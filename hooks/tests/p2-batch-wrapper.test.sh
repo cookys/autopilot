@@ -62,7 +62,7 @@ mk_mut() { # <name> then pairs: <old> <new> ...; builds $TEST_TMP/mut-<name>/run
   while [ $# -ge 2 ]; do mutate "$f" "$1" "$2" || fail "mutant $n could not be built"; shift 2; done
 }
 mk_mut model "for (const r of by('MODEL')) need(" "for (const r of []) need(" "need(mr.rest.slice(id.length + 1) ===" "need(true || mr.rest.slice(id.length + 1) ==="
-mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap," "need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
+mk_mut cost "need(Math.abs(Number(kvOf(c.rest).running) -" "need(true || Math.abs(Number(kvOf(c.rest).running) -" "need(total <= m.arms[arm].cap," "need(true || total <= m.arms[arm].cap," "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
 mk_mut prereg "else if (pr.length) {" "else if (false) {"
 mk_mut probe "probeSpent: a.probeSpent, total" "probeSpent: a.probeSpent + probeCost, total"
 mk_mut base "['taskhash baseline', m.taskhash_expected, 'taskhash_expected']]) {" "]) {" "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === ''," "need(nowList !== null && nowList === expected" "need(true || nowList !== null && nowList === expected"
@@ -78,7 +78,7 @@ mk_mut nowindow "if (tmo <= 0) throw" "if (false) throw"
 mk_mut probest "need(tsvSeq.length > 0 &&" "need(true || tsvSeq.length > 0 &&" "need(tsvSeq[tsvSeq.length - 1] === 'ok'," "need(true || tsvSeq[tsvSeq.length - 1] === 'ok'," "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')"
 mk_mut scoreval "need(okv, " "need(true || okv, " "need(okv && kv.m3" "need(true || okv && kv.m3" "need(o && typeof" "need(true || o && typeof"
 mk_mut bmax "if (hc) need(" "if (false) need(" "need(bv !== null && /^\\d+$/.test(bv) &&" "need(bv !== null &&" "need(bv !== null && rawMax === Number(bv)," "need(true || bv !== null && rawMax === Number(bv)," "need(rawMax <= m.max_blocks," "need(true || rawMax <= m.max_blocks,"
-mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || " "need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
+mk_mut negcost "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(" "for (const r of by('COST')) { const kv = kvOf(r.rest); for (const k of ['run', 'probe']) need(true || " "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
 mk_mut prereplaced "need(since.status === 0 && since.stdout.trim() === ''," "need(true || since.status === 0 && since.stdout.trim() === '',"  "need(atCommit.status === 0 &&" "need(true || atCommit.status === 0 &&"
 mk_mut runver "need(rvVal === m.cli," "need(true || rvVal === m.cli," "need(rj === rvVal," "need(true || rj === rvVal,"
 mk_mut endrc "if (rawTurns === 5 && rcOf[id] === 0)" "if (rawTurns === 5)"
@@ -88,11 +88,18 @@ mk_mut turnsraw "need(Number(kv.n) === rawTurns," "need(true || Number(kv.n) ===
 mk_mut boolcheck "typeof o.constraints_pass === 'boolean' && typeof o.features_pass === 'boolean' && " ""
 mk_mut modelraw "need(mr.rest.slice(id.length + 1) ===" "need(true || mr.rest.slice(id.length + 1) ==="
 mk_mut traceraw "need(Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin," "need(true || Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin,"
-mk_mut costraw "need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
+mk_mut costraw "need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5," "need(true || rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5,"
 mk_mut taskdir "need(nowList !== null && nowList === expected" "need(true || nowList !== null && nowList === expected"
 mk_mut probeaw "need(rawSeq.join(',') === tsvSeq.join(',')" "need(true || rawSeq.join(',') === tsvSeq.join(',')"
 mk_mut cmdtpl "need(Array.isArray(av) &&" "need(true || Array.isArray(av) &&"
 mk_mut mtime "need(Number.isFinite(mt) &&" "need(true || Number.isFinite(mt) &&"
+mk_mut oldhead "o.auth_ok === true" "String(o.result_head).includes('AUTH_OK')"
+mk_mut canon "need(Array.isArray(av) && outV === path.join" "need(true || Array.isArray(av) && outV === path.join"
+mk_mut slack "Math.floor(mt) >= Date.parse(st.ts) &&" "Math.floor(mt) >= Date.parse(st.ts) - 5000 &&" "Math.floor(mt) <= Date.parse(en.ts)," "Math.floor(mt) <= Date.parse(en.ts) + 5000,"
+mk_mut costnull "? o.total_cost_usd : null; return c; };" "? o.total_cost_usd : 0; return c; };"
+mk_mut probecost "cost = costOk ? o.total_cost_usd : 0; err = (o.is_error || !costOk) ? 1 : 0;" "cost = 0; err = o.is_error ? 1 : 0;"
+mk_mut authscan "need(!AUTH_RE.test(raw)," "need(true || !AUTH_RE.test(raw),"
+mk_mut tracefiles "need(tc.files > 0," "need(true || tc.files > 0,"
 mk_mut hookerr "if (he) need(" "if (false) need(" "need(errRuns <= 2," "need(true || errRuns <= 2,"
 mk_mut modelrow "need(byId('MODEL', id).length === 1," "need(true || byId('MODEL', id).length === 1,"
 MAN_SE="$CLONE/prereg/manifest-startelapsed-mutant.json"; make_manifest "$TEST_TMP/mut-startelapsed/run-p2-batch.js" "$MAN_SE"
@@ -100,6 +107,7 @@ export MAN_WINDOW=3
 MAN_W3="$CLONE/prereg/manifest-w3.json"; make_manifest "$WRAP" "$MAN_W3"
 MAN_W3M="$CLONE/prereg/manifest-w3-mutant.json"; make_manifest "$TEST_TMP/mut-nowindow/run-p2-batch.js" "$MAN_W3M"
 unset MAN_WINDOW
+MAN_PC="$CLONE/prereg/manifest-probecost-mutant.json"; make_manifest "$TEST_TMP/mut-probecost/run-p2-batch.js" "$MAN_PC"
 MAN_PROBE="$CLONE/prereg/manifest-probe-mutant.json"; make_manifest "$TEST_TMP/mut-probe/run-p2-batch.js" "$MAN_PROBE"
 # manifests live inside the clone and are committed with the preregistration stand-in (the wrapper requires that)
 MAN="$CLONE/prereg/manifest.json"; make_manifest "$WRAP" "$MAN"
@@ -195,8 +203,8 @@ assert_eq "$(grep -c 'TASKHASH_DIFF post fail' "$TEST_TMP/run-nc8-mut/invocation
 assert_file_absent "$TEST_TMP/run-nc8-mut/taskhash.post.txt"
 
 echo "--- audit round 1: models, final cost, preregistration state, probe accounting"
-fixm() { local f; for f in "$R1"/runs/*/run.log "$R1"/runs/*/result.json; do touch -r "$f" "$1/${f#"$R1"/}"; done; }
-audit_rc() { [ -z "${NOFIXM:-}" ] && [ "$2" != "$R1" ] && [ -d "$2/runs" ] && fixm "$2"; node "$1" --audit --manifest "$MAN" --run-dir "$2" --clone "$CLONE" >/dev/null 2>&1; echo $?; }
+fixm() { local f; if [ -z "${NOFIXM:-}" ]; then for f in "$R1"/runs/*/run.log "$R1"/runs/*/result.json; do touch -r "$f" "$1/${f#"$R1"/}"; done; fi; if [ -z "${KEEPCMD:-}" ]; then for f in "$1"/cmd/*.json; do sed -i "s#$R1#$1#g" "$f"; done; fi; }
+audit_rc() { [ "$2" != "$R1" ] && [ -d "$2/runs" ] && fixm "$2"; node "$1" --audit --manifest "$MAN" --run-dir "$2" --clone "$CLONE" >/dev/null 2>&1; echo $?; }
 tamper() { rm -rf "$TEST_TMP/t-$1"; cp -a "$R1" "$TEST_TMP/t-$1"; }
 # 1 several models in every MODEL row
 tamper model; sed -i -E 's/^(\S+ MODEL \S+ ).*/\1claude-haiku-4-5,claude-sonnet-4-5/' "$TEST_TMP/t-model/invocation.log"
@@ -477,5 +485,45 @@ assert_eq "$(audit_rc "$TEST_TMP/mut-cmdtpl/run-p2-batch.js" "$TEST_TMP/t-cm")" 
 tamper mt; MF=$(ls "$TEST_TMP"/t-mt/runs/*/run.log | head -1); touch -d '+2 hours' "$MF"
 assert_neq "$(NOFIXM=1 audit_rc "$WRAP" "$TEST_TMP/t-mt")" 0 "run.log written outside START..END: real audit non-zero"
 assert_eq "$(NOFIXM=1 audit_rc "$TEST_TMP/mut-mtime/run-p2-batch.js" "$TEST_TMP/t-mt")" 0 "RED run file time: mutant says OK"
+
+echo "--- round 8: long probe reply, canonical argv paths, strict mtime, missing costs, auth rescan, missing traces"
+tamper lp; PF=$(ls "$TEST_TMP"/t-lp/probes/*-1.json | head -1); sed -i -E 's/"result_head":"[^"]*"/"result_head":"filler only, the marker came after 200 characters"/' "$PF"
+assert_eq "$(audit_rc "$WRAP" "$TEST_TMP/t-lp")" 0 "AUTH_OK beyond the saved head: auth_ok decides, audit OK"
+assert_neq "$(audit_rc "$TEST_TMP/mut-oldhead/run-p2-batch.js" "$TEST_TMP/t-lp")" 0 "RED long reply: the head-based mutant misjudges a good probe"
+tamper cp2; CF=$(ls "$TEST_TMP"/t-cp2/cmd/ON-*.json | head -1); KEEPCMD=1 fixm "$TEST_TMP/t-cp2"; sed -i -E 's#"[^"]*/runs/#"/tmp/other/runs/#' "$CF"
+assert_neq "$(KEEPCMD=1 audit_rc "$WRAP" "$TEST_TMP/t-cp2")" 0 "saved argv with another out path: real audit non-zero"
+assert_eq "$(KEEPCMD=1 audit_rc "$TEST_TMP/mut-canon/run-p2-batch.js" "$TEST_TMP/t-cp2")" 0 "RED out path: suffix-only mutant says OK"
+tamper mt2; MF=$(ls "$TEST_TMP"/t-mt2/runs/*/run.log | head -1); MID=$(basename "$(dirname "$MF")")
+ENDMS=$(python3 - "$TEST_TMP/t-mt2/invocation.log" "$MID" <<'PY'
+import sys, datetime
+for l in open(sys.argv[1]):
+    p = l.split()
+    if len(p) > 2 and p[1] == 'END' and p[2] == sys.argv[2]:
+        print(datetime.datetime.fromisoformat(p[0].replace('Z', '+00:00')).timestamp() + 2)
+PY
+)
+touch -d "@$ENDMS" "$MF"
+assert_neq "$(NOFIXM=1 audit_rc "$WRAP" "$TEST_TMP/t-mt2")" 0 "run.log 2 s after END: strict real audit non-zero"
+assert_eq "$(NOFIXM=1 audit_rc "$TEST_TMP/mut-slack/run-p2-batch.js" "$TEST_TMP/t-mt2")" 0 "RED 2 s after END: the slack mutant says OK"
+node -e 'const w=require(process.argv[1]);const c=[w.lastResultCost("{\"type\":\"result\"}"),w.lastResultCost("{\"type\":\"result\",\"total_cost_usd\":\"x\"}"),w.lastResultCost("{\"type\":\"result\",\"total_cost_usd\":-1}")];process.exit(c.every((v)=>v===null)&&w.lastResultCost("{\"type\":\"result\",\"total_cost_usd\":0.5}")===0.5?0:1)' "$WRAP"; assert_eq "$?" 0 "missing, non-numeric and negative costs are null"
+node -e 'const w=require(process.argv[1]);process.exit(w.lastResultCost("{\"type\":\"result\"}")===null?0:1)' "$TEST_TMP/mut-costnull/run-p2-batch.js"; assert_eq "$?" 1 "RED missing cost: the zero-defaulting mutant returns 0"
+tamper cm2; python3 - "$TEST_TMP/t-cm2" <<'PY'
+import sys, re, glob
+d = sys.argv[1]; p = d + '/invocation.log'; L = open(p).read().split('\n')
+i = max(k for k, l in enumerate(L) if ' COST ' in l and ' COSTCHK ' not in l)
+rid = L[i].split()[2]; run = float(re.search(r'run=(\S+)', L[i]).group(1)); running = float(re.search(r'running=(\S+)', L[i]).group(1))
+L[i] = re.sub(r'run=\S+', 'run=0.000000', L[i]); L[i] = re.sub(r'running=\S+', 'running=%.4f' % (running - run), L[i]); open(p, 'w').write('\n'.join(L))
+rl = d + '/runs/' + rid + '/run.log'; t = open(rl).read(); open(rl, 'w').write(re.sub(r'"total_cost_usd":[0-9.]+,?', '', t))
+PY
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-cm2")" 0 "run.log without total_cost_usd, COST row 0: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-costnull/run-p2-batch.js" "$TEST_TMP/t-cm2")" 0 "RED run.log cost missing: mutant says OK"
+RUN_ARGS="--first 1 --last 1" FAKE_PROBE_NOCOST=1 run_batch "$WRAP" "$MAN" "$TEST_TMP/run-nocost"; assert_eq "$?" 7 "probe response without total_cost_usd: the probe fails (exit 7)"
+RUN_ARGS="--first 1 --last 1" FAKE_PROBE_NOCOST=1 run_batch "$TEST_TMP/mut-probecost/run-p2-batch.js" "$MAN_PC" "$TEST_TMP/run-nocost-mut"; assert_neq "$?" 7 "RED probe without cost: the zero-defaulting mutant lets it through"
+tamper au; AL=$(ls "$TEST_TMP"/t-au/runs/*/run.log | head -1); echo "OAuth session expired, please log in" >>"$AL"
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-au")" 0 "raw run.log shows an expired session: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-authscan/run-p2-batch.js" "$TEST_TMP/t-au")" 0 "RED expired session: mutant says OK"
+tamper tr; rm -rf "$TEST_TMP"/t-tr/trace/C-*
+assert_neq "$(audit_rc "$WRAP" "$TEST_TMP/t-tr")" 0 "all C-arm traces deleted: real audit non-zero"
+assert_eq "$(audit_rc "$TEST_TMP/mut-tracefiles/run-p2-batch.js" "$TEST_TMP/t-tr")" 0 "RED missing traces: mutant says OK"
 
 finalize_test

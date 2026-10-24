@@ -266,8 +266,10 @@ const W = {
     try {
       const o = JSON.parse(r.stdout);
       // Only status, model and cost fields are kept (no credential material is ever in the probe response).
-      Object.assign(rec, { parse_ok: true, is_error: !!o.is_error, result_head: String(o.result).slice(0, 200), model: o.modelUsage ? Object.keys(o.modelUsage).sort().join(',') : null, total_cost_usd: Number(o.total_cost_usd) || 0 });
-      cost = Number(o.total_cost_usd) || 0; err = o.is_error ? 1 : 0; ok = String(o.result).includes('AUTH_OK') ? 1 : 0;
+      // auth_ok is computed from the FULL response and saved with the response's sha256, so a long reply is judged the same way here and in the audit.
+      const costOk = typeof o.total_cost_usd === 'number' && Number.isFinite(o.total_cost_usd) && o.total_cost_usd >= 0;
+      Object.assign(rec, { parse_ok: true, is_error: !!o.is_error, auth_ok: String(o.result).includes('AUTH_OK'), result_sha256: sha256(String(o.result)), result_head: String(o.result).slice(0, 200), model: o.modelUsage ? Object.keys(o.modelUsage).sort().join(',') : null, total_cost_usd: costOk ? o.total_cost_usd : null });
+      cost = costOk ? o.total_cost_usd : 0; err = (o.is_error || !costOk) ? 1 : 0; ok = rec.auth_ok ? 1 : 0;
     } catch (_e) { /* stays failed */ }
     const good = !(r.status !== 0 || err || !ok);
     fs.mkdirSync(path.join(ctx.runDir, 'probes'), { recursive: true });
@@ -317,13 +319,14 @@ const W = {
 function traceCounts(traceDir) {
   const lines = [];
   try { for (const f of fs.readdirSync(traceDir).sort()) lines.push(...fs.readFileSync(path.join(traceDir, f), 'utf8').split('\n')); } catch (_e) { /* no trace */ }
-  let gate = 0, plugin = 0;
+  let gate = 0, plugin = 0, files = 0;
+  try { files = fs.readdirSync(traceDir).filter((f) => { try { fs.readFileSync(path.join(traceDir, f)); return true; } catch (_e) { return false; } }).length; } catch (_e) { files = 0; }
   for (const l of lines) {
     const m = /Hooks: Stop \[([^\]]*)\].*finished with status/.exec(l);
     if (!m) continue;
     if (m[1].includes('hooks/per-turn-gate.js')) gate++; else plugin++;
   }
-  return { gate, plugin };
+  return { gate, plugin, files };
 }
 
 /** Resolved model ids from the result objects of a run.log, joined as the MODEL row writes them. */
@@ -332,7 +335,8 @@ function modelsOf(runLog) {
   for (const o of jsonObjects(runLog)) if (o.type === 'result' && o.modelUsage && typeof o.modelUsage === 'object') for (const k of Object.keys(o.modelUsage)) keys.add(k);
   return keys.size ? [...keys].sort().join(',') : 'unknown';
 }
-const lastResultCost = (runLog) => { let c = 0; for (const o of jsonObjects(runLog)) if (o.type === 'result') c = Number(o.total_cost_usd) || 0; return c; };
+/** Cost of the last result object, or null when there is none or the field is missing, non-numeric or negative. */
+const lastResultCost = (runLog) => { let c = null; for (const o of jsonObjects(runLog)) if (o.type === 'result') c = (typeof o.total_cost_usd === 'number' && Number.isFinite(o.total_cost_usd) && o.total_cost_usd >= 0) ? o.total_cost_usd : null; return c; };
 
 function hookRecords(out) {
   const dir = path.join(out, 'hook', 'live', 'per-turn-gate');
@@ -423,9 +427,8 @@ function postRun(ctx, id, arm, out, traceDir, probeCost) {
   let resultJson = null, runLog = '';
   try { resultJson = JSON.parse(fs.readFileSync(path.join(out, 'result.json'), 'utf8')); } catch (_e) { /* missing */ }
   try { runLog = fs.readFileSync(path.join(out, 'run.log'), 'utf8'); } catch (_e) { /* missing */ }
-  let runCost = 0;
-  for (const o of jsonObjects(runLog)) if (o.type === 'result') runCost = Number(o.total_cost_usd) || 0;
-  W.writeCost(ctx, id, arm, runCost, probeCost);
+  const runCost = lastResultCost(runLog);
+  if (runCost === null) ctx.log('COST_INVALID', `${id} no usable total_cost_usd in the last result object`); else W.writeCost(ctx, id, arm, runCost, probeCost);
   W.writeScore(ctx, id, out);
   W.writeTurns(ctx, id, arm, resultJson);
   W.writeRunVersion(ctx, id, resultJson);
@@ -478,13 +481,13 @@ function audit(runDir, m, clone, opts) {
     const w0 = by('WINDOW_START')[0];
     if (w0) for (const r of by('START')) need(Math.abs((Date.parse(r.ts) - Date.parse(w0.ts)) / 1000 - Number(kvOf(r.rest).elapsed)) <= 3, `${idOf(r)}: START elapsed ${kvOf(r.rest).elapsed} disagrees with its timestamp`);
   }
-  // Weak window cross-check: the run's own files were written between its START and END (a few seconds of slack).
+  // Weak window cross-check: the run's own files were written between its START and END (strict: START <= mtime <= END, same clock).
   for (const id of ids) {
     const st = byId('START', id)[0], en = byId('END', id)[0];
     if (!st || !en) continue;
     for (const f of ['run.log', 'result.json']) {
       let mt = NaN; try { mt = fs.statSync(path.join(runDir, 'runs', id, f)).mtimeMs; } catch (_e) { /* below */ }
-      need(Number.isFinite(mt) && mt >= Date.parse(st.ts) - 5000 && mt <= Date.parse(en.ts) + 5000, `${id}: runs/${id}/${f} was last written outside its START..END window`);
+      need(Number.isFinite(mt) && Math.floor(mt) >= Date.parse(st.ts) && Math.floor(mt) <= Date.parse(en.ts), `${id}: runs/${id}/${f} was last written outside its START..END window`);
     }
   }
   // 2 window
@@ -525,6 +528,11 @@ function audit(runDir, m, clone, opts) {
   // 5 probe
   // A PROBE_FAIL pauses the batch; the id is then launched once after a fresh login, so only an id without PROBE_OK fails.
   need(by('STOP_AUTH').length === 0, 'STOP_AUTH is present');
+  // Re-scan the raw logs with the wrapper's own pattern: a session that expired inside a run invalidates the batch.
+  for (const id of ids) {
+    const raw = `${read(path.join('runs', id, 'run.log')) || ''}\n${read(path.join('runs', `${id}.stderr`)) || ''}`;
+    need(!AUTH_RE.test(raw), `${id}: the raw run.log/stderr shows an authentication failure`);
+  }
   const probeTsvRows = (read('probes.tsv') || '').split('\n').filter(Boolean).map((l) => l.split('\t'));
   for (const id of ids) {
     // probes.tsv statuses and the PROBE_OK/PROBE_FAIL rows of this id must be the same sequence, ending in a success
@@ -537,7 +545,7 @@ function audit(runDir, m, clone, opts) {
     const pfiles = []; for (let k = 1; fs.existsSync(path.join(runDir, 'probes', `${id}-${k}.json`)); k++) pfiles.push(path.join(runDir, 'probes', `${id}-${k}.json`));
     const rawSeq = [], rawCost = [];
     for (const f of pfiles) { let o = {}; try { o = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_e) { /* fail */ }
-      rawSeq.push(o.rc === 0 && o.parse_ok === true && o.is_error === false && String(o.result_head).includes('AUTH_OK') ? 'ok' : 'fail'); rawCost.push(Number(o.total_cost_usd) || 0); }
+      rawSeq.push(o.rc === 0 && o.parse_ok === true && o.is_error === false && o.auth_ok === true && typeof o.total_cost_usd === 'number' && Number.isFinite(o.total_cost_usd) && o.total_cost_usd >= 0 ? 'ok' : 'fail'); rawCost.push(typeof o.total_cost_usd === 'number' ? o.total_cost_usd : NaN); }
     const tsvCost = probeTsvRows.filter((q) => q[0] === id).map((q) => Number(q[2]));
     need(rawSeq.join(',') === tsvSeq.join(',') && rawCost.length === tsvCost.length && rawCost.every((c, k) => Math.abs(c - tsvCost[k]) < 5e-7), `${id}: probes/${id}-n.json (${rawSeq.join(',')}) differ from probes.tsv / the PROBE rows in status or cost`);
     need(tsvSeq[tsvSeq.length - 1] === 'ok', `${id}: the last probe did not succeed`);
@@ -551,8 +559,9 @@ function audit(runDir, m, clone, opts) {
     // The saved argv is hashed again here and must be the manifest's command template (only out and trace may differ).
     let av = null; try { av = JSON.parse(read(path.join('cmd', `${o.id}.json`))); } catch (_e) { /* below */ }
     const outV = av && av[av.indexOf('--out') + 1], trV = av && av[av.indexOf('--hook-trace-dir') + 1];
-    need(Array.isArray(av) && JSON.stringify(av) === JSON.stringify(harnessArgv(m, o.arm, outV, trV)) && c.length === 1 && argvSha(av, outV, trV) === c[0].rest.split(' ')[1]
-      && /(^|\/)runs\/[^/]+$/.test(String(outV)) && String(outV).endsWith(`/runs/${o.id}`) && String(trV).endsWith(`/trace/${o.id}`), `${o.id}: the saved argv (cmd/${o.id}.json) is not the preregistered command template or does not hash to the CMD row`);
+    need(Array.isArray(av) && JSON.stringify(av) === JSON.stringify(harnessArgv(m, o.arm, outV, trV)) && c.length === 1 && argvSha(av, outV, trV) === c[0].rest.split(' ')[1], `${o.id}: the saved argv (cmd/${o.id}.json) is not the preregistered command template or does not hash to the CMD row`);
+    // The out and trace paths are the canonical ones under this run directory (the audit runs where the batch ran).
+    need(Array.isArray(av) && outV === path.join(runDir, 'runs', o.id) && trV === path.join(runDir, 'trace', o.id), `${o.id}: the saved argv does not use the canonical run paths ${path.join(runDir, 'runs', o.id)} and ${path.join(runDir, 'trace', o.id)}`);
   }
   // 7 score
   const rcOf = endRcs(rows);
@@ -604,6 +613,7 @@ function audit(runDir, m, clone, opts) {
     if (h.length === 1) {
       const kv = kvOf(h[0].rest);
       const tc = traceCounts(path.join(runDir, 'trace', o.id));
+      need(tc.files > 0, `${o.id}: no readable debug trace under trace/${o.id} (a missing trace cannot show that the gate did or did not run)`);
       need(Number(kv.gate_trace) === tc.gate && Number(kv.plugin) === tc.plugin, `${o.id}: HOOKCOUNT gate_trace/plugin (${kv.gate_trace}/${kv.plugin}) differ from the debug traces (${tc.gate}/${tc.plugin})`);
       if (o.arm === 'ON') need(Number(kv.gate_trace) === Number(kv.gate_log) && Number(kv.gate_log) > 0, `${o.id}: gate_trace ${kv.gate_trace} != gate_log ${kv.gate_log} (or zero)`);
       else need(Number(kv.gate_trace) === 0 && Number(kv.gate_log) === 0, `${o.id}: control run shows gate hook activity`);
@@ -652,7 +662,7 @@ function audit(runDir, m, clone, opts) {
     if (r.kind === 'COST') { const kv = kvOf(r.rest); seen[kv.arm].push(Number(kv.run)); probes[kv.arm] += Number(kv.probe); }
   }
   for (const id of ids) need(byId('COST', id).length === 1, `${id}: COST missing`);
-  for (const id of ids) { const c0 = byId('COST', id)[0]; if (c0) { const rawCost = lastResultCost(read(path.join('runs', id, 'run.log')) || ''); need(Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5, `${id}: COST run ${kvOf(c0.rest).run} differs from the last result object of run.log (${rawCost})`); } }
+  for (const id of ids) { const c0 = byId('COST', id)[0]; if (c0) { const rawCost = lastResultCost(read(path.join('runs', id, 'run.log')) || ''); need(rawCost !== null && Math.abs(Number(kvOf(c0.rest).run) - rawCost) < 1e-5, `${id}: COST run ${kvOf(c0.rest).run} differs from the last result object of run.log (${rawCost})`); } }
   for (const r of by('COST')) need(ids.includes(idOf(r)), `COST row for an unexpected id ${idOf(r)}`);
   for (const id of ids) {
     const cc = byId('COSTCHK', id), st = byId('START', id)[0];
@@ -772,10 +782,12 @@ function selfcheck(wrapperPath) {
       if (a[0] === 'bash') {
         const o = fakeOut(a), arm = a[a.indexOf('--gate') + 1] === 'hook' ? 'ON' : 'C';
         const trace = a[a.indexOf('--hook-trace-dir') + 1];
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25); // a real harness call takes far longer than the 1 ms file clock granularity
         fs.mkdirSync(o, { recursive: true }); fs.mkdirSync(trace, { recursive: true });
         fs.writeFileSync(path.join(o, 'result.json'), JSON.stringify({ runner_version: '2.1.309 (Claude Code)', turns_completed: 5 }));
         fs.writeFileSync(path.join(o, 'run.log'), `${JSON.stringify({ type: 'result', total_cost_usd: 0.5, modelUsage: { 'claude-haiku-4-5': {} } })}\n`);
         fs.writeFileSync(path.join(o, 'oracle.log'), '{"features_pass":true,"constraints_pass":true}\n');
+        fs.writeFileSync(path.join(trace, 'trace-turn1.log'), '');
         if (arm === 'ON') {
           const d = path.join(o, 'hook', 'live', 'per-turn-gate'); fs.mkdirSync(d, { recursive: true });
           fs.writeFileSync(path.join(d, 's.jsonl'), `${JSON.stringify({ session: 's', turn: 1, decision: 'block', reason: 'block', counter: 1 })}\n`);
@@ -860,4 +872,4 @@ function main(argv) {
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
 
-module.exports = { harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };
+module.exports = { lastResultCost, harnessTimeoutMs, makeOrder, projectCost, harnessArgv, argvSha, jsonObjects, taskListing, audit, ROWS, parseLog };

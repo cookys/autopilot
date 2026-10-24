@@ -11,9 +11,10 @@ done
 prompt=$(cat)
 cost=${FAKE_COST:-0.1}
 case "$prompt" in
-  *AUTH_OK*) [ -n "${FAKE_PROBE_SLEEP:-}" ] && sleep "$FAKE_PROBE_SLEEP"; echo '{"type":"result","is_error":false,"result":"AUTH_OK","total_cost_usd":0.0166}'; exit 0 ;;
+  *AUTH_OK*) [ -n "${FAKE_PROBE_NOCOST:-}" ] && { echo '{"type":"result","is_error":false,"result":"AUTH_OK"}'; exit 0; }; [ -n "${FAKE_PROBE_SLEEP:-}" ] && sleep "$FAKE_PROBE_SLEEP"; echo '{"type":"result","is_error":false,"result":"AUTH_OK","total_cost_usd":0.0166}'; exit 0 ;;
 esac
 mkdir -p "$FAKE_STATE"
+[ -n "$dbg" ] && : >> "$dbg"
 if [ -n "$resume" ]; then sid="$resume"; else sid="fake-$$-$RANDOM"; fi
 calls=$(cat "$FAKE_STATE/$sid.calls" 2>/dev/null || echo 0); calls=$((calls + 1)); echo "$calls" > "$FAKE_STATE/$sid.calls"
 if [ -n "${FAKE_TASK_EDIT:-}" ] && [ ! -e "$FAKE_STATE/edited" ]; then echo "edited mid-batch" >> "$FAKE_TASK_EDIT"; : > "$FAKE_STATE/edited"; fi

@@ -114,6 +114,11 @@ export AUTOPILOT_FOREMAN_EVIDENCE_DIR="$TEST_TMP/foreman-evidence"
 # A host with a real /etc/claude-code/managed-settings.json would change what the autocompact resolver
 # reports; point it at a path that never exists (a test needing a managed file overrides this).
 export AUTOPILOT_MANAGED_SETTINGS_FILE="$TEST_TMP/.no-managed-settings.json"
+# A claude-native dispatch seeds its child's config dir from the source .credentials.json (fail closed
+# without it). Point that source at a per-test fake so no suite ever reads the operator's real ~/.claude.
+export CLAUDE_CONFIG_DIR="$TEST_TMP/fake-claude-config"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+printf '{"claudeAiOauth":{"accessToken":"fake-test-token"}}\n' > "$CLAUDE_CONFIG_DIR/.credentials.json"
 HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$HOOKS_DIR/.." && pwd)"
 

@@ -45,10 +45,11 @@ run_case() {
   local sd="$1" kind="$2" mode="$3"
   rm -f "$REC" "$REC.ready"; rm -rf "$TMPDIR"; mkdir -p "$TMPDIR"
   local -a cmd
+  local runner=claude-native; [ "${CASE_RUNNER:-}" = cc-shim ] && runner=cc-shim
   if [ "$kind" = review ]; then
-    cmd=("$sd/dispatch-review.sh" --runner claude-native --model m --diff-file "$TEST_TMP/d.diff" --bin "$STUB" --timeout 20s)
+    cmd=("$sd/dispatch-review.sh" --runner "$runner" ${CASE_RUNNER:+--endpoint TESTEP} --model m --diff-file "$TEST_TMP/d.diff" --bin "$STUB" --timeout 20s)
   else
-    cmd=("$sd/dispatch-author.sh" --runner claude-native --model m --prompt-file "$TEST_TMP/p.txt" --bin "$STUB" --timeout 20s)
+    cmd=("$sd/dispatch-author.sh" --runner "$runner" --model m --prompt-file "$TEST_TMP/p.txt" --bin "$STUB" --timeout 20s)
   fi
   if [ "$mode" = term ]; then
     # short-lived helper child of this test; waited below
@@ -103,6 +104,17 @@ sed -i 's/ CLAUDE_CONFIG_DIR="\$CNATIVE_CFG"//' "$OLD/dispatch-review.sh" "$OLD/
 for kind in review author; do
   check_case "$OLD" "$kind" ok >/dev/null; NRC=$?
   assert_neq "0" "$NRC" "negative control: $kind with the old hand-off removed is detected"
+done
+
+# cc-shim authenticates with its own bearer token under a scratch HOME: it must NOT inherit the operator's
+# CLAUDE_CONFIG_DIR (the fake real dir here carries a settings.json). Old behaviour (no -u) is caught.
+export ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_AUTH_TOKEN=tok
+export AUTOPILOT_ENDPOINT_TESTEP_URL="http://127.0.0.1:9/v1" AUTOPILOT_ENDPOINT_TESTEP_TOKEN="t"
+ccshim_ok() { CASE_RUNNER=cc-shim run_case "$1" "$2" ok; [ "$SEEN_CFG" = UNSET ]; }
+for kind in review author; do
+  ccshim_ok "$SD" "$kind"; assert_eq "0" "$?" "$kind cc-shim child does not inherit CLAUDE_CONFIG_DIR (saw: $SEEN_CFG)"
+  sed -i 's/ -u CLAUDE_CONFIG_DIR//' "$OLD/dispatch-review.sh" "$OLD/dispatch-author.sh"
+  ccshim_ok "$OLD" "$kind"; assert_neq "0" "$?" "negative control: $kind cc-shim without the unset is detected"
 done
 
 finalize_test

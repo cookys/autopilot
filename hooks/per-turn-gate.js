@@ -39,12 +39,15 @@
  * record per Stop (so a live check can tell "knob off" from "hook not running"). Enabled without a usable
  * verifier: `error`.
  *
- * Concurrency: the per-session state transitions run under an atomic lock directory (<session>.lock,
- * mkdir, stale after 30 s). Turn and counter are decided, and a block slot is reserved, inside the lock;
- * the verifier runs outside it; a non-block outcome gives the slot back. A lock that cannot be taken in
- * 5 s allows and logs `error` (an error never blocks).
+ * Concurrency: per-session state changes run under an atomic lock directory (<session>.lock holding
+ * owner.json {pid, token, created}; mkdir; stale after 30 s; a stale lock is reclaimed by renaming it away
+ * and checking the token that was moved). A short lock decides the turn and reads the cap (at cap: allow,
+ * no verifier run); the verifier runs outside any lock; only a block takes a second lock, re-reads the
+ * state (same turn, below the cap) and then counts. Nothing is taken before it is needed, so nothing is
+ * given back. A lock not taken in 5 s, or one found taken from us at release, allows and logs `error`
+ * (an error never blocks; a broken lock can only block less).
  *
- * Retention: every call deletes this hook's counter, turn, tmp and lock files older than
+ * Retention: every call deletes this hook's own counter, turn, pid-tmp and lock files older than
  * per_turn_gate.state_retention_days (default 7). Log files are kept.
  *
  * State (same directory): <session>.turn holds the current turn index; <session>.t<turn>.count holds
@@ -171,39 +174,95 @@ function sleepMs(ms) {
   try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch (_e) { /* nothing */ }
 }
 
-/** Take the per-session lock (mkdir is atomic). Returns an unlock function, or null when it could not be taken. */
-function acquireLock(lockDir) {
+const crypto = require('crypto');
+
+function readOwner(lockDir) {
+  try {
+    const o = JSON.parse(fs.readFileSync(path.join(lockDir, 'owner.json'), 'utf8'));
+    return o && typeof o === 'object' ? o : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
+/** Age of a lock in ms: from its owner record, else (owner not written yet, or not a lock) from the path's mtime. */
+function lockAgeMs(lockDir) {
+  const o = readOwner(lockDir);
+  if (o && Number.isFinite(o.created)) return Date.now() - o.created;
+  return Date.now() - fs.statSync(lockDir).mtimeMs;
+}
+
+/**
+ * Take the per-session lock: mkdir is atomic, and the directory holds owner.json {pid, token, created}.
+ * Returns {release()} or null when the lock could not be taken within LOCK_WAIT_MS.
+ * release() returns false when the lock is no longer ours (our token is gone from the path): the caller
+ * must then turn its result into allow/error. A stale lock is reclaimed by renaming it to a unique name
+ * first (atomic) and checking the token of what was moved: a different token than the one judged stale
+ * means a live lock was moved, so this call gives up (null) instead of continuing. Either way a broken
+ * mutual exclusion can only make the hook block LESS, never past the cap.
+ * `seam.afterJudged(lockDir)` is a test hook called between the stale judgement and the rename.
+ */
+function acquireLock(lockDir, seam) {
   const deadline = Date.now() + LOCK_WAIT_MS;
+  const token = crypto.randomBytes(8).toString('hex');
   for (;;) {
     try {
       fs.mkdirSync(lockDir);
-      return () => { try { fs.rmdirSync(lockDir); } catch (_e) { /* nothing */ } };
+      try {
+        fs.writeFileSync(path.join(lockDir, 'owner.json'), JSON.stringify({ pid: process.pid, token, created: Date.now() }));
+      } catch (_e) {
+        try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch (_e2) { /* nothing */ }
+        return null;
+      }
+      return {
+        release() {
+          const o = readOwner(lockDir);
+          if (!o || o.token !== token) return false;
+          try { fs.rmSync(lockDir, { recursive: true, force: true }); } catch (_e) { /* nothing */ }
+          return true;
+        },
+      };
     } catch (e) {
       if (!e || e.code !== 'EEXIST') return null;
     }
+    let judged = null; // owner token of the lock judged stale; undefined when not stale
     try {
-      if (Date.now() - fs.statSync(lockDir).mtimeMs > LOCK_STALE_MS) {
-        try { fs.rmdirSync(lockDir); } catch (_e) { /* someone else reclaimed it */ }
-        continue;
+      if (lockAgeMs(lockDir) > LOCK_STALE_MS) {
+        const o = readOwner(lockDir);
+        judged = o && typeof o.token === 'string' ? o.token : null;
+      } else {
+        judged = undefined;
       }
-    } catch (_e) { continue; } // vanished between mkdir and stat: retry
+    } catch (_e) { judged = undefined; } // vanished between mkdir and stat: just retry (after the deadline check)
+    if (judged !== undefined) {
+      if (seam && typeof seam.afterJudged === 'function') seam.afterJudged(lockDir);
+      const moved = `${lockDir}.reclaim.${crypto.randomBytes(6).toString('hex')}`;
+      let renamed = false;
+      try { fs.renameSync(lockDir, moved); renamed = true; } catch (_e) { /* someone else got there first */ }
+      if (renamed) {
+        const o = readOwner(moved);
+        const movedToken = o && typeof o.token === 'string' ? o.token : null;
+        try { fs.rmSync(moved, { recursive: true, force: true }); } catch (_e) { /* nothing */ }
+        if (movedToken !== judged) return null; // we moved a live lock: give up, the caller allows
+      }
+    }
     if (Date.now() >= deadline) return null;
     sleepMs(20);
   }
 }
 
-/** Delete this hook's state files (not the logs) untouched for more than `days` days. */
+/** Delete this hook's own state files (not the logs, not anything else) untouched for more than `days` days. */
+const STATE_NAME = /^[A-Za-z0-9_-]+\.(?:turn|t\d+\.count)(?:\.\d+\.tmp)?$|^[A-Za-z0-9_-]+\.lock(?:\.reclaim\.[0-9a-f]+)?$/;
 function cleanupState(dir, days) {
   const cutoff = Date.now() - days * 86400000;
   let names = [];
   try { names = fs.readdirSync(dir); } catch (_e) { return; }
   for (const name of names) {
-    if (!/\.(turn|count|lock)$|\.tmp$/.test(name)) continue;
+    if (!STATE_NAME.test(name)) continue;
     const f = path.join(dir, name);
     try {
-      const st = fs.statSync(f);
-      if (st.mtimeMs >= cutoff) continue;
-      if (st.isDirectory()) fs.rmdirSync(f); else fs.unlinkSync(f);
+      if (fs.statSync(f).mtimeMs >= cutoff) continue;
+      fs.rmSync(f, { recursive: true, force: true });
     } catch (_e) { /* fail-open */ }
   }
 }
@@ -288,41 +347,36 @@ function main() {
   const lockDir = path.join(dir, `${session}.lock`);
   const turnFile = path.join(dir, `${session}.turn`);
 
-  // Phase A (locked): decide the turn, and reserve a block slot if the cap allows one.
-  let unlock = acquireLock(lockDir);
-  if (!unlock) {
+  // Phase A (short lock): decide the turn and read the cap. No slot is taken here.
+  const lockA = acquireLock(lockDir);
+  if (!lockA) {
     log(null, 'allow', 'error', 0);
     return;
   }
   let turn;
-  let countFile;
-  let reserved;
+  let atCap = false;
+  let capCounter = 0;
   try {
     const prevTurn = readInt(turnFile);
     turn = prevTurn === 0 ? 1 : (startsNewTurn(payload) ? prevTurn + 1 : prevTurn);
     writeInt(turnFile, turn);
-    countFile = path.join(dir, `${session}.t${turn}.count`);
-    const counter = readInt(countFile);
-    if (counter >= maxBlocks) {
-      unlock(); unlock = null;
-      log(turn, 'allow', 'cap', counter);
-      return;
-    }
-    reserved = counter + 1;
-    writeInt(countFile, reserved);
+    capCounter = readInt(path.join(dir, `${session}.t${turn}.count`));
+    atCap = capCounter >= maxBlocks;
   } catch (_e) {
-    if (unlock) unlock();
-    log(null, 'allow', 'error', 0); // cannot count, so cannot bound: do not block
+    lockA.release();
+    log(null, 'allow', 'error', 0);
     return;
   }
-  unlock();
+  if (!lockA.release()) {
+    log(turn, 'allow', 'error', capCounter); // our lock was taken from us: do not trust the decision
+    return;
+  }
+  if (atCap) {
+    log(turn, 'allow', 'cap', capCounter);
+    return;
+  }
 
-  // Verifier and text (unlocked). Everything that can fail happens before any block is logged.
-  const giveBack = () => {
-    const u = acquireLock(lockDir);
-    if (!u) return; // slot stays consumed: the cap only gets stricter
-    try { writeInt(countFile, Math.max(0, readInt(countFile) - 1)); } catch (_e) { /* fail-open */ } finally { u(); }
-  };
+  // Verifier and text (unlocked). Everything that can fail happens before any state change or log record.
   let text = null;
   let outcome = 'error';
   try {
@@ -335,18 +389,45 @@ function main() {
     outcome = 'error';
   }
   if (outcome !== 'block') {
-    giveBack();
-    log(turn, 'allow', outcome, reserved - 1);
+    log(turn, 'allow', outcome, capCounter);
     return;
   }
-  log(turn, 'block', 'block', reserved);
+
+  // Phase B (lock): only a block changes the counter. Re-read under the lock; still the same turn and
+  // still below the cap, else allow. Nothing is taken before this point, so nothing has to be given back.
+  const lockB = acquireLock(lockDir);
+  if (!lockB) {
+    log(turn, 'allow', 'error', capCounter);
+    return;
+  }
+  let verdict = 'error';
+  let counterNow = capCounter;
+  const countFile = path.join(dir, `${session}.t${turn}.count`);
+  try {
+    counterNow = readInt(countFile);
+    if (readInt(turnFile) !== turn) verdict = 'error'; // a newer turn began while the verifier ran: this answer is stale
+    else if (counterNow >= maxBlocks) verdict = 'cap';
+    else { writeInt(countFile, counterNow + 1); counterNow += 1; verdict = 'block'; }
+  } catch (_e) {
+    verdict = 'error';
+  }
+  if (!lockB.release() && verdict === 'block') verdict = 'error'; // mutual exclusion was broken: block less, never more
+  if (verdict !== 'block') {
+    log(turn, 'allow', verdict, counterNow);
+    return;
+  }
+  log(turn, 'block', 'block', counterNow);
   process.stdout.write(`${JSON.stringify({ decision: 'block', reason: text })}\n`);
 }
 
-try {
-  main();
-} catch (_e) {
-  // fail-open: an unexpected error never blocks a stop; it still leaves its one record
-  try { if (LOG_STATE.write) LOG_STATE.write(null, 'allow', 'error', 0); } catch (_e2) { /* nothing */ }
+if (require.main === module) {
+  try {
+    main();
+  } catch (_e) {
+    // fail-open: an unexpected error never blocks a stop; it still leaves its one record
+    try { if (LOG_STATE.write) LOG_STATE.write(null, 'allow', 'error', 0); } catch (_e2) { /* nothing */ }
+  }
+  process.exit(0);
 }
-process.exit(0);
+
+module.exports = { acquireLock, cleanupState, STATE_NAME }; // for the lock tests

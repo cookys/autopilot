@@ -24,6 +24,13 @@ if (m === 'notarray') { console.log(JSON.stringify({ violations: 'oops' })); pro
 if (m === 'missing') { console.log(JSON.stringify({ ok: false })); process.exit(1); }
 if (m === 'partial') { console.log(JSON.stringify({ violations: [{ constraint: 1 }] })); process.exit(1); }
 if (m === 'badgaps') { console.log(JSON.stringify({ violations: [], feature_gaps: [null] })); process.exit(0); }
+if (m === 'cleanslow' || m === 'violslow') {
+  setTimeout(() => {
+    if (m === 'cleanslow') { console.log(JSON.stringify({ turn: 1, ok: true, violations: [], feature_gaps: [] })); process.exit(0); }
+    console.log(JSON.stringify({ turn: 1, ok: false, violations: v, feature_gaps: [] })); process.exit(1);
+  }, 600);
+  return;
+}
 if (m === 'crash') { process.exit(2); }
 if (m === 'garbage') { console.log('not json {'); process.exit(1); }
 if (m === 'slow') { setTimeout(() => {}, 30000); return; }
@@ -148,15 +155,68 @@ nc12() {
   fresh nc12; export PTG_V_MODE=clean
   local d="$AUTOPILOT_LIVE_DIR/per-turn-gate"; mkdir -p "$d/old.lock"
   : >"$d/old.t3.count"; : >"$d/old.turn"; : >"$d/fresh.turn"; echo '{}' >"$d/old.jsonl"
-  touch -d '10 days ago' "$d/old.t3.count" "$d/old.turn" "$d/old.lock" "$d/old.jsonl"
+  : >"$d/old.t4.count.4242.tmp"; : >"$d/foreign.tmp"; : >"$d/foreign.count"; : >"$d/other.lock.bak"
+  touch -d '10 days ago' "$d/old.t3.count" "$d/old.turn" "$d/old.lock" "$d/old.jsonl" "$d/old.t4.count.4242.tmp" "$d/foreign.tmp" "$d/foreign.count" "$d/other.lock.bak"
   stop "$1" false
-  [ ! -e "$d/old.t3.count" ] && [ ! -e "$d/old.turn" ] && [ ! -e "$d/old.lock" ] && [ -e "$d/fresh.turn" ] && [ -e "$d/old.jsonl" ] && [ -e "$d/s1.turn" ]
+  [ ! -e "$d/old.t3.count" ] && [ ! -e "$d/old.turn" ] && [ ! -e "$d/old.lock" ] && [ ! -e "$d/old.t4.count.4242.tmp" ] && [ -e "$d/fresh.turn" ] && [ -e "$d/old.jsonl" ] && [ -e "$d/s1.turn" ] || return 1
+  # files that are not this hook's own state are never touched
+  [ -e "$d/foreign.tmp" ] && [ -e "$d/foreign.count" ] && [ -e "$d/other.lock.bak" ]
 }
 # NC13: nothing configured => the live-state directory gets no new file or directory at all.
 nc13() {
   fresh nc13; printf '{}' >"$AUTOPILOT_CONFIG_FILE"; export PTG_V_MODE=violate
   stop "$1" false
   [ "$(find "$AUTOPILOT_LIVE_DIR" -mindepth 1 | wc -l | tr -d ' ')" = 0 ] && [ "$(blocks)" = 0 ]
+}
+
+# hold_lock <dir> : a live lock held by someone else (fresh owner record).
+hold_lock() {
+  mkdir -p "$1"; printf '{"pid":1,"token":"other","created":%s}' "$(node -e 'console.log(Date.now())')" >"$1/owner.json"
+}
+# NC14: nothing is deducted and given back. A lock taken by someone else while the verifier runs must not
+# leave a consumed slot behind (clean outcome), and a block that cannot take its lock allows with error.
+nc14() {
+  fresh nc14c; export PTG_V_MODE=cleanslow
+  local d="$AUTOPILOT_LIVE_DIR/per-turn-gate"
+  ( sleep 0.25; hold_lock "$d/s1.lock" ) &
+  stop "$1" false; wait
+  [ "$(log_has '"reason":"clean"')" = 1 ] && [ "$(cat "$d/s1.t1.count" 2>/dev/null || echo 0)" = 0 ] || return 1
+  fresh nc14b; export PTG_V_MODE=violslow; d="$AUTOPILOT_LIVE_DIR/per-turn-gate"
+  ( sleep 0.25; hold_lock "$d/s1.lock" ) &
+  stop "$1" false; wait
+  [ "$(blocks)" = 0 ] && [ "$(log_has '"decision":"allow","reason":"error"')" = 1 ] && [ "$(log_count)" = 1 ] && [ "$(cat "$d/s1.t1.count" 2>/dev/null || echo 0)" = 0 ]
+}
+# unit script for the lock functions: node lockcase.js <hook> <case>
+cat >"$TEST_TMP/lockcase.js" <<'JS'
+'use strict';
+const fs = require('fs'); const path = require('path'); const os = require('os');
+const { acquireLock } = require(process.argv[2]);
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ptg-lock-')); const lockDir = path.join(dir, 's1.lock');
+const writeOwner = (d, token, created) => fs.writeFileSync(path.join(d, 'owner.json'), JSON.stringify({ pid: 1, token, created }));
+fs.mkdirSync(lockDir); writeOwner(lockDir, 'stale-token', Date.now() - 60000);
+let holder = null;
+const got = acquireLock(lockDir, { afterJudged: (d) => { fs.rmSync(d, { recursive: true }); holder = acquireLock(d); } });
+// the stale lock was replaced by a live one between the judgement and the reclaim
+const gaveUp = got === null;
+const holderLost = holder ? holder.release() === false : false;
+process.exit(gaveUp && holderLost ? 0 : 1);
+JS
+# NC15: stale judgement, then the lock is swapped for a live one: the reclaimer gives up and the holder notices.
+nc15() { node "$TEST_TMP/lockcase.js" "$1"; }
+# NC16: a lock path that is a regular file never makes the hook spin: fresh file => error within the wait;
+# stale file => reclaimed, the hook finishes normally.
+nc16() {
+  fresh nc16a; export PTG_V_MODE=violate
+  local d="$AUTOPILOT_LIVE_DIR/per-turn-gate"; mkdir -p "$d"; : >"$d/s1.lock"
+  local t0 t1; t0=$(date +%s)
+  STOP_OUT="$(printf '{"session_id":"s1","cwd":"%s","stop_hook_active":false}' "$CASE_DIR/repo" | env HOME="$HOOK_HOME" timeout 12 node "$1" 2>/dev/null)" || true
+  t1=$(date +%s)
+  [ $((t1 - t0)) -le 8 ] && [ "$(blocks)" = 0 ] && [ "$(log_has '"decision":"allow","reason":"error"')" = 1 ] && [ "$(log_count)" = 1 ] || return 1
+  fresh nc16b; export PTG_V_MODE=violate; d="$AUTOPILOT_LIVE_DIR/per-turn-gate"; mkdir -p "$d"; : >"$d/s1.lock"; touch -d '10 minutes ago' "$d/s1.lock"
+  t0=$(date +%s)
+  STOP_OUT="$(printf '{"session_id":"s1","cwd":"%s","stop_hook_active":false}' "$CASE_DIR/repo" | env HOME="$HOOK_HOME" timeout 12 node "$1" 2>/dev/null)" || true
+  t1=$(date +%s)
+  [ $((t1 - t0)) -le 8 ] && [ "$(log_count)" = 1 ] && [ "$(blocks)" = 1 ]
 }
 
 run_nc() { # <label> <fn> <mutant-name> <sed-expr>
@@ -166,7 +226,7 @@ run_nc() { # <label> <fn> <mutant-name> <sed-expr>
 }
 
 run_nc NC1 nc1 allowall "s#else { text = renderRetry(result.json, mode); outcome = 'block'; }#else { outcome = 'clean'; }#"
-run_nc NC2 nc2 nocap "s#if (counter >= maxBlocks) {#if (false) {#"
+run_nc NC2 nc2 nocap "s#capCounter >= maxBlocks#false#; s#counterNow >= maxBlocks#false#"
 run_nc NC3 nc3 blockonerr "s#if (result.kind === 'error') outcome = 'error';#if (false) outcome = 'error';#; s#return { kind: 'error' };#return { kind: 'violations', json: {} };#g"
 run_nc NC4 nc4 noreset "s#startsNewTurn(payload) ? prevTurn + 1 : prevTurn#prevTurn#"
 run_nc NC9v nc9v gapsblock "s#return mode === 'violations+features' \&\& gapsOf(result.json).length > 0;#return gapsOf(result.json).length > 0;#"
@@ -174,9 +234,14 @@ run_nc NC9v nc9v gapsblock "s#return mode === 'violations+features' \&\& gapsOf(
 run_nc NC9f nc9f gapsnever "s#return mode === 'violations+features' \&\& gapsOf(result.json).length > 0;#return false;#"
 run_nc NC9t nc9t nogate "s#const withGaps = mode === 'violations+features' \&\& gaps.length > 0;#const withGaps = gaps.length > 0;#"
 
-run_nc NC10 nc10 nolock "s#let unlock = acquireLock(lockDir);#let unlock = () => {};#; s#const u = acquireLock(lockDir);#const u = () => {};#; s#const counter = readInt(countFile);#const counter = readInt(countFile); sleepMs(150);#"
+run_nc NC10 nc10 nolock "s#const lockA = acquireLock(lockDir);#const lockA = { release: () => true };#; s#const lockB = acquireLock(lockDir);#const lockB = { release: () => true };#; s#counterNow = readInt(countFile);#counterNow = readInt(countFile); sleepMs(150);#"
 run_nc NC11 nc11 noschema "s#if (!validSchema(json)) return { kind: 'error' };##"
+run_nc NC12w nc12 widecleanup "s#if (!STATE_NAME.test(name)) continue;##"
 run_nc NC12 nc12 noclean "s#^  cleanupState(dir,#  (() => {})(dir,#"
+run_nc NC14 nc14 givebackish "s#log(turn, 'allow', outcome, capCounter);#log(turn, 'allow', outcome, capCounter); writeInt(path.join(dir, session + '.t' + turn + '.count'), 1);#"
+run_nc NC15 nc15 reclaimnotoken "s#if (movedToken !== judged) return null;##"
+run_nc NC15r nc15 releasenotoken "s#if (!o || o.token !== token) return false;##"
+run_nc NC16 nc16 nodeadline "s#if (Date.now() >= deadline) return null;##"
 run_nc NC13 nc13 alwaystrace "s#if (!enabled \&\& !hasVerifier) return;##"
 
 # Knob off / nothing configured / prompt_id.

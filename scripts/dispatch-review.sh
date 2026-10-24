@@ -100,6 +100,9 @@
 #   dispatch-hetero.sh's lib/cursor-model.sh) — a missing or bare-alias --model is a
 #   precondition failure. No --reasoning-effort/--effort: effort is encoded in the model id
 #   (P12); cursor-agent rejects both flags with "error: unknown option".
+#   opencode quota fail-fast: opencode has no retry-disable flag, so non-text NDJSON events + stderr are watched;
+#   a quota/rate-limit signal kills the child group and yields no_verdict with error `engine_quota_exhausted: ...`
+#   (not a bare rc=124). Review prose ("type":"text" events) is never scanned.
 #   opencode runner: drives the OpenCode CLI (`opencode run`). Containment is a real
 #   deny-all (live adversarial probe 2026-10-16, opencode 1.19.2, docs
 #   https://opencode.ai/docs/permissions/): inline OPENCODE_CONFIG_CONTENT sets global
@@ -484,17 +487,17 @@ if [[ -n "$SPEC_FILE" || -n "$PACK_FILE" || -n "$CHECKLISTS" ]]; then
   _SUP_ERR="$(mktemp -t dispatch-review-suppression-err-XXXXXX)"
   {
     if [[ -n "$SPEC_FILE" ]]; then
-      printf '--- spec ---\n'
+      printf -- '--- spec ---\n'
       cat "$SPEC_FILE"
       printf '\n'
     fi
     if [[ -n "$PACK_FILE" ]]; then
-      printf '--- pack ---\n'
+      printf -- '--- pack ---\n'
       cat "$PACK_FILE"
       printf '\n'
     fi
     if [[ -n "$CHECKLISTS" ]]; then
-      printf '--- checklists ---\n'
+      printf -- '--- checklists ---\n'
       IFS=',' read -r -a _sup_items <<< "$CHECKLISTS"
       for _item in "${_sup_items[@]}"; do
         _item="$(printf '%s' "${_item}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
@@ -971,6 +974,7 @@ CURSOR_CWD="" # set only on the cursor path; same trap-reap rationale
 CURSOR_OUT="" # cursor reviewer stdout capture (PARSE_INPUT); reaped on EXIT after the parser runs
 CURSOR_ERR="" # cursor reviewer stderr capture (chrome); reaped on EXIT
 OPENCODE_CWD=""   # set only on the opencode path; same trap-reap rationale
+OC_PID=""; OC_SETSID=""   # opencode child pid (= its process group id) + session launcher; cleanup kills the group on TERM/INT
 OPENCODE_HOME_ROOT=""   # clean temp HOME/XDG tree for the opencode seat (auth.json only)
 OPENCODE_OUT=""   # opencode reviewer stdout (NDJSON, then normalized in place); reaped on EXIT
 OPENCODE_ERR=""   # opencode stderr chrome
@@ -1004,6 +1008,10 @@ cleanup() {
   [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD"
   [ -n "$CURSOR_OUT" ] && rm -f "$CURSOR_OUT"
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR"
+  # Kill the detached opencode child (own session) BEFORE its cwd/home tree is removed.
+  if [ -n "${OC_PID:-}" ]; then
+    kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
+  fi
   [ -n "$OPENCODE_CWD" ] && rm -rf "$OPENCODE_CWD"
   [ -n "$OPENCODE_HOME_ROOT" ] && rm -rf "$OPENCODE_HOME_ROOT"
   [ -n "$OPENCODE_OUT" ] && rm -f "$OPENCODE_OUT"
@@ -1689,15 +1697,69 @@ elif [[ "$RUNNER" = "opencode" ]]; then
   mapfile -d '' -t OC_ENV < "$OC_PLAN_DIR/env.nul"
   OC_ADAPTOR="$(cat "$OC_PLAN_DIR/adaptor")"
   OPENCODE_CWD="$(cat "$OC_PLAN_DIR/cwd")"
-  timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
+  # Quota fail-fast: opencode has NO flag to disable provider retries (`opencode run --help`,
+  # 1.19.x), so on a quota / rate-limit error it retries until the wall cap (rc=124, empty
+  # output). Run the child in its own process group and watch its NON-text events + stderr;
+  # on a quota signal kill the group and report engine_quota_exhausted. Review prose
+  # (`"type":"text"` events) is never scanned, so the word "quota" in a review is inert.
+  OPENCODE_QUOTA=0
+  # The child always leads its own process group (PGID == OC_PID), so every kill is a group kill:
+  # with a session launcher that comes from the new session; without one, bash job control
+  # (`set -m`) makes the background job its own group leader. Members that outlive the root stay
+  # in the group, so they are reaped too and no pid list is ever kept.
+  OC_SETSID=""; [ -n "$(type -P setsid)" ] && OC_SETSID="$(type -P setsid)"
+  # Job control only without the launcher: as a group leader the launcher would fork and detach from `wait`.
+  # INT and TERM take one path while the child runs: kill its whole group at once, exit 130. A
+  # background bash job ignores SIGINT, so this must be our own trap, not signal propagation.
+  # Armed only for this window, where the only foreground command is a 0.2 s sleep, so the
+  # deferred trap runs promptly; the EXIT trap (cleanup) still follows.
+  trap 'if [ -n "${OC_PID:-}" ]; then kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null; fi; exit 130' INT TERM
+  if [ -z "$OC_SETSID" ]; then set -m; fi
+  # shellcheck disable=SC2086
+  $OC_SETSID timeout "$TIMEOUT" bash -c 'cd "$1" && in="$2" && shift 2 && exec "$@" < "$in"' \
       _ "$OPENCODE_CWD" "$PROMPT_FILE" \
-      env "${OC_ENV[@]}" "$OPENCODE_BIN" "${OC_ARGV[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR"
+      env "${OC_ENV[@]}" "$OPENCODE_BIN" "${OC_ARGV[@]}" > "$OPENCODE_OUT" 2> "$OPENCODE_ERR" &
+  OC_PID=$!
+  set +m
+  # Deterministic detection: no pipelines (no SIGPIPE/pipefail dependence). Only structured error
+  # signals count: stdout NDJSON lines with "type":"error" (opencode: error.data.message), and
+  # stderr lines of the unambiguous shape `Error: ...` / `error: ...` / `{"type":"error"...}`.
+  # Free text (review prose, "reviewing quota handling in src/429.ts") is inert.
+  OC_QUOTA_RE='insufficient_quota|quota exceeded|exceeded your (current )?quota|rate.?limit|usage limit|too many requests|status"? *:? *429|"(status_code|code)" *: *"?429([^0-9]|$)|HTTP 429'
+  oc_quota_hit() {
+    local errs
+    errs="$(grep -iE '"type" *: *"error"' "$OPENCODE_OUT" 2>/dev/null; grep -iE '^[[:space:]]*(error|fatal)[:[:space:]]|"type" *: *"error"' "$OPENCODE_ERR" 2>/dev/null)" || true
+    [ -n "$errs" ] || return 1
+    grep -qiE "$OC_QUOTA_RE" <<<"$errs"
+  }
+  while kill -0 "$OC_PID" 2>/dev/null; do
+    if oc_quota_hit; then
+      OPENCODE_QUOTA=1
+      kill -KILL -- "-$OC_PID" 2>/dev/null || kill -KILL "$OC_PID" 2>/dev/null
+      break
+    fi
+    sleep 0.2
+  done
+  wait "$OC_PID" 2>/dev/null
   OPENCODE_RC=$?
-  wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  # Final scan: a child that wrote a structured quota event and exited before the poll saw it.
+  if [ "$OPENCODE_QUOTA" -eq 0 ] && oc_quota_hit; then OPENCODE_QUOTA=1; fi
+  # The root is gone but a descendant may have been reparented and survived: it is still in the group.
+  kill -KILL -- "-$OC_PID" 2>/dev/null || true
+  OC_PID=""
+  trap - INT TERM
+  if [ "$OPENCODE_QUOTA" -eq 0 ]; then
+    wait_output_quiescent "$OPENCODE_OUT" "${AUTOPILOT_SETTLE_MS:-60000}" || true
+  fi
   rm -rf "$OPENCODE_HOME_ROOT"; OPENCODE_CWD=""; OPENCODE_HOME_ROOT=""   # one root holds work/ + home/ + plan/; clear so the EXIT trap doesn't rm it a 2nd time
   cat "$OPENCODE_OUT" > "$RAW_LOG"
   printf '\n--- opencode stderr (chrome, not parsed) ---\n' >> "$RAW_LOG"
   cat "$OPENCODE_ERR" >> "$RAW_LOG"
+  if [ "$OPENCODE_QUOTA" -eq 1 ]; then
+    printf '\n[dispatch-review: opencode quota/rate-limit error detected — child killed, engine_quota_exhausted]\n' >> "$RAW_LOG"
+    SALVAGE_CAPTURE=/dev/null
+    emit_no_verdict "engine_quota_exhausted: opencode hit a provider quota / rate-limit error — child killed early (not a timeout); see raw_log"
+  fi
   # Containment audit BEFORE normalising: a clean exit proves nothing, so ANY tool event in the
   # NDJSON voids the seat (never salvage an answer from a run that touched a tool).
   if ! OC_AUDIT="$(node "$OC_LIB" audit "$OPENCODE_OUT" "$OC_ADAPTOR" 2>&1)"; then

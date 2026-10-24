@@ -1948,7 +1948,17 @@ def _assertion_shape(raw, strict):
             ):
                 return None
         op = _TEST_OP.search(" " + inner + " ")
-        return ("op", op.group(1)) if op and op.group(1) == toks[1] else None
+        if not (op and op.group(1) == toks[1]):
+            return None
+        if toks[1] in ("-eq", "-ne", "-lt", "-le", "-gt", "-ge"):
+            # Variable operands are the subject and must be identical on both
+            # sides of an edit; only integer literals may change.
+            subj = tuple(
+                "#" if _ARITH_LITERAL.fullmatch(t) else _norm_operand(t)
+                for t in (raw_toks[0], raw_toks[2])
+            )
+            return ("op", toks[1], subj)
+        return ("op", op.group(1))
     return None
 
 

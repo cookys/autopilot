@@ -86,16 +86,21 @@ if(!text.includes(m.seed))bad.push("seed missing");
 for(const x of [...fm.map((q)=>q.seed),"ptg-p2-3-order-2026-10-24"])if(x!==m.seed&&text.includes(x))bad.push("seed "+x+" of another batch");
 console.log(bad.length?bad.join("; "):"ok")' "$@"
 }
-P1="$EVD/2026-10-24-per-turn-gate-p2-3"; PR="$EVD/2026-10-25-per-turn-gate-p2-3r"; PH="$EVD/2026-10-25-per-turn-gate-p2-3-h55"
-assert_eq "$(prereg_in_step "$PR" "$WRAP_SRC" "$P1" "$PH")" ok "4.5 rerun PREREG: wrapper hash, appendix, order, hashes, caps, probe cost, model and seed agree with its manifest"
-assert_eq "$(prereg_in_step "$PH" "$WRAP_SRC" "$P1" "$PR")" ok "5.5 PREREG: wrapper hash, appendix, order, hashes, caps, probe cost, model and seed agree with its manifest"
+P1="$EVD/2026-10-24-per-turn-gate-p2-3"; PR="$EVD/2026-10-25-per-turn-gate-p2-3r"; PH="$EVD/2026-10-25-per-turn-gate-p2-3-h55"; P2="$EVD/2026-10-25-per-turn-gate-p2-3r2"
+assert_eq "$(prereg_in_step "$PR" "$WRAP_SRC" "$P1" "$PH" "$P2")" ok "4.5 rerun PREREG: wrapper hash, appendix, order, hashes, caps, probe cost, model and seed agree with its manifest"
+assert_eq "$(prereg_in_step "$PH" "$WRAP_SRC" "$P1" "$PR" "$P2")" ok "5.5 PREREG: wrapper hash, appendix, order, hashes, caps, probe cost, model and seed agree with its manifest"
 prbad() { rm -rf "$TEST_TMP/prereg-bad"; cp -a "$PH" "$TEST_TMP/prereg-bad"; sed -i "$1" "$TEST_TMP/prereg-bad/PREREG.md"; }
-prbad 's/a6f2d856/0a5f50be/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR")" ok "RED: a 4.5 argv prefix inside the 5.5 PREREG is flagged"
-prbad '0,/C arm 3 USD/s//C arm 18 USD/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR")" ok "RED: a changed cap sentence is flagged"
-prbad 's/probe_cost` 0.0015/probe_cost` 0.0166/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR")" ok "RED: another batch's probe cost is flagged"
-prbad '0,/Haiku 5.5 batch/s//claude-haiku-4-5 batch/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR")" ok "RED: another batch's model name is flagged"
-prbad '0,/ptg-p2-3-h55-order-2026-10-25/s//ptg-p2-3-order-2026-10-24/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR")" ok "RED: another batch's seed is flagged"
-prbad 's/total cap 48 USD//;0,/Caps, never raised in place/s//The 48 USD approved total; caps, never raised in place/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR")" ok "RED: a leftover 48 USD cap statement is flagged"
+prbad 's/a6f2d856/0a5f50be/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR" "$P2")" ok "RED: a 4.5 argv prefix inside the 5.5 PREREG is flagged"
+prbad '0,/C arm 3 USD/s//C arm 18 USD/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR" "$P2")" ok "RED: a changed cap sentence is flagged"
+prbad 's/probe_cost` 0.0015/probe_cost` 0.0166/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR" "$P2")" ok "RED: another batch's probe cost is flagged"
+prbad '0,/Haiku 5.5 batch/s//claude-haiku-4-5 batch/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR" "$P2")" ok "RED: another batch's model name is flagged"
+prbad '0,/ptg-p2-3-h55-order-2026-10-25/s//ptg-p2-3-order-2026-10-24/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR" "$P2")" ok "RED: another batch's seed is flagged"
+prbad 's/total cap 48 USD//;0,/Caps, never raised in place/s//The 48 USD approved total; caps, never raised in place/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PR" "$P2")" ok "RED: a leftover 48 USD cap statement is flagged"
+assert_eq "$(prereg_in_step "$P2" "$WRAP_SRC" "$P1" "$PR" "$PH")" ok "4.5 second rerun PREREG (caps C 26, ON 40): wrapper hash, appendix, order, hashes, caps, probe cost, model and seed agree with its manifest"
+pr2bad() { rm -rf "$TEST_TMP/prereg-bad2"; cp -a "$P2" "$TEST_TMP/prereg-bad2"; sed -i "$1" "$TEST_TMP/prereg-bad2/PREREG.md"; }
+pr2bad '0,/Two earlier 4.5 batches/s//The cap of the first design was 18 USD; two earlier 4.5 batches/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad2" "$WRAP_SRC" "$P1" "$PR" "$PH")" ok "RED: the 18 USD cap of p2-3r put into the p2-3r2 PREREG is flagged"
+pr2bad 's/C arm 26 USD/C arm 18 USD/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad2" "$WRAP_SRC" "$P1" "$PR" "$PH")" ok "RED: the p2-3r cap sentence in the p2-3r2 PREREG is flagged"
+pr2bad 's/ptg-p2-3r2-order-2026-10-25/ptg-p2-3r-order-2026-10-25/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad2" "$WRAP_SRC" "$P1" "$PR" "$PH")" ok "RED: the p2-3r seed in the p2-3r2 PREREG is flagged"
 rm -rf "$TEST_TMP/prereg-bad"; cp -a "$PR" "$TEST_TMP/prereg-bad"; sed -i 's/"wrapper": "./"wrapper": "0/' "$TEST_TMP/prereg-bad/manifest.json"
 assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PH")" ok "RED: a manifest with another wrapper hash is reported out of step"
 finalize_test

@@ -33,13 +33,13 @@
 // a failed record with an authentication phrase in .out or .err is an auth failure (scripts/lib/auth-stop.js).
 //
 // I/O inventory (every read / write / close / rename in this file, and what a failure does):
-//   procStat      readFileSync /proc/<pid>/stat       failure = process gone (null); read is atomic enough, a torn read cannot match starttime
+//   procStat      readFile /proc/<pid>/stat           ENOENT = process gone; any other error = unknown (treated as alive + record incomplete)
 //   register      writeFileSync tmp + renameSync      failure throws -> non-zero exit; the wrapper's `register` call then fails loudly
 //   mirror read   fs.read(0)                          stream 'data' events (poll based, no blocking threadpool read); EOF/error ends the mirror; every chunk read is written before closing
 //   mirror write  writeAll(fd) loops short writes     EAGAIN waits and retries; EPIPE/other on the ORIGINAL output = .outbroken, record continues;
 //                                                    failure on the RECORD = .writeerror (never swallowed silently)
 //   mirror close  closeSync(rec), tmp+rename .closed  .closed is written last, after the final write completed; failure throws
-//   judge read    readFileSync .out/.err/.pid         missing file = empty text (a record can legitimately lack a stream)
+//   judge read    readFile via snapshot() (table there)  every read returns {ok,text,reason}; a failed read makes the record incomplete = failed, uncached
 //   judge cache   writeFileSync .ok                   failure is ignored: only the cache is lost, the record is judged again next time
 //   stop          writeFileSync tmp + renameSync      failure throws (the stop must not be silent); the line is also printed on stderr
 
@@ -50,19 +50,33 @@ const authStop = require('./auth-stop.js');
 const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// THE read function of the judge path (no other fs.readFileSync / accessSync / try-catch-to-empty exists for evidence):
+// {ok, text, reason, enoent}. ok=false = the read failed (reason = the errno); enoent=true = the file is simply absent.
+function readFile(file) {
+  try { return { ok: true, text: fs.readFileSync(file, 'utf8'), reason: null, enoent: false }; } catch (e) {
+    return { ok: false, text: '', reason: e.code || String(e.message), enoent: e.code === 'ENOENT' };
+  }
+}
+// Marker presence through the same function: {present, ok, reason}. ENOENT = absent (ok); any other error = unknown (ok=false).
+function marker(file) {
+  const r = readFile(file);
+  if (r.ok) return { present: true, ok: true, reason: null };
+  return { present: false, ok: r.enoent, reason: r.enoent ? null : r.reason };
+}
+// {gone:true} when the process does not exist (ENOENT/ESRCH); {unknown:true,reason} on any other read error; else {state,start}.
 function procStat(pid) {
-  try {
-    const raw = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
-    const rest = raw.slice(raw.lastIndexOf(')') + 2).split(' ');
-    return { state: rest[0], start: rest[19] };
-  } catch (_e) { return null; }
+  const r = readFile(`/proc/${pid}/stat`);
+  if (!r.ok) return r.enoent ? null : { unknown: true, reason: r.reason };
+  const rest = r.text.slice(r.text.lastIndexOf(')') + 2).split(' ');
+  return { state: rest[0], start: rest[19] };
 }
 function alive(pid, start) {
   const st = procStat(pid);
+  if (st && st.unknown) return true;                   // cannot tell: not dead (the record is flagged incomplete by snapshot)
   return !!st && st.state !== 'Z' && (!start || st.start === start);
 }
 function arg(argv, name, dflt) { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; }
-const exists = (f) => { try { fs.accessSync(f); return true; } catch (_e) { return false; } };
+const exists = (f) => marker(f).present;
 
 function writeAtomic(file, text) {
   const tmp = `${file}.tmp.${process.pid}`;
@@ -73,7 +87,7 @@ function writeAtomic(file, text) {
 function cmdRegister(argv) {
   const rec = arg(argv, '--rec'); const pid = arg(argv, '--pid');
   const st = procStat(pid);
-  writeAtomic(`${rec}.pid`, `${pid} ${st ? st.start : ''}\n`);
+  writeAtomic(`${rec}.pid`, `${pid} ${st && st.start ? st.start : ''}\n`);
   return 0;
 }
 
@@ -93,7 +107,7 @@ function writeAll(fd, buf) {
 
 async function cmdMirror(argv) {
   const pid = arg(argv, '--pid'); const file = arg(argv, '--rec'); const outFd = Number(arg(argv, '--fd', '1')) === 2 ? 2 : 1;
-  const st = procStat(pid); const start = st ? st.start : null;
+  const st = procStat(pid); const start = st && st.start ? st.start : null;
   const recFd = fs.openSync(file, 'a');
   let outBroken = null; let writeError = null;
   const emit = (chunk) => {
@@ -120,34 +134,50 @@ async function cmdMirror(argv) {
   process.exit(0);
 }
 
-function readRec(base, ext) { try { return fs.readFileSync(`${base}.${ext}`, 'utf8'); } catch (_e) { return ''; } }
-const isClosed = (base) => exists(`${base}.out.closed`) && exists(`${base}.err.closed`);
-
-function readPid(base) {
-  const parts = readRec(base, 'pid').trim().split(' ');
-  return parts[0] ? { pid: parts[0], start: parts[1] || null } : null;
+// One snapshot per record = every read of the judge path for that record. Deciding what a record IS (state) and whether its
+// evidence is complete (reasons) both come from here. Any failed read (not plain ENOENT of a file that may be absent in that
+// state) adds a reason; a record with a reason is a FAILED record and is never cached as .ok.
+//   read point                         ENOENT                                 other error
+//   <rec>.pid                          record vanished -> state 'gone'        reason pid-unreadable, state pending
+//   .pid starttime empty               -                                      reason no-starttime
+//   /proc/<pid>/stat                   process dead (ok)                      treated as alive, reason proc-unreadable
+//   <rec>.out.closed / .err.closed     not closed (ok)                        not closed, reason closed-unreadable
+//   <rec>.out / <rec>.err              ok unless the record is ready          reason out-unreadable / err-unreadable
+//   <rec>.out.writeerror / .err.writeerror  absent (ok)                       reason writeerror-unreadable
+//   <rec>.ok (cache)                   not cached (ok)                        not cached (judged again)
+// A present .writeerror, and every state other than ready, are reasons too. .outbroken is NOT (the record file is complete).
+function snapshot(base) {
+  const reasons = [];
+  const note = (why) => reasons.push(why);
+  const pidR = readFile(`${base}.pid`);
+  if (!pidR.ok && pidR.enoent) return { state: 'gone', out: '', err: '', reasons: ['gone'] };
+  let state; 
+  const parts = pidR.text.trim().split(' ');
+  const info = pidR.ok && parts[0] ? { pid: parts[0], start: parts[1] || null } : null;
+  if (!pidR.ok) { note(`pid-unreadable:${pidR.reason}`); }
+  else if (!info) { state = 'alive'; }                          // registration still being written: not judged yet
+  else if (!info.start) note('no-starttime');
+  const closedM = [marker(`${base}.out.closed`), marker(`${base}.err.closed`)];
+  for (const m of closedM) if (!m.ok) note(`closed-unreadable:${m.reason}`);
+  const closed = closedM[0].present && closedM[1].present;
+  if (!state) {
+    if (info) {
+      const st = procStat(info.pid);
+      if (st && st.unknown) { note(`proc-unreadable:${st.reason}`); state = 'alive'; }
+      else state = alive(info.pid, info.start) ? 'alive' : (closed ? 'ready' : 'pending');
+    } else state = 'pending';                                   // unreadable .pid
+  }
+  const o = readFile(`${base}.out`); const e = readFile(`${base}.err`);
+  if (!o.ok && !(o.enoent && state !== 'ready')) note(`out-unreadable:${o.reason}`);
+  if (!e.ok && !(e.enoent && state !== 'ready')) note(`err-unreadable:${e.reason}`);
+  for (const f of ['out', 'err']) {
+    const w = marker(`${base}.${f}.writeerror`);
+    if (w.present) note(`writeerror:${f}`); else if (!w.ok) note(`writeerror-unreadable:${w.reason}`);
+  }
+  if (state !== 'ready') note(`state:${state}`);
+  return { state, out: o.text, err: e.text, reasons };
 }
-// The one place that decides what a record is. Used by the boundary mode and by --final alike.
-function recordState(base) {
-  const info = readPid(base);
-  if (!info) return 'alive';                                    // registration still being written: not judged yet
-  if (alive(info.pid, info.start)) return 'alive';              // PID-ALIVE
-  return isClosed(base) ? 'ready' : 'pending';
-}
-
-// Every way a record can be incomplete -> judged as a FAILED record, never cached as .ok:
-//   not closed (alive/pending)         state !== 'ready' in cmdJudge
-//   .out.writeerror / .err.writeerror  the record file lost bytes (mirror could not write it)
-//   .out or .err file missing          a closed record always has both (mirror opens them); a missing one means lost evidence
-//   starttime unreadable (.pid)        the pid cannot be tied to one process: aliveness is a guess
-// NOT incomplete: .outbroken (only the pass-through to the caller failed; the record file is complete) -> judged by its content.
-function incompleteReason(base) {
-  if (exists(`${base}.out.writeerror`) || exists(`${base}.err.writeerror`)) return 'writeerror';
-  if (!exists(`${base}.out`) || !exists(`${base}.err`)) return 'missing-stream';
-  const info = readPid(base);
-  if (!info || !info.start) return 'no-starttime';
-  return null;
-}
+const recordState = (base) => snapshot(base).state;
 
 function stop(dir, line) {
   writeAtomic(path.join(dir, 'STOP'), `${line}\n`);
@@ -158,11 +188,18 @@ function stop(dir, line) {
 function cmdJudge(argv) {
   const dir = arg(argv, '--dir'); const prefix = arg(argv, '--id-prefix', '');
   const final = argv.includes('--final'); const waitMs = (final ? Number(arg(argv, '--wait', '10')) : 3) * 1000;
-  if (exists(path.join(dir, 'STOP'))) {
-    process.stderr.write(fs.readFileSync(path.join(dir, 'STOP'), 'utf8').replace(/^STOP_AUTH after /, `STOP_AUTH after ${prefix}`));
+  const stopM = marker(path.join(dir, 'STOP'));
+  if (stopM.present || !stopM.ok) {           // an unreadable STOP is still a stop
+    const t = readFile(path.join(dir, 'STOP')).text || `STOP_AUTH after : stop marker unreadable (${stopM.reason})\n`;
+    process.stderr.write(t.replace(/^STOP_AUTH after /, `STOP_AUTH after ${prefix}`));
     return authStop.EXIT_AUTH_STOP;
   }
-  const bases = () => { try { return fs.readdirSync(dir).filter((f) => f.endsWith('.pid')).map((f) => path.join(dir, f.slice(0, -4))).sort(); } catch (_e) { return []; } };
+  const bases = () => {
+    try { return fs.readdirSync(dir).filter((f) => f.endsWith('.pid')).map((f) => path.join(dir, f.slice(0, -4))).sort(); } catch (e) {
+      if (e.code === 'ENOENT') return [];      // no record directory = no records
+      throw e;                                 // anything else: refuse to judge (non-zero exit), never "no records"
+    }
+  };
   const waitFor = (states) => {          // wait (bounded) until no record is in one of `states`
     const until = Date.now() + waitMs;
     while (Date.now() < until && bases().some((b) => !exists(`${b}.ok`) && states.includes(recordState(b)))) sleepSync(50);
@@ -170,15 +207,12 @@ function cmdJudge(argv) {
   waitFor(final ? ['alive', 'pending'] : ['pending']);
   for (const base of bases()) {
     if (exists(`${base}.ok`)) continue;
-    const state = recordState(base);
-    if (state === 'alive' && !final) continue;                  // still running: judged once it is closed
-    const out = readRec(base, 'out'); const err = readRec(base, 'err');
-    // ready: failed unless a successful result line exists. Not ready (final, or pending past the wait): a FAILED record, judged
-    // from whatever exists.
-    // Evidence that may be incomplete is never trusted as success and never cached: see incompleteReason.
-    const incomplete = state !== 'ready' || incompleteReason(base);
-    const failed = incomplete ? true : authStop.claudeStreamFailed(out);
-    const hit = authStop.checkSources([{ kind: 'raw', text: out }, { kind: 'raw', text: err }], { failed });
+    const snap = snapshot(base);
+    if (snap.state === 'gone') continue;
+    if (snap.state === 'alive' && !final && snap.reasons.every((r) => r === 'state:alive')) continue;   // still running: judged once closed
+    const incomplete = snap.reasons.length > 0;                 // includes every non-ready state
+    const failed = incomplete ? true : authStop.claudeStreamFailed(snap.out);
+    const hit = authStop.checkSources([{ kind: 'raw', text: snap.out }, { kind: 'raw', text: snap.err }], { failed });
     if (hit) return stop(dir, authStop.stopLine(`${prefix}${path.basename(base)}`, hit));
     if (!incomplete) { try { fs.writeFileSync(`${base}.ok`, ''); } catch (_e) { /* cache only */ } }
   }
@@ -197,4 +231,4 @@ async function main(argv) {
 if (require.main === module) {
   main(process.argv.slice(2)).then((rc) => { if (rc !== undefined) process.exitCode = rc; }, (e) => { process.stderr.write(`claude-call-capture: ${e && e.stack || e}\n`); process.exit(3); });
 }
-module.exports = { alive, procStat, isClosed, recordState, incompleteReason };
+module.exports = { alive, procStat, recordState, snapshot };

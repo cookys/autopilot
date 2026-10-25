@@ -253,9 +253,9 @@ kill_grandchildren "$TEST_TMP/ebw-mut2"; sleep 1
 # 3. the record-state function skips a dead record whose streams are not closed yet (the old "only judge what is already closed" hole)
 #    -> claude 1 was just killed, its mirror is still draining, so query 3 starts before the authentication stderr is on disk
 mk_layout "$TEST_TMP/ebw-mut3"
-grep -q "isClosed(base) ? 'ready' : 'pending'" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" || fail "state-function mutation anchor missing"
-sed -i "s/return isClosed(base) ? 'ready' : 'pending';/return isClosed(base) ? 'ready' : 'alive';/" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js"
-grep -q "isClosed(base) ? 'ready' : 'alive'" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" || fail "state-function mutation did not apply"
+grep -q "(closed ? 'ready' : 'pending')" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" || fail "state-function mutation anchor missing"
+sed -i "s/(closed ? 'ready' : 'pending')/(closed ? 'ready' : 'alive')/" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js"
+grep -q "(closed ? 'ready' : 'alive')" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" || fail "state-function mutation did not apply"
 ebw_run "$TEST_TMP/ebw-mut3" wrap-late1gc standin_probe.py 1.6
 if [ "$CALLS" -le 2 ]; then fail "run-eval-batch: judging a live record did not let query 3 through (calls=$CALLS) -- negative control broken"; fi
 echo "MUTANT-RED run-eval-batch (recordState: unclosed dead record skipped): claude calls=$CALLS (the probe's third query was paid)"
@@ -263,14 +263,31 @@ kill_grandchildren "$TEST_TMP/ebw-mut3"
 # 4. judge ignores .writeerror (incomplete record trusted) -> a record whose write failed, with a success prefix and auth stderr, is not stopped
 mk_layout "$TEST_TMP/ebw-mut4"
 JSM="$TEST_TMP/ebw-mut4/scripts/lib/claude-call-capture.js"
-sed -i "s/if (exists(\`\${base}.out.writeerror\`) || exists(\`\${base}.err.writeerror\`)) return 'writeerror';//" "$JSM"
-grep -q "return 'writeerror'" "$JSM" && fail "writeerror mutation did not apply"
+grep -q 'if (w.present) note(`writeerror' "$JSM" || fail "writeerror mutation anchor missing"
+sed -i 's/if (w.present) note(`writeerror/if (false) note(`writeerror/' "$JSM"
+grep -q 'if (false) note(`writeerror' "$JSM" || fail "writeerror mutation did not apply"
 MD="$TEST_TMP/ebw-mut4/jd"; mkdir -p "$MD"; echo "999999 1" > "$MD/m.pid"
 echo '{"type":"result","subtype":"success","is_error":false,"result":"fine"}' > "$MD/m.out"; echo 'Authentication error' > "$MD/m.err"
 : > "$MD/m.out.closed"; : > "$MD/m.err.closed"; echo EIO > "$MD/m.out.writeerror"
 node "$JSM" judge --dir "$MD" < /dev/null 2>/dev/null; MRC=$?
 if [ "$MRC" = 6 ]; then fail "writeerror mutant still stopped -- negative control broken"; fi
 echo "MUTANT-RED claude-call-capture (writeerror ignored): rc=$MRC (the incomplete record was trusted)"
+# 5. a read error is swallowed into empty text again (the old readRec) -> an unreadable .out is trusted
+mk_layout "$TEST_TMP/ebw-mut5"
+JS5="$TEST_TMP/ebw-mut5/scripts/lib/claude-call-capture.js"
+python3 - "$JS5" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+a = "return { ok: false, text: '', reason: e.code || String(e.message), enoent: e.code === 'ENOENT' };"
+assert a in s, "read-error mutation anchor missing"
+open(p, "w").write(s.replace(a, "if (e.code !== 'ENOENT') return { ok: true, text: '', reason: null, enoent: false }; " + a))
+PY
+M5="$TEST_TMP/ebw-mut5/jd"; mkdir -p "$M5"; echo "999999 1" > "$M5/m.pid"
+echo '{"type":"result","subtype":"success","is_error":false,"result":"fine"}' > "$M5/m.out"; : > "$M5/m.out.closed"; : > "$M5/m.err.closed"; mkdir "$M5/m.err"   # .err unreadable (EISDIR)
+node "$JS5" judge --dir "$M5" < /dev/null 2>/dev/null
+if [ ! -e "$M5/m.ok" ]; then fail "read-error mutant did not cache the unreadable record as clean -- negative control broken"; fi
+MRC=cached-as-clean
+echo "MUTANT-RED claude-call-capture (read errors swallowed into empty text): rc=$MRC"
 
 # ============================ 2. scripts/bench-engine-capability.sh (one dispatch per case) ============================
 # outputs of a paid call: dispatch stdout+stderr (captured together) and the agent_log it names

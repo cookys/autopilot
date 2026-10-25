@@ -86,4 +86,19 @@ node "$JS" judge --dir "$D" < /dev/null 2>/dev/null; RC=$?
 assert_eq "$RC" "0" "judge: .outbroken only (record complete) is judged by content: clean"
 assert_file_exists "$D/w4.ok" "judge: and cached"
 
+# 5. unreadable evidence is incomplete evidence (a read error is never "empty text")
+rm -rf "$D"; mkdir -p "$D"; mkrec u1; rm -f "$D/u1.out"; mkdir "$D/u1.out"       # a directory posing as the stream file: EISDIR
+node "$JS" judge --dir "$D" < /dev/null 2>/dev/null; RC=$?
+assert_eq "$RC" "6" "judge: .out unreadable (EISDIR) + auth stderr -> stop"
+assert_file_absent "$D/u1.ok" "judge: and no .ok"
+rm -rf "$D"; mkdir -p "$D"; mkrec u2; echo '{"type":"result","subtype":"success","is_error":false,"result":"fine"}' > "$D/u2.out"; echo ok > "$D/u2.err"
+rm -f "$D/u2.err"; mkdir "$D/u2.err"
+node "$JS" judge --dir "$D" < /dev/null 2>/dev/null; RC=$?
+assert_eq "$RC" "0" "judge: .err unreadable but nothing wrong in what is readable -> no stop"
+assert_file_absent "$D/u2.ok" "judge: an unreadable stream is never cached as clean"
+rm -rf "$D"; mkdir -p "$D"; mkrec u3; rm -f "$D/u3.pid"; mkdir "$D/u3.pid"
+node "$JS" judge --dir "$D" < /dev/null 2>/dev/null; RC=$?
+assert_eq "$RC" "6" "judge: .pid unreadable (directory) -> failed record rules, the auth stderr stops"
+assert_file_absent "$D/u3.ok" "judge: unreadable .pid -> no .ok"
+
 finalize_test

@@ -321,9 +321,9 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-01
 - **Origin**: self
-- **Problem**: 每回合重新提醒模型守規則沒有明顯進步，因此改做每回合驗證。Haiku 4.5（p2-3r2）與 Haiku 5.5（p2-3-h55）兩批評測都判 PASS，hook 可記載為經評測的 opt-in。P2-4 收尾文件進行中；預設值由 owner 決定（卡 d-7d8444a3）。
+- **Problem**: 每回合重新提醒模型守規則沒有明顯進步，因此改做每回合驗證。兩批評測（Haiku 4.5、5.5；模式 violations+features）都 PASS；預設模式 violations 未單獨評測。P2-4 收尾文件進行中；預設值由 owner 決定（卡 d-32849d39）。
 - **Impact**: 預設仍未開啟，長時間工作時模型可能漸漸偏離規定；hook 已可選用，兩批評測都通過，等 owner 決定預設。
-- **Trigger**: P2-4 verdict note merged and owner answers d-7d8444a3. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
+- **Trigger**: P2-4 verdict note merged and owner answers d-32849d39. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)

@@ -2,7 +2,7 @@
 
 Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-09-14
 
-- **Trigger**: P2-4 verdict note merged and owner answers d-7d8444a3 (was, until 2026-10-25: the Haiku 5.5 batch finishes and is judged).
+- **Trigger**: P2-4 verdict note merged and owner answers d-32849d39 (was, until 2026-10-25: the Haiku 5.5 batch finishes and is judged).
 - **Context**: Per-turn re-injection moved vocabulary but did not produce a statistically conclusive behavior lift. As of 2026-09-14 the untested lever was mechanical verification at every turn: reject constraint-violating output and force a bounded retry. Keep this distinct from re-injection and measure against the existing t14 baseline. Since 2026-10-25 the per-turn gate hook exists, is opt-in (default off), and passed both the Haiku 4.5 (P2-3r2) and Haiku 5.5 (P2-3-h55) evaluations (see Status below).
 - **Effort**: M.
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
@@ -16,4 +16,6 @@ P2-3r (Haiku 4.5 rerun, started 2026-10-25 06:34 Taipei) hit STOP_COST before C-
 
 P2-3r2 (Haiku 4.5 second rerun) judged PASS (merge 670b3ffaf): docs/plans/evidence/2026-10-25-per-turn-gate-p2-3r2/RESULT.md. M3 ON 28/30 vs C 1/30, one-sided Fisher p=1.14e-13; M1 ON 29/30; the M2 trade check was not triggered. Per the preregistration, PASS permits documenting the hook as an evaluated opt-in; it does not decide a default. The Haiku 5.5 batch (p2-3-h55) started 2026-10-25 19:52 Taipei; the BL-0295 eval design is in progress.
 
-P2-3-h55 (Haiku 5.5) judged PASS (a10bceef5): docs/plans/evidence/2026-10-25-per-turn-gate-p2-3-h55/RESULT.md. M3 ON 23/30 vs C 0/30, one-sided Fisher p=8.71e-11, cost 2.10 USD. Both batches (4.5 and 5.5) PASS. Next: the P2-4 wrap-up documents (in progress); the default is the owner's decision (decision card d-7d8444a3, 2026-10-25).
+P2-3-h55 (Haiku 5.5) judged PASS (a10bceef5): docs/plans/evidence/2026-10-25-per-turn-gate-p2-3-h55/RESULT.md. M3 ON 23/30 vs C 0/30, one-sided Fisher p=8.71e-11, cost 2.10 USD. Both batches (4.5 and 5.5) PASS. Next: the P2-4 wrap-up documents (in progress); the default is the owner's decision (decision card d-32849d39, 2026-10-25).
+
+Mode note: both batches evaluated mode violations+features; the hook's default mode (violations) was not evaluated on its own (decision card d-32849d39).

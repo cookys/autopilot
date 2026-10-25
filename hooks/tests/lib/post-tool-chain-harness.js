@@ -206,19 +206,17 @@ function buildOrigTree() {
   const rev = spawnSync('git', ['-C', REPO, 'rev-parse', '--verify', `${ORIG_REF}^{commit}`], { encoding: 'utf8' });
   if (rev.status !== 0) return null;
   const root = path.join(BASE, 'orig');
-  fs.mkdirSync(path.join(root, 'hooks'), { recursive: true });
-  fs.symlinkSync(path.join(REPO, 'src'), path.join(root, 'src'));
-  fs.symlinkSync(path.join(REPO, 'scripts'), path.join(root, 'scripts'));
-  for (const f of fs.readdirSync(HOOKS)) {
-    fs.symlinkSync(path.join(HOOKS, f), path.join(root, 'hooks', f)); // files and dirs (_shared/, lib/)
-  }
-  for (const stem of MEMBERS) {
-    const show = spawnSync('git', ['-C', REPO, 'show', `${ORIG_REF}:hooks/${stem}.js`], { encoding: 'buffer', maxBuffer: 1 << 26 });
-    if (show.status !== 0) return null;
-    const dest = path.join(root, 'hooks', `${stem}.js`);
-    fs.rmSync(dest, { force: true });
-    fs.writeFileSync(dest, show.stdout);
-  }
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.mkdirSync(root, { recursive: true });
+  // INDEPENDENCE (BL-0304): every line of code the orig arm runs comes out of ORIG_REF, not out of the tree under test: the
+  // whole of hooks/ (observers and everything they require: _shared/, lib/, *-lib.js), src/ and scripts/ are extracted
+  // from the pinned commit. Nothing is linked to HEAD; hooks/tests (this harness, the golden, ptc-freeze.js) is excluded.
+  const ex = spawnSync('sh', ['-c', 'git -C "$1" archive "$2" -- hooks src scripts ":(exclude)hooks/tests" | tar -x -C "$3"', 'sh', REPO, ORIG_REF, root], { encoding: 'utf8', maxBuffer: 1 << 26 });
+  if (ex.status !== 0) return null;
+  // proof, not trust: no symlink may exist anywhere in the orig tree (a link would lead back to HEAD code or data)
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isSymbolicLink()) die(`orig tree contains a symlink (${p}): the orig arm must run only code extracted from ${ORIG_REF}`); if (e.isDirectory()) walk(p); } };
+  walk(root);
+  for (const stem of MEMBERS) if (!fs.existsSync(path.join(root, 'hooks', `${stem}.js`))) return null;
   return path.join(root, 'hooks');
 }
 

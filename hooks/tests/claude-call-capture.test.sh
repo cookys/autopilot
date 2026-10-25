@@ -101,4 +101,21 @@ node "$JS" judge --dir "$D" < /dev/null 2>/dev/null; RC=$?
 assert_eq "$RC" "6" "judge: .pid unreadable (directory) -> failed record rules, the auth stderr stops"
 assert_file_absent "$D/u3.ok" "judge: unreadable .pid -> no .ok"
 
+# 6. one read per source: the judge path reads /proc/<pid>/stat exactly once per record, and an EIO on it is a recorded reason
+rm -rf "$D"; mkdir -p "$D"; mkrec p1 "$START"; echo "$ME $START" > "$D/p1.pid"
+cat > "$W/probe_reads.js" <<'EOS'
+const fs = require('fs'); const real = fs.readFileSync; let n = 0; const mode = process.argv[4];
+fs.readFileSync = function (f, ...a) {
+  if (String(f).startsWith('/proc/')) { n++; if (mode === 'eio-second' && n > 1) { const e = new Error('EIO'); e.code = 'EIO'; throw e; }
+    if (mode === 'eio-first') { const e = new Error('EIO'); e.code = 'EIO'; throw e; } }
+  return real.call(this, f, ...a);
+};
+const snap = require(process.argv[2]).snapshot(process.argv[3]);
+console.log(JSON.stringify({ reads: n, state: snap.state, reasons: snap.reasons }));
+EOS
+R="$(node "$W/probe_reads.js" "$JS" "$D/p1" eio-second)"
+assert_contains "$R" '"reads":1' "snapshot: /proc stat is read exactly once per record"
+R="$(node "$W/probe_reads.js" "$JS" "$D/p1" eio-first)"
+assert_contains "$R" 'proc-unreadable:EIO' "snapshot: an EIO on the /proc read is recorded as a reason"
+
 finalize_test

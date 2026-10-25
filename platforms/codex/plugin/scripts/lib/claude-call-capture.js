@@ -70,11 +70,12 @@ function procStat(pid) {
   const rest = r.text.slice(r.text.lastIndexOf(')') + 2).split(' ');
   return { state: rest[0], start: rest[19] };
 }
-function alive(pid, start) {
-  const st = procStat(pid);
-  if (st && st.unknown) return true;                   // cannot tell: not dead (the record is flagged incomplete by snapshot)
+// Pure: aliveness from ONE procStat result (the judge path reads /proc once per record and decides from that single result).
+function aliveFrom(st, start) {
+  if (st && st.unknown) return true;                   // cannot tell: not dead (snapshot flags the record incomplete)
   return !!st && st.state !== 'Z' && (!start || st.start === start);
 }
+function alive(pid, start) { return aliveFrom(procStat(pid), start); }   // mirror only: not on the judge path
 function arg(argv, name, dflt) { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; }
 const exists = (f) => marker(f).present;
 
@@ -151,7 +152,7 @@ function snapshot(base) {
   const note = (why) => reasons.push(why);
   const pidR = readFile(`${base}.pid`);
   if (!pidR.ok && pidR.enoent) return { state: 'gone', out: '', err: '', reasons: ['gone'] };
-  let state; 
+  let state;
   const parts = pidR.text.trim().split(' ');
   const info = pidR.ok && parts[0] ? { pid: parts[0], start: parts[1] || null } : null;
   if (!pidR.ok) { note(`pid-unreadable:${pidR.reason}`); }
@@ -164,7 +165,7 @@ function snapshot(base) {
     if (info) {
       const st = procStat(info.pid);
       if (st && st.unknown) { note(`proc-unreadable:${st.reason}`); state = 'alive'; }
-      else state = alive(info.pid, info.start) ? 'alive' : (closed ? 'ready' : 'pending');
+      else state = aliveFrom(st, info.start) ? 'alive' : (closed ? 'ready' : 'pending');
     } else state = 'pending';                                   // unreadable .pid
   }
   const o = readFile(`${base}.out`); const e = readFile(`${base}.err`);
@@ -231,4 +232,4 @@ async function main(argv) {
 if (require.main === module) {
   main(process.argv.slice(2)).then((rc) => { if (rc !== undefined) process.exitCode = rc; }, (e) => { process.stderr.write(`claude-call-capture: ${e && e.stack || e}\n`); process.exit(3); });
 }
-module.exports = { alive, procStat, recordState, snapshot };
+module.exports = { alive, aliveFrom, procStat, recordState, snapshot };

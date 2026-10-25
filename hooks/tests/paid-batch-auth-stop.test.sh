@@ -288,6 +288,15 @@ node "$JS5" judge --dir "$M5" < /dev/null 2>/dev/null
 if [ ! -e "$M5/m.ok" ]; then fail "read-error mutant did not cache the unreadable record as clean -- negative control broken"; fi
 MRC=cached-as-clean
 echo "MUTANT-RED claude-call-capture (read errors swallowed into empty text): rc=$MRC"
+# 6. aliveness is read from /proc a second time (alive() again) -> the second read can fail unrecorded; the one-read count catches it
+mk_layout "$TEST_TMP/ebw-mut6"
+JS6="$TEST_TMP/ebw-mut6/scripts/lib/claude-call-capture.js"
+grep -q 'aliveFrom(st, info.start) ?' "$JS6" || fail "double-read mutation anchor missing"
+sed -i 's/aliveFrom(st, info.start) ?/alive(info.pid, info.start) ?/' "$JS6"
+M6="$TEST_TMP/ebw-mut6/jd"; mkdir -p "$M6"; echo "$$ 1" > "$M6/m.pid"
+N6="$(node -e 'const fs=require("fs");const r=fs.readFileSync;let n=0;fs.readFileSync=function(f,...a){if(String(f).startsWith("/proc/"))n++;return r.call(this,f,...a)};require(process.argv[1]).snapshot(process.argv[2]);console.log(n)' "$JS6" "$M6/m")"
+if [ "$N6" = 1 ]; then fail "double-read mutant still reads /proc once -- negative control broken"; fi
+echo "MUTANT-RED claude-call-capture (aliveness re-reads /proc): reads=$N6"
 
 # ============================ 2. scripts/bench-engine-capability.sh (one dispatch per case) ============================
 # outputs of a paid call: dispatch stdout+stderr (captured together) and the agent_log it names

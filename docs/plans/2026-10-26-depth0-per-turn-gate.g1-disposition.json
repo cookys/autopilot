@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "depth0-per-turn-gate-2026-10-26",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "f02b4c6ee8d110b6ae650ef5ba2418fa493cf2ab815cf50a2cbf1d5de00be1e8",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision A: must_pass no longer carries command text; it names checks declared in a repo-owned committed registry (or autopilot-shipped checks), so a rule list cannot run arbitrary code; every path field is repo-relative, normalised, no .. or absolute, realpath-contained."
+    },
+    {
+      "fingerprint": "bff16484d3aa953fd5ba812ac0dcfc5d2721f3ff34a94b95630a88e6ce6c377b",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision B: no lane-keyed files. The switch binds to the worker: headless rails write the gate file keyed by the CHILD_SESSION_ID they generate and remove it on worker exit, expiry = rail timeout; native subagents key on the worker worktree realpath only if P0 proves the hook sees it, otherwise the native path is excluded explicitly. Block counters keyed per worker."
+    },
+    {
+      "fingerprint": "eae3d8a8b91ec75843b4e560bb90e520e1f5f21c8115c893c6c6703ce721ac53",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision B: no lane-keyed files. The switch binds to the worker: headless rails write the gate file keyed by the CHILD_SESSION_ID they generate and remove it on worker exit, expiry = rail timeout; native subagents key on the worker worktree realpath only if P0 proves the hook sees it, otherwise the native path is excluded explicitly. Block counters keyed per worker."
+    },
+    {
+      "fingerprint": "3459337f7a24292f6fc64b0862d0c2cbfd67fdebddbf1e0a237297fbe3c25ff5",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision F: correct the hook descriptions against hooks/per-turn-gate.js and cite or label every load-bearing claim; dispatch-author.sh:1388 does pass --session-id, but the id is generated inside the rail, so depth-0 cannot write a session file before dispatch (handled by B)."
+    },
+    {
+      "fingerprint": "c0d1a0fb09d7d332bb97768e455b5ce61c415683cc6dfec4d005fc4b32c89bec",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision E: the change arm uses a candidate guidance paragraph frozen in the eval directory; P4 commits that exact text after PASS; arms, file list, G3 turns, G4 carrier and cost table reconciled."
+    },
+    {
+      "fingerprint": "91020536839826844a9690ef9df63791ce5acc234ced0151964c49885670ba85",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted, folded: hygiene and consistency fixed in the revision."
+    },
+    {
+      "fingerprint": "c69125d0724fee398d35d89fd33e34bd77c6e0595f9cc6941201cc116eece726",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision C: one fail-open rule: any problem with a gate file means the file is ignored and the hook runs exactly as today; nothing is logged unless a valid file arms the gate."
+    },
+    {
+      "fingerprint": "de558250082c4329f9b9a0c3e768532d1c91698b0632b00594a33625e2c0cc33",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision A: must_pass no longer carries command text; it names checks declared in a repo-owned committed registry (or autopilot-shipped checks), so a rule list cannot run arbitrary code; every path field is repo-relative, normalised, no .. or absolute, realpath-contained."
+    },
+    {
+      "fingerprint": "cd5e9d167dac4a968881893aba3d1bfa6d2111431d269dfaec31922a7a41e7db",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision D: forbid_paths has one definition: changed or untracked paths relative to a base sha recorded at arming, with an in-house glob subset specified."
+    },
+    {
+      "fingerprint": "ffd2bd24a8adafe3f42d1631c532c48bd5d1e4a5a8172579321b79735394fe13",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision B: no lane-keyed files. The switch binds to the worker: headless rails write the gate file keyed by the CHILD_SESSION_ID they generate and remove it on worker exit, expiry = rail timeout; native subagents key on the worker worktree realpath only if P0 proves the hook sees it, otherwise the native path is excluded explicitly. Block counters keyed per worker."
+    },
+    {
+      "fingerprint": "12121c8a7a2c9ec0262ecca055e38e009c134eeb55d46c77327d4a04d66ed05d",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision B: no lane-keyed files. The switch binds to the worker: headless rails write the gate file keyed by the CHILD_SESSION_ID they generate and remove it on worker exit, expiry = rail timeout; native subagents key on the worker worktree realpath only if P0 proves the hook sees it, otherwise the native path is excluded explicitly. Block counters keyed per worker."
+    },
+    {
+      "fingerprint": "acd92fd657ae8009f3d3aa1927bb3050f54d56642f8140370e3d3455a4777f6d",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision F: correct the hook descriptions against hooks/per-turn-gate.js and cite or label every load-bearing claim; dispatch-author.sh:1388 does pass --session-id, but the id is generated inside the rail, so depth-0 cannot write a session file before dispatch (handled by B)."
+    },
+    {
+      "fingerprint": "251ed7246752d8e3ca937044ca9a0bfe4728f8fcf2fcf11630c11b3024600666",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision E: the change arm uses a candidate guidance paragraph frozen in the eval directory; P4 commits that exact text after PASS; arms, file list, G3 turns, G4 carrier and cost table reconciled."
+    },
+    {
+      "fingerprint": "326bc132dc81782b0e9a505c640d2ebd62de1e304d8704f02edddc82cf27e2b8",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted, folded: hygiene and consistency fixed in the revision."
+    },
+    {
+      "fingerprint": "9c7d3a1a805130557b9fa031b9e35020868b8ad703e1d27f45f0b52d39977e1d",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision A: must_pass no longer carries command text; it names checks declared in a repo-owned committed registry (or autopilot-shipped checks), so a rule list cannot run arbitrary code; every path field is repo-relative, normalised, no .. or absolute, realpath-contained."
+    },
+    {
+      "fingerprint": "d667acc2e009fb7a3c1a796a84cfe56819d444932dde61e0ed9e1ba58bb4e6d5",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision E: the change arm uses a candidate guidance paragraph frozen in the eval directory; P4 commits that exact text after PASS; arms, file list, G3 turns, G4 carrier and cost table reconciled."
+    },
+    {
+      "fingerprint": "670d849a6c175fe918e41f9d437d213a94066505da2895262055738b25608a5c",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision B: no lane-keyed files. The switch binds to the worker: headless rails write the gate file keyed by the CHILD_SESSION_ID they generate and remove it on worker exit, expiry = rail timeout; native subagents key on the worker worktree realpath only if P0 proves the hook sees it, otherwise the native path is excluded explicitly. Block counters keyed per worker."
+    },
+    {
+      "fingerprint": "915fc8376fb7a2fef65ecda9c2c828baf781444ecff2f7a9715ea9914b4576cf",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision F: correct the hook descriptions against hooks/per-turn-gate.js and cite or label every load-bearing claim; dispatch-author.sh:1388 does pass --session-id, but the id is generated inside the rail, so depth-0 cannot write a session file before dispatch (handled by B)."
+    },
+    {
+      "fingerprint": "39cbc058c94eff8d3237dbf34b169dbc152bd78663459f4ca39535c5d5e79d30",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted, folded: hygiene and consistency fixed in the revision."
+    },
+    {
+      "fingerprint": "41053644ff3818b3b954d7b81865daf14f8798a5b355465b12e5e9369a5e3ed2",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision C: one fail-open rule: any problem with a gate file means the file is ignored and the hook runs exactly as today; nothing is logged unless a valid file arms the gate."
+    },
+    {
+      "fingerprint": "2880cf24fe49f0e82709bc490f100a2ae8172cb1412afcb9ddcfe9da6182ceb3",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision C: one fail-open rule: any problem with a gate file means the file is ignored and the hook runs exactly as today; nothing is logged unless a valid file arms the gate."
+    },
+    {
+      "fingerprint": "56bc4f2437f933570bec2f4871d85435815376ffd34817aee6b96eed165c84b0",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision A: must_pass no longer carries command text; it names checks declared in a repo-owned committed registry (or autopilot-shipped checks), so a rule list cannot run arbitrary code; every path field is repo-relative, normalised, no .. or absolute, realpath-contained."
+    },
+    {
+      "fingerprint": "09a519196709dde486593b1a6e965c74ba36aebb44045c4ec48b1b0249fa3299",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision A: must_pass no longer carries command text; it names checks declared in a repo-owned committed registry (or autopilot-shipped checks), so a rule list cannot run arbitrary code; every path field is repo-relative, normalised, no .. or absolute, realpath-contained."
+    },
+    {
+      "fingerprint": "6c560979ccb4d70bb604f55fed13ea7d085f50b8da4dbdd05c80a5931a0735bc",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision E: the change arm uses a candidate guidance paragraph frozen in the eval directory; P4 commits that exact text after PASS; arms, file list, G3 turns, G4 carrier and cost table reconciled."
+    },
+    {
+      "fingerprint": "0688faf2792ee0cc9046ec50c53b7c5e876411e1ec8c8f902d74348b9b99b296",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision F: correct the hook descriptions against hooks/per-turn-gate.js and cite or label every load-bearing claim; dispatch-author.sh:1388 does pass --session-id, but the id is generated inside the rail, so depth-0 cannot write a session file before dispatch (handled by B)."
+    },
+    {
+      "fingerprint": "7abf87b32cbe877718195eec8d8381930b2f1ea4577180daf69474cba1e9fffe",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision B: no lane-keyed files. The switch binds to the worker: headless rails write the gate file keyed by the CHILD_SESSION_ID they generate and remove it on worker exit, expiry = rail timeout; native subagents key on the worker worktree realpath only if P0 proves the hook sees it, otherwise the native path is excluded explicitly. Block counters keyed per worker."
+    },
+    {
+      "fingerprint": "9dc96b37443a7ed5074f41541e44a3c03d927f48016c78e831f4c1e7f654038c",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision A: must_pass no longer carries command text; it names checks declared in a repo-owned committed registry (or autopilot-shipped checks), so a rule list cannot run arbitrary code; every path field is repo-relative, normalised, no .. or absolute, realpath-contained."
+    },
+    {
+      "fingerprint": "a53f0186f01302b1e528d3637b13b930a7af9e3f0d3f923f6c288afb69ddca27",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision B: no lane-keyed files. The switch binds to the worker: headless rails write the gate file keyed by the CHILD_SESSION_ID they generate and remove it on worker exit, expiry = rail timeout; native subagents key on the worker worktree realpath only if P0 proves the hook sees it, otherwise the native path is excluded explicitly. Block counters keyed per worker."
+    }
+  ]
+}

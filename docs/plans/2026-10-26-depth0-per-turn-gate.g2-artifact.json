@@ -1,0 +1,991 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "d0gate-plan-20261026",
+  "logical_plan_id": "depth0-per-turn-gate-2026-10-26",
+  "session_id": "92ec79e7-0033-4c98-bb31-9597cc878979",
+  "session_key": "57970f137c0e6630b8bed2b394a979b622afa0f59dc0e398e38c6cf4dd0de219",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "eeeab3a72426759c6bf8761af19095a96b0e2abadd437f3c5ce58a42483729d9",
+  "manifest_sha256": "aa2c828e00a40a4409e6bd1ca71b630cd1a0f241ec877e56b23ca932a1397148",
+  "plan_sha256": "8305ebba1f84605b575d3a64b6cb94ed360b57e1c61e99309b8b97eea4120159",
+  "growth_ratio": {
+    "numerator": 26919,
+    "denominator": 26032
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "8bd429526e60166face4e68f13d30190540797c062f9ead76d823ca03a9375fc"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "eb5d64ea5c10df6bb334e0746ac483d6360fb229a75323e059df395b24b18780",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-jXu8nM/stdout",
+          "digest": "eb5d64ea5c10df6bb334e0746ac483d6360fb229a75323e059df395b24b18780"
+        },
+        "receipt_digest": "d4941e2853c1ef70b6c0081c77435158c1c793c7755de54fab377229745c70de"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "6eba9be61d319afeab842eb259285d057840e501ac0c0c2f30017b552bf87a67"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "bb27baf9cfe7be4b014d9049adc0e8eb2cd6a4b3d9089dc014db69bf7e26d6c2",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-VZKJX1",
+          "digest": "bb27baf9cfe7be4b014d9049adc0e8eb2cd6a4b3d9089dc014db69bf7e26d6c2"
+        },
+        "receipt_digest": "b02024dd06bc0d93fc83ca2406038febe5daf93a6b5c7969f2e6a2381fff1ad9"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "051ad1202fe632cac3de3ca802d8783141e73cbfc71d19cfbb2242a14406004a"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 5,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "410e608b8c55867d85e4b03fcc17f58d726ad2d757470c63d62079c883e39770",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-dle6w3",
+          "digest": "410e608b8c55867d85e4b03fcc17f58d726ad2d757470c63d62079c883e39770"
+        },
+        "receipt_digest": "4ad9236adbab21ee727415f7721636d36637458b403c4810332ec099b12bad7f"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "available",
+      "unratified": {
+        "payload": {
+          "verdict": "STOP",
+          "findings": [
+            {
+              "rubric_id": "R3",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Section 3.3 native-subagent path and Sections 3.1/5 P0 identity-routing proof",
+              "claim": "The native-subagent path is described as keyed by the worker's worktree realpath, which conflicts with the plan's session-bound, no-lane-keyed switch and does not establish that only the intended subagent can consume the arming.",
+              "evidence": "Section 3.1 requires the gate file to be looked up by sanitized session_id and explicitly says 'No lane-keyed file exists.' Section 3.3 instead says the native subagent is 'keyed by the worker's worktree realpath.' A worktree path identifies a tree, not a particular worker or task; multiple subagents in that tree could therefore resolve the same arming. The cited captured SubagentStop payload contains session_id and agent_id, while the plan says no lane key exists and does not define how a worker-specific identity is selected when the available session_id may belong to a parent session.",
+              "evidence_reference": "Plan sections 3.1, 3.3, 4 and P0 done-condition; hooks/hooks.json SubagentStop registration; docs/plans/evidence/2026-10-21-subagent-concurrency-advisory/06-task-agent-matcher-alias.md:24 as cited by the plan",
+              "repair": "Before allowing native subagents, define one identity-routing mechanism that binds the arming to the exact worker session or agent identity exposed to SubagentStop, specifies the lookup key and collision behavior, and preserves the session-bound/no-lane-key invariant. Extend P0 to prove with distinct concurrent workers in the same worktree that only the intended worker is armed. Exclude native subagents by default if the hook cannot expose and route that identity unambiguously.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": false
+            },
+            {
+              "rubric_id": "R4",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Section 3.2 generic verifier rule schema and must_pass/features registry execution",
+              "claim": "The rule list is data-only, but the plan's trusted registry can still execute arbitrary owner-supplied argv, including an interpreter or shell with arbitrary code, so the verifier does not establish that an unsafe command cannot run arbitrary code.",
+              "evidence": "The rule list can select a name from .claude/gate-checks.json. That registry stores an unrestricted argv array, and the plan says it is run 'without a shell' and is 'trusted like the project's own test scripts.' A shell-less restriction prevents shell metacharacter expansion, but an argv such as sh with -c and arbitrary script text still executes arbitrary code. The owner-only provenance statement bounds who may introduce the command, but it does not make the selected command safe or make the rule list incapable of activating arbitrary owner-defined code. The plan's safety claim is therefore stated more broadly than the mechanism supports.",
+              "evidence_reference": "Plan section 3.2, bullets 'must_pass / features' and 'Path safety'; frozen rubric R4",
+              "repair": "Constrain registry entries to an allowlisted executable plus a constrained argument grammar, or define a narrow command DSL whose executable and arguments cannot launch a shell/interpreter with inline code. Reject argv containing shell/interpreter executables or inline-code flags unless they are explicitly represented by a safe built-in check kind. State the trust boundary precisely: the rule list can invoke only pre-reviewed, owner-authored commands whose execution surface is bounded. Add negative controls for a registry entry such as sh -c and an interpreter with inline source, and prove the generic verifier returns exit 2 without executing it.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": false
+            },
+            {
+              "rubric_id": "R4",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Section 3.2 path safety and --check validation",
+              "claim": "The plan does not ensure that every path derived from a glob is confined to the repository before it is read or matched, despite the rubric requiring that a path outside the repo cannot block work or run arbitrary code.",
+              "evidence": "Path safety says 'for existing paths the realpath must lie inside the repo realpath,' but forbid_text and forbid_paths consume glob matches rather than a singular path field. The plan does not say whether every existing file selected by a glob must pass the realpath-containment check before being read, whether symlink targets are checked during matching, or what happens when one unsafe match is mixed with safe matches. The --check rule that each glob matches at least one tracked file also does not reject a glob that can traverse an escaping symlink. Consequently, a data-only rule can still select content outside the repo unless glob expansion is explicitly realpath-bounded before all reads and comparisons.",
+              "evidence_reference": "Plan section 3.2 bullets 'Path safety (Decision A)', 'Glob subset (Decision D)', 'forbid_paths', and '--check'; frozen rubric R4",
+              "repair": "Specify a single traversal algorithm for literal paths and glob matches: enumerate repository-relative candidates without following symlinks, resolve each existing candidate's realpath, and reject the entire rule list before any read or comparison if any candidate escapes the repo. Apply the same check to tracked symlinks and untracked matches. Define --check and runtime behavior for a mixed safe/unsafe glob, and add red controls for a forbid_text glob matching an escaping symlink and for a glob whose candidate set includes both in-repo and out-of-repo files.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": false
+            },
+            {
+              "rubric_id": "R7",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Section 5 phase table and Section 8 owner-decision gate",
+              "claim": "The plan says all owner questions must be answered before P0 and P2 start, but leaves three mechanism-defining decisions unresolved and requires owner answers only before the phases that depend on them, making the stated phase order internally inconsistent.",
+              "evidence": "Section 5 states, 'Owner questions Q1-Q4 ... must be answered in this plan before P0 and P2 start.' Yet Q1 asks for approval of the P0 cap and P3 cap, Q2 asks confirmation of precedence, Q3 asks whether to ship one carrier or wait for both, and Q4 asks confirmation of max_blocks. Section 8 leaves all four open. P0 is paid and cannot start without Q1 approval; P2 depends on Q2's precedence and Q4's cap semantics; P0's carrier result is needed for Q3 and P2. The plan simultaneously calls P0/P1 independent, P2 dependent on P0/P1, and says every question must be answered before P0, which cannot include the later carrier result. The done-conditions therefore are not executable as a coherent preregistered sequence.",
+              "evidence_reference": "Plan section 5 introductory paragraph, P0/P2 rows and order statement; section 8 Q1-Q4; frozen rubric R7",
+              "repair": "Reorder the decisions explicitly: approve the P0 probe budget before P0; run P0; approve the P3 budget before P3; resolve carrier scope from P0 before P2; and lock precedence/max_blocks before P1/P2 implementation or state them as frozen plan decisions rather than open questions. Amend the phase table so every paid phase has its owner approval as a prerequisite and every unresolved decision has an explicit owner, due point, and artifact that records the answer.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": false
+            },
+            {
+              "rubric_id": "R7",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Sections 5.1 ON/OFF evaluation arms and decision rules",
+              "claim": "The ON/OFF design does not define a well-formed, buildable base arm, so its preregistration and decision thresholds are not executable as written.",
+              "evidence": "The base arm is defined as 'depth-0 guidance files frozen at the develop sha at freeze time, mechanism present,' while the change arm adds a candidate paragraph plus loaded references. The plan does not identify the exact base files, how the candidate paragraph is mechanically inserted into them, whether the base files contain equivalent arming guidance, or how the arm builder produces a base that differs from change only by allowed_arm_difference. A develop-sha snapshot may also differ in unrelated ways from the candidate-containing snapshot. The prereg requirement that --check-arms show no other difference cannot be satisfied without a concrete deterministic arm builder and an enumerated file set.",
+              "evidence_reference": "Plan section 5.1, 'Arms (Decision E)' and the G1-G4 marker table; frozen rubrics R6 and R7",
+              "repair": "Define the arm builder and exact input/output artifacts: list the base and candidate guidance files, identify the insertion point and loaded references, and state that both arms are generated from one frozen source tree so the only difference is the preregistered candidate/reference bytes. Specify how --check-arms compares them and add a build test showing that an unrelated file difference fails the check.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": false
+            },
+            {
+              "rubric_id": "R7",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Section 5.1 ON/OFF evaluation arms and decision rules",
+              "claim": "The preregistered arm labels do not match the task labels used by the decision rules, leaving PASS/NOT-SHIP determinations ambiguous.",
+              "evidence": "Section 5.1 defines Arms 'base' and 'change'. The G4 row defines two conditions, 'gate forced on' and 'gate forced off,' and the decision rule calls these OFF and ON. Elsewhere the prose refers to an 'ON arm' and 'OFF arm.' No mapping states whether G4's forced-on condition is the change arm, whether its forced-off condition is the base arm, or whether G4 is a separate harness-controlled experiment. Consequently, rules V3 and G4 do not unambiguously identify the experimental cells to compare.",
+              "evidence_reference": "Plan section 5.1 Arms, G4 row, and Decision rules V2-V4/G4; frozen rubrics R6 and R7",
+              "repair": "Use one stable naming scheme and a cell matrix that explicitly maps arm, guidance condition, gate condition, and task for every scored cell. State whether G4 is nested under base/change or is a separate gate-only manipulation, and rewrite every threshold to refer to the exact matrix coordinates.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": false
+            },
+            {
+              "rubric_id": "R7",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Section 5.1 ON/OFF evaluation decision rules and cost estimate",
+              "claim": "The evaluation cost estimate is arithmetically inconsistent with the specified cells and cap, so the owner cannot approve a bounded spend from the plan.",
+              "evidence": "For depth-0 formal cells, the plan writes 2 arms x 5 x (G1 0.30 + G2 0.19 + G3 0.30), but G2 is specified as one-turn and G1/G3 as two-turn; this calculation charges all three tasks at the two-turn rate in each arm and gives 7.90 only by mixing an arithmetic error with an assumed price. Using the plan's own listed per-task estimates gives 2 x 5 x (0.30 + 0.19 + 0.30) = 7.90, while the upper-bound line claims 2 x 5 x (0.35 + 0.22 + 0.35) = 9.20; the same G2 ambiguity then propagates into the 12.8 and 18.0 totals. The G4 pilot line also says '2 G4 cells 0.30' while the formal G4 line uses two carriers and gives 3.00, without defining whether pilot runs one or two carriers or what each 0.30 cell comprises.",
+              "evidence_reference": "Plan section 5.1, Task table, 'Cost, per-cell prices,' formal/pilot arithmetic, and hard cap paragraph; frozen rubrics R6 and R7",
+              "repair": "Provide a cost table with one row per task, arm, condition, carrier, repetitions, turn count, unit price source, and multiplication formula. Reconcile one-turn versus two-turn prices, the G2 rate used in both formal and upper-bound totals, the number of G4 pilot cells, and the treatment of the rerun reserve. Make the computed formal total, upper bound, and hard cap agree with the row totals before owner approval.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": false
+            },
+            {
+              "rubric_id": "R6",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Section 5.1 ON/OFF preregistration and P4 guidance shipment",
+              "claim": "The evaluation does not specify a negative trace for the m_not_armed marker even though it requires every marker to have both a negative and positive trace, and the proposed negative trace for m_armed is not a valid trace of that marker.",
+              "evidence": "The validity paragraph says 'each marker has one recorded negative trace ... and one positive trace.' For m_not_armed, a negative trace should show an incorrectly armed worker, but no such trace is defined. For m_armed, the proposed negative is 'arm call after dispatch, or a list missing a rule'; the first violates ordering rather than failing the arm marker, and the second can still pass a marker that checks that the list passes --check and covers all three rule ids only if coverage means exact IDs rather than merely syntactic validity. The marker definition does not say whether 'covers all 3 rule ids' is exact equality, so a list with one missing ID could either score as violating or remain ambiguous.",
+              "evidence_reference": "Plan section 5.1 G1/G2 marker definitions and 'Instrument validity' paragraph; frozen rubric R6",
+              "repair": "Define one explicit negative and one positive trace for every marker, including m_not_armed and m_not_wedged. For m_armed, define coverage as an exact required-ID comparison and make the negative trace omit a required ID or arm after dispatch according to the marker's precise predicate. State the expected marker score for each trace and ensure the negative trace cannot pass due to an under-specified predicate.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": false
+            },
+            {
+              "rubric_id": "R6",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Section 5.1 G3 and G4 evaluation validity",
+              "claim": "G3 and G4 do not specify a reproducible task, rule list, or failure injection, so their required pass and effect thresholds cannot be preregistered or independently scored.",
+              "evidence": "G3 says only 'list forbids a path the task needs.' It does not define the task, the forbidden path, the worker behavior, or the exact evidence that the worker 'finishes after max_blocks, repo builds.' G4 says 'G1 with the gate forced on versus forced off by the harness,' but G1 is a depth-0 task whose marker is a stub dispatch, while G4 is a Haiku hand task; it does not define the hand prompt, the three rules, how the harness forces gate state, how ON/OFF is isolated from guidance-arm differences, or how violation rate is measured. The decision rule requires 5/5 and a 2/5 effect, but there is no deterministic cell construction behind those numbers.",
+              "evidence_reference": "Plan section 5.1 G3/G4 rows, Instrument validity, and Decision rules V4/G4; frozen rubric R6",
+              "repair": "Specify fixture-level prompts, rule lists, expected edits or violations, forced ON/OFF mechanism, trial isolation, and scoring code for G3 and G4. Make G4 cells differ only in gate state and use the same hand prompt, rules, carrier, and budget in both conditions. Add deterministic negative/positive traces proving the scoring observes violations and releases the worker at the cap.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": false
+            },
+            {
+              "rubric_id": "R1",
+              "class": "decision-now",
+              "severity": "blocking",
+              "affected_surface": "Section 3.3 dispatch-hetero carrier coverage and Section 4 verified/unverified facts",
+              "claim": "The plan asserts that both the claude-native and cc-shim hetero hands receive the rail-generated session ID and that a per-run settings file can wire the hook, but it simultaneously marks the identity and firing behavior as unverified; the claimed carrier coverage is therefore not yet backed by the cited source or an executable proof.",
+              "evidence": "Section 3.3 marks dispatch-hetero claude-native and cc-shim hands as P0 status and states that the rail generates the session id it already passes via --session-id. Section 4 says it is not recorded whether '--session-id X' equals the hook stdin session_id or whether a Stop hook wired through --settings fires and blocks. P0 is explicitly intended to establish both facts. A plan may use conditional coverage, but section 3.3's current status and P2's instruction to wire 'the paths P0 kept' are coherent only if P0 is an upstream gate, not a simultaneous alternative. The broader R1 concern is that the plan currently presents the carriers as covered before the source facts needed for that coverage are verified.",
+              "evidence_reference": "Plan sections 3.3, 4 and P0/P2 rows; cited dispatch-hetero.sh:3869-3882 and docs/plans/evidence/2026-10-26-depth0-gate-p0/ as a future artifact",
+              "repair": "Mark both hetero carrier rows explicitly as provisional/unverified until P0 produces raw stdin and an end-to-end arm-and-block trace. In the plan, make P0 a hard prerequisite and P2's carrier-specific implementation conditional on named P0 evidence; do not describe either carrier as covered in the same generation as the plan. Cite the future evidence path only as an expected artifact, not as support for an existing fact.",
+              "blocks_next_slice_or_immediate_integrity": true,
+              "cannot_defer_to_spike": false
+            }
+          ]
+        },
+        "parser_status": "extracted",
+        "attempt": 1,
+        "target_id": "minimax_deep",
+        "family": "minimax",
+        "request_digest": "051ad1202fe632cac3de3ca802d8783141e73cbfc71d19cfbb2242a14406004a",
+        "raw_digest": "410e608b8c55867d85e4b03fcc17f58d726ad2d757470c63d62079c883e39770"
+      }
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "f046d4dd82a092c8ac7f07ee219cd0ce4b1a6b81f3af272bf05730e5b4da17ce"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0adf8783db267bd43f5793fab4133d76d30d467b1bce4b3d5383aee54c7b87a0",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-sL4hlQ",
+          "digest": "0adf8783db267bd43f5793fab4133d76d30d467b1bce4b3d5383aee54c7b87a0"
+        },
+        "receipt_digest": "cebdb383354cd45ea851ee25a835a86f0b0674276a13a2252bfb173cc573fb4f"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "operation": "plan-review",
+          "request_digest": "b3e3aa4c1e96525fbe7d15935b21f5bc3678b18b2c66881a4398c5a083f9e5a7"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-R0dHcC",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "021429dddf8aa39cf15af0c93e25864302018cb727cc5ddd69a0c78afb93fa1d"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "family": "alibaba",
+      "verdict": "READY"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 2.6 and 3.1; P2 log compatibility acceptance",
+      "claim": "The plan specifies incompatible log contracts for the existing global path.",
+      "evidence": "Section 2.6 promises the same records when no valid gate file exists, and P2 requires output identical to today's no-file run. Section 3.1 instead requires ordinary global-path records to carry source: global. The supplied hook currently emits no source field.",
+      "evidence_reference": "Plan sections 2.6, 3.1 step 4, and P2 done-condition; hooks/per-turn-gate.js main() log callback.",
+      "repair": "Choose one contract before implementation. To preserve the stated compatibility requirement, add source only for valid gate-file invocations and leave global-path records unchanged; align P2 assertions with that choice.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ac91d647cd35881f16d806f46fd85f7af29f24fd77f4176ad74b4313de852b32"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Generic verifier --check and require_files rules",
+      "claim": "The arming validator rejects a useful and otherwise valid requirement to create a currently missing file.",
+      "evidence": "Section 3.2 defines require_files but also requires every literal path to exist during --check. The arm script refuses to write a gate file when --check fails, so a missing required deliverable cannot be enforced while the worker creates it.",
+      "evidence_reference": "Plan sections 3.1 final paragraph and 3.2 rule-list example and --check bullet.",
+      "repair": "During P1, distinguish safe path resolution from requirement satisfaction. Allow absent require_files targets after validating their existing ancestor containment, and add an arming fixture followed by missing-file violation and created-file clean results.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d0459a0977e2e6aa6bc365cbe3a4d032d83bf5a2e63e61a8add36f67d16e96bf"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Conditional native subagent carrier",
+      "claim": "Proving that a subagent hook sees its worktree does not yet specify how that worker receives an independent gate file and counter identity.",
+      "evidence": "Section 3.3 proposes a worktree-realpath key for native subagents, while section 3.1 looks up files exclusively by session_id and asserts that each worker has its own session id. The cited captured payload contains both session_id and agent_id, but the plan supplies no proof that session_id differs between sibling subagents or from depth-0.",
+      "evidence_reference": "Plan sections 3.1 lookup and Lifetime, 3.3 native subagent row, section 4 captured SubagentStop fields, and P0 acceptance.",
+      "repair": "Make P0 record sibling and parent identities and demonstrate the exact file lookup and counter routing. Retain native subagents only with a concrete independent worker key, arming writer, and cleanup lifecycle; otherwise use the plan's explicit exclusion option.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "91084427f5e85f04b64ea1788341a5cb221c6d4d3d886c11e54e1abb738e4540"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "frozen log contract (section 2.5, 2.6, 3.1 step 4, P2 invalid-file cases)",
+      "claim": "The plan contradicts itself on whether a no-gate-file run may write source on the log record, so P2 cannot pin the frozen log contract.",
+      "evidence": "Section 2.5 and 2.6 say that with no valid gate file the hook writes the same records as today and that a valid file adds the optional source field. Section 3.1 step 4 says ordinary global-path records carry source: global. P2 requires each invalid-file kind to yield output identical to a no-file run, with global on producing today's record. Today's append in hooks/per-turn-gate.js writes only session, turn, prompt_id, decision, reason, counter.",
+      "evidence_reference": "plan sections 2.5, 2.6, 3.1 step 4, P2 done-when; hooks/per-turn-gate.js log append in main()",
+      "repair": "Pin one rule in 2.5, 3.1 and P2: with no valid gate file, records are identical to today (no source key). Write source only when a valid gate file armed the decision, with value gate-file. Delete the clause that ordinary global-path records carry source: global.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "812b01284dc3232acd46dc264929e6f2a00117157c56c2b385727151fc62cb75"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "dispatch-hetero claude-native and cc-shim carriers (section 3.3, P0, P2)",
+      "claim": "The plan claims those hand paths will be gated, but P0 forbids autopilot code and P2 never requires the production hook plus gate-verify.js to run inside each carrier's real launch shape.",
+      "evidence": "P0 is throwaway hooks in a credentials-only config dir, no autopilot code. dispatch-hetero.sh claude-native seeds CLAUDE_CONFIG_DIR with only .credentials.json and does not pass --settings today (lines 3860-3871); cc-shim unsets ANTHROPIC_API_KEY and sets no config dir (3880-3882), so user plugins may already load hooks/per-turn-gate.js. The production hook resolves config and live-state via relative requires and, in this plan, is supposed to spawn node <plugin>/scripts/gate-verify.js. Under a credentials-only dir CLAUDE_PLUGIN_ROOT is not shown to be set. P0 proving a throwaway Stop block therefore does not prove the worker that edits the repo is checked by the generic verifier. P2 lists in-process hook cases and a rail trap, not a per-carrier production e2e. If both --settings and the plugin register the same Stop hook, two processes share one session counter and can burn max_blocks on one turn.",
+      "evidence_reference": "plan section 3.3 table, P0 paragraph, P2 done-when; scripts/dispatch-hetero.sh:3860-3882; hooks/per-turn-gate.js runVerifier and relative requires; hooks/hooks.json Stop per-turn-gate command",
+      "repair": "For each path 3.3 keeps, name the wiring: claude-native --settings must invoke the on-disk plugin hook by absolute path and resolve gate-verify.js from __dirname, not CLAUDE_PLUGIN_ROOT; cc-shim must not register a second Stop hook if the plugin already loads it (arm the gate file only). Add a P2 done-when per kept carrier: production hook plus gate-verify.js in that launch shape, planted violation blocks, depth-0 and an unarmed worker do not. If P0 sees double-fire, keep the plugin-only wiring and drop --settings for that shape.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2c4a86de9995268b6b52f15c378dc233941c4a53e8196bde7f469a61f5546f28"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "section 5.1 G1 markers and V4",
+      "claim": "PASS rule V4 scores G1 m_hand_clean, but G1 stubs dispatch, so that marker does not measure a gated worker and cannot be preregistered as written.",
+      "evidence": "G1 is a 2-turn Sonnet depth-0 cell whose situation is a brief with 3 hard rules and a stub dispatch that records the call. Markers are m_armed (rail called with --gate-rules) and m_hand_clean (final state has 0 violations). V4 requires change-arm G1 m_hand_clean >= base. A stub that records argv and does not run the hand leaves the fixture repo unchanged, so m_hand_clean is 5/5 or 0/5 in both arms from fixture setup, not from the gate. G4 is the cell that actually runs a hand with the gate forced on versus off, but V4 does not use G4 for cleanliness.",
+      "evidence_reference": "plan section 5.1 table G1, Decision rules V4, G4 row",
+      "repair": "Either drop m_hand_clean from G1 and V4 and let G4 carry worker-effect cleanliness, or define G1's stub as recording argv while still running the P0-kept hand against the fixture so m_hand_clean reads the post-hand tree. Write one negative and one positive no-agent trace for whichever marker remains.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d1769c7a1442f8fcc7c124efab7a3e27d52474f60adb9c7efdf7d1b205feaab7"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "native subagent path (section 3.1 lookup vs 3.3 SubagentStop carrier)",
+      "claim": "Section 3.1 looks up only <session_id>.gate.json, but a captured SubagentStop carries the parent session_id, so using that lookup would arm depth-0.",
+      "evidence": "The captured SubagentStop JSON at docs/plans/evidence/2026-10-21-subagent-concurrency-advisory/06-task-agent-matcher-alias.md:24 has the same session_id as the parent Stop and PreToolUse, plus agent_id, and no cwd. Section 3.3 says the carrier is the worker worktree realpath if P0 proves it, and that depth-0 is not gated. Section 3.1 never describes a second lookup, filename scheme, or a rule that a SubagentStop sharing depth-0's session_id is ignored. P2 (c) still ships SubagentStop if P0 proves the path.",
+      "evidence_reference": "plan sections 3.1 steps 1-4, 3.3 native subagent row, P2 (c); docs/plans/evidence/2026-10-21-subagent-concurrency-advisory/06-task-agent-matcher-alias.md:24",
+      "repair": "Keep the path excluded until P0 (a). If it is kept, add a lookup that uses only a worker-unique field proven visible (realpath or a dispatch-set env token), never the parent session_id, and add a negative control that depth-0 Stop does not load that file. Do not implement P2 (c) on session_id.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "291a234fc1af0f29e36f8255884776593f0f49c0941e2e58ca1d0a262550dd7a"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "section 4 quota-error claim",
+      "claim": "The plan asserts no SubagentStop after a quota error, but the cited note labels that run SIMULATED, not a true quota error.",
+      "evidence": "Section 4 says no SubagentStop was captured after a quota error at 01-subagentstop-on-quota-error.md:122 and treats a dead worker as fail-open. That file's verdict is SIMULATED, not a true quota error; the true-quota case is ACCEPTED RISK.",
+      "evidence_reference": "plan section 4; docs/plans/evidence/2026-10-21-subagent-concurrency-advisory/01-subagentstop-on-quota-error.md:121-124",
+      "repair": "Relabel the claim as a simulated quota-limit run, keep the true-quota case unverified, and keep the fail-open inference scoped to the observed missing SubagentStop after SubagentStart in that simulation.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5742ecb784fc20017b219493fbb585ec60c142115c4e9c25fdf3d9c1814b4578"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 3.1 lookup vs frozen silent returns in 2.5",
+      "claim": "Looking up a session gate file can create live-state that today's nothing-configured path never touches, which would break the frozen silent return.",
+      "evidence": "Today hooks/per-turn-gate.js returns before resolveLiveDir and mkdirSync when the hook is not enabled and no verifier is set, so nothing is created. Section 3.1 step 2 looks for <live-state>/per-turn-gate/<session_id>.gate.json before treating absent as no gate file and running byte-for-byte as today, possibly with no trace. resolveLiveDir mkdirSyncs a ram-backed candidate when absent. P2's identical-output case checks records, not whether a new live-state directory appeared.",
+      "evidence_reference": "plan sections 2.5, 3.1 steps 1-3, P2 invalid-file cases; hooks/per-turn-gate.js early return before mkdirSync; scripts/lib/live-state-dir.js resolveLiveDir mkdir contract",
+      "repair": "State that an absent or invalid gate file on a globally off session must not create live-state files or directories. Implement lookup so the nothing-configured silent return still happens before mkdir. Extend the P2 no-file/global-off case to assert no new live-state entries.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "64ea9b3ec1cd4dceb5fe673f15f10b092a89b1b0b04cb278595aba5f1b4e0c92"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "section 3.3 coverage table vs KR2 exclusion list",
+      "claim": "KR2 requires every excluded path to be recorded, but several repo-touching or Claude launch rails are neither covered nor excluded.",
+      "evidence": "Section 3.3 names dispatch-hetero claude-native and cc-shim as P0, dispatch-author.sh as excluded because of --tools empty at :1388 and :1414, native subagent as conditional, and other harnesses as out of scope. dispatch-review.sh uses the same --tools empty posture (scripts/dispatch-review.sh:1908, :1940). dispatch-explore.sh and dispatch-foreman.sh are unnamed. Foreman hands go through dispatch-hetero, but the kimi foreman process itself is a worker that writes the worktree.",
+      "evidence_reference": "plan KR2, section 3.3 table, section 7; scripts/dispatch-review.sh:1908 and :1940; scripts/dispatch-foreman.sh header",
+      "repair": "No current change to P0 or P2 wiring. Add explicit excluded rows for dispatch-review.sh, dispatch-explore.sh, and dispatch-foreman.sh (kimi foreman out of scope; nested hetero hands follow 3.3).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bf01a8c71820328d64fc42e2ab52d428ee9bcdecc2fdfe32705e946210f641c7"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "section 5.1 G2 m_not_armed",
+      "claim": "G2's primary marker is specified as the absence of --gate-rules, which is not yet a positive recorded shape.",
+      "evidence": "G2 is an ordinary task with no hard rules and marker m_not_armed: no --gate-rules. Instrument validity gives a worked negative/positive pair only for m_armed. An absent flag cannot distinguish a stub that never ran from a recorded call without the flag. V3 requires change G2 m_not_armed >= 4/5.",
+      "evidence_reference": "plan section 5.1 G2 row, instrument validity paragraph, V3",
+      "repair": "No current change to mechanism phases. Define m_not_armed as a recorded stub-dispatch argv whose flag set omits --gate-rules, and add the missing negative (recorded call with the flag) and positive (recorded call without it) traces before freeze.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "90904efae61407ed10e5ecbbd6a9f1b8deb5d8bee7bd385f604efdc9ef7d2643"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan section 3.3 native-subagent row, section 3.1 lookup steps 2-4, P2 (c)",
+      "claim": "The subagent row is not implementable as written: section 3.1 defines one session-id-keyed lookup and says no lane-keyed file exists, while section 3.3 keys the subagent path on the worktree realpath, which no lookup supports; nothing also stops depth-0's own Stop from consuming a worker's gate file when session_id is shared, so the claim that depth-0 is never gated is unbacked here.",
+      "evidence": "hooks/per-turn-gate.js names the gate file from the sanitized stdin session_id and has no repo-keyed lookup; hooks/hooks.json registers per-turn-gate.js under Stop only, so the parent's Stop hook would find a subagent-armed file if session_id is shared; the plan's captured SubagentStop stdin has session_id and agent_id but the plan records no evidence that the two sessions differ, and no discriminator appears in the validity rule.",
+      "evidence_reference": "PLAN 3.1 steps 2-4 and 'No lane-keyed file exists', 3.3 row 'Native subagent (Agent tool)', 4 (SubagentStop stdin); hooks/hooks.json Stop/SubagentStop; hooks/per-turn-gate.js main() session and path resolution",
+      "repair": "Either define the subagent lookup and discriminator in 3.1 (file named from session_id plus agent_id, arming only for hook_event_name SubagentStop with that agent_id) or exclude the subagent path now in 3.3 and 7 and drop P2 (c); also have P0 (a) record the subagent's session_id and agent_id beside the parent's so the identity-routing proof tests a defined mechanism.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1d264a27db21d37389082b158820381c68b4cdc6f7dd001b8001a1fdcd5f927f"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Plan section 5.1 decision rules V1-V4 and G4, section 5 P3 done-when",
+      "claim": "The decision rules do not partition outcomes, so several results get no verdict: V2 covers base G1 m_armed 4/5-5/5 and V3 covers base 2/5 or less, leaving base 3/5 and change 4/5 with base 2/5 unnamed; no rule names the verdict when V3 or V4 fails (for example change G3 m_not_wedged below 5/5).",
+      "evidence": "P3 accepts only PASS, NOT NEEDED, NOT-SHIP or INVALID and PASS needs V1, V3, V4 and G4, but only two failure verdicts are ever assigned (V2 gives NOT NEEDED, a missing carrier gives NOT-SHIP); a V3 or V4 failure would have to be interpreted after the money is spent, which the prereg is meant to prevent.",
+      "evidence_reference": "PLAN 5.1 'Decision rules' V1-V4 and G4 bullets, 5 table row P3 'Done when'",
+      "repair": "Rewrite 5.1 as a complete decision table over V1, V2, V3, V4 and G4 with one named verdict per combination (V1 fails gives INVALID, V2 gives NOT NEEDED, V3 or V4 fails gives NOT-SHIP, no P0 carrier gives NOT-SHIP, all of V1, V3, V4, G4 hold gives PASS) and state that this table is copied verbatim into the prereg before the first scored cell.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "794e1ad6cc7fdc686424b61f8d28f2d4353d6cb4b0b12c4966f9ad99dfc9c96b"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan section 5.1 markers table, 'Instrument validity' paragraph, rule V1",
+      "claim": "Marker and trace definitions are incomplete for preregistration: the markers table defines m_armed, m_not_armed, m_not_wedged, m_hand_clean and m_violation_rate, but V1 depends on skill_invoked, which the plan never defines nor locates; the negative and positive trace pair is spelled out only for m_armed, so three markers have no stated fixtures.",
+      "evidence": "The Instrument validity paragraph promises one negative and one positive trace per marker, then gives the pair only for m_armed; the G4 dead-gate mutation substitutes for m_violation_rate but nothing substitutes for the other three markers, and the plan does not say whether skill_invoked is an existing marker of the evals/skill-onoff pattern.",
+      "evidence_reference": "PLAN 5.1 markers table and 'Instrument validity' paragraph, decision rule V1",
+      "repair": "Add a row per marker giving its violating fixture and its safe fixture (with the dead-gate mutation standing in for m_violation_rate), and either cite skill_invoked as an existing evals/skill-onoff marker or replace the V1 threshold with a marker this plan defines.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cd1529e0cd8e26e744109803d61f881eb18c4534d903f8e0d8ebece0ceae9740"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan section 3.1 Lifetime paragraph, section 3.3 dispatch-hetero row, P2 done-when",
+      "claim": "Per-worker session-id uniqueness is asserted, not specified: the plan says each worker has its own session id so counters are never shared, but the rail passes the id it already has via --session-id, present only when CHILD_SESSION_ID is non-empty; nothing requires a fresh id per dispatch, so two hands inheriting one id would share a gate file and one block counter.",
+      "evidence": "The hook stores the cap per (session, turn) in <session>.t<turn>.count and the gate file as <session>.gate.json, so a shared id shares arming and cap; the plan's only stated guarantee is presence (the rail must guarantee one when --gate-rules is given), and the P2 case 'two workers keep separate counters' exercises the hook with distinct ids, not the rail's id minting.",
+      "evidence_reference": "PLAN 3.1 'Lifetime' paragraph, 3.3 dispatch-hetero row, 5 P2 done-when; hooks/per-turn-gate.js turn and count file naming",
+      "repair": "State in 3.1 that the rail mints a unique session id per worker (or writes a per-worker nonce into the file name) and refuses to arm when it cannot guarantee one, and add a P2 rail-level case that two concurrent hands get distinct ids and distinct gate files.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d76eeeb651ddf16757d7362326479cad8cdbb200dbb8da708c804e2747d367f2"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan section 3.1 step 2 and the 'hook builds the verifier command itself' sentence, section 2.5",
+      "claim": "The new command runs through a shell and the plan never states that the session-derived gate-file path is shell-safe: the path comes from the stdin session id 'sanitised as the existing state files are', but the hook interpolates the command into /bin/sh -c, so every character the sanitizer allows reaches a shell.",
+      "evidence": "hooks/per-turn-gate.js runVerifier executes the configured command with /bin/sh -c and appends --turn, --repo and --json; today the command string comes from the owner's config, while the new command embeds a path derived from hook stdin, which makes the sanitizer charset load-bearing, yet the plan gives neither the charset nor a quoting rule.",
+      "evidence_reference": "PLAN 3.1 step 2 and the command-building sentence, 2.5 rule-list bullet; hooks/per-turn-gate.js runVerifier",
+      "repair": "State the exact sanitized-session-id charset a gate-file path must satisfy (for example letters, digits, underscore, hyphen), require that path to be single-quoted or whitespace-free when interpolated into the /bin/sh -c command string, and add a P2 case with a hostile session_id (space, quote or semicolon) that must yield no gate file and no shell side effect.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "49d23e9ab62392e91ef044938cb83f0101e18ff56591ebe6ca7672250471460e"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan section 3.1 step 3 versus section 3.3 'Repo resolution per carrier'",
+      "claim": "The validity rule uses a term with no counterpart in the hook: it requires repo to equal the realpath of 'the hook's repo directory', but the hook has no such notion and section 3.3 states a different rule (payload.cwd plus realpath comparison); read as the plugin root the rule invalidates every worker gate file, read as payload.cwd it matches 3.3.",
+      "evidence": "hooks/per-turn-gate.js resolves the verifier repo as payload.cwd when present and otherwise process.cwd(), and no other repo path appears in the hook; the plan gives two different statements of one validity criterion.",
+      "evidence_reference": "PLAN 3.1 step 3 versus 3.3 'Repo resolution per carrier'; hooks/per-turn-gate.js verifier repo resolution",
+      "repair": "Replace 'the hook's repo directory' with the exact rule: repo must equal the realpath of the directory the hook resolves for the verifier (payload.cwd when present, else process.cwd()), and that same resolved value is passed as --repo, citing the hook line so the two statements cannot drift.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "47a09554654103833432578d8c261b703513f3fb143d3ba9f3472fab0bd71058"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan section 2.5 first bullet, section 2.6 Compatibility impact, section 3.1 step 4, P2 done-when",
+      "claim": "The log-shape change is stated three incompatible ways: 3.1 step 4 says ordinary global records carry source 'global', 2.6 says that with no valid gate file the hook writes the same records as today, 2.5 freezes the record as six fields with new behaviour only adding an optional source, and P2 then expects an invalid file to give output identical to a no-file run (global on: today's record), which is undefined if every global record gains a field.",
+      "evidence": "hooks/per-turn-gate.js log() writes exactly session, turn, prompt_id, decision, reason and counter per invocation, so adding a source key to global records changes the shape for every existing user while the plan calls that 'the same records as today' and 'today's record' in the P2 expectation.",
+      "evidence_reference": "PLAN 2.5 first bullet, 2.6 Compatibility impact, 3.1 step 4, 5 P2 done-when; hooks/per-turn-gate.js log()",
+      "repair": "Choose one shape and state it in both places: either source is written only on gate-file records and global records keep today's six fields (then P2 says 'identical to a no-file run, same six fields, no source key'), or every record gains source (then amend 2.5 and 2.6 to say the record shape becomes seven fields for all users) and pin both variants in the log-shape test.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "782b81c6e387129d2b0647c4e494ad7e0e36ac889532e0be38f2d988f819913e"
+    },
+    {
+      "rubric_id": "R2",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan header owner direction, section 2.5 last bullet, section 3.1 step 1 and Precedence paragraph, P2 (a)",
+      "claim": "The default of the new user-facing knob is never stated: the plan adds per_turn_gate.session_arming, says only that the global default is not turned on, and implements the check as 'if session_arming is false, skip', which reads as absent-means-allowed but is never written down; an implementer could default it to false, handing the arming decision back to a user-edited global setting.",
+      "evidence": "The status line records the owner direction that whether the gate runs must not be a setting a user edits by hand and that depth-0 decides per task; the Precedence paragraph makes session_arming false the only user veto but never states the key's default, and the net default-off claim only holds when that key and the hooks.per-turn-gate opt-in are read together, which the plan never states explicitly.",
+      "evidence_reference": "PLAN header owner direction, 2.5 last bullet, 3.1 step 1 and Precedence paragraph, 5 P2 (a) config-keys.json entry",
+      "repair": "State in 3.1 step 1 and in the P2 (a) config-keys.json entry that session_arming defaults to allowed (absent or true) and only an explicit false vetoes session arming, and restate the net default as global opt-in off, global verifier unset, no gate file present, so nothing is gated until depth-0 passes --gate-rules.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4b8658a9150e82db07c949963bc6c187172d2272b31d0ebdd03aa64052d11c7f"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan section 3.1 steps 3-4 and gate file content block, section 3.2, P2 done-when invalid-file list",
+      "claim": "The gate-file validity predicate and the P2 invalid-file matrix leave required and optional fields undefined: the content block lists v, repo, base, mode, max_blocks, expires_at and rules, but step 3 validates only parses, v, no unknown field, expires_at, repo and the rule list, so a file with a missing or malformed base, an out-of-enum mode, a missing rules object or a missing max_blocks is neither valid nor one of the listed invalid kinds.",
+      "evidence": "Step 3 enumerates the failure kinds (absent, unreadable, malformed, expired, wrong v, unknown field, repo mismatch) and P2 repeats that list; base is what the forbid_paths diff needs (git diff --name-only --relative <base>) and mode selects violations versus violations+features, yet neither has a stated default or invalid kind, and 'no unknown field' implies a closed schema whose required set is never written down.",
+      "evidence_reference": "PLAN 3.1 steps 3-4 and gate file content block, 3.2 forbid_paths and output mapping, 5 P2 done-when invalid-file list",
+      "repair": "Write the gate-file schema as a closed list naming the required fields (v, repo, base, mode, max_blocks, expires_at, rules), give each optional field a stated default or a stated invalid kind, and extend the P2 matrix with missing base, missing rules, mode outside the enum, max_blocks above 2 and a base that is not a commit in the repo, each expecting output identical to a no-file run.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a1ec5c5ef70d97b2d83bea096cbe6108819083cee56a3236b15fcc64c8fc4172"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Plan section 4 dispatch-hetero CLAUDE_CONFIG_DIR note, P0 (c), P2 done-when",
+      "claim": "The double-wired hook risk is named but no mitigation is specified: the plan notes the cc-shim hand may load the user's plugins while the rail also wires the gate through a per-run --settings file, leaving the check to P0 (c), but neither P0 (c) nor P2 says how two Stop-hook invocations in one turn are handled.",
+      "evidence": "The hook counts blocks per (session, turn) and writes one record per invocation, so a hook firing twice in one turn can consume the whole per-turn budget of two blocks in that single turn rather than allowing two repair rounds; P0 (c) only asks whether a double-fired hook happens and the P2 done-when has no case for it.",
+      "evidence_reference": "PLAN 4 'dispatch-hetero.sh claude-native ... cc-shim line' note, 5 P0 (c) and P2 done-when; hooks/per-turn-gate.js log() and per-(session, turn) count files",
+      "repair": "State the mitigation in 3.3 or P2 (for a carrier that already loads plugin hooks, do not also pass the gate hook through --settings, or make the record and counter idempotent per session, turn and prompt_id) and add a P2 case that a twice-wired carrier still stops after max_blocks blocks in a turn and writes one record per invocation.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a8fc7eef17c40d6b010e72eb8af74b87516a5f97bd1c57e0ed8480a2fcaebd6f"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "d0459a0977e2e6aa6bc365cbe3a4d032d83bf5a2e63e61a8add36f67d16e96bf",
+      "rubric_id": "R4",
+      "affected_surface": "Generic verifier --check and require_files rules",
+      "claim": "The arming validator rejects a useful and otherwise valid requirement to create a currently missing file.",
+      "evidence_reference": "Plan sections 3.1 final paragraph and 3.2 rule-list example and --check bullet.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "91084427f5e85f04b64ea1788341a5cb221c6d4d3d886c11e54e1abb738e4540",
+      "rubric_id": "R5",
+      "affected_surface": "Conditional native subagent carrier",
+      "claim": "Proving that a subagent hook sees its worktree does not yet specify how that worker receives an independent gate file and counter identity.",
+      "evidence_reference": "Plan sections 3.1 lookup and Lifetime, 3.3 native subagent row, section 4 captured SubagentStop fields, and P0 acceptance.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "291a234fc1af0f29e36f8255884776593f0f49c0941e2e58ca1d0a262550dd7a",
+      "rubric_id": "R3",
+      "affected_surface": "native subagent path (section 3.1 lookup vs 3.3 SubagentStop carrier)",
+      "claim": "Section 3.1 looks up only <session_id>.gate.json, but a captured SubagentStop carries the parent session_id, so using that lookup would arm depth-0.",
+      "evidence_reference": "plan sections 3.1 steps 1-4, 3.3 native subagent row, P2 (c); docs/plans/evidence/2026-10-21-subagent-concurrency-advisory/06-task-agent-matcher-alias.md:24",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5742ecb784fc20017b219493fbb585ec60c142115c4e9c25fdf3d9c1814b4578",
+      "rubric_id": "R1",
+      "affected_surface": "section 4 quota-error claim",
+      "claim": "The plan asserts no SubagentStop after a quota error, but the cited note labels that run SIMULATED, not a true quota error.",
+      "evidence_reference": "plan section 4; docs/plans/evidence/2026-10-21-subagent-concurrency-advisory/01-subagentstop-on-quota-error.md:121-124",
+      "disposition": null
+    },
+    {
+      "fingerprint": "64ea9b3ec1cd4dceb5fe673f15f10b092a89b1b0b04cb278595aba5f1b4e0c92",
+      "rubric_id": "R3",
+      "affected_surface": "section 3.1 lookup vs frozen silent returns in 2.5",
+      "claim": "Looking up a session gate file can create live-state that today's nothing-configured path never touches, which would break the frozen silent return.",
+      "evidence_reference": "plan sections 2.5, 3.1 steps 1-3, P2 invalid-file cases; hooks/per-turn-gate.js early return before mkdirSync; scripts/lib/live-state-dir.js resolveLiveDir mkdir contract",
+      "disposition": null
+    },
+    {
+      "fingerprint": "bf01a8c71820328d64fc42e2ab52d428ee9bcdecc2fdfe32705e946210f641c7",
+      "rubric_id": "R5",
+      "affected_surface": "section 3.3 coverage table vs KR2 exclusion list",
+      "claim": "KR2 requires every excluded path to be recorded, but several repo-touching or Claude launch rails are neither covered nor excluded.",
+      "evidence_reference": "plan KR2, section 3.3 table, section 7; scripts/dispatch-review.sh:1908 and :1940; scripts/dispatch-foreman.sh header",
+      "disposition": null
+    },
+    {
+      "fingerprint": "90904efae61407ed10e5ecbbd6a9f1b8deb5d8bee7bd385f604efdc9ef7d2643",
+      "rubric_id": "R6",
+      "affected_surface": "section 5.1 G2 m_not_armed",
+      "claim": "G2's primary marker is specified as the absence of --gate-rules, which is not yet a positive recorded shape.",
+      "evidence_reference": "plan section 5.1 G2 row, instrument validity paragraph, V3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "cd1529e0cd8e26e744109803d61f881eb18c4534d903f8e0d8ebece0ceae9740",
+      "rubric_id": "R6",
+      "affected_surface": "Plan section 5.1 markers table, 'Instrument validity' paragraph, rule V1",
+      "claim": "Marker and trace definitions are incomplete for preregistration: the markers table defines m_armed, m_not_armed, m_not_wedged, m_hand_clean and m_violation_rate, but V1 depends on skill_invoked, which the plan never defines nor locates; the negative and positive trace pair is spelled out only for m_armed, so three markers have no stated fixtures.",
+      "evidence_reference": "PLAN 5.1 markers table and 'Instrument validity' paragraph, decision rule V1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d76eeeb651ddf16757d7362326479cad8cdbb200dbb8da708c804e2747d367f2",
+      "rubric_id": "R3",
+      "affected_surface": "Plan section 3.1 Lifetime paragraph, section 3.3 dispatch-hetero row, P2 done-when",
+      "claim": "Per-worker session-id uniqueness is asserted, not specified: the plan says each worker has its own session id so counters are never shared, but the rail passes the id it already has via --session-id, present only when CHILD_SESSION_ID is non-empty; nothing requires a fresh id per dispatch, so two hands inheriting one id would share a gate file and one block counter.",
+      "evidence_reference": "PLAN 3.1 'Lifetime' paragraph, 3.3 dispatch-hetero row, 5 P2 done-when; hooks/per-turn-gate.js turn and count file naming",
+      "disposition": null
+    },
+    {
+      "fingerprint": "49d23e9ab62392e91ef044938cb83f0101e18ff56591ebe6ca7672250471460e",
+      "rubric_id": "R4",
+      "affected_surface": "Plan section 3.1 step 2 and the 'hook builds the verifier command itself' sentence, section 2.5",
+      "claim": "The new command runs through a shell and the plan never states that the session-derived gate-file path is shell-safe: the path comes from the stdin session id 'sanitised as the existing state files are', but the hook interpolates the command into /bin/sh -c, so every character the sanitizer allows reaches a shell.",
+      "evidence_reference": "PLAN 3.1 step 2 and the command-building sentence, 2.5 rule-list bullet; hooks/per-turn-gate.js runVerifier",
+      "disposition": null
+    },
+    {
+      "fingerprint": "47a09554654103833432578d8c261b703513f3fb143d3ba9f3472fab0bd71058",
+      "rubric_id": "R1",
+      "affected_surface": "Plan section 3.1 step 3 versus section 3.3 'Repo resolution per carrier'",
+      "claim": "The validity rule uses a term with no counterpart in the hook: it requires repo to equal the realpath of 'the hook's repo directory', but the hook has no such notion and section 3.3 states a different rule (payload.cwd plus realpath comparison); read as the plugin root the rule invalidates every worker gate file, read as payload.cwd it matches 3.3.",
+      "evidence_reference": "PLAN 3.1 step 3 versus 3.3 'Repo resolution per carrier'; hooks/per-turn-gate.js verifier repo resolution",
+      "disposition": null
+    },
+    {
+      "fingerprint": "782b81c6e387129d2b0647c4e494ad7e0e36ac889532e0be38f2d988f819913e",
+      "rubric_id": "R7",
+      "affected_surface": "Plan section 2.5 first bullet, section 2.6 Compatibility impact, section 3.1 step 4, P2 done-when",
+      "claim": "The log-shape change is stated three incompatible ways: 3.1 step 4 says ordinary global records carry source 'global', 2.6 says that with no valid gate file the hook writes the same records as today, 2.5 freezes the record as six fields with new behaviour only adding an optional source, and P2 then expects an invalid file to give output identical to a no-file run (global on: today's record), which is undefined if every global record gains a field.",
+      "evidence_reference": "PLAN 2.5 first bullet, 2.6 Compatibility impact, 3.1 step 4, 5 P2 done-when; hooks/per-turn-gate.js log()",
+      "disposition": null
+    },
+    {
+      "fingerprint": "4b8658a9150e82db07c949963bc6c187172d2272b31d0ebdd03aa64052d11c7f",
+      "rubric_id": "R2",
+      "affected_surface": "Plan header owner direction, section 2.5 last bullet, section 3.1 step 1 and Precedence paragraph, P2 (a)",
+      "claim": "The default of the new user-facing knob is never stated: the plan adds per_turn_gate.session_arming, says only that the global default is not turned on, and implements the check as 'if session_arming is false, skip', which reads as absent-means-allowed but is never written down; an implementer could default it to false, handing the arming decision back to a user-edited global setting.",
+      "evidence_reference": "PLAN header owner direction, 2.5 last bullet, 3.1 step 1 and Precedence paragraph, 5 P2 (a) config-keys.json entry",
+      "disposition": null
+    },
+    {
+      "fingerprint": "a1ec5c5ef70d97b2d83bea096cbe6108819083cee56a3236b15fcc64c8fc4172",
+      "rubric_id": "R3",
+      "affected_surface": "Plan section 3.1 steps 3-4 and gate file content block, section 3.2, P2 done-when invalid-file list",
+      "claim": "The gate-file validity predicate and the P2 invalid-file matrix leave required and optional fields undefined: the content block lists v, repo, base, mode, max_blocks, expires_at and rules, but step 3 validates only parses, v, no unknown field, expires_at, repo and the rule list, so a file with a missing or malformed base, an out-of-enum mode, a missing rules object or a missing max_blocks is neither valid nor one of the listed invalid kinds.",
+      "evidence_reference": "PLAN 3.1 steps 3-4 and gate file content block, 3.2 forbid_paths and output mapping, 5 P2 done-when invalid-file list",
+      "disposition": null
+    },
+    {
+      "fingerprint": "a8fc7eef17c40d6b010e72eb8af74b87516a5f97bd1c57e0ed8480a2fcaebd6f",
+      "rubric_id": "R3",
+      "affected_surface": "Plan section 4 dispatch-hetero CLAUDE_CONFIG_DIR note, P0 (c), P2 done-when",
+      "claim": "The double-wired hook risk is named but no mitigation is specified: the plan notes the cc-shim hand may load the user's plugins while the rail also wires the gate through a per-run --settings file, leaving the check to P0 (c), but neither P0 (c) nor P2 says how two Stop-hook invocations in one turn are handled.",
+      "evidence_reference": "PLAN 4 'dispatch-hetero.sh claude-native ... cc-shim line' note, 5 P0 (c) and P2 done-when; hooks/per-turn-gate.js log() and per-(session, turn) count files",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-10-25T19:47:30.272Z"
+}

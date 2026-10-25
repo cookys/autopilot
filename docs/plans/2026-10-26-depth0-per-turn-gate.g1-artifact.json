@@ -1,0 +1,1007 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "d0gate-plan-20261026",
+  "logical_plan_id": "depth0-per-turn-gate-2026-10-26",
+  "session_id": "92ec79e7-0033-4c98-bb31-9597cc878979",
+  "session_key": "57970f137c0e6630b8bed2b394a979b622afa0f59dc0e398e38c6cf4dd0de219",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "eeeab3a72426759c6bf8761af19095a96b0e2abadd437f3c5ce58a42483729d9",
+  "manifest_sha256": "aa2c828e00a40a4409e6bd1ca71b630cd1a0f241ec877e56b23ca932a1397148",
+  "plan_sha256": "1dbdcf26c61e291b102b0353267cac6104f44369564752f05af1727271af8c17",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "973dd56e29cddbb47cafa1830b624f0cbed08c65cdb2298f98c6e09d61d68d59"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "8b85b9943d10940b2b19bb35f775561319be7fdcdaf39f1f06cf885df462e7a5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-4MvJ4B/stdout",
+          "digest": "8b85b9943d10940b2b19bb35f775561319be7fdcdaf39f1f06cf885df462e7a5"
+        },
+        "receipt_digest": "1167a078d7fed9e662085e2f5869386751107e1f5dbb6c9dd6776a15fd44d2f2"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "grok",
+          "model": "grok-4.6",
+          "operation": "plan-review",
+          "request_digest": "172e7b9fde0aad9cc6ca6b602823f4b36e951a51acfb03a86ebafd80a4f21ac7"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "91c59af06828d3083e9c812867df135e937fe59699bd82efb67ef5c221b419a2",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-6DkvEH",
+          "digest": "91c59af06828d3083e9c812867df135e937fe59699bd82efb67ef5c221b419a2"
+        },
+        "receipt_digest": "352186eeac76b5bc3de10202d7c589f81084ee507a42e55e6709f5113b973b8c"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "cc-shim",
+          "model": "MiniMax-M3",
+          "operation": "plan-review",
+          "request_digest": "c43b1114bc1b8460bdc18b2c5b9ea0cc402932c50f421950a27eb10acbc5e914"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "b64cacd1953c4e77468de238e6e3a40f6691d91107bf3899f0cf9eaae778a0fd",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-oANoXy",
+          "digest": "b64cacd1953c4e77468de238e6e3a40f6691d91107bf3899f0cf9eaae778a0fd"
+        },
+        "receipt_digest": "90d01d7cb8fc338d6e692555b5248a51f9c2b8e67de36e1a58e3763b5aac62af"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max",
+          "operation": "plan-review",
+          "request_digest": "cf93976bf3ee774597f3782387ca455f7b2dc92292742a86b01803d3eecba5f1"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "69d04e30e9d5e993f4d23ab25ae2d5cb079493bf277dc37abac49eb55e47ffc4",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-uLZUya",
+          "digest": "69d04e30e9d5e993f4d23ab25ae2d5cb079493bf277dc37abac49eb55e47ffc4"
+        },
+        "receipt_digest": "b859b0711bba4bcc541446781160efe6f24a199750272782b6e879f204f6636f"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "grok_consult",
+      "target_id": "grok_consult",
+      "family": "xai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "minimax_deep",
+      "target_id": "minimax_deep",
+      "family": "minimax",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "qwen_alt",
+      "target_id": "qwen_alt",
+      "family": "alibaba",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.2 command execution and path validation",
+      "claim": "The executable allowlist does not prevent arbitrary code execution, and repository containment is not defined for every path surface.",
+      "evidence": "Allowing node, python3, bash, npm and npx permits inline programs, arbitrary package scripts or downloaded code. Closing stdin, scrubbing the environment and avoiding a shell do not prevent this. Escape rejection is specified for globs, but not for require_files.path, require_text.path, executable arguments or symlink targets.",
+      "evidence_reference": "Plan sections 3.2 and 6; frozen rubric R4.",
+      "repair": "Replace free-form commands with explicitly supported operations and validated arguments, or define a concrete execution boundary that prevents arbitrary code execution. Specify canonical repository containment, including symlinks, for all file and command path inputs. Reject unsafe inputs with exit 2 before executing anything, with negative controls.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f02b4c6ee8d110b6ae650ef5ba2418fa493cf2ab815cf50a2cbf1d5de00be1e8"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Sections 3.1 and 3.3 session and lane switch ownership",
+      "claim": "The switch has no task-bound lifetime or sufficiently scoped lane identity, so it can affect unrelated work.",
+      "evidence": "Gate files contain rules and timestamps but no task, repository or parent-session binding. Lane filenames contain only the lane name. A two-hour expiry allows a completed task's switch to remain active during later work, and lane cleanup depends on an explicit disarm call. Section 8 also leaves counter isolation between parallel subagents unresolved.",
+      "evidence_reference": "Plan sections 3.1, 3.3, 6 and owner question 8.5.",
+      "repair": "Define a task-scoped identity bound to the repository, parent session and worker or dispatch instance. Specify automatic task-close retirement and fail-open behavior on identity mismatch. Isolate counters by worker identity and add negative controls for concurrent parents, reused lane names and subsequent tasks before expiry.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bff16484d3aa953fd5ba812ac0dcfc5d2721f3ff34a94b95630a88e6ce6c377b"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 3.3 native-subagent carrier and P0 coverage probe",
+      "claim": "The native-subagent design does not specify how the hook obtains the lane or binds it to the actual worker.",
+      "evidence": "The plan places Lane in the dispatch brief, while the cited captured hook fields contain agent_id and agent_type but no lane. P0 measures stdin and cwd, but does not require a demonstrated mapping from the brief to the lane file, isolation from depth-0, or correct selection between simultaneous lanes.",
+      "evidence_reference": "Plan sections 3.3, 4 and P0 done-condition.",
+      "repair": "Specify the proposed worker-to-lane mapping and make successful end-to-end identity routing an explicit P0 acceptance criterion. Require controls showing an armed worker blocks while depth-0 and an unrelated worker remain unaffected; exclude native coverage if that mapping cannot be demonstrated.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "eae3d8a8b91ec75843b4e560bb90e520e1f5f21c8115c893c6c6703ce721ac53"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Sections 2.5 and 3.2 existing-hook contract descriptions",
+      "claim": "Two descriptions of the existing hook contradict the supplied implementation.",
+      "evidence": "Section 3.2 calls shell-less argv execution the same constraint as the existing verifier knob, but runVerifier explicitly executes through /bin/sh -c. Section 2.5 states exactly one log record per invocation without preserving the documented exceptions for an entirely unconfigured hook or an unavailable state directory.",
+      "evidence_reference": "Supplied hooks/per-turn-gate.js: runVerifier, main early return, state-directory failure return and log-contract comments.",
+      "repair": "Describe shell-less execution as a new generic-verifier restriction, and qualify the log invariant with the existing no-configuration and state-directory failure exceptions.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3459337f7a24292f6fc64b0862d0c2cbfd67fdebddbf1e0a237297fbe3c25ff5"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Section 5.1 evaluation cells and decision rules",
+      "claim": "The evaluation draft does not yet reconcile carrier coverage, treatment arms and the stated cell budget.",
+      "evidence": "G4 compares forced ON against forced OFF, whereas the shared arm definition compares guidance base against change. G4 requires improvement in at least one of two carriers, but the 40-cell calculation has no carrier dimension. The saved repair-round cost used by the NOT-SHIP rule is not assigned a measurement or threshold.",
+      "evidence_reference": "Plan section 5.1 arms, task G4, decision rules and cost calculation; section 6 cost stop-line.",
+      "repair": "Before preregistration, enumerate the exact guidance and mechanism cells by carrier, assign each its treatment and model, reconcile the resulting cost with the cap, and define the repair-cost comparison. No current mechanism change is required.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c0d1a0fb09d7d332bb97768e455b5ce61c415683cc6dfec4d005fc4b32c89bec"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P2 done-conditions, P4 and section 7 exclusions",
+      "claim": "The plan contains conflicting acceptance and scope statements.",
+      "evidence": "Section 3.1 makes malformed or expired switch files fall back to global behavior, while P2 requires these files to allow with reason error, which cannot hold when global configuration legitimately blocks. P4 requires a CHANGELOG entry, while section 7 excludes CHANGELOG edits.",
+      "evidence_reference": "Plan section 3.1 fail-open precedence, P2 done-condition, P4 and section 7.",
+      "repair": "State malformed-switch expectations separately for global-off and global-on cases, and resolve whether the guidance CHANGELOG entry is included while retaining the version hold.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "91020536839826844a9690ef9df63791ce5acc234ced0151964c49885670ba85"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/per-turn-gate.js session/lane file lookup versus global path and never-configured early return",
+      "claim": "The plan specifies three incompatible outcomes for an expired, malformed, or unreadable gate file, so the new switch can skip a configured global verifier or write logs where today's hook leaves no trace.",
+      "evidence": "Section 3.1 says an unreadable, malformed, expired, wrong-version, or unknown-field file means no session switch and the hook falls to the global path, and an expired file counts as absent. Section 5 P2 done-when says expired, malformed, and unreadable files allow with reason error. In hooks/per-turn-gate.js, enabled false and no verifier returns before stdin, mkdir, or a log record; enabled true and no verifier logs error and allows. Treating a bad session file as error therefore skips a working global verifier when the global knob is on, and can create a log record when the global path is the never-configured silent return. Compatibility impact in 2.6 (byte-for-byte when no session state is present) is not an algorithm and is not a P2 negative control.",
+      "evidence_reference": "Plan 3.1 fail-open and expired-counts-as-absent; plan 2.6 byte-for-byte claim; plan section 5 P2 done-when; hooks/per-turn-gate.js main() early return and enabled-without-verifier error log",
+      "repair": "Replace 3.1 and the P2 cases with one lookup procedure: parse stdin; load session file then lane file; invalid, expired, wrong-v, or unknown-field equals absent and does not itself log error; valid file arms that session under the chosen global floor or ceiling; absent plus global off plus no verifier returns with no mkdir and no log; absent plus global on is today's global path, including error when enabled with no verifier. Add a negative control that global off and no files creates no log file. Delete the blanket P2 case that malformed files allow with error.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "c69125d0724fee398d35d89fd33e34bd77c6e0595f9cc6941201cc116eece726"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/gate-verify.js must_pass and features command execution",
+      "claim": "The draft allowlist still lets a mis-filled rule list run arbitrary code, so the generic verifier does not meet the bound that an unsafe command cannot run arbitrary code.",
+      "evidence": "Section 3.2 says each cmd is a plain argv string, first tokens may be node, npm, npx, python3, bash with a repo-relative script path, or git read-only subcommands, and anything else exits 2. npx can fetch and execute packages. A first token of bash does not reject bash -c, -e, or --eval. npm is not limited to a repo script. The cmd field is a string, not an argv array, so splitting and metacharacters are unspecified. Exit 2 is fail-open for the hook, but R4 also forbids running that code. Negative controls list a cmd outside the allowlist and do not list npx, bash -c, or an eval flag.",
+      "evidence_reference": "Plan 3.2 Safety of commands and negative-control list; plan 2.5 generic-verifier exit-code contract",
+      "repair": "Store each command as a JSON argv array. Allow only these forms: node or python3 with a path inside --repo; git with a fixed read-only subcommand list (status, diff, log, show, rev-parse); optional exact npm test or npm run plus a script name that exists in the repo package.json. Reject npx, bash, sh, -c, -e, --eval, pipelines, and any path that resolves outside --repo, all as exit 2. Negative controls must include npx, bash -c, and a .. path, each exit 2, shown red under a dead-verifier mutation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "de558250082c4329f9b9a0c3e768532d1c91698b0632b00594a33625e2c0cc33"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "gate-rules.json forbid_paths judgement and scripts/gate-verify.js",
+      "claim": "forbid_paths is not a single defined check, so a committed forbidden path can miss and P1 negative controls cannot be written from the plan.",
+      "evidence": "Section 3.2 says forbid_paths is a violation if git status --porcelain (relative to --base or HEAD, flag optional) shows a changed path matching the glob. git status is not relative to an arbitrary --base. Porcelain is empty after a commit, so a hand that commits a matching path can exit 0. The optional --base flag is named but not tied to a git invocation, a default, or a requirement that the base resolve inside --repo. The P1 negative control says a deliberately violating change must exit 1 and does not say whether that change is committed.",
+      "evidence_reference": "Plan 3.2 Judgement rules for forbid_paths; plan 3.2 negative control for a violating change",
+      "repair": "Define the checked path set as the union of git diff --name-only --relative <base> and git status --porcelain=v1 paths, with <base> default HEAD, and --base accepted only if it resolves to a commit inside --repo. A glob that matches a path outside --repo exits 2. P1 negative controls: uncommitted matching path exits 1; the same path committed with a clean porcelain still exits 1; glob ../** exits 2.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cd5e9d167dac4a968881893aba3d1bfa6d2111431d269dfaec31922a7a41e7db"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "lane-keyed gate file lane-<lane>.gate.json and per-turn-gate counter identity",
+      "claim": "A lane-keyed switch can arm later or parallel work it was not meant for, can outlive the task by up to the default two-hour expiry, and the plan disagrees with itself on whether those workers share a max_blocks counter.",
+      "evidence": "Section 3.1 keys native-subagent arming by lane-<lane>.gate.json, default expires_at now plus 2 hours, lookup order session then lane then global. Section 8 Q5 says two parallel subagents in one lane would share a counter key unless agent_id is added. The existing hook counts in <session>.t<turn>.count using payload.session_id, and section 4 lists SubagentStop stdin as session_id, agent_id, agent_type, with no lane field. A reused lane name inside the TTL, or a forgotten disarm, arms the next task in that lane. A 2 hour TTL outlives a normal lane. Section 6 mitigations (expires_at, disarm at lane close) do not bind expiry to task end or pick lookup key versus counter key.",
+      "evidence_reference": "Plan 3.1 lane file, lookup order, expires_at; plan section 4 SubagentStop stdin fields; plan section 6 gate-leak row; plan section 8 question 5",
+      "repair": "Close Q5 in the plan before P2. Rules may be shared by subagents of one dispatch; the arming key is a unique run id (hand session-id when known, otherwise lane plus run-id), not a reusable lane name. Turn, counter, and jsonl stay on payload.session_id so parallel subagents do not share max_blocks. expires_at is required, not longer than the lane, and disarm is part of lane teardown. P2 gets a negative control: after expiry or disarm, a later worker with the same lane name is not gated.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ffd2bd24a8adafe3f42d1631c532c48bd5d1e4a5a8172579321b79735394fe13"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "P0 SubagentStop probe and P2(b) native-subagent carrier",
+      "claim": "Native-subagent coverage is claimed via a lane file, but the hook-visible payload has no lane and cwd is unverified, and P0 does not yet name a carrier to try before dropping the path.",
+      "evidence": "Section 3.3 says the carrier is lane-<lane>.gate.json and that the brief already carries Lane:. Section 4 lists captured SubagentStop fields without lane or cwd, says per-turn-gate.js uses payload.cwd or process.cwd(), and marks subagent cwd unverified. P0(a) records full stdin and hook process cwd, and section 6 says the native path is dropped if the lane cannot be identified. The brief is not stdin, so Lane: is not a hook lookup key unless a carrier (env, matcher, agent_id map) is defined and probed.",
+      "evidence_reference": "Plan 3.3 native-subagent row; plan section 4 SubagentStop stdin and cwd note; plan section 5 P0(a); plan section 6 SubagentStop payload risk",
+      "repair": "Keep P0. Add one throwaway-hook trial of a designed carrier (for example an env var or agent_id map written at dispatch) plus cwd compared to the tree the hand edited. The P0 verdict table must say, per path, which key would be used in P2(b) or that the path is excluded. No current P2(b) implementation until that row exists.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "12121c8a7a2c9ec0262ecca055e38e009c134eeb55d46c77327d4a04d66ed05d"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "plan section 3.1 headless session-id claim and 3.2 verifier-knob wording",
+      "claim": "Two load-bearing claims are asserted as fact without a citation or an unverified label, unlike the plan's own handling of --settings hook firing.",
+      "evidence": "Section 3.1 says headless workers already receive --session-id from dispatch-author.sh and dispatch-hetero.sh (CHILD_SESSION_ID) with no file:line and no unverified label. Section 3.3 treats brief Lane: as already carrying the switch, which is not a documented SubagentStop field. Section 3.2 says must_pass cmds run without a shell pipeline with the same constraint as the hook verifier knob, but hooks/per-turn-gate.js runVerifier execs the verifier through /bin/sh -c. Section 4 correctly labels --settings firing unverified despite dispatch-author.sh:1388; the session-id and Lane claims do not get that treatment.",
+      "evidence_reference": "Plan 3.1 which-session-id paragraph; plan 3.2 must_pass command constraint; plan 3.3 Lane: carrier; plan section 4 --settings unverified note; hooks/per-turn-gate.js runVerifier spawnSync",
+      "repair": "Cite the dispatch lines for --session-id on both rails or mark the claim unverified and fold it into P0(b)/(c). Label Lane: in the brief as not hook-visible. Describe the existing verifier knob as sh -c exec of a simple command, and keep rule cmds as argv without a shell.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "acd92fd657ae8009f3d3aa1927bb3050f54d56642f8140370e3d3455a4777f6d"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "section 5.1 ON/OFF preregistration (arms, G3 cost, G4 carriers)",
+      "claim": "The evaluation is close to a preregisterable design but still lacks the exact change-arm file list, a P0-conditioned G4 carrier rule, and a turn count for G3, so P3 cannot be frozen from this text alone.",
+      "evidence": "Section 5.1 says allowed_arm_difference lists exactly those files, then names skills (ceo-agent, dev-flow, /l3 to /l6) rather than paths. G4 requires OFF minus ON violation rate >= 2/5 in at least one of the two hand carriers, while P0 may drop a carrier. Cost treats only G1 and G4 as two-turn (20 * 0.30 + 20 * 0.19 = 9.8 USD) but G3 requires the hand to finish after max_blocks, which is extra turns not in that model. Markers, negative traces, V1-V4, 20 USD cap, and P4-only-on-PASS are otherwise specified.",
+      "evidence_reference": "Plan 5.1 arms, tasks G1-G4, decision rules, cost paragraph; plan section 5 P0-to-P2 dependency; plan P4 guidance files",
+      "repair": "Before P3 prereg, list the exact guidance paths in allowed_arm_difference. Rewrite G4 as: at least one carrier that P0 kept, else G4 is NOT-SHIP and P4 does not ship. Count G3 as two-turn (or measured turns) in the cost table and keep the 20 USD cap. No current change to P0/P1; follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "251ed7246752d8e3ca937044ca9a0bfe4728f8fcf2fcf11630c11b3024600666"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "phase order versus section 8 open questions, KR1 max_blocks, log schema",
+      "claim": "Owner decisions that change P2 shape are listed but not gated, and two mechanism claims disagree with later phases.",
+      "evidence": "Section 8 Q2-Q5 change precedence, max_blocks ceiling, whether one hand path may ship, and lane counter identity, but the phase table lets P2 start from the draft. KR1 and 2.5 freeze the existing max_blocks default of 2; 3.1 allows a session file to raise max_blocks to 3 when no global value is set. 2.6 and 3.1 add log field source on every invocation; P2 says existing per-turn-gate suites stay unchanged and green. Paid caps (P0 about 0.6 USD, P3 20 USD) and version hold 3.0.0 are listed.",
+      "evidence_reference": "Plan section 8 questions 2-5; plan KR1; plan 2.5 max_blocks; plan 3.1 session max_blocks ceiling; plan 2.6/3.1 source log field; plan section 5 P2 done-when",
+      "repair": "Add a written gate: P2 does not start until Q2-Q5 are answered in the plan. Set the session-file max_blocks ceiling equal to the frozen default 2 unless the owner picks 3 and KR1 is reworded. State that existing log tests will be updated to tolerate or expect source, so suites-unchanged is not a P2 done-condition.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "grok_consult",
+          "runner": "grok",
+          "model": "grok-4.6"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "326bc132dc81782b0e9a505c640d2ebd62de1e304d8704f02edddc82cf27e2b8"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/gate-verify.js rule-list command execution; hooks/per-turn-gate.js verifier command string; rule-list schema (PLAN 3.2)",
+      "claim": "The plan states that the rule list is data rather than code and that the first-token allowlist in must_pass.cmd 'only bounds what a mis-filled list can run', and it hands the rule-list path to the verifier 'as part of the verifier command string'.",
+      "evidence": "The allowlist admits node, npm, npx, python3 and bash and checks only the first token, so 'python3 -c <inline code>', 'node -e <inline code>' and 'npx <remote package>' all execute arbitrary code; the stated bound therefore does not hold. The existing hook interpolates the verifier command into a shell string (hooks/per-turn-gate.js runVerifier() calls spawnSync('/bin/sh', ['-c', 'exec <command> ...'])) so a rule-list path containing shell metacharacters is executed by the shell, and the plan never constrains that path, nor the require_files / require_text path values, to stay inside the repo (only globs are constrained, via 'a glob escaping the repo' -> exit 2). The listed negative controls cover a malformed list, an unknown key, a cmd outside the allowlist and a '../**' glob, but none of an inline-code cmd, an absolute or escaping path value, or a rule-list path with shell metacharacters.",
+      "evidence_reference": "PLAN 3.2 (Safety of commands; Judgement rules; Negative control); hooks/per-turn-gate.js runVerifier() (sh -c interpolation of the verifier command string)",
+      "repair": "State the safety model in the plan before P1: (a) the rule-list file, every require_files / require_text path and every glob must resolve inside --repo, with absolute paths and '..' escapes rejected; (b) must_pass.cmd must be argv with no shell, restricted to an allowlisted interpreter applied to a repo-relative script path, with '-c', '-e', '--eval', 'npm run', 'npx' and 'bash -c' forbidden; (c) the rule-list path must reach the verifier without shell interpolation (fixed argv form, or a fixed-name file the verifier reads), never concatenated into the hook's shell command string; (d) add negative controls for 'python3 -c ...', 'node -e ...', 'npx ...', an absolute require_text path and a rule-list path containing a shell metacharacter, each exiting 2 with nothing executed.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9c7d3a1a805130557b9fa031b9e35020868b8ad703e1d27f45f0b52d39977e1d"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "evals/skill-onoff preregistration and the base/change arms; P3/P4 phase order (PLAN 5, 5.1)",
+      "claim": "'change' = base plus the P4 paragraph, frozen with freeze-guidance-arm.js, while 'base' = depth-0 guidance files frozen at the develop sha at freeze time; P4, the commit that adds that paragraph, runs only after P3 PASS.",
+      "evidence": "The text that distinguishes the two arms is created by P4, which is gated on P3's verdict, so at P3 freeze time the 'P4 paragraph' has no defined home or contents. If the paragraph is drafted into ceo-agent / dev-flow before the freeze, then base (guidance files frozen at the develop sha) already contains it and the two arms are identical; if it is kept outside those files, the plan never says how freeze-guidance-arm.js overlays it onto the frozen base, nor how allowed_arm_difference names files that do not yet exist. As written, the arms are not reproducible at preregistration, which is the condition KR3 and the whole P3 -> P4 gate rest on.",
+      "evidence_reference": "PLAN 5.1 (Arms; Instrument; allowed_arm_difference), PLAN 5 (P3 and P4 rows)",
+      "repair": "Add an explicit pre-evaluation step: the candidate paragraph is drafted into a non-shipping location (a candidate file or a dedicated branch under evals/skill-onoff/) before the freeze; freeze-guidance-arm.js overlays exactly that frozen text over the frozen base to form the change arm; allowed_arm_difference names the candidate plus the overlay mechanism; the base freeze must be asserted not to contain the candidate; P4 becomes 'commit exactly the text evaluated in the change arm, byte for byte'.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d667acc2e009fb7a3c1a796a84cfe56819d444932dde61e0ed9e1ba58bb4e6d5"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "lane-file lookup in hooks/per-turn-gate.js; scripts/per-turn-gate-arm.js arm/disarm lifecycle; P4 guidance content (PLAN 3.1, 6, 5, 8 Q5)",
+      "claim": "Native subagents are gated through a lane-keyed file <live-state>/per-turn-gate/lane-<lane>.gate.json with expires_at defaulting to now + 2 h, and the risk table says 'lane files are removed by the arm script disarm at lane close and expire anyway'.",
+      "evidence": "The gate file is looked up by lane, so every subagent of that lane that reads it is gated, including a later or parallel hand dispatched for a different task in the same lane. The only named mitigation (depth-0 calling disarm at lane close) is not part of what P4 ships: P4 adds only the 'when to arm the gate' paragraph, and no marker in 5.1 measures disarm, so nothing in the shipped guidance or the evaluation keeps the lease inside its task. A lane lease can therefore outlive its task by up to the 2 h default and silently gate the next hand in that lane. The plan itself raises only the shared-counter half of this in open question 5, not the wrong-session half.",
+      "evidence_reference": "PLAN 3.1 (Path; Content; lookup order), PLAN 6 (Gate leaks row), PLAN 5 (P4 row), PLAN 5.1 (markers), PLAN 8 Q5",
+      "repair": "Make the carrier lease-scoped before P2 is implemented: key the file by lane plus the dispatched task or hand id (or have the file carry an explicit task id that the brief carries and have the hook require a match), bound expires_at to the hand's expected life rather than a flat 2 h, add an explicit disarm-at-task-end duty to the P4 guidance, and add an evaluation marker and negative control that a second hand dispatched in the same lane is not gated. If the owner keeps a lane-only key, state the residual leak as accepted with its expiry bound and remove native-subagent coverage from the KR2 claim.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "670d849a6c175fe918e41f9d437d213a94066505da2895262055738b25608a5c"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "session-file lookup key in hooks/per-turn-gate.js; file name written by scripts/per-turn-gate-arm.js; dispatch-author.sh / dispatch-hetero.sh --session-id (PLAN 3.1, 4, 5)",
+      "claim": "'Headless workers already receive --session-id from dispatch-author.sh/dispatch-hetero.sh (CHILD_SESSION_ID)', depth-0 'needs the id of the session it is about to create', and the hook looks up 'session file, then lane file, then global config' using its own session_id from stdin.",
+      "evidence": "The design equates the id depth-0 knows before dispatch with the session_id the worker later reports on stdin, and equates the file name depth-0 writes with the name the hook computes (hooks/per-turn-gate.js main() applies sanitizeSessionId() to the raw stdin id before building any state path). Neither identity is verified or labelled unverified in section 4; section 4 only flags whether a Stop hook fires at all in the claude -p rails. P0 probes (b) and (c) record the full stdin, but the P0 done-condition does not require comparing that session_id with the --session-id value passed on the command line, and the P2 done-conditions contain no case for a mismatched key. If the two ids differ, the session carrier silently never fires (KR1 and KR2 unmet); if the raw and sanitized keys differ, the arm script writes a file the hook never looks up.",
+      "evidence_reference": "PLAN 3.1 (Which session id; lookup order), PLAN 4 (claude -p settings paragraph; local probe records), PLAN 5 (P0 and P2 rows); hooks/per-turn-gate.js main() sanitizeSessionId() usage",
+      "repair": "Mark the identity as unverified in section 4 and make it a P0 deliverable: capture, in probes (b) and (c), both the --session-id passed to the CLI and the session_id on the hook's stdin, and require the arm script to write the file under exactly the sanitized key the hook computes. Make the session-file carrier conditional on that equality (otherwise fall back to the lane form or drop it from P2), add a P2 negative control 'armed under a different session id -> no block', and require the evaluation's stub dispatch to use the same keying so the measured arm is the shipped arm.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "915fc8376fb7a2fef65ecda9c2c828baf781444ecff2f7a9715ea9914b4576cf"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "precedence rules between session file, lane file and config.json (PLAN 3.1, 8 Q2, 2.5)",
+      "claim": "PLAN 3.1: 'Precedence with config.json (decided, open for the owner in section 8): the global switch is a floor, never a ceiling', and a session file 'may only supply its own rule list when no per_turn_gate.verifier is configured'.",
+      "evidence": "The same bullet is labelled decided and open at once, and section 8 Q2 asks the owner to choose between the drafted floor semantics and a hard global-off veto of depth-0's arming. That is exactly the owner-intent question the plan must settle and justify rather than carry in two states. The matrix is also incomplete: when the global knob is on, a global verifier is configured and a session file exists, the plan states only that the session file cannot supply the rule list, and says nothing about which mode, max_blocks, source value or reason value apply in that combination.",
+      "evidence_reference": "PLAN 3.1 (Precedence with config.json), PLAN 8 Q2, PLAN 2.5 (Global Constraints)",
+      "repair": "Pick one precedence in the plan and mark it decided, then state the full matrix for (global on/off) x (global verifier present/absent) x (session or lane file present) covering verifier command, mode, max_blocks, source and reason. If the owner wants a global veto, name it an explicit owner kill switch, say how depth-0 can observe it, and record the owner-intent justification for allowing a user setting to override depth-0.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "39cbc058c94eff8d3237dbf34b169dbc152bd78663459f4ca39535c5d5e79d30"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "fail-open and log-reason contract of hooks/per-turn-gate.js under the new session/lane lookup (PLAN 3.1, 5 P2)",
+      "claim": "PLAN 3.1: 'unreadable, malformed, expired, wrong-version or unknown-field file means \"no session switch\" and the hook falls to the global path'. PLAN 5 P2 done-when: 'expired, malformed and unreadable files allow with error'.",
+      "evidence": "The two statements give different log reasons for the same case. Falling to the global path with the global knob off yields the existing off reason (hooks/per-turn-gate.js logs allow/off when the knob is off but a verifier is configured, and writes nothing at all when neither the knob nor a verifier is configured), while the P2 done-condition demands error. The plan also does not say where the session/lane lookup sits relative to the hook's early return (hooks/per-turn-gate.js main() returns before touching disk when neither the knob nor a verifier is configured), which is what lets a session file arm the gate while the global knob is off, nor which reason a session-armed invocation uses when clean, capped or blocked.",
+      "evidence_reference": "PLAN 3.1 (Fail-open; Log), PLAN 5 (P2 done-when), PLAN 2.5 (frozen hook contract); hooks/per-turn-gate.js main() early return and log() calls",
+      "repair": "Add an explicit reason matrix: no session or lane file and global off -> no record (unchanged); session or lane file present but malformed, expired or wrong-version -> fall back to the global path and log off when the global knob is off, or error only when the global path itself fails; session or lane armed -> block, clean, cap or error exactly as today. State where the session/lane lookup sits relative to the nothing-configured early return so the 'no disk trace' property is preserved when no session state exists.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "41053644ff3818b3b954d7b81865daf14f8798a5b355465b12e5e9369a5e3ed2"
+    },
+    {
+      "rubric_id": "R7",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "compatibility statement and log record shape (PLAN 2.6, 3.1)",
+      "claim": "PLAN 2.6: 'with no session state present the hook behaves byte-for-byte as today'.",
+      "evidence": "The plan itself adds a field to every emitted log record (PLAN 3.1: 'add one additive field source: session|lane|global'), so the record bytes change even when no session state exists; 'byte-for-byte' is stronger than the intended claim of identical decisions and counters. The supporting statement 'existing consumers ignore unknown keys' is asserted without a citation, and the only in-repo writer of that record is hooks/per-turn-gate.js itself.",
+      "evidence_reference": "PLAN 2.6 (Compatibility impact), PLAN 3.1 (Log)",
+      "repair": "Restate the claim as 'same decisions, same counter and same log fields, plus one additive source field', cite the log-parity test that pins the existing record shape, or drop the added field and record the source outside the frozen record.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "2880cf24fe49f0e82709bc490f100a2ae8172cb1412afcb9ddcfe9da6182ceb3"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/gate-verify.js stdout contract against the hook's verifier schema (PLAN 3.2)",
+      "claim": "PLAN 3.2: the verifier prints violations as {constraint, rule, evidence} and feature_gaps as strings, and the negative control expects 'the expected constraint id'.",
+      "evidence": "The hook validates the verifier answer before trusting it: hooks/per-turn-gate.js validSchema() requires every violation to carry constraint, rule and evidence, with constraint and rule each a string or a finite number, and an answer that fails the schema is treated as an error (fail open, no block). The plan maps constraint to the rule id but never says which list field fills rule, and three of the six rule kinds in its own schema (require_files, must_pass, features) carry no why field to populate it. A verifier answer that omits rule is rejected as an error, so the gate silently never blocks while still logging error records.",
+      "evidence_reference": "PLAN 3.2 (Rule list schema; Judgement rules; Negative control); hooks/per-turn-gate.js validSchema() and renderRetry()",
+      "repair": "Fix the mapping in the schema section of the plan: constraint = the rule id, rule = why when present else the rule kind plus id, evidence = the path, path:line, exit code or first-bytes text. Require the generic verifier to emit all three fields for every rule kind, and add a P1 case per rule kind asserting that the hook's schema validation accepts the generic verifier's output.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "56bc4f2437f933570bec2f4871d85435815376ffd34817aee6b96eed165c84b0"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "gate-verify.js --check mode and the arm script's pre-arm validation (PLAN 6, 3.2, 5 P1)",
+      "claim": "PLAN 6: 'gate-verify.js --check validates schema and that each path/glob resolves in the repo, run by the arm script before writing the file; a list that matches nothing is rejected with a message, not silently armed'.",
+      "evidence": "The --check mode is not part of the interface defined in 3.2 (--rules, --turn, --repo, --json) and is not in the P1 done-conditions, so it is an undefined surface that the arm script depends on. The 'matches nothing' rejection also conflicts with the semantics of the forbid_* kinds: a correct forbid_text rule (no console.log under src) has zero matches in a clean tree, and a forbid_paths rule for a path that does not exist yet is also the desired state, so a per-rule reading of 'matches nothing' would reject correct lists. The sentence does not say whether the test is per rule or per list.",
+      "evidence_reference": "PLAN 6 (Rule list filled wrong row), PLAN 3.2 (Judgement rules), PLAN 5 (P1 row)",
+      "repair": "Define --check precisely in 3.2 and list it in the P1 done-conditions: it validates the schema, unknown keys, duplicate ids, the 40-rule cap and that every path and glob resolves inside the repo; it requires require_files and require_text paths to exist; it does not require forbid_* rules to have a current match and reports, without rejecting, any rule whose path does not exist.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "09a519196709dde486593b1a6e965c74ba36aebb44045c4ec48b1b0249fa3299"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "P3 cost model and the owner cap request (PLAN 5.1 Cost, 8 Q1)",
+      "claim": "PLAN 5.1: 'formal cells = 4 tasks x 2 arms x 5 = 40, of which G1 and G4 are two-turn: 20 x 0.30 + 20 x 0.19 = 9.8 USD; pilot 6 cells about 1.6 USD; total about 11.4 USD, upper bound ... about 17 USD. Hard cap 20 USD', with 'Sonnet for depth-0 decision cells G1/G2/G3' and 'Haiku for pilot and G4'.",
+      "evidence": "The per-cell prices (0.19 single-turn, 0.30 two-turn) are attributed to the findings-batch and gdorm pilots without naming the model those prices were measured on, while the cell model split puts Sonnet on 30 of the 40 formal cells (G1, G2, G3). The 9.80 USD figure and the ~17 USD upper bound are therefore computed from prices whose model basis does not match two thirds of the cells, and the owner is asked to approve a 20 USD cap against that estimate. The arithmetic itself is internally consistent (20 two-turn cells at 0.30 plus 20 single-turn cells at 0.19 equals 9.80, plus 1.6 pilot).",
+      "evidence_reference": "PLAN 5.1 (Cost paragraph), PLAN 5 (P3 row), PLAN 8 Q1",
+      "repair": "State the per-cell price for each model actually used (Haiku single-turn and two-turn, Sonnet single-turn and two-turn), recompute the formal, pilot and 20 percent re-run reserve under that split, and put the recomputed upper bound to the owner in section 8 Q1. Keep the written rules that no live cell runs without owner approval and that a revised upper bound above the cap stops and asks.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6c560979ccb4d70bb604f55fed13ea7d085f50b8da4dbdd05c80a5931a0735bc"
+    },
+    {
+      "rubric_id": "R1",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "claude -p carrier row of the section 3.3 table; the unverified-facts list in section 4",
+      "claim": "PLAN 3.3 table: 'cc-shim runs with --setting-sources project and a scratch HOME, and claude-native with a credentials-only config dir, so plugin hooks are NOT loaded there and the settings file must wire the hook explicitly'; the table header says 'Facts below are from section 4'.",
+      "evidence": "Section 4 contains no citation for these three claims: it cites the dispatch scripts only for the --settings flag at dispatch-author.sh:1388 and cites capability files for grok, agy, codex, opencode, cursor and copilot-cli, but not for the cc-shim or claude-native rails. The claims are load-bearing for the claude -p carrier design (they decide that a per-run settings file is required) yet are asserted without a source, which is the pattern the fact-fidelity rubric requires to be labelled unverified.",
+      "evidence_reference": "PLAN 3.3 (claude -p row), PLAN 4 (Verified and unverified facts)",
+      "repair": "Cite the exact dispatch-script line and capability file for each of the three claims (cc-shim --setting-sources project and scratch HOME, claude-native credentials-only config dir, plugin hooks not loaded in either rail), or move them into section 4 as explicitly unverified with a pointer to the P0 probes (b) and (c), which already exercise both shapes.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0688faf2792ee0cc9046ec50c53b7c5e876411e1ec8c8f902d74348b9b99b296"
+    },
+    {
+      "rubric_id": "R5",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "verifier --repo resolution for the subagent and claude -p carriers (PLAN 3.3, 4, 5 P0)",
+      "claim": "PLAN 4: the subagent hook 'cannot rely on payload.cwd the way per-turn-gate.js does at repo = payload.cwd || process.cwd(); the hook inherits the parent process cwd, whose value for a subagent is NOT verified. Phase 0 measures it.'",
+      "evidence": "The plan measures cwd for the native-subagent shape only. It never states how --repo is resolved for the claude -p carriers, where the new per-run --settings file says nothing about the worker's working directory, nor what happens for a lane that spans more than one repo. The existing hook takes the repo from payload.cwd or process.cwd(); if a carrier's cwd is not the tree under test, the verifier inspects the wrong tree, and the only stated response is the generic fail-open (error, allow), which silently disables the gate for that carrier without any signal to depth-0.",
+      "evidence_reference": "PLAN 4 (SubagentStop stdin captured record), PLAN 3.3 (claude -p row), PLAN 5 (P0 (a)); hooks/per-turn-gate.js main() repo resolution",
+      "repair": "State the repo resolution per carrier in the design: either an explicit repo path carried in the session or lane file and passed as --repo, or a verified cwd with an explicit rule that a missing or non-repo cwd is an error and allows. Require the P0 probes to record the worker cwd for the claude -p shapes as well, and add a P2 case where the worker cwd is not the repo, which must allow with error rather than check the wrong tree.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "minimax_deep",
+          "runner": "cc-shim",
+          "model": "MiniMax-M3"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7abf87b32cbe877718195eec8d8381930b2f1ea4577180daf69474cba1e9fffe"
+    },
+    {
+      "rubric_id": "R4",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/gate-verify.js must_pass command allowlist, section 3.2",
+      "claim": "The bash entry in the command allowlist permits 'bash with a repo-relative script path' but the plan does not specify the exact path-shape validation applied to the script argument (rejection of '..' segments, requirement that the file pre-exist, prohibition of absolute paths). The negative controls list 'a cmd outside the allowlist' and 'a glob escaping the repo' as exit-2 cases, but do not explicitly name a bash path-traversal case such as 'bash ../../etc/passwd'.",
+      "evidence": "Section 3.2 allowlist: 'node, npm, npx, python3, bash with a repo-relative script path, git read-only subcommands'. Negative-control list: 'a cmd outside the allowlist and a glob such as ../** must each exit 2'. The glob-escape check covers forbid_paths globs, not the script-path argument to bash in must_pass.cmd.",
+      "evidence_reference": "Plan section 3.2, paragraphs on command safety and negative control; rule-list schema must_pass entry.",
+      "repair": "In P1, add an explicit negative-control fixture: a rule list whose must_pass cmd is 'bash ../../outside.sh' and another with 'bash /etc/passwd'; both must exit 2. State in the schema doc that the script argument must match ^[A-Za-z0-9_./-]+$ with no leading '/' and no '..' component, and that the file must exist under --repo at arm-check time.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "qwen_alt",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9dc96b37443a7ed5074f41541e44a3c03d927f48016c78e831f4c1e7f654038c"
+    },
+    {
+      "rubric_id": "R3",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "Lane gate file and counter keying for parallel native subagents, section 3.1 / 3.3",
+      "claim": "A lane-keyed gate file is shared by all subagents dispatched in that lane. Open question 5 flags the shared-counter issue but the plan does not state the default behaviour when two parallel subagents in the same lane hit the gate simultaneously: whether they share a single max_blocks counter (one subagent's block consumes the other's budget) or get independent counters keyed by agent_id. The fail-open and cap properties still hold in either case, but the effective number of blocks a single misbehaving subagent receives is not pinned until the owner answers.",
+      "evidence": "Open question 5: 'Is a lane-keyed file (shared by all subagents of a lane) acceptable, given two parallel subagents in one lane would share a counter key unless agent_id is added to it?' Section 3.1: 'native subagents do not have a known id ahead of time, so for them the file is keyed by lane'. SubagentStop stdin includes agent_id per captured evidence (06-task-agent-matcher-alias.md:24), so per-agent counters are technically feasible at hook runtime.",
+      "evidence_reference": "Plan sections 3.1, 3.3, and open question 5; SubagentStop stdin field list in section 4.",
+      "repair": "In P2 implementation, default to per-agent_id counter files (<session>.t<turn>.count becomes <agent_id>.t<turn>.count when hook_event_name is SubagentStop) so parallel subagents do not consume each other's block budget; record the decision in the P2 done-condition evidence. If the owner prefers the simpler shared counter, document the reduced effective cap as accepted behaviour. No current blocking change; follow-up only.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "qwen_alt",
+          "runner": "qoderclicn",
+          "model": "Qwen3.8-Max"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a53f0186f01302b1e528d3637b13b930a7af9e3f0d3f923f6c288afb69ddca27"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "3459337f7a24292f6fc64b0862d0c2cbfd67fdebddbf1e0a237297fbe3c25ff5",
+      "rubric_id": "R1",
+      "affected_surface": "Sections 2.5 and 3.2 existing-hook contract descriptions",
+      "claim": "Two descriptions of the existing hook contradict the supplied implementation.",
+      "evidence_reference": "Supplied hooks/per-turn-gate.js: runVerifier, main early return, state-directory failure return and log-contract comments.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "c0d1a0fb09d7d332bb97768e455b5ce61c415683cc6dfec4d005fc4b32c89bec",
+      "rubric_id": "R6",
+      "affected_surface": "Section 5.1 evaluation cells and decision rules",
+      "claim": "The evaluation draft does not yet reconcile carrier coverage, treatment arms and the stated cell budget.",
+      "evidence_reference": "Plan section 5.1 arms, task G4, decision rules and cost calculation; section 6 cost stop-line.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "91020536839826844a9690ef9df63791ce5acc234ced0151964c49885670ba85",
+      "rubric_id": "R7",
+      "affected_surface": "P2 done-conditions, P4 and section 7 exclusions",
+      "claim": "The plan contains conflicting acceptance and scope statements.",
+      "evidence_reference": "Plan section 3.1 fail-open precedence, P2 done-condition, P4 and section 7.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "12121c8a7a2c9ec0262ecca055e38e009c134eeb55d46c77327d4a04d66ed05d",
+      "rubric_id": "R5",
+      "affected_surface": "P0 SubagentStop probe and P2(b) native-subagent carrier",
+      "claim": "Native-subagent coverage is claimed via a lane file, but the hook-visible payload has no lane and cwd is unverified, and P0 does not yet name a carrier to try before dropping the path.",
+      "evidence_reference": "Plan 3.3 native-subagent row; plan section 4 SubagentStop stdin and cwd note; plan section 5 P0(a); plan section 6 SubagentStop payload risk",
+      "disposition": null
+    },
+    {
+      "fingerprint": "acd92fd657ae8009f3d3aa1927bb3050f54d56642f8140370e3d3455a4777f6d",
+      "rubric_id": "R1",
+      "affected_surface": "plan section 3.1 headless session-id claim and 3.2 verifier-knob wording",
+      "claim": "Two load-bearing claims are asserted as fact without a citation or an unverified label, unlike the plan's own handling of --settings hook firing.",
+      "evidence_reference": "Plan 3.1 which-session-id paragraph; plan 3.2 must_pass command constraint; plan 3.3 Lane: carrier; plan section 4 --settings unverified note; hooks/per-turn-gate.js runVerifier spawnSync",
+      "disposition": null
+    },
+    {
+      "fingerprint": "251ed7246752d8e3ca937044ca9a0bfe4728f8fcf2fcf11630c11b3024600666",
+      "rubric_id": "R6",
+      "affected_surface": "section 5.1 ON/OFF preregistration (arms, G3 cost, G4 carriers)",
+      "claim": "The evaluation is close to a preregisterable design but still lacks the exact change-arm file list, a P0-conditioned G4 carrier rule, and a turn count for G3, so P3 cannot be frozen from this text alone.",
+      "evidence_reference": "Plan 5.1 arms, tasks G1-G4, decision rules, cost paragraph; plan section 5 P0-to-P2 dependency; plan P4 guidance files",
+      "disposition": null
+    },
+    {
+      "fingerprint": "326bc132dc81782b0e9a505c640d2ebd62de1e304d8704f02edddc82cf27e2b8",
+      "rubric_id": "R7",
+      "affected_surface": "phase order versus section 8 open questions, KR1 max_blocks, log schema",
+      "claim": "Owner decisions that change P2 shape are listed but not gated, and two mechanism claims disagree with later phases.",
+      "evidence_reference": "Plan section 8 questions 2-5; plan KR1; plan 2.5 max_blocks; plan 3.1 session max_blocks ceiling; plan 2.6/3.1 source log field; plan section 5 P2 done-when",
+      "disposition": null
+    },
+    {
+      "fingerprint": "39cbc058c94eff8d3237dbf34b169dbc152bd78663459f4ca39535c5d5e79d30",
+      "rubric_id": "R7",
+      "affected_surface": "precedence rules between session file, lane file and config.json (PLAN 3.1, 8 Q2, 2.5)",
+      "claim": "PLAN 3.1: 'Precedence with config.json (decided, open for the owner in section 8): the global switch is a floor, never a ceiling', and a session file 'may only supply its own rule list when no per_turn_gate.verifier is configured'.",
+      "evidence_reference": "PLAN 3.1 (Precedence with config.json), PLAN 8 Q2, PLAN 2.5 (Global Constraints)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "41053644ff3818b3b954d7b81865daf14f8798a5b355465b12e5e9369a5e3ed2",
+      "rubric_id": "R3",
+      "affected_surface": "fail-open and log-reason contract of hooks/per-turn-gate.js under the new session/lane lookup (PLAN 3.1, 5 P2)",
+      "claim": "PLAN 3.1: 'unreadable, malformed, expired, wrong-version or unknown-field file means \"no session switch\" and the hook falls to the global path'. PLAN 5 P2 done-when: 'expired, malformed and unreadable files allow with error'.",
+      "evidence_reference": "PLAN 3.1 (Fail-open; Log), PLAN 5 (P2 done-when), PLAN 2.5 (frozen hook contract); hooks/per-turn-gate.js main() early return and log() calls",
+      "disposition": null
+    },
+    {
+      "fingerprint": "2880cf24fe49f0e82709bc490f100a2ae8172cb1412afcb9ddcfe9da6182ceb3",
+      "rubric_id": "R7",
+      "affected_surface": "compatibility statement and log record shape (PLAN 2.6, 3.1)",
+      "claim": "PLAN 2.6: 'with no session state present the hook behaves byte-for-byte as today'.",
+      "evidence_reference": "PLAN 2.6 (Compatibility impact), PLAN 3.1 (Log)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "56bc4f2437f933570bec2f4871d85435815376ffd34817aee6b96eed165c84b0",
+      "rubric_id": "R4",
+      "affected_surface": "scripts/gate-verify.js stdout contract against the hook's verifier schema (PLAN 3.2)",
+      "claim": "PLAN 3.2: the verifier prints violations as {constraint, rule, evidence} and feature_gaps as strings, and the negative control expects 'the expected constraint id'.",
+      "evidence_reference": "PLAN 3.2 (Rule list schema; Judgement rules; Negative control); hooks/per-turn-gate.js validSchema() and renderRetry()",
+      "disposition": null
+    },
+    {
+      "fingerprint": "09a519196709dde486593b1a6e965c74ba36aebb44045c4ec48b1b0249fa3299",
+      "rubric_id": "R4",
+      "affected_surface": "gate-verify.js --check mode and the arm script's pre-arm validation (PLAN 6, 3.2, 5 P1)",
+      "claim": "PLAN 6: 'gate-verify.js --check validates schema and that each path/glob resolves in the repo, run by the arm script before writing the file; a list that matches nothing is rejected with a message, not silently armed'.",
+      "evidence_reference": "PLAN 6 (Rule list filled wrong row), PLAN 3.2 (Judgement rules), PLAN 5 (P1 row)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6c560979ccb4d70bb604f55fed13ea7d085f50b8da4dbdd05c80a5931a0735bc",
+      "rubric_id": "R6",
+      "affected_surface": "P3 cost model and the owner cap request (PLAN 5.1 Cost, 8 Q1)",
+      "claim": "PLAN 5.1: 'formal cells = 4 tasks x 2 arms x 5 = 40, of which G1 and G4 are two-turn: 20 x 0.30 + 20 x 0.19 = 9.8 USD; pilot 6 cells about 1.6 USD; total about 11.4 USD, upper bound ... about 17 USD. Hard cap 20 USD', with 'Sonnet for depth-0 decision cells G1/G2/G3' and 'Haiku for pilot and G4'.",
+      "evidence_reference": "PLAN 5.1 (Cost paragraph), PLAN 5 (P3 row), PLAN 8 Q1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0688faf2792ee0cc9046ec50c53b7c5e876411e1ec8c8f902d74348b9b99b296",
+      "rubric_id": "R1",
+      "affected_surface": "claude -p carrier row of the section 3.3 table; the unverified-facts list in section 4",
+      "claim": "PLAN 3.3 table: 'cc-shim runs with --setting-sources project and a scratch HOME, and claude-native with a credentials-only config dir, so plugin hooks are NOT loaded there and the settings file must wire the hook explicitly'; the table header says 'Facts below are from section 4'.",
+      "evidence_reference": "PLAN 3.3 (claude -p row), PLAN 4 (Verified and unverified facts)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7abf87b32cbe877718195eec8d8381930b2f1ea4577180daf69474cba1e9fffe",
+      "rubric_id": "R5",
+      "affected_surface": "verifier --repo resolution for the subagent and claude -p carriers (PLAN 3.3, 4, 5 P0)",
+      "claim": "PLAN 4: the subagent hook 'cannot rely on payload.cwd the way per-turn-gate.js does at repo = payload.cwd || process.cwd(); the hook inherits the parent process cwd, whose value for a subagent is NOT verified. Phase 0 measures it.'",
+      "evidence_reference": "PLAN 4 (SubagentStop stdin captured record), PLAN 3.3 (claude -p row), PLAN 5 (P0 (a)); hooks/per-turn-gate.js main() repo resolution",
+      "disposition": null
+    },
+    {
+      "fingerprint": "9dc96b37443a7ed5074f41541e44a3c03d927f48016c78e831f4c1e7f654038c",
+      "rubric_id": "R4",
+      "affected_surface": "scripts/gate-verify.js must_pass command allowlist, section 3.2",
+      "claim": "The bash entry in the command allowlist permits 'bash with a repo-relative script path' but the plan does not specify the exact path-shape validation applied to the script argument (rejection of '..' segments, requirement that the file pre-exist, prohibition of absolute paths). The negative controls list 'a cmd outside the allowlist' and 'a glob escaping the repo' as exit-2 cases, but do not explicitly name a bash path-traversal case such as 'bash ../../etc/passwd'.",
+      "evidence_reference": "Plan section 3.2, paragraphs on command safety and negative control; rule-list schema must_pass entry.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "a53f0186f01302b1e528d3637b13b930a7af9e3f0d3f923f6c288afb69ddca27",
+      "rubric_id": "R3",
+      "affected_surface": "Lane gate file and counter keying for parallel native subagents, section 3.1 / 3.3",
+      "claim": "A lane-keyed gate file is shared by all subagents dispatched in that lane. Open question 5 flags the shared-counter issue but the plan does not state the default behaviour when two parallel subagents in the same lane hit the gate simultaneously: whether they share a single max_blocks counter (one subagent's block consumes the other's budget) or get independent counters keyed by agent_id. The fail-open and cap properties still hold in either case, but the effective number of blocks a single misbehaving subagent receives is not pinned until the owner answers.",
+      "evidence_reference": "Plan sections 3.1, 3.3, and open question 5; SubagentStop stdin field list in section 4.",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-10-25T19:12:23.591Z"
+}

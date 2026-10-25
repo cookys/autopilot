@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "depth0-per-turn-gate-2026-10-26",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "ac91d647cd35881f16d806f46fd85f7af29f24fd77f4176ad74b4313de852b32",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision H: one log contract. No valid gate file: the hook is byte-identical to today, including the record shape (no source field) and no live-state reads that create files (stat only, never mkdir). A valid gate file: the record gains one optional field source (session|subagent). Every other statement in the plan is rewritten to match."
+    },
+    {
+      "fingerprint": "d0459a0977e2e6aa6bc365cbe3a4d032d83bf5a2e63e61a8add36f67d16e96bf",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. require_files may name a file that does not exist yet; the arming check validates path shape and containment only, not existence."
+    },
+    {
+      "fingerprint": "91084427f5e85f04b64ea1788341a5cb221c6d4d3d886c11e54e1abb738e4540",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision I: native subagents are keyed by (session_id, agent_id): depth-0 arms right after the Agent call returns the agent id, writing <session_id>.<agent_id>.gate.json; the SubagentStop hook reads only that key; depth-0 own Stop has no agent_id and never matches a worker file. P0 must prove the Agent result id equals the hook payload agent_id; otherwise the native path is excluded. The arming race (a stop before the file lands) fails open and is stated."
+    },
+    {
+      "fingerprint": "812b01284dc3232acd46dc264929e6f2a00117157c56c2b385727151fc62cb75",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision H: one log contract. No valid gate file: the hook is byte-identical to today, including the record shape (no source field) and no live-state reads that create files (stat only, never mkdir). A valid gate file: the record gains one optional field source (session|subagent). Every other statement in the plan is rewritten to match."
+    },
+    {
+      "fingerprint": "2c4a86de9995268b6b52f15c378dc233941c4a53e8196bde7f469a61f5546f28",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision J: when --gate-rules is given the rail mints a fresh session id per dispatch (refuses if it cannot), P2 done-condition runs the production hook plus gate-verify.js inside each covered carrier real launch shape with fake claude, and every repo-touching or Claude launch rail is listed as covered or excluded. Double wiring: the gate is idempotent per (session, turn) under the existing counter lock, and P0 (c) decides whether --settings wiring is used at all."
+    },
+    {
+      "fingerprint": "d1769c7a1442f8fcc7c124efab7a3e27d52474f60adb9c7efdf7d1b205feaab7",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision L: decision rules become a full partition (a table where every combination of outcomes maps to exactly one verdict, unnamed combinations are NOT-SHIP), m_hand_clean leaves V4 and is measured only in G4, skill_invoked is defined and located, every marker gets a negative and positive trace, G2 primary marker is a positive recorded shape."
+    },
+    {
+      "fingerprint": "291a234fc1af0f29e36f8255884776593f0f49c0941e2e58ca1d0a262550dd7a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision I: native subagents are keyed by (session_id, agent_id): depth-0 arms right after the Agent call returns the agent id, writing <session_id>.<agent_id>.gate.json; the SubagentStop hook reads only that key; depth-0 own Stop has no agent_id and never matches a worker file. P0 must prove the Agent result id equals the hook payload agent_id; otherwise the native path is excluded. The arming race (a stop before the file lands) fails open and is stated."
+    },
+    {
+      "fingerprint": "5742ecb784fc20017b219493fbb585ec60c142115c4e9c25fdf3d9c1814b4578",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. The quota-error note is labelled SIMULATED as the cited source says; a real quota-error SubagentStop stays unverified."
+    },
+    {
+      "fingerprint": "64ea9b3ec1cd4dceb5fe673f15f10b092a89b1b0b04cb278595aba5f1b4e0c92",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision H: one log contract. No valid gate file: the hook is byte-identical to today, including the record shape (no source field) and no live-state reads that create files (stat only, never mkdir). A valid gate file: the record gains one optional field source (session|subagent). Every other statement in the plan is rewritten to match."
+    },
+    {
+      "fingerprint": "bf01a8c71820328d64fc42e2ab52d428ee9bcdecc2fdfe32705e946210f641c7",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision J: when --gate-rules is given the rail mints a fresh session id per dispatch (refuses if it cannot), P2 done-condition runs the production hook plus gate-verify.js inside each covered carrier real launch shape with fake claude, and every repo-touching or Claude launch rail is listed as covered or excluded. Double wiring: the gate is idempotent per (session, turn) under the existing counter lock, and P0 (c) decides whether --settings wiring is used at all."
+    },
+    {
+      "fingerprint": "90904efae61407ed10e5ecbbd6a9f1b8deb5d8bee7bd385f604efdc9ef7d2643",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision L: decision rules become a full partition (a table where every combination of outcomes maps to exactly one verdict, unnamed combinations are NOT-SHIP), m_hand_clean leaves V4 and is measured only in G4, skill_invoked is defined and located, every marker gets a negative and positive trace, G2 primary marker is a positive recorded shape."
+    },
+    {
+      "fingerprint": "1d264a27db21d37389082b158820381c68b4cdc6f7dd001b8001a1fdcd5f927f",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision I: native subagents are keyed by (session_id, agent_id): depth-0 arms right after the Agent call returns the agent id, writing <session_id>.<agent_id>.gate.json; the SubagentStop hook reads only that key; depth-0 own Stop has no agent_id and never matches a worker file. P0 must prove the Agent result id equals the hook payload agent_id; otherwise the native path is excluded. The arming race (a stop before the file lands) fails open and is stated."
+    },
+    {
+      "fingerprint": "794e1ad6cc7fdc686424b61f8d28f2d4353d6cb4b0b12c4966f9ad99dfc9c96b",
+      "disposition": "accepted_blocker",
+      "rationale": "Accepted. Decision L: decision rules become a full partition (a table where every combination of outcomes maps to exactly one verdict, unnamed combinations are NOT-SHIP), m_hand_clean leaves V4 and is measured only in G4, skill_invoked is defined and located, every marker gets a negative and positive trace, G2 primary marker is a positive recorded shape."
+    },
+    {
+      "fingerprint": "cd1529e0cd8e26e744109803d61f881eb18c4534d903f8e0d8ebece0ceae9740",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision L: decision rules become a full partition (a table where every combination of outcomes maps to exactly one verdict, unnamed combinations are NOT-SHIP), m_hand_clean leaves V4 and is measured only in G4, skill_invoked is defined and located, every marker gets a negative and positive trace, G2 primary marker is a positive recorded shape."
+    },
+    {
+      "fingerprint": "d76eeeb651ddf16757d7362326479cad8cdbb200dbb8da708c804e2747d367f2",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision J: when --gate-rules is given the rail mints a fresh session id per dispatch (refuses if it cannot), P2 done-condition runs the production hook plus gate-verify.js inside each covered carrier real launch shape with fake claude, and every repo-touching or Claude launch rail is listed as covered or excluded. Double wiring: the gate is idempotent per (session, turn) under the existing counter lock, and P0 (c) decides whether --settings wiring is used at all."
+    },
+    {
+      "fingerprint": "49d23e9ab62392e91ef044938cb83f0101e18ff56591ebe6ca7672250471460e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision K: session and agent ids must match ^[A-Za-z0-9-]{1,128}$ or the gate file is ignored; the gate-file path reaches the verifier through an environment variable, never interpolated into the /bin/sh -c string. Validity predicate lists every required field with type and enum; repo means payload.cwd realpath, as in 3.3."
+    },
+    {
+      "fingerprint": "47a09554654103833432578d8c261b703513f3fb143d3ba9f3472fab0bd71058",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision K: session and agent ids must match ^[A-Za-z0-9-]{1,128}$ or the gate file is ignored; the gate-file path reaches the verifier through an environment variable, never interpolated into the /bin/sh -c string. Validity predicate lists every required field with type and enum; repo means payload.cwd realpath, as in 3.3."
+    },
+    {
+      "fingerprint": "782b81c6e387129d2b0647c4e494ad7e0e36ac889532e0be38f2d988f819913e",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision H: one log contract. No valid gate file: the hook is byte-identical to today, including the record shape (no source field) and no live-state reads that create files (stat only, never mkdir). A valid gate file: the record gains one optional field source (session|subagent). Every other statement in the plan is rewritten to match."
+    },
+    {
+      "fingerprint": "4b8658a9150e82db07c949963bc6c187172d2272b31d0ebdd03aa64052d11c7f",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. per_turn_gate.session_arming defaults to true (absent means depth-0 may arm); only an explicit false disables session arming."
+    },
+    {
+      "fingerprint": "a1ec5c5ef70d97b2d83bea096cbe6108819083cee56a3236b15fcc64c8fc4172",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision K: session and agent ids must match ^[A-Za-z0-9-]{1,128}$ or the gate file is ignored; the gate-file path reaches the verifier through an environment variable, never interpolated into the /bin/sh -c string. Validity predicate lists every required field with type and enum; repo means payload.cwd realpath, as in 3.3."
+    },
+    {
+      "fingerprint": "a8fc7eef17c40d6b010e72eb8af74b87516a5f97bd1c57e0ed8480a2fcaebd6f",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Accepted. Decision J: when --gate-rules is given the rail mints a fresh session id per dispatch (refuses if it cannot), P2 done-condition runs the production hook plus gate-verify.js inside each covered carrier real launch shape with fake claude, and every repo-touching or Claude launch rail is listed as covered or excluded. Double wiring: the gate is idempotent per (session, turn) under the existing counter lock, and P0 (c) decides whether --settings wiring is used at all."
+    }
+  ]
+}

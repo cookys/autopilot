@@ -132,11 +132,13 @@ while IFS='|' read -r arm caseset cid rep; do
   T0="$(date +%s.%N)"
   # </dev/null so a runner that reads stdin (agy's `script -qec` pseudo-TTY) cannot consume
   # the `while read` loop's CELLS heredoc and terminate the matrix after one cell.
-  RESP="$(DISPATCH_QUIET=1 "$DISPATCH_REVIEW_CMD" "${ARGS[@]}" </dev/null 2>"$ERRF" || true)"
-  # BL-0294: first authentication failure stops the matrix (STOP_AUTH, exit 6) before this cell is recorded
-  printf '%s' "$RESP" > "$RESPF"
-  auth_stop_check "$CELL_KEY" --dispatch "$RESPF" --stderr "$ERRF" || exit "$AUTH_STOP_EXIT"
+  RESP_RC=0
+  RESP="$(DISPATCH_QUIET=1 "$DISPATCH_REVIEW_CMD" "${ARGS[@]}" </dev/null 2>"$ERRF")" || RESP_RC=$?
   T1="$(date +%s.%N)"
+  # BL-0294: first authentication failure stops the matrix (STOP_AUTH, exit 6) before this cell is recorded;
+  # failed = the reviewer exited non-zero or its result status is not reviewed
+  printf '%s' "$RESP" > "$RESPF"
+  auth_stop_check "$CELL_KEY" --failed "$(( RESP_RC != 0 ))" --failed-from "$RESPF" --dispatch "$RESPF" --stderr "$ERRF" || exit "$AUTH_STOP_EXIT"
   LAT="$(node -e 'process.stdout.write(String(Math.round((process.argv[1]-process.argv[2])*1000)/1000))' "$T1" "$T0")"
 
   # Parse the shared review JSON in ONE node pass (findings base64 to survive newlines/tabs).

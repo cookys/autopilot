@@ -4,7 +4,7 @@
 . "$(dirname "$0")/lib.sh"
 
 HELPER="$REPO_ROOT/scripts/lib/auth-stop.js"
-chk() { node "$HELPER" check --id T1 "$@" < /dev/null 2>"$TEST_TMP/chk.err"; CHK_RC=$?; CHK_ERR="$(cat "$TEST_TMP/chk.err")"; }
+chk() { node "$HELPER" check --id T1 --failed "${FAILED:-1}" "$@" < /dev/null 2>"$TEST_TMP/chk.err"; CHK_RC=$?; CHK_ERR="$(cat "$TEST_TMP/chk.err")"; }
 
 # --- auth failures (each phrase is a real runner output, see the helper header) ---
 for phrase in \
@@ -22,6 +22,9 @@ for phrase in \
   'request failed with status 401' \
   '{"status":401,"message":"x"}' \
   'Invalid API key' \
+  'Please log in to continue.' \
+  'Authentication error' \
+  'Authentication failed: token expired' \
   '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}'; do
   chk --text "$phrase"
   assert_eq "6" "$CHK_RC" "auth phrase stops: $phrase"
@@ -45,44 +48,43 @@ for phrase in \
   assert_eq "0" "$CHK_RC" "generic failure does not stop: $phrase"
 done
 
-# --- structured reading: model prose inside JSON assistant lines is never searched ---
-S="$TEST_TMP/structured.jsonl"
-printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"the docs say: Failed to authenticate means log in"}]}}' \
-  '{"type":"result","is_error":false,"result":"Not logged in is what the CLI prints"}' > "$S"
-chk --log "$S"
-assert_eq "0" "$CHK_RC" "assistant prose and a successful result are not auth failures"
-printf '%s\n' '{"type":"result","is_error":true,"api_error_status":401,"result":"x"}' > "$S"
-chk --log "$S"
-assert_eq "6" "$CHK_RC" "is_error result with api_error_status 401 stops"
-printf '%s\n' '{"type":"result","is_error":true,"api_error_status":429,"result":"slow down"}' > "$S"
-chk --log "$S"
-assert_eq "0" "$CHK_RC" "is_error result with api_error_status 429 does not stop"
-printf '%s\n' '{"status":"failure","error":"Failed to authenticate"}' > "$S"
-chk --log "$S"
-assert_eq "6" "$CHK_RC" "dispatch JSON error string stops"
-printf 'plain stderr line\nOAuth session expired\n' > "$S"
-chk --log "$S"
-assert_eq "6" "$CHK_RC" "plain-text line in a mixed log stops"
-printf 'OAuth session expired\n' > "$S"
-chk --stderr "$S"
-assert_eq "6" "$CHK_RC" "stderr file stops"
+# --- the call decides: a SUCCESSFUL call is never an auth failure, whatever its text says ---
+for phrase in 'Invalid API key' 'Failed to authenticate' 'OAuth session expired' 'login required' 'API Error: 401 Unauthorized' 'Please log in to continue.' 'Authentication error'; do
+  FAILED=0 chk --text "$phrase"
+  assert_eq "0" "$CHK_RC" "successful call quoting '$phrase' does not stop"
+done
+FAILED=0 chk --stderr "$TEST_TMP/missing-file"
+assert_eq "0" "$CHK_RC" "a successful call with a missing file does not stop"
 
-# --- structured layer: dispatch result names the runner's own log; weak phrases are not searched in plain mixed-log lines ---
+# --- text phrases from the table that only a FAILED call may count (mixed stream, no stdout/stderr distinction) ---
+S="$TEST_TMP/mixed.log"
+printf 'plain line\nthe assistant says nothing\nerror: invalid api key\n' > "$S"
+chk --log "$S"
+assert_eq "6" "$CHK_RC" "failed call: weak phrase in a mixed log stops"
+FAILED=0 chk --log "$S"
+assert_eq "0" "$CHK_RC" "successful call: the same mixed log does not stop"
+printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"Authentication failed: token expired"}]}}' > "$S"
+chk --log "$S"
+assert_eq "6" "$CHK_RC" "failed call: a phrase anywhere in any output counts"
+
+# --- structured fields decide on their own, even for a call that looks successful ---
+echo '{"type":"result","is_error":false,"api_error_status":401}' > "$S"
+FAILED=0 chk --log "$S"; assert_eq "6" "$CHK_RC" "structured status 401 stops without a failed call"
+echo '{"type":"error","error":{"type":"authentication_error","message":"x"}}' > "$S"
+FAILED=0 chk --log "$S"; assert_eq "6" "$CHK_RC" "structured authentication_error stops without a failed call"
+echo '{"type":"error","error":{"type":"permission_error"},"status":403}' > "$S"
+chk --log "$S"; assert_eq "0" "$CHK_RC" "structured permission_error / 403 does not stop"
+echo '{"type":"result","is_error":true,"api_error_status":429,"result":"slow down"}' > "$S"
+chk --log "$S"; assert_eq "0" "$CHK_RC" "429 does not stop"
+
+# --- failure signal from a dispatch result ---
+printf '%s\n' '{"status":"committed","agent_log":"'"$TEST_TMP"'/agent.log"}' > "$S"
+echo 'Invalid API key' > "$TEST_TMP/agent.log"
+node "$HELPER" check --id T1 --failed-from "$S" --dispatch "$S" < /dev/null 2>/dev/null; assert_eq "0" "$?" "committed dispatch result: its agent_log quoting a phrase does not stop"
 printf '%s\n' '{"status":"failure","agent_log":"'"$TEST_TMP"'/agent.log"}' > "$S"
-echo '{"type":"result","is_error":true,"result":"OAuth session expired"}' > "$TEST_TMP/agent.log"
-chk --dispatch "$S"
-assert_eq "6" "$CHK_RC" "dispatch result: auth error only in the agent_log it names stops"
-echo '{"type":"result","is_error":true,"result":"rate limit"}' > "$TEST_TMP/agent.log"
-chk --dispatch "$S"
-assert_eq "0" "$CHK_RC" "dispatch result: a non-auth agent_log does not stop"
-printf 'candidate code says: invalid API key\n' > "$S"
-chk --log "$S"
-assert_eq "0" "$CHK_RC" "a weak phrase in a plain line of a mixed log does not stop"
-chk --stderr "$S"
-assert_eq "6" "$CHK_RC" "the same weak phrase in stderr stops"
-echo '{"type":"error","error":{"type":"authentication_error"}}' > "$S"
-chk --log "$S"
-assert_eq "6" "$CHK_RC" "Anthropic authentication_error envelope in a log stops"
+node "$HELPER" check --id T1 --failed-from "$S" --dispatch "$S" < /dev/null 2>/dev/null; assert_eq "6" "$?" "failed dispatch result: the phrase in the agent_log it names stops"
+node "$HELPER" check --id T1 --failed-from "$TEST_TMP/missing-file" --text 'Invalid API key' < /dev/null 2>/dev/null; assert_eq "6" "$?" "an unreadable result counts as failed"
+node "$HELPER" check --id T1 --text 'Invalid API key' < /dev/null 2>/dev/null; assert_eq "2" "$?" "no failure signal given is a usage error"
 
 # --- plumbing ---
 chk --stderr "$TEST_TMP/missing-file"
@@ -101,7 +103,8 @@ done
 # --- negative control: with the pattern list emptied, the stop test above would go red ---
 MUT="$TEST_TMP/mut"; mkdir -p "$MUT"; cp "$HELPER" "$MUT/auth-stop.js"
 sed -i 's/^const AUTH_PATTERNS = \[/const AUTH_PATTERNS = [ \/\\bnever-matches-anything\\b\/, ].concat([/; s/^\];$/]).slice(0, 1);/' "$MUT/auth-stop.js"
-node "$MUT/auth-stop.js" check --id T1 --text 'Failed to authenticate' < /dev/null 2>/dev/null; MUT_RC=$?
+node "$MUT/auth-stop.js" check --id T1 --failed 1 --text 'Failed to authenticate' < /dev/null 2>/dev/null; MUT_RC=$?
+assert_eq "0" "$MUT_RC" "negative control: mutant runs and reports clean (not a usage error)"
 assert_neq "6" "$MUT_RC" "negative control: a helper with no live pattern does not stop (the stop assertion would be red)"
 
 finalize_test

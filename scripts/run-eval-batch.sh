@@ -306,6 +306,7 @@ for skill in "${SKILLS[@]}"; do
   cd "$SKILL_CREATOR_DIR"
   # Snapshot this skill's command files right before run_eval so we can delete
   # exactly what it creates (and nothing a concurrent run/user owns).
+  eval_rc=0
   before_cmds="$(ls "$CMD_DIR/${skill}-skill-"*.md 2>/dev/null | sort || true)"
   export ARM_PLUGIN_DIR="$SKILL_PATH"
   $RUN_EVAL_CMD \
@@ -317,7 +318,7 @@ for skill in "${SKILLS[@]}"; do
     --model "$MODEL" \
     --verbose \
     > "$RESULT_DIR/eval-output.json" \
-    2> "$RESULT_DIR/eval-log.txt" || true
+    2> "$RESULT_DIR/eval-log.txt" || eval_rc=$?
   after_cmds="$(ls "$CMD_DIR/${skill}-skill-"*.md 2>/dev/null | sort || true)"
   while IFS= read -r nf; do
     [[ -n "$nf" ]] && CREATED_CMDS+=("$nf")
@@ -329,7 +330,10 @@ for skill in "${SKILLS[@]}"; do
 
   # BL-0294: a dead credential fails every remaining skill the same way, so the first authentication
   # failure stops the whole batch (STOP_AUTH line, exit 6) after removing the command files made so far.
-  if ! auth_stop_check "$skill" --stderr "$RESULT_DIR/eval-log.txt" --log "$RESULT_DIR/eval-output.json"; then
+  # The call failed when run_eval exited non-zero or printed no summary; text phrases only count then.
+  eval_failed=0
+  { [ "$eval_rc" -ne 0 ] || ! grep -q '"summary"' "$RESULT_DIR/eval-output.json" 2>/dev/null; } && eval_failed=1
+  if ! auth_stop_check "$skill" --failed "$eval_failed" --stderr "$RESULT_DIR/eval-log.txt" --log "$RESULT_DIR/eval-output.json"; then
     for f in "${CREATED_CMDS[@]+"${CREATED_CMDS[@]}"}"; do [[ -e "$f" ]] && rm -f "$f"; done
     exit "$AUTH_STOP_EXIT"
   fi

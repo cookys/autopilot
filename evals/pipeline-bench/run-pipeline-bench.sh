@@ -194,15 +194,16 @@ PROMPT_FILE="$OUT_DIR/prompt_1.md"
 cp "$TASK_DIR/task.md" "$PROMPT_FILE"
 
 RUN_EXIT=0
+CALL_RC=0
 OUT_JSON=$(
   cd "$TEMP_REPO"
   export HOME="$SCRATCH_HOME"
   timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json < "$PROMPT_FILE" 2>>"$RAW_LOG"
-) || RUN_EXIT=$?
+) || { RUN_EXIT=$?; CALL_RC=$RUN_EXIT; }
 echo "$OUT_JSON" >> "$RAW_LOG"
 echo "$OUT_JSON" >> "$OUT_DIR/all_outs.jsonl"
 # BL-0294: stop at the first authentication failure (STOP_AUTH, exit 6); RAW_LOG holds the call's stdout and stderr
-auth_stop_check "$TASK_ID/round-1" --log "$RAW_LOG" || exit "$AUTH_STOP_EXIT"
+auth_stop_check "$TASK_ID/round-1" --failed "$(( CALL_RC != 0 ))" --log "$RAW_LOG" || exit "$AUTH_STOP_EXIT"
 
 (
   cd "$TEMP_REPO"
@@ -264,7 +265,7 @@ if [ "$ARM" = "pipeline" ] || { [ "$ARM" = "verify-first" ] && [ "$CONVERGED" !=
     fi
     echo "$verdict_json" > "$OUT_DIR/review_${ROUNDS}.json"
     # the reviewer is a paid call too: a dead credential must not be followed by another round
-    auth_stop_check "$TASK_ID/review-${ROUNDS}" --dispatch "$OUT_DIR/review_${ROUNDS}.json" --log "$RAW_LOG" || exit "$AUTH_STOP_EXIT"
+    auth_stop_check "$TASK_ID/review-${ROUNDS}" --failed 0 --failed-from "$OUT_DIR/review_${ROUNDS}.json" --dispatch "$OUT_DIR/review_${ROUNDS}.json" --log "$RAW_LOG" || exit "$AUTH_STOP_EXIT"
     VERDICT=$(echo "$verdict_json" | python3 -c 'import sys, json; print(json.loads(sys.stdin.read()).get("verdict", "null"))' 2>/dev/null || echo "null")
     FINDINGS=$(echo "$verdict_json" | python3 -c 'import sys, json; print(json.loads(sys.stdin.read()).get("findings", ""))' 2>/dev/null || echo "")
     
@@ -300,14 +301,15 @@ if [ "$ARM" = "pipeline" ] || { [ "$ARM" = "verify-first" ] && [ "$CONVERGED" !=
     cat "$diff_file" >> "$NEXT_PROMPT_FILE"
     echo "\`\`\`" >> "$NEXT_PROMPT_FILE"
     
+    CALL_RC=0
     OUT_JSON=$(
       cd "$TEMP_REPO"
       export HOME="$SCRATCH_HOME"
       timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json < "$NEXT_PROMPT_FILE" 2>>"$RAW_LOG"
-    ) || RUN_EXIT=$?
+    ) || { RUN_EXIT=$?; CALL_RC=$RUN_EXIT; }
     echo "$OUT_JSON" >> "$RAW_LOG"
     echo "$OUT_JSON" >> "$OUT_DIR/all_outs.jsonl"
-    auth_stop_check "$TASK_ID/round-${ROUNDS}" --log "$RAW_LOG" || exit "$AUTH_STOP_EXIT"
+    auth_stop_check "$TASK_ID/round-${ROUNDS}" --failed "$(( CALL_RC != 0 ))" --log "$RAW_LOG" || exit "$AUTH_STOP_EXIT"
     
     (
       cd "$TEMP_REPO"

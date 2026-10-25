@@ -387,7 +387,8 @@ NODE
 
   # BL-0294: first authentication failure stops the matrix (STOP_AUTH, exit 6) before this cell is recorded; the
   # dispatcher's worktree is removed first, and a re-run redoes the cell because no row was written.
-  if ! auth_stop_check "$key" --dispatch "$dispatch_json" --stderr "$dispatch_err"; then
+  # failed = the dispatcher exited non-zero or its result status is not committed / no_op
+  if ! auth_stop_check "$key" --failed "$(( dispatch_rc != 0 ))" --failed-from "$dispatch_json" --dispatch "$dispatch_json" --stderr "$dispatch_err"; then
     if [ -n "$returned_wt" ] && [ -d "$returned_wt" ]; then git -C "$repo" worktree remove --force "$returned_wt" >/dev/null 2>&1 || true; fi
     exit "$AUTH_STOP_EXIT"
   fi
@@ -430,6 +431,12 @@ NODE
           --spec-file "$TASKS_ROOT/$path/task.md" --context-window block < /dev/null) > "$cell/review.json" 2> "$cell/review.stderr"
         review_rc=$?
         set -e
+        # the reviewer is a paid call too (failed = non-zero exit or result status not reviewed); stop before the cell is recorded
+        if ! auth_stop_check "$key/review" --failed "$(( review_rc != 0 ))" --failed-from "$cell/review.json" --dispatch "$cell/review.json" --stderr "$cell/review.stderr"; then
+          git -C "$repo" worktree remove --force "$candidate" >/dev/null 2>&1 || true
+          if [ -n "$returned_wt" ] && [ -d "$returned_wt" ]; then git -C "$repo" worktree remove --force "$returned_wt" >/dev/null 2>&1 || true; fi
+          exit "$AUTH_STOP_EXIT"
+        fi
         normalize_review "$cell/review.json" "$review_norm"
         review_valid="$(node -e 'const o=require(process.argv[1]);process.stdout.write(String(o.valid))' "$review_norm")"
         review_reason="$(node -e 'const o=require(process.argv[1]);process.stdout.write(String(o.reason||""))' "$review_norm")"

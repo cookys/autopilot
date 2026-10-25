@@ -198,7 +198,8 @@ for c in "${cases[@]}"; do
   fi
   dispatch_args+=("${skills_args[@]}")
 
-  run_output="$("$SELF_DIR/dispatch-hetero.sh" "${dispatch_args[@]}" 2>&1)"
+  dispatch_rc=0
+  run_output="$("$SELF_DIR/dispatch-hetero.sh" "${dispatch_args[@]}" 2>&1)" || dispatch_rc=$?
   
   # Clean up worktree and branch
   wt_path="$(echo "$run_output" | node -e '
@@ -232,7 +233,8 @@ for c in "${cases[@]}"; do
   # (STOP_AUTH line, exit 6; the temp store is removed by the EXIT trap, no record is written).
   printf '%s\n' "$run_output" > "$BENCH_DIR/${c}.dispatch.out"
   # every output of this paid call: the dispatch result + its stderr (one file), and the runner's own agent_log it names
-  auth_args=(--dispatch "$BENCH_DIR/${c}.dispatch.out")
+  # failed = the dispatcher exited non-zero or its result status is not committed / no_op
+  auth_args=(--failed "$(( dispatch_rc != 0 ))" --failed-from "$BENCH_DIR/${c}.dispatch.out" --dispatch "$BENCH_DIR/${c}.dispatch.out")
   [ -f "$log_path" ] && auth_args+=(--log "$log_path")
   auth_stop_check "$c" "${auth_args[@]}" || exit "$AUTH_STOP_EXIT"
 

@@ -46,6 +46,8 @@ git_layout() {
   ( cd "$1" && git init -q -b main && git config user.email t@t.invalid && git config user.name t \
     && git add -A && git commit -q -m one && git commit -q --allow-empty -m two )
 }
+# quote_case <label> <expect_calls> <expect_rc>: a SUCCESSFUL call whose output quotes an auth phrase must not stop the batch
+quote_case() { assert_neq "$RC" "6" "$1: a successful call quoting an auth phrase does not stop"; assert_eq "$CALLS" "$2" "$1: every unit still runs"; }
 # stop_case <label> <expect_calls> : the scenario's globals RC/CALLS/OUT must show the stop
 stop_case() { assert_eq "$RC" "6" "$1: exits 6"; assert_eq "$CALLS" "$2" "$1: nothing is launched after the failing call"; assert_contains "$OUT" "STOP_AUTH after $3" "$1: stop line"; }
 # mutant_red <label> <expect_calls>: with the wiring removed the stop must NOT happen
@@ -69,6 +71,8 @@ echo call >> "${FAKE_CALLS:?}"
 case "${FAKE_MODE}" in
   auth) echo '{"summary": {"passed": 1, "total": 1}}'; echo "Failed to authenticate. API Error: 401" >&2; exit 1 ;;
   authjson) echo '{"summary": {"passed": 0, "total": 1}, "error": "OAuth session expired"}'; exit 1 ;;
+  authweak) echo '{"summary": {"passed": 0, "total": 1}}'; echo "error: invalid api key" >&2; exit 1 ;;
+  quote) echo '{"summary": {"passed": 1, "total": 1}}'; echo "the skill text mentions: Invalid API key" >&2; exit 0 ;;
   *) echo '{"summary": {"passed": 1, "total": 1}}'; echo "API Error: 429 rate limit reached" >&2; exit 1 ;;
 esac
 EOS
@@ -80,6 +84,9 @@ EOS
 mk_layout "$TEST_TMP/eb"
 eb_run "$TEST_TMP/eb" auth;     stop_case "run-eval-batch (stderr)" 1 "alpha:"
 eb_run "$TEST_TMP/eb" authjson; stop_case "run-eval-batch (stdout JSON only)" 1 "alpha:"
+eb_run "$TEST_TMP/eb" authweak; stop_case "run-eval-batch (failed call, weak phrase in stderr)" 1 "alpha:"
+eb_run "$TEST_TMP/eb" quote;    quote_case "run-eval-batch" 3
+assert_eq "$RC" "0" "run-eval-batch: quote case exit code unchanged"
 eb_run "$TEST_TMP/eb" generic
 assert_eq "$CALLS" "3" "run-eval-batch: a generic failure does not stop the batch"
 assert_eq "$RC" "0" "run-eval-batch: a generic failure keeps the original exit code 0"
@@ -103,6 +110,8 @@ err=""
 case "${FAKE_MODE}" in
   authlog) echo '{"type":"result","is_error":true,"result":"Invalid API key · Please run /login"}' > "$log" ;;
   authjson) err=', "error": "OAuth session expired"' ;;
+  authweak) echo 'agent output: invalid api key' > "$log"; printf '{"status":"failure","worktree":"","agent_log":"%s","files_changed":0}\n' "$log"; exit 1 ;;
+  quote) echo 'the answer quotes: Invalid API key' > "$log"; printf '{"status":"committed","worktree":"","agent_log":"%s","files_changed":0}\n' "$log"; exit 0 ;;
   generic) echo '{"type":"result","is_error":true,"result":"rate limit 429, retry later"}' > "$log" ;;
 esac
 printf '{"status":"failure","worktree":"","agent_log":"%s","files_changed":0%s}\n' "$log" "$err"
@@ -116,6 +125,8 @@ EOS
 mk_layout "$TEST_TMP/bc"
 bc_run "$TEST_TMP/bc" authlog;  stop_case "bench-engine-capability (agent_log only)" 1 "brainstorm-gate:"
 bc_run "$TEST_TMP/bc" authjson; stop_case "bench-engine-capability (stdout JSON only)" 1 "brainstorm-gate:"
+bc_run "$TEST_TMP/bc" authweak; stop_case "bench-engine-capability (failed call, weak phrase in plain agent_log)" 1 "brainstorm-gate:"
+bc_run "$TEST_TMP/bc" quote;    quote_case "bench-engine-capability" 4
 bc_run "$TEST_TMP/bc" generic
 assert_eq "$CALLS" "4" "bench-engine-capability: a generic failure runs every case"
 assert_eq "$RC" "0" "bench-engine-capability: a generic failure keeps the original exit code 0"
@@ -160,10 +171,16 @@ fs.appendFileSync(process.env.FAKE_QCALLS, 'call\n');
 const rawDir = process.argv[process.argv.indexOf('--raw-dir') + 1];
 const row = { status: 'PASS', quality: { corpus_pass: '1/1' }, capability_score: 1, latency: { sample_wall_time_s: 1 } };
 if (process.env.FAKE_MODE === 'qualify-autherr') { console.error('OAuth session expired, please log in'); process.exit(3); }
-if (process.env.FAKE_MODE === 'qualify-authjson') { console.log(JSON.stringify({ ...row, status: 'infra_abort', error: 'Failed to authenticate' })); process.exit(0); }
+if (process.env.FAKE_MODE === 'qualify-authweak') { console.error('error: invalid api key'); process.exit(3); }
+if (process.env.FAKE_MODE === 'qualify-authjson') { console.log(JSON.stringify({ ...row, status: 'infra_abort', error: 'Failed to authenticate' })); process.exit(3); }
 if (process.env.FAKE_MODE === 'qualify-authraw') {
   fs.mkdirSync(rawDir, { recursive: true });
   fs.writeFileSync(`${rawDir}/case-1.log`, 'agent said: OAuth session expired\n');
+  console.log(JSON.stringify(row)); process.exit(3);
+}
+if (process.env.FAKE_MODE === 'qualify-quote') {
+  fs.mkdirSync(rawDir, { recursive: true });
+  fs.writeFileSync(`${rawDir}/case-1.log`, 'candidate wrote: Invalid API key\n');
 }
 console.log(JSON.stringify(row));
 EOS
@@ -178,6 +195,9 @@ qs_run "$TEST_TMP/qs" probe-autherr;  stop_case "qualification-sweep (probe stde
 qs_run "$TEST_TMP/qs" qualify-autherr;  stop_case "qualification-sweep (qualify stderr)" 2 "s1:"
 qs_run "$TEST_TMP/qs" qualify-authjson; stop_case "qualification-sweep (qualify stdout row JSON only)" 2 "s1:"
 qs_run "$TEST_TMP/qs" qualify-authraw;  stop_case "qualification-sweep (qualify raw dir file only)" 2 "s1:"
+qs_run "$TEST_TMP/qs" qualify-authweak; stop_case "qualification-sweep (failed qualify, weak phrase in stderr log)" 2 "s1:"
+qs_run "$TEST_TMP/qs" qualify-quote;    quote_case "qualification-sweep" 6
+assert_eq "$RC" "0" "qualification-sweep: quote case exit code unchanged"
 qs_run "$TEST_TMP/qs" generic
 assert_eq "$CALLS" "3" "qualification-sweep: a generic probe failure still probes every seat"
 assert_eq "$RC" "1" "qualification-sweep: a generic failure keeps its old exit code 1 (INCOMPLETE)"
@@ -198,6 +218,8 @@ log="${FAKE_CALLS}.agent.log"; echo '{"type":"result","is_error":false}' > "$log
 case "${FAKE_MODE}" in
   auth) err="Failed to authenticate. API Error: 401" ;;
   authlog) err="simulated failure"; echo '{"type":"result","is_error":true,"result":"OAuth session expired"}' > "$log" ;;
+  authweak) err="simulated failure"; echo 'agent output: invalid api key' > "$log" ;;
+  quote) echo 'candidate says: Invalid API key' > "$log"; printf '{"status":"committed","runner":"grok","model":"grok-4.5","commit":null,"files_changed":0,"model_calls":1,"agent_log":"%s","error":null}\n' "$log"; exit 0 ;;
   autherr) err="simulated failure"; echo "Failed to authenticate" >&2 ;;
   *) err="simulated failure" ;;
 esac
@@ -223,6 +245,10 @@ ga_run "$TEST_TMP/ga" auth;    stop_case "run-grok-implementer-ab (stdout JSON)"
 assert_file_absent "$TEST_TMP/ga/scratch" "run-grok-implementer-ab: the scratch clone is removed on the stop path"
 ga_run "$TEST_TMP/ga" authlog; stop_case "run-grok-implementer-ab (agent_log only)" 1 "t01/A:"
 ga_run "$TEST_TMP/ga" autherr; stop_case "run-grok-implementer-ab (stderr only)" 1 "t01/A:"
+ga_run "$TEST_TMP/ga" authweak; stop_case "run-grok-implementer-ab (failed call, weak phrase in plain agent_log)" 1 "t01/A:"
+ga_run "$TEST_TMP/ga" quote
+assert_neq "$RC" "6" "run-grok-implementer-ab: a successful call quoting an auth phrase does not stop"
+if [ "$CALLS" -le 1 ]; then fail "run-grok-implementer-ab: quote case must keep running (calls=$CALLS)"; fi
 ga_run "$TEST_TMP/ga" generic
 assert_eq "$RC" "1" "run-grok-implementer-ab: a generic failure keeps its original exit code 1"
 if [ "$CALLS" -le 1 ]; then fail "run-grok-implementer-ab: a generic failure must keep retrying (calls=$CALLS)"; fi
@@ -242,6 +268,8 @@ echo call >> "${FAKE_CALLS:?}"
 case "${FAKE_MODE}" in
   auth) echo "Invalid API key · Please run /login" ;;
   authjson) echo '{"type":"result","is_error":true,"api_error_status":401,"result":"x"}' ;;
+  authweak) echo "error: invalid api key" ;;
+  quote) echo '{"type":"assistant","message":"the key was an Invalid API key in the docs"}'; exit 0 ;;
   *) echo '{"type":"result","is_error":true,"api_error_status":429,"result":"rate limit"}' ;;
 esac
 exit 1
@@ -254,6 +282,8 @@ EOS
 mk_layout "$TEST_TMP/tt"
 tt_run "$TEST_TMP/tt" auth;     stop_case "run-trigger-test (plain stdout)" 1 "dev-flow:"
 tt_run "$TEST_TMP/tt" authjson; stop_case "run-trigger-test (JSON api_error_status 401)" 1 "dev-flow:"
+tt_run "$TEST_TMP/tt" authweak; stop_case "run-trigger-test (failed call, weak phrase in merged stream)" 1 "dev-flow:"
+tt_run "$TEST_TMP/tt" quote;    quote_case "run-trigger-test" 4
 tt_run "$TEST_TMP/tt" generic
 assert_eq "$CALLS" "4" "run-trigger-test: a generic failure runs every prompt"
 assert_eq "$RC" "1" "run-trigger-test: a generic failure keeps its original exit code 1 (FAIL counted)"
@@ -270,6 +300,8 @@ echo call >> "${FAKE_CALLS:?}"
 case "${FAKE_MODE}" in
   auth) echo "Invalid API key · Please run /login"; exit 1 ;;
   autherr) echo "OAuth session expired" >&2; exit 1 ;;
+  authweak) echo "error: invalid api key" >&2; exit 1 ;;
+  quote) echo "ACTION: CONTINUE (the hook text mentions Invalid API key)"; exit 0 ;;
   *) echo "API Error: 429 rate limit" >&2; exit 1 ;;
 esac
 EOS
@@ -281,6 +313,10 @@ EOS
 mk_layout "$TEST_TMP/t2"
 t2_run "$TEST_TMP/t2" auth;    stop_case "run-t2-eval (stdout)" 1 "A-headless"
 t2_run "$TEST_TMP/t2" autherr; stop_case "run-t2-eval (stderr)" 1 "A-headless"
+t2_run "$TEST_TMP/t2" authweak; stop_case "run-t2-eval (failed call, weak phrase)" 1 "A-headless"
+t2_run "$TEST_TMP/t2" quote
+assert_neq "$RC" "6" "run-t2-eval: a successful call quoting an auth phrase does not stop"
+if [ "$CALLS" -le 1 ]; then fail "run-t2-eval: quote case must run every job (calls=$CALLS)"; fi
 t2_run "$TEST_TMP/t2" generic
 assert_eq "$RC" "0" "run-t2-eval: a generic failure keeps its original exit code 0"
 if [ "$CALLS" -le 1 ]; then fail "run-t2-eval: a generic failure must run every job (calls=$CALLS)"; fi
@@ -301,6 +337,8 @@ case "${FAKE_MODE}" in
   auth) echo '{"status":"precondition_failed","verdict":"","findings":"","error":"Failed to authenticate"}' ;;
   authraw) echo "OAuth session expired" > "$raw"; printf '{"status":"no_verdict","verdict":"","findings":"","raw_log":"%s"}\n' "$raw" ;;
   autherr) echo "Failed to authenticate" >&2; echo '{"status":"no_verdict","verdict":"","findings":""}' ;;
+  authweak) echo "invalid api key" > "$raw"; printf '{"status":"no_verdict","verdict":"","findings":"","raw_log":"%s"}\n' "$raw" ;;
+  quote) echo "the diff mentions Invalid API key" > "$raw"; printf '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":"","raw_log":"%s"}\n' "$raw" ;;
   *) echo "429 rate limit" >&2; echo '{"status":"no_verdict","verdict":"","findings":""}' ;;
 esac
 EOS
@@ -314,6 +352,8 @@ mk_layout "$TEST_TMP/rm"
 rm_run "$TEST_TMP/rm" auth;    stop_case "run-matrix (result JSON)" 1 "e1|nopack|"
 rm_run "$TEST_TMP/rm" authraw; stop_case "run-matrix (raw_log only)" 1 "e1|nopack|"
 rm_run "$TEST_TMP/rm" autherr; stop_case "run-matrix (stderr only)" 1 "e1|nopack|"
+rm_run "$TEST_TMP/rm" authweak; stop_case "run-matrix (failed result, weak phrase in raw_log)" 1 "e1|nopack|"
+rm_run "$TEST_TMP/rm" quote;    quote_case "run-matrix" 4
 rm_run "$TEST_TMP/rm" generic
 assert_eq "$CALLS" "4" "run-matrix: a generic failure runs every cell"
 assert_neq "$RC" "6" "run-matrix: a generic failure does not exit 6"
@@ -340,24 +380,43 @@ case "${FAKE_MODE}" in
   auth) echo '{"status":"failure","model_calls":1,"error":"Failed to authenticate"}' ;;
   authlog) echo "OAuth session expired" > "$log"; printf '{"status":"failure","model_calls":1,"agent_log":"%s"}\n' "$log" ;;
   autherr) echo "Failed to authenticate" >&2; echo '{"status":"failure","model_calls":1}' ;;
+  review-*) echo "work $RANDOM" > "w-$RANDOM.txt"; git add -A >/dev/null 2>&1; git commit -qm work >/dev/null 2>&1
+    printf '{"status":"committed","commit":"%s","model_calls":1,"skill_mode_effective":"off","worktree":""}\n' "$(git rev-parse HEAD)" ;;
   *) echo "429 rate limit" >&2; echo '{"status":"failure","model_calls":1}' ;;
 esac
 EOS
   chmod +x "$L/fake-impl-dispatch"
-  OUT="$("${ENVX[@]}" HOME="$L/home" FAKE_CALLS="$L/calls" FAKE_MODE="$mode" \
+  : > "$L/rcalls"
+  cat > "$L/fake-reviewer" <<'EOS'
+#!/usr/bin/env bash
+echo call >> "${FAKE_RCALLS:?}"
+case "${FAKE_MODE}" in
+  review-auth) echo '{"status":"precondition_failed","error":"Failed to authenticate"}'; exit 1 ;;
+  review-authweak) echo "error: invalid api key" >&2; echo '{"status":"no_verdict"}'; exit 1 ;;
+  review-quote) echo "the diff mentions Invalid API key" >&2; echo '{"status":"reviewed","verdict":"SHIP-AS-IS","findings":""}'; exit 0 ;;
+esac
+EOS
+  chmod +x "$L/fake-reviewer"
+  OUT="$("${ENVX[@]}" HOME="$L/home" FAKE_CALLS="$L/calls" FAKE_RCALLS="$L/rcalls" FAKE_MODE="$mode" \
     bash "$L/evals/skill-transport/run-implementer-matrix.sh" --test-mode --manifest "$L/im/manifest.json" --tasks-root "$L/im/tasks" \
       --pack "$L/evals/skill-transport/packs/implementer-pack.md" --out "$L/im/out.jsonl" --seed-file "$L/im/seed" --seed 5 \
-      --private-root "$L/im/private" --dispatch-cmd "$L/fake-impl-dispatch" --reviewer-cmd /bin/true --codex-bin /bin/true < /dev/null 2>&1)"
-  RC=$?; CALLS="$(count "$L/calls")"
+      --private-root "$L/im/private" --dispatch-cmd "$L/fake-impl-dispatch" --reviewer-cmd "$L/fake-reviewer" --codex-bin /bin/true < /dev/null 2>&1)"
+  RC=$?; CALLS=$(( $(count "$L/calls") + $(count "$L/rcalls") ))
 }
 mk_layout "$TEST_TMP/im"
 im_run "$TEST_TMP/im" auth;    stop_case "run-implementer-matrix (dispatch.json)" 1 "gpt-5.3-codex-spark|"
 im_run "$TEST_TMP/im" authlog; stop_case "run-implementer-matrix (agent_log only)" 1 "gpt-5.3-codex-spark|"
 im_run "$TEST_TMP/im" autherr; stop_case "run-implementer-matrix (stderr only)" 1 "gpt-5.3-codex-spark|"
+im_run "$TEST_TMP/im" review-auth;     stop_case "run-implementer-matrix (reviewer call, result JSON)" 2 "gpt-5.3-codex-spark|"
+im_run "$TEST_TMP/im" review-authweak; stop_case "run-implementer-matrix (failed reviewer, weak phrase in stderr)" 2 "gpt-5.3-codex-spark|"
+im_run "$TEST_TMP/im" review-quote
+assert_neq "$RC" "6" "run-implementer-matrix: a successful reviewer quoting an auth phrase does not stop"
+if [ "$CALLS" -le 2 ]; then fail "run-implementer-matrix: reviewer quote case must run every cell (calls=$CALLS) -- $OUT"; fi
 im_run "$TEST_TMP/im" generic
 assert_neq "$RC" "6" "run-implementer-matrix: a generic failure does not exit 6"
 if [ "$CALLS" -le 1 ]; then fail "run-implementer-matrix: a generic failure must run every cell (calls=$CALLS) -- $OUT"; fi
-mk_layout "$TEST_TMP/im-mut" mutant; im_run "$TEST_TMP/im-mut" authlog; mutant_red "run-implementer-matrix" 1
+mk_layout "$TEST_TMP/im-mut" mutant; im_run "$TEST_TMP/im-mut" authlog; mutant_red "run-implementer-matrix (dispatch)" 1
+im_run "$TEST_TMP/im-mut" review-auth; mutant_red "run-implementer-matrix (reviewer)" 2
 
 # ============================ 9. evals/pipeline-bench/run-pipeline-bench.sh (author rounds + reviewer calls) ============================
 # outputs of a paid call: RAW_LOG (claude stdout+stderr), the reviewer's result JSON (names a raw_log) and its stderr (into RAW_LOG)
@@ -372,6 +431,8 @@ echo call >> "${FAKE_CALLS:?}"
 echo "change $RANDOM" >> f.txt
 case "${FAKE_MODE}" in
   claude-auth) echo "Failed to authenticate" >&2; exit 1 ;;
+  claude-authweak) echo "error: invalid api key" >&2; exit 1 ;;
+  quote) echo '{"type":"result","is_error":false,"result":"the docs say Invalid API key","total_cost_usd":0}'; exit 0 ;;
 esac
 echo '{"type":"result","is_error":false,"result":"done","total_cost_usd":0}'
 EOS
@@ -393,6 +454,9 @@ EOS
 }
 mk_layout "$TEST_TMP/pb"
 pb_run "$TEST_TMP/pb" claude-auth;    stop_case "run-pipeline-bench (author call, RAW_LOG)" 1 "t1/round-1:"
+pb_run "$TEST_TMP/pb" claude-authweak; stop_case "run-pipeline-bench (failed author call, weak phrase in merged log)" 1 "t1/round-1:"
+pb_run "$TEST_TMP/pb" quote
+assert_neq "$RC" "6" "run-pipeline-bench: a successful call quoting an auth phrase does not stop"
 pb_run "$TEST_TMP/pb" review-auth;    stop_case "run-pipeline-bench (reviewer result JSON)" 2 "t1/review-1:"
 pb_run "$TEST_TMP/pb" review-authraw; stop_case "run-pipeline-bench (reviewer raw_log only)" 2 "t1/review-1:"
 pb_run "$TEST_TMP/pb" generic
@@ -414,6 +478,8 @@ echo call >> "${FAKE_CALLS:?}"
 case "${FAKE_MODE}" in
   auth) echo '{"type":"result","is_error":true,"result":"Invalid API key · Please run /login","total_cost_usd":0}'; exit 1 ;;
   autherr) echo "OAuth session expired" >&2; exit 1 ;;
+  authweak) echo "error: invalid api key" >&2; exit 1 ;;
+  quote) echo '{"type":"result","is_error":false,"result":"Invalid API key is a phrase","total_cost_usd":0.01}'; exit 0 ;;
   *) echo "API Error: 429 rate limit" >&2; exit 1 ;;
 esac
 EOS
@@ -426,6 +492,9 @@ mk_layout "$TEST_TMP/bh"
 bh_run "$TEST_TMP/bh" auth;    stop_case "benchmark-hook-latency (stdout envelope)" 1 "enabled sample 1:"
 bh_run "$TEST_TMP/bh" autherr; stop_case "benchmark-hook-latency (stderr)" 1 "enabled sample 1:"
 assert_file_absent "$TEST_TMP/bh/bh/report.json" "benchmark-hook-latency: no report is written on the auth stop"
+bh_run "$TEST_TMP/bh" authweak; stop_case "benchmark-hook-latency (failed call, weak phrase)" 1 "enabled sample 1:"
+bh_run "$TEST_TMP/bh" quote
+assert_neq "$RC" "6" "benchmark-hook-latency: a successful call quoting an auth phrase does not stop"
 bh_run "$TEST_TMP/bh" generic
 assert_neq "$RC" "6" "benchmark-hook-latency: a generic failure does not exit 6"
 if [ "$CALLS" -le 1 ]; then fail "benchmark-hook-latency: a generic failure must keep sampling (calls=$CALLS) -- $OUT"; fi

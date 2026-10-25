@@ -18,6 +18,7 @@ SBX="$TEST_TMP/repo"
 mkdir -p "$SBX/scripts" "$SBX/hooks" "$SBX/.claude-plugin"
 
 cp "$REPO_ROOT/scripts/check-hook-inventory.js" "$SBX/scripts/"
+mkdir -p "$SBX/scripts/lib"; cp "$REPO_ROOT/scripts/lib/chain-command.js" "$SBX/scripts/lib/"   # the one chain-command parser
 # wiring sources (the derivation inputs)
 cp "$REPO_ROOT/hooks/hooks.json"      "$SBX/hooks/hooks.json"
 # the real hooks.json registers the composed mods module (P1d, then the viewer mod): the sandbox needs that file so the shipped key resolves
@@ -188,6 +189,26 @@ j.hooks.PostToolUse[0].hooks.push({ type: 'command', command: 'node ${CLAUDE_PLU
 fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
 JS
 OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "1" "$?" "chain: member also registered directly fails --check"
+restore "hooks/hooks.json"
+
+# 18. chain argv parsing is shell-aware and ordered (class A of the g1 review): a quoted script path still parses; swapped
+#     member order, an unparseable chain command and a misspelt member all fail --check, never fall back to a default list
+
+chain_mutate() { restore "hooks/hooks.json"; sed -i "$1" "$SBX/hooks/hooks.json" || exit 1; }
+chain_mutate 's|node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-chain.js|node \\"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-chain.js\\"|'
+grep -q 'node \\"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-chain.js\\" intent-capture' "$SBX/hooks/hooks.json" || { echo "FATAL [$TEST_NAME] quoted-path anchor missing" >&2; exit 1; }
+OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "$?" "0" "chain: a quoted script path parses and --check stays green"
+chain_mutate 's|post-tool-chain.js intent-capture audit-log log-error|post-tool-chain.js audit-log intent-capture log-error|'
+OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "$?" "1" "chain: swapped member order fails --check"
+assert_contains "$OUT" "out of MEMBERS order" "chain: the order failure is named"
+chain_mutate 's|post-tool-chain.js intent-capture audit-log log-error|post-tool-chain.js intent-capture audit-log \\"log-error|'
+OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "$?" "1" "chain: an unparseable chain command fails --check"
+assert_contains "$OUT" "cannot be parsed" "chain: unparseable is reported, not defaulted"
+chain_mutate 's|post-tool-chain.js intent-capture audit-log log-error|post-tool-chain.js intent-capture audit-log log-eror|'
+OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "$?" "1" "chain: a misspelt member fails --check"
+assert_contains "$OUT" 'member "log-eror" is not in the chain' "chain: the misspelt member is named"
+chain_mutate 's|post-tool-chain.js intent-capture audit-log log-error|post-tool-chain.js|'
+OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "$?" "1" "chain: a chain command naming no members fails --check (no silent default)"
 restore "hooks/hooks.json"
 
 finalize_test

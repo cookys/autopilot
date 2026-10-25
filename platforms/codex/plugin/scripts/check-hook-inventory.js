@@ -38,6 +38,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { parseChainCommand } = require('./lib/chain-command.js');
 
 const REPO = path.resolve(__dirname, '..');
 const HOOKS_DIR = path.join(REPO, 'hooks');
@@ -82,20 +83,14 @@ const MULTIPLEXER_EVENT_TABLE = {
   ],
 };
 
-// Guard port (BL-0241): post-tool-chain.js runs several observers in one process. Its argv names the member
-// stems (validated against the chain's own MEMBERS list); no argv means all of MEMBERS. Each member counts as wired.
-// Problems (unknown member, a member registered both through the chain and directly, or twice) land in `problems`.
-function chainMembers(cmd) {
-  // MEMBERS is read from the lib's source text (not require'd): the lib pulls in hooks/_shared, which a mirror tree may lack.
-  let defaults = [];
-  try {
-    const src = fs.readFileSync(path.join(HOOKS_DIR, 'post-tool-chain-lib.js'), 'utf8');
-    const lit = src.match(/const MEMBERS = \[([^\]]*)\]/);
-    if (lit) defaults = [...lit[1].matchAll(/'([A-Za-z0-9_-]+)'/g)].map((x) => x[1]);
-  } catch (e) { /* defaults stays empty: every member then reports as unknown */ }
-  const m = cmd.match(/post-tool-chain\.js((?:\s+[A-Za-z0-9_-]+)*)\s*$/);
-  const args = m ? m[1].trim().split(/\s+/).filter(Boolean) : [];
-  return { defaults, members: args.length ? args : defaults };
+// Guard port (BL-0241): post-tool-chain.js runs several observers in one process. scripts/lib/chain-command.js is the
+// one parser (quotes, escapes, ordered members; an unparseable chain command is an error, never a default list).
+// MEMBERS has one source, hooks/post-tool-chain-lib.js, read as text (not require'd: it pulls in hooks/_shared).
+function chainMembersList() {
+  const src = fs.readFileSync(path.join(HOOKS_DIR, 'post-tool-chain-lib.js'), 'utf8');
+  const lit = src.match(/const MEMBERS = \[([^\]]*)\]/);
+  if (!lit) throw new Error('cannot find MEMBERS in hooks/post-tool-chain-lib.js');
+  return [...lit[1].matchAll(/'([A-Za-z0-9_-]+)'/g)].map((x) => x[1]);
 }
 
 function stemsFromHookBlock(eventMap, problems) {
@@ -108,17 +103,25 @@ function stemsFromHookBlock(eventMap, problems) {
     };
     for (const matcher of eventMap[event]) {
       for (const h of matcher.hooks || []) {
-        const s = stemFromCommand(h.command || '');
-        if (!s) continue;
-        if (s === 'post-tool-chain') {
-          const { defaults, members } = chainMembers(h.command || '');
-          for (const stem of members) {
+        let chain = null;
+        try { chain = parseChainCommand(h.command || ''); } catch (e) { if (problems) problems.push(`hooks/hooks.json: ${event}: ${e.message}`); continue; }
+        if (chain) {
+          let defaults = [];
+          try { defaults = chainMembersList(); } catch (e) { if (problems) problems.push(`hooks/hooks.json: ${event}: ${e.message}`); }
+          // Order: the members must appear in MEMBERS order (plan 2.5: the registration order within one event is preserved).
+          const idx = chain.members.map((m) => defaults.indexOf(m));
+          if (problems && idx.some((i, k) => i >= 0 && k > 0 && idx[k - 1] >= 0 && i < idx[k - 1])) {
+            problems.push(`hooks/hooks.json: ${event}: post-tool-chain members [${chain.members.join(' ')}] are out of MEMBERS order [${defaults.join(' ')}]`);
+          }
+          for (const stem of chain.members) {
             if (problems && !defaults.includes(stem)) problems.push(`hooks/hooks.json: ${event}: post-tool-chain member "${stem}" is not in the chain's MEMBERS`);
             note(stem, 'chain');
             out.add(stem);
           }
           continue;
         }
+        const s = stemFromCommand(h.command || '');
+        if (!s) continue;
         note(s, 'direct');
         if (s === 'opt-in-multiplexer') {
           // Expand multiplexed opt-in membership for this event.

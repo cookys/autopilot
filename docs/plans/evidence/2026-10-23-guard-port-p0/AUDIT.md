@@ -8,33 +8,36 @@ Plan: `docs/plans/2026-10-23-guard-port.md` section 4 Phase 0. Tree: develop at 
 - KR2 feasibility gate (floor F against 0.76 * B) is pending for the same reason: it is the same harness on a scratch checkout. Until B and F exist, KR2 is neither met nor unreachable.
 - KR1 is a count and needs no run: PostToolUse spawns for an unmatched tool go from 7 to 5 under depth-0 ruling (a), not to the plan's original target of 3 or fewer. KR1 as written (<= 3) is therefore missed by the ruling; reload-watch and failure-escalation stay separate because the host reads PostToolUse stdout as JSON only when it is one JSON object.
 
-## Behavioural audit (in-scope PostToolUse observers)
+## Behavioural audit
 
-Columns: stdin = how fd 0 is read; exit = process.exit or returned status; state = files written. "Export form" means Phase 1 turned the hook into `runHook(stdinText) -> status` with an unchanged CLI wrapper (`if (require.main === module)`).
+Every cell carries `file:line` evidence (lines are in `hooks/<hook>.js`, current positions after the Phase 1 export refactor). "Export form" means Phase 1 turned the hook into `runHook(stdinText) -> status` with an unchanged CLI wrapper (`if (require.main === module)`). State column: files read and written, or `none`. All twelve state paths below are under the live-state base or `~/.autopilot` unless stated.
 
-| Hook | Event / matcher | stdin | exit use | Exit codes | Fail mode | State written |
+### PostToolUse observers (in scope for the chain, plus the other PostToolUse registrations)
+
+| Hook | Event / matcher | stdin | process.exit | Exit codes | Fail mode | State files (read / write) |
 |---|---|---|---|---|---|---|
-| intent-capture | PostToolUse `.*` | `readStdinCli` fd 0, fallback `/dev/stdin` (`:195-197`) | export form, `process.exit(runHook(...))` at `:289`, no exit inside the body | 0 only | open; failure counter then disable flag | `~/.autopilot/intent/<sha1>.json`, `.intent-capture-failures`, `intent-capture.disabled`, `$TMPDIR/claude-intent-tool-count-*` |
-| reload-watch | PostToolUse `.*` | `readStdinCli` (`:75-77`) | export form, `process.exit(runHook(payload))` at `:130` | 0 only | open | `~/.claude/plugins/.reload-watch-state.json` (reads installed_plugins.json, `$PWD/.claude/*`) |
-| audit-log | PostToolUse `.*` | `readStdinCli` (`:29-31`) | export form, `:79` | 0 only | open | `~/.claude/bash-commands.log` (append); live-state writers via awaiting-owner |
-| log-error | PostToolUse `.*` | `readStdinCli` (`:22-24`) | export form, `:75` | 0 only | open | `~/.claude/error-log.md` (append) |
-| failure-escalation | PostToolUse `.*` | `readStdinCli` (`:173-175`) | export form, `:233` | 0 only | open | `~/.autopilot/.failure_count_<sessionHash>` |
-| context-budget | PostToolUse `.*` | `JSON.parse(fs.readFileSync(0))` (`:304`) | many `process.exit(0)`, final `process.exit(exitCode)` (`:488`); `process.on('exit', releaseLock)` (`:323`) | 0, advisory 2 (`:409`, `:473`); error resets to 0 (`:486`) | open | `~/.autopilot/context-budget/<sid>.json` via tmp + rename, lock file |
-| opt-in-multiplexer | Pre/PostToolUse | `fs.readFileSync(0)` (`:91`) | `process.exit` at `:81,126,130,181,187` | 0, child exit 2 passthrough (`:126`) | open | none of its own |
-| suggest-compact | PostToolUse `Write\|Edit` | fd 0 then `/dev/stdin` (`:50`) | `process.exit(0)` (`:61,100`) | 0 | open | counter state |
-| session-tasks | PostToolUse `TaskCreate\|TaskUpdate\|TaskList` | `L.readStdinJson()` (`:117`) | `process.exit(0)` (`:153`) | 0 | open via `L.failOpen` | task status files |
-| run-approval-gate | Pre/PostToolUse `Task\|Agent` | fd 0 (`:182`) | `process.exit(0)` throughout; asks via `emitAsk` | 0 | open | approval state file |
+| intent-capture | PostToolUse `.*` | fd 0, then `/dev/stdin` (`:195-197`) | export form: only the CLI wrapper exits (`:289`) | 0 only (`:237,240` early returns 0, `:284` final return 0; catch `:275-279`) | open; failure counter then disable flag (`:275-279`) | write `~/.autopilot/intent/<sha1>.json` (`:48`), `.intent-capture-failures` (`:50`, write `:122`), `intent-capture.disabled` (`:49`, write `:164`), `$TMPDIR/claude-intent-tool-count-*` (`:51`); reads the same |
+| reload-watch | PostToolUse `.*` | fd 0, then `/dev/stdin` (`:75-77`) | export form, wrapper `:130` | 0 only (`:90,118` returns 0; catch returns 0 at `:119-121`) | open | read `~/.claude/plugins/installed_plugins.json`, `$PWD/.claude/dispatch-config.md`, `$PWD/.claude/settings.local.json` (`:32-34`); read and write `~/.claude/plugins/.reload-watch-state.json` (`:37`, read `:53`, write `:61`) |
+| audit-log | PostToolUse `.*` | fd 0, then `/dev/stdin` (`:29-31`) | export form, wrapper `:79` | 0 only (`:58,70` returns 0; catch returns 0 at `:71-73`) | open | append `~/.claude/bash-commands.log` (`:68`); live-state writers hosted via awaiting-owner / ask-decision / merge-task-status (`:44-53`) |
+| log-error | PostToolUse `.*` | fd 0, then `/dev/stdin` (`:22-24`) | export form, wrapper `:75` | 0 only (`:39,66` returns 0; catch returns 0 at `:67-69`) | open | append `~/.claude/error-log.md` (`:64`) |
+| failure-escalation | PostToolUse `.*` | fd 0, then `/dev/stdin` (`:173-175`) | export form, wrapper `:233` | 0 only (`runHook` returns 0, catch `:224`; plan cite `:219-223` predates the refactor) | open | read and write `~/.autopilot/.failure_count_<sessionHash>` (`:46`, `:61`, write `:74`) |
+| context-budget | PostToolUse `.*` | `JSON.parse(fs.readFileSync(0))` (`:304`) | many `process.exit(0)` (`:299,308,310`), final `process.exit(exitCode)` (`:488`); `process.on('exit', releaseLock)` (`:323`) | 0; advisory 2 (`:409`, `:473`); error resets to 0 (`:483-486`) | open | read and write `~/.autopilot/context-budget/<sid>.json` via tmp + rename (`:233-234`), lock file (`:323`); reads the live statusline file (`:79`) |
+| opt-in-multiplexer | Pre/PostToolUse | `fs.readFileSync(0)` (`:91`) | `process.exit` (`:81,126,130,181,187`) | 0; child exit 2 passed through (`:126`) | open (`:186-188`) | none of its own (children keep theirs); search of `writeFileSync` / `appendFileSync` finds no write in the file |
+| suggest-compact | PostToolUse `Write\|Edit` | fd 0, fallback `/dev/stdin` (`:50`) | `process.exit(0)` (`:61,100`) | 0 (`process.exit(0)` `:100`, catch `:97-99`) | open (catch writes one stderr line `:97-99`) | read and write `$TMPDIR/claude-tool-count-<sid>` (`:67`, write `:77`) |
+| session-tasks | PostToolUse `TaskCreate\|TaskUpdate\|TaskList` | `L.readStdinJson()` (`:117`) | `process.exit(0)` (`:153`) | 0 (catch `:152`, exit `:153`) | open via `L.failOpen` (`:152`) | read and write the per-session `tasks` file from `L.sessionFile(p, 'tasks')` under the live base, under `L.withLock`, atomic JSON write (`:119-121,148`) |
+| run-approval-gate | PostToolUse `Task\|Agent` (and PreToolUse) | fd 0 (`:182`) | `process.exit(0)` throughout (`:177,184-206`) | 0; asks via `emitAsk`, never 2 | open (`:184` bad JSON, `:206` catch) | read and write `<live base>/run-approval/<sid>.json` (or `$AUTOPILOT_RUN_APPROVAL_DIR`; `:106-110`), tmp + rename mode 0600 (`:148-152`), pending written `:134`, approved `:144`, checked `:196` |
 
-PreToolUse guards (read only, not changed by Phase 2):
+### PreToolUse guards (not changed by Phase 2)
 
-| Hook | stdin | Exit codes | Fail mode |
-|---|---|---|---|
-| ask-decision | `L.readStdinJson()` (`:117`) | 0 (`:118`) | open via `L.failOpen` |
-| foreman-guard | fd 0 (`:617`) | 0 (deny is JSON on stdout, `:684`) | open; lock timeout open |
-| cost-fuse | fd 0 (`:278`) | 0 (`:274-355`) | open |
-| dispatch-model-guard | fd 0 then `/dev/stdin` (`:243-245`) | 0 | open on payload errors; config garbage falls back closed (`:133,140,147`) |
-| subagent-budget | fd 0 (`:544`) | 0 (`:549`) | open with stderr note |
-| depth0-delegate-gate | fd 0 (`:218`) | 0 (`:346-348`) | open; lock timeout open |
+| Hook | Event / matcher | stdin | process.exit | Exit codes | Fail mode | State files (read / write) |
+|---|---|---|---|---|---|---|
+| ask-decision | PreToolUse `AskUserQuestion` | `L.readStdinJson()` (`:117`) | `process.exit(0)` (`:118`) | 0 | open via `L.failOpen` (`:117`) | write a pointer `<live>/ask-decision/<sid>.json` via `L.atomicWriteJson(L.sessionFile(p, 'ask-decision'), ...)` (`:87`); append an entry to the open-decision file through `openDecision` (`:77-82`, same lock + atomic rename); PostToolUse side reads and removes the pointer (`:92-99`) |
+| foreman-guard | PreToolUse `Bash\|Monitor` | fd 0 (`:617`) | `process.exit(0)` (`:615,619-625,643,675-687`) | 0; deny is JSON on stdout (`:684`) | open; crash `:687`; lock timeout runs without the lock (`:521`) | read and write `~/.autopilot/foreman-guard/<sid>-<agent>.json` (or `$AUTOPILOT_FOREMAN_GUARD_DIR`; `:455-459`), tmp + rename (`:469-472`), lock file `<file>.lock` (`:508-521`), GC stamp file in the same dir (`:478-483`); reads the agent transcript head (`:296`) |
+| cost-fuse | PreToolUse `Bash\|Edit\|Write\|MultiEdit\|NotebookEdit` | fd 0 (`:278`) | `process.exit(0)` (`:274-355`) | 0; deny JSON (`:324`) | open (`:280` bad JSON, `:355` catch); lock timeout runs without lock (`:89`) | read and write `~/.autopilot/cost-fuse/<sid>.json` (or `$AUTOPILOT_COST_FUSE_DIR`; `:35-39`), tmp + rename (`:64-67`), lock (`:76-89`); reads costs ledger `~/.claude/metrics/costs.jsonl` (`:285`) and the transcript (`:171`); warn mode creates the dir at `:332` |
+| dispatch-model-guard | PreToolUse `Task\|Agent` | fd 0, fallback `/dev/stdin` (`:243-245`) | `process.exit(0)` (`:39,172-363`) | 0; deny is JSON | open on payload errors (`:251-255`, `:359-362`); config garbage falls back closed (`:133,140,147`) | none written (no `writeFileSync` / `appendFileSync` in the file); reads `<cwd>/.claude/dispatch-guard-config.md` and other config candidates (`:96-103`) |
+| subagent-budget | PreToolUse `Task\|Agent` | fd 0 (`:544`) | `process.exit(0)` (`:549`) | 0 | open with stderr note (`:546-549`) | read and write transcript-scan cache `<live>/subagent-budget/cache/<sid>.json` (`:246`, tmp + rename mode 0600 at `:259-262`); read and write card pointer `<live>/subagent-budget/cards/<sid>-<key>.json` under `L.withLock` (`:400-407`) |
+| depth0-delegate-gate | PreToolUse `WebFetch\|WebSearch\|Read\|Grep\|Glob\|Bash\|Agent\|Task\|Skill` | fd 0 (`:218`) | `process.exit(0)` (`:215-348`) | 0 | open (`:348`); lock timeout runs without lock (`:189`); bad JSON `:220` | read and write `<live base>/depth0-gate/<sid>.json` (or `$AUTOPILOT_DEPTH0_GATE_DIR`; `:144`, dir created `:280`), tmp + rename (`:159-162`), lock (`:176-189`) |
+| run-approval-gate | PreToolUse `Task\|Agent` | see PostToolUse table | see above | 0 | see above | see above (same file `:106-110`; pending state written `:131-134` on ask) |
 
 Findings relevant to the chain:
 

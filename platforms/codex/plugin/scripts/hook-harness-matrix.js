@@ -24,6 +24,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { parseChainCommand } = require('./lib/chain-command.js');
 
 const STALE_DAYS = 60;
 const HARNESSES = [['claude', 'Claude Code'], ['codex', 'Codex'], ['opencode', 'OpenCode'], ['agy', 'agy']];
@@ -55,17 +56,19 @@ function registered(block) {
   for (const [event, matchers] of Object.entries(block || {})) {
     for (const m of matchers) {
       for (const h of m.hooks || []) {
+        let chain = null;
+        try { chain = parseChainCommand(h.command || ''); } catch (e) { die(`hooks.json ${event}: ${e.message}`); }
+        if (chain) { // guard port (BL-0241): the chain hosts these stems; each stays a registered stem
+          for (const stem of ['post-tool-chain', ...chain.members]) {
+            if (!out.has(stem)) out.set(stem, new Set());
+            out.get(stem).add(event);
+          }
+          continue;
+        }
         const mm = /hooks\/([A-Za-z0-9_-]+)\.(js|sh)/u.exec(h.command || '');
         if (!mm) continue;
         if (!out.has(mm[1])) out.set(mm[1], new Set());
         out.get(mm[1]).add(event);
-        if (mm[1] === 'post-tool-chain') { // guard port (BL-0241): the chain hosts these stems; each stays a registered stem
-          const args = (/post-tool-chain\.js((?:\s+[A-Za-z0-9_-]+)*)\s*$/u.exec(h.command || '') || [, ''])[1].trim().split(/\s+/).filter(Boolean);
-          for (const stem of args.length ? args : ['intent-capture', 'reload-watch', 'audit-log', 'log-error', 'failure-escalation']) {
-            if (!out.has(stem)) out.set(stem, new Set());
-            out.get(stem).add(event);
-          }
-        }
       }
     }
   }

@@ -387,7 +387,7 @@ NODE
 
   # BL-0294: first authentication failure stops the matrix (STOP_AUTH, exit 6) before this cell is recorded; the
   # dispatcher's worktree is removed first, and a re-run redoes the cell because no row was written.
-  # failed = the dispatcher exited non-zero or its result status is not committed / no_op
+  # failed = the dispatcher exited non-zero or its result status is not committed / reviewed (no_op counts as failed)
   if ! auth_stop_check "$key" --failed "$(( dispatch_rc != 0 ))" --failed-from "$dispatch_json" --dispatch "$dispatch_json" --stderr "$dispatch_err"; then
     if [ -n "$returned_wt" ] && [ -d "$returned_wt" ]; then git -C "$repo" worktree remove --force "$returned_wt" >/dev/null 2>&1 || true; fi
     exit "$AUTH_STOP_EXIT"

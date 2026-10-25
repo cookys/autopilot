@@ -92,11 +92,56 @@ eb_run "$TEST_TMP/eb" exit0;    stop_case "run-eval-batch (exit 0, no summary, o
 eb_run "$TEST_TMP/eb" cross;    quote_case "run-eval-batch (call 1 ok quoting, calls 2-3 fail 429)" 3
 eb_run "$TEST_TMP/eb" quote;    quote_case "run-eval-batch" 3
 assert_eq "$RC" "0" "run-eval-batch: quote case exit code unchanged"
+# The REAL skill-creator run_eval.py cannot be changed or fetched here. This stand-in behaves like its run_single_query as seen in the
+# cv4 acceptance of BL-0294 (2026-10-25): Popen(claude -p ..., stdout=PIPE, stderr=DEVNULL), the exit code is never read, and a valid
+# {"summary": ...} is always printed with exit 0. The wrapper `claude` that run-eval-batch.sh puts first on PATH is the only place the
+# failure can still be seen, so these cases must stop on the FIRST skill.
+ebw_run() {
+  local L="$1" mode="$2" H="$1/home"
+  rm -rf "$H" "$L/skills" "$L/skill-creator-workspace" "$L/calls" "$L/fb"; : > "$L/calls"; mkdir -p "$L/fb"
+  mkdir -p "$H/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator" "$L/tmp"
+  for sk in alpha beta gamma; do
+    mkdir -p "$L/skills/$sk" "$L/skill-creator-workspace/evals"; : > "$L/skill-creator-workspace/evals/$sk-evals.json"
+  done
+  cat > "$L/standin_run_eval.py" <<'EOS'
+import json, subprocess, sys
+p = subprocess.Popen(["claude", "-p", "a query", "--output-format", "stream-json"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+p.stdout.read()
+p.wait()
+print(json.dumps({"summary": {"passed": 0, "total": 1}, "results": []}))
+sys.exit(0)
+EOS
+  cat > "$L/fb/claude" <<'EOS'
+#!/usr/bin/env bash
+echo call >> "${FAKE_CALLS:?}"
+case "${FAKE_MODE}" in
+  wrap-auth) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Invalid API key · Please run /login"}'; echo "Authentication error" >&2; exit 1 ;;
+  wrap-exit0) echo "Please log in to continue."; exit 0 ;;
+  wrap-quote) echo '{"type":"result","subtype":"success","is_error":false,"result":"the docs quote: Invalid API key"}'; exit 0 ;;
+  wrap-cross) if [ "$(wc -l < "$FAKE_CALLS" | tr -d " ")" = 1 ]; then echo '{"type":"result","subtype":"success","is_error":false,"result":"Invalid API key quoted"}'; exit 0; fi
+              echo "API Error: 429 rate limit" >&2; exit 1 ;;
+esac
+EOS
+  chmod +x "$L/fb/claude"
+  OUT="$("${ENVX[@]}" HOME="$H" TMPDIR="$L/tmp" PATH="$L/fb:$PATH" FAKE_CALLS="$L/calls" FAKE_MODE="$mode" RUN_EVAL_CMD="python3 $L/standin_run_eval.py" \
+    bash "$L/scripts/run-eval-batch.sh" < /dev/null 2>&1)"
+  RC=$?; CALLS="$(count "$L/calls")"
+}
+ebw_run "$TEST_TMP/eb" wrap-auth;  stop_case "run-eval-batch (run_eval swallows claude: json is_error + stderr, exit 1)" 1 "alpha/"
+ebw_run "$TEST_TMP/eb" wrap-exit0; stop_case "run-eval-batch (run_eval swallows claude: exit 0, only an auth message)" 1 "alpha/"
+ebw_run "$TEST_TMP/eb" wrap-quote; quote_case "run-eval-batch (wrapper: successful call quoting a phrase)" 3
+ebw_run "$TEST_TMP/eb" wrap-cross; quote_case "run-eval-batch (wrapper: call 1 ok quoting, later calls 429)" 3
 eb_run "$TEST_TMP/eb" generic
 assert_eq "$CALLS" "3" "run-eval-batch: a generic failure does not stop the batch"
 assert_eq "$RC" "0" "run-eval-batch: a generic failure keeps the original exit code 0"
 mk_layout "$TEST_TMP/eb-mut" mutant
 eb_run "$TEST_TMP/eb-mut" auth; mutant_red "run-eval-batch" 1
+# negative control for the wrapper itself: no per-call record (= the wrapper back to a plain exec) -> the swallowed failure is not seen
+mk_layout "$TEST_TMP/ebw-mut"
+grep -q 'if \[\[ -z "${EVAL_CALL_RECORD_DIR:-}" \]\]; then' "$TEST_TMP/ebw-mut/scripts/run-eval-batch.sh" || fail "wrapper mutation anchor missing"
+sed -i 's/if \[\[ -z "${EVAL_CALL_RECORD_DIR:-}" \]\]; then/if true; then/' "$TEST_TMP/ebw-mut/scripts/run-eval-batch.sh"
+ebw_run "$TEST_TMP/ebw-mut" wrap-auth; mutant_red "run-eval-batch (wrapper back to exec)" 1
+assert_eq "$CALLS" "3" "wrapper mutant: all three skills were called (nothing stopped it)"
 
 # ============================ 2. scripts/bench-engine-capability.sh (one dispatch per case) ============================
 # outputs of a paid call: dispatch stdout+stderr (captured together) and the agent_log it names
@@ -148,6 +193,9 @@ bc_run "$TEST_TMP/bc-mut" authlog; mutant_red "bench-engine-capability" 1
 qs_run() {
   local L="$1" mode="$2"
   rm -rf "$L/home" "$L/dcalls" "$L/qcalls" "$L/ev"; : > "$L/dcalls"; : > "$L/qcalls"; mkdir -p "$L/home"
+  if [ "$mode" = qualify-stale ]; then   # an OLD run left an auth message in the bundle's raw dir, written right now (same second)
+    mkdir -p "$L/ev/s1-qualify/raw"; echo "old run: OAuth session expired" > "$L/ev/s1-qualify/raw/old.log"
+  fi
   cat > "$L/roster.json" <<'EOS'
 { "corpus": { "prompt_config_hash": "a", "semantic_fingerprint": "b", "containment_fingerprint": "c", "harness_version": "h", "expires_days": 90 },
   "evidence_root": "ev", "role": "implementer",
@@ -189,6 +237,7 @@ if (process.env.FAKE_MODE === 'qualify-authraw') {
   fs.writeFileSync(`${rawDir}/case-1.log`, 'agent said: OAuth session expired\n');
   console.log(JSON.stringify(row)); process.exit(3);
 }
+if (process.env.FAKE_MODE === 'qualify-stale') { console.error('boom: unrelated failure'); process.exit(3); }
 if (process.env.FAKE_MODE === 'qualify-quote') {
   fs.mkdirSync(rawDir, { recursive: true });
   fs.writeFileSync(`${rawDir}/case-1.log`, 'candidate wrote: Invalid API key\n');
@@ -207,6 +256,10 @@ qs_run "$TEST_TMP/qs" probe-autherr;  stop_case "qualification-sweep (probe stde
 qs_run "$TEST_TMP/qs" qualify-autherr;  stop_case "qualification-sweep (qualify stderr)" 2 "s1:"
 qs_run "$TEST_TMP/qs" qualify-authjson; stop_case "qualification-sweep (qualify stdout row JSON only)" 2 "s1:"
 qs_run "$TEST_TMP/qs" qualify-authraw;  stop_case "qualification-sweep (qualify raw dir file only)" 2 "s1:"
+assert_file_exists "$TEST_TMP/qs/ev/s1-qualify/raw/case-1.log" "qualification-sweep: the judged raw files are copied into the evidence bundle"
+qs_run "$TEST_TMP/qs" qualify-stale
+assert_neq "$RC" "6" "qualification-sweep: a stale auth message from an older run (same second) is not this administration's"
+assert_eq "$CALLS" "6" "qualification-sweep: every seat is still administered after the unrelated failure"
 qs_run "$TEST_TMP/qs" qualify-authweak; stop_case "qualification-sweep (failed qualify, weak phrase in stderr log)" 2 "s1:"
 qs_run "$TEST_TMP/qs" qualify-quote;    quote_case "qualification-sweep" 6
 assert_eq "$RC" "0" "qualification-sweep: quote case exit code unchanged"

@@ -131,11 +131,25 @@ fi
 # Print manifest info for selftest/verification
 if [[ -n "${ARM_PLUGIN_DIR:-}" ]]; then
   echo "[runner] Loaded plugins: [$(basename "$ARM_PLUGIN_DIR")]" >&2
-  exec "$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local --plugin-dir "$ARM_PLUGIN_DIR"
+  PLUGIN_ARGS=(--plugin-dir "$ARM_PLUGIN_DIR")
 else
   echo "[runner] Loaded plugins: []" >&2
-  exec "$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local --plugin-dir "$EMPTY_PLUGIN_DIR"
+  PLUGIN_ARGS=(--plugin-dir "$EMPTY_PLUGIN_DIR")
 fi
+
+# BL-0294: run_eval.py (an external plugin) sends claude's stderr to DEVNULL, drops its exit code and always writes a valid
+# summary, so an authentication failure never reaches this script through run_eval. Capture the evidence HERE, at the
+# claude boundary: stdout is streamed through tee (run_eval reads it live), stderr and the exit code are saved per call,
+# and the wrapper exits with claude's own code. No record dir (selftest) = the plain pass-through it always was.
+if [[ -z "${EVAL_CALL_RECORD_DIR:-}" ]]; then
+  exec "$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local "${PLUGIN_ARGS[@]}"
+fi
+call_id="$$-$RANDOM"
+"$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local "${PLUGIN_ARGS[@]}" 2>"$EVAL_CALL_RECORD_DIR/$call_id.err" | tee "$EVAL_CALL_RECORD_DIR/$call_id.out"
+rc=${PIPESTATUS[0]}
+cat "$EVAL_CALL_RECORD_DIR/$call_id.err" >&2
+echo "$rc" > "$EVAL_CALL_RECORD_DIR/$call_id.rc"
+exit "$rc"
 EOF
 chmod +x "$WRAPPER_DIR/claude"
 
@@ -309,6 +323,8 @@ for skill in "${SKILLS[@]}"; do
   eval_rc=0
   before_cmds="$(ls "$CMD_DIR/${skill}-skill-"*.md 2>/dev/null | sort || true)"
   export ARM_PLUGIN_DIR="$SKILL_PATH"
+  export EVAL_CALL_RECORD_DIR="$RESULT_DIR/claude-calls"   # one .out/.err/.rc triple per claude call of THIS skill
+  mkdir -p "$EVAL_CALL_RECORD_DIR"
   $RUN_EVAL_CMD \
     --eval-set "$EVAL_FILE" \
     --skill-path "$SKILL_PATH" \
@@ -330,10 +346,22 @@ for skill in "${SKILLS[@]}"; do
 
   # BL-0294: a dead credential fails every remaining skill the same way, so the first authentication
   # failure stops the whole batch (STOP_AUTH line, exit 6) after removing the command files made so far.
-  # The call failed when run_eval exited non-zero or printed no summary; text phrases only count then.
+  # run_eval-level signal: failed when run_eval exited non-zero or printed no summary (it swallows claude's own failures, hence the
+  # per-call records judged below); text phrases only count for a failed call.
   eval_failed=0
   { [ "$eval_rc" -ne 0 ] || ! grep -q '"summary"' "$RESULT_DIR/eval-output.json" 2>/dev/null; } && eval_failed=1
-  if ! auth_stop_check "$skill" --failed "$eval_failed" --stderr "$RESULT_DIR/eval-log.txt" --log "$RESULT_DIR/eval-output.json"; then
+  # Every recorded claude call is judged on its own (failed = non-zero exit, or no successful stream-json result line).
+  auth_hit=0
+  for rcf in "$EVAL_CALL_RECORD_DIR"/*.rc; do
+    [ -e "$rcf" ] || continue
+    call_base="${rcf%.rc}"
+    call_rc="$(cat "$rcf" 2>/dev/null || echo 1)"
+    auth_stop_check "$skill/$(basename "$call_base")" --failed "$(( call_rc != 0 ))" --failed-from-stream "$call_base.out" --log "$call_base.out" --stderr "$call_base.err" || { auth_hit=1; break; }
+  done
+  if [ "$auth_hit" -eq 0 ]; then
+    auth_stop_check "$skill" --failed "$eval_failed" --stderr "$RESULT_DIR/eval-log.txt" --log "$RESULT_DIR/eval-output.json" || auth_hit=1
+  fi
+  if [ "$auth_hit" -eq 1 ]; then
     for f in "${CREATED_CMDS[@]+"${CREATED_CMDS[@]}"}"; do [[ -e "$f" ]] && rm -f "$f"; done
     exit "$AUTH_STOP_EXIT"
   fi

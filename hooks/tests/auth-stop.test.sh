@@ -96,6 +96,11 @@ node "$HELPER" check --id T1 --failed-from-stream "$S" --log "$S" < /dev/null 2>
 echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Please log in to continue."}' > "$S"
 node "$HELPER" check --id T1 --failed-from-json "$S" --log "$S" < /dev/null 2>/dev/null; assert_eq "6" "$?" "json call reporting is_error with an auth message stops"
 
+# --- the shipped docs must say what the code does: no_op is a failure, not a success
+assert_not_contains "$(cat "$HELPER")" "committed / no_op / reviewed" "helper header does not list no_op as a success status"
+assert_contains "$(cat "$HELPER")" "no_op is NOT a success" "helper header says why no_op counts as failed"
+assert_not_contains "$(grep -m1 'no_op' "$REPO_ROOT/docs/scripts-inventory.md" | grep -o 'committed / no_op' || true)" "committed / no_op" "inventory row does not list no_op as a success status"
+
 # --- plumbing ---
 chk --stderr "$TEST_TMP/missing-file"
 assert_eq "0" "$CHK_RC" "a missing file is skipped, not an error"

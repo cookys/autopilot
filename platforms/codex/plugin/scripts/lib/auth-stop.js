@@ -14,7 +14,7 @@
 //        hooks/tests/endpoints-cli.test.sh:162 (Anthropic envelope), scripts/dispatch-hetero.sh capture_structured_provider_error
 //        (reads api_error_status), src/readiness/probe.js:50 ('401' -> auth_failed)
 //  (2) TEXT phrases count ONLY WHEN THE CALL FAILED (the caller says so: non-zero exit code, no valid result, or a dispatch result
-//      whose status is not committed / no_op / reviewed). A call that succeeded is never an auth failure, whatever its text says
+//      whose status is not committed / reviewed). A call that succeeded is never an auth failure, whatever its text says
 //      (a normal answer may quote "invalid api key"). When the call failed, a phrase anywhere in any of its outputs counts; there is
 //      no stdout / stderr / log distinction, so merged or split streams judge the same. ONE table, every row traced to file:line:
 //        failed to authenticate; oauth session|token expired; authentication_failed
@@ -35,13 +35,16 @@
 //
 // A dispatch source (dispatch-hetero / dispatch-review result) also reads the files its agent_log / raw_log fields name.
 //
-// CLI:  node auth-stop.js check [--id ID] (--failed 0|1 | --failed-from FILE)... [--stderr FILE]... [--log FILE]...
-//                               [--dispatch FILE]... [--text STR]...
+// CLI:  node auth-stop.js check [--id ID] (--failed 0|1 | --failed-from FILE | --failed-from-json FILE | --failed-from-stream FILE)...
+//                               [--stderr FILE]... [--log FILE]... [--dispatch FILE]... [--text STR]...
 //   --failed-from-json FILE: a `claude -p --output-format json` output counts as failed unless it is a result object with is_error not true,
 //                     subtype success and a result string. --failed-from-stream FILE: same for stream-json (a type=result line must report success).
 //                     A call that exited 0 but printed only an auth message ("Please log in to continue.") therefore counts as failed.
 //   --failed N        the call's own failure signal (1 = failed). --failed-from FILE: a dispatch result counts as failed unless its
-//                     status is committed / no_op / reviewed. Several are OR-ed; at least one is required (exit 2 otherwise).
+//                     status is committed or reviewed. no_op is NOT a success: dispatch-hetero reports a runner that exited 0 without
+//                     committing -- the shape of an exit-0 "Please log in" reply -- as no_op (scripts/dispatch-hetero.sh ~5126); an
+//                     unreadable or status-less result also counts as failed. Several signals are OR-ed; at least one is required
+//                     (exit 2 otherwise).
 //   exit 0 = no auth failure, 6 = auth failure (stop line on stderr), 2 = usage. Missing files are skipped.
 // Library: callFailed, scanText, checkSources, stopLine, EXIT_AUTH_STOP.
 

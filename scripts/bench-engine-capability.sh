@@ -233,7 +233,7 @@ for c in "${cases[@]}"; do
   # (STOP_AUTH line, exit 6; the temp store is removed by the EXIT trap, no record is written).
   printf '%s\n' "$run_output" > "$BENCH_DIR/${c}.dispatch.out"
   # every output of this paid call: the dispatch result + its stderr (one file), and the runner's own agent_log it names
-  # failed = the dispatcher exited non-zero or its result status is not committed / no_op
+  # failed = the dispatcher exited non-zero or its result status is not committed / reviewed (no_op counts as failed)
   auth_args=(--failed "$(( dispatch_rc != 0 ))" --failed-from "$BENCH_DIR/${c}.dispatch.out" --dispatch "$BENCH_DIR/${c}.dispatch.out")
   [ -f "$log_path" ] && auth_args+=(--log "$log_path")
   auth_stop_check "$c" "${auth_args[@]}" || exit "$AUTH_STOP_EXIT"

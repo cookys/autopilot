@@ -37,6 +37,9 @@
 //
 // CLI:  node auth-stop.js check [--id ID] (--failed 0|1 | --failed-from FILE)... [--stderr FILE]... [--log FILE]...
 //                               [--dispatch FILE]... [--text STR]...
+//   --failed-from-json FILE: a `claude -p --output-format json` output counts as failed unless it is a result object with is_error not true,
+//                     subtype success and a result string. --failed-from-stream FILE: same for stream-json (a type=result line must report success).
+//                     A call that exited 0 but printed only an auth message ("Please log in to continue.") therefore counts as failed.
 //   --failed N        the call's own failure signal (1 = failed). --failed-from FILE: a dispatch result counts as failed unless its
 //                     status is committed / no_op / reviewed. Several are OR-ed; at least one is required (exit 2 otherwise).
 //   exit 0 = no auth failure, 6 = auth failure (stop line on stderr), 2 = usage. Missing files are skipped.
@@ -102,13 +105,34 @@ function scanText(text, opts) {
   return null;
 }
 
-const OK_STATUS = new Set(['committed', 'no_op', 'reviewed']);
+// no_op is NOT a success here: dispatch-hetero reports a runner that exited 0 without committing (the shape of an exit-0
+// "Please log in" reply) as status no_op (scripts/dispatch-hetero.sh ~5126), and dispatch-review reports an unparsed reply as no_verdict.
+const OK_STATUS = new Set(['committed', 'reviewed']);
 /** Did a dispatch result report failure? Unparseable or status-less output counts as failed. */
 function callFailed(text) {
   let last;
   for (const line of String(text).split(/\r?\n/)) { const o = parseJson(line.trim()); if (o && typeof o === 'object' && typeof o.status === 'string') last = o; }
   if (!last) { const w = parseJson(String(text).trim()); if (w && typeof w === 'object' && typeof w.status === 'string') last = w; }
   return !last || !OK_STATUS.has(last.status);
+}
+
+function lastJsonObjects(text) {
+  const out = [];
+  const whole = parseJson(String(text).trim());
+  if (whole && typeof whole === 'object' && !Array.isArray(whole)) out.push(whole);
+  else for (const line of String(text).split(/\r?\n/)) { const o = parseJson(line.trim()); if (o && typeof o === 'object' && !Array.isArray(o)) out.push(o); }
+  return out;
+}
+const okResult = (o) => o.is_error !== true && (o.subtype === undefined || o.subtype === 'success');
+/** claude -p --output-format json: failed unless a result object with is_error false (or absent), subtype success, and a result string. */
+function claudeJsonFailed(text) {
+  const ok = lastJsonObjects(text).some((o) => okResult(o) && typeof o.result === 'string');
+  return !ok;
+}
+/** claude -p --output-format stream-json: failed unless a type=result line reports success. */
+function claudeStreamFailed(text) {
+  const ok = lastJsonObjects(text).some((o) => o.type === 'result' && okResult(o));
+  return !ok;
 }
 
 // File paths a dispatch result names for the runner's own log.
@@ -142,7 +166,7 @@ function checkSources(sources, opts) {
 const stopLine = (id, hit) => `STOP_AUTH after ${id}: ${hit.match}`;
 
 function main(argv) {
-  const usage = () => { process.stderr.write('usage: auth-stop.js check [--id ID] (--failed 0|1 | --failed-from FILE)... [--stderr F]... [--log F]... [--dispatch F]... [--text S]...\n'); return 2; };
+  const usage = () => { process.stderr.write('usage: auth-stop.js check [--id ID] (--failed 0|1 | --failed-from F | --failed-from-json F | --failed-from-stream F)... [--stderr F]... [--log F]... [--dispatch F]... [--text S]...\n'); return 2; };
   if (argv[0] !== 'check') return usage();
   let id = '?'; let failed = null; const sources = [];
   for (let i = 1; i < argv.length; i += 2) {
@@ -151,6 +175,10 @@ function main(argv) {
     if (k === '--id') id = v;
     else if (k === '--failed') { if (v !== '0' && v !== '1') return usage(); failed = (failed || false) || v === '1'; }
     else if (k === '--failed-from') { let t = ''; try { t = fs.readFileSync(v, 'utf8'); } catch (_e) { /* unreadable: counts as failed */ } failed = (failed || false) || callFailed(t); }
+    else if (k === '--failed-from-json' || k === '--failed-from-stream') {
+      let t = ''; try { t = fs.readFileSync(v, 'utf8'); } catch (_e) { /* unreadable: counts as failed */ }
+      failed = (failed || false) || (k === '--failed-from-json' ? claudeJsonFailed(t) : claudeStreamFailed(t));
+    }
     else if (k === '--stderr' || k === '--log') sources.push({ kind: 'raw', path: v });
     else if (k === '--dispatch') sources.push({ kind: 'dispatch', path: v });
     else if (k === '--text') sources.push({ kind: 'raw', text: v });
@@ -163,5 +191,5 @@ function main(argv) {
   return EXIT_AUTH_STOP;
 }
 
-module.exports = { EXIT_AUTH_STOP, AUTH_PATTERNS, callFailed, scanText, checkSources, stopLine };
+module.exports = { EXIT_AUTH_STOP, AUTH_PATTERNS, callFailed, claudeJsonFailed, claudeStreamFailed, scanText, checkSources, stopLine };
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

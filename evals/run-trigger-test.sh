@@ -36,8 +36,8 @@ test_trigger() {
     --max-turns 2 \
     --output-format stream-json \
     > "$outfile" 2>&1 && claude_rc=0 || claude_rc=$?
-  # BL-0294: stop the whole run at the first authentication failure (STOP_AUTH, exit 6); failed = claude exited non-zero
-  auth_stop_check "$label" --failed "$(( claude_rc != 0 ))" --log "$outfile" || exit "$AUTH_STOP_EXIT"
+  # BL-0294: stop the whole run at the first authentication failure (STOP_AUTH, exit 6); failed = claude exited non-zero or printed no successful result line
+  auth_stop_check "$label" --failed "$(( claude_rc != 0 ))" --failed-from-stream "$outfile" --log "$outfile" || exit "$AUTH_STOP_EXIT"
 
   if grep -q "\"$skill\"" "$outfile" 2>/dev/null; then
     echo "  PASS: $label (triggered $skill)"
@@ -59,8 +59,8 @@ test_no_trigger() {
     --max-turns 2 \
     --output-format stream-json \
     > "$outfile" 2>&1 && claude_rc=0 || claude_rc=$?
-  # BL-0294: stop the whole run at the first authentication failure (STOP_AUTH, exit 6); failed = claude exited non-zero
-  auth_stop_check "$label" --failed "$(( claude_rc != 0 ))" --log "$outfile" || exit "$AUTH_STOP_EXIT"
+  # BL-0294: stop the whole run at the first authentication failure (STOP_AUTH, exit 6); failed = claude exited non-zero or printed no successful result line
+  auth_stop_check "$label" --failed "$(( claude_rc != 0 ))" --failed-from-stream "$outfile" --log "$outfile" || exit "$AUTH_STOP_EXIT"
 
   if grep -q '"autopilot:' "$outfile" 2>/dev/null; then
     echo "  FAIL: $label (autopilot skill triggered unexpectedly)"

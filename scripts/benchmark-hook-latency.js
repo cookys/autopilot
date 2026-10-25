@@ -290,7 +290,7 @@ function main() {
         const r = runOnce(ctx, arm, o.maxUsd - spent);
         spent += r.cost;
         // BL-0294: the first authentication failure stops the benchmark (STOP_AUTH, exit 6, no report written)
-        authHit = authStop.checkSources([{ kind: 'raw', text: String(r.stdout || '') }, { kind: 'raw', text: String(r.stderr || '') }], { failed: !r.ok });
+        authHit = authStop.checkSources([{ kind: 'raw', text: String(r.stdout || '') }, { kind: 'raw', text: String(r.stderr || '') }], { failed: !r.ok || authStop.claudeJsonFailed(String(r.stdout || '')) });
         if (authHit) { authId = `${arm} sample ${s + 1}`; break outer; }
         if (r.costUnknown) costUnknown++;
         if (!r.ok) process.stderr.write(`warning: ${arm} sample ${s + 1} exited non-zero: ${r.stderr.slice(0, 200)}\n`);

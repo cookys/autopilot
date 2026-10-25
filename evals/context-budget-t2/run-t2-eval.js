@@ -82,7 +82,7 @@ for (const j of jobs) {
   });
   const out = r.stdout || '';
   // BL-0294: the first authentication failure stops the run (every later call fails the same way).
-  const authHit = authStop.checkSources([{ kind: 'raw', text: out }, { kind: 'raw', text: r.stderr || '' }], { failed: r.status !== 0 });
+  const authHit = authStop.checkSources([{ kind: 'raw', text: out }, { kind: 'raw', text: r.stderr || '' }], { failed: r.status !== 0 || grade(out).action === 'UNPARSED' });
   if (authHit) {
     process.stderr.write(`${authStop.stopLine(`${j.c.id} ${j.arm} #${j.i}`, authHit)}\n`);
     fs.writeFileSync(OUT, JSON.stringify({ model: MODEL, stopped: 'STOP_AUTH', results }, null, 1));

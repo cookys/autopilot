@@ -404,10 +404,8 @@ EOF
     --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off 2>"$pd/.dispatch.err" | tee "$pd/.dispatch.out" | tail -1)
   # BL-0294: a probe that died on authentication means every later seat dies the same way. Read every output of
   # the call (full stdout, stderr, and the runner's agent_log the result names) BEFORE the scratch dir is removed.
-  # failed = the probe's last line is not a committed result
-  local probe_failed=1
-  grep -q '"status": *"committed"' < <(echo "$out") && probe_failed=0
-  auth_stop_check "probe-$runner/$model" --failed "$probe_failed" --dispatch "$pd/.dispatch.out" --stderr "$pd/.dispatch.err" || AUTH_STOP_ID="probe $runner/$model"
+  # failed = the probe's result is not committed / reviewed (--failed-from; a runner that exited 0 with no commit is no_op = failed)
+  auth_stop_check "probe-$runner/$model" --failed-from "$pd/.dispatch.out" --dispatch "$pd/.dispatch.out" --stderr "$pd/.dispatch.err" || AUTH_STOP_ID="probe $runner/$model"
   rm -rf "$pd"
   grep -q '"status": *"committed"' < <(echo "$out") && return 0
   echo "PROBE_OUT:$out" >&2
@@ -484,6 +482,7 @@ run_seat() { # slug runner model family vsrc endpoint effort
   if [ "$endpoint" != "-" ] && [ "$endpoint" != "anthropic-native" ] && [ "$runner" = "cc-shim" ]; then
     endpoint_args=(--endpoint "$endpoint")
   fi
+  local admin_start; admin_start="$(date +%s)"   # THIS administration only: older raw files in a reused bundle are not judged
   node "$REPO_ROOT/scripts/engine-qualify.js" "$ROLE" \
     --engine "$model" --model "$model" --model-version "$model_version" \
     --runner "$runner" --runner-version "$RESOLVED_VERSION_TOKEN" --family "$family" \
@@ -502,7 +501,7 @@ run_seat() { # slug runner model family vsrc endpoint effort
   # failed = engine-qualify exited non-zero
   local auth_args=(--failed "$(( qexit != 0 ))" --log "$bundle/qualify-err.log" --dispatch "$bundle/qualify-out.json") rawf
   if [ -d "$bundle/raw" ]; then
-    while IFS= read -r rawf; do auth_args+=(--dispatch "$rawf"); done < <(find "$bundle/raw" -type f 2>/dev/null)
+    while IFS= read -r rawf; do auth_args+=(--dispatch "$rawf"); done < <(find "$bundle/raw" -type f -newermt "@$admin_start" 2>/dev/null)
   fi
   auth_stop_check "$slug" "${auth_args[@]}" || AUTH_STOP_ID="$slug"
   local summary="no-row"

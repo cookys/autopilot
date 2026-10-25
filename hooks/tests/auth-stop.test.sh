@@ -85,6 +85,16 @@ printf '%s\n' '{"status":"failure","agent_log":"'"$TEST_TMP"'/agent.log"}' > "$S
 node "$HELPER" check --id T1 --failed-from "$S" --dispatch "$S" < /dev/null 2>/dev/null; assert_eq "6" "$?" "failed dispatch result: the phrase in the agent_log it names stops"
 node "$HELPER" check --id T1 --failed-from "$TEST_TMP/missing-file" --text 'Invalid API key' < /dev/null 2>/dev/null; assert_eq "6" "$?" "an unreadable result counts as failed"
 node "$HELPER" check --id T1 --text 'Invalid API key' < /dev/null 2>/dev/null; assert_eq "2" "$?" "no failure signal given is a usage error"
+echo '{"status":"no_op","agent_log":"'"$TEST_TMP"'/agent.log"}' > "$S"
+node "$HELPER" check --id T1 --failed-from "$S" --dispatch "$S" < /dev/null 2>/dev/null; assert_eq "6" "$?" "no_op dispatch result (exit-0 runner, nothing committed) counts as failed"
+printf 'Please log in to continue.\n' > "$S"
+node "$HELPER" check --id T1 --failed-from-json "$S" --log "$S" < /dev/null 2>/dev/null; assert_eq "6" "$?" "json call with no result object (exit 0, plain auth message) counts as failed"
+node "$HELPER" check --id T1 --failed-from-stream "$S" --log "$S" < /dev/null 2>/dev/null; assert_eq "6" "$?" "stream call with no result line counts as failed"
+echo '{"type":"result","subtype":"success","is_error":false,"result":"Invalid API key is a phrase"}' > "$S"
+node "$HELPER" check --id T1 --failed-from-json "$S" --log "$S" < /dev/null 2>/dev/null; assert_eq "0" "$?" "json call with a successful result object quoting a phrase does not stop"
+node "$HELPER" check --id T1 --failed-from-stream "$S" --log "$S" < /dev/null 2>/dev/null; assert_eq "0" "$?" "stream call with a successful result line quoting a phrase does not stop"
+echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Please log in to continue."}' > "$S"
+node "$HELPER" check --id T1 --failed-from-json "$S" --log "$S" < /dev/null 2>/dev/null; assert_eq "6" "$?" "json call reporting is_error with an auth message stops"
 
 # --- plumbing ---
 chk --stderr "$TEST_TMP/missing-file"

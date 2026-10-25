@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0305 -->
+<!-- next-id: BL-0306 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -321,14 +321,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-01
 - **Origin**: self
-- **Problem**: 每回合重新提醒模型守規則沒有明顯進步，因此改做每回合驗證。p2-3r2（Haiku 4.5 重跑）判 PASS，可據此把 hook 記載為經評測的 opt-in，不決定預設值；Haiku 5.5 批次 p2-3-h55 已開跑，BL-0295 評測設計中。
-- **Impact**: 預設仍未開啟，長時間工作時模型仍可能漸漸偏離規定；hook 已可選用，且在 Haiku 4.5 評測通過。
-- **Trigger**: the Haiku 5.5 batch (p2-3-h55, started 2026-10-25 19:52 Taipei) of P2-3 finishes and is judged. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
+- **Problem**: 每回合重新提醒模型守規則沒有明顯進步，因此改做每回合驗證。Haiku 4.5（p2-3r2）與 Haiku 5.5（p2-3-h55）兩批評測都判 PASS，hook 可記載為經評測的 opt-in。P2-4 收尾文件進行中；預設值由 owner 決定（卡 d-7d8444a3）。
+- **Impact**: 預設仍未開啟，長時間工作時模型可能漸漸偏離規定；hook 已可選用，兩批評測都通過，等 owner 決定預設。
+- **Trigger**: P2-4 verdict note merged and owner answers d-7d8444a3. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 - **Pointer**: docs/plans/2026-10-20-per-turn-gate.md
-- **Context**: p2-3r2 PASS (670b3ffaf): M3 ON 28/30 vs C 1/30. p2-3-h55 started 2026-10-25 19:52 Taipei. Details in sidecar.
+- **Context**: p2-3r2 PASS (670b3ffaf): M3 ON 28/30 vs C 1/30. p2-3-h55 PASS (a10bceef5): M3 ON 23/30 vs C 0/30, Fisher p 8.71e-11, cost 2.10 USD. Details in sidecar.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056
@@ -1129,7 +1129,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: revival.3d
 - **Report**: 01M5MZ2BMFACG8RZB31S6G1V9F
 - **Reply**: 2026-10-25 01M5QR3SKAR0303QRVJC11P60P/01M5QR4BJFH17NV55671K2MBMN
-- **Problem**: 審查者每發現一點就送一次，對方要反覆處理；peer 建議先累積再一次送出。副問題已確認非 autopilot 問題。owner 決定先做 ON/OFF 評測；設計與前置登錄撰寫中，付費執行等設計審過。
+- **Problem**: 審查者每發現一點就送一次，對方要反覆處理；peer 建議先累積再一次送出。owner 選方案 A：改跑 10/24 的合成評測（上限 20 USD），真實重放設計擱置。進行中：把評測接上真實執行器，尚未付費執行。
 - **Impact**: 來回訊息多，處理零碎，浪費雙方時間。
 - **Trigger**: a guidance change to the reviewer flow is scheduled, or a batching ON/OFF eval is budgeted
 - **Trigger-Type**: owner
@@ -1218,3 +1218,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0294 hand finding 2026-10-25
 - **Pointer**: docs/backlog/implementer-matrix-stale-pack-digest.md
 
+### bash-launch-guard test timing assertion fails under high host load
+- **Id**: BL-0305
+- **Status**: open
+- **Since**: 2026-10-25
+- **Origin**: self
+- **Problem**: 其中一條防護測試要求長輸入（16000 字元與 64 KB）各在 100 毫秒內處理完。主機負載高（約 35）時穩定失敗：10/25 量到 121 與 106 毫秒，三次重跑都紅；負載正常時是綠的。
+- **Impact**: 推送前跑套件會出現和改動無關的紅，要人工判讀是不是真的有問題。
+- **Trigger**: next time the suite is run before a push, or the test file is edited
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: 2026-10-25 pre-push suite runs at 670b3ffaf and 1d38cfefb
+- **Pointer**: docs/backlog/bash-launch-guard-timing-assertion-load.md

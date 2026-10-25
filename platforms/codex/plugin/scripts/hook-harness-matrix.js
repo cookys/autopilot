@@ -24,6 +24,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { parseChainCommand } = require('./lib/chain-command.js');
 
 const STALE_DAYS = 60;
 const HARNESSES = [['claude', 'Claude Code'], ['codex', 'Codex'], ['opencode', 'OpenCode'], ['agy', 'agy']];
@@ -55,6 +56,15 @@ function registered(block) {
   for (const [event, matchers] of Object.entries(block || {})) {
     for (const m of matchers) {
       for (const h of m.hooks || []) {
+        let chain = null;
+        try { chain = parseChainCommand(h.command || ''); } catch (e) { die(`hooks.json ${event}: ${e.message}`); }
+        if (chain) { // guard port (BL-0241): the chain hosts these stems; each stays a registered stem
+          for (const stem of ['post-tool-chain', ...chain.members]) {
+            if (!out.has(stem)) out.set(stem, new Set());
+            out.get(stem).add(event);
+          }
+          continue;
+        }
         const mm = /hooks\/([A-Za-z0-9_-]+)\.(js|sh)/u.exec(h.command || '');
         if (!mm) continue;
         if (!out.has(mm[1])) out.set(mm[1], new Set());
@@ -105,7 +115,7 @@ function render(data) {
   for (const stem of [...stems].sort()) {
     lines.push(`| \`${stem}\` | ${HARNESSES.map(([h]) => cell(data, stem, h)).join(' | ')} |`);
   }
-  lines.push('', '`opt-in-multiplexer` hosts the opt-in PreToolUse / PostToolUse / Stop stems for Claude Code; their tiers are in `scripts/check-hook-inventory.js`.', '');
+  lines.push('', '`opt-in-multiplexer` hosts the opt-in PreToolUse / PostToolUse / Stop stems for Claude Code; their tiers are in `scripts/check-hook-inventory.js`. `post-tool-chain` hosts the PostToolUse stems named in its hooks.json command (one process instead of several).', '');
   return lines.join('\n');
 }
 

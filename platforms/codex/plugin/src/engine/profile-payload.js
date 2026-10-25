@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { TextDecoder } = require('util');
+const { parseChainCommand } = require('../../scripts/lib/chain-command.js');
 const {
   canonicalJson,
   cloneCanonical,
@@ -321,7 +322,16 @@ function loadHookClasses(repoRoot = DEFAULT_REPO_ROOT) {
   for (const [eventName, groups] of Object.entries(hookManifest.hooks || {})) {
     for (const group of groups) {
       for (const hook of group.hooks || []) {
-        const match = /\/hooks\/([A-Za-z0-9._-]+)\.js(?:\s|$)/u.exec(hook.command || '');
+        let chain = null;
+        try { chain = parseChainCommand(hook.command || ''); } catch (e) {
+          payloadError(`unreadable post-tool-chain registration: ${e.message}`, 'PROFILE_HOOK_DRIFT');
+        }
+        if (chain) {
+          // guard port (BL-0241): the chain hosts exactly the stems its command names, in that order
+          for (const stem of chain.members) wired.push(stem);
+          continue;
+        }
+        const match =/\/hooks\/([A-Za-z0-9._-]+)\.js(?:\s|$)/u.exec(hook.command || '');
         if (!match) continue;
         if (match[1] === 'opt-in-multiplexer') {
           for (const stem of (MULTIPLEXER_EVENT_TABLE[eventName] || [])) {

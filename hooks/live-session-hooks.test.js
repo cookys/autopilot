@@ -331,9 +331,18 @@ test('concurrency: attention end signal vs heartbeats leaves no resurrected file
   assert.ok(!fs.existsSync(attnFile(live)));
 });
 
+
+const { parseChainCommand } = require('../scripts/lib/chain-command.js');
+// A hook command "hosts" a stem when it is that hook's own script or a post-tool-chain registration naming it
+// (the shared parser expands the chain; the depth-0 ruling of the guard port folds intent-capture, audit-log and log-error into one process).
+const hostsStem = (cmd, stem) => {
+  const chain = parseChainCommand(cmd);
+  return chain ? chain.members.includes(stem) : cmd.includes(`/hooks/${stem}.js`);
+};
+
 test('wiring: hooks.json registers both hooks with exact matchers, never Task/Agent', () => {
   const h = JSON.parse(fs.readFileSync(path.join(ROOT, 'hooks', 'hooks.json'), 'utf8')).hooks;
-  const find = (ev, stem) => (h[ev] || []).filter((g) => g.hooks.some((x) => x.command.includes(`/hooks/${stem}.js`)));
+  const find = (ev, stem) => (h[ev] || []).filter((g) => g.hooks.some((x) => hostsStem(x.command, stem)));
   for (const ev of ['TaskCreated', 'TaskCompleted']) assert.strictEqual(find(ev, 'session-tasks').length, 1, ev);
   const pt = find('PostToolUse', 'session-tasks');
   assert.strictEqual(pt.length, 1);

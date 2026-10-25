@@ -158,19 +158,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/intent-capture.js"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-chain.js intent-capture audit-log log-error"
           },
           {
             "type": "command",
             "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/reload-watch.js"
-          },
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/audit-log.js"
-          },
-          {
-            "type": "command",
-            "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/log-error.js"
           },
           {
             "type": "command",

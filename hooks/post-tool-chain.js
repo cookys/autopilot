@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * post-tool-chain — PostToolUse (UNREGISTERED; guard-port Phase 1, BL-0241)
+ * post-tool-chain — PostToolUse (guard-port Phase 1+2, BL-0241; registered for intent-capture, audit-log, log-error)
  *
  * One process for the five `.*` PostToolUse observers that precede opt-in-multiplexer.js. Forwards each
  * observer's bytes in order; the one exception is pure additionalContext objects, merged into a single JSON object (BL-0304); see hooks/post-tool-chain-lib.js for the contract.

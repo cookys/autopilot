@@ -38,6 +38,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { parseChainCommand } = require('./lib/chain-command.js');
 
 const REPO = path.resolve(__dirname, '..');
 const HOOKS_DIR = path.join(REPO, 'hooks');
@@ -47,7 +48,7 @@ const NON_HOOK = [
   /-lib\.js$/, /\.test\.js$/, /^capture-payload\.js$/, /^_transcript-timing-probe\.js$/,
   /^transcript-reader\.test\.js$/, /\.bak$/,
   /^opt-in-multiplexer\.js$/, // D6 infrastructure, not a user-facing hook stem
-  /^post-tool-chain\.js$/, // guard-port chain (BL-0241): infrastructure that hosts five wired stems; Phase 2 adds its expansion table
+  /^post-tool-chain\.js$/, // guard-port chain (BL-0241): infrastructure that hosts wired stems; expanded via CHAIN_COMMANDS below
 ];
 
 function die(msg, code) { console.error(msg); process.exit(code === undefined ? 2 : code); }
@@ -82,13 +83,46 @@ const MULTIPLEXER_EVENT_TABLE = {
   ],
 };
 
-function stemsFromHookBlock(eventMap) {
+// Guard port (BL-0241): post-tool-chain.js runs several observers in one process. scripts/lib/chain-command.js is the
+// one parser (quotes, escapes, ordered members; an unparseable chain command is an error, never a default list).
+// MEMBERS has one source, hooks/post-tool-chain-lib.js, read as text (not require'd: it pulls in hooks/_shared).
+function chainMembersList() {
+  const src = fs.readFileSync(path.join(HOOKS_DIR, 'post-tool-chain-lib.js'), 'utf8');
+  const lit = src.match(/const MEMBERS = \[([^\]]*)\]/);
+  if (!lit) throw new Error('cannot find MEMBERS in hooks/post-tool-chain-lib.js');
+  return [...lit[1].matchAll(/'([A-Za-z0-9_-]+)'/g)].map((x) => x[1]);
+}
+
+function stemsFromHookBlock(eventMap, problems) {
   const out = new Set();
   for (const event of Object.keys(eventMap || {})) {
+    const seen = new Map(); // stem -> how it was registered in this event ('direct' | 'chain')
+    const note = (stem, how) => {
+      if (problems && seen.has(stem)) problems.push(`hooks/hooks.json: ${event}: "${stem}" registered more than once (${seen.get(stem)} and ${how})`);
+      seen.set(stem, how);
+    };
     for (const matcher of eventMap[event]) {
       for (const h of matcher.hooks || []) {
+        let chain = null;
+        try { chain = parseChainCommand(h.command || ''); } catch (e) { if (problems) problems.push(`hooks/hooks.json: ${event}: ${e.message}`); continue; }
+        if (chain) {
+          let defaults = [];
+          try { defaults = chainMembersList(); } catch (e) { if (problems) problems.push(`hooks/hooks.json: ${event}: ${e.message}`); }
+          // Order: the members must appear in MEMBERS order (plan 2.5: the registration order within one event is preserved).
+          const idx = chain.members.map((m) => defaults.indexOf(m));
+          if (problems && idx.some((i, k) => i >= 0 && k > 0 && idx[k - 1] >= 0 && i < idx[k - 1])) {
+            problems.push(`hooks/hooks.json: ${event}: post-tool-chain members [${chain.members.join(' ')}] are out of MEMBERS order [${defaults.join(' ')}]`);
+          }
+          for (const stem of chain.members) {
+            if (problems && !defaults.includes(stem)) problems.push(`hooks/hooks.json: ${event}: post-tool-chain member "${stem}" is not in the chain's MEMBERS`);
+            note(stem, 'chain');
+            out.add(stem);
+          }
+          continue;
+        }
         const s = stemFromCommand(h.command || '');
         if (!s) continue;
+        note(s, 'direct');
         if (s === 'opt-in-multiplexer') {
           // Expand multiplexed opt-in membership for this event.
           for (const stem of (MULTIPLEXER_EVENT_TABLE[event] || [])) out.add(stem);
@@ -129,7 +163,8 @@ function deriveInventory() {
   const modErrors = validateModules(modules);
 
   // Everything actually wired in hooks.json.
-  const wired = stemsFromHookBlock(hooksJson.hooks);
+  const chainProblems = [];
+  const wired = stemsFromHookBlock(hooksJson.hooks, chainProblems);
 
   // The opt-in subset is declared in the manifest (default-off, self-gated).
   const optInList = Array.isArray(manifest.opt_in) ? manifest.opt_in : [];
@@ -158,7 +193,7 @@ function deriveInventory() {
     optIn: [...optIn].sort(),
     disabled: [...disabled].sort(),
     mods: Array.isArray(modules) ? modules.length : 0,
-    modErrors,
+    modErrors: [...modErrors, ...chainProblems],
     get total() { return this.defaultOn.length + this.optIn.length + this.disabled.length; },
   };
 }

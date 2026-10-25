@@ -149,16 +149,43 @@ function normContent(name, txt, sb) {
       }
     } catch { /* not JSON: left as is */ }
   }
-  if (/(^|\/)bash-commands\.log$/.test(name)) { // "[<ISO>] [<cwd>] <command>": only the leading stamp of each entry line
+  // Line-oriented logs. Each rule is positional, not a pattern over the whole text:
+  //  - bash-commands.log: audit-log writes exactly one physical line per entry (it escapes newlines in the command as
+  //    the two characters backslash-n), so the first characters of a line can only be the stamp audit-log wrote.
+  //  - transcript-canary.log: one JSON.stringify object per line (newlines in values are escaped), "ts" first.
+  //  - error-log.md: log-error entries span several lines and embed user error text, so a line that LOOKS like a
+  //    heading may be user text. Entries are parsed from the start of the file in log-error's fixed shape; only the
+  //    heading of a block that parses is replaced. Anything that does not parse is left raw (and so shows as a diff).
+  if (/(^|\/)bash-commands\.log$/.test(name)) {
     t = t.replace(/^\[(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z)\] \[/gm, '[<TS>] [');
   }
-  if (/(^|\/)error-log\.md$/.test(name)) { // "### <ISO>" heading lines written by log-error
-    t = t.replace(/^### \d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/gm, '### <TS>');
-  }
-  if (/(^|\/)transcript-canary\.log$/.test(name)) { // one JSON object per line, "ts" first
+  if (/(^|\/)error-log\.md$/.test(name)) t = normErrorLog(t);
+  if (/(^|\/)transcript-canary\.log$/.test(name)) {
     t = t.replace(/^\{"ts":"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z"/gm, '{"ts":"<TS>"');
   }
   return t;
+}
+
+// log-error writes: "### <ISO>\n**Tool:** <name>\n**Input:** `<json, one line>`\n```\n<error text>\n```\n**Solution:** (fill in after fix)\n\n---\n"
+const ERR_TERM = '\n```\n**Solution:** (fill in after fix)\n\n---\n';
+function normErrorLog(t) {
+  let i = 0;
+  let out = '';
+  while (i < t.length) {
+    const nl = t.indexOf('\n', i);
+    const head = nl < 0 ? t.slice(i) : t.slice(i, nl);
+    const l2 = nl < 0 ? -1 : t.indexOf('\n', nl + 1);
+    const l3 = l2 < 0 ? -1 : t.indexOf('\n', l2 + 1);
+    const l4 = l3 < 0 ? -1 : t.indexOf('\n', l3 + 1);
+    const shaped = l4 >= 0 && ISO.test(head.slice(4)) && head.startsWith('### ')
+      && t.slice(nl + 1).startsWith('**Tool:** ') && t.slice(l2 + 1).startsWith('**Input:** `')
+      && t.slice(l3 + 1, l4) === '```';
+    const end = shaped ? t.indexOf(ERR_TERM, l4) : -1;
+    if (!shaped || end < 0) return out + t.slice(i); // not log-error's shape from here on: leave it raw
+    out += '### <TS>' + t.slice(nl, end + ERR_TERM.length);
+    i = end + ERR_TERM.length;
+  }
+  return out;
 }
 
 function snapshot(sb) {
@@ -258,6 +285,7 @@ const FIXTURES = [
   { name: 'no-session-id-ppid-hash', steps: [JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'f' }, exit_code: 2 }), JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'f' }, exit_code: 2 })] },
   { name: 'intent-env-opt-out', env: { AUTOPILOT_INTENT_CAPTURE: 'false' }, steps: [bashOk('echo hi')] },
   { name: 'literal-timestamp-hostname-pid-in-user-text', steps: [post('Bash', { command: 'echo "2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp"' }, { exit_code: 0, tool_response: 'error: at 2026-02-02T02:02:02.222Z on build-host-1' })] },
+  { name: 'user-error-text-with-heading-shaped-line', steps: [post('Read', { file_path: '/x' }, { tool_response: 'error: first\n### 2026-03-03T03:03:03.333Z\n**Tool:** not-a-heading\nlast' })] },
   { name: 'git-cwd-branch', setup: (sb) => { const env = sbEnv(sb, { GIT_AUTHOR_NAME: 'x', GIT_AUTHOR_EMAIL: 'x@x', GIT_COMMITTER_NAME: 'x', GIT_COMMITTER_EMAIL: 'x@x' }); spawnSync('git', ['init', '-q', '-b', 'main', sb.cwd], { env }); spawnSync('git', ['-C', sb.cwd, 'commit', '-q', '--allow-empty', '-m', 'i'], { env }); }, steps: [bashOk('echo hi')] },
 ];
 
@@ -344,12 +372,12 @@ function perms(a) { if (a.length <= 1) return [a]; const o = []; a.forEach((x, i
 function outcomeKey(perCall, state, sb) { return JSON.stringify({ calls: perCall.map((a) => aggJson(a, sb)), state }); }
 
 const OVERLAP_CASES = [
-  { name: 'two-failing-bash-same-session', calls: () => [bashFail('false a'), bashFail('false b')] },
-  { name: 'fail-and-success-same-session', setup: (sb) => seedFailureCount(sb, 1, 'sess-ptc'), calls: () => [bashFail('false'), bashOk('true')] },
-  { name: 'three-failing-bash-same-session', calls: () => [bashFail('false a'), bashFail('false b'), bashFail('false c')] },
-  { name: 'intent-breaker-pair', setup: (sb) => { const d = path.join(sb.home, '.autopilot'); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '.intent-capture-failures'), '8'); fs.writeFileSync(path.join(d, 'intent'), 'not a dir'); }, calls: () => [bashOk('echo 1'), bashOk('echo 2')] },
-  { name: 'reload-change-pair', setup: (sb) => seedReload(sb, { changed: true }), calls: () => [post('Read', { file_path: '/a' }), post('Read', { file_path: '/b' })] },
-  { name: 'same-cwd-intent-and-log-pair', calls: () => [post('Read', { file_path: '/a' }, { tool_response: 'error one' }), post('Bash', { command: 'echo two' }, { exit_code: 0, tool_response: 'error two' })] },
+  { name: 'two-failing-bash-same-session', sem: { fc: { init: 0, inc: 2, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, calls: () => [bashFail('false a'), bashFail('false b')] },
+  { name: 'fail-and-success-same-session', sem: { fc: { init: 1, inc: 1, reset: true }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, setup: (sb) => seedFailureCount(sb, 1, 'sess-ptc'), calls: () => [bashFail('false'), bashOk('true')] },
+  { name: 'three-failing-bash-same-session', sem: { fc: { init: 0, inc: 3, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 3, reset: false } }, calls: () => [bashFail('false a'), bashFail('false b'), bashFail('false c')] },
+  { name: 'intent-breaker-pair', sem: { fc: { init: 0, inc: 0, reset: false }, ifail: { init: 8, inc: 2, reset: false }, tc: { init: 0, inc: 2, reset: false } }, setup: (sb) => { const d = path.join(sb.home, '.autopilot'); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '.intent-capture-failures'), '8'); fs.writeFileSync(path.join(d, 'intent'), 'not a dir'); }, calls: () => [bashOk('echo 1'), bashOk('echo 2')] },
+  { name: 'reload-change-pair', sem: { fc: { init: 0, inc: 0, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, setup: (sb) => seedReload(sb, { changed: true }), calls: () => [post('Read', { file_path: '/a' }), post('Read', { file_path: '/b' })] },
+  { name: 'same-cwd-intent-and-log-pair', sem: { fc: { init: 0, inc: 0, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, calls: () => [post('Read', { file_path: '/a' }, { tool_response: 'error one' }), post('Bash', { command: 'echo two' }, { exit_code: 0, tool_response: 'error two' })] },
 ];
 
 function serialOutcome(oc, order, calls, origOrCur) {
@@ -429,8 +457,9 @@ async function sample(oc, side, n, stats) {
 //   per path:  the path exists in the chain outcome if it exists in every outcome of O, and no path appears that
 //              never appears in O (lock / tmp residue);
 //   mode:      the file/dir mode is one seen in O for that path;
-//   content:   a counter file (all-digit in O) holds an integer in [0, max of O + number of calls] (0: a reader saw the file mid-rewrite; +calls: a lost reset leaves a stale high value); a JSON object file parses,
-//              has a key set seen in O, and each number field lies in the same range while every other field
+//   content:   a counter file holds an integer inside the range REACHABLE FROM THE CALLS' OPERATIONS (rangeOf: each case declares
+//              init / number of +1 calls / whether some call resets to 0), not a range padded around what was sampled; a JSON object file parses,
+//              has a key set seen in O, and the intent record's tool_count_session obeys the tool counter's range while every other field
 //              equals a value seen in O; any other text file has the same line count range as O and every line
 //              a line seen in O.
 function collect(keys) {
@@ -444,20 +473,36 @@ function collect(keys) {
   }
   return { out, perPath, outcomes };
 }
-function contentProblem(pth, content, observed, nCalls) {
+// Reachable range of a counter from the operations of the overlapping calls (ruling: no free-floating slack).
+//   init:  value before the group;  inc: number of calls that do read-modify-write "+1";
+//   reset: some call writes 0 (a success branch).
+// Every written value is (a value read) + 1 with the value read in {init, anything written earlier, 0 for a read of
+// a file caught mid-rewrite}, so no value exceeds init + inc; without a reset op every write is >= 1, so the file
+// is >= 1 whenever some call increments and stays init when none does. With a reset op the file may end at 0.
+function rangeOf({ init, inc, reset }) {
+  return { lo: reset ? 0 : (inc > 0 ? 1 : init), hi: init + inc };
+}
+const COUNTER_FILES = [
+  [/^home\/\.autopilot\/\.failure_count_[0-9a-f]{8}$/, 'fc'],        // failure-escalation: failing Bash +1, success -> 0
+  [/^home\/\.autopilot\/\.intent-capture-failures$/, 'ifail'],       // intent-capture: failed record write +1, success -> 0
+  [/^tmp\/claude-intent-tool-count-<CWDSHA12>$/, 'tc'],                  // intent-capture tool counter: +1 per call
+];
+function counterKind(pth) { const m = COUNTER_FILES.find(([re]) => re.test(pth)); return m ? m[1] : null; }
+
+function contentProblem(pth, content, observed, sem) {
   const vals = observed.map((e) => e.content).filter((c) => typeof c === 'string');
   if (vals.length === 0) return null;
   const isInt = (c) => /^\d+$/.test(c);
   if (vals.every(isInt)) {
     if (!isInt(content)) return `${pth}: counter content "${String(content).slice(0, 40)}" is not an integer`;
-    // Upper bound: the largest value any serial/baseline outcome held. Lower bound 0, not the observed minimum:
-    // the counters are rewritten in place (open with O_TRUNC, then write), so a concurrent reader can see an
-    // empty file, count from 0 and write 1; the baseline can do that too, and 20 samples do not always show it.
     const v = Number(content);
-    // Upper bound: observed maximum plus one increment per call (a lost reset can leave a stale high value).
-    const hi = Math.max(...vals.map(Number)) + nCalls;
-    if (v > hi) return `${pth}: counter ${v} above observed maximum + ${nCalls} calls = ${hi}`;
-    return null;
+    const kind = counterKind(pth);
+    if (kind) {
+      const r = rangeOf(sem[kind]);
+      if (v < r.lo || v > r.hi) return `${pth}: counter ${v} outside the range [${r.lo}, ${r.hi}] reachable from these calls' operations (${JSON.stringify(sem[kind])})`;
+      return null;
+    }
+    return vals.includes(content) ? null : `${pth}: unmodelled numeric file holds ${v}, never observed`;
   }
   const parse = (c) => { try { const o = JSON.parse(c); return o && typeof o === 'object' && !Array.isArray(o) ? o : null; } catch { return null; } };
   if (vals.every((c) => parse(c) !== null)) {
@@ -468,8 +513,9 @@ function contentProblem(pth, content, observed, nCalls) {
     if (!objs.some((x) => keySig(x) === keySig(o))) return `${pth}: key set ${keySig(o)} never observed`;
     for (const [key, v] of Object.entries(o)) {
       const seen = objs.filter((x) => key in x).map((x) => x[key]);
-      if (seen.every((x) => typeof x === 'number')) {
-        if (typeof v !== 'number' || v < 0 || v > Math.max(...seen) + nCalls) return `${pth}: field ${key}=${JSON.stringify(v)} outside [0, observed maximum ${Math.max(...seen)} + ${nCalls} calls]`;
+      if (key === 'tool_count_session' && /\/intent\//.test(pth)) { // the tool counter's value after this call's +1
+        const r = rangeOf(sem.tc);
+        if (typeof v !== 'number' || v < Math.max(1, r.lo) || v > r.hi) return `${pth}: tool_count_session=${JSON.stringify(v)} outside [${Math.max(1, r.lo)}, ${r.hi}]`;
       } else if (!seen.some((x) => JSON.stringify(x) === JSON.stringify(v))) return `${pth}: field ${key}=${JSON.stringify(v).slice(0, 80)} never observed`;
     }
     return null;
@@ -482,7 +528,7 @@ function contentProblem(pth, content, observed, nCalls) {
   const stray = l.find((x) => !seenLines.has(x));
   return stray === undefined ? null : `${pth}: line never observed: ${stray.slice(0, 80)}`;
 }
-function judge(keys, acc) {
+function judge(keys, acc, sem) {
   const failing = [];
   for (const k of keys) {
     const o = JSON.parse(k);
@@ -494,7 +540,7 @@ function judge(keys, acc) {
       const observed = acc.perPath.get(pth);
       if (!observed) { failing.push(`${pth}: path never seen in serial/baseline`); continue; }
       if (!observed.some((x) => x.mode === e.mode)) failing.push(`${pth}: mode ${e.mode} (observed ${[...new Set(observed.map((x) => x.mode))].join(',')})`);
-      if (typeof e.content === 'string') { const pr = contentProblem(pth, e.content, observed, o.calls.length); if (pr) failing.push(pr); }
+      if (typeof e.content === 'string') { const pr = contentProblem(pth, e.content, observed, sem); if (pr) failing.push(pr); }
     }
   }
   return { failing };
@@ -510,7 +556,7 @@ async function runOverlap() {
     const baseKeys = await sample(oc, 'separate', overlapN * 2, stats);
     const chainKeys = await sample(oc, 'chain', overlapN, stats);
     const serialSet = new Set(serial);
-    const verdict = judge(chainKeys, collect([...serial, ...baseKeys]));
+    const verdict = judge(chainKeys, collect([...serial, ...baseKeys]), oc.sem);
     const sp = stats.spreads.slice().sort((a, b) => a - b);
     report.push({ case: oc.name, serial_outcomes: serialSet.size, baseline_n: baseKeys.length, baseline_non_serial: baseKeys.filter((k) => !serialSet.has(k)).length, chain_n: chainKeys.length, chain_non_serial: chainKeys.filter((k) => !serialSet.has(k)).length, chain_failing_components: verdict.failing.length, release_spread_us_p50: Math.round(sp[Math.floor(sp.length / 2)]), release_spread_us_max: Math.round(sp[sp.length - 1]) });
     if (verdict.failing.length > 0) bad(`overlap ${oc.name}: ${[...new Set(verdict.failing)].slice(0, 4).join(' | ')}`);

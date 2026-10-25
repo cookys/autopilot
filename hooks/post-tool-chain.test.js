@@ -165,6 +165,34 @@ test('a member cannot leave process event listeners behind (added ones removed, 
   } finally { process.removeAllListeners('ptc-test-event'); }
 });
 
+test('a once() listener stays once after a member touches the listeners of that event', () => {
+  let calls = 0;
+  process.once('ptc-once-event', () => { calls++; });
+  try {
+    run(['a'], { a: fake(() => { process.on('ptc-once-event', () => {}); return 0; }) });
+    process.emit('ptc-once-event');
+    process.emit('ptc-once-event');
+    assert.strictEqual(calls, 1);
+  } finally { process.removeAllListeners('ptc-once-event'); }
+});
+
+test('a shared module PRELOADED before the chain started is fresh for every member', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ptc-pre-'));
+  try {
+    const lib = path.join(dir, 'preloaded-lib.js');
+    fs.writeFileSync(lib, "'use strict'; let hits = 0; module.exports = { TAIL: 256, bump() { return ++hits; } };\n");
+    const pre = require(lib); // loaded before runChain, as an embedder or an earlier step could have
+    assert.strictEqual(pre.TAIL, 256);
+    const seen = [];
+    const mods = {
+      a: fake(() => { const l = require(lib); seen.push([l.TAIL, l.bump()]); l.TAIL = 123; l.bump(); return 0; }),
+      b: fake(() => { const l = require(lib); seen.push([l.TAIL, l.bump()]); return 0; }),
+    };
+    run(['a', 'b'], mods);
+    assert.deepStrictEqual(seen, [[256, 1], [256, 1]]);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('module-level state a member mutates (a shared lib, like transcript-reader-lib TAIL_WINDOW_BYTES) starts fresh for the next member', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ptc-mod-'));
   try {

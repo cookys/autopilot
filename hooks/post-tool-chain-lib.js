@@ -13,8 +13,8 @@
  *  - Each member runs under its own try/catch, so one throw cannot skip the others or change their status.
  *    A member that throws (a bug, or a load failure) fails open: one stderr line, status 0.
  *  - process.stdout.write / process.stderr.write / process.exit are swapped while a member runs, and process.env,
- *    process.exitCode, process event listeners and newly loaded modules are snapshotted and put back, all in a
- *    `finally`. Exit statuses are normalised to what a separate process would exit with (0-255). A member's output is flushed with fs.writeSync as soon as that member finished, so a
+ *    process.exitCode, process event listeners and the module cache are snapshotted, put back or purged, all in a
+ *    `finally` (modules: purged before and after each member). Exit statuses are normalised to what a separate process would exit with (0-255). A member's output is flushed with fs.writeSync as soon as that member finished, so a
  *    later member that hangs (the host kills the chain on its timeout) never takes the earlier bytes down
  *    with it, and a large output is not cut by process.exit (pipe writes via process.stdout are async).
  *  - A write failure (EPIPE: the host stopped listening) never stops the remaining members; their state
@@ -75,10 +75,21 @@ function writeAll(fd, buf) {
 // `finally`): environment variables, process.exitCode, process event listeners, and every module the member
 // loaded into require.cache (so module-level state such as transcript-reader-lib's TAIL_WINDOW_BYTES, or a
 // lib's memo, starts fresh for the next member exactly as in a separate process).
+// Modules: every member starts with an EMPTY require.cache (this file and the entry script excepted) and the cache
+// is emptied again after it. Chosen over "prove the shared libs hold no mutable state": they do (transcript-reader-lib
+// keeps `let TAIL_WINDOW_BYTES`, live-session-lib a memo), and a lib preloaded before the chain started would
+// otherwise carry one member's mutation into the next. The cost is re-parsing each member's libs (measured: no visible
+// change in the chain's p50). runChain is a process entry point; it owns the cache.
+function purgeModules() {
+  const keep = new Set([__filename, require.main && require.main.filename]);
+  for (const k of Object.keys(require.cache)) if (!keep.has(k)) delete require.cache[k];
+}
 function snapshotProcess() {
+  purgeModules();
   const events = new Map();
-  for (const ev of process.eventNames()) events.set(ev, process.listeners(ev));
-  return { env: { ...process.env }, exitCode: process.exitCode, events, cacheKeys: new Set(Object.keys(require.cache)) };
+  // rawListeners(): keeps once() wrappers, so a once listener is still once after the restore
+  for (const ev of process.eventNames()) events.set(ev, process.rawListeners(ev));
+  return { env: { ...process.env }, exitCode: process.exitCode, events };
 }
 function restoreProcess(snap) {
   for (const k of Object.keys(process.env)) if (!(k in snap.env)) delete process.env[k];
@@ -87,12 +98,12 @@ function restoreProcess(snap) {
   const now = new Set([...process.eventNames(), ...snap.events.keys()]);
   for (const ev of now) {
     const want = snap.events.get(ev) || [];
-    const have = process.listeners(ev);
+    const have = process.rawListeners(ev);
     if (have.length === want.length && have.every((f, i) => f === want[i])) continue;
     process.removeAllListeners(ev);
     for (const f of want) process.on(ev, f);
   }
-  for (const k of Object.keys(require.cache)) if (!snap.cacheKeys.has(k)) delete require.cache[k];
+  purgeModules();
 }
 
 // Runs fn() with stdout/stderr/exit captured and process-wide state restored; returns { code, out, err }.

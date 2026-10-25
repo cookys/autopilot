@@ -79,18 +79,30 @@ CTR="require('path').join(process.env.HOME, '.autopilot', '.failure_count_4fd0e4
 inv_neg counter-999999 "try { require('fs').writeFileSync($CTR, '999999'); } catch (e) { void e; }"
 inv_neg state-file-deleted "try { require('fs').unlinkSync($CTR); } catch (e) { void e; }"
 inv_neg mode-changed "try { require('fs').chmodSync($CTR, 0o644); } catch (e) { void e; }"
+ICTR="require('path').join(process.env.HOME, '.autopilot', '.intent-capture-failures')"
+inv_neg stale-write-zero-failure-counter "try { require('fs').writeFileSync($CTR, '0'); } catch (e) { void e; }"
+inv_neg observed-max-plus-one "try { require('fs').writeFileSync($CTR, '4'); } catch (e) { void e; }"
+inv_neg stale-write-zero-intent-counter "try { require('fs').writeFileSync($ICTR, '0'); } catch (e) { void e; }"
 inv_neg json-key-added "try { const f = require('path').join(process.env.HOME, '.autopilot', 'intent'); const fs2 = require('fs'); for (const n of fs2.readdirSync(f)) { const q = require('path').join(f, n); fs2.writeFileSync(q, fs2.readFileSync(q, 'utf8').replace('\"cwd\"', '\"cwdx\"')); } } catch (e) { void e; }"
 
-# --- negative control: a user-text timestamp/hostname must stay visible (only enumerated fields are normalised) ---
-LIT="$MUT/lit"
-mkdir -p "$LIT/hooks" "$LIT/src" "$LIT/scripts"
-for f in "$HOOKS_DIR"/* ; do ln -sf "$f" "$LIT/hooks/$(basename "$f")"; done
-rm -f "$LIT/hooks/post-tool-chain.js" "$LIT/hooks/post-tool-chain-lib.js" "$LIT/hooks/audit-log.js"
-cp "$HOOKS_DIR/post-tool-chain.js" "$HOOKS_DIR/post-tool-chain-lib.js" "$HOOKS_DIR/audit-log.js" "$LIT/hooks/"
-sed_mutate "$LIT/hooks/audit-log.js" "s#redacted.replace(#redacted.replace(/00:00:00.123Z/g, '00:00:00.999Z').replace(#" || true
-run_harness --chain "$LIT/hooks"
-[ "$H_RC" -ne 0 ] || fail "negative control 'literal timestamp changed inside a logged command' was NOT detected"
-assert_contains "$H_OUT" "literal-timestamp-hostname-pid-in-user-text" "the literal-timestamp fixture is the one that goes red"
+# --- negative controls: user-supplied text must stay visible (only enumerated fields / log-written positions are normalised) ---
+mk_member_tree() { # <name> <member stem>: chain files + the member copied (mutable), everything else symlinked; sets MT
+  MT="$MUT/$1"
+  mkdir -p "$MT/hooks" "$MT/src" "$MT/scripts"
+  local f
+  for f in "$HOOKS_DIR"/* ; do ln -sf "$f" "$MT/hooks/$(basename "$f")"; done
+  rm -f "$MT/hooks/post-tool-chain.js" "$MT/hooks/post-tool-chain-lib.js" "$MT/hooks/$2.js"
+  cp "$HOOKS_DIR/post-tool-chain.js" "$HOOKS_DIR/post-tool-chain-lib.js" "$HOOKS_DIR/$2.js" "$MT/hooks/"
+}
+norm_neg() { # <label> <member> <sed command> <fixture name that must go red>
+  mk_member_tree "$1" "$2"
+  sed_mutate "$MT/hooks/$2.js" "$3" || return 0
+  run_harness --chain "$MT/hooks"
+  [ "$H_RC" -ne 0 ] || fail "negative control '$1' was NOT detected"
+  assert_contains "$H_OUT" "$4" "negative control '$1': the '$4' fixture goes red"
+}
+norm_neg literal-timestamp-in-command audit-log "s#redacted.replace(#redacted.replace(/00:00:00.123Z/g, '00:00:00.999Z').replace(#" literal-timestamp-hostname-pid-in-user-text
+norm_neg heading-shaped-line-in-error-text log-error "s#^\( *\)truncError,\$#\1truncError.replace(/03:03:03.333Z/, '03:03:03.999Z'),#" user-error-text-with-heading-shaped-line
 
 # --- negative control: dropping the umask pin makes a umask-077 caller red ---
 UP="$MUT/umask"; mkdir -p "$UP/hooks"
@@ -119,7 +131,8 @@ unit_neg exit-not-restored 's/    process.exit = realExit;//'
 unit_neg env-leak 's/  for (const k of Object.keys(process.env)) if (!(k in snap.env)) delete process.env\[k\];//'
 unit_neg exitcode-leak 's/  process.exitCode = snap.exitCode;//'
 unit_neg listener-leak 's/  const now = new Set(\[...process.eventNames(), ...snap.events.keys()\]);/  const now = new Set();/'
-unit_neg module-state-leak 's/  for (const k of Object.keys(require.cache)) if (!snap.cacheKeys.has(k)) delete require.cache\[k\];//'
+unit_neg once-listener-made-permanent 's/events.set(ev, process.rawListeners(ev))/events.set(ev, process.listeners(ev))/'
+unit_neg module-cache-not-purged 's/  for (const k of Object.keys(require.cache)) if (!keep.has(k)) delete require.cache\[k\];/  for (const k of Object.keys(require.cache)) if (!keep.has(k) \&\& false) delete require.cache[k];/'
 unit_neg exit-status-not-masked 's/  return n \& 0xff;/  return n;/'
 
 # the unmodified unit tests are green

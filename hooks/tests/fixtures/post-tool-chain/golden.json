@@ -2526,6 +2526,88 @@
     }
    }
   },
+  "user-error-text-with-heading-shaped-line": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### <TS>\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\nerror: first\n### 2026-03-03T03:03:03.333Z\n**Tool:** not-a-heading\nlast\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
   "git-cwd-branch": {
    "steps": [
     {

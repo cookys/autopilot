@@ -55,6 +55,21 @@ test('K1 default-agent fixture (leaked canary): audit rc=1', () => {
   assert.match(r.stderr, /kimi containment breach/);
 });
 
+// kimi 2.3.1 writes one changeNotifier.snapshot per session (AGENTS.md / skills hashes, subagent names; no tool
+// data). Shape copied from a real 2.3.1 wire (2026-10-26), paths scrubbed. It must not void a clean run.
+test('kimi 2.3.1 changeNotifier.snapshot record: audit rc=0', () => {
+  const snap = JSON.stringify({
+    type: 'changeNotifier.snapshot', agentId: 'main', agentsMdHash: null, agentsMdFiles: {},
+    skillsHash: 'a'.repeat(64), subagentNames: ['plan', 'agent', 'coder', 'explore'], modelPool: null, time: 1792966810156,
+  });
+  const out = [];
+  for (const l of lines(CLEAN)) { out.push(l); if (l.includes('"profile.bind"')) out.push(snap); }
+  const home = seatWith(out.join('\n') + '\n');
+  assert.strictEqual(auditKimiRun({ seatHome: home }), null);
+  const r = rc(home);
+  assert.strictEqual(r.status, 0, r.stderr);
+});
+
 const breaches = {
   'appended tool.call line': () => CLEAN + JSON.stringify({
     type: 'context.append_loop_event', agentId: 'main',

@@ -93,6 +93,7 @@ fi
 printf 'DONE\n'
 STUB
 chmod +x "$STUB_AGY"
+make_agy_stdin_stub "$STUB_AGY"   # BL-0298: judge-B prompt arrives on stdin; adapter hands it to this legacy stub as -p <prompt>
 export QC_AGY_BIN="$STUB_AGY"
 export INVOKE_DIR
 
@@ -299,6 +300,7 @@ fi
 printf 'DONE\n'
 STUB
 chmod +x "$AGREE_AGY"
+make_agy_stdin_stub "$AGREE_AGY"
 
 # Claude always reports MISSED; agy never does → disagreement
 AGREE_OUT_DIR="$TEST_TMP/agree-panel-out"
@@ -521,6 +523,7 @@ fi
 printf 'DONE\n'
 STUB
 chmod +x "$REFUTE_AGY"
+make_agy_stdin_stub "$REFUTE_AGY"
 
 REFUTE_REPORT="$TEST_TMP/refute-report.json"
 cat > "$REFUTE_REPORT" <<'EOF'
@@ -587,6 +590,7 @@ fi
 QC_SBX="$TEST_TMP/qc-namespace"
 mkdir -p "$QC_SBX/scripts"
 cp "$SCRIPT" "$QC_SBX/scripts/qc-panel.js"
+mkdir -p "$QC_SBX/scripts/lib" && cp "$REPO_ROOT/scripts/lib/agy-stream-json.js" "$QC_SBX/scripts/lib/"   # qc-panel.js requires the shared agy transport
 NS1="$(cd "$QC_SBX" && node "$QC_SBX/scripts/qc-panel.js" \
   --report "$NULL_REPORT" --artifacts "$ARTIFACT" --proj sameproj --node node-a 2>"$TEST_TMP/ns1.err")"
 NS2="$(cd "$QC_SBX" && node "$QC_SBX/scripts/qc-panel.js" \

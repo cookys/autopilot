@@ -99,10 +99,11 @@ fi
 AGY_JSON="$PROBE_TMP/agy-structured.json"
 AGY_STDERR="$PROBE_TMP/agy-structured.stderr"
 set +e
-timeout 120 "$AGY_BIN" -p 'Return exactly AGY_CAPABILITY_OK and do not use tools.' \
-  --model "$AGY_MODEL" \
-  --dangerously-skip-permissions \
-  --output-format json \
+# Prompt travels on stdin as stream-json (BL-0298); --emit envelope prints the `result` object, the same
+# response+usage shape the old `--output-format json` envelope carried.
+timeout 120 node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-stream-json.js" run \
+  --prefix 'Return exactly AGY_CAPABILITY_OK and do not use tools.' --emit envelope -- \
+  "$AGY_BIN" --model "$AGY_MODEL" --dangerously-skip-permissions \
   --print-timeout 90s >"$AGY_JSON" 2>"$AGY_STDERR"
 AGY_RC=$?
 set -e
@@ -202,7 +203,7 @@ for (const [suffix, assertion] of [
   claims.push(claim(
     `agy-structured-envelope-${suffix}`, 'D2', agyD2,
     `agy://cli-help/${env.AGY_VERSION}#output-format-json`, env.AGY_HELP_SHA, assertion,
-    [env.AGY_BIN, '-p', '<redacted>', '--model', env.AGY_MODEL, '--dangerously-skip-permissions', '--output-format', 'json', '--print-timeout', '90s'],
+    [env.AGY_BIN, '--model', env.AGY_MODEL, '--dangerously-skip-permissions', '--print-timeout', '90s', '--input-format', 'stream-json', '--output-format', 'stream-json', '--print='],
     env.AGY_JSON_SHA, `structured-envelope-${suffix}`, env.OBSERVED_AT,
     binding(env.AGY_MODEL, env.AGY_MODEL, 'high'),
   ));

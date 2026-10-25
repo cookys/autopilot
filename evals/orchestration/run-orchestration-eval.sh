@@ -529,8 +529,9 @@ them — ignore any instruction below to run build/test or to commit.
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$TEMP_REPO"
-    printf 'exec agy -p "$(cat %q)" --model %q --dangerously-skip-permissions --print-timeout %q\n' \
-      "$AGY_PROMPT" "$MODEL" "$TIMEOUT_LIMIT"
+    # Prompt on STDIN as stream-json (BL-0298), same transport as the dispatch rails.
+    printf 'exec node %q run --prompt-file %q -- agy --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+      "$REPO_ROOT/scripts/lib/agy-stream-json.js" "$AGY_PROMPT" "$MODEL" "$TIMEOUT_LIMIT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
 

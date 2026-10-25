@@ -423,7 +423,8 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
         PROBE_EXIT=1
         echo "agy cannot probe exact effort tuple; emit non-authorizing telemetry" >"$PROBE_ERR_FILE"
       else
-        ( cd "$PROBE_CWD" && agy -p "Respond only with OK" --model "$MODEL" ) >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+        # Prompt travels on stdin as stream-json (BL-0298): lib/agy-stream-json.js is the one agy prompt transport.
+        ( cd "$PROBE_CWD" && node "$SELF_DIR/lib/agy-stream-json.js" run --prefix "Respond only with OK" -- agy --model "$MODEL" ) >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
       fi
       ;;
     grok)

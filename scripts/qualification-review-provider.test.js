@@ -258,6 +258,11 @@ if (process.env.STUB_SLEEP_MS) {
 // claude -p --output-format json must be the envelope verifyClaudeRuntimeIdentity
 // parses: a string result plus a non-empty modelUsage keyed by --model.
 function writeAnswer(text) {
+  if (process.argv.includes('--print=')) {
+    // agy stream-json (BL-0298): the answer rides in a \`result\` event.
+    fs.writeSync(1, JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: String(text) } }) + '\\n');
+    return;
+  }
   const fmtAt = process.argv.indexOf('--output-format');
   if (fmtAt !== -1 && process.argv[fmtAt + 1] === 'json') {
     const modelAt = process.argv.indexOf('--model');
@@ -989,7 +994,15 @@ function roleOnlyRequest(role, content = 'x') {
   check(captured !== null, 'agy stub captured the invocation');
   check(captured.argv.includes('--dangerously-skip-permissions'),
     'agy argv includes --dangerously-skip-permissions');
-  equal(captured.argv[0], '-p', 'agy still opens with -p (prompt travels as its own argv value)');
+  // BL-0298: the prompt travels on stdin as ONE stream-json line; argv carries no prompt and no -p.
+  check(!captured.argv.includes('-p'), 'agy argv has no -p');
+  check(captured.argv.includes('--print=') && captured.argv.includes('--input-format')
+    && captured.argv[captured.argv.indexOf('--input-format') + 1] === 'stream-json',
+  'agy argv carries the stream-json stdin flags');
+  const agyLine = JSON.parse(captured.stdin.trim());
+  equal(agyLine.event, 'user', 'agy stdin is a user event');
+  check(agyLine.message.content.includes('+++ b/lib/mod.js'), 'the case diff travels on agy stdin');
+  check(!captured.argv.some((a) => a.includes('+++ b/lib/mod.js')), 'no prompt text appears in agy argv');
   const modelIdx = captured.argv.indexOf('--model');
   check(modelIdx !== -1 && captured.argv[modelIdx + 1] === 'fake-model-exact',
     'agy argv still carries --model');
@@ -1240,6 +1253,33 @@ function roleOnlyRequest(role, content = 'x') {
   check(/produced no output/.test(child.stderr), 'the no-output message is still present');
   check(child.stderr.includes('Print mode: soft-denying tool confirmation'),
     'the captured stderr diagnosis is appended to the no-output error');
+}
+
+// ── 11d. agy stdin transport (BL-0298): odd bytes survive, argv stays prompt-free, ceiling fails closed ─
+{
+  const template = path.join(tempRoot, 'agy-stdin-clihome-template');
+  fs.mkdirSync(template, { recursive: true });
+  const agyEnv = { QRP_TRANSPORT: 'cli', QRP_CLI_KIND: 'agy', QRP_CLI_BIN: stubClaude, QRP_CLI_HOME: template };
+  const ODD = 'odd-start\nquote " and \' backslash \\ dollar $HOME $(id) `bt` 中文 😀 tab\t end-odd\n';
+  const odd = runProvider({ env: agyEnv, request: reviewerRequest(ODD + REVIEWER_DIFF), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(odd.child.status, 0, odd.child.stderr + 'agy: a prompt with newlines, quotes, backslash, $, backticks and non-ASCII succeeds');
+  check(JSON.parse(odd.captured.stdin.trim()).message.content.includes(ODD), 'agy: the odd bytes reach stdin verbatim');
+  check(!odd.captured.argv.some((a) => a.includes('odd-start') || a.includes('end-odd')), 'agy: argv carries none of the prompt');
+
+  // The old 512 KiB argv limit (kimi-only now) no longer applies to agy; the stdin ceiling does, and fails closed.
+  const big = runProvider({ env: agyEnv, request: reviewerRequest('y'.repeat(200_000) + REVIEWER_DIFF), stubOutput: REVIEWER_MODEL_OUTPUT });
+  equal(big.child.status, 1, 'agy: a prompt over the stdin ceiling fails the case');
+  check(/agy_stdin_ceiling/.test(big.child.stderr), 'agy: the refusal names agy_stdin_ceiling');
+  check(big.captured === null, 'agy: an over-ceiling prompt never spawns agy');
+  const raised = runProvider({
+    env: { ...agyEnv, AUTOPILOT_AGY_STDIN_MAX_BYTES: '400000' },
+    request: reviewerRequest('y'.repeat(200_000) + REVIEWER_DIFF), stubOutput: REVIEWER_MODEL_OUTPUT,
+  });
+  equal(raised.child.status, 0, 'agy: AUTOPILOT_AGY_STDIN_MAX_BYTES raises the ceiling');
+
+  // An empty SUCCESS response is the BL-0021 silent-truncation signature: a failure, not a clean pass.
+  const empty = runProvider({ env: agyEnv, request: reviewerRequest(), stubOutput: '' });
+  equal(empty.child.status, 1, 'agy: SUCCESS with an empty response fails the case');
 }
 
 // ── 12. grok transport: CATCH-ALL --deny "*" containment, prompt-via-file, effort clamp ─
@@ -2319,5 +2359,5 @@ process.stdout.write(JSON.stringify({ type: 'text', part: { text: '{"verdict":"p
 }
 
 fs.rmSync(tempRoot, { recursive: true, force: true });
-if (assertions !== 519) throw new Error(`qualification-review-provider: expected exactly 519 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
+if (assertions !== 531) throw new Error(`qualification-review-provider: expected exactly 531 assertions (count pin moved here from hooks/tests/qualification-review-provider.test.sh so the L1 run enforces it), got ${assertions}`);
 process.stdout.write(`${assertions} assertions passed\n`);

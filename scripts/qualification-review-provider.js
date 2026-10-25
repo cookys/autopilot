@@ -16,10 +16,12 @@
  *                                 QRP_CLI_KIND=claude → `claude -p
  *                                 --setting-sources project --strict-mcp-config
  *                                 --tools ""`, prompt on stdin, output on stdout;
- *                                 QRP_CLI_KIND=agy → `agy -p <prompt> --model`,
+ *                                 QRP_CLI_KIND=agy → `agy --model ... --input-format
+ *                                 stream-json --output-format stream-json --print=`,
+ *                                 prompt as one NDJSON line on stdin (lib/agy-stream-json.js);
  *                                 QRP_CLI_KIND=kimi → `kimi -m <model> -p <prompt>`
- *                                 — both take the prompt as an ARGV value, not on
- *                                 stdin, so they run in promptViaArgv mode;
+ *                                 — takes the prompt as an ARGV value, not on
+ *                                 stdin, so it runs in promptViaArgv mode;
  *                                 QRP_CLI_KIND=grok → `grok --prompt-file <tmp>
  *                                 --model --deny "*" ...` (forced CATCH-ALL
  *                                 wildcard tool-deny argv — NOT an enumerated
@@ -198,7 +200,7 @@ const REQUEST_TIMEOUT_MS = (() => {
 })();
 const MAX_DIFF_BYTES = 2 * 1024 * 1024;
 // CLI harnesses this adapter can drive. codex/claude/qoderclicn take the prompt on
-// stdin; agy/kimi take it on argv; grok takes it via --prompt-file (see callCli).
+// stdin (agy as a stream-json line); kimi takes it on argv; grok takes it via --prompt-file (see callCli).
 // `cursor` is a KNOWN but ALWAYS-REFUSING kind (cursor-agent has no verified
 // tool-deny/sandbox mechanism — see the callCli() cursor branch) — it stays in this
 // list so an operator gets the precise refusal reason from callCli() rather than
@@ -209,7 +211,7 @@ const CLI_KINDS = ['codex', 'claude', 'agy', 'kimi', 'grok', 'qoderclicn', 'curs
 // A credential-only QRP_CLI_HOME seed is ~16 KB; 8 MB leaves room for a config
 // tree while still refusing a real home.
 const CLI_HOME_TEMPLATE_MAX_BYTES = 8 * 1024 * 1024;
-// Conservative ceiling for argv-delivered prompts. Linux ARG_MAX is typically
+// Conservative ceiling for argv-delivered prompts (kimi only; agy moved to stdin, BL-0298). Linux ARG_MAX is typically
 // ~2MB for the whole argv+environ block; stay well under it so the environment
 // and the other arguments always fit.
 const ARGV_PROMPT_LIMIT_BYTES = 512 * 1024;
@@ -1164,6 +1166,7 @@ const { grokEffortClamp } = require('./lib/grok-effort');
 
 // Tool-less agent + post-run audit: single owner shared with dispatch-review.sh.
 const agyContainment = require('./lib/agy-containment');
+const agyStream = require('./lib/agy-stream-json');
 const kimiContainment = require('./lib/kimi-containment');
 const opencodeContainment = require('./lib/opencode-containment');
 
@@ -1287,12 +1290,14 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   let opencodeDir = null;
   let opencodeRoot = null;
   let opencodeAdaptor = 'v1';
-  // codex/claude/qoderclicn read the prompt on stdin; agy/kimi take it as an argv
+  // codex/claude/qoderclicn read the prompt on stdin; agy also reads it on stdin, as one
+  // stream-json line via the shared lib/agy-stream-json.js (BL-0298); kimi takes it as an argv
   // value; grok takes it via --prompt-file (avoids ARG_MAX the same way codex's
   // sidecar avoids it for OUTPUT — see the promptViaFile branch below). Keep this a
   // per-kind property rather than a special case at the call site — the delivery
   // channel is part of the harness contract, same as the arg shape.
-  const promptViaArgv = kind === 'agy' || kind === 'kimi';
+  const promptViaArgv = kind === 'kimi';
+  const promptViaAgyStream = kind === 'agy';
   const promptViaFile = kind === 'grok';
   if (promptViaArgv) {
     // A case that overflows ARG_MAX would surface as an opaque spawn E2BIG.
@@ -1303,6 +1308,19 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       throw new Error(
         `${kind} takes the prompt on argv and this case is ${bytes} bytes `
         + `(limit ${ARGV_PROMPT_LIMIT_BYTES}); use an stdin-capable kind for cases this large`,
+      );
+    }
+  }
+  if (promptViaAgyStream) {
+    // agy no longer has an argv wall (stdin transport), but the stdin path has its own silent wall
+    // (BL-0021): refuse an oversized line here, as a named reason, instead of grading an empty
+    // "SUCCESS" as a model failure.
+    const lineBytes = Buffer.byteLength(agyStream.encodeUserLine(prompt), 'utf8');
+    const maxBytes = agyStream.stdinMaxBytes();
+    if (lineBytes > maxBytes) {
+      throw new Error(
+        `agy_stdin_ceiling: this case encodes to ${lineBytes} bytes, over the ${maxBytes}-byte `
+        + 'fail-closed agy stdin ceiling (BL-0021); agy was not run',
       );
     }
   }
@@ -1344,8 +1362,8 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
         + '-- refusing to spawn agy flag-armed and uncontained',
       );
     }
-    args = ['-p', prompt, '--model', model, '--dangerously-skip-permissions',
-      '--agent', agyContainment.AGENT_NAME];
+    args = ['--model', model, '--dangerously-skip-permissions',
+      '--agent', agyContainment.AGENT_NAME, ...agyStream.STREAM_FLAGS];
   } else if (kind === 'kimi') {
     // Single-shot non-interactive; no --auto/--plan (they cannot combine with -p).
     // No effort flag exists for kimi; the tier travels as KIMI_MODEL_THINKING_EFFORT (set on the child env below).
@@ -1785,6 +1803,16 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
         }
       } else {
         text = Buffer.concat(stdout).toString('utf8');
+        if (kind === 'agy') {
+          // stream-json NDJSON: the answer is the `result` event's response. A non-SUCCESS result,
+          // a missing result, an empty response or an over-ceiling token count is a transport failure.
+          const parsed = agyStream.parseStream(text);
+          if (!parsed.ok) {
+            finish(new Error(`agy CLI produced no output: ${parsed.reason}`));
+            return;
+          }
+          text = parsed.result.response;
+        }
         if (kind === 'claude') {
           // Fail closed: a claude run whose runtime model cannot be proven to be the
           // declared one is a transport failure, never a scored answer.
@@ -1882,9 +1910,9 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     });
     child.once('close', (status, signal) => settleFromExit(status, signal));
     child.stdin.once('error', () => {});
-    // argv/file-mode kinds already carry the prompt; close stdin immediately so a
+    // agy gets one stream-json line; argv/file-mode kinds already carry the prompt; close stdin immediately so a
     // CLI that waits on it cannot hang the exam until the timeout.
-    child.stdin.end((promptViaArgv || promptViaFile) ? '' : prompt);
+    child.stdin.end(promptViaAgyStream ? agyStream.encodeUserLine(prompt) : ((promptViaArgv || promptViaFile) ? '' : prompt));
   });
 }
 

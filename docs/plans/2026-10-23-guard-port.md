@@ -1,6 +1,6 @@
 # Plan — guard port: cut the per-tool-call hook spawns
 
-> Status: 計畫審查 G2 CONDITIONAL 於世代上限；depth-0 裁決後修訂 G2 blockers，未重審（2026-10-24） / Owner: cookys / Branch: not yet created / Frame: autopilot hooks only
+> Status: 計畫審查 G2 CONDITIONAL 於世代上限；depth-0 裁決後修訂 G2 blockers，未重審（2026-10-24） / Owner: cookys / Branch: hands/gport1/1 (Phase 1 built, chain unregistered, 2026-10-25; Phase 0 evidence and re-baseline not done. Depth-0 rulings 2026-10-25: (a) host concatenation predicate is NO for reload-watch + failure-escalation (official hooks doc: stdout is JSON only when it is one JSON object; PostToolUse plain text goes to the debug log only), so Phase 2 chains only intent-capture, audit-log, log-error and keeps reload-watch and failure-escalation as separate registrations; (b) the overlapping-call acceptance "final state equals some serial order" is replaced by per-file invariants (existence, mode, counter range, JSON key set and field ranges, line set), because the separate-process baseline itself is not a serial outcome in 70 to 100 percent of tight-overlap samples) / Frame: autopilot hooks only
 > Source: P2 of [mods-visible-dispatch](2026-10-03-mods-visible-dispatch.md); verdict `open_guard_port_plan`; BL-0241 in `docs/BACKLOG.md`.
 
 ## 0. Context / thesis

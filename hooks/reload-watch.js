@@ -71,47 +71,61 @@ function friendlyName(f) {
   return path.basename(f);
 }
 
-try {
-  // Consume stdin so the harness doesn't block on us
-  try { fs.readFileSync(0, 'utf8'); }
-  catch { try { fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* no stdin */ } }
+// Reads the hook payload for the CLI entry; the body below only consumes it.
+function readStdinCli() {
+  try { return fs.readFileSync(0, 'utf8'); }
+  catch { try { return fs.readFileSync('/dev/stdin', 'utf8'); } catch { return ''; } /* no stdin */ }
+}
 
-  const current = getMtimes();
-  const previous = loadState();
+// Exported body (post-tool-chain runs it in-process): returns the exit status, never calls process.exit.
+// `stdin` is the already-read payload text, which this hook has never used (it only drains the pipe).
+function runHook(stdin) { // eslint-disable-line no-unused-vars
+  try {
+    const current = getMtimes();
+    const previous = loadState();
 
-  if (previous === null) {
-    // First run on this machine — silently initialize, never spam
-    saveState(current);
-    process.exit(0);
+    if (previous === null) {
+      // First run on this machine — silently initialize, never spam
+      saveState(current);
+      return 0;
+    }
+
+    // Cwd-scoped silent init: if this cwd's WATCH_FILES are absent from `previous`,
+    // we've never seen them before (e.g. first time agent enters this project) —
+    // treat as init, not as change. Otherwise switching between project cwds in a
+    // monorepo would fire one false reminder per switch and erode the signal.
+    const changed = WATCH_FILES.filter(f => (f in previous) && previous[f] !== current[f]);
+
+    if (changed.length > 0) {
+      const friendly = changed.map(friendlyName).join(', ');
+      const advisory = `⚠ Plugin catalog signal changed (${friendly}) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.`;
+      process.stderr.write(`${advisory}\n`);
+      process.stdout.write(`${JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PostToolUse',
+          additionalContext: advisory,
+        },
+      })}\n`);
+      // Save AFTER emitting: if writeFileSync crashes mid-emit, next invocation
+      // will re-fire the same reminder (preferred over silently losing it).
+      saveState({ ...previous, ...current });
+    } else if (WATCH_FILES.some(f => !(f in previous))) {
+      // New cwd seen for the first time — merge its keys into state silently so
+      // future runs from this cwd compare against an established baseline.
+      saveState({ ...previous, ...current });
+    }
+
+    return 0;
+  } catch (e) {
+    process.stderr.write(`reload-watch error: ${e.message}\n`);
+    return 0;
   }
+}
 
-  // Cwd-scoped silent init: if this cwd's WATCH_FILES are absent from `previous`,
-  // we've never seen them before (e.g. first time agent enters this project) —
-  // treat as init, not as change. Otherwise switching between project cwds in a
-  // monorepo would fire one false reminder per switch and erode the signal.
-  const changed = WATCH_FILES.filter(f => (f in previous) && previous[f] !== current[f]);
+module.exports = { runHook };
 
-  if (changed.length > 0) {
-    const friendly = changed.map(friendlyName).join(', ');
-    const advisory = `⚠ Plugin catalog signal changed (${friendly}) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.`;
-    process.stderr.write(`${advisory}\n`);
-    process.stdout.write(`${JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'PostToolUse',
-        additionalContext: advisory,
-      },
-    })}\n`);
-    // Save AFTER emitting: if writeFileSync crashes mid-emit, next invocation
-    // will re-fire the same reminder (preferred over silently losing it).
-    saveState({ ...previous, ...current });
-  } else if (WATCH_FILES.some(f => !(f in previous))) {
-    // New cwd seen for the first time — merge its keys into state silently so
-    // future runs from this cwd compare against an established baseline.
-    saveState({ ...previous, ...current });
-  }
-
-  process.exit(0);
-} catch (e) {
-  process.stderr.write(`reload-watch error: ${e.message}\n`);
-  process.exit(0);
+if (require.main === module) {
+  // Drain stdin first (as before), then run.
+  const payload = readStdinCli();
+  process.exit(runHook(payload));
 }

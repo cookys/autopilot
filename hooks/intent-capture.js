@@ -190,17 +190,22 @@ function atomicWrite(target, content, mode = 0o600) {
 
 // === Main ===
 
-(function main() {
+// CLI stdin read. fd 0 first: the '/dev/stdin' PATH throws ENXIO on a socket stdin. A failed read gives ''
+// (runHook() treats that exactly like the old "parse fail" path: no payload, transcript recovery next).
+function readStdinCli() {
+  try { return fs.readFileSync(0, 'utf8'); }
+  catch { try { return fs.readFileSync('/dev/stdin', 'utf8'); } catch { return ''; } }
+}
+
+// Exported body (post-tool-chain runs it in-process): `stdin` is the payload text; returns the exit status
+// and never calls process.exit.
+function runHook(stdin) {
   try {
-    // Always consume stdin (required even if unused)
     let toolName = '<unknown>';
     let toolInput = {};
     let toolSource = 'stdin';
     let rawPayload = null;
     try {
-      // fd 0 first: the '/dev/stdin' PATH throws ENXIO on a socket stdin.
-      let stdin;
-      try { stdin = fs.readFileSync(0, 'utf8'); } catch { stdin = fs.readFileSync('/dev/stdin', 'utf8'); }
       if (stdin.trim()) {
         const input = JSON.parse(stdin);
         rawPayload = input;
@@ -229,10 +234,10 @@ function atomicWrite(target, content, mode = 0o600) {
     }
 
     // Env opt-out
-    if (process.env.AUTOPILOT_INTENT_CAPTURE === 'false') return process.exit(0);
+    if (process.env.AUTOPILOT_INTENT_CAPTURE === 'false') return 0;
 
     // Disable flag check (with auto-clear logic)
-    if (checkDisableFlag()) return process.exit(0);
+    if (checkDisableFlag()) return 0;
 
     // Ensure dirs
     if (!fs.existsSync(STATE_DIR)) fs.mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 });
@@ -276,5 +281,9 @@ function atomicWrite(target, content, mode = 0o600) {
     }
     // Fail-open
   }
-  process.exit(0);
-})();
+  return 0;
+}
+
+module.exports = { runHook };
+
+if (require.main === module) process.exit(runHook(readStdinCli()));

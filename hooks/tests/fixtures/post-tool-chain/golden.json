@@ -1,0 +1,2948 @@
+{
+ "source_ref": "e5691fb6c",
+ "source_sha": "e5691fb6c3f4e3fc5220883c9bc3524492bccc90",
+ "fixtures": {
+  "quiet-bash-success": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo ok\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo ok\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "bash-fail-escalation-ladder": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L2]\n\nThird consecutive Bash failure. MANDATORY investigation steps:\n1. Read the error message word by word — 90% of answers are in the error text\n2. Search (WebSearch / Grep) for the core problem\n3. Read the original context around the failure (50 lines up/down)\n4. List 3 fundamentally different hypotheses\n5. Reverse your main assumption — what if the problem is NOT where you think it is?\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L2]\n\nThird consecutive Bash failure. MANDATORY investigation steps:\n1. Read the error message word by word — 90% of answers are in the error text\n2. Search (WebSearch / Grep) for the core problem\n3. Read the original context around the failure (50 lines up/down)\n4. List 3 fundamentally different hypotheses\n5. Reverse your main assumption — what if the problem is NOT where you think it is?\n",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L3]\n\nFourth consecutive Bash failure. Complete ALL items before proceeding:\n- [ ] Read failure signal word by word?\n- [ ] Searched core problem with tools?\n- [ ] Read original context around failure?\n- [ ] All assumptions verified with tools?\n- [ ] Tried the opposite assumption?\n- [ ] Reproduced in minimal scope?\n- [ ] Switched tools/methods/angles/stack?\n\nDo not skip any item. Each must have a concrete answer, not just a checkmark.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L3]\n\nFourth consecutive Bash failure. Complete ALL items before proceeding:\n- [ ] Read failure signal word by word?\n- [ ] Searched core problem with tools?\n- [ ] Read original context around failure?\n- [ ] All assumptions verified with tools?\n- [ ] Tried the opposite assumption?\n- [ ] Reproduced in minimal scope?\n- [ ] Switched tools/methods/angles/stack?\n\nDo not skip any item. Each must have a concrete answer, not just a checkmark.\n",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "6"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false 6\",\n  \"tool_count_session\": 6,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 1\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 2\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 3\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 4\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 5\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 6\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "6"
+    }
+   }
+  },
+  "bash-fail-then-reset": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "1"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 4,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] true\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "4"
+    }
+   }
+  },
+  "bash-fail-pattern-exit0": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "2"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] x\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] x\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "2"
+    }
+   }
+  },
+  "reload-first-run-silent": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "reload-change-emits": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\"}}\n",
+       "stderr": "⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\n"
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\"}}\n",
+      "stderr": "⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\n"
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "cwd/.claude/": {
+     "mode": "755"
+    },
+    "cwd/.claude/dispatch-config.md": {
+     "mode": "644",
+     "content": "cfg"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/plugins/": {
+     "mode": "755"
+    },
+    "home/.claude/plugins/.reload-watch-state.json": {
+     "mode": "644",
+     "content": "{\n  \"/tmp/ptc-fixed-sandbox/home/.claude/plugins/installed_plugins.json\": null,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/settings.local.json\": null\n}"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "2"
+    }
+   }
+  },
+  "reload-and-failure-both-emit": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\"}}\n",
+       "stderr": "⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\n"
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\"}}\n[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": "⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\n"
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "cwd/.claude/": {
+     "mode": "755"
+    },
+    "cwd/.claude/dispatch-config.md": {
+     "mode": "644",
+     "content": "cfg"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "2"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false\n"
+    },
+    "home/.claude/plugins/": {
+     "mode": "755"
+    },
+    "home/.claude/plugins/.reload-watch-state.json": {
+     "mode": "644",
+     "content": "{\n  \"/tmp/ptc-fixed-sandbox/home/.claude/plugins/installed_plugins.json\": null,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/settings.local.json\": null\n}"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "none-emit-read": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "cwd/.claude/": {
+     "mode": "755"
+    },
+    "cwd/.claude/dispatch-config.md": {
+     "mode": "644",
+     "content": "cfg"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/plugins/": {
+     "mode": "755"
+    },
+    "home/.claude/plugins/.reload-watch-state.json": {
+     "mode": "644",
+     "content": "{\n  \"/tmp/ptc-fixed-sandbox/home/.claude/plugins/installed_plugins.json\": null,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/settings.local.json\": null\n}"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "empty-stdin": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "invalid-json": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": "audit-log: live-state hosting fail-open: Unexpected token 'o', \"not json {\" is not valid JSON\n"
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": "audit-log: live-state hosting fail-open: Unexpected token 'o', \"not json {\" is not valid JSON\n"
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "json-null": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "non-utf8-bytes": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": "audit-log: live-state hosting fail-open: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n"
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": "audit-log: live-state hosting fail-open: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n"
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "huge-payload": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "1"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash cat big\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] cat big\n"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Bash\n**Input:** `{\"command\":\"cat big\"}`\n```\nerror ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: ...\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "ask-user-question-live-state": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "attention-pending-resolved-by-posttool": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    },
+    "LIVE:attention/": {
+     "mode": "700"
+    }
+   }
+  },
+  "bash-secret-redaction-multiline": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"token=ghp_abcdefghijklmnopqrstuvwxyz0123456789\\\"\\nsecond line\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo \"token=<REDACTED>\"\\nsecond line\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "log-error-keyword-read": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Edit\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Edit /y\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\npermission denied while reading\n```\n**Solution:** (fill in after fix)\n\n---\n### 2026-01-01T00:00:00.000Z\n**Tool:** Edit\n**Input:** `{\"file_path\":\"/y\"}`\n```\nx\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "2"
+    }
+   }
+  },
+  "intent-disable-flag-active": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "755"
+    },
+    "home/.autopilot/intent-capture.disabled": {
+     "mode": "644",
+     "content": "{\"disabled_at\":\"2026-01-01T00:00:00.000Z\",\"reason\":\"x\",\"plugin_version\":\"unknown\"}"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo hi\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    }
+   }
+  },
+  "intent-breaker-trips": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": "[intent-capture] disabled after 10 consecutive failures — see /tmp/ptc-fixed-sandbox/home/.autopilot/intent-capture.disabled\n"
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": "[intent-capture] disabled after 10 consecutive failures — see /tmp/ptc-fixed-sandbox/home/.autopilot/intent-capture.disabled\n"
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "755"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "644",
+     "content": "10"
+    },
+    "home/.autopilot/intent": {
+     "mode": "644",
+     "content": "not a dir"
+    },
+    "home/.autopilot/intent-capture.disabled": {
+     "mode": "600",
+     "content": "{\n  \"disabled_at\": \"2026-01-01T00:00:00.000Z\",\n  \"reason\": \"10 consecutive failures: ENOTDIR: not a directory, open '/tmp/ptc-fixed-sandbox/home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json.4242.tmp'\",\n  \"plugin_version\": \"unknown\",\n  \"manual_reset\": \"rm /tmp/ptc-fixed-sandbox/home/.autopilot/intent-capture.disabled\"\n}"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo hi\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo again\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "home-dot-claude-is-a-file": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": "audit-log error: EEXIST: file already exists, mkdir '/tmp/ptc-fixed-sandbox/home/.claude'\n"
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": "log-error error: EEXIST: file already exists, mkdir '/tmp/ptc-fixed-sandbox/home/.claude'\n"
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": "audit-log error: EEXIST: file already exists, mkdir '/tmp/ptc-fixed-sandbox/home/.claude'\nlog-error error: EEXIST: file already exists, mkdir '/tmp/ptc-fixed-sandbox/home/.claude'\n"
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo err\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude": {
+     "mode": "644",
+     "content": "file"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "transcript-fallback": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_8565d381": {
+     "mode": "600",
+     "content": "2"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"dddd0000-1111-2222-3333-444455556666\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"transcript\",\n  \"last_tool_input_summary\": \"Bash echo from-transcript\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo from-transcript\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo from-transcript\n"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Bash\n**Input:** `{\"command\":\"echo from-transcript\"}`\n```\nerror: failed\n```\n**Solution:** (fill in after fix)\n\n---\n### 2026-01-01T00:00:00.000Z\n**Tool:** Bash\n**Input:** `{\"command\":\"echo from-transcript\"}`\n```\nerror: failed\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "home/.claude/projects/": {
+     "mode": "755"
+    },
+    "home/.claude/projects/-enc/": {
+     "mode": "755"
+    },
+    "home/.claude/projects/-enc/dddd0000-1111-2222-3333-444455556666.jsonl": {
+     "mode": "644",
+     "content": "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"b1\",\"name\":\"Bash\",\"input\":{\"command\":\"echo from-transcript\"}}]}}\n{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"b1\",\"content\":\"error: failed\",\"is_error\":true}]}}\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-dddd0000-1111-2222-3333-444455556666": {
+     "mode": "600",
+     "content": "2"
+    }
+   }
+  },
+  "no-session-id-ppid-hash": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_5eb13cb6": {
+     "mode": "600",
+     "content": "2"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash f\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] f\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] f\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "2"
+    }
+   }
+  },
+  "intent-env-opt-out": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo hi\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    }
+   }
+  },
+  "literal-timestamp-hostname-pid-in-user-text": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\\\"\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo \"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\"\n"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Bash\n**Input:** `{\"command\":\"echo \\\"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\\\"\"}`\n```\nerror: at 2026-02-02T02:02:02.222Z on build-host-1\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "user-error-text-with-heading-shaped-line": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\nerror: first\n### 2026-03-03T03:03:03.333Z\n**Tool:** not-a-heading\nlast\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "user-error-text-embeds-terminator-and-heading": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\nerror: before\n```\n**Solution:** (fill in after fix)\n\n---\n### 2026-03-03T03:03:03.333Z\n**Tool:** fake\n**Input:** `{}`\n```\nafter\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "user-text-with-placeholder-lookalikes-and-sandbox-path": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "1"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"<ROOT> <LIVE> <CWDSHA1> <CWDSHA12> <TS> <HOST> /tmp/ptc-fixed-sandbox/h...\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo \"<ROOT> <LIVE> <CWDSHA1> <CWDSHA12> <TS> <HOST> /tmp/ptc-fixed-sandbox/home /dev/shm/ptc-fixed-live\"\n"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Bash\n**Input:** `{\"command\":\"echo \\\"<ROOT> <LIVE> <CWDSHA1> <CWDSHA12> <TS> <HOST> /tmp/ptc-fixed-sandbox/home /dev/shm/ptc-fixed-live\\\"\"}`\n```\nerror: <ROOT>/x <CWDSHA12> /tmp/ptc-fixed-sandbox/cwd <LIVE>\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "lone-surrogate-escape-in-error-text": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\nerror: bad � byte\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "git-cwd-branch": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo hi\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": \"main\"\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo hi\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  }
+ }
+}

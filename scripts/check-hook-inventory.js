@@ -47,6 +47,7 @@ const NON_HOOK = [
   /-lib\.js$/, /\.test\.js$/, /^capture-payload\.js$/, /^_transcript-timing-probe\.js$/,
   /^transcript-reader\.test\.js$/, /\.bak$/,
   /^opt-in-multiplexer\.js$/, // D6 infrastructure, not a user-facing hook stem
+  /^post-tool-chain\.js$/, // guard-port chain (BL-0241): infrastructure that hosts five wired stems; Phase 2 adds its expansion table
 ];
 
 function die(msg, code) { console.error(msg); process.exit(code === undefined ? 2 : code); }

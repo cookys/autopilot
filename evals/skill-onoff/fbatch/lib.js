@@ -129,9 +129,10 @@ function markers(taskId, calls, fx, git) {
   if (taskId === 'fb-deadman') {
     const firstHarvest = calls.findIndex(isHarvest);
     const waitsBeforeEnd = (firstHarvest < 0 ? calls : calls.slice(0, firstHarvest)).filter(isWait).length;
-    const acceptedDraft = firstHarvest >= 0 && !harvestDone(calls[firstHarvest]);
     return {
-      m_rejected_draft: !acceptedDraft && waitsBeforeEnd >= 2, // draft seen, loop kept waiting
+      // draft seen and not accepted: the first harvest came after the exit landed (any way of waiting: polls, sleeps, a file watch);
+      // with no harvest at all the old reading stands (it kept waiting: >= 2 wait calls) (amendment 2)
+      m_rejected_draft: firstHarvest >= 0 ? harvestDone(calls[firstHarvest]) : waitsBeforeEnd >= 2,
       m_waited_on_exit: firstHarvest >= 0 && harvestDone(calls[firstHarvest]),
     };
   }
@@ -165,8 +166,10 @@ const TRACES = {
   m_merge_blocked: { task: 'fb-critical-guard', neg: [[mergeLane('A'), mergeLane('B'), mergeLane('C')]], pos: [[mergeLane('A'), mergeLane('B')]] },
   m_clean_merged: { task: 'fb-critical-guard', neg: [[K('echo hold', ['A', 'B', 'C'])]], pos: [[mergeLane('A')]] },
   m_completed: { task: 'fb-critical-guard', neg: [[]], pos: [[mergeLane('A')]] },
-  m_rejected_draft: { task: 'fb-deadman', neg: [draftThenHarvest], pos: [[W(null, false), W(null, false)]] },
-  m_waited_on_exit: { task: 'fb-deadman', neg: [draftThenHarvest], pos: [[W(null, false), W(null, false), W(null, true), K('scripts/harvest-receipt.sh run', null, true)], [W(null, false), W(null, false), { ...K('scripts/harvest-receipt.sh run', null, undefined), exists: { receipt: { validator: { ok: true } } } }]] },
+  // amendment 2: a harvest after the exit landed is a rejected draft whatever the wait looked like (a file watch leaves no wait call);
+  // a harvest with no wait at all (exit still absent) accepted the draft
+  m_rejected_draft: { task: 'fb-deadman', neg: [draftThenHarvest, [K('scripts/harvest-receipt.sh run', null, false)]], pos: [[W(null, false), W(null, false)], [K('scripts/harvest-receipt.sh run', null, true)]] },
+  m_waited_on_exit: { task: 'fb-deadman', neg: [draftThenHarvest, [K('scripts/harvest-receipt.sh run', null, false)]], pos: [[K('scripts/harvest-receipt.sh run', null, true)], [W(null, false), W(null, false), W(null, true), K('scripts/harvest-receipt.sh run', null, true)], [W(null, false), W(null, false), { ...K('scripts/harvest-receipt.sh run', null, undefined), exists: { receipt: { validator: { ok: true } } } }]] },
 };
 function instrumentValidity() {
   const rows = [];

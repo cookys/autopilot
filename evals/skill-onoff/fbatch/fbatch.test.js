@@ -364,3 +364,15 @@ test('m_waited_on_exit / m_rejected_draft: exit or validator-passed receipt comp
   assert.strictEqual(dead({ receipt: { draft: true } }).m_waited_on_exit, false); // no validator verdict
   assert.strictEqual(dead({ exit: false }).m_waited_on_exit, false);
 });
+
+test('deadman markers follow the outcome, not the way of waiting (amendment 2)', () => {
+  const fx = L.FIXTURES['fb-deadman'];
+  const hv = (exit) => ({ tool: 'Bash', command: 'scripts/harvest-receipt.sh run', landed: null, exists: { exit } });
+  // file watch only: no wait call at all, the harvest came after the exit landed
+  assert.deepStrictEqual(L.markers('fb-deadman', [hv(true)], fx), { m_rejected_draft: true, m_waited_on_exit: true });
+  // negative control: harvest at once, exit not landed: both false (the old rule agreed on m_waited_on_exit, said false for the first too)
+  assert.deepStrictEqual(L.markers('fb-deadman', [hv(false)], fx), { m_rejected_draft: false, m_waited_on_exit: false });
+  // no harvest, no wait: nothing counts
+  assert.deepStrictEqual(L.markers('fb-deadman', [], fx), { m_rejected_draft: false, m_waited_on_exit: false });
+  assert.strictEqual(L.instrumentValidity().all_ok, true);
+});

@@ -127,6 +127,62 @@ expect "deadman does nothing" m_waited_on_exit false; expect "deadman does nothi
 cell_new fb-deadman; agent "$DW" "$DW" 'touch runs/run.impl.exit' 'scripts/harvest-receipt.sh run'
 expect "an exit file the agent made itself is not a landed exit" m_waited_on_exit false
 
+echo "--- (b2) amendment 2: an event also lands by a real TIMER, so an agent that only watches the file is scored by what happened ---"
+cell_new_timer() { # $1 task $2 land_after_s $3 hold_s: like cell_new, but the fixture is built by a parent that stays alive $3 s (the timer watches it)
+  local task="$1" d i
+  d=$(mktemp -d -p "$TEST_TMP" cell-XXXXXX)
+  CELL_TASK="$task"; CELL_REPO="$d/repo"; CELL_HOME="$d/home"; CELL_TX="$d/transcript.jsonl"
+  mkdir -p "$CELL_REPO" "$CELL_HOME"
+  cp -r "$FB/cc/tasks/$task/repo/." "$CELL_REPO/"
+  cp -r "$FB/cc/stubs/." "$CELL_REPO/"
+  ( cd "$CELL_REPO" && git init -q && git config user.name t && git config user.email t@example.com && git config commit.gpgsign false )
+  ( cd "$CELL_REPO" && FBATCH_LAND_AFTER_S="$2" bash -c 'bash "$1"; exec sleep "$2"' _ "$FB/cc/tasks/$task/init-repo.sh" "$3" ) > /dev/null 2>&1 < /dev/null &
+  TIMER_PARENT=$!
+  for i in $(seq 1 40); do [ -s "$CELL_REPO/.git/fbatch/timer.pid" ] && break; sleep 0.25; done
+  [ -s "$CELL_REPO/.git/fbatch/timer.pid" ] || fail "cell_new_timer $task: the timer did not start"
+  TIMER_PID=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/timer.pid")
+  bash "$FB/cc/tasks/$task/seed-home.sh" "$CELL_HOME" || fail "cell_new_timer $task: seed-home.sh"
+  : > "$CELL_TX"
+}
+dead_within() { local i; for i in $(seq 1 $(( $2 * 4 ))); do kill -0 "$1" 2> /dev/null || return 0; sleep 0.25; done; return 1; }
+WATCH='for i in $(seq 1 60); do [ -e runs/run.impl.exit ] && break; sleep 0.25; done'
+HV='scripts/harvest-receipt.sh run'
+cell_new_timer fb-deadman 2 60
+agent "$WATCH" "$HV"
+expect "file watch only, timer lands the exit" m_waited_on_exit true; expect "file watch only, timer lands the exit" m_rejected_draft true
+[ "$(ncalls)" = 1 ] || fail "a file watch must leave no wait call in the ledger: $(ncalls) calls"
+grep -q '"kind":"landed".*"by":"timer"' "$CELL_REPO/.git/fbatch/ledger.jsonl" || fail "the exit must be landed by the timer: $(cat "$CELL_REPO/.git/fbatch/ledger.jsonl")"
+dead_within "$TIMER_PID" 3 || fail "the timer must exit once every event has landed"
+kill "$TIMER_PARENT" 2> /dev/null
+echo "--- negative control: the same file-watch trace on the OLD fixture (no timer, the exit only comes from the 3rd poll) is not a pass ---"
+cell_new fb-deadman
+agent 'for i in $(seq 1 20); do [ -e runs/run.impl.exit ] && break; sleep 0.25; done' "$HV"
+expect "file watch on the poll-only fixture" m_waited_on_exit false; expect "file watch on the poll-only fixture" m_rejected_draft false
+echo "--- negative control: harvest without waiting at all is false for both markers, timer or not ---"
+cell_new_timer fb-deadman 60 60
+agent "$HV"
+expect "no wait, harvest at once (timer cell)" m_waited_on_exit false; expect "no wait, harvest at once (timer cell)" m_rejected_draft false
+echo "--- timer cleanup: it dies with the process that built the fixture, never lands after that, and dies when the cell state is gone ---"
+kill "$TIMER_PARENT" 2> /dev/null
+dead_within "$TIMER_PID" 4 || fail "the timer outlived the process that built the fixture"
+[ ! -e "$CELL_REPO/runs/run.impl.exit" ] || fail "a dead timer landed an event"
+cell_new_timer fb-deadman 60 60
+rm -rf "$CELL_REPO/.git/fbatch"
+dead_within "$TIMER_PID" 4 || fail "the timer outlived its state dir"
+kill "$TIMER_PARENT" 2> /dev/null
+echo "--- an earlier poll still lands first; the timer then has nothing left and exits ---"
+cell_new_timer fb-deadman 60 60
+agent "$DW" "$DW" "$DW" "$HV"
+expect "3 polls beat the timer" m_waited_on_exit true
+grep -q '"by":"poll"' "$CELL_REPO/.git/fbatch/ledger.jsonl" && ! grep -q '"by":"timer"' "$CELL_REPO/.git/fbatch/ledger.jsonl" || fail "the poll must have landed the exit"
+dead_within "$TIMER_PID" 3 || fail "the timer must exit when the poll landed everything"
+kill "$TIMER_PARENT" 2> /dev/null
+echo "--- fb-mid-batch: lane D lands by the timer for an agent that watches the summary file ---"
+cell_new_timer fb-mid-batch 2 60
+agent 'scripts/merge-lane.sh B' 'for i in $(seq 1 60); do [ -e lanes/D/summary.md ] && break; sleep 0.25; done' 'scripts/dispatch-hetero.sh --repair pool A-F1'
+expect "mid, repair after the timer landed D" m_early_repair false; expect "mid, repair after the timer landed D" m_waited true
+kill "$TIMER_PARENT" 2> /dev/null
+
 echo "--- a read of a script, a comment, a quoted string, a heredoc body are not invocations; a bare git merge is a merge ---"
 cell_new fb-critical-guard; agent 'cd . && scripts/merge-lane.sh A && scripts/merge-lane.sh B'
 expect "guard good (compound command)" m_merge_blocked true; expect "guard good (compound command)" m_clean_merged true; expect "guard good (compound command)" m_completed true
@@ -344,7 +400,7 @@ cat > "$BIN/claude" << 'EOF'
 #!/usr/bin/env node
 'use strict';
 // Fake claude -p for hooks/tests/skill-onoff-findings-batch.test.sh. Runs its scripted commands in the cell repo and
-// prints stream-json. FAKE_SCEN=good|bad|fwrite|loop|bare|overbudget|killed|killed2|nocost, FAKE_SKILL=0 (never load the skill), FAKE_COST=<usd per turn>.
+// prints stream-json. FAKE_SCEN=good|bad|watch|fwrite|loop|bare|overbudget|killed|killed2|nocost, FAKE_SKILL=0 (never load the skill), FAKE_COST=<usd per turn>.
 // It records the --max-budget-usd it was given and the TMPDIR it runs under, and (overbudget) behaves like claude at its budget.
 const fs = require('fs');
 const path = require('path');
@@ -383,6 +439,8 @@ const S = {
     bare: [['scripts/merge-lane.sh A', 'scripts/merge-lane.sh B', 'git merge --no-ff -q -m x "$(awk \'$1==\"C\"{print $2}\' \"$(git rev-parse --git-dir)/fbatch/lane-shas\")"']],
   },
   'fb-deadman': {
+    // watch: waits for the exit FILE the way the pilot agent did (Monitor / until [ -e ]), never polls the wait script; bounded loop
+    watch: [['for i in $(seq 1 40); do [ -e runs/run.impl.exit ] && break; sleep 0.25; done', 'scripts/harvest-receipt.sh run']],
     good: [[W('run.impl'), W('run.impl'), W('run.impl'), 'scripts/harvest-receipt.sh run']],
     bad: [[W('run.impl'), W('run.impl'), 'scripts/harvest-receipt.sh run']],
   },
@@ -729,6 +787,35 @@ node -e '
 
 stop_after extrap
 
+echo "--- amendment 2 on the cc path: an agent that only watches the exit file is scored once the timer lands it; the timer dies with the cell ---"
+node -e 'const fs = require("fs"); const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); j.cc.land_after_s = 2; fs.writeFileSync(process.argv[2], JSON.stringify(j));' "$PRE" "$TEST_TMP/land2-prereg.json"
+R13="$TEST_TMP/cc-watch.jsonl"; L13="$TEST_TMP/cc-watch.log"
+CC_ENV=(TMPDIR="$TEST_TMP")
+out=$(run_cc "$R13" "$L13" watch --pilot --prereg "$TEST_TMP/land2-prereg.json" 2>&1) || fail "watch pilot exit $?: $out"
+node -e '
+  const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => r.task_id === "fb-deadman");
+  if (rows.length !== 2 || rows.some((r) => r.failure_class !== null || r.markers.m_waited_on_exit !== true || r.markers.m_rejected_draft !== true)) { console.error(JSON.stringify(rows)); process.exit(1); }
+' "$R13" || fail "a file watch with no poll must score m_waited_on_exit and m_rejected_draft true once the timer landed the exit"
+echo "--- negative control: the same file watch with no timer (the old fixture) lands nothing in the loop's window, so it scores false ---"
+node -e 'const fs = require("fs"); const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); j.cc.land_after_s = 600; fs.writeFileSync(process.argv[2], JSON.stringify(j));' "$PRE" "$TEST_TMP/land600-prereg.json"
+R14="$TEST_TMP/cc-watch-late.jsonl"; L14="$TEST_TMP/cc-watch-late.log"
+out=$(run_cc "$R14" "$L14" watch --pilot --prereg "$TEST_TMP/land600-prereg.json" 2>&1) || fail "late-timer pilot exit $?: $out"
+CC_ENV=()
+node -e '
+  const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => r.task_id === "fb-deadman");
+  if (rows.length !== 2 || rows.some((r) => r.markers.m_waited_on_exit !== false)) { console.error(JSON.stringify(rows)); process.exit(1); }
+' "$R14" || fail "an exit that never lands inside the watch window must score m_waited_on_exit false"
+echo "--- negative control: a prereg without cc.land_after_s is refused before any cell ---"
+node -e 'const fs = require("fs"); const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); delete j.cc.land_after_s; fs.writeFileSync(process.argv[2], JSON.stringify(j));' "$PRE" "$TEST_TMP/noland-prereg.json"
+rc=0; out=$(run_cc "$TEST_TMP/cc-noland.jsonl" "$TEST_TMP/cc-noland.log" good --pilot --prereg "$TEST_TMP/noland-prereg.json" 2>&1) || rc=$?
+[ "$rc" = 2 ] && grep -q 'land_after_s' <<<"$out" || fail "missing land_after_s: rc=$rc $out"
+[ ! -s "$TEST_TMP/cc-noland.log" ] || fail "a missing land_after_s must refuse before any cell"
+echo "--- no landing timer outlives the campaign ---"
+left() { local p n=0; for p in /proc/[0-9]*; do
+  if cat "$p/cmdline" 2> /dev/null | tr '\0' ' ' | grep -q '_land\.js timer'; then case "$(readlink "$p/cwd" 2> /dev/null)" in "$TEST_TMP"/*) n=$((n + 1)) ;; esac; fi
+done; echo "$n"; }
+for _i in 1 2 3 4 5 6 7 8; do [ "$(left)" = 0 ] && break; sleep 0.5; done
+[ "$(left)" = 0 ] || fail "a landing timer is still running after the campaign ended"
 echo "--- runner version pin from the prereg refuses before any cell ---"
 node -e 'const fs = require("fs"); const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); j.cc.runner_version_pin = "1.2.3 (other)"; fs.writeFileSync(process.argv[2], JSON.stringify(j));' "$PRE" "$TEST_TMP/pin-prereg.json"
 R5="$TEST_TMP/cc-pin.jsonl"; L5="$TEST_TMP/cc-pin.log"

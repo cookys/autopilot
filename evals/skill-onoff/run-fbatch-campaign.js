@@ -213,6 +213,9 @@ function runCc() {
     }
     return c;
   };
+  // Fixture landing time (amendment 2): a pending background event lands on the Nth poll OR land_after_s seconds after the
+  // fixture is built, whichever comes first (timer process, fbatch/cc/stubs/scripts/_land.js). Prereg value only, no env override.
+  if (!Number.isInteger(CC.land_after_s) || CC.land_after_s < 1) die('prereg cc.land_after_s missing or not a positive integer');
   const ceilings = CC.cell_ceiling_usd || {};
   for (const g of GROUPS) if (!(typeof ceilings[g.task] === 'number' && ceilings[g.task] > 0)) die(`prereg cc.cell_ceiling_usd.${g.task} missing or not a positive number`);
   const startEstimate = todoCost();
@@ -289,6 +292,7 @@ function runCc() {
         ONOFF_MAX_BUDGET_USD: String(budget),
         ONOFF_SINGLE_REP: '1', // the matrix runs exactly this cell: no hidden retry of an earlier rep outside the budget check above
         ONOFF_CELL_TMPDIR: '1',
+        FBATCH_LAND_AFTER_S: String(CC.land_after_s),
       },
     });
     patchRows(before);

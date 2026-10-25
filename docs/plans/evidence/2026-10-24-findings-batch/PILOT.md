@@ -19,7 +19,7 @@ Not scored. Not used for V2 or V3. The pilot checks wiring only (plan section 4)
 
 New algorithm = the last `total_cost_usd` of each `session_id`, summed over sessions (`node evals/skill-onoff/fbatch/cell.js cost --transcript <file>`).
 
-Correction to the hand-off note: the two `fb-deadman` cells are NOT clean. Both ended as `infra_fail` / `runner_timeout` after the 10-minute limit (their transcripts end with 8 turns and a `success` result costing about 0.004 USD, so the agent stopped early and the cell then waited out the timeout). They are not counted here and the cause is not investigated in this unit; the formal run would re-dispatch them under the amended infra rule (prereg amendment 1). A Sonnet T4 cell needs a look at this before the paid run.
+Correction to the hand-off note: the two `fb-deadman` cells are NOT clean. Both ended as `infra_fail` / `runner_timeout` after the 10-minute limit (their transcripts end with 8 turns and a `success` result costing about 0.004 USD, so the agent stopped early and the cell then waited out the timeout). They are not counted here. Cause (found by depth-0 from the transcript): the agent polled `wait-dispatch-results.js` once, a `sleep 240` was blocked by a hook, then it waited for `runs/run.impl.exit` with a Monitor (`until [ -e ... ]`) and ended its turn. `claude -p` waits for the Monitor, but the fixture landed the exit file only on the 3rd poll, which the agent never made, so the cell ran into the 600 s timeout. Waiting for the file is a legitimate way to wait; the fixture was unrealistic. Fixed by prereg amendment 2 (events also land by a timer, `cc.land_after_s` 90).
 
 ## Findings
 

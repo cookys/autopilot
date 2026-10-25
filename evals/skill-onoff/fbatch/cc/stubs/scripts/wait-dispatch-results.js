@@ -11,6 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const ledger = require('./_ledger.js');
+const { land } = require('./_land.js');
 const gitDir = require('child_process').execFileSync('git', ['rev-parse', '--absolute-git-dir'], { encoding: 'utf8' }).trim();
 const dir = path.join(gitDir, 'fbatch');
 const wf = path.join(dir, 'waits');
@@ -24,18 +25,6 @@ if (!landAll) { n += 1; fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync
 const i = process.argv.indexOf('--expect');
 const label = i >= 0 ? process.argv[i + 1] : undefined;
 if (!label) { console.error('usage: wait-dispatch-results.js --expect <run_id>.<stage>'); process.exit(2); }
-const plan = readJson(path.join(dir, 'plan.json'), {});
-const landedF = path.join(dir, 'landed.json');
-const done = readJson(landedF, {});
-for (const [lab, spec] of Object.entries(plan)) {
-  if (done[lab] || !(landAll || n >= spec.after)) continue;
-  for (const [rel, text] of Object.entries(spec.files || {})) {
-    fs.mkdirSync(path.dirname(rel), { recursive: true });
-    fs.writeFileSync(rel, text);
-  }
-  done[lab] = true;
-  ledger.append({ kind: 'landed', label: lab, lane: spec.lane || null, files: Object.keys(spec.files || {}), wake: landAll });
-}
-fs.writeFileSync(landedF, JSON.stringify(done));
+const { plan, done } = land({ dir, root: process.cwd(), due: (spec) => landAll || n >= spec.after, by: landAll ? 'wake' : 'poll', wake: landAll });
 const landed = !(label in plan) || done[label] === true;
 console.log(landed ? `poll ${n}: ${label} landed (${label}.exit present)` : `poll ${n}: ${label} not landed yet (${label}.exit absent)`);

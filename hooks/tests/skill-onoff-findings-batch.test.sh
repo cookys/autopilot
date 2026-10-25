@@ -830,4 +830,34 @@ rc=0; out=$(clean env PATH="$NOBIN" "$(command -v node)" "$BASE/run-fbatch-campa
 [ "$rc" = 2 ] || fail "no claude on PATH: rc=$rc want 2: $out"
 grep -q 'claude is not on PATH' <<<"$out" || fail "no claude message: $out"
 
+echo "=== stamp: findings-batch row is frozen; editing any frozen file turns --check red (negative controls) ==="
+clean node "$BASE/stamp-prereg.js" --row findings-batch --check > /dev/null 2>&1 < /dev/null || fail "findings-batch frozen row does not check ok"
+STAMP_ROOT="$TEST_TMP/stamp-root"
+mkdir -p "$STAMP_ROOT/prereg" "$STAMP_ROOT/packs"
+cp "$BASE/prereg/FROZEN.json" "$STAMP_ROOT/prereg/"
+cp "$BASE/packs/manifest.json" "$STAMP_ROOT/packs/"
+node -e '
+  const fs = require("fs"), path = require("path");
+  const rec = JSON.parse(fs.readFileSync(process.argv[1] + "/prereg/FROZEN.json", "utf8"))["findings-batch"];
+  for (const f of Object.keys(rec.files)) { const d = path.join(process.argv[2], f); fs.mkdirSync(path.dirname(d), { recursive: true }); fs.copyFileSync(path.join(process.argv[1], f), d); }' "$BASE" "$STAMP_ROOT"
+stamp_check() { clean node "$BASE/stamp-prereg.js" --row findings-batch --root "$STAMP_ROOT" --check 2>&1 < /dev/null; }
+out=$(stamp_check) || fail "copied frozen root must check ok: $out"
+for f in fbatch/lib.js fbatch/cell.js fbatch/cc-build.js fbatch/gate.md score-fbatch.js run-fbatch-campaign.js run-skill-onoff-matrix-fbatch.sh run-skill-onoff-eval-fbatch.sh fbatch/arms/change/code-review.md fbatch/cc/stubs/scripts/wait-dispatch-results.js fbatch/cc/tasks/fb-pool/task.md prereg/findings-batch.json; do
+  cp "$STAMP_ROOT/$f" "$TEST_TMP/stamp-orig"
+  case "$f" in
+    *.json) sed -i 's/"reps": 5/"reps": 6/' "$STAMP_ROOT/$f" ;; # a JSON file must stay parseable
+    *) printf '\n# mutated\n' >> "$STAMP_ROOT/$f" ;;
+  esac
+  cmp -s "$TEST_TMP/stamp-orig" "$STAMP_ROOT/$f" && fail "the mutation of $f changed nothing"
+  rc=0; out=$(stamp_check) || rc=$?
+  cp "$TEST_TMP/stamp-orig" "$STAMP_ROOT/$f"
+  [ "$rc" = 2 ] || fail "editing frozen file $f must turn --check red (rc=$rc): $out"
+  grep -q "$f" <<<"$out" || fail "--check must name $f: $out"
+done
+rm "$STAMP_ROOT/fbatch/arms/base/dev-flow-wait.md"
+rc=0; out=$(stamp_check) || rc=$?
+[ "$rc" = 2 ] && grep -q 'gone' <<<"$out" || fail "a deleted frozen file must turn --check red: rc=$rc $out"
+echo "=== stamp: rows stamped before stay ok ==="
+clean node "$BASE/stamp-prereg.js" --row bpack --check > /dev/null 2>&1 < /dev/null || fail "bpack frozen row no longer checks ok"
+
 echo "findings-batch cc tests passed"

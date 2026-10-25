@@ -117,7 +117,8 @@ done
 
 # --- negative control: with the pattern list emptied, the stop test above would go red ---
 MUT="$TEST_TMP/mut"; mkdir -p "$MUT"; cp "$HELPER" "$MUT/auth-stop.js"
-sed -i 's/^const AUTH_PATTERNS = \[/const AUTH_PATTERNS = [ \/\\bnever-matches-anything\\b\/, ].concat([/; s/^\];$/]).slice(0, 1);/' "$MUT/auth-stop.js"
+sed_mutate "$MUT/auth-stop.js" 's/^const AUTH_PATTERNS = \[/const AUTH_PATTERNS = [ \/\\bnever-matches-anything\\b\/, ].concat([/'
+sed_mutate "$MUT/auth-stop.js" 's/^\];$/]).slice(0, 1);/'
 node "$MUT/auth-stop.js" check --id T1 --failed 1 --text 'Failed to authenticate' < /dev/null 2>/dev/null; MUT_RC=$?
 assert_eq "0" "$MUT_RC" "negative control: mutant runs and reports clean (not a usage error)"
 assert_neq "6" "$MUT_RC" "negative control: a helper with no live pattern does not stop (the stop assertion would be red)"

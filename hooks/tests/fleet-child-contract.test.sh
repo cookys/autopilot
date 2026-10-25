@@ -126,7 +126,7 @@ check "probe-skill-frontmatter-portability" probe "$d"
 # run-skill-opt.sh: the external run_loop (not in this repo) starts bare `claude -p` children from PATH; the script's PATH wrapper must append --strict-mcp-config
 hopt="$TEST_TMP/hopt"; mkdir -p "$hopt/ap/scripts/lib" "$hopt/ap/skills/xs" "$hopt/ap/skill-creator-workspace/evals" "$hopt/home/.claude" "$hopt/bin" \
   "$hopt/home/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
-cp "$REPO_ROOT/scripts/run-skill-opt.sh" "$hopt/ap/scripts/"; cp "$REPO_ROOT/scripts/lib/repo-identity.sh" "$hopt/ap/scripts/lib/"
+cp "$REPO_ROOT/scripts/run-skill-opt.sh" "$hopt/ap/scripts/"; cp "$REPO_ROOT/scripts/lib/repo-identity.sh" "$REPO_ROOT"/scripts/lib/auth-stop.* "$REPO_ROOT"/scripts/lib/claude-call-capture* "$hopt/ap/scripts/lib/"
 echo '{}' > "$hopt/ap/skill-creator-workspace/evals/xs-evals.json"
 printf '{"claudeAiOauth":{"accessToken":"tok","expiresAt":99999999999999}}' > "$hopt/home/.claude/.credentials.json"
 REAL_PY="$(command -v python3)"

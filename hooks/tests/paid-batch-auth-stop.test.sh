@@ -29,17 +29,17 @@ mk_layout() {
   ln -sfn "$REPO_ROOT/hooks" "$d/hooks"
   # test seam: the matrix pins a frozen pack digest that the shipped pack no longer has (separate, pre-existing drift);
   # the layout copy pins the digest of the pack it ships so the cell loop can be reached
-  sed -i "s/3f29d5fd224d45ac96630e642fa9ada1f24446d538b6c2b2ed020ad3f8a7beca/$(sha256sum "$d/evals/skill-transport/packs/implementer-pack.md" | awk '{print $1}')/" "$d/evals/skill-transport/run-implementer-matrix.sh"
+  sed_mutate "$d/evals/skill-transport/run-implementer-matrix.sh" "s/3f29d5fd224d45ac96630e642fa9ada1f24446d538b6c2b2ed020ad3f8a7beca/$(sha256sum "$d/evals/skill-transport/packs/implementer-pack.md" | awk '{print $1}')/"
   if [ -n "$mutant" ]; then
     for f in "$d/scripts/run-eval-batch.sh" "$d/scripts/bench-engine-capability.sh" "$d/scripts/qualification-sweep.sh" \
              "$d/evals/run-trigger-test.sh" "$d/evals/skill-transport/run-matrix.sh" "$d/evals/skill-transport/run-implementer-matrix.sh" \
              "$d/evals/pipeline-bench/run-pipeline-bench.sh"; do
       grep -q 'auth_stop_check' "$f" || fail "mutant: no wiring found in $f"
-      sed -i 's/auth_stop_check/:/g' "$f"
+      sed_mutate "$f" 's/auth_stop_check/:/g'
     done
     for f in "$d/scripts/run-grok-implementer-ab.sh" "$d/scripts/benchmark-hook-latency.js" "$d/evals/context-budget-t2/run-t2-eval.js"; do
       grep -q 'authStop\.checkSources(' "$f" || fail "mutant: no wiring found in $f"
-      sed -i 's/authStop\.checkSources(/((_s) => null)(/g' "$f"
+      sed_mutate "$f" 's/authStop\.checkSources(/((_s) => null)(/g'
     done
   fi
 }
@@ -237,7 +237,7 @@ eb_run "$TEST_TMP/eb-mut" auth; mutant_red "run-eval-batch" 1
 # 1. no boundary check before a claude start -> the second paid call of the same skill happens
 mk_layout "$TEST_TMP/ebw-mut"
 grep -q 'judge --dir "\$EVAL_CALL_RECORD_DIR"' "$TEST_TMP/ebw-mut/scripts/lib/claude-call-capture-exec.sh" || fail "boundary mutation anchor missing"
-sed -i '/judge --dir "\$EVAL_CALL_RECORD_DIR"/d' "$TEST_TMP/ebw-mut/scripts/lib/claude-call-capture-exec.sh"
+sed_mutate "$TEST_TMP/ebw-mut/scripts/lib/claude-call-capture-exec.sh" '/judge --dir "\$EVAL_CALL_RECORD_DIR"/d'
 ebw_run "$TEST_TMP/ebw-mut" wrap-auth
 if [ "$CALLS" -le 1 ]; then fail "run-eval-batch: boundary check removed but only $CALLS claude call happened -- negative control broken"; fi
 echo "MUTANT-RED run-eval-batch (boundary check removed): claude calls=$CALLS (a second paid call of the same skill happened; the outer check still ends with rc=$RC)"
@@ -245,7 +245,8 @@ kill_grandchildren "$TEST_TMP/ebw-mut"
 # 2. the mirror back to tee, with a grandchild holding the pipes -> the tee survives (orphan)
 mk_layout "$TEST_TMP/ebw-mut2"
 grep -q 'mirror --pid' "$TEST_TMP/ebw-mut2/scripts/lib/claude-call-capture-exec.sh" || fail "tee mutation anchor missing"
-sed -i 's#>(node "\$CLAUDE_CAPTURE_JS" mirror --pid "\$\$" --rec "\$_rec.err" --fd 2)#>(tee "$_rec.err" >\&2)#; s#>(node "\$CLAUDE_CAPTURE_JS" mirror --pid "\$\$" --rec "\$_rec.out" --fd 1)#>(tee "$_rec.out")#' "$TEST_TMP/ebw-mut2/scripts/lib/claude-call-capture-exec.sh"
+sed_mutate "$TEST_TMP/ebw-mut2/scripts/lib/claude-call-capture-exec.sh" 's#>(node "\$CLAUDE_CAPTURE_JS" mirror --pid "\$\$" --rec "\$_rec.err" --fd 2)#>(tee "$_rec.err" >\&2)#'
+sed_mutate "$TEST_TMP/ebw-mut2/scripts/lib/claude-call-capture-exec.sh" 's#>(node "\$CLAUDE_CAPTURE_JS" mirror --pid "\$\$" --rec "\$_rec.out" --fd 1)#>(tee "$_rec.out")#'
 ebw_run "$TEST_TMP/ebw-mut2" wrap-grandchild
 if [ "$LEFT" = 0 ]; then fail "run-eval-batch: tee mirrors left no orphan -- negative control broken"; fi
 echo "MUTANT-RED run-eval-batch (mirror back to tee): $LEFT process(es) left behind after claude was killed while a grandchild held the pipes"
@@ -254,7 +255,7 @@ kill_grandchildren "$TEST_TMP/ebw-mut2"; sleep 1
 #    -> claude 1 was just killed, its mirror is still draining, so query 3 starts before the authentication stderr is on disk
 mk_layout "$TEST_TMP/ebw-mut3"
 grep -q "(closed ? 'ready' : 'pending')" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" || fail "state-function mutation anchor missing"
-sed -i "s/(closed ? 'ready' : 'pending')/(closed ? 'ready' : 'alive')/" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js"
+sed_mutate "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" "s/(closed ? 'ready' : 'pending')/(closed ? 'ready' : 'alive')/"
 grep -q "(closed ? 'ready' : 'alive')" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" || fail "state-function mutation did not apply"
 ebw_run "$TEST_TMP/ebw-mut3" wrap-late1gc standin_probe.py 1.6
 if [ "$CALLS" -le 2 ]; then fail "run-eval-batch: judging a live record did not let query 3 through (calls=$CALLS) -- negative control broken"; fi
@@ -264,7 +265,7 @@ kill_grandchildren "$TEST_TMP/ebw-mut3"
 mk_layout "$TEST_TMP/ebw-mut4"
 JSM="$TEST_TMP/ebw-mut4/scripts/lib/claude-call-capture.js"
 grep -q 'if (w.present) note(`writeerror' "$JSM" || fail "writeerror mutation anchor missing"
-sed -i 's/if (w.present) note(`writeerror/if (false) note(`writeerror/' "$JSM"
+sed_mutate "$JSM" 's/if (w.present) note(`writeerror/if (false) note(`writeerror/'
 grep -q 'if (false) note(`writeerror' "$JSM" || fail "writeerror mutation did not apply"
 MD="$TEST_TMP/ebw-mut4/jd"; mkdir -p "$MD"; echo "999999 1" > "$MD/m.pid"
 echo '{"type":"result","subtype":"success","is_error":false,"result":"fine"}' > "$MD/m.out"; echo 'Authentication error' > "$MD/m.err"
@@ -292,7 +293,7 @@ echo "MUTANT-RED claude-call-capture (read errors swallowed into empty text): rc
 mk_layout "$TEST_TMP/ebw-mut6"
 JS6="$TEST_TMP/ebw-mut6/scripts/lib/claude-call-capture.js"
 grep -q 'aliveFrom(st, info.start) ?' "$JS6" || fail "double-read mutation anchor missing"
-sed -i 's/aliveFrom(st, info.start) ?/alive(info.pid, info.start) ?/' "$JS6"
+sed_mutate "$JS6" 's/aliveFrom(st, info.start) ?/alive(info.pid, info.start) ?/'
 M6="$TEST_TMP/ebw-mut6/jd"; mkdir -p "$M6"; echo "$$ 1" > "$M6/m.pid"
 N6="$(node -e 'const fs=require("fs");const r=fs.readFileSync;let n=0;fs.readFileSync=function(f,...a){if(String(f).startsWith("/proc/"))n++;return r.call(this,f,...a)};require(process.argv[1]).snapshot(process.argv[2]);console.log(n)' "$JS6" "$M6/m")"
 if [ "$N6" = 1 ]; then fail "double-read mutant still reads /proc once -- negative control broken"; fi
@@ -806,7 +807,7 @@ assert_neq "$RC" "6" "run-skill-opt: a 429 failure after a quoting success is no
 # negative control: no capture wiring in the script (no record dir) -> all 9 paid calls happen and nothing stops
 mk_layout "$TEST_TMP/so-mut"
 grep -q '^claude_capture_begin ' "$TEST_TMP/so-mut/scripts/run-skill-opt.sh" || fail "run-skill-opt mutation anchor missing"
-sed -i 's/^claude_capture_begin .*$/export EVAL_CALL_RECORD_DIR=/' "$TEST_TMP/so-mut/scripts/run-skill-opt.sh"
+sed_mutate "$TEST_TMP/so-mut/scripts/run-skill-opt.sh" 's/^claude_capture_begin .*$/export EVAL_CALL_RECORD_DIR=/'
 so_run "$TEST_TMP/so-mut" wrap-auth
 if [ "$CALLS" -le 3 ]; then fail "run-skill-opt: wiring removed but only $CALLS calls -- negative control broken (rc=$RC)"; fi
 echo "MUTANT-RED run-skill-opt (capture wiring removed): rc=$RC calls=$CALLS (every iteration paid)"
@@ -841,7 +842,8 @@ tb_run "$TEST_TMP/tb" generic
 assert_neq "$RC" "6" "test-behavior: a 429 failure is not an auth stop"
 assert_eq "$CALLS" "3" "test-behavior: every call still runs after a 429 failure"
 mk_layout "$TEST_TMP/tb-mut"; cp "$REPO_ROOT/evals/test-helpers.sh" "$REPO_ROOT/evals/test-behavior.sh" "$TEST_TMP/tb-mut/evals/"
-sed -i 's/^stop_if_auth_failed .*$//; s/auth_stop_check /:  /' "$TEST_TMP/tb-mut/evals/test-behavior.sh" "$TEST_TMP/tb-mut/evals/test-helpers.sh"
+sed_mutate "$TEST_TMP/tb-mut/evals/test-behavior.sh" 's/^stop_if_auth_failed .*$//'
+sed_mutate "$TEST_TMP/tb-mut/evals/test-helpers.sh" 's/auth_stop_check /:  /'
 tb_run "$TEST_TMP/tb-mut" auth; mutant_red "test-behavior" 1
 
 finalize_test

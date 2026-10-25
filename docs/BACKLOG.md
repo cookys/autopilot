@@ -321,14 +321,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-01
 - **Origin**: self
-- **Problem**: 每回合重新提醒模型守規則，行為沒有明顯進步，因此改做每回合驗證。第一批 P2-3 判 U（憑證過期）；Haiku 4.5 重跑 p2-3r 因預測成本超上限中止，也判 U。p2-3r2 已於 2026-10-25 13:44 台北開跑，之後做 BL-0295 評測與 Haiku 5.5 批次。
+- **Problem**: 每回合重新提醒模型守規則沒有明顯進步，因此改做每回合驗證。p2-3r2（Haiku 4.5 重跑）判 PASS，可據此把 hook 記載為經評測的 opt-in，不決定預設值；Haiku 5.5 批次 p2-3-h55 已開跑，BL-0295 評測設計中。
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
-- **Trigger**: the p2-3r2 Haiku 4.5 rerun (started 2026-10-25 13:44 Taipei) and the Haiku 5.5 batch (p2-3-h55) of P2-3 finish and are judged. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
+- **Trigger**: the Haiku 5.5 batch (p2-3-h55, started 2026-10-25 19:52 Taipei) of P2-3 finishes and is judged. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 - **Pointer**: docs/plans/2026-10-20-per-turn-gate.md
-- **Context**: p2-3r U (STOP_COST); p2-3r2 caps C 26/ON 40, 1c5935da6. P1 rerun e13ff469e: M1 6/30, M2 13/30, M3 0/30, deviation accepted (d-baf11c30). P2 cost approved (d-15c0364c): C arm 18, ON arm 30 USD. P0 e726bc485; P2-0 2c4e5ccb8; P2-1 e68371406.
+- **Context**: p2-3r2 PASS (670b3ffaf): M3 ON 28/30 vs C 1/30. p2-3-h55 started 2026-10-25 19:52 Taipei. Details in sidecar.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056
@@ -831,19 +831,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/2026-09-02-cursor-transport-fallback.md
 - **Context**: Also docs/plans/2026-08-26-cursor-cli-adaptor.md. Seat blocked: cursor-agent cannot enforce tool-deny.
 
-### mods-visible-dispatch: P2 guard-port plan to write, P4 progress.json parked
+### mods-visible-dispatch: P2 guard-port Phase 2 next, P4 progress.json parked
 - **Id**: BL-0241
 - **Status**: open
 - **Since**: 2026-10-19
 - **Origin**: owner
-- **Problem**: 畫面上可見派工計畫剩兩件事。一是 P2 的 guard-port 計畫已經過兩代審查並審定，可以進入實作（Design B 不可選）。二是 P4 的 progress.json 與 work-round 投影，owner 決定先掛起，因為目前沒有程式會讀它。
+- **Problem**: P2 guard-port Phase 1（未註冊的 chain 與差異比對 harness）已合併，下一步 Phase 2：把 chain 註冊進 hooks.json。P4 的 progress.json 與 work-round 投影先掛起，因為目前沒有程式會讀它。
 - **Impact**: 不寫 guard-port 計畫，工具呼叫的 hook 延遲就維持現狀。progress.json 掛起不影響現有功能，radar 要讀時再補。
-- **Trigger**: P2: guard-port plan is reviewed and adjudicated (merge 0967088f1); implementation can start now. P4 progress.json and work-round projection: radar asks for it
+- **Trigger**: P2: Phase 1 merged (ffee03326, 2026-10-25); Phase 2 (register the chain in hooks.json) can start now. P4 progress.json and work-round projection: radar asks for it
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: owner ruling 2026-10-23 d-585003b0 (partial keep); 2026-10-19 deletion audit, restored; docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/plans/2026-10-03-mods-visible-dispatch.md
-- **Context**: P5 is already BL-0110. P2 measured (hooklat 54e9ff131). Guard-port plan: two review generations, depth-0 adjudicated revision, Design B is not selectable. P4 stays parked.
+- **Context**: Phase 1 ffee03326. Phase 2 chains intent-capture, audit-log, log-error only; reload-watch and failure-escalation stay separate (plan status line). P4 parked.
 
 ### dispatch-tree step 5 and R blocked by the D0 probes
 - **Id**: BL-0242
@@ -1121,19 +1121,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/family-of-case-table-no-direct-test.md
 - **Context**: The JS familyOf suite is on lane/oqseat; bash family_of is only touched indirectly today. Details in sidecar.
 
-### Paid batch should abort on the first auth failure
-- **Id**: BL-0294
-- **Status**: open
-- **Since**: 2026-10-24
-- **Origin**: self
-- **Problem**: 付費評測批次遇到第一次認證失敗，應立刻中止，而不是每個 id 都重試燒掉預算。目前只有某個包裝腳本有自己的 STOP_AUTH，要做成共用機制。
-- **Impact**: 認證壞掉時批次可能空轉並浪費時間與額度。
-- **Trigger**: next paid batch wrapper is written or edited, or an auth failure burns more than one id
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: owner efficiency rule, bldone9 2026-10-24
-- **Pointer**: docs/backlog/paid-batch-abort-on-first-auth-failure.md
-
 ### Findings batching: reviewers accumulate findings, then send once
 - **Id**: BL-0295
 - **Status**: open
@@ -1142,7 +1129,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: revival.3d
 - **Report**: 01M5MZ2BMFACG8RZB31S6G1V9F
 - **Reply**: 2026-10-25 01M5QR3SKAR0303QRVJC11P60P/01M5QR4BJFH17NV55671K2MBMN
-- **Problem**: 審查者每發現一點就送一次，對方要反覆處理；peer 建議先累積再一次送出。副問題已確認非 autopilot 問題並於 2026-10-25 回覆。owner 決定先做 ON/OFF 評測，再決定是否改指引。
+- **Problem**: 審查者每發現一點就送一次，對方要反覆處理；peer 建議先累積再一次送出。副問題已確認非 autopilot 問題。owner 決定先做 ON/OFF 評測；設計與前置登錄撰寫中，付費執行等設計審過。
 - **Impact**: 來回訊息多，處理零碎，浪費雙方時間。
 - **Trigger**: a guidance change to the reviewer flow is scheduled, or a batching ON/OFF eval is budgeted
 - **Trigger-Type**: owner
@@ -1231,15 +1218,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0294 hand finding 2026-10-25
 - **Pointer**: docs/backlog/implementer-matrix-stale-pack-digest.md
 
-### failure-escalation hook output never reaches the model
-- **Id**: BL-0304
-- **Status**: open
-- **Since**: 2026-10-25
-- **Origin**: self
-- **Problem**: 失敗升級 hook 在工具執行後用純文字輸出升級提示。依官方文件，這種輸出只進除錯日誌，模型看不到；要讓模型看到得改用 JSON 的附加內容欄位，或用錯誤輸出配 exit 2。
-- **Impact**: 升級提示實際上沒有送到模型，這個 hook 等於空轉；其他已註冊 hook 可能有同樣問題。
-- **Trigger**: BL-0241 guard-port Phase 1 has merged (same file), or any hook is found whose output the model never sees
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: depth-0 verification 2026-10-25
-- **Pointer**: docs/backlog/hook-output-channel-not-reaching-model.md

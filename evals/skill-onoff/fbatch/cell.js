@@ -9,6 +9,8 @@
 //       "findings" (README "Limits of the --check-arms FINDINGS lint"); the campaign turns such a cell into an
 //       invalid_cell row, so a cell where the agent wrote a report-style FINDINGS file can never score.
 //       Exit 3 when the replayed poll count disagrees with the fixture's own counter (the cell cannot be judged).
+//       --require-counter (what the task markers.sh pass, with an explicit --git-dir): a missing counter is exit 3.
+//       --emit-refusal: on any exit-3 refusal also print marker_cell_refused=true (see the comment at the refusal).
 //   cell.js trace --task <id> --transcript <file> [--turn1 <file>]   prints the trace JSON
 //   cell.js cost --transcript <file>                                 prints {total, turns:[...]}
 //
@@ -22,84 +24,21 @@
 // <git-dir>/fbatch/waits; when that final count differs from the replay (a loop or a failed shell, say) the cell is
 // refused (exit 3 -> infra_fail marker_error) instead of scored on a guess.
 //
-// A Bash command is split into simple commands (quote-aware; heredoc bodies skipped). A simple command whose
-// leading word is a reader (cat, grep, ls, echo ...) is a read, not an invocation: it is kept as ":read <word>" so it
-// matches no marker, because `cat scripts/merge-lane.sh` is not a merge.
+// Every decision about a Bash command string goes through ONE tokenizer, fbatch/shell-parse.js (quotes and
+// backslash escapes honoured, redirections separated from words, $(...) / backticks / `bash -c '...'` parsed
+// recursively, wrappers such as env/timeout/xargs stripped). A simple command whose program is a reader (cat, grep,
+// ls, echo ...) is a read, not an invocation (":read <word>"); `node -e '<code>'` is inline code (":inline node"),
+// whose text never matches a marker. A poll is counted only when the executed program or script IS
+// wait-dispatch-results.js. lib.js then matches its regexes on the normalised command text produced here.
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
 const L = require('./lib');
+const SH = require('./shell-parse');
 
-const READERS = new Set(['cat', 'head', 'tail', 'grep', 'egrep', 'fgrep', 'rg', 'ag', 'less', 'more', 'ls', 'wc', 'stat', 'file', 'diff', 'cmp', 'echo', 'printf', 'test', '[', '[[', 'find', 'tree', 'sed', 'awk', 'jq', 'which', 'type', 'realpath', 'basename', 'dirname', 'pwd', 'date', 'true', 'false', 'read', 'sort', 'uniq', 'cut', 'tr', 'tee']);
-const KEYWORDS = new Set(['do', 'then', 'else', 'elif', 'if', 'while', 'until', '!', 'time', '{', '(']);
-
-// ---- shell splitting ---------------------------------------------------------------------
-function simples(cmd) {
-  const out = [];
-  let cur = '';
-  let q = null;
-  const pend = [];
-  const flush = () => { if (cur.trim()) out.push(cur.trim()); cur = ''; };
-  for (let i = 0; i < cmd.length; i++) {
-    const ch = cmd[i];
-    if (q) {
-      cur += ch;
-      if (ch === '\\' && q === '"') { cur += cmd[++i] || ''; continue; }
-      if (ch === q) q = null;
-      continue;
-    }
-    if (ch === "'" || ch === '"') { q = ch; cur += ch; continue; }
-    if (ch === '\\') { cur += ch + (cmd[++i] || ''); continue; }
-    if (ch === '<' && cmd[i + 1] === '<' && cmd[i + 2] !== '<') {
-      let j = i + 2;
-      if (cmd[j] === '-') j++;
-      while (cmd[j] === ' ' || cmd[j] === '\t') j++;
-      let delim = '';
-      if (cmd[j] === "'" || cmd[j] === '"') {
-        const close = cmd.indexOf(cmd[j], j + 1);
-        if (close > 0) { delim = cmd.slice(j + 1, close); j = close + 1; }
-      } else {
-        let k = j;
-        while (k < cmd.length && /[\w]/.test(cmd[k])) k++;
-        delim = cmd.slice(j, k); j = k;
-      }
-      if (delim) { pend.push(delim); cur += cmd.slice(i, j); i = j - 1; continue; }
-    }
-    if (ch === '\n') {
-      flush();
-      let at = i + 1;
-      while (pend.length) {
-        const d = pend.shift();
-        for (;;) {
-          if (at >= cmd.length) break;
-          let e = cmd.indexOf('\n', at);
-          if (e < 0) e = cmd.length;
-          const line = cmd.slice(at, e);
-          at = e + 1;
-          if (line.trim() === d) break;
-        }
-      }
-      i = at - 1;
-      continue;
-    }
-    if (ch === ';' || ch === '&' || ch === '|') { flush(); continue; }
-    cur += ch;
-  }
-  flush();
-  return out;
-}
-// Leading word of a simple command after assignments, control keywords and grouping characters.
-function leading(seg) {
-  const toks = seg.replace(/^[({]+\s*/, '').split(/\s+/).filter(Boolean);
-  let i = 0;
-  while (i < toks.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i]) || KEYWORDS.has(toks[i]))) i++;
-  const w = (toks[i] || '').replace(/^['"]|['"]$/g, '');
-  return { word: w.slice(w.lastIndexOf('/') + 1), rest: toks.slice(i).join(' ') };
-}
-function classify(seg) {
-  const { word, rest } = leading(seg);
-  if (READERS.has(word)) return `:read ${word}`;
-  return rest || seg;
+// One Bash command string -> normalised calls (execution order).
+function callsOf(commandText) {
+  return SH.parseShell(String(commandText || '')).map((cmd) => SH.describe(cmd)).filter((d) => d.kind !== 'empty');
 }
 
 // ---- transcript ----------------------------------------------------------------------------
@@ -135,14 +74,17 @@ function findingsWrites(tools) {
       continue;
     }
     if (t.name !== 'Bash') continue;
-    for (const seg of simples(String(t.input.command || ''))) {
-      const re = /(?:^|[^<>&\d])\d*>>?\s*(['"]?)([^\s;|&<>'"]+)\1/g;
-      let m;
-      while ((m = re.exec(seg))) if (FW.test(m[2])) hits.push(`redirect ${m[2]}`);
-      const { word, rest } = leading(seg);
-      const args = rest.split(/\s+/).slice(1).map((a) => a.replace(/^['"]|['"]$/g, '')).filter((a) => a && !a.startsWith('-'));
-      if (['tee', 'touch', 'install'].includes(word)) for (const a of args) if (FW.test(a)) hits.push(`${word} ${a}`);
-      if (['cp', 'mv', 'ln'].includes(word) && args.length && FW.test(args[args.length - 1])) hits.push(`${word} ${args[args.length - 1]}`);
+    for (const cmd of SH.parseShell(String(t.input.command || ''))) {
+      for (const r of cmd.redirs) if (SH.WRITE_OPS.has(r.op) && FW.test(r.target)) hits.push(`redirect ${r.target}`);
+      const w = SH.unwrap(cmd.words);
+      if (!w.length) continue;
+      const name = SH.base(w[0]);
+      const args = w.slice(1).filter((a) => !a.startsWith('-'));
+      if (['tee', 'touch', 'install'].includes(name)) for (const a of args) if (FW.test(a)) hits.push(`${name} ${a}`);
+      if (['cp', 'mv', 'ln'].includes(name) && args.length && FW.test(args[args.length - 1])) hits.push(`${name} ${args[args.length - 1]}`);
+      if (name === 'git' && args[0] === 'mv' && args.length > 1 && FW.test(args[args.length - 1])) hits.push(`git mv ${args[args.length - 1]}`);
+      if (name === 'sed' && w.some((a) => /^-[a-zA-Z]*i/.test(a) || a === '--in-place')) for (const a of args) if (FW.test(a)) hits.push(`sed -i ${a}`);
+      if (name === 'dd') for (const a of w) if (/^of=/.test(a) && FW.test(a)) hits.push(`dd ${a}`);
     }
   }
   return hits;
@@ -163,10 +105,9 @@ function buildTrace(taskId, tools, turn1Count = null) {
   tools.forEach((t, idx) => {
     if (t.name !== 'Bash') return;
     const turn2 = turn1Count !== null && idx >= turn1Count;
-    for (const seg of simples(String(t.input.command || ''))) {
-      const command = classify(seg);
-      calls.push({ tool: 'Bash', command, landed: landedSet(fx, waits, turn2), exists: { exit: fx.exitAfterWaits !== undefined ? waits >= fx.exitAfterWaits : undefined } });
-      if (/wait-dispatch-results\.js/.test(command)) waits++;
+    for (const d of callsOf(t.input.command)) {
+      calls.push({ tool: 'Bash', command: d.command, landed: landedSet(fx, waits, turn2), exists: { exit: fx.exitAfterWaits !== undefined ? waits >= fx.exitAfterWaits : undefined } });
+      if (d.kind === 'run' && d.program === 'wait-dispatch-results.js') waits++;
     }
   });
   return { calls, waits, fx };
@@ -183,7 +124,7 @@ function transcriptCost(file) {
   return { total: Number(costs.reduce((a, b) => a + b, 0).toFixed(6)), turns: costs };
 }
 
-module.exports = { simples, classify, buildTrace, cellMarkers, transcriptCost, readEvents, findingsWrites };
+module.exports = { callsOf, buildTrace, cellMarkers, transcriptCost, readEvents, findingsWrites };
 
 if (require.main === module) {
   const argv = process.argv.slice(2);
@@ -202,9 +143,14 @@ if (require.main === module) {
     let gitDir = val('--git-dir');
     if (!gitDir) { try { gitDir = cp.execFileSync('git', ['rev-parse', '--absolute-git-dir'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { gitDir = ''; } }
     const wf = gitDir ? path.join(gitDir, 'fbatch', 'waits') : '';
+    // run-skill-onoff-eval-bpack.sh takes the exit status of its marker subshell, whose last command is an `if`, so a
+    // non-zero exit of markers.sh is swallowed. --emit-refusal therefore also prints a marker the campaign turns
+    // into an infra_fail marker_error row.
+    const refuse = (msg) => { if (argv.includes('--emit-refusal')) process.stdout.write('marker_cell_refused=true\n'); die(msg, 3); };
+    if (argv.includes('--require-counter') && !(wf && fs.existsSync(wf))) refuse(`--require-counter: the fixture poll counter is missing (git dir '${gitDir}'); refusing to score a cell whose state cannot be checked`);
     if (wf && fs.existsSync(wf)) {
       const real = parseInt(fs.readFileSync(wf, 'utf8'), 10);
-      if (real !== r.waits) die(`replayed ${r.waits} wait polls but the fixture counted ${real}: the trace cannot place the state of every call (a loop, or a command that failed in the shell); refusing to score`, 3);
+      if (real !== r.waits) refuse(`replayed ${r.waits} wait polls but the fixture counted ${real}: the trace cannot place the state of every call (a loop, or a command that failed in the shell); refusing to score`);
     }
     for (const [k, v] of Object.entries(r.markers)) process.stdout.write(`marker_${k}=${v}\n`);
     process.stdout.write(`marker_findings_write=${r.findings_writes.length > 0}\n`);

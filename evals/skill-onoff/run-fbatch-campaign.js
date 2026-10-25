@@ -18,11 +18,10 @@
 // .credentials.json, plugin built per cell, turn2.sh second turn). This script only supplies the inputs through
 // the runner's own env overlays (ONOFF_PACKS_DIR, ONOFF_TASKS_DIR, ONOFF_PROMPT_PREFIX, ONOFF_TIMEOUT,
 // ONOFF_KEEP_CELLS_DIR, --arm-manifests, --check-skill): fbatch/cc-build.js assembles them per run from
-// fbatch/arms and fbatch/cc/. One call = one rep of one task (both arms), so the stop-loss is checked between
-// every pair of cells. Markers come from fbatch/cell.js (tool calls in the transcript); after each call the new rows
+// fbatch/arms and fbatch/cc/. One call = one cell, so the stop-loss is checked before every cell. Markers come from fbatch/cell.js (tool calls in the transcript); after each call the new rows
 // get row/pilot and the cell's actual cost_usd (sum of the transcript's result events). Stop-loss: refuse when spent
-// + the next pair's estimate exceeds ONOFF_MAX_USD, or when spent + (measured/estimated spend ratio of the done
-// cells) x the remaining estimate does (needs prereg cc.extrapolate_min_cells measured cells first). One results
+// + max(the cell's estimate, the largest cell measured so far) exceeds ONOFF_MAX_USD, or when spent + (measured/estimated
+// spend ratio of the done cells) x the remaining estimate does (needs prereg cc.extrapolate_min_cells measured cells first). One results
 // file per scope: a cc run refuses a file holding rows of another pilot flag or model (the matrix resume key
 // ignores both). The paid run (P1) needs the owner's cap approval.
 // --pilot = T1, T2, T4 one rep on both arms (6 cells), not scored.
@@ -229,42 +228,48 @@ function runCc() {
       let j; try { j = JSON.parse(l); } catch { return l; }
       // A cell where the agent wrote a FINDINGS-named file is invalid whatever its markers say (README: post-run check).
       const bad = !j.failure_class && j.markers && j.markers.findings_write === true;
-      return JSON.stringify({ row: P.row, pilot: PILOT, ...j, ...(bad ? { failure_class: 'invalid_cell', failure_cause: 'findings_write' } : {}), ...costOfKept(j) });
+      // markers.sh refused the cell (replay cannot be checked): the runner swallows that exit status, so it is an infra row here.
+      const refused = !j.failure_class && j.markers && j.markers.cell_refused === true;
+      return JSON.stringify({ row: P.row, pilot: PILOT, ...j, ...(bad ? { failure_class: 'invalid_cell', failure_cause: 'findings_write' } : {}), ...(refused ? { failure_class: 'infra_fail', failure_cause: 'marker_error' } : {}), ...costOfKept(j) });
     });
     fs.writeFileSync(abs, head + (tail.length ? `${tail.join('\n')}\n` : ''));
   };
-  for (const g of GROUPS) for (let rep = 1; rep <= g.reps; rep++) {
+  // One matrix call = one cell (--reps N skips the done reps 1..N-1; --arms names the single arm), and the stop-loss
+  // is checked, with the real cost of every earlier cell already in the results file, before EVERY cell:
+  //   projected = spent + max(this cell's estimate, the largest cell measured so far) must stay <= ONOFF_MAX_USD;
+  //   extrapolated = spent + (measured/estimated ratio of the measured cells) x the remaining estimate likewise.
+  for (const g of GROUPS) for (let rep = 1; rep <= g.reps; rep++) for (const arm of g.arms) {
     const { ok, fails } = stateOf();
-    const todoArms = g.arms.filter((a) => !ok.has(`${g.task}|${a}|${rep}`) && (fails.get(`${g.task}|${a}|${rep}`) || 0) < 3);
-    if (!todoArms.length) continue;
+    const key = `${g.task}|${arm}|${rep}`;
+    if (ok.has(key) || (fails.get(key) || 0) >= 3) continue;
     const spent = spentUsd();
-    const pair = todoArms.length * cellCost(g.task);
-    if (spent + pair > CAP + 1e-9) stop(`spend cap: spent ${money(spent)} USD so far; next ${g.task} rep ${rep} [${todoArms.join(',')}] costs ${money(pair)} USD; cap ${money(CAP)} USD; refusing to dispatch`, 1, dir);
     const measured = readRows().filter((j) => num(j.cost_usd) !== null && !j.cost_estimated);
+    const worst = Math.max(cellCost(g.task), ...measured.map((j) => j.cost_usd));
+    if (spent + worst > CAP + 1e-9) stop(`spend cap: spent ${money(spent)} USD so far; next cell ${key} may cost ${money(worst)} USD (its estimate or the largest cell measured so far); cap ${money(CAP)} USD; refusing to dispatch`, 1, dir);
     if (measured.length >= minCells) {
       const est = measured.reduce((s, j) => s + cellCost(j.task_id), 0);
       const act = measured.reduce((s, j) => s + j.cost_usd, 0);
       const scale = est > 0 ? act / est : 1;
       const projected = spent + scale * todoCost();
-      if (projected > CAP + 1e-9) stop(`spend extrapolation: spent ${money(spent)} USD; ${measured.length} measured cells cost ${scale.toFixed(2)}x their estimate; projected total ${money(projected)} USD exceeds ONOFF_MAX_USD ${money(CAP)} USD; refusing to dispatch`, 1, dir);
+      if (projected > CAP + 1e-9) stop(`spend extrapolation: spent ${money(spent)} USD; ${measured.length} measured cells cost ${scale.toFixed(2)}x their estimate; projected total ${money(projected)} USD exceeds ONOFF_MAX_USD ${money(CAP)} USD; refusing to dispatch ${key}`, 1, dir);
     }
-    console.log(`== task ${g.task} rep ${rep}: [${todoArms.join(',')}]`);
+    console.log(`== cell ${key}`);
     const before = fs.existsSync(abs) ? fs.statSync(abs).size : 0;
     const r = cp.spawnSync('bash', [path.join(HERE, 'run-skill-onoff-matrix-bpack.sh'),
-      '--model', MODEL, '--reps', String(rep), '--results', abs, '--tasks', g.task, '--arms', todoArms.join(','),
+      '--model', MODEL, '--reps', String(rep), '--results', abs, '--tasks', g.task, '--arms', arm,
       '--runner', 'cc', '--arm-manifests', bd.armManifestsDir, '--check-skill', CC.skill], {
       stdio: 'inherit',
       env: {
         ...process.env,
         ONOFF_PROMPT_PREFIX: CC.invocation_prefix,
-        ONOFF_TIMEOUT: process.env.ONOFF_TIMEOUT_OVERRIDE || CC.timeout || '10m',
+        ONOFF_TIMEOUT: CC.timeout || '10m', // the prereg value only: an env override would silently change the cells
         ONOFF_PACKS_DIR: bd.packsDir,
         ONOFF_TASKS_DIR: bd.tasksDir,
         ONOFF_KEEP_CELLS_DIR: keep,
       },
     });
     patchRows(before);
-    if (r.status !== 0) stop(`matrix failed for ${g.task} rep ${rep} (exit ${r.status})`, [3, 4].includes(r.status) ? r.status : 2, dir);
+    if (r.status !== 0) stop(`matrix failed for ${key} (exit ${r.status})`, [3, 4].includes(r.status) ? r.status : 2, dir);
   }
   fs.rmSync(dir, { recursive: true, force: true });
   console.log(JSON.stringify({ runner: 'cc', pilot: PILOT, model: MODEL, spent_usd: money(spentUsd()), max_usd: CAP }));

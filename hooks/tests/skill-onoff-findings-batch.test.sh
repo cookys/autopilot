@@ -74,7 +74,7 @@ mk_tx() { # $1 out.jsonl, rest: commands; the word @@TURN2@@ starts turn 2 (then
 }
 mark() { # $1 task $2 tx $3 marker -> true|false
   local t1=(); [ ! -f "$2.turn1" ] || t1=(--turn1 "$2.turn1")
-  clean node "$FB/cell.js" markers --task "$1" --transcript "$2" "${t1[@]+"${t1[@]}"}" --git-dir "$TEST_TMP/no-git-dir" < /dev/null 2>/dev/null | sed -n "s/^marker_${3}=//p"
+  clean node "$FB/cell.js" markers --task "$1" --transcript "$2" "${t1[@]+"${t1[@]}"}" --git-dir "${MARK_GD:-$TEST_TMP/no-git-dir}" < /dev/null 2>/dev/null | sed -n "s/^marker_${3}=//p"
 }
 expect() { # $1 label $2 task $3 tx $4 marker $5 want
   local got; got=$(mark "$2" "$3" "$4")
@@ -174,6 +174,47 @@ fw "reading a findings file" false 'cat findings-src.md' 'grep -n findings READM
 fw "cp from a findings file" false 'cp findings-src.md notes.md'
 fw "redirect to another name" false 'echo x > registry.json 2>&1'
 
+echo "--- class B: one shell tokenizer decides what is written and what is executed ---"
+fw "redirect to a quoted name with a space" true 'echo x > "FINDINGS report.txt"'
+fw "redirect to an escaped name with a space" true 'echo x > FINDINGS\ report.txt'
+fw "clobber redirect" true 'echo x >| findings.txt'
+fw "redirect of both streams" true 'echo x &> findings.txt'
+fw "bash -c one level down" true "bash -c 'echo x > findings.txt'"
+fw "inside a command substitution" true 'echo $(touch findings.md)'
+fw "behind env and xargs wrappers" true 'env A=1 xargs -I{} cp {} findings-x.md'
+fw "sed -i on a findings file" true 'sed -i s/a/b/ findings.md'
+fw "a quoted > is not a redirect" false 'echo "x > FINDINGS.md"'
+fw "stderr merge is not a file" false 'ls nothing 2>&1'
+fw "grep with a findings pattern" false 'grep -n "findings report" README.md'
+GDW="$TEST_TMP/gd-w2"; mkdir -p "$GDW/fbatch"; echo 2 > "$GDW/fbatch/waits"
+markgd() { MARK_GD="$GDW" mark "$@"; }
+rcgd() { local rc=0; clean node "$FB/cell.js" markers --task "$1" --transcript "$2" --git-dir "$GDW" < /dev/null > /dev/null 2>&1 || rc=$?; echo "$rc"; }
+LIT="$TEST_TMP/lit.jsonl"; mk_tx "$LIT" "node -e \"console.log('wait-dispatch-results.js')\"" "$W" "$W" 'scripts/dispatch-hetero.sh --repair pool A-F1'
+[ "$(rcgd fb-mid-batch "$LIT")" = 0 ] || fail "a script name inside node -e code must not count as a poll (rc $(rcgd fb-mid-batch "$LIT"))"
+[ "$(markgd fb-mid-batch "$LIT" m_waited)" = true ] || fail "literal-name tx: m_waited"
+LIT2="$TEST_TMP/lit2.jsonl"; mk_tx "$LIT2" 'grep -n wait-dispatch-results.js scripts/README.md' 'echo "wait-dispatch-results.js"' "$W" "$W"
+[ "$(rcgd fb-mid-batch "$LIT2")" = 0 ] || fail "greps and echoes of the script name must not count as polls"
+INN="$TEST_TMP/inner.jsonl"; mk_tx "$INN" "bash -c '$W'" "timeout 30 $W" 'scripts/dispatch-hetero.sh --repair pool A-F1'
+[ "$(rcgd fb-mid-batch "$INN")" = 0 ] || fail "bash -c and timeout runs of the wait script must each count once"
+MG="$TEST_TMP/mg.jsonl"; mk_tx "$MG" 'echo $(scripts/merge-lane.sh A)'
+expect "merge inside a substitution" fb-critical-guard "$MG" m_clean_merged true
+MG2="$TEST_TMP/mg2.jsonl"; mk_tx "$MG2" "bash -c 'cd /x && scripts/merge-lane.sh A'" 'printf "A\n" | xargs scripts/merge-lane.sh B'
+expect "merge through bash -c and xargs" fb-critical-guard "$MG2" m_clean_merged true
+MG3="$TEST_TMP/mg3.jsonl"; mk_tx "$MG3" 'git commit -m "scripts/merge-lane.sh A"' 'echo "scripts/merge-lane.sh A"'
+expect "a commit message naming the script is not a merge" fb-critical-guard "$MG3" m_clean_merged false
+
+echo "--- class C: markers.sh passes an explicit git dir and requires the poll counter; a refusal emits marker_cell_refused ---"
+NOGD="$TEST_TMP/gd-none"; mkdir -p "$NOGD"
+rc=0; out=$(clean node "$FB/cell.js" markers --task fb-mid-batch --transcript "$MID_GOOD" --git-dir "$NOGD" --require-counter --emit-refusal 2>/dev/null < /dev/null) || rc=$?
+[ "$rc" = 3 ] || fail "--require-counter with no counter: rc=$rc want 3"
+grep -q '^marker_cell_refused=true$' <<<"$out" || fail "--emit-refusal must print marker_cell_refused=true: $out"
+echo 3 > "$GD/fbatch/waits"
+rc=0; out=$(clean node "$FB/cell.js" markers --task fb-mid-batch --transcript "$MID_GOOD" --git-dir "$GD" --require-counter --emit-refusal 2>/dev/null < /dev/null) || rc=$?
+[ "$rc" = 3 ] && grep -q '^marker_cell_refused=true$' <<<"$out" || fail "a poll-count mismatch must emit marker_cell_refused too: rc=$rc $out"
+for t in fb-mid-batch fb-pool fb-critical-guard fb-deadman; do
+  grep -q -- '--git-dir "$(git rev-parse --absolute-git-dir' "$FB/cc/tasks/$t/markers.sh" && grep -q -- '--require-counter --emit-refusal' "$FB/cc/tasks/$t/markers.sh" || fail "tasks/$t/markers.sh must pass --git-dir, --require-counter and --emit-refusal"
+done
+
 stop_after unit
 
 # ---- scorer on stub rows ------------------------------------------------------------------------------------
@@ -218,6 +259,7 @@ stop_after scorer
 # ---- the real cc path with a fake claude --------------------------------------------------------------------
 echo "=== cc path with a fake claude ==="
 BIN="$TEST_TMP/bin"; mkdir -p "$BIN"
+ln -sf "$(command -v node)" "$BIN/node"   # the PATH filter below may drop the directory that holds node (npm/nvm installs)
 cat > "$BIN/claude" << 'EOF'
 #!/usr/bin/env node
 'use strict';
@@ -262,8 +304,11 @@ const S = {
   },
 };
 const scen = process.env.FAKE_SCEN || 'good';
-const turns = S[task][scen === 'fwrite' ? 'good' : scen];
-const cmds = ((turns[resume ? 1 : 0]) || []).concat(scen === 'fwrite' && !resume ? ['echo hold > FINDINGS-A.md'] : []);
+const turns = S[task][scen === 'fwrite' || scen === 'loop' ? 'good' : scen];
+let base = (turns[resume ? 1 : 0]) || [];
+// loop: lane D is polled by a shell loop; the replay cannot know how many polls ran, so the cell must be refused.
+if (scen === 'loop' && task === 'fb-mid-batch' && !resume) base = ['for i in 1 2; do ' + W('D.impl') + '; done', 'scripts/dispatch-hetero.sh --repair pool A-F1'];
+const cmds = base.concat(scen === 'fwrite' && !resume ? ['echo hold > FINDINGS-A.md'] : []);
 const sid = `fake-${task}`;
 const out = (o) => process.stdout.write(`${JSON.stringify(o)}\n`);
 out({ type: 'system', subtype: 'init', session_id: sid });
@@ -371,6 +416,17 @@ node -e '
 echo "--- the cell transcripts are kept next to the results (the post-run check needs them) ---"
 [ -s "$R2B.cells/fb-deadman/base/1/transcript.jsonl" ] || fail "cell transcript not kept at $R2B.cells"
 
+echo "--- a poll count the replay cannot reproduce: the full cell path ends in exit 3 -> infra_fail marker_error ---"
+R2C="$TEST_TMP/cc-pilot-loop.jsonl"; L2C="$TEST_TMP/cc-pilot-loop.log"
+out=$(run_cc "$R2C" "$L2C" loop --pilot 2>&1) || fail "pilot loop exit $?: $out"
+node -e '
+  const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const mid = rows.filter((r) => r.task_id === "fb-mid-batch");
+  const others = rows.filter((r) => r.task_id !== "fb-mid-batch");
+  if (mid.length !== 2 || mid.some((r) => r.failure_class !== "infra_fail" || r.failure_cause !== "marker_error")) { console.error(JSON.stringify(mid.map((r) => [r.failure_class, r.failure_cause]))); process.exit(1); }
+  if (others.some((r) => r.failure_class !== null)) { console.error("other tasks must be unaffected"); process.exit(1); }
+' "$R2C" || fail "a loop-polled cell must be an infra_fail marker_error row"
+
 echo "--- a second pilot call resumes: nothing left to run, no new rows ---"
 out=$(run_cc "$R1" "$L1" good --pilot 2>&1) || fail "pilot resume exit $?: $out"
 [ "$(wc -l < "$R1")" = 6 ] || fail "resume added rows: $(wc -l < "$R1")"
@@ -405,13 +461,29 @@ node -e '
   const spent = rows.reduce((s, r) => s + r.cost_usd, 0);
   if (!(spent < 10) || rows.some((r) => Math.abs(r.cost_usd - 1.0) > 1e-9)) { console.error("spent " + spent + " " + JSON.stringify(rows.map((r) => r.cost_usd))); process.exit(1); }
 ' "$R4" || fail "extrapolation rows: spent must be under the cap and each two-turn cell must carry its measured 1.00 USD"
-echo "--- control for (d): the same grid at 0.01 USD per turn is not stopped ---"
+echo "--- control for (d): the same grid at 0.01 USD per turn is not stopped, and is scored (not INVALID / INCOMPLETE) ---"
 R4B="$TEST_TMP/cc-cheap.jsonl"; L4B="$TEST_TMP/cc-cheap.log"
 CC_ENV=(FAKE_COST=0.01 ONOFF_MAX_USD=10)
 rc=0; out=$(run_cc "$R4B" "$L4B" good --model sonnet --reps 1 2>&1) || rc=$?
 CC_ENV=()
 grep -q 'spend extrapolation\|spend cap' <<<"$out" && fail "cheap grid must not be stopped: $out"
 [ "$(wc -l < "$R4B")" = 8 ] || fail "cheap grid rows: $(wc -l < "$R4B") (rc=$rc): $out"
+grep -qE '^findings-batch: (FAIL|PASS|NOT-SHIP|NOT NEEDED)$' <<<"$out" || fail "cheap grid must reach a content verdict: $out"
+grep -qE '^findings-batch: (INVALID|INCOMPLETE)$' <<<"$out" && fail "cheap grid verdict must not be INVALID/INCOMPLETE: $out"
+case "$rc" in 0|3|4) ;; *) fail "cheap grid scorer rc=$rc is not a content-verdict code" ;; esac
+echo "--- class A regression: cap 2, 0.75 USD per turn (1.50 per two-turn cell) must stop with spent <= cap ---"
+R4D="$TEST_TMP/cc-cap2.jsonl"; L4D="$TEST_TMP/cc-cap2.log"
+CC_ENV=(FAKE_COST=0.75 ONOFF_MAX_USD=2)
+rc=0; out=$(run_cc "$R4D" "$L4D" good --pilot 2>&1) || rc=$?
+CC_ENV=()
+[ "$rc" = 1 ] || fail "cap 2 / 0.75 per turn: rc=$rc want 1: $out"
+grep -q 'spend cap' <<<"$out" || fail "cap 2 message: $out"
+node -e '
+  const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const spent = rows.reduce((s, r) => s + r.cost_usd, 0);
+  if (spent > 2 + 1e-9 || rows.length !== 1) { console.error("rows " + rows.length + " spent " + spent); process.exit(1); }
+' "$R4D" || fail "must stop before exceeding ONOFF_MAX_USD (cap 2, 0.75 per turn): spent over the cap or more than one cell ran"
+grep -q ONOFF_TIMEOUT_OVERRIDE "$BASE/run-fbatch-campaign.js" && fail "ONOFF_TIMEOUT_OVERRIDE must not exist: it would silently replace the prereg cc.timeout"
 R4C="$TEST_TMP/cc-cap.jsonl"; L4C="$TEST_TMP/cc-cap.log"
 CC_ENV=(ONOFF_MAX_USD=1)
 rc=0; out=$(run_cc "$R4C" "$L4C" good --model sonnet 2>&1) || rc=$?

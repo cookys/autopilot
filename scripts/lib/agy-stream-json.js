@@ -83,6 +83,19 @@ function encodeUserLine(prompt) {
   return `${JSON.stringify({ event: 'user', message: { content: String(prompt) } })}\n`;
 }
 
+// The last `result` event's result object, or null.
+function lastResult(text) {
+  let result = null;
+  for (const line of String(text).split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    let ev;
+    try { ev = JSON.parse(t); } catch (_e) { continue; }
+    if (ev && ev.event === 'result' && ev.result && typeof ev.result === 'object') result = ev.result;
+  }
+  return result;
+}
+
 // Returns {ok:true, result} for SUCCESS, {ok:false, reason} for ERROR / no result event.
 function parseStream(text, env = process.env) {
   let result = null;
@@ -161,26 +174,35 @@ function main(argv) {
     process.exit(127);
   });
   child.on('close', (code, signal) => {
-    // --text-compat: the old `agy -p` text mode left agy's raw stdout in the caller's log whatever happened,
-    // and callers classify failures from that text (authentication wording, ...). On any failure path the raw
-    // stdout is replayed on our stdout so that text survives. Without the flag nothing changes.
-    const replayRaw = () => { if (textCompat) { const raw = Buffer.concat(chunks); if (raw.length) fs.writeSync(1, raw); } };
-    if (code !== 0) replayRaw();
+    // --text-compat: the old `agy -p` text mode left agy's plain text in the caller's log whatever happened,
+    // and callers classify failures from that text (authentication wording, ...). On a failure path the text of
+    // the last `result` event (response, else error) plus one newline is written to stdout; only when no
+    // result event parses at all is the raw stdout replayed. Without the flag nothing changes.
+    const replayText = () => {
+      if (!textCompat) return;
+      const raw = Buffer.concat(chunks);
+      const r = lastResult(raw.toString('utf8'));
+      if (r) {
+        const t = typeof r.response === 'string' && r.response !== '' ? r.response
+          : (r.error == null ? '' : (typeof r.error === 'string' ? r.error : JSON.stringify(r.error)));
+        fs.writeSync(1, `${t}\n`);
+      } else if (raw.length) fs.writeSync(1, raw);
+    };
+    if (code !== 0) replayText();
     if (code !== 0) process.exit(code == null ? 128 + ({ SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 }[signal] || 1) : code);
     const parsed = parseStream(Buffer.concat(chunks).toString('utf8'));
     // --text-compat: an empty SUCCESS response is what `agy -p` text mode printed too (an empty line, exit 0);
     // the caller's own empty-output / oracle classification decides, so it is not turned into a helper failure.
     if (!parsed.ok && textCompat && /^agy_empty_response/.test(parsed.reason)) {
-      process.stderr.write(`agy-stream-json.js: ${parsed.reason}\n`);
-      process.stdout.write('\n');
+      process.stdout.write('\n'); // no stderr line either: the old text mode printed nothing here
       return;
     }
     if (!parsed.ok) {
-      replayRaw();
+      replayText();
       process.stderr.write(`agy-stream-json.js: ${parsed.reason}\n`);
       process.exit(1);
     }
-    if (parsed.note) process.stderr.write(`agy-stream-json.js: ${parsed.note}\n`);
+    if (parsed.note && !textCompat) process.stderr.write(`agy-stream-json.js: ${parsed.note}\n`);
     process.stdout.write(emit === 'envelope' ? `${JSON.stringify(parsed.result)}\n` : parsed.result.response + (textCompat && emit === 'response' ? '\n' : ''));
   });
 }

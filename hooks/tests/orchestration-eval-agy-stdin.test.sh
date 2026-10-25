@@ -13,6 +13,10 @@ HARNESS="${EVAL_HARNESS:-$REPO_ROOT/evals/orchestration/run-orchestration-eval.s
 BIN="$TEST_TMP/bin"; REC="$TEST_TMP/rec"; mkdir -p "$BIN" "$REC"
 cat >"$BIN/agy" <<'FAKE'
 #!/usr/bin/env node
+// Fake agy. Text mode (argv has -p, the pre-BL-0302 transport) prints plain text only. Stream-json mode
+// prints NDJSON events; the formats follow scripts/lib/agy-stream-json.js: a `result` event is
+// {"event":"result","result":{status,response,error}} (parseStream and lastResult read event==='result',
+// result.status, result.response, result.error; status other than SUCCESS = failure, error carries the text).
 const fs = require('fs');
 const a = process.argv.slice(2);
 if (a[0] === '--version') { console.log('1.4.6'); process.exit(0); }
@@ -21,15 +25,16 @@ const stdin = fs.readFileSync(0);
 fs.writeFileSync(`${process.env.REC}/${n}.argv`, JSON.stringify(a));
 fs.writeFileSync(`${process.env.REC}/${n}.stdin`, stdin);
 const mode = process.env.FAKE_MODE || 'ok';
-const legacy = a.includes('-p'); // pre-BL-0302 text transport: plain text on stdout
-if (mode === 'auth') { process.stdout.write('authentication invalid API key\n'); process.exit(7); }
-if (mode === 'exit3') { process.stdout.write('some diagnostic\n'); process.exit(3); }
-if (mode === 'empty') {
-  if (legacy) { process.stdout.write('\n'); process.exit(0); }
-  console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: '' } })); process.exit(0);
-}
-if (legacy) { process.stdout.write('FAKE-AGY-RESPONSE\n'); process.exit(0); }
-console.log(JSON.stringify({ event: 'result', result: { status: 'SUCCESS', response: 'FAKE-AGY-RESPONSE' } }));
+const legacy = a.includes('-p');
+const TEXT = { auth: ['authentication invalid API key', 7], exit3: ['some diagnostic', 3], empty: ['', 0], ok: ['FAKE-AGY-RESPONSE', 0] }[mode];
+const [text, code] = TEXT;
+if (legacy) { process.stdout.write(`${text}\n`); process.exit(code); }
+const ev = (o) => process.stdout.write(`${JSON.stringify(o)}\n`);
+ev({ event: 'init', session: 'fake' });
+ev({ event: 'assistant', message: { content: text } });
+if (code === 0) ev({ event: 'result', result: { status: 'SUCCESS', response: text } });
+else ev({ event: 'result', result: { status: 'ERROR', error: text } });
+process.exit(code);
 FAKE
 chmod +x "$BIN/agy"
 export PATH="$BIN:$PATH" REC
@@ -50,28 +55,51 @@ assert_contains "$ARGV" '"--dangerously-skip-permissions"' "agy-eval: permission
 assert_contains "$ARGV" '"--print-timeout","1m"' "agy-eval: print-timeout preserved"
 assert_contains "$(cat "$OUT/run.log" 2>/dev/null)" 'FAKE-AGY-RESPONSE' "agy-eval: unwrapped response reaches the raw log"
 
-# --- failure scenarios: the harness classification must match the pre-BL-0302 (text transport) behaviour ---
-run_mode() { # <mode> -> sets CAUSE
-  local o="$TEST_TMP/out-$1"; mkdir -p "$o"
-  FAKE_MODE="$1" timeout 300 bash "$HARNESS" --task t1-fix-with-decoy --arm on --runner agy --model fake-model --out "$o" >"$TEST_TMP/run-$1.log" 2>&1 </dev/null || true
-  CAUSE="$(node -e 'try{process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).failure_cause))}catch(e){process.stdout.write("NO-RESULT")}' "$o/result.json")"
-  RUNLOG="$(cat "$o/run.log" 2>/dev/null)"
+# --- failure scenarios: run.log bytes and failure_cause must equal the pre-BL-0302 (text transport) harness ---
+# Each harness runs from a throw-away tree (symlinks to the repo, REPO_ROOT = ../.. of the harness copy), so the
+# base harness (git show a10bceef5:...) and the HEAD harness each see the repo, and EVAL_HELPER can swap the helper.
+HELPER_REAL="$REPO_ROOT/scripts/lib/agy-stream-json.js"
+HELPER_USE="${EVAL_HELPER:-$HELPER_REAL}"
+build_tree() { # <name> <harness file> -> echoes the harness path inside the tree
+  local t="$TEST_TMP/tree-$1" e
+  mkdir -p "$t/evals/orchestration" "$t/scripts/lib"
+  for e in "$REPO_ROOT"/* "$REPO_ROOT"/.[!.]*; do
+    case "$(basename "$e")" in .git|evals|scripts) continue ;; esac
+    ln -s "$e" "$t/$(basename "$e")"
+  done
+  for e in "$REPO_ROOT"/evals/*; do [ "$(basename "$e")" = orchestration ] || ln -s "$e" "$t/evals/$(basename "$e")"; done
+  for e in "$REPO_ROOT"/evals/orchestration/*; do ln -s "$e" "$t/evals/orchestration/$(basename "$e")"; done
+  for e in "$REPO_ROOT"/scripts/*; do [ "$(basename "$e")" = lib ] || ln -s "$e" "$t/scripts/$(basename "$e")"; done
+  for e in "$REPO_ROOT"/scripts/lib/*; do ln -s "$e" "$t/scripts/lib/$(basename "$e")"; done
+  rm -f "$t/scripts/lib/agy-stream-json.js" "$t/evals/orchestration/run-orchestration-eval.sh"
+  cp "$HELPER_USE" "$t/scripts/lib/agy-stream-json.js"
+  cp "$2" "$t/evals/orchestration/run-orchestration-eval.sh"
+  echo "$t/evals/orchestration/run-orchestration-eval.sh"
 }
-run_mode auth
-assert_eq "authentication" "$CAUSE" "agy-eval: exit 7 with authentication wording classifies as authentication"
-assert_contains "$RUNLOG" 'authentication invalid API key' "agy-eval: agy's raw diagnostic stays in the run log"
-run_mode empty
-assert_eq "oracle_rejected" "$CAUSE" "agy-eval: an empty SUCCESS response classifies as oracle_rejected (same as the text transport)"
-run_mode exit3
-assert_eq "runner_error" "$CAUSE" "agy-eval: a non-zero exit without auth wording classifies as runner_error"
-assert_contains "$RUNLOG" 'some diagnostic' "agy-eval: raw stdout of a failing agy stays in the run log"
+git -C "$REPO_ROOT" show a10bceef5:evals/orchestration/run-orchestration-eval.sh >"$TEST_TMP/base-harness.sh" 2>/dev/null || fail "cannot read the base harness from a10bceef5"
+BASE_H="$(build_tree base "$TEST_TMP/base-harness.sh")"
+HEAD_H="$(build_tree head "$HARNESS")"
+run_mode() { # <label> <harness> <mode> -> sets CAUSE, RUNLOG_FILE
+  local o="$TEST_TMP/out-$1-$3"; mkdir -p "$o"
+  FAKE_MODE="$3" timeout 300 bash "$2" --task t1-fix-with-decoy --arm on --runner agy --model fake-model --out "$o" >"$TEST_TMP/run-$1-$3.log" 2>&1 </dev/null || true
+  CAUSE="$(node -e 'try{process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).failure_cause))}catch(e){process.stdout.write("NO-RESULT")}' "$o/result.json")"
+  RUNLOG_FILE="$o/run.log"
+}
+for m in auth exit3 empty ok; do
+  run_mode base "$BASE_H" "$m"; BASE_CAUSE="$CAUSE"; BASE_LOG="$RUNLOG_FILE"
+  run_mode head "$HEAD_H" "$m"; HEAD_CAUSE="$CAUSE"; HEAD_LOG="$RUNLOG_FILE"
+  assert_eq "$BASE_CAUSE" "$HEAD_CAUSE" "agy-eval[$m]: failure_cause equals the text-transport harness ($BASE_CAUSE)"
+  if cmp -s "$BASE_LOG" "$HEAD_LOG"; then pass_msg=1; else pass_msg=0; fi
+  assert_eq "1" "$pass_msg" "agy-eval[$m]: run.log is byte-identical to the text-transport harness (base: $(od -An -c "$BASE_LOG" | tr -s ' ' | head -c 80) | head: $(od -An -c "$HEAD_LOG" | tr -s ' ' | head -c 80))"
+done
+assert_eq "authentication" "$(run_mode head "$HEAD_H" auth; echo "$CAUSE")" "agy-eval: auth scenario really classifies as authentication"
 
 # --- helper level: exit code passthrough and the --text-compat contract ---
 HELPER="$REPO_ROOT/scripts/lib/agy-stream-json.js"
 printf 'p' >"$TEST_TMP/p.txt"
 FAKE_MODE=exit3 node "$HELPER" run --text-compat --prompt-file "$TEST_TMP/p.txt" -- agy >"$TEST_TMP/h.out" 2>/dev/null; HRC=$?
 assert_eq "3" "$HRC" "helper --text-compat: agy exit code passed through"
-assert_contains "$(cat "$TEST_TMP/h.out")" 'some diagnostic' "helper --text-compat: raw stdout replayed on failure"
+assert_eq "some diagnostic" "$(cat "$TEST_TMP/h.out")" "helper --text-compat: the failing result's text is replayed on failure"
 FAKE_MODE=exit3 node "$HELPER" run --prompt-file "$TEST_TMP/p.txt" -- agy >"$TEST_TMP/h2.out" 2>/dev/null; HRC=$?
 assert_eq "3" "$HRC" "helper default: exit code passed through"
 assert_eq "" "$(cat "$TEST_TMP/h2.out")" "helper default: stdout stays empty on failure (unchanged)"

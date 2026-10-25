@@ -27,6 +27,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { getToolEvent } = require('./transcript-reader-lib.js');
+const { emitAdditionalContext } = require('./_shared/hook-output.js');
 
 // Strong error patterns — only these trigger failure on exit code 0.
 // Bare "error" keyword is intentionally excluded to prevent false positives
@@ -208,7 +209,8 @@ function runHook(rawInput) {
 
       const msg = escalationMessage(count);
       if (msg) {
-        process.stdout.write(msg + '\n');
+        // PostToolUse plain stdout never reaches the model (BL-0304): ship it as additionalContext, text unchanged.
+        emitAdditionalContext('PostToolUse', msg);
       }
     } else {
       // Success: reset consecutive counter

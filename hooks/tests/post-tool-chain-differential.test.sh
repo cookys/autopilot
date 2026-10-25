@@ -68,6 +68,7 @@ neg exit-code 's/if (r.code > status) status = r.code;/status = 1;/' quiet-bash-
 neg stdout-byte 's/if (r.out.length) emitOut(r.out);/if (r.out.length) emitOut(r.out.subarray(0, r.out.length - 1));/' bash-fail-escalation-ladder
 neg aggregate-order "s/const MEMBERS = \['intent-capture', 'reload-watch', 'audit-log', 'log-error', 'failure-escalation'\];/const MEMBERS = ['intent-capture', 'failure-escalation', 'audit-log', 'log-error', 'reload-watch'];/" reload-and-failure-both-emit
 neg member-order-sorted "s/for (const stem of members) {/for (const stem of members.slice().sort()) {/" reload-and-failure-both-emit
+neg no-context-merge 's/    if (events.length === 1) {/    if (false) {/' reload-and-failure-both-emit
 neg drop-state-write "s/for (const stem of members) {/for (const stem of members.filter((m) => m !== 'log-error')) {/" log-error-keyword-read
 
 # --- negative controls: pollution, exit status, order (unit tests red on a broken lib) and the umask pin ---
@@ -426,6 +427,8 @@ unit_neg() { # <label> <sed command>
   printf '%s\n' "$out" | grep -Eq 'fail [1-9]' || fail "unit negative control '$label': no failing test reported"
 }
 unit_neg no-failopen-note 's/    else err.push(/    else void (/'
+unit_neg context-not-merged 's/    if (events.length === 1) {/    if (false) {/'
+unit_neg context-held-dropped 's/  if (held.length === 1) emitOut(held\[0\].out);/  if (false) emitOut(held[0].out);/'
 unit_neg status-min 's/if (r.code > status) status = r.code;/if (r.code < status) status = r.code;/'
 unit_neg exit-not-restored 's/    process.exit = realExit;//'
 unit_neg env-leak 's/  for (const k of Object.keys(process.env)) if (!(k in snap.env)) delete process.env\[k\];//'

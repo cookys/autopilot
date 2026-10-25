@@ -144,7 +144,7 @@ test('wrapper: AUTOPILOT_SUGGEST_COMPACT=false opts out (no counter file written
 });
 
 // P7a advisory bridge: the nudge stays on stderr and is also exactly one advisory row for the live mod.
-// AUTOPILOT_ADVISORY_BRIDGE_SUGGEST_COMPACT=inject is the old behaviour (stderr only, no row).
+// AUTOPILOT_ADVISORY_BRIDGE_SUGGEST_COMPACT=inject writes no row; the text reaches the model as PostToolUse additionalContext.
 test('wrapper: bridge — the 50th call writes one advisory row with the stderr text; knob inject writes none', () => {
   for (const [mode, expectRow] of [['', true], ['inject', false]]) {
     const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'suggest-compact-bridge-'));
@@ -156,6 +156,15 @@ test('wrapper: bridge — the 50th call writes one advisory row with the stderr 
       assert.equal(r.status, 0);
       assert.match(r.stderr, /Consider running \/compact/);
       assert.equal(fs.existsSync(rows), expectRow);
+      // BL-0304: sink mode keeps stdout empty (the row is the channel); inject mode must put the text on stdout as ONE
+      // PostToolUse additionalContext object, because stderr on exit 0 never reaches the model.
+      if (expectRow) assert.equal(r.stdout, '');
+      else {
+        const o = JSON.parse(r.stdout);
+        assert.deepEqual(Object.keys(o), ['hookSpecificOutput']);
+        assert.equal(o.hookSpecificOutput.hookEventName, 'PostToolUse');
+        assert.equal(o.hookSpecificOutput.additionalContext, r.stderr.split('\n')[0]);
+      }
       if (expectRow) {
         const lines = fs.readFileSync(rows, 'utf8').trim().split('\n').map(l => JSON.parse(l));
         assert.equal(lines.length, 1);

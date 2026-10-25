@@ -7,8 +7,13 @@
  *
  * Contract (plan § 2.5 and Design A chain contract):
  *  - A chain only FORWARDS. Each member's stdout, stderr and exit status are the bytes it would produce as
- *    its own process; they are never parsed, merged or rewritten. Per stream, members' bytes follow the
- *    registration order (MEMBERS order). The chain exits with the highest member status.
+ *    its own process, in registration order (MEMBERS order); the chain exits with the highest member status.
+ *    ONE exception (BL-0304): the host parses stdout only when the WHOLE stream is a single JSON object, and two
+ *    members (reload-watch, failure-escalation) each write one `hookSpecificOutput.additionalContext` object, so
+ *    the concatenation of two would be invalid. A member stdout that is exactly such a pure context object is
+ *    HELD until the last member finished; one held object is then written unchanged, several are merged into one
+ *    object (texts joined by "\n", registration order). Every other stdout byte is forwarded at once as before.
+ *    Cost: a held context is lost if a later member hangs and the host kills the chain.
  *  - fd 0 is read once by the caller and handed to every member as text.
  *  - Each member runs under its own try/catch, so one throw cannot skip the others or change their status.
  *    A member that throws (a bug, or a load failure) fails open: one stderr line, status 0.
@@ -26,6 +31,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { parsePureContext } = require('./_shared/hook-output.js');
 
 // Design A members, in hooks/hooks.json registration order (the five `.*` PostToolUse observers that
 // precede opt-in-multiplexer.js). The chain's registered timeout must be the largest of theirs.
@@ -156,15 +162,26 @@ function runChain({ stdin, members = MEMBERS, load, writeOut, writeErr } = {}) {
   const emitErr = writeErr || ((b) => writeAll(2, b));
   const text = typeof stdin === 'string' ? stdin : '';
   let status = 0;
+  const held = []; // pure additionalContext objects, merged into one after the last member (BL-0304)
   for (const stem of members) {
     const r = capture(() => {
       const mod = loader(stem);
       if (!mod || typeof mod.runHook !== 'function') throw new Error(`${stem} exports no runHook`);
       return mod.runHook(text);
     });
-    if (r.out.length) emitOut(r.out);
+    const ctx = r.out.length ? parsePureContext(r.out) : null;
+    if (ctx) held.push({ out: r.out, ...ctx });
+    else if (r.out.length) emitOut(r.out);
     if (r.err.length) emitErr(r.err);
     if (r.code > status) status = r.code;
+  }
+  if (held.length === 1) emitOut(held[0].out);
+  else if (held.length > 1) {
+    const events = [...new Set(held.map((h) => h.event))];
+    if (events.length === 1) {
+      const merged = { hookSpecificOutput: { hookEventName: events[0], additionalContext: held.map((h) => h.text).join('\n') } };
+      emitOut(Buffer.from(`${JSON.stringify(merged)}\n`));
+    } else for (const h of held) emitOut(h.out); // mixed events cannot share one object: forward as is
   }
   return status;
 }

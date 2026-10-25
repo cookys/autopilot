@@ -8,7 +8,7 @@
  *   cur    the five observers as in this tree (export refactor + unchanged CLI wrapper), separate processes
  *   chain  hooks/post-tool-chain.js (one process)
  * Host-visible oracle for a call (plan Phase 1): the five standalone stdout streams concatenated in
- * registration order, stderr likewise, exit = highest of the five. Exit code, stdout and stderr are compared
+ * registration order (pure additionalContext objects merged into one, BL-0304: see hostStdout), stderr likewise, exit = highest of the five. Exit code, stdout and stderr are compared
  * RAW, and so are state files: nothing the observers wrote is rewritten before comparing. Volatile values (clock,
  * hostname, pid) are frozen identically in every process of every arm by ptc-freeze.js (--require via NODE_OPTIONS),
  * and every arm runs in the SAME sandbox paths (recreated before each run), so the bytes are equal by construction.
@@ -380,10 +380,32 @@ function spawnOnce(script, argv, input, sb, extraEnv) {
 function runSeparate(dir, input, sb, extraEnv) {
   return MEMBERS.map((stem) => Object.assign({ hook: stem }, spawnOnce(observerPath(dir, stem), [], input, sb, extraEnv)));
 }
+// BL-0304 host-visible stdout: the host parses stdout only when it is ONE JSON object, so the observers' pure
+// {hookSpecificOutput:{hookEventName,additionalContext}} objects (reload-watch, failure-escalation) are one object
+// whose texts are joined by "\n"; any other stdout stays in order in front of it. Deliberately NOT the chain's own code
+// (independent re-derivation): this file parses with plain JSON.parse and builds the object itself.
+function pureContext(buf) {
+  let o;
+  try { o = JSON.parse(buf.toString('utf8')); } catch { return null; }
+  const h = o && typeof o === 'object' && Object.keys(o).length === 1 ? o.hookSpecificOutput : null;
+  if (!h || typeof h !== 'object' || Object.keys(h).sort().join() !== 'additionalContext,hookEventName') return null;
+  return typeof h.additionalContext === 'string' && typeof h.hookEventName === 'string' ? h : null;
+}
+function hostStdout(bufs) {
+  const rest = [], ctx = [];
+  for (const b of bufs) { const h = b.length ? pureContext(b) : null; if (h) ctx.push({ b, h }); else rest.push(b); }
+  if (ctx.length === 1) rest.push(ctx[0].b);
+  else if (ctx.length > 1) {
+    const ev = [...new Set(ctx.map((c) => c.h.hookEventName))];
+    if (ev.length === 1) rest.push(Buffer.from(JSON.stringify({ hookSpecificOutput: { hookEventName: ev[0], additionalContext: ctx.map((c) => c.h.additionalContext).join('\n') } }) + '\n'));
+    else for (const c of ctx) rest.push(c.b);
+  }
+  return Buffer.concat(rest);
+}
 function aggregate(per) {
   return {
     code: Math.max(...per.map((p) => p.code)),
-    stdout: Buffer.concat(per.map((p) => p.stdout)),
+    stdout: hostStdout(per.map((p) => p.stdout)),
     stderr: Buffer.concat(per.map((p) => p.stderr)),
   };
 }
@@ -688,7 +710,7 @@ async function main() {
           if (arm === 'chain-rev') {
             // members are independent: the reversed chain's streams are the per-hook golden streams, reversed
             const rev = want.steps[i].per.slice().reverse();
-            wantAgg = Object.assign({ code: Math.max(...rev.map((x) => x.code)) }, encBytes(Buffer.concat(rev.map((x) => decBytes(x, 'stdout'))), 'stdout'), encBytes(Buffer.concat(rev.map((x) => decBytes(x, 'stderr'))), 'stderr'));
+            wantAgg = Object.assign({ code: Math.max(...rev.map((x) => x.code)) }, encBytes(hostStdout(rev.map((x) => decBytes(x, 'stdout'))), 'stdout'), encBytes(Buffer.concat(rev.map((x) => decBytes(x, 'stderr'))), 'stderr'));
           }
           cmpAgg(`${fx.name}[${i}] ${arm} aggregate`, s.agg, wantAgg, res.sb);
           if (arm !== 'chain' && arm !== 'chain-rev') s.per.forEach((p, j) => cmpAgg(`${fx.name}[${i}] ${arm} ${p.hook}`, p, want.steps[i].per[j], res.sb));

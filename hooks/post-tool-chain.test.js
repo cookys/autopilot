@@ -38,6 +38,42 @@ test('members are forwarded in order, per stream, and every member sees the same
   assert.strictEqual(r.code, 0);
 });
 
+// BL-0304: the host parses stdout only when it is ONE JSON object. Pure additionalContext objects are held and merged.
+const ctxObj = (event, text) => `${JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } })}\n`;
+test('two pure additionalContext outputs become ONE JSON object (texts joined by newline, registration order)', () => {
+  const mods = {
+    a: fake(() => { process.stdout.write(ctxObj('PostToolUse', 'first')); return 0; }),
+    quiet: fake(() => 0),
+    b: fake(() => { process.stdout.write(ctxObj('PostToolUse', 'second')); return 0; }),
+  };
+  const r = run(['a', 'quiet', 'b'], mods);
+  assert.strictEqual(r.out, ctxObj('PostToolUse', 'first\nsecond'));
+  assert.doesNotThrow(() => JSON.parse(r.out), 'the whole stdout parses as one object');
+});
+
+test('a single pure additionalContext output is written byte-for-byte; other stdout is forwarded at once and in order', () => {
+  const one = ctxObj('PostToolUse', 'only');
+  const mods = {
+    a: fake(() => { process.stdout.write(one); return 0; }),
+    b: fake(() => { process.stdout.write('plain;'); return 0; }),
+  };
+  const r = run(['a', 'b'], mods);
+  assert.strictEqual(r.out, `plain;${one}`);
+  const r2 = run(['a'], mods);
+  assert.strictEqual(r2.out, one);
+});
+
+test('an object with a permissionDecision, extra keys or a different event is never merged', () => {
+  const dec = `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: 'x' } })}\n`;
+  const mods = {
+    a: fake(() => { process.stdout.write(dec); return 0; }),
+    b: fake(() => { process.stdout.write(ctxObj('PostToolUse', 'ctx')); return 0; }),
+    c: fake(() => { process.stdout.write(ctxObj('PreToolUse', 'other')); return 0; }),
+  };
+  assert.strictEqual(run(['a', 'b'], mods).out, dec + ctxObj('PostToolUse', 'ctx'));
+  assert.strictEqual(run(['b', 'c'], mods).out, ctxObj('PostToolUse', 'ctx') + ctxObj('PreToolUse', 'other'));
+});
+
 test('a member that throws fails open: one note on stderr, the others still run, status 0', () => {
   const mods = {
     a: fake(() => { process.stdout.write('A;'); return 0; }),

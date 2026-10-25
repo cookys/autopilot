@@ -837,7 +837,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-19
 - **Origin**: owner
 - **Problem**: P2 guard-port Phase 1（未註冊的 chain 與差異比對 harness）已合併，下一步 Phase 2：把 chain 註冊進 hooks.json。P4 的 progress.json 與 work-round 投影先掛起，因為目前沒有程式會讀它。
-- **Impact**: 不寫 guard-port 計畫，工具呼叫的 hook 延遲就維持現狀。progress.json 掛起不影響現有功能，radar 要讀時再補。
+- **Impact**: Phase 2 不把 chain 註冊進 hooks.json，工具呼叫的 hook 延遲就維持現狀。progress.json 掛起不影響現有功能，radar 要讀時再補。
 - **Trigger**: P2: Phase 1 merged (ffee03326, 2026-10-25); Phase 2 (register the chain in hooks.json) can start now. P4 progress.json and work-round projection: radar asks for it
 - **Trigger-Type**: ready
 - **Effort**: M

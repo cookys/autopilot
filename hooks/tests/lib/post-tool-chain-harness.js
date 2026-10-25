@@ -14,11 +14,11 @@
  * and every arm runs in the SAME sandbox paths (recreated before each run), so the bytes are equal by construction.
  * The sandbox lives at ONE fixed absolute path (/tmp/ptc-fixed-sandbox, live dir /dev/shm/ptc-fixed-live), the same on
  * every host and in every arm and run, so the golden file stores the observers' real bytes: no placeholder, no
- * expansion. The kernel serialises runs that would share a path: each resource (sandbox, scratch, live dir) has its lock
- * file NEXT TO IT (<parent>/.<name>.lock), so any two configurations that resolve to the same resource contend on the
- * same lock; the harness re-executes itself under flock(1) on those three files in a fixed order (released by the kernel
- * when the holder dies, SIGKILL included), in its own process group; the first thing a holder does is delete whatever a
- * previous holder may have left.
+ * expansion. The three resource paths and the one lock file are CONSTANTS of this file: no environment variable or option
+ * changes them, so no second spelling of a resource exists (tests that need other paths run a mutated COPY of this file).
+ * The kernel serialises runs: the harness re-executes itself under flock(1) on that one lock file (released by the kernel
+ * when the holder dies, SIGKILL included), in its own process group, and the holder proves the lock is its own (inherited
+ * descriptor holds it, a fresh descriptor is refused) before it deletes whatever a previous holder may have left.
  *
  * Modes:
  *   check [--chain DIR] [--no-orig] [--overlap-n N]   permanent test: cur == golden, chain == golden,
@@ -61,20 +61,23 @@ const freezeOn = !args.includes('--no-freeze');
 // ---------- early exit handling, lock, sandbox ----------
 function die(msg) { console.error('post-tool-chain-harness: ' + msg); process.exit(2); }
 
-// Fixed paths (the golden includes them). Test-only knobs: PTC_FIXED_PARENT (moves sandbox, scratch AND live dir under
-// one parent; a golden compare then goes red, so it is unusable for a real run), PTC_LOCK_WAIT_SEC, PTC_TRACE_FILE
-// (appends 'start'/'end' lines with a monotonic clock while the locks are held), PTC_TEST_DELAY_AFTER_LOCK_MS (holder
-// sleeps that long right after it starts). There is no way to name a lock file or a separate live parent: the locks are
-// derived from the resolved resource paths, so two configurations that reach the same resource take the same lock.
-const FIXED_PARENT = process.env.PTC_FIXED_PARENT || '/tmp';
-const SHM_PARENT = process.env.PTC_FIXED_PARENT ? FIXED_PARENT : '/dev/shm';
-const SANDBOX_ROOT = path.join(FIXED_PARENT, 'ptc-fixed-sandbox');
-const SCRATCH_ROOT = path.join(FIXED_PARENT, 'ptc-fixed-scratch');
-const LIVE_ROOT = path.join(SHM_PARENT, 'ptc-fixed-live');
-// parents are checked below to be their own realpath, so a lock path built from them is the resource's real neighbour
-const LOCKS = [SANDBOX_ROOT, SCRATCH_ROOT, LIVE_ROOT].map((r) => path.join(path.dirname(r), `.${path.basename(r)}.lock`));
+// Resource paths and the lock file: constants (the golden includes them). Nothing in the environment or on the command line
+// can change them; the old override variables are refused so a stale use fails loudly instead of being ignored.
+const SANDBOX_ROOT = '/tmp/ptc-fixed-sandbox';
+const SCRATCH_ROOT = '/tmp/ptc-fixed-scratch';
+const LIVE_ROOT = '/dev/shm/ptc-fixed-live';
+const LOCK_FILE = '/tmp/ptc-fixed-harness.lock';
+for (const v of ['PTC_FIXED_PARENT', 'PTC_FIXED_SHM', 'PTC_LOCK_FILE', 'PTC_FLOCK_HELD']) {
+  if (process.env[v] !== undefined) die(`${v} is no longer accepted: the sandbox, scratch, live and lock paths are fixed constants. Tests that need other paths run a relocated copy of this file.`);
+}
+// Environment/option inventory (none of these touches a resource path or the lock): PTC_LOCK_WAIT_SEC (how long to wait for the
+// lock), PTC_TRACE_FILE (append start/end lines), PTC_TEST_DELAY_AFTER_LOCK_MS (holder sleeps after it starts),
+// PTC_TEST_DRAIN_MS (how long the outer waits for the group before SIGKILL), PTC_PID (read by ptc-freeze in the CHILDREN, set
+// by this file); options --chain/--no-orig/--only/--case/--overlap-n/--only-overlap/--no-freeze/--tag/mode select what is
+// compared or labelled; --under-flock is set by the outer run and is VERIFIED (assertIHoldTheLock), not trusted.
 const LOCK_WAIT_SEC = Number(process.env.PTC_LOCK_WAIT_SEC || 900);
-const lockHeld = process.env.PTC_FLOCK_HELD === '1';
+const DRAIN_MS = Number(process.env.PTC_TEST_DRAIN_MS || 30000);
+const underFlock = args.includes('--under-flock');
 
 function checkParent(dir, what) {
   try {
@@ -85,39 +88,38 @@ function checkParent(dir, what) {
     die(`cannot use ${dir} (${what}): missing or not writable (${e.code || e.message}). The differential test needs a writable /tmp and /dev/shm.`);
   }
 }
-checkParent(FIXED_PARENT, 'sandbox and scratch parent');
-checkParent(SHM_PARENT, 'live-state parent');
+checkParent(path.dirname(SANDBOX_ROOT), 'sandbox and scratch parent');
+checkParent(path.dirname(LIVE_ROOT), 'live-state parent');
+checkParent(path.dirname(LOCK_FILE), 'lock file parent');
 
-if (!lockHeld) {
-  // Re-run this very command under flock(1) on the three resource locks, in a fixed order (sandbox, scratch, live), so two
-  // runs can never wait on each other. flock(1) forks its command, so the whole chain is started in its OWN PROCESS GROUP
-  // and every signal we get goes to that group; we then wait for the group to be empty before exiting.
+if (!underFlock) {
+  // Re-run this very command under flock(1) on the one lock file. flock(1) forks its command, so the whole chain is started
+  // in its OWN PROCESS GROUP and every signal we get goes to that group; we then wait for the group to be empty.
   const probe = spawnSync('flock', ['--version'], { encoding: 'utf8' });
   if (probe.error || probe.status !== 0) die('flock(1) (util-linux) is required to serialise harness runs on the fixed sandbox paths and was not found on PATH');
-  console.error(`post-tool-chain-harness: taking ${LOCKS.join(', ')} (waits up to ${LOCK_WAIT_SEC} s per lock if another run holds one)`);
-  const chain = [];
-  for (const lock of LOCKS) chain.push('flock', '-E', '75', '-w', String(LOCK_WAIT_SEC), lock);
-  chain.push(process.execPath, ...process.argv.slice(1));
-  const child = spawn(chain[0], chain.slice(1), {
-    stdio: 'inherit', detached: true, env: Object.assign({}, process.env, { PTC_FLOCK_HELD: '1' }),
+  console.error(`post-tool-chain-harness: taking ${LOCK_FILE} (waits up to ${LOCK_WAIT_SEC} s if another run holds it)`);
+  const child = spawn('flock', ['-E', '75', '-w', String(LOCK_WAIT_SEC), LOCK_FILE, process.execPath, ...process.argv.slice(1), '--under-flock'], {
+    stdio: 'inherit', detached: true,
   });
   let signalled = 0;
   const NUM = { SIGHUP: 1, SIGINT: 2, SIGKILL: 9, SIGTERM: 15 };
   for (const sig of ['SIGHUP', 'SIGINT', 'SIGTERM']) {
     process.on(sig, () => { if (!signalled) signalled = NUM[sig]; try { process.kill(-child.pid, sig); } catch { /* group already gone */ } });
   }
+  const groupAlive = () => { try { process.kill(-child.pid, 0); return true; } catch { return false; } };
   child.on('close', (code, sigName) => {
     // flock may be gone while the holder is still cleaning up: wait until nothing is left in the group
     const t0 = Date.now();
+    let killed = false;
     const finish = () => {
-      if (code === 75 && !signalled) die(`could not get one of ${LOCKS.join(', ')} within ${LOCK_WAIT_SEC} s: another run holds that resource`);
+      if (code === 75 && !signalled) die(`could not get ${LOCK_FILE} within ${LOCK_WAIT_SEC} s: another harness run holds the fixed sandbox`);
       process.exit(signalled ? 128 + signalled : code === null ? 128 + (NUM[sigName] || 15) : code);
     };
     const tick = () => {
-      let alive = true;
-      try { process.kill(-child.pid, 0); } catch { alive = false; }
-      if (!alive) return finish();
-      if (Date.now() - t0 > 30000) { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } return setTimeout(finish, 300); }
+      if (!groupAlive()) return finish();
+      if (!killed && Date.now() - t0 > DRAIN_MS) { killed = true; try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } }
+      // after SIGKILL keep polling until the group is really empty; give up loudly, never exit as if it were clean
+      if (killed && Date.now() - t0 > DRAIN_MS + 10000) { console.error('post-tool-chain-harness: cannot reap the lock-holding process group after SIGKILL'); process.exit(3); }
       return setTimeout(tick, 20);
     };
     tick();
@@ -130,15 +132,24 @@ if (!lockHeld) {
 
 // ---- from here on this process was started by the flock chain ----
 if (process.env.PTC_TEST_DELAY_AFTER_LOCK_MS) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.PTC_TEST_DELAY_AFTER_LOCK_MS));
-// PTC_FLOCK_HELD is only a hint: prove the three locks really are held (a second non-blocking flock on each must be refused)
-function assertLocksHeld() {
-  for (const lock of LOCKS) {
-    const r = spawnSync('flock', ['-n', lock, 'true']);
-    if (r.status === 0) die(`PTC_FLOCK_HELD is set but ${lock} is not held; start the harness without it so it takes the locks itself`);
+// --under-flock is only a claim; prove the lock is OURS, not merely held by someone: (1) a fresh open file description on the
+// lock file must be refused (somebody holds it), and (2) the descriptor flock(1) handed down to us must hold it (flock -n on
+// that very descriptor succeeds). A forged flag while another process holds the lock fails (2); with nobody holding it, (1).
+function assertIHoldTheLock() {
+  const fresh = spawnSync('flock', ['-n', LOCK_FILE, 'true']);
+  if (fresh.error) die(`cannot run flock to verify the lock: ${fresh.error.message}`);
+  if (fresh.status === 0) die(`--under-flock was given but ${LOCK_FILE} is held by nobody: start the harness without it so it takes the lock itself`);
+  let fd = -1;
+  for (const n of fs.readdirSync('/proc/self/fd')) {
+    try { if (fs.readlinkSync(`/proc/self/fd/${n}`) === LOCK_FILE) { fd = Number(n); break; } } catch { /* fd closed meanwhile */ }
   }
+  if (fd < 0) die(`--under-flock was given but this process has no descriptor on ${LOCK_FILE}: the lock is held by someone else, not by this run`);
+  const stdio = Array.from({ length: fd + 1 }, (_, i) => (i === fd ? fd : 'ignore'));
+  const mine = spawnSync('flock', ['-n', String(fd)], { stdio });
+  if (mine.status !== 0) die(`the inherited descriptor ${fd} does not hold ${LOCK_FILE}: refusing to touch the fixed paths`);
 }
-assertLocksHeld();
-// Holding the locks means nobody else uses these resources: remove whatever a killed predecessor left.
+assertIHoldTheLock();
+// Holding the lock means nobody else uses these resources: remove whatever a killed predecessor left.
 const wipe = () => { for (const d of [SANDBOX_ROOT, SCRATCH_ROOT, LIVE_ROOT]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } } };
 wipe();
 fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
@@ -155,6 +166,7 @@ for (const [sig, n] of [['SIGHUP', 1], ['SIGINT', 2], ['SIGTERM', 15]]) {
   process.on(sig, () => {
     if (stopping) return;
     stopping = true;
+    trace('signal-' + n);
     const closes = [...liveChildren].map((c) => new Promise((res) => c.once('close', res)));
     for (const c of liveChildren) { try { c.kill('SIGKILL'); } catch { /* gone */ } }
     Promise.race([Promise.all(closes), new Promise((res) => setTimeout(res, 5000))]).then(() => process.exit(128 + n));
@@ -203,7 +215,7 @@ function sbEnv(sb, extra) {
     AUTOPILOT_LIVE_DIR: sb.live,
     AUTOPILOT_RUNS_WATCH_AUTOSTART: '0',
     AUTOPILOT_REVIEW_SERVER_AUTOSTART: '0',
-    GIT_CEILING_DIRECTORIES: FIXED_PARENT,
+    GIT_CEILING_DIRECTORIES: path.dirname(SANDBOX_ROOT),
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_CONFIG_SYSTEM: '/dev/null',
     LC_ALL: 'C.UTF-8',

@@ -2780,6 +2780,88 @@
     }
    }
   },
+  "lone-surrogate-escape-in-error-text": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\nerror: bad � byte\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
   "git-cwd-branch": {
    "steps": [
     {

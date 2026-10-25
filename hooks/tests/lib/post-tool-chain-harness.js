@@ -14,7 +14,9 @@
  * and every arm runs in the SAME sandbox paths (recreated before each run), so the bytes are equal by construction.
  * The sandbox lives at ONE fixed absolute path (/tmp/ptc-fixed-sandbox, live dir /dev/shm/ptc-fixed-live), the same on
  * every host and in every arm and run, so the golden file stores the observers' real bytes: no placeholder, no
- * expansion. A directory lock serialises harness runs that would share the path.
+ * expansion. The kernel serialises runs that would share the path: the harness re-executes itself under flock(1) on one
+ * fixed lock file (released by the kernel when the holder dies, SIGKILL included); the first thing a lock holder does is
+ * delete whatever a previous holder may have left (sandbox, live dir, scratch).
  *
  * Modes:
  *   check [--chain DIR] [--no-orig] [--overlap-n N]   permanent test: cur == golden, chain == golden,
@@ -48,52 +50,68 @@ const chainDir = path.resolve(opt('--chain', HOOKS));
 const useOrig = !args.includes('--no-orig');
 const overlapN = Number(opt('--overlap-n', '12'));
 const onlyOverlap = args.includes('--only-overlap');
+const onlyFixtures = opt('--only', '') ? opt('--only', '').split(',') : null; // negative controls name the fixture(s) their mutation must break
+const onlyCase = opt('--case', '');
+const selected = () => FIXTURES.filter((f) => !onlyFixtures || onlyFixtures.includes(f.name));
 const FREEZE = path.join(__dirname, 'ptc-freeze.js');
 const freezeOn = !args.includes('--no-freeze');
 
-// ---------- sandbox ----------
-// Fixed paths (golden bytes include them). PTC_FIXED_PARENT exists only so the test can exercise the error path on a
-// parent that is missing; any other value changes the paths and makes every golden compare red.
-const FIXED_PARENT = process.env.PTC_FIXED_PARENT || '/tmp';
-const SANDBOX_ROOT = path.join(FIXED_PARENT, 'ptc-fixed-sandbox');
-const SHM_PARENT = '/dev/shm';
-const LIVE_ROOT = path.join(SHM_PARENT, 'ptc-fixed-live');
-const LOCK_DIR = path.join(FIXED_PARENT, 'ptc-fixed-sandbox.lock');
+// ---------- early exit handling, lock, sandbox ----------
 function die(msg) { console.error('post-tool-chain-harness: ' + msg); process.exit(2); }
-try {
-  fs.accessSync(FIXED_PARENT, fs.constants.W_OK);
-  if (fs.realpathSync(FIXED_PARENT) !== FIXED_PARENT) die(`${FIXED_PARENT} is behind a symlink here (realpath ${fs.realpathSync(FIXED_PARENT)}); the golden needs the literal path ${SANDBOX_ROOT}`);
-} catch (e) {
-  die(`cannot use the fixed sandbox ${SANDBOX_ROOT}: ${FIXED_PARENT} is missing or not writable (${e.code || e.message}). The differential test needs a writable /tmp and /dev/shm.`);
-}
-try { fs.accessSync(SHM_PARENT, fs.constants.W_OK); } catch (e) { die(`cannot use the fixed live dir ${LIVE_ROOT}: ${SHM_PARENT} is missing or not writable (${e.code || e.message}). The live-state paths need a tmpfs at /dev/shm.`); }
 
-// One harness at a time may own the fixed paths. mkdir is the lock; a holder whose pid is gone is stale. Waits up to 15 min.
-function acquireLock() {
-  const deadline = Date.now() + 15 * 60 * 1000;
-  let announced = false;
-  for (;;) {
-    try { fs.mkdirSync(LOCK_DIR); fs.writeFileSync(path.join(LOCK_DIR, 'pid'), String(process.pid)); return; }
-    catch (e) {
-      if (!e || e.code !== 'EEXIST') die(`cannot take the lock ${LOCK_DIR}: ${e && e.message}`);
-    }
-    let holder = NaN;
-    try { holder = Number(fs.readFileSync(path.join(LOCK_DIR, 'pid'), 'utf8')); } catch { /* lock dir just created or just removed */ }
-    let alive = true;
-    if (Number.isInteger(holder) && holder > 0) { try { process.kill(holder, 0); } catch (e) { alive = e.code === 'EPERM'; } }
-    if (!alive) { fs.rmSync(LOCK_DIR, { recursive: true, force: true }); continue; }
-    if (!announced) { console.error(`post-tool-chain-harness: waiting for another harness run (pid ${holder || '?'}) to release ${LOCK_DIR}`); announced = true; }
-    if (Date.now() > deadline) die(`gave up after 15 minutes waiting for ${LOCK_DIR} (held by pid ${holder || '?'}); remove it by hand if that run is gone`);
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+// Fixed paths (the golden includes them). Test-only overrides, each of which moves its paths away from the real ones
+// (a golden compare then goes red, so none is usable for a real run): PTC_FIXED_PARENT (sandbox, scratch, and the live dir
+// unless PTC_FIXED_SHM is set), PTC_FIXED_SHM (parent of the live dir), PTC_LOCK_FILE, PTC_LOCK_WAIT_SEC.
+const FIXED_PARENT = process.env.PTC_FIXED_PARENT || '/tmp';
+const SHM_PARENT = process.env.PTC_FIXED_SHM || (process.env.PTC_FIXED_PARENT ? FIXED_PARENT : '/dev/shm');
+const SANDBOX_ROOT = path.join(FIXED_PARENT, 'ptc-fixed-sandbox');
+const SCRATCH_ROOT = path.join(FIXED_PARENT, 'ptc-fixed-scratch');
+const LIVE_ROOT = path.join(SHM_PARENT, 'ptc-fixed-live');
+const LOCK_FILE = process.env.PTC_LOCK_FILE || '/tmp/ptc-fixed-harness.lock';
+const LOCK_WAIT_SEC = Number(process.env.PTC_LOCK_WAIT_SEC || 900);
+const lockHeld = process.env.PTC_FLOCK_HELD === '1';
+
+function checkParent(dir, what) {
+  try {
+    fs.accessSync(dir, fs.constants.W_OK);
+    const real = fs.realpathSync(dir);
+    if (real !== dir) die(`${dir} (${what}) is behind a symlink here (realpath ${real}); the golden needs the literal path`);
+  } catch (e) {
+    die(`cannot use ${dir} (${what}): missing or not writable (${e.code || e.message}). The differential test needs a writable /tmp and /dev/shm.`);
   }
 }
-acquireLock();
-const BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'ptc-harness-')); // orig-tree scratch only; not part of any compared byte
-function release() {
-  for (const d of [BASE, SANDBOX_ROOT, LIVE_ROOT, LOCK_DIR]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
+checkParent(FIXED_PARENT, 'sandbox and scratch parent');
+checkParent(SHM_PARENT, 'live-state parent');
+
+if (!lockHeld) {
+  // Re-run this very command under flock(1): kernel-held, released when the process dies. -E 75 marks "lock wait timed out".
+  const probe = spawnSync('flock', ['--version'], { encoding: 'utf8' });
+  if (probe.error || probe.status !== 0) die('flock(1) (util-linux) is required to serialise harness runs on the fixed sandbox path and was not found on PATH');
+  console.error(`post-tool-chain-harness: taking ${LOCK_FILE} (waits up to ${LOCK_WAIT_SEC} s if another run holds it)`);
+  const child = spawn('flock', ['-E', '75', '-w', String(LOCK_WAIT_SEC), LOCK_FILE, process.execPath, ...process.argv.slice(1)], {
+    stdio: 'inherit', env: Object.assign({}, process.env, { PTC_FLOCK_HELD: '1' }),
+  });
+  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { child.kill(sig); } catch { /* gone */ } });
+  child.on('close', (code, sig) => {
+    if (code === 75) die(`could not get ${LOCK_FILE} within ${LOCK_WAIT_SEC} s: another harness run holds the fixed sandbox`);
+    process.exit(code === null ? 128 + (sig === 'SIGKILL' ? 9 : 15) : code);
+  });
+  child.on('error', (e) => die(`cannot start flock: ${e.message}`));
+  // park: the child's exit ends us. (Top-level `return` is legal in a CommonJS module.)
+  setInterval(() => {}, 1 << 30);
+  return;
 }
-process.on('exit', release);
+
+// ---- from here on this process owns the lock ----
+// Holding it means nobody else uses these paths: remove whatever a killed predecessor left.
+const wipe = () => { for (const d of [SANDBOX_ROOT, SCRATCH_ROOT, LIVE_ROOT]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } } };
+wipe();
+fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
+process.on('exit', wipe);
+// A TERM/INT now ends us through the normal exit path, which wipes (only the lock holder gets here; a run still waiting
+// for the lock has created nothing, and its signal is forwarded to the waiting flock).
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130));
+const BASE = SCRATCH_ROOT; // orig-tree scratch only; not part of any compared byte
 
 // hooks dir for the orig arm: symlinks to every file in hooks/, the five replaced by `git show` copies;
 // ../src and ../scripts are symlinked so the originals' relative requires resolve.
@@ -145,6 +163,15 @@ function sbEnv(sb, extra) {
   return Object.assign(env, extra || {});
 }
 
+// Lossless storage of arbitrary bytes: UTF-8 text when the bytes survive a decode/encode round trip, base64 otherwise
+// (field name + '_b64'). Equal bytes always give equal encodings and different bytes never do, so comparing encodings is
+// comparing bytes; a decode is only ever used to make a human-readable message.
+function encBytes(buf, name) {
+  const t = buf.toString('utf8');
+  return Buffer.from(t, 'utf8').equals(buf) ? { [name]: t } : { [name + '_b64']: buf.toString('base64') };
+}
+function decBytes(obj, name) { return name in obj ? Buffer.from(obj[name], 'utf8') : Buffer.from(obj[name + '_b64'], 'base64'); }
+
 // ---------- state snapshot (raw) ----------
 // Nothing is rewritten: names and contents are what the observers wrote (the sandbox path is fixed, so the sha1 of the
 // cwd that names the intent record is fixed too).
@@ -165,9 +192,9 @@ function snapshot(sb) {
         const mode = (st.mode & 0o777).toString(8);
         if (e.isDirectory()) { out[rel + '/'] = { mode }; walk(full); }
         else if (e.isFile()) {
-          let txt;
-          try { txt = fs.readFileSync(full, 'utf8'); } catch { txt = '<unreadable>'; }
-          out[rel] = { mode, content: txt };
+          let buf = null;
+          try { buf = fs.readFileSync(full); } catch { /* unreadable: recorded as such */ }
+          out[rel] = buf === null ? { mode, unreadable: true } : Object.assign({ mode }, encBytes(buf, 'content'));
         } else out[rel] = { mode, kind: 'other' };
       }
     })(r);
@@ -248,6 +275,7 @@ const FIXTURES = [
   { name: 'user-error-text-with-heading-shaped-line', steps: [post('Read', { file_path: '/x' }, { tool_response: 'error: first\n### 2026-03-03T03:03:03.333Z\n**Tool:** not-a-heading\nlast' })] },
   { name: 'user-error-text-embeds-terminator-and-heading', steps: [post('Read', { file_path: '/x' }, { tool_response: 'error: before\n```\n**Solution:** (fill in after fix)\n\n---\n### 2026-03-03T03:03:03.333Z\n**Tool:** fake\n**Input:** `{}`\n```\nafter' })] },
   { name: 'user-text-with-placeholder-lookalikes-and-sandbox-path', steps: [post('Bash', { command: 'echo "<ROOT> <LIVE> <CWDSHA1> <CWDSHA12> <TS> <HOST> /tmp/ptc-fixed-sandbox/home /dev/shm/ptc-fixed-live"' }, { exit_code: 1, tool_response: 'error: <ROOT>/x <CWDSHA12> /tmp/ptc-fixed-sandbox/cwd <LIVE>' })] },
+  { name: 'lone-surrogate-escape-in-error-text', steps: ['{"hook_event_name":"PostToolUse","session_id":"s","tool_name":"Read","tool_input":{"file_path":"/x"},"tool_response":"error: bad \\ud800 byte"}'] },
   { name: 'git-cwd-branch', setup: (sb) => { const env = sbEnv(sb, { GIT_AUTHOR_NAME: 'x', GIT_AUTHOR_EMAIL: 'x@x', GIT_COMMITTER_NAME: 'x', GIT_COMMITTER_EMAIL: 'x@x' }); spawnSync('git', ['init', '-q', '-b', 'main', sb.cwd], { env }); spawnSync('git', ['-C', sb.cwd, 'commit', '-q', '--allow-empty', '-m', 'i'], { env }); }, steps: [bashOk('echo hi')] },
 ];
 
@@ -293,14 +321,8 @@ function runFixture(fx, arm, origDir) {
   return { steps, state, sb };
 }
 
-// Golden bytes are the observers' real bytes stored as UTF-8 text (asserted lossless), compared byte for byte.
-function tmpl(buf) {
-  const t = buf.toString('utf8');
-  if (!Buffer.from(t, 'utf8').equals(buf)) throw new Error('hook output is not lossless UTF-8; golden cannot store it');
-  return t;
-}
-function expand(text) { return Buffer.from(text, 'utf8'); }
-function aggJson(a) { return { code: a.code, stdout: tmpl(a.stdout), stderr: tmpl(a.stderr) }; }
+// Golden bytes are the observers' real bytes (encBytes: text when lossless, base64 otherwise), compared as bytes.
+function aggJson(a) { return Object.assign({ code: a.code }, encBytes(a.stdout, 'stdout'), encBytes(a.stderr, 'stderr')); }
 function toGolden(res) {
   return {
     steps: res.steps.map((s) => ({ per: s.per ? s.per.map((p) => Object.assign({ hook: p.hook }, aggJson(p))) : undefined, agg: aggJson(s.agg) })),
@@ -314,7 +336,7 @@ function bad(msg) { problems.push(msg); }
 function cmpAgg(label, got, want, sb) {
   // want: golden aggJson (templated text). Raw byte compare against the expansion.
   if (got.code !== want.code) bad(`${label}: exit ${got.code} != ${want.code}`);
-  const wo = expand(want.stdout), we = expand(want.stderr);
+  const wo = decBytes(want, 'stdout'), we = decBytes(want, 'stderr');
   if (!got.stdout.equals(wo)) bad(`${label}: stdout bytes differ (${got.stdout.length} vs ${wo.length})`);
   if (!got.stderr.equals(we)) bad(`${label}: stderr bytes differ (${got.stderr.length} vs ${we.length})`);
 }
@@ -508,6 +530,7 @@ function judge(keys, acc, sem) {
       const observed = acc.perPath.get(pth);
       if (!observed) { failing.push(`${pth}: path never seen in serial/baseline`); continue; }
       if (!observed.some((x) => x.mode === e.mode)) failing.push(`${pth}: mode ${e.mode} (observed ${[...new Set(observed.map((x) => x.mode))].join(',')})`);
+      if (e.content_b64 !== undefined && !observed.some((x) => x.content_b64 !== undefined)) failing.push(`${pth}: content is no longer valid UTF-8 text (observed outcomes are text)`);
       if (typeof e.content === 'string') { const pr = contentProblem(pth, e.content, observed, sem); if (pr) failing.push(pr); }
     }
   }
@@ -516,7 +539,7 @@ function judge(keys, acc, sem) {
 
 async function runOverlap() {
   const report = [];
-  for (const oc of OVERLAP_CASES) {
+  for (const oc of OVERLAP_CASES.filter((c) => !onlyCase || c.name === onlyCase)) {
     const calls = oc.calls();
     const serial = [];
     for (const order of perms(calls.map((_, i) => i))) serial.push(serialOutcome(oc, order, calls, HOOKS));
@@ -545,7 +568,7 @@ async function main() {
     return;
   }
   if (mode === 'serial-orig-vs-cur') {
-    for (const fx of FIXTURES) {
+    for (const fx of selected()) {
       const a = toGolden(runFixture(fx, 'orig', origDir));
       const b = toGolden(runFixture(fx, 'cur', origDir));
       if (JSON.stringify(a) !== JSON.stringify(b)) {
@@ -558,7 +581,7 @@ async function main() {
     }
   } else if (!onlyOverlap) {
     const golden = JSON.parse(fs.readFileSync(GOLDEN, 'utf8'));
-    for (const fx of FIXTURES) {
+    for (const fx of selected()) {
       const want = golden.fixtures[fx.name];
       if (!want) { bad(`${fx.name}: missing from golden`); continue; }
       const arms = ['cur', 'chain', 'chain-rev'];
@@ -570,7 +593,7 @@ async function main() {
           if (arm === 'chain-rev') {
             // members are independent: the reversed chain's streams are the per-hook golden streams, reversed
             const rev = want.steps[i].per.slice().reverse();
-            wantAgg = { code: Math.max(...rev.map((x) => x.code)), stdout: rev.map((x) => x.stdout).join(''), stderr: rev.map((x) => x.stderr).join('') };
+            wantAgg = Object.assign({ code: Math.max(...rev.map((x) => x.code)) }, encBytes(Buffer.concat(rev.map((x) => decBytes(x, 'stdout'))), 'stdout'), encBytes(Buffer.concat(rev.map((x) => decBytes(x, 'stderr'))), 'stderr'));
           }
           cmpAgg(`${fx.name}[${i}] ${arm} aggregate`, s.agg, wantAgg, res.sb);
           if (arm !== 'chain' && arm !== 'chain-rev') s.per.forEach((p, j) => cmpAgg(`${fx.name}[${i}] ${arm} ${p.hook}`, p, want.steps[i].per[j], res.sb));
@@ -578,7 +601,7 @@ async function main() {
         cmpState(`${fx.name} ${arm}`, res.state, want.state);
       }
     }
-    console.log(`serial corpus: ${FIXTURES.length} fixtures, arms ${origDir ? 'orig,' : '(orig skipped: pinned sha absent) '}cur,chain,chain-rev`);
+    console.log(`serial corpus: ${selected().length} fixtures, arms ${origDir ? 'orig,' : '(orig skipped: pinned sha absent) '}cur,chain,chain-rev`);
   }
   if (mode === 'check' && overlapN > 0) {
     const rep = await runOverlap();

@@ -56,19 +56,19 @@ assert_contains "$OVERLAP_OUT" '"case":"two-failing-bash-same-session"' "overlap
 assert_contains "$OVERLAP_OUT" '"chain_failing_components":0' "no chain component outside serial/baseline"
 
 # --- negative controls on the chain ---
-neg() { # <label> <sed command> <file under chain dir>
-  local label="$1" expr="$2" file="${3:-post-tool-chain-lib.js}"
+neg() { # <label> <sed command> <fixture the mutation must break>
+  local label="$1" expr="$2" fx="$3" file="post-tool-chain-lib.js"
   mk_chain_dir "$label"
   mutate_or_die "$MUT/$label/$file" "$expr"
-  run_harness --chain "$MUT/$label"
+  run_harness --chain "$MUT/$label" --only "$fx" --no-orig
   [ "$H_RC" -ne 0 ] || fail "negative control '$label' was NOT detected (harness rc=$H_RC)"
   assert_contains "$H_OUT" "HARNESS RED" "negative control '$label' reports RED"
 }
-neg exit-code 's/if (r.code > status) status = r.code;/status = 1;/'
-neg stdout-byte 's/if (r.out.length) emitOut(r.out);/if (r.out.length) emitOut(r.out.subarray(0, r.out.length - 1));/'
-neg aggregate-order "s/const MEMBERS = \['intent-capture', 'reload-watch', 'audit-log', 'log-error', 'failure-escalation'\];/const MEMBERS = ['intent-capture', 'failure-escalation', 'audit-log', 'log-error', 'reload-watch'];/"
-neg member-order-sorted "s/for (const stem of members) {/for (const stem of members.slice().sort()) {/"
-neg drop-state-write "s/for (const stem of members) {/for (const stem of members.filter((m) => m !== 'log-error')) {/"
+neg exit-code 's/if (r.code > status) status = r.code;/status = 1;/' quiet-bash-success
+neg stdout-byte 's/if (r.out.length) emitOut(r.out);/if (r.out.length) emitOut(r.out.subarray(0, r.out.length - 1));/' bash-fail-escalation-ladder
+neg aggregate-order "s/const MEMBERS = \['intent-capture', 'reload-watch', 'audit-log', 'log-error', 'failure-escalation'\];/const MEMBERS = ['intent-capture', 'failure-escalation', 'audit-log', 'log-error', 'reload-watch'];/" reload-and-failure-both-emit
+neg member-order-sorted "s/for (const stem of members) {/for (const stem of members.slice().sort()) {/" reload-and-failure-both-emit
+neg drop-state-write "s/for (const stem of members) {/for (const stem of members.filter((m) => m !== 'log-error')) {/" log-error-keyword-read
 
 # --- negative controls: pollution, exit status, order (unit tests red on a broken lib) and the umask pin ---
 # (the unit-test controls are below, after unit_neg is defined)
@@ -79,7 +79,7 @@ inv_neg() { # <label> <js statement run on the counter file before the chain ret
   mk_chain_dir "$label"
   mutate_or_die "$MUT/$label/post-tool-chain-lib.js" "s#^  return status;#  $stmt return status;#"
   local out rc
-  out="$(HOME="$HOOK_HOME" node "$HARNESS" check --only-overlap --overlap-n 3 --chain "$MUT/$label" 2>&1 < /dev/null)"; rc=$?
+  out="$(HOME="$HOOK_HOME" node "$HARNESS" check --only-overlap --overlap-n 3 --case "${3:-two-failing-bash-same-session}" --chain "$MUT/$label" 2>&1 < /dev/null)"; rc=$?
   [ "$rc" -ne 0 ] || fail "invariant negative control '$label' was NOT detected"
   assert_contains "$out" "HARNESS RED" "invariant negative control '$label' reports RED"
 }
@@ -90,7 +90,7 @@ inv_neg mode-changed "try { require('fs').chmodSync($CTR, 0o644); } catch (e) { 
 ICTR="require('path').join(process.env.HOME, '.autopilot', '.intent-capture-failures')"
 inv_neg stale-write-zero-failure-counter "try { require('fs').writeFileSync($CTR, '0'); } catch (e) { void e; }"
 inv_neg observed-max-plus-one "try { require('fs').writeFileSync($CTR, '4'); } catch (e) { void e; }"
-inv_neg stale-write-zero-intent-counter "try { require('fs').writeFileSync($ICTR, '0'); } catch (e) { void e; }"
+inv_neg stale-write-zero-intent-counter "try { require('fs').writeFileSync($ICTR, '0'); } catch (e) { void e; }" intent-breaker-pair
 inv_neg json-key-added "try { const f = require('path').join(process.env.HOME, '.autopilot', 'intent'); const fs2 = require('fs'); for (const n of fs2.readdirSync(f)) { const q = require('path').join(f, n); fs2.writeFileSync(q, fs2.readFileSync(q, 'utf8').replace('\"cwd\"', '\"cwdx\"')); } } catch (e) { void e; }"
 
 # --- negative controls: user-supplied text must stay visible (only enumerated fields / log-written positions are normalised) ---
@@ -105,7 +105,7 @@ mk_member_tree() { # <name> <member stem>: chain files + the member copied (muta
 norm_neg() { # <label> <member> <sed command> <fixture name that must go red>
   mk_member_tree "$1" "$2"
   mutate_or_die "$MT/hooks/$2.js" "$3"
-  run_harness --chain "$MT/hooks"
+  run_harness --chain "$MT/hooks" --only "$4" --no-orig
   [ "$H_RC" -ne 0 ] || fail "negative control '$1' was NOT detected"
   assert_contains "$H_OUT" "$4" "negative control '$1': the '$4' fixture goes red"
 }
@@ -116,8 +116,11 @@ norm_neg corrupted-error-block-empty-tool log-error 's#\*\*Tool:\*\* ${toolName}
 norm_neg embedded-terminator-user-date-changed log-error 's#^\( *\)truncError,$#\1truncError.replace(/03:03:03.333Z/, "03:03:03.999Z"),#' user-error-text-embeds-terminator-and-heading
 norm_neg one-byte-of-user-error-text log-error 's#^\( *\)truncError,$#\1truncError.replace(/before/, "befora"),#' user-error-text-embeds-terminator-and-heading
 
+# EF BF BD (U+FFFD) turned into FF in the written log: UTF-8 decoding used to make them look the same
+norm_neg invalid-utf8-byte-in-state-file log-error 's#fs.appendFileSync(logPath, entry);#fs.appendFileSync(logPath, Buffer.from(Buffer.from(entry).toString("latin1").replace(/\\xef\\xbf\\xbd/g, "\\xff"), "latin1"));#' lone-surrogate-escape-in-error-text
+
 # --- negative control: without the freeze module the arms disagree on clock / hostname (the freeze really is what makes them equal) ---
-run_harness --no-freeze
+run_harness --no-freeze --only quiet-bash-success --no-orig
 [ "$H_RC" -ne 0 ] || fail "negative control 'freeze module removed' was NOT detected"
 assert_contains "$H_OUT" "state differs" "freeze removed: volatile values differ and the harness is red"
 
@@ -136,31 +139,65 @@ mk_harness_tree() { # <name>: sets HT; a repo-shaped tree whose harness (and not
 # --- negative control: a counter regex that stops matching leaves its declared range dead; the harness must say so ---
 mk_harness_tree deadcounter
 mutate_or_die "$HT/hooks/tests/lib/post-tool-chain-harness.js" 's#claude-intent-tool-count-\[0-9a-f\]{12}#claude-intent-tool-count-[0-9a-f]{13}#'
-DC_OUT="$(HOME="$HOOK_HOME" node "$HT/hooks/tests/lib/post-tool-chain-harness.js" check --only-overlap --overlap-n 3 --no-orig 2>&1 < /dev/null)"; DC_RC=$?
+DC_OUT="$(HOME="$HOOK_HOME" node "$HT/hooks/tests/lib/post-tool-chain-harness.js" check --only-overlap --overlap-n 3 --case two-failing-bash-same-session --no-orig 2>&1 < /dev/null)"; DC_RC=$?
 [ "$DC_RC" -ne 0 ] || fail "negative control 'tool-counter regex broken' was NOT detected"
 assert_contains "$DC_OUT" "dead declaration" "broken counter regex is reported as a dead declaration"
 
-# --- fixed-sandbox plumbing: unusable parent, stale lock, live lock (PTC_FIXED_PARENT points the lock/sandbox at a scratch dir) ---
-NP_OUT="$(PTC_FIXED_PARENT="$TEST_TMP/no-such-parent" HOME="$HOOK_HOME" node "$HARNESS" check --only-overlap --overlap-n 0 2>&1 < /dev/null)"; NP_RC=$?
+# --- fixed-sandbox plumbing. The harness serialises itself with flock(1) on one fixed lock file; these controls point
+# PTC_LOCK_FILE / PTC_FIXED_PARENT / PTC_FIXED_SHM at scratch locations so they never touch the real lock or paths.
+HARNESS_Q=(node "$HARNESS" check --only-overlap --overlap-n 0)
+NP_OUT="$(PTC_FIXED_PARENT="$TEST_TMP/no-such-parent" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; NP_RC=$?
 assert_exit_code "$NP_RC" 2 "unusable sandbox parent exits 2"
 assert_contains "$NP_OUT" "missing or not writable" "unusable sandbox parent: explicit message"
-FP1="$TEST_TMP/fp1"; mkdir -p "$FP1/ptc-fixed-sandbox.lock"; echo 2147483646 > "$FP1/ptc-fixed-sandbox.lock/pid"
-SL_OUT="$(PTC_FIXED_PARENT="$FP1" HOME="$HOOK_HOME" timeout 60 node "$HARNESS" check --only-overlap --overlap-n 0 2>&1 < /dev/null)"; SL_RC=$?
-assert_exit_code "$SL_RC" 0 "a lock held by a dead pid is taken over"
-[ ! -d "$FP1/ptc-fixed-sandbox.lock" ] || fail "lock directory left behind after the run"
-FP2="$TEST_TMP/fp2"; mkdir -p "$FP2/ptc-fixed-sandbox.lock"
-sleep 120 & HOLDER=$!
-echo "$HOLDER" > "$FP2/ptc-fixed-sandbox.lock/pid"
-LL_OUT="$(PTC_FIXED_PARENT="$FP2" HOME="$HOOK_HOME" timeout 4 node "$HARNESS" check --only-overlap --overlap-n 0 2>&1 < /dev/null)"; LL_RC=$?
-kill "$HOLDER" 2>/dev/null; wait "$HOLDER" 2>/dev/null
-assert_exit_code "$LL_RC" 124 "a lock held by a live pid makes the harness wait (timeout fired)"
-assert_contains "$LL_OUT" "waiting for another harness run" "live lock: the wait is announced"
+
+mkdir -p "$TEST_TMP/realdir"; ln -s "$TEST_TMP/realdir" "$TEST_TMP/parentlink"; ln -s "$TEST_TMP/realdir" "$TEST_TMP/shmlink"
+SY_OUT="$(PTC_LOCK_FILE="$TEST_TMP/lk-sy" PTC_FIXED_PARENT="$TEST_TMP/parentlink" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; SY_RC=$?
+assert_exit_code "$SY_RC" 2 "sandbox parent behind a symlink exits 2"
+assert_contains "$SY_OUT" "behind a symlink" "sandbox parent symlink: explicit message"
+SS_OUT="$(PTC_LOCK_FILE="$TEST_TMP/lk-sy" PTC_FIXED_PARENT="$TEST_TMP/realdir" PTC_FIXED_SHM="$TEST_TMP/shmlink" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; SS_RC=$?
+assert_exit_code "$SS_RC" 2 "/dev/shm-style live parent behind a symlink exits 2"
+assert_contains "$SS_OUT" "behind a symlink" "live parent symlink: explicit message"
+
+mkdir -p "$TEST_TMP/nopath"; ln -sf "$(command -v node)" "$TEST_TMP/nopath/node"
+NF_OUT="$(PATH="$TEST_TMP/nopath" HOME="$HOOK_HOME" "$TEST_TMP/nopath/node" "$HARNESS" check --only-overlap --overlap-n 0 2>&1 < /dev/null)"; NF_RC=$?
+assert_exit_code "$NF_RC" 2 "no flock on PATH exits 2"
+assert_contains "$NF_OUT" "flock(1)" "no flock: the message names it"
+
+# a second run waits for the first, and gives up with an explicit error when the wait runs out
+LK="$TEST_TMP/lk-wait"; mkdir -p "$TEST_TMP/fpw"
+setsid flock "$LK" sleep 8 > /dev/null 2>&1 < /dev/null & HOLDER=$!
+sleep 0.5
+W_OUT="$(PTC_LOCK_FILE="$LK" PTC_LOCK_WAIT_SEC=2 PTC_FIXED_PARENT="$TEST_TMP/fpw" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; W_RC=$?
+kill -- "-$HOLDER" 2>/dev/null; wait "$HOLDER" 2>/dev/null
+[ "$W_RC" -ne 0 ] || fail "second harness did not wait/give up while the lock was held"
+assert_contains "$W_OUT" "could not get" "lock wait timed out: explicit error"
+# ... and gets in as soon as the holder is gone
+W2_OUT="$(PTC_LOCK_FILE="$LK" PTC_LOCK_WAIT_SEC=5 PTC_FIXED_PARENT="$TEST_TMP/fpw" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; W2_RC=$?
+assert_exit_code "$W2_RC" 0 "lock free: the next run proceeds"
+
+# SIGKILL of a running harness: the kernel drops its lock, the next run takes over at once and leaves nothing behind
+LK2="$TEST_TMP/lk-kill"; FPK="$TEST_TMP/fpk"; mkdir -p "$FPK"
+setsid env PTC_LOCK_FILE="$LK2" PTC_FIXED_PARENT="$FPK" HOME="$HOOK_HOME" node "$HARNESS" check --overlap-n 30 > /dev/null 2>&1 < /dev/null &
+FIRST=$!
+for _ in $(seq 1 100); do [ -d "$FPK/ptc-fixed-sandbox/home" ] && break; sleep 0.2; done
+[ -d "$FPK/ptc-fixed-sandbox/home" ] || fail "first harness never created its sandbox"
+kill -9 -- "-$FIRST" 2>/dev/null; sleep 0.5
+[ -d "$FPK/ptc-fixed-sandbox" ] || fail "the SIGKILLed harness left no residue, so the takeover cleanup is not exercised"
+K_OUT="$(PTC_LOCK_FILE="$LK2" PTC_LOCK_WAIT_SEC=5 PTC_FIXED_PARENT="$FPK" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; K_RC=$?
+assert_exit_code "$K_RC" 0 "after SIGKILL the next run takes the lock at once (5 s wait budget)"
+for d in ptc-fixed-sandbox ptc-fixed-scratch ptc-fixed-live; do [ ! -e "$FPK/$d" ] || fail "residue left after takeover run: $FPK/$d"; done
+
+# a harness with its own PTC_FIXED_PARENT never touches the real live dir (sentinel kept), run inside the real lock
+REAL_LOCK=/tmp/ptc-fixed-harness.lock
+REAL_LIVE=/dev/shm/ptc-fixed-live
+ISO_OUT="$(flock -w 600 "$REAL_LOCK" bash -c 'mkdir -p "$3" && echo x > "$3/sentinel"; mkdir -p "$1"; PTC_FLOCK_HELD=1 PTC_FIXED_PARENT="$1" node "$2" check --only-overlap --overlap-n 1 > /dev/null 2>&1; rc=$?; if [ -e "$3/sentinel" ]; then st=kept; else st=gone; fi; rm -f "$3/sentinel"; rmdir "$3" 2>/dev/null; echo "$rc $st"' _ "$TEST_TMP/fpiso" "$HARNESS" "$REAL_LIVE" 2>&1 < /dev/null)"
+assert_contains "$ISO_OUT" "0 kept" "a harness under another PTC_FIXED_PARENT leaves the real live dir alone"
 
 # --- negative control: dropping the umask pin makes a umask-077 caller red ---
 mk_harness_tree umask
 UP="$HT"
 mutate_or_die "$UP/hooks/tests/lib/post-tool-chain-harness.js" "s#^process.umask(0o022);##"
-UN_OUT="$( umask 077; HOME="$HOOK_HOME" node "$UP/hooks/tests/lib/post-tool-chain-harness.js" check --overlap-n 0 --no-orig 2>&1 < /dev/null )"; UN_RC=$?
+UN_OUT="$( umask 077; HOME="$HOOK_HOME" node "$UP/hooks/tests/lib/post-tool-chain-harness.js" check --overlap-n 0 --no-orig --only quiet-bash-success 2>&1 < /dev/null )"; UN_RC=$?
 [ "$UN_RC" -ne 0 ] || fail "negative control 'umask pin removed' was NOT detected under umask 077"
 assert_contains "$UN_OUT" "state differs" "umask pin removed: the red is a state (mode) difference"
 

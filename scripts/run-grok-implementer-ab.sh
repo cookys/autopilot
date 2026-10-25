@@ -11,6 +11,9 @@
 # Extension: after initial_pairs (30), if decision is still indeterminate,
 # extend once to max_pairs (60). Session budget ≤ max_provider_sessions (120).
 #
+# Exit codes: 0 decided · 1 open / indeterminate · 2 usage · 6 STOP_AUTH (the first session that dies on
+# authentication stops the run before any retry; BL-0294, scripts/lib/auth-stop.js).
+#
 # Usage:
 #   bash scripts/run-grok-implementer-ab.sh \
 #     --tasks evals/grok-implementer-ab/tasks.json \
@@ -110,6 +113,7 @@ const modelCli = String(model).toLowerCase().replace(/\s+/g, '-');
 const runner = seed.actor.runner || 'grok';
 const hetero = path.join(repo, 'scripts', 'dispatch-hetero.sh');
 const dispatchBin = process.env.AUTOPILOT_GROK_AB_DISPATCH_BIN || hetero;
+const authStop = require(path.join(repo, 'scripts', 'lib', 'auth-stop.js'));
 
 function runnerVersion() {
   const probe = spawnSync(runner, ['--version'], {
@@ -258,6 +262,13 @@ function runArm(task, arm, attempt, taskBase) {
   });
   const wallMs = Date.now() - started;
   const outcome = parseOutcome(run.stdout);
+  // BL-0294: a dead credential fails every later session (and every retry of this one) the same way.
+  // Stop the whole run at the first authentication failure instead of spending the retry/session budget.
+  const authSources = [{ kind: 'dispatch', text: String(run.stdout || '') }, { kind: 'raw', text: String(run.stderr || '') }];
+  const callFailed = run.status !== 0 || authStop.callFailed(String(run.stdout || ''));
+  if (typeof outcome.agent_log === 'string' && outcome.agent_log) authSources.push({ kind: 'raw', path: outcome.agent_log });
+  const authHit = authStop.checkSources(authSources, { failed: callFailed });
+  if (authHit) stopForAuth(`${task.id}/${arm}`, authHit);
   const status = outcome.status || 'runner_failed';
   const committed = status === 'committed' && Boolean(outcome.commit);
   const expectedModel = modelCli.toLowerCase();
@@ -324,6 +335,16 @@ function runArm(task, arm, attempt, taskBase) {
 }
 
 const sessionBudget = { used: 0 };
+
+function stopForAuth(id, hit) {
+  process.stderr.write(`${authStop.stopLine(id, hit)}\n`);
+  try {
+    fs.writeFileSync(reportPath + '.partial.json', JSON.stringify({
+      stopped: 'STOP_AUTH', after: id, pairs: pairs.length, sessions: sessionBudget.used,
+    }, null, 2));
+  } catch (_e) { /* the stop line is the contract; the partial file is a courtesy */ }
+  process.exit(authStop.EXIT_AUTH_STOP);
+}
 
 function reserveSession() {
   if (sessionBudget.used >= maxSessions) return false;

@@ -47,6 +47,8 @@ MOCK_REPO="$TEST_TMP/mock_repo"
 mkdir -p "$MOCK_REPO/evals/pipeline-bench"
 mkdir -p "$MOCK_REPO/evals/orchestration/tasks/t1/repo"
 mkdir -p "$MOCK_REPO/scripts"
+mkdir -p "$MOCK_REPO/scripts/lib"
+cp "$REPO_ROOT/scripts/lib/auth-stop.sh" "$REPO_ROOT/scripts/lib/auth-stop.js" "$MOCK_REPO/scripts/lib/"
 
 # Copy the real script to the mock repo so its REPO_ROOT resolves to MOCK_REPO
 cp "$(cd "$(dirname "$0")/../../evals/pipeline-bench" && pwd)/run-pipeline-bench.sh" "$MOCK_REPO/evals/pipeline-bench/run-pipeline-bench.sh"

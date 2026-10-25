@@ -40,6 +40,8 @@
 #
 # Example high-fidelity baseline run:
 #   RUNS_PER_QUERY=5 MODEL=claude-opus-4-8 bash scripts/run-eval-batch.sh
+# EXIT CODES: 0 done · 1 usage / lock held / selftest contamination · 6 STOP_AUTH: the first authentication
+# failure of a run_eval stops the whole batch (BL-0294, scripts/lib/auth-stop.js).
 set -euo pipefail
 
 # Single-instance lock: two concurrent eval batches would each create
@@ -129,11 +131,18 @@ fi
 # Print manifest info for selftest/verification
 if [[ -n "${ARM_PLUGIN_DIR:-}" ]]; then
   echo "[runner] Loaded plugins: [$(basename "$ARM_PLUGIN_DIR")]" >&2
-  exec "$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local --plugin-dir "$ARM_PLUGIN_DIR"
+  PLUGIN_ARGS=(--plugin-dir "$ARM_PLUGIN_DIR")
 else
   echo "[runner] Loaded plugins: []" >&2
-  exec "$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local --plugin-dir "$EMPTY_PLUGIN_DIR"
+  PLUGIN_ARGS=(--plugin-dir "$EMPTY_PLUGIN_DIR")
 fi
+
+# BL-0294: run_eval.py (an external plugin) swallows claude's stderr and exit code, returns on the first type=result line and SIGKILLs
+# the child, so the evidence is captured here at the claude boundary by the shared wrapper tail (scripts/lib/claude-call-capture-exec.sh;
+# design in claude-call-capture.js). The tail ends in `exec claude`, keeps the kill semantics, and refuses to start a claude after an
+# earlier call died on authentication. No record dir (selftest) = the plain pass-through it always was.
+EXTRA_ARGS=("$@" --strict-mcp-config --setting-sources project,local "${PLUGIN_ARGS[@]}")
+. "$CLAUDE_CAPTURE_TAIL"
 EOF
 chmod +x "$WRAPPER_DIR/claude"
 
@@ -143,6 +152,11 @@ _EVAL_SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 [ -r "$_EVAL_SELF_DIR/lib/repo-identity.sh" ] && . "$_EVAL_SELF_DIR/lib/repo-identity.sh" || true
 declare -F child_session_mint >/dev/null 2>&1 && child_session_mint eval-run
+# shellcheck source=lib/auth-stop.sh
+. "$_EVAL_SELF_DIR/lib/auth-stop.sh"
+
+# shellcheck source=lib/claude-call-capture.sh
+. "$_EVAL_SELF_DIR/lib/claude-call-capture.sh"
 
 # Prepend WRAPPER_DIR to PATH
 export PATH="$WRAPPER_DIR:$PATH"
@@ -302,8 +316,10 @@ for skill in "${SKILLS[@]}"; do
   cd "$SKILL_CREATOR_DIR"
   # Snapshot this skill's command files right before run_eval so we can delete
   # exactly what it creates (and nothing a concurrent run/user owns).
+  eval_rc=0
   before_cmds="$(ls "$CMD_DIR/${skill}-skill-"*.md 2>/dev/null | sort || true)"
   export ARM_PLUGIN_DIR="$SKILL_PATH"
+  claude_capture_begin "$RESULT_DIR/claude-calls"   # one record per claude call of THIS skill, plus a STOP marker
   $RUN_EVAL_CMD \
     --eval-set "$EVAL_FILE" \
     --skill-path "$SKILL_PATH" \
@@ -313,7 +329,7 @@ for skill in "${SKILLS[@]}"; do
     --model "$MODEL" \
     --verbose \
     > "$RESULT_DIR/eval-output.json" \
-    2> "$RESULT_DIR/eval-log.txt" || true
+    2> "$RESULT_DIR/eval-log.txt" || eval_rc=$?
   after_cmds="$(ls "$CMD_DIR/${skill}-skill-"*.md 2>/dev/null | sort || true)"
   while IFS= read -r nf; do
     [[ -n "$nf" ]] && CREATED_CMDS+=("$nf")
@@ -322,6 +338,25 @@ for skill in "${SKILLS[@]}"; do
   # verbose output goes to stderr (captured in eval-log.txt)
   # JSON results go to stdout (captured in eval-output.json)
   cat "$RESULT_DIR/eval-log.txt"
+
+  # BL-0294: a dead credential fails every remaining skill the same way, so the first authentication
+  # failure stops the whole batch (STOP_AUTH line, exit 6) after removing the command files made so far.
+  # run_eval-level signal: failed when run_eval exited non-zero or printed no summary (it swallows claude's own failures, hence the
+  # per-call records judged below); text phrases only count for a failed call.
+  eval_failed=0
+  { [ "$eval_rc" -ne 0 ] || ! grep -q '"summary"' "$RESULT_DIR/eval-output.json" 2>/dev/null; } && eval_failed=1
+  # Every recorded claude call is judged once its streams are closed (waits up to 10 s for stragglers; an unclosed one is judged as
+  # failed). The wrapper already refused to start a claude after an earlier record died on authentication -- this is the second,
+  # independent check, and it also covers the last in-flight calls.
+  auth_hit=0
+  claude_capture_judge "$skill/" --final || auth_hit=1
+  if [ "$auth_hit" -eq 0 ]; then
+    auth_stop_check "$skill" --failed "$eval_failed" --stderr "$RESULT_DIR/eval-log.txt" --log "$RESULT_DIR/eval-output.json" || auth_hit=1
+  fi
+  if [ "$auth_hit" -eq 1 ]; then
+    for f in "${CREATED_CMDS[@]+"${CREATED_CMDS[@]}"}"; do [[ -e "$f" ]] && rm -f "$f"; done
+    exit "$AUTH_STOP_EXIT"
+  fi
 
   SCORE=$(python3 -c "
 import json

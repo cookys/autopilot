@@ -83,6 +83,8 @@ if [ "$SHIM" -eq 1 ]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../../scripts/lib/auth-stop.sh
+. "$REPO_ROOT/scripts/lib/auth-stop.sh"
 if [[ "$TASK_ID" == /* ]]; then
   TASK_DIR="$TASK_ID"
 else
@@ -192,13 +194,19 @@ PROMPT_FILE="$OUT_DIR/prompt_1.md"
 cp "$TASK_DIR/task.md" "$PROMPT_FILE"
 
 RUN_EXIT=0
+CALL_RC=0
 OUT_JSON=$(
   cd "$TEMP_REPO"
   export HOME="$SCRATCH_HOME"
-  timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json < "$PROMPT_FILE" 2>>"$RAW_LOG"
-) || RUN_EXIT=$?
+  timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json < "$PROMPT_FILE" 2>"$OUT_DIR/call_1.stderr"
+) || { RUN_EXIT=$?; CALL_RC=$RUN_EXIT; }
+printf '%s\n' "$OUT_JSON" > "$OUT_DIR/call_1.stdout"
+cat "$OUT_DIR/call_1.stderr" >> "$RAW_LOG"
 echo "$OUT_JSON" >> "$RAW_LOG"
 echo "$OUT_JSON" >> "$OUT_DIR/all_outs.jsonl"
+# BL-0294: stop at the first authentication failure (STOP_AUTH, exit 6). Only THIS call's own stdout / stderr files are judged
+# (RAW_LOG is cumulative evidence, never judged); failed = non-zero exit or no successful claude result object.
+auth_stop_check "$TASK_ID/round-1" --failed "$(( CALL_RC != 0 ))" --failed-from-json "$OUT_DIR/call_1.stdout" --log "$OUT_DIR/call_1.stdout" --stderr "$OUT_DIR/call_1.stderr" || exit "$AUTH_STOP_EXIT"
 
 (
   cd "$TEMP_REPO"
@@ -253,12 +261,16 @@ if [ "$ARM" = "pipeline" ] || { [ "$ARM" = "verify-first" ] && [ "$CONVERGED" !=
     adv_count=$(python3 -c 'import sys, json; print(len(json.load(sys.stdin).get("findings", [])))' < "$OUT_DIR/error_scan_${ROUNDS}.json" 2>/dev/null || echo 0)
     ADVISORY_FINDINGS=$(( ADVISORY_FINDINGS + adv_count ))
     
+    REVIEW_RC=0
     if [ -n "${PIPELINE_BENCH_REVIEW_CMD:-}" ]; then
-      verdict_json=$($PIPELINE_BENCH_REVIEW_CMD --runner "$REVIEWER_RUNNER" --model "$REVIEWER_MODEL" --diff-file "$diff_file" --spec-file "$TASK_DIR/task.md" 2>>"$RAW_LOG") || true
+      verdict_json=$($PIPELINE_BENCH_REVIEW_CMD --runner "$REVIEWER_RUNNER" --model "$REVIEWER_MODEL" --diff-file "$diff_file" --spec-file "$TASK_DIR/task.md" 2>"$OUT_DIR/review_${ROUNDS}.stderr") || REVIEW_RC=$?
     else
-      verdict_json=$(bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner "$REVIEWER_RUNNER" --model "$REVIEWER_MODEL" --diff-file "$diff_file" --spec-file "$TASK_DIR/task.md" 2>>"$RAW_LOG") || true
+      verdict_json=$(bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner "$REVIEWER_RUNNER" --model "$REVIEWER_MODEL" --diff-file "$diff_file" --spec-file "$TASK_DIR/task.md" 2>"$OUT_DIR/review_${ROUNDS}.stderr") || REVIEW_RC=$?
     fi
+    cat "$OUT_DIR/review_${ROUNDS}.stderr" >> "$RAW_LOG"
     echo "$verdict_json" > "$OUT_DIR/review_${ROUNDS}.json"
+    # the reviewer is a paid call too: a dead credential must not be followed by another round
+    auth_stop_check "$TASK_ID/review-${ROUNDS}" --failed "$(( REVIEW_RC != 0 ))" --failed-from "$OUT_DIR/review_${ROUNDS}.json" --dispatch "$OUT_DIR/review_${ROUNDS}.json" --stderr "$OUT_DIR/review_${ROUNDS}.stderr" || exit "$AUTH_STOP_EXIT"
     VERDICT=$(echo "$verdict_json" | python3 -c 'import sys, json; print(json.loads(sys.stdin.read()).get("verdict", "null"))' 2>/dev/null || echo "null")
     FINDINGS=$(echo "$verdict_json" | python3 -c 'import sys, json; print(json.loads(sys.stdin.read()).get("findings", ""))' 2>/dev/null || echo "")
     
@@ -294,13 +306,17 @@ if [ "$ARM" = "pipeline" ] || { [ "$ARM" = "verify-first" ] && [ "$CONVERGED" !=
     cat "$diff_file" >> "$NEXT_PROMPT_FILE"
     echo "\`\`\`" >> "$NEXT_PROMPT_FILE"
     
+    CALL_RC=0
     OUT_JSON=$(
       cd "$TEMP_REPO"
       export HOME="$SCRATCH_HOME"
-      timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json < "$NEXT_PROMPT_FILE" 2>>"$RAW_LOG"
-    ) || RUN_EXIT=$?
+      timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --setting-sources project --strict-mcp-config --dangerously-skip-permissions --output-format json < "$NEXT_PROMPT_FILE" 2>"$OUT_DIR/call_${ROUNDS}.stderr"
+    ) || { RUN_EXIT=$?; CALL_RC=$RUN_EXIT; }
+    printf '%s\n' "$OUT_JSON" > "$OUT_DIR/call_${ROUNDS}.stdout"
+    cat "$OUT_DIR/call_${ROUNDS}.stderr" >> "$RAW_LOG"
     echo "$OUT_JSON" >> "$RAW_LOG"
     echo "$OUT_JSON" >> "$OUT_DIR/all_outs.jsonl"
+    auth_stop_check "$TASK_ID/round-${ROUNDS}" --failed "$(( CALL_RC != 0 ))" --failed-from-json "$OUT_DIR/call_${ROUNDS}.stdout" --log "$OUT_DIR/call_${ROUNDS}.stdout" --stderr "$OUT_DIR/call_${ROUNDS}.stderr" || exit "$AUTH_STOP_EXIT"
     
     (
       cd "$TEMP_REPO"

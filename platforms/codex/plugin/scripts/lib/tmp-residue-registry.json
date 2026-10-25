@@ -426,6 +426,13 @@
       "reason": "short-lived scratch; owner removes it, registry backstop prunes after retention"
     },
     {
+      "pattern": "qualification-sweep-raw-*",
+      "kind": "scratch",
+      "owner": "scripts/qualification-sweep.sh",
+      "retention_days": null,
+      "reason": "one administration's raw output, judged for authentication failure then copied into the evidence bundle; removed by the sweep right after"
+    },
+    {
       "pattern": "autopilot-engine-qualify-*",
       "kind": "scratch",
       "owner": "scripts/engine-qualify.js",

@@ -50,20 +50,19 @@ pin_cmd() {
     "$@"
 }
 
-# ── 1: round-trip: pin-seat then pins → exactly one row, expires: null ──
+# ── 1: round-trip: pin-seat then pins → exactly one seven-key row, no expiry ──
 reset_pins
 pin_cmd implementer 'owner ruling' >"$OUT" 2>"$ERR"
 ec=$?
 node "$CLI" pins --role implementer --store "$CAP" >"$OUT" 2>"$ERR"
 ec_pins=$?
 count=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d.length))' "$OUT")
-expires=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(d[0]&&d[0].expires===null?"null":String(d[0]&&d[0].expires))' "$OUT")
 keys=$(node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(Object.keys(d[0]||{}).sort().join(","))' "$OUT")
-if [ "$ec" = "0" ] && [ "$ec_pins" = "0" ] && [ "$count" = "1" ] && [ "$expires" = "null" ] \
-  && [ "$keys" = "effort,endpoint,engine,expires,operator,reason,role,runner" ]; then
-  ok "1: round-trip pin-seat → pins returns one eight-key row with expires:null"
+if [ "$ec" = "0" ] && [ "$ec_pins" = "0" ] && [ "$count" = "1" ] \
+  && [ "$keys" = "effort,endpoint,engine,operator,reason,role,runner" ]; then
+  ok "1: round-trip pin-seat → pins returns one seven-key row with no expiry key"
 else
-  bad "1: ec=$ec ec_pins=$ec_pins count=$count expires=$expires keys=$keys out=$(cat "$OUT") err=$(cat "$ERR")"
+  bad "1: ec=$ec ec_pins=$ec_pins count=$count keys=$keys out=$(cat "$OUT") err=$(cat "$ERR")"
 fi
 
 # ── 2: --expires <date> exits non-zero and stderr names expires ──
@@ -187,7 +186,6 @@ node -e '
       endpoint: "local",
       reason: "should-not-land",
       operator: "cookys",
-      expires: null,
     }]);
     process.exit(0);
   } catch (e) {

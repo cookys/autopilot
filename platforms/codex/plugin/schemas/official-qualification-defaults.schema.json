@@ -182,8 +182,7 @@
         "prompt_config_hash",
         "effort",
         "date",
-        "qualified_at",
-        "expires"
+        "qualified_at"
       ],
       "properties": {
         "engine": {
@@ -259,12 +258,6 @@
           ]
         },
         "qualified_at": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "expires": {
           "type": [
             "string",
             "null"

@@ -22,7 +22,7 @@
 // Usage:
 //   node consult-discuss-genuine-row-fixture.js <consult|discuss> \
 //     --engine <id> --runner <runner> [--scope-file <path>] \
-//     [--corrupt-answer] [--issued-at <iso>] [--expires-at <iso>]
+//     [--corrupt-answer] [--issued-at <iso>]
 //
 // --scope-file, when given, OVERRIDES the frozen production scope with the
 // scope JSON at that path (D7 test case xviii: a row emitted under a
@@ -52,7 +52,7 @@ function sha256(seed) {
 
 function parseArgs(argv) {
   const role = argv[0];
-  const opts = { engine: null, runner: null, scopeFile: null, corrupt: false, issuedAt: null, expiresAt: null };
+  const opts = { engine: null, runner: null, scopeFile: null, corrupt: false, issuedAt: null };
   for (let i = 1; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--engine') opts.engine = argv[++i];
@@ -60,7 +60,6 @@ function parseArgs(argv) {
     else if (a === '--scope-file') opts.scopeFile = argv[++i];
     else if (a === '--corrupt-answer') opts.corrupt = true;
     else if (a === '--issued-at') opts.issuedAt = argv[++i];
-    else if (a === '--expires-at') opts.expiresAt = argv[++i];
   }
   if (role !== 'consult' && role !== 'discuss') {
     throw new Error(`unknown role '${role}' (expected consult|discuss)`);
@@ -183,8 +182,7 @@ function buildDiscussAdministration(corrupt, trialTimes) {
 // runs, not fixed calendar literals: the resolver's own qualification-row
 // read never forwards --now to seat-status (real wall clock), so a fixture
 // pinned to a literal date only stays "in date"/"strike window open" for a
-// few hours around its authorship. MAX_QUALIFIED_TTL_DAYS (30, plan §2.6)
-// bounds issued_at..expires_at, so the defaults below stay inside it.
+// few hours around its authorship.
 const DAY_MS = 24 * 60 * 60 * 1000;
 function isoOffset(days) {
   return new Date(Date.now() + days * DAY_MS).toISOString();
@@ -192,19 +190,13 @@ function isoOffset(days) {
 
 function main() {
   const opts = parseArgs(process.argv.slice(2));
-  // Default: issued 2 days ago, expires 28 days from now — unexpired (case
-  // v), inside the 30-day ceiling, and leaves a wide (issued_at, now] window
+  // Default: issued 2 days ago; leaves a wide (issued_at, now] window
   // for a caller to plant strikes (case vii-a/b/c). Computed BEFORE trial
   // times so an --issued-at override (case vi: a calendar-expired row) still
   // gets trial timestamps that precede it — compileCapabilityEvidence rejects
   // a trial later than evidence.observed_at (== issued_at here) regardless of
   // whether "now" is later still.
-  // A day of safety margin below the 30-day MAX_QUALIFIED_TTL_DAYS ceiling:
-  // issuedAt and expiresAt are two independent Date.now() reads a few ms
-  // apart, so cutting exactly at 30 days is a flaky boundary (occasionally
-  // lands a few ms OVER the ceiling and compileCapabilityEvidence refuses).
   const issuedAt = opts.issuedAt || isoOffset(-2);
-  const expiresAt = opts.expiresAt || isoOffset(27);
   const issuedAtMs = Date.parse(issuedAt);
   const trialTimes = [
     new Date(issuedAtMs - 2 * DAY_MS).toISOString(),
@@ -272,7 +264,6 @@ function main() {
     identity,
     issued_at: issuedAt,
     observed_at: issuedAt,
-    expires_at: expiresAt,
     methodology,
     trials: built.trialRecords,
     revocation: null,
@@ -303,7 +294,6 @@ function main() {
     latency: { sample_wall_time_s: 1 },
     status: state,
     qualified_at: issuedAt.slice(0, 10),
-    expires: expiresAt.slice(0, 10),
     evidence_store: {
       event_id: written.event_id,
       producer: written.producer,

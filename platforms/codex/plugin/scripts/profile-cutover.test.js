@@ -81,7 +81,6 @@ function dogfood(index) {
     reviewer_family: 'xai',
     owner_qualification_receipt_id: sha256('owner:qualification'),
     owner_qualified_at: '2026-07-26T07:00:00.000Z',
-    owner_qualification_expires_at: '2026-07-27T07:00:00.000Z',
     independent_acceptance_receipt_hash: sha256(`acceptance:${index}`),
     acceptance_passed: true,
     critical_false_pass_attributed_to_reduction: false,
@@ -301,17 +300,6 @@ function main() {
     gate(duplicateDecision, 'five_fresh_qualified_owner_dogfoods').status,
     'hold',
     'dogfood uniqueness is enforced',
-  );
-
-  const expired = eligibleSnapshot();
-  expired.dogfood_receipts[0].owner_qualification_expires_at
-    = '2026-07-26T09:00:00.000Z';
-  const expiredDecision = evaluateProfileCutover(expired, liveVerifiers);
-  equal(expiredDecision.decision, 'hold_guided', 'expired owner qualification blocks cutover');
-  equal(
-    gate(expiredDecision, 'five_fresh_qualified_owner_dogfoods').status,
-    'hold',
-    'owner qualification must remain fresh at decision time',
   );
 
   const critical = eligibleSnapshot();

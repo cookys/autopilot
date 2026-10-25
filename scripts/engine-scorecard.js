@@ -52,13 +52,9 @@ const LADDER_ROLES = new Set(['reviewer', 'implementer', 'owner']);
 // row.provenance.administration_version_source. It is disclosure, not
 // authority — no admission path branches on it.
 const VALID_VERSION_SOURCES = new Set(['runtime', 'manual', 'operator-asserted', 'official-default']);
-// `expired` stays a legal INPUT status (rows written before the 2026-08-22
-// no-confidence-decay cut may still legitimately carry it on disk) but the
-// projection (deriveStatus, below) never PRODUCES it any more — a stale/
-// past-expires row now derives `qualified` with `expiry_warning: true`
-// instead. Calendar dates are advisory-only everywhere; see
-// references/strike-decay.md.
-const VALID_STATUSES = new Set(['qualified', 'failed', 'expired']);
+// Qualification has no calendar: a row is `qualified` or `failed`, and standing ends only through
+// strikes (references/strike-decay.md).
+const VALID_STATUSES = new Set(['qualified', 'failed']);
 const VALID_COST_SOURCES = new Set(['measured', 'manual', 'unknown']);
 // --- strike-decay projection (2026-08-22 no-confidence-decay P1) ------------------
 // Closed registries, frozen contract §2.7.3. The strike STORE (write path,
@@ -106,7 +102,6 @@ const REQUIRED_FIELDS = [
   'latency',
   'status',
   'qualified_at',
-  'expires',
 ];
 
 // The effort vocabulary, owned once. Three states that look alike and are NOT interchangeable:
@@ -142,6 +137,7 @@ const HELP_TEXT = `Usage:\n\
   node scripts/engine-scorecard.js import-transcripts --root <codex|grok|opencode|agy>=<path> [--root ...] [--output <path>]\n\
   node scripts/engine-scorecard.js seat-status --engine <token> --runner <token> --role <role> [--effort <effort>] [--seat-kind brain|default] [--now <ISO-date>]\n\
     [--require-evidence --scope-file <path> [--identity-file <path>]] [--role-default-scope]\n\
+  node scripts/engine-scorecard.js strip-expiry [--dry-run]\n\
   node scripts/engine-scorecard.js relabel-effort --to default --reason <text> [--event-id <N>]... [--evidence-event-id <N>]... [--dry-run]\n\
 \n  --file <path>  Read one JSON row from this file (optional with --supersede-provisional).\n\
   --supersede-provisional  Append a record_kind=supersession marker for a prior event.\n\
@@ -151,7 +147,7 @@ const HELP_TEXT = `Usage:\n\
   --effort selects ONE seat partition for seat-status. Omit it only for legacy rows recorded\n\
     before effort partitioning — omitting does NOT mean "any effort".\n\
   --key accepts capability (default) or cost.\n\
-  --now accepts ISO date; used by current/report/ladder/seat-status for deterministic TTL checks.\n\
+  --now accepts ISO date; used by current/report/ladder/seat-status for a deterministic clock.\n\
   All disk-backed views are untrusted telemetry: stored qualified rows are projected\n\
     as provisional and report/ladder cannot produce a routing candidate.\n\
   --require-evidence additionally excludes legacy rows and requires --scope-file.\n\
@@ -164,10 +160,10 @@ const HELP_TEXT = `Usage:\n\
   import-transcripts requires explicit roots and emits aggregate-only, untrusted telemetry;\n\
     it never appends scorecard rows. --output atomically writes the same JSON printed to stdout.\n\
   seat-status prints the §2.7.5 admission projection for one engine+runner+role seat:\n\
-    admission_status/expiry_warning/strikes_since_pass/critical_trigger/would_requalify/\n\
+    admission_status/strikes_since_pass/critical_trigger/would_requalify/\n\
     strike_threshold/strike_policy_version/rejected_strikes, plus engine/runner/role (the seat\n\
     answered for), seat_hash and the\n\
-    baseline (baseline_event_id/baseline_qualified_at). Calendar dates never gate admission;\n\
+    baseline (baseline_event_id/baseline_qualified_at). a qualification has no date at all;\n\
     AUTOPILOT_STRIKE_ENFORCEMENT=enforce arms ordinary-strike requalification (shadow by default).\n\
     seat-status --require-evidence (D7, plan 2026-08-28-consult-discuss-qualification.md) runs\n\
     the STRICT evidence-validating path: strict store parse, validateRecordRow forgery/anchor\n\
@@ -181,6 +177,10 @@ const HELP_TEXT = `Usage:\n\
     that has no scorecard row yet, so it can be registered later at "default". All-or-nothing: any\n\
     unknown/legacy/already-default target aborts with nothing written. Backs both stores up\n\
     (<file>.bak-relabel-effort-<UTC>) before an atomic rewrite under both locks. --dry-run plans only.\n\
+  strip-expiry is the one-time migration for stores written before qualification lost its expiry\n\
+    (2026-10-26): it re-seals each evidence record without its expiry field (ids change, references follow),\n\
+    drops the expiry field from scorecard rows and pins, and backs every store up (<file>.bak-strip-expiry-<UTC>)\n\
+    first. Qualification has no calendar: standing ends only through strikes. --dry-run plans only.\n\
 \nExit codes:\n\
   0 = success\n\
   1 = validation error\n\
@@ -252,6 +252,14 @@ function parseJsonObject(raw, context) {
 //   candidates themselves);
 // - their supersedes_event_id targets are collected so every baseline path
 //   can filter them out before selection.
+// A row written before qualification lost its calendar: it carries `expires`, a status of
+// `expired`, or evidence sealed with `expires_at`. Detected so the reader names the one-line
+// migration instead of failing on a generic schema error.
+function isLegacyExpiryRow(row) {
+  return row.expires !== undefined || row.status === 'expired'
+    || (row.evidence && typeof row.evidence === 'object' && row.evidence.expires_at !== undefined);
+}
+
 function readStorePartition(silentWarn = false, strict = false) {
   const lines = readTextLines(SCORECARD_FILE);
   const allRows = [];
@@ -284,6 +292,9 @@ function readStorePartition(silentWarn = false, strict = false) {
       continue;
     }
 
+    if (isLegacyExpiryRow(row)) {
+      failValidation(`scorecard line ${i + 1} was written before qualification lost its expiry (2026-10-26); run once: node scripts/engine-scorecard.js strip-expiry   (backs every store up first)`);
+    }
     allRows.push(row);
     ordinaryRows.push(row);
   }
@@ -325,18 +336,6 @@ function toDateMs(value) {
     : String(value);
   const ms = Date.parse(normalized);
   return Number.isFinite(ms) ? ms : null;
-}
-
-// Start of the UTC day containing `ms`. Used ONLY by computeExpiryWarning, whose
-// right-hand side (`expires`) is contractually DATE-ONLY (:342) — a date-vs-date
-// comparison must not become time-of-day sensitive. It is deliberately NOT the
-// default clock: see nowArgToMs.
-function startOfUtcDayMsOf(ms) {
-  // Date#toISOString throws RangeError outside +-8.64e15 even for finite input.
-  if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return ms;
-  const iso = new Date(ms).toISOString().slice(0, 10);
-  const floor = Date.parse(`${iso}T00:00:00.000Z`);
-  return Number.isFinite(floor) ? floor : ms;
 }
 
 // v2.34.37: the DEFAULT clock is the real instant, not UTC midnight.
@@ -410,6 +409,10 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
     failValidation(`missing required field(s): ${missing.join(', ')}`);
   }
 
+  if (row.expires !== undefined) {
+    failValidation('a scorecard row has no expires field: qualification has no expiry (standing ends only through strikes)');
+  }
+
   if (typeof row.engine !== 'string' || row.engine.trim().length === 0) {
     failValidation('engine must be a non-empty string');
   }
@@ -453,7 +456,7 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
   }
 
   // Legacy rows have no evidence block, so the evidence timestamp gate never
-  // sees qualified_at / expires. Date-only strings are valid tsUtc input;
+  // sees qualified_at. Date-only strings are valid tsUtc input;
   // absent or non-string fields stay optional.
   rejectImpossibleRowDateFields(row);
 
@@ -504,22 +507,12 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
         failValidation(`scorecard ${field} does not match capability evidence`);
       }
     }
-    // Calendar tooth (a) pulled 2026-08-22: a `stale` evidence receipt is
-    // advisory-only (surfaced as expiry_warning at read time), never an
-    // admission downgrade — so a stale-receipt row now expects `qualified`.
-    // Rows recorded before this cut may still legitimately carry the literal
-    // `expired` string for a stale receipt; accepted on input for replay
-    // idempotency, never produced by the projection going forward.
-    const evidenceStatus = evidence.state === 'qualified' || evidence.state === 'stale'
-      ? 'qualified' : 'failed';
-    const evidenceStatusOk = row.status === evidenceStatus
-      || (evidence.state === 'stale' && row.status === 'expired');
-    if (!evidenceStatusOk) {
+    const evidenceStatus = evidence.state === 'qualified' ? 'qualified' : 'failed';
+    if (row.status !== evidenceStatus) {
       failValidation(`scorecard status does not match capability evidence state '${evidence.state}'`);
     }
-    if (row.qualified_at !== evidence.issued_at.slice(0, 10)
-        || row.expires !== evidence.expires_at.slice(0, 10)) {
-      failValidation('scorecard qualification dates do not match capability evidence');
+    if (row.qualified_at !== evidence.issued_at.slice(0, 10)) {
+      failValidation('scorecard qualification date does not match capability evidence');
     }
     row.evidence = evidence;
     if (evidence.source === 'internal_eval') {
@@ -528,11 +521,11 @@ function validateRecordRow(row, capabilityRowsOverride = null) {
   }
 }
 
-// Reject calendar-impossible qualified_at / expires before they are stored.
+// Reject calendar-impossible qualified_at before they are stored.
 function rejectImpossibleRowDateFields(row) {
   if (!row || typeof row !== 'object') return;
   const { tsUtc } = require('./lib/qualification-record-v2.js');
-  for (const field of ['qualified_at', 'expires']) {
+  for (const field of ['qualified_at']) {
     const value = row[field];
     if (typeof value !== 'string') continue;
     try {
@@ -559,7 +552,6 @@ function rejectImpossibleEvidenceTimestamps(evidence) {
   };
   check(evidence.issued_at, 'evidence.issued_at');
   check(evidence.observed_at, 'evidence.observed_at');
-  check(evidence.expires_at, 'evidence.expires_at');
   if (Array.isArray(evidence.trials)) {
     evidence.trials.forEach((trial, index) => {
       if (!trial || typeof trial !== 'object' || Array.isArray(trial)) return;
@@ -1664,10 +1656,8 @@ function currentRowsForRole(role, nowMs, options = {}) {
       admissible: false,
       observed_status: evidenceBackedStatus,
       event_id: toEventId(row.event_id) || 0,
-      // §2.7.5 projection fields. expiry_warning is THIS row's own `expires`
-      // (advisory-only, never gates admission_status).
+      // §2.7.5 projection fields.
       admission_status: seatProjection.admission_status,
-      expiry_warning: computeExpiryWarning(row.expires, nowMs),
       strikes_since_pass: seatProjection.strikes_since_pass,
       critical_trigger: seatProjection.critical_trigger,
       would_requalify: seatProjection.would_requalify,
@@ -1699,25 +1689,8 @@ function deriveStatus(row, nowMs, resolvedEvidenceReceipt = null, resolvedRecord
       evaluation_time: new Date(nowMs).toISOString(),
     });
     if (receipt.state === 'qualified') return 'qualified';
-    // Calendar tooth (a) pulled 2026-08-22 (no-confidence-decay P1): a stale
-    // evidence receipt is advisory-only — surfaced as `expiry_warning` in the
-    // projection, never a downgrade to `expired`. See references/strike-decay.md.
-    // But capability-evidence marks EVERY expired non-revoked record `stale`, failed exams
-    // included; only an expired QUALIFICATION keeps its standing. Reading every stale receipt as
-    // qualified admitted exams that did not pass once they expired (2026-09-24: GLM-5.3 40/42 and
-    // MiniMax-M3 26/42, degraded 2026-08-20). Unknown underlying state ⇒ not admitted.
-    if (receipt.state === 'stale') {
-      const underlying = resolvedRecordState !== undefined
-        ? resolvedRecordState
-        : (receipt.evidence_id === row.evidence.evidence_id ? row.evidence.state : undefined);
-      return underlying === 'qualified' ? 'qualified' : 'failed';
-    }
     return 'failed';
   }
-  if (row.status !== 'qualified') return row.status;
-  // Calendar tooth (a) pulled 2026-08-22: `expires` never flips a qualified
-  // row to `expired` here. It is surfaced separately as `expiry_warning`
-  // (computeExpiryWarning, below) and plays no part in admission.
   return row.status;
 }
 
@@ -1765,18 +1738,6 @@ function seatIdentityHash(engine, runner, role, effort, seatKind = 'default') {
   }));
 }
 
-// `expires` is a DATE, not an instant — so this stays a date-vs-date comparison.
-// The default clock became the real instant in v2.34.37 (nowArgToMs); without the
-// floor here, an advisory-only warning would newly fire on the expiry date itself
-// (00:00:00.001Z onward) rather than the day after, and would answer differently
-// for `--now 2026-08-24` vs `--now 2026-08-24T10:00:00Z`. Neither is a defect the
-// clock fix set out to change, and expiry is advisory-only either way
-// (references/strike-decay.md: calendar tooth (a) is pulled).
-function computeExpiryWarning(expiresValue, nowMs) {
-  const ms = toDateMs(expiresValue);
-  return ms !== null && ms < startOfUtcDayMsOf(nowMs);
-}
-
 // Start-of-day instant for a DATE-ONLY string (qualified_at is pinned date-only, :342).
 // Used only as the fold threshold fallback below — matches toDateMs (start-of-day),
 // the same granularity row selection/sorting already uses, so ties resolve by event_id.
@@ -1822,8 +1783,8 @@ function baselineInstantMs(row, evidence) {
 }
 
 // Baseline = the newest scorecard row for this seat (engine+runner+role, NOT
-// full configured identity) whose derived status is `qualified` — calendar
-// plays no part (deriveStatus above never emits `expired`) — ordered by
+// full configured identity) whose derived status is `qualified` — status
+// is derived by deriveStatus above, no calendar involved — ordered by
 // qualified_at then event_id. Scans the RAW store (not the current/latest-per-
 // identity collapse) because a seat's true qualification history spans every
 // configured-identity variant (corpus/harness/runner_version churn) that ever
@@ -1893,7 +1854,6 @@ function findSeatBaseline(
         eid,
         qualified_at: row.qualified_at,
         event_id: eid,
-        expires: row.expires,
         instantMs: instantMs === null ? qMs : instantMs,
         // Adoption provenance (v2.34.36). Present only on rows copied in from
         // the shipped official defaults by scripts/adopt-qualification-defaults.js.
@@ -2072,7 +2032,7 @@ function strikeEnforcementMode() {
   return process.env.AUTOPILOT_STRIKE_ENFORCEMENT === 'enforce' ? 'enforce' : 'shadow';
 }
 
-// Any local scorecard row for this seat — qualified, failed, expired, superseded
+// Any local scorecard row for this seat — qualified, failed, superseded
 // or revoked — is local evidence. The feed is never consulted for that seat.
 function hasLocalSeatRow(engine, runner, role, effort, seatKind, rows) {
   const runnerNorm = normRunnerToken(runner);
@@ -2163,7 +2123,6 @@ function computeSeatProjection(
 
   const projection = {
     admission_status: baseline ? 'qualified' : 'no_record',
-    expiry_warning: baseline ? computeExpiryWarning(baseline.expires, nowMs) : false,
     strikes_since_pass: 0,
     critical_trigger: false,
     would_requalify: false,
@@ -2628,7 +2587,6 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
         eid,
         qualified_at: clone.qualified_at,
         event_id: eid,
-        expires: clone.expires,
         instantMs: instantMs === null ? qMs : instantMs,
       };
     }
@@ -2636,7 +2594,6 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
 
   const projection = {
     admission_status: best ? 'qualified' : 'no_record',
-    expiry_warning: best ? computeExpiryWarning(best.expires, nowMs) : false,
     strikes_since_pass: 0,
     critical_trigger: false,
     would_requalify: false,
@@ -2750,7 +2707,7 @@ function cmdLadder(args) {
     identity,
   } = parseLadderArgs(args);
   // currentRowsForRole already applies the invocation-tuple supersede (R6) —
-  // a later failed/expired re-qualification retires the rung before this
+  // a later failed re-qualification retires the rung before this
   // qualified filter runs (R5 semantics preserved).
   const deduped = currentRowsForRole(role, nowMs, {
     requireEvidence,
@@ -3046,9 +3003,9 @@ function planEffortRelabel(opts, scorecardRows, evidenceWrappers, strikeRows, pi
   };
 }
 
-function backupFile(file, tag) {
+function backupFile(file, tag, kind = 'relabel-effort') {
   for (let n = 0; n < 1000; n += 1) {
-    const dest = `${file}.bak-relabel-effort-${tag}${n === 0 ? '' : `-${n}`}`;
+    const dest = `${file}.bak-${kind}-${tag}${n === 0 ? '' : `-${n}`}`;
     try {
       fs.copyFileSync(file, dest, fs.constants.COPYFILE_EXCL);
       fs.chmodSync(dest, 0o600);
@@ -3153,6 +3110,225 @@ function cmdRelabelEffort(args) {
   process.stdout.write(`${JSON.stringify(report)}\n`);
 }
 
+// ---------------------------------------------------------------------------------------------
+// strip-expiry: one-time migration for stores written before qualification lost its calendar
+// (owner, 2026-10-26: "no expiry; standing is lost only by strikes").
+//
+// Why this is not a field edit. expires_at sat inside the capability-evidence body, so it is
+// covered by evidence_id/evidence_hash and by the wrapper transcript_hash; the scorecard row
+// embeds the evidence and anchors to the wrapper by event_id + transcript_hash. Dropping the field
+// therefore re-seals every evidence record (and every `supersedes` that points at one), then
+// rewrites the embedded copies and anchors. Rows carrying `expires`, status `expired`, and pin rows
+// carrying `expires: null` lose the field. Planned fully in memory first (all-or-nothing), every
+// store backed up, then rewritten atomically under both locks. --dry-run only plans.
+// ---------------------------------------------------------------------------------------------
+function parseStripExpiryArgs(args) {
+  const out = { dryRun: false };
+  for (const arg of args) {
+    if (isHelpToken(arg)) usage(0);
+    if (arg === '--dry-run') out.dryRun = true;
+    else failUsage(`unknown option: ${arg}`);
+  }
+  return out;
+}
+
+function resealWithoutExpiry(evidence, idMap) {
+  const raw = JSON.parse(JSON.stringify(evidence));
+  delete raw.expires_at;
+  for (const field of RELABEL_HASH_FIELDS) delete raw[field];
+  if (raw.state === 'stale') {
+    throw new Error(`evidence ${evidence.evidence_id} has the retired state 'stale' (a date-derived state); it cannot be migrated`);
+  }
+  if (raw.supersedes && idMap.has(raw.supersedes)) raw.supersedes = idMap.get(raw.supersedes);
+  return compileCapabilityEvidence(raw);
+}
+
+// Planner: no disk I/O. Throws Error(message) so a bad store changes nothing.
+function planStripExpiry(scorecardRows, evidenceWrappers, strikeRows, pinRows) {
+  const oldIds = new Set(evidenceWrappers.map((w) => w.evidence.evidence_id));
+  const idMap = new Map();
+  const done = new Map();
+  const pending = evidenceWrappers.slice();
+  while (pending.length > 0) {
+    const before = pending.length;
+    for (let i = pending.length - 1; i >= 0; i -= 1) {
+      const w = pending[i];
+      const parent = w.evidence.supersedes;
+      if (parent && oldIds.has(parent) && !idMap.has(parent)) continue;
+      const evidence = resealWithoutExpiry(w.evidence, idMap);
+      idMap.set(w.evidence.evidence_id, evidence.evidence_id);
+      done.set(w.event_id, {
+        event_id: w.event_id,
+        producer: w.producer,
+        transcript_hash: capabilityEvidenceProducerHash(evidence, w.producer),
+        evidence,
+      });
+      pending.splice(i, 1);
+    }
+    if (pending.length === before) throw new Error('evidence supersedes chain is cyclic or dangling; cannot re-seal');
+  }
+  const newWrappers = evidenceWrappers.map((w) => done.get(w.event_id));
+  const newIds = new Set(newWrappers.map((w) => w.evidence.evidence_id));
+  if (newIds.size !== newWrappers.length) {
+    throw new Error('re-sealing would make two evidence records identical (they differed only in expires_at)');
+  }
+  for (const w of newWrappers) validateEvidenceProducer(w.evidence, w.producer);
+  const wrapperByEvent = new Map(newWrappers.map((w) => [w.event_id, w]));
+
+  let expiresRemoved = 0;
+  let expiredMapped = 0;
+  let evidenceRelinked = 0;
+  const newRows = scorecardRows.map((row) => {
+    if (row.record_kind !== undefined) return row;
+    const next = { ...row };
+    if (next.expires !== undefined) { delete next.expires; expiresRemoved += 1; }
+    if (next.evidence && typeof next.evidence === 'object') {
+      const anchor = next.evidence_store;
+      const wrapper = anchor ? wrapperByEvent.get(toEventId(anchor.event_id)) : null;
+      if (anchor && !wrapper) throw new Error(`scorecard event ${row.event_id} anchors an evidence record that is not in the evidence store`);
+      if (wrapper) {
+        next.evidence = wrapper.evidence;
+        next.evidence_store = { ...anchor, transcript_hash: wrapper.transcript_hash };
+      } else {
+        next.evidence = resealWithoutExpiry(next.evidence, idMap);
+      }
+      evidenceRelinked += 1;
+    }
+    if (next.status === 'expired') {
+      // `expired` was only ever written onto a row that had qualified and then passed its date.
+      next.status = next.evidence && next.evidence.state !== 'qualified' ? 'failed' : 'qualified';
+      expiredMapped += 1;
+    }
+    return next;
+  });
+  failValidationThrows = true;
+  try {
+    for (const next of newRows) {
+      if (next.record_kind === undefined && next.evidence) validateRecordRow(JSON.parse(JSON.stringify(next)), newWrappers);
+    }
+  } finally {
+    failValidationThrows = false;
+  }
+
+  // Nothing outside the evidence store and scorecard may point at an old evidence id: a leftover
+  // would be orphaned by the re-seal, so refuse rather than strand it.
+  for (const [label, rows] of [['strikes', strikeRows], ['pins', pinRows]]) {
+    const text = JSON.stringify(rows || []);
+    for (const [oldId, newId] of idMap) {
+      if (oldId !== newId && text.includes(oldId)) {
+        throw new Error(`${label} reference evidence ${oldId}, which re-sealing would change; refusing so it is not orphaned`);
+      }
+    }
+  }
+  let pinsRewritten = 0;
+  const newPins = pinRows ? pinRows.map((p) => {
+    if (p.expires === undefined) return p;
+    const { expires: _dropped, ...rest } = p;
+    pinsRewritten += 1;
+    return rest;
+  }) : null;
+  const changedIds = [...idMap].filter(([a, b]) => a !== b).length;
+  return {
+    newRows, newWrappers, newPins,
+    summary: {
+      evidence_records: newWrappers.length,
+      evidence_ids_changed: changedIds,
+      scorecard_rows_relinked: evidenceRelinked,
+      scorecard_expires_removed: expiresRemoved,
+      expired_status_mapped: expiredMapped,
+      pins_rewritten: pinsRewritten,
+    },
+  };
+}
+
+function cmdStripExpiry(args) {
+  const opts = parseStripExpiryArgs(args);
+  const strikesFile = path.join(CAPABILITY_DIR, 'strikes.jsonl');
+  const pinsFile = path.join(CAPABILITY_DIR, 'pins.jsonl');
+  const evidenceLock = { storeDir: CAPABILITY_DIR, lockFile: path.join(CAPABILITY_DIR, '.lock'), name: 'capability' };
+  const scorecardLock = { storeDir: SCORECARD_DIR, lockFile: LOCK_FILE, name: 'scorecard' };
+
+  const run = () => {
+    let plan;
+    failValidationThrows = true;
+    try {
+      const scorecardRows = readJsonlStrict(SCORECARD_FILE, 'scorecard') || [];
+      const evidenceWrappers = (readJsonlStrict(CAPABILITY_EVIDENCE_FILE, 'capability evidence') || []).map((w) => {
+        if (!w.evidence || typeof w.evidence !== 'object' || toEventId(w.event_id) === null) {
+          throw new Error('capability evidence line has an invalid wrapper');
+        }
+        return { event_id: toEventId(w.event_id), producer: w.producer, transcript_hash: w.transcript_hash, evidence: w.evidence };
+      });
+      plan = planStripExpiry(
+        scorecardRows,
+        evidenceWrappers,
+        readJsonlStrict(strikesFile, 'strikes'),
+        readJsonlStrict(pinsFile, 'pins'),
+      );
+    } finally {
+      failValidationThrows = false;
+    }
+    const s = plan.summary;
+    const needsWrite = s.evidence_ids_changed > 0 || s.scorecard_expires_removed > 0
+      || s.expired_status_mapped > 0 || s.pins_rewritten > 0;
+    const report = { dry_run: opts.dryRun, already_migrated: !needsWrite, ...s, backups: [] };
+    if (opts.dryRun || !needsWrite) return report;
+
+    const tag = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    const files = [];
+    if (fs.existsSync(CAPABILITY_EVIDENCE_FILE)) {
+      files.push([CAPABILITY_EVIDENCE_FILE, plan.newWrappers.map((w) => ({
+        event_id: w.event_id, producer: w.producer, transcript_hash: w.transcript_hash, evidence: w.evidence,
+      }))]);
+    }
+    if (fs.existsSync(SCORECARD_FILE)) files.push([SCORECARD_FILE, plan.newRows]);
+    if (s.pins_rewritten > 0) files.push([pinsFile, plan.newPins]);
+    for (const [file] of files) report.backups.push(backupFile(file, tag, 'strip-expiry'));
+    const modes = new Map(files.map(([file]) => [file, fs.statSync(file).mode & 0o777]));
+    const written = [];
+    try {
+      for (const [file, rows] of files) {
+        written.push(file);
+        rewriteKeepingMode(file, rows);
+      }
+    } catch (writeError) {
+      const failedRestores = [];
+      files.forEach(([file], i) => {
+        if (!written.includes(file)) return;
+        try {
+          fs.copyFileSync(report.backups[i], file);
+          fs.chmodSync(file, modes.get(file));
+        } catch (restoreError) {
+          failedRestores.push(`${file} (backup kept at ${report.backups[i]}: ${restoreError.message})`);
+        }
+      });
+      const err = new Error(failedRestores.length === 0
+        ? `PARTIAL WRITE then RESTORED: ${writeError.message}; every store was put back from its backup`
+        : `PARTIAL WRITE and RESTORE FAILED for ${failedRestores.join('; ')}; original cause: ${writeError.message}`);
+      err.partialWrite = true;
+      throw err;
+    }
+    return report;
+  };
+
+  let report;
+  try {
+    if (opts.dryRun) {
+      report = run();
+    } else {
+      const locks = [scorecardLock];
+      if (evidenceLock.lockFile !== scorecardLock.lockFile) locks.push(evidenceLock);
+      const nest = (i) => (i >= locks.length ? run() : withWriteLock(locks[i], () => nest(i + 1)));
+      report = nest(0);
+    }
+  } catch (error) {
+    failValidation(error.partialWrite
+      ? `strip-expiry FAILED after writing began: ${error.message}`
+      : `strip-expiry refused, nothing written: ${error.message}`);
+  }
+  process.stdout.write(`${JSON.stringify(report)}\n`);
+}
+
 function main() {
   const argv = process.argv.slice(2);
 
@@ -3169,6 +3345,7 @@ function main() {
   else if (command === 'import-transcripts') cmdImportTranscripts(commandArgs);
   else if (command === 'seat-status') cmdSeatStatus(commandArgs);
   else if (command === 'relabel-effort') cmdRelabelEffort(commandArgs);
+  else if (command === 'strip-expiry') cmdStripExpiry(commandArgs);
   else if (command === 'status') cmdStatus();
   else failUsage(`unknown subcommand '${command}'`);
 }
@@ -3187,7 +3364,6 @@ if (require.main === module) {
 module.exports = {
   costSortValue, // pinned directly: unknown / null-priced rows must never rank as free (BL-0024)
   computeSeatProjection,
-  startOfUtcDayMsOf, // exported so the +-8.64e15 range guard can be pinned directly
   // Authoritative active-strike fold (plan 2026-09-11 KR7 / P3). Resolver
   // pending_revocation is a projection of this result — never a second reader.
   seatIdentityHash,

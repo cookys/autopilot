@@ -2547,8 +2547,7 @@ _try_qualification_row() {
     # critical_trigger, or enforced strike threshold): falls through.
     return
   fi
-  # Advisory warnings that never change the admission decision: calendar
-  # expiry on the ROW is advisory-only (case vi), and a shadow-mode
+  # Advisory warning that never changes the admission decision: a shadow-mode
   # would_requalify is deliberate Board policy, not a hole (finding [1]
   # PARTIAL OVERRULE) — surfaced on stderr either way.
   local warn
@@ -2559,7 +2558,6 @@ process.stdin.on("end", () => {
   let j;
   try { j = JSON.parse(s); } catch { process.exit(0); }
   const lines = [];
-  if (j.expiry_warning) lines.push("qualification row is past its calendar expiry — advisory only, standing is not demoted, admitting");
   if (j.would_requalify) lines.push(`would_requalify (strikes_since_pass=${j.strikes_since_pass}/${j.strike_threshold}) — shadow-mode admission is deliberate Board policy (references/strike-decay.md), not a hole`);
   process.stdout.write(lines.join(""));
 });' 2>/dev/null || true)"
@@ -2645,8 +2643,7 @@ process.stdout.write(`${m.reason}\u001f${m.expires}\u001f${m.operator}\u001foper
   # defect — an operator who has ALREADY named a seat should not hand-author a
   # JSON artifact per dispatch to be obeyed. D1-D4 closed that on the admission
   # side (dispatch-contract.js reads operator_pin); this closes the roster side.
-  # A pin carries expires: null by design (TTL is advisory, never a gate), so it
-  # is reported as "standing" rather than with a date.
+  # A pin has no expiry at all, so it is reported as "standing" rather than with a date.
   # Scoped exactly like every other capability-store read in this file: an
   # explicit --store wins, --capability-state off skips the store entirely, and
   # the caller's ENGINE_CAPABILITY_DIR is inherited. Reading the host's real pin
@@ -2694,7 +2691,7 @@ process.stdout.write(`${m.reason}\u001fstanding\u001f${m.operator}\u001fstanding
   _reason="${_ovr%%$'\x1f'*}"; _rest="${_ovr#*$'\x1f'}"
   _expires="${_rest%%$'\x1f'*}"; _rest="${_rest#*$'\x1f'}"
   _operator="${_rest%%$'\x1f'*}"; _ovr_source="${_rest##*$'\x1f'}"
-  echo "resolve-review-loop: ⚠ ${_role} seat (${_eng}/${_run}) runs on an EVIDENCE-FREE ${_ovr_source} (operator: ${_operator}; reason: ${_reason}; expires ${_expires}) — this is a RECORDED OPERATOR DECISION, not earned qualification." >&2
+  echo "resolve-review-loop: ⚠ ${_role} seat (${_eng}/${_run}) runs on an EVIDENCE-FREE ${_ovr_source} (operator: ${_operator}; reason: ${_reason}; $([[ "$_expires" == standing ]] && echo standing || echo "expires ${_expires}")) — this is a RECORDED OPERATOR DECISION, not earned qualification." >&2
   # depth-0 panel 🟠 #4: the recording is not decoration — Ruling 1 requires an
   # evidence-free admission to be AUDITABLE, and override_admitted_seats is the
   # record. Falling back to the previous array on failure would let the admission

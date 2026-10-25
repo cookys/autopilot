@@ -387,7 +387,6 @@ const evidence = {
   scope: { task_classes: ["brain-seat"], domains: ["general"], languages: ["en"], tool_surface: [] },
   identity,
   issued_at: "2026-08-22T00:00:00.000Z", observed_at: "2026-08-22T00:00:00.000Z",
-  expires_at: "2027-08-22T00:00:00.000Z",
   methodology: {
     kind: "owner_brain_seat", name: "brain-seat-exam", version: "v1", corpus_version: "v1",
     corpus_manifest_hash: corpusHash,
@@ -602,7 +601,7 @@ LINES_18B="$(wc -l < "$TESTDIR/strikes.jsonl")"
 # was excluded from admission all along (rejected_strikes), and the fix above
 # just stopped it from blocking the real one at write time.
 cat <<JSON | ENGINE_SCORECARD_DIR="$SCORECARD_TESTDIR" node "$ESC" record >/dev/null 2>&1
-{"engine":"$F4_ENGINE","runner":"$F4_RUNNER","family":"f","role":"$F4_ROLE","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-07-01","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-07-01","expires":"2099-01-01"}
+{"engine":"$F4_ENGINE","runner":"$F4_RUNNER","family":"f","role":"$F4_ROLE","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-07-01","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-07-01"}
 JSON
 SS_18="$(ENGINE_SCORECARD_DIR="$SCORECARD_TESTDIR" ENGINE_CAPABILITY_DIR="$TESTDIR" node "$ESC" seat-status --engine "$F4_ENGINE" --runner "$F4_RUNNER" --role "$F4_ROLE" --now 2026-08-22)"
 SS_18_SP="$(echo "$SS_18" | jq_get strikes_since_pass)"

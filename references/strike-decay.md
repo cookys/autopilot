@@ -4,40 +4,33 @@
 > That section says what may *grant* authority. This one says what may *take it away*.
 
 **The rule, in one line: a seat loses authority by accumulating mechanical strikes during real
-work, never because a date passed.**
+work, and by nothing else.**
 
 Owner ruling 2026-08-18: *"同一個模型不需要日期授權;降級授權應該用不信任投票累積而不是時間。"*
 A model does not get worse because the calendar turned over. Design frozen 2026-08-22 by a
 seven-seat heterogeneous panel (all seven verdicts `sound-with-changes`; no seat proposed keeping
 any calendar tooth). Plan: [`../docs/plans/_archive/2026/08/2026-08-22-no-confidence-decay.md`](../docs/plans/_archive/2026/08/2026-08-22-no-confidence-decay.md).
 
-## The calendar is advisory, everywhere
+## A qualification has no expiry
 
-`expires` on a scorecard row is a **warning**, surfaced as `expiry_warning: true`. It never
-appears in an admission decision. Three consumers used to flip on it and no longer do:
+A qualification has no date on it: no `expires`, no `expires_at`, no `--expires-days`, no
+`expired` status, no warning that a date passed. Owner ruling 2026-10-14, repeated 2026-10-26:
+*"資格考沒有期限,考過就算;不要有期限,喪失資格是用犯錯扣分來計算,掉到一定程度就喪失資格需要重考。"*
 
-| Consumer | Was | Is |
-|----------|-----|-----|
-| `engine-scorecard.js` `deriveStatus` | `expires < now` ⇒ status `expired` | derives `qualified`, sets `expiry_warning` |
-| `resolve-review-loop.sh` density scaling | status `expired` ⇒ capability tier `low` | tier follows `admission_status` |
-| `dispatch-contract.js` admission | an `expired` row is never admissible ⇒ NO-GO | NO-GO on `admission_status === 'requalify_required'` |
-| `resolve-scaffold-tier.js` `isFresh` | `expires < now` ⇒ stale ⇒ tier `T2` | freshness follows `admission_status` |
+The only way a seat stops being admitted is strikes (below): N ordinary strikes since the last
+passing administration, or one critical trigger, makes it `requalify_required`, and a later
+passing fresh administration restores it. Nothing else reads a clock.
 
-The fourth was found by the first-pass reviewer AFTER the first three were pulled, on a
-production path (`dispatch-hetero.sh` calls it on every dispatch under the default
-`--scaffold-tier auto`) that the original contract test did not scan. That is the honest shape
-of this section: **the list is the set of teeth we have found and scanned for, not a proof that
-no other exists.**
+`hooks/tests/calendar-teeth-negative.test.sh` pins this: scorecard rows, the shipped official
+defaults, the evidence schema and the adopt / scorecard output carry no expiry field, and no
+admission or sampling path compares `now` against a qualification date. Its guarantee is exactly as
+wide as its scan set; when you add a consumer that reads a scorecard row, add it to the scan set in
+the same commit.
 
-`hooks/tests/calendar-teeth-negative.test.sh` carries a planted negative per tooth plus a
-contract assertion that no admission path compares `now` against `expires`. Its guarantee is
-**exactly as wide as its scan set** — the four files in the table above. Re-introducing a tooth
-in one of those turns it red; a tooth in a file outside the set does not. When you add a consumer
-that reads a scorecard row, add it to the scan set in the same commit.
-
-What a past-expiry date *does* buy, per the panel's §6: it is a reason to look harder — escalate
-mechanical QC sampling for that seat, so real drift arrives as strikes through the normal channel.
-The calendar changes how hard we look, never whether the seat routes.
+Stores written before 2026-10-26 still carry the field. They are migrated once with
+`node scripts/engine-scorecard.js strip-expiry` (`--dry-run` first; every store is backed up as
+`<file>.bak-strip-expiry-<UTC>`). Evidence ids are content hashes and `expires_at` was inside them,
+so the migration re-seals the evidence and rewrites everything that points at it.
 
 ## What a strike is
 
@@ -170,13 +163,12 @@ indistinguishable from a module never written, and its own unit tests pass in bo
 # read its existence as evidence the fold is wired — the wiring is `currentRowsForRole`.
 node scripts/engine-scorecard.js seat-status --engine <model> --runner <runner> --role <role>
 
-# every current row for a role, each carrying admission_status + expiry_warning
+# every current row for a role, each carrying admission_status
 node scripts/engine-scorecard.js current --role implementer
 ```
 
 `admission_status ∈ {qualified, no_record, requalify_required}` is the **only** admission
-authority. `expiry_warning` is advisory. Consumers that read `status` alone still work — the
-projection simply stopped producing `expired`.
+authority. Consumers that read `status` alone still work; `status` is only `qualified` or `failed`.
 
 ## Deliberately not built
 

@@ -351,7 +351,6 @@ function formatDisclosure(entry) {
   lines.push(`  corpus          ${a.corpus_version}`);
   lines.push(`  prompt config   ${a.prompt_config_hash}`);
   lines.push(`  model version   ${a.model_version}`);
-  lines.push(`  expires         ${a.expires}  (ADVISORY ONLY — never gates admission; see references/strike-decay.md)`);
   if (entry.quality && entry.quality.corpus_pass !== undefined) {
     lines.push(`  result          corpus_pass=${entry.quality.corpus_pass}  capability_score=${entry.capability_score}`);
   } else if (entry.capability_score !== null) {

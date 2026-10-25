@@ -71,7 +71,6 @@
  "verdict": {
   "capability_score": 0.7,
   "date": "2026-07-17",
-  "expires": "2026-10-15",
   "qualified_at": "2026-07-17",
   "quality": {
    "corpus_pass": "1/1",

@@ -245,15 +245,14 @@ Build stage-3 usage policy from a live host-observed qualification, not from sco
 
 No routing exception for phase/domain is allowed in this stage.
 
-## Stage 4 — opportunistic re-qualify and TTL
+## Stage 4 — opportunistic re-qualify
 
 - Treat captured `model_version` from real dispatches as the source of truth.
-- Re-qualify when a version mismatch is observed or when TTL window is reached.
+- Re-qualify when a version mismatch is observed or when strikes make the seat `requalify_required`. A qualification has no expiry.
 - On **exam-identity** mismatch — model/version, prompt contract, semantic or containment fingerprint, runner, role, effort, corpus — the prior evidence is inapplicable; rerun Stage 1+2.
 - **`harness_version` and `runner_version` are ENVIRONMENT, not exam identity** (Board 2026-09-02: "the exam tests the model, it should not be pinned to the autopilot version"). A mismatch there is recorded and surfaced as `environment_warning`, and **never** makes evidence inapplicable. Gating on them meant every adopted default silently stopped applying the moment a consumer moved to a newer plugin build — with no error, because the row simply never matched.
 - A Critical miss or probe regression revokes the active qualification view immediately.
-- Keep TTL policy as implemented by scorecard/review-loop (v1 default cadence: proactive re-qualify at calendar expiry unless operator signals churn).
-- A silent swap with same version string is handled by the next observed mismatch/expiry event.
+- A silent swap with same version string is handled by the next observed mismatch or accumulated strikes.
 
 ## Execution sequence (default v1)
 
@@ -262,7 +261,7 @@ No routing exception for phase/domain is allowed in this stage.
 3. Stage 2 record telemetry to scorecard (`node scripts/engine-scorecard.js record`).
 4. Stage 3 run the evaluator live and in-process; shell/JSON compatibility paths remain
    guided/unqualified.
-5. Stage 4 set re-qualify expectation and TTL monitoring; restart onboarding when stale or model/version mismatch appears.
+5. Stage 4 set re-qualify expectation (strike-driven, no expiry); restart onboarding when the seat is `requalify_required` or a model/version mismatch appears.
 
 Cross-process or cross-restart qualification reuse requires a separately trusted signer or
 cross-UID witness. It is not claimed by the plugin-native session-local path.

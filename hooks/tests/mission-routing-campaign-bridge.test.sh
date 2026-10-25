@@ -521,7 +521,6 @@ const engineRow = {
   latency: { sample_wall_time_s: 0 },
   status: 'qualified',
   qualified_at: '2026-06-30',
-  expires: '2099-01-01',
 };
 const engineEvent = {
   schema_version: 1,

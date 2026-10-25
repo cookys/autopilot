@@ -811,7 +811,7 @@ CFG
     local engine="$1" runner="$2" family="$3" role="$4"
     local rec="$HERMETIC_SCORECARD_DIR/rec-${role}-${engine}.json"
     cat > "$rec" <<JSON
-{"engine":"${engine}","runner":"${runner}","family":"${family}","role":"${role}","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"${engine}","runner":"${runner}","family":"${family}","role":"${role}","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 JSON
     ENGINE_SCORECARD_DIR="$HERMETIC_SCORECARD_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$rec" >/dev/null
   }

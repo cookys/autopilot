@@ -31,16 +31,14 @@ const STATES = new Set([
   'provisional',
   'qualified',
   'degraded',
-  'stale',
   'revoked',
 ]);
 const STATE_TIE_PRECEDENCE = Object.freeze({
   unknown: 0,
   provisional: 1,
   qualified: 2,
-  stale: 3,
-  degraded: 4,
-  revoked: 5,
+  degraded: 3,
+  revoked: 4,
 });
 const REVOCATION_REASONS = new Set([
   'critical_miss',
@@ -48,22 +46,11 @@ const REVOCATION_REASONS = new Set([
   'probe_regression',
 ]);
 const SOURCE_STATE_CEILINGS = Object.freeze({
-  external_prior: new Set(['unknown', 'provisional', 'degraded', 'stale', 'revoked']),
-  self_report: new Set(['unknown', 'provisional', 'degraded', 'stale', 'revoked']),
-  ordinary_receipt: new Set(['unknown', 'provisional', 'degraded', 'stale', 'revoked']),
+  external_prior: new Set(['unknown', 'provisional', 'degraded', 'revoked']),
+  self_report: new Set(['unknown', 'provisional', 'degraded', 'revoked']),
+  ordinary_receipt: new Set(['unknown', 'provisional', 'degraded', 'revoked']),
   internal_eval: STATES,
-  runtime_probe: new Set(['unknown', 'provisional', 'degraded', 'stale', 'revoked']),
-});
-const MAX_QUALIFIED_TTL_DAYS = Object.freeze({
-  owner: 30,
-  reviewer: 30,
-  implementer: 90,
-  verification_author: 60,
-  explorer: 90,
-  // Qualification-seat roles (plan 2026-08-28-consult-discuss-qualification.md
-  // D3): flat 30-day cap, no ceiling exception, for both.
-  consult: 30,
-  discuss: 30,
+  runtime_probe: new Set(['unknown', 'provisional', 'degraded', 'revoked']),
 });
 const METHODOLOGY_KINDS = new Set([
   'role_eval',
@@ -92,9 +79,9 @@ const SOURCE_METHODOLOGY_KINDS = Object.freeze({
   ]),
   runtime_probe: new Set(['runtime_probe']),
 });
-// Board 2026-08-17: brain-seat qualification is STANDING — expires_at stays a
-// schema-compatible placeholder that never stales this kind and is exempt from the
-// qualified-owner TTL ceiling; revocation is strike-based, never clock-based.
+// Qualification has no clock at all (owner, 2026-10-14 and 2026-10-26): evidence carries
+// no expiry, nothing derives a date-based state, and the only ways standing ends are
+// strikes (engine-scorecard.js) and explicit revocation evidence.
 const BRAIN_METHODOLOGY_KIND = 'owner_brain_seat';
 // Verification-author declared-plan exam (va_declared_plan,
 // plan 2026-08-18-verification-author-suite-v3).
@@ -1592,7 +1579,6 @@ function compileCapabilityEvidence(raw) {
     'grant_identity_hash',
     'issued_at',
     'observed_at',
-    'expires_at',
     'methodology',
     'trials',
     'trial_set_hash',
@@ -1610,6 +1596,9 @@ function compileCapabilityEvidence(raw) {
     'tier1_terminated',
     'stop_reason',
   ];
+  if (value.expires_at !== undefined) {
+    evidenceError('capability evidence has no expires_at: qualification has no expiry (run engine-scorecard.js strip-expiry on a pre-2026-10-26 store)');
+  }
   onlyKeys(value, new Set(fields), 'capability evidence');
   requiredKeys(
     value,
@@ -1623,7 +1612,6 @@ function compileCapabilityEvidence(raw) {
       'identity',
       'issued_at',
       'observed_at',
-      'expires_at',
       'methodology',
       'trials',
       'revocation',
@@ -1652,26 +1640,14 @@ function compileCapabilityEvidence(raw) {
   const pooledReceipt = normalizePooledReceipt(value, methodology.kind, state);
   const issuedAt = timestamp(value.issued_at, 'capability evidence.issued_at');
   const observedAt = timestamp(value.observed_at, 'capability evidence.observed_at');
-  const expiresAt = timestamp(value.expires_at, 'capability evidence.expires_at');
   if (Date.parse(observedAt) > Date.parse(issuedAt)) {
     evidenceError('capability evidence observed_at cannot be later than issued_at');
-  }
-  if (Date.parse(expiresAt) <= Date.parse(issuedAt)) {
-    evidenceError('capability evidence expires_at must be later than issued_at');
   }
   if (trials.some((trial) => Date.parse(trial.observed_at) > Date.parse(observedAt))) {
     evidenceError('capability evidence trial cannot be later than observed_at');
   }
 
   const role = enumValue(value.role, ROLES, 'capability evidence.role');
-  // Brain-seat standing exemption (Board 2026-08-17): the owner_brain_seat kind is
-  // clock-exempt — no TTL ceiling; revocation is strike-based in the state layer.
-  if (state === 'qualified' && methodology.kind !== BRAIN_METHODOLOGY_KIND) {
-    const ttlDays = (Date.parse(expiresAt) - Date.parse(issuedAt)) / 86_400_000;
-    if (ttlDays > MAX_QUALIFIED_TTL_DAYS[role]) {
-      evidenceError(`qualified ${role} evidence exceeds its expiry ceiling`);
-    }
-  }
   const supersedes = value.supersedes === null
     ? null : digest(value.supersedes, 'capability evidence.supersedes');
   const revocation = normalizeRevocation(value.revocation, state);
@@ -1692,7 +1668,6 @@ function compileCapabilityEvidence(raw) {
     grant_identity_hash: grantIdentityHash,
     issued_at: issuedAt,
     observed_at: observedAt,
-    expires_at: expiresAt,
     methodology,
     trials,
     trial_set_hash: trialSetHash,
@@ -1822,7 +1797,6 @@ function emptyEvaluation(query, reasons) {
     environment_warning: false,
     issued_at: null,
     observed_at: null,
-    expires_at: null,
     methodology_version: null,
     trial_set_hash: null,
     revocation_reason: null,
@@ -1931,7 +1905,7 @@ function evaluateCapabilityEvidence(rawRecords, rawQuery, { isolated = false } =
   });
   const latestQualified = eligibleRecords.find((record) => record.state === 'qualified');
   const restrictiveRecords = eligibleRecords.filter(
-    (record) => ['revoked', 'degraded', 'stale'].includes(record.state),
+    (record) => ['revoked', 'degraded'].includes(record.state),
   );
   if (latestQualified) {
     const unboundRestriction = restrictiveRecords.find((record) => (
@@ -1960,11 +1934,6 @@ function evaluateCapabilityEvidence(rawRecords, rawQuery, { isolated = false } =
   }
   let state = record.state;
   let revocationReason = record.revocation ? record.revocation.reason : null;
-  if (state !== 'revoked'
-      && record.methodology.kind !== BRAIN_METHODOLOGY_KIND
-      && Date.parse(record.expires_at) <= Date.parse(query.evaluation_time)) {
-    state = 'stale';
-  }
   if (query.observation) {
     if (query.observation.identity_hash !== query.identity_hash) {
       state = 'revoked';
@@ -2013,7 +1982,6 @@ function evaluateCapabilityEvidence(rawRecords, rawQuery, { isolated = false } =
     environment_warning: record.identity_hash !== query.identity_hash,
     issued_at: record.issued_at,
     observed_at: record.observed_at,
-    expires_at: record.expires_at,
     methodology_version: record.methodology.version,
     trial_set_hash: record.trial_set_hash,
     revocation_reason: revocationReason,
@@ -2039,7 +2007,6 @@ function normalizeCapabilityEvidenceReceipt(raw, options = {}) {
     'applicability',
     'issued_at',
     'observed_at',
-    'expires_at',
     'methodology_version',
     'trial_set_hash',
     'revocation_reason',
@@ -2054,7 +2021,7 @@ function normalizeCapabilityEvidenceReceipt(raw, options = {}) {
   if (value.evidence_id === null || value.evidence_hash === null
       || value.grant_identity_hash === null || value.provenance === null
       || value.issued_at === null || value.observed_at === null
-      || value.expires_at === null || value.methodology_version === null
+      || value.methodology_version === null
       || value.trial_set_hash === null) {
     evidenceError('capability evidence receipt does not identify applicable evidence');
   }
@@ -2195,10 +2162,8 @@ function normalizeCapabilityEvidenceReceipt(raw, options = {}) {
   }
   const issuedAt = timestamp(value.issued_at, 'capability evidence receipt.issued_at');
   const observedAt = timestamp(value.observed_at, 'capability evidence receipt.observed_at');
-  const expiresAt = timestamp(value.expires_at, 'capability evidence receipt.expires_at');
-  if (Date.parse(observedAt) > Date.parse(issuedAt)
-      || Date.parse(expiresAt) <= Date.parse(issuedAt)) {
-    evidenceError('capability evidence receipt has invalid observation/expiry ordering');
+  if (Date.parse(observedAt) > Date.parse(issuedAt)) {
+    evidenceError('capability evidence receipt has invalid observation ordering');
   }
   const revocationReason = value.revocation_reason === null
     ? null
@@ -2243,7 +2208,6 @@ function normalizeCapabilityEvidenceReceipt(raw, options = {}) {
     environment_warning: value.environment_warning === true,
     issued_at: issuedAt,
     observed_at: observedAt,
-    expires_at: expiresAt,
     methodology_version: methodVersion,
     trial_set_hash: digest(
       value.trial_set_hash,
@@ -2670,7 +2634,6 @@ module.exports = {
   LOCKED_QUALIFY_MIN,
   VERDICT_Z,
   VERDICT_TAU,
-  MAX_QUALIFIED_TTL_DAYS,
   METHODOLOGY_KINDS,
   REVOCATION_REASONS,
   ROLES,

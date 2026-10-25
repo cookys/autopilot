@@ -65,8 +65,7 @@
     "administered_at": "2026-10-12T10:00:00Z",
     "record_id": "b3f8f8cc5513e6db676ecd651626937e1def738457dc7806266854c5730f6a8f",
     "record_id_basis": "v1:producer,transcript_hash,seat,corpus_version,administered_at",
-    "supersedes": null,
-    "expires": "2026-11-11"
+    "supersedes": null
    }
   }
  ],

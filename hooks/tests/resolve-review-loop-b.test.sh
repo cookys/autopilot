@@ -240,7 +240,7 @@ SCDIR="$TEST_TMP/check-ok"
 mkdir -p "$SCDIR"
 RECQUAL_JSON="$SCDIR/rec.json"
 cat > "$RECQUAL_JSON" <<'JSON'
-{"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 JSON
 ENGINE_SCORECARD_DIR="$SCDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECQUAL_JSON" > /dev/null
 # ISOLATED: EMPTY_CFG pins the default reviewer (gpt-5.5/codex) + openai implementer so
@@ -267,7 +267,7 @@ FAILDIR="$TEST_TMP/check-failed"
 mkdir -p "$FAILDIR"
 RECFAIL_JSON="$FAILDIR/rec.json"
 cat > "$RECFAIL_JSON" <<'JSON'
-{"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30"}
 JSON
 ENGINE_SCORECARD_DIR="$FAILDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECFAIL_JSON" > /dev/null
 FAIL_LADDER="$(ENGINE_SCORECARD_DIR="$FAILDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer --implementer-family openai)"
@@ -286,25 +286,22 @@ mkdir -p "$IMPLMISS_DIR"
 IMPLMISS_OUT="$(ENGINE_SCORECARD_DIR="$IMPLMISS_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
 assert_contains "$(json_get "$IMPLMISS_OUT" capability_warnings)" "implementer seat (grok-4.5/grok) is not admissible: no scorecard row" \
   "missing implementer row surfaces a capability warning under --check-scorecard"
-# 20b. Calendar tooth pulled 2026-08-22 (no-confidence-decay P1/P2): a
-# past-expires qualified row is now admissible (status=provisional,
-# observed_status=qualified) — expires is advisory-only and never downgrades
-# admissibility here either. No implementer warning; was "loud warning naming
-# the expired status" pre-cut.
+# 20b. A qualified row from long ago is admissible (status=provisional, observed_status=qualified):
+# qualification has no expiry, so age never downgrades admissibility. No implementer warning.
 IMPLEXP_DIR="$TEST_TMP/impl-expired"
 mkdir -p "$IMPLEXP_DIR"
 cat > "$IMPLEXP_DIR/rec.json" <<'JSON'
-{"engine":"grok-4.5","runner":"grok","family":"xai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"2/2","false_pass_critical":0},"capability_score":1,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2026-07-14"}
+{"engine":"grok-4.5","runner":"grok","family":"xai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"2/2","false_pass_critical":0},"capability_score":1,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 JSON
 ENGINE_SCORECARD_DIR="$IMPLEXP_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$IMPLEXP_DIR/rec.json" > /dev/null
 IMPLEXP_OUT="$(ENGINE_SCORECARD_DIR="$IMPLEXP_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
 assert_not_contains "$(json_get "$IMPLEXP_OUT" capability_warnings)" "implementer seat" \
-  "past-expires implementer row is admissible (calendar tooth pulled), no implementer warning"
+  "an old qualified implementer row is admissible (no expiry), no implementer warning"
 # 20c. Admissible (fresh) row → NO implementer warning; warning absent without --check-scorecard
 IMPLOK_DIR="$TEST_TMP/impl-ok"
 mkdir -p "$IMPLOK_DIR"
 cat > "$IMPLOK_DIR/rec.json" <<'JSON'
-{"engine":"grok-4.5","runner":"grok","family":"xai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"2/2","false_pass_critical":0},"capability_score":1,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"grok-4.5","runner":"grok","family":"xai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"2/2","false_pass_critical":0},"capability_score":1,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 JSON
 ENGINE_SCORECARD_DIR="$IMPLOK_DIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$IMPLOK_DIR/rec.json" > /dev/null
 IMPLOK_OUT="$(ENGINE_SCORECARD_DIR="$IMPLOK_DIR" REVIEW_LOOP_CONFIG_OVERRIDE="$GROK_IMPL_CFG" bash "$SCRIPT" --check-scorecard)"
@@ -337,17 +334,17 @@ IMPLOVR_NO_OPERATOR_OUT="$(AUTOPILOT_QUALIFICATION_OVERRIDE="$TEST_TMP/qual-over
 assert_not_contains "$(json_get "$IMPLOVR_NO_OPERATOR_OUT" capability_warnings)" "EVIDENCE-FREE operator override" \
   "override without operator never advertises admission"
 
-EXPDIR="$TEST_TMP/check-expired"
+EXPDIR="$TEST_TMP/check-failed"
 mkdir -p "$EXPDIR"
 RECEXPIRED_JSON="$EXPDIR/rec.json"
 cat > "$RECEXPIRED_JSON" <<'JSON'
-{"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-01-01","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"expired","qualified_at":"2026-01-01","expires":"2026-01-02"}
+{"engine":"gpt-5.5","runner":"codex","family":"openai","role":"reviewer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-01-01","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-01-01"}
 JSON
 ENGINE_SCORECARD_DIR="$EXPDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECEXPIRED_JSON" > /dev/null
 EXP_LADDER="$(ENGINE_SCORECARD_DIR="$EXPDIR" node "$REPO_ROOT/scripts/engine-scorecard.js" ladder --role reviewer --implementer-family openai)"
 EXP_OUT="$(ENGINE_SCORECARD_DIR="$EXPDIR" bash "$SCRIPT" --check-scorecard)"
-assert_eq "false" "$(json_get "$EXP_OUT" reviewer_qualified)" "expired reviewer row => reviewer_qualified false"
-assert_eq "$EXP_LADDER" "$(json_get "$EXP_OUT" fallback_ladder)" "expired row still emits fallback ladder"
+assert_eq "false" "$(json_get "$EXP_OUT" reviewer_qualified)" "failed reviewer row => reviewer_qualified false"
+assert_eq "$EXP_LADDER" "$(json_get "$EXP_OUT" fallback_ladder)" "failed row still emits fallback ladder"
 # 20. capability-state report-only / demotion-only tests
 CAP_TEST_DIR="$TEST_TMP/cap-store"
 mkdir -p "$CAP_TEST_DIR"

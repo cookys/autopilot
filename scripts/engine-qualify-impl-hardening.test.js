@@ -183,7 +183,7 @@ test('an oracle module that floods stdout is the candidate oracle_miss, not a pa
   assert.strictEqual(verdict, 'oracle_miss');
 });
 
-// ── argv gates: --trials exactness and expires-days boundaries ──
+// ── argv gates: --trials exactness; --expires-days refused ──
 const QUAL = path.join(__dirname, 'engine-qualify.js');
 const dg = (c) => c.repeat(64);
 function cli(role, extra) {
@@ -195,19 +195,14 @@ function cli(role, extra) {
   return spawnSync(process.execPath, [QUAL, ...args], { encoding: 'utf8', env: { ...process.env, HOME: tempRoot, AUTOPILOT_QUALIFY_SEED: 'hardening' } });
 }
 
-test('implementer --expires-days: 30/90 pass the argv gate, 91 is refused; other roles stop at 30', () => {
-  for (const days of ['30', '90']) {
-    const r = cli('implementer', ['--expires-days', days, '--endpoint', 'lanx']);
-    assert.ok(!/cannot exceed/.test(r.stderr), `implementer ${days} not refused by the cap: ${r.stderr.slice(0, 160)}`);
+test('--expires-days is refused for every role: qualification has no expiry', () => {
+  for (const [role, extra] of [['implementer', ['--endpoint', 'lanx']], ['reviewer', ['--panel-cmd', 'true']]]) {
+    for (const days of ['30', '90', '91']) {
+      const r = cli(role, ['--expires-days', days, ...extra]);
+      assert.strictEqual(r.status, 2, `${role} --expires-days ${days} must exit 2`);
+      assert.match(r.stderr, /qualification has no expiry/);
+    }
   }
-  const over = cli('implementer', ['--expires-days', '91', '--endpoint', 'lanx']);
-  assert.strictEqual(over.status, 2);
-  assert.match(over.stderr, /implementer --expires-days cannot exceed 90/);
-  const rev31 = cli('reviewer', ['--expires-days', '31', '--panel-cmd', 'true']);
-  assert.strictEqual(rev31.status, 2);
-  assert.match(rev31.stderr, /reviewer --expires-days cannot exceed 30/);
-  const rev30 = cli('reviewer', ['--expires-days', '30', '--panel-cmd', 'true']);
-  assert.ok(!/cannot exceed/.test(rev30.stderr), 'reviewer 30 is not refused by the cap');
 });
 
 test('implementer --trials: default and an explicit 2 pass the gate, others are refused', () => {

@@ -872,7 +872,6 @@ fs.writeFileSync(engineScorePath, `${JSON.stringify({
   latency: { sample_wall_time_s: 0 },
   status: 'qualified',
   qualified_at: '2026-07-30',
-  expires: '2099-01-01',
 }, null, 2)}\n`);
 fs.writeFileSync(engineCapabilityPath, `${JSON.stringify({
   schema_version: 1,

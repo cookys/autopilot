@@ -22,7 +22,7 @@ jq_get(){ node -e "let d=JSON.parse(require('fs').readFileSync(0,'utf8'));let v=
 row() { # engine runner family role corpus cap costsrc costin status expires [model_version]
   local engine="$1" runner="$2" family="$3" role="$4" corpus="$5" cap="$6" csrc="$7" cin="$8" status="$9" expires="${10}" mv="${11:-v1}"
   cat <<JSON
-{"engine":"$engine","runner":"$runner","family":"$family","role":"$role","model_version":"$mv","version_source":"manual","corpus_version":"$corpus","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":$cap,"cost":{"source":"$csrc","usd_per_mtok_input":$cin,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"$status","qualified_at":"2026-06-30","expires":"$expires"}
+{"engine":"$engine","runner":"$runner","family":"$family","role":"$role","model_version":"$mv","version_source":"manual","corpus_version":"$corpus","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":$cap,"cost":{"source":"$csrc","usd_per_mtok_input":$cin,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"$status","qualified_at":"2026-06-30"}
 JSON
 }
 
@@ -57,21 +57,21 @@ echo "$(row A r2 f reviewer c@1 0.9 manual 0 qualified 2099-01-01)" | node "$CLI
 cnt=$(node "$CLI" current --role reviewer --now 2026-06-30 | arrlen)
 [ "$cnt" = "2" ] && ok "4: differing runner => 2 identities" || bad "4: cnt=$cnt want 2"
 
-# 5: past-expires is advisory-only (calendar tooth pulled 2026-08-22), never
-# derived as expired; no store mutation. Disk-backed projection maps the
-# observed-qualified state to status=provisional (untrusted telemetry) while
-# observed_status/admission_status carry the real (never-expired) truth.
+# 5: qualification has no expiry (owner, 2026-10-26): an old row stays qualified, the projection
+# carries no expiry field at all, and the store is not mutated by a read.
 reset
 echo "$(row A r f reviewer c@1 0.9 manual 0 qualified 2026-01-01)" | node "$CLI" record >/dev/null 2>&1
-out=$(node "$CLI" current --role reviewer --now 2026-06-30)
+out=$(node "$CLI" current --role reviewer --now 2030-06-30)
 st=$(echo "$out" | jq_get 0.status)
 obs=$(echo "$out" | jq_get 0.observed_status)
 adm=$(echo "$out" | jq_get 0.admission_status)
-ew=$(echo "$out" | jq_get 0.expiry_warning)
 stored=$(grep -o '"status":"[a-z]*"' "$TESTDIR/scorecard.jsonl" | head -1)
-[ "$st" = "provisional" ] && [ "$obs" = "qualified" ] && [ "$adm" = "qualified" ] && [ "$ew" = "true" ] && [ "$stored" = '"status":"qualified"' ] \
-  && ok "5: past-expires => qualified+expiry_warning at read, store unmutated" \
-  || bad "5: status=$st observed_status=$obs admission_status=$adm expiry_warning=$ew stored=$stored"
+if [ "$st" = "provisional" ] && [ "$obs" = "qualified" ] && [ "$adm" = "qualified" ] && [ "$stored" = '"status":"qualified"' ] \
+  && ! echo "$out" | grep -q -i 'expir'; then
+  ok "5: years later => still qualified, no expiry field in the projection, store unmutated"
+else
+  bad "5: status=$st observed_status=$obs admission_status=$adm stored=$stored out=$out"
+fi
 
 # 6: disk-only report cannot surface a qualified candidate, regardless of cost.
 reset
@@ -84,7 +84,7 @@ len=$(node "$CLI" report --role reviewer --key cost | arrlen)
 reset
 echo "$(row PRICED r f reviewer c@1 0.5 manual 2 qualified 2099-01-01)" | node "$CLI" record >/dev/null 2>&1
 # manual row with price fields stripped out (source=manual but no usd_per_mtok_*):
-printf '{"engine":"NOPRICE","runner":"r","family":"f","role":"reviewer","model_version":"v","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"1/1","false_pass_critical":0,"specificity":"ok"},"capability_score":0.5,"cost":{"source":"manual"},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}\n' | node "$CLI" record >/dev/null 2>&1
+printf '{"engine":"NOPRICE","runner":"r","family":"f","role":"reviewer","model_version":"v","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"1/1","false_pass_critical":0,"specificity":"ok"},"capability_score":0.5,"cost":{"source":"manual"},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}\n' | node "$CLI" record >/dev/null 2>&1
 len=$(node "$CLI" report --role reviewer --key cost | arrlen)
 [ "$len" = "0" ] && ok "6b: unpriced disk telemetry cannot rank as free" || bad "6b: report len=$len want 0"
 
@@ -926,7 +926,7 @@ score_ev() {
 write_ev() {
   local evidence_json="$1"
   local dest="$2"
-  node -e 'const fs=require("fs"); const ev=JSON.parse(process.argv[1]); fs.writeFileSync(process.argv[2], JSON.stringify({engine:"e",runner:"r",family:"f",role:"reviewer",model_version:"v1",version_source:"manual",corpus_version:"c",harness_version:"h",runner_version:"rv",prompt_config_hash:"sha256:x",date:"2026-06-30",quality:{corpus_pass:"10/10"},capability_score:0.1,cost:{source:"manual"},latency:{sample_wall_time_s:0},status:"failed",qualified_at:"2026-03-02",expires:"2026-04-02",evidence:ev}));' "$evidence_json" "$dest"
+  node -e 'const fs=require("fs"); const ev=JSON.parse(process.argv[1]); fs.writeFileSync(process.argv[2], JSON.stringify({engine:"e",runner:"r",family:"f",role:"reviewer",model_version:"v1",version_source:"manual",corpus_version:"c",harness_version:"h",runner_version:"rv",prompt_config_hash:"sha256:x",date:"2026-06-30",quality:{corpus_pass:"10/10"},capability_score:0.1,cost:{source:"manual"},latency:{sample_wall_time_s:0},status:"failed",qualified_at:"2026-03-02",evidence:ev}));' "$evidence_json" "$dest"
 }
 ev25_bad() {
   local name="$1"
@@ -945,8 +945,8 @@ ev25_bad() {
 }
 ev25_bad "observed_at" '{"observed_at":"2026-02-30T00:00:00Z"}' "2026-02-30T00:00:00Z"
 ev25_bad "issued_at" '{"issued_at":"2026-02-30T00:00:00.000Z"}' "evidence.issued_at"
-ev25_bad "expires_at" '{"expires_at":"2026-04-31T00:00:00Z"}' "evidence.expires_at"
-ev25_bad "trial observed_at" '{"issued_at":"2026-03-02T00:00:00.000Z","observed_at":"2026-03-02T00:00:00.000Z","expires_at":"2026-04-02T00:00:00.000Z","trials":[{"observed_at":"2026-02-30T00:00:00Z"}]}' "evidence.trials[0].observed_at"
+ev25_bad "expires_at (no longer a field)" '{"expires_at":"2026-04-30T00:00:00Z"}' "no expires_at"
+ev25_bad "trial observed_at" '{"issued_at":"2026-03-02T00:00:00.000Z","observed_at":"2026-03-02T00:00:00.000Z","trials":[{"observed_at":"2026-02-30T00:00:00Z"}]}' "evidence.trials[0].observed_at"
 row_ok="$TESTDIR/row25-ok.json"
 err_ok="$TESTDIR/err25-ok.txt"
 write_ev "{\"observed_at\":\"$ISO_OK\"}" "$row_ok"
@@ -958,14 +958,15 @@ else
 fi
 rm -rf "$OUT25" "$HOME25"
 
-# 26: legacy rows (no evidence) reject calendar-impossible qualified_at / expires.
+# 26: legacy rows (no evidence) reject calendar-impossible qualified_at, and any row that still
+# carries an `expires` field (qualification has no expiry).
 # A valid date-only pair is still recorded. Temp HOME and ENGINE_SCORECARD_DIR only.
 reset
 OUT26="$(mktemp -d)"
 HOME26="$(mktemp -d)"
 legacy26() {
-  local qat="$1" exp="$2" dest="$3"
-  node -e 'const fs=require("fs"); fs.writeFileSync(process.argv[3], JSON.stringify({engine:"e",runner:"r",family:"f",role:"reviewer",model_version:"v1",version_source:"manual",corpus_version:"c",harness_version:"h",runner_version:"rv",prompt_config_hash:"sha256:x",date:"2026-06-30",quality:{corpus_pass:"10/10"},capability_score:0.1,cost:{source:"manual"},latency:{sample_wall_time_s:0},status:"qualified",qualified_at:process.argv[1],expires:process.argv[2]}));' "$qat" "$exp" "$dest"
+  local qat="$1" exp="$2" dest="$3"  # exp: "" omits the field, anything else plants it
+  node -e 'const fs=require("fs"); fs.writeFileSync(process.argv[3], JSON.stringify({engine:"e",runner:"r",family:"f",role:"reviewer",model_version:"v1",version_source:"manual",corpus_version:"c",harness_version:"h",runner_version:"rv",prompt_config_hash:"sha256:x",date:"2026-06-30",quality:{corpus_pass:"10/10"},capability_score:0.1,cost:{source:"manual"},latency:{sample_wall_time_s:0},status:"qualified",qualified_at:process.argv[1],...(process.argv[2]===""?{}:{expires:process.argv[2]})}));' "$qat" "$exp" "$dest"
 }
 run26() {
   HOME="$HOME26" AUTOPILOT_OUTBOX_DIR="$OUT26" ENGINE_SCORECARD_DIR="$TESTDIR" \
@@ -985,12 +986,12 @@ leg26_bad() {
   fi
   rm -f "$errf"
 }
-leg26_bad "qualified_at" "2026-02-30" "2099-01-01" "invalid qualified_at '2026-02-30'"
-leg26_bad "expires" "2026-06-30" "2026-02-30" "invalid expires '2026-02-30'"
+leg26_bad "qualified_at" "2026-02-30" "" "invalid qualified_at '2026-02-30'"
+leg26_bad "expires field" "2026-06-30" "2099-01-01" "no expiry"
 row26ok="$TESTDIR/row26-ok.json"
 err26ok="$TESTDIR/err26-ok.txt"
 rm -f "$TESTDIR/scorecard.jsonl"
-legacy26 "2026-06-30" "2099-01-01" "$row26ok"
+legacy26 "2026-06-30" "" "$row26ok"
 run26 "$row26ok" "$err26ok"; ec26=$?
 if [ "$ec26" = "0" ] && [ -f "$TESTDIR/scorecard.jsonl" ] && grep -F -q '"qualified_at":"2026-06-30"' "$TESTDIR/scorecard.jsonl"; then
   ok "26: valid date-only legacy row accepted"

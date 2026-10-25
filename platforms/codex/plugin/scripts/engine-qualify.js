@@ -259,7 +259,7 @@ const HELP = `Usage:
     [--panel-bind-ro <absolute-source>=</panel/or/auth/path>] [--panel-env <name>]
     [--provider-env <name>] [--remote-timeout-ms <n>]
     --task-class <class> --domain <domain> --language <language> --tool <tool>
-    [--trials <n>] [--expires-days <n>] [--store <path>] [--emit-row]
+    [--trials <n>] [--store <path>] [--emit-row]
     [--seat-file <json>] [--emit-record]
 
   With --seat-file, identity fields that were not passed as flags are derived
@@ -336,8 +336,8 @@ const HELP = `Usage:
       through scripts/resolve-endpoint.sh — the SAME named-endpoint definition daily
       routing uses — instead of the raw env passthrough; not-ready exits 2 uncharged;
       the emitted row discloses endpoint {name, transport_security}; base_url stays on the rail only)
-  implementer --expires-days caps at 90 (its schema ceiling); all other roles
-  keep the flat 30-day cap.
+  Qualification has no expiry: there is no --expires-days (it is refused). A seat loses standing
+  only through accumulated strikes (references/strike-decay.md), and regains it by re-sitting.
 
   consult and discuss are QUALIFICATION-SEAT roles (never live-rail): they take
   the same --panel-cmd / --remote-provider-cmd broker transport as reviewer/owner
@@ -556,7 +556,6 @@ function parseArgs(argv) {
     role: seatPreview ? null : argv[0],
     seatPreview,
     trials: 2,
-    expiresDays: 30,
     store: null,
     emitRow: false,
     emitRecord: false,
@@ -589,7 +588,6 @@ function parseArgs(argv) {
     ['--remote-provider', 'remoteProvider'],
     ['--remote-timeout-ms', 'remoteTimeoutMs'],
     ['--trials', 'trials'],
-    ['--expires-days', 'expiresDays'],
     ['--store', 'store'],
     ['--seat-file', 'seatFile'],
     ['--version-source', 'versionSource'],
@@ -616,6 +614,9 @@ function parseArgs(argv) {
   ]);
   for (let index = 1; index < argv.length; index += 1) {
     const arg = argv[index];
+    if (arg === '--expires-days' || arg.startsWith('--expires-days=')) {
+      usage(2, 'qualification has no expiry: --expires-days is not accepted (a seat loses standing only by strikes, references/strike-decay.md)');
+    }
     if (arg === '--emit-row') {
       options.emitRow = true;
       continue;
@@ -767,15 +768,6 @@ function parseArgs(argv) {
     usage(2, '--version-source must be runtime or operator-asserted');
   }
   options.trials = positiveInteger(options.trials, '--trials', 2);
-  options.expiresDays = positiveInteger(options.expiresDays, '--expires-days');
-  // TTL cap stays at the flat 30 for every existing role (behavior-preserving,
-  // G1-F9/G2-F19). Only the implementer live-rail exam claims its schema
-  // ceiling (90); VA/brain/reviewer/owner are untouched — no undefined-key uncap.
-  const IMPL_EXPIRES_CAP = 90;
-  const expiresCap = options.role === 'implementer' ? IMPL_EXPIRES_CAP : 30;
-  if (options.expiresDays > expiresCap) {
-    usage(2, `${options.role} --expires-days cannot exceed ${expiresCap}`);
-  }
   try {
     qualUsage.parsePricing(options);
   } catch (error) {
@@ -2923,9 +2915,6 @@ function runVaQualification(options) {
       admin.trials[index].cases.map((c) => c.envelope),
     )),
   }));
-  const expiresAt = new Date(
-    Date.parse(issuedAt) + options.expiresDays * 86_400_000,
-  ).toISOString();
   const methodology = {
     kind: 'va_declared_plan',
     name: 'va-declared-plan',
@@ -2950,7 +2939,6 @@ function runVaQualification(options) {
     identity,
     issued_at: issuedAt,
     observed_at: issuedAt,
-    expires_at: expiresAt,
     methodology,
     trials,
     revocation: null,
@@ -2993,7 +2981,6 @@ function runVaQualification(options) {
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
     status: qualified ? 'qualified' : 'failed',
     qualified_at: issuedAt.slice(0, 10),
-    expires: expiresAt.slice(0, 10),
     evidence_store: {
       event_id: evidenceStoreRecord.event_id,
       producer: evidenceStoreRecord.producer,
@@ -3309,9 +3296,6 @@ function runBrainQualification(options) {
     corpus_manifest_hash: corpusManifestHash,
   }));
   const observedAt = trials.map((trial) => trial.observed_at).sort().at(-1) || issuedAt;
-  const expiresAt = new Date(
-    Date.parse(issuedAt) + options.expiresDays * 86_400_000,
-  ).toISOString();
   const methodology = {
     kind: 'owner_brain_seat',
     name: 'owner-brain-seat',
@@ -3348,7 +3332,6 @@ function runBrainQualification(options) {
     identity,
     issued_at: issuedAt,
     observed_at: observedAt,
-    expires_at: expiresAt,
     // The administration nonce reaches DISK. It was minted, used to derive every
     // candidate-visible byte, returned in memory — and dropped before the row was
     // written, so no completed sitting could be regenerated and its oracle was
@@ -3427,9 +3410,6 @@ function runBrainQualification(options) {
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
     status: qualified ? 'qualified' : 'failed',
     qualified_at: issuedAt.slice(0, 10),
-    // Must equal evidence.expires_at's date (engine-scorecard record cross-checks it).
-    // Advisory only for the brain seat — standing qualification, never blocks.
-    expires: expiresAt.slice(0, 10),
     standing: true,
     evidence_store: {
       event_id: evidenceStoreRecord.event_id,
@@ -3795,9 +3775,6 @@ function runImplQualification(options) {
       )),
     };
   });
-  const expiresAt = new Date(
-    Date.parse(issuedAt) + options.expiresDays * 86_400_000,
-  ).toISOString();
   const methodology = {
     kind: 'impl_dispatch',
     name: 'impl-live-rail',
@@ -3829,7 +3806,6 @@ function runImplQualification(options) {
       identity,
       issued_at: issuedAt,
       observed_at: issuedAt,
-      expires_at: expiresAt,
       methodology,
       trials,
       revocation: null,
@@ -3924,7 +3900,6 @@ function runImplQualification(options) {
       ? 'no_verdict'
       : (qualified ? 'qualified' : 'failed'),
     qualified_at: issuedAt.slice(0, 10),
-    expires: expiresAt.slice(0, 10),
     evidence_store: evidenceStoreRecord
       ? {
         event_id: evidenceStoreRecord.event_id,
@@ -5341,9 +5316,6 @@ function runConsultDiscussQualification(options) {
     identity_resolved: true,
   };
 
-  const expiresAt = new Date(
-    Date.parse(issuedAt) + options.expiresDays * 86_400_000,
-  ).toISOString();
 
   const thresholds = role === 'consult'
     ? {
@@ -5399,7 +5371,6 @@ function runConsultDiscussQualification(options) {
       identity,
       issued_at: issuedAt,
       observed_at: issuedAt,
-      expires_at: expiresAt,
       methodology,
       trials,
       revocation: null,
@@ -5510,7 +5481,6 @@ function runConsultDiscussQualification(options) {
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
     status: rowStatus,
     qualified_at: issuedAt.slice(0, 10),
-    expires: expiresAt.slice(0, 10),
     evidence_store: evidenceStoreRecord
       ? {
         event_id: evidenceStoreRecord.event_id,
@@ -5795,9 +5765,6 @@ function runQualification(options) {
 
   const issuedAt = timestamp();
   const observedAt = trials.map((trial) => trial.observed_at).sort().at(-1) || issuedAt;
-  const expiresAt = new Date(
-    Date.parse(issuedAt) + options.expiresDays * 86_400_000,
-  ).toISOString();
   const state = failures.length === 0 ? 'qualified' : 'degraded';
   const scope = {
     task_classes: options.taskClasses,
@@ -5875,7 +5842,6 @@ function runQualification(options) {
     identity,
     issued_at: issuedAt,
     observed_at: observedAt,
-    expires_at: expiresAt,
     methodology,
     trials,
     revocation: null,
@@ -5923,7 +5889,6 @@ function runQualification(options) {
     latency: { sample_wall_time_s: Math.max(0, Math.round((Date.now() - started) / 1000)) },
     status: qualified ? 'qualified' : 'failed',
     qualified_at: issuedAt.slice(0, 10),
-    expires: expiresAt.slice(0, 10),
     evidence_store: {
       event_id: evidenceStoreRecord.event_id,
       producer: evidenceStoreRecord.producer,

@@ -4,8 +4,7 @@
 # BLOCKER 2 fix (2026-08-22 review repair): freshness is now the seat's strike-decay
 # admission PROJECTION (scripts/engine-scorecard.js computeSeatProjection), reused
 # rather than a third hand-rolled calendar check — never a comparison of `now` against
-# the row's own `expires`. A past-expires qualified row stays T0/T1-eligible and an
-# expiry-less row is no longer punished for lacking a date (references/strike-decay.md,
+# any date. An old qualified row stays T0/T1-eligible: a qualification has no expiry (references/strike-decay.md,
 # docs/plans/_archive/2026/08/2026-08-22-no-confidence-decay.md). The T2 fail-closure cases covered here:
 # missing store, unknown engine, no admissible baseline (no qualified row at all),
 # requalify_required (mechanical no-confidence — a critical strike after the pass),
@@ -26,7 +25,7 @@ STRIKES_FILE="$ENGINE_CAPABILITY_DIR/strikes.jsonl"
 resolve() { node "$SCRIPT" --runner grok --model grok-4.5 --role implementer --now "$NOW" --scorecard "$SC"; }
 tier()    { resolve | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).tier));'; }
 
-# row $1=qualified_at $2=expires(""=omit) $3=corpus_pass $4=false_pass_critical $5=score $6=extra-json
+# row $1=qualified_at $2=(unused, kept so call sites keep their shape) $3=corpus_pass $4=false_pass_critical $5=score $6=extra-json
 # status is derived from score (>=1 => qualified, matching real scorecard rows) — the
 # admission PROJECTION (not this local `status` string) is what resolve-scaffold-tier.js
 # now gates freshness on, but findSeatBaseline (engine-scorecard.js) still requires a
@@ -35,10 +34,8 @@ row() {
   local qat="$1" exp="$2" cp="$3" fpc="$4" score="$5" extra="${6:-}"
   local status="qualified"
   [ "$score" = "0" ] && status="failed"
-  local expires_field=""
-  [ -n "$exp" ] && expires_field="\"expires\":\"$exp\","
-  printf '{"runner":"grok","model":"grok-4.5","engine":"grok-4.5","role":"implementer","qualified_at":"%s",%s"status":"%s","quality":{"corpus_pass":"%s","false_pass_critical":%s},"capability_score":%s%s}\n' \
-    "$qat" "$expires_field" "$status" "$cp" "$fpc" "$score" "$extra"
+  printf '{"runner":"grok","model":"grok-4.5","engine":"grok-4.5","role":"implementer","qualified_at":"%s","status":"%s","quality":{"corpus_pass":"%s","false_pass_critical":%s},"capability_score":%s%s}\n' \
+    "$qat" "$status" "$cp" "$fpc" "$score" "$extra"
 }
 
 # seat_hash engine runner role — independent re-derivation via the SAME primitives
@@ -64,15 +61,13 @@ rm -f "$STRIKES_FILE"
 assert_eq "T2" "$(tier)" "missing scorecard store fails closed to T2"
 
 # ── T2: unknown engine (store exists, no matching row) ──
-printf '{"runner":"codex","model":"gpt-5.5","engine":"gpt-5.5","role":"reviewer","qualified_at":"2026-08-10","expires":"2026-09-10","status":"qualified","quality":{"corpus_pass":"5/5","false_pass_critical":0},"capability_score":1}\n' > "$SC"
+printf '{"runner":"codex","model":"gpt-5.5","engine":"gpt-5.5","role":"reviewer","qualified_at":"2026-08-10","status":"qualified","quality":{"corpus_pass":"5/5","false_pass_critical":0},"capability_score":1}\n' > "$SC"
 assert_eq "T2" "$(tier)" "unknown engine (no matching row) fails closed to T2"
 
-# ── BLOCKER 2 planted negative: a PAST-EXPIRES qualified row still resolves T0.
-#     This is the exact tooth pulled — before the fix, isFresh() compared `now` against
-#     `row.expires` and this fixture resolved T2 ("expired record fails closed").
+# ── BLOCKER 2 planted negative: an OLD qualified row still resolves T0 — no date decides it.
 rm -f "$STRIKES_FILE"
 row "2026-06-01" "2026-06-15" "40/40" 0 1 > "$SC"
-assert_eq "T0" "$(tier)" "BLOCKER 2: a past-expires qualified+complete row still resolves T0 (calendar is advisory, never authority)"
+assert_eq "T0" "$(tier)" "BLOCKER 2: an old qualified+complete row still resolves T0 (no expiry exists)"
 
 # ── expiry-less record is no longer punished for lacking a date (T0, not stale) ──
 rm -f "$STRIKES_FILE"

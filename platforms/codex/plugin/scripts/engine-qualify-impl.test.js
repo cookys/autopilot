@@ -331,7 +331,6 @@ const implRecord = (trials) => ({
     semantic_fingerprint: digestX('b'), containment_fingerprint: digestX('c'), identity_resolved: true,
   },
   issued_at: '2026-08-22T00:00:00.000Z', observed_at: '2026-08-22T00:00:00.000Z',
-  expires_at: '2026-11-19T00:00:00.000Z',
   methodology: {
     kind: 'impl_dispatch', name: 'impl-live-rail', version: '1.0.0',
     corpus_version: 'impl-live-rail-v1.impl-live-rail-v1', corpus_manifest_hash: digestX('d'),

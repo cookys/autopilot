@@ -310,7 +310,6 @@ function main() {
     grant_identity_hash: hex('3'),
     issued_at: '2026-08-01T00:00:00.000Z',
     observed_at: '2026-08-01T00:00:00.000Z',
-    expires_at: '2026-08-29T00:00:00.000Z',
     methodology: {
       kind: 'role_eval',
       name: 'reviewer-metamorphic-executable',
@@ -363,7 +362,6 @@ function main() {
     identity: JSON.parse(JSON.stringify(record.identity)),
     issued_at: record.issued_at,
     observed_at: record.observed_at,
-    expires_at: record.expires_at,
     methodology: JSON.parse(JSON.stringify(record.methodology)),
     trials: JSON.parse(JSON.stringify(record.trials)),
     revocation: null,
@@ -397,7 +395,8 @@ function main() {
     check(typeof brainRow.capability_score === 'number' && brainRow.capability_score === 1,
       `perfect sitting scores 1 (plant catch rate), got ${brainRow.capability_score}`);
     equal(brainRow.cost && brainRow.cost.source, 'unknown', 'brain row carries the unknown-cost block');
-    equal(brainRow.expires, record.expires_at.slice(0, 10), 'row.expires mirrors evidence.expires_at');
+    check(!('expires' in brainRow), 'a brain row carries no expires field (qualification has no expiry)');
+    check(!('expires_at' in record), 'brain evidence carries no expires_at');
     equal(brainRow.status, 'qualified', 'perfect sitting row is status qualified');
     equal(brainRow.quality.subjects, perfect.verdict.subjects,
       'perfect row quality.subjects is the graded verdict, not a literal');
@@ -409,7 +408,7 @@ function main() {
     check(accepted.result.status === 0,
       `brain row is accepted by engine-scorecard record (${accepted.result.stdout}${accepted.result.stderr})`.slice(0, 400));
     // Negative controls: dropping any one of the three fields must be refused.
-    for (const field of ['capability_score', 'cost', 'expires']) {
+    for (const field of ['capability_score', 'cost']) {
       const broken = { ...brainRow };
       delete broken[field];
       const refused = recordRow(broken, `sc-missing-${field}`);

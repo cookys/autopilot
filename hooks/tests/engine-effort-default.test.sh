@@ -71,14 +71,12 @@ if (!src) { console.log('FAIL: no qualified shipped fixture'); process.exit(1); 
 const producer = src.capability_evidence.producer;
 const now = new Date();
 const issued = new Date(now.getTime() - 3600_000).toISOString();
-const ttl = Date.parse(src.row.evidence.expires_at) - Date.parse(src.row.evidence.issued_at);
-const expires = new Date(Date.parse(issued) + ttl).toISOString();
 const DERIVED = ['evidence_id', 'evidence_hash', 'scope_hash', 'identity_hash', 'grant_identity_hash', 'trial_set_hash'];
 
 function makeEvidence(alias, effort) {
   const raw = JSON.parse(JSON.stringify(src.row.evidence));
   for (const f of DERIVED) delete raw[f];
-  raw.issued_at = issued; raw.observed_at = issued; raw.expires_at = expires;
+  raw.issued_at = issued; raw.observed_at = issued;
   for (const t of raw.trials || []) if (t.observed_at) t.observed_at = issued;
   raw.identity.model_alias = alias;
   raw.identity.effort = effort;
@@ -93,7 +91,7 @@ function rowFor(evidence, wrapper, effort) {
   const row = JSON.parse(JSON.stringify(src.row));
   const today = now.toISOString().slice(0, 10);
   row.engine = evidence.identity.model_alias;
-  row.date = today; row.qualified_at = today; row.expires = expires.slice(0, 10);
+  row.date = today; row.qualified_at = today;
   if (effort === undefined) delete row.effort; else row.effort = effort;
   row.evidence = evidence;
   row.evidence_store = { event_id: wrapper.event_id, producer, transcript_hash: wrapper.transcript_hash };
@@ -264,7 +262,7 @@ const strikeV2 = (hash, e, r, ro, key) => ({
 });
 const pinRow = (row, effort) => ({
   engine: row.engine, runner: row.runner, role: row.role, effort, endpoint: null,
-  reason: 'fixture pin', operator: 'tester', expires: null,
+  reason: 'fixture pin', operator: 'tester',
 });
 function freshHighSeat(name, alias) {
   useStores(name);

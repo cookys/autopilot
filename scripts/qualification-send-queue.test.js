@@ -292,7 +292,7 @@ function externalPriorRow(observedAt) {
     harness_version: 'h1', runner_version: 'rv1', prompt_config_hash: hash,
     date: '2026-06-30', quality: { corpus_pass: '10/10' }, capability_score: 0.9,
     cost: { source: 'manual' }, latency: { sample_wall_time_s: 0 },
-    status: 'failed', qualified_at: '2026-03-02', expires: '2026-04-02',
+    status: 'failed', qualified_at: '2026-03-02',
     evidence_store: { producer: 'p', transcript_hash: hash },
     evidence: {
       schema_version: 1, source: 'external_prior', source_ref: 'src', state: 'provisional', role: 'reviewer',
@@ -302,7 +302,7 @@ function externalPriorRow(observedAt) {
         runner_version: 'rv1', harness_version: 'h1', effort: 'default', prompt_config_hash: hash,
         semantic_fingerprint: hash, containment_fingerprint: hash, identity_resolved: false,
       },
-      issued_at: '2026-03-02T00:00:00.000Z', observed_at: observedAt, expires_at: '2026-04-02T00:00:00.000Z',
+      issued_at: '2026-03-02T00:00:00.000Z', observed_at: observedAt,
       methodology: {
         kind: 'external_prior', name: 'ext', version: '1', corpus_version: null, corpus_manifest_hash: null, thresholds: null,
         basis: { cohort: 'c', cohort_hash: hash, observation_hash: hash, dimensions: ['x'], applicability: [] },

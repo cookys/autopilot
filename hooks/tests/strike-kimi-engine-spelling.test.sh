@@ -25,7 +25,7 @@ NOW="2026-10-15T00:00:00Z"
 # The qualified baseline is spelled with a hyphen, as scorecard events 157/166/182 are.
 node -e '
 const r = { event_id: 1, engine: "kimi-code-k3", runner: "kimi", role: "reviewer",
-  status: "qualified", qualified_at: "2026-10-01", date: "2026-10-01", expires: "2026-12-14",
+  status: "qualified", qualified_at: "2026-10-01", date: "2026-10-01",
   capability_score: 1, family: "x", cost: { source: "unknown" }, model_version: "v1",
   corpus_version: "c1", harness_version: "h1", runner_version: "r1", prompt_config_hash: "p1" };
 process.stdout.write(JSON.stringify(r) + "\n");' > "$ENGINE_SCORECARD_DIR/scorecard.jsonl"

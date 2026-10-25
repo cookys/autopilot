@@ -172,15 +172,15 @@ assert_not_contains "$V_ERR_NON_QC" "⚠" "(v) admitted SILENTLY — no warning 
 assert_not_contains "$(cat "$TEST_TMP/v.err")" "consult seat" "(v) stderr says nothing about the consult seat"
 
 # ═══════════════════════════════════════════════════════════════════════════
-# (vi) switch on + calendar-expired row, standing not demoted => admitted
-# WITH a stderr expiry warning naming the date.
+# (vi) switch on + a row issued years ago, standing not demoted => admitted
+# with NO expiry warning (qualification has no expiry).
 # ═══════════════════════════════════════════════════════════════════════════
 fresh_stores "case-vi"
-mk_row consult eng-vi cc-shim --issued-at "2020-01-01T00:00:00.000Z" --expires-at "2020-01-20T00:00:00.000Z"
+mk_row consult eng-vi cc-shim --issued-at "2020-01-01T00:00:00.000Z"
 CFG_VI="$(mk_cfg consult eng-vi cc-shim high on)"
 OUT_VI="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_VI" bash "$SCRIPT" 2>"$TEST_TMP/vi.err")"; RC_VI=$?
-assert_eq "0" "$RC_VI" "(vi) calendar-expired-but-standing row ADMITS"
-assert_contains "$(cat "$TEST_TMP/vi.err")" "expiry" "(vi) admits WITH a stderr expiry warning"
+assert_eq "0" "$RC_VI" "(vi) an old standing row ADMITS"
+assert_not_contains "$(cat "$TEST_TMP/vi.err")" "expir" "(vi) admits with no expiry warning on stderr"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # (vii) switch on + in-date row whose standing is requalify_required (via a
@@ -279,7 +279,7 @@ assert_contains "$ERR_X" "malformed capability evidence" "(x) error names the ma
 # real qualifier evidence_store anchor at all) fails validateRecordRow.
 # ═══════════════════════════════════════════════════════════════════════════
 fresh_stores "case-xi"
-FORGED_ROW='{"engine":"eng-xi","model":"eng-xi","runner":"cc-shim","family":"test-family","role":"consult","model_version":"1.0","version_source":"operator-asserted","corpus_version":"consult-v1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-08-28","quality":{"corpus_pass":"20/20"},"capability_score":1.0,"cost":{"source":"unknown"},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-08-28","expires":"2099-01-01"}'
+FORGED_ROW='{"engine":"eng-xi","model":"eng-xi","runner":"cc-shim","family":"test-family","role":"consult","model_version":"1.0","version_source":"operator-asserted","corpus_version":"consult-v1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-08-28","quality":{"corpus_pass":"20/20"},"capability_score":1.0,"cost":{"source":"unknown"},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-08-28"}'
 printf '%s\n' "$FORGED_ROW" | node "$REPO_ROOT/scripts/engine-scorecard.js" record >/dev/null 2>&1
 CFG_XI="$(mk_cfg consult eng-xi cc-shim high on)"
 RC_XI="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_XI" bash "$SCRIPT" >/dev/null 2>&1; echo $?)"

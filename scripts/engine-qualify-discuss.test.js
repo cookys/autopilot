@@ -435,11 +435,11 @@ require('fs').writeFileSync(${JSON.stringify(sentinelPath)}, 'module-top-level-c
   function rawEvidenceInput(evidence) {
     const {
       schema_version, source, source_ref, state, role, scope, identity,
-      issued_at, observed_at, expires_at, methodology, trials, revocation, supersedes,
+      issued_at, observed_at, methodology, trials, revocation, supersedes,
     } = JSON.parse(JSON.stringify(evidence));
     return {
       schema_version, source, source_ref, state, role, scope, identity,
-      issued_at, observed_at, expires_at, methodology, trials, revocation, supersedes,
+      issued_at, observed_at, methodology, trials, revocation, supersedes,
     };
   }
 

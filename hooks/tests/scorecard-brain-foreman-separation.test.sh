@@ -19,7 +19,7 @@ row() {
   node -e '
 const [engine, kind, id] = process.argv.slice(1);
 const r = { event_id: Number(id), engine, runner: "claude", role: "owner", status: "qualified",
-  qualified_at: "2026-10-14", date: "2026-10-14", expires: "2026-12-14", capability_score: 1,
+  qualified_at: "2026-10-14", date: "2026-10-14", capability_score: 1,
   family: "x", cost: { source: "unknown" }, model_version: "v1", corpus_version: "c1",
   harness_version: "h1", runner_version: "r1", prompt_config_hash: "p1" };
 if (kind === "brain") r.methodology_kind = "owner_brain_seat";

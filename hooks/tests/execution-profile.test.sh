@@ -41,7 +41,6 @@ const makeEvidenceReceipt = ({
   modelIdentity,
   seed,
   observedAt = '2026-07-25T00:00:00.000Z',
-  expiresAt = '2026-08-01T00:00:00.000Z',
 }) => {
   const exactIdentity = {
     ...modelIdentity,
@@ -117,7 +116,6 @@ const makeEvidenceReceipt = ({
     identity: exactIdentity,
     issued_at: '2026-07-25T00:30:00.000Z',
     observed_at: observedAt,
-    expires_at: expiresAt,
     methodology,
     trials,
     revocation: null,
@@ -821,18 +819,8 @@ assert.throws(
   () => resolveTrustedRoleGrant({ ...futureEvidence, envelope }),
   /cannot be later than the explicit evaluation time/,
 );
-const staleEvidence = clone(grantInput);
-staleEvidence.evidence[0].expires_at = '2026-07-26T00:00:00.000Z';
-assert.throws(
-  () => resolveTrustedRoleGrant({ ...staleEvidence, envelope }),
-  /must be fresh/,
-);
-const expiringEvidence = clone(grantInput);
-expiringEvidence.evidence[0].expires_at = '2026-07-26T00:59:59.000Z';
-assert.throws(
-  () => resolveTrustedRoleGrant({ ...expiringEvidence, envelope }),
-  /cannot outlive its capability evidence/,
-);
+// Evidence carries no expiry: a grant is bounded by its own expiresAt and the task ceiling only.
+assert.ok(!('expires_at' in grantInput.evidence[0]), 'grant evidence carries no expires_at');
 
 const activeCheck = {
   expectedGrantId: grant.grant_id,

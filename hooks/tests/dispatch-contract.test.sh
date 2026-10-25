@@ -255,7 +255,7 @@ setup_qualified_store() {
   
   local scorecard_row="$store_dir/score.json"
   cat > "$scorecard_row" <<'EOF'
-{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 EOF
   
   env ENGINE_SCORECARD_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$scorecard_row" > /dev/null 2>&1 || {
@@ -285,7 +285,7 @@ setup_va_qualified_store() {
 
   local impl_scorecard_row="$store_dir/impl_score.json"
   cat > "$impl_scorecard_row" <<'EOF'
-{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 EOF
   env ENGINE_SCORECARD_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$impl_scorecard_row" > /dev/null 2>&1 || {
     echo "FATAL: engine-scorecard.js failed setup (va impl)"; exit 1
@@ -301,7 +301,7 @@ EOF
 
   local va_scorecard_row="$store_dir/va_score.json"
   cat > "$va_scorecard_row" <<EOF
-{"engine":"glm-5.2","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"$va_status","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"glm-5.2","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"$va_status","qualified_at":"2026-06-30"}
 EOF
   env ENGINE_SCORECARD_DIR="$store_dir" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$va_scorecard_row" > /dev/null 2>&1
   if [ $? -ne 0 ]; then
@@ -486,7 +486,7 @@ echo "--- Case 3.2: Present but unqualified ---"
 mkdir -p "$STORE_BASE/unqual"
 SCORE_UNQUAL="$STORE_BASE/unqual/s.json"
 cat > "$SCORE_UNQUAL" <<'EOF'
-{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"2/10","false_pass_critical":3,"specificity":"1/3"},"capability_score":0.1,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"2/10","false_pass_critical":3,"specificity":"1/3"},"capability_score":0.1,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30"}
 EOF
 env ENGINE_SCORECARD_DIR="$STORE_BASE/unqual" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$SCORE_UNQUAL" > /dev/null 2>&1 || {
   echo "FATAL: engine-scorecard.js failed setup (unqual)"; exit 1
@@ -927,7 +927,7 @@ done
 echo "--- Case 10.2: failed implementer remains NO-GO under native projection ---"
 setup_qualified_store "$STORE_BASE/failed_impl"
 cat > "$STORE_BASE/failed_impl/score.json" <<'EOF'
-{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"2/10","false_pass_critical":3,"specificity":"1/3"},"capability_score":0.1,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"2/10","false_pass_critical":3,"specificity":"1/3"},"capability_score":0.1,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30"}
 EOF
 env ENGINE_SCORECARD_DIR="$STORE_BASE/failed_impl" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/failed_impl/score.json" > /dev/null 2>&1 || {
   echo "FATAL: engine-scorecard.js failed setup (failed_impl)"; exit 1
@@ -943,7 +943,7 @@ echo "--- Case 10.3: past-expires implementer GOes under native projection (cale
 # assurance=provisional exactly like Case 10.1 (observed_status=qualified).
 setup_qualified_store "$STORE_BASE/expired_impl"
 cat > "$STORE_BASE/expired_impl/score.json" <<'EOF'
-{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2020-01-01","expires":"2020-01-02"}
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2020-01-01"}
 EOF
 env ENGINE_SCORECARD_DIR="$STORE_BASE/expired_impl" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/expired_impl/score.json" > /dev/null 2>&1 || {
   echo "FATAL: engine-scorecard.js failed setup (expired_impl)"; exit 1
@@ -961,7 +961,7 @@ echo "--- Case 10.4: identity-mismatched implementer remains NO-GO ---"
 rm -rf "$STORE_BASE/mismatch_impl"
 mkdir -p "$STORE_BASE/mismatch_impl"
 cat > "$STORE_BASE/mismatch_impl/score.json" <<'EOF'
-{"engine":"wrong-model","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"wrong-model","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 EOF
 env ENGINE_SCORECARD_DIR="$STORE_BASE/mismatch_impl" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/mismatch_impl/score.json" > /dev/null 2>&1 || {
   echo "FATAL: engine-scorecard.js failed setup (mismatch_impl)"; exit 1
@@ -981,7 +981,7 @@ echo "--- Case 10.5: runner-mismatched implementer remains NO-GO ---"
 rm -rf "$STORE_BASE/runner_mismatch"
 mkdir -p "$STORE_BASE/runner_mismatch"
 cat > "$STORE_BASE/runner_mismatch/score.json" <<'EOF'
-{"engine":"gpt-5.3-codex-spark","runner":"claude","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"gpt-5.3-codex-spark","runner":"claude","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 EOF
 env ENGINE_SCORECARD_DIR="$STORE_BASE/runner_mismatch" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/runner_mismatch/score.json" > /dev/null 2>&1 || {
   echo "FATAL: engine-scorecard.js failed setup (runner_mismatch)"; exit 1
@@ -1128,7 +1128,7 @@ EOF
   rm -rf "$STORE_BASE/va_mismatch"
   mkdir -p "$STORE_BASE/va_mismatch"
   cat > "$STORE_BASE/va_mismatch/score.json" <<'EOF'
-{"engine":"wrong-va-model","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"wrong-va-model","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 EOF
   env ENGINE_SCORECARD_DIR="$STORE_BASE/va_mismatch" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/va_mismatch/score.json" > /dev/null 2>&1 || {
     echo "FATAL: engine-scorecard.js failed setup (va_mismatch)"; exit 1
@@ -1152,7 +1152,7 @@ EOF
   rm -rf "$STORE_BASE/exact_impl_quota"
   mkdir -p "$STORE_BASE/exact_impl_quota"
   cat > "$STORE_BASE/exact_impl_quota/score.json" <<'EOF'
-{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 EOF
   env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_impl_quota" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_impl_quota/score.json" > /dev/null 2>&1 || {
     echo "FATAL: engine-scorecard.js failed setup (exact_impl_quota)"; exit 1
@@ -1225,7 +1225,7 @@ EOF
   mkdir -p "$STORE_BASE/exact_va_quota"
   # Scorecard: implementer row not required for VA path; seed VA only.
   cat > "$STORE_BASE/exact_va_quota/va_score.json" <<'EOF'
-{"engine":"glm-5.2","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"glm-5.2","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 EOF
   env ENGINE_SCORECARD_DIR="$STORE_BASE/exact_va_quota" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/exact_va_quota/va_score.json" > /dev/null 2>&1 || {
     echo "FATAL: engine-scorecard.js failed setup (exact_va_quota)"; exit 1
@@ -1529,7 +1529,7 @@ EOF
   rm -rf "$STORE_BASE/va_l6_family"
   mkdir -p "$STORE_BASE/va_l6_family"
   cat > "$STORE_BASE/va_l6_family/score.json" <<'EOF'
-{"engine":"Gemini 3.5 Flash (High)","runner":"agy","family":"google","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"Gemini 3.5 Flash (High)","runner":"agy","family":"google","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 EOF
   env ENGINE_SCORECARD_DIR="$STORE_BASE/va_l6_family" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$STORE_BASE/va_l6_family/score.json" > /dev/null 2>&1 || {
     echo "FATAL: engine-scorecard.js failed setup (va_l6_family)"; exit 1

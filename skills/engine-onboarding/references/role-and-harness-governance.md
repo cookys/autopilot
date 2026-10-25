@@ -15,7 +15,7 @@ Collect these inputs before choosing an implementation level or role:
   subscription quota, and third-party provider quota are separate facts. A
   Claude Code driver with a MiniMax/GLM `cc-shim` endpoint is not the same quota
   domain as native Anthropic-backed Claude dispatch.
-- **Evidence age**: latest official docs, local CLI probe, committed probe artifact, scorecard row, and expiry date.
+- **Evidence age**: latest official docs, local CLI probe, committed probe artifact, and scorecard row.
 - **Failure cost**: can a wrong result mutate the repo, leak secrets, merge broken code, or silently remove the human from the loop?
 
 If any fact is stale, missing, or based on memory, run a survey/spike before implementing behavior. Survey gathers evidence; this reference decides the gate.
@@ -121,7 +121,7 @@ Every role evaluation should score these dimensions explicitly:
 - **Cost and latency**: measured or explicitly unknown; unknown cost must never
   rank as free.
 - **Freshness**: evidence has model identity, runner version, prompt hash,
-  corpus version, `qualified_at`, and `expires`.
+  corpus version, and `qualified_at`. A qualification has no expiry.
 
 ## Role Evidence Bars
 

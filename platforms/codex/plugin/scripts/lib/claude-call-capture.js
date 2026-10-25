@@ -135,6 +135,20 @@ function recordState(base) {
   return isClosed(base) ? 'ready' : 'pending';
 }
 
+// Every way a record can be incomplete -> judged as a FAILED record, never cached as .ok:
+//   not closed (alive/pending)         state !== 'ready' in cmdJudge
+//   .out.writeerror / .err.writeerror  the record file lost bytes (mirror could not write it)
+//   .out or .err file missing          a closed record always has both (mirror opens them); a missing one means lost evidence
+//   starttime unreadable (.pid)        the pid cannot be tied to one process: aliveness is a guess
+// NOT incomplete: .outbroken (only the pass-through to the caller failed; the record file is complete) -> judged by its content.
+function incompleteReason(base) {
+  if (exists(`${base}.out.writeerror`) || exists(`${base}.err.writeerror`)) return 'writeerror';
+  if (!exists(`${base}.out`) || !exists(`${base}.err`)) return 'missing-stream';
+  const info = readPid(base);
+  if (!info || !info.start) return 'no-starttime';
+  return null;
+}
+
 function stop(dir, line) {
   writeAtomic(path.join(dir, 'STOP'), `${line}\n`);
   process.stderr.write(`${line}\n`);
@@ -161,10 +175,12 @@ function cmdJudge(argv) {
     const out = readRec(base, 'out'); const err = readRec(base, 'err');
     // ready: failed unless a successful result line exists. Not ready (final, or pending past the wait): a FAILED record, judged
     // from whatever exists.
-    const failed = state === 'ready' ? authStop.claudeStreamFailed(out) : true;
+    // Evidence that may be incomplete is never trusted as success and never cached: see incompleteReason.
+    const incomplete = state !== 'ready' || incompleteReason(base);
+    const failed = incomplete ? true : authStop.claudeStreamFailed(out);
     const hit = authStop.checkSources([{ kind: 'raw', text: out }, { kind: 'raw', text: err }], { failed });
     if (hit) return stop(dir, authStop.stopLine(`${prefix}${path.basename(base)}`, hit));
-    if (state === 'ready') { try { fs.writeFileSync(`${base}.ok`, ''); } catch (_e) { /* cache only */ } }
+    if (!incomplete) { try { fs.writeFileSync(`${base}.ok`, ''); } catch (_e) { /* cache only */ } }
   }
   return 0;
 }
@@ -181,4 +197,4 @@ async function main(argv) {
 if (require.main === module) {
   main(process.argv.slice(2)).then((rc) => { if (rc !== undefined) process.exitCode = rc; }, (e) => { process.stderr.write(`claude-call-capture: ${e && e.stack || e}\n`); process.exit(3); });
 }
-module.exports = { alive, procStat, isClosed, recordState };
+module.exports = { alive, procStat, isClosed, recordState, incompleteReason };

@@ -67,4 +67,23 @@ node "$JS" judge --dir "$D" < /dev/null 2>/dev/null; RC=$?
 assert_eq "$RC" "0" "judge: a closed, successful record quoting a phrase is clean"
 assert_file_exists "$D/r5.ok" "judge: and cached"
 
+# 4. incomplete evidence is a failed record and is never cached
+mkrec() { # name pidstart: closed record with a successful result prefix and an authentication stderr
+  echo "999999 ${2-1}" > "$D/$1.pid"; echo '{"type":"result","subtype":"success","is_error":false,"result":"fine"}' > "$D/$1.out"
+  echo 'Authentication error' > "$D/$1.err"; : > "$D/$1.out.closed"; : > "$D/$1.err.closed"; }
+rm -rf "$D"; mkdir -p "$D"; mkrec w1; echo EIO > "$D/w1.out.writeerror"
+node "$JS" judge --dir "$D" < /dev/null 2>/dev/null; RC=$?
+assert_eq "$RC" "6" "judge: record write failed (.writeerror) + success result prefix + auth stderr -> stop"
+rm -rf "$D"; mkdir -p "$D"; mkrec w2; echo EIO > "$D/w2.err.writeerror"; echo ok > "$D/w2.err"
+node "$JS" judge --dir "$D" < /dev/null 2>/dev/null; RC=$?
+assert_eq "$RC" "0" "judge: incomplete but no phrase in what exists -> no stop"
+assert_file_absent "$D/w2.ok" "judge: an incomplete record is never cached as .ok"
+rm -rf "$D"; mkdir -p "$D"; mkrec w3 ""
+node "$JS" judge --dir "$D" < /dev/null 2>/dev/null; RC=$?
+assert_eq "$RC" "6" "judge: unreadable starttime -> failed record rules (auth stderr stops)"
+rm -rf "$D"; mkdir -p "$D"; mkrec w4; echo '{"type":"result","subtype":"success","is_error":false,"result":"fine"}' > "$D/w4.out"; : > "$D/w4.err"; echo EPIPE > "$D/w4.out.outbroken"
+node "$JS" judge --dir "$D" < /dev/null 2>/dev/null; RC=$?
+assert_eq "$RC" "0" "judge: .outbroken only (record complete) is judged by content: clean"
+assert_file_exists "$D/w4.ok" "judge: and cached"
+
 finalize_test

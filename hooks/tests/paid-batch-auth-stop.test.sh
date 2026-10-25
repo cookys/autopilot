@@ -260,6 +260,17 @@ ebw_run "$TEST_TMP/ebw-mut3" wrap-late1gc standin_probe.py 1.6
 if [ "$CALLS" -le 2 ]; then fail "run-eval-batch: judging a live record did not let query 3 through (calls=$CALLS) -- negative control broken"; fi
 echo "MUTANT-RED run-eval-batch (recordState: unclosed dead record skipped): claude calls=$CALLS (the probe's third query was paid)"
 kill_grandchildren "$TEST_TMP/ebw-mut3"
+# 4. judge ignores .writeerror (incomplete record trusted) -> a record whose write failed, with a success prefix and auth stderr, is not stopped
+mk_layout "$TEST_TMP/ebw-mut4"
+JSM="$TEST_TMP/ebw-mut4/scripts/lib/claude-call-capture.js"
+sed -i "s/if (exists(\`\${base}.out.writeerror\`) || exists(\`\${base}.err.writeerror\`)) return 'writeerror';//" "$JSM"
+grep -q "return 'writeerror'" "$JSM" && fail "writeerror mutation did not apply"
+MD="$TEST_TMP/ebw-mut4/jd"; mkdir -p "$MD"; echo "999999 1" > "$MD/m.pid"
+echo '{"type":"result","subtype":"success","is_error":false,"result":"fine"}' > "$MD/m.out"; echo 'Authentication error' > "$MD/m.err"
+: > "$MD/m.out.closed"; : > "$MD/m.err.closed"; echo EIO > "$MD/m.out.writeerror"
+node "$JSM" judge --dir "$MD" < /dev/null 2>/dev/null; MRC=$?
+if [ "$MRC" = 6 ]; then fail "writeerror mutant still stopped -- negative control broken"; fi
+echo "MUTANT-RED claude-call-capture (writeerror ignored): rc=$MRC (the incomplete record was trusted)"
 
 # ============================ 2. scripts/bench-engine-capability.sh (one dispatch per case) ============================
 # outputs of a paid call: dispatch stdout+stderr (captured together) and the agent_log it names

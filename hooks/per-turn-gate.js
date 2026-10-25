@@ -17,8 +17,9 @@
  *   per_turn_gate.mode        "violations" (default): only exit 1 can block.
  *                             "violations+features" (W4, guidance): exit 0 with a non-empty
  *                             feature_gaps list blocks too, and the retry text lists the violations,
- *                             then the gaps, then a keep-what-works line. UNEVALUATED: the W4 trigger
- *                             and text have no ON/OFF evaluation until plan P2-4 returns PASS.
+ *                             then the gaps, then a keep-what-works line. EVALUATED: the P2-3r2 and
+ *                             P2-3-h55 ON arms ran this mode (PASS, Haiku only, task t14); mode
+ *                             "violations" alone was not run as an ON arm.
  *   per_turn_gate.max_blocks  blocks allowed per (session, turn); default 2 (the historical cap).
  *   per_turn_gate.timeout_ms  hard timeout for the verifier; default 30000.
  *
@@ -298,7 +299,7 @@ function cleanupState(dir, days) {
 
 /**
  * Retry text, the wording of gate_write_retry in evals/orchestration/run-orchestration-eval.sh.
- * Mode "violations+features" appends the feature gaps and the keep-what-works line (W4, unevaluated).
+ * Mode "violations+features" appends the feature gaps and the keep-what-works line (W4, the evaluated mode).
  */
 function renderRetry(json, mode) {
   const real = Array.isArray(json.violations) ? json.violations : [];

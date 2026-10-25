@@ -11,7 +11,7 @@ Plan: `docs/plans/2026-10-24-per-turn-gate-phase2.md` section 5 (P2-4), section 
 | P2-3r2 | `claude-haiku-4-5` | **PASS** | `docs/plans/evidence/2026-10-25-per-turn-gate-p2-3r2/RESULT.md`, `AUDIT OK` |
 | P2-3-h55 | `claude-haiku-5-5` | **PASS** | `docs/plans/evidence/2026-10-25-per-turn-gate-p2-3-h55/RESULT.md`, `AUDIT OK` |
 
-The two U batches are listed for completeness and take no part in the verdict. Both PASS batches: task `t14-constraint-horizon`, n=30 per arm (ON = hook, C = concurrent control), 5 turns per run, CLI `2.1.309`, hook mode `violations`.
+The two U batches are listed for completeness and take no part in the verdict. Both PASS batches: task `t14-constraint-horizon`, n=30 per arm (ON = hook, C = concurrent control), 5 turns per run, CLI `2.1.309`, hook mode `violations+features` (W4) in the ON arm, as registered in `docs/plans/evidence/2026-10-25-per-turn-gate-p2-3r2/PREREG.md` lines 16 and 25 and `docs/plans/evidence/2026-10-25-per-turn-gate-p2-3-h55/PREREG.md` lines 15 and 24 (W4 commit `977027c999e52383ad354f35fa88ea16dec7476f`).
 
 ## 2. Registered thresholds, as recorded in the two RESULT files
 
@@ -47,20 +47,20 @@ Counts and p values equal the RESULT files (the trade-check p of about 0.99999 i
 
 ## 4. What was measured and what was not (plan section 6)
 
-Measured: one hook (`hooks/per-turn-gate.js`, mode `violations`), one task (`t14-constraint-horizon`), one verifier (the t14 `verify-turn.js`), two Haiku aliases (`claude-haiku-4-5` and `claude-haiku-5-5`, each in its own preregistered batch), one CLI version (`2.1.309`), n=30 per arm.
+Measured: one hook (`hooks/per-turn-gate.js`, mode `violations+features` (W4: the feature-gap trigger and its retry text), one task (`t14-constraint-horizon`), one verifier (the t14 `verify-turn.js`), two Haiku aliases (`claude-haiku-4-5` and `claude-haiku-5-5`, each in its own preregistered batch), one CLI version (`2.1.309`), n=30 per arm.
 
 Not measured:
 
 - Any task other than t14 (a PASS covers this hook and this task only).
 - Any model other than the two Haiku aliases; larger models were not run (O7, out of scope).
 - Any other CLI version; the CLI auto-updates and a pin change goes to the owner.
-- Mode `violations+features` (the W4 trigger and retry text): not part of these arms; it stays unevaluated.
+- Mode `violations` alone (the hook's default, which blocks only on verifier exit 1): no batch ran it as the ON arm, so it was not evaluated on its own. Both PASS batches ran W4 (`violations+features`) as registered in the PREREG lines cited in section 1.
 - SubagentStop (C1): deferred (plan 2.4, O4); t14 has no subagents.
 - Multi-project, real-user or long-session behaviour, and the cost or latency of the hook outside the harness.
 - Why the batches differ: the two batches differ in model and are separate preregistrations, so no causal statement across them is made here.
 
 ## 5. Recommendation to the owner
 
-Keep the hook opt-in, default off (decision O6), shipped at 3.0.0 with no CHANGELOG entry until the owner's release call. Describe it in the docs as evaluated on task t14 with Haiku only, citing the two PASS batches, and keep the W4 text described as unevaluated. Owner decision card d-7d8444a3 is still open; this note follows the recommendation above. If the owner chooses default-on instead, that goes into a separate commit (it is a guidance change and needs its own plan, W6).
+Keep the hook opt-in, default off (decision O6), shipped at 3.0.0 with no CHANGELOG entry until the owner's release call. Describe it in the docs as evaluated on task t14 with Haiku only, citing the two PASS batches, and say that the evaluated mode is `violations+features` (W4) while the default mode `violations` was not run on its own. Whether the default should become `violations+features` is part of the owner's decision. Owner decision card d-7d8444a3 is still open; this note follows the recommendation above. If the owner chooses default-on instead, that goes into a separate commit (it is a guidance change and needs its own plan, W6).
 
 The plan is not archived yet; archiving waits for the owner's answer.

@@ -46,6 +46,8 @@ const KNOWN_TYPES = new Set([
   'plugin.session_start', 'context.append_loop_event', 'llm.tools_snapshot', 'llm.request',
   'usage.record', 'token_counting.measured', 'agent.turn.ended', 'turn.ended',
   'token_counting.turn_recorded', 'prompt.completed',
+  // kimi 2.3.1 (2026-10-26): one per session; AGENTS.md / skills hashes and subagent names, no tool data.
+  'changeNotifier.snapshot',
 ]);
 // context.append_loop_event .event.type values a tool-less text answer produces
 // (tool.call / tool.result appear only in K1, never here).

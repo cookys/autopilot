@@ -83,6 +83,14 @@ for(const x of fm)if(x.probe_cost!==m.probe_cost&&text.includes(String(x.probe_c
 if(!text.includes(m.model))bad.push("model "+m.model+" missing");
 for(const x of fm)if(x.model!==m.model&&text.includes(x.model))bad.push("model "+x.model+" of another batch");
 if(!text.includes(m.seed))bad.push("seed missing");
+const codeOf=(seed)=>{const q=/^ptg-(.+)-order-/.exec(seed);return q?q[1]:null};const disp={"claude-haiku-4-5":"Haiku 4.5","claude-haiku-5-5":"Haiku 5.5"};
+const own=codeOf(m.seed),title=text.split("\n")[0],opening=text.slice(0,text.indexOf("## 1."));
+if(!own||!new RegExp("\\b"+own+"\\b","i").test(title))bad.push("title lacks the batch code "+own);
+for(const x of fm){const fc=codeOf(x.seed);if(fc&&fc!==own&&fc!=="p2-3"&&new RegExp("\\b"+fc+"\\b","i").test(title))bad.push("title names the batch "+fc);}
+if(!title.includes(disp[m.model]))bad.push("title lacks the model name "+disp[m.model]);
+for(const x of fm)if(x.model!==m.model&&title.includes(disp[x.model]))bad.push("title names "+disp[x.model]);
+if(!opening.includes(m.model))bad.push("opening paragraphs lack the model "+m.model);
+for(const x of fm)if(x.model!==m.model&&opening.includes(x.model))bad.push("opening names the model "+x.model);
 for(const x of [...fm.map((q)=>q.seed),"ptg-p2-3-order-2026-10-24"])if(x!==m.seed&&text.includes(x))bad.push("seed "+x+" of another batch");
 console.log(bad.length?bad.join("; "):"ok")' "$@"
 }
@@ -101,6 +109,9 @@ pr2bad() { rm -rf "$TEST_TMP/prereg-bad2"; cp -a "$P2" "$TEST_TMP/prereg-bad2"; 
 pr2bad '0,/Two earlier 4.5 batches/s//The cap of the first design was 18 USD; two earlier 4.5 batches/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad2" "$WRAP_SRC" "$P1" "$PR" "$PH")" ok "RED: the 18 USD cap of p2-3r put into the p2-3r2 PREREG is flagged"
 pr2bad 's/C arm 26 USD/C arm 18 USD/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad2" "$WRAP_SRC" "$P1" "$PR" "$PH")" ok "RED: the p2-3r cap sentence in the p2-3r2 PREREG is flagged"
 pr2bad 's/ptg-p2-3r2-order-2026-10-25/ptg-p2-3r-order-2026-10-25/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad2" "$WRAP_SRC" "$P1" "$PR" "$PH")" ok "RED: the p2-3r seed in the p2-3r2 PREREG is flagged"
+pr2bad '1s/.*/# P2-3-h55 batch preregistration - per-turn gate, hook ON against a concurrent control, Haiku 5.5 (BL-0055 phase 2)/'; assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad2" "$WRAP_SRC" "$P1" "$PR" "$PH")" ok "RED: the h55 title put into the p2-3r2 PREREG is flagged"
+rm -rf "$TEST_TMP/prereg-bad3"; cp -a "$PR" "$TEST_TMP/prereg-bad3"; sed -i '1s/Haiku 4.5/Haiku 5.5/' "$TEST_TMP/prereg-bad3/PREREG.md"
+assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad3" "$WRAP_SRC" "$P1" "$PH" "$P2")" ok "RED: Haiku 5.5 in the title of the p2-3r PREREG is flagged"
 rm -rf "$TEST_TMP/prereg-bad"; cp -a "$PR" "$TEST_TMP/prereg-bad"; sed -i 's/"wrapper": "./"wrapper": "0/' "$TEST_TMP/prereg-bad/manifest.json"
 assert_neq "$(prereg_in_step "$TEST_TMP/prereg-bad" "$WRAP_SRC" "$P1" "$PH")" ok "RED: a manifest with another wrapper hash is reported out of step"
 finalize_test

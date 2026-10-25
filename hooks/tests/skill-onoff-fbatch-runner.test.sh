@@ -3,7 +3,7 @@
 # bpack (and gdorm) are digest-frozen and have live results, so they never change. run-skill-onoff-eval-fbatch.sh /
 # run-skill-onoff-matrix-fbatch.sh are copies; the matrix adds ONOFF_SINGLE_REP (run only the campaign's rep, no hidden
 # retry of an earlier failed rep), the eval runner adds: ONOFF_MAX_BUDGET_USD (hard
-# per-cell spend cap handed to every `claude -p` as --max-budget-usd, turn 2 gets what turn 1 left, a budget stop is
+# per-cell spend cap handed to every `claude -p` as --max-budget-usd, turn 2 gets what turn 1 left (turn 1's cumulative session spend), a budget stop is
 # infra_fail/budget_exceeded; a turn without a trustworthy end cost = no further turn, cost_unknown:true) and ONOFF_CELL_TMPDIR=1 (the agent's TMPDIR is a dir inside the scratch HOME). Both opt-in.
 # The delta is pinned line for line: any other code difference, or an edit of these lines, is red. Negative control: a
 # mutant with one extra line, and a mutant that no longer passes the budget flag, are both red.
@@ -37,14 +37,25 @@ cat > "$TEST_TMP/delta.expected" << 'DELTA'
 +  BUDGET_USD="$ONOFF_MAX_BUDGET_USD"
 +fi
 +if [ "${ONOFF_CELL_TMPDIR:-0}" = 1 ]; then CELL_TMPDIR="$SCRATCH_HOME/tmp"; mkdir -p "$CELL_TMPDIR"; fi
-+turn_cost() { # $1 one turn's transcript -> its spend in USD, or "unknown" unless a result event carries a finite total_cost_usd >= 0
++turn_cost() { # $1 one turn's transcript -> its spend in USD, or "unknown" unless every result event carries a finite total_cost_usd >= 0
 +  node -e '
-+    let sum=0,n=0,bad=0;
++    const last=new Map();let n=0,bad=0;
 +    try{for(const l of require("fs").readFileSync(process.argv[1],"utf8").split("\n")){
 +      let j;try{j=JSON.parse(l)}catch{continue}
-+      if(j&&j.type==="result"){n++;if(typeof j.total_cost_usd==="number"&&Number.isFinite(j.total_cost_usd)&&j.total_cost_usd>=0)sum+=j.total_cost_usd;else bad++}
++      if(j&&j.type==="result"){n++;if(typeof j.total_cost_usd==="number"&&Number.isFinite(j.total_cost_usd)&&j.total_cost_usd>=0)last.set(typeof j.session_id==="string"?j.session_id:"",j.total_cost_usd);else bad++}
 +    }}catch{}
++    let sum=0;for(const v of last.values())sum+=v;
 +    process.stdout.write(n>0&&bad===0?sum.toFixed(6):"unknown");
++  ' "$1"
++}
++budget_stopped() { # $1 transcript -> exit 0 when a result event is the CLI budget stop: subtype error_max_budget_usd AND is_error true (measured CLI 2.1.309, 2026-10-26)
++  node -e '
++    let hit=false;
++    try{for(const l of require("fs").readFileSync(process.argv[1],"utf8").split("\n")){
++      let j;try{j=JSON.parse(l)}catch{continue}
++      if(j&&j.type==="result"&&j.subtype==="error_max_budget_usd"&&j.is_error===true)hit=true;
++    }}catch{}
++    process.exit(hit?0:1);
 +  ' "$1"
 +}
 -  local prompt="$1" dest="$2" turn_n="$3" resume="${4:-}"
@@ -68,7 +79,7 @@ cat > "$TEST_TMP/delta.expected" << 'DELTA'
 -        run_model_turn "$TURN2_PROMPT" "$TURN2_FILE" 2 "$SESSION_ID"
 +        run_model_turn "$TURN2_PROMPT" "$TURN2_FILE" 2 "$SESSION_ID" "$BUDGET_TURN2"
 +        [ -z "$BUDGET_USD" ] || [ "$(turn_cost "$TURN2_FILE")" != unknown ] || COST_UNKNOWN=1
-+elif [ "$BUDGET_EXHAUSTED" -eq 1 ] || { [ -n "$BUDGET_USD" ] && grep -Eq '"subtype": ?"error_max_budget' "$TRANSCRIPT"; }; then
++elif [ "$BUDGET_EXHAUSTED" -eq 1 ] || { [ -n "$BUDGET_USD" ] && budget_stopped "$TRANSCRIPT"; }; then
 +  failure_class='"infra_fail"'; failure_cause='"budget_exceeded"'
 +elif [ "$COST_UNKNOWN" -eq 1 ]; then
 +  failure_class='"infra_fail"'; failure_cause='"cost_unknown"'

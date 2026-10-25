@@ -6,6 +6,10 @@
 #   fb_snapshot_repo           name list of every path in the cell repo (except .git), taken before the agent starts
 #   fb_seed_home <home>        scratch HOME: a tmp/ dir (the cell TMPDIR) and the name list of HOME (except the CLI's own
 #                              .claude-config and .claude.json), taken before the agent starts
+#   fb_after_s                 prints `,"after_s":N` for a plan entry when FBATCH_LAND_AFTER_S (seconds, prereg cc.land_after_s,
+#                              handed over by the campaign) is a positive integer, else nothing
+#   fb_start_timer             starts the landing timer (scripts/_land.js timer) in the background when the plan has an after_s
+#                              entry; it lives in the runner's process group and exits with the runner / the cell (see _land.js)
 # fbatch/cell.js compares these lists with the same listing after the run: a new path whose name contains "findings"
 # makes the cell invalid.
 fb_state() {
@@ -37,4 +41,13 @@ fb_snapshot_repo() {
 fb_seed_home() {
   mkdir -p "$1/tmp" "$1/.fbatch-snap"
   (cd "$1" && find . -mindepth 1 \( -path ./.claude-config -o -path ./.claude.json -o -path ./.fbatch-snap \) -prune -o -print | sort) > "$1/.fbatch-snap/home.list"
+}
+fb_after_s() {
+  case "${FBATCH_LAND_AFTER_S:-}" in ''|0|*[!0-9]*) ;; *) printf ',"after_s":%s' "$FBATCH_LAND_AFTER_S" ;; esac
+}
+fb_start_timer() {
+  case "${FBATCH_LAND_AFTER_S:-}" in ''|0|*[!0-9]*) return 0 ;; esac
+  # no setsid: the timer stays in the process group of whoever built the fixture; $PPID = that builder (runner or test shell)
+  node scripts/_land.js timer --watch-pid "$PPID" > /dev/null 2>&1 < /dev/null &
+  disown 2> /dev/null || true
 }

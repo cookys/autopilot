@@ -14,9 +14,11 @@
  * and every arm runs in the SAME sandbox paths (recreated before each run), so the bytes are equal by construction.
  * The sandbox lives at ONE fixed absolute path (/tmp/ptc-fixed-sandbox, live dir /dev/shm/ptc-fixed-live), the same on
  * every host and in every arm and run, so the golden file stores the observers' real bytes: no placeholder, no
- * expansion. The kernel serialises runs that would share the path: the harness re-executes itself under flock(1) on one
- * fixed lock file (released by the kernel when the holder dies, SIGKILL included); the first thing a lock holder does is
- * delete whatever a previous holder may have left (sandbox, live dir, scratch).
+ * expansion. The kernel serialises runs that would share a path: each resource (sandbox, scratch, live dir) has its lock
+ * file NEXT TO IT (<parent>/.<name>.lock), so any two configurations that resolve to the same resource contend on the
+ * same lock; the harness re-executes itself under flock(1) on those three files in a fixed order (released by the kernel
+ * when the holder dies, SIGKILL included), in its own process group; the first thing a holder does is delete whatever a
+ * previous holder may have left.
  *
  * Modes:
  *   check [--chain DIR] [--no-orig] [--overlap-n N]   permanent test: cur == golden, chain == golden,
@@ -59,25 +61,18 @@ const freezeOn = !args.includes('--no-freeze');
 // ---------- early exit handling, lock, sandbox ----------
 function die(msg) { console.error('post-tool-chain-harness: ' + msg); process.exit(2); }
 
-// Fixed paths (the golden includes them). Test-only overrides, each of which moves its paths away from the real ones
-// (a golden compare then goes red, so none is usable for a real run): PTC_FIXED_PARENT (sandbox, scratch, live dir),
-// PTC_FIXED_SHM (live-dir parent, only under PTC_FIXED_PARENT), PTC_LOCK_FILE, PTC_LOCK_WAIT_SEC, PTC_TRACE_FILE (appends
-// 'start'/'end' lines with a monotonic clock while the lock is held).
+// Fixed paths (the golden includes them). Test-only knobs: PTC_FIXED_PARENT (moves sandbox, scratch AND live dir under
+// one parent; a golden compare then goes red, so it is unusable for a real run), PTC_LOCK_WAIT_SEC, PTC_TRACE_FILE
+// (appends 'start'/'end' lines with a monotonic clock while the locks are held), PTC_TEST_DELAY_AFTER_LOCK_MS (holder
+// sleeps that long right after it starts). There is no way to name a lock file or a separate live parent: the locks are
+// derived from the resolved resource paths, so two configurations that reach the same resource take the same lock.
 const FIXED_PARENT = process.env.PTC_FIXED_PARENT || '/tmp';
-// With PTC_FIXED_PARENT set, everything (sandbox, scratch, live dir) lives under it. PTC_FIXED_SHM may only name a place
-// UNDER that parent (the symlink control uses it), so no test configuration can make this harness touch the real
-// /dev/shm/ptc-fixed-live; without PTC_FIXED_PARENT the override is refused.
-let SHM_PARENT = process.env.PTC_FIXED_PARENT ? FIXED_PARENT : '/dev/shm';
-if (process.env.PTC_FIXED_SHM) {
-  if (!process.env.PTC_FIXED_PARENT) die('PTC_FIXED_SHM is only accepted together with PTC_FIXED_PARENT (and must lie under it)');
-  const rel = path.relative(FIXED_PARENT, process.env.PTC_FIXED_SHM);
-  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) die(`PTC_FIXED_SHM (${process.env.PTC_FIXED_SHM}) must lie under PTC_FIXED_PARENT (${FIXED_PARENT})`);
-  SHM_PARENT = process.env.PTC_FIXED_SHM;
-}
+const SHM_PARENT = process.env.PTC_FIXED_PARENT ? FIXED_PARENT : '/dev/shm';
 const SANDBOX_ROOT = path.join(FIXED_PARENT, 'ptc-fixed-sandbox');
 const SCRATCH_ROOT = path.join(FIXED_PARENT, 'ptc-fixed-scratch');
 const LIVE_ROOT = path.join(SHM_PARENT, 'ptc-fixed-live');
-const LOCK_FILE = process.env.PTC_LOCK_FILE || '/tmp/ptc-fixed-harness.lock';
+// parents are checked below to be their own realpath, so a lock path built from them is the resource's real neighbour
+const LOCKS = [SANDBOX_ROOT, SCRATCH_ROOT, LIVE_ROOT].map((r) => path.join(path.dirname(r), `.${path.basename(r)}.lock`));
 const LOCK_WAIT_SEC = Number(process.env.PTC_LOCK_WAIT_SEC || 900);
 const lockHeld = process.env.PTC_FLOCK_HELD === '1';
 
@@ -94,33 +89,38 @@ checkParent(FIXED_PARENT, 'sandbox and scratch parent');
 checkParent(SHM_PARENT, 'live-state parent');
 
 if (!lockHeld) {
-  // Re-run this very command under flock(1): kernel-held, released when the process dies. -E 75 marks "lock wait timed out".
+  // Re-run this very command under flock(1) on the three resource locks, in a fixed order (sandbox, scratch, live), so two
+  // runs can never wait on each other. flock(1) forks its command, so the whole chain is started in its OWN PROCESS GROUP
+  // and every signal we get goes to that group; we then wait for the group to be empty before exiting.
   const probe = spawnSync('flock', ['--version'], { encoding: 'utf8' });
-  if (probe.error || probe.status !== 0) die('flock(1) (util-linux) is required to serialise harness runs on the fixed sandbox path and was not found on PATH');
-  console.error(`post-tool-chain-harness: taking ${LOCK_FILE} (waits up to ${LOCK_WAIT_SEC} s if another run holds it)`);
-  const child = spawn('flock', ['-E', '75', '-w', String(LOCK_WAIT_SEC), LOCK_FILE, process.execPath, ...process.argv.slice(1)], {
-    stdio: 'inherit', env: Object.assign({}, process.env, { PTC_FLOCK_HELD: '1' }),
+  if (probe.error || probe.status !== 0) die('flock(1) (util-linux) is required to serialise harness runs on the fixed sandbox paths and was not found on PATH');
+  console.error(`post-tool-chain-harness: taking ${LOCKS.join(', ')} (waits up to ${LOCK_WAIT_SEC} s per lock if another run holds one)`);
+  const chain = [];
+  for (const lock of LOCKS) chain.push('flock', '-E', '75', '-w', String(LOCK_WAIT_SEC), lock);
+  chain.push(process.execPath, ...process.argv.slice(1));
+  const child = spawn(chain[0], chain.slice(1), {
+    stdio: 'inherit', detached: true, env: Object.assign({}, process.env, { PTC_FLOCK_HELD: '1' }),
   });
-  // flock(1) forks the command, so signalling flock alone would leave the real harness (the lock holder) running.
-  // Forward to flock's child when it exists (it cleans up and exits with 128+signal); if the lock is still being waited
-  // for there is no child and nothing was created, so the signal goes to flock itself.
-  const childrenOf = (pid) => {
-    try {
-      return fs.readdirSync('/proc').filter((n) => /^\d+$/.test(n)).filter((n) => {
-        try { return Number(fs.readFileSync(`/proc/${n}/stat`, 'utf8').replace(/^.*\) \S+ /, '').split(' ')[0]) === pid; } catch { return false; }
-      }).map(Number);
-    } catch { return []; }
-  };
-  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
-    process.on(sig, () => {
-      const kids = childrenOf(child.pid);
-      for (const k of kids.length ? kids : [child.pid]) { try { process.kill(k, sig); } catch { /* gone */ } }
-    });
+  let signalled = 0;
+  const NUM = { SIGHUP: 1, SIGINT: 2, SIGKILL: 9, SIGTERM: 15 };
+  for (const sig of ['SIGHUP', 'SIGINT', 'SIGTERM']) {
+    process.on(sig, () => { if (!signalled) signalled = NUM[sig]; try { process.kill(-child.pid, sig); } catch { /* group already gone */ } });
   }
-  child.on('close', (code, sig) => {
-    if (code === 75) die(`could not get ${LOCK_FILE} within ${LOCK_WAIT_SEC} s: another harness run holds the fixed sandbox`);
-    const num = { SIGHUP: 1, SIGINT: 2, SIGKILL: 9, SIGTERM: 15 };
-    process.exit(code === null ? 128 + (num[sig] || 15) : code);
+  child.on('close', (code, sigName) => {
+    // flock may be gone while the holder is still cleaning up: wait until nothing is left in the group
+    const t0 = Date.now();
+    const finish = () => {
+      if (code === 75 && !signalled) die(`could not get one of ${LOCKS.join(', ')} within ${LOCK_WAIT_SEC} s: another run holds that resource`);
+      process.exit(signalled ? 128 + signalled : code === null ? 128 + (NUM[sigName] || 15) : code);
+    };
+    const tick = () => {
+      let alive = true;
+      try { process.kill(-child.pid, 0); } catch { alive = false; }
+      if (!alive) return finish();
+      if (Date.now() - t0 > 30000) { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* gone */ } return setTimeout(finish, 300); }
+      return setTimeout(tick, 20);
+    };
+    tick();
   });
   child.on('error', (e) => die(`cannot start flock: ${e.message}`));
   // park: the child's exit ends us. (Top-level `return` is legal in a CommonJS module.)
@@ -128,22 +128,37 @@ if (!lockHeld) {
   return;
 }
 
-// ---- from here on this process owns the lock ----
-// Holding it means nobody else uses these paths: remove whatever a killed predecessor left.
+// ---- from here on this process was started by the flock chain ----
+if (process.env.PTC_TEST_DELAY_AFTER_LOCK_MS) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.PTC_TEST_DELAY_AFTER_LOCK_MS));
+// PTC_FLOCK_HELD is only a hint: prove the three locks really are held (a second non-blocking flock on each must be refused)
+function assertLocksHeld() {
+  for (const lock of LOCKS) {
+    const r = spawnSync('flock', ['-n', lock, 'true']);
+    if (r.status === 0) die(`PTC_FLOCK_HELD is set but ${lock} is not held; start the harness without it so it takes the locks itself`);
+  }
+}
+assertLocksHeld();
+// Holding the locks means nobody else uses these resources: remove whatever a killed predecessor left.
 const wipe = () => { for (const d of [SANDBOX_ROOT, SCRATCH_ROOT, LIVE_ROOT]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } } };
 wipe();
 fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
 process.on('exit', wipe);
-// Children the harness started asynchronously (overlap runs); a signal kills them before the wipe so none can recreate files.
+// Children the harness started asynchronously (overlap runs). On a signal they are killed and AWAITED (at most 5 s) before
+// the wipe, so none can write a file back after it.
 const liveChildren = new Set();
 const TRACE = process.env.PTC_TRACE_FILE;
 const trace = (what) => { if (TRACE) { try { fs.appendFileSync(TRACE, `${what} ${process.pid} ${process.hrtime.bigint()}\n`); } catch { /* tracing is best effort */ } } };
 trace('start');
 process.on('exit', () => trace('end'));
-// A signal now ends us through the normal exit path (wipe), with the conventional status 128+signal. Only the lock holder
-// gets here; a run still waiting for the lock has created nothing and its signal was forwarded to the waiting flock.
+let stopping = false;
 for (const [sig, n] of [['SIGHUP', 1], ['SIGINT', 2], ['SIGTERM', 15]]) {
-  process.on(sig, () => { for (const c of liveChildren) { try { c.kill('SIGKILL'); } catch { /* gone */ } } process.exit(128 + n); });
+  process.on(sig, () => {
+    if (stopping) return;
+    stopping = true;
+    const closes = [...liveChildren].map((c) => new Promise((res) => c.once('close', res)));
+    for (const c of liveChildren) { try { c.kill('SIGKILL'); } catch { /* gone */ } }
+    Promise.race([Promise.all(closes), new Promise((res) => setTimeout(res, 5000))]).then(() => process.exit(128 + n));
+  });
 }
 const BASE = SCRATCH_ROOT; // orig-tree scratch only; not part of any compared byte
 
@@ -592,12 +607,16 @@ async function runOverlap() {
 }
 
 // ---------- main ----------
+// The serial corpus is synchronous (spawnSync); a signal handler only runs when the event loop turns, so every fixture
+// starts with a turn. Without it a TERM waits for the whole corpus and the cleanup misses its window.
+const yieldToSignals = () => new Promise((res) => setImmediate(res));
+
 async function main() {
   const origDir = useOrig ? buildOrigTree() : null;
   if (mode === 'gen-golden') {
     if (!origDir) { console.error('gen-golden needs the pinned sha in this clone'); process.exit(2); }
     const golden = { source_ref: ORIG_REF, source_sha: spawnSync('git', ['-C', REPO, 'rev-parse', ORIG_REF], { encoding: 'utf8' }).stdout.trim(), fixtures: {} };
-    for (const fx of FIXTURES) golden.fixtures[fx.name] = toGolden(runFixture(fx, 'orig', origDir));
+    for (const fx of FIXTURES) { await yieldToSignals(); golden.fixtures[fx.name] = toGolden(runFixture(fx, 'orig', origDir)); }
     fs.mkdirSync(path.dirname(GOLDEN), { recursive: true });
     fs.writeFileSync(GOLDEN, JSON.stringify(golden, null, 1) + '\n');
     console.log(`golden written: ${GOLDEN} (${FIXTURES.length} fixtures, source ${golden.source_sha})`);
@@ -605,6 +624,7 @@ async function main() {
   }
   if (mode === 'serial-orig-vs-cur') {
     for (const fx of selected()) {
+      await yieldToSignals();
       const a = toGolden(runFixture(fx, 'orig', origDir));
       const b = toGolden(runFixture(fx, 'cur', origDir));
       if (JSON.stringify(a) !== JSON.stringify(b)) {
@@ -618,6 +638,7 @@ async function main() {
   } else if (!onlyOverlap) {
     const golden = JSON.parse(fs.readFileSync(GOLDEN, 'utf8'));
     for (const fx of selected()) {
+      await yieldToSignals();
       const want = golden.fixtures[fx.name];
       if (!want) { bad(`${fx.name}: missing from golden`); continue; }
       const arms = ['cur', 'chain', 'chain-rev'];

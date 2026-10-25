@@ -143,93 +143,123 @@ DC_OUT="$(HOME="$HOOK_HOME" node "$HT/hooks/tests/lib/post-tool-chain-harness.js
 [ "$DC_RC" -ne 0 ] || fail "negative control 'tool-counter regex broken' was NOT detected"
 assert_contains "$DC_OUT" "dead declaration" "broken counter regex is reported as a dead declaration"
 
-# --- fixed-sandbox plumbing. The harness serialises itself with flock(1) on one fixed lock file; these controls point
-# PTC_LOCK_FILE / PTC_FIXED_PARENT / PTC_FIXED_SHM at scratch locations so they never touch the real lock or paths.
+# --- fixed-sandbox plumbing. Each resource (sandbox, scratch, live dir) has its lock file next to it (<parent>/.<name>.lock);
+# the harness takes the three in a fixed order under flock(1), in its own process group. Controls use PTC_FIXED_PARENT
+# scratch dirs, except the two that must prove the REAL resources are protected, which run inside the real locks.
 HARNESS_Q=(node "$HARNESS" check --only-overlap --overlap-n 0)
+LOCK_NAMES=(.ptc-fixed-sandbox.lock .ptc-fixed-scratch.lock .ptc-fixed-live.lock)
 NP_OUT="$(PTC_FIXED_PARENT="$TEST_TMP/no-such-parent" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; NP_RC=$?
 assert_exit_code "$NP_RC" 2 "unusable sandbox parent exits 2"
 assert_contains "$NP_OUT" "missing or not writable" "unusable sandbox parent: explicit message"
 
-mkdir -p "$TEST_TMP/realdir" "$TEST_TMP/realdir2"; ln -s "$TEST_TMP/realdir" "$TEST_TMP/parentlink"; ln -s "$TEST_TMP/realdir2" "$TEST_TMP/realdir/shmlink"
-SY_OUT="$(PTC_LOCK_FILE="$TEST_TMP/lk-sy" PTC_FIXED_PARENT="$TEST_TMP/parentlink" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; SY_RC=$?
-assert_exit_code "$SY_RC" 2 "sandbox parent behind a symlink exits 2"
-assert_contains "$SY_OUT" "behind a symlink" "sandbox parent symlink: explicit message"
-SS_OUT="$(PTC_LOCK_FILE="$TEST_TMP/lk-sy" PTC_FIXED_PARENT="$TEST_TMP/realdir" PTC_FIXED_SHM="$TEST_TMP/realdir/shmlink" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; SS_RC=$?
-assert_exit_code "$SS_RC" 2 "live parent (under PTC_FIXED_PARENT) behind a symlink exits 2"
-assert_contains "$SS_OUT" "behind a symlink" "live parent symlink: explicit message"
-# PTC_FIXED_SHM cannot be used to leave PTC_FIXED_PARENT, nor on its own: both are refused before anything is touched
-SO_OUT="$(PTC_LOCK_FILE="$TEST_TMP/lk-sy" PTC_FIXED_PARENT="$TEST_TMP/realdir" PTC_FIXED_SHM="/dev/shm" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; SO_RC=$?
-assert_exit_code "$SO_RC" 2 "PTC_FIXED_SHM outside PTC_FIXED_PARENT exits 2"
-assert_contains "$SO_OUT" "must lie under PTC_FIXED_PARENT" "shm outside the parent: explicit message"
-SA_OUT="$(PTC_LOCK_FILE="$TEST_TMP/lk-sy" PTC_FIXED_SHM="$TEST_TMP/realdir" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; SA_RC=$?
-assert_exit_code "$SA_RC" 2 "PTC_FIXED_SHM without PTC_FIXED_PARENT exits 2"
-# ... and the real live dir keeps its sentinel when both are set to it (checked inside the real lock)
-REAL_LOCK=/tmp/ptc-fixed-harness.lock
-REAL_LIVE=/dev/shm/ptc-fixed-live
-BOTH_OUT="$(flock -w 600 "$REAL_LOCK" bash -c 'mkdir -p "$3" && echo x > "$3/sentinel"; PTC_LOCK_FILE="$4" PTC_FLOCK_HELD=1 PTC_FIXED_PARENT="$1" PTC_FIXED_SHM=/dev/shm node "$2" check --only-overlap --overlap-n 0 > /dev/null 2>&1; rc=$?; if [ -e "$3/sentinel" ]; then st=kept; else st=gone; fi; rm -f "$3/sentinel"; rmdir "$3" 2>/dev/null; echo "$rc $st"' _ "$TEST_TMP/realdir" "$HARNESS" "$REAL_LIVE" "$TEST_TMP/lk-sy" 2>&1 < /dev/null)"
-assert_contains "$BOTH_OUT" "2 kept" "both overrides set: refused, and the real live dir's sentinel is untouched"
+mkdir -p "$TEST_TMP/realdir"; ln -s "$TEST_TMP/realdir" "$TEST_TMP/parentlink"
+SY_OUT="$(PTC_FIXED_PARENT="$TEST_TMP/parentlink" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; SY_RC=$?
+assert_exit_code "$SY_RC" 2 "PTC_FIXED_PARENT behind a symlink exits 2"
+assert_contains "$SY_OUT" "behind a symlink" "parent symlink: explicit message"
 
 mkdir -p "$TEST_TMP/nopath"; ln -sf "$(command -v node)" "$TEST_TMP/nopath/node"
 NF_OUT="$(PATH="$TEST_TMP/nopath" HOME="$HOOK_HOME" "$TEST_TMP/nopath/node" "$HARNESS" check --only-overlap --overlap-n 0 2>&1 < /dev/null)"; NF_RC=$?
 assert_exit_code "$NF_RC" 2 "no flock on PATH exits 2"
 assert_contains "$NF_OUT" "flock(1)" "no flock: the message names it"
 
-# a second run waits for the first, and gives up with an explicit error when the wait runs out
-LK="$TEST_TMP/lk-wait"; mkdir -p "$TEST_TMP/fpw"
-setsid flock "$LK" sleep 8 > /dev/null 2>&1 < /dev/null & HOLDER=$!
-sleep 0.5
-W_OUT="$(PTC_LOCK_FILE="$LK" PTC_LOCK_WAIT_SEC=2 PTC_FIXED_PARENT="$TEST_TMP/fpw" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; W_RC=$?
-kill -- "-$HOLDER" 2>/dev/null; wait "$HOLDER" 2>/dev/null
-[ "$W_RC" -ne 0 ] || fail "second harness did not wait/give up while the lock was held"
-assert_contains "$W_OUT" "could not get" "lock wait timed out: explicit error"
-# ... and gets in as soon as the holder is gone
-W2_OUT="$(PTC_LOCK_FILE="$LK" PTC_LOCK_WAIT_SEC=5 PTC_FIXED_PARENT="$TEST_TMP/fpw" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; W2_RC=$?
-assert_exit_code "$W2_RC" 0 "lock free: the next run proceeds"
+# PTC_FLOCK_HELD is only a hint: claiming the locks without holding them is refused
+NH_OUT="$(PTC_FLOCK_HELD=1 PTC_FIXED_PARENT="$TEST_TMP/realdir" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; NH_RC=$?
+assert_exit_code "$NH_RC" 2 "PTC_FLOCK_HELD=1 without the locks exits 2"
+assert_contains "$NH_OUT" "is not held" "false lock claim: explicit message"
 
-# SIGKILL of a running harness: the kernel drops its lock, the next run takes over at once and leaves nothing behind
-LK2="$TEST_TMP/lk-kill"; FPK="$TEST_TMP/fpk"; mkdir -p "$FPK"
-setsid env PTC_LOCK_FILE="$LK2" PTC_FIXED_PARENT="$FPK" HOME="$HOOK_HOME" node "$HARNESS" check --overlap-n 30 > /dev/null 2>&1 < /dev/null &
+# lock follows the RESOURCE, not the configuration: with the real locks held (and sentinels in the real resources), a run
+# configured onto /dev/shm or /tmp must wait for the lock of the resource it resolves to (give up: exit 2), sentinels intact
+sentinel_probe() { # <harness js>: prints "<rc shm> <rc tmp> <sentinels kept|gone>"
+  local h="$1" r1 r2 st=kept
+  flock -w 600 /tmp/.ptc-fixed-sandbox.lock flock -w 600 /tmp/.ptc-fixed-scratch.lock flock -w 600 /dev/shm/.ptc-fixed-live.lock bash -c '
+    h="$1"
+    mkdir -p /dev/shm/ptc-fixed-live /tmp/ptc-fixed-sandbox /tmp/ptc-fixed-scratch
+    for d in /dev/shm/ptc-fixed-live /tmp/ptc-fixed-sandbox /tmp/ptc-fixed-scratch; do echo x > "$d/sentinel"; done
+    PTC_LOCK_WAIT_SEC=2 PTC_FIXED_PARENT=/dev/shm node "$h" check --only-overlap --overlap-n 0 > /dev/null 2>&1; r1=$?
+    PTC_LOCK_WAIT_SEC=2 PTC_FIXED_PARENT=/tmp node "$h" check --only-overlap --overlap-n 0 > /dev/null 2>&1; r2=$?
+    st=kept
+    for d in /dev/shm/ptc-fixed-live /tmp/ptc-fixed-sandbox /tmp/ptc-fixed-scratch; do [ -e "$d/sentinel" ] || st=gone; done
+    for d in /dev/shm/ptc-fixed-live /tmp/ptc-fixed-sandbox /tmp/ptc-fixed-scratch; do rm -f "$d/sentinel"; rmdir "$d" 2>/dev/null; done
+    echo "$r1 $r2 $st"' _ "$h" 2>/dev/null < /dev/null
+}
+SP_OUT="$(HOME="$HOOK_HOME" sentinel_probe "$HARNESS")"
+assert_eq "$SP_OUT" "2 2 kept" "real locks held: runs reconfigured onto /dev/shm and /tmp wait and give up, real resources untouched"
+mk_harness_tree lockbyconfig
+mutate_or_die "$HT/hooks/tests/lib/post-tool-chain-harness.js" 's#path.join(path.dirname(r), #path.join(process.env.HOME, #'
+SPM_OUT="$(HOME="$HOOK_HOME" sentinel_probe "$HT/hooks/tests/lib/post-tool-chain-harness.js")"
+[ "$SPM_OUT" != "2 2 kept" ] || fail "negative control 'lock derived from configuration, not from the resource' was NOT detected ($SPM_OUT)"
+
+# a second run waits for a held resource lock, gives up with an explicit error, and gets in once it is free
+FPW="$TEST_TMP/fpw"; mkdir -p "$FPW"
+setsid flock "$FPW/${LOCK_NAMES[1]}" sleep 8 > /dev/null 2>&1 < /dev/null & HOLDER=$!
+sleep 0.5
+W_OUT="$(PTC_LOCK_WAIT_SEC=2 PTC_FIXED_PARENT="$FPW" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; W_RC=$?
+kill -- "-$HOLDER" 2>/dev/null; wait "$HOLDER" 2>/dev/null
+assert_exit_code "$W_RC" 2 "a held resource lock: the run gives up with exit 2"
+assert_contains "$W_OUT" "could not get" "lock wait timed out: explicit error"
+W2_OUT="$(PTC_LOCK_WAIT_SEC=5 PTC_FIXED_PARENT="$FPW" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; W2_RC=$?
+assert_exit_code "$W2_RC" 0 "locks free: the next run proceeds"
+
+# SIGKILL of a running harness: the kernel drops its locks, the next run takes over at once and leaves nothing behind
+FPK="$TEST_TMP/fpk"; mkdir -p "$FPK"
+KTAG="killtag-$$-$RANDOM"
+setsid env PTC_FIXED_PARENT="$FPK" HOME="$HOOK_HOME" node "$HARNESS" check --overlap-n 30 --tag "$KTAG" > /dev/null 2>&1 < /dev/null &
 FIRST=$!
 for _ in $(seq 1 100); do [ -d "$FPK/ptc-fixed-sandbox/home" ] && break; sleep 0.2; done
 [ -d "$FPK/ptc-fixed-sandbox/home" ] || fail "first harness never created its sandbox"
-kill -9 -- "-$FIRST" 2>/dev/null; sleep 0.5
+# SIGKILL the whole tree (outer, flock chain, holder, their children): nothing gets a chance to clean up
+kill -9 -- "-$FIRST" 2>/dev/null
+for pg in $(ps -eo pgid,args | grep -e "[-]-tag $KTAG" | awk '{print $1}' | sort -u); do kill -9 -- "-$pg" 2>/dev/null; done
+sleep 0.5
 [ -d "$FPK/ptc-fixed-sandbox" ] || fail "the SIGKILLed harness left no residue, so the takeover cleanup is not exercised"
-K_OUT="$(PTC_LOCK_FILE="$LK2" PTC_LOCK_WAIT_SEC=5 PTC_FIXED_PARENT="$FPK" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; K_RC=$?
-assert_exit_code "$K_RC" 0 "after SIGKILL the next run takes the lock at once (5 s wait budget)"
+K_OUT="$(PTC_LOCK_WAIT_SEC=5 PTC_FIXED_PARENT="$FPK" HOME="$HOOK_HOME" "${HARNESS_Q[@]}" 2>&1 < /dev/null)"; K_RC=$?
+assert_exit_code "$K_RC" 0 "after SIGKILL the next run takes the locks at once (5 s wait budget)"
 for d in ptc-fixed-sandbox ptc-fixed-scratch ptc-fixed-live; do [ ! -e "$FPK/$d" ] || fail "residue left after takeover run: $FPK/$d"; done
 
-# a harness with its own PTC_FIXED_PARENT never touches the real live dir (sentinel kept), run inside the real lock
-REAL_LOCK=/tmp/ptc-fixed-harness.lock
-REAL_LIVE=/dev/shm/ptc-fixed-live
-ISO_OUT="$(flock -w 600 "$REAL_LOCK" bash -c 'mkdir -p "$3" && echo x > "$3/sentinel"; mkdir -p "$1"; PTC_FLOCK_HELD=1 PTC_FIXED_PARENT="$1" node "$2" check --only-overlap --overlap-n 1 > /dev/null 2>&1; rc=$?; if [ -e "$3/sentinel" ]; then st=kept; else st=gone; fi; rm -f "$3/sentinel"; rmdir "$3" 2>/dev/null; echo "$rc $st"' _ "$TEST_TMP/fpiso" "$HARNESS" "$REAL_LIVE" 2>&1 < /dev/null)"
-assert_contains "$ISO_OUT" "0 kept" "a harness under another PTC_FIXED_PARENT leaves the real live dir alone"
-
-# --- a signal sent ONLY to the outer harness pid reaches the process that holds the lock: it cleans up and the outer
-# exits with 128+signal (no process-group kill here; that would hide the bug)
-sig_probe() { # <harness js> <signal name> <dir>: prints "rc=<n> lockfree=<0|1> residue=<0|1>"; always reaps what is left
-  local h="$1" sig="$2" d="$3" pid rc lf=0 res=0 i
+# --- a signal sent ONLY to the outer harness pid reaches the whole lock chain: the holder (and its async children) end,
+# cleanup is complete the moment the outer exits, the locks are free, and the outer exits 128+signal ---
+sig_probe() { # <harness js> <signal> <dir> [pre-signal delay s] [extra env assignment]: "rc=<n> lockfree=<0|1> residue=<0|1> leftover=<n>"
+  local h="$1" sig="$2" d="$3" delay="${4:-}" extra="${5:-PTC_NOP=1}" pid rc lf=1 res=0 left x i tag="sigtag-$$-$RANDOM"
   rm -rf "$d"; mkdir -p "$d"
-  setsid env PTC_LOCK_FILE="$d/lk" PTC_FIXED_PARENT="$d" HOME="$HOOK_HOME" node "$h" check --overlap-n 30 > /dev/null 2>&1 < /dev/null &
+  setsid env "$extra" PTC_FIXED_PARENT="$d" HOME="$HOOK_HOME" node "$h" check --overlap-n 30 --tag "$tag" > /dev/null 2>&1 < /dev/null &
   pid=$!
-  for i in $(seq 1 100); do [ -d "$d/ptc-fixed-sandbox/home" ] && break; sleep 0.2; done
+  if [ -n "$delay" ]; then sleep "$delay"; else for i in $(seq 1 100); do [ -d "$d/ptc-fixed-sandbox/home" ] && break; sleep 0.2; done; fi
   kill "-$sig" "$pid" 2>/dev/null
-  for i in $(seq 1 100); do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
   wait "$pid" 2>/dev/null; rc=$?
-  sleep 1
-  flock -n "$d/lk" true && lf=1
+  # no sleep: everything must already be gone when the outer has exited
+  for x in "${LOCK_NAMES[@]}"; do flock -n "$d/$x" true || lf=0; done
   for x in ptc-fixed-sandbox ptc-fixed-scratch ptc-fixed-live; do [ -e "$d/$x" ] && res=1; done
-  kill -9 -- "-$pid" 2>/dev/null   # whatever survived (only a broken forwarder leaves anything)
-  echo "rc=$rc lockfree=$lf residue=$res"
+  left="$(ps -eo args | grep -c -e "[-]-tag $tag")"
+  # reap what a broken forwarder would leave behind
+  for x in $(ps -eo pgid,args | grep -e "[-]-tag $tag" | awk '{print $1}' | sort -u); do kill -9 -- "-$x" 2>/dev/null; done
+  echo "rc=$rc lockfree=$lf residue=$res leftover=$left"
 }
 for pair in TERM:143 INT:130 HUP:129; do
   sg="${pair%%:*}"; want="${pair##*:}"
   SP="$(sig_probe "$HARNESS" "$sg" "$TEST_TMP/sig-$sg")"
-  assert_eq "$SP" "rc=$want lockfree=1 residue=0" "SIG$sg to the outer pid only: holder cleaned up, lock free, outer exits $want"
+  assert_eq "$SP" "rc=$want lockfree=1 residue=0 leftover=0" "SIG$sg to the outer pid only: whole chain gone, no residue, locks free, exit $want"
+done
+# timing: the signal lands just after the holder started and while it sits before its own setup (test delay), and at
+# several moments around the flock chain's start-up
+SP="$(sig_probe "$HARNESS" TERM "$TEST_TMP/sig-early" 1.5 PTC_TEST_DELAY_AFTER_LOCK_MS=3000)"
+assert_eq "$SP" "rc=143 lockfree=1 residue=0 leftover=0" "SIGTERM while the holder has just started (before its own setup)"
+for dl in 0.08 0.15 0.25 0.4; do
+  SP="$(sig_probe "$HARNESS" TERM "$TEST_TMP/sig-t$dl" "$dl")"
+  assert_eq "$SP" "rc=143 lockfree=1 residue=0 leftover=0" "SIGTERM ${dl}s after launch (somewhere in the flock chain start-up): no orphan holder"
 done
 mk_harness_tree sigmut
-mutate_or_die "$HT/hooks/tests/lib/post-tool-chain-harness.js" 's/for (const k of kids.length ? kids : \[child.pid\])/for (const k of [child.pid])/'
+mutate_or_die "$HT/hooks/tests/lib/post-tool-chain-harness.js" 's/process.kill(-child.pid, sig)/process.kill(child.pid, sig)/'
 SPM="$(sig_probe "$HT/hooks/tests/lib/post-tool-chain-harness.js" TERM "$TEST_TMP/sig-mut")"
-[ "$SPM" != "rc=143 lockfree=1 residue=0" ] || fail "negative control 'signal sent to flock only' was NOT detected ($SPM)"
+[ "$SPM" != "rc=143 lockfree=1 residue=0 leftover=0" ] || fail "negative control 'signal sent to flock only' was NOT detected ($SPM)"
+# the holder waits for its async children before cleaning up: with the wait removed, residue can come back after the wipe
+mk_harness_tree nowaitkids
+mutate_or_die "$HT/hooks/tests/lib/post-tool-chain-harness.js" 's/Promise.race(\[Promise.all(closes), new Promise((res) => setTimeout(res, 5000))\]).then(() => process.exit(128 + n));/process.exit(128 + n);/'
+NWK_BAD=0
+for i in 1 2 3; do
+  SPK="$(sig_probe "$HT/hooks/tests/lib/post-tool-chain-harness.js" TERM "$TEST_TMP/sig-nwk$i")"
+  [ "$SPK" = "rc=143 lockfree=1 residue=0 leftover=0" ] || NWK_BAD=1
+done
+[ "$NWK_BAD" = 1 ] || echo "note: the no-wait-for-children mutant happened to leave no residue in 3 tries (race, not asserted)" >&2
 
 # --- two harnesses started at the same moment run one after the other, and both pass ---
 interval_check() { # <trace file>: "disjoint <n>" or "overlap <n>" (start/end lines: "<what> <pid> <monotonic ns>")
@@ -245,20 +275,21 @@ interval_check() { # <trace file>: "disjoint <n>" or "overlap <n>" (start/end li
 }
 TWO_ARGS=(check --only-overlap --overlap-n 2 --case two-failing-bash-same-session --no-orig)
 TR1="$TEST_TMP/trace1"; : > "$TR1"; mkdir -p "$TEST_TMP/fp2a"
-PTC_TRACE_FILE="$TR1" PTC_LOCK_FILE="$TEST_TMP/lk-two" PTC_FIXED_PARENT="$TEST_TMP/fp2a" HOME="$HOOK_HOME" node "$HARNESS" "${TWO_ARGS[@]}" > "$TEST_TMP/two-a.out" 2>&1 < /dev/null & TA=$!
-PTC_TRACE_FILE="$TR1" PTC_LOCK_FILE="$TEST_TMP/lk-two" PTC_FIXED_PARENT="$TEST_TMP/fp2a" HOME="$HOOK_HOME" node "$HARNESS" "${TWO_ARGS[@]}" > "$TEST_TMP/two-b.out" 2>&1 < /dev/null & TB=$!
+PTC_TRACE_FILE="$TR1" PTC_FIXED_PARENT="$TEST_TMP/fp2a" HOME="$HOOK_HOME" node "$HARNESS" "${TWO_ARGS[@]}" > "$TEST_TMP/two-a.out" 2>&1 < /dev/null & TA=$!
+PTC_TRACE_FILE="$TR1" PTC_FIXED_PARENT="$TEST_TMP/fp2a" HOME="$HOOK_HOME" node "$HARNESS" "${TWO_ARGS[@]}" > "$TEST_TMP/two-b.out" 2>&1 < /dev/null & TB=$!
 wait "$TA"; TA_RC=$?; wait "$TB"; TB_RC=$?
 assert_exit_code "$TA_RC" 0 "simultaneous harness A passes"
 assert_exit_code "$TB_RC" 0 "simultaneous harness B passes"
-assert_eq "$(interval_check "$TR1")" "disjoint 2" "two simultaneously started harnesses hold the lock in disjoint intervals"
-# the interval check can see overlap: the same two runs with the lock bypassed (separate parents so they do not corrupt each other)
+assert_eq "$(interval_check "$TR1")" "disjoint 2" "two simultaneously started harnesses hold the locks in disjoint intervals"
+# the interval check can see overlap: the same two runs with the locks bypassed (separate parents so they do not corrupt each other)
 mk_harness_tree nolock
 mutate_or_die "$HT/hooks/tests/lib/post-tool-chain-harness.js" "s/^const lockHeld = process.env.PTC_FLOCK_HELD === '1';/const lockHeld = true;/"
+mutate_or_die "$HT/hooks/tests/lib/post-tool-chain-harness.js" 's/^assertLocksHeld();/\/\/ lock check bypassed/'
 TR2="$TEST_TMP/trace2"; : > "$TR2"; mkdir -p "$TEST_TMP/fp2b" "$TEST_TMP/fp2c"
 PTC_TRACE_FILE="$TR2" PTC_FIXED_PARENT="$TEST_TMP/fp2b" HOME="$HOOK_HOME" node "$HT/hooks/tests/lib/post-tool-chain-harness.js" "${TWO_ARGS[@]}" > /dev/null 2>&1 < /dev/null & NA=$!
 PTC_TRACE_FILE="$TR2" PTC_FIXED_PARENT="$TEST_TMP/fp2c" HOME="$HOOK_HOME" node "$HT/hooks/tests/lib/post-tool-chain-harness.js" "${TWO_ARGS[@]}" > /dev/null 2>&1 < /dev/null & NB=$!
 wait "$NA"; wait "$NB"
-assert_eq "$(interval_check "$TR2")" "overlap 2" "negative control: with the lock bypassed the same two runs overlap and the interval check says so"
+assert_eq "$(interval_check "$TR2")" "overlap 2" "negative control: with the locks bypassed the same two runs overlap and the interval check says so"
 
 # --- negative control: dropping the umask pin makes a umask-077 caller red ---
 mk_harness_tree umask

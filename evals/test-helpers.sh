@@ -16,8 +16,19 @@ run_skill() {
         --dangerously-skip-permissions \
         --max-turns "$max_turns" \
         --output-format stream-json \
-        --verbose 2>/dev/null > "$outfile" || true
+        --verbose 2>"$outfile.err" > "$outfile" && local claude_rc=0 || claude_rc=$?
+    # BL-0294: an authentication failure of this call is flagged for the caller (run_skill runs in a $(...) subshell, so it cannot
+    # exit the test itself): <outfile>.authstop exists and the caller runs stop_if_auth_failed.
+    # shellcheck source=../scripts/lib/auth-stop.sh
+    . "$PLUGIN_DIR/scripts/lib/auth-stop.sh"
+    auth_stop_check "run_skill" --failed "$(( claude_rc != 0 ))" --failed-from-stream "$outfile" --log "$outfile" --stderr "$outfile.err" >&2 || : > "$outfile.authstop"
+    rm -f "$outfile.err"
     echo "$outfile"
+}
+
+# Exit 6 (STOP_AUTH) when the run_skill call that produced $1 died on authentication.
+stop_if_auth_failed() {
+    [ ! -e "$1.authstop" ] || exit 6
 }
 
 # Assert output file contains a pattern (regex)

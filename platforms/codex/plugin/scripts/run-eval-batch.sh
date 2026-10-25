@@ -137,38 +137,12 @@ else
   PLUGIN_ARGS=(--plugin-dir "$EMPTY_PLUGIN_DIR")
 fi
 
-# BL-0294: run_eval.py (an external plugin) sends claude's stderr to DEVNULL, drops its exit code, returns as soon as it sees a
-# type=result line and then SIGKILLs the child, and always writes a valid summary. An authentication failure therefore never
-# reaches this script through run_eval. The evidence is taken HERE, at the claude boundary, without changing the child's life cycle:
-# this wrapper still ENDS IN `exec claude`, so run_eval's kill hits claude itself (no orphan). The streams are mirrored by tee
-# processes that end on their own when claude closes its stdout / stderr. No exit code is needed: a record counts as failed when it has
-# no successful type=result line (killed early, unfinished, or exit 0 with only an auth message), and then an auth phrase decides.
-# Before EVERY claude start the earlier records of this skill are judged, so the second paid call of a skill never happens after the
-# first one died on authentication. No record dir (selftest) = the plain pass-through it always was.
-if [[ -z "${EVAL_CALL_RECORD_DIR:-}" ]]; then
-  exec "$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local "${PLUGIN_ARGS[@]}"
-fi
-D="$EVAL_CALL_RECORD_DIR"
-alive() {   # a live, non-zombie process
-  local st; st="$(sed -n 's/^[0-9]* (.*) \(.\) .*/\1/p' "/proc/$1/stat" 2>/dev/null)"
-  [ -n "$st" ] && [ "$st" != "Z" ]
-}
-if [ -e "$D/STOP" ]; then cat "$D/STOP" >&2; exit 6; fi
-for out in "$D"/*.out; do
-  [ -e "$out" ] || continue
-  base="${out%.out}"; name="$(basename "$base")"
-  [ -e "$base.ok" ] && continue
-  if alive "${name%%-*}" && ! grep -q '"type": *"result"' "$out" 2>/dev/null; then continue; fi   # still running: judged later
-  if node "$AUTH_STOP_JS" check --id "$name" --failed-from-stream "$out" --log "$out" --stderr "$base.err" < /dev/null 2> "$D/STOP.tmp"; then
-    : > "$base.ok"
-  else
-    mv "$D/STOP.tmp" "$D/STOP"; cat "$D/STOP" >&2; exit 6
-  fi
-done
-rec="$D/$$-$RANDOM"
-exec 2> >(tee "$rec.err" >&2)
-exec > >(tee "$rec.out")
-exec "$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local "${PLUGIN_ARGS[@]}"
+# BL-0294: run_eval.py (an external plugin) swallows claude's stderr and exit code, returns on the first type=result line and SIGKILLs
+# the child, so the evidence is captured here at the claude boundary by the shared wrapper tail (scripts/lib/claude-call-capture-exec.sh;
+# design in claude-call-capture.js). The tail ends in `exec claude`, keeps the kill semantics, and refuses to start a claude after an
+# earlier call died on authentication. No record dir (selftest) = the plain pass-through it always was.
+EXTRA_ARGS=("$@" --strict-mcp-config --setting-sources project,local "${PLUGIN_ARGS[@]}")
+. "$CLAUDE_CAPTURE_TAIL"
 EOF
 chmod +x "$WRAPPER_DIR/claude"
 
@@ -181,7 +155,8 @@ declare -F child_session_mint >/dev/null 2>&1 && child_session_mint eval-run
 # shellcheck source=lib/auth-stop.sh
 . "$_EVAL_SELF_DIR/lib/auth-stop.sh"
 
-export AUTH_STOP_JS="$_AUTH_STOP_JS"   # the PATH claude wrapper judges earlier records with it
+# shellcheck source=lib/claude-call-capture.sh
+. "$_EVAL_SELF_DIR/lib/claude-call-capture.sh"
 
 # Prepend WRAPPER_DIR to PATH
 export PATH="$WRAPPER_DIR:$PATH"
@@ -344,8 +319,7 @@ for skill in "${SKILLS[@]}"; do
   eval_rc=0
   before_cmds="$(ls "$CMD_DIR/${skill}-skill-"*.md 2>/dev/null | sort || true)"
   export ARM_PLUGIN_DIR="$SKILL_PATH"
-  export EVAL_CALL_RECORD_DIR="$RESULT_DIR/claude-calls"   # one .out/.err pair per claude call of THIS skill, plus a STOP marker
-  mkdir -p "$EVAL_CALL_RECORD_DIR"
+  claude_capture_begin "$RESULT_DIR/claude-calls"   # one record per claude call of THIS skill, plus a STOP marker
   $RUN_EVAL_CMD \
     --eval-set "$EVAL_FILE" \
     --skill-path "$SKILL_PATH" \
@@ -371,17 +345,11 @@ for skill in "${SKILLS[@]}"; do
   # per-call records judged below); text phrases only count for a failed call.
   eval_failed=0
   { [ "$eval_rc" -ne 0 ] || ! grep -q '"summary"' "$RESULT_DIR/eval-output.json" 2>/dev/null; } && eval_failed=1
-  # Every recorded claude call is judged on its own (failed = no successful stream-json result line, finished or not; the wrapper
-  # already refuses to start a claude once an earlier record died on authentication -- this is the second, independent check).
+  # Every recorded claude call is judged once its streams are closed (waits up to 10 s for stragglers; an unclosed one is judged as
+  # failed). The wrapper already refused to start a claude after an earlier record died on authentication -- this is the second,
+  # independent check, and it also covers the last in-flight calls.
   auth_hit=0
-  for outf in "$EVAL_CALL_RECORD_DIR"/*.out; do
-    [ -e "$outf" ] || continue
-    call_base="${outf%.out}"
-    auth_stop_check "$skill/$(basename "$call_base")" --failed-from-stream "$outf" --log "$outf" --stderr "$call_base.err" || { auth_hit=1; break; }
-  done
-  if [ "$auth_hit" -eq 0 ] && [ -e "$EVAL_CALL_RECORD_DIR/STOP" ]; then
-    cat "$EVAL_CALL_RECORD_DIR/STOP" >&2; auth_hit=1
-  fi
+  claude_capture_judge "$skill/" --final || auth_hit=1
   if [ "$auth_hit" -eq 0 ]; then
     auth_stop_check "$skill" --failed "$eval_failed" --stderr "$RESULT_DIR/eval-log.txt" --log "$RESULT_DIR/eval-output.json" || auth_hit=1
   fi

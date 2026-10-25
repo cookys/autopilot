@@ -17,7 +17,9 @@ mk_layout() {
   mkdir -p "$d/scripts/lib" "$d/evals/skill-transport/lib" "$d/evals/skill-transport/packs" "$d/evals/pipeline-bench" "$d/evals/context-budget-t2"
   cp "$SCRIPTS/run-eval-batch.sh" "$SCRIPTS/bench-engine-capability.sh" "$SCRIPTS/qualification-sweep.sh" \
      "$SCRIPTS/run-grok-implementer-ab.sh" "$SCRIPTS/benchmark-hook-latency.js" "$d/scripts/"
-  cp "$SCRIPTS/lib/auth-stop.js" "$SCRIPTS/lib/auth-stop.sh" "$SCRIPTS/lib/repo-identity.sh" "$d/scripts/lib/"
+  cp "$SCRIPTS/lib/auth-stop.js" "$SCRIPTS/lib/auth-stop.sh" "$SCRIPTS/lib/repo-identity.sh" \
+     "$SCRIPTS/lib/claude-call-capture.js" "$SCRIPTS/lib/claude-call-capture.sh" "$SCRIPTS/lib/claude-call-capture-exec.sh" "$d/scripts/lib/"
+  cp "$SCRIPTS/run-skill-opt.sh" "$d/scripts/"
   cp "$REPO_ROOT/evals/run-trigger-test.sh" "$d/evals/"
   cp "$REPO_ROOT/evals/skill-transport/run-matrix.sh" "$REPO_ROOT/evals/skill-transport/run-implementer-matrix.sh" "$REPO_ROOT/evals/skill-transport/match-eval.js" "$d/evals/skill-transport/"
   cp -r "$REPO_ROOT/evals/skill-transport/lib/." "$d/evals/skill-transport/lib/"
@@ -92,28 +94,22 @@ eb_run "$TEST_TMP/eb" exit0;    stop_case "run-eval-batch (exit 0, no summary, o
 eb_run "$TEST_TMP/eb" cross;    quote_case "run-eval-batch (call 1 ok quoting, calls 2-3 fail 429)" 3
 eb_run "$TEST_TMP/eb" quote;    quote_case "run-eval-batch" 3
 assert_eq "$RC" "0" "run-eval-batch: quote case exit code unchanged"
-# The REAL skill-creator run_eval.py cannot be changed or fetched here. This stand-in copies the behaviour of its run_single_query that
-# matters, as seen in the cv4/cv5 acceptance of BL-0294 (2026-10-25): Popen(claude -p ..., stdout=PIPE, stderr=DEVNULL); it returns as
-# soon as it reads a type=result line (or when its own timeout expires), then SIGKILLs the child; the exit code is never read; a valid
-# {"summary": ...} is always printed with exit 0; one skill may run several queries (here 2). The wrapper `claude` that
-# run-eval-batch.sh puts first on PATH is the only place the failure can still be seen.
-# STANDIN_TIMEOUT models the per-query timeout kill.
-procs_left() { # number of claude fakes / tee mirrors of this layout that are still alive after the batch
+# The REAL skill-creator run_eval.py / run_loop.py cannot be changed or fetched here. These stand-ins copy the behaviour that matters,
+# as seen in the cv4-cv6 acceptances of BL-0294 (2026-10-25): Popen(claude -p ..., stdout=PIPE, stderr=DEVNULL); return as soon as a
+# type=result line is read (optionally after STANDIN_GRACE seconds) or when the per-query timeout expires; then SIGKILL the child;
+# the exit code is never read; a valid {"summary": ...} is always printed with exit 0.
+procs_left() { # number of claude fakes / mirror processes of this layout still alive after the batch
   sleep 1
   local n=0 p
   for p in $(cat "$1/pids" 2>/dev/null); do [ -d "/proc/$p" ] && ! grep -q '^State:.*Z' "/proc/$p/status" 2>/dev/null && n=$((n + 1)); done
   n=$(( n + $(ps -eo args | awk -v pat="$1/skill-creator-workspace" '$1 != "awk" && index($0, pat) > 0' | wc -l) ))
   echo "$n"
 }
-ebw_run() {
-  local L="$1" mode="$2" H="$1/home"
-  rm -rf "$H" "$L/skills" "$L/skill-creator-workspace" "$L/calls" "$L/fb" "$L/pids"; : > "$L/calls"; : > "$L/pids"; mkdir -p "$L/fb"
-  mkdir -p "$H/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator" "$L/tmp"
-  for sk in alpha beta gamma; do
-    mkdir -p "$L/skills/$sk" "$L/skill-creator-workspace/evals"; : > "$L/skill-creator-workspace/evals/$sk-evals.json"
-  done
-  cat > "$L/standin_run_eval.py" <<'EOS'
-import json, os, selectors, subprocess, sys, time
+kill_grandchildren() { for p in $(cat "$1/pids2" 2>/dev/null); do kill -9 "$p" 2>/dev/null; done; for p in $(cat "$1/pids" 2>/dev/null); do kill -9 "$p" 2>/dev/null; done; }
+write_standins() {
+  local L="$1"
+  cat > "$L/standin_common.py" <<'EOS'
+import json, os, selectors, subprocess, threading, time
 
 def run_one():
     p = subprocess.Popen(["claude", "-p", "a query", "--output-format", "stream-json"],
@@ -130,17 +126,47 @@ def run_one():
             break
         try:
             if json.loads(line).get("type") == "result":
+                time.sleep(float(os.environ.get("STANDIN_GRACE", "0")))
                 break
         except ValueError:
             pass
     p.kill()   # SIGKILL, like run_eval's finally
     p.wait()
 
+def summary():
+    print(json.dumps({"summary": {"passed": 0, "total": 1}, "results": []}))
+EOS
+  cat > "$L/standin_run_eval.py" <<'EOS'
+import sys
+from standin_common import run_one, summary
 for _ in range(2):
     run_one()
-print(json.dumps({"summary": {"passed": 0, "total": 1}, "results": []}))
-sys.exit(0)
+summary(); sys.exit(0)
 EOS
+  # boundary probe: query 1 and 2 overlap (parallel workers), query 3 starts after both were killed
+  cat > "$L/standin_probe.py" <<'EOS'
+import sys, threading, time
+from standin_common import run_one, summary
+t1 = threading.Thread(target=run_one); t1.start()
+time.sleep(0.2)
+t2 = threading.Thread(target=run_one); t2.start()
+t1.join(); t2.join()
+run_one()
+summary(); sys.exit(0)
+EOS
+  # run_loop: 3 iterations x 3 parallel queries
+  cat > "$L/standin_loop.py" <<'EOS'
+import sys, threading
+from standin_common import run_one, summary
+for _ in range(3):
+    ts = [threading.Thread(target=run_one) for _ in range(3)]
+    [t.start() for t in ts]; [t.join() for t in ts]
+summary(); sys.exit(0)
+EOS
+}
+write_fake_claude() {
+  local L="$1"
+  mkdir -p "$L/fb"
   cat > "$L/fb/claude" <<'EOS'
 #!/usr/bin/env bash
 echo call >> "${FAKE_CALLS:?}"
@@ -148,6 +174,11 @@ echo $$ >> "${FAKE_PIDS:?}"
 n="$(wc -l < "$FAKE_CALLS" | tr -d " ")"
 case "${FAKE_MODE}" in
   wrap-auth) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Invalid API key · Please run /login"}'; echo "Authentication error" >&2; exec sleep 60 ;;
+  wrap-late) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"boom"}'; sleep 1.0; echo "Authentication error" >&2; exec sleep 60 ;;
+  wrap-late1) if [ "$n" = 1 ]; then echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"boom"}'; sleep 1.0; echo "Authentication error" >&2; exec sleep 60; fi
+              echo '{"type":"result","subtype":"success","is_error":false,"result":"fine"}'; exec sleep 60 ;;
+  wrap-grandchild) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Invalid API key · Please run /login"}'
+                   sleep 60 & echo $! >> "${FAKE_PIDS2:?}"; exec sleep 60 ;;
   wrap-exit0) echo "Please log in to continue."; exit 0 ;;
   wrap-quote) echo '{"type":"result","subtype":"success","is_error":false,"result":"the docs quote: Invalid API key"}'; exec sleep 60 ;;
   wrap-cross) if [ "$n" = 1 ]; then echo '{"type":"result","subtype":"success","is_error":false,"result":"Invalid API key quoted"}'; exec sleep 60; fi
@@ -156,13 +187,22 @@ case "${FAKE_MODE}" in
 esac
 EOS
   chmod +x "$L/fb/claude"
-  OUT="$("${ENVX[@]}" HOME="$H" TMPDIR="$L/tmp" PATH="$L/fb:$PATH" FAKE_CALLS="$L/calls" FAKE_PIDS="$L/pids" FAKE_MODE="$mode" \
-    STANDIN_TIMEOUT="$([ "$mode" = wrap-hang ] && echo 0.5 || echo 20)" RUN_EVAL_CMD="python3 $L/standin_run_eval.py" \
+}
+ebw_run() {   # <layout> <mode> [standin file] [grace seconds]
+  local L="$1" mode="$2" H="$1/home" standin="${3:-standin_run_eval.py}" grace="${4:-0}"
+  rm -rf "$H" "$L/skills" "$L/skill-creator-workspace" "$L/calls" "$L/fb" "$L/pids" "$L/pids2"; : > "$L/calls"; : > "$L/pids"; : > "$L/pids2"
+  mkdir -p "$H/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator" "$L/tmp"
+  for sk in alpha beta gamma; do
+    mkdir -p "$L/skills/$sk" "$L/skill-creator-workspace/evals"; : > "$L/skill-creator-workspace/evals/$sk-evals.json"
+  done
+  write_standins "$L"; write_fake_claude "$L"
+  OUT="$(cd "$L" && "${ENVX[@]}" HOME="$H" TMPDIR="$L/tmp" PATH="$L/fb:$PATH" PYTHONPATH="$L" FAKE_CALLS="$L/calls" FAKE_PIDS="$L/pids" FAKE_PIDS2="$L/pids2" FAKE_MODE="$mode" \
+    STANDIN_GRACE="$grace" STANDIN_TIMEOUT="$([ "$mode" = wrap-hang ] && echo 0.5 || echo 20)" RUN_EVAL_CMD="python3 $L/$standin" \
     bash "$L/scripts/run-eval-batch.sh" < /dev/null 2>&1)"
   RC=$?; CALLS="$(count "$L/calls")"; LEFT="$(procs_left "$L")"
 }
 ebw_run "$TEST_TMP/eb" wrap-auth;  stop_case "run-eval-batch (run_eval returns on the result line and SIGKILLs: json is_error + stderr)" 1 "alpha/"
-assert_eq "$LEFT" "0" "run-eval-batch: no claude / tee process is left behind after run_eval killed claude (exec life cycle kept)"
+assert_eq "$LEFT" "0" "run-eval-batch: no claude / mirror process is left behind after run_eval killed claude (exec life cycle kept)"
 ebw_run "$TEST_TMP/eb" wrap-exit0; stop_case "run-eval-batch (exit 0, only an auth message, no result line)" 1 "alpha/"
 assert_eq "$LEFT" "0" "run-eval-batch: nothing left behind (exit 0 case)"
 ebw_run "$TEST_TMP/eb" wrap-quote; quote_case "run-eval-batch (wrapper: successful calls quoting a phrase)" 6
@@ -171,29 +211,47 @@ assert_eq "$LEFT" "0" "run-eval-batch: nothing left behind (quote case)"
 ebw_run "$TEST_TMP/eb" wrap-cross; quote_case "run-eval-batch (wrapper: call 1 ok quoting, later calls fail with 429)" 6
 ebw_run "$TEST_TMP/eb" wrap-hang;  quote_case "run-eval-batch (wrapper: per-query timeout kill, no auth message)" 6
 assert_eq "$LEFT" "0" "run-eval-batch: a timeout-killed claude leaves nothing behind"
+# (a) boundary probe: the failed result line arrives first, the authentication stderr 0.4 s later, the process stays alive until the
+# caller kills it; query 2 overlaps query 1 (parallel worker); query 3 starts after both are dead and MUST be refused.
+ebw_run "$TEST_TMP/eb" wrap-late1 standin_probe.py 1.6
+stop_case "run-eval-batch (boundary probe: failed result first, authentication stderr later)" 2 "alpha/"
+assert_eq "$LEFT" "0" "run-eval-batch: nothing left behind (boundary probe)"
+# (b) claude is SIGKILLed while its own child still holds stdout / stderr: the mirrors must still finish
+ebw_run "$TEST_TMP/eb" wrap-grandchild
+assert_eq "$RC" "6" "run-eval-batch: stop with a grandchild holding the pipes"
+assert_eq "$LEFT" "0" "run-eval-batch: mirrors end although a grandchild of claude still holds the pipes (no process left but the grandchild itself)"
+kill_grandchildren "$TEST_TMP/eb"
 eb_run "$TEST_TMP/eb" generic
 assert_eq "$CALLS" "3" "run-eval-batch: a generic failure does not stop the batch"
 assert_eq "$RC" "0" "run-eval-batch: a generic failure keeps the original exit code 0"
 mk_layout "$TEST_TMP/eb-mut" mutant
 eb_run "$TEST_TMP/eb-mut" auth; mutant_red "run-eval-batch" 1
-# negative control 1: no boundary check before a claude start -> the second paid call of the same skill happens
+# negative controls on the shared capture lib (the layout copies are mutated, the real files are not)
+# 1. no boundary check before a claude start -> the second paid call of the same skill happens
 mk_layout "$TEST_TMP/ebw-mut"
-grep -q '^for out in "\$D"/\*.out; do' "$TEST_TMP/ebw-mut/scripts/run-eval-batch.sh" || fail "boundary mutation anchor missing"
-sed -i 's|^for out in "\$D"/\*.out; do|for out in ; do|' "$TEST_TMP/ebw-mut/scripts/run-eval-batch.sh"
+grep -q 'judge --dir "\$EVAL_CALL_RECORD_DIR"' "$TEST_TMP/ebw-mut/scripts/lib/claude-call-capture-exec.sh" || fail "boundary mutation anchor missing"
+sed -i '/judge --dir "\$EVAL_CALL_RECORD_DIR"/d' "$TEST_TMP/ebw-mut/scripts/lib/claude-call-capture-exec.sh"
 ebw_run "$TEST_TMP/ebw-mut" wrap-auth
 if [ "$CALLS" -le 1 ]; then fail "run-eval-batch: boundary check removed but only $CALLS claude call happened -- negative control broken"; fi
 echo "MUTANT-RED run-eval-batch (boundary check removed): claude calls=$CALLS (a second paid call of the same skill happened; the outer check still ends with rc=$RC)"
-# negative control 2: wrapper back to a non-exec pipeline -> run_eval's SIGKILL leaves claude / tee behind
+kill_grandchildren "$TEST_TMP/ebw-mut"
+# 2. the mirror back to tee, with a grandchild holding the pipes -> the tee survives (orphan)
 mk_layout "$TEST_TMP/ebw-mut2"
-grep -q '^exec "\$REAL_CLAUDE"' "$TEST_TMP/ebw-mut2/scripts/run-eval-batch.sh" || fail "pipeline mutation anchor missing"
-sed -i 's#^exec "\$REAL_CLAUDE" "\$@" --strict-mcp-config --setting-sources project,local "\${PLUGIN_ARGS\[@\]}"$#"$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local "${PLUGIN_ARGS[@]}" 2>\&1 | tee "$rec.out"#' "$TEST_TMP/ebw-mut2/scripts/run-eval-batch.sh"
-ebw_run "$TEST_TMP/ebw-mut2" wrap-auth
-if [ "$LEFT" = 0 ]; then fail "run-eval-batch: pipeline wrapper left no orphan -- negative control broken"; fi
-echo "MUTANT-RED run-eval-batch (non-exec pipeline wrapper): $LEFT claude/tee process(es) left behind after run_eval's SIGKILL"
-pkill_left() { for p in $(cat "$1/pids" 2>/dev/null); do kill -9 "$p" 2>/dev/null; done; }
-pkill_left "$TEST_TMP/ebw-mut2"; pkill_left "$TEST_TMP/ebw-mut"
+grep -q 'mirror --pid' "$TEST_TMP/ebw-mut2/scripts/lib/claude-call-capture-exec.sh" || fail "tee mutation anchor missing"
+sed -i 's#>(node "\$CLAUDE_CAPTURE_JS" mirror --pid "\$\$" --rec "\$_rec.err" --fd 2)#>(tee "$_rec.err" >\&2)#; s#>(node "\$CLAUDE_CAPTURE_JS" mirror --pid "\$\$" --rec "\$_rec.out" --fd 1)#>(tee "$_rec.out")#' "$TEST_TMP/ebw-mut2/scripts/lib/claude-call-capture-exec.sh"
+ebw_run "$TEST_TMP/ebw-mut2" wrap-grandchild
+if [ "$LEFT" = 0 ]; then fail "run-eval-batch: tee mirrors left no orphan -- negative control broken"; fi
+echo "MUTANT-RED run-eval-batch (mirror back to tee): $LEFT process(es) left behind after claude was killed while a grandchild held the pipes"
+kill_grandchildren "$TEST_TMP/ebw-mut2"; sleep 1
+# 3. judging ignores the closed markers (judge a live record, cache it as clean) -> the boundary probe is missed
+mk_layout "$TEST_TMP/ebw-mut3"
+grep -q 'BOUNDARY-SKIP-OPEN' "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" || fail "closed-marker mutation anchor missing"
+sed -i '/BOUNDARY-SKIP-OPEN/d; s/Date.now() + 3000/Date.now()/; s/if (closed) fs.writeFileSync/if (true) fs.writeFileSync/' "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js"
+ebw_run "$TEST_TMP/ebw-mut3" wrap-late1 standin_probe.py 1.6
+if [ "$CALLS" -le 2 ]; then fail "run-eval-batch: judging a live record did not let query 3 through (calls=$CALLS) -- negative control broken"; fi
+echo "MUTANT-RED run-eval-batch (closed markers ignored): claude calls=$CALLS (the probe's third query was paid)"
+kill_grandchildren "$TEST_TMP/ebw-mut3"
 
-mk_layout "$TEST_TMP/bc"
 # ============================ 2. scripts/bench-engine-capability.sh (one dispatch per case) ============================
 # outputs of a paid call: dispatch stdout+stderr (captured together) and the agent_log it names
 bc_run() {
@@ -660,5 +718,84 @@ assert_neq "$RC" "6" "benchmark-hook-latency: a generic failure does not exit 6"
 if [ "$CALLS" -le 1 ]; then fail "benchmark-hook-latency: a generic failure must keep sampling (calls=$CALLS) -- $OUT"; fi
 assert_eq "$RC" "4" "benchmark-hook-latency: a generic failure keeps its original exit code 4 (refused conclusion)"
 mk_layout "$TEST_TMP/bh-mut" mutant; bh_run "$TEST_TMP/bh-mut" auth; mutant_red "benchmark-hook-latency" 1
+
+# ============================ 11. scripts/run-skill-opt.sh (external run_loop -> run_eval, 3 iterations x parallel queries) ============================
+# The external skill-creator (run_loop.py / run_eval.py / improve_description.py) is replaced by a minimal package with the behaviour that
+# matters (see the stand-in notes in section 1): 3 iterations, each starting 3 parallel `claude -p` queries, the child killed on the
+# first result line, exit codes never read. The anthropic SDK is stubbed. HOME is a throwaway dir with fake credentials.
+so_run() {   # <layout> <mode>
+  local L="$1" mode="$2" H="$1/home" SC
+  rm -rf "$H" "$L/skills" "$L/skill-creator-workspace" "$L/calls" "$L/fb" "$L/pids" "$L/pids2"; : > "$L/calls"; : > "$L/pids"; : > "$L/pids2"
+  SC="$H/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
+  mkdir -p "$SC/scripts" "$L/skills/alpha" "$L/skill-creator-workspace/evals" "$L/tmp"
+  : > "$L/skill-creator-workspace/evals/alpha-evals.json"
+  node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({claudeAiOauth:{accessToken:"tok",expiresAt:Date.now()+36e5*5}}))' "$H/.claude/.credentials.json"
+  write_standins "$L"; write_fake_claude "$L"
+  : > "$SC/scripts/__init__.py"
+  printf 'def improve_description(*a, **k):\n    return ""\n' > "$SC/scripts/improve_description.py"
+  printf 'import sys\nclass Anthropic:\n    def __init__(self, **k): pass\n' > "$SC/anthropic.py"
+  cat > "$SC/scripts/run_loop.py" <<EOS
+import sys
+sys.path.insert(0, "$L")
+from scripts.improve_description import improve_description
+import runpy
+def main():
+    runpy.run_path("$L/standin_loop.py", run_name="__main__")
+EOS
+  OUT="$("${ENVX[@]}" HOME="$H" TMPDIR="$L/tmp" PATH="$L/fb:$PATH" FAKE_CALLS="$L/calls" FAKE_PIDS="$L/pids" FAKE_PIDS2="$L/pids2" FAKE_MODE="$mode" \
+    bash "$L/scripts/run-skill-opt.sh" alpha < /dev/null 2>&1)"
+  RC=$?; CALLS="$(count "$L/calls")"; LEFT="$(procs_left "$L")"
+}
+mk_layout "$TEST_TMP/so"
+so_run "$TEST_TMP/so" wrap-auth
+assert_eq "$RC" "6" "run-skill-opt: the real-run_eval-like loop dies on authentication -> exit 6"
+if [ "$CALLS" -lt 1 ] || [ "$CALLS" -gt 3 ]; then fail "run-skill-opt: at most the 3 queries already in flight may be paid, none of iterations 2 and 3 (calls=$CALLS) -- $OUT"; fi
+assert_contains "$OUT" "STOP_AUTH after " "run-skill-opt: stop line"
+assert_eq "$LEFT" "0" "run-skill-opt: nothing left behind"
+so_run "$TEST_TMP/so" wrap-quote
+assert_neq "$RC" "6" "run-skill-opt: successful calls quoting an auth phrase do not stop"
+assert_eq "$CALLS" "9" "run-skill-opt: all 3 iterations x 3 queries run when nothing failed"
+so_run "$TEST_TMP/so" wrap-cross
+assert_neq "$RC" "6" "run-skill-opt: a 429 failure after a quoting success is not an auth stop"
+# negative control: no capture wiring in the script (no record dir) -> all 9 paid calls happen and nothing stops
+mk_layout "$TEST_TMP/so-mut"
+grep -q '^claude_capture_begin ' "$TEST_TMP/so-mut/scripts/run-skill-opt.sh" || fail "run-skill-opt mutation anchor missing"
+sed -i 's/^claude_capture_begin .*$/export EVAL_CALL_RECORD_DIR=/' "$TEST_TMP/so-mut/scripts/run-skill-opt.sh"
+so_run "$TEST_TMP/so-mut" wrap-auth
+if [ "$CALLS" -le 3 ]; then fail "run-skill-opt: wiring removed but only $CALLS calls -- negative control broken (rc=$RC)"; fi
+echo "MUTANT-RED run-skill-opt (capture wiring removed): rc=$RC calls=$CALLS (every iteration paid)"
+kill_grandchildren "$TEST_TMP/so-mut"
+
+# ============================ 12. evals/test-behavior.sh (three run_skill claude -p calls) ============================
+tb_run() {
+  local L="$1" mode="$2"
+  rm -rf "$L/calls" "$L/fb"; : > "$L/calls"; mkdir -p "$L/fb" "$L/home"
+  cat > "$L/fb/claude" <<'EOS'
+#!/usr/bin/env bash
+echo call >> "${FAKE_CALLS:?}"
+case "${FAKE_MODE}" in
+  auth) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Invalid API key · Please run /login"}'; exit 1 ;;
+  exit0) echo "Please log in to continue."; exit 0 ;;
+  quote) echo '{"type":"result","subtype":"success","is_error":false,"result":"verify branch test: the docs quote Invalid API key"}'; exit 0 ;;
+  *) echo "API Error: 429 rate limit" >&2; exit 1 ;;
+esac
+EOS
+  chmod +x "$L/fb/claude"
+  OUT="$("${ENVX[@]}" HOME="$L/home" PATH="$L/fb:$PATH" AUTOPILOT_EVAL_INTEGRATION=1 FAKE_CALLS="$L/calls" FAKE_MODE="$mode" \
+    bash "$L/evals/test-behavior.sh" < /dev/null 2>&1)"
+  RC=$?; CALLS="$(count "$L/calls")"
+}
+mk_layout "$TEST_TMP/tb"; cp "$REPO_ROOT/evals/test-helpers.sh" "$REPO_ROOT/evals/test-behavior.sh" "$TEST_TMP/tb/evals/"
+tb_run "$TEST_TMP/tb" auth;  stop_case "test-behavior (json is_error)" 1 "run_skill:"
+tb_run "$TEST_TMP/tb" exit0; stop_case "test-behavior (exit 0, only an auth message)" 1 "run_skill:"
+tb_run "$TEST_TMP/tb" quote
+assert_neq "$RC" "6" "test-behavior: a successful call quoting a phrase does not stop"
+assert_eq "$CALLS" "3" "test-behavior: all three calls run"
+tb_run "$TEST_TMP/tb" generic
+assert_neq "$RC" "6" "test-behavior: a 429 failure is not an auth stop"
+assert_eq "$CALLS" "3" "test-behavior: every call still runs after a 429 failure"
+mk_layout "$TEST_TMP/tb-mut"; cp "$REPO_ROOT/evals/test-helpers.sh" "$REPO_ROOT/evals/test-behavior.sh" "$TEST_TMP/tb-mut/evals/"
+sed -i 's/^stop_if_auth_failed .*$//; s/auth_stop_check /:  /' "$TEST_TMP/tb-mut/evals/test-behavior.sh" "$TEST_TMP/tb-mut/evals/test-helpers.sh"
+tb_run "$TEST_TMP/tb-mut" auth; mutant_red "test-behavior" 1
 
 finalize_test

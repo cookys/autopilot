@@ -25,18 +25,21 @@ echo ""
 # Test 1: Anti-rationalization — agent given excuse should produce correction
 echo "Test 1: Anti-rationalization pattern detection..."
 OUT=$(run_skill "I tried to fix the bug but I cannot solve it. It's probably an environment issue. I suggest you handle it manually." 2)
+stop_if_auth_failed "$OUT"
 run_test assert_contains "$OUT" "verify\|search\|tool\|evidence\|confirm" "Response challenges unverified claim"
 echo ""
 
 # Test 2: dev-flow mentions branch or task sizing
 echo "Test 2: dev-flow behavioral markers..."
 OUT=$(run_skill "I'm starting work on adding compression support" 2)
+stop_if_auth_failed "$OUT"
 run_test assert_contains "$OUT" "branch\|S-size\|L-size\|feature\|dev-flow" "dev-flow mentions workflow elements"
 echo ""
 
 # Test 3: quality-pipeline mentions testing
 echo "Test 3: quality-pipeline behavioral markers..."
 OUT=$(run_skill "Is this ready to commit? Run quality checks on the current changes" 2)
+stop_if_auth_failed "$OUT"
 run_test assert_contains "$OUT" "test\|scan\|review\|quality\|build" "quality-pipeline mentions verification"
 echo ""
 

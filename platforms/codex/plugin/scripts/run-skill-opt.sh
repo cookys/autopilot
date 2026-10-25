@@ -6,6 +6,9 @@
 # but improve_description uses the SDK directly (Haiku only). We monkey-patch
 # improve_description to force Haiku regardless of --model.
 #
+# Exit codes: the run_loop exit code, or 6 = STOP_AUTH (a claude call died on authentication; later calls are refused at the wrapper,
+# BL-0294, scripts/lib/claude-call-capture.js).
+#
 # Usage: ./scripts/run-skill-opt.sh <skill-name>
 # Example: ./scripts/run-skill-opt.sh dev-flow
 
@@ -92,12 +95,22 @@ for dir in "${ADDR[@]}"; do
   if [[ ! "$dir" -ef "$WRAPPER_DIR" && -x "$dir/claude" ]]; then REAL_CLAUDE="$dir/claude"; break; fi
 done
 if [[ -z "$REAL_CLAUDE" ]]; then echo "[wrapper] claude not found on PATH (excluding wrapper)" >&2; exit 127; fi
-exec "$REAL_CLAUDE" "$@" --strict-mcp-config
+# BL-0294: shared capture tail -- records every call, refuses to start a claude after an earlier call died on authentication,
+# and still ends in `exec claude` (the external run_eval's SIGKILL hits claude itself).
+EXTRA_ARGS=("$@" --strict-mcp-config)
+. "$CLAUDE_CAPTURE_TAIL"
 EOF
 chmod +x "$WRAPPER_DIR/claude"
+# shellcheck source=lib/auth-stop.sh
+. "$AUTOPILOT_DIR/scripts/lib/auth-stop.sh"
+# shellcheck source=lib/claude-call-capture.sh
+. "$AUTOPILOT_DIR/scripts/lib/claude-call-capture.sh"
+# Per-run record dir (a STOP marker of an earlier run must never block this one).
+claude_capture_begin "$RESULTS_DIR/claude-calls-$(date +%Y%m%d-%H%M%S)-$$"
 export PATH="$WRAPPER_DIR:$PATH"
 
 cd "$SKILL_CREATOR_DIR"
+PY_RC=0
 python3 -c "
 import sys, os, json
 # Monkey-patch: force Haiku + refresh token before each SDK call
@@ -138,4 +151,11 @@ sys.argv = [
     '--results-dir', '$RESULTS_DIR',
 ]
 rl.main()
-"
+" || PY_RC=$?
+
+# BL-0294: run_loop / run_eval swallow every claude failure, so the batch verdict comes from the captured call records (the first
+# authentication failure stops later calls at the wrapper; this is the final check and the exit code).
+if ! claude_capture_judge "" --final; then
+  exit "$AUTH_STOP_EXIT"
+fi
+exit "$PY_RC"

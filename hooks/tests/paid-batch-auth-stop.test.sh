@@ -177,6 +177,9 @@ case "${FAKE_MODE}" in
   wrap-late) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"boom"}'; sleep 1.0; echo "Authentication error" >&2; exec sleep 60 ;;
   wrap-late1) if [ "$n" = 1 ]; then echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"boom"}'; sleep 1.0; echo "Authentication error" >&2; exec sleep 60; fi
               echo '{"type":"result","subtype":"success","is_error":false,"result":"fine"}'; exec sleep 60 ;;
+  wrap-late1gc) if [ "$n" = 1 ]; then echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"boom"}'; sleep 1.0; echo "Authentication error" >&2
+                  sleep 60 & echo $! >> "${FAKE_PIDS2:?}"; exec sleep 60; fi
+              echo '{"type":"result","subtype":"success","is_error":false,"result":"fine"}'; exec sleep 60 ;;
   wrap-grandchild) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Invalid API key · Please run /login"}'
                    sleep 60 & echo $! >> "${FAKE_PIDS2:?}"; exec sleep 60 ;;
   wrap-exit0) echo "Please log in to continue."; exit 0 ;;
@@ -216,6 +219,10 @@ assert_eq "$LEFT" "0" "run-eval-batch: a timeout-killed claude leaves nothing be
 ebw_run "$TEST_TMP/eb" wrap-late1 standin_probe.py 1.6
 stop_case "run-eval-batch (boundary probe: failed result first, authentication stderr later)" 2 "alpha/"
 assert_eq "$LEFT" "0" "run-eval-batch: nothing left behind (boundary probe)"
+# (a2) same, but a grandchild of claude 1 keeps the pipes open: its record is dead-but-not-closed when query 3 starts -> pending, waited for
+ebw_run "$TEST_TMP/eb" wrap-late1gc standin_probe.py 1.6
+stop_case "run-eval-batch (boundary probe: dead record still draining -> pending, not skipped)" 2 "alpha/"
+kill_grandchildren "$TEST_TMP/eb"
 # (b) claude is SIGKILLed while its own child still holds stdout / stderr: the mirrors must still finish
 ebw_run "$TEST_TMP/eb" wrap-grandchild
 assert_eq "$RC" "6" "run-eval-batch: stop with a grandchild holding the pipes"
@@ -243,13 +250,15 @@ ebw_run "$TEST_TMP/ebw-mut2" wrap-grandchild
 if [ "$LEFT" = 0 ]; then fail "run-eval-batch: tee mirrors left no orphan -- negative control broken"; fi
 echo "MUTANT-RED run-eval-batch (mirror back to tee): $LEFT process(es) left behind after claude was killed while a grandchild held the pipes"
 kill_grandchildren "$TEST_TMP/ebw-mut2"; sleep 1
-# 3. judging ignores the closed markers (judge a live record, cache it as clean) -> the boundary probe is missed
+# 3. the record-state function skips a dead record whose streams are not closed yet (the old "only judge what is already closed" hole)
+#    -> claude 1 was just killed, its mirror is still draining, so query 3 starts before the authentication stderr is on disk
 mk_layout "$TEST_TMP/ebw-mut3"
-grep -q 'BOUNDARY-SKIP-OPEN' "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" || fail "closed-marker mutation anchor missing"
-sed -i '/BOUNDARY-SKIP-OPEN/d; s/Date.now() + 3000/Date.now()/; s/if (closed) fs.writeFileSync/if (true) fs.writeFileSync/' "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js"
-ebw_run "$TEST_TMP/ebw-mut3" wrap-late1 standin_probe.py 1.6
+grep -q "isClosed(base) ? 'ready' : 'pending'" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" || fail "state-function mutation anchor missing"
+sed -i "s/return isClosed(base) ? 'ready' : 'pending';/return isClosed(base) ? 'ready' : 'alive';/" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js"
+grep -q "isClosed(base) ? 'ready' : 'alive'" "$TEST_TMP/ebw-mut3/scripts/lib/claude-call-capture.js" || fail "state-function mutation did not apply"
+ebw_run "$TEST_TMP/ebw-mut3" wrap-late1gc standin_probe.py 1.6
 if [ "$CALLS" -le 2 ]; then fail "run-eval-batch: judging a live record did not let query 3 through (calls=$CALLS) -- negative control broken"; fi
-echo "MUTANT-RED run-eval-batch (closed markers ignored): claude calls=$CALLS (the probe's third query was paid)"
+echo "MUTANT-RED run-eval-batch (recordState: unclosed dead record skipped): claude calls=$CALLS (the probe's third query was paid)"
 kill_grandchildren "$TEST_TMP/ebw-mut3"
 
 # ============================ 2. scripts/bench-engine-capability.sh (one dispatch per case) ============================

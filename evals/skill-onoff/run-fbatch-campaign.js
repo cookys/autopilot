@@ -12,14 +12,29 @@
 //
 // Same flag contract as run-bpack-campaign.js. --dry-run ALSO needs --results (usage error
 // otherwise, although it never spawns anything). --dry-run and --check-arms never spend.
-// --runner stub scores deterministic stub cells (no model). --runner cc is NOT wired in this
-// P0 tooling unit: it refuses (exit 2); the paid run is P1 and needs the owner's cap approval.
+// --runner stub scores deterministic stub cells (no model).
+// --runner cc runs real `claude -p` cells through the bpack runner (run-skill-onoff-matrix-bpack.sh ->
+// run-skill-onoff-eval-bpack.sh, shared as is: scratch HOME + scratch CLAUDE_CONFIG_DIR holding only
+// .credentials.json, plugin built per cell, turn2.sh second turn). This script only supplies the inputs through
+// the runner's own env overlays (ONOFF_PACKS_DIR, ONOFF_TASKS_DIR, ONOFF_PROMPT_PREFIX, ONOFF_TIMEOUT,
+// ONOFF_KEEP_CELLS_DIR, --arm-manifests, --check-skill): fbatch/cc-build.js assembles them per run from
+// fbatch/arms and fbatch/cc/. One call = one rep of one task (both arms), so the stop-loss is checked between
+// every pair of cells. Markers come from fbatch/cell.js (tool calls in the transcript); after each call the new rows
+// get row/pilot and the cell's actual cost_usd (sum of the transcript's result events). Stop-loss: refuse when spent
+// + the next pair's estimate exceeds ONOFF_MAX_USD, or when spent + (measured/estimated spend ratio of the done
+// cells) x the remaining estimate does (needs prereg cc.extrapolate_min_cells measured cells first). One results
+// file per scope: a cc run refuses a file holding rows of another pilot flag or model (the matrix resume key
+// ignores both). The paid run (P1) needs the owner's cap approval.
 // --pilot = T1, T2, T4 one rep on both arms (6 cells), not scored.
 // ONOFF_MAX_USD default 20; --dry-run exits 1 when the estimate exceeds it.
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const cp = require('child_process');
 const L = require('./fbatch/lib');
+const B = require('./fbatch/cc-build');
+const CELL = require('./fbatch/cell');
 
 const HERE = __dirname;
 const argv = process.argv.slice(2);
@@ -157,7 +172,109 @@ if (flag('--dry-run')) {
   process.exit(0);
 }
 
-if (runner === 'cc') die('--runner cc is not wired in this P0 tooling unit; the paid run (P1) needs the owner to approve the cap');
+// ---- --runner cc ---------------------------------------------------------------------------
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+const money = (n) => Number(n.toFixed(2));
+const rowCost = (j) => { const v = num(j.cost_usd); return v === null ? cellCost(j.task_id) : v; };
+const spentUsd = () => readRows().filter((j) => typeof j.task_id === 'string' && (!j.row || j.row === P.row)).reduce((s, j) => s + rowCost(j), 0);
+
+function runCc() {
+  const CC = P.cc || {};
+  const stop = (msg, code, dir) => { if (dir) fs.rmSync(dir, { recursive: true, force: true }); die(msg, code); };
+  if (typeof CC.invocation_prefix !== 'string' || !CC.invocation_prefix.trim() || !CC.skill) die('prereg.cc.invocation_prefix / cc.skill missing');
+  if (cp.spawnSync('bash', ['-c', 'command -v claude'], { stdio: 'ignore' }).status !== 0) die('claude is not on PATH');
+  const chk0 = checkArms();
+  if (!chk0.ok) die(`--check-arms failed: ${chk0.problems.join('; ')}`);
+  const ver = String(cp.spawnSync('claude', ['--version'], { encoding: 'utf8' }).stdout || '').split('\n')[0].trim();
+  if (!ver) die('claude --version printed nothing; cannot pin the runner', 3);
+  if (CC.runner_version_pin && ver !== CC.runner_version_pin) die(`runner version '${ver}' differs from prereg cc.runner_version_pin '${CC.runner_version_pin}'`, 3);
+  const foreign = readRows().filter((j) => (j.pilot === true) !== PILOT || j.model !== MODEL);
+  if (foreign.length) die(`results file holds ${foreign.length} row(s) of another scope (pilot flag or model); use one results file per pilot and per formal model, the matrix resume key ignores both`);
+  const abs = path.resolve(resultsPath);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  const stateOf = () => {
+    const ok = new Set(); const fails = new Map();
+    for (const j of readRows()) {
+      const k = `${j.task_id}|${j.arm}|${j.rep}`;
+      if (j.failure_class === null || j.failure_class === undefined) ok.add(k); else fails.set(k, (fails.get(k) || 0) + 1);
+    }
+    return { ok, fails };
+  };
+  const todoCost = () => {
+    const { ok, fails } = stateOf(); let c = 0;
+    for (const g of GROUPS) for (const arm of g.arms) for (let rep = 1; rep <= g.reps; rep++) {
+      const k = `${g.task}|${arm}|${rep}`;
+      if (!ok.has(k) && (fails.get(k) || 0) < 3) c += cellCost(g.task);
+    }
+    return c;
+  };
+  const startEstimate = todoCost();
+  const spent0 = spentUsd();
+  if (spent0 + startEstimate > CAP + 1e-9) die(`spend cap: spent ${money(spent0)} USD + remaining estimate ${money(startEstimate)} USD exceeds ONOFF_MAX_USD ${money(CAP)} USD`, 1);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fbatch-cc-'));
+  const bd = B.build({ armsDir, outDir: dir });
+  const keep = `${abs}.cells`;
+  const minCells = CC.extrapolate_min_cells || 2;
+  const costOfKept = (j) => {
+    try {
+      const c = CELL.transcriptCost(path.join(keep, j.task_id, j.arm, String(j.rep), 'transcript.jsonl'));
+      if (c.turns.length) return { cost_usd: c.total, cost_turns: c.turns };
+    } catch { /* no transcript kept */ }
+    return { cost_usd: cellCost(j.task_id), cost_estimated: true };
+  };
+  const patchRows = (before) => {
+    const buf = fs.readFileSync(abs);
+    const head = buf.subarray(0, before).toString('utf8');
+    const tail = buf.subarray(before).toString('utf8').split('\n').filter((l) => l.trim()).map((l) => {
+      let j; try { j = JSON.parse(l); } catch { return l; }
+      // A cell where the agent wrote a FINDINGS-named file is invalid whatever its markers say (README: post-run check).
+      const bad = !j.failure_class && j.markers && j.markers.findings_write === true;
+      return JSON.stringify({ row: P.row, pilot: PILOT, ...j, ...(bad ? { failure_class: 'invalid_cell', failure_cause: 'findings_write' } : {}), ...costOfKept(j) });
+    });
+    fs.writeFileSync(abs, head + (tail.length ? `${tail.join('\n')}\n` : ''));
+  };
+  for (const g of GROUPS) for (let rep = 1; rep <= g.reps; rep++) {
+    const { ok, fails } = stateOf();
+    const todoArms = g.arms.filter((a) => !ok.has(`${g.task}|${a}|${rep}`) && (fails.get(`${g.task}|${a}|${rep}`) || 0) < 3);
+    if (!todoArms.length) continue;
+    const spent = spentUsd();
+    const pair = todoArms.length * cellCost(g.task);
+    if (spent + pair > CAP + 1e-9) stop(`spend cap: spent ${money(spent)} USD so far; next ${g.task} rep ${rep} [${todoArms.join(',')}] costs ${money(pair)} USD; cap ${money(CAP)} USD; refusing to dispatch`, 1, dir);
+    const measured = readRows().filter((j) => num(j.cost_usd) !== null && !j.cost_estimated);
+    if (measured.length >= minCells) {
+      const est = measured.reduce((s, j) => s + cellCost(j.task_id), 0);
+      const act = measured.reduce((s, j) => s + j.cost_usd, 0);
+      const scale = est > 0 ? act / est : 1;
+      const projected = spent + scale * todoCost();
+      if (projected > CAP + 1e-9) stop(`spend extrapolation: spent ${money(spent)} USD; ${measured.length} measured cells cost ${scale.toFixed(2)}x their estimate; projected total ${money(projected)} USD exceeds ONOFF_MAX_USD ${money(CAP)} USD; refusing to dispatch`, 1, dir);
+    }
+    console.log(`== task ${g.task} rep ${rep}: [${todoArms.join(',')}]`);
+    const before = fs.existsSync(abs) ? fs.statSync(abs).size : 0;
+    const r = cp.spawnSync('bash', [path.join(HERE, 'run-skill-onoff-matrix-bpack.sh'),
+      '--model', MODEL, '--reps', String(rep), '--results', abs, '--tasks', g.task, '--arms', todoArms.join(','),
+      '--runner', 'cc', '--arm-manifests', bd.armManifestsDir, '--check-skill', CC.skill], {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        ONOFF_PROMPT_PREFIX: CC.invocation_prefix,
+        ONOFF_TIMEOUT: process.env.ONOFF_TIMEOUT_OVERRIDE || CC.timeout || '10m',
+        ONOFF_PACKS_DIR: bd.packsDir,
+        ONOFF_TASKS_DIR: bd.tasksDir,
+        ONOFF_KEEP_CELLS_DIR: keep,
+      },
+    });
+    patchRows(before);
+    if (r.status !== 0) stop(`matrix failed for ${g.task} rep ${rep} (exit ${r.status})`, [3, 4].includes(r.status) ? r.status : 2, dir);
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+  console.log(JSON.stringify({ runner: 'cc', pilot: PILOT, model: MODEL, spent_usd: money(spentUsd()), max_usd: CAP }));
+  if (PILOT) { console.log('pilot done: cc cells, not scored (a partial grid cannot PASS; pilot rates check wiring only).'); process.exit(0); }
+  const s = cp.spawnSync('node', [path.join(HERE, 'score-fbatch.js'), '--prereg', preregPath, '--results', abs, '--arms-dir', armsDir, '--model', MODEL, '--reps', String(REPS)], { encoding: 'utf8' });
+  process.stderr.write(s.stderr || '');
+  process.stdout.write(s.stdout || '');
+  process.exit(s.status === null ? 2 : s.status);
+}
+if (runner === 'cc') runCc();
 const chk = checkArms();
 if (!chk.ok) die(`--check-arms failed: ${chk.problems.join('; ')}`);
 const arms = L.loadArms(armsDir);

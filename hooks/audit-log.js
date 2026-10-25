@@ -24,49 +24,56 @@ const path = require('path');
 const secrets = require('./_shared/secret-patterns');
 const { getToolEvent } = require('./transcript-reader-lib.js');
 
-try {
-  // stdin pipe is broken for tool-event hooks (ENXIO; upstream #6305) — recover
-  // the tool from the transcript instead. stdin-first keeps it future-proof.
-  let stdin = '';
+// CLI stdin read. stdin pipe is broken for tool-event hooks (ENXIO; upstream #6305) — an empty
+// result makes runHook() recover the tool from the transcript instead. stdin-first keeps it future-proof.
+function readStdinCli() {
+  try { return fs.readFileSync(0, 'utf8'); }
+  catch { try { return fs.readFileSync('/dev/stdin', 'utf8'); } catch { return ''; /* ENXIO → transcript */ } }
+}
+
+// Exported body (post-tool-chain runs it in-process): `stdin` is the payload text; returns the exit
+// status and never calls process.exit.
+function runHook(stdin) {
   try {
-    stdin = fs.readFileSync(0, 'utf8');
-  } catch {
-    try { stdin = fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* ENXIO → transcript */ }
-  }
-  try {
-    if (stdin.trim()) {
-      const p = JSON.parse(stdin);
-      if (p && typeof p === 'object' && p.hook_event_name === 'PostToolUse') {
-        require('./awaiting-owner.js').handle(p);
-        // HOOKQ (mods P1W): the answer to depth-0's AskUserQuestion closes its decision file; a successful merge into the
-        // integration branch refreshes the task-status input. Own try each, lazy-required only for their tool.
-        if (p.tool_name === 'AskUserQuestion') {
-          try { require('./ask-decision.js').onPostToolUse(p); } catch (e) { process.stderr.write(`audit-log: ask-decision fail-open: ${e && e.message ? e.message : e}\n`); }
-        } else if (p.tool_name === 'Bash') {
-          try { require('./merge-task-status-lib.js').onPostToolUse(p); } catch (e) { process.stderr.write(`audit-log: merge-task-status fail-open: ${e && e.message ? e.message : e}\n`); }
+    try {
+      if (stdin.trim()) {
+        const p = JSON.parse(stdin);
+        if (p && typeof p === 'object' && p.hook_event_name === 'PostToolUse') {
+          require('./awaiting-owner.js').handle(p);
+          // HOOKQ (mods P1W): the answer to depth-0's AskUserQuestion closes its decision file; a successful merge into the
+          // integration branch refreshes the task-status input. Own try each, lazy-required only for their tool.
+          if (p.tool_name === 'AskUserQuestion') {
+            try { require('./ask-decision.js').onPostToolUse(p); } catch (e) { process.stderr.write(`audit-log: ask-decision fail-open: ${e && e.message ? e.message : e}\n`); }
+          } else if (p.tool_name === 'Bash') {
+            try { require('./merge-task-status-lib.js').onPostToolUse(p); } catch (e) { process.stderr.write(`audit-log: merge-task-status fail-open: ${e && e.message ? e.message : e}\n`); }
+          }
         }
       }
+    } catch (e) {
+      process.stderr.write(`audit-log: live-state hosting fail-open: ${e && e.message ? e.message : e}\n`);
     }
+    const ev = getToolEvent({ stdin, env: process.env });
+    const command = (ev.tool_input && ev.tool_input.command) || '';
+
+    if (!command) return 0;
+
+    const redacted = secrets.redact(command);
+    const ts = new Date().toISOString();
+    const cwd = process.cwd();
+
+    const logDir = path.join(os.homedir(), '.claude');
+    fs.mkdirSync(logDir, { recursive: true });
+
+    const entry = `[${ts}] [${cwd}] ${redacted.replace(/\n/g, '\\n')}\n`;
+    fs.appendFileSync(path.join(logDir, 'bash-commands.log'), entry);
+
+    return 0;
   } catch (e) {
-    process.stderr.write(`audit-log: live-state hosting fail-open: ${e && e.message ? e.message : e}\n`);
+    process.stderr.write(`audit-log error: ${e.message}\n`);
+    return 0;
   }
-  const ev = getToolEvent({ stdin, env: process.env });
-  const command = (ev.tool_input && ev.tool_input.command) || '';
-
-  if (!command) process.exit(0);
-
-  const redacted = secrets.redact(command);
-  const ts = new Date().toISOString();
-  const cwd = process.cwd();
-
-  const logDir = path.join(os.homedir(), '.claude');
-  fs.mkdirSync(logDir, { recursive: true });
-
-  const entry = `[${ts}] [${cwd}] ${redacted.replace(/\n/g, '\\n')}\n`;
-  fs.appendFileSync(path.join(logDir, 'bash-commands.log'), entry);
-
-  process.exit(0);
-} catch (e) {
-  process.stderr.write(`audit-log error: ${e.message}\n`);
-  process.exit(0);
 }
+
+module.exports = { runHook };
+
+if (require.main === module) process.exit(runHook(readStdinCli()));

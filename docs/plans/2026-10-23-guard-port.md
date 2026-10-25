@@ -1,6 +1,6 @@
 # Plan — guard port: cut the per-tool-call hook spawns
 
-> Status: 計畫審查 G2 CONDITIONAL 於世代上限；depth-0 裁決後修訂 G2 blockers，未重審（2026-10-24） / Owner: cookys / Branch: not yet created / Frame: autopilot hooks only
+> Status: 計畫審查 G2 CONDITIONAL 於世代上限；depth-0 裁決後修訂 G2 blockers，未重審（2026-10-24） / Owner: cookys / Branch: hands/gport1/1 (Phase 1 built, chain unregistered, 2026-10-25; Phase 0 evidence and re-baseline not done; host-concatenation predicate answered NO for reload-watch + failure-escalation, see hand report) / Frame: autopilot hooks only
 > Source: P2 of [mods-visible-dispatch](2026-10-03-mods-visible-dispatch.md); verdict `open_guard_port_plan`; BL-0241 in `docs/BACKLOG.md`.
 
 ## 0. Context / thesis

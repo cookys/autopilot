@@ -168,57 +168,64 @@ Five or more consecutive Bash failures. You MUST produce a structured failure re
 If you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.`;
 }
 
-// Main
-try {
-  let rawInput = '';
-  try {
-    rawInput = fs.readFileSync(0, 'utf8');
-  } catch {
-    try { rawInput = fs.readFileSync('/dev/stdin', 'utf8'); } catch { /* ENXIO; #6305 */ }
-  }
-  let input;
-  try { input = JSON.parse(rawInput); } catch { input = {}; }
-
-  // stdin pipe broken for tool-event hooks → recover from the transcript and
-  // shape it into the fields isFailure()/getSessionHash() expect.
-  if (!input || !input.tool_name) {
-    const ev = getToolEvent({ stdin: '', env: process.env });
-    input = {
-      tool_name: ev.tool_name,
-      tool_input: ev.tool_input,
-      tool_result: ev.tool_response,
-      session_id: process.env.CLAUDE_CODE_SESSION_ID,
-    };
-    if (ev.is_error) input.exit_code = 1; // reliable failure signal from transcript
-  }
-
-  // Only process Bash tool results
-  const toolName = input.tool_name || '';
-  if (toolName !== 'Bash') process.exit(0);
-
-  ensureStateDir();
-  const sessionHash = getSessionHash(input);
-  const cPath = counterPath(sessionHash);
-
-  if (isFailure(input)) {
-    const count = readCounter(cPath) + 1;
-    writeCounter(cPath, count);
-
-    const msg = escalationMessage(count);
-    if (msg) {
-      process.stdout.write(msg + '\n');
-    }
-  } else {
-    // Success: reset consecutive counter
-    const current = readCounter(cPath);
-    if (current > 0) {
-      writeCounter(cPath, 0);
-    }
-  }
-
-  process.exit(0);
-} catch (e) {
-  // Fail-open: malformed JSON or other errors should not block the tool pipeline
-  process.stderr.write(`failure-escalation: ${e.message}\n`);
-  process.exit(0);
+// CLI stdin read ('' on ENXIO; #6305 — runHook() then recovers from the transcript).
+function readStdinCli() {
+  try { return fs.readFileSync(0, 'utf8'); }
+  catch { try { return fs.readFileSync('/dev/stdin', 'utf8'); } catch { return ''; /* ENXIO; #6305 */ } }
 }
+
+// Main. Exported body (post-tool-chain runs it in-process): `rawInput` is the payload text; returns the
+// exit status and never calls process.exit.
+function runHook(rawInput) {
+  try {
+    let input;
+    try { input = JSON.parse(rawInput); } catch { input = {}; }
+
+    // stdin pipe broken for tool-event hooks → recover from the transcript and
+    // shape it into the fields isFailure()/getSessionHash() expect.
+    if (!input || !input.tool_name) {
+      const ev = getToolEvent({ stdin: '', env: process.env });
+      input = {
+        tool_name: ev.tool_name,
+        tool_input: ev.tool_input,
+        tool_result: ev.tool_response,
+        session_id: process.env.CLAUDE_CODE_SESSION_ID,
+      };
+      if (ev.is_error) input.exit_code = 1; // reliable failure signal from transcript
+    }
+
+    // Only process Bash tool results
+    const toolName = input.tool_name || '';
+    if (toolName !== 'Bash') return 0;
+
+    ensureStateDir();
+    const sessionHash = getSessionHash(input);
+    const cPath = counterPath(sessionHash);
+
+    if (isFailure(input)) {
+      const count = readCounter(cPath) + 1;
+      writeCounter(cPath, count);
+
+      const msg = escalationMessage(count);
+      if (msg) {
+        process.stdout.write(msg + '\n');
+      }
+    } else {
+      // Success: reset consecutive counter
+      const current = readCounter(cPath);
+      if (current > 0) {
+        writeCounter(cPath, 0);
+      }
+    }
+
+    return 0;
+  } catch (e) {
+    // Fail-open: malformed JSON or other errors should not block the tool pipeline
+    process.stderr.write(`failure-escalation: ${e.message}\n`);
+    return 0;
+  }
+}
+
+module.exports = { runHook };
+
+if (require.main === module) process.exit(runHook(readStdinCli()));

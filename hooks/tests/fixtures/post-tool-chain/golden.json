@@ -1,0 +1,2625 @@
+{
+ "source_ref": "e5691fb6c",
+ "source_sha": "e5691fb6c3f4e3fc5220883c9bc3524492bccc90",
+ "fixtures": {
+  "quiet-bash-success": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo ok\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] echo ok\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "bash-fail-escalation-ladder": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L2]\n\nThird consecutive Bash failure. MANDATORY investigation steps:\n1. Read the error message word by word — 90% of answers are in the error text\n2. Search (WebSearch / Grep) for the core problem\n3. Read the original context around the failure (50 lines up/down)\n4. List 3 fundamentally different hypotheses\n5. Reverse your main assumption — what if the problem is NOT where you think it is?\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L2]\n\nThird consecutive Bash failure. MANDATORY investigation steps:\n1. Read the error message word by word — 90% of answers are in the error text\n2. Search (WebSearch / Grep) for the core problem\n3. Read the original context around the failure (50 lines up/down)\n4. List 3 fundamentally different hypotheses\n5. Reverse your main assumption — what if the problem is NOT where you think it is?\n",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L3]\n\nFourth consecutive Bash failure. Complete ALL items before proceeding:\n- [ ] Read failure signal word by word?\n- [ ] Searched core problem with tools?\n- [ ] Read original context around failure?\n- [ ] All assumptions verified with tools?\n- [ ] Tried the opposite assumption?\n- [ ] Reproduced in minimal scope?\n- [ ] Switched tools/methods/angles/stack?\n\nDo not skip any item. Each must have a concrete answer, not just a checkmark.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L3]\n\nFourth consecutive Bash failure. Complete ALL items before proceeding:\n- [ ] Read failure signal word by word?\n- [ ] Searched core problem with tools?\n- [ ] Read original context around failure?\n- [ ] All assumptions verified with tools?\n- [ ] Tried the opposite assumption?\n- [ ] Reproduced in minimal scope?\n- [ ] Switched tools/methods/angles/stack?\n\nDo not skip any item. Each must have a concrete answer, not just a checkmark.\n",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "6"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false 6\",\n  \"tool_count_session\": 6,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] false 1\n[<TS>] [<ROOT>/cwd] false 2\n[<TS>] [<ROOT>/cwd] false 3\n[<TS>] [<ROOT>/cwd] false 4\n[<TS>] [<ROOT>/cwd] false 5\n[<TS>] [<ROOT>/cwd] false 6\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "6"
+    }
+   }
+  },
+  "bash-fail-then-reset": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "1"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 4,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] false\n[<TS>] [<ROOT>/cwd] false\n[<TS>] [<ROOT>/cwd] true\n[<TS>] [<ROOT>/cwd] false\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "4"
+    }
+   }
+  },
+  "bash-fail-pattern-exit0": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "2"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] x\n[<TS>] [<ROOT>/cwd] x\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "2"
+    }
+   }
+  },
+  "reload-first-run-silent": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "reload-change-emits": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\"}}\n",
+       "stderr": "⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\n"
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\"}}\n",
+      "stderr": "⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\n"
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "cwd/.claude/": {
+     "mode": "775"
+    },
+    "cwd/.claude/dispatch-config.md": {
+     "mode": "664",
+     "content": "cfg"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/plugins/": {
+     "mode": "775"
+    },
+    "home/.claude/plugins/.reload-watch-state.json": {
+     "mode": "664",
+     "content": "{\n  \"<ROOT>/home/.claude/plugins/installed_plugins.json\": null,\n  \"<ROOT>/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"<ROOT>/cwd/.claude/settings.local.json\": null\n}"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "2"
+    }
+   }
+  },
+  "reload-and-failure-both-emit": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\"}}\n",
+       "stderr": "⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\n"
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\"}}\n[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": "⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\n"
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "cwd/.claude/": {
+     "mode": "775"
+    },
+    "cwd/.claude/dispatch-config.md": {
+     "mode": "664",
+     "content": "cfg"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "2"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] false\n"
+    },
+    "home/.claude/plugins/": {
+     "mode": "775"
+    },
+    "home/.claude/plugins/.reload-watch-state.json": {
+     "mode": "664",
+     "content": "{\n  \"<ROOT>/home/.claude/plugins/installed_plugins.json\": null,\n  \"<ROOT>/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"<ROOT>/cwd/.claude/settings.local.json\": null\n}"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "none-emit-read": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "cwd/.claude/": {
+     "mode": "775"
+    },
+    "cwd/.claude/dispatch-config.md": {
+     "mode": "664",
+     "content": "cfg"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/plugins/": {
+     "mode": "775"
+    },
+    "home/.claude/plugins/.reload-watch-state.json": {
+     "mode": "664",
+     "content": "{\n  \"<ROOT>/home/.claude/plugins/installed_plugins.json\": null,\n  \"<ROOT>/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"<ROOT>/cwd/.claude/settings.local.json\": null\n}"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "empty-stdin": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "invalid-json": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": "audit-log: live-state hosting fail-open: Unexpected token 'o', \"not json {\" is not valid JSON\n"
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": "audit-log: live-state hosting fail-open: Unexpected token 'o', \"not json {\" is not valid JSON\n"
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "json-null": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "non-utf8-bytes": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": "audit-log: live-state hosting fail-open: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n"
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": "audit-log: live-state hosting fail-open: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n"
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "huge-payload": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "1"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash cat big\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] cat big\n"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "664",
+     "content": "### <TS>\n**Tool:** Bash\n**Input:** `{\"command\":\"cat big\"}`\n```\nerror ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: ...\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "ask-user-question-live-state": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "attention-pending-resolved-by-posttool": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    },
+    "LIVE:attention/": {
+     "mode": "700"
+    }
+   }
+  },
+  "bash-secret-redaction-multiline": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"token=ghp_abcdefghijklmnopqrstuvwxyz0123456789\\\"\\nsecond line\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] echo \"token=<REDACTED>\"\\nsecond line\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "log-error-keyword-read": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Edit\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Edit /y\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "664",
+     "content": "### <TS>\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\npermission denied while reading\n```\n**Solution:** (fill in after fix)\n\n---\n### <TS>\n**Tool:** Edit\n**Input:** `{\"file_path\":\"/y\"}`\n```\nx\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "2"
+    }
+   }
+  },
+  "intent-disable-flag-active": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "775"
+    },
+    "home/.autopilot/intent-capture.disabled": {
+     "mode": "664",
+     "content": "{\"disabled_at\":\"<TS>\",\"reason\":\"x\",\"plugin_version\":\"unknown\"}"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] echo hi\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    }
+   }
+  },
+  "intent-breaker-trips": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": "[intent-capture] disabled after 10 consecutive failures — see <ROOT>/home/.autopilot/intent-capture.disabled\n"
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": "[intent-capture] disabled after 10 consecutive failures — see <ROOT>/home/.autopilot/intent-capture.disabled\n"
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "775"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "664",
+     "content": "10"
+    },
+    "home/.autopilot/intent": {
+     "mode": "664",
+     "content": "not a dir"
+    },
+    "home/.autopilot/intent-capture.disabled": {
+     "mode": "600",
+     "content": "{\n  \"disabled_at\": \"<TS>\",\n  \"reason\": \"10 consecutive failures: ENOTDIR: not a directory, open '<ROOT>/home/.autopilot/intent/<CWDSHA1>.json.<PID>.tmp'\",\n  \"plugin_version\": \"unknown\",\n  \"manual_reset\": \"rm <ROOT>/home/.autopilot/intent-capture.disabled\"\n}"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] echo hi\n[<TS>] [<ROOT>/cwd] echo again\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "home-dot-claude-is-a-file": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": "audit-log error: EEXIST: file already exists, mkdir '<ROOT>/home/.claude'\n"
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": "log-error error: EEXIST: file already exists, mkdir '<ROOT>/home/.claude'\n"
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": "audit-log error: EEXIST: file already exists, mkdir '<ROOT>/home/.claude'\nlog-error error: EEXIST: file already exists, mkdir '<ROOT>/home/.claude'\n"
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo err\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude": {
+     "mode": "664",
+     "content": "file"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "transcript-fallback": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_8565d381": {
+     "mode": "600",
+     "content": "2"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"dddd0000-1111-2222-3333-444455556666\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"transcript\",\n  \"last_tool_input_summary\": \"Bash echo from-transcript\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] echo from-transcript\n[<TS>] [<ROOT>/cwd] echo from-transcript\n"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "664",
+     "content": "### <TS>\n**Tool:** Bash\n**Input:** `{\"command\":\"echo from-transcript\"}`\n```\nerror: failed\n```\n**Solution:** (fill in after fix)\n\n---\n### <TS>\n**Tool:** Bash\n**Input:** `{\"command\":\"echo from-transcript\"}`\n```\nerror: failed\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "home/.claude/projects/": {
+     "mode": "775"
+    },
+    "home/.claude/projects/-enc/": {
+     "mode": "775"
+    },
+    "home/.claude/projects/-enc/dddd0000-1111-2222-3333-444455556666.jsonl": {
+     "mode": "664",
+     "content": "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"b1\",\"name\":\"Bash\",\"input\":{\"command\":\"echo from-transcript\"}}]}}\n{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"b1\",\"content\":\"error: failed\",\"is_error\":true}]}}\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-dddd0000-1111-2222-3333-444455556666": {
+     "mode": "600",
+     "content": "2"
+    }
+   }
+  },
+  "no-session-id-ppid-hash": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_<PPIDHASH8>": {
+     "mode": "600",
+     "content": "2"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash f\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] f\n[<TS>] [<ROOT>/cwd] f\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "2"
+    }
+   }
+  },
+  "intent-env-opt-out": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] echo hi\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    }
+   }
+  },
+  "git-cwd-branch": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "775"
+    },
+    "cwd/.git/": {
+     "mode": "775"
+    },
+    "cwd/.git/HEAD": {
+     "mode": "664",
+     "content": "ref: refs/heads/main\n"
+    },
+    "cwd/.git/config": {
+     "mode": "664",
+     "content": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n"
+    },
+    "cwd/.git/description": {
+     "mode": "664",
+     "content": "Unnamed repository; edit this file 'description' to name the repository.\n"
+    },
+    "cwd/.git/hooks/": {
+     "mode": "775"
+    },
+    "cwd/.git/hooks/applypatch-msg.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n#\n# An example hook script to check the commit log message taken by\n# applypatch from an e-mail message.\n#\n# The hook should exit with non-zero status after issuing an\n# appropriate message if it wants to stop the commit.  The hook is\n# allowed to edit the commit message file.\n#\n# To enable this hook, rename this file to \"applypatch-msg\".\n\n. git-sh-setup\ncommitmsg=\"$(git rev-parse --git-path hooks/commit-msg)\"\ntest -x \"$commitmsg\" && exec \"$commitmsg\" ${1+\"$@\"}\n:\n"
+    },
+    "cwd/.git/hooks/commit-msg.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n#\n# An example hook script to check the commit log message.\n# Called by \"git commit\" with one argument, the name of the file\n# that has the commit message.  The hook should exit with non-zero\n# status after issuing an appropriate message if it wants to stop the\n# commit.  The hook is allowed to edit the commit message file.\n#\n# To enable this hook, rename this file to \"commit-msg\".\n\n# Uncomment the below to add a Signed-off-by line to the message.\n# Doing this in a hook is a bad idea in general, but the prepare-commit-msg\n# hook is more suited to it.\n#\n# SOB=$(git var GIT_AUTHOR_IDENT | sed -n 's/^\\(.*>\\).*$/Signed-off-by: \\1/p')\n# grep -qs \"^$SOB\" \"$1\" || echo \"$SOB\" >> \"$1\"\n\n# This example catches duplicate Signed-off-by lines.\n\ntest \"\" = \"$(grep '^Signed-off-by: ' \"$1\" |\n\t sort | uniq -c | sed -e '/^[ \t]*1[ \t]/d')\" || {\n\techo >&2 Duplicate Signed-off-by lines.\n\texit 1\n}\n"
+    },
+    "cwd/.git/hooks/fsmonitor-watchman.sample": {
+     "mode": "775",
+     "content": "#!/usr/bin/perl\n\nuse strict;\nuse warnings;\nuse IPC::Open2;\n\n# An example hook script to integrate Watchman\n# (https://facebook.github.io/watchman/) with git to speed up detecting\n# new and modified files.\n#\n# The hook is passed a version (currently 2) and last update token\n# formatted as a string and outputs to stdout a new update token and\n# all files that have been modified since the update token. Paths must\n# be relative to the root of the working tree and separated by a single NUL.\n#\n# To enable this hook, rename this file to \"query-watchman\" and set\n# 'git config core.fsmonitor .git/hooks/query-watchman'\n#\nmy ($version, $last_update_token) = @ARGV;\n\n# Uncomment for debugging\n# print STDERR \"$0 $version $last_update_token\\n\";\n\n# Check the hook interface version\nif ($version ne 2) {\n\tdie \"Unsupported query-fsmonitor hook version '$version'.\\n\" .\n\t    \"Falling back to scanning...\\n\";\n}\n\nmy $git_work_tree = get_working_dir();\n\nmy $retry = 1;\n\nmy $json_pkg;\neval {\n\trequire JSON::XS;\n\t$json_pkg = \"JSON::XS\";\n\t1;\n} or do {\n\trequire JSON::PP;\n\t$json_pkg = \"JSON::PP\";\n};\n\nlaunch_watchman();\n\nsub launch_watchman {\n\tmy $o = watchman_query();\n\tif (is_work_tree_watched($o)) {\n\t\toutput_result($o->{clock}, @{$o->{files}});\n\t}\n}\n\nsub output_result {\n\tmy ($clockid, @files) = @_;\n\n\t# Uncomment for debugging watchman output\n\t# open (my $fh, \">\", \".git/watchman-output.out\");\n\t# binmode $fh, \":utf8\";\n\t# print $fh \"$clockid\\n@files\\n\";\n\t# close $fh;\n\n\tbinmode STDOUT, \":utf8\";\n\tprint $clockid;\n\tprint \"\\0\";\n\tlocal $, = \"\\0\";\n\tprint @files;\n}\n\nsub watchman_clock {\n\tmy $response = qx/watchman clock \"$git_work_tree\"/;\n\tdie \"Failed to get clock id on '$git_work_tree'.\\n\" .\n\t\t\"Falling back to scanning...\\n\" if $? != 0;\n\n\treturn $json_pkg->new->utf8->decode($response);\n}\n\nsub watchman_query {\n\tmy $pid = open2(\\*CHLD_OUT, \\*CHLD_IN, 'watchman -j --no-pretty')\n\tor die \"open2() failed: $!\\n\" .\n\t\"Falling back to scanning...\\n\";\n\n\t# In the query expression below we're asking for names of files that\n\t# changed since $last_update_token but not from the .git folder.\n\t#\n\t# To accomplish this, we're using the \"since\" generator to use the\n\t# recency index to select candidate nodes and \"fields\" to limit the\n\t# output to file names only. Then we're using the \"expression\" term to\n\t# further constrain the results.\n\tmy $last_update_line = \"\";\n\tif (substr($last_update_token, 0, 1) eq \"c\") {\n\t\t$last_update_token = \"\\\"$last_update_token\\\"\";\n\t\t$last_update_line = qq[\\n\"since\": $last_update_token,];\n\t}\n\tmy $query = <<\"\tEND\";\n\t\t[\"query\", \"$git_work_tree\", {$last_update_line\n\t\t\t\"fields\": [\"name\"],\n\t\t\t\"expression\": [\"not\", [\"dirname\", \".git\"]]\n\t\t}]\n\tEND\n\n\t# Uncomment for debugging the watchman query\n\t# open (my $fh, \">\", \".git/watchman-query.json\");\n\t# print $fh $query;\n\t# close $fh;\n\n\tprint CHLD_IN $query;\n\tclose CHLD_IN;\n\tmy $response = do {local $/; <CHLD_OUT>};\n\n\t# Uncomment for debugging the watch response\n\t# open ($fh, \">\", \".git/watchman-response.json\");\n\t# print $fh $response;\n\t# close $fh;\n\n\tdie \"Watchman: command returned no output.\\n\" .\n\t\"Falling back to scanning...\\n\" if $response eq \"\";\n\tdie \"Watchman: command returned invalid output: $response\\n\" .\n\t\"Falling back to scanning...\\n\" unless $response =~ /^\\{/;\n\n\treturn $json_pkg->new->utf8->decode($response);\n}\n\nsub is_work_tree_watched {\n\tmy ($output) = @_;\n\tmy $error = $output->{error};\n\tif ($retry > 0 and $error and $error =~ m/unable to resolve root .* directory (.*) is not watched/) {\n\t\t$retry--;\n\t\tmy $response = qx/watchman watch \"$git_work_tree\"/;\n\t\tdie \"Failed to make watchman watch '$git_work_tree'.\\n\" .\n\t\t    \"Falling back to scanning...\\n\" if $? != 0;\n\t\t$output = $json_pkg->new->utf8->decode($response);\n\t\t$error = $output->{error};\n\t\tdie \"Watchman: $error.\\n\" .\n\t\t\"Falling back to scanning...\\n\" if $error;\n\n\t\t# Uncomment for debugging watchman output\n\t\t# open (my $fh, \">\", \".git/watchman-output.out\");\n\t\t# close $fh;\n\n\t\t# Watchman will always return all files on the first query so\n\t\t# return the fast \"everything is dirty\" flag to git and do the\n\t\t# Watchman query just to get it over with now so we won't pay\n\t\t# the cost in git to look up each individual file.\n\t\tmy $o = watchman_clock();\n\t\t$error = $output->{error};\n\n\t\tdie \"Watchman: $error.\\n\" .\n\t\t\"Falling back to scanning...\\n\" if $error;\n\n\t\toutput_result($o->{clock}, (\"/\"));\n\t\t$last_update_token = $o->{clock};\n\n\t\teval { launch_watchman() };\n\t\treturn 0;\n\t}\n\n\tdie \"Watchman: $error.\\n\" .\n\t\"Falling back to scanning...\\n\" if $error;\n\n\treturn 1;\n}\n\nsub get_working_dir {\n\tmy $working_dir;\n\tif ($^O =~ 'msys' || $^O =~ 'cygwin') {\n\t\t$working_dir = Win32::GetCwd();\n\t\t$working_dir =~ tr/\\\\/\\//;\n\t} else {\n\t\trequire Cwd;\n\t\t$working_dir = Cwd::cwd();\n\t}\n\n\treturn $working_dir;\n}\n"
+    },
+    "cwd/.git/hooks/post-update.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n#\n# An example hook script to prepare a packed repository for use over\n# dumb transports.\n#\n# To enable this hook, rename this file to \"post-update\".\n\nexec git update-server-info\n"
+    },
+    "cwd/.git/hooks/pre-applypatch.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n#\n# An example hook script to verify what is about to be committed\n# by applypatch from an e-mail message.\n#\n# The hook should exit with non-zero status after issuing an\n# appropriate message if it wants to stop the commit.\n#\n# To enable this hook, rename this file to \"pre-applypatch\".\n\n. git-sh-setup\nprecommit=\"$(git rev-parse --git-path hooks/pre-commit)\"\ntest -x \"$precommit\" && exec \"$precommit\" ${1+\"$@\"}\n:\n"
+    },
+    "cwd/.git/hooks/pre-commit.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n#\n# An example hook script to verify what is about to be committed.\n# Called by \"git commit\" with no arguments.  The hook should\n# exit with non-zero status after issuing an appropriate message if\n# it wants to stop the commit.\n#\n# To enable this hook, rename this file to \"pre-commit\".\n\nif git rev-parse --verify HEAD >/dev/null 2>&1\nthen\n\tagainst=HEAD\nelse\n\t# Initial commit: diff against an empty tree object\n\tagainst=$(git hash-object -t tree /dev/null)\nfi\n\n# If you want to allow non-ASCII filenames set this variable to true.\nallownonascii=$(git config --type=bool hooks.allownonascii)\n\n# Redirect output to stderr.\nexec 1>&2\n\n# Cross platform projects tend to avoid non-ASCII filenames; prevent\n# them from being added to the repository. We exploit the fact that the\n# printable range starts at the space character and ends with tilde.\nif [ \"$allownonascii\" != \"true\" ] &&\n\t# Note that the use of brackets around a tr range is ok here, (it's\n\t# even required, for portability to Solaris 10's /usr/bin/tr), since\n\t# the square bracket bytes happen to fall in the designated range.\n\ttest $(git diff-index --cached --name-only --diff-filter=A -z $against |\n\t  LC_ALL=C tr -d '[ -~]\\0' | wc -c) != 0\nthen\n\tcat <<\\EOF\nError: Attempt to add a non-ASCII file name.\n\nThis can cause problems if you want to work with people on other platforms.\n\nTo be portable it is advisable to rename the file.\n\nIf you know what you are doing you can disable this check using:\n\n  git config hooks.allownonascii true\nEOF\n\texit 1\nfi\n\n# If there are whitespace errors, print the offending file names and fail.\nexec git diff-index --check --cached $against --\n"
+    },
+    "cwd/.git/hooks/pre-merge-commit.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n#\n# An example hook script to verify what is about to be committed.\n# Called by \"git merge\" with no arguments.  The hook should\n# exit with non-zero status after issuing an appropriate message to\n# stderr if it wants to stop the merge commit.\n#\n# To enable this hook, rename this file to \"pre-merge-commit\".\n\n. git-sh-setup\ntest -x \"$GIT_DIR/hooks/pre-commit\" &&\n        exec \"$GIT_DIR/hooks/pre-commit\"\n:\n"
+    },
+    "cwd/.git/hooks/pre-push.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n\n# An example hook script to verify what is about to be pushed.  Called by \"git\n# push\" after it has checked the remote status, but before anything has been\n# pushed.  If this script exits with a non-zero status nothing will be pushed.\n#\n# This hook is called with the following parameters:\n#\n# $1 -- Name of the remote to which the push is being done\n# $2 -- URL to which the push is being done\n#\n# If pushing without using a named remote those arguments will be equal.\n#\n# Information about the commits which are being pushed is supplied as lines to\n# the standard input in the form:\n#\n#   <local ref> <local oid> <remote ref> <remote oid>\n#\n# This sample shows how to prevent push of commits where the log message starts\n# with \"WIP\" (work in progress).\n\nremote=\"$1\"\nurl=\"$2\"\n\nzero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')\n\nwhile read local_ref local_oid remote_ref remote_oid\ndo\n\tif test \"$local_oid\" = \"$zero\"\n\tthen\n\t\t# Handle delete\n\t\t:\n\telse\n\t\tif test \"$remote_oid\" = \"$zero\"\n\t\tthen\n\t\t\t# New branch, examine all commits\n\t\t\trange=\"$local_oid\"\n\t\telse\n\t\t\t# Update to existing branch, examine new commits\n\t\t\trange=\"$remote_oid..$local_oid\"\n\t\tfi\n\n\t\t# Check for WIP commit\n\t\tcommit=$(git rev-list -n 1 --grep '^WIP' \"$range\")\n\t\tif test -n \"$commit\"\n\t\tthen\n\t\t\techo >&2 \"Found WIP commit in $local_ref, not pushing\"\n\t\t\texit 1\n\t\tfi\n\tfi\ndone\n\nexit 0\n"
+    },
+    "cwd/.git/hooks/pre-rebase.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n#\n# Copyright (c) 2006, 2008 Junio C Hamano\n#\n# The \"pre-rebase\" hook is run just before \"git rebase\" starts doing\n# its job, and can prevent the command from running by exiting with\n# non-zero status.\n#\n# The hook is called with the following parameters:\n#\n# $1 -- the upstream the series was forked from.\n# $2 -- the branch being rebased (or empty when rebasing the current branch).\n#\n# This sample shows how to prevent topic branches that are already\n# merged to 'next' branch from getting rebased, because allowing it\n# would result in rebasing already published history.\n\npublish=next\nbasebranch=\"$1\"\nif test \"$#\" = 2\nthen\n\ttopic=\"refs/heads/$2\"\nelse\n\ttopic=`git symbolic-ref HEAD` ||\n\texit 0 ;# we do not interrupt rebasing detached HEAD\nfi\n\ncase \"$topic\" in\nrefs/heads/??/*)\n\t;;\n*)\n\texit 0 ;# we do not interrupt others.\n\t;;\nesac\n\n# Now we are dealing with a topic branch being rebased\n# on top of master.  Is it OK to rebase it?\n\n# Does the topic really exist?\ngit show-ref -q \"$topic\" || {\n\techo >&2 \"No such branch $topic\"\n\texit 1\n}\n\n# Is topic fully merged to master?\nnot_in_master=`git rev-list --pretty=oneline ^master \"$topic\"`\nif test -z \"$not_in_master\"\nthen\n\techo >&2 \"$topic is fully merged to master; better remove it.\"\n\texit 1 ;# we could allow it, but there is no point.\nfi\n\n# Is topic ever merged to next?  If so you should not be rebasing it.\nonly_next_1=`git rev-list ^master \"^$topic\" ${publish} | sort`\nonly_next_2=`git rev-list ^master           ${publish} | sort`\nif test \"$only_next_1\" = \"$only_next_2\"\nthen\n\tnot_in_topic=`git rev-list \"^$topic\" master`\n\tif test -z \"$not_in_topic\"\n\tthen\n\t\techo >&2 \"$topic is already up to date with master\"\n\t\texit 1 ;# we could allow it, but there is no point.\n\telse\n\t\texit 0\n\tfi\nelse\n\tnot_in_next=`git rev-list --pretty=oneline ^${publish} \"$topic\"`\n\t/usr/bin/perl -e '\n\t\tmy $topic = $ARGV[0];\n\t\tmy $msg = \"* $topic has commits already merged to public branch:\\n\";\n\t\tmy (%not_in_next) = map {\n\t\t\t/^([0-9a-f]+) /;\n\t\t\t($1 => 1);\n\t\t} split(/\\n/, $ARGV[1]);\n\t\tfor my $elem (map {\n\t\t\t\t/^([0-9a-f]+) (.*)$/;\n\t\t\t\t[$1 => $2];\n\t\t\t} split(/\\n/, $ARGV[2])) {\n\t\t\tif (!exists $not_in_next{$elem->[0]}) {\n\t\t\t\tif ($msg) {\n\t\t\t\t\tprint STDERR $msg;\n\t\t\t\t\tundef $msg;\n\t\t\t\t}\n\t\t\t\tprint STDERR \" $elem->[1]\\n\";\n\t\t\t}\n\t\t}\n\t' \"$topic\" \"$not_in_next\" \"$not_in_master\"\n\texit 1\nfi\n\n<<\\DOC_END\n\nThis sample hook safeguards topic branches that have been\npublished from being rewound.\n\nThe workflow assumed here is:\n\n * Once a topic branch forks from \"master\", \"master\" is never\n   merged into it again (either directly or indirectly).\n\n * Once a topic branch is fully cooked and merged into \"master\",\n   it is deleted.  If you need to build on top of it to correct\n   earlier mistakes, a new topic branch is created by forking at\n   the tip of the \"master\".  This is not strictly necessary, but\n   it makes it easier to keep your history simple.\n\n * Whenever you need to test or publish your changes to topic\n   branches, merge them into \"next\" branch.\n\nThe script, being an example, hardcodes the publish branch name\nto be \"next\", but it is trivial to make it configurable via\n$GIT_DIR/config mechanism.\n\nWith this workflow, you would want to know:\n\n(1) ... if a topic branch has ever been merged to \"next\".  Young\n    topic branches can have stupid mistakes you would rather\n    clean up before publishing, and things that have not been\n    merged into other branches can be easily rebased without\n    affecting other people.  But once it is published, you would\n    not want to rewind it.\n\n(2) ... if a topic branch has been fully merged to \"master\".\n    Then you can delete it.  More importantly, you should not\n    build on top of it -- other people may already want to\n    change things related to the topic as patches against your\n    \"master\", so if you need further changes, it is better to\n    fork the topic (perhaps with the same name) afresh from the\n    tip of \"master\".\n\nLet's look at this example:\n\n\t\t   o---o---o---o---o---o---o---o---o---o \"next\"\n\t\t  /       /           /           /\n\t\t /   a---a---b A     /           /\n\t\t/   /               /           /\n\t       /   /   c---c---c---c B         /\n\t      /   /   /             \\         /\n\t     /   /   /   b---b C     \\       /\n\t    /   /   /   /             \\     /\n    ---o---o---o---o---o---o---o---o---o---o---o \"master\"\n\n\nA, B and C are topic branches.\n\n * A has one fix since it was merged up to \"next\".\n\n * B has finished.  It has been fully merged up to \"master\" and \"next\",\n   and is ready to be deleted.\n\n * C has not merged to \"next\" at all.\n\nWe would want to allow C to be rebased, refuse A, and encourage\nB to be deleted.\n\nTo compute (1):\n\n\tgit rev-list ^master ^topic next\n\tgit rev-list ^master        next\n\n\tif these match, topic has not merged in next at all.\n\nTo compute (2):\n\n\tgit rev-list master..topic\n\n\tif this is empty, it is fully merged to \"master\".\n\nDOC_END\n"
+    },
+    "cwd/.git/hooks/pre-receive.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n#\n# An example hook script to make use of push options.\n# The example simply echoes all push options that start with 'echoback='\n# and rejects all pushes when the \"reject\" push option is used.\n#\n# To enable this hook, rename this file to \"pre-receive\".\n\nif test -n \"$GIT_PUSH_OPTION_COUNT\"\nthen\n\ti=0\n\twhile test \"$i\" -lt \"$GIT_PUSH_OPTION_COUNT\"\n\tdo\n\t\teval \"value=\\$GIT_PUSH_OPTION_$i\"\n\t\tcase \"$value\" in\n\t\techoback=*)\n\t\t\techo \"echo from the pre-receive-hook: ${value#*=}\" >&2\n\t\t\t;;\n\t\treject)\n\t\t\texit 1\n\t\tesac\n\t\ti=$((i + 1))\n\tdone\nfi\n"
+    },
+    "cwd/.git/hooks/prepare-commit-msg.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n#\n# An example hook script to prepare the commit log message.\n# Called by \"git commit\" with the name of the file that has the\n# commit message, followed by the description of the commit\n# message's source.  The hook's purpose is to edit the commit\n# message file.  If the hook fails with a non-zero status,\n# the commit is aborted.\n#\n# To enable this hook, rename this file to \"prepare-commit-msg\".\n\n# This hook includes three examples. The first one removes the\n# \"# Please enter the commit message...\" help message.\n#\n# The second includes the output of \"git diff --name-status -r\"\n# into the message, just before the \"git status\" output.  It is\n# commented because it doesn't cope with --amend or with squashed\n# commits.\n#\n# The third example adds a Signed-off-by line to the message, that can\n# still be edited.  This is rarely a good idea.\n\nCOMMIT_MSG_FILE=$1\nCOMMIT_SOURCE=$2\nSHA1=$3\n\n/usr/bin/perl -i.bak -ne 'print unless(m/^. Please enter the commit message/..m/^#$/)' \"$COMMIT_MSG_FILE\"\n\n# case \"$COMMIT_SOURCE,$SHA1\" in\n#  ,|template,)\n#    /usr/bin/perl -i.bak -pe '\n#       print \"\\n\" . `git diff --cached --name-status -r`\n# \t if /^#/ && $first++ == 0' \"$COMMIT_MSG_FILE\" ;;\n#  *) ;;\n# esac\n\n# SOB=$(git var GIT_COMMITTER_IDENT | sed -n 's/^\\(.*>\\).*$/Signed-off-by: \\1/p')\n# git interpret-trailers --in-place --trailer \"$SOB\" \"$COMMIT_MSG_FILE\"\n# if test -z \"$COMMIT_SOURCE\"\n# then\n#   /usr/bin/perl -i.bak -pe 'print \"\\n\" if !$first_line++' \"$COMMIT_MSG_FILE\"\n# fi\n"
+    },
+    "cwd/.git/hooks/push-to-checkout.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n\n# An example hook script to update a checked-out tree on a git push.\n#\n# This hook is invoked by git-receive-pack(1) when it reacts to git\n# push and updates reference(s) in its repository, and when the push\n# tries to update the branch that is currently checked out and the\n# receive.denyCurrentBranch configuration variable is set to\n# updateInstead.\n#\n# By default, such a push is refused if the working tree and the index\n# of the remote repository has any difference from the currently\n# checked out commit; when both the working tree and the index match\n# the current commit, they are updated to match the newly pushed tip\n# of the branch. This hook is to be used to override the default\n# behaviour; however the code below reimplements the default behaviour\n# as a starting point for convenient modification.\n#\n# The hook receives the commit with which the tip of the current\n# branch is going to be updated:\ncommit=$1\n\n# It can exit with a non-zero status to refuse the push (when it does\n# so, it must not modify the index or the working tree).\ndie () {\n\techo >&2 \"$*\"\n\texit 1\n}\n\n# Or it can make any necessary changes to the working tree and to the\n# index to bring them to the desired state when the tip of the current\n# branch is updated to the new commit, and exit with a zero status.\n#\n# For example, the hook can simply run git read-tree -u -m HEAD \"$1\"\n# in order to emulate git fetch that is run in the reverse direction\n# with git push, as the two-tree form of git read-tree -u -m is\n# essentially the same as git switch or git checkout that switches\n# branches while keeping the local changes in the working tree that do\n# not interfere with the difference between the branches.\n\n# The below is a more-or-less exact translation to shell of the C code\n# for the default behaviour for git's push-to-checkout hook defined in\n# the push_to_deploy() function in builtin/receive-pack.c.\n#\n# Note that the hook will be executed from the repository directory,\n# not from the working tree, so if you want to perform operations on\n# the working tree, you will have to adapt your code accordingly, e.g.\n# by adding \"cd ..\" or using relative paths.\n\nif ! git update-index -q --ignore-submodules --refresh\nthen\n\tdie \"Up-to-date check failed\"\nfi\n\nif ! git diff-files --quiet --ignore-submodules --\nthen\n\tdie \"Working directory has unstaged changes\"\nfi\n\n# This is a rough translation of:\n#\n#   head_has_history() ? \"HEAD\" : EMPTY_TREE_SHA1_HEX\nif git cat-file -e HEAD 2>/dev/null\nthen\n\thead=HEAD\nelse\n\thead=$(git hash-object -t tree --stdin </dev/null)\nfi\n\nif ! git diff-index --quiet --cached --ignore-submodules $head --\nthen\n\tdie \"Working directory has staged changes\"\nfi\n\nif ! git read-tree -u -m \"$commit\"\nthen\n\tdie \"Could not update working tree to new HEAD\"\nfi\n"
+    },
+    "cwd/.git/hooks/sendemail-validate.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n\n# An example hook script to validate a patch (and/or patch series) before\n# sending it via email.\n#\n# The hook should exit with non-zero status after issuing an appropriate\n# message if it wants to prevent the email(s) from being sent.\n#\n# To enable this hook, rename this file to \"sendemail-validate\".\n#\n# By default, it will only check that the patch(es) can be applied on top of\n# the default upstream branch without conflicts in a secondary worktree. After\n# validation (successful or not) of the last patch of a series, the worktree\n# will be deleted.\n#\n# The following config variables can be set to change the default remote and\n# remote ref that are used to apply the patches against:\n#\n#   sendemail.validateRemote (default: origin)\n#   sendemail.validateRemoteRef (default: HEAD)\n#\n# Replace the TODO placeholders with appropriate checks according to your\n# needs.\n\nvalidate_cover_letter () {\n\tfile=\"$1\"\n\t# TODO: Replace with appropriate checks (e.g. spell checking).\n\ttrue\n}\n\nvalidate_patch () {\n\tfile=\"$1\"\n\t# Ensure that the patch applies without conflicts.\n\tgit am -3 \"$file\" || return\n\t# TODO: Replace with appropriate checks for this patch\n\t# (e.g. checkpatch.pl).\n\ttrue\n}\n\nvalidate_series () {\n\t# TODO: Replace with appropriate checks for the whole series\n\t# (e.g. quick build, coding style checks, etc.).\n\ttrue\n}\n\n# main -------------------------------------------------------------------------\n\nif test \"$GIT_SENDEMAIL_FILE_COUNTER\" = 1\nthen\n\tremote=$(git config --default origin --get sendemail.validateRemote) &&\n\tref=$(git config --default HEAD --get sendemail.validateRemoteRef) &&\n\tworktree=$(mktemp --tmpdir -d sendemail-validate.XXXXXXX) &&\n\tgit worktree add -fd --checkout \"$worktree\" \"refs/remotes/$remote/$ref\" &&\n\tgit config --replace-all sendemail.validateWorktree \"$worktree\"\nelse\n\tworktree=$(git config --get sendemail.validateWorktree)\nfi || {\n\techo \"sendemail-validate: error: failed to prepare worktree\" >&2\n\texit 1\n}\n\nunset GIT_DIR GIT_WORK_TREE\ncd \"$worktree\" &&\n\nif grep -q \"^diff --git \" \"$1\"\nthen\n\tvalidate_patch \"$1\"\nelse\n\tvalidate_cover_letter \"$1\"\nfi &&\n\nif test \"$GIT_SENDEMAIL_FILE_COUNTER\" = \"$GIT_SENDEMAIL_FILE_TOTAL\"\nthen\n\tgit config --unset-all sendemail.validateWorktree &&\n\ttrap 'git worktree remove -ff \"$worktree\"' EXIT &&\n\tvalidate_series\nfi\n"
+    },
+    "cwd/.git/hooks/update.sample": {
+     "mode": "775",
+     "content": "#!/bin/sh\n#\n# An example hook script to block unannotated tags from entering.\n# Called by \"git receive-pack\" with arguments: refname sha1-old sha1-new\n#\n# To enable this hook, rename this file to \"update\".\n#\n# Config\n# ------\n# hooks.allowunannotated\n#   This boolean sets whether unannotated tags will be allowed into the\n#   repository.  By default they won't be.\n# hooks.allowdeletetag\n#   This boolean sets whether deleting tags will be allowed in the\n#   repository.  By default they won't be.\n# hooks.allowmodifytag\n#   This boolean sets whether a tag may be modified after creation. By default\n#   it won't be.\n# hooks.allowdeletebranch\n#   This boolean sets whether deleting branches will be allowed in the\n#   repository.  By default they won't be.\n# hooks.denycreatebranch\n#   This boolean sets whether remotely creating branches will be denied\n#   in the repository.  By default this is allowed.\n#\n\n# --- Command line\nrefname=\"$1\"\noldrev=\"$2\"\nnewrev=\"$3\"\n\n# --- Safety check\nif [ -z \"$GIT_DIR\" ]; then\n\techo \"Don't run this script from the command line.\" >&2\n\techo \" (if you want, you could supply GIT_DIR then run\" >&2\n\techo \"  $0 <ref> <oldrev> <newrev>)\" >&2\n\texit 1\nfi\n\nif [ -z \"$refname\" -o -z \"$oldrev\" -o -z \"$newrev\" ]; then\n\techo \"usage: $0 <ref> <oldrev> <newrev>\" >&2\n\texit 1\nfi\n\n# --- Config\nallowunannotated=$(git config --type=bool hooks.allowunannotated)\nallowdeletebranch=$(git config --type=bool hooks.allowdeletebranch)\ndenycreatebranch=$(git config --type=bool hooks.denycreatebranch)\nallowdeletetag=$(git config --type=bool hooks.allowdeletetag)\nallowmodifytag=$(git config --type=bool hooks.allowmodifytag)\n\n# check for no description\nprojectdesc=$(sed -e '1q' \"$GIT_DIR/description\")\ncase \"$projectdesc\" in\n\"Unnamed repository\"* | \"\")\n\techo \"*** Project description file hasn't been set\" >&2\n\texit 1\n\t;;\nesac\n\n# --- Check types\n# if $newrev is 0000...0000, it's a commit to delete a ref.\nzero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')\nif [ \"$newrev\" = \"$zero\" ]; then\n\tnewrev_type=delete\nelse\n\tnewrev_type=$(git cat-file -t $newrev)\nfi\n\ncase \"$refname\",\"$newrev_type\" in\n\trefs/tags/*,commit)\n\t\t# un-annotated tag\n\t\tshort_refname=${refname##refs/tags/}\n\t\tif [ \"$allowunannotated\" != \"true\" ]; then\n\t\t\techo \"*** The un-annotated tag, $short_refname, is not allowed in this repository\" >&2\n\t\t\techo \"*** Use 'git tag [ -a | -s ]' for tags you want to propagate.\" >&2\n\t\t\texit 1\n\t\tfi\n\t\t;;\n\trefs/tags/*,delete)\n\t\t# delete tag\n\t\tif [ \"$allowdeletetag\" != \"true\" ]; then\n\t\t\techo \"*** Deleting a tag is not allowed in this repository\" >&2\n\t\t\texit 1\n\t\tfi\n\t\t;;\n\trefs/tags/*,tag)\n\t\t# annotated tag\n\t\tif [ \"$allowmodifytag\" != \"true\" ] && git rev-parse $refname > /dev/null 2>&1\n\t\tthen\n\t\t\techo \"*** Tag '$refname' already exists.\" >&2\n\t\t\techo \"*** Modifying a tag is not allowed in this repository.\" >&2\n\t\t\texit 1\n\t\tfi\n\t\t;;\n\trefs/heads/*,commit)\n\t\t# branch\n\t\tif [ \"$oldrev\" = \"$zero\" -a \"$denycreatebranch\" = \"true\" ]; then\n\t\t\techo \"*** Creating a branch is not allowed in this repository\" >&2\n\t\t\texit 1\n\t\tfi\n\t\t;;\n\trefs/heads/*,delete)\n\t\t# delete branch\n\t\tif [ \"$allowdeletebranch\" != \"true\" ]; then\n\t\t\techo \"*** Deleting a branch is not allowed in this repository\" >&2\n\t\t\texit 1\n\t\tfi\n\t\t;;\n\trefs/remotes/*,commit)\n\t\t# tracking branch\n\t\t;;\n\trefs/remotes/*,delete)\n\t\t# delete tracking branch\n\t\tif [ \"$allowdeletebranch\" != \"true\" ]; then\n\t\t\techo \"*** Deleting a tracking branch is not allowed in this repository\" >&2\n\t\t\texit 1\n\t\tfi\n\t\t;;\n\t*)\n\t\t# Anything else (is there anything else?)\n\t\techo \"*** Update hook: unknown type of update to ref $refname of type $newrev_type\" >&2\n\t\texit 1\n\t\t;;\nesac\n\n# --- Finished\nexit 0\n"
+    },
+    "cwd/.git/info/": {
+     "mode": "775"
+    },
+    "cwd/.git/info/exclude": {
+     "mode": "664",
+     "content": "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n"
+    },
+    "cwd/.git/objects/": {
+     "mode": "775"
+    },
+    "cwd/.git/objects/info/": {
+     "mode": "775"
+    },
+    "cwd/.git/objects/pack/": {
+     "mode": "775"
+    },
+    "cwd/.git/refs/": {
+     "mode": "775"
+    },
+    "cwd/.git/refs/heads/": {
+     "mode": "775"
+    },
+    "cwd/.git/refs/tags/": {
+     "mode": "775"
+    },
+    "home/": {
+     "mode": "775"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo hi\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": \"HEAD\"\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "775"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "664",
+     "content": "[<TS>] [<ROOT>/cwd] echo hi\n"
+    },
+    "run/": {
+     "mode": "775"
+    },
+    "tmp/": {
+     "mode": "775"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  }
+ }
+}

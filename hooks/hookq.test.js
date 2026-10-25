@@ -116,13 +116,22 @@ const postAsk = (repo, sid, over = {}) => ({
 
 // ---------- wiring ----------
 
+const { parseChainCommand } = require('../scripts/lib/chain-command.js');
+// A hook command "hosts" a stem when it is that hook's own script or a post-tool-chain registration naming it
+// (the shared parser expands the chain; the depth-0 ruling of the guard port folds intent-capture, audit-log and log-error into one process).
+const hostsStem = (cmd, stem) => {
+  const chain = parseChainCommand(cmd);
+  return chain ? chain.members.includes(stem) : cmd.includes(`/hooks/${stem}.js`);
+};
+
 test('wiring: ONE new PreToolUse entry with the exact matcher AskUserQuestion; no new PostToolUse process; classified', () => {
   const groups = HOOKS.PreToolUse.filter((g) => g.hooks.some((h) => h.command.includes('/hooks/ask-decision.js')));
   assert.strictEqual(groups.length, 1);
   assert.strictEqual(groups[0].matcher, 'AskUserQuestion');
   const postCmds = HOOKS.PostToolUse.filter((g) => !g.matcher || g.matcher === '.*').flatMap((g) => g.hooks.map((h) => h.command));
   assert.ok(!postCmds.some((c) => c.includes('ask-decision') || c.includes('merge-task-status')), 'hosted in audit-log.js, no own process');
-  assert.strictEqual(postCmds.length, 7);
+  // 5 = the former 7 minus the 2 folded into post-tool-chain (intent-capture + audit-log + log-error in one process; guard port, depth-0 ruling (a))
+  assert.strictEqual(postCmds.length, 5);
   const classes = JSON.parse(fs.readFileSync(path.join(ROOT, 'profiles', 'hook-classes.json'), 'utf8'));
   assert.ok(JSON.stringify(classes).includes('"ask-decision"'));
   const readme = fs.readFileSync(path.join(ROOT, 'hooks', 'README.md'), 'utf8');
@@ -442,8 +451,9 @@ test('B: the audit log still records the command and the hosted legs never fail 
 });
 
 test('wiring: audit-log.js sits in the `.*` PostToolUse group (the AskUserQuestion close leg is hosted there); README matcher wording agrees', () => {
-  const g = HOOKS.PostToolUse.filter((x) => x.hooks.some((h) => h.command.endsWith('/hooks/audit-log.js')));
-  assert.strictEqual(g.length, 1, 'audit-log.js appears in exactly one PostToolUse group');
+  const g = HOOKS.PostToolUse.filter((x) => x.hooks.some((h) => hostsStem(h.command, 'audit-log')));
+  assert.strictEqual(g.length, 1, 'audit-log.js is hosted in exactly one PostToolUse group (directly or via the chain argv)');
+  assert.strictEqual(g[0].hooks.filter((h) => hostsStem(h.command, 'audit-log')).length, 1, 'and exactly one process in that group hosts it');
   assert.strictEqual(g[0].matcher, '.*', 'the close leg needs every tool, AskUserQuestion included');
   const readme = fs.readFileSync(path.join(ROOT, 'hooks', 'README.md'), 'utf8');
   const row = readme.split('\n').find((l) => /^\| audit-log \| PostToolUse \|/.test(l));

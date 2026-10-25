@@ -116,11 +116,20 @@ const entries = (event, tool) => {
 
 // ---------- wiring: process counts ----------
 
+const { parseChainCommand } = require('../scripts/lib/chain-command.js');
+// A hook command "hosts" a stem when it is that hook's own script or a post-tool-chain registration naming it
+// (the shared parser expands the chain; the depth-0 ruling of the guard port folds intent-capture, audit-log and log-error into one process).
+const hostsStem = (cmd, stem) => {
+  const chain = parseChainCommand(cmd);
+  return chain ? chain.members.includes(stem) : cmd.includes(`/hooks/${stem}.js`);
+};
+
 test('wiring: PostToolUse(Bash) spawns no awaiting-owner process; audit-log is the default-on host', () => {
   const cmds = entries('PostToolUse', 'Bash');
   assert.ok(!cmds.some((c) => c.includes('/hooks/awaiting-owner.js')), 'awaiting-owner must not be a PostToolUse process');
-  assert.ok(cmds.some((c) => c.includes('/hooks/audit-log.js')), 'host hook stays wired on PostToolUse .*');
-  assert.strictEqual(cmds.length, 7, `7 default-on PostToolUse processes (was 8 with awaiting-owner): ${cmds.join(' | ')}`);
+  assert.ok(cmds.some((c) => hostsStem(c, 'audit-log')), 'host hook stays wired on PostToolUse .* (directly or inside the post-tool-chain argv)');
+  // 5 = the former 7 minus the 2 that post-tool-chain folds in (intent-capture + audit-log + log-error share one process; plan docs/plans/2026-10-23-guard-port.md, depth-0 ruling (a))
+  assert.strictEqual(cmds.length, 5, `5 default-on PostToolUse processes (was 7 before the chain, 8 with awaiting-owner): ${cmds.join(' | ')}`);
 });
 
 test('wiring: UserPromptSubmit spawns ONE process (advisory-relay, timeout 10); autostart + awaiting-owner are hosted; SessionStart keeps its own autostart', () => {

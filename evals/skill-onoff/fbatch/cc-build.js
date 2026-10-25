@@ -1,6 +1,6 @@
 'use strict';
 // fbatch/cc-build.js — assemble, for one campaign run, the packs / arm manifests / tasks directories that the
-// shared bpack cell runner (run-skill-onoff-matrix-bpack.sh -> run-skill-onoff-eval-bpack.sh) already knows how to
+// fbatch cell runner (run-skill-onoff-matrix-fbatch.sh -> run-skill-onoff-eval-fbatch.sh, a pinned copy of the bpack one) already knows how to
 // consume through ONOFF_PACKS_DIR, --arm-manifests and ONOFF_TASKS_DIR. Nothing in the runner is copied or edited.
 //
 // Arm text reaches the agent as ONE skill, autopilot:fbatch-lane-rules (the campaign's invocation prefix tells the

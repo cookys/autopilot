@@ -13,8 +13,8 @@
 // Same flag contract as run-bpack-campaign.js. --dry-run ALSO needs --results (usage error
 // otherwise, although it never spawns anything). --dry-run and --check-arms never spend.
 // --runner stub scores deterministic stub cells (no model).
-// --runner cc runs real `claude -p` cells through the bpack runner (run-skill-onoff-matrix-bpack.sh ->
-// run-skill-onoff-eval-bpack.sh, shared as is: scratch HOME + scratch CLAUDE_CONFIG_DIR holding only
+// --runner cc runs real `claude -p` cells through the fbatch runner, a pinned copy of the bpack one (run-skill-onoff-matrix-fbatch.sh ->
+// run-skill-onoff-eval-fbatch.sh: scratch HOME + scratch CLAUDE_CONFIG_DIR holding only
 // .credentials.json, plugin built per cell, turn2.sh second turn). This script only supplies the inputs through
 // the runner's own env overlays (ONOFF_PACKS_DIR, ONOFF_TASKS_DIR, ONOFF_PROMPT_PREFIX, ONOFF_TIMEOUT,
 // ONOFF_KEEP_CELLS_DIR, --arm-manifests, --check-skill): fbatch/cc-build.js assembles them per run from
@@ -267,7 +267,7 @@ function runCc() {
     }
     console.log(`== cell ${key} (budget ${budget} USD)`);
     const before = fs.existsSync(abs) ? fs.statSync(abs).size : 0;
-    const r = cp.spawnSync('bash', [path.join(HERE, 'run-skill-onoff-matrix-bpack.sh'),
+    const r = cp.spawnSync('bash', [path.join(HERE, 'run-skill-onoff-matrix-fbatch.sh'),
       '--model', MODEL, '--reps', String(rep), '--results', abs, '--tasks', g.task, '--arms', arm,
       '--runner', 'cc', '--arm-manifests', bd.armManifestsDir, '--check-skill', CC.skill], {
       stdio: 'inherit',

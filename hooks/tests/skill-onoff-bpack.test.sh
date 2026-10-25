@@ -210,54 +210,10 @@ if ! git -C "$REPO_ROOT" diff --quiet 788f92268 -- evals/skill-onoff/run-skill-o
   git -C "$REPO_ROOT" cat-file -e 788f92268 2>/dev/null && fail "shared runner/matrix differ from 788f92268"
 fi
 
-echo "=== runner copy differs from the gdorm copy only in names, comments and the pinned findings-batch delta ==="
+echo "=== runner copy differs from the gdorm copy only in names and comments ==="
 diff <(sed 's/gdorm/bpack/g' "$BASE/run-skill-onoff-matrix-gdorm.sh") "$BASE/run-skill-onoff-matrix-bpack.sh" > /dev/null || fail "matrix-bpack drifted from matrix-gdorm"
-# The gdorm copy is digest-frozen (prereg/FROZEN.json), so it never changes. The bpack copy carries exactly one code delta
-# on top of it, for the findings-batch cc rows: ONOFF_MAX_BUDGET_USD (a hard per-cell spend cap handed to every `claude -p`
-# as --max-budget-usd, turn 2 gets what turn 1 left, a budget stop is infra_fail/budget_exceeded) and ONOFF_CELL_TMPDIR=1
-# (the agent's TMPDIR is a directory inside the scratch HOME). Both are opt-in env; unset = the gdorm behaviour. The delta
-# is pinned below line for line: any other code difference, or any edit of these lines, is red.
-code_delta() { diff -U0 <(grep -v '^[[:space:]]*#' "$BASE/run-skill-onoff-eval-gdorm.sh") <(grep -v '^[[:space:]]*#' "$1") | sed '1,2d' | grep -E '^[+-]' || true; }
-cat > "$TEST_TMP/bpack-delta.expected" << 'DELTA'
-+BUDGET_USD=""; BUDGET_EXHAUSTED=0; CELL_TMPDIR=""
-+if [ -n "${ONOFF_MAX_BUDGET_USD:-}" ]; then
-+  [[ "$ONOFF_MAX_BUDGET_USD" =~ ^[0-9]+(\.[0-9]+)?$ ]] && [ -n "${ONOFF_MAX_BUDGET_USD//[0.]/}" ] || { echo "ERROR: ONOFF_MAX_BUDGET_USD must be a positive number: $ONOFF_MAX_BUDGET_USD" >&2; exit 2; }
-+  BUDGET_USD="$ONOFF_MAX_BUDGET_USD"
-+fi
-+if [ "${ONOFF_CELL_TMPDIR:-0}" = 1 ]; then CELL_TMPDIR="$SCRATCH_HOME/tmp"; mkdir -p "$CELL_TMPDIR"; fi
--  local prompt="$1" dest="$2" turn_n="$3" resume="${4:-}"
-+  local prompt="$1" dest="$2" turn_n="$3" resume="${4:-}" budget="${5:-}"
-+  local budget_args=()
-+  [ -z "$budget" ] || budget_args=(--max-budget-usd "$budget")
-+      [ -z "$CELL_TMPDIR" ] || export TMPDIR="$CELL_TMPDIR"
-+          "${budget_args[@]+"${budget_args[@]}"}" \
-+          "${budget_args[@]+"${budget_args[@]}"}" \
--  run_model_turn "$PROMPT_FILE" "$TRANSCRIPT" 1 ""
-+  run_model_turn "$PROMPT_FILE" "$TRANSCRIPT" 1 "" "$BUDGET_USD"
-+      BUDGET_TURN2=""
-+      if [ -n "$BUDGET_USD" ]; then
-+        BUDGET_TURN2=$(node -e '
-+          let spent=0;
-+          try{for(const l of require("fs").readFileSync(process.argv[1],"utf8").split("\n")){
-+            let j;try{j=JSON.parse(l)}catch{continue}
-+            if(j&&j.type==="result"&&typeof j.total_cost_usd==="number"&&j.total_cost_usd>0) spent+=j.total_cost_usd;
-+          }}catch{}
-+          process.stdout.write(Math.max(0,Number(process.argv[2])-spent).toFixed(6));
-+        ' "$TURN1_FILE" "$BUDGET_USD")
-+      fi
-+      elif [ -n "$BUDGET_USD" ] && [ -z "${BUDGET_TURN2//[0.]/}" ]; then
-+        BUDGET_EXHAUSTED=1
--        run_model_turn "$TURN2_PROMPT" "$TURN2_FILE" 2 "$SESSION_ID"
-+        run_model_turn "$TURN2_PROMPT" "$TURN2_FILE" 2 "$SESSION_ID" "$BUDGET_TURN2"
-+elif [ "$BUDGET_EXHAUSTED" -eq 1 ] || { [ -n "$BUDGET_USD" ] && grep -Eq '"subtype": ?"error_max_budget' "$TRANSCRIPT"; }; then
-+  failure_class='"infra_fail"'; failure_cause='"budget_exceeded"'
-DELTA
-code_delta "$BASE/run-skill-onoff-eval-bpack.sh" > "$TEST_TMP/bpack-delta.actual"
-diff "$TEST_TMP/bpack-delta.expected" "$TEST_TMP/bpack-delta.actual" > "$TEST_TMP/bpack-delta.diff" || fail "eval-bpack code differs from eval-gdorm by more or less than the pinned delta: $(cat "$TEST_TMP/bpack-delta.diff")"
-# negative control: a bpack copy with one extra code line must be red
-sed 's/^BUDGET_USD=""; /BUDGET_USD=""; EXTRA_LINE=1; /' "$BASE/run-skill-onoff-eval-bpack.sh" > "$TEST_TMP/eval-bpack.mutant.sh"
-code_delta "$TEST_TMP/eval-bpack.mutant.sh" > "$TEST_TMP/bpack-delta.mutant"
-! diff -q "$TEST_TMP/bpack-delta.expected" "$TEST_TMP/bpack-delta.mutant" > /dev/null || fail "the delta pin did not notice a changed code line"
+d=$(diff <(grep -v '^[[:space:]]*#' "$BASE/run-skill-onoff-eval-gdorm.sh") <(grep -v '^[[:space:]]*#' "$BASE/run-skill-onoff-eval-bpack.sh")) || true
+[ -z "$d" ] || fail "eval-bpack code differs from eval-gdorm: $d"
 grep -q 'run-skill-onoff-eval-bpack.sh' "$BASE/run-skill-onoff-matrix-bpack.sh" || fail "matrix-bpack does not call eval-bpack"
 
 # ---- sections below need Hand B's files ----

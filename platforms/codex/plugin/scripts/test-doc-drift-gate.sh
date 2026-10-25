@@ -77,6 +77,21 @@ if node "$script_dir/doc-drift-gate.js" "$fixture/hooks" --repo-root "$fixture" 
 fi
 rm -rf "$fixture/hooks"
 
+# --- findings-batch cell fixtures: docs under evals/skill-onoff/fbatch/cc name the fixture's own stub scripts
+# (resolved inside the eval cell repo), so DEFAULT_EXCLUDES skips that tree by path; the same doc anywhere else still fails.
+mkdir -p "$fixture/evals/skill-onoff/fbatch/cc/stubs/scripts" "$fixture/evals/skill-onoff/other"
+printf '%s\n' '# Batch tooling' '' 'Run `scripts/merge-lane.sh A`.' >"$fixture/evals/skill-onoff/fbatch/cc/stubs/scripts/README.md"
+if ! node "$script_dir/doc-drift-gate.js" "$fixture/evals/skill-onoff/fbatch" --repo-root "$fixture" >/dev/null; then
+  echo "test-doc-drift-gate: FAIL — findings-batch cell fixture docs should have been excluded" >&2
+  exit 1
+fi
+printf '%s\n' '# Not a cell fixture' '' 'Run `scripts/merge-lane.sh A`.' >"$fixture/evals/skill-onoff/other/README.md"
+if node "$script_dir/doc-drift-gate.js" "$fixture/evals/skill-onoff/other" --repo-root "$fixture" >/dev/null; then
+  echo "test-doc-drift-gate: FAIL — the same missing script ref outside the cell fixtures must still fail the gate" >&2
+  exit 1
+fi
+rm -rf "$fixture/evals"
+
 # --- doc-relative script-ref resolution: a subproject doc (e.g. viewer/README.md)
 # that references `scripts/x` meaning ITS OWN scripts/ subdir (not the repo root's)
 # must resolve against the doc's own directory, not just --repo-root.

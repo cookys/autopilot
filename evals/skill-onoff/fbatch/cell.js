@@ -3,7 +3,7 @@
 // fbatch/cell.js — score one finished findings-batch cell and read its spend. No model call, no network.
 //
 //   cell.js markers --task <id> --transcript <file> --git-dir <dir> --repo <dir> --home <dir>
-//       prints marker_<name>=true|false for the task (the shape run-skill-onoff-eval-bpack.sh reads), plus
+//       prints marker_<name>=true|false for the task (the shape run-skill-onoff-eval-fbatch.sh reads), plus
 //       marker_findings_write (not a scored marker): true when the cell created a path whose name contains "findings"
 //       (see below); the campaign turns such a cell into an invalid_cell row, so a cell where the agent wrote a
 //       report-style FINDINGS file can never score. Exit 2 when the evidence cannot be read (no ledger, a corrupt

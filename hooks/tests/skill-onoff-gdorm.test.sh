@@ -457,6 +457,7 @@ echo "=== every FROZEN row that is ok at develop 778f39dee still checks ok ==="
 # Not ok there: stage-graph-g67 (FROZEN row not stamped), stage-graph-g8
 # (digest mismatch: packs/manifest.json, run-skill-onoff-eval.sh,
 # run-skill-onoff-matrix.sh, stamp-prereg.js). gdorm is this branch's row.
+# findings-batch was a draft (not stamped) at 778f39dee; it is stamped now (94b924092), so it is expected ok and listed in expect_ok.
 python3 - "$BASE" << 'PY' || fail "frozen row check"
 import json, os, subprocess, sys
 base = sys.argv[1]
@@ -470,11 +471,11 @@ for key, val in frozen.items():
     if not os.path.isfile(os.path.join(base, "prereg", key + ".json")):
         continue
     rows.append(key)
-expect_ok = {"qs", "qs-v2", "qs-v3", "dcard", "dcard-v2", "dcard-v3", "gdorm", "bpack"}
+expect_ok = {"qs", "qs-v2", "qs-v3", "dcard", "dcard-v2", "dcard-v3", "gdorm", "bpack", "findings-batch"}
 env = os.environ.copy()
 env.pop("AUTOPILOT_SESSION_ID", None)
 env.pop("CLAUDE_CODE_SESSION_ID", None)
-bad = []
+bad = [f"{r} is expected ok but has no stamped FROZEN row" for r in sorted(expect_ok - set(rows))]
 for row in rows:
     p = subprocess.run(
         ["node", os.path.join(base, "stamp-prereg.js"), "--row", row, "--check"],

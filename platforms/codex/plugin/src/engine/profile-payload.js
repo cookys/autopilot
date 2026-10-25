@@ -329,6 +329,15 @@ function loadHookClasses(repoRoot = DEFAULT_REPO_ROOT) {
           }
           continue;
         }
+        if (match[1] === 'post-tool-chain') {
+          // guard port (BL-0241): the chain's argv names the stems it hosts (none named: the chain's five defaults)
+          const argv = (/post-tool-chain\.js((?:\s+[A-Za-z0-9_-]+)*)\s*$/u.exec(hook.command || '') || [, ''])[1]
+            .trim().split(/\s+/u).filter(Boolean);
+          for (const stem of argv.length ? argv : ['intent-capture', 'reload-watch', 'audit-log', 'log-error', 'failure-escalation']) {
+            wired.push(stem);
+          }
+          continue;
+        }
         wired.push(match[1]);
       }
     }

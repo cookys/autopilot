@@ -1,0 +1,3 @@
+# bash-launch-guard test timing assertion fails under high host load
+
+BL-0305. `hooks/bash-launch-guard.test.js:776` asserts that a 16000-character input and a 64 KB input are each handled in under 100 ms. With host load average around 35 it fails every time: 121 ms at 670b3ffaf and 106 ms at 1d38cfefb on 2026-10-25, red on three reruns each; it was green under normal load. Effect: the pre-push suite shows a red unrelated to the change, which needs manual reading. Options when picked up: measure CPU time instead of wall time, or relax the bound with a load-aware margin, with a negative control that still fails on a genuinely quadratic regression.

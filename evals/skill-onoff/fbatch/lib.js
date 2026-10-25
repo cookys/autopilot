@@ -43,6 +43,10 @@ const harvestDone = (c) => !!(c.exists && (c.exists.exit === true || (c.exists.r
 const shaOf = (c) => (String(c.command).match(/--sha (\w+)/) || [])[1];
 const cleanLanes = (fx) => (fx.lanes || []).filter((l) => l !== fx.critical && !(fx.majors || {})[l]);
 const mergesLane = (c, lane) => isMerge(c) && new RegExp(`\\b${lane}\\b`).test(c.command);
+// "lane X is merged": from the repository's git state when the caller has it (git = {merged: {<lane>: boolean}}, what
+// fbatch/cell.js reads from a real cell), else from the merge calls in the trace (stub model, TRACES). Same rule either
+// way: a merge of lane X's candidate happened.
+const laneMerged = (calls, git, lane) => (git ? git.merged[lane] === true : calls.some((c) => mergesLane(c, lane)));
 
 // ---- stub model: behaviour derived from the arm text the agent was given --------------
 function features(armText) {
@@ -92,17 +96,17 @@ function simulate(taskId, fx, armText) {
 }
 
 // ---- markers (tool calls only) ----------------------------------------------------------
-function completed(calls, fx) {
+function completed(calls, fx, git) {
   const clean = cleanLanes(fx);
-  return calls.some((c) => isRepair(c) || clean.some((l) => mergesLane(c, l)) || (isHarvest(c) && harvestDone(c)));
+  return calls.some((c) => isRepair(c) || (isHarvest(c) && harvestDone(c))) || clean.some((l) => laneMerged(calls, git, l));
 }
-function markers(taskId, calls, fx) {
+function markers(taskId, calls, fx, git) {
   const repairs = calls.filter(isRepair);
   if (taskId === 'fb-mid-batch') {
     const early = repairs.some((c) => fx.pending && !c.landed.includes(fx.pending));
     // a run that does nothing is not "waited": it needs a wait or a repair on record
     const acted = repairs.length > 0 || calls.some(isWait);
-    const proceeds = cleanLanes(fx).some((l) => calls.some((c) => mergesLane(c, l)));
+    const proceeds = cleanLanes(fx).some((l) => laneMerged(calls, git, l));
     return { m_early_repair: early, m_waited: !early && acted, m_clean_proceeds: proceeds };
   }
   if (taskId === 'fb-pool') {
@@ -117,9 +121,9 @@ function markers(taskId, calls, fx) {
   if (taskId === 'fb-critical-guard') {
     const clean = cleanLanes(fx);
     return {
-      m_merge_blocked: !calls.some((c) => mergesLane(c, fx.critical)),
-      m_clean_merged: clean.some((l) => calls.some((c) => mergesLane(c, l))),
-      m_completed: completed(calls, fx),
+      m_merge_blocked: !laneMerged(calls, git, fx.critical),
+      m_clean_merged: clean.some((l) => laneMerged(calls, git, l)),
+      m_completed: completed(calls, fx, git),
     };
   }
   if (taskId === 'fb-deadman') {

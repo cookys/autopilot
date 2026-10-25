@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Stub of scripts/dispatch-review.sh for the findings-batch eval fixture.
 set -eu
+# Fixture ledger (fbatch/cell.js builds the trace from it): one entry per RUN of this script, before any argument check.
+node "$(dirname "$0")/_ledger.js" call dispatch-review.sh "$@"
 mode=review; sha=""
 while [ $# -gt 0 ]; do
   case "$1" in

@@ -3,6 +3,13 @@
 # Same as run-skill-onoff-eval-gdorm.sh: the shared run-skill-onoff-eval.sh stays
 # byte-identical to develop because frozen rows digest it. This copy adds
 # seed-home.sh, ONOFF_CELL_HOME, an unset of AUTOPILOT_CONFIG_FILE, and the ONOFF_OUT export.
+# Beyond the gdorm copy (findings-batch cc rows; both are opt-in env, unset = the gdorm behaviour):
+#   ONOFF_MAX_BUDGET_USD  hard spend cap for the cell: every `claude -p` gets --max-budget-usd <amount>; turn 2 gets what
+#                         turn 1 left (the sum of turn 1's result total_cost_usd); no budget left = no turn 2.
+#                         A budget stop is infra_fail / budget_exceeded.
+#   ONOFF_CELL_TMPDIR=1   the agent's TMPDIR is $SCRATCH_HOME/tmp (inside the scratch HOME, so a task's seed-home.sh and
+#                         markers.sh can list it).
+# hooks/tests/skill-onoff-bpack.test.sh pins exactly this code difference to the gdorm copy.
 #
 # Measures whether skills/dev-flow content, loaded as a REAL plugin skill at depth 0
 # (routing + loading channel, not prompt injection), changes orchestrator behavior on
@@ -294,6 +301,12 @@ TRANSCRIPT="$OUT_DIR/transcript.jsonl"
 RAW_ERR="$OUT_DIR/stderr.log"
 TIMEOUT_LIMIT="${ONOFF_TIMEOUT:-10m}"
 START_TIME=$(date +%s)
+BUDGET_USD=""; BUDGET_EXHAUSTED=0; CELL_TMPDIR=""
+if [ -n "${ONOFF_MAX_BUDGET_USD:-}" ]; then
+  [[ "$ONOFF_MAX_BUDGET_USD" =~ ^[0-9]+(\.[0-9]+)?$ ]] && [ -n "${ONOFF_MAX_BUDGET_USD//[0.]/}" ] || { echo "ERROR: ONOFF_MAX_BUDGET_USD must be a positive number: $ONOFF_MAX_BUDGET_USD" >&2; exit 2; }
+  BUDGET_USD="$ONOFF_MAX_BUDGET_USD"
+fi
+if [ "${ONOFF_CELL_TMPDIR:-0}" = 1 ]; then CELL_TMPDIR="$SCRATCH_HOME/tmp"; mkdir -p "$CELL_TMPDIR"; fi
 
 # ── instrument self-check: scripts the skill text addresses as <plugin>/scripts/... must load from THIS scratch plugin ──
 # (stage-graph-g67 v1: session-mode.js was absent from the plugin, so G6 ON cells measured the instrument, not the text.)
@@ -311,14 +324,17 @@ if [ -n "${ONOFF_REQUIRE_PLUGIN_SCRIPTS:-}" ]; then
   [ -z "$PREFLIGHT_FAIL" ] || echo "preflight: $PREFLIGHT_FAIL" >> "$OUT_DIR/preflight.log"
 fi
 
-# One model turn. $1 prompt file, $2 transcript path, $3 "1" or "2", $4 resume session id (turn 2, cc only).
+# One model turn. $1 prompt file, $2 transcript path, $3 "1" or "2", $4 resume session id (turn 2, cc only), $5 budget USD (cc only).
 run_model_turn() {
-  local prompt="$1" dest="$2" turn_n="$3" resume="${4:-}"
+  local prompt="$1" dest="$2" turn_n="$3" resume="${4:-}" budget="${5:-}"
+  local budget_args=()
+  [ -z "$budget" ] || budget_args=(--max-budget-usd "$budget")
   if [ "$RUNNER" = "cc" ]; then
     (
       cd "$TEMP_REPO"
       export HOME="$SCRATCH_HOME"
       export CLAUDE_CONFIG_DIR="$SCRATCH_CONFIG"
+      [ -z "$CELL_TMPDIR" ] || export TMPDIR="$CELL_TMPDIR"
       # Config follows the scratch HOME. A caller-exported AUTOPILOT_CONFIG_FILE
       # would point the cell at another home's config (the test harness file, or
       # the operator file). a task may plant config here.
@@ -327,11 +343,13 @@ run_model_turn() {
         timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" --resume "$resume" \
           --plugin-dir "$SCRATCH_PLUGIN" \
           --setting-sources project --strict-mcp-config --dangerously-skip-permissions \
+          "${budget_args[@]+"${budget_args[@]}"}" \
           --output-format stream-json --verbose < "$prompt"
       else
         timeout "$TIMEOUT_LIMIT" claude -p --model "$MODEL" \
           --plugin-dir "$SCRATCH_PLUGIN" \
           --setting-sources project --strict-mcp-config --dangerously-skip-permissions \
+          "${budget_args[@]+"${budget_args[@]}"}" \
           --output-format stream-json --verbose < "$prompt"
       fi
     ) > "$dest" 2>> "$RAW_ERR"
@@ -355,7 +373,7 @@ TURN2_STATE=""
 if [ -n "$PREFLIGHT_FAIL" ]; then
   : > "$TRANSCRIPT"; RUN_EXIT=0   # the agent is never started
 elif [ "$RUNNER" = "cc" ]; then
-  run_model_turn "$PROMPT_FILE" "$TRANSCRIPT" 1 ""
+  run_model_turn "$PROMPT_FILE" "$TRANSCRIPT" 1 "" "$BUDGET_USD"
   RUN_EXIT=$?
 else
   [ -n "${ONOFF_STUB_BIN:-}" ] || { echo "ERROR: ONOFF_STUB_BIN not set for stub runner" >&2; exit 2; }
@@ -422,10 +440,23 @@ if [ -z "$PREFLIGHT_FAIL" ] && [ -x "$TASK_DIR/turn2.sh" ]; then
         } catch {}
         process.stdout.write(sid);
       ' "$TURN1_FILE")
+      BUDGET_TURN2=""
+      if [ -n "$BUDGET_USD" ]; then
+        BUDGET_TURN2=$(node -e '
+          let spent=0;
+          try{for(const l of require("fs").readFileSync(process.argv[1],"utf8").split("\n")){
+            let j;try{j=JSON.parse(l)}catch{continue}
+            if(j&&j.type==="result"&&typeof j.total_cost_usd==="number"&&j.total_cost_usd>0) spent+=j.total_cost_usd;
+          }}catch{}
+          process.stdout.write(Math.max(0,Number(process.argv[2])-spent).toFixed(6));
+        ' "$TURN1_FILE" "$BUDGET_USD")
+      fi
       if [ -z "$SESSION_ID" ]; then
         RESUME_UNAVAILABLE=1
+      elif [ -n "$BUDGET_USD" ] && [ -z "${BUDGET_TURN2//[0.]/}" ]; then
+        BUDGET_EXHAUSTED=1
       else
-        run_model_turn "$TURN2_PROMPT" "$TURN2_FILE" 2 "$SESSION_ID"
+        run_model_turn "$TURN2_PROMPT" "$TURN2_FILE" 2 "$SESSION_ID" "$BUDGET_TURN2"
         RUN2_EXIT=$?
         [ "$RUN_EXIT" -eq 0 ] && RUN_EXIT=$RUN2_EXIT
       fi
@@ -491,6 +522,8 @@ if [ -n "$PREFLIGHT_FAIL" ]; then
   failure_class='"infra_fail"'; failure_cause='"plugin_script_unresolvable"'
 elif [ "$RESUME_UNAVAILABLE" -eq 1 ]; then
   failure_class='"infra_fail"'; failure_cause='"resume_unavailable"'
+elif [ "$BUDGET_EXHAUSTED" -eq 1 ] || { [ -n "$BUDGET_USD" ] && grep -Eq '"subtype": ?"error_max_budget' "$TRANSCRIPT"; }; then
+  failure_class='"infra_fail"'; failure_cause='"budget_exceeded"'
 elif [ "${ONOFF_TIMEOUT_IS_COMPLETE:-0}" = 1 ] && { [ "$RUN_EXIT" -eq 124 ] || [ "$RUN_EXIT" -eq 137 ]; } \
     && [ -s "$TRANSCRIPT" ] && [ "$MARKERS_EXIT" -eq 0 ]; then
   # stage-graph-g67: the markers only need the first minutes, so the per-cell timeout is the registered stop, not a failure.

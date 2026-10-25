@@ -1293,7 +1293,7 @@
       "lib-bpack/dcard-markers.sh": "e935a6dcb774ea906b3e19a04fad759a474cc001af1344ca5d9f90d63b6807e8",
       "prereg/bpack.json": "1c48f658728d315c0dc511ad0591ffe0e8f96654454a599f99cb30c6ebd64d32",
       "run-bpack-campaign.js": "c886ac093b91278635fe9b648a2c48b8aa5c36336c42da704af5b8afc32ae417",
-      "run-skill-onoff-eval-bpack.sh": "a7bae955c50f1057ea9a7bb396deaa3e617aaff3469d7ffe21b92f75956fab7d",
+      "run-skill-onoff-eval-bpack.sh": "afd37be4438920fd76e87e7b82dd14dad70d2d869c59ef53282c9790a74e5a2f",
       "run-skill-onoff-matrix-bpack.sh": "7f79b523ba4c3cc6a17f74c429577d6a8894008d877773a3bb34a28092d78304",
       "score-bpack.js": "4a7f2619b9cbe0a0e77c303070500f7ebe99d73858d21653fda84a1fd69fa104",
       "tasks/bpack-revoked/init-repo.sh": "bf4bdc8b2d2b94e6c7f9d18eafa8071a4b90e5530872c4da425bbba0ab1e24a2",

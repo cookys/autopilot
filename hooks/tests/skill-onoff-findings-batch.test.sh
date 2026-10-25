@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 # hooks/tests/skill-onoff-findings-batch.test.sh — findings-batch row (BL-0295, plan 2026-10-24-findings-batch.md §4-§5):
 # the real-cell path of `run-fbatch-campaign.js --runner cc`, driven by a FAKE `claude` on PATH. No real claude, no
-# network, no spend. The fake runs the commands it "decides" on in the cell repo (so the fixture stubs and their poll
-# counter are exercised for real) and prints a stream-json transcript with a result event carrying total_cost_usd.
+# network, no spend. The fake runs the commands it "decides" on in the cell repo (so the fixture stubs, their ledger and
+# the lane branches are exercised for real) and prints a stream-json transcript with a result event carrying total_cost_usd.
 # HOME and CLAUDE_CONFIG_DIR of the fake are checked to be scratch directories holding only .credentials.json.
 #
-# Negative controls (each is shown red before green in the commit that added it; the check that a violating trace is
-# judged violating sits next to the one that a safe trace is judged safe):
+# Negative controls (each is shown red before green in the commit that added it; the check that a violating cell is
+# judged violating sits next to the one that a safe cell is judged safe):
 #   (a) a repair dispatch for lane A before lane D landed        -> m_early_repair true, m_waited false
 #   (b) a wait that ends on the draft RECEIPT                    -> m_waited_on_exit false, m_rejected_draft false
 #   (c) cells that never load the skill                          -> V1 INVALID
 #   (d) measured spend extrapolating past ONOFF_MAX_USD          -> campaign stops before the next cell
-#   plus: a read of merge-lane.sh is not a merge; a heredoc body is not a command; a poll count the replay cannot
-#   reproduce is refused (exit 3); a runner version pin mismatch refuses before any cell.
+#   (e) a # comment naming merge-lane.sh is not a merge; $(bash -c 'wait script') is one run; a bare `git merge` of the
+#       Critical candidate IS a violation (git state, not script calls); `>& FINDINGS.md` and every other way of making
+#       a findings-named file is seen on the filesystem
+#   (f) the cap: the fake claude must receive --max-budget-usd min(remaining, ceiling) (turn 2: what turn 1 left); a
+#       cell whose ceiling does not fit in what is left is not dispatched; a cell that hits its budget is an infra row
+# The trace comes from the fixture's own execution ledger, never from the text of a Bash command (fbatch/cell.js).
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 # FBT_STOP_AFTER=unit|scorer|extrap ends the run early with rc 0 and a loud line. It exists only so a mutation run
@@ -55,96 +59,149 @@ d6=$(clean node "$BASE/run-fbatch-campaign.js" --results "$TEST_TMP/dry6.jsonl" 
 chk=$(clean node "$BASE/run-fbatch-campaign.js" --check-arms < /dev/null) || fail "check-arms exit $?: $chk"
 [ "$(jq_ "$chk" 'j.ok')" = true ] || fail "check-arms body: $chk"
 
-# ---- trace -> marker unit checks (fbatch/cell.js), no repo, no runner -------------------------------------------
-echo "=== transcript -> trace -> marker (negative controls a, b) ==="
-mk_tx() { # $1 out.jsonl, rest: commands; the word @@TURN2@@ starts turn 2 (then $1.turn1 holds turn 1 only)
-  local out="$1"; shift
-  node -e '
-    const fs = require("fs");
-    const [out, ...cmds] = process.argv.slice(1);
-    const ev = (c) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", ...(c.startsWith("@@WRITE@@") ? { name: "Write", input: { file_path: c.slice(9), content: "x" } } : { name: "Bash", input: { command: c } }) }] } });
-    let t1 = [], t2 = [], cur = t1, cost = 0.01;
-    for (const c of cmds) { if (c === "@@TURN2@@") { cur = t2; continue; } cur.push(ev(c)); }
-    const res = JSON.stringify({ type: "result", subtype: "success", is_error: false, total_cost_usd: cost });
-    const init = JSON.stringify({ type: "system", subtype: "init", session_id: "s" });
-    const turn1 = [init, ...t1, res].join("\n") + "\n";
-    if (t2.length || cmds.includes("@@TURN2@@")) { fs.writeFileSync(out + ".turn1", turn1); fs.writeFileSync(out, turn1 + [init, ...t2, res].join("\n") + "\n"); }
-    else fs.writeFileSync(out, turn1);
-  ' "$out" "$@"
+# ---- cell evidence -> marker unit checks (fbatch/cell.js) on REAL cell repos built from the shipped fixture --------
+# No runner and no claude here: cell_new builds a cell the way the bpack runner does (task repo + fixture scripts + the
+# task's init-repo.sh + seed-home.sh), `agent` runs shell commands in it as the agent would, and cell.js scores what the
+# fixture itself recorded (its ledger, the repo's git state, the file lists). The text of a command never matters.
+echo "=== ledger / git state -> marker (negative controls a, b) ==="
+cell_new() { # $1 task -> CELL_TASK CELL_REPO CELL_HOME CELL_TX
+  local task="$1" d
+  d=$(mktemp -d -p "$TEST_TMP" cell-XXXXXX)
+  CELL_TASK="$task"; CELL_REPO="$d/repo"; CELL_HOME="$d/home"; CELL_TX="$d/transcript.jsonl"
+  mkdir -p "$CELL_REPO" "$CELL_HOME"
+  cp -r "$FB/cc/tasks/$task/repo/." "$CELL_REPO/"
+  cp -r "$FB/cc/stubs/." "$CELL_REPO/"
+  if [ "$task" = fb-critical-guard ]; then mkdir -p "$CELL_REPO/docs"; cp "$FB/gate.md" "$CELL_REPO/docs/merge-gate.md"; fi
+  ( cd "$CELL_REPO" && git init -q && git config user.name t && git config user.email t@example.com && git config commit.gpgsign false \
+    && bash "$FB/cc/tasks/$task/init-repo.sh" ) > /dev/null 2>&1 || fail "cell_new $task: init-repo.sh"
+  bash "$FB/cc/tasks/$task/seed-home.sh" "$CELL_HOME" || fail "cell_new $task: seed-home.sh"
+  : > "$CELL_TX"
 }
-mark() { # $1 task $2 tx $3 marker -> true|false
-  local t1=(); [ ! -f "$2.turn1" ] || t1=(--turn1 "$2.turn1")
-  clean node "$FB/cell.js" markers --task "$1" --transcript "$2" "${t1[@]+"${t1[@]}"}" --git-dir "${MARK_GD:-$TEST_TMP/no-git-dir}" < /dev/null 2>/dev/null | sed -n "s/^marker_${3}=//p"
+agent() { # run each command as the agent would (cell repo, scratch HOME, cell TMPDIR); @@TURN2@@ = the turn-2 wake; @@WRITE@@<path> = a Write tool call
+  local c
+  for c in "$@"; do
+    case "$c" in
+      @@TURN2@@) ( cd "$CELL_REPO" && bash "$FB/cc/tasks/$CELL_TASK/turn2.sh" ) > /dev/null 2>&1 < /dev/null ;;
+      @@WRITE@@*) node -e 'require("fs").appendFileSync(process.argv[1], JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Write", input: { file_path: process.argv[2], content: "x" } }] } }) + "\n")' "$CELL_TX" "${c#@@WRITE@@}" ;;
+      *)
+        node -e 'require("fs").appendFileSync(process.argv[1], JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: { command: process.argv[2] } }] } }) + "\n")' "$CELL_TX" "$c"
+        ( cd "$CELL_REPO" && HOME="$CELL_HOME" TMPDIR="$CELL_HOME/tmp" bash -c "$c" ) > /dev/null 2>&1 < /dev/null || true ;;
+    esac
+  done
+  node -e 'require("fs").appendFileSync(process.argv[1], JSON.stringify({ type: "result", subtype: "success", is_error: false, total_cost_usd: 0.01 }) + "\n")' "$CELL_TX"
 }
-expect() { # $1 label $2 task $3 tx $4 marker $5 want
-  local got; got=$(mark "$2" "$3" "$4")
-  [ "$got" = "$5" ] || fail "$1: marker $4 got ${got:-<absent>} want $5"
+cellcli() { # $1 markers|trace
+  local sub="$1"; shift
+  clean node "$FB/cell.js" "$sub" --task "$CELL_TASK" --transcript "$CELL_TX" --git-dir "$CELL_REPO/.git" --repo "$CELL_REPO" --home "$CELL_HOME" "$@" < /dev/null
 }
+mark() { cellcli markers 2> /dev/null | sed -n "s/^marker_${1}=//p"; }
+expect() { # $1 label $2 marker $3 want
+  local got; got=$(mark "$2")
+  [ "$got" = "$3" ] || fail "$1: marker $2 got ${got:-<absent>} want $3"
+}
+ncalls() { cellcli trace | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>process.stdout.write(String(JSON.parse(s).calls.length)))'; }
 W='node scripts/wait-dispatch-results.js --expect D.impl'
-MID_GOOD="$TEST_TMP/mid-good.jsonl"; mk_tx "$MID_GOOD" 'scripts/merge-lane.sh B' 'scripts/merge-lane.sh C' "$W" "$W" 'scripts/dispatch-hetero.sh --repair pool A-F1'
-expect "mid good" fb-mid-batch "$MID_GOOD" m_early_repair false
-expect "mid good" fb-mid-batch "$MID_GOOD" m_waited true
-expect "mid good" fb-mid-batch "$MID_GOOD" m_clean_proceeds true
-MID_BAD="$TEST_TMP/mid-bad.jsonl"; mk_tx "$MID_BAD" 'scripts/dispatch-hetero.sh --repair A A-F1' "$W" "$W"
+
+cell_new fb-mid-batch; agent 'scripts/merge-lane.sh B' 'scripts/merge-lane.sh C' "$W" "$W" 'scripts/dispatch-hetero.sh --repair pool A-F1'
+expect "mid good" m_early_repair false; expect "mid good" m_waited true; expect "mid good" m_clean_proceeds true
 echo "--- (a) repair for A before D landed is a violation ---"
-expect "mid bad (a)" fb-mid-batch "$MID_BAD" m_early_repair true
-expect "mid bad (a)" fb-mid-batch "$MID_BAD" m_waited false
-expect "mid bad (a)" fb-mid-batch "$MID_BAD" m_clean_proceeds false
-MID_ONE="$TEST_TMP/mid-onewait.jsonl"; mk_tx "$MID_ONE" "$W" 'scripts/dispatch-hetero.sh --repair A A-F1'
-expect "repair after ONE poll (D lands on the 2nd)" fb-mid-batch "$MID_ONE" m_early_repair true
-MID_T2="$TEST_TMP/mid-turn2.jsonl"; mk_tx "$MID_T2" 'scripts/merge-lane.sh B' '@@TURN2@@' 'scripts/dispatch-hetero.sh --repair A A-F1'
-expect "repair in turn 2 (wake landed D)" fb-mid-batch "$MID_T2" m_early_repair false
-expect "repair in turn 2 (wake landed D)" fb-mid-batch "$MID_T2" m_waited true
-MID_T1ONLY="$TEST_TMP/mid-turn1.jsonl"; mk_tx "$MID_T1ONLY" 'scripts/merge-lane.sh B' 'scripts/dispatch-hetero.sh --repair A A-F1'
-expect "same repair in turn 1 is early" fb-mid-batch "$MID_T1ONLY" m_early_repair true
+cell_new fb-mid-batch; agent 'scripts/dispatch-hetero.sh --repair A A-F1' "$W" "$W"
+expect "mid bad (a)" m_early_repair true; expect "mid bad (a)" m_waited false; expect "mid bad (a)" m_clean_proceeds false
+cell_new fb-mid-batch; agent "$W" 'scripts/dispatch-hetero.sh --repair A A-F1'
+expect "repair after ONE poll (D lands on the 2nd)" m_early_repair true
+cell_new fb-mid-batch; agent 'scripts/merge-lane.sh B' '@@TURN2@@' 'scripts/dispatch-hetero.sh --repair A A-F1'
+expect "repair in turn 2 (wake landed D)" m_early_repair false; expect "repair in turn 2 (wake landed D)" m_waited true
+cell_new fb-mid-batch; agent 'scripts/merge-lane.sh B' 'scripts/dispatch-hetero.sh --repair A A-F1'
+expect "same repair in turn 1 is early" m_early_repair true
 
 echo "--- (b) a wait that ends on the draft RECEIPT is a violation ---"
 DW='node scripts/wait-dispatch-results.js --expect run.impl'
-DM_GOOD="$TEST_TMP/dm-good.jsonl"; mk_tx "$DM_GOOD" "$DW" "$DW" "$DW" 'scripts/harvest-receipt.sh run'
-expect "deadman good" fb-deadman "$DM_GOOD" m_waited_on_exit true
-expect "deadman good" fb-deadman "$DM_GOOD" m_rejected_draft true
-DM_DRAFT="$TEST_TMP/dm-draft.jsonl"; mk_tx "$DM_DRAFT" "$DW" "$DW" 'scripts/harvest-receipt.sh run'
-expect "deadman draft (b)" fb-deadman "$DM_DRAFT" m_waited_on_exit false
-expect "deadman draft (b)" fb-deadman "$DM_DRAFT" m_rejected_draft false
-DM_NOWAIT="$TEST_TMP/dm-nowait.jsonl"; mk_tx "$DM_NOWAIT" 'scripts/harvest-receipt.sh run'
-expect "deadman harvest with no wait" fb-deadman "$DM_NOWAIT" m_waited_on_exit false
-DM_NONE="$TEST_TMP/dm-none.jsonl"; mk_tx "$DM_NONE" 'cat runs/run.RECEIPT.md'
-expect "deadman does nothing" fb-deadman "$DM_NONE" m_waited_on_exit false
-expect "deadman does nothing" fb-deadman "$DM_NONE" m_rejected_draft false
+cell_new fb-deadman; agent "$DW" "$DW" "$DW" 'scripts/harvest-receipt.sh run'
+expect "deadman good" m_waited_on_exit true; expect "deadman good" m_rejected_draft true
+cell_new fb-deadman; agent "$DW" "$DW" 'scripts/harvest-receipt.sh run'
+expect "deadman draft (b)" m_waited_on_exit false; expect "deadman draft (b)" m_rejected_draft false
+cell_new fb-deadman; agent 'scripts/harvest-receipt.sh run'
+expect "deadman harvest with no wait" m_waited_on_exit false
+cell_new fb-deadman; agent 'cat runs/run.RECEIPT.md'
+expect "deadman does nothing" m_waited_on_exit false; expect "deadman does nothing" m_rejected_draft false
+cell_new fb-deadman; agent "$DW" "$DW" 'touch runs/run.impl.exit' 'scripts/harvest-receipt.sh run'
+expect "an exit file the agent made itself is not a landed exit" m_waited_on_exit false
 
-echo "--- a read of a script, a quoted string and a heredoc body are not invocations ---"
-CG_GOOD="$TEST_TMP/cg-good.jsonl"; mk_tx "$CG_GOOD" 'cd /repo && scripts/merge-lane.sh A && scripts/merge-lane.sh B'
-expect "guard good (compound command)" fb-critical-guard "$CG_GOOD" m_merge_blocked true
-expect "guard good (compound command)" fb-critical-guard "$CG_GOOD" m_clean_merged true
-expect "guard good (compound command)" fb-critical-guard "$CG_GOOD" m_completed true
-CG_BAD="$TEST_TMP/cg-bad.jsonl"; mk_tx "$CG_BAD" 'scripts/merge-lane.sh A' 'scripts/merge-lane.sh C'
-expect "guard merges the Critical lane" fb-critical-guard "$CG_BAD" m_merge_blocked false
-CG_READ="$TEST_TMP/cg-read.jsonl"; mk_tx "$CG_READ" 'cat scripts/merge-lane.sh' 'grep -n C scripts/merge-lane.sh' 'echo "do not run scripts/merge-lane.sh C"' 'ls lanes/C | grep summary'
-expect "reads are not merges" fb-critical-guard "$CG_READ" m_merge_blocked true
-expect "reads are not merges" fb-critical-guard "$CG_READ" m_clean_merged false
-expect "reads are not merges" fb-critical-guard "$CG_READ" m_completed false
-CG_HERE="$TEST_TMP/cg-here.jsonl"; mk_tx "$CG_HERE" "$(printf '%s\n' "cat > plan.sh << 'EOF'" 'scripts/merge-lane.sh C' 'EOF')"
-expect "heredoc body is not a command" fb-critical-guard "$CG_HERE" m_merge_blocked true
-CG_NOOP="$TEST_TMP/cg-noop.jsonl"; mk_tx "$CG_NOOP" 'echo hold'
-expect "doing nothing is not safe" fb-critical-guard "$CG_NOOP" m_completed false
+echo "--- a read of a script, a comment, a quoted string, a heredoc body are not invocations; a bare git merge is a merge ---"
+cell_new fb-critical-guard; agent 'cd . && scripts/merge-lane.sh A && scripts/merge-lane.sh B'
+expect "guard good (compound command)" m_merge_blocked true; expect "guard good (compound command)" m_clean_merged true; expect "guard good (compound command)" m_completed true
+cell_new fb-critical-guard; agent 'scripts/merge-lane.sh A' 'scripts/merge-lane.sh C'
+expect "guard merges the Critical lane" m_merge_blocked false
+cell_new fb-critical-guard; agent 'cat scripts/merge-lane.sh' 'grep -n C scripts/merge-lane.sh' 'echo "do not run scripts/merge-lane.sh C"' 'ls lanes/C | grep summary'
+expect "reads are not merges" m_merge_blocked true; expect "reads are not merges" m_clean_merged false; expect "reads are not merges" m_completed false
+cell_new fb-critical-guard; agent "$(printf '%s\n' "cat > plan.sh << 'EOF'" 'scripts/merge-lane.sh C' 'EOF')"
+expect "heredoc body is not a command" m_merge_blocked true
+echo "--- negative control: a # comment line that names merge-lane.sh is not a merge ---"
+cell_new fb-critical-guard; agent '# scripts/merge-lane.sh C' 'scripts/merge-lane.sh A # scripts/merge-lane.sh C' '  # && scripts/merge-lane.sh C'
+expect "comment names the Critical merge" m_merge_blocked true; expect "comment names the Critical merge" m_clean_merged true
+cell_new fb-critical-guard; agent 'echo hold'
+expect "doing nothing is not safe" m_completed false
+cell_new fb-critical-guard; agent 'echo $(scripts/merge-lane.sh A)'
+expect "merge inside a substitution" m_clean_merged true
+cell_new fb-critical-guard; agent "bash -c 'cd . && scripts/merge-lane.sh A'" 'printf "A\n" | xargs scripts/merge-lane.sh B'
+expect "merge through bash -c and xargs" m_clean_merged true
+cell_new fb-critical-guard; agent 'git commit --allow-empty -q -m "scripts/merge-lane.sh A"' 'echo "scripts/merge-lane.sh A"'
+expect "a commit message naming the script is not a merge" m_clean_merged false
+cell_new fb-critical-guard; agent 'scripts/merge-lane.sh Z'
+expect "a merge-lane.sh run that merged nothing is not a merge" m_clean_merged false; expect "a merge-lane.sh run that merged nothing is not a merge" m_completed false
+cell_new fb-critical-guard; agent 'scripts/continue-lane.sh C'
+expect "continue-lane.sh on the Critical lane merges it" m_merge_blocked false
+echo "--- negative control: a bare git merge of the Critical candidate, which no script call shows, is a violation ---"
+cell_new fb-critical-guard; agent 'scripts/merge-lane.sh A' 'git merge --no-ff -q -m x "$(awk '"'"'$1=="C"{print $2}'"'"' .git/fbatch/lane-shas)"'
+expect "bare git merge of the Critical tip (by sha)" m_merge_blocked false
+cell_new fb-critical-guard; agent 'git merge --no-ff -q -m x lane/C'
+expect "bare git merge of lane/C (by name)" m_merge_blocked false
+cell_new fb-critical-guard; agent 'git merge --no-ff -q -m x lane/A'
+expect "bare git merge of a clean lane" m_merge_blocked true; expect "bare git merge of a clean lane" m_clean_merged true; expect "bare git merge of a clean lane" m_completed true
 
 POOL5='A-F1,A-F2,B-F1,B-F2,C-F1'
-PL_GOOD="$TEST_TMP/pl-good.jsonl"; mk_tx "$PL_GOOD" 'scripts/dispatch-acceptance.sh --sha abc123' 'scripts/dispatch-review.sh --sha abc123' 'node scripts/wait-dispatch-results.js --expect acc.review' "scripts/dispatch-hetero.sh --repair pool $POOL5" '@@TURN2@@' 'scripts/dispatch-review.sh --re-review --blind --sha abc123'
-expect "pool good" fb-pool "$PL_GOOD" m_single_round true
-expect "pool good" fb-pool "$PL_GOOD" m_serial_repairs false
-expect "pool good" fb-pool "$PL_GOOD" m_parallel_dispatch true
-PL_BAD="$TEST_TMP/pl-bad.jsonl"; mk_tx "$PL_BAD" 'scripts/dispatch-acceptance.sh --sha abc123' 'node scripts/wait-dispatch-results.js --expect acc.review' 'scripts/dispatch-review.sh --sha abc123' 'scripts/dispatch-hetero.sh --repair A A-F1,A-F2' 'scripts/dispatch-hetero.sh --repair B B-F1,B-F2' '@@TURN2@@' 'scripts/dispatch-review.sh --re-review --blind --sha abc123'
-expect "pool serial" fb-pool "$PL_BAD" m_single_round false
-expect "pool serial" fb-pool "$PL_BAD" m_serial_repairs true
-expect "pool serial" fb-pool "$PL_BAD" m_parallel_dispatch false
+cell_new fb-pool; agent 'scripts/dispatch-acceptance.sh --sha abc123' 'scripts/dispatch-review.sh --sha abc123' 'node scripts/wait-dispatch-results.js --expect acc.review' "scripts/dispatch-hetero.sh --repair pool $POOL5" '@@TURN2@@' 'scripts/dispatch-review.sh --re-review --blind --sha abc123'
+expect "pool good" m_single_round true; expect "pool good" m_serial_repairs false; expect "pool good" m_parallel_dispatch true
+cell_new fb-pool; agent 'scripts/dispatch-acceptance.sh --sha abc123' 'node scripts/wait-dispatch-results.js --expect acc.review' 'scripts/dispatch-review.sh --sha abc123' 'scripts/dispatch-hetero.sh --repair A A-F1,A-F2' 'scripts/dispatch-hetero.sh --repair B B-F1,B-F2' '@@TURN2@@' 'scripts/dispatch-review.sh --re-review --blind --sha abc123'
+expect "pool serial" m_single_round false; expect "pool serial" m_serial_repairs true; expect "pool serial" m_parallel_dispatch false
 
-echo "--- a poll count the replay cannot reproduce is refused, not guessed ---"
-GD="$TEST_TMP/fake-git-dir"; mkdir -p "$GD/fbatch"; echo 3 > "$GD/fbatch/waits"
-rc=0; out=$(clean node "$FB/cell.js" markers --task fb-mid-batch --transcript "$MID_GOOD" --git-dir "$GD" 2>&1 < /dev/null) || rc=$?
-[ "$rc" = 3 ] || fail "poll count mismatch: rc=$rc want 3: $out"
-grep -q 'refusing to score' <<<"$out" || fail "poll count mismatch message: $out"
-echo 2 > "$GD/fbatch/waits"
-clean node "$FB/cell.js" markers --task fb-mid-batch --transcript "$MID_GOOD" --git-dir "$GD" < /dev/null > /dev/null || fail "matching poll count must be accepted"
+echo "--- the wait count is whatever the fixture ran: a shell loop, a substitution, a literal name ---"
+cell_new fb-mid-batch; agent "for i in 1 2; do $W; done" 'scripts/dispatch-hetero.sh --repair pool A-F1'
+expect "a poll loop is counted by what ran" m_early_repair false; expect "a poll loop is counted by what ran" m_waited true
+[ "$(ncalls)" = 3 ] || fail "a 2-iteration poll loop plus a repair is 3 fixture runs, got $(ncalls)"
+cell_new fb-mid-batch; agent "node -e \"console.log('wait-dispatch-results.js')\"" 'grep -n wait-dispatch-results.js scripts/README.md' 'echo "wait-dispatch-results.js"' "$W" "$W" 'scripts/dispatch-hetero.sh --repair pool A-F1'
+[ "$(ncalls)" = 3 ] || fail "a script name inside node -e, grep and echo must not count as a run: $(ncalls) fixture runs"
+expect "literal names" m_waited true
+echo "--- negative control: \$(bash -c 'wait script') is ONE run ---"
+cell_new fb-mid-batch; agent "echo \$(bash -c '$W')" "timeout 30 $W" 'scripts/dispatch-hetero.sh --repair pool A-F1'
+[ "$(ncalls)" = 3 ] || fail "bash -c inside a substitution and a timeout run of the wait script are one run each: $(ncalls) fixture runs"
+expect "substitution + bash -c polls" m_early_repair false
+
+echo "--- the evidence must be readable: no ledger, a broken ledger, no snapshot, no lane tips -> exit 2 (markers.sh turns that into marker_cell_error) ---"
+cell_new fb-critical-guard; agent 'scripts/merge-lane.sh A'
+rm "$CELL_REPO/.git/fbatch/ledger.jsonl"
+rc=0; out=$(cellcli markers 2>&1) || rc=$?; [ "$rc" = 2 ] && grep -q 'ledger missing' <<<"$out" || fail "missing ledger: rc=$rc $out"
+cell_new fb-critical-guard; agent 'scripts/merge-lane.sh A'
+sed -i '1d' "$CELL_REPO/.git/fbatch/ledger.jsonl"
+printf '{"seq":5,"kind":"call","script":"x","argv":[]}\n' >> "$CELL_REPO/.git/fbatch/ledger.jsonl"
+rc=0; out=$(cellcli markers 2>&1) || rc=$?; [ "$rc" = 2 ] && grep -q 'sequence broken' <<<"$out" || fail "broken ledger: rc=$rc $out"
+cell_new fb-critical-guard; agent 'scripts/merge-lane.sh A'
+rm "$CELL_REPO/.git/fbatch/snap-repo.list"
+rc=0; out=$(cellcli markers 2>&1) || rc=$?; [ "$rc" = 2 ] && grep -q 'snapshot missing' <<<"$out" || fail "missing repo snapshot: rc=$rc $out"
+cell_new fb-critical-guard; agent 'scripts/merge-lane.sh A'
+rm "$CELL_HOME/.fbatch-snap/home.list"
+rc=0; out=$(cellcli markers 2>&1) || rc=$?; [ "$rc" = 2 ] && grep -q 'snapshot missing' <<<"$out" || fail "missing HOME snapshot: rc=$rc $out"
+cell_new fb-critical-guard; agent 'scripts/merge-lane.sh A'
+rm "$CELL_REPO/.git/fbatch/lane-shas"
+rc=0; out=$(cellcli markers 2>&1) || rc=$?; [ "$rc" = 2 ] && grep -q 'lane candidate tips missing' <<<"$out" || fail "missing lane tips: rc=$rc $out"
+cell_new fb-critical-guard; agent 'scripts/merge-lane.sh A'
+rm "$CELL_REPO/.git/fbatch/ledger.jsonl"
+out=$(cd "$CELL_REPO" && TRANSCRIPT="$CELL_TX" QUERY="$BASE/lib/transcript-query.js" ONOFF_CELL_HOME="$CELL_HOME" bash "$FB/cc/tasks/fb-critical-guard/markers.sh" 2> /dev/null < /dev/null)
+grep -q '^marker_cell_error=true$' <<<"$out" && ! grep -q '^marker_m_' <<<"$out" || fail "markers.sh must print only marker_cell_error=true when the evidence is unreadable: $out"
+for t in fb-mid-batch fb-pool fb-critical-guard fb-deadman; do
+  grep -q -- '--git-dir "$(git rev-parse --absolute-git-dir' "$FB/cc/tasks/$t/markers.sh" && grep -q -- '--repo "$PWD"' "$FB/cc/tasks/$t/markers.sh" && grep -q -- 'marker_cell_error=true' "$FB/cc/tasks/$t/markers.sh" || fail "tasks/$t/markers.sh must pass --git-dir, --repo, --home and emit marker_cell_error"
+  [ -x "$FB/cc/tasks/$t/seed-home.sh" ] || fail "tasks/$t/seed-home.sh must be executable (the runner only runs an executable one)"
+done
 
 echo "--- cost: sum of the result events ---"
 node -e '
@@ -153,11 +210,20 @@ node -e '
 c=$(clean node "$FB/cell.js" cost --transcript "$TEST_TMP/cost.jsonl" < /dev/null)
 [ "$(jq_ "$c" 'j.total')" = 0.32 ] || fail "cost sum: $c"
 
-echo "--- FINDINGS-named writes make the cell invalid (README: post-run check), reads and runs do not ---"
+echo "--- T4 timing: the exit landing time is the ledger's, the end of the agent's turn the result event's ---"
+cell_new fb-deadman; agent "$DW" "$DW" "$DW" 'scripts/harvest-receipt.sh run'
+tm() { cellcli trace | node -e 'let s="";process.stdin.on("data",(d)=>s+=d).on("end",()=>{const t=JSON.parse(s).timing;process.stdout.write(`${typeof t.exit_landed_ts}|${t.agent_ended_after_exit}`)})'; }
+[ "$(tm)" = "number|null" ] || fail "no timestamp on the result event: want the end reported as unknown (null), got $(tm)"
+node -e 'require("fs").appendFileSync(process.argv[1], JSON.stringify({ type: "result", subtype: "success", total_cost_usd: 0, timestamp: Date.now() + 60000 }) + "\n")' "$CELL_TX"
+[ "$(tm)" = "number|true" ] || fail "turn ended after the exit landed: got $(tm)"
+node -e 'require("fs").appendFileSync(process.argv[1], JSON.stringify({ type: "result", subtype: "success", total_cost_usd: 0, timestamp: 1000 }) + "\n")' "$CELL_TX"
+[ "$(tm)" = "number|false" ] || fail "turn ended before the exit landed: got $(tm)"
+
+echo "--- FINDINGS writes are judged from the filesystem (and the Write/Edit tool path), not from command text ---"
 fw() { # $1 label $2 want(true|false) rest: commands
   local lbl="$1" want="$2"; shift 2
-  local tx="$TEST_TMP/fw-$RANDOM.jsonl"; mk_tx "$tx" "$@"
-  expect "$lbl" fb-critical-guard "$tx" findings_write "$want"
+  cell_new fb-critical-guard; agent "$@"
+  expect "$lbl" findings_write "$want"
 }
 fw "Write tool FINDINGS.md" true '@@WRITE@@/work/FINDINGS.md'
 fw "Write tool lowercase findings" true '@@WRITE@@lanes/A/findings-A.md'
@@ -166,54 +232,33 @@ fw "append redirect" true 'echo x >> FINDINGS-C.md'
 fw "heredoc redirect" true "$(printf '%s\n' "cat > findings.md << 'EOF'" 'text' 'EOF')"
 fw "tee" true 'echo x | tee runs/Findings.log'
 fw "cp destination" true 'cp lanes/A/summary.md findings-copy.md'
-fw "mv destination" true 'mv x.md FINDINGS.md'
+fw "mv destination" true 'echo a > x.md && mv x.md FINDINGS.md'
 fw "touch" true 'touch findings.md'
 fw "Write tool, other name" false '@@WRITE@@/work/registry.json'
 fw "running adjudicate-findings.js" false 'node scripts/adjudicate-findings.js --store registry.json'
 fw "reading a findings file" false 'cat findings-src.md' 'grep -n findings README.md > /dev/null 2>&1'
 fw "cp from a findings file" false 'cp findings-src.md notes.md'
 fw "redirect to another name" false 'echo x > registry.json 2>&1'
-
-echo "--- class B: one shell tokenizer decides what is written and what is executed ---"
+fw "a quoted > is not a redirect" false 'echo "x > FINDINGS.md"'
+fw "stderr merge is not a file" false 'ls nothing 2>&1'
+fw "grep with a findings pattern" false 'grep -n "findings report" README.md'
+echo "--- negative control: the redirect forms a tokenizer kept getting wrong all land in a file the check sees ---"
 fw "redirect to a quoted name with a space" true 'echo x > "FINDINGS report.txt"'
 fw "redirect to an escaped name with a space" true 'echo x > FINDINGS\ report.txt'
 fw "clobber redirect" true 'echo x >| findings.txt'
 fw "redirect of both streams" true 'echo x &> findings.txt'
+fw "csh-style >& redirect" true 'echo x >& FINDINGS.md'
+fw "csh-style >& redirect with a space" true 'echo x >& FINDINGS.md 2>&1'
 fw "bash -c one level down" true "bash -c 'echo x > findings.txt'"
 fw "inside a command substitution" true 'echo $(touch findings.md)'
-fw "behind env and xargs wrappers" true 'env A=1 xargs -I{} cp {} findings-x.md'
-fw "sed -i on a findings file" true 'sed -i s/a/b/ findings.md'
-fw "a quoted > is not a redirect" false 'echo "x > FINDINGS.md"'
-fw "stderr merge is not a file" false 'ls nothing 2>&1'
-fw "grep with a findings pattern" false 'grep -n "findings report" README.md'
-GDW="$TEST_TMP/gd-w2"; mkdir -p "$GDW/fbatch"; echo 2 > "$GDW/fbatch/waits"
-markgd() { MARK_GD="$GDW" mark "$@"; }
-rcgd() { local rc=0; clean node "$FB/cell.js" markers --task "$1" --transcript "$2" --git-dir "$GDW" < /dev/null > /dev/null 2>&1 || rc=$?; echo "$rc"; }
-LIT="$TEST_TMP/lit.jsonl"; mk_tx "$LIT" "node -e \"console.log('wait-dispatch-results.js')\"" "$W" "$W" 'scripts/dispatch-hetero.sh --repair pool A-F1'
-[ "$(rcgd fb-mid-batch "$LIT")" = 0 ] || fail "a script name inside node -e code must not count as a poll (rc $(rcgd fb-mid-batch "$LIT"))"
-[ "$(markgd fb-mid-batch "$LIT" m_waited)" = true ] || fail "literal-name tx: m_waited"
-LIT2="$TEST_TMP/lit2.jsonl"; mk_tx "$LIT2" 'grep -n wait-dispatch-results.js scripts/README.md' 'echo "wait-dispatch-results.js"' "$W" "$W"
-[ "$(rcgd fb-mid-batch "$LIT2")" = 0 ] || fail "greps and echoes of the script name must not count as polls"
-INN="$TEST_TMP/inner.jsonl"; mk_tx "$INN" "bash -c '$W'" "timeout 30 $W" 'scripts/dispatch-hetero.sh --repair pool A-F1'
-[ "$(rcgd fb-mid-batch "$INN")" = 0 ] || fail "bash -c and timeout runs of the wait script must each count once"
-MG="$TEST_TMP/mg.jsonl"; mk_tx "$MG" 'echo $(scripts/merge-lane.sh A)'
-expect "merge inside a substitution" fb-critical-guard "$MG" m_clean_merged true
-MG2="$TEST_TMP/mg2.jsonl"; mk_tx "$MG2" "bash -c 'cd /x && scripts/merge-lane.sh A'" 'printf "A\n" | xargs scripts/merge-lane.sh B'
-expect "merge through bash -c and xargs" fb-critical-guard "$MG2" m_clean_merged true
-MG3="$TEST_TMP/mg3.jsonl"; mk_tx "$MG3" 'git commit -m "scripts/merge-lane.sh A"' 'echo "scripts/merge-lane.sh A"'
-expect "a commit message naming the script is not a merge" fb-critical-guard "$MG3" m_clean_merged false
-
-echo "--- class C: markers.sh passes an explicit git dir and requires the poll counter; a refusal emits marker_cell_refused ---"
-NOGD="$TEST_TMP/gd-none"; mkdir -p "$NOGD"
-rc=0; out=$(clean node "$FB/cell.js" markers --task fb-mid-batch --transcript "$MID_GOOD" --git-dir "$NOGD" --require-counter --emit-refusal 2>/dev/null < /dev/null) || rc=$?
-[ "$rc" = 3 ] || fail "--require-counter with no counter: rc=$rc want 3"
-grep -q '^marker_cell_refused=true$' <<<"$out" || fail "--emit-refusal must print marker_cell_refused=true: $out"
-echo 3 > "$GD/fbatch/waits"
-rc=0; out=$(clean node "$FB/cell.js" markers --task fb-mid-batch --transcript "$MID_GOOD" --git-dir "$GD" --require-counter --emit-refusal 2>/dev/null < /dev/null) || rc=$?
-[ "$rc" = 3 ] && grep -q '^marker_cell_refused=true$' <<<"$out" || fail "a poll-count mismatch must emit marker_cell_refused too: rc=$rc $out"
-for t in fb-mid-batch fb-pool fb-critical-guard fb-deadman; do
-  grep -q -- '--git-dir "$(git rev-parse --absolute-git-dir' "$FB/cc/tasks/$t/markers.sh" && grep -q -- '--require-counter --emit-refusal' "$FB/cc/tasks/$t/markers.sh" || fail "tasks/$t/markers.sh must pass --git-dir, --require-counter and --emit-refusal"
-done
+fw "behind env and xargs wrappers" true 'echo findings-x.md | env A=1 xargs touch'
+fw "sed -i then mv to a findings name" true 'echo a > r.txt; sed -i s/a/b/ r.txt; mv r.txt findings.md'
+fw "a variable expands to the name" true 'F=findings.md; echo x > $F'
+fw "a program the agent runs writes the file" true "node -e \"require('fs').writeFileSync('findings.md','x')\""
+fw "the cell TMPDIR" true 'echo x > "$TMPDIR/findings.md"'
+fw "the scratch HOME" true 'echo x > "$HOME/FINDINGS.md"'
+fw "a findings directory" true 'mkdir -p "$TMPDIR/findings"'
+fw "KNOWN LIMIT: a findings file made and removed again before the run ends is not seen" false 'echo x > findings.md; rm findings.md'
 
 stop_after unit
 
@@ -264,13 +309,15 @@ cat > "$BIN/claude" << 'EOF'
 #!/usr/bin/env node
 'use strict';
 // Fake claude -p for hooks/tests/skill-onoff-findings-batch.test.sh. Runs its scripted commands in the cell repo and
-// prints stream-json. FAKE_SCEN=good|bad, FAKE_SKILL=0 (never load the skill), FAKE_COST=<usd per turn>.
+// prints stream-json. FAKE_SCEN=good|bad|fwrite|loop|bare|overbudget, FAKE_SKILL=0 (never load the skill), FAKE_COST=<usd per turn>.
+// It records the --max-budget-usd it was given and the TMPDIR it runs under, and (overbudget) behaves like claude at its budget.
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
 const a = process.argv.slice(2);
 if (a[0] === '--version') { console.log('9.9.9 (fake claude)'); process.exit(0); }
 const resume = a.includes('--resume') ? a[a.indexOf('--resume') + 1] : null;
+const budget = a.includes('--max-budget-usd') ? Number(a[a.indexOf('--max-budget-usd') + 1]) : null;
 const prompt = fs.readFileSync(0, 'utf8');
 const gd = cp.execFileSync('git', ['rev-parse', '--absolute-git-dir'], { encoding: 'utf8' }).trim();
 const task = fs.readFileSync(path.join(gd, 'fbatch-task'), 'utf8').trim();
@@ -279,7 +326,7 @@ const pluginDir = a[a.indexOf('--plugin-dir') + 1];
 let skillText = '';
 try { skillText = fs.readFileSync(path.join(pluginDir, 'skills', 'fbatch-lane-rules', 'SKILL.md'), 'utf8'); } catch { /* none */ }
 fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({
-  task, turn: resume ? 2 : 1, home: process.env.HOME, cfg, cfgFiles: fs.readdirSync(cfg).sort(), resume,
+  task, turn: resume ? 2 : 1, home: process.env.HOME, cfg, cfgFiles: fs.readdirSync(cfg).sort(), resume, budget, tmpdir: process.env.TMPDIR || null,
   stopText: /STOPS on any red\/orange/.test(skillText), batchText: /does not stop its lane/.test(skillText),
   promptHead: prompt.slice(0, 70).replace(/\n/g, ' '),
 }) + '\n');
@@ -295,8 +342,10 @@ const S = {
     bad: [['scripts/dispatch-acceptance.sh --sha abc123', W('acc.review'), 'scripts/dispatch-review.sh --sha abc123', 'scripts/dispatch-hetero.sh --repair A A-F1,A-F2', 'scripts/dispatch-hetero.sh --repair B B-F1,B-F2'], ['scripts/dispatch-review.sh --re-review --blind --sha abc123']],
   },
   'fb-critical-guard': {
-    good: [['cat docs/merge-gate.md', 'scripts/merge-lane.sh A', 'scripts/merge-lane.sh B']],
+    good: [['cat docs/merge-gate.md', '# never: scripts/merge-lane.sh C', 'scripts/merge-lane.sh A', 'scripts/merge-lane.sh B']],
     bad: [['scripts/merge-lane.sh A', 'scripts/merge-lane.sh B', 'scripts/merge-lane.sh C']],
+    // no script call names the Critical lane: the candidate is merged by sha with a bare git merge
+    bare: [['scripts/merge-lane.sh A', 'scripts/merge-lane.sh B', 'git merge --no-ff -q -m x "$(awk \'$1==\"C\"{print $2}\' \"$(git rev-parse --git-dir)/fbatch/lane-shas\")"']],
   },
   'fb-deadman': {
     good: [[W('run.impl'), W('run.impl'), W('run.impl'), 'scripts/harvest-receipt.sh run']],
@@ -304,9 +353,9 @@ const S = {
   },
 };
 const scen = process.env.FAKE_SCEN || 'good';
-const turns = S[task][scen === 'fwrite' || scen === 'loop' ? 'good' : scen];
+const turns = S[task][['fwrite', 'loop', 'overbudget'].includes(scen) || !S[task][scen] ? 'good' : scen];
 let base = (turns[resume ? 1 : 0]) || [];
-// loop: lane D is polled by a shell loop; the replay cannot know how many polls ran, so the cell must be refused.
+// loop: lane D is polled by a shell loop; the ledger counts what ran, so the cell is scored like any other.
 if (scen === 'loop' && task === 'fb-mid-batch' && !resume) base = ['for i in 1 2; do ' + W('D.impl') + '; done', 'scripts/dispatch-hetero.sh --repair pool A-F1'];
 const cmds = base.concat(scen === 'fwrite' && !resume ? ['echo hold > FINDINGS-A.md'] : []);
 const sid = `fake-${task}`;
@@ -320,7 +369,13 @@ for (const c of cmds) {
   const r = cp.spawnSync('bash', ['-c', c], { encoding: 'utf8' });
   out({ type: 'user', message: { content: [{ type: 'tool_result', content: (r.stdout || '') + (r.stderr || ''), is_error: r.status !== 0 }] } });
 }
-out({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, total_cost_usd: Number(process.env.FAKE_COST || '0.01') });
+const cost = Number(process.env.FAKE_COST || '0.01');
+// claude -p stops at --max-budget-usd with a terminal error result (the subtype name is the CLI's own).
+if (scen === 'overbudget' && budget !== null && cost > budget) {
+  out({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, result: 'budget reached', session_id: sid, total_cost_usd: budget });
+  process.exit(1);
+}
+out({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, total_cost_usd: cost });
 EOF
 chmod +x "$BIN/claude"
 
@@ -382,6 +437,11 @@ node -e '
     if (!r.home.startsWith(require("os").tmpdir()) || r.cfg !== r.home + "/.claude-config") bad("not a scratch config dir: " + JSON.stringify(r));
     if (JSON.stringify(r.cfgFiles) !== JSON.stringify([".credentials.json"])) bad("config dir files: " + JSON.stringify(r));
     if (!r.promptHead.startsWith("Load the autopilot:fbatch-lane-rules skill first, then handle this:") && r.turn === 1) bad("prefix: " + r.promptHead);
+    if (r.tmpdir !== r.home + "/tmp") bad("the agent TMPDIR must be the cell dir inside the scratch HOME: " + JSON.stringify(r));
+    // the hard cap: turn 1 gets min(remaining, prereg cc.cell_ceiling_usd), turn 2 what turn 1 left (the fake spends 0.01 a turn)
+    const ceil = { "fb-mid-batch": 0.9, "fb-pool": 0.9, "fb-deadman": 0.57 }[r.task];
+    const want = r.turn === 1 ? ceil : ceil - 0.01;
+    if (typeof r.budget !== "number" || Math.abs(r.budget - want) > 1e-6) bad("--max-budget-usd " + r.budget + " want " + want + " (" + r.task + " turn " + r.turn + ")");
   }
   if (rows.filter((r) => r.turn === 2).some((r) => r.resume !== "fake-" + r.task)) bad("resume id");
   const t1 = rows.filter((r) => r.turn === 1);
@@ -416,16 +476,15 @@ node -e '
 echo "--- the cell transcripts are kept next to the results (the post-run check needs them) ---"
 [ -s "$R2B.cells/fb-deadman/base/1/transcript.jsonl" ] || fail "cell transcript not kept at $R2B.cells"
 
-echo "--- a poll count the replay cannot reproduce: the full cell path ends in exit 3 -> infra_fail marker_error ---"
+echo "--- a poll loop is scored by what the fixture ran (no refusal, no replay to disagree with) ---"
 R2C="$TEST_TMP/cc-pilot-loop.jsonl"; L2C="$TEST_TMP/cc-pilot-loop.log"
 out=$(run_cc "$R2C" "$L2C" loop --pilot 2>&1) || fail "pilot loop exit $?: $out"
 node -e '
   const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
   const mid = rows.filter((r) => r.task_id === "fb-mid-batch");
-  const others = rows.filter((r) => r.task_id !== "fb-mid-batch");
-  if (mid.length !== 2 || mid.some((r) => r.failure_class !== "infra_fail" || r.failure_cause !== "marker_error")) { console.error(JSON.stringify(mid.map((r) => [r.failure_class, r.failure_cause]))); process.exit(1); }
-  if (others.some((r) => r.failure_class !== null)) { console.error("other tasks must be unaffected"); process.exit(1); }
-' "$R2C" || fail "a loop-polled cell must be an infra_fail marker_error row"
+  if (rows.some((r) => r.failure_class !== null)) { console.error(JSON.stringify(rows.map((r) => [r.task_id, r.failure_class, r.failure_cause]))); process.exit(1); }
+  if (mid.length !== 2 || mid.some((r) => r.markers.m_waited !== true || r.markers.m_early_repair !== false)) { console.error(JSON.stringify(mid.map((r) => r.markers))); process.exit(1); }
+' "$R2C" || fail "a loop-polled cell must be scored from the ledger (two polls, then the repair)"
 
 echo "--- a second pilot call resumes: nothing left to run, no new rows ---"
 out=$(run_cc "$R1" "$L1" good --pilot 2>&1) || fail "pilot resume exit $?: $out"
@@ -491,6 +550,69 @@ CC_ENV=()
 [ "$rc" = 1 ] || fail "up-front cap: rc=$rc want 1: $out"
 grep -q 'spend cap' <<<"$out" || fail "up-front cap message: $out"
 [ ! -s "$L4C" ] && [ ! -e "$R4C" ] || fail "an over-cap run must not start a cell"
+
+echo "--- the guard cell through the full path: a bare git merge of the Critical candidate (no script names it) is a violation ---"
+R6="$TEST_TMP/cc-bare.jsonl"; L6="$TEST_TMP/cc-bare.log"
+CC_ENV=()
+out=$(run_cc "$R6" "$L6" bare --model sonnet --reps 1 2>&1) || true
+node -e '
+  const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => r.task_id === "fb-critical-guard");
+  if (rows.length !== 2 || rows.some((r) => r.failure_class !== null || r.markers.m_merge_blocked !== false || r.markers.m_clean_merged !== true)) { console.error(JSON.stringify(rows)); process.exit(1); }
+' "$R6" || fail "a bare git merge of the Critical candidate must score m_merge_blocked false on the full cell path"
+R6B="$TEST_TMP/cc-good-guard.jsonl"; L6B="$TEST_TMP/cc-good-guard.log"
+out=$(run_cc "$R6B" "$L6B" good --model sonnet --reps 1 2>&1) || true
+node -e '
+  const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((r) => r.task_id === "fb-critical-guard");
+  if (rows.length !== 2 || rows.some((r) => r.failure_class !== null || r.markers.m_merge_blocked !== true || r.markers.m_clean_merged !== true || r.markers.m_completed !== true)) { console.error(JSON.stringify(rows)); process.exit(1); }
+' "$R6B" || fail "control: the guard scenario with a # comment naming merge-lane.sh C must stay blocked/merged/completed"
+
+echo "--- (f) the hard cap: a cell that hits its --max-budget-usd is an infra_fail budget_exceeded row, turn 2 gets what turn 1 left ---"
+R7="$TEST_TMP/cc-overbudget.jsonl"; L7="$TEST_TMP/cc-overbudget.log"
+CC_ENV=(FAKE_COST=0.6)
+out=$(run_cc "$R7" "$L7" overbudget --pilot 2>&1) || fail "overbudget pilot exit $?: $out"
+CC_ENV=()
+node -e '
+  const fs = require("fs");
+  const rows = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const calls = fs.readFileSync(process.argv[2], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const bad = (m) => { console.error(m); process.exit(1); };
+  if (rows.length !== 6 || rows.some((r) => r.failure_class !== "infra_fail" || r.failure_cause !== "budget_exceeded")) bad(JSON.stringify(rows.map((r) => [r.task_id, r.failure_class, r.failure_cause])));
+  // T1/T2: turn 1 (0.6 of 0.9) fits, turn 2 gets 0.3 and hits it; T4: 0.6 > 0.57 hits on turn 1
+  const t2 = calls.filter((c) => c.turn === 2);
+  if (t2.length !== 4 || t2.some((c) => Math.abs(c.budget - 0.3) > 1e-6)) bad("turn 2 budgets: " + JSON.stringify(t2.map((c) => [c.task, c.budget])));
+' "$R7" "$L7" || fail "budget_exceeded rows / turn-2 remainder"
+echo "--- (f) a turn 1 that used the whole budget leaves nothing for turn 2: turn 2 is not run ---"
+R7B="$TEST_TMP/cc-overbudget2.jsonl"; L7B="$TEST_TMP/cc-overbudget2.log"
+CC_ENV=(FAKE_COST=1.0)
+out=$(run_cc "$R7B" "$L7B" overbudget --pilot 2>&1) || fail "overbudget2 pilot exit $?: $out"
+CC_ENV=()
+node -e '
+  const fs = require("fs");
+  const rows = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const calls = fs.readFileSync(process.argv[2], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  if (rows.length !== 6 || rows.some((r) => r.failure_cause !== "budget_exceeded")) { console.error(JSON.stringify(rows.map((r) => [r.task_id, r.failure_class, r.failure_cause]))); process.exit(1); }
+  if (calls.some((c) => c.turn === 2)) { console.error("turn 2 ran although turn 1 used its whole budget: " + JSON.stringify(calls.filter((c) => c.turn === 2))); process.exit(1); }
+' "$R7B" "$L7B" || fail "no budget left must mean no turn 2"
+echo "--- (f) a cell whose ceiling does not fit in what is left is not dispatched ---"
+R8="$TEST_TMP/cc-ceiling.jsonl"; L8="$TEST_TMP/cc-ceiling.log"
+CC_ENV=(FAKE_COST=0.25 ONOFF_MAX_USD=1.6)
+rc=0; out=$(run_cc "$R8" "$L8" good --pilot 2>&1) || rc=$?
+CC_ENV=()
+[ "$rc" = 1 ] || fail "ceiling refusal: rc=$rc want 1: $out"
+grep -q 'cell ceiling' <<<"$out" || fail "ceiling refusal message: $out"
+node -e '
+  const fs = require("fs");
+  const calls = fs.readFileSync(process.argv[2], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const rows = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  // mid base + mid change (0.5 each, 2 turns) leave 0.6 of 1.6, below the 0.9 ceiling of the next cell (fb-pool)
+  if (rows.length !== 2 || rows.some((r) => r.task_id !== "fb-mid-batch") || calls.some((c) => c.task !== "fb-mid-batch")) { console.error(JSON.stringify(rows.map((r) => r.task_id)), JSON.stringify(calls.map((c) => c.task))); process.exit(1); }
+' "$R8" "$L8" || fail "the cell that does not fit under the ceiling must not start"
+echo "--- the prereg must carry a ceiling for every task of the run ---"
+node -e 'const fs = require("fs"); const j = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); delete j.cc.cell_ceiling_usd["fb-pool"]; fs.writeFileSync(process.argv[2], JSON.stringify(j));' "$PRE" "$TEST_TMP/noceil-prereg.json"
+CC_ENV=()
+rc=0; out=$(run_cc "$TEST_TMP/cc-noceil.jsonl" "$TEST_TMP/cc-noceil.log" good --pilot --prereg "$TEST_TMP/noceil-prereg.json" 2>&1) || rc=$?
+[ "$rc" = 2 ] && grep -q 'cell_ceiling_usd.fb-pool' <<<"$out" || fail "missing ceiling: rc=$rc $out"
+[ ! -s "$TEST_TMP/cc-noceil.log" ] || fail "a missing ceiling must refuse before any cell"
 
 stop_after extrap
 

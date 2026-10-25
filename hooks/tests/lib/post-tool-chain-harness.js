@@ -4,7 +4,7 @@
  * post-tool-chain differential harness (BL-0241 guard-port Phase 1; plan docs/plans/2026-10-23-guard-port.md).
  *
  * Compares three arms on equal isolated sandboxes (own HOME, TMPDIR, XDG/AUTOPILOT_LIVE_DIR, cwd, env):
- *   orig   the five observers exactly as at the pinned develop sha (git show), run as separate processes
+ *   orig   the five observers AND all the code they load (hooks/, src/, scripts/ minus hooks/tests) extracted from the pinned sha with git archive, run as separate processes
  *   cur    the five observers as in this tree (export refactor + unchanged CLI wrapper), separate processes
  *   chain  hooks/post-tool-chain.js (one process)
  * Host-visible oracle for a call (plan Phase 1): the five standalone stdout streams concatenated in
@@ -200,8 +200,8 @@ for (const [sig, n] of [['SIGHUP', 1], ['SIGINT', 2], ['SIGTERM', 15]]) {
 }
 const BASE = SCRATCH_ROOT; // orig-tree scratch only; not part of any compared byte
 
-// hooks dir for the orig arm: symlinks to every file in hooks/, the five replaced by `git show` copies;
-// ../src and ../scripts are symlinked so the originals' relative requires resolve.
+// hooks dir for the orig arm: hooks/, src/ and scripts/ (minus hooks/tests) extracted from ORIG_REF with `git archive`
+// into a scratch root; no symlink may remain in it (checked below), so no byte of HEAD code is loaded.
 function buildOrigTree() {
   const rev = spawnSync('git', ['-C', REPO, 'rev-parse', '--verify', `${ORIG_REF}^{commit}`], { encoding: 'utf8' });
   if (rev.status !== 0) return null;

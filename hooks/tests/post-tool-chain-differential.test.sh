@@ -143,7 +143,7 @@ mk_harness_tree() { # <name>: sets HT; a repo-shaped tree whose harness (and not
 # keeps the ORIG_REF bytes (no orig line in the report). Controls B/C: a buildOrigTree that links back to HEAD must be caught.
 mk_indep_tree() { # <name>: mk_harness_tree + git access + a REAL copy of _shared whose emitter prefixes the context with "X"
   mk_harness_tree "$1"
-  ln -sfn "$(git -C "$REPO_ROOT" rev-parse --git-common-dir)" "$HT/.git"
+  ln -sfn "$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)" "$HT/.git"   # absolute: in a main checkout the plain form is a relative ".git" (a link to itself)
   # real copies (node resolves a symlinked module through its REAL path, so a linked observer would load the real _shared)
   cp --remove-destination "$HOOKS_DIR"/*.js "$HT/hooks/"
   rm -f "$HT/hooks/_shared"; cp -r "$HOOKS_DIR/_shared" "$HT/hooks/_shared"

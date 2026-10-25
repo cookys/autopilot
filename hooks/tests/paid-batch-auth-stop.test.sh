@@ -92,57 +92,108 @@ eb_run "$TEST_TMP/eb" exit0;    stop_case "run-eval-batch (exit 0, no summary, o
 eb_run "$TEST_TMP/eb" cross;    quote_case "run-eval-batch (call 1 ok quoting, calls 2-3 fail 429)" 3
 eb_run "$TEST_TMP/eb" quote;    quote_case "run-eval-batch" 3
 assert_eq "$RC" "0" "run-eval-batch: quote case exit code unchanged"
-# The REAL skill-creator run_eval.py cannot be changed or fetched here. This stand-in behaves like its run_single_query as seen in the
-# cv4 acceptance of BL-0294 (2026-10-25): Popen(claude -p ..., stdout=PIPE, stderr=DEVNULL), the exit code is never read, and a valid
-# {"summary": ...} is always printed with exit 0. The wrapper `claude` that run-eval-batch.sh puts first on PATH is the only place the
-# failure can still be seen, so these cases must stop on the FIRST skill.
+# The REAL skill-creator run_eval.py cannot be changed or fetched here. This stand-in copies the behaviour of its run_single_query that
+# matters, as seen in the cv4/cv5 acceptance of BL-0294 (2026-10-25): Popen(claude -p ..., stdout=PIPE, stderr=DEVNULL); it returns as
+# soon as it reads a type=result line (or when its own timeout expires), then SIGKILLs the child; the exit code is never read; a valid
+# {"summary": ...} is always printed with exit 0; one skill may run several queries (here 2). The wrapper `claude` that
+# run-eval-batch.sh puts first on PATH is the only place the failure can still be seen.
+# STANDIN_TIMEOUT models the per-query timeout kill.
+procs_left() { # number of claude fakes / tee mirrors of this layout that are still alive after the batch
+  sleep 1
+  local n=0 p
+  for p in $(cat "$1/pids" 2>/dev/null); do [ -d "/proc/$p" ] && ! grep -q '^State:.*Z' "/proc/$p/status" 2>/dev/null && n=$((n + 1)); done
+  n=$(( n + $(ps -eo args | awk -v pat="$1/skill-creator-workspace" '$1 != "awk" && index($0, pat) > 0' | wc -l) ))
+  echo "$n"
+}
 ebw_run() {
   local L="$1" mode="$2" H="$1/home"
-  rm -rf "$H" "$L/skills" "$L/skill-creator-workspace" "$L/calls" "$L/fb"; : > "$L/calls"; mkdir -p "$L/fb"
+  rm -rf "$H" "$L/skills" "$L/skill-creator-workspace" "$L/calls" "$L/fb" "$L/pids"; : > "$L/calls"; : > "$L/pids"; mkdir -p "$L/fb"
   mkdir -p "$H/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator" "$L/tmp"
   for sk in alpha beta gamma; do
     mkdir -p "$L/skills/$sk" "$L/skill-creator-workspace/evals"; : > "$L/skill-creator-workspace/evals/$sk-evals.json"
   done
   cat > "$L/standin_run_eval.py" <<'EOS'
-import json, subprocess, sys
-p = subprocess.Popen(["claude", "-p", "a query", "--output-format", "stream-json"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-p.stdout.read()
-p.wait()
+import json, os, selectors, subprocess, sys, time
+
+def run_one():
+    p = subprocess.Popen(["claude", "-p", "a query", "--output-format", "stream-json"],
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    sel = selectors.DefaultSelector()
+    sel.register(p.stdout, selectors.EVENT_READ)
+    t0 = time.time()
+    limit = float(os.environ.get("STANDIN_TIMEOUT", "20"))
+    while time.time() - t0 < limit:
+        if not sel.select(timeout=0.1):
+            continue
+        line = p.stdout.readline()
+        if not line:
+            break
+        try:
+            if json.loads(line).get("type") == "result":
+                break
+        except ValueError:
+            pass
+    p.kill()   # SIGKILL, like run_eval's finally
+    p.wait()
+
+for _ in range(2):
+    run_one()
 print(json.dumps({"summary": {"passed": 0, "total": 1}, "results": []}))
 sys.exit(0)
 EOS
   cat > "$L/fb/claude" <<'EOS'
 #!/usr/bin/env bash
 echo call >> "${FAKE_CALLS:?}"
+echo $$ >> "${FAKE_PIDS:?}"
+n="$(wc -l < "$FAKE_CALLS" | tr -d " ")"
 case "${FAKE_MODE}" in
-  wrap-auth) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Invalid API key · Please run /login"}'; echo "Authentication error" >&2; exit 1 ;;
+  wrap-auth) echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"Invalid API key · Please run /login"}'; echo "Authentication error" >&2; exec sleep 60 ;;
   wrap-exit0) echo "Please log in to continue."; exit 0 ;;
-  wrap-quote) echo '{"type":"result","subtype":"success","is_error":false,"result":"the docs quote: Invalid API key"}'; exit 0 ;;
-  wrap-cross) if [ "$(wc -l < "$FAKE_CALLS" | tr -d " ")" = 1 ]; then echo '{"type":"result","subtype":"success","is_error":false,"result":"Invalid API key quoted"}'; exit 0; fi
-              echo "API Error: 429 rate limit" >&2; exit 1 ;;
+  wrap-quote) echo '{"type":"result","subtype":"success","is_error":false,"result":"the docs quote: Invalid API key"}'; exec sleep 60 ;;
+  wrap-cross) if [ "$n" = 1 ]; then echo '{"type":"result","subtype":"success","is_error":false,"result":"Invalid API key quoted"}'; exec sleep 60; fi
+              echo "API Error: 429 rate limit" >&2; echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":"rate limited"}'; exec sleep 60 ;;
+  wrap-hang) exec sleep 60 ;;
 esac
 EOS
   chmod +x "$L/fb/claude"
-  OUT="$("${ENVX[@]}" HOME="$H" TMPDIR="$L/tmp" PATH="$L/fb:$PATH" FAKE_CALLS="$L/calls" FAKE_MODE="$mode" RUN_EVAL_CMD="python3 $L/standin_run_eval.py" \
+  OUT="$("${ENVX[@]}" HOME="$H" TMPDIR="$L/tmp" PATH="$L/fb:$PATH" FAKE_CALLS="$L/calls" FAKE_PIDS="$L/pids" FAKE_MODE="$mode" \
+    STANDIN_TIMEOUT="$([ "$mode" = wrap-hang ] && echo 0.5 || echo 20)" RUN_EVAL_CMD="python3 $L/standin_run_eval.py" \
     bash "$L/scripts/run-eval-batch.sh" < /dev/null 2>&1)"
-  RC=$?; CALLS="$(count "$L/calls")"
+  RC=$?; CALLS="$(count "$L/calls")"; LEFT="$(procs_left "$L")"
 }
-ebw_run "$TEST_TMP/eb" wrap-auth;  stop_case "run-eval-batch (run_eval swallows claude: json is_error + stderr, exit 1)" 1 "alpha/"
-ebw_run "$TEST_TMP/eb" wrap-exit0; stop_case "run-eval-batch (run_eval swallows claude: exit 0, only an auth message)" 1 "alpha/"
-ebw_run "$TEST_TMP/eb" wrap-quote; quote_case "run-eval-batch (wrapper: successful call quoting a phrase)" 3
-ebw_run "$TEST_TMP/eb" wrap-cross; quote_case "run-eval-batch (wrapper: call 1 ok quoting, later calls 429)" 3
+ebw_run "$TEST_TMP/eb" wrap-auth;  stop_case "run-eval-batch (run_eval returns on the result line and SIGKILLs: json is_error + stderr)" 1 "alpha/"
+assert_eq "$LEFT" "0" "run-eval-batch: no claude / tee process is left behind after run_eval killed claude (exec life cycle kept)"
+ebw_run "$TEST_TMP/eb" wrap-exit0; stop_case "run-eval-batch (exit 0, only an auth message, no result line)" 1 "alpha/"
+assert_eq "$LEFT" "0" "run-eval-batch: nothing left behind (exit 0 case)"
+ebw_run "$TEST_TMP/eb" wrap-quote; quote_case "run-eval-batch (wrapper: successful calls quoting a phrase)" 6
+assert_eq "$RC" "0" "run-eval-batch: quote case completes"
+assert_eq "$LEFT" "0" "run-eval-batch: nothing left behind (quote case)"
+ebw_run "$TEST_TMP/eb" wrap-cross; quote_case "run-eval-batch (wrapper: call 1 ok quoting, later calls fail with 429)" 6
+ebw_run "$TEST_TMP/eb" wrap-hang;  quote_case "run-eval-batch (wrapper: per-query timeout kill, no auth message)" 6
+assert_eq "$LEFT" "0" "run-eval-batch: a timeout-killed claude leaves nothing behind"
 eb_run "$TEST_TMP/eb" generic
 assert_eq "$CALLS" "3" "run-eval-batch: a generic failure does not stop the batch"
 assert_eq "$RC" "0" "run-eval-batch: a generic failure keeps the original exit code 0"
 mk_layout "$TEST_TMP/eb-mut" mutant
 eb_run "$TEST_TMP/eb-mut" auth; mutant_red "run-eval-batch" 1
-# negative control for the wrapper itself: no per-call record (= the wrapper back to a plain exec) -> the swallowed failure is not seen
+# negative control 1: no boundary check before a claude start -> the second paid call of the same skill happens
 mk_layout "$TEST_TMP/ebw-mut"
-grep -q 'if \[\[ -z "${EVAL_CALL_RECORD_DIR:-}" \]\]; then' "$TEST_TMP/ebw-mut/scripts/run-eval-batch.sh" || fail "wrapper mutation anchor missing"
-sed -i 's/if \[\[ -z "${EVAL_CALL_RECORD_DIR:-}" \]\]; then/if true; then/' "$TEST_TMP/ebw-mut/scripts/run-eval-batch.sh"
-ebw_run "$TEST_TMP/ebw-mut" wrap-auth; mutant_red "run-eval-batch (wrapper back to exec)" 1
-assert_eq "$CALLS" "3" "wrapper mutant: all three skills were called (nothing stopped it)"
+grep -q '^for out in "\$D"/\*.out; do' "$TEST_TMP/ebw-mut/scripts/run-eval-batch.sh" || fail "boundary mutation anchor missing"
+sed -i 's|^for out in "\$D"/\*.out; do|for out in ; do|' "$TEST_TMP/ebw-mut/scripts/run-eval-batch.sh"
+ebw_run "$TEST_TMP/ebw-mut" wrap-auth
+if [ "$CALLS" -le 1 ]; then fail "run-eval-batch: boundary check removed but only $CALLS claude call happened -- negative control broken"; fi
+echo "MUTANT-RED run-eval-batch (boundary check removed): claude calls=$CALLS (a second paid call of the same skill happened; the outer check still ends with rc=$RC)"
+# negative control 2: wrapper back to a non-exec pipeline -> run_eval's SIGKILL leaves claude / tee behind
+mk_layout "$TEST_TMP/ebw-mut2"
+grep -q '^exec "\$REAL_CLAUDE"' "$TEST_TMP/ebw-mut2/scripts/run-eval-batch.sh" || fail "pipeline mutation anchor missing"
+sed -i 's#^exec "\$REAL_CLAUDE" "\$@" --strict-mcp-config --setting-sources project,local "\${PLUGIN_ARGS\[@\]}"$#"$REAL_CLAUDE" "$@" --strict-mcp-config --setting-sources project,local "${PLUGIN_ARGS[@]}" 2>\&1 | tee "$rec.out"#' "$TEST_TMP/ebw-mut2/scripts/run-eval-batch.sh"
+ebw_run "$TEST_TMP/ebw-mut2" wrap-auth
+if [ "$LEFT" = 0 ]; then fail "run-eval-batch: pipeline wrapper left no orphan -- negative control broken"; fi
+echo "MUTANT-RED run-eval-batch (non-exec pipeline wrapper): $LEFT claude/tee process(es) left behind after run_eval's SIGKILL"
+pkill_left() { for p in $(cat "$1/pids" 2>/dev/null); do kill -9 "$p" 2>/dev/null; done; }
+pkill_left "$TEST_TMP/ebw-mut2"; pkill_left "$TEST_TMP/ebw-mut"
 
+mk_layout "$TEST_TMP/bc"
 # ============================ 2. scripts/bench-engine-capability.sh (one dispatch per case) ============================
 # outputs of a paid call: dispatch stdout+stderr (captured together) and the agent_log it names
 bc_run() {

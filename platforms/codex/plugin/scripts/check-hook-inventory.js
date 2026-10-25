@@ -47,7 +47,7 @@ const NON_HOOK = [
   /-lib\.js$/, /\.test\.js$/, /^capture-payload\.js$/, /^_transcript-timing-probe\.js$/,
   /^transcript-reader\.test\.js$/, /\.bak$/,
   /^opt-in-multiplexer\.js$/, // D6 infrastructure, not a user-facing hook stem
-  /^post-tool-chain\.js$/, // guard-port chain (BL-0241): infrastructure that hosts five wired stems; Phase 2 adds its expansion table
+  /^post-tool-chain\.js$/, // guard-port chain (BL-0241): infrastructure that hosts wired stems; expanded via CHAIN_COMMANDS below
 ];
 
 function die(msg, code) { console.error(msg); process.exit(code === undefined ? 2 : code); }
@@ -82,13 +82,44 @@ const MULTIPLEXER_EVENT_TABLE = {
   ],
 };
 
-function stemsFromHookBlock(eventMap) {
+// Guard port (BL-0241): post-tool-chain.js runs several observers in one process. Its argv names the member
+// stems (validated against the chain's own MEMBERS list); no argv means all of MEMBERS. Each member counts as wired.
+// Problems (unknown member, a member registered both through the chain and directly, or twice) land in `problems`.
+function chainMembers(cmd) {
+  // MEMBERS is read from the lib's source text (not require'd): the lib pulls in hooks/_shared, which a mirror tree may lack.
+  let defaults = [];
+  try {
+    const src = fs.readFileSync(path.join(HOOKS_DIR, 'post-tool-chain-lib.js'), 'utf8');
+    const lit = src.match(/const MEMBERS = \[([^\]]*)\]/);
+    if (lit) defaults = [...lit[1].matchAll(/'([A-Za-z0-9_-]+)'/g)].map((x) => x[1]);
+  } catch (e) { /* defaults stays empty: every member then reports as unknown */ }
+  const m = cmd.match(/post-tool-chain\.js((?:\s+[A-Za-z0-9_-]+)*)\s*$/);
+  const args = m ? m[1].trim().split(/\s+/).filter(Boolean) : [];
+  return { defaults, members: args.length ? args : defaults };
+}
+
+function stemsFromHookBlock(eventMap, problems) {
   const out = new Set();
   for (const event of Object.keys(eventMap || {})) {
+    const seen = new Map(); // stem -> how it was registered in this event ('direct' | 'chain')
+    const note = (stem, how) => {
+      if (problems && seen.has(stem)) problems.push(`hooks/hooks.json: ${event}: "${stem}" registered more than once (${seen.get(stem)} and ${how})`);
+      seen.set(stem, how);
+    };
     for (const matcher of eventMap[event]) {
       for (const h of matcher.hooks || []) {
         const s = stemFromCommand(h.command || '');
         if (!s) continue;
+        if (s === 'post-tool-chain') {
+          const { defaults, members } = chainMembers(h.command || '');
+          for (const stem of members) {
+            if (problems && !defaults.includes(stem)) problems.push(`hooks/hooks.json: ${event}: post-tool-chain member "${stem}" is not in the chain's MEMBERS`);
+            note(stem, 'chain');
+            out.add(stem);
+          }
+          continue;
+        }
+        note(s, 'direct');
         if (s === 'opt-in-multiplexer') {
           // Expand multiplexed opt-in membership for this event.
           for (const stem of (MULTIPLEXER_EVENT_TABLE[event] || [])) out.add(stem);
@@ -129,7 +160,8 @@ function deriveInventory() {
   const modErrors = validateModules(modules);
 
   // Everything actually wired in hooks.json.
-  const wired = stemsFromHookBlock(hooksJson.hooks);
+  const chainProblems = [];
+  const wired = stemsFromHookBlock(hooksJson.hooks, chainProblems);
 
   // The opt-in subset is declared in the manifest (default-off, self-gated).
   const optInList = Array.isArray(manifest.opt_in) ? manifest.opt_in : [];
@@ -158,7 +190,7 @@ function deriveInventory() {
     optIn: [...optIn].sort(),
     disabled: [...disabled].sort(),
     mods: Array.isArray(modules) ? modules.length : 0,
-    modErrors,
+    modErrors: [...modErrors, ...chainProblems],
     get total() { return this.defaultOn.length + this.optIn.length + this.disabled.length; },
   };
 }

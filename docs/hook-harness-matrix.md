@@ -25,6 +25,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `owner-question-guard` | Stop<br>未驗證 | — | — | — |
 | `per-turn-gate` | Stop<br>未驗證 | — | — | — |
 | `post-compact` | — | PostCompact<br>已打包（未驗證觸發）: PostCompact 2026-08-05 | — | — |
+| `post-tool-chain` | PostToolUse<br>未驗證 | — | — | — |
 | `reload-watch` | PostToolUse<br>未驗證 | — | — | — |
 | `residue-auto-reap` | SessionStart<br>未驗證 | — | — | — |
 | `run-approval-gate` | PostToolUse, PreToolUse<br>未驗證 | — | — | — |
@@ -37,4 +38,4 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `suggest-compact` | PostToolUse<br>未驗證 | — | — | — |
 | `version-drift-check` | SessionStart<br>未驗證 | — | — | — |
 
-`opt-in-multiplexer` hosts the opt-in PreToolUse / PostToolUse / Stop stems for Claude Code; their tiers are in `scripts/check-hook-inventory.js`.
+`opt-in-multiplexer` hosts the opt-in PreToolUse / PostToolUse / Stop stems for Claude Code; their tiers are in `scripts/check-hook-inventory.js`. `post-tool-chain` hosts the PostToolUse stems named in its hooks.json command (one process instead of several).

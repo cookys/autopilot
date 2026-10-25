@@ -412,28 +412,33 @@ test('CLI: unknown member names fail open (exit 0, one stderr line) and run noth
 });
 
 // --- wiring tripwires ---
-function postToolStems(hooksJson) {
-  const star = hooksJson.hooks.PostToolUse.find((m) => m.matcher === '.*');
-  return star.hooks.map((h) => (h.command.match(/hooks\/([A-Za-z0-9_-]+)\.js/) || [])[1]);
+// Phase 2 wiring (depth-0 ruling (a)): the chain is registered with argv intent-capture audit-log log-error; reload-watch and
+// failure-escalation stay separate registrations. The registered chain members must be a subsequence of MEMBERS.
+const REGISTERED_CHAIN = ['intent-capture', 'audit-log', 'log-error'];
+function starCommands(hooksJson) {
+  return hooksJson.hooks.PostToolUse.find((m) => m.matcher === '.*').hooks.map((h) => h.command);
 }
-function membersMatchWiring(members, hooksJson) {
-  const stems = postToolStems(hooksJson);
-  const i = stems.indexOf('opt-in-multiplexer');
-  return JSON.stringify(stems.slice(0, i)) === JSON.stringify(members);
+function wiringOk(chainMembers, hooksJson) {
+  const cmds = starCommands(hooksJson);
+  const chain = cmds.filter((c) => /post-tool-chain\.js/.test(c));
+  if (chain.length !== 1) return false;
+  const argv = chain[0].replace(/^.*post-tool-chain\.js/, '').trim().split(/\s+/).filter(Boolean);
+  if (JSON.stringify(argv) !== JSON.stringify(chainMembers)) return false;
+  // no chained member is also registered directly in the same event
+  return !cmds.some((c) => chainMembers.some((m) => new RegExp(`hooks/${m}\\.js`).test(c)));
 }
 
-test('MEMBERS are the `.*` PostToolUse observers that precede opt-in-multiplexer, in registration order', () => {
+test('Phase 2: hooks.json registers the chain for intent-capture, audit-log, log-error and nothing else chained', () => {
   const hooksJson = JSON.parse(fs.readFileSync(path.join(HOOKS, 'hooks.json'), 'utf8'));
-  // Phase 1 (unregistered): the direct commands are still in hooks.json, so the list can be derived from it.
-  // Phase 2 replaces them with the chain registration and must rewrite this test with the wiring change.
-  assert.ok(membersMatchWiring(MEMBERS, hooksJson));
-  // negative control: swapped order and a dropped member are both detected
-  assert.ok(!membersMatchWiring([MEMBERS[1], MEMBERS[0], ...MEMBERS.slice(2)], hooksJson));
-  assert.ok(!membersMatchWiring(MEMBERS.slice(1), hooksJson));
-});
-
-test('Phase 1 leaves the chain unregistered: no hooks.json command references it', () => {
-  const text = fs.readFileSync(path.join(HOOKS, 'hooks.json'), 'utf8');
-  assert.ok(!/post-tool-chain/.test(text));
-  assert.ok(/post-tool-chain/.test(text + ' post-tool-chain'), 'negative control: the pattern does detect a reference');
+  assert.ok(wiringOk(REGISTERED_CHAIN, hooksJson));
+  for (const m of REGISTERED_CHAIN) assert.ok(MEMBERS.includes(m), `${m} is a chain member`);
+  const cmds = starCommands(hooksJson);
+  assert.ok(cmds.some((c) => /hooks\/reload-watch\.js/.test(c)), 'reload-watch stays a separate registration');
+  assert.ok(cmds.some((c) => /hooks\/failure-escalation\.js/.test(c)), 'failure-escalation stays a separate registration');
+  assert.equal(cmds.length, 5, 'PostToolUse `.*` spawns five processes');
+  // negative controls: dropping a member, or registering one directly as well, is detected
+  assert.ok(!wiringOk(REGISTERED_CHAIN.slice(1), hooksJson));
+  const dup = JSON.parse(JSON.stringify(hooksJson));
+  dup.hooks.PostToolUse[0].hooks.push({ type: 'command', command: 'node ${CLAUDE_PLUGIN_ROOT}/hooks/log-error.js' });
+  assert.ok(!wiringOk(REGISTERED_CHAIN, dup));
 });

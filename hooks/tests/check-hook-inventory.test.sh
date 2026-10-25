@@ -166,4 +166,28 @@ assert_eq "0" "$MODS_IN_MIRRORS" "no mods/ directory inside either mirror"
 MODULES_IN_BASELINE="$(grep -c '"modules"' "$REPO_ROOT/platforms/codex/plugin/profiles/baselines/claude-hooks.json")"
 assert_eq "0" "$MODULES_IN_BASELINE" "codex hook baseline carries no modules key"
 
+# 17. guard-port chain (BL-0241): the chain's argv members count as wired; a chain that drops a member or a member
+#     registered twice must turn --check red (negative controls, shown red before the real tree is shown green)
+restore "hooks/hooks.json"
+grep -q 'post-tool-chain.js intent-capture audit-log log-error' "$SBX/hooks/hooks.json" || { echo "FATAL [$TEST_NAME] chain registration anchor missing" >&2; exit 1; }
+OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "0" "$?" "chain: shipped registration --check green"
+sed -i 's|post-tool-chain.js intent-capture audit-log log-error|post-tool-chain.js intent-capture audit-log|' "$SBX/hooks/hooks.json"
+OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "1" "$?" "chain: dropping one member (log-error becomes disabled) fails --check"
+assert_contains "$OUT" "log-error" "chain: the dropped member is named in the drift report"
+restore "hooks/hooks.json"
+sed -i 's|post-tool-chain.js intent-capture audit-log log-error|post-tool-chain.js intent-capture audit-log log-error audit-log|' "$SBX/hooks/hooks.json"
+OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "1" "$?" "chain: a member listed twice fails --check"
+assert_contains "$OUT" "registered more than once" "chain: duplicate registration is named"
+restore "hooks/hooks.json"
+sed -i 's|post-tool-chain.js intent-capture audit-log log-error|post-tool-chain.js intent-capture audit-log log-error context-budget|' "$SBX/hooks/hooks.json"
+OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "1" "$?" "chain: a stem outside the chain's MEMBERS fails --check"
+restore "hooks/hooks.json"
+node - "$SBX/hooks/hooks.json" <<'JS'
+const fs = require('fs'); const p = process.argv[2]; const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+j.hooks.PostToolUse[0].hooks.push({ type: 'command', command: 'node ${CLAUDE_PLUGIN_ROOT}/hooks/log-error.js' });
+fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+JS
+OUT="$(node "$SCRIPT" --check 2>&1)"; assert_eq "1" "$?" "chain: member also registered directly fails --check"
+restore "hooks/hooks.json"
+
 finalize_test

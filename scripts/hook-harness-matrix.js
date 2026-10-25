@@ -59,6 +59,13 @@ function registered(block) {
         if (!mm) continue;
         if (!out.has(mm[1])) out.set(mm[1], new Set());
         out.get(mm[1]).add(event);
+        if (mm[1] === 'post-tool-chain') { // guard port (BL-0241): the chain hosts these stems; each stays a registered stem
+          const args = (/post-tool-chain\.js((?:\s+[A-Za-z0-9_-]+)*)\s*$/u.exec(h.command || '') || [, ''])[1].trim().split(/\s+/).filter(Boolean);
+          for (const stem of args.length ? args : ['intent-capture', 'reload-watch', 'audit-log', 'log-error', 'failure-escalation']) {
+            if (!out.has(stem)) out.set(stem, new Set());
+            out.get(stem).add(event);
+          }
+        }
       }
     }
   }
@@ -105,7 +112,7 @@ function render(data) {
   for (const stem of [...stems].sort()) {
     lines.push(`| \`${stem}\` | ${HARNESSES.map(([h]) => cell(data, stem, h)).join(' | ')} |`);
   }
-  lines.push('', '`opt-in-multiplexer` hosts the opt-in PreToolUse / PostToolUse / Stop stems for Claude Code; their tiers are in `scripts/check-hook-inventory.js`.', '');
+  lines.push('', '`opt-in-multiplexer` hosts the opt-in PreToolUse / PostToolUse / Stop stems for Claude Code; their tiers are in `scripts/check-hook-inventory.js`. `post-tool-chain` hosts the PostToolUse stems named in its hooks.json command (one process instead of several).', '');
   return lines.join('\n');
 }
 

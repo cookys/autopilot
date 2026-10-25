@@ -317,8 +317,13 @@ test('end to end stub run: PASS with honest arms; pilot is not scored', () => {
   assert.strictEqual(p.status, 0);
   assert.match(p.stdout, /not scored/);
 });
-test('--runner cc refuses in P0 (no spend path exists)', () => {
-  assert.strictEqual(run(['--results', path.join(tmp(), 'r.jsonl'), '--runner', 'cc']).status, 2);
+// --runner cc is wired (fbatch/cc-build.js, fbatch/cell.js; end to end in hooks/tests/skill-onoff-findings-batch.test.sh
+// with a fake claude). This suite must never reach a real claude: PATH holds only bash, so the refusal is the claude check.
+test('--runner cc refuses when claude is not on PATH (this suite never spawns a real claude)', () => {
+  const bin = tmp(); fs.symlinkSync(cp.execSync('command -v bash', { encoding: 'utf8', shell: '/bin/sh' }).trim(), path.join(bin, 'bash'));
+  const r = cp.spawnSync(process.execPath, [RUN, '--results', path.join(tmp(), 'r.jsonl'), '--runner', 'cc', '--pilot'], { encoding: 'utf8', env: { ...process.env, PATH: bin } });
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /claude is not on PATH/);
 });
 
 // ---- marker edge cases found by independent verification ----

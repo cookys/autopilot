@@ -92,6 +92,32 @@ checkParent(path.dirname(SANDBOX_ROOT), 'sandbox and scratch parent');
 checkParent(path.dirname(LIVE_ROOT), 'live-state parent');
 checkParent(path.dirname(LOCK_FILE), 'lock file parent');
 
+// A relocated COPY of this file (tests) must never share a path with the OFFICIAL set: the official run wipes its resources
+// and a copy's lock is a different lock. So every copy, and the official file itself, compares its four canonical paths with
+// the official four, written below in a form a path-rewriting copy does not rewrite: the set must be exactly the official one,
+// or share no path with it (no equal, ancestor or descendant relation to ANY official path).
+const OFFICIAL = {
+  sandbox: '/tmp/' + 'ptc-fixed-sandbox', scratch: '/tmp/' + 'ptc-fixed-scratch',
+  live: '/dev/shm/' + 'ptc-fixed-live', lock: '/tmp/' + 'ptc-fixed-harness.lock',
+};
+const canon = (p) => {
+  try { return fs.realpathSync(p); } catch { /* not created yet: canonical parent + name */ }
+  try { return path.join(fs.realpathSync(path.dirname(p)), path.basename(p)); } catch { return path.resolve(p); }
+};
+{
+  const mine = { sandbox: SANDBOX_ROOT, scratch: SCRATCH_ROOT, live: LIVE_ROOT, lock: LOCK_FILE };
+  const related = (a, b) => a === b || a.startsWith(b + '/') || b.startsWith(a + '/');
+  const keys = Object.keys(OFFICIAL);
+  const isOfficial = keys.every((k) => canon(mine[k]) === canon(OFFICIAL[k]));
+  if (!isOfficial) {
+    for (const k of keys) for (const o of keys) {
+      if (related(canon(mine[k]), canon(OFFICIAL[o]))) {
+        die(`${mine[k]} (${k}) overlaps the official ${o} path ${OFFICIAL[o]} (equal, ancestor or descendant) without being the official set: a copy must live elsewhere`);
+      }
+    }
+  }
+}
+
 if (!underFlock) {
   // Re-run this very command under flock(1) on the one lock file. flock(1) forks its command, so the whole chain is started
   // in its OWN PROCESS GROUP and every signal we get goes to that group; we then wait for the group to be empty.

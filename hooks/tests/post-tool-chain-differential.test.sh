@@ -162,10 +162,15 @@ mk_reloc() { # <name> <parent> [source js]: sets HT and HR = a harness inside a 
   local src="$HARNESS"; [ "$#" -ge 3 ] && src="$3"
   [ -f "$src" ] || { echo "FATAL [$TEST_NAME] mk_reloc: harness source missing (a mutation did not apply?): '$src'" >&2; exit 1; }
   cp "$src" "$HR"
-  mutate_or_die "$HR" "s#/tmp/ptc-fixed-sandbox#$2/ptc-fixed-sandbox#g"
-  mutate_or_die "$HR" "s#/tmp/ptc-fixed-scratch#$2/ptc-fixed-scratch#g"
-  mutate_or_die "$HR" "s#/dev/shm/ptc-fixed-live#$2/ptc-fixed-live#g"
-  mutate_or_die "$HR" "s#/tmp/ptc-fixed-harness.lock#$2/ptc-fixed-harness.lock#g"
+  # through tokens: a parent that itself contains one of the official names must not be rewritten by a later expression
+  mutate_or_die "$HR" "s#/tmp/ptc-fixed-sandbox#@@PTC-S@@#g"
+  mutate_or_die "$HR" "s#/tmp/ptc-fixed-scratch#@@PTC-C@@#g"
+  mutate_or_die "$HR" "s#/dev/shm/ptc-fixed-live#@@PTC-L@@#g"
+  mutate_or_die "$HR" "s#/tmp/ptc-fixed-harness.lock#@@PTC-K@@#g"
+  mutate_or_die "$HR" "s#@@PTC-S@@#$2/ptc-fixed-sandbox#g"
+  mutate_or_die "$HR" "s#@@PTC-C@@#$2/ptc-fixed-scratch#g"
+  mutate_or_die "$HR" "s#@@PTC-L@@#$2/ptc-fixed-live#g"
+  mutate_or_die "$HR" "s#@@PTC-K@@#$2/ptc-fixed-harness.lock#g"
 }
 
 # unusable parent, symlinked parent (relocated copies)
@@ -205,6 +210,52 @@ mkdir -p "$TEST_TMP/fpo"
 mk_reloc noreject "$TEST_TMP/fpo" "$(mut_src noreject 's/^for (const v of \[.*\]) {/for (const v of []) {/')"
 NR_RC=0; PTC_FLOCK_HELD=1 HOME="$HOOK_HOME" node "$HR" check --only-overlap --overlap-n 0 > /dev/null 2>&1 < /dev/null || NR_RC=$?
 [ "$NR_RC" -ne 2 ] || fail "negative control 'override refusal removed' was NOT detected"
+
+# a relocated copy must not share a path with the OFFICIAL set (equal, ancestor or descendant), or the official run's wipe
+# could delete the copy's resources and lock. Run the copy ITSELF (no environment variable involved), nested under each
+# official resource while the real lock is held so nothing real is running.
+nested_probe() { # <copy js> <official dir to nest under>: prints the copy's output and "rc=<n>"
+  flock -o -w 600 "$REAL_LOCK" bash -c '
+    mkdir -p "$2/inner"
+    PTC_LOCK_WAIT_SEC=2 node "$1" check --only-overlap --overlap-n 0 2>&1 < /dev/null; echo "rc=$?"
+    rm -f "$2/inner/ptc-fixed-harness.lock"; rmdir "$2/inner" 2>/dev/null; rmdir "$2" 2>/dev/null' _ "$1" "$2" 2>/dev/null < /dev/null
+}
+NEST_MUT_SRC="$(mut_src nonest 's/^  if (!isOfficial) {/  if (false) {/')"
+for under in /tmp/ptc-fixed-sandbox /tmp/ptc-fixed-scratch /dev/shm/ptc-fixed-live; do
+  mk_reloc "nest-$(basename "$under")" "$under/inner"
+  NP="$(HOME="$HOOK_HOME" nested_probe "$HR" "$under")"
+  assert_contains "$NP" "rc=2" "a harness copy placed under $under is refused (exit 2)"
+  assert_contains "$NP" "overlaps the official" "nested under $under: explicit message"
+  mk_reloc "nestmut-$(basename "$under")" "$under/inner" "$NEST_MUT_SRC"
+  NPM="$(HOME="$HOOK_HOME" nested_probe "$HR" "$under")"
+  assert_contains "$NPM" "rc=0" "negative control: without the overlap check the same nested copy runs (and would be wiped by an official run)"
+done
+# the same logic with ancestor / equal / exact-set / disjoint relations, against a MOCK official set (the copy's literals are
+# rewritten into a mktemp dir, so a broken check can only ever touch that directory)
+off_case() { # <name> <parent> <sandbox-off> <scratch-off> <live-off> <lock-off> [source js]: prints "rc=<n>"
+  local n="$1" P="$2" so="$3" co="$4" lo="$5" ko="$6"
+  mkdir -p "$P"; mk_reloc "off-$n" "$P" ${7:+"$7"}
+  mutate_or_die "$HR" "s#'/tmp/' + 'ptc-fixed-sandbox'#'$so'#"
+  mutate_or_die "$HR" "s#'/tmp/' + 'ptc-fixed-scratch'#'$co'#"
+  mutate_or_die "$HR" "s#'/dev/shm/' + 'ptc-fixed-live'#'$lo'#"
+  mutate_or_die "$HR" "s#'/tmp/' + 'ptc-fixed-harness.lock'#'$ko'#"
+  HOME="$HOOK_HOME" node "$HR" check --only-overlap --overlap-n 0 > "$TEST_TMP/off-$n.out" 2>&1 < /dev/null; echo "rc=$?"
+}
+OX="$TEST_TMP/offx"; mkdir -p "$OX"
+FAR=("$OX/f/sandbox" "$OX/f/scratch" "$OX/f/live" "$OX/f/lock")
+P1="$TEST_TMP/offp1"
+assert_eq "$(off_case anc "$P1" "$P1/ptc-fixed-sandbox/deep/x" "${FAR[1]}" "${FAR[2]}" "${FAR[3]}")" "rc=2" "own sandbox is an ANCESTOR of an official path: refused"
+P2="$TEST_TMP/offp2"
+assert_eq "$(off_case desc "$P2" "$P2" "${FAR[1]}" "${FAR[2]}" "${FAR[3]}")" "rc=2" "own sandbox is a DESCENDANT of an official path: refused"
+P3="$TEST_TMP/offp3"
+assert_eq "$(off_case eq "$P3" "${FAR[0]}" "${FAR[1]}" "${FAR[2]}" "$P3/ptc-fixed-harness.lock")" "rc=2" "only the lock path equals an official path (not the whole set): refused"
+assert_contains "$(cat "$TEST_TMP/off-eq.out")" "overlaps the official" "equal-path refusal: explicit message"
+P4="$TEST_TMP/offp4"
+assert_eq "$(off_case set "$P4" "$P4/ptc-fixed-sandbox" "$P4/ptc-fixed-scratch" "$P4/ptc-fixed-live" "$P4/ptc-fixed-harness.lock")" "rc=0" "exactly the official set: accepted"
+P5="$TEST_TMP/offp5"
+assert_eq "$(off_case far "$P5" "${FAR[0]}" "${FAR[1]}" "${FAR[2]}" "${FAR[3]}")" "rc=0" "a disjoint set: accepted"
+P6="$TEST_TMP/offp6"
+assert_eq "$(off_case ancmut "$P6" "$P6/ptc-fixed-sandbox/deep/x" "${FAR[1]}" "${FAR[2]}" "${FAR[3]}" "$NEST_MUT_SRC")" "rc=0" "negative control: ancestor relation not detected when the check is removed"
 
 # the lock protects the resources, and the holder proves the lock is ITS OWN. held_probe: with <lock> held by a process that
 # does NOT pass the descriptor down (flock -o), run the harness (plain, or with the forged --under-flock claim) on resources
@@ -383,7 +434,10 @@ unit_neg listener-leak 's/  const now = new Set(\[...process.eventNames(), ...sn
 unit_neg once-listener-made-permanent 's/events.set(ev, process.rawListeners(ev))/events.set(ev, process.listeners(ev))/'
 unit_neg module-cache-not-purged 's/  for (const k of Object.keys(require.cache)) if (!keep.has(k)) delete require.cache\[k\];/  for (const k of Object.keys(require.cache)) if (!keep.has(k) \&\& false) delete require.cache[k];/'
 unit_neg once-wrapper-reused 's/process.once(ev, f.listener);/process.on(ev, f);/'
-unit_neg exit-status-not-masked 's/  return n \& 0xff;/  return n;/'
+unit_neg exit-status-not-masked 's/ | 0) \& 0xff; }/ | 0); }/'
+unit_neg exit-own-conversion 's/    if (args.length !== 0) process.exitCode = args\[0\];/    if (args.length !== 0 \&\& Number.isInteger(args[0])) process.exitCode = args[0];/'
+unit_neg exit-noarg-ignores-exitcode 's/throw new MemberExit(toStatus());/throw new MemberExit(args.length ? toStatus() : 0);/'
+unit_neg return-value-bypasses-setter 's/try { process.exitCode = c; return toStatus(); }/try { return Number(c) \& 0xff; }/'
 
 # the unmodified unit tests are green
 UOUT="$(HOME="$HOOK_HOME" node --test "$HOOKS_DIR/post-tool-chain.test.js" 2>&1 < /dev/null)"; URC=$?

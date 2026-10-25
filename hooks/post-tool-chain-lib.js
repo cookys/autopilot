@@ -14,7 +14,7 @@
  *    A member that throws (a bug, or a load failure) fails open: one stderr line, status 0.
  *  - process.stdout.write / process.stderr.write / process.exit are swapped while a member runs, and process.env,
  *    process.exitCode, process event listeners and the module cache are snapshotted, put back or purged, all in a
- *    `finally` (modules: purged before and after each member). Exit statuses are normalised to what a separate process would exit with (0-255). A member's output is flushed with fs.writeSync as soon as that member finished, so a
+ *    `finally` (modules: purged before and after each member). Exit statuses are what a separate process would exit with (process.exitCode setter + 8 bits). A member's output is flushed with fs.writeSync as soon as that member finished, so a
  *    later member that hangs (the host kills the chain on its timeout) never takes the earlier bytes down
  *    with it, and a large output is not cut by process.exit (pipe writes via process.stdout are async).
  *  - A write failure (EPIPE: the host stopped listening) never stops the remaining members; their state
@@ -36,20 +36,17 @@ class MemberExit extends Error {
   constructor(code) { super(`member called process.exit(${code})`); this.code = code; }
 }
 
-// The status a standalone process would end with for process.exit(c) / process.exit(runHook(...)): Node accepts
-// an integer (or an integer string), uses 0 for undefined/null, rejects anything else with a TypeError, and the
-// OS keeps the low 8 bits (-1 -> 255, 256 -> 0). Reproduced here so the chain's "highest status" is taken over
-// the numbers the separate processes would really have exited with.
+// The status a standalone process would end with for process.exit(c) / process.exit(runHook(...)). NOT reimplemented:
+// Node's own process.exitCode setter does the validation (integer or integer-like string, ERR_INVALID_ARG_TYPE /
+// ERR_OUT_OF_RANGE otherwise, null/undefined clear it) and process.exit() does `if (arguments.length) process.exitCode = c`,
+// so we hand the value to that setter and read the result back. The one step Node does in C++ (reallyExit: ToInt32 of
+// `process.exitCode || 0`, then the OS keeps 8 bits) is reproduced by toStatus(); Node 20.10 reads a string code back as
+// the string ("0x03"), Node 24 as the number (3), and Number(v)|0 gives the same status for both.
+function toStatus() { return (Number(process.exitCode || 0) | 0) & 0xff; }
+// setter errors propagate to the caller exactly as Node's process.exit would throw them
 function exitStatus(c) {
-  if (c === undefined || c === null) return 0;
-  let n = c;
-  if (typeof n === 'string' && /^[-+]?\d+$/.test(n.trim())) n = Number(n);
-  if (typeof n !== 'number' || !Number.isInteger(n)) {
-    const e = new TypeError(`The "code" argument must be of type integer. Received ${String(c)}`);
-    e.code = 'ERR_INVALID_ARG_TYPE';
-    throw e;
-  }
-  return n & 0xff;
+  const prev = process.exitCode;
+  try { process.exitCode = c; return toStatus(); } finally { process.exitCode = prev; }
 }
 
 function toBuffer(chunk, encoding) {
@@ -128,7 +125,12 @@ function capture(fn) {
   let code = 0;
   process.stdout.write = sink(out);
   process.stderr.write = sink(err);
-  process.exit = (c) => { throw new MemberExit(exitStatus(c)); };
+  // same contract as Node: an argument (even undefined) goes through the process.exitCode setter, no argument keeps the
+  // current exitCode; the member is ended by a throw because the chain process must survive
+  process.exit = function exit(...args) {
+    if (args.length !== 0) process.exitCode = args[0];
+    throw new MemberExit(toStatus());
+  };
   try {
     code = exitStatus(fn());
   } catch (e) {

@@ -108,10 +108,51 @@ test('exit statuses are normalised the way a separate process would exit (-1 -> 
   for (const bad of [1.5, NaN, true, 'abc']) {
     const rr = run(['a'], { a: fake(() => bad) });
     assert.strictEqual(rr.code, 0, `status for ${String(bad)}`);
-    assert.match(rr.err, /member fail-open: The "code" argument must be of type integer/);
+    assert.match(rr.err, /member fail-open: The (value of )?"code"/);
   }
   const rp = run(['a'], { a: fake(() => { process.exit(1.5); }) });
   assert.match(rp.err, /member fail-open/);
+});
+
+// Exit-code semantics are Node's own: the chain hands the value to process.exitCode (Node's setter validates and converts) and
+// the expected result is what the hook gets as its OWN process (`node -e` running the same statements). Valid values must give
+// the identical exit code; values Node rejects make the standalone process die with status 1 and Node's error, which in the
+// chain is a fail-open member (status 0) carrying the SAME Node error text.
+const CODE_VALUES = ['"3.0"', '"3e0"', '"0x03"', '"0b11"', '"0o3"', '"-1.0"', '" 3 "', '"7"', '3', '-1', '255', '256', '257', 'undefined', 'null',
+  '"abc"', '""', '3.5', '1e30', '"1e30"', 'NaN', 'Infinity', 'true', '{}'];
+const standalone = (stmt) => {
+  const r = spawnSync(process.execPath, ['-e', stmt], { encoding: 'utf8' });
+  return { code: r.status, err: r.stderr };
+};
+const nodeMsg = (stderr) => { const m = /^(?:Uncaught )?(?:RangeError|TypeError)[^\n]*?: (.+)$/m.exec(stderr) || /(The "code" argument[^\n]*)/.exec(stderr); return m ? m[1].replace(/ \[ERR_[A-Z_]+\]$/, '') : null; };
+for (const style of ['return', 'exit']) {
+  test(`exit code semantics equal the hook running alone (${style} style, every value)`, () => {
+    for (const v of CODE_VALUES) {
+      const alone = standalone(style === 'return' ? `process.exit((() => (${v}))())` : `process.exit(${v})`);
+      const impl = style === 'return' ? new Function(`return (${v});`) : new Function(`process.exit(${v});`);
+      const r = run(['a'], { a: fake(impl) });
+      if (alone.code === 1 && /ERR_(INVALID_ARG_TYPE|OUT_OF_RANGE)/.test(alone.err)) {
+        assert.strictEqual(r.code, 0, `${v}: rejected by Node -> fail-open status`);
+        const msg = nodeMsg(alone.err);
+        assert.ok(msg && r.err.includes(msg), `${v}: chain diagnostic carries Node's error text (${msg}) got ${r.err}`);
+      } else {
+        assert.strictEqual(r.code, alone.code, `${v}: chain status equals the standalone status`);
+        assert.strictEqual(r.err, '', `${v}: no diagnostic`);
+      }
+    }
+  });
+}
+test('process.exit() with no argument takes the exitCode the member set; process.exit(undefined) clears it (as alone)', () => {
+  const alone = standalone('process.exitCode = 7; process.exit()');
+  assert.strictEqual(alone.code, 7);
+  assert.strictEqual(run(['a'], { a: fake(() => { process.exitCode = 7; process.exit(); }) }).code, 7);
+  const alone2 = standalone('process.exitCode = 7; process.exit(undefined)');
+  assert.strictEqual(run(['a'], { a: fake(() => { process.exitCode = 7; process.exit(undefined); }) }).code, alone2.code);
+  // and a member returning normally after setting exitCode: alone it is process.exit(<return value>) -> the return value wins
+  const alone3 = standalone('process.exitCode = 7; process.exit((() => 0)())');
+  assert.strictEqual(run(['a'], { a: fake(() => { process.exitCode = 7; return 0; }) }).code, alone3.code);
+  // the member's exitCode does not leak into the next member
+  assert.strictEqual(run(['a', 'b'], { a: fake(() => { process.exitCode = 9; return 0; }), b: fake(() => { process.exit(); }) }).code, 0);
 });
 
 // --- isolation between members (same process): env, exitCode, listeners, module state ---

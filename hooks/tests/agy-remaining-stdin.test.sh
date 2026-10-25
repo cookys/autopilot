@@ -2,7 +2,8 @@
 # agy-remaining-stdin.test.sh — BL-0298: the agy call sites that used to put the prompt on argv now go
 # through lib/agy-stream-json.js (prompt as one stream-json line on stdin). A recording fake agy captures
 # argv and stdin for each site; the prompt text must be on stdin and absent from argv.
-#   sites: probe-engine-capability.sh (agy), qc-panel.js (judge B), run-orchestration-eval.sh (--runner agy)
+#   sites: probe-engine-capability.sh (agy), qc-panel.js (judge B)
+#   (run-orchestration-eval.sh is deliberately NOT changed: its hash is pinned by the P2 prereg manifests)
 #   (probe-harness-capabilities.sh is covered by probe-harness-capabilities-agy-alias.test.sh,
 #    qualification-review-provider.js by scripts/qualification-review-provider.test.js)
 # Negative control: AGY_REMAINING_NEGCTL=1 makes the fake reject any run that is NOT stdin transport
@@ -91,28 +92,5 @@ assert_eq "$(/bin/ls "$REC"/*.argv 2>/dev/null | wc -l | tr -d ' ')" "0" "qc-pan
 # NEGATIVE CONTROL
 run_qc AGY_REMAINING_NEGCTL=1 FAKE_AGY_MODE=ok; QC_RC=$?
 assert_neq "0" "$QC_RC" "NEGATIVE CONTROL qc-panel: an argv-demanding agy turns the stdin transport red"
-
-# ── 3. run-orchestration-eval.sh --runner agy ────────────────────────────────
-run_eval() { # $@ env
-  clear_rec
-  env "$@" bash "$REPO_ROOT/evals/orchestration/run-orchestration-eval.sh" --task t1-fix-with-decoy --arm off --runner agy --model test-model --out "$TEST_TMP/eval-$RANDOM" >"$TEST_TMP/eval.out" 2>&1
-}
-run_eval FAKE_AGY_MODE=ok
-A="$(last_rec)"
-if [ -n "$A" ]; then
-  assert_contains "$(cat "${A%.argv}.stdin")" "HARNESS DIRECTIVE" "eval-harness: the task prompt (quotes, newlines, \$ and all) arrives on stdin"
-  assert_not_contains "$(cat "$A")" "HARNESS DIRECTIVE" "eval-harness: argv carries no prompt text"
-  assert_not_contains "$(cat "$A")" '"-p"' "eval-harness: argv has no -p"
-  assert_contains "$(cat "$A")" '"--dangerously-skip-permissions"' "eval-harness: containment flags unchanged"
-else
-  fail "eval-harness: agy was not invoked at all"
-fi
-# terminal path: no agy_prompt / run script residue under /tmp after the run
-assert_eq "$(/bin/ls /tmp 2>/dev/null | grep -c '^agy-run-' || true)" "0" "eval-harness: no agy-run script residue"
-# NEGATIVE CONTROL
-run_eval AGY_REMAINING_NEGCTL=1 FAKE_AGY_MODE=ok
-assert_contains "$(cat "$TEST_TMP/eval.out")" '"oracle_pass":false' "NEGATIVE CONTROL eval-harness: runs without agy edits record oracle_pass false (smoke)"
-N_OK="$(/bin/ls "$REC"/*.argv 2>/dev/null | wc -l | tr -d ' ')"
-assert_eq "$N_OK" "1" "NEGATIVE CONTROL eval-harness: the argv-demanding fake was still invoked once, via stdin"
 
 finalize_test

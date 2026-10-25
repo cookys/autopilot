@@ -1,6 +1,6 @@
 {
- "source_ref": "e5691fb6c",
- "source_sha": "e5691fb6c3f4e3fc5220883c9bc3524492bccc90",
+ "source_ref": "1b4923736",
+ "source_sha": "1b492373636ab2ce9396db0c81a5c0b4cc887eb6",
  "fixtures": {
   "quiet-bash-success": {
    "steps": [
@@ -154,13 +154,13 @@
       {
        "hook": "failure-escalation",
        "code": 0,
-       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
        "stderr": ""
       }
      ],
      "agg": {
       "code": 0,
-      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
       "stderr": ""
      }
     },
@@ -193,13 +193,13 @@
       {
        "hook": "failure-escalation",
        "code": 0,
-       "stdout": "[Autopilot Failure Escalation — L2]\n\nThird consecutive Bash failure. MANDATORY investigation steps:\n1. Read the error message word by word — 90% of answers are in the error text\n2. Search (WebSearch / Grep) for the core problem\n3. Read the original context around the failure (50 lines up/down)\n4. List 3 fundamentally different hypotheses\n5. Reverse your main assumption — what if the problem is NOT where you think it is?\n",
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L2]\\n\\nThird consecutive Bash failure. MANDATORY investigation steps:\\n1. Read the error message word by word — 90% of answers are in the error text\\n2. Search (WebSearch / Grep) for the core problem\\n3. Read the original context around the failure (50 lines up/down)\\n4. List 3 fundamentally different hypotheses\\n5. Reverse your main assumption — what if the problem is NOT where you think it is?\"}}\n",
        "stderr": ""
       }
      ],
      "agg": {
       "code": 0,
-      "stdout": "[Autopilot Failure Escalation — L2]\n\nThird consecutive Bash failure. MANDATORY investigation steps:\n1. Read the error message word by word — 90% of answers are in the error text\n2. Search (WebSearch / Grep) for the core problem\n3. Read the original context around the failure (50 lines up/down)\n4. List 3 fundamentally different hypotheses\n5. Reverse your main assumption — what if the problem is NOT where you think it is?\n",
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L2]\\n\\nThird consecutive Bash failure. MANDATORY investigation steps:\\n1. Read the error message word by word — 90% of answers are in the error text\\n2. Search (WebSearch / Grep) for the core problem\\n3. Read the original context around the failure (50 lines up/down)\\n4. List 3 fundamentally different hypotheses\\n5. Reverse your main assumption — what if the problem is NOT where you think it is?\"}}\n",
       "stderr": ""
      }
     },
@@ -232,13 +232,13 @@
       {
        "hook": "failure-escalation",
        "code": 0,
-       "stdout": "[Autopilot Failure Escalation — L3]\n\nFourth consecutive Bash failure. Complete ALL items before proceeding:\n- [ ] Read failure signal word by word?\n- [ ] Searched core problem with tools?\n- [ ] Read original context around failure?\n- [ ] All assumptions verified with tools?\n- [ ] Tried the opposite assumption?\n- [ ] Reproduced in minimal scope?\n- [ ] Switched tools/methods/angles/stack?\n\nDo not skip any item. Each must have a concrete answer, not just a checkmark.\n",
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L3]\\n\\nFourth consecutive Bash failure. Complete ALL items before proceeding:\\n- [ ] Read failure signal word by word?\\n- [ ] Searched core problem with tools?\\n- [ ] Read original context around failure?\\n- [ ] All assumptions verified with tools?\\n- [ ] Tried the opposite assumption?\\n- [ ] Reproduced in minimal scope?\\n- [ ] Switched tools/methods/angles/stack?\\n\\nDo not skip any item. Each must have a concrete answer, not just a checkmark.\"}}\n",
        "stderr": ""
       }
      ],
      "agg": {
       "code": 0,
-      "stdout": "[Autopilot Failure Escalation — L3]\n\nFourth consecutive Bash failure. Complete ALL items before proceeding:\n- [ ] Read failure signal word by word?\n- [ ] Searched core problem with tools?\n- [ ] Read original context around failure?\n- [ ] All assumptions verified with tools?\n- [ ] Tried the opposite assumption?\n- [ ] Reproduced in minimal scope?\n- [ ] Switched tools/methods/angles/stack?\n\nDo not skip any item. Each must have a concrete answer, not just a checkmark.\n",
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L3]\\n\\nFourth consecutive Bash failure. Complete ALL items before proceeding:\\n- [ ] Read failure signal word by word?\\n- [ ] Searched core problem with tools?\\n- [ ] Read original context around failure?\\n- [ ] All assumptions verified with tools?\\n- [ ] Tried the opposite assumption?\\n- [ ] Reproduced in minimal scope?\\n- [ ] Switched tools/methods/angles/stack?\\n\\nDo not skip any item. Each must have a concrete answer, not just a checkmark.\"}}\n",
       "stderr": ""
      }
     },
@@ -271,13 +271,13 @@
       {
        "hook": "failure-escalation",
        "code": 0,
-       "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L4]\\n\\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\\n\\n1. **Verified facts** — what do you KNOW with evidence?\\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\\n3. **Narrowed problem scope** — where exactly is the problem?\\n4. **Recommended next steps** — what should be tried next?\\n5. **Approaches tried** — list each approach and why it failed\\n\\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\"}}\n",
        "stderr": ""
       }
      ],
      "agg": {
       "code": 0,
-      "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L4]\\n\\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\\n\\n1. **Verified facts** — what do you KNOW with evidence?\\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\\n3. **Narrowed problem scope** — where exactly is the problem?\\n4. **Recommended next steps** — what should be tried next?\\n5. **Approaches tried** — list each approach and why it failed\\n\\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\"}}\n",
       "stderr": ""
      }
     },
@@ -310,13 +310,13 @@
       {
        "hook": "failure-escalation",
        "code": 0,
-       "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L4]\\n\\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\\n\\n1. **Verified facts** — what do you KNOW with evidence?\\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\\n3. **Narrowed problem scope** — where exactly is the problem?\\n4. **Recommended next steps** — what should be tried next?\\n5. **Approaches tried** — list each approach and why it failed\\n\\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\"}}\n",
        "stderr": ""
       }
      ],
      "agg": {
       "code": 0,
-      "stdout": "[Autopilot Failure Escalation — L4]\n\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\n\n1. **Verified facts** — what do you KNOW with evidence?\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\n3. **Narrowed problem scope** — where exactly is the problem?\n4. **Recommended next steps** — what should be tried next?\n5. **Approaches tried** — list each approach and why it failed\n\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\n",
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L4]\\n\\nFive or more consecutive Bash failures. You MUST produce a structured failure report NOW:\\n\\n1. **Verified facts** — what do you KNOW with evidence?\\n2. **Excluded possibilities** — what have you ruled out, with evidence for each?\\n3. **Narrowed problem scope** — where exactly is the problem?\\n4. **Recommended next steps** — what should be tried next?\\n5. **Approaches tried** — list each approach and why it failed\\n\\nIf you are genuinely stuck after exhausting all approaches, this report IS the deliverable. A well-documented dead end is more valuable than continued spinning.\"}}\n",
       "stderr": ""
      }
     }
@@ -435,13 +435,13 @@
       {
        "hook": "failure-escalation",
        "code": 0,
-       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
        "stderr": ""
       }
      ],
      "agg": {
       "code": 0,
-      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
       "stderr": ""
      }
     },
@@ -638,13 +638,13 @@
       {
        "hook": "failure-escalation",
        "code": 0,
-       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
        "stderr": ""
       }
      ],
      "agg": {
       "code": 0,
-      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
       "stderr": ""
      }
     }
@@ -930,13 +930,13 @@
       {
        "hook": "failure-escalation",
        "code": 0,
-       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
        "stderr": ""
       }
      ],
      "agg": {
       "code": 0,
-      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\"}}\n[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\\n[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
       "stderr": "⚠ Plugin catalog signal changed (dispatch chain config) — run /reload-plugins before next routing query so the skill catalog reflects on-disk state.\n"
      }
     }
@@ -2179,13 +2179,13 @@
       {
        "hook": "failure-escalation",
        "code": 0,
-       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
        "stderr": ""
       }
      ],
      "agg": {
       "code": 0,
-      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
       "stderr": ""
      }
     }
@@ -2318,13 +2318,13 @@
       {
        "hook": "failure-escalation",
        "code": 0,
-       "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+       "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
        "stderr": ""
       }
      ],
      "agg": {
       "code": 0,
-      "stdout": "[Autopilot Failure Escalation — L1]\n\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\n\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\n",
+      "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[Autopilot Failure Escalation — L1]\\n\\nConsecutive Bash failure detected (2nd). You MUST switch to a fundamentally different approach — not parameter tweaking, not retrying the same command with minor changes.\\n\\nConsider invoking autopilot:debug (or superpowers:systematic-debugging if installed) if you haven't already.\"}}\n",
       "stderr": ""
      }
     }

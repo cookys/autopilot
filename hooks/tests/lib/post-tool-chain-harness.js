@@ -40,7 +40,7 @@ const REPO = path.resolve(__dirname, '..', '..', '..');
 const HOOKS = path.join(REPO, 'hooks');
 const GOLDEN = path.join(REPO, 'hooks', 'tests', 'fixtures', 'post-tool-chain', 'golden.json');
 const { MEMBERS } = require(path.join(HOOKS, 'post-tool-chain-lib.js'));
-const ORIG_REF = 'e5691fb6c';
+const ORIG_REF = '1b4923736'; // BL-0304: re-pinned to the commit whose failure-escalation emits additionalContext (was e5691fb6c)
 
 // ---------- args ----------
 // Fixed umask: default-created files/dirs get the same modes on every host (the golden stores modes).

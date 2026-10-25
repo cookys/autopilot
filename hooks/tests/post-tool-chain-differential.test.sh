@@ -25,6 +25,7 @@ mk_chain_dir() {
   local d="$MUT/$1"
   mkdir -p "$d"
   cp "$HOOKS_DIR/post-tool-chain.js" "$HOOKS_DIR/post-tool-chain-lib.js" "$d/"
+  ln -sfn "$HOOKS_DIR/_shared" "$d/_shared"   # the lib requires ./_shared/hook-output.js (BL-0304)
   for s in intent-capture reload-watch audit-log log-error failure-escalation; do
     ln -sf "$HOOKS_DIR/$s.js" "$d/$s.js"
   done
@@ -65,7 +66,7 @@ neg() { # <label> <sed command> <fixture the mutation must break>
   assert_contains "$H_OUT" "HARNESS RED" "negative control '$label' reports RED"
 }
 neg exit-code 's/if (r.code > status) status = r.code;/status = 1;/' quiet-bash-success
-neg stdout-byte 's/if (r.out.length) emitOut(r.out);/if (r.out.length) emitOut(r.out.subarray(0, r.out.length - 1));/' bash-fail-escalation-ladder
+neg stdout-byte 's/  if (held.length === 1) emitOut(held\[0\].out);/  if (held.length === 1) emitOut(held[0].out.subarray(0, held[0].out.length - 1));/' bash-fail-escalation-ladder
 neg aggregate-order "s/const MEMBERS = \['intent-capture', 'reload-watch', 'audit-log', 'log-error', 'failure-escalation'\];/const MEMBERS = ['intent-capture', 'failure-escalation', 'audit-log', 'log-error', 'reload-watch'];/" reload-and-failure-both-emit
 neg member-order-sorted "s/for (const stem of members) {/for (const stem of members.slice().sort()) {/" reload-and-failure-both-emit
 neg no-context-merge 's/    if (events.length === 1) {/    if (false) {/' reload-and-failure-both-emit

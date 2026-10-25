@@ -176,6 +176,22 @@ test('a once() listener stays once after a member touches the listeners of that 
   } finally { process.removeAllListeners('ptc-once-event'); }
 });
 
+test('a once() listener fired by one member can fire again for the next member (a separate process starts with a fresh one)', () => {
+  let calls = 0;
+  process.once('ptc-once-fire', () => { calls++; });
+  try {
+    run(['a', 'b'], {
+      a: fake(() => { process.emit('ptc-once-fire'); return 0; }),
+      b: fake(() => { process.emit('ptc-once-fire'); return 0; }),
+    });
+    assert.strictEqual(calls, 2, 'fired once per member');
+    // and it is still a once listener afterwards: one more emit fires it, the next does not
+    process.emit('ptc-once-fire');
+    process.emit('ptc-once-fire');
+    assert.strictEqual(calls, 3);
+  } finally { process.removeAllListeners('ptc-once-fire'); }
+});
+
 test('a shared module PRELOADED before the chain started is fresh for every member', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ptc-pre-'));
   try {

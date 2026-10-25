@@ -13,6 +13,12 @@ HARNESS="$REPO_ROOT/hooks/tests/lib/post-tool-chain-harness.js"
 MUT="$TEST_TMP/mut"
 mkdir -p "$MUT"
 
+# Every negative control applies its mutation through mutate_or_die: if the sed anchor no longer hits, the whole test
+# stops at once (a control that was never applied must not pass as green).
+mutate_or_die() {
+  sed_mutate "$@" || { echo "FATAL [$TEST_NAME] negative control not applied (mutation missed its anchor): $*" >&2; exit 1; }
+}
+
 # mutant dir <name>: a copy of chain.js + chain-lib.js with the five observers symlinked in (they resolve their
 # own ../src and ./lib requires through the symlink's real path).
 mk_chain_dir() {
@@ -51,7 +57,7 @@ assert_contains "$OVERLAP_OUT" '"chain_failing_components":0' "no chain componen
 neg() { # <label> <sed command> <file under chain dir>
   local label="$1" expr="$2" file="${3:-post-tool-chain-lib.js}"
   mk_chain_dir "$label"
-  sed_mutate "$MUT/$label/$file" "$expr" || return 0
+  mutate_or_die "$MUT/$label/$file" "$expr"
   run_harness --chain "$MUT/$label"
   [ "$H_RC" -ne 0 ] || fail "negative control '$label' was NOT detected (harness rc=$H_RC)"
   assert_contains "$H_OUT" "HARNESS RED" "negative control '$label' reports RED"
@@ -69,7 +75,7 @@ neg drop-state-write "s/for (const stem of members) {/for (const stem of members
 inv_neg() { # <label> <js statement run on the counter file before the chain returns>
   local label="$1" stmt="$2"
   mk_chain_dir "$label"
-  sed_mutate "$MUT/$label/post-tool-chain-lib.js" "s#^  return status;#  $stmt return status;#" || return 0
+  mutate_or_die "$MUT/$label/post-tool-chain-lib.js" "s#^  return status;#  $stmt return status;#"
   local out rc
   out="$(HOME="$HOOK_HOME" node "$HARNESS" check --only-overlap --overlap-n 3 --chain "$MUT/$label" 2>&1 < /dev/null)"; rc=$?
   [ "$rc" -ne 0 ] || fail "invariant negative control '$label' was NOT detected"
@@ -96,13 +102,22 @@ mk_member_tree() { # <name> <member stem>: chain files + the member copied (muta
 }
 norm_neg() { # <label> <member> <sed command> <fixture name that must go red>
   mk_member_tree "$1" "$2"
-  sed_mutate "$MT/hooks/$2.js" "$3" || return 0
+  mutate_or_die "$MT/hooks/$2.js" "$3"
   run_harness --chain "$MT/hooks"
   [ "$H_RC" -ne 0 ] || fail "negative control '$1' was NOT detected"
   assert_contains "$H_OUT" "$4" "negative control '$1': the '$4' fixture goes red"
 }
 norm_neg literal-timestamp-in-command audit-log "s#redacted.replace(#redacted.replace(/00:00:00.123Z/g, '00:00:00.999Z').replace(#" literal-timestamp-hostname-pid-in-user-text
 norm_neg heading-shaped-line-in-error-text log-error "s#^\( *\)truncError,\$#\1truncError.replace(/03:03:03.333Z/, '03:03:03.999Z'),#" user-error-text-with-heading-shaped-line
+
+norm_neg corrupted-error-block-empty-tool log-error 's#\*\*Tool:\*\* ${toolName}#**Tool:** #' user-error-text-with-heading-shaped-line
+norm_neg embedded-terminator-user-date-changed log-error 's#^\( *\)truncError,$#\1truncError.replace(/03:03:03.333Z/, "03:03:03.999Z"),#' user-error-text-embeds-terminator-and-heading
+norm_neg one-byte-of-user-error-text log-error 's#^\( *\)truncError,$#\1truncError.replace(/before/, "befora"),#' user-error-text-embeds-terminator-and-heading
+
+# --- negative control: without the freeze module the arms disagree on clock / hostname (the freeze really is what makes them equal) ---
+run_harness --no-freeze
+[ "$H_RC" -ne 0 ] || fail "negative control 'freeze module removed' was NOT detected"
+assert_contains "$H_OUT" "state differs" "freeze removed: volatile values differ and the harness is red"
 
 # --- negative control: dropping the umask pin makes a umask-077 caller red ---
 UP="$MUT/umask"; mkdir -p "$UP/hooks"
@@ -111,7 +126,7 @@ rm -f "$UP/hooks/tests"; mkdir -p "$UP/hooks/tests/lib" "$UP/hooks/tests/fixture
 ln -sf "$REPO_ROOT/hooks/tests/fixtures/post-tool-chain/golden.json" "$UP/hooks/tests/fixtures/post-tool-chain/golden.json"
 ln -sf "$REPO_ROOT/src" "$UP/src"; ln -sf "$REPO_ROOT/scripts" "$UP/scripts"
 cp "$HARNESS" "$UP/hooks/tests/lib/post-tool-chain-harness.js"
-sed_mutate "$UP/hooks/tests/lib/post-tool-chain-harness.js" "s#^process.umask(0o022);##" || true
+mutate_or_die "$UP/hooks/tests/lib/post-tool-chain-harness.js" "s#^process.umask(0o022);##"
 UN_OUT="$( umask 077; HOME="$HOOK_HOME" node "$UP/hooks/tests/lib/post-tool-chain-harness.js" check --overlap-n 0 --no-orig 2>&1 < /dev/null )"; UN_RC=$?
 [ "$UN_RC" -ne 0 ] || fail "negative control 'umask pin removed' was NOT detected under umask 077"
 
@@ -119,7 +134,7 @@ UN_OUT="$( umask 077; HOME="$HOOK_HOME" node "$UP/hooks/tests/lib/post-tool-chai
 unit_neg() { # <label> <sed command>
   local label="$1" expr="$2"
   mk_chain_dir "u-$label"
-  sed_mutate "$MUT/u-$label/post-tool-chain-lib.js" "$expr" || return 0
+  mutate_or_die "$MUT/u-$label/post-tool-chain-lib.js" "$expr"
   local out rc
   out="$(PTC_LIB="$MUT/u-$label/post-tool-chain-lib.js" HOME="$HOOK_HOME" node --test "$HOOKS_DIR/post-tool-chain.test.js" 2>&1 < /dev/null)"; rc=$?
   [ "$rc" -ne 0 ] || fail "unit negative control '$label' was NOT detected"
@@ -133,6 +148,7 @@ unit_neg exitcode-leak 's/  process.exitCode = snap.exitCode;//'
 unit_neg listener-leak 's/  const now = new Set(\[...process.eventNames(), ...snap.events.keys()\]);/  const now = new Set();/'
 unit_neg once-listener-made-permanent 's/events.set(ev, process.rawListeners(ev))/events.set(ev, process.listeners(ev))/'
 unit_neg module-cache-not-purged 's/  for (const k of Object.keys(require.cache)) if (!keep.has(k)) delete require.cache\[k\];/  for (const k of Object.keys(require.cache)) if (!keep.has(k) \&\& false) delete require.cache[k];/'
+unit_neg once-wrapper-reused 's/process.once(ev, f.listener);/process.on(ev, f);/'
 unit_neg exit-status-not-masked 's/  return n \& 0xff;/  return n;/'
 
 # the unmodified unit tests are green

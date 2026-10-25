@@ -63,14 +63,14 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo ok\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo ok\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] echo ok\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo ok\n"
     },
     "run/": {
      "mode": "755"
@@ -344,14 +344,14 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false 6\",\n  \"tool_count_session\": 6,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false 6\",\n  \"tool_count_session\": 6,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] false 1\n[<TS>] [<ROOT>/cwd] false 2\n[<TS>] [<ROOT>/cwd] false 3\n[<TS>] [<ROOT>/cwd] false 4\n[<TS>] [<ROOT>/cwd] false 5\n[<TS>] [<ROOT>/cwd] false 6\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 1\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 2\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 3\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 4\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 5\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 6\n"
     },
     "run/": {
      "mode": "755"
@@ -547,14 +547,14 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 4,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 4,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] false\n[<TS>] [<ROOT>/cwd] false\n[<TS>] [<ROOT>/cwd] true\n[<TS>] [<ROOT>/cwd] false\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] true\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false\n"
     },
     "run/": {
      "mode": "755"
@@ -672,14 +672,14 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] x\n[<TS>] [<ROOT>/cwd] x\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] x\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] x\n"
     },
     "run/": {
      "mode": "755"
@@ -754,7 +754,7 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -875,7 +875,7 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
@@ -971,14 +971,14 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] false\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false\n"
     },
     "home/.claude/plugins/": {
      "mode": "755"
@@ -1067,7 +1067,7 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
@@ -1152,7 +1152,7 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1227,7 +1227,7 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1302,7 +1302,7 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1377,7 +1377,7 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1456,18 +1456,18 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash cat big\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash cat big\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] cat big\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] cat big\n"
     },
     "home/.claude/error-log.md": {
      "mode": "644",
-     "content": "### <TS>\n**Tool:** Bash\n**Input:** `{\"command\":\"cat big\"}`\n```\nerror ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: ...\n```\n**Solution:** (fill in after fix)\n\n---\n"
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Bash\n**Input:** `{\"command\":\"cat big\"}`\n```\nerror ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: error ENOENT fatal: ...\n```\n**Solution:** (fill in after fix)\n\n---\n"
     },
     "run/": {
      "mode": "755"
@@ -1542,7 +1542,7 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1617,7 +1617,7 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1695,14 +1695,14 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"token=ghp_abcdefghijklmnopqrstuvwxyz0123456789\\\"\\nsecond line\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"token=ghp_abcdefghijklmnopqrstuvwxyz0123456789\\\"\\nsecond line\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] echo \"token=<REDACTED>\"\\nsecond line\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo \"token=<REDACTED>\"\\nsecond line\n"
     },
     "run/": {
      "mode": "755"
@@ -1816,14 +1816,14 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Edit\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Edit /y\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Edit\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Edit /y\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/error-log.md": {
      "mode": "644",
-     "content": "### <TS>\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\npermission denied while reading\n```\n**Solution:** (fill in after fix)\n\n---\n### <TS>\n**Tool:** Edit\n**Input:** `{\"file_path\":\"/y\"}`\n```\nx\n```\n**Solution:** (fill in after fix)\n\n---\n"
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\npermission denied while reading\n```\n**Solution:** (fill in after fix)\n\n---\n### 2026-01-01T00:00:00.000Z\n**Tool:** Edit\n**Input:** `{\"file_path\":\"/y\"}`\n```\nx\n```\n**Solution:** (fill in after fix)\n\n---\n"
     },
     "run/": {
      "mode": "755"
@@ -1891,14 +1891,14 @@
     },
     "home/.autopilot/intent-capture.disabled": {
      "mode": "644",
-     "content": "{\"disabled_at\":\"<TS>\",\"reason\":\"x\",\"plugin_version\":\"unknown\"}"
+     "content": "{\"disabled_at\":\"2026-01-01T00:00:00.000Z\",\"reason\":\"x\",\"plugin_version\":\"unknown\"}"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] echo hi\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo hi\n"
     },
     "run/": {
      "mode": "755"
@@ -2009,14 +2009,14 @@
     },
     "home/.autopilot/intent-capture.disabled": {
      "mode": "600",
-     "content": "{\n  \"disabled_at\": \"<TS>\",\n  \"reason\": \"10 consecutive failures: ENOTDIR: not a directory, open '<ROOT>/home/.autopilot/intent/<CWDSHA1>.json.<PID>.tmp'\",\n  \"plugin_version\": \"unknown\",\n  \"manual_reset\": \"rm <ROOT>/home/.autopilot/intent-capture.disabled\"\n}"
+     "content": "{\n  \"disabled_at\": \"2026-01-01T00:00:00.000Z\",\n  \"reason\": \"10 consecutive failures: ENOTDIR: not a directory, open '<ROOT>/home/.autopilot/intent/<CWDSHA1>.json.4242.tmp'\",\n  \"plugin_version\": \"unknown\",\n  \"manual_reset\": \"rm <ROOT>/home/.autopilot/intent-capture.disabled\"\n}"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] echo hi\n[<TS>] [<ROOT>/cwd] echo again\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo hi\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo again\n"
     },
     "run/": {
      "mode": "755"
@@ -2091,7 +2091,7 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo err\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo err\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude": {
      "mode": "644",
@@ -2213,18 +2213,18 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"dddd0000-1111-2222-3333-444455556666\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"transcript\",\n  \"last_tool_input_summary\": \"Bash echo from-transcript\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"dddd0000-1111-2222-3333-444455556666\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"transcript\",\n  \"last_tool_input_summary\": \"Bash echo from-transcript\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] echo from-transcript\n[<TS>] [<ROOT>/cwd] echo from-transcript\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo from-transcript\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo from-transcript\n"
     },
     "home/.claude/error-log.md": {
      "mode": "644",
-     "content": "### <TS>\n**Tool:** Bash\n**Input:** `{\"command\":\"echo from-transcript\"}`\n```\nerror: failed\n```\n**Solution:** (fill in after fix)\n\n---\n### <TS>\n**Tool:** Bash\n**Input:** `{\"command\":\"echo from-transcript\"}`\n```\nerror: failed\n```\n**Solution:** (fill in after fix)\n\n---\n"
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Bash\n**Input:** `{\"command\":\"echo from-transcript\"}`\n```\nerror: failed\n```\n**Solution:** (fill in after fix)\n\n---\n### 2026-01-01T00:00:00.000Z\n**Tool:** Bash\n**Input:** `{\"command\":\"echo from-transcript\"}`\n```\nerror: failed\n```\n**Solution:** (fill in after fix)\n\n---\n"
     },
     "home/.claude/projects/": {
      "mode": "755"
@@ -2339,7 +2339,7 @@
     "home/.autopilot/": {
      "mode": "700"
     },
-    "home/.autopilot/.failure_count_<PPIDHASH8>": {
+    "home/.autopilot/.failure_count_5eb13cb6": {
      "mode": "600",
      "content": "2"
     },
@@ -2352,14 +2352,14 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash f\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash f\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] f\n[<TS>] [<ROOT>/cwd] f\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] f\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] f\n"
     },
     "run/": {
      "mode": "755"
@@ -2430,7 +2430,7 @@
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] echo hi\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo hi\n"
     },
     "run/": {
      "mode": "755"
@@ -2501,18 +2501,18 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\\\"\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\\\"\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] echo \"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\"\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo \"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\"\n"
     },
     "home/.claude/error-log.md": {
      "mode": "644",
-     "content": "### <TS>\n**Tool:** Bash\n**Input:** `{\"command\":\"echo \\\"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\\\"\"}`\n```\nerror: at 2026-02-02T02:02:02.222Z on build-host-1\n```\n**Solution:** (fill in after fix)\n\n---\n"
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Bash\n**Input:** `{\"command\":\"echo \\\"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\\\"\"}`\n```\nerror: at 2026-02-02T02:02:02.222Z on build-host-1\n```\n**Solution:** (fill in after fix)\n\n---\n"
     },
     "run/": {
      "mode": "755"
@@ -2587,14 +2587,96 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/error-log.md": {
      "mode": "644",
-     "content": "### <TS>\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\nerror: first\n### 2026-03-03T03:03:03.333Z\n**Tool:** not-a-heading\nlast\n```\n**Solution:** (fill in after fix)\n\n---\n"
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\nerror: first\n### 2026-03-03T03:03:03.333Z\n**Tool:** not-a-heading\nlast\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "user-error-text-embeds-terminator-and-heading": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/<CWDSHA1>.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Read\n**Input:** `{\"file_path\":\"/x\"}`\n```\nerror: before\n```\n**Solution:** (fill in after fix)\n\n---\n### 2026-03-03T03:03:03.333Z\n**Tool:** fake\n**Input:** `{}`\n```\nafter\n```\n**Solution:** (fill in after fix)\n\n---\n"
     },
     "run/": {
      "mode": "755"
@@ -2669,14 +2751,14 @@
     },
     "home/.autopilot/intent/<CWDSHA1>.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"<HOST>\",\n  \"last_updated\": \"<TS>\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo hi\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": \"main\"\n}\n"
+     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo hi\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": \"main\"\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[<TS>] [<ROOT>/cwd] echo hi\n"
+     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo hi\n"
     },
     "run/": {
      "mode": "755"

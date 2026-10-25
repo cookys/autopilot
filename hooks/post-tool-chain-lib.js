@@ -101,7 +101,12 @@ function restoreProcess(snap) {
     const have = process.rawListeners(ev);
     if (have.length === want.length && have.every((f, i) => f === want[i])) continue;
     process.removeAllListeners(ev);
-    for (const f of want) process.on(ev, f);
+    // A once() wrapper that fired inside the member is spent (and gone from `have`); a separate process would start
+    // with a fresh one. Rebuild every once listener from its original function, keep plain ones as they were.
+    for (const f of want) {
+      if (typeof f.listener === 'function') process.once(ev, f.listener);
+      else process.on(ev, f);
+    }
   }
   purgeModules();
 }

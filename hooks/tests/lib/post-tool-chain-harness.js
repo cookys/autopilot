@@ -9,11 +9,16 @@
  *   chain  hooks/post-tool-chain.js (one process)
  * Host-visible oracle for a call (plan Phase 1): the five standalone stdout streams concatenated in
  * registration order, stderr likewise, exit = highest of the five. Exit code, stdout and stderr are compared
- * RAW (never normalised); only STATE files go through the volatile-field allowlist in normText().
+ * RAW, and so are state files: nothing the observers wrote is rewritten before comparing. Volatile values (clock,
+ * hostname, pid) are frozen identically in every process of every arm by ptc-freeze.js (--require via NODE_OPTIONS),
+ * and every arm runs in the SAME sandbox paths (recreated before each run), so the bytes are equal by construction.
+ * The golden file keeps sandbox paths as <ROOT>/<LIVE>/<CWDSHA1>/<CWDSHA12> placeholders and is EXPANDED for the
+ * observing sandbox before the byte compare; observed bytes are never touched.
  *
  * Modes:
  *   check [--chain DIR] [--no-orig] [--overlap-n N]   permanent test: cur == golden, chain == golden,
  *                                                    (orig == golden when the pinned sha is present),
+ *   --no-freeze                                      run without ptc-freeze.js (negative control: must go red)
  *                                                    overlapping-call cases; exit 1 on any difference
  *   gen-golden                                       (re)write the golden file from the ORIG arm
  *   serial-orig-vs-cur                               orig vs cur only, no golden
@@ -42,6 +47,8 @@ const chainDir = path.resolve(opt('--chain', HOOKS));
 const useOrig = !args.includes('--no-orig');
 const overlapN = Number(opt('--overlap-n', '12'));
 const onlyOverlap = args.includes('--only-overlap');
+const FREEZE = path.join(__dirname, 'ptc-freeze.js');
+const freezeOn = !args.includes('--no-freeze');
 
 // ---------- sandbox ----------
 const BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'ptc-harness-'));
@@ -74,15 +81,18 @@ function buildOrigTree() {
   return path.join(root, 'hooks');
 }
 
-let runCounter = 0;
+// One fixed sandbox path per invocation, recreated empty before every run (arms run one after another), so a path
+// that an observer echoes into a file is the same bytes in every arm.
 function newSandbox() {
-  const root = path.join(BASE, `sb${++runCounter}`);
+  const root = path.join(BASE, 'sb');
+  fs.rmSync(root, { recursive: true, force: true });
   for (const d of ['home', 'tmp', 'cwd', 'run']) fs.mkdirSync(path.join(root, d), { recursive: true });
-  const live = path.join(LIVE_BASE, `l${runCounter}`);
+  const live = path.join(LIVE_BASE, 'live');
+  fs.rmSync(live, { recursive: true, force: true });
   fs.mkdirSync(live, { recursive: true, mode: 0o700 });
   const realRoot = fs.realpathSync(root);
   const cwd = path.join(realRoot, 'cwd');
-  return { root: realRoot, home: path.join(realRoot, 'home'), tmp: path.join(realRoot, 'tmp'), cwd, live };
+  return { root: realRoot, home: path.join(realRoot, 'home'), tmp: path.join(realRoot, 'tmp'), cwd, live: fs.realpathSync(live) };
 }
 
 function sbEnv(sb, extra) {
@@ -99,95 +109,13 @@ function sbEnv(sb, extra) {
     GIT_CONFIG_SYSTEM: '/dev/null',
     LC_ALL: 'C.UTF-8',
   };
+  if (freezeOn) env.NODE_OPTIONS = `--require=${FREEZE}`;
   return Object.assign(env, extra || {});
 }
 
-// ---------- normalisation (state files ONLY; exit/stdout/stderr are never normalised) ----------
-// Two separate things, kept narrow on purpose:
-//  1. Sandbox identity: the exact strings that name THIS sandbox (its root, live dir, the sha1 of its cwd, the
-//     harness-pid hash) are swapped for placeholders, in file names and contents. Exact strings, no patterns.
-//  2. Volatile FIELDS, named per file below (timestamp / hostname / pid in a fixed position). Nothing else is
-//     touched: a timestamp, hostname or ".123.tmp" that appears inside user-supplied command or error text stays
-//     as written, so a change to it is a difference.
-const ISO = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
-function identity(s, sb) {
-  const reps = [
-    [sb.root, '<ROOT>'],
-    [sb.live, '<LIVE>'],
-    [crypto.createHash('sha1').update(sb.cwd).digest('hex'), '<CWDSHA1>'],
-    [crypto.createHash('sha1').update(sb.cwd).digest('hex').slice(0, 12), '<CWDSHA12>'],
-    [crypto.createHash('md5').update(String(process.pid)).digest('hex').slice(0, 8), '<PPIDHASH8>'],
-  ];
-  let t = s;
-  for (const [a, b] of reps) if (a) t = t.split(a).join(b);
-  return t;
-}
-function normName(rel, sb) {
-  return identity(rel, sb).replace(/\.\d+\.tmp$/, '.<PID>.tmp'); // atomicWrite temp name: <target>.<pid>.tmp
-}
-// JSON file rules by normalised path: top-level string fields whose value is replaced when it has the expected shape.
-const JSON_FIELD_RULES = [
-  { path: /^home\/\.autopilot\/intent\/<CWDSHA1>\.json$/, fields: { last_updated: ISO, hostname: (v) => v === os.hostname() } },
-  { path: /^home\/\.autopilot\/intent-capture\.disabled$/, fields: { disabled_at: ISO } },
-];
-const TS_FIELD = { last_updated: '<TS>', hostname: '<HOST>', disabled_at: '<TS>' };
-function normContent(name, txt, sb) {
-  let t = identity(txt, sb);
-  const jr = JSON_FIELD_RULES.find((r) => r.path.test(name));
-  if (jr) {
-    try {
-      const o = JSON.parse(t);
-      const indent = [2, 0].find((n) => JSON.stringify(o, null, n) + (t.endsWith('\n') ? '\n' : '') === t);
-      if (indent !== undefined) { // re-serialise only when that reproduces the original bytes exactly
-        for (const [k, ok] of Object.entries(jr.fields)) {
-          const good = ok instanceof RegExp ? typeof o[k] === 'string' && ok.test(o[k]) : typeof o[k] === 'string' && ok(o[k]);
-          if (good) o[k] = TS_FIELD[k];
-        }
-        // the breaker's reason embeds the failed write's temp name "<target>.json.<pid>.tmp": its pid is volatile
-        if (/intent-capture\.disabled$/.test(name) && typeof o.reason === 'string') o.reason = o.reason.replace(/(\.json)\.\d+\.tmp\b/, '$1.<PID>.tmp');
-        t = JSON.stringify(o, null, indent) + (t.endsWith('\n') ? '\n' : '');
-      }
-    } catch { /* not JSON: left as is */ }
-  }
-  // Line-oriented logs. Each rule is positional, not a pattern over the whole text:
-  //  - bash-commands.log: audit-log writes exactly one physical line per entry (it escapes newlines in the command as
-  //    the two characters backslash-n), so the first characters of a line can only be the stamp audit-log wrote.
-  //  - transcript-canary.log: one JSON.stringify object per line (newlines in values are escaped), "ts" first.
-  //  - error-log.md: log-error entries span several lines and embed user error text, so a line that LOOKS like a
-  //    heading may be user text. Entries are parsed from the start of the file in log-error's fixed shape; only the
-  //    heading of a block that parses is replaced. Anything that does not parse is left raw (and so shows as a diff).
-  if (/(^|\/)bash-commands\.log$/.test(name)) {
-    t = t.replace(/^\[(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z)\] \[/gm, '[<TS>] [');
-  }
-  if (/(^|\/)error-log\.md$/.test(name)) t = normErrorLog(t);
-  if (/(^|\/)transcript-canary\.log$/.test(name)) {
-    t = t.replace(/^\{"ts":"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z"/gm, '{"ts":"<TS>"');
-  }
-  return t;
-}
-
-// log-error writes: "### <ISO>\n**Tool:** <name>\n**Input:** `<json, one line>`\n```\n<error text>\n```\n**Solution:** (fill in after fix)\n\n---\n"
-const ERR_TERM = '\n```\n**Solution:** (fill in after fix)\n\n---\n';
-function normErrorLog(t) {
-  let i = 0;
-  let out = '';
-  while (i < t.length) {
-    const nl = t.indexOf('\n', i);
-    const head = nl < 0 ? t.slice(i) : t.slice(i, nl);
-    const l2 = nl < 0 ? -1 : t.indexOf('\n', nl + 1);
-    const l3 = l2 < 0 ? -1 : t.indexOf('\n', l2 + 1);
-    const l4 = l3 < 0 ? -1 : t.indexOf('\n', l3 + 1);
-    const shaped = l4 >= 0 && ISO.test(head.slice(4)) && head.startsWith('### ')
-      && t.slice(nl + 1).startsWith('**Tool:** ') && t.slice(l2 + 1).startsWith('**Input:** `')
-      && t.slice(l3 + 1, l4) === '```';
-    const end = shaped ? t.indexOf(ERR_TERM, l4) : -1;
-    if (!shaped || end < 0) return out + t.slice(i); // not log-error's shape from here on: leave it raw
-    out += '### <TS>' + t.slice(nl, end + ERR_TERM.length);
-    i = end + ERR_TERM.length;
-  }
-  return out;
-}
-
+// ---------- state snapshot (raw) and golden placeholders ----------
+// No state file content is rewritten. File NAMES contain the sandbox identity (the sha1 of the cwd names the intent
+// record), so the golden keeps those as placeholders; see tmpl()/expandText() below.
 function snapshot(sb) {
   const out = {};
   const roots = [[sb.root, ''], [sb.live, 'LIVE:']];
@@ -199,7 +127,7 @@ function snapshot(sb) {
       for (const e of ents) {
         if (e.name === '.git') continue; // git's own tree (sample hooks, description, config) is git-version state, not hook state
         const full = path.join(dir, e.name);
-        const rel = prefix + normName(path.relative(r, full), sb);
+        const rel = prefix + path.relative(r, full);
         let st;
         try { st = fs.lstatSync(full); } catch { continue; }
         const mode = (st.mode & 0o777).toString(8);
@@ -207,7 +135,7 @@ function snapshot(sb) {
         else if (e.isFile()) {
           let txt;
           try { txt = fs.readFileSync(full, 'utf8'); } catch { txt = '<unreadable>'; }
-          out[rel] = { mode, content: normContent(rel, txt, sb) };
+          out[rel] = { mode, content: txt };
         } else out[rel] = { mode, kind: 'other' };
       }
     })(r);
@@ -286,6 +214,7 @@ const FIXTURES = [
   { name: 'intent-env-opt-out', env: { AUTOPILOT_INTENT_CAPTURE: 'false' }, steps: [bashOk('echo hi')] },
   { name: 'literal-timestamp-hostname-pid-in-user-text', steps: [post('Bash', { command: 'echo "2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp"' }, { exit_code: 0, tool_response: 'error: at 2026-02-02T02:02:02.222Z on build-host-1' })] },
   { name: 'user-error-text-with-heading-shaped-line', steps: [post('Read', { file_path: '/x' }, { tool_response: 'error: first\n### 2026-03-03T03:03:03.333Z\n**Tool:** not-a-heading\nlast' })] },
+  { name: 'user-error-text-embeds-terminator-and-heading', steps: [post('Read', { file_path: '/x' }, { tool_response: 'error: before\n```\n**Solution:** (fill in after fix)\n\n---\n### 2026-03-03T03:03:03.333Z\n**Tool:** fake\n**Input:** `{}`\n```\nafter' })] },
   { name: 'git-cwd-branch', setup: (sb) => { const env = sbEnv(sb, { GIT_AUTHOR_NAME: 'x', GIT_AUTHOR_EMAIL: 'x@x', GIT_COMMITTER_NAME: 'x', GIT_COMMITTER_EMAIL: 'x@x' }); spawnSync('git', ['init', '-q', '-b', 'main', sb.cwd], { env }); spawnSync('git', ['-C', sb.cwd, 'commit', '-q', '--allow-empty', '-m', 'i'], { env }); }, steps: [bashOk('echo hi')] },
 ];
 
@@ -331,20 +260,45 @@ function runFixture(fx, arm, origDir) {
   return { steps, state, sb };
 }
 
-// Golden bytes are stored as UTF-8 text with the sandbox's own paths as <ROOT>/<LIVE> placeholders (hooks echo
-// their sandbox path in a few error lines). The OBSERVED bytes are never touched: the expected text is expanded
-// with the observing sandbox's real paths and compared byte for byte.
+// Golden text keeps the sandbox's own identity strings as placeholders (hooks echo their sandbox path, and the cwd's
+// sha1 names the intent record). The OBSERVED bytes are never touched: the expected text is expanded with the observing
+// sandbox's real strings and compared byte for byte. tmpl() asserts the round trip is lossless.
+function idMap(sb) {
+  const sha1 = crypto.createHash('sha1').update(sb.cwd).digest('hex');
+  return [[sha1, '<CWDSHA1>'], [sha1.slice(0, 12), '<CWDSHA12>'], [sb.root, '<ROOT>'], [sb.live, '<LIVE>']];
+}
+function tmplText(t, sb) {
+  let out = t;
+  for (const [a, b] of idMap(sb)) out = out.split(a).join(b);
+  if (expandText(out, sb) !== t) throw new Error('golden placeholders are not lossless for this text');
+  return out;
+}
+function expandText(t, sb) {
+  let out = t;
+  for (const [a, b] of idMap(sb).slice().reverse()) out = out.split(b).join(a);
+  return out;
+}
 function tmpl(buf, sb) {
   const t = buf.toString('utf8');
   if (!Buffer.from(t, 'utf8').equals(buf)) throw new Error('hook output is not lossless UTF-8; golden cannot store it');
-  return t.split(sb.root).join('<ROOT>').split(sb.live).join('<LIVE>');
+  return tmplText(t, sb);
 }
-function expand(text, sb) { return Buffer.from(text.split('<ROOT>').join(sb.root).split('<LIVE>').join(sb.live), 'utf8'); }
+function expand(text, sb) { return Buffer.from(expandText(text, sb), 'utf8'); }
 function aggJson(a, sb) { return { code: a.code, stdout: tmpl(a.stdout, sb), stderr: tmpl(a.stderr, sb) }; }
+function stateToGolden(state, sb) {
+  const out = {};
+  for (const [k, v] of Object.entries(state)) out[tmplText(k, sb)] = typeof v.content === 'string' ? { ...v, content: tmplText(v.content, sb) } : v;
+  return out;
+}
+function stateFromGolden(g, sb) {
+  const out = {};
+  for (const [k, v] of Object.entries(g)) out[expandText(k, sb)] = typeof v.content === 'string' ? { ...v, content: expandText(v.content, sb) } : v;
+  return out;
+}
 function toGolden(res) {
   return {
     steps: res.steps.map((s) => ({ per: s.per ? s.per.map((p) => Object.assign({ hook: p.hook }, aggJson(p, res.sb))) : undefined, agg: aggJson(s.agg, res.sb) })),
-    state: res.state,
+    state: stateToGolden(res.state, res.sb),
   };
 }
 
@@ -369,13 +323,13 @@ function cmpState(label, got, want) {
 // ---------- overlapping calls ----------
 function perms(a) { if (a.length <= 1) return [a]; const o = []; a.forEach((x, i) => perms([...a.slice(0, i), ...a.slice(i + 1)]).forEach((p) => o.push([x, ...p]))); return o; }
 
-function outcomeKey(perCall, state, sb) { return JSON.stringify({ calls: perCall.map((a) => aggJson(a, sb)), state }); }
+function outcomeKey(perCall, state, sb) { return JSON.stringify({ calls: perCall.map((a) => aggJson(a, sb)), state: JSON.parse(tmplText(JSON.stringify(state), sb)) }); }
 
 const OVERLAP_CASES = [
   { name: 'two-failing-bash-same-session', sem: { fc: { init: 0, inc: 2, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, calls: () => [bashFail('false a'), bashFail('false b')] },
   { name: 'fail-and-success-same-session', sem: { fc: { init: 1, inc: 1, reset: true }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, setup: (sb) => seedFailureCount(sb, 1, 'sess-ptc'), calls: () => [bashFail('false'), bashOk('true')] },
   { name: 'three-failing-bash-same-session', sem: { fc: { init: 0, inc: 3, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 3, reset: false } }, calls: () => [bashFail('false a'), bashFail('false b'), bashFail('false c')] },
-  { name: 'intent-breaker-pair', sem: { fc: { init: 0, inc: 0, reset: false }, ifail: { init: 8, inc: 2, reset: false }, tc: { init: 0, inc: 2, reset: false } }, setup: (sb) => { const d = path.join(sb.home, '.autopilot'); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '.intent-capture-failures'), '8'); fs.writeFileSync(path.join(d, 'intent'), 'not a dir'); }, calls: () => [bashOk('echo 1'), bashOk('echo 2')] },
+  { name: 'intent-breaker-pair', sem: { fc: { init: 0, inc: 0, reset: false }, ifail: { init: 8, inc: 2, reset: false }, tc: { init: 0, inc: 2, reset: false }, optional: [/^home\/\.autopilot\/intent-capture\.disabled$/] }, setup: (sb) => { const d = path.join(sb.home, '.autopilot'); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '.intent-capture-failures'), '8'); fs.writeFileSync(path.join(d, 'intent'), 'not a dir'); }, calls: () => [bashOk('echo 1'), bashOk('echo 2')] },
   { name: 'reload-change-pair', sem: { fc: { init: 0, inc: 0, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, setup: (sb) => seedReload(sb, { changed: true }), calls: () => [post('Read', { file_path: '/a' }), post('Read', { file_path: '/b' })] },
   { name: 'same-cwd-intent-and-log-pair', sem: { fc: { init: 0, inc: 0, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, calls: () => [post('Read', { file_path: '/a' }, { tool_response: 'error one' }), post('Bash', { command: 'echo two' }, { exit_code: 0, tool_response: 'error two' })] },
 ];
@@ -385,7 +339,7 @@ function serialOutcome(oc, order, calls, origOrCur) {
   if (oc.setup) oc.setup(sb);
   const perCall = new Array(calls.length);
   for (const idx of order) {
-    perCall[idx] = aggregate(runSeparate(origOrCur, calls[idx], sb));
+    perCall[idx] = aggregate(runSeparate(origOrCur, calls[idx], sb, { PTC_PID: String(4242 + 10 * idx) }));
   }
   return outcomeKey(perCall, snapshot(sb), sb);
 }
@@ -399,7 +353,7 @@ function runConcurrent(oc, calls, side) {
   calls.forEach((input, ci) => {
     const scripts = side === 'chain' ? [{ hook: 'chain', file: path.join(chainDir, 'post-tool-chain.js') }] : MEMBERS.map((stem) => ({ hook: stem, file: path.join(HOOKS, `${stem}.js`) }));
     for (const s of scripts) {
-      const child = spawn(process.execPath, [s.file], { cwd: sb.cwd, env: sbEnv(sb), stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = spawn(process.execPath, [s.file], { cwd: sb.cwd, env: sbEnv(sb, { PTC_PID: String(4242 + 10 * ci) }), stdio: ['pipe', 'pipe', 'pipe'] });
       spawnTimes.push(process.hrtime.bigint() - t0);
       const rec = { call: ci, hook: s.hook, out: [], err: [], code: null };
       child.stdout.on('data', (d) => rec.out.push(d));
@@ -454,7 +408,8 @@ async function sample(oc, side, n, stats) {
 // baseline can produce; what must hold is an invariant of every such outcome. Observed set O = every serial
 // outcome plus the baseline's own 2n samples. A chain outcome FAILS when any of these breaks:
 //   per call:  exit code, stdout and stderr are each a value seen in O (few values: empty / escalation text);
-//   per path:  the path exists in the chain outcome if it exists in every outcome of O, and no path appears that
+//   per path:  the path exists in the chain outcome if it exists in every outcome of O (except a path the case declares
+//              optional: the breaker's flag file exists only if no update was lost), and no path appears that
 //              never appears in O (lock / tmp residue);
 //   mode:      the file/dir mode is one seen in O for that path;
 //   content:   a counter file holds an integer inside the range REACHABLE FROM THE CALLS' OPERATIONS (rangeOf: each case declares
@@ -485,7 +440,7 @@ function rangeOf({ init, inc, reset }) {
 const COUNTER_FILES = [
   [/^home\/\.autopilot\/\.failure_count_[0-9a-f]{8}$/, 'fc'],        // failure-escalation: failing Bash +1, success -> 0
   [/^home\/\.autopilot\/\.intent-capture-failures$/, 'ifail'],       // intent-capture: failed record write +1, success -> 0
-  [/^tmp\/claude-intent-tool-count-<CWDSHA12>$/, 'tc'],                  // intent-capture tool counter: +1 per call
+  [/^tmp\/claude-intent-tool-count-[0-9a-f]{12}$/, 'tc'],                  // intent-capture tool counter: +1 per call
 ];
 function counterKind(pth) { const m = COUNTER_FILES.find(([re]) => re.test(pth)); return m ? m[1] : null; }
 
@@ -534,7 +489,7 @@ function judge(keys, acc, sem) {
     const o = JSON.parse(k);
     o.calls.forEach((c, i) => { for (const f of ['code', 'stdout', 'stderr']) { const n = `call${i}.${f}`; if (!acc.out.has(n) || !acc.out.get(n).has(JSON.stringify(c[f]))) failing.push(`${n} = ${JSON.stringify(c[f]).slice(0, 120)}`); } });
     for (const [pth, observed] of acc.perPath) {
-      if (observed.length === acc.outcomes && !(pth in o.state)) failing.push(`${pth}: missing (present in every observed outcome)`);
+      if (observed.length === acc.outcomes && !(pth in o.state) && !(sem.optional || []).some((re) => re.test(pth))) failing.push(`${pth}: missing (present in every observed outcome)`);
     }
     for (const [pth, e] of Object.entries(o.state)) {
       const observed = acc.perPath.get(pth);
@@ -607,7 +562,7 @@ async function main() {
           cmpAgg(`${fx.name}[${i}] ${arm} aggregate`, s.agg, wantAgg, res.sb);
           if (arm !== 'chain' && arm !== 'chain-rev') s.per.forEach((p, j) => cmpAgg(`${fx.name}[${i}] ${arm} ${p.hook}`, p, want.steps[i].per[j], res.sb));
         });
-        cmpState(`${fx.name} ${arm}`, res.state, want.state);
+        cmpState(`${fx.name} ${arm}`, res.state, stateFromGolden(want.state, res.sb));
       }
     }
     console.log(`serial corpus: ${FIXTURES.length} fixtures, arms ${origDir ? 'orig,' : '(orig skipped: pinned sha absent) '}cur,chain,chain-rev`);

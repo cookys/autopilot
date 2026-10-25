@@ -80,7 +80,7 @@ function consumeStdin() {
     if (decision.warn) {
       process.stderr.write(decision.message + '\n');
       // P7a advisory bridge: also one advisory row for the live mod (needs a real session id: payload, else env).
-      // AUTOPILOT_ADVISORY_BRIDGE_SUGGEST_COMPACT=inject = the old stderr-only behaviour, no row.
+      // AUTOPILOT_ADVISORY_BRIDGE_SUGGEST_COMPACT=inject = no row; the text goes to the model as PostToolUse additionalContext.
       try {
         const sink = require('./_shared/advisory-sink.js');
         let psid = '';
@@ -88,6 +88,9 @@ function consumeStdin() {
         const sid = psid || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || '';
         if (sid && sink.advisoryMode('suggest_compact') === 'sink') {
           sink.writeAdvisory({ sid, kind: 'suggest-compact', severity: 'info', text: decision.message });
+        } else {
+          // inject mode (or no session id): stderr on exit 0 never reaches the model (BL-0304), so carry the text as additionalContext.
+          require('./_shared/hook-output.js').emitAdditionalContext('PostToolUse', decision.message);
         }
       } catch { /* the bridge never breaks the hook */ }
     }

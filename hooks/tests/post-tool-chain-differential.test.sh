@@ -25,6 +25,7 @@ mk_chain_dir() {
   local d="$MUT/$1"
   mkdir -p "$d"
   cp "$HOOKS_DIR/post-tool-chain.js" "$HOOKS_DIR/post-tool-chain-lib.js" "$d/"
+  ln -sfn "$HOOKS_DIR/_shared" "$d/_shared"   # the lib requires ./_shared/hook-output.js (BL-0304)
   for s in intent-capture reload-watch audit-log log-error failure-escalation; do
     ln -sf "$HOOKS_DIR/$s.js" "$d/$s.js"
   done
@@ -65,9 +66,10 @@ neg() { # <label> <sed command> <fixture the mutation must break>
   assert_contains "$H_OUT" "HARNESS RED" "negative control '$label' reports RED"
 }
 neg exit-code 's/if (r.code > status) status = r.code;/status = 1;/' quiet-bash-success
-neg stdout-byte 's/if (r.out.length) emitOut(r.out);/if (r.out.length) emitOut(r.out.subarray(0, r.out.length - 1));/' bash-fail-escalation-ladder
+neg stdout-byte 's/  if (held.length === 1) emitOut(held\[0\].out);/  if (held.length === 1) emitOut(held[0].out.subarray(0, held[0].out.length - 1));/' bash-fail-escalation-ladder
 neg aggregate-order "s/const MEMBERS = \['intent-capture', 'reload-watch', 'audit-log', 'log-error', 'failure-escalation'\];/const MEMBERS = ['intent-capture', 'failure-escalation', 'audit-log', 'log-error', 'reload-watch'];/" reload-and-failure-both-emit
 neg member-order-sorted "s/for (const stem of members) {/for (const stem of members.slice().sort()) {/" reload-and-failure-both-emit
+neg no-context-merge 's/    if (events.length === 1) {/    if (false) {/' reload-and-failure-both-emit
 neg drop-state-write "s/for (const stem of members) {/for (const stem of members.filter((m) => m !== 'log-error')) {/" log-error-keyword-read
 
 # --- negative controls: pollution, exit status, order (unit tests red on a broken lib) and the umask pin ---
@@ -135,6 +137,35 @@ mk_harness_tree() { # <name>: sets HT; a repo-shaped tree whose harness (and not
   ln -sf "$REPO_ROOT/src" "$HT/src"; ln -sf "$REPO_ROOT/scripts" "$HT/scripts"
   cp "$HARNESS" "$HT/hooks/tests/lib/post-tool-chain-harness.js"
 }
+
+# --- INDEPENDENCE of the orig arm (BL-0304): its code (observers AND everything they require, e.g. hooks/_shared/hook-output.js)
+# comes out of ORIG_REF, never out of the tree under test. Control A: change only HEAD's emitter -> cur and chain go red, orig
+# keeps the ORIG_REF bytes (no orig line in the report). Controls B/C: a buildOrigTree that links back to HEAD must be caught.
+mk_indep_tree() { # <name>: mk_harness_tree + git access + a REAL copy of _shared whose emitter prefixes the context with "X"
+  mk_harness_tree "$1"
+  ln -sfn "$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)" "$HT/.git"   # absolute: in a main checkout the plain form is a relative ".git" (a link to itself)
+  # real copies (node resolves a symlinked module through its REAL path, so a linked observer would load the real _shared)
+  cp --remove-destination "$HOOKS_DIR"/*.js "$HT/hooks/"
+  rm -f "$HT/hooks/_shared"; cp -r "$HOOKS_DIR/_shared" "$HT/hooks/_shared"
+  mutate_or_die "$HT/hooks/_shared/hook-output.js" "s/additionalContext: String(text) } }/additionalContext: 'X' + String(text) } }/"
+}
+INDEP_ARGS=(check --overlap-n 0 --only bash-fail-escalation-ladder)
+mk_indep_tree indep-a
+IA_OUT="$(HOME="$HOOK_HOME" node "$HT/hooks/tests/lib/post-tool-chain-harness.js" "${INDEP_ARGS[@]}" 2>&1 < /dev/null)"; IA_RC=$?
+[ "$IA_RC" -ne 0 ] || fail "independence control A: a changed HEAD emitter was NOT detected"
+assert_contains "$IA_OUT" " cur aggregate" "independence A: the current-tree arm goes red on the changed emitter"
+assert_contains "$IA_OUT" " chain aggregate" "independence A: the chain arm goes red on the changed emitter"
+assert_not_contains "$IA_OUT" " orig " "independence A: the orig arm still produces the ORIG_REF bytes (no orig difference)"
+mk_indep_tree indep-b
+mutate_or_die "$HT/hooks/tests/lib/post-tool-chain-harness.js" "s#^  walk(root);#  fs.rmSync(path.join(root, 'hooks', '_shared'), { recursive: true }); fs.symlinkSync(path.join(HOOKS, '_shared'), path.join(root, 'hooks', '_shared'));#"
+IB_OUT="$(HOME="$HOOK_HOME" node "$HT/hooks/tests/lib/post-tool-chain-harness.js" "${INDEP_ARGS[@]}" 2>&1 < /dev/null)"; IB_RC=$?
+[ "$IB_RC" -ne 0 ] || fail "independence control B: nothing was red"
+assert_contains "$IB_OUT" " orig " "independence B: with _shared linked back to HEAD the orig arm follows HEAD, so the control A property is lost and the harness says so"
+mk_indep_tree indep-c
+mutate_or_die "$HT/hooks/tests/lib/post-tool-chain-harness.js" "s#^  walk(root);#  fs.rmSync(path.join(root, 'hooks', '_shared'), { recursive: true }); fs.symlinkSync(path.join(HOOKS, '_shared'), path.join(root, 'hooks', '_shared')); walk(root);#"
+IC_OUT="$(HOME="$HOOK_HOME" node "$HT/hooks/tests/lib/post-tool-chain-harness.js" "${INDEP_ARGS[@]}" 2>&1 < /dev/null)"; IC_RC=$?
+assert_exit_code "$IC_RC" 2 "independence C: a symlink in the orig tree stops the harness"
+assert_contains "$IC_OUT" "orig tree contains a symlink" "independence C: the symlink guard names the problem"
 
 # --- negative control: a counter regex that stops matching leaves its declared range dead; the harness must say so ---
 mk_harness_tree deadcounter
@@ -426,6 +457,8 @@ unit_neg() { # <label> <sed command>
   printf '%s\n' "$out" | grep -Eq 'fail [1-9]' || fail "unit negative control '$label': no failing test reported"
 }
 unit_neg no-failopen-note 's/    else err.push(/    else void (/'
+unit_neg context-not-merged 's/    if (events.length === 1) {/    if (false) {/'
+unit_neg context-held-dropped 's/  if (held.length === 1) emitOut(held\[0\].out);/  if (false) emitOut(held[0].out);/'
 unit_neg status-min 's/if (r.code > status) status = r.code;/if (r.code < status) status = r.code;/'
 unit_neg exit-not-restored 's/    process.exit = realExit;//'
 unit_neg env-leak 's/  for (const k of Object.keys(process.env)) if (!(k in snap.env)) delete process.env\[k\];//'

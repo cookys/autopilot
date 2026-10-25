@@ -3,7 +3,7 @@
  * post-tool-chain — PostToolUse (UNREGISTERED; guard-port Phase 1, BL-0241)
  *
  * One process for the five `.*` PostToolUse observers that precede opt-in-multiplexer.js. Forwards each
- * observer's bytes in order and never merges them; see hooks/post-tool-chain-lib.js for the contract.
+ * observer's bytes in order; the one exception is pure additionalContext objects, merged into a single JSON object (BL-0304); see hooks/post-tool-chain-lib.js for the contract.
  * Optional argv: observer stems to run instead of the default five (a plan fallback keeps stdout-writing
  * observers as separate registrations), validated against the default list.
  */

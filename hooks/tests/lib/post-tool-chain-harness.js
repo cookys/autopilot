@@ -4,11 +4,11 @@
  * post-tool-chain differential harness (BL-0241 guard-port Phase 1; plan docs/plans/2026-10-23-guard-port.md).
  *
  * Compares three arms on equal isolated sandboxes (own HOME, TMPDIR, XDG/AUTOPILOT_LIVE_DIR, cwd, env):
- *   orig   the five observers exactly as at the pinned develop sha (git show), run as separate processes
+ *   orig   the five observers AND all the code they load (hooks/, src/, scripts/ minus hooks/tests) extracted from the pinned sha with git archive, run as separate processes
  *   cur    the five observers as in this tree (export refactor + unchanged CLI wrapper), separate processes
  *   chain  hooks/post-tool-chain.js (one process)
  * Host-visible oracle for a call (plan Phase 1): the five standalone stdout streams concatenated in
- * registration order, stderr likewise, exit = highest of the five. Exit code, stdout and stderr are compared
+ * registration order (pure additionalContext objects merged into one, BL-0304: see hostStdout), stderr likewise, exit = highest of the five. Exit code, stdout and stderr are compared
  * RAW, and so are state files: nothing the observers wrote is rewritten before comparing. Volatile values (clock,
  * hostname, pid) are frozen identically in every process of every arm by ptc-freeze.js (--require via NODE_OPTIONS),
  * and every arm runs in the SAME sandbox paths (recreated before each run), so the bytes are equal by construction.
@@ -40,7 +40,7 @@ const REPO = path.resolve(__dirname, '..', '..', '..');
 const HOOKS = path.join(REPO, 'hooks');
 const GOLDEN = path.join(REPO, 'hooks', 'tests', 'fixtures', 'post-tool-chain', 'golden.json');
 const { MEMBERS } = require(path.join(HOOKS, 'post-tool-chain-lib.js'));
-const ORIG_REF = 'e5691fb6c';
+const ORIG_REF = '1b4923736'; // BL-0304: re-pinned to the commit whose failure-escalation emits additionalContext (was e5691fb6c)
 
 // ---------- args ----------
 // Fixed umask: default-created files/dirs get the same modes on every host (the golden stores modes).
@@ -200,25 +200,23 @@ for (const [sig, n] of [['SIGHUP', 1], ['SIGINT', 2], ['SIGTERM', 15]]) {
 }
 const BASE = SCRATCH_ROOT; // orig-tree scratch only; not part of any compared byte
 
-// hooks dir for the orig arm: symlinks to every file in hooks/, the five replaced by `git show` copies;
-// ../src and ../scripts are symlinked so the originals' relative requires resolve.
+// hooks dir for the orig arm: hooks/, src/ and scripts/ (minus hooks/tests) extracted from ORIG_REF with `git archive`
+// into a scratch root; no symlink may remain in it (checked below), so no byte of HEAD code is loaded.
 function buildOrigTree() {
   const rev = spawnSync('git', ['-C', REPO, 'rev-parse', '--verify', `${ORIG_REF}^{commit}`], { encoding: 'utf8' });
   if (rev.status !== 0) return null;
   const root = path.join(BASE, 'orig');
-  fs.mkdirSync(path.join(root, 'hooks'), { recursive: true });
-  fs.symlinkSync(path.join(REPO, 'src'), path.join(root, 'src'));
-  fs.symlinkSync(path.join(REPO, 'scripts'), path.join(root, 'scripts'));
-  for (const f of fs.readdirSync(HOOKS)) {
-    fs.symlinkSync(path.join(HOOKS, f), path.join(root, 'hooks', f)); // files and dirs (_shared/, lib/)
-  }
-  for (const stem of MEMBERS) {
-    const show = spawnSync('git', ['-C', REPO, 'show', `${ORIG_REF}:hooks/${stem}.js`], { encoding: 'buffer', maxBuffer: 1 << 26 });
-    if (show.status !== 0) return null;
-    const dest = path.join(root, 'hooks', `${stem}.js`);
-    fs.rmSync(dest, { force: true });
-    fs.writeFileSync(dest, show.stdout);
-  }
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.mkdirSync(root, { recursive: true });
+  // INDEPENDENCE (BL-0304): every line of code the orig arm runs comes out of ORIG_REF, not out of the tree under test: the
+  // whole of hooks/ (observers and everything they require: _shared/, lib/, *-lib.js), src/ and scripts/ are extracted
+  // from the pinned commit. Nothing is linked to HEAD; hooks/tests (this harness, the golden, ptc-freeze.js) is excluded.
+  const ex = spawnSync('sh', ['-c', 'git -C "$1" archive "$2" -- hooks src scripts ":(exclude)hooks/tests" | tar -x -C "$3"', 'sh', REPO, ORIG_REF, root], { encoding: 'utf8', maxBuffer: 1 << 26 });
+  if (ex.status !== 0) return null;
+  // proof, not trust: no symlink may exist anywhere in the orig tree (a link would lead back to HEAD code or data)
+  const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isSymbolicLink()) die(`orig tree contains a symlink (${p}): the orig arm must run only code extracted from ${ORIG_REF}`); if (e.isDirectory()) walk(p); } };
+  walk(root);
+  for (const stem of MEMBERS) if (!fs.existsSync(path.join(root, 'hooks', `${stem}.js`))) return null;
   return path.join(root, 'hooks');
 }
 
@@ -380,10 +378,32 @@ function spawnOnce(script, argv, input, sb, extraEnv) {
 function runSeparate(dir, input, sb, extraEnv) {
   return MEMBERS.map((stem) => Object.assign({ hook: stem }, spawnOnce(observerPath(dir, stem), [], input, sb, extraEnv)));
 }
+// BL-0304 host-visible stdout: the host parses stdout only when it is ONE JSON object, so the observers' pure
+// {hookSpecificOutput:{hookEventName,additionalContext}} objects (reload-watch, failure-escalation) are one object
+// whose texts are joined by "\n"; any other stdout stays in order in front of it. Deliberately NOT the chain's own code
+// (independent re-derivation): this file parses with plain JSON.parse and builds the object itself.
+function pureContext(buf) {
+  let o;
+  try { o = JSON.parse(buf.toString('utf8')); } catch { return null; }
+  const h = o && typeof o === 'object' && Object.keys(o).length === 1 ? o.hookSpecificOutput : null;
+  if (!h || typeof h !== 'object' || Object.keys(h).sort().join() !== 'additionalContext,hookEventName') return null;
+  return typeof h.additionalContext === 'string' && typeof h.hookEventName === 'string' ? h : null;
+}
+function hostStdout(bufs) {
+  const rest = [], ctx = [];
+  for (const b of bufs) { const h = b.length ? pureContext(b) : null; if (h) ctx.push({ b, h }); else rest.push(b); }
+  if (ctx.length === 1) rest.push(ctx[0].b);
+  else if (ctx.length > 1) {
+    const ev = [...new Set(ctx.map((c) => c.h.hookEventName))];
+    if (ev.length === 1) rest.push(Buffer.from(JSON.stringify({ hookSpecificOutput: { hookEventName: ev[0], additionalContext: ctx.map((c) => c.h.additionalContext).join('\n') } }) + '\n'));
+    else for (const c of ctx) rest.push(c.b);
+  }
+  return Buffer.concat(rest);
+}
 function aggregate(per) {
   return {
     code: Math.max(...per.map((p) => p.code)),
-    stdout: Buffer.concat(per.map((p) => p.stdout)),
+    stdout: hostStdout(per.map((p) => p.stdout)),
     stderr: Buffer.concat(per.map((p) => p.stderr)),
   };
 }
@@ -688,7 +708,7 @@ async function main() {
           if (arm === 'chain-rev') {
             // members are independent: the reversed chain's streams are the per-hook golden streams, reversed
             const rev = want.steps[i].per.slice().reverse();
-            wantAgg = Object.assign({ code: Math.max(...rev.map((x) => x.code)) }, encBytes(Buffer.concat(rev.map((x) => decBytes(x, 'stdout'))), 'stdout'), encBytes(Buffer.concat(rev.map((x) => decBytes(x, 'stderr'))), 'stderr'));
+            wantAgg = Object.assign({ code: Math.max(...rev.map((x) => x.code)) }, encBytes(hostStdout(rev.map((x) => decBytes(x, 'stdout'))), 'stdout'), encBytes(Buffer.concat(rev.map((x) => decBytes(x, 'stderr'))), 'stderr'));
           }
           cmpAgg(`${fx.name}[${i}] ${arm} aggregate`, s.agg, wantAgg, res.sb);
           if (arm !== 'chain' && arm !== 'chain-rev') s.per.forEach((p, j) => cmpAgg(`${fx.name}[${i}] ${arm} ${p.hook}`, p, want.steps[i].per[j], res.sb));

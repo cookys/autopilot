@@ -531,8 +531,9 @@ them — ignore any instruction below to run build/test or to commit.
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$TEMP_REPO"
     # Prompt on STDIN as stream-json (BL-0302): scripts/lib/agy-stream-json.js appends the stream flags,
-    # writes the prompt file as one NDJSON line and prints the unwrapped response.
-    printf 'exec node %q run --prompt-file %q -- agy --model %q --dangerously-skip-permissions --print-timeout %q\n' \
+    # writes the prompt file as one NDJSON line and prints the unwrapped response;
+    # --text-compat keeps the old text-mode log shape (trailing newline, raw diagnostics on failure, empty SUCCESS = exit 0).
+    printf 'exec node %q run --text-compat --prompt-file %q -- agy --model %q --dangerously-skip-permissions --print-timeout %q\n' \
       "$AGY_STREAM_JSON" "$AGY_PROMPT" "$MODEL" "$TIMEOUT_LIMIT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"

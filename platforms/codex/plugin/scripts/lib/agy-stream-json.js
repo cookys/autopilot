@@ -45,6 +45,9 @@
 //                3  agy_stdin_ceiling — the encoded prompt line is over STDIN_MAX_BYTES; agy was NOT run
 //                127 the agy command could not be spawned (spawn error, stderr names it)
 //                2  usage error
+//   --text-compat (opt-in, for callers that replace a plain `agy -p` text run): the response is followed by a
+//   newline, an empty SUCCESS response exits 0 (empty line) instead of 1, and on every failure path agy's raw
+//   stdout is replayed on stdout so the caller's log keeps agy's own diagnostics. Default behaviour unchanged.
 
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -120,8 +123,10 @@ function main(argv) {
   let promptFile = '';
   let prefix = '';
   let emit = 'response';
+  let textCompat = false;
   let i = 1;
   for (; i < argv.length && argv[i] !== '--'; i += 2) {
+    if (argv[i] === '--text-compat') { textCompat = true; i -= 1; continue; }
     if (argv[i] === '--prompt-file') promptFile = argv[i + 1] || '';
     else if (argv[i] === '--prefix') prefix = argv[i + 1] || '';
     else if (argv[i] === '--emit') emit = argv[i + 1] || '';
@@ -156,14 +161,27 @@ function main(argv) {
     process.exit(127);
   });
   child.on('close', (code, signal) => {
+    // --text-compat: the old `agy -p` text mode left agy's raw stdout in the caller's log whatever happened,
+    // and callers classify failures from that text (authentication wording, ...). On any failure path the raw
+    // stdout is replayed on our stdout so that text survives. Without the flag nothing changes.
+    const replayRaw = () => { if (textCompat) { const raw = Buffer.concat(chunks); if (raw.length) fs.writeSync(1, raw); } };
+    if (code !== 0) replayRaw();
     if (code !== 0) process.exit(code == null ? 128 + ({ SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 }[signal] || 1) : code);
     const parsed = parseStream(Buffer.concat(chunks).toString('utf8'));
+    // --text-compat: an empty SUCCESS response is what `agy -p` text mode printed too (an empty line, exit 0);
+    // the caller's own empty-output / oracle classification decides, so it is not turned into a helper failure.
+    if (!parsed.ok && textCompat && /^agy_empty_response/.test(parsed.reason)) {
+      process.stderr.write(`agy-stream-json.js: ${parsed.reason}\n`);
+      process.stdout.write('\n');
+      return;
+    }
     if (!parsed.ok) {
+      replayRaw();
       process.stderr.write(`agy-stream-json.js: ${parsed.reason}\n`);
       process.exit(1);
     }
     if (parsed.note) process.stderr.write(`agy-stream-json.js: ${parsed.note}\n`);
-    process.stdout.write(emit === 'envelope' ? `${JSON.stringify(parsed.result)}\n` : parsed.result.response);
+    process.stdout.write(emit === 'envelope' ? `${JSON.stringify(parsed.result)}\n` : parsed.result.response + (textCompat && emit === 'response' ? '\n' : ''));
   });
 }
 

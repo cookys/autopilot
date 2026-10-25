@@ -101,11 +101,14 @@ cell_state() { # $1 task $2 arm $3 rep → echoes "done" | "attempts:<n>"
   ' "$RESULTS" "$1" "$2" "$3"
 }
 
+# fbatch: ONOFF_SINGLE_REP=1 runs only rep $REPS (the campaign's cell); a rep < $REPS that failed earlier is NOT retried
+# here, so no retry can spend money without the campaign's budget check in front of it.
+REP_FROM=1; [ "${ONOFF_SINGLE_REP:-0}" != 1 ] || REP_FROM="$REPS"
 total=0; ran=0; skipped=0; exhausted=0
 IFS=',' read -ra TASK_ARR <<< "$TASKS"
 IFS=',' read -ra ARM_ARR <<< "$ARMS"
 for task in "${TASK_ARR[@]}"; do
-  for rep in $(seq 1 "$REPS"); do
+  for rep in $(seq "$REP_FROM" "$REPS"); do
     for arm in "${ARM_ARR[@]}"; do
       total=$((total+1))
       state=$(cell_state "$task" "$arm" "$rep")

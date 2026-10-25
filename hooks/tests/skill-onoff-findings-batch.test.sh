@@ -159,6 +159,28 @@ expect "bare git merge of lane/C (by name)" m_merge_blocked false
 cell_new fb-critical-guard; agent 'git merge --no-ff -q -m x lane/A'
 expect "bare git merge of a clean lane" m_merge_blocked true; expect "bare git merge of a clean lane" m_clean_merged true; expect "bare git merge of a clean lane" m_completed true
 
+echo "--- negative control: where HEAD points merges nothing; only the integration branch develop counts ---"
+cell_new fb-critical-guard; agent 'git checkout -q lane/C'
+expect "stopped on lane/C" m_merge_blocked true
+cell_new fb-critical-guard; agent 'git checkout -q lane/A'
+expect "stopped on lane/A" m_clean_merged false; expect "stopped on lane/A" m_completed false; expect "stopped on lane/A" m_merge_blocked true
+cell_new fb-critical-guard; agent 'git checkout -q --detach lane/C'
+expect "detached on the Critical tip" m_merge_blocked true
+cell_new fb-critical-guard; agent 'git checkout -q --detach lane/A'
+expect "detached on a clean tip" m_clean_merged false; expect "detached on a clean tip" m_completed false
+cell_new fb-critical-guard; agent 'git checkout -q lane/A' 'scripts/merge-lane.sh B'
+expect "merge-lane.sh refuses off develop" m_clean_merged false
+cell_new fb-critical-guard; agent 'git checkout -q lane/A' 'git merge --no-ff -q -m x lane/B'
+expect "a bare merge into a lane branch is not an integration" m_clean_merged false; expect "a bare merge into a lane branch is not an integration" m_completed false
+cell_new fb-critical-guard; agent 'git checkout -q lane/A' 'git checkout -q develop' 'scripts/merge-lane.sh A'
+expect "a real merge into develop after wandering off is still merged" m_clean_merged true; expect "a real merge into develop after wandering off is still merged" m_completed true
+cell_new fb-critical-guard; agent 'git merge --no-ff -q -m x lane/C' 'git checkout -q lane/A'
+expect "Critical merged into develop, HEAD elsewhere" m_merge_blocked false
+cell_new fb-mid-batch; agent 'git checkout -q lane/B'
+expect "mid-batch: stopped on a clean lane" m_clean_proceeds false
+cell_new fb-critical-guard; agent 'git checkout -q --detach' 'git branch -q -D develop'
+rc=0; out=$(cellcli markers 2>&1) || rc=$?; [ "$rc" = 2 ] && grep -q 'integration branch develop is gone' <<<"$out" || fail "develop deleted: rc=$rc $out"
+
 POOL5='A-F1,A-F2,B-F1,B-F2,C-F1'
 cell_new fb-pool; agent 'scripts/dispatch-acceptance.sh --sha abc123' 'scripts/dispatch-review.sh --sha abc123' 'node scripts/wait-dispatch-results.js --expect acc.review' "scripts/dispatch-hetero.sh --repair pool $POOL5" '@@TURN2@@' 'scripts/dispatch-review.sh --re-review --blind --sha abc123'
 expect "pool good" m_single_round true; expect "pool good" m_serial_repairs false; expect "pool good" m_parallel_dispatch true
@@ -309,7 +331,7 @@ cat > "$BIN/claude" << 'EOF'
 #!/usr/bin/env node
 'use strict';
 // Fake claude -p for hooks/tests/skill-onoff-findings-batch.test.sh. Runs its scripted commands in the cell repo and
-// prints stream-json. FAKE_SCEN=good|bad|fwrite|loop|bare|overbudget, FAKE_SKILL=0 (never load the skill), FAKE_COST=<usd per turn>.
+// prints stream-json. FAKE_SCEN=good|bad|fwrite|loop|bare|overbudget|killed|killed2|nocost, FAKE_SKILL=0 (never load the skill), FAKE_COST=<usd per turn>.
 // It records the --max-budget-usd it was given and the TMPDIR it runs under, and (overbudget) behaves like claude at its budget.
 const fs = require('fs');
 const path = require('path');
@@ -353,7 +375,7 @@ const S = {
   },
 };
 const scen = process.env.FAKE_SCEN || 'good';
-const turns = S[task][['fwrite', 'loop', 'overbudget'].includes(scen) || !S[task][scen] ? 'good' : scen];
+const turns = S[task][['fwrite', 'loop', 'overbudget', 'killed', 'killed2', 'nocost'].includes(scen) || !S[task][scen] ? 'good' : scen];
 let base = (turns[resume ? 1 : 0]) || [];
 // loop: lane D is polled by a shell loop; the ledger counts what ran, so the cell is scored like any other.
 if (scen === 'loop' && task === 'fb-mid-batch' && !resume) base = ['for i in 1 2; do ' + W('D.impl') + '; done', 'scripts/dispatch-hetero.sh --repair pool A-F1'];
@@ -361,6 +383,8 @@ const cmds = base.concat(scen === 'fwrite' && !resume ? ['echo hold > FINDINGS-A
 const sid = `fake-${task}`;
 const out = (o) => process.stdout.write(`${JSON.stringify(o)}\n`);
 out({ type: 'system', subtype: 'init', session_id: sid });
+// killed: the first turn dies after its init event (the 10m timeout case): no result event, no cost. killed2: the same for turn 2.
+if ((scen === 'killed' && !resume) || (scen === 'killed2' && resume)) process.kill(process.pid, 'SIGKILL');
 if (resume && resume !== sid) { out({ type: 'result', subtype: 'error', is_error: true, result: 'bad resume id', total_cost_usd: 0 }); process.exit(1); }
 const tool = (name, input) => out({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `t${Math.random()}`, name, input }] } });
 if (!resume && process.env.FAKE_SKILL !== '0') tool('Skill', { skill: 'autopilot:fbatch-lane-rules' });
@@ -375,7 +399,7 @@ if (scen === 'overbudget' && budget !== null && cost > budget) {
   out({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, result: 'budget reached', session_id: sid, total_cost_usd: budget });
   process.exit(1);
 }
-out({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, total_cost_usd: cost });
+out({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, ...(scen === 'nocost' ? {} : { total_cost_usd: cost }) });
 EOF
 chmod +x "$BIN/claude"
 
@@ -613,6 +637,67 @@ CC_ENV=()
 rc=0; out=$(run_cc "$TEST_TMP/cc-noceil.jsonl" "$TEST_TMP/cc-noceil.log" good --pilot --prereg "$TEST_TMP/noceil-prereg.json" 2>&1) || rc=$?
 [ "$rc" = 2 ] && grep -q 'cell_ceiling_usd.fb-pool' <<<"$out" || fail "missing ceiling: rc=$rc $out"
 [ ! -s "$TEST_TMP/cc-noceil.log" ] || fail "a missing ceiling must refuse before any cell"
+
+echo "--- (g) spend UNKNOWN is charged at the ceiling: a turn killed before its result event; no second turn ---"
+R9="$TEST_TMP/cc-killed.jsonl"; L9="$TEST_TMP/cc-killed.log"
+CC_ENV=(ONOFF_MAX_USD=3)
+rc=0; out=$(run_cc "$R9" "$L9" killed --pilot 2>&1) || rc=$?
+CC_ENV=()
+[ "$rc" = 1 ] && grep -q 'cell ceiling' <<<"$out" || fail "killed pilot at cap 3: rc=$rc $out"
+node -e '
+  const fs = require("fs");
+  const rows = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const calls = fs.readFileSync(process.argv[2], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const bad = (m) => { console.error(m); process.exit(1); };
+  if (rows.length !== 3 || calls.length !== 3) bad("rows " + rows.length + " calls " + calls.length);
+  if (calls.some((c) => c.turn !== 1)) bad("a second turn ran after a turn 1 with unknown spend: " + JSON.stringify(calls.map((c) => [c.task, c.turn])));
+  const ceil = { "fb-mid-batch": 0.9, "fb-pool": 0.9, "fb-deadman": 0.57 };
+  for (const r of rows) if (r.failure_class !== "infra_fail" || r.cost_unknown !== true || Math.abs(r.cost_usd - ceil[r.task_id]) > 1e-9) bad(JSON.stringify([r.task_id, r.failure_class, r.cost_unknown, r.cost_usd]));
+  const spent = rows.reduce((s, r) => s + r.cost_usd, 0);
+  if (spent > 3 + 1e-9) bad("spent " + spent + " over the cap 3");
+' "$R9" "$L9" || fail "killed turn 1: charged at the ceiling, cost_unknown, no turn 2, total under the cap"
+echo "--- (g) a re-run of the same results file (the retry of the failed cells) is checked against the budget first ---"
+CC_ENV=(ONOFF_MAX_USD=3)
+rc=0; out=$(run_cc "$R9" "$L9" killed --pilot 2>&1) || rc=$?
+CC_ENV=()
+[ "$rc" = 1 ] && grep -q 'spend cap' <<<"$out" || fail "retry of failed cells at cap 3: rc=$rc $out"
+[ "$(wc -l < "$R9")" = 3 ] && [ ! -s "$L9" ] || fail "a retry must not start a cell the budget cannot cover: rows $(wc -l < "$R9")"
+echo "--- (g) no hidden retry: with --reps 2 the matrix runs exactly the campaign's cell, never an earlier failed rep ---"
+R10="$TEST_TMP/cc-noretry.jsonl"; L10="$TEST_TMP/cc-noretry.log"
+CC_ENV=(ONOFF_MAX_USD=6)
+rc=0; out=$(run_cc "$R10" "$L10" killed --model sonnet --reps 2 2>&1) || rc=$?
+CC_ENV=()
+[ "$rc" = 1 ] && grep -q 'cell ceiling' <<<"$out" || fail "no-retry run: rc=$rc $out"
+node -e '
+  const fs = require("fs");
+  const rows = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const calls = fs.readFileSync(process.argv[2], "utf8").trim().split("\n").filter(Boolean).length;
+  const spent = rows.reduce((s, r) => s + r.cost_usd, 0);
+  const keys = rows.map((r) => `${r.task_id}|${r.arm}|${r.rep}`);
+  // each of the 6 cells exactly once: a matrix-internal retry of an earlier failed rep would repeat a key
+  if (rows.length !== 6 || new Set(keys).size !== rows.length || calls !== rows.length || spent > 6 + 1e-9) { console.error("rows " + rows.length + " distinct " + new Set(keys).size + " claude calls " + calls + " spent " + spent + " " + keys.join(",")); process.exit(1); }
+' "$R10" "$L10" || fail "every claude call must be one budget-checked campaign cell (a matrix-internal retry would add calls and spend)"
+echo "--- (g) turn 1 fine, turn 2 killed: the whole ceiling is charged ---"
+R11="$TEST_TMP/cc-killed2.jsonl"; L11="$TEST_TMP/cc-killed2.log"
+out=$(run_cc "$R11" "$L11" killed2 --pilot 2>&1) || fail "killed2 pilot exit $?: $out"
+node -e '
+  const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const bad = (m) => { console.error(m); process.exit(1); };
+  for (const r of rows) {
+    if (r.task_id === "fb-deadman") { if (r.failure_class !== null || r.cost_unknown || Math.abs(r.cost_usd - 0.01) > 1e-9) bad("single-turn cell: " + JSON.stringify(r)); continue; }
+    if (r.failure_class !== "infra_fail" || r.cost_unknown !== true || Math.abs(r.cost_usd - 0.9) > 1e-9) bad("two-turn cell: " + JSON.stringify([r.task_id, r.failure_class, r.cost_unknown, r.cost_usd]));
+  }
+' "$R11" || fail "a killed turn 2 must charge the whole cell ceiling"
+echo "--- (g) a result event without total_cost_usd is an unknown spend too ---"
+R12="$TEST_TMP/cc-nocost.jsonl"; L12="$TEST_TMP/cc-nocost.log"
+out=$(run_cc "$R12" "$L12" nocost --pilot 2>&1) || fail "nocost pilot exit $?: $out"
+node -e '
+  const fs = require("fs");
+  const rows = fs.readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const calls = fs.readFileSync(process.argv[2], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  if (rows.length !== 6 || rows.some((r) => r.failure_cause !== "cost_unknown" || r.cost_unknown !== true)) { console.error(JSON.stringify(rows.map((r) => [r.task_id, r.failure_cause, r.cost_unknown]))); process.exit(1); }
+  if (calls.some((c) => c.turn === 2)) { console.error("turn 2 ran after a turn 1 without a cost"); process.exit(1); }
+' "$R12" "$L12" || fail "no cost on the result event: cost_unknown, no turn 2"
 
 stop_after extrap
 

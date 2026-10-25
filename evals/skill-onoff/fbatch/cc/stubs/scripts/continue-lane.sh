@@ -6,6 +6,7 @@ set -eu
 node "$(dirname "$0")/_ledger.js" call continue-lane.sh "$@"
 [ -n "${1:-}" ] || { echo "usage: continue-lane.sh <lane>" >&2; exit 2; }
 git rev-parse -q --verify "refs/heads/lane/$1" > /dev/null || { echo "continue-lane: no candidate for lane $1" >&2; exit 2; }
+[ "$(git symbolic-ref -q HEAD)" = refs/heads/develop ] || { echo "continue-lane: run it on the integration branch develop (HEAD is elsewhere); nothing was merged" >&2; exit 2; }
 mkdir -p runs
 printf 'continue %s\n' "$1" >> runs/dispatch.log
 git merge --no-ff -q -m "continue lane $1" "lane/$1"

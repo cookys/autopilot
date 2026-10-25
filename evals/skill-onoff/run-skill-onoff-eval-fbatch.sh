@@ -5,8 +5,11 @@
 # seed-home.sh, ONOFF_CELL_HOME, an unset of AUTOPILOT_CONFIG_FILE, and the ONOFF_OUT export.
 # Beyond the bpack copy (findings-batch cc rows; both are opt-in env, unset = the bpack behaviour):
 #   ONOFF_MAX_BUDGET_USD  hard spend cap for the cell: every `claude -p` gets --max-budget-usd <amount>; turn 2 gets what
-#                         turn 1 left (the sum of turn 1's result total_cost_usd); no budget left = no turn 2.
-#                         A budget stop is infra_fail / budget_exceeded.
+#                         turn 1 left (turn 1's result total_cost_usd); no budget left = no turn 2.
+#                         A budget stop is infra_fail / budget_exceeded. A turn without a trustworthy end cost (no result
+#                         event, or total_cost_usd missing / not a finite number >= 0; for example killed by the timeout)
+#                         is accounted conservatively: no further turn, the row carries cost_unknown:true (infra_fail /
+#                         cost_unknown unless an earlier cause applies) and the campaign charges the whole cell ceiling.
 #   ONOFF_CELL_TMPDIR=1   the agent's TMPDIR is $SCRATCH_HOME/tmp (inside the scratch HOME, so a task's seed-home.sh and
 #                         markers.sh can list it).
 # hooks/tests/skill-onoff-fbatch-runner.test.sh pins exactly this code difference to the bpack copy.
@@ -301,12 +304,22 @@ TRANSCRIPT="$OUT_DIR/transcript.jsonl"
 RAW_ERR="$OUT_DIR/stderr.log"
 TIMEOUT_LIMIT="${ONOFF_TIMEOUT:-10m}"
 START_TIME=$(date +%s)
-BUDGET_USD=""; BUDGET_EXHAUSTED=0; CELL_TMPDIR=""
+BUDGET_USD=""; BUDGET_EXHAUSTED=0; CELL_TMPDIR=""; COST_UNKNOWN=0
 if [ -n "${ONOFF_MAX_BUDGET_USD:-}" ]; then
   [[ "$ONOFF_MAX_BUDGET_USD" =~ ^[0-9]+(\.[0-9]+)?$ ]] && [ -n "${ONOFF_MAX_BUDGET_USD//[0.]/}" ] || { echo "ERROR: ONOFF_MAX_BUDGET_USD must be a positive number: $ONOFF_MAX_BUDGET_USD" >&2; exit 2; }
   BUDGET_USD="$ONOFF_MAX_BUDGET_USD"
 fi
 if [ "${ONOFF_CELL_TMPDIR:-0}" = 1 ]; then CELL_TMPDIR="$SCRATCH_HOME/tmp"; mkdir -p "$CELL_TMPDIR"; fi
+turn_cost() { # $1 one turn's transcript -> its spend in USD, or "unknown" unless a result event carries a finite total_cost_usd >= 0
+  node -e '
+    let sum=0,n=0,bad=0;
+    try{for(const l of require("fs").readFileSync(process.argv[1],"utf8").split("\n")){
+      let j;try{j=JSON.parse(l)}catch{continue}
+      if(j&&j.type==="result"){n++;if(typeof j.total_cost_usd==="number"&&Number.isFinite(j.total_cost_usd)&&j.total_cost_usd>=0)sum+=j.total_cost_usd;else bad++}
+    }}catch{}
+    process.stdout.write(n>0&&bad===0?sum.toFixed(6):"unknown");
+  ' "$1"
+}
 
 # ── instrument self-check: scripts the skill text addresses as <plugin>/scripts/... must load from THIS scratch plugin ──
 # (stage-graph-g67 v1: session-mode.js was absent from the plugin, so G6 ON cells measured the instrument, not the text.)
@@ -375,6 +388,7 @@ if [ -n "$PREFLIGHT_FAIL" ]; then
 elif [ "$RUNNER" = "cc" ]; then
   run_model_turn "$PROMPT_FILE" "$TRANSCRIPT" 1 "" "$BUDGET_USD"
   RUN_EXIT=$?
+  [ -z "$BUDGET_USD" ] || { TURN1_COST=$(turn_cost "$TRANSCRIPT"); [ "$TURN1_COST" != unknown ] || COST_UNKNOWN=1; }
 else
   [ -n "${ONOFF_STUB_BIN:-}" ] || { echo "ERROR: ONOFF_STUB_BIN not set for stub runner" >&2; exit 2; }
   run_model_turn "$PROMPT_FILE" "$TRANSCRIPT" 1 ""
@@ -441,23 +455,19 @@ if [ -z "$PREFLIGHT_FAIL" ] && [ -x "$TASK_DIR/turn2.sh" ]; then
         process.stdout.write(sid);
       ' "$TURN1_FILE")
       BUDGET_TURN2=""
-      if [ -n "$BUDGET_USD" ]; then
-        BUDGET_TURN2=$(node -e '
-          let spent=0;
-          try{for(const l of require("fs").readFileSync(process.argv[1],"utf8").split("\n")){
-            let j;try{j=JSON.parse(l)}catch{continue}
-            if(j&&j.type==="result"&&typeof j.total_cost_usd==="number"&&j.total_cost_usd>0) spent+=j.total_cost_usd;
-          }}catch{}
-          process.stdout.write(Math.max(0,Number(process.argv[2])-spent).toFixed(6));
-        ' "$TURN1_FILE" "$BUDGET_USD")
+      if [ -n "$BUDGET_USD" ] && [ "$COST_UNKNOWN" -eq 0 ]; then
+        BUDGET_TURN2=$(node -e 'process.stdout.write(Math.max(0,Number(process.argv[1])-Number(process.argv[2])).toFixed(6))' "$BUDGET_USD" "$TURN1_COST")
       fi
       if [ -z "$SESSION_ID" ]; then
         RESUME_UNAVAILABLE=1
+      elif [ "$COST_UNKNOWN" -eq 1 ]; then
+        :  # turn 1's spend is unknown: no second turn, the campaign charges the whole cell ceiling
       elif [ -n "$BUDGET_USD" ] && [ -z "${BUDGET_TURN2//[0.]/}" ]; then
         BUDGET_EXHAUSTED=1
       else
         run_model_turn "$TURN2_PROMPT" "$TURN2_FILE" 2 "$SESSION_ID" "$BUDGET_TURN2"
         RUN2_EXIT=$?
+        [ -z "$BUDGET_USD" ] || [ "$(turn_cost "$TURN2_FILE")" != unknown ] || COST_UNKNOWN=1
         [ "$RUN_EXIT" -eq 0 ] && RUN_EXIT=$RUN2_EXIT
       fi
     else
@@ -540,6 +550,8 @@ elif [ "$RUN_EXIT" -ne 0 ]; then
   failure_class='"infra_fail"'; failure_cause='"runner_error"'
 elif [ ! -s "$TRANSCRIPT" ]; then
   failure_class='"infra_fail"'; failure_cause='"empty_output"'
+elif [ "$COST_UNKNOWN" -eq 1 ]; then
+  failure_class='"infra_fail"'; failure_cause='"cost_unknown"'
 elif [ "$MARKERS_EXIT" -ne 0 ]; then
   failure_class='"infra_fail"'; failure_cause='"marker_error"'
 fi
@@ -581,6 +593,7 @@ if [ -n "$ARM_MANIFEST" ]; then
   ARM_SHA_FIELD=$(printf ',"arm_manifest_sha256":"%s"' "$ARM_SHA")
 fi
 [ "$STOPPED_BY_TIMEOUT" -eq 0 ] || ARM_SHA_FIELD="$ARM_SHA_FIELD,\"stopped_by_timeout\":true"
+[ "$COST_UNKNOWN" -eq 0 ] || ARM_SHA_FIELD="$ARM_SHA_FIELD,\"cost_unknown\":true"
 # turn2 and turn2_exit are emitted only for tasks that ship an executable turn2.sh
 # (other rows stay byte-identical). turn2_exit is the turn2.sh status, 0 when it ran clean.
 if [ -n "$TURN2_STATE" ]; then

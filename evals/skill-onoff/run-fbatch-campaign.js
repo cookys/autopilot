@@ -220,12 +220,18 @@ function runCc() {
   const bd = B.build({ armsDir, outDir: dir });
   const keep = `${abs}.cells`;
   const minCells = CC.extrapolate_min_cells || 2;
+  // A cell's spend is the sum of its transcript's result events ONLY when every turn that ran ended with a trustworthy
+  // one. The runner marks a cell cost_unknown when a turn did not (killed by the timeout, no result event, a missing or
+  // non-numeric total_cost_usd); a transcript with no cost at all is the same case. Such a cell is charged its whole
+  // ceiling (the most the --max-budget-usd cap lets it spend): never less than what may have been spent.
   const costOfKept = (j) => {
-    try {
-      const c = CELL.transcriptCost(path.join(keep, j.task_id, j.arm, String(j.rep), 'transcript.jsonl'));
-      if (c.turns.length) return { cost_usd: c.total, cost_turns: c.turns };
-    } catch { /* no transcript kept */ }
-    return { cost_usd: cellCost(j.task_id), cost_estimated: true };
+    if (j.cost_unknown !== true) {
+      try {
+        const c = CELL.transcriptCost(path.join(keep, j.task_id, j.arm, String(j.rep), 'transcript.jsonl'));
+        if (c.turns.length) return { cost_usd: c.total, cost_turns: c.turns };
+      } catch { /* no transcript kept */ }
+    }
+    return { cost_usd: ceilings[j.task_id], cost_unknown: true, cost_estimated: true };
   };
   const patchRows = (before) => {
     const buf = fs.readFileSync(abs);
@@ -279,6 +285,7 @@ function runCc() {
         ONOFF_TASKS_DIR: bd.tasksDir,
         ONOFF_KEEP_CELLS_DIR: keep,
         ONOFF_MAX_BUDGET_USD: String(budget),
+        ONOFF_SINGLE_REP: '1', // the matrix runs exactly this cell: no hidden retry of an earlier rep outside the budget check above
         ONOFF_CELL_TMPDIR: '1',
       },
     });

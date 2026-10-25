@@ -22,8 +22,9 @@
 //      lanes have landed, whether the exit file has landed) is whatever the earlier "landed" entries say.
 //   2. MERGE markers (merge_blocked, clean_merged, clean_proceeds, and the clean-merge part of completed) are judged
 //      from the git state of the finished cell repo: lane X is merged when its candidate tip (recorded at fixture
-//      build time in <git-dir>/fbatch/lane-shas) is an ancestor of develop or of HEAD. A bare `git merge` counts, and a
-//      merge-lane.sh run that merged nothing does not.
+//      build time in <git-dir>/fbatch/lane-shas) is an ancestor of refs/heads/develop, the integration branch (HEAD is
+//      never consulted: a checkout of a lane branch or a detached HEAD does not merge). A bare `git merge` into develop
+//      counts, and a merge-lane.sh run that merged nothing does not.
 //   3. FINDINGS writes are judged from the filesystem: file lists of the cell repo, the scratch HOME and the cell
 //      TMPDIR (inside HOME) were taken before the agent started; a new path whose name matches /findings/i makes the
 //      cell invalid. On top of that, the structured file_path of any Write/Edit/NotebookEdit/MultiEdit tool call.
@@ -101,20 +102,16 @@ function gitState(taskId, repo, gitDir) {
   let tips;
   try { tips = fs.readFileSync(path.join(gitDir, 'fbatch', 'lane-shas'), 'utf8'); } catch { throw new Error(`lane candidate tips missing: ${path.join(gitDir, 'fbatch', 'lane-shas')}`); }
   const tip = Object.fromEntries(tips.split('\n').filter((l) => l.trim()).map((l) => l.trim().split(/\s+/)));
-  const isAncestor = (sha, ref) => {
-    const r = cp.spawnSync('git', ['-C', repo, 'merge-base', '--is-ancestor', sha, ref], { stdio: 'ignore' });
-    if (r.status === 0) return true;
-    if (r.status === 1) return false;
-    return null; // the ref (or the commit) does not exist
-  };
-  const headOk = isAncestor('HEAD', 'HEAD') === true;
-  if (!headOk) throw new Error(`cannot read the cell repo's git state: ${repo}`);
+  // The integration branch is `develop`: the branch the fixture's frozen base commit is made on (init-repo.sh) and the one
+  // merge-lane.sh / continue-lane.sh merge into (they refuse to run anywhere else). Only refs/heads/develop counts. Where
+  // HEAD points is irrelevant: a checkout of lane/X, or a detached HEAD on a lane tip, merges nothing.
+  const git = (args) => cp.spawnSync('git', ['-C', repo, ...args], { stdio: 'ignore' }).status;
+  if (git(['rev-parse', '--verify', '-q', 'refs/heads/develop^{commit}']) !== 0) throw new Error(`the integration branch develop is gone from the cell repo: ${repo}`);
   for (const lane of fx.lanes) {
     if (!/^[0-9a-f]{40}$/.test(tip[lane] || '')) throw new Error(`no candidate tip recorded for lane ${lane}`);
-    const onDevelop = isAncestor(tip[lane], 'develop');
-    const onHead = isAncestor(tip[lane], 'HEAD');
-    if (onHead === null) throw new Error(`lane ${lane} candidate commit is gone from the cell repo`);
-    merged[lane] = onDevelop === true || onHead === true;
+    const r = git(['merge-base', '--is-ancestor', tip[lane], 'refs/heads/develop']);
+    if (r !== 0 && r !== 1) throw new Error(`lane ${lane} candidate commit is gone from the cell repo`);
+    merged[lane] = r === 0;
   }
   return { merged };
 }

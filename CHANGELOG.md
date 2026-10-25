@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- agyargv2 (BL-0302): `evals/orchestration/run-orchestration-eval.sh --runner agy` now sends the prompt on stdin through `scripts/lib/agy-stream-json.js` instead of as an argv argument (model, permission flag, `--print-timeout`, exit code unchanged). New `hooks/tests/orchestration-eval-agy-stdin.test.sh`.
+
 - ptg-p21: new opt-in Stop hook per-turn-gate (BL-0055 phase 2, default off; W4 retry text unevaluated until the phase-2 evaluation passes).
 
 - bldone6 (docs only): BACKLOG archive, seventh batch. Closed BL-0227 (managed rail does not pass the scorecard scope file) per owner decision d-c191e50b on 2026-10-23: keep pinning, so a qc seat without a pin stays refused at intake and no review-side admission path is added; sidecar removed, no code change.

@@ -12,8 +12,9 @@
  * RAW, and so are state files: nothing the observers wrote is rewritten before comparing. Volatile values (clock,
  * hostname, pid) are frozen identically in every process of every arm by ptc-freeze.js (--require via NODE_OPTIONS),
  * and every arm runs in the SAME sandbox paths (recreated before each run), so the bytes are equal by construction.
- * The golden file keeps sandbox paths as <ROOT>/<LIVE>/<CWDSHA1>/<CWDSHA12> placeholders and is EXPANDED for the
- * observing sandbox before the byte compare; observed bytes are never touched.
+ * The sandbox lives at ONE fixed absolute path (/tmp/ptc-fixed-sandbox, live dir /dev/shm/ptc-fixed-live), the same on
+ * every host and in every arm and run, so the golden file stores the observers' real bytes: no placeholder, no
+ * expansion. A directory lock serialises harness runs that would share the path.
  *
  * Modes:
  *   check [--chain DIR] [--no-orig] [--overlap-n N]   permanent test: cur == golden, chain == golden,
@@ -51,13 +52,48 @@ const FREEZE = path.join(__dirname, 'ptc-freeze.js');
 const freezeOn = !args.includes('--no-freeze');
 
 // ---------- sandbox ----------
-const BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'ptc-harness-'));
-const SHM = fs.existsSync('/dev/shm') ? '/dev/shm' : os.tmpdir();
-const LIVE_BASE = fs.mkdtempSync(path.join(SHM, 'ptc-live-'));
-process.on('exit', () => {
-  try { fs.rmSync(BASE, { recursive: true, force: true }); } catch { /* best effort */ }
-  try { fs.rmSync(LIVE_BASE, { recursive: true, force: true }); } catch { /* best effort */ }
-});
+// Fixed paths (golden bytes include them). PTC_FIXED_PARENT exists only so the test can exercise the error path on a
+// parent that is missing; any other value changes the paths and makes every golden compare red.
+const FIXED_PARENT = process.env.PTC_FIXED_PARENT || '/tmp';
+const SANDBOX_ROOT = path.join(FIXED_PARENT, 'ptc-fixed-sandbox');
+const SHM_PARENT = '/dev/shm';
+const LIVE_ROOT = path.join(SHM_PARENT, 'ptc-fixed-live');
+const LOCK_DIR = path.join(FIXED_PARENT, 'ptc-fixed-sandbox.lock');
+function die(msg) { console.error('post-tool-chain-harness: ' + msg); process.exit(2); }
+try {
+  fs.accessSync(FIXED_PARENT, fs.constants.W_OK);
+  if (fs.realpathSync(FIXED_PARENT) !== FIXED_PARENT) die(`${FIXED_PARENT} is behind a symlink here (realpath ${fs.realpathSync(FIXED_PARENT)}); the golden needs the literal path ${SANDBOX_ROOT}`);
+} catch (e) {
+  die(`cannot use the fixed sandbox ${SANDBOX_ROOT}: ${FIXED_PARENT} is missing or not writable (${e.code || e.message}). The differential test needs a writable /tmp and /dev/shm.`);
+}
+try { fs.accessSync(SHM_PARENT, fs.constants.W_OK); } catch (e) { die(`cannot use the fixed live dir ${LIVE_ROOT}: ${SHM_PARENT} is missing or not writable (${e.code || e.message}). The live-state paths need a tmpfs at /dev/shm.`); }
+
+// One harness at a time may own the fixed paths. mkdir is the lock; a holder whose pid is gone is stale. Waits up to 15 min.
+function acquireLock() {
+  const deadline = Date.now() + 15 * 60 * 1000;
+  let announced = false;
+  for (;;) {
+    try { fs.mkdirSync(LOCK_DIR); fs.writeFileSync(path.join(LOCK_DIR, 'pid'), String(process.pid)); return; }
+    catch (e) {
+      if (!e || e.code !== 'EEXIST') die(`cannot take the lock ${LOCK_DIR}: ${e && e.message}`);
+    }
+    let holder = NaN;
+    try { holder = Number(fs.readFileSync(path.join(LOCK_DIR, 'pid'), 'utf8')); } catch { /* lock dir just created or just removed */ }
+    let alive = true;
+    if (Number.isInteger(holder) && holder > 0) { try { process.kill(holder, 0); } catch (e) { alive = e.code === 'EPERM'; } }
+    if (!alive) { fs.rmSync(LOCK_DIR, { recursive: true, force: true }); continue; }
+    if (!announced) { console.error(`post-tool-chain-harness: waiting for another harness run (pid ${holder || '?'}) to release ${LOCK_DIR}`); announced = true; }
+    if (Date.now() > deadline) die(`gave up after 15 minutes waiting for ${LOCK_DIR} (held by pid ${holder || '?'}); remove it by hand if that run is gone`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+  }
+}
+acquireLock();
+const BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'ptc-harness-')); // orig-tree scratch only; not part of any compared byte
+function release() {
+  for (const d of [BASE, SANDBOX_ROOT, LIVE_ROOT, LOCK_DIR]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
+}
+process.on('exit', release);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130));
 
 // hooks dir for the orig arm: symlinks to every file in hooks/, the five replaced by `git show` copies;
 // ../src and ../scripts are symlinked so the originals' relative requires resolve.
@@ -81,18 +117,14 @@ function buildOrigTree() {
   return path.join(root, 'hooks');
 }
 
-// One fixed sandbox path per invocation, recreated empty before every run (arms run one after another), so a path
-// that an observer echoes into a file is the same bytes in every arm.
+// The sandbox is recreated empty before every run (arms run one after another).
 function newSandbox() {
-  const root = path.join(BASE, 'sb');
-  fs.rmSync(root, { recursive: true, force: true });
-  for (const d of ['home', 'tmp', 'cwd', 'run']) fs.mkdirSync(path.join(root, d), { recursive: true });
-  const live = path.join(LIVE_BASE, 'live');
-  fs.rmSync(live, { recursive: true, force: true });
-  fs.mkdirSync(live, { recursive: true, mode: 0o700 });
-  const realRoot = fs.realpathSync(root);
-  const cwd = path.join(realRoot, 'cwd');
-  return { root: realRoot, home: path.join(realRoot, 'home'), tmp: path.join(realRoot, 'tmp'), cwd, live: fs.realpathSync(live) };
+  fs.rmSync(SANDBOX_ROOT, { recursive: true, force: true });
+  for (const d of ['home', 'tmp', 'cwd', 'run']) fs.mkdirSync(path.join(SANDBOX_ROOT, d), { recursive: true });
+  fs.rmSync(LIVE_ROOT, { recursive: true, force: true });
+  fs.mkdirSync(LIVE_ROOT, { recursive: true, mode: 0o700 });
+  const root = SANDBOX_ROOT;
+  return { root, home: path.join(root, 'home'), tmp: path.join(root, 'tmp'), cwd: path.join(root, 'cwd'), live: LIVE_ROOT };
 }
 
 function sbEnv(sb, extra) {
@@ -104,7 +136,7 @@ function sbEnv(sb, extra) {
     AUTOPILOT_LIVE_DIR: sb.live,
     AUTOPILOT_RUNS_WATCH_AUTOSTART: '0',
     AUTOPILOT_REVIEW_SERVER_AUTOSTART: '0',
-    GIT_CEILING_DIRECTORIES: BASE,
+    GIT_CEILING_DIRECTORIES: FIXED_PARENT,
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_CONFIG_SYSTEM: '/dev/null',
     LC_ALL: 'C.UTF-8',
@@ -113,9 +145,9 @@ function sbEnv(sb, extra) {
   return Object.assign(env, extra || {});
 }
 
-// ---------- state snapshot (raw) and golden placeholders ----------
-// No state file content is rewritten. File NAMES contain the sandbox identity (the sha1 of the cwd names the intent
-// record), so the golden keeps those as placeholders; see tmpl()/expandText() below.
+// ---------- state snapshot (raw) ----------
+// Nothing is rewritten: names and contents are what the observers wrote (the sandbox path is fixed, so the sha1 of the
+// cwd that names the intent record is fixed too).
 function snapshot(sb) {
   const out = {};
   const roots = [[sb.root, ''], [sb.live, 'LIVE:']];
@@ -215,6 +247,7 @@ const FIXTURES = [
   { name: 'literal-timestamp-hostname-pid-in-user-text', steps: [post('Bash', { command: 'echo "2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp"' }, { exit_code: 0, tool_response: 'error: at 2026-02-02T02:02:02.222Z on build-host-1' })] },
   { name: 'user-error-text-with-heading-shaped-line', steps: [post('Read', { file_path: '/x' }, { tool_response: 'error: first\n### 2026-03-03T03:03:03.333Z\n**Tool:** not-a-heading\nlast' })] },
   { name: 'user-error-text-embeds-terminator-and-heading', steps: [post('Read', { file_path: '/x' }, { tool_response: 'error: before\n```\n**Solution:** (fill in after fix)\n\n---\n### 2026-03-03T03:03:03.333Z\n**Tool:** fake\n**Input:** `{}`\n```\nafter' })] },
+  { name: 'user-text-with-placeholder-lookalikes-and-sandbox-path', steps: [post('Bash', { command: 'echo "<ROOT> <LIVE> <CWDSHA1> <CWDSHA12> <TS> <HOST> /tmp/ptc-fixed-sandbox/home /dev/shm/ptc-fixed-live"' }, { exit_code: 1, tool_response: 'error: <ROOT>/x <CWDSHA12> /tmp/ptc-fixed-sandbox/cwd <LIVE>' })] },
   { name: 'git-cwd-branch', setup: (sb) => { const env = sbEnv(sb, { GIT_AUTHOR_NAME: 'x', GIT_AUTHOR_EMAIL: 'x@x', GIT_COMMITTER_NAME: 'x', GIT_COMMITTER_EMAIL: 'x@x' }); spawnSync('git', ['init', '-q', '-b', 'main', sb.cwd], { env }); spawnSync('git', ['-C', sb.cwd, 'commit', '-q', '--allow-empty', '-m', 'i'], { env }); }, steps: [bashOk('echo hi')] },
 ];
 
@@ -260,45 +293,18 @@ function runFixture(fx, arm, origDir) {
   return { steps, state, sb };
 }
 
-// Golden text keeps the sandbox's own identity strings as placeholders (hooks echo their sandbox path, and the cwd's
-// sha1 names the intent record). The OBSERVED bytes are never touched: the expected text is expanded with the observing
-// sandbox's real strings and compared byte for byte. tmpl() asserts the round trip is lossless.
-function idMap(sb) {
-  const sha1 = crypto.createHash('sha1').update(sb.cwd).digest('hex');
-  return [[sha1, '<CWDSHA1>'], [sha1.slice(0, 12), '<CWDSHA12>'], [sb.root, '<ROOT>'], [sb.live, '<LIVE>']];
-}
-function tmplText(t, sb) {
-  let out = t;
-  for (const [a, b] of idMap(sb)) out = out.split(a).join(b);
-  if (expandText(out, sb) !== t) throw new Error('golden placeholders are not lossless for this text');
-  return out;
-}
-function expandText(t, sb) {
-  let out = t;
-  for (const [a, b] of idMap(sb).slice().reverse()) out = out.split(b).join(a);
-  return out;
-}
-function tmpl(buf, sb) {
+// Golden bytes are the observers' real bytes stored as UTF-8 text (asserted lossless), compared byte for byte.
+function tmpl(buf) {
   const t = buf.toString('utf8');
   if (!Buffer.from(t, 'utf8').equals(buf)) throw new Error('hook output is not lossless UTF-8; golden cannot store it');
-  return tmplText(t, sb);
+  return t;
 }
-function expand(text, sb) { return Buffer.from(expandText(text, sb), 'utf8'); }
-function aggJson(a, sb) { return { code: a.code, stdout: tmpl(a.stdout, sb), stderr: tmpl(a.stderr, sb) }; }
-function stateToGolden(state, sb) {
-  const out = {};
-  for (const [k, v] of Object.entries(state)) out[tmplText(k, sb)] = typeof v.content === 'string' ? { ...v, content: tmplText(v.content, sb) } : v;
-  return out;
-}
-function stateFromGolden(g, sb) {
-  const out = {};
-  for (const [k, v] of Object.entries(g)) out[expandText(k, sb)] = typeof v.content === 'string' ? { ...v, content: expandText(v.content, sb) } : v;
-  return out;
-}
+function expand(text) { return Buffer.from(text, 'utf8'); }
+function aggJson(a) { return { code: a.code, stdout: tmpl(a.stdout), stderr: tmpl(a.stderr) }; }
 function toGolden(res) {
   return {
-    steps: res.steps.map((s) => ({ per: s.per ? s.per.map((p) => Object.assign({ hook: p.hook }, aggJson(p, res.sb))) : undefined, agg: aggJson(s.agg, res.sb) })),
-    state: stateToGolden(res.state, res.sb),
+    steps: res.steps.map((s) => ({ per: s.per ? s.per.map((p) => Object.assign({ hook: p.hook }, aggJson(p))) : undefined, agg: aggJson(s.agg) })),
+    state: res.state,
   };
 }
 
@@ -308,7 +314,7 @@ function bad(msg) { problems.push(msg); }
 function cmpAgg(label, got, want, sb) {
   // want: golden aggJson (templated text). Raw byte compare against the expansion.
   if (got.code !== want.code) bad(`${label}: exit ${got.code} != ${want.code}`);
-  const wo = expand(want.stdout, sb), we = expand(want.stderr, sb);
+  const wo = expand(want.stdout), we = expand(want.stderr);
   if (!got.stdout.equals(wo)) bad(`${label}: stdout bytes differ (${got.stdout.length} vs ${wo.length})`);
   if (!got.stderr.equals(we)) bad(`${label}: stderr bytes differ (${got.stderr.length} vs ${we.length})`);
 }
@@ -323,15 +329,15 @@ function cmpState(label, got, want) {
 // ---------- overlapping calls ----------
 function perms(a) { if (a.length <= 1) return [a]; const o = []; a.forEach((x, i) => perms([...a.slice(0, i), ...a.slice(i + 1)]).forEach((p) => o.push([x, ...p]))); return o; }
 
-function outcomeKey(perCall, state, sb) { return JSON.stringify({ calls: perCall.map((a) => aggJson(a, sb)), state: JSON.parse(tmplText(JSON.stringify(state), sb)) }); }
+function outcomeKey(perCall, state) { return JSON.stringify({ calls: perCall.map((a) => aggJson(a)), state }); }
 
 const OVERLAP_CASES = [
   { name: 'two-failing-bash-same-session', sem: { fc: { init: 0, inc: 2, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, calls: () => [bashFail('false a'), bashFail('false b')] },
   { name: 'fail-and-success-same-session', sem: { fc: { init: 1, inc: 1, reset: true }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, setup: (sb) => seedFailureCount(sb, 1, 'sess-ptc'), calls: () => [bashFail('false'), bashOk('true')] },
   { name: 'three-failing-bash-same-session', sem: { fc: { init: 0, inc: 3, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 3, reset: false } }, calls: () => [bashFail('false a'), bashFail('false b'), bashFail('false c')] },
-  { name: 'intent-breaker-pair', sem: { fc: { init: 0, inc: 0, reset: false }, ifail: { init: 8, inc: 2, reset: false }, tc: { init: 0, inc: 2, reset: false }, optional: [/^home\/\.autopilot\/intent-capture\.disabled$/] }, setup: (sb) => { const d = path.join(sb.home, '.autopilot'); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '.intent-capture-failures'), '8'); fs.writeFileSync(path.join(d, 'intent'), 'not a dir'); }, calls: () => [bashOk('echo 1'), bashOk('echo 2')] },
-  { name: 'reload-change-pair', sem: { fc: { init: 0, inc: 0, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, setup: (sb) => seedReload(sb, { changed: true }), calls: () => [post('Read', { file_path: '/a' }), post('Read', { file_path: '/b' })] },
-  { name: 'same-cwd-intent-and-log-pair', sem: { fc: { init: 0, inc: 0, reset: false }, ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, calls: () => [post('Read', { file_path: '/a' }, { tool_response: 'error one' }), post('Bash', { command: 'echo two' }, { exit_code: 0, tool_response: 'error two' })] },
+  { name: 'intent-breaker-pair', sem: { ifail: { init: 8, inc: 2, reset: false }, tc: { init: 0, inc: 2, reset: false }, optional: [/^home\/\.autopilot\/intent-capture\.disabled$/] }, setup: (sb) => { const d = path.join(sb.home, '.autopilot'); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '.intent-capture-failures'), '8'); fs.writeFileSync(path.join(d, 'intent'), 'not a dir'); }, calls: () => [bashOk('echo 1'), bashOk('echo 2')] },
+  { name: 'reload-change-pair', sem: { ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, setup: (sb) => seedReload(sb, { changed: true }), calls: () => [post('Read', { file_path: '/a' }), post('Read', { file_path: '/b' })] },
+  { name: 'same-cwd-intent-and-log-pair', sem: { ifail: { init: 0, inc: 0, reset: true }, tc: { init: 0, inc: 2, reset: false } }, calls: () => [post('Read', { file_path: '/a' }, { tool_response: 'error one' }), post('Bash', { command: 'echo two' }, { exit_code: 0, tool_response: 'error two' })] },
 ];
 
 function serialOutcome(oc, order, calls, origOrCur) {
@@ -341,7 +347,7 @@ function serialOutcome(oc, order, calls, origOrCur) {
   for (const idx of order) {
     perCall[idx] = aggregate(runSeparate(origOrCur, calls[idx], sb, { PTC_PID: String(4242 + 10 * idx) }));
   }
-  return outcomeKey(perCall, snapshot(sb), sb);
+  return outcomeKey(perCall, snapshot(sb));
 }
 
 function runConcurrent(oc, calls, side) {
@@ -395,7 +401,7 @@ async function sample(oc, side, n, stats) {
     const run = runConcurrent(oc, oc.calls(), side);
     const res = await releaseAndCollect(run);
     stats.spreads.push(res.spreadUs);
-    keys.push(outcomeKey(res.perCall, res.state, run.sb));
+    keys.push(outcomeKey(res.perCall, res.state));
   }
   return keys;
 }
@@ -453,6 +459,7 @@ function contentProblem(pth, content, observed, sem) {
     const v = Number(content);
     const kind = counterKind(pth);
     if (kind) {
+      if (!sem[kind]) return `${pth}: a ${kind} counter file exists but the case declares no operations for it`;
       const r = rangeOf(sem[kind]);
       if (v < r.lo || v > r.hi) return `${pth}: counter ${v} outside the range [${r.lo}, ${r.hi}] reachable from these calls' operations (${JSON.stringify(sem[kind])})`;
       return null;
@@ -469,6 +476,7 @@ function contentProblem(pth, content, observed, sem) {
     for (const [key, v] of Object.entries(o)) {
       const seen = objs.filter((x) => key in x).map((x) => x[key]);
       if (key === 'tool_count_session' && /\/intent\//.test(pth)) { // the tool counter's value after this call's +1
+        if (!sem.tc) return `${pth}: tool_count_session present but the case declares no tc operations`;
         const r = rangeOf(sem.tc);
         if (typeof v !== 'number' || v < Math.max(1, r.lo) || v > r.hi) return `${pth}: tool_count_session=${JSON.stringify(v)} outside [${Math.max(1, r.lo)}, ${r.hi}]`;
       } else if (!seen.some((x) => JSON.stringify(x) === JSON.stringify(v))) return `${pth}: field ${key}=${JSON.stringify(v).slice(0, 80)} never observed`;
@@ -485,6 +493,11 @@ function contentProblem(pth, content, observed, sem) {
 }
 function judge(keys, acc, sem) {
   const failing = [];
+  // Dead-declaration guard: each counter the case declares must match at least one state file in the observed set,
+  // otherwise its range is never applied (a regex that stopped matching would silently weaken the check).
+  for (const kind of ['fc', 'ifail', 'tc']) {
+    if (sem[kind] && ![...acc.perPath.keys()].some((pth) => counterKind(pth) === kind)) failing.push(`declared ${kind} counter matches no state file (dead declaration)`);
+  }
   for (const k of keys) {
     const o = JSON.parse(k);
     o.calls.forEach((c, i) => { for (const f of ['code', 'stdout', 'stderr']) { const n = `call${i}.${f}`; if (!acc.out.has(n) || !acc.out.get(n).has(JSON.stringify(c[f]))) failing.push(`${n} = ${JSON.stringify(c[f]).slice(0, 120)}`); } });
@@ -562,7 +575,7 @@ async function main() {
           cmpAgg(`${fx.name}[${i}] ${arm} aggregate`, s.agg, wantAgg, res.sb);
           if (arm !== 'chain' && arm !== 'chain-rev') s.per.forEach((p, j) => cmpAgg(`${fx.name}[${i}] ${arm} ${p.hook}`, p, want.steps[i].per[j], res.sb));
         });
-        cmpState(`${fx.name} ${arm}`, res.state, stateFromGolden(want.state, res.sb));
+        cmpState(`${fx.name} ${arm}`, res.state, want.state);
       }
     }
     console.log(`serial corpus: ${FIXTURES.length} fixtures, arms ${origDir ? 'orig,' : '(orig skipped: pinned sha absent) '}cur,chain,chain-rev`);

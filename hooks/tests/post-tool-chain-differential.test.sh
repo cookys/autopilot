@@ -45,6 +45,8 @@ assert_contains "$H_OUT" "arms orig,cur,chain,chain-rev" "all arms ran (original
 # --- the golden does not depend on the shell's umask (the harness pins 022 itself; a restrictive caller umask is green) ---
 UM_OUT="$( umask 077; HOME="$HOOK_HOME" node "$HARNESS" check --overlap-n 0 2>&1 < /dev/null )"; UM_RC=$?
 assert_exit_code "$UM_RC" 0 "umask 077 caller: serial corpus still green"
+UM2_OUT="$( umask 022; HOME="$HOOK_HOME" node "$HARNESS" check --overlap-n 0 2>&1 < /dev/null )"; UM2_RC=$?
+assert_exit_code "$UM2_RC" 0 "umask 022 caller: serial corpus still green"
 
 # --- the real tree, with the overlapping-call cases ---
 OVERLAP_OUT="$(HOME="$HOOK_HOME" node "$HARNESS" check --overlap-n 6 2>&1 < /dev/null)"
@@ -119,16 +121,48 @@ run_harness --no-freeze
 [ "$H_RC" -ne 0 ] || fail "negative control 'freeze module removed' was NOT detected"
 assert_contains "$H_OUT" "state differs" "freeze removed: volatile values differ and the harness is red"
 
+# --- harness copies for controls that mutate the harness itself ---
+mk_harness_tree() { # <name>: sets HT; a repo-shaped tree whose harness (and nothing else) is a mutable copy
+  HT="$MUT/$1"; mkdir -p "$HT/hooks"
+  local f
+  for f in "$HOOKS_DIR"/* ; do ln -sf "$f" "$HT/hooks/$(basename "$f")"; done
+  rm -f "$HT/hooks/tests"; mkdir -p "$HT/hooks/tests/lib" "$HT/hooks/tests/fixtures/post-tool-chain"
+  ln -sf "$REPO_ROOT/hooks/tests/fixtures/post-tool-chain/golden.json" "$HT/hooks/tests/fixtures/post-tool-chain/golden.json"
+  ln -sf "$HOOKS_DIR/tests/lib/ptc-freeze.js" "$HT/hooks/tests/lib/ptc-freeze.js"
+  ln -sf "$REPO_ROOT/src" "$HT/src"; ln -sf "$REPO_ROOT/scripts" "$HT/scripts"
+  cp "$HARNESS" "$HT/hooks/tests/lib/post-tool-chain-harness.js"
+}
+
+# --- negative control: a counter regex that stops matching leaves its declared range dead; the harness must say so ---
+mk_harness_tree deadcounter
+mutate_or_die "$HT/hooks/tests/lib/post-tool-chain-harness.js" 's#claude-intent-tool-count-\[0-9a-f\]{12}#claude-intent-tool-count-[0-9a-f]{13}#'
+DC_OUT="$(HOME="$HOOK_HOME" node "$HT/hooks/tests/lib/post-tool-chain-harness.js" check --only-overlap --overlap-n 3 --no-orig 2>&1 < /dev/null)"; DC_RC=$?
+[ "$DC_RC" -ne 0 ] || fail "negative control 'tool-counter regex broken' was NOT detected"
+assert_contains "$DC_OUT" "dead declaration" "broken counter regex is reported as a dead declaration"
+
+# --- fixed-sandbox plumbing: unusable parent, stale lock, live lock (PTC_FIXED_PARENT points the lock/sandbox at a scratch dir) ---
+NP_OUT="$(PTC_FIXED_PARENT="$TEST_TMP/no-such-parent" HOME="$HOOK_HOME" node "$HARNESS" check --only-overlap --overlap-n 0 2>&1 < /dev/null)"; NP_RC=$?
+assert_exit_code "$NP_RC" 2 "unusable sandbox parent exits 2"
+assert_contains "$NP_OUT" "missing or not writable" "unusable sandbox parent: explicit message"
+FP1="$TEST_TMP/fp1"; mkdir -p "$FP1/ptc-fixed-sandbox.lock"; echo 2147483646 > "$FP1/ptc-fixed-sandbox.lock/pid"
+SL_OUT="$(PTC_FIXED_PARENT="$FP1" HOME="$HOOK_HOME" timeout 60 node "$HARNESS" check --only-overlap --overlap-n 0 2>&1 < /dev/null)"; SL_RC=$?
+assert_exit_code "$SL_RC" 0 "a lock held by a dead pid is taken over"
+[ ! -d "$FP1/ptc-fixed-sandbox.lock" ] || fail "lock directory left behind after the run"
+FP2="$TEST_TMP/fp2"; mkdir -p "$FP2/ptc-fixed-sandbox.lock"
+sleep 120 & HOLDER=$!
+echo "$HOLDER" > "$FP2/ptc-fixed-sandbox.lock/pid"
+LL_OUT="$(PTC_FIXED_PARENT="$FP2" HOME="$HOOK_HOME" timeout 4 node "$HARNESS" check --only-overlap --overlap-n 0 2>&1 < /dev/null)"; LL_RC=$?
+kill "$HOLDER" 2>/dev/null; wait "$HOLDER" 2>/dev/null
+assert_exit_code "$LL_RC" 124 "a lock held by a live pid makes the harness wait (timeout fired)"
+assert_contains "$LL_OUT" "waiting for another harness run" "live lock: the wait is announced"
+
 # --- negative control: dropping the umask pin makes a umask-077 caller red ---
-UP="$MUT/umask"; mkdir -p "$UP/hooks"
-for f in "$HOOKS_DIR"/* ; do ln -sf "$f" "$UP/hooks/$(basename "$f")"; done
-rm -f "$UP/hooks/tests"; mkdir -p "$UP/hooks/tests/lib" "$UP/hooks/tests/fixtures/post-tool-chain"
-ln -sf "$REPO_ROOT/hooks/tests/fixtures/post-tool-chain/golden.json" "$UP/hooks/tests/fixtures/post-tool-chain/golden.json"
-ln -sf "$REPO_ROOT/src" "$UP/src"; ln -sf "$REPO_ROOT/scripts" "$UP/scripts"
-cp "$HARNESS" "$UP/hooks/tests/lib/post-tool-chain-harness.js"
+mk_harness_tree umask
+UP="$HT"
 mutate_or_die "$UP/hooks/tests/lib/post-tool-chain-harness.js" "s#^process.umask(0o022);##"
 UN_OUT="$( umask 077; HOME="$HOOK_HOME" node "$UP/hooks/tests/lib/post-tool-chain-harness.js" check --overlap-n 0 --no-orig 2>&1 < /dev/null )"; UN_RC=$?
 [ "$UN_RC" -ne 0 ] || fail "negative control 'umask pin removed' was NOT detected under umask 077"
+assert_contains "$UN_OUT" "state differs" "umask pin removed: the red is a state (mode) difference"
 
 # --- negative controls on the unit tests (broken lib copies must turn the mechanics tests red) ---
 unit_neg() { # <label> <sed command>

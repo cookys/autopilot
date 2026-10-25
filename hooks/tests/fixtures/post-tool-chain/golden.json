@@ -61,16 +61,16 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo ok\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo ok\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo ok\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo ok\n"
     },
     "run/": {
      "mode": "755"
@@ -78,7 +78,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -342,16 +342,16 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false 6\",\n  \"tool_count_session\": 6,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false 6\",\n  \"tool_count_session\": 6,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 1\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 2\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 3\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 4\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 5\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false 6\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 1\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 2\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 3\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 4\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 5\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false 6\n"
     },
     "run/": {
      "mode": "755"
@@ -359,7 +359,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "6"
     }
@@ -545,16 +545,16 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 4,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 4,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] true\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] true\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false\n"
     },
     "run/": {
      "mode": "755"
@@ -562,7 +562,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "4"
     }
@@ -670,16 +670,16 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] x\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] x\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] x\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] x\n"
     },
     "run/": {
      "mode": "755"
@@ -687,7 +687,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "2"
     }
@@ -752,9 +752,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -762,7 +762,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -873,9 +873,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
@@ -885,7 +885,7 @@
     },
     "home/.claude/plugins/.reload-watch-state.json": {
      "mode": "644",
-     "content": "{\n  \"<ROOT>/home/.claude/plugins/installed_plugins.json\": null,\n  \"<ROOT>/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"<ROOT>/cwd/.claude/settings.local.json\": null\n}"
+     "content": "{\n  \"/tmp/ptc-fixed-sandbox/home/.claude/plugins/installed_plugins.json\": null,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/settings.local.json\": null\n}"
     },
     "run/": {
      "mode": "755"
@@ -893,7 +893,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "2"
     }
@@ -969,23 +969,23 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash false\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] false\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] false\n"
     },
     "home/.claude/plugins/": {
      "mode": "755"
     },
     "home/.claude/plugins/.reload-watch-state.json": {
      "mode": "644",
-     "content": "{\n  \"<ROOT>/home/.claude/plugins/installed_plugins.json\": null,\n  \"<ROOT>/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"<ROOT>/cwd/.claude/settings.local.json\": null\n}"
+     "content": "{\n  \"/tmp/ptc-fixed-sandbox/home/.claude/plugins/installed_plugins.json\": null,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/settings.local.json\": null\n}"
     },
     "run/": {
      "mode": "755"
@@ -993,7 +993,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -1065,9 +1065,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
@@ -1077,7 +1077,7 @@
     },
     "home/.claude/plugins/.reload-watch-state.json": {
      "mode": "644",
-     "content": "{\n  \"<ROOT>/home/.claude/plugins/installed_plugins.json\": null,\n  \"<ROOT>/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"<ROOT>/cwd/.claude/settings.local.json\": null\n}"
+     "content": "{\n  \"/tmp/ptc-fixed-sandbox/home/.claude/plugins/installed_plugins.json\": null,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/dispatch-config.md\": 1700000000000,\n  \"/tmp/ptc-fixed-sandbox/cwd/.claude/settings.local.json\": null\n}"
     },
     "run/": {
      "mode": "755"
@@ -1085,7 +1085,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -1150,9 +1150,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1160,7 +1160,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -1225,9 +1225,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1235,7 +1235,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -1300,9 +1300,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1310,7 +1310,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -1375,9 +1375,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"<unknown>\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"<unknown>\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1385,7 +1385,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -1454,16 +1454,16 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash cat big\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash cat big\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] cat big\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] cat big\n"
     },
     "home/.claude/error-log.md": {
      "mode": "644",
@@ -1475,7 +1475,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -1540,9 +1540,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1550,7 +1550,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -1615,9 +1615,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"AskUserQuestion\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"AskUserQuestion\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "run/": {
      "mode": "755"
@@ -1625,7 +1625,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     },
@@ -1693,16 +1693,16 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"token=ghp_abcdefghijklmnopqrstuvwxyz0123456789\\\"\\nsecond line\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"token=ghp_abcdefghijklmnopqrstuvwxyz0123456789\\\"\\nsecond line\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo \"token=<REDACTED>\"\\nsecond line\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo \"token=<REDACTED>\"\\nsecond line\n"
     },
     "run/": {
      "mode": "755"
@@ -1710,7 +1710,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -1814,9 +1814,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Edit\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Edit /y\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Edit\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Edit /y\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
@@ -1831,7 +1831,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "2"
     }
@@ -1898,7 +1898,7 @@
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo hi\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo hi\n"
     },
     "run/": {
      "mode": "755"
@@ -1916,7 +1916,7 @@
        "hook": "intent-capture",
        "code": 0,
        "stdout": "",
-       "stderr": "[intent-capture] disabled after 10 consecutive failures — see <ROOT>/home/.autopilot/intent-capture.disabled\n"
+       "stderr": "[intent-capture] disabled after 10 consecutive failures — see /tmp/ptc-fixed-sandbox/home/.autopilot/intent-capture.disabled\n"
       },
       {
        "hook": "reload-watch",
@@ -1946,7 +1946,7 @@
      "agg": {
       "code": 0,
       "stdout": "",
-      "stderr": "[intent-capture] disabled after 10 consecutive failures — see <ROOT>/home/.autopilot/intent-capture.disabled\n"
+      "stderr": "[intent-capture] disabled after 10 consecutive failures — see /tmp/ptc-fixed-sandbox/home/.autopilot/intent-capture.disabled\n"
      }
     },
     {
@@ -2009,14 +2009,14 @@
     },
     "home/.autopilot/intent-capture.disabled": {
      "mode": "600",
-     "content": "{\n  \"disabled_at\": \"2026-01-01T00:00:00.000Z\",\n  \"reason\": \"10 consecutive failures: ENOTDIR: not a directory, open '<ROOT>/home/.autopilot/intent/<CWDSHA1>.json.4242.tmp'\",\n  \"plugin_version\": \"unknown\",\n  \"manual_reset\": \"rm <ROOT>/home/.autopilot/intent-capture.disabled\"\n}"
+     "content": "{\n  \"disabled_at\": \"2026-01-01T00:00:00.000Z\",\n  \"reason\": \"10 consecutive failures: ENOTDIR: not a directory, open '/tmp/ptc-fixed-sandbox/home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json.4242.tmp'\",\n  \"plugin_version\": \"unknown\",\n  \"manual_reset\": \"rm /tmp/ptc-fixed-sandbox/home/.autopilot/intent-capture.disabled\"\n}"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo hi\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo again\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo hi\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo again\n"
     },
     "run/": {
      "mode": "755"
@@ -2024,7 +2024,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -2050,13 +2050,13 @@
        "hook": "audit-log",
        "code": 0,
        "stdout": "",
-       "stderr": "audit-log error: EEXIST: file already exists, mkdir '<ROOT>/home/.claude'\n"
+       "stderr": "audit-log error: EEXIST: file already exists, mkdir '/tmp/ptc-fixed-sandbox/home/.claude'\n"
       },
       {
        "hook": "log-error",
        "code": 0,
        "stdout": "",
-       "stderr": "log-error error: EEXIST: file already exists, mkdir '<ROOT>/home/.claude'\n"
+       "stderr": "log-error error: EEXIST: file already exists, mkdir '/tmp/ptc-fixed-sandbox/home/.claude'\n"
       },
       {
        "hook": "failure-escalation",
@@ -2068,7 +2068,7 @@
      "agg": {
       "code": 0,
       "stdout": "",
-      "stderr": "audit-log error: EEXIST: file already exists, mkdir '<ROOT>/home/.claude'\nlog-error error: EEXIST: file already exists, mkdir '<ROOT>/home/.claude'\n"
+      "stderr": "audit-log error: EEXIST: file already exists, mkdir '/tmp/ptc-fixed-sandbox/home/.claude'\nlog-error error: EEXIST: file already exists, mkdir '/tmp/ptc-fixed-sandbox/home/.claude'\n"
      }
     }
    ],
@@ -2089,9 +2089,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo err\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo err\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude": {
      "mode": "644",
@@ -2103,7 +2103,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -2211,16 +2211,16 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"dddd0000-1111-2222-3333-444455556666\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"transcript\",\n  \"last_tool_input_summary\": \"Bash echo from-transcript\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"dddd0000-1111-2222-3333-444455556666\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"transcript\",\n  \"last_tool_input_summary\": \"Bash echo from-transcript\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo from-transcript\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo from-transcript\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo from-transcript\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo from-transcript\n"
     },
     "home/.claude/error-log.md": {
      "mode": "644",
@@ -2350,16 +2350,16 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash f\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash f\",\n  \"tool_count_session\": 2,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] f\n[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] f\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] f\n[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] f\n"
     },
     "run/": {
      "mode": "755"
@@ -2367,7 +2367,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "2"
     }
@@ -2430,7 +2430,7 @@
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo hi\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo hi\n"
     },
     "run/": {
      "mode": "755"
@@ -2499,16 +2499,16 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\\\"\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\\\"\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo \"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\"\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo \"2026-01-01T00:00:00.123Z build-host-1 f.4242.tmp\"\n"
     },
     "home/.claude/error-log.md": {
      "mode": "644",
@@ -2520,7 +2520,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -2585,9 +2585,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
@@ -2602,7 +2602,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -2667,9 +2667,9 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": null\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Read\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Read /x\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
@@ -2684,7 +2684,97 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
+     "mode": "600",
+     "content": "1"
+    }
+   }
+  },
+  "user-text-with-placeholder-lookalikes-and-sandbox-path": {
+   "steps": [
+    {
+     "per": [
+      {
+       "hook": "intent-capture",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "reload-watch",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "audit-log",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "log-error",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      },
+      {
+       "hook": "failure-escalation",
+       "code": 0,
+       "stdout": "",
+       "stderr": ""
+      }
+     ],
+     "agg": {
+      "code": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    }
+   ],
+   "state": {
+    "cwd/": {
+     "mode": "755"
+    },
+    "home/": {
+     "mode": "755"
+    },
+    "home/.autopilot/": {
+     "mode": "700"
+    },
+    "home/.autopilot/.failure_count_4fd0e486": {
+     "mode": "600",
+     "content": "1"
+    },
+    "home/.autopilot/.intent-capture-failures": {
+     "mode": "600",
+     "content": "0"
+    },
+    "home/.autopilot/intent/": {
+     "mode": "700"
+    },
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
+     "mode": "600",
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo \\\"<ROOT> <LIVE> <CWDSHA1> <CWDSHA12> <TS> <HOST> /tmp/ptc-fixed-sandbox/h...\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": null\n}\n"
+    },
+    "home/.claude/": {
+     "mode": "755"
+    },
+    "home/.claude/bash-commands.log": {
+     "mode": "644",
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo \"<ROOT> <LIVE> <CWDSHA1> <CWDSHA12> <TS> <HOST> /tmp/ptc-fixed-sandbox/home /dev/shm/ptc-fixed-live\"\n"
+    },
+    "home/.claude/error-log.md": {
+     "mode": "644",
+     "content": "### 2026-01-01T00:00:00.000Z\n**Tool:** Bash\n**Input:** `{\"command\":\"echo \\\"<ROOT> <LIVE> <CWDSHA1> <CWDSHA12> <TS> <HOST> /tmp/ptc-fixed-sandbox/home /dev/shm/ptc-fixed-live\\\"\"}`\n```\nerror: <ROOT>/x <CWDSHA12> /tmp/ptc-fixed-sandbox/cwd <LIVE>\n```\n**Solution:** (fill in after fix)\n\n---\n"
+    },
+    "run/": {
+     "mode": "755"
+    },
+    "tmp/": {
+     "mode": "755"
+    },
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }
@@ -2749,16 +2839,16 @@
     "home/.autopilot/intent/": {
      "mode": "700"
     },
-    "home/.autopilot/intent/<CWDSHA1>.json": {
+    "home/.autopilot/intent/86a2450258f8ca4df7cd58ffa535d8e2755054bb.json": {
      "mode": "600",
-     "content": "{\n  \"session_id\": \"<CWDSHA12>\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo hi\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"<ROOT>/cwd\",\n  \"git_branch\": \"main\"\n}\n"
+     "content": "{\n  \"session_id\": \"86a2450258f8\",\n  \"hostname\": \"frozen-host\",\n  \"last_updated\": \"2026-01-01T00:00:00.000Z\",\n  \"last_tool\": \"Bash\",\n  \"last_tool_source\": \"stdin\",\n  \"last_tool_input_summary\": \"Bash echo hi\",\n  \"tool_count_session\": 1,\n  \"cwd\": \"/tmp/ptc-fixed-sandbox/cwd\",\n  \"git_branch\": \"main\"\n}\n"
     },
     "home/.claude/": {
      "mode": "755"
     },
     "home/.claude/bash-commands.log": {
      "mode": "644",
-     "content": "[2026-01-01T00:00:00.000Z] [<ROOT>/cwd] echo hi\n"
+     "content": "[2026-01-01T00:00:00.000Z] [/tmp/ptc-fixed-sandbox/cwd] echo hi\n"
     },
     "run/": {
      "mode": "755"
@@ -2766,7 +2856,7 @@
     "tmp/": {
      "mode": "755"
     },
-    "tmp/claude-intent-tool-count-<CWDSHA12>": {
+    "tmp/claude-intent-tool-count-86a2450258f8": {
      "mode": "600",
      "content": "1"
     }

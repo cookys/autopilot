@@ -322,7 +322,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-08-01
 - **Origin**: self
 - **Problem**: 每回合重新提醒模型守規則沒有明顯進步，因此改做每回合驗證。p2-3r2（Haiku 4.5 重跑）判 PASS，可據此把 hook 記載為經評測的 opt-in，不決定預設值；Haiku 5.5 批次 p2-3-h55 已開跑，BL-0295 評測設計中。
-- **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
+- **Impact**: 預設仍未開啟，長時間工作時模型仍可能漸漸偏離規定；hook 已可選用，且在 Haiku 4.5 評測通過。
 - **Trigger**: the Haiku 5.5 batch (p2-3-h55, started 2026-10-25 19:52 Taipei) of P2-3 finishes and is judged. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
 - **Trigger-Type**: event
 - **Effort**: M

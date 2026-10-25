@@ -94,6 +94,120 @@ test('non-JSON, binary and multi-byte output is forwarded byte for byte', () => 
   assert.ok(Buffer.concat(out).equals(Buffer.concat([bytes, Buffer.from('—')])));
 });
 
+test('exit statuses are normalised the way a separate process would exit (-1 -> 255, 256 -> 0, "3" -> 3)', () => {
+  const st = (v) => run(['a'], { a: fake(() => v) }).code;
+  assert.strictEqual(st(-1), 255);
+  assert.strictEqual(st(256), 0);
+  assert.strictEqual(st(257), 1);
+  assert.strictEqual(st('3'), 3);
+  assert.strictEqual(st(undefined), 0);
+  // process.exit(-1) inside a member counts as 255 and beats a later 1
+  const r = run(['a', 'b'], { a: fake(() => { process.exit(-1); }), b: fake(() => 1) });
+  assert.strictEqual(r.code, 255);
+  // anything Node would reject (non-integer, NaN, boolean, non-numeric string) fails that member open, status 0
+  for (const bad of [1.5, NaN, true, 'abc']) {
+    const rr = run(['a'], { a: fake(() => bad) });
+    assert.strictEqual(rr.code, 0, `status for ${String(bad)}`);
+    assert.match(rr.err, /member fail-open: The "code" argument must be of type integer/);
+  }
+  const rp = run(['a'], { a: fake(() => { process.exit(1.5); }) });
+  assert.match(rp.err, /member fail-open/);
+});
+
+// --- isolation between members (same process): env, exitCode, listeners, module state ---
+test('a member cannot leak process.env into the next one', () => {
+  const seen = [];
+  run(['a', 'b'], {
+    a: fake(() => { process.env.PTC_LEAK = 'x'; delete process.env.PATH_PTC_NONE; process.env.HOME_PTC_CHANGED = 'new'; return 0; }),
+    b: fake(() => { seen.push(process.env.PTC_LEAK, process.env.HOME_PTC_CHANGED); return 0; }),
+  });
+  assert.deepStrictEqual(seen, [undefined, undefined]);
+  assert.strictEqual(process.env.PTC_LEAK, undefined);
+});
+
+test('a member that changes or deletes an existing env var gets it back', () => {
+  process.env.PTC_KEEP = 'orig';
+  const seen = [];
+  try {
+    run(['a', 'b'], {
+      a: fake(() => { process.env.PTC_KEEP = 'changed'; return 0; }),
+      b: fake(() => { seen.push(process.env.PTC_KEEP); delete process.env.PTC_KEEP; return 0; }),
+    });
+    assert.deepStrictEqual(seen, ['orig']);
+    assert.strictEqual(process.env.PTC_KEEP, 'orig');
+  } finally { delete process.env.PTC_KEEP; }
+});
+
+test('a member cannot leak process.exitCode', () => {
+  const before = process.exitCode;
+  const seen = [];
+  const r = run(['a', 'b'], {
+    a: fake(() => { process.exitCode = 9; return 0; }),
+    b: fake(() => { seen.push(process.exitCode); return 0; }),
+  });
+  assert.deepStrictEqual(seen, [before]);
+  assert.strictEqual(process.exitCode, before);
+  assert.strictEqual(r.code, 0);
+});
+
+test('a member cannot leave process event listeners behind (added ones removed, removed ones restored)', () => {
+  const keep = () => {};
+  process.on('ptc-test-event', keep);
+  try {
+    const counts = [];
+    run(['a', 'b', 'c'], {
+      a: fake(() => { process.on('ptc-test-event', () => {}); process.on('ptc-other-event', () => {}); return 0; }),
+      b: fake(() => { counts.push([process.listenerCount('ptc-test-event'), process.listenerCount('ptc-other-event')]); process.removeAllListeners('ptc-test-event'); return 0; }),
+      c: fake(() => { counts.push([process.listenerCount('ptc-test-event'), process.listenerCount('ptc-other-event')]); return 0; }),
+    });
+    assert.deepStrictEqual(counts, [[1, 0], [1, 0]]);
+    assert.deepStrictEqual(process.listeners('ptc-test-event'), [keep]);
+  } finally { process.removeAllListeners('ptc-test-event'); }
+});
+
+test('module-level state a member mutates (a shared lib, like transcript-reader-lib TAIL_WINDOW_BYTES) starts fresh for the next member', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ptc-mod-'));
+  try {
+    const lib = path.join(dir, 'shared-lib.js');
+    fs.writeFileSync(lib, "'use strict'; let hits = 0; module.exports = { TAIL: 256, bump() { return ++hits; } };\n");
+    const seen = [];
+    const mods = {
+      a: fake(() => { const l = require(lib); l.TAIL = 200; l.bump(); l.bump(); return 0; }),
+      b: fake(() => { const l = require(lib); seen.push([l.TAIL, l.bump()]); return 0; }),
+    };
+    run(['a', 'b'], mods);
+    assert.deepStrictEqual(seen, [[256, 1]]);
+    assert.ok(!(lib in require.cache), 'module loaded by a member is not left in the cache');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the real hook modules can run in reverse order: each member behaves the same wherever it sits', () => {
+  // members are independent: reversing the list only reverses the per-stream concatenation
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ptc-rev-'));
+  try {
+    const script = path.join(tmpHome, 'drive.js');
+    fs.writeFileSync(script, `const { runChain, MEMBERS } = require(${JSON.stringify(LIB)});
+const payload = JSON.stringify({ hook_event_name: 'PostToolUse', session_id: 's', tool_name: 'Bash', tool_input: { command: 'false' }, exit_code: 1, tool_response: 'x' });
+const go = (members) => { const o = []; const e = []; const code = runChain({ stdin: payload, members, writeOut: (b) => o.push(String(b)), writeErr: (b) => e.push(String(b)) }); return { code, o, e }; };
+const fwd = go(MEMBERS);
+const rev = go(MEMBERS.slice().reverse());
+const all = go(MEMBERS); // third run: failure counter is now 3
+console.log(JSON.stringify({ fwd, rev, all }));`);
+    const env = { PATH: process.env.PATH, HOME: path.join(tmpHome, 'home'), TMPDIR: tmpHome, AUTOPILOT_LIVE_DIR: path.join(tmpHome, 'live') };
+    fs.mkdirSync(env.HOME);
+    const r = spawnSync(process.execPath, [script], { cwd: tmpHome, env, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+    const j = JSON.parse(r.stdout);
+    assert.strictEqual(j.fwd.code, 0);
+    assert.strictEqual(j.rev.code, 0);
+    // forward run was the 1st failure (silent), reverse the 2nd (L1 text), third the 3rd (L2 text): the counter
+    // advanced identically no matter where failure-escalation sat in the list
+    assert.strictEqual(j.fwd.o.join(''), '');
+    assert.match(j.rev.o.join(''), /Failure Escalation — L1/);
+    assert.match(j.all.o.join(''), /Failure Escalation — L2/);
+  } finally { fs.rmSync(tmpHome, { recursive: true, force: true }); }
+});
+
 // --- real process tests: large output through a slow pipe, TERM, no residue ---
 function childScript(dir, body) {
   const f = path.join(dir, 'child.js');

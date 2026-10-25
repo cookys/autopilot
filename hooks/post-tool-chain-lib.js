@@ -12,8 +12,9 @@
  *  - fd 0 is read once by the caller and handed to every member as text.
  *  - Each member runs under its own try/catch, so one throw cannot skip the others or change their status.
  *    A member that throws (a bug, or a load failure) fails open: one stderr line, status 0.
- *  - process.stdout.write / process.stderr.write / process.exit are swapped while a member runs and put back
- *    in a `finally`. A member's output is flushed with fs.writeSync as soon as that member finished, so a
+ *  - process.stdout.write / process.stderr.write / process.exit are swapped while a member runs, and process.env,
+ *    process.exitCode, process event listeners and newly loaded modules are snapshotted and put back, all in a
+ *    `finally`. Exit statuses are normalised to what a separate process would exit with (0-255). A member's output is flushed with fs.writeSync as soon as that member finished, so a
  *    later member that hangs (the host kills the chain on its timeout) never takes the earlier bytes down
  *    with it, and a large output is not cut by process.exit (pipe writes via process.stdout are async).
  *  - A write failure (EPIPE: the host stopped listening) never stops the remaining members; their state
@@ -35,6 +36,22 @@ class MemberExit extends Error {
   constructor(code) { super(`member called process.exit(${code})`); this.code = code; }
 }
 
+// The status a standalone process would end with for process.exit(c) / process.exit(runHook(...)): Node accepts
+// an integer (or an integer string), uses 0 for undefined/null, rejects anything else with a TypeError, and the
+// OS keeps the low 8 bits (-1 -> 255, 256 -> 0). Reproduced here so the chain's "highest status" is taken over
+// the numbers the separate processes would really have exited with.
+function exitStatus(c) {
+  if (c === undefined || c === null) return 0;
+  let n = c;
+  if (typeof n === 'string' && /^[-+]?\d+$/.test(n.trim())) n = Number(n);
+  if (typeof n !== 'number' || !Number.isInteger(n)) {
+    const e = new TypeError(`The "code" argument must be of type integer. Received ${String(c)}`);
+    e.code = 'ERR_INVALID_ARG_TYPE';
+    throw e;
+  }
+  return n & 0xff;
+}
+
 function toBuffer(chunk, encoding) {
   if (Buffer.isBuffer(chunk)) return chunk;
   if (chunk instanceof Uint8Array) return Buffer.from(chunk);
@@ -54,10 +71,35 @@ function writeAll(fd, buf) {
   }
 }
 
-// Runs fn() with stdout/stderr/exit captured; returns { code, out, err }.
+// Process-wide state a member could leave behind for the next one. Snapshot before, put back after (in a
+// `finally`): environment variables, process.exitCode, process event listeners, and every module the member
+// loaded into require.cache (so module-level state such as transcript-reader-lib's TAIL_WINDOW_BYTES, or a
+// lib's memo, starts fresh for the next member exactly as in a separate process).
+function snapshotProcess() {
+  const events = new Map();
+  for (const ev of process.eventNames()) events.set(ev, process.listeners(ev));
+  return { env: { ...process.env }, exitCode: process.exitCode, events, cacheKeys: new Set(Object.keys(require.cache)) };
+}
+function restoreProcess(snap) {
+  for (const k of Object.keys(process.env)) if (!(k in snap.env)) delete process.env[k];
+  for (const [k, v] of Object.entries(snap.env)) if (process.env[k] !== v) process.env[k] = v;
+  process.exitCode = snap.exitCode;
+  const now = new Set([...process.eventNames(), ...snap.events.keys()]);
+  for (const ev of now) {
+    const want = snap.events.get(ev) || [];
+    const have = process.listeners(ev);
+    if (have.length === want.length && have.every((f, i) => f === want[i])) continue;
+    process.removeAllListeners(ev);
+    for (const f of want) process.on(ev, f);
+  }
+  for (const k of Object.keys(require.cache)) if (!snap.cacheKeys.has(k)) delete require.cache[k];
+}
+
+// Runs fn() with stdout/stderr/exit captured and process-wide state restored; returns { code, out, err }.
 function capture(fn) {
   const out = [];
   const err = [];
+  const snap = snapshotProcess();
   const realOut = process.stdout.write;
   const realErr = process.stderr.write;
   const realExit = process.exit;
@@ -70,17 +112,17 @@ function capture(fn) {
   let code = 0;
   process.stdout.write = sink(out);
   process.stderr.write = sink(err);
-  process.exit = (c) => { throw new MemberExit(c === undefined ? 0 : Number(c)); };
+  process.exit = (c) => { throw new MemberExit(exitStatus(c)); };
   try {
-    const r = fn();
-    code = Number.isInteger(r) ? r : 0;
+    code = exitStatus(fn());
   } catch (e) {
-    if (e instanceof MemberExit) code = Number.isInteger(e.code) ? e.code : 0;
+    if (e instanceof MemberExit) code = e.code;
     else err.push(Buffer.from(`post-tool-chain: member fail-open: ${e && e.message ? e.message : e}\n`));
   } finally {
     process.stdout.write = realOut;
     process.stderr.write = realErr;
     process.exit = realExit;
+    restoreProcess(snap);
   }
   return { code, out: Buffer.concat(out), err: Buffer.concat(err) };
 }
@@ -115,4 +157,4 @@ function readStdin() {
   catch { try { return fs.readFileSync('/dev/stdin', 'utf8'); } catch { return ''; } }
 }
 
-module.exports = { MEMBERS, runChain, readStdin, capture, MemberExit };
+module.exports = { MEMBERS, runChain, readStdin, capture, MemberExit, exitStatus };

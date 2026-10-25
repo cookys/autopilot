@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { budgetDecision } = require('../../hooks/context-budget-lib.js');
+const authStop = require('../../scripts/lib/auth-stop.js');
 
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i >= 0 ? process.argv[i + 1] : d; };
 const MODEL = arg('--model', 'sonnet');
@@ -80,6 +81,13 @@ for (const j of jobs) {
     env: { ...process.env, CLAUDE_CONFIG_DIR: CFGDIR }, encoding: 'utf8', timeout: 180000,
   });
   const out = r.stdout || '';
+  // BL-0294: the first authentication failure stops the run (every later call fails the same way).
+  const authHit = authStop.checkSources([{ kind: 'structured', text: out }, { kind: 'raw', text: r.stderr || '' }]);
+  if (authHit) {
+    process.stderr.write(`${authStop.stopLine(`${j.c.id} ${j.arm} #${j.i}`, authHit)}\n`);
+    fs.writeFileSync(OUT, JSON.stringify({ model: MODEL, stopped: 'STOP_AUTH', results }, null, 1));
+    process.exit(authStop.EXIT_AUTH_STOP);
+  }
   results.push({ case: j.c.id, arm: j.arm, run: j.i, ...grade(out), raw: out.slice(0, 600), err: r.status === 0 ? '' : (r.stderr || '').slice(0, 200) });
   process.stderr.write(`${j.c.id} ${j.arm} #${j.i} -> ${results[results.length - 1].action}\n`);
 }

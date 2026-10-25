@@ -11,7 +11,9 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-RESULTS_DIR="/tmp/autopilot-evals/$(date +%s)"
+# shellcheck source=../scripts/lib/auth-stop.sh
+. "$SCRIPT_DIR/../scripts/lib/auth-stop.sh"
+RESULTS_DIR="${AUTOPILOT_EVAL_RESULTS_DIR:-/tmp/autopilot-evals/$(date +%s)}"
 mkdir -p "$RESULTS_DIR"
 
 echo "=== Autopilot Skill Trigger Tests ==="
@@ -34,6 +36,8 @@ test_trigger() {
     --max-turns 2 \
     --output-format stream-json \
     > "$outfile" 2>&1 || true
+  # BL-0294: stop the whole run at the first authentication failure (STOP_AUTH, exit 6)
+  auth_stop_check "$label" --log "$outfile" || exit "$AUTH_STOP_EXIT"
 
   if grep -q "\"$skill\"" "$outfile" 2>/dev/null; then
     echo "  PASS: $label (triggered $skill)"
@@ -55,6 +59,8 @@ test_no_trigger() {
     --max-turns 2 \
     --output-format stream-json \
     > "$outfile" 2>&1 || true
+  # BL-0294: stop the whole run at the first authentication failure (STOP_AUTH, exit 6)
+  auth_stop_check "$label" --log "$outfile" || exit "$AUTH_STOP_EXIT"
 
   if grep -q '"autopilot:' "$outfile" 2>/dev/null; then
     echo "  FAIL: $label (autopilot skill triggered unexpectedly)"

@@ -15,7 +15,14 @@ for phrase in \
   'Not logged in · Please run /login' \
   'OAuth token has expired' \
   '401 Unauthorized: bad credentials' \
-  'HTTP 401 unauthorised'; do
+  'HTTP 401 unauthorised' \
+  'invalid API key authorization failed' \
+  'login required' \
+  'API Error: 401 {"type":"error"}' \
+  'request failed with status 401' \
+  '{"status":401,"message":"x"}' \
+  'Invalid API key' \
+  '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}'; do
   chk --text "$phrase"
   assert_eq "6" "$CHK_RC" "auth phrase stops: $phrase"
   assert_contains "$CHK_ERR" "STOP_AUTH after T1:" "stop line names the id: $phrase"
@@ -30,7 +37,10 @@ for phrase in \
   'simulated failure' \
   'implement the authentication module for the author page' \
   'Unauthorized access to the repo is a policy topic' \
-  'exit code 401 from the build tool'; do
+  'exit code 401 from the build tool' \
+  'API Error: 403 permission_error' \
+  '{"type":"error","error":{"type":"permission_error","message":"nope"}}' \
+  'processed 401 records'; do
   chk --text "$phrase"
   assert_eq "0" "$CHK_RC" "generic failure does not stop: $phrase"
 done
@@ -56,6 +66,23 @@ assert_eq "6" "$CHK_RC" "plain-text line in a mixed log stops"
 printf 'OAuth session expired\n' > "$S"
 chk --stderr "$S"
 assert_eq "6" "$CHK_RC" "stderr file stops"
+
+# --- structured layer: dispatch result names the runner's own log; weak phrases are not searched in plain mixed-log lines ---
+printf '%s\n' '{"status":"failure","agent_log":"'"$TEST_TMP"'/agent.log"}' > "$S"
+echo '{"type":"result","is_error":true,"result":"OAuth session expired"}' > "$TEST_TMP/agent.log"
+chk --dispatch "$S"
+assert_eq "6" "$CHK_RC" "dispatch result: auth error only in the agent_log it names stops"
+echo '{"type":"result","is_error":true,"result":"rate limit"}' > "$TEST_TMP/agent.log"
+chk --dispatch "$S"
+assert_eq "0" "$CHK_RC" "dispatch result: a non-auth agent_log does not stop"
+printf 'candidate code says: invalid API key\n' > "$S"
+chk --log "$S"
+assert_eq "0" "$CHK_RC" "a weak phrase in a plain line of a mixed log does not stop"
+chk --stderr "$S"
+assert_eq "6" "$CHK_RC" "the same weak phrase in stderr stops"
+echo '{"type":"error","error":{"type":"authentication_error"}}' > "$S"
+chk --log "$S"
+assert_eq "6" "$CHK_RC" "Anthropic authentication_error envelope in a log stops"
 
 # --- plumbing ---
 chk --stderr "$TEST_TMP/missing-file"

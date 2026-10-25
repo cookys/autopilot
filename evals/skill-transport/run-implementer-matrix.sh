@@ -7,6 +7,8 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
+# shellcheck source=../../scripts/lib/auth-stop.sh
+. "$REPO_ROOT/scripts/lib/auth-stop.sh"
 MANIFEST="$HERE/implementer-tasks.json"
 TASKS_ROOT="$REPO_ROOT/evals/orchestration/tasks"
 PACK="$HERE/packs/implementer-pack.md"
@@ -381,6 +383,13 @@ NODE
     effective="$(printf '%s' "$parsed" | cut -f3 | base64 -d)"
     model_calls="$(printf '%s' "$parsed" | cut -f4)"
     returned_wt="$(printf '%s' "$parsed" | cut -f5 | base64 -d)"
+  fi
+
+  # BL-0294: first authentication failure stops the matrix (STOP_AUTH, exit 6) before this cell is recorded; the
+  # dispatcher's worktree is removed first, and a re-run redoes the cell because no row was written.
+  if ! auth_stop_check "$key" --dispatch "$dispatch_json" --stderr "$dispatch_err"; then
+    if [ -n "$returned_wt" ] && [ -d "$returned_wt" ]; then git -C "$repo" worktree remove --force "$returned_wt" >/dev/null 2>&1 || true; fi
+    exit "$AUTH_STOP_EXIT"
   fi
 
   row_status="completed"; infra=""; oracle_rc=255

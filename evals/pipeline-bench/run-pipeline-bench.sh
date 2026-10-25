@@ -83,6 +83,8 @@ if [ "$SHIM" -eq 1 ]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../../scripts/lib/auth-stop.sh
+. "$REPO_ROOT/scripts/lib/auth-stop.sh"
 if [[ "$TASK_ID" == /* ]]; then
   TASK_DIR="$TASK_ID"
 else
@@ -199,6 +201,8 @@ OUT_JSON=$(
 ) || RUN_EXIT=$?
 echo "$OUT_JSON" >> "$RAW_LOG"
 echo "$OUT_JSON" >> "$OUT_DIR/all_outs.jsonl"
+# BL-0294: stop at the first authentication failure (STOP_AUTH, exit 6); RAW_LOG holds the call's stdout and stderr
+auth_stop_check "$TASK_ID/round-1" --log "$RAW_LOG" || exit "$AUTH_STOP_EXIT"
 
 (
   cd "$TEMP_REPO"
@@ -259,6 +263,8 @@ if [ "$ARM" = "pipeline" ] || { [ "$ARM" = "verify-first" ] && [ "$CONVERGED" !=
       verdict_json=$(bash "$REPO_ROOT/scripts/dispatch-review.sh" --runner "$REVIEWER_RUNNER" --model "$REVIEWER_MODEL" --diff-file "$diff_file" --spec-file "$TASK_DIR/task.md" 2>>"$RAW_LOG") || true
     fi
     echo "$verdict_json" > "$OUT_DIR/review_${ROUNDS}.json"
+    # the reviewer is a paid call too: a dead credential must not be followed by another round
+    auth_stop_check "$TASK_ID/review-${ROUNDS}" --dispatch "$OUT_DIR/review_${ROUNDS}.json" --log "$RAW_LOG" || exit "$AUTH_STOP_EXIT"
     VERDICT=$(echo "$verdict_json" | python3 -c 'import sys, json; print(json.loads(sys.stdin.read()).get("verdict", "null"))' 2>/dev/null || echo "null")
     FINDINGS=$(echo "$verdict_json" | python3 -c 'import sys, json; print(json.loads(sys.stdin.read()).get("findings", ""))' 2>/dev/null || echo "")
     
@@ -301,6 +307,7 @@ if [ "$ARM" = "pipeline" ] || { [ "$ARM" = "verify-first" ] && [ "$CONVERGED" !=
     ) || RUN_EXIT=$?
     echo "$OUT_JSON" >> "$RAW_LOG"
     echo "$OUT_JSON" >> "$OUT_DIR/all_outs.jsonl"
+    auth_stop_check "$TASK_ID/round-${ROUNDS}" --log "$RAW_LOG" || exit "$AUTH_STOP_EXIT"
     
     (
       cd "$TEMP_REPO"

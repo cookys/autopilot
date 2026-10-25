@@ -32,6 +32,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const authStop = require('./lib/auth-stop.js');
 
 const TOOL_CALLS = 20;
 const MARKER_CMD = 'sleep 0.2';
@@ -245,7 +246,7 @@ function runOnce(ctx, arm, remainingUsd) {
     const costUnknown = r.status !== 0 || !(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0);
     if (costUnknown) cost = budget;
     const text = fs.existsSync(debugFile) ? fs.readFileSync(debugFile, 'utf8') : '';
-    return { ok: r.status === 0, cost, costUnknown, lines: parseHookLines(text), stderr: r.stderr };
+    return { ok: r.status === 0, cost, costUnknown, lines: parseHookLines(text), stderr: r.stderr, stdout: r.stdout };
   } finally {
     if (runDir) fs.rmSync(runDir, { recursive: true, force: true });
   }
@@ -281,18 +282,23 @@ function main() {
     let spent = 0;
     let stopped = null;
     let costUnknown = 0;
+    let authHit = null; let authId = '';
     outer:
     for (let s = 0; s < o.samples; s++) {
       for (const arm of ARMS) {
         if (spent >= o.maxUsd) { stopped = 'max_usd'; break outer; }
         const r = runOnce(ctx, arm, o.maxUsd - spent);
         spent += r.cost;
+        // BL-0294: the first authentication failure stops the benchmark (STOP_AUTH, exit 6, no report written)
+        authHit = authStop.checkSources([{ kind: 'structured', text: String(r.stdout || '') }, { kind: 'raw', text: String(r.stderr || '') }]);
+        if (authHit) { authId = `${arm} sample ${s + 1}`; break outer; }
         if (r.costUnknown) costUnknown++;
         if (!r.ok) process.stderr.write(`warning: ${arm} sample ${s + 1} exited non-zero: ${r.stderr.slice(0, 200)}\n`);
         raw[arm].push(r.lines);
         process.stderr.write(`run ${arm} ${s + 1}/${o.samples}: ${r.lines.length} hook lines, cost ${r.cost.toFixed(4)}${r.costUnknown ? ' (unknown: cap charged)' : ''}, spent ${spent.toFixed(4)}\n`);
       }
     }
+    if (authHit) { process.stderr.write(`${authStop.stopLine(authId, authHit)}\n`); return authStop.EXIT_AUTH_STOP; }
     const report = {
       commit: sha,
       workload_sha: workloadSha(),

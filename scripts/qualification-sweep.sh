@@ -401,10 +401,10 @@ EOF
   local out
   out=$(cd "$pd" && timeout 320 bash "$REPO_ROOT/scripts/dispatch-hetero.sh" \
     --branch probe-1 --prompt-file "$pd/.prompt.txt" --runner "$runner" --model "$model" \
-    --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off 2>"$pd/.dispatch.err" | tail -1)
-  # BL-0294: a probe that died on authentication means every later seat dies the same way.
-  printf '%s\n' "$out" > "$pd/.dispatch.out"
-  auth_stop_check "probe-$runner/$model" --log "$pd/.dispatch.out" --stderr "$pd/.dispatch.err" || AUTH_STOP_ID="probe $runner/$model"
+    --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off 2>"$pd/.dispatch.err" | tee "$pd/.dispatch.out" | tail -1)
+  # BL-0294: a probe that died on authentication means every later seat dies the same way. Read every output of
+  # the call (full stdout, stderr, and the runner's agent_log the result names) BEFORE the scratch dir is removed.
+  auth_stop_check "probe-$runner/$model" --dispatch "$pd/.dispatch.out" --stderr "$pd/.dispatch.err" || AUTH_STOP_ID="probe $runner/$model"
   rm -rf "$pd"
   grep -q '"status": *"committed"' < <(echo "$out") && return 0
   echo "PROBE_OUT:$out" >&2
@@ -495,7 +495,12 @@ run_seat() { # slug runner model family vsrc endpoint effort
   local qexit=$?
   echo "QUALIFY_EXIT=$qexit" >> "$bundle/qualify-err.log"
   # BL-0294: authentication died inside the administration -> stop the sweep after this seat is settled.
-  auth_stop_check "$slug" --log "$bundle/qualify-err.log" || AUTH_STOP_ID="$slug"
+  # (every output of the administration: stderr log, the stdout row, and the per-case raw logs)
+  local auth_args=(--log "$bundle/qualify-err.log" --dispatch "$bundle/qualify-out.json") rawf
+  if [ -d "$bundle/raw" ]; then
+    while IFS= read -r rawf; do auth_args+=(--dispatch "$rawf"); done < <(find "$bundle/raw" -type f 2>/dev/null)
+  fi
+  auth_stop_check "$slug" "${auth_args[@]}" || AUTH_STOP_ID="$slug"
   local summary="no-row"
   # OPERATIONAL failure vs HONEST VERDICT (depth-0 panel F4). A recorded FAILED
   # administration is a successful sweep step - that is the instrument working.

@@ -231,7 +231,8 @@ for c in "${cases[@]}"; do
   # BL-0294: a dead credential fails every remaining case the same way -- stop the bench at the first one
   # (STOP_AUTH line, exit 6; the temp store is removed by the EXIT trap, no record is written).
   printf '%s\n' "$run_output" > "$BENCH_DIR/${c}.dispatch.out"
-  auth_args=(--log "$BENCH_DIR/${c}.dispatch.out")
+  # every output of this paid call: the dispatch result + its stderr (one file), and the runner's own agent_log it names
+  auth_args=(--dispatch "$BENCH_DIR/${c}.dispatch.out")
   [ -f "$log_path" ] && auth_args+=(--log "$log_path")
   auth_stop_check "$c" "${auth_args[@]}" || exit "$AUTH_STOP_EXIT"
 

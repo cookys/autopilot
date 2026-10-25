@@ -264,7 +264,7 @@ function runArm(task, arm, attempt, taskBase) {
   const outcome = parseOutcome(run.stdout);
   // BL-0294: a dead credential fails every later session (and every retry of this one) the same way.
   // Stop the whole run at the first authentication failure instead of spending the retry/session budget.
-  const authSources = [{ kind: 'structured', text: String(run.stdout || '') }, { kind: 'raw', text: String(run.stderr || '') }];
+  const authSources = [{ kind: 'dispatch', text: String(run.stdout || '') }, { kind: 'raw', text: String(run.stderr || '') }];
   if (typeof outcome.agent_log === 'string' && outcome.agent_log) authSources.push({ kind: 'structured', path: outcome.agent_log });
   const authHit = authStop.checkSources(authSources);
   if (authHit) stopForAuth(`${task.id}/${arm}`, authHit);

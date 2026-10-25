@@ -5,8 +5,13 @@
 # seed-home.sh, ONOFF_CELL_HOME, an unset of AUTOPILOT_CONFIG_FILE, and the ONOFF_OUT export.
 # Beyond the bpack copy (findings-batch cc rows; both are opt-in env, unset = the bpack behaviour):
 #   ONOFF_MAX_BUDGET_USD  hard spend cap for the cell: every `claude -p` gets --max-budget-usd <amount>; turn 2 gets what
-#                         turn 1 left (turn 1's result total_cost_usd); no budget left = no turn 2.
-#                         A budget stop is infra_fail / budget_exceeded. A turn without a trustworthy end cost (no result
+#                         turn 1 left (the cumulative total_cost_usd of turn 1's session); no budget left = no turn 2.
+#                         Spend accounting (CLI 2.1.309, measured 2026-10-26): total_cost_usd is the CUMULATIVE spend of a
+#                         session (a --resume result also carries the earlier spend), so a cell's spend is the LAST result of
+#                         each session_id, summed over sessions; adding every result over-counts.
+#                         A budget stop is a result with subtype "error_max_budget_usd" and is_error true (measured
+#                         2026-10-26, CLI 2.1.309), recorded as infra_fail / budget_exceeded. The CLI checks the budget AFTER
+#                         a call, so a cell can overshoot its cap by up to one model call (a 0.0001 cap spent 0.0016). A turn without a trustworthy end cost (no result
 #                         event, or total_cost_usd missing / not a finite number >= 0; for example killed by the timeout)
 #                         is accounted conservatively: no further turn, the row carries cost_unknown:true (infra_fail /
 #                         cost_unknown unless an earlier cause applies) and the campaign charges the whole cell ceiling.
@@ -310,14 +315,26 @@ if [ -n "${ONOFF_MAX_BUDGET_USD:-}" ]; then
   BUDGET_USD="$ONOFF_MAX_BUDGET_USD"
 fi
 if [ "${ONOFF_CELL_TMPDIR:-0}" = 1 ]; then CELL_TMPDIR="$SCRATCH_HOME/tmp"; mkdir -p "$CELL_TMPDIR"; fi
-turn_cost() { # $1 one turn's transcript -> its spend in USD, or "unknown" unless a result event carries a finite total_cost_usd >= 0
+turn_cost() { # $1 one turn's transcript -> its spend in USD, or "unknown" unless every result event carries a finite total_cost_usd >= 0
+  # total_cost_usd is the CUMULATIVE spend of the session (CLI 2.1.309, 2026-10-26): spend = the LAST result of each session_id, summed over sessions.
   node -e '
-    let sum=0,n=0,bad=0;
+    const last=new Map();let n=0,bad=0;
     try{for(const l of require("fs").readFileSync(process.argv[1],"utf8").split("\n")){
       let j;try{j=JSON.parse(l)}catch{continue}
-      if(j&&j.type==="result"){n++;if(typeof j.total_cost_usd==="number"&&Number.isFinite(j.total_cost_usd)&&j.total_cost_usd>=0)sum+=j.total_cost_usd;else bad++}
+      if(j&&j.type==="result"){n++;if(typeof j.total_cost_usd==="number"&&Number.isFinite(j.total_cost_usd)&&j.total_cost_usd>=0)last.set(typeof j.session_id==="string"?j.session_id:"",j.total_cost_usd);else bad++}
     }}catch{}
+    let sum=0;for(const v of last.values())sum+=v;
     process.stdout.write(n>0&&bad===0?sum.toFixed(6):"unknown");
+  ' "$1"
+}
+budget_stopped() { # $1 transcript -> exit 0 when a result event is the CLI budget stop: subtype error_max_budget_usd AND is_error true (measured CLI 2.1.309, 2026-10-26)
+  node -e '
+    let hit=false;
+    try{for(const l of require("fs").readFileSync(process.argv[1],"utf8").split("\n")){
+      let j;try{j=JSON.parse(l)}catch{continue}
+      if(j&&j.type==="result"&&j.subtype==="error_max_budget_usd"&&j.is_error===true)hit=true;
+    }}catch{}
+    process.exit(hit?0:1);
   ' "$1"
 }
 
@@ -532,7 +549,7 @@ if [ -n "$PREFLIGHT_FAIL" ]; then
   failure_class='"infra_fail"'; failure_cause='"plugin_script_unresolvable"'
 elif [ "$RESUME_UNAVAILABLE" -eq 1 ]; then
   failure_class='"infra_fail"'; failure_cause='"resume_unavailable"'
-elif [ "$BUDGET_EXHAUSTED" -eq 1 ] || { [ -n "$BUDGET_USD" ] && grep -Eq '"subtype": ?"error_max_budget' "$TRANSCRIPT"; }; then
+elif [ "$BUDGET_EXHAUSTED" -eq 1 ] || { [ -n "$BUDGET_USD" ] && budget_stopped "$TRANSCRIPT"; }; then
   failure_class='"infra_fail"'; failure_cause='"budget_exceeded"'
 elif [ "${ONOFF_TIMEOUT_IS_COMPLETE:-0}" = 1 ] && { [ "$RUN_EXIT" -eq 124 ] || [ "$RUN_EXIT" -eq 137 ]; } \
     && [ -s "$TRANSCRIPT" ] && [ "$MARKERS_EXIT" -eq 0 ]; then

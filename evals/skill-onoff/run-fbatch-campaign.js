@@ -20,13 +20,13 @@
 // ONOFF_KEEP_CELLS_DIR, --arm-manifests, --check-skill): fbatch/cc-build.js assembles them per run from
 // fbatch/arms and fbatch/cc/. One call = one cell, so the stop-loss is checked before every cell. Markers come from
 // fbatch/cell.js (the fixture's execution ledger, the cell repo's git state and the filesystem snapshots; prereg
-// cc.trace_source); after each call the new rows get row/pilot and the cell's actual cost_usd (sum of the transcript's
-// result events). Stop-loss: refuse when spent + max(the cell's estimate, the largest cell measured so far) exceeds
+// cc.trace_source); after each call the new rows get row/pilot and the cell's actual cost_usd (total_cost_usd is the
+// session's CUMULATIVE spend, CLI 2.1.309: the LAST result of each session_id, summed over sessions, never every result). Stop-loss: refuse when spent + max(the cell's estimate, the largest cell measured so far) exceeds
 // ONOFF_MAX_USD, or when spent + (measured/estimated spend ratio of the done cells) x the remaining estimate does (needs
 // prereg cc.extrapolate_min_cells measured cells first). HARD cap per cell: prereg cc.cell_ceiling_usd[task]; a cell is
 // not dispatched when ONOFF_MAX_USD - spent is below its ceiling, otherwise the runner hands claude
 // --max-budget-usd min(remaining, ceiling) (ONOFF_MAX_BUDGET_USD of the bpack runner; a two-turn cell's second turn gets
-// what the first left). One results file per scope: a cc run refuses a file holding rows of another pilot flag or model (the matrix resume key
+// what the first left; the CLI checks the budget after a call, so a cell may overshoot by up to one model call, see README). One results file per scope: a cc run refuses a file holding rows of another pilot flag or model (the matrix resume key
 // ignores both). The paid run (P1) needs the owner's cap approval.
 // --pilot = T1, T2, T4 one rep on both arms (6 cells), not scored.
 // ONOFF_MAX_USD default 20; --dry-run exits 1 when the estimate exceeds it.
@@ -190,6 +190,8 @@ function runCc() {
   if (!chk0.ok) die(`--check-arms failed: ${chk0.problems.join('; ')}`);
   const ver = String(cp.spawnSync('claude', ['--version'], { encoding: 'utf8' }).stdout || '').split('\n')[0].trim();
   if (!ver) die('claude --version printed nothing; cannot pin the runner', 3);
+  // Version pin: with cc.runner_version_pin set, any other `claude --version` first line is REFUSED before the first cell (exit 3);
+  // the matrix then also records/checks the version in <results>.runner-pin before every cell (BL-0113, same as bpack).
   if (CC.runner_version_pin && ver !== CC.runner_version_pin) die(`runner version '${ver}' differs from prereg cc.runner_version_pin '${CC.runner_version_pin}'`, 3);
   const foreign = readRows().filter((j) => (j.pilot === true) !== PILOT || j.model !== MODEL);
   if (foreign.length) die(`results file holds ${foreign.length} row(s) of another scope (pilot flag or model); use one results file per pilot and per formal model, the matrix resume key ignores both`);
@@ -220,15 +222,15 @@ function runCc() {
   const bd = B.build({ armsDir, outDir: dir });
   const keep = `${abs}.cells`;
   const minCells = CC.extrapolate_min_cells || 2;
-  // A cell's spend is the sum of its transcript's result events ONLY when every turn that ran ended with a trustworthy
-  // one. The runner marks a cell cost_unknown when a turn did not (killed by the timeout, no result event, a missing or
+  // A cell's spend is the sum over sessions of the LAST result's total_cost_usd (cumulative per session: adding every result
+  // would count a resumed session's earlier spend again) ONLY when every turn that ran ended with a trustworthy one. The runner marks a cell cost_unknown when a turn did not (killed by the timeout, no result event, a missing or
   // non-numeric total_cost_usd); a transcript with no cost at all is the same case. Such a cell is charged its whole
   // ceiling (the most the --max-budget-usd cap lets it spend): never less than what may have been spent.
   const costOfKept = (j) => {
     if (j.cost_unknown !== true) {
       try {
         const c = CELL.transcriptCost(path.join(keep, j.task_id, j.arm, String(j.rep), 'transcript.jsonl'));
-        if (c.turns.length) return { cost_usd: c.total, cost_turns: c.turns };
+        if (c.turns.length) return { cost_usd: c.total, cost_turns: c.turns, cost_sessions: c.sessions };
       } catch { /* no transcript kept */ }
     }
     return { cost_usd: ceilings[j.task_id], cost_unknown: true, cost_estimated: true };

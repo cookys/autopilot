@@ -10,7 +10,7 @@
 //       ledger, missing snapshots, no lane tips): markers.sh then prints marker_cell_error=true and the campaign
 //       records an infra_fail row. A cell is never scored on a guess.
 //   cell.js trace --task <id> ...same flags...   prints {calls, timing, git, findings_writes, markers} as JSON
-//   cell.js cost --transcript <file>             prints {total, turns:[...]}
+//   cell.js cost --transcript <file>             prints {total, turns:[...], sessions:{id:last}}; total = sum over sessions of the LAST result's cumulative total_cost_usd
 //
 // Where each judgement comes from (nothing is parsed out of a command string):
 //   1. The TRACE (what the agent ran, in order) is the fixture's own EXECUTION LEDGER, <git-dir>/fbatch/ledger.jsonl.
@@ -40,6 +40,9 @@ const L = require('./lib');
 function readTranscript(file) {
   const tools = [];
   const costs = [];
+  // total_cost_usd is the CUMULATIVE spend of the session (CLI 2.1.309, measured 2026-10-26: every --resume result carries the
+  // earlier spend too). A cell's spend is therefore the LAST valid result of each session_id, summed over sessions.
+  const sessionCost = new Map();
   let endTs = null;
   let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch { throw new Error(`unreadable transcript: ${file}`); }
@@ -48,7 +51,10 @@ function readTranscript(file) {
     let j;
     try { j = JSON.parse(line); } catch { continue; }
     if (j && j.type === 'result') {
-      if (typeof j.total_cost_usd === 'number' && Number.isFinite(j.total_cost_usd) && j.total_cost_usd >= 0) costs.push(j.total_cost_usd);
+      if (typeof j.total_cost_usd === 'number' && Number.isFinite(j.total_cost_usd) && j.total_cost_usd >= 0) {
+        costs.push(j.total_cost_usd);
+        sessionCost.set(typeof j.session_id === 'string' ? j.session_id : '', j.total_cost_usd);
+      }
       const t = j.timestamp ?? j.ts;
       const ms = typeof t === 'number' ? t : (typeof t === 'string' ? Date.parse(t) : NaN);
       if (Number.isFinite(ms)) endTs = ms;
@@ -57,7 +63,7 @@ function readTranscript(file) {
     if (!Array.isArray(content)) continue;
     for (const b of content) if (b && b.type === 'tool_use') tools.push({ name: String(b.name || ''), input: b.input || {} });
   }
-  return { tools, costs, endTs };
+  return { tools, costs, sessionCost, endTs };
 }
 
 // ---- ledger -> trace -------------------------------------------------------------------------
@@ -164,8 +170,9 @@ function cellMarkers(taskId, { transcript, gitDir, repo, home }) {
   };
 }
 function transcriptCost(file) {
-  const { costs } = readTranscript(file);
-  return { total: Number(costs.reduce((a, b) => a + b, 0).toFixed(6)), turns: costs };
+  const { costs, sessionCost } = readTranscript(file);
+  const sessions = Object.fromEntries(sessionCost);
+  return { total: Number([...sessionCost.values()].reduce((a, b) => a + b, 0).toFixed(6)), turns: costs, sessions };
 }
 
 module.exports = { readLedger, buildTrace, gitState, findingsWrites, cellMarkers, transcriptCost, readTranscript, listNames };

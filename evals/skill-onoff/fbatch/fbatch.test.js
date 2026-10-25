@@ -291,8 +291,25 @@ test('verdict: V1 skill_invoked < 0.9, a red control, an infra row, or a partial
   const rows = grid(eff); rows[0].failure_class = 'infra';
   assert.strictEqual(L.verdict(rows, OK).verdict, 'INCOMPLETE'); // the infra row also leaves its cell short
   rows.push({ ...rows[0], failure_class: null }); // refilled cell + the infra row still present
-  assert.strictEqual(L.verdict(rows, OK).verdict, 'INVALID');
+  // amendment 1 (2026-10-26): an infra row that a later scorable row of the same cell replaced is only counted. Negative control:
+  // the pre-amendment rule (any infra row => INVALID) turns this assertion red.
+  const refilled = L.verdict(rows, OK);
+  assert.strictEqual(refilled.verdict, 'PASS');
+  assert.strictEqual(refilled.superseded_infra, 1);
   assert.strictEqual(L.verdict(grid(eff).slice(0, 20), OK).verdict, 'INCOMPLETE');
+});
+test('verdict: a cell with no scorable row once its attempts are used up is INVALID; a cell with attempts left is only INCOMPLETE', () => {
+  assert.strictEqual(L.MAX_ATTEMPTS, 3); // the campaign re-dispatches a cell up to 3 failed rows (run-fbatch-campaign.js stateOf)
+  const lost = (n) => { const r = grid(eff); const c = r.shift(); for (let i = 0; i < n; i++) r.push({ ...c, failure_class: 'infra_fail', markers: {} }); return r; };
+  assert.strictEqual(L.verdict(lost(1), OK).verdict, 'INCOMPLETE');
+  assert.strictEqual(L.verdict(lost(2), OK).verdict, 'INCOMPLETE');
+  const dead = L.verdict(lost(3), OK);
+  assert.strictEqual(dead.verdict, 'INVALID');
+  assert.match(dead.reasons[0], /no scorable row/);
+  // two failed rows then a success: superseded, counted, not INVALID
+  const r = grid(eff); r.push({ ...r[0], failure_class: 'infra_fail', markers: {} }, { ...r[0], failure_class: 'infra_fail', markers: {} });
+  const ok2 = L.verdict(r, OK);
+  assert.strictEqual(ok2.verdict, 'PASS'); assert.strictEqual(ok2.superseded_infra, 2);
 });
 
 test('verdict: missing scored marker m_waited in some T1 cells is INCOMPLETE, never PASS', () => {

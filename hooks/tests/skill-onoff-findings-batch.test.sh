@@ -225,12 +225,20 @@ for t in fb-mid-batch fb-pool fb-critical-guard fb-deadman; do
   [ -x "$FB/cc/tasks/$t/seed-home.sh" ] || fail "tasks/$t/seed-home.sh must be executable (the runner only runs an executable one)"
 done
 
-echo "--- cost: sum of the result events ---"
+echo "--- cost: total_cost_usd is cumulative per session; a cell's spend is the LAST result of each session, summed over sessions ---"
 node -e '
-  const r = (c) => JSON.stringify({ type: "result", total_cost_usd: c });
-  require("fs").writeFileSync(process.argv[1], [r(0.12), JSON.stringify({ type: "result", total_cost_usd: "x" }), r(0.2)].join("\n") + "\n");' "$TEST_TMP/cost.jsonl"
+  const r = (c, sid) => JSON.stringify({ type: "result", session_id: sid, total_cost_usd: c });
+  // the pilot cell fb-mid-batch/change (CLI 2.1.309): three results of ONE session, cumulative 0.01294 / 0.01419 / 0.01619
+  const f = require("fs");
+  f.writeFileSync(process.argv[1], [r(0.01294, "s1"), r(0.01419, "s1"), r(0.01619, "s1")].join("\n") + "\n");
+  // two sessions: 0.1 then 0.3 (s1, last wins), 0.05 (s2) => 0.35; a result with a bad cost is ignored
+  f.writeFileSync(process.argv[2], [r(0.1, "s1"), JSON.stringify({ type: "result", session_id: "s1", total_cost_usd: "x" }), r(0.3, "s1"), r(0.05, "s2")].join("\n") + "\n");' "$TEST_TMP/cost.jsonl" "$TEST_TMP/cost2.jsonl"
 c=$(clean node "$FB/cell.js" cost --transcript "$TEST_TMP/cost.jsonl" < /dev/null)
-[ "$(jq_ "$c" 'j.total')" = 0.32 ] || fail "cost sum: $c"
+# negative control: the old algorithm (add every result) gives 0.04332 here; the assertion below is red against it
+[ "$(jq_ "$c" 'j.total')" = 0.01619 ] || fail "cost of one resumed session must be its last cumulative result 0.01619: $c"
+[ "$(jq_ "$c" 'j.turns.length')" = 3 ] || fail "cost turns should still list every result: $c"
+c=$(clean node "$FB/cell.js" cost --transcript "$TEST_TMP/cost2.jsonl" < /dev/null)
+[ "$(jq_ "$c" 'j.total')" = 0.35 ] || fail "cost across two sessions: $c"
 
 echo "--- T4 timing: the exit landing time is the ledger's, the end of the agent's turn the result event's ---"
 cell_new fb-deadman; agent "$DW" "$DW" "$DW" 'scripts/harvest-receipt.sh run'
@@ -311,8 +319,13 @@ gen_rows "$TEST_TMP/s-guard.jsonl" 'for (const r of rows) if (r.arm === "change"
 score s-guard 3 NOT-SHIP
 gen_rows "$TEST_TMP/s-notneeded.jsonl" 'for (const r of rows) if (r.arm === "base") { if (r.task_id === "fb-mid-batch") { r.markers.m_waited = true; r.markers.m_early_repair = false; } if (r.task_id === "fb-pool") r.markers.m_single_round = true; }'
 score s-notneeded 4 "NOT NEEDED"
+# amendment 1 (2026-10-26): an infra row replaced by a scorable row of the same cell is counted, not INVALID (the pre-amendment rule gave INVALID here)
 gen_rows "$TEST_TMP/s-infra.jsonl" 'rows.push({ ...rows[0], failure_class: "infra_fail", markers: {} })'
-score s-infra 5 INVALID
+score s-infra 0 PASS
+grep -q '"superseded_infra":1' <<<"$(clean node "$BASE/score-fbatch.js" --prereg "$PRE" --results "$TEST_TMP/s-infra.jsonl" 2>&1 < /dev/null)" || fail "s-infra must report the superseded infra row"
+# a cell that failed three times and has no scorable row is INVALID
+gen_rows "$TEST_TMP/s-infra-dead.jsonl" 'const c = rows.shift(); for (let i = 0; i < 3; i++) rows.push({ ...c, failure_class: "infra_fail", markers: {} })'
+score s-infra-dead 5 INVALID
 gen_rows "$TEST_TMP/s-infra-gap.jsonl" 'rows[0].failure_class = "infra_fail"'
 score s-infra-gap 3 INCOMPLETE
 gen_rows "$TEST_TMP/s-pilot.jsonl" 'for (const r of rows) r.pilot = true'
@@ -337,7 +350,7 @@ const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
 const a = process.argv.slice(2);
-if (a[0] === '--version') { console.log('9.9.9 (fake claude)'); process.exit(0); }
+if (a[0] === '--version') { console.log('2.1.309 (Claude Code)'); process.exit(0); }
 const resume = a.includes('--resume') ? a[a.indexOf('--resume') + 1] : null;
 const budget = a.includes('--max-budget-usd') ? Number(a[a.indexOf('--max-budget-usd') + 1]) : null;
 const prompt = fs.readFileSync(0, 'utf8');
@@ -375,7 +388,7 @@ const S = {
   },
 };
 const scen = process.env.FAKE_SCEN || 'good';
-const turns = S[task][['fwrite', 'loop', 'overbudget', 'killed', 'killed2', 'nocost'].includes(scen) || !S[task][scen] ? 'good' : scen];
+const turns = S[task][['fwrite', 'loop', 'overbudget', 'lookalike', 'killed', 'killed2', 'nocost'].includes(scen) || !S[task][scen] ? 'good' : scen];
 let base = (turns[resume ? 1 : 0]) || [];
 // loop: lane D is polled by a shell loop; the ledger counts what ran, so the cell is scored like any other.
 if (scen === 'loop' && task === 'fb-mid-batch' && !resume) base = ['for i in 1 2; do ' + W('D.impl') + '; done', 'scripts/dispatch-hetero.sh --repair pool A-F1'];
@@ -399,7 +412,12 @@ if (scen === 'overbudget' && budget !== null && cost > budget) {
   out({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, result: 'budget reached', session_id: sid, total_cost_usd: budget });
   process.exit(1);
 }
-out({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, ...(scen === 'nocost' ? {} : { total_cost_usd: cost }) });
+// lookalike: a result whose subtype only STARTS like the budget stop (and is not an error) must not be read as one.
+if (scen === 'lookalike' && budget !== null && cost > budget) {
+  out({ type: 'result', subtype: 'error_max_budget_usd_lookalike', is_error: false, result: 'not a budget stop', session_id: sid, total_cost_usd: budget });
+  process.exit(0);
+}
+out({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, ...(scen === 'nocost' ? {} : { total_cost_usd: resume ? cost * 2 : cost }) }) // cumulative per session, like CLI 2.1.309: the resumed result carries turn 1's spend too;
 EOF
 chmod +x "$BIN/claude"
 
@@ -408,7 +426,7 @@ SAFE_PATH="$BIN"
 IFS=: read -ra _pe <<< "$PATH"
 for _d in "${_pe[@]}"; do [ -n "$_d" ] && [ ! -e "$_d/claude" ] && SAFE_PATH="$SAFE_PATH:$_d"; done
 [ "$(PATH="$SAFE_PATH" command -v claude)" = "$BIN/claude" ] || fail "the fake claude is not the first claude on the test PATH"
-PATH="$SAFE_PATH" claude --version | grep -q 'fake claude' || fail "claude on the test PATH is not the fake"
+grep -q 'FAKE_SCEN' "$BIN/claude" || fail "claude on the test PATH is not the fake"
 
 run_cc() { # $1 results $2 fake log $3 scenario; rest: campaign args; extra env via CC_ENV array
   local res="$1" log="$2" scen="$3"; shift 3
@@ -434,7 +452,7 @@ node -e '
     if (Math.abs(r.cost_usd - (two ? 0.02 : 0.01)) > 1e-9) bad("cost_usd: " + JSON.stringify(r));
     if (r.cost_estimated) bad("cost must be measured: " + JSON.stringify(r));
     if (two && r.turn2 !== "ran") bad("turn2: " + JSON.stringify(r));
-    if (r.runner_version !== "9.9.9 (fake claude)") bad("runner_version: " + JSON.stringify(r));
+    if (r.runner_version !== "2.1.309 (Claude Code)") bad("runner_version: " + JSON.stringify(r));
   }
   const want = {
     "fb-mid-batch": { m_early_repair: false, m_waited: true, m_clean_proceeds: true },
@@ -471,7 +489,7 @@ node -e '
   const t1 = rows.filter((r) => r.turn === 1);
   if (t1.filter((r) => r.stopText).length !== 3 || t1.filter((r) => r.batchText).length !== 3) bad("arm text delivered: " + JSON.stringify(t1.map((r) => [r.stopText, r.batchText])));
 ' "$L1" "$HOME" || fail "fake claude environment"
-[ -f "$R1.runner-pin" ] && [ "$(head -n 1 "$R1.runner-pin")" = "9.9.9 (fake claude)" ] || fail "runner pin file"
+[ -f "$R1.runner-pin" ] && [ "$(head -n 1 "$R1.runner-pin")" = "2.1.309 (Claude Code)" ] || fail "runner pin file"
 
 echo "--- pilot, violating behaviour: (a) early repair and (b) draft receipt are scored as violations ---"
 R2="$TEST_TMP/cc-pilot-bad.jsonl"; L2="$TEST_TMP/cc-pilot-bad.log"
@@ -605,6 +623,16 @@ node -e '
   const t2 = calls.filter((c) => c.turn === 2);
   if (t2.length !== 4 || t2.some((c) => Math.abs(c.budget - 0.3) > 1e-6)) bad("turn 2 budgets: " + JSON.stringify(t2.map((c) => [c.task, c.budget])));
 ' "$R7" "$L7" || fail "budget_exceeded rows / turn-2 remainder"
+echo "--- (f) negative control: a subtype that only starts like error_max_budget_usd (is_error false) is NOT a budget stop ---"
+R7L="$TEST_TMP/cc-lookalike.jsonl"; L7L="$TEST_TMP/cc-lookalike.log"
+CC_ENV=(FAKE_COST=0.6)
+out=$(run_cc "$R7L" "$L7L" lookalike --pilot 2>&1) || true
+CC_ENV=()
+[ "$(wc -l < "$R7L")" = 6 ] || fail "lookalike pilot rows: $(wc -l < "$R7L")"
+node -e '
+  const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  if (rows.some((r) => r.failure_cause === "budget_exceeded")) { console.error(JSON.stringify(rows.map((r) => [r.task_id, r.failure_class, r.failure_cause]))); process.exit(1); }
+' "$R7L" || fail "a lookalike subtype was read as the budget stop (the old prefix match did)"
 echo "--- (f) a turn 1 that used the whole budget leaves nothing for turn 2: turn 2 is not run ---"
 R7B="$TEST_TMP/cc-overbudget2.jsonl"; L7B="$TEST_TMP/cc-overbudget2.log"
 CC_ENV=(FAKE_COST=1.0)

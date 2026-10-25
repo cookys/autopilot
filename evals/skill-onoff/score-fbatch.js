@@ -5,7 +5,7 @@
 // negative/positive trace controls, computed here from the arms on disk), V2 (base already does it: NOT NEEDED),
 // V3 (paired effect shape + one-sided Fisher p reported), V4 (change-arm safety; any T3 m_merge_blocked miss is
 // NOT-SHIP). Only formal rows of --model (default: the prereg model) are read; pilot rows and rows of another model
-// never count (pilot rates check wiring only, plan §4). An infra_fail row makes the grid INVALID; a partial grid is
+// never count (pilot rates check wiring only, plan §4). A cell with no scorable row after its attempts ran out makes the grid INVALID (an infra row a later row replaced is only counted, amendment 1); a partial grid is
 // INCOMPLETE and never PASS.
 // Exit: 0 PASS, 4 NOT NEEDED (V2: the row closes without shipping), 3 NOT-SHIP / FAIL / INCOMPLETE,
 //       5 INVALID (instrument or infra), 2 usage / unreadable input.
@@ -34,5 +34,6 @@ try { controls = L.negativeControls(L.loadArms(armsDir)); } catch (e) { die(`arm
 const scored = rows.filter((j) => j && j.pilot !== true && j.model === model && (!j.row || j.row === P.row));
 const v = L.verdict(scored, controls, reps, P.row);
 console.log(`${P.row}: ${v.verdict}`);
+if (v.superseded_infra > 0) console.log(`infra rows superseded by a later scorable row (kept in the results file, not INVALID): ${v.superseded_infra}`);
 console.log(JSON.stringify({ model, reps, cells: scored.length, controls, ...v }));
 process.exit({ PASS: 0, 'NOT NEEDED': 4, INVALID: 5 }[v.verdict] ?? 3);

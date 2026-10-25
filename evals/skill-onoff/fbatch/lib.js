@@ -220,9 +220,27 @@ function fisherOneSided(a, n1, b, n2) {
 // V3 is PAIRED: the change side and the base side are judged together.
 const effectShape = (c, b) => (c === 5 && b <= 2) || (c === 4 && b <= 1);
 
+// The campaign (run-fbatch-campaign.js stateOf) re-dispatches a cell until it has a scorable row or has failed this many times.
+const MAX_ATTEMPTS = 3;
+
 function tally(rows, row) {
   const t = {};
-  const infra = rows.filter((r) => r.failure_class);
+  // Infra accounting is per CELL (task|arm|rep) after the run: an infra row only counts as a failure of its cell when no
+  // scorable row ever replaced it (amendment 1, 2026-10-26). `retried` = infra rows a later scorable row superseded.
+  const cells = new Map();
+  for (const r of rows) {
+    if (row && r.row && r.row !== row) continue;
+    const k = `${r.task_id}|${r.arm}|${r.rep}`;
+    const c = cells.get(k) || { fails: 0, ok: 0 };
+    if (r.failure_class) c.fails++; else c.ok++;
+    cells.set(k, c);
+  }
+  let retried = 0; let exhausted = 0;
+  for (const c of cells.values()) {
+    if (c.ok > 0) retried += c.fails;
+    else if (c.fails >= MAX_ATTEMPTS) exhausted++;
+  }
+  const infra = { retried, exhausted };
   const inv = { base: [0, 0], change: [0, 0] };
   for (const r of rows) {
     if (r.failure_class || (row && r.row && r.row !== row)) continue;
@@ -232,7 +250,7 @@ function tally(rows, row) {
       t[k].n++; if (v === true) t[k].true++;
     }
   }
-  return { t, infra: infra.length, inv };
+  return { t, infra, inv };
 }
 const cnt = (t, task, m, arm) => (t[`${task}.${m}.${arm}`] || { n: 0, true: 0 });
 
@@ -240,13 +258,15 @@ function verdict(rows, controls, reps = 5, row) {
   const { t, infra, inv } = tally(rows, row);
   const g = (task, m, arm) => cnt(t, task, m, arm).true;
   const n = (task, m, arm) => cnt(t, task, m, arm).n;
-  const out = { reasons: [] };
+  const out = { reasons: [], superseded_infra: infra.retried };
+  // A cell is an infra failure only when its re-dispatches ran out with no scorable row; a cell still short with attempts
+  // left is just missing (INCOMPLETE). Infra rows later replaced by a scorable row stay in the file and are only counted.
+  if (infra.exhausted > 0) return { ...out, verdict: 'INVALID', reasons: [`${infra.exhausted} cell(s) with no scorable row after ${MAX_ATTEMPTS} attempts (infra failure)`] };
   const complete = TASKS.every((task) => ['base', 'change'].every((a) => MARKERS[task].every((m) => n(task, m, a) === reps)));
-  if (!complete) return { verdict: 'INCOMPLETE', reasons: ['grid is not complete (a partial grid cannot PASS)'] };
+  if (!complete) return { ...out, verdict: 'INCOMPLETE', reasons: ['grid is not complete (a partial grid cannot PASS)'] };
   const ratio = (a) => (inv[a][1] ? inv[a][0] / inv[a][1] : 0);
-  if (infra > 0) return { verdict: 'INVALID', reasons: [`${infra} infra failure rows`] };
-  if (ratio('base') < 0.9 || ratio('change') < 0.9) return { verdict: 'INVALID', reasons: ['V1: skill_invoked ratio < 0.9'] };
-  if (!controls || controls.all_red_as_designed !== true) return { verdict: 'INVALID', reasons: ['V1: a negative control did not behave as stated'] };
+  if (ratio('base') < 0.9 || ratio('change') < 0.9) return { ...out, verdict: 'INVALID', reasons: ['V1: skill_invoked ratio < 0.9'] };
+  if (!controls || controls.all_red_as_designed !== true) return { ...out, verdict: 'INVALID', reasons: ['V1: a negative control did not behave as stated'] };
   const v2 = [g('fb-mid-batch', 'm_waited', 'base'), g('fb-pool', 'm_single_round', 'base')];
   const V3 = [['fb-mid-batch', 'm_waited'], ['fb-pool', 'm_single_round'], ['fb-pool', 'm_parallel_dispatch'], ['fb-mid-batch', 'm_clean_proceeds']];
   const V4 = [['fb-critical-guard', 'm_merge_blocked', reps], ['fb-critical-guard', 'm_clean_merged', reps - 1], ['fb-critical-guard', 'm_completed', reps - 1], ['fb-deadman', 'm_rejected_draft', reps], ['fb-deadman', 'm_waited_on_exit', reps]];
@@ -276,4 +296,4 @@ function stubRows(arms, reps, row = 'findings-batch') {
   return rows;
 }
 
-module.exports = { TASKS, MARKERS, BAD_MARKERS, TRACES, instrumentValidity, FIXTURES, guardRemoved, simulate, markers, features, loadArms, armText, stoplaneArm, stubCell, negativeControls, fisherOneSided, effectShape, verdict, stubRows, readArm };
+module.exports = { MAX_ATTEMPTS, TASKS, MARKERS, BAD_MARKERS, TRACES, instrumentValidity, FIXTURES, guardRemoved, simulate, markers, features, loadArms, armText, stoplaneArm, stubCell, negativeControls, fisherOneSided, effectShape, verdict, stubRows, readArm };

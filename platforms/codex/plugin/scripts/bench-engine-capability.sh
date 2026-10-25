@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # bench-engine-capability.sh — Capability bench runner for skill transport.
+# Exit codes: 0 supported · 1 unsupported / live-spend missing · 2 usage · 6 STOP_AUTH (first case that dies on
+# authentication stops the bench, nothing is recorded; BL-0294, scripts/lib/auth-stop.js).
 
 set -uo pipefail
 
@@ -19,6 +21,8 @@ LIVE_SPEND=0
 STORE_DIR=""
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(dirname "$SELF_DIR")"
+# shellcheck source=lib/auth-stop.sh
+. "$SELF_DIR/lib/auth-stop.sh"
 
 usage() {
   cat <<EOF
@@ -223,6 +227,13 @@ for c in "${cases[@]}"; do
   if [ -f "$log_path" ]; then
     cp "$log_path" "$BENCH_DIR/${c}.log"
   fi
+
+  # BL-0294: a dead credential fails every remaining case the same way -- stop the bench at the first one
+  # (STOP_AUTH line, exit 6; the temp store is removed by the EXIT trap, no record is written).
+  printf '%s\n' "$run_output" > "$BENCH_DIR/${c}.dispatch.out"
+  auth_args=(--log "$BENCH_DIR/${c}.dispatch.out")
+  [ -f "$log_path" ] && auth_args+=(--log "$log_path")
+  auth_stop_check "$c" "${auth_args[@]}" || exit "$AUTH_STOP_EXIT"
 
   case_passed=1
   # Mutation check (bench is read-only)

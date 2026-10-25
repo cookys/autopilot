@@ -40,6 +40,8 @@
 #
 # Example high-fidelity baseline run:
 #   RUNS_PER_QUERY=5 MODEL=claude-opus-4-8 bash scripts/run-eval-batch.sh
+# EXIT CODES: 0 done · 1 usage / lock held / selftest contamination · 6 STOP_AUTH: the first authentication
+# failure of a run_eval stops the whole batch (BL-0294, scripts/lib/auth-stop.js).
 set -euo pipefail
 
 # Single-instance lock: two concurrent eval batches would each create
@@ -143,6 +145,8 @@ _EVAL_SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 [ -r "$_EVAL_SELF_DIR/lib/repo-identity.sh" ] && . "$_EVAL_SELF_DIR/lib/repo-identity.sh" || true
 declare -F child_session_mint >/dev/null 2>&1 && child_session_mint eval-run
+# shellcheck source=lib/auth-stop.sh
+. "$_EVAL_SELF_DIR/lib/auth-stop.sh"
 
 # Prepend WRAPPER_DIR to PATH
 export PATH="$WRAPPER_DIR:$PATH"
@@ -322,6 +326,13 @@ for skill in "${SKILLS[@]}"; do
   # verbose output goes to stderr (captured in eval-log.txt)
   # JSON results go to stdout (captured in eval-output.json)
   cat "$RESULT_DIR/eval-log.txt"
+
+  # BL-0294: a dead credential fails every remaining skill the same way, so the first authentication
+  # failure stops the whole batch (STOP_AUTH line, exit 6) after removing the command files made so far.
+  if ! auth_stop_check "$skill" --stderr "$RESULT_DIR/eval-log.txt" --log "$RESULT_DIR/eval-output.json"; then
+    for f in "${CREATED_CMDS[@]+"${CREATED_CMDS[@]}"}"; do [[ -e "$f" ]] && rm -f "$f"; done
+    exit "$AUTH_STOP_EXIT"
+  fi
 
   SCORE=$(python3 -c "
 import json

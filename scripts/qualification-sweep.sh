@@ -100,7 +100,8 @@
 #   -h, --help           Print this header and exit 0.
 #
 # EXIT CODES: 0 success · 1 roster/validation failure (bad path, malformed
-#   JSON, missing required field) · 2 usage error (bad/missing flag).
+#   JSON, missing required field) · 2 usage error (bad/missing flag) · 6 STOP_AUTH: a probe or an
+#   administration died on authentication, the remaining seats were NOT run (BL-0294, scripts/lib/auth-stop.js).
 #
 # Language choice: bash. This is git/CLI-dispatch glue that never runs inside
 # the agy sandbox (CLAUDE.md § "Language choice (sh vs js vs py)"), so Node is
@@ -233,6 +234,9 @@ fi
 
 CORPUS_LINE="$(printf '%s\n' "$ROSTER_LINES" | head -n 1)"
 IFS=$'\t' read -r _tag PROMPT_HASH SEM_HASH CONTAIN_HASH HARNESS_VERSION EXPIRES_DAYS EVROOT ROLE <<< "$CORPUS_LINE"
+
+# shellcheck source=lib/auth-stop.sh
+. "$REPO_ROOT/scripts/lib/auth-stop.sh"
 
 SEAT_LINES=()
 while IFS= read -r line; do
@@ -397,7 +401,10 @@ EOF
   local out
   out=$(cd "$pd" && timeout 320 bash "$REPO_ROOT/scripts/dispatch-hetero.sh" \
     --branch probe-1 --prompt-file "$pd/.prompt.txt" --runner "$runner" --model "$model" \
-    --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off 2>/dev/null | tail -1)
+    --effort "$effort" --base HEAD --timeout 240s --scaffold-tier off 2>"$pd/.dispatch.err" | tail -1)
+  # BL-0294: a probe that died on authentication means every later seat dies the same way.
+  printf '%s\n' "$out" > "$pd/.dispatch.out"
+  auth_stop_check "probe-$runner/$model" --log "$pd/.dispatch.out" --stderr "$pd/.dispatch.err" || AUTH_STOP_ID="probe $runner/$model"
   rm -rf "$pd"
   grep -q '"status": *"committed"' < <(echo "$out") && return 0
   echo "PROBE_OUT:$out" >&2
@@ -487,6 +494,8 @@ run_seat() { # slug runner model family vsrc endpoint effort
     > "$bundle/qualify-out.json" 2> "$bundle/qualify-err.log"
   local qexit=$?
   echo "QUALIFY_EXIT=$qexit" >> "$bundle/qualify-err.log"
+  # BL-0294: authentication died inside the administration -> stop the sweep after this seat is settled.
+  auth_stop_check "$slug" --log "$bundle/qualify-err.log" || AUTH_STOP_ID="$slug"
   local summary="no-row"
   # OPERATIONAL failure vs HONEST VERDICT (depth-0 panel F4). A recorded FAILED
   # administration is a successful sweep step - that is the instrument working.
@@ -521,6 +530,7 @@ run_seat() { # slug runner model family vsrc endpoint effort
 }
 
 SEAT_FAILURES=0
+AUTH_STOP_ID=""
 
 execute_sweep() {
   local n_seats=${#SEAT_LINES[@]}
@@ -544,6 +554,11 @@ execute_sweep() {
   for seat_line in "${SEAT_LINES[@]}"; do
     IFS=$'\t' read -r _tag slug runner model family vsrc endpoint effort <<< "$seat_line"
     run_seat "$slug" "$runner" "$model" "$family" "$vsrc" "$endpoint" "$effort"
+    if [ -n "$AUTH_STOP_ID" ]; then
+      log "STOP_AUTH after $AUTH_STOP_ID - the remaining seats were NOT run (re-authenticate, then re-run with a roster narrowed to the unfinished seats)"
+      log "QUALIFICATION-SWEEP INCOMPLETE $(date -u +%H:%M:%SZ) - stopped on authentication failure"
+      exit "$AUTH_STOP_EXIT"
+    fi
   done
   if [ "$SEAT_FAILURES" -gt 0 ]; then
     log "QUALIFICATION-SWEEP INCOMPLETE $(date -u +%H:%M:%SZ) - $SEAT_FAILURES of $n_seats seat(s) did not land a recorded administration (see PROBE-FAIL / QUALIFY-FAIL / RECORD-FAIL lines above)"

@@ -1,6 +1,6 @@
 # Plan - per-turn gate, phase 2 (BL-0055): a Stop-hook adapter and its ON/OFF evaluation
 
-> Status: draft, awaiting plan review. Written after owner decision d-35748784 (2026-10-24, Taipei time): GO on a plan for the stages after P1. Follow-up to section 4 of `docs/plans/2026-10-20-per-turn-gate.md`; no code here; needs its own plan review.
+> Status: P2-4 verdict written (`docs/plans/evidence/2026-10-25-per-turn-gate-p2-4/VERDICT.md`), default decision pending the owner (card d-7d8444a3); not archived yet. Earlier status: draft, awaiting plan review. Written after owner decision d-35748784 (2026-10-24, Taipei time): GO on a plan for the stages after P1. Follow-up to section 4 of `docs/plans/2026-10-20-per-turn-gate.md`; no code here; needs its own plan review.
 
 ## 0. Thesis
 

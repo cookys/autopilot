@@ -60,10 +60,20 @@ const freezeOn = !args.includes('--no-freeze');
 function die(msg) { console.error('post-tool-chain-harness: ' + msg); process.exit(2); }
 
 // Fixed paths (the golden includes them). Test-only overrides, each of which moves its paths away from the real ones
-// (a golden compare then goes red, so none is usable for a real run): PTC_FIXED_PARENT (sandbox, scratch, and the live dir
-// unless PTC_FIXED_SHM is set), PTC_FIXED_SHM (parent of the live dir), PTC_LOCK_FILE, PTC_LOCK_WAIT_SEC.
+// (a golden compare then goes red, so none is usable for a real run): PTC_FIXED_PARENT (sandbox, scratch, live dir),
+// PTC_FIXED_SHM (live-dir parent, only under PTC_FIXED_PARENT), PTC_LOCK_FILE, PTC_LOCK_WAIT_SEC, PTC_TRACE_FILE (appends
+// 'start'/'end' lines with a monotonic clock while the lock is held).
 const FIXED_PARENT = process.env.PTC_FIXED_PARENT || '/tmp';
-const SHM_PARENT = process.env.PTC_FIXED_SHM || (process.env.PTC_FIXED_PARENT ? FIXED_PARENT : '/dev/shm');
+// With PTC_FIXED_PARENT set, everything (sandbox, scratch, live dir) lives under it. PTC_FIXED_SHM may only name a place
+// UNDER that parent (the symlink control uses it), so no test configuration can make this harness touch the real
+// /dev/shm/ptc-fixed-live; without PTC_FIXED_PARENT the override is refused.
+let SHM_PARENT = process.env.PTC_FIXED_PARENT ? FIXED_PARENT : '/dev/shm';
+if (process.env.PTC_FIXED_SHM) {
+  if (!process.env.PTC_FIXED_PARENT) die('PTC_FIXED_SHM is only accepted together with PTC_FIXED_PARENT (and must lie under it)');
+  const rel = path.relative(FIXED_PARENT, process.env.PTC_FIXED_SHM);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) die(`PTC_FIXED_SHM (${process.env.PTC_FIXED_SHM}) must lie under PTC_FIXED_PARENT (${FIXED_PARENT})`);
+  SHM_PARENT = process.env.PTC_FIXED_SHM;
+}
 const SANDBOX_ROOT = path.join(FIXED_PARENT, 'ptc-fixed-sandbox');
 const SCRATCH_ROOT = path.join(FIXED_PARENT, 'ptc-fixed-scratch');
 const LIVE_ROOT = path.join(SHM_PARENT, 'ptc-fixed-live');
@@ -91,10 +101,26 @@ if (!lockHeld) {
   const child = spawn('flock', ['-E', '75', '-w', String(LOCK_WAIT_SEC), LOCK_FILE, process.execPath, ...process.argv.slice(1)], {
     stdio: 'inherit', env: Object.assign({}, process.env, { PTC_FLOCK_HELD: '1' }),
   });
-  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try { child.kill(sig); } catch { /* gone */ } });
+  // flock(1) forks the command, so signalling flock alone would leave the real harness (the lock holder) running.
+  // Forward to flock's child when it exists (it cleans up and exits with 128+signal); if the lock is still being waited
+  // for there is no child and nothing was created, so the signal goes to flock itself.
+  const childrenOf = (pid) => {
+    try {
+      return fs.readdirSync('/proc').filter((n) => /^\d+$/.test(n)).filter((n) => {
+        try { return Number(fs.readFileSync(`/proc/${n}/stat`, 'utf8').replace(/^.*\) \S+ /, '').split(' ')[0]) === pid; } catch { return false; }
+      }).map(Number);
+    } catch { return []; }
+  };
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(sig, () => {
+      const kids = childrenOf(child.pid);
+      for (const k of kids.length ? kids : [child.pid]) { try { process.kill(k, sig); } catch { /* gone */ } }
+    });
+  }
   child.on('close', (code, sig) => {
     if (code === 75) die(`could not get ${LOCK_FILE} within ${LOCK_WAIT_SEC} s: another harness run holds the fixed sandbox`);
-    process.exit(code === null ? 128 + (sig === 'SIGKILL' ? 9 : 15) : code);
+    const num = { SIGHUP: 1, SIGINT: 2, SIGKILL: 9, SIGTERM: 15 };
+    process.exit(code === null ? 128 + (num[sig] || 15) : code);
   });
   child.on('error', (e) => die(`cannot start flock: ${e.message}`));
   // park: the child's exit ends us. (Top-level `return` is legal in a CommonJS module.)
@@ -108,9 +134,17 @@ const wipe = () => { for (const d of [SANDBOX_ROOT, SCRATCH_ROOT, LIVE_ROOT]) { 
 wipe();
 fs.mkdirSync(SCRATCH_ROOT, { recursive: true });
 process.on('exit', wipe);
-// A TERM/INT now ends us through the normal exit path, which wipes (only the lock holder gets here; a run still waiting
-// for the lock has created nothing, and its signal is forwarded to the waiting flock).
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130));
+// Children the harness started asynchronously (overlap runs); a signal kills them before the wipe so none can recreate files.
+const liveChildren = new Set();
+const TRACE = process.env.PTC_TRACE_FILE;
+const trace = (what) => { if (TRACE) { try { fs.appendFileSync(TRACE, `${what} ${process.pid} ${process.hrtime.bigint()}\n`); } catch { /* tracing is best effort */ } } };
+trace('start');
+process.on('exit', () => trace('end'));
+// A signal now ends us through the normal exit path (wipe), with the conventional status 128+signal. Only the lock holder
+// gets here; a run still waiting for the lock has created nothing and its signal was forwarded to the waiting flock.
+for (const [sig, n] of [['SIGHUP', 1], ['SIGINT', 2], ['SIGTERM', 15]]) {
+  process.on(sig, () => { for (const c of liveChildren) { try { c.kill('SIGKILL'); } catch { /* gone */ } } process.exit(128 + n); });
+}
 const BASE = SCRATCH_ROOT; // orig-tree scratch only; not part of any compared byte
 
 // hooks dir for the orig arm: symlinks to every file in hooks/, the five replaced by `git show` copies;
@@ -388,6 +422,8 @@ function runConcurrent(oc, calls, side) {
       child.stderr.on('data', (d) => rec.err.push(d));
       rec.done = new Promise((res) => child.on('close', (c) => { rec.code = c === null ? -1 : c; res(); }));
       rec.child = child;
+      liveChildren.add(child);
+      child.on('close', () => liveChildren.delete(child));
       procs.push(rec);
     }
   });

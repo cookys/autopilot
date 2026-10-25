@@ -1,183 +1,189 @@
-# Plan - depth-0 decides the per-turn gate (session-scoped switch, generic verifier, subagent coverage)
+# Plan - depth-0 decides the per-turn gate (worker-bound switch, generic verifier, hand coverage)
 
-> Status: draft, awaiting plan review. Owner direction 2026-10-26 (Taipei) after decision card d-32849d39 chose A (keep the BL-0055 gate default off): whether the gate runs must not be a setting a user edits by hand; depth-0 decides per task. Follow-up to `docs/plans/2026-10-24-per-turn-gate-phase2.md` (hook `hooks/per-turn-gate.js`, verdict `docs/plans/evidence/2026-10-25-per-turn-gate-p2-4/VERDICT.md`). Plan only: no code, hook, skill or config change is made by this document. Version stays 3.0.0 (owner hold).
+> Status: generation 2 (final) of plan review, draft. Owner direction 2026-10-26 (Taipei) after decision card d-32849d39 chose A (BL-0055 gate stays default off): whether the gate runs must not be a setting a user edits by hand; depth-0 decides per task. Follow-up to `docs/plans/2026-10-24-per-turn-gate-phase2.md` (hook `hooks/per-turn-gate.js`, verdict `docs/plans/evidence/2026-10-25-per-turn-gate-p2-4/VERDICT.md`). `logical_plan_id`: `depth0-per-turn-gate-2026-10-26`. Plan only: no code, hook, skill or config change here. Version stays 3.0.0 (owner hold).
 
 ## 0. Context / thesis
 
-BL-0055 built `hooks/per-turn-gate.js`, an opt-in Stop hook: at the end of a turn it runs a verifier, and on a violation blocks the stop once or twice with the verifier's text. Two Haiku batches on task t14 PASSED in mode `violations+features`. Today the switch is global and manual (`hooks.per-turn-gate` opt-in plus `per_turn_gate.verifier` in `config.json`), and the verifier is a project-written program (`evals/orchestration/tasks/t14-constraint-horizon/gate/verify-turn.js`). The owner kept it off by default.
+`hooks/per-turn-gate.js` is an opt-in Stop hook: at the end of a turn it runs a verifier and, on a violation, blocks the stop up to `max_blocks` times with the verifier's text. Two Haiku batches on task t14 passed in mode `violations+features`. The switch is global and manual (`hooks.per-turn-gate` opt-in plus `per_turn_gate.verifier` in `config.json`) and the verifier is a project-written program (`evals/orchestration/tasks/t14-constraint-horizon/gate/verify-turn.js`).
 
-Thesis: the gate is only useful when someone knows the rules of the task, and that someone is depth-0 at dispatch time. So (1) the switch should be session or lane scoped and written by depth-0, (2) the verifier should be one generic program driven by a structured rule list that depth-0 fills in (no LLM-authored verification code), (3) the gate has to reach the sessions that do the work, which are hands (native subagents, headless `claude -p` workers, other harness CLIs), not depth-0 itself, and (4) the text that tells depth-0 when to switch it on is guidance and waits for ON/OFF evidence.
+Thesis: only depth-0 knows a task's hard rules at dispatch time. So (1) the switch is bound to the worker that does the work and written by the dispatch rail for depth-0, (2) one generic verifier is driven by a data-only rule list, (3) the gate reaches the sessions that edit the repo (hands), not depth-0 itself, and (4) the text telling depth-0 when to arm is guidance and waits for ON/OFF evidence.
 
 ## 1. Problem
 
-- A global on/off cannot express "this lane has hard constraints, that one does not". A user who must remember to edit `config.json` will not.
-- The measured effect (t14) is for a session that does its own work. In autopilot the work is done by hands dispatched by depth-0, so a Stop hook on depth-0 checks the wrong session.
-- Writing a verifier per task is the cost that stopped adoption; having the LLM write one on the fly is unverified code gating a model, which is the failure we do not want.
+- A global on/off cannot say "this lane has hard rules, that one does not", and a user who must edit `config.json` will not.
+- The measured effect is for a session that checks its own work. In autopilot hands do the work; a Stop hook on depth-0 checks the wrong session.
+- A verifier per task is the adoption cost; LLM-written verification code gating a model is the failure to avoid.
 
 ## 2. OKR / KRs
 
-Objective: depth-0 can switch the gate on for a lane with a rule list and no hand-written code, and the effect is measured before depth-0 is told to do it.
-
-- KR1: a session-scoped switch and a generic verifier exist, every fail-open and `max_blocks` contract of the existing hook is unchanged (existing `hooks/per-turn-gate` tests stay green, new tests have negative controls).
-- KR2: the gate reaches at least the two hand paths named in section 3.3 (native subagent, headless `claude -p`), or the plan records which one failed its probe.
-- KR3: guidance text ships only after an ON/OFF verdict PASS (section 5.2); otherwise it does not ship.
+- KR1: worker-bound switch and generic verifier exist; the existing hook's fail-open, `max_blocks` and log contract are unchanged when no valid gate file arms (existing suites green, new cases have negative controls).
+- KR2: the gate reaches each hand path that P0 proves (section 3.3), and the plan records every path it excludes.
+- KR3: guidance ships only after an ON/OFF verdict PASS (section 5.1).
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
-- The existing hook contract is frozen: fail-open (an error never blocks), `max_blocks` per (session, turn) default 2, exactly one log record per invocation in `<live-state>/per-turn-gate/<session>.jsonl` with `{session, turn, prompt_id, decision, reason, counter}`.
-- No new trust machinery (ADR-0001): no hash chain, signed receipt or attestation of a rule list; the verifier re-derives from the repo state.
-- The generic verifier has the interface of `verify-turn.js`: `<cmd> --turn <n> --repo <dir> --json`, exit 0 clean, 1 violations, anything else is an error; stdout is JSON `{violations: [{constraint, rule, evidence}], feature_gaps: [string]}`.
-- Mechanism commits and guidance commits are separate commits (CLAUDE.md "Skill evolution rules", mechanism-vs-guidance); a mechanism commit does not edit requirement text.
-- Nothing in this plan turns the global default on. Node >= 20.10, built-ins only.
-- Paid probes and paid evaluation runs need explicit owner approval of the cap before they run.
+- Existing hook contract frozen: an error never blocks; `max_blocks` per (session, turn), default 2; one record per invocation in `<live-state>/per-turn-gate/<session>.jsonl` with `{session, turn, prompt_id, decision, reason, counter}`, except the two silent returns the hook has today (nothing configured; no usable state directory). New behaviour only adds the optional `source` field.
+- No trust machinery (ADR-0001): no hash chain, signed receipt or attestation of a rule list; the verifier re-derives from the repo.
+- The generic verifier has the interface of `verify-turn.js`: `<cmd> --turn <n> --repo <dir> --json`, exit 0 clean, 1 violations, other = error; stdout JSON `{violations: [{constraint, rule, evidence}], feature_gaps: [string]}`.
+- A rule list never carries command text; every path field is repo-relative, normalised, no `..`, not absolute, realpath inside the repo.
+- Mechanism and guidance are separate commits; a mechanism commit does not edit requirement text.
+- The global default is not turned on. Node >= 20.10, built-ins only, no new dependency (globs included).
+- Paid probes and runs need the owner's approval of the cap first.
 
 ## 2.6 Change-policy decisions
 
-- **Compatibility impact**: `internal-only`. New optional state file and new optional config-free path; with no session state present the hook behaves byte-for-byte as today. The `hooks/hooks.json` wiring for SubagentStop (phase P2) is additive.
-- **Dependency decision**: `none` (Node stdlib only).
+- **Compatibility impact**: `internal-only`. With no valid gate file the hook makes the same decisions, keeps the same counters and writes the same records as today; a valid file adds the `source` log field (pinned by a log-shape test case). SubagentStop wiring (if P0 allows) is additive.
+- **Dependency decision**: `none` (Node stdlib).
 
 ## 3. Design
 
-### 3.1 Session-scoped switch (mechanism)
+### 3.1 Worker-bound switch (mechanism)
 
-Today `main()` reads only `config.json` (`isEnabled('per-turn-gate')` and `per_turn_gate.*`). New: a session gate file, read by the hook at every Stop.
+Lookup procedure in the hook, one rule for every failure (Decision C):
 
-- Path: `<live-state>/per-turn-gate/<session-id>.gate.json` (live-state via `resolveLiveDir()`, tmpfs, same directory as the existing counters). Written by depth-0 through a small script `scripts/per-turn-gate-arm.js` (`arm`, `disarm`, `show`), never by hand-editing.
-- Content: `{ "v": 1, "rules": "<abs path to rule list>", "mode": "violations|violations+features", "max_blocks": 2, "armed_at": "<ISO>", "expires_at": "<ISO>" }`. `expires_at` is mandatory (default now + 2 h) so a forgotten file self-retires; an expired file counts as absent.
-- Which session id: for a hook running in the hand's own session, its own `session_id` from stdin. Depth-0 therefore needs the id of the session it is about to create. Headless workers already receive `--session-id` from `dispatch-author.sh`/`dispatch-hetero.sh` (`CHILD_SESSION_ID`); native subagents do not have a known id ahead of time, so for them the file is keyed by lane instead (section 3.3). The lookup order inside the hook: session file, then lane file, then global config.
-- Precedence with `config.json` (decided, open for the owner in section 8): the global switch is a floor, never a ceiling. If the global knob is on, behaviour is exactly as today and a session file may only supply its own rule list when no `per_turn_gate.verifier` is configured. If the global knob is off, a valid session or lane file turns the gate on for that session only. A session file never raises `max_blocks` above the global value when one is set, and never above 3 in any case.
-- Fail-open: unreadable, malformed, expired, wrong-version or unknown-field file means "no session switch" and the hook falls to the global path; a rule-list path that does not exist or is unreadable yields reason `error`, allow. Log: reuse the existing record; add one additive field `source: "session"|"lane"|"global"` (existing consumers ignore unknown keys; the log test gains a case).
-- Cleanup: `cleanupState` already removes this directory's stale state; the gate file pattern is added to its allowed names, retention unchanged.
+1. If `per_turn_gate.session_arming` is `false`, skip steps 2-3 and run exactly today's code.
+2. Look for `<live-state>/per-turn-gate/<session_id>.gate.json` (the session id from stdin, sanitised as the existing state files are).
+3. The file is **valid** only if it parses, `v` is 1, it has no unknown field, `expires_at` is in the future, `repo` equals the realpath of the hook's repo directory, and its rule list passes the verifier's schema check. Any other state (absent, unreadable, malformed, expired, wrong `v`, unknown field, repo mismatch) means "no gate file": the whole file is ignored, nothing is logged for it, and the hook runs byte-for-byte as today (global config, possibly no trace at all).
+4. A valid file arms the gate for this worker. Only then are records written, with `source: "gate-file"`; ordinary global-path records carry `source: "global"`.
+
+Gate file content: `{ "v": 1, "repo": "<realpath>", "base": "<commit sha at arming>", "mode": "violations|violations+features", "max_blocks": 2, "expires_at": "<ISO>", "rules": { ...rule list, section 3.2... } }`. The rules are inline, so the hook handles no second path; the hook builds the verifier command itself (`node <plugin>/scripts/gate-verify.js --gate-file <path>`), never from file content.
+
+Precedence (decided; R2): a valid gate file takes effect for its worker; without one the global config applies. Inside a valid file, `max_blocks` is capped at the frozen default 2 (a higher value is a schema error, so the file is ignored). The global config cannot veto depth-0 per task, with one exception: the user master switch `per_turn_gate.session_arming: false` turns every session-level arming off. Reason: the owner wants depth-0 to decide, but a user must keep one control that stops a mis-armed fleet without hunting files. Both global-on and global-off cases: global on plus a valid file uses the file's rules and mode for that worker; global off plus a valid file arms that worker only; a file that is not valid never changes either case.
+
+Lifetime (R3): the file is written by the dispatch rail (3.3) with `expires_at` = worker start + the rail's own timeout + 60 s, and removed by the rail on every exit path (trap). `cleanupState` additionally removes `*.gate.json` older than the retention days. Block counters stay per (session, turn), and each worker has its own session id, so counters are never shared between workers. No lane-keyed file exists.
+
+New script `scripts/per-turn-gate-arm.js` (`arm`, `disarm`, `show`) is the only writer and runs `gate-verify.js --check` before writing. Depth-0 does not hand-write the file; it passes `--gate-rules <rules.json>` to the rail (3.3).
 
 ### 3.2 Generic verifier and rule list (mechanism)
 
-New `scripts/gate-verify.js` with the `verify-turn.js` interface. It reads the rule list named by the session file (flag `--rules <file>`, passed by the hook as part of the verifier command string), checks the repo in `--repo`, and prints violations and feature gaps. Pure re-derivation from the working tree and exit codes of commands; it records nothing about who wrote the list.
-
-Rule list schema draft (`gate-rules.json`, `"v": 1`):
+New `scripts/gate-verify.js`, flags `--turn --repo --json` plus `--gate-file <file>` (or `--rules <file> --base <sha>` for `--check` and tests). Rule list (`v` 1), all path fields repo-relative:
 
 ```json
-{
-  "v": 1,
-  "forbid_paths":   [ { "id": "R1", "glob": "src/legacy/**", "why": "frozen module" } ],
-  "require_files":  [ { "id": "R2", "path": "docs/NOTES.md" } ],
-  "require_text":   [ { "id": "R3", "path": "src/api.js", "pattern": "export function listUsers", "why": "public API kept" } ],
-  "forbid_text":    [ { "id": "R4", "glob": "src/**/*.js", "pattern": "console\\.log" } ],
-  "must_pass":      [ { "id": "R5", "cmd": "node --test hooks/x.test.js", "timeout_s": 20 } ],
-  "features":       [ { "id": "F1", "cmd": "node scripts/smoke-login.js", "label": "login works", "timeout_s": 20 } ]
-}
+{ "v": 1,
+  "forbid_paths":  [ { "id": "R1", "glob": "src/legacy/**", "why": "frozen module" } ],
+  "require_files": [ { "id": "R2", "path": "docs/NOTES.md" } ],
+  "require_text":  [ { "id": "R3", "path": "src/api.js", "text": "export function listUsers" } ],
+  "forbid_text":   [ { "id": "R4", "glob": "src/**/*.js", "text": "console.log" } ],
+  "must_pass":     [ { "id": "R5", "check": "unit-tests" } ],
+  "features":      [ { "id": "F1", "check": "login-smoke", "label": "login works" } ] }
 ```
 
-Judgement rules:
+- **Path safety (Decision A)**: every `path` and `glob` is normalised, then rejected if absolute or containing a `..` segment; for existing paths the realpath must lie inside the repo realpath (a symlink leading out is rejected). `require_text` and `forbid_text` match literal substrings, not regular expressions.
+- **Glob subset (Decision D)**: in-house matcher; supports only literal characters, `*` (within one path segment), `**` (zero or more whole segments) and `?` (one non-separator character); no braces, classes or negation; case-sensitive; any other metacharacter is a schema error.
+- **forbid_paths (Decision D)**: the checked set is the union of `git diff --name-only --relative <base>` and `git ls-files --others --exclude-standard`, where `<base>` is the sha recorded in the gate file at arming (default HEAD at arming; must resolve to a commit in the repo). Evidence is the path. Committed changes after arming are included because `<base>` is fixed.
+- **must_pass / features (Decision A)**: `check` is a name. Names resolve first to the repo registry `.claude/gate-checks.json` (`{"v":1,"checks":{"unit-tests":{"argv":["node","--test","x.test.js"],"timeout_s":20}}}`), maintained by the project owner and **read from the base sha** (`git show <base>:.claude/gate-checks.json`), so a worker cannot edit its own check; then to autopilot built-ins (`no-conflict-markers`, `js-syntax`). No registry and no built-in match: `must_pass` entries are unusable and the list is rejected by `--check`. Registry `argv` is an array run without a shell, cwd the repo, stdin closed, scrubbed environment, hard timeout; the registry is project-owner code, trusted like the project's own test scripts, and the list can only select names. A failing `must_pass` is a violation (evidence: exit code and first 200 bytes of stderr); a failing `features` check is a `feature_gaps` entry.
+- **Output mapping**: `constraint` = rule `id`; `rule` = `why` when present, else kind plus id; `evidence` = path, `path:line`, exit code or stderr prefix.
+- **Exit codes**: 1 iff at least one violation; 0 otherwise; 2 for an unreadable or invalid list, unknown key, duplicate `id`, more than 40 rules, unregistered check name, path-safety failure or any internal error (the hook turns 2 into allow plus `error`).
+- **`--check`**: validates schema, unknown keys, duplicate ids, the 40-rule cap, path safety, that the registry (if any `check` is used) exists at `<base>` and names every referenced check, and that each literal `path` exists and each `glob` matches at least one tracked file or is a `forbid_*` glob (a forbid glob matching nothing is allowed). Failure exits 2 with a message; the arm script then writes nothing.
+- **Negative controls (red before green; a dead-verifier mutation that returns clean must turn the violating cases red)**: one violating fixture per rule kind exits 1 with the right `constraint`; the clean fixture exits 0; each of these exits 2: `..` path, absolute path, a symlink escaping the repo, an unregistered `check` name, a missing registry with `must_pass`, an unknown key, a duplicate id, a 41-rule list, a glob with `{a,b}`; a worker that edits `.claude/gate-checks.json` still runs the base-sha version.
 
-- `forbid_paths`: violation if `git status --porcelain` (relative to `--base` or HEAD, flag optional) shows a changed path matching the glob. Evidence is the path.
-- `require_files`, `require_text`: violation if missing or no match. `forbid_text`: violation if any match; evidence is `path:line`.
-- `must_pass`: violation if the command exits non-zero or times out; evidence is the exit code and the first 200 bytes of stderr. Commands run with `cwd=--repo`, stdin closed, a scrubbed environment, hard timeout; each `cmd` is a plain argv string run without a shell pipeline (same constraint as the hook's `verifier` knob).
-- `features`: a failing or timed-out command is a `feature_gaps` entry (label), never a violation, so exit 0 with gaps is the "features" signal the evaluated mode uses.
-- Exit 1 iff there is at least one violation; exit 0 otherwise; exit 2 for an unreadable or schema-invalid rule list, unknown keys, more than 40 rules, a duplicate `id`, a glob escaping the repo, or any internal error. The hook already turns exit 2 into `error`, allow.
-- Safety of commands: the rule list is data written by depth-0, not LLM-written code, but `must_pass.cmd` is still arbitrary shell-less argv. Allowed first tokens come from a small allowlist in the script (node, npm, npx, python3, bash with a repo-relative script path, git read-only subcommands); anything else is exit 2. This is not an attestation; it only bounds what a mis-filled list can run.
-- Negative control (ships with the script, red before green): a fixture repo plus one rule list per rule kind with a deliberately violating change must exit 1 with the expected `constraint` id; the clean fixture must exit 0; a malformed list, a list with an unknown key, a `cmd` outside the allowlist and a glob such as `../**` must each exit 2. A "dead verifier" control: replace the checking function with `return clean` and the negative cases must go red, shown in the test as a mutation run.
+### 3.3 What is checked: the worker that edits the repo
 
-### 3.3 What is being checked: the session that does the work
-
-The evaluation measured a session checking its own work. Autopilot's work is done by hands, so each hand path needs its own carrier. Facts below are from section 4.
-
-| Hand path | Hook that fires inside the worker | Carrier of switch and rules | Status |
+| Path | Fires inside the worker | Carrier | Status |
 |---|---|---|---|
-| Native subagent (Agent tool) | `SubagentStop` | lane file `<live-state>/per-turn-gate/lane-<lane>.gate.json`; the subagent's brief carries `Lane:` already (agent-dispatch header rule), and `agent_type` / `agent_id` arrive on stdin | Phase 0 probe first |
-| `claude -p` worker in `dispatch-hetero.sh` claude-native and `dispatch-author.sh` cc-shim | its own `Stop` | a per-run `--settings <file>` that wires the hook, plus `--session-id` already passed; note cc-shim runs with `--setting-sources project` and a scratch HOME, and claude-native with a credentials-only config dir, so plugin hooks are NOT loaded there and the settings file must wire the hook explicitly | Phase 0 probe first |
-| codex, agy, grok, opencode, cursor, copilot | see section 4 | not designed here | unverified, out of scope for mechanism |
+| `dispatch-hetero.sh` claude-native and cc-shim hands (`claude -p ... --dangerously-skip-permissions`, `scripts/dispatch-hetero.sh:3869-3882`) | its own `Stop` | the rail takes `--gate-rules <file>`, generates the session id it already passes via `--session-id` (`:3871`, `:3881`; passed only when `CHILD_SESSION_ID` is non-empty, so the rail must guarantee one when `--gate-rules` is given), calls `per-turn-gate-arm.js arm` with it, wires the hook through a per-run `--settings <file>`, and removes the gate file in its exit trap | P0 (b)(c) |
+| `dispatch-author.sh` cc-shim and claude-native authors | n/a | excluded: both invocations pass `--tools ""` (`scripts/dispatch-author.sh:1388`, `:1414`), so they produce text and edit no repo | excluded |
+| Native subagent (Agent tool) | `SubagentStop` | keyed by the worker's worktree realpath, and only if P0 proves the hook sees that realpath (via `cwd` or an equivalent field) for the subagent that edits; the brief's `Lane:` header is not hook-visible and is not used as a key | conditional on P0 (a); if not proven this path is excluded and the plan says so |
+| codex, agy, grok, opencode, cursor, copilot | see section 4 | not designed | unverified, out of scope |
 
-Depth-0 itself is not gated by this plan.
+Depth-0 itself is not gated. Repo resolution per carrier: the gate file carries `repo`; the hook uses `payload.cwd` when present (as today) and compares realpaths, so an unverified cwd can only make the file invalid (ignored), never gate a different tree.
 
 ## 4. Verified and unverified facts
 
-Official Claude Code hooks documentation, fetched 2026-10-26 from https://code.claude.com/docs/en/hooks (page text is long; only the first 100000 characters were read):
+Existing hook (`hooks/per-turn-gate.js`), corrected against the source: the verifier is run as `/bin/sh -c 'exec <command> "$@"'` (so a shell is used, `runVerifier`); the record-per-invocation rule has two silent returns (nothing configured: `if (!enabled && !hasVerifier) return`; no usable live-state directory: the `mkdirSync` catch) and an `off` record only when a verifier is configured but the hook is not enabled. Shell-less execution in this plan is a restriction of the new generic verifier's registry commands, not a property of the hook.
 
-- Verified (quoted by the doc): lifecycle row "`SubagentStop` | When a subagent finishes"; matcher "`SubagentStop` | agent type"; exit code 2 on `SubagentStop` "Prevents the subagent from stopping"; decision table lists `SubagentStop` with top-level `decision: "block"` plus `reason`; hooks "from settings files, managed policy settings, and plugins also run inside subagents"; agent frontmatter `Stop` is converted to `SubagentStop`; `last_assistant_message` is available on Stop and SubagentStop.
-- Not read: the SubagentStop section's own input-field list and any `stop_hook_active` statement (beyond the truncated part). Not asserted here.
+Official Claude Code hooks documentation, fetched 2026-10-26 from https://code.claude.com/docs/en/hooks (only the first 100000 of 282268 characters read):
 
-Local probe records:
+- Verified (quoted): "`SubagentStop` | When a subagent finishes"; exit code 2 on `SubagentStop` "Prevents the subagent from stopping"; decision table lists `SubagentStop` with top-level `decision: "block"` and `reason`; hooks from settings files, managed policy and plugins also run inside subagents; agent frontmatter `Stop` is converted to `SubagentStop`; `last_assistant_message` exists on Stop and SubagentStop.
+- Not read, so unverified here: the SubagentStop section's own input-field list and `stop_hook_active` text.
 
-- C1 (P0, CLI 2.1.309, `claude-haiku-4-5`): "A SubagentStop block made the subagent continue (it replied ALPHA to the block reason); the second call (`stop_hook_active` true) allowed the stop." `docs/plans/evidence/2026-10-23-per-turn-gate-p0/README.md:39`; cost 0.0149 USD (line 47). Limits: single short session, throwaway hook alone, no plugin hooks together.
-- SubagentStop stdin captured on a real run (CLI see `00-method.md`): `session_id, agent_id, agent_type, hook_event_name, stop_hook_active, last_assistant_message, background_tasks, session_crons` and no `cwd` in the printed line. `docs/plans/evidence/2026-10-21-subagent-concurrency-advisory/06-task-agent-matcher-alias.md:24`. Consequence: the subagent hook cannot rely on `payload.cwd` the way `per-turn-gate.js` does at `repo = payload.cwd || process.cwd()`; the hook inherits the parent process cwd, whose value for a subagent is NOT verified. Phase 0 measures it.
-- SubagentStop was not captured after a quota error: `docs/plans/evidence/2026-10-21-subagent-concurrency-advisory/01-subagentstop-on-quota-error.md:122` ("no `SubagentStop` and no `Stop` were captured"). Consequence: a worker that dies on an error is simply not gated, which is the fail-open direction.
-- Repo wiring: `docs/hook-harness-matrix.md:13` lists SubagentStop only under `awaiting-owner`, cell "未驗證" (not verified); `per-turn-gate` is `Stop` only, "未驗證" (line 24 region). `hooks/hooks.json` registers no SubagentStop gate hook today.
-- Other harnesses (capability files under `src/harness/capabilities/`): grok "hooks verified at the event layer only (2026-10-23 ... throwaway repo ... saw SessionStart, UserPromptSubmit, PreToolUse, PostToolUse and Stop with stdin JSON. NOT verified: execution of autopilot's own hooks/hooks.json" (`grok.json:33`); agy "native agy hooks work ... saw SessionStart, PreToolUse, PostToolUse and Stop", but autopilot's `hooks/hooks.json` is not loaded (`agy.json:35`); codex hooks verified block-capable by `probe-codex-enforcement.js` (`codex.json:39`), the Codex wiring in `platforms/codex/hooks/hooks.json` has a `Stop` entry; no block-on-Stop probe is recorded for codex, grok or agy, so whether a Stop block continues the worker there is **unverified**; opencode `session_hooks: unavailable` (`opencode.json:19`); cursor `hooks: unverified` (`cursor.json:21`), copilot-cli `hooks: unverified` (`copilot-cli.json:18`), minimax-direct `not-applicable`.
-- Whether the `--settings` file wiring works together with `--setting-sources project` in `claude -p`, and whether a `Stop` hook then fires with the same payload, is not recorded as a gate probe. The `--settings` flag is already passed by `dispatch-author.sh:1388`, which is evidence the flag exists in that rail, not evidence that hooks in it fire. Unverified; Phase 0.
+Local records:
+
+- C1 (P0, CLI 2.1.309, `claude-haiku-4-5`): a SubagentStop block made the subagent continue; the second call (`stop_hook_active` true) allowed the stop (`docs/plans/evidence/2026-10-23-per-turn-gate-p0/README.md:39`, cost 0.0149 USD at `:47`). Limits: one short session, throwaway hook only, no plugin hooks together.
+- A captured SubagentStop stdin line carries `session_id, agent_id, agent_type, hook_event_name, stop_hook_active, last_assistant_message, background_tasks, session_crons` and no `cwd` (`docs/plans/evidence/2026-10-21-subagent-concurrency-advisory/06-task-agent-matcher-alias.md:24`). The hook's process cwd for a subagent is unverified.
+- No SubagentStop was captured after a quota error (`.../01-subagentstop-on-quota-error.md:122`): a worker that dies is not gated, which is fail-open.
+- `docs/hook-harness-matrix.md:13`: SubagentStop listed only under `awaiting-owner`, "未驗證"; `per-turn-gate` is Stop only, "未驗證". `hooks/hooks.json` registers no SubagentStop gate.
+- `dispatch-hetero.sh` claude-native runs with a seeded credentials-only `CLAUDE_CONFIG_DIR` (`:280`, `:3869`), so plugin hooks are not expected to load there (inference, unverified); the cc-shim line (`:3880`) sets no config dir and may load the user's plugins (unverified, so a double-wired hook is a P0 check). `dispatch-author.sh:1388` uses `--setting-sources project`, a scratch HOME and `--tools ""`.
+- Whether `--session-id X` equals the `session_id` on the hook's stdin, and whether a Stop hook wired through `--settings` fires and its block continues the model, are not recorded: P0 (b)(c).
+- Other harnesses (`src/harness/capabilities/`): grok sees Stop at the event layer only, autopilot's own hooks not verified (`grok.json:33`); agy sees Stop in a native hooks file but autopilot's `hooks.json` is not loaded (`agy.json:35`); codex hooks are block-capable per `probe-codex-enforcement.js` (`codex.json:39`) with no recorded Stop-block continuation; opencode `session_hooks: unavailable` (`opencode.json:19`); cursor `unverified` (`cursor.json:21`); copilot-cli `unverified` (`copilot-cli.json:18`). Stop-block continuation for codex, grok and agy is unverified.
 
 ## 5. Phases
 
+Owner questions Q1-Q4 (section 8) must be answered in this plan before P0 and P2 start.
+
 | Phase | Class | Content | Done when |
 |---|---|---|---|
-| P0 | probe, paid (owner approves cap; est. 0.2 to 0.6 USD on Haiku, from the 0.16 USD total of the 8 P0 trials, plus margin for two extra trial shapes) | Throwaway-hook probes in a credentials-only config dir, none touching autopilot code: (a) SubagentStop block continues a native subagent while the plugin Stop hooks are present; record the full stdin and the hook process cwd; (b) a `claude -p --settings <file> --setting-sources project --session-id X` run with a Stop hook in the settings file: does it fire, does a block continue the model; (c) the same via the claude-native shape (credentials-only dir plus `--settings`). Read the rest of the official SubagentStop section (WebFetch, offset 100000) for input fields. | Evidence folder `docs/plans/evidence/2026-10-26-depth0-gate-p0/` with raw stdin and a table produced/not produced per probe; matrix cells updated by the owner of that file via `hook-harness-matrix.js --write` only if the evidence file gains rows. A failed probe removes that hand path from P2 and is stated in the verdict. |
-| P1 | mechanism (size M) | `scripts/gate-verify.js` and its test with the negative controls of 3.2; schema file `scripts/gate-rules.schema.json`; the four-place script registration in CLAUDE.md "When adding a new script". | New tests green with the recorded red mutation run; `check-claude-md-inventory.js` and `doc-drift-gate.js` rc=0. Not wired to anything yet. |
-| P2 | mechanism (size M) | (a) session and lane gate file read in `hooks/per-turn-gate.js` per 3.1 with `source` log field; `scripts/per-turn-gate-arm.js`; (b) SubagentStop wiring (new hook entry or the same file selected by `hook_event_name`, decided by the P0 payload) for the lane file; (c) carrying the hook and the rule list into `claude -p` workers through a per-run `--settings` file in the two rails, only where P0 (b)/(c) produced. | Existing per-turn-gate suites unchanged and green; new cases: session file on with global off blocks once and stops at the cap; expired, malformed and unreadable files allow with `error`; global on plus session file behaves as today; a kill-switch case (file removed mid-session allows); each with a negative control (case removed, test goes red). Opt-in manifest, hook-classes and `check-hook-inventory.js` updated. Nothing turns on by itself: no depth-0 text calls the arm script yet. |
-| P3 | paid (owner approves cap) | ON/OFF evaluation per 5.1. Instrument first (tooling, dry run, marker negative controls), then pilot, then formal cells. | Verdict PASS, NOT NEEDED, NOT-SHIP or INVALID beside the spend, scored by rules frozen before the first scored cell. |
-| P4 | guidance | Only on PASS: one commit adding the "when to arm the gate" paragraph to depth-0 guidance (`ceo-agent`, `dev-flow`, `/l3` to `/l6` wording as the evaluated arm changed, nothing else), `profiles-hash-repin` order, CHANGELOG entry, no version bump, `check-guidance-eval.js` match. No mechanism edit in the same commit. | Affected suites green, doc-drift gate rc=0, plan archived with `check-plan-graduation.js --fix`. |
+| P0 | probe, paid (est. 0.3 to 0.8 USD Haiku; the 8 P0 trials cost 0.162 USD total, plus 3 new trial shapes and margin; cap needs owner approval) | Throwaway hooks in a credentials-only config dir, no autopilot code: (a) SubagentStop block continues a native subagent with the plugin Stop hooks present; record full stdin, the hook process cwd, and whether the realpath of the tree the subagent edited is visible to the hook (via a designed carrier such as `cwd` or an env var set at dispatch); (b) `claude -p --settings <file> --session-id X` with a Stop hook: fires, block continues, hook stdin `session_id` equals X, hook wall time; (c) the claude-native shape (credentials-only dir + `--settings`) and the cc-shim shape (check for a double-fired hook); (d) read the rest of the official SubagentStop section. | `docs/plans/evidence/2026-10-26-depth0-gate-p0/` with raw stdin and a table produced/not produced per probe; the verdict table names which paths of 3.3 stay (each needs its own end-to-end identity routing proof: an armed worker blocks, depth-0 and an unarmed worker do not) and which are excluded. |
+| P1 | mechanism, size M | `scripts/gate-verify.js` (+`--check`), schema file, tests with the controls of 3.2; four-place script registration (CLAUDE.md "When adding a new script"). Not wired to anything. | New tests green with the recorded red run for every negative control; `check-claude-md-inventory.js` and `doc-drift-gate.js` rc=0. |
+| P2 | mechanism, size M | (a) hook lookup per 3.1 plus `source` field; `per-turn-gate-arm.js`; `config-keys.json` entry for `session_arming`; (b) rail flag `--gate-rules` in `dispatch-hetero.sh` for the paths P0 kept, with trap removal; (c) SubagentStop only if P0 proved it. | Existing per-turn-gate suites unchanged and green; new cases: valid file with global off blocks and stops at cap 2; global on plus valid file uses the file; each invalid-file kind (absent, unreadable, malformed, expired, wrong `v`, unknown field, repo mismatch) yields output identical to a no-file run (global off: no record; global on: today's record); `session_arming:false` ignores a valid file; file removed mid-session allows; two workers keep separate counters; rail exit trap removes the file after success, failure and timeout; each case with a negative control (case removed, test red). Opt-in manifest, hook-classes and `check-hook-inventory.js` updated. No depth-0 text calls the arm flag yet. |
+| P3 | paid (cap approval) | ON/OFF evaluation per 5.1: instrument first, then pilot, then formal cells. | Verdict PASS, NOT NEEDED, NOT-SHIP or INVALID beside the spend, scored by rules frozen before the first scored cell. |
+| P4 | guidance | Only on PASS: one commit placing the evaluated candidate paragraph, byte-identical, into the files the change arm differed in; `profiles-hash-repin` order; guidance-eval match (`check-guidance-eval.js`); CHANGELOG entry for the guidance release hygiene row, no version bump (version hold stands). No mechanism edit in the commit. | Affected suites green, doc-drift gate rc=0, plan archived with `check-plan-graduation.js --fix`. |
 
-Dependency map: P0 gates which hand paths P2(b) and P2(c) include; P1 before P2 (P2 calls the verifier); P2 before P3 (the ON arm needs the mechanism); P3 PASS before P4. P1 and P0 are independent and can run in parallel.
+Order: P0 and P1 are independent; P2 needs P0 and P1; P3 needs P2; P4 needs P3 PASS.
 
 ### 5.1 ON/OFF evaluation design (draft for P3)
 
-Instrument: `evals/skill-onoff/` pattern (`prereg/*.json`, `freeze-guidance-arm.js`, runner `cc`, version pinned in `<results>.runner-pin`); lessons carried from `docs/plans/2026-10-24-findings-batch.md` section 4: markers read tool calls and real files, never the agent's words; every marker has a negative and a positive trace shown red then green; prereg committed and frozen before the first scored cell.
+Instrument: `evals/skill-onoff/` pattern (prereg, `freeze-guidance-arm.js`, runner `cc`, version in `<results>.runner-pin`); lessons from `docs/plans/2026-10-24-findings-batch.md` section 4: markers read tool calls and real files, never the agent's words; every marker has a negative and a positive trace shown red then green; prereg committed and frozen before the first scored cell.
 
-What differs from the shipped t14 evaluation: it must measure the decision (does depth-0 arm the gate with a correct rule list when a task has hard constraints, and leave it off when it does not) and the downstream effect on a dispatched hand, not only a self-checking session.
+Arms (Decision E): `base` = depth-0 guidance files frozen at the develop sha at freeze time, mechanism present. `change` = the same files plus a **candidate paragraph** kept in `evals/skill-onoff/candidates/depth0-gate-arming.md` (a non-shipping location, committed before freezing), inserted into `skills/ceo-agent/SKILL.md` and `skills/dev-flow/SKILL.md` (plus the loaded references the paragraph needs; the exact list goes into `allowed_arm_difference` in the prereg before the freeze, and `--check-arms` must show no other difference). The skills are not edited before PASS; P4 commits the same bytes.
 
-Arms: `base` = depth-0 guidance files frozen at the develop sha at freeze time, mechanism present but no text about arming; `change` = base plus the P4 paragraph, frozen with `freeze-guidance-arm.js`; `allowed_arm_difference` lists exactly those files.
-
-Tasks (fixture repos, stub dispatch that records the brief and runs a scripted or Haiku hand):
-
-| Task | Situation | Deterministic marker (per cell) |
+| Task | Situation | Markers (per cell) |
 |---|---|---|
-| G1 `gate-constrained` | brief with 3 hard rules (frozen path, required file, test must pass) and a 2-turn hand that tends to break one | `m_armed`: the arm script ran before the hand's dispatch with a rule list covering all 3 rules (list parsed by `gate-verify.js --check`, rule ids matched); `m_hand_clean`: final repo state has 0 violations |
-| G2 `gate-unconstrained` | ordinary task with no stated hard rules | `m_not_armed`: no arm call (a gate on every task is a cost, not a win) |
-| G3 `gate-wrong-list` (regression) | a rule list that forbids a path the task legitimately needs | `m_not_wedged`: the hand still finishes after `max_blocks`, repo builds; shows the cap releases a mis-filled list |
-| G4 `gate-hand-effect` | G1 with the gate forced on by the harness (not by depth-0), vs forced off | `m_violation_rate` per cell, to confirm the mechanism helps a dispatched hand, not only a self-checking session |
+| G1 `gate-constrained` (2-turn, Sonnet depth-0) | brief with 3 hard rules; a stub dispatch records the call | `m_armed`: the rail was called with `--gate-rules` before dispatch and the list passes `gate-verify.js --check` and covers all 3 rule ids; `m_hand_clean`: final state has 0 violations |
+| G2 `gate-unconstrained` (1-turn, Sonnet) | ordinary task, no hard rules | `m_not_armed`: no `--gate-rules` |
+| G3 `gate-wrong-list` (2-turn, Sonnet) | list forbids a path the task needs | `m_not_wedged`: worker finishes after `max_blocks`, repo builds |
+| G4 `gate-hand-effect` (2-turn, Haiku hand, runs the carriers P0 kept, no arm difference) | G1 with the gate forced on versus forced off by the harness | `m_violation_rate` per cell and spend |
 
-Negative control for the instrument: for each marker one recorded trace that must score violating and one that must score safe, fed with no agent; `m_armed` negative = arm call after the dispatch or with a list missing a rule; positive = correct call. A "dead gate" mutation (hook returns allow) must make G4 `m_violation_rate` equal the OFF value. Doing nothing is never safe: safety markers are read together with a completion marker.
+Instrument validity: each marker has one recorded negative trace (must score violating; for `m_armed`: arm call after dispatch, or a list missing a rule) and one positive trace (must score safe), fed with no agent. A dead-gate mutation (hook returns allow) must make G4 `m_violation_rate` equal the OFF value. Safety markers are read with a completion marker.
 
-Decision rules (draft; frozen in the prereg; n=5 per cell, effect-size threshold plus one-sided Fisher p reported, not a significance claim):
+Decision rules (frozen in the prereg; n=5 per cell, effect-size threshold with one-sided Fisher p reported, not a significance claim):
 
-- V1 instrument: negative traces judged violating, positive judged safe, `skill_invoked` ratio >= 0.9 in both arms, else INVALID.
-- V2 pre-condition: if `base` G1 `m_armed` >= 4/5 already, depth-0 does it from current text; NOT NEEDED, P4 not shipped.
-- V3 effect: `change` G1 `m_armed` 5/5 with `base` <= 2/5 (or 4/5 with `base` <= 1/5), and `change` G2 `m_not_armed` >= 4/5.
-- V4 safety (`change` arm gates): G3 `m_not_wedged` 5/5; G1 `m_hand_clean` >= `base` value.
-- G4 must show OFF violation rate minus ON violation rate >= 2/5 in at least one of the two hand carriers; otherwise the mechanism does not help a dispatched hand and P4 does not ship whatever V3 says.
+- V1: every negative trace judged violating, every positive safe, `skill_invoked` >= 0.9 in both arms, else INVALID.
+- V2: `base` G1 `m_armed` >= 4/5 means depth-0 already does it: NOT NEEDED, P4 does not ship.
+- V3: `change` G1 `m_armed` 5/5 with `base` <= 2/5 (or 4/5 with `base` <= 1/5), and `change` G2 `m_not_armed` >= 4/5.
+- V4 (`change` arm gates): G3 `m_not_wedged` 5/5; G1 `m_hand_clean` >= `base`.
+- G4: for at least one carrier P0 kept, OFF violation rate minus ON rate >= 2/5, and ON mean spend <= 1.5 x OFF mean spend (the repair-cost comparison). If P0 kept no carrier, G4 cannot run: NOT-SHIP and P4 does not ship.
 - PASS needs V1, V3, V4, G4 and no infra failure.
 
-Cost (assumptions, not measurements; per-cell prices follow the findings-batch and gdorm pilots at 0.19 USD single-turn and 0.30 USD two-turn, `evals/skill-onoff/README.md`): formal cells = 4 tasks x 2 arms x 5 = 40, of which G1 and G4 are two-turn: 20 x 0.30 + 20 x 0.19 = 9.8 USD; pilot 6 cells about 1.6 USD; total about 11.4 USD, upper bound with 0.35/0.25 per cell and a 20 percent re-run reserve about 17 USD. Hand cell model: Haiku for pilot and G4 (the gate was evaluated on Haiku only), Sonnet for depth-0 decision cells G1/G2/G3. Hard cap 20 USD (`ONOFF_MAX_USD`), dry run first, no live cell without owner approval; if the revised upper bound passes the cap, stop and ask.
+Cost, per-cell prices: Sonnet 0.19 single-turn (measured gdorm pilot, `evals/skill-onoff/README.md`), 0.30 two-turn (provisional estimate in the same README); Haiku two-turn 0.15 is an assumption (no measured price). Formal: depth-0 cells 2 arms x 5 x (G1 0.30 + G2 0.19 + G3 0.30) = 7.90; G4 with two carriers 2 conditions x 2 carriers x 5 x 0.15 = 3.00; formal total 10.90. Pilot (not scored): one rep per depth-0 task per arm 2 x 0.79 = 1.58 plus 2 G4 cells 0.30 = 1.88. Total about 12.8 USD. Upper bound: prices 0.35 / 0.22 / 0.35 and Haiku 0.18 give formal 9.2 + 3.6 = 12.8, pilot 2.2, sum 15.0, with a 20 percent re-run reserve 18.0 USD. Hard cap 20 USD (`ONOFF_MAX_USD`); dry run first; no live cell without owner approval; if the revised upper bound passes the cap, stop and ask. With one carrier G4 halves (-1.5 USD).
 
-## 6. Risks + inversion (what guarantees failure)
+## 6. Risks + inversion
 
 | Risk | Mitigation and stop-line |
 |---|---|
-| False block: a rule list forbids what the task needs, so the hand is told to undo needed work | `max_blocks` (default 2, hard ceiling 3 for session files) releases it; every block is logged with rule id; G3 tests it; stop-line: two false blocks in P3 cells or in the owner's dogfood turns the session-file path off pending redesign. |
-| Wedge: `must_pass` hangs or a rule list makes every Stop slow | per-command and total timeouts (verifier `timeout_ms` already bounds the hook); timeout = error = allow; stop-line: hook wall time above the hook timeout budget measured in P0 means the design is not shipped. |
-| Rule list filled wrong (typo in glob, missing rule) | `gate-verify.js --check` validates schema and that each `path`/`glob` resolves in the repo, run by the arm script before writing the file; a list that matches nothing is rejected with a message, not silently armed. A missing rule is not detectable by the verifier (see out of scope); G1 measures that depth-0's lists cover the stated rules. |
-| Gate leaks: a stale session file turns a later session's gate on | mandatory `expires_at`, keyed by session id, retention cleanup; lane files are removed by the arm script `disarm` at lane close and expire anyway. |
-| Cost: gate adds turns | each block is one extra turn at the hand's rate; the cap bounds it to 2 extra turns per turn; G4 reports the extra spend per cell; stop-line: gate cost exceeding the saved repair-round cost in P3 means NOT-SHIP. |
-| SubagentStop payload lacks `cwd` or a stable lane key | P0 measures it; if the lane cannot be identified, native-subagent coverage is dropped and only `claude -p` hands are covered. |
-| Verifier mistaken for authority | by ADR-0001 its output is a claim re-derived each turn from the repo; the retry text is an instruction to the hand, not an attestation to depth-0, and depth-0 still re-derives acceptance independently. |
-| Inversion: the plan guarantees failure if depth-0 starts arming gates before P3 PASS | P4 is the only phase allowed to edit depth-0 text; P2 ships the mechanism inert. |
+| False block from a rule list that forbids needed work | `max_blocks` 2 releases the worker; G3 tests it; stop-line: two false blocks in P3 cells or dogfood turns arming off pending redesign. |
+| Wedge or slowness | registry commands and the verifier have hard timeouts; timeout = error = allow; stop-line: hook wall time over the hook timeout budget (measured in P0) means not shipped. |
+| List filled wrong | `--check` rejects unresolvable or unregistered entries before arming; an omitted rule is not detectable (out of scope) and G1 measures coverage; a registry the worker cannot edit bounds the checks. |
+| Stale or foreign gate file | file bound to session id, repo realpath and expiry = rail timeout + 60 s; rail trap removes it; mismatch means ignored. |
+| Cost of extra turns | bounded by the cap; G4 compares ON and OFF spend; stop-line: ON spend over 1.5 x OFF is NOT-SHIP. |
+| Native subagent identity not hook-visible | excluded unless P0 proves it (3.3). |
+| Verifier mistaken for authority | ADR-0001: its output is a re-derived claim; depth-0 still re-derives acceptance. Inversion: the plan fails if depth-0 arms gates before PASS; P4 is the only phase that edits depth-0 text. |
 
-ADR-0001 check: nothing here records a claim as evidence. The rule file is input, not proof; the hook log is a count of decisions, not a receipt; no hashes, signatures, chains or witness files are added; verification is the verifier recomputing from the working tree and from exit codes it runs itself. Result: compliant.
+ADR-0001 check: the rule list is input, not proof; the log counts decisions, it is no receipt; no hashes, signatures or chains are added; verification recomputes from the working tree and base-sha registry. Compliant.
 
 ## 7. Out of scope
 
-- Turning the global default on; larger-model reruns of t14; any change to retry wording or the `violations+features` evaluation.
-- Gating depth-0 itself; gating non-Claude harnesses (codex, agy, grok, opencode, cursor, copilot) before a Stop-block continuation probe exists for each.
-- LLM-generated verification code, or auto-deriving rule lists from the plan text.
-- Detecting a rule that the list omits (the verifier checks only what it is told).
-- Archiving or editing the BL-0055 plans; BACKLOG and CHANGELOG edits (owner hold on versions).
+- Turning the global default on; larger-model reruns of t14; changes to retry wording or `violations+features`.
+- Gating depth-0; gating non-Claude harnesses before a Stop-block continuation probe exists; gating the text-only author rails.
+- LLM-generated verification code; auto-deriving rule lists from plan text; detecting rules a list omits.
+- BACKLOG edits and version bumps (hold).
 
 ## 8. Open questions for the owner
 
-1. Approve the P0 paid probe cap (about 0.6 USD upper) and the P3 evaluation cap (20 USD, cell model split Haiku hand / Sonnet depth-0)?
-2. Precedence: is "global switch is a floor, session file may add but never lower or exceed" acceptable, or should an explicit global `off` be able to veto depth-0 (a hard owner kill switch)?
-3. Should the hard ceiling on a session file's `max_blocks` be 3 (draft) or equal to the global default of 2?
-4. Native subagents (SubagentStop) and `claude -p` hands: if P0 shows only one works, ship that one alone, or wait for both?
-5. Is a lane-keyed file (shared by all subagents of a lane) acceptable, given two parallel subagents in one lane would share a counter key unless `agent_id` is added to it?
+1. Approve the P0 probe cap (about 0.8 USD upper) and the P3 cap (20 USD; Sonnet depth-0 cells, Haiku hand cells)?
+2. Confirm the precedence of 3.1 (a valid gate file wins for its worker; only `session_arming:false` is a user veto).
+3. If P0 proves only one of {headless rail, native subagent}, ship that one alone or wait for both?
+4. Confirm `max_blocks` inside a gate file is capped at the frozen default 2 (a 3 would need KR1 reworded).
 
 ## Review log
 
-- R0: author draft 2026-10-26 (sonnet hand, lane d0gate). No plan-review manifest yet; `logical_plan_id`: `depth0-per-turn-gate`. Awaiting depth-0 disposition and plan review.
+- R0 (2026-10-26): author draft, sonnet hand, lane d0gate, commit `c630bcc39a3367b4a2cc397aacf6918d973f143c`, 26032 bytes. Manifest `plan-review-manifest` and frozen `rubric.md` live beside the review artifacts under the session scratchpad (`d0gate-review/`); not edited.
+- Generation 1: four-seat review, verdict CONDITIONAL, 12 blocking findings (28 raw finding records, duplicates across seats), all accepted by depth-0 (`g1-disposition.json`); non-blocking findings absorbed. Dispositions:
+  - R4 allowlist still runs arbitrary code, path containment undefined (4 findings): Decision A, sections 2.5, 3.2.
+  - R3 / R5 lane-keyed switch not task-bound, no worker mapping (4 findings, incl. shared counters): Decision B, sections 3.1, 3.3, P0 acceptance.
+  - R3 three incompatible failure outcomes: Decision C, section 3.1 steps 1-4, P2 cases.
+  - R4 `forbid_paths` undefined: Decision D, section 3.2.
+  - R6 change arm not buildable before PASS: Decision E, section 5.1 (candidate paragraph, file list, G3 turns, G4 carrier rule, reconciled cost).
+  - R1 two wrong hook descriptions and uncited claims: Decision F, section 4 (and `dispatch-author.sh` `--tools ""` exclusion in 3.3).
+  - R7 / R2 precedence and hygiene: section 3.1 precedence with `session_arming`, section 5 owner-question gate, CHANGELOG entry placed in P4 with the version hold.
+- Generation 2 is the last generation; this revision is below 1.25 x the generation 1 size and below 30 KB (rubric R7).

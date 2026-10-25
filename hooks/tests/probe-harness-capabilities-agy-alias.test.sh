@@ -36,7 +36,10 @@ case "\${1:-}" in
     fi
     exit 0
     ;;
-  -p)
+  # BL-0298: the paid probe sends its prompt on stdin as stream-json; a -p on argv is a bug.
+  --model|-p)
+    [ "\${1:-}" = "-p" ] && { printf 'agy -p on argv is not the stdin transport\n' >&2; exit 2; }
+    cat >> "$AGY_STDIN"
     model=""
     prev=""
     for arg in "\$@"; do
@@ -45,7 +48,7 @@ case "\${1:-}" in
     done
     case "\$model" in
       gemini-3.8-flash-low|gemini-3.8-flash-medium|gemini-3.8-flash-high)
-        printf '%s\n' '{"status":"SUCCESS","response":"AGY_CAPABILITY_OK","usage":{"cache_read_tokens":1,"input_tokens":2,"output_tokens":3,"thinking_tokens":4,"total_tokens":10}}'
+        printf '%s\n' '{"event":"result","result":{"status":"SUCCESS","response":"AGY_CAPABILITY_OK","usage":{"cache_read_tokens":1,"input_tokens":2,"output_tokens":3,"thinking_tokens":4,"total_tokens":10}}}'
         exit 0
         ;;
       *)
@@ -63,6 +66,8 @@ EOF
 setup_fakes() {
   BIN="$TEST_TMP/bin"
   AGY_LOG="$TEST_TMP/agy.log"
+  AGY_STDIN="$TEST_TMP/agy.stdin"
+  export AGY_STDIN
   mkdir -p "$BIN" "$TEST_TMP/home"
   : > "$AGY_LOG"
   export PATH="$BIN:$PATH"
@@ -86,7 +91,7 @@ assert_contains "$(cat "$OUT_JSON")" "gemini-3.8-flash-high" "agy claims bind to
 # Every --model the fake saw must be a listed id.
 while IFS= read -r line; do
   case "$line" in
-    -p*)
+    --model*)
       model=""
       prev=""
       for arg in $line; do
@@ -100,7 +105,11 @@ while IFS= read -r line; do
       ;;
   esac
 done < "$AGY_LOG"
-assert_contains "$(grep -- '-p' "$AGY_LOG")" "gemini-3.8-flash-high" "paid probe used the resolved id"
+assert_contains "$(grep -- '--input-format' "$AGY_LOG")" "gemini-3.8-flash-high" "paid probe used the resolved id"
+# BL-0298: the prompt travels on stdin, never on argv.
+assert_contains "$(cat "$AGY_STDIN")" "Return exactly AGY_CAPABILITY_OK" "paid probe prompt arrived on stdin"
+assert_not_contains "$(cat "$AGY_LOG")" "Return exactly" "paid probe argv does not carry the prompt"
+assert_not_contains "$(cat "$AGY_LOG")" " -p " "paid probe argv has no -p"
 
 install_agy noflash
 : > "$AGY_LOG"
@@ -110,7 +119,7 @@ NEG_EXIT=$?
 set -e
 assert_neq "0" "$NEG_EXIT" "missing flash inventory fails closed"
 assert_contains "$(cat "$TEST_TMP/neg.err")" "no current canonical model" "stderr carries the library reason"
-assert_not_contains "$(cat "$AGY_LOG")" "-p" "failed resolution never calls agy -p"
+assert_not_contains "$(cat "$AGY_LOG")" "--input-format" "failed resolution never makes the paid agy call"
 
 assert_not_contains "$(cat "$PROBE")" "gemini-3.6" "probe script has no gemini-3.6 literal"
 

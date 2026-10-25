@@ -60,27 +60,21 @@ function resolveAgyAlias(requested) {
   agyAliasCache.set(requested, ids[0]);
   return ids[0];
 }
-// agy has no --prompt-file: judge-B's prompt travels as ONE argv string, and Linux caps a single
-// argv string at MAX_ARG_STRLEN = 32 x PAGE_SIZE. Past that, spawn fails before agy starts. Node
-// surfaces that as an errored child rather than a silent stall, so this is a clarity guard, not a
-// correctness one — but every agy caller in the repo should name the same wall the same way
-// (scripts/lib/agy-argv-ceiling.sh is the shell owner of this constant).
-function agyArgvCeilingBytes() {
-  let page = 4096;
-  try {
-    const out = spawnSync('getconf', ['PAGESIZE'], { encoding: 'utf8', timeout: 5000 });
-    const parsed = Number(String(out.stdout || '').trim());
-    if (Number.isInteger(parsed) && parsed > 0) page = parsed;
-  } catch (_e) { /* keep the 4K default */ }
-  return 32 * page - 1;   // -1 for the NUL execve appends
-}
-
-function assertAgyArgvFits(prompt, what) {
-  const bytes = Buffer.byteLength(prompt, 'utf8');
-  const ceiling = agyArgvCeilingBytes();
+// agy judge prompts travel on STDIN as stream-json through the shared helper (BL-0298), so the old
+// single-argv MAX_ARG_STRLEN wall is gone. The stdin path has its own fail-closed byte ceiling
+// (agy-stream-json.js stdinMaxBytes): past it agy can answer SUCCESS with an empty response.
+const agyStream = require('./lib/agy-stream-json');
+function assertAgyStdinFits(prompt, what) {
+  const bytes = Buffer.byteLength(agyStream.encodeUserLine(prompt), 'utf8');
+  const ceiling = agyStream.stdinMaxBytes();
   if (bytes > ceiling) {
-    throw new Error(`${what} is ${bytes} bytes, over the ${ceiling}-byte single-argv ceiling agy can be exec'd with (Linux MAX_ARG_STRLEN); agy has no --prompt-file, so this cannot be streamed — shrink the node report or artifact set`);
+    throw new Error(`${what} is ${bytes} bytes, over the ${ceiling}-byte fail-closed agy stdin ceiling (agy_stdin_ceiling, BL-0021); shrink the node report or artifact set`);
   }
+}
+// stdout of an agy stream-json run -> the model's response text ('' when the run carries no usable result).
+function agyResponseText(raw) {
+  const parsed = agyStream.parseStream(raw);
+  return parsed.ok ? parsed.result.response : '';
 }
 
 const synthModel = process.env.QC_SYNTH_MODEL || 'claude-haiku-4-5';
@@ -406,12 +400,12 @@ async function main() {
         ];
       } else {
         childBin = agyBin;
-        assertAgyArgvFits(prompt, 'the judge-B prompt');
+        assertAgyStdinFits(prompt, 'the judge-B prompt');
         childArgs = [
-          '-p', prompt,
           '--model', resolveAgyAlias(judgeBModelRequested),
           '--dangerously-skip-permissions',
-          '--print-timeout', '8m'
+          '--print-timeout', '8m',
+          ...agyStream.STREAM_FLAGS
         ];
       }
 
@@ -430,7 +424,7 @@ async function main() {
         child.stdin.write(prompt);
         child.stdin.end();
       } else {
-        child.stdin.end();
+        child.stdin.end(agyStream.encodeUserLine(prompt));
       }
 
       child.on('error', (err) => {
@@ -448,8 +442,9 @@ async function main() {
           fs.copyFileSync(verdictTarget, outfile);
           success = true;
         } else {
-          if (agyOut.trim().length > 0) {
-            fs.writeFileSync(outfile, agyOut);
+          const judgeText = isCodex ? agyOut : agyResponseText(agyOut);
+          if (judgeText.trim().length > 0) {
+            fs.writeFileSync(outfile, judgeText);
             success = true;
           }
         }
@@ -559,12 +554,12 @@ async function main() {
         ];
       } else {
         childBin = agyBin;
-        assertAgyArgvFits(prompt, 'the judge-B prompt');
+        assertAgyStdinFits(prompt, 'the judge-B prompt');
         childArgs = [
-          '-p', prompt,
           '--model', resolveAgyAlias(judgeBModelRequested),
           '--dangerously-skip-permissions',
-          '--print-timeout', '8m'
+          '--print-timeout', '8m',
+          ...agyStream.STREAM_FLAGS
         ];
       }
 
@@ -583,7 +578,7 @@ async function main() {
         child.stdin.write(prompt);
         child.stdin.end();
       } else {
-        child.stdin.end();
+        child.stdin.end(agyStream.encodeUserLine(prompt));
       }
 
       child.on('error', () => {
@@ -598,7 +593,7 @@ async function main() {
         if (fs.existsSync(verdictTarget) && fs.statSync(verdictTarget).size > 0) {
           out = fs.readFileSync(verdictTarget, 'utf8');
         } else {
-          out = agyOut;
+          out = isCodex ? agyOut : agyResponseText(agyOut);
         }
 
         try { fs.rmSync(judgeDir, { recursive: true, force: true }); } catch (_) {}

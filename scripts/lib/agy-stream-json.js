@@ -45,6 +45,8 @@
 //                3  agy_stdin_ceiling — the encoded prompt line is over STDIN_MAX_BYTES; agy was NOT run
 //                127 the agy command could not be spawned (spawn error, stderr names it)
 //                2  usage error
+//   --text-compat (opt-in, for callers that replace a plain `agy -p` text run): one output rule, see
+//   textCompatClose below. Default behaviour (without the flag) is unchanged.
 
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -78,6 +80,19 @@ function stdinMaxBytes(env = process.env) {
 
 function encodeUserLine(prompt) {
   return `${JSON.stringify({ event: 'user', message: { content: String(prompt) } })}\n`;
+}
+
+// The last `result` event's result object, or null.
+function lastResult(text) {
+  let result = null;
+  for (const line of String(text).split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    let ev;
+    try { ev = JSON.parse(t); } catch (_e) { continue; }
+    if (ev && ev.event === 'result' && ev.result && typeof ev.result === 'object') result = ev.result;
+  }
+  return result;
 }
 
 // Returns {ok:true, result} for SUCCESS, {ok:false, reason} for ERROR / no result event.
@@ -120,8 +135,10 @@ function main(argv) {
   let promptFile = '';
   let prefix = '';
   let emit = 'response';
+  let textCompat = false;
   let i = 1;
   for (; i < argv.length && argv[i] !== '--'; i += 2) {
+    if (argv[i] === '--text-compat') { textCompat = true; i -= 1; continue; }
     if (argv[i] === '--prompt-file') promptFile = argv[i + 1] || '';
     else if (argv[i] === '--prefix') prefix = argv[i + 1] || '';
     else if (argv[i] === '--emit') emit = argv[i + 1] || '';
@@ -131,6 +148,7 @@ function main(argv) {
   const cmd = argv.slice(i + 1);
   if (cmd.length === 0) usage('empty agy command');
   if (emit !== 'response' && emit !== 'envelope') usage('--emit must be response|envelope');
+  if (textCompat && emit !== 'response') usage('--text-compat only combines with --emit response');
   let prompt = prefix;
   if (promptFile) {
     try { prompt += fs.readFileSync(promptFile, 'utf8'); } catch (e) { usage(`cannot read prompt file: ${e.message}`); }
@@ -156,7 +174,12 @@ function main(argv) {
     process.exit(127);
   });
   child.on('close', (code, signal) => {
-    if (code !== 0) process.exit(code == null ? 128 + ({ SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 }[signal] || 1) : code);
+    const exitCode = () => (code == null ? 128 + ({ SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 }[signal] || 1) : code);
+    if (textCompat) { // --text-compat has ONE output rule, see textCompatClose
+      const raw = Buffer.concat(chunks);
+      process.exit(textCompatClose(raw, code === 0 ? 0 : exitCode()));
+    }
+    if (code !== 0) process.exit(exitCode());
     const parsed = parseStream(Buffer.concat(chunks).toString('utf8'));
     if (!parsed.ok) {
       process.stderr.write(`agy-stream-json.js: ${parsed.reason}\n`);
@@ -165,6 +188,34 @@ function main(argv) {
     if (parsed.note) process.stderr.write(`agy-stream-json.js: ${parsed.note}\n`);
     process.stdout.write(emit === 'envelope' ? `${JSON.stringify(parsed.result)}\n` : parsed.result.response);
   });
+}
+
+// --text-compat: stands in for a plain `agy -p` text run. The old text mode printed whatever agy produced, then a
+// newline, and callers classify failures from that text (authentication wording, ...). One rule, no branch on
+// the text's content (no trim, no length): when a `result` event parses, write its text byte for byte (response
+// when it is a string, else error) plus one newline; when none parses, replay agy's raw stdout.
+// Exit code: agy's own non-zero code passes through; with agy exit 0 it is 0 for status SUCCESS with a string
+// response (empty or whitespace-only included: the old text mode exited 0 there and the caller's own
+// empty-output / oracle classification decides), 1 otherwise (status not SUCCESS, no result event, or the
+// input-token ceiling reached: the BL-0021 silent-truncation guard stays on).
+function textCompatClose(raw, agyCode) {
+  const r = lastResult(raw.toString('utf8'));
+  if (!r) {
+    if (raw.length) fs.writeSync(1, raw);
+    if (agyCode === 0) process.stderr.write('agy-stream-json.js: agy emitted no result event\n');
+    return agyCode === 0 ? 1 : agyCode;
+  }
+  const text = typeof r.response === 'string' ? r.response
+    : (r.error == null ? '' : (typeof r.error === 'string' ? r.error : JSON.stringify(r.error)));
+  fs.writeSync(1, `${text}\n`);
+  if (agyCode !== 0) return agyCode;
+  if (r.status !== 'SUCCESS' || typeof r.response !== 'string') return 1;
+  const used = r.usage && typeof r.usage === 'object' ? r.usage.input_tokens : undefined;
+  if (typeof used === 'number' && Number.isFinite(used) && used >= inputTokenCeiling()) {
+    process.stderr.write(`agy-stream-json.js: agy_input_truncated: ${used} input tokens at or over the ${inputTokenCeiling()}-token fail-closed ceiling (BL-0021)\n`);
+    return 1;
+  }
+  return 0;
 }
 
 if (require.main === module) main(process.argv.slice(2));

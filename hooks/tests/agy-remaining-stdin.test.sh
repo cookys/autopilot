@@ -3,7 +3,7 @@
 # through lib/agy-stream-json.js (prompt as one stream-json line on stdin). A recording fake agy captures
 # argv and stdin for each site; the prompt text must be on stdin and absent from argv.
 #   sites: probe-engine-capability.sh (agy), qc-panel.js (judge B)
-#   (run-orchestration-eval.sh is deliberately NOT changed: its hash is pinned by the P2 prereg manifests)
+#   (run-orchestration-eval.sh moved to the same transport in BL-0302: see orchestration-eval-agy-stdin.test.sh)
 #   (probe-harness-capabilities.sh is covered by probe-harness-capabilities-agy-alias.test.sh,
 #    qualification-review-provider.js by scripts/qualification-review-provider.test.js)
 # Negative control: AGY_REMAINING_NEGCTL=1 makes the fake reject any run that is NOT stdin transport

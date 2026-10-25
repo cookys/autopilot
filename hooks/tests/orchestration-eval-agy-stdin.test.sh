@@ -26,7 +26,7 @@ fs.writeFileSync(`${process.env.REC}/${n}.argv`, JSON.stringify(a));
 fs.writeFileSync(`${process.env.REC}/${n}.stdin`, stdin);
 const mode = process.env.FAKE_MODE || 'ok';
 const legacy = a.includes('-p');
-const TEXT = { auth: ['authentication invalid API key', 7], exit3: ['some diagnostic', 3], empty: ['', 0], ok: ['FAKE-AGY-RESPONSE', 0] }[mode];
+const TEXT = { auth: ['authentication invalid API key', 7], exit3: ['some diagnostic', 3], empty: ['', 0], ws: ['   ', 0], nl: ['line one\n', 0], ok: ['FAKE-AGY-RESPONSE', 0] }[mode];
 const [text, code] = TEXT;
 if (legacy) { process.stdout.write(`${text}\n`); process.exit(code); }
 const ev = (o) => process.stdout.write(`${JSON.stringify(o)}\n`);
@@ -85,7 +85,7 @@ run_mode() { # <label> <harness> <mode> -> sets CAUSE, RUNLOG_FILE
   CAUSE="$(node -e 'try{process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).failure_cause))}catch(e){process.stdout.write("NO-RESULT")}' "$o/result.json")"
   RUNLOG_FILE="$o/run.log"
 }
-for m in auth exit3 empty ok; do
+for m in auth exit3 empty ws nl ok; do
   run_mode base "$BASE_H" "$m"; BASE_CAUSE="$CAUSE"; BASE_LOG="$RUNLOG_FILE"
   run_mode head "$HEAD_H" "$m"; HEAD_CAUSE="$CAUSE"; HEAD_LOG="$RUNLOG_FILE"
   assert_eq "$BASE_CAUSE" "$HEAD_CAUSE" "agy-eval[$m]: failure_cause equals the text-transport harness ($BASE_CAUSE)"

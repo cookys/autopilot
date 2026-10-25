@@ -45,9 +45,8 @@
 //                3  agy_stdin_ceiling — the encoded prompt line is over STDIN_MAX_BYTES; agy was NOT run
 //                127 the agy command could not be spawned (spawn error, stderr names it)
 //                2  usage error
-//   --text-compat (opt-in, for callers that replace a plain `agy -p` text run): the response is followed by a
-//   newline, an empty SUCCESS response exits 0 (empty line) instead of 1, and on every failure path agy's raw
-//   stdout is replayed on stdout so the caller's log keeps agy's own diagnostics. Default behaviour unchanged.
+//   --text-compat (opt-in, for callers that replace a plain `agy -p` text run): one output rule, see
+//   textCompatClose below. Default behaviour (without the flag) is unchanged.
 
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -149,6 +148,7 @@ function main(argv) {
   const cmd = argv.slice(i + 1);
   if (cmd.length === 0) usage('empty agy command');
   if (emit !== 'response' && emit !== 'envelope') usage('--emit must be response|envelope');
+  if (textCompat && emit !== 'response') usage('--text-compat only combines with --emit response');
   let prompt = prefix;
   if (promptFile) {
     try { prompt += fs.readFileSync(promptFile, 'utf8'); } catch (e) { usage(`cannot read prompt file: ${e.message}`); }
@@ -174,37 +174,48 @@ function main(argv) {
     process.exit(127);
   });
   child.on('close', (code, signal) => {
-    // --text-compat: the old `agy -p` text mode left agy's plain text in the caller's log whatever happened,
-    // and callers classify failures from that text (authentication wording, ...). On a failure path the text of
-    // the last `result` event (response, else error) plus one newline is written to stdout; only when no
-    // result event parses at all is the raw stdout replayed. Without the flag nothing changes.
-    const replayText = () => {
-      if (!textCompat) return;
+    const exitCode = () => (code == null ? 128 + ({ SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 }[signal] || 1) : code);
+    if (textCompat) { // --text-compat has ONE output rule, see textCompatClose
       const raw = Buffer.concat(chunks);
-      const r = lastResult(raw.toString('utf8'));
-      if (r) {
-        const t = typeof r.response === 'string' && r.response !== '' ? r.response
-          : (r.error == null ? '' : (typeof r.error === 'string' ? r.error : JSON.stringify(r.error)));
-        fs.writeSync(1, `${t}\n`);
-      } else if (raw.length) fs.writeSync(1, raw);
-    };
-    if (code !== 0) replayText();
-    if (code !== 0) process.exit(code == null ? 128 + ({ SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGHUP: 1 }[signal] || 1) : code);
-    const parsed = parseStream(Buffer.concat(chunks).toString('utf8'));
-    // --text-compat: an empty SUCCESS response is what `agy -p` text mode printed too (an empty line, exit 0);
-    // the caller's own empty-output / oracle classification decides, so it is not turned into a helper failure.
-    if (!parsed.ok && textCompat && /^agy_empty_response/.test(parsed.reason)) {
-      process.stdout.write('\n'); // no stderr line either: the old text mode printed nothing here
-      return;
+      process.exit(textCompatClose(raw, code === 0 ? 0 : exitCode()));
     }
+    if (code !== 0) process.exit(exitCode());
+    const parsed = parseStream(Buffer.concat(chunks).toString('utf8'));
     if (!parsed.ok) {
-      replayText();
       process.stderr.write(`agy-stream-json.js: ${parsed.reason}\n`);
       process.exit(1);
     }
-    if (parsed.note && !textCompat) process.stderr.write(`agy-stream-json.js: ${parsed.note}\n`);
-    process.stdout.write(emit === 'envelope' ? `${JSON.stringify(parsed.result)}\n` : parsed.result.response + (textCompat && emit === 'response' ? '\n' : ''));
+    if (parsed.note) process.stderr.write(`agy-stream-json.js: ${parsed.note}\n`);
+    process.stdout.write(emit === 'envelope' ? `${JSON.stringify(parsed.result)}\n` : parsed.result.response);
   });
+}
+
+// --text-compat: stands in for a plain `agy -p` text run. The old text mode printed whatever agy produced, then a
+// newline, and callers classify failures from that text (authentication wording, ...). One rule, no branch on
+// the text's content (no trim, no length): when a `result` event parses, write its text byte for byte (response
+// when it is a string, else error) plus one newline; when none parses, replay agy's raw stdout.
+// Exit code: agy's own non-zero code passes through; with agy exit 0 it is 0 for status SUCCESS with a string
+// response (empty or whitespace-only included: the old text mode exited 0 there and the caller's own
+// empty-output / oracle classification decides), 1 otherwise (status not SUCCESS, no result event, or the
+// input-token ceiling reached: the BL-0021 silent-truncation guard stays on).
+function textCompatClose(raw, agyCode) {
+  const r = lastResult(raw.toString('utf8'));
+  if (!r) {
+    if (raw.length) fs.writeSync(1, raw);
+    if (agyCode === 0) process.stderr.write('agy-stream-json.js: agy emitted no result event\n');
+    return agyCode === 0 ? 1 : agyCode;
+  }
+  const text = typeof r.response === 'string' ? r.response
+    : (r.error == null ? '' : (typeof r.error === 'string' ? r.error : JSON.stringify(r.error)));
+  fs.writeSync(1, `${text}\n`);
+  if (agyCode !== 0) return agyCode;
+  if (r.status !== 'SUCCESS' || typeof r.response !== 'string') return 1;
+  const used = r.usage && typeof r.usage === 'object' ? r.usage.input_tokens : undefined;
+  if (typeof used === 'number' && Number.isFinite(used) && used >= inputTokenCeiling()) {
+    process.stderr.write(`agy-stream-json.js: agy_input_truncated: ${used} input tokens at or over the ${inputTokenCeiling()}-token fail-closed ceiling (BL-0021)\n`);
+    return 1;
+  }
+  return 0;
 }
 
 if (require.main === module) main(process.argv.slice(2));

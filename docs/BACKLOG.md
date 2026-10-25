@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0302 -->
+<!-- next-id: BL-0305 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -321,14 +321,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-01
 - **Origin**: self
-- **Problem**: 每回合重新提醒模型守規則，行為沒有明顯進步，因此改做每回合驗證。P2-2 已合併；第一批 P2-3 判為 U（憑證過期），儀器已修，Haiku 4.5 重跑 2026-10-25 開跑，之後再跑 Haiku 5.5。
+- **Problem**: 每回合重新提醒模型守規則，行為沒有明顯進步，因此改做每回合驗證。第一批 P2-3 判 U（憑證過期）；Haiku 4.5 重跑 p2-3r 因預測成本超上限中止，也判 U。p2-3r2 已於 2026-10-25 13:44 台北開跑，之後做 BL-0295 評測與 Haiku 5.5 批次。
 - **Impact**: 長時間工作時模型仍可能漸漸偏離規定，目前沒有機制擋。 (draft)
-- **Trigger**: the Haiku 4.5 rerun (2026-10-25) and the Haiku 5.5 batch of P2-3 finish and are judged. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
+- **Trigger**: the p2-3r2 Haiku 4.5 rerun (started 2026-10-25 13:44 Taipei) and the Haiku 5.5 batch (p2-3-h55) of P2-3 finish and are judged. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 - **Pointer**: docs/plans/2026-10-20-per-turn-gate.md
-- **Context**: P1 rerun e13ff469e: M1 6/30, M2 13/30, M3 0/30, deviation accepted (d-baf11c30). P2 cost approved (d-15c0364c): C arm 18, ON arm 30 USD. P0 e726bc485; P2-0 2c4e5ccb8; P2-1 e68371406.
+- **Context**: p2-3r U (STOP_COST); p2-3r2 caps C 26/ON 40, 1c5935da6. P1 rerun e13ff469e: M1 6/30, M2 13/30, M3 0/30, deviation accepted (d-baf11c30). P2 cost approved (d-15c0364c): C arm 18, ON arm 30 USD. P0 e726bc485; P2-0 2c4e5ccb8; P2-1 e68371406.
 
 ### Mission graph scheduler 與 portfolio optimization
 - **Id**: BL-0056
@@ -1179,19 +1179,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED llm-playground c4140 2026-10-24
 - **Pointer**: docs/backlog/long-session-background-work-not-reaped.md
 
-### Remaining agy argv call sites should use agy-stream-json.js
-- **Id**: BL-0298
-- **Status**: open
-- **Since**: 2026-10-24
-- **Origin**: self
-- **Problem**: 還有幾處呼叫 agy 的地方仍把提示放在命令列參數，沒有走共用的 stdin 傳輸。屬一致性問題，不是正確性問題。
-- **Impact**: 不同入口行為不一致，之後維護要記得多處。
-- **Trigger**: any of these call sites is edited
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: bldone9 2026-10-24 audit after agystdin
-- **Pointer**: docs/backlog/agy-remaining-argv-call-sites.md
-
 ### fbtool P1: findings-write protection must land before the cc runner
 - **Id**: BL-0299
 - **Status**: open
@@ -1217,3 +1204,42 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: XS
 - **Source**: bldone9 2026-10-24 observations on CC 2.1.309
 - **Pointer**: docs/backlog/claude-code-upstream-report-draft.md
+
+### eval harness --runner agy still passes the prompt as argv
+- **Id**: BL-0302
+- **Status**: open
+- **Since**: 2026-10-25
+- **Origin**: self
+- **Problem**: 其中一支評測腳本的 agy 模式仍把提示放在命令列參數，沒有改走 stdin。上一輪刻意沒動它，因為 P2-3 的前置登錄釘住了該檔的雜湊，改了就等於改動已登錄的評測。
+- **Impact**: 這個入口和其他 agy 呼叫點行為不一致；提示太長時可能撞命令列長度上限。
+- **Trigger**: all BL-0055 P2 batches have finished and been judged
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: BL-0298 unit review 2026-10-25
+- **Pointer**: docs/backlog/eval-orchestration-agy-argv.md
+
+### run-implementer-matrix.sh pins a stale implementer pack digest
+- **Id**: BL-0303
+- **Status**: open
+- **Since**: 2026-10-25
+- **Origin**: self
+- **Problem**: implementer 矩陣評測腳本寫死的 pack 雜湊，和目前 pack 檔的實際雜湊不一致，正式執行一開始檢查輸入就會失敗。這是既有問題，不是新引入。
+- **Impact**: implementer 矩陣評測無法正式執行，要先決定是重新凍結 pack 還是還原 pack。
+- **Trigger**: next implementer matrix run is planned, or the script or its pack is edited
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: BL-0294 hand finding 2026-10-25
+- **Pointer**: docs/backlog/implementer-matrix-stale-pack-digest.md
+
+### failure-escalation hook output never reaches the model
+- **Id**: BL-0304
+- **Status**: open
+- **Since**: 2026-10-25
+- **Origin**: self
+- **Problem**: 失敗升級 hook 在工具執行後用純文字輸出升級提示。依官方文件，這種輸出只進除錯日誌，模型看不到；要讓模型看到得改用 JSON 的附加內容欄位，或用錯誤輸出配 exit 2。
+- **Impact**: 升級提示實際上沒有送到模型，這個 hook 等於空轉；其他已註冊 hook 可能有同樣問題。
+- **Trigger**: BL-0241 guard-port Phase 1 has merged (same file), or any hook is found whose output the model never sees
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: depth-0 verification 2026-10-25
+- **Pointer**: docs/backlog/hook-output-channel-not-reaching-model.md

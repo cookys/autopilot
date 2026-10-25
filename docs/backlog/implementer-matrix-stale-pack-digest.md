@@ -1,0 +1,3 @@
+# run-implementer-matrix.sh pins a stale implementer pack digest
+
+BL-0303. `evals/skill-transport/run-implementer-matrix.sh` line 139 hardcodes pack sha256 `3f29d5fd224d45ac96630e642fa9ada1f24446d538b6c2b2ed020ad3f8a7beca`, and `evals/skill-transport/implementer-tasks.json` `pack_sha256` carries the same value. The current `evals/skill-transport/packs/implementer-pack.md` hashes to `0e4f4b71f8d6f079f235357eede59289f0d073be21854f004bac48cd7f486b7c` (sha256sum, 2026-10-25), so a real run dies at the "frozen implementer pack digest drift" check. Pre-existing; found by the BL-0294 hand. Decide: re-freeze the pack digest in both files, or restore the pack to the frozen bytes.

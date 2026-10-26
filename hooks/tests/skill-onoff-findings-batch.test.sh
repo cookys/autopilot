@@ -830,4 +830,61 @@ rc=0; out=$(clean env PATH="$NOBIN" "$(command -v node)" "$BASE/run-fbatch-campa
 [ "$rc" = 2 ] || fail "no claude on PATH: rc=$rc want 2: $out"
 grep -q 'claude is not on PATH' <<<"$out" || fail "no claude message: $out"
 
+echo "=== stamp: findings-batch row is frozen; editing any frozen file turns --check red (negative controls) ==="
+clean node "$BASE/stamp-prereg.js" --row findings-batch --check > /dev/null 2>&1 < /dev/null || fail "findings-batch frozen row does not check ok"
+STAMP_ROOT="$TEST_TMP/stamp-root"
+mkdir -p "$STAMP_ROOT/prereg" "$STAMP_ROOT/packs"
+cp "$BASE/prereg/FROZEN.json" "$STAMP_ROOT/prereg/"
+cp "$BASE/packs/manifest.json" "$STAMP_ROOT/packs/"
+node -e '
+  const fs = require("fs"), path = require("path");
+  const rec = JSON.parse(fs.readFileSync(process.argv[1] + "/prereg/FROZEN.json", "utf8"))["findings-batch"];
+  for (const f of Object.keys(rec.files)) { const d = path.join(process.argv[2], f); fs.mkdirSync(path.dirname(d), { recursive: true }); fs.copyFileSync(path.join(process.argv[1], f), d); }' "$BASE" "$STAMP_ROOT"
+stamp_check() { clean node "$BASE/stamp-prereg.js" --row findings-batch --root "$STAMP_ROOT" --check 2>&1 < /dev/null; }
+out=$(stamp_check) || fail "copied frozen root must check ok: $out"
+for f in lib/transcript-query.js fbatch/lib.js fbatch/cell.js fbatch/cc-build.js fbatch/gate.md score-fbatch.js run-fbatch-campaign.js run-skill-onoff-matrix-fbatch.sh run-skill-onoff-eval-fbatch.sh fbatch/arms/change/code-review.md fbatch/cc/stubs/scripts/wait-dispatch-results.js fbatch/cc/tasks/fb-pool/task.md prereg/findings-batch.json; do
+  cp "$STAMP_ROOT/$f" "$TEST_TMP/stamp-orig"
+  case "$f" in
+    *.json) sed -i 's/"reps": 5/"reps": 6/' "$STAMP_ROOT/$f" ;; # a JSON file must stay parseable
+    lib/transcript-query.js) printf 'process.exit(42);\n' > "$STAMP_ROOT/$f" ;; # the shared reader every cell's skill-invoked check runs
+    *) printf '\n# mutated\n' >> "$STAMP_ROOT/$f" ;;
+  esac
+  cmp -s "$TEST_TMP/stamp-orig" "$STAMP_ROOT/$f" && fail "the mutation of $f changed nothing"
+  rc=0; out=$(stamp_check) || rc=$?
+  cp "$TEST_TMP/stamp-orig" "$STAMP_ROOT/$f"
+  [ "$rc" = 2 ] || fail "editing frozen file $f must turn --check red (rc=$rc): $out"
+  grep -q "$f" <<<"$out" || fail "--check must name $f: $out"
+done
+rm "$STAMP_ROOT/fbatch/arms/base/dev-flow-wait.md"
+rc=0; out=$(stamp_check) || rc=$?
+[ "$rc" = 2 ] && grep -q 'gone' <<<"$out" || fail "a deleted frozen file must turn --check red: rc=$rc $out"
+echo "=== stamp: every file the evaluation reads (dependency closure) is in freeze_files ==="
+node -e '
+  const fs = require("fs"), path = require("path");
+  const base = process.argv[1];
+  const { closure } = require(path.join(base, "closure-scan.js"));
+  const pre = JSON.parse(fs.readFileSync(path.join(base, "prereg/findings-batch.json"), "utf8"));
+  if (!Array.isArray(pre.closure_roots) || pre.closure_roots.length === 0) { console.error("prereg has no closure_roots"); process.exit(1); }
+  const c = closure(base, [...pre.closure_roots, pre.campaign_script]);
+  const uncovered = (freeze) => c.files.filter((f) => !freeze.some((e) => f === e || f.startsWith(e + "/")));
+  const real = uncovered(pre.freeze_files);
+  if (real.length) { console.error("closure files missing from freeze_files: " + real.join(", ")); process.exit(1); }
+  if (!c.files.includes("lib/transcript-query.js") || !c.files.includes("fbatch/gate.md") || !c.files.includes("fbatch/cc/stubs/scripts/_ledger.js")) { console.error("closure lost a known dependency: " + c.files.length); process.exit(1); }
+  // negative control: dropping a closure file from the list must be seen
+  const dropped = uncovered(pre.freeze_files.filter((e) => e !== "lib/transcript-query.js"));
+  if (dropped.join() !== "lib/transcript-query.js") { console.error("dropping lib/transcript-query.js from freeze_files was not detected: " + dropped.join()); process.exit(1); }
+  const droppedDir = uncovered(pre.freeze_files.filter((e) => e !== "fbatch/arms"));
+  if (droppedDir.length !== 8) { console.error("dropping fbatch/arms should uncover its 8 files, got " + droppedDir.length); process.exit(1); }
+  console.log("closure: " + c.files.length + " files, all frozen; unresolved: " + JSON.stringify(c.unresolved));
+' "$BASE" || fail "freeze_files does not cover the dependency closure"
+echo "=== stamp: a freeze list that misses a closure file is refused by the tool (exit 2) ==="
+node -e '
+  const fs = require("fs"), f = process.argv[1] + "/prereg/findings-batch.json";
+  const p = JSON.parse(fs.readFileSync(f, "utf8")); p.freeze_files = p.freeze_files.filter((e) => e !== "lib/transcript-query.js");
+  fs.writeFileSync(f, JSON.stringify(p, null, 2) + "\n");' "$STAMP_ROOT"
+rc=0; out=$(stamp_check) || rc=$?
+[ "$rc" = 2 ] && grep -q 'lib/transcript-query.js' <<<"$out" && grep -q 'dependency closure' <<<"$out" || fail "a freeze list missing a closure file must be refused and name it (rc=$rc): $out"
+echo "=== stamp: rows stamped before stay ok ==="
+clean node "$BASE/stamp-prereg.js" --row bpack --check > /dev/null 2>&1 < /dev/null || fail "bpack frozen row no longer checks ok"
+
 echo "findings-batch cc tests passed"

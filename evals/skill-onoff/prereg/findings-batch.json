@@ -1,6 +1,6 @@
 {
   "row": "findings-batch",
-  "status": "draft, not stamped: FROZEN.json is stamped by the owner-approved P1 step, before the first scored cell",
+  "status": "stamped 2026-10-26: stamped before any scored cell; pilot rows are not scored",
   "plan": "docs/plans (findings batch plan v3, sections 2-5)",
   "model": "sonnet",
   "reps": 5,
@@ -123,5 +123,33 @@
       },
       "evidence": "docs/plans/evidence/2026-10-24-findings-batch/PILOT.md (fb-deadman cells), results/fbatch-pilot.jsonl"
     }
+  ],
+  "campaign_script": "run-fbatch-campaign.js",
+  "freeze_files": [
+    "prereg/findings-batch.json",
+    "fbatch/lib.js",
+    "fbatch/cell.js",
+    "fbatch/cc-build.js",
+    "fbatch/gate.md",
+    "fbatch/stoplane.md",
+    "fbatch/arms",
+    "lib/transcript-query.js",
+    "fbatch/cc",
+    "score-fbatch.js",
+    "run-fbatch-campaign.js",
+    "run-skill-onoff-matrix-fbatch.sh",
+    "run-skill-onoff-eval-fbatch.sh"
+  ],
+  "closure_roots": [
+    "prereg/findings-batch.json",
+    "run-fbatch-campaign.js",
+    "score-fbatch.js",
+    "run-skill-onoff-matrix-fbatch.sh",
+    "run-skill-onoff-eval-fbatch.sh",
+    "fbatch/cell.js",
+    "fbatch/cc-build.js",
+    "fbatch/lib.js",
+    "fbatch/arms",
+    "fbatch/cc"
   ]
 }

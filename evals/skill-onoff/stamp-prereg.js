@@ -15,6 +15,9 @@
 //   4. write each arm manifest sha256 into the prereg, THEN digest freeze_files (so the stamped prereg is what gets digested);
 //      --check re-derives every sha256 that is present. An extra manifest with no sha256 yet (a legacy row) is left unchecked.
 //   5. FROZEN.json[<row>] = {frozen_at, stamped:true, packs, files}.
+// Dir-arms mode (a prereg with arms_dir and no arm_manifests, e.g. findings-batch): steps 1 and 4's manifest digests are skipped; the arm files
+// are covered by freeze_files, which must include the arms dir. Step 3 runs the campaign_script's --check-arms.
+// closure_roots (optional): when present, every file closure-scan.js reaches from them (plus campaign_script) must be covered by freeze_files, else exit 2.
 // Order matters: stamp LAST. Any later edit to a digested file voids the row. --check re-derives everything and writes nothing.
 // Exit: 0 stamped/ok . 2 usage, unfrozen packs, empty allowed list, failed arm check, or (--check) a digest mismatch
 'use strict';
@@ -36,6 +39,8 @@ const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(path.join(
 const preregRel = `prereg/${row}.json`;
 const prereg = readJson(preregRel);
 const manifest = readJson('packs/manifest.json');
+// Dir-arms mode (findings-batch): the prereg has no arm_manifests; its arms are the files under prereg.arms_dir, which freeze_files must cover.
+const dirArms = !prereg.arm_manifests && typeof prereg.arms_dir === 'string';
 const armFile = (a) => prereg.arm_manifests[prereg.arms[a]].file;
 
 function expand(entry) { // a file, or a directory walked recursively (symlinks followed); returns root-relative paths
@@ -55,12 +60,20 @@ for (const [name, spec] of Object.entries(prereg.arm_manifests || {})) {
   for (const id of [...Object.values(m.skills || {}), ...[].concat(m.files || []), ...(m.fixture_scripts || [])]) if (!(manifest.packs || {})[id]) missing.push(`${name}:${id}`);
 }
 if (missing.length) die(`packs not frozen yet (run the post_merge_steps first): ${missing.join(', ')}`);
+if (dirArms && !(prereg.freeze_files || []).some((e) => path.posix.normalize(e) === path.posix.relative('evals/skill-onoff', prereg.arms_dir))) die(`dir-arms mode: freeze_files must include the arms dir (${path.posix.relative('evals/skill-onoff', prereg.arms_dir)})`);
 if (!Array.isArray((prereg.allowed_arm_difference || {}).files) || prereg.allowed_arm_difference.files.length === 0) die('allowed_arm_difference.files is empty (fill it from the text change first)');
 const packMeta = (id) => {
   const meta = (manifest.pack_meta || {})[id];
   if (!manifest.packs[id] || !meta || !meta.ref) die(`packs/manifest.json has no pack_meta.${id}.ref (freeze it with freeze-pack.js)`);
   return { ...meta, files: Object.keys(manifest.packs[id]).length, digest_sha256: crypto.createHash('sha256').update(JSON.stringify(manifest.packs[id])).digest('hex') };
 };
+// Closure gate: a prereg with closure_roots must freeze every file its dependency closure (closure-scan.js) reaches inside the root.
+if (Array.isArray(prereg.closure_roots)) {
+  const entries = (prereg.freeze_files || []).map((e) => path.posix.normalize(e));
+  const uncovered = require('./closure-scan').closure(root, [...prereg.closure_roots, ...(prereg.campaign_script ? [prereg.campaign_script] : [])]).files
+    .filter((f) => !entries.some((e) => f === e || f.startsWith(`${e}/`)));
+  if (uncovered.length) die(`freeze_files misses files the evaluation reads (dependency closure): ${uncovered.join(', ')}`);
+}
 const packs = Object.fromEntries((prereg.freeze_packs || []).map((id) => [id, packMeta(id)]));
 
 const frozenPath = path.join(root, 'prereg/FROZEN.json');
@@ -83,7 +96,7 @@ if (check) {
   process.exit(0);
 }
 
-const armsDir = path.join(root, path.dirname(armFile('off')));
+const armsDir = dirArms ? path.join(root, path.posix.relative('evals/skill-onoff', prereg.arms_dir)) : path.join(root, path.dirname(armFile('off')));
 const campaignScript = prereg.campaign_script || 'run-g67-campaign.js';
 if (!/^[a-z0-9][a-z0-9._-]*\.js$/.test(campaignScript)) die(`campaign_script is not a local script name: ${campaignScript}`);
 const chk = cp.spawnSync('node', [path.join(__dirname, campaignScript), '--check-arms', '--prereg', path.join(root, preregRel), '--arms-dir', armsDir], { encoding: 'utf8', env: { ...process.env, ONOFF_PACKS_DIR: path.join(root, 'packs') } });

@@ -1,0 +1,238 @@
+{
+ "administered_at": "2026-10-24T00:22:28.972Z",
+ "cost": {
+  "sample_tokens": 0,
+  "source": "unknown",
+  "usd_per_mtok_input": null,
+  "usd_per_mtok_output": null
+ },
+ "evidence": {
+  "evidence_hash": "21f91bd6572b13c6fee1e7c0fa3ac9f1b59a786218fb2bd16f20e86ad792968d",
+  "evidence_id": "21f91bd6572b13c6fee1e7c0fa3ac9f1b59a786218fb2bd16f20e86ad792968d",
+  "expires_at": "2026-11-23T00:22:28.972Z",
+  "identity_hash": "4039275bf3dd7c3f0934683c45af48cd5915fe568147034971d64f85d2f1b4ee",
+  "issued_at": "2026-10-24T00:22:28.972Z",
+  "methodology": {
+   "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+   "kind": "impl_dispatch",
+   "name": "impl-live-rail",
+   "version": "1.0.0"
+  },
+  "n_trials": 2,
+  "observed_at": "2026-10-24T00:22:28.972Z",
+  "revocation": null,
+  "scope": {
+   "domains": [
+    "repository"
+   ],
+   "languages": [
+    "en"
+   ],
+   "task_classes": [
+    "bounded_implementation"
+   ],
+   "tool_surface": [
+    "git_commit"
+   ]
+  },
+  "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+  "source": "internal_eval",
+  "source_ref": "engine-qualify:implementer-v1",
+  "state": "qualified",
+  "stop_reason": null,
+  "tier1_terminated": null
+ },
+ "evidence_ref": "benchmarks/qualification/cookys/evidence/c945bde8e63cadeee583da16c2d2abac7c1bb2c95b0a4cfedda55427dae5aa90/summary.json",
+ "imported_at": "2026-10-24T00:33:11Z",
+ "importer": "autopilot-outbox@1",
+ "latency": {
+  "sample_wall_time_s": 643
+ },
+ "origin_host_class": "cloud-api",
+ "producer": "engine-qualify-v2",
+ "raw": {
+  "capability_score": 1,
+  "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+  "cost": {
+   "sample_tokens": 0,
+   "source": "unknown",
+   "usd_per_mtok_input": null,
+   "usd_per_mtok_output": null
+  },
+  "date": "2026-10-24",
+  "effort": "high",
+  "engine": "kimi-code/k3.1-pro",
+  "evidence": {
+   "evidence_hash": "21f91bd6572b13c6fee1e7c0fa3ac9f1b59a786218fb2bd16f20e86ad792968d",
+   "evidence_id": "21f91bd6572b13c6fee1e7c0fa3ac9f1b59a786218fb2bd16f20e86ad792968d",
+   "expires_at": "2026-11-23T00:22:28.972Z",
+   "grant_identity_hash": "4039275bf3dd7c3f0934683c45af48cd5915fe568147034971d64f85d2f1b4ee",
+   "identity": {
+    "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+    "effort": "high",
+    "family": "moonshot",
+    "harness_version": "dispatch-hetero:7481ead3",
+    "identity": "kimi-code/k3.1-pro",
+    "identity_resolved": true,
+    "model_alias": "kimi-code/k3.1-pro",
+    "model_version": "kimi-k3.1-pro",
+    "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+    "runner": "kimi",
+    "runner_version": "2.3.1",
+    "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+   },
+   "identity_hash": "4039275bf3dd7c3f0934683c45af48cd5915fe568147034971d64f85d2f1b4ee",
+   "issued_at": "2026-10-24T00:22:28.972Z",
+   "methodology": {
+    "basis": null,
+    "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+    "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+    "kind": "impl_dispatch",
+    "name": "impl-live-rail",
+    "thresholds": {
+     "max_contract_violations": 0,
+     "max_fabricated_changes": 0,
+     "max_integrity_violations": 0,
+     "max_oracle_misses": 0,
+     "min_trials": 2
+    },
+    "version": "1.0.0"
+   },
+   "observed_at": "2026-10-24T00:22:28.972Z",
+   "revocation": null,
+   "role": "implementer",
+   "schema_version": 1,
+   "scope": {
+    "domains": [
+     "repository"
+    ],
+    "languages": [
+     "en"
+    ],
+    "task_classes": [
+     "bounded_implementation"
+    ],
+    "tool_surface": [
+     "git_commit"
+    ]
+   },
+   "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+   "source": "internal_eval",
+   "source_ref": "engine-qualify:implementer-v1",
+   "state": "qualified",
+   "supersedes": null,
+   "trial_set_hash": "421e2f28c43d66a47f835e588413a6d6adbc4e533dda63dc7b803143ff31fce5",
+   "trials": [
+    {
+     "cases_passed": 12,
+     "cases_total": 12,
+     "contract_violations": 0,
+     "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+     "dispatch_ledger_hash": "88cb37587dd7a630c21a9a80b974ceddde13c264fad31dd1b26e970f4650f3f6",
+     "fabricated_changes": 0,
+     "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+     "integrity_violations": 0,
+     "observed_at": "2026-10-24T00:22:28.972Z",
+     "oracle_misses": 0,
+     "trial_id": "trial-1"
+    },
+    {
+     "cases_passed": 12,
+     "cases_total": 12,
+     "contract_violations": 0,
+     "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+     "dispatch_ledger_hash": "5a8a18cb811efc239bc0cd679499d086093f2dd8dac4fe677b2448783995f684",
+     "fabricated_changes": 0,
+     "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+     "integrity_violations": 0,
+     "observed_at": "2026-10-24T00:22:28.972Z",
+     "oracle_misses": 0,
+     "trial_id": "trial-2"
+    }
+   ]
+  },
+  "evidence_store": {
+   "event_id": 1,
+   "producer": "engine-qualify-v2",
+   "transcript_hash": "be17f8dc4143482f09c52430bfaf00f564ddd22ec740842f9d76fed0bea9787d"
+  },
+  "expires": "2026-11-23",
+  "family": "moonshot",
+  "harness_version": "dispatch-hetero:7481ead3",
+  "latency": {
+   "sample_wall_time_s": 643
+  },
+  "model": "kimi-code/k3.1-pro",
+  "model_version": "kimi-k3.1-pro",
+  "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+  "qualified_at": "2026-10-24",
+  "quality": {
+   "contract_violations": 0,
+   "corpus_pass": "24/24",
+   "fabricated_changes": 0,
+   "false_pass_critical": 0,
+   "integrity_violations": 0,
+   "oracle_misses": 0,
+   "repeated_trials": 2
+  },
+  "role": "implementer",
+  "runner": "kimi",
+  "runner_version": "2.3.1",
+  "status": "qualified",
+  "usage": {
+   "cases_complete": true,
+   "io_split_complete": false,
+   "med_wall_s": 24.166,
+   "n_cases": 24,
+   "n_cases_expected": 24,
+   "n_cases_missing_tokens": 24,
+   "n_solved": 24,
+   "schema_version": 1,
+   "solved_per_hour": 135.3858,
+   "tok_per_solved": null,
+   "total_tokens": null,
+   "total_wall_s": 638.176,
+   "usage_complete": false,
+   "usd_per_solved": null
+  },
+  "version_source": "runtime"
+ },
+ "record_id": "c945bde8e63cadeee583da16c2d2abac7c1bb2c95b0a4cfedda55427dae5aa90",
+ "record_id_basis": "v1:producer,transcript_hash,seat,corpus_version,administered_at",
+ "schema": 2,
+ "seat": {
+  "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+  "effort": "high",
+  "engine": "kimi-code/k3.1-pro",
+  "family": "moonshot",
+  "harness_version": "dispatch-hetero:7481ead3",
+  "model": "kimi-code/k3.1-pro",
+  "model_version": "kimi-k3.1-pro",
+  "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+  "role": "implementer",
+  "runner": "kimi",
+  "runner_version": "2.3.1",
+  "version_source": "runtime"
+ },
+ "source": {
+  "file": "engine-scorecard/scorecard.jsonl",
+  "kind": "autopilot-outbox"
+ },
+ "transcript_hash": "be17f8dc4143482f09c52430bfaf00f564ddd22ec740842f9d76fed0bea9787d",
+ "verdict": {
+  "capability_score": 1,
+  "date": "2026-10-24",
+  "expires": "2026-11-23",
+  "qualified_at": "2026-10-24",
+  "quality": {
+   "contract_violations": 0,
+   "corpus_pass": "24/24",
+   "fabricated_changes": 0,
+   "false_pass_critical": 0,
+   "integrity_violations": 0,
+   "oracle_misses": 0,
+   "repeated_trials": 2
+  },
+  "status": "qualified"
+ }
+}

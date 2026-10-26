@@ -1,0 +1,10 @@
+{
+ "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+ "effort": "default",
+ "engine": "opencode-go/beam-free",
+ "model": "opencode-go/beam-free",
+ "model_version": "beam-1.0-free",
+ "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+ "role": "implementer",
+ "runner": "opencode"
+}

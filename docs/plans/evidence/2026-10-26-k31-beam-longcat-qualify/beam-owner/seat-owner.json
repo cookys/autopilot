@@ -1,0 +1,10 @@
+{
+ "corpus_version": "owner-intent-control-v1.owner-intent-control-metamorphic-v1",
+ "effort": "default",
+ "engine": "opencode-go/beam-free",
+ "model": "opencode-go/beam-free",
+ "model_version": "beam-1.0-free",
+ "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+ "role": "owner",
+ "runner": "opencode"
+}

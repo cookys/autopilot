@@ -1,0 +1,10 @@
+{
+ "corpus_version": "consult-v6.consult-eval-generator-v1",
+ "effort": "high",
+ "engine": "kimi-code/k3.1-pro",
+ "model": "kimi-code/k3.1-pro",
+ "model_version": "kimi-k3.1-pro",
+ "prompt_config_hash": "1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635",
+ "role": "consult",
+ "runner": "kimi"
+}

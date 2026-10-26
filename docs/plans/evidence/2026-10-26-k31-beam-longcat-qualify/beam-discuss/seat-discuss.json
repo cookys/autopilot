@@ -1,0 +1,10 @@
+{
+ "corpus_version": "discuss-v4.discuss-v1",
+ "effort": "default",
+ "engine": "opencode-go/beam-free",
+ "model": "opencode-go/beam-free",
+ "model_version": "beam-1.0-free",
+ "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+ "role": "discuss",
+ "runner": "opencode"
+}

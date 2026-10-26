@@ -1,0 +1,239 @@
+{
+ "administered_at": "2026-10-25T16:12:33.714Z",
+ "cost": {
+  "sample_tokens": 0,
+  "source": "unknown",
+  "usd_per_mtok_input": null,
+  "usd_per_mtok_output": null
+ },
+ "evidence": {
+  "evidence_hash": "2a8ff506d6d5e3a337a9cab5e25bc5d1ab74bab313268369e49373803ebc5348",
+  "evidence_id": "2a8ff506d6d5e3a337a9cab5e25bc5d1ab74bab313268369e49373803ebc5348",
+  "expires_at": "2026-11-24T16:12:33.714Z",
+  "identity_hash": "248c4f83880347180068e8d8aaa9309aa205aefe4c07617b0d1b1a6820204bc0",
+  "issued_at": "2026-10-25T16:12:33.714Z",
+  "methodology": {
+   "corpus_version": "va-declared-plan-v1.va-declared-plan-v1",
+   "kind": "va_declared_plan",
+   "name": "va-declared-plan",
+   "version": "1.0.0"
+  },
+  "n_trials": 2,
+  "observed_at": "2026-10-25T16:12:33.714Z",
+  "revocation": null,
+  "scope": {
+   "domains": [
+    "cross-cutting"
+   ],
+   "languages": [
+    "en"
+   ],
+   "task_classes": [
+    "verification_authoring"
+   ],
+   "tool_surface": [
+    "read_only"
+   ]
+  },
+  "scope_hash": "d3863bb8070a0eb6b0b671a933a9a59cb07285f3834a95bb9af10fb9ee4704c0",
+  "source": "internal_eval",
+  "source_ref": "engine-qualify:verification_author-v1",
+  "state": "degraded",
+  "stop_reason": null,
+  "tier1_terminated": null
+ },
+ "evidence_ref": "benchmarks/qualification/cookys/evidence/3c398049ae22b26a245e25e674e6ea625586ca18e31a3f4146f879d1ea3bb7da/summary.json",
+ "imported_at": "2026-10-25T16:12:33Z",
+ "importer": "autopilot-outbox@1",
+ "latency": {
+  "sample_wall_time_s": 509
+ },
+ "origin_host_class": "cloud-api",
+ "producer": "engine-qualify-v2",
+ "raw": {
+  "capability_score": 0.9583333333333334,
+  "corpus_version": "va-declared-plan-v1.va-declared-plan-v1",
+  "cost": {
+   "sample_tokens": 0,
+   "source": "unknown",
+   "usd_per_mtok_input": null,
+   "usd_per_mtok_output": null
+  },
+  "date": "2026-10-25",
+  "effort": "default",
+  "engine": "opencode-go/longcat-2.0",
+  "evidence": {
+   "evidence_hash": "2a8ff506d6d5e3a337a9cab5e25bc5d1ab74bab313268369e49373803ebc5348",
+   "evidence_id": "2a8ff506d6d5e3a337a9cab5e25bc5d1ab74bab313268369e49373803ebc5348",
+   "expires_at": "2026-11-24T16:12:33.714Z",
+   "grant_identity_hash": "248c4f83880347180068e8d8aaa9309aa205aefe4c07617b0d1b1a6820204bc0",
+   "identity": {
+    "containment_fingerprint": "3246c97f2fa034deb33644406747be2cd722dbb7120b42680d15d5049676b6b3",
+    "effort": "default",
+    "family": "meituan",
+    "harness_version": "engine-qualify-ea0726c9",
+    "identity": "opencode-go/longcat-2.0",
+    "identity_resolved": true,
+    "model_alias": "opencode-go/longcat-2.0",
+    "model_version": "longcat-2.0",
+    "prompt_config_hash": "99d8c8386b234f683b787965a70184e4fa1fc789eb9b19420802e4ee13b09aad",
+    "runner": "opencode",
+    "runner_version": "1.19.4",
+    "semantic_fingerprint": "de7129d2af22e6ea9a6b2790208c80c1d19b53756e80e66ed7031d1f7fd3faf9"
+   },
+   "identity_hash": "248c4f83880347180068e8d8aaa9309aa205aefe4c07617b0d1b1a6820204bc0",
+   "issued_at": "2026-10-25T16:12:33.714Z",
+   "methodology": {
+    "basis": null,
+    "corpus_manifest_hash": "85ede154ce11f89ceca3af3c9f895c9fa94e7bc0a84ffd8dc0da391535ccd9b8",
+    "corpus_version": "va-declared-plan-v1.va-declared-plan-v1",
+    "kind": "va_declared_plan",
+    "name": "va-declared-plan",
+    "thresholds": {
+     "max_declared_mismatches": 0,
+     "max_missed_defects": 0,
+     "max_robustness_violations": 0,
+     "min_trials": 2
+    },
+    "version": "1.0.0"
+   },
+   "observed_at": "2026-10-25T16:12:33.714Z",
+   "revocation": null,
+   "role": "verification_author",
+   "schema_version": 1,
+   "scope": {
+    "domains": [
+     "cross-cutting"
+    ],
+    "languages": [
+     "en"
+    ],
+    "task_classes": [
+     "verification_authoring"
+    ],
+    "tool_surface": [
+     "read_only"
+    ]
+   },
+   "scope_hash": "d3863bb8070a0eb6b0b671a933a9a59cb07285f3834a95bb9af10fb9ee4704c0",
+   "source": "internal_eval",
+   "source_ref": "engine-qualify:verification_author-v1",
+   "state": "degraded",
+   "supersedes": null,
+   "trial_set_hash": "35074ca0fc723aaac10a0a2e1818befd212e9fca0f610936e846805c33cbd29b",
+   "trials": [
+    {
+     "cases_passed": 12,
+     "cases_total": 12,
+     "corpus_manifest_hash": "85ede154ce11f89ceca3af3c9f895c9fa94e7bc0a84ffd8dc0da391535ccd9b8",
+     "declared_mismatches": 0,
+     "envelope_stream_hash": "db8541c2e9a7e97f359211aa12d9634973eacd43bacb72c0e856807358fabc16",
+     "missed_defects": 0,
+     "observed_at": "2026-10-25T16:12:33.714Z",
+     "plan_set_hash": "961a7d20b78133605833716aa230017a205ede8b6fd03e9dda8fc1a8b78a9b22",
+     "robustness_violations": 0,
+     "subjects": {
+      "declared_accuracy": true,
+      "robustness": true,
+      "sensitivity": true
+     },
+     "trial_id": "trial_d09ac731a4"
+    },
+    {
+     "cases_passed": 11,
+     "cases_total": 12,
+     "corpus_manifest_hash": "85ede154ce11f89ceca3af3c9f895c9fa94e7bc0a84ffd8dc0da391535ccd9b8",
+     "declared_mismatches": 1,
+     "envelope_stream_hash": "05276499c7903d6dc9e6f9984b2b51b1e7f01f8eb680de8bd68ef622e23d73a3",
+     "missed_defects": 0,
+     "observed_at": "2026-10-25T16:12:33.714Z",
+     "plan_set_hash": "369da4a31031081a9cb007817fde1d4f1c0961fa943c1a8cc18993ed91865ea3",
+     "robustness_violations": 0,
+     "subjects": {
+      "declared_accuracy": false,
+      "robustness": true,
+      "sensitivity": true
+     },
+     "trial_id": "trial_fb4d9f97ff"
+    }
+   ]
+  },
+  "evidence_store": {
+   "event_id": 1,
+   "producer": "engine-qualify-v2",
+   "transcript_hash": "b4039c3b59ea9bff7b7d760ea7777330532663f70538552b9797a83d6690308b"
+  },
+  "expires": "2026-11-24",
+  "family": "meituan",
+  "harness_version": "engine-qualify-ea0726c9",
+  "latency": {
+   "sample_wall_time_s": 509
+  },
+  "model": "opencode-go/longcat-2.0",
+  "model_version": "longcat-2.0",
+  "prompt_config_hash": "99d8c8386b234f683b787965a70184e4fa1fc789eb9b19420802e4ee13b09aad",
+  "qualified_at": "2026-10-25",
+  "quality": {
+   "corpus_pass": "23/24",
+   "false_pass_critical": 0,
+   "repeated_trials": 2,
+   "specificity": "1/24"
+  },
+  "role": "verification_author",
+  "runner": "opencode",
+  "runner_version": "1.19.4",
+  "status": "failed",
+  "usage": {
+   "cases_complete": null,
+   "io_split_complete": false,
+   "med_wall_s": 19.844,
+   "n_cases": 24,
+   "n_cases_expected": null,
+   "n_cases_missing_tokens": 24,
+   "n_solved": 23,
+   "schema_version": 1,
+   "solved_per_hour": 163.5336,
+   "tok_per_solved": null,
+   "total_tokens": null,
+   "total_wall_s": 506.318,
+   "usage_complete": false,
+   "usd_per_solved": null
+  },
+  "version_source": "operator-asserted"
+ },
+ "record_id": "3c398049ae22b26a245e25e674e6ea625586ca18e31a3f4146f879d1ea3bb7da",
+ "record_id_basis": "v1:producer,transcript_hash,seat,corpus_version,administered_at",
+ "schema": 2,
+ "seat": {
+  "corpus_version": "va-declared-plan-v1.va-declared-plan-v1",
+  "effort": "default",
+  "engine": "opencode-go/longcat-2.0",
+  "family": "meituan",
+  "harness_version": "engine-qualify-ea0726c9",
+  "model": "opencode-go/longcat-2.0",
+  "model_version": "longcat-2.0",
+  "prompt_config_hash": "99d8c8386b234f683b787965a70184e4fa1fc789eb9b19420802e4ee13b09aad",
+  "role": "verification_author",
+  "runner": "opencode",
+  "runner_version": "1.19.4",
+  "version_source": "operator-asserted"
+ },
+ "source": {
+  "file": "engine-scorecard/scorecard.jsonl",
+  "kind": "autopilot-outbox"
+ },
+ "transcript_hash": "b4039c3b59ea9bff7b7d760ea7777330532663f70538552b9797a83d6690308b",
+ "verdict": {
+  "capability_score": 0.9583333333333334,
+  "date": "2026-10-25",
+  "expires": "2026-11-24",
+  "qualified_at": "2026-10-25",
+  "quality": {
+   "corpus_pass": "23/24",
+   "false_pass_critical": 0,
+   "repeated_trials": 2,
+   "specificity": "1/24"
+  },
+  "status": "failed"
+ }
+}

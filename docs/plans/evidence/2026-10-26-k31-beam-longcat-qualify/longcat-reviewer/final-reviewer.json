@@ -1,0 +1,259 @@
+{
+ "administered_at": "2026-10-25T15:50:27.837Z",
+ "cost": {
+  "sample_tokens": 0,
+  "source": "unknown",
+  "usd_per_mtok_input": null,
+  "usd_per_mtok_output": null
+ },
+ "evidence": {
+  "evidence_hash": "5a7dad220fc6b3bf1b88d8ba883e50c6bab60d066cf7759698508e50c2ddcc5d",
+  "evidence_id": "5a7dad220fc6b3bf1b88d8ba883e50c6bab60d066cf7759698508e50c2ddcc5d",
+  "expires_at": "2026-11-24T16:04:02.174Z",
+  "identity_hash": "5b1b5cb6a0adfdee289b9af88cbe9c8b09ca48b1dfccc58f40603920b144c810",
+  "issued_at": "2026-10-25T16:04:02.174Z",
+  "methodology": {
+   "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+   "kind": "role_eval",
+   "name": "reviewer-metamorphic-executable",
+   "version": "4.1.0"
+  },
+  "n_trials": 2,
+  "observed_at": "2026-10-25T15:50:27.837Z",
+  "revocation": null,
+  "scope": {
+   "domains": [
+    "cross-cutting"
+   ],
+   "languages": [
+    "en"
+   ],
+   "task_classes": [
+    "code_review"
+   ],
+   "tool_surface": [
+    "read_only"
+   ]
+  },
+  "scope_hash": "d67cf0c1f52d907d20dd41395f884ee0a453924fbf290e38af9fc9d88857bdb8",
+  "source": "internal_eval",
+  "source_ref": "engine-qualify:reviewer-v2",
+  "state": "degraded",
+  "stop_reason": null,
+  "tier1_terminated": null
+ },
+ "evidence_ref": "benchmarks/qualification/cookys/evidence/05f65f97f3e29d81daaf6e0cef19eabf10986e92035de29541a54cfa876417c4/summary.json",
+ "imported_at": "2026-10-25T16:04:02Z",
+ "importer": "autopilot-outbox@1",
+ "latency": {
+  "sample_wall_time_s": 1747
+ },
+ "origin_host_class": "cloud-api",
+ "producer": "engine-qualify-v2",
+ "raw": {
+  "capability_score": 0.7380952380952381,
+  "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+  "cost": {
+   "sample_tokens": 0,
+   "source": "unknown",
+   "usd_per_mtok_input": null,
+   "usd_per_mtok_output": null
+  },
+  "date": "2026-10-25",
+  "effort": "default",
+  "engine": "opencode-go/longcat-2.0",
+  "evidence": {
+   "evidence_hash": "5a7dad220fc6b3bf1b88d8ba883e50c6bab60d066cf7759698508e50c2ddcc5d",
+   "evidence_id": "5a7dad220fc6b3bf1b88d8ba883e50c6bab60d066cf7759698508e50c2ddcc5d",
+   "expires_at": "2026-11-24T16:04:02.174Z",
+   "grant_identity_hash": "5b1b5cb6a0adfdee289b9af88cbe9c8b09ca48b1dfccc58f40603920b144c810",
+   "identity": {
+    "containment_fingerprint": "527081d6f44bf82138e32721ab52578fbe109d13cf80e3863d0b04a82f278296",
+    "effort": "default",
+    "family": "meituan",
+    "harness_version": "engine-qualify-ea0726c9",
+    "identity": "opencode-go/longcat-2.0",
+    "identity_resolved": true,
+    "model_alias": "opencode-go/longcat-2.0",
+    "model_version": "longcat-2.0",
+    "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+    "runner": "opencode",
+    "runner_version": "1.19.4",
+    "semantic_fingerprint": "9b967888fb4e08c690f926a560aa77c7f9db0317e8ad13182deb8629f5580de2"
+   },
+   "identity_hash": "5b1b5cb6a0adfdee289b9af88cbe9c8b09ca48b1dfccc58f40603920b144c810",
+   "issued_at": "2026-10-25T16:04:02.174Z",
+   "methodology": {
+    "basis": null,
+    "corpus_manifest_hash": "d0626eff9f034a09eec8c7dd2fdad38042e7892226176d374b5d0447f9e87423",
+    "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+    "kind": "role_eval",
+    "name": "reviewer-metamorphic-executable",
+    "thresholds": {
+     "max_clean_false_positives": 0,
+     "max_false_pass_critical": 0,
+     "min_clean_cases": 19,
+     "min_critical_cases": 9,
+     "min_known_bad_cases": 21,
+     "min_trials": 2
+    },
+    "version": "4.1.0"
+   },
+   "observed_at": "2026-10-25T15:50:27.837Z",
+   "revocation": null,
+   "role": "reviewer",
+   "schema_version": 1,
+   "scope": {
+    "domains": [
+     "cross-cutting"
+    ],
+    "languages": [
+     "en"
+    ],
+    "task_classes": [
+     "code_review"
+    ],
+    "tool_surface": [
+     "read_only"
+    ]
+   },
+   "scope_hash": "d67cf0c1f52d907d20dd41395f884ee0a453924fbf290e38af9fc9d88857bdb8",
+   "source": "internal_eval",
+   "source_ref": "engine-qualify:reviewer-v2",
+   "state": "degraded",
+   "supersedes": null,
+   "trial_set_hash": "f1403ff1957cfe57995822abab7d7c5888ecb55ff6fd01428bbf6c8dd802f40d",
+   "trials": [
+    {
+     "artifact_oracle": {
+      "independent": true,
+      "kind": "host_executable_metamorphic_witness_v3",
+      "oracle_hash": "1da2b4efa349c41e6caa53969c1a7bf50983bfcd332773b31fdeebc74e7c96b6",
+      "passed": false,
+      "result_set_hash": "a8e538b492ea25d8e6fa646359ec761f91c7fec76613fa8187fa6f3dcb9cb716"
+     },
+     "clean_false_positives": 0,
+     "clean_total": 19,
+     "corpus_manifest_hash": "d0626eff9f034a09eec8c7dd2fdad38042e7892226176d374b5d0447f9e87423",
+     "critical_total": 9,
+     "false_pass_critical": 0,
+     "known_bad_caught": 15,
+     "known_bad_total": 21,
+     "mutation_validation": {
+      "mutated_hash": "afd47b479a9ecb43dd2bca3eff3b637c71db55ead30a345cdf88a30f7e1acd8a",
+      "mutated_verdict": "fail",
+      "oracle_rejected": false,
+      "original_hash": "9a3e4b3e00a2a8f5245d6f761a4d736b5c136c6f295c6c92496b0929e2876194",
+      "original_verdict": "fail",
+      "target_id": "known-bad-01"
+     },
+     "observed_at": "2026-10-25T15:35:02.127Z",
+     "trial_id": "trial-1"
+    },
+    {
+     "artifact_oracle": {
+      "independent": true,
+      "kind": "host_executable_metamorphic_witness_v3",
+      "oracle_hash": "1da2b4efa349c41e6caa53969c1a7bf50983bfcd332773b31fdeebc74e7c96b6",
+      "passed": false,
+      "result_set_hash": "c22c3b52d922af97f4f47d20e8bf64b06b1eaf1e369f0d76f440ba35246bea88"
+     },
+     "clean_false_positives": 0,
+     "clean_total": 19,
+     "corpus_manifest_hash": "d0626eff9f034a09eec8c7dd2fdad38042e7892226176d374b5d0447f9e87423",
+     "critical_total": 9,
+     "false_pass_critical": 0,
+     "known_bad_caught": 16,
+     "known_bad_total": 21,
+     "mutation_validation": {
+      "mutated_hash": "2ec3c4a681407923926897862ef15fd143b14acf6e8726ba76a29d8ad6ffd540",
+      "mutated_verdict": "fail",
+      "oracle_rejected": false,
+      "original_hash": "b62e0a417d21dff12f159b64e80e7f87a92dea6f6973fe6cbb4a2998b1ac6169",
+      "original_verdict": "fail",
+      "target_id": "known-bad-01"
+     },
+     "observed_at": "2026-10-25T15:50:27.837Z",
+     "trial_id": "trial-2"
+    }
+   ]
+  },
+  "evidence_store": {
+   "event_id": 1,
+   "producer": "engine-qualify-v2",
+   "transcript_hash": "363c38b6117f48450a45d776ab6ced2d5ebc800341e7d1e4fe14c3d947f69e4e"
+  },
+  "expires": "2026-11-24",
+  "family": "meituan",
+  "harness_version": "engine-qualify-ea0726c9",
+  "latency": {
+   "sample_wall_time_s": 1747
+  },
+  "model": "opencode-go/longcat-2.0",
+  "model_version": "longcat-2.0",
+  "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+  "qualified_at": "2026-10-25",
+  "quality": {
+   "corpus_pass": "31/42",
+   "false_pass_critical": 0,
+   "repeated_trials": 2,
+   "specificity": "0/38"
+  },
+  "role": "reviewer",
+  "runner": "opencode",
+  "runner_version": "1.19.4",
+  "status": "failed",
+  "usage": {
+   "cases_complete": null,
+   "io_split_complete": false,
+   "med_wall_s": 17.61,
+   "n_cases": 82,
+   "n_cases_expected": null,
+   "n_cases_missing_tokens": 82,
+   "n_solved": 69,
+   "schema_version": 1,
+   "solved_per_hour": 143.1033,
+   "tok_per_solved": null,
+   "total_tokens": null,
+   "total_wall_s": 1735.809,
+   "usage_complete": false,
+   "usd_per_solved": null
+  },
+  "version_source": "operator-asserted"
+ },
+ "record_id": "05f65f97f3e29d81daaf6e0cef19eabf10986e92035de29541a54cfa876417c4",
+ "record_id_basis": "v1:producer,transcript_hash,seat,corpus_version,administered_at",
+ "schema": 2,
+ "seat": {
+  "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+  "effort": "default",
+  "engine": "opencode-go/longcat-2.0",
+  "family": "meituan",
+  "harness_version": "engine-qualify-ea0726c9",
+  "model": "opencode-go/longcat-2.0",
+  "model_version": "longcat-2.0",
+  "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+  "role": "reviewer",
+  "runner": "opencode",
+  "runner_version": "1.19.4",
+  "version_source": "operator-asserted"
+ },
+ "source": {
+  "file": "engine-scorecard/scorecard.jsonl",
+  "kind": "autopilot-outbox"
+ },
+ "transcript_hash": "363c38b6117f48450a45d776ab6ced2d5ebc800341e7d1e4fe14c3d947f69e4e",
+ "verdict": {
+  "capability_score": 0.7380952380952381,
+  "date": "2026-10-25",
+  "expires": "2026-11-24",
+  "qualified_at": "2026-10-25",
+  "quality": {
+   "corpus_pass": "31/42",
+   "false_pass_critical": 0,
+   "repeated_trials": 2,
+   "specificity": "0/38"
+  },
+  "status": "failed"
+ }
+}

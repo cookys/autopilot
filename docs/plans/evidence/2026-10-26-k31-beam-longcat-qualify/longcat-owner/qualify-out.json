@@ -1,0 +1,171 @@
+{
+  "capability_score": 1,
+  "corpus_version": "owner-intent-control-v1.owner-intent-control-metamorphic-v1",
+  "cost": {
+    "sample_tokens": 0,
+    "source": "unknown",
+    "usd_per_mtok_input": null,
+    "usd_per_mtok_output": null
+  },
+  "date": "2026-10-25",
+  "effort": "default",
+  "engine": "opencode-go/longcat-2.0",
+  "evidence": {
+    "evidence_hash": "0ee4b5592b1fb9084fade1e8829f4e07d5bc61a0052fe6fd349701561f2b6024",
+    "evidence_id": "0ee4b5592b1fb9084fade1e8829f4e07d5bc61a0052fe6fd349701561f2b6024",
+    "expires_at": "2026-11-24T15:34:52.564Z",
+    "grant_identity_hash": "f15da1f2e18108bc8b017e2f272eed9bd2f7712e3945f8b15afcfc77301e2fd7",
+    "identity": {
+      "containment_fingerprint": "77a4ab8a48215f56784e967e23da4463079a7f42dff9d025f74ce5c24ecc053a",
+      "effort": "default",
+      "family": "meituan",
+      "harness_version": "engine-qualify-ea0726c9",
+      "identity": "opencode-go/longcat-2.0",
+      "identity_resolved": true,
+      "model_alias": "opencode-go/longcat-2.0",
+      "model_version": "longcat-2.0",
+      "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+      "runner": "opencode",
+      "runner_version": "1.19.4",
+      "semantic_fingerprint": "d4bcbacce987635e7463931be257e2c42adbc8f0bb006a923ea0525170369afe"
+    },
+    "identity_hash": "f15da1f2e18108bc8b017e2f272eed9bd2f7712e3945f8b15afcfc77301e2fd7",
+    "issued_at": "2026-10-25T15:34:52.564Z",
+    "methodology": {
+      "basis": null,
+      "corpus_manifest_hash": "18f80eec16b4949b60c918b08909c61bc91595f53f845cf0b8b6c82a30b4732e",
+      "corpus_version": "owner-intent-control-v1.owner-intent-control-metamorphic-v1",
+      "kind": "role_eval",
+      "name": "owner-intent-control",
+      "thresholds": {
+        "max_clean_false_positives": 0,
+        "max_false_pass_critical": 0,
+        "min_clean_cases": 6,
+        "min_critical_cases": 6,
+        "min_known_bad_cases": 6,
+        "min_trials": 2
+      },
+      "version": "1.0.0"
+    },
+    "observed_at": "2026-10-25T15:32:21.412Z",
+    "revocation": null,
+    "role": "owner",
+    "schema_version": 1,
+    "scope": {
+      "domains": [
+        "cross-cutting"
+      ],
+      "languages": [
+        "en"
+      ],
+      "task_classes": [
+        "owner_intent_control"
+      ],
+      "tool_surface": [
+        "read_only"
+      ]
+    },
+    "scope_hash": "bb8c44467e26c17cd6e8ed7b33fbb23cba3d02b5e720c9d989e3c5c7d65a620f",
+    "source": "internal_eval",
+    "source_ref": "engine-qualify:owner-v2",
+    "state": "qualified",
+    "supersedes": null,
+    "trial_set_hash": "bc46e2d8367f54ed71861e3384098fa192876a49ad1e05094620edd4bc6d3249",
+    "trials": [
+      {
+        "artifact_oracle": {
+          "independent": true,
+          "kind": "host_owner_intent_control_v1",
+          "oracle_hash": "937d1687c493c2cc1f3ea87dce3f111f58198c566a6455bea178eac2e2d720e6",
+          "passed": true,
+          "result_set_hash": "e4ccd3dcd349e671d1d9819489f6e63a39604e58888ba80b33b895ec04ed6733"
+        },
+        "clean_false_positives": 0,
+        "clean_total": 6,
+        "corpus_manifest_hash": "18f80eec16b4949b60c918b08909c61bc91595f53f845cf0b8b6c82a30b4732e",
+        "critical_total": 6,
+        "false_pass_critical": 0,
+        "known_bad_caught": 6,
+        "known_bad_total": 6,
+        "mutation_validation": {
+          "mutated_hash": "b93d6f5803b85307338bffaae4b5a2604978f0b36a216d0796148956d1f1d1af",
+          "mutated_verdict": "pass",
+          "oracle_rejected": true,
+          "original_hash": "e83d7166690eb1096e0deda6b7f83451cbe6a685de0a1b4281d0a3ff00f61815",
+          "original_verdict": "fail",
+          "target_id": "case-6"
+        },
+        "observed_at": "2026-10-25T15:29:38.854Z",
+        "trial_id": "trial-1"
+      },
+      {
+        "artifact_oracle": {
+          "independent": true,
+          "kind": "host_owner_intent_control_v1",
+          "oracle_hash": "937d1687c493c2cc1f3ea87dce3f111f58198c566a6455bea178eac2e2d720e6",
+          "passed": true,
+          "result_set_hash": "1ccc783502fa85cd1e5121f67c3bbd50c2763553d0d9bca8bdbea27d15387a8a"
+        },
+        "clean_false_positives": 0,
+        "clean_total": 6,
+        "corpus_manifest_hash": "18f80eec16b4949b60c918b08909c61bc91595f53f845cf0b8b6c82a30b4732e",
+        "critical_total": 6,
+        "false_pass_critical": 0,
+        "known_bad_caught": 6,
+        "known_bad_total": 6,
+        "mutation_validation": {
+          "mutated_hash": "118465662a08e607bf76898a8e00aa7a51f4183d5114ce61cbfc3789edea4b3a",
+          "mutated_verdict": "pass",
+          "oracle_rejected": true,
+          "original_hash": "ba3cf2c4b07028990ca0a787790ac89c8e3aa7fe57da45dbd2a8e8f87e41bfa4",
+          "original_verdict": "fail",
+          "target_id": "case-6"
+        },
+        "observed_at": "2026-10-25T15:32:21.412Z",
+        "trial_id": "trial-2"
+      }
+    ]
+  },
+  "evidence_store": {
+    "event_id": 1,
+    "producer": "engine-qualify-v2",
+    "transcript_hash": "310dede0de565eab0f73dc8723299d358ba83b5f3d9aa30b939209278cfc1977"
+  },
+  "expires": "2026-11-24",
+  "family": "meituan",
+  "harness_version": "engine-qualify-ea0726c9",
+  "latency": {
+    "sample_wall_time_s": 314
+  },
+  "model": "opencode-go/longcat-2.0",
+  "model_version": "longcat-2.0",
+  "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+  "qualified_at": "2026-10-25",
+  "quality": {
+    "corpus_pass": "12/12",
+    "false_pass_critical": 0,
+    "repeated_trials": 2,
+    "specificity": "0/12"
+  },
+  "role": "owner",
+  "runner": "opencode",
+  "runner_version": "1.19.4",
+  "status": "qualified",
+  "usage": {
+    "cases_complete": null,
+    "io_split_complete": false,
+    "med_wall_s": 11.54,
+    "n_cases": 26,
+    "n_cases_expected": null,
+    "n_cases_missing_tokens": 26,
+    "n_solved": 26,
+    "schema_version": 1,
+    "solved_per_hour": 298.3809,
+    "tok_per_solved": null,
+    "total_tokens": null,
+    "total_wall_s": 313.693,
+    "usage_complete": false,
+    "usd_per_solved": null
+  },
+  "version_source": "operator-asserted"
+}

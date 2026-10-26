@@ -13,7 +13,8 @@ mkdir -p "$HOME/.autopilot"
 export AUTOPILOT_RESIDUE_RECENT_HOURS=0
 unset AUTOPILOT_RESIDUE_AUTO_REAP AUTOPILOT_RESIDUE_LEASE_HOURS AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS AUTOPILOT_RESIDUE_PROC_ROOT
 
-PIDS=()
+PIDS=(); STARTED=()
+track() { PIDS+=("$1"); STARTED+=("$1"); }   # every long-lived test process is started in THIS shell (never inside $(...), a pipe or a subshell function call) so its pid lands here
 cleanup_pids() { local p; for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null; done; }
 trap 'cleanup_pids' EXIT
 
@@ -46,7 +47,7 @@ R="$(reap_one)"
 
 # --- 1. cwd inside ---
 new_case cwd
-(cd "$WT" && exec sleep 300) & PIDS+=($!)
+(cd "$WT" && exec sleep 300) & track $!
 sleep 0.3
 S="$(scan)"
 assert_eq "$(class_of "$S")" "busy" "cwd: class busy"
@@ -61,7 +62,7 @@ assert_eq "$(jx "$R" 'j.actions.worktrees_kept[0].kept')" "true" "cwd: kept flag
 # --- 2. exe inside, cwd outside ---
 new_case exe
 cp "$(command -v sleep)" "$WT/mysleep"
-(cd "$TEST_TMP" && exec "$WT/mysleep" 300) & PIDS+=($!)
+(cd "$TEST_TMP" && exec "$WT/mysleep" 300) & track $!
 sleep 0.3
 S="$(scan)"
 assert_eq "$(class_of "$S")" "busy" "exe: class busy with cwd outside"
@@ -75,7 +76,7 @@ LIB="$(ldconfig -p 2>/dev/null | awk '/libz\.so\.1 /{print $NF; exit}')"
 [ -n "$LIB" ] || LIB="$(ls /lib/x86_64-linux-gnu/libz.so.1 /usr/lib/*/libz.so.1 2>/dev/null | head -1)"
 if [ -n "$LIB" ] && [ -f "$LIB" ]; then
   cp "$LIB" "$WT/libz.so.1"
-  (cd "$TEST_TMP" && LD_PRELOAD="$WT/libz.so.1" exec sleep 300) & PIDS+=($!)
+  (cd "$TEST_TMP" && LD_PRELOAD="$WT/libz.so.1" exec sleep 300) & track $!
   sleep 0.3
   S="$(scan)"
   assert_eq "$(class_of "$S")" "busy" "maps: class busy with cwd and exe outside"
@@ -100,7 +101,7 @@ unset AUTOPILOT_RESIDUE_PROC_ROOT
 new_case late
 S="$(scan)"
 assert_eq "$(listed "$S" "$WT")" "true" "late: listed at scan time"
-(cd "$WT" && exec sleep 300) & PIDS+=($!)
+(cd "$WT" && exec sleep 300) & track $!
 sleep 0.3
 reap_one >/dev/null
 [ -d "$WT" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "late: reap must re-check and keep the directory"
@@ -109,7 +110,7 @@ reap_one >/dev/null
 # script was read and closed, so only /proc/<pid>/cmdline names the worktree ---
 new_case node
 printf 'setTimeout(()=>{}, 300000)\n' > "$WT/x.js"; printf 'x.js\n' >> "$REPO/.git/info/exclude"
-(cd "$TEST_TMP" && exec node "$WT/x.js") & PIDS+=($!)
+(cd "$TEST_TMP" && exec node "$WT/x.js") & track $!
 sleep 0.5
 S="$(scan)"
 assert_eq "$(class_of "$S")" "busy" "node abs: class busy with cwd outside"
@@ -121,7 +122,7 @@ reap_one >/dev/null
 new_case noderel
 printf 'setTimeout(()=>{}, 300000)\n' > "$WT/x.js"; printf 'x.js\n' >> "$REPO/.git/info/exclude"
 ln -s "$WT" "$TEST_TMP/link-noderel"
-(cd "$TEST_TMP" && exec node "link-noderel/x.js") & PIDS+=($!)
+(cd "$TEST_TMP" && exec node "link-noderel/x.js") & track $!
 sleep 0.5
 S="$(scan)"
 assert_eq "$(class_of "$S")" "busy" "node rel+symlink: class busy"
@@ -130,7 +131,7 @@ assert_contains "$(wt_row "$S" "$WT")" "cmdline" "node rel+symlink: reason names
 # a file held open (fd) with cwd, exe and arguments all outside
 new_case fd
 printf 'data\n' > "$WT/held.txt"; printf 'held.txt\n' >> "$REPO/.git/info/exclude"
-(cd "$TEST_TMP" && exec 3< "$WT/held.txt" && exec sleep 300) & PIDS+=($!)
+(cd "$TEST_TMP" && exec 3< "$WT/held.txt" && exec sleep 300) & track $!
 sleep 0.3
 S="$(scan)"
 assert_eq "$(class_of "$S")" "busy" "fd: class busy"
@@ -160,24 +161,26 @@ auto_case() { # <name> <starter fn>
   printf 'created_at=%s\nbranch=br-%s\nbase_sha=%s\nrun_id=run-%s\nroot_run_id=root-%s\nloop_id=run-%s\nschema=2\n' "$(( $(date +%s) - 360000 ))" "$1" "$base" "$1" "$1" "$1" > "$WT/.autopilot-worktree"
   [ -n "${2:-}" ] && "$2"
   sleep 0.4
-  (cd "$TEST_TMP" && node "$SCRIPT" reap --repo "$REPO" --auto --yes --integration-ref develop 2>&1)
+  (cd "$TEST_TMP" && node "$SCRIPT" reap --repo "$REPO" --auto --yes --integration-ref develop > "$TEST_TMP/auto.out" 2>&1)
 }
-st_cwd() { (cd "$WT" && exec sleep 300 >/dev/null 2>&1) & PIDS+=($!); }
-st_exe() { cp "$(command -v sleep)" "$WT/mysleep"; (cd "$TEST_TMP" && exec "$WT/mysleep" 300 >/dev/null 2>&1) & PIDS+=($!); }
-st_maps() { cp "$LIB" "$WT/libz.so.1"; (cd "$TEST_TMP" && LD_PRELOAD="$WT/libz.so.1" exec sleep 300 >/dev/null 2>&1) & PIDS+=($!); }
-st_node() { printf 'setTimeout(()=>{}, 300000)\n' > "$WT/x.js"; (cd "$TEST_TMP" && exec node "$WT/x.js" >/dev/null 2>&1) & PIDS+=($!); }
-OUT="$(auto_case actl "")"; WT="$TEST_TMP/wt-actl"
+st_cwd() { (cd "$WT" && exec sleep 300 >/dev/null 2>&1) & track $!; }
+st_exe() { cp "$(command -v sleep)" "$WT/mysleep"; (cd "$TEST_TMP" && exec "$WT/mysleep" 300 >/dev/null 2>&1) & track $!; }
+st_maps() { cp "$LIB" "$WT/libz.so.1"; (cd "$TEST_TMP" && LD_PRELOAD="$WT/libz.so.1" exec sleep 300 >/dev/null 2>&1) & track $!; }
+st_node() { printf 'setTimeout(()=>{}, 300000)\n' > "$WT/x.js"; (cd "$TEST_TMP" && exec node "$WT/x.js" >/dev/null 2>&1) & track $!; }
+auto_case actl ""; OUT="$(cat "$TEST_TMP/auto.out")"; WT="$TEST_TMP/wt-actl"
 [ -d "$WT" ] && fail "auto control: an idle expired-lease integrated marker worktree must be removed ($OUT)" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+N0=${#STARTED[@]}
 for kind in cwd exe maps node; do
-  OUT="$(auto_case "a$kind" "st_$kind")"; WT="$TEST_TMP/wt-a$kind"
+  auto_case "a$kind" "st_$kind"; OUT="$(cat "$TEST_TMP/auto.out")"; WT="$TEST_TMP/wt-a$kind"
   [ -d "$WT" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "auto $kind: directory must be kept"
   assert_contains "$OUT" "process_" "auto $kind: reported kept with a process_* reason"
 done
+assert_eq "$(( ${#STARTED[@]} - N0 ))" "4" "auto: the four starter pids are tracked in the parent shell"
 cleanup_pids; PIDS=()
 
 # --- 6. once the process is gone the worktree is clean-integrated again and can be reaped ---
 new_case gone
-(cd "$WT" && exec sleep 300 >/dev/null 2>&1) & PIDS+=($!)
+(cd "$WT" && exec sleep 300 >/dev/null 2>&1) & track $!
 sleep 0.3
 assert_eq "$(class_of "$(scan)")" "busy" "gone: busy while the process lives"
 cleanup_pids; PIDS=(); sleep 0.3
@@ -185,5 +188,11 @@ S="$(scan)"
 assert_eq "$(class_of "$S")" "clean-integrated" "after exit: clean-integrated again"
 reap_one >/dev/null
 [ -d "$WT" ] && fail "after exit: reap must remove it" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+
+# --- end: every process this test started is really gone (read /proc/<pid>, never a name search) ---
+cleanup_pids; wait 2>/dev/null; sleep 0.3
+ALIVE=""; for p in "${STARTED[@]}"; do [ -e "/proc/$p" ] && ALIVE="$ALIVE $p"; done
+assert_eq "$ALIVE" "" "no started process survives the test"
+assert_eq "$([ "${#STARTED[@]}" -ge 12 ] && echo yes || echo no)" "yes" "the pid list is not empty by accident (${#STARTED[@]} started)"
 
 finalize_test

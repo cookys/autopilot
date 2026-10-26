@@ -8,6 +8,10 @@
 //   3. the cell runner is run-skill-onoff-matrix-fbatch-v2.sh -> run-skill-onoff-eval-fbatch-v2.sh, and the campaign refuses a
 //      prereg whose cc.disallowed_tools does not name ScheduleWakeup, handing the value over as ONOFF_DISALLOWED_TOOLS;
 //   4. the dry-run cost basis text;
+//   6. launch guard (a formal paid run, i.e. --runner cc without --pilot): refused before the first cell unless (a) prereg status is
+//      "stamped", (b) `stamp-prereg.js --row findings-batch-v2 --check` is ok (--stamp-root <dir> redirects the check, tests only), and
+//      (c) --pilot-results <file> holds at least one scorable (failure_class null) pilot row of this row. --dry-run prints the guard
+//      state (`guard: ...`) and never refuses; --pilot needs none of it (the pilot checks the instrument before stamping).
 //   5. verdict math: fbatch/lib-v2.js and score-fbatch-v2.js (V3 of T1 m_clean_proceeds is non-inferiority, change >= 4/5).
 // Everything below this block is the v1 header, unchanged.
 // run-fbatch-campaign.js — findings-batch ON/OFF row (plan §4): fb-mid-batch (T1),
@@ -49,6 +53,9 @@ const cp = require('child_process');
 const L = require('./fbatch/lib-v2');
 const B = require('./fbatch/cc-build');
 const CELL = require('./fbatch/cell');
+const STAMP_ROOT = path.resolve(val0('--stamp-root') || __dirname);
+const PILOT_RESULTS = val0('--pilot-results');
+function val0(n) { const i = process.argv.indexOf(n); return i >= 0 ? process.argv[i + 1] : undefined; }
 const CC_V2 = path.join(__dirname, 'fbatch', 'cc-v2');
 
 const HERE = __dirname;
@@ -148,6 +155,22 @@ if (flag('--check-arms')) {
   process.exit(r.ok ? 0 : 2);
 }
 
+// Launch guard state for a formal paid run: [] when every condition holds, else the reasons.
+function guardReasons() {
+  const r = [];
+  if (!/^stamped\b/.test(String(P.status || ''))) r.push('unstamped: prereg status is not "stamped"');
+  const chk = cp.spawnSync('node', [path.join(__dirname, ['stamp', 'prereg.js'].join('-')) /* the gate tool, not an evaluation input: spelled so that closure-scan does not pull it (and its own closure) into the freeze list */, '--row', P.row, '--root', STAMP_ROOT, '--check'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (chk.status !== 0) r.push(`stamp check failed: ${String(chk.stderr || chk.stdout).trim().split('\n')[0]}`);
+  let ok = 0;
+  if (!PILOT_RESULTS) r.push('no pilot: --pilot-results <file> not given');
+  else {
+    let text = '';
+    try { text = fs.readFileSync(PILOT_RESULTS, 'utf8'); } catch { /* missing */ }
+    for (const line of text.split('\n')) { if (!line.trim()) continue; try { const j = JSON.parse(line); if (j.pilot === true && j.row === P.row && !j.failure_class) ok++; } catch { /* skip */ } }
+    if (!ok) r.push(`no pilot: ${PILOT_RESULTS} has no scorable pilot row of ${P.row}`);
+  }
+  return r;
+}
 const REPS = parseReps();
 const ARMS = parseArms();
 const GROUPS = PILOT
@@ -177,11 +200,15 @@ if (flag('--dry-run')) {
     console.log(`${done.has(key) ? 'done' : 'todo'}`.padEnd(9) + ` ${key}`);
   }
   const cost = Number(keys.reduce((s, k) => s + cellCost(k.split('|')[0]), 0).toFixed(2));
+  const gr = guardReasons();
+  const guardLine = gr.length ? gr.join('; ') : 'ok';
+  console.log(`guard: ${PILOT ? 'not needed for --pilot' : guardLine}`);
   console.log(JSON.stringify({
     dry_run: true, pilot: PILOT, row: P.row, model: MODEL, runner, cells_total: keys.length,
     cells_todo: keys.filter((k) => !done.has(k)).length, cost_estimate_usd: cost,
     cost_basis: 'prereg cost_per_cell_usd: the v1 measured mean per task (findings-batch v1 formal re-run, 3.34 USD over 41 rows), rounded up to 0.005',
     max_usd: CAP,
+    guard: guardLine,
   }));
   if (cost > CAP + 1e-9) die(`spend cap: estimate ${cost.toFixed(2)} USD exceeds ONOFF_MAX_USD ${CAP.toFixed(2)} USD`, 1);
   process.exit(0);
@@ -194,6 +221,10 @@ const rowCost = (j) => { const v = num(j.cost_usd); return v === null ? cellCost
 const spentUsd = () => readRows().filter((j) => typeof j.task_id === 'string' && (!j.row || j.row === P.row)).reduce((s, j) => s + rowCost(j), 0);
 
 function runCc() {
+  if (!PILOT) {
+    const g = guardReasons();
+    if (g.length) die(`refusing a formal paid run, nothing was dispatched: ${g.join('; ')}`, 2);
+  }
   const CC = P.cc || {};
   const stop = (msg, code, dir) => { if (dir) fs.rmSync(dir, { recursive: true, force: true }); die(msg, code); };
   if (typeof CC.invocation_prefix !== 'string' || !CC.invocation_prefix.trim() || !CC.skill) die('prereg.cc.invocation_prefix / cc.skill missing');

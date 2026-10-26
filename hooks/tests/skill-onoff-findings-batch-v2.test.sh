@@ -417,6 +417,62 @@ echo "--- the v1 row is untouched: --check still ok on the real tree ---"
 clean node "$BASE/stamp-prereg.js" --row findings-batch --check > /dev/null 2>&1 < /dev/null || fail "findings-batch (v1) frozen row no longer checks ok"
 echo "  findings-batch --check: ok"
 
+# ======================================================================================================================
+echo "=== (7) launch guard: a formal paid run needs a stamped prereg, a passing --check and a scorable pilot ==="
+GUARDLESS="$BASE/run-fbatch-v2-campaign.guardless.js"
+trap 'rm -f "$GUARDLESS"; fbt_main_cleanup; cleanup_test_tmp' EXIT
+# the mutant: the same campaign with the guard condition removed (the negative control: with no guard the fake claude IS called)
+sed 's/^  if (!PILOT) {$/  if (false) {/' "$BASE/run-fbatch-v2-campaign.js" > "$GUARDLESS"
+cmp -s "$GUARDLESS" "$BASE/run-fbatch-v2-campaign.js" && fail "the guardless mutant is identical to the campaign"
+# stamped copy of the row (stamp root $SR from the stamp section, status switched to stamped and re-stamped)
+node -e 'const fs=require("fs");const f=process.argv[1];const p=JSON.parse(fs.readFileSync(f,"utf8"));p.status="stamped 2026-10-26 (test copy)";fs.writeFileSync(f,JSON.stringify(p,null,2)+"\n")' "$SR/prereg/findings-batch-v2.json"
+st > /dev/null || fail "re-stamping the test copy"
+st --check > /dev/null || fail "test copy --check"
+STAMPED_PRE="$SR/prereg/findings-batch-v2.json"
+# a stamped-looking prereg whose --check fails (the real tree has no FROZEN row for v2)
+BADSTAMP="$TEST_TMP/prereg-badstamp.json"
+node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));p.status="stamped 2026-10-26 (check fails)";fs.writeFileSync(process.argv[2],JSON.stringify(p))' "$BASE/prereg/findings-batch-v2.json" "$BADSTAMP"
+INFRA="$TEST_TMP/pilot-infra.jsonl"
+node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map((l)=>JSON.parse(l)).map((r)=>({...r,failure_class:"infra_fail",failure_cause:"runner_timeout"}));fs.writeFileSync(process.argv[2],rows.map((r)=>JSON.stringify(r)).join("\n")+"\n")' "$RV2" "$INFRA"
+NOT_THIS_ROW="$TEST_TMP/pilot-other-row.jsonl"
+sed 's/"row":"findings-batch-v2"/"row":"findings-batch"/' "$RV2" > "$NOT_THIS_ROW"
+FORMAL=(--runner cc --reps 1 --arms base)
+gcase() { # $1 script $2 label $3 want(refused|dispatched); rest: campaign args. refused = rc!=0, message, fake 0 calls; dispatched = fake >= 1 call
+  local script="$1" label="$2" want="$3" rc=0 out n; shift 3
+  out=$(run_campaign "$script" "$TEST_TMP/g.log" "$@" 2>&1) || rc=$?
+  n=$(wc -l < "$TEST_TMP/g.log")
+  case "$want" in
+    refused) [ "$rc" != 0 ] && [ "$n" = 0 ] && grep -q 'refusing a formal paid run' <<<"$out" || { echo "$label: want refusal with 0 fake calls, got rc=$rc calls=$n: $(head -c 300 <<<"$out")"; return 1; }; echo "$label: refused (rc=$rc, 0 calls): $(grep -o 'nothing was dispatched: .*' <<<"$out" | cut -c1-110)" ;;
+    dispatched) [ "$n" -ge 1 ] || { echo "$label: want a dispatched cell, fake calls=$n rc=$rc: $(head -c 300 <<<"$out")"; return 1; }; echo "$label: dispatched ($n fake calls)" ;;
+  esac
+}
+fresh() { echo "$TEST_TMP/guard-$1.jsonl"; rm -f "$TEST_TMP/guard-$1.jsonl"; }
+echo "--- the guard refuses (fake claude called 0 times) ---"
+o=$(gcase run-fbatch-v2-campaign.js "draft prereg, valid pilot" refused "${FORMAL[@]}" --results "$(fresh a)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "stamped status but --check fails" refused "${FORMAL[@]}" --prereg "$BADSTAMP" --results "$(fresh b)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
+grep -q 'stamp check failed' <<<"$(run_campaign run-fbatch-v2-campaign.js "$TEST_TMP/g.log" "${FORMAL[@]}" --prereg "$BADSTAMP" --results "$(fresh b2)" --pilot-results "$RV2" 2>&1)" || fail "the stamp-check refusal must name the failed check"
+o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok, no --pilot-results" refused "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh c)") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok, pilot file missing" refused "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh c2)" --pilot-results "$TEST_TMP/no-such-pilot.jsonl") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok, pilot rows all infra failures" refused "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh d)" --pilot-results "$INFRA") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok, pilot rows of another row" refused "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh d2)" --pilot-results "$NOT_THIS_ROW") || fail "$o"; echo "  $o"
+echo "--- stamped, check ok, scorable pilot: the first cell is dispatched ---"
+o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok + pilot" dispatched "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh e)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
+echo "--- negative controls: the same first three refusals on the campaign with the guard removed dispatch cells ---"
+o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, draft prereg" dispatched "${FORMAL[@]}" --results "$(fresh ma)" --pilot-results "$RV2") || fail "control broken: $o"; echo "  red as designed: $o"
+o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, stamped but --check fails" dispatched "${FORMAL[@]}" --prereg "$BADSTAMP" --results "$(fresh mb)" --pilot-results "$RV2") || fail "control broken: $o"; echo "  red as designed: $o"
+o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, no pilot file" dispatched "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh mc)") || fail "control broken: $o"; echo "  red as designed: $o"
+rm -f "$GUARDLESS"
+echo "--- --pilot needs neither a stamp nor a pilot file; --dry-run is never refused and prints the guard state ---"
+o=$(gcase run-fbatch-v2-campaign.js "pilot on the draft prereg" dispatched --runner cc --pilot --results "$(fresh p)") || fail "$o"; echo "  $o"
+d=$(clean node "$BASE/run-fbatch-v2-campaign.js" --results "$TEST_TMP/gdry.jsonl" --dry-run < /dev/null) || fail "dry-run on the draft prereg must exit 0"
+grep -q '^guard: unstamped' <<<"$d" && grep -q 'no pilot' <<<"$d" || fail "dry-run must print the guard state: $(grep '^guard' <<<"$d")"
+echo "  $(grep '^guard' <<<"$d" | cut -c1-120)"
+d=$(clean node "$BASE/run-fbatch-v2-campaign.js" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$TEST_TMP/gdry2.jsonl" --dry-run --pilot-results "$RV2" < /dev/null) || fail "dry-run on the stamped copy"
+grep -q '^guard: ok$' <<<"$d" || fail "dry-run must print guard: ok when every condition holds: $(grep '^guard' <<<"$d")"
+echo "  guard: ok (stamped copy + pilot)"
+d=$(clean node "$BASE/run-fbatch-v2-campaign.js" --results "$TEST_TMP/gdry3.jsonl" --pilot --dry-run < /dev/null) || fail "pilot dry-run"
+grep -q '^guard: not needed for --pilot' <<<"$d" || fail "pilot dry-run guard line"
+
 echo "=== no landing timer started by this test is still alive ==="
 for i in $(seq 1 20); do [ -z "$(land_pids "$TEST_TMP")" ] && break; sleep 0.25; done
 left=$(land_pids "$TEST_TMP" | tr '\n' ' ')

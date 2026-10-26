@@ -19,7 +19,7 @@
 //   repo-residue-sweep.js close-session --session <sid> [--yes] [--repo <dir>] [--integration-ref <ref>] [--json]
 //
 // CLASSES (from git facts, never from a marker's claim):
-//   worktree: live | missing-dir | dirty | clean-integrated | clean-unintegrated
+//   worktree: live | busy | missing-dir | dirty | clean-integrated | clean-unintegrated   (busy = a process uses it: cwd, exe or a mapped file inside, or /proc unreadable; never removable)
 //     live      — `.autopilot-worktree.lock` is held (a rail is running in it): never touched
 //     dirty     — any `git status --porcelain` line (staged, unstaged, untracked)
 //     integrated— the worktree's HEAD is an ancestor of --integration-ref (default: the main
@@ -682,20 +682,91 @@ function parseSchema2Marker(file) {
 }
 
 // ------------------------------------------------------------------ liveness and campaign signals
-// Every cwd (realpath) of every process this user can read, or null when /proc is unavailable.
-function readProcCwds() {
+// worktreeInUse: THE single definition of "a process is using this worktree", shared by every path that can delete
+// one (scan classification, needs-human list, manual reap, auto reap, close-session). Signals read per process
+// (scan table, class "a process depends on a directory"):
+//   cwd            /proc/<pid>/cwd       the process stands in it
+//   exe            /proc/<pid>/exe       the binary itself lives there
+//   maps           /proc/<pid>/maps      a file mmap'd from there (libraries, a node binary copy, JIT'd sources)
+//   cmdline        /proc/<pid>/cmdline   every argument taken as a path (absolute, or relative to the process's cwd;
+//                                        `--opt=/path` too), realpath'd. This is the hub case: `node <worktree>/x.js`
+//                                        with the cwd elsewhere has the SYSTEM node as exe, and the script is read then
+//                                        closed, so neither exe, maps nor fd shows it; only the argument does.
+//   fd             /proc/<pid>/fd/*      a file held open there
+//   root           /proc/<pid>/root      a chroot into it
+// NOT read: the environment (/proc/<pid>/environ). PWD/OLDPWD/NODE_PATH style values are inherited from the parent
+// shell and are routinely stale (every shell started from a since-removed worktree carries it), so they would flag
+// processes that no longer depend on the directory, while the loads that do matter are already seen via cmdline,
+// maps and fd. The sweep's own pid is skipped for cmdline and fd only (its arguments name the target worktree).
+// Unreadable /proc is UNKNOWN, and unknown is treated as in use (never cleanable): a missing or empty proc root, or
+// NO item of NO pid readable at all (a sandbox hiding /proc). One readable item anywhere means the table is
+// readable; a single pid that is unreadable (non-dumpable system processes such as systemd --user, sshd-session,
+// ssh-agent are always EACCES for their own uid) is skipped, otherwise every host would be permanently "busy".
+// The proc root is injectable (AUTOPILOT_RESIDUE_PROC_ROOT) so tests can simulate an unreadable or odd /proc.
+function procRootDir() { return process.env.AUTOPILOT_RESIDUE_PROC_ROOT || '/proc'; }
+// One pass over /proc, shared by every worktree of a scan: null when unreadable, else { items: [{pid, via, file}] }.
+function readProcUse() {
+  const root = procRootDir();
   let pids;
-  try { pids = fs.readdirSync('/proc').filter((n) => /^[0-9]+$/.test(n)); } catch { return null; }
+  try { pids = fs.readdirSync(root).filter((n) => /^[0-9]+$/.test(n)); } catch { return null; }
   if (pids.length === 0) return null;
-  const out = [];
-  for (const pid of pids) { try { out.push(fs.readlinkSync(`/proc/${pid}/cwd`).replace(/ \(deleted\)$/, '')); } catch { /* gone or not ours */ } }
-  return out;
+  const items = [];
+  let readable = 0;
+  const clean = (p) => p.replace(/ \(deleted\)$/, '');
+  const real = (p) => { try { return fs.realpathSync(p); } catch { return p; } };
+  for (const pid of pids) {
+    const me = Number(pid) === process.pid;
+    const add = (via, file) => items.push({ pid: Number(pid), via, file });
+    let cwd = null;
+    for (const via of ['cwd', 'exe', 'root']) {
+      try {
+        const t = clean(fs.readlinkSync(`${root}/${pid}/${via}`)); readable++;
+        if (via === 'cwd') cwd = t;
+        if (via !== 'root' || t !== '/') add(via, t);
+      } catch { /* gone, or not readable by us */ }
+    }
+    try {
+      for (const line of fs.readFileSync(`${root}/${pid}/maps`, 'utf8').split('\n')) {
+        const i = line.indexOf('/');
+        if (i > 0) add('maps', clean(line.slice(i).trim()));
+      }
+      readable++;
+    } catch { /* gone, or not readable by us */ }
+    if (me) continue;
+    try {
+      const args = fs.readFileSync(`${root}/${pid}/cmdline`, 'utf8').split('\0').filter((x) => x !== '');
+      readable++;
+      for (const arg of args) {
+        const cands = [arg]; const eq = arg.indexOf('=');
+        if (eq > 0 && arg.startsWith('-')) cands.push(arg.slice(eq + 1));
+        for (const c of cands) {
+          if (c.startsWith('/')) add('cmdline', real(c));
+          else if (cwd !== null && c !== '' && !c.startsWith('-')) add('cmdline', real(path.resolve(cwd, c)));
+        }
+      }
+    } catch { /* gone, or not readable by us */ }
+    try {
+      for (const fd of fs.readdirSync(`${root}/${pid}/fd`)) {
+        try { const t = clean(fs.readlinkSync(`${root}/${pid}/fd/${fd}`)); if (t.startsWith('/')) add('fd', t); } catch { /* closed meanwhile */ }
+      }
+      readable++;
+    } catch { /* gone, or not readable by us */ }
+  }
+  return readable === 0 ? null : { items };
 }
-function cwdInside(cwds, dir) {
-  if (cwds === null) return null; // unknowable: callers treat as busy
+// -> { busy: false } | { busy: true, unknown: true, why } | { busy: true, pid, via, file, why }
+function worktreeInUse(procs, dir) {
+  if (procs === null) return { busy: true, unknown: true, why: 'process table unreadable: cannot tell whether a process uses it' };
   let real = dir; try { real = fs.realpathSync(dir); } catch { /* missing */ }
-  return cwds.some((c) => c === real || c.startsWith(`${real}/`));
+  real = real.replace(/\/+$/, '');
+  for (const it of procs.items) {
+    const c = it.file.replace(/\/+$/, '');
+    if (c === real || c.startsWith(`${real}/`)) return { busy: true, unknown: false, pid: it.pid, via: it.via, file: it.file, why: `in use by pid ${it.pid} (${it.via}: ${it.file})` };
+  }
+  return { busy: false };
 }
+// a fresh look right before a deletion (the scan may be seconds old)
+function busyNow(dir) { return worktreeInUse(readProcUse(), dir); }
 
 function loadCampaignSignal(commonDir) {
   const unresolved = new Set();
@@ -747,12 +818,16 @@ function branchLastActivity(repo, b) {
   return t || null;
 }
 
-function annotateWorktrees(rows, cfg, nowMs, cwds, repo) {
+function annotateWorktrees(rows, cfg, nowMs, procs, repo) {
   for (const w of rows) {
     w.marker_valid = null; w.retention_reason = null; w.retention_expires_at = null; w.lease = null; w.lease_expired = null;
-    w.detached = false; w.head_is_branch_tip = null; w.cwd_busy = null;
+    w.detached = false; w.head_is_branch_tip = null; w.cwd_busy = null; w.in_use = null;
     if (w.class === 'missing-dir') continue;
-    w.cwd_busy = cwdInside(cwds, w.path);
+    // cwd_busy keeps its old meaning for the callers: true = in use (any of cwd/exe/maps), null = unknowable, false = free
+    const use = worktreeInUse(procs, w.path);
+    w.in_use = use;
+    w.cwd_busy = use.busy ? (use.unknown ? null : true) : false;
+    if (use.busy && (w.class === 'clean-integrated' || w.class === 'clean-unintegrated')) { w.class_before_busy = w.class; w.class = 'busy'; w.reason = `${w.reason}${w.reason ? '; ' : ''}${use.why}`; }
     w.detached = !w.branch;
     if (w.branch) { const t = git(repo, ['rev-parse', '--verify', '--quiet', `refs/heads/${w.branch}`]); w.head_is_branch_tip = t.ok && t.out.trim() === w.head; }
     const m = w.marker_strict;
@@ -823,7 +898,7 @@ function computeNeedsHuman(rows, branches, ctx) {
   const markerBranches = new Map();
   for (const w of rows) if (w.marker_strict && w.marker_strict.valid && fs.existsSync(w.path)) markerBranches.set(w.marker_strict.branch, w);
   for (const w of rows) {
-    if (w.class === 'live' || w.class === 'missing-dir') continue;
+    if (w.class === 'live' || w.class === 'missing-dir' || w.class === 'busy') continue; // busy: a process uses it, never offered for removal
     // A session worktree with a process in it is in use; a marked rail worktree is judged by its marker and lock.
     if (w.cwd_busy === true && w.path.startsWith(wtRoot) && w.marker_valid !== true) continue;
     const entry = (command) => ({ kind: 'worktree', path: w.path, class: w.class, age_days: w.age_days, bytes: null, reason: w.retention_reason || (w.reason || '').slice(0, 120), command });
@@ -948,10 +1023,10 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
     writeStdout(`${JSON.stringify(skipped)}\n`);
     return 0;
   }
-  const cwds = readProcCwds();
+  const procs = readProcUse();
   const sig = loadCampaignSignal(common);
   let rows = classifyWorktrees(mainPath, mainPath, integrationSha);
-  annotateWorktrees(rows, cfg, nowMs, cwds, mainPath);
+  annotateWorktrees(rows, cfg, nowMs, procs, mainPath);
   let branches = classifyBranches(mainPath, listWorktrees(mainPath).map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha, integrationBranch);
   const removed = []; const archived = []; const kept = []; const failedWorktrees = new Set(); const failedBranches = new Set();
   const notes = [];
@@ -976,13 +1051,15 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
     if (w.class === 'live' || w.class === 'dirty' || w.class === 'unverifiable') { keep(w.class); continue; }
     if (w.marker_valid !== true) { keep(w.marker_valid === false ? 'marker_invalid' : 'no_marker'); continue; }
     const m = w.marker_strict;
-    if (w.cwd_busy !== false) { keep(w.cwd_busy === null ? 'proc_unavailable' : 'process_cwd_inside'); continue; }
+    if (w.cwd_busy !== false) { keep(w.cwd_busy === null ? 'proc_unavailable' : (w.in_use && w.in_use.via && w.in_use.via !== 'cwd' ? 'process_in_use' : 'process_cwd_inside')); continue; }
     if (w.lease === 'lease' && !w.lease_expired) { keep('explicit_lease_unexpired'); continue; }
     if (w.class !== 'clean-integrated' && !w.lease_expired) { keep('lease_not_expired'); continue; }
     if (w.detached || w.head_is_branch_tip !== true) { keep('detached_or_head_not_branch_tip'); continue; }
     if (m.branch !== w.branch) { keep('marker_branch_mismatch'); continue; }
     if (!sig.reliable && m.root_run_id !== m.run_id) { keep('campaign_signal_unavailable'); continue; }
     if (sig.reliable && heldByCampaign(m.root_run_id)) { keep('unresolved_campaign'); continue; }
+    const again = busyNow(w.path); // a process may have started since the scan above
+    if (again.busy) { keep(again.unknown ? 'proc_unavailable' : 'process_in_use'); continue; }
     const r = removeMarkerWorktree(mainPath, w);
     if (r.ok) removed.push({ kind: 'worktree', path: w.path, class: w.class, reason: w.class === 'clean-integrated' ? 'integrated' : 'lease_expired', branch: w.branch });
     else { keep(r.why); failedWorktrees.add(w.path); }
@@ -1054,7 +1131,7 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
 
   // 4. what remains for a person
   rows = classifyWorktrees(mainPath, mainPath, integrationSha);
-  annotateWorktrees(rows, cfg, Date.now(), cwds, mainPath);
+  annotateWorktrees(rows, cfg, Date.now(), readProcUse(), mainPath);
   branches = classifyBranches(mainPath, listWorktrees(mainPath).map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha, integrationBranch);
   const tmp_prune = runTmpPrune(o, cfg);
   const report = { schema: 'autopilot.residue-auto/1', ran_at: new Date(nowMs).toISOString(), ran_at_epoch: Math.floor(nowMs / 1000), removed, archived, kept, notes, anchors, ledger, tmp_prune };
@@ -1182,7 +1259,7 @@ function runCloseSession(o, mainPath, integrationSha, integrationBranch, common)
   const byName = new Map(branches.map((b) => [b.branch, b]));
   const sig = loadCampaignSignal(common);
   const wtRows = classifyWorktrees(mainPath, mainPath, integrationSha);
-  annotateWorktrees(wtRows, cfg, nowMs, readProcCwds(), mainPath);
+  annotateWorktrees(wtRows, cfg, nowMs, readProcUse(), mainPath);
   const pointers = new Map(); // branch -> every marker worktree that names it
   for (const w of wtRows) {
     if (!(w.marker_strict && w.marker_strict.valid && fs.existsSync(w.path))) continue;
@@ -1302,7 +1379,7 @@ function main() {
   if (o.cmd === 'scan') {
     const cfg = loadResidueConfig();
     const nowMs = Date.now();
-    annotateWorktrees(worktrees, cfg, nowMs, readProcCwds(), mainPath);
+    annotateWorktrees(worktrees, cfg, nowMs, readProcUse(), mainPath);
     const ctx = { mainPath, cfg, nowMs, sig: loadCampaignSignal(common), failedWorktrees: new Set(), failedBranches: new Set() };
     attachNeedsHuman(report, worktrees, branches, ctx, o.sizes ? 'measure' : 'cached', readCachedSizes(common));
     writeStdout(`${JSON.stringify(report)}\n`);
@@ -1325,6 +1402,10 @@ function main() {
   const onlyWt = o.worktrees.map((p) => path.resolve(p));
   for (const w of worktrees) {
     if (onlyWt.length > 0 && !onlyWt.includes(w.path)) continue;
+    if (w.class !== 'missing-dir') {
+      const use = busyNow(w.path); // fresh, right before any deletion: the scan the button came from may be old
+      if (use.busy) { actions.worktrees_kept.push({ path: w.path, class: 'busy', was: w.class, kept: true, why: use.why }); continue; }
+    }
     if (w.class === 'live' || w.class === 'unverifiable' || w.class === 'clean-unintegrated') { actions.worktrees_kept.push({ path: w.path, class: w.class, why: w.reason }); continue; }
     if (tooYoung(w.age_days)) { actions.worktrees_kept.push({ path: w.path, class: w.class, why: `younger than ${o.olderThanDays} days` }); continue; }
     if (w.class === 'dirty') {
@@ -1369,7 +1450,7 @@ function main() {
   const after = classifyWorktrees(mainPath, mainPath, integrationSha.out);
   report.after = { worktrees: count(after, 'class'), final_panel_seats: count(classifyFinalPanelSeats(mainPath, after, o.olderThanDays).rows, 'class'), branches: count(classifyBranches(mainPath, listWorktrees(mainPath).map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha.out, integrationBranch), 'class') };
   writeStdout(`${JSON.stringify(report)}\n`);
-  const leftover = actions.worktrees_kept.filter((k) => ['missing-dir', 'clean-integrated'].includes(k.class))
+  const leftover = actions.worktrees_kept.filter((k) => ['missing-dir', 'clean-integrated'].includes(k.class) || (onlyWt.length > 0 && k.class === 'busy'))
     .concat(actions.final_panel_seats_kept.filter((k) => /^reap (failed|refused)/.test(k.why)));
   return leftover.length > 0 ? 1 : 0;
 }

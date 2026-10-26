@@ -1,0 +1,70 @@
+{
+  "dir": "a_armed",
+  "session_id_init": "1fbdd242-8bfa-45dc-871f-9e644b3b6a03",
+  "expected_session_id": "1fbdd242-8bfa-45dc-871f-9e644b3b6a03",
+  "hook_calls": 4,
+  "stop_calls": 2,
+  "subagent_stop_calls": 2,
+  "first_fire_calls_by_wiring": {
+    "Stop/cli": 2,
+    "SubagentStop/cli": 1
+  },
+  "blocked": 1,
+  "continued_after_block": true,
+  "decisions": [
+    "Stop:cli:allow(event-not-gated)",
+    "SubagentStop:cli:block",
+    "SubagentStop:cli:allow(stop_hook_active)",
+    "Stop:cli:allow(event-not-gated)"
+  ],
+  "hook_stdin_session_ids": [
+    "1fbdd242-8bfa-45dc-871f-9e644b3b6a03"
+  ],
+  "hook_stdin_matches_expected": true,
+  "hook_wall_ms": [
+    1,
+    0,
+    0,
+    0
+  ],
+  "stdin_has_cwd": [
+    true,
+    true,
+    true,
+    true
+  ],
+  "stdin_cwd_exists": [
+    true,
+    true,
+    true,
+    true
+  ],
+  "hook_stdin_keys": [
+    "agent_id",
+    "agent_transcript_path",
+    "agent_type",
+    "background_tasks",
+    "cwd",
+    "effort",
+    "hook_event_name",
+    "last_assistant_message",
+    "permission_mode",
+    "prompt_id",
+    "session_crons",
+    "session_id",
+    "stop_hook_active",
+    "transcript_path"
+  ],
+  "result_text": "FINISHED\n\nThe subagent returned \"ALPHA\" instead of \"DONE\", so it did not follow the brief. I did not re-dispatch it, since you asked for exactly one Agent call.",
+  "is_error": false,
+  "total_cost_usd": 0.00896359,
+  "hook_agent_ids": [
+    "a1b4eed44e831adb8"
+  ],
+  "tool_result_agent_ids": [
+    "a1b4eed44e831adb8"
+  ],
+  "agent_id_equal": true,
+  "parent_session_in_subagent_hook": true,
+  "plugin_hook_events_seen": 92
+}

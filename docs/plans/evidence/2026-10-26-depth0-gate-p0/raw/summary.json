@@ -1,0 +1,368 @@
+{
+  "total_cost_usd": 0.025261944999999997,
+  "cap_usd": 1,
+  "cap_reached": false,
+  "cases": {
+    "a_armed": {
+      "status": "produced",
+      "note": "",
+      "hook_calls": 4,
+      "blocked": 1,
+      "continued_after_block": true,
+      "decisions": [
+        "Stop:cli:allow(event-not-gated)",
+        "SubagentStop:cli:block",
+        "SubagentStop:cli:allow(stop_hook_active)",
+        "Stop:cli:allow(event-not-gated)"
+      ],
+      "session_id_init": "1fbdd242-8bfa-45dc-871f-9e644b3b6a03",
+      "hook_stdin_matches_expected": true,
+      "first_fire_calls_by_wiring": {
+        "Stop/cli": 2,
+        "SubagentStop/cli": 1
+      },
+      "agent_id_equal": true,
+      "hook_agent_ids": [
+        "a1b4eed44e831adb8"
+      ],
+      "tool_result_agent_ids": [
+        "a1b4eed44e831adb8"
+      ],
+      "parent_session_in_subagent_hook": true,
+      "stdin_has_cwd": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "hook_wall_ms": [
+        1,
+        0,
+        0,
+        0
+      ],
+      "hook_stdin_keys": [
+        "agent_id",
+        "agent_transcript_path",
+        "agent_type",
+        "background_tasks",
+        "cwd",
+        "effort",
+        "hook_event_name",
+        "last_assistant_message",
+        "permission_mode",
+        "prompt_id",
+        "session_crons",
+        "session_id",
+        "stop_hook_active",
+        "transcript_path"
+      ],
+      "cost_usd": 0.00896359
+    },
+    "a_unarmed": {
+      "status": "produced",
+      "note": "",
+      "hook_calls": 2,
+      "blocked": 0,
+      "continued_after_block": false,
+      "decisions": [
+        "SubagentStop:cli:allow(unarmed)",
+        "Stop:cli:allow(unarmed)"
+      ],
+      "session_id_init": "e31bac60-4cfd-4d06-ba15-dff5a905cb13",
+      "hook_stdin_matches_expected": true,
+      "first_fire_calls_by_wiring": {
+        "SubagentStop/cli": 1,
+        "Stop/cli": 1
+      },
+      "agent_id_equal": true,
+      "hook_agent_ids": [
+        "a5ffe78b734da87a2"
+      ],
+      "tool_result_agent_ids": [
+        "a5ffe78b734da87a2"
+      ],
+      "parent_session_in_subagent_hook": true,
+      "stdin_has_cwd": [
+        true,
+        true
+      ],
+      "hook_wall_ms": [
+        0,
+        1
+      ],
+      "hook_stdin_keys": [
+        "agent_id",
+        "agent_transcript_path",
+        "agent_type",
+        "background_tasks",
+        "cwd",
+        "effort",
+        "hook_event_name",
+        "last_assistant_message",
+        "permission_mode",
+        "prompt_id",
+        "session_crons",
+        "session_id",
+        "stop_hook_active",
+        "transcript_path"
+      ],
+      "cost_usd": 0.0075528850000000005
+    },
+    "b_armed": {
+      "status": "produced",
+      "note": "",
+      "hook_calls": 2,
+      "blocked": 1,
+      "continued_after_block": true,
+      "decisions": [
+        "Stop:cli:block",
+        "Stop:cli:allow(stop_hook_active)"
+      ],
+      "session_id_init": "920bc683-2d75-41bb-91b2-bc3a0dbcaa19",
+      "hook_stdin_matches_expected": true,
+      "first_fire_calls_by_wiring": {
+        "Stop/cli": 1
+      },
+      "agent_id_equal": null,
+      "hook_agent_ids": [],
+      "tool_result_agent_ids": [],
+      "parent_session_in_subagent_hook": null,
+      "stdin_has_cwd": [
+        true,
+        true
+      ],
+      "hook_wall_ms": [
+        0,
+        1
+      ],
+      "hook_stdin_keys": [
+        "background_tasks",
+        "cwd",
+        "effort",
+        "hook_event_name",
+        "last_assistant_message",
+        "permission_mode",
+        "prompt_id",
+        "session_crons",
+        "session_id",
+        "stop_hook_active",
+        "transcript_path"
+      ],
+      "cost_usd": 0.00229078
+    },
+    "b_unarmed": {
+      "status": "produced",
+      "note": "",
+      "hook_calls": 1,
+      "blocked": 0,
+      "continued_after_block": false,
+      "decisions": [
+        "Stop:cli:allow(session-id-mismatch)"
+      ],
+      "session_id_init": "bd402726-9303-4b9b-b394-192f21854bc9",
+      "hook_stdin_matches_expected": true,
+      "first_fire_calls_by_wiring": {
+        "Stop/cli": 1
+      },
+      "agent_id_equal": null,
+      "hook_agent_ids": [],
+      "tool_result_agent_ids": [],
+      "parent_session_in_subagent_hook": null,
+      "stdin_has_cwd": [
+        true
+      ],
+      "hook_wall_ms": [
+        0
+      ],
+      "hook_stdin_keys": [
+        "background_tasks",
+        "cwd",
+        "effort",
+        "hook_event_name",
+        "last_assistant_message",
+        "permission_mode",
+        "prompt_id",
+        "session_crons",
+        "session_id",
+        "stop_hook_active",
+        "transcript_path"
+      ],
+      "cost_usd": 0.00140553
+    },
+    "c_author_armed": {
+      "status": "produced",
+      "note": "",
+      "hook_calls": 2,
+      "blocked": 1,
+      "continued_after_block": true,
+      "decisions": [
+        "Stop:cli:block",
+        "Stop:cli:allow(stop_hook_active)"
+      ],
+      "session_id_init": "4acaae0a-fff4-45e2-b192-02e107d83a06",
+      "hook_stdin_matches_expected": true,
+      "first_fire_calls_by_wiring": {
+        "Stop/cli": 1
+      },
+      "agent_id_equal": null,
+      "hook_agent_ids": [],
+      "tool_result_agent_ids": [],
+      "parent_session_in_subagent_hook": null,
+      "stdin_has_cwd": [
+        true,
+        true
+      ],
+      "hook_wall_ms": [
+        1,
+        0
+      ],
+      "hook_stdin_keys": [
+        "background_tasks",
+        "cwd",
+        "effort",
+        "hook_event_name",
+        "last_assistant_message",
+        "permission_mode",
+        "prompt_id",
+        "session_crons",
+        "session_id",
+        "stop_hook_active",
+        "transcript_path"
+      ],
+      "cost_usd": 0.00072791
+    },
+    "c_author_unarmed": {
+      "status": "produced",
+      "note": "",
+      "hook_calls": 1,
+      "blocked": 0,
+      "continued_after_block": false,
+      "decisions": [
+        "Stop:cli:allow(unarmed)"
+      ],
+      "session_id_init": "0644bc12-f7f2-451b-8a9d-852ddf8410c3",
+      "hook_stdin_matches_expected": true,
+      "first_fire_calls_by_wiring": {
+        "Stop/cli": 1
+      },
+      "agent_id_equal": null,
+      "hook_agent_ids": [],
+      "tool_result_agent_ids": [],
+      "parent_session_in_subagent_hook": null,
+      "stdin_has_cwd": [
+        true
+      ],
+      "hook_wall_ms": [
+        0
+      ],
+      "hook_stdin_keys": [
+        "background_tasks",
+        "cwd",
+        "effort",
+        "hook_event_name",
+        "last_assistant_message",
+        "permission_mode",
+        "prompt_id",
+        "session_crons",
+        "session_id",
+        "stop_hook_active",
+        "transcript_path"
+      ],
+      "cost_usd": 0.00058169
+    },
+    "c_hetero_armed": {
+      "status": "produced",
+      "note": "",
+      "hook_calls": 4,
+      "blocked": 2,
+      "continued_after_block": true,
+      "decisions": [
+        "Stop:user:block",
+        "Stop:cli:block",
+        "Stop:user:allow(stop_hook_active)",
+        "Stop:cli:allow(stop_hook_active)"
+      ],
+      "session_id_init": "0d084af5-bc43-4569-abd9-1a47b3e9171f",
+      "hook_stdin_matches_expected": true,
+      "first_fire_calls_by_wiring": {
+        "Stop/user": 1,
+        "Stop/cli": 1
+      },
+      "agent_id_equal": null,
+      "hook_agent_ids": [],
+      "tool_result_agent_ids": [],
+      "parent_session_in_subagent_hook": null,
+      "stdin_has_cwd": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "hook_wall_ms": [
+        1,
+        0,
+        1,
+        0
+      ],
+      "hook_stdin_keys": [
+        "background_tasks",
+        "cwd",
+        "effort",
+        "hook_event_name",
+        "last_assistant_message",
+        "permission_mode",
+        "prompt_id",
+        "session_crons",
+        "session_id",
+        "stop_hook_active",
+        "transcript_path"
+      ],
+      "cost_usd": 0.00233263
+    },
+    "c_hetero_unarmed": {
+      "status": "produced",
+      "note": "",
+      "hook_calls": 2,
+      "blocked": 0,
+      "continued_after_block": false,
+      "decisions": [
+        "Stop:user:allow(unarmed)",
+        "Stop:cli:allow(unarmed)"
+      ],
+      "session_id_init": "ea7cf7ca-525c-43af-af20-bb0d6d131d3b",
+      "hook_stdin_matches_expected": true,
+      "first_fire_calls_by_wiring": {
+        "Stop/user": 1,
+        "Stop/cli": 1
+      },
+      "agent_id_equal": null,
+      "hook_agent_ids": [],
+      "tool_result_agent_ids": [],
+      "parent_session_in_subagent_hook": null,
+      "stdin_has_cwd": [
+        true,
+        true
+      ],
+      "hook_wall_ms": [
+        0,
+        0
+      ],
+      "hook_stdin_keys": [
+        "background_tasks",
+        "cwd",
+        "effort",
+        "hook_event_name",
+        "last_assistant_message",
+        "permission_mode",
+        "prompt_id",
+        "session_crons",
+        "session_id",
+        "stop_hook_active",
+        "transcript_path"
+      ],
+      "cost_usd": 0.00140693
+    }
+  },
+  "note": "merged: b and c from the first paid run, a from the rerun (first-run a replaced); run.json files regenerated with the fixed analyze.js. Two-run spend including the replaced first-run a: 0.0433 USD (rerun 0.0165)"
+}

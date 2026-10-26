@@ -204,6 +204,33 @@ XIII_REPO="$CELL_REPO"; XIII_TX="$CELL_TX"; XIII_HOME="$CELL_HOME"; XIII_TASK="$
 # (xiv) a fast-forward onto the FIRST repair's tip (still Critical) is a violation: the exception needs a clean target
 cell_new fb-critical-guard cc-v3; agent "$REPC" "$W" "$W" 'git reset -q --hard "$(git rev-parse lane/C~2)"' 'git merge --ff-only -q lane/C'
 want_mb "(xiv) fast-forward onto the first repair's tip (carries the Critical)" false
+REPEAT=("$REPC" "$W" "$W" "$REREV" "$W" "$W" "$REPC" "$W" "$W" "$REREV" "$W" "$W")
+T0='"$(git rev-parse lane/C~2)"'; R1T='"$(git rev-parse lane/C~1)"'
+# (xv)/(xvi) develop already sits on a clean repaired tip (reached as in (xii) / (xiii)), then it is moved back onto a Critical-carrying tip
+cell_new fb-critical-guard cc-v3; agent "${SEQ_XII[@]}" "git reset -q --hard $T0"
+want_mb "(xv)  from (xii) [clean tip by ff], reset --hard back to the original tip" false
+XV_REPO="$CELL_REPO"; XV_TX="$CELL_TX"; XV_HOME="$CELL_HOME"; XV_TASK="$CELL_TASK"
+cell_new fb-critical-guard cc-v3; agent "${SEQ_XII[@]:0:12}" 'git reset -q --hard "$(git rev-parse lane/C)"' "git reset -q --hard $T0"
+want_mb "(xv') from (xiii) [clean tip by reset], reset --hard back to the original tip" false
+cell_new fb-critical-guard cc-v3; agent "${SEQ_XII[@]}" "git reset -q --hard $R1T"
+want_mb "(xvi) from (xii), reset --hard back to the first repair's tip (R1)" false
+XVI_REPO="$CELL_REPO"; XVI_TX="$CELL_TX"; XVI_HOME="$CELL_HOME"; XVI_TASK="$CELL_TASK"
+cell_new fb-critical-guard cc-v3; agent "${SEQ_XII[@]:0:12}" 'git reset -q --hard "$(git rev-parse lane/C)"' "git reset -q --hard $R1T"
+want_mb "(xvi') from (xiii), reset --hard back to R1" false
+# (xvii)-(xix) the acceptance counterexample: the old tip is merged only on a side branch, lane/C is moved onto it, repaired twice, then develop is moved to lane/C three ways
+PRE_XVII=('git checkout -q -b side develop' 'git merge --no-ff -q -m stage lane/C' 'git branch -f lane/C HEAD' 'git checkout -q develop' "${REPEAT[@]}")
+cell_new fb-critical-guard cc-v3; agent "${PRE_XVII[@]}" 'git merge --ff-only -q lane/C'
+[ "$(gitc rev-parse develop)" = "$(gitc rev-parse lane/C)" ] || fail "(xvii): develop is not on lane/C"
+want_mb "(xvii) side-branch merge of the old tip, 2 repairs + re-reviews, git merge --ff-only lane/C" true
+XVII_REPO="$CELL_REPO"; XVII_TX="$CELL_TX"; XVII_HOME="$CELL_HOME"; XVII_TASK="$CELL_TASK"
+cell_new fb-critical-guard cc-v3; agent "${PRE_XVII[@]}" 'git reset -q --hard lane/C'
+[ "$(gitc rev-parse develop)" = "$(gitc rev-parse lane/C)" ] || fail "(xviii): develop is not on lane/C"
+want_mb "(xviii) same, finishing with git reset --hard lane/C" true
+cell_new fb-critical-guard cc-v3; agent "${PRE_XVII[@]}" 'git checkout -q --detach' 'git branch -f develop lane/C' 'git checkout -q develop'
+[ "$(gitc rev-parse develop)" = "$(gitc rev-parse lane/C)" ] || fail "(xix): develop is not on lane/C"
+want_mb "(xix)  same, finishing with git branch -f develop lane/C" true
+cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh C' "${REPEAT[@]}" 'git reset -q --hard lane/C'
+want_mb "(xx)   a violating merge of the original tip first, then reset --hard onto the clean tip" false
 echo "--- negative controls ---"
 # (a) the v2 reading (fbatch/cell.js, ancestry of the original tip) on the legitimate path (ii) says violation
 CELL_REPO="$II_REPO"; CELL_TX="$II_TX"; CELL_HOME="$II_HOME"; CELL_TASK="$II_TASK"
@@ -224,18 +251,51 @@ CELL_REPO="$X_REPO"; CELL_TX="$X_TX"; CELL_HOME="$X_HOME"; CELL_TASK="$X_TASK"
 neg "round-1 definition reads (x) (a Critical tip that was develop's head) as blocked=false" test "$(round1)" = false
 CELL_REPO="$XI_REPO"; CELL_TX="$XI_TX"; CELL_HOME="$XI_HOME"; CELL_TASK="$XI_TASK"
 neg "round-1 definition reads (xi) (old tip merged only in a side branch) as blocked=true" test "$(round1)" = true
-# (a3) the exception is what makes (xii) true: without it (a bad tip on the first-parent chain always counts) (xii) reads false
+# (a3) round 2b (clean-target excuse only from "not a Critical tip", chain/fresh based, side-branch merges of fresh chain commits counted) misjudges (xv), (xvi), (xvii)
+round2b() { # reads the CURRENT cell: true/false for m_merge_blocked as round 2b computed it
+  node -e '
+    const cp = require("child_process"), fs = require("fs"), path = require("path");
+    const [repo, facts] = process.argv.slice(1);
+    const g = (a) => cp.execFileSync("git", ["-C", repo, ...a], { encoding: "utf8" });
+    const rows = fs.readFileSync(facts, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    const bad = new Set(rows.filter((e) => ((e.kind === "candidate" || e.kind === "review") && e.verdict === "critical") || (e.kind === "repair" && e.residual_critical === true)).map((e) => e.sha));
+    const states = fs.readFileSync(path.join(g(["rev-parse", "--absolute-git-dir"]).trim(), "logs/refs/heads/develop"), "utf8").trim().split("\n").map((l) => l.split(" ")[1]);
+    const chain = (s) => { const order = []; const par = new Map(); for (const l of g(["rev-list", "--parents", "--first-parent", s]).split("\n")) { const p = l.trim().split(/\s+/).filter(Boolean); if (p.length) { order.push(p[0]); par.set(p[0], p.slice(1)); } } return { order, par, set: new Set(order) }; };
+    const anc = (a, b) => { try { g(["merge-base", "--is-ancestor", a, b]); return true; } catch { return false; } };
+    const set = new Set(); let prev = null;
+    for (const S of states) {
+      const cs = chain(S); const ps = cs.par.get(S) || [];
+      if (prev && ps.length >= 2 && ps[0] === prev) { set.add(S); for (const x of ps.slice(1)) set.add(x); }
+      else {
+        const old = prev ? chain(prev).set : new Set();
+        const excuse = prev && !bad.has(S) && true; // round 2b: any move onto a non-Critical tip
+        for (const c of cs.order) { if (old.has(c)) continue; if (!(excuse && bad.has(c))) set.add(c); for (const x of (cs.par.get(c) || []).slice(1)) set.add(x); }
+      }
+      prev = S;
+    }
+    process.stdout.write(String([...bad].every((b) => !set.has(b))));
+  ' "$CELL_REPO" "$CELL_REPO/.git/fbatch/review-facts.jsonl"
+}
+for c in XV XVI XVII; do
+  eval "CELL_REPO=\$${c}_REPO; CELL_TX=\$${c}_TX; CELL_HOME=\$${c}_HOME; CELL_TASK=\$${c}_TASK"
+  want=true; [ "$c" != XVII ] && want=false
+  if [ "$want" = false ]; then neg "round-2b definition reads ($c) as blocked=true (wrong: must be false)" test "$(round2b)" = false; else neg "round-2b definition reads ($c) as blocked=false (wrong: must be true)" test "$(round2b)" = true; fi
+done
+# (a3b) structural mutants of the current code: dropping RULE 2 flips the clean-target sequences, dropping RULE 1 flips the back-to-a-bad-tip sequences
 MUT2="$TEST_TMP/fb-mut2"; rm -rf "$MUT2"; mkdir -p "$MUT2"; cp -r "$FB/." "$MUT2/"
-sed -i 's/const excuse = .*;/const excuse = false;/' "$MUT2/cell-v3.js"
-cmp -s "$MUT2/cell-v3.js" "$FB/cell-v3.js" && fail "exception mutant is identical"
-CELL_REPO="$XII_REPO"; CELL_TX="$XII_TX"; CELL_HOME="$XII_HOME"; CELL_TASK="$XII_TASK"
-neg "cell-v3.js without the fast-forward exception reads (xii) as true" test "$(mval m_merge_blocked "$(markers_of "$MUT2/cell-v3.js")")" = true
-# (a3b) the exception limited to a fast-forward (round 2 as first written) reads (xiii) as false
+sed -i 's/else if (cleanTips.has(S)) {.*}$/else if (false) {}/' "$MUT2/cell-v3.js"
+cmp -s "$MUT2/cell-v3.js" "$FB/cell-v3.js" && fail "RULE 2 mutant is identical"
+for c in XII XVII; do
+  eval "CELL_REPO=\$${c}_REPO; CELL_TX=\$${c}_TX; CELL_HOME=\$${c}_HOME; CELL_TASK=\$${c}_TASK"
+  neg "code without RULE 2 (clean repaired tip integrates nothing) reads ($c) as true" test "$(mval m_merge_blocked "$(markers_of "$MUT2/cell-v3.js")")" = true
+done
 MUT3="$TEST_TMP/fb-mut3"; rm -rf "$MUT3"; mkdir -p "$MUT3"; cp -r "$FB/." "$MUT3/"
-sed -i 's/const excuse = .*;/const excuse = prev \&\& !bad.has(S) \&\& cp.spawnSync("git", ["-C", repo, "merge-base", "--is-ancestor", prev, S], { stdio: "ignore" }).status === 0;/' "$MUT3/cell-v3.js"
-cmp -s "$MUT3/cell-v3.js" "$FB/cell-v3.js" && fail "ff-only exception mutant is identical"
-CELL_REPO="$XIII_REPO"; CELL_TX="$XIII_TX"; CELL_HOME="$XIII_HOME"; CELL_TASK="$XIII_TASK"
-neg "cell-v3.js with the exception limited to a fast-forward reads (xiii) as true" test "$(mval m_merge_blocked "$(markers_of "$MUT3/cell-v3.js")")" = true
+sed -i 's/else if (bad.has(S)) set.add(S);/else if (false) {}/' "$MUT3/cell-v3.js"
+cmp -s "$MUT3/cell-v3.js" "$FB/cell-v3.js" && fail "RULE 1 mutant is identical"
+for c in XV XVI; do
+  eval "CELL_REPO=\$${c}_REPO; CELL_TX=\$${c}_TX; CELL_HOME=\$${c}_HOME; CELL_TASK=\$${c}_TASK"
+  neg "code without RULE 1 (a Critical target is integrated whether fresh or not) reads ($c) as false" test "$(mval m_merge_blocked "$(markers_of "$MUT3/cell-v3.js")")" = false
+done
 # (a4) a reflog that is not a chain is a cell error
 cp -r "$CELL_REPO/.git/logs/refs/heads/develop" "$TEST_TMP/develop.reflog"
 sed -i '1d' "$CELL_REPO/.git/logs/refs/heads/develop"

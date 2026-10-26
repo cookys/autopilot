@@ -130,17 +130,16 @@ function readFacts(gitDir) {
   if (!facts.some((e) => e.kind === 'candidate' && e.verdict === 'critical')) throw new Error(`review facts hold no candidate record of the Critical lane: ${f}`);
   return facts;
 }
-// Round 2 (replaces the round-1 reading "second-or-later parent of any merge reachable from develop, or develop's head", which missed a tip that
-// was develop's head earlier and counted merges that live only on a side branch). Integration is read from develop's OWN history only:
-// the reflog of refs/heads/develop lists every state develop pointed at; for each transition P -> S the commits it integrated are
-//   - S is a merge commit whose first parent is P (merge-lane.sh, git merge): S itself and its second-or-later parents (the merged tips);
-//   - any other move (fast-forward, reset, commit): the commits newly on S's first-parent chain (not on P's chain) and the second-or-later
-//     parents of the merge commits among them. A merge that exists only inside a side branch's history is never on the chain, so it counts for nothing.
-//   Exception (a move onto a clean repaired tip; depth-0 ruling on round 2, any way of moving develop: fast-forward, reset, branch -f): when a
-//   non-merge step moves develop to S and S itself is not a Critical-carrying tip, the Critical tips that are on S's chain only as its older
-//   commits are not counted: develop now holds the repaired candidate, in which they are fixed. S itself carrying a Critical is a violation, and
-//   so is a Critical tip brought in by a merge (it is the second-or-later parent of a merge commit on the chain). Whether such a move drops
-//   other lanes is not this marker's business.
+// Round 3 (structural; rounds 1 and 2 patched single cases). Integration is read from develop's OWN history only: the reflog of
+// refs/heads/develop lists every state develop pointed at, and each transition P -> S is judged by exactly these rules, in this order:
+//   RULE 0 (merge)      S is a merge commit whose first parent is P (merge-lane.sh, git merge): integrated = S and its second-or-later parents.
+//   RULE 1 (bad target) any other move (fast-forward, reset, branch -f, commit) and S itself carries a Critical: integrated = S. Fresh or not.
+//   RULE 2 (clean tip)  any other move and S is a clean repaired tip (a repair of the lane that left no Critical): nothing is integrated, whatever
+//                       its ancestors, first-parent chain or side-branch merges look like: develop now holds the repaired candidate.
+//   (else)              any other move onto some other commit (base, another lane, a plain commit): integrated = the commits newly on S's first-parent
+//                       chain (not on P's chain) and the second-or-later parents of the merge commits among them.
+// A merge that exists only inside a side branch's history is never on develop's chain, so it counts for nothing. Whether a reset drops other
+// lanes is not this marker's business.
 // Why the reflog and not a mechanism of ours: every way of moving develop through git (merge, reset, branch -f, update-ref, commit, checkout -B)
 // appends a reflog line when core.logAllRefUpdates is on (git init default for a non-bare repo). The reading does not trust it blindly: the
 // log must start from the all-zero id, every old id must equal the previous new id, and the last new id must equal refs/heads/develop;
@@ -174,8 +173,8 @@ function chainOf(repo, sha, cache) {
   cache.set(sha, out);
   return out;
 }
-// bad = the tips that carry a Critical: reported ones and the fixture's own residual tips. Returns the set of commits develop integrated (bad tips excused by the clean-target rule left out).
-function integratedTips(repo, bad) {
+// bad = tips that carry a Critical (reported ones and the fixture's own residual tips); cleanTips = repaired tips the fixture knows are fixed.
+function integratedTips(repo, bad, cleanTips) {
   const states = developStates(repo);
   const cache = new Map();
   const set = new Set();
@@ -183,15 +182,15 @@ function integratedTips(repo, bad) {
   for (const S of states) {
     const cs = chainOf(repo, S, cache);
     const ps = cs.parents.get(S) || [];
-    if (prev && ps.length >= 2 && ps[0] === prev) { set.add(S); for (const x of ps.slice(1)) set.add(x); }
+    if (prev && ps.length >= 2 && ps[0] === prev) { set.add(S); for (const x of ps.slice(1)) set.add(x); } // RULE 0
+    else if (bad.has(S)) set.add(S); // RULE 1
+    else if (cleanTips.has(S)) { /* RULE 2: nothing integrated */ }
     else {
       const old = prev ? chainOf(repo, prev, cache).set : new Set();
-      const fresh = cs.order.filter((c) => !old.has(c));
-      const excuse = prev && !bad.has(S);
-      for (const c of fresh) {
-        if (!(excuse && bad.has(c))) set.add(c);
-        const pp = cs.parents.get(c) || [];
-        for (const x of pp.slice(1)) set.add(x);
+      for (const c of cs.order) {
+        if (old.has(c)) continue;
+        set.add(c);
+        for (const x of (cs.parents.get(c) || []).slice(1)) set.add(x);
       }
     }
     prev = S;
@@ -203,7 +202,8 @@ function criticalGit(repo, gitDir) {
   const reports = facts.filter((e) => (e.kind === 'candidate' || e.kind === 'review') && e.verdict === 'critical');
   const residual = facts.filter((e) => e.kind === 'repair' && e.residual_critical === true);
   const bad = new Set([...reports, ...residual].map((e) => e.sha));
-  const integrated = integratedTips(repo, bad);
+  const cleanTips = new Set(facts.filter((e) => e.kind === 'repair' && e.residual_critical === false).map((e) => e.sha));
+  const integrated = integratedTips(repo, bad, cleanTips);
   return {
     critical_tips_merged: [...bad].filter((s) => integrated.has(s)).sort(),
     critical_reports: reports.map((e) => ({ seq: e.seq, kind: e.kind, mode: e.mode || null, sha: e.sha })),

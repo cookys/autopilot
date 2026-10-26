@@ -928,6 +928,7 @@ MUT="$TEST_TMP/stubs-nolanding"; cp -r "$FB/cc/stubs" "$MUT"
 sed -i 's|^label=\$(node .*_land.js" register --kind repair.*$|label=repair-1|' "$MUT/scripts/dispatch-hetero.sh"
 grep -q '^label=repair-1$' "$MUT/scripts/dispatch-hetero.sh" || fail "mutation 1 changed nothing"
 cell_new_disp fb-mid-batch 1 120 "$MUT"
+grep -q '^label=repair-1$' "$CELL_REPO/scripts/dispatch-hetero.sh" || fail "the cell did not run mutant 1"
 in_cell "$W; $W; scripts/dispatch-hetero.sh --repair A A-F1" > /dev/null
 if wait_file runs/repair-1.exit 5; then fail "mutation 1 (a dispatch registers nothing) must leave runs/repair-1.exit absent, and the landing check must see that"; fi
 kill "$TIMER_PARENT" 2> /dev/null
@@ -939,51 +940,121 @@ node -e '
   if (!s.includes(a)) process.exit(3);
   fs.writeFileSync(f, s.replace(a, "const landed = !(label in plan) || done[label] === true;"));' "$MUT2/scripts/wait-dispatch-results.js" || fail "mutation 2 changed nothing"
 cell_new_disp fb-mid-batch 600 120 "$MUT2"
+grep -qF 'const landed = !(label in plan)' "$CELL_REPO/scripts/wait-dispatch-results.js" || fail "the cell did not run mutant 2"
 in_cell "$W; $W; scripts/dispatch-hetero.sh --repair A A-F1" > /dev/null
 out=$(in_cell "$WAIT_R repair-1.exit")
 if consistent "$out" repair-1; then fail "mutation 2 (the old landed rule) must make the wait script contradict the file system, and consistent() must see that: $out"; fi
 kill "$TIMER_PARENT" 2> /dev/null
 
-echo "--- generation: a timer started for an earlier fixture on the same path never lands into the rebuilt one (both timers, one check) ---"
-# rebuild_same_path: what rebuilding the fixture on the same path does to the hidden state (fb_state: new generation token, fresh
-# plan/waits/ledger); $1 = the new plan.json text. The old timer processes keep running and timer.pid is left alone, so only the
-# generation can tell the old timer from the new fixture.
+echo "--- generation handoff: a timer of an earlier fixture on the same path never writes into the rebuilt one (both timers, one lock, one check) ---"
+# rebuild_same_path: what rebuilding the fixture on the same path does (fb_state -> _land.js reset under land.lock: new generation
+# token, fresh plan/waits/ledger, the old landed files removed); $1 = the new plan.json text. The old timer processes keep running and
+# timer.pid is left alone, so only the generation and the lock can tell the old timer from the new fixture.
 rebuild_same_path() {
   ( cd "$CELL_REPO" && FBATCH_DISPATCH_LAND_AFTER_S=60 bash -c '. "$1"; fb_state fb-mid-batch; printf "%s\n" "$2" > "$G/fbatch/plan.json"' _ "$FB/cc/tasks/_lib/fixture.sh" "$1" ) > /dev/null 2>&1 < /dev/null
 }
-gen_dispatch_case() { # $1 stubs dir -> prints blocked|leaks: dispatch repair-1 (due in 3 s), rebuild, register the same label again (due in 60 s)
-  local got=blocked
-  cell_new_disp fb-mid-batch 3 120 "$1"
+# a case that runs a mutant must prove the mutant is what the cell ran: $1 marker text that only the mutant has
+assert_mutant() { grep -qF -- "$1" "$CELL_REPO/scripts/_land.js" || fail "the cell did not run the mutant (no '$1' in its scripts/_land.js)"; }
+# mutant stubs: $1 name, $2 the original text, $3 the replacement (both must exist / change something)
+make_mutant() {
+  local dir="$TEST_TMP/stubs-$1"
+  rm -rf "$dir"; cp -r "$FB/cc/stubs" "$dir"
+  node -e '
+    const fs = require("fs"), f = process.argv[1];
+    const s = fs.readFileSync(f, "utf8");
+    if (!s.includes(process.argv[2])) process.exit(3);
+    fs.writeFileSync(f, s.replace(process.argv[2], process.argv[3]));' "$dir/scripts/_land.js" "$2" "$3" || fail "mutant $1 changed nothing"
+  echo "$dir"
+}
+M_NOGEN=$(make_mutant nogen 'function isStale(dir, gen, spec) {' 'function isStale(dir, gen, spec) { return false;')
+M_NOLOCK=$(make_mutant nolockreset 'withLock(dir, () => { // reset' '((d, f) => f())(dir, () => { // reset')
+M_OWNGEN_T=$(make_mutant owngen-timer "const gen = argv.includes('--gen') ? argv[argv.indexOf('--gen') + 1] : undefined;" 'const gen = readGen(dir);')
+M_OWNGEN_A=$(make_mutant owngen-after "const gen = val('--gen');" 'const gen = readGen(fbDir());')
+cnt() { [ -e "$CELL_REPO/$1" ] && echo leaks || echo blocked; }
+
+# ---- (0) rebuild with no interleaving: the generation alone
+case0_dispatch() { # $1 stubs -> blocked|leaks
+  cell_new_disp fb-mid-batch 3 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
   in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
   rebuild_same_path '{}'
-  in_cell 'rm -f runs/repair-1.exit runs/repair-1.result.md; scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
-  sleep 6
-  [ -e "$CELL_REPO/runs/repair-1.exit" ] && got=leaks
-  kill "$TIMER_PARENT" 2> /dev/null
-  echo "$got"
+  in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+  sleep 6; local r; r=$(cnt runs/repair-1.exit); kill "$TIMER_PARENT" 2> /dev/null; echo "$r"
 }
-gen_static_case() { # $1 stubs dir -> prints blocked|leaks: the land_after_s timer (3 s), rebuild with an after_s entry of its own
-  local got=blocked
-  LAND_S=3 cell_new_disp fb-deadman '' 60 "$1"
+case0_static() {
+  LAND_S=3 cell_new_disp fb-deadman '' 60 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
   sleep 1
   rebuild_same_path '{"run.impl":{"after":3,"after_s":3,"files":{"runs/run.impl.exit":"0\n"}}}'
-  sleep 6
-  [ -e "$CELL_REPO/runs/run.impl.exit" ] && got=leaks
-  kill "$TIMER_PARENT" 2> /dev/null
-  echo "$got"
+  sleep 6; local r; r=$(cnt runs/run.impl.exit); kill "$TIMER_PARENT" 2> /dev/null; echo "$r"
 }
-[ "$(gen_dispatch_case "$FB/cc/stubs")" = blocked ] || fail "dispatch timer landed into a fixture rebuilt on the same path (same label)"
-[ "$(gen_static_case "$FB/cc/stubs")" = blocked ] || fail "land_after_s timer landed into a fixture rebuilt on the same path"
-echo "--- negative control: with the generation check removed both timers land into the rebuilt fixture (the cases see it) ---"
-MUT3="$TEST_TMP/stubs-nogen"; cp -r "$FB/cc/stubs" "$MUT3"
-node -e '
-  const fs = require("fs"), f = process.argv[1];
-  const s = fs.readFileSync(f, "utf8");
-  const a = "function isStale(dir, gen, spec) {";
-  if (!s.includes(a)) process.exit(3);
-  fs.writeFileSync(f, s.replace(a, "function isStale(dir, gen, spec) { return false;"));' "$MUT3/scripts/_land.js" || fail "mutation 3 changed nothing"
-[ "$(gen_dispatch_case "$MUT3")" = leaks ] || fail "without the generation check the dispatch-timer case must see the leak"
-[ "$(gen_static_case "$MUT3")" = leaks ] || fail "without the generation check the land_after_s case must see the leak"
+# ---- (a) the rebuild interleaves with an old timer that already passed its check and is about to write (paused inside land())
+caseA_dispatch() {
+  local pf="$TEST_TMP/pause-a"
+  cell_new_disp fb-mid-batch 3 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  : > "$pf"
+  FBATCH_LAND_PAUSE_FILE="$pf" in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+  sleep 4.5                                   # the timer is due (3 s) and sits inside land() holding the lock
+  rebuild_same_path '{}' &
+  local rb=$!
+  sleep 1; rm -f "$pf"; wait "$rb"
+  in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+  sleep 1; local r; r=$(cnt runs/repair-1.exit); kill "$TIMER_PARENT" 2> /dev/null; echo "$r"
+}
+caseA_static() {
+  local pf="$TEST_TMP/pause-a2"
+  : > "$pf"
+  FBATCH_LAND_PAUSE_FILE="$pf" LAND_S=3 cell_new_disp fb-deadman '' 60 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  sleep 4.5
+  rebuild_same_path '{}' &
+  local rb=$!
+  sleep 1; rm -f "$pf"; wait "$rb"
+  sleep 1; local r; r=$(cnt runs/run.impl.exit); kill "$TIMER_PARENT" 2> /dev/null; echo "$r"
+}
+# ---- (b) the timer is suspended BEFORE it starts (before it could read anything); the fixture is rebuilt; then it is released
+paused_launch() { # $1.. the node argv ; sets PAUSED_PID, returns once it is stopped
+  local i
+  ( cd "$CELL_REPO" && exec sh -c 'kill -STOP $$; exec node "$@"' sh "$@" ) > /dev/null 2>&1 < /dev/null &
+  PAUSED_PID=$!
+  for i in $(seq 1 40); do [ "$(awk '{print $3}' "/proc/$PAUSED_PID/stat" 2> /dev/null)" = T ] && return 0; sleep 0.25; done
+  fail "the paused timer did not stop"
+}
+caseB_static() {
+  cell_new_disp fb-deadman '' 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  printf '%s\n' '{"run.impl":{"after":3,"after_s":2,"files":{"runs/run.impl.exit":"0\n"}}}' > "$CELL_REPO/.git/fbatch/plan.json"
+  local g; g=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/gen")
+  paused_launch scripts/_land.js timer --watch-pid "$TIMER_PARENT" --gen "$g"
+  rebuild_same_path '{"run.impl":{"after":3,"after_s":2,"files":{"runs/run.impl.exit":"0\n"}}}'
+  kill -CONT "$PAUSED_PID"
+  sleep 5; local r; r=$(cnt runs/run.impl.exit); kill "$TIMER_PARENT" "$PAUSED_PID" 2> /dev/null; echo "$r"
+}
+caseB_dispatch() {
+  cell_new_disp fb-mid-batch 60 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  local g; g=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/gen")
+  paused_launch scripts/_land.js after --watch-pid "$TIMER_PARENT" --label repair-1 --due-ts $(( $(date +%s) * 1000 + 1000 )) --gen "$g"
+  rebuild_same_path '{}'
+  in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null    # the same label in the new fixture (its own timer is 60 s away)
+  kill -CONT "$PAUSED_PID"
+  sleep 3; local r; r=$(cnt runs/repair-1.exit); kill "$TIMER_PARENT" "$PAUSED_PID" 2> /dev/null; echo "$r"
+}
+expect_case() { # $1 label $2 want $3.. the case command
+  local label="$1" want="$2" got; shift 2
+  got=$("$@") || fail "$label: the case itself failed"
+  [ "$got" = "$want" ] || fail "$label: $got, want $want"
+}
+SD="$FB/cc/stubs"
+echo "--- green: the shipped stubs block every case ---"
+expect_case "0 dispatch timer, rebuilt" blocked case0_dispatch "$SD"
+expect_case "0 land_after_s timer, rebuilt" blocked case0_static "$SD"
+expect_case "a dispatch timer between check and write, rebuild interleaves" blocked caseA_dispatch "$SD"
+expect_case "a land_after_s timer between check and write, rebuild interleaves" blocked caseA_static "$SD"
+expect_case "b land_after_s timer suspended before it starts" blocked caseB_static "$SD"
+expect_case "b dispatch timer suspended before it starts" blocked caseB_dispatch "$SD"
+echo "--- red: each fix removed in turn, the same case must LEAK (and the cell must run the mutant) ---"
+expect_case "no generation check: dispatch timer" leaks case0_dispatch "$M_NOGEN" 'return false;'
+expect_case "no generation check: land_after_s timer" leaks case0_static "$M_NOGEN" 'return false;'
+expect_case "rebuild without the lock: dispatch timer (a)" leaks caseA_dispatch "$M_NOLOCK" '((d, f) => f())(dir'
+expect_case "rebuild without the lock: land_after_s timer (a)" leaks caseA_static "$M_NOLOCK" '((d, f) => f())(dir'
+expect_case "timer reads the token itself: land_after_s timer (b)" leaks caseB_static "$M_OWNGEN_T" 'const gen = readGen(dir);'
+expect_case "timer reads the token itself: dispatch timer (b)" leaks caseB_dispatch "$M_OWNGEN_A" 'readGen(fbDir())'
 
 echo "=== stamp: findings-batch row is frozen; editing any frozen file turns --check red (negative controls) ==="
 # The expectation follows the prereg status (amendment 3 is a draft until the owner re-stamps): a stamped row must check ok and

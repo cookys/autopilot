@@ -16,14 +16,12 @@ fb_state() {
   G=$(git rev-parse --absolute-git-dir)
   mkdir -p "$G/fbatch"
   echo "$1" > "$G/fbatch-task"
-  # generation token: a fixture rebuilt on this path gets a new one; every background writer (_land.js) lands only for its own
-  echo "$(date +%s%N)-$$-$RANDOM-$RANDOM" > "$G/fbatch/gen"
-  echo 0 > "$G/fbatch/waits"
-  : > "$G/fbatch/ledger.jsonl"
-  # dispatched work (amendment 3): $PPID = whoever built the fixture (the dispatch timers watch it, see _land.js register);
-  # FBATCH_DISPATCH_LAND_AFTER_S (prereg cc.dispatch_land_after_s) is the time landing, the 2nd poll after the dispatch the other
-  echo "$PPID" > "$G/fbatch/watch.pid"
-  case "${FBATCH_DISPATCH_LAND_AFTER_S:-}" in ''|0|*[!0-9]*) echo '{"after_polls":2}' > "$G/fbatch/dispatch.json" ;; *) printf '{"after_polls":2,"after_s":%s}\n' "$FBATCH_DISPATCH_LAND_AFTER_S" > "$G/fbatch/dispatch.json" ;; esac
+  # The whole hidden state (generation token, plan, landed, waits, ledger, dispatch.json, watch.pid) is swapped by ONE node call under
+  # the lock land() uses (_land.js reset), so a timer of an earlier fixture on this path is either finished before the swap or stale
+  # after it. The token is made HERE, by the builder, and handed to the timers (fb_start_timer, register); no timer reads it for itself.
+  # $PPID = whoever built the fixture (the timers watch it); FBATCH_DISPATCH_LAND_AFTER_S = prereg cc.dispatch_land_after_s.
+  FB_GEN="$(date +%s%N)-$$-$RANDOM-$RANDOM"
+  node scripts/_land.js reset --gen "$FB_GEN" --task "$1" --watch-pid "$PPID" --dispatch-after-s "$(case "${FBATCH_DISPATCH_LAND_AFTER_S:-}" in ''|0|*[!0-9]*) echo 0 ;; *) echo "$FBATCH_DISPATCH_LAND_AFTER_S" ;; esac)"
 }
 fb_lanes() {
   local l base
@@ -54,6 +52,6 @@ fb_after_s() {
 fb_start_timer() {
   case "${FBATCH_LAND_AFTER_S:-}" in ''|0|*[!0-9]*) return 0 ;; esac
   # no setsid: the timer stays in the process group of whoever built the fixture; $PPID = that builder (runner or test shell)
-  node scripts/_land.js timer --watch-pid "$PPID" > /dev/null 2>&1 < /dev/null &
+  node scripts/_land.js timer --watch-pid "$PPID" --gen "$FB_GEN" > /dev/null 2>&1 < /dev/null &
   disown 2> /dev/null || true
 }

@@ -16,8 +16,10 @@
 // after_polls-th poll of wait-dispatch-results.js AFTER the dispatch, or after_s seconds after the dispatch, whichever
 // comes first; a file watch therefore sees the file even if nobody polls. Those ledger entries carry dispatch:true: they
 // are not part of the marker evidence (fbatch/cell.js buildTrace skips them).
+//   reset --gen <token> --task <id> --watch-pid <pid> [--dispatch-after-s <n>]   fixture build: swap the hidden state under land.lock
 //   register --kind <repair|review|re-review|acceptance> --detail <text> [--sha <sha>]   prints the label (= run name)
-//   after --watch-pid <pid> --label <label> --due-ts <ms>                              one-shot timer, started by register
+//   timer --watch-pid <pid> --gen <token>                                              the land_after_s timer (started by fb_start_timer)
+//   after --watch-pid <pid> --label <label> --due-ts <ms> --gen <token>                              one-shot timer, started by register
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
@@ -38,13 +40,36 @@ function withLock(dir, fn) {
   }
   try { return fn(); } finally { try { fs.unlinkSync(lock); } catch { /* gone */ } }
 }
-// Generation (one check for BOTH timers): fb_state writes an immutable token to <git-dir>/fbatch/gen when the fixture is built, so a
-// fixture rebuilt on the same path gets a new one. A timer takes the token it was started for (the static timer reads it at start, a
-// dispatch timer gets it from `register`, which also stamps it on the plan entry) and passes it to land(), which compares it with the
-// file INSIDE the lock, right before writing: no match = stale, nothing is written and the timer ends. Polls pass no token (they
-// act on whatever fixture they run in).
+// Generation handoff (one check for BOTH timers; every hand-over point below is why no timer can write into another fixture):
+//   1. The token is made by the party that BUILDS the fixture (fixture.sh fb_state) and is stored by `reset` (below), which swaps
+//      the whole hidden state (gen, plan, landed, waits, ledger, dispatch.json, watch.pid) and deletes the files the old plan
+//      landed, all inside land.lock.
+//   2. A timer never reads the token itself: the builder hands it over (`timer --gen`, fb_start_timer; `after --gen`, from
+//      `register`, which reads it inside land.lock when it stamps the plan entry). So a timer paused before it starts, or before
+//      its first read of anything, still carries the token of the fixture it was started for.
+//   3. land() compares the timer's token with the stored one INSIDE land.lock and writes inside the same lock hold. `reset`
+//      takes the same lock, so either land() finished first (its files are then deleted by reset) or reset finished first (the
+//      stored token no longer matches: nothing is written and the timer ends). There is no point between check and write at
+//      which a reset can run. Polls pass no token (they act on the fixture they run in).
 function readGen(dir) { try { return fs.readFileSync(path.join(dir, 'gen'), 'utf8').trim(); } catch { return ''; } }
 function isStale(dir, gen, spec) { return gen !== undefined && (readGen(dir) !== gen || (spec && spec.gen !== undefined && spec.gen !== gen)); }
+// test-only pause point (inside the lock, after the check, before the write): FBATCH_LAND_PAUSE_FILE = a path; while it exists land() waits.
+function pausePoint() { const f = process.env.FBATCH_LAND_PAUSE_FILE; if (f) for (let i = 0; i < 160 && fs.existsSync(f); i++) sleepMs(50); }
+// Rebuild of the hidden state for a new fixture on this path (called by fixture.sh fb_state). Everything under one lock hold.
+function reset({ dir, gen, task, watch, dispatchAfterS, root }) {
+  fs.mkdirSync(dir, { recursive: true });
+  return withLock(dir, () => { // reset
+    const plan = readJson(path.join(dir, 'plan.json'), {});
+    for (const spec of Object.values(plan)) for (const rel of Object.keys(spec.files || {})) { try { fs.unlinkSync(path.resolve(spec.root || root, rel)); } catch { /* not landed */ } }
+    fs.writeFileSync(path.join(dir, 'plan.json'), '{}');
+    try { fs.unlinkSync(path.join(dir, 'landed.json')); } catch { /* none */ }
+    fs.writeFileSync(path.join(dir, 'waits'), '0\n');
+    fs.writeFileSync(path.join(dir, 'ledger.jsonl'), '');
+    fs.writeFileSync(path.join(dir, 'watch.pid'), `${watch}\n`);
+    fs.writeFileSync(path.join(dir, 'dispatch.json'), `${JSON.stringify({ after_polls: 2, ...(dispatchAfterS > 0 ? { after_s: dispatchAfterS } : {}) })}\n`);
+    fs.writeFileSync(path.join(dir, 'gen'), `${gen}\n`); // last: from here every timer of an earlier fixture is stale
+  });
+}
 // Land every plan entry the predicate calls due. `root` is where the files are written (relative paths).
 function land({ dir, root, due, by, wake, gen }) {
   return withLock(dir, () => {
@@ -55,6 +80,7 @@ function land({ dir, root, due, by, wake, gen }) {
     for (const [lab, spec] of Object.entries(plan)) {
       if (isStale(dir, gen, spec)) return { plan: {}, done: {}, stale: true };
       if (done[lab] || !due(spec, lab)) continue;
+      pausePoint();
       for (const [rel, text] of Object.entries(spec.files || {})) {
         const abs = path.resolve(spec.root || root, rel);
         fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -77,7 +103,8 @@ function timerMain(argv) {
   const plan0 = readJson(path.join(dir, 'plan.json'), {});
   const secs = Object.values(plan0).map((s) => s.after_s).filter((v) => typeof v === 'number' && v > 0);
   if (!Number.isInteger(watch) || watch < 1 || !secs.length) process.exit(2);
-  const gen = readGen(dir);
+  const gen = argv.includes('--gen') ? argv[argv.indexOf('--gen') + 1] : undefined; // handed over by the builder, never read here
+  if (!gen) process.exit(2);
   const pidFile = path.join(dir, 'timer.pid');
   fs.writeFileSync(pidFile, `${process.pid}\n`);
   const t0 = Date.now();
@@ -147,12 +174,16 @@ function afterMain(argv) {
   }
 }
 
-module.exports = { land, register };
+module.exports = { land, register, reset };
 if (require.main === module) {
   const cmd = process.argv[2];
   const a = process.argv.slice(3);
   const val = (n) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : undefined; };
-  if (cmd === 'timer') timerMain(a);
+  if (cmd === 'reset') {
+    const gen = val('--gen');
+    if (!gen) { console.error('usage: _land.js reset --gen <token> --task <id> --watch-pid <pid> [--dispatch-after-s <n>]'); process.exit(2); }
+    reset({ dir: fbDir(), gen, task: val('--task'), watch: val('--watch-pid') || '', dispatchAfterS: Number(val('--dispatch-after-s')) || 0, root: process.cwd() });
+  } else if (cmd === 'timer') timerMain(a);
   else if (cmd === 'after') afterMain(a);
   else if (cmd === 'register') {
     const kind = val('--kind');

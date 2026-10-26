@@ -25,17 +25,19 @@ uuid() { "$NODE" -e 'console.log(require("crypto").randomUUID())'; }
 A_PROMPT='Use the Agent tool exactly once to launch a subagent whose task is: reply with the single word DONE. After it returns, reply with the single word FINISHED.'
 B_PROMPT='Reply with exactly the word OK.'
 
-# run_case <probe> <label> <shape native|hetero|author> <armed 0|1> <arm-sid: -|SID|uuid> <events> <prompt> [plugin 0|1] [cfg-settings 0|1]
+# run_case <probe> <label> <shape native|hetero|author> <armed 0|1> <arm-sid: -|SID|uuid> <events> <prompt> [plugin 0|1]
 run_case() {
-  local probe="$1" label="$2" shape="$3" armed="$4" armsid="$5" events="$6" prompt="$7" plugin="${8:-0}" cfgset="${9:-0}"
+  local probe="$1" label="$2" shape="$3" armed="$4" armsid="$5" events="$6" prompt="$7" plugin="${8:-0}"
   local dir="$OUT/$probe/$label"; mkdir -p "$dir"
-  if over; then
-    echo "{\"skipped\":true,\"reason\":\"cumulative spend $(spent) >= PROBE_MAX_USD $MAXUSD\"}" > "$dir/skipped.json"
+  # strict cap: remaining = cap - spent; <= 0 means no launch; otherwise this call's budget is min(per-call, remaining)
+  local budget; budget="$("$NODE" -e 'const r=parseFloat(process.argv[2])-parseFloat(process.argv[1]);const b=Math.min(parseFloat(process.argv[3]),r);console.log(r<=1e-9?"0":b.toFixed(4))' "$(spent)" "$MAXUSD" "$PER_CALL_USD")"
+  if [ "$budget" = 0 ]; then
+    echo "{\"skipped\":true,\"reason\":\"cumulative spend $(spent) leaves no budget under PROBE_MAX_USD $MAXUSD\"}" > "$dir/skipped.json"
     echo "SKIP $probe/$label (cap)"; return 0
   fi
   local H CFG="" sid; H="$(mktemp -d)"; sid="$(uuid)"; : > "$dir/hook.jsonl"
   local S="$dir/settings.json"; "$NODE" "$HERE/mk-settings.js" "$S" "$HOOK" cli "$events"
-  local -a args=(-p --session-id "$sid" --model haiku --max-budget-usd "$PER_CALL_USD" --strict-mcp-config --dangerously-skip-permissions --output-format stream-json --verbose --include-hook-events)
+  local -a args=(-p --session-id "$sid" --model haiku --max-budget-usd "$budget" --strict-mcp-config --dangerously-skip-permissions --output-format stream-json --verbose --include-hook-events)
   local -a envs=(-u CLAUDE_CONFIG_DIR -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_BASE_URL -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID "HOME=$H" "P0_LOG=$dir/hook.jsonl" "P0_ARM=$armed")
   if [ "$armsid" != "-" ]; then [ "$armsid" = "SID" ] && armsid="$sid"; envs+=("P0_ARM_SID=$armsid"); fi
   [ "$probe" = a ] && envs+=("P0_ONLY=SubagentStop")
@@ -44,7 +46,7 @@ run_case() {
       CFG="$(mktemp -d)"; cp "$CREDS" "$CFG/.credentials.json"; chmod 600 "$CFG/.credentials.json"
       [ "$(command ls -A "$CFG")" = ".credentials.json" ] || { echo "ABORT: seeded config dir not credentials-only" >&2; exit 4; }
       case "$CFG" in "$HOME/.claude"|"$HOME/.claude/"*) echo "ABORT: real config dir" >&2; exit 4;; esac
-      if [ "$cfgset" = 1 ]; then cp "$S" "$CFG/settings.json"; else args+=(--settings "$S"); fi
+      args+=(--settings "$S")
       envs+=("CLAUDE_CONFIG_DIR=$CFG") ;;
     hetero|author)
       mkdir -p "$H/.claude"; cp "$CREDS" "$H/.claude/.credentials.json"; chmod 600 "$H/.claude/.credentials.json"
@@ -56,17 +58,19 @@ run_case() {
   [ "$plugin" = 1 ] && args+=(--plugin-dir "$REPO")
   printf '%s' "$prompt" > "$dir/prompt.txt"
   local t0 t1 rc; t0=$(( $(date +%s%N) / 1000000 ))
-  ( cd "$(mktemp -d)" && env "${envs[@]}" timeout 300 "$CLAUDE" "${args[@]}" < "$dir/prompt.txt" > "$dir/stream.jsonl" 2> "$dir/stderr.txt" ); rc=$?
-  t1=$(( $(date +%s%N) / 1000000 ))
+  local WD; WD="$(mktemp -d)"
+  ( cd "$WD" && env "${envs[@]}" timeout 300 "$CLAUDE" "${args[@]}" < "$dir/prompt.txt" > "$dir/stream.jsonl" 2> "$dir/stderr.txt" ); rc=$?
+  t1=$(( $(date +%s%N) / 1000000 )); rm -rf "$WD"
   echo "{\"shape\":\"$shape\",\"rc\":$rc,\"claude_wall_ms\":$((t1-t0)),\"session_id\":\"$sid\",\"argv\":$("$NODE" -e 'console.log(JSON.stringify(process.argv.slice(1)))' -- "${args[@]}")}" > "$dir/meta.json"
   [ -n "$CFG" ] && rm -rf "$CFG"; rm -rf "$H"
   local j; j="$("$NODE" "$HERE/analyze.js" "$dir" "$sid")"
-  addspend "$probe/$label" "$("$NODE" -e 'console.log(JSON.parse(process.argv[1]).total_cost_usd)' "$j")"
+  # a call without a result event (crash) is charged its full budget, not 0
+  addspend "$probe/$label" "$("$NODE" -e 'const o=JSON.parse(process.argv[1]);console.log(o.is_error===null?process.argv[2]:o.total_cost_usd)' "$j" "$budget")"
   echo "DONE $probe/$label rc=$rc spent=$(spent)"
 }
 case "${1:-}" in
-  a) run_case a a_armed native 1 - SubagentStop,Stop "$A_PROMPT" 1 1
-     run_case a a_unarmed native 0 - SubagentStop,Stop "$A_PROMPT" 1 1 ;;
+  a) run_case a a_armed native 1 - SubagentStop,Stop "$A_PROMPT" 1
+     run_case a a_unarmed native 0 - SubagentStop,Stop "$A_PROMPT" 1 ;;
   b) run_case b b_armed native 1 SID Stop "$B_PROMPT"
      run_case b b_unarmed native 1 00000000-0000-4000-8000-000000000000 Stop "$B_PROMPT" ;;   # wrong session id = not the armed worker
   c) run_case c c_hetero_armed hetero 1 SID Stop "$B_PROMPT"

@@ -1092,7 +1092,7 @@ function runAuto(o, mainPath, integrationSha, integrationBranch, common) {
 
   // 4. what remains for a person
   rows = classifyWorktrees(mainPath, mainPath, integrationSha);
-  annotateWorktrees(rows, cfg, Date.now(), cwds, mainPath);
+  annotateWorktrees(rows, cfg, Date.now(), readProcUse(), mainPath);
   branches = classifyBranches(mainPath, listWorktrees(mainPath).map((w) => ({ branch: w.branch, path: path.resolve(w.path) })), integrationSha, integrationBranch);
   const tmp_prune = runTmpPrune(o, cfg);
   const report = { schema: 'autopilot.residue-auto/1', ran_at: new Date(nowMs).toISOString(), ran_at_epoch: Math.floor(nowMs / 1000), removed, archived, kept, notes, anchors, ledger, tmp_prune };

@@ -35,6 +35,31 @@ FB="$BASE/fbatch"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 clean() { env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u ONOFF_MAX_USD "$@"; }
 
+# ---- timer bookkeeping: this test starts background landing timers (scripts/_land.js timer|after) in cells under $TEST_TMP. They are
+# found by walking /proc (cmdline + cwd), by a PID list and never by a name-pattern process search (that matches its own command line),
+# cleaned on every exit path, and asserted gone at the end.
+land_pids() { # $1 dir prefix -> pids of _land.js timer|after processes whose cwd is under it (builtins only until a cmdline matches: a scan must be fast)
+  local d p w a c
+  for d in /proc/[0-9]*; do
+    p=${d#/proc/}; [ "$p" = "$$" ] && continue
+    a=()
+    { mapfile -d '' -t a < "$d/cmdline"; } 2> /dev/null || continue
+    c="${a[*]:-}"
+    case "$c" in *_land.js\ timer*|*_land.js\ after*) ;; *) continue ;; esac
+    w=$(readlink "$d/cwd" 2> /dev/null) || continue
+    case "$w" in "$1"|"$1"/*) echo "$p" ;; esac
+  done
+}
+case_cleanup() { # the per-case EXIT trap (cases run in $(...) subshells): kills this case's holder, paused/live timers and every timer in its cell
+  local p
+  for p in ${TIMER_PARENT:-} ${PAUSED_PID:-} ${LIVE_PID:-}; do kill -KILL "$p" 2> /dev/null; done
+  for p in $(land_pids "${CELL_REPO:-/nonexistent-cell}"); do kill -KILL "$p" 2> /dev/null; done
+  return 0
+}
+FBT_MAIN=$BASHPID
+fbt_main_cleanup() { local p; [ "$BASHPID" = "$FBT_MAIN" ] || return 0; for p in $(land_pids "$TEST_TMP"); do kill -KILL "$p" 2> /dev/null; done; return 0; }
+trap 'fbt_main_cleanup; cleanup_test_tmp' EXIT
+
 for f in run-fbatch-campaign.js score-fbatch.js fbatch/cell.js fbatch/cc-build.js fbatch/lib.js; do
   [ -f "$BASE/$f" ] || fail "missing $f"
 done
@@ -138,9 +163,8 @@ cell_new_timer() { # $1 task $2 land_after_s $3 hold_s: like cell_new, but the f
   ( cd "$CELL_REPO" && git init -q && git config user.name t && git config user.email t@example.com && git config commit.gpgsign false )
   ( cd "$CELL_REPO" && FBATCH_LAND_AFTER_S="$2" bash -c 'bash "$1"; exec sleep "$2"' _ "$FB/cc/tasks/$task/init-repo.sh" "$3" ) > /dev/null 2>&1 < /dev/null &
   TIMER_PARENT=$!
-  for i in $(seq 1 40); do [ -s "$CELL_REPO/.git/fbatch/timer.pid" ] && break; sleep 0.25; done
-  [ -s "$CELL_REPO/.git/fbatch/timer.pid" ] || fail "cell_new_timer $task: the timer did not start"
-  TIMER_PID=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/timer.pid")
+  for i in $(seq 1 40); do TIMER_PID=$(land_pids "$CELL_REPO" | head -n 1); [ -n "$TIMER_PID" ] && break; sleep 0.25; done
+  [ -n "$TIMER_PID" ] || fail "cell_new_timer $task: the timer did not start"
   bash "$FB/cc/tasks/$task/seed-home.sh" "$CELL_HOME" || fail "cell_new_timer $task: seed-home.sh"
   : > "$CELL_TX"
 }
@@ -830,8 +854,280 @@ rc=0; out=$(clean env PATH="$NOBIN" "$(command -v node)" "$BASE/run-fbatch-campa
 [ "$rc" = 2 ] || fail "no claude on PATH: rc=$rc want 2: $out"
 grep -q 'claude is not on PATH' <<<"$out" || fail "no claude message: $out"
 
+echo "=== amendment 3: every run the agent dispatches lands, and 'landed' is the file (replays of the formal fb-mid-batch change reps 1-3) ==="
+# Formal cells fb-mid-batch/change rep 1-3 ended as runner_timeout: a repair/review/acceptance the agent dispatched never landed,
+# and the wait script called an unknown label landed while its file was absent. cell_new_disp builds a cell whose fixture is
+# built by a parent that stays alive (the dispatch timers watch it) with FBATCH_DISPATCH_LAND_AFTER_S=$2; $4 = a stubs dir.
+cell_new_disp() { # $1 task $2 dispatch_land_after_s ('' = polls only) $3 hold_s $4 stubs dir (default: the shipped stubs)
+  local task="$1" d i stubs="${4:-$FB/cc/stubs}"
+  d=$(mktemp -d -p "$TEST_TMP" cell-XXXXXX)
+  CELL_TASK="$task"; CELL_REPO="$d/repo"; CELL_HOME="$d/home"; CELL_TX="$d/transcript.jsonl"
+  mkdir -p "$CELL_REPO" "$CELL_HOME"
+  cp -r "$FB/cc/tasks/$task/repo/." "$CELL_REPO/"
+  cp -r "$stubs/." "$CELL_REPO/"
+  ( cd "$CELL_REPO" && git init -q && git config user.name t && git config user.email t@example.com && git config commit.gpgsign false )
+  ( cd "$CELL_REPO" && FBATCH_LAND_AFTER_S="${LAND_S:-}" FBATCH_DISPATCH_LAND_AFTER_S="$2" bash -c 'bash "$1"; exec sleep "$2"' _ "$FB/cc/tasks/$task/init-repo.sh" "$3" ) > /dev/null 2>&1 < /dev/null &
+  TIMER_PARENT=$!
+  for i in $(seq 1 60); do [ -s "$CELL_REPO/.git/fbatch/snap-repo.list" ] && break; sleep 0.25; done
+  [ -s "$CELL_REPO/.git/fbatch/snap-repo.list" ] || fail "cell_new_disp $task: the fixture was not built"
+  bash "$FB/cc/tasks/$task/seed-home.sh" "$CELL_HOME" || fail "cell_new_disp $task: seed-home.sh"
+  : > "$CELL_TX"
+}
+in_cell() { ( cd "$CELL_REPO" && HOME="$CELL_HOME" TMPDIR="$CELL_HOME/tmp" bash -c "$1" ) 2>&1 < /dev/null; }
+wait_file() { local i; for i in $(seq 1 $(( $2 * 4 ))); do [ -e "$CELL_REPO/$1" ] && return 0; sleep 0.25; done; return 1; }
+# the wait script's answer must equal the file system: "landed" iff runs/<name>.exit exists
+consistent() { # $1 wait output $2 name
+  local said=no has=no
+  case "$1" in *" landed ("*) said=yes ;; esac
+  [ -e "$CELL_REPO/runs/$2.exit" ] && has=yes
+  [ "$said" = "$has" ]
+}
+WAIT_R='node scripts/wait-dispatch-results.js --expect'
+
+echo "--- rep 1: repair A, poll repair-1 (pending, file absent), watch the file (lands by the timer), poll again (landed, file there) ---"
+cell_new_disp fb-mid-batch 2 120
+in_cell "$W; $W" > /dev/null
+out=$(in_cell 'scripts/dispatch-hetero.sh --repair A A-F1')
+grep -q 'runs/repair-1.exit' <<<"$out" || fail "the repair stub must name runs/repair-1.exit: $out"
+out=$(in_cell "$WAIT_R repair-1")
+consistent "$out" repair-1 && grep -q 'not landed yet' <<<"$out" || fail "right after the dispatch repair-1 is pending and the file absent: $out"
+wait_file runs/repair-1.exit 20 || fail "runs/repair-1.exit never landed (the formal rep 1 defect)"
+wait_file runs/repair-1.result.md 5 || fail "runs/repair-1.result.md missing"
+out=$(in_cell "$WAIT_R repair-1.exit")
+consistent "$out" repair-1 && grep -q ' landed (' <<<"$out" || fail "after landing the wait script must say landed: $out"
+grep -q '"kind":"landed".*"by":"timer".*"dispatch":true' "$CELL_REPO/.git/fbatch/ledger.jsonl" || fail "the dispatch must be landed by its timer: $(cat "$CELL_REPO/.git/fbatch/ledger.jsonl")"
+kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- rep 2: review, acceptance and re-review on lane D's sha all land, with the names the stubs printed; an unknown label is never 'landed' ---"
+cell_new_disp fb-mid-batch 2 120
+in_cell "$W; $W" > /dev/null
+sha=$(in_cell 'git rev-parse --short lane/D')
+out=$(in_cell "scripts/dispatch-review.sh --sha $sha; scripts/dispatch-acceptance.sh --sha $sha; scripts/dispatch-review.sh --re-review --blind --sha $sha")
+for n in review-$sha acceptance-$sha re-review-$sha; do
+  grep -q "runs/$n.exit" <<<"$out" || fail "the stub must name runs/$n.exit: $out"
+  wait_file "runs/$n.exit" 20 || fail "runs/$n.exit never landed (the formal rep 2 defect)"
+  out2=$(in_cell "$WAIT_R $n"); consistent "$out2" "$n" && grep -q ' landed (' <<<"$out2" || fail "$n: $out2"
+done
+out2=$(in_cell "$WAIT_R acc.impl"); consistent "$out2" acc.impl && grep -q ' unknown ' <<<"$out2" || fail "an unknown label is unknown, not landed: $out2"
+kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- rep 3: the repair name counts repairs, not the lines of runs/dispatch.log ---"
+cell_new_disp fb-mid-batch 2 120
+in_cell "$W; $W; scripts/harvest-receipt.sh D" > /dev/null
+out=$(in_cell 'scripts/dispatch-hetero.sh --repair A A-F1')
+grep -q 'runs/repair-1.exit' <<<"$out" || fail "the first repair is repair-1 even after a harvest line: $out"
+wait_file runs/repair-1.exit 20 || fail "runs/repair-1.exit never landed"
+kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- the 2nd poll after the dispatch lands it too, with no timer at all (poll-only fixture) ---"
+cell_new_disp fb-mid-batch '' 120
+in_cell "$W; $W" > /dev/null
+in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+out=$(in_cell "$WAIT_R repair-1"); grep -q 'not landed yet' <<<"$out" || fail "1st poll after the dispatch: $out"
+out=$(in_cell "$WAIT_R repair-1"); consistent "$out" repair-1 && grep -q ' landed (' <<<"$out" || fail "2nd poll after the dispatch must land it: $out"
+kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- the markers do not move: the same trace scores identically with and without the dispatch landing ---"
+SEQ_GOOD=('scripts/merge-lane.sh B' "$W" "$W" 'scripts/dispatch-hetero.sh --repair A A-F1' 'scripts/dispatch-review.sh --sha 1111aaa')
+cell_new_disp fb-mid-batch 1 120; agent "${SEQ_GOOD[@]}"; sleep 3
+M_LAND=$(cellcli markers 2> /dev/null); ncl=$(ncalls)
+[ -e "$CELL_REPO/runs/repair-1.exit" ] || fail "the dispatches must have landed before scoring"
+kill "$TIMER_PARENT" 2> /dev/null
+cell_new_disp fb-mid-batch '' 120; agent "${SEQ_GOOD[@]}"
+M_NOLAND=$(cellcli markers 2> /dev/null)
+[ "$M_LAND" = "$M_NOLAND" ] && [ "$ncl" = "$(ncalls)" ] || fail "a dispatch landing moved the markers or the trace: [$M_LAND] vs [$M_NOLAND]"
+grep -q '^marker_m_waited=true' <<<"$M_LAND" && grep -q '^marker_m_early_repair=false' <<<"$M_LAND" && grep -q '^marker_m_clean_proceeds=true' <<<"$M_LAND" || fail "good trace markers: $M_LAND"
+kill "$TIMER_PARENT" 2> /dev/null
+echo "--- negative control: an agent that does not wait (repair before D landed, then moves on) is still judged violating after its dispatch landed ---"
+cell_new_disp fb-mid-batch 1 120; agent 'scripts/dispatch-hetero.sh --repair A A-F1' 'scripts/dispatch-review.sh --sha 1111aaa'; sleep 3
+[ -e "$CELL_REPO/runs/repair-1.exit" ] || fail "the dispatches must have landed before scoring"
+expect "no wait, dispatch landed" m_early_repair true; expect "no wait, dispatch landed" m_waited false; expect "no wait, dispatch landed" m_clean_proceeds false
+kill "$TIMER_PARENT" 2> /dev/null
+cell_new_disp fb-pool 1 120; agent 'scripts/dispatch-acceptance.sh --sha abc123' 'scripts/dispatch-review.sh --sha abc123' 'node scripts/wait-dispatch-results.js --expect acceptance-abc123' "scripts/dispatch-hetero.sh --repair A A-F1,A-F2" 'scripts/dispatch-hetero.sh --repair B B-F1,B-F2' 'scripts/dispatch-review.sh --re-review --blind --sha abc123'; sleep 2
+expect "pool serial repairs, dispatches landed" m_serial_repairs true; expect "pool serial repairs, dispatches landed" m_single_round false; expect "pool serial repairs, dispatches landed" m_parallel_dispatch true
+kill "$TIMER_PARENT" 2> /dev/null
+
+# ---- mutants: every mutant stub carries a sentinel that only it has; a case that runs a mutant proves (assert_mutant) that its cell
+# holds the sentinel, and make_mutant proves the sentinel occurs 0 times in the shipped stubs (so it cannot pass by accident).
+SENTINEL_SCAN="$TEST_TMP/sentinel-scan.txt"; : > "$SENTINEL_SCAN"   # name|sentinel|occurrences in the shipped stubs (make_mutant runs in a subshell, so a file)
+mutant_sentinel() { printf 'FBATCH_MUTANT_%s' "$(tr 'a-z-' 'A-Z_' <<<"$1")"; }
+make_mutant() { # $1 name $2 original text $3 replacement text [$4 file under scripts/, default _land.js] -> the mutant stubs dir
+  local name="$1" dir="$TEST_TMP/stubs-$1" file="${4:-_land.js}" sent n
+  sent=$(mutant_sentinel "$name")
+  n=$(grep -rF -- "$sent" "$FB/cc/stubs" 2> /dev/null | wc -l)
+  [ "$n" = 0 ] || fail "sentinel $sent already occurs $n time(s) in the shipped stubs"
+  rm -rf "$dir"; cp -r "$FB/cc/stubs" "$dir"
+  node -e '
+    const fs = require("fs"), f = process.argv[1], sent = process.argv[4];
+    const s = fs.readFileSync(f, "utf8");
+    if (!s.includes(process.argv[2])) process.exit(3);
+    const mark = f.endsWith(".sh") ? "# " + sent : "/* " + sent + " */";
+    fs.writeFileSync(f, s.replace(process.argv[2], () => process.argv[3] + " " + mark));' "$dir/scripts/$file" "$2" "$3" "$sent" || fail "mutant $name changed nothing"
+  echo "$name|$sent|$n" >> "$SENTINEL_SCAN"
+  echo "$dir"
+}
+assert_mutant() { # $1 sentinel: the cell under test must hold it
+  grep -rqF -- "$1" "$CELL_REPO/scripts" || fail "the cell did not run the mutant (no $1 in its scripts/)"
+}
+echo "--- negative control: the pre-amendment stubs (no landing for a dispatch / unknown label = landed) are caught by the same checks ---"
+MUT=$(make_mutant nolanding 'label=$(node "$(dirname "$0")/_land.js" register --kind repair --detail "$2 $3")' 'label=repair-1' dispatch-hetero.sh)
+cell_new_disp fb-mid-batch 1 120 "$MUT"
+assert_mutant "$(mutant_sentinel nolanding)"
+in_cell "$W; $W; scripts/dispatch-hetero.sh --repair A A-F1" > /dev/null
+if wait_file runs/repair-1.exit 5; then fail "mutation 1 (a dispatch registers nothing) must leave runs/repair-1.exit absent, and the landing check must see that"; fi
+kill "$TIMER_PARENT" 2> /dev/null
+MUT2=$(make_mutant oldwait 'const landed = fs.existsSync(exitFile) || (!hasExit && done[key] === true);' 'const landed = !(label in plan) || done[label] === true;' wait-dispatch-results.js)
+cell_new_disp fb-mid-batch 600 120 "$MUT2"
+assert_mutant "$(mutant_sentinel oldwait)"
+in_cell "$W; $W; scripts/dispatch-hetero.sh --repair A A-F1" > /dev/null
+out=$(in_cell "$WAIT_R repair-1.exit")
+if consistent "$out" repair-1; then fail "mutation 2 (the old landed rule) must make the wait script contradict the file system, and consistent() must see that: $out"; fi
+kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- generation handoff: a timer of an earlier fixture on the same path never writes into the rebuilt one (both timers, one lock, one check) ---"
+# rebuild_same_path: what rebuilding the fixture on the same path does (fb_state -> _land.js reset under land.lock: new generation
+# token, fresh plan/waits/ledger, the old landed files removed); $1 = the new plan.json text. The old timer processes keep running and
+# no pid file exists any more, so only the generation and the lock can tell the old timer from the new fixture.
+rebuild_same_path() {
+  ( cd "$CELL_REPO" && FBATCH_DISPATCH_LAND_AFTER_S=60 bash -c '. "$1"; fb_state fb-mid-batch; printf "%s\n" "$2" > "$G/fbatch/plan.json"' _ "$FB/cc/tasks/_lib/fixture.sh" "$1" ) > /dev/null 2>&1 < /dev/null
+}
+M_NOGEN=$(make_mutant nogen 'function isStale(dir, gen, spec) {' 'function isStale(dir, gen, spec) { return false;')
+M_NOLOCK=$(make_mutant nolockreset 'withLock(dir, () => { // reset' '((d, f) => f())(dir, () => { // reset')
+M_OWNGEN_T=$(make_mutant owngen-timer "const gen = argv.includes('--gen') ? argv[argv.indexOf('--gen') + 1] : undefined;" 'const gen = readGen(dir);')
+M_OWNGEN_A=$(make_mutant owngen-after "const gen = val('--gen');" 'const gen = readGen(fbDir());')
+M_PIDOWNER=$(make_mutant pidowner "const alive = (p) => { try { process.kill(p, 0); return true; } catch (e) { return e.code === 'EPERM'; } };" "const pidFile = path.join(dir, 'timer.pid'); fs.writeFileSync(pidFile, process.pid + '\\n'); const alive = (p) => { if (p === watch) { let mine = false; try { mine = fs.readFileSync(pidFile, 'utf8').trim() === String(process.pid); } catch { /* gone */ } if (!mine) return false; } try { process.kill(p, 0); return true; } catch (e) { return e.code === 'EPERM'; } };")
+cnt() { [ -e "$CELL_REPO/$1" ] && echo leaks || echo blocked; }
+
+# ---- (0) rebuild with no interleaving: the generation alone
+case0_dispatch() {
+  trap case_cleanup EXIT # $1 stubs -> blocked|leaks
+  cell_new_disp fb-mid-batch 3 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+  rebuild_same_path '{}'
+  in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+  sleep 6; local r; r=$(cnt runs/repair-1.exit); kill "$TIMER_PARENT" 2> /dev/null; echo "$r"
+}
+case0_static() {
+  trap case_cleanup EXIT
+  LAND_S=3 cell_new_disp fb-deadman '' 60 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  sleep 1
+  rebuild_same_path '{"run.impl":{"after":3,"after_s":3,"files":{"runs/run.impl.exit":"0\n"}}}'
+  sleep 6; local r; r=$(cnt runs/run.impl.exit); kill "$TIMER_PARENT" 2> /dev/null; echo "$r"
+}
+# ---- (a) the rebuild interleaves with an old timer that already passed its check and is about to write (paused inside land())
+caseA_dispatch() {
+  trap case_cleanup EXIT
+  local pf="$TEST_TMP/pause-a"
+  cell_new_disp fb-mid-batch 3 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  : > "$pf"
+  FBATCH_LAND_PAUSE_FILE="$pf" in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+  sleep 4.5                                   # the timer is due (3 s) and sits inside land() holding the lock
+  rebuild_same_path '{}' &
+  local rb=$!
+  sleep 1; rm -f "$pf"; wait "$rb"
+  in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+  sleep 1; local r; r=$(cnt runs/repair-1.exit); kill "$TIMER_PARENT" 2> /dev/null; echo "$r"
+}
+caseA_static() {
+  trap case_cleanup EXIT
+  local pf="$TEST_TMP/pause-a2"
+  : > "$pf"
+  FBATCH_LAND_PAUSE_FILE="$pf" LAND_S=3 cell_new_disp fb-deadman '' 60 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  sleep 4.5
+  rebuild_same_path '{}' &
+  local rb=$!
+  sleep 1; rm -f "$pf"; wait "$rb"
+  sleep 1; local r; r=$(cnt runs/run.impl.exit); kill "$TIMER_PARENT" 2> /dev/null; echo "$r"
+}
+# ---- (b) the timer is suspended BEFORE it starts (before it could read anything); the fixture is rebuilt; then it is released
+paused_launch() { # $1.. the node argv ; sets PAUSED_PID, returns once it is stopped
+  local i
+  ( cd "$CELL_REPO" && exec sh -c 'kill -STOP $$; exec node "$@"' sh "$@" ) > /dev/null 2>&1 < /dev/null &
+  PAUSED_PID=$!
+  for i in $(seq 1 40); do [ "$(awk '{print $3}' "/proc/$PAUSED_PID/stat" 2> /dev/null)" = T ] && return 0; sleep 0.25; done
+  fail "the paused timer did not stop"
+}
+caseB_static() {
+  trap case_cleanup EXIT
+  cell_new_disp fb-deadman '' 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  printf '%s\n' '{"run.impl":{"after":3,"after_s":2,"files":{"runs/run.impl.exit":"0\n"}}}' > "$CELL_REPO/.git/fbatch/plan.json"
+  local g; g=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/gen")
+  paused_launch scripts/_land.js timer --watch-pid "$TIMER_PARENT" --gen "$g"
+  rebuild_same_path '{"run.impl":{"after":3,"after_s":2,"files":{"runs/run.impl.exit":"0\n"}}}'
+  kill -CONT "$PAUSED_PID"
+  sleep 5; local r; r=$(cnt runs/run.impl.exit); kill "$TIMER_PARENT" "$PAUSED_PID" 2> /dev/null; echo "$r"
+}
+caseB_dispatch() {
+  trap case_cleanup EXIT
+  cell_new_disp fb-mid-batch 60 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  local g; g=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/gen")
+  paused_launch scripts/_land.js after --watch-pid "$TIMER_PARENT" --label repair-1 --due-ts $(( $(date +%s) * 1000 + 1000 )) --gen "$g"
+  rebuild_same_path '{}'
+  in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null    # the same label in the new fixture (its own timer is 60 s away)
+  kill -CONT "$PAUSED_PID"
+  sleep 3; local r; r=$(cnt runs/repair-1.exit); kill "$TIMER_PARENT" "$PAUSED_PID" 2> /dev/null; echo "$r"
+}
+# ---- liveness: a late-starting timer of an earlier fixture coexists with the new fixture's timer; the new fixture's event must still land
+caseL_liveness() {
+  trap case_cleanup EXIT
+  cell_new_disp fb-deadman '' 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  local plan='{"run.impl":{"after":3,"after_s":2,"files":{"runs/run.impl.exit":"0\n"}}}' g g2
+  printf '%s\n' "$plan" > "$CELL_REPO/.git/fbatch/plan.json"
+  g=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/gen")
+  paused_launch scripts/_land.js timer --watch-pid "$TIMER_PARENT" --gen "$g"      # the old fixture's timer, not started yet
+  rebuild_same_path "$plan"                                                         # same path rebuilt: new generation
+  g2=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/gen")
+  ( cd "$CELL_REPO" && exec node scripts/_land.js timer --watch-pid "$TIMER_PARENT" --gen "$g2" ) > /dev/null 2>&1 < /dev/null &
+  LIVE_PID=$!
+  sleep 1                                                                           # the new fixture's timer is up
+  kill -CONT "$PAUSED_PID"                                                          # now the old one starts
+  sleep 5
+  [ -e "$CELL_REPO/runs/run.impl.exit" ] && echo lands || echo starved
+}
+expect_case() { # $1 label $2 want $3.. the case command
+  local label="$1" want="$2" got; shift 2
+  got=$("$@") || fail "$label: the case itself failed"
+  [ "$got" = "$want" ] || fail "$label: $got, want $want"
+}
+SD="$FB/cc/stubs"
+echo "--- green: the shipped stubs block every case ---"
+expect_case "0 dispatch timer, rebuilt" blocked case0_dispatch "$SD"
+expect_case "0 land_after_s timer, rebuilt" blocked case0_static "$SD"
+expect_case "a dispatch timer between check and write, rebuild interleaves" blocked caseA_dispatch "$SD"
+expect_case "a land_after_s timer between check and write, rebuild interleaves" blocked caseA_static "$SD"
+expect_case "b land_after_s timer suspended before it starts" blocked caseB_static "$SD"
+expect_case "b dispatch timer suspended before it starts" blocked caseB_dispatch "$SD"
+expect_case "liveness: a late old timer does not starve the new fixture" lands caseL_liveness "$SD"
+echo "--- red: each fix removed in turn, the same case must LEAK (and the cell must run the mutant) ---"
+expect_case "no generation check: dispatch timer" leaks case0_dispatch "$M_NOGEN" "$(mutant_sentinel nogen)"
+expect_case "no generation check: land_after_s timer" leaks case0_static "$M_NOGEN" "$(mutant_sentinel nogen)"
+expect_case "rebuild without the lock: dispatch timer (a)" leaks caseA_dispatch "$M_NOLOCK" "$(mutant_sentinel nolockreset)"
+expect_case "rebuild without the lock: land_after_s timer (a)" leaks caseA_static "$M_NOLOCK" "$(mutant_sentinel nolockreset)"
+expect_case "timer reads the token itself: land_after_s timer (b)" leaks caseB_static "$M_OWNGEN_T" "$(mutant_sentinel owngen-timer)"
+expect_case "timer reads the token itself: dispatch timer (b)" leaks caseB_dispatch "$M_OWNGEN_A" "$(mutant_sentinel owngen-after)"
+expect_case "pid ownership (the pre-simplification timer): the new fixture starves" starved caseL_liveness "$M_PIDOWNER" "$(mutant_sentinel pidowner)"
+
+echo "--- negative control: a cell that runs the SHIPPED stubs in a mutant case is refused by assert_mutant ---"
+for ms in nogen nolockreset owngen-timer owngen-after pidowner nolanding oldwait; do
+  out=$( ( trap case_cleanup EXIT; cell_new_disp fb-mid-batch 3 20 "$SD"; assert_mutant "$(mutant_sentinel "$ms")" ) 2>&1 ) && fail "assert_mutant passed on the shipped stubs for $ms"
+  grep -q "did not run the mutant" <<<"$out" || fail "assert_mutant must refuse the shipped stubs for $ms: $out"
+done
+echo "--- mutant sentinel table (name | sentinel | occurrences in the shipped stubs, must be 0) ---"
+while read -r row; do echo "$row"; [ "${row##*|}" = 0 ] || fail "sentinel not unique: $row"; done < "$SENTINEL_SCAN"
+[ "$(wc -l < "$SENTINEL_SCAN")" = 7 ] || fail "expected 7 mutants, scanned $(wc -l < "$SENTINEL_SCAN")"
+
 echo "=== stamp: findings-batch row is frozen; editing any frozen file turns --check red (negative controls) ==="
-clean node "$BASE/stamp-prereg.js" --row findings-batch --check > /dev/null 2>&1 < /dev/null || fail "findings-batch frozen row does not check ok"
+# The expectation follows the prereg status (amendment 3 is a draft until the owner re-stamps): a stamped row must check ok and
+# every frozen-file mutation must turn it red; a draft row must NOT check ok (its files moved on from the stamp), and the
+# per-file mutation loop, which cannot tell a mutation from the draft's own mismatch, is skipped.
+FB_STAMPED=$(node -e 'process.stdout.write(/^stamped\b/.test(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).status) ? "yes" : "no")' "$BASE/prereg/findings-batch.json")
+if [ "$FB_STAMPED" = yes ]; then
+  clean node "$BASE/stamp-prereg.js" --row findings-batch --check > /dev/null 2>&1 < /dev/null || fail "findings-batch frozen row does not check ok"
+else
+  rc=0; out=$(clean node "$BASE/stamp-prereg.js" --row findings-batch --check 2>&1 < /dev/null) || rc=$?
+  [ "$rc" = 2 ] && grep -q 'digest mismatch' <<<"$out" || fail "a draft findings-batch prereg must not check ok (rc=$rc): $out"
+  echo "findings-batch prereg is a draft: --check is red as expected, the per-file mutation loop is skipped"
+fi
 STAMP_ROOT="$TEST_TMP/stamp-root"
 mkdir -p "$STAMP_ROOT/prereg" "$STAMP_ROOT/packs"
 cp "$BASE/prereg/FROZEN.json" "$STAMP_ROOT/prereg/"
@@ -841,8 +1137,9 @@ node -e '
   const rec = JSON.parse(fs.readFileSync(process.argv[1] + "/prereg/FROZEN.json", "utf8"))["findings-batch"];
   for (const f of Object.keys(rec.files)) { const d = path.join(process.argv[2], f); fs.mkdirSync(path.dirname(d), { recursive: true }); fs.copyFileSync(path.join(process.argv[1], f), d); }' "$BASE" "$STAMP_ROOT"
 stamp_check() { clean node "$BASE/stamp-prereg.js" --row findings-batch --root "$STAMP_ROOT" --check 2>&1 < /dev/null; }
-out=$(stamp_check) || fail "copied frozen root must check ok: $out"
+if [ "$FB_STAMPED" = yes ]; then out=$(stamp_check) || fail "copied frozen root must check ok: $out"; fi
 for f in lib/transcript-query.js fbatch/lib.js fbatch/cell.js fbatch/cc-build.js fbatch/gate.md score-fbatch.js run-fbatch-campaign.js run-skill-onoff-matrix-fbatch.sh run-skill-onoff-eval-fbatch.sh fbatch/arms/change/code-review.md fbatch/cc/stubs/scripts/wait-dispatch-results.js fbatch/cc/tasks/fb-pool/task.md prereg/findings-batch.json; do
+  [ "$FB_STAMPED" = yes ] || continue
   cp "$STAMP_ROOT/$f" "$TEST_TMP/stamp-orig"
   case "$f" in
     *.json) sed -i 's/"reps": 5/"reps": 6/' "$STAMP_ROOT/$f" ;; # a JSON file must stay parseable
@@ -857,7 +1154,7 @@ for f in lib/transcript-query.js fbatch/lib.js fbatch/cell.js fbatch/cc-build.js
 done
 rm "$STAMP_ROOT/fbatch/arms/base/dev-flow-wait.md"
 rc=0; out=$(stamp_check) || rc=$?
-[ "$rc" = 2 ] && grep -q 'gone' <<<"$out" || fail "a deleted frozen file must turn --check red: rc=$rc $out"
+[ "$rc" = 2 ] && { [ "$FB_STAMPED" != yes ] || grep -q 'gone' <<<"$out"; } || fail "a deleted frozen file must turn --check red: rc=$rc $out"
 echo "=== stamp: every file the evaluation reads (dependency closure) is in freeze_files ==="
 node -e '
   const fs = require("fs"), path = require("path");
@@ -887,4 +1184,8 @@ rc=0; out=$(stamp_check) || rc=$?
 echo "=== stamp: rows stamped before stay ok ==="
 clean node "$BASE/stamp-prereg.js" --row bpack --check > /dev/null 2>&1 < /dev/null || fail "bpack frozen row no longer checks ok"
 
+echo "=== no landing timer started by this test is still alive ==="
+for i in $(seq 1 20); do [ -z "$(land_pids "$TEST_TMP")" ] && break; sleep 0.25; done
+left=$(land_pids "$TEST_TMP" | tr '\n' ' ')
+[ -z "$left" ] || fail "landing timers started by this test are still alive: $left"
 echo "findings-batch cc tests passed"

@@ -91,6 +91,7 @@ function buildTrace(taskId, entries) {
   const calls = [];
   for (const e of entries) {
     if (e.kind === 'landed') {
+      if (e.dispatch) continue; // a run the agent itself dispatched landing (amendment 3): not fixture evidence for any marker
       if (e.lane) landed.add(e.lane);
       if ((e.files || []).some((f) => /\.exit$/.test(f)) && exitTs === null) exitTs = e.ts;
       continue;

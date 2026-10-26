@@ -1,0 +1,10 @@
+{
+ "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+ "effort": "high",
+ "engine": "kimi-code/k3.1-pro",
+ "model": "kimi-code/k3.1-pro",
+ "model_version": "kimi-k3.1-pro",
+ "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+ "role": "implementer",
+ "runner": "kimi"
+}

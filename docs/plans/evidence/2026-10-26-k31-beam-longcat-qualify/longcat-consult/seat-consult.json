@@ -1,0 +1,10 @@
+{
+ "corpus_version": "consult-v6.consult-eval-generator-v1",
+ "effort": "default",
+ "engine": "opencode-go/longcat-2.0",
+ "model": "opencode-go/longcat-2.0",
+ "model_version": "longcat-2.0",
+ "prompt_config_hash": "1479cfe29685e6239b56f9a5c72112075cc13b4c992bc9105b83d9e33bda3635",
+ "role": "consult",
+ "runner": "opencode"
+}

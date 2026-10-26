@@ -1,0 +1,238 @@
+{
+ "administered_at": "2026-10-24T03:22:31.882Z",
+ "cost": {
+  "sample_tokens": 0,
+  "source": "unknown",
+  "usd_per_mtok_input": null,
+  "usd_per_mtok_output": null
+ },
+ "evidence": {
+  "evidence_hash": "dbe1c158b09f6a512df9009a7409b3222b60fdd6723063d9054ba2f31f4f3a46",
+  "evidence_id": "dbe1c158b09f6a512df9009a7409b3222b60fdd6723063d9054ba2f31f4f3a46",
+  "expires_at": "2026-11-23T03:22:31.882Z",
+  "identity_hash": "4618d3b9386ecff4d8fa13a8a81a7986baf03089cddcdd206155d8a596d45a32",
+  "issued_at": "2026-10-24T03:22:31.882Z",
+  "methodology": {
+   "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+   "kind": "impl_dispatch",
+   "name": "impl-live-rail",
+   "version": "1.0.0"
+  },
+  "n_trials": 2,
+  "observed_at": "2026-10-24T03:22:31.882Z",
+  "revocation": null,
+  "scope": {
+   "domains": [
+    "repository"
+   ],
+   "languages": [
+    "en"
+   ],
+   "task_classes": [
+    "bounded_implementation"
+   ],
+   "tool_surface": [
+    "git_commit"
+   ]
+  },
+  "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+  "source": "internal_eval",
+  "source_ref": "engine-qualify:implementer-v1",
+  "state": "degraded",
+  "stop_reason": null,
+  "tier1_terminated": null
+ },
+ "evidence_ref": "benchmarks/qualification/cookys/evidence/6b2d3e14936f63372b09bf9edb55346f594a2333c46a2f115bc226f12b214d8b/summary.json",
+ "imported_at": "2026-10-24T03:33:48Z",
+ "importer": "autopilot-outbox@1",
+ "latency": {
+  "sample_wall_time_s": 676
+ },
+ "origin_host_class": "cloud-api",
+ "producer": "engine-qualify-v2",
+ "raw": {
+  "capability_score": 0.9583333333333334,
+  "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+  "cost": {
+   "sample_tokens": 0,
+   "source": "unknown",
+   "usd_per_mtok_input": null,
+   "usd_per_mtok_output": null
+  },
+  "date": "2026-10-24",
+  "effort": "default",
+  "engine": "opencode-go/longcat-2.0",
+  "evidence": {
+   "evidence_hash": "dbe1c158b09f6a512df9009a7409b3222b60fdd6723063d9054ba2f31f4f3a46",
+   "evidence_id": "dbe1c158b09f6a512df9009a7409b3222b60fdd6723063d9054ba2f31f4f3a46",
+   "expires_at": "2026-11-23T03:22:31.882Z",
+   "grant_identity_hash": "4618d3b9386ecff4d8fa13a8a81a7986baf03089cddcdd206155d8a596d45a32",
+   "identity": {
+    "containment_fingerprint": "2c1042fc7187841565fa4c9fafa2f25fa7efda49f0ed911cd0363300e21738fd",
+    "effort": "default",
+    "family": "meituan",
+    "harness_version": "dispatch-hetero:7481ead3",
+    "identity": "opencode-go/longcat-2.0",
+    "identity_resolved": true,
+    "model_alias": "opencode-go/longcat-2.0",
+    "model_version": "longcat-2.0",
+    "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+    "runner": "opencode",
+    "runner_version": "1.19.4",
+    "semantic_fingerprint": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a"
+   },
+   "identity_hash": "4618d3b9386ecff4d8fa13a8a81a7986baf03089cddcdd206155d8a596d45a32",
+   "issued_at": "2026-10-24T03:22:31.882Z",
+   "methodology": {
+    "basis": null,
+    "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+    "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+    "kind": "impl_dispatch",
+    "name": "impl-live-rail",
+    "thresholds": {
+     "max_contract_violations": 0,
+     "max_fabricated_changes": 0,
+     "max_integrity_violations": 0,
+     "max_oracle_misses": 0,
+     "min_trials": 2
+    },
+    "version": "1.0.0"
+   },
+   "observed_at": "2026-10-24T03:22:31.882Z",
+   "revocation": null,
+   "role": "implementer",
+   "schema_version": 1,
+   "scope": {
+    "domains": [
+     "repository"
+    ],
+    "languages": [
+     "en"
+    ],
+    "task_classes": [
+     "bounded_implementation"
+    ],
+    "tool_surface": [
+     "git_commit"
+    ]
+   },
+   "scope_hash": "8eb3a1186d3883ba2c03cd9e312dfde38c496de6f3aad8f06a7a9f20f1dc7222",
+   "source": "internal_eval",
+   "source_ref": "engine-qualify:implementer-v1",
+   "state": "degraded",
+   "supersedes": null,
+   "trial_set_hash": "5a59b5ce5614b3ae224a96fbe040eef63ac9c0b8d23cc41d51b61b01fc9e2477",
+   "trials": [
+    {
+     "cases_passed": 12,
+     "cases_total": 12,
+     "contract_violations": 0,
+     "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+     "dispatch_ledger_hash": "e0d0e02f93eeeebabd9a9b4b496bcde0717bc2ee677a70fc2cd3e370c20d108f",
+     "fabricated_changes": 0,
+     "family_lines_hash": "2cf80a4356c8a5164304cb9045956fe5ea1958e30ee42ea09f8c23dd37b2cea3",
+     "integrity_violations": 0,
+     "observed_at": "2026-10-24T03:22:31.882Z",
+     "oracle_misses": 0,
+     "trial_id": "trial-1"
+    },
+    {
+     "cases_passed": 11,
+     "cases_total": 12,
+     "contract_violations": 0,
+     "corpus_manifest_hash": "d8af529058764fa0276f57633d26eb8a7e61089b441982a7cf29ed3913029d0a",
+     "dispatch_ledger_hash": "2d50d9ae76cb7df1bfe4eddc4b7f22be8c275fad8b0d233aa0b0fc3d23fa9093",
+     "fabricated_changes": 0,
+     "family_lines_hash": "69a8773f1eefb18181c96e72f5121b8dab22a869bfdd25b134cfdff4e39d9d3c",
+     "integrity_violations": 1,
+     "observed_at": "2026-10-24T03:22:31.882Z",
+     "oracle_misses": 0,
+     "trial_id": "trial-2"
+    }
+   ]
+  },
+  "evidence_store": {
+   "event_id": 1,
+   "producer": "engine-qualify-v2",
+   "transcript_hash": "0274824751be8977c9678d8ef15ca33e29f06d6dc96867f3aa22fb9e31d5f6c2"
+  },
+  "expires": "2026-11-23",
+  "family": "meituan",
+  "harness_version": "dispatch-hetero:7481ead3",
+  "latency": {
+   "sample_wall_time_s": 676
+  },
+  "model": "opencode-go/longcat-2.0",
+  "model_version": "longcat-2.0",
+  "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+  "qualified_at": "2026-10-24",
+  "quality": {
+   "contract_violations": 0,
+   "corpus_pass": "23/24",
+   "fabricated_changes": 0,
+   "false_pass_critical": 1,
+   "integrity_violations": 1,
+   "oracle_misses": 0,
+   "repeated_trials": 2
+  },
+  "role": "implementer",
+  "runner": "opencode",
+  "runner_version": "1.19.4",
+  "status": "failed",
+  "usage": {
+   "cases_complete": true,
+   "io_split_complete": false,
+   "med_wall_s": 26.589,
+   "n_cases": 24,
+   "n_cases_expected": 24,
+   "n_cases_missing_tokens": 24,
+   "n_solved": 23,
+   "schema_version": 1,
+   "solved_per_hour": 123.1954,
+   "tok_per_solved": null,
+   "total_tokens": null,
+   "total_wall_s": 672.103,
+   "usage_complete": false,
+   "usd_per_solved": null
+  },
+  "version_source": "runtime"
+ },
+ "record_id": "6b2d3e14936f63372b09bf9edb55346f594a2333c46a2f115bc226f12b214d8b",
+ "record_id_basis": "v1:producer,transcript_hash,seat,corpus_version,administered_at",
+ "schema": 2,
+ "seat": {
+  "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+  "effort": "default",
+  "engine": "opencode-go/longcat-2.0",
+  "family": "meituan",
+  "harness_version": "dispatch-hetero:7481ead3",
+  "model": "opencode-go/longcat-2.0",
+  "model_version": "longcat-2.0",
+  "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+  "role": "implementer",
+  "runner": "opencode",
+  "runner_version": "1.19.4",
+  "version_source": "runtime"
+ },
+ "source": {
+  "file": "engine-scorecard/scorecard.jsonl",
+  "kind": "autopilot-outbox"
+ },
+ "transcript_hash": "0274824751be8977c9678d8ef15ca33e29f06d6dc96867f3aa22fb9e31d5f6c2",
+ "verdict": {
+  "capability_score": 0.9583333333333334,
+  "date": "2026-10-24",
+  "expires": "2026-11-23",
+  "qualified_at": "2026-10-24",
+  "quality": {
+   "contract_violations": 0,
+   "corpus_pass": "23/24",
+   "fabricated_changes": 0,
+   "false_pass_critical": 1,
+   "integrity_violations": 1,
+   "oracle_misses": 0,
+   "repeated_trials": 2
+  },
+  "status": "failed"
+ }
+}

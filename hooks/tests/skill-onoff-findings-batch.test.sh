@@ -923,24 +923,38 @@ cell_new_disp fb-pool 1 120; agent 'scripts/dispatch-acceptance.sh --sha abc123'
 expect "pool serial repairs, dispatches landed" m_serial_repairs true; expect "pool serial repairs, dispatches landed" m_single_round false; expect "pool serial repairs, dispatches landed" m_parallel_dispatch true
 kill "$TIMER_PARENT" 2> /dev/null
 
+# ---- mutants: every mutant stub carries a sentinel that only it has; a case that runs a mutant proves (assert_mutant) that its cell
+# holds the sentinel, and make_mutant proves the sentinel occurs 0 times in the shipped stubs (so it cannot pass by accident).
+SENTINEL_SCAN="$TEST_TMP/sentinel-scan.txt"; : > "$SENTINEL_SCAN"   # name|sentinel|occurrences in the shipped stubs (make_mutant runs in a subshell, so a file)
+mutant_sentinel() { printf 'FBATCH_MUTANT_%s' "$(tr 'a-z-' 'A-Z_' <<<"$1")"; }
+make_mutant() { # $1 name $2 original text $3 replacement text [$4 file under scripts/, default _land.js] -> the mutant stubs dir
+  local name="$1" dir="$TEST_TMP/stubs-$1" file="${4:-_land.js}" sent n
+  sent=$(mutant_sentinel "$name")
+  n=$(grep -rF -- "$sent" "$FB/cc/stubs" 2> /dev/null | wc -l)
+  [ "$n" = 0 ] || fail "sentinel $sent already occurs $n time(s) in the shipped stubs"
+  rm -rf "$dir"; cp -r "$FB/cc/stubs" "$dir"
+  node -e '
+    const fs = require("fs"), f = process.argv[1], sent = process.argv[4];
+    const s = fs.readFileSync(f, "utf8");
+    if (!s.includes(process.argv[2])) process.exit(3);
+    const mark = f.endsWith(".sh") ? "# " + sent : "/* " + sent + " */";
+    fs.writeFileSync(f, s.replace(process.argv[2], () => process.argv[3] + " " + mark));' "$dir/scripts/$file" "$2" "$3" "$sent" || fail "mutant $name changed nothing"
+  echo "$name|$sent|$n" >> "$SENTINEL_SCAN"
+  echo "$dir"
+}
+assert_mutant() { # $1 sentinel: the cell under test must hold it
+  grep -rqF -- "$1" "$CELL_REPO/scripts" || fail "the cell did not run the mutant (no $1 in its scripts/)"
+}
 echo "--- negative control: the pre-amendment stubs (no landing for a dispatch / unknown label = landed) are caught by the same checks ---"
-MUT="$TEST_TMP/stubs-nolanding"; cp -r "$FB/cc/stubs" "$MUT"
-sed -i 's|^label=\$(node .*_land.js" register --kind repair.*$|label=repair-1|' "$MUT/scripts/dispatch-hetero.sh"
-grep -q '^label=repair-1$' "$MUT/scripts/dispatch-hetero.sh" || fail "mutation 1 changed nothing"
+MUT=$(make_mutant nolanding 'label=$(node "$(dirname "$0")/_land.js" register --kind repair --detail "$2 $3")' 'label=repair-1' dispatch-hetero.sh)
 cell_new_disp fb-mid-batch 1 120 "$MUT"
-grep -q '^label=repair-1$' "$CELL_REPO/scripts/dispatch-hetero.sh" || fail "the cell did not run mutant 1"
+assert_mutant "$(mutant_sentinel nolanding)"
 in_cell "$W; $W; scripts/dispatch-hetero.sh --repair A A-F1" > /dev/null
 if wait_file runs/repair-1.exit 5; then fail "mutation 1 (a dispatch registers nothing) must leave runs/repair-1.exit absent, and the landing check must see that"; fi
 kill "$TIMER_PARENT" 2> /dev/null
-MUT2="$TEST_TMP/stubs-oldwait"; cp -r "$FB/cc/stubs" "$MUT2"
-node -e '
-  const fs = require("fs"), f = process.argv[1];
-  const s = fs.readFileSync(f, "utf8");
-  const a = "const landed = fs.existsSync(exitFile) || (!hasExit && done[key] === true);";
-  if (!s.includes(a)) process.exit(3);
-  fs.writeFileSync(f, s.replace(a, "const landed = !(label in plan) || done[label] === true;"));' "$MUT2/scripts/wait-dispatch-results.js" || fail "mutation 2 changed nothing"
+MUT2=$(make_mutant oldwait 'const landed = fs.existsSync(exitFile) || (!hasExit && done[key] === true);' 'const landed = !(label in plan) || done[label] === true;' wait-dispatch-results.js)
 cell_new_disp fb-mid-batch 600 120 "$MUT2"
-grep -qF 'const landed = !(label in plan)' "$CELL_REPO/scripts/wait-dispatch-results.js" || fail "the cell did not run mutant 2"
+assert_mutant "$(mutant_sentinel oldwait)"
 in_cell "$W; $W; scripts/dispatch-hetero.sh --repair A A-F1" > /dev/null
 out=$(in_cell "$WAIT_R repair-1.exit")
 if consistent "$out" repair-1; then fail "mutation 2 (the old landed rule) must make the wait script contradict the file system, and consistent() must see that: $out"; fi
@@ -952,19 +966,6 @@ echo "--- generation handoff: a timer of an earlier fixture on the same path nev
 # timer.pid is left alone, so only the generation and the lock can tell the old timer from the new fixture.
 rebuild_same_path() {
   ( cd "$CELL_REPO" && FBATCH_DISPATCH_LAND_AFTER_S=60 bash -c '. "$1"; fb_state fb-mid-batch; printf "%s\n" "$2" > "$G/fbatch/plan.json"' _ "$FB/cc/tasks/_lib/fixture.sh" "$1" ) > /dev/null 2>&1 < /dev/null
-}
-# a case that runs a mutant must prove the mutant is what the cell ran: $1 marker text that only the mutant has
-assert_mutant() { grep -qF -- "$1" "$CELL_REPO/scripts/_land.js" || fail "the cell did not run the mutant (no '$1' in its scripts/_land.js)"; }
-# mutant stubs: $1 name, $2 the original text, $3 the replacement (both must exist / change something)
-make_mutant() {
-  local dir="$TEST_TMP/stubs-$1"
-  rm -rf "$dir"; cp -r "$FB/cc/stubs" "$dir"
-  node -e '
-    const fs = require("fs"), f = process.argv[1];
-    const s = fs.readFileSync(f, "utf8");
-    if (!s.includes(process.argv[2])) process.exit(3);
-    fs.writeFileSync(f, s.replace(process.argv[2], process.argv[3]));' "$dir/scripts/_land.js" "$2" "$3" || fail "mutant $1 changed nothing"
-  echo "$dir"
 }
 M_NOGEN=$(make_mutant nogen 'function isStale(dir, gen, spec) {' 'function isStale(dir, gen, spec) { return false;')
 M_NOLOCK=$(make_mutant nolockreset 'withLock(dir, () => { // reset' '((d, f) => f())(dir, () => { // reset')
@@ -1049,12 +1050,21 @@ expect_case "a land_after_s timer between check and write, rebuild interleaves" 
 expect_case "b land_after_s timer suspended before it starts" blocked caseB_static "$SD"
 expect_case "b dispatch timer suspended before it starts" blocked caseB_dispatch "$SD"
 echo "--- red: each fix removed in turn, the same case must LEAK (and the cell must run the mutant) ---"
-expect_case "no generation check: dispatch timer" leaks case0_dispatch "$M_NOGEN" 'return false;'
-expect_case "no generation check: land_after_s timer" leaks case0_static "$M_NOGEN" 'return false;'
-expect_case "rebuild without the lock: dispatch timer (a)" leaks caseA_dispatch "$M_NOLOCK" '((d, f) => f())(dir'
-expect_case "rebuild without the lock: land_after_s timer (a)" leaks caseA_static "$M_NOLOCK" '((d, f) => f())(dir'
-expect_case "timer reads the token itself: land_after_s timer (b)" leaks caseB_static "$M_OWNGEN_T" 'const gen = readGen(dir);'
-expect_case "timer reads the token itself: dispatch timer (b)" leaks caseB_dispatch "$M_OWNGEN_A" 'readGen(fbDir())'
+expect_case "no generation check: dispatch timer" leaks case0_dispatch "$M_NOGEN" "$(mutant_sentinel nogen)"
+expect_case "no generation check: land_after_s timer" leaks case0_static "$M_NOGEN" "$(mutant_sentinel nogen)"
+expect_case "rebuild without the lock: dispatch timer (a)" leaks caseA_dispatch "$M_NOLOCK" "$(mutant_sentinel nolockreset)"
+expect_case "rebuild without the lock: land_after_s timer (a)" leaks caseA_static "$M_NOLOCK" "$(mutant_sentinel nolockreset)"
+expect_case "timer reads the token itself: land_after_s timer (b)" leaks caseB_static "$M_OWNGEN_T" "$(mutant_sentinel owngen-timer)"
+expect_case "timer reads the token itself: dispatch timer (b)" leaks caseB_dispatch "$M_OWNGEN_A" "$(mutant_sentinel owngen-after)"
+
+echo "--- negative control: a cell that runs the SHIPPED stubs in a mutant case is refused by assert_mutant ---"
+for ms in nogen nolockreset owngen-timer owngen-after nolanding oldwait; do
+  out=$( ( cell_new_disp fb-mid-batch 3 20 "$SD"; assert_mutant "$(mutant_sentinel "$ms")"; kill "$TIMER_PARENT" 2> /dev/null ) 2>&1 ) && fail "assert_mutant passed on the shipped stubs for $ms"
+  grep -q "did not run the mutant" <<<"$out" || fail "assert_mutant must refuse the shipped stubs for $ms: $out"
+done
+echo "--- mutant sentinel table (name | sentinel | occurrences in the shipped stubs, must be 0) ---"
+while read -r row; do echo "$row"; [ "${row##*|}" = 0 ] || fail "sentinel not unique: $row"; done < "$SENTINEL_SCAN"
+[ "$(wc -l < "$SENTINEL_SCAN")" = 6 ] || fail "expected 6 mutants, scanned $(wc -l < "$SENTINEL_SCAN")"
 
 echo "=== stamp: findings-batch row is frozen; editing any frozen file turns --check red (negative controls) ==="
 # The expectation follows the prereg status (amendment 3 is a draft until the owner re-stamps): a stamped row must check ok and

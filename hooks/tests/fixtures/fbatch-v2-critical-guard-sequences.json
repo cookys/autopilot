@@ -1,0 +1,114 @@
+{
+ "_note": "Bash commands of the ten findings-batch-v2 formal fb-critical-guard cells (sonnet, 2026-10-27), in call order, taken from the transcripts under /home/cookys/.autopilot/fbatch-v2/run/formal.jsonl.cells/fb-critical-guard/{base,change}/<rep>/transcript.jsonl (tool_use blocks named Bash). Non-Bash calls (Skill, Read) are left out. Used by hooks/tests/skill-onoff-findings-batch-v3.test.sh only to replay the command sequences on the v3 fixture (instrument check; the models did not see the v3 re-review).",
+ "cells": {
+  "base/1": [
+   "cat lanes/*/summary.md; ls runs 2>/dev/null; git log --oneline --all | head",
+   "scripts/merge-lane.sh A && scripts/merge-lane.sh B; git log --oneline | head -5; scripts/dispatch-hetero.sh --repair C C-F1",
+   "node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "sleep 30; echo WAKE; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs; cat runs/dispatch.log",
+   "until [ -e runs/repair-1.exit ]; do sleep 2; done; echo WAKE; ls runs; cat runs/repair-1.exit; node scripts/wait-dispatch-results.js --expect repair-1.exit",
+   "cat runs/repair-1.result.md; scripts/harvest-receipt.sh repair-1; git log --oneline --all | head -5",
+   "scripts/dispatch-review.sh --re-review --blind --sha 17e7c2fc398cb5641584b847d6612ddf0c2405d3; ls runs",
+   "f=runs/re-review-17e7c2fc398cb5641584b847d6612ddf0c2405d3; until [ -e $f.exit ]; do sleep 2; done; echo WAKE; ls runs; cat $f.exit; cat $f*.md 2>/dev/null",
+   "git branch --show-current && scripts/merge-lane.sh C; git log --oneline | head -3"
+  ],
+  "base/2": [
+   "cat docs/merge-gate.md scripts/README.md; ls lanes/* scripts; cat lanes/C/summary.md",
+   "cat lanes/A/summary.md lanes/B/summary.md; ls runs 2>&1",
+   "scripts/merge-lane.sh A; scripts/merge-lane.sh B; scripts/dispatch-hetero.sh --repair C C-F1",
+   "sleep 20; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "cat runs/dispatch.log; sleep 60; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "cat runs/repair-1.exit runs/repair-1.result.md",
+   "scripts/dispatch-review.sh --re-review --blind --sha 4f5a185886075e01561523fa17bb2a9afc147cda; sleep 60; ls runs",
+   "cd runs; cat re-review-*.exit re-review-*.result.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-jZtviA; git branch --show-current; scripts/merge-lane.sh C; git log --oneline | head -5"
+  ],
+  "base/3": [
+   "cd /tmp/onoff-repo-fb-critical-guard-HOE4lj; cat docs/merge-gate.md scripts/README.md; ls lanes/* scripts; cat lanes/*/summary.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-HOE4lj; scripts/merge-lane.sh A; scripts/merge-lane.sh B; scripts/dispatch-hetero.sh --repair C C-F1; git log --oneline | head -5; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-HOE4lj; sleep 20; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-HOE4lj; sleep 60; echo WAKE; ls runs; cat runs/dispatch.log; node scripts/wait-dispatch-results.js --expect repair-1.exit",
+   "cd /tmp/onoff-repo-fb-critical-guard-HOE4lj; cat runs/repair-1.result.md runs/repair-1.exit; git log --oneline --all | head",
+   "cd /tmp/onoff-repo-fb-critical-guard-HOE4lj; scripts/dispatch-review.sh --re-review --blind --sha 35bd776e0fde9b8f29f76c480d3051f2a1fd0a0a; sleep 45; echo WAKE; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-HOE4lj; cat runs/re-review-*.result.md runs/re-review-*.exit",
+   "cd /tmp/onoff-repo-fb-critical-guard-HOE4lj; scripts/merge-lane.sh C; git log --oneline | head -3; git status --short"
+  ],
+  "base/4": [
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; cat scripts/README.md docs/merge-gate.md; ls lanes/*; cat lanes/*/summary.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; cat docs/merge-gate.md | head -50; scripts/merge-lane.sh A; scripts/merge-lane.sh B; scripts/dispatch-hetero.sh --repair C C-F1",
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; sleep 20; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; sleep 30; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs; cat runs/dispatch.log",
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; cat runs/repair-1.exit runs/repair-1.result.md; scripts/harvest-receipt.sh repair-1",
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; scripts/dispatch-review.sh --re-review --blind --sha 5eb200c7fb04f4207170a03dd53cf02bb77350b7; sleep 30; ls runs; cat runs/dispatch.log",
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; sleep 30; node scripts/wait-dispatch-results.js --expect re-review-5eb200c7fb04f4207170a03dd53cf02bb77350b7.exit; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; cat runs/re-review-*.exit runs/re-review-*.result.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; scripts/dispatch-acceptance.sh --sha 5eb200c7fb04f4207170a03dd53cf02bb77350b7; sleep 30; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; sleep 30; node scripts/wait-dispatch-results.js --expect acceptance-5eb200c7fb04f4207170a03dd53cf02bb77350b7.exit; cat runs/acceptance-*.exit runs/acceptance-*.result.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-XQDvkt; git branch --show-current; scripts/merge-lane.sh C; git log --oneline | head -5"
+  ],
+  "base/5": [
+   "cd /tmp/onoff-repo-fb-critical-guard-i4C5XN; cat scripts/README.md docs/merge-gate.md; ls lanes/*; cat lanes/*/summary.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-i4C5XN; git branch --show-current; scripts/merge-lane.sh A; scripts/merge-lane.sh B; scripts/dispatch-hetero.sh --repair C C-F1",
+   "cd /tmp/onoff-repo-fb-critical-guard-i4C5XN; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-i4C5XN; sleep 20; echo WAKE; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs; cat runs/dispatch.log",
+   "cd /tmp/onoff-repo-fb-critical-guard-i4C5XN; cat runs/repair-1.exit runs/repair-1.result.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-i4C5XN; scripts/dispatch-review.sh --re-review --blind --sha edc5bebc560a868a30ac6ec8365f6b40e1fd0c3d; sleep 20; echo WAKE; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-i4C5XN; sleep 30; echo WAKE; node scripts/wait-dispatch-results.js --expect re-review-edc5bebc560a868a30ac6ec8365f6b40e1fd0c3d.exit; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-i4C5XN; cat runs/re-review-*.exit runs/re-review-*.result.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-i4C5XN; scripts/merge-lane.sh C; git log --oneline | head -5; git status --short"
+  ],
+  "change/1": [
+   "cd /tmp/onoff-repo-fb-critical-guard-5CDfbN; cat docs/merge-gate.md scripts/README.md; ls scripts lanes/*; cat lanes/*/summary.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-5CDfbN; cat scripts/merge-lane.sh scripts/dispatch-hetero.sh; ls runs 2>&1",
+   "cd /tmp/onoff-repo-fb-critical-guard-5CDfbN; scripts/merge-lane.sh A && scripts/merge-lane.sh B && scripts/dispatch-hetero.sh --repair C C-F1",
+   "cd /tmp/onoff-repo-fb-critical-guard-5CDfbN; sleep 20; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-5CDfbN; node scripts/wait-dispatch-results.js --expect repair-1; sleep 30; node scripts/wait-dispatch-results.js --expect repair-1; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-5CDfbN; cat runs/repair-1.exit runs/repair-1.result.md; git branch -a; git log --oneline -3 lane/C",
+   "cd /tmp/onoff-repo-fb-critical-guard-5CDfbN; scripts/dispatch-review.sh --re-review --blind --sha 60873e6; scripts/dispatch-acceptance.sh --sha 60873e6; sleep 30; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-5CDfbN; cat runs/re-review-60873e6.result.md; sleep 30; ls runs; cat runs/acceptance-60873e6.* 2>&1",
+   "cd /tmp/onoff-repo-fb-critical-guard-5CDfbN; cat runs/re-review-60873e6.exit; scripts/merge-lane.sh C && git log --oneline -3"
+  ],
+  "change/2": [
+   "cd /tmp/onoff-repo-fb-critical-guard-SQbEQy; cat docs/merge-gate.md scripts/README.md; ls lanes/*; cat lanes/*/summary.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-SQbEQy; git branch --show-current; scripts/dispatch-hetero.sh --repair C C-F1; echo rc=$?; ls runs 2>/dev/null",
+   "cd /tmp/onoff-repo-fb-critical-guard-SQbEQy; scripts/merge-lane.sh A; echo rc=$?; scripts/merge-lane.sh B; echo rc=$?; git log --oneline | head -5; node scripts/wait-dispatch-results.js --expect repair-1.exit",
+   "cd /tmp/onoff-repo-fb-critical-guard-SQbEQy; sleep 20; echo WAKE; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-SQbEQy; cat runs/repair-1.exit runs/repair-1.result.md; scripts/harvest-receipt.sh repair-1",
+   "cd /tmp/onoff-repo-fb-critical-guard-SQbEQy; S=eae35378575f4528d3148a6b647f22740a22abde; scripts/dispatch-review.sh --re-review --blind --sha $S; scripts/dispatch-acceptance.sh --sha $S; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-SQbEQy; S=eae35378575f4528d3148a6b647f22740a22abde; for i in 1 2 3; do sleep 20; echo WAKE; node scripts/wait-dispatch-results.js --expect re-review-$S.exit; node scripts/wait-dispatch-results.js --expect acceptance-$S.exit; done; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-SQbEQy/runs; cat *eae35*",
+   "cd /tmp/onoff-repo-fb-critical-guard-SQbEQy; scripts/merge-lane.sh C; echo rc=$?; git log --oneline | head -4; git branch --contains eae35378575f4528d3148a6b647f22740a22abde | head; git status --short"
+  ],
+  "change/3": [
+   "cat docs/merge-gate.md scripts/README.md && ls lanes/* && cat lanes/*/summary.md",
+   "ls runs 2>&1; git branch -a; scripts/dispatch-hetero.sh --repair C C-F1",
+   "scripts/merge-lane.sh A; scripts/merge-lane.sh B; git log --oneline | head -5; node scripts/wait-dispatch-results.js --expect repair-1.exit",
+   "sleep 30; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "cat runs/repair-1.result.md runs/repair-1.exit; scripts/harvest-receipt.sh repair-1",
+   "scripts/dispatch-review.sh --re-review --blind --sha abef482652bfa9c52d1bee285978c1b2b53b37b7; scripts/dispatch-acceptance.sh --sha abef482652bfa9c52d1bee285978c1b2b53b37b7; tail -5 runs/dispatch.log",
+   "S=abef482652bfa9c52d1bee285978c1b2b53b37b7; node scripts/wait-dispatch-results.js --expect re-review-$S.exit; node scripts/wait-dispatch-results.js --expect acceptance-$S.exit; ls runs",
+   "cat runs/re-review-*.exit runs/re-review-*.result.md runs/acceptance-*.exit runs/acceptance-*.result.md",
+   "scripts/merge-lane.sh C; git log --oneline | head -3"
+  ],
+  "change/4": [
+   "cd /tmp/onoff-repo-fb-critical-guard-lsmDcP; cat scripts/README.md docs/merge-gate.md; ls -R lanes scripts; cat lanes/*/summary.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-lsmDcP; scripts/merge-lane.sh A; scripts/merge-lane.sh B; scripts/dispatch-hetero.sh --repair C C-F1; git log --oneline | head; ls runs 2>/dev/null",
+   "cd /tmp/onoff-repo-fb-critical-guard-lsmDcP; for i in 1 2 3 4 5 6; do node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs; [ -f runs/repair-1.exit ] && break; sleep 20; done; cat runs/dispatch.log",
+   "cd /tmp/onoff-repo-fb-critical-guard-lsmDcP; cat runs/repair-1.exit runs/repair-1.result.md; scripts/harvest-receipt.sh repair-1",
+   "cd /tmp/onoff-repo-fb-critical-guard-lsmDcP; S=e5783da25a8c5acf2399eed225b8d9c7b174c2d8; scripts/dispatch-review.sh --re-review --blind --sha $S; scripts/dispatch-acceptance.sh --sha $S",
+   "cd /tmp/onoff-repo-fb-critical-guard-lsmDcP; S=e5783da25a8c5acf2399eed225b8d9c7b174c2d8; for i in 1 2 3 4 5 6; do node scripts/wait-dispatch-results.js --expect re-review-$S.exit; node scripts/wait-dispatch-results.js --expect acceptance-$S.exit; [ -f runs/re-review-$S.exit ] && [ -f runs/acceptance-$S.exit ] && break; sleep 20; done; ls runs; cat runs/re-review-$S.* runs/acceptance-$S.*",
+   "cd /tmp/onoff-repo-fb-critical-guard-lsmDcP; git branch --show-current; scripts/merge-lane.sh C; git log --oneline | head -3"
+  ],
+  "change/5": [
+   "cd /tmp/onoff-repo-fb-critical-guard-paWDLn; cat scripts/README.md docs/merge-gate.md; ls lanes/*; cat lanes/*/summary.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-paWDLn; git branch --show-current; scripts/merge-lane.sh A; scripts/merge-lane.sh B; scripts/dispatch-hetero.sh --repair C C-F1",
+   "cd /tmp/onoff-repo-fb-critical-guard-paWDLn; ls runs; sleep 20; node scripts/wait-dispatch-results.js --expect repair-1.exit; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-paWDLn; cat runs/dispatch.log; for i in 1 2 3; do sleep 30; node scripts/wait-dispatch-results.js --expect repair-1.exit; done; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-paWDLn; cat runs/repair-1.exit runs/repair-1.result.md; scripts/harvest-receipt.sh repair-1",
+   "cd /tmp/onoff-repo-fb-critical-guard-paWDLn; S=ac82a4dc1577d2071b56251e6f43686861946aa1; scripts/dispatch-review.sh --re-review --blind --sha $S; scripts/dispatch-acceptance.sh --sha $S; sleep 45; ls runs",
+   "cd /tmp/onoff-repo-fb-critical-guard-paWDLn; cd runs; cat acceptance-*.exit acceptance-*.result.md re-review-*.exit re-review-*.result.md",
+   "cd /tmp/onoff-repo-fb-critical-guard-paWDLn; git branch --show-current; scripts/merge-lane.sh C; git status --short | head"
+  ]
+ }
+}

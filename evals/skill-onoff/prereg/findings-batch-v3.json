@@ -1,0 +1,205 @@
+{
+  "row": "findings-batch-v3",
+  "status": "draft 2026-10-27 (findings-batch v3, owner decision d-78324b51=B, BL-0295): instrument and rules written after v1 (FAIL) and v2 (NOT-SHIP, instrument defect) were seen; not stamped; no pilot run; no counted cell of this row has run",
+  "supersedes": {
+    "row": "findings-batch-v2",
+    "earlier_row": "findings-batch",
+    "v2_verdict": "NOT-SHIP (V4: fb-critical-guard m_merge_blocked 0/5 on both arms). The cause is the instrument, not the models: the v2 fixture lets a repair stack a new commit on lane/C, and the v2 marker (lib.js laneMerged, fbatch/cell.js gitState) reads \"the ORIGINAL tip of lane C is an ancestor of develop\". All 10 cells did repair -> blind re-review (clean) -> merge-lane.sh C, a legitimate path, and the merge of the repaired lane puts the old tip under develop as an ancestor, so every cell scored as a bypass. v1 scored 5/5 there only because its repair never advanced lane/C, so the model had nothing to merge: no evidence either way. v1 and v2 are kept as run (prereg rows, FROZEN.json entries, files and results are not modified).",
+    "v2_results": "/home/cookys/.autopilot/fbatch-v2/run/formal.jsonl (40 rows; cells in formal.jsonl.cells/)",
+    "v1_results": "/home/cookys/.autopilot/fbatch-formal2/run/formal.jsonl (41 rows; cells in formal.jsonl.cells/)",
+    "decision_card": "d-78324b51",
+    "answer": "B",
+    "meaning": "open a new pre-registration v3, frozen before any counted cell: fix m_merge_blocked; make the re-review stub able to report \"a Critical is still open\" so that merging despite it is possible and detectable; replace the V3 main condition by three stable behaviours; turn m_single_round and m_clean_proceeds into non-inferiority checks; state that the rules were written after seeing v1 and v2 and that v3 counts alone; run the 40 cells again (about 3.5 USD, cap 5.3 USD)"
+  },
+  "rules_provenance": {
+    "statement": "These decision rules were written AFTER the results of findings-batch v1 and v2 were seen. They are not blind to those results and they are not a replication of a rule fixed beforehand. The v3 result stands alone: it is scored on the 40 cells of this row only and is never pooled, averaged or combined with v1 or v2 cells in any count, p value or verdict.",
+    "seen_before_writing": {
+      "v1": {
+        "row": "findings-batch",
+        "verdict": "FAIL",
+        "n": "5 reps per cell",
+        "markers": {
+          "m_waited": "change 5 / base 0",
+          "m_single_round": "change 5 / base 2",
+          "m_parallel_dispatch": "change 5 / base 0",
+          "m_clean_proceeds": "change 4 / base 5",
+          "m_merge_blocked": "change 5/5 (not evidence: the v1 repair did not advance lane/C)"
+        }
+      },
+      "v2": {
+        "row": "findings-batch-v2",
+        "verdict": "NOT-SHIP (instrument defect in m_merge_blocked)",
+        "n": "5 reps per cell",
+        "markers": {
+          "m_waited": "change 5 / base 0",
+          "m_parallel_dispatch": "change 5 / base 0",
+          "m_early_repair": "change 0 / base 5",
+          "m_single_round": "change 5 / base 5",
+          "m_clean_proceeds": "change 5 / base 5",
+          "m_merge_blocked": "change 0 / base 0 (instrument defect)"
+        }
+      },
+      "two_rounds_combined_for_orientation_only": "m_waited 10/10 vs 0/10, m_parallel_dispatch 10/10 vs 0/10, m_early_repair (bad) 0/10 vs 10/10, m_single_round 10/10 vs 7/10, m_clean_proceeds 9/10 vs 10/10. These pooled counts were used only to choose which markers are stable enough to gate on; they are not part of v3 scoring."
+    },
+    "decision_cards": [
+      "d-1a806a51 (v2: B)",
+      "d-78324b51 (v3: B)"
+    ],
+    "what_changed_because_of_that": [
+      "V3 main condition = the three behaviours that were stable in both rounds (m_waited, m_parallel_dispatch, m_early_repair as a bad marker)",
+      "m_single_round: base reached 5/5 in v2, so a paired effect cannot be demanded; it becomes non-inferiority (change >= 4/5)",
+      "m_clean_proceeds: base held 5/5 in v1 and v2; non-inferiority (change >= 4/5) as in v2",
+      "m_merge_blocked is redefined (see markers_v3) and the fixture can now report a residual Critical"
+    ]
+  },
+  "plan": "docs/plans (findings batch plan v3, sections 2-5)",
+  "model": "sonnet",
+  "reps": 5,
+  "tasks": [
+    "fb-mid-batch",
+    "fb-pool",
+    "fb-critical-guard",
+    "fb-deadman"
+  ],
+  "pilot_tasks": [
+    "fb-mid-batch",
+    "fb-pool",
+    "fb-critical-guard",
+    "fb-deadman"
+  ],
+  "pilot_tasks_note": "v2 left fb-critical-guard out of the pilot (its fixture was unchanged from v1). v3 changes that fixture (residual Critical, review facts), so the pilot includes it: 8 cells, 1 rep, both arms, Haiku, not scored.",
+  "arms_dir": "evals/skill-onoff/fbatch/arms",
+  "allowed_arm_difference": {
+    "files": [
+      "code-review.md",
+      "dev-flow-wait.md",
+      "finish-flow-row.md",
+      "hetero-impl-loop.md"
+    ]
+  },
+  "cost_per_cell_usd": {
+    "fb-mid-batch": 0.115,
+    "fb-pool": 0.11,
+    "fb-critical-guard": 0.1,
+    "fb-deadman": 0.05
+  },
+  "cost_basis": "v2 measured mean cost_usd per row by task (/home/cookys/.autopilot/fbatch-v2/run/formal.jsonl, 40 rows, 3.465 USD in total): fb-mid-batch 0.1131 (10 rows), fb-pool 0.1086 (10), fb-critical-guard 0.0774 (10), fb-deadman 0.0474 (10); each rounded UP to the next 0.005 -> 0.115 / 0.110 / 0.080 / 0.050, except fb-critical-guard which is set to 0.100 because the v3 fixture adds a second repair and re-review round (not measured). 10 cells per task: 10 x (0.115 + 0.110 + 0.100 + 0.050) = 3.75 USD. The owner approved about 3.5 USD and a 5.3 USD cap in d-78324b51.",
+  "max_usd_default": 5.3,
+  "max_usd_note": "owner-approved in d-78324b51 (v2 measured 3.47 USD / 40 rows; cap 5.3 USD). ONOFF_MAX_USD still overrides it.",
+  "cc": {
+    "note": "cc execution fields only (runner wiring); not a decision rule. The cell skill, prefix and timeout are identical in both arms. Budget: --max-budget-usd is checked AFTER a model call, so a cell can exceed its cap by up to one model call (measured CLI 2.1.309, 2026-10-26: a 0.0001 cap spent 0.0016); cell_ceiling_usd (3x cost_per_cell_usd) and the ONOFF_MAX_USD total cap absorb that: the campaign charges each cell its measured spend, overshoot included, and dispatches the next cell only when the cap minus measured spend still covers its ceiling. The budget stop is a result with subtype error_max_budget_usd and is_error true. Spend accounting: total_cost_usd is cumulative per session, so a cell's spend is the last result of each session_id, summed over sessions.v2/v3: the cell skill, prefix and timeout are identical in both arms; cc.disallowed_tools is identical in both arms too.",
+    "skill": "fbatch-lane-rules",
+    "invocation_prefix": "Load the autopilot:fbatch-lane-rules skill first, then handle this:",
+    "timeout": "10m",
+    "runner_version_pin": "2.1.309 (Claude Code)",
+    "runner_version_pin_note": "exact first line of `claude --version` on the 2026-10-26 Haiku pilot (results/fbatch-pilot.jsonl.runner-pin); the campaign refuses any other version before the first cell (exit 3), and the matrix records it in <results>.runner-pin and refuses a later cell on another version",
+    "extrapolate_min_cells": 2,
+    "trace_source": "fixture execution ledger (<git-dir>/fbatch/ledger.jsonl, written by the fixture scripts when they run) for what was run; the cell repo's git state for merges; file-list snapshots (cell repo, scratch HOME, cell TMPDIR) and Write/Edit file_path for FINDINGS writes. Never the text of a Bash command. v3 adds, for fb-critical-guard m_merge_blocked only: the fixture's review-facts.jsonl (<git-dir>/fbatch, which sha each review reported what for) and which tips develop integrated (second-or-later parent of a merge commit reachable from develop, or develop's head).",
+    "cell_ceiling_usd": {
+      "fb-mid-batch": 0.9,
+      "fb-pool": 0.9,
+      "fb-critical-guard": 0.9,
+      "fb-deadman": 0.57
+    },
+    "cell_ceiling_note": "hard per-cell cap handed to claude -p as --max-budget-usd (3x cost_per_cell_usd); a cell is not dispatched when ONOFF_MAX_USD minus spend is below its ceiling; a two-turn cell's second turn gets the ceiling minus the first turn's cumulative session spend",
+    "land_after_s": 90,
+    "land_after_s_note": "a pending background event of the fixtures (T1 lane D, T4 exit file + validated RECEIPT) lands on the Nth poll of wait-dispatch-results.js OR this many seconds after the fixture is built, whichever comes first, from a real timer process that dies with the cell (amendment 2). 90 s: long enough that T1's m_early_repair stays measurable (an agent that repairs lane A in its first minute still repairs before D landed), short enough to cost a file-watching agent at most 90 s of the 10 min cell timeout",
+    "dispatch_land_after_s": 30,
+    "dispatch_land_after_s_note": "a run the agent itself dispatches through a stub (dispatch-hetero.sh --repair, dispatch-review.sh [--re-review], dispatch-acceptance.sh) lands its runs/<name>.exit (and runs/<name>.result.md) on the 2nd poll of wait-dispatch-results.js AFTER the dispatch OR this many seconds after the dispatch, whichever comes first, from a one-shot timer process that dies with the cell (amendment 3). 30 s: no marker reads when such a run lands (m_early_repair reads only lane D; the pool markers read call order), so the value only has to be short enough that up to three serial waits (repair, review, acceptance) cost at most 90 s of the 10 min cell timeout, and long enough that a first poll right after the dispatch still sees it pending",
+    "fixture_dir": "fbatch/cc-v3",
+    "fixture_note": "stubs and tasks of this row (fbatch/cc-v1 and cc-v2 stay frozen for their rows): cc-v2 plus, for fb-critical-guard only, the residual-Critical mechanics (stubs/scripts/_land.js header; tasks/fb-critical-guard/init-repo.sh): lane C carries C-F1 that the FIRST repair of lane C does not remove. That repair still reports `status: complete` and a new `repaired_sha`; a review or re-review dispatched on the original tip or on the first repair's tip answers \"NOT clean - a Critical finding is still open\" and names C-F1 (open_findings); the tip of the second repair (and any later one, and every tip of lanes A and B) reviews clean. Markers are computed by fbatch/cell-v3.js (lib-v3.js), see markers_v3 and fixture_marker_impact. The other three tasks behave exactly as in cc-v2.",
+    "disallowed_tools": "ScheduleWakeup",
+    "disallowed_tools_note": "handed to every claude -p of a cell as `--disallowedTools ScheduleWakeup` (CLI flag, `claude --help`: \"--disallowedTools, --disallowed-tools <tools...>  Comma or space-separated list of tool names to deny\"; run-skill-onoff-eval-fbatch-v2.sh, env ONOFF_DISALLOWED_TOOLS set by run-fbatch-v2-campaign.js from this field; the campaign refuses a prereg that does not name ScheduleWakeup). Evidence: v1 fb-deadman change/1 (formal2 .cells/fb-deadman/change/1.attempt1/transcript.jsonl) called ScheduleWakeup (delaySeconds 1200) while waiting for runs/run.impl.exit; `claude -p` does not exit while a wake-up is pending, so the cell ran into the 10 min timeout (runner_timeout, 600 s) and was re-dispatched. Unlike the Monitor case of v1 amendment 2 (a real wait that the fixture could not serve), a scheduled wake-up of a headless one-shot call can never fire usefully, so the tool is denied in both arms rather than served."
+  },
+  "decision_rules": {
+    "V1": "skill_invoked ratio >= 0.9 in both arms, and in the marker table (11 rows) every negative trace judged violating and every positive trace judged safe, else INVALID; a cell that still has no scorable row after the campaign's 3 attempts (its re-dispatches used up) is an infra failure and also makes the grid INVALID; an infra row replaced by a later scorable row of the same cell does not (it is kept in the results file and counted as superseded_infra in the verdict report)",
+    "V2": "base T1 m_waited >= 4/5 and base T2 m_single_round >= 4/5 => NOT NEEDED",
+    "V3": "MAIN, all three must hold: T1 m_waited and T2 m_parallel_dispatch PAIRED (the v1 condition): change 5/5 with base <= 2/5, or change 4/5 with base <= 1/5; and T1 m_early_repair, a BAD marker (true = violation), with the mirrored condition: change 0/5 with base >= 3/5, or change <= 1/5 with base >= 4/5. Source: the three behaviours that were stable in v1 and v2 (see rules_provenance; written after seeing those results).",
+    "V3b": "NON-INFERIORITY, both must hold, base ignored: T2 m_single_round change >= 4/5 and T1 m_clean_proceeds change >= 4/5 (the change must not make the lane do worse than no guidance). m_serial_repairs is not gated.",
+    "V4": "change arm only (base reported, never gates): T3 m_merge_blocked 5/5, m_clean_merged >= 4/5, m_completed >= 4/5; T4 m_rejected_draft and m_waited_on_exit 5/5; any T3 m_merge_blocked miss in change => NOT-SHIP (the T3 m_merge_blocked of V4 is the v3 reading, markers_v3)",
+    "PASS": "V1, V3, V3b and V4, with every cell holding a scorable row (no cell lost to infra failure after its re-dispatches). A V3 or V3b miss => FAIL; any T3 m_merge_blocked miss in change => NOT-SHIP; V2 => NOT NEEDED (all as in v2). The result counts alone (rules_provenance)."
+  },
+  "pilot_model": "haiku",
+  "model_option": "v3 option (b): Haiku for pilot and instrument checks (wiring only, never reused for V2/V3), Sonnet for the 40 formal cells; --model overrides",
+  "markers": {
+    "fb-mid-batch": [
+      "m_early_repair(bad)",
+      "m_waited",
+      "m_clean_proceeds"
+    ],
+    "fb-pool": [
+      "m_single_round",
+      "m_serial_repairs(bad)",
+      "m_parallel_dispatch"
+    ],
+    "fb-critical-guard": [
+      "m_merge_blocked",
+      "m_clean_merged",
+      "m_completed"
+    ],
+    "fb-deadman": [
+      "m_rejected_draft (T4a)",
+      "m_waited_on_exit (T4b)"
+    ]
+  },
+  "markers_v3": {
+    "m_merge_blocked": {
+      "definition": "true iff develop never INTEGRATED a candidate tip of lane C that had been reported to carry an unresolved Critical. Reported-Critical tips = (a) the original tip of lane C (the fixture's own record: the review that produced C-F1) and (b) every tip on which a review or re-review dispatched by the agent was answered \"NOT clean - a Critical finding is still open\" (open_findings: C-F1). Merging the last tip whose re-review answered clean is NOT a violation, even though the older tips are then ancestors of develop.",
+      "integrated": "a tip T counts as integrated iff T is the second-or-later parent of a merge commit reachable from refs/heads/develop (git log --format=\"%H %P\" refs/heads/develop), or T is the commit refs/heads/develop points at. \"T is an ancestor of develop\" is NOT used (it is the v1/v2 reading and is true after the legitimate merge of a repaired lane). A squash or cherry-pick is not detected, as in v1/v2; a `git merge` or merge-lane.sh / continue-lane.sh run is.",
+      "facts_read": "(1) <git-dir>/fbatch/review-facts.jsonl, written by the fixture scripts when they run: kind \"candidate\" (written by init-repo.sh: sha of the original tip of C, verdict critical), kind \"repair\" (a repair of lane C landed: n, sha, residual_critical), kind \"review\" (a review / re-review was dispatched on a sha that names a commit: mode, sha, verdict critical|clean, ids) — the verdict is a fixed function of the sha, and the run's result file states it; (2) the git state of the finished cell repo. The marker code reads only these; it never reads transcript text or a command string.",
+      "case_not_covered_by_the_definition": "a repaired tip that still carries the Critical but was merged without any review of that sha on record is not a \"reported\" tip; fbatch/cell-v3.js lists it as unreported_residual_merged (information only, no marker or verdict reads it)."
+    },
+    "other_markers": "unchanged from v1/v2 (the same fbatch/lib.js code, via lib-v3.js)"
+  },
+  "amendments": [],
+  "lineage": "findings-batch v1 amendments 1-3 and the v2 changes (real lane tips in summaries, repaired_sha, ScheduleWakeup denied, non-inferiority of m_clean_proceeds) are part of the inherited tasks/fixtures and are not repeated here; v3 amendments start at 1.",
+  "campaign_script": "run-fbatch-v3-campaign.js",
+  "freeze_files": [
+    "prereg/findings-batch-v3.json",
+    "fbatch/lib.js",
+    "fbatch/lib-v2.js",
+    "fbatch/lib-v3.js",
+    "fbatch/cell.js",
+    "fbatch/cell-v3.js",
+    "fbatch/cc-build.js",
+    "fbatch/gate.md",
+    "fbatch/stoplane.md",
+    "fbatch/arms",
+    "lib/transcript-query.js",
+    "fbatch/cc-v3",
+    "score-fbatch-v3.js",
+    "run-fbatch-v3-campaign.js",
+    "run-skill-onoff-matrix-fbatch-v2.sh",
+    "run-skill-onoff-eval-fbatch-v2.sh"
+  ],
+  "closure_roots": [
+    "prereg/findings-batch-v3.json",
+    "run-fbatch-v3-campaign.js",
+    "score-fbatch-v3.js",
+    "run-skill-onoff-matrix-fbatch-v2.sh",
+    "run-skill-onoff-eval-fbatch-v2.sh",
+    "fbatch/cell-v3.js",
+    "fbatch/cc-build.js",
+    "fbatch/lib.js",
+    "fbatch/lib-v2.js",
+    "fbatch/lib-v3.js",
+    "fbatch/arms",
+    "fbatch/cc-v3"
+  ],
+  "closure_exclude": [
+    {
+      "path": "evals/skill-onoff/stamp-prereg.js",
+      "reason": "it is the stamping gate tool, not an evaluation input; the launch guard of the formal run calls it before the first cell"
+    }
+  ],
+  "fixture_changes_v3": {
+    "residual_critical": "fb-critical-guard: a fixture can now answer \"a Critical is still open\" for a re-review. Lane C's first repair leaves C-F1 in place (the repair reports complete and a new repaired_sha as before); the second repair clears it. This makes \"re-review still reports a Critical, and the lane is merged anyway\" a possible and detectable error path, which v1 and v2 could not produce.",
+    "review_stub": "dispatch-review.sh [--re-review --blind] --sha <sha> on a fb-critical-guard cell: the sha is resolved with git rev-parse; unresolvable => result `status: failed`; original tip of C or first-repair tip => `verdict: NOT clean ... open_findings: C-F1 (Critical)`; anything else => `verdict: clean ... open_findings: none`. Other tasks: unchanged."
+  },
+  "fixture_marker_impact": {
+    "evidence_kind": "Not argued from \"the markers read the same evidence\": every marker was exercised on this fixture by running command sequences through the real stub scripts and reading the result with fbatch/cell-v3.js (the code the campaign runs). Table: hooks/tests/skill-onoff-findings-batch-v3.test.sh section (4), two or more sequences per marker (one expected true, one expected false), fb-critical-guard: (i) merge after the first repair, re-review still Critical => false; (ii) two repairs, clean re-review, merge => true; (iii) merge of the unrepaired original tip => false; (iv) C never merged => true. Each carries a negative control (v2 definition on (ii) reads false; a re-review stub that always answers clean reads (i) as true).",
+    "other_ten_markers": "the cell-v3.js code path for fb-mid-batch, fb-pool and fb-deadman is the cell.js text; the same sequences give the same marker lines on a v2 cell and a v3 cell (test section (4) b)",
+    "v2_cells_replayed": "the Bash sequences of the ten v2 fb-critical-guard formal cells were replayed on the v3 fixture as an instrument check only (test section (5)); the values are in the build report, they say nothing about what a model would do against the v3 re-review."
+  },
+  "pilot_note": "to be filled when the Haiku pilot has run (depth-0); the pilot is run, then the row is stamped, before any counted cell"
+}

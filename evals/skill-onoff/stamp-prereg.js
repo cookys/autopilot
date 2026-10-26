@@ -17,6 +17,7 @@
 //   5. FROZEN.json[<row>] = {frozen_at, stamped:true, packs, files}.
 // Dir-arms mode (a prereg with arms_dir and no arm_manifests, e.g. findings-batch): steps 1 and 4's manifest digests are skipped; the arm files
 // are covered by freeze_files, which must include the arms dir. Step 3 runs the campaign_script's --check-arms.
+// closure_roots (optional): when present, every file closure-scan.js reaches from them (plus campaign_script) must be covered by freeze_files, else exit 2.
 // Order matters: stamp LAST. Any later edit to a digested file voids the row. --check re-derives everything and writes nothing.
 // Exit: 0 stamped/ok . 2 usage, unfrozen packs, empty allowed list, failed arm check, or (--check) a digest mismatch
 'use strict';
@@ -66,6 +67,13 @@ const packMeta = (id) => {
   if (!manifest.packs[id] || !meta || !meta.ref) die(`packs/manifest.json has no pack_meta.${id}.ref (freeze it with freeze-pack.js)`);
   return { ...meta, files: Object.keys(manifest.packs[id]).length, digest_sha256: crypto.createHash('sha256').update(JSON.stringify(manifest.packs[id])).digest('hex') };
 };
+// Closure gate: a prereg with closure_roots must freeze every file its dependency closure (closure-scan.js) reaches inside the root.
+if (Array.isArray(prereg.closure_roots)) {
+  const entries = (prereg.freeze_files || []).map((e) => path.posix.normalize(e));
+  const uncovered = require('./closure-scan').closure(root, [...prereg.closure_roots, ...(prereg.campaign_script ? [prereg.campaign_script] : [])]).files
+    .filter((f) => !entries.some((e) => f === e || f.startsWith(`${e}/`)));
+  if (uncovered.length) die(`freeze_files misses files the evaluation reads (dependency closure): ${uncovered.join(', ')}`);
+}
 const packs = Object.fromEntries((prereg.freeze_packs || []).map((id) => [id, packMeta(id)]));
 
 const frozenPath = path.join(root, 'prereg/FROZEN.json');

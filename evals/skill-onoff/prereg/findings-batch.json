@@ -133,10 +133,23 @@
     "fbatch/gate.md",
     "fbatch/stoplane.md",
     "fbatch/arms",
+    "lib/transcript-query.js",
     "fbatch/cc",
     "score-fbatch.js",
     "run-fbatch-campaign.js",
     "run-skill-onoff-matrix-fbatch.sh",
     "run-skill-onoff-eval-fbatch.sh"
+  ],
+  "closure_roots": [
+    "prereg/findings-batch.json",
+    "run-fbatch-campaign.js",
+    "score-fbatch.js",
+    "run-skill-onoff-matrix-fbatch.sh",
+    "run-skill-onoff-eval-fbatch.sh",
+    "fbatch/cell.js",
+    "fbatch/cc-build.js",
+    "fbatch/lib.js",
+    "fbatch/arms",
+    "fbatch/cc"
   ]
 }

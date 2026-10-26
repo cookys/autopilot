@@ -199,7 +199,7 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_REVIEW_IDLE_TIMEOUT` | Idle cap for a review seat: when its output files have not grown for this long (seconds, or Ns / Nm) the seat is killed and reported no_verdict with reason `seat_idle_timeout`, so the seat can be swapped. Same as `dispatch-review.sh --idle-timeout`, which wins. Keep it above the longest quiet think of the runner: buffered runners (claude -p) print nothing until the end. | unset (off) |  |
 | `AUTOPILOT_MIN_REVIEWED_SEATS` | Minimum seats that must have reviewed before a review loop or phase receipt passes (same grammar as --min-reviewed-seats). | all seats |  |
 | `AUTOPILOT_QUALIFICATION_OVERRIDE` | A matching, unexpired override that lets a dispatch use a seat whose qualification would otherwise refuse it. | unset |  |
-| `AUTOPILOT_STRIKE_ENFORCEMENT` | Set to "enforce" to arm strike-based requalification; otherwise strikes are only recorded. | shadow |  |
+| `AUTOPILOT_STRIKE_ENFORCEMENT` | Strike-based requalification is enforced by default; set to "shadow" to opt out (strikes are then only recorded and `would_requalify` is projected). | enforce |  |
 | `AUTOPILOT_ALLOW_REAL_STORE_WITH_BIN_OVERRIDE` | Set to "1" to let a dispatch whose --*-bin override is not the PATH binary write the real capability store. Otherwise the strike writer and passive capture skip that write unless ENGINE_CAPABILITY_DIR, ENGINE_CAPABILITY_FILE, or --store isolates it. | unset |  |
 | `AUTOPILOT_CONSULT_TIMEOUT` | Timeout of a consult dispatch. | `5m` |  |
 | `AUTOPILOT_DISCUSS_TIMEOUT` | Timeout of a discuss dispatch. | `5m` |  |

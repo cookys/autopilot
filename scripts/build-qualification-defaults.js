@@ -99,7 +99,6 @@ const DISCLOSURE_FIELDS = [
   'effort',
   'date',
   'qualified_at',
-  'expires',
 ];
 
 // Fields the recipe/store cross-check must agree on between the shipped store
@@ -407,7 +406,7 @@ const ARTIFACT_NOTICES = {
     // No wall-clock: a timestamp here would break the byte-identical regeneration contract.
     disclosure_notice: 'These rows record administrations run in the autopilot maintainer\'s environment, not yours. Every entry carries the full administration environment (engine/runner/CLI versions, transport harness, prompt_config_hash, effort, corpus_version, date) precisely because official environment != user environment. FAILED rows ship alongside QUALIFIED ones: a FAILED administration is routing information, not an embarrassment to hide.',
     adr_0001_notice: 'DISCLOSURE, NOT ATTESTATION. Nothing here is signed, hash-chained, or witnessed, and no field is tamper-evidence (ADR-0001). Adopting these defaults is an informed choice to reuse someone else\'s evidence; the only verification path is re-derivation — self-qualify in your own environment via the engine-qualify flow, which overrides a default on the same seat identity.',
-    downgrade_notice: 'An adopted default is a seat-scoped strike target exactly like a self-qualified row (references/strike-decay.md). Authority is withdrawn by accumulated mechanical no-confidence, never because a date passed: `expires` is advisory here too.',
+    downgrade_notice: 'An adopted default is a seat-scoped strike target exactly like a self-qualified row (references/strike-decay.md). Authority is withdrawn by accumulated mechanical no-confidence, never because a date passed (there is no date on a default).',
 };
 
 function assembleArtifact(recipe, entries) {

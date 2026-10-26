@@ -17,7 +17,7 @@ function evidenceSummary(ev) {
   return {
     evidence_id: g('evidence_id'), evidence_hash: g('evidence_hash'), state: g('state'), source: g('source'),
     source_ref: g('source_ref'), scope: g('scope'), scope_hash: g('scope_hash'), identity_hash: g('identity_hash'),
-    issued_at: g('issued_at'), observed_at: g('observed_at'), expires_at: g('expires_at'),
+    issued_at: g('issued_at'), observed_at: g('observed_at'),
     methodology: { kind: pick('kind'), name: pick('name'), version: pick('version'), corpus_version: pick('corpus_version') },
     n_trials: Array.isArray(ev.trials) ? ev.trials.length : null,
     tier1_terminated: g('tier1_terminated'), stop_reason: g('stop_reason'), revocation: g('revocation'),
@@ -101,7 +101,6 @@ function buildV2Record(row, { originHostClass = 'cloud-api', now } = {}) {
       status: row.status, capability_score: row.capability_score === undefined ? null : row.capability_score,
       quality: row.quality === undefined ? null : row.quality, date: row.date,
       qualified_at: row.qualified_at === undefined ? null : row.qualified_at,
-      expires: row.expires === undefined ? null : row.expires,
     },
     evidence: ev,
     cost: row.cost === undefined ? null : row.cost,

@@ -19,7 +19,6 @@
     "grant_identity_hash",
     "issued_at",
     "observed_at",
-    "expires_at",
     "methodology",
     "trials",
     "trial_set_hash",
@@ -81,10 +80,6 @@
       "format": "date-time"
     },
     "observed_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "expires_at": {
       "type": "string",
       "format": "date-time"
     },

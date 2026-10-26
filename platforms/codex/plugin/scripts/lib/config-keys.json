@@ -4888,7 +4888,7 @@
       "kind": "env",
       "audience": "user",
       "group": "dispatch",
-      "default": "shadow",
+      "default": "enforce",
       "readers": [
         "scripts/engine-scorecard.js"
       ],

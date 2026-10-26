@@ -24,7 +24,7 @@ NOW="2026-10-15T00:00:00Z"
 # Same engine, both a brain row and a foreman row, both qualified, role owner.
 node -e '
 const mk = (id, brain) => { const r = { event_id: id, engine: "dual", runner: "claude", role: "owner",
-  status: "qualified", qualified_at: "2026-10-01", date: "2026-10-01", expires: "2026-12-14",
+  status: "qualified", qualified_at: "2026-10-01", date: "2026-10-01",
   capability_score: 1, family: "x", cost: { source: "unknown" }, model_version: "v1",
   corpus_version: "c1", harness_version: "h1", runner_version: "r1", prompt_config_hash: "p1" };
   if (brain) r.methodology_kind = "owner_brain_seat"; return JSON.stringify(r) + "\n"; };

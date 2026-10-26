@@ -253,13 +253,11 @@ IMPL_FLAG_OUT="$($SCRIPT "${CONSULT_PLAN_ARGS[@]}" --dispatch-bin /bin/true 2>&1
 IMPL_FLAG_RC=$?
 assert_exit_code "$IMPL_FLAG_RC" "2" "consult --plan combined with an implementer-only flag exits 2"
 
-# --expires-days: flat 30-day cap for consult (30 accepted, 31 rejected).
+# --expires-days: qualification has no expiry, so the flag is refused whatever the value.
 EXPIRES_30_RC=0
-$SCRIPT "${CONSULT_PLAN_ARGS[@]}" --expires-days 30 >/dev/null 2>&1 || EXPIRES_30_RC=$?
-assert_exit_code "$EXPIRES_30_RC" "0" "consult --expires-days 30 is accepted"
-EXPIRES_31_RC=0
-$SCRIPT "${CONSULT_PLAN_ARGS[@]}" --expires-days 31 >/dev/null 2>&1 || EXPIRES_31_RC=$?
-assert_exit_code "$EXPIRES_31_RC" "2" "consult --expires-days 31 is rejected (flat 30-day cap)"
+EXPIRES_30_OUT="$($SCRIPT "${CONSULT_PLAN_ARGS[@]}" --expires-days 30 2>&1)" || EXPIRES_30_RC=$?
+assert_exit_code "$EXPIRES_30_RC" "2" "consult --expires-days 30 is refused (qualification has no expiry)"
+assert_contains "$EXPIRES_30_OUT" "no expiry" "the refusal says qualification has no expiry"
 
 # Live-rail flags are rejected outright for consult (never live-rail).
 RUNNER_BIN_RC=0

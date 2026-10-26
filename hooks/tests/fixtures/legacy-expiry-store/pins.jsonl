@@ -1,0 +1,1 @@
+{"engine":"cursor-grok-4.6-low","runner":"cursor","role":"implementer","effort":"low","endpoint":null,"reason":"Grok Build balance exhausted (402, measured 2026-09-12); operator named grok-4.6 via cursor","operator":"cookys","expires":null}

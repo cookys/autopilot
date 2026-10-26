@@ -155,7 +155,6 @@ function normalizeDogfoodReceipt(raw, index) {
     'reviewer_family',
     'owner_qualification_receipt_id',
     'owner_qualified_at',
-    'owner_qualification_expires_at',
     'independent_acceptance_receipt_hash',
     'acceptance_passed',
     'critical_false_pass_attributed_to_reduction',
@@ -182,10 +181,6 @@ function normalizeDogfoodReceipt(raw, index) {
       `${label}.owner_qualification_receipt_id`,
     ),
     owner_qualified_at: timestamp(value.owner_qualified_at, `${label}.owner_qualified_at`),
-    owner_qualification_expires_at: timestamp(
-      value.owner_qualification_expires_at,
-      `${label}.owner_qualification_expires_at`,
-    ),
     independent_acceptance_receipt_hash: sha(
       value.independent_acceptance_receipt_hash,
       `${label}.independent_acceptance_receipt_hash`,
@@ -201,9 +196,7 @@ function normalizeDogfoodReceipt(raw, index) {
     input_tokens: integer(value.input_tokens, `${label}.input_tokens`, 1),
     output_tokens: integer(value.output_tokens, `${label}.output_tokens`, 1),
   };
-  if (Date.parse(receipt.completed_at) < Date.parse(receipt.started_at)
-      || Date.parse(receipt.owner_qualification_expires_at)
-        <= Date.parse(receipt.owner_qualified_at)) {
+  if (Date.parse(receipt.completed_at) < Date.parse(receipt.started_at)) {
     fail(`${label} has an invalid time interval`);
   }
   return receipt;
@@ -535,9 +528,7 @@ function evaluateProfileCutover(raw, options = {}) {
   let decorrelated = receipts.length >= 5;
   for (const receipt of receipts) {
     const qualificationFresh = Date.parse(receipt.owner_qualified_at)
-        <= Date.parse(receipt.started_at)
-      && Date.parse(receipt.owner_qualification_expires_at)
-        >= Math.max(Date.parse(receipt.completed_at), observedAtMs);
+        <= Date.parse(receipt.started_at);
     const ownerQuery = {
       owner_identity_hash: receipt.owner_identity_hash,
       owner_qualification_receipt_id: receipt.owner_qualification_receipt_id,

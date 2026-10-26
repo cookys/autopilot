@@ -40,7 +40,7 @@ So「簽署」is implemented as **disclosure**:
 
 - every default carries its full administration environment (engine, model, model_version,
   version_source, runner, runner_version, family, harness_version, corpus_version,
-  prompt_config_hash, effort, date, qualified_at, expires),
+  prompt_config_hash, effort, date, qualified_at),
 - every default carries **evidence pointers** — the official event id, the capability-evidence
   anchor, and the on-disk evidence bundle path under `docs/plans/evidence/`,
 - `list` prints the disclosure block *with* the verdict, always. There is deliberately no view that
@@ -172,10 +172,10 @@ An adopted row is an **ordinary seat-scoped strike target**. Nothing about it is
   derivation as any self-qualified row, from fields copied verbatim. Strikes written by
   `dispatch_hetero_failclosed` and the other allowlisted writers accrue against it unchanged.
 - The fold is unchanged: N=3 ordinary strikes since the last passing administration ⇒
-  `requalify_required` (under `AUTOPILOT_STRIKE_ENFORCEMENT=enforce`; shadow by default).
+  `requalify_required` (enforced by default; `AUTOPILOT_STRIKE_ENFORCEMENT=shadow` is the explicit opt-out).
   `critical_reexam_trigger` still fires immediately.
-- `expires` is advisory here too. No admission path compares `now` against it
-  ([`strike-decay.md`](strike-decay.md) § "The calendar is advisory, everywhere").
+- A default carries no expiry, like any qualification. No admission path compares `now` against
+  a qualification date ([`strike-decay.md`](strike-decay.md) § "A qualification has no expiry").
 
 The one addition is advisory, and it exists because the remedy for an adopted seat differs from the
 remedy for a self-qualified one: when a `requalify_required` seat's baseline row carries
@@ -311,5 +311,5 @@ administrations) are still valid. Library: `scripts/lib/qualification-usage.js`.
 - It does not create routing authority that survives your own evidence. Local wins.
 - It does not protect a seat from downgrade. Strikes apply identically.
 - It does not ship brain-seat sittings — those are `owner-brain-seat-v1` records in the capability
-  store with their own semantics (forced brain-seat scope, advisory-only expiry, 3-strike revocation).
+  store with their own semantics (forced brain-seat scope, no expiry, 3-strike revocation).
   They can be recorded as scorecard rows, told apart by `methodology_kind` and scope. Deferred to a BACKLOG row rather than forced into this shape.

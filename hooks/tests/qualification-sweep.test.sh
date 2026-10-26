@@ -18,8 +18,7 @@ cat > "$ROSTER" <<'EOF'
     "prompt_config_hash": "aaaa1111",
     "semantic_fingerprint": "bbbb2222",
     "containment_fingerprint": "cccc3333",
-    "harness_version": "dispatch-hetero:deadbeef",
-    "expires_days": 90
+    "harness_version": "dispatch-hetero:deadbeef"
   },
   "evidence_root": "docs/plans/evidence/test-qualification-sweep-bundle",
   "role": "implementer",
@@ -101,7 +100,7 @@ assert_contains "$PLAN_OUT" "--prompt-config-hash aaaa1111" "plan resolves promp
 assert_contains "$PLAN_OUT" "--semantic-fingerprint bbbb2222" "plan resolves semantic-fingerprint"
 assert_contains "$PLAN_OUT" "--containment-fingerprint cccc3333" "plan resolves containment-fingerprint"
 assert_contains "$PLAN_OUT" "--harness-version dispatch-hetero:deadbeef" "plan resolves harness-version"
-assert_contains "$PLAN_OUT" "--expires-days 90" "plan resolves expires-days"
+assert_not_contains "$PLAN_OUT" "expires" "plan has no expiry flag (qualification has no expiry)"
 
 # scorecard record command also present
 assert_contains "$PLAN_OUT" "node scripts/engine-scorecard.js record" "plan contains scorecard record invocation"

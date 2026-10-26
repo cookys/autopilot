@@ -12,7 +12,42 @@ REPO_ROOT="$(cd "$SELF_DIR/../.." && pwd)"
 ADOPT="$REPO_ROOT/scripts/adopt-qualification-defaults.js"
 CAPSTATE="$REPO_ROOT/scripts/engine-capability-state.js"
 SCORECARD="$REPO_ROOT/scripts/engine-scorecard.js"
-SAMPLE="$REPO_ROOT/docs/plans/evidence/2026-09-02-qualification-feed/sample-feed.json"
+SAMPLE_ORIG="$REPO_ROOT/docs/plans/evidence/2026-09-02-qualification-feed/sample-feed.json"
+SAMPLE="$TEST_TMP/sample-feed.json"
+# The committed sample is a 2026-09-02 feed: its rows and evidence still carry the retired expiry
+# (qualification has no expiry since 2026-10-26, and a producer still emitting one is refused).
+# Rewrite it the way a current producer would — no expiry field, evidence re-sealed — so the
+# adoption contract below is exercised on the same 29 entries. Everything else is untouched.
+node - "$REPO_ROOT" "$SAMPLE_ORIG" "$SAMPLE" <<'NODE'
+const fs = require('fs');
+const [root, from, to] = process.argv.slice(2);
+const { compileCapabilityEvidence, capabilityEvidenceProducerHash } = require(root + '/src/engine/capability-evidence.js');
+const reseal = (ev) => {
+  const raw = JSON.parse(JSON.stringify(ev));
+  delete raw.expires_at;
+  for (const k of ['evidence_id', 'evidence_hash', 'scope_hash', 'identity_hash', 'grant_identity_hash', 'trial_set_hash']) delete raw[k];
+  return compileCapabilityEvidence(raw);
+};
+const doc = JSON.parse(fs.readFileSync(from, 'utf8'));
+for (const d of doc.defaults) {
+  delete d.row.expires;
+  if (d.administration) delete d.administration.expires;
+  if (d.row.evidence) {
+    const ev = reseal(d.row.evidence);
+    d.row.evidence = ev;
+    const producer = (d.capability_evidence && d.capability_evidence.producer) || (d.row.evidence_store && d.row.evidence_store.producer);
+    const th = capabilityEvidenceProducerHash(ev, producer);
+    if (d.row.evidence_store) d.row.evidence_store.transcript_hash = th;
+    if (d.evidence_pointers) {
+      d.evidence_pointers.evidence_id = ev.evidence_id;
+      if (d.evidence_pointers.evidence_store) d.evidence_pointers.evidence_store.transcript_hash = th;
+    }
+    if (d.capability_evidence) { d.capability_evidence.evidence = ev; d.capability_evidence.transcript_hash = th; }
+  }
+}
+for (const p of doc.priors || []) delete p.expires_at;
+fs.writeFileSync(to, JSON.stringify(doc));
+NODE
 
 CACHE="$TEST_TMP/feed-cache"
 SC="$TEST_TMP/sc"; CAP="$TEST_TMP/cap"

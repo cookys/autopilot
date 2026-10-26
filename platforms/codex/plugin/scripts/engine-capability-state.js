@@ -896,13 +896,13 @@ function seatHashOf(seatIdentity) {
 }
 
 // --- operator pin store (pins.jsonl) ---
-// Own validator, own file. NOT the qualification-override row: expires MUST be
-// JSON null here; the override requires a real calendar date. Do not share a
-// validator between them. Mutations go through withWriteLock + writeSnapshot
+// Own validator, own file. NOT the qualification-override row (which still carries an
+// operator-chosen calendar date): a pin has no expiry and no `expires` key at all.
+// Do not share a validator between them. Mutations go through withWriteLock + writeSnapshot
 // only — an append-only write cannot express "replace this role with no tombstone".
 
 const PIN_ROW_KEYS = Object.freeze([
-  'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator', 'expires',
+  'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator',
 ]);
 
 // Unlike readTextLines' other callers, an unparsable pin row is operator state
@@ -955,6 +955,9 @@ function validatePinRow(row) {
     throw new Error('pin row must be a JSON object');
   }
   const keys = Object.keys(row);
+  if (keys.includes('expires')) {
+    throw new Error('pin row carries a pre-2026-10-26 `expires` key; run once: node scripts/engine-scorecard.js strip-expiry');
+  }
   for (const key of keys) {
     if (!PIN_ROW_KEYS.includes(key)) {
       throw new Error(`pin row unknown key: ${key}`);
@@ -966,7 +969,7 @@ function validatePinRow(row) {
     }
   }
   if (keys.length !== PIN_ROW_KEYS.length) {
-    throw new Error(`pin row must have exactly eight keys (got ${keys.length})`);
+    throw new Error(`pin row must have exactly seven keys (got ${keys.length})`);
   }
   // Reuse seat-verb validators for engine/runner/role/effort; endpoint reuses
   // the same ENDPOINT_NAME_RE / @none rule the current verb already uses.
@@ -984,9 +987,6 @@ function validatePinRow(row) {
   if (typeof row.operator !== 'string' || row.operator.trim().length === 0) {
     throw new Error('operator must be a non-empty string');
   }
-  if (row.expires !== null) {
-    throw new Error('expires must be JSON null');
-  }
   return {
     engine: normalizeEngineToken(row.engine, 'engine'),
     runner: normalizeSeatToken(row.runner, 'runner'),
@@ -995,7 +995,6 @@ function validatePinRow(row) {
     endpoint: row.endpoint,
     reason: row.reason.trim(),
     operator: row.operator.trim(),
-    expires: null,
   };
 }
 
@@ -1008,7 +1007,6 @@ function buildPinRow(input) {
     endpoint: normalizePinEndpoint(input.endpoint),
     reason: input.reason,
     operator: input.operator,
-    expires: null,
   });
 }
 
@@ -1581,7 +1579,6 @@ function buildObservedRevocation(target, observation, observedAt) {
     identity: target.identity,
     issued_at: observedAt,
     observed_at: observedAt,
-    expires_at: new Date(Date.parse(observedAt) + 86_400_000).toISOString(),
     methodology: {
       kind: 'runtime_probe',
       name: 'owner-kernel-runtime-observation',
@@ -1955,7 +1952,7 @@ function parseCommandLineArgs(argv) {
     ])],
     ['seat-hash', new Set(['engine', 'runner', 'role', 'effort', 'seat-kind'])],
     ['pin-seat', new Set([
-      'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator', 'expires', 'store',
+      'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator', 'store',
     ])],
     ['unpin-seat', new Set(['role', 'engine', 'runner', 'endpoint', 'store'])],
     ['pins', new Set(['role', 'store'])],
@@ -2303,11 +2300,6 @@ function main() {
       if (!Object.prototype.hasOwnProperty.call(options, key)) {
         failUsage(`pin-seat requires --${key}`);
       }
-    }
-    // A pin row's expires MUST be JSON null. Any CLI-supplied --expires is a
-    // non-null string and is therefore invalid — reject naming the field.
-    if (Object.prototype.hasOwnProperty.call(options, 'expires')) {
-      failValidation('expires must be JSON null');
     }
     const config = resolveStoreConfig(options);
     enforceTestRunGuard(config, 'pin-seat');

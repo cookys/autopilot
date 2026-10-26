@@ -377,7 +377,6 @@ function evidenceReceipt(role, selectedScope, selectedIdentity, seed) {
     identity: exactIdentity,
     issued_at: '2026-07-25T00:30:00.000Z',
     observed_at: '2026-07-25T00:00:00.000Z',
-    expires_at: '2026-08-01T00:00:00.000Z',
     methodology: {
       kind: 'role_eval',
       name: `${role}-qualification`,

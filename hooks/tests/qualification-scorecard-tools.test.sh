@@ -8,7 +8,7 @@ FIXTURE_JS="$REPO_ROOT/hooks/tests/lib/consult-discuss-genuine-row-fixture.js"
 SCOPE_HELPER="$REPO_ROOT/scripts/lib/qualification-applicability-scope.js"
 
 # The genuine-row fixture stamps issued_at = (wall clock - 2d) and
-# expires_at = (wall clock + 27d) by design (see its header). A literal
+# (no expiry) by design (see its header). A literal
 # --now pinned to the authoring date therefore rots: two days later issued_at
 # is AFTER that literal midnight and the row reads evidence_not_yet_valid.
 # Evaluate at the same wall clock the fixture used, read AFTER it ran.
@@ -84,7 +84,6 @@ const doc = {
       corpus_version: "impl-live-rail-v1",
       prompt_config_hash: "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
       model_version: "GLM-5.3",
-      expires: "2026-11-19",
     },
     evidence_pointers: { evidence_bundle: null },
   }],
@@ -136,7 +135,6 @@ function row(engine, runner, role) {
       corpus_version: "impl-live-rail-v1",
       prompt_config_hash: "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
       model_version: engine,
-      expires: "2026-11-19",
     },
   };
 }

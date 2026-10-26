@@ -112,7 +112,7 @@ DENSITY_HIGH_STORE="$TEST_TMP/contract-density-high-scorecard"
 mkdir -p "$DENSITY_HIGH_STORE"
 RECIMPL_HIGH_JSON="$DENSITY_HIGH_STORE/rec.json"
 cat > "$RECIMPL_HIGH_JSON" <<'JSON'
-{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 JSON
 ENGINE_SCORECARD_DIR="$DENSITY_HIGH_STORE" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECIMPL_HIGH_JSON" > /dev/null
 DENSITY_HIGH_OUT="$(ENGINE_SCORECARD_DIR="$DENSITY_HIGH_STORE" "$REPO_ROOT/scripts/resolve-review-loop.sh" --scale-by-capability --diff-lines 0 --protected-path 0 --oracle-available 1 --security-surface 0)"

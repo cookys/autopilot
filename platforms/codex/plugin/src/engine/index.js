@@ -113,7 +113,6 @@ module.exports = {
   CAPABILITY_ROLE_IDS: roles.CAPABILITY_ROLE_IDS,
   CAPABILITY_ROLE_ALIASES: roles.LEGACY_ROLE_ALIASES,
   CapabilityEvidenceError: capabilityEvidence.CapabilityEvidenceError,
-  MAX_QUALIFIED_TTL_DAYS: capabilityEvidence.MAX_QUALIFIED_TTL_DAYS,
   buildCapabilityEvidenceReceipt: capabilityEvidence.buildCapabilityEvidenceReceipt,
   compileCapabilityEvidence: capabilityEvidence.compileCapabilityEvidence,
   evaluateCapabilityEvidence: capabilityEvidence.evaluateCapabilityEvidence,

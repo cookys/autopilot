@@ -34,8 +34,8 @@ Evidence inputs and precedence:
 2. scorecard telemetry — supporting;
 3. imported model-level priors (e.g. AA imports) — advisory only, can never lift above T2 alone.
 
-Freshness cutoff: the qualification record's own TTL/expiry field; records without an expiry are
-treated as stale (fail-closed). Conflicting records (two sources disagree on qualification for
+Freshness follows the seat's `admission_status` (strike-decay), never a date: a qualification has no
+expiry. Conflicting records (two sources disagree on qualification for
 the same tuple+role) resolve to T2 with both refs recorded in `evidence_refs`.
 
 Disk telemetry is same-UID-editable (survey: advisory priors, never admission authority) — the

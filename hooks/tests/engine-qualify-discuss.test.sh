@@ -212,11 +212,9 @@ IMPL_FLAG_RC=$?
 assert_exit_code "$IMPL_FLAG_RC" "2" "discuss --plan combined with an implementer-only flag exits 2"
 
 EXPIRES_30_RC=0
-$SCRIPT "${DISCUSS_PLAN_ARGS[@]}" --expires-days 30 >/dev/null 2>&1 || EXPIRES_30_RC=$?
-assert_exit_code "$EXPIRES_30_RC" "0" "discuss --expires-days 30 is accepted"
-EXPIRES_31_RC=0
-$SCRIPT "${DISCUSS_PLAN_ARGS[@]}" --expires-days 31 >/dev/null 2>&1 || EXPIRES_31_RC=$?
-assert_exit_code "$EXPIRES_31_RC" "2" "discuss --expires-days 31 is rejected (flat 30-day cap)"
+EXPIRES_30_OUT="$($SCRIPT "${DISCUSS_PLAN_ARGS[@]}" --expires-days 30 2>&1)" || EXPIRES_30_RC=$?
+assert_exit_code "$EXPIRES_30_RC" "2" "discuss --expires-days 30 is refused (qualification has no expiry)"
+assert_contains "$EXPIRES_30_OUT" "no expiry" "the refusal says qualification has no expiry"
 
 RUNNER_BIN_RC=0
 $SCRIPT "${DISCUSS_PLAN_ARGS[@]}" --runner-bin /bin/true >/dev/null 2>&1 || RUNNER_BIN_RC=$?

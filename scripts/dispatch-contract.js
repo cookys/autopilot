@@ -132,7 +132,6 @@ function isAdmissibleScorecardRow(row, storeRole, resolvedEngine, options = {}) 
   // Calendar tooth (c) pulled 2026-08-22 (no-confidence-decay P2): a strike-decay
   // requalify_required seat is NOT admissible regardless of `status` — this is
   // the mechanical-evidence downgrade path (ADR-0001), never a date comparison.
-  // A past-expires row is admissible exactly as before the cut.
   if (row.admission_status === 'requalify_required') return false;
   if (row.status === 'qualified') return true;
   if (row.status !== 'provisional') return false;
@@ -244,10 +243,10 @@ function loadResolvedLive(resolvedLivePath, reasons) {
   return doc;
 }
 
-// The frozen eight-key pin row (KR6). expires is `null` by construction -- a pin
-// does not expire -- so a row carrying a date is not a pin and must not admit.
+// The frozen seven-key pin row (KR6). A pin has no expiry and carries no `expires` key; a row
+// that still has one (pre-2026-10-26) is not a pin until `engine-scorecard.js strip-expiry` runs.
 const PIN_ROW_KEYS = Object.freeze([
-  'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator', 'expires',
+  'engine', 'runner', 'role', 'effort', 'endpoint', 'reason', 'operator',
 ]);
 
 function isPinRow(pin, docRole, reasons) {
@@ -274,10 +273,6 @@ function isPinRow(pin, docRole, reasons) {
   // string (including "") or null is a pin row; anything else is not.
   if (pin.endpoint !== null && typeof pin.endpoint !== 'string') {
     reasons.push('resolved-live: operator_pin.endpoint must be a string or null (@none)');
-    return false;
-  }
-  if (pin.expires !== null) {
-    reasons.push('resolved-live: operator_pin.expires must be null');
     return false;
   }
   if (normalizeStoreRole(pin.role) !== normalizeStoreRole(docRole)) {

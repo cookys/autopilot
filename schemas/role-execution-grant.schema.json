@@ -480,7 +480,6 @@
         "applicability",
         "issued_at",
         "observed_at",
-        "expires_at",
         "methodology_version",
         "trial_set_hash",
         "revocation_reason"
@@ -588,10 +587,6 @@
           "format": "date-time"
         },
         "observed_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "expires_at": {
           "type": "string",
           "format": "date-time"
         },

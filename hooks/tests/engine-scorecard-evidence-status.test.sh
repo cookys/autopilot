@@ -2,15 +2,16 @@
 # engine-scorecard-evidence-status.test.sh — `engine-scorecard.js current` on evidence-backed rows.
 #
 # Fixture = three real reviewer rows from the 2026-08-20 exam round (model names and hashes only):
-#   gpt-5.6-sol / codex                qualified, evidence now past expires_at   (control)
-#   GLM-5.3 / anthropic-compatible     failed (40/42), evidence `degraded`, past expires_at
+#   gpt-5.6-sol / codex                qualified, issued long ago               (control)
+#   GLM-5.3 / anthropic-compatible     failed (40/42), evidence `degraded`
 #   Gemini-3.7-Flash-High / agy        qualified requalification (evidence `supersedes` an earlier record)
 # Two defects this pins (2026-09-24):
 #   1. the agy row crashed `current --role reviewer` (the embedded record was lineage-checked alone,
 #      where its predecessor cannot be present) — and resolve-dispatch-topology.js read that crash as
 #      "no reviewer candidates";
-#   2. every expired non-revoked record is `stale`, and deriveStatus read every stale receipt as
-#      qualified — so the failed GLM-5.3 exam read as admitted once it expired.
+#   2. (historical) a date-derived `stale` state made deriveStatus read the failed GLM-5.3 exam as
+#      admitted. Qualification has no expiry now, so there is no stale state; the assertions below
+#      still pin that a failed exam is never admitted and a qualification keeps its standing.
 . "$(dirname "$0")/lib.sh"
 
 export ENGINE_SCORECARD_DIR="$TEST_TMP/scorecard"
@@ -32,9 +33,9 @@ let s = ""; process.stdin.on("data", (d) => s += d).on("end", () => {
 }
 
 assert_eq "$(seat GLM-5.3)" "failed no_record" \
-  "an expired FAILED exam is not admitted (stale must not read as qualified)"
+  "a FAILED exam is not admitted"
 assert_eq "$(seat gpt-5.6-sol)" "provisional qualified" \
-  "an expired QUALIFICATION keeps its standing (advisory expiry, calendar tooth pulled 2026-08-22)"
+  "an old QUALIFICATION keeps its standing (no expiry)"
 assert_eq "$(seat Gemini-3.7-Flash-High)" "provisional qualified" \
   "a requalified row is evaluated and admitted"
 

@@ -82,7 +82,7 @@ DENS_HIGH_STORE="$TEST_TMP/dens-high"
 mkdir -p "$DENS_HIGH_STORE"
 RECIMPL_HIGH_JSON="$DENS_HIGH_STORE/rec.json"
 cat > "$RECIMPL_HIGH_JSON" <<'JSON'
-{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}
+{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"ph","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0.0,"usd_per_mtok_output":0.0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}
 JSON
 ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" node "$REPO_ROOT/scripts/engine-scorecard.js" record --file "$RECIMPL_HIGH_JSON" > /dev/null
 DENS_HIGH_OUT="$(ENGINE_SCORECARD_DIR="$DENS_HIGH_STORE" REVIEW_LOOP_CONFIG_OVERRIDE="$CODEX_IMPL_CFG" bash "$SCRIPT" --scale-by-capability)"
@@ -405,7 +405,6 @@ const evidence = compileCapabilityEvidence({
   state: "qualified", role: "owner",
   scope: { task_classes: ["brain-seat"], domains: ["repository"], languages: ["en"], tool_surface: [] },
   identity, issued_at: "2026-08-17T00:00:00.000Z", observed_at: "2026-08-17T00:00:00.000Z",
-  expires_at: "2026-09-16T00:00:00.000Z",
   methodology: {
     kind: "owner_brain_seat", name: "owner-brain-seat", version: "1.0.0",
     corpus_version: "brain-seat-v1.brain-seat-metamorphic-v1", corpus_manifest_hash: corpusHash,

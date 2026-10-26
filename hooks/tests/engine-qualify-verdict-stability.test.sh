@@ -15,7 +15,7 @@ STORE="$ENGINE_SCORECARD_DIR/scorecard.jsonl"
 row() { # engine runner family role corpus cap costsrc costin status expires [model_version]
   local engine="$1" runner="$2" family="$3" role="$4" corpus="$5" cap="$6" csrc="$7" cin="$8" status="$9" expires="${10}" mv="${11:-v1}"
   cat <<JSON
-{"engine":"$engine","runner":"$runner","family":"$family","role":"$role","model_version":"$mv","version_source":"manual","corpus_version":"$corpus","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":$cap,"cost":{"source":"$csrc","usd_per_mtok_input":$cin,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"$status","qualified_at":"2026-06-30","expires":"$expires"}
+{"engine":"$engine","runner":"$runner","family":"$family","role":"$role","model_version":"$mv","version_source":"manual","corpus_version":"$corpus","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":$cap,"cost":{"source":"$csrc","usd_per_mtok_input":$cin,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"$status","qualified_at":"2026-06-30"}
 JSON
 }
 
@@ -1889,7 +1889,7 @@ const row = {
   quality: { corpus_pass: '60/60', protocol_violations: 0 },
   capability_score: 1,
   cost: { source: 'unknown' }, latency: { sample_wall_time_s: 0 },
-  status: 'qualified', qualified_at: '2026-08-28', expires: '2099-01-01',
+  status: 'qualified', qualified_at: '2026-08-28',
   administrations: [{
     run: 1,
     per_trial: [{ trial: 1, cases_total: 10, cases_passed: 10 }, { trial: 2, cases_total: 10, cases_passed: 10 }],
@@ -2047,7 +2047,6 @@ const compiledEvidence = compileCapabilityEvidence({
   identity: baseEvidence.identity,
   issued_at: baseEvidence.issued_at,
   observed_at: baseEvidence.observed_at,
-  expires_at: baseEvidence.expires_at,
   methodology: baseEvidence.methodology,
   trials: baseEvidence.trials,
   revocation: null,
@@ -2123,7 +2122,7 @@ const row = {
   date: '2026-08-28',
   quality: { corpus_pass: process.env.BAR, protocol_violations: 0 },
   capability_score: 1, cost: { source: 'unknown' }, latency: { sample_wall_time_s: 0 },
-  status: 'qualified', qualified_at: '2026-08-28', expires: '2099-01-01',
+  status: 'qualified', qualified_at: '2026-08-28',
   administrations: admins,
   pooled: { passes: N, eligible_full_N: N, tier2_misses_by_class: {}, harness_excluded: 0 },
   competence: { wilson_lower: wilson, z: Z, tau: 0.85, n: N },
@@ -2323,7 +2322,7 @@ const evidence = compileCapabilityEvidence({
   schema_version: 1, source: 'internal_eval', source_ref: 'test:ladder-admissible',
   state: 'qualified', role: 'reviewer', scope, identity,
   issued_at: '2026-08-20T02:00:00.000Z', observed_at: '2026-08-20T01:30:00.000Z',
-  expires_at: '2026-09-18T02:00:00.000Z', methodology,
+  methodology,
   trials: [trial('trial-1', '2026-08-18T01:00:00.000Z'), trial('trial-2', '2026-08-19T01:00:00.000Z')],
   revocation: null, supersedes: null,
 });
@@ -2336,7 +2335,7 @@ const row = {
   runner_version: identity.runner_version, prompt_config_hash: identity.prompt_config_hash,
   effort: identity.effort, date: '2026-08-20', quality: { corpus_pass: '13/13' }, capability_score: 1,
   cost: { source: 'unknown', usd_per_mtok_input: 0, usd_per_mtok_output: 0, sample_tokens: 0 },
-  latency: { sample_wall_time_s: 0 }, status: 'qualified', qualified_at: '2026-08-20', expires: '2026-09-18',
+  latency: { sample_wall_time_s: 0 }, status: 'qualified', qualified_at: '2026-08-20',
   evidence_store: { event_id: written.event_id, producer: written.producer, transcript_hash: written.transcript_hash },
   evidence,
 };
@@ -3528,7 +3527,7 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
   // BL-0172). Anything else that touches the body fails here.
   //
   // runBrainQualification left this list on 2026-10-14: its emitted row gained capability_score,
-  // cost and expires so `engine-scorecard.js record` accepts a brain sitting. Same reasoning as
+  // and cost so `engine-scorecard.js record` accepts a brain sitting. Same reasoning as
   // runQualification above — the pin names an old commit, and the brain path is now covered end to
   // end by scripts/engine-qualify-brain.test.js (record accepted; each missing field refused).
   //
@@ -3592,6 +3591,11 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
       [SINK, 'rawRowsText(rawExchanges),'],
       [FOREMAN_PLAN_ANCHOR, FOREMAN_PLAN_NEW],
       [FOREMAN_RUN_ANCHOR, FOREMAN_RUN_NEW],
+      // 2026-10-26: qualification has no expiry — the three places runQualification computed and
+      // wrote one (the expiresAt constant, evidence.expires_at, row.expires) are removed.
+      ['  const expiresAt = new Date(\n    Date.parse(issuedAt) + options.expiresDays * 86_400_000,\n  ).toISOString();\n', ''],
+      ['    expires_at: expiresAt,\n', ''],
+      ['    expires: expiresAt.slice(0, 10),\n', ''],
     ],
   };
   const expectedBody = (name, baseText) => {

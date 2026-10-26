@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Planted negative controls for the 2026-08-22 no-confidence-decay cut
-# (docs/plans/_archive/2026/08/2026-08-22-no-confidence-decay.md §4 P1/P2/P3).
+# Negative controls for "a qualification has no calendar".
 #
-# Three calendar teeth were pulled from the admission path:
-#   (a) engine-scorecard.js deriveStatus no longer emits `expired` for a
-#       past-`expires` qualified row (or a `stale` evidence receipt).
-#   (b) resolve-review-loop.sh's density-scaling tier keys on the
-#       strike-decay projection's admission_status, never on a date.
-#   (c) dispatch-contract.js's isAdmissibleScorecardRow admits a
-#       past-expires row and only refuses on admission_status ===
-#       'requalify_required'.
+# 2026-08-22 pulled the calendar teeth out of admission (a past-expires row no longer
+# derived `expired`, the density tier and dispatch-contract keyed on the strike-decay
+# projection). 2026-10-26 (owner, third time of asking) removed the calendar itself: no
+# `expires` on a scorecard row, no `expires_at` inside capability evidence, no
+# `--expires-days`, no `expired`/`stale` state, no expiry_warning, no expiry in the shipped
+# official defaults or in any adopt / scorecard output. A seat now loses standing ONLY through
+# strikes (references/strike-decay.md). Sections below:
+#   fields   no expiry field in rows, evidence, schemas, the shipped defaults, any output
+#   scan     no admission or sampling source reads a qualification date
+#   cli      engine-qualify refuses --expires-days
+#   migrate  a store written by the old code reads with a message naming the one-line
+#            migration, and migrates without moving any seat's admission
+#   strikes  the withdrawal path that replaced the calendar still works end to end
 #
-# Each assertion below fails if its tooth is re-introduced (evidence-discipline
-# §2: a suite that passes when you delete the gate it tests has not tested
-# it). The P3 contract test (last section) is a grep-able negative on the
-# admission source itself; its not-vacuous demonstration (tooth reintroduced
-# => red, reverted => green) is pasted in the dispatching session's report,
-# not re-run automatically here (mutating shipped source mid-suite is unsafe).
+# Each assertion fails if its tooth is re-introduced (evidence-discipline §2: a suite that
+# passes when you delete the gate it tests has not tested it).
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -75,7 +75,7 @@ process.stdout.write(sha256(canonicalJson({ engine: process.argv[1], runner: pro
 score_row() {
   local engine="$1" runner="$2" role="$3" qat="$4" exp="$5" status="${6:-qualified}"
   cat <<JSON
-{"engine":"$engine","runner":"$runner","family":"f","role":"$role","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"$status","qualified_at":"$qat","expires":"$exp"}
+{"engine":"$engine","runner":"$runner","family":"f","role":"$role","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"$status","qualified_at":"$qat"}
 JSON
 }
 
@@ -100,24 +100,23 @@ JSON
 STRIKES_FILE="$CAPABILITY_DIR/strikes.jsonl"
 
 # =============================================================================
-# (a) past-expires qualified row projects qualified + expiry_warning,
-#     admission_status qualified, store unmutated.
+# (a) an old qualified row stays qualified and nothing in the projection mentions a date
+#     that could expire; the store is not mutated by a read.
 # =============================================================================
 reset_stores
 echo "$(score_row A codex reviewer 2026-01-01 2026-01-02)" | node "$ESC" record >/dev/null 2>&1
-OUT_A=$(node "$ESC" current --role reviewer --now 2026-06-30)
+OUT_A=$(node "$ESC" current --role reviewer --now 2099-06-30)
 obs=$(echo "$OUT_A" | jq_get 0.observed_status)
 st=$(echo "$OUT_A" | jq_get 0.status)
 adm=$(echo "$OUT_A" | jq_get 0.admission_status)
-ew=$(echo "$OUT_A" | jq_get 0.expiry_warning)
 stored=$(grep -o '"status":"[a-z]*"' "$SCORECARD_DIR/scorecard.jsonl" | head -1)
-[ "$obs" = "qualified" ] && [ "$st" = "provisional" ] && [ "$adm" = "qualified" ] && [ "$ew" = "true" ] \
-  && [ "$stored" = '"status":"qualified"' ] \
-  && ok "a1: past-expires row => observed_status/admission_status qualified, expiry_warning true, store unmutated" \
-  || bad "a1: obs=$obs st=$st adm=$adm ew=$ew stored=$stored"
+[ "$obs" = "qualified" ] && [ "$st" = "provisional" ] && [ "$adm" = "qualified" ] \
+  && [ "$stored" = '"status":"qualified"' ] && ! echo "$OUT_A" | grep -q -i 'expir' \
+  && ok "a1: row qualified in 2026, read in 2099 => observed/admission qualified, no expiry field in the projection, store unmutated" \
+  || bad "a1: obs=$obs st=$st adm=$adm stored=$stored out=$OUT_A"
 
 # =============================================================================
-# (b) the same past-expires row does NOT get tier 'low' from resolve-review-loop.sh
+# (b) the same OLD row does NOT get tier 'low' from resolve-review-loop.sh
 # =============================================================================
 IMPL_CFG="$TESTDIR/impl-cfg.md"
 printf -- '- implementer_engine: A\n- implementer_runner: codex\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' > "$IMPL_CFG"
@@ -125,11 +124,11 @@ reset_stores
 echo "$(score_row A codex implementer 2026-01-01 2026-01-02)" | node "$ESC" record >/dev/null 2>&1
 RRL_OUT=$(REVIEW_LOOP_CONFIG_OVERRIDE="$IMPL_CFG" bash "$RRL" --scale-by-capability 2>/dev/null || true)
 TIER=$(printf '%s' "$RRL_OUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const d=JSON.parse(s);process.stdout.write(String(d.capability_tier||""))}catch{process.stdout.write("")}})' 2>/dev/null || true)
-[ "$TIER" != "low" ] && ok "b1: past-expires implementer row does not tier 'low' (got '$TIER')" \
-  || bad "b1: past-expires implementer row tiered 'low' — calendar tooth (b) reintroduced"
+[ "$TIER" != "low" ] && ok "b1: old implementer row does not tier 'low' (got '$TIER')" \
+  || bad "b1: past-expires implementer row tiered 'low' — a date decides the tier again"
 
 # =============================================================================
-# (c) the same past-expires row gets a GO from dispatch-contract.js
+# (c) the same OLD row gets a GO from dispatch-contract.js
 # =============================================================================
 # build_contract_fixture engine runner unit_id
 # Builds a minimal real git repo + a schema-valid dispatch contract for it
@@ -212,12 +211,14 @@ if [ "$DC_RC" = "0" ]; then
 else
   VERDICT="NO-GO(rc=$DC_RC)"
 fi
-[ "$VERDICT" = "GO" ] && ok "c1: past-expires implementer row GOes under dispatch-contract.js (calendar tooth c pulled)" \
+[ "$VERDICT" = "GO" ] && ok "c1: old implementer row GOes under dispatch-contract.js" \
   || bad "c1: dispatch-contract verdict=$VERDICT out=$DC_OUT"
 
 # =============================================================================
-# Strike accumulation — shadow-first (KR6): 3 ordinary strikes => would_requalify
-# true but admission_status stays qualified under the DEFAULT shadow flag.
+# Strike accumulation — ENFORCED BY DEFAULT (owner, 2026-10-26: standing is lost by
+# accumulated strikes). 2 ordinary strikes keep the seat qualified; the 3rd makes it
+# requalify_required with the variable UNSET; AUTOPILOT_STRIKE_ENFORCEMENT=shadow is the
+# explicit opt-out that records and projects would_requalify without gating.
 # =============================================================================
 reset_stores
 echo "$(score_row B codex reviewer 2026-06-01 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
@@ -225,23 +226,27 @@ SH_B=$(seat_hash B codex reviewer)
 {
   strike_line "$SH_B" B codex reviewer ordinary_strike null fuse "rcpt-1" "inc-1:det-1" "2026-06-02T00:00:00Z" 1
   strike_line "$SH_B" B codex reviewer ordinary_strike null fuse "rcpt-2" "inc-2:det-1" "2026-06-03T00:00:00Z" 2
-  strike_line "$SH_B" B codex reviewer ordinary_strike null fuse "rcpt-3" "inc-3:det-1" "2026-06-04T00:00:00Z" 3
 } > "$STRIKES_FILE"
 unset AUTOPILOT_STRIKE_ENFORCEMENT
+SS_B2=$(node "$ESC" seat-status --engine B --runner codex --role reviewer --now 2026-06-30)
+adm2=$(echo "$SS_B2" | jq_get admission_status); sp2=$(echo "$SS_B2" | jq_get strikes_since_pass); wr2=$(echo "$SS_B2" | jq_get would_requalify)
+[ "$adm2" = "qualified" ] && [ "$sp2" = "2" ] && [ "$wr2" = "false" ] \
+  && ok "strike0: 2 ordinary strikes (threshold is 3) => still qualified, enforcement unset" \
+  || bad "strike0: admission_status=$adm2 strikes_since_pass=$sp2 would_requalify=$wr2"
+strike_line "$SH_B" B codex reviewer ordinary_strike null fuse "rcpt-3" "inc-3:det-1" "2026-06-04T00:00:00Z" 3 >> "$STRIKES_FILE"
 SS_B=$(node "$ESC" seat-status --engine B --runner codex --role reviewer --now 2026-06-30)
 wr=$(echo "$SS_B" | jq_get would_requalify)
 adm=$(echo "$SS_B" | jq_get admission_status)
 sp=$(echo "$SS_B" | jq_get strikes_since_pass)
-[ "$wr" = "true" ] && [ "$sp" = "3" ] && [ "$adm" = "qualified" ] \
-  && ok "strike1: 3 ordinary strikes => would_requalify true, admission_status qualified under shadow (default)" \
-  || bad "strike1: would_requalify=$wr strikes_since_pass=$sp admission_status=$adm"
+[ "$wr" = "true" ] && [ "$sp" = "3" ] && [ "$adm" = "requalify_required" ] \
+  && ok "strike1: 3 ordinary strikes, enforcement UNSET (the default) => requalify_required" \
+  || bad "strike1: would_requalify=$wr strikes_since_pass=$sp admission_status=$adm (want requalify_required by default)"
 
-# Same fixture with AUTOPILOT_STRIKE_ENFORCEMENT=enforce => requalify_required,
-# tier 'low', and dispatch-contract.js NO-GO naming the strike cause.
-SS_B_ENF=$(AUTOPILOT_STRIKE_ENFORCEMENT=enforce node "$ESC" seat-status --engine B --runner codex --role reviewer --now 2026-06-30)
-adm_enf=$(echo "$SS_B_ENF" | jq_get admission_status)
-[ "$adm_enf" = "requalify_required" ] && ok "strike2: same fixture under --enforce => requalify_required" \
-  || bad "strike2: admission_status=$adm_enf under enforce"
+SS_B_SHADOW=$(AUTOPILOT_STRIKE_ENFORCEMENT=shadow node "$ESC" seat-status --engine B --runner codex --role reviewer --now 2026-06-30)
+adm_sh=$(echo "$SS_B_SHADOW" | jq_get admission_status); wr_sh=$(echo "$SS_B_SHADOW" | jq_get would_requalify)
+[ "$adm_sh" = "qualified" ] && [ "$wr_sh" = "true" ] \
+  && ok "strike2: AUTOPILOT_STRIKE_ENFORCEMENT=shadow (the explicit opt-out) => stays qualified and projects would_requalify" \
+  || bad "strike2: admission_status=$adm_sh would_requalify=$wr_sh under shadow"
 
 IMPL_CFG_B="$TESTDIR/impl-cfg-b.md"
 printf -- '- implementer_engine: B\n- implementer_runner: codex\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' > "$IMPL_CFG_B"
@@ -253,9 +258,9 @@ SH_B_IMPL=$(seat_hash B codex implementer)
   strike_line "$SH_B_IMPL" B codex implementer ordinary_strike null fuse "rcpt-5" "inc-5:det-1" "2026-06-03T00:00:00Z" 5
   strike_line "$SH_B_IMPL" B codex implementer ordinary_strike null fuse "rcpt-6" "inc-6:det-1" "2026-06-04T00:00:00Z" 6
 } > "$STRIKES_FILE.tmp" && mv "$STRIKES_FILE.tmp" "$STRIKES_FILE"
-RRL_OUT_B=$(REVIEW_LOOP_CONFIG_OVERRIDE="$IMPL_CFG_B" AUTOPILOT_STRIKE_ENFORCEMENT=enforce bash "$RRL" --scale-by-capability 2>/dev/null || true)
+RRL_OUT_B=$(REVIEW_LOOP_CONFIG_OVERRIDE="$IMPL_CFG_B" bash "$RRL" --scale-by-capability 2>/dev/null || true)
 TIER_B=$(printf '%s' "$RRL_OUT_B" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const d=JSON.parse(s);process.stdout.write(String(d.capability_tier||""))}catch{process.stdout.write("")}})' 2>/dev/null || true)
-[ "$TIER_B" = "low" ] && ok "strike3: requalify_required seat tiers 'low' under --enforce" \
+[ "$TIER_B" = "low" ] && ok "strike3: requalify_required seat tiers 'low' by default (no env var)" \
   || bad "strike3: capability_tier=$TIER_B (want low)"
 
 CAP_EVENT_B="$TESTDIR/cap-event-b.json"
@@ -266,7 +271,7 @@ node "$ROOT/scripts/engine-capability-state.js" record --file "$CAP_EVENT_B" >/d
 FIXTURE_B=$(build_contract_fixture B codex u-b)
 REPO_B="${FIXTURE_B%%|*}"
 CONTRACT_B="${FIXTURE_B##*|}"
-DC_OUT_B=$(AUTOPILOT_STRIKE_ENFORCEMENT=enforce node "$DC" check --contract "$CONTRACT_B" --repo "$REPO_B" --json 2>&1); DC_RC_B=$?
+DC_OUT_B=$(node "$DC" check --contract "$CONTRACT_B" --repo "$REPO_B" --json 2>&1); DC_RC_B=$?
 REASONS_B=$(printf '%s' "$DC_OUT_B" | jq_get reasons.0 2>/dev/null || true)
 if [ "$DC_RC_B" != "0" ] && grep -q "requalification" < <(printf '%s' "$REASONS_B"); then
   ok "strike4: requalify_required seat NO-GOes from dispatch-contract.js naming the strike cause ($REASONS_B)"
@@ -276,7 +281,7 @@ fi
 
 # =============================================================================
 # One critical_reexam_trigger => requalify_required immediately, under the
-# DEFAULT shadow flag (critical always enforces).
+# default and under shadow (critical always enforces).
 # =============================================================================
 reset_stores
 echo "$(score_row C codex reviewer 2026-06-01 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
@@ -287,7 +292,7 @@ SS_C=$(node "$ESC" seat-status --engine C --runner codex --role reviewer --now 2
 adm_c=$(echo "$SS_C" | jq_get admission_status)
 ct_c=$(echo "$SS_C" | jq_get critical_trigger)
 [ "$adm_c" = "requalify_required" ] && [ "$ct_c" = "true" ] \
-  && ok "critical1: one critical_reexam_trigger => requalify_required under shadow (default)" \
+  && ok "critical1: one critical_reexam_trigger => requalify_required with enforcement unset" \
   || bad "critical1: admission_status=$adm_c critical_trigger=$ct_c"
 
 # =============================================================================
@@ -472,113 +477,246 @@ rej_k=$(echo "$SS_K" | jq_get rejected_strikes)
   || bad "invalidate3: strikes_since_pass=$sp_k rejected_strikes=$rej_k (want 1/1)"
 
 # =============================================================================
-# P3: no admission path compares `now` against `expires`. Grep-able negative
-# on the three admission source files. Precise enough that re-introducing
-# `expiresMs < nowMs => 'expired'` (or an equivalent) turns this red, loose
-# enough that the legitimate expiry_warning computation does not trip it: the
-# only permitted `now`-vs-expiry comparison must assign into a
-# variable/field whose name contains "warning", and the literal token
-# `expired` (case-insensitive `"expired"`) must never appear inside an
-# admission branch (an `if`/ternary that can influence admission_status,
-# rowStatus, or a NO-GO/tier decision).
+# fields: no expiry field anywhere a qualification is stored, shipped or displayed
 # =============================================================================
-# engine-scorecard.js's admission/projection region starts at deriveStatus
-# (everything before it — REQUIRED_FIELDS validation, record-time evidence
-# checks — is the WRITE path, where the frozen contract explicitly allows a
-# legacy `status: "expired"` literal to be accepted ON INPUT for replay
-# idempotency; it is never produced going forward). Scoping the scan to the
-# admission region is what keeps this test from tripping on that legitimate
-# input-acceptance line while still catching a reintroduced tooth anywhere
-# admission decisions are actually made (deriveStatus, the current-row
-# projection, computeSeatProjection, and everything below them, incl.
-# cmdSeatStatus/cmdCurrent/cmdReport/cmdLadder).
-ESC_ADMISSION_START=$(grep -n '^function deriveStatus' "$ESC" | head -1 | cut -d: -f1)
-ESC_ADMISSION_REGION="$TESTDIR/esc-admission-region.js"
-tail -n "+$ESC_ADMISSION_START" "$ESC" > "$ESC_ADMISSION_REGION"
-[ -n "$ESC_ADMISSION_START" ] && [ -s "$ESC_ADMISSION_REGION" ] \
-  || bad "p3_setup: could not locate engine-scorecard.js admission region (deriveStatus)"
+DEFAULTS="$ROOT/references/official-qualification-defaults.json"
+DEF_HITS=$(grep -c -E '"expires(_at)?"' "$DEFAULTS" || true)
+[ "$DEF_HITS" = "0" ] && ok "fields1: the shipped official defaults carry no expires / expires_at key" \
+  || bad "fields1: $DEF_HITS expiry key(s) in references/official-qualification-defaults.json"
 
-# resolve-review-loop.sh and dispatch-contract.js have no legitimate
-# "expired accepted on input" carve-out anywhere — their entire files are
-# fair game for the literal-token scan.
-p3_no_expired_literal_in_admission_branch() {
-  # A live `'expired'`/`"expired"` token used as a comparison target or
-  # return/assignment value (=== 'expired', 'expired' ===, ? 'expired' :,
-  # : 'expired', return 'expired') is presumed to be an admission-branch
-  # literal — the projection is documented to never PRODUCE that string, so
-  # it may only appear in a prose comment explaining the pulled tooth. Full
-  # comment lines (// ... for .js, # ... for .sh) are stripped first.
-  local file="$1"
-  grep -vE '^[[:space:]]*(//|#)' "$file" \
-    | grep -nE "===[[:space:]]*['\"]expired['\"]|['\"]expired['\"][[:space:]]*===|\\?[[:space:]]*['\"]expired['\"]|:[[:space:]]*['\"]expired['\"]|return[[:space:]]+['\"]expired['\"]" \
-    || true
+SCHEMA_HITS=$(grep -l -E '"expires(_at)?"' "$ROOT/schemas/capability-evidence.schema.json" "$ROOT/schemas/official-qualification-defaults.schema.json" 2>/dev/null || true)
+[ -z "$SCHEMA_HITS" ] && ok "fields2: the evidence and defaults schemas have no expiry property" \
+  || bad "fields2: expiry property in: $SCHEMA_HITS"
+
+reset_stores
+ROW_EXP=$(score_row P codex reviewer 2026-06-01 2099-01-01 | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s);r.expires="2099-01-01";process.stdout.write(JSON.stringify(r))})')
+echo "$ROW_EXP" | node "$ESC" record >"$TESTDIR/rec-exp.out" 2>&1; RC_EXP=$?
+[ "$RC_EXP" != "0" ] && grep -q -i "no expir" "$TESTDIR/rec-exp.out" && [ ! -s "$SCORECARD_DIR/scorecard.jsonl" ] \
+  && ok "fields3: record refuses a row that carries an expires field, and writes nothing" \
+  || bad "fields3: rc=$RC_EXP out=$(cat "$TESTDIR/rec-exp.out")"
+
+reset_stores
+echo "$(score_row Q codex reviewer 2026-06-01 x)" | node "$ESC" record >/dev/null 2>&1
+if ! grep -q -E '"expires' "$SCORECARD_DIR/scorecard.jsonl"; then ok "fields4: a recorded row has no expires key on disk"; else bad "fields4: expiry key written: $(cat "$SCORECARD_DIR/scorecard.jsonl")"; fi
+
+DISPLAY_OUT=""
+for cmd in "current --role reviewer" "report --role reviewer" "ladder --role reviewer" "seat-status --engine Q --runner codex --role reviewer"; do
+  DISPLAY_OUT="$DISPLAY_OUT$(node "$ESC" $cmd --now 2099-01-01 2>&1)"
+done
+echo "$DISPLAY_OUT" | grep -q -i -E 'expir|calendar'; DISPLAY_RC=$?
+[ "$DISPLAY_RC" != "0" ] && ok "fields5: scorecard current / report / ladder / seat-status output mentions no expiry" \
+  || bad "fields5: an expiry word appears in scorecard output: $(echo "$DISPLAY_OUT" | grep -i -E 'expir|calendar' | head -3)"
+
+ADOPT_OUT=$(node "$ROOT/scripts/adopt-qualification-defaults.js" list 2>&1 | head -400)
+echo "$ADOPT_OUT" | grep -q -i -E 'expir' ; ADOPT_RC=$?
+[ "$ADOPT_RC" != "0" ] && [ -n "$ADOPT_OUT" ] && ok "fields6: adopt-qualification-defaults list output mentions no expiry" \
+  || bad "fields6: adopt list rc=$ADOPT_RC (0 = an expiry word was found, or output empty): $(echo "$ADOPT_OUT" | grep -i expir | head -3)"
+
+# =============================================================================
+# scan: no admission / sampling source reads a qualification date
+# =============================================================================
+# strip comment lines, then require zero `expires` / `expires_at` / expiry_warning tokens.
+# engine-scorecard.js keeps the strip-expiry migration (it must name the legacy field to remove
+# it), so that block is cut out of the scan; capability-evidence.js keeps one line that REFUSES
+# a legacy expires_at.
+scan_tokens() { # file [exclude-regex-for-lines]
+  grep -v -E '^[[:space:]]*(//|\*|/\*|#)' "$1" | grep -n -E 'expires(_at)?\b|expiry_warning|computeExpiryWarning|MAX_QUALIFIED_TTL_DAYS|ttl_days' | grep -v -E 'strip-expiry|--expires-days|no expiry' || true
 }
-
-P3_HITS=""
-h=$(p3_no_expired_literal_in_admission_branch "$ESC_ADMISSION_REGION")
-[ -n "$h" ] && P3_HITS="$P3_HITS
-$ESC (admission region, from deriveStatus):
-$h"
-for f in "$RRL" "$DC" "$RST"; do
-  h=$(p3_no_expired_literal_in_admission_branch "$f")
-  [ -n "$h" ] && P3_HITS="$P3_HITS
-$f:
+SCAN_HITS=""
+ESC_NOMIG="$TESTDIR/esc-without-migration.js"
+awk '/^\/\/ strip-expiry: one-time migration/{skip=1} /^function main\(\)/{skip=0} !skip' "$ESC" > "$ESC_NOMIG"
+CE_NOLEGACY="$TESTDIR/ce-without-legacy-line.js"
+grep -v -E "value\.expires_at !== undefined|capability evidence has no expires_at" "$ROOT/src/engine/capability-evidence.js" > "$CE_NOLEGACY"
+# isLegacyExpiryRow in engine-scorecard.js is the reader's legacy detector: also a named exception
+grep -v -E "isLegacyExpiryRow|row\.expires !== undefined|row\.evidence\.expires_at !== undefined|a scorecard row has no expires field" "$ESC_NOMIG" > "$ESC_NOMIG.2"
+for pair in "$ESC_NOMIG.2" "$CE_NOLEGACY" "$RST" "$ROOT/scripts/lib/qualification-record-v2.js" "$ROOT/scripts/build-qualification-defaults.js" "$ROOT/scripts/adopt-qualification-defaults.js" "$ROOT/scripts/engine-qualify.js"; do
+  h=$(scan_tokens "$pair")
+  [ -n "$h" ] && SCAN_HITS="$SCAN_HITS
+$pair:
 $h"
 done
+# engine-qualify.js names --expires-days exactly once, in the line that REFUSES it
+EQ_HITS=$(grep -v -E "expires-days|no expiry" "$ROOT/scripts/engine-qualify.js" | grep -c -E 'expiresDays|expires_at|expiresAt' || true)
+[ "$EQ_HITS" = "0" ] || SCAN_HITS="$SCAN_HITS
+engine-qualify.js still computes an expiry ($EQ_HITS lines)"
+[ -z "$SCAN_HITS" ] && ok "scan1: no scorecard / evidence / tier / build / adopt / qualify source reads or writes a qualification date" \
+  || bad "scan1: expiry token(s) in an admission or writer source:$SCAN_HITS"
 
-if [ -z "$P3_HITS" ]; then
-  ok "p3_1: no admission path compares an 'expired' literal inside a live admission branch"
-else
-  bad "p3_1: found expired-literal admission branch(es):$P3_HITS"
-fi
+# the dispatch contract and the review-loop resolver keep ONE date contract: the operator
+# override file's own `expires` (a separate, explicitly operator-written waiver). Neither may
+# know about expiry_warning, nor read a date off a scorecard ROW.
+ROWDATE_HITS=$(grep -v -E '^[[:space:]]*(//|#)' "$DC" "$RRL" | grep -E 'expiry_warning|row\.expires|r\.expires|\.expires_at' | grep -v -i 'override\|retention\|marker\|isCalendarDate' || true)
+[ -z "$ROWDATE_HITS" ] && ok "scan2: dispatch-contract.js and resolve-review-loop.sh read no date off a scorecard row" \
+  || bad "scan2: a row date is read: $ROWDATE_HITS"
 
-# BLOCKER 2's actual bug never used the literal string 'expired' anywhere — isFresh()
-# just returned `Date.parse(row.expires) > now` as a bare boolean, so p3_1's literal-
-# token scan above would NOT have caught it. resolve-scaffold-tier.js has no legitimate
-# now-vs-expiry carve-out at all (unlike engine-scorecard.js's computeExpiryWarning,
-# which produces an advisory-only expiry_warning field) — it must have ZERO now-vs-
-# expires comparisons anywhere in the file, full stop. A single-line awk scan (like
-# p3_2's EW_HITS) is VACUOUS here: the real tooth reads
-#   const t = Date.parse(row.expires || ''); return Number.isFinite(t) && t > now;
-# — "now" and "expir" never share ONE line, so a per-line grep never sees them
-# together. Comments are stripped, remaining lines joined with spaces, then scanned
-# for "now"/"expir" co-occurring within 80 chars of a comparison operator — proven
-# non-vacuous below by re-planting exactly this tooth (git-diff-and-revert, not left
-# mutating the shipped file) and observing this assertion flip red, then green again.
-p3_now_expiry_comparison_anywhere() {
-  node -e '
-    const fs = require("fs");
-    const src = fs.readFileSync(process.argv[1], "utf8");
-    const stripped = src.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join(" ");
-    const flat = stripped.replace(/\s+/g, " ");
-    const re = /now[\s\S]{0,80}?[<>][\s\S]{0,80}?expir|expir[\s\S]{0,80}?[<>][\s\S]{0,80}?now/i;
-    const m = flat.match(re);
-    process.stdout.write(m ? m[0] : "");
-  ' "$1"
+# the literal `expired` status must not be produced or compared in any admission branch
+P3_HITS=""
+for fx in "$ESC_NOMIG.2" "$RRL" "$DC" "$RST"; do
+  h=$(grep -v -E '^[[:space:]]*(//|#)' "$fx" | grep -nE "===[[:space:]]*['\"]expired['\"]|['\"]expired['\"][[:space:]]*===|\?[[:space:]]*['\"]expired['\"]|:[[:space:]]*['\"]expired['\"]|return[[:space:]]+['\"]expired['\"]" || true)
+  [ -n "$h" ] && P3_HITS="$P3_HITS
+$fx:
+$h"
+done
+[ -z "$P3_HITS" ] && ok "scan3: no admission path produces or compares an 'expired' status literal" \
+  || bad "scan3: found expired-literal branch(es):$P3_HITS"
+
+# =============================================================================
+# cli: --expires-days is refused
+# =============================================================================
+EQ_OUT=$(node "$ROOT/scripts/engine-qualify.js" reviewer --expires-days 30 2>&1); EQ_RC=$?
+[ "$EQ_RC" = "2" ] && echo "$EQ_OUT" | grep -q -i "no expiry" \
+  && ok "cli1: engine-qualify --expires-days 30 exits 2 saying qualification has no expiry" \
+  || bad "cli1: rc=$EQ_RC out=$EQ_OUT"
+
+# =============================================================================
+# migrate: a store written by the OLD code (committed fixture: real rows, a row whose date
+# had passed, evidence sealed with expires_at, a pin carrying expires:null, three strikes)
+# =============================================================================
+LEG_FIX="$ROOT/hooks/tests/fixtures/legacy-expiry-store"
+mk_legacy() { # dest
+  rm -rf "$1"; mkdir -p "$1/sc" "$1/cap"
+  cp "$LEG_FIX/scorecard.jsonl" "$1/sc/"
+  cp "$LEG_FIX/qualification-evidence.jsonl" "$LEG_FIX/pins.jsonl" "$LEG_FIX/strikes.jsonl" "$1/cap/"
 }
-RST_HIT=$(p3_now_expiry_comparison_anywhere "$RST")
-[ -z "$RST_HIT" ] && ok "p3_3: resolve-scaffold-tier.js has zero now-vs-expires comparisons anywhere (no expiry_warning carve-out exists here)" \
-  || bad "p3_3: found a now-vs-expires comparison in resolve-scaffold-tier.js: $RST_HIT"
+LEG="$TESTDIR/legacy"; mk_legacy "$LEG"
+LEG_SC_SHA=$(sha256sum "$LEG/sc/scorecard.jsonl" | awk '{print $1}')
+LEG_ENV=(env ENGINE_SCORECARD_DIR="$LEG/sc" ENGINE_CAPABILITY_DIR="$LEG/cap")
 
-# The permitted now-vs-expires comparison must live ONLY inside
-# computeExpiryWarning and assign only into a warning-named result — never
-# feed admission_status, rowStatus, a tier, or a GO/NO-GO decision directly.
-# Detected by: find every line in the admission region that compares a
-# `nowMs`-named value against an expiry-derived value, then require ALL such
-# lines to fall within computeExpiryWarning's own function body (found by its
-# declaration line through the next line that is a bare closing brace).
-CEW_START=$(grep -n '^function computeExpiryWarning' "$ESC_ADMISSION_REGION" | head -1 | cut -d: -f1)
-CEW_END=$(awk -v s="$CEW_START" 'NR>s && /^}/ {print NR; exit}' "$ESC_ADMISSION_REGION")
-[ -n "$CEW_START" ] && [ -n "$CEW_END" ] \
-  || bad "p3_setup: could not locate computeExpiryWarning function boundaries"
+"${LEG_ENV[@]}" node "$ESC" current --role reviewer >"$TESTDIR/leg-read.out" 2>&1; LEG_READ_RC=$?
+[ "$LEG_READ_RC" != "0" ] && grep -q "strip-expiry" "$TESTDIR/leg-read.out" \
+  && ok "migrate1: reading an old-format store fails with a message naming the one-line migration (node scripts/engine-scorecard.js strip-expiry)" \
+  || bad "migrate1: rc=$LEG_READ_RC out=$(head -c 300 "$TESTDIR/leg-read.out")"
 
-EW_HITS=$(awk -v s="$CEW_START" -v e="$CEW_END" '
-  /nowMs/ && (/</ || />/) && tolower($0) ~ /expir/ {
-    if (NR < s || NR > e) print NR": "$0
-  }
-' "$ESC_ADMISSION_REGION")
-[ -z "$EW_HITS" ] && ok "p3_2: the only now-vs-expires comparison in the admission region lives inside computeExpiryWarning" \
-  || bad "p3_2: an expiry-vs-now comparison exists outside computeExpiryWarning: $EW_HITS"
+"${LEG_ENV[@]}" node "$ESC" strip-expiry --dry-run >"$TESTDIR/leg-dry.out" 2>&1
+[ "$(sha256sum "$LEG/sc/scorecard.jsonl" | awk '{print $1}')" = "$LEG_SC_SHA" ] && grep -q '"dry_run":true' "$TESTDIR/leg-dry.out" \
+  && ok "migrate2: --dry-run plans and writes nothing" || bad "migrate2: $(cat "$TESTDIR/leg-dry.out")"
+
+"${LEG_ENV[@]}" node "$ESC" strip-expiry >"$TESTDIR/leg-run.out" 2>&1; LEG_RUN_RC=$?
+BAK_COUNT=$(find "$LEG" -name '*.bak-strip-expiry-*' | wc -l)
+LEFT=$(grep -c -E '"expires' "$LEG/sc/scorecard.jsonl" "$LEG/cap/qualification-evidence.jsonl" "$LEG/cap/pins.jsonl" | grep -v ':0$' || true)
+[ "$LEG_RUN_RC" = "0" ] && [ "$BAK_COUNT" = "3" ] && [ -z "$LEFT" ] \
+  && ok "migrate3: strip-expiry backs up the three stores it rewrites and leaves no expiry key in any of them" \
+  || bad "migrate3: rc=$LEG_RUN_RC backups=$BAK_COUNT left=[$LEFT] out=$(cat "$TESTDIR/leg-run.out")"
+BAK_SC=$(find "$LEG" -name 'scorecard.jsonl.bak-strip-expiry-*' | head -1)
+[ -n "$BAK_SC" ] && [ "$(sha256sum "$BAK_SC" | awk '{print $1}')" = "$LEG_SC_SHA" ] \
+  && ok "migrate4: the scorecard backup is the original bytes" || bad "migrate4: backup missing or altered"
+
+"${LEG_ENV[@]}" node "$ESC" strip-expiry >"$TESTDIR/leg-run2.out" 2>&1
+grep -q '"already_migrated":true' "$TESTDIR/leg-run2.out" && ! find "$LEG" -name '*.bak-strip-expiry-*' | wc -l | grep -q '^[4-9]' \
+  && ok "migrate5: a second run is a no-op (already_migrated, no new backup)" || bad "migrate5: $(cat "$TESTDIR/leg-run2.out")"
+
+# admission of every seat in the fixture, read at a date long after every old `expires`:
+# the claude-haiku reviewer row had a past date (2026-10-14) and three strikes; gpt-5.6-sol
+# reviewer (past date) is qualified; GLM-5.3 reviewer failed; kimi consult (past date) qualified.
+# Pinned from the OLD code's own output on this fixture (base 2ff568412, same --now).
+proj() { # role -> "engine:status:admission:strikes" lines
+  "${LEG_ENV[@]}" node "$ESC" current --role "$1" --now 2026-10-26T00:00:00Z \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const r of JSON.parse(s))console.log([r.engine,r.status,r.observed_status,r.admission_status,r.strikes_since_pass].join(":"))})' | sort | tr '\n' ' '
+}
+PROJ_REV=$(proj reviewer); PROJ_CON=$(proj consult)
+case "$PROJ_REV" in
+  *"gpt-5.6-sol:provisional:qualified:qualified:0"*"GLM-5.3:failed:failed:no_record:0"*|*"GLM-5.3:failed:failed:no_record:0"*"gpt-5.6-sol:provisional:qualified:qualified:0"*) REV_OK=1 ;;
+  *) REV_OK=0 ;;
+esac
+echo "$PROJ_REV" | grep -q "claude-haiku:provisional:qualified:requalify_required:3" || REV_OK=0
+echo "$PROJ_CON" | grep -q "kimi-code-k3:provisional:qualified:qualified:0" || REV_OK=0
+[ "$REV_OK" = "1" ] \
+  && ok "migrate6: seats whose old date had long passed are still qualified after migration, the failed seat is still failed, and the planted 3 strikes survived and now enforce (requalify_required by default)" \
+  || bad "migrate6: reviewer=[$PROJ_REV] consult=[$PROJ_CON]"
+
+# an old `expired` status (the only status the old code ever wrote for a past date) maps to qualified
+LEG2="$TESTDIR/legacy2"; mk_legacy "$LEG2"
+node -e '
+const fs=require("fs");const p=process.argv[1];
+const rows=fs.readFileSync(p,"utf8").trim().split("\n").map(JSON.parse);
+for(const r of rows) if(r.event_id===5) r.status="expired";
+fs.writeFileSync(p,rows.map(r=>JSON.stringify(r)).join("\n")+"\n")' "$LEG2/sc/scorecard.jsonl"
+env ENGINE_SCORECARD_DIR="$LEG2/sc" ENGINE_CAPABILITY_DIR="$LEG2/cap" node "$ESC" strip-expiry >"$TESTDIR/leg2.out" 2>&1
+grep -q '"expired_status_mapped":1' "$TESTDIR/leg2.out" \
+  && env ENGINE_SCORECARD_DIR="$LEG2/sc" ENGINE_CAPABILITY_DIR="$LEG2/cap" node "$ESC" current --role reviewer --now 2026-10-26T00:00:00Z | grep -q '"engine":"claude-haiku".*"observed_status":"qualified"' \
+  && ok "migrate7: an old status 'expired' row becomes qualified (it had qualified, then only its date passed)" \
+  || bad "migrate7: $(cat "$TESTDIR/leg2.out")"
+
+# a legacy evidence record stored in the retired `stale` state migrates (never an error): base only
+# DERIVED stale from the date at query time (capability-evidence.js:1966) and read a stored one as
+# not qualified (engine-scorecard.js:1709-1711), so it maps to degraded and its row to failed.
+LEG4="$TESTDIR/legacy4"; mk_legacy "$LEG4"
+node -e '
+const fs=require("fs");
+const sp=process.argv[1]+"/sc/scorecard.jsonl", ep=process.argv[1]+"/cap/qualification-evidence.jsonl";
+const rows=fs.readFileSync(sp,"utf8").trim().split("\n").map(JSON.parse);
+const ws=fs.readFileSync(ep,"utf8").trim().split("\n").map(JSON.parse);
+for(const id of [141,157]){ // two qualified rows, each anchored to an evidence wrapper
+  const row=rows.find(r=>r.event_id===id); row.evidence.state="stale";
+  if(row.evidence_store) for(const w of ws) if(w.event_id===row.evidence_store.event_id) w.evidence.state="stale";
+}
+fs.writeFileSync(sp,rows.map(r=>JSON.stringify(r)).join("\n")+"\n");
+fs.writeFileSync(ep,ws.map(r=>JSON.stringify(r)).join("\n")+"\n")' "$LEG4"
+L4=(env ENGINE_SCORECARD_DIR="$LEG4/sc" ENGINE_CAPABILITY_DIR="$LEG4/cap")
+"${L4[@]}" node "$ESC" strip-expiry --dry-run >"$TESTDIR/leg4-dry.out" 2>&1; L4_DRY_RC=$?
+"${L4[@]}" node "$ESC" strip-expiry >"$TESTDIR/leg4.out" 2>&1; L4_RC=$?
+L4_STATE=$(node -e 'const fs=require("fs");const rs=fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map(JSON.parse);console.log([141,157].map(i=>{const r=rs.find(x=>x.event_id===i);return r.status+":"+r.evidence.state}).join(" "))' "$LEG4/sc/scorecard.jsonl")
+L4_PROJ=$("${L4[@]}" node "$ESC" current --role reviewer --now 2026-10-26T00:00:00Z | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s).find(x=>x.engine==="gpt-5.6-sol");console.log(r.observed_status+":"+r.admission_status)})')
+[ "$L4_DRY_RC" = "0" ] && grep -q '"stale_state_mapped":2' "$TESTDIR/leg4-dry.out" && [ "$L4_RC" = "0" ] \
+  && [ "$L4_STATE" = "failed:degraded failed:degraded" ] && [ "${L4_PROJ%%:*}" = "failed" ] \
+  && ok "migrate10: an old store holding a stale-state evidence record migrates (stale_state_mapped=2): evidence degraded, row failed, seat not admitted as qualified" \
+  || bad "migrate10: dry_rc=$L4_DRY_RC rc=$L4_RC state=$L4_STATE proj=$L4_PROJ out=$(cat "$TESTDIR/leg4.out") dry=$(cat "$TESTDIR/leg4-dry.out")"
+
+# the same, for a row whose authoritative evidence lives ONLY in the evidence-store wrapper (no embedded
+# copy): the wrapper's stale evidence becomes degraded, so the row must become failed too.
+LEG5="$TESTDIR/legacy5"; mk_legacy "$LEG5"
+node -e '
+const fs=require("fs");
+const sp=process.argv[1]+"/sc/scorecard.jsonl", ep=process.argv[1]+"/cap/qualification-evidence.jsonl";
+const rows=fs.readFileSync(sp,"utf8").trim().split("\n").map(JSON.parse);
+const ws=fs.readFileSync(ep,"utf8").trim().split("\n").map(JSON.parse);
+const row=rows.find(r=>r.event_id===141);
+for(const w of ws) if(w.event_id===row.evidence_store.event_id) w.evidence.state="stale";
+delete row.evidence;
+fs.writeFileSync(sp,rows.map(r=>JSON.stringify(r)).join("\n")+"\n");
+fs.writeFileSync(ep,ws.map(r=>JSON.stringify(r)).join("\n")+"\n")' "$LEG5"
+L5=(env ENGINE_SCORECARD_DIR="$LEG5/sc" ENGINE_CAPABILITY_DIR="$LEG5/cap")
+"${L5[@]}" node "$ESC" strip-expiry >"$TESTDIR/leg5.out" 2>&1; L5_RC=$?
+L5_STATE=$(node -e 'const fs=require("fs");const rs=fs.readFileSync(process.argv[1]+"/sc/scorecard.jsonl","utf8").trim().split("\n").map(JSON.parse);const r=rs.find(x=>x.event_id===141);const ws=fs.readFileSync(process.argv[1]+"/cap/qualification-evidence.jsonl","utf8").trim().split("\n").map(JSON.parse);const w=ws.find(x=>x.event_id===r.evidence_store.event_id);console.log(r.status+":"+w.evidence.state+":"+(r.evidence===undefined?"no-embedded":"embedded"))' "$LEG5")
+[ "$L5_RC" = "0" ] && grep -q '"stale_state_mapped":1' "$TESTDIR/leg5.out" && [ "$L5_STATE" = "failed:degraded:no-embedded" ] \
+  && ok "migrate11: a wrapper-only stale row (no embedded evidence) migrates: wrapper evidence degraded, row failed" \
+  || bad "migrate11: rc=$L5_RC state=$L5_STATE out=$(cat "$TESTDIR/leg5.out")"
+
+# the wrapper is authoritative: an embedded copy that is stale next to a QUALIFIED wrapper must not
+# fail the row; the migrated wrapper equals the plain migration's, the embedded copy equals the wrapper.
+LEG6="$TESTDIR/legacy6"; mk_legacy "$LEG6"
+node -e '
+const fs=require("fs");
+const sp=process.argv[1]+"/sc/scorecard.jsonl";
+const rows=fs.readFileSync(sp,"utf8").trim().split("\n").map(JSON.parse);
+rows.find(r=>r.event_id===141).evidence.state="stale";
+fs.writeFileSync(sp,rows.map(r=>JSON.stringify(r)).join("\n")+"\n")' "$LEG6"
+env ENGINE_SCORECARD_DIR="$LEG6/sc" ENGINE_CAPABILITY_DIR="$LEG6/cap" node "$ESC" strip-expiry >"$TESTDIR/leg6.out" 2>&1; L6_RC=$?
+L6_RES=$(node -e '
+const fs=require("fs");const rd=(d)=>({rows:fs.readFileSync(d+"/sc/scorecard.jsonl","utf8").trim().split("\n").map(JSON.parse),ws:fs.readFileSync(d+"/cap/qualification-evidence.jsonl","utf8").trim().split("\n").map(JSON.parse)});
+const a=rd(process.argv[1]), b=rd(process.argv[2]);
+const ra=a.rows.find(r=>r.event_id===141), rb=b.rows.find(r=>r.event_id===141);
+const wa=a.ws.find(w=>w.event_id===ra.evidence_store.event_id), wb=b.ws.find(w=>w.event_id===rb.evidence_store.event_id);
+console.log([ra.status, wa.evidence.state, JSON.stringify(wa)===JSON.stringify(wb), JSON.stringify(ra.evidence)===JSON.stringify(wa.evidence)].join(":"))' "$LEG6" "$LEG")
+[ "$L6_RC" = "0" ] && grep -q '"stale_state_mapped":0' "$TESTDIR/leg6.out" && [ "$L6_RES" = "qualified:qualified:true:true" ] \
+  && ok "migrate12: embedded stale + wrapper qualified => row stays qualified, wrapper identical to the plain migration, embedded re-sealed equal to the wrapper" \
+  || bad "migrate12: rc=$L6_RC res=$L6_RES out=$(cat "$TESTDIR/leg6.out")"
+
+# evidence ids are content hashes with expires_at inside them: they changed, and nothing dangles
+NEW_EV_IDS=$(node -e 'const fs=require("fs");console.log(fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map(l=>JSON.parse(l).evidence.evidence_id).join(" "))' "$LEG/cap/qualification-evidence.jsonl")
+OLD_EV_IDS=$(node -e 'const fs=require("fs");console.log(fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map(l=>JSON.parse(l).evidence.evidence_id).join(" "))' "$LEG_FIX/qualification-evidence.jsonl")
+DANGLING=0
+for id in $OLD_EV_IDS; do grep -q "$id" "$LEG/sc/scorecard.jsonl" "$LEG/cap/qualification-evidence.jsonl" && DANGLING=1; done
+[ "$NEW_EV_IDS" != "$OLD_EV_IDS" ] && [ "$DANGLING" = "0" ] \
+  && ok "migrate8: every evidence record was re-sealed and no old evidence id is left in the scorecard or the evidence store" \
+  || bad "migrate8: dangling=$DANGLING new=[$NEW_EV_IDS] old=[$OLD_EV_IDS]"
+
+# the same store with a pin carrying expires:null is refused by the pin reader with the migration named
+LEG3="$TESTDIR/legacy3"; mk_legacy "$LEG3"
+env ENGINE_SCORECARD_DIR="$LEG3/sc" ENGINE_CAPABILITY_DIR="$LEG3/cap" node "$ROOT/scripts/engine-capability-state.js" pins --role implementer --store "$LEG3/cap" >"$TESTDIR/leg3.out" 2>&1; LEG3_RC=$?
+[ "$LEG3_RC" != "0" ] && grep -q "strip-expiry" "$TESTDIR/leg3.out" \
+  && ok "migrate9: a pre-migration pin row (expires:null) is refused naming strip-expiry, not silently dropped" \
+  || bad "migrate9: rc=$LEG3_RC out=$(cat "$TESTDIR/leg3.out")"
 
 # =============================================================================
 # v2.34.37 — THE DEFAULT CLOCK IS AN INSTANT, NOT UTC MIDNIGHT.
@@ -643,17 +781,11 @@ const src = artifact.defaults.find((d) => d.row && d.row.evidence
   && Object.keys(PIN).every((k) => d.row[k] === PIN[k]));
 if (!src) { process.stdout.write('NO_FIXTURE'); process.exit(0); }
 
-// Reuse the source administration's own TTL: it already passed the per-role expiry ceiling
-// (MAX_QUALIFIED_TTL_DAYS), whichever role the first qualified default happens to be.
-// A hard-coded 60 days broke once that first default became a 30-day-cap consult seat.
-const srcTtlMs = Date.parse(src.row.evidence.expires_at) - Date.parse(src.row.evidence.issued_at);
-const expires = new Date(Date.parse(issued) + srcTtlMs).toISOString();
 const raw = JSON.parse(JSON.stringify(src.row.evidence));
 for (const derived of ['evidence_id', 'evidence_hash', 'scope_hash', 'identity_hash',
   'grant_identity_hash', 'trial_set_hash']) delete raw[derived];
 raw.issued_at = issued;
 raw.observed_at = issued;
-raw.expires_at = expires;
 for (const trial of raw.trials || []) { if (trial.observed_at) trial.observed_at = issued; }
 const evidence = compileCapabilityEvidence(raw);
 
@@ -666,7 +798,6 @@ fs.writeFileSync(path.join(capDir, 'qualification-evidence.jsonl'),
 const row = JSON.parse(JSON.stringify(src.row));
 row.date = today;
 row.qualified_at = today;
-row.expires = expires.slice(0, 10);
 row.evidence = evidence;
 row.evidence_store = { event_id: 1, producer, transcript_hash: transcriptHash };
 const rowFile = path.join(capDir, 'receipt-row.json');
@@ -730,11 +861,8 @@ wr_sd=$(echo "$SS_SD" | jq_get would_requalify)
 # The default clock must not be re-truncated. `todayMsUtc` (the removed helper)
 # is banned from the WHOLE file — it lived in the argument parsers (nowArgToMs
 # and the three parse*Args sites), which sit ABOVE the deriveStatus admission
-# region this suite otherwise scans, so $ESC_ADMISSION_REGION would miss it and
-# this assertion would be vacuous. The one surviving start-of-day floor,
-# startOfUtcDayMsOf, is confined to computeExpiryWarning, whose right-hand side
-# (`expires`) is contractually date-only and stays a date-vs-date comparison —
-# and p3_2 above already pins that comparison to that function.
+# region this suite otherwise scans, so the whole file is scanned. No start-of-day floor
+# survives either: there is no date-vs-date comparison left in the projection.
 TRUNC_HITS=$(awk '
   /^[[:space:]]*(\/\/|\*|\/\*)/ { next }
   /todayMsUtc\(\)/ { print NR": "$0 }
@@ -742,16 +870,6 @@ TRUNC_HITS=$(awk '
 [ -z "$TRUNC_HITS" ] \
   && ok "instant3: no call to the removed todayMsUtc() helper remains in engine-scorecard.js (a grep for that name only; the behaviour is instant1/instant2)" \
   || bad "instant3: the removed todayMsUtc() helper is called again: $TRUNC_HITS"
-
-# startOfUtcDayMsOf must not throw for a finite ms outside the Date range
-# (new Date(ms).toISOString() throws RangeError there): it hands the value back.
-RANGE_OUT=$(node -e "
-const m = require('$ESC');
-const r = [m.startOfUtcDayMsOf(9e15), m.startOfUtcDayMsOf(-9e15), m.startOfUtcDayMsOf(Date.UTC(2026,7,24,10,0,0))];
-console.log(JSON.stringify(r));" 2>&1)
-[ "$RANGE_OUT" = "[9000000000000000,-9000000000000000,1787529600000]" ] \
-  && ok "instant5: startOfUtcDayMsOf returns out-of-Date-range finite input unchanged instead of throwing, and floors a normal instant" \
-  || bad "instant5: startOfUtcDayMsOf range handling wrong: $RANGE_OUT"
 
 # ...and the same must hold for the shipped Codex mirror, which is a byte copy.
 TRUNC_HITS_MIRROR=$(awk '

@@ -209,7 +209,6 @@ function recordLocal(env, status, effort = 'default') {
     latency: { sample_wall_time_s: 0 },
     status,
     qualified_at: '2026-06-01',
-    expires: '2026-07-01',
   };
   const file = path.join(tmp('row'), 'row.json');
   fs.writeFileSync(file, JSON.stringify(row));

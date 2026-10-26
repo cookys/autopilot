@@ -259,9 +259,6 @@ function normalizeEvidence(
     if (normalized.state !== capabilityState) {
       grantError(`${label}.state does not match capabilityState`);
     }
-    if (Date.parse(normalized.expires_at) <= Date.parse(normalized.observed_at)) {
-      grantError(`${label}.expires_at must be later than observed_at`);
-    }
     return normalized;
   }).sort((left, right) => left.evidence_id.localeCompare(right.evidence_id));
 }
@@ -512,13 +509,6 @@ function validateGrantInputStructure(value, {
         || Date.parse(record.issued_at) > Date.parse(issuedAt)) {
       grantError('evidence issued_at/observed_at cannot be later than the explicit evaluation time');
     }
-    if (['qualified', 'provisional'].includes(capabilityState)
-      && Date.parse(record.expires_at) <= Date.parse(issuedAt)) {
-      grantError(`${capabilityState} evidence must be fresh at the explicit evaluation time`);
-    }
-    if (Date.parse(record.expires_at) < Date.parse(expiresAt)) {
-      grantError('role grant cannot outlive its capability evidence');
-    }
   }
 }
 
@@ -634,10 +624,6 @@ function resolveRoleExecutionGrantCandidate(raw, options = {}) {
         || Date.parse(record.issued_at) > Date.parse(issuedAt)) {
       grantError('evidence issued_at/observed_at cannot be later than the explicit evaluation time');
     }
-    if (['qualified', 'provisional'].includes(capabilityState)
-      && Date.parse(record.expires_at) <= Date.parse(issuedAt)) {
-      grantError(`${capabilityState} evidence must be fresh at the explicit evaluation time`);
-    }
   }
   const ttlMs = Date.parse(expiresAt) - Date.parse(issuedAt);
   if (ttlMs <= 0
@@ -646,9 +632,6 @@ function resolveRoleExecutionGrantCandidate(raw, options = {}) {
       'role grant expiry exceeds the task grant TTL ceiling',
       'GRANT_BROADENS_AUTHORITY',
     );
-  }
-  if (evidence.some((record) => Date.parse(record.expires_at) < Date.parse(expiresAt))) {
-    grantError('role grant cannot outlive its capability evidence');
   }
   const denialReasons = admissionDecision({
     role,

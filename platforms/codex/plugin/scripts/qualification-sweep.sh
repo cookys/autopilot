@@ -70,8 +70,7 @@
 #       "prompt_config_hash": "<sha256 hex>",
 #       "semantic_fingerprint": "<sha256 hex>",
 #       "containment_fingerprint": "<sha256 hex>",
-#       "harness_version": "dispatch-hetero:<short-sha>",
-#       "expires_days": 90
+#       "harness_version": "dispatch-hetero:<short-sha>"
 #     },
 #     "evidence_root": "docs/plans/evidence/<bundle-root>",
 #     "role": "implementer",
@@ -210,7 +209,7 @@ if (data.role !== 'implementer') {
 }
 req(data.corpus, [
   'prompt_config_hash', 'semantic_fingerprint', 'containment_fingerprint',
-  'harness_version', 'expires_days',
+  'harness_version',
 ], 'roster.corpus');
 if (!Array.isArray(data.seats) || data.seats.length === 0) {
   console.error(`qualification-sweep.sh: roster.seats must be a non-empty array: ${rosterPath}`);
@@ -219,7 +218,7 @@ if (!Array.isArray(data.seats) || data.seats.length === 0) {
 const T = '\t';
 const corpus = data.corpus;
 console.log(['CORPUS', corpus.prompt_config_hash, corpus.semantic_fingerprint,
-  corpus.containment_fingerprint, corpus.harness_version, corpus.expires_days,
+  corpus.containment_fingerprint, corpus.harness_version,
   data.evidence_root, data.role].join(T));
 for (const seat of data.seats) {
   req(seat, ['slug', 'runner', 'model', 'family', 'version_source', 'endpoint', 'effort'], 'roster.seats[]');
@@ -233,7 +232,7 @@ if ! ROSTER_LINES="$(node -e "$ROSTER_READER_JS" "$ROSTER")"; then
 fi
 
 CORPUS_LINE="$(printf '%s\n' "$ROSTER_LINES" | head -n 1)"
-IFS=$'\t' read -r _tag PROMPT_HASH SEM_HASH CONTAIN_HASH HARNESS_VERSION EXPIRES_DAYS EVROOT ROLE <<< "$CORPUS_LINE"
+IFS=$'\t' read -r _tag PROMPT_HASH SEM_HASH CONTAIN_HASH HARNESS_VERSION EVROOT ROLE <<< "$CORPUS_LINE"
 
 # shellcheck source=lib/auth-stop.sh
 . "$REPO_ROOT/scripts/lib/auth-stop.sh"
@@ -303,7 +302,7 @@ plan_sweep() {
     echo "    --prompt-config-hash $PROMPT_HASH --semantic-fingerprint $SEM_HASH \\"
     echo "    --containment-fingerprint $CONTAIN_HASH \\"
     echo "    --task-class bounded_implementation --domain repository --language en --tool git_commit \\"
-    echo "    --version-source $vsrc --expires-days $EXPIRES_DAYS \\"
+    echo "    --version-source $vsrc \\"
     if [ "$endpoint" != "-" ] && [ "$endpoint" != "anthropic-native" ] && [ "$runner" = "cc-shim" ]; then
       echo "    --endpoint $endpoint \\"
     fi
@@ -492,7 +491,7 @@ run_seat() { # slug runner model family vsrc endpoint effort
     --prompt-config-hash "$PROMPT_HASH" --semantic-fingerprint "$SEM_HASH" \
     --containment-fingerprint "$CONTAIN_HASH" \
     --task-class bounded_implementation --domain repository --language en --tool git_commit \
-    --version-source "$vsrc" --expires-days "$EXPIRES_DAYS" \
+    --version-source "$vsrc" \
     "${endpoint_args[@]}" \
     --raw-dir "$raw_run" --emit-row \
     > "$bundle/qualify-out.json" 2> "$bundle/qualify-err.log"

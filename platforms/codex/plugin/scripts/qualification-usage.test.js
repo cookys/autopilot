@@ -170,7 +170,7 @@ function legacyRow(extra = {}) {
     quality: { corpus_pass: '10/10', false_pass_critical: 0, specificity: '3/3' },
     capability_score: 0.9,
     cost: { source: 'unknown', usd_per_mtok_input: 0, usd_per_mtok_output: 0, sample_tokens: 0 },
-    latency: { sample_wall_time_s: 0 }, status: 'qualified', qualified_at: '2026-06-30', expires: '2099-01-01',
+    latency: { sample_wall_time_s: 0 }, status: 'qualified', qualified_at: '2026-06-30',
     ...extra,
   };
 }

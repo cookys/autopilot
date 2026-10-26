@@ -38,7 +38,6 @@ const MAX_SNAPSHOT_BYTES = 64 * 1024 * 1024;
 const MAX_PAGES = 100;
 const MAX_MODELS = 20_000;
 const CANDIDATE_PERCENTILE = 0.75;
-const EVIDENCE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const TARGET_DIMENSIONS = Object.freeze({
   intelligence: 'artificial_analysis_intelligence_index',
   coding: 'artificial_analysis_coding_index',
@@ -388,7 +387,6 @@ function buildEvidence(entry, role, version, cohortHash, retrievedAt) {
     identity: buildIdentity(entry),
     issued_at: retrievedAt,
     observed_at: retrievedAt,
-    expires_at: new Date(Date.parse(retrievedAt) + EVIDENCE_TTL_MS).toISOString(),
     methodology: {
       kind: 'external_prior',
       name: 'artificial-analysis-model-prior',
@@ -440,7 +438,6 @@ function buildRetirementEvidence(
     identity: previousEvidence.identity,
     issued_at: retrievedAt,
     observed_at: retrievedAt,
-    expires_at: new Date(Date.parse(retrievedAt) + EVIDENCE_TTL_MS).toISOString(),
     methodology: {
       kind: 'external_prior',
       name: 'artificial-analysis-model-prior',

@@ -224,11 +224,11 @@ STORE_BASE="$TEST_TMP/stores"
 mkdir -p "$STORE_BASE"
 HEX64=$(node -e "process.stdout.write('a'.repeat(64))")
 
-QUAL_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
-FAILED_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"2/10","false_pass_critical":3,"specificity":"1/3"},"capability_score":0.1,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30","expires":"2099-01-01"}'
-MISMATCH_ROW='{"engine":"wrong-model","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
-VA_QUAL='{"engine":"glm-5.2","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
-SUB_QUAL='{"engine":"stand-in-engine-b","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30","expires":"2099-01-01"}'
+QUAL_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}'
+FAILED_ROW='{"engine":"gpt-5.3-codex-spark","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"2/10","false_pass_critical":3,"specificity":"1/3"},"capability_score":0.1,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"failed","qualified_at":"2026-06-30"}'
+MISMATCH_ROW='{"engine":"wrong-model","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}'
+VA_QUAL='{"engine":"glm-5.2","runner":"anthropic-compatible","family":"zhipu","role":"verification_author","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}'
+SUB_QUAL='{"engine":"stand-in-engine-b","runner":"codex","family":"openai","role":"implementer","model_version":"v1","version_source":"manual","corpus_version":"c@1","harness_version":"h@1","runner_version":"rv1","prompt_config_hash":"sha256:x","date":"2026-06-30","quality":{"corpus_pass":"10/10","false_pass_critical":0,"specificity":"3/3"},"capability_score":0.9,"cost":{"source":"manual","usd_per_mtok_input":0,"usd_per_mtok_output":0,"sample_tokens":0},"latency":{"sample_wall_time_s":0},"status":"qualified","qualified_at":"2026-06-30"}'
 
 seed_cap() {
   local store="$1" model="$2" runner="$3" role="$4"
@@ -485,8 +485,7 @@ cat > "$LIVE_PIN" <<'JSON'
     "effort": "high",
     "endpoint": "",
     "reason": "owner ruling 2026-09-11",
-    "operator": "cookys",
-    "expires": null
+    "operator": "cookys"
   },
   "preferred_tuple": {
     "engine": "gpt-5.3-codex-spark",
@@ -614,8 +613,7 @@ cat > "$LIVE_SUB" <<'JSON'
     "effort": "high",
     "endpoint": "",
     "reason": "owner ruling 2026-09-11",
-    "operator": "cookys",
-    "expires": null
+    "operator": "cookys"
   },
   "preferred_tuple": {
     "engine": "gpt-5.3-codex-spark",
@@ -813,7 +811,7 @@ assert_contains "$(cat "$MISS_OUT")" "resolved-live"
 # non-empty string) — silently treating a malformed field as "no pin".
 printf '%s\n' '{
   "role": "implementer",
-  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys", "expires": null},
+  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys"},
   "preferred_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "effective_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "substitution_reason": false,
@@ -835,7 +833,7 @@ assert_contains "$(cat "$SUBFALSE_OUT")" "substitution_reason"
 # reason (no match) instead of being refused as malformed input up front.
 printf '%s\n' '{
   "role": "implementer",
-  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys", "expires": null},
+  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys"},
   "preferred_tuple": {"engine": "", "runner": "codex", "effort": "high", "endpoint": ""},
   "effective_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "substitution_reason": null,
@@ -855,7 +853,7 @@ assert_contains "$(cat "$EMPTYENG_OUT")" "preferred_tuple"
 # pending_revocation not an array
 printf '%s\n' '{
   "role": "implementer",
-  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys", "expires": null},
+  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys"},
   "preferred_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "effective_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "substitution_reason": null,
@@ -875,7 +873,7 @@ assert_contains "$(cat "$PENDBAD_OUT")" "pending_revocation"
 # Missing substitution_reason key entirely (not merely falsy — absent).
 printf '%s\n' '{
   "role": "implementer",
-  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys", "expires": null},
+  "operator_pin": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "role": "implementer", "effort": "high", "endpoint": "", "reason": "owner ruling 2026-09-11", "operator": "cookys"},
   "preferred_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "effective_tuple": {"engine": "gpt-5.3-codex-spark", "runner": "codex", "effort": "high", "endpoint": ""},
   "pending_revocation": []

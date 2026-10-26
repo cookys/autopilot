@@ -47,9 +47,8 @@ requires the consult seat to be qualified, or vice versa (evidence binds to `{en
 role}`, and a hidden inter-role dependency would make one seat's admission turn on evidence about
 a different job).
 
-Qualification-row expiry is advisory only — an expired-but-not-demoted row still admits, with a
-stderr warning. Demotion runs through strike accrual to `requalify_required` standing.
-Override-file expiry is a separate, still-enforced contract.
+A qualification row has no expiry. Demotion runs through strike accrual to `requalify_required`
+standing. Override-file expiry is a separate, still-enforced contract.
 
 ## The exam construct
 

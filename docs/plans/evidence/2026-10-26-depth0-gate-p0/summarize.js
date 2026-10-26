@@ -26,5 +26,6 @@ for (const p of fs.readdirSync(OUT)) {
   }
 }
 const s = { total_cost_usd: spend.total, cap_usd: cap, cap_reached: spend.total >= cap, cases };
+try { s.note = fs.readFileSync(path.join(OUT, 'note.txt'), 'utf8').trim(); } catch (e) {}
 fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify(s, null, 2) + '\n');
 process.stdout.write(JSON.stringify(s, null, 2) + '\n');

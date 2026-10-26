@@ -30,8 +30,8 @@ run_case() {
   local probe="$1" label="$2" shape="$3" armed="$4" armsid="$5" events="$6" prompt="$7" plugin="${8:-0}"
   local dir="$OUT/$probe/$label"; mkdir -p "$dir"
   # strict cap: remaining = cap - spent; <= 0 means no launch; otherwise this call's budget is min(per-call, remaining)
-  local budget; budget="$("$NODE" -e 'const r=parseFloat(process.argv[2])-parseFloat(process.argv[1]);const b=Math.min(parseFloat(process.argv[3]),r);console.log(r<=1e-9?"0":b.toFixed(4))' "$(spent)" "$MAXUSD" "$PER_CALL_USD")"
-  if [ "$budget" = 0 ]; then
+  local budget; budget="$("$NODE" -e 'const r=parseFloat(process.argv[2])-parseFloat(process.argv[1]);const b=Math.floor(Math.min(parseFloat(process.argv[3]),r)*1e4+1e-6)/1e4;console.log(b>0?b.toFixed(4):"0")' "$(spent)" "$MAXUSD" "$PER_CALL_USD")"
+  if [ "$budget" = 0 ]; then   # floor to 4 decimals: never above the remaining cap; 0 after flooring = no launch
     echo "{\"skipped\":true,\"reason\":\"cumulative spend $(spent) leaves no budget under PROBE_MAX_USD $MAXUSD\"}" > "$dir/skipped.json"
     echo "SKIP $probe/$label (cap)"; return 0
   fi

@@ -11,7 +11,8 @@ const last = results[results.length - 1];
 const cost = last && typeof last.total_cost_usd === 'number' ? last.total_cost_usd : 0;
 const blocks = hooks.filter((h) => h.decision === 'block');
 const stopCalls = hooks.filter((h) => h.event === 'Stop'), subCalls = hooks.filter((h) => h.event === 'SubagentStop');
-const texts = stream.filter((e) => e.type === 'assistant').map((e) => JSON.stringify(e.message && e.message.content));
+// assistant text blocks only: message.content[] items of type text, field path message.content[].text
+const texts = stream.filter((e) => e.type === 'assistant').flatMap((e) => ((e.message && e.message.content) || []).filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text));
 const idxBlock = hooks.findIndex((h) => h.decision === 'block');
 const refired = idxBlock >= 0 && hooks.slice(idxBlock + 1).some((h) => h.event === hooks[idxBlock].event && h.stdin && h.stdin.stop_hook_active === true);
 const continued = idxBlock >= 0 && (texts.some((t) => /ALPHA/.test(t)) || refired);
@@ -28,11 +29,16 @@ const o = {
 };
 // subagent id comparison
 const hookAgentIds = [...new Set(subCalls.map((h) => h.stdin && h.stdin.agent_id).filter(Boolean))];
-const resultLines = stream.filter((e) => e.type === 'user').map((e) => JSON.stringify(e));
-const agentToolIds = []; for (const l of resultLines) { for (const m of l.matchAll(/agentId[\\":\s]+([0-9a-zA-Z]+)/g)) agentToolIds.push(m[1]); }
+// Agent tool-result id: only the structured field tool_use_result.agentId of a user event whose message.content has a
+// tool_result answering an Agent tool_use (ids of those tool_use blocks come from assistant message.content[]), and the
+// value must look like a real agent id (a + 16 hex). Free text is never searched.
+const agentUseIds = new Set(stream.filter((e) => e.type === 'assistant').flatMap((e) => ((e.message && e.message.content) || []).filter((b) => b && b.type === 'tool_use' && b.name === 'Agent').map((b) => b.id)));
+const AGENT_ID = /^a[0-9a-f]{16}$/;
+const agentToolIds = stream.filter((e) => e.type === 'user' && e.tool_use_result && typeof e.tool_use_result.agentId === 'string' && AGENT_ID.test(e.tool_use_result.agentId)
+  && ((e.message && e.message.content) || []).some((b) => b && b.type === 'tool_result' && agentUseIds.has(b.tool_use_id))).map((e) => e.tool_use_result.agentId);
 o.hook_agent_ids = hookAgentIds; o.tool_result_agent_ids = [...new Set(agentToolIds)];
 o.agent_id_equal = hookAgentIds.length > 0 && o.tool_result_agent_ids.length > 0 ? hookAgentIds.some((x) => o.tool_result_agent_ids.includes(x)) : null;
 o.parent_session_in_subagent_hook = subCalls.length ? subCalls.every((h) => h.stdin && h.stdin.session_id === (init && init.session_id)) : null;
-o.plugin_hook_events_seen = stream.filter((e) => e.type === 'system' && /hook/.test(e.subtype || '')).length;
+o.plugin_hook_events_seen = stream.filter((e) => e.type === 'system' && (e.subtype || '').startsWith('hook_')).length;
 fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify(o, null, 2) + '\n');
 process.stdout.write(JSON.stringify(o) + '\n');

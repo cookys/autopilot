@@ -47,4 +47,13 @@ ck "crash without result event is charged its budget (0.15), second call gets 0.
 # red control: with the cap lifted to 100 the same 1.2 USD/call fake is called 8 times (so the 1-call result above is the cap's doing)
 OUT="$T/o6" PROBE_MAX_USD=100 PROBE_CLAUDE_BIN="$FAKE" PROBE_CREDS_SRC="$T/creds.json" FAKE_LOG="$T/f6.log" FAKE_COST=1.2 bash "$HERE/run-all.sh" > /dev/null 2>&1
 ck "red control: cap 100 -> 8 claude calls" '[ "$(wc -l < "$T/f6.log")" = 8 ]'
+# floor, never round up: remaining 0.00006 -> no launch; remaining 0.12345 -> budget 0.1234
+mkdir -p "$T/o7" "$T/o8"; echo '{"total":0.99994,"runs":{"x":0.99994}}' > "$T/o7/spend.json"; echo '{"total":0.87655,"runs":{"x":0.87655}}' > "$T/o8/spend.json"
+OUT="$T/o7" PROBE_CLAUDE_BIN="$FAKE" PROBE_CREDS_SRC="$T/creds.json" FAKE_LOG="$T/f7.log" bash "$HERE/probe.sh" b > /dev/null 2>&1
+ck "floor: remaining 0.00006 does not launch (0 claude calls)" '[ ! -s "$T/f7.log" ]'
+OUT="$T/o8" PROBE_CLAUDE_BIN="$FAKE" PROBE_CREDS_SRC="$T/creds.json" FAKE_LOG="$T/f8.log" FAKE_COST=0.001 bash "$HERE/probe.sh" b > /dev/null 2>&1
+ck "floor: remaining 0.12345 gives --max-budget-usd 0.1234" 'node -e "const l=require(\"fs\").readFileSync(process.argv[1],\"utf8\").trim().split(\"\n\").map(JSON.parse);const a=l[0].argv;process.exit(a[a.indexOf(\"--max-budget-usd\")+1]===\"0.1234\"?0:1)" "$T/f8.log"'
+# red control for floor: toFixed(4) of 0.00006 is 0.0001 (would launch above the remaining cap)
+ck "red control: toFixed(4) would have rounded 0.00006 up to 0.0001" '[ "$(node -e "console.log((0.00006).toFixed(4))")" = 0.0001 ]'
+ck "analyze regression + red control (test-analyze.js)" 'node "$HERE/test-analyze.js" > "$T/ta.txt" 2>&1 || { cat "$T/ta.txt"; false; }'
 echo "scratch: $T"; exit $fail

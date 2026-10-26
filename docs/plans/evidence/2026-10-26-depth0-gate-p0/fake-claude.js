@@ -36,11 +36,11 @@ const msg = (t) => ({ type: 'assistant', session_id: sid, message: { role: 'assi
 emit({ type: 'system', subtype: 'init', session_id: sid, model: 'fake-haiku' });
 let text = 'OK';
 if (/Agent tool/.test(prompt)) {
-  const aid = 'a' + Math.random().toString(16).slice(2, 18);
+  const aid = 'a' + require('crypto').randomBytes(8).toString('hex');
   emit({ type: 'assistant', session_id: sid, message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_fake', name: 'Agent', input: { prompt: 'DONE' } }] } });
   let b = runHooks('SubagentStop', { agent_id: aid, agent_type: 'general-purpose' });
   if (b) runHooks('SubagentStop', { agent_id: aid, agent_type: 'general-purpose', stop_hook_active: true });
-  emit({ type: 'user', session_id: sid, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_fake', content: [{ type: 'text', text: 'DONE\nagentId: ' + aid }] }] } });
+  emit({ type: 'user', session_id: sid, tool_use_result: { status: 'completed', agentId: aid }, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_fake', content: [{ type: 'text', text: 'DONE\nagentId: ' + aid }] }] } });
   text = 'FINISHED';
 }
 emit(msg(text));

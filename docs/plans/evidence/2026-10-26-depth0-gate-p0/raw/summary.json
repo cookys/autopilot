@@ -1,5 +1,5 @@
 {
-  "total_cost_usd": 0.025261945,
+  "total_cost_usd": 0.025261944999999997,
   "cap_usd": 1,
   "cap_reached": false,
   "cases": {
@@ -26,7 +26,6 @@
         "a1b4eed44e831adb8"
       ],
       "tool_result_agent_ids": [
-        "below",
         "a1b4eed44e831adb8"
       ],
       "parent_session_in_subagent_hook": true,
@@ -365,5 +364,5 @@
       "cost_usd": 0.00140693
     }
   },
-  "note": "merged: b and c from the first paid run, a from the rerun (first-run a replaced); total here is the sum of these 8 cases. Two-run spend including the replaced first-run a: 0.0433 USD (rerun 0.0165)"
+  "note": "merged: b and c from the first paid run, a from the rerun (first-run a replaced); run.json files regenerated with the fixed analyze.js. Two-run spend including the replaced first-run a: 0.0433 USD (rerun 0.0165)"
 }

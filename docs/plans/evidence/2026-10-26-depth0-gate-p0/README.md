@@ -19,7 +19,9 @@ Plan: `docs/plans/2026-10-26-depth0-per-turn-gate.md` section 5, row P0, and sec
 
 (a) loads the plugin through `--plugin-dir`. Basis: the 2026-10-23 precedent control run used `--plugin-dir <checkout>` on CLI 2.1.309 and its trace listed the plugin Stop hooks (`docs/plans/evidence/2026-10-23-per-turn-gate-p0/README.md`, "Step 0 isolation"); the official page says plugin hooks also run inside subagents (below). Limit: a user-installed plugin (marketplace) is not the same load path as `--plugin-dir`; probe c uses a user-level settings hook as the stand-in for "something in the user config loads", and does not claim the user's real plugins.
 
-Limits: c uses first-party auth, so a cc-shim endpoint's own behavior is not exercised. Every call carries `--model haiku --max-budget-usd 0.15`. Strict cumulative cap `PROBE_MAX_USD` (default 1.0): before each call the remaining budget is cap minus spent; if it is zero or less the case is written `skipped.json` and reported "not run", otherwise `--max-budget-usd` is min(0.15, remaining). Spend is the last result event's `total_cost_usd`; a call with no result event (crash) is charged its full budget.
+Limits: c uses first-party auth, so a cc-shim endpoint's own behavior is not exercised. Every call carries `--model haiku --max-budget-usd 0.15`. Strict cumulative cap `PROBE_MAX_USD` (default 1.0): before each call the remaining budget is cap minus spent; `--max-budget-usd` is min(0.15, remaining) **floored** (never rounded up) to 4 decimals, and if that is 0 the case is written `skipped.json` and reported "not run". Spend is the last result event's `total_cost_usd`; a call with no result event (crash) is charged its full budget.
+
+Evidence limit on isolation: `meta.json` of the paid runs does not record the config dir's file list, so "the config dir held only `.credentials.json`" cannot be re-derived from `raw/`. It rests on the assertion in `probe.sh` before launch (the run aborts if the seeded dir holds anything else) and on the dry tests (`verify-dry.sh` checks the fake claude's observed file list); it is not raw evidence.
 
 Safety: the real `~/.claude` is never handed to a child. Native calls get a mktemp `CLAUDE_CONFIG_DIR` seeded with only `.credentials.json` (asserted before launch for every native case, probe a included: the throwaway hooks reach it through `--settings`, never through a file in the config dir); HOME is a mktemp dir; the credentials file is only copied. Without `PROBE_PAID=1` (or a fake `PROBE_CLAUDE_BIN`) the scripts refuse to start `claude`.
 
@@ -44,12 +46,12 @@ Findings beyond the table: the SubagentStop stdin does contain `cwd` (the 2026-1
 - The throwaway hook blocked **only SubagentStop**, once (`a_armed`; reason text ALPHA). It is the only hook in either case whose response carries `decision: block` on a Stop or SubagentStop event.
 - The plugin's **Stop hooks did not block** in either case (no Stop or SubagentStop hook response other than the throwaway one carried a block or exit code 2).
 - The plugin blocked something else: **PreToolUse:Agent**. In both cases the first Agent calls were denied (3 denials per case): `dispatch-model-guard` (no model specified / prompt line 1 must match `Engine: haiku`) and `subagent-budget` (brief has no valid `Lane:` line). The model re-issued the call with a corrected brief header until it passed. Those denials come from plugin hooks (`PreToolUse:Agent`, 15 starts per case), not from the throwaway hook, and they happen before any subagent exists.
-- The first Stop in each trace, `Stop:cli:allow(event-not-gated)` before the SubagentStop line, is the **main agent's own turn end while the subagent was still running**: in the rerun the Agent call was launched in the background (`is_backgrounded` true in `task_started`), and the hook's `last_assistant_message` reads "The subagent is still running in the background, so I can't reply FINISHED yet." The main agent stopped (allowed, since `P0_ONLY=SubagentStop`), the subagent finished afterwards (SubagentStop block, then allow with `stop_hook_active` true), and the main agent got a second turn and ended with a second Stop (allowed). The first-run trace had a foreground subagent and a single Stop. So the number of main-agent Stop events around a subagent varies run to run; a gate keyed on `(session_id, agent_id)` for SubagentStop does not depend on it.
+- Event order differs between the two cases (from `raw/a/*/hook.jsonl`). `a_armed`: `Stop:allow(event-not-gated)` → `SubagentStop:block` → `SubagentStop:allow(stop_hook_active)` → `Stop:allow(event-not-gated)`. Its first Stop is the main agent's own turn end while the subagent was still running: the Agent call was launched in the background (`is_backgrounded` true in `task_started`) and the hook's `last_assistant_message` reads "The subagent is still running in the background, so I can't reply FINISHED yet."; the subagent then finished (block, then allow with `stop_hook_active` true) and the main agent ended with a second Stop. `a_unarmed`: `SubagentStop:allow(unarmed)` → `Stop:allow(unarmed)`, only one of each (the subagent finished first, then the main agent stopped). The first-run `a_armed` trace (replaced) had a foreground subagent and a single Stop. So the number and order of main-agent Stop events around a subagent varies between runs; a gate keyed on `(session_id, agent_id)` for SubagentStop does not depend on it.
 - Note on model behavior: with the block reason "reply ALPHA" the subagent answered ALPHA instead of DONE, which is the continuation evidence.
 
 ## Limits
 
-- One short session per case, model haiku only; trivial prompts. Nothing here covers long sessions, parallel subagents, background subagents, or other models.
+- One short session per case, model haiku only; trivial prompts. Nothing here covers long sessions, parallel subagents, other models, or a controlled foreground-versus-background comparison: a background subagent was observed once (`a_armed` rerun, `is_backgrounded` true) and the other subagent runs (`a_unarmed` rerun, first-run a) were not marked background; no case was designed to force either mode.
 - `--plugin-dir` is not a marketplace install; a user-installed plugin may load differently.
 - The cc-shim shapes ran with first-party auth, not a cc-shim endpoint; the user-level hook stands in for "user config loads" and says nothing about the user's real plugins.
 - The unarmed worker is simulated by the hook (env var or session id mismatch), not by the real rail.
@@ -62,6 +64,20 @@ Findings beyond the table: the SubagentStop stdin does contain `cwd` (the 2026-1
 - "Hooks from settings files, managed policy settings, and plugins also run inside subagents"; the `agent_id` common field identifies the subagent.
 - Not read: the Stop section (the `stop_hook_active` definition) and the last 82268 characters. The documented example `cwd` is present in the SubagentStop input, which contradicts the 2026-10-21 captured line that had no `cwd`; probe a records which is true.
 - The docs do not say that the `agent_id` in the Agent tool result equals the hook `agent_id`; probe a measures it.
+
+## Agent-id extraction (analyze.js) and the scan of loose matches
+
+`tool_result_agent_ids` comes only from the structured field `tool_use_result.agentId` of a user event whose `message.content[]` has a `tool_result` answering an Agent `tool_use` (ids taken from assistant `message.content[]`), and the value must match `^a[0-9a-f]{16}$`. The earlier whole-line regex also caught the word "below" from the tool-result text ("the agentId below"). `test-analyze.js` runs on the recorded `raw/a/a_armed` trace: the list must be exactly `["a1b4eed44e831adb8"]` (green), the old matcher must also find `below` (red control), and a free-text "agentId: ..." in a non-tool-result message is ignored.
+
+Scan of every place in `analyze.js` and `summarize.js` that matched a field by pattern over JSON text:
+
+| Location | Before | After |
+|---|---|---|
+| `analyze.js` agent ids | regex over `JSON.stringify(user event)` | field path `tool_use_result.agentId` plus tool_use_id link plus id format |
+| `analyze.js` ALPHA continuation | `/ALPHA/` over `JSON.stringify(message.content)` (also matched tool_use inputs) | `message.content[]` items of type `text`, field `.text` |
+| `analyze.js` plugin hook event count | `/hook/` anywhere in `subtype` | `subtype` starts with `hook_` |
+| `analyze.js` init, result, hooks, decisions | already field reads (`e.type`, `e.subtype`, `h.decision`, `h.stdin.*`) | unchanged |
+| `summarize.js` | `/_armed$/` on the case directory name (a label this tooling writes) and field reads of `run.json` | unchanged (name is not JSON text) |
 
 ## Dry-run check (no cost)
 

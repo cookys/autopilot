@@ -1169,11 +1169,13 @@ export type ResidueView = {
   auto_ran_at: string | null; auto_removed_count: number | null; auto_archived_count: number | null
 }
 // the producer's own list of what a person must act on (path, branch or ref names the target); at most 20 entries are read
+const isBusyEntry = (e: Record<string, unknown>): boolean => typeof e.class === 'string' && e.class.trim().toLowerCase() === 'busy'
 function readNeedsHuman(list: unknown): NeedsHumanEntry[] {
   const rows: NeedsHumanEntry[] = []
   if (!Array.isArray(list)) return rows
   for (const e of list) {
     if (!isObject(e)) continue
+    if (isBusyEntry(e)) continue // a worktree a process uses is not residue: dropped before any row, count or button exists
     const target = str(e.path) ?? str(e.branch) ?? str(e.ref)
     if (target === null) continue
     rows.push({
@@ -1194,9 +1196,10 @@ export function readResidue(text: string | null, projectKey: string): ResidueVie
   const by: Record<string, number> = {}
   if (isObject(v.by_class)) for (const k of Object.keys(v.by_class)) if (isCount(v.by_class[k])) by[k] = v.by_class[k] as number
   const rows = readNeedsHuman(v.needs_human)
+  const busy = Array.isArray(v.needs_human) ? v.needs_human.filter(e => isObject(e) && isBusyEntry(e)).length : 0
   return {
     reapable: v.reapable_worktrees, by_class: by, at: str(v.at),
-    needs_human_count: isCount(v.needs_human_count) ? v.needs_human_count : 0,
+    needs_human_count: isCount(v.needs_human_count) ? Math.max(0, v.needs_human_count - busy) : 0,
     needs_human_bytes: isCount(v.needs_human_bytes) ? v.needs_human_bytes : null,
     needs_human: rows, auto_ran_at: str(v.auto_ran_at),
     auto_removed_count: isCount(v.auto_removed_count) ? v.auto_removed_count : null,

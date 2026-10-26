@@ -683,15 +683,26 @@ function parseSchema2Marker(file) {
 
 // ------------------------------------------------------------------ liveness and campaign signals
 // worktreeInUse: THE single definition of "a process is using this worktree", shared by every path that can delete
-// one (scan classification, needs-human list, manual reap, auto reap, close-session). A process uses a worktree
-// when its cwd, its executable (/proc/<pid>/exe) or any file mapped into it (/proc/<pid>/maps) is inside.
-// exe and maps matter because cwd alone misses the long-running case: the fleet hub's node runs with its cwd
-// elsewhere but loads its .ts sources from the worktree (a mapped or executed file); removing the directory
-// breaks its next restart. Unreadable /proc is UNKNOWN, and unknown is treated as in use (never cleanable):
-// a missing/empty proc root, or no process at all whose cwd can be read (a sandbox hiding /proc). A single
-// pid that is unreadable (permission: non-dumpable system processes such as systemd --user, sshd-session,
+// one (scan classification, needs-human list, manual reap, auto reap, close-session). Signals read per process
+// (scan table, class "a process depends on a directory"):
+//   cwd            /proc/<pid>/cwd       the process stands in it
+//   exe            /proc/<pid>/exe       the binary itself lives there
+//   maps           /proc/<pid>/maps      a file mmap'd from there (libraries, a node binary copy, JIT'd sources)
+//   cmdline        /proc/<pid>/cmdline   every argument taken as a path (absolute, or relative to the process's cwd;
+//                                        `--opt=/path` too), realpath'd. This is the hub case: `node <worktree>/x.js`
+//                                        with the cwd elsewhere has the SYSTEM node as exe, and the script is read then
+//                                        closed, so neither exe, maps nor fd shows it; only the argument does.
+//   fd             /proc/<pid>/fd/*      a file held open there
+//   root           /proc/<pid>/root      a chroot into it
+// NOT read: the environment (/proc/<pid>/environ). PWD/OLDPWD/NODE_PATH style values are inherited from the parent
+// shell and are routinely stale (every shell started from a since-removed worktree carries it), so they would flag
+// processes that no longer depend on the directory, while the loads that do matter are already seen via cmdline,
+// maps and fd. The sweep's own pid is skipped for cmdline and fd only (its arguments name the target worktree).
+// Unreadable /proc is UNKNOWN, and unknown is treated as in use (never cleanable): a missing or empty proc root, or
+// NO item of NO pid readable at all (a sandbox hiding /proc). One readable item anywhere means the table is
+// readable; a single pid that is unreadable (non-dumpable system processes such as systemd --user, sshd-session,
 // ssh-agent are always EACCES for their own uid) is skipped, otherwise every host would be permanently "busy".
-// The proc root is injectable (AUTOPILOT_RESIDUE_PROC_ROOT) so tests can simulate an unreadable /proc.
+// The proc root is injectable (AUTOPILOT_RESIDUE_PROC_ROOT) so tests can simulate an unreadable or odd /proc.
 function procRootDir() { return process.env.AUTOPILOT_RESIDUE_PROC_ROOT || '/proc'; }
 // One pass over /proc, shared by every worktree of a scan: null when unreadable, else { items: [{pid, via, file}] }.
 function readProcUse() {
@@ -702,15 +713,43 @@ function readProcUse() {
   const items = [];
   let readable = 0;
   const clean = (p) => p.replace(/ \(deleted\)$/, '');
+  const real = (p) => { try { return fs.realpathSync(p); } catch { return p; } };
   for (const pid of pids) {
-    for (const via of ['cwd', 'exe']) {
-      try { items.push({ pid: Number(pid), via, file: clean(fs.readlinkSync(`${root}/${pid}/${via}`)) }); if (via === 'cwd') readable++; } catch { /* gone, or not readable by us */ }
+    const me = Number(pid) === process.pid;
+    const add = (via, file) => items.push({ pid: Number(pid), via, file });
+    let cwd = null;
+    for (const via of ['cwd', 'exe', 'root']) {
+      try {
+        const t = clean(fs.readlinkSync(`${root}/${pid}/${via}`)); readable++;
+        if (via === 'cwd') cwd = t;
+        if (via !== 'root' || t !== '/') add(via, t);
+      } catch { /* gone, or not readable by us */ }
     }
     try {
       for (const line of fs.readFileSync(`${root}/${pid}/maps`, 'utf8').split('\n')) {
         const i = line.indexOf('/');
-        if (i > 0) items.push({ pid: Number(pid), via: 'maps', file: clean(line.slice(i).trim()) });
+        if (i > 0) add('maps', clean(line.slice(i).trim()));
       }
+      readable++;
+    } catch { /* gone, or not readable by us */ }
+    if (me) continue;
+    try {
+      const args = fs.readFileSync(`${root}/${pid}/cmdline`, 'utf8').split('\0').filter((x) => x !== '');
+      readable++;
+      for (const arg of args) {
+        const cands = [arg]; const eq = arg.indexOf('=');
+        if (eq > 0 && arg.startsWith('-')) cands.push(arg.slice(eq + 1));
+        for (const c of cands) {
+          if (c.startsWith('/')) add('cmdline', real(c));
+          else if (cwd !== null && c !== '' && !c.startsWith('-')) add('cmdline', real(path.resolve(cwd, c)));
+        }
+      }
+    } catch { /* gone, or not readable by us */ }
+    try {
+      for (const fd of fs.readdirSync(`${root}/${pid}/fd`)) {
+        try { const t = clean(fs.readlinkSync(`${root}/${pid}/fd/${fd}`)); if (t.startsWith('/')) add('fd', t); } catch { /* closed meanwhile */ }
+      }
+      readable++;
     } catch { /* gone, or not readable by us */ }
   }
   return readable === 0 ? null : { items };

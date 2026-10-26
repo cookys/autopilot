@@ -315,16 +315,20 @@ test('cleanup buttons: one per clearable worktree plus one for all of them, in t
   // a surface without buttons keeps the commands
   expect(hyg(snapOf(REAL_RESIDUE, REAL_LOAD))).toEqual(GOLDEN_ZH_76)
 })
-test('cleanup buttons: a worktree class `busy` (a process uses it) gets no button and is not a clear target; the same entry as clean-integrated does', () => {
+test('busy: a worktree class `busy` (a process uses it) is dropped before any panel row, count or button exists; the same entry as clean-integrated is drawn', () => {
   const busy = entry({ class: 'busy', path: '/w/hub-app', reason: 'in use by pid 7 (cwd: /w/hub-app)', command: null })
   const free = entry({ class: 'clean-integrated', path: '/w/hub-app', command: null })
-  const ids = (e: object): string[] => pressIds(withButtons(snapOf(resWith([e]), null)))
-  expect(ids(busy).some(i => i.includes('/w/hub-app'))).toBe(false)
+  const view = (e: object) => readResidue(JSON.stringify(resWith([e])), KEY)!
+  expect(view(busy).needs_human.length).toBe(0)
+  expect(view(busy).needs_human_count).toBe(0)
+  const rows = (e: object): string[] => hyg(snapOf(resWith([e]), null))
+  expect(rows(busy).some(l => l.includes('hub-app'))).toBe(false)
+  expect(pressIds(withButtons(snapOf(resWith([busy]), null))).some(i => i.includes('/w/hub-app'))).toBe(false)
   expect(cleanTargets(snapOf(resWith([busy]), null).detail).worktrees.length).toBe(0)
-  expect(ui.residueKindOf('busy')).toBe('live')
-  // negative control: the identical entry classed clean-integrated is offered a button
-  expect(ids(free).some(i => i === 'clean:/w/hub-app')).toBe(true)
-  expect(cleanTargets(snapOf(resWith([free]), null).detail).worktrees.length).toBe(1)
+  // negative control: the identical entry classed clean-integrated is drawn, counted and offered a button
+  expect(view(free).needs_human.length).toBe(1)
+  expect(rows(free).some(l => l.includes('hub-app'))).toBe(true)
+  expect(pressIds(withButtons(snapOf(resWith([free]), null))).some(i => i === 'clean:/w/hub-app')).toBe(true)
 })
 test('cleanup buttons: with no 待決 card at all the buttons are still drawn and no command is printed under a clearable entry (2026-10-16 report); a surface without the decide view prints them', () => {
   const s = snapOf(REAL_RESIDUE, REAL_LOAD)

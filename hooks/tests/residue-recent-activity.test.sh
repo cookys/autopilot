@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # residue-recent-activity.test.sh — a brand-new clean worktree (0 commits, branch at the integration ref) looks exactly like a merged one.
+# (the JSON reader gets the path through the environment, not argv: an argument naming the worktree on a concurrently running process is, correctly, an in-use signal)
 # It must not be listed as clearable and `reap --yes` must not remove it until its on-disk activity is older than the window (2026-10-16 incident).
 . "$(dirname "$0")/lib.sh"
 unset AUTOPILOT_RESIDUE_RECENT_HOURS
@@ -11,8 +12,8 @@ G init -q -b develop; echo a > "$SBX/a.txt"; G add a.txt; G commit -q -m base
 BASE="$(G rev-parse HEAD)"
 WT="$TEST_TMP/wt-fresh"
 G worktree add -q "$WT" -b fresh "$BASE"
-listed() { node "$SCRIPT" scan --repo "$SBX" --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log((j.needs_human||[]).filter(e=>e.path===process.argv[1]).map(e=>e.class).join(","))})' "$WT"; }
-class_of() { node "$SCRIPT" scan --repo "$SBX" --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log((j.worktrees||[]).filter(e=>e.path===process.argv[1]).map(e=>e.class).join(","))})' "$WT"; }
+listed() { node "$SCRIPT" scan --repo "$SBX" --json | WTP="$WT" node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log((j.needs_human||[]).filter(e=>e.path===process.env.WTP).map(e=>e.class).join(","))})'; }
+class_of() { node "$SCRIPT" scan --repo "$SBX" --json | WTP="$WT" node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log((j.worktrees||[]).filter(e=>e.path===process.env.WTP).map(e=>e.class).join(","))})'; }
 
 # fresh: not clearable, not removed
 assert_eq "$(listed)" "" "fresh empty worktree is not listed as clearable"
@@ -38,7 +39,7 @@ WT2="$TEST_TMP/wt-reflog-only"
 G worktree add -q "$WT2" -b reflogonly "$BASE"
 ADMIN2="$(git -C "$WT2" rev-parse --absolute-git-dir)"
 touch -d "@$OLD" "$WT2" "$ADMIN2/HEAD" "$ADMIN2/index" "$ADMIN2/logs/HEAD" 2>/dev/null
-class_of2() { node "$SCRIPT" scan --repo "$SBX" --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log((j.worktrees||[]).filter(e=>e.path===process.argv[1]).map(e=>e.class+"|"+e.reason).join(","))})' "$WT2"; }
+class_of2() { node "$SCRIPT" scan --repo "$SBX" --json | WTP="$WT2" node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log((j.worktrees||[]).filter(e=>e.path===process.env.WTP).map(e=>e.class+"|"+e.reason).join(","))})'; }
 assert_eq "$(class_of2 | cut -d'|' -f1)" "live" "only a new first reflog line still classes the worktree as in use"
 case "$(class_of2)" in *"recent activity"*) __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1));; *) fail "live reason lost its recent-activity text";; esac
 # negative control: the same worktree with the reflog line aged too is clearable

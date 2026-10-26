@@ -105,7 +105,81 @@ sleep 0.3
 reap_one >/dev/null
 [ -d "$WT" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "late: reap must re-check and keep the directory"
 
+# --- 5b. node script run by absolute path with the cwd outside (the hub case): exe is the system node, the
+# script was read and closed, so only /proc/<pid>/cmdline names the worktree ---
+new_case node
+printf 'setTimeout(()=>{}, 300000)\n' > "$WT/x.js"; printf 'x.js\n' >> "$REPO/.git/info/exclude"
+(cd "$TEST_TMP" && exec node "$WT/x.js") & PIDS+=($!)
+sleep 0.5
+S="$(scan)"
+assert_eq "$(class_of "$S")" "busy" "node abs: class busy with cwd outside"
+assert_contains "$(wt_row "$S" "$WT")" "cmdline" "node abs: reason names cmdline"
+reap_one >/dev/null
+[ -d "$WT" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "node abs: manual reap must keep the directory"
+
+# relative argument resolved against the process's cwd, through a symlink
+new_case noderel
+printf 'setTimeout(()=>{}, 300000)\n' > "$WT/x.js"; printf 'x.js\n' >> "$REPO/.git/info/exclude"
+ln -s "$WT" "$TEST_TMP/link-noderel"
+(cd "$TEST_TMP" && exec node "link-noderel/x.js") & PIDS+=($!)
+sleep 0.5
+S="$(scan)"
+assert_eq "$(class_of "$S")" "busy" "node rel+symlink: class busy"
+assert_contains "$(wt_row "$S" "$WT")" "cmdline" "node rel+symlink: reason names cmdline"
+
+# a file held open (fd) with cwd, exe and arguments all outside
+new_case fd
+printf 'data\n' > "$WT/held.txt"; printf 'held.txt\n' >> "$REPO/.git/info/exclude"
+(cd "$TEST_TMP" && exec 3< "$WT/held.txt" && exec sleep 300) & PIDS+=($!)
+sleep 0.3
+S="$(scan)"
+assert_eq "$(class_of "$S")" "busy" "fd: class busy"
+assert_contains "$(wt_row "$S" "$WT")" "fd" "fd: reason names fd"
+
+# --- 5c. unknown semantics: ONE readable item anywhere means the table is readable ---
+new_case unk
+FP="$TEST_TMP/fakeproc"; mkdir -p "$FP/4242"
+export AUTOPILOT_RESIDUE_PROC_ROOT="$FP"
+S="$(scan)"
+assert_eq "$(class_of "$S")" "busy" "unknown: a pid dir with nothing readable -> unknown -> busy"
+ln -s /bin/true "$FP/4242/exe"            # exe readable, no cwd, no maps, no cmdline
+S="$(scan)"
+assert_eq "$(class_of "$S")" "clean-integrated" "unknown: only exe readable is NOT unknown (idle worktree stays clean-integrated)"
+printf 'node\0%s/x.js\0' "$WT" > "$FP/4242/cmdline"   # now a readable cmdline names the worktree
+S="$(scan)"
+assert_eq "$(class_of "$S")" "busy" "unknown: cmdline-only evidence still marks it busy"
+unset AUTOPILOT_RESIDUE_PROC_ROOT
+
+# --- 5d. auto reap: branch + valid schema=2 marker + expired lease; control reaps, then in use by cwd/exe/maps/node-arg keeps ---
+auto_case() { # <name> <starter fn>
+  new_case "$1"
+  git -C "$REPO" worktree remove --force "$WT"; git -C "$REPO" worktree add -q -b "br-$1" "$WT" HEAD
+  WT="$(cd "$WT" && pwd -P)"
+  printf 'mysleep\nlibz.so.1\nx.js\n.autopilot-worktree\n.autopilot-worktree.lock\n' >> "$REPO/.git/info/exclude"
+  local base; base="$(git -C "$REPO" rev-parse HEAD)"
+  printf 'created_at=%s\nbranch=br-%s\nbase_sha=%s\nrun_id=run-%s\nroot_run_id=root-%s\nloop_id=run-%s\nschema=2\n' "$(( $(date +%s) - 360000 ))" "$1" "$base" "$1" "$1" "$1" > "$WT/.autopilot-worktree"
+  [ -n "${2:-}" ] && "$2"
+  sleep 0.4
+  (cd "$TEST_TMP" && node "$SCRIPT" reap --repo "$REPO" --auto --yes --integration-ref develop 2>&1)
+}
+st_cwd() { (cd "$WT" && exec sleep 300 >/dev/null 2>&1) & PIDS+=($!); }
+st_exe() { cp "$(command -v sleep)" "$WT/mysleep"; (cd "$TEST_TMP" && exec "$WT/mysleep" 300 >/dev/null 2>&1) & PIDS+=($!); }
+st_maps() { cp "$LIB" "$WT/libz.so.1"; (cd "$TEST_TMP" && LD_PRELOAD="$WT/libz.so.1" exec sleep 300 >/dev/null 2>&1) & PIDS+=($!); }
+st_node() { printf 'setTimeout(()=>{}, 300000)\n' > "$WT/x.js"; (cd "$TEST_TMP" && exec node "$WT/x.js" >/dev/null 2>&1) & PIDS+=($!); }
+OUT="$(auto_case actl "")"; WT="$TEST_TMP/wt-actl"
+[ -d "$WT" ] && fail "auto control: an idle expired-lease integrated marker worktree must be removed ($OUT)" || __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1))
+for kind in cwd exe maps node; do
+  OUT="$(auto_case "a$kind" "st_$kind")"; WT="$TEST_TMP/wt-a$kind"
+  [ -d "$WT" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT+1)) || fail "auto $kind: directory must be kept"
+  assert_contains "$OUT" "process_" "auto $kind: reported kept with a process_* reason"
+done
+cleanup_pids; PIDS=()
+
 # --- 6. once the process is gone the worktree is clean-integrated again and can be reaped ---
+new_case gone
+(cd "$WT" && exec sleep 300 >/dev/null 2>&1) & PIDS+=($!)
+sleep 0.3
+assert_eq "$(class_of "$(scan)")" "busy" "gone: busy while the process lives"
 cleanup_pids; PIDS=(); sleep 0.3
 S="$(scan)"
 assert_eq "$(class_of "$S")" "clean-integrated" "after exit: clean-integrated again"

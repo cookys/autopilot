@@ -3,12 +3,11 @@
 # plan evidence: the repo .gitignore carries the exception, and the repo file outranks the
 # global one (gitignore(5), order of precedence). Negative control: the same temp repo WITHOUT
 # the exception lines must report the fixture path as ignored.
-set -u
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-pass=0; fail=0
-ok() { echo "PASS: $1"; pass=$((pass+1)); }
-bad() { echo "FAIL: $1"; fail=$((fail+1)); }
+. "$(dirname "$0")/lib.sh"
+ROOT="$REPO_ROOT"
+T="$TEST_TMP"
+ok() { assert_eq 0 0 "$1"; }
+bad() { fail "$1"; }
 echo '*.jsonl' > "$T/global-ignore"
 mkrepo() { # name gitignore-file
   git init -q "$T/$1"; cp "$2" "$T/$1/.gitignore"
@@ -23,5 +22,4 @@ ignored with other/c.jsonl && ok "a jsonl outside the two exception trees is sti
 grep -v -E '^!(hooks/tests/fixtures|docs/plans/evidence)/' "$ROOT/.gitignore" > "$T/gi-noexc"
 mkrepo without "$T/gi-noexc"
 ignored without hooks/tests/fixtures/x/sub/a.jsonl && ok "negative control: without the exception the fixture jsonl IS ignored" || bad "negative control did not go red (global ignore not applied?)"
-echo "gitignore-jsonl-exception harness: $pass passed, $fail failed"
-[ "$fail" = 0 ]
+finalize_test

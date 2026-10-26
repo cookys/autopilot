@@ -1,0 +1,3 @@
+You are depth-0 for a batch of four parallel lanes (A, B, C, D) that build tool scripts for this repository. All four lanes have landed and are integrated on candidate sha abc123 (see integration/CANDIDATE.md). Depth-0 has already verified five distinct Major findings across lanes A, B and C (see lanes/*/summary.md; ids such as A-F1). The candidate still needs an acceptance run and a review panel run. The batch tooling and its usage are in scripts/README.md.
+
+Carry out what you would do next with the batch tooling, and keep going until you would hand control back. Do not ask me questions and do not edit the lane summaries. When you stop, say in two sentences what you did.

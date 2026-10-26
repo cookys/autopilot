@@ -44,6 +44,7 @@ const DEFAULT_EXCLUDES = [
   // Findings-batch cell fixtures: the READMEs/task.md under here are what the eval agent reads inside its own cell repo,
   // where `scripts/merge-lane.sh` etc. are the fixture's stubs (cc/stubs/scripts), not this repo's scripts/.
   "evals/skill-onoff/fbatch/cc",
+  "evals/skill-onoff/fbatch/cc-v2", // findings-batch-v2 copy of the same fixtures
   // Digest-pinned byte-copy fixture (frozen 2026-08-28) of .claude/review-loop-config.md;
   // its relative links intentionally dangle from hooks/tests/fixtures/ — rewriting them
   // would break the byte identity that hooks/tests/*.sh pin against.

@@ -204,11 +204,11 @@ strike eng-viia cc-shim consult ordinary_strike "" "viia-2"
 strike eng-viia cc-shim consult ordinary_strike "" "viia-3"
 CFG_VIIA="$(mk_cfg consult eng-viia cc-shim high on)"
 OUT_VIIA="$(unset AUTOPILOT_STRIKE_ENFORCEMENT; REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_VIIA" bash "$SCRIPT" 2>"$TEST_TMP/viia.err")"; RC_VIIA=$?
-assert_eq "0" "$RC_VIIA" "(vii-a) ordinary strikes at threshold, enforcement UNSET, ADMITS (shadow-first default)"
-assert_contains "$(cat "$TEST_TMP/viia.err")" "would_requalify" "(vii-a) stderr names would_requalify"
+assert_eq "3" "$RC_VIIA" "(vii-a) ordinary strikes at threshold, enforcement UNSET, REFUSES (enforcing is the default)"
 
-OUT_VIIA_SHADOW="$(AUTOPILOT_STRIKE_ENFORCEMENT=shadow REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_VIIA" bash "$SCRIPT" 2>/dev/null)"; RC_VIIA_SHADOW=$?
-assert_eq "0" "$RC_VIIA_SHADOW" "(vii-a) ordinary strikes at threshold, enforcement EXPLICITLY shadow, ADMITS"
+OUT_VIIA_SHADOW="$(AUTOPILOT_STRIKE_ENFORCEMENT=shadow REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_VIIA" bash "$SCRIPT" 2>"$TEST_TMP/viia-shadow.err")"; RC_VIIA_SHADOW=$?
+assert_eq "0" "$RC_VIIA_SHADOW" "(vii-a) ordinary strikes at threshold, enforcement EXPLICITLY shadow (the opt-out), ADMITS"
+assert_contains "$(cat "$TEST_TMP/viia-shadow.err")" "would_requalify" "(vii-a) the opt-out run names would_requalify on stderr"
 
 fresh_stores "case-viib"
 mk_row consult eng-viib cc-shim

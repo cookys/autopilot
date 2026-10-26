@@ -172,7 +172,7 @@ An adopted row is an **ordinary seat-scoped strike target**. Nothing about it is
   derivation as any self-qualified row, from fields copied verbatim. Strikes written by
   `dispatch_hetero_failclosed` and the other allowlisted writers accrue against it unchanged.
 - The fold is unchanged: N=3 ordinary strikes since the last passing administration ⇒
-  `requalify_required` (under `AUTOPILOT_STRIKE_ENFORCEMENT=enforce`; shadow by default).
+  `requalify_required` (enforced by default; `AUTOPILOT_STRIKE_ENFORCEMENT=shadow` is the explicit opt-out).
   `critical_reexam_trigger` still fires immediately.
 - A default carries no expiry, like any qualification. No admission path compares `now` against
   a qualification date ([`strike-decay.md`](strike-decay.md) § "A qualification has no expiry").

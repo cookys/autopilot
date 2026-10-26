@@ -552,8 +552,8 @@ env ENGINE_CAPABILITY_DIR="$STORE_BASE/strike_override" node "$REPO_ROOT/scripts
   echo "FATAL: engine-capability-state.js failed setup (strike_override, quota)"; exit 1
 }
 # A single critical_reexam_trigger strike is enough — it ENFORCES regardless
-# of AUTOPILOT_STRIKE_ENFORCEMENT (shadow is the ambient default here), unlike
-# ordinary_strike which needs 3 + --enforce. Registered predicate, allowlisted
+# of AUTOPILOT_STRIKE_ENFORCEMENT, unlike ordinary_strike which needs 3 (and is
+# enforced by default; only AUTOPILOT_STRIKE_ENFORCEMENT=shadow opts out). Registered predicate, allowlisted
 # writer, well-formed artifact hash — a countable strike per §2.7.
 env ENGINE_CAPABILITY_DIR="$STORE_BASE/strike_override" node "$REPO_ROOT/scripts/engine-capability-state.js" strike-seat \
   --engine gpt-5.3-codex-spark --runner codex --role implementer \

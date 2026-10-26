@@ -124,19 +124,19 @@ The only correction is an append-only `strike_invalidated` event, admissible **o
 mechanical proof of a detector defect (`proof_artifact_sha256` + `proof_detector_id`). There is no
 human free-form rescind.
 
-## Arming (this cut ships in shadow)
+## Arming (enforced by default)
 
 | Class | Status today |
 |-------|-------------|
 | `critical_reexam_trigger` | **ENFORCING immediately.** Deterministic, high-specificity predicates do not need calibration. |
-| `ordinary_strike` | **SHADOW.** Records strikes and projects `would_requalify`, but does not gate. |
+| `ordinary_strike` | **ENFORCING by default** (owner, 2026-10-26). The 3rd ordinary strike since the last pass makes the seat `requalify_required`; 2 strikes do not. |
 
-The flip lives in one place: the environment variable **`AUTOPILOT_STRIKE_ENFORCEMENT`**, read at
-projection time in `scripts/engine-scorecard.js`. `shadow` is the default; `enforce` arms the
-ordinary-strike threshold. Any other value (including unset) means `shadow`.
+The one knob is the environment variable **`AUTOPILOT_STRIKE_ENFORCEMENT`**, read at projection time
+in `scripts/engine-scorecard.js`. Unset (or any value other than `shadow`) enforces. `shadow` is the
+explicit opt-out: strikes are only recorded and `would_requalify` is projected, nothing gates. Use it
+to debug a detector, not as a standing setting.
 
-Do not arm it on a hunch. Arming is a dated Board decision that shadow data must justify, per role
-— and the threshold itself needs a dated review, because *a threshold nobody revisits is a
+The threshold itself needs a dated review, because *a threshold nobody revisits is a
 calendar tooth in a trench coat*.
 
 ## Writers

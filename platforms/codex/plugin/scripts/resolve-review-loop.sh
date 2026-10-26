@@ -2547,9 +2547,8 @@ _try_qualification_row() {
     # critical_trigger, or enforced strike threshold): falls through.
     return
   fi
-  # Advisory warning that never changes the admission decision: a shadow-mode
-  # would_requalify is deliberate Board policy, not a hole (finding [1]
-  # PARTIAL OVERRULE) — surfaced on stderr either way.
+  # Advisory warning that never changes the admission decision: under the explicit opt-out
+  # AUTOPILOT_STRIKE_ENFORCEMENT=shadow a would_requalify seat still admits — surfaced on stderr.
   local warn
   warn="$(printf '%s' "$seat_json" | node -e '
 let s = "";
@@ -2558,7 +2557,7 @@ process.stdin.on("end", () => {
   let j;
   try { j = JSON.parse(s); } catch { process.exit(0); }
   const lines = [];
-  if (j.would_requalify) lines.push(`would_requalify (strikes_since_pass=${j.strikes_since_pass}/${j.strike_threshold}) — shadow-mode admission is deliberate Board policy (references/strike-decay.md), not a hole`);
+  if (j.would_requalify) lines.push(`would_requalify (strikes_since_pass=${j.strikes_since_pass}/${j.strike_threshold}) — admitted only because AUTOPILOT_STRIKE_ENFORCEMENT=shadow was set explicitly (references/strike-decay.md)`);
   process.stdout.write(lines.join(""));
 });' 2>/dev/null || true)"
   if [[ -n "$warn" ]]; then

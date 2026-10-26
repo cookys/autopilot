@@ -215,8 +215,10 @@ fi
   || bad "c1: dispatch-contract verdict=$VERDICT out=$DC_OUT"
 
 # =============================================================================
-# Strike accumulation — shadow-first (KR6): 3 ordinary strikes => would_requalify
-# true but admission_status stays qualified under the DEFAULT shadow flag.
+# Strike accumulation — ENFORCED BY DEFAULT (owner, 2026-10-26: standing is lost by
+# accumulated strikes). 2 ordinary strikes keep the seat qualified; the 3rd makes it
+# requalify_required with the variable UNSET; AUTOPILOT_STRIKE_ENFORCEMENT=shadow is the
+# explicit opt-out that records and projects would_requalify without gating.
 # =============================================================================
 reset_stores
 echo "$(score_row B codex reviewer 2026-06-01 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
@@ -224,23 +226,27 @@ SH_B=$(seat_hash B codex reviewer)
 {
   strike_line "$SH_B" B codex reviewer ordinary_strike null fuse "rcpt-1" "inc-1:det-1" "2026-06-02T00:00:00Z" 1
   strike_line "$SH_B" B codex reviewer ordinary_strike null fuse "rcpt-2" "inc-2:det-1" "2026-06-03T00:00:00Z" 2
-  strike_line "$SH_B" B codex reviewer ordinary_strike null fuse "rcpt-3" "inc-3:det-1" "2026-06-04T00:00:00Z" 3
 } > "$STRIKES_FILE"
 unset AUTOPILOT_STRIKE_ENFORCEMENT
+SS_B2=$(node "$ESC" seat-status --engine B --runner codex --role reviewer --now 2026-06-30)
+adm2=$(echo "$SS_B2" | jq_get admission_status); sp2=$(echo "$SS_B2" | jq_get strikes_since_pass); wr2=$(echo "$SS_B2" | jq_get would_requalify)
+[ "$adm2" = "qualified" ] && [ "$sp2" = "2" ] && [ "$wr2" = "false" ] \
+  && ok "strike0: 2 ordinary strikes (threshold is 3) => still qualified, enforcement unset" \
+  || bad "strike0: admission_status=$adm2 strikes_since_pass=$sp2 would_requalify=$wr2"
+strike_line "$SH_B" B codex reviewer ordinary_strike null fuse "rcpt-3" "inc-3:det-1" "2026-06-04T00:00:00Z" 3 >> "$STRIKES_FILE"
 SS_B=$(node "$ESC" seat-status --engine B --runner codex --role reviewer --now 2026-06-30)
 wr=$(echo "$SS_B" | jq_get would_requalify)
 adm=$(echo "$SS_B" | jq_get admission_status)
 sp=$(echo "$SS_B" | jq_get strikes_since_pass)
-[ "$wr" = "true" ] && [ "$sp" = "3" ] && [ "$adm" = "qualified" ] \
-  && ok "strike1: 3 ordinary strikes => would_requalify true, admission_status qualified under shadow (default)" \
-  || bad "strike1: would_requalify=$wr strikes_since_pass=$sp admission_status=$adm"
+[ "$wr" = "true" ] && [ "$sp" = "3" ] && [ "$adm" = "requalify_required" ] \
+  && ok "strike1: 3 ordinary strikes, enforcement UNSET (the default) => requalify_required" \
+  || bad "strike1: would_requalify=$wr strikes_since_pass=$sp admission_status=$adm (want requalify_required by default)"
 
-# Same fixture with AUTOPILOT_STRIKE_ENFORCEMENT=enforce => requalify_required,
-# tier 'low', and dispatch-contract.js NO-GO naming the strike cause.
-SS_B_ENF=$(AUTOPILOT_STRIKE_ENFORCEMENT=enforce node "$ESC" seat-status --engine B --runner codex --role reviewer --now 2026-06-30)
-adm_enf=$(echo "$SS_B_ENF" | jq_get admission_status)
-[ "$adm_enf" = "requalify_required" ] && ok "strike2: same fixture under --enforce => requalify_required" \
-  || bad "strike2: admission_status=$adm_enf under enforce"
+SS_B_SHADOW=$(AUTOPILOT_STRIKE_ENFORCEMENT=shadow node "$ESC" seat-status --engine B --runner codex --role reviewer --now 2026-06-30)
+adm_sh=$(echo "$SS_B_SHADOW" | jq_get admission_status); wr_sh=$(echo "$SS_B_SHADOW" | jq_get would_requalify)
+[ "$adm_sh" = "qualified" ] && [ "$wr_sh" = "true" ] \
+  && ok "strike2: AUTOPILOT_STRIKE_ENFORCEMENT=shadow (the explicit opt-out) => stays qualified and projects would_requalify" \
+  || bad "strike2: admission_status=$adm_sh would_requalify=$wr_sh under shadow"
 
 IMPL_CFG_B="$TESTDIR/impl-cfg-b.md"
 printf -- '- implementer_engine: B\n- implementer_runner: codex\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' > "$IMPL_CFG_B"
@@ -252,9 +258,9 @@ SH_B_IMPL=$(seat_hash B codex implementer)
   strike_line "$SH_B_IMPL" B codex implementer ordinary_strike null fuse "rcpt-5" "inc-5:det-1" "2026-06-03T00:00:00Z" 5
   strike_line "$SH_B_IMPL" B codex implementer ordinary_strike null fuse "rcpt-6" "inc-6:det-1" "2026-06-04T00:00:00Z" 6
 } > "$STRIKES_FILE.tmp" && mv "$STRIKES_FILE.tmp" "$STRIKES_FILE"
-RRL_OUT_B=$(REVIEW_LOOP_CONFIG_OVERRIDE="$IMPL_CFG_B" AUTOPILOT_STRIKE_ENFORCEMENT=enforce bash "$RRL" --scale-by-capability 2>/dev/null || true)
+RRL_OUT_B=$(REVIEW_LOOP_CONFIG_OVERRIDE="$IMPL_CFG_B" bash "$RRL" --scale-by-capability 2>/dev/null || true)
 TIER_B=$(printf '%s' "$RRL_OUT_B" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const d=JSON.parse(s);process.stdout.write(String(d.capability_tier||""))}catch{process.stdout.write("")}})' 2>/dev/null || true)
-[ "$TIER_B" = "low" ] && ok "strike3: requalify_required seat tiers 'low' under --enforce" \
+[ "$TIER_B" = "low" ] && ok "strike3: requalify_required seat tiers 'low' by default (no env var)" \
   || bad "strike3: capability_tier=$TIER_B (want low)"
 
 CAP_EVENT_B="$TESTDIR/cap-event-b.json"
@@ -265,7 +271,7 @@ node "$ROOT/scripts/engine-capability-state.js" record --file "$CAP_EVENT_B" >/d
 FIXTURE_B=$(build_contract_fixture B codex u-b)
 REPO_B="${FIXTURE_B%%|*}"
 CONTRACT_B="${FIXTURE_B##*|}"
-DC_OUT_B=$(AUTOPILOT_STRIKE_ENFORCEMENT=enforce node "$DC" check --contract "$CONTRACT_B" --repo "$REPO_B" --json 2>&1); DC_RC_B=$?
+DC_OUT_B=$(node "$DC" check --contract "$CONTRACT_B" --repo "$REPO_B" --json 2>&1); DC_RC_B=$?
 REASONS_B=$(printf '%s' "$DC_OUT_B" | jq_get reasons.0 2>/dev/null || true)
 if [ "$DC_RC_B" != "0" ] && grep -q "requalification" < <(printf '%s' "$REASONS_B"); then
   ok "strike4: requalify_required seat NO-GOes from dispatch-contract.js naming the strike cause ($REASONS_B)"
@@ -275,7 +281,7 @@ fi
 
 # =============================================================================
 # One critical_reexam_trigger => requalify_required immediately, under the
-# DEFAULT shadow flag (critical always enforces).
+# default and under shadow (critical always enforces).
 # =============================================================================
 reset_stores
 echo "$(score_row C codex reviewer 2026-06-01 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
@@ -286,7 +292,7 @@ SS_C=$(node "$ESC" seat-status --engine C --runner codex --role reviewer --now 2
 adm_c=$(echo "$SS_C" | jq_get admission_status)
 ct_c=$(echo "$SS_C" | jq_get critical_trigger)
 [ "$adm_c" = "requalify_required" ] && [ "$ct_c" = "true" ] \
-  && ok "critical1: one critical_reexam_trigger => requalify_required under shadow (default)" \
+  && ok "critical1: one critical_reexam_trigger => requalify_required with enforcement unset" \
   || bad "critical1: admission_status=$adm_c critical_trigger=$ct_c"
 
 # =============================================================================
@@ -478,8 +484,8 @@ DEF_HITS=$(grep -c -E '"expires(_at)?"' "$DEFAULTS" || true)
 [ "$DEF_HITS" = "0" ] && ok "fields1: the shipped official defaults carry no expires / expires_at key" \
   || bad "fields1: $DEF_HITS expiry key(s) in references/official-qualification-defaults.json"
 
-SCHEMA_HITS=$(grep -l -E '"expires(_at)?"' "$ROOT/schemas/capability-evidence.schema.json" "$ROOT/schemas/official-qualification-defaults.schema.json" "$ROOT/schemas/qualification-feed-v2.schema.json" 2>/dev/null || true)
-[ -z "$SCHEMA_HITS" ] && ok "fields2: the evidence, defaults and feed schemas have no expiry property" \
+SCHEMA_HITS=$(grep -l -E '"expires(_at)?"' "$ROOT/schemas/capability-evidence.schema.json" "$ROOT/schemas/official-qualification-defaults.schema.json" 2>/dev/null || true)
+[ -z "$SCHEMA_HITS" ] && ok "fields2: the evidence and defaults schemas have no expiry property" \
   || bad "fields2: expiry property in: $SCHEMA_HITS"
 
 reset_stores
@@ -612,10 +618,10 @@ case "$PROJ_REV" in
   *"gpt-5.6-sol:provisional:qualified:qualified:0"*"GLM-5.3:failed:failed:no_record:0"*|*"GLM-5.3:failed:failed:no_record:0"*"gpt-5.6-sol:provisional:qualified:qualified:0"*) REV_OK=1 ;;
   *) REV_OK=0 ;;
 esac
-echo "$PROJ_REV" | grep -q "claude-haiku:provisional:qualified:qualified:3" || REV_OK=0
+echo "$PROJ_REV" | grep -q "claude-haiku:provisional:qualified:requalify_required:3" || REV_OK=0
 echo "$PROJ_CON" | grep -q "kimi-code-k3:provisional:qualified:qualified:0" || REV_OK=0
 [ "$REV_OK" = "1" ] \
-  && ok "migrate6: seats whose old date had long passed are still qualified after migration, the failed seat is still failed, and the planted strikes survived (strikes_since_pass=3)" \
+  && ok "migrate6: seats whose old date had long passed are still qualified after migration, the failed seat is still failed, and the planted 3 strikes survived and now enforce (requalify_required by default)" \
   || bad "migrate6: reviewer=[$PROJ_REV] consult=[$PROJ_CON]"
 
 # an old `expired` status (the only status the old code ever wrote for a past date) maps to qualified

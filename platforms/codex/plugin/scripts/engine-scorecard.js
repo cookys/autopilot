@@ -164,7 +164,8 @@ const HELP_TEXT = `Usage:\n\
     strike_threshold/strike_policy_version/rejected_strikes, plus engine/runner/role (the seat\n\
     answered for), seat_hash and the\n\
     baseline (baseline_event_id/baseline_qualified_at). a qualification has no date at all;\n\
-    AUTOPILOT_STRIKE_ENFORCEMENT=enforce arms ordinary-strike requalification (shadow by default).\n\
+    Ordinary-strike requalification is enforced by default; AUTOPILOT_STRIKE_ENFORCEMENT=shadow is the\n\
+    explicit opt-out (strikes are then only recorded and would_requalify is projected).\n\
     seat-status --require-evidence (D7, plan 2026-08-28-consult-discuss-qualification.md) runs\n\
     the STRICT evidence-validating path: strict store parse, validateRecordRow forgery/anchor\n\
     checks, and applicability-scope match against the caller-supplied --scope-file — never the\n\
@@ -2029,7 +2030,9 @@ function foldSeatStrikes(seatHashValue, baselineQMs, nowMs, storeDir = CAPABILIT
 }
 
 function strikeEnforcementMode() {
-  return process.env.AUTOPILOT_STRIKE_ENFORCEMENT === 'enforce' ? 'enforce' : 'shadow';
+  // Enforcing is the default (owner, 2026-10-26: standing is lost by accumulated strikes). The only
+  // value that changes anything is the explicit opt-out `shadow`.
+  return process.env.AUTOPILOT_STRIKE_ENFORCEMENT === 'shadow' ? 'shadow' : 'enforce';
 }
 
 // Any local scorecard row for this seat — qualified, failed, superseded
@@ -2614,8 +2617,8 @@ function computeSeatProjectionStrict(engine, runner, role, nowMs, scope, identit
     projection.would_requalify = projection.strikes_since_pass >= ORDINARY_STRIKE_THRESHOLD;
     // Finding [1] PARTIAL OVERRULE: read the shipped projection honestly,
     // never hard-arm it. critical_trigger always refuses; ordinary strikes
-    // at threshold only refuse under AUTOPILOT_STRIKE_ENFORCEMENT=enforce —
-    // under shadow (default) the seat still admits, and the CALLER (the
+    // at threshold refuse by default — only the explicit opt-out
+    // AUTOPILOT_STRIKE_ENFORCEMENT=shadow keeps the seat admitted, and then the CALLER (the
     // resolver) is responsible for surfacing would_requalify on stderr.
     if (projection.critical_trigger
         || (projection.would_requalify && strikeEnforcementMode() === 'enforce')) {

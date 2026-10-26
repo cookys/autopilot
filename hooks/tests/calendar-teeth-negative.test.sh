@@ -682,6 +682,26 @@ L5_STATE=$(node -e 'const fs=require("fs");const rs=fs.readFileSync(process.argv
   && ok "migrate11: a wrapper-only stale row (no embedded evidence) migrates: wrapper evidence degraded, row failed" \
   || bad "migrate11: rc=$L5_RC state=$L5_STATE out=$(cat "$TESTDIR/leg5.out")"
 
+# the wrapper is authoritative: an embedded copy that is stale next to a QUALIFIED wrapper must not
+# fail the row; the migrated wrapper equals the plain migration's, the embedded copy equals the wrapper.
+LEG6="$TESTDIR/legacy6"; mk_legacy "$LEG6"
+node -e '
+const fs=require("fs");
+const sp=process.argv[1]+"/sc/scorecard.jsonl";
+const rows=fs.readFileSync(sp,"utf8").trim().split("\n").map(JSON.parse);
+rows.find(r=>r.event_id===141).evidence.state="stale";
+fs.writeFileSync(sp,rows.map(r=>JSON.stringify(r)).join("\n")+"\n")' "$LEG6"
+env ENGINE_SCORECARD_DIR="$LEG6/sc" ENGINE_CAPABILITY_DIR="$LEG6/cap" node "$ESC" strip-expiry >"$TESTDIR/leg6.out" 2>&1; L6_RC=$?
+L6_RES=$(node -e '
+const fs=require("fs");const rd=(d)=>({rows:fs.readFileSync(d+"/sc/scorecard.jsonl","utf8").trim().split("\n").map(JSON.parse),ws:fs.readFileSync(d+"/cap/qualification-evidence.jsonl","utf8").trim().split("\n").map(JSON.parse)});
+const a=rd(process.argv[1]), b=rd(process.argv[2]);
+const ra=a.rows.find(r=>r.event_id===141), rb=b.rows.find(r=>r.event_id===141);
+const wa=a.ws.find(w=>w.event_id===ra.evidence_store.event_id), wb=b.ws.find(w=>w.event_id===rb.evidence_store.event_id);
+console.log([ra.status, wa.evidence.state, JSON.stringify(wa)===JSON.stringify(wb), JSON.stringify(ra.evidence)===JSON.stringify(wa.evidence)].join(":"))' "$LEG6" "$LEG")
+[ "$L6_RC" = "0" ] && grep -q '"stale_state_mapped":0' "$TESTDIR/leg6.out" && [ "$L6_RES" = "qualified:qualified:true:true" ] \
+  && ok "migrate12: embedded stale + wrapper qualified => row stays qualified, wrapper identical to the plain migration, embedded re-sealed equal to the wrapper" \
+  || bad "migrate12: rc=$L6_RC res=$L6_RES out=$(cat "$TESTDIR/leg6.out")"
+
 # evidence ids are content hashes with expires_at inside them: they changed, and nothing dangles
 NEW_EV_IDS=$(node -e 'const fs=require("fs");console.log(fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map(l=>JSON.parse(l).evidence.evidence_id).join(" "))' "$LEG/cap/qualification-evidence.jsonl")
 OLD_EV_IDS=$(node -e 'const fs=require("fs");console.log(fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map(l=>JSON.parse(l).evidence.evidence_id).join(" "))' "$LEG_FIX/qualification-evidence.jsonl")

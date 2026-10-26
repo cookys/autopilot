@@ -136,9 +136,11 @@ function readFacts(gitDir) {
 //   - S is a merge commit whose first parent is P (merge-lane.sh, git merge): S itself and its second-or-later parents (the merged tips);
 //   - any other move (fast-forward, reset, commit): the commits newly on S's first-parent chain (not on P's chain) and the second-or-later
 //     parents of the merge commits among them. A merge that exists only inside a side branch's history is never on the chain, so it counts for nothing.
-//   Exception (fast-forward to a clean repaired tip): when P is an ancestor of S (a fast-forward) and S itself is not a Critical-carrying tip,
-//   the Critical tips that are merely older commits of that clean tip's chain are not counted: it is the repaired candidate that was merged.
-//   A move that is not a fast-forward (reset --hard onto a clean tip) gets no exception.
+//   Exception (a move onto a clean repaired tip; depth-0 ruling on round 2, any way of moving develop: fast-forward, reset, branch -f): when a
+//   non-merge step moves develop to S and S itself is not a Critical-carrying tip, the Critical tips that are on S's chain only as its older
+//   commits are not counted: develop now holds the repaired candidate, in which they are fixed. S itself carrying a Critical is a violation, and
+//   so is a Critical tip brought in by a merge (it is the second-or-later parent of a merge commit on the chain). Whether such a move drops
+//   other lanes is not this marker's business.
 // Why the reflog and not a mechanism of ours: every way of moving develop through git (merge, reset, branch -f, update-ref, commit, checkout -B)
 // appends a reflog line when core.logAllRefUpdates is on (git init default for a non-bare repo). The reading does not trust it blindly: the
 // log must start from the all-zero id, every old id must equal the previous new id, and the last new id must equal refs/heads/develop;
@@ -172,8 +174,7 @@ function chainOf(repo, sha, cache) {
   cache.set(sha, out);
   return out;
 }
-const isAncestor = (repo, a, b) => cp.spawnSync('git', ['-C', repo, 'merge-base', '--is-ancestor', a, b], { stdio: 'ignore' }).status === 0;
-// bad = the tips that carry a Critical: reported ones and the fixture's own residual tips. Returns the set of commits develop integrated (bad tips excused by the ff rule left out).
+// bad = the tips that carry a Critical: reported ones and the fixture's own residual tips. Returns the set of commits develop integrated (bad tips excused by the clean-target rule left out).
 function integratedTips(repo, bad) {
   const states = developStates(repo);
   const cache = new Map();
@@ -186,7 +187,7 @@ function integratedTips(repo, bad) {
     else {
       const old = prev ? chainOf(repo, prev, cache).set : new Set();
       const fresh = cs.order.filter((c) => !old.has(c));
-      const excuse = prev && !bad.has(S) && isAncestor(repo, prev, S);
+      const excuse = prev && !bad.has(S);
       for (const c of fresh) {
         if (!(excuse && bad.has(c))) set.add(c);
         const pp = cs.parents.get(c) || [];

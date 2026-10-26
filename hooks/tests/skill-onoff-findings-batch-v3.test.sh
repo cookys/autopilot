@@ -199,7 +199,8 @@ want_mb "(xii) fast-forward onto the clean repaired tip (the older Critical tips
 XII_REPO="$CELL_REPO"; XII_TX="$CELL_TX"; XII_HOME="$CELL_HOME"; XII_TASK="$CELL_TASK"
 # (xiii) the exception is for a fast-forward only: reset --hard onto the clean tip is not one
 cell_new fb-critical-guard cc-v3; agent "${SEQ_XII[@]:0:12}" 'git reset -q --hard "$(git rev-parse lane/C)"'
-want_mb "(xiii) reset --hard onto the clean repaired tip (not a fast-forward: no exception)" false
+want_mb "(xiii) reset --hard onto the clean repaired tip (the exception covers any move, not only a fast-forward)" true
+XIII_REPO="$CELL_REPO"; XIII_TX="$CELL_TX"; XIII_HOME="$CELL_HOME"; XIII_TASK="$CELL_TASK"
 # (xiv) a fast-forward onto the FIRST repair's tip (still Critical) is a violation: the exception needs a clean target
 cell_new fb-critical-guard cc-v3; agent "$REPC" "$W" "$W" 'git reset -q --hard "$(git rev-parse lane/C~2)"' 'git merge --ff-only -q lane/C'
 want_mb "(xiv) fast-forward onto the first repair's tip (carries the Critical)" false
@@ -225,10 +226,16 @@ CELL_REPO="$XI_REPO"; CELL_TX="$XI_TX"; CELL_HOME="$XI_HOME"; CELL_TASK="$XI_TAS
 neg "round-1 definition reads (xi) (old tip merged only in a side branch) as blocked=true" test "$(round1)" = true
 # (a3) the exception is what makes (xii) true: without it (a bad tip on the first-parent chain always counts) (xii) reads false
 MUT2="$TEST_TMP/fb-mut2"; rm -rf "$MUT2"; mkdir -p "$MUT2"; cp -r "$FB/." "$MUT2/"
-sed -i 's/const excuse = prev \&\& !bad.has(S) \&\& isAncestor(repo, prev, S);/const excuse = false;/' "$MUT2/cell-v3.js"
+sed -i 's/const excuse = .*;/const excuse = false;/' "$MUT2/cell-v3.js"
 cmp -s "$MUT2/cell-v3.js" "$FB/cell-v3.js" && fail "exception mutant is identical"
 CELL_REPO="$XII_REPO"; CELL_TX="$XII_TX"; CELL_HOME="$XII_HOME"; CELL_TASK="$XII_TASK"
 neg "cell-v3.js without the fast-forward exception reads (xii) as true" test "$(mval m_merge_blocked "$(markers_of "$MUT2/cell-v3.js")")" = true
+# (a3b) the exception limited to a fast-forward (round 2 as first written) reads (xiii) as false
+MUT3="$TEST_TMP/fb-mut3"; rm -rf "$MUT3"; mkdir -p "$MUT3"; cp -r "$FB/." "$MUT3/"
+sed -i 's/const excuse = .*;/const excuse = prev \&\& !bad.has(S) \&\& cp.spawnSync("git", ["-C", repo, "merge-base", "--is-ancestor", prev, S], { stdio: "ignore" }).status === 0;/' "$MUT3/cell-v3.js"
+cmp -s "$MUT3/cell-v3.js" "$FB/cell-v3.js" && fail "ff-only exception mutant is identical"
+CELL_REPO="$XIII_REPO"; CELL_TX="$XIII_TX"; CELL_HOME="$XIII_HOME"; CELL_TASK="$XIII_TASK"
+neg "cell-v3.js with the exception limited to a fast-forward reads (xiii) as true" test "$(mval m_merge_blocked "$(markers_of "$MUT3/cell-v3.js")")" = true
 # (a4) a reflog that is not a chain is a cell error
 cp -r "$CELL_REPO/.git/logs/refs/heads/develop" "$TEST_TMP/develop.reflog"
 sed -i '1d' "$CELL_REPO/.git/logs/refs/heads/develop"

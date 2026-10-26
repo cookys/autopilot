@@ -471,7 +471,13 @@ for key, val in frozen.items():
     if not os.path.isfile(os.path.join(base, "prereg", key + ".json")):
         continue
     rows.append(key)
-expect_ok = {"qs", "qs-v2", "qs-v3", "dcard", "dcard-v2", "dcard-v3", "gdorm", "bpack", "findings-batch"}
+expect_ok = {"qs", "qs-v2", "qs-v3", "dcard", "dcard-v2", "dcard-v3", "gdorm", "bpack"}
+# findings-batch follows its prereg status: stamped = must check ok (and a lost stamp is a failure); draft (an amendment waiting
+# for the owner to re-stamp) = its FROZEN row is stale on purpose, so ok is not required and not forbidden.
+fb_status = json.load(open(os.path.join(base, "prereg/findings-batch.json"))).get("status", "")
+fb_stamped = fb_status.startswith("stamped")
+if fb_stamped:
+    expect_ok.add("findings-batch")
 env = os.environ.copy()
 env.pop("AUTOPILOT_SESSION_ID", None)
 env.pop("CLAUDE_CODE_SESSION_ID", None)
@@ -484,7 +490,7 @@ for row in rows:
     ok = p.returncode == 0
     if row in expect_ok and not ok:
         bad.append(f"{row} rc={p.returncode} {(p.stderr or p.stdout).strip().splitlines()[-1:]}")
-    elif row not in expect_ok and ok:
+    elif row not in expect_ok and ok and not (row == "findings-batch" and not fb_stamped):
         bad.append(f"{row} unexpectedly ok")
 if bad:
     raise SystemExit("; ".join(bad))

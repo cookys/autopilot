@@ -14,5 +14,6 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$sha" ] || { echo "usage: dispatch-review.sh [--re-review --blind] --sha <sha>" >&2; exit 2; }
 mkdir -p runs
+label=$(node "$(dirname "$0")/_land.js" register --kind "$mode" --sha "$sha")
 printf '%s %s\n' "$mode" "$sha" >> runs/dispatch.log
-echo "$mode dispatched on $sha (results land at runs/$mode-$sha.exit)"
+echo "$mode dispatched on $sha (results land at runs/$label.exit)"

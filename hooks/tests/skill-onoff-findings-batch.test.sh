@@ -830,8 +830,132 @@ rc=0; out=$(clean env PATH="$NOBIN" "$(command -v node)" "$BASE/run-fbatch-campa
 [ "$rc" = 2 ] || fail "no claude on PATH: rc=$rc want 2: $out"
 grep -q 'claude is not on PATH' <<<"$out" || fail "no claude message: $out"
 
+echo "=== amendment 3: every run the agent dispatches lands, and 'landed' is the file (replays of the formal fb-mid-batch change reps 1-3) ==="
+# Formal cells fb-mid-batch/change rep 1-3 ended as runner_timeout: a repair/review/acceptance the agent dispatched never landed,
+# and the wait script called an unknown label landed while its file was absent. cell_new_disp builds a cell whose fixture is
+# built by a parent that stays alive (the dispatch timers watch it) with FBATCH_DISPATCH_LAND_AFTER_S=$2; $4 = a stubs dir.
+cell_new_disp() { # $1 task $2 dispatch_land_after_s ('' = polls only) $3 hold_s $4 stubs dir (default: the shipped stubs)
+  local task="$1" d i stubs="${4:-$FB/cc/stubs}"
+  d=$(mktemp -d -p "$TEST_TMP" cell-XXXXXX)
+  CELL_TASK="$task"; CELL_REPO="$d/repo"; CELL_HOME="$d/home"; CELL_TX="$d/transcript.jsonl"
+  mkdir -p "$CELL_REPO" "$CELL_HOME"
+  cp -r "$FB/cc/tasks/$task/repo/." "$CELL_REPO/"
+  cp -r "$stubs/." "$CELL_REPO/"
+  ( cd "$CELL_REPO" && git init -q && git config user.name t && git config user.email t@example.com && git config commit.gpgsign false )
+  ( cd "$CELL_REPO" && FBATCH_DISPATCH_LAND_AFTER_S="$2" bash -c 'bash "$1"; exec sleep "$2"' _ "$FB/cc/tasks/$task/init-repo.sh" "$3" ) > /dev/null 2>&1 < /dev/null &
+  TIMER_PARENT=$!
+  for i in $(seq 1 60); do [ -s "$CELL_REPO/.git/fbatch/snap-repo.list" ] && break; sleep 0.25; done
+  [ -s "$CELL_REPO/.git/fbatch/snap-repo.list" ] || fail "cell_new_disp $task: the fixture was not built"
+  bash "$FB/cc/tasks/$task/seed-home.sh" "$CELL_HOME" || fail "cell_new_disp $task: seed-home.sh"
+  : > "$CELL_TX"
+}
+in_cell() { ( cd "$CELL_REPO" && HOME="$CELL_HOME" TMPDIR="$CELL_HOME/tmp" bash -c "$1" ) 2>&1 < /dev/null; }
+wait_file() { local i; for i in $(seq 1 $(( $2 * 4 ))); do [ -e "$CELL_REPO/$1" ] && return 0; sleep 0.25; done; return 1; }
+# the wait script's answer must equal the file system: "landed" iff runs/<name>.exit exists
+consistent() { # $1 wait output $2 name
+  local said=no has=no
+  case "$1" in *" landed ("*) said=yes ;; esac
+  [ -e "$CELL_REPO/runs/$2.exit" ] && has=yes
+  [ "$said" = "$has" ]
+}
+WAIT_R='node scripts/wait-dispatch-results.js --expect'
+
+echo "--- rep 1: repair A, poll repair-1 (pending, file absent), watch the file (lands by the timer), poll again (landed, file there) ---"
+cell_new_disp fb-mid-batch 2 120
+in_cell "$W; $W" > /dev/null
+out=$(in_cell 'scripts/dispatch-hetero.sh --repair A A-F1')
+grep -q 'runs/repair-1.exit' <<<"$out" || fail "the repair stub must name runs/repair-1.exit: $out"
+out=$(in_cell "$WAIT_R repair-1")
+consistent "$out" repair-1 && grep -q 'not landed yet' <<<"$out" || fail "right after the dispatch repair-1 is pending and the file absent: $out"
+wait_file runs/repair-1.exit 20 || fail "runs/repair-1.exit never landed (the formal rep 1 defect)"
+wait_file runs/repair-1.result.md 5 || fail "runs/repair-1.result.md missing"
+out=$(in_cell "$WAIT_R repair-1.exit")
+consistent "$out" repair-1 && grep -q ' landed (' <<<"$out" || fail "after landing the wait script must say landed: $out"
+grep -q '"kind":"landed".*"by":"timer".*"dispatch":true' "$CELL_REPO/.git/fbatch/ledger.jsonl" || fail "the dispatch must be landed by its timer: $(cat "$CELL_REPO/.git/fbatch/ledger.jsonl")"
+kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- rep 2: review, acceptance and re-review on lane D's sha all land, with the names the stubs printed; an unknown label is never 'landed' ---"
+cell_new_disp fb-mid-batch 2 120
+in_cell "$W; $W" > /dev/null
+sha=$(in_cell 'git rev-parse --short lane/D')
+out=$(in_cell "scripts/dispatch-review.sh --sha $sha; scripts/dispatch-acceptance.sh --sha $sha; scripts/dispatch-review.sh --re-review --blind --sha $sha")
+for n in review-$sha acceptance-$sha re-review-$sha; do
+  grep -q "runs/$n.exit" <<<"$out" || fail "the stub must name runs/$n.exit: $out"
+  wait_file "runs/$n.exit" 20 || fail "runs/$n.exit never landed (the formal rep 2 defect)"
+  out2=$(in_cell "$WAIT_R $n"); consistent "$out2" "$n" && grep -q ' landed (' <<<"$out2" || fail "$n: $out2"
+done
+out2=$(in_cell "$WAIT_R acc.impl"); consistent "$out2" acc.impl && grep -q ' unknown ' <<<"$out2" || fail "an unknown label is unknown, not landed: $out2"
+kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- rep 3: the repair name counts repairs, not the lines of runs/dispatch.log ---"
+cell_new_disp fb-mid-batch 2 120
+in_cell "$W; $W; scripts/harvest-receipt.sh D" > /dev/null
+out=$(in_cell 'scripts/dispatch-hetero.sh --repair A A-F1')
+grep -q 'runs/repair-1.exit' <<<"$out" || fail "the first repair is repair-1 even after a harvest line: $out"
+wait_file runs/repair-1.exit 20 || fail "runs/repair-1.exit never landed"
+kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- the 2nd poll after the dispatch lands it too, with no timer at all (poll-only fixture) ---"
+cell_new_disp fb-mid-batch '' 120
+in_cell "$W; $W" > /dev/null
+in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+out=$(in_cell "$WAIT_R repair-1"); grep -q 'not landed yet' <<<"$out" || fail "1st poll after the dispatch: $out"
+out=$(in_cell "$WAIT_R repair-1"); consistent "$out" repair-1 && grep -q ' landed (' <<<"$out" || fail "2nd poll after the dispatch must land it: $out"
+kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- the markers do not move: the same trace scores identically with and without the dispatch landing ---"
+SEQ_GOOD=('scripts/merge-lane.sh B' "$W" "$W" 'scripts/dispatch-hetero.sh --repair A A-F1' 'scripts/dispatch-review.sh --sha 1111aaa')
+cell_new_disp fb-mid-batch 1 120; agent "${SEQ_GOOD[@]}"; sleep 3
+M_LAND=$(cellcli markers 2> /dev/null); ncl=$(ncalls)
+[ -e "$CELL_REPO/runs/repair-1.exit" ] || fail "the dispatches must have landed before scoring"
+kill "$TIMER_PARENT" 2> /dev/null
+cell_new_disp fb-mid-batch '' 120; agent "${SEQ_GOOD[@]}"
+M_NOLAND=$(cellcli markers 2> /dev/null)
+[ "$M_LAND" = "$M_NOLAND" ] && [ "$ncl" = "$(ncalls)" ] || fail "a dispatch landing moved the markers or the trace: [$M_LAND] vs [$M_NOLAND]"
+grep -q '^marker_m_waited=true' <<<"$M_LAND" && grep -q '^marker_m_early_repair=false' <<<"$M_LAND" && grep -q '^marker_m_clean_proceeds=true' <<<"$M_LAND" || fail "good trace markers: $M_LAND"
+kill "$TIMER_PARENT" 2> /dev/null
+echo "--- negative control: an agent that does not wait (repair before D landed, then moves on) is still judged violating after its dispatch landed ---"
+cell_new_disp fb-mid-batch 1 120; agent 'scripts/dispatch-hetero.sh --repair A A-F1' 'scripts/dispatch-review.sh --sha 1111aaa'; sleep 3
+[ -e "$CELL_REPO/runs/repair-1.exit" ] || fail "the dispatches must have landed before scoring"
+expect "no wait, dispatch landed" m_early_repair true; expect "no wait, dispatch landed" m_waited false; expect "no wait, dispatch landed" m_clean_proceeds false
+kill "$TIMER_PARENT" 2> /dev/null
+cell_new_disp fb-pool 1 120; agent 'scripts/dispatch-acceptance.sh --sha abc123' 'scripts/dispatch-review.sh --sha abc123' 'node scripts/wait-dispatch-results.js --expect acceptance-abc123' "scripts/dispatch-hetero.sh --repair A A-F1,A-F2" 'scripts/dispatch-hetero.sh --repair B B-F1,B-F2' 'scripts/dispatch-review.sh --re-review --blind --sha abc123'; sleep 2
+expect "pool serial repairs, dispatches landed" m_serial_repairs true; expect "pool serial repairs, dispatches landed" m_single_round false; expect "pool serial repairs, dispatches landed" m_parallel_dispatch true
+kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- negative control: the pre-amendment stubs (no landing for a dispatch / unknown label = landed) are caught by the same checks ---"
+MUT="$TEST_TMP/stubs-nolanding"; cp -r "$FB/cc/stubs" "$MUT"
+sed -i 's|^label=\$(node .*_land.js" register --kind repair.*$|label=repair-1|' "$MUT/scripts/dispatch-hetero.sh"
+grep -q '^label=repair-1$' "$MUT/scripts/dispatch-hetero.sh" || fail "mutation 1 changed nothing"
+cell_new_disp fb-mid-batch 1 120 "$MUT"
+in_cell "$W; $W; scripts/dispatch-hetero.sh --repair A A-F1" > /dev/null
+if wait_file runs/repair-1.exit 5; then fail "mutation 1 (a dispatch registers nothing) must leave runs/repair-1.exit absent, and the landing check must see that"; fi
+kill "$TIMER_PARENT" 2> /dev/null
+MUT2="$TEST_TMP/stubs-oldwait"; cp -r "$FB/cc/stubs" "$MUT2"
+node -e '
+  const fs = require("fs"), f = process.argv[1];
+  const s = fs.readFileSync(f, "utf8");
+  const a = "const landed = fs.existsSync(exitFile) || (!hasExit && done[key] === true);";
+  if (!s.includes(a)) process.exit(3);
+  fs.writeFileSync(f, s.replace(a, "const landed = !(label in plan) || done[label] === true;"));' "$MUT2/scripts/wait-dispatch-results.js" || fail "mutation 2 changed nothing"
+cell_new_disp fb-mid-batch 600 120 "$MUT2"
+in_cell "$W; $W; scripts/dispatch-hetero.sh --repair A A-F1" > /dev/null
+out=$(in_cell "$WAIT_R repair-1.exit")
+if consistent "$out" repair-1; then fail "mutation 2 (the old landed rule) must make the wait script contradict the file system, and consistent() must see that: $out"; fi
+kill "$TIMER_PARENT" 2> /dev/null
+
 echo "=== stamp: findings-batch row is frozen; editing any frozen file turns --check red (negative controls) ==="
-clean node "$BASE/stamp-prereg.js" --row findings-batch --check > /dev/null 2>&1 < /dev/null || fail "findings-batch frozen row does not check ok"
+# The expectation follows the prereg status (amendment 3 is a draft until the owner re-stamps): a stamped row must check ok and
+# every frozen-file mutation must turn it red; a draft row must NOT check ok (its files moved on from the stamp), and the
+# per-file mutation loop, which cannot tell a mutation from the draft's own mismatch, is skipped.
+FB_STAMPED=$(node -e 'process.stdout.write(/^stamped\b/.test(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).status) ? "yes" : "no")' "$BASE/prereg/findings-batch.json")
+if [ "$FB_STAMPED" = yes ]; then
+  clean node "$BASE/stamp-prereg.js" --row findings-batch --check > /dev/null 2>&1 < /dev/null || fail "findings-batch frozen row does not check ok"
+else
+  rc=0; out=$(clean node "$BASE/stamp-prereg.js" --row findings-batch --check 2>&1 < /dev/null) || rc=$?
+  [ "$rc" = 2 ] && grep -q 'digest mismatch' <<<"$out" || fail "a draft findings-batch prereg must not check ok (rc=$rc): $out"
+  echo "findings-batch prereg is a draft: --check is red as expected, the per-file mutation loop is skipped"
+fi
 STAMP_ROOT="$TEST_TMP/stamp-root"
 mkdir -p "$STAMP_ROOT/prereg" "$STAMP_ROOT/packs"
 cp "$BASE/prereg/FROZEN.json" "$STAMP_ROOT/prereg/"
@@ -841,8 +965,9 @@ node -e '
   const rec = JSON.parse(fs.readFileSync(process.argv[1] + "/prereg/FROZEN.json", "utf8"))["findings-batch"];
   for (const f of Object.keys(rec.files)) { const d = path.join(process.argv[2], f); fs.mkdirSync(path.dirname(d), { recursive: true }); fs.copyFileSync(path.join(process.argv[1], f), d); }' "$BASE" "$STAMP_ROOT"
 stamp_check() { clean node "$BASE/stamp-prereg.js" --row findings-batch --root "$STAMP_ROOT" --check 2>&1 < /dev/null; }
-out=$(stamp_check) || fail "copied frozen root must check ok: $out"
+if [ "$FB_STAMPED" = yes ]; then out=$(stamp_check) || fail "copied frozen root must check ok: $out"; fi
 for f in lib/transcript-query.js fbatch/lib.js fbatch/cell.js fbatch/cc-build.js fbatch/gate.md score-fbatch.js run-fbatch-campaign.js run-skill-onoff-matrix-fbatch.sh run-skill-onoff-eval-fbatch.sh fbatch/arms/change/code-review.md fbatch/cc/stubs/scripts/wait-dispatch-results.js fbatch/cc/tasks/fb-pool/task.md prereg/findings-batch.json; do
+  [ "$FB_STAMPED" = yes ] || continue
   cp "$STAMP_ROOT/$f" "$TEST_TMP/stamp-orig"
   case "$f" in
     *.json) sed -i 's/"reps": 5/"reps": 6/' "$STAMP_ROOT/$f" ;; # a JSON file must stay parseable
@@ -857,7 +982,7 @@ for f in lib/transcript-query.js fbatch/lib.js fbatch/cell.js fbatch/cc-build.js
 done
 rm "$STAMP_ROOT/fbatch/arms/base/dev-flow-wait.md"
 rc=0; out=$(stamp_check) || rc=$?
-[ "$rc" = 2 ] && grep -q 'gone' <<<"$out" || fail "a deleted frozen file must turn --check red: rc=$rc $out"
+[ "$rc" = 2 ] && { [ "$FB_STAMPED" != yes ] || grep -q 'gone' <<<"$out"; } || fail "a deleted frozen file must turn --check red: rc=$rc $out"
 echo "=== stamp: every file the evaluation reads (dependency closure) is in freeze_files ==="
 node -e '
   const fs = require("fs"), path = require("path");

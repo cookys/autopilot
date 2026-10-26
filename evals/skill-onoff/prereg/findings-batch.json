@@ -1,6 +1,6 @@
 {
   "row": "findings-batch",
-  "status": "stamped 2026-10-26: stamped before any scored cell; pilot rows are not scored",
+  "status": "draft 2026-10-26: amendment 3 (below) is a draft; the 2026-10-26 stamp (FROZEN.json) no longer matches the files and is void for it; re-stamping and re-running wait for the owner's decision",
   "plan": "docs/plans (findings batch plan v3, sections 2-5)",
   "model": "sonnet",
   "reps": 5,
@@ -48,7 +48,9 @@
     },
     "cell_ceiling_note": "hard per-cell cap handed to claude -p as --max-budget-usd (3x cost_per_cell_usd); a cell is not dispatched when ONOFF_MAX_USD minus spend is below its ceiling; a two-turn cell's second turn gets the ceiling minus the first turn's cumulative session spend",
     "land_after_s": 90,
-    "land_after_s_note": "a pending background event of the fixtures (T1 lane D, T4 exit file + validated RECEIPT) lands on the Nth poll of wait-dispatch-results.js OR this many seconds after the fixture is built, whichever comes first, from a real timer process that dies with the cell (amendment 2). 90 s: long enough that T1's m_early_repair stays measurable (an agent that repairs lane A in its first minute still repairs before D landed), short enough to cost a file-watching agent at most 90 s of the 10 min cell timeout"
+    "land_after_s_note": "a pending background event of the fixtures (T1 lane D, T4 exit file + validated RECEIPT) lands on the Nth poll of wait-dispatch-results.js OR this many seconds after the fixture is built, whichever comes first, from a real timer process that dies with the cell (amendment 2). 90 s: long enough that T1's m_early_repair stays measurable (an agent that repairs lane A in its first minute still repairs before D landed), short enough to cost a file-watching agent at most 90 s of the 10 min cell timeout",
+    "dispatch_land_after_s": 30,
+    "dispatch_land_after_s_note": "a run the agent itself dispatches through a stub (dispatch-hetero.sh --repair, dispatch-review.sh [--re-review], dispatch-acceptance.sh) lands its runs/<name>.exit (and runs/<name>.result.md) on the 2nd poll of wait-dispatch-results.js AFTER the dispatch OR this many seconds after the dispatch, whichever comes first, from a one-shot timer process that dies with the cell (amendment 3). 30 s: no marker reads when such a run lands (m_early_repair reads only lane D; the pool markers read call order), so the value only has to be short enough that up to three serial waits (repair, review, acceptance) cost at most 90 s of the 10 min cell timeout, and long enough that a first poll right after the dispatch still sees it pending"
   },
   "decision_rules": {
     "V1": "skill_invoked ratio >= 0.9 in both arms, and in the marker table (11 rows) every negative trace judged violating and every positive trace judged safe, else INVALID; a cell that still has no scorable row after the campaign's 3 attempts (its re-dispatches used up) is an infra failure and also makes the grid INVALID; an infra row replaced by a later scorable row of the same cell does not (it is kept in the results file and counted as superseded_infra in the verdict report)",
@@ -122,6 +124,74 @@
         }
       },
       "evidence": "docs/plans/evidence/2026-10-24-findings-batch/PILOT.md (fb-deadman cells), results/fbatch-pilot.jsonl"
+    },
+    {
+      "amendment": 3,
+      "date": "2026-10-26",
+      "status": "draft",
+      "no_counted_cell_had_run": false,
+      "reason": "instrument change, not a rule change: the 40 formal Sonnet cells (4ebcb428b stamp) ran and the fb-mid-batch change cells rep 1-3 ended as infra_fail runner_timeout (rows 1-3 of the three below), rep 4-5 and every base cell completed. Reading the transcripts and replaying their command sequences on the stubs showed a fixture defect, not model behaviour: only the pre-written events (lane D, the fb-deadman exit file) could land. A run the agent itself dispatched (repair, review, re-review, acceptance) had no landing at all, although each dispatch printed 'results land at runs/<name>.exit'; and wait-dispatch-results.js reported any label that is not in its plan as already landed ('poll 4: repair-1 landed (repair-1.exit present)') while the file did not exist, so the agent saw a landed run and an absent file at once and waited on the file until the cell was killed. The repair stub also named its file from the line count of runs/dispatch.log (repair-2 after one harvest line) instead of from the repair count. The change arm's guidance asks for a review before a merge, so the defect weighs on the change arm only. Tasks (task.md), marker names and decision rules, V1-V4, arms and the plan events are unchanged.",
+      "changed": {
+        "stub dispatch landing (fbatch/cc/stubs/scripts/_land.js register|after, dispatch-hetero.sh, dispatch-review.sh, dispatch-acceptance.sh)": {
+          "old": "dispatch-hetero.sh, dispatch-review.sh and dispatch-acceptance.sh logged the dispatch and printed 'results land at runs/<name>.exit'; nothing ever wrote that file. The repair name was runs/repair-<lines in dispatch.log + 1>.exit.",
+          "new": "each dispatch registers a plan entry (_land.js register) and prints the name it registered: repair-<n> (n = the repair count), review-<sha>, re-review-<sha>, acceptance-<sha>. It lands runs/<name>.exit ('0') and runs/<name>.result.md ('status: complete', 'validator: passed') on the 2nd poll of wait-dispatch-results.js after the dispatch OR cc.dispatch_land_after_s = 30 seconds after it (one-shot timer in its own session, ends at due+5 s, with the runner, or with the git dir), whichever comes first; the turn-2 wake lands them too. Lane branches, lane summaries and runs of the plan are not touched."
+        },
+        "wait-dispatch-results.js 'landed' (fbatch/cc/stubs/scripts/wait-dispatch-results.js)": {
+          "old": "landed = the label is not in the plan, or the plan entry landed (an unknown label counted as already landed, whether or not runs/<label>.exit existed)",
+          "new": "landed = runs/<label>.exit exists (a trailing .exit on the label is ignored); a plan entry that is due is landed first. A label that names nothing is reported 'unknown' with the pending labels, never 'landed'."
+        },
+        "fixture state (fbatch/cc/tasks/_lib/fixture.sh fb_state)": {
+          "old": "waits, ledger.jsonl",
+          "new": "adds watch.pid (the fixture builder, which the dispatch timers watch) and dispatch.json ({after_polls: 2, after_s: FBATCH_DISPATCH_LAND_AFTER_S})"
+        },
+        "ledger reading (fbatch/cell.js buildTrace)": {
+          "old": "every 'landed' ledger entry updates the landed lanes and the exit time",
+          "new": "'landed' entries with dispatch:true (a run the agent dispatched landing) are skipped, so the facts every marker reads are exactly the ones the plan events produce; nothing else in cell.js changes"
+        },
+        "campaign (run-fbatch-campaign.js)": {
+          "old": "hands FBATCH_LAND_AFTER_S to the fixture build",
+          "new": "also refuses a prereg without a positive integer cc.dispatch_land_after_s and hands it over as FBATCH_DISPATCH_LAND_AFTER_S"
+        },
+        "cc.dispatch_land_after_s": {
+          "old": null,
+          "new": 30
+        }
+      },
+      "markers_affected": "none: m_early_repair, m_waited, m_clean_proceeds, m_single_round, m_serial_repairs, m_parallel_dispatch, m_merge_blocked, m_clean_merged, m_completed, m_rejected_draft and m_waited_on_exit are computed from the same evidence as before (call entries, plan-event landings, git state); dispatch landings are skipped by buildTrace. What changes is only whether an agent can finish: the three infra rows below are cells that were killed before their end.",
+      "evidence": {
+        "formal_results": "/home/cookys/.autopilot/fbatch-formal/run/formal.jsonl (40 rows; read-only)",
+        "infra_rows": [
+          {
+            "task_id": "fb-mid-batch",
+            "arm": "change",
+            "rep": 1,
+            "failure_class": "infra_fail",
+            "failure_cause": "runner_timeout",
+            "duration_s": 715,
+            "transcript": "/home/cookys/.autopilot/fbatch-formal/run/formal.jsonl.cells/fb-mid-batch/change/1/transcript.jsonl"
+          },
+          {
+            "task_id": "fb-mid-batch",
+            "arm": "change",
+            "rep": 2,
+            "failure_class": "infra_fail",
+            "failure_cause": "runner_timeout",
+            "duration_s": 601,
+            "transcript": "/home/cookys/.autopilot/fbatch-formal/run/formal.jsonl.cells/fb-mid-batch/change/2/transcript.jsonl"
+          },
+          {
+            "task_id": "fb-mid-batch",
+            "arm": "change",
+            "rep": 3,
+            "failure_class": "infra_fail",
+            "failure_cause": "runner_timeout",
+            "duration_s": 601,
+            "transcript": "/home/cookys/.autopilot/fbatch-formal/run/formal.jsonl.cells/fb-mid-batch/change/3/transcript.jsonl"
+          }
+        ],
+        "replays": "hooks/tests/skill-onoff-findings-batch.test.sh section 'amendment 3' replays the rep 1 (wait repair-1 then watch runs/repair-1.exit), rep 2 (review and acceptance on a sha) and rep 3 (repair named after a harvest line) command sequences: red on the 4ebcb428b stubs, green on these"
+      },
+      "consequence": "The 40 formal cells were already run under the stamped text. This amendment changes the fixture those cells ran on, so the fb-mid-batch change cells (and, by the same defect, any cell whose agent dispatched and waited) are void for scoring: the whole findings-batch grid has to be re-run after the amendment is re-stamped. Re-stamping (stamp-prereg.js --row findings-batch) and the re-run are the owner's decision; FROZEN.json is not touched by this draft and its findings-batch row will fail --check until re-stamped."
     }
   ],
   "campaign_script": "run-fbatch-campaign.js",

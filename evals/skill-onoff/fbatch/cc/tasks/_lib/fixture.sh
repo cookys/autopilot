@@ -18,6 +18,10 @@ fb_state() {
   echo "$1" > "$G/fbatch-task"
   echo 0 > "$G/fbatch/waits"
   : > "$G/fbatch/ledger.jsonl"
+  # dispatched work (amendment 3): $PPID = whoever built the fixture (the dispatch timers watch it, see _land.js register);
+  # FBATCH_DISPATCH_LAND_AFTER_S (prereg cc.dispatch_land_after_s) is the time landing, the 2nd poll after the dispatch the other
+  echo "$PPID" > "$G/fbatch/watch.pid"
+  case "${FBATCH_DISPATCH_LAND_AFTER_S:-}" in ''|0|*[!0-9]*) echo '{"after_polls":2}' > "$G/fbatch/dispatch.json" ;; *) printf '{"after_polls":2,"after_s":%s}\n' "$FBATCH_DISPATCH_LAND_AFTER_S" > "$G/fbatch/dispatch.json" ;; esac
 }
 fb_lanes() {
   local l base

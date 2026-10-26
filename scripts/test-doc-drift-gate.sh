@@ -85,6 +85,12 @@ if ! node "$script_dir/doc-drift-gate.js" "$fixture/evals/skill-onoff/fbatch" --
   echo "test-doc-drift-gate: FAIL — findings-batch cell fixture docs should have been excluded" >&2
   exit 1
 fi
+mkdir -p "$fixture/evals/skill-onoff/fbatch/cc-v2/stubs/scripts"
+printf '%s\n' '# Batch tooling' '' 'Run `scripts/merge-lane.sh A`.' >"$fixture/evals/skill-onoff/fbatch/cc-v2/stubs/scripts/README.md"
+if ! node "$script_dir/doc-drift-gate.js" "$fixture/evals/skill-onoff/fbatch/cc-v2" --repo-root "$fixture" >/dev/null; then
+  echo "test-doc-drift-gate: FAIL — findings-batch-v2 cell fixture docs should have been excluded" >&2
+  exit 1
+fi
 printf '%s\n' '# Not a cell fixture' '' 'Run `scripts/merge-lane.sh A`.' >"$fixture/evals/skill-onoff/other/README.md"
 if node "$script_dir/doc-drift-gate.js" "$fixture/evals/skill-onoff/other" --repo-root "$fixture" >/dev/null; then
   echo "test-doc-drift-gate: FAIL — the same missing script ref outside the cell fixtures must still fail the gate" >&2

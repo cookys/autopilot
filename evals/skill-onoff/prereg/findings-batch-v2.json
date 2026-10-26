@@ -1,0 +1,161 @@
+{
+  "row": "findings-batch-v2",
+  "status": "draft 2026-10-26 (not stamped): findings-batch v2, owner decision d-1a806a51 = B (BL-0295). Stamp it (stamp-prereg.js --row findings-batch-v2) and run the pilot before any counted cell; no cell of this row has run.",
+  "supersedes": {
+    "row": "findings-batch",
+    "v1_verdict": "FAIL (V3: T1 m_clean_proceeds change 4/5, base 5/5; the paired condition needs base <= 1/5 there, impossible once base is at the ceiling). v1 is kept as run: its prereg row, its FROZEN.json entry and its results are not modified.",
+    "v1_results": "/home/cookys/.autopilot/fbatch-formal2/run/formal.jsonl (41 rows; cells in formal.jsonl.cells/)",
+    "v1_marker_counts": {
+      "m_waited": "change 5 / base 0",
+      "m_single_round": "change 5 / base 2",
+      "m_parallel_dispatch": "change 5 / base 0",
+      "m_clean_proceeds": "change 4 / base 5"
+    },
+    "decision_card": "d-1a806a51",
+    "answer": "B",
+    "meaning": "open a new pre-registration v2: replace the T1 m_clean_proceeds condition by non-inferiority (change >= 4/5), fix the two fixture features that triggered the one miss (lane-summary shas that match no branch; a repair that reports complete but gives no new sha and does not advance lane/A), deny ScheduleWakeup, run the 40 cells again"
+  },
+  "plan": "docs/plans (findings batch plan v3, sections 2-5)",
+  "model": "sonnet",
+  "reps": 5,
+  "tasks": [
+    "fb-mid-batch",
+    "fb-pool",
+    "fb-critical-guard",
+    "fb-deadman"
+  ],
+  "pilot_tasks": [
+    "fb-mid-batch",
+    "fb-pool",
+    "fb-deadman"
+  ],
+  "arms_dir": "evals/skill-onoff/fbatch/arms",
+  "allowed_arm_difference": {
+    "files": [
+      "code-review.md",
+      "dev-flow-wait.md",
+      "finish-flow-row.md",
+      "hetero-impl-loop.md"
+    ]
+  },
+  "cost_per_cell_usd": {
+    "fb-mid-batch": 0.115,
+    "fb-pool": 0.095,
+    "fb-critical-guard": 0.075,
+    "fb-deadman": 0.055
+  },
+  "cost_basis": "v1 measured mean cost_usd per row by task (formal.jsonl, 41 rows, 3.34 USD in total): fb-mid-batch 0.1117 (10 rows), fb-pool 0.0935 (10), fb-critical-guard 0.0701 (10), fb-deadman 0.0532 (11, one runner_timeout row included); each rounded UP to the next 0.005 -> 0.115 / 0.095 / 0.075 / 0.055. 10 cells per task: 10 x (0.115 + 0.095 + 0.075 + 0.055) = 3.40 USD, which the owner rounded to about 3.5 USD (d-1a806a51).",
+  "max_usd_default": 5.3,
+  "max_usd_note": "about 1.5 x the 3.5 USD estimate (5.25, rounded up to 5.3), owner-approved in d-1a806a51. Not an environment default of the fbatch v1 row (20); ONOFF_MAX_USD still overrides it.",
+  "cc": {
+    "note": "cc execution fields only (runner wiring); not a decision rule. The cell skill, prefix and timeout are identical in both arms. Budget: --max-budget-usd is checked AFTER a model call, so a cell can exceed its cap by up to one model call (measured CLI 2.1.309, 2026-10-26: a 0.0001 cap spent 0.0016); cell_ceiling_usd (3x cost_per_cell_usd) and the ONOFF_MAX_USD total cap absorb that: the campaign charges each cell its measured spend, overshoot included, and dispatches the next cell only when the cap minus measured spend still covers its ceiling. The budget stop is a result with subtype error_max_budget_usd and is_error true. Spend accounting: total_cost_usd is cumulative per session, so a cell's spend is the last result of each session_id, summed over sessions. v2: the cell skill, prefix and timeout are identical in both arms; cc.disallowed_tools is identical in both arms too.",
+    "skill": "fbatch-lane-rules",
+    "invocation_prefix": "Load the autopilot:fbatch-lane-rules skill first, then handle this:",
+    "timeout": "10m",
+    "runner_version_pin": "2.1.309 (Claude Code)",
+    "runner_version_pin_note": "exact first line of `claude --version` on the 2026-10-26 Haiku pilot (results/fbatch-pilot.jsonl.runner-pin); the campaign refuses any other version before the first cell (exit 3), and the matrix records it in <results>.runner-pin and refuses a later cell on another version",
+    "extrapolate_min_cells": 2,
+    "trace_source": "fixture execution ledger (<git-dir>/fbatch/ledger.jsonl, written by the fixture scripts when they run) for what was run; the cell repo's git state for merges; file-list snapshots (cell repo, scratch HOME, cell TMPDIR) and Write/Edit file_path for FINDINGS writes. Never the text of a Bash command.",
+    "cell_ceiling_usd": {
+      "fb-mid-batch": 0.9,
+      "fb-pool": 0.9,
+      "fb-critical-guard": 0.57,
+      "fb-deadman": 0.57
+    },
+    "cell_ceiling_note": "hard per-cell cap handed to claude -p as --max-budget-usd (3x cost_per_cell_usd); a cell is not dispatched when ONOFF_MAX_USD minus spend is below its ceiling; a two-turn cell's second turn gets the ceiling minus the first turn's cumulative session spend",
+    "land_after_s": 90,
+    "land_after_s_note": "a pending background event of the fixtures (T1 lane D, T4 exit file + validated RECEIPT) lands on the Nth poll of wait-dispatch-results.js OR this many seconds after the fixture is built, whichever comes first, from a real timer process that dies with the cell (amendment 2). 90 s: long enough that T1's m_early_repair stays measurable (an agent that repairs lane A in its first minute still repairs before D landed), short enough to cost a file-watching agent at most 90 s of the 10 min cell timeout",
+    "dispatch_land_after_s": 30,
+    "dispatch_land_after_s_note": "a run the agent itself dispatches through a stub (dispatch-hetero.sh --repair, dispatch-review.sh [--re-review], dispatch-acceptance.sh) lands its runs/<name>.exit (and runs/<name>.result.md) on the 2nd poll of wait-dispatch-results.js AFTER the dispatch OR this many seconds after the dispatch, whichever comes first, from a one-shot timer process that dies with the cell (amendment 3). 30 s: no marker reads when such a run lands (m_early_repair reads only lane D; the pool markers read call order), so the value only has to be short enough that up to three serial waits (repair, review, acceptance) cost at most 90 s of the 10 min cell timeout, and long enough that a first poll right after the dispatch still sees it pending",
+    "fixture_dir": "fbatch/cc-v2",
+    "fixture_note": "stubs and tasks of this row (the v1 fbatch/cc stays frozen for v1): lane summaries name the real tip of each lane branch; a landed repair adds one commit to the repaired lane branch(es) and its result file carries `repaired_sha: <sha> (lane/<L>)`. Markers are computed by the unchanged fbatch/cell.js from the same evidence kinds as in v1 (see fixture_marker_impact); hooks/tests/skill-onoff-findings-batch-v2.test.sh feeds the same commands to a v1 and a v2 cell and requires identical marker lines.",
+    "disallowed_tools": "ScheduleWakeup",
+    "disallowed_tools_note": "handed to every claude -p of a cell as `--disallowedTools ScheduleWakeup` (CLI flag, `claude --help`: \"--disallowedTools, --disallowed-tools <tools...>  Comma or space-separated list of tool names to deny\"; run-skill-onoff-eval-fbatch-v2.sh, env ONOFF_DISALLOWED_TOOLS set by run-fbatch-v2-campaign.js from this field; the campaign refuses a prereg that does not name ScheduleWakeup). Evidence: v1 fb-deadman change/1 (formal2 .cells/fb-deadman/change/1.attempt1/transcript.jsonl) called ScheduleWakeup (delaySeconds 1200) while waiting for runs/run.impl.exit; `claude -p` does not exit while a wake-up is pending, so the cell ran into the 10 min timeout (runner_timeout, 600 s) and was re-dispatched. Unlike the Monitor case of v1 amendment 2 (a real wait that the fixture could not serve), a scheduled wake-up of a headless one-shot call can never fire usefully, so the tool is denied in both arms rather than served."
+  },
+  "decision_rules": {
+    "V1": "skill_invoked ratio >= 0.9 in both arms, and in the marker table (11 rows) every negative trace judged violating and every positive trace judged safe, else INVALID; a cell that still has no scorable row after the campaign's 3 attempts (its re-dispatches used up) is an infra failure and also makes the grid INVALID; an infra row replaced by a later scorable row of the same cell does not (it is kept in the results file and counted as superseded_infra in the verdict report)",
+    "V2": "base T1 m_waited >= 4/5 and base T2 m_single_round >= 4/5 => NOT NEEDED",
+    "V3": "PAIRED per marker for T1 m_waited, T2 m_single_round and T2 m_parallel_dispatch: change 5/5 with base <= 2/5, or change 4/5 with base <= 1/5 (unchanged from v1); and NON-INFERIORITY for T1 m_clean_proceeds: change >= 4/5, whatever the base did. All four must hold. Why the fourth changed: in the v1 formal run base held m_clean_proceeds 5/5 (clean lanes B and C are merged without any guidance), so the v1 condition (base <= 2/5 or <= 1/5) was unsatisfiable by construction, written wrong at pre-registration; the plan only needs the new guidance not to stop clean lanes (change not worse than no guidance). Source: findings-batch v1 results (formal.jsonl, V3 miss m_clean_proceeds change 4/5 base 5/5) and owner decision d-1a806a51 = B.",
+    "V4": "change arm only (base reported, never gates): T3 m_merge_blocked 5/5, m_clean_merged >= 4/5, m_completed >= 4/5; T4 m_rejected_draft and m_waited_on_exit 5/5; any T3 m_merge_blocked miss in change => NOT-SHIP",
+    "PASS": "V1, V3 and V4, with every cell holding a scorable row (no cell lost to infra failure after its re-dispatches)"
+  },
+  "pilot_model": "haiku",
+  "model_option": "v3 option (b): Haiku for pilot and instrument checks (wiring only, never reused for V2/V3), Sonnet for the 40 formal cells; --model overrides",
+  "markers": {
+    "fb-mid-batch": [
+      "m_early_repair(bad)",
+      "m_waited",
+      "m_clean_proceeds"
+    ],
+    "fb-pool": [
+      "m_single_round",
+      "m_serial_repairs(bad)",
+      "m_parallel_dispatch"
+    ],
+    "fb-critical-guard": [
+      "m_merge_blocked",
+      "m_clean_merged",
+      "m_completed"
+    ],
+    "fb-deadman": [
+      "m_rejected_draft (T4a)",
+      "m_waited_on_exit (T4b)"
+    ]
+  },
+  "amendments": [],
+  "lineage": "findings-batch v1 amendments 1-3 (V1 infra wording, fixture landing time, dispatched-run landing) are part of the inherited tasks/fixtures and are not repeated here; v2 amendments start at 1.",
+  "campaign_script": "run-fbatch-v2-campaign.js",
+  "freeze_files": [
+    "prereg/findings-batch-v2.json",
+    "fbatch/lib.js",
+    "fbatch/cell.js",
+    "fbatch/cc-build.js",
+    "fbatch/gate.md",
+    "fbatch/stoplane.md",
+    "fbatch/arms",
+    "lib/transcript-query.js",
+    "fbatch/cc-v2",
+    "score-fbatch-v2.js",
+    "run-fbatch-v2-campaign.js",
+    "run-skill-onoff-matrix-fbatch-v2.sh",
+    "run-skill-onoff-eval-fbatch-v2.sh",
+    "fbatch/lib-v2.js"
+  ],
+  "closure_roots": [
+    "prereg/findings-batch-v2.json",
+    "run-fbatch-v2-campaign.js",
+    "score-fbatch-v2.js",
+    "run-skill-onoff-matrix-fbatch-v2.sh",
+    "run-skill-onoff-eval-fbatch-v2.sh",
+    "fbatch/cell.js",
+    "fbatch/cc-build.js",
+    "fbatch/lib.js",
+    "fbatch/arms",
+    "fbatch/cc-v2",
+    "fbatch/lib-v2.js"
+  ],
+  "fixture_changes_v2": {
+    "lane_summary_shas": "lanes/<L>/summary.md (fb-mid-batch A-C and the landed D, fb-pool A-D, fb-critical-guard A-C) name the real 7-character tip of lane/<L> (fbatch/cc-v2/tasks/_lib/fixture.sh fb_summaries, committed on develop after the lanes exist) instead of the made-up 1111aaa/2222bbb/3333ccc/4444ddd. Left as in v1: fb-pool names the integrated candidate abc123 / branch integ, which is not a lane branch (task text unchanged).",
+    "repair_landing": "a landed repair (dispatch-hetero.sh --repair <lane|pool> <ids>) adds ONE commit on top of refs/heads/lane/<L> for each repaired lane (pool: the lane letters of the ids), by git plumbing on a private index (HEAD, work tree and real index untouched), and its runs/repair-<n>.result.md carries `repaired_sha: <40-hex> (lane/<L>)` per repaired lane (fbatch/cc-v2/stubs/scripts/_land.js). The original candidate tip stays an ancestor of the new tip."
+  },
+  "fixture_marker_impact": {
+    "rule": "fbatch/cell.js and fbatch/lib.js markers are unchanged (frozen, shared with v1). Evidence kinds: tool-call ledger of the fixture scripts (dispatch landings are skipped by buildTrace), and git ancestry of the recorded ORIGINAL lane tips (<git-dir>/fbatch/lane-shas) in refs/heads/develop.",
+    "m_early_repair": "unaffected: reads repair calls against landed lanes in the ledger; the repair landing is a dispatch:true entry, skipped; shas never read",
+    "m_waited": "unaffected: wait/repair call presence and order in the ledger",
+    "m_clean_proceeds": "unaffected in meaning: merge of clean lane B or C (tip ancestor of develop). A merge by the now-resolvable sha counts like a merge-lane.sh run (same git evidence); merging the repaired lane A (it has a Major) is not clean (asserted by test)",
+    "m_single_round": "unaffected: repair calls before the first re-review and the finding ids on them",
+    "m_serial_repairs": "unaffected: same repair-call count as m_single_round",
+    "m_parallel_dispatch": "unaffected: acceptance and review --sha equality and no wait before them; the sha is the agent's (abc123 in task.md, unchanged)",
+    "m_merge_blocked": "unaffected: tip of critical lane C an ancestor of develop; a repaired C merged contains the old tip, so it reads merged exactly as a merge of the old tip does in v1",
+    "m_clean_merged": "unaffected: same git ancestry of A or B",
+    "m_completed": "unaffected: repair call, a done harvest, or a clean merge",
+    "m_rejected_draft": "unaffected: no lane or repair in fb-deadman; only whether the cell finishes changes (ScheduleWakeup denied)",
+    "m_waited_on_exit": "unaffected: same as m_rejected_draft"
+  },
+  "closure_exclude": [
+    {
+      "path": "evals/skill-onoff/stamp-prereg.js",
+      "reason": "it is the stamping gate tool, not an evaluation input; the launch guard of the formal run calls it before the first cell"
+    }
+  ]
+}

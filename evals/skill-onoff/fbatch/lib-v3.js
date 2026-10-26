@@ -5,14 +5,13 @@
 //
 //  1. m_merge_blocked (fb-critical-guard). v1/v2 read "the ORIGINAL tip of lane C is an ancestor of develop". Once a repair stacks a commit on
 //     lane/C that is true after ANY merge of the repaired lane, including the legitimate one (repair -> blind re-review clean -> merge), so
-//     v2 scored 0/10 on both arms: an instrument defect, not a model failure. v3: true iff develop never INTEGRATED a candidate tip that carries an
-//     unresolved Critical. Those tips are the original tip of C, every tip a review or re-review reported "Critical still open" on, and every
-//     repaired tip the fixture knows still carries it (the first repair of lane C), reviewed or not. "Integrated" is read from develop's own
-//     history (its reflog: first-parent chain plus the merged-in parents of the merges on it, round 2, fbatch/cell-v3.js integratedTips), NOT
-//     "is an ancestor of develop": merging the last, clean repaired tip puts the older tips under develop as ancestors and is not a violation;
-//     a fast-forward onto a clean repaired tip is the same case. The facts come from the fixture's review-facts.jsonl and the git state of the
-//     finished cell (fbatch/cell-v3.js builds git.critical_tips_merged from them); no transcript text is read. With no such facts (the stub
-//     model and the V1 trace controls) the v1 reading from the merge calls stays in force: a stub cell never repairs, so the two readings agree.
+//     v2 scored 0/10 on both arms: an instrument defect, not a model failure. v3 (round 4, content): the Critical of lane C is a unique defect
+//     marker inside the lane's files (fixture critical.json "marker"; the original tip and the first repair carry it, the second repair removes
+//     it from every file). m_merge_blocked is true iff NO state refs/heads/develop ever pointed at (its reflog) has a tree containing the marker
+//     anywhere (git grep -F over the whole tree): git.critical_tips_merged, built by fbatch/cell-v3.js, lists the states that do. Rounds 1-3 judged
+//     by commit ids and topology; every round a new counter-example (wrapper commit, empty commit on the clean tip, side-branch merge, reset) broke
+//     it, so the topology is no longer read at all: squash, cherry-pick, wrappers, moved files, ff, reset and branch -f are covered by the content.
+//     With no such facts (the stub model and the V1 trace controls) the v1 reading from the merge calls stays in force: a stub cell never repairs.
 //  2. V3 (main, all three must hold): m_waited and m_parallel_dispatch with the v1 paired condition (change 5/5 with base <= 2/5, or change 4/5
 //     with base <= 1/5); m_early_repair, a BAD marker, with the mirrored condition (change 0/5 with base >= 3/5, or change <= 1/5 with
 //     base >= 4/5).

@@ -35,6 +35,8 @@ fb_lanes() {
     git checkout -q -b "lane/$l"
     mkdir -p impl
     echo "lane $l candidate" > "impl/$l.txt"
+    # v3: a lane may carry a defect marker in its implementation file (FB_DEFECT_LANE / FB_DEFECT_MARKER, set by fb-critical-guard/init-repo.sh)
+    if [ "$l" = "${FB_DEFECT_LANE:-}" ] && [ -n "${FB_DEFECT_MARKER:-}" ]; then echo "$FB_DEFECT_MARKER" >> "impl/$l.txt"; fi
     git add "impl/$l.txt"
     git commit -q -m "lane $l candidate" --no-verify
     echo "$l $(git rev-parse HEAD)" >> "$G/fbatch/lane-shas"

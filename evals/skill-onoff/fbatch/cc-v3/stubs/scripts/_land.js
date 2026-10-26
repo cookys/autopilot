@@ -117,17 +117,28 @@ function commitRepairs(root, lanes, label, ids, dir) {
     const idx = path.join(gitDir, 'fbatch', `repair-index-${label}-${lane}`);
     const env = { GIT_INDEX_FILE: idx };
     try {
-      const blob = git(['hash-object', '-w', '--stdin'], { input: `repair of ${ids || 'findings'} (${label})\n` }).stdout.trim();
+      // Round 4 (content): a repair of the critical lane either keeps a residual copy of the defect marker (the first `residual_repairs` repairs,
+      // in a file it adds) or removes the marker from EVERY file of the tree it repairs (git grep, any path).
+      const n = cfg && cfg.lane === lane ? readFacts(dir).filter((f) => f.kind === 'repair' && f.lane === lane).length + 1 : 0;
+      const residual = n > 0 && n <= (cfg.residual_repairs || 0);
+      const note = `repair of ${ids || 'findings'} (${label})\n${residual && cfg.marker ? `${cfg.marker}\n` : ''}`;
+      const blob = git(['hash-object', '-w', '--stdin'], { input: note }).stdout.trim();
       git(['read-tree', old], { env });
+      if (n > 0 && !residual && cfg.marker) {
+        const hits = git(['grep', '-l', '-z', '-F', '-e', cfg.marker, old, '--']).stdout.split('\0').filter(Boolean).map((x) => x.slice(old.length + 1));
+        for (const f of hits) {
+          const text = git(['show', `${old}:${f}`]).stdout.split('\n').filter((l) => !l.includes(cfg.marker)).join('\n');
+          const b2 = git(['hash-object', '-w', '--stdin'], { input: text }).stdout.trim();
+          const mode = (git(['ls-tree', old, '--', f]).stdout.split(/\s+/)[0]) || '100644';
+          git(['update-index', '--add', '--cacheinfo', `${mode},${b2},${f}`], { env });
+        }
+      }
       git(['update-index', '--add', '--cacheinfo', `100644,${blob},impl/${lane}.${label}.txt`], { env });
       const tree = git(['write-tree'], { env }).stdout.trim();
       const sha = git(['commit-tree', tree, '-p', old, '-m', `lane ${lane} ${label}: repair ${ids || ''}`.trim()]).stdout.trim();
       if (/^[0-9a-f]{40}$/.test(sha) && git(['update-ref', ref, sha, old]).status === 0) {
         out.push({ lane, sha });
-        if (cfg && cfg.lane === lane) {
-          const n = readFacts(dir).filter((f) => f.kind === 'repair' && f.lane === lane).length + 1;
-          appendFact(dir, { kind: 'repair', lane, n, sha, label, residual_critical: n <= (cfg.residual_repairs || 0) });
-        }
+        if (n > 0) appendFact(dir, { kind: 'repair', lane, n, sha, label, residual_critical: residual });
       }
     } finally { try { fs.unlinkSync(idx); } catch { /* none */ } }
   }

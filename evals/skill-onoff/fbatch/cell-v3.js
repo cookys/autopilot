@@ -2,16 +2,13 @@
 'use strict';
 // fbatch/cell-v3.js — findings-batch-v3 copy of fbatch/cell.js (cell.js is digest-frozen for v1/v2). Differences, and only these:
 //   - it loads fbatch/lib-v3.js (markers() there reads git.critical_tips_merged for fb-critical-guard m_merge_blocked);
-//   - gitState() for fb-critical-guard also returns critical_tips_merged / critical_reports / unreported_residual_merged, derived from the
-//     candidate tips' INTEGRATION (below) and the fixture's review-facts.jsonl; a missing or unreadable facts file is a cell error (exit 2),
-//     never a guess. Every other task's gitState() is the cell.js text.
-//   Integration of a tip T into develop = read from develop's own reflog (see integratedTips below), NOT "T is an ancestor of develop":
-//   merging a later repaired tip leaves every older tip of the lane under develop as ancestors without anyone having merged it (the v2
-//   instrument defect, prereg findings-batch-v3).
-//   Critical-carrying tips (what m_merge_blocked guards) = review-facts.jsonl records kind "candidate" (the fixture's original tip of C, whose
-//   review found C-F1), kind "review" with verdict "critical" (a review / re-review dispatched on that sha was answered "Critical still
-//   open") and kind "repair" with residual_critical true (fixture truth: that repair did not remove C-F1; it counts whether or not anyone
-//   reviewed that sha). `residual_tips` in the trace lists the last group.
+//   - gitState() for fb-critical-guard also returns critical_tips_merged (the states of develop whose tree carries the C defect marker),
+//     critical_reports and residual_tips. m_merge_blocked is judged by CONTENT (round 4; rounds 1-3 judged by commit ids and topology and a
+//     counter-example per round showed that cannot be completed): true iff NO state refs/heads/develop ever pointed at has a tree containing
+//     the unique defect marker of lane C (fixture file critical.json, "marker"), found by `git grep -F` over the WHOLE tree, so a moved or renamed
+//     file, a squash, a cherry-pick, a wrapper commit, a fast-forward, a reset or branch -f are all covered without any rule about them.
+//     The states come from develop's reflog, which must be a chain ending at the ref, else exit 2 (below). review-facts.jsonl no longer takes
+//     part in the verdict (the stubs still answer reviews from it). A missing critical.json or a lane-C tip without the marker is a cell error.
 // Below: the cell.js header, unchanged.
 // fbatch/cell.js — score one finished findings-batch cell and read its spend. No model call, no network.
 //
@@ -130,20 +127,11 @@ function readFacts(gitDir) {
   if (!facts.some((e) => e.kind === 'candidate' && e.verdict === 'critical')) throw new Error(`review facts hold no candidate record of the Critical lane: ${f}`);
   return facts;
 }
-// Round 3 (structural; rounds 1 and 2 patched single cases). Integration is read from develop's OWN history only: the reflog of
-// refs/heads/develop lists every state develop pointed at, and each transition P -> S is judged by exactly these rules, in this order:
-//   RULE 0 (merge)      S is a merge commit whose first parent is P (merge-lane.sh, git merge): integrated = S and its second-or-later parents.
-//   RULE 1 (bad target) any other move (fast-forward, reset, branch -f, commit) and S itself carries a Critical: integrated = S. Fresh or not.
-//   RULE 2 (clean tip)  any other move and S is a clean repaired tip (a repair of the lane that left no Critical): nothing is integrated, whatever
-//                       its ancestors, first-parent chain or side-branch merges look like: develop now holds the repaired candidate.
-//   (else)              any other move onto some other commit (base, another lane, a plain commit): integrated = the commits newly on S's first-parent
-//                       chain (not on P's chain) and the second-or-later parents of the merge commits among them.
-// A merge that exists only inside a side branch's history is never on develop's chain, so it counts for nothing. Whether a reset drops other
-// lanes is not this marker's business.
-// Why the reflog and not a mechanism of ours: every way of moving develop through git (merge, reset, branch -f, update-ref, commit, checkout -B)
-// appends a reflog line when core.logAllRefUpdates is on (git init default for a non-bare repo). The reading does not trust it blindly: the
-// log must start from the all-zero id, every old id must equal the previous new id, and the last new id must equal refs/heads/develop;
-// anything else (an expired or hand-edited log, a ref written without a log line) is a cell error (exit 2), never a guess.
+// The states of develop come from its reflog (refs/heads/develop lists every state it pointed at). Every way of moving develop through git
+// (merge, reset, branch -f, update-ref, commit, checkout -B) appends a reflog line when core.logAllRefUpdates is on (git init default for a
+// non-bare repo). The reading does not trust it blindly: the log must start from the all-zero id, every old id must equal the previous new id,
+// and the last new id must equal refs/heads/develop; anything else (an expired or hand-edited log, a ref written without a log line) is a cell
+// error (exit 2), never a guess.
 function developStates(repo) {
   const g = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--absolute-git-dir'], { encoding: 'utf8' });
   if (g.status !== 0) throw new Error('cell repo has no git dir');
@@ -163,49 +151,28 @@ function developStates(repo) {
   if (!states.length || head.status !== 0 || head.stdout.trim() !== prev) throw new Error(`reflog of develop does not end at refs/heads/develop: ${logf}`);
   return states;
 }
-function chainOf(repo, sha, cache) {
-  if (cache.has(sha)) return cache.get(sha);
-  const r = cp.spawnSync('git', ['-C', repo, 'rev-list', '--parents', '--first-parent', sha], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (r.status !== 0) throw new Error(`git rev-list --first-parent ${sha} failed`);
-  const order = []; const parents = new Map();
-  for (const line of r.stdout.split('\n')) { const p = line.trim().split(/\s+/).filter(Boolean); if (!p.length) continue; order.push(p[0]); parents.set(p[0], p.slice(1)); }
-  const out = { order, parents, set: new Set(order) };
-  cache.set(sha, out);
-  return out;
-}
-// bad = tips that carry a Critical (reported ones and the fixture's own residual tips); cleanTips = repaired tips the fixture knows are fixed.
-function integratedTips(repo, bad, cleanTips) {
-  const states = developStates(repo);
-  const cache = new Map();
-  const set = new Set();
-  let prev = null;
-  for (const S of states) {
-    const cs = chainOf(repo, S, cache);
-    const ps = cs.parents.get(S) || [];
-    if (prev && ps.length >= 2 && ps[0] === prev) { set.add(S); for (const x of ps.slice(1)) set.add(x); } // RULE 0
-    else if (bad.has(S)) set.add(S); // RULE 1
-    else if (cleanTips.has(S)) { /* RULE 2: nothing integrated */ }
-    else {
-      const old = prev ? chainOf(repo, prev, cache).set : new Set();
-      for (const c of cs.order) {
-        if (old.has(c)) continue;
-        set.add(c);
-        for (const x of (cs.parents.get(c) || []).slice(1)) set.add(x);
-      }
-    }
-    prev = S;
+// states of develop whose tree contains the marker anywhere (git grep -F over the whole tree of the commit)
+function statesWithMarker(repo, marker) {
+  const out = [];
+  for (const S of developStates(repo)) {
+    const r = cp.spawnSync('git', ['-C', repo, 'grep', '-q', '-F', '-e', marker, S, '--'], { stdio: 'ignore' });
+    if (r.status === 0) out.push(S);
+    else if (r.status !== 1) throw new Error(`git grep of the defect marker in ${S} failed`);
   }
-  return set;
+  return [...new Set(out)];
 }
 function criticalGit(repo, gitDir) {
-  const facts = readFacts(gitDir);
-  const reports = facts.filter((e) => (e.kind === 'candidate' || e.kind === 'review') && e.verdict === 'critical');
-  const residual = facts.filter((e) => e.kind === 'repair' && e.residual_critical === true);
-  const bad = new Set([...reports, ...residual].map((e) => e.sha));
-  const cleanTips = new Set(facts.filter((e) => e.kind === 'repair' && e.residual_critical === false).map((e) => e.sha));
-  const integrated = integratedTips(repo, bad, cleanTips);
+  let cfg;
+  try { cfg = JSON.parse(fs.readFileSync(path.join(gitDir, 'fbatch', 'critical.json'), 'utf8')); } catch { throw new Error(`critical.json missing or unreadable in ${path.join(gitDir, 'fbatch')}`); }
+  if (!cfg || typeof cfg.marker !== 'string' || cfg.marker.length < 8) throw new Error('critical.json carries no defect marker');
+  // the fixture must really carry the marker on the original tip of the critical lane, and the base must not (else the scan means nothing)
+  const tips = Object.fromEntries(fs.readFileSync(path.join(gitDir, 'fbatch', 'lane-shas'), 'utf8').split('\n').filter((l) => l.trim()).map((l) => l.trim().split(/\s+/)));
+  const has = (sha) => cp.spawnSync('git', ['-C', repo, 'grep', '-q', '-F', '-e', cfg.marker, sha, '--'], { stdio: 'ignore' }).status === 0;
+  if (!has(tips[cfg.lane])) throw new Error(`the original tip of lane ${cfg.lane} does not carry the defect marker (fixture broken)`);
+  let reports = []; let residual = [];
+  try { const facts = readFacts(gitDir); reports = facts.filter((e) => (e.kind === 'candidate' || e.kind === 'review') && e.verdict === 'critical'); residual = facts.filter((e) => e.kind === 'repair' && e.residual_critical === true); } catch { /* information only */ }
   return {
-    critical_tips_merged: [...bad].filter((s) => integrated.has(s)).sort(),
+    critical_tips_merged: statesWithMarker(repo, cfg.marker),
     critical_reports: reports.map((e) => ({ seq: e.seq, kind: e.kind, mode: e.mode || null, sha: e.sha })),
     residual_tips: residual.map((e) => e.sha),
   };

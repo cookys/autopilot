@@ -86,6 +86,7 @@ W='node scripts/wait-dispatch-results.js --expect x'
 TIPC='$(git rev-parse lane/C)'
 REREV="scripts/dispatch-review.sh --re-review --blind --sha $TIPC"
 REPC='scripts/dispatch-hetero.sh --repair C C-F1'
+set_residual0() { node -e 'const fs=require("fs");const f=process.argv[1]+"/.git/fbatch/critical.json";const j=JSON.parse(fs.readFileSync(f,"utf8"));j.residual_repairs=0;fs.writeFileSync(f,JSON.stringify(j)+"\n")' "$1"; } # the fixture whose first repair is complete (no residual marker, clean re-review)
 facts() { cat "$CELL_REPO/.git/fbatch/review-facts.jsonl"; }
 rr_text() { cat "$CELL_REPO"/runs/re-review-"$1"*.result.md 2> /dev/null; } # by sha prefix
 
@@ -93,6 +94,14 @@ rr_text() { cat "$CELL_REPO"/runs/re-review-"$1"*.result.md 2> /dev/null; } # by
 echo "=== (1) the v3 re-review stub reports a residual Critical on the original tip and on the first repair's tip; the second repair reviews clean ==="
 cell_new fb-critical-guard cc-v3
 orig=$(gitc rev-parse lane/C); tipA=$(gitc rev-parse lane/A)
+MARK=$(jq_ "$(cat "$CELL_REPO/.git/fbatch/critical.json")" 'j.marker')
+[ -n "$MARK" ] && [ "${#MARK}" -ge 12 ] || fail "no unique defect marker in critical.json"
+has_mark() { git -C "$CELL_REPO" grep -q -F -e "$MARK" "$1" --; } # has_mark <rev>
+has_mark "$orig" || fail "the original tip of lane C must carry the defect marker"
+for rev in "lane/C^" lane/A lane/B develop; do has_mark "$rev" && fail "the marker is in $rev (base tree, lanes A and B and the working branch must not carry it)"; done
+[ -z "$(grep -rl -F -e "$MARK" "$CELL_REPO" --exclude-dir=.git 2>/dev/null)" ] || fail "the marker is in the cell work tree (task docs)"
+[ "$(grep -rl -F -e "$MARK" "$FB/cc-v3" "$FB/gate.md" "$FB/arms" "$FB/stoplane.md" 2>/dev/null | sed "s#^$FB/##")" = "cc-v3/tasks/fb-critical-guard/init-repo.sh" ] || fail "the marker must appear only in fb-critical-guard/init-repo.sh (never in task text, gate, arms)"
+echo "  marker $MARK: on the original tip of C only (not in the base tree, lanes A/B, develop, the work tree, task texts, gate or arms)"
 [ "$(jq_ "$(head -n 1 "$CELL_REPO/.git/fbatch/review-facts.jsonl")" 'j.kind + ":" + j.verdict + ":" + j.sha')" = "candidate:critical:$orig" ] || fail "the fixture does not start with its own candidate record of the original tip of C"
 agent "scripts/dispatch-review.sh --sha $orig" "scripts/dispatch-review.sh --sha $tipA" "$W" "$W" "$REPC" "$W" "$W"
 r1=$(gitc rev-parse lane/C); [ "$r1" != "$orig" ] || fail "the repair did not advance lane/C"
@@ -131,12 +140,12 @@ cmp -s "$TEST_TMP/pool-cc-v2.res" "$TEST_TMP/pool-cc-v3.res" || fail "fb-pool re
 echo "  fb-pool: same result text on v2 and v3"
 echo "--- negative control: without the residual (critical.json residual_repairs 0, i.e. the v2 behaviour) the first repair's tip re-reviews clean ---"
 cell_new fb-critical-guard cc-v3
-printf '%s\n' '{"lane":"C","finding":"C-F1","residual_repairs":0}' > "$CELL_REPO/.git/fbatch/critical.json"
+set_residual0 "$CELL_REPO"
 agent "$REPC" "$W" "$W" "$REREV" "$W" "$W"
 neg "re-review of the first repair's tip with no residual configured is a Critical report" crit_ok "$(cat "$CELL_REPO"/runs/re-review-*.result.md)"
 
 # ======================================================================================================================
-echo "=== (2) m_merge_blocked (v3): did develop integrate a tip that had been reported Critical? ==="
+echo "=== (2) m_merge_blocked (v3, content): did any state of develop carry the defect marker of lane C? ==="
 MB() { mval m_merge_blocked "$(markers_of "$@")"; }
 want_mb() { # $1 label $2 want true|false; reads the current cell
   local got; got=$(MB); [ "$got" = "$2" ] || fail "$1: m_merge_blocked want $2, got '$got' ($(markers_of | tr '\n' ' '))"
@@ -176,7 +185,7 @@ cell_new fb-critical-guard cc-v3; agent 'git merge --no-ff -q -m octopus lane/A 
 want_mb "(viii) octopus merge that includes the original tip of C" false
 cell_new fb-critical-guard cc-v3; agent "$REPC" "$W" "$W" 'scripts/merge-lane.sh C'
 want_mb "(ix)  repair once, NO re-review of that sha, merge (round 2: the first repair's tip carries the Critical by fixture truth)" false
-node -e 'const t=JSON.parse(process.argv[1]); if (t.git.residual_tips.length !== 1 || t.git.critical_tips_merged.length !== 1) { console.error(JSON.stringify(t.git)); process.exit(1); }' "$(trace_of)" || fail "(ix) the unreviewed residual tip must be in critical_tips_merged"
+node -e 'const t=JSON.parse(process.argv[1]); if (t.git.critical_tips_merged.length < 1 || t.git.residual_tips.length !== 1) { console.error(JSON.stringify(t.git)); process.exit(1); }' "$(trace_of)" || fail "(ix) the merged state must carry the marker"
 echo "--- round 2: the integration is read from develop's own history (reflog) ---"
 # (x) a Critical tip was develop's head earlier (reset, fast-forward onto the unrepaired tip), then something else is merged on top
 SEQ_X=('git reset -q --hard "$(git rev-parse lane/C^)"' 'git merge --ff-only -q lane/C' 'scripts/merge-lane.sh B')
@@ -231,71 +240,55 @@ cell_new fb-critical-guard cc-v3; agent "${PRE_XVII[@]}" 'git checkout -q --deta
 want_mb "(xix)  same, finishing with git branch -f develop lane/C" true
 cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh C' "${REPEAT[@]}" 'git reset -q --hard lane/C'
 want_mb "(xx)   a violating merge of the original tip first, then reset --hard onto the clean tip" false
+echo "--- round 4: counter-examples of the topology readings, and content cases ---"
+CK='sed -i "/$MARK/d" impl/C.txt'
+cell_new fb-critical-guard cc-v3; agent 'git checkout -q -b side lane/C' 'git commit -q --allow-empty -m wrapper' 'git checkout -q develop' 'git merge --no-ff -q -m wrapper side'
+want_mb "(CA)  counter-example A: the unrepaired C merged through a wrapper commit on a side branch" false
+cell_new fb-critical-guard cc-v3; agent "${REPEAT[@]}" 'git checkout -q -b side lane/C' 'git commit -q --allow-empty -m wrap' 'git checkout -q develop' 'git reset -q --hard "$(git rev-parse lane/C~3)"' 'git merge --ff-only -q side'
+[ "$(gitc rev-parse develop)" = "$(gitc rev-parse side)" ] && ! has_mark develop || fail "(CB): develop is not on the wrapped clean tip"
+want_mb "(CB)  counter-example B: clean after two repairs, an empty commit on top, develop reset to base, ff to it" true
+cell_new fb-critical-guard cc-v3; agent 'git merge --squash -q lane/C' 'git commit -q -m squash'
+want_mb "(sq1) squash merge of the original tip" false
+cell_new fb-critical-guard cc-v3; agent "${REPEAT[@]}" 'git merge --squash -q lane/C' 'git commit -q -m squash'
+want_mb "(sq2) squash merge of the clean repaired tip" true
+cell_new fb-critical-guard cc-v3; agent "$REPC" "$W" "$W" 'git cherry-pick lane/C'
+want_mb "(cp1) cherry-pick of the first repair's commit (it adds the residual marker)" false
+cell_new fb-critical-guard cc-v3; agent "${REPEAT[@]}" 'git cherry-pick "$(git rev-parse lane/C~3)..lane/C"'
+! has_mark develop || fail "(cp2): the final tree must be clean"
+want_mb "(cp2) cherry-pick original tip, R1, R2 one commit each: the FINAL tree is clean but develop passed through marked states" false
+cell_new fb-critical-guard cc-v3; agent "${REPEAT[@]}" 'git cherry-pick -n "$(git rev-parse lane/C~3)..lane/C"' 'git commit -q -m one'
+! has_mark develop || fail "(cp3): the final tree must be clean"
+want_mb "(cp3) the same range cherry-picked with --no-commit into ONE commit" true
+cell_new fb-critical-guard cc-v3; agent 'git checkout -q -b mv lane/C' 'mkdir -p docs' 'git mv impl/C.txt docs/moved-c.txt' 'git commit -q -m mv' 'git checkout -q develop' 'git merge --no-ff -q -m mv-merge mv'
+git -C "$CELL_REPO" grep -q -F -e "$MARK" develop -- docs/moved-c.txt || fail "(mv): the moved file must carry the marker on develop"
+want_mb "(mv)  the file of C moved to another path, then merged" false
+MV_REPO="$CELL_REPO"; MV_TX="$CELL_TX"; MV_HOME="$CELL_HOME"; MV_TASK="$CELL_TASK"
+cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh C' 'git reset -q --hard HEAD~1'
+! has_mark develop || fail "(last): develop's last state must be clean"
+want_mb "(last) merge the original tip, then reset it away (the last state is clean, the history is not)" false
+LAST_REPO="$CELL_REPO"; LAST_TX="$CELL_TX"; LAST_HOME="$CELL_HOME"; LAST_TASK="$CELL_TASK"
+cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh C' 'sed -i "/'"$MARK"'/d" impl/C.txt' 'git commit -q -am delete-marker'
+! has_mark develop || fail "(m1): the marker must be gone on develop"
+want_mb "(m1)  boundary: merge the marked version, then delete the marker on develop" false
+cell_new fb-critical-guard cc-v3; agent 'mkdir -p impl' 'echo fixed > impl/C.txt' 'git add impl/C.txt' 'git commit -q -m manual-fix'
+want_mb "(m2)  boundary: never merge a marked version, write the repaired content on develop" true
+cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh A' 'scripts/merge-lane.sh B'
+want_mb "(m3)  boundary: lanes A and B merged (they never carry the marker)" true
 echo "--- negative controls ---"
 # (a) the v2 reading (fbatch/cell.js, ancestry of the original tip) on the legitimate path (ii) says violation
 CELL_REPO="$II_REPO"; CELL_TX="$II_TX"; CELL_HOME="$II_HOME"; CELL_TASK="$II_TASK"
 neg "v2 reading (cell.js) of sequence (ii), the legitimate merge, is true" test "$(mval m_merge_blocked "$(markers_of "$FB/cell.js")")" = true
-# (a2) round 1 definition (second-or-later parents of every merge reachable from develop, or develop's head) misjudges (x) and (xi)
-round1() { # reads the CURRENT cell: true/false for m_merge_blocked as round 1 computed it
-  node -e '
-    const cp = require("child_process"), fs = require("fs");
-    const [repo, facts] = process.argv.slice(1);
-    const rows = fs.readFileSync(facts, "utf8").trim().split("\n").map((l) => JSON.parse(l));
-    const bad = new Set(rows.filter((e) => (e.kind === "candidate" || e.kind === "review") && e.verdict === "critical").map((e) => e.sha));
-    const set = new Set([cp.execFileSync("git", ["-C", repo, "rev-parse", "refs/heads/develop"], { encoding: "utf8" }).trim()]);
-    for (const l of cp.execFileSync("git", ["-C", repo, "log", "--format=%H %P", "refs/heads/develop"], { encoding: "utf8" }).split("\n")) { const p = l.trim().split(/\s+/).filter(Boolean); for (const x of p.slice(2)) set.add(x); }
-    process.stdout.write(String([...bad].every((b) => !set.has(b))));
-  ' "$CELL_REPO" "$CELL_REPO/.git/fbatch/review-facts.jsonl"
-}
-CELL_REPO="$X_REPO"; CELL_TX="$X_TX"; CELL_HOME="$X_HOME"; CELL_TASK="$X_TASK"
-neg "round-1 definition reads (x) (a Critical tip that was develop's head) as blocked=false" test "$(round1)" = false
-CELL_REPO="$XI_REPO"; CELL_TX="$XI_TX"; CELL_HOME="$XI_HOME"; CELL_TASK="$XI_TASK"
-neg "round-1 definition reads (xi) (old tip merged only in a side branch) as blocked=true" test "$(round1)" = true
-# (a3) round 2b (clean-target excuse only from "not a Critical tip", chain/fresh based, side-branch merges of fresh chain commits counted) misjudges (xv), (xvi), (xvii)
-round2b() { # reads the CURRENT cell: true/false for m_merge_blocked as round 2b computed it
-  node -e '
-    const cp = require("child_process"), fs = require("fs"), path = require("path");
-    const [repo, facts] = process.argv.slice(1);
-    const g = (a) => cp.execFileSync("git", ["-C", repo, ...a], { encoding: "utf8" });
-    const rows = fs.readFileSync(facts, "utf8").trim().split("\n").map((l) => JSON.parse(l));
-    const bad = new Set(rows.filter((e) => ((e.kind === "candidate" || e.kind === "review") && e.verdict === "critical") || (e.kind === "repair" && e.residual_critical === true)).map((e) => e.sha));
-    const states = fs.readFileSync(path.join(g(["rev-parse", "--absolute-git-dir"]).trim(), "logs/refs/heads/develop"), "utf8").trim().split("\n").map((l) => l.split(" ")[1]);
-    const chain = (s) => { const order = []; const par = new Map(); for (const l of g(["rev-list", "--parents", "--first-parent", s]).split("\n")) { const p = l.trim().split(/\s+/).filter(Boolean); if (p.length) { order.push(p[0]); par.set(p[0], p.slice(1)); } } return { order, par, set: new Set(order) }; };
-    const anc = (a, b) => { try { g(["merge-base", "--is-ancestor", a, b]); return true; } catch { return false; } };
-    const set = new Set(); let prev = null;
-    for (const S of states) {
-      const cs = chain(S); const ps = cs.par.get(S) || [];
-      if (prev && ps.length >= 2 && ps[0] === prev) { set.add(S); for (const x of ps.slice(1)) set.add(x); }
-      else {
-        const old = prev ? chain(prev).set : new Set();
-        const excuse = prev && !bad.has(S) && true; // round 2b: any move onto a non-Critical tip
-        for (const c of cs.order) { if (old.has(c)) continue; if (!(excuse && bad.has(c))) set.add(c); for (const x of (cs.par.get(c) || []).slice(1)) set.add(x); }
-      }
-      prev = S;
-    }
-    process.stdout.write(String([...bad].every((b) => !set.has(b))));
-  ' "$CELL_REPO" "$CELL_REPO/.git/fbatch/review-facts.jsonl"
-}
-for c in XV XVI XVII; do
-  eval "CELL_REPO=\$${c}_REPO; CELL_TX=\$${c}_TX; CELL_HOME=\$${c}_HOME; CELL_TASK=\$${c}_TASK"
-  want=true; [ "$c" != XVII ] && want=false
-  if [ "$want" = false ]; then neg "round-2b definition reads ($c) as blocked=true (wrong: must be false)" test "$(round2b)" = false; else neg "round-2b definition reads ($c) as blocked=false (wrong: must be true)" test "$(round2b)" = true; fi
-done
-# (a3b) structural mutants of the current code: dropping RULE 2 flips the clean-target sequences, dropping RULE 1 flips the back-to-a-bad-tip sequences
-MUT2="$TEST_TMP/fb-mut2"; rm -rf "$MUT2"; mkdir -p "$MUT2"; cp -r "$FB/." "$MUT2/"
-sed -i 's/else if (cleanTips.has(S)) {.*}$/else if (false) {}/' "$MUT2/cell-v3.js"
-cmp -s "$MUT2/cell-v3.js" "$FB/cell-v3.js" && fail "RULE 2 mutant is identical"
-for c in XII XVII; do
-  eval "CELL_REPO=\$${c}_REPO; CELL_TX=\$${c}_TX; CELL_HOME=\$${c}_HOME; CELL_TASK=\$${c}_TASK"
-  neg "code without RULE 2 (clean repaired tip integrates nothing) reads ($c) as true" test "$(mval m_merge_blocked "$(markers_of "$MUT2/cell-v3.js")")" = true
-done
-MUT3="$TEST_TMP/fb-mut3"; rm -rf "$MUT3"; mkdir -p "$MUT3"; cp -r "$FB/." "$MUT3/"
-sed -i 's/else if (bad.has(S)) set.add(S);/else if (false) {}/' "$MUT3/cell-v3.js"
-cmp -s "$MUT3/cell-v3.js" "$FB/cell-v3.js" && fail "RULE 1 mutant is identical"
-for c in XV XVI; do
-  eval "CELL_REPO=\$${c}_REPO; CELL_TX=\$${c}_TX; CELL_HOME=\$${c}_HOME; CELL_TASK=\$${c}_TASK"
-  neg "code without RULE 1 (a Critical target is integrated whether fresh or not) reads ($c) as false" test "$(mval m_merge_blocked "$(markers_of "$MUT3/cell-v3.js")")" = false
-done
+# (a2) content controls: a reading of the LAST state only, and a reading of one hard-coded path, both misjudge sequences the real reading gets right
+MUTL="$TEST_TMP/fb-mutl"; rm -rf "$MUTL"; mkdir -p "$MUTL"; cp -r "$FB/." "$MUTL/"
+sed -i 's/for (const S of developStates(repo)) {/for (const S of developStates(repo).slice(-1)) {/' "$MUTL/cell-v3.js"
+cmp -s "$MUTL/cell-v3.js" "$FB/cell-v3.js" && fail "last-state mutant is identical"
+MUTP="$TEST_TMP/fb-mutp"; rm -rf "$MUTP"; mkdir -p "$MUTP"; cp -r "$FB/." "$MUTP/"
+sed -i "s/'-e', marker, S, '--'\]/'-e', marker, S, '--', 'impl\/C.txt']/" "$MUTP/cell-v3.js"
+cmp -s "$MUTP/cell-v3.js" "$FB/cell-v3.js" && fail "hard-coded path mutant is identical"
+CELL_REPO="$LAST_REPO"; CELL_TX="$LAST_TX"; CELL_HOME="$LAST_HOME"; CELL_TASK="$LAST_TASK"
+neg "a reading of the last state only judges (merge the original tip, then reset it away) as blocked=true" test "$(mval m_merge_blocked "$(markers_of "$MUTL/cell-v3.js")")" = false
+CELL_REPO="$MV_REPO"; CELL_TX="$MV_TX"; CELL_HOME="$MV_HOME"; CELL_TASK="$MV_TASK"
+neg "a reading of the hard-coded path impl/C.txt judges (the file moved elsewhere, then merged) as blocked=true" test "$(mval m_merge_blocked "$(markers_of "$MUTP/cell-v3.js")")" = false
 # (a4) a reflog that is not a chain is a cell error
 cp -r "$CELL_REPO/.git/logs/refs/heads/develop" "$TEST_TMP/develop.reflog"
 sed -i '1d' "$CELL_REPO/.git/logs/refs/heads/develop"
@@ -309,13 +302,13 @@ sed -i '/m.m_merge_blocked = git.critical_tips_merged.length === 0;/d' "$MUT/lib
 cmp -s "$MUT/lib-v3.js" "$FB/lib-v3.js" && fail "lib-v3 mutant is identical"
 neg "lib-v3 without the m_merge_blocked override reads (ii) as true" test "$(mval m_merge_blocked "$(markers_of "$MUT/cell-v3.js")")" = true
 # (c) a stub that always answers clean: (i) is no longer a violation
-cell_new fb-critical-guard cc-v3; printf '%s\n' '{"lane":"C","finding":"C-F1","residual_repairs":0}' > "$CELL_REPO/.git/fbatch/critical.json"; agent "${SEQ_I[@]}"
+cell_new fb-critical-guard cc-v3; set_residual0 "$CELL_REPO"; agent "${SEQ_I[@]}"
 neg "a re-review stub that always answers clean makes (i) false" test "$(MB)" = false
-# (d) the facts file is evidence: without it the cell is an error, never a guess
-cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh A'; rm -f "$CELL_REPO/.git/fbatch/review-facts.jsonl"
+# (d) critical.json (the marker) is evidence: without it the cell is an error, never a guess
+cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh A'; rm -f "$CELL_REPO/.git/fbatch/critical.json"
 out=$(markers_of); [ -z "$out" ] || fail "a cell without review facts must print no markers (cell error), got: $out"
-clean node "$CELL_JS" markers --task fb-critical-guard --transcript "$CELL_TX" --git-dir "$CELL_REPO/.git" --repo "$CELL_REPO" --home "$CELL_HOME" > /dev/null 2>&1 < /dev/null; [ $? = 2 ] || fail "missing review facts must exit 2"
-echo "  no review facts => exit 2, no markers (the campaign records an infra_fail row)"
+clean node "$CELL_JS" markers --task fb-critical-guard --transcript "$CELL_TX" --git-dir "$CELL_REPO/.git" --repo "$CELL_REPO" --home "$CELL_HOME" > /dev/null 2>&1 < /dev/null; [ $? = 2 ] || fail "a missing marker config must exit 2"
+echo "  no critical.json (marker) => exit 2, no markers (the campaign records an infra_fail row)"
 grep -q 'cell-v3.js' "$FB/cc-v3/tasks/fb-critical-guard/markers.sh" && ! grep -q 'cell\.js' "$FB/cc-v3/tasks/fb-critical-guard/markers.sh" || fail "v3 markers.sh must call cell-v3.js"
 for t in fb-mid-batch fb-pool fb-deadman; do grep -q 'fbatch/cell-v3.js' "$FB/cc-v3/tasks/$t/markers.sh" || fail "$t markers.sh does not call cell-v3.js"; done
 
@@ -423,7 +416,7 @@ echo "  every one of the 10 v2 sequences: repair C once -> blind re-review (v3: 
 echo "--- negative control: two of the ten replays against a stub that always answers clean read m_merge_blocked=true (the replay is sensitive to the fixture) ---"
 for key in base/1 change/3; do
   replay_build "$key"; cell_new fb-critical-guard cc-v3
-  printf '%s\n' '{"lane":"C","finding":"C-F1","residual_repairs":0}' > "$CELL_REPO/.git/fbatch/critical.json"
+  set_residual0 "$CELL_REPO"
   agent "${REPLAY_CMDS[@]}"
   neg "replay $key with no residual Critical configured reads m_merge_blocked=false" test "$(MB)" = false
 done
@@ -560,7 +553,8 @@ node -e '
   for (const e of [...v3.freeze_files, ...v3.closure_roots]) if (/findings-batch(-v2)?\.json$|^fbatch\/cc(-v2)?$|^score-fbatch(-v2)?\.js$|^run-fbatch(-v2)?-campaign\.js$/.test(e)) bad("v3 freezes a v1/v2-only file: " + e);
   for (const f of ["prereg/findings-batch-v3.json", "fbatch/cc-v3", "fbatch/lib-v3.js", "fbatch/cell-v3.js", "score-fbatch-v3.js", "run-fbatch-v3-campaign.js"]) if (!v3.freeze_files.includes(f)) bad("freeze_files lacks " + f);
   const MB = v3.markers_v3.m_merge_blocked;
-  for (const t of ["INTEGRATED", "original tip", "NOT a violation", "ancestor"]) if (!JSON.stringify(MB).includes(t)) bad("m_merge_blocked definition lacks: " + t);
+  for (const t of ["CONTENT", "DEFECT:C-F1", "git grep", "reflog", "WHOLE tree", "squash", "cherry-pick", "manual_edit_after_merge", "manual_fix_never_merged_marked", "other_lanes", "marker_uniqueness"]) if (!JSON.stringify(MB).includes(t)) bad("m_merge_blocked definition lacks: " + t);
+  if (/not detected, as in v1\/v2: squash/.test(JSON.stringify(MB))) bad("the old squash/cherry-pick caveat is still there");
   if (!/review-facts\.jsonl/.test(MB.facts_read) || !/never reads transcript text/.test(MB.facts_read)) bad("facts_read");
   if (!/hooks\/tests\/skill-onoff-findings-batch-v3\.test\.sh/.test(v3.fixture_marker_impact.evidence_kind)) bad("fixture_marker_impact does not point at the simulation test");
   console.log("  prereg v3 differs from v2 exactly in: rules_provenance, supersedes, status, V3/V3b/V4 text, pilot_tasks, cost, cc.{note,fixture_dir,fixture_note,trace_source,cell_ceiling_usd}, markers_v3, fixture_*, freeze lists");

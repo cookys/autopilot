@@ -7,7 +7,7 @@
 //     counter-example per round showed that cannot be completed): true iff NO state refs/heads/develop ever pointed at has a tree containing
 //     the unique defect marker of lane C (fixture file critical.json, "marker"), found by `git grep -F` over the WHOLE tree, so a moved or renamed
 //     file, a squash, a cherry-pick, a wrapper commit, a fast-forward, a reset or branch -f are all covered without any rule about them.
-//     The states come from develop's reflog, which must be a chain ending at the ref, else exit 2 (below). review-facts.jsonl no longer takes
+//     The states come from the fixture's reference-transaction journal of develop, cross-checked against the reflog; any inconsistency exits 2 (below). review-facts.jsonl no longer takes
 //     part in the verdict (the stubs still answer reviews from it). A missing critical.json or a lane-C tip without the marker is a cell error.
 // Below: the cell.js header, unchanged.
 // fbatch/cell.js — score one finished findings-batch cell and read its spend. No model call, no network.
@@ -127,29 +127,56 @@ function readFacts(gitDir) {
   if (!facts.some((e) => e.kind === 'candidate' && e.verdict === 'critical')) throw new Error(`review facts hold no candidate record of the Critical lane: ${f}`);
   return facts;
 }
-// The states of develop come from its reflog (refs/heads/develop lists every state it pointed at). Every way of moving develop through git
-// (merge, reset, branch -f, update-ref, commit, checkout -B) appends a reflog line when core.logAllRefUpdates is on (git init default for a
-// non-bare repo). The reading does not trust it blindly: the log must start from the all-zero id, every old id must equal the previous new id,
-// and the last new id must equal refs/heads/develop; anything else (an expired or hand-edited log, a ref written without a log line) is a cell
-// error (exit 2), never a guess.
-function developStates(repo) {
+// The states of develop come from the fixture's JOURNAL, not from the reflog (round 5: a deleted/renamed and re-created develop starts a new reflog of one
+// entry and erased the history; deleting a branch deletes its reflog). fb-critical-guard/init-repo.sh installs a reference-transaction hook that, at the
+// `committed` stage of every transaction touching refs/heads/develop, appends "<old> <new>" to <git-dir>/fbatch/develop-journal (new = all zeros for a
+// deletion, old = all zeros for a creation). Deletion, rename, re-creation, reset, ff, merge, commit, update-ref, branch -f all pass through it.
+// Consistency checks, any failure is a cell error (exit 2, an infra_fail row in the campaign), never a guess:
+//   1. the journal exists and every line is "<40hex> <40hex>";
+//   2. its first record is the creation of develop at the fixture's base commit (<git-dir>/fbatch/develop-base);
+//   3. it is a chain: each record's old equals the previous record's new (all zeros after a deletion);
+//   4. its last new equals the current refs/heads/develop;
+//   5. cross-check with the reflog (secondary evidence): every state the current develop reflog lists must be a state the journal lists. A move made
+//      with the hook disabled (git -c core.hooksPath=..., deleting the hook) breaks 3, 4 or 5.
+// The states judged are every non-zero new of the journal.
+const ZERO = '0'.repeat(40);
+function gitDirOf(repo) {
   const g = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--absolute-git-dir'], { encoding: 'utf8' });
   if (g.status !== 0) throw new Error('cell repo has no git dir');
-  const logf = path.join(g.stdout.trim(), 'logs', 'refs', 'heads', 'develop');
+  return g.stdout.trim();
+}
+function reflogEntries(repo) { // news (non-zero) of the current develop reflog; [] when the branch has no reflog
   let text;
-  try { text = fs.readFileSync(logf, 'utf8'); } catch { throw new Error(`reflog of develop missing: ${logf}`); }
-  const states = [];
-  let prev = '0'.repeat(40);
+  try { text = fs.readFileSync(path.join(gitDirOf(repo), 'logs', 'refs', 'heads', 'develop'), 'utf8'); } catch { return []; }
+  const out = [];
+  for (const line of text.split('\n')) { const m = /^([0-9a-f]{40}) ([0-9a-f]{40}) /.exec(line); if (m && m[2] !== ZERO) out.push(m[2]); }
+  return out;
+}
+function journalStates(repo) {
+  const dir = path.join(gitDirOf(repo), 'fbatch');
+  let text; let base;
+  try { text = fs.readFileSync(path.join(dir, 'develop-journal'), 'utf8'); } catch { throw new Error(`develop journal missing (hook not installed or removed): ${dir}/develop-journal`); }
+  try { base = fs.readFileSync(path.join(dir, 'develop-base'), 'utf8').trim(); } catch { throw new Error(`develop-base missing: ${dir}/develop-base`); }
+  const rec = [];
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
-    const m = /^([0-9a-f]{40}) ([0-9a-f]{40}) /.exec(line);
-    if (!m) throw new Error(`reflog of develop has a malformed line: ${logf}`);
-    if (m[1] !== prev) throw new Error(`reflog of develop is not a chain (an entry starts at ${m[1].slice(0, 7)}, the previous one ended at ${prev.slice(0, 7)}): ${logf}`);
-    states.push(m[2]); prev = m[2];
+    const m = /^([0-9a-f]{40}) ([0-9a-f]{40})$/.exec(line.trim());
+    if (!m) throw new Error('develop journal has a malformed line');
+    rec.push([m[1], m[2]]);
   }
+  if (!rec.length) throw new Error('develop journal is empty');
+  if (rec[0][0] !== ZERO || rec[0][1] !== base) throw new Error('develop journal does not start with the creation of develop at the fixture base');
+  let prev = ZERO;
+  for (const [o, n] of rec) { if (o !== prev) throw new Error(`develop journal is not a chain (a record starts at ${o.slice(0, 7)}, the previous one ended at ${prev.slice(0, 7)}): a move of develop bypassed the hook`); prev = n; }
   const head = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--verify', '-q', 'refs/heads/develop^{commit}'], { encoding: 'utf8' });
-  if (!states.length || head.status !== 0 || head.stdout.trim() !== prev) throw new Error(`reflog of develop does not end at refs/heads/develop: ${logf}`);
+  if (head.status !== 0 || head.stdout.trim() !== prev) throw new Error('develop journal does not end at the current refs/heads/develop: a move of develop bypassed the hook');
+  const states = rec.map((r) => r[1]).filter((n) => n !== ZERO); // journal order, repeats kept (the last one is develop's final state)
+  const set = new Set(states);
+  for (const n of reflogEntries(repo)) if (!set.has(n)) throw new Error(`the reflog of develop lists a state (${n.slice(0, 7)}) that the journal does not: a move of develop bypassed the hook`);
   return states;
+}
+function developStates(repo) {
+  return journalStates(repo);
 }
 // states of develop whose tree contains the marker anywhere (git grep -F over the whole tree of the commit)
 function statesWithMarker(repo, marker) {

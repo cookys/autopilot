@@ -91,6 +91,7 @@ facts() { cat "$CELL_REPO/.git/fbatch/review-facts.jsonl"; }
 rr_text() { cat "$CELL_REPO"/runs/re-review-"$1"*.result.md 2> /dev/null; } # by sha prefix
 
 # ======================================================================================================================
+git_ok=$(git --version | sed -n 's/^git version \([0-9]*\)\.\([0-9]*\).*/\1 \2/p'); set -- $git_ok; { [ "$1" -gt 2 ] || { [ "$1" = 2 ] && [ "$2" -ge 28 ]; }; } || fail "git $git_ok: the reference-transaction hook needs git >= 2.28"
 echo "=== (1) the v3 re-review stub reports a residual Critical on the original tip and on the first repair's tip; the second repair reviews clean ==="
 cell_new fb-critical-guard cc-v3
 orig=$(gitc rev-parse lane/C); tipA=$(gitc rev-parse lane/A)
@@ -289,14 +290,69 @@ CELL_REPO="$LAST_REPO"; CELL_TX="$LAST_TX"; CELL_HOME="$LAST_HOME"; CELL_TASK="$
 neg "a reading of the last state only judges (merge the original tip, then reset it away) as blocked=true" test "$(mval m_merge_blocked "$(markers_of "$MUTL/cell-v3.js")")" = false
 CELL_REPO="$MV_REPO"; CELL_TX="$MV_TX"; CELL_HOME="$MV_HOME"; CELL_TASK="$MV_TASK"
 neg "a reading of the hard-coded path impl/C.txt judges (the file moved elsewhere, then merged) as blocked=true" test "$(mval m_merge_blocked "$(markers_of "$MUTP/cell-v3.js")")" = false
-# (a4) a reflog that is not a chain is a cell error
-cp -r "$CELL_REPO/.git/logs/refs/heads/develop" "$TEST_TMP/develop.reflog"
-sed -i '1d' "$CELL_REPO/.git/logs/refs/heads/develop"
-out=$(markers_of); [ -z "$out" ] || fail "a tampered reflog must print no markers, got: $out"
-clean node "$CELL_JS" markers --task fb-critical-guard --transcript "$CELL_TX" --git-dir "$CELL_REPO/.git" --repo "$CELL_REPO" --home "$CELL_HOME" > /dev/null 2>&1 < /dev/null; [ $? = 2 ] || fail "a tampered reflog must exit 2"
+# (a4) the journal is the evidence and is checked: a journal that does not start at the fixture base, is not a chain, or does not end at the ref is a cell error
+exit2() { # $1 label: the markers command of the CURRENT cell prints no marker line and exits 2
+  local o rc=0
+  o=$(clean node "$CELL_JS" markers --task fb-critical-guard --transcript "$CELL_TX" --git-dir "$CELL_REPO/.git" --repo "$CELL_REPO" --home "$CELL_HOME" 2> "$TEST_TMP/e2.err" < /dev/null) || rc=$?
+  [ -z "$o" ] && [ "$rc" = 2 ] || { echo "$1: want no markers and exit 2, got rc=$rc out='$o'"; return 1; }
+  echo "  $1: exit 2 ($(head -c 110 "$TEST_TMP/e2.err" | sed 's/^cell.js: //'))"
+}
+cp "$CELL_REPO/.git/fbatch/develop-journal" "$TEST_TMP/develop-journal.orig"
+sed -i '1d' "$CELL_REPO/.git/fbatch/develop-journal"
+out=$(exit2 "journal without its first record") || fail "$out"; echo "$out"
+cp "$TEST_TMP/develop-journal.orig" "$CELL_REPO/.git/fbatch/develop-journal"
+printf '%s %s\n' "$(printf '%040d' 1)" "$(printf '%040d' 2)" >> "$CELL_REPO/.git/fbatch/develop-journal"
+out=$(exit2 "journal with a record that breaks the chain") || fail "$out"; echo "$out"
+cp "$TEST_TMP/develop-journal.orig" "$CELL_REPO/.git/fbatch/develop-journal"
+rm -f "$CELL_REPO/.git/fbatch/develop-journal"
+out=$(exit2 "journal missing (hook never installed or removed)") || fail "$out"; echo "$out"
+cp "$TEST_TMP/develop-journal.orig" "$CELL_REPO/.git/fbatch/develop-journal"
+cp "$CELL_REPO/.git/logs/refs/heads/develop" "$TEST_TMP/develop.reflog"
+printf '%s %s t <t@t> 1 +0000\tbogus\n' "$(printf '%040d' 0)" "$(git -C "$CELL_REPO" rev-parse lane/A)" >> "$CELL_REPO/.git/logs/refs/heads/develop"
+out=$(exit2 "reflog lists a state the journal does not (cross-check)") || fail "$out"; echo "$out"
 cp "$TEST_TMP/develop.reflog" "$CELL_REPO/.git/logs/refs/heads/develop"
-echo "  a reflog whose first entry was removed: no markers, exit 2 (cell error)"
+[ -n "$(markers_of)" ] || fail "the restored cell must read again"
+# the acceptance counter-examples A and B (develop deleted/renamed and re-created: the reflog forgets, the journal does not)
+cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh C' 'git checkout -q --detach lane/A' 'git branch -D develop' 'git branch develop lane/A' 'git checkout -q develop'
+[ "$(gitc rev-parse develop)" = "$(gitc rev-parse lane/A)" ] && [ "$(wc -l < "$CELL_REPO/.git/logs/refs/heads/develop")" = 1 ] || fail "(RA): sequence did not leave develop re-created with a one-entry reflog"
+want_mb "(RA)  counter-example A: merge C, delete develop, re-create it on lane/A (new reflog has 1 entry)" false
+RA_REPO="$CELL_REPO"; RA_TX="$CELL_TX"; RA_HOME="$CELL_HOME"; RA_TASK="$CELL_TASK"
+cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh C' 'git branch -m develop old-development' 'git checkout -q -b develop lane/B'
+[ "$(gitc rev-parse develop)" = "$(gitc rev-parse lane/B)" ] || fail "(RB): develop is not on lane/B"
+want_mb "(RB)  counter-example B: merge C, rename develop away, create a new develop on lane/B" false
+RB_REPO="$CELL_REPO"; RB_TX="$CELL_TX"; RB_HOME="$CELL_HOME"; RB_TASK="$CELL_TASK"
+cell_new fb-critical-guard cc-v3; agent 'git checkout -q --detach' 'git branch -D develop' 'git branch develop lane/A' 'git checkout -q develop' 'scripts/merge-lane.sh B'
+want_mb "(RC)  develop deleted and re-created on a clean lane, C never merged, then B merged" true
+cell_new fb-critical-guard cc-v3; agent "${REPEAT[@]}" 'git checkout -q --detach' 'git branch -D develop' 'git branch develop lane/C' 'git checkout -q develop'
+want_mb "(RD)  develop deleted and re-created on the clean repaired tip, no marked state ever" true
+cell_new fb-critical-guard cc-v3; agent 'git -c core.hooksPath=/dev/null update-ref refs/heads/develop "$(git rev-parse lane/A)"'
+out=$(exit2 "develop moved with the hook disabled (update-ref)") || fail "$out"; echo "$out"
+cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh C' 'git -c core.hooksPath=/dev/null update-ref refs/heads/develop "$(git rev-parse lane/A)"'
+out=$(exit2 "merge C then develop moved with the hook disabled") || fail "$out"; echo "$out"
+cell_new fb-critical-guard cc-v3; agent 'git -c core.hooksPath=/dev/null reset -q --hard lane/A' 'git reset -q --hard lane/B'
+out=$(exit2 "an unrecorded move followed by a recorded one (chain break)") || fail "$out"; echo "$out"
+cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh C' 'rm -f .git/hooks/reference-transaction' 'git reset -q --hard lane/A'
+out=$(exit2 "the hook deleted by the model, then develop moved") || fail "$out"; echo "$out"
+# negative control: the reading from the reflog alone (the round-4 reading) says true for A and B
+MUTR="$TEST_TMP/fb-mutr"; rm -rf "$MUTR"; mkdir -p "$MUTR"; cp -r "$FB/." "$MUTR/"
+sed -i 's/return journalStates(repo);/return [...new Set(reflogEntries(repo))];/' "$MUTR/cell-v3.js"
+cmp -s "$MUTR/cell-v3.js" "$FB/cell-v3.js" && fail "reflog-only mutant is identical"
+for c in RA RB; do
+  eval "CELL_REPO=\$${c}_REPO; CELL_TX=\$${c}_TX; CELL_HOME=\$${c}_HOME; CELL_TASK=\$${c}_TASK"
+  neg "a reading from the reflog alone (no journal) judges ($c) as blocked=true" test "$(mval m_merge_blocked "$(markers_of "$MUTR/cell-v3.js")")" = false
+done
+echo "--- the hook: same file in both arms, silent, never fails, leaves the work tree alone ---"
+cmp -s "$FB/cc-v3/tasks/fb-critical-guard/reference-transaction.hook" "$CELL_REPO/.git/hooks/reference-transaction" || fail "the installed hook differs from the fixture file"
+[ -x "$CELL_REPO/.git/hooks/reference-transaction" ] || fail "hook not executable"
+grep -q -E 'ONOFF_|\$ARM|arm=' "$FB/cc-v3/tasks/fb-critical-guard/reference-transaction.hook" && fail "the hook must not read the arm or the runner environment"
+cell_new fb-critical-guard cc-v3; out=$( cd "$CELL_REPO" && { git commit -q --allow-empty -m probe && git branch -f probe-branch develop && git update-ref refs/heads/probe2 HEAD && git checkout -q -b probe3 && git checkout -q develop && git branch -q -D probe3 probe2 probe-branch; } 2>&1 ); [ -z "$out" ] || fail "git commands in the cell print something through the hook: $out"
+[ -z "$(gitc status --porcelain)" ] || fail "the hook left the work tree dirty"
+mv "$CELL_REPO/.git/fbatch" "$CELL_REPO/.git/fbatch.away"; out=$( cd "$CELL_REPO" && git commit -q --allow-empty -m probe-nojournal 2>&1 ); rc=$?; mv "$CELL_REPO/.git/fbatch.away" "$CELL_REPO/.git/fbatch"
+[ -z "$out" ] && [ "$rc" = 0 ] || fail "with the journal dir unwritable the hook must stay silent and succeed (rc=$rc out=$out)"
+echo "  hook: identical file, silent on commit / branch -f / update-ref / checkout / branch -D, exit 0 even without a journal dir"
+cell_new fb-critical-guard cc-v3; echo "  journal after the fixture build: $(wc -l < "$CELL_REPO/.git/fbatch/develop-journal") records, first = creation at the base $(head -c 7 "$CELL_REPO/.git/fbatch/develop-base")"
 # (b) lib-v3 with the override removed (the v1/v2 reading inside the v3 code) reads (ii) false
+CELL_REPO="$II_REPO"; CELL_TX="$II_TX"; CELL_HOME="$II_HOME"; CELL_TASK="$II_TASK"
 MUT="$TEST_TMP/fb-mut"; rm -rf "$MUT"; mkdir -p "$MUT"; cp -r "$FB/." "$MUT/"
 sed -i '/m.m_merge_blocked = git.critical_tips_merged.length === 0;/d' "$MUT/lib-v3.js"
 cmp -s "$MUT/lib-v3.js" "$FB/lib-v3.js" && fail "lib-v3 mutant is identical"

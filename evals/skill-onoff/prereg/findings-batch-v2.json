@@ -151,5 +151,11 @@
     "m_completed": "unaffected: repair call, a done harvest, or a clean merge",
     "m_rejected_draft": "unaffected: no lane or repair in fb-deadman; only whether the cell finishes changes (ScheduleWakeup denied)",
     "m_waited_on_exit": "unaffected: same as m_rejected_draft"
-  }
+  },
+  "closure_exclude": [
+    {
+      "path": "evals/skill-onoff/stamp-prereg.js",
+      "reason": "it is the stamping gate tool, not an evaluation input; the launch guard of the formal run calls it before the first cell"
+    }
+  ]
 }

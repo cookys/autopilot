@@ -17,6 +17,7 @@
 //   5. FROZEN.json[<row>] = {frozen_at, stamped:true, packs, files}.
 // Dir-arms mode (a prereg with arms_dir and no arm_manifests, e.g. findings-batch): steps 1 and 4's manifest digests are skipped; the arm files
 // are covered by freeze_files, which must include the arms dir. Step 3 runs the campaign_script's --check-arms.
+// closure_exclude (optional, default empty; see closure-scan.js): audited exclusions from the closure; stamped into the FROZEN row verbatim and compared by --check.
 // closure_roots (optional): when present, every file closure-scan.js reaches from them (plus campaign_script) must be covered by freeze_files, else exit 2.
 // Order matters: stamp LAST. Any later edit to a digested file voids the row. --check re-derives everything and writes nothing.
 // Exit: 0 stamped/ok . 2 usage, unfrozen packs, empty allowed list, failed arm check, or (--check) a digest mismatch
@@ -70,8 +71,11 @@ const packMeta = (id) => {
 // Closure gate: a prereg with closure_roots must freeze every file its dependency closure (closure-scan.js) reaches inside the root.
 if (Array.isArray(prereg.closure_roots)) {
   const entries = (prereg.freeze_files || []).map((e) => path.posix.normalize(e));
-  const uncovered = require('./closure-scan').closure(root, [...prereg.closure_roots, ...(prereg.campaign_script ? [prereg.campaign_script] : [])]).files
-    .filter((f) => !entries.some((e) => f === e || f.startsWith(`${e}/`)));
+  const CS = require('./closure-scan');
+  const res = CS.closure(root, [...prereg.closure_roots, ...(prereg.campaign_script ? [prereg.campaign_script] : [])], prereg.closure_exclude);
+  const exErr = CS.checkExclude(root, prereg.closure_exclude, res.exclude_hits); // closure_exclude: audited, default empty (closure-scan.js header)
+  if (exErr.length) die(`closure_exclude refused: ${exErr.join('; ')}`);
+  const uncovered = res.files.filter((f) => !entries.some((e) => f === e || f.startsWith(`${e}/`)));
   if (uncovered.length) die(`freeze_files misses files the evaluation reads (dependency closure): ${uncovered.join(', ')}`);
 }
 const packs = Object.fromEntries((prereg.freeze_packs || []).map((id) => [id, packMeta(id)]));
@@ -87,6 +91,7 @@ if (check) {
   const rec = readJson('prereg/FROZEN.json')[row];
   if (!rec || !rec.stamped) bad.push('FROZEN.json row not stamped');
   else {
+    if (JSON.stringify(rec.closure_exclude) !== JSON.stringify(prereg.closure_exclude)) bad.push('closure_exclude (differs from the stamped list)');
     for (const f of freezeFiles()) if (rec.files[f] !== sha(f)) bad.push(f);
     for (const f of Object.keys(rec.files)) if (!fs.existsSync(path.join(root, f))) bad.push(`${f} (gone)`);
     for (const [id, p] of Object.entries(packs)) if (!rec.packs || !rec.packs[id] || rec.packs[id].digest_sha256 !== p.digest_sha256) bad.push(`pack ${id}`);
@@ -116,6 +121,7 @@ frozen[row] = {
   stamped: true,
   note: `sha256 of the ${row} pre-registration (rule, markers, scorer, briefs, arm manifests, shared harness files) frozen before any live cell. Any edit after the first live cell voids the row.`,
   packs,
+  ...(prereg.closure_exclude !== undefined ? { closure_exclude: prereg.closure_exclude } : {}),
   files,
 };
 fs.writeFileSync(frozenPath, `${JSON.stringify(frozen, null, 2)}\n`);

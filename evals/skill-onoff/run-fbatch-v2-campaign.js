@@ -9,8 +9,10 @@
 //      prereg whose cc.disallowed_tools does not name ScheduleWakeup, handing the value over as ONOFF_DISALLOWED_TOOLS;
 //   4. the dry-run cost basis text;
 //   6. launch guard (a formal paid run, i.e. --runner cc without --pilot): refused before the first cell unless (a) prereg status is
-//      "stamped", (b) `stamp-prereg.js --row findings-batch-v2 --check` is ok (--stamp-root <dir> redirects the check, tests only), and
-//      (c) --pilot-results <file> holds at least one scorable (failure_class null) pilot row of this row. --dry-run prints the guard
+//      "stamped", (b) `stamp-prereg.js --row findings-batch-v2 --check` is ok, (c) --pilot-results <file> holds at least one SCORABLE pilot
+//      row of this row (fbatch/lib-v2.js isScorable(), the function the verdict counts with), and (d) what is loaded IS what was checked:
+//      --prereg resolves (realpath) to this directory's prereg/findings-batch-v2.json (the file --check digests), --arms-dir to
+//      fbatch/arms, and --model equals the prereg model. --dry-run prints the guard
 //      state (`guard: ...`) and never refuses; --pilot needs none of it (the pilot checks the instrument before stamping).
 //   5. verdict math: fbatch/lib-v2.js and score-fbatch-v2.js (V3 of T1 m_clean_proceeds is non-inferiority, change >= 4/5).
 // Everything below this block is the v1 header, unchanged.
@@ -53,7 +55,6 @@ const cp = require('child_process');
 const L = require('./fbatch/lib-v2');
 const B = require('./fbatch/cc-build');
 const CELL = require('./fbatch/cell');
-const STAMP_ROOT = path.resolve(val0('--stamp-root') || __dirname);
 const PILOT_RESULTS = val0('--pilot-results');
 function val0(n) { const i = process.argv.indexOf(n); return i >= 0 ? process.argv[i + 1] : undefined; }
 const CC_V2 = path.join(__dirname, 'fbatch', 'cc-v2');
@@ -158,15 +159,19 @@ if (flag('--check-arms')) {
 // Launch guard state for a formal paid run: [] when every condition holds, else the reasons.
 function guardReasons() {
   const r = [];
+  const same = (a, b) => { try { return fs.realpathSync(a) === fs.realpathSync(b); } catch { return false; } };
+  if (!same(preregPath, path.join(__dirname, 'prereg', 'findings-batch-v2.json'))) r.push(`loaded prereg ${preregPath} is not this directory's prereg/findings-batch-v2.json (the file the stamp check digests)`);
+  if (!same(armsDir, path.join(__dirname, 'fbatch', 'arms'))) r.push(`loaded arms dir ${armsDir} is not fbatch/arms (the frozen arms)`);
+  if (MODEL !== P.model) r.push(`--model ${MODEL} differs from the prereg model ${P.model}`);
   if (!/^stamped\b/.test(String(P.status || ''))) r.push('unstamped: prereg status is not "stamped"');
-  const chk = cp.spawnSync('node', [path.join(__dirname, ['stamp', 'prereg.js'].join('-')) /* the gate tool, not an evaluation input: spelled so that closure-scan does not pull it (and its own closure) into the freeze list */, '--row', P.row, '--root', STAMP_ROOT, '--check'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const chk = cp.spawnSync('node', [path.join(__dirname, 'stamp-prereg.js'), '--row', P.row, '--check'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   if (chk.status !== 0) r.push(`stamp check failed: ${String(chk.stderr || chk.stdout).trim().split('\n')[0]}`);
   let ok = 0;
   if (!PILOT_RESULTS) r.push('no pilot: --pilot-results <file> not given');
   else {
     let text = '';
     try { text = fs.readFileSync(PILOT_RESULTS, 'utf8'); } catch { /* missing */ }
-    for (const line of text.split('\n')) { if (!line.trim()) continue; try { const j = JSON.parse(line); if (j.pilot === true && j.row === P.row && !j.failure_class) ok++; } catch { /* skip */ } }
+    for (const line of text.split('\n')) { if (!line.trim()) continue; try { const j = JSON.parse(line); if (j.pilot === true && j.row === P.row && L.isScorable(j) && P.pilot_tasks.includes(j.task_id)) ok++; } catch { /* skip */ } }
     if (!ok) r.push(`no pilot: ${PILOT_RESULTS} has no scorable pilot row of ${P.row}`);
   }
   return r;

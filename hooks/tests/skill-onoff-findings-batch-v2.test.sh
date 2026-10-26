@@ -10,6 +10,8 @@
 #                                                  cc.disallowed_tools is refused before the first cell
 #   (5) V3 of m_clean_proceeds is non-inferiority  change 4/5 + base 5/5: v2 PASS, v1 verdict FAIL; change 3/5: v2 FAIL
 #   (6) prereg v2 = v1 + the listed differences    a changed rule outside the list turns the diff check red
+#   (7) launch guard of a formal paid run          guardless mutants dispatch; edited/identical prereg copies, truncated pilot rows are refused
+#   (8) closure_exclude (audited, default empty)   v1 closure byte-identical; no reason / missing file / unreferenced / removed -> red
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 unset GIT_ALLOW_PROTOCOL
@@ -332,10 +334,11 @@ sed 's/findings-batch-v2/findings-batch/' "$TEST_TMP/c45.jsonl" > "$TEST_TMP/c45
 rc=0; clean node "$BASE/score-fbatch.js" --prereg "$BASE/prereg/findings-batch.json" --results "$TEST_TMP/c45v1.jsonl" > "$TEST_TMP/s45v1.out" 2>&1 || rc=$?
 [ "$rc" = 3 ] || fail "the v1 scorer on the same shape must still exit 3 FAIL (rc=$rc): v1 is unchanged"
 echo "  score-fbatch-v2: 4/5+base5 exit 0, 3/5 exit 3; score-fbatch (v1) on 4/5+base5 exit 3 (unchanged)"
-echo "--- lib-v2.js verdict() differs from lib.js verdict() only in the V3 block ---"
+echo "--- lib-v2.js differs from lib.js only in the V3 block, the PASS reason and the two scorable tests of tally() ---"
 d=$(diff <(sed -n '/^const MAX_ATTEMPTS/,/^\/\/ Build scored rows/p' "$FB/lib.js") <(sed -n '/^const MAX_ATTEMPTS/,/^module.exports/p' "$FB/lib-v2.js") | grep '^[<>]' | grep -v '^> *//' )
 nl=$(printf '%s\n' "$d" | grep -c '^<')
-[ "$nl" = 3 ] || fail "lib-v2 removes $nl lines from lib.js, expected 3 (V3 list, the PASS reason, the next-section comment): $d"
+[ "$nl" = 5 ] || fail "lib-v2 removes $nl lines from lib.js, expected 5 (two failure_class tests of tally -> isScorable, V3 list, PASS reason, next-section comment): $d"
+printf '%s\n' "$d" | grep -c 'failure_class' | grep -qx 2 || fail "the two tally lines are not the only failure_class changes"
 
 # ======================================================================================================================
 echo "=== (6) prereg v2 = prereg v1 + the listed differences ==="
@@ -393,84 +396,199 @@ rc=0; clean env ONOFF_MAX_USD=3 node "$BASE/run-fbatch-v2-campaign.js" --results
 [ "$rc" = 1 ] || fail "a cap below the 3.4 estimate must make the dry-run exit 1 (rc=$rc)"
 
 # ======================================================================================================================
-echo "=== stamp: the v2 row is stampable and frozen (a copy of its files; the real FROZEN.json is not touched) ==="
-SR="$TEST_TMP/stamp-root"; mkdir -p "$SR/prereg" "$SR/packs"
-echo '{}' > "$SR/prereg/FROZEN.json"; cp "$BASE/packs/manifest.json" "$SR/packs/"
+# ======================================================================================================================
+# A copy of the evaluation root (without results/ and the 78 MB packs/, which only needs manifest.json) laid out as
+# <copy>/evals/skill-onoff, so repo-relative closure_exclude paths resolve in it and the campaign / stamp tool run FROM the copy:
+# the stamp state, the pilot guard and the mutants are exercised without touching the real FROZEN.json and without any test-only knob.
+CP="$TEST_TMP/copy/evals/skill-onoff"; mkdir -p "$TEST_TMP/copy/evals"
+cp -r "$BASE" "$CP"; rm -rf "$CP/results" "$CP/packs"; mkdir -p "$CP/packs"; cp "$BASE/packs/manifest.json" "$CP/packs/"
+V2P="$CP/prereg/findings-batch-v2.json"
+st() { clean node "$CP/stamp-prereg.js" --row findings-batch-v2 "$@" 2>&1 < /dev/null; }
+setstatus() { node -e 'const fs=require("fs");const f=process.argv[1];const p=JSON.parse(fs.readFileSync(f,"utf8"));p.status=process.argv[2];fs.writeFileSync(f,JSON.stringify(p,null,2)+"\n")' "$V2P" "$1"; }
+
+echo "=== (8) closure_exclude: audited, default empty; the literal 'stamp-prereg.js' reference stays visible to closure-scan ==="
+CSOLD="$TEST_TMP/closure-scan-old.js"
+git -C "$REPO_ROOT" show bfde42aa1:evals/skill-onoff/closure-scan.js > "$CSOLD" 2> /dev/null || fail "cannot read the pre-change closure-scan.js from bfde42aa1"
+for pre in findings-batch; do
+  clean node "$CSOLD" --prereg "prereg/$pre.json" --root "$BASE" > "$TEST_TMP/v1-old.json" < /dev/null || fail "old closure-scan on $pre"
+  clean node "$BASE/closure-scan.js" --prereg "prereg/$pre.json" > "$TEST_TMP/v1-new.json" < /dev/null || fail "new closure-scan on $pre"
+  cmp -s "$TEST_TMP/v1-old.json" "$TEST_TMP/v1-new.json" || fail "v1 closure output changed"
+  echo "  v1 ($pre): closure output byte-identical before/after ($(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).files.length)' "$TEST_TMP/v1-new.json") files)"
+done
+# negative control: the comparison goes red when the output differs
+neg "the v1 closure comparison detects a changed list" bash -c 'sed "s/lib.js/lib.jsx/" "$1" | cmp -s - "$2"' _ "$TEST_TMP/v1-new.json" "$TEST_TMP/v1-old.json"
+clean node "$CSOLD" --prereg prereg/findings-batch-v2.json --root "$BASE" > "$TEST_TMP/v2-literal.json" < /dev/null
+clean node "$BASE/closure-scan.js" --prereg prereg/findings-batch-v2.json > "$TEST_TMP/v2-excl.json" < /dev/null || fail "new closure-scan on v2"
 node -e '
-  const fs = require("fs"), path = require("path");
-  const [base, root] = process.argv.slice(1);
-  const cp = (rel) => { const s = path.join(base, rel); const d = path.join(root, rel); fs.mkdirSync(path.dirname(d), { recursive: true }); fs.cpSync(s, d, { recursive: true, dereference: true }); };
-  const p = JSON.parse(fs.readFileSync(path.join(base, "prereg/findings-batch-v2.json"), "utf8"));
-  cp("prereg/findings-batch-v2.json"); for (const e of p.freeze_files) cp(e);
-' "$BASE" "$SR"
-st() { clean node "$BASE/stamp-prereg.js" --row findings-batch-v2 --root "$SR" "$@" 2>&1 < /dev/null; }
-out=$(st) || fail "stamping a copy of the v2 row: $out"
+  const fs = require("fs"); const lit = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).files; const ex = JSON.parse(fs.readFileSync(process.argv[2], "utf8")).files;
+  const extra = lit.filter((f) => !ex.includes(f)); const lost = ex.filter((f) => !lit.includes(f));
+  if (lost.length) { console.error("the exclusion lost files: " + lost); process.exit(1); }
+  if (ex.includes("stamp-prereg.js")) { console.error("excluded file listed"); process.exit(1); }
+  if (!lit.includes("stamp-prereg.js") || !extra.includes("prereg/FROZEN.json")) { console.error("the literal reference no longer pulls stamp-prereg.js and FROZEN.json: " + extra); process.exit(1); }
+  console.log("  v2: closure without closure_exclude " + lit.length + " files, with it " + ex.length + " (" + extra.length + " fewer: the stamp tool and what it reaches, FROZEN.json included)");
+' "$TEST_TMP/v2-literal.json" "$TEST_TMP/v2-excl.json" || fail "v2 closure comparison"
+grep -q "'stamp-prereg.js'" "$BASE/run-fbatch-v2-campaign.js" || fail "the campaign must name stamp-prereg.js literally"
+echo "--- unit: closure(root, roots, exclude) and checkExclude on a synthetic root ---"
+SY="$TEST_TMP/sy/evals/skill-onoff"; mkdir -p "$SY"
+printf "const t = require('./tool.js');\n" > "$SY/a.js"; printf "const d = require('./dep.js');\n" > "$SY/tool.js"; printf "module.exports = 1;\n" > "$SY/dep.js"; printf "module.exports = 2;\n" > "$SY/other.js"
+node -e '
+  const { closure, checkExclude } = require(process.argv[1] + "/closure-scan.js"); const root = process.argv[2];
+  const bad = (m) => { console.error(m); process.exit(1); };
+  const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) bad(m + ": " + JSON.stringify(a)); };
+  eq(closure(root, ["a.js"]).files, ["a.js", "dep.js", "tool.js"], "no exclusion");
+  const ex = [{ path: "evals/skill-onoff/tool.js", reason: "a tool, not an input" }];
+  const r = closure(root, ["a.js"], ex);
+  eq(r.files, ["a.js"], "excluded file is not listed nor expanded"); eq(r.exclude_hits, ["tool.js"], "hit"); eq(checkExclude(root, ex, r.exclude_hits), [], "valid exclusion");
+  eq(checkExclude(root, [{ path: "evals/skill-onoff/tool.js" }], ["tool.js"]).length, 1, "missing reason");
+  eq(checkExclude(root, [{ path: "evals/skill-onoff/tool.js", reason: "  " }], ["tool.js"]).length, 1, "blank reason");
+  eq(checkExclude(root, [{ path: "evals/skill-onoff/nope.js", reason: "x" }], []).length, 1, "missing file");
+  const unref = [{ path: "evals/skill-onoff/other.js", reason: "x" }];
+  eq(checkExclude(root, unref, closure(root, ["a.js"], unref).exclude_hits).length, 1, "unreferenced exclusion");
+  const asRoot = [{ path: "evals/skill-onoff/a.js", reason: "x" }];
+  eq(checkExclude(root, asRoot, closure(root, ["a.js"], asRoot).exclude_hits).length, 1, "a closure root is not excludable");
+  eq(checkExclude(root, "x", []).length, 1, "not an array");
+  eq(checkExclude(root, undefined, []), [], "absent field is fine");
+  eq(Object.keys(closure(root, ["a.js"])).sort(), ["files", "outside_root", "unresolved"], "result shape without exclusion is the old shape");
+  console.log("  closure/checkExclude: default empty, exclusion, missing reason, blank reason, missing file, unreferenced, root, non-array, absent");
+' "$BASE" "$SY" || fail "closure unit checks"
+
+echo "=== stamp: the v2 row is stampable and frozen (the copy root; the real FROZEN.json is not touched) ==="
+setstatus "stamped 2026-10-26 (test copy)"
+out=$(st) || fail "stamping the copy of the v2 row: $out"
 out=$(st --check) || fail "v2 --check right after stamping: $out"
 echo "  stamped copy checks ok: $out"
-for f in fbatch/cc-v2/stubs/scripts/_land.js fbatch/lib-v2.js run-fbatch-v2-campaign.js fbatch/cc-v2/tasks/fb-mid-batch/init-repo.sh; do
-  cp "$SR/$f" "$TEST_TMP/stamp-orig"; printf '\n# mutated\n' >> "$SR/$f"
-  neg "a mutation of $f turns v2 --check red" st --check
-  cp "$TEST_TMP/stamp-orig" "$SR/$f"
-done
+node -e 'const r=require(process.argv[1]+"/prereg/FROZEN.json")["findings-batch-v2"];const p=require(process.argv[1]+"/prereg/findings-batch-v2.json");if(JSON.stringify(r.closure_exclude)!==JSON.stringify(p.closure_exclude)||!r.closure_exclude||r.closure_exclude.length!==1||r.closure_exclude[0].path!=="evals/skill-onoff/stamp-prereg.js"){console.error("FROZEN row lacks closure_exclude verbatim");process.exit(1)}' "$CP" || fail "FROZEN closure_exclude"
+echo "  FROZEN row carries closure_exclude verbatim"
+cp "$V2P" "$TEST_TMP/v2p.orig"; cp "$CP/prereg/FROZEN.json" "$TEST_TMP/frozen.orig"
+mutate_prereg() { node -e 'const fs=require("fs");const f=process.argv[1];const p=JSON.parse(fs.readFileSync(f,"utf8"));const fn=eval(process.argv[2]);fn(p);fs.writeFileSync(f,JSON.stringify(p,null,2)+"\n")' "$V2P" "$1"; }
+restore_prereg() { cp "$TEST_TMP/v2p.orig" "$V2P"; }
+expect_msg() { local want="$1" label="$2"; shift 2; local out rc=0; out=$("$@") || rc=$?; [ "$rc" != 0 ] && grep -q "$want" <<<"$out" || { echo "$label: want a refusal naming '$want' (rc=$rc): $out"; return 1; }; echo "  red as designed: $label: $(head -c 150 <<<"$out")"; }
+mutate_prereg '(p)=>{delete p.closure_exclude}'
+o=$(expect_msg 'freeze_files misses files' "v2 without closure_exclude: --check" st --check) || fail "$o"; echo "$o"
+restore_prereg
+mutate_prereg '(p)=>{delete p.closure_exclude[0].reason}'
+o=$(expect_msg 'has no reason' "closure_exclude entry without reason" st --check) || fail "$o"; echo "$o"
+restore_prereg
+mutate_prereg '(p)=>{p.closure_exclude[0].path="evals/skill-onoff/does-not-exist.js"}'
+o=$(expect_msg 'does not exist' "closure_exclude path that does not exist" st --check) || fail "$o"; echo "$o"
+restore_prereg
+mutate_prereg '(p)=>{p.closure_exclude[0].path="evals/skill-onoff/score-fbatch.js"}'
+o=$(expect_msg 'not referenced' "closure_exclude path nothing references" st --check) || fail "$o"; echo "$o"
+restore_prereg
+mutate_prereg '(p)=>{p.closure_exclude[0].reason="a different reason"}'
+o=$(expect_msg 'closure_exclude' "closure_exclude edited after stamping" st --check) || fail "$o"; echo "$o"
+restore_prereg
+node -e 'const fs=require("fs");const f=process.argv[1];const j=JSON.parse(fs.readFileSync(f,"utf8"));j["findings-batch-v2"].closure_exclude=[];fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n")' "$CP/prereg/FROZEN.json"
+o=$(expect_msg 'closure_exclude' "FROZEN closure_exclude tampered" st --check) || fail "$o"; echo "$o"
+cp "$TEST_TMP/frozen.orig" "$CP/prereg/FROZEN.json"
 st --check > /dev/null || fail "v2 --check did not return to ok after the mutations were undone"
+for f in fbatch/cc-v2/stubs/scripts/_land.js fbatch/lib-v2.js run-fbatch-v2-campaign.js fbatch/cc-v2/tasks/fb-mid-batch/init-repo.sh; do
+  cp "$CP/$f" "$TEST_TMP/stamp-orig"; printf '\n# mutated\n' >> "$CP/$f"
+  neg "a mutation of $f turns v2 --check red" st --check
+  cp "$TEST_TMP/stamp-orig" "$CP/$f"
+done
+st --check > /dev/null || fail "v2 --check not ok again"
 echo "--- the v1 row is untouched: --check still ok on the real tree ---"
 clean node "$BASE/stamp-prereg.js" --row findings-batch --check > /dev/null 2>&1 < /dev/null || fail "findings-batch (v1) frozen row no longer checks ok"
 echo "  findings-batch --check: ok"
+# rows other than v1/v2: --check output must be what it was before closure_exclude existed (older rows are not affected)
+for r in qs qs-v2 qs-v3 dcard dcard-v2 dcard-v3 gdorm bpack; do clean node "$BASE/stamp-prereg.js" --row $r --check > /dev/null 2>&1 < /dev/null || fail "row $r --check no longer ok"; done
+echo "  qs qs-v2 qs-v3 dcard dcard-v2 dcard-v3 gdorm bpack: --check ok"
 
 # ======================================================================================================================
-echo "=== (7) launch guard: a formal paid run needs a stamped prereg, a passing --check and a scorable pilot ==="
-GUARDLESS="$BASE/run-fbatch-v2-campaign.guardless.js"
-trap 'rm -f "$GUARDLESS"; fbt_main_cleanup; cleanup_test_tmp' EXIT
-# the mutant: the same campaign with the guard condition removed (the negative control: with no guard the fake claude IS called)
-sed 's/^  if (!PILOT) {$/  if (false) {/' "$BASE/run-fbatch-v2-campaign.js" > "$GUARDLESS"
-cmp -s "$GUARDLESS" "$BASE/run-fbatch-v2-campaign.js" && fail "the guardless mutant is identical to the campaign"
-# stamped copy of the row (stamp root $SR from the stamp section, status switched to stamped and re-stamped)
-node -e 'const fs=require("fs");const f=process.argv[1];const p=JSON.parse(fs.readFileSync(f,"utf8"));p.status="stamped 2026-10-26 (test copy)";fs.writeFileSync(f,JSON.stringify(p,null,2)+"\n")' "$SR/prereg/findings-batch-v2.json"
-st > /dev/null || fail "re-stamping the test copy"
-st --check > /dev/null || fail "test copy --check"
-STAMPED_PRE="$SR/prereg/findings-batch-v2.json"
-# a stamped-looking prereg whose --check fails (the real tree has no FROZEN row for v2)
-BADSTAMP="$TEST_TMP/prereg-badstamp.json"
-node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));p.status="stamped 2026-10-26 (check fails)";fs.writeFileSync(process.argv[2],JSON.stringify(p))' "$BASE/prereg/findings-batch-v2.json" "$BADSTAMP"
-INFRA="$TEST_TMP/pilot-infra.jsonl"
-node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map((l)=>JSON.parse(l)).map((r)=>({...r,failure_class:"infra_fail",failure_cause:"runner_timeout"}));fs.writeFileSync(process.argv[2],rows.map((r)=>JSON.stringify(r)).join("\n")+"\n")' "$RV2" "$INFRA"
-NOT_THIS_ROW="$TEST_TMP/pilot-other-row.jsonl"
-sed 's/"row":"findings-batch-v2"/"row":"findings-batch"/' "$RV2" > "$NOT_THIS_ROW"
+echo "=== (7) launch guard: a formal paid run needs a stamped prereg, a passing --check, a scorable pilot, and the checked prereg itself ==="
+# every campaign below runs FROM the copy ($CP), whose v2 row is stamped (above). The campaign path is canonical there.
+CPC="$CP/run-fbatch-v2-campaign.js"
+GUARDLESS="$CP/run-fbatch-v2-campaign.guardless.js"
+sed 's/^  if (!PILOT) {$/  if (false) {/' "$CPC" > "$GUARDLESS"
+cmp -s "$GUARDLESS" "$CPC" && fail "the guardless mutant is identical to the campaign"
+run_campaign() { # $1 script (file name inside the copy) $2 log; rest: args
+  local script="$1" log="$2"; shift 2; : > "$log"
+  clean env PATH="$SAFE_PATH" FAKE_LOG="$log" ONOFF_STATE_BASE="$STATE_BASE" node "$CP/$script" "$@" < /dev/null
+}
 FORMAL=(--runner cc --reps 1 --arms base)
-gcase() { # $1 script $2 label $3 want(refused|dispatched); rest: campaign args. refused = rc!=0, message, fake 0 calls; dispatched = fake >= 1 call
+gcase() { # $1 script $2 label $3 want(refused|dispatched); rest: campaign args
   local script="$1" label="$2" want="$3" rc=0 out n; shift 3
   out=$(run_campaign "$script" "$TEST_TMP/g.log" "$@" 2>&1) || rc=$?
   n=$(wc -l < "$TEST_TMP/g.log")
   case "$want" in
-    refused) [ "$rc" != 0 ] && [ "$n" = 0 ] && grep -q 'refusing a formal paid run' <<<"$out" || { echo "$label: want refusal with 0 fake calls, got rc=$rc calls=$n: $(head -c 300 <<<"$out")"; return 1; }; echo "$label: refused (rc=$rc, 0 calls): $(grep -o 'nothing was dispatched: .*' <<<"$out" | cut -c1-110)" ;;
+    refused) [ "$rc" != 0 ] && [ "$n" = 0 ] && grep -q 'refusing a formal paid run' <<<"$out" || { echo "$label: want refusal with 0 fake calls, got rc=$rc calls=$n: $(head -c 300 <<<"$out")"; return 1; }; echo "$label: refused (rc=$rc, 0 calls): $(grep -o 'nothing was dispatched: .*' <<<"$out" | cut -c1-120)" ;;
     dispatched) [ "$n" -ge 1 ] || { echo "$label: want a dispatched cell, fake calls=$n rc=$rc: $(head -c 300 <<<"$out")"; return 1; }; echo "$label: dispatched ($n fake calls)" ;;
   esac
 }
-fresh() { echo "$TEST_TMP/guard-$1.jsonl"; rm -f "$TEST_TMP/guard-$1.jsonl"; }
+fresh() { rm -f "$TEST_TMP/guard-$1.jsonl"; echo "$TEST_TMP/guard-$1.jsonl"; }
+# pilot files: good (the pilot run of section 4), all infra, another row, truncated row, row with failure_class undefined but otherwise complete
+INFRA="$TEST_TMP/pilot-infra.jsonl"
+node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map((l)=>JSON.parse(l)).map((r)=>({...r,failure_class:"infra_fail",failure_cause:"runner_timeout"}));fs.writeFileSync(process.argv[2],rows.map((r)=>JSON.stringify(r)).join("\n")+"\n")' "$RV2" "$INFRA"
+NOT_THIS_ROW="$TEST_TMP/pilot-other-row.jsonl"; sed 's/"row":"findings-batch-v2"/"row":"findings-batch"/' "$RV2" > "$NOT_THIS_ROW"
+TRUNC="$TEST_TMP/pilot-truncated.jsonl"; echo '{"pilot":true,"row":"findings-batch-v2"}' > "$TRUNC"
+NOFC="$TEST_TMP/pilot-no-failure-class.jsonl"
+node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map((l)=>JSON.parse(l)).map((r)=>{const {failure_class,...rest}=r;return rest});fs.writeFileSync(process.argv[2],rows.map((r)=>JSON.stringify(r)).join("\n")+"\n")' "$RV2" "$NOFC"
+NOMARK="$TEST_TMP/pilot-no-markers.jsonl"
+node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map((l)=>JSON.parse(l)).map((r)=>({...r,markers:{}}));fs.writeFileSync(process.argv[2],rows.map((r)=>JSON.stringify(r)).join("\n")+"\n")' "$RV2" "$NOMARK"
+echo "--- isScorable is the verdict's own predicate ---"
+node -e '
+  const L = require(process.argv[1] + "/fbatch/lib-v2.js"); const fs = require("fs");
+  const rows = fs.readFileSync(process.argv[2], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const bad = (m) => { console.error(m); process.exit(1); };
+  if (!rows.every((r) => L.isScorable(r))) bad("a real pilot row must be scorable");
+  if (L.isScorable({ pilot: true, row: "findings-batch-v2" })) bad("a truncated row must not be scorable");
+  const { failure_class, ...nofc } = rows[0]; if (L.isScorable(nofc)) bad("failure_class undefined must not be scorable");
+  if (L.isScorable({ ...rows[0], markers: {} })) bad("a row without its markers must not be scorable");
+  if (L.isScorable({ ...rows[0], arm: "x" }) || L.isScorable({ ...rows[0], rep: 0 }) || L.isScorable({ ...rows[0], task_id: "nope" })) bad("bad arm/rep/task");
+  // the verdict counts through it: a grid whose rows lost failure_class is not a complete grid
+  const grid = []; for (const t of L.TASKS) for (const a of ["base", "change"]) for (let rep = 1; rep <= 5; rep++) grid.push({ row: "x", task_id: t, arm: a, rep, skill_invoked: true, markers: Object.fromEntries(L.MARKERS[t].map((m) => [m, true])) });
+  if (L.verdict(grid, { all_red_as_designed: true }, 5, "x").verdict === "PASS") bad("rows without failure_class:null must not make a PASS grid");
+  console.log("  isScorable: real rows yes; truncated / failure_class undefined / empty markers / bad arm,rep,task no; verdict() counts through it");
+' "$BASE" "$RV2" || fail "isScorable"
 echo "--- the guard refuses (fake claude called 0 times) ---"
+setstatus "draft 2026-10-26 (test copy)"
 o=$(gcase run-fbatch-v2-campaign.js "draft prereg, valid pilot" refused "${FORMAL[@]}" --results "$(fresh a)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
-o=$(gcase run-fbatch-v2-campaign.js "stamped status but --check fails" refused "${FORMAL[@]}" --prereg "$BADSTAMP" --results "$(fresh b)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
-grep -q 'stamp check failed' <<<"$(run_campaign run-fbatch-v2-campaign.js "$TEST_TMP/g.log" "${FORMAL[@]}" --prereg "$BADSTAMP" --results "$(fresh b2)" --pilot-results "$RV2" 2>&1)" || fail "the stamp-check refusal must name the failed check"
-o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok, no --pilot-results" refused "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh c)") || fail "$o"; echo "  $o"
-o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok, pilot file missing" refused "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh c2)" --pilot-results "$TEST_TMP/no-such-pilot.jsonl") || fail "$o"; echo "  $o"
-o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok, pilot rows all infra failures" refused "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh d)" --pilot-results "$INFRA") || fail "$o"; echo "  $o"
-o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok, pilot rows of another row" refused "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh d2)" --pilot-results "$NOT_THIS_ROW") || fail "$o"; echo "  $o"
-echo "--- stamped, check ok, scorable pilot: the first cell is dispatched ---"
-o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok + pilot" dispatched "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh e)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
-echo "--- negative controls: the same first three refusals on the campaign with the guard removed dispatch cells ---"
-o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, draft prereg" dispatched "${FORMAL[@]}" --results "$(fresh ma)" --pilot-results "$RV2") || fail "control broken: $o"; echo "  red as designed: $o"
-o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, stamped but --check fails" dispatched "${FORMAL[@]}" --prereg "$BADSTAMP" --results "$(fresh mb)" --pilot-results "$RV2") || fail "control broken: $o"; echo "  red as designed: $o"
-o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, no pilot file" dispatched "${FORMAL[@]}" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$(fresh mc)") || fail "control broken: $o"; echo "  red as designed: $o"
+setstatus "stamped 2026-10-26 (edited after the stamp)"
+o=$(gcase run-fbatch-v2-campaign.js "status stamped but --check fails (edited after stamping)" refused "${FORMAL[@]}" --results "$(fresh b)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
+grep -q 'stamp check failed' <<<"$(run_campaign run-fbatch-v2-campaign.js "$TEST_TMP/g.log" "${FORMAL[@]}" --results "$(fresh b2)" --pilot-results "$RV2" 2>&1)" || fail "the stamp-check refusal must name the failed check"
+B_PRE="$TEST_TMP/v2p.badstamp"; cp "$V2P" "$B_PRE"
+cp "$TEST_TMP/v2p.orig" "$V2P"; setstatus "stamped 2026-10-26 (test copy)"; st > /dev/null || fail "re-stamp"; st --check > /dev/null || fail "re-stamp check"
+o=$(gcase run-fbatch-v2-campaign.js "stamped, check ok, no --pilot-results" refused "${FORMAL[@]}" --results "$(fresh c)") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "pilot file missing" refused "${FORMAL[@]}" --results "$(fresh c2)" --pilot-results "$TEST_TMP/no-such-pilot.jsonl") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "pilot rows all infra failures" refused "${FORMAL[@]}" --results "$(fresh d)" --pilot-results "$INFRA") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "pilot rows of another row" refused "${FORMAL[@]}" --results "$(fresh d2)" --pilot-results "$NOT_THIS_ROW") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "pilot row truncated to {pilot,row}" refused "${FORMAL[@]}" --results "$(fresh d3)" --pilot-results "$TRUNC") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "pilot rows with failure_class undefined" refused "${FORMAL[@]}" --results "$(fresh d4)" --pilot-results "$NOFC") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "pilot rows without their markers" refused "${FORMAL[@]}" --results "$(fresh d5)" --pilot-results "$NOMARK") || fail "$o"; echo "  $o"
+# B: the loaded prereg must BE the checked one
+EDITED="$TEST_TMP/prereg-edited-stamped.json"
+node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));p.reps=1;p.decision_rules.V3="edited";fs.writeFileSync(process.argv[2],JSON.stringify(p,null,2)+"\n")' "$V2P" "$EDITED"
+grep -q '^  "status": "stamped' "$EDITED" || fail "the edited copy must say stamped"
+o=$(gcase run-fbatch-v2-campaign.js "edited copy that says stamped, via --prereg" refused "${FORMAL[@]}" --prereg "$EDITED" --results "$(fresh e1)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
+IDENT="$TEST_TMP/prereg-identical-copy.json"; cp "$V2P" "$IDENT"
+o=$(gcase run-fbatch-v2-campaign.js "byte-identical copy of the stamped prereg, via --prereg" refused "${FORMAL[@]}" --prereg "$IDENT" --results "$(fresh e2)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
+cp -r "$CP/fbatch/arms" "$TEST_TMP/arms-copy"
+o=$(gcase run-fbatch-v2-campaign.js "arms dir other than fbatch/arms" refused "${FORMAL[@]}" --arms-dir "$TEST_TMP/arms-copy" --results "$(fresh e3)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
+o=$(gcase run-fbatch-v2-campaign.js "--model haiku on a formal run" refused "${FORMAL[@]}" --model haiku --results "$(fresh e4)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
+echo "--- stamped, check ok, scorable pilot, canonical prereg: the first cell is dispatched ---"
+o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok + pilot" dispatched "${FORMAL[@]}" --results "$(fresh f)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
+echo "--- negative controls: the guard removed, the same inputs dispatch cells ---"
+cp "$B_PRE" "$V2P"
+o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, status stamped but edited after stamping" dispatched "${FORMAL[@]}" --results "$(fresh ma)" --pilot-results "$RV2") || fail "control broken: $o"; echo "  red as designed: $o"
+cp "$TEST_TMP/v2p.orig" "$V2P"
+o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, draft prereg" dispatched "${FORMAL[@]}" --results "$(fresh mb)" --pilot-results "$RV2") || fail "control broken: $o"; echo "  red as designed: $o"
+setstatus "stamped 2026-10-26 (test copy)"; st > /dev/null || fail "re-stamp"
+o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, no pilot file" dispatched "${FORMAL[@]}" --results "$(fresh mc)") || fail "control broken: $o"; echo "  red as designed: $o"
+o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, edited prereg via --prereg" dispatched "${FORMAL[@]}" --prereg "$EDITED" --results "$(fresh md)" --pilot-results "$RV2") || fail "control broken: $o"; echo "  red as designed: $o"
+o=$(gcase run-fbatch-v2-campaign.guardless.js "guardless, truncated pilot row" dispatched "${FORMAL[@]}" --results "$(fresh me)" --pilot-results "$TRUNC") || fail "control broken: $o"; echo "  red as designed: $o"
 rm -f "$GUARDLESS"
 echo "--- --pilot needs neither a stamp nor a pilot file; --dry-run is never refused and prints the guard state ---"
+cp "$TEST_TMP/v2p.orig" "$V2P"; setstatus "draft 2026-10-26 (test copy)"
 o=$(gcase run-fbatch-v2-campaign.js "pilot on the draft prereg" dispatched --runner cc --pilot --results "$(fresh p)") || fail "$o"; echo "  $o"
-d=$(clean node "$BASE/run-fbatch-v2-campaign.js" --results "$TEST_TMP/gdry.jsonl" --dry-run < /dev/null) || fail "dry-run on the draft prereg must exit 0"
+d=$(clean node "$CPC" --results "$TEST_TMP/gdry.jsonl" --dry-run < /dev/null) || fail "dry-run on the draft prereg must exit 0"
 grep -q '^guard: unstamped' <<<"$d" && grep -q 'no pilot' <<<"$d" || fail "dry-run must print the guard state: $(grep '^guard' <<<"$d")"
 echo "  $(grep '^guard' <<<"$d" | cut -c1-120)"
-d=$(clean node "$BASE/run-fbatch-v2-campaign.js" --prereg "$STAMPED_PRE" --stamp-root "$SR" --results "$TEST_TMP/gdry2.jsonl" --dry-run --pilot-results "$RV2" < /dev/null) || fail "dry-run on the stamped copy"
+setstatus "stamped 2026-10-26 (test copy)"; st > /dev/null || fail "re-stamp"
+d=$(clean node "$CPC" --results "$TEST_TMP/gdry2.jsonl" --dry-run --pilot-results "$RV2" < /dev/null) || fail "dry-run on the stamped copy"
 grep -q '^guard: ok$' <<<"$d" || fail "dry-run must print guard: ok when every condition holds: $(grep '^guard' <<<"$d")"
 echo "  guard: ok (stamped copy + pilot)"
-d=$(clean node "$BASE/run-fbatch-v2-campaign.js" --results "$TEST_TMP/gdry3.jsonl" --pilot --dry-run < /dev/null) || fail "pilot dry-run"
+d=$(clean node "$CPC" --results "$TEST_TMP/gdry3.jsonl" --pilot --dry-run < /dev/null) || fail "pilot dry-run"
 grep -q '^guard: not needed for --pilot' <<<"$d" || fail "pilot dry-run guard line"
 
 echo "=== no landing timer started by this test is still alive ==="

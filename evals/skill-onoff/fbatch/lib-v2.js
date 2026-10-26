@@ -5,12 +5,22 @@
 //   V3, fourth marker (T1 m_clean_proceeds): v1 paired effect (change 5/5 with base <= 2/5, or 4/5 with base <= 1/5) -> v2 non-inferiority,
 //   change >= reps - 1 (4/5), whatever the base did. Reason: in the v1 formal run base held m_clean_proceeds 5/5 (a ceiling), so the v1 condition
 //   could not be met by any change arm (written wrong at pre-registration). The three other V3 markers keep the v1 paired condition.
+// Second change: a row counts as scorable through isScorable() (failure_class === null and the fields the verdict reads), not through `!failure_class`.
 // Everything else (V1, V2, V4, MAX_ATTEMPTS, marker computation) is the v1 text. hooks/tests/skill-onoff-findings-batch-v2.test.sh pins
 // the difference to lib.js verdict() and shows a negative control for the rule.
 const L = require('./lib');
 
 const { TASKS, MARKERS, fisherOneSided, effectShape } = L;
 // v2 non-inferiority (see verdict): the change arm keeps the marker in at least reps - 1 cells, whatever the base did.
+// ONE definition of a scorable row, used by tally() below (so by the verdict) and by the campaign's pilot guard: a result row that is
+// not an infra/invalid failure (failure_class === null exactly) and carries what the verdict reads: task_id of the grid, arm, rep, a boolean
+// skill_invoked, and a markers object with a boolean for every marker of the task. A truncated or hand-made row is not scorable.
+function isScorable(r) {
+  if (!r || typeof r !== 'object' || r.failure_class !== null) return false;
+  if (!TASKS.includes(r.task_id) || !['base', 'change'].includes(r.arm) || !Number.isInteger(r.rep) || r.rep < 1) return false;
+  if (typeof r.skill_invoked !== 'boolean' || !r.markers || typeof r.markers !== 'object') return false;
+  return MARKERS[r.task_id].every((m) => typeof r.markers[m] === 'boolean');
+}
 const nonInferior = (c, reps) => c >= reps - 1;
 
 // The campaign (run-fbatch-campaign.js stateOf) re-dispatches a cell until it has a scorable row or has failed this many times.
@@ -25,7 +35,7 @@ function tally(rows, row) {
     if (row && r.row && r.row !== row) continue;
     const k = `${r.task_id}|${r.arm}|${r.rep}`;
     const c = cells.get(k) || { fails: 0, ok: 0 };
-    if (r.failure_class) c.fails++; else c.ok++;
+    if (!isScorable(r)) c.fails++; else c.ok++;
     cells.set(k, c);
   }
   let retried = 0; let exhausted = 0;
@@ -36,7 +46,7 @@ function tally(rows, row) {
   const infra = { retried, exhausted };
   const inv = { base: [0, 0], change: [0, 0] };
   for (const r of rows) {
-    if (r.failure_class || (row && r.row && r.row !== row)) continue;
+    if (!isScorable(r) || (row && r.row && r.row !== row)) continue;
     inv[r.arm][1]++; if (r.skill_invoked) inv[r.arm][0]++;
     for (const [m, v] of Object.entries(r.markers || {})) {
       const k = `${r.task_id}.${m}.${r.arm}`; t[k] = t[k] || { n: 0, true: 0 };
@@ -89,4 +99,4 @@ function verdict(rows, controls, reps = 5, row) {
 }
 
 
-module.exports = { ...L, effectShape, nonInferior, verdict };
+module.exports = { ...L, effectShape, nonInferior, isScorable, verdict };

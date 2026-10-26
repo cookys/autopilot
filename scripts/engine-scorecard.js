@@ -3185,6 +3185,7 @@ function planStripExpiry(scorecardRows, evidenceWrappers, strikeRows, pinRows) {
   }
   for (const w of newWrappers) validateEvidenceProducer(w.evidence, w.producer);
   const wrapperByEvent = new Map(newWrappers.map((w) => [w.event_id, w]));
+  const oldIdByEvent = new Map(evidenceWrappers.map((w) => [w.event_id, w.evidence.evidence_id]));
 
   let expiresRemoved = 0;
   let expiredMapped = 0;
@@ -3193,23 +3194,32 @@ function planStripExpiry(scorecardRows, evidenceWrappers, strikeRows, pinRows) {
     if (row.record_kind !== undefined) return row;
     const next = { ...row };
     if (next.expires !== undefined) { delete next.expires; expiresRemoved += 1; }
-    if (next.evidence && typeof next.evidence === 'object') {
-      const anchor = next.evidence_store;
+    // The evidence a row links can be embedded, anchored to a wrapper in the evidence store, or
+    // both; the wrapper is authoritative. A row with an anchor but no embedded copy still has its
+    // anchor hash re-sealed and still follows the wrapper's evidence below.
+    const hasEmbedded = next.evidence && typeof next.evidence === 'object';
+    const anchor = next.evidence_store;
+    let staleLinked = hasEmbedded && staleSeen.has(row.evidence.evidence_id);
+    if (hasEmbedded || anchor) {
       const wrapper = anchor ? wrapperByEvent.get(toEventId(anchor.event_id)) : null;
       if (anchor && !wrapper) throw new Error(`scorecard event ${row.event_id} anchors an evidence record that is not in the evidence store`);
       if (wrapper) {
-        next.evidence = wrapper.evidence;
+        if (hasEmbedded) next.evidence = wrapper.evidence;
         next.evidence_store = { ...anchor, transcript_hash: wrapper.transcript_hash };
+        if (staleSeen.has(oldIdByEvent.get(wrapper.event_id))) staleLinked = true;
       } else {
         next.evidence = resealWithoutExpiry(next.evidence, idMap, staleSeen);
       }
       evidenceRelinked += 1;
     }
-    if (next.evidence && staleSeen.has(row.evidence && row.evidence.evidence_id) && next.status !== 'failed') {
-      next.status = 'failed'; // base projected a stale-evidence row as failed (engine-scorecard.js:1709-1711)
+    if (staleLinked && next.status !== 'failed') {
+      // whichever copy carried it, the linked evidence became degraded: base projected a
+      // stale-evidence row as failed (engine-scorecard.js:1709-1711)
+      next.status = 'failed';
     } else if (next.status === 'expired') {
       // `expired` was only ever written onto a row that had qualified and then passed its date.
-      next.status = next.evidence && next.evidence.state !== 'qualified' ? 'failed' : 'qualified';
+      const linked = hasEmbedded ? next.evidence : (anchor && wrapperByEvent.get(toEventId(anchor.event_id)) || {}).evidence;
+      next.status = linked && linked.state !== 'qualified' ? 'failed' : 'qualified';
       expiredMapped += 1;
     }
     return next;
@@ -3217,7 +3227,7 @@ function planStripExpiry(scorecardRows, evidenceWrappers, strikeRows, pinRows) {
   failValidationThrows = true;
   try {
     for (const next of newRows) {
-      if (next.record_kind === undefined && next.evidence) validateRecordRow(JSON.parse(JSON.stringify(next)), newWrappers);
+      if (next.record_kind === undefined && (next.evidence || next.evidence_store)) validateRecordRow(JSON.parse(JSON.stringify(next)), newWrappers);
     }
   } finally {
     failValidationThrows = false;

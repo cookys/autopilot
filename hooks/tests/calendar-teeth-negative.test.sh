@@ -662,6 +662,26 @@ L4_PROJ=$("${L4[@]}" node "$ESC" current --role reviewer --now 2026-10-26T00:00:
   && ok "migrate10: an old store holding a stale-state evidence record migrates (stale_state_mapped=2): evidence degraded, row failed, seat not admitted as qualified" \
   || bad "migrate10: dry_rc=$L4_DRY_RC rc=$L4_RC state=$L4_STATE proj=$L4_PROJ out=$(cat "$TESTDIR/leg4.out") dry=$(cat "$TESTDIR/leg4-dry.out")"
 
+# the same, for a row whose authoritative evidence lives ONLY in the evidence-store wrapper (no embedded
+# copy): the wrapper's stale evidence becomes degraded, so the row must become failed too.
+LEG5="$TESTDIR/legacy5"; mk_legacy "$LEG5"
+node -e '
+const fs=require("fs");
+const sp=process.argv[1]+"/sc/scorecard.jsonl", ep=process.argv[1]+"/cap/qualification-evidence.jsonl";
+const rows=fs.readFileSync(sp,"utf8").trim().split("\n").map(JSON.parse);
+const ws=fs.readFileSync(ep,"utf8").trim().split("\n").map(JSON.parse);
+const row=rows.find(r=>r.event_id===141);
+for(const w of ws) if(w.event_id===row.evidence_store.event_id) w.evidence.state="stale";
+delete row.evidence;
+fs.writeFileSync(sp,rows.map(r=>JSON.stringify(r)).join("\n")+"\n");
+fs.writeFileSync(ep,ws.map(r=>JSON.stringify(r)).join("\n")+"\n")' "$LEG5"
+L5=(env ENGINE_SCORECARD_DIR="$LEG5/sc" ENGINE_CAPABILITY_DIR="$LEG5/cap")
+"${L5[@]}" node "$ESC" strip-expiry >"$TESTDIR/leg5.out" 2>&1; L5_RC=$?
+L5_STATE=$(node -e 'const fs=require("fs");const rs=fs.readFileSync(process.argv[1]+"/sc/scorecard.jsonl","utf8").trim().split("\n").map(JSON.parse);const r=rs.find(x=>x.event_id===141);const ws=fs.readFileSync(process.argv[1]+"/cap/qualification-evidence.jsonl","utf8").trim().split("\n").map(JSON.parse);const w=ws.find(x=>x.event_id===r.evidence_store.event_id);console.log(r.status+":"+w.evidence.state+":"+(r.evidence===undefined?"no-embedded":"embedded"))' "$LEG5")
+[ "$L5_RC" = "0" ] && grep -q '"stale_state_mapped":1' "$TESTDIR/leg5.out" && [ "$L5_STATE" = "failed:degraded:no-embedded" ] \
+  && ok "migrate11: a wrapper-only stale row (no embedded evidence) migrates: wrapper evidence degraded, row failed" \
+  || bad "migrate11: rc=$L5_RC state=$L5_STATE out=$(cat "$TESTDIR/leg5.out")"
+
 # evidence ids are content hashes with expires_at inside them: they changed, and nothing dangles
 NEW_EV_IDS=$(node -e 'const fs=require("fs");console.log(fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map(l=>JSON.parse(l).evidence.evidence_id).join(" "))' "$LEG/cap/qualification-evidence.jsonl")
 OLD_EV_IDS=$(node -e 'const fs=require("fs");console.log(fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map(l=>JSON.parse(l).evidence.evidence_id).join(" "))' "$LEG_FIX/qualification-evidence.jsonl")

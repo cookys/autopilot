@@ -142,7 +142,7 @@
         },
         "fixture state (fbatch/cc/tasks/_lib/fixture.sh fb_state)": {
           "old": "waits, ledger.jsonl",
-          "new": "adds watch.pid (the fixture builder, which the dispatch timers watch) and dispatch.json ({after_polls: 2, after_s: FBATCH_DISPATCH_LAND_AFTER_S})"
+          "new": "adds watch.pid (the fixture builder, which the dispatch timers watch) and dispatch.json ({after_polls: 2, after_s: FBATCH_DISPATCH_LAND_AFTER_S}) and gen (an immutable generation token; both timers, the land_after_s one and the dispatch ones, land only while it still equals the one they were started for, checked inside land() under the lock, so a timer of an earlier fixture on the same path never writes into a rebuilt one)"
         },
         "ledger reading (fbatch/cell.js buildTrace)": {
           "old": "every 'landed' ledger entry updates the landed lanes and the exit time",

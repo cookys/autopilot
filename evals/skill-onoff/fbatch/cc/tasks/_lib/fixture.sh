@@ -16,6 +16,8 @@ fb_state() {
   G=$(git rev-parse --absolute-git-dir)
   mkdir -p "$G/fbatch"
   echo "$1" > "$G/fbatch-task"
+  # generation token: a fixture rebuilt on this path gets a new one; every background writer (_land.js) lands only for its own
+  echo "$(date +%s%N)-$$-$RANDOM-$RANDOM" > "$G/fbatch/gen"
   echo 0 > "$G/fbatch/waits"
   : > "$G/fbatch/ledger.jsonl"
   # dispatched work (amendment 3): $PPID = whoever built the fixture (the dispatch timers watch it, see _land.js register);

@@ -38,13 +38,22 @@ function withLock(dir, fn) {
   }
   try { return fn(); } finally { try { fs.unlinkSync(lock); } catch { /* gone */ } }
 }
+// Generation (one check for BOTH timers): fb_state writes an immutable token to <git-dir>/fbatch/gen when the fixture is built, so a
+// fixture rebuilt on the same path gets a new one. A timer takes the token it was started for (the static timer reads it at start, a
+// dispatch timer gets it from `register`, which also stamps it on the plan entry) and passes it to land(), which compares it with the
+// file INSIDE the lock, right before writing: no match = stale, nothing is written and the timer ends. Polls pass no token (they
+// act on whatever fixture they run in).
+function readGen(dir) { try { return fs.readFileSync(path.join(dir, 'gen'), 'utf8').trim(); } catch { return ''; } }
+function isStale(dir, gen, spec) { return gen !== undefined && (readGen(dir) !== gen || (spec && spec.gen !== undefined && spec.gen !== gen)); }
 // Land every plan entry the predicate calls due. `root` is where the files are written (relative paths).
-function land({ dir, root, due, by, wake }) {
+function land({ dir, root, due, by, wake, gen }) {
   return withLock(dir, () => {
+    if (isStale(dir, gen)) return { plan: {}, done: {}, stale: true };
     const plan = readJson(path.join(dir, 'plan.json'), {});
     const landedF = path.join(dir, 'landed.json');
     const done = readJson(landedF, {});
     for (const [lab, spec] of Object.entries(plan)) {
+      if (isStale(dir, gen, spec)) return { plan: {}, done: {}, stale: true };
       if (done[lab] || !due(spec, lab)) continue;
       for (const [rel, text] of Object.entries(spec.files || {})) {
         const abs = path.resolve(spec.root || root, rel);
@@ -68,6 +77,7 @@ function timerMain(argv) {
   const plan0 = readJson(path.join(dir, 'plan.json'), {});
   const secs = Object.values(plan0).map((s) => s.after_s).filter((v) => typeof v === 'number' && v > 0);
   if (!Number.isInteger(watch) || watch < 1 || !secs.length) process.exit(2);
+  const gen = readGen(dir);
   const pidFile = path.join(dir, 'timer.pid');
   fs.writeFileSync(pidFile, `${process.pid}\n`);
   const t0 = Date.now();
@@ -79,7 +89,8 @@ function timerMain(argv) {
     try { mine = fs.readFileSync(pidFile, 'utf8').trim() === String(process.pid); } catch { /* gone */ }
     if (!alive(watch) || !mine || Date.now() - t0 > stop) process.exit(0);
     const el = Date.now() - t0;
-    const { plan, done } = land({ dir, root, by: 'timer', due: (s) => typeof s.after_s === 'number' && s.after_s > 0 && el >= s.after_s * 1000 });
+    const { plan, done, stale } = land({ dir, root, by: 'timer', gen, due: (s) => typeof s.after_s === 'number' && s.after_s > 0 && el >= s.after_s * 1000 });
+    if (stale) process.exit(0);
     if (Object.entries(plan).every(([lab, s]) => !(typeof s.after_s === 'number' && s.after_s > 0) || done[lab])) process.exit(0);
   }
 }
@@ -98,6 +109,7 @@ function register({ kind, detail, sha }) {
   const afterS = Number.isInteger(cfg.after_s) && cfg.after_s > 0 ? cfg.after_s : 0;
   const cwd = process.cwd();
   let label;
+  let gen;
   let dueTs = 0;
   withLock(dir, () => {
     const planF = path.join(dir, 'plan.json');
@@ -107,7 +119,8 @@ function register({ kind, detail, sha }) {
     let polls = 0;
     try { polls = parseInt(fs.readFileSync(path.join(dir, 'waits'), 'utf8'), 10) || 0; } catch { /* no poll yet */ }
     dueTs = afterS ? Date.now() + afterS * 1000 : 0;
-    plan[label] = { dispatch: true, kind, root: cwd, after: polls + afterPolls, ...(dueTs ? { due_ts: dueTs } : {}),
+    gen = readGen(dir);
+    plan[label] = { dispatch: true, kind, gen, root: cwd, after: polls + afterPolls, ...(dueTs ? { due_ts: dueTs } : {}),
       files: { [`runs/${label}.exit`]: '0\n', [`runs/${label}.result.md`]: resultText(kind, detail, sha) } };
     fs.writeFileSync(planF, JSON.stringify(plan));
   });
@@ -115,22 +128,22 @@ function register({ kind, detail, sha }) {
   try { watch = parseInt(fs.readFileSync(path.join(dir, 'watch.pid'), 'utf8'), 10); } catch { /* none recorded */ }
   if (dueTs && Number.isInteger(watch) && watch > 0) {
     // own session: it must outlive the shell command that dispatched; it ends at due+5 s, with the watched runner, or with the git dir
-    const child = cp.spawn(process.execPath, [__filename, 'after', '--watch-pid', String(watch), '--label', label, '--due-ts', String(dueTs)], { cwd, detached: true, stdio: 'ignore' });
+    const child = cp.spawn(process.execPath, [__filename, 'after', '--watch-pid', String(watch), '--label', label, '--due-ts', String(dueTs), '--gen', gen], { cwd, detached: true, stdio: 'ignore' });
     child.unref();
   }
   return label;
 }
 function afterMain(argv) {
   const val = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : undefined; };
-  const watch = Number(val('--watch-pid')); const label = val('--label'); const dueTs = Number(val('--due-ts'));
-  if (!Number.isInteger(watch) || watch < 1 || !label || !Number.isFinite(dueTs)) process.exit(2);
+  const watch = Number(val('--watch-pid')); const label = val('--label'); const dueTs = Number(val('--due-ts')); const gen = val('--gen');
+  if (!Number.isInteger(watch) || watch < 1 || !label || !Number.isFinite(dueTs) || gen === undefined) process.exit(2);
   const root = process.cwd();
   let dir;
   try { dir = fbDir(); } catch { process.exit(0); }
   for (;;) {
     sleepMs(250);
     if (!aliveP(watch) || !fs.existsSync(dir) || Date.now() > dueTs + 5000) process.exit(0);
-    if (Date.now() >= dueTs) { land({ dir, root, by: 'timer', due: (s, lab) => lab === label }); process.exit(0); }
+    if (Date.now() >= dueTs) { land({ dir, root, by: 'timer', gen, due: (s, lab) => lab === label }); process.exit(0); }
   }
 }
 

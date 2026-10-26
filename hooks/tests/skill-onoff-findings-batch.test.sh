@@ -842,7 +842,7 @@ cell_new_disp() { # $1 task $2 dispatch_land_after_s ('' = polls only) $3 hold_s
   cp -r "$FB/cc/tasks/$task/repo/." "$CELL_REPO/"
   cp -r "$stubs/." "$CELL_REPO/"
   ( cd "$CELL_REPO" && git init -q && git config user.name t && git config user.email t@example.com && git config commit.gpgsign false )
-  ( cd "$CELL_REPO" && FBATCH_DISPATCH_LAND_AFTER_S="$2" bash -c 'bash "$1"; exec sleep "$2"' _ "$FB/cc/tasks/$task/init-repo.sh" "$3" ) > /dev/null 2>&1 < /dev/null &
+  ( cd "$CELL_REPO" && FBATCH_LAND_AFTER_S="${LAND_S:-}" FBATCH_DISPATCH_LAND_AFTER_S="$2" bash -c 'bash "$1"; exec sleep "$2"' _ "$FB/cc/tasks/$task/init-repo.sh" "$3" ) > /dev/null 2>&1 < /dev/null &
   TIMER_PARENT=$!
   for i in $(seq 1 60); do [ -s "$CELL_REPO/.git/fbatch/snap-repo.list" ] && break; sleep 0.25; done
   [ -s "$CELL_REPO/.git/fbatch/snap-repo.list" ] || fail "cell_new_disp $task: the fixture was not built"
@@ -943,6 +943,47 @@ in_cell "$W; $W; scripts/dispatch-hetero.sh --repair A A-F1" > /dev/null
 out=$(in_cell "$WAIT_R repair-1.exit")
 if consistent "$out" repair-1; then fail "mutation 2 (the old landed rule) must make the wait script contradict the file system, and consistent() must see that: $out"; fi
 kill "$TIMER_PARENT" 2> /dev/null
+
+echo "--- generation: a timer started for an earlier fixture on the same path never lands into the rebuilt one (both timers, one check) ---"
+# rebuild_same_path: what rebuilding the fixture on the same path does to the hidden state (fb_state: new generation token, fresh
+# plan/waits/ledger); $1 = the new plan.json text. The old timer processes keep running and timer.pid is left alone, so only the
+# generation can tell the old timer from the new fixture.
+rebuild_same_path() {
+  ( cd "$CELL_REPO" && FBATCH_DISPATCH_LAND_AFTER_S=60 bash -c '. "$1"; fb_state fb-mid-batch; printf "%s\n" "$2" > "$G/fbatch/plan.json"' _ "$FB/cc/tasks/_lib/fixture.sh" "$1" ) > /dev/null 2>&1 < /dev/null
+}
+gen_dispatch_case() { # $1 stubs dir -> prints blocked|leaks: dispatch repair-1 (due in 3 s), rebuild, register the same label again (due in 60 s)
+  local got=blocked
+  cell_new_disp fb-mid-batch 3 120 "$1"
+  in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+  rebuild_same_path '{}'
+  in_cell 'rm -f runs/repair-1.exit runs/repair-1.result.md; scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
+  sleep 6
+  [ -e "$CELL_REPO/runs/repair-1.exit" ] && got=leaks
+  kill "$TIMER_PARENT" 2> /dev/null
+  echo "$got"
+}
+gen_static_case() { # $1 stubs dir -> prints blocked|leaks: the land_after_s timer (3 s), rebuild with an after_s entry of its own
+  local got=blocked
+  LAND_S=3 cell_new_disp fb-deadman '' 60 "$1"
+  sleep 1
+  rebuild_same_path '{"run.impl":{"after":3,"after_s":3,"files":{"runs/run.impl.exit":"0\n"}}}'
+  sleep 6
+  [ -e "$CELL_REPO/runs/run.impl.exit" ] && got=leaks
+  kill "$TIMER_PARENT" 2> /dev/null
+  echo "$got"
+}
+[ "$(gen_dispatch_case "$FB/cc/stubs")" = blocked ] || fail "dispatch timer landed into a fixture rebuilt on the same path (same label)"
+[ "$(gen_static_case "$FB/cc/stubs")" = blocked ] || fail "land_after_s timer landed into a fixture rebuilt on the same path"
+echo "--- negative control: with the generation check removed both timers land into the rebuilt fixture (the cases see it) ---"
+MUT3="$TEST_TMP/stubs-nogen"; cp -r "$FB/cc/stubs" "$MUT3"
+node -e '
+  const fs = require("fs"), f = process.argv[1];
+  const s = fs.readFileSync(f, "utf8");
+  const a = "function isStale(dir, gen, spec) {";
+  if (!s.includes(a)) process.exit(3);
+  fs.writeFileSync(f, s.replace(a, "function isStale(dir, gen, spec) { return false;"));' "$MUT3/scripts/_land.js" || fail "mutation 3 changed nothing"
+[ "$(gen_dispatch_case "$MUT3")" = leaks ] || fail "without the generation check the dispatch-timer case must see the leak"
+[ "$(gen_static_case "$MUT3")" = leaks ] || fail "without the generation check the land_after_s case must see the leak"
 
 echo "=== stamp: findings-batch row is frozen; editing any frozen file turns --check red (negative controls) ==="
 # The expectation follows the prereg status (amendment 3 is a draft until the owner re-stamps): a stamped row must check ok and

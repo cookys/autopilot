@@ -44,6 +44,19 @@ if REAP_OUT="$(node "$REPO_DIR/scripts/dispatch-status.js" --reap --days 7 2>/de
   [ "${REAPED:-0}" = "0" ] || echo "Reaped $REAPED stale dispatch-run manifests (>7d, not live)."
 fi
 
+# Qualification lost its expiry (2026-10-26): scorecard / evidence / pin stores written before
+# that carry an expiry field and are refused by the reader until migrated once. Detect only
+# (dry run, writes nothing) and print the one-line fix; the migration backs every store up first.
+if STRIP_OUT="$(node "$REPO_DIR/scripts/engine-scorecard.js" strip-expiry --dry-run 2>/dev/null)"; then
+  case "$STRIP_OUT" in
+    *\"already_migrated\":false*)
+      echo ""
+      echo "Qualification stores still hold the retired expiry field. Run once (backs every store up first):"
+      echo "  node $REPO_DIR/scripts/engine-scorecard.js strip-expiry"
+      ;;
+  esac
+fi
+
 echo ""
 if [[ "$BEFORE" == "$AFTER" ]]; then
   echo "Already up to date ($AFTER) — nothing pulled."

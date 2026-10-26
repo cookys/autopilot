@@ -242,6 +242,13 @@
      ],
      "pattern": "^[0-9a-f]{64}$",
      "title": "record_id this one supersedes, or null"
+    },
+    "expires": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "title": "advisory only; calendar never gates admission"
     }
    }
   },

@@ -157,7 +157,7 @@ test('auto-needs-adopt', () => {
   assert.equal(out.baseline_event_id, null);
   assert.equal(out.baseline_qualified_at, null);
   assert.equal(out.feed_record_id, qualEntry().qualification.record_id);
-  assert.equal(out.feed_content_digest, '1c531f4133c8d1bbe6004d228a74bff4cd8a7ba31e1f396ccc505e22274724ef');
+  assert.equal(out.feed_content_digest, '75f3003cc8bf70675a7e4e508578eb52174a7c1cbfb2c0ead4a9bbe2270d821d');
 });
 
 test('off-influences-result', () => {
@@ -216,7 +216,7 @@ test('feed-overwrites-local-evidence', () => {
   assert.equal(body.admission_source, undefined);
   assert.notEqual(body.feed_record_id, qualEntry().qualification.record_id);
 
-  for (const status of ['failed', 'expired']) {
+  for (const status of ['failed']) {
     const home = homeWithCache(doc, 'auto');
     const env = childEnv(home);
     recordLocal(env, status);

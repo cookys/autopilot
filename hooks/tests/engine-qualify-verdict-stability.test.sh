@@ -3591,6 +3591,11 @@ fs.rmSync(shortTmpBase, { recursive: true, force: true });
       [SINK, 'rawRowsText(rawExchanges),'],
       [FOREMAN_PLAN_ANCHOR, FOREMAN_PLAN_NEW],
       [FOREMAN_RUN_ANCHOR, FOREMAN_RUN_NEW],
+      // 2026-10-26: qualification has no expiry — the three places runQualification computed and
+      // wrote one (the expiresAt constant, evidence.expires_at, row.expires) are removed.
+      ['  const expiresAt = new Date(\n    Date.parse(issuedAt) + options.expiresDays * 86_400_000,\n  ).toISOString();\n', ''],
+      ['    expires_at: expiresAt,\n', ''],
+      ['    expires: expiresAt.slice(0, 10),\n', ''],
     ],
   };
   const expectedBody = (name, baseText) => {

@@ -66,7 +66,7 @@ assert_contains "$LIST_OUT" "$SEAT_ENGINE" "list names the seat"
 assert_contains "$LIST_OUT" "runner version" "list discloses the runner CLI version"
 assert_contains "$LIST_OUT" "prompt config" "list discloses the prompt config hash"
 assert_contains "$LIST_OUT" "corpus" "list discloses the corpus version"
-assert_contains "$LIST_OUT" "ADVISORY ONLY" "list marks expires as advisory, never a gate"
+assert_not_contains "$LIST_OUT" "expir" "list shows no expiry (qualification has no expiry)"
 assert_contains "$LIST_OUT" "self-qualify" "list always offers the self-qualify alternative"
 # FAILED rows are routing information and must be visible, not filtered away.
 assert_contains "$LIST_OUT" "FAILED" "list ships honest FAILED administrations too"

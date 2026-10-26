@@ -428,28 +428,37 @@ node -e '
   console.log("  v2: closure without closure_exclude " + lit.length + " files, with it " + ex.length + " (" + extra.length + " fewer: the stamp tool and what it reaches, FROZEN.json included)");
 ' "$TEST_TMP/v2-literal.json" "$TEST_TMP/v2-excl.json" || fail "v2 closure comparison"
 grep -q "'stamp-prereg.js'" "$BASE/run-fbatch-v2-campaign.js" || fail "the campaign must name stamp-prereg.js literally"
-echo "--- unit: closure(root, roots, exclude) and checkExclude on a synthetic root ---"
+echo "--- unit: closure(root, roots, exclude) and checkExclude on a synthetic root (the allowlisted name is stamp-prereg.js) ---"
 SY="$TEST_TMP/sy/evals/skill-onoff"; mkdir -p "$SY"
-printf "const t = require('./tool.js');\n" > "$SY/a.js"; printf "const d = require('./dep.js');\n" > "$SY/tool.js"; printf "module.exports = 1;\n" > "$SY/dep.js"; printf "module.exports = 2;\n" > "$SY/other.js"
+printf "const t = require('./stamp-prereg.js');\n" > "$SY/a.js"; printf "const d = require('./dep.js');\n" > "$SY/stamp-prereg.js"; printf "module.exports = 1;\n" > "$SY/dep.js"; printf "module.exports = 2;\n" > "$SY/other.js"; printf "module.exports = 3;\n" > "$SY/tool.js"
+printf "const t = require('./tool.js');\n" > "$SY/b.js"
 node -e '
-  const { closure, checkExclude } = require(process.argv[1] + "/closure-scan.js"); const root = process.argv[2];
+  const { closure, checkExclude, EXCLUDABLE } = require(process.argv[1] + "/closure-scan.js"); const root = process.argv[2];
   const bad = (m) => { console.error(m); process.exit(1); };
   const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) bad(m + ": " + JSON.stringify(a)); };
-  eq(closure(root, ["a.js"]).files, ["a.js", "dep.js", "tool.js"], "no exclusion");
-  const ex = [{ path: "evals/skill-onoff/tool.js", reason: "a tool, not an input" }];
-  const r = closure(root, ["a.js"], ex);
-  eq(r.files, ["a.js"], "excluded file is not listed nor expanded"); eq(r.exclude_hits, ["tool.js"], "hit"); eq(checkExclude(root, ex, r.exclude_hits), [], "valid exclusion");
-  eq(checkExclude(root, [{ path: "evals/skill-onoff/tool.js" }], ["tool.js"]).length, 1, "missing reason");
-  eq(checkExclude(root, [{ path: "evals/skill-onoff/tool.js", reason: "  " }], ["tool.js"]).length, 1, "blank reason");
-  eq(checkExclude(root, [{ path: "evals/skill-onoff/nope.js", reason: "x" }], []).length, 1, "missing file");
-  const unref = [{ path: "evals/skill-onoff/other.js", reason: "x" }];
-  eq(checkExclude(root, unref, closure(root, ["a.js"], unref).exclude_hits).length, 1, "unreferenced exclusion");
-  const asRoot = [{ path: "evals/skill-onoff/a.js", reason: "x" }];
-  eq(checkExclude(root, asRoot, closure(root, ["a.js"], asRoot).exclude_hits).length, 1, "a closure root is not excludable");
-  eq(checkExclude(root, "x", []).length, 1, "not an array");
-  eq(checkExclude(root, undefined, []), [], "absent field is fine");
+  const errs = (ex, roots) => checkExclude(root, ex, closure(root, roots, ex));
+  const E = (p) => [{ path: "evals/skill-onoff/" + p, reason: "r" }];
+  eq(EXCLUDABLE, ["evals/skill-onoff/stamp-prereg.js"], "the allowlist is exactly the stamp tool");
+  if (!Object.isFrozen(EXCLUDABLE)) bad("the allowlist must be frozen");
+  eq(closure(root, ["a.js"]).files, ["a.js", "dep.js", "stamp-prereg.js"], "no exclusion");
+  const r = closure(root, ["a.js"], E("stamp-prereg.js"));
+  eq(r.files, ["a.js"], "excluded file is not listed nor expanded"); eq(r.exclude_hits, ["stamp-prereg.js"], "hit"); eq(errs(E("stamp-prereg.js"), ["a.js"]), [], "valid exclusion");
+  eq(errs([{ path: "evals/skill-onoff/stamp-prereg.js" }], ["a.js"]).length, 1, "missing reason");
+  eq(errs([{ path: "evals/skill-onoff/stamp-prereg.js", reason: "  " }], ["a.js"]).length, 1, "blank reason");
+  eq(errs(E("nope.js"), ["a.js"]).length, 1, "missing file");
+  // allowlist: anything else is refused, whether or not it is referenced, and is NOT honoured by closure() even if the caller skips the audit
+  for (const p of ["tool.js", "other.js", "dep.js", "a.js"]) eq(errs(E(p), ["b.js"]).filter((m) => /allowlist/.test(m)).length, 1, "not on the allowlist: " + p);
+  eq(closure(root, ["b.js"], E("tool.js")).files, ["b.js", "tool.js"], "a non-allowlisted exclusion hides nothing");
+  // unreferenced (allowlisted, exists, nothing references it)
+  eq(errs(E("stamp-prereg.js"), ["b.js"]).filter((m) => /not referenced/.test(m)).length, 1, "unreferenced exclusion");
+  // a closure root that another closure file references and that is excluded: refused (root check before the hit check)
+  const rr = closure(root, ["a.js", "stamp-prereg.js"], E("stamp-prereg.js"));
+  eq(rr.files.includes("stamp-prereg.js"), true, "a root is never dropped by an exclusion"); eq(rr.excluded_roots, ["stamp-prereg.js"], "excluded root recorded"); eq(rr.exclude_hits, [], "a root is not a hit");
+  eq(errs(E("stamp-prereg.js"), ["a.js", "stamp-prereg.js"]).filter((m) => /closure root/.test(m)).length, 1, "root exclusion refused");
+  eq(checkExclude(root, "x", {}).length, 1, "not an array");
+  eq(checkExclude(root, undefined, {}), [], "absent field is fine");
   eq(Object.keys(closure(root, ["a.js"])).sort(), ["files", "outside_root", "unresolved"], "result shape without exclusion is the old shape");
-  console.log("  closure/checkExclude: default empty, exclusion, missing reason, blank reason, missing file, unreferenced, root, non-array, absent");
+  console.log("  closure/checkExclude: allowlist (frozen), exclusion, missing/blank reason, missing file, not allowlisted (4 paths), unreferenced, closure root, non-array, absent");
 ' "$BASE" "$SY" || fail "closure unit checks"
 
 echo "=== stamp: the v2 row is stampable and frozen (the copy root; the real FROZEN.json is not touched) ==="
@@ -473,7 +482,18 @@ mutate_prereg '(p)=>{p.closure_exclude[0].path="evals/skill-onoff/does-not-exist
 o=$(expect_msg 'does not exist' "closure_exclude path that does not exist" st --check) || fail "$o"; echo "$o"
 restore_prereg
 mutate_prereg '(p)=>{p.closure_exclude[0].path="evals/skill-onoff/score-fbatch.js"}'
-o=$(expect_msg 'not referenced' "closure_exclude path nothing references" st --check) || fail "$o"; echo "$o"
+o=$(expect_msg 'allowlist' "closure_exclude of a path that is not on the allowlist" st --check) || fail "$o"; echo "$o"
+restore_prereg
+# the abuse shown by the acceptance run: take cell.js out of the roots and exclude it (before: stamped and --check stayed ok after editing cell.js)
+mutate_prereg '(p)=>{p.closure_roots=p.closure_roots.filter((e)=>e!=="fbatch/cell.js");p.closure_exclude.push({path:"evals/skill-onoff/fbatch/cell.js",reason:"hiding an evaluation input"})}'
+o=$(expect_msg 'allowlist' "cell.js out of closure_roots and into closure_exclude" st) || fail "$o"; echo "$o"
+o=$(expect_msg 'allowlist' "the same, --check" st --check) || fail "$o"; echo "$o"
+restore_prereg
+mutate_prereg '(p)=>{p.closure_roots=p.closure_roots.filter((e)=>e!=="fbatch/cell.js");p.freeze_files=p.freeze_files.filter((e)=>e!=="fbatch/cell.js");p.closure_exclude.push({path:"evals/skill-onoff/fbatch/cell.js",reason:"hiding an evaluation input"})}'
+o=$(expect_msg 'allowlist' "cell.js out of roots, freeze list and into closure_exclude" st) || fail "$o"; echo "$o"
+restore_prereg
+mutate_prereg '(p)=>{p.closure_roots.push("stamp-prereg.js")}'
+o=$(expect_msg 'closure root' "stamp-prereg.js made a closure root while excluded" st --check) || fail "$o"; echo "$o"
 restore_prereg
 mutate_prereg '(p)=>{p.closure_exclude[0].reason="a different reason"}'
 o=$(expect_msg 'closure_exclude' "closure_exclude edited after stamping" st --check) || fail "$o"; echo "$o"
@@ -566,6 +586,22 @@ o=$(gcase run-fbatch-v2-campaign.js "byte-identical copy of the stamped prereg, 
 cp -r "$CP/fbatch/arms" "$TEST_TMP/arms-copy"
 o=$(gcase run-fbatch-v2-campaign.js "arms dir other than fbatch/arms" refused "${FORMAL[@]}" --arms-dir "$TEST_TMP/arms-copy" --results "$(fresh e3)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
 o=$(gcase run-fbatch-v2-campaign.js "--model haiku on a formal run" refused "${FORMAL[@]}" --model haiku --results "$(fresh e4)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
+# the row is fixed in the campaign: a canonical-path prereg that names another (stamped) row is refused, pilot and formal, 0 fake calls
+cp "$V2P" "$TEST_TMP/v2p.rowkeep"
+node -e 'const fs=require("fs");const f=process.argv[1];const p=JSON.parse(fs.readFileSync(f,"utf8"));p.row="findings-batch";fs.writeFileSync(f,JSON.stringify(p,null,2)+"\n")' "$V2P"
+for mode in formal pilot; do
+  if [ "$mode" = formal ]; then args=("${FORMAL[@]}" --results "$(fresh r1)" --pilot-results "$RV2"); else args=(--runner cc --pilot --results "$(fresh r2)"); fi
+  rc=0; out=$(run_campaign run-fbatch-v2-campaign.js "$TEST_TMP/g.log" "${args[@]}" 2>&1) || rc=$?
+  [ "$rc" != 0 ] && [ "$(wc -l < "$TEST_TMP/g.log")" = 0 ] && grep -q "not 'findings-batch-v2'" <<<"$out" || fail "a prereg naming another row must be refused ($mode, rc=$rc): $(head -c 300 <<<"$out")"
+  echo "  row replaced by findings-batch ($mode): refused (rc=$rc, 0 calls)"
+done
+# negative control: the campaign with the row fixed only in name (check run with P.row, no row refusal) accepts it and dispatches
+ROWLESS="$CP/run-fbatch-v2-campaign.rowless.js"
+sed -e "/^if (!P || P.row !== ROW) die/d" -e "s/'--row', ROW, '--check'/'--row', P.row, '--check'/" "$CPC" > "$ROWLESS"
+cmp -s "$ROWLESS" "$CPC" && fail "the rowless mutant is identical"
+o=$(gcase run-fbatch-v2-campaign.rowless.js "rowless mutant, prereg row replaced by the stamped findings-batch" dispatched "${FORMAL[@]}" --results "$(fresh r3)" --pilot-results "$RV2") || fail "control broken: $o"; echo "  red as designed: $o"
+rm -f "$ROWLESS"
+cp "$TEST_TMP/v2p.rowkeep" "$V2P"
 echo "--- stamped, check ok, scorable pilot, canonical prereg: the first cell is dispatched ---"
 o=$(gcase run-fbatch-v2-campaign.js "stamped + check ok + pilot" dispatched "${FORMAL[@]}" --results "$(fresh f)" --pilot-results "$RV2") || fail "$o"; echo "  $o"
 echo "--- negative controls: the guard removed, the same inputs dispatch cells ---"

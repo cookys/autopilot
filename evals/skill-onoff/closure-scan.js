@@ -17,9 +17,11 @@
 // existing file outside the root goes to outside_root (digests are root-relative, so these are reported, not frozen). A reference the
 // static scan cannot resolve (variable inside the path, or a bare directory built at run time) goes to unresolved.
 // closure_exclude (optional prereg field, default empty = the scan above, byte for byte): [{"path": "<repo-relative or root-relative file>", "reason": "<why>"}].
-// A reference that resolves to an excluded file is neither listed nor expanded. closure() takes the list as its third argument and returns
-// exclude_hits (the excluded paths some scanned file referenced); checkExclude(root, exclude, hits) returns the audit errors: every entry needs a
-// non-empty reason, the file must exist, a closure file must really reference it (a root is not excludable and counts as unreferenced).
+// A reference that resolves to an excluded file is neither listed nor expanded. ONLY paths on EXCLUDABLE (a list written in THIS file, so that
+// adding one is a reviewed code change and never a prereg edit) can be excluded; any other path is an error and is never honoured by closure().
+// closure() takes the list as its third argument and returns exclude_hits (excluded paths some scanned file referenced) and excluded_roots (excluded
+// paths that are closure roots: a root is never excluded); checkExclude(root, exclude, result) returns the audit errors: on the allowlist,
+// non-empty reason, the file exists, not a closure root, and really referenced by a closure file.
 // Node built-ins, bare module names and system commands are ignored. Exit: 0 printed . 2 usage
 'use strict';
 const fs = require('fs');
@@ -41,7 +43,12 @@ function excludeRel(root, p) {
   }
   return null;
 }
-function checkExclude(root, exclude, hits) {
+const EXCLUDABLE = Object.freeze(['evals/skill-onoff/stamp-prereg.js']); // the stamping gate tool: not an evaluation input (the formal-run launch guard calls it)
+const excludableRel = (root) => new Set(EXCLUDABLE.map((p) => excludeRel(root, p)).filter(Boolean));
+function checkExclude(root, exclude, res) {
+  const hits = (res && res.exclude_hits) || [];
+  const rootsHit = (res && res.excluded_roots) || [];
+  const allowed = excludableRel(root);
   const errors = [];
   if (exclude === undefined) return errors;
   if (!Array.isArray(exclude)) return ['closure_exclude must be an array of {path, reason}'];
@@ -50,13 +57,18 @@ function checkExclude(root, exclude, hits) {
     if (typeof e.reason !== 'string' || !e.reason.trim()) { errors.push(`closure_exclude[${i}] (${e.path}) has no reason`); return; }
     const rel = excludeRel(root, e.path);
     if (rel === null) { errors.push(`closure_exclude[${i}] (${e.path}) does not exist inside the root`); return; }
-    if (!(hits || []).includes(rel)) errors.push(`closure_exclude[${i}] (${e.path}) is not referenced by any file in the closure (remove the useless exclusion)`);
+    if (!allowed.has(rel)) { errors.push(`closure_exclude[${i}] (${e.path}) is not on the closure-scan.js allowlist (${EXCLUDABLE.join(', ')}); only a reviewed change to closure-scan.js can add a path`); return; }
+    if (rootsHit.includes(rel)) { errors.push(`closure_exclude[${i}] (${e.path}) is a closure root and cannot be excluded`); return; }
+    if (!hits.includes(rel)) errors.push(`closure_exclude[${i}] (${e.path}) is not referenced by any file in the closure (remove the useless exclusion)`);
   });
   return errors;
 }
 function closure(root, roots, exclude) {
-  const excluded = new Set(Array.isArray(exclude) ? exclude.map((e) => (e && typeof e.path === 'string' ? excludeRel(root, e.path) : null)).filter(Boolean) : []);
+  const allowedRel = excludableRel(root);
+  const excluded = new Set(Array.isArray(exclude) ? exclude.map((e) => (e && typeof e.path === 'string' ? excludeRel(root, e.path) : null)).filter((r) => r && allowedRel.has(r)) : []);
+  const rootSet = new Set();
   const hits = new Set();
+  const rootsHit = new Set();
   const files = new Set();
   const unresolved = new Set();
   const outside = new Set();
@@ -67,7 +79,7 @@ function closure(root, roots, exclude) {
     if (fs.statSync(abs).isDirectory()) return false;
     if (!inRoot(abs)) { outside.add(path.relative(path.resolve(root, '../..'), abs).split(path.sep).join('/')); return true; }
     const rel = path.relative(root, abs).split(path.sep).join('/');
-    if (!isRoot && excluded.has(rel)) { hits.add(rel); return true; }
+    if (!isRoot && excluded.has(rel)) { if (rootSet.has(rel)) rootsHit.add(rel); else { hits.add(rel); return true; } }
     if (!files.has(rel)) { files.add(rel); if (SCAN.test(rel)) queue.push(rel); }
     return true;
   };
@@ -75,7 +87,7 @@ function closure(root, roots, exclude) {
     const abs = path.join(root, r);
     if (!fs.existsSync(abs)) { unresolved.add(`${r} (closure root missing)`); continue; }
     const set = new Set(); walk(abs, r, set);
-    for (const f of set) add(path.join(root, f), true);
+    for (const f of set) { rootSet.add(f); add(path.join(root, f), true); }
   }
   const tryResolve = (from, cand) => {
     const bases = cand.includes('/') ? [path.dirname(path.join(root, from)), root] : [path.dirname(path.join(root, from))]; // a bare name is only the file's own sibling
@@ -110,10 +122,10 @@ function closure(root, roots, exclude) {
       if (abs) add(abs);
     }
   }
-  return { files: [...files].sort(), unresolved: [...unresolved].sort(), outside_root: [...outside].sort(), ...(excluded.size ? { exclude_hits: [...hits].sort() } : {}) };
+  return { files: [...files].sort(), unresolved: [...unresolved].sort(), outside_root: [...outside].sort(), ...(excluded.size ? { exclude_hits: [...hits].sort(), excluded_roots: [...rootsHit].sort() } : {}) };
 }
 
-module.exports = { closure, checkExclude };
+module.exports = { closure, checkExclude, EXCLUDABLE };
 
 if (require.main === module) {
   const argv = process.argv.slice(2);
@@ -124,7 +136,7 @@ if (require.main === module) {
   const prereg = JSON.parse(fs.readFileSync(path.join(root, preregRel), 'utf8'));
   const roots = [...(prereg.closure_roots || []), ...(prereg.campaign_script ? [prereg.campaign_script] : [])];
   const res = closure(root, roots, prereg.closure_exclude);
-  const exErr = checkExclude(root, prereg.closure_exclude, res.exclude_hits);
+  const exErr = checkExclude(root, prereg.closure_exclude, res);
   if (exErr.length) { console.error(`closure-scan: ${exErr.join('; ')}`); process.exit(2); }
   console.log(JSON.stringify(res, null, 2));
 }

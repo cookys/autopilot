@@ -68,8 +68,10 @@ const resultsPath = val('--results');
 const USAGE = 'usage: run-fbatch-v2-campaign.js --results <file.jsonl> [--dry-run] [--check-arms] [--pilot] [--runner stub|cc] [--model haiku|sonnet] [--arms base,change] [--reps N]';
 if (!resultsPath && !flag('--check-arms')) die(USAGE);
 const preregPath = val('--prereg', path.join(HERE, 'prereg', 'findings-batch-v2.json'));
+const ROW = 'findings-batch-v2'; // fixed here: the row the stamp check and the pilot rows are about is never read from an editable file
 let P;
 try { P = JSON.parse(fs.readFileSync(preregPath, 'utf8')); } catch (e) { die(`cannot read prereg ${preregPath}: ${e.message}`); }
+if (!P || P.row !== ROW) die(`prereg ${preregPath} is the row '${P && P.row}', not '${ROW}': refused (pilot and formal runs alike)`);
 const armsDir = path.resolve(val('--arms-dir', path.join(HERE, 'fbatch', 'arms')));
 const runner = val('--runner', 'stub');
 if (!['cc', 'stub'].includes(runner)) die('runner must be cc|stub');
@@ -164,15 +166,15 @@ function guardReasons() {
   if (!same(armsDir, path.join(__dirname, 'fbatch', 'arms'))) r.push(`loaded arms dir ${armsDir} is not fbatch/arms (the frozen arms)`);
   if (MODEL !== P.model) r.push(`--model ${MODEL} differs from the prereg model ${P.model}`);
   if (!/^stamped\b/.test(String(P.status || ''))) r.push('unstamped: prereg status is not "stamped"');
-  const chk = cp.spawnSync('node', [path.join(__dirname, 'stamp-prereg.js'), '--row', P.row, '--check'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const chk = cp.spawnSync('node', [path.join(__dirname, 'stamp-prereg.js'), '--row', ROW, '--check'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   if (chk.status !== 0) r.push(`stamp check failed: ${String(chk.stderr || chk.stdout).trim().split('\n')[0]}`);
   let ok = 0;
   if (!PILOT_RESULTS) r.push('no pilot: --pilot-results <file> not given');
   else {
     let text = '';
     try { text = fs.readFileSync(PILOT_RESULTS, 'utf8'); } catch { /* missing */ }
-    for (const line of text.split('\n')) { if (!line.trim()) continue; try { const j = JSON.parse(line); if (j.pilot === true && j.row === P.row && L.isScorable(j) && P.pilot_tasks.includes(j.task_id)) ok++; } catch { /* skip */ } }
-    if (!ok) r.push(`no pilot: ${PILOT_RESULTS} has no scorable pilot row of ${P.row}`);
+    for (const line of text.split('\n')) { if (!line.trim()) continue; try { const j = JSON.parse(line); if (j.pilot === true && j.row === ROW && L.isScorable(j) && P.pilot_tasks.includes(j.task_id)) ok++; } catch { /* skip */ } }
+    if (!ok) r.push(`no pilot: ${PILOT_RESULTS} has no scorable pilot row of ${ROW}`);
   }
   return r;
 }
@@ -209,7 +211,7 @@ if (flag('--dry-run')) {
   const guardLine = gr.length ? gr.join('; ') : 'ok';
   console.log(`guard: ${PILOT ? 'not needed for --pilot' : guardLine}`);
   console.log(JSON.stringify({
-    dry_run: true, pilot: PILOT, row: P.row, model: MODEL, runner, cells_total: keys.length,
+    dry_run: true, pilot: PILOT, row: ROW, model: MODEL, runner, cells_total: keys.length,
     cells_todo: keys.filter((k) => !done.has(k)).length, cost_estimate_usd: cost,
     cost_basis: 'prereg cost_per_cell_usd: the v1 measured mean per task (findings-batch v1 formal re-run, 3.34 USD over 41 rows), rounded up to 0.005',
     max_usd: CAP,
@@ -223,7 +225,7 @@ if (flag('--dry-run')) {
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
 const money = (n) => Number(n.toFixed(2));
 const rowCost = (j) => { const v = num(j.cost_usd); return v === null ? cellCost(j.task_id) : v; };
-const spentUsd = () => readRows().filter((j) => typeof j.task_id === 'string' && (!j.row || j.row === P.row)).reduce((s, j) => s + rowCost(j), 0);
+const spentUsd = () => readRows().filter((j) => typeof j.task_id === 'string' && (!j.row || j.row === ROW)).reduce((s, j) => s + rowCost(j), 0);
 
 function runCc() {
   if (!PILOT) {
@@ -299,7 +301,7 @@ function runCc() {
       const bad = !j.failure_class && j.markers && j.markers.findings_write === true;
       // markers.sh could not read the cell's evidence (ledger, git state, snapshots): the runner swallows that exit status, so it is an infra row here.
       const refused = !j.failure_class && j.markers && j.markers.cell_error === true;
-      return JSON.stringify({ row: P.row, pilot: PILOT, ...j, ...(bad ? { failure_class: 'invalid_cell', failure_cause: 'findings_write' } : {}), ...(refused ? { failure_class: 'infra_fail', failure_cause: 'marker_error' } : {}), ...costOfKept(j) });
+      return JSON.stringify({ row: ROW, pilot: PILOT, ...j, ...(bad ? { failure_class: 'invalid_cell', failure_cause: 'findings_write' } : {}), ...(refused ? { failure_class: 'infra_fail', failure_cause: 'marker_error' } : {}), ...costOfKept(j) });
     });
     fs.writeFileSync(abs, head + (tail.length ? `${tail.join('\n')}\n` : ''));
   };
@@ -369,10 +371,10 @@ const have = new Set(scoredRows().filter((j) => !j.failure_class).map((j) => `${
 for (const g of GROUPS) for (const arm of g.arms) for (let rep = 1; rep <= g.reps; rep++) {
   if (have.has(`${g.task}|${arm}|${rep}`)) continue;
   const { markers } = L.stubCell(g.task, arm, L.armText(arms[arm]));
-  fs.appendFileSync(resultsPath, `${JSON.stringify({ row: P.row, pilot: PILOT, model: MODEL, task_id: g.task, arm, rep, runner: 'stub', failure_class: null, skill_invoked: true, cost_usd: 0, markers })}\n`);
+  fs.appendFileSync(resultsPath, `${JSON.stringify({ row: ROW, pilot: PILOT, model: MODEL, task_id: g.task, arm, rep, runner: 'stub', failure_class: null, skill_invoked: true, cost_usd: 0, markers })}\n`);
 }
 if (PILOT) { console.log('pilot done: stub cells, not scored (a partial grid cannot PASS).'); process.exit(0); }
 const controls = L.negativeControls(arms);
-const v = L.verdict(scoredRows(), controls, REPS, P.row);
+const v = L.verdict(scoredRows(), controls, REPS, ROW);
 console.log(JSON.stringify({ controls, ...v }));
 process.exit(v.verdict === 'PASS' ? 0 : 1);

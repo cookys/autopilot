@@ -73,7 +73,7 @@ if (Array.isArray(prereg.closure_roots)) {
   const entries = (prereg.freeze_files || []).map((e) => path.posix.normalize(e));
   const CS = require('./closure-scan');
   const res = CS.closure(root, [...prereg.closure_roots, ...(prereg.campaign_script ? [prereg.campaign_script] : [])], prereg.closure_exclude);
-  const exErr = CS.checkExclude(root, prereg.closure_exclude, res.exclude_hits); // closure_exclude: audited, default empty (closure-scan.js header)
+  const exErr = CS.checkExclude(root, prereg.closure_exclude, res); // closure_exclude: audited, default empty (closure-scan.js header)
   if (exErr.length) die(`closure_exclude refused: ${exErr.join('; ')}`);
   const uncovered = res.files.filter((f) => !entries.some((e) => f === e || f.startsWith(`${e}/`)));
   if (uncovered.length) die(`freeze_files misses files the evaluation reads (dependency closure): ${uncovered.join(', ')}`);

@@ -5,11 +5,13 @@
 // An event lands on the Nth poll of wait-dispatch-results.js OR `after_s` seconds after the fixture was built, whichever
 // comes first (amendment 2): a real background run finishes whether or not anybody polls it, and a model that waits for the
 // exit FILE (Monitor, until [ -e ... ]) never calls the poll script. `[ -e ]` runs no code, so the timer is a real process.
-//   timer: node scripts/_land.js timer --watch-pid <pid>
-//     started in the background by init-repo.sh, in the runner's process group (no setsid), stdio closed. It exits as soon as
-//     (a) every event with an after_s has landed, or (b) the watched pid (the runner / test shell that built the fixture) is
-//     gone, or (c) the fixture's git dir is gone, or (d) <git-dir>/fbatch/timer.pid no longer holds its own pid (the fixture
-//     was rebuilt), or (e) max(after_s)+5 s have passed. It never touches HOME and never runs claude.
+//   timer: node scripts/_land.js timer --watch-pid <pid> --gen <token>
+//     started in the background by init-repo.sh, in the runner's process group (no setsid), stdio closed. There is no pid
+//     file and no single-owner rule: any number of timers may exist at once and none coordinates with another; the lock and
+//     the generation token (below) alone make that correct. A timer exits as soon as (a) land() says the token is stale,
+//     or (b) every event it is responsible for (the plan's after_s events) has landed or is no longer in the plan, or
+//     (c) the fixture's fbatch state dir (inside the git dir) is gone, or (d) the watched pid (the runner / test shell that
+//     built the fixture) is gone, or (e) max(after_s)+5 s have passed. It never touches HOME and never runs claude.
 // Landing is serialised by <git-dir>/fbatch/land.lock, so a poll and the timer never land the same event twice.
 // Dispatched work (amendment 3): every stub that DISPATCHES something (repair, review, re-review, acceptance) registers a plan
 // entry for it with `register` (below) and starts a one-shot timer for it. Its exit file lands on the `dispatch.json`
@@ -105,19 +107,15 @@ function timerMain(argv) {
   if (!Number.isInteger(watch) || watch < 1 || !secs.length) process.exit(2);
   const gen = argv.includes('--gen') ? argv[argv.indexOf('--gen') + 1] : undefined; // handed over by the builder, never read here
   if (!gen) process.exit(2);
-  const pidFile = path.join(dir, 'timer.pid');
-  fs.writeFileSync(pidFile, `${process.pid}\n`);
   const t0 = Date.now();
   const stop = Math.max(...secs) * 1000 + 5000;
   const alive = (p) => { try { process.kill(p, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
   for (;;) {
     sleepMs(250);
-    let mine = false;
-    try { mine = fs.readFileSync(pidFile, 'utf8').trim() === String(process.pid); } catch { /* gone */ }
-    if (!alive(watch) || !mine || Date.now() - t0 > stop) process.exit(0);
+    if (!alive(watch) || !fs.existsSync(dir) || Date.now() - t0 > stop) process.exit(0); // (d) (c) (e)
     const el = Date.now() - t0;
     const { plan, done, stale } = land({ dir, root, by: 'timer', gen, due: (s) => typeof s.after_s === 'number' && s.after_s > 0 && el >= s.after_s * 1000 });
-    if (stale) process.exit(0);
+    if (stale) process.exit(0); // (a)
     if (Object.entries(plan).every(([lab, s]) => !(typeof s.after_s === 'number' && s.after_s > 0) || done[lab])) process.exit(0);
   }
 }

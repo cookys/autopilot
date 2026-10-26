@@ -35,6 +35,31 @@ FB="$BASE/fbatch"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 clean() { env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u ONOFF_MAX_USD "$@"; }
 
+# ---- timer bookkeeping: this test starts background landing timers (scripts/_land.js timer|after) in cells under $TEST_TMP. They are
+# found by walking /proc (cmdline + cwd), by a PID list and never by a name-pattern process search (that matches its own command line),
+# cleaned on every exit path, and asserted gone at the end.
+land_pids() { # $1 dir prefix -> pids of _land.js timer|after processes whose cwd is under it (builtins only until a cmdline matches: a scan must be fast)
+  local d p w a c
+  for d in /proc/[0-9]*; do
+    p=${d#/proc/}; [ "$p" = "$$" ] && continue
+    a=()
+    { mapfile -d '' -t a < "$d/cmdline"; } 2> /dev/null || continue
+    c="${a[*]:-}"
+    case "$c" in *_land.js\ timer*|*_land.js\ after*) ;; *) continue ;; esac
+    w=$(readlink "$d/cwd" 2> /dev/null) || continue
+    case "$w" in "$1"|"$1"/*) echo "$p" ;; esac
+  done
+}
+case_cleanup() { # the per-case EXIT trap (cases run in $(...) subshells): kills this case's holder, paused/live timers and every timer in its cell
+  local p
+  for p in ${TIMER_PARENT:-} ${PAUSED_PID:-} ${LIVE_PID:-}; do kill -KILL "$p" 2> /dev/null; done
+  for p in $(land_pids "${CELL_REPO:-/nonexistent-cell}"); do kill -KILL "$p" 2> /dev/null; done
+  return 0
+}
+FBT_MAIN=$BASHPID
+fbt_main_cleanup() { local p; [ "$BASHPID" = "$FBT_MAIN" ] || return 0; for p in $(land_pids "$TEST_TMP"); do kill -KILL "$p" 2> /dev/null; done; return 0; }
+trap 'fbt_main_cleanup; cleanup_test_tmp' EXIT
+
 for f in run-fbatch-campaign.js score-fbatch.js fbatch/cell.js fbatch/cc-build.js fbatch/lib.js; do
   [ -f "$BASE/$f" ] || fail "missing $f"
 done
@@ -138,9 +163,8 @@ cell_new_timer() { # $1 task $2 land_after_s $3 hold_s: like cell_new, but the f
   ( cd "$CELL_REPO" && git init -q && git config user.name t && git config user.email t@example.com && git config commit.gpgsign false )
   ( cd "$CELL_REPO" && FBATCH_LAND_AFTER_S="$2" bash -c 'bash "$1"; exec sleep "$2"' _ "$FB/cc/tasks/$task/init-repo.sh" "$3" ) > /dev/null 2>&1 < /dev/null &
   TIMER_PARENT=$!
-  for i in $(seq 1 40); do [ -s "$CELL_REPO/.git/fbatch/timer.pid" ] && break; sleep 0.25; done
-  [ -s "$CELL_REPO/.git/fbatch/timer.pid" ] || fail "cell_new_timer $task: the timer did not start"
-  TIMER_PID=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/timer.pid")
+  for i in $(seq 1 40); do TIMER_PID=$(land_pids "$CELL_REPO" | head -n 1); [ -n "$TIMER_PID" ] && break; sleep 0.25; done
+  [ -n "$TIMER_PID" ] || fail "cell_new_timer $task: the timer did not start"
   bash "$FB/cc/tasks/$task/seed-home.sh" "$CELL_HOME" || fail "cell_new_timer $task: seed-home.sh"
   : > "$CELL_TX"
 }
@@ -963,7 +987,7 @@ kill "$TIMER_PARENT" 2> /dev/null
 echo "--- generation handoff: a timer of an earlier fixture on the same path never writes into the rebuilt one (both timers, one lock, one check) ---"
 # rebuild_same_path: what rebuilding the fixture on the same path does (fb_state -> _land.js reset under land.lock: new generation
 # token, fresh plan/waits/ledger, the old landed files removed); $1 = the new plan.json text. The old timer processes keep running and
-# timer.pid is left alone, so only the generation and the lock can tell the old timer from the new fixture.
+# no pid file exists any more, so only the generation and the lock can tell the old timer from the new fixture.
 rebuild_same_path() {
   ( cd "$CELL_REPO" && FBATCH_DISPATCH_LAND_AFTER_S=60 bash -c '. "$1"; fb_state fb-mid-batch; printf "%s\n" "$2" > "$G/fbatch/plan.json"' _ "$FB/cc/tasks/_lib/fixture.sh" "$1" ) > /dev/null 2>&1 < /dev/null
 }
@@ -971,10 +995,12 @@ M_NOGEN=$(make_mutant nogen 'function isStale(dir, gen, spec) {' 'function isSta
 M_NOLOCK=$(make_mutant nolockreset 'withLock(dir, () => { // reset' '((d, f) => f())(dir, () => { // reset')
 M_OWNGEN_T=$(make_mutant owngen-timer "const gen = argv.includes('--gen') ? argv[argv.indexOf('--gen') + 1] : undefined;" 'const gen = readGen(dir);')
 M_OWNGEN_A=$(make_mutant owngen-after "const gen = val('--gen');" 'const gen = readGen(fbDir());')
+M_PIDOWNER=$(make_mutant pidowner "const alive = (p) => { try { process.kill(p, 0); return true; } catch (e) { return e.code === 'EPERM'; } };" "const pidFile = path.join(dir, 'timer.pid'); fs.writeFileSync(pidFile, process.pid + '\\n'); const alive = (p) => { if (p === watch) { let mine = false; try { mine = fs.readFileSync(pidFile, 'utf8').trim() === String(process.pid); } catch { /* gone */ } if (!mine) return false; } try { process.kill(p, 0); return true; } catch (e) { return e.code === 'EPERM'; } };")
 cnt() { [ -e "$CELL_REPO/$1" ] && echo leaks || echo blocked; }
 
 # ---- (0) rebuild with no interleaving: the generation alone
-case0_dispatch() { # $1 stubs -> blocked|leaks
+case0_dispatch() {
+  trap case_cleanup EXIT # $1 stubs -> blocked|leaks
   cell_new_disp fb-mid-batch 3 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
   in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null
   rebuild_same_path '{}'
@@ -982,6 +1008,7 @@ case0_dispatch() { # $1 stubs -> blocked|leaks
   sleep 6; local r; r=$(cnt runs/repair-1.exit); kill "$TIMER_PARENT" 2> /dev/null; echo "$r"
 }
 case0_static() {
+  trap case_cleanup EXIT
   LAND_S=3 cell_new_disp fb-deadman '' 60 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
   sleep 1
   rebuild_same_path '{"run.impl":{"after":3,"after_s":3,"files":{"runs/run.impl.exit":"0\n"}}}'
@@ -989,6 +1016,7 @@ case0_static() {
 }
 # ---- (a) the rebuild interleaves with an old timer that already passed its check and is about to write (paused inside land())
 caseA_dispatch() {
+  trap case_cleanup EXIT
   local pf="$TEST_TMP/pause-a"
   cell_new_disp fb-mid-batch 3 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
   : > "$pf"
@@ -1001,6 +1029,7 @@ caseA_dispatch() {
   sleep 1; local r; r=$(cnt runs/repair-1.exit); kill "$TIMER_PARENT" 2> /dev/null; echo "$r"
 }
 caseA_static() {
+  trap case_cleanup EXIT
   local pf="$TEST_TMP/pause-a2"
   : > "$pf"
   FBATCH_LAND_PAUSE_FILE="$pf" LAND_S=3 cell_new_disp fb-deadman '' 60 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
@@ -1019,6 +1048,7 @@ paused_launch() { # $1.. the node argv ; sets PAUSED_PID, returns once it is sto
   fail "the paused timer did not stop"
 }
 caseB_static() {
+  trap case_cleanup EXIT
   cell_new_disp fb-deadman '' 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
   printf '%s\n' '{"run.impl":{"after":3,"after_s":2,"files":{"runs/run.impl.exit":"0\n"}}}' > "$CELL_REPO/.git/fbatch/plan.json"
   local g; g=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/gen")
@@ -1028,6 +1058,7 @@ caseB_static() {
   sleep 5; local r; r=$(cnt runs/run.impl.exit); kill "$TIMER_PARENT" "$PAUSED_PID" 2> /dev/null; echo "$r"
 }
 caseB_dispatch() {
+  trap case_cleanup EXIT
   cell_new_disp fb-mid-batch 60 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
   local g; g=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/gen")
   paused_launch scripts/_land.js after --watch-pid "$TIMER_PARENT" --label repair-1 --due-ts $(( $(date +%s) * 1000 + 1000 )) --gen "$g"
@@ -1035,6 +1066,23 @@ caseB_dispatch() {
   in_cell 'scripts/dispatch-hetero.sh --repair A A-F1' > /dev/null    # the same label in the new fixture (its own timer is 60 s away)
   kill -CONT "$PAUSED_PID"
   sleep 3; local r; r=$(cnt runs/repair-1.exit); kill "$TIMER_PARENT" "$PAUSED_PID" 2> /dev/null; echo "$r"
+}
+# ---- liveness: a late-starting timer of an earlier fixture coexists with the new fixture's timer; the new fixture's event must still land
+caseL_liveness() {
+  trap case_cleanup EXIT
+  cell_new_disp fb-deadman '' 120 "$1"; [ "$1" = "$FB/cc/stubs" ] || assert_mutant "${2:-}"
+  local plan='{"run.impl":{"after":3,"after_s":2,"files":{"runs/run.impl.exit":"0\n"}}}' g g2
+  printf '%s\n' "$plan" > "$CELL_REPO/.git/fbatch/plan.json"
+  g=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/gen")
+  paused_launch scripts/_land.js timer --watch-pid "$TIMER_PARENT" --gen "$g"      # the old fixture's timer, not started yet
+  rebuild_same_path "$plan"                                                         # same path rebuilt: new generation
+  g2=$(tr -d '[:space:]' < "$CELL_REPO/.git/fbatch/gen")
+  ( cd "$CELL_REPO" && exec node scripts/_land.js timer --watch-pid "$TIMER_PARENT" --gen "$g2" ) > /dev/null 2>&1 < /dev/null &
+  LIVE_PID=$!
+  sleep 1                                                                           # the new fixture's timer is up
+  kill -CONT "$PAUSED_PID"                                                          # now the old one starts
+  sleep 5
+  [ -e "$CELL_REPO/runs/run.impl.exit" ] && echo lands || echo starved
 }
 expect_case() { # $1 label $2 want $3.. the case command
   local label="$1" want="$2" got; shift 2
@@ -1049,6 +1097,7 @@ expect_case "a dispatch timer between check and write, rebuild interleaves" bloc
 expect_case "a land_after_s timer between check and write, rebuild interleaves" blocked caseA_static "$SD"
 expect_case "b land_after_s timer suspended before it starts" blocked caseB_static "$SD"
 expect_case "b dispatch timer suspended before it starts" blocked caseB_dispatch "$SD"
+expect_case "liveness: a late old timer does not starve the new fixture" lands caseL_liveness "$SD"
 echo "--- red: each fix removed in turn, the same case must LEAK (and the cell must run the mutant) ---"
 expect_case "no generation check: dispatch timer" leaks case0_dispatch "$M_NOGEN" "$(mutant_sentinel nogen)"
 expect_case "no generation check: land_after_s timer" leaks case0_static "$M_NOGEN" "$(mutant_sentinel nogen)"
@@ -1056,15 +1105,16 @@ expect_case "rebuild without the lock: dispatch timer (a)" leaks caseA_dispatch 
 expect_case "rebuild without the lock: land_after_s timer (a)" leaks caseA_static "$M_NOLOCK" "$(mutant_sentinel nolockreset)"
 expect_case "timer reads the token itself: land_after_s timer (b)" leaks caseB_static "$M_OWNGEN_T" "$(mutant_sentinel owngen-timer)"
 expect_case "timer reads the token itself: dispatch timer (b)" leaks caseB_dispatch "$M_OWNGEN_A" "$(mutant_sentinel owngen-after)"
+expect_case "pid ownership (the pre-simplification timer): the new fixture starves" starved caseL_liveness "$M_PIDOWNER" "$(mutant_sentinel pidowner)"
 
 echo "--- negative control: a cell that runs the SHIPPED stubs in a mutant case is refused by assert_mutant ---"
-for ms in nogen nolockreset owngen-timer owngen-after nolanding oldwait; do
-  out=$( ( cell_new_disp fb-mid-batch 3 20 "$SD"; assert_mutant "$(mutant_sentinel "$ms")"; kill "$TIMER_PARENT" 2> /dev/null ) 2>&1 ) && fail "assert_mutant passed on the shipped stubs for $ms"
+for ms in nogen nolockreset owngen-timer owngen-after pidowner nolanding oldwait; do
+  out=$( ( trap case_cleanup EXIT; cell_new_disp fb-mid-batch 3 20 "$SD"; assert_mutant "$(mutant_sentinel "$ms")" ) 2>&1 ) && fail "assert_mutant passed on the shipped stubs for $ms"
   grep -q "did not run the mutant" <<<"$out" || fail "assert_mutant must refuse the shipped stubs for $ms: $out"
 done
 echo "--- mutant sentinel table (name | sentinel | occurrences in the shipped stubs, must be 0) ---"
 while read -r row; do echo "$row"; [ "${row##*|}" = 0 ] || fail "sentinel not unique: $row"; done < "$SENTINEL_SCAN"
-[ "$(wc -l < "$SENTINEL_SCAN")" = 6 ] || fail "expected 6 mutants, scanned $(wc -l < "$SENTINEL_SCAN")"
+[ "$(wc -l < "$SENTINEL_SCAN")" = 7 ] || fail "expected 7 mutants, scanned $(wc -l < "$SENTINEL_SCAN")"
 
 echo "=== stamp: findings-batch row is frozen; editing any frozen file turns --check red (negative controls) ==="
 # The expectation follows the prereg status (amendment 3 is a draft until the owner re-stamps): a stamped row must check ok and
@@ -1134,4 +1184,8 @@ rc=0; out=$(stamp_check) || rc=$?
 echo "=== stamp: rows stamped before stay ok ==="
 clean node "$BASE/stamp-prereg.js" --row bpack --check > /dev/null 2>&1 < /dev/null || fail "bpack frozen row no longer checks ok"
 
+echo "=== no landing timer started by this test is still alive ==="
+for i in $(seq 1 20); do [ -z "$(land_pids "$TEST_TMP")" ] && break; sleep 0.25; done
+left=$(land_pids "$TEST_TMP" | tr '\n' ' ')
+[ -z "$left" ] || fail "landing timers started by this test are still alive: $left"
 echo "findings-batch cc tests passed"

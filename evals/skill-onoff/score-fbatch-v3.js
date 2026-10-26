@@ -30,10 +30,18 @@ let rows;
 try { P = JSON.parse(fs.readFileSync(preregPath, 'utf8')); } catch (e) { die(`prereg unreadable: ${preregPath}: ${e.message}`); }
 try { rows = fs.readFileSync(resultsPath, 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)); } catch (e) { die(`results unreadable: ${resultsPath}: ${e.message}`); }
 if (!P || typeof P !== 'object' || typeof P.row !== 'string') die(`prereg ${preregPath} has no row`);
-const model = val('--model') || P.model;
-const reps = val('--reps') !== undefined ? Number(val('--reps')) : (P.reps || 5);
-if (!Number.isInteger(reps) || reps < 1) die('--reps must be a positive integer');
-const armsDir = path.resolve(val('--arms-dir') || path.join(__dirname, 'fbatch', 'arms'));
+// Round 2: scoring is fixed by the pre-registration. reps, model, the prereg file and the arms dir cannot be redirected (a shorter grid or
+// another rule file would score a protocol nobody registered); a grid short of the prereg reps is INCOMPLETE in the verdict.
+const same = (a, b) => { try { return fs.realpathSync(a) === fs.realpathSync(b); } catch { return false; } };
+if (!same(preregPath, path.join(__dirname, 'prereg', 'findings-batch-v3.json'))) die(`--prereg ${preregPath} is not this directory's prereg/findings-batch-v3.json`);
+if (P.row !== 'findings-batch-v3') die(`prereg row is '${P.row}', not 'findings-batch-v3'`);
+const model = P.model;
+if (val('--model') !== undefined && val('--model') !== model) die(`--model ${val('--model')} differs from the prereg model ${model}`);
+const reps = P.reps;
+if (!Number.isInteger(reps) || reps < 1) die('prereg reps is not a positive integer');
+if (val('--reps') !== undefined && Number(val('--reps')) !== reps) die(`--reps ${val('--reps')} differs from the prereg reps ${reps}`);
+if (val('--arms-dir') !== undefined && !same(val('--arms-dir'), path.join(__dirname, 'fbatch', 'arms'))) die(`--arms-dir ${val('--arms-dir')} is not fbatch/arms`);
+const armsDir = path.resolve(path.join(__dirname, 'fbatch', 'arms'));
 let controls;
 try { controls = L.negativeControls(L.loadArms(armsDir)); } catch (e) { die(`arms unreadable: ${armsDir}: ${e.message}`); }
 const scored = rows.filter((j) => j && j.pilot !== true && j.model === model && (!j.row || j.row === P.row));

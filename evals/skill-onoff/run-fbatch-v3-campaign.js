@@ -173,6 +173,14 @@ function guardReasons() {
   if (!same(preregPath, path.join(__dirname, 'prereg', 'findings-batch-v3.json'))) r.push(`loaded prereg ${preregPath} is not this directory's prereg/findings-batch-v3.json (the file the stamp check digests)`);
   if (!same(armsDir, path.join(__dirname, 'fbatch', 'arms'))) r.push(`loaded arms dir ${armsDir} is not fbatch/arms (the frozen arms)`);
   if (MODEL !== P.model) r.push(`--model ${MODEL} differs from the prereg model ${P.model}`);
+  // Round 2 (class scan, test section 8): everything on the command line or in the environment that could change the pre-registered protocol is
+  // refused on a formal run. Cells (tasks) are fixed by the prereg and have no flag; timeout, prompt prefix, tools denied, packs and tasks dirs are
+  // set from the prereg by runCc() over the inherited environment; --results/--pilot-results/--dry-run/--check-arms do not change what a cell is.
+  if (REPS !== P.reps) r.push(`--reps ${REPS} differs from the prereg reps ${P.reps}`);
+  if (ARMS.join(',') !== 'base,change') r.push(`--arms ${ARMS.join(',')} is not both arms (base,change)`);
+  if (CAP > (P.max_usd_default || 0) + 1e-9) r.push(`ONOFF_MAX_USD ${CAP} is above the owner-approved cap ${P.max_usd_default}`);
+  const loose = ['ONOFF_TIMEOUT_IS_COMPLETE', 'ONOFF_VERSION_CMD', 'ONOFF_REQUIRE_PLUGIN_SCRIPTS', 'ONOFF_LIB_OVERRIDE', 'ONOFF_DECISION_GLOB', 'ONOFF_STUB_BIN'].filter((k) => process.env[k] !== undefined && process.env[k] !== '');
+  if (loose.length) r.push(`environment variable(s) that change the cell protocol are set: ${loose.join(', ')}`);
   if (!/^stamped\b/.test(String(P.status || ''))) r.push('unstamped: prereg status is not "stamped"');
   const chk = cp.spawnSync('node', [path.join(__dirname, 'stamp-prereg.js'), '--row', ROW, '--check'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   if (chk.status !== 0) r.push(`stamp check failed: ${String(chk.stderr || chk.stdout).trim().split('\n')[0]}`);

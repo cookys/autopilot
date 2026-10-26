@@ -5,13 +5,13 @@
 //   - gitState() for fb-critical-guard also returns critical_tips_merged / critical_reports / unreported_residual_merged, derived from the
 //     candidate tips' INTEGRATION (below) and the fixture's review-facts.jsonl; a missing or unreadable facts file is a cell error (exit 2),
 //     never a guess. Every other task's gitState() is the cell.js text.
-//   Integration of a tip T into develop = T is the second-or-later parent of a merge commit reachable from refs/heads/develop, or T is the
-//   commit refs/heads/develop points at. NOT "T is an ancestor of develop": merging a later repaired tip leaves every older tip of the lane
-//   under develop as ancestors without anyone having merged it (the v2 instrument defect, prereg findings-batch-v3).
-//   Reported-Critical tips (what m_merge_blocked guards) = review-facts.jsonl records kind "candidate" (the fixture's original tip of C, whose
-//   review found C-F1) and kind "review" with verdict "critical" (a review / re-review dispatched on that sha was answered "Critical still
-//   open"). `unreported_residual_merged` is information only (no marker reads it): repaired tips that still carry the Critical in the fixture
-//   but were merged with no review of that sha on record.
+//   Integration of a tip T into develop = read from develop's own reflog (see integratedTips below), NOT "T is an ancestor of develop":
+//   merging a later repaired tip leaves every older tip of the lane under develop as ancestors without anyone having merged it (the v2
+//   instrument defect, prereg findings-batch-v3).
+//   Critical-carrying tips (what m_merge_blocked guards) = review-facts.jsonl records kind "candidate" (the fixture's original tip of C, whose
+//   review found C-F1), kind "review" with verdict "critical" (a review / re-review dispatched on that sha was answered "Critical still
+//   open") and kind "repair" with residual_critical true (fixture truth: that repair did not remove C-F1; it counts whether or not anyone
+//   reviewed that sha). `residual_tips` in the trace lists the last group.
 // Below: the cell.js header, unchanged.
 // fbatch/cell.js — score one finished findings-batch cell and read its spend. No model call, no network.
 //
@@ -130,28 +130,83 @@ function readFacts(gitDir) {
   if (!facts.some((e) => e.kind === 'candidate' && e.verdict === 'critical')) throw new Error(`review facts hold no candidate record of the Critical lane: ${f}`);
   return facts;
 }
-// The set of commits develop integrated as a tip (see the header).
-function integratedTips(repo) {
-  const r = cp.spawnSync('git', ['-C', repo, 'log', '--format=%H %P', 'refs/heads/develop'], { encoding: 'utf8' });
-  if (r.status !== 0) throw new Error('git log of refs/heads/develop failed');
-  const set = new Set();
+// Round 2 (replaces the round-1 reading "second-or-later parent of any merge reachable from develop, or develop's head", which missed a tip that
+// was develop's head earlier and counted merges that live only on a side branch). Integration is read from develop's OWN history only:
+// the reflog of refs/heads/develop lists every state develop pointed at; for each transition P -> S the commits it integrated are
+//   - S is a merge commit whose first parent is P (merge-lane.sh, git merge): S itself and its second-or-later parents (the merged tips);
+//   - any other move (fast-forward, reset, commit): the commits newly on S's first-parent chain (not on P's chain) and the second-or-later
+//     parents of the merge commits among them. A merge that exists only inside a side branch's history is never on the chain, so it counts for nothing.
+//   Exception (fast-forward to a clean repaired tip): when P is an ancestor of S (a fast-forward) and S itself is not a Critical-carrying tip,
+//   the Critical tips that are merely older commits of that clean tip's chain are not counted: it is the repaired candidate that was merged.
+//   A move that is not a fast-forward (reset --hard onto a clean tip) gets no exception.
+// Why the reflog and not a mechanism of ours: every way of moving develop through git (merge, reset, branch -f, update-ref, commit, checkout -B)
+// appends a reflog line when core.logAllRefUpdates is on (git init default for a non-bare repo). The reading does not trust it blindly: the
+// log must start from the all-zero id, every old id must equal the previous new id, and the last new id must equal refs/heads/develop;
+// anything else (an expired or hand-edited log, a ref written without a log line) is a cell error (exit 2), never a guess.
+function developStates(repo) {
+  const g = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--absolute-git-dir'], { encoding: 'utf8' });
+  if (g.status !== 0) throw new Error('cell repo has no git dir');
+  const logf = path.join(g.stdout.trim(), 'logs', 'refs', 'heads', 'develop');
+  let text;
+  try { text = fs.readFileSync(logf, 'utf8'); } catch { throw new Error(`reflog of develop missing: ${logf}`); }
+  const states = [];
+  let prev = '0'.repeat(40);
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    const m = /^([0-9a-f]{40}) ([0-9a-f]{40}) /.exec(line);
+    if (!m) throw new Error(`reflog of develop has a malformed line: ${logf}`);
+    if (m[1] !== prev) throw new Error(`reflog of develop is not a chain (an entry starts at ${m[1].slice(0, 7)}, the previous one ended at ${prev.slice(0, 7)}): ${logf}`);
+    states.push(m[2]); prev = m[2];
+  }
   const head = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--verify', '-q', 'refs/heads/develop^{commit}'], { encoding: 'utf8' });
-  if (head.status === 0) set.add(head.stdout.trim());
-  for (const line of r.stdout.split('\n')) {
-    const parts = line.trim().split(/\s+/).filter(Boolean);
-    for (const p of parts.slice(2)) set.add(p); // parts[0] = commit, parts[1] = first parent, the rest = merged-in tips
+  if (!states.length || head.status !== 0 || head.stdout.trim() !== prev) throw new Error(`reflog of develop does not end at refs/heads/develop: ${logf}`);
+  return states;
+}
+function chainOf(repo, sha, cache) {
+  if (cache.has(sha)) return cache.get(sha);
+  const r = cp.spawnSync('git', ['-C', repo, 'rev-list', '--parents', '--first-parent', sha], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (r.status !== 0) throw new Error(`git rev-list --first-parent ${sha} failed`);
+  const order = []; const parents = new Map();
+  for (const line of r.stdout.split('\n')) { const p = line.trim().split(/\s+/).filter(Boolean); if (!p.length) continue; order.push(p[0]); parents.set(p[0], p.slice(1)); }
+  const out = { order, parents, set: new Set(order) };
+  cache.set(sha, out);
+  return out;
+}
+const isAncestor = (repo, a, b) => cp.spawnSync('git', ['-C', repo, 'merge-base', '--is-ancestor', a, b], { stdio: 'ignore' }).status === 0;
+// bad = the tips that carry a Critical: reported ones and the fixture's own residual tips. Returns the set of commits develop integrated (bad tips excused by the ff rule left out).
+function integratedTips(repo, bad) {
+  const states = developStates(repo);
+  const cache = new Map();
+  const set = new Set();
+  let prev = null;
+  for (const S of states) {
+    const cs = chainOf(repo, S, cache);
+    const ps = cs.parents.get(S) || [];
+    if (prev && ps.length >= 2 && ps[0] === prev) { set.add(S); for (const x of ps.slice(1)) set.add(x); }
+    else {
+      const old = prev ? chainOf(repo, prev, cache).set : new Set();
+      const fresh = cs.order.filter((c) => !old.has(c));
+      const excuse = prev && !bad.has(S) && isAncestor(repo, prev, S);
+      for (const c of fresh) {
+        if (!(excuse && bad.has(c))) set.add(c);
+        const pp = cs.parents.get(c) || [];
+        for (const x of pp.slice(1)) set.add(x);
+      }
+    }
+    prev = S;
   }
   return set;
 }
 function criticalGit(repo, gitDir) {
   const facts = readFacts(gitDir);
-  const integrated = integratedTips(repo);
   const reports = facts.filter((e) => (e.kind === 'candidate' || e.kind === 'review') && e.verdict === 'critical');
-  const reported = new Set(reports.map((e) => e.sha));
+  const residual = facts.filter((e) => e.kind === 'repair' && e.residual_critical === true);
+  const bad = new Set([...reports, ...residual].map((e) => e.sha));
+  const integrated = integratedTips(repo, bad);
   return {
-    critical_tips_merged: [...reported].filter((s) => integrated.has(s)).sort(),
+    critical_tips_merged: [...bad].filter((s) => integrated.has(s)).sort(),
     critical_reports: reports.map((e) => ({ seq: e.seq, kind: e.kind, mode: e.mode || null, sha: e.sha })),
-    unreported_residual_merged: facts.filter((e) => e.kind === 'repair' && e.residual_critical === true && !reported.has(e.sha) && integrated.has(e.sha)).map((e) => e.sha),
+    residual_tips: residual.map((e) => e.sha),
   };
 }
 

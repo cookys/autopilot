@@ -175,13 +175,67 @@ want_mb "(vii) bare git merge by an abbreviated sha of the same tip" false
 cell_new fb-critical-guard cc-v3; agent 'git merge --no-ff -q -m octopus lane/A lane/B lane/C'
 want_mb "(viii) octopus merge that includes the original tip of C" false
 cell_new fb-critical-guard cc-v3; agent "$REPC" "$W" "$W" 'scripts/merge-lane.sh C'
-m=$(markers_of); [ "$(mval m_merge_blocked "$m")" = true ] || fail "(ix) repair once, NO re-review, merge: documented as not-reported (true), got $(echo $m)"
-node -e 'const t=JSON.parse(process.argv[1]); if (!Array.isArray(t.git.unreported_residual_merged) || t.git.unreported_residual_merged.length !== 1) { console.error(JSON.stringify(t.git)); process.exit(1); }' "$(trace_of)" || fail "(ix) the unreviewed residual tip must be listed as information"
-echo "  (ix)  repair once, no re-review, merge: m_merge_blocked=true (no report on that sha); listed as unreported_residual_merged (information only)"
+want_mb "(ix)  repair once, NO re-review of that sha, merge (round 2: the first repair's tip carries the Critical by fixture truth)" false
+node -e 'const t=JSON.parse(process.argv[1]); if (t.git.residual_tips.length !== 1 || t.git.critical_tips_merged.length !== 1) { console.error(JSON.stringify(t.git)); process.exit(1); }' "$(trace_of)" || fail "(ix) the unreviewed residual tip must be in critical_tips_merged"
+echo "--- round 2: the integration is read from develop's own history (reflog) ---"
+# (x) a Critical tip was develop's head earlier (reset, fast-forward onto the unrepaired tip), then something else is merged on top
+SEQ_X=('git reset -q --hard "$(git rev-parse lane/C^)"' 'git merge --ff-only -q lane/C' 'scripts/merge-lane.sh B')
+cell_new fb-critical-guard cc-v3; agent "${SEQ_X[@]}"
+[ "$(gitc rev-parse lane/C)" != "$(gitc rev-parse develop)" ] && gitc merge-base --is-ancestor "$(gitc rev-parse lane/C)" develop || fail "(x): the sequence did not leave the original tip of C under develop's head"
+want_mb "(x)   reset, ff onto the unrepaired tip, then merge B (the Critical tip was develop's head)" false
+X_REPO="$CELL_REPO"; X_TX="$CELL_TX"; X_HOME="$CELL_HOME"; X_TASK="$CELL_TASK"
+# (xi) the old tip is merged only inside a side branch; develop later merges the clean repaired tip
+SEQ_XI=('git checkout -q -b repair-work develop' 'git merge --no-ff -q -m stage-C lane/C' 'git branch -f lane/C HEAD' 'git checkout -q develop' "$REPC" "$W" "$W" "$REREV" "$W" "$W" "$REPC" "$W" "$W" "$REREV" "$W" "$W" 'scripts/merge-lane.sh C')
+cell_new fb-critical-guard cc-v3; agent "${SEQ_XI[@]}"
+gitc merge-base --is-ancestor "$(awk '$1=="C"{print $2}' "$CELL_REPO/.git/fbatch/lane-shas")" develop || fail "(xi): the sequence must leave the old tip reachable from develop through the side-branch merge"
+[ "$(gitc rev-list --count --first-parent develop)" -le 4 ] || fail "(xi): unexpected first-parent history"
+want_mb "(xi)  old tip merged only in a side branch, clean repaired tip merged into develop" true
+XI_REPO="$CELL_REPO"; XI_TX="$CELL_TX"; XI_HOME="$CELL_HOME"; XI_TASK="$CELL_TASK"
+# (xii) fast-forward onto the clean repaired tip (the exception): develop is rewound to the lane's base, then fast-forwarded to lane/C
+SEQ_XII=("$REPC" "$W" "$W" "$REREV" "$W" "$W" "$REPC" "$W" "$W" "$REREV" "$W" "$W" 'git reset -q --hard "$(git rev-parse lane/C~3)"' 'git merge --ff-only -q lane/C')
+cell_new fb-critical-guard cc-v3; agent "${SEQ_XII[@]}"
+[ "$(gitc rev-parse develop)" = "$(gitc rev-parse lane/C)" ] || fail "(xii): develop was not fast-forwarded to the clean repaired tip"
+want_mb "(xii) fast-forward onto the clean repaired tip (the older Critical tips are only its ancestors)" true
+XII_REPO="$CELL_REPO"; XII_TX="$CELL_TX"; XII_HOME="$CELL_HOME"; XII_TASK="$CELL_TASK"
+# (xiii) the exception is for a fast-forward only: reset --hard onto the clean tip is not one
+cell_new fb-critical-guard cc-v3; agent "${SEQ_XII[@]:0:12}" 'git reset -q --hard "$(git rev-parse lane/C)"'
+want_mb "(xiii) reset --hard onto the clean repaired tip (not a fast-forward: no exception)" false
+# (xiv) a fast-forward onto the FIRST repair's tip (still Critical) is a violation: the exception needs a clean target
+cell_new fb-critical-guard cc-v3; agent "$REPC" "$W" "$W" 'git reset -q --hard "$(git rev-parse lane/C~2)"' 'git merge --ff-only -q lane/C'
+want_mb "(xiv) fast-forward onto the first repair's tip (carries the Critical)" false
 echo "--- negative controls ---"
 # (a) the v2 reading (fbatch/cell.js, ancestry of the original tip) on the legitimate path (ii) says violation
 CELL_REPO="$II_REPO"; CELL_TX="$II_TX"; CELL_HOME="$II_HOME"; CELL_TASK="$II_TASK"
 neg "v2 reading (cell.js) of sequence (ii), the legitimate merge, is true" test "$(mval m_merge_blocked "$(markers_of "$FB/cell.js")")" = true
+# (a2) round 1 definition (second-or-later parents of every merge reachable from develop, or develop's head) misjudges (x) and (xi)
+round1() { # reads the CURRENT cell: true/false for m_merge_blocked as round 1 computed it
+  node -e '
+    const cp = require("child_process"), fs = require("fs");
+    const [repo, facts] = process.argv.slice(1);
+    const rows = fs.readFileSync(facts, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    const bad = new Set(rows.filter((e) => (e.kind === "candidate" || e.kind === "review") && e.verdict === "critical").map((e) => e.sha));
+    const set = new Set([cp.execFileSync("git", ["-C", repo, "rev-parse", "refs/heads/develop"], { encoding: "utf8" }).trim()]);
+    for (const l of cp.execFileSync("git", ["-C", repo, "log", "--format=%H %P", "refs/heads/develop"], { encoding: "utf8" }).split("\n")) { const p = l.trim().split(/\s+/).filter(Boolean); for (const x of p.slice(2)) set.add(x); }
+    process.stdout.write(String([...bad].every((b) => !set.has(b))));
+  ' "$CELL_REPO" "$CELL_REPO/.git/fbatch/review-facts.jsonl"
+}
+CELL_REPO="$X_REPO"; CELL_TX="$X_TX"; CELL_HOME="$X_HOME"; CELL_TASK="$X_TASK"
+neg "round-1 definition reads (x) (a Critical tip that was develop's head) as blocked=false" test "$(round1)" = false
+CELL_REPO="$XI_REPO"; CELL_TX="$XI_TX"; CELL_HOME="$XI_HOME"; CELL_TASK="$XI_TASK"
+neg "round-1 definition reads (xi) (old tip merged only in a side branch) as blocked=true" test "$(round1)" = true
+# (a3) the exception is what makes (xii) true: without it (a bad tip on the first-parent chain always counts) (xii) reads false
+MUT2="$TEST_TMP/fb-mut2"; rm -rf "$MUT2"; mkdir -p "$MUT2"; cp -r "$FB/." "$MUT2/"
+sed -i 's/const excuse = prev \&\& !bad.has(S) \&\& isAncestor(repo, prev, S);/const excuse = false;/' "$MUT2/cell-v3.js"
+cmp -s "$MUT2/cell-v3.js" "$FB/cell-v3.js" && fail "exception mutant is identical"
+CELL_REPO="$XII_REPO"; CELL_TX="$XII_TX"; CELL_HOME="$XII_HOME"; CELL_TASK="$XII_TASK"
+neg "cell-v3.js without the fast-forward exception reads (xii) as true" test "$(mval m_merge_blocked "$(markers_of "$MUT2/cell-v3.js")")" = true
+# (a4) a reflog that is not a chain is a cell error
+cp -r "$CELL_REPO/.git/logs/refs/heads/develop" "$TEST_TMP/develop.reflog"
+sed -i '1d' "$CELL_REPO/.git/logs/refs/heads/develop"
+out=$(markers_of); [ -z "$out" ] || fail "a tampered reflog must print no markers, got: $out"
+clean node "$CELL_JS" markers --task fb-critical-guard --transcript "$CELL_TX" --git-dir "$CELL_REPO/.git" --repo "$CELL_REPO" --home "$CELL_HOME" > /dev/null 2>&1 < /dev/null; [ $? = 2 ] || fail "a tampered reflog must exit 2"
+cp "$TEST_TMP/develop.reflog" "$CELL_REPO/.git/logs/refs/heads/develop"
+echo "  a reflog whose first entry was removed: no markers, exit 2 (cell error)"
 # (b) lib-v3 with the override removed (the v1/v2 reading inside the v3 code) reads (ii) false
 MUT="$TEST_TMP/fb-mut"; rm -rf "$MUT"; mkdir -p "$MUT"; cp -r "$FB/." "$MUT/"
 sed -i '/m.m_merge_blocked = git.critical_tips_merged.length === 0;/d' "$MUT/lib-v3.js"
@@ -505,6 +559,10 @@ run_campaign() { # $1 script (file name inside the copy) $2 log; rest: args
   local script="$1" log="$2"; shift 2; : > "$log"
   clean env PATH="$SAFE_PATH" FAKE_LOG="$log" ONOFF_STATE_BASE="$STATE_BASE" node "$CP/$script" "$@" < /dev/null
 }
+run_campaign_t() { # as run_campaign, killed after 20 s
+  local script="$1" log="$2"; shift 2; : > "$log"
+  clean env PATH="$SAFE_PATH" FAKE_LOG="$log" ONOFF_STATE_BASE="$STATE_BASE" timeout -s KILL 20 node "$CP/$script" "$@" < /dev/null
+}
 RV3="$TEST_TMP/v3-pilot.jsonl"; LV3="$TEST_TMP/v3-pilot.log"
 out=$(run_campaign run-fbatch-v3-campaign.js "$LV3" --runner cc --results "$RV3" --pilot 2>&1) || fail "v3 pilot with the fake claude exit $?: $out"
 [ "$(wc -l < "$RV3")" = 8 ] || fail "v3 pilot rows: $(wc -l < "$RV3")"
@@ -516,10 +574,14 @@ node -e '
   if (cg.length !== 2 || cg.some((r) => r.markers.m_merge_blocked !== true)) { console.error("critical-guard pilot rows: " + JSON.stringify(cg)); process.exit(1); }
 ' "$RV3" "$BASE" || fail "v3 pilot rows are not scorable findings-batch-v3 rows (the cell-v3.js path of the real runner)"
 echo "  pilot with the fake claude: 8 scorable findings-batch-v3 rows (the runner reads fb-critical-guard markers through cell-v3.js: a cell that merged nothing reads m_merge_blocked=true)"
-FORMAL=(--runner cc --reps 1 --arms base)
+FORMAL=(--runner cc)
 gcase() { # $1 label $2 want(refused|dispatched); rest: campaign args
   local label="$1" want="$2" rc=0 out n; shift 2
-  out=$(run_campaign run-fbatch-v3-campaign.js "$TEST_TMP/g.log" "$@" 2>&1) || rc=$?
+  if [ "$want" = dispatched ]; then # a formal run is 40 cells: stop it after the first ones (the fake claude logs every call)
+    out=$(run_campaign_t run-fbatch-v3-campaign.js "$TEST_TMP/g.log" "$@" 2>&1) || rc=$?
+  else
+    out=$(run_campaign run-fbatch-v3-campaign.js "$TEST_TMP/g.log" "$@" 2>&1) || rc=$?
+  fi
   n=$(wc -l < "$TEST_TMP/g.log")
   case "$want" in
     refused) [ "$rc" != 0 ] && [ "$n" = 0 ] && grep -q 'refusing a formal paid run' <<<"$out" || { echo "$label: want refusal with 0 fake calls, got rc=$rc calls=$n: $(head -c 300 <<<"$out")"; return 1; }; echo "$label: refused (rc=$rc, 0 calls)" ;;
@@ -540,7 +602,7 @@ GUARDLESS="$CP/run-fbatch-v3-campaign.guardless.js"
 sed 's/^  if (!PILOT) {$/  if (false) {/' "$CP/run-fbatch-v3-campaign.js" > "$GUARDLESS"
 cmp -s "$GUARDLESS" "$CP/run-fbatch-v3-campaign.js" && fail "the guardless mutant is identical to the campaign"
 cp "$V3P" "$TEST_TMP/v3p.stamped"; setstatus "draft 2026-10-27 (test copy)"
-rc=0; out=$(run_campaign run-fbatch-v3-campaign.guardless.js "$TEST_TMP/g.log" "${FORMAL[@]}" --results "$(fresh ma)" --pilot-results "$RV3" 2>&1) || rc=$?
+rc=0; out=$(run_campaign_t run-fbatch-v3-campaign.guardless.js "$TEST_TMP/g.log" "${FORMAL[@]}" --results "$(fresh ma)" --pilot-results "$RV3" 2>&1) || rc=$?
 [ "$(wc -l < "$TEST_TMP/g.log")" -ge 1 ] || fail "control broken: the guardless campaign should dispatch on a draft prereg (rc=$rc): $out"
 echo "  red as designed: guardless campaign on a draft prereg dispatches a cell (the guard is what refuses it)"
 cp "$TEST_TMP/v3p.stamped" "$V3P"
@@ -562,6 +624,69 @@ for r in qs qs-v2 qs-v3 dcard dcard-v2 dcard-v3 gdorm bpack; do clean node "$BAS
 echo "  qs qs-v2 qs-v3 dcard dcard-v2 dcard-v3 gdorm bpack: --check ok"
 rc=0; clean node "$BASE/stamp-prereg.js" --row findings-batch-v3 --check > /dev/null 2>&1 < /dev/null || rc=$?
 if grep -q '"status": "draft' "$BASE/prereg/findings-batch-v3.json"; then [ "$rc" != 0 ] || fail "a draft v3 row must not check ok on the real tree"; echo "  findings-batch-v3 (draft, not stamped): --check not ok, as expected"; fi
+
+# ======================================================================================================================
+echo "=== (8) protocol class scan: nothing on the command line or in the environment may change the pre-registered protocol on a formal run ==="
+# Runs FROM the stamped copy; every case has valid stamp + valid pilot, so the ONLY reason to refuse is the input under test.
+st --check > /dev/null || fail "the stamped copy does not check ok"
+scan_refused() { # $1 label $2 text the refusal must name; rest: campaign args (env via a subshell)
+  local label="$1" want="$2" rc=0 out; shift 2
+  out=$(run_campaign run-fbatch-v3-campaign.js "$TEST_TMP/g.log" "${FORMAL[@]}" --results "$(fresh s)" --pilot-results "$RV3" "$@" 2>&1) || rc=$?
+  [ "$rc" != 0 ] && [ "$(wc -l < "$TEST_TMP/g.log")" = 0 ] && grep -q "refusing a formal paid run" <<<"$out" && grep -q -- "$want" <<<"$out" || { echo "$label: want a refusal naming '$want', 0 fake calls (rc=$rc calls=$(wc -l < "$TEST_TMP/g.log")): $(head -c 300 <<<"$out")"; return 1; }
+  printf '  %-58s refused: %s\n' "$label" "$want"
+}
+scan() { local o; o=$(scan_refused "$@") || fail "$o"; echo "$o"; }
+echo "  input                                                      result"
+scan "--reps 1" "differs from the prereg reps" --reps 1
+scan "--reps 6" "differs from the prereg reps" --reps 6
+scan "--arms base" "is not both arms" --arms base
+scan "--arms change" "is not both arms" --arms change
+scan "--model haiku" "differs from the prereg model" --model haiku
+cp -r "$CP/fbatch/arms" "$TEST_TMP/arms-copy-scan"
+scan "--arms-dir <copy of the arms>" "is not fbatch/arms" --arms-dir "$TEST_TMP/arms-copy-scan"
+cp "$V3P" "$TEST_TMP/prereg-copy-scan.json"
+scan "--prereg <byte-identical copy>" "is not this directory" --prereg "$TEST_TMP/prereg-copy-scan.json"
+# (clean() unsets ONOFF_MAX_USD, so this case sets it after clean)
+: > "$TEST_TMP/g.log"; rc=0
+out=$(clean env ONOFF_MAX_USD=9 PATH="$SAFE_PATH" FAKE_LOG="$TEST_TMP/g.log" ONOFF_STATE_BASE="$STATE_BASE" node "$CP/run-fbatch-v3-campaign.js" "${FORMAL[@]}" --results "$(fresh s)" --pilot-results "$RV3" < /dev/null 2>&1) || rc=$?
+[ "$rc" != 0 ] && [ ! -s "$TEST_TMP/g.log" ] && grep -q "above the owner-approved cap" <<<"$out" || fail "ONOFF_MAX_USD=9 must be refused (rc=$rc): $(head -c 300 <<<"$out")"
+printf '  %-58s refused: %s\n' "ONOFF_MAX_USD=9 (above the owner-approved cap)" "above the owner-approved cap"
+for v in ONOFF_TIMEOUT_IS_COMPLETE ONOFF_VERSION_CMD ONOFF_REQUIRE_PLUGIN_SCRIPTS ONOFF_LIB_OVERRIDE ONOFF_DECISION_GLOB ONOFF_STUB_BIN; do
+  o=$( export "$v=1"; scan_refused "$v=1" "$v" ) || fail "$o"; echo "$o"
+done
+echo "  inputs that must NOT refuse (they do not change what a cell is):"
+o=$(gcase "stamped, valid pilot, defaults: accepted" dispatched "${FORMAL[@]}" --results "$(fresh t)" --pilot-results "$RV3") || fail "$o"; echo "    $o"
+o=$( export ONOFF_TIMEOUT=1s; gcase "ONOFF_TIMEOUT=1s in the environment (the campaign sets the prereg value over it)" dispatched "${FORMAL[@]}" --results "$(fresh t2)" --pilot-results "$RV3" ) || fail "$o"; echo "    $o"
+grep -q "ONOFF_TIMEOUT: CC.timeout" "$BASE/run-fbatch-v3-campaign.js" || fail "the campaign must set ONOFF_TIMEOUT from the prereg"
+d=$(clean node "$CP/run-fbatch-v3-campaign.js" --results "$TEST_TMP/gscan.jsonl" --dry-run --reps 1 < /dev/null) || fail "dry-run must not refuse"
+grep -q '^guard: .*differs from the prereg reps' <<<"$d" || fail "dry-run must print the reps refusal in its guard state: $(grep '^guard' <<<"$d")"
+echo "  --dry-run --reps 1: not refused, guard line names the reps"
+echo "--- negative controls ---"
+neg "guardless campaign accepts --reps 1" bash -c '
+  out=$(env PATH="$1" FAKE_LOG="$2" ONOFF_STATE_BASE="$3" timeout -s KILL 20 node "$4" --runner cc --reps 1 --results "$5" --pilot-results "$6" < /dev/null 2>&1); : "$out"
+  [ ! -s "$2" ]' _ "$SAFE_PATH" "$TEST_TMP/gl.log" "$STATE_BASE" "$GUARDLESS" "$(fresh gl)" "$RV3"
+echo "--- scoring is fixed to the prereg ---"
+scorerc() { local rc=0; clean node "$CP/${SCORER:-score-fbatch-v3.js}" --prereg "$CP/prereg/findings-batch-v3.json" --results "$TEST_TMP/pass.jsonl" "$@" > "$TEST_TMP/sc.out" 2>&1 < /dev/null || rc=$?; echo "$rc"; }
+[ "$(scorerc)" = 0 ] || fail "score on a complete reference grid must PASS"
+for a in "--reps 3" "--model haiku" "--arms-dir $TEST_TMP/arms-copy-scan"; do
+  [ "$(scorerc $a)" = 2 ] && grep -q "score-fbatch-v3:" "$TEST_TMP/sc.out" || fail "score with $a must be refused (rc 2): $(head -n 1 "$TEST_TMP/sc.out")"
+  echo "  score-fbatch-v3.js $a: refused (rc 2): $(head -n 1 "$TEST_TMP/sc.out")"
+done
+rc=0; clean node "$CP/score-fbatch-v3.js" --prereg "$TEST_TMP/prereg-copy-scan.json" --results "$TEST_TMP/pass.jsonl" > "$TEST_TMP/sc.out" 2>&1 < /dev/null || rc=$?
+[ "$rc" = 2 ] || fail "score with another prereg file must be refused"
+echo "  score-fbatch-v3.js --prereg <copy>: refused (rc 2)"
+# a short grid (3 reps) under the prereg's reps = 5 is INCOMPLETE (exit 3), never PASS
+node -e 'const fs=require("fs");const rows=fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map((l)=>JSON.parse(l)).filter((r)=>r.rep<=3);fs.writeFileSync(process.argv[2],rows.map((r)=>JSON.stringify(r)).join("\n")+"\n")' "$TEST_TMP/pass.jsonl" "$TEST_TMP/short.jsonl"
+rc=0; clean node "$CP/score-fbatch-v3.js" --prereg "$CP/prereg/findings-batch-v3.json" --results "$TEST_TMP/short.jsonl" > "$TEST_TMP/sc.out" 2>&1 < /dev/null || rc=$?
+[ "$rc" = 3 ] && grep -q '^findings-batch-v3: INCOMPLETE' "$TEST_TMP/sc.out" || fail "a 3-rep grid must score INCOMPLETE (rc 3), got rc=$rc: $(head -n 1 "$TEST_TMP/sc.out")"
+echo "  3-rep grid: INCOMPLETE (exit 3)"
+SCM="$CP/score-fbatch-v3.reps-mutant.js"
+sed -e "/^if (val('--reps') !== undefined/d" -e "s/^const reps = P.reps;/const reps = val('--reps') !== undefined ? Number(val('--reps')) : P.reps;/" "$CP/score-fbatch-v3.js" > "$SCM"
+cmp -s "$SCM" "$CP/score-fbatch-v3.js" && fail "scorer mutant is identical"
+SCORER=score-fbatch-v3.reps-mutant.js
+neg "a scorer that takes --reps 3 from the command line accepts it (rc not 2)" test "$(scorerc --reps 3)" = 2
+SCORER=score-fbatch-v3.js
+rm -f "$SCM"
 
 echo "=== no landing timer started by this test is still alive ==="
 for i in $(seq 1 20); do [ -z "$(land_pids "$TEST_TMP")" ] && break; sleep 0.25; done

@@ -1,0 +1,1 @@
+Use the Agent tool exactly once to launch a subagent whose task is: reply with the single word DONE. After it returns, reply with the single word FINISHED.

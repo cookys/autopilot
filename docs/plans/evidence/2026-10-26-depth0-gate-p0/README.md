@@ -23,13 +23,27 @@ Limits: c uses first-party auth, so a cc-shim endpoint's own behavior is not exe
 
 Safety: the real `~/.claude` is never handed to a child. Native calls get a mktemp `CLAUDE_CONFIG_DIR` seeded with only `.credentials.json` (asserted before launch; probe a then adds its `settings.json`); HOME is a mktemp dir; the credentials file is only copied. Without `PROBE_PAID=1` (or a fake `PROBE_CLAUDE_BIN`) the scripts refuse to start `claude`.
 
-## Verdict table (filled after the paid run)
+## Results (paid run by depth-0, CLI 2.1.309, model haiku, `raw/cli-version.txt`)
 
-| Path (plan 3.3) | Probe | Result | Routing proof (armed blocks, depth-0/unarmed does not) | Keep? |
-|---|---|---|---|---|
-| hetero claude-native hand | b, (c native = b) | pending | pending | pending |
-| hetero cc-shim hand | c | pending | pending | pending |
-| native subagent | a | pending | pending | pending |
+Raw output is in `raw/` (`summary.json`, `spend.json`, per case `stream.jsonl`, `hook.jsonl`, `meta.json`, `run.json`, `stderr.txt`); `sums.txt` has the sha256 of every raw file. All 8 cases are `produced`; total spend 0.0268 USD against the 1.0 USD cap (cap not reached). Secret scan of `raw/`: grep for token and credential patterns found nothing, and none of the 6 string values (16 chars or longer) of the real `.credentials.json` appears in any raw file. mktemp paths are kept.
+
+| Path (plan 3.3) | Decision | Basis (case) | Routing proof |
+|---|---|---|---|
+| claude-native hand (credentials-only dir + `--settings`) | **keep** | b_armed: Stop hook fires, stdin `session_id` equals the `--session-id` X (`hook_stdin_matches_expected` true), one block then the model replied ALPHA, second call (`stop_hook_active` true) allowed; hook wall 0 to 1 ms | b_armed blocked once; b_unarmed (hook armed for another session id) allowed (`allow(session-id-mismatch)`) |
+| cc-shim hand, hetero form (`dispatch-hetero.sh:3881`, no config dir) | **keep, with the double-wiring rule** | c_hetero_armed: user-level and `--settings` hooks both fire in the same turn, so the turn blocks twice (`Stop:user:block`, `Stop:cli:block`); this confirms the plan's need for the idempotent (session, turn) counter under lock, or for wiring only one carrier | c_hetero_armed blocked; c_hetero_unarmed allowed on both carriers |
+| cc-shim, author form (`--setting-sources project`, `dispatch-author.sh:1388`) | keep as a carrier fact, rail stays **excluded** by plan 3.3 (text-only, `--tools ""`) | c_author_armed: only the `--settings` hook fires (user-level not loaded), one block, then continues | c_author_armed blocked; c_author_unarmed allowed |
+| native subagent (Agent tool), SubagentStop keyed `(session_id, agent_id)` | **keep (id proven)** | a_armed: autopilot plugin loaded (init plugins include `autopilot@inline`, plugin Stop hooks fired, 7 Stop starts in the trace); SubagentStop blocked once, second call with `stop_hook_active` true allowed, the subagent continued (ALPHA). The Agent tool-result `agentId` equals the hook `agent_id` (a_armed and a_unarmed both true). Hook stdin carries parent `session_id` (equal to the parent init session), `agent_id`, `cwd`, `agent_transcript_path`, `effort`, `permission_mode`, `prompt_id` | a_armed: subagent blocked, depth-0 Stop allowed (`allow(event-not-gated)`); a_unarmed: both events allowed |
+| codex, agy, grok, opencode, cursor, copilot; dispatch-review, consult, explore, foreman, batch | **excluded** | unchanged from plan 3.3; this probe has no evidence for them | none |
+
+Findings beyond the table: the SubagentStop stdin does contain `cwd` (the 2026-10-21 captured line had none), and the field list matches the official page plus `effort`, `permission_mode`, `prompt_id`, `transcript_path`. `a_armed` hook calls: SubagentStop 2, Stop (throwaway) 1.
+
+## Limits
+
+- One short session per case, model haiku only; trivial prompts. Nothing here covers long sessions, parallel subagents, background subagents, or other models.
+- `--plugin-dir` is not a marketplace install; a user-installed plugin may load differently.
+- The cc-shim shapes ran with first-party auth, not a cc-shim endpoint; the user-level hook stands in for "user config loads" and says nothing about the user's real plugins.
+- The unarmed worker is simulated by the hook (env var or session id mismatch), not by the real rail.
+- A Stop block is shown to continue the model in these runs only for the throwaway hook; the plugin's own Stop hooks never blocked here.
 
 ## (d) Official documentation, https://code.claude.com/docs/en/hooks (read 2026-10-26, characters 0 to 200000 of 282268)
 

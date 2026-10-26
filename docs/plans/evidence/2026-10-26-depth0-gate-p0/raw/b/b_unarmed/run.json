@@ -1,0 +1,50 @@
+{
+  "dir": "b_unarmed",
+  "session_id_init": "bd402726-9303-4b9b-b394-192f21854bc9",
+  "expected_session_id": "bd402726-9303-4b9b-b394-192f21854bc9",
+  "hook_calls": 1,
+  "stop_calls": 1,
+  "subagent_stop_calls": 0,
+  "first_fire_calls_by_wiring": {
+    "Stop/cli": 1
+  },
+  "blocked": 0,
+  "continued_after_block": false,
+  "decisions": [
+    "Stop:cli:allow(session-id-mismatch)"
+  ],
+  "hook_stdin_session_ids": [
+    "bd402726-9303-4b9b-b394-192f21854bc9"
+  ],
+  "hook_stdin_matches_expected": true,
+  "hook_wall_ms": [
+    0
+  ],
+  "stdin_has_cwd": [
+    true
+  ],
+  "stdin_cwd_exists": [
+    true
+  ],
+  "hook_stdin_keys": [
+    "background_tasks",
+    "cwd",
+    "effort",
+    "hook_event_name",
+    "last_assistant_message",
+    "permission_mode",
+    "prompt_id",
+    "session_crons",
+    "session_id",
+    "stop_hook_active",
+    "transcript_path"
+  ],
+  "result_text": "OK",
+  "is_error": false,
+  "total_cost_usd": 0.00140553,
+  "hook_agent_ids": [],
+  "tool_result_agent_ids": [],
+  "agent_id_equal": null,
+  "parent_session_in_subagent_hook": null,
+  "plugin_hook_events_seen": 2
+}

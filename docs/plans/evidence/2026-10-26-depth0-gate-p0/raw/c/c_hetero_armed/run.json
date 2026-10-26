@@ -1,0 +1,63 @@
+{
+  "dir": "c_hetero_armed",
+  "session_id_init": "0d084af5-bc43-4569-abd9-1a47b3e9171f",
+  "expected_session_id": "0d084af5-bc43-4569-abd9-1a47b3e9171f",
+  "hook_calls": 4,
+  "stop_calls": 4,
+  "subagent_stop_calls": 0,
+  "first_fire_calls_by_wiring": {
+    "Stop/user": 1,
+    "Stop/cli": 1
+  },
+  "blocked": 2,
+  "continued_after_block": true,
+  "decisions": [
+    "Stop:user:block",
+    "Stop:cli:block",
+    "Stop:user:allow(stop_hook_active)",
+    "Stop:cli:allow(stop_hook_active)"
+  ],
+  "hook_stdin_session_ids": [
+    "0d084af5-bc43-4569-abd9-1a47b3e9171f"
+  ],
+  "hook_stdin_matches_expected": true,
+  "hook_wall_ms": [
+    1,
+    0,
+    1,
+    0
+  ],
+  "stdin_has_cwd": [
+    true,
+    true,
+    true,
+    true
+  ],
+  "stdin_cwd_exists": [
+    true,
+    true,
+    true,
+    true
+  ],
+  "hook_stdin_keys": [
+    "background_tasks",
+    "cwd",
+    "effort",
+    "hook_event_name",
+    "last_assistant_message",
+    "permission_mode",
+    "prompt_id",
+    "session_crons",
+    "session_id",
+    "stop_hook_active",
+    "transcript_path"
+  ],
+  "result_text": "ALPHA",
+  "is_error": false,
+  "total_cost_usd": 0.00233263,
+  "hook_agent_ids": [],
+  "tool_result_agent_ids": [],
+  "agent_id_equal": null,
+  "parent_session_in_subagent_hook": null,
+  "plugin_hook_events_seen": 8
+}

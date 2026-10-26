@@ -1,0 +1,66 @@
+{
+  "dir": "a_armed",
+  "session_id_init": "95f4d0e2-7770-43c4-a415-b7a5d6199d5d",
+  "expected_session_id": "95f4d0e2-7770-43c4-a415-b7a5d6199d5d",
+  "hook_calls": 3,
+  "stop_calls": 1,
+  "subagent_stop_calls": 2,
+  "first_fire_calls_by_wiring": {
+    "SubagentStop/cli": 1,
+    "Stop/cli": 1
+  },
+  "blocked": 1,
+  "continued_after_block": true,
+  "decisions": [
+    "SubagentStop:cli:block",
+    "SubagentStop:cli:allow(stop_hook_active)",
+    "Stop:cli:allow(event-not-gated)"
+  ],
+  "hook_stdin_session_ids": [
+    "95f4d0e2-7770-43c4-a415-b7a5d6199d5d"
+  ],
+  "hook_stdin_matches_expected": true,
+  "hook_wall_ms": [
+    1,
+    0,
+    0
+  ],
+  "stdin_has_cwd": [
+    true,
+    true,
+    true
+  ],
+  "stdin_cwd_exists": [
+    true,
+    true,
+    true
+  ],
+  "hook_stdin_keys": [
+    "agent_id",
+    "agent_transcript_path",
+    "agent_type",
+    "background_tasks",
+    "cwd",
+    "effort",
+    "hook_event_name",
+    "last_assistant_message",
+    "permission_mode",
+    "prompt_id",
+    "session_crons",
+    "session_id",
+    "stop_hook_active",
+    "transcript_path"
+  ],
+  "result_text": "FINISHED\n\nThe subagent returned `ALPHA` instead of `DONE`. Its report was not the word you specified. The first two dispatch attempts were blocked by a guard hook that requires an explicit model and an `Engine:` header, so the third attempt used `model: haiku` with that header.",
+  "is_error": false,
+  "total_cost_usd": 0.011473234999999998,
+  "hook_agent_ids": [
+    "aec2da75dd4210195"
+  ],
+  "tool_result_agent_ids": [
+    "aec2da75dd4210195"
+  ],
+  "agent_id_equal": true,
+  "parent_session_in_subagent_hook": true,
+  "plugin_hook_events_seen": 76
+}

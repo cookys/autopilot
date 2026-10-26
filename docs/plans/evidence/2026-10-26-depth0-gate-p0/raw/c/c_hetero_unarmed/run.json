@@ -1,0 +1,55 @@
+{
+  "dir": "c_hetero_unarmed",
+  "session_id_init": "ea7cf7ca-525c-43af-af20-bb0d6d131d3b",
+  "expected_session_id": "ea7cf7ca-525c-43af-af20-bb0d6d131d3b",
+  "hook_calls": 2,
+  "stop_calls": 2,
+  "subagent_stop_calls": 0,
+  "first_fire_calls_by_wiring": {
+    "Stop/user": 1,
+    "Stop/cli": 1
+  },
+  "blocked": 0,
+  "continued_after_block": false,
+  "decisions": [
+    "Stop:user:allow(unarmed)",
+    "Stop:cli:allow(unarmed)"
+  ],
+  "hook_stdin_session_ids": [
+    "ea7cf7ca-525c-43af-af20-bb0d6d131d3b"
+  ],
+  "hook_stdin_matches_expected": true,
+  "hook_wall_ms": [
+    0,
+    0
+  ],
+  "stdin_has_cwd": [
+    true,
+    true
+  ],
+  "stdin_cwd_exists": [
+    true,
+    true
+  ],
+  "hook_stdin_keys": [
+    "background_tasks",
+    "cwd",
+    "effort",
+    "hook_event_name",
+    "last_assistant_message",
+    "permission_mode",
+    "prompt_id",
+    "session_crons",
+    "session_id",
+    "stop_hook_active",
+    "transcript_path"
+  ],
+  "result_text": "OK",
+  "is_error": false,
+  "total_cost_usd": 0.00140693,
+  "hook_agent_ids": [],
+  "tool_result_agent_ids": [],
+  "agent_id_equal": null,
+  "parent_session_in_subagent_hook": null,
+  "plugin_hook_events_seen": 4
+}

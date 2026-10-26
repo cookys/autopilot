@@ -1,6 +1,6 @@
 {
   "row": "findings-batch",
-  "status": "draft 2026-10-26: amendment 3 (below) is a draft; the 2026-10-26 stamp (FROZEN.json) no longer matches the files and is void for it; re-stamping and re-running wait for the owner's decision",
+  "status": "stamped 2026-10-26 (re-stamped after amendment 3, owner decision d-1f495374=A): stamped before any scored cell of the re-run; the 40 cells of the 4ebcb428b stamp are void for scoring and kept as evidence only",
   "plan": "docs/plans (findings batch plan v3, sections 2-5)",
   "model": "sonnet",
   "reps": 5,
@@ -128,7 +128,7 @@
     {
       "amendment": 3,
       "date": "2026-10-26",
-      "status": "draft",
+      "status": "adopted",
       "no_counted_cell_had_run": false,
       "reason": "instrument change, not a rule change: the 40 formal Sonnet cells (4ebcb428b stamp) ran and the fb-mid-batch change cells rep 1-3 ended as infra_fail runner_timeout (rows 1-3 of the three below), rep 4-5 and every base cell completed. Reading the transcripts and replaying their command sequences on the stubs showed a fixture defect, not model behaviour: only the pre-written events (lane D, the fb-deadman exit file) could land. A run the agent itself dispatched (repair, review, re-review, acceptance) had no landing at all, although each dispatch printed 'results land at runs/<name>.exit'; and wait-dispatch-results.js reported any label that is not in its plan as already landed ('poll 4: repair-1 landed (repair-1.exit present)') while the file did not exist, so the agent saw a landed run and an absent file at once and waited on the file until the cell was killed. The repair stub also named its file from the line count of runs/dispatch.log (repair-2 after one harvest line) instead of from the repair count. The change arm's guidance asks for a review before a merge, so the defect weighs on the change arm only. Tasks (task.md), marker names and decision rules, V1-V4, arms and the plan events are unchanged.",
       "changed": {
@@ -191,7 +191,22 @@
         ],
         "replays": "hooks/tests/skill-onoff-findings-batch.test.sh section 'amendment 3' replays the rep 1 (wait repair-1 then watch runs/repair-1.exit), rep 2 (review and acceptance on a sha) and rep 3 (repair named after a harvest line) command sequences: red on the 4ebcb428b stubs, green on these"
       },
-      "consequence": "The 40 formal cells were already run under the stamped text. This amendment changes the fixture those cells ran on, so the fb-mid-batch change cells (and, by the same defect, any cell whose agent dispatched and waited) are void for scoring: the whole findings-batch grid has to be re-run after the amendment is re-stamped. Re-stamping (stamp-prereg.js --row findings-batch) and the re-run are the owner's decision; FROZEN.json is not touched by this draft and its findings-batch row will fail --check until re-stamped."
+      "consequence": "The 40 formal cells were already run under the stamped text. This amendment changes the fixture those cells ran on, so the fb-mid-batch change cells (and, by the same defect, any cell whose agent dispatched and waited) are void for scoring: the whole findings-batch grid has to be re-run after the amendment is re-stamped. Re-stamping (stamp-prereg.js --row findings-batch) and the re-run are the owner's decision; FROZEN.json is not touched by this draft and its findings-batch row will fail --check until re-stamped.",
+      "consequence_on_adoption": "[consequence above is draft-time text, kept as written] On adoption, 2026-10-26: owner d-1f495374=A; amendment 3 is adopted; findings-batch was re-stamped (FROZEN.json, findings-batch row only) and stamp-prereg.js --row findings-batch --check is ok. The re-run is capped at 15.14 USD (ONOFF_MAX_USD).",
+      "owner_decision": {
+        "decision_card": "d-1f495374",
+        "answer": "A",
+        "date": "2026-10-26",
+        "meaning": "rerun the whole row (all 40 cells) after re-stamping this amendment"
+      },
+      "old_cells": "the 40 formal cells (4ebcb428b stamp) stay as evidence in /home/cookys/.autopilot/fbatch-formal/run/formal.jsonl and formal.jsonl.cells/; they are not scored and are not merged with the new results",
+      "rerun_cap_usd": {
+        "value": 15.14,
+        "formula": "20 - 4.86",
+        "basis": "owner's original approval of 20 USD minus the 4.86 USD the 40 formal cells already spent",
+        "how_set": "ONOFF_MAX_USD=15.14 on the launch command; max_usd_default and the decision rules are not changed"
+      },
+      "new_results_file": "the re-run writes a new results file (not formal.jsonl)"
     }
   ],
   "campaign_script": "run-fbatch-campaign.js",

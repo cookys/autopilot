@@ -192,6 +192,7 @@
         "replays": "hooks/tests/skill-onoff-findings-batch.test.sh section 'amendment 3' replays the rep 1 (wait repair-1 then watch runs/repair-1.exit), rep 2 (review and acceptance on a sha) and rep 3 (repair named after a harvest line) command sequences: red on the 4ebcb428b stubs, green on these"
       },
       "consequence": "The 40 formal cells were already run under the stamped text. This amendment changes the fixture those cells ran on, so the fb-mid-batch change cells (and, by the same defect, any cell whose agent dispatched and waited) are void for scoring: the whole findings-batch grid has to be re-run after the amendment is re-stamped. Re-stamping (stamp-prereg.js --row findings-batch) and the re-run are the owner's decision; FROZEN.json is not touched by this draft and its findings-batch row will fail --check until re-stamped.",
+      "consequence_on_adoption": "[consequence above is draft-time text, kept as written] On adoption, 2026-10-26: owner d-1f495374=A; amendment 3 is adopted; findings-batch was re-stamped (FROZEN.json, findings-batch row only) and stamp-prereg.js --row findings-batch --check is ok. The re-run is capped at 15.14 USD (ONOFF_MAX_USD).",
       "owner_decision": {
         "decision_card": "d-1f495374",
         "answer": "A",

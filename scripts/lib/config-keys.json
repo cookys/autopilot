@@ -1435,6 +1435,19 @@
       "note": "run-ledger.sh adaptive-intervention flag, default off; no operator documentation exists."
     },
     {
+      "name": "AUTOPILOT_RESIDUE_PROC_ROOT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/repo-residue-sweep.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Directory read in place of /proc when asking whether a process uses a worktree; tests point it at a missing directory to prove an unreadable process table counts as in use."
+    },
+    {
       "name": "AUTOPILOT_RESIDUE_RECENT_HOURS",
       "kind": "env",
       "audience": "internal",

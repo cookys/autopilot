@@ -315,6 +315,17 @@ test('cleanup buttons: one per clearable worktree plus one for all of them, in t
   // a surface without buttons keeps the commands
   expect(hyg(snapOf(REAL_RESIDUE, REAL_LOAD))).toEqual(GOLDEN_ZH_76)
 })
+test('cleanup buttons: a worktree class `busy` (a process uses it) gets no button and is not a clear target; the same entry as clean-integrated does', () => {
+  const busy = entry({ class: 'busy', path: '/w/hub-app', reason: 'in use by pid 7 (cwd: /w/hub-app)', command: null })
+  const free = entry({ class: 'clean-integrated', path: '/w/hub-app', command: null })
+  const ids = (e: object): string[] => pressIds(withButtons(snapOf(resWith([e]), null)))
+  expect(ids(busy).some(i => i.includes('/w/hub-app'))).toBe(false)
+  expect(cleanTargets(snapOf(resWith([busy]), null).detail).worktrees.length).toBe(0)
+  expect(ui.residueKindOf('busy')).toBe('live')
+  // negative control: the identical entry classed clean-integrated is offered a button
+  expect(ids(free).some(i => i === 'clean:/w/hub-app')).toBe(true)
+  expect(cleanTargets(snapOf(resWith([free]), null).detail).worktrees.length).toBe(1)
+})
 test('cleanup buttons: with no 待決 card at all the buttons are still drawn and no command is printed under a clearable entry (2026-10-16 report); a surface without the decide view prints them', () => {
   const s = snapOf(REAL_RESIDUE, REAL_LOAD)
   expect(s.pending.length).toBe(0)

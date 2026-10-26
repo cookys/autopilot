@@ -1081,6 +1081,7 @@ export type ResidueKind = 'judge' | 'clean' | 'live'
 export const RESIDUE_KINDS: Record<string, ResidueKind> = {
   dirty: 'judge', 'clean-unintegrated': 'judge', 'unintegrated-branch': 'judge', unverifiable: 'judge',
   'clean-integrated': 'clean', 'missing-dir': 'clean',
+  busy: 'live', // a process uses the worktree (repo-residue-sweep worktreeInUse): never cleanable, never offered a button
   live: 'live',
 }
 export const residueKindOf = (cls: string): ResidueKind => (Object.prototype.hasOwnProperty.call(RESIDUE_KINDS, norm(cls).toLowerCase()) ? RESIDUE_KINDS[norm(cls).toLowerCase()] : 'judge')

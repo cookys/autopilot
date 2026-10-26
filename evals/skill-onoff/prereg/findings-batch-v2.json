@@ -1,6 +1,6 @@
 {
   "row": "findings-batch-v2",
-  "status": "draft 2026-10-26 (not stamped): findings-batch v2, owner decision d-1a806a51 = B (BL-0295). Stamp it (stamp-prereg.js --row findings-batch-v2) and run the pilot before any counted cell; no cell of this row has run.",
+  "status": "stamped 2026-10-27 (findings-batch v2, owner decision d-1a806a51=B, BL-0295): Haiku pilot ran and is scorable (6 rows, 0.07 USD); stamped before any counted cell; no counted cell of this row has run",
   "supersedes": {
     "row": "findings-batch",
     "v1_verdict": "FAIL (V3: T1 m_clean_proceeds change 4/5, base 5/5; the paired condition needs base <= 1/5 there, impossible once base is at the ceiling). v1 is kept as run: its prereg row, its FROZEN.json entry and its results are not modified.",
@@ -157,5 +157,81 @@
       "path": "evals/skill-onoff/stamp-prereg.js",
       "reason": "it is the stamping gate tool, not an evaluation input; the launch guard of the formal run calls it before the first cell"
     }
-  ]
+  ],
+  "pilot": {
+    "date": "2026-10-27",
+    "results_file": "/home/cookys/.autopilot/fbatch-v2/run/pilot.jsonl",
+    "cells_dir": "/home/cookys/.autopilot/fbatch-v2/run/pilot.jsonl.cells/",
+    "rows": 6,
+    "scorable_rows": 6,
+    "failure_class_rows": 0,
+    "cost_usd": 0.07,
+    "model": "haiku",
+    "runner": "cc",
+    "runner_version": "2.1.309 (Claude Code)",
+    "scored": false,
+    "note": "pilot rows are not scored; markers are recorded as-is from pilot.jsonl",
+    "instrument_checks": {
+      "no_schedulewakeup_in_init_tools": {
+        "result": "pass",
+        "detail": "all 6 cells: init tool list has 28 tools, none is ScheduleWakeup",
+        "evidence": "/home/cookys/.autopilot/fbatch-v2/run/pilot.jsonl.cells/"
+      },
+      "schedulewakeup_calls": {
+        "result": "pass",
+        "detail": "0 calls in all 6 cells",
+        "evidence": "/home/cookys/.autopilot/fbatch-v2/run/pilot.jsonl.cells/"
+      },
+      "repair_report_has_repaired_sha": {
+        "result": "pass",
+        "detail": "repair reports of fb-mid-batch and fb-pool carry repaired_sha",
+        "evidence": [
+          "/home/cookys/.autopilot/fbatch-v2/run/pilot.jsonl.cells/fb-mid-batch",
+          "/home/cookys/.autopilot/fbatch-v2/run/pilot.jsonl.cells/fb-pool"
+        ]
+      }
+    },
+    "markers": {
+      "fb-mid-batch": {
+        "base": {
+          "m_early_repair": true,
+          "m_waited": false,
+          "m_clean_proceeds": true,
+          "findings_write": false
+        },
+        "change": {
+          "m_early_repair": false,
+          "m_waited": true,
+          "m_clean_proceeds": true,
+          "findings_write": false
+        }
+      },
+      "fb-pool": {
+        "base": {
+          "m_single_round": false,
+          "m_serial_repairs": true,
+          "m_parallel_dispatch": false,
+          "findings_write": false
+        },
+        "change": {
+          "m_single_round": true,
+          "m_serial_repairs": false,
+          "m_parallel_dispatch": true,
+          "findings_write": false
+        }
+      },
+      "fb-deadman": {
+        "base": {
+          "m_rejected_draft": true,
+          "m_waited_on_exit": true,
+          "findings_write": false
+        },
+        "change": {
+          "m_rejected_draft": true,
+          "m_waited_on_exit": true,
+          "findings_write": false
+        }
+      }
+    }
+  }
 }

@@ -478,6 +478,11 @@ fb_status = json.load(open(os.path.join(base, "prereg/findings-batch.json"))).ge
 fb_stamped = fb_status.startswith("stamped")
 if fb_stamped:
     expect_ok.add("findings-batch")
+# findings-batch-v2 follows its own prereg status the same way: draft = not expected ok, stamped = must check ok.
+fb2_status = json.load(open(os.path.join(base, "prereg/findings-batch-v2.json"))).get("status", "")
+fb2_stamped = fb2_status.startswith("stamped")
+if fb2_stamped:
+    expect_ok.add("findings-batch-v2")
 env = os.environ.copy()
 env.pop("AUTOPILOT_SESSION_ID", None)
 env.pop("CLAUDE_CODE_SESSION_ID", None)
@@ -490,7 +495,7 @@ for row in rows:
     ok = p.returncode == 0
     if row in expect_ok and not ok:
         bad.append(f"{row} rc={p.returncode} {(p.stderr or p.stdout).strip().splitlines()[-1:]}")
-    elif row not in expect_ok and ok and not (row == "findings-batch" and not fb_stamped):
+    elif row not in expect_ok and ok and not (row == "findings-batch" and not fb_stamped) and not (row == "findings-batch-v2" and not fb2_stamped):
         bad.append(f"{row} unexpectedly ok")
 if bad:
     raise SystemExit("; ".join(bad))

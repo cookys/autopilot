@@ -1,40 +1,44 @@
 {
-  "total_cost_usd": 0.026802059999999992,
+  "total_cost_usd": 0.025261945,
   "cap_usd": 1,
   "cap_reached": false,
   "cases": {
     "a_armed": {
       "status": "produced",
       "note": "",
-      "hook_calls": 3,
+      "hook_calls": 4,
       "blocked": 1,
       "continued_after_block": true,
       "decisions": [
+        "Stop:cli:allow(event-not-gated)",
         "SubagentStop:cli:block",
         "SubagentStop:cli:allow(stop_hook_active)",
         "Stop:cli:allow(event-not-gated)"
       ],
-      "session_id_init": "95f4d0e2-7770-43c4-a415-b7a5d6199d5d",
+      "session_id_init": "1fbdd242-8bfa-45dc-871f-9e644b3b6a03",
       "hook_stdin_matches_expected": true,
       "first_fire_calls_by_wiring": {
-        "SubagentStop/cli": 1,
-        "Stop/cli": 1
+        "Stop/cli": 2,
+        "SubagentStop/cli": 1
       },
       "agent_id_equal": true,
       "hook_agent_ids": [
-        "aec2da75dd4210195"
+        "a1b4eed44e831adb8"
       ],
       "tool_result_agent_ids": [
-        "aec2da75dd4210195"
+        "below",
+        "a1b4eed44e831adb8"
       ],
       "parent_session_in_subagent_hook": true,
       "stdin_has_cwd": [
+        true,
         true,
         true,
         true
       ],
       "hook_wall_ms": [
         1,
+        0,
         0,
         0
       ],
@@ -54,7 +58,7 @@
         "stop_hook_active",
         "transcript_path"
       ],
-      "cost_usd": 0.011473234999999998
+      "cost_usd": 0.00896359
     },
     "a_unarmed": {
       "status": "produced",
@@ -66,7 +70,7 @@
         "SubagentStop:cli:allow(unarmed)",
         "Stop:cli:allow(unarmed)"
       ],
-      "session_id_init": "8a7c6fb1-10e9-4918-b137-09d96f866d38",
+      "session_id_init": "e31bac60-4cfd-4d06-ba15-dff5a905cb13",
       "hook_stdin_matches_expected": true,
       "first_fire_calls_by_wiring": {
         "SubagentStop/cli": 1,
@@ -74,10 +78,10 @@
       },
       "agent_id_equal": true,
       "hook_agent_ids": [
-        "a5ba5d0a62bef4ce7"
+        "a5ffe78b734da87a2"
       ],
       "tool_result_agent_ids": [
-        "a5ba5d0a62bef4ce7"
+        "a5ffe78b734da87a2"
       ],
       "parent_session_in_subagent_hook": true,
       "stdin_has_cwd": [
@@ -104,7 +108,7 @@
         "stop_hook_active",
         "transcript_path"
       ],
-      "cost_usd": 0.006583355000000001
+      "cost_usd": 0.0075528850000000005
     },
     "b_armed": {
       "status": "produced",
@@ -360,5 +364,6 @@
       ],
       "cost_usd": 0.00140693
     }
-  }
+  },
+  "note": "merged: b and c from the first paid run, a from the rerun (first-run a replaced); total here is the sum of these 8 cases. Two-run spend including the replaced first-run a: 0.0433 USD (rerun 0.0165)"
 }

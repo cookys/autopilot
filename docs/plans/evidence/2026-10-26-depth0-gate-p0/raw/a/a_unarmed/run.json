@@ -1,7 +1,7 @@
 {
   "dir": "a_unarmed",
-  "session_id_init": "8a7c6fb1-10e9-4918-b137-09d96f866d38",
-  "expected_session_id": "8a7c6fb1-10e9-4918-b137-09d96f866d38",
+  "session_id_init": "e31bac60-4cfd-4d06-ba15-dff5a905cb13",
+  "expected_session_id": "e31bac60-4cfd-4d06-ba15-dff5a905cb13",
   "hook_calls": 2,
   "stop_calls": 1,
   "subagent_stop_calls": 1,
@@ -16,7 +16,7 @@
     "Stop:cli:allow(unarmed)"
   ],
   "hook_stdin_session_ids": [
-    "8a7c6fb1-10e9-4918-b137-09d96f866d38"
+    "e31bac60-4cfd-4d06-ba15-dff5a905cb13"
   ],
   "hook_stdin_matches_expected": true,
   "hook_wall_ms": [
@@ -49,14 +49,14 @@
   ],
   "result_text": "FINISHED",
   "is_error": false,
-  "total_cost_usd": 0.006583355000000001,
+  "total_cost_usd": 0.0075528850000000005,
   "hook_agent_ids": [
-    "a5ba5d0a62bef4ce7"
+    "a5ffe78b734da87a2"
   ],
   "tool_result_agent_ids": [
-    "a5ba5d0a62bef4ce7"
+    "a5ffe78b734da87a2"
   ],
   "agent_id_equal": true,
   "parent_session_in_subagent_hook": true,
-  "plugin_hook_events_seen": 82
+  "plugin_hook_events_seen": 72
 }

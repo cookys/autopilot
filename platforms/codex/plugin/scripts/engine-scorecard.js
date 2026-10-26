@@ -3135,12 +3135,19 @@ function parseStripExpiryArgs(args) {
   return out;
 }
 
-function resealWithoutExpiry(evidence, idMap) {
+function resealWithoutExpiry(evidence, idMap, staleSeen) {
   const raw = JSON.parse(JSON.stringify(evidence));
   delete raw.expires_at;
   for (const field of RELABEL_HASH_FIELDS) delete raw[field];
   if (raw.state === 'stale') {
-    throw new Error(`evidence ${evidence.evidence_id} has the retired state 'stale' (a date-derived state); it cannot be migrated`);
+    // 'stale' has no shipped writer: base capability-evidence.js:1966 only DERIVES it at query time
+    // from expires_at <= evaluation_time and never stores it; a stored one came from a hand-fed
+    // external/self/receipt source (ceilings, base capability-evidence.js:51-55). The state it had
+    // before going stale is not recoverable, and base admission read a stale row's evidence as
+    // not qualified (base engine-scorecard.js:1709-1711: underlying !== 'qualified' => failed).
+    // So map it to the nearest non-qualifying state, degraded — never to qualified.
+    raw.state = 'degraded';
+    if (staleSeen) staleSeen.add(evidence.evidence_id);
   }
   if (raw.supersedes && idMap.has(raw.supersedes)) raw.supersedes = idMap.get(raw.supersedes);
   return compileCapabilityEvidence(raw);
@@ -3148,6 +3155,7 @@ function resealWithoutExpiry(evidence, idMap) {
 
 // Planner: no disk I/O. Throws Error(message) so a bad store changes nothing.
 function planStripExpiry(scorecardRows, evidenceWrappers, strikeRows, pinRows) {
+  const staleSeen = new Set();
   const oldIds = new Set(evidenceWrappers.map((w) => w.evidence.evidence_id));
   const idMap = new Map();
   const done = new Map();
@@ -3158,7 +3166,7 @@ function planStripExpiry(scorecardRows, evidenceWrappers, strikeRows, pinRows) {
       const w = pending[i];
       const parent = w.evidence.supersedes;
       if (parent && oldIds.has(parent) && !idMap.has(parent)) continue;
-      const evidence = resealWithoutExpiry(w.evidence, idMap);
+      const evidence = resealWithoutExpiry(w.evidence, idMap, staleSeen);
       idMap.set(w.evidence.evidence_id, evidence.evidence_id);
       done.set(w.event_id, {
         event_id: w.event_id,
@@ -3193,11 +3201,13 @@ function planStripExpiry(scorecardRows, evidenceWrappers, strikeRows, pinRows) {
         next.evidence = wrapper.evidence;
         next.evidence_store = { ...anchor, transcript_hash: wrapper.transcript_hash };
       } else {
-        next.evidence = resealWithoutExpiry(next.evidence, idMap);
+        next.evidence = resealWithoutExpiry(next.evidence, idMap, staleSeen);
       }
       evidenceRelinked += 1;
     }
-    if (next.status === 'expired') {
+    if (next.evidence && staleSeen.has(row.evidence && row.evidence.evidence_id) && next.status !== 'failed') {
+      next.status = 'failed'; // base projected a stale-evidence row as failed (engine-scorecard.js:1709-1711)
+    } else if (next.status === 'expired') {
       // `expired` was only ever written onto a row that had qualified and then passed its date.
       next.status = next.evidence && next.evidence.state !== 'qualified' ? 'failed' : 'qualified';
       expiredMapped += 1;
@@ -3239,6 +3249,7 @@ function planStripExpiry(scorecardRows, evidenceWrappers, strikeRows, pinRows) {
       scorecard_rows_relinked: evidenceRelinked,
       scorecard_expires_removed: expiresRemoved,
       expired_status_mapped: expiredMapped,
+      stale_state_mapped: staleSeen.size,
       pins_rewritten: pinsRewritten,
     },
   };
@@ -3273,7 +3284,7 @@ function cmdStripExpiry(args) {
     }
     const s = plan.summary;
     const needsWrite = s.evidence_ids_changed > 0 || s.scorecard_expires_removed > 0
-      || s.expired_status_mapped > 0 || s.pins_rewritten > 0;
+      || s.expired_status_mapped > 0 || s.stale_state_mapped > 0 || s.pins_rewritten > 0;
     const report = { dry_run: opts.dryRun, already_migrated: !needsWrite, ...s, backups: [] };
     if (opts.dryRun || !needsWrite) return report;
 

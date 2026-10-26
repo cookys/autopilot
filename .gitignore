@@ -64,3 +64,8 @@ docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/**/*.html
 docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/**/*.ansi
 docs/plans/evidence/2026-10-04-mods-p1c/gate/runs/**/pane.png
 evals/skill-onoff/results/qs*.cells/
+
+# A contributor-global ignore of *.jsonl (core.excludesFile) must not hide committed evidence or fixtures.
+# Repo .gitignore outranks core.excludesFile (gitignore(5), order of precedence).
+!hooks/tests/fixtures/**/*.jsonl
+!docs/plans/evidence/**/*.jsonl

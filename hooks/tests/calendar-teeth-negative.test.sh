@@ -637,6 +637,31 @@ grep -q '"expired_status_mapped":1' "$TESTDIR/leg2.out" \
   && ok "migrate7: an old status 'expired' row becomes qualified (it had qualified, then only its date passed)" \
   || bad "migrate7: $(cat "$TESTDIR/leg2.out")"
 
+# a legacy evidence record stored in the retired `stale` state migrates (never an error): base only
+# DERIVED stale from the date at query time (capability-evidence.js:1966) and read a stored one as
+# not qualified (engine-scorecard.js:1709-1711), so it maps to degraded and its row to failed.
+LEG4="$TESTDIR/legacy4"; mk_legacy "$LEG4"
+node -e '
+const fs=require("fs");
+const sp=process.argv[1]+"/sc/scorecard.jsonl", ep=process.argv[1]+"/cap/qualification-evidence.jsonl";
+const rows=fs.readFileSync(sp,"utf8").trim().split("\n").map(JSON.parse);
+const ws=fs.readFileSync(ep,"utf8").trim().split("\n").map(JSON.parse);
+for(const id of [141,157]){ // two qualified rows, each anchored to an evidence wrapper
+  const row=rows.find(r=>r.event_id===id); row.evidence.state="stale";
+  if(row.evidence_store) for(const w of ws) if(w.event_id===row.evidence_store.event_id) w.evidence.state="stale";
+}
+fs.writeFileSync(sp,rows.map(r=>JSON.stringify(r)).join("\n")+"\n");
+fs.writeFileSync(ep,ws.map(r=>JSON.stringify(r)).join("\n")+"\n")' "$LEG4"
+L4=(env ENGINE_SCORECARD_DIR="$LEG4/sc" ENGINE_CAPABILITY_DIR="$LEG4/cap")
+"${L4[@]}" node "$ESC" strip-expiry --dry-run >"$TESTDIR/leg4-dry.out" 2>&1; L4_DRY_RC=$?
+"${L4[@]}" node "$ESC" strip-expiry >"$TESTDIR/leg4.out" 2>&1; L4_RC=$?
+L4_STATE=$(node -e 'const fs=require("fs");const rs=fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map(JSON.parse);console.log([141,157].map(i=>{const r=rs.find(x=>x.event_id===i);return r.status+":"+r.evidence.state}).join(" "))' "$LEG4/sc/scorecard.jsonl")
+L4_PROJ=$("${L4[@]}" node "$ESC" current --role reviewer --now 2026-10-26T00:00:00Z | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s).find(x=>x.engine==="gpt-5.6-sol");console.log(r.observed_status+":"+r.admission_status)})')
+[ "$L4_DRY_RC" = "0" ] && grep -q '"stale_state_mapped":2' "$TESTDIR/leg4-dry.out" && [ "$L4_RC" = "0" ] \
+  && [ "$L4_STATE" = "failed:degraded failed:degraded" ] && [ "${L4_PROJ%%:*}" = "failed" ] \
+  && ok "migrate10: an old store holding a stale-state evidence record migrates (stale_state_mapped=2): evidence degraded, row failed, seat not admitted as qualified" \
+  || bad "migrate10: dry_rc=$L4_DRY_RC rc=$L4_RC state=$L4_STATE proj=$L4_PROJ out=$(cat "$TESTDIR/leg4.out") dry=$(cat "$TESTDIR/leg4-dry.out")"
+
 # evidence ids are content hashes with expires_at inside them: they changed, and nothing dangles
 NEW_EV_IDS=$(node -e 'const fs=require("fs");console.log(fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map(l=>JSON.parse(l).evidence.evidence_id).join(" "))' "$LEG/cap/qualification-evidence.jsonl")
 OLD_EV_IDS=$(node -e 'const fs=require("fs");console.log(fs.readFileSync(process.argv[1],"utf8").trim().split("\n").map(l=>JSON.parse(l).evidence.evidence_id).join(" "))' "$LEG_FIX/qualification-evidence.jsonl")

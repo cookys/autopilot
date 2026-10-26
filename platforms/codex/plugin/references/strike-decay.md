@@ -31,6 +31,9 @@ Stores written before 2026-10-26 still carry the field. They are migrated once w
 `node scripts/engine-scorecard.js strip-expiry` (`--dry-run` first; every store is backed up as
 `<file>.bak-strip-expiry-<UTC>`). Evidence ids are content hashes and `expires_at` was inside them,
 so the migration re-seals the evidence and rewrites everything that points at it.
+An old `expired` row status becomes `qualified` (only its date had passed). An old stored `stale` evidence
+record has no recoverable earlier state and was read as not qualified, so it becomes `degraded` and its row
+`failed` (reported as `stale_state_mapped`); a migration never fails on either.
 
 ## What a strike is
 

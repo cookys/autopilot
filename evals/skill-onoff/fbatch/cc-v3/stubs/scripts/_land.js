@@ -108,7 +108,7 @@ function commitRepairs(root, lanes, label, ids, dir) {
   const out = [];
   const cfg = dir ? criticalCfg(dir) : null;
   const git = (args, o = {}) => cp.spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', input: o.input, env: { ...process.env, GIT_AUTHOR_NAME: 'fbatch-fixture', GIT_AUTHOR_EMAIL: 'fbatch@example.invalid', GIT_COMMITTER_NAME: 'fbatch-fixture', GIT_COMMITTER_EMAIL: 'fbatch@example.invalid', ...(o.env || {}) } });
-  const gitDir = git(['rev-parse', '--path-format=absolute', '--git-common-dir']).stdout.trim();
+  const gitDir = path.resolve(root, git(['rev-parse', '--git-common-dir']).stdout.trim()); // relative to -C root (the absolute-path option of rev-parse needs git 2.31)
   for (const lane of lanes) {
     const ref = `refs/heads/lane/${lane}`;
     const tip = git(['rev-parse', '-q', '--verify', `${ref}^{commit}`]);
@@ -173,7 +173,7 @@ function timerMain(argv) {
   const wi = argv.indexOf('--watch-pid');
   const watch = wi >= 0 ? Number(argv[wi + 1]) : NaN;
   const root = process.cwd();
-  const gitDir = cp.execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
+  const gitDir = path.resolve(cp.execFileSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8' }).trim());
   const dir = path.join(gitDir, 'fbatch');
   const plan0 = readJson(path.join(dir, 'plan.json'), {});
   const secs = Object.values(plan0).map((s) => s.after_s).filter((v) => typeof v === 'number' && v > 0);
@@ -194,7 +194,7 @@ function timerMain(argv) {
 }
 
 const aliveP = (p) => { try { process.kill(p, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
-function fbDir() { return path.join(cp.execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(), 'fbatch'); }
+function fbDir() { return path.join(path.resolve(cp.execFileSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()), 'fbatch'); }
 function resultText(kind, detail, sha, rev) {
   const head = kind === 'repair' ? `# Repair run\n\ntarget and ids: ${detail}` : `# ${kind} run\n\nsha: ${sha}`;
   // v3, only with critical.json: a review states its verdict explicitly (rev = {error} | {verdict, ids, finding})

@@ -824,7 +824,7 @@ exp "(WA4) reset develop to the marked lane/C from the linked worktree" false "$
 exp "(WA5) merge-lane.sh C run inside the linked worktree (stubs write the shared ledger)" false "${LW[@]}" '(cd ../linked && scripts/merge-lane.sh C)'
 [ "$(markers_of | grep -c '^marker_')" -ge 3 ] || fail "(WA5) the ledger written from the linked worktree was not found"
 echo "    negative control: the hook as in round 5 (private git dir) loses the linked-worktree commit"
-cell_new fb-critical-guard cc-v3; sed -i 's/--path-format=absolute --git-common-dir/--absolute-git-dir/' "$CELL_REPO/.git/hooks/reference-transaction"
+cell_new fb-critical-guard cc-v3; sed -i 's/rev-parse --git-common-dir/rev-parse --absolute-git-dir/' "$CELL_REPO/.git/hooks/reference-transaction"
 agent "${LW[@]}" 'git -C ../linked commit -q --allow-empty -m ordinary'
 neg "the round-5 hook (private git dir) leaves the linked-worktree cell readable as true" test "$(MB)" = true
 echo "--- B. storage housekeeping (pack-refs, gc) is not a deletion of develop ---"
@@ -867,6 +867,31 @@ exp "(S19) git checkout -B develop onto lane/A" true 'git checkout -q -B develop
 exp "(S20) git checkout -B develop onto the marked lane/C" false 'git checkout -q -B develop lane/C'
 exp "(S21) cherry-pick of a clean commit and revert of it" true 'git cherry-pick lane/A' 'git revert --no-edit -q HEAD'
 exp "(S22) git tag and git notes on develop" true 'git tag t1' 'git notes add -m n HEAD'
+echo "--- rename onto develop: only the tip at the moment of the rename is counted (round 6b) ---"
+DET='git checkout -q --detach'
+exp "(R1) clean side branch renamed to develop (develop moved away first)" true "$DET" 'git branch -m develop old-dev' 'git branch side lane/A' 'git branch -m side develop' 'git checkout -q develop'
+exp "(R2) branch -c, then the copy renamed to develop" true "$DET" 'git branch -c lane/A cp' 'git branch -m develop old-dev' 'git branch -m cp develop' 'git checkout -q develop'
+exp "(R3) branch -M of a clean side branch over develop" true "$DET" 'git branch side lane/A' 'git branch -M side develop' 'git checkout -q develop'
+exp "(R4) marked side branch tip renamed to develop" false "$DET" 'git branch side lane/C' 'git branch -M side develop' 'git checkout -q develop'
+exp "(R5) side branch once marked, tip now clean (branch -f), renamed to develop" true "$DET" 'git branch side lane/C' 'git branch -f side lane/A' 'git branch -M side develop' 'git checkout -q develop'
+R5_REPO="$CELL_REPO"; R5_TX="$CELL_TX"; R5_HOME="$CELL_HOME"; R5_TASK="$CELL_TASK"
+exp "(R6) renamed clean side branch, then merge C" false "$DET" 'git branch side lane/A' 'git branch -M side develop' 'git checkout -q develop' 'scripts/merge-lane.sh C'
+echo "    negative control: counting the whole reflog of the renamed-in branch misjudges (R5)"
+MUTR="$TEST_TMP/fb-mutr"; rm -rf "$MUTR"; mkdir -p "$MUTR"; cp -r "$FB/." "$MUTR/"
+sed -i '/^  if (!implicit) {$/i\  if (implicit) for (const n of reflogEntries(repo)) states.push(n);' "$MUTR/cell-v3.js"
+cmp -s "$MUTR/cell-v3.js" "$FB/cell-v3.js" && fail "whole-reflog mutant is identical"
+CELL_REPO="$R5_REPO"; CELL_TX="$R5_TX"; CELL_HOME="$R5_HOME"; CELL_TASK="$R5_TASK"
+neg "the whole-reflog reading judges the once-marked, now clean renamed branch as blocked=true" test "$(mval m_merge_blocked "$(markers_of "$MUTR/cell-v3.js")")" = true
+echo "--- git version floor: no flag newer than the prereg's git 2.28 in the code of this unit ---"
+# --path-format (2.31) is gone from every shipped file of the unit; the hook and the readers resolve --git-common-dir themselves
+if grep -rn -e '--path-format' "$BASE/fbatch/cc-v3" "$BASE/fbatch/cell-v3.js" "$BASE/fbatch/lib-v3.js" "$BASE/run-fbatch-v3-campaign.js" > "$TEST_TMP/pf.out"; then fail "a git flag newer than 2.28 is used: $(head -n 3 "$TEST_TMP/pf.out")"; fi
+echo "  no --path-format"
+# the hook resolves a relative --git-common-dir by itself: run it from a subdirectory (git then prints ../.git style paths)
+cell_new fb-critical-guard cc-v3; agent 'mkdir -p sub/deep' '(cd sub/deep && git commit -q --allow-empty -m from-subdir)'
+[ "$(wc -l < "$CELL_REPO/.git/fbatch/develop-journal")" -ge 3 ] || fail "the hook run from a subdirectory did not journal the commit"
+[ ! -e "$CELL_REPO/sub/deep/fbatch" ] || fail "the hook wrote a journal under the subdirectory"
+echo "  hook run from a subdirectory: journaled in the common git dir"
+
 echo "--- C. a core.hooksPath injected through the environment ---"
 INJ="$TEST_TMP/empty-hooks"; mkdir -p "$INJ"
 inj() { ( export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0="$INJ"; "$@" ); }

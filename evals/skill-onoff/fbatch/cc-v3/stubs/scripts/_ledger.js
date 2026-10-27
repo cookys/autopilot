@@ -11,7 +11,7 @@ const path = require('path');
 const cp = require('child_process');
 
 // Round 6: the shared (common) git dir, so a linked worktree of the cell repo writes the same fixture state as the main one.
-function gitDir() { return cp.execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+function gitDir() { return path.resolve(cp.execFileSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()); }
 function sleepMs(n) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, n); }
 function append(fields) {
   const dir = path.join(gitDir(), 'fbatch');

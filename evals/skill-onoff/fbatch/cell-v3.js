@@ -142,9 +142,9 @@ function readFacts(gitDir) {
 // The states judged are every non-zero new of the journal.
 const ZERO = '0'.repeat(40);
 function gitDirOf(repo) {
-  const g = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
+  const g = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], { encoding: 'utf8' }); // the absolute-path option needs git 2.31: resolve against the repo
   if (g.status !== 0) throw new Error('cell repo has no git dir');
-  return g.stdout.trim();
+  return path.resolve(repo, g.stdout.trim());
 }
 function reflogEntries(repo) { // news (non-zero) of the current develop reflog; [] when the branch has no reflog
   let text;
@@ -186,13 +186,15 @@ function journalStates(repo) {
   const cur = head.stdout.trim();
   if (prev === ZERO) { implicit = true; states.push(cur); } // deleted, then back by a rename: the present tip is a state too
   else if (prev !== cur) throw new Error('develop journal does not end at the current refs/heads/develop: a move of develop bypassed the hook');
-  const set = new Set(states);
-  for (const n of reflogEntries(repo)) {
-    if (set.has(n)) continue;
-    // Cross-check with the reflog. Without an implicit creation every reflog state must be in the journal (else a hook-less move: exit 2). With one, the
-    // reflog of the renamed-in branch came along with the rename and lists that branch's earlier states: they are judged too (conservative).
-    if (!implicit) throw new Error(`the reflog of develop lists a state (${n.slice(0, 7)}) that the journal does not: a move of develop bypassed the hook`);
-    states.push(n); set.add(n);
+  // Cross-check with the reflog. Without an implicit creation every state the develop reflog lists must be in the journal (else a hook-less move:
+  // exit 2). With one, the reflog of the renamed-in branch came along with the rename and lists states that branch had BEFORE it was develop: they never
+  // were develop, so they are neither required in the journal nor judged. Only the tip at the moment of the rename (the first state of the new develop)
+  // is counted, and what follows is judged as usual.
+  if (!implicit) {
+    const set = new Set(states);
+    for (const n of reflogEntries(repo)) {
+      if (!set.has(n)) throw new Error(`the reflog of develop lists a state (${n.slice(0, 7)}) that the journal does not: a move of develop bypassed the hook`);
+    }
   }
   return states;
 }

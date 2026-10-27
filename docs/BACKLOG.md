@@ -1202,23 +1202,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/depth0-per-turn-gate-status.md
 - **Context**: P1 shipped ae44b5a0a (not wired); P0 evidence bfde42aa1; P3 runs without asking again once acceptance passes; follow-on of BL-0055; P2 questions BL-0318, BL-0319. Detail at Pointer.
 
-### Owner decision cards: three ways a card is lost or never opened
-- **Id**: BL-0307
-- **Status**: open
-- **Since**: 2026-10-27
-- **Origin**: peer
-- **Reporter**: twgs-revival PEACE
-- **Report**: 2026-10-27 fleet
-- **Reply**: 2026-10-27 fleet
-- **Problem**: 待決卡片有三個漏洞：session 標記過期後卡片靜默寫進未綁定範圍；擋問句的守衛漏抓「要你批准」「要我…嗎」；stop hook 補開的卡不驗證落在本 session。
-- **Impact**: 卡片開了但 owner 面板看不到，或該開沒開，待決事項被對話洗掉。
-- **Trigger**: lane decfix merges; then tell PEACE (twgs-revival) it is fixed
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: PEER-REPORTED twgs-revival PEACE 2026-10-27 (session 5eb5d332, autopilot ab2b1d9f6, CC 2.1.310)
-- **Pointer**: docs/backlog/decision-card-three-defects.md
-- **Context**: Fix in progress in lane decfix (2026-10-27).
-
 ### dev-setup --harness agy --install fails validation on agy 1.4.7
 - **Id**: BL-0308
 - **Status**: open
@@ -1246,7 +1229,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-26 fleet
 - **Problem**: peer 回報編排者自己拖慢進度的七處：交接檔不分 owner 指示與前任判斷、停滯偵測看不到只改計畫不合入、DOA 內仍去問、審查迴圈不隨嚴重度縮編等。
 - **Impact**: 流程多花輪次與 owner 時間；指引類改動要先有 ON/OFF 評測。
-- **Trigger**: owner answers card d-f1aea07b (item 4), decfix merges (item 3), or an ON/OFF eval slot opens for items 1, 5, 7 (efficiency class, jumps the queue)
+- **Trigger**: owner answers card d-f1aea07b (item 4), lane doagate merges (item 3 mechanism), or an ON/OFF eval slot opens for items 1, 5, 7 and the item 3 DOA-table rows (efficiency class, jumps the queue)
 - **Trigger-Type**: owner
 - **Effort**: L
 - **Source**: PEER-REPORTED twgs-revival (peace--claude) 2026-10-26

@@ -187,5 +187,9 @@ node "$SCRIPT" check --bursts "$TEST_TMP/old3.jsonl" >/dev/null
 assert_exit_code "$?" "0" "legacy three-field rows keep their verdict"
 RC=0; node "$SCRIPT" classify --names "$TEST_TMP/burst-names.txt" --append "$BURSTS" >/dev/null 2>&1 || RC=$?
 assert_exit_code "$RC" "2" "--append without --burst-id is a usage error"
+NB="$TEST_TMP/no-base.jsonl"
+RC=0; node "$SCRIPT" classify --names "$TEST_TMP/burst-names.txt" --burst-id bx --append "$NB" >/dev/null 2>&1 || RC=$?
+assert_exit_code "$RC" "2" "--append without --burst-base is a usage error"
+[ ! -e "$NB" ]; assert_exit_code "$?" "0" "and the file is not written"
 
 finalize_test

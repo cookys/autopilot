@@ -49,8 +49,9 @@
  *     <burst-base>..HEAD; it is integrated when that range is non-empty and at least one of its commits is reachable
  *     from the integration ref (default origin/develop, else develop) — a merge or push of the burst makes its
  *     commits reachable there, while a burst of unmerged local commits stays false. An unresolvable ref or base
- *     yields integrated:false (the safe side: the process-only streak keeps counting). Without --burst-base the
- *     field is omitted. Stdout is unchanged.
+ *     yields integrated:false (the safe side: the process-only streak keeps counting). --append requires --burst-id
+ *     and --burst-base (usage error, exit 2, nothing written), so every appended row carries integrated.
+ *     Stdout is unchanged.
  *   check --bursts <file> [--threshold N] [--process-threshold N]
  *     Bursts file: JSONL rows {burst_id, product_files, verification_files,
  *     reverify?: {mode:"scoped"|"full-suite", finding_id}}.
@@ -107,6 +108,7 @@ function parseArgs(argv) {
     i += 1;
   }
   if (opts.append && !opts.burstId) usage('--append requires --burst-id');
+  if (opts.append && !opts.burstBase) usage('--append requires --burst-base (every appended row carries integrated)');
   if (opts.integrationRef && !opts.burstBase) usage('--integration-ref requires --burst-base');
   if (mode !== 'classify' && (opts.append || opts.burstId || opts.burstBase)) usage('burst-row flags are classify-mode only');
   if (mode === 'classify' && !opts.names) usage('classify requires --names');
@@ -170,7 +172,7 @@ function classify(opts) {
       product_files: out.product_files,
       verification_files: out.verification_files,
       process_files: out.process_files,
-      ...(opts.burstBase ? { integrated: decideIntegrated(opts) } : {}),
+      integrated: decideIntegrated(opts),
     };
     try {
       fs.appendFileSync(opts.append, `${JSON.stringify(row)}\n`);

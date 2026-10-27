@@ -335,7 +335,7 @@ cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh C' 'rm -f .git/ho
 out=$(exit2 "the hook deleted by the model, then develop moved") || fail "$out"; echo "$out"
 # negative control: the reading from the reflog alone (the round-4 reading) says true for A and B
 MUTR="$TEST_TMP/fb-mutr"; rm -rf "$MUTR"; mkdir -p "$MUTR"; cp -r "$FB/." "$MUTR/"
-sed -i 's/return journalStates(repo);/return [...new Set(reflogEntries(repo))];/' "$MUTR/cell-v3.js"
+sed -i "s/return journalStates(repo);/return reflogLines(repo).map((l) => l.n).filter((n) => n !== '0'.repeat(40));/" "$MUTR/cell-v3.js"
 cmp -s "$MUTR/cell-v3.js" "$FB/cell-v3.js" && fail "reflog-only mutant is identical"
 for c in RA RB; do
   eval "CELL_REPO=\$${c}_REPO; CELL_TX=\$${c}_TX; CELL_HOME=\$${c}_HOME; CELL_TASK=\$${c}_TASK"
@@ -876,12 +876,33 @@ exp "(R4) marked side branch tip renamed to develop" false "$DET" 'git branch si
 exp "(R5) side branch once marked, tip now clean (branch -f), renamed to develop" true "$DET" 'git branch side lane/C' 'git branch -f side lane/A' 'git branch -M side develop' 'git checkout -q develop'
 R5_REPO="$CELL_REPO"; R5_TX="$CELL_TX"; R5_HOME="$CELL_HOME"; R5_TASK="$CELL_TASK"
 exp "(R6) renamed clean side branch, then merge C" false "$DET" 'git branch side lane/A' 'git branch -M side develop' 'git checkout -q develop' 'scripts/merge-lane.sh C'
-echo "    negative control: counting the whole reflog of the renamed-in branch misjudges (R5)"
+echo "--- round 7: the rename boundary in the reflog (observed on git $(git --version | cut -d' ' -f3)) ---"
+BYP='git -c core.hooksPath=/nonexistent update-ref refs/heads/develop'
+exp "(R7) rename, then develop moved past the hook to lane/C and back to clean: exit 2" exit2 "$DET" 'git branch -m develop old-dev' 'git branch side lane/A' 'git branch -m side develop' 'git checkout -q develop' "$BYP \$(git rev-parse lane/C)" "$BYP \$(git rev-parse lane/A)"
+exp "(R8) the same after an overwriting rename (branch -M): exit 2" exit2 "$DET" 'git branch side lane/A' 'git branch -M side develop' 'git checkout -q develop' "$BYP \$(git rev-parse lane/C)" "$BYP \$(git rev-parse lane/A)"
+exp "(R9) rename, then develop moved past the hook to lane/C and left there: exit 2 (the hook-less move is not a journaled state)" exit2 "$DET" 'git branch side lane/A' 'git branch -M side develop' 'git checkout -q develop' "$BYP \$(git rev-parse lane/C)"
+exp "(R10) rename of a once-marked clean side branch, then a normal merge of A through the hook" true "$DET" 'git branch side lane/C' 'git branch -f side lane/A' 'git branch -M side develop' 'git checkout -q develop' 'scripts/merge-lane.sh A'
+exp "(R11) develop deleted and a branch of the same name created without a rename line (git branch develop X is journaled; hook-less update-ref is not): exit 2" exit2 "$DET" 'git branch -D develop' "$BYP \$(git rev-parse lane/A)"
+echo "    negative controls"
 MUTR="$TEST_TMP/fb-mutr"; rm -rf "$MUTR"; mkdir -p "$MUTR"; cp -r "$FB/." "$MUTR/"
-sed -i '/^  if (!implicit) {$/i\  if (implicit) for (const n of reflogEntries(repo)) states.push(n);' "$MUTR/cell-v3.js"
+sed -i 's/^  const set = new Set(states);$/  if (implicit) for (const l of lines) if (l.n !== ZERO) states.push(l.n);\n  const set = new Set(states);/' "$MUTR/cell-v3.js"
 cmp -s "$MUTR/cell-v3.js" "$FB/cell-v3.js" && fail "whole-reflog mutant is identical"
 CELL_REPO="$R5_REPO"; CELL_TX="$R5_TX"; CELL_HOME="$R5_HOME"; CELL_TASK="$R5_TASK"
-neg "the whole-reflog reading judges the once-marked, now clean renamed branch as blocked=true" test "$(mval m_merge_blocked "$(markers_of "$MUTR/cell-v3.js")")" = true
+neg "judging the inherited reflog lines of the renamed-in branch reads the once-marked, now clean branch (R5) as blocked=true" test "$(mval m_merge_blocked "$(markers_of "$MUTR/cell-v3.js")")" = true
+MUTS="$TEST_TMP/fb-muts"; rm -rf "$MUTS"; mkdir -p "$MUTS"; cp -r "$FB/." "$MUTS/"
+sed -i 's/for (const l of lines.slice(bi + 1)) {/for (const l of (implicit ? [] : lines.slice(bi + 1))) {/' "$MUTS/cell-v3.js"
+cmp -s "$MUTS/cell-v3.js" "$FB/cell-v3.js" && fail "skip-after-rename mutant is identical"
+cell_new fb-critical-guard cc-v3; agent "$DET" 'git branch -m develop old-dev' 'git branch side lane/A' 'git branch -m side develop' 'git checkout -q develop' "$BYP \$(git rev-parse lane/C)" "$BYP \$(git rev-parse lane/A)"
+neg "skipping the cross-check after a rename reads a hook-less detour through lane/C (R7) instead of refusing it (exit 2)" test -z "$(MB "$MUTS/cell-v3.js")"
+MUTT="$TEST_TMP/fb-mutt"; rm -rf "$MUTT"; mkdir -p "$MUTT"; cp -r "$FB/." "$MUTT/"
+sed -i 's/for (const l of lines.slice(bi + 1)) {/for (const l of lines) {/' "$MUTT/cell-v3.js"
+cmp -s "$MUTT/cell-v3.js" "$FB/cell-v3.js" && fail "no-boundary mutant is identical"
+CELL_REPO="$R5_REPO"; CELL_TX="$R5_TX"; CELL_HOME="$R5_HOME"; CELL_TASK="$R5_TASK"
+neg "requiring every reflog line in the journal (no boundary) lets the overwriting rename (R5) be read as true" test "$(mval m_merge_blocked "$(markers_of "$MUTT/cell-v3.js")")" = true
+# the real reflog topology of an overwriting rename: develop gets the side branch's reflog plus one rename line
+R5G="$R5_REPO/.git/logs/refs/heads/develop"
+[ "$(grep -c 'Branch: renamed refs/heads/side to refs/heads/develop$' "$R5G")" = 1 ] && [ "$(grep -c 'branch: Created from lane/C' "$R5G")" = 1 ] || fail "the observed reflog topology of an overwriting rename changed (git $(git --version)): see cell-v3.js reflogLines"
+echo "  observed: an overwriting rename gives develop the side branch's reflog (including the once-marked state) plus one 'Branch: renamed' line"
 echo "--- git version floor: no flag newer than the prereg's git 2.28 in the code of this unit ---"
 # --path-format (2.31) is gone from every shipped file of the unit; the hook and the readers resolve --git-common-dir themselves
 if grep -rn -e '--path-format' "$BASE/fbatch/cc-v3" "$BASE/fbatch/cell-v3.js" "$BASE/fbatch/lib-v3.js" "$BASE/run-fbatch-v3-campaign.js" > "$TEST_TMP/pf.out"; then fail "a git flag newer than 2.28 is used: $(head -n 3 "$TEST_TMP/pf.out")"; fi

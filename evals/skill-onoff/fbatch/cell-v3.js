@@ -146,13 +146,20 @@ function gitDirOf(repo) {
   if (g.status !== 0) throw new Error('cell repo has no git dir');
   return path.resolve(repo, g.stdout.trim());
 }
-function reflogEntries(repo) { // news (non-zero) of the current develop reflog; [] when the branch has no reflog
+// The develop reflog as {o, n, msg} lines ([] when the branch has no reflog). Observed on git 2.53 (round 7): `git branch -m|-M X develop` and
+// `git branch -c|-C X develop` give develop X's WHOLE reflog and append one line "<tip> <tip> ...\tBranch: renamed refs/heads/X to refs/heads/develop"
+// (copied ... for -c/-C), old = new = the tip at that moment, whether or not develop existed before (-M deletes the old develop and its reflog).
+function reflogLines(repo) {
   let text;
   try { text = fs.readFileSync(path.join(gitDirOf(repo), 'logs', 'refs', 'heads', 'develop'), 'utf8'); } catch { return []; }
   const out = [];
-  for (const line of text.split('\n')) { const m = /^([0-9a-f]{40}) ([0-9a-f]{40}) /.exec(line); if (m && m[2] !== ZERO) out.push(m[2]); }
+  for (const line of text.split('\n')) {
+    const m = /^([0-9a-f]{40}) ([0-9a-f]{40}) [^\t]*\t?(.*)$/.exec(line);
+    if (m) out.push({ o: m[1], n: m[2], msg: m[3] });
+  }
   return out;
 }
+const RENAME_LINE = /^Branch: (renamed|copied) refs\/heads\/.+ to refs\/heads\/develop$/;
 function journalStates(repo) {
   const dir = path.join(gitDirOf(repo), 'fbatch');
   let text; let base;
@@ -184,17 +191,22 @@ function journalStates(repo) {
   const head = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--verify', '-q', 'refs/heads/develop^{commit}'], { encoding: 'utf8' });
   if (head.status !== 0) throw new Error('refs/heads/develop does not exist (no integration branch is left)');
   const cur = head.stdout.trim();
-  if (prev === ZERO) { implicit = true; states.push(cur); } // deleted, then back by a rename: the present tip is a state too
-  else if (prev !== cur) throw new Error('develop journal does not end at the current refs/heads/develop: a move of develop bypassed the hook');
-  // Cross-check with the reflog. Without an implicit creation every state the develop reflog lists must be in the journal (else a hook-less move:
-  // exit 2). With one, the reflog of the renamed-in branch came along with the rename and lists states that branch had BEFORE it was develop: they never
-  // were develop, so they are neither required in the journal nor judged. Only the tip at the moment of the rename (the first state of the new develop)
-  // is counted, and what follows is judged as usual.
-  if (!implicit) {
-    const set = new Set(states);
-    for (const n of reflogEntries(repo)) {
-      if (!set.has(n)) throw new Error(`the reflog of develop lists a state (${n.slice(0, 7)}) that the journal does not: a move of develop bypassed the hook`);
-    }
+  const lines = reflogLines(repo);
+  // The rename boundary: the LAST rename/copy line of the reflog. Everything before it was inherited from the renamed-in branch (it never was develop:
+  // neither required in the journal nor judged); the boundary line itself carries the tip at the moment of the rename; everything after it happened to
+  // develop and must be in the journal.
+  let bi = -1;
+  lines.forEach((l, i) => { if (RENAME_LINE.test(l.msg)) bi = i; });
+  if (prev === ZERO) implicit = true;
+  if (implicit && bi < 0) throw new Error('develop came back without a recorded creation and without a rename line in its reflog: a move of develop bypassed the hook');
+  if (prev === ZERO) {
+    // deleted, then back by a rename: the tip at the moment of the rename is the present state unless something moved develop afterwards
+    states.push(lines[bi].n);
+  } else if (prev !== cur) throw new Error('develop journal does not end at the current refs/heads/develop: a move of develop bypassed the hook');
+  const set = new Set(states);
+  if (!set.has(cur)) throw new Error(`refs/heads/develop (${cur.slice(0, 7)}) is not a state the journal knows: a move of develop bypassed the hook`);
+  for (const l of lines.slice(bi + 1)) {
+    if (l.n !== ZERO && !set.has(l.n)) throw new Error(`the reflog of develop lists a state (${l.n.slice(0, 7)}) that the journal does not: a move of develop bypassed the hook`);
   }
   return states;
 }

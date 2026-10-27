@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0316 -->
+<!-- next-id: BL-0320 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1107,23 +1107,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/family-of-case-table-no-direct-test.md
 - **Context**: The JS familyOf suite is on lane/oqseat; bash family_of is only touched indirectly today. Details in sidecar.
 
-### Findings batching: reviewers accumulate findings, then send once
-- **Id**: BL-0295
-- **Status**: open
-- **Since**: 2026-10-24
-- **Origin**: peer
-- **Reporter**: revival.3d
-- **Report**: 01M5MZ2BMFACG8RZB31S6G1V9F
-- **Reply**: 2026-10-25 01M5QR3SKAR0303QRVJC11P60P/01M5QR4BJFH17NV55671K2MBMN
-- **Problem**: 審查者每發現一點就送一次。評測 v1 判不通過、v2 因量測缺陷未通過；v3 規則已凍結，蓋章與正式 40 格進行中，結果出來前不改指引。
-- **Impact**: 來回訊息多，處理零碎，浪費雙方時間。
-- **Trigger**: findings-batch-v3 formal 40 cells finish and are judged; the reviewer guidance changes only on a PASS verdict
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: PEER-REPORTED revival.3d 2026-10-24
-- **Pointer**: docs/backlog/findings-batching-reviewer-guidance.md
-- **Context**: Spend 4.86+3.34+0.07+3.47+0.094 USD of 20 approved. v1 FAIL, v2 NOT-SHIP (instrument defect), v3 Haiku pilot 8 cells scoreable. Details in sidecar.
-
 ### plan-review: author-side precondition_failed burns the logical id
 - **Id**: BL-0296
 - **Status**: open
@@ -1263,12 +1246,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-26 fleet
 - **Problem**: peer 回報編排者自己拖慢進度的七處：交接檔不分 owner 指示與前任判斷、停滯偵測看不到只改計畫不合入、DOA 內仍去問、審查迴圈不隨嚴重度縮編等。
 - **Impact**: 流程多花輪次與 owner 時間；指引類改動要先有 ON/OFF 評測。
-- **Trigger**: owner picks which of the seven to do first (efficiency class, jumps the queue); guidance items need an ON/OFF eval
+- **Trigger**: owner answers card d-f1aea07b (item 4), decfix merges (item 3), or an ON/OFF eval slot opens for items 1, 5, 7 (efficiency class, jumps the queue)
 - **Trigger-Type**: owner
 - **Effort**: L
 - **Source**: PEER-REPORTED twgs-revival (peace--claude) 2026-10-26
 - **Pointer**: docs/backlog/orchestrator-self-slowdown-seven-gaps.md
-- **Context**: Efficiency class. Replied 2026-10-26; the seven items are in the sidecar.
+- **Context**: Efficiency class. Replied 2026-10-26; the seven items and their status are in the sidecar. Items 2 and 6 shipped c9366c79a; item 4 waits on owner card d-f1aea07b; item 3 waits on the decfix merge; items 1, 5, 7 need an ON/OFF eval.
 
 ### Stamped eval rows may have lost files from their frozen set
 - **Id**: BL-0310
@@ -1350,3 +1333,45 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: bltidy14 candidates (3) and (4), 2026-10-26
 - **Pointer**: docs/backlog/intermittent-red-paid-batch-auth-stop-agy-stdin.md
+
+### next-pick top-stale hint has no caller
+- **Id**: BL-0317
+- **Status**: open
+- **Since**: 2026-10-27
+- **Origin**: self
+- **Problem**: next-pick 的「佇列頂端沒動」提示（top-stale）已實作（c9366c79a），但沒有任何 skill 或腳本呼叫它；要接線得改 skill 指引。
+- **Impact**: 功能做了卻不會觸發，停滯的佇列頂端還是沒人提醒；是 BL-0309 第 2 項的後半。
+- **Trigger**: an ON/OFF eval slot opens for guidance changes, or BL-0309 item 2 is revisited
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: c9366c79a closure scan 2026-10-27 (self)
+- **Pointer**: docs/backlog/orchestrator-self-slowdown-seven-gaps.md
+- **Context**: Folded into the BL-0309 sidecar (item 2 note) rather than a new sidecar. Wiring edits skill text, so it needs ON/OFF evidence.
+
+### preflight-release runs five paid slash-entry probes by default
+- **Id**: BL-0318
+- **Status**: open
+- **Since**: 2026-10-27
+- **Origin**: self
+- **Problem**: 發版前檢查腳本預設會跑 slash-entry 探針，內含 5 個真的 claude-sonnet-5 呼叫；只有設跳過旗標才不跑。
+- **Impact**: 沒掛哨兵就花真錢；10/27 fbship hand 跑兩次共 12 次真呼叫，約 9 USD 等值。
+- **Trigger**: next edit to scripts/preflight-release.sh, or the next release preflight run by a hand
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: fbship hand run 2026-10-27 15:40 Taipei (self)
+- **Pointer**: docs/backlog/preflight-release-paid-slash-probe-default.md
+- **Context**: Proposed: make the probe explicit opt-in, or skip automatically when a sentinel or test environment is detected. A change to a check needs a negative control.
+
+### fbatch v3 pilot could confirm the develop journal only indirectly
+- **Id**: BL-0319
+- **Status**: open
+- **Since**: 2026-10-27
+- **Origin**: self
+- **Problem**: findings-batch v3 先導測的 instrument_checks 只能用間接證據確認 develop 的紀錄檔，因為 cell repo 在計分後就清掉了。
+- **Impact**: 儀器檢查少了直接證據；若日後有人質疑計分，無法回頭看原始紀錄。低優先。
+- **Trigger**: the next paid ON/OFF eval that scores from a develop journal, or a challenge to the v3 instrument checks
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: findings-batch-v3 pilot closure 2026-10-27 (self)
+- **Pointer**: docs/backlog/fbatch-v3-journal-indirect-evidence.md
+- **Context**: Direct evidence needs the runner to keep the journal file before the cell repo is cleaned. The v3 verdict itself (PASS, stamp ea89198b8) does not depend on it.

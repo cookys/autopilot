@@ -1,0 +1,10 @@
+{
+ "corpus_version": "discuss-v4.discuss-v1",
+ "effort": "low",
+ "engine": "gpt-6.1-terra",
+ "model": "gpt-6.1-terra",
+ "model_version": "gpt-6.1-terra",
+ "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+ "role": "discuss",
+ "runner": "codex"
+}

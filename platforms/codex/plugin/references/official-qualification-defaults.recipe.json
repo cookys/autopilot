@@ -554,6 +554,36 @@
       "event_id": 347,
       "role": "verification_author",
       "evidence_bundle": "docs/plans/evidence/2026-10-26-k31-beam-longcat-qualify/k31-verification_author"
+    },
+    {
+      "event_id": 350,
+      "role": "consult",
+      "evidence_bundle": "docs/plans/evidence/2026-10-27-terra-qualify/terra-consult"
+    },
+    {
+      "event_id": 351,
+      "role": "discuss",
+      "evidence_bundle": "docs/plans/evidence/2026-10-27-terra-qualify/terra-discuss"
+    },
+    {
+      "event_id": 352,
+      "role": "implementer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-27-terra-qualify/terra-implementer"
+    },
+    {
+      "event_id": 353,
+      "role": "owner",
+      "evidence_bundle": "docs/plans/evidence/2026-10-27-terra-qualify/terra-owner"
+    },
+    {
+      "event_id": 354,
+      "role": "reviewer",
+      "evidence_bundle": "docs/plans/evidence/2026-10-27-terra-qualify/terra-reviewer"
+    },
+    {
+      "event_id": 355,
+      "role": "verification_author",
+      "evidence_bundle": "docs/plans/evidence/2026-10-27-terra-qualify/terra-verification_author"
     }
   ]
 }

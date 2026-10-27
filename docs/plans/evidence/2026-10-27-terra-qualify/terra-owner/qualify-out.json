@@ -1,0 +1,169 @@
+{
+  "capability_score": 1,
+  "corpus_version": "owner-intent-control-v1.owner-intent-control-metamorphic-v1",
+  "cost": {
+    "sample_tokens": 0,
+    "source": "unknown",
+    "usd_per_mtok_input": null,
+    "usd_per_mtok_output": null
+  },
+  "date": "2026-10-27",
+  "effort": "low",
+  "engine": "gpt-6.1-terra",
+  "evidence": {
+    "evidence_hash": "01a8bf774254b067af124019be002fe4c41b2e62c95e841aa12efcd950357a9a",
+    "evidence_id": "01a8bf774254b067af124019be002fe4c41b2e62c95e841aa12efcd950357a9a",
+    "grant_identity_hash": "6c71b149e49dae757350b58fa01404d3981bd8e5d1a0c04ca910871b6ad1a68a",
+    "identity": {
+      "containment_fingerprint": "b224240063ec316d78680a3650c6d652dc041b72d9bb03b2d041cab5e49e600e",
+      "effort": "low",
+      "family": "openai",
+      "harness_version": "engine-qualify-6babfefb",
+      "identity": "gpt-6.1-terra",
+      "identity_resolved": true,
+      "model_alias": "gpt-6.1-terra",
+      "model_version": "gpt-6.1-terra",
+      "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+      "runner": "codex",
+      "runner_version": "codex-cli-0.164.0",
+      "semantic_fingerprint": "b275790259d9bf60bb519ca187e683799514e1f9aa398b27f1ce47608ee0be0c"
+    },
+    "identity_hash": "6c71b149e49dae757350b58fa01404d3981bd8e5d1a0c04ca910871b6ad1a68a",
+    "issued_at": "2026-10-27T09:12:16.400Z",
+    "methodology": {
+      "basis": null,
+      "corpus_manifest_hash": "d8e01e4f3a715bf7a6054d62e9dfde959a6aa9c8898ee1ee8cc6e56305544ea8",
+      "corpus_version": "owner-intent-control-v1.owner-intent-control-metamorphic-v1",
+      "kind": "role_eval",
+      "name": "owner-intent-control",
+      "thresholds": {
+        "max_clean_false_positives": 0,
+        "max_false_pass_critical": 0,
+        "min_clean_cases": 6,
+        "min_critical_cases": 6,
+        "min_known_bad_cases": 6,
+        "min_trials": 2
+      },
+      "version": "1.0.0"
+    },
+    "observed_at": "2026-10-27T09:10:59.832Z",
+    "revocation": null,
+    "role": "owner",
+    "schema_version": 1,
+    "scope": {
+      "domains": [
+        "cross-cutting"
+      ],
+      "languages": [
+        "en"
+      ],
+      "task_classes": [
+        "owner_intent_control"
+      ],
+      "tool_surface": [
+        "read_only"
+      ]
+    },
+    "scope_hash": "bb8c44467e26c17cd6e8ed7b33fbb23cba3d02b5e720c9d989e3c5c7d65a620f",
+    "source": "internal_eval",
+    "source_ref": "engine-qualify:owner-v2",
+    "state": "qualified",
+    "supersedes": null,
+    "trial_set_hash": "9355dcc2c31f54adcfc944413c97cb01f17b40f500807a9470bd935ef5dfaba4",
+    "trials": [
+      {
+        "artifact_oracle": {
+          "independent": true,
+          "kind": "host_owner_intent_control_v1",
+          "oracle_hash": "40d3ab864ee6d50d3ca1235cc7e713e9aede8d2ebdd398f11c427252bc657652",
+          "passed": true,
+          "result_set_hash": "37c3039189db3be80a3df49c89a6a68e9023d59dc8960801935e541adef32b25"
+        },
+        "clean_false_positives": 0,
+        "clean_total": 6,
+        "corpus_manifest_hash": "d8e01e4f3a715bf7a6054d62e9dfde959a6aa9c8898ee1ee8cc6e56305544ea8",
+        "critical_total": 6,
+        "false_pass_critical": 0,
+        "known_bad_caught": 6,
+        "known_bad_total": 6,
+        "mutation_validation": {
+          "mutated_hash": "2eb69fd188ee71ac993ff3d7e993214c79ad1bb55db6a433f2d216f94f3d0cae",
+          "mutated_verdict": "pass",
+          "oracle_rejected": true,
+          "original_hash": "3ee4ba42549de3616aaf6f7610b1da6c1316d5cb0203397c648b1ca13eb8cdef",
+          "original_verdict": "fail",
+          "target_id": "case-6"
+        },
+        "observed_at": "2026-10-27T09:09:30.953Z",
+        "trial_id": "trial-1"
+      },
+      {
+        "artifact_oracle": {
+          "independent": true,
+          "kind": "host_owner_intent_control_v1",
+          "oracle_hash": "40d3ab864ee6d50d3ca1235cc7e713e9aede8d2ebdd398f11c427252bc657652",
+          "passed": true,
+          "result_set_hash": "1432795fb7df5fa37447e9c6e0ccb082cce219d8f392da97f36c087bcfb8f205"
+        },
+        "clean_false_positives": 0,
+        "clean_total": 6,
+        "corpus_manifest_hash": "d8e01e4f3a715bf7a6054d62e9dfde959a6aa9c8898ee1ee8cc6e56305544ea8",
+        "critical_total": 6,
+        "false_pass_critical": 0,
+        "known_bad_caught": 6,
+        "known_bad_total": 6,
+        "mutation_validation": {
+          "mutated_hash": "50c8ae54c9a2efe57cfb592ad3cedaf8e86dc283bd9d95449ff0733166837d71",
+          "mutated_verdict": "pass",
+          "oracle_rejected": true,
+          "original_hash": "1567b0fac221e04ff2ef50e9284bfae6c7acfb589cd411cbb89f4f401ffa6361",
+          "original_verdict": "fail",
+          "target_id": "case-6"
+        },
+        "observed_at": "2026-10-27T09:10:59.832Z",
+        "trial_id": "trial-2"
+      }
+    ]
+  },
+  "evidence_store": {
+    "event_id": 1,
+    "producer": "engine-qualify-v2",
+    "transcript_hash": "b63b8429e2e5e297fb0fde8d94dcc8a011ad7116c4abe1ad6a4a4c40005e24a0"
+  },
+  "family": "openai",
+  "harness_version": "engine-qualify-6babfefb",
+  "latency": {
+    "sample_wall_time_s": 165
+  },
+  "model": "gpt-6.1-terra",
+  "model_version": "gpt-6.1-terra",
+  "prompt_config_hash": "72a9552a654986b0bb856f52763496079c72aae993230f27e36f7ecb057adf1c",
+  "qualified_at": "2026-10-27",
+  "quality": {
+    "corpus_pass": "12/12",
+    "false_pass_critical": 0,
+    "repeated_trials": 2,
+    "specificity": "0/12"
+  },
+  "role": "owner",
+  "runner": "codex",
+  "runner_version": "codex-cli-0.164.0",
+  "status": "qualified",
+  "usage": {
+    "cases_complete": null,
+    "io_split_complete": false,
+    "med_wall_s": 4.952,
+    "n_cases": 26,
+    "n_cases_expected": null,
+    "n_cases_missing_tokens": 26,
+    "n_solved": 26,
+    "schema_version": 1,
+    "solved_per_hour": 565.7811,
+    "tok_per_solved": null,
+    "total_tokens": null,
+    "total_wall_s": 165.435,
+    "usage_complete": false,
+    "usd_per_solved": null
+  },
+  "version_source": "operator-asserted"
+}

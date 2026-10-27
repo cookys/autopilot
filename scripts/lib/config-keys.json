@@ -1223,6 +1223,28 @@
       "invalid_effect": "anything but a boolean (or env true/false/1/0/yes/no) is ignored, so the source stays"
     },
     {
+      "name": "AUTOPILOT_GATE_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/gate-verify.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Path of the per-turn gate file gate-verify.js reads when --gate-file is absent. The hook sets it (P2); not wired yet."
+    },
+    {
+      "name": "AUTOPILOT_GATE_REPO",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": ["scripts/gate-verify.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Set by gate-verify.js for a registered check: the worker repo it should inspect. The check itself runs in an exported temp dir."
+    },
+    {
       "name": "AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR",
       "kind": "env",
       "audience": "user",

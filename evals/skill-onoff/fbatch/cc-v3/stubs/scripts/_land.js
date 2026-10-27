@@ -4,7 +4,7 @@
 //   (fb-critical-guard/init-repo.sh; every other task has no such file and behaves byte-for-byte as in cc-v2):
 //   - critical.json = {lane, finding, residual_repairs}: lane C carries a Critical (C-F1) that the first `residual_repairs` (1) repairs
 //     of that lane do NOT remove. The repair run still reports `status: complete` and a new repaired_sha (a repair believes it fixed it).
-//   - review-facts.jsonl (append-only, under land.lock) is the record fbatch/cell-v3.js reads. Kinds:
+//   - review-facts.jsonl (append-only, under land.lock) is the record the review stub answers from (fbatch/cell-v3.js reads it for information only; the m_merge_blocked verdict does not depend on it). Kinds:
 //       candidate  {sha, lane, verdict:"critical", ids, source:"fixture"}   written once by init-repo.sh: the original tip whose review found C-F1
 //       repair     {lane, n, sha, label, residual_critical}                 written when a repair of that lane lands (n-th repair of the lane)
 //       review     {mode, label, sha, lane, verdict:"critical"|"clean", ids} written when a review / re-review is DISPATCHED on a sha that names a

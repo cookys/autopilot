@@ -951,6 +951,59 @@ node -e '
 echo "  red as designed: stripping and preflight both removed: cells are dispatched, and the critical-guard rows are infra_fail / marker_error (the cell-level safety net)"
 rm -f "$NOSAN" "$NOPRE"
 
+# ======================================================================================================================
+echo "=== (10) stale statements: the text of the unit must not describe a superseded instrument ==="
+# The check reads the GENERATED prereg and the shipped files themselves, not the generator that wrote them (round 10: trace_source is inherited from the
+# v2 prereg, so a fix in the generator's own literals missed it).
+#  - <git-dir>/fbatch: since round 6 all fixture state lives in <common-git-dir>/fbatch;
+#  - the round-1/2 topology phrases (second-or-later parent, develop's head, reachable from develop) describe a rule that was dropped in round 4;
+#  - whitelisted history fields of the prereg (v1/v2 and earlier rounds are described as they were): supersedes, lineage, rules_provenance, amendments.
+stale_scan() { # stale_scan <prereg.json> <path>...: prints every stale statement, returns 1 when there is one
+  local pj="$1"; shift; local bad=0 out
+  out=$(grep -rnP '(?<!common-)git-dir>/fbatch' "$pj" "$@" 2>/dev/null) && { echo "$out" | cut -c1-200; bad=1; }
+  node -e '
+    const p = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    const re = /second-or-later parent|second or later parent|develop.s head|reachable from develop/i;
+    const skip = new Set(["supersedes", "lineage", "rules_provenance", "amendments"]);
+    let n = 0;
+    const walk = (o, pa) => {
+      if (typeof o === "string") { const m = re.exec(o); if (m) { n++; console.log("prereg " + pa.join(".") + ": \"" + m[0] + "\""); } }
+      else if (o && typeof o === "object") for (const k of Object.keys(o)) { if (pa.length === 0 && skip.has(k)) continue; walk(o[k], pa.concat(k)); }
+    };
+    walk(p, []);
+    process.exit(n ? 1 : 0);
+  ' "$pj" || bad=1
+  return $bad
+}
+STALE_PATHS=("$FB/cc-v3/stubs" "$FB/cc-v3/tasks" "$FB/cell-v3.js" "$FB/lib-v3.js")
+out=$(stale_scan "$BASE/prereg/findings-batch-v3.json" "${STALE_PATHS[@]}") || fail "stale statements in the unit: $out"
+echo "  no <git-dir>/fbatch and no superseded topology phrase in the prereg (outside the history fields) or in the shipped files"
+# negative controls: put the old statements back
+STL="$TEST_TMP/stale"; rm -rf "$STL"; mkdir -p "$STL"
+node -e '
+  const fs = require("fs"); const p = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  p.cc.trace_source = p.cc.trace_source.replace("<common-git-dir>/fbatch/ledger.jsonl", "<git-dir>/fbatch/ledger.jsonl");
+  fs.writeFileSync(process.argv[2] + "/a.json", JSON.stringify(p));
+  const q = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  q.cc.trace_source += " and which tips develop integrated (second-or-later parent of a merge commit reachable from develop, or develop" + String.fromCharCode(39) + "s head).";
+  fs.writeFileSync(process.argv[2] + "/b.json", JSON.stringify(q));
+  const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  r.markers_v3.m_merge_blocked.integrated += " reachable from develop";
+  fs.writeFileSync(process.argv[2] + "/c.json", JSON.stringify(r));
+  const h = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  h.supersedes.v2_verdict += " second-or-later parent";
+  fs.writeFileSync(process.argv[2] + "/h.json", JSON.stringify(h));
+' "$BASE/prereg/findings-batch-v3.json" "$STL"
+neg "the old <git-dir>/fbatch ledger path back in trace_source is caught" stale_scan "$STL/a.json" "${STALE_PATHS[@]}"
+neg "the old 'second-or-later parent ... develop's head' ending back in trace_source is caught" stale_scan "$STL/b.json" "${STALE_PATHS[@]}"
+neg "an old topology phrase in the m_merge_blocked 'integrated' field is caught" stale_scan "$STL/c.json" "${STALE_PATHS[@]}"
+mkdir -p "$STL/files"; cp "$FB/cell-v3.js" "$STL/files/cell-v3.js"; sed -i '0,/<common-git-dir>\/fbatch\/develop-base/s//<git-dir>\/fbatch\/develop-base/' "$STL/files/cell-v3.js"
+cmp -s "$STL/files/cell-v3.js" "$FB/cell-v3.js" && fail "stale-file control is identical"
+neg "the old <git-dir>/fbatch/develop-base in cell-v3.js is caught" stale_scan "$BASE/prereg/findings-batch-v3.json" "$STL/files/cell-v3.js"
+# the whitelist is real: the same phrase in a history field is NOT reported (a positive control, so the scan is not simply blind there)
+stale_scan "$STL/h.json" "${STALE_PATHS[@]}" > /dev/null || fail "the history fields (supersedes) must be whitelisted"
+echo "  whitelist: a superseded phrase inside supersedes.v2_verdict is not reported"
+
 echo "=== no landing timer started by this test is still alive ==="
 for i in $(seq 1 20); do [ -z "$(land_pids "$TEST_TMP")" ] && break; sleep 0.25; done
 left=$(land_pids "$TEST_TMP" | tr '\n' ' ')

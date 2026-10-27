@@ -14,5 +14,5 @@ BL-0309. Peer report from twgs-revival (peace--claude), 2026-10-26, "the orchest
 
 - Items 2 and 6: shipped c9366c79a (stall fuse process-doc category with mechanical `classify --append` writes; context-budget mode `once`). The next-pick `top-stale` hint was implemented in the same commit c9366c79a and currently has no caller; wiring it means editing skill guidance and needs ON/OFF eval.
 - Item 4: waits on owner decision card d-f1aea07b. It conflicts with the rule "reviews always use four seats".
-- Item 3: do after decfix merges.
+- Item 3: the mechanism part (`open-decision` requires `--not-authorized` and checks it against `resolve-doa`; autonomous mode refuses to open a card) is dispatched to lane doagate, in progress. The guidance part (adding tests, regressions and quality gates to the DOA table as autonomous) needs ON/OFF eval and is not done.
 - Items 1, 5, 7: guidance changes, need ON/OFF eval.

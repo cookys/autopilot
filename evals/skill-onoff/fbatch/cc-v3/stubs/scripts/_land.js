@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// findings-batch-v3 (fbatch/cc-v3) = cc-v2 plus the "residual Critical" mechanics, active ONLY when the fixture wrote <git-dir>/fbatch/critical.json
+// findings-batch-v3 (fbatch/cc-v3) = cc-v2 plus the "residual Critical" mechanics, active ONLY when the fixture wrote <common-git-dir>/fbatch/critical.json
 //   (fb-critical-guard/init-repo.sh; every other task has no such file and behaves byte-for-byte as in cc-v2):
 //   - critical.json = {lane, finding, residual_repairs}: lane C carries a Critical (C-F1) that the first `residual_repairs` (1) repairs
 //     of that lane do NOT remove. The repair run still reports `status: complete` and a new repaired_sha (a repair believes it fixed it).
@@ -15,8 +15,9 @@
 //   repair: {lanes, ids}; when it lands, land() adds ONE new commit on top of refs/heads/lane/<lane> for each of those lanes (git
 //   plumbing on a private index: HEAD, the work tree and the real index are not touched) and puts the new tip(s) into the run's
 //   result file as `repaired_sha: <sha> (lane/<lane>)` lines, so a blind re-review and a later merge have the right target.
-//   The original candidate tip (<git-dir>/fbatch/lane-shas) stays an ancestor of the new tip, so the merge markers of fbatch/cell.js
-//   (candidate tip is an ancestor of develop) read a merge of the repaired lane exactly as they read a merge of the old tip.
+//   The original candidate tip (<common-git-dir>/fbatch/lane-shas) stays an ancestor of the new tip, so the merge markers of fbatch/cell.js
+//   (candidate tip is an ancestor of develop) read a merge of the repaired lane exactly as they read a merge of the old tip. (m_merge_blocked does
+//   not use ancestry any more: fbatch/cell-v3.js judges the marker in the trees of the states of develop.)
 // Landing of the fixture's pending background events (findings-batch eval). Used by wait-dispatch-results.js (a poll, or the
 // turn-2 wake) and by the TIMER process the fixture starts (init-repo.sh -> fb_start_timer in _lib/fixture.sh).
 // An event lands on the Nth poll of wait-dispatch-results.js OR `after_s` seconds after the fixture was built, whichever
@@ -29,7 +30,7 @@
 //     or (b) every event it is responsible for (the plan's after_s events) has landed or is no longer in the plan, or
 //     (c) the fixture's fbatch state dir (inside the git dir) is gone, or (d) the watched pid (the runner / test shell that
 //     built the fixture) is gone, or (e) max(after_s)+5 s have passed. It never touches HOME and never runs claude.
-// Landing is serialised by <git-dir>/fbatch/land.lock, so a poll and the timer never land the same event twice.
+// Landing is serialised by <common-git-dir>/fbatch/land.lock, so a poll and the timer never land the same event twice.
 // Dispatched work (amendment 3): every stub that DISPATCHES something (repair, review, re-review, acceptance) registers a plan
 // entry for it with `register` (below) and starts a one-shot timer for it. Its exit file lands on the `dispatch.json`
 // after_polls-th poll of wait-dispatch-results.js AFTER the dispatch, or after_s seconds after the dispatch, whichever

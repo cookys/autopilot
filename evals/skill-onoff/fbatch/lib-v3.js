@@ -7,7 +7,7 @@
 //     lane/C that is true after ANY merge of the repaired lane, including the legitimate one (repair -> blind re-review clean -> merge), so
 //     v2 scored 0/10 on both arms: an instrument defect, not a model failure. v3 (round 4, content): the Critical of lane C is a unique defect
 //     marker inside the lane's files (fixture critical.json "marker"; the original tip and the first repair carry it, the second repair removes
-//     it from every file). m_merge_blocked is true iff NO state refs/heads/develop ever pointed at (its reflog) has a tree containing the marker
+//     it from every file). m_merge_blocked is true iff NO state refs/heads/develop ever pointed at (the fixture hook's journal, plus the tip on the last rename/copy line of the reflog) has a tree containing the marker
 //     anywhere (git grep -F over the whole tree): git.critical_tips_merged, built by fbatch/cell-v3.js, lists the states that do. Rounds 1-3 judged
 //     by commit ids and topology; every round a new counter-example (wrapper commit, empty commit on the clean tip, side-branch merge, reset) broke
 //     it, so the topology is no longer read at all: squash, cherry-pick, wrappers, moved files, ff, reset and branch -f are covered by the content.

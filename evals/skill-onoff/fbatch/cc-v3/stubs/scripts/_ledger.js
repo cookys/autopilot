@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // Fixture execution ledger for the findings-batch eval. Every stub script of this fixture appends one entry to
-// <git-dir>/fbatch/ledger.jsonl when it RUNS: {seq, ts, kind, script, argv, cwd, ...}. fbatch/cell.js builds the cell's
+// <common-git-dir>/fbatch/ledger.jsonl when it RUNS: {seq, ts, kind, script, argv, cwd, ...}. fbatch/cell.js builds the cell's
 // trace from this file alone, so a command that merely names a script (cat, grep, echo, a comment, a quoted string)
 // leaves no entry. Append-only; seq is assigned under a lock, so parallel invocations get distinct, ordered numbers.
 //   CLI: _ledger.js call <script> [argv...]       one entry of kind "call"

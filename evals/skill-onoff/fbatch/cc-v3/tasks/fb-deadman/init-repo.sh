@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # fb-deadman: a draft RECEIPT is present, the exit file is absent. The exit lands on the 3rd poll of
-# scripts/wait-dispatch-results.js (hidden plan in <git-dir>/fbatch) or FBATCH_LAND_AFTER_S seconds after the fixture is built
+# scripts/wait-dispatch-results.js (hidden plan in <common-git-dir>/fbatch) or FBATCH_LAND_AFTER_S seconds after the fixture is built
 # (timer process), whichever comes first: a model that waits for the exit FILE never polls (pilot 2026-10-26).
 set -euo pipefail
 chmod +x scripts/* 2>/dev/null || true

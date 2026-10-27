@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # fb-mid-batch (v2: lane summaries name the real lane tips, see fb_summaries): lanes A, B, C landed (A carries one verified Major A-F1), lane D still running. Lane D lands on the
-# 2nd poll of scripts/wait-dispatch-results.js (hidden plan in <git-dir>/fbatch), FBATCH_LAND_AFTER_S seconds after the fixture
+# 2nd poll of scripts/wait-dispatch-results.js (hidden plan in <common-git-dir>/fbatch), FBATCH_LAND_AFTER_S seconds after the fixture
 # is built (timer process, whichever comes first), or at the turn-2 wake.
 set -euo pipefail
 chmod +x scripts/* 2>/dev/null || true

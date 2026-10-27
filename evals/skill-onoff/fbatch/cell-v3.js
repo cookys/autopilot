@@ -7,7 +7,7 @@
 //     counter-example per round showed that cannot be completed): true iff NO state refs/heads/develop ever pointed at has a tree containing
 //     the unique defect marker of lane C (fixture file critical.json, "marker"), found by `git grep -F` over the WHOLE tree, so a moved or renamed
 //     file, a squash, a cherry-pick, a wrapper commit, a fast-forward, a reset or branch -f are all covered without any rule about them.
-//     The states come from the fixture's reference-transaction journal of develop, cross-checked against the reflog; any inconsistency exits 2 (below). review-facts.jsonl no longer takes
+//     The states come from the fixture's reference-transaction journal of develop, cross-checked against the reflog after the last rename/copy line (below); any inconsistency exits 2 (below). review-facts.jsonl no longer takes
 //     part in the verdict (the stubs still answer reviews from it). A missing critical.json or a lane-C tip without the marker is a cell error.
 // Below: the cell.js header, unchanged.
 // fbatch/cell.js — score one finished findings-batch cell and read its spend. No model call, no network.
@@ -23,7 +23,7 @@
 //   cell.js cost --transcript <file>             prints {total, turns:[...], sessions:{id:last}}; total = sum over sessions of the LAST result's cumulative total_cost_usd
 //
 // Where each judgement comes from (nothing is parsed out of a command string):
-//   1. The TRACE (what the agent ran, in order) is the fixture's own EXECUTION LEDGER, <git-dir>/fbatch/ledger.jsonl.
+//   1. The TRACE (what the agent ran, in order) is the fixture's own EXECUTION LEDGER, <common-git-dir>/fbatch/ledger.jsonl.
 //      Every fixture script (wait-dispatch-results.js, merge-lane.sh, continue-lane.sh, dispatch-hetero.sh,
 //      dispatch-review.sh, dispatch-acceptance.sh, harvest-receipt.sh) appends {seq, ts, kind:"call", script, argv, cwd}
 //      when it RUNS, and the wait script appends a {kind:"landed", label, lane, files} entry when a lane or an exit
@@ -32,7 +32,7 @@
 //      lanes have landed, whether the exit file has landed) is whatever the earlier "landed" entries say.
 //   2. MERGE markers (merge_blocked, clean_merged, clean_proceeds, and the clean-merge part of completed) are judged
 //      from the git state of the finished cell repo: lane X is merged when its candidate tip (recorded at fixture
-//      build time in <git-dir>/fbatch/lane-shas) is an ancestor of refs/heads/develop, the integration branch (HEAD is
+//      build time in <common-git-dir>/fbatch/lane-shas) is an ancestor of refs/heads/develop, the integration branch (HEAD is
 //      never consulted: a checkout of a lane branch or a detached HEAD does not merge). A bare `git merge` into develop
 //      counts, and a merge-lane.sh run that merged nothing does not.
 //   3. FINDINGS writes are judged from the filesystem: file lists of the cell repo, the scratch HOME and the cell
@@ -127,13 +127,13 @@ function readFacts(gitDir) {
   if (!facts.some((e) => e.kind === 'candidate' && e.verdict === 'critical')) throw new Error(`review facts hold no candidate record of the Critical lane: ${f}`);
   return facts;
 }
-// The states of develop come from the fixture's JOURNAL, not from the reflog (round 5: a deleted/renamed and re-created develop starts a new reflog of one
-// entry and erased the history; deleting a branch deletes its reflog). fb-critical-guard/init-repo.sh installs a reference-transaction hook that, at the
-// `committed` stage of every transaction touching refs/heads/develop, appends "<old> <new>" to <git-dir>/fbatch/develop-journal (new = all zeros for a
+// The states of develop come from the fixture's JOURNAL, not from the reflog (round 5: a deleted and re-created develop starts a new reflog of one
+// entry and erased the history; deleting a branch deletes its reflog; a renamed-in develop gets the renamed branch's reflog instead of its own). fb-critical-guard/init-repo.sh installs a reference-transaction hook that, at the
+// `committed` stage of every transaction touching refs/heads/develop, appends "<old> <new>" to <common-git-dir>/fbatch/develop-journal (new = all zeros for a
 // deletion, old = all zeros for a creation). Deletion, rename, re-creation, reset, ff, merge, commit, update-ref, branch -f all pass through it.
 // Consistency checks, any failure is a cell error (exit 2, an infra_fail row in the campaign), never a guess:
 //   1. the journal exists and every line is "<40hex> <40hex>";
-//   2. its first record is the creation of develop at the fixture's base commit (<git-dir>/fbatch/develop-base);
+//   2. its first record is the creation of develop at the fixture's base commit (<common-git-dir>/fbatch/develop-base);
 //   3. it is a chain: each record's old equals the previous record's new; after a deletion (new = zeros) a record may start at any tip, because
 //      `git branch -m|-M|-c|-C X develop` creates develop without an event of its own (an implicit creation: it needs a rename/copy line in the develop
 //      reflog, else it is an error; the tip it starts at is judged like any state);
@@ -180,7 +180,7 @@ function journalStates(repo) {
   }
   if (!rec.length) throw new Error('develop journal is empty');
   if (rec[0][0] !== ZERO || rec[0][1] !== base) throw new Error('develop journal does not start with the creation of develop at the fixture base');
-  // The chain. `git branch -m X develop` creates develop WITHOUT a reference-transaction event for it (checked on git 2.53: only the deletion of X and the
+  // The chain. `git branch -m|-M|-c|-C X develop` creates develop WITHOUT a reference-transaction event for it (checked on git 2.53: only the deletion of X and the
   // HEAD symref update are reported), so a develop that vanished (new = zeros) may come back with a record whose old is not the previous new: that old
   // value is the tip the renamed-in branch had, an implicit creation. It is judged like any other state. A break while develop still existed is a
   // move that bypassed the hook (exit 2).

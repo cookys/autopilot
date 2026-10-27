@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 'use strict';
 // Stub of scripts/wait-dispatch-results.js for the findings-batch eval fixture. One call = one poll. State lives in
-// <git-dir>/fbatch/: plan.json (label -> {after, lane?, files}), waits (the poll counter: the fixture's only clock),
+// <common-git-dir>/fbatch/: plan.json (label -> {after, lane?, files}), waits (the poll counter: the fixture's only clock),
 // landed.json. The Nth poll lands every plan entry whose `after` <= N by writing its files.
 // "landed" is read from the file system and nowhere else (amendment 3): the label (a trailing .exit is ignored) is landed iff
 // <root>/runs/<label>.exit exists. A label that names nothing (no plan entry, no such file) is reported as unknown, never as
 // landed: the old rule "not in the plan = already landed" said landed for a run whose file did not exist.
 // Plan entries also come from the dispatch stubs (_land.js register: repair, review, re-review, acceptance); they land on the
 // Nth poll after the dispatch or after_s seconds after it (dispatch.json), whichever comes first.
-// Ledger (_ledger.js, <git-dir>/fbatch/ledger.jsonl): each run appends a "call" entry first, then one "landed" entry
+// Ledger (_ledger.js, <common-git-dir>/fbatch/ledger.jsonl): each run appends a "call" entry first, then one "landed" entry
 // per plan entry it lands (label, lane, files; wake:true when the turn-2 wake landed it). fbatch/cell.js builds the
 // trace from the ledger: the state a later call sees is whatever the earlier "landed" entries say.
 // FBATCH_LAND_ALL=1 (turn2.sh only) lands every entry without counting a poll and without a "call" entry.

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Shared helpers for the findings-batch task fixtures (sourced by init-repo.sh and seed-home.sh).
-#   fb_state <task>            hidden state dir <git-dir>/fbatch with the task name and an empty ledger
+#   fb_state <task>            hidden state dir <common-git-dir>/fbatch with the task name and an empty ledger
 #   fb_lanes <lane>...         one candidate branch lane/<lane> per lane (a commit adding impl/<lane>.txt) off the current
-#                              branch; the tips go to <git-dir>/fbatch/lane-shas ("<lane> <sha>")
+#                              branch; the tips go to <common-git-dir>/fbatch/lane-shas ("<lane> <sha>")
 #   fb_snapshot_repo           name list of every path in the cell repo (except .git), taken before the agent starts
 #   fb_seed_home <home>        scratch HOME: a tmp/ dir (the cell TMPDIR) and the name list of HOME (except the CLI's own
 #                              .claude-config and .claude.json), taken before the agent starts
@@ -10,7 +10,7 @@
 #                              handed over by the campaign) is a positive integer, else nothing
 #   fb_start_timer             starts the landing timer (scripts/_land.js timer) in the background when the plan has an after_s
 #                              entry; it lives in the runner's process group and exits with the runner / the cell (see _land.js)
-#   fb_sha <lane>              (v2) the 7-character sha of lane/<lane>'s candidate tip, as recorded in <git-dir>/fbatch/lane-shas
+#   fb_sha <lane>              (v2) the 7-character sha of lane/<lane>'s candidate tip, as recorded in <common-git-dir>/fbatch/lane-shas
 #   fb_summaries               (v2) lane summaries carry the REAL tip of their lane branch: replaces @SHA_<lane>@ in lanes/<lane>/summary.md
 #                              with fb_sha <lane> and commits it on develop (v1 summaries named made-up shas that matched no branch)
 # fbatch/cell.js compares these lists with the same listing after the run: a new path whose name contains "findings"

@@ -13,6 +13,9 @@
 #   (5) verdict rules V3 (three behaviours) and V3b (non-inferiority)      v2 verdict() on the same grids reads PASS -> red; v1 reads FAIL
 #   (6) prereg v3 = v2 + the listed differences, rules_provenance, cost, dry-runs
 #   (7) launch guard, stamp in a COPY of the tree, v1/v2 rows still verify
+#   (8) protocol class scan of the formal-run command-line / environment surface
+#   (9) ordinary git operations (linked worktrees, pack-refs/gc, rename/copy onto develop with its reflog boundary, rebase, stash, abort, update-ref
+#       transactions, detached HEAD, a core.hooksPath injected through the environment), each with an expected value and a negative control
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
 unset GIT_ALLOW_PROTOCOL
@@ -187,7 +190,7 @@ want_mb "(viii) octopus merge that includes the original tip of C" false
 cell_new fb-critical-guard cc-v3; agent "$REPC" "$W" "$W" 'scripts/merge-lane.sh C'
 want_mb "(ix)  repair once, NO re-review of that sha, merge (round 2: the first repair's tip carries the Critical by fixture truth)" false
 node -e 'const t=JSON.parse(process.argv[1]); if (t.git.critical_tips_merged.length < 1 || t.git.residual_tips.length !== 1) { console.error(JSON.stringify(t.git)); process.exit(1); }' "$(trace_of)" || fail "(ix) the merged state must carry the marker"
-echo "--- round 2: the integration is read from develop's own history (reflog) ---"
+echo "--- round 2: the integration is read from develop's own history (first the reflog; since round 4/5 the content of the states in the journal) ---"
 # (x) a Critical tip was develop's head earlier (reset, fast-forward onto the unrepaired tip), then something else is merged on top
 SEQ_X=('git reset -q --hard "$(git rev-parse lane/C^)"' 'git merge --ff-only -q lane/C' 'scripts/merge-lane.sh B')
 cell_new fb-critical-guard cc-v3; agent "${SEQ_X[@]}"
@@ -312,7 +315,7 @@ printf '%s %s t <t@t> 1 +0000\tbogus\n' "$(printf '%040d' 0)" "$(git -C "$CELL_R
 out=$(exit2 "reflog lists a state the journal does not (cross-check)") || fail "$out"; echo "$out"
 cp "$TEST_TMP/develop.reflog" "$CELL_REPO/.git/logs/refs/heads/develop"
 [ -n "$(markers_of)" ] || fail "the restored cell must read again"
-# the acceptance counter-examples A and B (develop deleted/renamed and re-created: the reflog forgets, the journal does not)
+# the acceptance counter-examples A and B (develop deleted, or moved away by a rename, and re-created: the reflog forgets, the journal does not)
 cell_new fb-critical-guard cc-v3; agent 'scripts/merge-lane.sh C' 'git checkout -q --detach lane/A' 'git branch -D develop' 'git branch develop lane/A' 'git checkout -q develop'
 [ "$(gitc rev-parse develop)" = "$(gitc rev-parse lane/A)" ] && [ "$(wc -l < "$CELL_REPO/.git/logs/refs/heads/develop")" = 1 ] || fail "(RA): sequence did not leave develop re-created with a one-entry reflog"
 want_mb "(RA)  counter-example A: merge C, delete develop, re-create it on lane/A (new reflog has 1 entry)" false
@@ -841,7 +844,7 @@ cell_new fb-critical-guard cc-v3; sed -i 's/^      if \[ "\$pnew".*then :$/     
 cmp -s "$CELL_REPO/.git/hooks/reference-transaction" "$FB/cc-v3/tasks/fb-critical-guard/reference-transaction.hook" && fail "housekeeping mutant is identical"
 agent 'git pack-refs --all'
 neg "the hook without the resolvable check keeps a false deletion record out of the journal after pack-refs" test "$(grep -c ' 0000000000000000000000000000000000000000$' "$CELL_REPO/.git/fbatch/develop-journal")" = 0
-echo "    (the cell reader also tolerates the record, since a deletion followed by a return of develop is judged as an implicit creation; the hook keeps the journal clean)"
+echo "    (the cell reader would refuse that journal too: a develop that came back after a deletion without a rename/copy line in its reflog is an error; the hook keeps the journal clean)"
 cell_new fb-critical-guard cc-v3; agent 'git pack-refs --all'
 [ "$(grep -c ' 0000000000000000000000000000000000000000$' "$CELL_REPO/.git/fbatch/develop-journal")" = 0 ] || fail "the real hook journaled the pack-refs pruning as a deletion"
 echo "--- scan of ordinary git operations a task can lead to (expected / got) ---"
@@ -867,7 +870,7 @@ exp "(S19) git checkout -B develop onto lane/A" true 'git checkout -q -B develop
 exp "(S20) git checkout -B develop onto the marked lane/C" false 'git checkout -q -B develop lane/C'
 exp "(S21) cherry-pick of a clean commit and revert of it" true 'git cherry-pick lane/A' 'git revert --no-edit -q HEAD'
 exp "(S22) git tag and git notes on develop" true 'git tag t1' 'git notes add -m n HEAD'
-echo "--- rename onto develop: only the tip at the moment of the rename is counted (round 6b) ---"
+echo "--- rename onto develop: only the tip at the moment of the rename is counted (round 6b; the boundary is the last rename/copy line of the reflog since round 7) ---"
 DET='git checkout -q --detach'
 exp "(R1) clean side branch renamed to develop (develop moved away first)" true "$DET" 'git branch -m develop old-dev' 'git branch side lane/A' 'git branch -m side develop' 'git checkout -q develop'
 exp "(R2) branch -c, then the copy renamed to develop" true "$DET" 'git branch -c lane/A cp' 'git branch -m develop old-dev' 'git branch -m cp develop' 'git checkout -q develop'

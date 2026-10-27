@@ -97,6 +97,8 @@ function write(ctx, rel, text) {
   fs.writeFileSync(path.join(ctx.dir, rel), text);
 }
 
+// every child output of the current case, scanned for runtime crashes (see evalMutation)
+const SEEN = [];
 let seq = 0;
 // Runs the verifier. rules: object (written to a file outside the repo).
 function run(S, ctx, rules, o) {
@@ -112,6 +114,7 @@ function run(S, ctx, rules, o) {
   const r = cp.spawnSync(process.execPath, args, { env: cleanEnv(o.env), encoding: 'utf8', timeout: 60000 });
   let out = null;
   try { out = JSON.parse(r.stdout); } catch (e) { /* keep null */ }
+  SEEN.push(String(r.stderr) + String(r.stdout));
   return { status: r.status, out, stdout: r.stdout, stderr: r.stderr };
 }
 
@@ -386,6 +389,7 @@ function runGate(S, ctx, gf, viaEnv) {
   if (!viaEnv) args.push('--gate-file', gf);
   const r = cp.spawnSync(process.execPath, args, { env, encoding: 'utf8', timeout: 60000 });
   let out = null; try { out = JSON.parse(r.stdout); } catch (e) { /* null */ }
+  SEEN.push(String(r.stderr) + String(r.stdout));
   return { status: r.status, out, stdout: r.stdout, stderr: r.stderr };
 }
 C.gate_file_valid_and_env_var = (S) => {
@@ -660,15 +664,22 @@ C.worker_fsmonitor_never_runs = (S) => {
 };
 C.forbid_text_sees_ignored_and_untracked = (S) => {
   const ctx = makeRepo(); write(ctx, '.gitignore', 'src/ign.js\n'); git(ctx.dir, 'add', '-A'); git(ctx.dir, 'commit', '-q', '-m', 'ign');
+  write(ctx, 'src/vis.js', 'console.log(1)\n'); // an ordinary untracked file is seen first, so a red below is about the ignored one
+  expectViolation(run(S, ctx, CLEAN_RULES), 'R4', /^src\/vis\.js:1$/);
+  fs.rmSync(path.join(ctx.dir, 'src/vis.js'));
   write(ctx, 'src/ign.js', 'console.log(1)\n');
   expectViolation(run(S, ctx, CLEAN_RULES), 'R4', /^src\/ign\.js:1$/);
 };
 C.builtins_see_ignored_files = (S) => {
   const ctx = makeRepo(); write(ctx, '.gitignore', 'src/bad.js\nnotes.conf\n'); git(ctx.dir, 'add', '-A'); git(ctx.dir, 'commit', '-q', '-m', 'ign');
+  const JS = L({ must_pass: [{ id: 'R5', check: 'js-syntax' }] }); const CM = L({ must_pass: [{ id: 'R5', check: 'no-conflict-markers' }] });
+  // ordinary (not ignored) bad files are found first: a red further down is about the ignored ones
+  write(ctx, 'src/vis-bad.js', 'function (\n'); expectViolation(run(S, ctx, JS), 'R5', /src\/vis-bad\.js/); fs.rmSync(path.join(ctx.dir, 'src/vis-bad.js'));
+  write(ctx, 'vis.conf', 'a\n<<<<<<< HEAD\n'); expectViolation(run(S, ctx, CM), 'R5', /^vis\.conf:2$/); fs.rmSync(path.join(ctx.dir, 'vis.conf'));
   write(ctx, 'src/bad.js', 'function (\n');
-  expectViolation(run(S, ctx, L({ must_pass: [{ id: 'R5', check: 'js-syntax' }] })), 'R5', /src\/bad\.js/);
+  expectViolation(run(S, ctx, JS), 'R5', /src\/bad\.js/);
   fs.rmSync(path.join(ctx.dir, 'src/bad.js')); write(ctx, 'notes.conf', 'a\n<<<<<<< HEAD\n');
-  expectViolation(run(S, ctx, L({ must_pass: [{ id: 'R5', check: 'no-conflict-markers' }] })), 'R5', /^notes\.conf:2$/);
+  expectViolation(run(S, ctx, CM), 'R5', /^notes\.conf:2$/);
 };
 C.no_worker_state_git_commands = (S) => {
   const src = fs.readFileSync(S, 'utf8');
@@ -933,7 +944,7 @@ const MUTATIONS = [
     ["const full = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.excludesFile=/dev/null'].concat(args);", 'const full = args;'],
     ['return wtBlobSha(repoReal, we) !== be.sha;', "return nulList(git(repoReal, ['diff', '--name-only', '-z', 'HEAD', '--', we.rel]).stdout).length > 0;"]],
     cases: ['worker_fsmonitor_never_runs'] },
-  { defence: 'no-index-reading-git-commands', from: "const args = ['--literal-pathspecs', 'ls-tree', '-r', '-z', base];", to: "const args = ['--literal-pathspecs', 'ls-files', '-z', base];", cases: ['no_worker_state_git_commands'] },
+  { defence: 'no-index-reading-git-commands', from: "const args = ['--literal-pathspecs', 'ls-tree', '-r', '-z', base];", to: "const unused = () => git(repo, ['ls-files', '-z']); const args = ['--literal-pathspecs', 'ls-tree', '-r', '-z', base];", cases: ['no_worker_state_git_commands'] },
   { defence: 'text-rules-walk-ignored-files', from: "for (const rel of fileRels(noOpaque(walkAll(repo, repoReal, base, prefixOf(f.norm)), 'forbid_text'))) {",
     to: "for (const rel of nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout)) {", cases: ['forbid_text_sees_ignored_and_untracked'] },
   { defence: 'conflict-marker-walk-ignored-files', from: "for (const rel of fileRels(noOpaque(walkAll(repo, repoReal, base, ''), 'no-conflict-markers'))) {",
@@ -989,7 +1000,7 @@ const MUTATIONS = [
     cases: ['worker_rewrites_registry', 'worker_registry_cannot_add_check'] },
   { defence: 'base-bytes-execution', from: "const blob = git(repo, ['show', base + ':./' + rel]).stdout;", to: 'const blob = fs.readFileSync(path.join(repoReal, rel));',
     cases: ['worker_rewrites_test_to_pass', 'worker_rewrites_test_to_fail', 'worker_rewrites_test_and_commits'] },
-  { defence: 'scrubbed-env', from: 'cwd: tmp, env, stdio', to: 'cwd: tmp, env: process.env, stdio', cases: ['check_runs_scrubbed_in_temp_dir'] },
+  { defence: 'scrubbed-env', from: 'cwd: tmp, env, stdio', to: 'cwd: tmp, env: { ...process.env, ...env }, stdio', cases: ['check_runs_scrubbed_in_temp_dir'] },
   { defence: 'run-outside-worker-tree', from: 'cwd: tmp, env, stdio', to: 'cwd: repoReal, env, stdio', cases: ['check_runs_scrubbed_in_temp_dir'] },
   { defence: 'temp-dir-removed', from: 'if (tmp) fs.rmSync(tmp, { recursive: true, force: true });', to: 'void 0;', cases: ['temp_dir_removed'] },
   { defence: 'hard-timeout', from: 'timeout: res.timeoutS * 1000,', to: 'timeout: 60000,', cases: ['check_timeout_is_error'] },
@@ -1004,7 +1015,7 @@ const MUTATIONS = [
   { defence: 'hit-cap-forbid_paths', from: 'if (matchGlob(f.norm, rel) && hits.get(f) < MAX_HITS_PER_RULE) {', to: 'if (matchGlob(f.norm, rel)) {', cases: ['hit_cap_forbid_paths'] },
   { defence: 'hit-cap-forbid_text', from: 'if (idx >= 0 && n++ < MAX_HITS_PER_RULE)', to: 'if (idx >= 0)', cases: ['hit_cap_forbid_text'] },
   { defence: 'rule-cap-counts-features', from: 'if (flat.length > MAX_RULES)', to: "if (flat.filter((f) => f.kind !== 'features').length > MAX_RULES)", cases: ['rule_cap_counts_features'] },
-  { defence: 'registry-before-builtin', from: 'if (reg && Object.prototype.hasOwnProperty.call(reg.checks, name)) {', to: 'if (false) {', cases: ['registry_beats_builtin_of_the_same_name'] },
+  { defence: 'registry-before-builtin', from: 'if (reg && Object.prototype.hasOwnProperty.call(reg.checks, name)) {', to: "if (BUILTINS.has(name)) { out.set(name, { kind: 'builtin', name }); } else if (reg && Object.prototype.hasOwnProperty.call(reg.checks, name)) {", cases: ['registry_beats_builtin_of_the_same_name'] },
   { defence: 'why-label-length', from: "(typeof entry[k] !== 'string' || entry[k].length > 300)", to: "(typeof entry[k] !== 'string')", cases: ['field_limits_why_label_text_id'] },
   { defence: 'why-label-type', from: "(typeof entry[k] !== 'string' || entry[k].length > 300)", to: '(entry[k].length > 300)', cases: ['field_limits_why_label_text_id'] },
   { defence: 'text-length', from: 'entry.text.length > 1000', to: 'entry.text.length > 100000', cases: ['field_limits_why_label_text_id'] },
@@ -1022,25 +1033,53 @@ const MUTATIONS = [
 
 const SRC = fs.readFileSync(REAL, 'utf8');
 
+// A mutation is only evidence if the case goes red BECAUSE the defence is gone, not because the
+// script broke. evalMutation applies it and reports, besides the red messages, the problems:
+//  - the clean fixture must still exit 0 with a clean verdict (the rest of the script still works);
+//  - no child run may crash with an internal error, and no case may fail with a runtime error.
+const CRASH = /gate-verify: internal error:/; // the script's own marker for an uncaught exception (child output can legitimately contain SyntaxError text from a checked fixture)
+function evalMutation(m) {
+  let text = SRC;
+  for (const [from, to] of (m.edits || [[m.from, m.to]])) {
+    const occurrences = text.split(from).length - 1;
+    assert.strictEqual(occurrences, 1, 'mutation anchor must appear exactly once, found ' + occurrences + ': ' + from.slice(0, 60));
+    text = text.replace(from, () => to);
+  }
+  const dir = mk('gv-mut-');
+  const mutated = path.join(dir, 'gate-verify.js');
+  fs.writeFileSync(mutated, text);
+  const reds = []; const problems = [];
+  for (const name of m.cases) {
+    SEEN.length = 0;
+    let err = null;
+    try { C[name](mutated); } catch (e) { err = e; }
+    if (err === null) { problems.push('case ' + name + ' stayed green: the control guards nothing'); continue; }
+    const msg = String(err.message || err);
+    const frames = (String(err.stack).match(/gate-verify\.test\.js:(\d+)/g) || []).map((f) => f.split(':')[1]);
+    reds.push({ name, msg: msg.split('\n')[0].slice(0, 200) + ' [test line ' + (frames[1] || frames[0]) + ']' });
+    if (err instanceof TypeError || err instanceof ReferenceError || err instanceof SyntaxError) problems.push('case ' + name + ' failed with a runtime error: ' + msg.split('\n')[0]);
+    const crash = SEEN.find((o) => CRASH.test(o));
+    if (crash) problems.push('case ' + name + ' made the script crash: ' + crash.split('\n').find((l) => CRASH.test(l)).slice(0, 160));
+  }
+  SEEN.length = 0;
+  try { C.clean_fixture_exits_0(mutated); } catch (e) { problems.push('clean fixture broken by the mutation: ' + String(e.message).split('\n')[0].slice(0, 160)); }
+  return { reds, problems };
+}
+
 for (const m of MUTATIONS) {
   test('red: removing ' + m.defence + ' turns ' + m.cases.join(', ') + ' red', () => {
-    let text = SRC;
-    for (const [from, to] of (m.edits || [[m.from, m.to]])) {
-      const occurrences = text.split(from).length - 1;
-      assert.strictEqual(occurrences, 1, 'mutation anchor must appear exactly once, found ' + occurrences + ': ' + from.slice(0, 60));
-      text = text.replace(from, () => to);
-    }
-    const dir = mk('gv-mut-');
-    const mutated = path.join(dir, 'gate-verify.js');
-    fs.writeFileSync(mutated, text);
-    for (const name of m.cases) {
-      let msg = null;
-      try { C[name](mutated); } catch (e) { msg = String(e.message || e).split('\n')[0].slice(0, 200); }
-      assert.ok(msg !== null, 'case ' + name + ' stayed green with ' + m.defence + ' removed: the control guards nothing');
-      console.log('RED(' + m.defence + ') ' + name + ': ' + msg);
-    }
+    const { reds, problems } = evalMutation(m);
+    for (const r of reds) console.log('RED(' + m.defence + ') ' + r.name + ': ' + r.msg);
+    assert.deepStrictEqual(problems, []);
   });
 }
+
+test('red: evalMutation flags a mutation that merely breaks the script', () => {
+  const broken = evalMutation({ defence: 'x', from: 'return result.violations.length > 0 ? 1 : 0;', to: 'return notDefinedAnywhere.length;', cases: ['forbid_paths_modified'] });
+  assert.ok(broken.problems.length > 0 && broken.problems.some((p) => /crash|clean fixture/.test(p)), JSON.stringify(broken.problems));
+  const syntax = evalMutation({ defence: 'x', from: 'return result.violations.length > 0 ? 1 : 0;', to: 'return ((;', cases: ['forbid_paths_modified'] });
+  assert.ok(syntax.problems.length > 0, 'a syntax-broken script must be flagged');
+});
 
 test('green: every case is a negative control with a mutation, or listed positive-only', () => {
   assert.deepStrictEqual(uncovered(C, MUTATIONS, POSITIVE_ONLY), []);

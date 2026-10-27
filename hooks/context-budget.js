@@ -30,6 +30,9 @@
  *    grew >= step (default 50000; config context_budget.step / env AUTOPILOT_CONTEXT_BUDGET_STEP)
  *    since that tier's last fire; the context at last fire lives in the state file
  *    (lastT1Context/lastT2Context). step 0 = remind on every call past the threshold.
+ *    mode "once" (config context_budget.mode / env AUTOPILOT_CONTEXT_BUDGET_MODE=once): each tier speaks at most
+ *    once per session, however far context grows; flags onceT1Fired/onceT2Fired in the same state file, never
+ *    cleared by a drop below the threshold. The default mode (warn) is unchanged.
  *    Two restart rules: context falling by >= step since the last reminder starts a new count,
  *    and context dropping below a tier's threshold resets that tier (the next climb reminds).
  *    PostToolUse cannot deny and /clear is a USER action — no pretend
@@ -228,6 +231,17 @@ function resetBelowTiers(st, contextTokens, cfg) {
   if (contextTokens < cfg.t2) st.lastT2Context = 0;
 }
 
+// context_budget.mode "once" (BL-0309 gap 6): each tier speaks at most once per session. The flags live in the
+// same state file as the step marks (onceT1Fired / onceT2Fired) and, unlike lastT1Context/lastT2Context, are NOT
+// cleared when context falls back under the threshold. Any other mode returns the decision untouched.
+function onceFilter(st, cfg, d) {
+  if (cfg.mode !== 'once' || !d || !d.tier) return d;
+  const key = d.tier === 't2' ? 'onceT2Fired' : 'onceT1Fired';
+  if (st[key] === true) return { tier: null, message: null };
+  st[key] = true;
+  return d;
+}
+
 function saveState(file, st) {
   const tmp = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(tmp, JSON.stringify(st));
@@ -394,10 +408,10 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
       st.lastContext = contextTokens;
       st.observedMax = Math.max(Number.isFinite(st.observedMax) ? st.observedMax : 0, contextTokens);
       resetBelowTiers(st, contextTokens, liveCfg);
-      const d = budgetDecision(
+      const d = onceFilter(st, cfg, budgetDecision(
         { contextTokens, calls: st.calls, lastT1Context: st.lastT1Context, lastT2Context: st.lastT2Context },
         { ...liveCfg, windowSource: 'statusline', autocompactWindow: autocompactForT2(contextTokens, liveCfg.t2, payload, st.knownModel) },
-      );
+      ));
       if (d.tier === 't1') {
         st.lastT1Context = contextTokens;
         const message = withAutocompactTip(d.message, liveWindow, payload, st.knownModel);
@@ -451,14 +465,14 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
             ? tiersForKnownWindow(cfg, rememberedWindow)
             : scaleTiers(cfg, inferWindowTokens(st.observedMax));
           resetBelowTiers(st, tokens, liveCfg);
-          const d = budgetDecision(
+          const d = onceFilter(st, cfg, budgetDecision(
             { contextTokens: tokens, calls: st.calls, lastT1Context: st.lastT1Context, lastT2Context: st.lastT2Context },
             rememberedWindow !== null
               ? { ...liveCfg, windowSource: 'session-window', autocompactWindow: autocompactForT2(tokens, liveCfg.t2, payload, st.knownModel) }
               // Unknown window: no live file, nothing remembered, and observedMax < 200K (200K and
               // 1M are indistinguishable). A user-explicit T2 keeps today's directive behaviour.
               : { ...liveCfg, windowUnknown: !cfg.explicitT2 && st.observedMax < BASE_WINDOW },
-          );
+          ));
           if (d.tier === 't1' || (d.tier === 't2' && d.advisory)) {
             if (d.tier === 't2') { st.lastT2Context = tokens; }
             else { st.lastT1Context = tokens; }

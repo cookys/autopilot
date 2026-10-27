@@ -20,6 +20,21 @@
  *                 *.spec.*, evals/**
  *   product:      everything else
  *
+ * Process-document class (BL-0309 gap 2, additive): a PROCESS path is planning
+ * paper that moves no product — docs/plans/**, docs/projects/**, docs/backlog/**,
+ * docs/BACKLOG.md, docs/adr/**. Process paths stay inside product_files (the
+ * product/verification split above is unchanged); classify additionally emits
+ * process_files (the subset of product_files that are process paths). A burst
+ * is PROCESS-ONLY when product_files > 0, process_files >= product_files and it
+ * did not land (integrated !== true: no merge, no push). check counts consecutive
+ * process-only bursts; DEFAULT_PROCESS_THRESHOLD (3, same reasoning as the
+ * verification threshold: one plan burst is normal, three in a row with nothing
+ * landed is planning-without-shipping) trips process_only_tripped and exits 1.
+ * Rows without a process_files field are never process-only, so every existing
+ * bursts file keeps its verdict. Any burst with real product delta, or with
+ * integrated:true, resets the process streak; a zero-product burst also resets it
+ * (that shape belongs to the verification fuse).
+ *
  * Scoped-reverify rule (KR4 third leg): re-verifying a FINDING re-runs the
  * finding's surface plus the frozen gate set — a burst declaring
  * reverify.mode="full-suite" for a finding is an IMMEDIATE violation
@@ -27,8 +42,8 @@
  *
  * Modes:
  *   classify --names <file>
- *     Reads newline-separated changed paths, emits {product_files, verification_files}.
- *   check --bursts <file> [--threshold N]
+ *     Reads newline-separated changed paths, emits {product_files, verification_files, process_files}.
+ *   check --bursts <file> [--threshold N] [--process-threshold N]
  *     Bursts file: JSONL rows {burst_id, product_files, verification_files,
  *     reverify?: {mode:"scoped"|"full-suite", finding_id}}.
  *     Emits {tripped, consecutive_zero_product, threshold, violations[]};
@@ -40,6 +55,14 @@
 const fs = require('fs');
 
 const DEFAULT_THRESHOLD = 3;
+const DEFAULT_PROCESS_THRESHOLD = 3;
+const PROCESS_PATTERNS = [
+  /^docs\/plans\//u,
+  /^docs\/projects\//u,
+  /^docs\/backlog\//u,
+  /^docs\/BACKLOG\.md$/u,
+  /^docs\/adr\//u,
+];
 const VERIFICATION_PATTERNS = [
   /^hooks\/tests\//u,
   /(^|\/)tests?\//u,
@@ -57,7 +80,7 @@ function usage(message) {
 function parseArgs(argv) {
   const mode = argv[0];
   if (!['classify', 'check'].includes(mode)) usage('mode must be classify|check');
-  const opts = { mode, threshold: DEFAULT_THRESHOLD };
+  const opts = { mode, threshold: DEFAULT_THRESHOLD, processThreshold: DEFAULT_PROCESS_THRESHOLD };
   for (let i = 1; i < argv.length; i += 1) {
     const arg = argv[i];
     const value = argv[i + 1];
@@ -65,6 +88,7 @@ function parseArgs(argv) {
     if (arg === '--names') opts.names = value;
     else if (arg === '--bursts') opts.bursts = value;
     else if (arg === '--threshold') opts.threshold = Number(value);
+    else if (arg === '--process-threshold') opts.processThreshold = Number(value);
     else if (arg === '--strike-identity-file') opts.strikeIdentityFile = value;
     else if (arg === '--strike-store') opts.strikeStore = value;
     else usage(`unknown argument: ${arg}`);
@@ -73,6 +97,7 @@ function parseArgs(argv) {
   if (mode === 'classify' && !opts.names) usage('classify requires --names');
   if (mode === 'check' && !opts.bursts) usage('check requires --bursts');
   if (!Number.isInteger(opts.threshold) || opts.threshold < 1) usage('--threshold must be a positive integer');
+  if (!Number.isInteger(opts.processThreshold) || opts.processThreshold < 1) usage('--process-threshold must be a positive integer');
   // Strike emission (plan 2026-08-17-brain-seat-exam-suite KR3b): check-mode only,
   // both flags or neither — a half-wired emitter is a dead gate, refuse it loudly.
   if ((opts.strikeIdentityFile != null) !== (opts.strikeStore != null)) {
@@ -88,6 +113,10 @@ function isVerificationPath(candidate) {
   return VERIFICATION_PATTERNS.some((pattern) => pattern.test(candidate));
 }
 
+function isProcessPath(candidate) {
+  return !isVerificationPath(candidate) && PROCESS_PATTERNS.some((pattern) => pattern.test(candidate));
+}
+
 function classify(opts) {
   let raw;
   try {
@@ -101,6 +130,7 @@ function classify(opts) {
     schema_version: 1,
     product_files: names.length - verification,
     verification_files: verification,
+    process_files: names.filter(isProcessPath).length,
   })}\n`);
 }
 
@@ -121,6 +151,8 @@ function check(opts) {
   const violations = [];
   let consecutive = 0;
   let maxConsecutive = 0;
+  let processStreak = 0;
+  let maxProcessStreak = 0;
   for (const burst of bursts) {
     if (burst.reverify && burst.reverify.mode === 'full-suite') {
       violations.push({
@@ -134,18 +166,26 @@ function check(opts) {
     if (product === 0 && verification >= 0) consecutive += 1;
     else consecutive = 0;
     if (consecutive > maxConsecutive) maxConsecutive = consecutive;
+    const processFiles = Number(burst.process_files) || 0;
+    const processOnly = product > 0 && processFiles >= product && burst.integrated !== true;
+    processStreak = processOnly ? processStreak + 1 : 0;
+    if (processStreak > maxProcessStreak) maxProcessStreak = processStreak;
   }
   const tripped = maxConsecutive >= opts.threshold;
+  const processOnlyTripped = maxProcessStreak >= opts.processThreshold;
   const result = {
     schema_version: 1,
     artifact_type: 'stall_fuse_result',
     tripped,
     consecutive_zero_product: maxConsecutive,
     threshold: opts.threshold,
+    consecutive_process_only: maxProcessStreak,
+    process_threshold: opts.processThreshold,
+    process_only_tripped: processOnlyTripped,
     violations,
   };
   process.stdout.write(`${JSON.stringify(result)}\n`);
-  const failing = tripped || violations.length > 0;
+  const failing = tripped || processOnlyTripped || violations.length > 0;
   if (failing && opts.strikeIdentityFile) {
     // Fail closed: a trip that cannot be recorded as a strike must not exit as a
     // plain trip — the revocation ledger is load-bearing (KR3b).

@@ -375,4 +375,21 @@ EOF
 P="$(node "$SCRIPT" parse --backlog "$TEST_TMP/trigger-fw.md" --today 2026-10-19)"
 assert_contains "$P" '"trigger_type": "event"' "parse accepts a fullwidth colon after Trigger-Type"
 
+# ── BL-0309 gap 2: top-stale hint ──
+ST="$TEST_TMP/top-state.json"
+node "$SCRIPT" top-stale --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" --state "$ST" --today 2026-10-20 >/dev/null
+assert_exit_code "$?" "0" "top-stale first run records state"
+OUT="$(node "$SCRIPT" top-stale --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" --state "$ST" --today 2026-10-21)"
+assert_contains "$OUT" '"stale": false' "1 day unchanged is not stale"
+OUT="$(node "$SCRIPT" top-stale --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" --state "$ST" --today 2026-10-23)"
+assert_contains "$OUT" '"stale": true' "3 days unchanged is stale"
+assert_contains "$OUT" 'User-preferred mechanical unit' "hint names the head"
+cat > "$TEST_TMP/prefs2.json" <<'JSON'
+{"class_weights":{"mechanical-impl":1,"standard-impl":5}}
+JSON
+OUT="$(node "$SCRIPT" top-stale --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs2.json" --state "$ST" --today 2026-10-30)"
+assert_contains "$OUT" '"stale": false' "a changed head resets the clock"
+TS_RC=0; node "$SCRIPT" top-stale --candidates "$TEST_TMP/candidates.json" --preferences "$TEST_TMP/prefs.json" >/dev/null 2>&1 || TS_RC=$?
+assert_exit_code "$TS_RC" "2" "top-stale without --state is a usage error"
+
 finalize_test

@@ -32,8 +32,8 @@ function configPath(opts) {
 function normMode(raw, where, warnings) {
   if (raw === undefined || raw === null || raw === '') return null;
   const m = String(raw).trim().toLowerCase();
-  if (m === 'off' || m === 'warn') return m;
-  warnings.push(`context_budget mode "${raw}" (${where}) is not off|warn, so it is ignored and the hook stays on`);
+  if (m === 'off' || m === 'warn' || m === 'once') return m;
+  warnings.push(`context_budget mode "${raw}" (${where}) is not off|warn|once, so it is ignored and the hook stays on`);
   return null;
 }
 

@@ -46,6 +46,15 @@
  *     AUTOPILOT_ROOT_RUN_ID is set; otherwise nothing is written. An implicit append failure
  *     warns on stderr and exits 0; only the explicit --ledger path exits 1.
  *
+ *   top-stale --candidates <file> --preferences <file> --state <file> [--today YYYY-MM-DD]
+ *        [--stale-days N]
+ *     BL-0309 gap 2 hint: ranks exactly as pick does and compares the top auto-eligible title with the
+ *     one remembered in --state ({title, since}). Same title for >= N whole UTC days (default 3) emits
+ *     stale:true with a hint; a different title (or no state) records {title, since: today}. Advisory,
+ *     always exit 0, state written only to the explicit --state path. Why 3: /next runs at least once
+ *     per working session, so a queue head unchanged over three calendar days means the head is not
+ *     being consumed (sessions are producing plans/backlog instead); 1-2 days is ordinary multi-day work.
+ *
  * Exit: 0 ok (also when no candidate is auto-eligible — pick is null) · 2 usage.
  * Node >= 20.10 built-ins.
  */
@@ -83,7 +92,7 @@ function parseUtcDay(text) {
 
 function parseArgs(argv) {
   const mode = argv[0];
-  if (!['parse', 'pick'].includes(mode)) usage('mode must be parse|pick');
+  if (!['parse', 'pick', 'top-stale'].includes(mode)) usage('mode must be parse|pick');
   const opts = { mode, round: null };
   for (let i = 1; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -96,6 +105,8 @@ function parseArgs(argv) {
     else if (arg === '--readiness') opts.readiness = value;
     else if (arg === '--ledger') opts.ledger = value;
     else if (arg === '--decision-id') opts.decisionId = value;
+    else if (arg === '--state') opts.state = value;
+    else if (arg === '--stale-days') opts.staleDays = Number(value);
     else if (arg === '--round') opts.round = Number(value);
     else if (arg === '--brain-status') opts.brainStatus = value;
     else if (arg === '--seat-class') opts.seatClass = value;
@@ -108,7 +119,9 @@ function parseArgs(argv) {
   if (opts.today !== undefined && parseUtcDay(opts.today) === null) {
     usage('--today must be a real calendar date, YYYY-MM-DD');
   }
-  if (mode === 'pick' && (!opts.candidates || !opts.preferences)) {
+  if (mode === 'top-stale' && !opts.state) usage('top-stale requires --state');
+  if (opts.staleDays !== undefined && (!Number.isInteger(opts.staleDays) || opts.staleDays < 1)) usage('--stale-days must be a positive integer');
+  if ((mode === 'pick' || mode === 'top-stale') && (!opts.candidates || !opts.preferences)) {
     usage('pick requires --candidates and --preferences');
   }
   if (opts.seatClass && !['incumbent', 'candidate'].includes(opts.seatClass)) {
@@ -253,23 +266,7 @@ function askFirstReason(row) {
   return null;
 }
 
-function pick(opts) {
-  const brainSeat = checkBrainSeat(opts);
-  let candidates;
-  let preferences;
-  try {
-    candidates = JSON.parse(fs.readFileSync(opts.candidates, 'utf8'));
-    preferences = JSON.parse(fs.readFileSync(opts.preferences, 'utf8'));
-  } catch (err) {
-    usage('candidates/preferences unreadable or invalid JSON');
-  }
-  if (!Array.isArray(candidates)) usage('candidates must be a JSON array');
-  const weights = (preferences && preferences.class_weights) || {};
-  const readiness = opts.readiness && fs.existsSync(opts.readiness)
-    ? JSON.parse(fs.readFileSync(opts.readiness, 'utf8'))
-    : {};
-
-  const todayMs = parseUtcDay(opts.today !== undefined ? opts.today : new Date().toISOString().slice(0, 10));
+function rankCandidates(candidates, weights, todayMs) {
   const askFirst = [];
   const eligible = [];
   for (const row of candidates) {
@@ -289,6 +286,65 @@ function pick(opts) {
     if (ea !== eb) return eb - ea;
     return a.title < b.title ? -1 : a.title > b.title ? 1 : 0;
   });
+  return { askFirst, eligible };
+}
+
+function topStale(opts) {
+  let candidates;
+  let preferences;
+  try {
+    candidates = JSON.parse(fs.readFileSync(opts.candidates, 'utf8'));
+    preferences = JSON.parse(fs.readFileSync(opts.preferences, 'utf8'));
+  } catch (err) {
+    usage('candidates/preferences unreadable or invalid JSON');
+  }
+  if (!Array.isArray(candidates)) usage('candidates must be a JSON array');
+  const weights = (preferences && preferences.class_weights) || {};
+  const todayText = opts.today !== undefined ? opts.today : new Date().toISOString().slice(0, 10);
+  const todayMs = parseUtcDay(todayText);
+  const staleDays = opts.staleDays || 3;
+  const { eligible } = rankCandidates(candidates, weights, todayMs);
+  const top = eligible.length > 0 ? eligible[0].title : null;
+  let prior = null;
+  try {
+    prior = JSON.parse(fs.readFileSync(opts.state, 'utf8'));
+  } catch { /* no state yet */ }
+  const priorMs = prior && typeof prior.since === 'string' ? parseUtcDay(prior.since) : null;
+  const same = top !== null && prior && prior.title === top && priorMs !== null;
+  const days = same ? Math.max(0, Math.round((todayMs - priorMs) / 86400000)) : 0;
+  const stale = Boolean(same && days >= staleDays);
+  if (!same) {
+    fs.writeFileSync(opts.state, `${JSON.stringify({ title: top, since: todayText })}\n`);
+  }
+  process.stdout.write(`${JSON.stringify({
+    schema_version: 1,
+    artifact_type: 'next_pick_top_stale_result',
+    top,
+    days_unchanged: days,
+    stale_days: staleDays,
+    stale,
+    ...(stale ? { hint: `queue head "${top}" has not changed for ${days} days — consume it or re-rank it; planning more rows does not move the queue` } : {}),
+  }, null, 1)}\n`);
+}
+
+function pick(opts) {
+  const brainSeat = checkBrainSeat(opts);
+  let candidates;
+  let preferences;
+  try {
+    candidates = JSON.parse(fs.readFileSync(opts.candidates, 'utf8'));
+    preferences = JSON.parse(fs.readFileSync(opts.preferences, 'utf8'));
+  } catch (err) {
+    usage('candidates/preferences unreadable or invalid JSON');
+  }
+  if (!Array.isArray(candidates)) usage('candidates must be a JSON array');
+  const weights = (preferences && preferences.class_weights) || {};
+  const readiness = opts.readiness && fs.existsSync(opts.readiness)
+    ? JSON.parse(fs.readFileSync(opts.readiness, 'utf8'))
+    : {};
+
+  const todayMs = parseUtcDay(opts.today !== undefined ? opts.today : new Date().toISOString().slice(0, 10));
+  const { askFirst, eligible } = rankCandidates(candidates, weights, todayMs);
 
   const pickRecord = {
     candidates_digest: sha256(JSON.stringify(candidates)),
@@ -345,6 +401,7 @@ function onAJob() {
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.mode === 'parse') parseBacklog(opts);
+  else if (opts.mode === 'top-stale') topStale(opts);
   else pick(opts);
 }
 

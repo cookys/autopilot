@@ -117,4 +117,39 @@ AUDIT_WIRED="$(grep -A 3 'check-blueprint-conformance.js audit' "$PROTOCOL" | gr
 assert_eq "1" "$FUSE_WIRED" "round protocol wires both strike flags on the fuse check"
 assert_eq "1" "$AUDIT_WIRED" "round protocol wires both strike flags on the conformance audit"
 
+# ── BL-0309 gap 2: process-document class (additive) ──
+cat > "$TEST_TMP/pnames.txt" <<'EOF'
+docs/plans/2026-10-27-x.md
+docs/BACKLOG.md
+docs/backlog/foo.md
+docs/projects/INDEX.md
+docs/notes.md
+src/a.js
+hooks/tests/docs/plans/x.test.sh
+EOF
+OUT="$(node "$SCRIPT" classify --names "$TEST_TMP/pnames.txt")"
+assert_contains "$OUT" '"process_files":4' "process paths counted (verification-looking path excluded)"
+assert_contains "$OUT" '"product_files":6' "process paths stay inside product_files (split unchanged)"
+cat > "$TEST_TMP/proc.jsonl" <<'EOF'
+{"burst_id":"b1","product_files":2,"verification_files":0,"process_files":2}
+{"burst_id":"b2","product_files":1,"verification_files":0,"process_files":1}
+{"burst_id":"b3","product_files":3,"verification_files":1,"process_files":3}
+EOF
+OUT="$(node "$SCRIPT" check --bursts "$TEST_TMP/proc.jsonl")"
+assert_exit_code "$?" "1" "three plan-only bursts with nothing landed trip"
+assert_contains "$OUT" '"process_only_tripped":true' "process-only trip flagged"
+assert_contains "$OUT" '"tripped":false' "verification fuse verdict unchanged"
+# negative controls: landing, real product delta, or no process_files field never trips
+sed 's/"process_files":1}/"process_files":1,"integrated":true}/' "$TEST_TMP/proc.jsonl" > "$TEST_TMP/proc-landed.jsonl"
+node "$SCRIPT" check --bursts "$TEST_TMP/proc-landed.jsonl" >/dev/null
+assert_exit_code "$?" "0" "an integrated burst resets the process streak"
+sed 's/"process_files":1}/"process_files":0}/' "$TEST_TMP/proc.jsonl" > "$TEST_TMP/proc-prod.jsonl"
+node "$SCRIPT" check --bursts "$TEST_TMP/proc-prod.jsonl" >/dev/null
+assert_exit_code "$?" "0" "a burst with product delta resets the process streak"
+sed 's/,"process_files":[0-9]*//' "$TEST_TMP/proc.jsonl" > "$TEST_TMP/proc-legacy.jsonl"
+node "$SCRIPT" check --bursts "$TEST_TMP/proc-legacy.jsonl" >/dev/null
+assert_exit_code "$?" "0" "legacy rows without process_files keep their verdict"
+node "$SCRIPT" check --bursts "$TEST_TMP/proc.jsonl" --process-threshold 4 >/dev/null
+assert_exit_code "$?" "0" "process threshold honored"
+
 finalize_test

@@ -277,6 +277,7 @@ function readSessionRoot(sessionId, opts = {}) {
     m = JSON.parse(fs.readFileSync(path.join(dir, `${session}.json`), 'utf8'));
   } catch { return out; }
   if (!m || typeof m !== 'object') return out;
+  if (m.level !== null && !LEVELS.has(m.level)) return out; // same validity as readSessionRecord
   out.found = true;
   const expires = Date.parse(m.expires_at);
   out.expired = !(expires > now);

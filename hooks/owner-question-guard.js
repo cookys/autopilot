@@ -65,6 +65,9 @@ const ADDRESSES_OWNER = [
 // A rhetorical question ("這不是很簡單嗎？", "難道...？") is not put to the owner: it only skips the question-mark rule, never an explicit wait phrase.
 const RHETORICAL = [/不是[^。？?！]*嗎/, /難道/, /豈不是|何嘗不|誰不/, /\bisn'?t it\b|\bright\?$/i];
 
+// "沒有要你決定的事", "不需要你批准": the phrase is negated, nothing is awaited.
+const NEGATED = /(?:沒有|沒|無需|不需要|不用|不必|毋須|不會|不要|\bno\b|\bnot\b|\bnothing\b)[^，。,；;]{0,6}[你您]|\b(?:no|not|nothing)\b[^.,;]{0,20}\byour\b/i;
+
 function optedOut(env, cfg) {
   const v = env.AUTOPILOT_OWNER_QUESTION_GUARD;
   if (typeof v === 'string' && ['off', 'false', '0', 'no'].includes(v.trim().toLowerCase())) return true;
@@ -95,7 +98,7 @@ function sentences(text) {
 // Returns the first sentence that waits for the owner, or null.
 function findOwnerQuestion(text) {
   for (const s of sentences(text)) {
-    if (OWNER_WAIT_PATTERNS.some((re) => re.test(s))) return s;
+    if (!NEGATED.test(s) && OWNER_WAIT_PATTERNS.some((re) => re.test(s))) return s;
     if (QUESTION_MARK.test(s) && !RHETORICAL.some((re) => re.test(s)) && ADDRESSES_OWNER.some((re) => re.test(s))) return s;
   }
   return null;

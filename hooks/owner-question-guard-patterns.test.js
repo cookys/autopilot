@@ -74,6 +74,9 @@ const SHOULD_NOT = [
   '這批變更需要經過測試。',
   'You can read the log under /tmp.',
   '為什麼會這樣？因為 cache 過期。',
+  '已完成清理，沒有要你決定的事。',
+  '這步不需要你批准，我直接做。',
+  'Nothing here needs your approval.',
 ];
 
 test('SHOULD table is big enough and every sentence is found', () => {

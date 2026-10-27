@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://autopilot.local/schemas/gate-rules.schema.json",
   "title": "GateRules",
-  "description": "Data-only rule list read by scripts/gate-verify.js (plan docs/plans/2026-10-26-depth0-per-turn-gate.md section 3.2). A rule never carries command text. Every path/glob is repo-relative, normalised, not absolute, no '..', realpath inside the repo (checked by the verifier; not expressible here). Globs support only literals, '*', '**' (whole segment) and '?'. At most 40 rules in total, ids unique across all kinds. gate-verify.js is the authority; this file documents the shape and is pinned to it by scripts/gate-verify.test.js.",
+  "description": "Data-only rule list read by scripts/gate-verify.js (plan docs/plans/2026-10-26-depth0-per-turn-gate.md section 3.2). A rule never carries command text. Every path/glob is repo-relative, normalised, not absolute, no '..', realpath inside the repo (checked by the verifier; not expressible here). Globs support only literals, '*', '**' (whole segment) and '?'. At most 40 rules in total, ids unique across all kinds. What the worker changed is judged from the filesystem against the base object database (deleted, added, or different bytes/mode/symlink target), never from the worker's index, ignore rules or git config; the worktree walk skips .git, does not follow symlinks and stops with exit 2 after 200000 entries per operation. gate-verify.js is the authority; this file documents the shape and is pinned to it by scripts/gate-verify.test.js.",
   "type": "object",
   "required": ["v"],
   "additionalProperties": false,

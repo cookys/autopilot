@@ -108,6 +108,7 @@ function run(S, ctx, rules, o) {
   else args.push('--turn', '1');
   args.push('--repo', ctx.dir, '--rules', rf, '--base', o.base || ctx.base, '--json');
   if (o.mode) args.push('--mode', o.mode);
+  if (o.args) args.push(...o.args);
   const r = cp.spawnSync(process.execPath, args, { env: cleanEnv(o.env), encoding: 'utf8', timeout: 60000 });
   let out = null;
   try { out = JSON.parse(r.stdout); } catch (e) { /* keep null */ }
@@ -463,7 +464,7 @@ C.replace_ref_cannot_add_require_text_target = (S) => {
   expectTwo(run(S, ctx, L({ require_text: [{ id: 'R3', path: 'src/later.js', text: 'x' }] }), { check: true }));
 };
 C.git_env_is_not_inherited = (S) => {
-  const ctx = makeRepo(); const other = makeRepo();
+  const ctx = makeRepo(); const other = makeRepo({ 'unique.txt': String(Math.random()) });
   write(ctx, 'src/legacy/new.js', '// new\n');
   const excl = path.join(ctx.aux, 'excl'); fs.writeFileSync(excl, 'src/legacy/\n');
   const env = {
@@ -586,6 +587,105 @@ C.conflict_marker_forms = (S) => {
   }
 };
 
+// ---- round-3 controls: the worker's own index, ignore rules and config are never trusted
+
+function writeGit(ctx, rel, text) { fs.mkdirSync(path.dirname(path.join(ctx.dir, '.git', rel)), { recursive: true }); fs.writeFileSync(path.join(ctx.dir, '.git', rel), text); }
+const FORBID = L({ forbid_paths: [{ id: 'R1', glob: 'src/legacy/**', why: 'frozen module' }] });
+
+C.forbid_paths_deleted = (S) => {
+  const ctx = makeRepo(); fs.rmSync(path.join(ctx.dir, 'src/legacy/old.js'));
+  expectViolation(run(S, ctx, FORBID), 'R1', /^src\/legacy\/old\.js$/);
+};
+C.forbid_paths_mode_change = (S) => {
+  const ctx = makeRepo(); fs.chmodSync(path.join(ctx.dir, 'src/legacy/old.js'), 0o755);
+  expectViolation(run(S, ctx, FORBID), 'R1', /old\.js/);
+};
+C.forbid_paths_symlink_retarget = (S) => {
+  const ctx = makeRepo({ 'src/legacy/ln': null });
+  fs.symlinkSync('a', path.join(ctx.dir, 'src/legacy/ln')); git(ctx.dir, 'add', '-A'); git(ctx.dir, 'commit', '-q', '-m', 'ln');
+  const base2 = git(ctx.dir, 'rev-parse', 'HEAD'); ctx.base = base2;
+  expectClean(run(S, ctx, FORBID));
+  fs.rmSync(path.join(ctx.dir, 'src/legacy/ln')); fs.symlinkSync('b', path.join(ctx.dir, 'src/legacy/ln'));
+  expectViolation(run(S, ctx, FORBID), 'R1', /legacy\/ln/);
+};
+C.forbid_paths_file_replaced_by_symlink = (S) => {
+  const ctx = makeRepo({ 'src/legacy/ln': 'g' }); // blob hash of "g" equals the hash of a symlink to "g"
+  expectClean(run(S, ctx, FORBID));
+  fs.rmSync(path.join(ctx.dir, 'src/legacy/ln')); fs.symlinkSync('g', path.join(ctx.dir, 'src/legacy/ln'));
+  expectViolation(run(S, ctx, FORBID), 'R1', /legacy\/ln/);
+};
+C.forbid_paths_unchanged_is_clean = (S) => {
+  const ctx = makeRepo(); // touch without changing bytes
+  const f = path.join(ctx.dir, 'src/legacy/old.js'); const t = new Date(Date.now() + 5000); fs.utimesSync(f, t, t);
+  expectClean(run(S, ctx, FORBID));
+};
+C.worker_exclude_info_cannot_hide_new_file = (S) => {
+  const ctx = makeRepo(); writeGit(ctx, 'info/exclude', 'src/legacy/\n');
+  write(ctx, 'src/legacy/new.js', '// new\n');
+  expectViolation(run(S, ctx, FORBID), 'R1', /^src\/legacy\/new\.js$/);
+};
+C.worker_excludes_file_cannot_hide_new_file = (S) => {
+  const ctx = makeRepo(); const ex = path.join(ctx.aux, 'ex'); fs.writeFileSync(ex, 'src/legacy/\n');
+  git(ctx.dir, 'config', 'core.excludesFile', ex);
+  write(ctx, 'src/legacy/new.js', '// new\n');
+  expectViolation(run(S, ctx, FORBID), 'R1', /^src\/legacy\/new\.js$/);
+};
+C.worker_gitignore_cannot_hide_new_file = (S) => {
+  const ctx = makeRepo(); write(ctx, '.gitignore', 'src/legacy/*.gen\n');
+  git(ctx.dir, 'add', '-A'); git(ctx.dir, 'commit', '-q', '-m', 'ignore');
+  write(ctx, 'src/legacy/x.gen', 'generated\n');
+  assert.strictEqual(git(ctx.dir, 'status', '--porcelain'), '', 'fixture: git itself does not see the ignored file');
+  expectViolation(run(S, ctx, FORBID), 'R1', /^src\/legacy\/x\.gen$/);
+};
+C.worker_assume_unchanged_cannot_hide_edit = (S) => {
+  const ctx = makeRepo(); git(ctx.dir, 'update-index', '--assume-unchanged', 'src/legacy/old.js');
+  write(ctx, 'src/legacy/old.js', '// edited\n');
+  assert.strictEqual(git(ctx.dir, 'diff', '--name-only'), '', 'fixture: git diff does not see the edit');
+  expectViolation(run(S, ctx, FORBID), 'R1', /^src\/legacy\/old\.js$/);
+};
+C.worker_skip_worktree_cannot_hide_edit = (S) => {
+  const ctx = makeRepo(); git(ctx.dir, 'update-index', '--skip-worktree', 'src/legacy/old.js');
+  write(ctx, 'src/legacy/old.js', '// edited\n');
+  assert.strictEqual(git(ctx.dir, 'diff', '--name-only'), '', 'fixture: git diff does not see the edit');
+  expectViolation(run(S, ctx, FORBID), 'R1', /^src\/legacy\/old\.js$/);
+};
+C.worker_fsmonitor_never_runs = (S) => {
+  const ctx = makeRepo(); const marker = path.join(ctx.aux, 'fsmonitor-ran');
+  const hook = path.join(ctx.aux, 'fsm.sh');
+  fs.writeFileSync(hook, '#!/bin/sh\ntouch ' + marker + '\nprintf "\\0"\n', { mode: 0o755 });
+  git(ctx.dir, 'config', 'core.fsmonitor', hook);
+  write(ctx, 'src/legacy/old.js', '// edited\n'); write(ctx, 'src/legacy/new.js', '// new\n');
+  expectViolation(run(S, ctx, FORBID), 'R1', /legacy/);
+  assert.ok(!fs.existsSync(marker), 'the worker-configured fsmonitor program ran');
+};
+C.forbid_text_sees_ignored_and_untracked = (S) => {
+  const ctx = makeRepo(); write(ctx, '.gitignore', 'src/ign.js\n'); git(ctx.dir, 'add', '-A'); git(ctx.dir, 'commit', '-q', '-m', 'ign');
+  write(ctx, 'src/ign.js', 'console.log(1)\n');
+  expectViolation(run(S, ctx, CLEAN_RULES), 'R4', /^src\/ign\.js:1$/);
+};
+C.builtins_see_ignored_files = (S) => {
+  const ctx = makeRepo(); write(ctx, '.gitignore', 'src/bad.js\nnotes.conf\n'); git(ctx.dir, 'add', '-A'); git(ctx.dir, 'commit', '-q', '-m', 'ign');
+  write(ctx, 'src/bad.js', 'function (\n');
+  expectViolation(run(S, ctx, L({ must_pass: [{ id: 'R5', check: 'js-syntax' }] })), 'R5', /src\/bad\.js/);
+  fs.rmSync(path.join(ctx.dir, 'src/bad.js')); write(ctx, 'notes.conf', 'a\n<<<<<<< HEAD\n');
+  expectViolation(run(S, ctx, L({ must_pass: [{ id: 'R5', check: 'no-conflict-markers' }] })), 'R5', /^notes\.conf:2$/);
+};
+C.no_worker_state_git_commands = (S) => {
+  const src = fs.readFileSync(S, 'utf8');
+  for (const cmd of ['ls-files', 'diff', 'status', 'diff-files', 'diff-index', 'update-index', 'check-ignore', 'add', 'stash', 'grep', 'log']) {
+    assert.ok(!src.includes("'" + cmd + "'"), 'git ' + cmd + ' reads the worker index, ignore rules or config');
+  }
+  assert.ok(src.includes("'core.fsmonitor=false'") && src.includes("'core.hooksPath=/dev/null'") && src.includes("'core.excludesFile=/dev/null'"));
+};
+C.walk_limit_exit_2 = (S) => {
+  const ctx = makeRepo(); for (let i = 0; i < 30; i++) write(ctx, 'src/legacy/n' + i + '.js', '//\n');
+  const r = run(S, ctx, FORBID, { args: ['--walk-limit', '10'] });
+  expectTwo(r, 'walk limit'); assert.match(r.stderr, /exceeds 10 entries/);
+  assert.strictEqual(run(S, ctx, FORBID, { args: ['--walk-limit', '1000'] }).status, 1);
+  expectTwo(run(S, ctx, FORBID, { args: ['--walk-limit', '0'] }));
+  expectTwo(run(S, ctx, FORBID, { args: ['--walk-limit', String(GV.MAX_WALK_ENTRIES + 1)] }));
+};
+
 // ---------------------------------------------------------------- green run
 
 for (const [name, fn] of Object.entries(C)) {
@@ -631,6 +731,7 @@ test('green: schema file matches the validator vocabulary', () => {
 
 function compareSchema(schema) {
   assert.deepStrictEqual(Object.keys(schema.properties).sort(), GV.RULE_KEYS.slice().sort());
+  assert.ok(schema.description.includes(String(GV.MAX_WALK_ENTRIES)), 'walk cap stated in the schema description');
   assert.deepStrictEqual(schema.$defs.argvFlag.enum.slice().sort(), GV.ALLOWED_FLAGS.slice().sort(), 'argv flag allowlist');
   const defFor = { forbid_paths: 'forbidPath', require_files: 'requireFile', require_text: 'requireText', forbid_text: 'forbidText', must_pass: 'mustPass', features: 'feature' };
   for (const [kind, spec] of Object.entries(GV.KIND_FIELDS)) {
@@ -649,12 +750,40 @@ const DEAD_CASES = ['forbid_paths_modified', 'require_files_absent_until_created
 const MUTATIONS = [
   { defence: 'dead-verifier-exit-code', from: 'return result.violations.length > 0 ? 1 : 0;', to: 'return 0;', cases: DEAD_CASES },
   { defence: 'dead-verifier-no-evaluation', from: 'const result = evaluate(prep, input, repoReal, repoReal);', to: 'const result = { violations: [], feature_gaps: [] };', cases: DEAD_CASES },
-  { defence: 'forbid_paths-base-fixed', from: "'--relative', base, '--']", to: "'--relative', 'HEAD', '--']", cases: ['forbid_paths_committed_after_base'] },
-  { defence: 'forbid_paths-untracked-union', from: 'return Array.from(new Set(diff.concat(untracked)));', to: 'return Array.from(new Set(diff.concat([])));', cases: ['forbid_paths_untracked'] },
+  { defence: 'forbid_paths-base-fixed', from: 'const b = baseEntries(repo, base, prefix);', to: "const b = baseEntries(repo, 'HEAD', prefix);", cases: ['forbid_paths_committed_after_base'] },
+  { defence: 'forbid_paths-added-detection', from: 'for (const p of w.keys()) if (!b.has(p)) changed.add(p);', to: '', cases: ['forbid_paths_untracked', 'worker_exclude_info_cannot_hide_new_file'] },
+  { defence: 'forbid_paths-deleted-detection', from: 'if (!we || differs(repoReal, be, we)) changed.add(p);', to: 'if (we && differs(repoReal, be, we)) changed.add(p);', cases: ['forbid_paths_deleted'] },
+  { defence: 'forbid_paths-mode-compare', from: "if (we.kind === 'file' && (be.mode === '100755') !== we.exec) return true;", to: '', cases: ['forbid_paths_mode_change'] },
+  { defence: 'forbid_paths-symlink-target-compare', from: 'e.kind === \'symlink\' ? Buffer.from(fs.readlinkSync(abs)) : fs.readFileSync(abs)', to: 'e.kind === \'symlink\' ? Buffer.alloc(0) : fs.readFileSync(abs)', cases: ['forbid_paths_symlink_retarget'] },
+  { defence: 'forbid_paths-kind-compare', from: 'if (baseKind(be) !== we.kind) return true;', to: '', cases: ['forbid_paths_file_replaced_by_symlink'] },
+  // worker index / ignore / config must not decide what changed: swap the filesystem judgement for git's
+  { defence: 'worker-ignore-rules-added-files', from: 'for (const p of w.keys()) if (!b.has(p)) changed.add(p);',
+    to: "for (const p of nulList(git(repo, ['ls-files', '-z', '--others', '--exclude-standard']).stdout)) changed.add(p);",
+    cases: ['worker_exclude_info_cannot_hide_new_file', 'worker_gitignore_cannot_hide_new_file'] },
+  // core.excludesFile is also neutralised by the -c flag (depth); both defences are removed here
+  { defence: 'worker-config-excludes-file', edits: [
+    ['for (const p of w.keys()) if (!b.has(p)) changed.add(p);', "for (const p of nulList(git(repo, ['ls-files', '-z', '--others', '--exclude-standard']).stdout)) changed.add(p);"],
+    ["const full = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.excludesFile=/dev/null'].concat(args);", 'const full = args;']],
+    cases: ['worker_excludes_file_cannot_hide_new_file'] },
+  { defence: 'worker-index-flags-modified-files', from: 'return wtBlobSha(repoReal, we) !== be.sha;',
+    to: "return nulList(git(repoReal, ['diff', '--name-only', '-z', 'HEAD', '--', we.rel]).stdout).length > 0;",
+    cases: ['worker_assume_unchanged_cannot_hide_edit', 'worker_skip_worktree_cannot_hide_edit'] },
+  { defence: 'git-config-flags-vs-fsmonitor', edits: [
+    ["const full = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.excludesFile=/dev/null'].concat(args);", 'const full = args;'],
+    ['return wtBlobSha(repoReal, we) !== be.sha;', "return nulList(git(repoReal, ['diff', '--name-only', '-z', 'HEAD', '--', we.rel]).stdout).length > 0;"]],
+    cases: ['worker_fsmonitor_never_runs'] },
+  { defence: 'no-index-reading-git-commands', from: "const args = ['--literal-pathspecs', 'ls-tree', '-r', '-z', base];", to: "const args = ['--literal-pathspecs', 'ls-files', '-z', base];", cases: ['no_worker_state_git_commands'] },
+  { defence: 'text-rules-walk-ignored-files', from: 'for (const rel of walkFiles(repoReal, prefixOf(f.norm))) {',
+    to: "for (const rel of nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout)) {", cases: ['forbid_text_sees_ignored_and_untracked'] },
+  { defence: 'conflict-marker-walk-ignored-files', from: "for (const rel of walkFiles(repoReal, '')) {",
+    to: "for (const rel of nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout)) {", cases: ['builtins_see_ignored_files'] },
+  { defence: 'js-syntax-walk-ignored-files', from: "for (const e of walkFs(repoReal, '')) {",
+    to: "for (const e of walkFs(repoReal, '').filter((x) => nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout).includes(x.rel))) {", cases: ['builtins_see_ignored_files'] },
+  { defence: 'walk-limit', from: 'if (++walkState.n > walkState.limit) fail(', to: 'if (++walkState.n < 0) fail(', cases: ['walk_limit_exit_2'] },
   { defence: 'path-dotdot', from: "if (p.split('/').includes('..')) return { error: 'contains a .. segment' };", to: '', cases: ['exit2_dotdot'] },
   { defence: 'path-absolute', from: "if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return { error: 'absolute path' };", to: '', cases: ['exit2_absolute'] },
   { defence: 'path-symlink-containment', from: 'if (!containedInRepo(literalPrefix(n.norm, isGlob), repoReal)) {', to: 'if (false) {', cases: ['exit2_symlink_escape'] },
-  { defence: 'read-symlink-containment', from: "if (!inside(real, repoReal)) return { state: 'skip', reason: 'outside' };", to: '', cases: ['symlinked_file_outside_is_not_read'] },
+  { defence: 'read-symlink-containment', edits: [["if (!inside(real, repoReal)) return { state: 'skip', reason: 'outside' };", ''], [".filter((e) => e.kind === 'file').map", ".filter((e) => e.kind !== 'gitlink').map"]], cases: ['symlinked_file_outside_is_not_read'] },
   { defence: 'rule-unknown-key', from: "if (!RULE_KEYS.includes(k)) errs.push('unknown key: ' + k);", to: '', cases: ['exit2_unknown_key'] },
   { defence: 'rule-unknown-entry-key', from: 'if (!spec.req.includes(k) && !spec.opt.includes(k)) errs.push(', to: 'if (false) errs.push(', cases: ['exit2_unknown_entry_key'] },
   { defence: 'rule-duplicate-id', from: 'else if (ids.has(entry.id))', to: 'else if (false)', cases: ['exit2_dup_id'] },
@@ -710,11 +839,15 @@ const SRC = fs.readFileSync(REAL, 'utf8');
 
 for (const m of MUTATIONS) {
   test('red: removing ' + m.defence + ' turns ' + m.cases.join(', ') + ' red', () => {
-    const occurrences = SRC.split(m.from).length - 1;
-    assert.strictEqual(occurrences, 1, 'mutation anchor must appear exactly once, found ' + occurrences);
+    let text = SRC;
+    for (const [from, to] of (m.edits || [[m.from, m.to]])) {
+      const occurrences = text.split(from).length - 1;
+      assert.strictEqual(occurrences, 1, 'mutation anchor must appear exactly once, found ' + occurrences + ': ' + from.slice(0, 60));
+      text = text.replace(from, () => to);
+    }
     const dir = mk('gv-mut-');
     const mutated = path.join(dir, 'gate-verify.js');
-    fs.writeFileSync(mutated, SRC.replace(m.from, () => m.to));
+    fs.writeFileSync(mutated, text);
     for (const name of m.cases) {
       let msg = null;
       try { C[name](mutated); } catch (e) { msg = String(e.message || e).split('\n')[0].slice(0, 200); }

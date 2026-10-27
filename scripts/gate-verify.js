@@ -25,6 +25,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const cp = require('child_process');
+const crypto = require('crypto');
 
 const MAX_RULES = 40;
 const ID_RE = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -32,6 +33,10 @@ const SHA_RE = /^[0-9a-f]{40}$/;
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_HITS_PER_RULE = 50;
+// Worktree walk cap, per operation (one forbid_paths prefix, one forbid_text rule, one built-in).
+// 200k entries: a large monorepo checkout is ~50k files; 200k is a few seconds of lstat, well
+// inside the hook's 30 s verifier budget, and anything bigger is not a repo this gate should walk.
+const MAX_WALK_ENTRIES = 200000;
 const DEFAULT_CHECK_TIMEOUT_S = 20;
 const MAX_CHECK_TIMEOUT_S = 120;
 const INTERPRETERS = new Set(['node', 'sh', 'bash', 'python3', 'python']);
@@ -67,12 +72,16 @@ function gitEnv() {
 }
 
 function git(repo, args, opts) {
-  const r = cp.spawnSync('git', args, {
+  // Defence in depth: nothing in the worker's .git/config may run code or hide files.
+  // Only object-database reads are used (ls-tree, cat-file, show, rev-parse); none reads the
+  // worker's index, ignore rules or fsmonitor.
+  const full = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.excludesFile=/dev/null'].concat(args);
+  const r = cp.spawnSync('git', full, {
     cwd: repo, env: gitEnv(), stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 * 1024 * 1024,
     timeout: 60000,
   });
   if (r.error) fail('git failed: ' + r.error.message);
-  if (r.status !== 0 && !(opts && opts.allowFail)) fail('git ' + args[0] + ' failed: ' + String(r.stderr).slice(0, 200));
+  if (r.status !== 0 && !(opts && opts.allowFail)) fail('git ' + args.filter((a) => !a.startsWith('-'))[0] + ' failed: ' + String(r.stderr).slice(0, 200));
   return r;
 }
 
@@ -301,7 +310,7 @@ function resolveChecks(flat, repoReal, repo, base, errs) {
 
 function parseArgs(argv) {
   const opts = { json: false, check: false };
-  const withValue = new Set(['--turn', '--repo', '--gate-file', '--rules', '--base', '--mode']);
+  const withValue = new Set(['--turn', '--repo', '--gate-file', '--rules', '--base', '--mode', '--walk-limit']);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--json') opts.json = true;
@@ -394,20 +403,99 @@ function isRegularFileInRepo(repoReal, rel) {
   } catch (e) { return false; }
 }
 
-function worktreeFiles(repo) {
-  const tracked = nulList(git(repo, ['ls-files', '-z']).stdout);
-  const untracked = nulList(git(repo, ['ls-files', '-z', '--others', '--exclude-standard']).stdout);
-  return Array.from(new Set(tracked.concat(untracked)));
+// ---- worker state is read from the filesystem and the object database only ----
+// Never from the worker's index, ignore rules or config: git diff / ls-files / status would trust
+// .git/info/exclude, core.excludesFile, committed .gitignore, assume-unchanged, skip-worktree and
+// core.fsmonitor, all of which the worker controls.
+
+const walkState = { n: 0, limit: MAX_WALK_ENTRIES };
+function newWalk() { walkState.n = 0; }
+function tick() { if (++walkState.n > walkState.limit) fail('worktree walk exceeds ' + walkState.limit + ' entries'); }
+
+function prefixOf(norm) { return literalPrefix(norm, true).join('/'); }
+
+// base side: {path -> {mode, sha}} under `prefix` (all of base when prefix is empty)
+function baseEntries(repo, base, prefix) {
+  const args = ['--literal-pathspecs', 'ls-tree', '-r', '-z', base];
+  if (prefix) args.push('--', prefix);
+  const out = new Map();
+  for (const rec of nulList(git(repo, args).stdout)) {
+    tick();
+    const tab = rec.indexOf('\t');
+    out.set(rec.slice(tab + 1), { mode: rec.slice(0, tab).split(' ')[0], sha: rec.slice(0, tab).split(' ')[2] });
+  }
+  return out;
 }
 
-function changedSince(repo, base) {
-  const diff = nulList(git(repo, ['diff', '--name-only', '-z', '--no-renames', '--no-ext-diff', '--relative', base, '--']).stdout);
-  const untracked = nulList(git(repo, ['ls-files', '-z', '--others', '--exclude-standard']).stdout);
-  return Array.from(new Set(diff.concat(untracked)));
+// worktree side: [{rel, kind: file|symlink|gitlink, exec}] under `prefix`; `.git` skipped,
+// symlinks are entries and are never followed.
+function walkFs(repoReal, prefix) {
+  const out = [];
+  const segs = prefix ? prefix.split('/') : [];
+  let rel = '';
+  for (let i = 0; i < segs.length; i++) {
+    rel = rel ? rel + '/' + segs[i] : segs[i];
+    if (segs[i] === '.git') return out;
+    let st;
+    try { st = fs.lstatSync(path.join(repoReal, rel)); } catch (e) { return out; }
+    if (i < segs.length - 1 && !st.isDirectory()) return out;
+  }
+  function visit(r) {
+    tick();
+    const abs = r ? path.join(repoReal, r) : repoReal;
+    let st;
+    try { st = fs.lstatSync(abs); } catch (e) { return; }
+    if (st.isSymbolicLink()) out.push({ rel: r, kind: 'symlink' });
+    else if (st.isFile()) out.push({ rel: r, kind: 'file', exec: (st.mode & 0o100) !== 0 });
+    else if (st.isDirectory()) {
+      if (r && fs.existsSync(path.join(abs, '.git'))) { out.push({ rel: r, kind: 'gitlink' }); return; }
+      let names;
+      try { names = fs.readdirSync(abs).sort(); } catch (e) { return; }
+      for (const n of names) if (n !== '.git') visit(r ? r + '/' + n : n);
+    }
+  }
+  visit(rel);
+  return out;
+}
+
+function blobSha(buf) {
+  return crypto.createHash('sha1').update('blob ' + buf.length + '\0').update(buf).digest('hex');
+}
+
+function wtBlobSha(repoReal, e) {
+  const abs = path.join(repoReal, e.rel);
+  try { return blobSha(e.kind === 'symlink' ? Buffer.from(fs.readlinkSync(abs)) : fs.readFileSync(abs)); } catch (err) { return null; }
+}
+
+function baseKind(be) { return be.mode === '120000' ? 'symlink' : be.mode === '160000' ? 'gitlink' : 'file'; }
+
+function differs(repoReal, be, we) {
+  if (baseKind(be) !== we.kind) return true;
+  if (we.kind === 'gitlink') return false;
+  if (we.kind === 'file' && (be.mode === '100755') !== we.exec) return true;
+  return wtBlobSha(repoReal, we) !== be.sha;
+}
+
+// Paths that differ between base and the worktree: deleted, added, or different bytes/mode.
+function changedPaths(repo, repoReal, base, prefixes) {
+  const changed = new Set();
+  for (const prefix of new Set(prefixes)) {
+    newWalk();
+    const b = baseEntries(repo, base, prefix);
+    const w = new Map(walkFs(repoReal, prefix).map((e) => [e.rel, e]));
+    for (const [p, be] of b) { const we = w.get(p); if (!we || differs(repoReal, be, we)) changed.add(p); }
+    for (const p of w.keys()) if (!b.has(p)) changed.add(p);
+  }
+  return Array.from(changed).sort();
+}
+
+function walkFiles(repoReal, prefix) {
+  newWalk();
+  return walkFs(repoReal, prefix).filter((e) => e.kind === 'file').map((e) => e.rel);
 }
 
 function builtinNoConflictMarkers(repo, repoReal) {
-  for (const rel of worktreeFiles(repo)) {
+  for (const rel of walkFiles(repoReal, '')) {
     const r = readWorktreeFile(repoReal, rel);
     if (r.state !== 'ok' || r.text.slice(0, 8000).includes('\0')) continue;
     const lines = r.text.split('\n');
@@ -423,8 +511,13 @@ function builtinNoConflictMarkers(repo, repoReal) {
 }
 
 function builtinJsSyntax(repo, repoReal, base) {
-  for (const rel of changedSince(repo, base)) {
-    if (!/\.(js|cjs|mjs)$/.test(rel)) continue;
+  newWalk();
+  const b = baseEntries(repo, base, '');
+  for (const e of walkFs(repoReal, '')) {
+    const rel = e.rel;
+    if (e.kind !== 'file' || !/\.(js|cjs|mjs)$/.test(rel)) continue;
+    const be = b.get(rel);
+    if (be && !differs(repoReal, be, e)) continue; // unchanged since base
     const abs = path.join(repoReal, rel);
     if (readWorktreeFile(repoReal, rel).state !== 'ok') continue;
     const r = cp.spawnSync(process.execPath, ['--check', abs], { cwd: repoReal, stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000, env: { PATH: process.env.PATH } });
@@ -484,7 +577,7 @@ function evaluate(prep, input, repo, repoReal) {
 
   const forbid = wanted('forbid_paths');
   if (forbid.length) {
-    const changed = changedSince(repo, base);
+    const changed = changedPaths(repo, repoReal, base, forbid.map((f) => prefixOf(f.norm)));
     for (const f of forbid) {
       let n = 0;
       for (const rel of changed) {
@@ -502,10 +595,9 @@ function evaluate(prep, input, repo, repoReal) {
   }
   const ft = wanted('forbid_text');
   if (ft.length) {
-    const files = worktreeFiles(repo);
     for (const f of ft) {
       let n = 0;
-      for (const rel of files) {
+      for (const rel of walkFiles(repoReal, prefixOf(f.norm))) {
         if (!matchGlob(f.norm, rel)) continue;
         const r = readWorktreeFile(repoReal, rel);
         if (r.state !== 'ok') continue;
@@ -532,6 +624,10 @@ function evaluate(prep, input, repo, repoReal) {
 function main(argv) {
   const opts = parseArgs(argv);
   if (opts.turn !== undefined && !/^[0-9]{1,9}$/.test(opts.turn)) fail('--turn must be a non-negative integer');
+  if (opts.walk_limit !== undefined) {
+    if (!/^[0-9]{1,6}$/.test(opts.walk_limit) || Number(opts.walk_limit) < 1 || Number(opts.walk_limit) > MAX_WALK_ENTRIES) fail('--walk-limit must be an integer 1-' + MAX_WALK_ENTRIES);
+    walkState.limit = Number(opts.walk_limit); // can only lower the cap (tests)
+  }
   const repo = opts.repo || process.cwd();
   let repoReal;
   try { repoReal = fs.realpathSync(repo); } catch (e) { fail('--repo unreadable: ' + e.message); }
@@ -566,4 +662,4 @@ if (require.main === module) {
   process.exitCode = code;
 }
 
-module.exports = { matchGlob, normaliseRel, KIND_FIELDS, RULE_KEYS, GATE_KEYS, ALLOWED_FLAGS };
+module.exports = { MAX_WALK_ENTRIES, matchGlob, normaliseRel, KIND_FIELDS, RULE_KEYS, GATE_KEYS, ALLOWED_FLAGS };

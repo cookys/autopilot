@@ -1199,8 +1199,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: L
 - **Source**: owner d-32849d39 (A, default off) and d-6f6b706f (A: P0 cap 1 USD, P3 cap 20 USD); plan merged 4ebcb428b; P1 merged ae44b5a0a
-- **Pointer**: docs/plans/2026-10-26-depth0-per-turn-gate.md
-- **Context**: P1 shipped ae44b5a0a: scripts/gate-verify.js, schemas/gate-rules.schema.json, 183 tests, 87 mutations all red; not wired. P3 cap 20 USD approved. P2 open questions: BL-0318, BL-0319.
+- **Pointer**: docs/backlog/depth0-per-turn-gate-status.md
+- **Context**: P1 shipped ae44b5a0a (not wired); P0 evidence bfde42aa1; P3 runs without asking again once acceptance passes; follow-on of BL-0055; P2 questions BL-0318, BL-0319. Detail at Pointer.
 
 ### Owner decision cards: three ways a card is lost or never opened
 - **Id**: BL-0307
@@ -1334,6 +1334,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: bltidy14 candidates (3) and (4), 2026-10-26
 - **Pointer**: docs/backlog/intermittent-red-paid-batch-auth-stop-agy-stdin.md
 
+### fbatch v3 pilot could confirm the develop journal only indirectly
+- **Id**: BL-0317
+- **Status**: open
+- **Since**: 2026-10-27
+- **Origin**: self
+- **Problem**: findings-batch v3 先導測的 instrument_checks 只能用間接證據確認 develop 的紀錄檔，因為 cell repo 在計分後就清掉了。
+- **Impact**: 儀器檢查目前只有間接證據，沒有直接的 journal 檔可查。低優先。
+- **Trigger**: the next paid ON/OFF eval that scores from a develop journal, or the runner is next edited
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: findings-batch-v3 pilot closure 2026-10-27 (self)
+- **Pointer**: docs/backlog/fbatch-v3-journal-indirect-evidence.md
+- **Context**: Direct evidence needs the runner to keep the journal file before the cell repo is cleaned.
+
 ### depth-0 gate P2: exit 2 is turned into allow, and a worker can cause exit 2
 - **Id**: BL-0318
 - **Status**: open
@@ -1361,17 +1375,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: d0gp1 fourth-generation review and acceptance, 2026-10-27 (self)
 - **Pointer**: docs/backlog/depth0-gate-p2-wiring-open-questions.md
 - **Context**: gate-verify runs git with core.fsmonitor=false, core.hooksPath and core.excludesFile set to off; follow-on of BL-0306.
-
-### fbatch v3 pilot could confirm the develop journal only indirectly
-- **Id**: BL-0317
-- **Status**: open
-- **Since**: 2026-10-27
-- **Origin**: self
-- **Problem**: findings-batch v3 先導測的 instrument_checks 只能用間接證據確認 develop 的紀錄檔，因為 cell repo 在計分後就清掉了。
-- **Impact**: 儀器檢查目前只有間接證據，沒有直接的 journal 檔可查。低優先。
-- **Trigger**: the next paid ON/OFF eval that scores from a develop journal, or the runner is next edited
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: findings-batch-v3 pilot closure 2026-10-27 (self)
-- **Pointer**: docs/backlog/fbatch-v3-journal-indirect-evidence.md
-- **Context**: Direct evidence needs the runner to keep the journal file before the cell repo is cleaned.

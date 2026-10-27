@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0320 -->
+<!-- next-id: BL-0318 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1251,7 +1251,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: PEER-REPORTED twgs-revival (peace--claude) 2026-10-26
 - **Pointer**: docs/backlog/orchestrator-self-slowdown-seven-gaps.md
-- **Context**: Efficiency class. Replied 2026-10-26; the seven items and their status are in the sidecar. Items 2 and 6 shipped c9366c79a; item 4 waits on owner card d-f1aea07b; item 3 waits on the decfix merge; items 1, 5, 7 need an ON/OFF eval.
+- **Context**: Efficiency class. Replied 2026-10-26; the seven items and their status are in the sidecar. Items 2 and 6 shipped c9366c79a (top-stale was implemented in the same commit, has no caller now, and wiring it means editing skill guidance, which needs ON/OFF eval); item 4 waits on owner card d-f1aea07b; item 3 waits on the decfix merge; items 1, 5, 7 need an ON/OFF eval.
 
 ### Stamped eval rows may have lost files from their frozen set
 - **Id**: BL-0310
@@ -1334,22 +1334,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: bltidy14 candidates (3) and (4), 2026-10-26
 - **Pointer**: docs/backlog/intermittent-red-paid-batch-auth-stop-agy-stdin.md
 
-### next-pick top-stale hint has no caller
-- **Id**: BL-0317
-- **Status**: open
-- **Since**: 2026-10-27
-- **Origin**: self
-- **Problem**: next-pick 的「佇列頂端沒動」提示（top-stale）已實作（c9366c79a），但沒有任何 skill 或腳本呼叫它；要接線得改 skill 指引。
-- **Impact**: 功能做了卻不會觸發，停滯的佇列頂端還是沒人提醒；是 BL-0309 第 2 項的後半。
-- **Trigger**: an ON/OFF eval slot opens for guidance changes, or BL-0309 item 2 is revisited
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: c9366c79a closure scan 2026-10-27 (self)
-- **Pointer**: docs/backlog/orchestrator-self-slowdown-seven-gaps.md
-- **Context**: Folded into the BL-0309 sidecar (item 2 note) rather than a new sidecar. Wiring edits skill text, so it needs ON/OFF evidence.
-
 ### preflight-release runs five paid slash-entry probes by default
-- **Id**: BL-0318
+- **Id**: BL-0316
 - **Status**: open
 - **Since**: 2026-10-27
 - **Origin**: self
@@ -1363,15 +1349,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Context**: Proposed: make the probe explicit opt-in, or skip automatically when a sentinel or test environment is detected. A change to a check needs a negative control.
 
 ### fbatch v3 pilot could confirm the develop journal only indirectly
-- **Id**: BL-0319
+- **Id**: BL-0317
 - **Status**: open
 - **Since**: 2026-10-27
 - **Origin**: self
 - **Problem**: findings-batch v3 先導測的 instrument_checks 只能用間接證據確認 develop 的紀錄檔，因為 cell repo 在計分後就清掉了。
-- **Impact**: 儀器檢查少了直接證據；若日後有人質疑計分，無法回頭看原始紀錄。低優先。
-- **Trigger**: the next paid ON/OFF eval that scores from a develop journal, or a challenge to the v3 instrument checks
+- **Impact**: 儀器檢查目前只有間接證據，沒有直接的 journal 檔可查。低優先。
+- **Trigger**: the next paid ON/OFF eval that scores from a develop journal, or the runner is next edited
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: findings-batch-v3 pilot closure 2026-10-27 (self)
 - **Pointer**: docs/backlog/fbatch-v3-journal-indirect-evidence.md
-- **Context**: Direct evidence needs the runner to keep the journal file before the cell repo is cleaned. The v3 verdict itself (PASS, stamp ea89198b8) does not depend on it.
+- **Context**: Direct evidence needs the runner to keep the journal file before the cell repo is cleaned.

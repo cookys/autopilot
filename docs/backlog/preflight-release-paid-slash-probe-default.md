@@ -1,6 +1,6 @@
 # preflight-release runs five paid slash-entry probes by default
 
-BL-0318. Found by self, 2026-10-27.
+BL-0316. Found by self, 2026-10-27.
 
 `scripts/preflight-release.sh` runs slash-entry-probe by default: 5 real claude-sonnet-5 `claude -p` probes. Only `AUTOPILOT_SKIP_SLASH_PROBE=1` skips them.
 

@@ -134,14 +134,15 @@ function readFacts(gitDir) {
 // Consistency checks, any failure is a cell error (exit 2, an infra_fail row in the campaign), never a guess:
 //   1. the journal exists and every line is "<40hex> <40hex>";
 //   2. its first record is the creation of develop at the fixture's base commit (<git-dir>/fbatch/develop-base);
-//   3. it is a chain: each record's old equals the previous record's new (all zeros after a deletion);
+//   3. it is a chain: each record's old equals the previous record's new; after a deletion (new = zeros) a record may start at any tip, because
+//      `git branch -m X develop` creates develop without an event of its own (an implicit creation, judged like any state);
 //   4. its last new equals the current refs/heads/develop;
 //   5. cross-check with the reflog (secondary evidence): every state the current develop reflog lists must be a state the journal lists. A move made
 //      with the hook disabled (git -c core.hooksPath=..., deleting the hook) breaks 3, 4 or 5.
 // The states judged are every non-zero new of the journal.
 const ZERO = '0'.repeat(40);
 function gitDirOf(repo) {
-  const g = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--absolute-git-dir'], { encoding: 'utf8' });
+  const g = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' });
   if (g.status !== 0) throw new Error('cell repo has no git dir');
   return g.stdout.trim();
 }
@@ -166,13 +167,33 @@ function journalStates(repo) {
   }
   if (!rec.length) throw new Error('develop journal is empty');
   if (rec[0][0] !== ZERO || rec[0][1] !== base) throw new Error('develop journal does not start with the creation of develop at the fixture base');
-  let prev = ZERO;
-  for (const [o, n] of rec) { if (o !== prev) throw new Error(`develop journal is not a chain (a record starts at ${o.slice(0, 7)}, the previous one ended at ${prev.slice(0, 7)}): a move of develop bypassed the hook`); prev = n; }
+  // The chain. `git branch -m X develop` creates develop WITHOUT a reference-transaction event for it (checked on git 2.53: only the deletion of X and the
+  // HEAD symref update are reported), so a develop that vanished (new = zeros) may come back with a record whose old is not the previous new: that old
+  // value is the tip the renamed-in branch had, an implicit creation. It is judged like any other state. A break while develop still existed is a
+  // move that bypassed the hook (exit 2).
+  const states = [];
+  let prev = ZERO; let implicit = false;
+  for (const [o, n] of rec) {
+    if (o !== prev) {
+      if (prev !== ZERO) throw new Error(`develop journal is not a chain (a record starts at ${o.slice(0, 7)}, the previous one ended at ${prev.slice(0, 7)}): a move of develop bypassed the hook`);
+      implicit = true; states.push(o);
+    }
+    if (n !== ZERO) states.push(n);
+    prev = n;
+  }
   const head = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--verify', '-q', 'refs/heads/develop^{commit}'], { encoding: 'utf8' });
-  if (head.status !== 0 || head.stdout.trim() !== prev) throw new Error('develop journal does not end at the current refs/heads/develop: a move of develop bypassed the hook');
-  const states = rec.map((r) => r[1]).filter((n) => n !== ZERO); // journal order, repeats kept (the last one is develop's final state)
+  if (head.status !== 0) throw new Error('refs/heads/develop does not exist (no integration branch is left)');
+  const cur = head.stdout.trim();
+  if (prev === ZERO) { implicit = true; states.push(cur); } // deleted, then back by a rename: the present tip is a state too
+  else if (prev !== cur) throw new Error('develop journal does not end at the current refs/heads/develop: a move of develop bypassed the hook');
   const set = new Set(states);
-  for (const n of reflogEntries(repo)) if (!set.has(n)) throw new Error(`the reflog of develop lists a state (${n.slice(0, 7)}) that the journal does not: a move of develop bypassed the hook`);
+  for (const n of reflogEntries(repo)) {
+    if (set.has(n)) continue;
+    // Cross-check with the reflog. Without an implicit creation every reflog state must be in the journal (else a hook-less move: exit 2). With one, the
+    // reflog of the renamed-in branch came along with the rename and lists that branch's earlier states: they are judged too (conservative).
+    if (!implicit) throw new Error(`the reflog of develop lists a state (${n.slice(0, 7)}) that the journal does not: a move of develop bypassed the hook`);
+    states.push(n); set.add(n);
+  }
   return states;
 }
 function developStates(repo) {

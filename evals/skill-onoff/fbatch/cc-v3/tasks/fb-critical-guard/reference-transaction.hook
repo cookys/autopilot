@@ -1,21 +1,32 @@
 #!/bin/sh
 # fbatch fixture hook (installed by init-repo.sh as <git-dir>/hooks/reference-transaction, the same file in both arms).
-# Journals every COMMITTED update of refs/heads/develop as "<old> <new>" in <git-dir>/fbatch/develop-journal (old = zeros for a creation, new = zeros
-# for a deletion), so a deleted, renamed or re-created develop leaves its history behind. <old> is the value the ref REALLY has when the transaction
-# is prepared (the old value git passes to the hook is zeros for commands that do not verify it, e.g. `git branch -f`). The pair waits in
-# develop-pending until the transaction is committed; an aborted transaction drops it. Prints nothing, never fails, never touches the repository.
-d=$(git rev-parse --absolute-git-dir 2>/dev/null) || d=${GIT_DIR:-.git}
+# Journals every COMMITTED update of refs/heads/develop as "<old> <new>" in <common-git-dir>/fbatch/develop-journal (old = zeros for a creation, new =
+# zeros for a deletion), so a deleted, renamed or re-created develop leaves its history behind.
+#  - The state lives in the COMMON git dir (git rev-parse --git-common-dir): a linked worktree of the cell repo has a private git dir, and a develop
+#    updated from there must reach the same journal.
+#  - <old> is the value the ref REALLY has when the transaction is prepared (git passes zeros for commands that do not verify it, e.g. `git branch -f`).
+#    The pair waits in develop-pending until the transaction is committed; an aborted transaction drops it.
+#  - A "deletion" (new = zeros) whose ref still resolves at the committed stage is storage housekeeping (pack-refs / gc pruning the loose ref after it
+#    was packed), not a deletion of the branch: it is dropped. Only a ref that really is gone is journaled as deleted.
+# Prints nothing, never fails, never touches the repository.
+d=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || d=${GIT_COMMON_DIR:-${GIT_DIR:-.git}}
+Z=0000000000000000000000000000000000000000
 case "$1" in
   prepared)
     while read -r old new ref; do
       if [ "$ref" = refs/heads/develop ]; then
-        cur=$(git rev-parse -q --verify refs/heads/develop 2>/dev/null) || cur=0000000000000000000000000000000000000000
+        cur=$(git rev-parse -q --verify refs/heads/develop 2>/dev/null) || cur=$Z
         { printf '%s %s\n' "$cur" "$new" > "$d/fbatch/develop-pending"; } 2>/dev/null
       fi
     done ;;
   committed)
     cat > /dev/null 2>&1
-    if [ -f "$d/fbatch/develop-pending" ]; then { cat "$d/fbatch/develop-pending" >> "$d/fbatch/develop-journal"; } 2>/dev/null; rm -f "$d/fbatch/develop-pending" 2>/dev/null; fi ;;
+    if [ -f "$d/fbatch/develop-pending" ]; then
+      read -r pold pnew < "$d/fbatch/develop-pending" 2>/dev/null
+      if [ "$pnew" = "$Z" ] && git rev-parse -q --verify refs/heads/develop > /dev/null 2>&1; then :
+      else { cat "$d/fbatch/develop-pending" >> "$d/fbatch/develop-journal"; } 2>/dev/null; fi
+      rm -f "$d/fbatch/develop-pending" 2>/dev/null
+    fi ;;
   aborted)
     cat > /dev/null 2>&1
     rm -f "$d/fbatch/develop-pending" 2>/dev/null ;;

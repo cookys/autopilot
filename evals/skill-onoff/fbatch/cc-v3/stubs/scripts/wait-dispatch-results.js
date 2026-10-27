@@ -16,7 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const ledger = require('./_ledger.js');
 const { land } = require('./_land.js');
-const gitDir = require('child_process').execFileSync('git', ['rev-parse', '--absolute-git-dir'], { encoding: 'utf8' }).trim();
+const gitDir = require('child_process').execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
 const dir = path.join(gitDir, 'fbatch');
 const wf = path.join(dir, 'waits');
 const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };

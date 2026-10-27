@@ -243,6 +243,37 @@ const money = (n) => Number(n.toFixed(2));
 const rowCost = (j) => { const v = num(j.cost_usd); return v === null ? cellCost(j.task_id) : v; };
 const spentUsd = () => readRows().filter((j) => typeof j.task_id === 'string' && (!j.row || j.row === ROW)).reduce((s, j) => s + rowCost(j), 0);
 
+// Round 6 (git environment). The fixture of fb-critical-guard pins core.hooksPath in the cell repo so that its reference-transaction hook journals develop.
+// Environment config (GIT_CONFIG_COUNT/KEY_n/VALUE_n, GIT_CONFIG_PARAMETERS, GIT_CONFIG_GLOBAL/SYSTEM/NOSYSTEM) overrides repo config, so:
+//   1. the environment handed to every cell is stripped of those variables (SANITIZE, chosen over refusing: dispatch rails legitimately export
+//      GIT_CONFIG_COUNT with protocol.* keys - scripts/lib/main-checkout-boundary.sh - so a depth-0 started from one must still run the eval; none of
+//      scripts/dispatch-*.sh / lib/gitconfig-containment.sh runs on the eval path, they guard dispatched workers);
+//   2. PREFLIGHT before the first cell, in exactly that environment: a throw-away fb-critical-guard fixture is built with the real init-repo.sh and
+//      the effective `git config core.hooksPath` must be the pinned directory and the hook must have journaled develop; otherwise the run is refused
+//      (exit 3, nothing dispatched, nothing spent) with the reason. A cell whose hook still failed to fire is a cell error at scoring time
+//      (fbatch/cell-v3.js: empty or inconsistent journal => marker_error, an infra_fail row).
+const GITCFG_VAR = /^(GIT_CONFIG_(COUNT|PARAMETERS|GLOBAL|SYSTEM|NOSYSTEM)|GIT_CONFIG_(KEY|VALUE)_[0-9]+)$/;
+const sanitizedEnv = (env) => Object.fromEntries(Object.entries(env).filter(([k]) => !GITCFG_VAR.test(k)));
+function hooksPreflight(env, stubsDir, tasksDir) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fbatch-preflight-'));
+  try {
+    const repo = path.join(tmp, 'repo');
+    fs.mkdirSync(repo);
+    fs.cpSync(path.join(tasksDir, 'fb-critical-guard', 'repo'), repo, { recursive: true });
+    fs.cpSync(stubsDir, repo, { recursive: true });
+    const sh = (cmd) => cp.spawnSync('bash', ['-c', cmd], { cwd: repo, env, encoding: 'utf8' });
+    const init = sh(`git init -q && git config user.name p && git config user.email p@e.invalid && git config commit.gpgsign false && bash ${JSON.stringify(path.join(tasksDir, 'fb-critical-guard', 'init-repo.sh'))}`);
+    if (init.status !== 0) return `the preflight fixture could not be built: ${String(init.stderr || init.stdout).trim().split('\n').pop()}`;
+    const eff = sh('git config --get core.hooksPath').stdout.trim();
+    const want = path.join(repo, '.git', 'hooks');
+    if (eff !== want) return `the effective core.hooksPath is '${eff}', not the pinned '${want}' (an environment or config override beats the repo setting)`;
+    let n = 0;
+    try { n = fs.readFileSync(path.join(repo, '.git', 'fbatch', 'develop-journal'), 'utf8').split('\n').filter(Boolean).length; } catch { /* none */ }
+    if (n < 2) return `the reference-transaction hook did not journal develop (${n} record(s) after the fixture build, expected at least 2)`;
+    return '';
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+}
+
 function runCc() {
   if (!PILOT) {
     const g = guardReasons();
@@ -293,6 +324,10 @@ function runCc() {
   if (spent0 + startEstimate > CAP + 1e-9) die(`spend cap: spent ${money(spent0)} USD + remaining estimate ${money(startEstimate)} USD exceeds ONOFF_MAX_USD ${money(CAP)} USD`, 1);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fbatch-cc-'));
   const bd = B.build({ armsDir, outDir: dir, stubsDir: path.join(CC_V3, 'stubs'), tasksSrc: path.join(CC_V3, 'tasks') });
+  if (GROUPS.some((g) => g.task === 'fb-critical-guard')) {
+    const why = hooksPreflight(sanitizedEnv(process.env), path.join(CC_V3, 'stubs'), bd.tasksDir);
+    if (why) stop(`preflight refused, nothing was dispatched: ${why}`, 3, dir);
+  }
   const keep = `${abs}.cells`;
   const minCells = CC.extrapolate_min_cells || 2;
   // A cell's spend is the sum over sessions of the LAST result's total_cost_usd (cumulative per session: adding every result
@@ -353,7 +388,7 @@ function runCc() {
       '--runner', 'cc', '--arm-manifests', bd.armManifestsDir, '--check-skill', CC.skill], {
       stdio: 'inherit',
       env: {
-        ...process.env,
+        ...sanitizedEnv(process.env),
         ONOFF_PROMPT_PREFIX: CC.invocation_prefix,
         ONOFF_TIMEOUT: CC.timeout || '10m', // the prereg value only: an env override would silently change the cells
         ONOFF_PACKS_DIR: bd.packsDir,

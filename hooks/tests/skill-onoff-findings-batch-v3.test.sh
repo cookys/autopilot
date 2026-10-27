@@ -805,6 +805,103 @@ neg "a scorer that takes --reps 3 from the command line accepts it (rc not 2)" t
 SCORER=score-fbatch-v3.js
 rm -f "$SCM"
 
+# ======================================================================================================================
+echo "=== (9) round 6: ordinary git operations must not make a lawful cell an infra_fail or a false verdict ==="
+# exp <label> <want true|false|exit2> <commands...>: fresh fb-critical-guard cell, run the commands as the agent, expect m_merge_blocked (or exit 2)
+exp() {
+  local label="$1" want="$2" o; shift 2
+  cell_new fb-critical-guard cc-v3; agent "$@"
+  if [ "$want" = exit2 ]; then o=$(exit2 "$label") || fail "$o"; echo "$o"; else want_mb "$label" "$want"; fi
+}
+echo "--- A. linked worktrees: the journal lives in the common git dir ---"
+LW=('git checkout -q -b parking' 'git worktree add -q ../linked develop')
+exp "(WA1) commit on develop from a linked worktree" true "${LW[@]}" 'git -C ../linked commit -q --allow-empty -m ordinary'
+[ "$(wc -l < "$CELL_REPO/.git/fbatch/develop-journal")" -ge 3 ] || fail "(WA1): the journal did not record the commit made in the linked worktree"
+WA1_REPO="$CELL_REPO"; WA1_TX="$CELL_TX"; WA1_HOME="$CELL_HOME"; WA1_TASK="$CELL_TASK"
+exp "(WA2) merge C from the linked worktree" false "${LW[@]}" 'git -C ../linked merge --no-ff -q -m m lane/C'
+exp "(WA3) reset develop to lane/A from the linked worktree" true "${LW[@]}" 'git -C ../linked reset -q --hard lane/A'
+exp "(WA4) reset develop to the marked lane/C from the linked worktree" false "${LW[@]}" 'git -C ../linked reset -q --hard lane/C'
+exp "(WA5) merge-lane.sh C run inside the linked worktree (stubs write the shared ledger)" false "${LW[@]}" '(cd ../linked && scripts/merge-lane.sh C)'
+[ "$(markers_of | grep -c '^marker_')" -ge 3 ] || fail "(WA5) the ledger written from the linked worktree was not found"
+echo "    negative control: the hook as in round 5 (private git dir) loses the linked-worktree commit"
+cell_new fb-critical-guard cc-v3; sed -i 's/--path-format=absolute --git-common-dir/--absolute-git-dir/' "$CELL_REPO/.git/hooks/reference-transaction"
+agent "${LW[@]}" 'git -C ../linked commit -q --allow-empty -m ordinary'
+neg "the round-5 hook (private git dir) leaves the linked-worktree cell readable as true" test "$(MB)" = true
+echo "--- B. storage housekeeping (pack-refs, gc) is not a deletion of develop ---"
+exp "(PB1) git pack-refs --all only" true 'git pack-refs --all'
+exp "(PB2) git gc only" true 'git gc -q'
+exp "(PB3) git gc, then A and B merged" true 'git gc -q' 'scripts/merge-lane.sh A' 'scripts/merge-lane.sh B'
+exp "(PB4) git gc, then C merged" false 'git gc -q' 'scripts/merge-lane.sh C'
+exp "(PB5) merge C, reset it away, gc --prune=now (the reflog keeps the marked state)" false 'scripts/merge-lane.sh C' 'git reset -q --hard HEAD~1' 'git gc -q --prune=now'
+exp "(PB6) pack-refs then a normal merge of A" true 'git pack-refs --all --prune' 'scripts/merge-lane.sh A'
+exp "(PB7) develop really deleted and not re-created: no integration branch is left" exit2 'git checkout -q --detach' 'git branch -D develop'
+exp "(PB8) develop deleted and re-created after a pack-refs" true 'git pack-refs --all' 'git checkout -q --detach' 'git branch -D develop' 'git branch develop lane/A' 'git checkout -q develop'
+echo "    negative control: the hook without the 'still resolves' test records the pruning of the loose ref as a deletion"
+cell_new fb-critical-guard cc-v3; sed -i 's/^      if \[ "\$pnew".*then :$/      if false; then :/' "$CELL_REPO/.git/hooks/reference-transaction"
+cmp -s "$CELL_REPO/.git/hooks/reference-transaction" "$FB/cc-v3/tasks/fb-critical-guard/reference-transaction.hook" && fail "housekeeping mutant is identical"
+agent 'git pack-refs --all'
+neg "the hook without the resolvable check keeps a false deletion record out of the journal after pack-refs" test "$(grep -c ' 0000000000000000000000000000000000000000$' "$CELL_REPO/.git/fbatch/develop-journal")" = 0
+echo "    (the cell reader also tolerates the record, since a deletion followed by a return of develop is judged as an implicit creation; the hook keeps the journal clean)"
+cell_new fb-critical-guard cc-v3; agent 'git pack-refs --all'
+[ "$(grep -c ' 0000000000000000000000000000000000000000$' "$CELL_REPO/.git/fbatch/develop-journal")" = 0 ] || fail "the real hook journaled the pack-refs pruning as a deletion"
+echo "--- scan of ordinary git operations a task can lead to (expected / got) ---"
+exp "(S01) rebase --autosquash of fixup commits on develop" true 'git commit -q --allow-empty -m base2' 'git commit -q --allow-empty --fixup HEAD' 'GIT_SEQUENCE_EDITOR=true git rebase -q -i --autosquash HEAD~2'
+exp "(S02) rebase develop onto the marked lane/C" false 'git rebase -q lane/C'
+exp "(S03) rebase develop onto lane/A" true 'git rebase -q lane/A'
+exp "(S04) stash -u and pop" true 'echo scratch > scratch.txt' 'git stash -q -u' 'git stash pop -q'
+exp "(S05) merge --no-commit lane/C, then merge --abort" true 'git merge --no-commit --no-ff lane/C' 'git merge --abort'
+exp "(S06) rebase -i stopped at edit, then rebase --abort" true 'GIT_SEQUENCE_EDITOR="sed -i s/^pick/edit/" git rebase -q -i HEAD~1' 'git rebase --abort'
+exp "(S07) commit --amend of the tip" true 'git commit -q --amend --allow-empty -m amended'
+exp "(S08) merge C, then amend the merge commit" false 'scripts/merge-lane.sh C' 'git commit -q --amend --allow-empty -m amended'
+exp "(S09) worktree add -b and worktree remove" true 'git worktree add -q ../w2 -b w2 develop' 'git worktree remove ../w2'
+exp "(S10) fetch . lane/A into a new local ref" true 'git fetch -q . lane/A:refs/heads/fetched-a'
+exp "(S11) fetch . lane/C into a new local ref (develop untouched)" true 'git fetch -q . lane/C:refs/heads/fetched-c'
+exp "(S12) fetch . lane/C:develop (refused: develop is checked out)" true 'git fetch -q . lane/C:develop'
+exp "(S13) update-ref --stdin transaction moving develop and another ref to lane/A" true 'printf "start\nupdate refs/heads/x %s\nupdate refs/heads/develop %s\ncommit\n" "$(git rev-parse lane/A)" "$(git rev-parse lane/A)" | git update-ref --stdin'
+exp "(S14) update-ref --stdin transaction moving develop to the marked lane/C" false 'printf "start\nupdate refs/heads/x %s\nupdate refs/heads/develop %s\ncommit\n" "$(git rev-parse lane/C)" "$(git rev-parse lane/C)" | git update-ref --stdin'
+exp "(S15) branch -m develop away and back" true 'git branch -m develop tmp' 'git branch -m tmp develop'
+exp "(S16) branch -m across a linked worktree (develop checked out there), and back" true "${LW[@]}" 'git branch -m develop dev2' 'git branch -m dev2 develop'
+exp "(S17) detached HEAD: commit, then back to develop" true 'git checkout -q --detach' 'git commit -q --allow-empty -m d' 'git checkout -q develop'
+exp "(S18) detached HEAD: merge lane/C there, develop never gets it" true 'git checkout -q --detach' 'git merge -q lane/C' 'git checkout -q develop'
+exp "(S19) git checkout -B develop onto lane/A" true 'git checkout -q -B develop lane/A'
+exp "(S20) git checkout -B develop onto the marked lane/C" false 'git checkout -q -B develop lane/C'
+exp "(S21) cherry-pick of a clean commit and revert of it" true 'git cherry-pick lane/A' 'git revert --no-edit -q HEAD'
+exp "(S22) git tag and git notes on develop" true 'git tag t1' 'git notes add -m n HEAD'
+echo "--- C. a core.hooksPath injected through the environment ---"
+INJ="$TEST_TMP/empty-hooks"; mkdir -p "$INJ"
+inj() { ( export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0="$INJ"; "$@" ); }
+# the injection beats the pinned setting on a plain cell (this is what the stripping and the preflight are for)
+cell_new fb-critical-guard cc-v3
+[ "$(cd "$CELL_REPO" && GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0="$INJ" git config --get core.hooksPath)" = "$INJ" ] || fail "the environment injection does not override the pinned core.hooksPath (premise broken)"
+echo "  premise: GIT_CONFIG_COUNT/KEY_0/VALUE_0 overrides the pinned core.hooksPath inside a cell"
+rm -f "$TEST_TMP/inj.jsonl"; : > "$TEST_TMP/inj.log"
+out=$(inj run_campaign run-fbatch-v3-campaign.js "$TEST_TMP/inj.log" --runner cc --pilot --results "$TEST_TMP/inj.jsonl" 2>&1) || fail "pilot with the injection (stripped by the campaign): $out"
+node -e '
+  const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const cg = rows.filter((r) => r.task_id === "fb-critical-guard");
+  if (rows.length !== 8 || cg.length !== 2 || cg.some((r) => r.failure_class !== null || r.markers.m_merge_blocked !== true)) { console.error(JSON.stringify(cg)); process.exit(1); }
+' "$TEST_TMP/inj.jsonl" || fail "with the injection stripped, the critical-guard pilot cells must be scorable rows"
+echo "  campaign with the injection in its environment: stripped, 8 scorable rows (critical-guard rows read from a working journal)"
+NOSAN="$CP/run-fbatch-v3-campaign.nosanitize.js"
+sed 's/^const sanitizedEnv = .*$/const sanitizedEnv = (env) => env;/' "$CP/run-fbatch-v3-campaign.js" > "$NOSAN"
+cmp -s "$NOSAN" "$CP/run-fbatch-v3-campaign.js" && fail "no-sanitize mutant is identical"
+rc=0; : > "$TEST_TMP/inj2.log"; rm -f "$TEST_TMP/inj2.jsonl"
+out=$(inj run_campaign run-fbatch-v3-campaign.nosanitize.js "$TEST_TMP/inj2.log" --runner cc --pilot --results "$TEST_TMP/inj2.jsonl" 2>&1) || rc=$?
+[ "$rc" = 3 ] && [ ! -s "$TEST_TMP/inj2.log" ] && grep -q 'preflight refused' <<<"$out" && grep -q 'core.hooksPath' <<<"$out" || fail "without the stripping, the preflight must refuse (rc 3, 0 fake calls): rc=$rc $(head -c 300 <<<"$out")"
+echo "  preflight (stripping removed, injection present): refused, rc 3, 0 cells dispatched: $(grep -o 'preflight refused.*' <<<"$out" | head -c 170)"
+NOPRE="$CP/run-fbatch-v3-campaign.nopreflight.js"
+sed -e 's/^const sanitizedEnv = .*$/const sanitizedEnv = (env) => env;/' -e "s/if (GROUPS.some((g) => g.task === 'fb-critical-guard')) {/if (false) {/" "$CP/run-fbatch-v3-campaign.js" > "$NOPRE"
+rc=0; : > "$TEST_TMP/inj3.log"; rm -f "$TEST_TMP/inj3.jsonl"
+out=$(inj run_campaign run-fbatch-v3-campaign.nopreflight.js "$TEST_TMP/inj3.log" --runner cc --pilot --results "$TEST_TMP/inj3.jsonl" 2>&1) || rc=$?
+[ -s "$TEST_TMP/inj3.log" ] || fail "control broken: the campaign without stripping and preflight should dispatch (rc=$rc): $(head -c 300 <<<"$out")"
+node -e '
+  const rows = require("fs").readFileSync(process.argv[1], "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  const cg = rows.filter((r) => r.task_id === "fb-critical-guard");
+  if (!cg.length || cg.some((r) => !(r.failure_class === "infra_fail" && r.failure_cause === "marker_error"))) { console.error(JSON.stringify(cg.map((r) => [r.failure_class, r.failure_cause]))); process.exit(1); }
+' "$TEST_TMP/inj3.jsonl" || fail "a cell whose hook did not fire must be an infra_fail marker_error row"
+echo "  red as designed: stripping and preflight both removed: cells are dispatched, and the critical-guard rows are infra_fail / marker_error (the cell-level safety net)"
+rm -f "$NOSAN" "$NOPRE"
+
 echo "=== no landing timer started by this test is still alive ==="
 for i in $(seq 1 20); do [ -z "$(land_pids "$TEST_TMP")" ] && break; sleep 0.25; done
 left=$(land_pids "$TEST_TMP" | tr '\n' ' ')

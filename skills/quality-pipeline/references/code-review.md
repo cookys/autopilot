@@ -252,8 +252,8 @@ When authoritative qc is a **panel** (depth-0 from `scripts/resolve-review-loop.
 
 | Severity | Definition | Action |
 |----------|------------|--------|
-| **Critical** | Correctness / security / data-loss | Fix immediately, before commit |
-| **Major** | Quality / maintainability / reliability | Fix immediately, before commit |
+| **Critical** | Correctness / security / data-loss | Fix immediately, before commit (parallel lanes: see [Findings Batch](#findings-batch-parallel-lanes), which governs: the finding blocks that candidate's merge and repair waits for the pooled round) |
+| **Major** | Quality / maintainability / reliability | Fix immediately, before commit (parallel lanes: see [Findings Batch](#findings-batch-parallel-lanes), which governs: the finding blocks that candidate's merge and repair waits for the pooled round) |
 | **Minor** | Style, naming, cosmetic | Analyze, then backlog or fix (see below) |
 | **Suggestion** | Improvement, does not affect correctness | Analyze, then backlog or fix (see below) |
 
@@ -276,6 +276,8 @@ When authoritative qc is a **panel** (depth-0 from `scripts/resolve-review-loop.
 - Unchanged: depth-0 re-derivation, union-on-verified-critical, repair-gate, blind re-review.
 
 ## Re-review Loop (Critical / Major)
+
+Priority: when lanes run in parallel as a batch, [Findings Batch](#findings-batch-parallel-lanes) governs over this loop and over every "fix immediately" / "fix now" / "before commit" wording in this file: a verified Critical or Major blocks the MERGE of its candidate, and repair waits for the pooled round. A single lane is unchanged.
 
 Critical/Major **claims** still surface via `union-on-verified-critical`. Only findings that pass **repair-gate** (`must-fix-now`) enter the fix loop; `follow-up` / `reject-out-of-scope` / unclassified do not mutate the ticket.
 

@@ -787,3 +787,15 @@ test('mode=once is accepted from config.json without a warning; an unknown mode 
   assert.strictEqual(bad.mode, 'warn');
   assert.ok(bad.warnings.some((w) => w.includes('"twice"') && w.includes('off|warn|once')));
 });
+
+test('mode=once: a delivered non-advisory T2 spends the T2 reminder; an undelivered decision does not (flag set at emit)', () => {
+  // Wrapper-level: first T2 (known 1M window, non-advisory) is delivered, a later T2 stays silent.
+  const call = stepSession({ AUTOPILOT_CONTEXT_BUDGET_MODE: 'once' });
+  assert.strictEqual(call(180_000).status, 2, 'delivered T2');
+  assert.strictEqual(call(300_000).status, 0, 'second T2 suppressed');
+  // A fresh session whose first decisions are below T1 never spends anything: T1 then T2 still each fire once.
+  const fresh = stepSession({ AUTOPILOT_CONTEXT_BUDGET_MODE: 'once' });
+  assert.strictEqual(fresh(50_000).status, 0);
+  assert.match(fresh(120_000).stderr, /Context budget T1/, 'T1 not pre-spent by silence');
+  assert.strictEqual(fresh(180_000).status, 2, 'T2 not pre-spent by T1');
+});

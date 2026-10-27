@@ -152,4 +152,40 @@ assert_exit_code "$?" "0" "legacy rows without process_files keep their verdict"
 node "$SCRIPT" check --bursts "$TEST_TMP/proc.jsonl" --process-threshold 4 >/dev/null
 assert_exit_code "$?" "0" "process threshold honored"
 
+# ── BL-0309 gap 2 (caller wiring): the documented classify command writes the row itself ──
+REPO="$TEST_TMP/burstrepo"; mkdir -p "$REPO/docs/plans"
+(
+  cd "$REPO" && git init -q -b develop . && git config user.email t@t && git config user.name t
+  echo a > README.md && git add -A && git commit -qm base
+  git checkout -qb work
+) >/dev/null 2>&1
+BURSTS="$TEST_TMP/camp-bursts.jsonl"; : > "$BURSTS"
+run_burst() { # $1 id ; commits one plan-only change then runs the documented command
+  ( cd "$REPO" && BASE="$(git rev-parse HEAD)" && echo "$1" >> "docs/plans/p.md" && git add -A && git commit -qm "$1" \
+    && git diff --name-only "$BASE"..HEAD > "$TEST_TMP/burst-names.txt" \
+    && node "$SCRIPT" classify --names "$TEST_TMP/burst-names.txt" --burst-id "$1" --burst-base "$BASE" \
+         --integration-ref develop --append "$BURSTS" >/dev/null )
+}
+run_burst b1; run_burst b2; run_burst b3
+assert_contains "$(cat "$BURSTS")" '"process_files":1,"integrated":false' "row carries process_files and integrated, written by the tool"
+node "$SCRIPT" check --bursts "$BURSTS" >/dev/null
+assert_exit_code "$?" "1" "three plan-only bursts via the documented command trip"
+# after merge into the integration ref the next burst is integrated and resets the streak
+( cd "$REPO" && git checkout -q develop && git merge -q --ff-only work && git checkout -q work ) >/dev/null 2>&1
+( cd "$REPO" && BASE="$(git rev-parse HEAD~1)" && git diff --name-only "$BASE"..HEAD > "$TEST_TMP/burst-names.txt" \
+    && node "$SCRIPT" classify --names "$TEST_TMP/burst-names.txt" --burst-id b4 --burst-base "$BASE" \
+         --integration-ref develop --append "$BURSTS" >/dev/null )
+assert_contains "$(tail -n 1 "$BURSTS")" '"integrated":true' "a merged burst is judged integrated"
+node "$SCRIPT" check --bursts "$BURSTS" >/dev/null
+assert_exit_code "$?" "1" "streak of earlier three still counted (max streak), integration only resets going forward"
+{ head -n 2 "$BURSTS"; tail -n 1 "$BURSTS"; } > "$TEST_TMP/reset-int.jsonl"
+node "$SCRIPT" check --bursts "$TEST_TMP/reset-int.jsonl" >/dev/null
+assert_exit_code "$?" "0" "two plan-only bursts then an integrated one: no trip (merge resets)"
+# negative control: the OLD three-field rows (hand-copied) never trigger the new streak
+printf '%s\n' '{"burst_id":"b1","product_files":1,"verification_files":0}' '{"burst_id":"b2","product_files":1,"verification_files":0}' '{"burst_id":"b3","product_files":1,"verification_files":0}' > "$TEST_TMP/old3.jsonl"
+node "$SCRIPT" check --bursts "$TEST_TMP/old3.jsonl" >/dev/null
+assert_exit_code "$?" "0" "legacy three-field rows keep their verdict"
+RC=0; node "$SCRIPT" classify --names "$TEST_TMP/burst-names.txt" --append "$BURSTS" >/dev/null 2>&1 || RC=$?
+assert_exit_code "$RC" "2" "--append without --burst-id is a usage error"
+
 finalize_test

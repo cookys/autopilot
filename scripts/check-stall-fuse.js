@@ -43,6 +43,14 @@
  * Modes:
  *   classify --names <file>
  *     Reads newline-separated changed paths, emits {product_files, verification_files, process_files}.
+ *     Mechanical row writing (BL-0309 gap 2): with --burst-id <id> --append <bursts.jsonl> classify itself appends
+ *     the full row {burst_id, product_files, verification_files, process_files, integrated?} so no caller hand-copies
+ *     fields. --burst-base <sha> [--integration-ref <ref>] decides `integrated`: the burst range is
+ *     <burst-base>..HEAD; it is integrated when that range is non-empty and at least one of its commits is reachable
+ *     from the integration ref (default origin/develop, else develop) — a merge or push of the burst makes its
+ *     commits reachable there, while a burst of unmerged local commits stays false. An unresolvable ref or base
+ *     yields integrated:false (the safe side: the process-only streak keeps counting). Without --burst-base the
+ *     field is omitted. Stdout is unchanged.
  *   check --bursts <file> [--threshold N] [--process-threshold N]
  *     Bursts file: JSONL rows {burst_id, product_files, verification_files,
  *     reverify?: {mode:"scoped"|"full-suite", finding_id}}.
@@ -88,12 +96,19 @@ function parseArgs(argv) {
     if (arg === '--names') opts.names = value;
     else if (arg === '--bursts') opts.bursts = value;
     else if (arg === '--threshold') opts.threshold = Number(value);
+    else if (arg === '--burst-id') opts.burstId = value;
+    else if (arg === '--append') opts.append = value;
+    else if (arg === '--burst-base') opts.burstBase = value;
+    else if (arg === '--integration-ref') opts.integrationRef = value;
     else if (arg === '--process-threshold') opts.processThreshold = Number(value);
     else if (arg === '--strike-identity-file') opts.strikeIdentityFile = value;
     else if (arg === '--strike-store') opts.strikeStore = value;
     else usage(`unknown argument: ${arg}`);
     i += 1;
   }
+  if (opts.append && !opts.burstId) usage('--append requires --burst-id');
+  if (opts.integrationRef && !opts.burstBase) usage('--integration-ref requires --burst-base');
+  if (mode !== 'classify' && (opts.append || opts.burstId || opts.burstBase)) usage('burst-row flags are classify-mode only');
   if (mode === 'classify' && !opts.names) usage('classify requires --names');
   if (mode === 'check' && !opts.bursts) usage('check requires --bursts');
   if (!Number.isInteger(opts.threshold) || opts.threshold < 1) usage('--threshold must be a positive integer');
@@ -117,6 +132,22 @@ function isProcessPath(candidate) {
   return !isVerificationPath(candidate) && PROCESS_PATTERNS.some((pattern) => pattern.test(candidate));
 }
 
+function git(args) {
+  const r = require('child_process').spawnSync('git', args, { encoding: 'utf8' });
+  return r.status === 0 ? r.stdout.trim() : null;
+}
+
+function decideIntegrated(opts) {
+  const ref = opts.integrationRef
+    || (git(['rev-parse', '--verify', '--quiet', 'origin/develop']) !== null ? 'origin/develop' : 'develop');
+  const all = git(['rev-list', `${opts.burstBase}..HEAD`]);
+  const outside = git(['rev-list', `${opts.burstBase}..HEAD`, '--not', ref]);
+  if (all === null || outside === null) return false;
+  const total = all ? all.split('\n').length : 0;
+  const notIn = outside ? outside.split('\n').length : 0;
+  return total > 0 && notIn < total;
+}
+
 function classify(opts) {
   let raw;
   try {
@@ -126,12 +157,27 @@ function classify(opts) {
   }
   const names = raw.split('\n').map((l) => l.trim()).filter(Boolean);
   const verification = names.filter(isVerificationPath).length;
-  process.stdout.write(`${JSON.stringify({
+  const out = {
     schema_version: 1,
     product_files: names.length - verification,
     verification_files: verification,
     process_files: names.filter(isProcessPath).length,
-  })}\n`);
+  };
+  process.stdout.write(`${JSON.stringify(out)}\n`);
+  if (opts.append) {
+    const row = {
+      burst_id: opts.burstId,
+      product_files: out.product_files,
+      verification_files: out.verification_files,
+      process_files: out.process_files,
+      ...(opts.burstBase ? { integrated: decideIntegrated(opts) } : {}),
+    };
+    try {
+      fs.appendFileSync(opts.append, `${JSON.stringify(row)}\n`);
+    } catch (err) {
+      usage(`--append not writable: ${opts.append}`);
+    }
+  }
 }
 
 function check(opts) {

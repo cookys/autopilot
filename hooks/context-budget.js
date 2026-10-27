@@ -233,13 +233,17 @@ function resetBelowTiers(st, contextTokens, cfg) {
 
 // context_budget.mode "once" (BL-0309 gap 6): each tier speaks at most once per session. The flags live in the
 // same state file as the step marks (onceT1Fired / onceT2Fired) and, unlike lastT1Context/lastT2Context, are NOT
-// cleared when context falls back under the threshold. Any other mode returns the decision untouched.
+// cleared when context falls back under the threshold. onceFilter only SUPPRESSES; onceMark sets the flag and is
+// called at the point where a message is actually written, so a decision that is not delivered never spends the
+// tier's one reminder. Any other mode returns the decision untouched / marks nothing.
 function onceFilter(st, cfg, d) {
   if (cfg.mode !== 'once' || !d || !d.tier) return d;
   const key = d.tier === 't2' ? 'onceT2Fired' : 'onceT1Fired';
-  if (st[key] === true) return { tier: null, message: null };
-  st[key] = true;
-  return d;
+  return st[key] === true ? { tier: null, message: null } : d;
+}
+function onceMark(st, cfg, d) {
+  if (cfg.mode !== 'once' || !d || !d.tier) return;
+  st[d.tier === 't2' ? 'onceT2Fired' : 'onceT1Fired'] = true;
 }
 
 function saveState(file, st) {
@@ -416,10 +420,12 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
         st.lastT1Context = contextTokens;
         const message = withAutocompactTip(d.message, liveWindow, payload, st.knownModel);
         process.stderr.write(`${message}\n`);
+        onceMark(st, cfg, d);
         emitT1(sid, message);
       } else if (d.tier === 't2') {
         st.lastT2Context = contextTokens;
         process.stderr.write(`${d.message}\n`);
+        onceMark(st, cfg, d);
         exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
       }
     } else {
@@ -479,11 +485,13 @@ function advisePostCompact(st, sid, liveTokens, cfg) {
             const message = d.tier === 't1'
               ? withAutocompactTip(d.message, rememberedWindow, payload, st.knownModel) : d.message;
             process.stderr.write(`${message}\n`);
+            onceMark(st, cfg, d);
             if (d.tier === 't1') emitT1(sid, message);
             else emitInjected(message); // the unknown-window T2 advisory stays model-facing
           } else if (d.tier === 't2') {
             st.lastT2Context = tokens;
             process.stderr.write(`${d.message}\n`);
+            onceMark(st, cfg, d);
             exitCode = 2; // PostToolUse exit 2 ⇒ stderr reaches the model
           }
         }

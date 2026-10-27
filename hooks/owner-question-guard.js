@@ -38,7 +38,7 @@ const CARD_ID = /\bd-[0-9a-f]{8}\b/i;
 // add a pattern here, never a new if. Matched per sentence (see sentences()).
 const OWNER_WAIT_PATTERNS = [
   // explicit waiting phrases (zh)
-  /請(決定|確認|選|回覆)/, /你說可以我再/, /等你(回答|決定|回覆|確認|說)/, /請你(決定|確認|回答|選)/, /你選好我就/, /你(決定|確認)後我再/,
+  /請(?:你|您)?(?:決定|確認|選|回覆|核准|批准|同意|授權|回答|指示)/, /你說可以我再/, /等你(回答|決定|回覆|確認|說)/, /請你(決定|確認|回答|選)/, /你選好我就/, /你(決定|確認)後我再/,
   // "needs / waits for your <approval verb>": 要你批准、會等你批准、需要您同意、待你授權、等你點頭
   /[要需會得待等請](?:要)?[你您](?:的)?(?:批准|核准|同意|授權|確認|決定|許可|首肯|點頭|拍板|放行|回覆|回答|指示|表態)/,
   /等(?:待|候)?\s*(?:owner|你|您)/i,
@@ -49,7 +49,7 @@ const OWNER_WAIT_PATTERNS = [
   /(?:要我|讓我|需要我|是否要我|我可以|我能|我要不要|我該不該|我應不應該)[^。？?！\n]{0,40}嗎/,
   /(?:可以|能不能|能否|行不行|好不好|對不對|同意|批准|核准|沒問題|ok)\s*嗎/i,
   // explicit waiting phrases (en)
-  /\bshall I\b/i, /\bshould I\b/i, /\bdo you want\b/i, /\bwant me to\b/i, /\bwould you like\b/i,
+  /\bplease (?:confirm|approve|decide|advise|reply|respond|choose|sign off|let me know)\b/i, /\bshall I\b/i, /\bshould I\b/i, /\bdo you want\b/i, /\bwant me to\b/i, /\bwould you like\b/i,
   /\blet me know (if|whether|which)\b/i, /\bwaiting for (your|you)\b/i,
   /\b(?:awaiting|pending|need|needs|require|requires|waiting (?:on|for))\s+(?:your|the owner'?s?)\s+(?:approval|go-?ahead|decision|confirmation|sign-?off|ok|okay|permission)\b/i,
   /\b(?:waiting|waits) (?:on|for) (?:the )?owner\b/i,
@@ -58,15 +58,21 @@ const OWNER_WAIT_PATTERNS = [
 // A question mark (full or half width) in a sentence that addresses the reader.
 const QUESTION_MARK = /[?？]/;
 const ADDRESSES_OWNER = [
-  /你|您/, /要不要/, /可以嗎/, /好嗎/, /行嗎/, /還是/, /哪一個|哪個|選哪/, /是否/, /要我|讓我|我可以|我要/, /嗎/,
+  /你|您/, /要不要/, /可以嗎/, /好嗎/, /行嗎/, /還是/, /哪一個|哪個|選哪/, /是否(?:要|需要|可以|同意|批准|允許|能)/, /要我|讓我|我可以|我要/,
   /\byou\b/i, /\byour\b/i, /\bor\b/i, /\bwhich\b/i, /\bshall\b/i, /\bok(?:ay)?\b/i,
 ];
 
 // A rhetorical question ("這不是很簡單嗎？", "難道...？") is not put to the owner: it only skips the question-mark rule, never an explicit wait phrase.
 const RHETORICAL = [/不是[^。？?！]*嗎/, /難道/, /豈不是|何嘗不|誰不/, /\bisn'?t it\b|\bright\?$/i];
 
-// "沒有要你決定的事", "不需要你批准": the phrase is negated, nothing is awaited.
-const NEGATED = /(?:沒有|沒|無需|不需要|不用|不必|毋須|不會|不要|\bno\b|\bnot\b|\bnothing\b)[^，。,；;]{0,6}[你您]|\b(?:no|not|nothing)\b[^.,;]{0,20}\byour\b/i;
+// Decision order (per reply): strip quotes + code (stripCode) -> split sentences -> split each into clauses -> per clause:
+//   1. CONDITION_ON_OWNER ("沒有你的批准就不能部署") is itself a wait, checked before negation;
+//   2. NEGATED clauses ("沒有要你決定的事", "不需要你批准", "Nothing here needs your approval") await nothing, and ONLY that clause is skipped;
+//   3. any other clause that matches OWNER_WAIT_PATTERNS is a wait.
+// The question-mark rule (a question mark plus a word addressing the owner, not rhetorical) runs on the whole sentence.
+const CONDITION_ON_OWNER = /(?:沒有|沒|未經|未獲|未得到|缺少)[你您]的?(?:批准|核准|同意|授權|許可|確認)/;
+const NEGATED = /(?:沒有|沒|無需|不需要|不用|不必|毋須|不會|不要|不)[^，。,；;]{0,6}[你您]|\b(?:no|not|nothing|don'?t|doesn'?t|isn'?t)\b[^.,;]{0,24}\b(?:you|your)\b|\bno (?:approval|decision|confirmation)\b/i;
+const CLAUSE_SPLIT = /[，,；;：:]|但是|但|不過|而是|\bbut\b|\bhowever\b/i;
 
 function optedOut(env, cfg) {
   const v = env.AUTOPILOT_OWNER_QUESTION_GUARD;
@@ -86,7 +92,7 @@ function loadCfg() {
 const QUOTED = [/「[^」\n]*」/g, /『[^』\n]*』/g, /“[^”\n]*”/g, /"[^"\n]*"/g];
 function stripCode(text) {
   let t = text.replace(/```[\s\S]*?(```|$)/g, ' ').replace(/`[^`\n]*`/g, ' ');
-  t = t.split('\n').filter((l) => !/^\s*>/.test(l)).join('\n');
+  t = t.split('\n').filter((l) => !/^\s*(>|\/\/|\/\*|\*\s)/.test(l)).join('\n'); // quote lines and source-comment lines
   for (const re of QUOTED) t = t.replace(re, ' ');
   return t;
 }
@@ -98,7 +104,11 @@ function sentences(text) {
 // Returns the first sentence that waits for the owner, or null.
 function findOwnerQuestion(text) {
   for (const s of sentences(text)) {
-    if (!NEGATED.test(s) && OWNER_WAIT_PATTERNS.some((re) => re.test(s))) return s;
+    for (const clause of s.split(CLAUSE_SPLIT)) {
+      if (CONDITION_ON_OWNER.test(clause)) return s;
+      if (NEGATED.test(clause)) continue;
+      if (OWNER_WAIT_PATTERNS.some((re) => re.test(clause))) return s;
+    }
     if (QUESTION_MARK.test(s) && !RHETORICAL.some((re) => re.test(s)) && ADDRESSES_OWNER.some((re) => re.test(s))) return s;
   }
   return null;

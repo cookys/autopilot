@@ -87,6 +87,16 @@ const PUBLISHED = '2026-10-04T10:00:00.000Z'
 const NOW_FRESH = Date.parse('2026-10-04T10:00:30.000Z')
 const NOW_STALE = Date.parse('2026-10-04T10:03:30.000Z') // 210 s after published_at, valid_for_s 180
 
+// ROOT_LIVENESS_CASES begin (strict JSON; hooks/session-root-liveness.test.js parses this block and runs scripts/session-mode.js readSessionRoot on it)
+const ROOT_LIVENESS_CASES: { name: string; level: string | null; marker_expires_in_h: number; turn_since_ago_h: number | null; root_alive: boolean }[] = [
+  { "name": "unexpired marker", "level": "l5", "marker_expires_in_h": 6, "turn_since_ago_h": null, "root_alive": true },
+  { "name": "unexpired plain marker", "level": null, "marker_expires_in_h": 6, "turn_since_ago_h": null, "root_alive": true },
+  { "name": "expired marker, fresh turn file", "level": null, "marker_expires_in_h": -30, "turn_since_ago_h": 1, "root_alive": true },
+  { "name": "expired marker, stale turn file", "level": null, "marker_expires_in_h": -60, "turn_since_ago_h": 30, "root_alive": false },
+  { "name": "expired marker, no turn file", "level": null, "marker_expires_in_h": -30, "turn_since_ago_h": null, "root_alive": false }
+]
+// ROOT_LIVENESS_CASES end
+
 type Tree = Record<string, string>
 const j = (v: unknown) => JSON.stringify(v)
 
@@ -464,6 +474,22 @@ for (const surface of SURFACES) {
     expect(await bandText($, surface)).toContain('疑似卡住 repo')
     expect(await paneHeader($, surface)).toBe('工作階段 $— · 本機今日 $3.10 · ctx —')
   })
+
+  // Root liveness parity: the same table is read by hooks/session-root-liveness.test.js against scripts/session-mode.js readSessionRoot.
+  // The clock here is 2026-10-04T10:00:00Z; offsets are hours relative to it (marker_expires_in_h < 0 = already expired, turn_since_ago_h = age of the turn file).
+  for (const c of ROOT_LIVENESS_CASES) {
+    test('band: root liveness parity - ' + c.name + ' (' + surface + ')', async ($, on) => {
+      const files = base()
+      const NOW0 = Date.parse(PUBLISHED)
+      files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: c.level, project_key: KEY, root_run_id: ROOT, expires_at: new Date(NOW0 + c.marker_expires_in_h * 3600e3).toISOString() })
+      if (c.turn_since_ago_h !== null) files[LIVE + '/turn/' + SID_A + '.json'] = j({ schema: 'autopilot.session-turn/1', session_id: SID_A, state: 'ended', since: new Date(NOW0 - c.turn_since_ago_h * 3600e3).toISOString(), project_key: KEY, root_run_id: ROOT })
+      world(on, files)
+      await start($, surface)
+      // a live root shows the root envelope (the healthy world's text); a dead one falls to the cwd route and finds no project
+      if (c.root_alive) expect(await bandText($, surface)).toBe(FRESH_TEXT())
+      else expect(await bandText($, surface)).not.toBe(FRESH_TEXT())
+    })
+  }
 
   test('band: an expired marker is ignored (' + surface + ')', async ($, on) => {
     const files = base()

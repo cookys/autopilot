@@ -79,6 +79,12 @@ const SHOULD_NOT = [
   'Nothing here needs your approval.',
 ];
 
+// The independent acceptance's 30 sentences (decfix cv1 evidence/probe.js), verbatim.
+const ACCEPT_YES = ['我不會替你決定，等你回覆。','等待你的核准才能 release。','- 請你決定 deployment 的時間。','- Shall I publish version two?','Would you like a separate hotfix branch?','Can I proceed with migration?','要我刪掉舊索引嗎？','我能修改 production 嗎？','能否讓我部署？','請核准這次上線。','需要您的確認才能前進。','Please confirm whether we should deploy.','Waiting for your sign-off on release.','請你同意我再操作。','沒有你的批准就不能部署。'];
+const ACCEPT_NO = ['所有 changes 已驗證完成。','- release 已經完成。','- No approval is required from you.','You do not need to approve this release.','No need for your approval.','章節標題：如何判斷是否完成？','服務會等待佇列清空。','函式檢查參數是否合法。','> Shall I release v2?','```text\n請你批准 release\n```','日誌內容是「要我重試嗎？」。','`waiting for your approval` 是訊息常數。','前一位同事說 “Can I proceed with migration?”','部署已獲同意，正在進行。','難道程式還不夠清楚嗎？'];
+SHOULD.push(...ACCEPT_YES, '我不會替你決定，等你回覆。', '請核准這次上線。');
+SHOULD_NOT.push(...ACCEPT_NO, '還有什麼好說的嗎？', '他問：「要我推到遠端嗎？」', '> 要不要推送？', '// TODO: should I retry?');
+
 test('SHOULD table is big enough and every sentence is found', () => {
   assert.ok(SHOULD.length >= 20);
   const missed = SHOULD.filter((s) => findOwnerQuestion(s) === null);

@@ -179,3 +179,58 @@ test('ask-decision markerRoot (AskUserQuestion cards) uses the same judgement', 
   fs.rmSync(path.join(t.live, 'turn', 's1.json'));
   assert.strictEqual(spawnSync(process.execPath, ['-e', code], { env: env(t), encoding: 'utf8' }).stdout, 'null');
 });
+
+// Panel parity: the live pane (mods/live/register.ts markerAlive) and readSessionRoot judge the SAME table. The table lives in
+// mods/live/live.test.ts (where the pane's side runs it through the real resolveScope); here the JS side runs it.
+test('parity table of the live pane (mods/live/live.test.ts ROOT_LIVENESS_CASES) gives the same root through readSessionRoot', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'mods', 'live', 'live.test.ts'), 'utf8');
+  const m = src.match(/ROOT_LIVENESS_CASES begin[^\n]*\nconst ROOT_LIVENESS_CASES[^=]*= (\[[\s\S]*?\n\])\n\/\/ ROOT_LIVENESS_CASES end/);
+  assert.ok(m, 'table block found');
+  const cases = JSON.parse(m[1]);
+  assert.ok(cases.length >= 5);
+  for (const c of cases) {
+    const t = fixture('par');
+    const now = Date.now();
+    fs.writeFileSync(path.join(t.modes, 's1.json'), JSON.stringify({ session_id: 's1', level: c.level, root_run_id: 'root-abc', expires_at: new Date(now + c.marker_expires_in_h * H).toISOString() }));
+    if (c.turn_since_ago_h !== null) turn(t, 's1', c.turn_since_ago_h);
+    const r = sm().readSessionRoot('s1', { markerDir: t.modes, liveBase: t.live });
+    assert.strictEqual(r.root !== null, c.root_alive, c.name);
+  }
+  // the pane's source carries the same TTL and schema the JS side uses
+  const reg = fs.readFileSync(path.join(ROOT, 'mods', 'live', 'register.ts'), 'utf8');
+  assert.match(reg, /MARKER_TTL_MS = 24 \* 3600 \* 1000/);
+  assert.match(reg, /autopilot\.session-turn\/1/);
+});
+
+// Turn state transition (live-session-lib recordTurn): an OLD turn file + expired marker, then a new UserPromptSubmit. The turn
+// file it writes and what open-decision / ask-decision decide afterwards must name the same root (no turn=null, askAfter=root).
+test('turn transition: stale turn + expired marker, then UserPromptSubmit -> turn.root, ask-decision and open-decision agree', () => {
+  const t = fixture('n'); marker(t, 's1', { expiredHoursAgo: 40 }); turn(t, 's1', 35);
+  const code = `require(${JSON.stringify(path.join(ROOT, 'hooks', 'live-session-lib.js'))}).recordTurn({hook_event_name:'UserPromptSubmit',session_id:'s1',cwd:${JSON.stringify(t.repo)}})`;
+  assert.strictEqual(spawnSync(process.execPath, ['-e', code], { env: env(t), encoding: 'utf8' }).status, 0);
+  const rec = JSON.parse(fs.readFileSync(path.join(t.live, 'turn', 's1.json'), 'utf8'));
+  const askCode = `process.stdout.write(String(require(${JSON.stringify(path.join(ROOT, 'hooks', 'ask-decision.js'))}).markerRoot('s1')))`;
+  const ask = spawnSync(process.execPath, ['-e', askCode], { env: env(t), encoding: 'utf8' }).stdout;
+  const r = openCard(t, 's1');
+  assert.strictEqual(rec.root_run_id, 'root-abc');
+  assert.strictEqual(ask, 'root-abc');
+  assert.ok(/--root-abc\.json$/.test(r.files[0]));
+  assert.strictEqual(r.stderr, '');
+  // a Stop after it keeps the scope; a SessionEnd removes the file and the root is gone again once the marker is expired
+  const stop = `require(${JSON.stringify(path.join(ROOT, 'hooks', 'live-session-lib.js'))}).recordTurn({hook_event_name:'Stop',session_id:'s1'})`;
+  spawnSync(process.execPath, ['-e', stop], { env: env(t), encoding: 'utf8' });
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(t.live, 'turn', 's1.json'), 'utf8')).root_run_id, 'root-abc');
+  const end = `require(${JSON.stringify(path.join(ROOT, 'hooks', 'live-session-lib.js'))}).recordTurn({hook_event_name:'SessionEnd',session_id:'s1'})`;
+  spawnSync(process.execPath, ['-e', end], { env: env(t), encoding: 'utf8' });
+  assert.strictEqual(spawnSync(process.execPath, ['-e', askCode], { env: env(t), encoding: 'utf8' }).stdout, 'null');
+});
+
+// A marker with no `level` key (plain session, hooks/session-turn.test.js fixture) is legal; only an unknown level is refused.
+test('readSessionRoot: no level key is a plain session (keeps its root); an unknown level is refused', () => {
+  const t = fixture('o');
+  const w = (extra) => fs.writeFileSync(path.join(t.modes, 's1.json'), JSON.stringify({ root_run_id: 'root-abc', expires_at: new Date(Date.now() + H).toISOString(), ...extra }));
+  w({});
+  assert.strictEqual(sm().readSessionRoot('s1', { markerDir: t.modes, liveBase: t.live }).root, 'root-abc');
+  w({ level: 'l9' });
+  assert.strictEqual(sm().readSessionRoot('s1', { markerDir: t.modes, liveBase: t.live }).root, null);
+});

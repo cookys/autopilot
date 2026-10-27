@@ -277,11 +277,12 @@ function readSessionRoot(sessionId, opts = {}) {
     m = JSON.parse(fs.readFileSync(path.join(dir, `${session}.json`), 'utf8'));
   } catch { return out; }
   if (!m || typeof m !== 'object') return out;
-  if (m.level !== null && !LEVELS.has(m.level)) return out; // same validity as readSessionRecord
+  if (m.level != null && !LEVELS.has(m.level)) return out; // a marker with no level is a plain session (legal); only an unknown level is refused
   out.found = true;
   const expires = Date.parse(m.expires_at);
   out.expired = !(expires > now);
   if (!out.expired) out.live_via = 'marker';
+  else if (opts.alive === true) out.live_via = 'caller'; // the caller is itself proof of life (a prompt is arriving now)
   else {
     try {
       const base = opts.liveBase || require('./lib/live-state-dir.js').resolveLiveDir({ warn: () => {} }).base;

@@ -224,7 +224,7 @@ function turnScope(p) {
   } catch { /* no cache: null */ }
   try {
     // the one shared root judgement (session-mode.js readSessionRoot), same as open-decision / ask-decision / the snapshot
-    rootRunId = require('../scripts/session-mode.js').readSessionRoot(sanitizeSessionId(p.session_id), { liveBase: liveBase() }).root;
+    rootRunId = require('../scripts/session-mode.js').readSessionRoot(sanitizeSessionId(p.session_id), { liveBase: liveBase(), alive: true }).root; // a prompt arriving now is proof of life: the turn file written next must agree
   } catch { /* no marker: null */ }
   return { projectKey, rootRunId };
 }

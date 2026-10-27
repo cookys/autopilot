@@ -132,10 +132,21 @@ function campaignRootsOf(marker: Json, markerRoot: string | null): string[] {
 // longest path-boundary prefix of the real cwd among the watchers' runs/paths files. Never git, never a hash.
 type Scope = { key: string; root: string | null; marker: Json | null; campaign: string[] }
 
+// Same judgement as scripts/session-mode.js readSessionRoot (parity pinned by the ROOT_LIVENESS_CASES table in live.test.ts and
+// hooks/session-root-liveness.test.js): alive = marker unexpired, OR expired but <live>/turn/<sid>.json (schema autopilot.session-turn/1) has a
+// `since` inside one marker TTL (24 h). SessionEnd removes the turn file, so an ended session stays expired. Never "expired counts as valid".
+const MARKER_TTL_MS = 24 * 3600 * 1000
+async function markerAlive($: EngineInterface, liveBase: string, sid: string, marker: Json, nowMs: number): Promise<boolean> {
+  if (typeof marker.expires_at === 'string' && Date.parse(marker.expires_at) > nowMs) return true
+  const turn = await readObject($, liveBase + '/turn/' + sid + '.json')
+  if (!turn || turn.schema !== 'autopilot.session-turn/1' || typeof turn.since !== 'string') return false
+  return Date.parse(turn.since) > nowMs - MARKER_TTL_MS
+}
+
 async function resolveScope($: EngineInterface, autopilotHome: string, liveBase: string, sid: string, nowMs: number): Promise<Scope | null> {
   if (sid) {
     const marker = await readObject($, autopilotHome + '/session-mode/' + sid + '.json')
-    if (marker && isKey(marker.project_key) && typeof marker.expires_at === 'string' && Date.parse(marker.expires_at) > nowMs) {
+    if (marker && isKey(marker.project_key) && await markerAlive($, liveBase, sid, marker, nowMs)) {
       const root = typeof marker.root_run_id === 'string' && marker.root_run_id ? marker.root_run_id : null
       return { key: marker.project_key, root, marker, campaign: campaignRootsOf(marker, root) }
     }

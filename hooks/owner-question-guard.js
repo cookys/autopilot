@@ -86,6 +86,7 @@ function loadCfg() {
 // Drop fenced blocks and inline code: a question mark inside code is not a question to the owner.
 // Also drop quoted text (「」 『』 “” "") and Markdown quote lines (> ...): a relayed question is not ours to the owner.
 const QUOTED = [/「[^」\n]*」/g, /『[^』\n]*』/g, /“[^”\n]*”/g, /"[^"\n]*"/g];
+const HEADING_MARK = '\u0001';
 function stripCode(text) {
   let t = text.replace(/```[\s\S]*?(```|$)/g, ' ').replace(/`[^`\n]*`/g, ' ');
   // quote lines, `//` comment lines, markdown headings, and the lines of a real (unclosed-until-`*/`) block comment; list bullets `* ` / `- ` stay
@@ -93,22 +94,24 @@ function stripCode(text) {
   t = t.split('\n').filter((l) => {
     if (inBlock) { if (l.includes('*/')) inBlock = false; return false; }
     if (/^\s*\/\*/.test(l)) { if (!l.includes('*/')) inBlock = true; return false; }
-    return !/^\s*(>|\/\/|#{1,6}\s)/.test(l);
-  }).join('\n');
+    return !/^\s*(>|\/\/)/.test(l);
+  }).map((l) => l.replace(/^\s*#{1,6}\s+/, HEADING_MARK)).join('\n'); // a heading keeps its text; HEADING_MARK only switches off the question-mark rule for it
   for (const re of QUOTED) t = t.replace(re, ' ');
   return t;
 }
 
-// ASCII ? ! . end a sentence only before whitespace or the end of text (a URL query "a?b=1" is not a sentence end).
+// ASCII ? ! . end a sentence before whitespace, the end of text, or a CJK / full-width character ("嗎?如果"); a URL query "a?b=1" and "v1.2" are not sentence ends.
 function sentences(text) {
-  return stripCode(text).split(/(?<=[。？！])\s*|(?<=[?!.])(?=\s|$)\s*|\n+/).map((s) => s.trim()).filter(Boolean);
+  return stripCode(text).split(/(?<=[。？！])\s*|(?<=[?!.])(?=\s|$|[\u3000-\u9fff\uff00-\uffef])\s*|\n+/).map((s) => s.trim()).filter(Boolean);
 }
 
 // Returns the first sentence that waits for the owner, or null.
 function findOwnerQuestion(text) {
-  for (const s of sentences(text)) {
-    if (TITLE_STYLE.test(s)) continue;
-    if (ENDS_WITH_QUESTION.test(s) && !RHETORICAL.some((re) => re.test(s))) return s;
+  for (const raw of sentences(text)) {
+    const heading = raw.startsWith(HEADING_MARK);
+    const s = heading ? raw.slice(1).trim() : raw;
+    // exclusions are scoped to the question-mark rule only; the wait rule below always runs
+    if (!heading && !TITLE_STYLE.test(s) && ENDS_WITH_QUESTION.test(s) && !RHETORICAL.some((re) => re.test(s))) return s;
     for (const clause of s.split(CLAUSE_SPLIT)) {
       if (CONDITION_ON_OWNER.test(clause)) return s;
       if (NEGATED.test(clause)) continue;

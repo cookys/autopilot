@@ -119,10 +119,10 @@ const ACCEPT2_NO = [
 '文件標題：如何選擇 shard？',
 'I am not waiting for your approval.',
 '不需要你批准這件事，真的不必你同意。'];
-SHOULD.push(...ACCEPT2_YES,
+SHOULD.push(...ACCEPT2_YES, '## 請你核准這次上線', '可以先發佈測試環境嗎?如果不行請告訴我。', '這個 schema 要採用方案 B 嗎?我先等著。', '要我推到遠端嗎?如果不要我就跳過。', 'Release heading: please approve the rollout', '章節標題：請你核准這次上線。',
   '這不是要你決定的事、要你批准後才能部署。', '能不能請你確認一下', '是不是要你批准', '* 要你核准 rollout', '- Please confirm the release date.',
   'Is the migration ok to start?', '可以先發佈測試環境嗎？');
-SHOULD_NOT.push(...ACCEPT2_NO,
+SHOULD_NOT.push(...ACCEPT2_NO, '版本 v1.2中文說明。', '網址是 https://x.com/a?b=1中文，已確認。', '章節標題：如何判斷是否完成？',
   '## 如何選擇 shard？', '/* should I retry?\n * 要你批准 */\n程式碼註解已略過。', 'See https://example.com/a?b=1 for details.');
 
 // RECALL TRADE-OFF (depth-0 decision: a missed owner question costs far more than one extra card prompt, so any sentence that ends with a

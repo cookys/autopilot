@@ -10,7 +10,7 @@
 |------|---------|----------------|--------|
 | 2026-10-26 | [depth-0 decides the per-turn gate (session-scoped switch, generic verifier, subagent coverage)](../plans/2026-10-26-depth0-per-turn-gate.md) | active | — | [plan](../plans/2026-10-26-depth0-per-turn-gate.md) |
 | 2026-10-24 | [BL-0055 phase 2: per-turn gate as an opt-in Stop-hook adapter, ON/OFF evaluation design (draft, awaiting plan review)](../plans/2026-10-24-per-turn-gate-phase2.md) | active | — | [plan](../plans/2026-10-24-per-turn-gate-phase2.md) |
-| 2026-10-24 | [findings batch: a Major blocks the merge, not the lane (plan, ON/OFF eval design)](../plans/2026-10-24-findings-batch.md) | active | — | [plan](../plans/2026-10-24-findings-batch.md) |
+| 2026-10-24 | [findings batch: a Major blocks the merge, not the lane (plan, ON/OFF eval design)](../plans/_archive/2026/10/2026-10-24-findings-batch.md) | 3.0.0 | — | [plan](../plans/_archive/2026/10/2026-10-24-findings-batch.md) |
 | 2026-10-23 | [guard port](../plans/2026-10-23-guard-port.md) | active | — | [plan](../plans/2026-10-23-guard-port.md) |
 | 2026-10-22 | [review ledger retention](../plans/2026-10-22-review-ledger-retention.md) | active | — | [plan](../plans/2026-10-22-review-ledger-retention.md) |
 | 2026-10-21 | [BL-0271 item 4: subagent concurrency advisory (inventory and plan, frozen, awaiting owner go/no-go)](../plans/2026-10-21-subagent-concurrency-advisory.md) | active | — | [plan](../plans/2026-10-21-subagent-concurrency-advisory.md) |

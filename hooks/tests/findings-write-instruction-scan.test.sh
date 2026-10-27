@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FINDINGS* write-instruction scan (docs/plans/2026-10-24-findings-batch.md iv, P2 mechanism commit).
+# FINDINGS* write-instruction scan (docs/plans/_archive/2026/10/2026-10-24-findings-batch.md iv, P2 mechanism commit).
 # Shipped guidance (skills/, references/, agents/) must never tell a subagent to Write a
 # FINDINGS* / report-style file: findings reach depth 0 as text. A line violates when it has a
 # write-verb followed by a FINDINGS filename token and carries no negation word.

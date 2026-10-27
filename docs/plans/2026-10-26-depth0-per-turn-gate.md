@@ -130,7 +130,7 @@ Order: P0 and P1 are independent; P2 needs P0 and P1; P3 needs P2; P4 needs P3 P
 
 ### 5.1 ON/OFF evaluation design (draft for P3)
 
-Instrument: `evals/skill-onoff/` pattern (prereg, `freeze-guidance-arm.js`, runner `cc`; lessons from `docs/plans/2026-10-24-findings-batch.md` section 4): markers read recorded tool calls and files, never the agent's words; prereg frozen before the first scored cell. `skill_invoked` is the existing manipulation-check column (`evals/skill-onoff/README.md:72`), measured per cell from the runner transcript (guidance file loaded).
+Instrument: `evals/skill-onoff/` pattern (prereg, `freeze-guidance-arm.js`, runner `cc`; lessons from `docs/plans/_archive/2026/10/2026-10-24-findings-batch.md` section 4): markers read recorded tool calls and files, never the agent's words; prereg frozen before the first scored cell. `skill_invoked` is the existing manipulation-check column (`evals/skill-onoff/README.md:72`), measured per cell from the runner transcript (guidance file loaded).
 
 Arms (Decision E): `base` = depth-0 guidance files frozen at the develop sha, mechanism present. `change` = the same plus a candidate paragraph kept in `evals/skill-onoff/candidates/depth0-gate-arming.md` (committed before freezing), inserted into `skills/ceo-agent/SKILL.md` and `skills/dev-flow/SKILL.md` and the loaded references it needs; the exact list goes into `allowed_arm_difference` and `--check-arms` must show no other difference. P4 commits the same bytes.
 

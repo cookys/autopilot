@@ -135,11 +135,17 @@ function readFacts(gitDir) {
 //   1. the journal exists and every line is "<40hex> <40hex>";
 //   2. its first record is the creation of develop at the fixture's base commit (<git-dir>/fbatch/develop-base);
 //   3. it is a chain: each record's old equals the previous record's new; after a deletion (new = zeros) a record may start at any tip, because
-//      `git branch -m X develop` creates develop without an event of its own (an implicit creation, judged like any state);
-//   4. its last new equals the current refs/heads/develop;
-//   5. cross-check with the reflog (secondary evidence): every state the current develop reflog lists must be a state the journal lists. A move made
-//      with the hook disabled (git -c core.hooksPath=..., deleting the hook) breaks 3, 4 or 5.
-// The states judged are every non-zero new of the journal.
+//      `git branch -m|-M|-c|-C X develop` creates develop without an event of its own (an implicit creation: it needs a rename/copy line in the develop
+//      reflog, else it is an error; the tip it starts at is judged like any state);
+//   4. when the journal does not end in a deletion its last new equals the current refs/heads/develop; when it does, the tip on the last rename/copy
+//      line of the reflog is the present state; either way the current refs/heads/develop must be a judged state;
+//   5. cross-check with the reflog (secondary evidence). git gives a renamed-in develop the WHOLE reflog of the renamed branch plus one line
+//      "Branch: renamed|copied refs/heads/X to refs/heads/develop" (old = new = the tip then). That last such line is the boundary: the lines before it
+//      were inherited (never develop: not required in the journal, not judged), its own tip is judged, and every line AFTER it must be a judged state.
+//      With no rename/copy line every line of the reflog is checked. A move made with the hook disabled (git -c core.hooksPath=..., deleting the hook),
+//      also after a rename, breaks 3, 4 or 5.
+// The states judged are the non-zero states of the journal (every non-zero new, and the old of a record that starts an implicit creation) plus the tip
+// on the last rename/copy line of the reflog.
 const ZERO = '0'.repeat(40);
 function gitDirOf(repo) {
   const g = cp.spawnSync('git', ['-C', repo, 'rev-parse', '--git-common-dir'], { encoding: 'utf8' }); // the absolute-path option needs git 2.31: resolve against the repo

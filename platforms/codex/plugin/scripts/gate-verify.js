@@ -92,7 +92,8 @@ function baseResolves(repo, base) {
 }
 
 function blobAtBase(repo, base, rel) {
-  return git(repo, ['cat-file', '-e', base + ':./' + rel], { allowFail: true }).status === 0;
+  const out = String(git(repo, ['--literal-pathspecs', 'ls-tree', base, '--', rel]).stdout);
+  return /^\d+ blob /.test(out);
 }
 
 // ---------------------------------------------------------------- paths and globs
@@ -376,24 +377,22 @@ function prepare(input, repo, repoReal) {
 
 // ---------------------------------------------------------------- evaluation
 
-// Three distinct states: {state:'ok', text} | {state:'missing'} (really absent) |
-// {state:'skip', reason} (too large, outside the repo, not a regular file, unreadable).
-// Text rules skip 'skip'; only 'missing' is reported as missing.
+// States: {state:'ok', text} | {state:'missing'} (really absent, or not a regular file) |
+// {state:'skip', reason} (only the two cases the plan names: too large, outside the repo).
+// Any other failure to look or read (permission, I/O) is exit 2, never "no change".
 function readWorktreeFile(repoReal, rel) {
   const abs = path.join(repoReal, rel);
-  try { fs.lstatSync(abs); } catch (e) {
-    return e.code === 'ENOENT' || e.code === 'ENOTDIR' ? { state: 'missing' } : { state: 'skip', reason: 'unreadable' };
-  }
   let real;
   try { real = fs.realpathSync(abs); } catch (e) {
-    return e.code === 'ENOENT' ? { state: 'missing' } : { state: 'skip', reason: 'unreadable' };
+    if (e.code === 'ENOENT' || e.code === 'ENOTDIR') return { state: 'missing' };
+    return fail('cannot resolve ' + rel + ': ' + e.code);
   }
   if (!inside(real, repoReal)) return { state: 'skip', reason: 'outside' };
   let st;
-  try { st = fs.statSync(real); } catch (e) { return { state: 'skip', reason: 'unreadable' }; }
-  if (!st.isFile()) return { state: 'skip', reason: 'not-a-file' };
+  try { st = fs.statSync(real); } catch (e) { return fail('cannot stat ' + rel + ': ' + e.code); }
+  if (!st.isFile()) return { state: 'missing' };
   if (st.size > MAX_FILE_BYTES) return { state: 'skip', reason: 'too-large' };
-  try { return { state: 'ok', text: fs.readFileSync(real, 'utf8') }; } catch (e) { return { state: 'skip', reason: 'unreadable' }; }
+  try { return { state: 'ok', text: fs.readFileSync(real, 'utf8') }; } catch (e) { return fail('cannot read ' + rel + ': ' + e.code); }
 }
 
 function isRegularFileInRepo(repoReal, rel) {
@@ -427,35 +426,60 @@ function baseEntries(repo, base, prefix) {
   return out;
 }
 
-// worktree side: [{rel, kind: file|symlink|gitlink, exec}] under `prefix`; `.git` skipped,
-// symlinks are entries and are never followed.
-function walkFs(repoReal, prefix) {
+function gitlinksOf(b) { return new Set(Array.from(b).filter(([, e]) => e.mode === '160000').map(([p]) => p)); }
+
+// worktree side: [{rel, kind: file|symlink|gitlink, exec}] under `prefix`. Only the repo ROOT
+// `.git` is skipped. A nested `.git` is an ordinary entry; a directory is a gitlink only where
+// base itself has a 160000 entry at that path. Symlinks are entries and are never followed.
+// Anything that cannot be looked at or listed is exit 2 (only a path that vanished is absent).
+function walkFs(repoReal, prefix, gitlinks) {
   const out = [];
   const segs = prefix ? prefix.split('/') : [];
   let rel = '';
   for (let i = 0; i < segs.length; i++) {
     rel = rel ? rel + '/' + segs[i] : segs[i];
-    if (segs[i] === '.git') return out;
+    if (i === 0 && segs[i] === '.git') return out;
     let st;
-    try { st = fs.lstatSync(path.join(repoReal, rel)); } catch (e) { return out; }
+    try { st = fs.lstatSync(path.join(repoReal, rel)); } catch (e) {
+      if (e.code === 'ENOENT' || e.code === 'ENOTDIR') return out;
+      return fail('cannot look at ' + rel + ': ' + e.code);
+    }
     if (i < segs.length - 1 && !st.isDirectory()) return out;
   }
   function visit(r) {
     tick();
     const abs = r ? path.join(repoReal, r) : repoReal;
     let st;
-    try { st = fs.lstatSync(abs); } catch (e) { return; }
+    try { st = fs.lstatSync(abs); } catch (e) {
+      if (e.code === 'ENOENT') return; // vanished while walking
+      return fail('cannot look at ' + r + ': ' + e.code);
+    }
     if (st.isSymbolicLink()) out.push({ rel: r, kind: 'symlink' });
     else if (st.isFile()) out.push({ rel: r, kind: 'file', exec: (st.mode & 0o100) !== 0 });
     else if (st.isDirectory()) {
-      if (r && fs.existsSync(path.join(abs, '.git'))) { out.push({ rel: r, kind: 'gitlink' }); return; }
+      if (gitlinks.has(r)) { out.push({ rel: r, kind: 'gitlink' }); return; }
       let names;
-      try { names = fs.readdirSync(abs).sort(); } catch (e) { return; }
-      for (const n of names) if (n !== '.git') visit(r ? r + '/' + n : n);
+      try { names = fs.readdirSync(abs).sort(); } catch (e) {
+        if (e.code === 'ENOENT') return;
+        return fail('cannot list ' + (r || '.') + ': ' + e.code);
+      }
+      for (const n of names) if (!(n === '.git' && !r)) visit(r ? r + '/' + n : n);
     }
   }
   visit(rel);
   return out;
+}
+
+// Commit a worktree submodule is really at, read without trusting the parent repo or any
+// worker config (the -c flags and the scrubbed env apply). Unreadable or undecidable is exit 2.
+function submoduleHead(repoReal, rel) {
+  const dir = path.join(repoReal, rel);
+  const r = git(dir, ['rev-parse', '--show-toplevel', 'HEAD'], { allowFail: true });
+  if (r.status !== 0) return fail('cannot read the HEAD of submodule ' + rel);
+  const [top, head] = String(r.stdout).trim().split('\n');
+  if (top !== fs.realpathSync(dir)) return fail('submodule ' + rel + ' is not its own repository');
+  if (!SHA_RE.test(head || '')) return fail('submodule ' + rel + ' has no readable HEAD commit');
+  return head;
 }
 
 function blobSha(buf) {
@@ -464,14 +488,17 @@ function blobSha(buf) {
 
 function wtBlobSha(repoReal, e) {
   const abs = path.join(repoReal, e.rel);
-  try { return blobSha(e.kind === 'symlink' ? Buffer.from(fs.readlinkSync(abs)) : fs.readFileSync(abs)); } catch (err) { return null; }
+  try { return blobSha(e.kind === 'symlink' ? Buffer.from(fs.readlinkSync(abs)) : fs.readFileSync(abs)); } catch (err) {
+    if (err.code === 'ENOENT') return null; // vanished: differs from base
+    return fail('cannot read ' + e.rel + ': ' + err.code);
+  }
 }
 
 function baseKind(be) { return be.mode === '120000' ? 'symlink' : be.mode === '160000' ? 'gitlink' : 'file'; }
 
 function differs(repoReal, be, we) {
   if (baseKind(be) !== we.kind) return true;
-  if (we.kind === 'gitlink') return false;
+  if (we.kind === 'gitlink') return submoduleHead(repoReal, we.rel) !== be.sha;
   if (we.kind === 'file' && (be.mode === '100755') !== we.exec) return true;
   return wtBlobSha(repoReal, we) !== be.sha;
 }
@@ -482,20 +509,21 @@ function changedPaths(repo, repoReal, base, prefixes) {
   for (const prefix of new Set(prefixes)) {
     newWalk();
     const b = baseEntries(repo, base, prefix);
-    const w = new Map(walkFs(repoReal, prefix).map((e) => [e.rel, e]));
+    const w = new Map(walkFs(repoReal, prefix, gitlinksOf(b)).map((e) => [e.rel, e]));
     for (const [p, be] of b) { const we = w.get(p); if (!we || differs(repoReal, be, we)) changed.add(p); }
     for (const p of w.keys()) if (!b.has(p)) changed.add(p);
   }
   return Array.from(changed).sort();
 }
 
-function walkFiles(repoReal, prefix) {
+function walkFiles(repo, repoReal, base, prefix) {
   newWalk();
-  return walkFs(repoReal, prefix).filter((e) => e.kind === 'file').map((e) => e.rel);
+  const gitlinks = gitlinksOf(baseEntries(repo, base, prefix));
+  return walkFs(repoReal, prefix, gitlinks).filter((e) => e.kind === 'file').map((e) => e.rel);
 }
 
-function builtinNoConflictMarkers(repo, repoReal) {
-  for (const rel of walkFiles(repoReal, '')) {
+function builtinNoConflictMarkers(repo, repoReal, base) {
+  for (const rel of walkFiles(repo, repoReal, base, '')) {
     const r = readWorktreeFile(repoReal, rel);
     if (r.state !== 'ok' || r.text.slice(0, 8000).includes('\0')) continue;
     const lines = r.text.split('\n');
@@ -513,7 +541,7 @@ function builtinNoConflictMarkers(repo, repoReal) {
 function builtinJsSyntax(repo, repoReal, base) {
   newWalk();
   const b = baseEntries(repo, base, '');
-  for (const e of walkFs(repoReal, '')) {
+  for (const e of walkFs(repoReal, '', gitlinksOf(b))) {
     const rel = e.rel;
     if (e.kind !== 'file' || !/\.(js|cjs|mjs)$/.test(rel)) continue;
     const be = b.get(rel);
@@ -563,7 +591,7 @@ function runRegistryCheck(res, repo, repoReal, base) {
 function runCheck(name, checks, repo, repoReal, base) {
   const res = checks.get(name);
   if (res.kind === 'builtin') {
-    return name === 'js-syntax' ? builtinJsSyntax(repo, repoReal, base) : builtinNoConflictMarkers(repo, repoReal);
+    return name === 'js-syntax' ? builtinJsSyntax(repo, repoReal, base) : builtinNoConflictMarkers(repo, repoReal, base);
   }
   return runRegistryCheck(res, repo, repoReal, base);
 }
@@ -597,7 +625,7 @@ function evaluate(prep, input, repo, repoReal) {
   if (ft.length) {
     for (const f of ft) {
       let n = 0;
-      for (const rel of walkFiles(repoReal, prefixOf(f.norm))) {
+      for (const rel of walkFiles(repo, repoReal, base, prefixOf(f.norm))) {
         if (!matchGlob(f.norm, rel)) continue;
         const r = readWorktreeFile(repoReal, rel);
         if (r.state !== 'ok') continue;

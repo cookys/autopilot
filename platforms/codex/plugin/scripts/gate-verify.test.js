@@ -686,6 +686,97 @@ C.walk_limit_exit_2 = (S) => {
   expectTwo(run(S, ctx, FORBID, { args: ['--walk-limit', String(GV.MAX_WALK_ENTRIES + 1)] }));
 };
 
+// ---- round-4 controls: the walk has no fail-open exit
+
+function makeSubRepo() {
+  const ctx = makeRepo();
+  const s = path.join(ctx.dir, 'sub'); fs.mkdirSync(s);
+  git(s, 'init', '-q'); fs.writeFileSync(path.join(s, 'p'), 'old'); git(s, 'add', '-A'); git(s, 'commit', '-q', '-m', 'old');
+  const sha = git(s, 'rev-parse', 'HEAD');
+  git(ctx.dir, 'update-index', '--add', '--cacheinfo', '160000,' + sha + ',sub'); git(ctx.dir, 'commit', '-q', '-m', 'gitlink');
+  ctx.base = git(ctx.dir, 'rev-parse', 'HEAD');
+  return { ctx, s };
+}
+const SUBRULES = L({ forbid_paths: [{ id: 'sub', glob: 'sub/**' }] });
+C.submodule_commit_change_is_a_violation = (S) => {
+  const { ctx, s } = makeSubRepo();
+  expectClean(run(S, ctx, SUBRULES));
+  fs.writeFileSync(path.join(s, 'p'), 'new'); git(s, 'add', '-A'); git(s, 'commit', '-q', '-m', 'new');
+  expectViolation(run(S, ctx, SUBRULES), 'sub', /^sub$/);
+};
+C.submodule_head_unreadable_is_exit_2 = (S) => {
+  const a = makeSubRepo(); fs.writeFileSync(path.join(a.s, '.git', 'HEAD'), 'garbage\n');
+  expectTwo(run(S, a.ctx, SUBRULES), 'corrupt HEAD');
+  const b = makeSubRepo(); fs.rmSync(path.join(b.s, '.git'), { recursive: true, force: true });
+  expectTwo(run(S, b.ctx, SUBRULES), 'uninitialised submodule directory');
+};
+
+const FAKE_GIT = {
+  empty_file: (d) => fs.writeFileSync(path.join(d, '.git'), ''),
+  empty_dir: (d) => fs.mkdirSync(path.join(d, '.git')),
+  gitdir_file: (d) => fs.writeFileSync(path.join(d, '.git'), 'gitdir: ../elsewhere\n'),
+  dir_with_payload: (d) => { fs.mkdirSync(path.join(d, '.git')); fs.writeFileSync(path.join(d, '.git', 'evil.js'), 'BAD function (\n'); },
+};
+C.fake_nested_dot_git_cannot_hide_a_subtree = (S) => {
+  for (const [name, mkfake] of Object.entries(FAKE_GIT)) {
+    const ctx = makeRepo(); fs.mkdirSync(path.join(ctx.dir, 'hidden'));
+    if (name !== 'dir_with_payload') write(ctx, 'hidden/a.js', 'BAD function (\n');
+    mkfake(path.join(ctx.dir, 'hidden'));
+    const at = (r) => name + ': ' + JSON.stringify(r.out) + r.stderr;
+    const fp = run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**/*.js' }] }));
+    assert.strictEqual(fp.status, 1, 'forbid_paths ' + at(fp));
+    const ft = run(S, ctx, L({ forbid_text: [{ id: 'R4', glob: 'hidden/**/*.js', text: 'BAD' }] }));
+    assert.strictEqual(ft.status, 1, 'forbid_text ' + at(ft));
+    const js = run(S, ctx, L({ must_pass: [{ id: 'R5', check: 'js-syntax' }] }));
+    assert.strictEqual(js.status, 1, 'js-syntax ' + at(js));
+  }
+};
+
+const IS_ROOT = typeof process.getuid === 'function' && process.getuid() === 0;
+function withMode(file, mode, fn) {
+  fs.chmodSync(file, mode);
+  try { fn(); } finally { fs.chmodSync(file, fs.statSync(file).isDirectory() ? 0o755 : 0o644); }
+}
+C.unreadable_directory_is_exit_2 = (S) => {
+  if (IS_ROOT) return;
+  const ctx = makeRepo(); const d = path.join(ctx.dir, 'hidden');
+  fs.mkdirSync(path.join(d, 'sub'), { recursive: true }); fs.writeFileSync(path.join(d, 'a.js'), 'BAD');
+  withMode(d, 0o000, () => {
+    expectTwo(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] })), 'readdir');
+    expectTwo(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/sub/**' }] })), 'prefix lstat');
+    expectTwo(run(S, ctx, L({ forbid_text: [{ id: 'R4', glob: 'hidden/**', text: 'BAD' }] })), 'forbid_text');
+  });
+};
+C.unsearchable_directory_is_exit_2 = (S) => {
+  if (IS_ROOT) return;
+  const ctx = makeRepo(); const d = path.join(ctx.dir, 'hidden'); fs.mkdirSync(d); fs.writeFileSync(path.join(d, 'a.js'), 'BAD');
+  withMode(d, 0o444, () => { // listable, but its children cannot be looked at
+    expectTwo(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] })));
+  });
+};
+C.unreadable_file_is_exit_2 = (S) => {
+  if (IS_ROOT) return;
+  const ctx = makeRepo(); const f = path.join(ctx.dir, 'src/legacy/old.js');
+  withMode(f, 0o000, () => { expectTwo(run(S, ctx, FORBID), 'hash a tracked file'); });
+  const g = path.join(ctx.dir, 'src/secret.js'); fs.writeFileSync(g, 'console.log(1)\n');
+  withMode(g, 0o000, () => { expectTwo(run(S, ctx, L({ forbid_text: [{ id: 'R4', glob: 'src/*.js', text: 'console.log' }] })), 'forbid_text read'); });
+};
+
+// every case is either a negative control with at least one mutation, or listed here with a reason
+const POSITIVE_ONLY = {
+  clean_fixture_exits_0: 'clean baseline, asserted by the exit-0 side of the other cases',
+  argv_allowed_flags_still_work: 'positive side of the argv allowlist',
+  rule_40_is_allowed: 'positive side of the 40-rule cap (negative: exit2_rule_41)',
+  forbid_paths_unchanged_is_clean: 'positive side of forbid_paths',
+  gate_file_valid_and_env_var: 'positive side of the gate-file envelope',
+  gate_file_mode_violations_hides_features: 'covered by mode-violations-skips-features',
+};
+function uncovered(cases, mutations, positive) {
+  const covered = new Set();
+  for (const m of mutations) for (const c of m.cases) covered.add(c);
+  return Object.keys(cases).filter((n) => !covered.has(n) && !(n in positive));
+}
+
 // ---------------------------------------------------------------- green run
 
 for (const [name, fn] of Object.entries(C)) {
@@ -773,12 +864,24 @@ const MUTATIONS = [
     ['return wtBlobSha(repoReal, we) !== be.sha;', "return nulList(git(repoReal, ['diff', '--name-only', '-z', 'HEAD', '--', we.rel]).stdout).length > 0;"]],
     cases: ['worker_fsmonitor_never_runs'] },
   { defence: 'no-index-reading-git-commands', from: "const args = ['--literal-pathspecs', 'ls-tree', '-r', '-z', base];", to: "const args = ['--literal-pathspecs', 'ls-files', '-z', base];", cases: ['no_worker_state_git_commands'] },
-  { defence: 'text-rules-walk-ignored-files', from: 'for (const rel of walkFiles(repoReal, prefixOf(f.norm))) {',
+  { defence: 'text-rules-walk-ignored-files', from: 'for (const rel of walkFiles(repo, repoReal, base, prefixOf(f.norm))) {',
     to: "for (const rel of nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout)) {", cases: ['forbid_text_sees_ignored_and_untracked'] },
-  { defence: 'conflict-marker-walk-ignored-files', from: "for (const rel of walkFiles(repoReal, '')) {",
+  { defence: 'conflict-marker-walk-ignored-files', from: "for (const rel of walkFiles(repo, repoReal, base, '')) {",
     to: "for (const rel of nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout)) {", cases: ['builtins_see_ignored_files'] },
-  { defence: 'js-syntax-walk-ignored-files', from: "for (const e of walkFs(repoReal, '')) {",
-    to: "for (const e of walkFs(repoReal, '').filter((x) => nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout).includes(x.rel))) {", cases: ['builtins_see_ignored_files'] },
+  { defence: 'js-syntax-walk-ignored-files', from: "for (const e of walkFs(repoReal, '', gitlinksOf(b))) {",
+    to: "for (const e of walkFs(repoReal, '', gitlinksOf(b)).filter((x) => nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout).includes(x.rel))) {", cases: ['builtins_see_ignored_files'] },
+  { defence: 'fake-dot-git-gitlink-by-existence', from: 'if (gitlinks.has(r)) {', to: "if (gitlinks.has(r) || (r && fs.existsSync(path.join(abs, '.git')))) {", cases: ['fake_nested_dot_git_cannot_hide_a_subtree'] },
+  { defence: 'nested-dot-git-name-skipped', from: "if (!(n === '.git' && !r)) visit(", to: "if (n !== '.git') visit(", cases: ['fake_nested_dot_git_cannot_hide_a_subtree'] },
+  { defence: 'submodule-commit-compare', from: 'return submoduleHead(repoReal, we.rel) !== be.sha;', to: 'return false;', cases: ['submodule_commit_change_is_a_violation'] },
+  { defence: 'submodule-head-error-swallowed', edits: [['function submoduleHead(', 'function submoduleHead(repoReal, rel) { try { return submoduleHead0(repoReal, rel); } catch (e) { return null; } }\nfunction submoduleHead0(']], cases: ['submodule_head_unreadable_is_exit_2'] },
+  { defence: 'submodule-own-repo-guard', from: "if (top !== fs.realpathSync(dir)) return fail(", to: "if (false) return fail(", cases: ['submodule_head_unreadable_is_exit_2'] },
+  { defence: 'walk-readdir-error', from: "return fail('cannot list ' + (r || '.') + ': ' + e.code);", to: 'return;', cases: ['unreadable_directory_is_exit_2'] },
+  { defence: 'walk-entry-lstat-error', from: "return fail('cannot look at ' + r + ': ' + e.code);", to: 'return;', cases: ['unsearchable_directory_is_exit_2'] },
+  { defence: 'hash-read-error', from: "return fail('cannot read ' + e.rel + ': ' + err.code);", to: 'return null;', cases: ['unreadable_file_is_exit_2'] },
+  { defence: 'text-read-error', from: "catch (e) { return fail('cannot read ' + rel + ': ' + e.code); }", to: "catch (e) { return { state: 'skip', reason: 'unreadable' }; }", cases: ['unreadable_file_is_exit_2'] },
+  { defence: 'builtin-conflict-markers-detect', from: "return { ok: false, evidence: rel + ':' + (i + 1) };", to: 'void 0;', cases: ['builtin_conflict_markers'] },
+  { defence: 'builtin-js-syntax-detect', from: "if (r.status !== 0) return { ok: false, evidence: rel + ': ' + String(r.stderr).slice(0, 200) };", to: 'void 0;', cases: ['builtin_js_syntax'] },
+  { defence: 'rules-file-json-parse', from: "try { return JSON.parse(text); } catch (e) { fail(what + ' is not valid JSON'); }", to: "try { return JSON.parse(text); } catch (e) { return { v: 1 }; }", cases: ['exit2_not_json'] },
   { defence: 'walk-limit', from: 'if (++walkState.n > walkState.limit) fail(', to: 'if (++walkState.n < 0) fail(', cases: ['walk_limit_exit_2'] },
   { defence: 'path-dotdot', from: "if (p.split('/').includes('..')) return { error: 'contains a .. segment' };", to: '', cases: ['exit2_dotdot'] },
   { defence: 'path-absolute', from: "if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return { error: 'absolute path' };", to: '', cases: ['exit2_absolute'] },
@@ -856,6 +959,16 @@ for (const m of MUTATIONS) {
     }
   });
 }
+
+test('green: every case is a negative control with a mutation, or listed positive-only', () => {
+  assert.deepStrictEqual(uncovered(C, MUTATIONS, POSITIVE_ONLY), []);
+  for (const n of Object.keys(POSITIVE_ONLY)) assert.ok(n in C, 'stale positive-only entry ' + n);
+});
+
+test('red: the coverage check flags a case no mutation guards', () => {
+  const fake = { ...C, a_new_case_nobody_mutates: () => {} };
+  assert.deepStrictEqual(uncovered(fake, MUTATIONS, POSITIVE_ONLY), ['a_new_case_nobody_mutates']);
+});
 
 test('red: a schema file that drifts from the validator fails the pin', () => {
   const schema = JSON.parse(fs.readFileSync(SCHEMA, 'utf8'));

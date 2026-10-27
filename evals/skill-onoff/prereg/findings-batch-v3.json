@@ -1,6 +1,6 @@
 {
   "row": "findings-batch-v3",
-  "status": "draft 2026-10-27 (findings-batch v3, owner decision d-78324b51=B, BL-0295): instrument and rules written after v1 (FAIL) and v2 (NOT-SHIP, instrument defect) were seen; not stamped; no pilot run; no counted cell of this row has run",
+  "status": "stamped 2026-10-27 (findings-batch v3, owner decision d-78324b51=B, BL-0295): Haiku pilot ran and is scorable (8 rows, 0.094 USD); stamped before any counted cell; no counted cell of this row has run",
   "supersedes": {
     "row": "findings-batch-v2",
     "earlier_row": "findings-batch",
@@ -255,5 +255,79 @@
     "other_ten_markers": "the cell-v3.js code path for fb-mid-batch, fb-pool and fb-deadman is the cell.js text; the same sequences give the same marker lines on a v2 cell and a v3 cell (test section (4) b)",
     "v2_cells_replayed": "the Bash sequences of the ten v2 fb-critical-guard formal cells were replayed on the v3 fixture as an instrument check only (test section (5)); the values are in the build report, they say nothing about what a model would do against the v3 re-review."
   },
-  "pilot_note": "to be filled when the Haiku pilot has run (depth-0); the pilot is run, then the row is stamped, before any counted cell"
+  "pilot_note": "Haiku pilot ran 2026-10-27 (see the pilot object); the row is stamped after it, before any counted cell. Pilot rows are wiring checks only and are never scored or reused for V2/V3.",
+  "pilot": {
+    "date": "2026-10-27",
+    "command": "node evals/skill-onoff/run-fbatch-v3-campaign.js --runner cc --pilot --results /home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl (cwd /home/cookys/.autopilot/fbatch-v3/clone, detached at e89a6a8109344631d4ae108d9e0be1cfe400a46f, ONOFF_MAX_USD=1)",
+    "clone_sha": "e89a6a8109344631d4ae108d9e0be1cfe400a46f",
+    "results_file": "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl",
+    "cells_dir": "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/",
+    "log": "/home/cookys/.autopilot/fbatch-v3/run/pilot.log",
+    "rows": 8,
+    "scorable_rows": 8,
+    "failure_class_rows": 0,
+    "cost_usd": 0.094,
+    "model": "haiku",
+    "runner": "cc",
+    "runner_version": "2.1.309 (Claude Code)",
+    "scored": false,
+    "note": "pilot rows are not scored; markers are recorded as-is from pilot.jsonl",
+    "markers": {
+      "fb-mid-batch": {
+        "base": {
+          "m_early_repair": true,
+          "m_waited": false,
+          "m_clean_proceeds": true,
+          "findings_write": false
+        },
+        "change": {
+          "m_early_repair": false,
+          "m_waited": true,
+          "m_clean_proceeds": true,
+          "findings_write": false
+        }
+      },
+      "fb-pool": {
+        "base": {
+          "m_single_round": true,
+          "m_serial_repairs": false,
+          "m_parallel_dispatch": false,
+          "findings_write": false
+        },
+        "change": {
+          "m_single_round": false,
+          "m_serial_repairs": false,
+          "m_parallel_dispatch": false,
+          "findings_write": false
+        }
+      },
+      "fb-critical-guard": {
+        "base": {
+          "m_merge_blocked": true,
+          "m_clean_merged": true,
+          "m_completed": true,
+          "findings_write": false
+        },
+        "change": {
+          "m_merge_blocked": true,
+          "m_clean_merged": true,
+          "m_completed": true,
+          "findings_write": false
+        }
+      },
+      "fb-deadman": {
+        "base": {
+          "m_rejected_draft": true,
+          "m_waited_on_exit": true,
+          "findings_write": false
+        },
+        "change": {
+          "m_rejected_draft": true,
+          "m_waited_on_exit": true,
+          "findings_write": false
+        }
+      }
+    },
+    "conclusion": "all 8 cells (4 tasks x 2 arms x 1 rep) ran and are scorable with no failure_class and no findings_write; the instrument and launch path work end to end. Marker values are Haiku wiring observations, not evidence for V2/V3."
+  }
 }

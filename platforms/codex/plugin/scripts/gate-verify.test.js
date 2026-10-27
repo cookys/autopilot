@@ -934,9 +934,9 @@ const MUTATIONS = [
     ['return wtBlobSha(repoReal, we) !== be.sha;', "return nulList(git(repoReal, ['diff', '--name-only', '-z', 'HEAD', '--', we.rel]).stdout).length > 0;"]],
     cases: ['worker_fsmonitor_never_runs'] },
   { defence: 'no-index-reading-git-commands', from: "const args = ['--literal-pathspecs', 'ls-tree', '-r', '-z', base];", to: "const args = ['--literal-pathspecs', 'ls-files', '-z', base];", cases: ['no_worker_state_git_commands'] },
-  { defence: 'text-rules-walk-ignored-files', from: 'for (const rel of walkFiles(repo, repoReal, base, prefixOf(f.norm))) {',
+  { defence: 'text-rules-walk-ignored-files', from: "for (const rel of fileRels(noOpaque(walkAll(repo, repoReal, base, prefixOf(f.norm)), 'forbid_text'))) {",
     to: "for (const rel of nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout)) {", cases: ['forbid_text_sees_ignored_and_untracked'] },
-  { defence: 'conflict-marker-walk-ignored-files', from: "for (const rel of walkFiles(repo, repoReal, base, '')) {",
+  { defence: 'conflict-marker-walk-ignored-files', from: "for (const rel of fileRels(noOpaque(walkAll(repo, repoReal, base, ''), 'no-conflict-markers'))) {",
     to: "for (const rel of nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout)) {", cases: ['builtins_see_ignored_files'] },
   { defence: 'js-syntax-walk-ignored-files', from: "for (const e of noOpaque(walkFs(repoReal, '', gitlinksOf(b)), 'js-syntax')) {",
     to: "for (const e of walkFs(repoReal, '', gitlinksOf(b)).filter((x) => nulList(git(repo, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout).includes(x.rel))) {", cases: ['builtins_see_ignored_files'] },
@@ -953,8 +953,9 @@ const MUTATIONS = [
   { defence: 'builtin-js-syntax-detect', from: "if (r.status !== 0) return { ok: false, evidence: rel + ': ' + String(r.stderr).slice(0, 200) };", to: 'void 0;', cases: ['builtin_js_syntax'] },
   { defence: 'rules-file-json-parse', from: "try { return JSON.parse(text); } catch (e) { fail(what + ' is not valid JSON'); }", to: "try { return JSON.parse(text); } catch (e) { return { v: 1 }; }", cases: ['exit2_not_json'] },
   { defence: 'walk-non-utf8-name', from: "return Buffer.from(str, 'utf8').equals(buf) ? { name: str } :", to: 'return true ? { name: str } :', cases: ['non_utf8_name_is_a_forbid_paths_violation_whatever_the_glob'] },
-  { defence: 'opaque-entry-text-rules', from: "noOpaque(walkFs(repoReal, prefix, gitlinks), 'text rule')", to: 'walkFs(repoReal, prefix, gitlinks).filter((e) => !e.opaque)', cases: ['non_utf8_file_name_content_rules_exit_2'] },
-  { defence: 'opaque-entry-js-syntax', from: "noOpaque(walkFs(repoReal, '', gitlinksOf(b)), 'js-syntax')", to: "walkFs(repoReal, '', gitlinksOf(b))", cases: ['non_utf8_file_name_content_rules_exit_2'] },
+  { defence: 'opaque-entry-forbid-text', from: "noOpaque(walkAll(repo, repoReal, base, prefixOf(f.norm)), 'forbid_text')", to: 'walkAll(repo, repoReal, base, prefixOf(f.norm)).filter((e) => !e.opaque)', cases: ['non_utf8_file_name_content_rules_exit_2'] },
+  { defence: 'opaque-entry-no-conflict-markers', from: "noOpaque(walkAll(repo, repoReal, base, ''), 'no-conflict-markers')", to: "walkAll(repo, repoReal, base, '').filter((e) => !e.opaque)", cases: ['non_utf8_file_name_content_rules_exit_2'] },
+  { defence: 'opaque-entry-js-syntax', from: "noOpaque(walkFs(repoReal, '', gitlinksOf(b)), 'js-syntax')", to: "walkFs(repoReal, '', gitlinksOf(b)).filter((e) => !e.opaque)", cases: ['non_utf8_file_name_content_rules_exit_2']},
   { defence: 'opaque-not-matched-by-glob', from: 'const under = pre === \'\' || e.parent === pre || e.parent.startsWith(pre + \'/\');', to: 'const under = matchGlob(f.norm, e.display);', cases: ['non_utf8_name_is_a_forbid_paths_violation_whatever_the_glob'] },
   { defence: 'opaque-never-a-map-key', edits: [
     ['const w = new Map(entries.filter((e) => !e.opaque).map((e) => [e.rel, e]));', 'const w = new Map(entries.map((e) => [e.opaque ? e.display : e.rel, e.opaque ? { kind: \'file\', rel: e.display } : e]));'],
@@ -1044,6 +1045,30 @@ for (const m of MUTATIONS) {
 test('green: every case is a negative control with a mutation, or listed positive-only', () => {
   assert.deepStrictEqual(uncovered(C, MUTATIONS, POSITIVE_ONLY), []);
   for (const n of Object.keys(POSITIVE_ONLY)) assert.ok(n in C, 'stale positive-only entry ' + n);
+});
+
+// every noOpaque() call site needs its own mutation that removes exactly that call
+function unguardedNoOpaqueSites(src, mutations) {
+  const froms = [];
+  for (const m of mutations) for (const [from] of (m.edits || [[m.from]])) froms.push(from);
+  const sites = [];
+  src = src.replace(/\/\/.*$/gm, ''); // call sites only, not comments
+  const re = /noOpaque\((?!entries)/g; let m;
+  while ((m = re.exec(src))) {
+    let depth = 1; let i = m.index + m[0].length;
+    for (; i < src.length && depth > 0; i++) { if (src[i] === '(') depth++; else if (src[i] === ')') depth--; }
+    sites.push(src.slice(m.index, i));
+  }
+  return { sites, unguarded: sites.filter((site) => !froms.some((f) => f.includes(site))) };
+}
+test('green: every noOpaque() call site has a dedicated mutation', () => {
+  const { sites, unguarded } = unguardedNoOpaqueSites(SRC, MUTATIONS);
+  assert.ok(sites.length >= 3, 'expected at least 3 noOpaque call sites, found ' + sites.length);
+  assert.deepStrictEqual(unguarded, []);
+});
+test('red: a new noOpaque() call site without a mutation is flagged', () => {
+  const { unguarded } = unguardedNoOpaqueSites(SRC + "\nnoOpaque(somethingNew(), 'x');", MUTATIONS);
+  assert.deepStrictEqual(unguarded, ["noOpaque(somethingNew(), 'x')"]);
 });
 
 test('red: the coverage check flags a case no mutation guards', () => {

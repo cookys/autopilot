@@ -557,14 +557,17 @@ function changedPaths(repo, repoReal, base, prefixes) {
   return { changed: Array.from(changed).sort(), opaque: Array.from(opaque.values()) };
 }
 
-function walkFiles(repo, repoReal, base, prefix) {
+// All entries under `prefix` (opaque ones included); each caller decides, with its own noOpaque().
+function walkAll(repo, repoReal, base, prefix) {
   newWalk();
   const gitlinks = gitlinksOf(baseEntries(repo, base, prefix));
-  return noOpaque(walkFs(repoReal, prefix, gitlinks), 'text rule').filter((e) => e.kind === 'file').map((e) => e.rel);
+  return walkFs(repoReal, prefix, gitlinks);
 }
 
+function fileRels(entries) { return entries.filter((e) => e.kind === 'file').map((e) => e.rel); }
+
 function builtinNoConflictMarkers(repo, repoReal, base) {
-  for (const rel of walkFiles(repo, repoReal, base, '')) {
+  for (const rel of fileRels(noOpaque(walkAll(repo, repoReal, base, ''), 'no-conflict-markers'))) {
     const r = readWorktreeFile(repoReal, rel);
     if (r.state !== 'ok' || r.text.slice(0, 8000).includes('\0')) continue;
     const lines = r.text.split('\n');
@@ -675,7 +678,7 @@ function evaluate(prep, input, repo, repoReal) {
   if (ft.length) {
     for (const f of ft) {
       let n = 0;
-      for (const rel of walkFiles(repo, repoReal, base, prefixOf(f.norm))) {
+      for (const rel of fileRels(noOpaque(walkAll(repo, repoReal, base, prefixOf(f.norm)), 'forbid_text'))) {
         if (!matchGlob(f.norm, rel)) continue;
         const r = readWorktreeFile(repoReal, rel);
         if (r.state !== 'ok') continue;

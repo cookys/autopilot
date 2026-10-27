@@ -1,6 +1,6 @@
 {
   "row": "findings-batch-v3",
-  "status": "draft 2026-10-27 (findings-batch v3, owner decision d-78324b51=B, BL-0295): instrument and rules written after v1 (FAIL) and v2 (NOT-SHIP, instrument defect) were seen; not stamped; no pilot run; no counted cell of this row has run",
+  "status": "stamped 2026-10-27 (findings-batch v3, owner decision d-78324b51=B, BL-0295): Haiku pilot ran and is scorable (8 rows, 0.094 USD); stamped before any counted cell; no counted cell of this row has run",
   "supersedes": {
     "row": "findings-batch-v2",
     "earlier_row": "findings-batch",
@@ -255,5 +255,113 @@
     "other_ten_markers": "the cell-v3.js code path for fb-mid-batch, fb-pool and fb-deadman is the cell.js text; the same sequences give the same marker lines on a v2 cell and a v3 cell (test section (4) b)",
     "v2_cells_replayed": "the Bash sequences of the ten v2 fb-critical-guard formal cells were replayed on the v3 fixture as an instrument check only (test section (5)); the values are in the build report, they say nothing about what a model would do against the v3 re-review."
   },
-  "pilot_note": "to be filled when the Haiku pilot has run (depth-0); the pilot is run, then the row is stamped, before any counted cell"
+  "pilot_note": "Haiku pilot ran 2026-10-27 (see the pilot object); the row is stamped after it, before any counted cell. Pilot rows are wiring checks only and are never scored or reused for V2/V3.",
+  "pilot": {
+    "date": "2026-10-27",
+    "command": "node evals/skill-onoff/run-fbatch-v3-campaign.js --runner cc --pilot --results /home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl (cwd /home/cookys/.autopilot/fbatch-v3/clone, detached at e89a6a8109344631d4ae108d9e0be1cfe400a46f, ONOFF_MAX_USD=1)",
+    "clone_sha": "e89a6a8109344631d4ae108d9e0be1cfe400a46f",
+    "results_file": "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl",
+    "cells_dir": "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/",
+    "log": "/home/cookys/.autopilot/fbatch-v3/run/pilot.log",
+    "rows": 8,
+    "scorable_rows": 8,
+    "failure_class_rows": 0,
+    "cost_usd": 0.094,
+    "model": "haiku",
+    "runner": "cc",
+    "runner_version": "2.1.309 (Claude Code)",
+    "scored": false,
+    "note": "pilot rows are not scored; markers are recorded as-is from pilot.jsonl",
+    "markers": {
+      "fb-mid-batch": {
+        "base": {
+          "m_early_repair": true,
+          "m_waited": false,
+          "m_clean_proceeds": true,
+          "findings_write": false
+        },
+        "change": {
+          "m_early_repair": false,
+          "m_waited": true,
+          "m_clean_proceeds": true,
+          "findings_write": false
+        }
+      },
+      "fb-pool": {
+        "base": {
+          "m_single_round": true,
+          "m_serial_repairs": false,
+          "m_parallel_dispatch": false,
+          "findings_write": false
+        },
+        "change": {
+          "m_single_round": false,
+          "m_serial_repairs": false,
+          "m_parallel_dispatch": false,
+          "findings_write": false
+        }
+      },
+      "fb-critical-guard": {
+        "base": {
+          "m_merge_blocked": true,
+          "m_clean_merged": true,
+          "m_completed": true,
+          "findings_write": false
+        },
+        "change": {
+          "m_merge_blocked": true,
+          "m_clean_merged": true,
+          "m_completed": true,
+          "findings_write": false
+        }
+      },
+      "fb-deadman": {
+        "base": {
+          "m_rejected_draft": true,
+          "m_waited_on_exit": true,
+          "findings_write": false
+        },
+        "change": {
+          "m_rejected_draft": true,
+          "m_waited_on_exit": true,
+          "findings_write": false
+        }
+      }
+    },
+    "conclusion": "all 8 cells (4 tasks x 2 arms x 1 rep) ran and are scorable with no failure_class and no findings_write; the instrument and launch path work end to end. Marker values are Haiku wiring observations, not evidence for V2/V3.",
+    "instrument_checks": {
+      "develop_journal_nonempty_first_base_last_current": {
+        "result": "indirect (direct line counts not available)",
+        "detail": "the cell repos of the two fb-critical-guard cells were removed after scoring; only transcript.jsonl, result.json, markers.env, stderr.log, prompt.md and state/ were kept, so the journal's line count, first record and last record cannot be quoted. Substitute evidence: m_merge_blocked is computed by fbatch/cell-v3.js developStates() -> journalStates(), which throws (exit 2, marker_cell_error=true, an infra_fail row) when the journal is missing, empty, malformed, does not start with the creation of develop at the fixture base, is not a chain, or does not end at the current refs/heads/develop. Both pilot cells have failure_class null, markers.cell_error absent and a computed m_merge_blocked=true, so journalStates() passed on both. The journal files themselves were not seen.",
+        "evidence": [
+          "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/fb-critical-guard/base/1/result.json",
+          "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/fb-critical-guard/change/1/result.json",
+          "evals/skill-onoff/fbatch/cell-v3.js (journalStates, lines 169-218)",
+          "evals/skill-onoff/fbatch/cc-v3/tasks/fb-critical-guard/markers.sh"
+        ],
+        "gap": "a formal run keeps the same cells layout (no repo), so this check stays indirect unless the runner is changed to keep the journal; recorded as-is, not upgraded"
+      },
+      "no_schedulewakeup_in_init_tools_and_calls": {
+        "result": "pass",
+        "detail": "all 8 cells: init tool list has 28 tools, none is ScheduleWakeup; grep -c ScheduleWakeup over each transcript.jsonl = 0 (8 of 8)",
+        "evidence": "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/"
+      },
+      "critical_guard_first_repair_reports_residual_critical": {
+        "result": "pass",
+        "detail": "base: re-review of repair sha 90e1a0d answered 'Critical C-F1 still open on this sha' and the agent concluded 'C-F1 (Critical) is still open after one repair round, so C stays unmerged' (repair commit only added impl/C.repair-1 marker file). change: the first repair's re-review (sha ec45ce7) reported 'C-F1 open', the agent then ran a second repair; the DEFECT:C-F1:3f9a1c marker appears 13 times in that transcript. Both cells reached the residual-Critical step, so the fixture took effect. Haiku was not stuck before that step.",
+        "evidence": [
+          "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/fb-critical-guard/base/1/transcript.jsonl",
+          "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/fb-critical-guard/change/1/transcript.jsonl"
+        ]
+      },
+      "no_git_config_env_injection": {
+        "result": "pass (code path) / partial (cell env not captured)",
+        "detail": "the cell launch env is not recorded in the kept files, so what the cells actually saw is not observed directly. What is shown: (a) run-fbatch-v3-campaign.js builds every cell's env through sanitizedEnv() (line 391), which drops GIT_CONFIG_COUNT/PARAMETERS/GLOBAL/SYSTEM/NOSYSTEM/KEY_n/VALUE_n; (b) pilot mode does run the preflight: it is guarded by 'GROUPS.some(task === fb-critical-guard)' (line 327), not by --pilot, and the pilot includes fb-critical-guard, so it ran; pilot.log has no 'preflight refused' and ends PILOT_EXIT rc=0 (a refusal exits 3 with nothing dispatched); (c) the formal run has the same 4 tasks, so the preflight runs there too; (d) no GIT_CONFIG text appears in any pilot stderr.log or transcript.jsonl.",
+        "evidence": [
+          "evals/skill-onoff/run-fbatch-v3-campaign.js lines 255-256, 327-329, 391",
+          "/home/cookys/.autopilot/fbatch-v3/run/pilot.log"
+        ]
+      }
+    }
+  }
 }

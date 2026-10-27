@@ -88,7 +88,7 @@ CEO mode:     dev-flow -> CEO decides within DOA
                        -> only escalate at DOA boundary
 ```
 
-When the owner must decide, open a card with `node scripts/open-decision.js open` because a card needs a question, at least two options, a recommendation and a reason (`--question`, repeated `--option <label>::<description>`, `--recommendation <label>`, `--why <reason>`, and `--not-authorized <why the owner must decide>`), write the printed id in the reply, act on an owner line starting `[待決回覆]`, then `node scripts/open-decision.js close --id <id>` ([`references/review-page.md`](../../references/review-page.md) decisions; [`references/mods.md`](../../references/mods.md)).
+When the owner must decide, open a card with `node scripts/open-decision.js open` because a card needs a question, at least two options, a recommendation and a reason (`--question`, repeated `--option <label>::<description>`, `--recommendation <label>`, `--why <reason>`, and `--not-authorized <boundary>[:<why the owner must decide>]`, required; boundary is `read_only|reversible|external|irreversible|goal-change|scope-expansion|resources-2x|red-line`, and a class your DOA lets you decide alone is refused: decide it yourself), write the printed id in the reply, act on an owner line starting `[待決回覆]`, then `node scripts/open-decision.js close --id <id>` ([`references/review-page.md`](../../references/review-page.md) decisions; [`references/mods.md`](../../references/mods.md)).
 
 CEO can autonomously invoke any skill (autopilot:survey, autopilot:think-tank, autopilot:think-tank-dialectic, autopilot:quality-pipeline, etc.) and any parallel dispatcher configured in `.claude/dispatch-config.md`.
 

@@ -53,7 +53,7 @@ function turn(t, sid, hoursAgo) {
 }
 
 function openCard(t, sid, extra = []) {
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'open-decision.js'), 'open', '--question', 'q?', ...extra], {
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'open-decision.js'), 'open', '--not-authorized', 'irreversible', '--question', 'q?', ...extra], {
     cwd: t.repo, env: env(t, { AUTOPILOT_SESSION_ID: sid }), encoding: 'utf8',
   });
   const files = fs.existsSync(path.join(t.repo, '.git', 'autopilot', 'decisions')) ? fs.readdirSync(path.join(t.repo, '.git', 'autopilot', 'decisions')).filter((f) => f.endsWith('.json')) : [];

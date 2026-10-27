@@ -155,7 +155,7 @@ test('read back: open-decision defaults to this session\'s plain marker root; no
   const f = fx();
   const od = (args) => spawnSync('node', [OPEN_DECISION, ...args, '--cwd', f.repo], { env: f.env, cwd: f.repo, encoding: 'utf8' });
   const dir = path.join(f.repo, '.git', 'autopilot', 'decisions');
-  let r = od(['open', '--question', 'unbound?']);
+  let r = od(['open', '--not-authorized', 'irreversible', '--question', 'unbound?']);
   assert.strictEqual(r.status, 0, r.stderr);
   assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}.json`]);
   assert.match(r.stdout.trim(), /^d-[0-9a-f]{8}$/, 'open prints the id');
@@ -163,20 +163,20 @@ test('read back: open-decision defaults to this session\'s plain marker root; no
   assert.deepStrictEqual(fs.readdirSync(dir), [], 'closing the last entry removes the file');
   cli(f, ['set', '--repo-root', f.repo]);
   const root = readJson(f.marker()).root_run_id;
-  r = od(['open', '--question', 'rooted?']);
+  r = od(['open', '--not-authorized', 'irreversible', '--question', 'rooted?']);
   assert.strictEqual(r.status, 0, r.stderr);
   const rootedId = r.stdout.trim();
   assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}--${root}.json`]);
   assert.strictEqual(readJson(path.join(dir, `${f.key}--${root}.json`)).root_run_id, root);
   assert.strictEqual(od(['show']).status, 0);
-  r = od(['open', '--question', 'explicit?', '--root-run-id', 'job-other']);
+  r = od(['open', '--not-authorized', 'irreversible', '--question', 'explicit?', '--root-run-id', 'job-other']);
   assert.strictEqual(r.status, 0, r.stderr);
   const otherId = r.stdout.trim();
   assert.ok(fs.existsSync(path.join(dir, `${f.key}--job-other.json`)));
   expire(f, 'spr-session');
   od(['close', '--id', otherId, '--root-run-id', 'job-other']);
   od(['close', '--id', rootedId, '--root-run-id', root]);
-  r = od(['open', '--question', 'after expiry']);
+  r = od(['open', '--not-authorized', 'irreversible', '--question', 'after expiry']);
   assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}.json`], 'an expired marker no longer scopes the decision');
 });
 

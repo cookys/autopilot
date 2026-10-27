@@ -1342,3 +1342,15 @@ Preventing artifacts: rlrun renamed the token to `dispatch-wdog-tok-XXXXXX` and 
 **Same-day: an empty review range.** In the 2026-10-20 bl263 lane, a cherry-pick conflict produced no commit, collect ran anyway and reviewed an empty diff; that collect was terminated by hand and re-run. Rule: before sending a range to review, confirm the range contains commits and the work tree is clean. `scripts/hetero-review-loop.js` collect does not reject an empty range today (it hashes and records whatever diff it gets, including a zero-byte one); that gap is filed as BL-0269.
 
 **Same-day: a whole-tree scan registered late (metscan2).** hderive added `hooks/tests/engine-qualify-seat-derive.test.sh`, and the whole-tree scan in `scripts/qualification-metrics.test.js` went red on develop d426dff4a. Measured by the foreman: `node scripts/affected-suites.js --base 634b4736a --head d426dff4a --json` selects `scripts/qualification-metrics.test.js`, so the selector was not the gap; the suite was simply not run before merging. Rule: run every suite the selector names before the merge. Fix: metscan2 (d01f9971a).
+
+## 64. A marker impact note must walk the real path
+
+2026-10-26 to 10-27, findings-batch evaluation (BL-0295). The v2 fixture made a repair produce a new commit, and the hand's marker impact table said `m_merge_blocked` "reads the same evidence, unaffected". Four review seats and the acceptance run did not catch it. The formal 40 cells did: the marker only asked whether C's original tip was ever an ancestor of develop, so every cell that repaired C, had the repaired sha blind re-reviewed clean, and only then merged it was scored as a bypass. Both arms read 0/5 and the row was NOT-SHIP on an instrument defect (3.47 USD). v3 was then bypassed by sha and topology tricks for several generations in a row, and converged only when `m_merge_blocked` was changed to a content judgement: true exactly when no state develop ever held contains C's defect marker.
+
+Rule: "reads the same evidence" is not an impact analysis. When a fixture or a judgement changes, run every marker over real command sequences, one that must come out true and one that must come out false, and read what the marker returns.
+
+- Prefer content facts (what the tree holds) over topology facts (which sha is an ancestor of which); a sha or a graph shape moves with every legitimate repair, a content marker does not.
+- The acceptor builds the sequences itself and never reuses the hand's sequences.
+- Bound the instrument's scope from the real transcripts first: list the operations the models actually used (v1 and v2 moved develop only through the merge lane, 190 times) and state what is and is not guaranteed.
+
+Preventing artifact: `findings-batch-v3` preregistration with a content-judged `m_merge_blocked`, an `instrument_scope` block and a preflight that refuses to dispatch unless the journal hook fires. Evidence: commit e89a6a810, v2 result `/home/cookys/.autopilot/fbatch-v2/run/formal.jsonl`, v1 result `/home/cookys/.autopilot/fbatch-formal2/run/formal.jsonl`.

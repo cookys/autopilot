@@ -1,0 +1,255 @@
+{
+ "administered_at": "2026-10-27T09:02:03.575Z",
+ "cost": {
+  "sample_tokens": 0,
+  "source": "unknown",
+  "usd_per_mtok_input": null,
+  "usd_per_mtok_output": null
+ },
+ "evidence": {
+  "evidence_hash": "06a92b3db28c09bc2598b51cc5b5c484b34b5671bd4aef634021bf98db70dc07",
+  "evidence_id": "06a92b3db28c09bc2598b51cc5b5c484b34b5671bd4aef634021bf98db70dc07",
+  "identity_hash": "e02618d475ec98f9b4fd65cac67cd58bed844a9ea9decfdddb49615168c566a9",
+  "issued_at": "2026-10-27T09:06:20.094Z",
+  "methodology": {
+   "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+   "kind": "role_eval",
+   "name": "reviewer-metamorphic-executable",
+   "version": "4.1.0"
+  },
+  "n_trials": 2,
+  "observed_at": "2026-10-27T09:02:03.575Z",
+  "revocation": null,
+  "scope": {
+   "domains": [
+    "cross-cutting"
+   ],
+   "languages": [
+    "en"
+   ],
+   "task_classes": [
+    "code_review"
+   ],
+   "tool_surface": [
+    "read_only"
+   ]
+  },
+  "scope_hash": "d67cf0c1f52d907d20dd41395f884ee0a453924fbf290e38af9fc9d88857bdb8",
+  "source": "internal_eval",
+  "source_ref": "engine-qualify:reviewer-v2",
+  "state": "qualified",
+  "stop_reason": null,
+  "tier1_terminated": null
+ },
+ "evidence_ref": "benchmarks/qualification/cookys/evidence/16a66aa48e3f16bd552168e633183955dd6aaef597da15efccc3c5cdbf61bf48/summary.json",
+ "imported_at": "2026-10-27T09:06:20Z",
+ "importer": "autopilot-outbox@1",
+ "latency": {
+  "sample_wall_time_s": 560
+ },
+ "origin_host_class": "cloud-api",
+ "producer": "engine-qualify-v2",
+ "raw": {
+  "capability_score": 1,
+  "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+  "cost": {
+   "sample_tokens": 0,
+   "source": "unknown",
+   "usd_per_mtok_input": null,
+   "usd_per_mtok_output": null
+  },
+  "date": "2026-10-27",
+  "effort": "low",
+  "engine": "gpt-6.1-terra",
+  "evidence": {
+   "evidence_hash": "06a92b3db28c09bc2598b51cc5b5c484b34b5671bd4aef634021bf98db70dc07",
+   "evidence_id": "06a92b3db28c09bc2598b51cc5b5c484b34b5671bd4aef634021bf98db70dc07",
+   "grant_identity_hash": "e02618d475ec98f9b4fd65cac67cd58bed844a9ea9decfdddb49615168c566a9",
+   "identity": {
+    "containment_fingerprint": "df75b624121a461ac83c2c9bb2046a152e94004244b68acce878e0ea310254df",
+    "effort": "low",
+    "family": "openai",
+    "harness_version": "engine-qualify-6babfefb",
+    "identity": "gpt-6.1-terra",
+    "identity_resolved": true,
+    "model_alias": "gpt-6.1-terra",
+    "model_version": "gpt-6.1-terra",
+    "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+    "runner": "codex",
+    "runner_version": "codex-cli-0.164.0",
+    "semantic_fingerprint": "89135628670dbbbfe4fb3e42be98c1780cba9f2f6800c2b8151c8728f6f1599e"
+   },
+   "identity_hash": "e02618d475ec98f9b4fd65cac67cd58bed844a9ea9decfdddb49615168c566a9",
+   "issued_at": "2026-10-27T09:06:20.094Z",
+   "methodology": {
+    "basis": null,
+    "corpus_manifest_hash": "f9ca1f386ed4f3cc060a6ea8fc2b7b82b72920976e17e680083f28c71eec0e4d",
+    "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+    "kind": "role_eval",
+    "name": "reviewer-metamorphic-executable",
+    "thresholds": {
+     "max_clean_false_positives": 0,
+     "max_false_pass_critical": 0,
+     "min_clean_cases": 19,
+     "min_critical_cases": 9,
+     "min_known_bad_cases": 21,
+     "min_trials": 2
+    },
+    "version": "4.1.0"
+   },
+   "observed_at": "2026-10-27T09:02:03.575Z",
+   "revocation": null,
+   "role": "reviewer",
+   "schema_version": 1,
+   "scope": {
+    "domains": [
+     "cross-cutting"
+    ],
+    "languages": [
+     "en"
+    ],
+    "task_classes": [
+     "code_review"
+    ],
+    "tool_surface": [
+     "read_only"
+    ]
+   },
+   "scope_hash": "d67cf0c1f52d907d20dd41395f884ee0a453924fbf290e38af9fc9d88857bdb8",
+   "source": "internal_eval",
+   "source_ref": "engine-qualify:reviewer-v2",
+   "state": "qualified",
+   "supersedes": null,
+   "trial_set_hash": "35c87ae15d5cec5ba9397e0823fbf220c29c7c4645a81f0fc8cc556d3d371052",
+   "trials": [
+    {
+     "artifact_oracle": {
+      "independent": true,
+      "kind": "host_executable_metamorphic_witness_v3",
+      "oracle_hash": "be4781aa0bf1aaadc9a20bc49d73723713a8a6276eb355a6a1dd1b9c33d44bff",
+      "passed": true,
+      "result_set_hash": "deeb8492f97ea0d83a548e416246f6ee96142f59c64a9e6fd927fa721741448d"
+     },
+     "clean_false_positives": 0,
+     "clean_total": 19,
+     "corpus_manifest_hash": "f9ca1f386ed4f3cc060a6ea8fc2b7b82b72920976e17e680083f28c71eec0e4d",
+     "critical_total": 9,
+     "false_pass_critical": 0,
+     "known_bad_caught": 21,
+     "known_bad_total": 21,
+     "mutation_validation": {
+      "mutated_hash": "5c0c73aa809516d157d9288ba2e9756c9a898010276cad985403e291b9342b15",
+      "mutated_verdict": "pass",
+      "oracle_rejected": true,
+      "original_hash": "2a54291a4f6a0bad847ea8c40390f477aad529c8100017597395efedd164b2f9",
+      "original_verdict": "fail",
+      "target_id": "known-bad-01"
+     },
+     "observed_at": "2026-10-27T08:57:06.934Z",
+     "trial_id": "trial-1"
+    },
+    {
+     "artifact_oracle": {
+      "independent": true,
+      "kind": "host_executable_metamorphic_witness_v3",
+      "oracle_hash": "be4781aa0bf1aaadc9a20bc49d73723713a8a6276eb355a6a1dd1b9c33d44bff",
+      "passed": true,
+      "result_set_hash": "09f40bfba246a49778b52ab70fe4cac98726447b381630c964529e6029a05e27"
+     },
+     "clean_false_positives": 0,
+     "clean_total": 19,
+     "corpus_manifest_hash": "f9ca1f386ed4f3cc060a6ea8fc2b7b82b72920976e17e680083f28c71eec0e4d",
+     "critical_total": 9,
+     "false_pass_critical": 0,
+     "known_bad_caught": 21,
+     "known_bad_total": 21,
+     "mutation_validation": {
+      "mutated_hash": "cffce65df7b0d06387fadaee6cb69de79fb9208b8a1579fcec0440d75dee2ef0",
+      "mutated_verdict": "pass",
+      "oracle_rejected": true,
+      "original_hash": "38197b68877bc9dd1fe2200ef43d9e7a39de4916374278035a71894640255998",
+      "original_verdict": "fail",
+      "target_id": "known-bad-01"
+     },
+     "observed_at": "2026-10-27T09:02:03.575Z",
+     "trial_id": "trial-2"
+    }
+   ]
+  },
+  "evidence_store": {
+   "event_id": 1,
+   "producer": "engine-qualify-v2",
+   "transcript_hash": "b7b444186eb70bb25cc01e15b5e67cf347994808bf96bf9bb3b542d60e3b11bc"
+  },
+  "family": "openai",
+  "harness_version": "engine-qualify-6babfefb",
+  "latency": {
+   "sample_wall_time_s": 560
+  },
+  "model": "gpt-6.1-terra",
+  "model_version": "gpt-6.1-terra",
+  "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+  "qualified_at": "2026-10-27",
+  "quality": {
+   "corpus_pass": "42/42",
+   "false_pass_critical": 0,
+   "repeated_trials": 2,
+   "specificity": "0/38"
+  },
+  "role": "reviewer",
+  "runner": "codex",
+  "runner_version": "codex-cli-0.164.0",
+  "status": "qualified",
+  "usage": {
+   "cases_complete": null,
+   "io_split_complete": false,
+   "med_wall_s": 5.526,
+   "n_cases": 82,
+   "n_cases_expected": null,
+   "n_cases_missing_tokens": 82,
+   "n_solved": 82,
+   "schema_version": 1,
+   "solved_per_hour": 538.7894,
+   "tok_per_solved": null,
+   "total_tokens": null,
+   "total_wall_s": 547.895,
+   "usage_complete": false,
+   "usd_per_solved": null
+  },
+  "version_source": "operator-asserted"
+ },
+ "record_id": "16a66aa48e3f16bd552168e633183955dd6aaef597da15efccc3c5cdbf61bf48",
+ "record_id_basis": "v1:producer,transcript_hash,seat,corpus_version,administered_at",
+ "schema": 2,
+ "seat": {
+  "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+  "effort": "low",
+  "engine": "gpt-6.1-terra",
+  "family": "openai",
+  "harness_version": "engine-qualify-6babfefb",
+  "model": "gpt-6.1-terra",
+  "model_version": "gpt-6.1-terra",
+  "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+  "role": "reviewer",
+  "runner": "codex",
+  "runner_version": "codex-cli-0.164.0",
+  "version_source": "operator-asserted"
+ },
+ "source": {
+  "file": "engine-scorecard/scorecard.jsonl",
+  "kind": "autopilot-outbox"
+ },
+ "transcript_hash": "b7b444186eb70bb25cc01e15b5e67cf347994808bf96bf9bb3b542d60e3b11bc",
+ "verdict": {
+  "capability_score": 1,
+  "date": "2026-10-27",
+  "qualified_at": "2026-10-27",
+  "quality": {
+   "corpus_pass": "42/42",
+   "false_pass_critical": 0,
+   "repeated_trials": 2,
+   "specificity": "0/38"
+  },
+  "status": "qualified"
+ }
+}

@@ -1,0 +1,10 @@
+{
+ "corpus_version": "impl-live-rail-v1.impl-live-rail-v1",
+ "effort": "low",
+ "engine": "gpt-6.1-terra",
+ "model": "gpt-6.1-terra",
+ "model_version": "gpt-6.1-terra",
+ "prompt_config_hash": "16b45e1a0ed185e494a602fd84e249f12fd6f86be0ab2b18ba3d5a6c64db7a5a",
+ "role": "implementer",
+ "runner": "codex"
+}

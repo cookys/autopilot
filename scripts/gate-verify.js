@@ -11,7 +11,7 @@
 //
 // Exit codes: 0 clean, 1 at least one violation, 2 error (unreadable or invalid
 // list, unknown key, duplicate id, more than 40 rules, unregistered check name,
-// a registry `files` entry missing at <base>, an `argv` path that is not an
+// a registry check that times out, a registry `files` entry missing at <base>, an `argv` path that is not an
 // exported file / built-in / bare interpreter name, path-safety failure, any
 // internal error). The hook turns 2 into allow plus `error`.
 // stdout (--json): {violations: [{constraint, rule, evidence}], feature_gaps: [string]}.
@@ -29,14 +29,17 @@ const cp = require('child_process');
 const MAX_RULES = 40;
 const ID_RE = /^[A-Za-z0-9_.-]{1,64}$/;
 const SHA_RE = /^[0-9a-f]{40}$/;
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_HITS_PER_RULE = 50;
 const DEFAULT_CHECK_TIMEOUT_S = 20;
 const MAX_CHECK_TIMEOUT_S = 120;
 const INTERPRETERS = new Set(['node', 'sh', 'bash', 'python3', 'python']);
-// Flags that make an interpreter run code that is not an exported file.
-const CODE_FLAGS = new Set(['-e', '-p', '-r', '-c', '-m']);
-const CODE_FLAG_PREFIXES = ['--eval', '--print', '--require', '--import', '--loader', '--experimental-loader', '--input-type'];
+// argv allowlist (structural, not an enumeration of forbidden flags): an argument is an
+// exported file, or exactly one of these value-less flags that execute no code. Every other
+// argument starting with '-' (joined short flags such as -cCODE, --x=y, value-taking flags,
+// a lone '-') is rejected. Value-taking flags are all rejected for now.
+const ALLOWED_FLAGS = ['--test', '--no-warnings', '--check', '-I', '-B'];
 const BUILTINS = new Set(['no-conflict-markers', 'js-syntax']);
 const GATE_KEYS = ['v', 'repo', 'base', 'mode', 'max_blocks', 'expires_at', 'rules'];
 const RULE_KEYS = ['v', 'forbid_paths', 'require_files', 'require_text', 'forbid_text', 'must_pass', 'features'];
@@ -58,6 +61,8 @@ function gitEnv() {
   const env = {};
   for (const k of Object.keys(process.env)) if (!k.startsWith('GIT_')) env[k] = process.env[k];
   env.GIT_OPTIONAL_LOCKS = '0';
+  // The worker owns its repo: a replace ref must not change what base bytes read.
+  env.GIT_NO_REPLACE_OBJECTS = '1';
   return env;
 }
 
@@ -257,8 +262,7 @@ function validateRegistryEntry(name, entry, repoReal, repo, base, errs) {
   argv.forEach((a, i) => {
     if (i === 0 && INTERPRETERS.has(a)) return;
     if (i > 0 && a.startsWith('-')) {
-      const bare = a.split('=')[0];
-      if (CODE_FLAGS.has(bare) || CODE_FLAG_PREFIXES.some((p) => bare === p)) errs.push(label + ': argv flag ' + a + ' runs code that is not an exported file');
+      if (!ALLOWED_FLAGS.includes(a)) errs.push(label + ': argv flag ' + JSON.stringify(a) + ' is not in the allowed value-less flag list');
       return;
     }
     const n = normaliseRel(a, false);
@@ -334,7 +338,7 @@ function loadInput(opts, repoReal) {
     if (typeof g.base !== 'string' || !SHA_RE.test(g.base)) errs.push('gate file base must be a 40-hex sha');
     if (g.mode !== 'violations' && g.mode !== 'violations+features') errs.push('gate file mode must be violations or violations+features');
     if (!Number.isInteger(g.max_blocks) || g.max_blocks < 0 || g.max_blocks > 2) errs.push('gate file max_blocks must be an integer 0-2');
-    if (typeof g.expires_at !== 'string' || Number.isNaN(Date.parse(g.expires_at))) errs.push('gate file expires_at must be an ISO string');
+    if (typeof g.expires_at !== 'string' || !ISO_RE.test(g.expires_at) || Number.isNaN(Date.parse(g.expires_at))) errs.push('gate file expires_at must be an ISO 8601 date-time (YYYY-MM-DDTHH:MM:SS[.fff]Z|+hh:mm)');
     if (errs.length) fail(errs.join('; '));
     return { rules: g.rules, base: g.base, mode: g.mode };
   }
@@ -363,20 +367,31 @@ function prepare(input, repo, repoReal) {
 
 // ---------------------------------------------------------------- evaluation
 
+// Three distinct states: {state:'ok', text} | {state:'missing'} (really absent) |
+// {state:'skip', reason} (too large, outside the repo, not a regular file, unreadable).
+// Text rules skip 'skip'; only 'missing' is reported as missing.
 function readWorktreeFile(repoReal, rel) {
   const abs = path.join(repoReal, rel);
-  let st;
-  try { st = fs.lstatSync(abs); } catch (e) { return null; }
+  try { fs.lstatSync(abs); } catch (e) {
+    return e.code === 'ENOENT' || e.code === 'ENOTDIR' ? { state: 'missing' } : { state: 'skip', reason: 'unreadable' };
+  }
   let real;
-  try { real = fs.realpathSync(abs); } catch (e) { return null; }
-  if (!inside(real, repoReal)) return null;
-  try { st = fs.statSync(real); } catch (e) { return null; }
-  if (!st.isFile() || st.size > MAX_FILE_BYTES) return null;
-  try { return fs.readFileSync(real, 'utf8'); } catch (e) { return null; }
+  try { real = fs.realpathSync(abs); } catch (e) {
+    return e.code === 'ENOENT' ? { state: 'missing' } : { state: 'skip', reason: 'unreadable' };
+  }
+  if (!inside(real, repoReal)) return { state: 'skip', reason: 'outside' };
+  let st;
+  try { st = fs.statSync(real); } catch (e) { return { state: 'skip', reason: 'unreadable' }; }
+  if (!st.isFile()) return { state: 'skip', reason: 'not-a-file' };
+  if (st.size > MAX_FILE_BYTES) return { state: 'skip', reason: 'too-large' };
+  try { return { state: 'ok', text: fs.readFileSync(real, 'utf8') }; } catch (e) { return { state: 'skip', reason: 'unreadable' }; }
 }
 
-function existsInRepo(repoReal, rel) {
-  try { return inside(fs.realpathSync(path.join(repoReal, rel)), repoReal); } catch (e) { return false; }
+function isRegularFileInRepo(repoReal, rel) {
+  try {
+    const real = fs.realpathSync(path.join(repoReal, rel));
+    return inside(real, repoReal) && fs.statSync(real).isFile();
+  } catch (e) { return false; }
 }
 
 function worktreeFiles(repo) {
@@ -393,11 +408,15 @@ function changedSince(repo, base) {
 
 function builtinNoConflictMarkers(repo, repoReal) {
   for (const rel of worktreeFiles(repo)) {
-    const text = readWorktreeFile(repoReal, rel);
-    if (text === null || text.slice(0, 8000).includes('\0')) continue;
-    const lines = text.split('\n');
+    const r = readWorktreeFile(repoReal, rel);
+    if (r.state !== 'ok' || r.text.slice(0, 8000).includes('\0')) continue;
+    const lines = r.text.split('\n');
+    // Standard forms: <<<<<<< x, >>>>>>> x, diff3 ||||||| x, and the lone ======= separator
+    // (the lone separator is not flagged in prose files, where it is a heading underline).
+    const lone = !/\.(md|markdown|rst|adoc|txt)$/i.test(rel);
     for (let i = 0; i < lines.length; i++) {
-      if (/^(<{7}|>{7})( |$)/.test(lines[i])) return { ok: false, evidence: rel + ':' + (i + 1) };
+      const line = lines[i].replace(/\r$/, '');
+      if (/^(<{7}|>{7}|\|{7})( |$)/.test(line) || (lone && /^={7}$/.test(line))) return { ok: false, evidence: rel + ':' + (i + 1) };
     }
   }
   return { ok: true };
@@ -407,7 +426,7 @@ function builtinJsSyntax(repo, repoReal, base) {
   for (const rel of changedSince(repo, base)) {
     if (!/\.(js|cjs|mjs)$/.test(rel)) continue;
     const abs = path.join(repoReal, rel);
-    if (readWorktreeFile(repoReal, rel) === null) continue;
+    if (readWorktreeFile(repoReal, rel).state !== 'ok') continue;
     const r = cp.spawnSync(process.execPath, ['--check', abs], { cwd: repoReal, stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000, env: { PATH: process.env.PATH } });
     if (r.status !== 0) return { ok: false, evidence: rel + ': ' + String(r.stderr).slice(0, 200) };
   }
@@ -430,11 +449,13 @@ function runRegistryCheck(res, repo, repoReal, base) {
       PATH: process.env.PATH || '/usr/bin:/bin', HOME: tmp, TMPDIR: tmp, LANG: 'C',
       AUTOPILOT_GATE_REPO: repoReal,
     };
-    const r = cp.spawnSync(res.argv[0], res.argv.slice(1), {
+    const cmd = INTERPRETERS.has(res.argv[0]) ? res.argv[0] : path.join(tmp, normaliseRel(res.argv[0], false).norm);
+    const r = cp.spawnSync(cmd, res.argv.slice(1), {
       cwd: tmp, env, stdio: ['ignore', 'pipe', 'pipe'], timeout: res.timeoutS * 1000,
       killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024, shell: false,
     });
-    if (r.error && r.error.code === 'ETIMEDOUT') return { ok: false, evidence: 'timeout after ' + res.timeoutS + 's' };
+    // A timeout is an error (plan section 6): exit 2, never a violation or a feature gap.
+    if (r.error && r.error.code === 'ETIMEDOUT') fail('check timed out after ' + res.timeoutS + 's');
     if (r.error) fail('check could not start: ' + r.error.message);
     if (r.status !== 0) {
       const tail = r.status === null ? 'signal ' + r.signal : 'exit ' + r.status;
@@ -472,12 +493,12 @@ function evaluate(prep, input, repo, repoReal) {
     }
   }
   for (const f of wanted('require_files')) {
-    if (!existsInRepo(repoReal, f.norm)) viol(f.entry, 'require_files', f.norm + ': missing');
+    if (!isRegularFileInRepo(repoReal, f.norm)) viol(f.entry, 'require_files', f.norm + ': missing or not a regular file');
   }
   for (const f of wanted('require_text')) {
-    const text = readWorktreeFile(repoReal, f.norm);
-    if (text === null) viol(f.entry, 'require_text', f.norm + ': file missing');
-    else if (!text.includes(f.entry.text)) viol(f.entry, 'require_text', f.norm + ': text not found');
+    const r = readWorktreeFile(repoReal, f.norm);
+    if (r.state === 'missing') viol(f.entry, 'require_text', f.norm + ': file missing');
+    else if (r.state === 'ok' && !r.text.includes(f.entry.text)) viol(f.entry, 'require_text', f.norm + ': text not found');
   }
   const ft = wanted('forbid_text');
   if (ft.length) {
@@ -486,10 +507,10 @@ function evaluate(prep, input, repo, repoReal) {
       let n = 0;
       for (const rel of files) {
         if (!matchGlob(f.norm, rel)) continue;
-        const text = readWorktreeFile(repoReal, rel);
-        if (text === null) continue;
-        const idx = text.indexOf(f.entry.text);
-        if (idx >= 0 && n++ < MAX_HITS_PER_RULE) viol(f.entry, 'forbid_text', rel + ':' + (text.slice(0, idx).split('\n').length));
+        const r = readWorktreeFile(repoReal, rel);
+        if (r.state !== 'ok') continue;
+        const idx = r.text.indexOf(f.entry.text);
+        if (idx >= 0 && n++ < MAX_HITS_PER_RULE) viol(f.entry, 'forbid_text', rel + ':' + (r.text.slice(0, idx).split('\n').length));
       }
     }
   }
@@ -545,4 +566,4 @@ if (require.main === module) {
   process.exitCode = code;
 }
 
-module.exports = { matchGlob, normaliseRel, KIND_FIELDS, RULE_KEYS, GATE_KEYS };
+module.exports = { matchGlob, normaliseRel, KIND_FIELDS, RULE_KEYS, GATE_KEYS, ALLOWED_FLAGS };

@@ -21,6 +21,7 @@
     "path": { "type": "string", "minLength": 1, "maxLength": 512 },
     "glob": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\[\\]{}()!\\\\]+$" },
     "text": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "argvFlag": { "description": "The only flags a registry argv may carry besides exported files. Pinned to ALLOWED_FLAGS in scripts/gate-verify.js by the test suite.", "enum": ["--test", "--no-warnings", "--check", "-I", "-B"] },
     "forbidPath": {
       "type": "object", "required": ["id", "glob"], "additionalProperties": false,
       "properties": { "id": { "$ref": "#/$defs/id" }, "glob": { "$ref": "#/$defs/glob" }, "why": { "$ref": "#/$defs/why" } }
@@ -46,7 +47,7 @@
       "properties": { "id": { "$ref": "#/$defs/id" }, "check": { "$ref": "#/$defs/id" }, "label": { "$ref": "#/$defs/why" }, "why": { "$ref": "#/$defs/why" } }
     },
     "checkRegistry": {
-      "description": ".claude/gate-checks.json, read from the base sha. Every file a check runs is listed in files and exported from base into a temp dir; argv[0] is a bare interpreter (node, sh, bash, python3, python) or an exported file; every other non-flag argv element is an exported file; code flags (-e -p -r -c -m --eval --print --require --import --loader --experimental-loader --input-type) are rejected.",
+      "description": ".claude/gate-checks.json, read from the base sha. Every file a check runs is listed in files and exported from base into a temp dir. argv[0] is a bare interpreter (node, sh, bash, python3, python) or an exported file (started by its exported path). Every other argv element is an exported file or exactly one of the value-less flags in $defs.argvFlag; any other element starting with '-' (joined short flags such as -cCODE, --x=y, a lone '-') is rejected. Value-taking flags are all rejected for now. A check that times out is an error (exit 2), not a violation.",
       "type": "object", "required": ["v", "checks"], "additionalProperties": false,
       "properties": {
         "v": { "const": 1 },

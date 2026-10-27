@@ -269,6 +269,19 @@ C.exit2_argv_outside_exported_files = (S) => {
     { argv: ['/bin/true'], files: ['x.test.js'] },
     { argv: ['node', '/etc/hostname'], files: ['x.test.js'] },
     { argv: ['node', '--eval=process.exit(0)', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['python3', '-cimport sys;sys.exit(0)', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['sh', '-cecho', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['python3', '-cpass', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['python3', '-mjson.tool', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['node', '--test-name-pattern=foo', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['node', '--test-name-pattern', 'foo', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['node', '-pprocess.exit(0)', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['node', '-rfs', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['node', '--require=./x.test.js', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['node', '--import=./x.test.js', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['node', '-', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['node', '--test', '-B=1', 'x.test.js'], files: ['x.test.js'] },
+    { argv: ['node', '--TEST', 'x.test.js'], files: ['x.test.js'] },
   ];
   for (const bad of bads) {
     const ctx = makeRepo({ '.claude/gate-checks.json': JSON.stringify({ v: 1, checks: { 'unit-tests': bad } }) });
@@ -342,11 +355,18 @@ C.temp_dir_removed = (S) => {
   expectViolation(run(S, ctx, MUST, { env: { TMPDIR: t } }), 'R5');
   assert.deepStrictEqual(fs.readdirSync(t), [], 'temp dir left behind after a failing run');
 };
-C.check_hard_timeout = (S) => {
+C.check_timeout_is_error = (S) => {
   const ctx = makeRepo();
   const t0 = Date.now();
-  expectViolation(run(S, ctx, L({ must_pass: [{ id: 'R5', check: 'slow' }] })), 'R5', /^timeout after 1s/);
+  const r = run(S, ctx, L({ must_pass: [{ id: 'R5', check: 'slow' }] }));
+  expectTwo(r, 'must_pass timeout');
+  assert.match(r.stderr, /timed out after 1s/);
+  assert.strictEqual(r.stdout, '');
   assert.ok(Date.now() - t0 < 3500, 'timeout did not cut the run short');
+  const f = run(S, ctx, L({ features: [{ id: 'F1', check: 'slow' }] }));
+  expectTwo(f, 'feature timeout');
+  // features are not run in mode violations, so no timeout can occur there
+  expectClean(run(S, ctx, L({ features: [{ id: 'F1', check: 'slow' }] }), { mode: 'violations' }));
 };
 
 // gate-file envelope (hook passes it through AUTOPILOT_GATE_FILE)
@@ -394,6 +414,178 @@ C.gate_file_mode_violations_hides_features = (S) => {
   assert.deepStrictEqual(b.out.feature_gaps, ['F1: login works']);
 };
 
+// ---- round-2 controls (A, B, C1-C6, D)
+
+C.argv_code_flag_bypass = (S) => {
+  // acceptance instance: python -c with the code glued to the flag must not replace a check that exits 1
+  const reg = { v: 1, checks: { 'unit-tests': { argv: ['python3', '-cimport sys;sys.exit(0)', 'check.js'], files: ['check.js'] } } };
+  const ctx = makeRepo({ '.claude/gate-checks.json': JSON.stringify(reg), 'check.js': 'import sys; sys.exit(1)\n' });
+  expectTwo(run(S, ctx, MUST), 'verify');
+  expectTwo(run(S, ctx, MUST, { check: true }), '--check');
+};
+C.argv_allowed_flags_still_work = (S) => {
+  const reg = { v: 1, checks: { 'unit-tests': { argv: ['node', '--test', '--no-warnings', 'x.test.js'], files: ['x.test.js', 'helper.js'] } } };
+  const ctx = makeRepo({ '.claude/gate-checks.json': JSON.stringify(reg) });
+  assert.strictEqual(run(S, ctx, MUST, { check: true }).status, 0);
+};
+C.argv0_exported_script = (S) => {
+  const reg = { v: 1, checks: { 'unit-tests': { argv: ['run.sh'], files: ['run.sh'] } } };
+  const sh = '#!/bin/sh\ngrep -q BAD "$AUTOPILOT_GATE_REPO/src/app.js" && { echo "app is BAD" >&2; exit 1; }\nexit 0\n';
+  const ctx = makeRepo({ '.claude/gate-checks.json': JSON.stringify(reg), 'run.sh': sh });
+  expectClean(run(S, ctx, MUST));
+  write(ctx, 'src/app.js', 'BAD\n');
+  expectViolation(run(S, ctx, MUST), 'R5', /app is BAD/);
+};
+
+// C1: git reads of base bytes must not honour replace refs or inherited GIT_* state
+function replaceBase(ctx, edits) {
+  for (const [rel, text] of Object.entries(edits)) write(ctx, rel, text);
+  git(ctx.dir, 'add', '-A'); git(ctx.dir, 'commit', '-q', '-m', 'evil');
+  const evil = git(ctx.dir, 'rev-parse', 'HEAD');
+  git(ctx.dir, 'reset', '-q', '--hard', ctx.base);
+  git(ctx.dir, 'replace', ctx.base, evil);
+}
+C.replace_ref_cannot_swap_check_bytes = (S) => {
+  const ctx = makeRepo();
+  replaceBase(ctx, { 'x.test.js': 'process.exit(0);\n', 'helper.js': 'exports.bad = () => false;\n' });
+  write(ctx, 'src/app.js', 'BAD\n');
+  expectViolation(run(S, ctx, MUST), 'R5', /app\.js is BAD/);
+};
+C.replace_ref_cannot_swap_registry = (S) => {
+  const ctx = makeRepo();
+  replaceBase(ctx, { '.claude/gate-checks.json': JSON.stringify({ v: 1, checks: { 'unit-tests': { argv: ['node', 'evil.js'], files: ['evil.js'] } } }) });
+  write(ctx, 'src/app.js', 'BAD\n');
+  expectViolation(run(S, ctx, MUST), 'R5', /app\.js is BAD/);
+};
+C.replace_ref_cannot_add_require_text_target = (S) => {
+  const ctx = makeRepo();
+  replaceBase(ctx, { 'src/later.js': 'x' });
+  expectTwo(run(S, ctx, L({ require_text: [{ id: 'R3', path: 'src/later.js', text: 'x' }] }), { check: true }));
+};
+C.git_env_is_not_inherited = (S) => {
+  const ctx = makeRepo(); const other = makeRepo();
+  write(ctx, 'src/legacy/new.js', '// new\n');
+  const excl = path.join(ctx.aux, 'excl'); fs.writeFileSync(excl, 'src/legacy/\n');
+  const env = {
+    GIT_DIR: path.join(other.dir, '.git'), GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'core.excludesFile', GIT_CONFIG_VALUE_0: excl,
+  };
+  expectViolation(run(S, ctx, CLEAN_RULES, { env }), 'R1', /new\.js$/);
+};
+C.every_spawn_site_declares_env = (S) => {
+  const src = fs.readFileSync(S, 'utf8');
+  const re = /cp\.(?:spawnSync|spawn|execFileSync|execFile|execSync|exec)\(/g;
+  let m; let n = 0;
+  while ((m = re.exec(src))) {
+    let depth = 1; let i = m.index + m[0].length;
+    for (; i < src.length && depth > 0; i++) { if (src[i] === '(') depth++; else if (src[i] === ')') depth--; }
+    const call = src.slice(m.index, i);
+    n++;
+    assert.match(call, /\benv\b/, 'spawn site without an explicit env: ' + call.slice(0, 80));
+  }
+  assert.ok(n >= 3, 'expected at least 3 spawn sites, found ' + n);
+};
+
+// C2: text rules tell missing, skipped (too large / outside) and ok apart
+C.text_rule_skip_states = (S) => {
+  const big = 'a'.repeat(9 * 1024 * 1024);
+  const ctx = makeRepo({ 'src/big.txt': big, 'src/gone.txt': 'hello\n', 'src/ln.txt': 'hello\n' });
+  const rt = L({ require_text: [{ id: 'R3', path: 'src/big.txt', text: 'zzz' }] });
+  expectClean(run(S, ctx, rt)); // too large: skipped, not "missing"
+  const ft = L({ forbid_text: [{ id: 'R4', glob: 'src/*.txt', text: 'aaa' }] });
+  expectClean(run(S, ctx, ft)); // too large: skipped
+  fs.rmSync(path.join(ctx.dir, 'src/gone.txt'));
+  expectViolation(run(S, ctx, L({ require_text: [{ id: 'R3', path: 'src/gone.txt', text: 'hello' }] })), 'R3', /file missing/);
+  // a symlink out of the repo is a path-safety failure (exit 2) for a named path
+  const outside = mk('gv-out-'); fs.writeFileSync(path.join(outside, 't'), 'hello');
+  fs.rmSync(path.join(ctx.dir, 'src/ln.txt')); fs.symlinkSync(path.join(outside, 't'), path.join(ctx.dir, 'src/ln.txt'));
+  expectTwo(run(S, ctx, L({ require_text: [{ id: 'R3', path: 'src/ln.txt', text: 'hello' }] })));
+};
+
+// C3
+C.gate_file_expires_at_is_iso = (S) => {
+  const ctx = makeRepo();
+  for (const v of ['January 1, 2099', '2099-01-01', '2099-01-01 00:00:00', '2099/01/01T00:00:00Z', '12/31/2099', 1e13]) {
+    expectTwo(runGate(S, ctx, gateFile(ctx, { expires_at: v }), false), JSON.stringify(v));
+  }
+  for (const v of ['2099-01-01T00:00:00Z', '2099-01-01T00:00:00.123+08:00']) {
+    assert.notStrictEqual(runGate(S, ctx, gateFile(ctx, { expires_at: v }), false).status, 2, v);
+  }
+};
+
+// C4
+C.require_files_needs_a_regular_file = (S) => {
+  const ctx = makeRepo();
+  expectViolation(run(S, ctx, L({ require_files: [{ id: 'R2', path: 'src' }] })), 'R2', /not a regular file/);
+  expectViolation(run(S, ctx, L({ require_files: [{ id: 'R2', path: 'nope.txt' }] })), 'R2', /missing/);
+  expectClean(run(S, ctx, L({ require_files: [{ id: 'R2', path: 'src/api.js' }] })));
+};
+
+// C5
+C.hit_cap_forbid_paths = (S) => {
+  const ctx = makeRepo();
+  for (let i = 0; i < 60; i++) write(ctx, 'src/legacy/n' + i + '.js', '//\n');
+  assert.strictEqual(viol(run(S, ctx, CLEAN_RULES), 'R1').length, 50);
+  const few = makeRepo(); for (let i = 0; i < 3; i++) write(few, 'src/legacy/n' + i + '.js', '//\n');
+  assert.strictEqual(viol(run(S, few, CLEAN_RULES), 'R1').length, 3);
+};
+C.hit_cap_forbid_text = (S) => {
+  const ctx = makeRepo();
+  for (let i = 0; i < 60; i++) write(ctx, 'src/m' + i + '.js', 'console.log(1)\n');
+  assert.strictEqual(viol(run(S, ctx, CLEAN_RULES), 'R4').length, 50);
+  const few = makeRepo(); for (let i = 0; i < 3; i++) write(few, 'src/m' + i + '.js', 'console.log(1)\n');
+  assert.strictEqual(viol(run(S, few, CLEAN_RULES), 'R4').length, 3);
+};
+C.rule_cap_counts_features = (S) => {
+  const ctx = makeRepo();
+  const mk2 = (n) => L({
+    require_files: Array.from({ length: n }, (_, i) => ({ id: 'R' + i, path: 'src/api.js' })),
+    features: [{ id: 'F1', check: 'js-syntax' }, { id: 'F2', check: 'js-syntax' }],
+  });
+  expectClean(run(S, ctx, mk2(38))); // 40 in total
+  expectTwo(run(S, ctx, mk2(39))); // 41 in total
+  expectTwo(run(S, ctx, mk2(39), { check: true }));
+};
+C.registry_beats_builtin_of_the_same_name = (S) => {
+  const reg = { v: 1, checks: { 'js-syntax': { argv: ['node', 'x.test.js'], files: ['x.test.js', 'helper.js'] } } };
+  const ctx = makeRepo({ '.claude/gate-checks.json': JSON.stringify(reg) });
+  const rules = L({ must_pass: [{ id: 'R5', check: 'js-syntax' }] });
+  expectClean(run(S, ctx, rules));
+  write(ctx, 'src/app.js', 'BAD\n'); // valid JS, so the built-in would pass; the registry check fails
+  expectViolation(run(S, ctx, rules), 'R5', /app\.js is BAD/);
+};
+C.field_limits_why_label_text_id = (S) => {
+  const ctx = makeRepo();
+  expectClean(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'src/legacy/**', why: 'w'.repeat(300) }] })));
+  expectTwo(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'src/legacy/**', why: 'w'.repeat(301) }] })), 'why 301');
+  expectTwo(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'src/legacy/**', why: 7 }] })), 'why number');
+  expectClean(run(S, ctx, L({ features: [{ id: 'F1', check: 'js-syntax', label: 'l'.repeat(300) }] })));
+  expectTwo(run(S, ctx, L({ features: [{ id: 'F1', check: 'js-syntax', label: 'l'.repeat(301) }] })), 'label 301');
+  expectTwo(run(S, ctx, L({ require_files: [{ id: 'R2', path: 'src/api.js', label: 'x' }] })), 'label outside features');
+  expectClean(run(S, ctx, L({ forbid_text: [{ id: 'R4', glob: 'src/**', text: 't'.repeat(1000) }] })));
+  expectTwo(run(S, ctx, L({ forbid_text: [{ id: 'R4', glob: 'src/**', text: 't'.repeat(1001) }] })), 'text 1001');
+  expectTwo(run(S, ctx, L({ require_files: [{ id: 'bad id!', path: 'src/api.js' }] })), 'bad id');
+  const cleanW = makeRepo(); write(cleanW, 'src/legacy/old.js', '// x\n');
+  assert.strictEqual(viol(run(S, cleanW, L({ forbid_paths: [{ id: 'R1', glob: 'src/legacy/**', why: 'frozen module' }] })), 'R1')[0].rule, 'frozen module');
+  assert.strictEqual(viol(run(S, cleanW, L({ forbid_paths: [{ id: 'R1', glob: 'src/legacy/**' }] })), 'R1')[0].rule, 'forbid_paths R1');
+};
+
+// C6
+C.conflict_marker_forms = (S) => {
+  const rules = L({ must_pass: [{ id: 'R5', check: 'no-conflict-markers' }] });
+  const flagged = ['<<<<<<< HEAD', '>>>>>>> branch', '||||||| base', '=======', '=======\r', '<<<<<<<'];
+  for (const line of flagged) {
+    const ctx = makeRepo(); write(ctx, 'src/app.js', 'a\n' + line + '\nb\n');
+    expectViolation(run(S, ctx, rules), 'R5', /^src\/app\.js:2$/);
+  }
+  const clean = [['src/app.js', '======\n'], ['src/app.js', '<<<<<<<<\n'], ['src/app.js', '  =======\n'], ['src/app.js', '========\n'],
+    ['docs/t.md', 'Title\n=======\n'], ['docs/t.rst', 'Title\n=======\n']];
+  for (const [rel, text] of clean) {
+    const ctx = makeRepo(); write(ctx, rel, text);
+    expectClean(run(S, ctx, rules));
+  }
+};
+
 // ---------------------------------------------------------------- green run
 
 for (const [name, fn] of Object.entries(C)) {
@@ -439,6 +631,7 @@ test('green: schema file matches the validator vocabulary', () => {
 
 function compareSchema(schema) {
   assert.deepStrictEqual(Object.keys(schema.properties).sort(), GV.RULE_KEYS.slice().sort());
+  assert.deepStrictEqual(schema.$defs.argvFlag.enum.slice().sort(), GV.ALLOWED_FLAGS.slice().sort(), 'argv flag allowlist');
   const defFor = { forbid_paths: 'forbidPath', require_files: 'requireFile', require_text: 'requireText', forbid_text: 'forbidText', must_pass: 'mustPass', features: 'feature' };
   for (const [kind, spec] of Object.entries(GV.KIND_FIELDS)) {
     const def = schema.$defs[defFor[kind]];
@@ -461,7 +654,7 @@ const MUTATIONS = [
   { defence: 'path-dotdot', from: "if (p.split('/').includes('..')) return { error: 'contains a .. segment' };", to: '', cases: ['exit2_dotdot'] },
   { defence: 'path-absolute', from: "if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return { error: 'absolute path' };", to: '', cases: ['exit2_absolute'] },
   { defence: 'path-symlink-containment', from: 'if (!containedInRepo(literalPrefix(n.norm, isGlob), repoReal)) {', to: 'if (false) {', cases: ['exit2_symlink_escape'] },
-  { defence: 'read-symlink-containment', from: 'if (!inside(real, repoReal)) return null;', to: '', cases: ['symlinked_file_outside_is_not_read'] },
+  { defence: 'read-symlink-containment', from: "if (!inside(real, repoReal)) return { state: 'skip', reason: 'outside' };", to: '', cases: ['symlinked_file_outside_is_not_read'] },
   { defence: 'rule-unknown-key', from: "if (!RULE_KEYS.includes(k)) errs.push('unknown key: ' + k);", to: '', cases: ['exit2_unknown_key'] },
   { defence: 'rule-unknown-entry-key', from: 'if (!spec.req.includes(k) && !spec.opt.includes(k)) errs.push(', to: 'if (false) errs.push(', cases: ['exit2_unknown_entry_key'] },
   { defence: 'rule-duplicate-id', from: 'else if (ids.has(entry.id))', to: 'else if (false)', cases: ['exit2_dup_id'] },
@@ -472,7 +665,9 @@ const MUTATIONS = [
   { defence: 'check-name-registered', from: "else errs.push('unregistered check name: ' + name + (reg ? '' : ' (no registry at base)'));", to: "else out.set(name, { kind: 'builtin', name });", cases: ['exit2_unregistered_check', 'exit2_missing_registry_with_must_pass'] },
   { defence: 'files-exist-at-base', from: 'if (!blobAtBase(repo, base, n.norm)) { errs.push(', to: 'if (false) { errs.push(', cases: ['exit2_files_entry_missing_at_base'] },
   { defence: 'argv-only-exported-files', from: 'if (n.error || !fileSet.has(n.norm)) errs.push(', to: 'if (n.error) errs.push(', cases: ['exit2_argv_outside_exported_files'] },
-  { defence: 'argv-no-code-flags', from: 'if (CODE_FLAGS.has(bare) || CODE_FLAG_PREFIXES.some((p) => bare === p))', to: 'if (false)', cases: ['exit2_argv_outside_exported_files'] },
+  { defence: 'argv-flag-allowlist', from: 'if (!ALLOWED_FLAGS.includes(a)) errs.push(', to: 'if (false) errs.push(', cases: ['exit2_argv_outside_exported_files', 'argv_code_flag_bypass'] },
+  // the old enumerated deny-list (exact flag, split at '=') must fail the same cases: structural, not enumerated
+  { defence: 'argv-denylist-regression', from: 'if (!ALLOWED_FLAGS.includes(a)) errs.push(', to: "if (['-e', '-p', '-r', '-c', '-m', '--eval', '--print', '--require', '--import'].includes(a.split('=')[0])) errs.push(", cases: ['exit2_argv_outside_exported_files', 'argv_code_flag_bypass'] },
   { defence: 'require_text-exists-at-base', from: "if (f.kind === 'require_text' && f.norm && !blobAtBase(", to: "if (false && !blobAtBase(", cases: ['exit2_require_text_path_missing_at_base'] },
   { defence: 'base-must-be-commit', from: "if (!baseResolves(repo, input.base)) fail('base does not resolve to a commit');", to: '', cases: ['exit2_base_not_a_commit'] },
   { defence: 'registry-from-base', from: "const r = git(repo, ['show', base + ':./.claude/gate-checks.json']);\n  let reg;\n  try { reg = JSON.parse(String(r.stdout)); }",
@@ -483,7 +678,28 @@ const MUTATIONS = [
   { defence: 'scrubbed-env', from: 'cwd: tmp, env, stdio', to: 'cwd: tmp, env: process.env, stdio', cases: ['check_runs_scrubbed_in_temp_dir'] },
   { defence: 'run-outside-worker-tree', from: 'cwd: tmp, env, stdio', to: 'cwd: repoReal, env, stdio', cases: ['check_runs_scrubbed_in_temp_dir'] },
   { defence: 'temp-dir-removed', from: 'if (tmp) fs.rmSync(tmp, { recursive: true, force: true });', to: 'void 0;', cases: ['temp_dir_removed'] },
-  { defence: 'hard-timeout', from: 'timeout: res.timeoutS * 1000,', to: 'timeout: 60000,', cases: ['check_hard_timeout'] },
+  { defence: 'hard-timeout', from: 'timeout: res.timeoutS * 1000,', to: 'timeout: 60000,', cases: ['check_timeout_is_error'] },
+  { defence: 'timeout-is-error', from: "fail('check timed out after ' + res.timeoutS + 's');", to: "return { ok: false, evidence: 'timeout' };", cases: ['check_timeout_is_error'] },
+  { defence: 'git-no-replace-objects', from: "env.GIT_NO_REPLACE_OBJECTS = '1';", to: 'void 0;', cases: ['replace_ref_cannot_swap_check_bytes', 'replace_ref_cannot_swap_registry', 'replace_ref_cannot_add_require_text_target'] },
+  { defence: 'git-env-scrub', from: "if (!k.startsWith('GIT_'))", to: 'if (true)', cases: ['git_env_is_not_inherited'] },
+  { defence: 'spawn-site-env', from: 'timeout: 20000, env: { PATH: process.env.PATH } }', to: 'timeout: 20000 }', cases: ['every_spawn_site_declares_env'] },
+  { defence: 'text-too-large-is-skip', from: "if (st.size > MAX_FILE_BYTES) return { state: 'skip', reason: 'too-large' };", to: "if (st.size > MAX_FILE_BYTES) return { state: 'missing' };", cases: ['text_rule_skip_states'] },
+  { defence: 'text-skip-not-missing', from: "if (r.state === 'missing') viol(", to: "if (r.state !== 'ok') viol(", cases: ['text_rule_skip_states'] },
+  { defence: 'expires-at-iso', from: '!ISO_RE.test(g.expires_at) ||', to: '', cases: ['gate_file_expires_at_is_iso'] },
+  { defence: 'require-files-regular-file', from: 'return inside(real, repoReal) && fs.statSync(real).isFile();', to: 'return inside(real, repoReal);', cases: ['require_files_needs_a_regular_file'] },
+  { defence: 'hit-cap-forbid_paths', from: 'if (matchGlob(f.norm, rel) && n++ < MAX_HITS_PER_RULE)', to: 'if (matchGlob(f.norm, rel))', cases: ['hit_cap_forbid_paths'] },
+  { defence: 'hit-cap-forbid_text', from: 'if (idx >= 0 && n++ < MAX_HITS_PER_RULE)', to: 'if (idx >= 0)', cases: ['hit_cap_forbid_text'] },
+  { defence: 'rule-cap-counts-features', from: 'if (flat.length > MAX_RULES)', to: "if (flat.filter((f) => f.kind !== 'features').length > MAX_RULES)", cases: ['rule_cap_counts_features'] },
+  { defence: 'registry-before-builtin', from: 'if (reg && Object.prototype.hasOwnProperty.call(reg.checks, name)) {', to: 'if (false) {', cases: ['registry_beats_builtin_of_the_same_name'] },
+  { defence: 'why-label-length', from: "(typeof entry[k] !== 'string' || entry[k].length > 300)", to: "(typeof entry[k] !== 'string')", cases: ['field_limits_why_label_text_id'] },
+  { defence: 'why-label-type', from: "(typeof entry[k] !== 'string' || entry[k].length > 300)", to: '(entry[k].length > 300)', cases: ['field_limits_why_label_text_id'] },
+  { defence: 'text-length', from: 'entry.text.length > 1000', to: 'entry.text.length > 100000', cases: ['field_limits_why_label_text_id'] },
+  { defence: 'id-format', from: "typeof entry.id !== 'string' || !ID_RE.test(entry.id)", to: "typeof entry.id !== 'string'", cases: ['field_limits_why_label_text_id'] },
+  { defence: 'rule-why-in-output', from: 'rule: e.why || (kind', to: 'rule: (kind', cases: ['field_limits_why_label_text_id'] },
+  { defence: 'conflict-lone-separator', from: ' || (lone && /^={7}$/.test(line))', to: '', cases: ['conflict_marker_forms'] },
+  { defence: 'conflict-diff3-marker', from: '/^(<{7}|>{7}|\\|{7})( |$)/', to: '/^(<{7}|>{7})( |$)/', cases: ['conflict_marker_forms'] },
+  { defence: 'conflict-prose-exemption', from: 'const lone = !/', to: 'const lone = true || !/', cases: ['conflict_marker_forms'] },
+  { defence: 'argv0-exported-path', from: 'const cmd = INTERPRETERS.has(res.argv[0]) ? res.argv[0] : path.join(tmp, normaliseRel(res.argv[0], false).norm);', to: 'const cmd = res.argv[0];', cases: ['argv0_exported_script'] },
   { defence: 'gate-file-repo-binding', from: 'if (real !== repoReal)', to: 'if (false)', cases: ['gate_file_repo_mismatch'] },
   { defence: 'gate-file-max-blocks-cap', from: 'g.max_blocks > 2', to: 'g.max_blocks > 200', cases: ['gate_file_bad_fields'] },
   { defence: 'gate-file-unknown-field', from: "if (!GATE_KEYS.includes(k)) errs.push('unknown gate-file key: ' + k);", to: '', cases: ['gate_file_bad_fields'] },
@@ -515,4 +731,7 @@ test('red: a schema file that drifts from the validator fails the pin', () => {
   const s2 = JSON.parse(fs.readFileSync(SCHEMA, 'utf8'));
   delete s2.$defs.mustPass.properties.check;
   assert.throws(() => compareSchema(s2));
+  const s3 = JSON.parse(fs.readFileSync(SCHEMA, 'utf8'));
+  s3.$defs.argvFlag.enum.push('-c');
+  assert.throws(() => compareSchema(s3));
 });

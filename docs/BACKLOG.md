@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0318 -->
+<!-- next-id: BL-0320 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1188,19 +1188,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-10-25 pre-push suite runs at 670b3ffaf and 1d38cfefb
 - **Pointer**: docs/backlog/bash-launch-guard-timing-assertion-load.md
 
-### depth-0 per-turn gate: P1 mechanism, P2 wiring, P3 evaluation, P4 guidance still to do
+### depth-0 per-turn gate: P2 wiring, P3 evaluation, P4 guidance still to do
 - **Id**: BL-0306
 - **Status**: open
 - **Since**: 2026-10-26
 - **Origin**: owner
-- **Problem**: 計畫要讓 depth-0 依任務決定要不要替工人開啟每回合驗證。P0 付費探測已完成（0.0433 美元），P1 驗證腳本、P2 接線、P3 開關評測與 P4 指引都還沒做。
+- **Problem**: 計畫要讓 depth-0 依任務決定要不要替工人開啟每回合驗證。P0 付費探測（0.0433 美元）與 P1 驗證腳本（尚未接線）已完成，P2 接線、P3 開關評測與 P4 指引都還沒做。
 - **Impact**: 沒做完就沒有人能在派工時替單一任務開驗證，預設仍維持關閉。
-- **Trigger**: P1 (gate-verify.js mechanism) can start now; P2 needs P0 and P1, P3 needs P2, P4 only on a P3 PASS
+- **Trigger**: P2 (hook wiring) can start now; P3 needs P2, P4 only on a P3 PASS
 - **Trigger-Type**: ready
 - **Effort**: L
-- **Source**: owner d-32849d39 (A, default off) and d-6f6b706f (A: P0 cap 1 USD, P3 cap 20 USD); plan merged 4ebcb428b
-- **Pointer**: docs/plans/2026-10-26-depth0-per-turn-gate.md
-- **Context**: P0 evidence bfde42aa1 (0.0433 USD, docs/plans/evidence/2026-10-26-depth0-gate-p0). After the mechanism passes acceptance, run P3 without asking again. Follow-on of BL-0055.
+- **Source**: owner d-32849d39 (A, default off) and d-6f6b706f (A: P0 cap 1 USD, P3 cap 20 USD); plan merged 4ebcb428b; P1 merged ae44b5a0a
+- **Pointer**: docs/backlog/depth0-per-turn-gate-status.md
+- **Context**: P1 shipped ae44b5a0a (not wired); P0 evidence bfde42aa1; P3 runs without asking again once acceptance passes; follow-on of BL-0055; P2 questions BL-0318, BL-0319. Detail at Pointer.
 
 ### Owner decision cards: three ways a card is lost or never opened
 - **Id**: BL-0307
@@ -1334,20 +1334,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: bltidy14 candidates (3) and (4), 2026-10-26
 - **Pointer**: docs/backlog/intermittent-red-paid-batch-auth-stop-agy-stdin.md
 
-### preflight-release runs six paid slash-entry probes by default
-- **Id**: BL-0316
-- **Status**: open
-- **Since**: 2026-10-27
-- **Origin**: self
-- **Problem**: 發版前檢查腳本預設會跑 slash-entry 探針，內含 6 個真的 claude-sonnet-5 呼叫；只有設跳過旗標才不跑。
-- **Impact**: 沒掛哨兵就花真錢；10/27 fbship hand 跑兩次共 12 次真呼叫，約 9 USD 等值。
-- **Trigger**: next edit to scripts/preflight-release.sh, or the next release preflight run by a hand
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: fbship hand run 2026-10-27 15:40 Taipei (self)
-- **Pointer**: docs/backlog/preflight-release-paid-slash-probe-default.md
-- **Context**: Proposed: make the probe explicit opt-in, or skip automatically when a sentinel or test environment is detected. A change to a check needs a negative control.
-
 ### fbatch v3 pilot could confirm the develop journal only indirectly
 - **Id**: BL-0317
 - **Status**: open
@@ -1361,3 +1347,31 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: findings-batch-v3 pilot closure 2026-10-27 (self)
 - **Pointer**: docs/backlog/fbatch-v3-journal-indirect-evidence.md
 - **Context**: Direct evidence needs the runner to keep the journal file before the cell repo is cleaned.
+
+### depth-0 gate P2: exit 2 is turned into allow, and a worker can cause exit 2
+- **Id**: BL-0318
+- **Status**: open
+- **Since**: 2026-10-27
+- **Origin**: self
+- **Problem**: 計畫規定接線的 hook 把驗證腳本的錯誤結束碼 2 轉成放行加錯誤訊息，但工人可以刻意製造這種錯誤來換取放行。接線時要決定錯誤是否給 owner 看、重複錯誤是否改為擋下、哪些原因工人能觸發。
+- **Impact**: 不決定就接線，工人可用製造錯誤的方式繞過每回合驗證。
+- **Trigger**: P2 hook wiring of the depth-0 per-turn gate starts
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: d0gp1 fourth-generation review and acceptance, 2026-10-27 (self)
+- **Pointer**: docs/backlog/depth0-gate-p2-wiring-open-questions.md
+- **Context**: Plan section 3.2; follow-on of BL-0306.
+
+### depth-0 gate P2: git calls in the hook may still read the worker's .git/config
+- **Id**: BL-0319
+- **Status**: open
+- **Since**: 2026-10-27
+- **Origin**: self
+- **Problem**: 驗證腳本已不讀工人的索引、忽略檔與設定來判斷變更，但工人仍擁有自己的 git 設定檔。接線時要確認 hook 情境下是否還有其他 git 呼叫會受這份設定影響。
+- **Impact**: 漏查的話，工人可改自己的 git 設定來影響驗證結果。
+- **Trigger**: P2 hook wiring of the depth-0 per-turn gate starts
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: d0gp1 fourth-generation review and acceptance, 2026-10-27 (self)
+- **Pointer**: docs/backlog/depth0-gate-p2-wiring-open-questions.md
+- **Context**: gate-verify runs git with core.fsmonitor=false, core.hooksPath and core.excludesFile set to off; follow-on of BL-0306.

@@ -312,8 +312,8 @@ include `test -x` on each new `*.test.sh` and every consumer suite of a changed 
 The clone-local "PARALLEL-RUN LOCAL ONLY … enforcement_mode shadow" commit is created by depth-0 and stated IN the brief; a foreman
 correctly refuses a governance downgrade that arrives as a later message instead. A landing clone sets `git config core.hooksPath
 .githooks`, otherwise the pre-push qc-gate is skipped (v2.36.99 shipped a literal `<id>` trailer this way) — fill the QC trailer's
-review id from the review manifest, never a placeholder. The landing foreman runs one full combined `origin/develop..HEAD` review
-and STOPS on any 🔴/🟠; refuting a finding is depth-0's job, done by re-derivation (ADR-0001), not the foreman's.
+review id from the review manifest, never a placeholder. The landing foreman runs one full combined `origin/develop..HEAD` review.
+A red/orange finding blocks the merge of the candidate. The landing foreman does not stop: it lands the candidate plus its findings as text for depth 0 to adjudicate in a batch. Its candidate sha and all findings come back as text in the final message; depth 0 writes them to the registry, so the lane never Writes a report-style file. Refuting a finding is depth-0's job, done by re-derivation (ADR-0001), not the foreman's.
 Receipts: `docs/plans/evidence/2026-09-19-parallel-sonnet-foremen/`, `docs/plans/evidence/2026-09-24-backlog-wave-1b/README.md`,
 `docs/plans/evidence/2026-09-25-foreman-guard-roles/landing/`, `docs/plans/evidence/2026-09-26-hook-channel-probe/landing/`.
 

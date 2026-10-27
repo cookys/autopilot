@@ -397,7 +397,7 @@ A turn must NEVER end waiting only on a background-task notification.
 | ≤ 2 min | foreground `Bash` with an explicit `timeout`. |
 | > 2 min | use the `Monitor` tool with an end condition; or `run_in_background`, but only if the output path is written down in the same turn AND a second background dead-man timer (`sleep <deadline>; echo WAKE`) is started. |
 
-An orchestrator handing off a long unit starts its dead-man timer before ending the turn. Foremen under
+An orchestrator handing off a long unit starts its dead-man timer before ending the turn. A wait ends only on a landed `<run_id>.<stage>.exit` file or a receipt that passes its validator; the mere existence of a draft RECEIPT file is never completion. Foremen under
 `/l4`–`/l6` keep their stricter no-polling clause: the dead-man timer is itself a background task — never
 foreground `sleep`, never `Monitor`.
 

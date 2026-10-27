@@ -765,23 +765,43 @@ C.unreadable_file_is_exit_2 = (S) => {
 // ---- round-5 controls: "not found" must not be forgeable
 
 function rawName(dir, rel, bytes) { return Buffer.concat([Buffer.from(path.join(dir, rel) + '/'), Buffer.from(bytes)]); }
-C.non_utf8_file_name_is_exit_2 = (S) => {
+const OPAQUE_EVIDENCE = /: opaque name \(cannot be matched\)$/;
+C.non_utf8_file_name_content_rules_exit_2 = (S) => {
   const ctx = makeRepo(); fs.mkdirSync(path.join(ctx.dir, 'hidden'));
   fs.writeFileSync(rawName(ctx.dir, 'hidden', [0x65, 0x76, 0x69, 0x6c, 0xff, 0x2e, 0x6a, 0x73]), 'BAD function (');
-  // the name cannot be a string: as a path it is an added file (violation); content rules cannot read it (exit 2)
-  expectViolation(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] })), 'R1', /^hidden\/evil\\xff\.js$/);
   expectTwo(run(S, ctx, L({ forbid_text: [{ id: 'R4', glob: 'hidden/**', text: 'BAD' }] })), 'forbid_text');
   expectTwo(run(S, ctx, L({ must_pass: [{ id: 'R5', check: 'js-syntax' }] })), 'js-syntax');
   expectTwo(run(S, ctx, L({ must_pass: [{ id: 'R5', check: 'no-conflict-markers' }] })), 'no-conflict-markers');
-  // a directory with such a name hides its contents unless a rule names it
-  const d = makeRepo(); fs.mkdirSync(path.join(d.dir, 'hidden'));
-  const dir = rawName(d.dir, 'hidden', [0x64, 0xff]); fs.mkdirSync(dir); fs.writeFileSync(Buffer.concat([dir, Buffer.from('/a.js')]), 'BAD');
-  expectTwo(run(S, d, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**/*.js' }] })), 'unnamed opaque directory');
-  expectViolation(run(S, d, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] })), 'R1', /d\\xff$/);
   // a valid, non-ASCII UTF-8 name is an ordinary file
   const ok = makeRepo(); fs.mkdirSync(path.join(ok.dir, 'hidden')); write(ok, 'hidden/\u00e9\u4e2d.js', 'BAD');
   expectViolation(run(S, ok, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] })), 'R1', /\u00e9\u4e2d\.js$/);
   expectViolation(run(S, ok, L({ forbid_text: [{ id: 'R4', glob: 'hidden/**', text: 'BAD' }] })), 'R4', /\u00e9\u4e2d\.js:1$/);
+};
+C.non_utf8_name_is_a_forbid_paths_violation_whatever_the_glob = (S) => {
+  const ctx = makeRepo(); fs.mkdirSync(path.join(ctx.dir, 'hidden'));
+  fs.writeFileSync(rawName(ctx.dir, 'hidden', [0x65, 0x76, 0x69, 0x6c, 0xff, 0x2e, 0x6a, 0x73]), 'BAD');
+  for (const glob of ['hidden/**', 'hidden/*.js', 'hidden/evil?.js', 'hidden/**/*.js', 'hidden/zzz*.py']) {
+    expectViolation(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob }] })), 'R1', /^hidden\/evil\\xff\.js: opaque name \(cannot be matched\)$/);
+  }
+  // a directory with such a name too (its contents cannot be listed by string)
+  const d = makeRepo(); fs.mkdirSync(path.join(d.dir, 'hidden'));
+  const dir = rawName(d.dir, 'hidden', [0x64, 0xff]); fs.mkdirSync(dir); fs.writeFileSync(Buffer.concat([dir, Buffer.from('/a.js')]), 'BAD');
+  for (const glob of ['hidden/**', 'hidden/**/*.js', 'hidden/d?']) {
+    expectViolation(run(S, d, L({ forbid_paths: [{ id: 'R1', glob }] })), 'R1', /^hidden\/d\\xff: opaque name/);
+  }
+  // not under any rule's literal prefix: not this rule's business
+  expectClean(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'src/**' }] })));
+};
+C.non_utf8_name_cannot_collide_with_a_real_name = (S) => {
+  // base holds a file whose UTF-8 name is literally backslash-x-f-f; the worker adds a real 0xff beside it
+  const ctx = makeRepo({ 'hidden/evil\\xff.js': 'ok', 'hidden/d\\xff/a.js': 'ok' });
+  fs.writeFileSync(rawName(ctx.dir, 'hidden', [0x65, 0x76, 0x69, 0x6c, 0xff, 0x2e, 0x6a, 0x73]), 'BAD');
+  expectViolation(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] })), 'R1', OPAQUE_EVIDENCE);
+  const d = makeRepo({ 'hidden/d\\xff/a.js': 'ok' });
+  const dir = rawName(d.dir, 'hidden', [0x64, 0xff]); fs.mkdirSync(dir); fs.writeFileSync(Buffer.concat([dir, Buffer.from('/a.js')]), 'BAD');
+  expectViolation(run(S, d, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] })), 'R1', OPAQUE_EVIDENCE);
+  const clean = makeRepo({ 'hidden/evil\\xff.js': 'ok' }); // the literal-backslash file alone is unchanged
+  expectClean(run(S, clean, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] })));
 };
 C.non_utf8_path_in_base_tree_is_exit_2 = (S) => {
   const ctx = makeRepo(); const env = cleanEnv();
@@ -932,10 +952,14 @@ const MUTATIONS = [
   { defence: 'builtin-conflict-markers-detect', from: "return { ok: false, evidence: rel + ':' + (i + 1) };", to: 'void 0;', cases: ['builtin_conflict_markers'] },
   { defence: 'builtin-js-syntax-detect', from: "if (r.status !== 0) return { ok: false, evidence: rel + ': ' + String(r.stderr).slice(0, 200) };", to: 'void 0;', cases: ['builtin_js_syntax'] },
   { defence: 'rules-file-json-parse', from: "try { return JSON.parse(text); } catch (e) { fail(what + ' is not valid JSON'); }", to: "try { return JSON.parse(text); } catch (e) { return { v: 1 }; }", cases: ['exit2_not_json'] },
-  { defence: 'walk-non-utf8-name', from: "return Buffer.from(str, 'utf8').equals(buf) ? { name: str } :", to: 'return true ? { name: str } :', cases: ['non_utf8_file_name_is_exit_2'] },
-  { defence: 'opaque-entry-text-rules', from: "noOpaque(walkFs(repoReal, prefix, gitlinks), 'text rule')", to: 'walkFs(repoReal, prefix, gitlinks)', cases: ['non_utf8_file_name_is_exit_2'] },
-  { defence: 'opaque-entry-js-syntax', from: "noOpaque(walkFs(repoReal, '', gitlinksOf(b)), 'js-syntax')", to: "walkFs(repoReal, '', gitlinksOf(b))", cases: ['non_utf8_file_name_is_exit_2'] },
-  { defence: 'opaque-directory-unnamed', from: 'if (!forbid.some((f) => matchGlob(f.norm, d))) fail(', to: 'if (false) fail(', cases: ['non_utf8_file_name_is_exit_2'] },
+  { defence: 'walk-non-utf8-name', from: "return Buffer.from(str, 'utf8').equals(buf) ? { name: str } :", to: 'return true ? { name: str } :', cases: ['non_utf8_name_is_a_forbid_paths_violation_whatever_the_glob'] },
+  { defence: 'opaque-entry-text-rules', from: "noOpaque(walkFs(repoReal, prefix, gitlinks), 'text rule')", to: 'walkFs(repoReal, prefix, gitlinks).filter((e) => !e.opaque)', cases: ['non_utf8_file_name_content_rules_exit_2'] },
+  { defence: 'opaque-entry-js-syntax', from: "noOpaque(walkFs(repoReal, '', gitlinksOf(b)), 'js-syntax')", to: "walkFs(repoReal, '', gitlinksOf(b))", cases: ['non_utf8_file_name_content_rules_exit_2'] },
+  { defence: 'opaque-not-matched-by-glob', from: 'const under = pre === \'\' || e.parent === pre || e.parent.startsWith(pre + \'/\');', to: 'const under = matchGlob(f.norm, e.display);', cases: ['non_utf8_name_is_a_forbid_paths_violation_whatever_the_glob'] },
+  { defence: 'opaque-never-a-map-key', edits: [
+    ['const w = new Map(entries.filter((e) => !e.opaque).map((e) => [e.rel, e]));', 'const w = new Map(entries.map((e) => [e.opaque ? e.display : e.rel, e.opaque ? { kind: \'file\', rel: e.display } : e]));'],
+    ['for (const e of entries) if (e.opaque) opaque.set(e.key, e);', '']],
+    cases: ['non_utf8_name_cannot_collide_with_a_real_name'] },
   { defence: 'base-tree-non-utf8-path', from: "if (!Buffer.from(String(raw), 'utf8').equals(raw)) fail(", to: 'if (false) fail(', cases: ['non_utf8_path_in_base_tree_is_exit_2'] },
   { defence: 'read-file-stat-enoent-is-missing', from: "try { st = fs.statSync(real); } catch (e) { return e.code === 'ENOENT' ? { state: 'missing' } : fail('cannot stat ' + rel + ': ' + e.code); }", to: "try { st = fs.statSync(real); } catch (e) { return fail('cannot stat ' + rel + ': ' + e.code); }", cases: ['read_worktree_file_enoent_is_missing'] },
   { defence: 'read-file-read-enoent-is-missing', from: "catch (e) { return e.code === 'ENOENT' ? { state: 'missing' } : fail('cannot read ' + rel + ': ' + e.code); }", to: "catch (e) { return fail('cannot read ' + rel + ': ' + e.code); }", cases: ['read_worktree_file_enoent_is_missing'] },
@@ -976,7 +1000,7 @@ const MUTATIONS = [
   { defence: 'text-skip-not-missing', from: "if (r.state === 'missing') viol(", to: "if (r.state !== 'ok') viol(", cases: ['text_rule_skip_states'] },
   { defence: 'expires-at-iso', from: '!ISO_RE.test(g.expires_at) ||', to: '', cases: ['gate_file_expires_at_is_iso'] },
   { defence: 'require-files-regular-file', from: 'return inside(real, repoReal) && fs.statSync(real).isFile();', to: 'return inside(real, repoReal);', cases: ['require_files_needs_a_regular_file'] },
-  { defence: 'hit-cap-forbid_paths', from: 'if (matchGlob(f.norm, rel) && n++ < MAX_HITS_PER_RULE)', to: 'if (matchGlob(f.norm, rel))', cases: ['hit_cap_forbid_paths'] },
+  { defence: 'hit-cap-forbid_paths', from: 'if (matchGlob(f.norm, rel) && hits.get(f) < MAX_HITS_PER_RULE) {', to: 'if (matchGlob(f.norm, rel)) {', cases: ['hit_cap_forbid_paths'] },
   { defence: 'hit-cap-forbid_text', from: 'if (idx >= 0 && n++ < MAX_HITS_PER_RULE)', to: 'if (idx >= 0)', cases: ['hit_cap_forbid_text'] },
   { defence: 'rule-cap-counts-features', from: 'if (flat.length > MAX_RULES)', to: "if (flat.filter((f) => f.kind !== 'features').length > MAX_RULES)", cases: ['rule_cap_counts_features'] },
   { defence: 'registry-before-builtin', from: 'if (reg && Object.prototype.hasOwnProperty.call(reg.checks, name)) {', to: 'if (false) {', cases: ['registry_beats_builtin_of_the_same_name'] },

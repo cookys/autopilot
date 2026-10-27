@@ -436,7 +436,7 @@ function escapeName(buf) {
 
 function noOpaque(entries, what) {
   const bad = entries.find((e) => e.opaque);
-  if (bad) fail('cannot read content: non-UTF-8 name ' + bad.rel + ' (' + what + ')');
+  if (bad) fail('cannot read content: non-UTF-8 name ' + bad.display + ' (' + what + ')');
   return entries;
 }
 
@@ -467,7 +467,9 @@ function walkFs(repoReal, prefix, gitlinks) {
       if (e.code === 'ENOENT') return;
       return fail('cannot look at a non-UTF-8 name under ' + (r || '.') + ': ' + e.code);
     }
-    out.push({ rel: (r ? r + '/' : '') + n.name, kind: st.isDirectory() ? 'dir' : 'file', opaque: true });
+    // No `rel`: an opaque entry never takes part in string matching or Map keys. `display` is for
+    // output only (it can equal the name of a real UTF-8 file); `key` is collision-free.
+    out.push({ opaque: true, parent: r, display: (r ? r + '/' : '') + n.name, key: r + '\0' + n.buf.toString('hex'), kind: st.isDirectory() ? 'dir' : 'file' });
   }
   function visit(r) {
     tick();
@@ -486,7 +488,7 @@ function walkFs(repoReal, prefix, gitlinks) {
       // matched, lstat()ed or reported as a string, and decoding it lossily would make the entry
       // look vanished. It becomes an OPAQUE entry (escaped display name, never read as a string):
       // forbid_paths treats it as an added path, every consumer that must read content stops
-      // with exit 2, and an opaque directory no forbid rule names is exit 2 as well.
+      // with exit 2. (forbid_paths: any opaque entry under a rule's literal prefix is a violation.)
       let raw;
       try { raw = fs.readdirSync(abs, { encoding: 'buffer' }); } catch (e) {
         if (e.code === 'ENOENT') return;
@@ -542,16 +544,17 @@ function differs(repoReal, be, we) {
 // Paths that differ between base and the worktree: deleted, added, or different bytes/mode.
 function changedPaths(repo, repoReal, base, prefixes) {
   const changed = new Set();
-  const opaqueDirs = [];
+  const opaque = new Map();
   for (const prefix of new Set(prefixes)) {
     newWalk();
     const b = baseEntries(repo, base, prefix);
-    const w = new Map(walkFs(repoReal, prefix, gitlinksOf(b)).map((e) => [e.rel, e]));
+    const entries = walkFs(repoReal, prefix, gitlinksOf(b));
+    const w = new Map(entries.filter((e) => !e.opaque).map((e) => [e.rel, e]));
     for (const [p, be] of b) { const we = w.get(p); if (!we || differs(repoReal, be, we)) changed.add(p); }
     for (const p of w.keys()) if (!b.has(p)) changed.add(p);
-    for (const e of w.values()) if (e.opaque && e.kind === 'dir') opaqueDirs.push(e.rel);
+    for (const e of entries) if (e.opaque) opaque.set(e.key, e);
   }
-  return { changed: Array.from(changed).sort(), opaqueDirs };
+  return { changed: Array.from(changed).sort(), opaque: Array.from(opaque.values()) };
 }
 
 function walkFiles(repo, repoReal, base, prefix) {
@@ -643,14 +646,20 @@ function evaluate(prep, input, repo, repoReal) {
 
   const forbid = wanted('forbid_paths');
   if (forbid.length) {
-    const { changed, opaqueDirs } = changedPaths(repo, repoReal, base, forbid.map((f) => prefixOf(f.norm)));
-    for (const d of opaqueDirs) {
-      if (!forbid.some((f) => matchGlob(f.norm, d))) fail('directory with a non-UTF-8 name ' + d + ' cannot be searched');
-    }
+    const { changed, opaque } = changedPaths(repo, repoReal, base, forbid.map((f) => prefixOf(f.norm)));
+    const hits = new Map(forbid.map((f) => [f, 0]));
     for (const f of forbid) {
-      let n = 0;
       for (const rel of changed) {
-        if (matchGlob(f.norm, rel) && n++ < MAX_HITS_PER_RULE) viol(f.entry, 'forbid_paths', rel);
+        if (matchGlob(f.norm, rel) && hits.get(f) < MAX_HITS_PER_RULE) { hits.set(f, hits.get(f) + 1); viol(f.entry, 'forbid_paths', rel); }
+      }
+    }
+    // An opaque (non-UTF-8) name cannot be matched against a glob, so any opaque entry under a
+    // rule's literal prefix is a violation of that rule (exit 2 would be turned into "allow").
+    for (const e of opaque) {
+      for (const f of forbid) {
+        const pre = prefixOf(f.norm);
+        const under = pre === '' || e.parent === pre || e.parent.startsWith(pre + '/');
+        if (under && hits.get(f) < MAX_HITS_PER_RULE) { hits.set(f, hits.get(f) + 1); viol(f.entry, 'forbid_paths', e.display + ': opaque name (cannot be matched)'); }
       }
     }
   }

@@ -3212,6 +3212,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_SLASH_PROBE_RELEASE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/preflight-release.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_SLASH_PROBE",
       "kind": "env",
       "audience": "internal",

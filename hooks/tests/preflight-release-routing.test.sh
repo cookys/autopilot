@@ -46,7 +46,8 @@ run_probe() {
     printf '%s\n' "$PROBE_OUT"
     printf 'rc=%s\n' "$PROBE_RC"
   else
-    PROBE_OUT=$( ENGINE_CAPABILITY_DIR="$store" SLASH_PROBE_MODEL="$MODEL" SLASH_PROBE_CLAUDE_BIN="$bin" AUTOPILOT_DISPATCH_MANIFEST=0 SPAWN_MARKER="$marker" bash "$REPO_ROOT/scripts/preflight-release.sh" --only-slash-probe 2>&1 )
+    # The probe is opt-in (BL-0316): --with-slash-probe is what makes these runs real.
+    PROBE_OUT=$( ENGINE_CAPABILITY_DIR="$store" SLASH_PROBE_MODEL="$MODEL" SLASH_PROBE_CLAUDE_BIN="$bin" AUTOPILOT_DISPATCH_MANIFEST=0 SPAWN_MARKER="$marker" bash "$REPO_ROOT/scripts/preflight-release.sh" --only-slash-probe --with-slash-probe 2>&1 )
     PROBE_RC=$?
     printf '%s\n' "$PROBE_OUT"
     printf 'rc=%s\n' "$PROBE_RC"

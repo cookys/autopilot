@@ -39,8 +39,8 @@ const { sanitizeSessionId: normSession } = require('../scripts/lib/live-state-di
 // form is not used. Returns root_run_id or null.
 function markerRoot(sessionId) {
   try {
-    const m = require('../scripts/session-mode.js').readSessionRecord(String(sessionId || ''));
-    const root = m && m.root_run_id;
+    // shared judgement (session-mode.js readSessionRoot): an expired marker of a still-working session keeps its root
+    const root = require('../scripts/session-mode.js').readSessionRoot(String(sessionId || ''), { liveBase: L.liveBase() }).root;
     return typeof root === 'string' && /^[A-Za-z0-9._-]+$/.test(root) && root !== '.' && root !== '..' ? root : null;
   } catch {
     return null;

@@ -173,8 +173,7 @@ function stampFields() {
   let root = process.env.AUTOPILOT_ROOT_RUN_ID || null;
   if (!root) {
     try {
-      const marker = require('./session-mode').readSessionRecord(); // l3-l6 or plain: only root_run_id is read
-      if (marker && typeof marker.root_run_id === 'string' && marker.root_run_id) root = marker.root_run_id;
+      root = require('./session-mode').readSessionRoot().root || null; // l3-l6 or plain, shared liveness judgement: only root_run_id is read
     } catch (err) {
       root = null;
     }

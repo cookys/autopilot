@@ -223,9 +223,8 @@ function turnScope(p) {
     }
   } catch { /* no cache: null */ }
   try {
-    const dir = process.env.AUTOPILOT_SESSION_MODE_DIR || path.join(require('os').homedir(), '.autopilot', 'session-mode');
-    const m = JSON.parse(fs.readFileSync(path.join(dir, `${sanitizeSessionId(p.session_id)}.json`), 'utf8'));
-    if (m && typeof m.root_run_id === 'string' && m.root_run_id && Date.parse(m.expires_at) > Date.now()) rootRunId = m.root_run_id;
+    // the one shared root judgement (session-mode.js readSessionRoot), same as open-decision / ask-decision / the snapshot
+    rootRunId = require('../scripts/session-mode.js').readSessionRoot(sanitizeSessionId(p.session_id), { liveBase: liveBase(), alive: true }).root; // a prompt arriving now is proof of life: the turn file written next must agree
   } catch { /* no marker: null */ }
   return { projectKey, rootRunId };
 }

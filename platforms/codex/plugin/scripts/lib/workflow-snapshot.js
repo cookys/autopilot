@@ -70,10 +70,9 @@ function liveBase(dirs) {
 function readMarker(ctx) {
   const dir = ctx.dirs.sessionMode || process.env.AUTOPILOT_SESSION_MODE_DIR
     || path.join(os.homedir(), '.autopilot', 'session-mode');
-  const m = readJson(path.join(dir, `${norm(ctx.sessionId)}.json`));
-  if (!m) return null;
-  if (!m.expires_at || Date.parse(m.expires_at) <= ctx.now) return null; // expired: same rule as readSessionRecord
-  return m;
+  // the one shared judgement (session-mode.js readSessionRoot): an expired marker of a session that is still working is still its marker
+  const r = require('../session-mode.js').readSessionRoot(norm(ctx.sessionId), { markerDir: dir, liveBase: liveBase(ctx.dirs) || undefined, now: ctx.now });
+  return r.live_via ? r.marker : null;
 }
 
 function srcSession(ctx) {

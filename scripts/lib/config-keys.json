@@ -3141,7 +3141,6 @@
       "default": null,
       "readers": [
         "hooks/dispatch-model-guard.js",
-        "hooks/live-session-lib.js",
         "hooks/runs-watch-autostart.js",
         "scripts/dispatch-author.sh",
         "scripts/dispatch-hetero.sh",
@@ -3149,7 +3148,6 @@
         "scripts/dispatch-tree.js",
         "scripts/lib/repo-identity.sh",
         "scripts/lib/workflow-snapshot.js",
-        "scripts/open-decision.js",
         "scripts/run-grok-implementer-ab.sh",
         "scripts/session-mode.js",
         "scripts/stage-advance.js",

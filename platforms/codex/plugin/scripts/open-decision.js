@@ -67,15 +67,14 @@ function parse(argv) {
 
 function sessionRoot() {
   const raw = process.env.AUTOPILOT_SESSION_ID || process.env.CLAUDE_CODE_SESSION_ID || process.env.CLAUDE_SESSION_ID || process.env.CODEX_THREAD_ID;
-  if (!raw) return { root: null, session: null };
+  if (!raw) return { root: null, session: null, why: 'no session id in the environment' };
   const session = String(raw).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+  // One shared judgement (session-mode.js readSessionRoot): an expired marker whose session is still alive keeps its root.
   try {
-    const dir = process.env.AUTOPILOT_SESSION_MODE_DIR || path.join(os.homedir(), '.autopilot', 'session-mode');
-    const m = JSON.parse(fs.readFileSync(path.join(dir, `${session}.json`), 'utf8'));
-    const live = m && Date.parse(m.expires_at) > Date.now();
-    return { root: live && typeof m.root_run_id === 'string' && m.root_run_id ? m.root_run_id : null, session };
+    const r = require('./session-mode.js').readSessionRoot(session);
+    return { root: r.root, session, why: r.root ? null : (!r.found ? 'no session marker' : (r.expired ? 'session marker expired and no live turn file' : 'marker has no root_run_id')) };
   } catch (_error) {
-    return { root: null, session };
+    return { root: null, session, why: 'session marker unreadable' };
   }
 }
 
@@ -122,6 +121,22 @@ function projectScopeFiles(cwd) {
   const sf = scopeFile(cwd, null);
   if (!sf) return [];
   return projectScopes(sf).map((s) => s.file);
+}
+
+// Cards this session opened that sit in the UNBOUND scope file (no root in the file): [{ id, file }]. The owner-question-guard
+// uses it to tell a session that has a root that its card landed where a root-scoped panel will not list it. Never throws.
+function unboundCardsOf(cwd, session) {
+  try {
+    const out = [];
+    for (const file of projectScopeFiles(cwd)) {
+      const v = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (v && v.root_run_id) continue;
+      for (const e of readFile(file)) if (e.opened_by_session === session) out.push({ id: e.id, file });
+    }
+    return out;
+  } catch (_error) {
+    return [];
+  }
 }
 
 function writeEntries(sf, root, entries) {
@@ -196,6 +211,10 @@ function main(argv) {
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source,
   });
+  if (r.status === 'ok' && !root) {
+    // The card is in the unbound scope: a panel scoped to a session root will not list it. Say so, once, on stderr (stdout stays the bare id).
+    process.stderr.write(`open-decision: warning: card ${r.id} written to the UNBOUND scope (${sess.why || 'no root'}); scope_key=${r.scope_key} file=${r.file}; pass --root-run-id <id> to bind it to a session root\n`);
+  }
   if (r.status === 'ok') { process.stdout.write(args.json ? `${JSON.stringify({ ok: true, id: r.id, file: r.file, scope_key: r.scope_key })}\n` : `${r.id}\n`); return 0; }
   process.stderr.write(`open-decision: ${r.message}\n`);
   return 4;
@@ -253,4 +272,4 @@ function closeDecisionById(file, id, isOurs) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, openDecision, closeDecisionById, projectScopeFiles, SAFE_ROOT, SCHEMA };
+module.exports = { main, openDecision, closeDecisionById, projectScopeFiles, unboundCardsOf, SAFE_ROOT, SCHEMA };

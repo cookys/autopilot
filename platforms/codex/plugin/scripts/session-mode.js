@@ -259,6 +259,41 @@ function readSessionRecord(sessionId) {
   }
 }
 
+// ONE answer to "which root does this session own, and is the session still alive". Every reader that wants a root
+// (open-decision, ask-decision, the turn scope, the workflow snapshot, the decision ledger stamp) calls this instead of
+// testing expires_at itself, so they cannot disagree. Gates keep readSessionRecord: for them an expired marker means fail-open.
+// Alive = marker unexpired, OR (marker expired but the session's turn file <live>/turn/<sid>.json is still there and its last
+// activity (`since`, written on UserPromptSubmit and Stop) is within one marker TTL). The turn file is removed on SessionEnd, so
+// a session that really ended stays expired; a session that outlived the 24 h marker keeps its root while it keeps working.
+// Never "expired counts as valid": no turn file or a stale one => the root is dropped. Returns
+// { root, session, found, expired, live_via: 'marker'|'turn'|null }; never throws.
+function readSessionRoot(sessionId, opts = {}) {
+  const now = Number.isFinite(opts.now) ? opts.now : Date.now();
+  const session = normalizeSessionId(sessionId === undefined ? getSessionId() : sessionId);
+  const out = { root: null, session, found: false, expired: null, live_via: null };
+  let m;
+  try {
+    const dir = opts.markerDir || markerDir();
+    m = JSON.parse(fs.readFileSync(path.join(dir, `${session}.json`), 'utf8'));
+  } catch { return out; }
+  if (!m || typeof m !== 'object') return out;
+  out.found = true;
+  const expires = Date.parse(m.expires_at);
+  out.expired = !(expires > now);
+  if (!out.expired) out.live_via = 'marker';
+  else {
+    try {
+      const base = opts.liveBase || require('./lib/live-state-dir.js').resolveLiveDir({ warn: () => {} }).base;
+      const t = JSON.parse(fs.readFileSync(path.join(base, 'turn', `${session}.json`), 'utf8'));
+      const since = t && t.schema === 'autopilot.session-turn/1' ? Date.parse(t.since) : NaN;
+      if (since > now - DEFAULT_TTL_HOURS * 3600 * 1000) out.live_via = 'turn';
+    } catch { /* no live signal: stays expired */ }
+  }
+  if (out.live_via && typeof m.root_run_id === 'string' && m.root_run_id) out.root = m.root_run_id;
+  out.marker = m;
+  return out;
+}
+
 function exactKeys(value, expected) {
   return value && typeof value === 'object' && !Array.isArray(value)
     && Object.keys(value).sort().join('\0') === [...expected].sort().join('\0');
@@ -1455,6 +1490,7 @@ module.exports = {
   devFlowAdmissionRejection,
   readMarker,
   readSessionRecord,
+  readSessionRoot,
   ensurePlainMarker,
   resolveJobRoot,
   getSessionId,

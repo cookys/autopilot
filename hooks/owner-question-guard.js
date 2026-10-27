@@ -39,16 +39,31 @@ const CARD_ID = /\bd-[0-9a-f]{8}\b/i;
 const OWNER_WAIT_PATTERNS = [
   // explicit waiting phrases (zh)
   /請(決定|確認|選|回覆)/, /你說可以我再/, /等你(回答|決定|回覆|確認|說)/, /請你(決定|確認|回答|選)/, /你選好我就/, /你(決定|確認)後我再/,
+  // "needs / waits for your <approval verb>": 要你批准、會等你批准、需要您同意、待你授權、等你點頭
+  /[要需會得待等請](?:要)?[你您](?:的)?(?:批准|核准|同意|授權|確認|決定|許可|首肯|點頭|拍板|放行|回覆|回答|指示|表態)/,
+  /等(?:待|候)?\s*(?:owner|你|您)/i,
+  /(?:須|必須|需)經(?:過)?\s*(?:owner|你|您)/i,
+  // "after you approve I will ..."
+  /[你您](?:批准|核准|同意|授權|確認|決定|點頭)(?:之後|後|才|再)/,
+  // "should I / may I ...嗎": a yes-no question put to the reader, with or without the question mark
+  /(?:要我|讓我|需要我|是否要我|我可以|我能|我要不要|我該不該|我應不應該)[^。？?！\n]{0,40}嗎/,
+  /(?:可以|能不能|能否|行不行|好不好|對不對|同意|批准|核准|沒問題|ok)\s*嗎/i,
   // explicit waiting phrases (en)
   /\bshall I\b/i, /\bshould I\b/i, /\bdo you want\b/i, /\bwant me to\b/i, /\bwould you like\b/i,
   /\blet me know (if|whether|which)\b/i, /\bwaiting for (your|you)\b/i,
+  /\b(?:awaiting|pending|need|needs|require|requires|waiting (?:on|for))\s+(?:your|the owner'?s?)\s+(?:approval|go-?ahead|decision|confirmation|sign-?off|ok|okay|permission)\b/i,
+  /\b(?:waiting|waits) (?:on|for) (?:the )?owner\b/i,
+  /\b(?:may I|can I (?:go ahead|proceed|push|merge)|ok(?:ay)? to (?:push|merge|proceed))\b/i,
 ];
 // A question mark (full or half width) in a sentence that addresses the reader.
 const QUESTION_MARK = /[?？]/;
 const ADDRESSES_OWNER = [
-  /你|您/, /要不要/, /可以嗎/, /好嗎/, /行嗎/, /還是/, /哪一個|哪個|選哪/, /是否要/,
-  /\byou\b/i, /\byour\b/i, /\bor\b/i, /\bwhich\b/i,
+  /你|您/, /要不要/, /可以嗎/, /好嗎/, /行嗎/, /還是/, /哪一個|哪個|選哪/, /是否/, /要我|讓我|我可以|我要/, /嗎/,
+  /\byou\b/i, /\byour\b/i, /\bor\b/i, /\bwhich\b/i, /\bshall\b/i, /\bok(?:ay)?\b/i,
 ];
+
+// A rhetorical question ("這不是很簡單嗎？", "難道...？") is not put to the owner: it only skips the question-mark rule, never an explicit wait phrase.
+const RHETORICAL = [/不是[^。？?！]*嗎/, /難道/, /豈不是|何嘗不|誰不/, /\bisn'?t it\b|\bright\?$/i];
 
 function optedOut(env, cfg) {
   const v = env.AUTOPILOT_OWNER_QUESTION_GUARD;
@@ -81,7 +96,7 @@ function sentences(text) {
 function findOwnerQuestion(text) {
   for (const s of sentences(text)) {
     if (OWNER_WAIT_PATTERNS.some((re) => re.test(s))) return s;
-    if (QUESTION_MARK.test(s) && ADDRESSES_OWNER.some((re) => re.test(s))) return s;
+    if (QUESTION_MARK.test(s) && !RHETORICAL.some((re) => re.test(s)) && ADDRESSES_OWNER.some((re) => re.test(s))) return s;
   }
   return null;
 }
@@ -108,19 +123,48 @@ function lastAssistantText(transcript) {
   return null;
 }
 
+// Where this session's root is and whether a card it already opened landed outside it. Fail-open: any error => { root: null, unbound: [] }.
+function rootState(input) {
+  try {
+    if (typeof input.session_id !== 'string' || !input.session_id) return { root: null, unbound: [] };
+    const sm = require('../scripts/session-mode.js');
+    const { root, session } = sm.readSessionRoot(input.session_id, { liveBase: require('./live-session-lib.js').liveBase() });
+    if (!root) return { root: null, unbound: [] };
+    const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd();
+    return { root, unbound: require('../scripts/open-decision.js').unboundCardsOf(cwd, session) };
+  } catch { return { root: null, unbound: [] }; }
+}
+
 function decide(input) {
   if (input.stop_hook_active === true) return null;
   const tp = input.transcript_path;
   if (typeof tp !== 'string' || !tp) return null;
   const text = lastAssistantText(fs.readFileSync(tp, 'utf8'));
-  if (!text || CARD_ID.test(text)) return null;
+  if (!text) return null;
+  const rs = rootState(input);
+  if (CARD_ID.test(text)) {
+    // The reply names a card. If this session has a root and the named card sits in the UNBOUND scope, a root-scoped panel
+    // will not list it: block once and say how to re-open it under the root.
+    const named = rs.unbound.filter((c) => text.includes(c.id));
+    if (!rs.root || named.length === 0) return null;
+    return {
+      decision: 'block',
+      reason: `回覆裡的待決卡片 ${named.map((c) => c.id).join('、')} 落在未綁定範圍（${named[0].file}），這個 session 的 root 是 ${rs.root}，以 root 為範圍的面板看不到它。`
+        + `請 node ${OPEN_DECISION_CMD} close --id ${named[0].id} 關掉，再用 node ${OPEN_DECISION_CMD} open --root-run-id ${rs.root} ... 重開同一題，並在回覆寫出新卡片編號。`,
+    };
+  }
   const hit = findOwnerQuestion(text);
   if (!hit) return null;
   const shown = hit.length > 120 ? `${hit.slice(0, 120)}…` : hit;
+  const rootFlag = rs.root ? ` --root-run-id ${rs.root}` : '';
   return {
     decision: 'block',
     reason: `偵測到這則回覆在等 owner 回答，但沒有待決卡片編號。偵測到的句子：「${shown}」。`
-      + `請用 node ${OPEN_DECISION_CMD} open --question <問題> [--background <背景>] [--option <標籤>::<說明>]... [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] [--not-authorized <為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
+      + `請用 node ${OPEN_DECISION_CMD} open${rootFlag} --question <問題> [--background <背景>] [--option <標籤>::<說明>]... [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] [--not-authorized <為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
+      + (rs.root
+        ? `本 session 的 root 是 ${rs.root}，務必照上面帶 --root-run-id，否則卡片會落在未綁定範圍、面板看不到。`
+          + (rs.unbound.length ? `注意：本 session 先前開的卡片 ${rs.unbound.map((c) => c.id).join('、')} 已落在未綁定範圍（${rs.unbound[0].file}），請一併用 close --id 關掉並以 --root-run-id 重開。` : '')
+        : '本 session 沒有可用的 root（open 會在 stderr 警告卡片落在未綁定範圍）。')
       + 'open 必填非空的 --question；--option 可重複（零個，或至少兩個，只有一個是用法錯誤）；其餘旗標可省略。'
       + '回覆必須寫出卡片編號（d- 加 8 個 hex）。'
       + `owner 從即時面板回答後，會送來第一行是 [待決回覆] 的訊息，卡片會自動關閉；手動關閉用 node ${OPEN_DECISION_CMD} close --id <id>。`

@@ -1,0 +1,10 @@
+{
+ "corpus_version": "va-declared-plan-v1.va-declared-plan-v1",
+ "effort": "high",
+ "engine": "kimi-code/k3.1-pro",
+ "model": "kimi-code/k3.1-pro",
+ "model_version": "kimi-k3.1-pro",
+ "prompt_config_hash": "99d8c8386b234f683b787965a70184e4fa1fc789eb9b19420802e4ee13b09aad",
+ "role": "verification_author",
+ "runner": "kimi"
+}

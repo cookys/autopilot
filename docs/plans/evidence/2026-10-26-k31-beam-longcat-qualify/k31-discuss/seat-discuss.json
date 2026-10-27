@@ -1,0 +1,10 @@
+{
+ "corpus_version": "discuss-v4.discuss-v1",
+ "effort": "high",
+ "engine": "kimi-code/k3.1-pro",
+ "model": "kimi-code/k3.1-pro",
+ "model_version": "kimi-k3.1-pro",
+ "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+ "role": "discuss",
+ "runner": "kimi"
+}

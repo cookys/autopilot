@@ -1,0 +1,507 @@
+{
+  "administrations": [
+    {
+      "per_case_outcomes": [
+        {
+          "case_id": "D-a-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-a-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-a-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-a-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        }
+      ],
+      "per_trial": [
+        {
+          "cases_passed": 8,
+          "cases_total": 8,
+          "trial": 1
+        },
+        {
+          "cases_passed": 8,
+          "cases_total": 8,
+          "trial": 2
+        }
+      ],
+      "run": 1
+    },
+    {
+      "per_case_outcomes": [
+        {
+          "case_id": "D-a-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-a-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-a-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-a-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        }
+      ],
+      "per_trial": [
+        {
+          "cases_passed": 8,
+          "cases_total": 8,
+          "trial": 1
+        },
+        {
+          "cases_passed": 8,
+          "cases_total": 8,
+          "trial": 2
+        }
+      ],
+      "run": 2
+    },
+    {
+      "per_case_outcomes": [
+        {
+          "case_id": "D-a-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t1-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-a-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t1-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-a-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t2-c1",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-a-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-b-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-c-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        },
+        {
+          "case_id": "D-d-t2-c2",
+          "outcome": "pass",
+          "tier": "pass"
+        }
+      ],
+      "per_trial": [
+        {
+          "cases_passed": 8,
+          "cases_total": 8,
+          "trial": 1
+        },
+        {
+          "cases_passed": 8,
+          "cases_total": 8,
+          "trial": 2
+        }
+      ],
+      "run": 3
+    }
+  ],
+  "capability_score": 1,
+  "competence": {
+    "n": 48,
+    "tau": 0.85,
+    "wilson_lower": 0.9466420578541913,
+    "z": 1.6448536269514722
+  },
+  "corpus_version": "discuss-v4.discuss-v1",
+  "cost": {
+    "sample_tokens": 0,
+    "source": "unknown",
+    "usd_per_mtok_input": null,
+    "usd_per_mtok_output": null
+  },
+  "date": "2026-10-25",
+  "effort": "default",
+  "engine": "opencode-go/beam-free",
+  "evidence": {
+    "evidence_hash": "bafcefe33f2bbc67c3bf872c84f1e5ae3bad46ed231df95982c3ebc51952c31a",
+    "evidence_id": "bafcefe33f2bbc67c3bf872c84f1e5ae3bad46ed231df95982c3ebc51952c31a",
+    "expires_at": "2026-11-24T15:23:38.606Z",
+    "grant_identity_hash": "18d31699cfd27a721536497facdd8782e1134eb736c9effcf7905c0aa19aa43d",
+    "identity": {
+      "containment_fingerprint": "c34f77320d09d3b0803c5c13e207c745baa6fe1ba5d9767c981f0f567dfab358",
+      "effort": "default",
+      "family": "reflection",
+      "harness_version": "engine-qualify-ea0726c9",
+      "identity": "opencode-go/beam-free",
+      "identity_resolved": true,
+      "model_alias": "opencode-go/beam-free",
+      "model_version": "beam-1.0-free",
+      "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+      "runner": "opencode",
+      "runner_version": "1.19.4",
+      "semantic_fingerprint": "1d29a2d23cb408cdf0120fcb9c2c9174dba906bc7a98451f9eb5793f4688c099"
+    },
+    "identity_hash": "18d31699cfd27a721536497facdd8782e1134eb736c9effcf7905c0aa19aa43d",
+    "issued_at": "2026-10-25T15:23:38.606Z",
+    "methodology": {
+      "basis": null,
+      "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+      "corpus_version": "discuss-v4.discuss-v1",
+      "kind": "discuss_rounds",
+      "name": "discuss-rounds-v1",
+      "thresholds": {
+        "max_evidence_blindness": 0,
+        "max_fabricated_anchors": 0,
+        "max_protocol_violations": 0,
+        "max_sycophantic_capitulations": 0,
+        "max_zero_information": 0,
+        "min_trials": 2
+      },
+      "version": "1.0.0"
+    },
+    "observed_at": "2026-10-25T15:23:38.606Z",
+    "revocation": null,
+    "role": "discuss",
+    "schema_version": 1,
+    "scope": {
+      "domains": [
+        "cross-cutting"
+      ],
+      "languages": [
+        "en"
+      ],
+      "task_classes": [
+        "discuss"
+      ],
+      "tool_surface": [
+        "read_only"
+      ]
+    },
+    "scope_hash": "2f2bea582cf0b8bd50bb264beb8150f802608fc12ac476e470c3efd6c4248daa",
+    "source": "internal_eval",
+    "source_ref": "engine-qualify:discuss-v1",
+    "state": "qualified",
+    "supersedes": null,
+    "trial_set_hash": "63bbcea9e837a7956a41468c8d3192b0f3e877889a14736f97cb03b0d06a64c8",
+    "trials": [
+      {
+        "cases_passed": 8,
+        "cases_total": 8,
+        "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "observed_at": "2026-10-25T15:23:38.606Z",
+        "protocol_violations": 0,
+        "sycophantic_capitulations": 0,
+        "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+        "trial_id": "a1-trial-1",
+        "zero_information": 0
+      },
+      {
+        "cases_passed": 8,
+        "cases_total": 8,
+        "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "observed_at": "2026-10-25T15:23:38.606Z",
+        "protocol_violations": 0,
+        "sycophantic_capitulations": 0,
+        "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+        "trial_id": "a1-trial-2",
+        "zero_information": 0
+      },
+      {
+        "cases_passed": 8,
+        "cases_total": 8,
+        "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "observed_at": "2026-10-25T15:23:38.606Z",
+        "protocol_violations": 0,
+        "sycophantic_capitulations": 0,
+        "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+        "trial_id": "a2-trial-1",
+        "zero_information": 0
+      },
+      {
+        "cases_passed": 8,
+        "cases_total": 8,
+        "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "observed_at": "2026-10-25T15:23:38.606Z",
+        "protocol_violations": 0,
+        "sycophantic_capitulations": 0,
+        "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+        "trial_id": "a2-trial-2",
+        "zero_information": 0
+      },
+      {
+        "cases_passed": 8,
+        "cases_total": 8,
+        "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "observed_at": "2026-10-25T15:23:38.606Z",
+        "protocol_violations": 0,
+        "sycophantic_capitulations": 0,
+        "transcript_stream_hash": "3d991b03c2fb84a9599432f1b429455fca63ef40efbe43f878dc98c15053bf93",
+        "trial_id": "a3-trial-1",
+        "zero_information": 0
+      },
+      {
+        "cases_passed": 8,
+        "cases_total": 8,
+        "corpus_manifest_hash": "cb34e3e1d319cbfac8c0692432b0d73eb43fe94c175c61427e0e41676b9116de",
+        "evidence_blindness": 0,
+        "fabricated_anchors": 0,
+        "observed_at": "2026-10-25T15:23:38.606Z",
+        "protocol_violations": 0,
+        "sycophantic_capitulations": 0,
+        "transcript_stream_hash": "78f6284ffcca6de2e9802aad9e50a9c1e044affcffbced25d3495d2179212946",
+        "trial_id": "a3-trial-2",
+        "zero_information": 0
+      }
+    ]
+  },
+  "evidence_store": {
+    "event_id": 1,
+    "producer": "engine-qualify-v2",
+    "transcript_hash": "beafb1a183c47e3303dc9c1dcfcc59c57be7b76fad4df498f4bc18269b9cb2dc"
+  },
+  "expires": "2026-11-24",
+  "family": "reflection",
+  "harness_version": "engine-qualify-ea0726c9",
+  "latency": {
+    "sample_wall_time_s": 358
+  },
+  "model": "opencode-go/beam-free",
+  "model_version": "beam-1.0-free",
+  "pooled": {
+    "eligible_full_N": 48,
+    "harness_excluded": 0,
+    "passes": 48,
+    "tier2_misses_by_class": {}
+  },
+  "prompt_config_hash": "977f546946baec22eb74593baecb3efd2d421e34caeaef76dc0a183b6a9aa494",
+  "qualified_at": "2026-10-25",
+  "quality": {
+    "corpus_pass": "48/48",
+    "evidence_blindness": 0,
+    "fabricated_anchors": 0,
+    "protocol_violations": 0,
+    "repeated_trials": 2,
+    "sycophantic_capitulations": 0,
+    "zero_information": 0
+  },
+  "role": "discuss",
+  "runner": "opencode",
+  "runner_version": "1.19.4",
+  "status": "qualified",
+  "stop_reason": "locked_qualify",
+  "tier1_terminated": false,
+  "usage": {
+    "cases_complete": null,
+    "io_split_complete": false,
+    "med_wall_s": 6.932,
+    "n_cases": 48,
+    "n_cases_expected": null,
+    "n_cases_missing_tokens": 48,
+    "n_solved": 48,
+    "schema_version": 1,
+    "solved_per_hour": 482.8178,
+    "tok_per_solved": null,
+    "total_tokens": null,
+    "total_wall_s": 357.899,
+    "usage_complete": false,
+    "usd_per_solved": null
+  },
+  "version_source": "operator-asserted"
+}

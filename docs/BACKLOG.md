@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0306 -->
+<!-- next-id: BL-0316 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -259,20 +259,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: G2 review finding（MiniMax R8, 2026-08-16）;strategy thread 2026-08-16
 - **Pointer**: docs/backlog/skill-contract-card-rewrites-under-g2-minimax-r8.md
 - **Context**: 童子軍規則的漸近線——把重量級 skills（dev-flow、quality-pipeline 候選）改寫為 contract-card shape（trigger/inputs/decision-table/engine-pointers）。未評測前不得重寫。
-
-### Arm the ordinary-strike threshold (currently shadow-only) — DATED REVIEW REQUIRED
-- **Id**: BL-0046
-- **Status**: open
-- **Since**: 2026-08-22
-- **Origin**: self
-- **Problem**: 引擎評分機制會記錄席位的「失誤次數」，但目前只做影子記錄、不會真的把席位降級，因為怕誤判。要等影子資料累積並人工確認屬實，才打開。 (draft)
-- **Impact**: 表現差的席位不會被自動降級，目前靠人工留意。擁有者 2026-10-13 同意等 11/22 檢討再決定。
-- **Trigger**: When shadow data exists for a role — i.e. `would_requalify` has fired at least once against a seat and the operator has replayed those strikes and agrees each was a true engine/pair failure. Also: this row must be re-read by…
-- **Trigger-Type**: owner
-- **Effort**: S
-- **Source**: hetero design panel 2026-08-22 (kimi's "trench coat" objection), shipped shadow-first per synthesis §8.
-- **Pointer**: docs/backlog/arm-the-ordinary-strike-threshold-currently-shadow-only-dated-review-required.md
-- **Context**: v2.34.35 ships `ordinary_strike` accrual in SHADOW: strikes are recorded and `would_requalify` is projected, but `admission_status` stays `qualified`.
 
 ### Strike-decay deferrals — the five mechanisms the panel cut from the first instrument
 - **Id**: BL-0047
@@ -831,19 +817,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/2026-09-02-cursor-transport-fallback.md
 - **Context**: Also docs/plans/2026-08-26-cursor-cli-adaptor.md. Seat blocked: cursor-agent cannot enforce tool-deny.
 
-### mods-visible-dispatch: P2 guard-port Phase 2 next, P4 progress.json parked
+### mods-visible-dispatch: P2 guard-port Phase 2 merged, latency unmeasured, P4 parked
 - **Id**: BL-0241
 - **Status**: open
 - **Since**: 2026-10-19
 - **Origin**: owner
-- **Problem**: P2 guard-port Phase 1（未註冊的 chain 與差異比對 harness）已合併，下一步 Phase 2：把 chain 註冊進 hooks.json。P4 的 progress.json 與 work-round 投影先掛起，因為目前沒有程式會讀它。
-- **Impact**: Phase 2 不把 chain 註冊進 hooks.json，工具呼叫的 hook 延遲就維持現狀。progress.json 掛起不影響現有功能，radar 要讀時再補。
-- **Trigger**: P2: Phase 1 merged (ffee03326, 2026-10-25); Phase 2 (register the chain in hooks.json) can start now. P4 progress.json and work-round projection: radar asks for it
-- **Trigger-Type**: ready
+- **Problem**: P2 guard-port Phase 2 已合併（三個觀察 hook 串成一次執行，每次工具呼叫 7 次降為 5 次）；owner 決定照現狀合併，延遲沒量。P4 的 progress.json 與 work-round 投影仍掛起，目前沒有程式會讀它。
+- **Impact**: 延遲改善沒有數字佐證，要等之後的基準量測。progress.json 掛起不影響現有功能。
+- **Trigger**: a later latency re-baseline is run (reference measurement, not a merge gate), or radar asks for P4 progress.json and the work-round projection
+- **Trigger-Type**: event
 - **Effort**: M
 - **Source**: owner ruling 2026-10-23 d-585003b0 (partial keep); 2026-10-19 deletion audit, restored; docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: docs/plans/2026-10-03-mods-visible-dispatch.md
-- **Context**: Phase 1 ffee03326. Phase 2 chains intent-capture, audit-log, log-error only; reload-watch and failure-escalation stay separate (plan status line). P4 parked.
+- **Context**: Phase 2 merged 59905f025 (gport2) by owner d-0ed54425=A: KR1 only reached 5 spawns, KR2 latency unmeasured, host load ~35. reload-watch and failure-escalation stay separate. P4 parked.
 
 ### dispatch-tree step 5 and R blocked by the D0 probes
 - **Id**: BL-0242
@@ -1129,13 +1115,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: revival.3d
 - **Report**: 01M5MZ2BMFACG8RZB31S6G1V9F
 - **Reply**: 2026-10-25 01M5QR3SKAR0303QRVJC11P60P/01M5QR4BJFH17NV55671K2MBMN
-- **Problem**: 審查者每發現一點就送一次，對方要反覆處理；peer 建議先累積再一次送出。owner 選方案 A：改跑 10/24 的合成評測（上限 20 USD），真實重放設計擱置。進行中：把評測接上真實執行器，尚未付費執行。
+- **Problem**: 審查者每發現一點就送一次。評測 v1 判不通過、v2 因量測缺陷未通過；v3 規則已凍結，蓋章與正式 40 格進行中，結果出來前不改指引。
 - **Impact**: 來回訊息多，處理零碎，浪費雙方時間。
-- **Trigger**: a guidance change to the reviewer flow is scheduled, or a batching ON/OFF eval is budgeted
-- **Trigger-Type**: owner
+- **Trigger**: findings-batch-v3 formal 40 cells finish and are judged; the reviewer guidance changes only on a PASS verdict
+- **Trigger-Type**: event
 - **Effort**: M
 - **Source**: PEER-REPORTED revival.3d 2026-10-24
 - **Pointer**: docs/backlog/findings-batching-reviewer-guidance.md
+- **Context**: Spend 4.86+3.34+0.07+3.47+0.094 USD of 20 approved. v1 FAIL, v2 NOT-SHIP (instrument defect), v3 Haiku pilot 8 cells scoreable. Details in sidecar.
 
 ### plan-review: author-side precondition_failed burns the logical id
 - **Id**: BL-0296
@@ -1192,19 +1179,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: bldone9 2026-10-24 observations on CC 2.1.309
 - **Pointer**: docs/backlog/claude-code-upstream-report-draft.md
 
-### eval harness --runner agy still passes the prompt as argv
-- **Id**: BL-0302
-- **Status**: open
-- **Since**: 2026-10-25
-- **Origin**: self
-- **Problem**: 其中一支評測腳本的 agy 模式仍把提示放在命令列參數，沒有改走 stdin。上一輪刻意沒動它，因為 P2-3 的前置登錄釘住了該檔的雜湊，改了就等於改動已登錄的評測。
-- **Impact**: 這個入口和其他 agy 呼叫點行為不一致；提示太長時可能撞命令列長度上限。
-- **Trigger**: all BL-0055 P2 batches have finished and been judged
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: BL-0298 unit review 2026-10-25
-- **Pointer**: docs/backlog/eval-orchestration-agy-argv.md
-
 ### run-implementer-matrix.sh pins a stale implementer pack digest
 - **Id**: BL-0303
 - **Status**: open
@@ -1230,3 +1204,149 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: 2026-10-25 pre-push suite runs at 670b3ffaf and 1d38cfefb
 - **Pointer**: docs/backlog/bash-launch-guard-timing-assertion-load.md
+
+### depth-0 per-turn gate: P1 mechanism, P2 wiring, P3 evaluation, P4 guidance still to do
+- **Id**: BL-0306
+- **Status**: open
+- **Since**: 2026-10-26
+- **Origin**: owner
+- **Problem**: 計畫要讓 depth-0 依任務決定要不要替工人開啟每回合驗證。P0 付費探測已完成（0.0433 美元），P1 驗證腳本、P2 接線、P3 開關評測與 P4 指引都還沒做。
+- **Impact**: 沒做完就沒有人能在派工時替單一任務開驗證，預設仍維持關閉。
+- **Trigger**: P1 (gate-verify.js mechanism) can start now; P2 needs P0 and P1, P3 needs P2, P4 only on a P3 PASS
+- **Trigger-Type**: ready
+- **Effort**: L
+- **Source**: owner d-32849d39 (A, default off) and d-6f6b706f (A: P0 cap 1 USD, P3 cap 20 USD); plan merged 4ebcb428b
+- **Pointer**: docs/plans/2026-10-26-depth0-per-turn-gate.md
+- **Context**: P0 evidence bfde42aa1 (0.0433 USD, docs/plans/evidence/2026-10-26-depth0-gate-p0). After the mechanism passes acceptance, run P3 without asking again. Follow-on of BL-0055.
+
+### Owner decision cards: three ways a card is lost or never opened
+- **Id**: BL-0307
+- **Status**: open
+- **Since**: 2026-10-27
+- **Origin**: peer
+- **Reporter**: twgs-revival PEACE
+- **Report**: 2026-10-27 fleet
+- **Reply**: 2026-10-27 fleet
+- **Problem**: 待決卡片有三個漏洞：session 標記過期後卡片靜默寫進未綁定範圍；擋問句的守衛漏抓「要你批准」「要我…嗎」；stop hook 補開的卡不驗證落在本 session。
+- **Impact**: 卡片開了但 owner 面板看不到，或該開沒開，待決事項被對話洗掉。
+- **Trigger**: lane decfix merges; then tell PEACE (twgs-revival) it is fixed
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PEER-REPORTED twgs-revival PEACE 2026-10-27 (session 5eb5d332, autopilot ab2b1d9f6, CC 2.1.310)
+- **Pointer**: docs/backlog/decision-card-three-defects.md
+- **Context**: Fix in progress in lane decfix (2026-10-27).
+
+### dev-setup --harness agy --install fails validation on agy 1.4.7
+- **Id**: BL-0308
+- **Status**: open
+- **Since**: 2026-10-26
+- **Origin**: peer
+- **Reporter**: twgs-revival peace--claude-2
+- **Report**: 2026-10-26 fleet
+- **Reply**: 2026-10-26 fleet
+- **Problem**: 3.0.0-alpha.6 在 agy 1.4.7 安裝驗證失敗（3 個錯誤、4 個警告，載入的 agent 為 0）：三個 agent 檔的工具欄位格式不對，另有檔案不被載入或被截斷。
+- **Impact**: agy 上裝不起這個 plugin；agy 審查目前走 cleanroom，不受影響。
+- **Trigger**: someone needs the autopilot plugin itself installed on agy, or agy reviewers stop using cleanroom
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PEER-REPORTED twgs-revival (peace--claude-2) 2026-10-26, agy 1.4.7, 3.0.0-alpha.6
+- **Pointer**: docs/backlog/agy-147-plugin-install-validation.md
+- **Context**: Check first whether Claude Code and Codex read an array-form tools field; then edit the source files or convert at agy install time.
+
+### Orchestrator slows itself down: seven process gaps from a peer
+- **Id**: BL-0309
+- **Status**: open
+- **Since**: 2026-10-26
+- **Origin**: peer
+- **Reporter**: twgs-revival peace--claude
+- **Report**: 2026-10-26 fleet
+- **Reply**: 2026-10-26 fleet
+- **Problem**: peer 回報編排者自己拖慢進度的七處：交接檔不分 owner 指示與前任判斷、停滯偵測看不到只改計畫不合入、DOA 內仍去問、審查迴圈不隨嚴重度縮編等。
+- **Impact**: 流程多花輪次與 owner 時間；指引類改動要先有 ON/OFF 評測。
+- **Trigger**: owner picks which of the seven to do first (efficiency class, jumps the queue); guidance items need an ON/OFF eval
+- **Trigger-Type**: owner
+- **Effort**: L
+- **Source**: PEER-REPORTED twgs-revival (peace--claude) 2026-10-26
+- **Pointer**: docs/backlog/orchestrator-self-slowdown-seven-gaps.md
+- **Context**: Efficiency class. Replied 2026-10-26; the seven items are in the sidecar.
+
+### Stamped eval rows may have lost files from their frozen set
+- **Id**: BL-0310
+- **Status**: open
+- **Since**: 2026-10-26
+- **Origin**: self
+- **Problem**: 已蓋章的評測列可能漏凍結檔案（bpack、gdorm、dcard-v3、qs-v3）。要查蓋章後這些檔有沒有被改過；改過的話，該列結果無法從原檔重新推導。
+- **Impact**: 檔案蓋章後若被改，舊評測列的結果就無法重新驗證。
+- **Trigger**: a spare lane is free for the audit, or an old stamped row is re-derived
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: fbstamp closure-scan observation 2026-10-26
+- **Pointer**: docs/backlog/stamped-rows-missing-frozen-files.md
+- **Context**: Past batch evidence must not be edited; this is a read-only check. transcript-query.js unchanged since 10/4.
+
+### affected-suites selects about 500 suites for the fbatch stub
+- **Id**: BL-0311
+- **Status**: open
+- **Since**: 2026-10-26
+- **Origin**: self
+- **Problem**: 評測用的 stub 檔與 dispatch 系列腳本同名，affected-suites 因此把約 500 支套件選進來，驗收時間大增。
+- **Impact**: 每次動到相關檔，驗收都要多等很久。
+- **Trigger**: next acceptance run that touches an fbatch stub, or the next edit to affected-suites.js
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: fbland and fbrestamp acceptance runs 2026-10-26
+- **Pointer**: docs/backlog/affected-suites-overselects-on-stub-basename.md
+
+### skill-onoff-markers suite is occasionally red, suspected $RANDOM directory collision
+- **Id**: BL-0312
+- **Status**: open
+- **Since**: 2026-10-26
+- **Origin**: self
+- **Problem**: skill-onoff-markers 測試偶發紅，懷疑建立臨時目錄時用隨機數取名而撞名；還沒重現確認。
+- **Impact**: 推送前套件出現與改動無關的紅，要人工判讀。
+- **Trigger**: next red of the skill-onoff-markers suite, or an edit to its make_repo helper
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: pre-push suite runs 2026-10-26
+- **Pointer**: docs/backlog/skill-onoff-markers-random-dir-collision.md
+
+### Suites red on base at every pre-push run: one list
+- **Id**: BL-0313
+- **Status**: open
+- **Since**: 2026-10-27
+- **Origin**: self
+- **Problem**: 推送前跑套件，有十幾支在 base 上本來就紅（非新引入），每次都要人工判讀；清單與各自的紅法見旁檔。
+- **Impact**: 真正的新紅會被淹沒，每次推送都得重新分辨。
+- **Trigger**: next pre-push suite run, or a lane touches one of the listed suites
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: pre-push suite runs 2026-10-26 to 10-27 (noexpiry, agyargv2, fbland, fbv3)
+- **Pointer**: docs/backlog/base-red-suite-list.md
+- **Context**: bash-launch-guard timing is BL-0305 and is not repeated here.
+
+### Capability probe classifies errors from a merged stderr file after agy-stream-json
+- **Id**: BL-0314
+- **Status**: open
+- **Since**: 2026-10-26
+- **Origin**: self
+- **Problem**: 能力探測讀合併後的錯誤檔做分類；agy 經 stream-json 處理後，stdout 上的額度或認證字樣消失，分類會失準（與 BL-0298 同類退化）。
+- **Impact**: 額度或認證錯誤被當成別種錯誤，席位狀態可能被誤判。
+- **Trigger**: next edit to probe-engine-capability.sh or the dispatch-review agy handling, or a misclassified agy probe
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: bltidy14 candidate (1), 2026-10-26
+- **Pointer**: docs/backlog/probe-classify-error-loses-agy-stdout-signals.md
+- **Context**: Same class, minor: dispatch-review.sh AGY_OUT rescue, cleanroom-launch.sh OUT_FILE.
+
+### Two suites go red intermittently under load: paid-batch-auth-stop and agy-stdin-transport
+- **Id**: BL-0315
+- **Status**: open
+- **Since**: 2026-10-26
+- **Origin**: self
+- **Problem**: paid-batch-auth-stop 偶發時序問題（calls=2），agy-stdin-transport 在高負載時 hetero 段偶發紅；兩支單跑都全過。
+- **Impact**: 推送前套件出現與改動無關的紅，要人工判讀。
+- **Trigger**: next time either suite goes red on a pre-push run, or either test file is edited
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: bltidy14 candidates (3) and (4), 2026-10-26
+- **Pointer**: docs/backlog/intermittent-red-paid-batch-auth-stop-agy-stdin.md

@@ -1251,7 +1251,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: PEER-REPORTED twgs-revival (peace--claude) 2026-10-26
 - **Pointer**: docs/backlog/orchestrator-self-slowdown-seven-gaps.md
-- **Context**: Efficiency class. Replied 2026-10-26; the seven items and their status are in the sidecar. Items 2 and 6 shipped c9366c79a (top-stale was implemented in the same commit, has no caller now, and wiring it means editing skill guidance, which needs ON/OFF eval); item 4 waits on owner card d-f1aea07b; item 3 waits on the decfix merge; items 1, 5, 7 need an ON/OFF eval.
+- **Context**: Items 2, 6 shipped c9366c79a; top-stale (same commit) has no caller, wiring needs skill edit plus ON/OFF eval. Status per item in sidecar.
 
 ### Stamped eval rows may have lost files from their frozen set
 - **Id**: BL-0310

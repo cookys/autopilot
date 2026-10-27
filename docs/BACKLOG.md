@@ -1338,12 +1338,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/probe-classify-error-loses-agy-stdout-signals.md
 - **Context**: Same class, minor: dispatch-review.sh AGY_OUT rescue, cleanroom-launch.sh OUT_FILE.
 
-### Two suites go red intermittently under load: paid-batch-auth-stop and agy-stdin-transport
+### Two suites go red under load: paid-batch-auth-stop and agy-stdin-transport
 - **Id**: BL-0315
 - **Status**: open
 - **Since**: 2026-10-26
 - **Origin**: self
-- **Problem**: paid-batch-auth-stop 偶發時序問題（calls=2），agy-stdin-transport 在高負載時 hetero 段偶發紅；兩支單跑都全過。
+- **Problem**: paid-batch-auth-stop 有時序問題（calls=2）；agy-stdin-transport 的 hetero 段推送前對照時 base 上也紅。兩支單跑都全過，判斷與負載有關，次數未量。
 - **Impact**: 推送前套件出現與改動無關的紅，要人工判讀。
 - **Trigger**: next time either suite goes red on a pre-push run, or either test file is edited
 - **Trigger-Type**: event

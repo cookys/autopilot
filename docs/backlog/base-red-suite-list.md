@@ -6,7 +6,7 @@ BL-0313. Seen in the pre-push suite runs of 2026-10-26 to 10-27. Each of these w
 - `child-parent-record`, `child-session-identity`
 - `codex-plugin-package` (qualifier cases)
 - `check-tmp-residue-registry` (EXDEV; case 3 parity)
-- `agy-stdin-transport` (also intermittent under load: BL-0315)
+- `agy-stdin-transport`: registered only in BL-0315, not repeated here
 - `dispatch-detach`, `dispatch-review-b`, `dispatch-review-c`
 - `engine-qualify-a`, `engine-qualify-b`, `engine-qualify-badmode`, `engine-qualify-headless`, `engine-qualify-writeboundary`, `engine-qualify-brain`
 - `mission-runtime-v2`

@@ -9,3 +9,10 @@ BL-0309. Peer report from twgs-revival (peace--claude), 2026-10-26, "the orchest
 5. Lessons that carry an applicability scope (implanted calibration) live only in memory.
 6. context-budget mode "once".
 7. How to look up a seat's qualification standard (seat-status plus adopt list, `admission_status` decides) should be written into engine-onboarding.
+
+## Status 2026-10-27
+
+- Items 2 and 6: shipped c9366c79a (stall fuse process-doc category with mechanical `classify --append` writes; context-budget mode `once`). The next-pick `top-stale` hint was implemented in the same commit c9366c79a and currently has no caller; wiring it means editing skill guidance and needs ON/OFF eval.
+- Item 4: waits on owner decision card d-f1aea07b. It conflicts with the rule "reviews always use four seats".
+- Item 3: do after decfix merges.
+- Items 1, 5, 7: guidance changes, need ON/OFF eval.

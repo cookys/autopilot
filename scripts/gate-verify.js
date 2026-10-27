@@ -428,6 +428,18 @@ function baseEntries(repo, base, prefix) {
   return out;
 }
 
+function escapeName(buf) {
+  let o = '';
+  for (const c of buf) o += c >= 0x20 && c < 0x7f ? String.fromCharCode(c) : '\\x' + c.toString(16).padStart(2, '0');
+  return o;
+}
+
+function noOpaque(entries, what) {
+  const bad = entries.find((e) => e.opaque);
+  if (bad) fail('cannot read content: non-UTF-8 name ' + bad.rel + ' (' + what + ')');
+  return entries;
+}
+
 function gitlinksOf(b) { return new Set(Array.from(b).filter(([, e]) => e.mode === '160000').map(([p]) => p)); }
 
 // worktree side: [{rel, kind: file|symlink|gitlink, exec}] under `prefix`. Only the repo ROOT
@@ -448,6 +460,15 @@ function walkFs(repoReal, prefix, gitlinks) {
     }
     if (i < segs.length - 1 && !st.isDirectory()) return out;
   }
+  function opaqueEntry(r, abs, n) {
+    tick();
+    let st;
+    try { st = fs.lstatSync(Buffer.concat([Buffer.from(abs + '/'), n.buf])); } catch (e) {
+      if (e.code === 'ENOENT') return;
+      return fail('cannot look at a non-UTF-8 name under ' + (r || '.') + ': ' + e.code);
+    }
+    out.push({ rel: (r ? r + '/' : '') + n.name, kind: st.isDirectory() ? 'dir' : 'file', opaque: true });
+  }
   function visit(r) {
     tick();
     const abs = r ? path.join(repoReal, r) : repoReal;
@@ -461,9 +482,11 @@ function walkFs(repoReal, prefix, gitlinks) {
     else if (st.isDirectory()) {
       if (gitlinks.has(r)) { out.push({ rel: r, kind: 'gitlink' }); return; }
       let names;
-      // Raw bytes, not decoded strings: a name that is not valid UTF-8 cannot be represented in
-      // the strings this verifier matches, lstat()s and reports, so it is exit 2 instead of being
-      // silently mangled into a name that does not exist (which would look "vanished").
+      // Raw bytes, not decoded strings. A name that does not round-trip through UTF-8 cannot be
+      // matched, lstat()ed or reported as a string, and decoding it lossily would make the entry
+      // look vanished. It becomes an OPAQUE entry (escaped display name, never read as a string):
+      // forbid_paths treats it as an added path, every consumer that must read content stops
+      // with exit 2, and an opaque directory no forbid rule names is exit 2 as well.
       let raw;
       try { raw = fs.readdirSync(abs, { encoding: 'buffer' }); } catch (e) {
         if (e.code === 'ENOENT') return;
@@ -471,10 +494,12 @@ function walkFs(repoReal, prefix, gitlinks) {
       }
       names = raw.map((buf) => {
         const str = buf.toString('utf8');
-        if (!Buffer.from(str, 'utf8').equals(buf)) return fail('non-UTF-8 file name under ' + (r || '.'));
-        return str;
-      }).sort();
-      for (const n of names) if (!(n === '.git' && !r)) visit(r ? r + '/' + n : n);
+        return Buffer.from(str, 'utf8').equals(buf) ? { name: str } : { name: escapeName(buf), buf, opaque: true };
+      }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      for (const n of names) {
+        if (n.opaque) { opaqueEntry(r, abs, n); continue; }
+        if (!(n.name === '.git' && !r)) visit(r ? r + '/' + n.name : n.name);
+      }
     }
   }
   visit(rel);
@@ -517,20 +542,22 @@ function differs(repoReal, be, we) {
 // Paths that differ between base and the worktree: deleted, added, or different bytes/mode.
 function changedPaths(repo, repoReal, base, prefixes) {
   const changed = new Set();
+  const opaqueDirs = [];
   for (const prefix of new Set(prefixes)) {
     newWalk();
     const b = baseEntries(repo, base, prefix);
     const w = new Map(walkFs(repoReal, prefix, gitlinksOf(b)).map((e) => [e.rel, e]));
     for (const [p, be] of b) { const we = w.get(p); if (!we || differs(repoReal, be, we)) changed.add(p); }
     for (const p of w.keys()) if (!b.has(p)) changed.add(p);
+    for (const e of w.values()) if (e.opaque && e.kind === 'dir') opaqueDirs.push(e.rel);
   }
-  return Array.from(changed).sort();
+  return { changed: Array.from(changed).sort(), opaqueDirs };
 }
 
 function walkFiles(repo, repoReal, base, prefix) {
   newWalk();
   const gitlinks = gitlinksOf(baseEntries(repo, base, prefix));
-  return walkFs(repoReal, prefix, gitlinks).filter((e) => e.kind === 'file').map((e) => e.rel);
+  return noOpaque(walkFs(repoReal, prefix, gitlinks), 'text rule').filter((e) => e.kind === 'file').map((e) => e.rel);
 }
 
 function builtinNoConflictMarkers(repo, repoReal, base) {
@@ -552,7 +579,7 @@ function builtinNoConflictMarkers(repo, repoReal, base) {
 function builtinJsSyntax(repo, repoReal, base) {
   newWalk();
   const b = baseEntries(repo, base, '');
-  for (const e of walkFs(repoReal, '', gitlinksOf(b))) {
+  for (const e of noOpaque(walkFs(repoReal, '', gitlinksOf(b)), 'js-syntax')) {
     const rel = e.rel;
     if (e.kind !== 'file' || !/\.(js|cjs|mjs)$/.test(rel)) continue;
     const be = b.get(rel);
@@ -616,7 +643,10 @@ function evaluate(prep, input, repo, repoReal) {
 
   const forbid = wanted('forbid_paths');
   if (forbid.length) {
-    const changed = changedPaths(repo, repoReal, base, forbid.map((f) => prefixOf(f.norm)));
+    const { changed, opaqueDirs } = changedPaths(repo, repoReal, base, forbid.map((f) => prefixOf(f.norm)));
+    for (const d of opaqueDirs) {
+      if (!forbid.some((f) => matchGlob(f.norm, d))) fail('directory with a non-UTF-8 name ' + d + ' cannot be searched');
+    }
     for (const f of forbid) {
       let n = 0;
       for (const rel of changed) {

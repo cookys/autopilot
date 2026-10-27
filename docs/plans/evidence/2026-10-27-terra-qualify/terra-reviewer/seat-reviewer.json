@@ -1,0 +1,10 @@
+{
+ "corpus_version": "reviewer-known-bad-clean-v2.reviewer-metamorphic-v6",
+ "effort": "low",
+ "engine": "gpt-6.1-terra",
+ "model": "gpt-6.1-terra",
+ "model_version": "gpt-6.1-terra",
+ "prompt_config_hash": "3cbe203c5958ec413269d63e2d5d1841336394d15f3c4a3ab4285ea3e73e3530",
+ "role": "reviewer",
+ "runner": "codex"
+}

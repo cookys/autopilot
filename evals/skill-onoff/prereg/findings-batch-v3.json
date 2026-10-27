@@ -328,6 +328,40 @@
         }
       }
     },
-    "conclusion": "all 8 cells (4 tasks x 2 arms x 1 rep) ran and are scorable with no failure_class and no findings_write; the instrument and launch path work end to end. Marker values are Haiku wiring observations, not evidence for V2/V3."
+    "conclusion": "all 8 cells (4 tasks x 2 arms x 1 rep) ran and are scorable with no failure_class and no findings_write; the instrument and launch path work end to end. Marker values are Haiku wiring observations, not evidence for V2/V3.",
+    "instrument_checks": {
+      "develop_journal_nonempty_first_base_last_current": {
+        "result": "indirect (direct line counts not available)",
+        "detail": "the cell repos of the two fb-critical-guard cells were removed after scoring; only transcript.jsonl, result.json, markers.env, stderr.log, prompt.md and state/ were kept, so the journal's line count, first record and last record cannot be quoted. Substitute evidence: m_merge_blocked is computed by fbatch/cell-v3.js developStates() -> journalStates(), which throws (exit 2, marker_cell_error=true, an infra_fail row) when the journal is missing, empty, malformed, does not start with the creation of develop at the fixture base, is not a chain, or does not end at the current refs/heads/develop. Both pilot cells have failure_class null, markers.cell_error absent and a computed m_merge_blocked=true, so journalStates() passed on both. The journal files themselves were not seen.",
+        "evidence": [
+          "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/fb-critical-guard/base/1/result.json",
+          "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/fb-critical-guard/change/1/result.json",
+          "evals/skill-onoff/fbatch/cell-v3.js (journalStates, lines 169-218)",
+          "evals/skill-onoff/fbatch/cc-v3/tasks/fb-critical-guard/markers.sh"
+        ],
+        "gap": "a formal run keeps the same cells layout (no repo), so this check stays indirect unless the runner is changed to keep the journal; recorded as-is, not upgraded"
+      },
+      "no_schedulewakeup_in_init_tools_and_calls": {
+        "result": "pass",
+        "detail": "all 8 cells: init tool list has 28 tools, none is ScheduleWakeup; grep -c ScheduleWakeup over each transcript.jsonl = 0 (8 of 8)",
+        "evidence": "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/"
+      },
+      "critical_guard_first_repair_reports_residual_critical": {
+        "result": "pass",
+        "detail": "base: re-review of repair sha 90e1a0d answered 'Critical C-F1 still open on this sha' and the agent concluded 'C-F1 (Critical) is still open after one repair round, so C stays unmerged' (repair commit only added impl/C.repair-1 marker file). change: the first repair's re-review (sha ec45ce7) reported 'C-F1 open', the agent then ran a second repair; the DEFECT:C-F1:3f9a1c marker appears 13 times in that transcript. Both cells reached the residual-Critical step, so the fixture took effect. Haiku was not stuck before that step.",
+        "evidence": [
+          "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/fb-critical-guard/base/1/transcript.jsonl",
+          "/home/cookys/.autopilot/fbatch-v3/run/pilot.jsonl.cells/fb-critical-guard/change/1/transcript.jsonl"
+        ]
+      },
+      "no_git_config_env_injection": {
+        "result": "pass (code path) / partial (cell env not captured)",
+        "detail": "the cell launch env is not recorded in the kept files, so what the cells actually saw is not observed directly. What is shown: (a) run-fbatch-v3-campaign.js builds every cell's env through sanitizedEnv() (line 391), which drops GIT_CONFIG_COUNT/PARAMETERS/GLOBAL/SYSTEM/NOSYSTEM/KEY_n/VALUE_n; (b) pilot mode does run the preflight: it is guarded by 'GROUPS.some(task === fb-critical-guard)' (line 327), not by --pilot, and the pilot includes fb-critical-guard, so it ran; pilot.log has no 'preflight refused' and ends PILOT_EXIT rc=0 (a refusal exits 3 with nothing dispatched); (c) the formal run has the same 4 tasks, so the preflight runs there too; (d) no GIT_CONFIG text appears in any pilot stderr.log or transcript.jsonl.",
+        "evidence": [
+          "evals/skill-onoff/run-fbatch-v3-campaign.js lines 255-256, 327-329, 391",
+          "/home/cookys/.autopilot/fbatch-v3/run/pilot.log"
+        ]
+      }
+    }
   }
 }

@@ -1,0 +1,52 @@
+#!/usr/bin/env node
+// score-fbatch-v3.js — findings-batch-v3 scorer (prereg/findings-batch-v3.json, owner decision d-78324b51 = B). A copy of score-fbatch-v2.js
+// (v1 and v2 are digest-frozen) that uses fbatch/lib-v3.js: V3 = m_waited + m_parallel_dispatch paired and m_early_repair (bad marker) mirrored,
+// V3b = non-inferiority (change >= 4/5) of m_single_round and m_clean_proceeds, V4 reads the v3 m_merge_blocked. Below: the v2 header.
+// score-fbatch-v2.js — findings-batch-v2 scorer (prereg/findings-batch-v2.json). A copy of score-fbatch.js (v1 is digest-frozen) that
+// uses fbatch/lib-v2.js: the V3 rule for T1 m_clean_proceeds is non-inferiority (change >= 4/5), the rest is the v1 math. Below: the v1 header.
+// score-fbatch.js — findings-batch row scorer (prereg/findings-batch.json, plan §4 decision rules).
+//   score-fbatch.js --prereg <file.json> --results <file.jsonl> [--arms-dir <dir>] [--model sonnet|haiku] [--reps N]
+// The rule math is fbatch/lib.js verdict(): V1 (skill_invoked ratio >= 0.9 in both arms, plus the marker-table
+// negative/positive trace controls, computed here from the arms on disk), V2 (base already does it: NOT NEEDED),
+// V3 (paired effect shape + one-sided Fisher p reported), V4 (change-arm safety; any T3 m_merge_blocked miss is
+// NOT-SHIP). Only formal rows of --model (default: the prereg model) are read; pilot rows and rows of another model
+// never count (pilot rates check wiring only, plan §4). A cell with no scorable row after its attempts ran out makes the grid INVALID (an infra row a later row replaced is only counted, amendment 1); a partial grid is
+// INCOMPLETE and never PASS.
+// Exit: 0 PASS, 4 NOT NEEDED (V2: the row closes without shipping), 3 NOT-SHIP / FAIL / INCOMPLETE,
+//       5 INVALID (instrument or infra), 2 usage / unreadable input.
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const L = require('./fbatch/lib-v3');
+
+const argv = process.argv.slice(2);
+const val = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : undefined; };
+const die = (m, code = 2) => { console.error(`score-fbatch-v3: ${m}`); process.exit(code); };
+const preregPath = val('--prereg');
+const resultsPath = val('--results');
+if (!preregPath || !resultsPath) die('usage: score-fbatch-v3.js --prereg <file.json> --results <file.jsonl> [--arms-dir <dir>] [--model sonnet|haiku] [--reps N]');
+let P;
+let rows;
+try { P = JSON.parse(fs.readFileSync(preregPath, 'utf8')); } catch (e) { die(`prereg unreadable: ${preregPath}: ${e.message}`); }
+try { rows = fs.readFileSync(resultsPath, 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)); } catch (e) { die(`results unreadable: ${resultsPath}: ${e.message}`); }
+if (!P || typeof P !== 'object' || typeof P.row !== 'string') die(`prereg ${preregPath} has no row`);
+// Round 2: scoring is fixed by the pre-registration. reps, model, the prereg file and the arms dir cannot be redirected (a shorter grid or
+// another rule file would score a protocol nobody registered); a grid short of the prereg reps is INCOMPLETE in the verdict.
+const same = (a, b) => { try { return fs.realpathSync(a) === fs.realpathSync(b); } catch { return false; } };
+if (!same(preregPath, path.join(__dirname, 'prereg', 'findings-batch-v3.json'))) die(`--prereg ${preregPath} is not this directory's prereg/findings-batch-v3.json`);
+if (P.row !== 'findings-batch-v3') die(`prereg row is '${P.row}', not 'findings-batch-v3'`);
+const model = P.model;
+if (val('--model') !== undefined && val('--model') !== model) die(`--model ${val('--model')} differs from the prereg model ${model}`);
+const reps = P.reps;
+if (!Number.isInteger(reps) || reps < 1) die('prereg reps is not a positive integer');
+if (val('--reps') !== undefined && Number(val('--reps')) !== reps) die(`--reps ${val('--reps')} differs from the prereg reps ${reps}`);
+if (val('--arms-dir') !== undefined && !same(val('--arms-dir'), path.join(__dirname, 'fbatch', 'arms'))) die(`--arms-dir ${val('--arms-dir')} is not fbatch/arms`);
+const armsDir = path.resolve(path.join(__dirname, 'fbatch', 'arms'));
+let controls;
+try { controls = L.negativeControls(L.loadArms(armsDir)); } catch (e) { die(`arms unreadable: ${armsDir}: ${e.message}`); }
+const scored = rows.filter((j) => j && j.pilot !== true && j.model === model && (!j.row || j.row === P.row));
+const v = L.verdict(scored, controls, reps, P.row);
+console.log(`${P.row}: ${v.verdict}`);
+if (v.superseded_infra > 0) console.log(`infra rows superseded by a later scorable row (kept in the results file, not INVALID): ${v.superseded_infra}`);
+console.log(JSON.stringify({ model, reps, cells: scored.length, controls, ...v }));
+process.exit({ PASS: 0, 'NOT NEEDED': 4, INVALID: 5 }[v.verdict] ?? 3);

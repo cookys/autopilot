@@ -9,7 +9,7 @@
 # scan_findings_writes <dir>...: prints "file:line:text" for each violating line.
 scan_findings_writes() {
   grep -rnE --include='*.md' \
-    '([Ww]rite|[Ww]rites|[Ss]ave|[Ss]aves|[Cc]reate|[Cc]reates|[Dd]ump|[Ee]mit|[Pp]ut)[^.;]{0,80}FINDINGS([A-Za-z0-9_-]*\.[a-z]+|\*|[A-Za-z0-9_-]+)' "$@" 2>/dev/null \
+    '([Ww]rite|[Ww]rites|[Ss]ave|[Ss]aves|[Cc]reate|[Cc]reates|[Dd]ump|[Ee]mit|[Pp]ut)[^.;]{0,80}FINDINGS([A-Za-z0-9_-]*\.[a-z]+|\*|[A-Za-z0-9_-]+)?' "$@" 2>/dev/null \
     | grep -viE "never|do not|don't|does not|not a |no brief|forbid|refus|must not|without"
 }
 
@@ -20,9 +20,13 @@ assert_eq "$HITS" "" "shipped guidance has no instruction to Write a FINDINGS* f
 SBX="$TEST_TMP/scan"
 mkdir -p "$SBX/skills/x"
 printf '%s\n' 'Each lane must Write its report to FINDINGS-A.md before returning.' > "$SBX/skills/x/bad.md"
+printf '%s\n' 'Write FINDINGS' > "$SBX/skills/x/bare.md"
+printf '%s\n' 'Never write FINDINGS' > "$SBX/skills/x/barenever.md"
 printf '%s\n' 'Never ask a Claude subagent to write a FINDINGS file; return text.' > "$SBX/skills/x/ok.md"
 PLANTED="$(cd "$SBX" && scan_findings_writes skills)"
 assert_contains "$PLANTED" "bad.md" "planted violation is flagged"
+assert_contains "$PLANTED" "bare.md" "planted bare Write FINDINGS is flagged"
+assert_not_contains "$PLANTED" "barenever.md" "Never write FINDINGS is not flagged"
 assert_not_contains "$PLANTED" "ok.md" "negated line is not flagged"
 
 finalize_test

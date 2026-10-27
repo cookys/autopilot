@@ -228,13 +228,14 @@
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_MODE"
       ],
-      "summary": "\"off\" silences the context-budget reminders and the SessionStart window check; \"warn\" keeps them.",
+      "summary": "\"off\" silences the context-budget reminders and the SessionStart window check; \"warn\" keeps them; \"once\" keeps them but each tier (T1, T2) speaks at most once per session.",
       "type": "enum",
       "allowed": [
         "off",
-        "warn"
+        "warn",
+        "once"
       ],
-      "invalid_effect": "anything but off or warn is ignored, so the reminders stay on"
+      "invalid_effect": "anything but off, warn or once is ignored, so the reminders stay on"
     },
     {
       "name": "context_budget.per_model",

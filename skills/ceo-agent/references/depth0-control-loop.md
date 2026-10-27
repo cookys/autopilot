@@ -478,7 +478,7 @@ kill, not this fuse's):
 ```bash
 git diff --name-only <burst-base>..HEAD > /tmp/burst-names.txt
 node scripts/check-stall-fuse.js classify --names /tmp/burst-names.txt \
-  # → append {burst_id, product_files, verification_files} to the campaign's bursts.jsonl
+  --burst-id <burst_id> --burst-base <burst-base> --append <campaign>/bursts.jsonl
 node scripts/check-stall-fuse.js check --bursts <campaign>/bursts.jsonl \
   --strike-identity-file <seat-identity.json> --strike-store <capability-store>
 node scripts/check-blueprint-conformance.js audit \

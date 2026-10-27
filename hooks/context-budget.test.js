@@ -759,3 +759,43 @@ test('lib: usage row written after the compact_boundary is returned normally', (
   ]);
   assert.strictEqual(readContextTokens(p), 73890 + 1948);
 });
+
+// --- mode "once" (BL-0309 gap 6): each tier speaks at most once per session ---
+test('mode=once: T1 and T2 each fire exactly once, not again after growth by step or after a compaction cycle', () => {
+  const call = stepSession({ AUTOPILOT_CONTEXT_BUDGET_MODE: 'once' });
+  assert.match(call(120_000).stderr, /Context budget T1/, 'first T1 fires');
+  assert.strictEqual(call(180_000).status, 2, 'first T2 fires');
+  assert.strictEqual(call(260_000).status, 0, 'grew by more than step: warn would fire, once stays silent');
+  assert.strictEqual(call(260_000).stderr.trim(), '');
+  assert.strictEqual(call(40_000).status, 0, 'compacted below both tiers');
+  assert.strictEqual(call(120_000).stderr.trim(), '', 'T1 does not remind again in the new cycle');
+  assert.strictEqual(call(180_000).status, 0, 'T2 does not remind again in the new cycle');
+});
+
+test('mode=once negative control: the default mode (warn) still re-reminds on the same sequence', () => {
+  const call = stepSession({});
+  assert.strictEqual(call(180_000).status, 2);
+  assert.strictEqual(call(260_000).status, 2, 'warn: grew by step => fires again');
+  assert.strictEqual(call(40_000).status, 0);
+  assert.strictEqual(call(180_000).status, 2, 'warn: new cycle fires again');
+});
+
+test('mode=once is accepted from config.json without a warning; an unknown mode still warns', () => {
+  const { readContextBudget } = require('../scripts/lib/config-path.js');
+  assert.strictEqual(readContextBudget({ env: { AUTOPILOT_CONTEXT_BUDGET_MODE: 'Once' }, home: '/nonexistent' }).mode, 'once');
+  const bad = readContextBudget({ env: { AUTOPILOT_CONTEXT_BUDGET_MODE: 'twice' }, home: '/nonexistent' });
+  assert.strictEqual(bad.mode, 'warn');
+  assert.ok(bad.warnings.some((w) => w.includes('"twice"') && w.includes('off|warn|once')));
+});
+
+test('mode=once: a delivered non-advisory T2 spends the T2 reminder; an undelivered decision does not (flag set at emit)', () => {
+  // Wrapper-level: first T2 (known 1M window, non-advisory) is delivered, a later T2 stays silent.
+  const call = stepSession({ AUTOPILOT_CONTEXT_BUDGET_MODE: 'once' });
+  assert.strictEqual(call(180_000).status, 2, 'delivered T2');
+  assert.strictEqual(call(300_000).status, 0, 'second T2 suppressed');
+  // A fresh session whose first decisions are below T1 never spends anything: T1 then T2 still each fire once.
+  const fresh = stepSession({ AUTOPILOT_CONTEXT_BUDGET_MODE: 'once' });
+  assert.strictEqual(fresh(50_000).status, 0);
+  assert.match(fresh(120_000).stderr, /Context budget T1/, 'T1 not pre-spent by silence');
+  assert.strictEqual(fresh(180_000).status, 2, 'T2 not pre-spent by T1');
+});

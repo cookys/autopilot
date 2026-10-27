@@ -1334,12 +1334,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: bltidy14 candidates (3) and (4), 2026-10-26
 - **Pointer**: docs/backlog/intermittent-red-paid-batch-auth-stop-agy-stdin.md
 
-### preflight-release runs five paid slash-entry probes by default
+### preflight-release runs six paid slash-entry probes by default
 - **Id**: BL-0316
 - **Status**: open
 - **Since**: 2026-10-27
 - **Origin**: self
-- **Problem**: 發版前檢查腳本預設會跑 slash-entry 探針，內含 5 個真的 claude-sonnet-5 呼叫；只有設跳過旗標才不跑。
+- **Problem**: 發版前檢查腳本預設會跑 slash-entry 探針，內含 6 個真的 claude-sonnet-5 呼叫；只有設跳過旗標才不跑。
 - **Impact**: 沒掛哨兵就花真錢；10/27 fbship hand 跑兩次共 12 次真呼叫，約 9 USD 等值。
 - **Trigger**: next edit to scripts/preflight-release.sh, or the next release preflight run by a hand
 - **Trigger-Type**: ready

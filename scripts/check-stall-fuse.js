@@ -51,7 +51,7 @@
  *     commits reachable there, while a burst of unmerged local commits stays false. An unresolvable ref or base
  *     yields integrated:false (the safe side: the process-only streak keeps counting). --append requires --burst-id
  *     and --burst-base (usage error, exit 2, nothing written), so every appended row carries integrated.
- *     Stdout is unchanged.
+ *     Stdout gains `integrated` only when --burst-base is given; without it the field is absent.
  *   check --bursts <file> [--threshold N] [--process-threshold N]
  *     Bursts file: JSONL rows {burst_id, product_files, verification_files,
  *     reverify?: {mode:"scoped"|"full-suite", finding_id}}.
@@ -165,6 +165,8 @@ function classify(opts) {
     verification_files: verification,
     process_files: names.filter(isProcessPath).length,
   };
+  const integrated = opts.burstBase ? decideIntegrated(opts) : undefined;
+  if (integrated !== undefined) out.integrated = integrated;
   process.stdout.write(`${JSON.stringify(out)}\n`);
   if (opts.append) {
     const row = {
@@ -172,7 +174,7 @@ function classify(opts) {
       product_files: out.product_files,
       verification_files: out.verification_files,
       process_files: out.process_files,
-      integrated: decideIntegrated(opts),
+      integrated,
     };
     try {
       fs.appendFileSync(opts.append, `${JSON.stringify(row)}\n`);

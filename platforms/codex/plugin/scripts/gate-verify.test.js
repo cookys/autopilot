@@ -762,6 +762,48 @@ C.unreadable_file_is_exit_2 = (S) => {
   withMode(g, 0o000, () => { expectTwo(run(S, ctx, L({ forbid_text: [{ id: 'R4', glob: 'src/*.js', text: 'console.log' }] })), 'forbid_text read'); });
 };
 
+// ---- round-5 controls: "not found" must not be forgeable
+
+function rawName(dir, rel, bytes) { return Buffer.concat([Buffer.from(path.join(dir, rel) + '/'), Buffer.from(bytes)]); }
+C.non_utf8_file_name_is_exit_2 = (S) => {
+  const ctx = makeRepo(); fs.mkdirSync(path.join(ctx.dir, 'hidden'));
+  fs.writeFileSync(rawName(ctx.dir, 'hidden', [0x65, 0x76, 0x69, 0x6c, 0xff, 0x2e, 0x6a, 0x73]), 'BAD function (');
+  expectTwo(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] })), 'forbid_paths');
+  expectTwo(run(S, ctx, L({ forbid_text: [{ id: 'R4', glob: 'hidden/**', text: 'BAD' }] })), 'forbid_text');
+  expectTwo(run(S, ctx, L({ must_pass: [{ id: 'R5', check: 'js-syntax' }] })), 'js-syntax');
+  // a valid, non-ASCII UTF-8 name is an ordinary file
+  const ok = makeRepo(); fs.mkdirSync(path.join(ok.dir, 'hidden')); write(ok, 'hidden/é中.js', 'BAD');
+  expectViolation(run(S, ok, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] })), 'R1', /é中\.js$/);
+};
+C.non_utf8_path_in_base_tree_is_exit_2 = (S) => {
+  const ctx = makeRepo(); const env = cleanEnv();
+  const gi = (args, input) => cp.execFileSync('git', args, { cwd: ctx.dir, env, input, stdio: ['pipe', 'pipe', 'pipe'] });
+  const blob = String(gi(['hash-object', '-w', '--stdin'], 'x')).trim();
+  const sub = String(gi(['mktree', '-z'], Buffer.concat([Buffer.from('100644 blob ' + blob + '\t'), Buffer.from([0x65, 0xff]), Buffer.from('\0')]))).trim();
+  const root = String(gi(['mktree', '-z'], Buffer.from('040000 tree ' + sub + '\thidden\0'))).trim();
+  const commit = String(cp.execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit-tree', root, '-m', 'raw'], { cwd: ctx.dir, env })).trim();
+  expectTwo(run(S, ctx, L({ forbid_paths: [{ id: 'R1', glob: 'hidden/**' }] }), { base: commit }));
+};
+// ENOENT from stat / readFile is "missing"; any other error is exit 2 (no fs shim needed: the
+// function is called in-process with fs.statSync / fs.readFileSync patched for one path)
+function withFsPatch(name, target, code, fn) {
+  const orig = fs[name];
+  fs[name] = function patched(p, ...rest) {
+    if (String(p) === target) { const e = new Error(code); e.code = code; throw e; }
+    return orig.call(fs, p, ...rest);
+  };
+  try { fn(); } finally { fs[name] = orig; }
+}
+C.read_worktree_file_enoent_is_missing = (S) => {
+  const m = require(S);
+  const dir = mk('gv-rw-'); const f = path.join(dir, 'x.txt'); fs.writeFileSync(f, 'hello');
+  assert.strictEqual(m.readWorktreeFile(dir, 'x.txt').state, 'ok');
+  for (const fnName of ['statSync', 'readFileSync']) {
+    withFsPatch(fnName, f, 'ENOENT', () => assert.strictEqual(m.readWorktreeFile(dir, 'x.txt').state, 'missing', fnName + ' ENOENT'));
+    withFsPatch(fnName, f, 'EACCES', () => assert.throws(() => m.readWorktreeFile(dir, 'x.txt'), /cannot (stat|read)/, fnName + ' EACCES'));
+  }
+};
+
 // every case is either a negative control with at least one mutation, or listed here with a reason
 const POSITIVE_ONLY = {
   clean_fixture_exits_0: 'clean baseline, asserted by the exit-0 side of the other cases',
@@ -878,10 +920,14 @@ const MUTATIONS = [
   { defence: 'walk-readdir-error', from: "return fail('cannot list ' + (r || '.') + ': ' + e.code);", to: 'return;', cases: ['unreadable_directory_is_exit_2'] },
   { defence: 'walk-entry-lstat-error', from: "return fail('cannot look at ' + r + ': ' + e.code);", to: 'return;', cases: ['unsearchable_directory_is_exit_2'] },
   { defence: 'hash-read-error', from: "return fail('cannot read ' + e.rel + ': ' + err.code);", to: 'return null;', cases: ['unreadable_file_is_exit_2'] },
-  { defence: 'text-read-error', from: "catch (e) { return fail('cannot read ' + rel + ': ' + e.code); }", to: "catch (e) { return { state: 'skip', reason: 'unreadable' }; }", cases: ['unreadable_file_is_exit_2'] },
+  { defence: 'text-read-error', from: ": fail('cannot read ' + rel + ': ' + e.code); }", to: ": { state: 'skip', reason: 'unreadable' }; }", cases: ['unreadable_file_is_exit_2'] },
   { defence: 'builtin-conflict-markers-detect', from: "return { ok: false, evidence: rel + ':' + (i + 1) };", to: 'void 0;', cases: ['builtin_conflict_markers'] },
   { defence: 'builtin-js-syntax-detect', from: "if (r.status !== 0) return { ok: false, evidence: rel + ': ' + String(r.stderr).slice(0, 200) };", to: 'void 0;', cases: ['builtin_js_syntax'] },
   { defence: 'rules-file-json-parse', from: "try { return JSON.parse(text); } catch (e) { fail(what + ' is not valid JSON'); }", to: "try { return JSON.parse(text); } catch (e) { return { v: 1 }; }", cases: ['exit2_not_json'] },
+  { defence: 'walk-non-utf8-name', from: "if (!Buffer.from(str, 'utf8').equals(buf)) return fail(", to: 'if (false) return fail(', cases: ['non_utf8_file_name_is_exit_2'] },
+  { defence: 'base-tree-non-utf8-path', from: "if (!Buffer.from(String(raw), 'utf8').equals(raw)) fail(", to: 'if (false) fail(', cases: ['non_utf8_path_in_base_tree_is_exit_2'] },
+  { defence: 'read-file-stat-enoent-is-missing', from: "try { st = fs.statSync(real); } catch (e) { return e.code === 'ENOENT' ? { state: 'missing' } : fail('cannot stat ' + rel + ': ' + e.code); }", to: "try { st = fs.statSync(real); } catch (e) { return fail('cannot stat ' + rel + ': ' + e.code); }", cases: ['read_worktree_file_enoent_is_missing'] },
+  { defence: 'read-file-read-enoent-is-missing', from: "catch (e) { return e.code === 'ENOENT' ? { state: 'missing' } : fail('cannot read ' + rel + ': ' + e.code); }", to: "catch (e) { return fail('cannot read ' + rel + ': ' + e.code); }", cases: ['read_worktree_file_enoent_is_missing'] },
   { defence: 'walk-limit', from: 'if (++walkState.n > walkState.limit) fail(', to: 'if (++walkState.n < 0) fail(', cases: ['walk_limit_exit_2'] },
   { defence: 'path-dotdot', from: "if (p.split('/').includes('..')) return { error: 'contains a .. segment' };", to: '', cases: ['exit2_dotdot'] },
   { defence: 'path-absolute', from: "if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return { error: 'absolute path' };", to: '', cases: ['exit2_absolute'] },

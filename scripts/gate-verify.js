@@ -389,10 +389,10 @@ function readWorktreeFile(repoReal, rel) {
   }
   if (!inside(real, repoReal)) return { state: 'skip', reason: 'outside' };
   let st;
-  try { st = fs.statSync(real); } catch (e) { return fail('cannot stat ' + rel + ': ' + e.code); }
+  try { st = fs.statSync(real); } catch (e) { return e.code === 'ENOENT' ? { state: 'missing' } : fail('cannot stat ' + rel + ': ' + e.code); }
   if (!st.isFile()) return { state: 'missing' };
   if (st.size > MAX_FILE_BYTES) return { state: 'skip', reason: 'too-large' };
-  try { return { state: 'ok', text: fs.readFileSync(real, 'utf8') }; } catch (e) { return fail('cannot read ' + rel + ': ' + e.code); }
+  try { return { state: 'ok', text: fs.readFileSync(real, 'utf8') }; } catch (e) { return e.code === 'ENOENT' ? { state: 'missing' } : fail('cannot read ' + rel + ': ' + e.code); }
 }
 
 function isRegularFileInRepo(repoReal, rel) {
@@ -418,7 +418,9 @@ function baseEntries(repo, base, prefix) {
   const args = ['--literal-pathspecs', 'ls-tree', '-r', '-z', base];
   if (prefix) args.push('--', prefix);
   const out = new Map();
-  for (const rec of nulList(git(repo, args).stdout)) {
+  const raw = git(repo, args).stdout;
+  if (!Buffer.from(String(raw), 'utf8').equals(raw)) fail('non-UTF-8 path in the base tree');
+  for (const rec of nulList(raw)) {
     tick();
     const tab = rec.indexOf('\t');
     out.set(rec.slice(tab + 1), { mode: rec.slice(0, tab).split(' ')[0], sha: rec.slice(0, tab).split(' ')[2] });
@@ -459,10 +461,19 @@ function walkFs(repoReal, prefix, gitlinks) {
     else if (st.isDirectory()) {
       if (gitlinks.has(r)) { out.push({ rel: r, kind: 'gitlink' }); return; }
       let names;
-      try { names = fs.readdirSync(abs).sort(); } catch (e) {
+      // Raw bytes, not decoded strings: a name that is not valid UTF-8 cannot be represented in
+      // the strings this verifier matches, lstat()s and reports, so it is exit 2 instead of being
+      // silently mangled into a name that does not exist (which would look "vanished").
+      let raw;
+      try { raw = fs.readdirSync(abs, { encoding: 'buffer' }); } catch (e) {
         if (e.code === 'ENOENT') return;
         return fail('cannot list ' + (r || '.') + ': ' + e.code);
       }
+      names = raw.map((buf) => {
+        const str = buf.toString('utf8');
+        if (!Buffer.from(str, 'utf8').equals(buf)) return fail('non-UTF-8 file name under ' + (r || '.'));
+        return str;
+      }).sort();
       for (const n of names) if (!(n === '.git' && !r)) visit(r ? r + '/' + n : n);
     }
   }
@@ -690,4 +701,4 @@ if (require.main === module) {
   process.exitCode = code;
 }
 
-module.exports = { MAX_WALK_ENTRIES, matchGlob, normaliseRel, KIND_FIELDS, RULE_KEYS, GATE_KEYS, ALLOWED_FLAGS };
+module.exports = { readWorktreeFile, MAX_WALK_ENTRIES, matchGlob, normaliseRel, KIND_FIELDS, RULE_KEYS, GATE_KEYS, ALLOWED_FLAGS };

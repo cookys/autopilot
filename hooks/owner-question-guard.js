@@ -55,24 +55,20 @@ const OWNER_WAIT_PATTERNS = [
   /\b(?:waiting|waits) (?:on|for) (?:the )?owner\b/i,
   /\b(?:may I|can I (?:go ahead|proceed|push|merge)|ok(?:ay)? to (?:push|merge|proceed))\b/i,
 ];
-// A question mark (full or half width) in a sentence that addresses the reader.
-const QUESTION_MARK = /[?？]/;
-const ADDRESSES_OWNER = [
-  /你|您/, /要不要/, /可以嗎/, /好嗎/, /行嗎/, /還是/, /哪一個|哪個|選哪/, /是否(?:要|需要|可以|同意|批准|允許|能)/, /要我|讓我|我可以|我要/,
-  /\byou\b/i, /\byour\b/i, /\bor\b/i, /\bwhich\b/i, /\bshall\b/i, /\bok(?:ay)?\b/i,
-];
-
-// A rhetorical question ("這不是很簡單嗎？", "難道...？") is not put to the owner: it only skips the question-mark rule, never an explicit wait phrase.
-const RHETORICAL = [/不是[^。？?！]*嗎/, /難道/, /豈不是|何嘗不|誰不/, /\bisn'?t it\b|\bright\?$/i];
-
-// Decision order (per reply): strip quotes + code (stripCode) -> split sentences -> split each into clauses -> per clause:
-//   1. CONDITION_ON_OWNER ("沒有你的批准就不能部署") is itself a wait, checked before negation;
-//   2. NEGATED clauses ("沒有要你決定的事", "不需要你批准", "Nothing here needs your approval") await nothing, and ONLY that clause is skipped;
-//   3. any other clause that matches OWNER_WAIT_PATTERNS is a wait.
-// The question-mark rule (a question mark plus a word addressing the owner, not rhetorical) runs on the whole sentence.
+// Decision order (recall-biased: a missed owner question costs far more than one extra card prompt):
+//   1. strip quotes, code, quote lines, source-comment lines and markdown headings (stripCode); `* ` / `- ` list markers are body text and stay;
+//   2. split into sentences, then each sentence into clauses;
+//   3. MAIN RULE: a sentence that ENDS with ？ or ? is a question to the owner, unless it is rhetorical (RHETORICAL, a small explicit list)
+//      or a title-style sentence ("章節標題：如何…？", TITLE_STYLE);
+//   4. WAIT RULE (statements): per clause, CONDITION_ON_OWNER ("沒有你的批准就不能…") is a wait; a NEGATED clause ("沒有要你決定的事") awaits
+//      nothing and ONLY that clause is skipped; any other clause that matches OWNER_WAIT_PATTERNS is a wait.
+const RHETORICAL = [/不是[^。？?！]*嗎/, /難道/, /豈不是|何嘗不|誰不/, /還有什麼[^。？?！]*嗎|有什麼好[^。？?！]*嗎|怎麼可能/, /\bisn'?t it\b|\bright\?$/i];
+const TITLE_STYLE = /^[^：:，,。]{0,16}(?:標題|章節|題目|主題|title|heading|section)\s*[：:]/i;
+const ENDS_WITH_QUESTION = /[？?][\s)）"'*_~]*$/;
 const CONDITION_ON_OWNER = /(?:沒有|沒|未經|未獲|未得到|缺少)[你您]的?(?:批准|核准|同意|授權|許可|確認)/;
-const NEGATED = /(?:沒有|沒|無需|不需要|不用|不必|毋須|不會|不要|不)[^，。,；;]{0,6}[你您]|\b(?:no|not|nothing|don'?t|doesn'?t|isn'?t)\b[^.,;]{0,24}\b(?:you|your)\b|\bno (?:approval|decision|confirmation)\b/i;
-const CLAUSE_SPLIT = /[，,；;：:]|但是|但|不過|而是|\bbut\b|\bhowever\b/i;
+// Explicit negators only. A bare 不 is NOT one: "能不能請你確認", "是不是要你批准" are A-not-A questions, not denials.
+const NEGATED = /(?:沒有|沒|無需|不需要|不用|不必|毋須|不會|不要)[^，。,；;、]{0,6}[你您]|\b(?:no|not|nothing|don'?t|doesn'?t|isn'?t)\b[^.,;]{0,24}\b(?:you|your)\b|\bno (?:approval|decision|confirmation)\b/i;
+const CLAUSE_SPLIT = /[，,；;：:、]|但是|但|不過|而是|\bbut\b|\bhowever\b/i;
 
 function optedOut(env, cfg) {
   const v = env.AUTOPILOT_OWNER_QUESTION_GUARD;
@@ -92,24 +88,32 @@ function loadCfg() {
 const QUOTED = [/「[^」\n]*」/g, /『[^』\n]*』/g, /“[^”\n]*”/g, /"[^"\n]*"/g];
 function stripCode(text) {
   let t = text.replace(/```[\s\S]*?(```|$)/g, ' ').replace(/`[^`\n]*`/g, ' ');
-  t = t.split('\n').filter((l) => !/^\s*(>|\/\/|\/\*|\*\s)/.test(l)).join('\n'); // quote lines and source-comment lines
+  // quote lines, `//` comment lines, markdown headings, and the lines of a real (unclosed-until-`*/`) block comment; list bullets `* ` / `- ` stay
+  let inBlock = false;
+  t = t.split('\n').filter((l) => {
+    if (inBlock) { if (l.includes('*/')) inBlock = false; return false; }
+    if (/^\s*\/\*/.test(l)) { if (!l.includes('*/')) inBlock = true; return false; }
+    return !/^\s*(>|\/\/|#{1,6}\s)/.test(l);
+  }).join('\n');
   for (const re of QUOTED) t = t.replace(re, ' ');
   return t;
 }
 
+// ASCII ? ! . end a sentence only before whitespace or the end of text (a URL query "a?b=1" is not a sentence end).
 function sentences(text) {
-  return stripCode(text).split(/(?<=[。？?！!.])\s*|\n+/).map((s) => s.trim()).filter(Boolean);
+  return stripCode(text).split(/(?<=[。？！])\s*|(?<=[?!.])(?=\s|$)\s*|\n+/).map((s) => s.trim()).filter(Boolean);
 }
 
 // Returns the first sentence that waits for the owner, or null.
 function findOwnerQuestion(text) {
   for (const s of sentences(text)) {
+    if (TITLE_STYLE.test(s)) continue;
+    if (ENDS_WITH_QUESTION.test(s) && !RHETORICAL.some((re) => re.test(s))) return s;
     for (const clause of s.split(CLAUSE_SPLIT)) {
       if (CONDITION_ON_OWNER.test(clause)) return s;
       if (NEGATED.test(clause)) continue;
       if (OWNER_WAIT_PATTERNS.some((re) => re.test(clause))) return s;
     }
-    if (QUESTION_MARK.test(s) && !RHETORICAL.some((re) => re.test(s)) && ADDRESSES_OWNER.some((re) => re.test(s))) return s;
   }
   return null;
 }

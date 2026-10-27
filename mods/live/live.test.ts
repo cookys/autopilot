@@ -93,7 +93,10 @@ const ROOT_LIVENESS_CASES: { name: string; level: string | null; marker_expires_
   { "name": "unexpired plain marker", "level": null, "marker_expires_in_h": 6, "turn_since_ago_h": null, "root_alive": true },
   { "name": "expired marker, fresh turn file", "level": null, "marker_expires_in_h": -30, "turn_since_ago_h": 1, "root_alive": true },
   { "name": "expired marker, stale turn file", "level": null, "marker_expires_in_h": -60, "turn_since_ago_h": 30, "root_alive": false },
-  { "name": "expired marker, no turn file", "level": null, "marker_expires_in_h": -30, "turn_since_ago_h": null, "root_alive": false }
+  { "name": "expired marker, no turn file", "level": null, "marker_expires_in_h": -30, "turn_since_ago_h": null, "root_alive": false },
+  { "name": "marker with no level key", "level": "__absent__", "marker_expires_in_h": 6, "turn_since_ago_h": null, "root_alive": true },
+  { "name": "unknown level, unexpired", "level": "l9", "marker_expires_in_h": 6, "turn_since_ago_h": null, "root_alive": false },
+  { "name": "unknown level, expired but fresh turn", "level": "l9", "marker_expires_in_h": -30, "turn_since_ago_h": 1, "root_alive": false }
 ]
 // ROOT_LIVENESS_CASES end
 
@@ -481,7 +484,7 @@ for (const surface of SURFACES) {
     test('band: root liveness parity - ' + c.name + ' (' + surface + ')', async ($, on) => {
       const files = base()
       const NOW0 = Date.parse(PUBLISHED)
-      files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, level: c.level, project_key: KEY, root_run_id: ROOT, expires_at: new Date(NOW0 + c.marker_expires_in_h * 3600e3).toISOString() })
+      files[AHOME + '/session-mode/' + SID_A + '.json'] = j({ session_id: SID_A, ...(c.level === '__absent__' ? {} : { level: c.level }), project_key: KEY, root_run_id: ROOT, expires_at: new Date(NOW0 + c.marker_expires_in_h * 3600e3).toISOString() })
       if (c.turn_since_ago_h !== null) files[LIVE + '/turn/' + SID_A + '.json'] = j({ schema: 'autopilot.session-turn/1', session_id: SID_A, state: 'ended', since: new Date(NOW0 - c.turn_since_ago_h * 3600e3).toISOString(), project_key: KEY, root_run_id: ROOT })
       world(on, files)
       await start($, surface)

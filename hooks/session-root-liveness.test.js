@@ -187,11 +187,11 @@ test('parity table of the live pane (mods/live/live.test.ts ROOT_LIVENESS_CASES)
   const m = src.match(/ROOT_LIVENESS_CASES begin[^\n]*\nconst ROOT_LIVENESS_CASES[^=]*= (\[[\s\S]*?\n\])\n\/\/ ROOT_LIVENESS_CASES end/);
   assert.ok(m, 'table block found');
   const cases = JSON.parse(m[1]);
-  assert.ok(cases.length >= 5);
+  assert.ok(cases.length >= 8);
   for (const c of cases) {
     const t = fixture('par');
     const now = Date.now();
-    fs.writeFileSync(path.join(t.modes, 's1.json'), JSON.stringify({ session_id: 's1', level: c.level, root_run_id: 'root-abc', expires_at: new Date(now + c.marker_expires_in_h * H).toISOString() }));
+    fs.writeFileSync(path.join(t.modes, 's1.json'), JSON.stringify({ session_id: 's1', ...(c.level === '__absent__' ? {} : { level: c.level }), root_run_id: 'root-abc', expires_at: new Date(now + c.marker_expires_in_h * H).toISOString() }));
     if (c.turn_since_ago_h !== null) turn(t, 's1', c.turn_since_ago_h);
     const r = sm().readSessionRoot('s1', { markerDir: t.modes, liveBase: t.live });
     assert.strictEqual(r.root !== null, c.root_alive, c.name);

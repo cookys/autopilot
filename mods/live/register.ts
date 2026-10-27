@@ -136,7 +136,10 @@ type Scope = { key: string; root: string | null; marker: Json | null; campaign: 
 // hooks/session-root-liveness.test.js): alive = marker unexpired, OR expired but <live>/turn/<sid>.json (schema autopilot.session-turn/1) has a
 // `since` inside one marker TTL (24 h). SessionEnd removes the turn file, so an ended session stays expired. Never "expired counts as valid".
 const MARKER_TTL_MS = 24 * 3600 * 1000
+const MARKER_LEVELS = ['l3', 'l4', 'l5', 'l6']
 async function markerAlive($: EngineInterface, liveBase: string, sid: string, marker: Json, nowMs: number): Promise<boolean> {
+  // level whitelist (readSessionRoot): a missing or null level is a legal plain session; an unknown level is refused
+  if (marker.level !== undefined && marker.level !== null && !MARKER_LEVELS.includes(marker.level as string)) return false
   if (typeof marker.expires_at === 'string' && Date.parse(marker.expires_at) > nowMs) return true
   const turn = await readObject($, liveBase + '/turn/' + sid + '.json')
   if (!turn || turn.schema !== 'autopilot.session-turn/1' || typeof turn.since !== 'string') return false

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # hooks/tests/slash-entry-probe.test.sh — B1/B2 thin-shell behavioral probe (release gate).
 #
-# Headlessly triggers ALL FIVE thin-shelled slash entries (/l3 /l4 /l5 /l6
+# Headlessly triggers ALL thin-shelled slash entries (/l3 /l4 /l5 /l6
 # /think-tank-dialectic) and asserts — by TOOL-USE ARTIFACT, never model
 # self-report — that each entry actually Reads its MUST-READ reference(s):
 #   l3, l4              → ceo-agent/references/level-front-door.md
@@ -14,7 +14,7 @@
 # transcript). Evidence = `--output-format stream-json` Read tool_use inputs
 # parsed mechanically (artifact-not-self-report).
 #
-# DEFAULT: self-skip. Each probe is a real LLM call (5 total) — cost + wall
+# DEFAULT: self-skip. Each probe is a real LLM call (6 total) — cost + wall
 # clock make it a RELEASE-time gate, not a suite/pre-commit gate (plan: "納入
 # preflight-release.sh, release 時跑"). preflight-release.sh runs it with
 # AUTOPILOT_SLASH_PROBE=1.

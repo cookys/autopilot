@@ -42,7 +42,7 @@ Fresh brief from `templates/land-brief.md`, dispatched only after depth-0 has ac
 - **Cherry-pick hand commits only.** Never the shadow commit; grep `enforcement_mode` still says `enforce` after every pick.
 - **The whole suite**, not a scoped slice — a change that touches a widely-consumed contract needs the full `hooks/tests/run.sh`. Rerun every red solo; anything still red gets compared at `origin/develop` in a throwaway worktree to separate pre-existing red from red the branch introduced.
 - **ONE combined review** over `origin/develop..HEAD`, never a re-run of the per-row reviews. A combined review has caught what per-row review missed on this exact pipeline (multiplexer allow-bypass and five findings in one round — see Rules learned). STOP on any 🔴/🟠 in that verdict; do not self-adjudicate them away.
-- **Release** only after gates are green and the verdict is SHIP-AS-IS: version bump, BACKLOG/CHANGELOG/INDEX, `preflight-release.sh`.
+- **Release** only after gates are green and the verdict is SHIP-AS-IS: version bump, BACKLOG/CHANGELOG/INDEX, `preflight-release.sh --with-slash-probe` (depth-0 at the release step; hands and routine acceptance run it without the flag, since the 6 slash probes are paid).
 - **Trailers are filled from the review manifest's real review id** (the JSON the combined review actually produced), never left as a literal placeholder string. Push, then confirm with `git ls-remote origin develop`.
 
 ## 3. depth-0's duties between stages

@@ -17,27 +17,38 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 
 ONLY_SLASH_PROBE=0
+UPDATE_BASELINE=0
+# The slash-entry probe is 6 real paid LLM calls: it runs ONLY when explicitly opted in
+# (--with-slash-probe or AUTOPILOT_SLASH_PROBE_RELEASE=1). BL-0316.
+WITH_SLASH_PROBE=0
+[ "${AUTOPILOT_SLASH_PROBE_RELEASE:-0}" = "1" ] && WITH_SLASH_PROBE=1
+SLASH_PROBE_STATE="not-run"
 
-case "${1:-}" in
-  ""|--update-baseline) ;;
-  --only-slash-probe)
-    ONLY_SLASH_PROBE=1
-    ;;
-  --help|-h)
-    echo "usage: $0 [--update-baseline]"
-    echo "  (no args)          run the full release-hygiene gate — NOTE: check 7 runs 5 real"
-    echo "                     LLM slash-entry probes; skip with AUTOPILOT_SKIP_SLASH_PROBE=1"
-    echo "  --only-slash-probe  run only the slash-entry probe gate (plus skip knob)"
-    echo "  --update-baseline  recompute + write docs/metrics/surface-lines.json, then exit"
-    exit 0
-    ;;
-  *)
-    echo "unknown argument: $1 (see --help)" >&2
-    exit 2
-    ;;
-esac
+for arg in "$@"; do
+  case "$arg" in
+    --update-baseline) UPDATE_BASELINE=1 ;;
+    --only-slash-probe) ONLY_SLASH_PROBE=1 ;;
+    --with-slash-probe) WITH_SLASH_PROBE=1 ;;
+    --help|-h)
+      echo "usage: $0 [--with-slash-probe] [--only-slash-probe] [--update-baseline]"
+      echo "  (no args)           run the release-hygiene gate; the paid slash-entry probe is NOT run"
+      echo "                      (reported as NOT RUN, rc unaffected)"
+      echo "  --with-slash-probe  also run check 7: 6 real paid LLM slash-entry probes (use at the"
+      echo "                      actual release; env equivalent AUTOPILOT_SLASH_PROBE_RELEASE=1)"
+      echo "  --only-slash-probe  run only the slash-entry probe gate; still needs --with-slash-probe"
+      echo "                      (without it: prints NOT RUN and exits 0, no paid call)"
+      echo "  --update-baseline   recompute + write docs/metrics/surface-lines.json, then exit"
+      echo "  AUTOPILOT_SKIP_SLASH_PROBE=1 always wins: skips the probe even with --with-slash-probe"
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $arg (see --help)" >&2
+      exit 2
+      ;;
+  esac
+done
 
-if [ "${1:-}" = "--update-baseline" ]; then
+if [ "$UPDATE_BASELINE" = "1" ]; then
   V=$(node scripts/lib/semver.js from-json .claude-plugin/plugin.json 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
   P=$(find skills references -name '*.md' -type f | sort -u | xargs cat | wc -l)
   E=$(find src -name '*.js' -type f | sort -u | xargs cat | wc -l)
@@ -162,15 +173,23 @@ check_settings_changelog() {
 }
 
 # ─── 7. slash-entry thin-shell behavioral probe (B1/B2 release gate) ───
-# 5 real LLM probes (l3/l4/l5/l6/think-tank-dialectic): each entry must Read its
+# 6 real LLM probes (l3/l4/l5/l6/think-tank-dialectic/hetero-review): each entry must Read its
 # MUST-READ reference(s) — evidence is stream-json tool_use artifacts, never
 # self-report. Release-time only by design (LLM cost — plan 2026-07-04
-# surface-area-reduction B1). Skip knob: AUTOPILOT_SKIP_SLASH_PROBE=1 (loud).
+# surface-area-reduction B1). Opt-in: --with-slash-probe / AUTOPILOT_SLASH_PROBE_RELEASE=1
+# (default is NOT RUN, BL-0316). Skip knob: AUTOPILOT_SKIP_SLASH_PROBE=1 (loud, wins over opt-in).
 check_slash_entry_probe() {
   if [ "${AUTOPILOT_SKIP_SLASH_PROBE:-0}" = "1" ]; then
+    SLASH_PROBE_STATE="skipped"
     echo "    SKIPPED by AUTOPILOT_SKIP_SLASH_PROBE=1 (thin-shell wiring NOT verified this release)"
     return 0
   fi
+  if [ "$WITH_SLASH_PROBE" != "1" ]; then
+    SLASH_PROBE_STATE="not-run"
+    echo "    slash-entry thin-shell probe: NOT RUN (paid LLM probes; pass --with-slash-probe at release)"
+    return 0
+  fi
+  SLASH_PROBE_STATE="ran"
 
   local probe_model="${SLASH_PROBE_MODEL:-claude-sonnet-5}"
   local probe_status
@@ -368,7 +387,7 @@ run_check "docs/projects/INDEX.md references v$VERSION" check_index_has_version
 run_check "all project README links in INDEX resolve to existing files" check_index_links_resolve
 run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
 run_check "user-setting changes are named in CHANGELOG Settings changes" check_settings_changelog
-run_check "slash-entry thin-shell probe (5 entries, LLM; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
+run_check "slash-entry thin-shell probe (6 paid LLM probes; opt-in: --with-slash-probe; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
 run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
 run_check "plan graduation clean (docs/BACKLOG.md queue rows, released docs/plans/*.md archived)" check_plan_graduation
 run_check "temp-prefix registry gate (check-tmp-residue-registry.js, whole repo)" check_tmp_residue_gate
@@ -395,7 +414,12 @@ node scripts/report-roster-field-consumers.js 2>&1 | sed -n '/no detected modele
 
 echo ""
 if [ "$FAILS" -eq 0 ]; then
-  echo "✅ RELEASE DOCS CONSISTENT for v$VERSION ($TOTAL/$TOTAL)"
+  case "$SLASH_PROBE_STATE" in
+    ran) PROBE_NOTE="slash-entry probe: ran" ;;
+    skipped) PROBE_NOTE="slash-entry probe: SKIPPED by AUTOPILOT_SKIP_SLASH_PROBE=1, NOT verified" ;;
+    *) PROBE_NOTE="slash-entry probe: NOT RUN, not verified; run with --with-slash-probe at release" ;;
+  esac
+  echo "✅ RELEASE DOCS CONSISTENT for v$VERSION ($TOTAL/$TOTAL; $PROBE_NOTE)"
   exit 0
 else
   echo "❌ $FAILS / $TOTAL release-hygiene checks FAILED for v$VERSION"

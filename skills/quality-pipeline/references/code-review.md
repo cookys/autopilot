@@ -232,7 +232,7 @@ Mixed task + scope-creep changes inflate review, break `git blame` / bisect, and
 
 When authoritative qc is a **panel** (depth-0 from `scripts/resolve-review-loop.sh` `qc_panel` / `required_review_families` / `min_panel_size`; homogeneous all-Claude must not drop below resolver **`min_panel_size`** (default 3), separate from `required_review_families` — lens diversity ≠ family decorrelation; same-family lenses share blind spots; no resolver → fall back to 3 — see [`skills/ceo-agent/references/depth0-control-loop.md`](../../ceo-agent/references/depth0-control-loop.md) § "qc@depth-0"), combine by **`union-on-verified-critical`**, NOT majority:
 
-- **Any panelist's _verified_ Critical/Major blocks.** Correlated-blind-spot catches appear to ONE reviewer (often cross-family). **Majority would suppress exactly the finding the panel exists for** — majority **forbidden** (`resolve-review-loop.sh` rejects `qc_panel_aggregation: majority` → `union-on-verified-critical`).
+- **A verified Critical or Major blocks the MERGE of its candidate. It does not stop its lane or any other lane.** Correlated-blind-spot catches appear to ONE reviewer (often cross-family). **Majority would suppress exactly the finding the panel exists for** — majority **forbidden** (`resolve-review-loop.sh` rejects `qc_panel_aggregation: majority` → `union-on-verified-critical`).
 - **"Verified" gates the union, not raw count.** Before a single-track finding blocks: reproduce it — **executable** via `independent_harness` (execution = decorrelation ceiling, zero shared LLM lineage); non-executable (design/spec-fit) → depth-0 second-look. Stops noisy false-blocks; never lets a real single-track Critical through.
 - **MVP portfolio selection is a separate bounded two-pass synthesis, never raw suggestion
   union.** When a panel is asked to prioritize explicit subitems under a fixed budget, depth-0
@@ -265,6 +265,15 @@ When authoritative qc is a **panel** (depth-0 from `scripts/resolve-review-loop.
 | Coding convention violation, missing error handling, resource leak risk | **Major** |
 | Naming style, whitespace, formatting | **Minor** |
 | Better design, readability, performance suggestion | **Suggestion** |
+
+## Findings Batch (parallel lanes)
+
+- A lane runs to a candidate and returns its candidate sha and ALL findings as text in its final message / receipt. Depth 0 writes them to the registry (a name that is not a report-shaped FINDINGS file). Never ask a Claude subagent to write a FINDINGS file; no brief tells a lane to Write a report-style file.
+- Acceptance and the review panel run in parallel on the same sha. Depth 0 waits for both, and for every dispatched lane to land, before any repair dispatch.
+- Depth 0 pools findings across lanes in ONE adjudicate-findings store (lane tag in the finding id, e.g. A-F1), disposes each (must-fix-now, follow-up, reject), runs completeness registry-wide, then dispatches ONE repair round per pool covering every must-fix-now id.
+- A second pool only if the first repair round introduced or exposed new verified Major findings; the 3-round cap still ends it.
+- Wait ends on a landed `<run_id>.<stage>.exit` file or a receipt that passes its validator.
+- Unchanged: depth-0 re-derivation, union-on-verified-critical, repair-gate, blind re-review.
 
 ## Re-review Loop (Critical / Major)
 

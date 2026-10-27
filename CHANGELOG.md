@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- fbship (BL-0295, guidance, no version bump): findings batch guidance shipped after the findings-batch-v3 ON/OFF evaluation (40 formal cells, PASS, 3.68 USD, 0 infra; waited 5/5 vs 0/5, parallel dispatch 5/5 vs 0/5, early repair 0/5 vs 5/5; merge-blocked, clean-merged, rejected-draft and waited-on-exit 5/5). A verified Critical or Major now blocks the merge of its candidate, not its lane; a lane lands candidate plus findings as text; acceptance and review run in parallel on one sha; depth 0 pools findings in one store and runs one repair round per pool; a wait ends only on a landed `.exit` file or a validated receipt. Text changed in `skills/quality-pipeline/references/code-review.md` (new Findings Batch section and the panel union bullet), `skills/finish-flow/SKILL.md` (qc verdict row), `skills/l5/references/hetero-impl-loop.md` (landing foreman no longer stops) and `skills/dev-flow/SKILL.md` (Background Wait Rule); profiles inventory, migration and catalog repinned (dev-flow line count unchanged, category totals unchanged). The FINDINGS* scan test ships separately as a mechanism commit.
+  prose-justification: the added prose is the evaluated findings-batch text (frozen change arm, ON/OFF PASS under `evals/skill-onoff/fbatch`); it states requirements that were missing (what a Major blocks, batch order, wait end condition), not restated ones.
+
 - ptg-p21: new opt-in Stop hook per-turn-gate (BL-0055 phase 2, default off; W4 retry text unevaluated until the phase-2 evaluation passes).
 
 - bldone6 (docs only): BACKLOG archive, seventh batch. Closed BL-0227 (managed rail does not pass the scorecard scope file) per owner decision d-c191e50b on 2026-10-23: keep pinning, so a qc seat without a pin stays refused at intake and no review-side admission path is added; sidecar removed, no code change.

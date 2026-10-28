@@ -374,8 +374,31 @@ function liveBase() {
  * repo mismatch) means "no gate file": the caller then runs exactly as without one.
  * Whether `rules` passes the verifier's schema is NOT judged here: an invalid list is gate-verify exit 2.
  */
+/**
+ * Could a gate file exist at all? resolveLiveDir() creates a missing override (or candidate) directory, and
+ * a run without a gate file must change nothing on disk, so the lookup first asks, without creating
+ * anything, whether any <base>/per-turn-gate directory exists where the arm script could have written
+ * (arm creates it). The override is the only candidate when AUTOPILOT_LIVE_DIR is set; otherwise the same
+ * candidates resolveLiveDir() tries. None exists: no gate file, silent return.
+ */
+function gateDirMayExist() {
+  const dirs = [];
+  const ov = process.env.AUTOPILOT_LIVE_DIR;
+  if (typeof ov === 'string' && ov !== '') dirs.push(path.resolve(ov));
+  else {
+    const uid = typeof process.getuid === 'function' ? process.getuid() : 0;
+    if (process.env.XDG_RUNTIME_DIR) dirs.push(path.join(process.env.XDG_RUNTIME_DIR, 'autopilot'));
+    dirs.push(path.join('/run/user', String(uid), 'autopilot'), path.join('/dev/shm', `autopilot-${uid}`),
+      path.join('/tmp', `autopilot-${uid}`), path.join(require('os').homedir(), '.autopilot'));
+  }
+  return dirs.some((d) => {
+    try { return fs.statSync(path.join(d, HOOK_STEM)).isDirectory(); } catch (_e) { return false; }
+  });
+}
+
 function findArmed(payload, isSub) {
   try {
+    if (!gateDirMayExist()) return null;
     const sid = payload.session_id;
     if (typeof sid !== 'string' || !ID_RE.test(sid)) return null;
     let key = sid;

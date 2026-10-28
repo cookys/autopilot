@@ -179,13 +179,14 @@ for tool in git findmnt; do
 done
 shim_count() { [ -f "$PTG_SHIM_LOG.$1" ] && wc -l <"$PTG_SHIM_LOG.$1" | tr -d ' ' || echo 0; }
 tn3_cost() {
-  fresh tn3; export PTG_SHIM_LOG="$CASE_DIR/shim"; rm -f "$PTG_SHIM_LOG".*
+  # the gate directory exists (as after any earlier arm) but holds no file for this session: the lookup runs
+  fresh tn3; mkdir -p "$CASE_GD"; export PTG_SHIM_LOG="$CASE_DIR/shim"; rm -f "$PTG_SHIM_LOG".*
   local before after; before="$(listing)"
   STOP_OUT="$(printf '{"session_id":"s1","cwd":"%s","stop_hook_active":false}' "$CASE_REPO" | env PATH="$SHIM:$PATH" HOME="$HOOK_HOME" node "$1" 2>/dev/null)"
   after="$(listing)"
   [ -z "$STOP_OUT" ] && [ "$before" = "$after" ] && [ "$(shim_count git)" = 0 ] && [ "$(shim_count findmnt)" -le 1 ] || return 1
   # the veto: session_arming false does no lookup at all
-  fresh tn3v '{"per_turn_gate":{"session_arming":false}}'; export PTG_SHIM_LOG="$CASE_DIR/shim"; rm -f "$PTG_SHIM_LOG".*
+  fresh tn3v '{"per_turn_gate":{"session_arming":false}}'; mkdir -p "$CASE_GD"; export PTG_SHIM_LOG="$CASE_DIR/shim"; rm -f "$PTG_SHIM_LOG".*
   STOP_OUT="$(printf '{"session_id":"s1","cwd":"%s","stop_hook_active":false}' "$CASE_REPO" | env PATH="$SHIM:$PATH" HOME="$HOOK_HOME" node "$1" 2>/dev/null)"
   [ -z "$STOP_OUT" ] && [ "$(shim_count findmnt)" = 0 ] && [ "$(shim_count git)" = 0 ]
 }
@@ -207,14 +208,12 @@ tn3_symlink() {
   CASE_REPO="$real"
   [ "$(blocks)" = 1 ] && [ "$(log_has '"decision":"block","reason":"block","counter":1')" = 1 ]
 }
-# Global off, no gate file, AUTOPILOT_LIVE_DIR names a path that does not exist. resolveLiveDir() (not changed
-# here) creates a missing override directory, so the empty base directory appears; pinned as is. The hook
-# itself creates no per-turn-gate directory and no file.
+# Global off, no gate file, AUTOPILOT_LIVE_DIR names a path that does not exist: the run changes nothing on
+# disk (resolveLiveDir() would create the directory, so the hook must not reach it).
 tn3_missing_live() {
   fresh tn3m; local nope="$CASE_DIR/nope/live"; export AUTOPILOT_LIVE_DIR="$nope"
   stop "$1" false
-  local got; got="$(find "$CASE_DIR/nope" | LC_ALL=C sort | sed "s#$CASE_DIR/##" | tr '\n' ' ')"
-  [ -z "$STOP_OUT" ] && [ "$got" = "nope nope/live " ]
+  [ -z "$STOP_OUT" ] && [ ! -e "$CASE_DIR/nope" ]
 }
 
 # ---- T-N4: every invalid gate file behaves exactly like no file (global on: same record, no source;

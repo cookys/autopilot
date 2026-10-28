@@ -5,8 +5,8 @@
  * open-decision.js — the "open owner questions" file of a watcher scope (mods P1W W2a-m; contract autopilot.decision/2).
  *
  *   node scripts/open-decision.js open  --question <q> [--background <why>] [--option <label>[::<description>]]...
- *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] [--not-authorized <why the owner must decide>]
- *                                       [--source <who/where>]
+ *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
+ *                                       [--doa-role <role>] [--doa-tier <tier>] [--source <who/where>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
  *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn)
  *   node scripts/open-decision.js show  [--root-run-id <id>] [--json] [--cwd <dir>]    (lists every open question)
@@ -20,16 +20,25 @@
  * `show` and `close --id` cover EVERY scope file of the project (unbound + each root), since a session's root can change mid-way; `open` writes only the current scope.
  * Scope root: --root-run-id > $AUTOPILOT_ROOT_RUN_ID > this session's marker root > unbound.
  *
+ * --not-authorized is REQUIRED (mechanism behind the "inside the DOA, decide yourself" rule). <boundary> is one of
+ * read_only | reversible | external | irreversible (the action classes of scripts/resolve-doa.sh) or goal-change | scope-expansion |
+ * resources-2x | red-line (the Board-approval rows of skills/ceo-agent/SKILL.md); text after the first ':' is the free-text reason.
+ * In an orchestrator session (marker level l3-l6 = autonomous, involvement just-results) a class boundary is accepted only when
+ * resolve-doa (--doa-role, default manager; --doa-tier, default sonnet) says that class is `escalate`; a boundary the DOA lets
+ * the session do alone (autonomous / logged) is refused: exit 3, decide it yourself. Plain sessions only need a known boundary.
+ * If resolve-doa cannot be run, the DOA-independent boundaries (irreversible + the Board rows, `escalate` in every preset) are
+ * still accepted with a stderr warning, and the other classes are refused (a gate that cannot verify must not wave them through).
  * --option may repeat; none -> options null, one -> usage error (a choice needs at least two). Everything except
  * --question is optional text for the owner; an empty value is stored as null. Writes take a lock and rename atomically.
  * Node built-ins only. This script writes nothing outside the decisions directory.
  * The library functions openDecision / closeDecisionById are also called by hooks/ask-decision.js (depth-0 AskUserQuestion
  * adds an entry with `origin: "ask_user_question"`; mods P1W HOOKQ).
  *
- * Exit: 0 ok (show: at least one open) | 1 show: none open | 2 usage / not a git repo | 4 write failure.
+ * Exit: 0 ok (show: at least one open) | 1 show: none open | 2 usage / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure.
  */
 
 const crypto = require('crypto');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -43,14 +52,14 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] [--not-authorized <why the owner must decide>] [--source <who/where>] [--root-run-id <id>]\n'
+  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--doa-role <role>] [--doa-tier <tier>] [--source <who/where>] [--root-run-id <id>]\n'
     + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js show [--root-run-id <id>] [--json]\n');
   return 2;
 }
 
 function parse(argv) {
   const out = { _: [], option: [] };
-  const valued = new Set(['question', 'background', 'option', 'recommendation', 'why', 'blocks', 'not-authorized', 'source', 'id', 'root-run-id', 'cwd']);
+  const valued = new Set(['question', 'background', 'option', 'recommendation', 'why', 'blocks', 'not-authorized', 'doa-role', 'doa-tier', 'source', 'id', 'root-run-id', 'cwd']);
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (!a.startsWith('--')) { out._.push(a); continue; }
@@ -76,6 +85,51 @@ function sessionRoot() {
   } catch (_error) {
     return { root: null, session, why: 'session marker unreadable' };
   }
+}
+
+// ---- --not-authorized: the DOA check (BL-0309 item 3) ----
+const DOA_CLASSES = ['read_only', 'reversible', 'external', 'irreversible'];
+const BOARD_BOUNDARIES = ['goal-change', 'scope-expansion', 'resources-2x', 'red-line'];
+const ALWAYS_OWNER = new Set(['irreversible', ...BOARD_BOUNDARIES]); // `escalate` under every preset of scripts/resolve-doa.sh
+const RESOLVE_DOA = path.join(__dirname, 'resolve-doa.sh');
+const boundaryList = () => [...DOA_CLASSES, ...BOARD_BOUNDARIES].join(' | ');
+
+// The orchestrator marker (level l3-l6) is the repo's definition of an autonomous session (involvement preset just-results).
+function isAutonomous() {
+  try { return require('./session-mode.js').isAutonomousSession(); } catch (_error) { return false; }
+}
+
+// -> { actions } | { failure } ; never throws. The caller's cwd carries the project doa-config override ($PWD).
+function runResolveDoa(cwd, role, tier) {
+  try {
+    const r = spawnSync('bash', [RESOLVE_DOA, '--role', role, '--tier', tier], { cwd, encoding: 'utf8', timeout: 10000 });
+    if (r.error) return { failure: r.error.message };
+    if (r.status !== 0) return { failure: `exit ${r.status}: ${String(r.stderr || '').trim().split('\n')[0] || 'no output'}` };
+    const j = JSON.parse(r.stdout);
+    if (!j || typeof j.actions !== 'object') return { failure: 'no actions in the output' };
+    return { actions: j.actions, preset: j.preset, source: j.source };
+  } catch (error) {
+    return { failure: error.message };
+  }
+}
+
+// -> { code: 0|2|3, message?, warning? }
+function checkNotAuthorized(raw, { cwd, role, tier, autonomous }) {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  const missing = `open needs --not-authorized <boundary>[:<why the owner must decide>]; boundary is one of ${boundaryList()}`;
+  if (!value) return { code: 2, message: missing };
+  const at = value.indexOf(':');
+  const id = (at < 0 ? value : value.slice(0, at)).trim().toLowerCase();
+  if (!DOA_CLASSES.includes(id) && !BOARD_BOUNDARIES.includes(id)) return { code: 2, message: `--not-authorized "${id}" is not a known boundary; use one of ${boundaryList()}` };
+  if (BOARD_BOUNDARIES.includes(id) || !autonomous) return { code: 0 };
+  const doa = runResolveDoa(cwd, role, tier);
+  if (doa.failure) {
+    if (ALWAYS_OWNER.has(id)) return { code: 0, warning: `resolve-doa failed (${doa.failure}); "${id}" is owner-only under every preset, so the card is opened unverified` };
+    return { code: 3, message: `resolve-doa failed (${doa.failure}), so "${id}" cannot be checked against the DOA; fix resolve-doa, or use a boundary that is owner-only in every preset (irreversible | ${BOARD_BOUNDARIES.join(' | ')})` };
+  }
+  const action = doa.actions[id];
+  if (action === 'escalate') return { code: 0 };
+  return { code: 3, message: `this is inside your DOA, decide it yourself: ${id} is "${action}" for role ${role} / tier ${tier} (preset ${doa.preset}, source ${doa.source}); a card is only for what resolve-doa marks "escalate" or a Board-approval boundary` };
 }
 
 const text = (v) => (typeof v === 'string' && v.trim() ? v : null);
@@ -207,6 +261,10 @@ function main(argv) {
   if (args.option.length === 1) return usage('--option needs at least two options (or none)');
   const options = args.option.length ? parseOptions(args.option) : null;
   if (options && options.some((o) => !o.label)) return usage('--option labels must be non-empty');
+  const gate = checkNotAuthorized(args['not-authorized'], { cwd: path.resolve(args.cwd || process.cwd()), role: args['doa-role'] || 'manager', tier: args['doa-tier'] || 'sonnet', autonomous: isAutonomous() });
+  if (gate.code === 2) return usage(gate.message);
+  if (gate.code === 3) { process.stderr.write(`open-decision: refused: ${gate.message}\n`); return 3; }
+  if (gate.warning) process.stderr.write(`open-decision: warning: ${gate.warning}\n`);
   const r = openDecision({
     cwd: args.cwd || process.cwd(), root: root || null, session: sess.session, question: args.question, background: args.background,
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source,
@@ -272,4 +330,4 @@ function closeDecisionById(file, id, isOurs) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = { main, openDecision, closeDecisionById, projectScopeFiles, unboundCardsOf, SAFE_ROOT, SCHEMA };
+module.exports = { main, checkNotAuthorized, openDecision, closeDecisionById, projectScopeFiles, unboundCardsOf, SAFE_ROOT, SCHEMA };

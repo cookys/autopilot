@@ -155,6 +155,14 @@ function rootState(input) {
   } catch { return { root: null, unbound: [] }; }
 }
 
+// Autonomous = an unexpired orchestrator marker (level l3-l6) for this session. Fail-open: any error => false.
+function isAutonomous(sessionId) {
+  try {
+    if (typeof sessionId !== 'string' || !sessionId) return false;
+    return require('../scripts/session-mode.js').isAutonomousSession(sessionId);
+  } catch { return false; }
+}
+
 function decide(input) {
   if (input.stop_hook_active === true) return null;
   const tp = input.transcript_path;
@@ -176,11 +184,15 @@ function decide(input) {
   const hit = findOwnerQuestion(text);
   if (!hit) return null;
   const shown = hit.length > 120 ? `${hit.slice(0, 120)}…` : hit;
+  const autonomous = isAutonomous(input.session_id);
   const rootFlag = rs.root ? ` --root-run-id ${rs.root}` : '';
   return {
     decision: 'block',
     reason: `偵測到這則回覆在等 owner 回答，但沒有待決卡片編號。偵測到的句子：「${shown}」。`
-      + `請用 node ${OPEN_DECISION_CMD} open${rootFlag} --question <問題> [--background <背景>] [--option <標籤>::<說明>]... [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] [--not-authorized <為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
+      + `請用 node ${OPEN_DECISION_CMD} open${rootFlag} --question <問題> [--background <背景>] [--option <標籤>::<說明>]... [--recommendation <標籤>] [--why <理由>] [--blocks <卡住什麼>] --not-authorized <邊界>[:<為何必須由 owner 決定>] [--source <誰/哪裡>] 把這件事寫進面板「待決」。`
+      + '--not-authorized 必填，邊界只能是 read_only、reversible、external、irreversible（resolve-doa 的行動類別）或 goal-change、scope-expansion、resources-2x、red-line（董事會批准項）；'
+      + '本 session 的 DOA 內會自動放行的類別，open 會拒絕（exit 3）。'
+      + (autonomous ? '本 session 是自主模式（l3–l6）：若這件事在 DOA 內請自行決定，不要開卡，直接改寫回覆、不要再問 owner。' : '')
       + (rs.root
         ? `本 session 的 root 是 ${rs.root}，務必照上面帶 --root-run-id，否則卡片會落在未綁定範圍、面板看不到。`
           + (rs.unbound.length ? `注意：本 session 先前開的卡片 ${rs.unbound.map((c) => c.id).join('、')} 已落在未綁定範圍（${rs.unbound[0].file}），請一併用 close --id 關掉並以 --root-run-id 重開。` : '')

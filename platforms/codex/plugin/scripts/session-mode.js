@@ -296,6 +296,15 @@ function readSessionRoot(sessionId, opts = {}) {
   return out;
 }
 
+// Autonomous = an unexpired marker whose level is exactly l3-l6 (a plain marker, level null, is not). One definition for
+// open-decision.js and hooks/owner-question-guard.js. No argument: the env-keyed session. Never throws.
+function isAutonomousSession(sessionId) {
+  try {
+    const m = readSessionRecord(sessionId);
+    return Boolean(m && typeof m.level === 'string' && LEVELS.has(m.level));
+  } catch { return false; }
+}
+
 function exactKeys(value, expected) {
   return value && typeof value === 'object' && !Array.isArray(value)
     && Object.keys(value).sort().join('\0') === [...expected].sort().join('\0');
@@ -1492,6 +1501,7 @@ module.exports = {
   devFlowAdmissionRejection,
   readMarker,
   readSessionRecord,
+  isAutonomousSession,
   readSessionRoot,
   ensurePlainMarker,
   resolveJobRoot,

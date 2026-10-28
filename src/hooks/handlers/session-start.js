@@ -63,7 +63,7 @@ function openDecisionCardLine(cwd) {
 function buildBaseContext(cwd = process.cwd()) {
   return `${BASE_AUTOPILOT_CONTEXT}
 
-Anything that needs the owner's decision or answer: open a card with node ${OPEN_DECISION_CMD} open --question ... and write the card id (d- + 8 hex) in the reply.
+Anything that needs the owner's decision or answer: open a card with node ${OPEN_DECISION_CMD} open --question ... --not-authorized <boundary> (required; refused when the DOA lets you decide it) and write the card id (d- + 8 hex) in the reply.
 When the owner answers in the live panel, a message whose first line is [待決回覆] arrives: act on the answers; the cards close automatically.
 To show the owner a file or a diff, use the show tool; do not paste the content.
 Cross-harness token discipline (advisory only): read ${TOKEN_DISCIPLINE_DOC}.

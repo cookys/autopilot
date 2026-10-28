@@ -23,7 +23,7 @@ In `hooks/harness-support-evidence.json`, a `fired` row (a probe run saw the eve
 | `log-error` | PostToolUse<br>未驗證 | — | — | — |
 | `opt-in-multiplexer` | PostToolUse, PostToolUseFailure, PreToolUse, Stop<br>未驗證 | — | — | — |
 | `owner-question-guard` | Stop<br>未驗證 | — | — | — |
-| `per-turn-gate` | Stop<br>未驗證 | — | — | — |
+| `per-turn-gate` | Stop, SubagentStop<br>未驗證 | — | — | — |
 | `post-compact` | — | PostCompact<br>已打包（未驗證觸發）: PostCompact 2026-08-05 | — | — |
 | `post-tool-chain` | PostToolUse<br>未驗證 | — | — | — |
 | `reload-watch` | PostToolUse<br>未驗證 | — | — | — |

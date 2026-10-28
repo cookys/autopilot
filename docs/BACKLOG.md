@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0320 -->
+<!-- next-id: BL-0321 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1229,12 +1229,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-26 fleet
 - **Problem**: peer 回報編排者自己拖慢進度的七處：交接檔不分 owner 指示與前任判斷、停滯偵測看不到只改計畫不合入、DOA 內仍去問、審查迴圈不隨嚴重度縮編等。
 - **Impact**: 流程多花輪次與 owner 時間；指引類改動要先有 ON/OFF 評測。
-- **Trigger**: owner answers card d-f1aea07b (item 4), lane doagate merges (item 3 mechanism), or an ON/OFF eval slot opens for items 1, 5, 7 and the item 3 DOA-table rows (efficiency class, jumps the queue)
+- **Trigger**: an ON/OFF eval slot opens for items 1, 5, 7, the item 3 DOA-table rows and the top-stale wiring (efficiency class, jumps the queue)
 - **Trigger-Type**: owner
 - **Effort**: L
 - **Source**: PEER-REPORTED twgs-revival (peace--claude) 2026-10-26
 - **Pointer**: docs/backlog/orchestrator-self-slowdown-seven-gaps.md
-- **Context**: Items 2, 6 shipped c9366c79a; top-stale (same commit) has no caller, wiring needs skill edit plus ON/OFF eval. Status per item in sidecar.
+- **Context**: Items 2, 6 shipped c9366c79a; item 3 mechanism shipped 4a34aa3a0; item 4 closed (d-f1aea07b, A). Left: top-stale wiring, item 3 DOA-table rows, items 1, 5, 7, all guidance needing ON/OFF eval. See sidecar.
 
 ### Stamped eval rows may have lost files from their frozen set
 - **Id**: BL-0310
@@ -1358,3 +1358,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: d0gp1 fourth-generation review and acceptance, 2026-10-27 (self)
 - **Pointer**: docs/backlog/depth0-gate-p2-wiring-open-questions.md
 - **Context**: gate-verify runs git with core.fsmonitor=false, core.hooksPath and core.excludesFile set to off; follow-on of BL-0306.
+
+### The library path openDecision() skips the --not-authorized and DOA checks
+- **Id**: BL-0320
+- **Status**: open
+- **Since**: 2026-10-28
+- **Origin**: self
+- **Problem**: 只有命令列開卡會檢查「這題為何輪不到自己決定」的旗標與 DOA；程式內部開卡的路徑（提問攔截 hook、子代理預算 hook、資格考確認代 owner 開卡）完全不檢查。
+- **Impact**: 自動開卡的路徑在自主模式下仍能開出 DOA 內的卡，繞過 BL-0309 第 3 項剛上的防線。
+- **Trigger**: someone picks up BL-0309 item 3 follow-ups, or an auto-opened card inside the DOA is seen in an autonomous session
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: doagate merge 4a34aa3a0 and depth-0 ruling 2026-10-28 (self)
+- **Pointer**: docs/backlog/open-decision-library-path-unchecked.md
+- **Context**: Depth-0 ruling on doagate deliberately did not add the check to the library path; first inventory what boundary each of the three callers' cards belongs to, then decide whether to add it. Follow-on of BL-0309.

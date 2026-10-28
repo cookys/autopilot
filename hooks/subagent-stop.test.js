@@ -46,10 +46,14 @@ const post = (over = {}) => ({ session_id: SID, hook_event_name: 'PostToolUse', 
 const adir = (live) => path.join(live, 'agents', SID);
 const readJ = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 
-test('wiring: hooks.json has a SubagentStop entry hosted by awaiting-owner.js (no new hook file)', () => {
+test('wiring: hooks.json has ONE SubagentStop group: awaiting-owner.js plus the per-turn-gate gate-file hook (no new hook file)', () => {
   const g = HOOKS.SubagentStop;
   assert.ok(Array.isArray(g) && g.length === 1, 'one SubagentStop group');
-  assert.deepStrictEqual(g[0].hooks.map((h) => h.command), ['node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js']);
+  // BL-0306 P2 added per-turn-gate.js to the same group (it returns silently without its own gate file).
+  assert.deepStrictEqual(g[0].hooks.map((h) => h.command), [
+    'node ${CLAUDE_PLUGIN_ROOT}/hooks/per-turn-gate.js',
+    'node ${CLAUDE_PLUGIN_ROOT}/hooks/awaiting-owner.js',
+  ]);
 });
 
 test('SubagentStop after tool calls: the stamp keeps its fields and gains ended_at', () => {

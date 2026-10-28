@@ -131,11 +131,19 @@ function capture(bin, args, timeoutMs) {
 
 // The sweep excludes the checkout it is pointed at, so it must be pointed at the MAIN worktree (git lists it first): scanned
 // from a linked worktree it would count the main checkout as `clean-integrated` and inflate the reapable count by one.
+// Returns { main, why }: main is the path or null, why says how it failed (timeout vs exit code vs spawn error, stderr cut to 200 chars).
 async function mainWorktreeOf(repo) {
   const r = await capture('git', ['-C', repo, 'worktree', 'list', '--porcelain'], 10000);
-  if (r.error || r.code !== 0) return null;
+  if (r.error || r.code !== 0) return { main: null, why: failureWhy(r) };
   const first = String(r.out).split('\n').find((l) => l.startsWith('worktree '));
-  return first ? first.slice('worktree '.length) : null;
+  return first ? { main: first.slice('worktree '.length), why: null } : { main: null, why: 'no worktree line in the output' };
+}
+
+// One short phrase for a failed capture(): a timeout and a non-zero exit used to share one message.
+function failureWhy(r) {
+  const tail = r.err ? `: ${String(r.err).trim().split('\n')[0].slice(0, 200)}` : '';
+  if (r.error) return r.error.message === 'timeout' ? 'timeout' : `error ${r.error.code || r.error.message}${tail}`;
+  return `rc=${r.code}${tail}`;
 }
 
 // The auto-run record sits in the repo's git common dir; read it (never throws) -> object or null.
@@ -151,9 +159,10 @@ function createResiduePublisher({ runsDir, key, repo, writeAtomic, log = () => {
   const file = path.join(runsDir, `${key}.residue.json`);
   let lastStartMs = null;
   let inflight = null; // Promise while a scan runs
+  let lastMainWhy = null; // the last logged reason the main worktree could not be resolved: log again only when it changes
 
   function finish(r, auto) {
-    if (r.error || r.code !== 0) { log(`residue scan failed (${r.error ? r.error.message : `rc=${r.code}`}); keeping the previous file${r.err ? `: ${String(r.err).trim().slice(0, 200)}` : ''}`); return false; }
+    if (r.error || r.code !== 0) { log(`residue scan failed (${failureWhy(r)}); keeping the previous file`); return false; }
     let report;
     try { report = JSON.parse(r.out); } catch (e) { log(`residue scan output unparseable (${e.message}); keeping the previous file`); return false; }
     if (!report || !Array.isArray(report.worktrees)) { log('residue scan output has no worktrees[]; keeping the previous file'); return false; }
@@ -168,8 +177,13 @@ function createResiduePublisher({ runsDir, key, repo, writeAtomic, log = () => {
     lastStartMs = nowMs;
     inflight = (async () => {
       try {
-        const main = await mainWorktreeOf(repo);
-        if (main === null) { log('residue: cannot resolve the main worktree (git worktree list failed); keeping the previous file'); return false; }
+        const { main, why } = await mainWorktreeOf(repo);
+        if (main === null) {
+          if (why !== lastMainWhy) log(`residue: cannot resolve the main worktree (git -C ${repo} worktree list: ${why}); keeping the previous file`);
+          lastMainWhy = why;
+          return false;
+        }
+        lastMainWhy = null;
         const scanned = await capture(nodeBin, [sweep, 'scan', '--repo', main, '--json'], SCAN_TIMEOUT_MS);
         return finish(scanned, await readAutoRecord(main));
       } catch (e) { log(`residue publish failed: ${e.message}`); return false; } finally { inflight = null; }
@@ -180,4 +194,4 @@ function createResiduePublisher({ runsDir, key, repo, writeAtomic, log = () => {
   return { publish, file };
 }
 
-module.exports = { SCHEMA, AUTO_SCHEMA, AUTO_FILE, NEEDS_HUMAN_CAP, autoFields, THROTTLE_S, REAPABLE_CLASSES, buildResidueFact, createResiduePublisher };
+module.exports = { failureWhy, SCHEMA, AUTO_SCHEMA, AUTO_FILE, NEEDS_HUMAN_CAP, autoFields, THROTTLE_S, REAPABLE_CLASSES, buildResidueFact, createResiduePublisher };

@@ -320,11 +320,18 @@ function createBrainSpendReader(env) {
 }
 
 // --- worktree -> project map -------------------------------------------------------------
-function worktreePaths({ cwd, scope }) {
+// `onFail(why)` (optional) receives how a failed listing failed: a timeout, a spawn error (e.g. ENOENT when the cwd is gone) or an exit code with stderr.
+function worktreePaths({ cwd, scope, onFail }) {
   const out = {};
   if (!scope.repo_identity) return out;
   const r = spawnSync('git', ['worktree', 'list', '--porcelain'], { cwd, encoding: 'utf8', timeout: 10000 });
-  if (r.status !== 0) return null; // unknown: the caller keeps the previous map
+  if (r.status !== 0) { // unknown: the caller keeps the previous map
+    if (typeof onFail === 'function') {
+      const tail = r.stderr ? `: ${String(r.stderr).trim().split('\n')[0].slice(0, 200)}` : '';
+      onFail(r.error ? (r.error.code === 'ETIMEDOUT' ? 'timeout' : `error ${r.error.code || r.error.message}`) + tail : `rc=${r.status}${tail}`);
+    }
+    return null;
+  }
   for (const line of String(r.stdout).split('\n')) {
     if (!line.startsWith('worktree ')) continue;
     try {
@@ -396,7 +403,7 @@ function createWatcher({
   const state = {
     lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null, host_today_brain_usd: null, brain_cap_usd: brainSpend.read().brain_cap_usd },
-    idleSince: null,
+    idleSince: null, lastPathsWhy: null, // lastPathsWhy: the last logged reason `git worktree list` failed (log again only when it changes)
     rootActiveAt: new Map(), droppedRoots: new Set(), // root retention (ROOT_RETENTION_S)
     // --render: last-seen signature per root, roots awaiting a publish, the debounce deadline, cached task receipts
     render: { seen: new Map(), dirty: new Set(), dueAt: null, task: new Map(), dates: new Map() },
@@ -443,8 +450,14 @@ function createWatcher({
   }
 
   function writePaths(force) {
-    const map = worktreePaths({ cwd, scope });
-    if (map === null) { log(`git worktree list failed; keeping the previous paths file for ${key}`); return; }
+    let why = null;
+    const map = worktreePaths({ cwd, scope, onFail: (w) => { why = w; } });
+    if (map === null) {
+      if (why !== state.lastPathsWhy) log(`git worktree list failed in ${cwd} (${why}); keeping the previous paths file for ${key}`);
+      state.lastPathsWhy = why;
+      return;
+    }
+    state.lastPathsWhy = null;
     const text = `${JSON.stringify(map, null, 2)}\n`;
     if (!force && text === state.lastPaths) return;
     writeAtomic(path.join(runsDir, 'paths', `${key}.json`), text);

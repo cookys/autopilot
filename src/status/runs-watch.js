@@ -335,6 +335,19 @@ function worktreePaths({ cwd, scope }) {
   return out;
 }
 
+// watcher.log is append-only and fed by a long-lived process: past WATCHER_LOG_MAX_BYTES it moves to watcher.log.1 (one generation, the old
+// .1 is replaced). 5 MB holds well over 50 000 timestamped lines, far beyond what a healthy watcher writes in a week, and bounds the disk cost of a
+// runaway line to two files. A detached watcher keeps its stdio fd on the renamed file until it exits, so startWatcherDetached rotates before
+// it opens the fd and log() rotates before each append. Fail-open: any error leaves the log as it is.
+const WATCHER_LOG_MAX_BYTES = 5 * 1024 * 1024;
+function rotateWatcherLog(file, maxBytes = WATCHER_LOG_MAX_BYTES) {
+  try {
+    if (fs.statSync(file).size <= maxBytes) return false;
+    fs.renameSync(file, `${file}.1`);
+    return true;
+  } catch (_error) { return false; }
+}
+
 // Task-receipt re-poll decision: a root with a live run polls every tick; a settled root once its cache is TASK_SETTLED_POLL_MS old.
 function taskPollDue(cacheAtMs, nowMs, live) {
   return live || nowMs - cacheAtMs >= TASK_SETTLED_POLL_MS;
@@ -392,6 +405,7 @@ function createWatcher({
   function log(message) {
     try {
       fs.mkdirSync(path.dirname(logFile), { recursive: true, mode: 0o700 });
+      rotateWatcherLog(logFile);
       fs.appendFileSync(logFile, `${new Date(now()).toISOString()} ${message}\n`);
     } catch (_error) { /* logging must never stop the watcher */ }
   }
@@ -453,18 +467,22 @@ function createWatcher({
   }
 
   // The same injectable `status task` call the renderer uses; one call per poll, cached for the publish.
+  // A failed poll refreshes the cache clock too, so a failing root obeys the same re-poll interval as a good one (before, `at` stayed at the
+  // first failure and a settled root re-polled, and re-logged, on every tick). The failure is logged here, once per transition into failing.
   function pollTask(root, nowMs) {
     const cache = state.render.task.get(root);
     const { callTaskStatus } = require('../../scripts/render-review-page');
-    const res = callTaskStatus(root, cwd, env);
+    let reason = null;
+    const res = callTaskStatus(root, cwd, env, { onFail: (r) => { reason = r; } });
     if (!res) {
-      if (cache) return cache.digest; // a transient failure must not flip the signature twice
-      state.render.task.set(root, { at: nowMs, digest: 'unavailable', value: null });
+      if (!cache || !cache.failed) log(`render: ${reason || `status task unavailable for ${root}`}`);
+      if (cache) { state.render.task.set(root, { ...cache, at: nowMs, failed: true }); return cache.digest; } // a transient failure must not flip the signature twice
+      state.render.task.set(root, { at: nowMs, digest: 'unavailable', value: null, failed: true });
       return 'unavailable';
     }
     const v = res.value;
     const digest = v && typeof v.receipt_digest === 'string' && v.receipt_digest ? v.receipt_digest : res.sha256;
-    state.render.task.set(root, { at: nowMs, digest, value: res });
+    state.render.task.set(root, { at: nowMs, digest, value: res, failed: false });
     return digest;
   }
 
@@ -705,7 +723,7 @@ function createWatcher({
     }
     if (dropped.length) {
       state.roots = new Set([...state.roots].filter((r) => !dropped.includes(r)));
-      for (const root of dropped) { removeRootFiles(root); state.render.seen.delete(root); state.render.dirty.delete(root); }
+      for (const root of dropped) { removeRootFiles(root); state.render.seen.delete(root); state.render.dirty.delete(root); state.render.task.delete(root); }
     }
     const bound = freshBoundOf(rows, interval, enrichCap);
     const counts = new Map([[null, computeCounts(rows, interval, enrichCap, bound)]]);
@@ -949,6 +967,7 @@ function startWatcherDetached({
     }
     const logFile = path.join(autopilotHomeOf(env), 'review', key, 'live', 'watcher.log');
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    rotateWatcherLog(logFile);
     const fd = fs.openSync(logFile, 'a');
     try {
       const child = spawn('nohup', ['sh', ...watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render })], {
@@ -1065,6 +1084,6 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 }
 
 module.exports = {
-  taskPollDue, TASK_SETTLED_POLL_MS, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
+  taskPollDue, TASK_SETTLED_POLL_MS, rotateWatcherLog, WATCHER_LOG_MAX_BYTES, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
   lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
 };

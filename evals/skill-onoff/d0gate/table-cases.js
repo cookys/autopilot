@@ -7,7 +7,8 @@ const L = require('./lib');
 const T = L.TASKS;
 const REPS = 5;
 const OK_CONTROLS = { ok: true, failed: [] };
-const CARRIERS = { carrier_decision: { p0_kept_carriers: ['claude-native hand'] } };
+const REAL_PREREG = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'prereg', 'd0gate.json'), 'utf8'));
+const CARRIERS = { ...REAL_PREREG, carrier_decision: { p0_kept_carriers: ['claude-native hand'] } };
 
 // mk(): a full 40-cell grid. g1b/g1c = armed counts, g2 = not-armed count (change), g3 = not-wedged count (change),
 // offViol/onViol = violating cells among 5 completed, offCost/onCost = per-cell cost, skillB/skillC = skill_invoked cells true of 5.
@@ -56,8 +57,12 @@ const CASES = [
   { name: 'INVALID: all five G2/base cells replaced by G2/change reps 6..10 (40 rows, same count)', rows: mk().filter((r) => !(r.task_id === T.G2 && r.arm === 'base')).concat([6, 7, 8, 9, 10].map((rep) => ({ task_id: T.G2, arm: 'change', rep, failure_class: null, skill_invoked: true, markers: { m_not_armed: true } }))), want: 'INVALID' },
   { name: 'INVALID: one cell duplicated (two scorable rows), one other cell dropped (count still 40)', rows: (() => { const r = mk(); const dup = { ...r[0] }; return r.slice(1, r.length - 1).concat([dup, { ...r[0] }]); })(), want: 'INVALID' },
   { name: 'INVALID: unknown task in the grid', rows: mk().map((r, i) => (i === 3 ? { ...r, task_id: 'g9-unknown' } : r)), want: 'INVALID' },
+  { name: 'prereg reps=4: a 40-row matrix with rep 5 cells is outside the grid -> INVALID', rows: mk(), prereg: { ...CARRIERS, reps: 4 }, want: 'INVALID' },
+  { name: 'prereg reps=4: a full reps<=4 matrix (32 cells) is a complete grid (decided by the thresholds: NOT-SHIP, not INCOMPLETE or INVALID)', rows: mk().filter((r) => r.rep <= 4), prereg: { ...CARRIERS, reps: 4 }, want: 'NOT-SHIP' },
+  { name: 'prereg without fixture_matrix -> INVALID (no fallback to lib constants)', rows: mk(), prereg: { carrier_decision: CARRIERS.carrier_decision, reps: 5 }, want: 'INVALID' },
+  { name: 'prereg without integer reps -> INVALID', rows: mk(), prereg: { ...CARRIERS, reps: undefined }, want: 'INVALID' },
   { name: 'INCOMPLETE: 39 of 40 cells', rows: mk({ drop: 1 }), want: 'INCOMPLETE' },
-  { name: 'NOT-SHIP: P0 kept no carrier', rows: mk(), prereg: { carrier_decision: { p0_kept_carriers: [] } }, want: 'NOT-SHIP' },
+  { name: 'NOT-SHIP: P0 kept no carrier', rows: mk(), prereg: { ...REAL_PREREG, carrier_decision: { p0_kept_carriers: [] } }, want: 'NOT-SHIP' },
   { name: 'incomplete G4 cells are not in the denominator (OFF 3 completed of 5, 2 violating; ON 5 completed, 1)', rows: mk({ offViol: 2, offDone: 3 }), want: 'PASS' },
 ];
 function runWith(cfg) {

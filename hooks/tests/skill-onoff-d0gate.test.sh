@@ -334,11 +334,14 @@ case "$(S node -e 'console.log(JSON.parse(require("fs").readFileSync(process.arg
 cat >"$TEST_TMP/localinfo.js" <<'EOF'
 // every string (keys and values) of the d0gate pack entries / pack_meta in the manifest, and of the whole prereg, must hold no machine-local text
 const fs = require('fs');
-const BAD = /\/tmp\/|\/home\/|\/run\/user|tmp\.[A-Za-z0-9]{8}|cookys/;
+let BAD_USER = null;
+const BAD = /\/tmp\/|\/home\/|\/run\/user|tmp\.[A-Za-z0-9]{8}/;
+const USER = process.argv[4]; // the local user name, passed in by the test (never written into the repo)
+if (USER) BAD_USER = new RegExp(USER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 const ALLOW = []; // explicit, named exceptions: [{where: '<json path>', re: /.../}] (none are needed)
 const hits = [];
 const walk = (v, where) => {
-  if (typeof v === 'string') { if (BAD.test(v) && !ALLOW.some((a) => a.where === where && a.re.test(v))) hits.push(`${where}: ${v.slice(0, 120)}`); return; }
+  if (typeof v === 'string') { if ((BAD.test(v) || (BAD_USER && BAD_USER.test(v))) && !ALLOW.some((a) => a.where === where && a.re.test(v))) hits.push(`${where}: ${v.slice(0, 120)}`); return; }
   if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${where}[${i}]`));
   if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { walk(k, `${where}{key ${k}}`); walk(x, `${where}.${k}`); }
 };
@@ -351,11 +354,12 @@ walk(JSON.parse(fs.readFileSync(process.argv[3], 'utf8')), 'prereg');
 if (hits.length) { console.log(hits.join('\n')); process.exit(1); }
 console.log('no machine-local text in the d0gate manifest entries or the prereg');
 EOF
-S node "$TEST_TMP/localinfo.js" "$EV/packs/manifest.json" "$EV/prereg/d0gate.json" || fail "local info in d0gate metadata"
+S node "$TEST_TMP/localinfo.js" "$EV/packs/manifest.json" "$EV/prereg/d0gate.json" "$(id -un)" || fail "local info in d0gate metadata"
 S node -e '
 const fs = require("fs"); const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-m.pack_meta["fixture-stubs-d0gate"].source = "/tmp/tmp.AbCd1234/stubs"; fs.writeFileSync(process.argv[2], JSON.stringify(m));' "$EV/packs/manifest.json" "$TEST_TMP/manifest-planted.json"
-if S node "$TEST_TMP/localinfo.js" "$TEST_TMP/manifest-planted.json" "$EV/prereg/d0gate.json" >"$TEST_TMP/li-red.out" 2>&1; then fail "RED control: a planted /tmp/tmp.XXXX in a d0gate manifest field was not caught"; fi
+m.pack_meta["fixture-stubs-d0gate"].source = "/tmp/tmp.AbCd1234/stubs"; fs.writeFileSync(process.argv[2], JSON.stringify(m));' "$EV/packs/manifest.json" "$TEST_TMP/manifest-planted.json" || fail "could not plant the local-path control"
+if S node "$TEST_TMP/localinfo.js" "$TEST_TMP/manifest-planted.json" "$EV/prereg/d0gate.json" "$(id -un)" >"$TEST_TMP/li-red.out" 2>&1; then fail "RED control: a planted /tmp/tmp.XXXX in a d0gate manifest field was not caught"; fi
+grep -q 'pack_meta.fixture-stubs-d0gate.source: /tmp/tmp.AbCd1234/stubs' "$TEST_TMP/li-red.out" || fail "RED control failed for the wrong reason: $(cat "$TEST_TMP/li-red.out")"
 echo "RED (expected) $(cat "$TEST_TMP/li-red.out")"
 ok "stamp rehearsal (real row untouched: draft, not in FROZEN.json)"
 

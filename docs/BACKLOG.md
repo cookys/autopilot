@@ -1234,7 +1234,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: L
 - **Source**: PEER-REPORTED twgs-revival (peace--claude) 2026-10-26
 - **Pointer**: docs/backlog/orchestrator-self-slowdown-seven-gaps.md
-- **Context**: Items 2, 6 shipped c9366c79a; item 3 mechanism shipped 4a34aa3a0; item 4 closed by owner (d-f1aea07b, option A). Left: top-stale (c9366c79a, no caller) wiring and the item 3 DOA-table rows, both skill/guidance edits needing ON/OFF eval, plus items 1, 5, 7. Status per item in sidecar.
+- **Context**: Items 2, 6 shipped c9366c79a; item 3 mechanism shipped 4a34aa3a0; item 4 closed (d-f1aea07b, A). Left: top-stale wiring, item 3 DOA-table rows, items 1, 5, 7, all guidance needing ON/OFF eval. See sidecar.
 
 ### Stamped eval rows may have lost files from their frozen set
 - **Id**: BL-0310
@@ -1364,7 +1364,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-28
 - **Origin**: self
-- **Problem**: 只有命令列 `open-decision.js open` 會檢查 `--not-authorized` 與 DOA；函式庫路徑 `openDecision()`（ask-decision hook、subagent-budget hook、qualification-confirm 代 owner 開卡）完全不檢查。
+- **Problem**: 只有命令列開卡會檢查「這題為何輪不到自己決定」的旗標與 DOA；程式內部開卡的路徑（提問攔截 hook、子代理預算 hook、資格考確認代 owner 開卡）完全不檢查。
 - **Impact**: 自動開卡的路徑在自主模式下仍能開出 DOA 內的卡，繞過 BL-0309 第 3 項剛上的防線。
 - **Trigger**: someone picks up BL-0309 item 3 follow-ups, or an auto-opened card inside the DOA is seen in an autonomous session
 - **Trigger-Type**: ready

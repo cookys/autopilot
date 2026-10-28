@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0327 -->
+<!-- next-id: BL-0330 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1412,3 +1412,54 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: d0gp2 P2 merge review, 2026-10-29 (self)
 - **Pointer**: docs/backlog/depth0-per-turn-gate-status.md
 - **Context**: Five limits listed at Pointer under Known limits of P2. Follow-on of BL-0306.
+
+### Live watcher idle-exits during long tool-only work and the panel shows unavailable
+- **Id**: BL-0327
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: peer
+- **Reporter**: cookys/openclaw/fleet--claude
+- **Report**: 2026-10-29 fleet:01M628K0GA63KYQY11GERK89KW
+- **Reply**: 2026-10-29 fleet:01M628KJBMWHK5Y16QHJG2KV8B
+- **Problem**: 長時間只跑工具、沒有新訊息時，背景監看程式會自己結束，面板就一直顯示「無法取得」，直到下一則訊息；而且面板只叫人手動執行一行指令，沒說明原因，也沒說明下一則訊息會自動恢復，對一般使用者沒有幫助。
+- **Impact**: 長工作期間看不到進度面板，使用者以為系統壞了。
+- **Trigger**: work can start now; efficiency and experience fix
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PEER-REPORTED cookys/openclaw/fleet--claude 2026-10-29
+- **Pointer**: docs/backlog/watcher-idle-exit-unavailable-panel.md
+- **Context**: Observed 2026-10-28 for about 2h20m. Timeline and two fix directions at Pointer.
+
+### Watcher log is flooded by repeated status task unavailable lines
+- **Id**: BL-0328
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: peer
+- **Reporter**: cookys/openclaw/fleet--claude
+- **Report**: 2026-10-29 fleet:01M628K0GA63KYQY11GERK89KW
+- **Reply**: 2026-10-29 fleet:01M628KJBMWHK5Y16QHJG2KV8B
+- **Problem**: 背景監看程式的紀錄檔被同一行「任務狀態取得失敗」重複寫了十四萬多行、佔 12.8 MB，沒有輪替也沒有去重，真正有用的訊息被淹沒。
+- **Impact**: 紀錄檔無限成長，要查問題時找不到有用的行。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED cookys/openclaw/fleet--claude 2026-10-29
+- **Pointer**: docs/backlog/watcher-idle-exit-unavailable-panel.md
+- **Context**: Counts and source line at Pointer under BL-0328.
+
+### Watcher cannot list git worktrees while the same command works by hand
+- **Id**: BL-0329
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: peer
+- **Reporter**: cookys/openclaw/fleet--claude
+- **Report**: 2026-10-29 fleet:01M628K0GA63KYQY11GERK89KW
+- **Reply**: 2026-10-29 fleet:01M628KJBMWHK5Y16QHJG2KV8B
+- **Problem**: 背景監看程式裡列出工作樹的 git 指令失敗了五百多次，但在同一個專案手動執行卻正常，結果清理資訊檔一直沿用舊的內容。疑似背景啟動後的環境和手動不同。
+- **Impact**: 清理資訊停在舊狀態，面板上的殘留數量可能過時。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED cookys/openclaw/fleet--claude 2026-10-29
+- **Pointer**: docs/backlog/watcher-idle-exit-unavailable-panel.md
+- **Context**: Failure count and suspect list at Pointer under BL-0329.

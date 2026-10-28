@@ -4,7 +4,7 @@
 /**
  * open-decision.js — the "open owner questions" file of a watcher scope (mods P1W W2a-m; contract autopilot.decision/2).
  *
- *   node scripts/open-decision.js open  --question <q> [--background <why>] [--option <label>[::<description>]]...
+ *   node scripts/open-decision.js open  --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text
  *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
  *                                       [--doa-role <role>] [--doa-tier <tier>] [--source <who/where>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
@@ -28,7 +28,7 @@
  * the session do alone (autonomous / logged) is refused: exit 3, decide it yourself. Plain sessions only need a known boundary.
  * If resolve-doa cannot be run, the DOA-independent boundaries (irreversible + the Board rows, `escalate` in every preset) are
  * still accepted with a stderr warning, and the other classes are refused (a gate that cannot verify must not wave them through).
- * --option may repeat; none -> options null, one -> usage error (a choice needs at least two). Everything except
+ * --option may repeat; at least two are REQUIRED (none or one -> exit 2); a question the owner answers in typed text passes --free-text instead (options null; --free-text with --option -> exit 2). Everything except
  * --question is optional text for the owner; an empty value is stored as null. Writes take a lock and rename atomically.
  * Node built-ins only. This script writes nothing outside the decisions directory.
  * The library functions openDecision / closeDecisionById are also called by hooks/ask-decision.js (depth-0 AskUserQuestion
@@ -52,7 +52,7 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--doa-role <role>] [--doa-tier <tier>] [--source <who/where>] [--root-run-id <id>]\n'
+  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--doa-role <role>] [--doa-tier <tier>] [--source <who/where>] [--root-run-id <id>]\n'
     + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js show [--root-run-id <id>] [--json]\n');
   return 2;
 }
@@ -68,7 +68,7 @@ function parse(argv) {
       if (i + 1 >= argv.length) return { error: `--${name} needs a value` };
       const v = argv[i + 1]; i += 1;
       if (name === 'option') out.option.push(v); else out[name] = v;
-    } else if (name === 'json') out[name] = true;
+    } else if (name === 'json' || name === 'free-text') out[name] = true;
     else return { error: `unknown argument: ${a}` };
   }
   return out;
@@ -258,7 +258,9 @@ function main(argv) {
 
   // open
   if (typeof args.question !== 'string' || !args.question.trim()) return usage('open needs a non-empty --question');
-  if (args.option.length === 1) return usage('--option needs at least two options (or none)');
+  if (args['free-text'] && args.option.length) return usage('--free-text and --option are mutually exclusive: a free-text card has no options');
+  if (args.option.length === 1) return usage('--option needs at least two options');
+  if (!args.option.length && !args['free-text']) return usage('a decision card needs at least two --option <label>::<description>; for a question answered in typed text pass --free-text');
   const options = args.option.length ? parseOptions(args.option) : null;
   if (options && options.some((o) => !o.label)) return usage('--option labels must be non-empty');
   const gate = checkNotAuthorized(args['not-authorized'], { cwd: path.resolve(args.cwd || process.cwd()), role: args['doa-role'] || 'manager', tier: args['doa-tier'] || 'sonnet', autonomous: isAutonomous() });

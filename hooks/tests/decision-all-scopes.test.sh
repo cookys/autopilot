@@ -9,9 +9,9 @@ OD="$REPO_ROOT/scripts/open-decision.js"
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 R="$TEST_TMP/repo"; mkdir -p "$R"; $GIT -C "$R" init -q; $GIT -C "$R" commit -q --allow-empty -m base
 
-ID_OLD="$(node "$OD" open --not-authorized irreversible --cwd "$R" --root-run-id root-old --question "Q-OLD?")"
-ID_UNB="$(node "$OD" open --not-authorized irreversible --cwd "$R" --question "Q-UNBOUND?")"
-ID_NEW="$(node "$OD" open --not-authorized irreversible --cwd "$R" --root-run-id root-new --question "Q-NEW?")"
+ID_OLD="$(node "$OD" open --not-authorized irreversible --free-text --cwd "$R" --root-run-id root-old --question "Q-OLD?")"
+ID_UNB="$(node "$OD" open --not-authorized irreversible --free-text --cwd "$R" --question "Q-UNBOUND?")"
+ID_NEW="$(node "$OD" open --not-authorized irreversible --free-text --cwd "$R" --root-run-id root-new --question "Q-NEW?")"
 D="$R/.git/autopilot/decisions"
 assert_eq "3" "$(ls "$D" | grep -c '\.json$')" "three scope files exist"
 

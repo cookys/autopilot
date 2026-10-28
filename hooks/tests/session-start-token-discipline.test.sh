@@ -8,7 +8,7 @@
 DOC="$REPO_ROOT/docs/token-discipline.md"
 LINE="Cross-harness token discipline (advisory only): read ${DOC}."
 SHOW='To show the owner a file or a diff, use the show tool; do not paste the content.'
-OPEN="Anything that needs the owner's decision or answer: open a card with node ${REPO_ROOT}/scripts/open-decision.js open --question ... --not-authorized <boundary> (required; refused when the DOA lets you decide it) and write the card id (d- + 8 hex) in the reply."
+OPEN="Anything that needs the owner's decision or answer: open a card with node ${REPO_ROOT}/scripts/open-decision.js open --question <q> --option <label>::<desc> --option <label>::<desc> --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>] (at least two options, or --free-text when the owner answers in typed text; --not-authorized is required and refused when the DOA lets you decide it) and write the card id (d- + 8 hex) in the reply."
 PENDING='When the owner answers in the live panel, a message whose first line is [待決回覆] arrives: act on the answers; the cards close automatically.'
 
 run_hook session-start.js

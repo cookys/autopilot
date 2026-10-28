@@ -713,6 +713,22 @@
       "type": "number"
     },
     {
+      "name": "per_turn_gate.session_arming",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": true,
+      "readers": [
+        "hooks/per-turn-gate.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "hooks.<stem>"
+      ],
+      "summary": "Whether per-turn-gate honours a worker-bound gate file written by scripts/per-turn-gate-arm.js. Missing or true: a valid gate file arms the gate for that one session even when the global knob is off. Only an explicit false ignores gate files (no lookup at all).",
+      "type": "boolean"
+    },
+    {
       "name": "subagent_budget.mode",
       "kind": "config_key",
       "audience": "user",

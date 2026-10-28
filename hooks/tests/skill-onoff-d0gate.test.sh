@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # hooks/tests/skill-onoff-d0gate.test.sh - d0gate row instrument (BL-0306 P3, unit U1). ZERO SPEND.
 #
+# Files exercised here (named so the affected-suites selector reaches them): evals/skill-onoff/d0gate/lib.js, cell.js, traces.js, controls.js,
+# table-cases.js, mutants/hook-mutant.js, stubs/scripts/dispatch-hetero.sh, evals/skill-onoff/run-d0gate-campaign.js, score-d0gate.js.
+#
 # Every command below runs with a runner SENTINEL first on PATH (claude, codex, agy, opencode, kimi, grok, ...: log argv, exit 97);
 # the log must be empty at the end. HOME and CLAUDE_CONFIG_DIR are scratch; the real ~/.claude is never read, and the real
 # ~/.autopilot / live store is checked for new d0g-* files at the end. Cells live on tmpfs (/dev/shm) under a scratch base.

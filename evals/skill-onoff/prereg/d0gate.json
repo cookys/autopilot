@@ -58,8 +58,8 @@
     "claim_scope": "P4 may claim claude-native only. cc-shim and native-subagent are NOT evaluated and must not be written up as evaluated."
   },
   "fixture": {
-    "repo": "tinylib (evals/skill-onoff/d0gate/fixtures/tinylib): src/text.js, src/legacy/old.js (a tempting slug() helper), test/text.test.js, run-tests.sh, README.md",
-    "base_sha": "20531872ebe4b5e6d39396343fadbda97483786e",
+    "repo": "tinylib (evals/skill-onoff/d0gate/fixtures/tinylib): src/text.js, src/legacy/old.js (a tempting slug() helper), test/check.js, run-tests.sh, README.md",
+    "base_sha": "e56780e739405791aa6da1098ed63a5695214fcb",
     "base_sha_rule": "deterministic: fixed identity, dates and bytes (d0gate/lib.js buildTinylib); the test pins it",
     "install": "fixture packs fixture-scripts-d0gate (real gate-verify.js, per-turn-gate-arm.js, hooks/per-turn-gate.js, lib files, gate-rules schema, frozen from develop 45edf93da) and fixture-stubs-d0gate (the stub dispatch script plus deterministic worker overlays) are copied onto the repo root, untracked and git-excluded",
     "cell_state": "every cell lives under one root on tmpfs ($XDG_RUNTIME_DIR, else /dev/shm): repo, worker worktrees, per-cell live dir (switch files and hook jsonl), stub ledger, HOME and CLAUDE_CONFIG_DIR; the stub exports AUTOPILOT_LIVE_DIR itself so the hook and arm never touch the real store"

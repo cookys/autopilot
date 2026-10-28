@@ -28,7 +28,7 @@ marker plain null
 # od <sid> <args...>: run open; sets RC, ERR, OUT
 od() {
   local sid="$1"; shift
-  OUT="$(AUTOPILOT_SESSION_ID="$sid" node "$OD" open --cwd "$R" --root-run-id root-t --question "Q?" "$@" 2>"$TEST_TMP/err")"; RC=$?
+  OUT="$(AUTOPILOT_SESSION_ID="$sid" node "$OD" open --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" "$@" 2>"$TEST_TMP/err")"; RC=$?
   ERR="$(cat "$TEST_TMP/err")"
 }
 
@@ -57,8 +57,20 @@ od auto --not-authorized irreversible --doa-tier "a b"; assert_eq "$RC" 0 "resol
 od auto --not-authorized reversible   --doa-tier "a b"; assert_eq "$RC" 3 "resolve-doa fails, reversible: refused (cannot be verified)"; assert_contains "$ERR" "resolve-doa failed" "refusal names the failure"
 # 7b. resolve-doa cannot even be spawned (no bash on PATH)
 NODE_BIN="$(command -v node)"; NOBASH="$TEST_TMP/nobash"; mkdir -p "$NOBASH"; ln -s "$(command -v git)" "$NOBASH/git"
-OUT="$(AUTOPILOT_SESSION_ID=auto PATH="$NOBASH" "$NODE_BIN" "$OD" open --cwd "$R" --root-run-id root-t --question "Q?" --not-authorized external 2>"$TEST_TMP/err")"; RC=$?
+OUT="$(AUTOPILOT_SESSION_ID=auto PATH="$NOBASH" "$NODE_BIN" "$OD" open --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized external 2>"$TEST_TMP/err")"; RC=$?
 assert_eq "$RC" 3 "no bash: external refused"; assert_contains "$(cat "$TEST_TMP/err")" "resolve-doa failed" "spawn failure named"
+
+# 7c. dcopt: a card needs options. Every case carries a valid --not-authorized, so each fails only on its own guard.
+R2="$TEST_TMP/r2"; mkdir -p "$R2"; git -C "$R2" init -q
+odn() { OUT="$(AUTOPILOT_SESSION_ID=plain node "$OD" open --cwd "$R2" --root-run-id root-n --not-authorized irreversible --question "Q?" "$@" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
+odn; assert_eq "$RC" 2 "no --option, no --free-text: exit 2"; assert_contains "$ERR" "--free-text" "refusal names --free-text"
+assert_eq "$(command ls "$R2/.git/autopilot/decisions" 2>/dev/null)" "" "the refused card wrote no scope file"
+odn --option "only::one"; assert_eq "$RC" 2 "exactly one --option: exit 2"
+odn --free-text --option "A::a" --option "B::b"; assert_eq "$RC" 2 "--free-text with --option: exit 2"; assert_contains "$ERR" "mutually exclusive" "conflict named"
+assert_eq "$(command ls "$R2/.git/autopilot/decisions" 2>/dev/null)" "" "conflicting flags wrote no scope file"
+odn --free-text; assert_eq "$RC" 0 "--free-text alone: exit 0"
+assert_contains "$(node "$OD" show --cwd "$R2" --json)" '"options": null' "free-text card stores options null"
+odn --option "A::a" --option "B::b"; assert_eq "$RC" 0 "two options: exit 0"
 
 # 8. owner-question-guard: both modes name --not-authorized; only the autonomous one says do not open a card
 mkdir -p "$TEST_TMP/t"

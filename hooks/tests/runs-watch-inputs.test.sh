@@ -54,12 +54,12 @@ eq yes "$(grep -Eq '^d-[0-9a-f]{8}$' <<<"$ID1" && echo yes || echo no)" "open pr
 eq 'autopilot.decision/2|1|R1' "$(jf "$F1" '[v.schema,v.decisions.length,v.root_run_id].join("|")')" "decision/2 file: schema, one entry, root_run_id"
 eq "Q one?|BG one|A:desc A,B:desc B|A|WHY one|BLOCKS one|irreversible:NA one|SRC one|$ID1" "$(jf "$F1" 'const d=v.decisions[0];[d.question,d.background,d.options.map((o)=>o.label+":"+o.description).join(","),d.recommendation,d.why,d.blocks,d.not_authorized,d.source,d.id].join("|")')" "entry fields (question, background, options[{label,description}], recommendation, why, blocks, source, id)"
 eq "$IDENT|$KEY" "$(jf "$F1" 'v.repo_identity+"|"+v.project_key')" "decision carries repo_identity and project_key"
-ID2=$(odo open --not-authorized irreversible --question 'Q two?' --root-run-id R1); eq 0 "$?" "a second open on the same scope succeeds (questions coexist)"
+ID2=$(odo open --not-authorized irreversible --free-text --question 'Q two?' --root-run-id R1); eq 0 "$?" "a second open on the same scope succeeds (questions coexist)"
 eq "Q one?,Q two?" "$(jf "$F1" 'v.decisions.map((d)=>d.question).join(",")')" "both questions are in the one file; the first is untouched"
 eq 'null|null|null|null|"irreversible"' "$(jf "$F1" 'const d=v.decisions[1];[d.options,d.background,d.recommendation,d.why,d.not_authorized].map((x)=>JSON.stringify(x)).join("|")')" "an entry with only --question stores the rest as null (not_authorized is the required boundary)"
 odo open --not-authorized irreversible --question 'Q3' --option only-one --root-run-id R1 > /dev/null; eq 2 "$?" "a single --option is a usage error (exit 2)"
-odo open --not-authorized irreversible --root-run-id R1 > /dev/null; eq 2 "$?" "open without --question is a usage error"
-odo open --not-authorized irreversible --question 'Q4' --replace --root-run-id R1 > /dev/null; eq 2 "$?" "the removed --replace flag is refused (no compat shim)"
+odo open --not-authorized irreversible --free-text --root-run-id R1 > /dev/null; eq 2 "$?" "open without --question is a usage error"
+odo open --not-authorized irreversible --free-text --question 'Q4' --replace --root-run-id R1 > /dev/null; eq 2 "$?" "the removed --replace flag is refused (no compat shim)"
 eq 2 "$(jf "$F1" 'v.decisions.length')" "usage errors left the file untouched"
 odo show --root-run-id R1 --json > "$SB/show.out"; eq 0 "$?" "show --json exits 0 when questions are open"
 eq 'Q one?,Q two?' "$(jf "$SB/show.out" 'v.decisions.map((d)=>d.question).join(",")')" "show --json prints every open entry"
@@ -76,18 +76,18 @@ assert_file_absent "$F1" "the file is removed when its last entry goes"
 odo show --root-run-id R1 --json > /dev/null; eq 1 "$?" "show exits 1 after the last close"
 # six concurrent opens: ALL win, none is lost, the file is intact JSON
 rm -f "$SB"/c*.rc
-for i in 1 2 3 4 5 6; do ( odo open --not-authorized irreversible --question "P$i" --root-run-id RC > /dev/null; echo $? > "$SB/c$i.rc" ) & done; wait
+for i in 1 2 3 4 5 6; do ( odo open --not-authorized irreversible --free-text --question "P$i" --root-run-id RC > /dev/null; echo $? > "$SB/c$i.rc" ) & done; wait
 eq '0 0 0 0 0 0' "$(cat "$SB"/c?.rc | sort | tr '\n' ' ' | sed 's/ $//')" "concurrent open x6: all six succeed"
 eq '6|6' "$(jf "$COMMON/autopilot/decisions/${KEY}--RC.json" 'v.decisions.length+"|"+new Set(v.decisions.map((d)=>d.id)).size')" "concurrent open leaves one intact file with six distinct entries (none lost)"
 rm -f "$COMMON/autopilot/decisions/${KEY}--RC.json"
 # concurrent close x12 + open x12 on one scope: every close lands, every open lands, nothing else is lost (the close path takes the same lock)
 FK="$COMMON/autopilot/decisions/${KEY}--RK.json"
 : > "$SB/keep.ids"; : > "$SB/gone.ids"
-for i in $(seq 1 12); do odo open --not-authorized irreversible --question "keep-$i" --root-run-id RK >> "$SB/keep.ids"; odo open --not-authorized irreversible --question "gone-$i" --root-run-id RK >> "$SB/gone.ids"; done
+for i in $(seq 1 12); do odo open --not-authorized irreversible --free-text --question "keep-$i" --root-run-id RK >> "$SB/keep.ids"; odo open --not-authorized irreversible --free-text --question "gone-$i" --root-run-id RK >> "$SB/gone.ids"; done
 eq 24 "$(jf "$FK" 'v.decisions.length')" "setup: 24 entries open on the scope"
 rm -f "$SB"/k*.rc "$SB"/n*.rc "$SB"/new.ids.*
 i=0; while read -r gid; do i=$((i+1)); ( odo close --id "$gid" --root-run-id RK > /dev/null; echo $? > "$SB/k$i.rc" ) & done < "$SB/gone.ids"
-for i in $(seq 1 12); do ( odo open --not-authorized irreversible --question "new-$i" --root-run-id RK > "$SB/new.ids.$i"; echo $? > "$SB/n$i.rc" ) & done; wait
+for i in $(seq 1 12); do ( odo open --not-authorized irreversible --free-text --question "new-$i" --root-run-id RK > "$SB/new.ids.$i"; echo $? > "$SB/n$i.rc" ) & done; wait
 eq '0' "$(cat "$SB"/k*.rc "$SB"/n*.rc | sort -u | tr '\n' ' ' | sed 's/ $//')" "concurrent close x12 + open x12: every call exits 0"
 cat "$SB/keep.ids" "$SB"/new.ids.* | LC_ALL=C sort > "$SB/want.ids"
 jf "$FK" 'v.decisions.map((d)=>d.id).sort().join("\n")' > "$SB/have.ids"; echo >> "$SB/have.ids"
@@ -95,7 +95,7 @@ eq 24 "$(wc -l < "$SB/have.ids" | tr -d ' ')" "concurrent close + open: 24 entri
 eq same "$(cmp -s "$SB/want.ids" "$SB/have.ids" && echo same || echo differ)" "concurrent close + open: the surviving id set is exactly the kept + new ids (no lost update, no resurrected close)"
 rm -f "$FK"
 # unbound scope file name = project_key
-IDU=$(odo open --not-authorized irreversible --question 'unbound?'); eq 0 "$?" "open without a root targets the unbound scope"
+IDU=$(odo open --not-authorized irreversible --free-text --question 'unbound?'); eq 0 "$?" "open without a root targets the unbound scope"
 assert_file_exists "$COMMON/autopilot/decisions/${KEY}.json" "unbound decision file is <project_key>.json"
 odo close --id "$IDU" > /dev/null
 # schema file validates a written file

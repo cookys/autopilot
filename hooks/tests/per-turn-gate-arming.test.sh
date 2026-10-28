@@ -152,6 +152,25 @@ tn2_global_unchanged() {
   [ "$(blocks)" = 0 ] && [ "$(log_has '"decision":"allow","reason":"error"')" = 1 ]
 }
 
+# A valid file that is ours but whose check cannot run (.git moved, base gone) is a verification error,
+# not "no gate": block with reason error, same max_blocks. A file for another repo stays silently ignored.
+tn2_nogit() {
+  fresh tn2n; arm_case; violate; mv "$CASE_REPO/.git" "$CASE_DIR/git-away"
+  stop "$1" false; [ "$(blocks)" = 1 ] && [ "$(log_has '"decision":"block","reason":"error","counter":1,"source":"session"')" = 1 ] || return 1
+  stop "$1" true; [ "$(blocks)" = 1 ] || return 1
+  stop "$1" true; [ "$(blocks)" = 0 ] && [ "$(log_has '"decision":"allow","reason":"cap"')" = 1 ] || return 1
+  mv "$CASE_DIR/git-away" "$CASE_REPO/.git"
+  stop "$1" false; [ "$(blocks)" = 1 ] && [ "$(log_has '"reason":"block","counter":1')" = 1 ]  # new turn, repo back: a normal violation block
+}
+tn2_basegone() {
+  fresh tn2o; arm_case; violate; tamper notcommit
+  stop "$1" false; [ "$(blocks)" = 1 ] && [ "$(log_has '"decision":"block","reason":"error","counter":1,"source":"session"')" = 1 ]
+}
+tn2_otherrepo() { # control: the file names another repo, so it is not this worker's: silent
+  fresh tn2p; arm_case; violate; tamper repo
+  stop "$1" false; [ -z "$STOP_OUT" ] && [ "$(log_count)" = 0 ]
+}
+
 # ---- T-N3: with no gate file nothing changes, and the lookup costs at most one findmnt and no git.
 SHIM="$TEST_TMP/shim"; mkdir -p "$SHIM"
 for tool in git findmnt; do
@@ -202,7 +221,7 @@ tamper() { # <kind> : edit the armed gate file of the current case
       fs.writeFileSync(f, JSON.stringify(g));' "$f" "$1" ;;
   esac
 }
-INVALID_KINDS="absent unreadable malformed array expired badv unknown repo nobase norules rulesarray mode maxblocks notcommit shortbase"
+INVALID_KINDS="absent unreadable malformed array expired badv unknown repo nobase norules rulesarray mode maxblocks shortbase"
 inv() { # <kind> <hook>
   [ "$1" != unreadable ] || [ "$(id -u)" != 0 ] || return 0
   fresh "inv-$1" '{"hooks":{"per-turn-gate":true},"per_turn_gate":{"verifier":"node '"$STUB"'"}}'
@@ -217,7 +236,6 @@ inv() { # <kind> <hook>
 }
 tn4_expired() { inv expired "$1"; }
 tn4_unknown() { inv unknown "$1"; }
-tn4_notcommit() { inv notcommit "$1"; }
 tn4_rest() { local k; for k in $INVALID_KINDS; do inv "$k" "$1" || { echo "invalid-file kind failed: $k" >&2; return 1; }; done; }
 
 # ---- T-N4b: hostile ids, env-only gate path, odd plugin path, vanished file.
@@ -313,21 +331,13 @@ tg1_key() { # <hook> <key>: with the sentinel configured in the worker's repo, t
 # core.pager was dropped: git only starts a pager on a tty, so no unisolated control can fire it here.
 TG1_KEYS="fsmonitor hooksPath editor sshCommand diffexternal credential gpg includefsmonitor smudge"
 tg1_all() { local k rc; for k in $TG1_KEYS; do tg1_key "$1" "$k"; rc=$?; [ "$rc" = 0 ] || { echo "tg1 key failed ($rc): $k" >&2; return 1; }; done; }
-tg2() { # GIT_DIR/GIT_WORK_TREE point at a decoy repo that has the base; the real repo does not
-  fresh tg2; arm_case; violate
-  local D="$CASE_DIR/decoy"; mkdir -p "$D"; ( cd "$D" && git init -q && echo d >d.txt && GIT add -A && GIT commit -qm decoy ) >/dev/null 2>&1
-  local dbase; dbase="$(git -C "$D" rev-parse HEAD)"
-  node -e 'const fs=require("fs");const f=process.argv[1];const g=JSON.parse(fs.readFileSync(f,"utf8"));g.base=process.argv[2];fs.writeFileSync(f,JSON.stringify(g))' "$CASE_GD/s1.gate.json" "$dbase"
-  STOP_OUT="$(printf '{"session_id":"s1","cwd":"%s","stop_hook_active":false}' "$CASE_REPO" | env GIT_DIR="$D/.git" GIT_WORK_TREE="$D" HOME="$HOOK_HOME" node "$1" 2>/dev/null)"
-  [ -z "$STOP_OUT" ] && [ "$(log_count)" = 0 ]
-}
-# T-G3: the isolation literals are identical in gate-verify.js, the hook and the arm script.
+# T-G3: the isolation literals are identical in gate-verify.js and the arm script (the hook makes no git call of its own).
 tg3() {
   node -e '
     const fs = require("fs"); const srcs = process.argv.slice(1).map((f) => fs.readFileSync(f, "utf8"));
     const lits = ["\x27-c\x27, \x27core.fsmonitor=false\x27, \x27-c\x27, \x27core.hooksPath=/dev/null\x27, \x27-c\x27, \x27core.excludesFile=/dev/null\x27",
       "!k.startsWith(\x27GIT_\x27)", "env.GIT_OPTIONAL_LOCKS = \x270\x27", "env.GIT_NO_REPLACE_OBJECTS = \x271\x27"];
-    process.exit(srcs.every((s) => lits.every((l) => s.includes(l))) ? 0 : 1);' "$GV" "$1" "$ARM"
+    process.exit(srcs.every((s) => lits.every((l) => s.includes(l))) ? 0 : 1);' "$GV" "$ARM"
 }
 
 run_nc() { # <label> <fn> <mutant-name> <sed-expr>
@@ -352,7 +362,10 @@ run_nc TN3-git tn3_cost gitfirst "s#const sid = payload.session_id;#spawnSync('g
 run_nc TN3-veto tn3_veto_ignores_file noveto2 "s#const armingAllowed = gate.session_arming !== false;#const armingAllowed = true;#"
 run_nc TN4-expired tn4_expired noexpiry "s#exp <= Date.now()#false#"
 run_nc TN4-unknown tn4_unknown nounknown "s#if (keys.length !== GATE_KEYS.length || !keys.every((k) => GATE_KEYS.includes(k))) return null;##"
-run_nc TN4-notcommit tn4_notcommit nobasecheck "s#if (!baseIsCommit(repoReal, g.base)) return null;##"
+OLDCHECK="s#if (fs.realpathSync(g.repo) !== repoReal) return null;#if (fs.realpathSync(g.repo) !== repoReal) return null; if (require('child_process').spawnSync('git', ['cat-file', '-e', g.base + '^{commit}'], { cwd: repoReal, stdio: 'ignore' }).status !== 0) return null;#"
+run_nc TN2n tn2_nogit oldsilent "$OLDCHECK"
+run_nc TN2o tn2_basegone oldsilent2 "$OLDCHECK"
+holds TN2p tn2_otherrepo
 holds TN4-all tn4_rest
 run_nc TN4b-ids tn4b_ids noidcheck "s#if (typeof sid !== 'string' || !ID_RE.test(sid)) return null;##"
 run_nc TN4b-shell tn4b_shell_path shellpath 's#shq(GATE_VERIFY)}` : gate.verifier;#shq(GATE_VERIFY)} --gate-file ${armed.file}` : gate.verifier;#'
@@ -360,8 +373,9 @@ holds TN4b-plugin-path tn4b_plugin_path
 holds TN4b-vanish tn4b_vanish
 run_nc TN5 tn5_subagent_blocks nosubkey "s#const file = path.join(liveBase(), HOOK_STEM, \`\${key}.gate.json\`);#const file = path.join(liveBase(), HOOK_STEM, \`\${sid}.gate.json\`);#"
 run_nc TN5-silent tn5_silent noeventgate "s#if (isSub) return; // SubagentStop without its own gate file: not ours, leave no trace##"
-run_nc TG2 tg2 keepgitenv "s#if (!k.startsWith('GIT_')) env\[k\]#env[k]#"
-run_nc TG3 tg3 driftflag "s#core.hooksPath=/dev/null#core.hooksPath=/tmp#"
+if tg3; then assert_eq 0 0 "TG3 holds"; else fail "TG3 drift between gate-verify.js and the arm script"; fi
+cp "$ARM" "$TEST_TMP/arm-drift.js"; sed -i 's#core.hooksPath=/dev/null#core.hooksPath=/tmp#' "$TEST_TMP/arm-drift.js"
+ARM_SAVE="$ARM"; ARM="$TEST_TMP/arm-drift.js"; if tg3; then fail "TG3 negative control: drift not seen"; else assert_eq 0 0 "TG3 red on a drifted copy"; fi; ARM="$ARM_SAVE"
 holds TG1 tg1_all
 
 # T-N6 scans the real tree; its negative control is a fake tree that mentions the flag.

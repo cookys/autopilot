@@ -352,27 +352,14 @@ function renderRetry(json, mode) {
 
 // ------------------------------------------------------------------ worker-bound gate file
 
-// Same isolation as scripts/gate-verify.js git(): nothing in the worker's .git/config may run code.
-// Duplicated on purpose (gate-verify.test.js pins the literals there); hooks/tests/per-turn-gate-arming.test.sh
-// compares the two sources.
-function isolatedGitEnv() {
-  const env = {};
-  for (const k of Object.keys(process.env)) if (!k.startsWith('GIT_')) env[k] = process.env[k];
-  env.GIT_OPTIONAL_LOCKS = '0';
-  env.GIT_NO_REPLACE_OBJECTS = '1';
-  return env;
-}
-
-function baseIsCommit(repo, base) {
-  try {
-    const r = spawnSync('git', ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.excludesFile=/dev/null',
-      'cat-file', '-e', `${base}^{commit}`], { cwd: repo, env: isolatedGitEnv(), stdio: 'ignore', timeout: 5000 });
-    return !r.error && r.status === 0;
-  } catch (_e) {
-    return false;
-  }
-}
-
+// Two kinds of "not usable", kept apart on purpose (BL-0306, owner choice B):
+//  - the gate file itself is invalid, or it is not this worker's (other session/agent id, repo that is not
+//    this cwd, expired): not ours, ignored silently, run exactly as without a file.
+//  - the file is valid and ours (right session, repo equals this cwd) but the check cannot run: base is
+//    gone, or .git was moved or damaged. That is a verification error, not "no gate": a worker could
+//    otherwise switch the gate off by deleting .git. So the file arms the gate, gate-verify.js exits 2
+//    and the hook blocks with reason `error`, counted in the same max_blocks.
+// The hook therefore makes no git call of its own; every git read happens in gate-verify.js (isolated).
 const isPlain = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 
 let liveBaseCache = null;
@@ -384,7 +371,7 @@ function liveBase() {
 /**
  * Find a valid gate file for this payload. Returns {file, source, key, session, mode, maxBlocks} or null.
  * Creates nothing. Every failure (bad id, no file, unreadable, malformed, expired, unknown or missing field,
- * repo mismatch, base not a commit) means "no gate file": the caller then runs exactly as without one.
+ * repo mismatch) means "no gate file": the caller then runs exactly as without one.
  * Whether `rules` passes the verifier's schema is NOT judged here: an invalid list is gate-verify exit 2.
  */
 function findArmed(payload, isSub) {
@@ -414,7 +401,6 @@ function findArmed(payload, isSub) {
     const cwd = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd();
     const repoReal = fs.realpathSync(cwd);
     if (fs.realpathSync(g.repo) !== repoReal) return null;
-    if (!baseIsCommit(repoReal, g.base)) return null;
     return { file, source: isSub ? 'subagent' : 'session', key, session: sid, mode: g.mode, maxBlocks: g.max_blocks };
   } catch (_e) {
     return null;

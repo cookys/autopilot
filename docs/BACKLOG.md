@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0325 -->
+<!-- next-id: BL-0327 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1188,19 +1188,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-10-25 pre-push suite runs at 670b3ffaf and 1d38cfefb
 - **Pointer**: docs/backlog/bash-launch-guard-timing-assertion-load.md
 
-### depth-0 per-turn gate: P2 wiring, P3 evaluation, P4 guidance still to do
+### depth-0 per-turn gate: P3 evaluation and P4 guidance still to do
 - **Id**: BL-0306
 - **Status**: open
 - **Since**: 2026-10-26
 - **Origin**: owner
-- **Problem**: 計畫要讓 depth-0 依任務決定要不要替工人開啟每回合驗證。P0 付費探測（0.0433 美元）與 P1 驗證腳本（尚未接線）已完成，P2 接線、P3 開關評測與 P4 指引都還沒做。
-- **Impact**: 沒做完就沒有人能在派工時替單一任務開驗證，預設仍維持關閉。
-- **Trigger**: P2 (hook wiring) can start now; P3 needs P2, P4 only on a P3 PASS
+- **Problem**: 計畫要讓 depth-0 依任務決定要不要替工人開啟每回合驗證。P0 探測、P1 驗證腳本、P2 接線都已完成並合併，還沒做的是 P3 開關評測與 P4 指引。
+- **Impact**: 沒做完評測就不知道這功能值不值得預設推廣，預設仍維持關閉。
+- **Trigger**: P3 ON/OFF evaluation can start now (cap 20 USD approved); P4 only on a P3 PASS
 - **Trigger-Type**: ready
 - **Effort**: L
-- **Source**: owner d-32849d39 (A, default off) and d-6f6b706f (A: P0 cap 1 USD, P3 cap 20 USD); plan merged 4ebcb428b; P1 merged ae44b5a0a
+- **Source**: owner d-32849d39 (A, default off), d-6f6b706f (A: P0 cap 1 USD, P3 cap 20 USD), d-b3bc7aef (BL-0318 option B); plan merged 4ebcb428b
 - **Pointer**: docs/backlog/depth0-per-turn-gate-status.md
-- **Context**: P1 shipped ae44b5a0a (not wired); P0 evidence bfde42aa1; P3 runs without asking again once acceptance passes; follow-on of BL-0055; P2 questions BL-0318, BL-0319. Detail at Pointer.
+- **Context**: P1 ae44b5a0a; P2 merges 7230a7f6e, b60ab831a; owner said run P3 right after acceptance passes; follow-on of BL-0055. Detail at Pointer.
 
 ### dev-setup --harness agy --install fails validation on agy 1.4.7
 - **Id**: BL-0308
@@ -1331,34 +1331,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/fbatch-v3-journal-indirect-evidence.md
 - **Context**: Direct evidence needs the runner to keep the journal file before the cell repo is cleaned.
 
-### depth-0 gate P2: exit 2 is turned into allow, and a worker can cause exit 2
-- **Id**: BL-0318
-- **Status**: open
-- **Since**: 2026-10-27
-- **Origin**: self
-- **Problem**: 計畫規定接線的 hook 把驗證腳本的錯誤結束碼 2 轉成放行加錯誤訊息，但工人可以刻意製造這種錯誤來換取放行。接線時要決定錯誤是否給 owner 看、重複錯誤是否改為擋下、哪些原因工人能觸發。
-- **Impact**: 不決定就接線，工人可用製造錯誤的方式繞過每回合驗證。
-- **Trigger**: P2 hook wiring of the depth-0 per-turn gate starts
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: d0gp1 fourth-generation review and acceptance, 2026-10-27 (self)
-- **Pointer**: docs/backlog/depth0-gate-p2-wiring-open-questions.md
-- **Context**: Plan section 3.2; follow-on of BL-0306.
-
-### depth-0 gate P2: git calls in the hook may still read the worker's .git/config
-- **Id**: BL-0319
-- **Status**: open
-- **Since**: 2026-10-27
-- **Origin**: self
-- **Problem**: 驗證腳本已不讀工人的索引、忽略檔與設定來判斷變更，但工人仍擁有自己的 git 設定檔。接線時要確認 hook 情境下是否還有其他 git 呼叫會受這份設定影響。
-- **Impact**: 漏查的話，工人可改自己的 git 設定來影響驗證結果。
-- **Trigger**: P2 hook wiring of the depth-0 per-turn gate starts
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: d0gp1 fourth-generation review and acceptance, 2026-10-27 (self)
-- **Pointer**: docs/backlog/depth0-gate-p2-wiring-open-questions.md
-- **Context**: gate-verify runs git with core.fsmonitor=false, core.hooksPath and core.excludesFile set to off; follow-on of BL-0306.
-
 ### The library path openDecision() skips the --not-authorized and DOA checks
 - **Id**: BL-0320
 - **Status**: open
@@ -1412,3 +1384,31 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: bltidy20 handoff list 2026-10-28 (self)
 - **Pointer**: docs/backlog/grok-loads-fleet-under-session-tree.md
+
+### Other Stop hooks run git on the worker tree and read its own .git/config
+- **Id**: BL-0325
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: self
+- **Problem**: 每回合驗證已改成不讀工人自己的 git 設定檔，但其他在結束時執行的鉤子仍直接對工人的工作目錄跑 git，工人若改了自己的 git 設定，這些鉤子看到的結果可能被影響。
+- **Impact**: 工人可藉改自己的 git 設定，讓這些鉤子漏報或誤報；目前只是風險，尚未見實際被利用。
+- **Trigger**: next change to a Stop or SubagentStop hook that runs git, or a worker seen editing its own git config
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: BL-0319 closeout, 2026-10-29 (self)
+- **Pointer**: docs/backlog/stop-hooks-git-isolation.md
+- **Context**: Same class as the closed BL-0319; per-turn-gate is handled, the hooks listed at Pointer are not. Follow-on of BL-0306.
+
+### Per-turn gate P2 known limits to settle in P3 design
+- **Id**: BL-0326
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: self
+- **Problem**: 每回合驗證的接線版有幾個已知限制：工人換到子目錄時可能不生效、前景原生子代理無法使用、與另一個外殼同時觸發時工人只剩一次修正機會、紀錄檔名格式讀取端要配合、兩個 git 設定項未被擋。
+- **Impact**: 不處理的話，評測結果可能被這些限制扭曲，或有工人繞過驗證的縫。
+- **Trigger**: P3 design starts, or the next change to the per-turn gate hook
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: d0gp2 P2 merge review, 2026-10-29 (self)
+- **Pointer**: docs/backlog/depth0-per-turn-gate-status.md
+- **Context**: Five limits listed at Pointer under Known limits of P2. Follow-on of BL-0306.

@@ -211,9 +211,27 @@ tn3_symlink() {
 # Global off, no gate file, AUTOPILOT_LIVE_DIR names a path that does not exist: the run changes nothing on
 # disk (resolveLiveDir() would create the directory, so the hook must not reach it).
 tn3_missing_live() {
-  fresh tn3m; local nope="$CASE_DIR/nope/live"; export AUTOPILOT_LIVE_DIR="$nope"
+  fresh tn3m; local saved="$AUTOPILOT_LIVE_DIR" nope="$CASE_DIR/nope/live" rc=0; export AUTOPILOT_LIVE_DIR="$nope"
   stop "$1" false
-  [ -z "$STOP_OUT" ] && [ ! -e "$CASE_DIR/nope" ]
+  { [ -z "$STOP_OUT" ] && [ ! -e "$CASE_DIR/nope" ]; } || rc=1
+  export AUTOPILOT_LIVE_DIR="$saved"
+  return $rc
+}
+# The ids are checked before anything is stat'ed: a fs.statSync wrapper (node --require) logs every stat of a
+# per-turn-gate path; hostile ids must produce none, a valid id at least one (so the wrapper is known to work).
+cat >"$TEST_TMP/statlog.js" <<'JS'
+const fs = require('fs'); const orig = fs.statSync;
+fs.statSync = function (p, ...a) { try { if (String(p).endsWith('per-turn-gate')) fs.appendFileSync(process.env.PTG_STAT_LOG, `${p}\n`); } catch (_e) { /* nothing */ } return orig.call(this, p, ...a); };
+JS
+tn3_id_before_stat() {
+  fresh tn3i; arm_case; export PTG_STAT_LOG="$CASE_DIR/stats"; : >"$PTG_STAT_LOG"
+  local id
+  for id in "a b" "a;b" "a..b" "$(printf 'a%.0s' $(seq 1 129))"; do
+    printf '{"session_id":"%s","cwd":"%s","stop_hook_active":false}' "$id" "$CASE_REPO" | env NODE_OPTIONS="--require=$TEST_TMP/statlog.js" HOME="$HOOK_HOME" node "$1" >/dev/null 2>&1
+  done
+  [ ! -s "$PTG_STAT_LOG" ] || return 1
+  printf '{"session_id":"s1","cwd":"%s","stop_hook_active":false}' "$CASE_REPO" | env NODE_OPTIONS="--require=$TEST_TMP/statlog.js" HOME="$HOOK_HOME" node "$1" >/dev/null 2>&1
+  [ -s "$PTG_STAT_LOG" ]
 }
 
 # ---- T-N4: every invalid gate file behaves exactly like no file (global on: same record, no source;
@@ -400,8 +418,9 @@ if tg3; then assert_eq 0 0 "TG3 holds"; else fail "TG3 drift between gate-verify
 cp "$ARM" "$TEST_TMP/arm-drift.js"; sed -i 's#core.hooksPath=/dev/null#core.hooksPath=/tmp#' "$TEST_TMP/arm-drift.js"
 ARM_SAVE="$ARM"; ARM="$TEST_TMP/arm-drift.js"; if tg3; then fail "TG3 negative control: drift not seen"; else assert_eq 0 0 "TG3 red on a drifted copy"; fi; ARM="$ARM_SAVE"
 holds TG1 tg1_all
-holds TN3-symlink tn3_symlink
-holds TN3-missing-live tn3_missing_live
+run_nc TN3-missing-live tn3_missing_live nogatecheck "s#if (!gateDirMayExist()) return null;##"
+run_nc TN3-symlink tn3_symlink stringrepo "s#if (fs.realpathSync(g.repo) !== repoReal) return null;#if (g.repo !== cwd) return null;#"
+run_nc TN3-id-order tn3_id_before_stat statfirst "s#const sid = payload.session_id;#if (!gateDirMayExist()) return null; const sid = payload.session_id;#"
 
 # T-N6 scans the real tree; its negative control is a fake tree that mentions the flag.
 if tn6 "$REPO_ROOT"; then assert_eq 0 0 "TN6 no depth-0 text mentions the arm flag"; else fail "TN6 a skill or agent mentions --gate-rules or per-turn-gate-arm"; fi

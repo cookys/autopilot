@@ -77,7 +77,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { isEnabled } = require('./_shared/opt-in.js');
 const { configPath } = require('../scripts/lib/config-path.js');
-const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
+const { resolveLiveDir, liveDirCandidates, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
 
 const HOOK_STEM = 'per-turn-gate';
 const ID_RE = /^[A-Za-z0-9-]{1,128}$/;
@@ -379,26 +379,17 @@ function liveBase() {
  * a run without a gate file must change nothing on disk, so the lookup first asks, without creating
  * anything, whether any <base>/per-turn-gate directory exists where the arm script could have written
  * (arm creates it). The override is the only candidate when AUTOPILOT_LIVE_DIR is set; otherwise the same
- * candidates resolveLiveDir() tries. None exists: no gate file, silent return.
+ * candidates resolveLiveDir() tries (liveDirCandidates, one list in scripts/lib/live-state-dir.js). None
+ * exists: no gate file, silent return. Called only after both ids passed the id check: a hostile id is never stat'ed.
  */
 function gateDirMayExist() {
-  const dirs = [];
-  const ov = process.env.AUTOPILOT_LIVE_DIR;
-  if (typeof ov === 'string' && ov !== '') dirs.push(path.resolve(ov));
-  else {
-    const uid = typeof process.getuid === 'function' ? process.getuid() : 0;
-    if (process.env.XDG_RUNTIME_DIR) dirs.push(path.join(process.env.XDG_RUNTIME_DIR, 'autopilot'));
-    dirs.push(path.join('/run/user', String(uid), 'autopilot'), path.join('/dev/shm', `autopilot-${uid}`),
-      path.join('/tmp', `autopilot-${uid}`), path.join(require('os').homedir(), '.autopilot'));
-  }
-  return dirs.some((d) => {
-    try { return fs.statSync(path.join(d, HOOK_STEM)).isDirectory(); } catch (_e) { return false; }
+  return liveDirCandidates().some((d) => {
+    try { return fs.statSync(path.join(path.resolve(d), HOOK_STEM)).isDirectory(); } catch (_e) { return false; }
   });
 }
 
 function findArmed(payload, isSub) {
   try {
-    if (!gateDirMayExist()) return null;
     const sid = payload.session_id;
     if (typeof sid !== 'string' || !ID_RE.test(sid)) return null;
     let key = sid;
@@ -406,6 +397,7 @@ function findArmed(payload, isSub) {
       if (typeof payload.agent_id !== 'string' || !ID_RE.test(payload.agent_id)) return null;
       key = `${sid}.${payload.agent_id}`;
     }
+    if (!gateDirMayExist()) return null;
     const file = path.join(liveBase(), HOOK_STEM, `${key}.gate.json`);
     const st = fs.lstatSync(file);
     if (!st.isFile() || st.size > 1024 * 1024) return null;

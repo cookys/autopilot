@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0321 -->
+<!-- next-id: BL-0322 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1372,3 +1372,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: doagate merge 4a34aa3a0 and depth-0 ruling 2026-10-28 (self)
 - **Pointer**: docs/backlog/open-decision-library-path-unchecked.md
 - **Context**: Depth-0 ruling on doagate deliberately did not add the check to the library path; first inventory what boundary each of the three callers' cards belongs to, then decide whether to add it. Follow-on of BL-0309.
+
+### Decision cards get opened with no options the owner can press
+- **Id**: BL-0321
+- **Status**: open
+- **Since**: 2026-10-28
+- **Origin**: peer
+- **Reporter**: hangar--claude
+- **Report**: 2026-10-28 fleet
+- **Reply**: 2026-10-28 fleet
+- **Problem**: 代理人開待決卡時常只寫問題、不給選項，owner 在面板上沒有東西可按；session 壓縮後，記得的開卡提示只剩一行、沒提選項，而開卡指令對零個選項也不報錯。
+- **Impact**: owner 得改用打字回覆，面板形同虛設；hangar 已連兩張卡這樣，owner 反映不是第一次。
+- **Trigger**: lane dcopt merges (fix already dispatched)
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED hangar (hangar--claude) 2026-10-28
+- **Pointer**: docs/backlog/decision-cards-opened-without-options.md
+- **Context**: Fix runs in lane dcopt in parallel; this row only records the report. Two root causes and the peer's two requests are in the sidecar.

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0322 -->
+<!-- next-id: BL-0325 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1389,3 +1389,42 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED hangar (hangar--claude) 2026-10-28
 - **Pointer**: docs/backlog/decision-cards-opened-without-options.md
 - **Context**: Fix runs in lane dcopt in parallel; this row only records the report. Two root causes and the peer's two requests are in the sidecar.
+
+### A review seat that fails once voids the whole generation
+- **Id**: BL-0322
+- **Status**: open
+- **Since**: 2026-10-28
+- **Origin**: self
+- **Problem**: 四席審查中只要有一席失敗（例如被閒置上限砍掉），整代審查就作廢，必須人工把同一席重派才能繼續；同席重派通常就成功。
+- **Impact**: 每次單席故障都多等一輪並要人介入，審查變慢。
+- **Trigger**: next review generation voided by a single seat fault, or the next edit to the review collector
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: bltidy20 handoff list 2026-10-28; idle cap shipped ae247356e, paid-batch auth stop shipped 8183aaaf2
+- **Pointer**: docs/backlog/review-seat-fault-no-auto-redispatch.md
+
+### The severity table edit in code-review was never measured
+- **Id**: BL-0323
+- **Status**: open
+- **Since**: 2026-10-28
+- **Origin**: self
+- **Problem**: 審查指引的嚴重度表原本與批次指引互相矛盾，後來改字面消除了矛盾，但這處改動沒有跑過開關對照評測。
+- **Impact**: 指引改動沒有成績單；單一工作線的行為是否真的沒變，也沒量過。
+- **Trigger**: next eval round on quality-pipeline guidance, or the owner deciding to accept the edit as a wording fix
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: bltidy20 handoff list 2026-10-28; edit in 33224ad72
+- **Pointer**: docs/backlog/code-review-tier-table-edit-not-evaluated.md
+
+### Find out which rail starts grok with the fleet server loaded
+- **Id**: BL-0324
+- **Status**: open
+- **Since**: 2026-10-28
+- **Origin**: self
+- **Problem**: 本 session 底下啟動的 grok 曾載入艦隊通訊服務；艦隊端已修，但我方哪條派工線起的 grok、有沒有把艦隊設定帶進去，還沒查。
+- **Impact**: 工作用引擎可能意外出現在艦隊名單，收到不該收的訊息。
+- **Trigger**: next time a worker engine shows up in the fleet directory, or the next edit to a grok launch rail
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: bltidy20 handoff list 2026-10-28 (self)
+- **Pointer**: docs/backlog/grok-loads-fleet-under-session-tree.md

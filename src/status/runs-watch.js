@@ -50,6 +50,7 @@ const { createQcPublisher } = require('./qc-fact');
 const { createLoadSourcePublisher, isolatedEnv } = require('./load-source');
 const { createReviewPublisher } = require('./review-input');
 const { createResiduePublisher } = require('./residue');
+const { cleanGitEnv } = require('./git-env');
 const { createStageWalkPublisher } = require('./stage-walk');
 const { createSpendHistoryPublisher } = require('./spend-history');
 const { createCodeFingerprint, pluginIdentity } = require('./code-fingerprint');
@@ -319,12 +320,18 @@ function createBrainSpendReader(env) {
   return { read };
 }
 
+// `git-common-dir:<main>/.git` -> `<main>`; null when the identity is absent or the repository is bare / non-standard (callers fall back to cwd).
+function stableRepoRoot(identity) {
+  const m = typeof identity === 'string' ? /^git-common-dir:(.+)$/.exec(identity) : null;
+  return m && path.basename(m[1]) === '.git' ? path.dirname(m[1]) : null;
+}
+
 // --- worktree -> project map -------------------------------------------------------------
 // `onFail(why)` (optional) receives how a failed listing failed: a timeout, a spawn error (e.g. ENOENT when the cwd is gone) or an exit code with stderr.
 function worktreePaths({ cwd, scope, onFail }) {
   const out = {};
   if (!scope.repo_identity) return out;
-  const r = spawnSync('git', ['worktree', 'list', '--porcelain'], { cwd, encoding: 'utf8', timeout: 10000 });
+  const r = spawnSync('git', ['worktree', 'list', '--porcelain'], { cwd, encoding: 'utf8', timeout: 10000, env: cleanGitEnv(process.env) });
   if (r.status !== 0) { // unknown: the caller keeps the previous map
     if (typeof onFail === 'function') {
       const tail = r.stderr ? `: ${String(r.stderr).trim().split('\n')[0].slice(0, 200)}` : '';
@@ -388,6 +395,10 @@ function createWatcher({
   let scope = scopeFromCwd(cwd);
   if (scope.project_key !== key) scope = { repo_identity: null, project_key: key };
   let identity = scope.repo_identity;
+  // The directory the watcher's git calls run in: the MAIN checkout derived from the repo identity, not the cwd it was started in. A watcher
+  // started from a linked worktree (hooks/runs-watch-autostart.js used to pass that worktree) outlives it when the worktree is removed, and
+  // every `git worktree list` / residue scan from a vanished cwd then failed forever (BL-0329). The stable root going away is a real failure.
+  const repoDir = () => stableRepoRoot(identity) || cwd;
 
   const costs = createCostReader(env);
   const brainSpend = createBrainSpendReader(env);
@@ -397,7 +408,7 @@ function createWatcher({
   const qcFact = createQcPublisher({ ...sidecarArgs, repo: cwd }); // stage-graph P7c: <project_key>.qc.json
   const loadSourceSidecar = createLoadSourcePublisher({ live, env, repoDir: path.resolve(__dirname, '..', '..'), writeAtomic, log: (m) => log(m) }); // P7b: <live>/load-source.json
   const reviewSidecar = createReviewPublisher({ runsDir, key, live, env, getIdentity: () => identity, writeAtomic, log: (m) => log(m) }); // P7d: <project_key>.review.json
-  const residueSidecar = createResiduePublisher({ runsDir, key, repo: cwd, writeAtomic, log: (m) => log(m), now }); // P7 D3: <project_key>.residue.json (async scan, 60 s throttle)
+  const residueSidecar = createResiduePublisher({ runsDir, key, repo: () => repoDir(), writeAtomic, log: (m) => log(m), now }); // P7 D3: <project_key>.residue.json (async scan, 60 s throttle)
   const spendHistory = createSpendHistoryPublisher({ live, writeAtomic, log: (m) => log(m) }); // follow-up C: <live>/runs/spend-history.json (host-wide, one sample per 15 min, 48 h)
   const stageWalkSidecar = createStageWalkPublisher({ live, writeAtomic, log: (m) => log(m) }); // P7 D4: <live>/stage/<sid>.json
   const state = {
@@ -451,9 +462,9 @@ function createWatcher({
 
   function writePaths(force) {
     let why = null;
-    const map = worktreePaths({ cwd, scope, onFail: (w) => { why = w; } });
+    const map = worktreePaths({ cwd: repoDir(), scope, onFail: (w) => { why = w; } });
     if (map === null) {
-      if (why !== state.lastPathsWhy) log(`git worktree list failed in ${cwd} (${why}); keeping the previous paths file for ${key}`);
+      if (why !== state.lastPathsWhy) log(`git worktree list failed in ${repoDir()} (${why}); keeping the previous paths file for ${key}`);
       state.lastPathsWhy = why;
       return;
     }
@@ -486,7 +497,7 @@ function createWatcher({
     const cache = state.render.task.get(root);
     const { callTaskStatus } = require('../../scripts/render-review-page');
     let reason = null;
-    const res = callTaskStatus(root, cwd, env, { onFail: (r) => { reason = r; } });
+    const res = callTaskStatus(root, repoDir(), env, { onFail: (r) => { reason = r; } });
     if (!res) {
       if (!cache || !cache.failed) log(`render: ${reason || `status task unavailable for ${root}`}`);
       if (cache) { state.render.task.set(root, { ...cache, at: nowMs, failed: true }); return cache.digest; } // a transient failure must not flip the signature twice
@@ -1098,5 +1109,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, rotateWatcherLog, WATCHER_LOG_MAX_BYTES, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
+  lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
 };

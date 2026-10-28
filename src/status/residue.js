@@ -21,6 +21,7 @@
 // and one line is logged; the next attempt waits the throttle again. If the main worktree cannot be resolved the publish is skipped the same way
 // (scanning the supplied checkout instead would silently change what is counted).
 
+const { cleanGitEnv } = require('./git-env');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -120,7 +121,7 @@ function capture(bin, args, timeoutMs) {
     const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (_e) { /* gone */ } done(null, new Error('timeout')); }, timeoutMs);
     timer.unref();
     try {
-      child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], env: cleanGitEnv(process.env) });
     } catch (e) { done(null, e); return; }
     child.stdout.on('data', (d) => { if (out.length < MAX_OUT_BYTES) out += d; });
     child.stderr.on('data', (d) => { if (err.length < 4096) err += d; });
@@ -155,6 +156,7 @@ async function readAutoRecord(main) {
   try { return JSON.parse(fs.readFileSync(path.join(common, AUTO_FILE), 'utf8')); } catch (_e) { return null; }
 }
 
+// `repo` is a directory or a function returning one (the watcher passes a function: its repository root can change).
 function createResiduePublisher({ runsDir, key, repo, writeAtomic, log = () => {}, now = Date.now, sweep = SWEEP, nodeBin = process.execPath, throttleS = THROTTLE_S }) {
   const file = path.join(runsDir, `${key}.residue.json`);
   let lastStartMs = null;
@@ -177,9 +179,10 @@ function createResiduePublisher({ runsDir, key, repo, writeAtomic, log = () => {
     lastStartMs = nowMs;
     inflight = (async () => {
       try {
-        const { main, why } = await mainWorktreeOf(repo);
+        const repoDir = typeof repo === 'function' ? repo() : repo;
+        const { main, why } = await mainWorktreeOf(repoDir);
         if (main === null) {
-          if (why !== lastMainWhy) log(`residue: cannot resolve the main worktree (git -C ${repo} worktree list: ${why}); keeping the previous file`);
+          if (why !== lastMainWhy) log(`residue: cannot resolve the main worktree (git -C ${repoDir} worktree list: ${why}); keeping the previous file`);
           lastMainWhy = why;
           return false;
         }

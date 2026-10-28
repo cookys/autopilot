@@ -393,8 +393,10 @@ function run(payload) {
     if (w && w.state === 'stale') reapStale(w, scope.project_key);
   }
   if (isolated) return; // see above: never start a watcher on the shared live dir from an isolated environment
-  const { startWatcherDetached } = require(path.join(root, 'src/status/runs-watch'));
-  const opts = { key: scope.project_key, cwd: topLevel(cwd), env: process.env, render: true };
+  const { startWatcherDetached, stableRepoRoot } = require(path.join(root, 'src/status/runs-watch'));
+  // The watcher outlives the session: start it in the MAIN checkout, not in the linked worktree the session happens to be in (a removed
+  // worktree left it with a dead cwd and failing git calls, BL-0329). Not a standard layout (bare repo): the session's own top level.
+  const opts = { key: scope.project_key, cwd: stableRepoRoot(scope.repo_identity) || topLevel(cwd), env: process.env, render: true };
   // Optional tuning (tests use it to make the watcher idle-exit in seconds); defaults are the watcher's own.
   const idle = Number(process.env.AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S);
   const interval = Number(process.env.AUTOPILOT_RUNS_WATCH_INTERVAL_S);

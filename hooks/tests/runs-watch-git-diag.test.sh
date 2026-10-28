@@ -96,4 +96,39 @@ WOUT="$(HOME="$SB/home" AUTOPILOT_LIVE_DIR="$LIVE" AUTOPILOT_REVIEW_SERVER_AUTOS
 eq 1 "$(printf '%s\n' "$WOUT" | sed -n 's/^lines=//p')" "watcher: four ticks failing the same way log 'git worktree list failed' once"
 eq yes "$(printf '%s\n' "$WOUT" | sed -n 's/^first=//p' | grep -q 'error ENOENT' && echo yes || echo no)" "watcher: the line says why (error ENOENT: the cwd is gone)"
 
+# ---- residue SCAN failures: one line per reason, again when the reason changes, reset by a success (same publisher instance) --------------
+cat > "$SB/sweep.js" <<'JS'
+const fs = require('fs');
+const mode = fs.readFileSync(process.argv[1] + '.mode', 'utf8').trim();
+if (mode === 'ok') { process.stdout.write(JSON.stringify({ worktrees: [] })); process.exit(0); }
+process.stderr.write(`sweep ${mode}\n`); process.exit(mode === 'f1' ? 2 : 3);
+JS
+cat > "$SB/scan.js" <<'JS'
+const fs = require('fs'); const path = require('path');
+const [, , repoRoot, sb, repo, live] = process.argv;
+const { createResiduePublisher } = require(path.join(repoRoot, 'src/status/residue.js'));
+const out = (k, v) => process.stdout.write(`${k}=${v}\n`);
+const sweep = path.join(sb, 'sweep.js');
+const logs = [];
+const runsDir = path.join(live, 'runs2'); fs.mkdirSync(runsDir, { recursive: true });
+const pub = createResiduePublisher({ runsDir, key: 'k2', repo, writeAtomic: (f, t) => fs.writeFileSync(f, t), log: (m) => logs.push(m), now: () => 0, throttleS: 0, sweep });
+let n = 0;
+const step = async (mode) => { fs.writeFileSync(sweep + '.mode', mode); n += 1; await pub.publish({ nowMs: n }); return logs.filter((l) => /residue scan failed/.test(l)).length; };
+(async () => {
+  out('s1', await step('f1')); out('s2_same', await step('f1')); out('s3_same', await step('f1'));
+  out('s4_changed', await step('f2'));
+  out('s5_ok_adds_none', await step('ok')); out('file_written', fs.existsSync(pub.file) ? 'yes' : 'no');
+  out('s6_after_reset', await step('f2'));
+})();
+JS
+SCAN="$(HOME="$SB/home" "$NODE" "$SB/scan.js" "$REPO_ROOT" "$SB" "$REPO" "$LIVE" 2> "$SB/scan.err" < /dev/null)"
+sv() { printf '%s\n' "$SCAN" | sed -n "s/^$1=//p" | head -1; }
+eq 1 "$(sv s1)" "scan failure: first failure logs one line"
+eq 1 "$(sv s2_same)" "scan failure: the same reason again adds nothing"
+eq 1 "$(sv s3_same)" "scan failure: and again"
+eq 2 "$(sv s4_changed)" "scan failure: a changed reason (rc 3) logs once more"
+eq 2 "$(sv s5_ok_adds_none)" "scan success adds no failure line"
+eq yes "$(sv file_written)" "scan success writes the residue file"
+eq 3 "$(sv s6_after_reset)" "scan failure after a success logs again (the success reset the memory)"
+
 finalize_test

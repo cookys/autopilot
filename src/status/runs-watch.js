@@ -497,7 +497,7 @@ function createWatcher({
     const cache = state.render.task.get(root);
     const { callTaskStatus } = require('../../scripts/render-review-page');
     let reason = null;
-    const res = callTaskStatus(root, repoDir(), env, { onFail: (r) => { reason = r; } });
+    const res = callTaskStatus(root, repoDir(), cleanGitEnv(env), { onFail: (r) => { reason = r; } });
     if (!res) {
       if (!cache || !cache.failed) log(`render: ${reason || `status task unavailable for ${root}`}`);
       if (cache) { state.render.task.set(root, { ...cache, at: nowMs, failed: true }); return cache.digest; } // a transient failure must not flip the signature twice

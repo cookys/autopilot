@@ -113,4 +113,32 @@ eq yes "$([ -n "$WPID" ] && echo yes || echo no)" "autostart from a linked workt
 REAL_MAIN="$(realpath "$MAIN")"
 eq "$REAL_MAIN" "$(readlink "/proc/$WPID/cwd" 2> /dev/null)" "the watcher's cwd is the MAIN checkout, not the linked worktree"
 
+# ---- 5. the task-status poll gets the cleaned environment too (GIT_DIR from the hook must not reach it) ---------------------------------
+cat > "$SB/task-env-bin.sh" <<SH
+#!/bin/sh
+echo "\${GIT_DIR:-unset}" > "$SB/task-git-dir"
+exit 1
+SH
+chmod +x "$SB/task-env-bin.sh"
+cat > "$SB/tp.js" <<'JS'
+const fs = require('fs'); const path = require('path');
+const [, , repoRoot, main, sb] = process.argv;
+const { createWatcher } = require(path.join(repoRoot, 'src/status/runs-watch.js'));
+const { scopeFromCwd } = require(path.join(repoRoot, 'src/status/project-key.js'));
+const key = scopeFromCwd(main).project_key;
+const mf = path.join(sb, 'tp-manifest.json'); fs.writeFileSync(mf, JSON.stringify({ run_id: 'r1', root_run_id: 'RX', ledger: path.join(sb, 'tp-ledger.jsonl'), branch: 'x' })); fs.writeFileSync(path.join(sb, 'tp-ledger.jsonl'), '');
+const row = { run_id: 'r1', role: 'hand', runner: 'claude', model: 'sonnet', started_at: '2026-10-04T01:00:00.000Z', ended_at: '2026-10-04T01:09:00.000Z', parent_run_id: null, root_run_id: 'RX', depth: 1, manifest: mf,
+  project: scopeFromCwd(main).repo_identity, source: { manifest: mf, status_probe: null, exit_file: path.join(sb, 'tp.exit') }, fact_at: '2026-10-04T01:00:00.000Z', observed_at: '2026-10-04T01:00:00.000Z', probe_age_s: null, rc: 0, final_status: 'ok', elapsed_s: 5, alive: null, phase: 'exited' };
+let T = Date.parse('2026-10-04T03:00:00.000Z');
+const w = createWatcher({ key, env: process.env, cwd: main, collect: () => [row], now: () => T, interval: 10, render: { outRoot: path.join(sb, 'tp-out') } });
+w.start();
+process.env.GIT_DIR = '/nonexistent'; // set after construction, as an inherited hook environment would carry it
+w.tick();
+w.finalPublish('stopped');
+JS
+TPMAIN="$SB/main-tp"; mkrepo "$TPMAIN"
+rm -f "$SB/task-git-dir"
+wenv AUTOPILOT_RENDER_TASK_STATUS_BIN="$SB/task-env-bin.sh" "$NODE" "$SB/tp.js" "$REPO_ROOT" "$TPMAIN" "$SB" > /dev/null 2> "$SB/tp.err" < /dev/null
+eq unset "$(cat "$SB/task-git-dir" 2> /dev/null)" "task poll with GIT_DIR=/nonexistent in the watcher env: the task-status child sees no GIT_DIR"
+
 finalize_test

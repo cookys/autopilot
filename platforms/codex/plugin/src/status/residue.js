@@ -163,13 +163,20 @@ function createResiduePublisher({ runsDir, key, repo, writeAtomic, log = () => {
   let inflight = null; // Promise while a scan runs
   let lastMainWhy = null; // the last logged reason the main worktree could not be resolved: log again only when it changes
 
+  let lastScanWhy = null; // same for a scan that ran and failed: a repeating failure is one line, a changed reason is a new line, a success resets
+  function scanFailed(why) {
+    if (why !== lastScanWhy) log(`${why}; keeping the previous file`);
+    lastScanWhy = why;
+    return false;
+  }
+
   function finish(r, auto) {
-    if (r.error || r.code !== 0) { log(`residue scan failed (${failureWhy(r)}); keeping the previous file`); return false; }
+    if (r.error || r.code !== 0) return scanFailed(`residue scan failed (${failureWhy(r)})`);
     let report;
-    try { report = JSON.parse(r.out); } catch (e) { log(`residue scan output unparseable (${e.message}); keeping the previous file`); return false; }
-    if (!report || !Array.isArray(report.worktrees)) { log('residue scan output has no worktrees[]; keeping the previous file'); return false; }
+    try { report = JSON.parse(r.out); } catch (e) { return scanFailed(`residue scan output unparseable (${e.message})`); }
+    if (!report || !Array.isArray(report.worktrees)) return scanFailed('residue scan output has no worktrees[]');
     if (!fs.existsSync(runsDir)) return false; // the live dir vanished while the scan ran (teardown): do not recreate it
-    try { writeAtomic(file, `${JSON.stringify(buildResidueFact({ key, report, atMs: now(), auto }), null, 2)}\n`); return true; } catch (e) { log(`residue write failed: ${e.message}`); return false; }
+    try { writeAtomic(file, `${JSON.stringify(buildResidueFact({ key, report, atMs: now(), auto }), null, 2)}\n`); lastScanWhy = null; return true; } catch (e) { return scanFailed(`residue write failed: ${e.message}`); }
   }
 
   // Returns the in-flight Promise when a scan was started (tests await it), else null. Never throws, never blocks.

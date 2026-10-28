@@ -58,7 +58,7 @@ ID2=$(odo open --not-authorized irreversible --free-text --question 'Q two?' --r
 eq "Q one?,Q two?" "$(jf "$F1" 'v.decisions.map((d)=>d.question).join(",")')" "both questions are in the one file; the first is untouched"
 eq 'null|null|null|null|"irreversible"' "$(jf "$F1" 'const d=v.decisions[1];[d.options,d.background,d.recommendation,d.why,d.not_authorized].map((x)=>JSON.stringify(x)).join("|")')" "an entry with only --question stores the rest as null (not_authorized is the required boundary)"
 odo open --not-authorized irreversible --question 'Q3' --option only-one --root-run-id R1 > /dev/null; eq 2 "$?" "a single --option is a usage error (exit 2)"
-odo open --not-authorized irreversible --root-run-id R1 > /dev/null; eq 2 "$?" "open without --question is a usage error"
+odo open --not-authorized irreversible --free-text --root-run-id R1 > /dev/null; eq 2 "$?" "open without --question is a usage error"
 odo open --not-authorized irreversible --free-text --question 'Q4' --replace --root-run-id R1 > /dev/null; eq 2 "$?" "the removed --replace flag is refused (no compat shim)"
 eq 2 "$(jf "$F1" 'v.decisions.length')" "usage errors left the file untouched"
 odo show --root-run-id R1 --json > "$SB/show.out"; eq 0 "$?" "show --json exits 0 when questions are open"

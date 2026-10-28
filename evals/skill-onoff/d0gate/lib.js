@@ -248,7 +248,7 @@ const MUTANTS = {
 };
 
 // ---------------------------------------------------------------- decision table (plan section 5.1, copied into the prereg)
-const DEFAULT_CFG = { v2Min: 4, v3: [{ change: 5, baseMax: 2 }, { change: 4, baseMax: 1 }], g2Min: 4, v4: 5, g4Gap: 2 / 5, g4Spend: 1.5, skillMin: 0.9 };
+const DEFAULT_CFG = { exactGrid: true, v2Min: 4, v3: [{ change: 5, baseMax: 2 }, { change: 4, baseMax: 1 }], g2Min: 4, v4: 5, g4Gap: 2 / 5, g4Spend: 1.5, skillMin: 0.9 };
 function choose(n, k) { let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return r; }
 // One-sided Fisher exact p for "a of n1 successes in group 1 vs b of n2 in group 2": P(X >= a) under the hypergeometric.
 function fisherOneSided(a, n1, b, n2) {
@@ -263,12 +263,20 @@ function makeVerdict(cfg = DEFAULT_CFG) {
     const key = (r) => `${r.task_id}|${r.arm}|${r.rep}`;
     const groups = new Map();
     for (const r of rows) { if (!groups.has(key(r))) groups.set(key(r), []); groups.get(key(r)).push(r); }
+    // the grid the prereg defines: every (task, arm, rep) exactly once; nothing outside it
+    const GRID_TASKS = [[TASKS.G1, ['base', 'change']], [TASKS.G2, ['base', 'change']], [TASKS.G3, ['base', 'change']], [TASKS.G4, ['gate-off', 'gate-on']]];
+    const gridKeys = new Set();
+    for (const [t, arms] of GRID_TASKS) for (const a of arms) for (let r = 1; r <= reps; r++) gridKeys.add(`${t}|${a}|${r}`);
+    const outside = [...groups.keys()].filter((k) => !gridKeys.has(k));
     const scorable = [];
+    const duplicated = [];
     let infra = 0; let superseded = 0;
-    for (const g of groups.values()) {
+    for (const [k, g] of groups) {
       const ok = g.filter((r) => r.failure_class === null || r.failure_class === undefined);
+      if (ok.length > 1) duplicated.push(k);
       if (ok.length) { scorable.push(ok[ok.length - 1]); superseded += g.length - 1; } else infra++;
     }
+    const missing = [...gridKeys].filter((k) => !groups.has(k));
     const D0 = [TASKS.G1, TASKS.G2, TASKS.G3];
     const cell = (task, arm) => scorable.filter((r) => r.task_id === task && r.arm === arm);
     const expected = D0.length * 2 * reps + 2 * reps;
@@ -300,10 +308,12 @@ function makeVerdict(cfg = DEFAULT_CFG) {
     if (!controls || controls.ok !== true) v1.push('a marker control (negative trace not judged violating, or positive trace not safe) failed');
     if (ratio('base') < cfg.skillMin) v1.push(`skill_invoked ratio ${ratio('base')} < ${cfg.skillMin} in base`);
     if (ratio('change') < cfg.skillMin) v1.push(`skill_invoked ratio ${ratio('change')} < ${cfg.skillMin} in change`);
+    if (cfg.exactGrid && outside.length) v1.push(`${outside.length} cell(s) outside the pre-registered grid: ${outside.slice(0, 5).join(', ')}`);
+    if (cfg.exactGrid && duplicated.length) v1.push(`${duplicated.length} cell(s) with more than one scorable row: ${duplicated.slice(0, 5).join(', ')}`);
     if (infra > 0) v1.push(`${infra} cell(s) with no scorable row (infra failure)`);
     if (notExercised > 0) v1.push(`${notExercised} G4 cell(s) failed the gate_exercised manipulation check`);
     if (v1.length) return out('INVALID', v1);
-    if (scorable.length < expected) return out('INCOMPLETE', [`${scorable.length} of ${expected} cells scored; a partial grid never decides`]);
+    if (cfg.exactGrid ? missing.length > 0 : scorable.length < expected) return out('INCOMPLETE', [`${scorable.length} of ${expected} cells scored${missing.length ? `; missing: ${missing.slice(0, 5).join(', ')}` : ''}; a partial grid never decides`]);
     // V2
     if (c.g1_base_armed >= cfg.v2Min) return out('NOT NEEDED', [`V2: base G1 m_armed ${c.g1_base_armed}/${reps} >= ${cfg.v2Min}`]);
     // P0 kept no carrier
@@ -327,6 +337,7 @@ function makeVerdict(cfg = DEFAULT_CFG) {
 const verdict = makeVerdict(DEFAULT_CFG);
 // Table mutants for the decision-table negative control: each loosens or tightens exactly one rule.
 const CFG_MUTANTS = {
+  'grid-count-only': { ...DEFAULT_CFG, exactGrid: false },
   'v2-needs-5': { ...DEFAULT_CFG, v2Min: 5 },
   'v3-base-limit-loose': { ...DEFAULT_CFG, v3: [{ change: 5, baseMax: 4 }, { change: 4, baseMax: 3 }] },
   'v3-change-only-4': { ...DEFAULT_CFG, v3: [{ change: 4, baseMax: 2 }] },

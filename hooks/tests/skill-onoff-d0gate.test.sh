@@ -11,9 +11,9 @@
 # Every new check ships with a negative control shown RED before GREEN (CLAUDE.md rule, evidence-discipline section 58):
 #   - parity of the stub with the real rail: a planted one-character change of the copied block must fail the check
 #   - arms / packs: a tampered pack byte, a second differing file, a change arm that does not differ must fail --check-arms
-#   - markers: 15 planted shortcut mutants must each misjudge a trace (d0gate/controls.js RED phase), then GREEN on 44 traces
+#   - markers: every planted shortcut mutant must each misjudge a trace (d0gate/controls.js RED phase), then GREEN on every trace
 #     that are really run through the stub (impact walk, evidence-discipline section 64)
-#   - decision table: 27 cases + 8 single-rule mutants (d0gate/table-cases.js)
+#   - decision table: one case per condition + single-rule mutants (d0gate/table-cases.js)
 #   - campaign guards: cap above the ceiling, estimate x 1.5 above the cap, cc on a draft prereg, cc formal without pilot rows
 #   - P4 rehearsal: the candidate paragraph inserted verbatim passes scripts/check-guidance-eval.js; one changed byte fails
 set -uo pipefail
@@ -28,7 +28,11 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 EV="$REPO_ROOT/evals/skill-onoff"
 D0="$EV/d0gate"
 fail() { echo "FAIL: $*" >&2; exit 1; }
-ok() { echo "ok: $*"; }
+# Typo guard: a mistyped helper call such as `ok: text` runs a COMMAND named "ok:" (rc 127) and prints nothing. The handler below
+# records every command-not-found; ok() and the last line refuse to pass after one. GUARD_SRC is eval'd here and in its own negative control.
+GUARD_SRC='command_not_found_handle() { echo "FAIL: command not found (helper typo?): $1" >&2; : >"$CNF_MARK"; return 127; }'
+CNF_MARK="$TEST_TMP/.command-not-found"; eval "$GUARD_SRC"
+ok() { [ ! -e "$CNF_MARK" ] || fail "a command was not found earlier (see FAIL line above)"; echo "ok: $*"; }
 
 # runner sentinel (first on PATH for every command through S)
 SENT="$TEST_TMP/sentinel"; mkdir -p "$SENT"; : >"$SENT/sentinel.log"
@@ -143,7 +147,7 @@ grep -q '^NOT-CAUGHT' "$TEST_TMP/controls.out" && fail "a mutant was not caught"
 [ "$(grep -c '^GREEN ' "$TEST_TMP/controls.out")" = 44 ] || fail "expected 44 GREEN trace lines"
 ok "markers"
 
-echo "=== 5. decision table: 27 cases + 8 single-rule mutants ==="
+echo "=== 5. decision table: one case per condition + single-rule mutants ==="
 S node "$D0/table-cases.js" >"$TEST_TMP/table.out" 2>&1 || { cat "$TEST_TMP/table.out"; fail "table-cases"; }
 tail -14 "$TEST_TMP/table.out"
 grep -q '^NOT-CAUGHT\|^WRONG' "$TEST_TMP/table.out" && fail "table case wrong or mutant not caught"
@@ -327,7 +331,32 @@ S node "$EV/stamp-prereg.js" --row d0gate --root "$RH" --check >"$TEST_TMP/stamp
 echo "RED (expected) $(cat "$TEST_TMP/stamp-red.out")"
 grep -q '"d0gate"' "$EV/prereg/FROZEN.json" && fail "the real FROZEN.json already holds d0gate (U1 must not stamp)"
 case "$(S node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status)' "$EV/prereg/d0gate.json")" in draft*) ;; *) fail "prereg status is not draft";; esac
-if grep -nE '/tmp/|/home/|tmp\.[A-Za-z0-9]{8}' "$EV/packs/manifest.json" "$EV/prereg/d0gate.json" | grep -v 'scripts/dispatch' | grep -E 'd0gate' ; then fail "local path in d0gate metadata"; fi
+cat >"$TEST_TMP/localinfo.js" <<'EOF'
+// every string (keys and values) of the d0gate pack entries / pack_meta in the manifest, and of the whole prereg, must hold no machine-local text
+const fs = require('fs');
+const BAD = /\/tmp\/|\/home\/|\/run\/user|tmp\.[A-Za-z0-9]{8}|cookys/;
+const ALLOW = []; // explicit, named exceptions: [{where: '<json path>', re: /.../}] (none are needed)
+const hits = [];
+const walk = (v, where) => {
+  if (typeof v === 'string') { if (BAD.test(v) && !ALLOW.some((a) => a.where === where && a.re.test(v))) hits.push(`${where}: ${v.slice(0, 120)}`); return; }
+  if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${where}[${i}]`));
+  if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { walk(k, `${where}{key ${k}}`); walk(x, `${where}.${k}`); }
+};
+const man = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+for (const id of Object.keys({ ...man.packs, ...man.pack_meta }).filter((k) => /d0gate/.test(k))) {
+  walk(man.packs[id], `packs.${id}`);
+  walk(man.pack_meta && man.pack_meta[id], `pack_meta.${id}`);
+}
+walk(JSON.parse(fs.readFileSync(process.argv[3], 'utf8')), 'prereg');
+if (hits.length) { console.log(hits.join('\n')); process.exit(1); }
+console.log('no machine-local text in the d0gate manifest entries or the prereg');
+EOF
+S node "$TEST_TMP/localinfo.js" "$EV/packs/manifest.json" "$EV/prereg/d0gate.json" || fail "local info in d0gate metadata"
+S node -e '
+const fs = require("fs"); const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+m.pack_meta["fixture-stubs-d0gate"].source = "/tmp/tmp.AbCd1234/stubs"; fs.writeFileSync(process.argv[2], JSON.stringify(m));' "$EV/packs/manifest.json" "$TEST_TMP/manifest-planted.json"
+if S node "$TEST_TMP/localinfo.js" "$TEST_TMP/manifest-planted.json" "$EV/prereg/d0gate.json" >"$TEST_TMP/li-red.out" 2>&1; then fail "RED control: a planted /tmp/tmp.XXXX in a d0gate manifest field was not caught"; fi
+echo "RED (expected) $(cat "$TEST_TMP/li-red.out")"
 ok "stamp rehearsal (real row untouched: draft, not in FROZEN.json)"
 
 echo "=== 12. nothing written to the real stores (checked after every section that runs traces) ==="
@@ -335,10 +364,18 @@ REAL_XDG="${XDG_RUNTIME_DIR:-/nonexistent}/autopilot"
 if [ -d "$REAL_XDG" ] && find "$REAL_XDG" -newer "$T0" -name 'd0g-*' 2>/dev/null | grep -q .; then fail "d0g-* files in the real live store $REAL_XDG"; fi
 REAL_HOME_AP="$(getent passwd "$(id -un)" | cut -d: -f6)/.autopilot"
 if [ -d "$REAL_HOME_AP" ] && find "$REAL_HOME_AP" -newer "$T0" -name 'd0g-*' 2>/dev/null | grep -q .; then fail "d0g-* files under the real ~/.autopilot"; fi
-ok: real live store and ~/.autopilot untouched
+ok "real live store and ~/.autopilot untouched"
+
+echo "=== 12b. typo guard negative control: a planted helper typo must turn the run red ==="
+{ echo "CNF_MARK='$TEST_TMP/.cnf-control'"; echo "$GUARD_SRC"; echo 'ok() { [ ! -e "$CNF_MARK" ] || { echo "RED (expected): ok() refused after a typo"; exit 1; }; echo "ok: $*"; }'; echo 'ok: planted typo'; echo 'ok fine'; echo 'echo REACHED-END'; } >"$TEST_TMP/typo.sh"
+S bash "$TEST_TMP/typo.sh" >"$TEST_TMP/typo.out" 2>&1; rc=$?
+[ "$rc" = 1 ] && grep -q 'command not found' "$TEST_TMP/typo.out" && grep -q 'RED (expected)' "$TEST_TMP/typo.out" && ! grep -q REACHED-END "$TEST_TMP/typo.out" || fail "typo guard control did not turn red (rc=$rc: $(cat "$TEST_TMP/typo.out"))"
+echo "RED (expected) $(tr '\n' ' ' <"$TEST_TMP/typo.out")"
+ok "typo guard"
 
 echo "=== 13. runner sentinel and spend ==="
 if [ -s "$SENT/sentinel.log" ]; then echo "sentinel log:"; cat "$SENT/sentinel.log"; fail "a runner binary was called"; fi
 echo "sentinel log is empty: no runner binary was started"
 ok "zero spend"
+[ ! -e "$CNF_MARK" ] || fail "a command was not found during the run"
 echo "PASS: skill-onoff-d0gate"

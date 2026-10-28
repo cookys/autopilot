@@ -44,7 +44,7 @@ export D0GATE_CELL_BASE="$CB"
 T0="$TEST_TMP/t0"; touch "$T0"; sleep 1
 
 echo "=== 1. fixtures, packs, base sha ==="
-for f in lib.js cell.js traces.js controls.js table-cases.js; do [ -f "$D0/$f" ] || fail "missing d0gate/$f"; done
+for f in lib.js cell.js traces.js controls.js table-cases.js mutants/hook-mutant.js; do [ -f "$D0/$f" ] || fail "missing d0gate/$f"; done
 for f in run-d0gate-campaign.js score-d0gate.js prereg/d0gate.json arms/d0gate/base.json arms/d0gate/change.json candidates/depth0-gate-arming.md; do [ -f "$EV/$f" ] || fail "missing $f"; done
 S node -e '
 const L = require(process.argv[1]); const fs = require("fs"); const os = require("os"); const path = require("path");

@@ -1421,7 +1421,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: cookys/openclaw/fleet--claude
 - **Report**: 2026-10-29 fleet:01M628K0GA63KYQY11GERK89KW
 - **Reply**: 2026-10-29 fleet:01M628KJBMWHK5Y16QHJG2KV8B
-- **Problem**: 長時間只跑工具、沒有新訊息時，背景監看程式會自己結束，面板就一直顯示「無法取得」，直到下一則訊息；而且文案要人手動執行指令，一般使用者做不到也不該做。
+- **Problem**: 長時間只跑工具、沒有新訊息時，背景監看程式會自己結束，面板就一直顯示「無法取得」，直到下一則訊息；而且面板只叫人手動執行一行指令，沒說明原因，也沒說明下一則訊息會自動恢復，對一般使用者沒有幫助。
 - **Impact**: 長工作期間看不到進度面板，使用者以為系統壞了。
 - **Trigger**: work can start now; efficiency and experience fix
 - **Trigger-Type**: ready

@@ -111,6 +111,42 @@ eq "0" "$(git_calls)" "alive: zero git processes (fast path)"
 sleep 1
 eq "$FIRST_PID" "$(envelope_pid)" "alive: starts nothing (same writer.pid)"
 eq "1" "$(count_watchers)" "alive: still exactly one watcher"
+# --- 2b. the stamp is complete (pid + plugin identity), lives under the AUTOPILOT_LIVE_DIR override, and the fast path never parses the envelope ----
+STAMP="$LIVE/autostart/ale-sess.ensure"
+VER="$(node -e 'process.stdout.write(require(process.argv[1]).version)' "$REPO_ROOT/.claude-plugin/plugin.json")"
+sget() { node -e 'try{const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(d[process.argv[2]]))}catch(_){process.stdout.write("?")}' "$STAMP" "$1"; }
+cat > "$SB/count-env-reads.js" <<'JS'
+const fs = require('fs'); const orig = fs.readFileSync;
+fs.readFileSync = function (p, ...rest) { if (typeof p === 'string' && /\/runs\/[0-9a-f]{16}\.json$/.test(p)) fs.appendFileSync(process.env.ENV_READS_FILE, 'x\n'); return orig.call(this, p, ...rest); };
+JS
+eq "yes" "$([ -f "$STAMP" ] && echo yes || echo no)" "the stamp is written under the AUTOPILOT_LIVE_DIR override (the same base the fast path reads)"
+eq "$FIRST_PID" "$(sget pid)" "stamp holds the confirmed watcher pid"
+eq "$VER" "$(sget plugin_version)" "stamp holds the plugin version"
+eq "yes" "$([ -n "$(sget plugin_root)" ] && [ "$(sget plugin_root)" != '?' ] && echo yes || echo no)" "stamp holds the plugin root"
+ER="$SB/env-reads"; rm -f "$ER"
+ENV_READS_FILE="$ER" NODE_OPTIONS="--require $SB/count-env-reads.js" run_ptu "$REPO"
+eq "0" "$([ -f "$ER" ] && wc -l < "$ER" | tr -d ' ' || echo 0)" "complete stamp: the fast path reads the envelope zero times"
+# incomplete stamp (an empty claim / pid null) inside the window: throttled, still no envelope parse, stamp untouched
+printf '{"cwd":"%s","project_key":"%s","pid":null}' "$REPO" "$KEY" > "$STAMP"; rm -f "$ER"
+ENV_READS_FILE="$ER" NODE_OPTIONS="--require $SB/count-env-reads.js" run_ptu "$REPO"
+eq "0" "$([ -f "$ER" ] && wc -l < "$ER" | tr -d ' ' || echo 0)" "incomplete stamp: no envelope read on the fast path"
+eq "null" "$(sget pid)" "incomplete stamp inside the window: left alone (throttled)"
+# incomplete + aged: the full path runs and completes the stamp
+touch -d '2 minutes ago' "$STAMP"
+run_ptu "$REPO"
+eq "$FIRST_PID" "$(sget pid)" "incomplete + aged stamp: the full path completes it with the watcher pid"
+# NEGATIVE CONTROL (WATCHVER): a stamp from another plugin version is not trusted
+printf '{"cwd":"%s","project_key":"%s","pid":%s,"plugin_root":"%s","plugin_version":"0.0.0-old"}' "$REPO" "$KEY" "$FIRST_PID" "$(sget plugin_root)" > "$STAMP"
+run_ptu "$REPO"
+eq "0.0.0-old" "$(sget plugin_version)" "version-mismatched stamp inside the window: throttled, not trusted (nothing rewritten)"
+touch -d '2 minutes ago' "$STAMP"
+run_ptu "$REPO"
+eq "$VER" "$(sget plugin_version)" "version-mismatched stamp, window passed: the FULL path ran (stamp re-confirmed against the live watcher)"
+# a mismatched stamp must not short-circuit even with the window open and the pid alive: fast path returns only for the matching identity
+printf '{"cwd":"%s","project_key":"%s","pid":%s,"plugin_root":"/elsewhere","plugin_version":"%s"}' "$REPO" "$KEY" "$FIRST_PID" "$VER" > "$STAMP"; touch -d '2 minutes ago' "$STAMP"
+run_ptu "$REPO"
+eq "yes" "$([ "$(sget plugin_root)" != "/elsewhere" ] && echo yes || echo no)" "plugin_root mismatch: the full path ran and rewrote the stamp"
+
 kill -9 "$FIRST_PID" 2> /dev/null
 eq "0" "$(lock_free_within 3)" "lock free after killing the watcher"
 rm -f "$ENV_FILE"

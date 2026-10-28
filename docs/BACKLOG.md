@@ -1404,7 +1404,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-29
 - **Origin**: self
-- **Problem**: 每回合驗證的接線版有幾個已知限制：工人換到子目錄時可能不生效、前景原生子代理無法使用、與另一個外殼同時觸發時工人只剩一次修正機會、紀錄檔名格式讀取端要配合、兩個 git 設定項未被擋。
+- **Problem**: 每回合驗證的接線版有幾個已知限制：工人換到子目錄時可能不生效、前景原生子代理無法使用、與另一個外殼同時觸發時工人只剩一次修正機會、紀錄檔名格式讀取端要配合、兩個 git 設定項沒有測試涵蓋。
 - **Impact**: 不處理的話，評測結果可能被這些限制扭曲，或有工人繞過驗證的縫。
 - **Trigger**: P3 design starts, or the next change to the per-turn gate hook
 - **Trigger-Type**: ready

@@ -22,4 +22,4 @@ BL-0306. Plan: docs/plans/2026-10-26-depth0-per-turn-gate.md
 2. A native subagent running in the foreground gets no agentId, so the gate works only for background subagents.
 3. With a cc-shim double trigger the worker really gets only one fix round (pinned by a test).
 4. The SubagentStop record file is named <session>.<agent_id>.jsonl; the P3 reader must read these too.
-5. T-G1 does not cover core.askPass or core.alternateRefsCommand.
+5. The T-G1 tests do not cover core.askPass or core.alternateRefsCommand (not known to be unguarded; simply untested).

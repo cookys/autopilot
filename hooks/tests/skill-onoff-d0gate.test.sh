@@ -337,7 +337,9 @@ const fs = require('fs');
 let BAD_USER = null;
 const BAD = /\/tmp\/|\/home\/|\/run\/user|tmp\.[A-Za-z0-9]{8}/;
 const USER = process.argv[4]; // the local user name, passed in by the test (never written into the repo)
-if (USER) BAD_USER = new RegExp(USER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+// the user name is matched only as a PATH SEGMENT (/home/<user>/, /Users/<user>/, or an absolute /<user>/ path start such as /root/),
+// never as a bare word: with user "root" the strings "closure_roots" and "repo root" must stay clean
+if (USER) { const e = USER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); BAD_USER = new RegExp(`(?:^|[^A-Za-z0-9._-])(?:/(?:home|Users)/${e}(?:/|$)|/${e}(?:/|$))`); }
 const ALLOW = []; // explicit, named exceptions: [{where: '<json path>', re: /.../}] (none are needed)
 const hits = [];
 const walk = (v, where) => {
@@ -360,6 +362,16 @@ const fs = require("fs"); const m = JSON.parse(fs.readFileSync(process.argv[1], 
 m.pack_meta["fixture-stubs-d0gate"].source = "/tmp/tmp.AbCd1234/stubs"; fs.writeFileSync(process.argv[2], JSON.stringify(m));' "$EV/packs/manifest.json" "$TEST_TMP/manifest-planted.json" || fail "could not plant the local-path control"
 if S node "$TEST_TMP/localinfo.js" "$TEST_TMP/manifest-planted.json" "$EV/prereg/d0gate.json" "$(id -un)" >"$TEST_TMP/li-red.out" 2>&1; then fail "RED control: a planted /tmp/tmp.XXXX in a d0gate manifest field was not caught"; fi
 grep -q 'pack_meta.fixture-stubs-d0gate.source: /tmp/tmp.AbCd1234/stubs' "$TEST_TMP/li-red.out" || fail "RED control failed for the wrong reason: $(cat "$TEST_TMP/li-red.out")"
+# user name "root": the real files must stay green (no bare-word match), planted /root/x and /home/root/x must be red
+S node "$TEST_TMP/localinfo.js" "$EV/packs/manifest.json" "$EV/prereg/d0gate.json" root >/dev/null 2>&1 || fail "user name root: the real manifest/prereg must be clean"
+for planted in /root/x /home/root/x; do
+  S node -e '
+const fs = require("fs"); const m = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+m.pack_meta["fixture-stubs-d0gate"].source = process.argv[3]; fs.writeFileSync(process.argv[2], JSON.stringify(m));' "$EV/packs/manifest.json" "$TEST_TMP/manifest-root.json" "$planted" || fail "could not plant $planted"
+  if S node "$TEST_TMP/localinfo.js" "$TEST_TMP/manifest-root.json" "$EV/prereg/d0gate.json" root >"$TEST_TMP/li-root.out" 2>&1; then fail "RED control: planted $planted was not caught for user root"; fi
+  grep -q "source: $planted" "$TEST_TMP/li-root.out" || fail "planted $planted caught for the wrong reason: $(cat "$TEST_TMP/li-root.out")"
+  echo "RED (expected) user root, planted $planted: $(cat "$TEST_TMP/li-root.out")"
+done
 echo "RED (expected) $(cat "$TEST_TMP/li-red.out")"
 ok "stamp rehearsal (real row untouched: draft, not in FROZEN.json)"
 

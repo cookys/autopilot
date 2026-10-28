@@ -275,6 +275,7 @@ function makeVerdict(cfg = DEFAULT_CFG) {
       const pm = prereg.fixture_matrix; const pr = prereg.reps;
       if (!Array.isArray(pm) || pm.length === 0 || !Number.isInteger(pr) || pr < 1) gridError = 'the prereg has no fixture_matrix / integer reps to derive the cell grid from';
       else if (!pm.every((e) => e && typeof e.id === 'string' && Array.isArray(e.arms) && e.arms.length > 0 && e.arms.every((a) => typeof a === 'string'))) gridError = 'a prereg fixture_matrix entry lacks id or arms';
+      else if (!cfg.allowDupIds && new Set(pm.map((e) => e.id)).size !== pm.length) gridError = 'prereg fixture_matrix has a duplicate task id';
       else if (Array.isArray(prereg.tasks) && JSON.stringify([...prereg.tasks].sort()) !== JSON.stringify(pm.map((e) => e.id).sort())) gridError = 'prereg tasks differ from the fixture_matrix ids';
       else for (const e of pm) for (const a of e.arms) for (let r = 1; r <= pr; r++) gridKeys.add(`${e.id}|${a}|${r}`);
     }
@@ -349,6 +350,7 @@ function makeVerdict(cfg = DEFAULT_CFG) {
 const verdict = makeVerdict(DEFAULT_CFG);
 // Table mutants for the decision-table negative control: each loosens or tightens exactly one rule.
 const CFG_MUTANTS = {
+  'duplicate-ids-swallowed': { ...DEFAULT_CFG, allowDupIds: true },
   'grid-from-lib-constants': { ...DEFAULT_CFG, gridFromLib: true },
   'grid-count-only': { ...DEFAULT_CFG, exactGrid: false },
   'v2-needs-5': { ...DEFAULT_CFG, v2Min: 5 },

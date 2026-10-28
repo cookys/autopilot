@@ -61,6 +61,7 @@ const CASES = [
   { name: 'prereg reps=4: a full reps<=4 matrix (32 cells) is a complete grid (decided by the thresholds: NOT-SHIP, not INCOMPLETE or INVALID)', rows: mk().filter((r) => r.rep <= 4), prereg: { ...CARRIERS, reps: 4 }, want: 'NOT-SHIP' },
   { name: 'prereg without fixture_matrix -> INVALID (no fallback to lib constants)', rows: mk(), prereg: { carrier_decision: CARRIERS.carrier_decision, reps: 5 }, want: 'INVALID' },
   { name: 'prereg without integer reps -> INVALID', rows: mk(), prereg: { ...CARRIERS, reps: undefined }, want: 'INVALID' },
+  { name: 'prereg fixture_matrix with a duplicate id -> INVALID (not swallowed by a Set)', rows: mk(), prereg: { ...CARRIERS, fixture_matrix: [...REAL_PREREG.fixture_matrix, REAL_PREREG.fixture_matrix[0]], tasks: [...REAL_PREREG.tasks, REAL_PREREG.tasks[0]] }, want: 'INVALID' },
   { name: 'INCOMPLETE: 39 of 40 cells', rows: mk({ drop: 1 }), want: 'INCOMPLETE' },
   { name: 'NOT-SHIP: P0 kept no carrier', rows: mk(), prereg: { ...REAL_PREREG, carrier_decision: { p0_kept_carriers: [] } }, want: 'NOT-SHIP' },
   { name: 'incomplete G4 cells are not in the denominator (OFF 3 completed of 5, 2 violating; ON 5 completed, 1)', rows: mk({ offViol: 2, offDone: 3 }), want: 'PASS' },

@@ -237,6 +237,33 @@ let warnedSsdFallback = false; // once per process for the no-RAM SSD fallback
  * @param {string} [opts.runUserRoot] — defaults to /run/user (injectable for tests)
  * @param {Function} [opts.warn] — defaults to a single process.stderr.write call
  */
+// The RAM-backed candidate directories, in the order resolveLiveDir tries them. Pure: it only lstat's the
+// inferred /run/user/<uid> parent and creates nothing.
+function ramCandidates(env, runUserRoot) {
+  const candidates = [];
+  if (env.XDG_RUNTIME_DIR) {
+    candidates.push({ dir: path.join(env.XDG_RUNTIME_DIR, 'autopilot'), source: 'xdg' });
+  } else {
+    const inferredParent = path.join(runUserRoot, String(uid()));
+    try {
+      if (fs.lstatSync(inferredParent).isDirectory()) {
+        candidates.push({ dir: path.join(inferredParent, 'autopilot'), source: 'xdg-inferred' });
+      }
+    } catch { /* parent missing — skip; never mkdir <runUserRoot>/<uid> */ }
+  }
+  candidates.push({ dir: `/dev/shm/autopilot-${uid()}`, source: 'shm' });
+  candidates.push({ dir: `/tmp/autopilot-${uid()}`, source: 'tmp' });
+  return candidates;
+}
+
+// Every directory resolveLiveDir() could return as `base`, without creating, probing or warning about any:
+// the override alone when AUTOPILOT_LIVE_DIR is set, else the RAM candidates plus the ~/.autopilot fallback.
+function liveDirCandidates(opts = {}) {
+  const env = opts.env || process.env;
+  if (env.AUTOPILOT_LIVE_DIR) return [env.AUTOPILOT_LIVE_DIR];
+  return ramCandidates(env, opts.runUserRoot || '/run/user').map((c) => c.dir).concat(path.join(os.homedir(), '.autopilot'));
+}
+
 function resolveLiveDir(opts = {}) {
   const env = opts.env || process.env;
   const execFile = opts.execFile || nodeExecFileSync;
@@ -265,19 +292,7 @@ function resolveLiveDir(opts = {}) {
     return { base: dir, source: 'override' };
   }
 
-  const candidates = [];
-  if (env.XDG_RUNTIME_DIR) {
-    candidates.push({ dir: path.join(env.XDG_RUNTIME_DIR, 'autopilot'), source: 'xdg' });
-  } else {
-    const inferredParent = path.join(runUserRoot, String(uid()));
-    try {
-      if (fs.lstatSync(inferredParent).isDirectory()) {
-        candidates.push({ dir: path.join(inferredParent, 'autopilot'), source: 'xdg-inferred' });
-      }
-    } catch { /* parent missing — skip; never mkdir <runUserRoot>/<uid> */ }
-  }
-  candidates.push({ dir: `/dev/shm/autopilot-${uid()}`, source: 'shm' });
-  candidates.push({ dir: `/tmp/autopilot-${uid()}`, source: 'tmp' });
+  const candidates = ramCandidates(env, runUserRoot);
 
   for (const c of candidates) {
     if (isRamBacked(c.dir, ctx) && isOwnedMode700Dir(c.dir)) {
@@ -364,6 +379,7 @@ function modelFamily(id) {
 
 module.exports = {
   resolveLiveDir,
+  liveDirCandidates,
   LiveDirRefusedError,
   sanitizeSessionId,
   readLive,

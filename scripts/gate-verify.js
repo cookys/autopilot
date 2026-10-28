@@ -13,13 +13,14 @@
 // list, unknown key, duplicate id, more than 40 rules, unregistered check name,
 // a registry check that times out, a registry `files` entry missing at <base>, an `argv` path that is not an
 // exported file / built-in / bare interpreter name, path-safety failure, any
-// internal error). The hook turns 2 into allow plus `error`.
+// internal error). The armed hook turns 2 into a block with reason `error` (owner choice B, BL-0318).
 // stdout (--json): {violations: [{constraint, rule, evidence}], feature_gaps: [string]}.
 // --check prints {ok, errors} and exits 0 or 2; it writes nothing.
 //
 // Node built-ins only (Node >= 20.10). Rule lists are data: no rule carries
 // command text; registered checks come from <base> bytes, never the worker tree.
-// Status: not wired to any hook or rail yet (P1 of the plan; wiring is P2).
+// Status: run by hooks/per-turn-gate.js for a worker-bound gate file (P2 of the plan; written by
+// scripts/per-turn-gate-arm.js). Hook policy (BL-0318): an armed exit 2 blocks the worker like a violation.
 
 const fs = require('fs');
 const os = require('os');

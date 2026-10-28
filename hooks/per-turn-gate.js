@@ -25,7 +25,19 @@
  *
  * Decision: reportable and counter below the cap -> print {"decision":"block","reason":...} and
  * count it. Not reportable, cap reached, verifier error (crash, timeout, unparseable output, missing
- * command) or knob off -> allow. An error NEVER blocks.
+ * command) or knob off -> allow. An error never blocks, with one exception: when a gate file armed the
+ * gate (below), a gate-verify.js exit 2 ("the check could not run", which a worker can cause by changing a
+ * path, permission or link) blocks like a violation, shares the same max_blocks counter and is logged
+ * decision block / reason error (BL-0318, owner choice B).
+ *
+ * Worker-bound arming (BL-0306 P2, plan docs/plans/2026-10-26-depth0-per-turn-gate.md): a valid gate file
+ * <live-state>/per-turn-gate/<session>.gate.json (Stop) or <session>.<agent_id>.gate.json (SubagentStop),
+ * written only by scripts/per-turn-gate-arm.js, arms the gate for that one session/subagent even when the
+ * global knob is off. Its mode and max_blocks replace the config values and the verifier is
+ * scripts/gate-verify.js reading the file through AUTOPILOT_GATE_FILE. Any invalid, missing or expired
+ * file is ignored: the run is then byte-identical to a run without it. A SubagentStop without a valid
+ * subagent gate file returns silently. per_turn_gate.session_arming=false ignores gate files entirely.
+ * An armed record gains one optional field, `source` (session|subagent); no other record has it.
  *
  * Log contract: every invocation appends exactly ONE record to
  * <live-state>/per-turn-gate/<session>.jsonl before it exits:
@@ -65,9 +77,14 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { isEnabled } = require('./_shared/opt-in.js');
 const { configPath } = require('../scripts/lib/config-path.js');
-const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
+const { resolveLiveDir, liveDirCandidates, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
 
 const HOOK_STEM = 'per-turn-gate';
+const ID_RE = /^[A-Za-z0-9-]{1,128}$/;
+const SHA_RE = /^[0-9a-f]{40}$/;
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const GATE_KEYS = ['v', 'repo', 'base', 'mode', 'max_blocks', 'expires_at', 'rules'];
+const GATE_VERIFY = path.resolve(__dirname, '..', 'scripts', 'gate-verify.js');
 const DEFAULT_MAX_BLOCKS = 2;
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_RETENTION_DAYS = 7;
@@ -119,12 +136,13 @@ function readInt(file) {
 }
 
 /** Run the verifier. Returns {kind:'error'} or {kind:'clean'|'violations', json}. */
-function runVerifier(command, turn, repo, timeoutMs) {
+function runVerifier(command, turn, repo, timeoutMs, env) {
   if (typeof command !== 'string' || command.trim() === '') return { kind: 'error' };
   let r;
   try {
     r = spawnSync('/bin/sh', ['-c', `exec ${command} "$@"`, 'sh', '--turn', String(turn), '--repo', repo, '--json'], {
       cwd: repo,
+      env: env || process.env,
       input: '',
       encoding: 'utf8',
       timeout: timeoutMs,
@@ -134,7 +152,9 @@ function runVerifier(command, turn, repo, timeoutMs) {
   } catch (_e) {
     return { kind: 'error' };
   }
-  if (r.error || r.signal || (r.status !== 0 && r.status !== 1)) return { kind: 'error' };
+  if (r.error || r.signal || (r.status !== 0 && r.status !== 1)) {
+    return { kind: 'error', status: r.error || r.signal ? null : r.status, stderr: cleanStderr(r.stderr) };
+  }
   let json;
   try {
     json = JSON.parse(String(r.stdout || '').trim());
@@ -144,6 +164,15 @@ function runVerifier(command, turn, repo, timeoutMs) {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return { kind: 'error' };
   if (!validSchema(json)) return { kind: 'error' };
   return { kind: r.status === 1 ? 'violations' : 'clean', json };
+}
+
+/** First 200 bytes of a verifier's stderr, control characters removed. */
+function cleanStderr(raw) {
+  try {
+    return Buffer.from(String(raw || ''), 'utf8').subarray(0, 200).toString('utf8').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+  } catch (_e) {
+    return '';
+  }
 }
 
 /** Is this verifier result one the current mode may block on? */
@@ -282,7 +311,9 @@ function acquireLock(lockDir, seam) {
 }
 
 /** Delete this hook's own state files (not the logs, not anything else) untouched for more than `days` days. */
-const STATE_NAME = /^[A-Za-z0-9_-]+\.(?:turn|t\d+\.count)(?:\.\d+\.tmp)?$|^[A-Za-z0-9_-]+\.lock(?:\.(?:reclaim|rel)\.[0-9a-f]+)?$/;
+const KEY_PART = '[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9-]+)?'; // <session> or <session>.<agent_id>
+const STATE_NAME = new RegExp(
+  `^${KEY_PART}\\.(?:turn|t\\d+\\.count)(?:\\.\\d+\\.tmp)?$|^${KEY_PART}\\.lock(?:\\.(?:reclaim|rel)\\.[0-9a-f]+)?$|^${KEY_PART}\\.gate\\.json(?:\\.\\d+\\.tmp)?$`);
 function cleanupState(dir, days) {
   const cutoff = Date.now() - days * 86400000;
   let names = [];
@@ -319,6 +350,80 @@ function renderRetry(json, mode) {
   return text;
 }
 
+// ------------------------------------------------------------------ worker-bound gate file
+
+// Two kinds of "not usable", kept apart on purpose (BL-0306, owner choice B):
+//  - the gate file itself is invalid, or it is not this worker's (other session/agent id, repo that is not
+//    this cwd, expired): not ours, ignored silently, run exactly as without a file.
+//  - the file is valid and ours (right session, repo equals this cwd) but the check cannot run: base is
+//    gone, or .git was moved or damaged. That is a verification error, not "no gate": a worker could
+//    otherwise switch the gate off by deleting .git. So the file arms the gate, gate-verify.js exits 2
+//    and the hook blocks with reason `error`, counted in the same max_blocks.
+// The hook therefore makes no git call of its own; every git read happens in gate-verify.js (isolated).
+const isPlain = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+
+let liveBaseCache = null;
+function liveBase() {
+  if (liveBaseCache === null) liveBaseCache = resolveLiveDir().base;
+  return liveBaseCache;
+}
+
+/**
+ * Find a valid gate file for this payload. Returns {file, source, key, session, mode, maxBlocks} or null.
+ * Creates nothing. Every failure (bad id, no file, unreadable, malformed, expired, unknown or missing field,
+ * repo mismatch) means "no gate file": the caller then runs exactly as without one.
+ * Whether `rules` passes the verifier's schema is NOT judged here: an invalid list is gate-verify exit 2.
+ */
+/**
+ * Could a gate file exist at all? resolveLiveDir() creates a missing override (or candidate) directory, and
+ * a run without a gate file must change nothing on disk, so the lookup first asks, without creating
+ * anything, whether any <base>/per-turn-gate directory exists where the arm script could have written
+ * (arm creates it). The override is the only candidate when AUTOPILOT_LIVE_DIR is set; otherwise the same
+ * candidates resolveLiveDir() tries (liveDirCandidates, one list in scripts/lib/live-state-dir.js). None
+ * exists: no gate file, silent return. Called only after both ids passed the id check: a hostile id is never stat'ed.
+ */
+function gateDirMayExist() {
+  return liveDirCandidates().some((d) => {
+    try { return fs.statSync(path.join(path.resolve(d), HOOK_STEM)).isDirectory(); } catch (_e) { return false; }
+  });
+}
+
+function findArmed(payload, isSub) {
+  try {
+    const sid = payload.session_id;
+    if (typeof sid !== 'string' || !ID_RE.test(sid)) return null;
+    let key = sid;
+    if (isSub) {
+      if (typeof payload.agent_id !== 'string' || !ID_RE.test(payload.agent_id)) return null;
+      key = `${sid}.${payload.agent_id}`;
+    }
+    if (!gateDirMayExist()) return null;
+    const file = path.join(liveBase(), HOOK_STEM, `${key}.gate.json`);
+    const st = fs.lstatSync(file);
+    if (!st.isFile() || st.size > 1024 * 1024) return null;
+    const g = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (!isPlain(g)) return null;
+    const keys = Object.keys(g);
+    if (keys.length !== GATE_KEYS.length || !keys.every((k) => GATE_KEYS.includes(k))) return null;
+    if (g.v !== 1 || !isPlain(g.rules)) return null;
+    if (typeof g.repo !== 'string' || !path.isAbsolute(g.repo)) return null;
+    if (typeof g.base !== 'string' || !SHA_RE.test(g.base)) return null;
+    if (!MODES.includes(g.mode)) return null;
+    if (!Number.isInteger(g.max_blocks) || g.max_blocks < 0 || g.max_blocks > 2) return null;
+    if (typeof g.expires_at !== 'string' || !ISO_RE.test(g.expires_at)) return null;
+    const exp = Date.parse(g.expires_at);
+    if (Number.isNaN(exp) || exp <= Date.now()) return null;
+    const cwd = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd();
+    const repoReal = fs.realpathSync(cwd);
+    if (fs.realpathSync(g.repo) !== repoReal) return null;
+    return { file, source: isSub ? 'subagent' : 'session', key, session: sid, mode: g.mode, maxBlocks: g.max_blocks };
+  } catch (_e) {
+    return null;
+  }
+}
+
+const shq = (x) => `'${String(x).replace(/'/g, `'\\''`)}'`;
+
 // One record per invocation: `done` flips on the first write; `write` lets the outer catch log an error.
 const LOG_STATE = { done: false, write: null };
 
@@ -327,7 +432,8 @@ function main() {
   const gate = cfg.per_turn_gate && typeof cfg.per_turn_gate === 'object' ? cfg.per_turn_gate : {};
   const enabled = isEnabled(HOOK_STEM);
   const hasVerifier = typeof gate.verifier === 'string' && gate.verifier.trim() !== '';
-  if (!enabled && !hasVerifier) return; // never configured: leave no trace
+  const armingAllowed = gate.session_arming !== false;
+  if (!enabled && !hasVerifier && !armingAllowed) return; // never configured, arming vetoed: leave no trace
 
   let payload = {};
   let payloadOk = true;
@@ -339,11 +445,21 @@ function main() {
     payloadOk = false;
   }
 
+  const isSub = payload.hook_event_name === 'SubagentStop' || (typeof payload.agent_id === 'string' && payload.agent_id !== '');
+  const armed = armingAllowed ? findArmed(payload, isSub) : null;
+  if (!armed) {
+    if (isSub) return; // SubagentStop without its own gate file: not ours, leave no trace
+    if (!enabled && !hasVerifier) return; // never configured: leave no trace
+  }
+  const on = armed ? true : enabled;
+  const canVerify = armed ? true : hasVerifier;
+
   const rawSid = typeof payload.session_id === 'string' ? payload.session_id : '';
-  const session = sanitizeSessionId(rawSid);
+  const session = armed ? armed.session : sanitizeSessionId(rawSid);
+  const key = armed ? armed.key : session; // state and log file name stem
   let dir = null;
   try {
-    dir = path.join(resolveLiveDir().base, HOOK_STEM);
+    dir = path.join(liveBase(), HOOK_STEM);
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   } catch (_e) {
     return; // no state directory: cannot count or log, so allow silently (fail-open)
@@ -354,28 +470,29 @@ function main() {
     if (LOG_STATE.done) return;
     LOG_STATE.done = true;
     try {
-      fs.appendFileSync(path.join(dir, `${session}.jsonl`),
-        `${JSON.stringify({ session, turn, prompt_id: promptId, decision, reason, counter })}\n`);
+      const rec = { session, turn, prompt_id: promptId, decision, reason, counter };
+      if (armed) rec.source = armed.source;
+      fs.appendFileSync(path.join(dir, `${key}.jsonl`), `${JSON.stringify(rec)}\n`);
     } catch (_e) { /* fail-open */ }
   };
 
   LOG_STATE.write = log;
-  if (!enabled) {
+  if (!on) {
     log(null, 'allow', 'off', 0);
     return;
   }
 
   cleanupState(dir, intKnob(gate.state_retention_days, DEFAULT_RETENTION_DAYS, 1));
 
-  const maxBlocks = intKnob(gate.max_blocks, DEFAULT_MAX_BLOCKS, 0);
-  const mode = MODES.includes(gate.mode) ? gate.mode : MODES[0];
-  if (!payloadOk || !hasVerifier) {
+  const maxBlocks = armed ? armed.maxBlocks : intKnob(gate.max_blocks, DEFAULT_MAX_BLOCKS, 0);
+  const mode = armed ? armed.mode : (MODES.includes(gate.mode) ? gate.mode : MODES[0]);
+  if (!payloadOk || !canVerify) {
     log(null, 'allow', 'error', 0);
     return;
   }
 
-  const lockDir = path.join(dir, `${session}.lock`);
-  const turnFile = path.join(dir, `${session}.turn`);
+  const lockDir = path.join(dir, `${key}.lock`);
+  const turnFile = path.join(dir, `${key}.turn`);
 
   // Phase A (short lock): decide the turn and read the cap. No slot is taken here.
   const lockA = acquireLock(lockDir);
@@ -390,7 +507,7 @@ function main() {
     const prevTurn = readInt(turnFile);
     turn = prevTurn === 0 ? 1 : (startsNewTurn(payload) ? prevTurn + 1 : prevTurn);
     lockA.writeInt(turnFile, turn);
-    capCounter = readInt(path.join(dir, `${session}.t${turn}.count`));
+    capCounter = readInt(path.join(dir, `${key}.t${turn}.count`));
     atCap = capCounter >= maxBlocks;
   } catch (_e) {
     lockA.release();
@@ -409,10 +526,19 @@ function main() {
   // Verifier and text (unlocked). Everything that can fail happens before any state change or log record.
   let text = null;
   let outcome = 'error';
+  let blockReason = 'block';
   try {
     const repo = typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd();
-    const result = runVerifier(gate.verifier, turn, repo, intKnob(gate.timeout_ms, DEFAULT_TIMEOUT_MS, 1));
-    if (result.kind === 'error') outcome = 'error';
+    const command = armed ? `${shq(process.execPath)} ${shq(GATE_VERIFY)}` : gate.verifier;
+    const env = armed ? Object.assign({}, process.env, { AUTOPILOT_GATE_FILE: armed.file }) : undefined;
+    const result = runVerifier(command, turn, repo, intKnob(gate.timeout_ms, DEFAULT_TIMEOUT_MS, 1), env);
+    if (armed && result.kind === 'error' && result.status === 2) {
+      // BL-0318 (owner choice B): the check could not run. Tell the worker, share the max_blocks counter.
+      text = `The per-turn check could not run: ${result.stderr || 'no detail'}. Restore what it needs (a path, permission or link you changed) and keep every other rule.\n`;
+      outcome = 'block';
+      blockReason = 'error';
+    }
+    else if (result.kind === 'error') outcome = 'error';
     else if (!isReportable(result, mode)) outcome = 'clean';
     else { text = renderRetry(result.json, mode); outcome = 'block'; }
   } catch (_e) {
@@ -432,7 +558,7 @@ function main() {
   }
   let verdict = 'error';
   let counterNow = capCounter;
-  const countFile = path.join(dir, `${session}.t${turn}.count`);
+  const countFile = path.join(dir, `${key}.t${turn}.count`);
   try {
     counterNow = readInt(countFile);
     if (readInt(turnFile) !== turn) verdict = 'error'; // a newer turn began while the verifier ran: this answer is stale
@@ -446,7 +572,7 @@ function main() {
     log(turn, 'allow', verdict, counterNow);
     return;
   }
-  log(turn, 'block', 'block', counterNow);
+  log(turn, 'block', blockReason, counterNow);
   process.stdout.write(`${JSON.stringify({ decision: 'block', reason: text })}\n`);
 }
 

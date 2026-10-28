@@ -62,6 +62,13 @@
 #       [--skill <name>]                       # repeatable skill name (0+)
 #       [--base develop]                       # default
 #       [--timeout 9m]                         # agy --print-timeout (default 5m is too short)
+#       [--gate-rules <file>]                  # claude-native / cc-shim only (any other runner is refused):
+#                                              #   per-turn gate for THIS hand. Mints a fresh session id, arms
+#                                              #   scripts/per-turn-gate-arm.js (gate-verify --check first; nothing
+#                                              #   is written for a bad list) and starts claude with a per-run
+#                                              #   --settings file whose Stop hook is hooks/per-turn-gate.js. The gate
+#                                              #   file and the settings file are removed when the worker ends
+#                                              #   (success, failure, timeout) and by the exit/abort traps. Off unless given.
 #       [--commit-quiet-secs 120]              # implement stage: stop the runner once the branch has
 #                                              #   advanced past base, the worktree is clean and the log
 #                                              #   has not grown and the agent has no child process for N s (0 disables); ledger note
@@ -188,6 +195,9 @@ MODEL="gemini-flash-high"
 MODEL_IS_DEFAULT=1
 BASE="develop"
 TIMEOUT="9m"
+GATE_RULES_FILE=""     # --gate-rules: per-turn gate rule list for ONE claude-native/cc-shim hand (BL-0306 P2)
+GATE_SETTINGS_FILE=""
+GATE_ARMED_SESSION=""
 MODEL_SUPPLIED=0
 BASE_SUPPLIED=0
 RUNNER_SUPPLIED=0
@@ -472,6 +482,8 @@ cleanup() {
   [ -n "${AGY_PARSED:-}" ] && rm -f "$AGY_PARSED"
   [ -n "${CCSHIM_ENVELOPE:-}" ] && rm -f "$CCSHIM_ENVELOPE"
   [ -n "${CNATIVE_CONFIG_DIR:-}" ] && rm -rf "$CNATIVE_CONFIG_DIR"
+  [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
+  [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   # Fail closed: claimed WO must get a terminal disposition; never swallow finalizer failures.
   # Parent that transferred claim to detached child must not mark WO failed on its EXIT.
   if [ -n "${_CONT_WO_CLAIMED_ROOT:-}" ] && [ "${_CONT_WO_PARENT_TRANSFERRED:-0}" != "1" ]; then
@@ -1822,6 +1834,7 @@ while [ $# -gt 0 ]; do
     --endpoint) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--endpoint requires a non-empty value"; ENDPOINT="$2"; [ "$ENDPOINT" = "@none" ] && ENDPOINT=""; shift 2 ;;
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
+    --gate-rules) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--gate-rules requires a non-empty file path"; GATE_RULES_FILE="$2"; shift 2 ;;
     --commit-quiet-secs) COMMIT_QUIET_SECS="${2:-}"; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; BIN_FLAG_AGY=1; shift 2 ;;
     --grok-bin) GROK_BIN="${2:-}"; BIN_FLAG_GROK=1; shift 2 ;;
@@ -2025,6 +2038,8 @@ set_runner_flags() {
   IS_OPENCODE=0
   IS_KIMI=0
   IS_CNATIVE=0
+  # --gate-rules: the session id keys the gate file, so it must be minted fresh for this dispatch (never inherited).
+  [ -z "${GATE_RULES_FILE:-}" ] || unset CHILD_SESSION_ID
   case "$RUNNER" in
     codex)   IS_CODEX=1 ;;
     agy)     ;;
@@ -2075,6 +2090,13 @@ set_runner_flags() {
       ;;
     *) die_precondition "--runner must be one of auto|codex|agy|grok|cc-shim|pi|qoderclicn|cursor|opencode|kimi|claude-native (got: $RUNNER)" ;;
   esac
+  if [ -n "${GATE_RULES_FILE:-}" ]; then
+    # Silently ignoring the flag on another runner would make the arm marker lie, so refuse it.
+    [ "$IS_CCSHIM" -eq 1 ] || [ "$IS_CNATIVE" -eq 1 ] || die_precondition "--gate-rules applies only to --runner claude-native or cc-shim (got runner: $RUNNER)"
+    [ -f "$GATE_RULES_FILE" ] && [ -r "$GATE_RULES_FILE" ] || die_precondition "--gate-rules file not readable: $GATE_RULES_FILE"
+    GATE_RULES_FILE="$(cd "$(dirname "$GATE_RULES_FILE")" && pwd -P)/$(basename "$GATE_RULES_FILE")"
+    [[ "${CHILD_SESSION_ID:-}" =~ ^[A-Za-z0-9-]{1,128}$ ]] || die_precondition "--gate-rules: could not mint a fresh session id; refusing to dispatch"
+  fi
   # Only reached if resolution actually completed (no die_precondition fired above,
   # including the cursor auto-guard refusals inside the `auto` arm). See RUNNER_RESOLVED
   # init comment and die_precondition (FINDING 1).
@@ -3297,6 +3319,8 @@ abort_dispatch() {
   [ -n "$OPENCODE_PROMPT_FILE" ] && rm -f "$OPENCODE_PROMPT_FILE"
   [ -n "$KIMI_PROMPT_FILE" ] && rm -f "$KIMI_PROMPT_FILE"
   [ -n "${CNATIVE_CONFIG_DIR:-}" ] && rm -rf "$CNATIVE_CONFIG_DIR"
+  [ -n "${GATE_ARMED_SESSION:-}" ] && node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1
+  [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
   [ -n "$AGY_ENVELOPE" ] && rm -f "$AGY_ENVELOPE"
   [ -n "$AGY_STDERR" ] && rm -f "$AGY_STDERR"
   [ -n "$AGY_PARSED" ] && rm -f "$AGY_PARSED"
@@ -3854,7 +3878,29 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   # The result string (or the raw bytes if it does not parse) is appended to
   # LOG so classify-error and other log consumers still see the old plain text.
   CCSHIM_ENVELOPE="$(mktemp -t dispatch-hetero-ccshim-envelope-XXXXXX)"
-  if [ "$IS_CNATIVE" -eq 1 ]; then
+  # --gate-rules (BL-0306 P2): arm the per-turn gate for this one hand, before it starts. The id was minted
+  # fresh above; arm runs gate-verify --check first and writes nothing for a bad list, in which case the
+  # worker is not started. GATE_ARGV stays empty without the flag, so the claude argv is unchanged.
+  GATE_ARGV=()
+  GATE_RUN_OK=1
+  if [ -n "${GATE_RULES_FILE:-}" ]; then
+    _gate_ttl="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
+    GATE_SETTINGS_FILE="$(mktemp -t dispatch-hetero-gate-settings-XXXXXX)"
+    if [[ "$_gate_ttl" =~ ^[0-9]+$ ]] \
+       && node "$SELF_DIR/per-turn-gate-arm.js" arm --session "${CHILD_SESSION_ID:-}" --repo "$WT" --rules "$GATE_RULES_FILE" \
+            --ttl-seconds "$((_gate_ttl + 60))" >"$LOG" 2>&1 \
+       && GATE_ARMED_SESSION="$CHILD_SESSION_ID" \
+       && node "$SELF_DIR/per-turn-gate-arm.js" settings --out "$GATE_SETTINGS_FILE" >>"$LOG" 2>&1; then
+      GATE_ARGV=("$GATE_SETTINGS_FILE")
+    else
+      echo "gate-rules: could not arm the per-turn gate; worker not started" >>"$LOG"
+      AGENT_EXIT=1
+      GATE_RUN_OK=0
+    fi
+  fi
+  if [ "$GATE_RUN_OK" -eq 0 ]; then
+    :
+  elif [ "$IS_CNATIVE" -eq 1 ]; then
     # Fresh 0700 dir with only a 0600 .credentials.json; removed right after the worker (success AND
     # failure), and by cleanup/abort_dispatch if the dispatcher dies first. A seeding failure never spawns.
     if CNATIVE_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")"; then
@@ -3867,8 +3913,8 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       # inject auth). NOT cleared: CLAUDE_CODE_SKIP_*_AUTH (only meaningful once a provider is selected) and
       # region/project tuning vars (inert without a selector).
       run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
-          --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} --output-format json < "$3" >"$6"' \
-          _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR"
+          --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${8:+--settings "$8"} --output-format json < "$3" >"$6"' \
+          _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR" ${GATE_ARGV[@]+"${GATE_ARGV[@]}"}
     else
       CNATIVE_CONFIG_DIR=""
       echo "claude-native: could not seed config dir; worker not started" > "$LOG"
@@ -3878,9 +3924,16 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     CNATIVE_CONFIG_DIR=""
   else
     run_worker bash -c 'cd "$1" && exec env -u ANTHROPIC_API_KEY claude -p ${4:+--session-id "$4"} --model "$2" \
-        --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} --output-format json < "$3" >"$6"' \
-        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE"
+        --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${7:+--settings "$7"} --output-format json < "$3" >"$6"' \
+        _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" ${GATE_ARGV[@]+"${GATE_ARGV[@]}"}
   fi
+  # The worker is done (success, failure or timeout): the gate file and the settings file go now.
+  if [ -n "${GATE_ARMED_SESSION:-}" ]; then
+    node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$GATE_ARMED_SESSION" >/dev/null 2>&1 || true
+    GATE_ARMED_SESSION=""
+  fi
+  [ -n "${GATE_SETTINGS_FILE:-}" ] && rm -f "$GATE_SETTINGS_FILE"
+  GATE_SETTINGS_FILE=""
   if [ -f "$CCSHIM_ENVELOPE" ]; then
     # One JSON object → result text (is_error with an empty result uses the
     # error message). Anything else, including a second JSON document, is the
@@ -5331,6 +5384,7 @@ dispatch_detached_run() {
     declare -p DETACH_PRECLAIM_GEN DETACH_PRECLAIM_NONCE 2>/dev/null
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
+    declare -p GATE_RULES_FILE 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.

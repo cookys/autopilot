@@ -1023,8 +1023,8 @@ export const stateText = (t: T) => ({
   // a repo with no watcher scope still shows its residue reminder: ⚑N from <git-common-dir>/autopilot-residue-auto.json
   noProjectWt: (wt: number) => t('state.no_project_wt', { wt: GT.residue, n: wt, hint: RUNS_HINT }),
   unreadable: t('state.unreadable'),
-  stale: (key: string, publishedAt: string | null) => (publishedAt ? t('state.stale_at', { at: publishedAt, hint: RUNS_HINT, key }) : t('state.stale', { hint: RUNS_HINT, key })),
-  unavailable: (key: string) => t('state.unavailable', { hint: RUNS_HINT, key }),
+  stale: (publishedAt: string | null) => (publishedAt ? t('state.stale_at', { at: publishedAt }) : t('state.stale')),
+  unavailable: () => t('state.unavailable'),
 })
 
 // ---- W3a pane sections: text built from the sources, drawn by pane.tsx ----

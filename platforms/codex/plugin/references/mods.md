@@ -72,7 +72,7 @@ S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non
 - **Band contract (P1c C3)**: for a person who left the computer, the band says which project, which phase, how long it has
   run and how far along, led by one of five verdict words. One entry, two lines: line 1 is `<mark> <verdict> <project> · <phase> ·
   <elapsed> · <progress>`, line 2 one short reason sentence (zh-TW, built from fields only). The state texts `no pointer`,
-  `no project`, `stale`, `unavailable · run: …`, `unreadable` are unchanged and replace the whole entry.
+  `no project`, `stale`, `unavailable · …` (plain text, no command to run), `unreadable` are unchanged and replace the whole entry.
   - Verdict words, first match wins: `▲ 要你決定` (job model `needs_decision === true`; reason = the decision question) >
     `⏸ 疑似卡住` (any envelope row with `stall: true`, reason = the quietest stalled row's `last_event_age_s` in minutes,
     no new threshold) > `✓ 完成待驗收` (envelope `confirmed_live === 0`, progress frozen with done = total, acceptance axis

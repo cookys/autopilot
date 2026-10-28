@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "forbid_paths": [
+    {
+      "id": "Rw",
+      "glob": "src/legacy/**"
+    }
+  ]
+}

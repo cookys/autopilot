@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "forbid_paths": [
+    {
+      "id": "Ra1",
+      "glob": "src/legacy/*"
+    },
+    {
+      "id": "Ra2",
+      "glob": "src/legacy/**"
+    }
+  ],
+  "require_files": [
+    {
+      "id": "Rb1",
+      "path": "docs/CHANGES.md"
+    }
+  ],
+  "forbid_text": [
+    {
+      "id": "Rc1",
+      "glob": "src/*.js",
+      "text": "console.log"
+    },
+    {
+      "id": "Rc2",
+      "glob": "src/**/*.js",
+      "text": "console.log"
+    }
+  ]
+}

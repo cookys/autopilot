@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "forbid_paths": [
+    {
+      "id": "Ra",
+      "glob": "src/legacy/**",
+      "why": "Do not touch src/legacy."
+    }
+  ],
+  "require_files": [
+    {
+      "id": "Rb",
+      "path": "docs/CHANGES.md",
+      "why": "docs/CHANGES.md must exist when you finish."
+    }
+  ]
+}

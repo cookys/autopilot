@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "arm": "change",
+  "skills": {
+    "ceo-agent": "ceo-agent-d0gate-change"
+  },
+  "files": [
+    "d0gate-files-change"
+  ],
+  "fixture_scripts": [
+    "fixture-scripts-d0gate",
+    "fixture-stubs-d0gate"
+  ]
+}

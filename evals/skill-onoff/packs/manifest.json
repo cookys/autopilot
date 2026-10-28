@@ -2,7 +2,7 @@
   "schema_version": 1,
   "artifact_type": "skill_onoff_pack_manifest",
   "frozen_at": "P3",
-  "note": "all three pack families digest-frozen; companions identical across arms (test-asserted); card frontmatter byte-identical to full (test-asserted); any card edit = CARD-arm re-run (plan \u00a74)",
+  "note": "all three pack families digest-frozen; companions identical across arms (test-asserted); card frontmatter byte-identical to full (test-asserted); any card edit = CARD-arm re-run (plan §4)",
   "packs": {
     "dev-flow-card": {
       "dev-flow-card/SKILL.md": "cb5b0b48fc23ec03dfdd8f68a7b040a1780299cebc1c7c48110afb430f0332e8",
@@ -4588,6 +4588,72 @@
     },
     "fixture-prompt-bpack-change": {
       "fixture-prompt-bpack-change/REVIEW_PROMPT.md": "d2afe2abe67505e68bc9ce89a6ad9b0775a463f463d295adee6aa4264043f53c"
+    },
+    "ceo-agent-d0gate-base": {
+      "ceo-agent-d0gate-base/SKILL.md": "ad0bd37e3f82027bc91e221dc76a21fa22573ed5682ef39a418eb4fda034e8de",
+      "ceo-agent-d0gate-base/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-d0gate-base/references/depth0-control-loop.md": "883ad1d56291d38a31a4289c37c01d282b156ef8726e3b375f9396e649d3fd83",
+      "ceo-agent-d0gate-base/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-d0gate-base/references/level-front-door.md": "0aa2ceede40c76757f972c2e012b630bac91ef27658440cef5980772bfb110b3",
+      "ceo-agent-d0gate-base/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-d0gate-base/references/tree-adapter.md": "14578dd7841cc9b0f47cc019c31e4362ad3f5b6c641b4ee0059cf65fd6beee09"
+    },
+    "ceo-agent-d0gate-change": {
+      "ceo-agent-d0gate-change/SKILL.md": "7e5cb0e974c455f19abedd31d71b955635c26e0e2d37bd9daf375b22af53a078",
+      "ceo-agent-d0gate-change/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-d0gate-change/references/depth0-control-loop.md": "883ad1d56291d38a31a4289c37c01d282b156ef8726e3b375f9396e649d3fd83",
+      "ceo-agent-d0gate-change/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-d0gate-change/references/level-front-door.md": "0aa2ceede40c76757f972c2e012b630bac91ef27658440cef5980772bfb110b3",
+      "ceo-agent-d0gate-change/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-d0gate-change/references/tree-adapter.md": "14578dd7841cc9b0f47cc019c31e4362ad3f5b6c641b4ee0059cf65fd6beee09"
+    },
+    "d0gate-files-base": {
+      "d0gate-files-base/references/hetero-dispatch.md": "6a632eade71faeaba8ba9afb94ea41a43739e06d13861bdb91f14730a605ba48"
+    },
+    "d0gate-files-change": {
+      "d0gate-files-change/references/hetero-dispatch.md": "6a632eade71faeaba8ba9afb94ea41a43739e06d13861bdb91f14730a605ba48"
+    },
+    "fixture-scripts-d0gate": {
+      "fixture-scripts-d0gate/hooks/_shared/opt-in.js": "1b67383a57cf54e2cdb9007a002acef0f5b7b68f0417de00e9aa3bda212a6775",
+      "fixture-scripts-d0gate/hooks/per-turn-gate.js": "130ada640c9d414e6b51e00c2e9d886322291cc6a130c0077c140aeac44a5810",
+      "fixture-scripts-d0gate/schemas/gate-rules.schema.json": "e40bd79357bbbffbeba239baa9e01b1e30efb7e7d88dd6b4d1f3876e13f6dd32",
+      "fixture-scripts-d0gate/scripts/gate-verify.js": "5ccc0ad5d69c096f4272aa3858291976c2555a5cd809300bd3af81f1d37b1a76",
+      "fixture-scripts-d0gate/scripts/lib/config-path.js": "d790ffdfc10a35f660009271b4a924747f632ec7f791c85e5d4fd1e7b31cf70e",
+      "fixture-scripts-d0gate/scripts/lib/live-state-dir.js": "f3425522e093e9785791c841510814d67e919d3cbbb842f94fdecffbc9013c4b",
+      "fixture-scripts-d0gate/scripts/per-turn-gate-arm.js": "fa2a7355ea1a03a58b5cf835792013dc4d5811de9553d2098e928c70e7b44c92"
+    },
+    "fixture-stubs-d0gate": {
+      "fixture-stubs-d0gate/scripts/d0gate-workers/clean-g1/MODE": "2a1f6da9e35b1102c13838d12fcd8d90f0f1256611856e38c89590e09c5158f5",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/clean-g1/files/docs/CHANGES.md": "fcc42fdb913ad6184648a060ff40e0f918725e391901e72fae29cc59a13440dd",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/clean-g1/files/src/text.js": "9cdb5a05ec73c2be2d2851f882b5a479be3dd765c0fe8adb811968a59e84efb3",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/clean-g1/files/test/text.test.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/clean-g2/MODE": "c4038a9644d303c6497c27f7f018ac5ae30ea8b2bdf060388bccfc11e4dc412f",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/clean-g2/files/src/text.js": "e6466a29052c6fd96624e08f15dc876ab3faae8b23cd037ac202f418bd88dd32",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/clean-g2/files/test/text.test.js": "08dbc1a68f6da3a0cd8c52e1981b8cfc4adc5ecfadd720d217077f1c8c1ffdfd",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g3-broken/MODE": "9702dbe967316aae6b2ab2671991579a8861b7ee889528d2f621aacfc8b44a3d",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g3-broken/files/src/text.js": "fc93ceb9f4d3cef01279f6a795de4b14dd0b2a00580a07679a0bf0748c0c0b98",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g3-broken/files/test/text.test.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g3-ok/MODE": "065af26a566f11b76f0af5b35355542b3c0da283bfb5e24b1ecf34f36568b36b",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g3-ok/files/src/text.js": "9cdb5a05ec73c2be2d2851f882b5a479be3dd765c0fe8adb811968a59e84efb3",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g3-ok/files/test/text.test.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-broken/MODE": "8aba3edbe02563f7dbd5f52d1ecb120f16f05caca4a093c56c12e45b575d3b6a",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-broken/files/docs/CHANGES.md": "fcc42fdb913ad6184648a060ff40e0f918725e391901e72fae29cc59a13440dd",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-broken/files/src/text.js": "fc93ceb9f4d3cef01279f6a795de4b14dd0b2a00580a07679a0bf0748c0c0b98",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-broken/files/test/text.test.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-console/MODE": "6413612a3e768b5d55f213d15435095ae30c9aaf8675609df98035212c75f1ae",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-console/files/docs/CHANGES.md": "fcc42fdb913ad6184648a060ff40e0f918725e391901e72fae29cc59a13440dd",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-console/files/src/text.js": "7d7e328797cd0ba1e03cd540f1f2e45c95d6abc1c2afe0b63bb578a854376e22",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-console/files/test/text.test.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-legacy/MODE": "12bbc584173c6332f46f81e592273cb3d70a26fe80d5333e20a9f86e174d6a81",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-legacy/files/docs/CHANGES.md": "fcc42fdb913ad6184648a060ff40e0f918725e391901e72fae29cc59a13440dd",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-legacy/files/src/legacy/old.js": "7fa558ce3b417dcd2f641880c75f4ead9f4912dbf8398dba3ca4fd11f964fa80",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-legacy/files/src/text.js": "9cdb5a05ec73c2be2d2851f882b5a479be3dd765c0fe8adb811968a59e84efb3",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-legacy/files/test/text.test.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-nochanges/MODE": "8b10cdd6450a47979ea6589dc61fa16436831192ff54c5c04cf772ef26ce5bbb",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-nochanges/files/src/text.js": "9cdb5a05ec73c2be2d2851f882b5a479be3dd765c0fe8adb811968a59e84efb3",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/g4-nochanges/files/test/text.test.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "fixture-stubs-d0gate/scripts/d0gate-workers/noop/MODE": "f42479bb812791672351969841b5817302ec3f87c7f1f803874fc86156266eb3",
+      "fixture-stubs-d0gate/scripts/dispatch-hetero.sh": "5a28988a99bd8138b7ae22ed8ccb1b049a93e0a49c0a26cbb2a515800630d135"
     }
   },
   "pack_meta": {
@@ -10762,6 +10828,36 @@
       "kind": "dir",
       "source": "REVIEW_PROMPT.md cut from dispatch-review.sh contract block",
       "ref": "09ca1458ca939f7be7d76167866b0e1c6ec07b3a"
+    },
+    "ceo-agent-d0gate-base": {
+      "kind": "skill",
+      "source": "ceo-agent",
+      "ref": "45edf93da867d0f5cd0b9bd356cb2659471cb926"
+    },
+    "ceo-agent-d0gate-change": {
+      "kind": "dir",
+      "source": "/tmp/tmp.7tXwuZqx6F",
+      "ref": "45edf93da+candidates/depth0-gate-arming.md"
+    },
+    "d0gate-files-base": {
+      "kind": "scripts",
+      "source": "references/hetero-dispatch.md",
+      "ref": "45edf93da867d0f5cd0b9bd356cb2659471cb926"
+    },
+    "d0gate-files-change": {
+      "kind": "scripts",
+      "source": "references/hetero-dispatch.md",
+      "ref": "45edf93da867d0f5cd0b9bd356cb2659471cb926"
+    },
+    "fixture-scripts-d0gate": {
+      "kind": "scripts",
+      "source": "scripts/gate-verify.js,scripts/per-turn-gate-arm.js,scripts/lib/live-state-dir.js,schemas/gate-rules.schema.json,hooks/per-turn-gate.js",
+      "ref": "45edf93da867d0f5cd0b9bd356cb2659471cb926"
+    },
+    "fixture-stubs-d0gate": {
+      "kind": "dir",
+      "source": "d0gate/stubs",
+      "ref": "d0gate-stubs@45edf93da"
     }
   }
 }

@@ -1375,12 +1375,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### Decision cards get opened with no options the owner can press
 - **Id**: BL-0321
-- **Status**: open
+- **Status**: shipped 412012c1c 2026-10-28
 - **Since**: 2026-10-28
 - **Origin**: peer
 - **Reporter**: hangar--claude
 - **Report**: 2026-10-28 fleet
-- **Reply**: 2026-10-28 fleet
+- **Reply**: 2026-10-28 fleet:01M61BZ9X9KVT84W5WDGTAPMVP
 - **Problem**: 代理人開待決卡時常只寫問題、不給選項，owner 在面板上沒有東西可按；session 壓縮後，記得的開卡提示只剩一行、沒提選項，而開卡指令對零個選項也不報錯。
 - **Impact**: owner 得改用打字回覆，面板形同虛設；hangar 已連兩張卡這樣，owner 反映不是第一次。
 - **Trigger**: lane dcopt merges (fix already dispatched)

@@ -96,7 +96,7 @@ const boundaryList = () => [...DOA_CLASSES, ...BOARD_BOUNDARIES].join(' | ');
 
 // The orchestrator marker (level l3-l6) is the repo's definition of an autonomous session (involvement preset just-results).
 function isAutonomous() {
-  try { return Boolean(require('./session-mode.js').readMarker()); } catch (_error) { return false; }
+  try { return require('./session-mode.js').isAutonomousSession(); } catch (_error) { return false; }
 }
 
 // -> { actions } | { failure } ; never throws. The caller's cwd carries the project doa-config override ($PWD).

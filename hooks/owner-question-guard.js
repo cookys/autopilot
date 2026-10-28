@@ -159,8 +159,7 @@ function rootState(input) {
 function isAutonomous(sessionId) {
   try {
     if (typeof sessionId !== 'string' || !sessionId) return false;
-    const m = require('../scripts/session-mode.js').readSessionRecord(sessionId);
-    return Boolean(m && m.level);
+    return require('../scripts/session-mode.js').isAutonomousSession(sessionId);
   } catch { return false; }
 }
 

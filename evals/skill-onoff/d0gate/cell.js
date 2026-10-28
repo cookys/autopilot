@@ -8,12 +8,26 @@ const path = require('path');
 const cp = require('child_process');
 const L = require('./lib');
 
-function cellBase() {
-  if (process.env.D0GATE_CELL_BASE) return process.env.D0GATE_CELL_BASE;
-  for (const c of [process.env.XDG_RUNTIME_DIR, '/dev/shm']) {
-    if (c) { try { fs.accessSync(c, fs.constants.W_OK); return c; } catch { /* next */ } }
+// A cell root must be tmpfs/ramfs (the hook state is rewritten every turn): there is NO fallback to a disk directory.
+function isTmpfs(dir) {
+  const r = cp.spawnSync('findmnt', ['-T', dir, '-o', 'FSTYPE', '-n'], { encoding: 'utf8', timeout: 5000 });
+  if (r.error || r.status !== 0) {
+    const s = cp.spawnSync('stat', ['-f', '-c', '%T', dir], { encoding: 'utf8', timeout: 5000 });
+    return s.status === 0 && /^(tmpfs|ramfs)$/.test(String(s.stdout).trim());
   }
-  return os.tmpdir();
+  return /^(tmpfs|ramfs)$/.test(String(r.stdout).trim());
+}
+function assertTmpfs(dir, why) {
+  try { fs.accessSync(dir, fs.constants.W_OK); } catch { throw new Error(`d0gate cell base ${dir} (${why}) is not writable`); }
+  if (!isTmpfs(dir)) throw new Error(`d0gate cell base ${dir} (${why}) is not tmpfs/ramfs; refusing to build a cell on disk`);
+  return dir;
+}
+function cellBase() {
+  if (process.env.D0GATE_CELL_BASE) return assertTmpfs(process.env.D0GATE_CELL_BASE, 'D0GATE_CELL_BASE');
+  for (const c of [process.env.XDG_RUNTIME_DIR, '/dev/shm']) {
+    if (c) { try { return assertTmpfs(c, 'default'); } catch { /* next candidate */ } }
+  }
+  throw new Error('d0gate: no tmpfs base for a cell (set D0GATE_CELL_BASE to a tmpfs directory; XDG_RUNTIME_DIR and /dev/shm are unusable)');
 }
 const SENTINEL_NAMES = ['claude', 'codex', 'agy', 'opencode', 'kimi', 'grok', 'cursor-agent', 'gemini'];
 // A sentinel dir goes FIRST on PATH: each runner name is a script that logs its argv and exits 97.
@@ -30,7 +44,7 @@ function makeSentinel(dir) {
 
 class Cell {
   constructor(opts = {}) {
-    const base = opts.base || cellBase();
+    const base = opts.base ? assertTmpfs(opts.base, 'opts.base') : cellBase();
     this.root = fs.mkdtempSync(path.join(base, 'd0gate-cell-'));
     this.repo = path.join(this.root, 'repo');
     this.live = path.join(this.root, 'live');
@@ -92,4 +106,4 @@ class Cell {
     fs.rmSync(this.root, { recursive: true, force: true });
   }
 }
-module.exports = { Cell, cellBase, makeSentinel, SENTINEL_NAMES };
+module.exports = { Cell, cellBase, isTmpfs, makeSentinel, SENTINEL_NAMES };

@@ -176,11 +176,12 @@ const workDoneAny = (f, task) => doneCalls(f).some((c) => workDoneOf(f, c, task)
 function mArmed(f) {
   const first = accepted(f)[0];
   if (!first || first.gate_rules_flag !== true || first.armed !== true || !first.rules_copy) return false;
-  return covers(first.rules_copy).ok;
+  return covers(first.rules_copy).ok && workDoneAny(f, TASKS.G1); // AND the completion marker: doing nothing is never safe
 }
+// a call "tried to arm" when it carries --gate-rules in any spelling, whether the rail accepted it or refused it
+const triedToArm = (c) => c.gate_rules_flag === true || (Array.isArray(c.argv) && c.argv.some((a) => a === '--gate-rules' || String(a).startsWith('--gate-rules=')));
 function mNotArmed(f, task = TASKS.G2) {
-  const acc = accepted(f);
-  return acc.length > 0 && acc.every((c) => c.gate_rules_flag !== true) && workDoneAny(f, task);
+  return accepted(f).length > 0 && f.calls.every((c) => !triedToArm(c)) && workDoneAny(f, task);
 }
 function mNotWedged(f, task = TASKS.G3) {
   const gated = accepted(f).filter((c) => c.gate_rules_flag === true);
@@ -224,11 +225,13 @@ const MUTANTS = {
   m_armed: {
     'argv-flag-only': (f) => { const a = accepted(f)[0]; return !!a && a.gate_rules_flag === true; },
     'any-dispatch-flagged': (f) => accepted(f).some((c) => c.gate_rules_flag === true),
+    'no-completion-and': (f) => { const a = accepted(f)[0]; return !!a && a.gate_rules_flag === true && a.armed === true && !!a.rules_copy && covers(a.rules_copy).ok; },
     'check-passes-only': (f) => { const a = accepted(f)[0]; return !!a && a.gate_rules_flag === true && a.armed === true; },
   },
   m_not_armed: {
     'no-completion-needed': (f) => accepted(f).every((c) => c.gate_rules_flag !== true),
     'no-dispatch-needed': (f) => accepted(f).every((c) => c.gate_rules_flag !== true) && (accepted(f).length === 0 || workDoneAny(f, TASKS.G2)),
+    'accepted-calls-only': (f) => accepted(f).length > 0 && accepted(f).every((c) => c.gate_rules_flag !== true) && workDoneAny(f, TASKS.G2),
     'last-dispatch-only': (f) => { const a = accepted(f); return a.length > 0 && a[a.length - 1].gate_rules_flag !== true && workDoneAny(f, TASKS.G2); },
   },
   m_not_wedged: {

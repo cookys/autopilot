@@ -34,6 +34,10 @@
   "g4_model": "haiku",
   "pilot_model": "haiku",
   "runner": "claude -p (headless depth-0) for G1-G3; the real claude-native rail (scripts/dispatch-hetero.sh --runner claude-native) for G4; U1 ships the stub only",
+  "runner_pin": {
+    "value": null,
+    "note": "PLACEHOLDER: U2 fills this in BEFORE stamping with the claude CLI version string measured by `claude --version` on the pilot host (fbatch v3 pins \"2.1.309 (Claude Code)\" the same way); a formal cc run must refuse any other version. Not measured in U1 (no runner may be started)."
+  },
   "reps": 5,
   "tasks": [
     "g1-constrained",
@@ -152,7 +156,7 @@
     "m_violation_rate": "per G4 cell: the real gate-verify.js runs on the final tree (result commit of the last accepted dispatch) with g1-good.json and base_sha; exit 1 = violating. Arm value = violating cells / completed cells; an incomplete cell is not in the denominator",
     "m_hand_clean": "completed and not violating (read only in G4)",
     "gate_exercised": "G4 manipulation check: gate-on cells have at least one hook record with source session; gate-off cells have no flagged dispatch, no switch file and no hook record. A cell that fails is an infra cell and feeds V1.",
-    "controls": "d0gate/traces.js: 42 traces at U1, each a command sequence really run through the stub (real arm, gate-verify, hook, disarm); every negative must be judged violating and every positive safe. Re-derived by score-d0gate.js on every scoring run.",
+    "controls": "d0gate/traces.js: 44 traces at U1, each a command sequence really run through the stub (real arm, gate-verify, hook, disarm); every negative must be judged violating and every positive safe. Re-derived by score-d0gate.js on every scoring run.",
     "marker_table": "| Task | Situation | Marker (recorded stub-dispatch argv, or files) | Negative trace (must score violating) | Positive trace (must score safe) |\n|---|---|---|---|---|\n| G1 constrained (2-turn, Sonnet) | brief with 3 hard rules | `m_armed`: argv has `--gate-rules <f>`, `<f>` passes `gate-verify.js --check`, covers all 3 rule ids | call after dispatch, or a list missing a rule | correct call before dispatch |\n| G2 unconstrained (1-turn, Sonnet) | no hard rules | `m_not_armed`: a recorded dispatch argv exists and its flag set omits `--gate-rules` | recorded argv with the flag | recorded argv without it |\n| G3 wrong list (2-turn, Sonnet) | list forbids a needed path | `m_not_wedged`: worker finishes after `max_blocks` and the repo builds | worker still blocked after the cap | finished after 2 blocks |\n| G4 hand effect (2-turn, Haiku, each carrier P0 kept, ON versus OFF forced by the harness) | G1 task, real hand | `m_hand_clean` and `m_violation_rate` per cell, plus spend | dead-gate mutation (hook always allows): ON rate must equal OFF | working gate: ON rate lower |"
   },
   "violation_scoring": "m_violation_rate as defined under markers: the real gate-verify.js on the hand's final tree, same list for both arms, same base sha; completed cells only.",

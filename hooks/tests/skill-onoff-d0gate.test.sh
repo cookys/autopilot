@@ -11,7 +11,7 @@
 # Every new check ships with a negative control shown RED before GREEN (CLAUDE.md rule, evidence-discipline section 58):
 #   - parity of the stub with the real rail: a planted one-character change of the copied block must fail the check
 #   - arms / packs: a tampered pack byte, a second differing file, a change arm that does not differ must fail --check-arms
-#   - markers: 12 planted shortcut mutants must each misjudge a trace (d0gate/controls.js RED phase), then GREEN on 42 traces
+#   - markers: 15 planted shortcut mutants must each misjudge a trace (d0gate/controls.js RED phase), then GREEN on 44 traces
 #     that are really run through the stub (impact walk, evidence-discipline section 64)
 #   - decision table: 27 cases + 8 single-rule mutants (d0gate/table-cases.js)
 #   - campaign guards: cap above the ceiling, estimate x 1.5 above the cap, cc on a draft prereg, cc formal without pilot rows
@@ -125,15 +125,22 @@ const arms2 = path.join(tmp, "arms-d"); fs.rmSync(arms2, { recursive: true, forc
 const ch2 = JSON.parse(fs.readFileSync(path.join(arms2, "change.json"), "utf8")); ch2.fixture_scripts = ["fixture-scripts-d0gate"]; fs.writeFileSync(path.join(arms2, "change.json"), JSON.stringify(ch2));
 expectRed("fixture packs differ", run(path.join(ev, "packs"), arms2), /fixture_scripts differ/);
 process.exit(bad ? 1 : 0);' "$EV" "$TEST_TMP" || fail "arms planted reds"
+S node -e '
+const fs = require("fs"); const [ev] = process.argv.slice(1);
+const cand = fs.readFileSync(ev + "/candidates/depth0-gate-arming.md", "utf8");
+const base = fs.readFileSync(ev + "/packs/ceo-agent-d0gate-base/SKILL.md", "utf8");
+const chg = fs.readFileSync(ev + "/packs/ceo-agent-d0gate-change/SKILL.md", "utf8");
+if (chg !== base.replace("\n## Startup\n", "\n" + cand + "\n## Startup\n")) throw new Error("change pack is not base + candidate verbatim");
+console.log("candidate paragraph (" + Buffer.byteLength(cand) + " bytes) equals the inserted block of the change pack byte for byte");' "$EV" || fail "candidate vs change pack"
 ok "arms and packs"
 
-echo "=== 4. markers: RED (planted mutants) then GREEN (42 traces really run through the stub) + impact walk ==="
+echo "=== 4. markers: RED (planted mutants) then GREEN (44 traces really run through the stub) + impact walk ==="
 S node "$D0/controls.js" >"$TEST_TMP/controls.out" 2>&1; rc=$?
 cat "$TEST_TMP/controls.out"
 [ "$rc" = 0 ] || fail "d0gate/controls.js rc=$rc"
 grep -q '^NOT-CAUGHT' "$TEST_TMP/controls.out" && fail "a mutant was not caught"
 [ "$(grep -c '^RED ' "$TEST_TMP/controls.out")" -ge 12 ] || fail "expected at least 12 RED mutant lines"
-[ "$(grep -c '^GREEN ' "$TEST_TMP/controls.out")" = 42 ] || fail "expected 42 GREEN trace lines"
+[ "$(grep -c '^GREEN ' "$TEST_TMP/controls.out")" = 44 ] || fail "expected 44 GREEN trace lines"
 ok "markers"
 
 echo "=== 5. decision table: 27 cases + 8 single-rule mutants ==="
@@ -233,12 +240,45 @@ const g = path.join(c.live, "per-turn-gate"); const files = fs.readdirSync(g);
 if (!files.some((f) => f.endsWith(".gate.json")) || !files.some((f) => /^d0g-.*\.jsonl$/.test(f))) throw new Error("switch file or hook jsonl missing under the cell live dir: " + files);
 console.log("cell root on " + fstype + "; switch file + hook jsonl under " + g + ": " + files.join(", "));
 c.destroy();' "$D0/.." || fail "isolation"
-REAL_XDG="${XDG_RUNTIME_DIR:-/nonexistent}/autopilot"
-if [ -d "$REAL_XDG" ] && find "$REAL_XDG" -newer "$T0" -name 'd0g-*' 2>/dev/null | grep -q .; then fail "d0g-* files in the real live store $REAL_XDG"; fi
-REAL_HOME_AP="$(getent passwd "$(id -un)" | cut -d: -f6)/.autopilot"
-if [ -d "$REAL_HOME_AP" ] && find "$REAL_HOME_AP" -newer "$T0" -name 'd0g-*' 2>/dev/null | grep -q .; then fail "d0g-* files under the real ~/.autopilot"; fi
 [ -z "$(find "$HOME/.claude" -newer "$T0" -type f 2>/dev/null)" ] || echo "(scratch CLAUDE_CONFIG_DIR is empty or untouched by design)"
 ok "isolation"
+
+echo "=== 9b. cell base must be tmpfs; --ledger does not break N; disarm runs on any exit ==="
+S node -e '
+const { Cell } = require(process.argv[1] + "/d0gate/cell.js"); const fs = require("fs"); const path = require("path");
+// 3: a disk directory is refused, with a clear error, and no cell is built
+let refused = false;
+try { new Cell({ base: process.argv[2] }); } catch (e) { refused = /not tmpfs/.test(e.message); console.log("RED (expected) " + e.message); }
+if (!refused) throw new Error("a non-tmpfs base was accepted");
+process.env.D0GATE_CELL_BASE = process.argv[2];
+const { cellBase } = require(process.argv[1] + "/d0gate/cell.js");
+try { cellBase(); throw new Error("D0GATE_CELL_BASE on disk was accepted"); } catch (e) { if (!/not tmpfs/.test(e.message)) throw e; }
+delete process.env.D0GATE_CELL_BASE;
+// 4: a --ledger option in the call must not redirect the stub ledger; the second call still counts N=2
+const c = new Cell().init();
+c.std([], { worker: "clean-g2" });
+const lg = path.join(c.root, "other-ledger.jsonl");
+const r2 = c.std(["--ledger", lg], { worker: "clean-g2" });
+const calls = c.facts().calls.filter((x) => x.accepted);
+if (r2.rc !== 0 || calls.length !== 2 || calls[1].n !== 2 || fs.existsSync(lg)) throw new Error("ledger/N broken by --ledger: " + JSON.stringify(calls.map((x) => x.n)) + r2.err);
+console.log("GREEN --ledger call: N=" + calls[1].n + ", stub ledger kept, option file not written");
+// 6: disarm on early exit (bad worker mode after arm) and on TERM during the worker
+const gdir = path.join(c.live, "per-turn-gate");
+const sw = () => (fs.existsSync(gdir) ? fs.readdirSync(gdir).filter((f) => f.endsWith(".gate.json")) : []);
+const rules = c.putRules("g1-good.json");
+const r3 = c.std(["--gate-rules", rules], { worker: "no-such-mode" });
+if (r3.rc === 0) throw new Error("bad worker mode did not exit non-zero");
+if (sw().length) throw new Error("switch file left after an early exit: " + sw());
+const k = c.sh("timeout -s TERM 3 bash scripts/dispatch-hetero.sh --runner claude-native --model m --prompt-file " + c.prompt + " --gate-rules " + rules, { worker: "clean-g1", env: { D0GATE_HOOK_CMD: "sleep 6" } });
+for (let i = 0; i < 40 && sw().length; i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+if (sw().length) throw new Error("switch file left after TERM: " + sw());
+console.log("GREEN disarm on early exit and on TERM (rc " + k.rc + ")");
+// red control: with the disarm switched off the same early exit DOES leave the switch file
+c.std(["--gate-rules", rules], { worker: "no-such-mode", env: { D0GATE_NO_DISARM: "1" } });
+if (!sw().length) throw new Error("control cannot see a left-behind switch file");
+console.log("RED (expected) with D0GATE_NO_DISARM=1 the switch file stays: " + sw().join(","));
+c.destroy();' "$D0/.." "$TEST_TMP" || fail "section 9b"
+ok "tmpfs base, --ledger, disarm trap"
 
 echo "=== 10. P4 rehearsal: the candidate paragraph byte for byte passes check-guidance-eval; one changed byte fails ==="
 MINI="$TEST_TMP/p4repo"; mkdir -p "$MINI/skills/ceo-agent"
@@ -287,9 +327,17 @@ S node "$EV/stamp-prereg.js" --row d0gate --root "$RH" --check >"$TEST_TMP/stamp
 echo "RED (expected) $(cat "$TEST_TMP/stamp-red.out")"
 grep -q '"d0gate"' "$EV/prereg/FROZEN.json" && fail "the real FROZEN.json already holds d0gate (U1 must not stamp)"
 case "$(S node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status)' "$EV/prereg/d0gate.json")" in draft*) ;; *) fail "prereg status is not draft";; esac
+if grep -nE '/tmp/|/home/|tmp\.[A-Za-z0-9]{8}' "$EV/packs/manifest.json" "$EV/prereg/d0gate.json" | grep -v 'scripts/dispatch' | grep -E 'd0gate' ; then fail "local path in d0gate metadata"; fi
 ok "stamp rehearsal (real row untouched: draft, not in FROZEN.json)"
 
-echo "=== 12. runner sentinel and spend ==="
+echo "=== 12. nothing written to the real stores (checked after every section that runs traces) ==="
+REAL_XDG="${XDG_RUNTIME_DIR:-/nonexistent}/autopilot"
+if [ -d "$REAL_XDG" ] && find "$REAL_XDG" -newer "$T0" -name 'd0g-*' 2>/dev/null | grep -q .; then fail "d0g-* files in the real live store $REAL_XDG"; fi
+REAL_HOME_AP="$(getent passwd "$(id -un)" | cut -d: -f6)/.autopilot"
+if [ -d "$REAL_HOME_AP" ] && find "$REAL_HOME_AP" -newer "$T0" -name 'd0g-*' 2>/dev/null | grep -q .; then fail "d0g-* files under the real ~/.autopilot"; fi
+ok: real live store and ~/.autopilot untouched
+
+echo "=== 13. runner sentinel and spend ==="
 if [ -s "$SENT/sentinel.log" ]; then echo "sentinel log:"; cat "$SENT/sentinel.log"; fail "a runner binary was called"; fi
 echo "sentinel log is empty: no runner binary was started"
 ok "zero spend"

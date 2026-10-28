@@ -19,8 +19,9 @@ mkdir -p "$CELL/.d0gate" "$CELL/wt"; mkdir -p -m 700 "$LIVE"
 export AUTOPILOT_LIVE_DIR="$LIVE"
 export AUTOPILOT_CONFIG_FILE="${AUTOPILOT_CONFIG_FILE:-$CELL/config.json}"
 [ -f "$AUTOPILOT_CONFIG_FILE" ] || echo '{}' >"$AUTOPILOT_CONFIG_FILE"
-LEDGER="$CELL/.d0gate/ledger.jsonl"
-export D0GATE_LEDGER="$LEDGER"
+# the stub's own names carry a D0G_ prefix: the copied option loop below assigns LEDGER (--ledger), BRANCH, MODEL, ... itself
+D0G_LEDGER="$CELL/.d0gate/ledger.jsonl"
+export D0GATE_LEDGER="$D0G_LEDGER"
 RUNNER="auto"; BRANCH=""; PROMPT_FILE=""; MODEL=""; BASE=""; TIMEOUT=""; GATE_RULES_FILE=""
 IS_CCSHIM=0; IS_CNATIVE=0; KEEP=0; SKILLS=(); MAIN_CHECKOUT_FP_EXCLUDE_PREFIXES=(); MAIN_CHECKOUT_FP_EXCLUDE_PATHS=()
 usage() { echo "d0gate stub of the hetero rail script (see the header of this file)"; }
@@ -127,7 +128,7 @@ CHILD_SESSION_ID="d0g-$$-$RANDOM"
 [ -n "$PROMPT_FILE" ] && [ -r "$PROMPT_FILE" ] || die_precondition "--prompt-file is required and must be readable"
 REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || die_precondition "not inside a git repository"
 BASE_SHA="$(git -C "$REPO" rev-parse --verify "${BASE:-HEAD}^{commit}" 2>/dev/null)" || die_precondition "cannot resolve --base"
-N="$(( $(grep -c '"kind":"call"' "$LEDGER" 2>/dev/null || true) + 1 ))"
+N="$(( $(grep -c '"kind":"call"' "$D0G_LEDGER" 2>/dev/null || true) + 1 ))"
 RULES_COPY=""; RULES_SHA=""
 if [ -n "$GATE_RULES_FILE" ]; then
   RULES_COPY="$CELL/.d0gate/rules.$N.json"; cp "$GATE_RULES_FILE" "$RULES_COPY"
@@ -143,6 +144,9 @@ ARMED=false
 if [ -n "$GATE_RULES_FILE" ]; then
   if node "$SELF_DIR/per-turn-gate-arm.js" arm --session "$CHILD_SESSION_ID" --repo "$WT" --rules "$GATE_RULES_FILE" --ttl-seconds 900 >"$CELL/.d0gate/arm.$N.log" 2>&1; then
     ARMED=true
+    # disarm on ANY exit (early exit, error, TERM/INT/HUP), like the real rail's exit trap; the explicit disarm below stays (idempotent)
+    trap 'exit 143' TERM INT HUP
+    trap '[ "${D0GATE_NO_DISARM:-0}" = 1 ] || node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$CHILD_SESSION_ID" >/dev/null 2>&1' EXIT
   fi
 fi
 ledger_append arm n="$N" armed="$ARMED"

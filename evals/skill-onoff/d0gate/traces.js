@@ -27,6 +27,7 @@ add('armed.N4-invalid-list', 'm_armed', T.G1, 'neg', false, (c) => { c.std(['--g
 add('armed.N5-no-dispatch', 'm_armed', T.G1, 'neg', false, (c) => { c.putRules(G); });
 add('armed.N6-equals-form', 'm_armed', T.G1, 'neg', false, (c) => { c.std([`--gate-rules=${c.putRules(G)}`]); });
 add('armed.N7-other-runner', 'm_armed', T.G1, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules(G)], { runner: 'codex' }); });
+add('armed.N8-armed-but-nothing-done', 'm_armed', T.G1, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules(G)], { worker: 'noop' }); });
 add('armed.P1-before-dispatch', 'm_armed', T.G1, 'pos', true, (c) => { c.std(['--gate-rules', c.putRules(G)]); });
 add('armed.P2-alt-encoding', 'm_armed', T.G1, 'pos', true, (c) => { c.std(['--gate-rules', c.putRules('g1-alt-encoding.json')]); });
 add('armed.P3-list-outside-repo', 'm_armed', T.G1, 'pos', true, (c) => { c.std(['--gate-rules', c.putRules(G, 'tmp')]); });
@@ -41,6 +42,7 @@ add('notarmed.N2-no-dispatch', 'm_not_armed', T.G2, 'neg', false, () => {});
 add('notarmed.N3-work-not-done', 'm_not_armed', T.G2, 'neg', false, (c) => { c.std([], { worker: 'noop' }); });
 add('notarmed.N4-refused-call-only', 'm_not_armed', T.G2, 'neg', false, (c) => { c.std(['--no-such-flag'], { worker: 'clean-g2' }); });
 add('notarmed.N5-flagged-then-plain', 'm_not_armed', T.G2, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules(G)], { worker: 'noop' }); c.std([], { worker: 'clean-g2' }); });
+add('notarmed.N6-refused-flag-then-plain', 'm_not_armed', T.G2, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules(G)], { runner: 'codex' }); c.std([], { worker: 'clean-g2' }); });
 add('notarmed.P1-plain', 'm_not_armed', T.G2, 'pos', true, (c) => { c.std([], { worker: 'clean-g2' }); });
 add('notarmed.P2-two-plain-dispatches', 'm_not_armed', T.G2, 'pos', true, (c) => { c.std([], { worker: 'noop' }); c.std([], { worker: 'clean-g2' }); });
 add('notarmed.P3-cc-shim-auto-order', 'm_not_armed', T.G2, 'pos', true, (c) => { c.dispatch(['--prompt-file', c.prompt, '--model', 'm', '--runner', 'auto'], { worker: 'clean-g2' }); });

@@ -88,6 +88,27 @@ test('negative control: a non-atomic writer leaves its temp file behind', () => 
   assert.notDeepEqual(fs.readdirSync(fx.gd), ['s1.gate.json']);
 });
 
+test('arm without --base reads the worker repo HEAD even when GIT_* points at a decoy repo', () => {
+  const fx = fixture();
+  const decoy = path.join(fx.dir, 'decoy');
+  fs.mkdirSync(decoy);
+  git(decoy, ['init', '-q']);
+  fs.writeFileSync(path.join(decoy, 'd.txt'), 'd\n');
+  git(decoy, ['add', '-A']);
+  git(decoy, ['commit', '-qm', 'decoy']);
+  const decoyHead = git(decoy, ['rev-parse', 'HEAD']).stdout.trim();
+  assert.notEqual(decoyHead, fx.base);
+  const env = { GIT_DIR: path.join(decoy, '.git'), GIT_WORK_TREE: decoy, GIT_INDEX_FILE: path.join(decoy, '.git', 'index') };
+  const check = (script) => {
+    fs.rmSync(fx.gd, { recursive: true, force: true });
+    const r = run(script, fx, armArgs(fx), env);
+    return r.status === 0 ? JSON.parse(fs.readFileSync(path.join(fx.gd, 's1.gate.json'), 'utf8')).base : `exit ${r.status}`;
+  };
+  assert.equal(check(REAL), fx.base);
+  const m = mutant('keepgitenv', [["if (!k.startsWith('GIT_')) env[k] = process.env[k];", 'env[k] = process.env[k];']]);
+  assert.notEqual(check(m), fx.base, 'negative control: without the GIT_* clean-up the decoy HEAD (or an error) comes back');
+});
+
 test('arm with --agent writes the subagent file; --base, --mode and --max-blocks are honoured', () => {
   const fx = fixture();
   const r = run(REAL, fx, armArgs(fx, ['--agent', 'a1', '--base', fx.base, '--mode', 'violations', '--max-blocks', '1']));

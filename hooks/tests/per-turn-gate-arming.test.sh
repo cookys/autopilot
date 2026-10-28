@@ -196,6 +196,27 @@ tn3_veto_ignores_file() {
   [ -z "$STOP_OUT" ] && [ "$before" = "$(listing)" ]
 }
 
+# A worktree entered through a symlink: the hook compares realpaths, and gate-verify.js realpaths --repo
+# itself, so a violation is a normal block (reason block, not error) and a clean tree is allowed.
+tn3_symlink() {
+  fresh tn3s; arm_case; ln -s "$CASE_REPO" "$CASE_DIR/link"
+  local real="$CASE_REPO"; CASE_REPO="$CASE_DIR/link"
+  stop "$1" false; [ -z "$STOP_OUT" ] && [ "$(log_has '"decision":"allow","reason":"clean","counter":0,"source":"session"')" = 1 ] || { CASE_REPO="$real"; return 1; }
+  echo x >"$real/src/legacy/new.js"
+  stop "$1" true
+  CASE_REPO="$real"
+  [ "$(blocks)" = 1 ] && [ "$(log_has '"decision":"block","reason":"block","counter":1')" = 1 ]
+}
+# Global off, no gate file, AUTOPILOT_LIVE_DIR names a path that does not exist. resolveLiveDir() (not changed
+# here) creates a missing override directory, so the empty base directory appears; pinned as is. The hook
+# itself creates no per-turn-gate directory and no file.
+tn3_missing_live() {
+  fresh tn3m; local nope="$CASE_DIR/nope/live"; export AUTOPILOT_LIVE_DIR="$nope"
+  stop "$1" false
+  local got; got="$(find "$CASE_DIR/nope" | LC_ALL=C sort | sed "s#$CASE_DIR/##" | tr '\n' ' ')"
+  [ -z "$STOP_OUT" ] && [ "$got" = "nope nope/live " ]
+}
+
 # ---- T-N4: every invalid gate file behaves exactly like no file (global on: same record, no source;
 # global off: empty output and no new live-state entry).
 tamper() { # <kind> : edit the armed gate file of the current case
@@ -328,6 +349,9 @@ tg1_key() { # <hook> <key>: with the sentinel configured in the worker's repo, t
   unset PTG_SENT
   return $rc
 }
+# core.askPass was dropped: it only fires when git asks for a password on an https remote, which needs a
+# live credential prompt this offline fixture cannot produce. core.alternateRefsCommand was dropped: it only
+# runs on a repo that has objects/info/alternates plus a fetch or receive, a fixture not worth its cost here.
 # core.pager was dropped: git only starts a pager on a tty, so no unisolated control can fire it here.
 TG1_KEYS="fsmonitor hooksPath editor sshCommand diffexternal credential gpg includefsmonitor smudge"
 tg1_all() { local k rc; for k in $TG1_KEYS; do tg1_key "$1" "$k"; rc=$?; [ "$rc" = 0 ] || { echo "tg1 key failed ($rc): $k" >&2; return 1; }; done; }
@@ -377,6 +401,8 @@ if tg3; then assert_eq 0 0 "TG3 holds"; else fail "TG3 drift between gate-verify
 cp "$ARM" "$TEST_TMP/arm-drift.js"; sed -i 's#core.hooksPath=/dev/null#core.hooksPath=/tmp#' "$TEST_TMP/arm-drift.js"
 ARM_SAVE="$ARM"; ARM="$TEST_TMP/arm-drift.js"; if tg3; then fail "TG3 negative control: drift not seen"; else assert_eq 0 0 "TG3 red on a drifted copy"; fi; ARM="$ARM_SAVE"
 holds TG1 tg1_all
+holds TN3-symlink tn3_symlink
+holds TN3-missing-live tn3_missing_live
 
 # T-N6 scans the real tree; its negative control is a fake tree that mentions the flag.
 if tn6 "$REPO_ROOT"; then assert_eq 0 0 "TN6 no depth-0 text mentions the arm flag"; else fail "TN6 a skill or agent mentions --gate-rules or per-turn-gate-arm"; fi

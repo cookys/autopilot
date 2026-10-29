@@ -462,7 +462,13 @@ for (const surface of SURFACES) {
     w.cwdReal.value = '/work/repo2/sub'
     w.files[LIVE + '/runs/paths/' + KEY + '.json'] = j({ '/work/repo': { project_key: KEY, repo_identity: 'y' } })
     await w.clock.advance(5000)
-    expect(await bandText($, surface)).toContain('--project ' + OTHER_KEY)
+    // routing proof without the state text: OTHER_KEY gets its own project envelope (identity /work/otherproj), so the band names THAT project
+    // (a different repo name than KEY's FOUND marker); before this the unavailable text carried '--project <key>' for the same check
+    w.files[LIVE + '/runs/' + OTHER_KEY + '.json'] = j(envelope({ scope: { project_key: OTHER_KEY, repo_identity: 'git-common-dir:/work/otherproj/.git', root_run_id: null } }, null, OTHER_KEY))
+    await w.clock.advance(5000)
+    const other = await bandText($, surface)
+    expect(other).toContain('Stalled otherproj')
+    expect(other).not.toContain(FOUND)
   })
 
   test('band: after /clear the sid changes, the old marker is gone and the cwd route takes over (' + surface + ')', async ($, on) => {
@@ -597,7 +603,7 @@ for (const surface of SURFACES) {
     expect(await paneHeader($, surface)).toContain('host today $7.50') // served from the SSD copy
     delete w.files[AHOME + '/review/' + KEY + '/live/runs.' + KEY + '--' + ROOT + '.json']
     await w.clock.advance(5000)
-    expect(await bandText($, surface)).toContain('unavailable · run: autopilot status runs --watch --project ' + KEY)
+    expect(await bandText($, surface)).toContain("unavailable · this project's status cannot be read right now")
     w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({}, 'some-other-root')) // wrong root
     await w.clock.advance(5000)
     expect(await bandText($, surface)).toContain('unavailable')
@@ -2781,7 +2787,7 @@ for (const surface of SURFACES) {
     worldEn(on, files)
     await start($, surface)
     const wide = await bandLine($, surface, 209)
-    expect(wide.text).toBe('unavailable · run: autopilot status runs --watch --project ' + KEY + ' │ ⓘ ')
+    expect(wide.text).toBe("unavailable · this project's status cannot be read right now │ ⓘ ")
     expect(walkTexts(wide.tree)[0].props?.dimColor).toBe(true)
     const narrow = await bandLine($, surface, 40)
     expect(displayWidth(narrow.text)).toBeLessThanOrEqual(40)

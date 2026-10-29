@@ -334,7 +334,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const keyed = { project_key: scope.key, root_run_id: scope.root }
   if (found.envelope === null) {
     const malformed = finds.some(f => f.found.status === 'malformed')
-    return none(malformed ? plain('unreadable', STATE_TEXT.unreadable, keyed) : plain('unavailable', STATE_TEXT.unavailable(scope.key), keyed))
+    return none(malformed ? plain('unreadable', STATE_TEXT.unreadable, keyed) : plain('unavailable', STATE_TEXT.unavailable(), keyed))
   }
   const published = typeof found.envelope.published_at === 'string' ? found.envelope.published_at : null
 
@@ -377,7 +377,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   }
   if (fresh.length === 0) {
     const at = published !== null && Number.isFinite(Date.parse(published)) ? hhmm(Date.parse(published)) : null
-    return { snap: plain('stale', STATE_TEXT.stale(scope.key, at), common), counts: null, acceptance: null }
+    return { snap: plain('stale', STATE_TEXT.stale(at), common), counts: null, acceptance: null }
   }
   // W3a sources. The per-session files are named by the sanitised sid; every sidecar is read for THIS scope only.
   const fileSid = sanitizeSid(sid)

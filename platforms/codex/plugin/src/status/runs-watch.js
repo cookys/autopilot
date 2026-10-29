@@ -50,6 +50,7 @@ const { createQcPublisher } = require('./qc-fact');
 const { createLoadSourcePublisher, isolatedEnv } = require('./load-source');
 const { createReviewPublisher } = require('./review-input');
 const { createResiduePublisher } = require('./residue');
+const { cleanGitEnv } = require('./git-env');
 const { createStageWalkPublisher } = require('./stage-walk');
 const { createSpendHistoryPublisher } = require('./spend-history');
 const { createCodeFingerprint, pluginIdentity } = require('./code-fingerprint');
@@ -319,12 +320,25 @@ function createBrainSpendReader(env) {
   return { read };
 }
 
+// `git-common-dir:<main>/.git` -> `<main>`; null when the identity is absent or the repository is bare / non-standard (callers fall back to cwd).
+function stableRepoRoot(identity) {
+  const m = typeof identity === 'string' ? /^git-common-dir:(.+)$/.exec(identity) : null;
+  return m && path.basename(m[1]) === '.git' ? path.dirname(m[1]) : null;
+}
+
 // --- worktree -> project map -------------------------------------------------------------
-function worktreePaths({ cwd, scope }) {
+// `onFail(why)` (optional) receives how a failed listing failed: a timeout, a spawn error (e.g. ENOENT when the cwd is gone) or an exit code with stderr.
+function worktreePaths({ cwd, scope, onFail }) {
   const out = {};
   if (!scope.repo_identity) return out;
-  const r = spawnSync('git', ['worktree', 'list', '--porcelain'], { cwd, encoding: 'utf8', timeout: 10000 });
-  if (r.status !== 0) return null; // unknown: the caller keeps the previous map
+  const r = spawnSync('git', ['worktree', 'list', '--porcelain'], { cwd, encoding: 'utf8', timeout: 10000, env: cleanGitEnv(process.env) });
+  if (r.status !== 0) { // unknown: the caller keeps the previous map
+    if (typeof onFail === 'function') {
+      const tail = r.stderr ? `: ${String(r.stderr).trim().split('\n')[0].slice(0, 200)}` : '';
+      onFail(r.error ? (r.error.code === 'ETIMEDOUT' ? 'timeout' : `error ${r.error.code || r.error.message}`) + tail : `rc=${r.status}${tail}`);
+    }
+    return null;
+  }
   for (const line of String(r.stdout).split('\n')) {
     if (!line.startsWith('worktree ')) continue;
     try {
@@ -333,6 +347,19 @@ function worktreePaths({ cwd, scope }) {
     } catch (_error) { /* a pruned worktree has no realpath: skip it */ }
   }
   return out;
+}
+
+// watcher.log is append-only and fed by a long-lived process: past WATCHER_LOG_MAX_BYTES it moves to watcher.log.1 (one generation, the old
+// .1 is replaced). 5 MB holds well over 50 000 timestamped lines, far beyond what a healthy watcher writes in a week, and bounds the disk cost of a
+// runaway line to two files. A detached watcher keeps its stdio fd on the renamed file until it exits, so startWatcherDetached rotates before
+// it opens the fd and log() rotates before each append. Fail-open: any error leaves the log as it is.
+const WATCHER_LOG_MAX_BYTES = 5 * 1024 * 1024;
+function rotateWatcherLog(file, maxBytes = WATCHER_LOG_MAX_BYTES) {
+  try {
+    if (fs.statSync(file).size <= maxBytes) return false;
+    fs.renameSync(file, `${file}.1`);
+    return true;
+  } catch (_error) { return false; }
 }
 
 // Task-receipt re-poll decision: a root with a live run polls every tick; a settled root once its cache is TASK_SETTLED_POLL_MS old.
@@ -368,6 +395,10 @@ function createWatcher({
   let scope = scopeFromCwd(cwd);
   if (scope.project_key !== key) scope = { repo_identity: null, project_key: key };
   let identity = scope.repo_identity;
+  // The directory the watcher's git calls run in: the MAIN checkout derived from the repo identity, not the cwd it was started in. A watcher
+  // started from a linked worktree (hooks/runs-watch-autostart.js used to pass that worktree) outlives it when the worktree is removed, and
+  // every `git worktree list` / residue scan from a vanished cwd then failed forever (BL-0329). The stable root going away is a real failure.
+  const repoDir = () => stableRepoRoot(identity) || cwd;
 
   const costs = createCostReader(env);
   const brainSpend = createBrainSpendReader(env);
@@ -377,13 +408,13 @@ function createWatcher({
   const qcFact = createQcPublisher({ ...sidecarArgs, repo: cwd }); // stage-graph P7c: <project_key>.qc.json
   const loadSourceSidecar = createLoadSourcePublisher({ live, env, repoDir: path.resolve(__dirname, '..', '..'), writeAtomic, log: (m) => log(m) }); // P7b: <live>/load-source.json
   const reviewSidecar = createReviewPublisher({ runsDir, key, live, env, getIdentity: () => identity, writeAtomic, log: (m) => log(m) }); // P7d: <project_key>.review.json
-  const residueSidecar = createResiduePublisher({ runsDir, key, repo: cwd, writeAtomic, log: (m) => log(m), now }); // P7 D3: <project_key>.residue.json (async scan, 60 s throttle)
+  const residueSidecar = createResiduePublisher({ runsDir, key, repo: () => repoDir(), writeAtomic, log: (m) => log(m), now }); // P7 D3: <project_key>.residue.json (async scan, 60 s throttle)
   const spendHistory = createSpendHistoryPublisher({ live, writeAtomic, log: (m) => log(m) }); // follow-up C: <live>/runs/spend-history.json (host-wide, one sample per 15 min, 48 h)
   const stageWalkSidecar = createStageWalkPublisher({ live, writeAtomic, log: (m) => log(m) }); // P7 D4: <live>/stage/<sid>.json
   const state = {
     lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null, host_today_brain_usd: null, brain_cap_usd: brainSpend.read().brain_cap_usd },
-    idleSince: null,
+    idleSince: null, lastPathsWhy: null, // lastPathsWhy: the last logged reason `git worktree list` failed (log again only when it changes)
     rootActiveAt: new Map(), droppedRoots: new Set(), // root retention (ROOT_RETENTION_S)
     // --render: last-seen signature per root, roots awaiting a publish, the debounce deadline, cached task receipts
     render: { seen: new Map(), dirty: new Set(), dueAt: null, task: new Map(), dates: new Map() },
@@ -392,6 +423,7 @@ function createWatcher({
   function log(message) {
     try {
       fs.mkdirSync(path.dirname(logFile), { recursive: true, mode: 0o700 });
+      rotateWatcherLog(logFile);
       fs.appendFileSync(logFile, `${new Date(now()).toISOString()} ${message}\n`);
     } catch (_error) { /* logging must never stop the watcher */ }
   }
@@ -429,8 +461,14 @@ function createWatcher({
   }
 
   function writePaths(force) {
-    const map = worktreePaths({ cwd, scope });
-    if (map === null) { log(`git worktree list failed; keeping the previous paths file for ${key}`); return; }
+    let why = null;
+    const map = worktreePaths({ cwd: repoDir(), scope, onFail: (w) => { why = w; } });
+    if (map === null) {
+      if (why !== state.lastPathsWhy) log(`git worktree list failed in ${repoDir()} (${why}); keeping the previous paths file for ${key}`);
+      state.lastPathsWhy = why;
+      return;
+    }
+    state.lastPathsWhy = null;
     const text = `${JSON.stringify(map, null, 2)}\n`;
     if (!force && text === state.lastPaths) return;
     writeAtomic(path.join(runsDir, 'paths', `${key}.json`), text);
@@ -453,18 +491,22 @@ function createWatcher({
   }
 
   // The same injectable `status task` call the renderer uses; one call per poll, cached for the publish.
+  // A failed poll refreshes the cache clock too, so a failing root obeys the same re-poll interval as a good one (before, `at` stayed at the
+  // first failure and a settled root re-polled, and re-logged, on every tick). The failure is logged here, once per transition into failing.
   function pollTask(root, nowMs) {
     const cache = state.render.task.get(root);
     const { callTaskStatus } = require('../../scripts/render-review-page');
-    const res = callTaskStatus(root, cwd, env);
+    let reason = null;
+    const res = callTaskStatus(root, repoDir(), cleanGitEnv(env), { onFail: (r) => { reason = r; } });
     if (!res) {
-      if (cache) return cache.digest; // a transient failure must not flip the signature twice
-      state.render.task.set(root, { at: nowMs, digest: 'unavailable', value: null });
+      if (!cache || !cache.failed) log(`render: ${reason || `status task unavailable for ${root}`}`);
+      if (cache) { state.render.task.set(root, { ...cache, at: nowMs, failed: true }); return cache.digest; } // a transient failure must not flip the signature twice
+      state.render.task.set(root, { at: nowMs, digest: 'unavailable', value: null, failed: true });
       return 'unavailable';
     }
     const v = res.value;
     const digest = v && typeof v.receipt_digest === 'string' && v.receipt_digest ? v.receipt_digest : res.sha256;
-    state.render.task.set(root, { at: nowMs, digest, value: res });
+    state.render.task.set(root, { at: nowMs, digest, value: res, failed: false });
     return digest;
   }
 
@@ -705,7 +747,7 @@ function createWatcher({
     }
     if (dropped.length) {
       state.roots = new Set([...state.roots].filter((r) => !dropped.includes(r)));
-      for (const root of dropped) { removeRootFiles(root); state.render.seen.delete(root); state.render.dirty.delete(root); }
+      for (const root of dropped) { removeRootFiles(root); state.render.seen.delete(root); state.render.dirty.delete(root); state.render.task.delete(root); }
     }
     const bound = freshBoundOf(rows, interval, enrichCap);
     const counts = new Map([[null, computeCounts(rows, interval, enrichCap, bound)]]);
@@ -949,6 +991,7 @@ function startWatcherDetached({
     }
     const logFile = path.join(autopilotHomeOf(env), 'review', key, 'live', 'watcher.log');
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    rotateWatcherLog(logFile);
     const fd = fs.openSync(logFile, 'a');
     try {
       const child = spawn('nohup', ['sh', ...watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render })], {
@@ -1065,6 +1108,6 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 }
 
 module.exports = {
-  taskPollDue, TASK_SETTLED_POLL_MS, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
+  taskPollDue, TASK_SETTLED_POLL_MS, rotateWatcherLog, WATCHER_LOG_MAX_BYTES, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
+  lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
 };

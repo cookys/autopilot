@@ -547,19 +547,25 @@ function compareEntry(file, rec, dir) {
     observer_note: r.observer_note || null,
   };
 }
-function callTaskStatus(root, repo, env) {
+// `opts.onFail(reason)` (the watcher): the caller reports the failure itself, once per state change, through its own timestamped log;
+// without it (the CLI renderer) the failure goes to stderr exactly as before.
+function callTaskStatus(root, repo, env, opts = {}) {
   const bin = env.AUTOPILOT_RENDER_TASK_STATUS_BIN;
   const args = ['status', 'task', '--root-run-id', root, '--json'];
+  const fail = (reason) => {
+    if (typeof opts.onFail === 'function') opts.onFail(reason);
+    else process.stderr.write(`render-review-page: ${reason}\n`);
+    return null;
+  };
   const res = bin
     ? cp.spawnSync(bin, args, { encoding: 'buffer', cwd: repo, env, timeout: 30000 })
     : cp.spawnSync(process.execPath, [path.join(REPO_ROOT, 'bin', 'autopilot.js'), ...args], { encoding: 'buffer', cwd: repo, env, timeout: 30000 });
   if (res.status !== 0) {
-    process.stderr.write(`render-review-page: status task unavailable for ${root} (rc ${res.status === null ? 'signal' : res.status})\n`);
-    return null;
+    const why = typeof opts.onFail === 'function' && res.stderr ? `: ${res.stderr.toString('utf8').trim().split('\n')[0].slice(0, 200)}` : '';
+    return fail(`status task unavailable for ${root} (rc ${res.status === null ? 'signal' : res.status})${why}`);
   }
   try { return { value: JSON.parse(res.stdout.toString('utf8')), sha256: sha256Of(res.stdout) }; } catch (_e) {
-    process.stderr.write('render-review-page: status task output is not JSON\n');
-    return null;
+    return fail('status task output is not JSON');
   }
 }
 

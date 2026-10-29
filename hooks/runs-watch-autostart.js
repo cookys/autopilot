@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * runs-watch-autostart — SessionStart + UserPromptSubmit (default-on, Tier A). Mods plan P1W W1c.
+ * runs-watch-autostart — SessionStart + UserPromptSubmit + PostToolUse ensure (default-on, Tier A). Mods plan P1W W1c.
  *
  * Gives a session in an OPTED-IN git repo the live band: write the live pointer and ensure the ONE project
  * watcher, through the same launch path `session-mode.js set` uses (`startWatcherDetached` →
@@ -31,7 +31,12 @@
  *     `<live>/tasks|attention/<sid>.json` of this project was updated within the idle window.
  *     A plain or dev-flow session holds no orchestrator marker, so this hook ALSO runs on UserPromptSubmit and re-ensures cheaply
  *     (foreground `flock -n` probe; spawn only when free; one spawn attempt per prompt).
- *   - SessionEnd does NOT stop the watcher (other sessions may share it); idle-exit handles it.
+ *     PostToolUse ensure (BL-0327): audit-log.js, which already runs on every tool call, also calls `run(payload)` with the PostToolUse
+ *     payload, so a watcher that idle-exited during a long tool-only stretch (no prompt, no orchestrator marker) comes back on the next
+ *     tool call. Same fast path (zero spawn when alive); the full path is throttled to once per 60 s per session
+ *     (`<live>/autostart/<sid>.ensure` mtime). Accepted gap: one tool call longer than the idle window leaves no PostToolUse.
+ *   - SessionEnd does NOT stop the watcher (other sessions may share it); idle-exit handles it. Because a plain session holds no
+ *     liveness signal during a long tool-only stretch, the watcher may idle-exit there; the next tool call (PostToolUse ensure) restarts it.
  *   - Isolated environment (HOME is not the real home, or CLAUDE_CONFIG_DIR is not the real ~/.claude — see
  *     src/status/load-source.js isolatedEnv) with AUTOPILOT_LIVE_DIR unset: no cache and no watcher on the shared live
  *     dir; override with AUTOPILOT_LOAD_SOURCE_TRUST_ENV=1. startWatcherDetached enforces the same for session-mode `set`.
@@ -44,7 +49,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+// child_process is loaded lazily: the per-tool-call PostToolUse fast path (hosted by audit-log.js) must not pay for it.
+function execFileSync(...args) { return require('child_process').execFileSync(...args); }
 
 const TAG = 'runs-watch-autostart';
 
@@ -258,10 +264,84 @@ function writeCache(base, cwd, key, scope, repoRoot) {
   } catch (_error) { /* cache is an optimisation only */ }
 }
 
+const ENSURE_THROTTLE_S = 60; // a tool-only stretch re-ensures about once a minute: restarts within a minute of an exit, costs one stat otherwise
+
+// PostToolUse stamp `<live>/autostart/<sid>.ensure`: JSON {cwd, project_key} (content = zero-crypto, zero-git "is the watcher alive" lookup for
+// the per-tool-call fast path; mtime = the throttle clock for the full path). Read-only helpers fail open (null / false).
+function ensureStampFile(base, sid) { return path.join(base, 'autostart', `${sid}.ensure`); }
+function readEnsureStamp(base, sid) {
+  try {
+    const file = ensureStampFile(base, sid);
+    const st = fs.statSync(file);
+    let data = null;
+    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_error) { /* claimed but not yet filled */ }
+    return { mtimeMs: st.mtimeMs, data };
+  } catch (_error) { return null; }
+}
+// true when this session may take the full path now (stamps the file so the next call inside the window is refused). Fail-open: allowed.
+function claimEnsure(base, sid) {
+  const prev = readEnsureStamp(base, sid);
+  if (prev && Date.now() - prev.mtimeMs < ENSURE_THROTTLE_S * 1000) return false;
+  try {
+    const file = ensureStampFile(base, sid);
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const now = new Date();
+    fs.closeSync(fs.openSync(file, 'a', 0o600));
+    fs.utimesSync(file, now, now);
+  } catch (_error) { /* unwritable: allow, the full path is merely not throttled */ }
+  return true;
+}
+function pidIsWatcher(pid, key) {
+  try {
+    const argv = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
+    const at = argv.indexOf('--project');
+    return ` ${argv.join(' ')} `.includes(' status runs --watch ') && at !== -1 && argv[at + 1] === key;
+  } catch (_error) { return false; }
+}
+// Only a COMPLETE stamp is ever written: the pid of a watcher confirmed `current` (so its plugin_root / plugin_version equal ours) plus that
+// identity. An incomplete stamp (the empty claim) just sends the next call after the throttle window down the full path; the fast path never
+// parses the envelope. Keeps the claim's mtime.
+function fillEnsureStamp(base, sid, cwd, key, pid, root) {
+  try {
+    if (!Number.isInteger(pid) || pid <= 0) return;
+    const own = ownIdentity(root);
+    const file = ensureStampFile(base, sid);
+    const prev = readEnsureStamp(base, sid);
+    const d = prev && prev.data;
+    if (d && d.cwd === cwd && d.project_key === key && d.pid === pid && d.plugin_root === own.root && d.plugin_version === own.version) return;
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const tmp = `${file}.tmp-${process.pid}`;
+    fs.writeFileSync(tmp, JSON.stringify({ cwd, project_key: key, pid, plugin_root: own.root, plugin_version: own.version }), { mode: 0o600 });
+    if (prev) fs.utimesSync(tmp, new Date(prev.mtimeMs), new Date(prev.mtimeMs));
+    fs.renameSync(tmp, file);
+  } catch (_error) { /* optimisation only */ }
+}
+
 function run(payload) {
   try { if (require(path.join(__dirname, '..', 'src/status/autostart-gate')).autostartDisabled(process.env)) return; } catch (_error) { if (process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART === '0') return; }
   const cwd = path.resolve(typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd());
   const root = path.resolve(__dirname, '..');
+  // PostToolUse (hosted by audit-log.js, BL-0327) runs on EVERY tool call: answer from the session's own stamp first (stat + one small read +
+  // /proc, no crypto, no git, no load-source). A stamp exists only where an earlier non-isolated run wrote it. Alive => done; a dead watcher
+  // takes the full path at most once per ENSURE_THROTTLE_S per session; SessionStart / UserPromptSubmit are never throttled.
+  const postToolUse = payload.hook_event_name === 'PostToolUse';
+  let livePostBase = null; // the base the PostToolUse stamp is read from; the full path below writes the stamp under the SAME path
+  if (postToolUse) {
+    const psid = typeof payload.session_id === 'string' ? payload.session_id : '';
+    if (!/^[A-Za-z0-9._-]{1,128}$/.test(psid)) return;
+    let pbase = null;
+    try { pbase = require('./live-session-lib.js').liveBase(); } catch (_error) { /* no live dir */ }
+    if (!pbase) return;
+    livePostBase = pbase;
+    const st = readEnsureStamp(pbase, psid);
+    if (st && st.data && st.data.cwd === cwd && /^[0-9a-f]{16}$/.test(st.data.project_key) && Number.isInteger(st.data.pid) && st.data.pid > 0) {
+      // A complete stamp names the watcher pid and the plugin identity it was confirmed against: one /proc read, no envelope parse (it can be
+      // large). A stamp from another plugin root / version (an upgrade landed) is not trusted: the full path runs WATCHVER's replacement.
+      const own = ownIdentity(root);
+      if (st.data.plugin_root === own.root && st.data.plugin_version === own.version && pidIsWatcher(st.data.pid, st.data.project_key)) return;
+    }
+    if (st && Date.now() - st.mtimeMs < ENSURE_THROTTLE_S * 1000) return;
+  }
   let base = null;
   // Isolated environment (own HOME / CLAUDE_CONFIG_DIR) on the shared live dir: no per-cwd cache and no watcher there
   // (it would write fake projects and a bogus load-source.json into the real live dir). The marker and live pointer
@@ -270,7 +350,8 @@ function run(payload) {
   let isolated = null;
   try { isolated = require(path.join(root, 'src/status/load-source')).isolatedEnv(process.env).reason; } catch (_error) { /* not isolated */ }
   if (!isolated) {
-    try { base = require('./live-session-lib.js').liveBase(); } catch (_error) { /* no fast path */ }
+    base = livePostBase || null;
+    if (base === null && !postToolUse) { try { base = require('./live-session-lib.js').liveBase(); } catch (_error) { /* no fast path */ } }
   }
   const event = payload.hook_event_name;
   const sid = typeof payload.session_id === 'string' ? payload.session_id : '';
@@ -278,6 +359,7 @@ function run(payload) {
   let fast = base ? watcherAliveFast(base, cwd, root) : null;
   if (fast && fast.stale) { reapStale(fast.stale, fast.key); fast = null; } // WATCHVER: an old install's watcher goes; the full path starts a current one
   if (fast && fs.existsSync(require(path.join(root, 'src/status/live-pointer')).pointerPath())) {
+    if (event === 'PostToolUse' && sid && /^[A-Za-z0-9._-]{1,128}$/.test(sid)) { const w = inspectWatcher(base, fast.project_key, root); if (w && w.state === 'current') fillEnsureStamp(base, sid, cwd, fast.project_key, w.pid, root); }
     if (event !== 'SessionStart' || !sid) return;
     // SessionStart still ensures this session's plain marker, still without a spawn: the cache carries the scope.
     // A cache written before MARKER lacks repo_root: take the full path once (it rewrites the cache).
@@ -294,6 +376,8 @@ function run(payload) {
   }
   // Not opted in costs no process: everything but SessionStart reads the opt-in signals without git first.
   if (event !== 'SessionStart' && !quickOptIn(cwd, sid)) return;
+  // PostToolUse: the full path is claimed (stamped) before any git runs. An isolated environment never starts a watcher: nothing to ensure.
+  if (event === 'PostToolUse' && (isolated || !base || !claimEnsure(base, sid))) return;
   const { scopeFromCwd } = require(path.join(root, 'src/status/project-key'));
   const scope = scopeFromCwd(cwd);
   if (!scope.project_key) return; // not a git repo: nothing to watch
@@ -314,10 +398,13 @@ function run(payload) {
   if (base) { // WATCHVER: no cache yet (first SessionStart) or the cache path was skipped: the same check against the lock holder
     const w = inspectWatcher(base, scope.project_key, root);
     if (w && w.state === 'stale') reapStale(w, scope.project_key);
+    if (w && w.state === 'current' && event === 'PostToolUse') fillEnsureStamp(base, sid, cwd, scope.project_key, w.pid, root);
   }
   if (isolated) return; // see above: never start a watcher on the shared live dir from an isolated environment
-  const { startWatcherDetached } = require(path.join(root, 'src/status/runs-watch'));
-  const opts = { key: scope.project_key, cwd: topLevel(cwd), env: process.env, render: true };
+  const { startWatcherDetached, stableRepoRoot } = require(path.join(root, 'src/status/runs-watch'));
+  // The watcher outlives the session: start it in the MAIN checkout, not in the linked worktree the session happens to be in (a removed
+  // worktree left it with a dead cwd and failing git calls, BL-0329). Not a standard layout (bare repo): the session's own top level.
+  const opts = { key: scope.project_key, cwd: stableRepoRoot(scope.repo_identity) || topLevel(cwd), env: process.env, render: true };
   // Optional tuning (tests use it to make the watcher idle-exit in seconds); defaults are the watcher's own.
   const idle = Number(process.env.AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S);
   const interval = Number(process.env.AUTOPILOT_RUNS_WATCH_INTERVAL_S);

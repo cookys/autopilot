@@ -33,7 +33,17 @@ LOC_CELL="$(cd "$SELF_DIR/../.." 2>/dev/null && pwd -P)"
 [ "$LOC_CELL" = "$CELL" ] || ENV_OVERRIDE=true
 [ -n "${D0GATE_CELL:-}" ] && [ "$(cd "$D0GATE_CELL" 2>/dev/null && pwd -P)" != "$CELL" ] && ENV_OVERRIDE=true
 LIVE="$CELL/live"
+# Every write below lands in .d0gate, wt, live or config.json of the pinned cell. A model may have replaced one of those directories with a
+# symlink ahead of time (inside the threat model), so each must be a plain directory whose realpath is that very path inside the cell,
+# checked before and after mkdir, and no file this script creates may already be a symlink (d0g_nolink). Same-uid races between a check
+# and the write are out of scope; the runner scans the cell for symlinks afterwards.
+D0G_GUARD='const fs=require("fs"),path=require("path"); const R=path.resolve(process.argv[1]); const rr=fs.realpathSync(R); let bad=null; for (const d of process.argv.slice(2)) { const T=path.join(R,d); let st; try { st=fs.lstatSync(T); } catch (e) { if (e.code==="ENOENT") continue; bad=T; break; } if (st.isSymbolicLink() || !st.isDirectory() || fs.realpathSync(T)!==path.join(rr,d)) { bad=T; break; } } if (bad) { process.stderr.write("not a plain directory inside the cell: "+bad+"\n"); process.exit(3); }'
+d0g_dirs_ok() { node -e "$D0G_GUARD" "$CELL" .d0gate wt live; }
+d0g_nolink() { for f in "$@"; do if [ -L "$f" ]; then echo "d0gate stub: $f is a symlink; refusing to write" >&2; exit 2; fi; done; }
+d0g_dirs_ok || { echo "d0gate stub: .d0gate, wt and live must be plain directories inside the cell" >&2; exit 2; }
 mkdir -p "$CELL/.d0gate" "$CELL/wt"; mkdir -p -m 700 "$LIVE"
+d0g_dirs_ok || { echo "d0gate stub: .d0gate, wt and live must be plain directories inside the cell" >&2; exit 2; }
+d0g_nolink "$CELL/config.json" "$CELL/.d0gate/ledger.jsonl"
 export AUTOPILOT_LIVE_DIR="$LIVE"
 export AUTOPILOT_CONFIG_FILE="$CELL/config.json"   # pinned: a caller value must not choose which file this script may create
 [ -f "$AUTOPILOT_CONFIG_FILE" ] || echo '{}' >"$AUTOPILOT_CONFIG_FILE"
@@ -49,7 +59,8 @@ ledger_append() {
     const fs = require("fs"); const [kind, ...kv] = process.argv.slice(1);
     const o = { kind, ts: Date.now() };
     for (const p of kv) { const i = p.indexOf("="); const k = p.slice(0, i); const v = p.slice(i + 1); o[k] = v === "true" ? true : v === "false" ? false : /^-?[0-9]+$/.test(v) ? Number(v) : v; }
-    fs.appendFileSync(process.env.D0GATE_LEDGER, JSON.stringify(o) + "\n");' "$@"
+    const fd = fs.openSync(process.env.D0GATE_LEDGER, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600);
+    try { fs.writeSync(fd, JSON.stringify(o) + "\n"); } finally { fs.closeSync(fd); }' "$@"
 }
 argv_json() { node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' -- "$@"; }
 die_precondition() {
@@ -147,6 +158,7 @@ CHILD_SESSION_ID="d0g-$$-$RANDOM"
 REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || die_precondition "not inside a git repository"
 BASE_SHA="$(git -C "$REPO" rev-parse --verify "${BASE:-HEAD}^{commit}" 2>/dev/null)" || die_precondition "cannot resolve --base"
 N="$(( $(grep -c '"kind":"call"' "$D0G_LEDGER" 2>/dev/null || true) + 1 ))"
+d0g_nolink "$CELL/.d0gate/rules.$N.json" "$CELL/.d0gate/arm.$N.log" "$CELL/.d0gate/settings.$N.json" "$CELL/.d0gate/hook-out.$N"
 RULES_COPY=""; RULES_SHA=""
 if [ -n "$GATE_RULES_FILE" ]; then
   RULES_COPY="$CELL/.d0gate/rules.$N.json"; cp "$GATE_RULES_FILE" "$RULES_COPY"

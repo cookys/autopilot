@@ -126,6 +126,9 @@ class Cell {
   facts() { return L.readFacts(this.root); }
   destroy() {
     try { cp.spawnSync('git', ['-C', this.repo, 'worktree', 'prune'], { stdio: 'ignore' }); } catch { /* none */ }
+    // a cell can hold a directory the model made unreadable: give the owner access back before removing (symlinks are not followed)
+    const open = (d) => { let st; try { st = fs.lstatSync(d); } catch { return; } if (!st.isDirectory()) return; try { fs.chmodSync(d, 0o700); } catch { /* best effort */ } let ents = []; try { ents = fs.readdirSync(d); } catch { return; } for (const e of ents) open(path.join(d, e)); };
+    open(this.root);
     fs.rmSync(this.root, { recursive: true, force: true });
   }
 }

@@ -430,10 +430,10 @@ test('a rerun never sees the pool run\'s TMPDIR: marker left by the first run do
 
 test('serial part keeps the caller\'s XDG_RUNTIME_DIR; a suite that fails under a per-entry one is green serial (negative control: a pool-style XDG for the serial part -> red)', () => {
   // red when XDG_RUNTIME_DIR is a per-entry directory (as dispatch-detach was), green when it is the caller's
-  const files = { 'hooks/tests/xdgdep.test.sh': suite('case "$XDG_RUNTIME_DIR" in *asj.*) echo per-entry-xdg; exit 1;; esac'),
+  const files = { 'hooks/tests/xdgdep.test.sh': suite('[ "$XDG_RUNTIME_DIR" = "$EXPECT_XDG" ] || { echo per-entry-xdg; exit 1; }'),
     [SERIAL_LIST]: 'hooks/tests/xdgdep.test.sh\n' };
   const callerXdg = fs.mkdtempSync(path.join(os.tmpdir(), 'caller-xdg-'));
-  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), XDG_RUNTIME_DIR: callerXdg };
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), XDG_RUNTIME_DIR: callerXdg, EXPECT_XDG: callerXdg };
   let r = makeRepo(files);
   try {
     const p = run(r.dir, ['--jobs', '2'], env);

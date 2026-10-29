@@ -141,6 +141,23 @@
 //      the closing marker, or, when none exists, only to the end of that line — never to end of file.
 //      A line whose first non-blank character is * is a comment only while the scan is inside a block.
 //      Shell and other non-JS files still drop full-line # and // comments only.
+//  11. A shared test helper (a non-suite .sh directly under hooks/tests/) that names a prose file (.md or .txt:
+//      `cp "$REPO_ROOT/hooks/README.md" ...`) creates no edge to it: it serves the few suites that call that
+//      function, not every suite that sources the helper. Its callers (setup_sync_version_sandbox: the sync-version-*
+//      and semver suites) are still reached through scripts/sync-version.js naming README.md.
+//  12. A "$VAR/name" path (a variable expansion directly before the slash, name closed by a quote or token end,
+//      "$TEST_TMP/session-mode") is a directory under a runtime root, not a mention of name.js: no slash-bare edge.
+//  13. Lazy require marker (BL-0332): a JavaScript line carrying `// affected-suites: lazy` declares that its
+//      require() sits behind a gate that does not open under test (an env switch, a CLI branch no suite takes).
+//      The specifier on that line is blanked before the mention scan: no strong edge and no bare-name edge from
+//      that file. A suite that names the target itself still reaches it by its own mention. Chosen over "every
+//      indented require is lazy": 192 indented requires exist, most always run when their function runs, and a weak
+//      edge still lets the strong edges behind it flood (tried: 678 -> 658); only a human who has checked the gate
+//      can say it stays closed under test, so the claim is explicit and greppable.
+//      Conditions of use: only on a require() behind a gate that is certain NOT to run under test; re-check every
+//      marker when that gate's meaning changes; list them all with `git grep 'affected-suites: lazy'`.
+//      The marker and the whole `require('./x')` call must be on ONE line: a require split over lines, or a marker
+//      on the line above, is not recognised and the edge stays strong (the safe direction; nothing is dropped).
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
 const { execFileSync, spawnSync, spawn } = require('child_process');
@@ -273,13 +290,31 @@ const globDir = (d) => d.replace(/^"?\$\{?\w+\}?"?/, '').replace(/^\/+/, '').rep
 const RE_REQ = /(?:require\(\s*|import\s+[^'"\n]*?from\s+|import\(\s*|import\s+)['"]([^'"\n]+)['"]/g;
 const RE_SRC = /(?:^|[;&|(]|\bthen\b|\bdo\b)[ \t]*(?:source|\.)[ \t]+["']?([^\s"';)]+)/gm;
 
+// A name directly after a shell/JS variable expansion and a slash, closed by a quote or the end of
+// the token ("$TEST_TMP/session-mode"), names a directory under a runtime root, not a code file.
+const VAR_DIR_BEFORE = /\$\{?[A-Za-z_]\w*\}?["']?$/;
+// Lazy require (BL-0332): a JavaScript line that carries `// affected-suites: lazy` declares that its
+// require is behind a gate that does not open under test (an env switch, a CLI branch no suite takes).
+// The specifier on that line is blanked before the mention scan, so it makes no edge at all (strong or
+// bare-name). A suite that names the target itself still reaches it by its own mention.
+const LAZY_MARK = /\/\/\s*affected-suites:\s*lazy\b/;
+const LAZY_REQ = /require\(\s*(['"])[^'"\n]+\1\s*\)/g;
+function blankLazyRequires(raw, file) {
+  if (!/\.(js|mjs|cjs)$/.test(file) || !LAZY_MARK.test(raw)) return raw;
+  return raw.split('\n').map((l) => (LAZY_MARK.test(l) ? l.replace(LAZY_REQ, 'require(null)') : l)).join('\n');
+}
 function mentions(text) {
   const exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
   for (const m of text.matchAll(RE_SEG)) segs.add(m[1]);
   for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) strong.add(base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''));
   for (const m of text.matchAll(RE_SRC)) strong.add(base(m[1]).replace(/\.(sh|bash|zsh)$/, ''));
   for (const m of text.matchAll(RE_EXT)) exts.add(m[0]);
-  for (const m of text.matchAll(RE_BARE)) (m[0].startsWith('/') ? slashBares : bares).add(m[1]);
+  for (const m of text.matchAll(RE_BARE)) {
+    if (m[0].startsWith('/')) {
+      if (VAR_DIR_BEFORE.test(text.slice(Math.max(0, m.index - 80), m.index))) continue;
+      slashBares.add(m[1]);
+    } else bares.add(m[1]);
+  }
   for (const m of text.matchAll(RE_GLOB)) globs.push({ dir: globDir(m[1]), ext: m[2] || '' });
   for (const m of text.matchAll(RE_MIRROR_PATH)) paths.add(m[0]);
   return { exts, bares, slashBares, globs, strong, segs, paths };
@@ -384,7 +419,7 @@ function buildGraph(tree) {
   const refs = new Map(); // file -> mentions
   for (const f of codeFiles) {
     const t = tree.read(f);
-    if (t != null) refs.set(f, mentions(stripComments(t, f)));
+    if (t != null) refs.set(f, mentions(stripComments(blankLazyRequires(t, f), f)));
   }
   const byExt = new Map(), byBare = new Map(), bySlashBare = new Map(), bySeg = new Map(), byPath = new Map(); // token -> Set(referrer)
   const add = (m, k, f) => { if (!m.has(k)) m.set(k, new Set()); m.get(k).add(f); };
@@ -426,7 +461,12 @@ function referrersOf(graph, p) {
   const bareP = base(p).replace(/\.[^.]+$/, '');
   const kind = (f) => (graph.refs.get(f).strong.has(bareP) ? 'strong' : 'weak');
   const b = base(p);
-  for (const f of graph.byExt.get(b) || []) out.set(f, kind(f));
+  for (const f of graph.byExt.get(b) || []) {
+    // Rule 11: a shared test helper (hooks/tests/lib.sh) naming a prose file (cp README.md ...) serves a few of
+    // the suites that source it, not all of them. Prose is a seed only; that mention makes no edge.
+    if (/^(md|txt)$/.test(extOf(p)) && isSharedTestHelper(f)) continue;
+    out.set(f, kind(f));
+  }
   if (isCode(p)) {
     const bare = b.replace(/\.[^.]+$/, '');
     const jsTarget = extOf(p) === 'js' || extOf(p) === 'mjs' || extOf(p) === 'cjs';

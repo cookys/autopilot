@@ -1073,3 +1073,196 @@ test('negative control: without the new flags no attribution output, no base_rc,
     assert.strictEqual(fs.readFileSync(rec, 'utf8').includes('base_rc'), false);
   } finally { r.cleanup(); }
 });
+
+// ---- BL-0332: lazy require marker and pseudo-edges ----------------------------------------------
+// A mutant is the real selector with one rule switched off; it must select MORE than the real one
+// on the same fixture, which is what shows the case can go red.
+function mutant(replacements) {
+  let src = fs.readFileSync(path.join(__dirname, 'affected-suites.js'), 'utf8');
+  for (const [from, to] of replacements) {
+    assert.ok(src.includes(from), `mutation anchor missing: ${from}`);
+    src = src.replace(from, to);
+  }
+  const md = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-mutant-'));
+  MUTANT_DIRS.push(md);
+  const f = path.join(md, 'affected-suites.js');
+  fs.writeFileSync(f, src);
+  return f;
+}
+const MUTANT_DIRS = [];
+test.after(() => { for (const d of MUTANT_DIRS) fs.rmSync(d, { recursive: true, force: true }); });
+// A mutant must RUN: a crash would turn a case red without showing that the rule's absence over-selects.
+function selectWith(bin, r, head) {
+  const p = spawnSync('node', [bin, '--root', r.dir, '--base', r.base, '--head', head, '--json'], { stdio: 'pipe' });
+  assert.strictEqual(p.status, 0, `mutant crashed: ${p.stderr}`);
+  return JSON.parse(p.stdout.toString());
+}
+const LAZY_LAYOUT = {
+  'scripts/lib/watcher.js': 'module.exports = 1;\n',
+  'scripts/gate.js': "const on = process.env.GATE_ON;\nfunction start() {\n  if (!on) return;\n  const w = require('./lib/watcher.js'); // affected-suites: lazy\n  return w;\n}\nmodule.exports = { start };\n",
+  'scripts/eager.js': "function run() {\n  const w = require('./lib/watcher.js');\n  return w;\n}\nmodule.exports = { run };\n",
+  'hooks/tests/gate.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/gate.js"\n',
+  'hooks/tests/eager.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/eager.js"\n',
+  'hooks/tests/watcher.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/lib/watcher.js"\n',
+};
+
+test('lazy require marker: a marked require makes no edge, an unmarked indented one stays strong', () => {
+  const r = makeRepo(LAZY_LAYOUT);
+  try {
+    const head = r.change({ 'scripts/lib/watcher.js': 'module.exports = 2;\n' });
+    const out = r.select(head);
+    assert.ok(out.suites.includes('hooks/tests/watcher.test.sh'), 'a suite that names the target itself is still selected');
+    assert.ok(out.suites.includes('hooks/tests/eager.test.sh'), 'unmarked in-function require keeps its strong edge');
+    assert.ok(!out.suites.includes('hooks/tests/gate.test.sh'), 'marked lazy require does not pull in the gate suite');
+  } finally { r.cleanup(); }
+});
+
+test('negative control: a top-level require is strong even next to the marker text elsewhere', () => {
+  const r = makeRepo({ ...LAZY_LAYOUT, 'scripts/top.js': "const w = require('./lib/watcher.js');\nmodule.exports = w;\n", 'hooks/tests/top.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/top.js"\n' });
+  try {
+    const head = r.change({ 'scripts/lib/watcher.js': 'module.exports = 3;\n' });
+    assert.ok(r.select(head).suites.includes('hooks/tests/top.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('negative control: with the marker rule off the gate suite is selected again (case turns red)', () => {
+  const r = makeRepo(LAZY_LAYOUT);
+  const bin = mutant([["if (!/\\.(js|mjs|cjs)$/.test(file) || !LAZY_MARK.test(raw)) return raw;", 'return raw;']]);
+  try {
+    const head = r.change({ 'scripts/lib/watcher.js': 'module.exports = 4;\n' });
+    assert.ok(!selectWith(SEL, r, head).suites.includes('hooks/tests/gate.test.sh'));
+    assert.ok(selectWith(bin, r, head).suites.includes('hooks/tests/gate.test.sh'), 'the mutant must over-select, else the case proves nothing');
+  } finally { r.cleanup(); }
+});
+
+const VARDIR_LAYOUT = {
+  'scripts/gate.js': 'module.exports = 1;\n',
+  'hooks/tests/lib.sh': '#!/usr/bin/env bash\nexport GATE_DIR="$TEST_TMP/gate"\n',
+  'hooks/tests/uses-lib.test.sh': '#!/usr/bin/env bash\nsource "$HERE/lib.sh"\necho hi\n',
+  'hooks/tests/gate.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/gate.js"\n',
+};
+
+test('pseudo-edge: "$VAR/name" is a directory under a runtime root, not a mention of name.js', () => {
+  const r = makeRepo(VARDIR_LAYOUT);
+  try {
+    const head = r.change({ 'scripts/gate.js': 'module.exports = 2;\n' });
+    assert.deepStrictEqual(r.select(head).suites, ['hooks/tests/gate.test.sh']);
+  } finally { r.cleanup(); }
+});
+
+test('negative control: with the variable-directory rule off the helper pulls in its sourcing suite', () => {
+  const r = makeRepo(VARDIR_LAYOUT);
+  const bin = mutant([['if (VAR_DIR_BEFORE.test(', 'if (false && VAR_DIR_BEFORE.test(']]);
+  try {
+    const head = r.change({ 'scripts/gate.js': 'module.exports = 2;\n' });
+    assert.ok(selectWith(bin, r, head).suites.includes('hooks/tests/uses-lib.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+const HELPER_LAYOUT = {
+  'hooks/README.md': 'a\n',
+  'hooks/tests/lib.sh': '#!/usr/bin/env bash\ncp "$REPO_ROOT/hooks/README.md" "$sandbox/hooks/README.md"\n',
+  'hooks/tests/via-lib.test.sh': '#!/usr/bin/env bash\nsource "$HERE/lib.sh"\necho hi\n',
+  'hooks/tests/direct.test.sh': '#!/usr/bin/env bash\ncat "$ROOT/hooks/README.md"\n',
+};
+
+test('rule 11: a prose file copied by the shared test helper selects the direct reader, not every sourcing suite', () => {
+  const r = makeRepo(HELPER_LAYOUT);
+  const bin = mutant([["if (/^(md|txt)$/.test(extOf(p)) && isSharedTestHelper(f)) continue;", '']]);
+  try {
+    const head = r.change({ 'hooks/README.md': 'b\n' });
+    const out = r.select(head);
+    assert.strictEqual(out.mode, 'selective');
+    assert.ok(out.suites.includes('hooks/tests/direct.test.sh'));
+    assert.ok(!out.suites.includes('hooks/tests/via-lib.test.sh'));
+    assert.ok(selectWith(bin, r, head).suites.includes('hooks/tests/via-lib.test.sh'), 'rule-11 mutant must over-select');
+  } finally { r.cleanup(); }
+});
+
+test('marker on a split require() is not recognised: the edge stays strong', () => {
+  const r = makeRepo({ ...LAZY_LAYOUT, 'scripts/split.js': "function f() {\n  const w = require(\n    './lib/watcher.js'); // affected-suites: lazy\n  return w;\n}\nmodule.exports = f;\n", 'hooks/tests/split.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/split.js"\n' });
+  try {
+    const head = r.change({ 'scripts/lib/watcher.js': 'module.exports = 9;\n' });
+    assert.ok(r.select(head).suites.includes('hooks/tests/split.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+// Real repo: every suite that really runs or names runs-watch must stay selected for a change to it.
+const REPO = path.join(__dirname, '..');
+const ROOTS = ['hooks', 'scripts', 'mods', 'src'];
+// Every test file under the four roots that runs or names runs-watch (git grep, not a hand list).
+function textTests(re) {
+  const out = spawnSync('git', ['grep', '-lE', re, '--', ...ROOTS], { cwd: REPO, stdio: 'pipe' }).stdout.toString();
+  return out.split('\n').filter((f) => /\.test\.(js|ts|sh)$/.test(f) && fs.existsSync(path.join(REPO, f)));
+}
+function runsWatchSuites() {
+  return textTests('AUTOPILOT_RUNS_WATCH_AUTOSTART=1|status runs --watch|startWatcherDetached|runs-watch([^-A-Za-z0-9_]|$)');
+}
+function missingRunsWatch(bin, seed) {
+  const p = spawnSync('node', [bin, '--root', REPO, '--files', seed, '--json'], { stdio: 'pipe', maxBuffer: 1 << 28 });
+  assert.strictEqual(p.status, 0, String(p.stderr));
+  const out = JSON.parse(p.stdout.toString());
+  const sel = new Set(out.suites);
+  const runners = out.extra_runners || [];
+  return runsWatchSuites().filter((f) => !sel.has(f) && !runners.some((r) => f.startsWith(r.replace(/\/[^/]+$/, '/'))));
+}
+const RW_SEEDS = ['src/status/runs-watch.js', 'src/status/git-env.js', 'src/status/residue.js'];
+
+test('regression: a change to runs-watch.js, git-env.js or residue.js selects every suite that runs or names runs-watch', () => {
+  const want = runsWatchSuites();
+  assert.ok(want.includes('hooks/tests/session-mode-watcher.test.sh'), 'derivation must find the watcher suite');
+  assert.ok(want.includes('hooks/tests/runs-watch-lock.test.sh') && want.includes('hooks/tests/review-server.test.sh'), 'derivation must find the suites that run `status runs --watch`');
+  assert.ok(want.filter((f) => /runs-watch-/.test(f)).length >= 3, 'derivation must find the runs-watch-* suites');
+  for (const seed of RW_SEEDS) assert.deepStrictEqual(missingRunsWatch(SEL, seed), [], seed);
+});
+
+test('negative control: with every require edge weakened the runs-watch regression goes red for each seed', () => {
+  const bin = mutant([["? 'strong' : 'weak');", "? 'weak' : 'weak');"]]);
+  for (const seed of RW_SEEDS) assert.ok(missingRunsWatch(bin, seed).length > 0, seed);
+});
+
+
+
+// Rule 12 removal: a real read of a README or CHANGELOG reaches the suite through its own mention.
+function suitesWithText(re) { return textTests(re); }
+function missingFor(bin, seed, wanted) {
+  const p = spawnSync('node', [bin, '--root', REPO, '--files', seed, '--json'], { stdio: 'pipe', maxBuffer: 1 << 28 });
+  assert.strictEqual(p.status, 0, String(p.stderr));
+  const sel = new Set(JSON.parse(p.stdout.toString()).suites);
+  return wanted.filter((f) => !sel.has(f));
+}
+test('regression: suites that read a README or CHANGELOG, or load a module by path.join, stay selected', () => {
+  const readers = suitesWithText("'hooks', 'README\\.md'");
+  assert.ok(readers.includes('hooks/hookq.test.js'), 'derivation must find hookq');
+  assert.deepStrictEqual(missingFor(SEL, 'hooks/README.md', readers), []);
+  const loaders = suitesWithText("'src', 'runners', 'review'");
+  assert.ok(loaders.includes('hooks/tests/autopilot-cli.test.sh'), 'derivation must find autopilot-cli');
+  assert.deepStrictEqual(missingFor(SEL, 'src/runners/review.js', loaders), []);
+  assert.deepStrictEqual(missingFor(SEL, 'README.md', ['hooks/tests/check-readme-parity.test.sh', ...suitesWithText('setup_sync_version_sandbox')]), []);
+  assert.deepStrictEqual(missingFor(SEL, 'CHANGELOG.md', ['hooks/tests/check-plan-graduation.test.sh']), []);
+});
+
+// Root README readers, in the two shapes the review found: path.join(__dirname, '..', 'README.md') and path.join(ROOT, 'README.md').
+test('fixture: a suite that reads the root README by either path.join shape is selected when README.md changes', () => {
+  const r = makeRepo({
+    'README.md': 'root\n', 'hooks/README.md': 'hooks\n',
+    'hooks/dotdot.test.js': "const fs = require('fs'); const path = require('path');\nfs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');\n",
+    'hooks/rootish.test.js': "const fs = require('fs'); const path = require('path');\nfs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');\n",
+    'hooks/hooksish.test.js': "const fs = require('fs'); const path = require('path');\nfs.readFileSync(path.join(ROOT, 'hooks', 'README.md'), 'utf8');\n",
+  });
+  try {
+    const out = r.select(r.change({ 'README.md': 'root2\n' }));
+    assert.strictEqual(out.mode, 'selective');
+    assert.ok(out.suites.includes('hooks/dotdot.test.js') && out.suites.includes('hooks/rootish.test.js'));
+  } finally { r.cleanup(); }
+});
+
+test('negative control: dropping the suites\' file-name mention edges turns the runs-watch regression red', () => {
+  const bin = mutant([['for (const f of graph.byExt.get(b) || []) {', 'for (const f of [...(graph.byExt.get(b) || [])].filter((x) => !isSuite(x))) {']]);
+  for (const seed of RW_SEEDS) assert.ok(missingRunsWatch(bin, seed).length > 0, seed);
+});
+
+test('negative control: dropping the hooks/README.md mention edge loses hookq', () => {
+  const bin = mutant([['for (const f of graph.byExt.get(b) || []) {', 'for (const f of []) {']]);
+  assert.ok(missingFor(bin, 'hooks/README.md', ['hooks/hookq.test.js']).length > 0);
+});

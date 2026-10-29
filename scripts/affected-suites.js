@@ -118,17 +118,9 @@
 //      `cp "$REPO_ROOT/hooks/README.md" ...`) creates no edge to it: it serves the few suites that call that
 //      function, not every suite that sources the helper. Its callers (setup_sync_version_sandbox: the sync-version-*
 //      and semver suites) are still reached through scripts/sync-version.js naming README.md.
-//  12. A prose seed whose basename is shared by two or more tracked files (README.md, CHANGELOG.md) is reached only
-//      by a referrer that names a path ending in the seed's own path (hooks/README.md, "$ROOT/README.md"); a bare
-//      `README.md` in a list of file names pins nothing. A path.join/path.resolve call whose quoted segments include the
-//      seed's directory (path.join(ROOT, 'hooks', 'README.md')) names it, and stays (for a root seed: a call with no other segment).
-//  13. A bare quoted word with no slash and no extension creates no weak edge to a JavaScript file whose stem is one
-//      plain lowercase word (residue, status, tree): it is an ordinary word in any text. Hyphenated stems, name.ext,
-//      slash mentions and strong require/source edges are unchanged. A word that also appears as a quoted segment of a
-//      path.join/path.resolve call in the same file (path.join(ROOT, 'src', 'runners', 'review')) is a path, and stays.
-//  14. A "$VAR/name" path (a variable expansion directly before the slash, name closed by a quote or token end,
+//  12. A "$VAR/name" path (a variable expansion directly before the slash, name closed by a quote or token end,
 //      "$TEST_TMP/session-mode") is a directory under a runtime root, not a mention of name.js: no slash-bare edge.
-//  15. Lazy require marker (BL-0332): a JavaScript line carrying `// affected-suites: lazy` declares that its
+//  13. Lazy require marker (BL-0332): a JavaScript line carrying `// affected-suites: lazy` declares that its
 //      require() sits behind a gate that does not open under test (an env switch, a CLI branch no suite takes).
 //      The specifier on that line is blanked before the mention scan: no strong edge and no bare-name edge from
 //      that file. A suite that names the target itself still reaches it by its own mention. Chosen over "every
@@ -284,28 +276,12 @@ function blankLazyRequires(raw, file) {
   if (!/\.(js|mjs|cjs)$/.test(file) || !LAZY_MARK.test(raw)) return raw;
   return raw.split('\n').map((l) => (LAZY_MARK.test(l) ? l.replace(LAZY_REQ, 'require(null)') : l)).join('\n');
 }
-// Rule 12 input: a prose-file mention that carries a directory part (hooks/README.md, "$ROOT/README.md").
-const RE_PROSE_PATH = /[A-Za-z0-9_.\-\/$"{}]*\/[A-Za-z0-9_][A-Za-z0-9_.\-]*\.(?:md|txt)\b/g;
-// A path built from separate string segments: path.join(ROOT, 'hooks', 'README.md'), require(path.join(r, 'src', 'review')).
-// One level of nested parentheses is allowed in the arguments.
-const RE_JOIN = /\b(?:join|resolve)\(((?:[^()]|\([^()]*\)){0,300})\)/g;
-const RE_QUOTED = /(['"`])([^'"`\n]+)\1/g;
 function mentions(text) {
-  const joinedSegs = new Set(), joinedProse = [];
-  for (const m of text.matchAll(RE_JOIN)) {
-    const words = new Set();
-    for (const q of m[1].matchAll(RE_QUOTED)) for (const w of q[2].split('/')) if (w) words.add(w);
-    for (const w of words) {
-      joinedSegs.add(w.replace(/\.[A-Za-z0-9]+$/, ''));
-      if (/\.(md|txt)$/.test(w)) joinedProse.push({ name: w, words });
-    }
-  }
-  const proseNames = new Set(), exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
+  const exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
   for (const m of text.matchAll(RE_SEG)) segs.add(m[1]);
   for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) strong.add(base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''));
   for (const m of text.matchAll(RE_SRC)) strong.add(base(m[1]).replace(/\.(sh|bash|zsh)$/, ''));
   for (const m of text.matchAll(RE_EXT)) exts.add(m[0]);
-  for (const m of text.matchAll(RE_PROSE_PATH)) proseNames.add(m[0].replace(/^"?\$\{?\w+\}?"?\//, '').replace(/^["{}$]*/, ''));
   for (const m of text.matchAll(RE_BARE)) {
     if (m[0].startsWith('/')) {
       if (VAR_DIR_BEFORE.test(text.slice(Math.max(0, m.index - 80), m.index))) continue;
@@ -314,7 +290,7 @@ function mentions(text) {
   }
   for (const m of text.matchAll(RE_GLOB)) globs.push({ dir: globDir(m[1]), ext: m[2] || '' });
   for (const m of text.matchAll(RE_MIRROR_PATH)) paths.add(m[0]);
-  return { joinedSegs, joinedProse, proseNames, exts, bares, slashBares, globs, strong, segs, paths };
+  return { exts, bares, slashBares, globs, strong, segs, paths };
 }
 
 const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', '.claude', 'node_modules']);
@@ -434,10 +410,6 @@ function buildGraph(tree) {
     const stem = base(f).replace(/\.[^.]+$/, '');
     stemCount.set(stem, (stemCount.get(stem) || 0) + 1);
   }
-  // Rule 12: a prose basename shared by two or more files (README.md) cannot be pinned by a bare mention.
-  const proseCount = new Map();
-  for (const f of tree.files) if (/\.(md|txt)$/.test(f)) proseCount.set(base(f), (proseCount.get(base(f)) || 0) + 1);
-  const genericProse = new Set([...proseCount].filter(([, n]) => n >= 2).map(([b]) => b));
   const genericStems = new Set([...stemCount].filter(([, n]) => n >= 2).map(([s]) => s));
   const globRefs = []; // {file, dir, ext}
   for (const [f, r] of refs) {
@@ -447,7 +419,7 @@ function buildGraph(tree) {
       globRefs.push({ file: f, ...g });
     }
   }
-  return { refs, byExt, byBare, bySlashBare, bySeg, byPath, globRefs, genericStems, genericProse };
+  return { refs, byExt, byBare, bySlashBare, bySeg, byPath, globRefs, genericStems };
 }
 
 // -> Map(referrer -> 'strong'|'weak')
@@ -466,16 +438,6 @@ function referrersOf(graph, p) {
     // Rule 11: a shared test helper (hooks/tests/lib.sh) naming a prose file (cp README.md ...) serves a few of
     // the suites that source it, not all of them. Prose is a seed only; that mention makes no edge.
     if (/^(md|txt)$/.test(extOf(p)) && isSharedTestHelper(f)) continue;
-    // Rule 12: for a prose seed whose basename is shared (README.md, CHANGELOG.md), a bare `README.md` mention is no
-    // edge; the referrer must name a path ending in the seed's own path (or the seed's path ends in the mention's).
-    if (graph.genericProse.has(b)) {
-      const r = graph.refs.get(f);
-      const dir = p.includes('/') ? p.split('/').slice(-2, -1)[0] : null;
-      // A path built from segments (path.join(ROOT, 'hooks', 'README.md')) names the seed when its directory is one of
-      // the segments; for a root-level seed the call must carry no other segment.
-      const joined = r.joinedProse.some((e) => e.name === b && (dir ? e.words.has(dir) : e.words.size === 1));
-      if (!joined && ![...r.proseNames].some((t) => t === p || p.endsWith('/' + t) || t.endsWith('/' + p))) continue;
-    }
     out.set(f, kind(f));
   }
   if (isCode(p)) {
@@ -486,9 +448,6 @@ function referrersOf(graph, p) {
       if (out.has(f)) continue;
       const k = kind(f);
       if (generic && k !== 'strong') continue;
-      // Rule 13: a bare quoted word with no slash or extension cannot pin a JavaScript file whose stem is one plain
-      // lowercase word (residue, status, tree): it is an ordinary word in any text. Hyphenated stems stay.
-      if (jsTarget && k !== 'strong' && /^[a-z]+$/.test(bare) && !graph.refs.get(f).joinedSegs.has(bare)) continue;
       out.set(f, k);
     }
     for (const f of graph.bySlashBare.get(bare) || []) if (!out.has(f)) out.set(f, kind(f));

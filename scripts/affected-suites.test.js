@@ -1162,30 +1162,6 @@ test('negative control: with the variable-directory rule off the helper pulls in
   } finally { r.cleanup(); }
 });
 
-test('pseudo-edge: a shared prose basename and a one-word stem do not flood', () => {
-  const r = makeRepo({
-    'README.md': 'a\n', 'hooks/README.md': 'b\n',
-    'scripts/residue.js': 'module.exports = 1;\n',
-    'scripts/lister.js': "const names = ['README.md', 'residue'];\nmodule.exports = names;\n",
-    'hooks/tests/lister.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/lister.js"\n',
-    'hooks/tests/residue.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/residue.js"\n',
-    'hooks/tests/readme.test.sh': '#!/usr/bin/env bash\ncat "$ROOT/hooks/README.md"\n',
-  });
-  const noProse = mutant([['if (graph.genericProse.has(b)) {', 'if (false) {']]);
-  const noWord = mutant([["if (jsTarget && k !== 'strong' && /^[a-z]+$/.test(bare) && !graph.refs.get(f).joinedSegs.has(bare)) continue;", '']]);
-  try {
-    const h1 = r.change({ 'hooks/README.md': 'c\n' });
-    const o1 = r.select(h1);
-    assert.strictEqual(o1.mode, 'selective');
-    assert.ok(o1.suites.includes('hooks/tests/readme.test.sh') && !o1.suites.includes('hooks/tests/lister.test.sh'));
-    assert.ok(selectWith(noProse, r, h1).suites.includes('hooks/tests/lister.test.sh'), 'prose mutant must over-select');
-    const h2 = r.change({ 'scripts/residue.js': 'module.exports = 2;\n' });
-    const out = r.select(h2);
-    assert.ok(out.suites.includes('hooks/tests/residue.test.sh') && !out.suites.includes('hooks/tests/lister.test.sh'));
-    assert.ok(selectWith(noWord, r, h2).suites.includes('hooks/tests/lister.test.sh'), 'one-word mutant must over-select');
-  } finally { r.cleanup(); }
-});
-
 const HELPER_LAYOUT = {
   'hooks/README.md': 'a\n',
   'hooks/tests/lib.sh': '#!/usr/bin/env bash\ncp "$REPO_ROOT/hooks/README.md" "$sandbox/hooks/README.md"\n',
@@ -1216,15 +1192,22 @@ test('marker on a split require() is not recognised: the edge stays strong', () 
 
 // Real repo: every suite that really runs or names runs-watch must stay selected for a change to it.
 const REPO = path.join(__dirname, '..');
+const ROOTS = ['hooks', 'scripts', 'mods', 'src'];
+// Every test file under the four roots that runs or names runs-watch (git grep, not a hand list).
+function textTests(re) {
+  const out = spawnSync('git', ['grep', '-lE', re, '--', ...ROOTS], { cwd: REPO, stdio: 'pipe' }).stdout.toString();
+  return out.split('\n').filter((f) => /\.test\.(js|ts|sh)$/.test(f) && fs.existsSync(path.join(REPO, f)));
+}
 function runsWatchSuites() {
-  const out = spawnSync('git', ['grep', '-lE', 'AUTOPILOT_RUNS_WATCH_AUTOSTART=1|status runs --watch|startWatcherDetached|runs-watch([^-A-Za-z0-9_]|$)', '--', 'hooks', 'scripts'], { cwd: REPO, stdio: 'pipe' }).stdout.toString();
-  return out.split('\n').filter((f) => /^(hooks\/[^/]+\.test\.js|scripts\/[^/]+\.test\.js|scripts\/lib\/[^/]+\.test\.js|hooks\/tests\/[^/]+\.test\.sh|scripts\/[^/]+\.test\.sh)$/.test(f) && fs.existsSync(path.join(REPO, f)));
+  return textTests('AUTOPILOT_RUNS_WATCH_AUTOSTART=1|status runs --watch|startWatcherDetached|runs-watch([^-A-Za-z0-9_]|$)');
 }
 function missingRunsWatch(bin, seed) {
   const p = spawnSync('node', [bin, '--root', REPO, '--files', seed, '--json'], { stdio: 'pipe', maxBuffer: 1 << 28 });
   assert.strictEqual(p.status, 0, String(p.stderr));
-  const sel = new Set(JSON.parse(p.stdout.toString()).suites);
-  return runsWatchSuites().filter((f) => !sel.has(f));
+  const out = JSON.parse(p.stdout.toString());
+  const sel = new Set(out.suites);
+  const runners = out.extra_runners || [];
+  return runsWatchSuites().filter((f) => !sel.has(f) && !runners.some((r) => f.startsWith(r.replace(/\/[^/]+$/, '/'))));
 }
 const RW_SEEDS = ['src/status/runs-watch.js', 'src/status/git-env.js', 'src/status/residue.js'];
 
@@ -1242,65 +1225,47 @@ test('negative control: with every require edge weakened the runs-watch regressi
 });
 
 
-// ---- Rule 12/13 counter-examples: a path built from separate segments is a real reference ----------
-const JOIN_LAYOUT = {
-  'README.md': 'root\n', 'hooks/README.md': 'hooks\n',
-  'src/runners/review.js': 'module.exports = 1;\n',
-  'scripts/lister.js': "const names = ['README.md', 'review'];\nmodule.exports = names;\n",
-  'hooks/hookish.test.js': "const fs = require('fs'); const path = require('path');\nfs.readFileSync(path.join(ROOT, 'hooks', 'README.md'), 'utf8');\nconst { x } = require(path.join(ROOT, 'src', 'runners', 'review'));\n",
-  'hooks/rootish.test.js': "const fs = require('fs'); const path = require('path');\nfs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');\n",
-  'hooks/tests/lister.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/lister.js"\n',
-};
 
-test('rule 12/13 counter-examples: path.join segments name the README and the one-word module they build', () => {
-  const r = makeRepo(JOIN_LAYOUT);
-  const noJoinProse = mutant([['const joined = r.joinedProse.some(', 'const joined = false && r.joinedProse.some(']]);
-  const noJoinSeg = mutant([['!graph.refs.get(f).joinedSegs.has(bare)', 'true']]);
-  try {
-    const h1 = r.change({ 'hooks/README.md': 'hooks2\n' });
-    const o1 = r.select(h1);
-    assert.ok(o1.suites.includes('hooks/hookish.test.js'), 'joined hooks/README.md is a real read');
-    assert.ok(!o1.suites.includes('hooks/rootish.test.js'), 'a root README.md reader is not pulled in by hooks/README.md');
-    assert.ok(!o1.suites.includes('hooks/tests/lister.test.sh'), 'a bare list entry still pins nothing');
-    assert.ok(!selectWith(noJoinProse, r, h1).suites.includes('hooks/hookish.test.js'), 'joined-prose mutant must lose the reader');
-    const h2 = r.change({ 'README.md': 'root2\n' });
-    assert.ok(r.select(h2).suites.includes('hooks/rootish.test.js'), 'joined root README.md is a real read');
-    const h3 = r.change({ 'src/runners/review.js': 'module.exports = 2;\n' });
-    const o3 = r.select(h3);
-    assert.ok(o3.suites.includes('hooks/hookish.test.js'), 'require(path.join(.., "review")) loads the module');
-    assert.ok(!o3.suites.includes('hooks/tests/lister.test.sh'), 'a bare quoted word alone still pins nothing');
-    assert.ok(!selectWith(noJoinSeg, r, h3).suites.includes('hooks/hookish.test.js'), 'joined-segment mutant must lose the loader');
-  } finally { r.cleanup(); }
-});
-
-// Real repo: suites derived from the source text as readers of a prose file or loaders of a one-word module.
-function suitesWithText(re) {
-  const out = spawnSync('git', ['grep', '-lE', re, '--', 'hooks', 'scripts'], { cwd: REPO, stdio: 'pipe' }).stdout.toString();
-  return out.split('\n').filter((f) => /\.test\.(js|sh)$/.test(f) && fs.existsSync(path.join(REPO, f)));
-}
+// Rule 12 removal: a real read of a README or CHANGELOG reaches the suite through its own mention.
+function suitesWithText(re) { return textTests(re); }
 function missingFor(bin, seed, wanted) {
   const p = spawnSync('node', [bin, '--root', REPO, '--files', seed, '--json'], { stdio: 'pipe', maxBuffer: 1 << 28 });
   assert.strictEqual(p.status, 0, String(p.stderr));
   const sel = new Set(JSON.parse(p.stdout.toString()).suites);
   return wanted.filter((f) => !sel.has(f));
 }
-const REAL_READS = [
-  ['hooks/README.md', () => suitesWithText("'hooks', 'README\\.md'"), 'hooks/hookq.test.js'],
-  ['src/runners/review.js', () => suitesWithText("'src', 'runners', 'review'"), 'hooks/tests/autopilot-cli.test.sh'],
-];
-
-test('regression: suites that build a path to a prose file or one-word module from segments stay selected', () => {
-  for (const [seed, derive, mustHave] of REAL_READS) {
-    const want = derive();
-    assert.ok(want.includes(mustHave), `derivation for ${seed} must find ${mustHave}`);
-    assert.deepStrictEqual(missingFor(SEL, seed, want), [], seed);
-  }
-  assert.deepStrictEqual(missingFor(SEL, 'README.md', ['hooks/tests/check-readme-parity.test.sh']), []);
+test('regression: suites that read a README or CHANGELOG, or load a module by path.join, stay selected', () => {
+  const readers = suitesWithText("'hooks', 'README\\.md'");
+  assert.ok(readers.includes('hooks/hookq.test.js'), 'derivation must find hookq');
+  assert.deepStrictEqual(missingFor(SEL, 'hooks/README.md', readers), []);
+  const loaders = suitesWithText("'src', 'runners', 'review'");
+  assert.ok(loaders.includes('hooks/tests/autopilot-cli.test.sh'), 'derivation must find autopilot-cli');
+  assert.deepStrictEqual(missingFor(SEL, 'src/runners/review.js', loaders), []);
+  assert.deepStrictEqual(missingFor(SEL, 'README.md', ['hooks/tests/check-readme-parity.test.sh', ...suitesWithText('setup_sync_version_sandbox')]), []);
   assert.deepStrictEqual(missingFor(SEL, 'CHANGELOG.md', ['hooks/tests/check-plan-graduation.test.sh']), []);
-  assert.deepStrictEqual(missingFor(SEL, 'README.md', suitesWithText('setup_sync_version_sandbox')), []);
 });
 
-test('negative control: reverting the segment rules turns the real-repo regression red', () => {
-  const noJoinProse = mutant([['const joined = r.joinedProse.some(', 'const joined = false && r.joinedProse.some(']]);
-  assert.ok(missingFor(noJoinProse, 'hooks/README.md', ['hooks/hookq.test.js']).length > 0);
+// Root README readers, in the two shapes the review found: path.join(__dirname, '..', 'README.md') and path.join(ROOT, 'README.md').
+test('fixture: a suite that reads the root README by either path.join shape is selected when README.md changes', () => {
+  const r = makeRepo({
+    'README.md': 'root\n', 'hooks/README.md': 'hooks\n',
+    'hooks/dotdot.test.js': "const fs = require('fs'); const path = require('path');\nfs.readFileSync(path.join(__dirname, '..', 'README.md'), 'utf8');\n",
+    'hooks/rootish.test.js': "const fs = require('fs'); const path = require('path');\nfs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');\n",
+    'hooks/hooksish.test.js': "const fs = require('fs'); const path = require('path');\nfs.readFileSync(path.join(ROOT, 'hooks', 'README.md'), 'utf8');\n",
+  });
+  try {
+    const out = r.select(r.change({ 'README.md': 'root2\n' }));
+    assert.strictEqual(out.mode, 'selective');
+    assert.ok(out.suites.includes('hooks/dotdot.test.js') && out.suites.includes('hooks/rootish.test.js'));
+  } finally { r.cleanup(); }
+});
+
+test('negative control: dropping the suites\' file-name mention edges turns the runs-watch regression red', () => {
+  const bin = mutant([['for (const f of graph.byExt.get(b) || []) {', 'for (const f of [...(graph.byExt.get(b) || [])].filter((x) => !isSuite(x))) {']]);
+  for (const seed of RW_SEEDS) assert.ok(missingRunsWatch(bin, seed).length > 0, seed);
+});
+
+test('negative control: dropping the hooks/README.md mention edge loses hookq', () => {
+  const bin = mutant([['for (const f of graph.byExt.get(b) || []) {', 'for (const f of []) {']]);
+  assert.ok(missingFor(bin, 'hooks/README.md', ['hooks/hookq.test.js']).length > 0);
 });

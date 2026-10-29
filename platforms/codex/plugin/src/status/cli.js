@@ -532,7 +532,7 @@ function runStatusCli(argv, {
       }
       idleExit = Number(selectors.idleExit.value);
     }
-    const { runWatchCli } = require('./runs-watch');
+    const { runWatchCli } = require('./runs-watch'); // affected-suites: lazy (only the status --watch branch)
     return runWatchCli({
       watch, stop, project: selectors.project.value, interval, idleExit, render,
       enrichCap: selectors.enrichCap.present ? enrichCap : null,

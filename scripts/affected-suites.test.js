@@ -1076,3 +1076,105 @@ test('negative control: without the new flags no attribution output, no base_rc,
     assert.strictEqual(fs.readFileSync(rec, 'utf8').includes('base_rc'), false);
   } finally { r.cleanup(); }
 });
+
+// ---- BL-0332: lazy require marker and pseudo-edges ----------------------------------------------
+// A mutant is the real selector with one rule switched off; it must select MORE than the real one
+// on the same fixture, which is what shows the case can go red.
+function mutant(replacements) {
+  let src = fs.readFileSync(path.join(__dirname, 'affected-suites.js'), 'utf8');
+  for (const [from, to] of replacements) {
+    assert.ok(src.includes(from), `mutation anchor missing: ${from}`);
+    src = src.replace(from, to);
+  }
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-mutant-')), 'affected-suites.js');
+  fs.writeFileSync(f, src);
+  return f;
+}
+function selectWith(bin, r, head) {
+  return JSON.parse(execFileSync('node', [bin, '--root', r.dir, '--base', r.base, '--head', head, '--json'], { stdio: 'pipe' }).toString());
+}
+const LAZY_LAYOUT = {
+  'scripts/lib/watcher.js': 'module.exports = 1;\n',
+  'scripts/gate.js': "const on = process.env.GATE_ON;\nfunction start() {\n  if (!on) return;\n  const w = require('./lib/watcher.js'); // affected-suites: lazy\n  return w;\n}\nmodule.exports = { start };\n",
+  'scripts/eager.js': "function run() {\n  const w = require('./lib/watcher.js');\n  return w;\n}\nmodule.exports = { run };\n",
+  'hooks/tests/gate.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/gate.js"\n',
+  'hooks/tests/eager.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/eager.js"\n',
+  'hooks/tests/watcher.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/lib/watcher.js"\n',
+};
+
+test('lazy require marker: a marked require makes no edge, an unmarked indented one stays strong', () => {
+  const r = makeRepo(LAZY_LAYOUT);
+  try {
+    const head = r.change({ 'scripts/lib/watcher.js': 'module.exports = 2;\n' });
+    const out = r.select(head);
+    assert.ok(out.suites.includes('hooks/tests/watcher.test.sh'), 'a suite that names the target itself is still selected');
+    assert.ok(out.suites.includes('hooks/tests/eager.test.sh'), 'unmarked in-function require keeps its strong edge');
+    assert.ok(!out.suites.includes('hooks/tests/gate.test.sh'), 'marked lazy require does not pull in the gate suite');
+  } finally { r.cleanup(); }
+});
+
+test('negative control: a top-level require is strong even next to the marker text elsewhere', () => {
+  const r = makeRepo({ ...LAZY_LAYOUT, 'scripts/top.js': "const w = require('./lib/watcher.js');\nmodule.exports = w;\n", 'hooks/tests/top.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/top.js"\n' });
+  try {
+    const head = r.change({ 'scripts/lib/watcher.js': 'module.exports = 3;\n' });
+    assert.ok(r.select(head).suites.includes('hooks/tests/top.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('negative control: with the marker rule off the gate suite is selected again (case turns red)', () => {
+  const r = makeRepo(LAZY_LAYOUT);
+  const bin = mutant([['return raw.split(', 'return raw; void (']]);
+  try {
+    const head = r.change({ 'scripts/lib/watcher.js': 'module.exports = 4;\n' });
+    assert.ok(!selectWith(SEL, r, head).suites.includes('hooks/tests/gate.test.sh'));
+    assert.ok(selectWith(bin, r, head).suites.includes('hooks/tests/gate.test.sh'), 'the mutant must over-select, else the case proves nothing');
+  } finally { r.cleanup(); }
+});
+
+const VARDIR_LAYOUT = {
+  'scripts/gate.js': 'module.exports = 1;\n',
+  'hooks/tests/lib.sh': '#!/usr/bin/env bash\nexport GATE_DIR="$TEST_TMP/gate"\n',
+  'hooks/tests/uses-lib.test.sh': '#!/usr/bin/env bash\nsource "$HERE/lib.sh"\necho hi\n',
+  'hooks/tests/gate.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/gate.js"\n',
+};
+
+test('pseudo-edge: "$VAR/name" is a directory under a runtime root, not a mention of name.js', () => {
+  const r = makeRepo(VARDIR_LAYOUT);
+  try {
+    const head = r.change({ 'scripts/gate.js': 'module.exports = 2;\n' });
+    assert.deepStrictEqual(r.select(head).suites, ['hooks/tests/gate.test.sh']);
+  } finally { r.cleanup(); }
+});
+
+test('negative control: with the variable-directory rule off the helper pulls in its sourcing suite', () => {
+  const r = makeRepo(VARDIR_LAYOUT);
+  const bin = mutant([['if (VAR_DIR_BEFORE.test(', 'if (false && VAR_DIR_BEFORE.test(']]);
+  try {
+    const head = r.change({ 'scripts/gate.js': 'module.exports = 2;\n' });
+    assert.ok(selectWith(bin, r, head).suites.includes('hooks/tests/uses-lib.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('pseudo-edge: a shared prose basename and a one-word stem do not flood', () => {
+  const r = makeRepo({
+    'README.md': 'a\n', 'hooks/README.md': 'b\n',
+    'scripts/residue.js': 'module.exports = 1;\n',
+    'scripts/lister.js': "const names = ['README.md', 'residue'];\nmodule.exports = names;\n",
+    'hooks/tests/lister.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/lister.js"\n',
+    'hooks/tests/residue.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/residue.js"\n',
+    'hooks/tests/readme.test.sh': '#!/usr/bin/env bash\ncat "$ROOT/hooks/README.md"\n',
+  });
+  const noProse = mutant([['if (graph.genericProse.has(b)) {', 'if (false) {']]);
+  const noWord = mutant([["if (jsTarget && k !== 'strong' && /^[a-z]+$/.test(bare)) continue;", '']]);
+  try {
+    const h1 = r.change({ 'hooks/README.md': 'c\n' });
+    const o1 = r.select(h1);
+    assert.strictEqual(o1.mode, 'selective');
+    assert.ok(o1.suites.includes('hooks/tests/readme.test.sh') && !o1.suites.includes('hooks/tests/lister.test.sh'));
+    assert.ok(selectWith(noProse, r, h1).suites.includes('hooks/tests/lister.test.sh'), 'prose mutant must over-select');
+    const h2 = r.change({ 'scripts/residue.js': 'module.exports = 2;\n' });
+    const out = r.select(h2);
+    assert.ok(out.suites.includes('hooks/tests/residue.test.sh') && !out.suites.includes('hooks/tests/lister.test.sh'));
+    assert.ok(selectWith(noWord, r, h2).suites.includes('hooks/tests/lister.test.sh'), 'one-word mutant must over-select');
+  } finally { r.cleanup(); }
+});

@@ -83,6 +83,7 @@ if (fmt === 'stream-json') {
   else {
     if (!get('--resume')) {
       if (CFG.tamper_stub) { const f = 'scripts/dispatch-hetero.sh'; fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^D0G_PINNED_CELL=.*$/m, "D0G_PINNED_CELL='/tmp/elsewhere'")); } // the model edits a harness file
+      if (CFG.make_symlink) fs.symlinkSync('/tmp', path.join(process.cwd(), '..', '.d0gate', 'evil')); // the model leaves a symlink in an artifact directory
       doSneak();
       if (CFG.nested) for (let k = 0; k < 2; k++) cp.spawnSync('claude', ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' }); // the agent tries to start its own claude
       let rules = null; let task = null;
@@ -428,19 +429,60 @@ JS
 node "$TEST_TMP/race.js" "$EV" "$TEST_TMP" || fail "source swap (green)"
 ok "swap after check"
 
+cat >"$TEST_TMP/settle.js" <<'JS'
+// a hand left symlinks where the wrapper settles its reservation: nothing outside the cell may be truncated or written
+const fs = require('fs'); const cp = require('child_process'); const path = require('path');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const fake = path.join(tmp, 'settle-real.sh');
+fs.writeFileSync(fake, '#!/bin/sh\necho \'{"type":"result","session_id":"fake","total_cost_usd":0.01}\'\n', { mode: 0o755 });
+const bad = [];
+const run = (what, plant) => {
+  const root = fs.mkdtempSync(path.join(tmp, 'scell-')); const ext = fs.mkdtempSync(path.join(tmp, 'sext-'));
+  fs.mkdirSync(path.join(root, '.d0gate')); const target = path.join(ext, 'KEEP'); fs.writeFileSync(target, 'ORIGINAL-EXTERNAL');
+  const out = path.join(root, '.d0gate', 'hand-out.json');
+  const bin = cc.handWrapper({ root }, fake, { out, budget: '1' });
+  plant(out, target);
+  const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env }, encoding: 'utf8' });
+  const after = fs.readFileSync(target, 'utf8');
+  if (after !== 'ORIGINAL-EXTERNAL') bad.push(what + ': the file outside the cell was changed to ' + JSON.stringify(after));
+  return r;
+};
+run('resv.tmp symlink', (out, target) => fs.symlinkSync(target, out + '.resv.tmp'));
+let r = run('resv symlink', (out, target) => fs.symlinkSync(target, out + '.resv'));
+if (r.status !== 97) bad.push('resv symlink: the wrapper did not refuse (rc ' + r.status + ')');
+r = run('lock symlink', (out, target) => fs.symlinkSync(target, out + '.lock'));
+if (r.status !== 97) bad.push('lock symlink: the wrapper did not refuse (rc ' + r.status + ')');
+if (bad.length) { console.log('SETTLEMENT WRITES THROUGH A SYMLINK: ' + bad.join(' ; ')); process.exit(1); }
+console.log('settlement: a planted RESV.tmp, RESV or LOCK symlink leaves the file outside the cell untouched (RESV and LOCK are refused with exit 97)');
+JS
+node "$TEST_TMP/settle.js" "$EV" "$TEST_TMP" || fail "settlement symlinks (green)"
+
 echo "=== 5d4. a cell whose model changed a harness file (the stub's pinned cell) is re-verified afterwards: failure_class harness_modified, not scored ==="
 cat >"$TEST_TMP/hm.js" <<'JS'
 const fs = require('fs');
-const rows = fs.readFileSync(process.argv[2], 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-const r = rows[0];
-if (!r || r.failure_class !== 'harness_modified' || r.failure_cause !== 'harness_modified' || !/scripts\/dispatch-hetero\.sh/.test(r.failure_detail || '') || r.markers.m_armed !== false || r.skill_invoked !== false) {
-  console.log('HARNESS CHANGE NOT FLAGGED: ' + JSON.stringify(r && { fc: r.failure_class, cause: r.failure_cause, detail: r.failure_detail, markers: r.markers })); process.exit(1);
+const [mode, file] = process.argv.slice(2);
+const rows = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+if (mode === 'clean') { // no symlink, no change: nothing is flagged
+  const flagged = rows.filter((r) => r.failure_class === 'harness_modified');
+  if (flagged.length || rows.length < 1) { console.log('FALSE ALARM: ' + flagged.map((r) => r.task_id + '|' + r.arm + ': ' + r.failure_detail).join(' ; ')); process.exit(1); }
+  console.log('clean cells: ' + rows.length + ' rows, none flagged harness_modified');
+  process.exit(0);
 }
-console.log('harness_modified: ' + r.failure_detail + ' (cost kept ' + r.cost_usd + ', every judged boolean false)');
+const r = rows[0];
+const want = mode === 'symlink' ? { cause: 'symlink_in_artifacts', detail: /symlink_in_artifacts: \.d0gate\/evil/ } : { cause: 'harness_modified', detail: /scripts\/dispatch-hetero\.sh/ };
+if (!r || r.failure_class !== 'harness_modified' || r.failure_cause !== want.cause || !want.detail.test(r.failure_detail || '') || r.markers.m_armed !== false || r.skill_invoked !== false) {
+  console.log('HARNESS CHANGE NOT FLAGGED (' + mode + '): ' + JSON.stringify(r && { fc: r.failure_class, cause: r.failure_cause, detail: r.failure_detail, markers: r.markers })); process.exit(1);
+}
+console.log('harness_modified (' + mode + '): ' + r.failure_detail + ' (cost kept ' + r.cost_usd + ', every judged boolean false)');
 JS
 setcfg '{"tamper_stub":true}'; : >"$FLOG"; RHM="$TEST_TMP/rhm.jsonl"
 CAP=2.2 cc --results "$RHM" --limit 1 >/dev/null 2>&1
-node "$TEST_TMP/hm.js" "$RHM" || fail "harness_modified (green)"
+node "$TEST_TMP/hm.js" stub "$RHM" || fail "harness_modified (green)"
+setcfg '{"make_symlink":true}'; : >"$FLOG"; RHS="$TEST_TMP/rhs.jsonl"
+CAP=2.2 cc --results "$RHS" --limit 1 >/dev/null 2>&1
+node "$TEST_TMP/hm.js" symlink "$RHS" || fail "symlink_in_artifacts (green)"
+node "$TEST_TMP/hm.js" clean "$R1" || fail "clean cells flagged (false alarm)"
 setcfg
 ok "harness re-verification"
 
@@ -721,11 +763,15 @@ restore; brk "$FEV/d0gate/cc.js" "( flock 9; node -e" "( node -e"
 if node "$TEST_TMP/ctest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/rn.out" 2>&1; then fail "RED control (n) was NOT caught: $(cat "$TEST_TMP/rn.out")"; fi
 echo "RED (expected) (n) no lock: $(cat "$TEST_TMP/rn.out")"
 # (hm) the post-cell re-verification switched off: the changed stub goes unnoticed
-restore; brk "$FEV/d0gate/cc.js" 'if (integrityBreak && integrityBreak.length) {' 'if (false) {'
+restore; brk "$FEV/d0gate/cc.js" 'if (integrityBreak && (integrityBreak.changed.length || integrityBreak.symlinks.length)) {' 'if (false) {'
 setcfg '{"tamper_stub":true}'; : >"$FLOG"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rhm2.jsonl" --limit 1 >/dev/null 2>&1
-if node "$TEST_TMP/hm.js" "$TEST_TMP/rhm2.jsonl" >"$TEST_TMP/rhm2.out" 2>&1; then fail "RED control (hm) was NOT caught: $(cat "$TEST_TMP/rhm2.out")"; fi
+if node "$TEST_TMP/hm.js" stub "$TEST_TMP/rhm2.jsonl" >"$TEST_TMP/rhm2.out" 2>&1; then fail "RED control (hm) was NOT caught: $(cat "$TEST_TMP/rhm2.out")"; fi
 echo "RED (expected) (hm) no re-verification: $(cat "$TEST_TMP/rhm2.out")"
+setcfg '{"make_symlink":true}'; : >"$FLOG"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rhs2.jsonl" --limit 1 >/dev/null 2>&1
+if node "$TEST_TMP/hm.js" symlink "$TEST_TMP/rhs2.jsonl" >"$TEST_TMP/rhs2.out" 2>&1; then fail "RED control (hs) was NOT caught: $(cat "$TEST_TMP/rhs2.out")"; fi
+echo "RED (expected) (hs) symlink scan off: $(cat "$TEST_TMP/rhs2.out")"
 setcfg; restore
 # (o) the wrapper of the previous commit (the OUT and the budget came from the environment) lets an outside OUT create files outside
 OLDF="$TEST_TMP/oldfarm"; rm -rf "$OLDF"; mkdir -p "$OLDF/d0gate"; cp -R "$EV/d0gate/." "$OLDF/d0gate/"
@@ -735,6 +781,11 @@ echo "RED (expected) (o) environment OUT trusted: $(cat "$TEST_TMP/ro.out")"
 # (o2) the previous wrapper follows a destination symlink planted by the hand
 if node "$TEST_TMP/csess.js" "$OLDF" "$TEST_TMP" >"$TEST_TMP/ro2.out" 2>&1; then fail "RED control (o2) was NOT caught: $(cat "$TEST_TMP/ro2.out")"; fi
 echo "RED (expected) (o2) previous wrapper: $(cat "$TEST_TMP/ro2.out")"
+# (o4) the wrapper of the previous commit rewrites RESV through a planted symlink and appends through a symlinked RESV or LOCK
+O2F="$TEST_TMP/old2farm"; rm -rf "$O2F"; mkdir -p "$O2F/d0gate"; cp -R "$EV/d0gate/." "$O2F/d0gate/"
+git -C "$REPO_ROOT" show 1d4931ee9:evals/skill-onoff/d0gate/cc.js >"$O2F/d0gate/cc.js" || fail "cannot read the previous cc.js (1d4931ee9)"
+if node "$TEST_TMP/settle.js" "$O2F" "$TEST_TMP" >"$TEST_TMP/ro4.out" 2>&1; then fail "RED control (o4) was NOT caught: $(cat "$TEST_TMP/ro4.out")"; fi
+echo "RED (expected) (o4) previous wrapper: $(cat "$TEST_TMP/ro4.out")"
 # (o3) without O_NOFOLLOW the swapped source is followed
 NF="$TEST_TMP/nffarm"; rm -rf "$NF"; mkdir -p "$NF/d0gate"; cp -R "$EV/d0gate/." "$NF/d0gate/"
 brk "$NF/d0gate/cc.js" 'const NF=C.O_NOFOLLOW;' 'const NF=0;'
@@ -772,7 +823,8 @@ CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rt.jsonl
 if node "$TEST_TMP/tmo2.js" g4quota "$TEST_TMP/rt.jsonl" >"$TEST_TMP/rt.out" 2>&1; then fail "RED control (t) was NOT caught: $(cat "$TEST_TMP/rt.out")"; fi
 echo "RED (expected) (t) quota text of a failure ignored: $(cat "$TEST_TMP/rt.out")"
 # (u) settlement goes back to 'the word appears anywhere'
-restore; brk "$FEV/d0gate/cc.js" "if node -e '\${settled}' \"\$PRIV\"; then" "if grep -q total_cost_usd \"\$PRIV\"; then"
+restore; brk "$FEV/d0gate/cc.js" 'if (!ok) process.exit(1);' ''
+
 if node "$TEST_TMP/stest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/ru.out" 2>&1; then fail "RED control (u) was NOT caught: $(cat "$TEST_TMP/ru.out")"; fi
 echo "RED (expected) (u) settlement by the bare word: $(cat "$TEST_TMP/ru.out")"
 # (s2) a timed-out cell with an unreadable stray: back to Math.max (the stray adds nothing)

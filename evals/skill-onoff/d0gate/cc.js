@@ -12,6 +12,10 @@
 // Cost: per call the LAST result's total_cost_usd, summed (cost_turns keeps each); a timed-out cell is charged its whole ceiling.
 // Depth-0 cells may NOT start a claude of their own: the cell PATH refuses it (exit 97) and counts the attempts (nested_claude_attempts).
 // G4: the claude wrapper on the PATH gives every hand launch of the cell only what is left of the cell budget.
+// Threat model: the cell guards against what a MODEL can do: set environment values, pass arguments, move or copy harness files, plant
+// symlinks ahead of time. It does NOT guard against a process of the same uid that swaps a directory component between two system
+// calls (Node has no openat); that residue is caught afterwards: every cell is re-verified (changed harness files, and any symlink under
+// the artifact directories the runner and the wrappers write: .d0gate/, live/, bin/, bin-deny/, rules/), and a hit is harness_modified.
 // Row shape: every row, finished or not, carries the fields the scorer judges on (see shapeProblems); an unfinished cell has them
 // all false and a failure_class.
 const fs = require('fs');
@@ -167,7 +171,19 @@ function snapshotBreaks(cell, snap) {
   return bad;
 }
 let integrityBreak = null; // set by a cell's finally block, read by runCell
-function noteIntegrity(cell, snap) { integrityBreak = snap ? snapshotBreaks(cell, snap) : null; }
+// symlinks under the directories the runner and the wrappers write (NOT the hand repo or its worktrees: a symlink there is normal work)
+const SCAN_DIRS = ['.d0gate', 'live', 'bin', 'bin-deny', 'rules'];
+function symlinksIn(cell) {
+  const found = [];
+  const walk = (d) => {
+    let ents = [];
+    try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) { const f = path.join(d, e.name); if (e.isSymbolicLink()) found.push(path.relative(cell.root, f)); else if (e.isDirectory()) walk(f); }
+  };
+  for (const d of SCAN_DIRS) { const f = path.join(cell.root, d); try { if (fs.lstatSync(f).isSymbolicLink()) { found.push(d); continue; } } catch { continue; } walk(f); }
+  return found;
+}
+function noteIntegrity(cell, snap) { integrityBreak = snap ? { changed: snapshotBreaks(cell, snap), symlinks: symlinksIn(cell) } : null; }
 function keepCopy(keepDir, cell, extra = {}) {
   if (!keepDir) return;
   fs.mkdirSync(keepDir, { recursive: true });
@@ -338,11 +354,12 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
 // single-quoted shell word). Every path it reads or writes is checked: source config dir under <cell>/tmp, destination under the cell root;
 // each existing level of the destination is lstat-checked (a symlink is refused), directories are created one level at a time and
 // re-checked, files are opened with O_NOFOLLOW (source) and O_CREAT|O_EXCL|O_NOFOLLOW (destination, so nothing is written through an
-// existing file or link), and each source file is re-validated (lstat + realpath) right before it is opened. Best effort: the copy runs
-// after the hand claude has exited, and a swap between the last check and the open is caught only by O_NOFOLLOW.
+// existing file or link), and each source file and its destination directory are re-validated (lstat + realpath) right before the open.
+// Best effort: the copy runs after the hand claude has exited. O_NOFOLLOW covers only the LAST path component; a middle directory swapped
+// by a still-running process between the check and the open is not preventable here and is caught by the post-cell symlink scan.
 const COPY_SESSIONS_JS = [
   'const fs=require("fs"),path=require("path"); const [root,cfg,out,id]=process.argv.slice(1);',
-  'const log=(m)=>{ try { fs.appendFileSync(path.join(root,".d0gate","copy-sessions.log"),m+"\\n"); } catch (e) {} };',
+  'const log=(m)=>{ try { const f=path.join(root,".d0gate","copy-sessions.log"); const fd=fs.openSync(f,fs.constants.O_WRONLY|fs.constants.O_APPEND|fs.constants.O_CREAT|fs.constants.O_NOFOLLOW,384); try { fs.writeSync(fd,m+"\\n"); } finally { fs.closeSync(fd); } } catch (e) {} };',
   'const inside=(p,b)=>p===b||p.startsWith(b+path.sep);',
   'const C=fs.constants; const NF=C.O_NOFOLLOW;',
   'let rr; try { rr=fs.realpathSync(root); } catch (e) { process.exit(0); }',
@@ -356,6 +373,7 @@ const COPY_SESSIONS_JS = [
   '  const top=path.join(ro,path.basename(out)+".sessions"); ensure(top); const dst=path.join(top,id); ensure(dst);',
   '  if (!inside(fs.realpathSync(dst),rr)) { log("skip: destination resolves outside the cell: "+dst); process.exit(0); }',
   '  const one=(a,b)=>{ const st=fs.lstatSync(a); if (!st.isFile()) { log("skip not a plain file: "+a); return; } if (!inside(fs.realpathSync(a),rp)) { log("skip source outside projects: "+a); return; }',
+  '    if (!inside(fs.realpathSync(path.dirname(b)),rr)) { log("skip: destination directory resolves outside the cell: "+path.dirname(b)); return; }',
   '    const fi=fs.openSync(a,C.O_RDONLY|NF); try { const fo=fs.openSync(b,C.O_WRONLY|C.O_CREAT|C.O_EXCL|NF,384); try { const buf=Buffer.alloc(65536); let n; while ((n=fs.readSync(fi,buf,0,buf.length,null))>0) fs.writeSync(fo,buf,0,n); } finally { fs.closeSync(fo); } } finally { fs.closeSync(fi); } };',
   '  const w=(s,d)=>{ for (const e of fs.readdirSync(s,{withFileTypes:true})) { const a=path.join(s,e.name), b=path.join(d,e.name); if (e.isSymbolicLink()) { log("skip symlink: "+a); continue; } if (e.isDirectory()) { ensure(b); w(a,b); } else if (e.isFile()) { try { one(a,b); } catch (err) { log("skip "+a+": "+err.message); } } } };',
   '  w(rp,dst);',
@@ -371,11 +389,29 @@ function handWrapper(cell, realClaude, opts = {}) {
   if (!(out === path.resolve(cell.root) || out.startsWith(path.resolve(cell.root) + path.sep))) throw new Error(`d0gate: the hand output file ${out} is outside the cell ${cell.root}`);
   const budget = opts.budget === undefined || opts.budget === null ? '' : String(opts.budget);
   const sq = (v) => `'${String(v).replace(/'/g, "'\\''")}'`;
+  // guarded writes (no single quote inside): append a line / touch a file only when the target is not a symlink, opened with O_NOFOLLOW
+  const safeAppend = [
+    'const fs=require("fs"); const [f,text]=process.argv.slice(1); const C=fs.constants;',
+    'try { const s=fs.lstatSync(f); if (s.isSymbolicLink()) process.exit(3); } catch (e) { if (e.code!=="ENOENT") process.exit(3); }',
+    'const fd=fs.openSync(f,C.O_WRONLY|C.O_APPEND|C.O_CREAT|C.O_NOFOLLOW,384); if (text) fs.writeSync(fd,text+"\\n"); fs.closeSync(fd);',
+  ].join(" ");
+  // settlement: drop this launch reservation from RESV only if PRIV carries a reported spend; RESV, LOCK and OUT must not be symlinks; the new
+  // content goes to a fresh RESV.<pid>.tmp (O_EXCL|O_NOFOLLOW) and is renamed over RESV
+  const settle = [
+    'const fs=require("fs"); const [priv,resv,id,lock,out]=process.argv.slice(1); const C=fs.constants;',
+    'for (const p of [resv,lock,out]) { try { if (fs.lstatSync(p).isSymbolicLink()) process.exit(3); } catch (e) { if (e.code!=="ENOENT") process.exit(3); } }',
+    'let ok=false; for (const l of fs.readFileSync(priv,"utf8").split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) ok=true; }',
+    'if (!ok) process.exit(1);',
+    'let keep=""; try { const fd=fs.openSync(resv,C.O_RDONLY|C.O_NOFOLLOW); try { keep=fs.readFileSync(fd,"utf8").split("\\n").filter((l)=>l && !l.startsWith(id+" ")).map((l)=>l+"\\n").join(""); } finally { fs.closeSync(fd); } } catch (e) { if (e.code!=="ENOENT") process.exit(3); }',
+    'const tmp=resv+"."+process.pid+".tmp"; const fo=fs.openSync(tmp,C.O_WRONLY|C.O_CREAT|C.O_EXCL|C.O_NOFOLLOW,384); try { fs.writeSync(fo,keep); } finally { fs.closeSync(fo); }',
+    'fs.renameSync(tmp,resv);',
+  ].join(" ");
   // Everything between "read what is spent and reserved" and "write my reservation" runs under one flock, so two launches at the same time
   // cannot both see the same remaining budget. The reservation is settled after the run: dropped when the launch reported a spend (that
   // spend is then in D0GATE_HAND_OUT, which the tee fills live so a killed launch still leaves its envelope), kept when it did not.
   const reserve = [
     'const fs=require("fs"); const [out,resv,budget,id]=process.argv.slice(1); const last=new Map();',
+    'for (const p of [out,resv]) { try { if (fs.lstatSync(p).isSymbolicLink()) { process.stdout.write("refuse"); process.exit(0); } } catch (e) {} }',
     'for (const l of fs.readFileSync(out,"utf8").split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) last.set(String(j.session_id), j.total_cost_usd); }',
     'let s=0; for (const v of last.values()) s+=v;',
     'let r=0; try { for (const l of fs.readFileSync(resv,"utf8").split("\\n")) { const f=l.split(" "); if (f.length===2 && Number.isFinite(Number(f[1]))) r+=Number(f[1]); } } catch {}',
@@ -383,34 +419,29 @@ function handWrapper(cell, realClaude, opts = {}) {
     'const d=Number(process.env.D0GATE_WRAPPER_TEST_DELAY||0); if (d>0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,d*1000);',
     'const amt=String(Number(rem.toFixed(4))); fs.appendFileSync(resv, id+" "+amt+"\\n"); process.stdout.write(amt);',
   ].join(' ');
-  // settlement uses the same test as the reservation step: a line of type result carrying a finite total_cost_usd (a mention of the word elsewhere is not a spend)
-  const settled = [
-    'const fs=require("fs"); let ok=false;',
-    'for (const l of fs.readFileSync(process.argv[1],"utf8").split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) ok=true; }',
-    'process.exit(ok?0:1);',
-  ].join(' ');
   fs.writeFileSync(path.join(bin, 'claude'), [
     '#!/bin/bash',
     `REAL='${realClaude.replace(/'/g, "'\\''")}'`,
     `ROOT=${sq(cell.root)}`, // fixed when the wrapper is written; no environment value decides what may be copied
     `OUT=${sq(out)}`,
     `BUDGET=${sq(budget)}`,
-    'note() { if [ -d "$ROOT/.d0gate" ]; then echo "ignored environment value $1" >>"$ROOT/.d0gate/copy-sessions.log"; fi; return 0; }',
+    `note() { if [ -d "$ROOT/.d0gate" ]; then node -e '${safeAppend}' "$ROOT/.d0gate/copy-sessions.log" "ignored environment value $1" 2>/dev/null; fi; return 0; }`,
     'if [ -n "${D0GATE_HAND_OUT:-}" ] && [ "$D0GATE_HAND_OUT" != "$OUT" ]; then note "D0GATE_HAND_OUT=$D0GATE_HAND_OUT"; fi',
     'if [ -n "${D0GATE_HAND_BUDGET:-}" ] && [ "$D0GATE_HAND_BUDGET" != "$BUDGET" ]; then note "D0GATE_HAND_BUDGET=$D0GATE_HAND_BUDGET"; fi',
     'args=("$@")',
     'if [ -n "$BUDGET" ]; then',
     '  LOCK="$OUT.lock"; RESV="$OUT.resv"; PRIV="$OUT.$$"; ID="$$"',
-    '  : >>"$OUT"',
+    '  for p in "$OUT" "$LOCK" "$RESV"; do if [ -L "$p" ]; then note "refused: $p is a symlink"; echo "d0gate: $p is a symlink; refusing to start claude" >&2; exit 97; fi; done',
+    `  node -e '${safeAppend}' "$OUT" "" 2>/dev/null || { echo "d0gate: cannot open the hand output file safely; refusing to start claude" >&2; exit 97; }`,
     // the rail seeds its own CLAUDE_CONFIG_DIR for the hand (a mkdtemp under $TMPDIR, which the runner points at <cell>/tmp) and removes it on exit:
     // keep the hand own session files (its tool trajectory) before that; see COPY_SESSIONS_JS for what is checked
     `  copy_sessions() { node -e '${COPY_SESSIONS_JS}' "$ROOT" "${'$'}{CLAUDE_CONFIG_DIR:-}" "$OUT" "$ID" 2>/dev/null; return 0; }`,
     '  trap copy_sessions EXIT; trap "exit 143" TERM INT HUP',
-    `  rem="$( ( flock 9; node -e '${reserve}' "$OUT" "$RESV" "$BUDGET" "$ID" ) 9>"$LOCK" )"`,
+    `  rem="$( ( flock 9; node -e '${reserve}' "$OUT" "$RESV" "$BUDGET" "$ID" ) 9<>"$LOCK" )"`,
     '  if [ "$rem" = refuse ] || [ -z "$rem" ]; then echo "d0gate: the cell budget is spent or reserved; refusing to start another claude" >&2; exit 97; fi',
     '  args+=(--max-budget-usd "$rem")',
     '  "$REAL" "${args[@]}" | tee -a "$OUT" "$PRIV"; code="${PIPESTATUS[0]}"',
-    `  ( flock 9; if node -e '${settled}' "$PRIV"; then grep -v "^$ID " "$RESV" >"$RESV.tmp"; mv "$RESV.tmp" "$RESV"; fi ) 9>"$LOCK"`,
+    `  ( flock 9; node -e '${settle}' "$PRIV" "$RESV" "$ID" "$LOCK" "$OUT" ) 9<>"$LOCK"`,
     '  rm -f "$PRIV"; exit "$code"',
     'fi',
     'exec "$REAL" "${args[@]}"',
@@ -549,14 +580,16 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
 function runCell(ctx, c, ceiling, budget, keepDir) {
   integrityBreak = null;
   let row = c.task === T.G4 ? runG4(ctx, c, ceiling, budget, keepDir) : runD0(ctx, c, ceiling, budget, keepDir);
-  if (integrityBreak && integrityBreak.length) { // the cell changed a harness file: infra, not scored, the spend it caused is kept
+  if (integrityBreak && (integrityBreak.changed.length || integrityBreak.symlinks.length)) { // the cell changed a harness file or left a symlink in the artifacts: infra, not scored, the spend it caused is kept
+    const only = integrityBreak.changed.length === 0;
     row = failureRow(ctx, c, { model: row.model, sessionId: row.session_id, durationS: row.duration_s, cost: row.cost_usd, costTurns: row.cost_turns,
       nestedAttempts: row.nested_claude_attempts, unaccounted: row.unaccounted_sessions, skillObserved: row.skill_invoked_observed, gateBlocks: row.g4 && row.g4.gate_blocks,
-      costUnknown: row.cost_unknown === true, cls: 'harness_modified', cause: 'harness_modified', detail: `changed or removed: ${integrityBreak.slice(0, 5).join(', ')}` });
+      costUnknown: row.cost_unknown === true, cls: 'harness_modified', cause: only ? 'symlink_in_artifacts' : 'harness_modified',
+      detail: [integrityBreak.changed.length ? `changed or removed: ${integrityBreak.changed.slice(0, 5).join(', ')}` : '', integrityBreak.symlinks.length ? `symlink_in_artifacts: ${integrityBreak.symlinks.slice(0, 5).join(', ')}` : ''].filter(Boolean).join('; ') });
   }
   const probs = shapeProblems(row);
   if (probs.length) throw new Error(`cc runner produced an incomplete row for ${c.task}|${c.arm}|${c.rep}: ${probs.join(', ')}`);
   return row;
 }
 
-module.exports = { COPY_SESSIONS_JS, takeSnapshot, snapshotBreaks, blockedTimeoutApplies, handWrapper, denyWrapper, runCell, shapeProblems, summary, classify, falseShape, whichClaude, REPO_ROOT, D0_MARKER };
+module.exports = { COPY_SESSIONS_JS, takeSnapshot, snapshotBreaks, symlinksIn, blockedTimeoutApplies, handWrapper, denyWrapper, runCell, shapeProblems, summary, classify, falseShape, whichClaude, REPO_ROOT, D0_MARKER };

@@ -1239,6 +1239,28 @@
       "invalid_effect": "anything but a boolean (or env true/false/1/0/yes/no) is ignored, so the source stays"
     },
     {
+      "name": "AUTOPILOT_TEST_DURATIONS_FILE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/affected-suites.js", "hooks/tests/run.sh"],
+      "doc": null,
+      "relates": [],
+      "note": "Path of the per-suite durations tsv (rel TAB seconds). Default ${XDG_CACHE_HOME:-~/.cache}/autopilot/test-durations.tsv. affected-suites --run writes it for the real repo only, or for any root when this is set (tests point it at a temp file)."
+    },
+    {
+      "name": "AUTOPILOT_TEST_TIMING_FACTOR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/affected-suites.js", "hooks/tests/run.sh"],
+      "doc": null,
+      "relates": [],
+      "note": "Multiplier suites apply to upper-bound timing assertions. run.sh --parallel N and affected-suites --jobs N default it to N for pooled suites and 1 for the serial part; a value already in the environment wins."
+    },
+    {
       "name": "AUTOPILOT_GATE_FILE",
       "kind": "env",
       "audience": "internal",

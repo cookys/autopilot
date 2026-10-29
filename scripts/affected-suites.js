@@ -4,7 +4,7 @@
 //
 // Usage:
 //   node scripts/affected-suites.js --base <ref> [--head <ref>] [--json] [--run] [--record [path]]
-//     [--entry-timeout <secs>] [--attribute]
+//     [--entry-timeout <secs>] [--attribute] [--jobs <N>]
 //   node scripts/affected-suites.js --files a.js b.sh [--json] [--run]   (paths relative to --root)
 //   Options: --root <dir> (default: the repo containing this script), --list-all (print every
 //   suite run.sh would run), --help.
@@ -27,9 +27,36 @@
 // rename). A failed write prints to stderr and exits 2. After the summary line, stdout gets
 // `record: <path>`. The command's exit code stays the run's (non-zero when any entry failed).
 // Record schema 1, key order: {schema:1, head, base, mode:"selective"|"full",
-//   suites:[{path, rc}, ...]} — one object per entry actually executed, in execution order
+//   suites:[{path, rc, seconds}, ...]} — one object per entry actually executed, in execution order
 //   (suites then extra_runners when selective; always_run then extra_runners when full). rc is
-//   the integer already printed as rc=N.
+//   the integer already printed as rc=N; seconds is that entry's wall time (BL-0330, additive: the
+//   `rc=N <path>` output line is unchanged). A --jobs pool failure that passed its serial rerun also
+//   carries `flaky_under_parallel: true`.
+//
+// Durations (BL-0330): every --run also merges each entry's whole-second wall time into the file
+// run.sh --parallel uses, ${AUTOPILOT_TEST_DURATIONS_FILE:-${XDG_CACHE_HOME:-~/.cache}/autopilot/test-durations.tsv}
+// (rel<TAB>seconds; timed-out entries are not written). For a --root other than this script's own repo it
+// is written only when AUTOPILOT_TEST_DURATIONS_FILE is set, so a fixture never pollutes the shared file.
+//
+// --jobs <N> (BL-0331; only with --run; default 1 = the serial run above, output byte-for-byte unchanged;
+// N>1 cannot be combined with --budget-seconds): suites not listed in hooks/tests/lib/serial-suites.txt (the
+// single source run.sh also reads) go through a pool of N workers, slowest first by the durations file
+// (no record = first, then name order); once the pool is empty the listed suites run one at a time, then
+// extra_runners. Each entry gets its own TMPDIR and XDG_RUNTIME_DIR; AUTOPILOT_TEST_TIMING_FACTOR defaults to N
+// for pool entries and 1 for the serial part (a value already in the environment wins). Output is buffered per
+// entry and printed whole, followed by its `rc=N <path>`; the summary line is unchanged and a
+// `slowest: <path> <s>s, ...` line (top 10) is printed last, after any `attribution:` and `record:` lines
+// (so a consumer that reads the summary-then-record sequence sees the same order as without --jobs).
+// A pool entry that exits non-zero is re-run once, alone, after the pool drains: rc 0 prints
+// `flaky-under-parallel: <path> (rc=<pool rc> in pool)` (`(timeout in pool)` when the pool run was killed by
+// --entry-timeout) then `rc=0 <path>` and counts green; its record entry has `flaky_under_parallel: true`,
+// `pool_rc` and, for a pool timeout, `pool_timed_out: true`. A second non-zero makes the RERUN final: its output,
+// rc (124 when it timed out, listed in the summary's timeout list), record entry and --attribute input; the pool rc
+// is not shown. Works with --entry-timeout, --attribute and --record.
+// Captured output: when an entry's process exits, its pipes get a 300 ms grace to drain; output a background
+// grandchild writes later than that is cut off (the entry's group is then killed). Durations writes are
+// serialised between affected-suites instances by <tsv>.lock (10 s cap, then a warning and no write); run.sh
+// --parallel writes the same file with an atomic rename but does not take that lock.
 //
 // --entry-timeout <secs> (only with --run; default none): each executed entry runs in its own process
 // group and is killed after that many seconds (TERM, KILL 2s later); its rc is 124 and the summary
@@ -524,17 +551,26 @@ function killGroup(pid, sig) { try { process.kill(-pid, sig); } catch { try { pr
 
 // Resolves {rc, timedOut}. With timeoutSecs the entry runs in its own process group; on expiry the
 // group gets TERM, then KILL 2s later, and rc is 124. Without it the spawn is the plain inherit run.
-function runEntry(root, rel, timeoutSecs, group) {
+function runEntry(root, rel, timeoutSecs, group, opts) {
+  const capture = !!(opts && opts.capture); // --jobs: buffer output, the caller prints it with the rc line
+  const env = opts && opts.env ? opts.env : undefined;
   const spec = entryCommand(rel);
   if (!spec) {
-    process.stderr.write(`affected-suites: no runner for ${rel} (run.sh runs .sh with bash and .test.js with node --test)\n`);
+    const msg = `affected-suites: no runner for ${rel} (run.sh runs .sh with bash and .test.js with node --test)\n`;
+    if (capture) return Promise.resolve({ rc: 1, timedOut: false, chunks: [['err', msg]] });
+    process.stderr.write(msg);
     process.stdout.write(`rc=1 ${rel}\n`);
     return Promise.resolve({ rc: 1, timedOut: false });
   }
   const argv = spec.argv.slice();
   argv[argv.length - 1] = path.join(root, rel);
   return new Promise((resolve) => {
-    const child = spawn(spec.cmd, argv, { cwd: root, stdio: 'inherit', detached: group || timeoutSecs != null });
+    const child = spawn(spec.cmd, argv, { cwd: root, env, stdio: capture ? ['inherit', 'pipe', 'pipe'] : 'inherit', detached: group || timeoutSecs != null });
+    const chunks = [];
+    if (capture) {
+      child.stdout.on('data', (d) => chunks.push(['out', d]));
+      child.stderr.on('data', (d) => chunks.push(['err', d]));
+    }
     let timedOut = false, killTimer = null, termTimer = null, done = false;
     const grouped = group || timeoutSecs != null;
     if (grouped) ACTIVE.add(child.pid);
@@ -552,11 +588,13 @@ function runEntry(root, rel, timeoutSecs, group) {
       if (child.pid && grouped) { killGroup(child.pid, 'SIGKILL'); ACTIVE.delete(child.pid); }
       clearTimeout(killTimer);
       const rc = timedOut ? 124 : (code == null ? 1 : code);
-      process.stdout.write(`rc=${rc} ${rel}\n`);
-      resolve({ rc, timedOut });
+      if (!capture) process.stdout.write(`rc=${rc} ${rel}\n`);
+      resolve({ rc, timedOut, chunks });
     };
     child.on('error', () => finish(1));
     child.on('close', (code) => finish(code));
+    // A suite that leaves a background process holding the pipe open would keep 'close' from firing.
+    if (capture) child.on('exit', (code) => setTimeout(() => finish(code), 300));
   });
 }
 
@@ -597,7 +635,160 @@ function orderForBudget(root, doc, suites) {
   }).map((x) => x.rel);
 }
 
-async function runSelected(root, doc, alwaysRun, budget, entryTimeout) {
+// ---- --jobs N (BL-0331) ----
+
+// hooks/tests/lib/serial-suites.txt: one repo-relative path per line, # comments. Missing file = no serial suites.
+function loadSerialSuites(root) {
+  const set = new Set();
+  try {
+    for (const line of fs.readFileSync(path.join(root, 'hooks', 'tests', 'lib', 'serial-suites.txt'), 'utf8').split('\n')) {
+      const t = line.replace(/#.*/, '').trim();
+      if (t) set.add(t);
+    }
+  } catch { /* no list */ }
+  return set;
+}
+
+// The durations file run.sh --parallel reads and writes: rel<TAB>integer seconds.
+function durationsFile() {
+  return process.env.AUTOPILOT_TEST_DURATIONS_FILE || path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'autopilot', 'test-durations.tsv');
+}
+function readDurations(file) {
+  const m = new Map();
+  try {
+    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+      const [rel, secs] = line.split('\t');
+      if (rel && /^[0-9]+$/.test(secs || '')) m.set(rel, Number(secs));
+    }
+  } catch { /* no file = no history */ }
+  return m;
+}
+// Only the real repo (or an explicit AUTOPILOT_TEST_DURATIONS_FILE) feeds the shared history: a fixture --root must not write fixture paths into ~/.cache.
+function durationsApply(root) {
+  return !!process.env.AUTOPILOT_TEST_DURATIONS_FILE || path.resolve(root) === path.resolve(__dirname, '..');
+}
+// The read-merge-rename below runs under the pid-lock helper scripts/lib/jsonl-store.js (<file>.lock), so concurrent
+// affected-suites runs keep each other's rows. run.sh --parallel writes the same file with its own atomic rename and no
+// lock (a shell writer cannot take this pid-lock): it is not mutually excluded, only affected-suites instances are.
+// A lock not obtained within 10 s skips the write with one warning on stderr; the run itself is never held up.
+const lockedRun = (opts, fn) => require('./lib/jsonl-store.js').withWriteLock(opts, fn);
+function recordDurations(root, results, timedOutPaths) {
+  if (!durationsApply(root)) return;
+  try {
+    const file = durationsFile();
+    lockedRun({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: 'durations', timeoutMs: 10000 }, () => {
+      const merged = readDurations(file);
+      for (const r of results) if (!timedOutPaths.includes(r.path) && typeof r.seconds === 'number') merged.set(r.path, Math.round(r.seconds));
+      const tmp = `${file}.tmp.${process.pid}`;
+      fs.writeFileSync(tmp, [...merged.entries()].sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)).map(([k, v]) => `${k}\t${v}\n`).join(''));
+      fs.renameSync(tmp, file);
+    });
+  } catch (e) { process.stderr.write(`affected-suites: durations not recorded: ${e.message}\n`); }
+}
+
+const JOB_TMPS = new Set();
+function emitChunks(chunks) {
+  for (const [kind, d] of chunks || []) (kind === 'err' ? process.stderr : process.stdout).write(d);
+}
+
+// Per-entry TMPDIR / XDG_RUNTIME_DIR under a fresh directory; AUTOPILOT_TEST_TIMING_FACTOR defaults to N for pool entries (a caller value wins).
+function jobEnv(base, idx, factor) {
+  const dir = path.join(base, String(idx));
+  fs.mkdirSync(path.join(dir, 'tmp'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'xdg'), { recursive: true, mode: 0o700 });
+  const env = { ...process.env, TMPDIR: path.join(dir, 'tmp'), XDG_RUNTIME_DIR: path.join(dir, 'xdg') };
+  if (env.AUTOPILOT_TEST_TIMING_FACTOR === undefined) env.AUTOPILOT_TEST_TIMING_FACTOR = String(factor);
+  return env;
+}
+
+async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
+  if (doc.mode === 'full') {
+    for (const reason of doc.full_reasons) process.stdout.write(`${reason}\n`);
+    process.stdout.write('whole suite deferred to the pre-merge run (CLAUDE.md Mission graph verification)\n');
+  }
+  const main = doc.mode === 'full' ? [...alwaysRun] : [...doc.suites];
+  const serialSet = loadSerialSuites(root);
+  const hist = durationsApply(root) ? readDurations(durationsFile()) : new Map();
+  // Slowest first; no record = first (unknown may be slow), ties keep name order (run.sh rule).
+  const poolList = main.filter((r) => !serialSet.has(r))
+    .map((rel, i) => ({ rel, i, s: hist.has(rel) ? hist.get(rel) : Infinity }))
+    .sort((a, b) => (a.s !== b.s ? (a.s > b.s ? -1 : 1) : a.i - b.i)).map((x) => x.rel);
+  const serialList = main.filter((r) => serialSet.has(r));
+  let base = null;
+  const results = [];
+  const timedOut = [];
+  let failed = 0;
+  let seq = 0;
+  const callerFactor = process.env.AUTOPILOT_TEST_TIMING_FACTOR;
+  const exec = async (rel, factor) => {
+    const t0 = Date.now();
+    const env = jobEnv(base, seq++, factor);
+    const r = await runEntry(root, rel, entryTimeout, true, { capture: true, env });
+    return { ...r, seconds: Math.round(Date.now() - t0) / 1000 };
+  };
+  const emit = (rel, r, extraLine) => {
+    emitChunks(r.chunks);
+    if (extraLine) process.stdout.write(extraLine);
+    process.stdout.write(`rc=${r.rc} ${rel}\n`);
+  };
+  const finalize = (rel, r, flaky) => {
+    if (r.timedOut) timedOut.push(rel);
+    const row = { path: rel, rc: r.rc, seconds: r.seconds };
+    if (flaky) { row.flaky_under_parallel = true; row.pool_rc = flaky.pool_rc; if (flaky.pool_timed_out) row.pool_timed_out = true; }
+    results.push(row);
+    if (r.rc !== 0) failed++;
+  };
+  try {
+    base = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-jobs-'));
+    JOB_TMPS.add(base);
+    const held = []; // non-zero pool results wait for their serial rerun before printing
+    let next = 0;
+    const worker = async () => {
+      while (next < poolList.length) {
+        const rel = poolList[next++];
+        const r = await exec(rel, callerFactor === undefined ? jobs : callerFactor);
+        if (r.rc === 0) { emit(rel, r); finalize(rel, r, null); } else held.push({ rel, r });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(jobs, poolList.length) }, worker));
+    // Serial rerun of every pool failure (BL-0331): green alone = flaky-under-parallel; still red = the RERUN's output,
+    // rc, timeout state and record entry are final (the pool rc is not reported then).
+    for (const { rel, r } of held) {
+      const again = await exec(rel, 1);
+      if (again.rc === 0) {
+        emitChunks(again.chunks);
+        process.stdout.write(`flaky-under-parallel: ${rel} (${r.timedOut ? 'timeout' : `rc=${r.rc}`} in pool)\n`);
+        process.stdout.write(`rc=0 ${rel}\n`);
+        finalize(rel, again, { pool_rc: r.rc, pool_timed_out: r.timedOut });
+      } else {
+        emit(rel, again);
+        finalize(rel, again, null);
+      }
+    }
+    for (const rel of [...serialList, ...doc.extra_runners]) {
+      const r = await exec(rel, 1);
+      emit(rel, r);
+      finalize(rel, r, null);
+    }
+  } finally {
+    if (base) {
+      JOB_TMPS.delete(base);
+      try { fs.rmSync(base, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
+  }
+  let emptyFail = false;
+  if (doc.mode === 'selective' && doc.suites.length === 0 && !doc.changed.every(isProse)) {
+    process.stdout.write('empty suites is not a pass: not every changed file is documentation\n');
+    failed++;
+    emptyFail = true;
+  }
+  process.stdout.write(`summary: ${results.length} run, ${failed} failed${timedOut.length ? ` (timeout: ${timedOut.join(' ')})` : ''}\n`);
+  const slow = results.slice().sort((a, b) => b.seconds - a.seconds).slice(0, 10).map((r) => `${r.path} ${r.seconds}s`);
+  return { code: failed === 0 ? 0 : 1, results, budgetDoc: null, emptyFail, timedOutPaths: timedOut, slowest: slow.length ? `slowest: ${slow.join(', ')}\n` : '' };
+}
+
+async function runSelected(root, doc, alwaysRun, budget, entryTimeout, jobs) {
+  if (jobs > 1) return runPool(root, doc, alwaysRun, jobs, entryTimeout);
   if (doc.mode === 'full') {
     for (const reason of doc.full_reasons) process.stdout.write(`${reason}\n`);
     process.stdout.write('whole suite deferred to the pre-merge run (CLAUDE.md Mission graph verification)\n');
@@ -619,7 +810,7 @@ async function runSelected(root, doc, alwaysRun, budget, entryTimeout) {
     const t0 = Date.now();
     const { rc, timedOut: to } = await runEntry(root, rel, entryTimeout);
     if (to) timedOut.push(rel);
-    results.push(budgeted ? { path: rel, rc, seconds: Math.round(Date.now() - t0) / 1000 } : { path: rel, rc });
+    results.push({ path: rel, rc, seconds: Math.round(Date.now() - t0) / 1000 });
     if (rc !== 0) failed++;
   }
   if (doc.mode === 'selective' && doc.suites.length === 0 && !doc.changed.every(isProse)) {
@@ -636,7 +827,7 @@ async function runSelected(root, doc, alwaysRun, budget, entryTimeout) {
     if (code === 0 && skipped.length > 0) code = 3;
     budgetDoc = { budget, executed: results.map((x) => x.path), skipped_for_budget: skipped };
   }
-  return { code, results, budgetDoc, emptyFail };
+  return { code, results, budgetDoc, emptyFail, timedOutPaths: timedOut };
 }
 
 // --attribute: re-run only the non-zero entries at the base commit in a temporary detached worktree
@@ -657,6 +848,7 @@ function installSignalKill() {
   for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, () => {
       for (const pid of ACTIVE) killGroup(pid, 'SIGKILL');
+      for (const d of JOB_TMPS) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
       if (SIG_CLEANUP) { try { SIG_CLEANUP(); } catch { /* best effort */ } }
       process.exit(sig === 'SIGINT' ? 130 : 143);
     });
@@ -743,6 +935,11 @@ function parseArgs(argv) {
       if (!(a.budget > 0) || !Number.isFinite(a.budget)) throw new Error(`--budget-seconds needs a positive number, got ${JSON.stringify(v)}`);
     }
     else if (x === '--attribute') a.attribute = true;
+    else if (x === '--jobs') {
+      const v = argv[++i];
+      a.jobs = v !== undefined && /^[1-9][0-9]*$/.test(v.trim()) ? Number(v) : NaN;
+      if (!Number.isInteger(a.jobs)) throw new Error(`--jobs needs a positive integer, got ${JSON.stringify(v)}`);
+    }
     else if (x === '--entry-timeout') {
       const v = argv[++i];
       a.entryTimeout = v !== undefined && v.trim() !== '' ? Number(v) : NaN;
@@ -770,6 +967,14 @@ async function main(argv) {
   }
   if (a.budget != null && !a.run) {
     process.stderr.write('affected-suites: --budget-seconds requires --run\n');
+    return 2;
+  }
+  if (a.jobs != null && !a.run) {
+    process.stderr.write('affected-suites: --jobs requires --run\n');
+    return 2;
+  }
+  if (a.jobs > 1 && a.budget != null) {
+    process.stderr.write('affected-suites: --jobs N (N>1) cannot be combined with --budget-seconds\n');
     return 2;
   }
   if (a.attribute && (!a.run || !a.base || a.useFiles)) {
@@ -833,8 +1038,9 @@ async function main(argv) {
       runAlways = r.alwaysRun;
     }
     if (a.run) {
-      if (a.entryTimeout != null && !SIG_INSTALLED) installSignalKill();
-      const ran = await runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget, a.entryTimeout);
+      if ((a.entryTimeout != null || a.jobs > 1) && !SIG_INSTALLED) installSignalKill();
+      const ran = await runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget, a.entryTimeout, a.jobs || 1);
+      recordDurations(root, ran.results, ran.timedOutPaths || []);
       let attrCode = null;
       if (a.attribute) {
         const baseSha = fullRef(root, baseRef);
@@ -858,6 +1064,7 @@ async function main(argv) {
           return 2;
         }
       }
+      if (ran.slowest) process.stdout.write(ran.slowest);
       return attrCode != null ? attrCode : ran.code;
     }
     const extra = doc.extra_runners.map((x) => x + '\n').join('');

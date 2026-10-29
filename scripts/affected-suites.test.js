@@ -397,7 +397,7 @@ function gitSha(dir, ref) {
   return execFileSync('git', ['rev-parse', ref], { cwd: dir, stdio: 'pipe' }).toString().trim();
 }
 
-test('--record shape: schema 1, full shas, mode selective, suites are the executed {path, rc} list', () => {
+test('--record shape: schema 1, full shas, mode selective, suites are the executed {path, rc, seconds} list', () => {
   const r = makeRepo({
     ...LAYOUT,
     'scripts/rec-ok.js': 'console.log("ok");\n',
@@ -413,7 +413,7 @@ test('--record shape: schema 1, full shas, mode selective, suites are the execut
     assert.strictEqual(doc.head, gitSha(r.dir, head));
     assert.strictEqual(doc.base, gitSha(r.dir, r.base));
     assert.strictEqual(doc.mode, 'selective');
-    assert.deepStrictEqual(doc.suites, [{ path: 'hooks/tests/rec-ok.test.sh', rc: 0 }]);
+    assert.deepStrictEqual(doc.suites.map((s) => [s.path, s.rc, typeof s.seconds]), [['hooks/tests/rec-ok.test.sh', 0, 'number']]);
     assert.match(ran.stdout, /summary: 1 run, 0 failed\nrecord: /);
   } finally { r.cleanup(); }
 });
@@ -431,10 +431,7 @@ test('--record captures rc: a suite that exits 1 is rc 1 and the command is non-
     const ran = runCli(r.dir, ['--base', r.base, '--head', head, '--run', '--record', rec]);
     assert.notStrictEqual(ran.status, 0);
     const doc = JSON.parse(fs.readFileSync(rec, 'utf8'));
-    assert.deepStrictEqual(doc.suites, [
-      { path: 'hooks/tests/rc-fail.test.sh', rc: 1 },
-      { path: 'hooks/tests/rc-pass.test.sh', rc: 0 },
-    ]);
+    assert.deepStrictEqual(doc.suites.map((s) => [s.path, s.rc]), [['hooks/tests/rc-fail.test.sh', 1], ['hooks/tests/rc-pass.test.sh', 0]]);
   } finally { r.cleanup(); }
 });
 
@@ -460,7 +457,7 @@ test('--record without --run exits 2, names --run, writes nothing; default path 
     const doc = JSON.parse(fs.readFileSync(rec, 'utf8'));
     assert.strictEqual(doc.schema, 1);
     assert.strictEqual(doc.head, sha);
-    assert.deepStrictEqual(doc.suites, [{ path: 'hooks/tests/def-rec.test.sh', rc: 0 }]);
+    assert.deepStrictEqual(doc.suites.map((s) => [s.path, s.rc]), [['hooks/tests/def-rec.test.sh', 0]]);
     assert.match(ok.stdout, new RegExp(`record: ${rec.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}`));
   } finally { r.cleanup(); }
 });
@@ -958,9 +955,9 @@ test('--attribute: red at head and base is preexisting, exit 0, worktree gone, b
     const j = JSON.parse(fs.readFileSync(rec, 'utf8'));
     assert.deepStrictEqual(Object.keys(j), ['schema', 'head', 'base', 'mode', 'suites']);
     const sa = j.suites.find((s) => s.path === 'hooks/tests/a.test.sh');
-    assert.deepStrictEqual(Object.keys(sa), ['path', 'rc', 'base_rc']);
+    assert.deepStrictEqual(Object.keys(sa), ['path', 'rc', 'seconds', 'base_rc']);
     assert.strictEqual(sa.base_rc, 1);
-    assert.deepStrictEqual(Object.keys(j.suites.find((s) => s.path === 'hooks/tests/b.test.sh')), ['path', 'rc']);
+    assert.deepStrictEqual(Object.keys(j.suites.find((s) => s.path === 'hooks/tests/b.test.sh')), ['path', 'rc', 'seconds']);
   } finally { r.cleanup(); }
 });
 

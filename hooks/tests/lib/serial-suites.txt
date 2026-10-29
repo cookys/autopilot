@@ -1,0 +1,46 @@
+# Suites that must not run beside other suites (BL-0331). One repo-relative path per line; # starts a comment.
+# Single source: hooks/tests/run.sh --parallel (the "serial tail", .sh files only) and
+# scripts/affected-suites.js --run --jobs N (every listed path) both read this file.
+# A listed suite runs only after the worker pool has drained, one at a time, with timing factor 1.
+
+# 1. Original serial tail (formerly a case list in hooks/tests/run.sh).
+# codex-plugin-package regenerates the live repo mirror (platforms/codex/plugin/) while dev-setup asserts on files inside that tree.
+hooks/tests/codex-plugin-package.test.sh
+hooks/tests/dev-setup.test.sh
+# resolve-review-loop-consult-discuss-gate case (xix): chmod 000 on the canonical evals/consult-capability-evidence-corpus.json.
+hooks/tests/resolve-review-loop-consult-discuss-gate.test.sh
+# detached ledger ownership / process handoff under real timing.
+hooks/tests/dispatch-detach.test.sh
+hooks/tests/dispatch-hetero.test.sh
+hooks/tests/dispatch-lineage.test.sh
+hooks/tests/dispatch-pi.test.sh
+# inspects the canonical tree while other suites may have short-lived in-repo fixtures.
+hooks/tests/sync-all.test.sh
+
+# 2. Temp file inside the real working tree.
+# check-phase-review-receipt.test.sh:1093-1096 writes $REPO_ROOT/scripts/hetero-review-loop.neg15r.js, which content scanners can see.
+hooks/tests/check-phase-review-receipt.test.sh
+
+# 3. Creates or deletes branches / worktrees / local git config in the real repo.
+# context-window.test.sh:32-45 (worktree prune, branch -D on $REPO_ROOT)
+hooks/tests/context-window.test.sh
+# session-mode.test.sh:208 (git worktree add on $REPO_ROOT)
+hooks/tests/session-mode.test.sh
+# suite-residue-reaper.test.sh:613 (git worktree add on $REPO_ROOT)
+hooks/tests/suite-residue-reaper.test.sh
+# test-snapshot.test.sh:363,414,452,859,890,974,1134 (git config --local and worktree add on $REPO_ROOT; whether it is a sandbox there is unconfirmed, so serial)
+hooks/tests/test-snapshot.test.sh
+
+# 4. Host-wide process scans (they count processes that other suites also start).
+# dispatch-hetero-wall-timeout.test.sh:180-187 (process-table scan across the whole host)
+hooks/tests/dispatch-hetero-wall-timeout.test.sh
+# paid-batch-auth-stop.test.sh:105 (process-table listing across the whole host)
+hooks/tests/paid-batch-auth-stop.test.sh
+
+# 5. Wall-clock assertions that went red under load.
+# bash-launch-guard.test.js:714,755,776 (200 ms / 100 ms bounds). run.sh runs only .sh in its tail; this path matters for affected-suites --jobs.
+hooks/bash-launch-guard.test.js
+# dispatch-hetero-gate-rules.test.sh:133 (timeout -s TERM 2)
+hooks/tests/dispatch-hetero-gate-rules.test.sh
+# dispatch-author-strict-roster.test.sh: rc=1 under serial high load in the 2026-10-29 watchfix pre-push record (docs/backlog/pre-push-suite-speed.md row 5). No wall-clock assertion was found by grep in the file, so there is no file:line; cause unconfirmed, BL-0334 to pin it.
+hooks/tests/dispatch-author-strict-roster.test.sh

@@ -42,8 +42,12 @@
 // N>1 cannot be combined with --budget-seconds): suites not listed in hooks/tests/lib/serial-suites.txt (the
 // single source run.sh also reads) go through a pool of N workers, slowest first by the durations file
 // (no record = first, then name order); once the pool is empty the listed suites run one at a time, then
-// extra_runners. Each entry gets its own TMPDIR and XDG_RUNTIME_DIR; AUTOPILOT_TEST_TIMING_FACTOR defaults to N
-// for pool entries and 1 for the serial part (a value already in the environment wins). Output is buffered per
+// extra_runners. Every entry, and every rerun, gets a NEW short TMPDIR (/tmp/asj.XXXXXX/<n>, 0700) (never the pool run's
+// directory; the base is removed at the end); pool entries also get a private XDG_RUNTIME_DIR, the serial part (listed
+// suites, reruns, extra_runners) keeps the caller's, like a direct run (a per-entry one breaks dispatch-detach's
+// no-setsid tuple lease; a 0775 entry directory breaks external-lifecycle-witness, hence the 0700). Before the serial
+// part every pool process group must be gone (waits up to --entry-timeout, 30 s without, then kills and says so).
+// AUTOPILOT_TEST_TIMING_FACTOR defaults to N for pool entries and 1 for the serial part (a value already in the environment wins). Output is buffered per
 // entry and printed whole, followed by its `rc=N <path>`; the summary line is unchanged and a
 // `slowest: <path> <s>s, ...` line (top 10) is printed last, after any `attribution:` and `record:` lines
 // (so a consumer that reads the summary-then-record sequence sees the same order as without --jobs).
@@ -614,6 +618,7 @@ function runEntry(root, rel, timeoutSecs, group, opts) {
     let timedOut = false, killTimer = null, termTimer = null, done = false;
     const grouped = group || timeoutSecs != null;
     if (grouped) ACTIVE.add(child.pid);
+    if (grouped && opts && opts.groups) opts.groups.add(child.pid);
     if (timeoutSecs != null) {
       termTimer = setTimeout(() => {
         timedOut = true;
@@ -731,14 +736,48 @@ function emitChunks(chunks) {
   for (const [kind, d] of chunks || []) (kind === 'err' ? process.stderr : process.stdout).write(d);
 }
 
-// Per-entry TMPDIR / XDG_RUNTIME_DIR under a fresh directory; AUTOPILOT_TEST_TIMING_FACTOR defaults to N for pool entries (a caller value wins).
-function jobEnv(base, idx, factor) {
-  const dir = path.join(base, String(idx));
-  fs.mkdirSync(path.join(dir, 'tmp'), { recursive: true });
-  fs.mkdirSync(path.join(dir, 'xdg'), { recursive: true, mode: 0o700 });
-  const env = { ...process.env, TMPDIR: path.join(dir, 'tmp'), XDG_RUNTIME_DIR: path.join(dir, 'xdg') };
+// Per-entry env under a fresh directory (never reused: every call, pool run or rerun, takes a new index).
+// - TMPDIR is <os.tmpdir()>/asj.XXXXXX/<idx> (about 19 characters, the length of a plain mktemp -d): suites build unix
+//   socket paths under $TMPDIR (engine-qualify-a's case broker) and a longer or deeper one trips the 108-byte sun_path
+//   limit, which showed as a red in the pool AND in the rerun.
+// - The private XDG_RUNTIME_DIR of a pool entry is <caller's XDG_RUNTIME_DIR>/asj.XXXXXX/<idx>, never under /tmp:
+//   external-lifecycle-witness walks every ancestor and refuses a group/world-writable one (/tmp is 1777). No caller
+//   XDG_RUNTIME_DIR (or an unwritable one) = pool entries keep the (absent) caller value, no isolation.
+// - The entry directory is chmod 0700: XDG_RUNTIME_DIR must have no group/world-writable ancestor below the
+//   shared base (external-lifecycle-witness refuses a 0775 parent, which a default umask gives mkdir -p).
+// - xdgBase (pool entries only): XDG_RUNTIME_DIR is a private subdirectory. Serial entries and reruns keep the
+//   caller's XDG_RUNTIME_DIR, like a direct `bash hooks/tests/x.test.sh`: dispatch-detach (the no-setsid tuple lease)
+//   fails with a per-entry one, and nothing runs beside a serial entry that could need the isolation. TMPDIR stays fresh.
+// AUTOPILOT_TEST_TIMING_FACTOR defaults to N for pool entries (a caller value wins).
+function jobEnv(base, idx, factor, xdgBase) {
+  const dir = path.join(base, String(idx)); // TMPDIR itself: short on purpose, see the path-length note above
+  fs.mkdirSync(dir, { mode: 0o700 });
+  fs.chmodSync(dir, 0o700);
+  const env = { ...process.env, TMPDIR: dir };
+  if (xdgBase) {
+    const xdg = path.join(xdgBase, String(idx));
+    fs.mkdirSync(xdg, { mode: 0o700 });
+    env.XDG_RUNTIME_DIR = xdg;
+  }
   if (env.AUTOPILOT_TEST_TIMING_FACTOR === undefined) env.AUTOPILOT_TEST_TIMING_FACTOR = String(factor);
   return env;
+}
+
+function makeXdgBase() {
+  const x = process.env.XDG_RUNTIME_DIR;
+  if (!x || !path.isAbsolute(x)) return null;
+  try { return fs.mkdtempSync(path.join(x, 'asj.')); } catch { return null; }
+}
+
+// Before the serial part: every pool entry's process group must be gone. runEntry already SIGKILLs the group when the
+// entry finishes, so this normally returns at once; a survivor is waited for up to the entry timeout (30 s without one),
+// then killed, and a line on stderr says so.
+async function drainPoolGroups(groups, entryTimeout) {
+  const alive = () => [...groups].filter((pid) => { try { process.kill(-pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } });
+  const limit = Date.now() + (entryTimeout != null ? entryTimeout : 30) * 1000;
+  let left = alive();
+  while (left.length && Date.now() < limit) { await new Promise((r) => setTimeout(r, 200)); left = alive(); }
+  for (const pid of left) { killGroup(pid, 'SIGKILL'); process.stderr.write(`affected-suites: pool process group ${pid} still alive after the pool drained; killed\n`); }
 }
 
 async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
@@ -755,15 +794,17 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
     .sort((a, b) => (a.s !== b.s ? (a.s > b.s ? -1 : 1) : a.i - b.i)).map((x) => x.rel);
   const serialList = main.filter((r) => serialSet.has(r));
   let base = null;
+  let xdgBase = null;
   const results = [];
   const timedOut = [];
   let failed = 0;
   let seq = 0;
   const callerFactor = process.env.AUTOPILOT_TEST_TIMING_FACTOR;
-  const exec = async (rel, factor) => {
+  const poolGroups = new Set();
+  const exec = async (rel, factor, isolateXdg) => {
     const t0 = Date.now();
-    const env = jobEnv(base, seq++, factor);
-    const r = await runEntry(root, rel, entryTimeout, true, { capture: true, env });
+    const env = jobEnv(base, seq++, factor, isolateXdg ? xdgBase : null);
+    const r = await runEntry(root, rel, entryTimeout, true, { capture: true, env, groups: isolateXdg ? poolGroups : null });
     return { ...r, seconds: Math.round(Date.now() - t0) / 1000 };
   };
   const emit = (rel, r, extraLine) => {
@@ -779,22 +820,25 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
     if (r.rc !== 0) failed++;
   };
   try {
-    base = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-jobs-'));
+    base = fs.mkdtempSync(path.join(os.tmpdir(), 'asj.'));
     JOB_TMPS.add(base);
+    xdgBase = makeXdgBase();
+    if (xdgBase) JOB_TMPS.add(xdgBase);
     const held = []; // non-zero pool results wait for their serial rerun before printing
     let next = 0;
     const worker = async () => {
       while (next < poolList.length) {
         const rel = poolList[next++];
-        const r = await exec(rel, callerFactor === undefined ? jobs : callerFactor);
+        const r = await exec(rel, callerFactor === undefined ? jobs : callerFactor, true);
         if (r.rc === 0) { emit(rel, r); finalize(rel, r, null); } else held.push({ rel, r });
       }
     };
     await Promise.all(Array.from({ length: Math.min(jobs, poolList.length) }, worker));
+    await drainPoolGroups(poolGroups, entryTimeout);
     // Serial rerun of every pool failure (BL-0331): green alone = flaky-under-parallel; still red = the RERUN's output,
     // rc, timeout state and record entry are final (the pool rc is not reported then).
     for (const { rel, r } of held) {
-      const again = await exec(rel, 1);
+      const again = await exec(rel, 1, false);
       if (again.rc === 0) {
         emitChunks(again.chunks);
         process.stdout.write(`flaky-under-parallel: ${rel} (${r.timedOut ? 'timeout' : `rc=${r.rc}`} in pool)\n`);
@@ -806,14 +850,15 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
       }
     }
     for (const rel of [...serialList, ...doc.extra_runners]) {
-      const r = await exec(rel, 1);
+      const r = await exec(rel, 1, false);
       emit(rel, r);
       finalize(rel, r, null);
     }
   } finally {
-    if (base) {
-      JOB_TMPS.delete(base);
-      try { fs.rmSync(base, { recursive: true, force: true }); } catch { /* best effort */ }
+    for (const d of [base, xdgBase]) {
+      if (!d) continue;
+      JOB_TMPS.delete(d);
+      try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ }
     }
   }
   let emptyFail = false;

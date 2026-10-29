@@ -3,6 +3,13 @@
   "version": 1,
   "entries": [
     {
+      "pattern": "asj.*",
+      "kind": "scratch",
+      "owner": "scripts/affected-suites.js",
+      "retention_days": null,
+      "reason": "affected-suites --jobs per-run TMPDIR base (and the private XDG_RUNTIME_DIR base); removed in runPool's finally and on TERM/INT"
+    },
+    {
       "pattern": "hetero-*-log-*",
       "kind": "scratch",
       "owner": "scripts/dispatch-hetero.sh",

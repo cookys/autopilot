@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0330 -->
+<!-- next-id: BL-0335 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1463,3 +1463,73 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED cookys/openclaw/fleet--claude 2026-10-29
 - **Pointer**: docs/backlog/watcher-idle-exit-unavailable-panel.md
 - **Context**: Failure count and suspect list at Pointer under BL-0329.
+
+### Affected-suites runner records per-suite seconds and uses them to order runs
+- **Id**: BL-0330
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: owner
+- **Problem**: 耗時紀錄檔 test-durations.tsv 有 414 列，但停在 10/12、不含串行尾巴，這次選出的套件有 291 支沒有紀錄；run.sh 會依它慢檔優先，但 affected-suites.js 跑的時候既不更新也不使用這份資料。
+- **Impact**: affected-suites.js 不使用這份耗時資料，291 支無紀錄的套件也無從排序，看不出時間花在哪。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: owner request 2026-10-29 (suite speed research)
+- **Pointer**: docs/backlog/pre-push-suite-speed.md
+- **Context**: Make --run write per-suite seconds, update the tsv, order slowest-first. Negative control: delete the tsv, fall back to name order, no crash. First in order (B2).
+
+### affected-suites gets --jobs N with a shared serial-suite list
+- **Id**: BL-0331
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: owner
+- **Problem**: 推送前套件目前只能一支一支串行跑，32 核機器只用到一核。
+- **Impact**: 串行跑 678 支要三小時以上；平行跑預估可縮到一至一個半小時（推測），推送不用再等半天。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: L
+- **Source**: owner request 2026-10-29 (suite speed research)
+- **Pointer**: docs/backlog/pre-push-suite-speed.md
+- **Context**: Add --jobs N reusing run.sh --parallel plus one shared serial list. Acceptance: --jobs 1 vs 8 same rc set, 3x faster. Negative control: unlisted unsafe suite reds. After BL-0330 (B1).
+
+### Lazy post-gate require and pseudo edges stop inflating the suite selector
+- **Id**: BL-0332
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: owner
+- **Problem**: 程式裡有兩處「條件成立才載入」的引用，測試環境根本不會執行，選取器卻當成一定會用到，結果改一個小檔就選出六百多支套件。
+- **Impact**: 約四成白跑；本次 678 支可降到約 393 支，省約 1.9 小時（推測：模擬選取乘歷史每支約 24 秒，未實測）。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: owner request 2026-10-29 (suite speed research)
+- **Pointer**: docs/backlog/pre-push-suite-speed.md
+- **Context**: Make lazy post-gate requires weak edges, fix pseudo edges. Acceptance: diff <=400, zero misses. Negative control: really executed lazy require still selected. After BL-0330 (A1).
+
+### Selection result reports each changed file's contribution
+- **Id**: BL-0333
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: owner
+- **Problem**: 選出幾百支套件時，看不出是哪個改動檔把它們拉進來的，也就不知道該先處理哪個。
+- **Impact**: 每次都要手動逐檔試跑才能找出灌水來源，這次調研就花了大量時間。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: owner request 2026-10-29 (suite speed research)
+- **Pointer**: docs/backlog/pre-push-suite-speed.md
+- **Context**: Contribution report: add per-file contrib to --json. Negative control: single-suite diff reports exactly 1 sole-pulled. After BL-0332.
+
+### Time assertions scale with the timing factor and host-wide process scans are prefix-scoped
+- **Id**: BL-0334
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: owner
+- **Problem**: 幾支測試用固定的短時間判斷（例如 2 秒內工人要啟動），機器忙的時候工人還沒起來就被判失敗；另有測試掃整台機器的程序，會看到別人的。
+- **Impact**: 2026-10-29 串行跑已紅過一次；平行下預期更多假紅（預測：負載 30+ 時牆鐘斷言串行下就已紅）。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: owner request 2026-10-29 (suite speed research)
+- **Pointer**: docs/backlog/pre-push-suite-speed.md
+- **Context**: Scale time asserts by test_timing_scale, prefix-scope pgrep, wait FAKE_STARTED in gate-rules R2 :133. Negative control: red under load before, green after (B3).

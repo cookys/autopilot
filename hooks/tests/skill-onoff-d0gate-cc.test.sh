@@ -56,8 +56,11 @@ log({ fmt, argv, cwd: process.cwd(), HOME: process.env.HOME, CLAUDE_CONFIG_DIR: 
   ENGINE_CAPABILITY_DIR: process.env.ENGINE_CAPABILITY_DIR, STRIKE: process.env.AUTOPILOT_STRIKE_WRITER, TMPDIR: process.env.TMPDIR,
   cfgFiles: (() => { try { return fs.readdirSync(cfgDir).sort(); } catch (e) { return null; } })(), budget: get('--max-budget-usd'), resume: get('--resume') || null,
   settings: settingsText, prompt: stdin.slice(0, 100) });
-if (fmt === 'stream-json' && !get('--plugin-dir')) { // a claude the depth-0 agent started itself (Bash): report a spend of its own
-  console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'nested', session_id: 'nested-' + process.pid, total_cost_usd: CFG.nested_cost }));
+// the session transcript claude leaves behind (ASSUMED layout, as in the runner: <config>/projects/<project>/<session>.jsonl)
+const writeSession = (sid, cost) => { try { const d = path.join(cfgDir, 'projects', '-cell'); fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, sid + '.jsonl'), JSON.stringify(cost === null ? { type: 'user' } : { type: 'result', total_cost_usd: cost }) + '\n'); } catch (e) { /* ignore */ } };
+if (fmt === 'stream-json' && !get('--plugin-dir')) { // a claude the depth-0 agent started itself, behind the PATH wrapper (absolute path)
+  const sneak = 'sneak-' + process.pid; writeSession(sneak, CFG.sneak_unreadable ? null : CFG.sneak_cost);
+  console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'sneak', session_id: sneak, total_cost_usd: CFG.sneak_cost }));
   process.exit(0);
 }
 if (cfgDir && CFG.leak_marker) { try { fs.writeFileSync(path.join(cfgDir, 'leak-marker'), 'x'); } catch (e) { /* ignore */ } }
@@ -68,6 +71,7 @@ if (fmt === 'stream-json') {
   const armed = skill.includes('--gate-rules'); // the change arm's paragraph names the flag
   const sid = get('--resume') || ('fake-sess-' + process.pid);
   const emit = (o) => console.log(JSON.stringify(o));
+  writeSession(sid, CFG.cost_per_turn * (get('--resume') ? 2 : 1));
   emit({ type: 'system', subtype: 'init', session_id: sid, model: 'fake-' + get('--model') });
   emit({ type: 'assistant', session_id: sid, message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: 'autopilot:ceo-agent' } }] } });
   if (CFG.hang_g2_base && stdin.includes('capitalize') && !armed) {
@@ -76,6 +80,7 @@ if (fmt === 'stream-json') {
   }
   else {
     if (!get('--resume')) {
+      if (CFG.sneak) cp.spawnSync(process.argv[1], ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' }); // absolute path: the PATH wrapper is bypassed
       if (CFG.nested) for (let k = 0; k < 2; k++) cp.spawnSync('claude', ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' }); // the agent tries to start its own claude
       let rules = null; let task = null;
       if (stdin.includes('capitalize')) task = 'g2'; else if (stdin.includes('gate/rules.json')) { task = 'g3'; rules = 'gate/rules.json'; } else { task = 'g1'; if (armed) rules = path.join(RULES, 'g1-good.json'); }
@@ -101,8 +106,9 @@ if (fmt === 'stream-json') {
   const hanging = settingsText ? CFG.hang_hand_on : CFG.hang_hand_off;
   if (hanging && CFG.hand_auth_error) console.log(JSON.stringify({ type: 'result', subtype: 'error', is_error: true, result: 'authentication invalid api key', session_id: sid, total_cost_usd: 0 }));
   else if (hanging && CFG.hand_report_first) console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, total_cost_usd: CFG.hand_cost }));
-  if (!hanging)
+  if (!hanging && !CFG.hand_silent)
   console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, total_cost_usd: CFG.hand_cost }));
+  if (!hanging && CFG.hand_fail) process.exit(1);
 }
 EOF
 chmod +x "$FB/claude"
@@ -135,7 +141,7 @@ if (mode === 'shape') { // every row carries every field the scorer judges on, f
     for (const k of ['HOME', 'CLAUDE_CONFIG_DIR', 'AUTOPILOT_LIVE_DIR', 'ENGINE_CAPABILITY_DIR']) if (!String(j[k] || '').startsWith(b + '/')) bad.push(`${k}=${j[k]} is not under the cell base`);
     if (j.CLAUDE_CONFIG_DIR === c) bad.push('CLAUDE_CONFIG_DIR is the real config dir');
     if (j.STRIKE !== 'off') bad.push('AUTOPILOT_STRIKE_WRITER is not off');
-    if (JSON.stringify(j.cfgFiles) !== '[".credentials.json"]') bad.push('config dir holds ' + JSON.stringify(j.cfgFiles));
+    if (!Array.isArray(j.cfgFiles) || !j.cfgFiles.includes('.credentials.json') || j.cfgFiles.some((f) => !['.credentials.json', 'projects'].includes(f))) bad.push('config dir holds ' + JSON.stringify(j.cfgFiles));
   }
   if (bad.length) { console.log('ISOLATION BROKEN: ' + [...new Set(bad)].slice(0, 4).join(' ; ')); process.exit(1); }
   console.log('isolation ok over ' + calls(a).length + ' claude calls');
@@ -164,7 +170,8 @@ eq(by("g1-constrained","base",1).markers, { m_armed: false }, "g1 base");
 eq(by("g1-constrained","change",1).markers, { m_armed: true }, "g1 change");
 eq(by("g1-constrained","change",1).skill_invoked, true, "g1 change skill_invoked");
 const hung = by("g2-unconstrained","base",1);
-eq([hung.failure_class, hung.failure_cause, hung.markers, hung.skill_invoked, hung.runner], ["infra_fail","runner_timeout",{ m_not_armed: false }, true, "cc"], "g2 base (timed out)");
+eq([hung.failure_class, hung.failure_cause, hung.markers, hung.skill_invoked, hung.skill_invoked_observed, hung.runner], ["infra_fail","runner_timeout",{ m_not_armed: false }, false, true, "cc"], "g2 base (timed out): skill_invoked false, observed true");
+eq(by("g1-constrained","change",1).skill_invoked_observed, true, "g1 change observed");
 eq(by("g2-unconstrained","change",1).markers, { m_not_armed: true }, "g2 change");
 eq(by("g3-wrong-list","base",1).markers, { m_not_wedged: true }, "g3 base");
 eq(by("g3-wrong-list","change",1).markers, { m_not_wedged: true }, "g3 change");
@@ -356,6 +363,11 @@ if (mode === 'g4cost') { // ON, one real block, hand reports 0.01, then hangs: s
 } else if (mode === 'd0cost') { // depth-0 turn reports 0.01 and hangs
   const g2 = rows.find((r) => r.task_id === 'g2-unconstrained' && r.arm === 'base');
   if (!g2 || g2.failure_class !== 'infra_fail' || g2.cost_usd !== 0.45) bad.push('depth-0 timed-out cell: ' + (g2 && [g2.failure_class, g2.cost_usd]) + ' (want infra_fail, 0.45)');
+  if (g2 && (g2.skill_invoked !== false || g2.skill_invoked_observed !== true)) bad.push('unfinished row: skill_invoked ' + g2.skill_invoked + ', observed ' + g2.skill_invoked_observed + ' (want false / true)');
+} else if (mode === 'g4failure' || mode === 'g4empty') { // rail failure status with a clean envelope / a hand that printed nothing: both infra, with their own cause
+  const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
+  const want = mode === 'g4failure' ? 'runner_error' : 'empty_output';
+  if (!on || on.failure_class !== 'infra_fail' || on.failure_cause !== want) bad.push(mode + ': ' + (on && [on.failure_class, on.failure_cause, on.rail_status]) + ' (want infra_fail/' + want + ')');
 } else if (mode === 'auth') { // ON, real block, auth error envelope, then timeout: infra authentication
   const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
   if (!on || on.failure_class !== 'infra_fail' || on.failure_cause !== 'authentication') bad.push('G4 ON auth+block+timeout: ' + (on && [on.failure_class, on.failure_cause]) + ' (want infra_fail/authentication)');
@@ -375,13 +387,86 @@ CAP=2.2 cc --results "$R12" >/dev/null 2>&1; [ -s "$R12" ] || fail "auth regress
 node "$TEST_TMP/tmo2.js" auth "$R12" || fail "auth+block+timeout (green)"
 ok "timeout cost ceiling and auth-before-exception"
 
+echo "=== 5g. a claude the depth-0 agent starts by absolute path leaves a session file: detected, charged, infra, and the campaign stops ==="
+cat >"$TEST_TMP/unac.js" <<'JS'
+const fs = require('fs');
+const [mode, rowsf] = process.argv.slice(2);
+const rows = fs.readFileSync(rowsf, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+const r = rows[0]; const bad = [];
+const want = mode === 'readable' ? 0.22 : 0.45; // 0.05 + 0.10 of its own turns + the stray's 0.07; unreadable: the whole ceiling
+if (rows.length !== 1) bad.push(rows.length + ' rows (the campaign must stop after the first cell)');
+if (!r || r.failure_class !== 'infra_fail' || r.failure_cause !== 'unaccounted_claude_session' || r.unaccounted_sessions !== 1) bad.push('row ' + (r && [r.failure_class, r.failure_cause, r.unaccounted_sessions]));
+if (r && Math.abs(r.cost_usd - want) > 1e-6) bad.push('cost_usd ' + (r && r.cost_usd) + ' (want ' + want + ')');
+if (bad.length) { console.log('UNACCOUNTED SESSION MISSED: ' + bad.join(' ; ')); process.exit(1); }
+console.log(mode + ' ok: infra/unaccounted_claude_session, unaccounted_sessions 1, cost_usd ' + r.cost_usd + ', campaign stopped after ' + rows.length + ' row');
+JS
+setcfg '{"cost_per_turn":0.05,"sneak":true,"sneak_cost":0.07}'; R13="$TEST_TMP/r13.jsonl"
+CAP=2.2 cc --results "$R13" >"$TEST_TMP/r13.out" 2>"$TEST_TMP/r13.err"; rc=$?
+[ "$rc" = 2 ] && grep -q 'stopping the campaign' "$TEST_TMP/r13.err" || { cat "$TEST_TMP/r13.err"; fail "unaccounted session must stop the campaign with exit 2 (rc=$rc)"; }
+node "$TEST_TMP/unac.js" readable "$R13" || fail "unaccounted (readable, green)"
+setcfg '{"cost_per_turn":0.05,"sneak":true,"sneak_cost":0.07,"sneak_unreadable":true}'; R14="$TEST_TMP/r14.jsonl"
+CAP=2.2 cc --results "$R14" >/dev/null 2>&1
+node "$TEST_TMP/unac.js" unreadable "$R14" || fail "unaccounted (unreadable, green)"
+ok "unaccounted sessions detected and the campaign stopped"
+
+echo "=== 5h. hand wrapper: simultaneous launches share one budget under a lock; BUDGET without OUT is refused ==="
+cat >"$TEST_TMP/real-slow.sh" <<EOF
+#!/bin/bash
+echo "\$*" >>"$TEST_TMP/slow-calls.log"
+sleep 1
+printf '{"type":"result","session_id":"s%s","total_cost_usd":0.1}\n' "\$\$"
+EOF
+chmod +x "$TEST_TMP/real-slow.sh"
+cat >"$TEST_TMP/ctest.js" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const path = require('path');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const cell = { root: fs.mkdtempSync(path.join(tmp, 'ccell-')) };
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-slow.sh'));
+const out = path.join(cell.root, 'hand-out.json'); fs.writeFileSync(out, '');
+const log = path.join(tmp, 'slow-calls.log'); fs.writeFileSync(log, '');
+const env = { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '0.5', D0GATE_WRAPPER_TEST_DELAY: '1' };
+const launch = () => new Promise((res) => { const c = cp.spawn(path.join(bin, 'claude'), ['-p'], { env }); c.on('close', (code) => res(code)); });
+Promise.all([launch(), launch()]).then((codes) => {
+  const budgets = fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => Number(l.split(' ').pop()));
+  const total = budgets.reduce((a, b) => a + b, 0);
+  if (total > 0.5 + 1e-9) { console.log('LOCK MISSING: two simultaneous launches were authorised ' + JSON.stringify(budgets) + ' = ' + total.toFixed(2) + ' USD of a 0.5 USD cell budget'); process.exit(1); }
+  console.log('simultaneous launches authorised ' + JSON.stringify(budgets) + ' = ' + total.toFixed(2) + ' USD <= 0.5; exit codes ' + JSON.stringify(codes));
+});
+JS
+cat >"$TEST_TMP/otest.js" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const path = require('path');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const cell = { root: fs.mkdtempSync(path.join(tmp, 'ocell-')) };
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-claude.sh'));
+fs.writeFileSync(path.join(tmp, 'wrap-calls.log'), '');
+const env = { ...process.env, D0GATE_HAND_BUDGET: '0.5' }; delete env.D0GATE_HAND_OUT;
+const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env, cwd: cell.root, encoding: 'utf8' });
+const called = fs.readFileSync(path.join(tmp, 'wrap-calls.log'), 'utf8').trim();
+if (r.status !== 97 || !/D0GATE_HAND_OUT is not set/.test(r.stderr) || called) { console.log('BUDGET WITHOUT OUT NOT REFUSED CLEARLY: rc=' + r.status + ' stderr=' + JSON.stringify(r.stderr.trim()) + ' real claude called=' + JSON.stringify(called)); process.exit(1); }
+console.log('budget without out: refused, exit 97, "' + r.stderr.trim() + '", the real claude was not called');
+JS
+node "$TEST_TMP/ctest.js" "$EV" "$TEST_TMP" || fail "wrapper lock (green)"
+node "$TEST_TMP/otest.js" "$EV" "$TEST_TMP" || fail "wrapper budget without out (green)"
+ok "hand wrapper lock and missing OUT"
+
+echo "=== 5i. rail failure status is infra even when classify finds nothing; the label is classify's cause ==="
+setcfg '{"hand_fail":true}'; R15="$TEST_TMP/r15.jsonl"; seed_on "$R15"
+CAP=2.2 cc --results "$R15" >/dev/null 2>&1; [ -s "$R15" ] || fail "failure run wrote nothing"
+node "$TEST_TMP/tmo2.js" g4failure "$R15" || fail "failure status (green)"
+setcfg '{"hand_silent":true}'; R16="$TEST_TMP/r16.jsonl"; seed_on "$R16"
+CAP=2.2 cc --results "$R16" >/dev/null 2>&1; [ -s "$R16" ] || fail "silent run wrote nothing"
+node "$TEST_TMP/tmo2.js" g4empty "$R16" || fail "empty output label (green)"
+ok "failure status and cause labels"
+
 echo "=== 6. negative controls: three runner copies each with ONE line broken, RED before the real runner is GREEN ==="
 FARM="$TEST_TMP/farm"; rm -rf "$FARM"; mkdir -p "$FARM/evals"; cp -R "$EV" "$FARM/evals/skill-onoff"
 for e in "$REPO_ROOT"/* "$REPO_ROOT"/.[!.]*; do b="$(basename "$e")"; case "$b" in evals|.git) ;; *) [ -e "$e" ] && ln -s "$e" "$FARM/$b";; esac; done  # the rail finds ../src from its own dir
 FEV="$FARM/evals/skill-onoff"
 brk() { local f="$1" before; before="$(sha256sum "$f" | cut -d' ' -f1)"; node -e 'const fs=require("fs"); const [f,from,to]=process.argv.slice(1); const t=fs.readFileSync(f,"utf8"); if(!t.includes(from)){console.error("pattern not found: "+from); process.exit(1);} fs.writeFileSync(f, t.split(from).join(to));' "$@" || fail "negative control: could not plant the break"; [ "$before" != "$(sha256sum "$f" | cut -d' ' -f1)" ] || fail "negative control: nothing changed ($2)"; }
 # (a) an unfinished cell that drops its marker boolean (and the runner's own shape guard switched off)
-brk "$FEV/d0gate/cc.js" "{ markers: { [D0_MARKER[c.task]]: false }, skill_invoked: false }" "{ markers: {}, skill_invoked: false }"
+brk "$FEV/d0gate/cc.js" "{ markers: { [D0_MARKER[c.task]]: false }," "{ markers: {},"
 brk "$FEV/d0gate/cc.js" "if (probs.length) throw" "if (false) throw"
 setcfg '{"hang_g2_base":true}'; : >"$FLOG"
 RA="$TEST_TMP/ra.jsonl"; CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$RA" --limit 3 >/dev/null 2>&1
@@ -461,6 +546,41 @@ setcfg '{"hang_g2_base":true,"hang_report":true}'; : >"$TEST_TMP/rk.jsonl"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rk.jsonl" --limit 3 >/dev/null 2>&1
 if node "$TEST_TMP/tmo2.js" d0cost "$TEST_TMP/rk.jsonl" >"$TEST_TMP/rk.out" 2>&1; then fail "RED control (k) was NOT caught: $(cat "$TEST_TMP/rk.out")"; fi
 echo "RED (expected) (k) depth-0 timeout charged only what it reported: $(cat "$TEST_TMP/rk.out")"
+# new mutants start from a clean copy of the two runner files
+restore() { cp "$EV/d0gate/cc.js" "$FEV/d0gate/cc.js"; cp "$EV/run-d0gate-campaign.js" "$FEV/run-d0gate-campaign.js"; }
+# (m) after-the-fact detection of unaccounted sessions switched off
+restore; brk "$FEV/d0gate/cc.js" "if (strays.length > 0) {" "if (false) {"
+setcfg '{"cost_per_turn":0.05,"sneak":true,"sneak_cost":0.07}'
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rm.jsonl" --limit 1 >/dev/null 2>&1
+if node "$TEST_TMP/unac.js" readable "$TEST_TMP/rm.jsonl" >"$TEST_TMP/rm.out" 2>&1; then fail "RED control (m) was NOT caught: $(cat "$TEST_TMP/rm.out")"; fi
+echo "RED (expected) (m) detection off: $(cat "$TEST_TMP/rm.out")"
+# (n) the lock around read-reserve removed
+restore; brk "$FEV/d0gate/cc.js" "( flock 9; node -e" "( node -e"
+if node "$TEST_TMP/ctest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/rn.out" 2>&1; then fail "RED control (n) was NOT caught: $(cat "$TEST_TMP/rn.out")"; fi
+echo "RED (expected) (n) no lock: $(cat "$TEST_TMP/rn.out")"
+# (o) BUDGET without OUT is no longer refused up front
+restore; brk "$FEV/d0gate/cc.js" 'if [ -z "${D0GATE_HAND_OUT:-}" ]; then' 'if false; then'
+if node "$TEST_TMP/otest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/ro.out" 2>&1; then fail "RED control (o) was NOT caught: $(cat "$TEST_TMP/ro.out")"; fi
+echo "RED (expected) (o) missing OUT not refused: $(cat "$TEST_TMP/ro.out")"
+# (p) failure status no longer forced to infra
+restore; brk "$FEV/d0gate/cc.js" "if (env0.status === 'failure' && !timedOutAfterBlock) return fail('infra_fail', cg ? cg.cause : 'runner_error', env0.error);" ""
+setcfg '{"hand_fail":true}'; seed_on "$TEST_TMP/rp.jsonl"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rp.jsonl" >/dev/null 2>&1
+if node "$TEST_TMP/tmo2.js" g4failure "$TEST_TMP/rp.jsonl" >"$TEST_TMP/rp.out" 2>&1; then fail "RED control (p) was NOT caught: $(cat "$TEST_TMP/rp.out")"; fi
+echo "RED (expected) (p) failure status scored: $(cat "$TEST_TMP/rp.out")"
+# (q) the unknown-cost label is always cost_unknown
+restore; brk "$FEV/d0gate/cc.js" "return fail('infra_fail', cg.cause);" "return fail('infra_fail', 'cost_unknown');"
+setcfg '{"hand_silent":true}'; seed_on "$TEST_TMP/rq.jsonl"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rq.jsonl" >/dev/null 2>&1
+if node "$TEST_TMP/tmo2.js" g4empty "$TEST_TMP/rq.jsonl" >"$TEST_TMP/rq.out" 2>&1; then fail "RED control (q) was NOT caught: $(cat "$TEST_TMP/rq.out")"; fi
+echo "RED (expected) (q) label always cost_unknown: $(cat "$TEST_TMP/rq.out")"
+# (r) an unfinished row keeps skill_invoked=true again (and the runner's own shape guard is off)
+restore; brk "$FEV/d0gate/cc.js" "{ skill_invoked_observed: !!o.skillObserved } : {}" "{ skill_invoked_observed: !!o.skillObserved, skill_invoked: !!o.skillObserved } : {}"
+brk "$FEV/d0gate/cc.js" "if (probs.length) throw" "if (false) throw"
+setcfg '{"hang_g2_base":true,"hang_report":true}'; : >"$TEST_TMP/rr.jsonl"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rr.jsonl" --limit 3 >/dev/null 2>&1
+if node "$TEST_TMP/tmo2.js" d0cost "$TEST_TMP/rr.jsonl" >"$TEST_TMP/rr.out" 2>&1; then fail "RED control (r) was NOT caught: $(cat "$TEST_TMP/rr.out")"; fi
+echo "RED (expected) (r) unfinished row keeps skill_invoked=true: $(cat "$TEST_TMP/rr.out")"
 ok "negative controls red, real runner green (sections 2 to 5)"
 
 echo "=== 7. no real runner binary was started ==="

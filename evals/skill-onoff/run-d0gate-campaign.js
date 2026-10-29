@@ -307,6 +307,7 @@ function runCc() {
     fs.appendFileSync(abs, `${JSON.stringify(row)}\n`);
     ran++;
     console.log(`   -> ${row.failure_class ? `${row.failure_class}/${row.failure_cause}` : 'scored'} cost ${row.cost_usd} USD ${JSON.stringify(row.markers || row.g4)}`);
+    if (row.failure_cause === 'unaccounted_claude_session') die(`stopping the campaign: ${key(c)} left ${row.unaccounted_sessions} claude session(s) the cell did not start itself (a depth-0 agent ran its own claude); the row is recorded as infra, cost ${row.cost_usd} USD`, 2);
     if (row.failure_class && ['quota', 'authentication'].includes(row.failure_cause)) die(`stopping the campaign: ${row.failure_cause} failure on ${key(c)}`, 2);
   }
   console.log(JSON.stringify({ runner: 'cc', pilot: PILOT, model, ran, spent_usd: money(spentUsd(abs)), max_usd: CAP, todo: todo().length }));

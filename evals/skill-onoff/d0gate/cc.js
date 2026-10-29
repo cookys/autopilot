@@ -50,7 +50,11 @@ function shapeProblems(row) {
     else for (const f of ['gate_exercised', 'completed', 'violating', 'hand_clean']) if (!isBool(row.g4[f])) p.push(`g4.${f}`);
   } else {
     if (!isBool(row.skill_invoked)) p.push('skill_invoked');
+    if (!isBool(row.skill_invoked_observed)) p.push('skill_invoked_observed');
+    // an unfinished or infra row has every judged boolean false; what the transcript actually showed goes in skill_invoked_observed
+    if (row.failure_class !== null && row.skill_invoked !== false) p.push('skill_invoked must be false on an unfinished row');
     if (!Number.isInteger(row.nested_claude_attempts) || row.nested_claude_attempts < 0) p.push('nested_claude_attempts');
+    if (!Number.isInteger(row.unaccounted_sessions) || row.unaccounted_sessions < 0) p.push('unaccounted_sessions');
     const m = D0_MARKER[row.task_id];
     if (!m) p.push('task_id unknown');
     else if (!row.markers || typeof row.markers !== 'object') p.push('markers');
@@ -108,7 +112,7 @@ function classify(exit, sum, errText) {
 // ---------------------------------------------------------------- cell plumbing
 const falseShape = (c) => (c.task === T.G4
   ? { g4: { gate_exercised: false, completed: false, violating: false, hand_clean: false } }
-  : { markers: { [D0_MARKER[c.task]]: false }, skill_invoked: false });
+  : { markers: { [D0_MARKER[c.task]]: false }, skill_invoked: false, skill_invoked_observed: false, nested_claude_attempts: 0, unaccounted_sessions: 0 });
 function cellEnv(cell, extra = {}) {
   const e = cell.env();
   delete e.ANTHROPIC_BASE_URL; // the stub cells point it at a dead port; a real cell must reach the API
@@ -147,11 +151,34 @@ const failureRow = (ctx, c, o) => ({
   row: ctx.P.row, task_id: c.task, arm: c.arm, rep: c.rep, ...falseShape(c), model: o.model, pilot: ctx.pilot, runner: 'cc',
   runner_version: ctx.runnerVersion, session_id: o.sessionId || '', duration_s: o.durationS, cost_usd: o.cost,
   cost_turns: o.costTurns || [], ...(o.nestedAttempts !== undefined ? { nested_claude_attempts: o.nestedAttempts } : {}),
+  ...(o.unaccounted !== undefined ? { unaccounted_sessions: o.unaccounted } : {}),
+  ...(c.task !== T.G4 ? { skill_invoked_observed: !!o.skillObserved } : {}),
   ...(o.costUnknown ? { cost_unknown: true, cost_estimated: true } : {}), failure_class: o.cls, failure_cause: o.cause,
   ...(o.detail ? { failure_detail: String(o.detail).slice(0, 300) } : {}),
 });
 
 // ---------------------------------------------------------------- depth-0 cell (G1-G3)
+// After-the-fact detection of a claude the depth-0 agent started behind the PATH wrapper's back (absolute path, its own PATH). There is no
+// sandbox, so what is checked is the trace it leaves: ASSUMPTION (to be confirmed by depth-0 on real pilot output): claude writes each
+// session transcript to <CLAUDE_CONFIG_DIR>/projects/<project dir>/<session id>.jsonl (exactly two levels below projects/; subagent files
+// sit deeper and are not looked at). A session file whose id is not one of the cell's own known sessions is "unaccounted".
+function sessionFiles(configDir) {
+  const out = [];
+  let dirs = [];
+  const root = path.join(configDir, 'projects');
+  try { dirs = fs.readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory()); } catch { return out; }
+  for (const d of dirs) {
+    let files = [];
+    try { files = fs.readdirSync(path.join(root, d.name), { withFileTypes: true }); } catch { continue; }
+    for (const e of files) if (e.isFile() && /\.jsonl$/.test(e.name)) out.push(path.join(root, d.name, e.name));
+  }
+  return out;
+}
+function lastCostIn(file) {
+  let last = null;
+  try { for (const l of fs.readFileSync(file, 'utf8').split('\n')) { let j; try { j = JSON.parse(l); } catch { continue; } if (j && num(j.total_cost_usd) !== null) last = j.total_cost_usd; } } catch { return null; }
+  return last;
+}
 function turnArgs(ctx, plugin, model, resume, budget) {
   return ['-p', '--model', model, ...(resume ? ['--resume', resume] : []), '--plugin-dir', plugin, '--setting-sources', 'project',
     '--strict-mcp-config', '--dangerously-skip-permissions', '--max-budget-usd', String(budget), '--disallowedTools', ctx.P.cc.disallowed_tools,
@@ -212,11 +239,20 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
     // prereg cc.resume_cost_cumulative=true switches to the last call's total (set only after the pilot transcripts show cumulative totals).
     const known = costTurnsKnown && !timedOut;
     const mainCost = ctx.P.cc.resume_cost_cumulative === true ? (costTurns[costTurns.length - 1] || 0) : costTurns.reduce((a, b) => a + b, 0);
-    const o = { model, sessionId: sid, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number(mainCost.toFixed(6)) : ceiling, costUnknown: !known, costTurns, nestedAttempts: fs.readFileSync(nestedLog, 'utf8').split('\n').filter(Boolean).length };
+    const o = { model, sessionId: sid, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number(mainCost.toFixed(6)) : ceiling, costUnknown: !known, costTurns, skillObserved: skillInvoked, nestedAttempts: fs.readFileSync(nestedLog, 'utf8').split('\n').filter(Boolean).length };
+    const knownSessions = new Set(transcript.flatMap((t) => readObjects(t).map((j) => j.session_id).filter((x) => typeof x === 'string')));
+    const strays = sessionFiles(path.join(cell.home, '.claude')).filter((f) => !knownSessions.has(path.basename(f, '.jsonl'))).map((f) => ({ f, cost: lastCostIn(f) }));
+    o.unaccounted = strays.length;
+    if (strays.length > 0) { // a claude of its own: charged what its trace says, or the whole ceiling when nothing readable; the campaign stops
+      const readable = strays.reduce((a, x) => a + (x.cost === null ? 0 : x.cost), 0);
+      const unreadable = strays.some((x) => x.cost === null);
+      keepCopy(keepDir, cell);
+      return failureRow(ctx, c, { ...o, cost: Number((unreadable ? Math.max(ceiling, mainCost + readable) : mainCost + readable).toFixed(6)), costUnknown: unreadable || o.costUnknown,
+        cls: 'infra_fail', cause: 'unaccounted_claude_session', detail: `${strays.length} session file(s) not started by this cell's own turns: ${strays.map((x) => path.basename(x.f)).join(', ')}` });
+    }
     if (fail) {
       keepCopy(keepDir, cell);
       const row = failureRow(ctx, c, { ...o, cls: fail.cls, cause: fail.cause, detail: errAll.trim().split('\n').pop() });
-      row.skill_invoked = skillInvoked;
       return row;
     }
     let scored;
@@ -227,7 +263,7 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
     keepCopy(keepDir, cell);
     return {
       row: ctx.P.row, ...scored, model, pilot: ctx.pilot, runner: 'cc', runner_version: ctx.runnerVersion, session_id: sid,
-      model_seen: sum.modelSeen, skill_invoked: skillInvoked, duration_s: o.durationS, cost_usd: o.cost, cost_turns: costTurns, nested_claude_attempts: o.nestedAttempts, failure_class: null,
+      model_seen: sum.modelSeen, skill_invoked: skillInvoked, skill_invoked_observed: skillInvoked, duration_s: o.durationS, cost_usd: o.cost, cost_turns: costTurns, nested_claude_attempts: o.nestedAttempts, unaccounted_sessions: 0, failure_class: null,
       ...(o.costUnknown ? { cost_unknown: true, cost_estimated: true } : {}),
       ...(c.arm === 'change' ? { arm_manifest_sha256: ctx.changeSha } : {}),
     };
@@ -241,23 +277,34 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
 function handWrapper(cell, realClaude) {
   const bin = path.join(cell.root, 'bin');
   fs.mkdirSync(bin, { recursive: true });
-  const left = [
-    'const fs=require("fs"); const last=new Map();',
-    'for (const l of fs.readFileSync(process.argv[1],"utf8").split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) last.set(String(j.session_id), j.total_cost_usd); }',
+  // Everything between "read what is spent and reserved" and "write my reservation" runs under one flock, so two launches at the same time
+  // cannot both see the same remaining budget. The reservation is settled after the run: dropped when the launch reported a spend (that
+  // spend is then in D0GATE_HAND_OUT, which the tee fills live so a killed launch still leaves its envelope), kept when it did not.
+  const reserve = [
+    'const fs=require("fs"); const [out,resv,budget,id]=process.argv.slice(1); const last=new Map();',
+    'for (const l of fs.readFileSync(out,"utf8").split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) last.set(String(j.session_id), j.total_cost_usd); }',
     'let s=0; for (const v of last.values()) s+=v;',
-    'const r=Number(process.argv[2])-s; process.stdout.write(r<=0.0005 ? "refuse" : String(Number(r.toFixed(4))));',
+    'let r=0; try { for (const l of fs.readFileSync(resv,"utf8").split("\\n")) { const f=l.split(" "); if (f.length===2 && Number.isFinite(Number(f[1]))) r+=Number(f[1]); } } catch {}',
+    'const rem=Number(budget)-s-r; if (rem<=0.0005) { process.stdout.write("refuse"); process.exit(0); }',
+    'const d=Number(process.env.D0GATE_WRAPPER_TEST_DELAY||0); if (d>0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,d*1000);',
+    'const amt=String(Number(rem.toFixed(4))); fs.appendFileSync(resv, id+" "+amt+"\\n"); process.stdout.write(amt);',
   ].join(' ');
   fs.writeFileSync(path.join(bin, 'claude'), [
     '#!/bin/bash',
     `REAL='${realClaude.replace(/'/g, "'\\''")}'`,
     'args=("$@")',
     'if [ -n "${D0GATE_HAND_BUDGET:-}" ]; then',
-    `  rem="$(node -e '${left}' "$D0GATE_HAND_OUT" "$D0GATE_HAND_BUDGET")"`,
-    '  if [ "$rem" = refuse ]; then echo "d0gate: the cell budget is spent; refusing to start another claude" >&2; exit 97; fi',
+    '  if [ -z "${D0GATE_HAND_OUT:-}" ]; then echo "d0gate: D0GATE_HAND_BUDGET is set but D0GATE_HAND_OUT is not set; refusing to start claude" >&2; exit 97; fi',
+    '  LOCK="$D0GATE_HAND_OUT.lock"; RESV="$D0GATE_HAND_OUT.resv"; PRIV="$D0GATE_HAND_OUT.$$"; ID="$$"',
+    '  : >>"$D0GATE_HAND_OUT"',
+    `  rem="$( ( flock 9; node -e '${reserve}' "$D0GATE_HAND_OUT" "$RESV" "$D0GATE_HAND_BUDGET" "$ID" ) 9>"$LOCK" )"`,
+    '  if [ "$rem" = refuse ] || [ -z "$rem" ]; then echo "d0gate: the cell budget is spent or reserved; refusing to start another claude" >&2; exit 97; fi',
     '  args+=(--max-budget-usd "$rem")',
+    '  "$REAL" "${args[@]}" | tee -a "$D0GATE_HAND_OUT" "$PRIV"; code="${PIPESTATUS[0]}"',
+    '  ( flock 9; if grep -q total_cost_usd "$PRIV"; then grep -v "^$ID " "$RESV" >"$RESV.tmp"; mv "$RESV.tmp" "$RESV"; fi ) 9>"$LOCK"',
+    '  rm -f "$PRIV"; exit "$code"',
     'fi',
-    '"$REAL" "${args[@]}" | tee -a "$D0GATE_HAND_OUT"',
-    'exit "${PIPESTATUS[0]}"',
+    'exec "$REAL" "${args[@]}"',
     '',
   ].join('\n'), { mode: 0o755 });
   return bin;
@@ -335,7 +382,7 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     // true of the cell; only what is left may use the blocked-timeout exception below. A timed-out hand has no trustworthy envelope, so
     // an empty output or an unknown cost does not count against it.
     const errBlob = `${errText}\n${env0.error || ''}`;
-    const cg = classify(timedOut ? 0 : (env0.status === 'failure' ? 1 : 0), sum, errBlob);
+    const cg = classify(0, sum, errBlob);
     let hard = cg && !['empty_output', 'cost_unknown'].includes(cg.cause) ? cg : null;
     if (!hard && timedOut) {
       if (QUOTA_RE.test(errBlob)) hard = { cls: 'infra_fail', cause: 'quota' };
@@ -350,7 +397,9 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
       if (!blocked) return fail('infra_fail', 'runner_timeout', 'the rail timed the hand out');
       timedOutAfterBlock = true;
     }
-    if (cg && !timedOutAfterBlock) return fail('infra_fail', 'cost_unknown');
+    // a failure status is infra whatever classify says (its cause when it has one); the only exception is the blocked timeout above
+    if (env0.status === 'failure' && !timedOutAfterBlock) return fail('infra_fail', cg ? cg.cause : 'runner_error', env0.error);
+    if (cg && !timedOutAfterBlock) return fail('infra_fail', cg.cause);
     // derived ledger: one accepted dispatch, its arm state, its result (only status committed is a done worker)
     const lf = path.join(cell.root, '.d0gate', 'ledger.jsonl');
     const ts = Date.now();

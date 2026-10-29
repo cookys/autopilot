@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0335 -->
+<!-- next-id: BL-0336 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1345,7 +1345,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/open-decision-library-path-unchecked.md
 - **Context**: Depth-0 ruling on doagate deliberately did not add the check to the library path; first inventory what boundary each of the three callers' cards belongs to, then decide whether to add it. Follow-on of BL-0309.
 
-
 ### A review seat that fails once voids the whole generation
 - **Id**: BL-0322
 - **Status**: open
@@ -1413,99 +1412,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/depth0-per-turn-gate-status.md
 - **Context**: Five limits listed at Pointer under Known limits of P2. Follow-on of BL-0306.
 
-### Live watcher idle-exits during long tool-only work and the panel shows unavailable
-- **Id**: BL-0327
-- **Status**: open
-- **Since**: 2026-10-29
-- **Origin**: peer
-- **Reporter**: cookys/openclaw/fleet--claude
-- **Report**: 2026-10-29 fleet:01M628K0GA63KYQY11GERK89KW
-- **Reply**: 2026-10-29 fleet:01M628KJBMWHK5Y16QHJG2KV8B
-- **Problem**: 長時間只跑工具、沒有新訊息時，背景監看程式會自己結束，面板就一直顯示「無法取得」，直到下一則訊息；而且面板只叫人手動執行一行指令，沒說明原因，也沒說明下一則訊息會自動恢復，對一般使用者沒有幫助。
-- **Impact**: 長工作期間看不到進度面板，使用者以為系統壞了。
-- **Trigger**: work can start now; efficiency and experience fix
-- **Trigger-Type**: ready
-- **Effort**: M
-- **Source**: PEER-REPORTED cookys/openclaw/fleet--claude 2026-10-29
-- **Pointer**: docs/backlog/watcher-idle-exit-unavailable-panel.md
-- **Context**: Observed 2026-10-28 for about 2h20m. Timeline and two fix directions at Pointer.
-
-### Watcher log is flooded by repeated status task unavailable lines
-- **Id**: BL-0328
-- **Status**: open
-- **Since**: 2026-10-29
-- **Origin**: peer
-- **Reporter**: cookys/openclaw/fleet--claude
-- **Report**: 2026-10-29 fleet:01M628K0GA63KYQY11GERK89KW
-- **Reply**: 2026-10-29 fleet:01M628KJBMWHK5Y16QHJG2KV8B
-- **Problem**: 背景監看程式的紀錄檔被同一行「任務狀態取得失敗」重複寫了十四萬多行、佔 12.8 MB，沒有輪替也沒有去重，真正有用的訊息被淹沒。
-- **Impact**: 紀錄檔無限成長，要查問題時找不到有用的行。
-- **Trigger**: work can start now
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: PEER-REPORTED cookys/openclaw/fleet--claude 2026-10-29
-- **Pointer**: docs/backlog/watcher-idle-exit-unavailable-panel.md
-- **Context**: Counts and source line at Pointer under BL-0328.
-
-### Watcher cannot list git worktrees while the same command works by hand
-- **Id**: BL-0329
-- **Status**: open
-- **Since**: 2026-10-29
-- **Origin**: peer
-- **Reporter**: cookys/openclaw/fleet--claude
-- **Report**: 2026-10-29 fleet:01M628K0GA63KYQY11GERK89KW
-- **Reply**: 2026-10-29 fleet:01M628KJBMWHK5Y16QHJG2KV8B
-- **Problem**: 背景監看程式裡列出工作樹的 git 指令失敗了五百多次，但在同一個專案手動執行卻正常，結果清理資訊檔一直沿用舊的內容。疑似背景啟動後的環境和手動不同。
-- **Impact**: 清理資訊停在舊狀態，面板上的殘留數量可能過時。
-- **Trigger**: work can start now
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: PEER-REPORTED cookys/openclaw/fleet--claude 2026-10-29
-- **Pointer**: docs/backlog/watcher-idle-exit-unavailable-panel.md
-- **Context**: Failure count and suspect list at Pointer under BL-0329.
-
-### Affected-suites runner records per-suite seconds and uses them to order runs
-- **Id**: BL-0330
-- **Status**: open
-- **Since**: 2026-10-29
-- **Origin**: owner
-- **Problem**: 耗時紀錄檔 test-durations.tsv 有 414 列，但停在 10/12、不含串行尾巴，這次選出的套件有 291 支沒有紀錄；run.sh 會依它慢檔優先，但 affected-suites.js 跑的時候既不更新也不使用這份資料。
-- **Impact**: affected-suites.js 不使用這份耗時資料，291 支無紀錄的套件也無從排序，看不出時間花在哪。
-- **Trigger**: work can start now
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: owner request 2026-10-29 (suite speed research)
-- **Pointer**: docs/backlog/pre-push-suite-speed.md
-- **Context**: Make --run write per-suite seconds, update the tsv, order slowest-first. Negative control: delete the tsv, fall back to name order, no crash. First in order (B2).
-
-### affected-suites gets --jobs N with a shared serial-suite list
-- **Id**: BL-0331
-- **Status**: open
-- **Since**: 2026-10-29
-- **Origin**: owner
-- **Problem**: 推送前套件目前只能一支一支串行跑，32 核機器只用到一核。
-- **Impact**: 串行跑 678 支要三小時以上；平行跑預估可縮到一至一個半小時（推測），推送不用再等半天。
-- **Trigger**: work can start now
-- **Trigger-Type**: ready
-- **Effort**: L
-- **Source**: owner request 2026-10-29 (suite speed research)
-- **Pointer**: docs/backlog/pre-push-suite-speed.md
-- **Context**: Add --jobs N reusing run.sh --parallel plus one shared serial list. Acceptance: --jobs 1 vs 8 same rc set, 3x faster. Negative control: unlisted unsafe suite reds. After BL-0330 (B1).
-
-### Lazy post-gate require and pseudo edges stop inflating the suite selector
-- **Id**: BL-0332
-- **Status**: open
-- **Since**: 2026-10-29
-- **Origin**: owner
-- **Problem**: 程式裡有兩處「條件成立才載入」的引用，測試環境根本不會執行，選取器卻當成一定會用到，結果改一個小檔就選出六百多支套件。
-- **Impact**: 約四成白跑；本次 678 支可降到約 393 支，省約 1.9 小時（推測：模擬選取乘歷史每支約 24 秒，未實測）。
-- **Trigger**: work can start now
-- **Trigger-Type**: ready
-- **Effort**: M
-- **Source**: owner request 2026-10-29 (suite speed research)
-- **Pointer**: docs/backlog/pre-push-suite-speed.md
-- **Context**: Make lazy post-gate requires weak edges, fix pseudo edges. Acceptance: diff <=400, zero misses. Negative control: really executed lazy require still selected. After BL-0330 (A1).
-
 ### Selection result reports each changed file's contribution
 - **Id**: BL-0333
 - **Status**: open
@@ -1533,3 +1439,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner request 2026-10-29 (suite speed research)
 - **Pointer**: docs/backlog/pre-push-suite-speed.md
 - **Context**: Scale time asserts by test_timing_scale, prefix-scope pgrep, wait FAKE_STARTED in gate-rules R2 :133. Negative control: red under load before, green after (B3).
+
+### Rerun and serial stage of the parallel run produce false reds
+- **Id**: BL-0335
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: self
+- **Problem**: 平行模式的重跑和串行段會出假紅：有些套件在池內紅、串行重跑還是紅，但同一版本單獨直接跑是綠的，害人以為改動壞了。
+- **Impact**: 推送前套件出現假紅，要人工一支支單獨重跑確認，白費時間又不可信。
+- **Trigger**: work can start now; the fix is already in progress
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: 2026-10-29 pre-push run (self)
+- **Pointer**: docs/backlog/pre-push-suite-speed.md
+- **Context**: Facts under the BL-0335 section at Pointer. Follow-on of BL-0331.

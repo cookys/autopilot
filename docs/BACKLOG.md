@@ -1470,7 +1470,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-29
 - **Origin**: owner
 - **Problem**: 耗時紀錄檔 test-durations.tsv 有 414 列，但停在 10/12、不含串行尾巴，這次選出的套件有 291 支沒有紀錄；run.sh 會依它慢檔優先，但 affected-suites.js 跑的時候既不更新也不使用這份資料。
-- **Impact**: affected-suites.js 跑的時候不使用這份耗時資料，291 支沒有紀錄的套件也無從排序，看不出時間花在哪，後續提速缺少可信依據。
+- **Impact**: affected-suites.js 不使用這份耗時資料，291 支無紀錄的套件也無從排序，看不出時間花在哪。
 - **Trigger**: work can start now
 - **Trigger-Type**: ready
 - **Effort**: S

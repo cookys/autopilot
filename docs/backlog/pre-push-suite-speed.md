@@ -94,3 +94,11 @@ BL-0330 (record durations, B2) -> BL-0331 (`--jobs`, B1) -> BL-0332 (lazy requir
 - BL-0332 (A1): this diff selects at most 400; `miss-check-wide.js` N=60 has zero misses; all 28 breakers still hit. Negative control: a fixture with a lazy require whose path really executes is still selected; reverting to a strong edge turns the check red.
 - BL-0333 (contribution report): `--json` gains a `contrib` field (per changed file: suites pulled in, suites pulled in only by it).
 - BL-0334 (B3): time assertions multiplied by `test_timing_scale` (only loosening upper bounds); `pgrep`/`ps` scans limited to the `TEST_TMP` prefix; `dispatch-hetero-gate-rules.test.sh` R2 (:133) waits for `FAKE_STARTED` instead of the fixed `timeout -s TERM 2` (already red once under serial load on 2026-10-29).
+
+## BL-0335: false reds in the rerun and serial stage of --jobs mode
+
+First official `--jobs 6` run, 2026-10-29 (the run log of that day).
+
+- engine-qualify-a and external-lifecycle-witness were red inside the pool and still red on the serial rerun, yet green when run directly on the same commit.
+- The engine-qualify-a error showed the rerun seeing a capture-backup left by the previous attempt; the path sits under the per-entry TMPDIR. Suspected cause: the rerun reuses the same temporary directory.
+- dispatch-detach and dispatch-hetero, both on the serial list, were red in the `--jobs` serial stage and green when run directly. Cause not confirmed (suspects: environment difference, or processes left over from the pool).

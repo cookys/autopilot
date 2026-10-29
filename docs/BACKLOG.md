@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0335 -->
+<!-- next-id: BL-0336 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1439,3 +1439,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner request 2026-10-29 (suite speed research)
 - **Pointer**: docs/backlog/pre-push-suite-speed.md
 - **Context**: Scale time asserts by test_timing_scale, prefix-scope pgrep, wait FAKE_STARTED in gate-rules R2 :133. Negative control: red under load before, green after (B3).
+
+### Rerun and serial stage of the parallel run produce false reds
+- **Id**: BL-0335
+- **Status**: open
+- **Since**: 2026-10-29
+- **Origin**: self
+- **Problem**: 平行模式的重跑和串行段會出假紅：有些套件在池內紅、串行重跑還是紅，但同一版本單獨直接跑是綠的，害人以為改動壞了。
+- **Impact**: 推送前套件出現假紅，要人工一支支單獨重跑確認，白費時間又不可信。
+- **Trigger**: work can start now; the fix is already in progress
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: 2026-10-29 pre-push run (self)
+- **Pointer**: docs/backlog/pre-push-suite-speed.md
+- **Context**: Facts under the BL-0335 section at Pointer. Follow-on of BL-0331.

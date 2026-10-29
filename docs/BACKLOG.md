@@ -1188,19 +1188,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: 2026-10-25 pre-push suite runs at 670b3ffaf and 1d38cfefb
 - **Pointer**: docs/backlog/bash-launch-guard-timing-assertion-load.md
 
-### depth-0 per-turn gate: P3 evaluation and P4 guidance still to do
+### depth-0 per-turn gate: P3 NOT-SHIP, next step waits for owner
 - **Id**: BL-0306
 - **Status**: open
 - **Since**: 2026-10-26
 - **Origin**: owner
-- **Problem**: 計畫要讓 depth-0 依任務決定要不要替工人開啟每回合驗證。P0 探測、P1 驗證腳本、P2 接線都已完成並合併，還沒做的是 P3 開關評測與 P4 指引。
-- **Impact**: 沒做完評測就不知道這功能值不值得預設推廣，預設仍維持關閉。
-- **Trigger**: P3 ON/OFF evaluation can start now (cap 20 USD approved); P4 only on a P3 PASS
-- **Trigger-Type**: ready
+- **Problem**: 計畫要讓 depth-0 依任務決定要不要替工人開啟每回合驗證。P0 探測、P1 驗證腳本、P2 接線都已完成並合併，P3 開關評測已跑完，裁決 NOT-SHIP（2026-10-30，正式格 3.84 USD）；P4 不開。
+- **Impact**: 評測沒有支持預設推廣，預設維持關閉；要不要修指引與評分後另開 v2 要 owner 決定。
+- **Trigger**: owner decides card d-1ea8bb49 (A fix guidance and G3 scoring then a v2 row; B authorize depth-0 to fix the list then a v2 row; C stop)
+- **Trigger-Type**: owner
 - **Effort**: L
 - **Source**: owner d-32849d39 (A, default off), d-6f6b706f (A: P0 cap 1 USD, P3 cap 20 USD), d-b3bc7aef (BL-0318 option B); plan merged 4ebcb428b
 - **Pointer**: docs/backlog/depth0-per-turn-gate-status.md
-- **Context**: P1 ae44b5a0a; P2 merges 7230a7f6e, b60ab831a; owner said run P3 right after acceptance passes; follow-on of BL-0055. Detail at Pointer.
+- **Context**: P1 ae44b5a0a; P2 7230a7f6e, b60ab831a; P3 NOT-SHIP (G3 scoring gap, G4 no violation), evidence docs/plans/evidence/2026-10-26-depth0-gate-p3; row kept for A/B. Detail at Pointer.
 
 ### dev-setup --harness agy --install fails validation on agy 1.4.7
 - **Id**: BL-0308

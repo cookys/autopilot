@@ -3,21 +3,49 @@
 # It exists so the ON/OFF cells of the d0gate row can run with zero spend: it keeps the real rail's argument
 # parsing and its --gate-rules refusal rules byte for byte (the two blocks below are copied from
 # scripts/dispatch-hetero.sh at 45edf93da; hooks/tests/skill-onoff-d0gate.test.sh asserts they still match the real
-# file), records every call in $D0GATE_CELL/.d0gate/ledger.jsonl at call time, and then runs a DETERMINISTIC
+# file), records every call in <cell>/.d0gate/ledger.jsonl at call time, and then runs a DETERMINISTIC
 # worker (scripts/d0gate-workers/<mode>) in a detached worktree. With --gate-rules it runs the REAL
 # scripts/per-turn-gate-arm.js arm/settings/disarm and the REAL hooks/per-turn-gate.js as the worker's Stop hook
 # (the way claude would at the end of a turn). The stub worker does not react to a block text: it only shows the
-# gate being exercised. Needs D0GATE_CELL (cell root); live/state files go to $D0GATE_LIVE (default $D0GATE_CELL/live).
-# Worker mode: D0GATE_WORKER (default clean-g1). Mutation hooks for negative controls: D0GATE_HOOK_CMD.
+# gate being exercised. The cell root is pinned inside the cell's own copy of this file when the cell is built, never taken from the
+# environment or from where the file is called; live/state files go to <cell>/live. Nothing here needs to be set by the caller.
 # Spend: none. It never starts claude, codex or any other runner.
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 ORIG_ARGV=("$@")
-CELL="${D0GATE_CELL:-}"
-[ -n "$CELL" ] && [ -d "$CELL" ] || { echo "d0gate stub: D0GATE_CELL is not a directory" >&2; exit 2; }
-LIVE="${D0GATE_LIVE:-$CELL/live}"
+# The cell root is written into this file when the cell materialises it (D0G_PINNED_CELL below); that value is the only thing that decides
+# where the ledger and the live files go. A copy or a symlink of this file elsewhere still writes into the real cell. Neither an
+# environment value nor the position this file is called from can move them; when either differs from the pinned cell, the call
+# record carries cell_env_override=true.
+D0G_PINNED_CELL=""
+CELL="$D0G_PINNED_CELL"
+[ -n "$CELL" ] && [ -d "$CELL/.d0gate" ] || { echo "d0gate stub: this copy was not materialised by a d0gate cell" >&2; exit 2; }
+# The worker mode, the hook command override and the no-disarm switch (negative-control knobs) are pinned the same way: the harness writes
+# them into this cell's copy, the stub reads only these, and an environment value that differs is ignored and flagged (knob_env_override).
+D0G_PINNED_WORKER=""
+D0G_PINNED_HOOK_CMD=""
+D0G_PINNED_NO_DISARM=""
+KNOB_OVERRIDE=false
+[ -n "${D0GATE_WORKER:-}" ] && [ "$D0GATE_WORKER" != "${D0G_PINNED_WORKER:-clean-g1}" ] && KNOB_OVERRIDE=true
+[ -n "${D0GATE_HOOK_CMD:-}" ] && [ "$D0GATE_HOOK_CMD" != "$D0G_PINNED_HOOK_CMD" ] && KNOB_OVERRIDE=true
+[ -n "${D0GATE_NO_DISARM:-}" ] && [ "$D0GATE_NO_DISARM" != "$D0G_PINNED_NO_DISARM" ] && KNOB_OVERRIDE=true
+ENV_OVERRIDE=false
+LOC_CELL="$(cd "$SELF_DIR/../.." 2>/dev/null && pwd -P)"
+[ "$LOC_CELL" = "$CELL" ] || ENV_OVERRIDE=true
+[ -n "${D0GATE_CELL:-}" ] && [ "$(cd "$D0GATE_CELL" 2>/dev/null && pwd -P)" != "$CELL" ] && ENV_OVERRIDE=true
+LIVE="$CELL/live"
+# Every write below lands in .d0gate, wt, live or config.json of the pinned cell. A model may have replaced one of those directories with a
+# symlink ahead of time (inside the threat model), so each must be a plain directory whose realpath is that very path inside the cell,
+# checked before and after mkdir, and no file this script creates may already be a symlink (d0g_nolink). Same-uid races between a check
+# and the write are out of scope; the runner scans the cell for symlinks afterwards.
+D0G_GUARD='const fs=require("fs"),path=require("path"); const R=path.resolve(process.argv[1]); const rr=fs.realpathSync(R); let bad=null; for (const d of process.argv.slice(2)) { const T=path.join(R,d); let st; try { st=fs.lstatSync(T); } catch (e) { if (e.code==="ENOENT") continue; bad=T; break; } if (st.isSymbolicLink() || !st.isDirectory() || fs.realpathSync(T)!==path.join(rr,d)) { bad=T; break; } } if (bad) { process.stderr.write("not a plain directory inside the cell: "+bad+"\n"); process.exit(3); }'
+d0g_dirs_ok() { node -e "$D0G_GUARD" "$CELL" .d0gate wt live; }
+d0g_nolink() { for f in "$@"; do if [ -L "$f" ]; then echo "d0gate stub: $f is a symlink; refusing to write" >&2; exit 2; fi; done; }
+d0g_dirs_ok || { echo "d0gate stub: .d0gate, wt and live must be plain directories inside the cell" >&2; exit 2; }
 mkdir -p "$CELL/.d0gate" "$CELL/wt"; mkdir -p -m 700 "$LIVE"
+d0g_dirs_ok || { echo "d0gate stub: .d0gate, wt and live must be plain directories inside the cell" >&2; exit 2; }
+d0g_nolink "$CELL/config.json" "$CELL/.d0gate/ledger.jsonl"
 export AUTOPILOT_LIVE_DIR="$LIVE"
-export AUTOPILOT_CONFIG_FILE="${AUTOPILOT_CONFIG_FILE:-$CELL/config.json}"
+export AUTOPILOT_CONFIG_FILE="$CELL/config.json"   # pinned: a caller value must not choose which file this script may create
 [ -f "$AUTOPILOT_CONFIG_FILE" ] || echo '{}' >"$AUTOPILOT_CONFIG_FILE"
 # the stub's own names carry a D0G_ prefix: the copied option loop below assigns LEDGER (--ledger), BRANCH, MODEL, ... itself
 D0G_LEDGER="$CELL/.d0gate/ledger.jsonl"
@@ -31,11 +59,12 @@ ledger_append() {
     const fs = require("fs"); const [kind, ...kv] = process.argv.slice(1);
     const o = { kind, ts: Date.now() };
     for (const p of kv) { const i = p.indexOf("="); const k = p.slice(0, i); const v = p.slice(i + 1); o[k] = v === "true" ? true : v === "false" ? false : /^-?[0-9]+$/.test(v) ? Number(v) : v; }
-    fs.appendFileSync(process.env.D0GATE_LEDGER, JSON.stringify(o) + "\n");' "$@"
+    const fd = fs.openSync(process.env.D0GATE_LEDGER, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600);
+    try { fs.writeFileSync(fd, JSON.stringify(o) + "\n"); } finally { fs.closeSync(fd); }' "$@"
 }
 argv_json() { node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' -- "$@"; }
 die_precondition() {
-  ledger_append call accepted=false reason="$1" argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD"
+  ledger_append call accepted=false cell_env_override="$ENV_OVERRIDE" knob_env_override="$KNOB_OVERRIDE" reason="$1" argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD"
   printf '{"status":"precondition_failed","reason":"%s"}\n' "$(printf '%s' "$1" | sed 's/"/\\"/g')"
   exit 2
 }
@@ -129,13 +158,14 @@ CHILD_SESSION_ID="d0g-$$-$RANDOM"
 REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || die_precondition "not inside a git repository"
 BASE_SHA="$(git -C "$REPO" rev-parse --verify "${BASE:-HEAD}^{commit}" 2>/dev/null)" || die_precondition "cannot resolve --base"
 N="$(( $(grep -c '"kind":"call"' "$D0G_LEDGER" 2>/dev/null || true) + 1 ))"
+d0g_nolink "$CELL/.d0gate/rules.$N.json" "$CELL/.d0gate/arm.$N.log" "$CELL/.d0gate/settings.$N.json" "$CELL/.d0gate/hook-out.$N"
 RULES_COPY=""; RULES_SHA=""
 if [ -n "$GATE_RULES_FILE" ]; then
   RULES_COPY="$CELL/.d0gate/rules.$N.json"; cp "$GATE_RULES_FILE" "$RULES_COPY"
   RULES_SHA="$(sha256sum "$RULES_COPY" | cut -d' ' -f1)"
 fi
 GATE_FLAG=false; [ -n "$GATE_RULES_FILE" ] && GATE_FLAG=true
-ledger_append call n="$N" accepted=true argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD" repo="$REPO" runner="$RUNNER" \
+ledger_append call n="$N" accepted=true cell_env_override="$ENV_OVERRIDE" knob_env_override="$KNOB_OVERRIDE" argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD" repo="$REPO" runner="$RUNNER" \
   gate_rules_flag="$GATE_FLAG" gate_rules_file="$GATE_RULES_FILE" rules_copy="$RULES_COPY" rules_sha="$RULES_SHA" base_sha="$BASE_SHA" session="$CHILD_SESSION_ID"
 WT="$CELL/wt/$N"
 git -C "$REPO" worktree add -q --detach "$WT" "$BASE_SHA" >/dev/null 2>&1 || die_precondition "cannot create the worker worktree"
@@ -146,7 +176,7 @@ if [ -n "$GATE_RULES_FILE" ]; then
     ARMED=true
     # disarm on ANY exit (early exit, error, TERM/INT/HUP), like the real rail's exit trap; the explicit disarm below stays (idempotent)
     trap 'exit 143' TERM INT HUP
-    trap '[ "${D0GATE_NO_DISARM:-0}" = 1 ] || node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$CHILD_SESSION_ID" >/dev/null 2>&1' EXIT
+    trap '[ "$D0G_PINNED_NO_DISARM" = 1 ] || node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$CHILD_SESSION_ID" >/dev/null 2>&1' EXIT
   fi
 fi
 ledger_append arm n="$N" armed="$ARMED"
@@ -156,19 +186,19 @@ if [ -n "$GATE_RULES_FILE" ] && [ "$ARMED" != true ]; then
   printf '{"status":"failed","reason":"gate-rules could not arm"}\n'
   exit 1
 fi
-MODE="${D0GATE_WORKER:-clean-g1}"
+MODE="${D0G_PINNED_WORKER:-clean-g1}"
 MD="$SELF_DIR/d0gate-workers/$MODE"
 [ -d "$MD" ] || { ledger_append result n="$N" status=bad_worker_mode; echo "d0gate stub: unknown worker mode $MODE" >&2; exit 2; }
 [ ! -d "$MD/files" ] || cp -R "$MD/files/." "$WT/"
 if [ "$ARMED" = true ]; then
   node "$SELF_DIR/per-turn-gate-arm.js" settings --out "$CELL/.d0gate/settings.$N.json" || true
-  HOOK_CMD="${D0GATE_HOOK_CMD:-$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).hooks.Stop[0].hooks[0].command)' "$CELL/.d0gate/settings.$N.json")}"
+  HOOK_CMD="${D0G_PINNED_HOOK_CMD:-$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).hooks.Stop[0].hooks[0].command)' "$CELL/.d0gate/settings.$N.json")}"
   : >"$CELL/.d0gate/hook-out.$N"
   for active in false true true true; do
     printf '{"session_id":"%s","cwd":"%s","stop_hook_active":%s,"prompt_id":"p"}' "$CHILD_SESSION_ID" "$WT" "$active" \
       | (cd "$WT" && D0GATE_SESSION="$CHILD_SESSION_ID" sh -c "$HOOK_CMD") >>"$CELL/.d0gate/hook-out.$N" 2>/dev/null || true
   done
-  [ "${D0GATE_NO_DISARM:-0}" = 1 ] || node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$CHILD_SESSION_ID" || true
+  [ "$D0G_PINNED_NO_DISARM" = 1 ] || node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$CHILD_SESSION_ID" || true
 fi
 BR="${BRANCH:-d0g/$N}"
 git -C "$WT" "${GIT_ID[@]}" checkout -q -b "$BR"

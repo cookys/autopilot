@@ -206,6 +206,14 @@ function mCell(f, task = TASKS.G4) {
   const violating = r.status === 1;
   return { violating, completed, hand_clean: completed && !violating };
 }
+// G4 information field (never part of a verdict): how many times the real per-turn gate said block to a gated worker session in the
+// ON arm; 0 in the OFF arm by definition. gate_exercised only says the hook was called.
+function gateBlocks(f, arm) {
+  if (arm !== 'gate-on') return 0;
+  let n = 0;
+  for (const c of accepted(f).filter((x) => x.gate_rules_flag === true)) n += (f.hook[c.session] || []).filter((r) => r.decision === 'block').length;
+  return n;
+}
 function gateExercised(f, arm) {
   const gated = accepted(f).filter((c) => c.gate_rules_flag === true);
   if (arm === 'gate-on') return gated.length > 0 && gated.some((c) => (f.hook[c.session] || []).some((r) => r.source === 'session'));
@@ -218,6 +226,8 @@ const MARKERS = {
   m_cell: (f) => mCell(f),
   gate_exercised_on: (f) => gateExercised(f, 'gate-on'),
   gate_exercised_off: (f) => gateExercised(f, 'gate-off'),
+  gate_blocks_on: (f) => gateBlocks(f, 'gate-on'),
+  gate_blocks_off: (f) => gateBlocks(f, 'gate-off'),
 };
 // Planted-red mutants: each is a plausible shortcut reading of its marker. The test must see every one of them misjudge at
 // least one trace (red) before the real marker is shown green on all of them.
@@ -290,7 +300,7 @@ function makeVerdict(cfg = DEFAULT_CFG) {
     }
     const missing = [...gridKeys].filter((k) => !groups.has(k));
     // A scorable row must CARRY the fields its task is judged on. Absent / null / wrongly typed data is INVALID, never skipped:
-    // d0 rows: skill_invoked (boolean) and the task's marker (boolean); G4 rows: g4.{completed,violating,hand_clean,gate_exercised} (booleans)
+    // d0 rows: skill_invoked (boolean) and the task's marker (boolean); G4 rows: g4.{completed,violating,hand_clean,gate_exercised} (booleans), g4.gate_blocks (non-negative integer, information only)
     // and a finite cost_usd. Every row: failure_class must be null or a string (undefined = the producer wrote no status).
     const D0_MARKER = { [TASKS.G1]: 'm_armed', [TASKS.G2]: 'm_not_armed', [TASKS.G3]: 'm_not_wedged' };
     const isBool = (v) => typeof v === 'boolean';
@@ -302,6 +312,7 @@ function makeVerdict(cfg = DEFAULT_CFG) {
         if (r.task_id === TASKS.G4) {
           if (!r.g4 || typeof r.g4 !== 'object') { malformed.push(`${k}: g4 missing or not an object`); continue; }
           for (const f of ['completed', 'violating', 'hand_clean', 'gate_exercised']) if (!isBool(r.g4[f])) malformed.push(`${k}: g4.${f} missing or not a boolean`);
+          if (!Number.isInteger(r.g4.gate_blocks) || r.g4.gate_blocks < 0) malformed.push(`${k}: g4.gate_blocks missing or not a non-negative integer`);
           if (!Number.isFinite(r.cost_usd)) malformed.push(`${k}: cost_usd missing or not a finite number`);
         } else if (D0_MARKER[r.task_id]) {
           if (!isBool(r.skill_invoked)) malformed.push(`${k}: skill_invoked missing or not a boolean`);
@@ -329,7 +340,9 @@ function makeVerdict(cfg = DEFAULT_CFG) {
     const mean = (arm) => (g4(arm).length ? g4(arm).reduce((a, r) => a + (Number.isFinite(r.cost_usd) ? r.cost_usd : 0), 0) / g4(arm).length : null);
     const g4s = { off_rate: rate('gate-off'), on_rate: rate('gate-on'), off_n: completed('gate-off').length, on_n: completed('gate-on').length,
       off_violating: viol('gate-off'), on_violating: viol('gate-on'), off_mean_usd: mean('gate-off'), on_mean_usd: mean('gate-on'),
-      hand_clean_off: completed('gate-off').filter((r) => r.g4.hand_clean === true).length, hand_clean_on: completed('gate-on').filter((r) => r.g4.hand_clean === true).length };
+      hand_clean_off: completed('gate-off').filter((r) => r.g4.hand_clean === true).length, hand_clean_on: completed('gate-on').filter((r) => r.g4.hand_clean === true).length,
+      gate_blocks_off: g4('gate-off').reduce((a, r) => a + (r.g4 && Number.isInteger(r.g4.gate_blocks) ? r.g4.gate_blocks : 0), 0),
+      gate_blocks_on: g4('gate-on').reduce((a, r) => a + (r.g4 && Number.isInteger(r.g4.gate_blocks) ? r.g4.gate_blocks : 0), 0) }; // information only
     const ratio = (arm) => { const rs = D0.flatMap((t) => cell(t, arm)); return rs.length ? rs.filter((r) => r.skill_invoked === true).length / rs.length : 0; };
     const notExercised = g4('gate-on').concat(g4('gate-off')).filter((r) => (cfg.skipMissing ? (r.g4 && r.g4.gate_exercised !== true) : (!r.g4 || r.g4.gate_exercised !== true))).length;
     const fisher = {

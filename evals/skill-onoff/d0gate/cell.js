@@ -53,13 +53,31 @@ class Cell {
     this.sentinel = opts.sentinel || null;
     this.baseSha = null;
   }
-  init() {
+  // pin(values): write values into this cell's own copy of the stub; the stub trusts nothing else (no environment value, no call position).
+  //   cell: the cell root (written once at init); worker / hookCmd / noDisarm: the worker mode and the test-only negative-control knobs.
+  // Only keys present in `values` change; an absent or empty value means the stub's default.
+  pin(values) {
+    const q = (v) => `'${String(v).replace(/'/g, "'\\''")}'`;
+    const names = { cell: 'D0G_PINNED_CELL', worker: 'D0G_PINNED_WORKER', hookCmd: 'D0G_PINNED_HOOK_CMD', noDisarm: 'D0G_PINNED_NO_DISARM' };
+    let text = fs.readFileSync(this.stubPath, 'utf8');
+    for (const [k, v] of Object.entries(values)) {
+      if (!names[k]) throw new Error(`d0gate: unknown stub knob ${k}`);
+      const re = new RegExp(`^${names[k]}=.*$`, 'm');
+      if (!re.test(text)) throw new Error(`d0gate: the stub has no ${names[k]} line to pin`);
+      text = text.replace(re, () => `${names[k]}=${v === undefined || v === null || v === '' ? '""' : q(v)}`);
+    }
+    fs.writeFileSync(this.stubPath, text);
+    return this;
+  }
+  init(opts = {}) {
     for (const d of [this.live, this.home, path.join(this.home, '.claude'), path.join(this.root, '.d0gate'), path.join(this.root, 'rules')]) fs.mkdirSync(d, { recursive: true });
     fs.chmodSync(this.live, 0o700);
     this.baseSha = L.buildTinylib(this.repo);
     fs.writeFileSync(path.join(this.root, '.d0gate', 'base_sha'), `${this.baseSha}\n`);
     // install the fixture packs onto the repo root (untracked + excluded: the worker worktrees start from the base commit)
     for (const id of ['fixture-scripts-d0gate', 'fixture-stubs-d0gate']) L.copyTree(path.join(L.packsDir(), id), this.repo);
+    this.stubPath = path.join(this.repo, 'scripts', 'dispatch-hetero.sh');
+    this.pin({ cell: fs.realpathSync(this.root), ...(opts.knobs || {}) });
     fs.writeFileSync(path.join(this.repo, '.git', 'info', 'exclude'), 'scripts/\nhooks/\nschemas/\ngate/\n');
     fs.writeFileSync(path.join(this.root, 'config.json'), '{}\n');
     fs.writeFileSync(this.prompt, 'Implement the task described by the owner in this repository. Work in the repository root.\n');
@@ -83,6 +101,9 @@ class Cell {
     fs.copyFileSync(src, dst);
     return dst;
   }
+  // pinKnobs(opts): the stub worker mode and negative-control knobs of the next call (opts.worker / hookCmd / noDisarm), written into the stub.
+  // opts.rawEnv is passed to the process as-is (the way a caller could set it): the stub ignores those values and flags them.
+  pinKnobs(opts) { return this.pin({ worker: opts.worker || '', hookCmd: opts.hookCmd || '', noDisarm: opts.noDisarm || '' }); }
   // std(extra, opts): the usual claude-native dispatch; opts.worker sets the stub worker mode, opts.env adds env.
   std(extra = [], opts = {}) {
     const runner = opts.runner || 'claude-native';
@@ -90,19 +111,24 @@ class Cell {
   }
   dispatch(args, opts = {}) {
     const script = opts.script || path.join(this.repo, 'scripts', 'dispatch-hetero.sh');
-    const env = this.env({ ...(opts.worker ? { D0GATE_WORKER: opts.worker } : {}), ...(opts.env || {}) });
+    if (!opts.script) this.pinKnobs(opts);
+    const env = this.env({ ...(opts.rawEnv || {}) });
     const r = cp.spawnSync('bash', [script, ...args], { cwd: opts.cwd || this.repo, env, encoding: 'utf8', timeout: 120000 });
     return { rc: r.status, out: String(r.stdout), err: String(r.stderr) };
   }
   // sh(cmd, opts): run a shell command line in the cell (cd into subdirs, ./script form, ...).
   sh(cmd, opts = {}) {
-    const env = this.env({ ...(opts.worker ? { D0GATE_WORKER: opts.worker } : {}), ...(opts.env || {}) });
+    this.pinKnobs(opts);
+    const env = this.env({ ...(opts.rawEnv || {}) });
     const r = cp.spawnSync('bash', ['-c', cmd], { cwd: opts.cwd || this.repo, env, encoding: 'utf8', timeout: 120000 });
     return { rc: r.status, out: String(r.stdout), err: String(r.stderr) };
   }
   facts() { return L.readFacts(this.root); }
   destroy() {
     try { cp.spawnSync('git', ['-C', this.repo, 'worktree', 'prune'], { stdio: 'ignore' }); } catch { /* none */ }
+    // a cell can hold a directory the model made unreadable: give the owner access back before removing (symlinks are not followed)
+    const open = (d) => { let st; try { st = fs.lstatSync(d); } catch { return; } if (!st.isDirectory()) return; try { fs.chmodSync(d, 0o700); } catch { /* best effort */ } let ents = []; try { ents = fs.readdirSync(d); } catch { return; } for (const e of ents) open(path.join(d, e)); };
+    open(this.root);
     fs.rmSync(this.root, { recursive: true, force: true });
   }
 }

@@ -167,12 +167,17 @@ if (g("g1-constrained") !== 10 || g("g2-unconstrained") !== 10 || g("g3-wrong-li
 console.log("dry-run: 40 cells, estimate " + j.cost_estimate_usd + " USD, x1.5 = " + j.cost_estimate_x1_5_usd + " <= cap " + j.max_usd);' "$DRY" || fail "dry-run shape"
 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run --pilot | tail -1 | S node -e 'const j = JSON.parse(require("fs").readFileSync(0, "utf8")); if (j.cells_total !== 9 || !(j.cost_estimate_usd * 1.5 <= j.max_usd) || j.max_usd !== 2.2) throw new Error(JSON.stringify(j)); console.log("pilot dry-run: 9 cells, estimate " + j.cost_estimate_usd + " x1.5 <= " + j.max_usd)' || fail "pilot dry-run"
 # negative controls
-ONOFF_MAX_USD=14 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run >/dev/null 2>"$TEST_TMP/e1"; rc=$?
-[ "$rc" = 1 ] && grep -q 'exceeds ONOFF_MAX_USD' "$TEST_TMP/e1" || fail "RED control: cap 14 must refuse (rc=$rc: $(cat "$TEST_TMP/e1"))"; echo "RED (expected) cap 14: $(cat "$TEST_TMP/e1")"
+ONOFF_MAX_USD=4 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run >/dev/null 2>"$TEST_TMP/e1"; rc=$?
+[ "$rc" = 1 ] && grep -q 'exceeds ONOFF_MAX_USD' "$TEST_TMP/e1" || fail "RED control: cap 4 must refuse (rc=$rc: $(cat "$TEST_TMP/e1"))"; echo "RED (expected) cap 4: $(cat "$TEST_TMP/e1")"
 ONOFF_MAX_USD=25 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run >/dev/null 2>"$TEST_TMP/e2"; rc=$?
 [ "$rc" = 2 ] && grep -q 'never raised' "$TEST_TMP/e2" || fail "RED control: cap 25 must be refused (rc=$rc: $(cat "$TEST_TMP/e2"))"; echo "RED (expected) cap 25: $(cat "$TEST_TMP/e2")"
-S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/cc.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e3"; rc=$?
+S node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.status="draft (control copy)"; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$EV/prereg/d0gate.json" "$TEST_TMP/prereg-draft.json"
+S node "$EV/run-d0gate-campaign.js" --prereg "$TEST_TMP/prereg-draft.json" --results "$TEST_TMP/cc.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e3"; rc=$?
 [ "$rc" = 2 ] && grep -q 'not stamped' "$TEST_TMP/e3" || fail "RED control: cc formal on a draft prereg must be refused (rc=$rc: $(cat "$TEST_TMP/e3"))"; echo "RED (expected) cc formal, draft: $(cat "$TEST_TMP/e3")"
+# GREEN: the real row is stamped, so the formal launch guard gets past "not stamped" and "--check is not green" and stops at the pilot-results rule (nothing is launched)
+S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/cc-real.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e3g"; rc=$?
+[ "$rc" = 2 ] && grep -q -- '--pilot-results must hold' "$TEST_TMP/e3g" && ! grep -q 'not stamped\|--check is not green' "$TEST_TMP/e3g" || fail "GREEN control: the stamped real row must pass the stamp checks of the formal guard (rc=$rc: $(cat "$TEST_TMP/e3g"))"
+echo "GREEN (stamped row recognised by the formal guard, stops before any cell): $(cat "$TEST_TMP/e3g")"
 # U2 wired the cc runner (hooks/tests/skill-onoff-d0gate-cc.test.sh drives it with a fake claude). Here: with NO claude on PATH it must stop
 # before dispatching anything (the sentinel claude must not be reached either: PATH is an empty directory, node is called by absolute path).
 mkdir -p "$TEST_TMP/emptypath"
@@ -239,7 +244,7 @@ S node -e '
 const fs = require("fs"); const cp = require("child_process"); const path = require("path");
 const { Cell } = require(process.argv[1] + "/d0gate/cell.js"); const L = require(process.argv[1] + "/d0gate/lib.js");
 const c = new Cell().init();
-const r = c.std(["--gate-rules", c.putRules("g1-good.json")], { worker: "clean-g1", env: { D0GATE_NO_DISARM: "1" } });
+const r = c.std(["--gate-rules", c.putRules("g1-good.json")], { worker: "clean-g1", noDisarm: "1" });
 if (r.rc !== 0) throw new Error("dispatch rc " + r.rc + r.err);
 const fstype = cp.spawnSync("findmnt", ["-T", c.root, "-o", "FSTYPE", "-n"], { encoding: "utf8" }).stdout.trim();
 if (!/^(tmpfs|ramfs)$/.test(fstype)) throw new Error("cell root is on " + fstype);
@@ -287,16 +292,121 @@ const rules = c.putRules("g1-good.json");
 const r3 = c.std(["--gate-rules", rules], { worker: "no-such-mode" });
 if (r3.rc === 0) throw new Error("bad worker mode did not exit non-zero");
 if (sw().length) throw new Error("switch file left after an early exit: " + sw());
-const k = c.sh("timeout -s TERM 3 bash scripts/dispatch-hetero.sh --runner claude-native --model m --prompt-file " + c.prompt + " --gate-rules " + rules, { worker: "clean-g1", env: { D0GATE_HOOK_CMD: "sleep 6" } });
+const k = c.sh("timeout -s TERM 3 bash scripts/dispatch-hetero.sh --runner claude-native --model m --prompt-file " + c.prompt + " --gate-rules " + rules, { worker: "clean-g1", hookCmd: "sleep 6" });
 for (let i = 0; i < 40 && sw().length; i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
 if (sw().length) throw new Error("switch file left after TERM: " + sw());
 console.log("GREEN disarm on early exit and on TERM (rc " + k.rc + ")");
 // red control: with the disarm switched off the same early exit DOES leave the switch file
-c.std(["--gate-rules", rules], { worker: "no-such-mode", env: { D0GATE_NO_DISARM: "1" } });
+c.std(["--gate-rules", rules], { worker: "no-such-mode", noDisarm: "1" });
 if (!sw().length) throw new Error("control cannot see a left-behind switch file");
 console.log("RED (expected) with D0GATE_NO_DISARM=1 the switch file stays: " + sw().join(","));
 c.destroy();' "$D0/.." "$NONTMP" || fail "section 9b"
 ok "tmpfs base, --ledger, disarm trap"
+
+echo "=== 9c. stub cell root comes from the stub's own position, never from D0GATE_CELL; fixture rules match the rule list; gate_blocks ==="
+git -C "$REPO_ROOT" show 50e840543:evals/skill-onoff/d0gate/stubs/scripts/dispatch-hetero.sh >"$TEST_TMP/stub-old.sh" || fail "cannot read the stub at the base commit"
+git -C "$REPO_ROOT" show 37f631a9c:evals/skill-onoff/d0gate/stubs/scripts/dispatch-hetero.sh >"$TEST_TMP/stub-prefix.sh" || fail "cannot read the previous stub"
+git -C "$REPO_ROOT" show 278052bad:evals/skill-onoff/d0gate/stubs/scripts/dispatch-hetero.sh >"$TEST_TMP/stub-locderived.sh" || fail "cannot read the position-deriving stub"
+if grep -nE 'Needs D0GATE_CELL|D0GATE_CELL is not' "$D0/stubs/scripts/dispatch-hetero.sh" "$EV/packs/fixture-stubs-d0gate/scripts/dispatch-hetero.sh"; then fail "the stub still tells the model to set D0GATE_CELL"; fi
+cmp -s "$D0/stubs/scripts/dispatch-hetero.sh" "$EV/packs/fixture-stubs-d0gate/scripts/dispatch-hetero.sh" || fail "frozen stub pack differs from d0gate/stubs"
+S node -e '
+const { Cell } = require(process.argv[1] + "/d0gate/cell.js"); const fs = require("fs"); const path = require("path");
+const c = new Cell().init();
+// a copy or a symlink of the stub in a directory that LOOKS like a cell (<dir>/repo/scripts/ and <dir>/.d0gate/base_sha) while D0GATE_CELL names the real cell
+const lookalike = (name, how, src) => {
+  const d = fs.mkdtempSync(path.join(path.dirname(c.root), "d0gate-ext-" + name + "-"));
+  fs.mkdirSync(path.join(d, "repo", "scripts"), { recursive: true }); fs.mkdirSync(path.join(d, ".d0gate"));
+  fs.writeFileSync(path.join(d, ".d0gate", "base_sha"), "x\n");
+  const f = path.join(d, "repo", "scripts", "dispatch-hetero.sh");
+  if (how === "copy") fs.copyFileSync(src, f); else fs.symlinkSync(src, f);
+  return { d, f };
+};
+const callThrough = (f) => c.dispatch(["--runner", "claude-native", "--model", "m", "--prompt-file", c.prompt], { script: f, rawEnv: { D0GATE_CELL: c.root } });
+const realStub = path.join(c.repo, "scripts", "dispatch-hetero.sh");
+for (const how of ["copy", "symlink"]) {
+  // RED: the stub that derives the cell from its position builds the ledger outside the real cell
+  const bad = lookalike("red-" + how, how, how === "copy" ? process.argv[3] : (fs.copyFileSync(process.argv[3], path.join(c.repo, "scripts", "stub-locderived.sh")), path.join(c.repo, "scripts", "stub-locderived.sh")));
+  callThrough(bad.f);
+  if (!fs.existsSync(path.join(bad.d, ".d0gate", "ledger.jsonl"))) throw new Error("RED control cannot see the position-deriving stub (" + how + ") write outside");
+  console.log("RED (expected) position-derived stub, " + how + ": the ledger was created outside the real cell");
+  // GREEN: the pinned stub writes into the real cell wherever it is copied or linked
+  const before = c.facts().calls.filter((x) => x.accepted).length;
+  const good = lookalike("green-" + how, how, realStub);
+  callThrough(good.f);
+  if (fs.existsSync(path.join(good.d, ".d0gate", "ledger.jsonl"))) throw new Error("GREEN failed: ledger created outside the cell (" + how + ")");
+  const cl = c.facts().calls.filter((x) => x.accepted);
+  if (cl.length !== before + 1 || cl[cl.length - 1].cell_env_override !== true) throw new Error("GREEN failed: no flagged call in the real cell (" + how + ")");
+  console.log("GREEN pinned stub, " + how + ": ledger in the real cell, cell_env_override=true, nothing outside");
+  fs.rmSync(good.d, { recursive: true, force: true }); fs.rmSync(bad.d, { recursive: true, force: true });
+}
+const other = fs.mkdtempSync(path.join(path.dirname(c.root), "d0gate-other-"));
+fs.mkdirSync(path.join(other, ".d0gate"));
+// RED: the stub as it was at the base commit trusts the caller value, so the ledger lands in the wrong directory
+fs.copyFileSync(process.argv[2], path.join(c.repo, "scripts", "dispatch-hetero-old.sh"));
+const n0 = c.facts().calls.length;
+const r0 = c.std([], { worker: "clean-g1", script: path.join(c.repo, "scripts", "dispatch-hetero-old.sh"), rawEnv: { D0GATE_CELL: other } });
+const wrong = fs.existsSync(path.join(other, ".d0gate", "ledger.jsonl")) && c.facts().calls.length === n0;
+if (!wrong) throw new Error("RED control cannot see the old stub misplace the ledger: rc=" + r0.rc + " " + r0.err);
+console.log("RED (expected) old stub with a caller D0GATE_CELL writes the ledger into the other directory, the cell sees no new call");
+fs.rmSync(path.join(other, ".d0gate"), { recursive: true });
+// GREEN: the stub in the tree puts the ledger in its own cell and flags the override
+const nA = c.facts().calls.filter((x) => x.accepted).length;
+const r1 = c.std([], { worker: "clean-g1", rawEnv: { D0GATE_CELL: other } });
+const calls = c.facts().calls.filter((x) => x.accepted);
+if (r1.rc !== 0 || calls.length !== nA + 1 || calls[nA].cell_env_override !== true) throw new Error("override not flagged or call missing: " + JSON.stringify(calls) + r1.err);
+if (fs.existsSync(path.join(other, ".d0gate"))) throw new Error("the stub wrote into the overriding directory");
+// the same value as the real cell root (spelled differently) is not an override
+const r2 = c.std([], { worker: "clean-g1", rawEnv: { D0GATE_CELL: c.root + "/." } });
+const calls2 = c.facts().calls.filter((x) => x.accepted);
+if (r2.rc !== 0 || calls2.length !== nA + 2 || calls2[nA + 1].cell_env_override !== false) throw new Error("same-root value flagged: " + JSON.stringify(calls2[1]));
+const r3 = c.std([], { worker: "clean-g1", rawEnv: { D0GATE_CELL: "" } });
+if (r3.rc !== 0 || c.facts().calls.filter((x) => x.accepted)[nA + 2].cell_env_override !== false) throw new Error("empty value flagged");
+console.log("GREEN stub under an overriding D0GATE_CELL: ledger in its own cell, cell_env_override=true; same root and empty value: false");
+// the worker mode / hook command / no-disarm knobs are pinned too: a caller putting D0GATE_WORKER in front of the call changes nothing
+const prefix = path.join(c.repo, "scripts", "stub-prefix.sh");
+fs.writeFileSync(prefix, fs.readFileSync(process.argv[4], "utf8").replace(/^D0G_PINNED_CELL=""$/m, () => "D0G_PINNED_CELL=\x27" + fs.realpathSync(c.root) + "\x27"), { mode: 0o755 });
+const nB = c.facts().calls.filter((x) => x.accepted).length;
+c.dispatch(["--runner", "claude-native", "--model", "m", "--prompt-file", c.prompt], { script: prefix, rawEnv: { D0GATE_WORKER: "g4-console" } });
+const pre = c.facts().calls.filter((x) => x.accepted)[nB];
+if (!pre || pre.worker !== "g4-console") throw new Error("RED control cannot see the environment-driven worker of the previous stub: " + JSON.stringify(pre));
+console.log("RED (expected) previous stub with D0GATE_WORKER=g4-console in front of the call ran the worker " + pre.worker + " (pinned mode was clean-g1)");
+c.std([], { worker: "clean-g1", rawEnv: { D0GATE_WORKER: "g4-console" } });
+const cur = c.facts().calls.filter((x) => x.accepted)[nB + 1];
+if (!cur || cur.worker !== "clean-g1" || cur.knob_env_override !== true) throw new Error("GREEN failed: worker " + (cur && cur.worker) + " knob_env_override " + (cur && cur.knob_env_override));
+c.std([], { worker: "g4-console", rawEnv: { D0GATE_WORKER: "g4-console" } });
+const same = c.facts().calls.filter((x) => x.accepted)[nB + 2];
+if (!same || same.worker !== "g4-console" || same.knob_env_override !== false) throw new Error("an env value equal to the pinned mode was flagged: " + JSON.stringify(same));
+const hk = c.facts().calls.filter((x) => x.accepted)[nB + 1];
+console.log("GREEN pinned stub with D0GATE_WORKER=g4-console in front: ran " + cur.worker + ", knob_env_override=true; equal value: false");
+fs.rmSync(other, { recursive: true, force: true }); c.destroy();' "$D0/.." "$TEST_TMP/stub-old.sh" "$TEST_TMP/stub-locderived.sh" "$TEST_TMP/stub-prefix.sh" || fail "section 9c stub cell root"
+# the rules live where the hand reads them (CONTRIBUTING.md) and agree with the rule list that scores the cell; the brief carries none of them
+S node -e '
+const fs = require("fs"); const path = require("path");
+const d0 = process.argv[1] + "/d0gate";
+const T = require(d0 + "/cc-tasks.js"); const rules = JSON.parse(fs.readFileSync(d0 + "/fixtures/rules/g1-good.json", "utf8"));
+const contrib = fs.readFileSync(d0 + "/fixtures/tinylib/CONTRIBUTING.md", "utf8");
+const brief = T.handPrompt();
+const items = [rules.forbid_paths[0].glob.replace(/\*+$/, ""), rules.require_files[0].path, rules.forbid_text[0].text];
+if (items.length !== 3 || rules.forbid_paths.length !== 1 || rules.require_files.length !== 1 || rules.forbid_text.length !== 1) throw new Error("g1-good.json is no longer the three-rule list");
+for (const it of items) {
+  if (!contrib.includes(it)) throw new Error("CONTRIBUTING.md does not state the rule for " + it);
+}
+if (!contrib.includes(rules.forbid_text[0].glob.split("/")[0] + "/")) throw new Error("CONTRIBUTING.md names a different scope for the text rule");
+if (/rejected|Hard rules|docs\/CHANGES\.md|no console\.log/i.test(brief)) throw new Error("the hand brief still spells the rules out");
+if (!/contributing rules/.test(brief)) throw new Error("the hand brief does not point at the repo rules");
+if (/must|required|necessary/i.test(brief.split("Notes:")[1] || "")) throw new Error("a bait is written as a requirement");
+// a planted brief that lists the rules again (the old text) must be caught by the same check
+const old = T.RULES; if (!/rejected|Hard rules|docs\/CHANGES\.md|no console\.log/i.test("Hard rules from the owner, the work is rejected if one is broken:\n" + old)) throw new Error("RED control cannot see the old brief");
+console.log("GREEN fixture rules agree with g1-good.json, the brief only points at them; RED the old brief text is detected");' "$D0/.." || fail "section 9c rules agreement"
+# the gate_blocks field: counted in the ON arm from the real hook records, 0 in the OFF arm, and a row without it is INVALID (table-cases)
+S node -e '
+const { Cell } = require(process.argv[1] + "/d0gate/cell.js"); const TR = require(process.argv[1] + "/d0gate/traces.js"); const L = require(process.argv[1] + "/d0gate/lib.js");
+const on = new Cell().init(); on.std(["--gate-rules", on.putRules("g1-good.json")], { worker: "g4-console" });
+const off = new Cell().init(); off.std([], { worker: "g4-console" });
+const a = TR.scoreCell(on, { task: L.TASKS.G4, arm: "gate-on", rep: 1 }).g4, b = TR.scoreCell(off, { task: L.TASKS.G4, arm: "gate-off", rep: 1 }).g4;
+if (!(Number.isInteger(a.gate_blocks) && a.gate_blocks >= 1) || b.gate_blocks !== 0) throw new Error("gate_blocks " + JSON.stringify([a, b]));
+console.log("GREEN gate_blocks ON=" + a.gate_blocks + " OFF=" + b.gate_blocks); on.destroy(); off.destroy();' "$D0/.." || fail "section 9c gate_blocks"
+ok "stub cell root, rules agreement, gate_blocks"
 
 echo "=== 10. P4 rehearsal: the candidate paragraph byte for byte passes check-guidance-eval; one changed byte fails ==="
 MINI="$TEST_TMP/p4repo"; mkdir -p "$MINI/skills/ceo-agent"
@@ -343,8 +453,14 @@ S node "$EV/stamp-prereg.js" --row d0gate --root "$RH" --check >/dev/null 2>&1 |
 echo "x" >>"$RH/d0gate/lib.js"
 S node "$EV/stamp-prereg.js" --row d0gate --root "$RH" --check >"$TEST_TMP/stamp-red.out" 2>&1 && fail "RED control: a changed frozen file must break --check"
 echo "RED (expected) $(cat "$TEST_TMP/stamp-red.out")"
-grep -q '"d0gate"' "$EV/prereg/FROZEN.json" && fail "the real FROZEN.json already holds d0gate (U1 must not stamp)"
-case "$(S node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status)' "$EV/prereg/d0gate.json")" in draft*) ;; *) fail "prereg status is not draft";; esac
+grep -q '"d0gate"' "$EV/prereg/FROZEN.json" || fail "the real FROZEN.json does not hold d0gate (the row must be stamped)"
+case "$(S node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status)' "$EV/prereg/d0gate.json")" in stamped*) ;; *) fail "prereg status is not stamped";; esac
+S node "$EV/stamp-prereg.js" --row d0gate --check >/dev/null 2>&1 || fail "the real row is stamped but stamp-prereg --check is not green (a frozen file changed after stamping)"
+# RED: the same real row with one frozen file changed (in a throwaway copy) must make --check AND the formal launch guard refuse
+echo "x" >>"$RH/d0gate/cell.js"
+S node "$RH/run-d0gate-campaign.js" --results "$TEST_TMP/cc-red.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e4"; rc=$?
+[ "$rc" = 2 ] && grep -q -- '--check is not green' "$TEST_TMP/e4" || fail "RED control: a changed frozen file must stop the formal launch guard (rc=$rc: $(cat "$TEST_TMP/e4"))"
+echo "RED (expected) formal guard after a frozen file changed: $(cat "$TEST_TMP/e4")"
 cat >"$TEST_TMP/localinfo.js" <<'EOF'
 // every string (keys and values) of the d0gate pack entries / pack_meta in the manifest, and of the whole prereg, must hold no machine-local text
 const fs = require('fs');
@@ -387,7 +503,7 @@ m.pack_meta["fixture-stubs-d0gate"].source = process.argv[3]; fs.writeFileSync(p
   echo "RED (expected) user root, planted $planted: $(cat "$TEST_TMP/li-root.out")"
 done
 echo "RED (expected) $(cat "$TEST_TMP/li-red.out")"
-ok "stamp rehearsal (real row untouched: draft, not in FROZEN.json)"
+ok "stamp rehearsal and the real row: stamped, --check green, a changed frozen file is caught"
 
 echo "=== 12. nothing written to the real stores (checked after every section that runs traces) ==="
 REAL_XDG="${XDG_RUNTIME_DIR:-/nonexistent}/autopilot"

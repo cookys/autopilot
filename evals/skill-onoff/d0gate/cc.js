@@ -12,6 +12,10 @@
 // Cost: per call the LAST result's total_cost_usd, summed (cost_turns keeps each); a timed-out cell is charged its whole ceiling.
 // Depth-0 cells may NOT start a claude of their own: the cell PATH refuses it (exit 97) and counts the attempts (nested_claude_attempts).
 // G4: the claude wrapper on the PATH gives every hand launch of the cell only what is left of the cell budget.
+// Threat model: the cell guards against what a MODEL can do: set environment values, pass arguments, move or copy harness files, plant
+// symlinks ahead of time. It does NOT guard against a process of the same uid that swaps a directory component between two system
+// calls (Node has no openat); that residue is caught afterwards: every cell is re-verified (changed harness files, and any symlink under
+// the artifact directories the runner and the wrappers write: .d0gate/, live/, bin/, bin-deny/, rules/), and a hit is harness_modified.
 // Row shape: every row, finished or not, carries the fields the scorer judges on (see shapeProblems); an unfinished cell has them
 // all false and a failure_class.
 const fs = require('fs');
@@ -48,7 +52,10 @@ function shapeProblems(row) {
   if (!(row.failure_class === null || typeof row.failure_class === 'string')) p.push('failure_class');
   if (row.task_id === T.G4) {
     if (!row.g4 || typeof row.g4 !== 'object') p.push('g4');
-    else for (const f of ['gate_exercised', 'completed', 'violating', 'hand_clean']) if (!isBool(row.g4[f])) p.push(`g4.${f}`);
+    else {
+      for (const f of ['gate_exercised', 'completed', 'violating', 'hand_clean']) if (!isBool(row.g4[f])) p.push(`g4.${f}`);
+      if (!Number.isInteger(row.g4.gate_blocks) || row.g4.gate_blocks < 0) p.push('g4.gate_blocks');
+    }
   } else {
     if (!isBool(row.skill_invoked)) p.push('skill_invoked');
     if (!isBool(row.skill_invoked_observed)) p.push('skill_invoked_observed');
@@ -112,7 +119,7 @@ function classify(exit, sum, errText) {
 
 // ---------------------------------------------------------------- cell plumbing
 const falseShape = (c) => (c.task === T.G4
-  ? { g4: { gate_exercised: false, completed: false, violating: false, hand_clean: false } }
+  ? { g4: { gate_exercised: false, completed: false, violating: false, hand_clean: false, gate_blocks: 0 } }
   : { markers: { [D0_MARKER[c.task]]: false }, skill_invoked: false, skill_invoked_observed: false, nested_claude_attempts: 0, unaccounted_sessions: 0 });
 function cellEnv(cell, extra = {}) {
   const e = cell.env();
@@ -140,6 +147,48 @@ function buildPlugin(dir, tree) {
     fs.copyFileSync(src, dst);
   }
 }
+// ---- harness integrity (a re-verification after the cell, NOT tamper protection: ADR-0001). The runner records the bytes of every harness
+// file it wrote into the cell (the stub copy with its pinned values, the installed fixture scripts/hooks/schemas, gate/rules.json, the
+// deny/hand wrapper, the plugin tree, the rule lists, the hand prompt) when the cell is built; after the cell it compares them with the
+// cell. A file that is gone or differs makes the row failure_class harness_modified (infra, never scored). Files the cell adds are ignored.
+const SNAP_DIRS = { d0: ['repo/scripts', 'repo/hooks', 'repo/schemas', 'repo/gate', 'bin-deny', 'plugin'], g4: ['repo/scripts', 'repo/hooks', 'repo/schemas', 'repo/gate', 'bin', 'rules'] };
+const SNAP_FILES = { d0: [], g4: ['hand-prompt.txt'] };
+const sha = (f) => require('crypto').createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+function takeSnapshot(cell, kind) {
+  const m = new Map();
+  const walk = (d) => {
+    let ents = [];
+    try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (e.isFile()) m.set(path.relative(cell.root, f), sha(f)); }
+  };
+  for (const d of SNAP_DIRS[kind]) walk(path.join(cell.root, d));
+  for (const f of SNAP_FILES[kind]) { try { m.set(f, sha(path.join(cell.root, f))); } catch { /* absent */ } }
+  return m;
+}
+function snapshotBreaks(cell, snap) {
+  const bad = [];
+  for (const [rel, h] of snap) { let now = null; try { const f = path.join(cell.root, rel); now = fs.lstatSync(f).isFile() ? sha(f) : 'not-a-file'; } catch { now = 'gone'; } if (now !== h) bad.push(rel); }
+  return bad;
+}
+let integrityBreak = null; // set by a cell's finally block, read by runCell
+// symlinks under the directories the runner and the wrappers write (NOT the hand repo or its worktrees: a symlink there is normal work)
+const SCAN_DIRS = ['.d0gate', 'live', 'bin', 'bin-deny', 'rules'];
+function symlinksIn(cell) {
+  const found = [];
+  const errors = [];
+  const walk = (d) => {
+    let ents = [];
+    try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch (e) { if (e.code !== 'ENOENT') errors.push(`${path.relative(cell.root, d)} (${e.code || e.message})`); return; }
+    for (const e of ents) { const f = path.join(d, e.name); if (e.isSymbolicLink()) found.push(path.relative(cell.root, f)); else if (e.isDirectory()) walk(f); }
+  };
+  for (const d of SCAN_DIRS) {
+    const f = path.join(cell.root, d);
+    try { if (fs.lstatSync(f).isSymbolicLink()) { found.push(d); continue; } } catch (e) { if (e.code !== 'ENOENT') errors.push(`${d} (${e.code || e.message})`); continue; }
+    walk(f);
+  }
+  return { found, errors };
+}
+function noteIntegrity(cell, snap) { integrityBreak = snap ? (() => { const sc = symlinksIn(cell); return { changed: snapshotBreaks(cell, snap), symlinks: sc.found, scanErrors: sc.errors }; })() : null; }
 function keepCopy(keepDir, cell, extra = {}) {
   if (!keepDir) return;
   fs.mkdirSync(keepDir, { recursive: true });
@@ -147,9 +196,34 @@ function keepCopy(keepDir, cell, extra = {}) {
     try { fs.copyFileSync(src, path.join(keepDir, name)); } catch { /* absent */ }
   }
   try { fs.cpSync(path.join(cell.live, 'per-turn-gate'), path.join(keepDir, 'per-turn-gate'), { recursive: true }); } catch { /* none */ }
+  keepProjects(keepDir, [{ label: 'projects', dir: path.join(cell.home, '.claude', 'projects') }, { label: 'hand-sessions', dir: path.join(cell.root, '.d0gate', 'hand-out.json.sessions') }]);
+}
+// The cell config dir is deleted with the cell, so the evidence about the claude sessions it saw is kept here: the file list of
+// <config>/projects/ (path and size, the direct evidence the stray-session check works from) and a copy of those files. A G4 hand runs in
+// a config dir the rail seeds and removes itself, so the claude wrapper copies the hand's session files (its tool trajectory; the
+// rail's envelope has only the final result) into hand-out.json.sessions/ and they are kept as hand-sessions/.
+function keepProjects(keepDir, roots) {
+  const list = [];
+  const walk = (label, root, d) => {
+    let ents = [];
+    try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      const f = path.join(d, e.name);
+      if (e.isDirectory()) walk(label, root, f);
+      else if (e.isFile()) { let size = null; try { size = fs.statSync(f).size; } catch { /* gone */ } list.push({ path: path.posix.join(label, path.relative(root, f).split(path.sep).join('/')), size }); }
+    }
+  };
+  for (const r of roots) {
+    walk(r.label, r.dir, r.dir);
+    if (list.some((x) => x.path.startsWith(`${r.label}/`))) { try { fs.cpSync(r.dir, path.join(keepDir, r.label), { recursive: true }); } catch { /* best effort */ } }
+  }
+  list.sort((a, b) => (a.path < b.path ? -1 : 1));
+  try { fs.writeFileSync(path.join(keepDir, 'projects-files.json'), `${JSON.stringify(list, null, 2)}\n`); } catch { /* best effort */ }
 }
 const failureRow = (ctx, c, o) => ({
   row: ctx.P.row, task_id: c.task, arm: c.arm, rep: c.rep, ...falseShape(c), model: o.model, pilot: ctx.pilot, runner: 'cc',
+  // a G4 cell that failed after the gate already blocked it still reports those blocks (information field; every judged boolean stays false)
+  ...(c.task === T.G4 ? { g4: { ...falseShape(c).g4, gate_blocks: Number.isInteger(o.gateBlocks) && o.gateBlocks > 0 ? o.gateBlocks : 0 } } : {}),
   runner_version: ctx.runnerVersion, session_id: o.sessionId || '', duration_s: o.durationS, cost_usd: o.cost,
   cost_turns: o.costTurns || [], ...(o.nestedAttempts !== undefined ? { nested_claude_attempts: o.nestedAttempts } : {}),
   ...(o.unaccounted !== undefined ? { unaccounted_sessions: o.unaccounted } : {}),
@@ -189,6 +263,7 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
   const t0 = Date.now();
   const cell = new Cell().init();
   const model = ctx.d0Model;
+  let snap = null;
   try {
     seedConfig(cell, ctx.srcConfigDir);
     const plugin = path.join(cell.root, 'plugin');
@@ -198,8 +273,10 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
     // zero-spend dispatch stub): the cell PATH starts with a wrapper that REFUSES (exit 97), runs nothing and records each attempt.
     const nestedLog = path.join(cell.root, '.d0gate', 'nested-attempts.log');
     fs.writeFileSync(nestedLog, '');
+    cell.pin({ worker: D0_WORKER[c.task] }); // the stub hand's mode is written into the cell's stub copy, not passed through the environment
     const bin = denyWrapper(cell);
-    const baseEnv = cellEnv(cell, { PATH: `${bin}:${process.env.PATH || ''}`, D0GATE_NESTED_LOG: nestedLog, D0GATE_WORKER: D0_WORKER[c.task] });
+    const baseEnv = cellEnv(cell, { PATH: `${bin}:${process.env.PATH || ''}`, D0GATE_NESTED_LOG: nestedLog });
+    snap = takeSnapshot(cell, 'd0');
     const prompts = TASKS.turns(c.task, ctx.P.invocation_prefix);
     const transcript = [];
     let sid = '';
@@ -271,48 +348,139 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
       ...(o.costUnknown ? { cost_unknown: true, cost_estimated: true } : {}),
       ...(c.arm === 'change' ? { arm_manifest_sha256: ctx.changeSha } : {}),
     };
-  } finally { cell.destroy(); }
+  } finally { noteIntegrity(cell, snap); cell.destroy(); }
 }
 
 // ---------------------------------------------------------------- G4 cell (real claude-native rail)
 // G4: the rail starts exactly one hand per dispatch, but a rail that started more than one for the same cell must still not pass the cell's
 // cap, so this wrapper adds up what the cell's earlier hand launches already reported (D0GATE_HAND_OUT) and gives each launch only what is
 // left (--max-budget-usd), refusing (exit 97) once nothing is. It also tees the envelope, because the rail prints no spend.
-function handWrapper(cell, realClaude) {
+const shq = (v) => `'${String(v).replace(/'/g, "'\\''")}'`;
+// ---- guarded file access for everything a wrapper writes or locks. ONE guard, used by every node program below (no single quote may appear in
+// any of them: they are embedded in single-quoted shell words). guardPath(root, target): the target is lexically inside the pinned cell
+// root; every level from the root down to the target's directory is lstat-checked (a symlink or a non-directory is refused);
+// realpath(dirname) must stay under realpath(root); the target itself, if it exists, must not be a symlink. openG/renameG/unlinkG/mkdirG
+// call it before every open, rename, unlink and mkdir, and the final component is opened with O_NOFOLLOW. Threat model: see the header of
+// this file (a swap between the check and the system call by a same-uid process is not preventable here; the post-cell scan catches it).
+const GUARD_JS = [
+  'const fs=require("fs"),path=require("path"); const C=fs.constants; const NF=C.O_NOFOLLOW;',
+  'const under=(p,b)=>p===b||p.startsWith(b+path.sep);',
+  'const guardPath=(root,target)=>{ const R=path.resolve(root), T=path.resolve(target); if (T===R || !under(T,R)) throw new Error("not inside the cell: "+T);',
+  '  const rr=fs.realpathSync(R); let cur=R;',
+  '  for (const part of path.relative(R,path.dirname(T)).split(path.sep).filter(Boolean)) { cur=path.join(cur,part); const st=fs.lstatSync(cur); if (st.isSymbolicLink() || !st.isDirectory()) throw new Error("not a plain directory: "+cur); }',
+  '  if (!under(fs.realpathSync(path.dirname(T)),rr)) throw new Error("resolves outside the cell: "+T);',
+  '  try { if (fs.lstatSync(T).isSymbolicLink()) throw new Error("is a symlink: "+T); } catch (e) { if (e.code!=="ENOENT") throw e; }',
+  '  return T; };',
+  'const openG=(root,target,flags,mode)=>fs.openSync(guardPath(root,target),flags|NF,mode);',
+  'const renameG=(root,a,b)=>{ guardPath(root,a); guardPath(root,b); fs.renameSync(a,b); };',
+  'const unlinkG=(root,f)=>{ guardPath(root,f); fs.unlinkSync(f); };',
+  'const mkdirG=(root,d)=>{ guardPath(root,d); try { fs.mkdirSync(d,448); } catch (e) { if (e.code!=="EEXIST") throw e; } const st=fs.lstatSync(d); if (st.isSymbolicLink() || !st.isDirectory()) throw new Error("not a plain directory: "+d); };',
+  'const readG=(root,f)=>{ const fd=openG(root,f,C.O_RDONLY); try { return fs.readFileSync(fd,"utf8"); } finally { fs.closeSync(fd); } };',
+  // writeAll: fs.writeSync may write only part of the buffer (a pipe, a signal); loop until everything is written; EAGAIN waits 5 ms and retries (at most 2000 times)
+  'const writeAll=(fd,data)=>{ const b=Buffer.isBuffer(data)?data:Buffer.from(String(data)); let o=0,t=0; while (o<b.length) { try { o+=fs.writeSync(fd,b,o,b.length-o); t=0; } catch (e) { if (e.code==="EAGAIN" && ++t<2000) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5); continue; } throw e; } } };',
+  'const appendG=(root,f,text)=>{ const fd=openG(root,f,C.O_WRONLY|C.O_APPEND|C.O_CREAT,384); try { if (text) writeAll(fd,text); } finally { fs.closeSync(fd); } };',
+].join(" ");
+// guard check only: exit 3 when any listed path fails the guard
+const GUARD_CHECK_JS = GUARD_JS + ' const [root,...ts]=process.argv.slice(1); try { for (const t of ts) guardPath(root,t); } catch (e) { process.stderr.write(String(e.message)+"\\n"); process.exit(3); }';
+// guarded append of one line (or, with empty text, just make sure the file can be opened safely)
+const APPEND_JS = GUARD_JS + ' const [root,f,text]=process.argv.slice(1); try { appendG(root,f,text?text+"\\n":""); } catch (e) { process.exit(3); }';
+// tee for the hand envelope: stdin to stdout, to OUT (append) and to PRIV (fresh); a target that fails the guard is dropped, stdout always flows
+const TEE_JS = GUARD_JS + [
+  ' const [root,out,priv]=process.argv.slice(1); const open=(t,fl)=>{ try { return openG(root,t,fl,384); } catch (e) { return -1; } };',
+  'let fo=open(out,C.O_WRONLY|C.O_APPEND|C.O_CREAT), fp=open(priv,C.O_WRONLY|C.O_CREAT|C.O_EXCL); const buf=Buffer.alloc(65536);',
+  'const drop=(what,e)=>{ try { appendG(root,path.join(root,".d0gate","copy-sessions.log"),"tee: dropped the "+what+" target after a write error: "+e.message+"\\n"); } catch (x) {} };',
+  'for (;;) { let n; try { n=fs.readSync(0,buf,0,buf.length,null); } catch (e) { if (e.code==="EAGAIN") continue; if (e.code==="EOF") break; throw e; } if (n<=0) break;',
+  '  try { writeAll(1,buf.subarray(0,n)); } catch (e) { process.stderr.write("tee: stdout write failed: "+e.message+"\\n"); process.exit(4); }',
+  '  if (fo>=0) { try { writeAll(fo,buf.subarray(0,n)); } catch (e) { drop("hand output",e); fs.closeSync(fo); fo=-1; } }',
+  '  if (fp>=0) { try { writeAll(fp,buf.subarray(0,n)); } catch (e) { drop("private copy",e); fs.closeSync(fp); fp=-1; } } }',
+].join(" ");
+// the reservation step (run under flock): how much budget is left; appends this launch reservation to RESV
+const RESERVE_JS = GUARD_JS + [
+  ' const [root,out,resv,budget,id]=process.argv.slice(1); const last=new Map();',
+  'let text; try { guardPath(root,resv); text=readG(root,out); } catch (e) { process.stdout.write("refuse"); process.exit(0); }',
+  'for (const l of text.split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) last.set(String(j.session_id), j.total_cost_usd); }',
+  'let s=0; for (const v of last.values()) s+=v;',
+  'let r=0; try { for (const l of readG(root,resv).split("\\n")) { const f=l.split(" "); if (f.length===2 && Number.isFinite(Number(f[1]))) r+=Number(f[1]); } } catch (e) { if (e.code!=="ENOENT") { process.stdout.write("refuse"); process.exit(0); } }',
+  'const rem=Number(budget)-s-r; if (rem<=0.0005) { process.stdout.write("refuse"); process.exit(0); }',
+  'const d=Number(process.env.D0GATE_WRAPPER_TEST_DELAY||0); if (d>0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,d*1000);',
+  'const amt=String(Number(rem.toFixed(4))); try { appendG(root,resv,id+" "+amt+"\\n"); } catch (e) { process.stdout.write("refuse"); process.exit(0); } process.stdout.write(amt);',
+].join(" ");
+// settlement (run under flock): drop this launch reservation from RESV only if PRIV carries a reported spend (a mention of the word elsewhere
+// is not a spend). The new RESV goes to the fixed name RESV.settle.tmp opened O_EXCL|O_NOFOLLOW (a planted file or link makes the settlement
+// fail, which keeps the reservation: the conservative side), then is renamed over RESV. PRIV is removed at the end.
+const SETTLE_JS = GUARD_JS + [
+  ' const [root,priv,resv,id,lock,out]=process.argv.slice(1); let code=0;',
+  'try { for (const p of [resv,lock,out]) guardPath(root,p);',
+  '  let ok=false; for (const l of readG(root,priv).split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) ok=true; }',
+  '  if (!ok) { code=1; } else {',
+  '    let keep=""; try { keep=readG(root,resv).split("\\n").filter((l)=>l && !l.startsWith(id+" ")).map((l)=>l+"\\n").join(""); } catch (e) { if (e.code!=="ENOENT") throw e; }',
+  '    const tmp=resv+".settle.tmp"; let fo; try { fo=openG(root,tmp,C.O_WRONLY|C.O_CREAT|C.O_EXCL,384); } catch (e) { if (e.code!=="EEXIST") throw e; if (!fs.lstatSync(tmp).isFile()) throw e; unlinkG(root,tmp); fo=openG(root,tmp,C.O_WRONLY|C.O_CREAT|C.O_EXCL,384); }',
+  '    try { writeAll(fo,keep); } finally { fs.closeSync(fo); } renameG(root,tmp,resv); }',
+  '} catch (e) { process.stderr.write(String(e.message)+"\\n"); code=3; }',
+  'try { unlinkG(root,priv); } catch (e) {} process.exit(code);',
+].join(" ");
+// The program the hand wrapper runs at exit to keep the hand own session files. Source config dir under <cell>/tmp, destination under the
+// cell root; every open, mkdir and the log go through the guard above (each existing destination level lstat-checked, files opened
+// O_NOFOLLOW, destination files O_CREAT|O_EXCL); each source file is re-validated (lstat + realpath) right before it is opened.
+// Best effort: the copy runs after the hand claude has exited. O_NOFOLLOW covers only the LAST path component; a middle directory
+// swapped by a still-running process between a check and the open is not preventable here and is caught by the post-cell symlink scan.
+const COPY_SESSIONS_JS = GUARD_JS + [
+  ' const [root,cfg,out,id]=process.argv.slice(1);',
+  'const log=(m)=>{ try { appendG(root,path.join(root,".d0gate","copy-sessions.log"),m+"\\n"); } catch (e) {} };',
+  'let rr; try { rr=fs.realpathSync(root); } catch (e) { process.exit(0); }',
+  'if (!cfg) process.exit(0);',
+  'try {',
+  '  if (fs.lstatSync(cfg).isSymbolicLink() || fs.lstatSync(path.join(cfg,"projects")).isSymbolicLink()) { log("skip: config dir or its projects is a symlink: "+cfg); process.exit(0); }',
+  '  const rc=fs.realpathSync(cfg), rp=fs.realpathSync(path.join(cfg,"projects")), ro=fs.realpathSync(path.dirname(out));',
+  '  if (!under(rc,path.join(rr,"tmp")) || !under(rp,rc)) { log("skip: config dir "+rc+" is not under the cell tmp "+path.join(rr,"tmp")); process.exit(0); }',
+  '  if (!under(ro,rr)) { log("skip: output dir "+ro+" is outside the cell "+rr); process.exit(0); }',
+  '  const top=path.join(path.dirname(path.resolve(out)),path.basename(out)+".sessions"); mkdirG(root,top); const dst=path.join(top,id); mkdirG(root,dst);',
+  '  const one=(a,b)=>{ const st=fs.lstatSync(a); if (!st.isFile()) { log("skip not a plain file: "+a); return; } if (!under(fs.realpathSync(a),rp)) { log("skip source outside projects: "+a); return; }',
+  '    const fi=openG(root,a,C.O_RDONLY); try { const fo=openG(root,b,C.O_WRONLY|C.O_CREAT|C.O_EXCL,384); try { const buf=Buffer.alloc(65536); let n; while ((n=fs.readSync(fi,buf,0,buf.length,null))>0) writeAll(fo,buf.subarray(0,n)); } finally { fs.closeSync(fo); } } finally { fs.closeSync(fi); } };',
+  '  const w=(s,d)=>{ for (const e of fs.readdirSync(s,{withFileTypes:true})) { const a=path.join(s,e.name), b=path.join(d,e.name); if (e.isSymbolicLink()) { log("skip symlink: "+a); continue; } if (e.isDirectory()) { mkdirG(root,b); w(a,b); } else if (e.isFile()) { try { one(a,b); } catch (err) { log("skip "+a+": "+err.message); } } } };',
+  '  w(rp,dst);',
+  '} catch (e) { log("skip: "+e.message); }',
+].join(" ");
+
+function handWrapper(cell, realClaude, opts = {}) {
   const bin = path.join(cell.root, 'bin');
   fs.mkdirSync(bin, { recursive: true });
+  // OUT (the tee target; LOCK, RESV and PRIV are derived from it) and BUDGET are fixed when the wrapper is written, like ROOT; an environment
+  // value that differs is ignored and noted in <cell>/.d0gate/copy-sessions.log. OUT must be inside the cell.
+  const out = path.resolve(opts.out || path.join(cell.root, '.d0gate', 'hand-out.json'));
+  if (!(out === path.resolve(cell.root) || out.startsWith(path.resolve(cell.root) + path.sep))) throw new Error(`d0gate: the hand output file ${out} is outside the cell ${cell.root}`);
+  const budget = opts.budget === undefined || opts.budget === null ? '' : String(opts.budget);
   // Everything between "read what is spent and reserved" and "write my reservation" runs under one flock, so two launches at the same time
   // cannot both see the same remaining budget. The reservation is settled after the run: dropped when the launch reported a spend (that
-  // spend is then in D0GATE_HAND_OUT, which the tee fills live so a killed launch still leaves its envelope), kept when it did not.
-  const reserve = [
-    'const fs=require("fs"); const [out,resv,budget,id]=process.argv.slice(1); const last=new Map();',
-    'for (const l of fs.readFileSync(out,"utf8").split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) last.set(String(j.session_id), j.total_cost_usd); }',
-    'let s=0; for (const v of last.values()) s+=v;',
-    'let r=0; try { for (const l of fs.readFileSync(resv,"utf8").split("\\n")) { const f=l.split(" "); if (f.length===2 && Number.isFinite(Number(f[1]))) r+=Number(f[1]); } } catch {}',
-    'const rem=Number(budget)-s-r; if (rem<=0.0005) { process.stdout.write("refuse"); process.exit(0); }',
-    'const d=Number(process.env.D0GATE_WRAPPER_TEST_DELAY||0); if (d>0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,d*1000);',
-    'const amt=String(Number(rem.toFixed(4))); fs.appendFileSync(resv, id+" "+amt+"\\n"); process.stdout.write(amt);',
-  ].join(' ');
-  // settlement uses the same test as the reservation step: a line of type result carrying a finite total_cost_usd (a mention of the word elsewhere is not a spend)
-  const settled = [
-    'const fs=require("fs"); let ok=false;',
-    'for (const l of fs.readFileSync(process.argv[1],"utf8").split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) ok=true; }',
-    'process.exit(ok?0:1);',
-  ].join(' ');
+  // spend is then in OUT, which the tee fills live so a killed launch still leaves its envelope), kept when it did not.
   fs.writeFileSync(path.join(bin, 'claude'), [
     '#!/bin/bash',
-    `REAL='${realClaude.replace(/'/g, "'\\''")}'`,
+    `REAL=${shq(realClaude)}`,
+    `ROOT=${shq(cell.root)}`, // fixed when the wrapper is written; no environment value decides what may be written or copied
+    `OUT=${shq(out)}`,
+    `BUDGET=${shq(budget)}`,
+    `note() { node -e '${APPEND_JS}' "$ROOT" "$ROOT/.d0gate/copy-sessions.log" "$1" 2>/dev/null; return 0; }`,
+    'if [ -n "${D0GATE_HAND_OUT:-}" ] && [ "$D0GATE_HAND_OUT" != "$OUT" ]; then note "ignored environment value D0GATE_HAND_OUT=$D0GATE_HAND_OUT"; fi',
+    'if [ -n "${D0GATE_HAND_BUDGET:-}" ] && [ "$D0GATE_HAND_BUDGET" != "$BUDGET" ]; then note "ignored environment value D0GATE_HAND_BUDGET=$D0GATE_HAND_BUDGET"; fi',
     'args=("$@")',
-    'if [ -n "${D0GATE_HAND_BUDGET:-}" ]; then',
-    '  if [ -z "${D0GATE_HAND_OUT:-}" ]; then echo "d0gate: D0GATE_HAND_BUDGET is set but D0GATE_HAND_OUT is not set; refusing to start claude" >&2; exit 97; fi',
-    '  LOCK="$D0GATE_HAND_OUT.lock"; RESV="$D0GATE_HAND_OUT.resv"; PRIV="$D0GATE_HAND_OUT.$$"; ID="$$"',
-    '  : >>"$D0GATE_HAND_OUT"',
-    `  rem="$( ( flock 9; node -e '${reserve}' "$D0GATE_HAND_OUT" "$RESV" "$D0GATE_HAND_BUDGET" "$ID" ) 9>"$LOCK" )"`,
+    'if [ -n "$BUDGET" ]; then',
+    '  LOCK="$OUT.lock"; RESV="$OUT.resv"; PRIV="$OUT.$$"; ID="$$"',
+    `  if ! node -e '${GUARD_CHECK_JS}' "$ROOT" "$OUT" "$LOCK" "$RESV" "$PRIV" 2>/dev/null; then note "refused to start: the hand output paths failed the cell guard"; echo "d0gate: the hand output paths are not plain files inside the cell; refusing to start claude" >&2; exit 97; fi`,
+    `  node -e '${APPEND_JS}' "$ROOT" "$OUT" "" 2>/dev/null || { echo "d0gate: cannot open the hand output file safely; refusing to start claude" >&2; exit 97; }`,
+    // the rail seeds its own CLAUDE_CONFIG_DIR for the hand (a mkdtemp under $TMPDIR, which the runner points at <cell>/tmp) and removes it on exit:
+    // keep the hand own session files (its tool trajectory) before that; see COPY_SESSIONS_JS for what is checked
+    `  copy_sessions() { node -e '${COPY_SESSIONS_JS}' "$ROOT" "${'$'}{CLAUDE_CONFIG_DIR:-}" "$OUT" "$ID" 2>/dev/null; return 0; }`,
+    '  trap copy_sessions EXIT; trap "exit 143" TERM INT HUP',
+    `  rem="$( ( flock 9; node -e '${RESERVE_JS}' "$ROOT" "$OUT" "$RESV" "$BUDGET" "$ID" ) 9<>"$LOCK" )"`,
     '  if [ "$rem" = refuse ] || [ -z "$rem" ]; then echo "d0gate: the cell budget is spent or reserved; refusing to start another claude" >&2; exit 97; fi',
     '  args+=(--max-budget-usd "$rem")',
-    '  "$REAL" "${args[@]}" | tee -a "$D0GATE_HAND_OUT" "$PRIV"; code="${PIPESTATUS[0]}"',
-    `  ( flock 9; if node -e '${settled}' "$PRIV"; then grep -v "^$ID " "$RESV" >"$RESV.tmp"; mv "$RESV.tmp" "$RESV"; fi ) 9>"$LOCK"`,
-    '  rm -f "$PRIV"; exit "$code"',
+    `  "$REAL" "\${args[@]}" | node -e '${TEE_JS}' "$ROOT" "$OUT" "$PRIV"; code="\${PIPESTATUS[0]}"`,
+    // before the lock is opened again, LOCK and the directories above it are checked once more; a failure skips the settlement and keeps the reservation
+    `  if node -e '${GUARD_CHECK_JS}' "$ROOT" "$LOCK" "$RESV" "$OUT" "$PRIV" 2>/dev/null; then`,
+    `    ( flock 9; node -e '${SETTLE_JS}' "$ROOT" "$PRIV" "$RESV" "$ID" "$LOCK" "$OUT" 2>/dev/null ) 9<>"$LOCK"; rc=$?`,
+    '    if [ "$rc" != 0 ] && [ "$rc" != 1 ]; then note "settlement skipped (exit $rc), the reservation is kept"; fi',
+    '  else note "settlement skipped: the lock path failed the cell guard, the reservation is kept"; fi',
+    '  exit "$code"',
     'fi',
     'exec "$REAL" "${args[@]}"',
     '',
@@ -323,9 +491,11 @@ function handWrapper(cell, realClaude) {
 function denyWrapper(cell) {
   const bin = path.join(cell.root, 'bin-deny');
   fs.mkdirSync(bin, { recursive: true });
+  const nested = path.join(cell.root, '.d0gate', 'nested-attempts.log');
   fs.writeFileSync(path.join(bin, 'claude'), [
     '#!/bin/bash',
-    'echo "attempt: $*" >>"$D0GATE_NESTED_LOG"',
+    // the log path and the cell root are written into the wrapper with the cell; the append goes through the same guard as every wrapper write
+    `node -e '${APPEND_JS}' ${shq(cell.root)} ${shq(nested)} "attempt: $*" 2>/dev/null`,
     'echo "d0gate: a depth-0 cell may not start claude; refused (the attempt is recorded)" >&2',
     'exit 97',
     '',
@@ -356,13 +526,14 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
   const t0 = Date.now();
   const cell = new Cell().init();
   const model = ctx.g4Model;
+  let snap = null;
   try {
     seedConfig(cell, ctx.srcConfigDir);
     // the owner's one-time claude-native confirmation (the rail refuses without it); only that key is carried into the cell HOME
     fs.mkdirSync(path.join(cell.home, '.autopilot'), { recursive: true });
     fs.writeFileSync(path.join(cell.home, '.autopilot', 'config.json'), `${JSON.stringify({ implementer_claude_native: { confirmed_at: ctx.confirmedAt } })}\n`);
-    const bin = handWrapper(cell, ctx.realClaude);
     const handOut = path.join(cell.root, '.d0gate', 'hand-out.json');
+    const bin = handWrapper(cell, ctx.realClaude, { out: handOut, budget });
     fs.writeFileSync(handOut, '');
     const promptFile = path.join(cell.root, 'hand-prompt.txt');
     fs.writeFileSync(promptFile, TASKS.handPrompt());
@@ -371,7 +542,8 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     const branch = `d0g/g4-${c.arm}-${c.rep}`;
     const argv = ['--runner', 'claude-native', '--model', model, '--prompt-file', promptFile, '--context-window', 'off', '--base', cell.baseSha,
       '--branch', branch, '--timeout', ctx.P.cc.hand_timeout, ...(on ? ['--gate-rules', rules] : [])];
-    const env = cellEnv(cell, { PATH: `${bin}:${process.env.PATH || ''}`, D0GATE_HAND_OUT: handOut, D0GATE_HAND_BUDGET: String(budget) });
+    const env = cellEnv(cell, { PATH: `${bin}:${process.env.PATH || ''}` });
+    snap = takeSnapshot(cell, 'g4');
     const r = cp.spawnSync('timeout', ['--kill-after=30', String(ctx.P.cc.hand_outer_timeout_s), 'bash', ctx.railScript, ...argv],
       { cwd: cell.repo, env, encoding: 'utf8', maxBuffer: 1 << 28 });
     const exit = r.status === null ? 137 : r.status;
@@ -387,8 +559,10 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     // A hand the rail timed out may have spent after the last number it reported, and nothing measures that: its cell is charged the whole ceiling.
     const timedOut = env0.timed_out === true;
     const known = sum.costKnown && exit !== 124 && exit !== 137 && !timedOut;
-    const o = { model, sessionId: session, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number(sum.total.toFixed(6)) : ceiling, costUnknown: !known, costTurns: [Number(sum.total.toFixed(6))] };
-    const keep = () => keepCopy(keepDir, cell, { 'hand-out.json': handOut });
+    // block records of the gated sessions in the cell (ON arm only; the OFF arm has no gated session)
+    const gateBlocks = on ? Object.values(facts0.hook).reduce((a, recs) => a + recs.filter((r) => r.decision === 'block').length, 0) : 0;
+    const o = { model, sessionId: session, gateBlocks, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number(sum.total.toFixed(6)) : ceiling, costUnknown: !known, costTurns: [Number(sum.total.toFixed(6))] };
+    const keep = () => keepCopy(keepDir, cell, { 'hand-out.json': handOut, 'hand-prompt.txt': promptFile });
     if (keepDir) { fs.mkdirSync(keepDir, { recursive: true }); fs.writeFileSync(path.join(keepDir, 'rail-stdout.json'), out); fs.writeFileSync(path.join(keepDir, 'rail-stderr.log'), errText); }
     const fail = (cls, cause, detail) => { keep(); return failureRow(ctx, c, { ...o, cls, cause, detail }); };
     if (exit === 124 || exit === 137) return fail('infra_fail', 'runner_timeout', 'outer timeout');
@@ -422,7 +596,12 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     // derived ledger: one accepted dispatch, its arm state, its result (only status committed is a done worker)
     const lf = path.join(cell.root, '.d0gate', 'ledger.jsonl');
     const ts = Date.now();
-    const w = (o2) => fs.appendFileSync(lf, `${JSON.stringify(o2)}\n`);
+    // the cell has been running a model: .d0gate must still be a plain directory (the post-cell scan flags the cell otherwise) and the ledger is opened O_NOFOLLOW
+    const w = (o2) => {
+      try { const st = fs.lstatSync(path.join(cell.root, '.d0gate')); if (st.isSymbolicLink() || !st.isDirectory()) return; } catch { return; }
+      let fd; try { fd = fs.openSync(lf, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600); } catch { return; }
+      try { fs.writeFileSync(fd, `${JSON.stringify(o2)}\n`); } finally { fs.closeSync(fd); }
+    };
     w({ kind: 'call', ts, n: 1, accepted: true, argv: JSON.stringify(['bash', ctx.railScript, ...argv]), cwd: cell.repo, repo: cell.repo, runner: 'claude-native',
       gate_rules_flag: on, gate_rules_file: on ? rules : '', rules_copy: '', rules_sha: '', base_sha: cell.baseSha, session });
     w({ kind: 'arm', ts, n: 1, armed: on && sessions.length > 0 });
@@ -438,15 +617,23 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
       ...(timedOutAfterBlock ? { failure_cause: 'timed_out_after_gate_block' } : {}),
       ...(o.costUnknown ? { cost_unknown: true, cost_estimated: true } : {}),
     };
-  } finally { cell.destroy(); }
+  } finally { noteIntegrity(cell, snap); cell.destroy(); }
 }
 
 // runCell(ctx, c, ceiling, budget, keepDir) -> a row (always complete in shape)
 function runCell(ctx, c, ceiling, budget, keepDir) {
-  const row = c.task === T.G4 ? runG4(ctx, c, ceiling, budget, keepDir) : runD0(ctx, c, ceiling, budget, keepDir);
+  integrityBreak = null;
+  let row = c.task === T.G4 ? runG4(ctx, c, ceiling, budget, keepDir) : runD0(ctx, c, ceiling, budget, keepDir);
+  if (integrityBreak && (integrityBreak.changed.length || integrityBreak.symlinks.length || integrityBreak.scanErrors.length)) { // the cell changed a harness file or left a symlink in the artifacts: infra, not scored, the spend it caused is kept
+    const only = integrityBreak.changed.length === 0 && integrityBreak.scanErrors.length === 0;
+    row = failureRow(ctx, c, { model: row.model, sessionId: row.session_id, durationS: row.duration_s, cost: row.cost_usd, costTurns: row.cost_turns,
+      nestedAttempts: row.nested_claude_attempts, unaccounted: row.unaccounted_sessions, skillObserved: row.skill_invoked_observed, gateBlocks: row.g4 && row.g4.gate_blocks,
+      costUnknown: row.cost_unknown === true, cls: 'harness_modified', cause: integrityBreak.scanErrors.length ? 'scan_error' : only ? 'symlink_in_artifacts' : 'harness_modified',
+      detail: [integrityBreak.changed.length ? `changed or removed: ${integrityBreak.changed.slice(0, 5).join(', ')}` : '', integrityBreak.symlinks.length ? `symlink_in_artifacts: ${integrityBreak.symlinks.slice(0, 5).join(', ')}` : '', integrityBreak.scanErrors.length ? `scan_error: ${integrityBreak.scanErrors.slice(0, 5).join(', ')}` : ''].filter(Boolean).join('; ') });
+  }
   const probs = shapeProblems(row);
   if (probs.length) throw new Error(`cc runner produced an incomplete row for ${c.task}|${c.arm}|${c.rep}: ${probs.join(', ')}`);
   return row;
 }
 
-module.exports = { blockedTimeoutApplies, handWrapper, denyWrapper, runCell, shapeProblems, summary, classify, falseShape, whichClaude, REPO_ROOT, D0_MARKER };
+module.exports = { COPY_SESSIONS_JS, TEE_JS, GUARD_JS, takeSnapshot, snapshotBreaks, symlinksIn, blockedTimeoutApplies, handWrapper, denyWrapper, runCell, shapeProblems, summary, classify, falseShape, whichClaude, REPO_ROOT, D0_MARKER };

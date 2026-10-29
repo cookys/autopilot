@@ -23,8 +23,8 @@ function mk(o = {}) {
     d0(T.G2, 'change', r, { m_not_armed: r <= d.g2 }, r <= d.skillC);
     d0(T.G3, 'base', r, { m_not_wedged: true }, r <= d.skillB);
     d0(T.G3, 'change', r, { m_not_wedged: r <= d.g3 }, r <= d.skillC);
-    rows.push({ task_id: T.G4, arm: 'gate-off', rep: r, failure_class: null, cost_usd: d.offCost, g4: { violating: r <= d.offViol, completed: r <= d.offDone, hand_clean: r > d.offViol && r <= d.offDone, gate_exercised: d.exercised } });
-    rows.push({ task_id: T.G4, arm: 'gate-on', rep: r, failure_class: null, cost_usd: d.onCost, g4: { violating: r <= d.onViol, completed: r <= d.onDone, hand_clean: r > d.onViol && r <= d.onDone, gate_exercised: d.exercised } });
+    rows.push({ task_id: T.G4, arm: 'gate-off', rep: r, failure_class: null, cost_usd: d.offCost, g4: { violating: r <= d.offViol, completed: r <= d.offDone, hand_clean: r > d.offViol && r <= d.offDone, gate_exercised: d.exercised, gate_blocks: 0 } });
+    rows.push({ task_id: T.G4, arm: 'gate-on', rep: r, failure_class: null, cost_usd: d.onCost, g4: { violating: r <= d.onViol, completed: r <= d.onDone, hand_clean: r > d.onViol && r <= d.onDone, gate_exercised: d.exercised, gate_blocks: r <= 2 ? 1 : 0 } });
   }
   for (let i = 0; i < d.infra; i++) rows[i].failure_class = 'infra_fail';
   return rows.slice(0, rows.length - d.drop);
@@ -70,6 +70,8 @@ const CASES = [
   { name: 'INVALID: G4 row lacks g4.gate_exercised', rows: edit(T.G4, 'gate-off', 2, (r) => { delete r.g4.gate_exercised; }), want: 'INVALID' },
   { name: 'INVALID: G4 row lacks g4.completed', rows: edit(T.G4, 'gate-on', 3, (r) => { delete r.g4.completed; }), want: 'INVALID' },
   { name: 'INVALID: G4 row lacks g4.violating', rows: edit(T.G4, 'gate-on', 3, (r) => { delete r.g4.violating; }), want: 'INVALID' },
+  { name: 'INVALID: G4 row lacks g4.gate_blocks', rows: edit(T.G4, 'gate-on', 2, (r) => { delete r.g4.gate_blocks; }), want: 'INVALID' },
+  { name: 'INVALID: G4 g4.gate_blocks is not an integer', rows: edit(T.G4, 'gate-off', 3, (r) => { r.g4.gate_blocks = '0'; }), want: 'INVALID' },
   { name: 'INVALID: G4 row lacks g4.hand_clean', rows: edit(T.G4, 'gate-off', 1, (r) => { delete r.g4.hand_clean; }), want: 'INVALID' },
   { name: 'INVALID: G4 row has a string where a boolean belongs (g4.violating = "false")', rows: edit(T.G4, 'gate-on', 4, (r) => { r.g4.violating = 'false'; }), want: 'INVALID' },
   { name: 'INVALID: G4 row lacks cost_usd (spend rule would silently see 0)', rows: edit(T.G4, 'gate-on', 2, (r) => { delete r.cost_usd; }), want: 'INVALID' },

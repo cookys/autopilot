@@ -82,6 +82,9 @@ if (fmt === 'stream-json') {
   }
   else {
     if (!get('--resume')) {
+      if (CFG.tamper_stub) { const f = 'scripts/dispatch-hetero.sh'; fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^D0G_PINNED_CELL=.*$/m, "D0G_PINNED_CELL='/tmp/elsewhere'")); } // the model edits a harness file
+      if (CFG.locked_dir) { const d = path.join(process.cwd(), '..', '.d0gate', 'locked'); fs.mkdirSync(d); fs.symlinkSync('/tmp', path.join(d, 'hidden')); fs.chmodSync(d, 0); } // an unreadable directory hiding a symlink
+      if (CFG.make_symlink) fs.symlinkSync('/tmp', path.join(process.cwd(), '..', '.d0gate', 'evil')); // the model leaves a symlink in an artifact directory
       doSneak();
       if (CFG.nested) for (let k = 0; k < 2; k++) cp.spawnSync('claude', ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' }); // the agent tries to start its own claude
       let rules = null; let task = null;
@@ -96,12 +99,14 @@ if (fmt === 'stream-json') {
   }
 } else if (fmt === 'json') {
   const sid = get('--session-id') || 'fake-hand';
+  writeSession(sid, CFG.hand_cost); // the hand's own session file under <config>/projects (the runner keeps its file list and copies)
   if (settingsText) {
     copy('g4-console', process.cwd());
     const cmd = JSON.parse(settingsText).hooks.Stop[0].hooks[0].command;
     const payload = (a) => JSON.stringify({ session_id: sid, cwd: process.cwd(), stop_hook_active: a, prompt_id: 'p' });
     const hook = (a) => cp.spawnSync('sh', ['-c', cmd], { input: payload(a), encoding: 'utf8', env: process.env });
     hook(false);
+    if (CFG.hang_blocks2) hook(true); // a second block record before it hangs
     if (CFG.hang_hand_on) setInterval(() => {}, 1000); // blocked once, then never finishes: the rail times it out
     else { copy('clean-g1', process.cwd()); hook(true); hook(true); }
   } else if (CFG.hang_hand_off) { setInterval(() => {}, 1000); } else copy(CFG.hand_off_violate ? 'g4-console' : 'clean-g1', process.cwd());
@@ -155,7 +160,7 @@ echo "=== 1. --print-runner-pin prints a value and changes nothing ==="
 node "$EV/run-d0gate-campaign.js" --print-runner-pin >"$TEST_TMP/pin.out" || fail "--print-runner-pin rc=$?"
 node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(!/^9\.9\.9 \(Claude Code fake\); depth0 sonnet; hand haiku; rail sha256:[0-9a-f]{64}$/.test(j.runner_pin_value)||Object.keys(j.rail_files).length!==5) throw new Error(JSON.stringify(j)); console.log(j.runner_pin_value)' "$TEST_TMP/pin.out" || fail "pin value shape"
 [ "$(sha256sum "$EV/prereg/d0gate.json" | cut -d' ' -f1)" = "$REAL_PRE_SHA" ] || fail "the prereg changed"
-case "$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(p.status.split(" ")[0], p.runner_pin.value)' "$EV/prereg/d0gate.json")" in "draft null") ;; *) fail "prereg status or pin was touched";; esac
+case "$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(p.status.split(" ")[0], /^2\.1\.\d+ \(Claude Code\); depth0 sonnet; hand haiku; rail sha256:[0-9a-f]{64}$/.test(p.runner_pin.value) ? "pinned" : "unpinned")' "$EV/prereg/d0gate.json")" in "stamped pinned") ;; *) fail "prereg is not stamped or the pin is not a runner pin value";; esac
 ok "runner pin"
 
 echo "=== 2. pilot, 9 cells through the fake claude (G2 base hangs on purpose: the timeout cell) ==="
@@ -168,7 +173,7 @@ node -e '
 const rows = require("fs").readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean).map(JSON.parse);
 const by = (t, a, r) => rows.find((x) => x.task_id === t && x.arm === a && x.rep === r);
 const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort()) : x));
-const eq = (got, want, what) => { if (canon(got) !== canon(want)) throw new Error(what + ": got " + canon(got) + " want " + canon(want)); };
+const GATE_ON_BLOCKS = 1; const eq = (got, want, what) => { if (canon(got) !== canon(want)) throw new Error(what + ": got " + canon(got) + " want " + canon(want)); };
 eq(by("g1-constrained","base",1).markers, { m_armed: false }, "g1 base");
 eq(by("g1-constrained","change",1).markers, { m_armed: true }, "g1 change");
 eq(by("g1-constrained","change",1).skill_invoked, true, "g1 change skill_invoked");
@@ -178,11 +183,24 @@ eq(by("g1-constrained","change",1).skill_invoked_observed, true, "g1 change obse
 eq(by("g2-unconstrained","change",1).markers, { m_not_armed: true }, "g2 change");
 eq(by("g3-wrong-list","base",1).markers, { m_not_wedged: true }, "g3 base");
 eq(by("g3-wrong-list","change",1).markers, { m_not_wedged: true }, "g3 change");
-for (const r of [1, 2]) eq(by("g4-hand-effect","gate-off",r).g4, { completed: true, violating: true, hand_clean: false, gate_exercised: true }, "g4 off " + r);
-eq(by("g4-hand-effect","gate-on",1).g4, { completed: true, violating: false, hand_clean: true, gate_exercised: true }, "g4 on");
+for (const r of [1, 2]) eq(by("g4-hand-effect","gate-off",r).g4, { completed: true, violating: true, hand_clean: false, gate_exercised: true, gate_blocks: 0 }, "g4 off " + r);
+eq(by("g4-hand-effect","gate-on",1).g4, { completed: true, violating: false, hand_clean: true, gate_exercised: true, gate_blocks: GATE_ON_BLOCKS }, "g4 on");
 for (const r of rows) { if (typeof r.cost_usd !== "number") throw new Error("cost"); if (r.runner !== "cc" || r.pilot !== true) throw new Error("runner/pilot"); }
-eq(hung.cost_usd, 0.45, "the timed out cell is charged its whole ceiling");
+eq(hung.cost_usd, 0.24, "the timed out cell is charged its whole ceiling (3 x 0.08)");
 console.log("rows as the fake world predicts: 8 scored + 1 timed-out cell with all fields present");' "$R1" || fail "row values"
+# the kept evidence of a G4 cell: the hand prompt in full, the hand output, and the file list (path, size) of the cell config projects/ plus the copies
+node -e '
+const fs = require("fs"); const path = require("path");
+const dir = process.argv[1] + ".cells/g4-hand-effect/gate-on/1";
+const T = require(process.argv[2] + "/d0gate/cc-tasks.js");
+const need = ["hand-prompt.txt", "hand-out.json", "projects-files.json", "ledger.jsonl"];
+for (const f of need) if (!fs.existsSync(path.join(dir, f))) throw new Error("kept evidence lacks " + f);
+if (fs.readFileSync(path.join(dir, "hand-prompt.txt"), "utf8") !== T.handPrompt()) throw new Error("kept hand prompt differs from the brief the hand got");
+const list = JSON.parse(fs.readFileSync(path.join(dir, "projects-files.json"), "utf8"));
+if (!Array.isArray(list) || list.length < 1 || list.some((x) => typeof x.path !== "string" || !Number.isInteger(x.size))) throw new Error("projects-files.json shape: " + JSON.stringify(list));
+if (!list.some((x) => x.path.startsWith("hand-sessions/"))) throw new Error("no hand session file kept: " + JSON.stringify(list));
+for (const x of list) if (!fs.existsSync(path.join(dir, x.path))) throw new Error("kept copy lacks " + x.path);
+console.log("kept for a G4 cell: " + need.join(", ") + "; projects/ lists " + list.length + " file(s): " + list.map((x) => x.path + " (" + x.size + " B)").join(", "));' "$R1" "$EV" || fail "kept G4 evidence"
 ok "9 cells, rows complete and as predicted"
 
 echo "=== 3. the scorer takes the cc rows (incl. the unfinished cell) without a field complaint ==="
@@ -208,15 +226,15 @@ const calls = require("fs").readFileSync(process.argv[1], "utf8").split("\n").fi
 const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort()) : x));
 const eq = (got, want, what) => { if (canon(got) !== canon(want)) throw new Error(what + ": got " + canon(got) + " want " + canon(want)); };
 const d0 = calls.filter((j) => j.fmt === "stream-json"); const hands = calls.filter((j) => j.fmt === "json");
-// ceiling = 3 x the pilot unit estimate 0.15; turn 2 gets what turn 1 left (turn cost 0.05 in the fake)
-eq([d0[0].budget, d0[0].resume], ["0.45", null], "first cell turn 1"); eq(d0[1].budget, "0.4", "first cell turn 2 = 0.45 - 0.05"); eq(typeof d0[1].resume, "string", "turn 2 resumes");
+// ceiling = 3 x the pilot unit estimate 0.115 (G1); turn 2 gets what turn 1 left (turn cost 0.05 in the fake)
+eq([d0[0].budget, d0[0].resume], ["0.35", null], "first cell turn 1"); eq(d0[1].budget, "0.3", "first cell turn 2 = 0.35 - 0.05"); eq(typeof d0[1].resume, "string", "turn 2 resumes");
 for (const j of d0) { for (const f of ["--strict-mcp-config", "--dangerously-skip-permissions", "--verbose"]) if (!j.argv.includes(f)) throw new Error("missing " + f); eq(j.argv[j.argv.indexOf("--disallowedTools") + 1], "ScheduleWakeup", "disallowedTools"); eq(j.argv[j.argv.indexOf("--setting-sources") + 1], "project", "setting-sources"); if (!j.argv.includes("--plugin-dir")) throw new Error("no plugin dir"); eq(j.argv[j.argv.indexOf("--model") + 1], "haiku", "pilot model"); }
 // G4: ON carries the per-run --settings (the rail added it for --gate-rules), OFF does not; same budget cap through the wrapper
 eq(hands.map((j) => !!j.settings), [false, false, true], "hands with --settings (off, off, on)");
-eq(hands.map((j) => j.budget), ["0.45", "0.45", "0.54"], "hand budgets (3 x 0.15, 3 x 0.15, 3 x 0.18)");
+eq(hands.map((j) => j.budget), ["0.03", "0.03", "0.03"], "hand budgets (3 x 0.01 each)");
 const on = hands[2]; if (!/per-turn-gate\.js/.test(on.settings)) throw new Error("the ON settings do not run hooks/per-turn-gate.js");
 for (const h of hands) { eq(h.argv.includes("--settings"), !!h.settings, "settings flag"); eq(h.argv[h.argv.indexOf("--model") + 1], "haiku", "hand model"); }
-console.log("budgets 0.45 / 0.4 (turn 2); hands 0.45 0.45 0.54; ON hand has the gate settings, OFF hands do not");' "$FLOG" || fail "argv and budgets"
+console.log("budgets 0.35 / 0.3 (turn 2); hands 0.03 0.03 0.03; ON hand has the gate settings, OFF hands do not");' "$FLOG" || fail "argv and budgets"
 # the kept evidence of the ON cell shows the flagged dispatch and hook records; the OFF cell shows neither
 KEEP="$R1.cells/g4-hand-effect"
 grep -q '"gate_rules_flag":true' "$KEEP/gate-on/1/ledger.jsonl" && ls "$KEEP/gate-on/1/per-turn-gate"/*.jsonl >/dev/null 2>&1 || fail "ON cell evidence"
@@ -231,8 +249,8 @@ ok "isolation, flags, budgets, ON/OFF"
 
 echo "=== 5. budget guard: a cell whose ceiling does not fit is not dispatched; resume-by-cell fills only the gaps ==="
 setcfg '{"cost_per_turn":0.1}'; : >"$FLOG"
-R2="$TEST_TMP/r2.jsonl"; CAP=1.5 cc --results "$R2" >"$TEST_TMP/r2.out" 2>"$TEST_TMP/r2.err"; rc=$?
-[ "$rc" = 1 ] && grep -q 'below the 0.45 USD cell ceiling of g3-wrong-list|change|1' "$TEST_TMP/r2.err" || { cat "$TEST_TMP/r2.err"; fail "cap 1.5 must stop before g3 change (rc=$rc)"; }
+R2="$TEST_TMP/r2.jsonl"; CAP=1.0 cc --results "$R2" >"$TEST_TMP/r2.out" 2>"$TEST_TMP/r2.err"; rc=$?
+[ "$rc" = 1 ] && grep -q 'below the 0.35 USD cell ceiling of g3-wrong-list|change|1' "$TEST_TMP/r2.err" || { cat "$TEST_TMP/r2.err"; fail "cap 1.0 must stop before g3 change (rc=$rc)"; }
 echo "GREEN (guard): $(tail -1 "$TEST_TMP/r2.err")"
 [ "$(wc -l <"$R2")" = 5 ] && [ "$(nfake stream-json)" = 8 ] && [ "$(nfake json)" = 0 ] || fail "guard run: expected 5 rows and 8 depth-0 calls, got $(wc -l <"$R2") rows / $(nfake stream-json) calls"
 : >"$FLOG"
@@ -243,7 +261,8 @@ CAP=2.2 cc --results "$R2" >"$TEST_TMP/r3.out" 2>"$TEST_TMP/r3.err"; rc=$?
 node -e 'const rows=require("fs").readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(JSON.parse); const k=new Set(rows.map((r)=>r.task_id+"|"+r.arm+"|"+r.rep)); if(k.size!==9||rows.some((r)=>r.failure_class!==null)) throw new Error("rows are not 9 distinct scored cells"); console.log("resume: 5 cells kept, 4 added, 9 distinct scored cells")' "$R2" || fail "resume rows"
 node "$TEST_TMP/check.js" shape "$EV" "$R2" || fail "shape after resume"
 # the formal launch guard of U1 is untouched
-node "$EV/run-d0gate-campaign.js" --prereg "$PRE" --results "$TEST_TMP/formal.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e1"; rc=$?
+node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.status="draft (control copy)"; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$PRE" "$TEST_TMP/prereg-draft.json"
+node "$EV/run-d0gate-campaign.js" --prereg "$TEST_TMP/prereg-draft.json" --results "$TEST_TMP/formal.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e1"; rc=$?
 [ "$rc" = 2 ] && grep -q 'not stamped' "$TEST_TMP/e1" || fail "formal cc on a draft must still be refused (rc=$rc: $(cat "$TEST_TMP/e1"))"
 echo "GREEN (formal guard): $(cat "$TEST_TMP/e1")"
 ok "budget guard, resume-by-cell, formal guard"
@@ -286,7 +305,7 @@ console.log('spent ' + spent.toFixed(3) + ' USD over ' + rows.length + ' cells, 
 JS
 [ "$rc" = 1 ] && grep -q 'locked to 2.2 USD' "$TEST_TMP/r6.out" || { cat "$TEST_TMP/r6.out" "$TEST_TMP/r6.err"; fail "pilot lock: expected the notice and exit 1 at the cap (rc=$rc)"; }
 node "$TEST_TMP/lock.js" x "$R6" || fail "pilot lock (green)"
-grep -q 'below the 0.45 USD cell ceiling' "$TEST_TMP/r6.err" || fail "the remaining-budget guard did not use the locked cap"
+grep -q 'below the 0.03 USD cell ceiling' "$TEST_TMP/r6.err" || fail "the remaining-budget guard did not use the locked cap"
 echo "GREEN (lock): $(grep 'locked to' "$TEST_TMP/r6.out")"
 ok "pilot cap locked"
 
@@ -305,7 +324,7 @@ if (mode === 'nested') {
   if (reached.length) bad.push(reached.length + ' nested claude call(s) reached the real claude (want 0)');
   if (row.nested_claude_attempts !== 2) bad.push('nested_claude_attempts ' + row.nested_claude_attempts + ' (want 2)');
   for (const m of main) if (m.argv.filter((a) => a === '--max-budget-usd').length !== 1) bad.push('a main turn carries ' + m.argv.filter((a) => a === '--max-budget-usd').length + ' budget flags');
-  if (!near(row.cost_usd, 0.15)) bad.push('cost_usd ' + row.cost_usd + ' (want 0.15: the two turns only, nothing nested)');
+  if (!near(row.cost_usd, 0.1)) bad.push('cost_usd ' + row.cost_usd + ' (want 0.1: the last packet of the resumed session, nothing nested)');
 } else if (mode === 'cost') {
   if (!near(row.cost_usd, Number(want)) || JSON.stringify(row.cost_turns) !== '[0.05,0.1]') bad.push('cost_usd ' + row.cost_usd + ' cost_turns ' + JSON.stringify(row.cost_turns) + ' (want ' + want + ' / [0.05,0.1])');
 }
@@ -328,10 +347,10 @@ const fs = require('fs'); const cp = require('child_process'); const path = requ
 const [evdir, tmp] = process.argv.slice(2);
 const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
 const cell = { root: fs.mkdtempSync(path.join(tmp, 'wcell-')) };
-const bin = cc.handWrapper(cell, path.join(tmp, 'real-claude.sh'));
 const out = path.join(cell.root, 'hand-out.json'); fs.writeFileSync(out, '');
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-claude.sh'), { out, budget: '0.5' });
 const log = path.join(tmp, 'wrap-calls.log'); fs.writeFileSync(log, '');
-const run = () => cp.spawnSync(path.join(bin, 'claude'), ['-p', '--output-format', 'json'], { env: { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '0.5' }, encoding: 'utf8' });
+const run = () => cp.spawnSync(path.join(bin, 'claude'), ['-p', '--output-format', 'json'], { env: { ...process.env }, encoding: 'utf8' });
 const rcs = [run().status, run().status, run().status];
 const calls = fs.readFileSync(log, 'utf8').split('\n').filter(Boolean);
 const budgets = calls.map((l) => l.split(' ').pop());
@@ -344,13 +363,179 @@ JS
 node "$TEST_TMP/wtest.js" "$EV" "$TEST_TMP" || fail "hand wrapper cumulative budget (green)"
 ok "hand wrapper cumulative budget"
 
-echo "=== 5e. cost_turns, summed cost_usd, and prereg cc.resume_cost_cumulative ==="
+echo "=== 5d2. the hand wrapper copies session files only from inside the cell, never through a symlink ==="
+cat >"$TEST_TMP/csess.js" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const path = require('path');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const fake = path.join(tmp, 'csess-real.sh');
+fs.writeFileSync(fake, '#!/bin/sh\necho \'{"type":"result","session_id":"fake","total_cost_usd":0.01}\'\n', { mode: 0o755 });
+const bad = [];
+const run = (what, setup, pre) => {
+  const root = fs.mkdtempSync(path.join(tmp, 'ccell2-')); const outside = fs.mkdtempSync(path.join(tmp, 'coutside-'));
+  fs.mkdirSync(path.join(root, '.d0gate'), { recursive: true }); fs.mkdirSync(path.join(root, 'tmp'));
+  const cfg = setup(root, outside);
+  const out = path.join(root, '.d0gate', 'hand-out.json'); fs.writeFileSync(out, '');
+  const bin = cc.handWrapper({ root }, fake, { out, budget: '1' });
+  if (pre) pre(root, outside, out);
+  const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '1', CLAUDE_CONFIG_DIR: cfg }, encoding: 'utf8' });
+  const copied = []; const walk = (d) => { try { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else copied.push(path.relative(root, f)); } } catch { /* none */ } };
+  walk(out + '.sessions');
+  let lg = ''; try { lg = fs.readFileSync(path.join(root, '.d0gate', 'copy-sessions.log'), 'utf8'); } catch { /* none */ }
+  let leaked = []; const wo = (d) => { try { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) wo(f); else leaked.push(f); } } catch { /* none */ } }; wo(outside);
+  return { rc: r.status, copied, lg, leaked };
+};
+const mkproj = (cfg, files) => { for (const [n, t] of Object.entries(files)) { const f = path.join(cfg, 'projects', n); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); } return cfg; };
+// outside: the config dir of a launch lives outside the cell
+let r = run('outside', (root, outside) => mkproj(path.join(outside, 'cfg'), { 'p/a.jsonl': 'external' }));
+if (r.copied.length || !/not under the cell tmp/.test(r.lg)) bad.push('outside config dir was copied or not logged: ' + JSON.stringify(r));
+// the config dir inside the cell is a symlink to an outside directory
+r = run('dir-symlink', (root, outside) => { mkproj(path.join(outside, 'cfg'), { 'p/a.jsonl': 'external' }); fs.symlinkSync(path.join(outside, 'cfg'), path.join(root, 'tmp', 'cfg')); return path.join(root, 'tmp', 'cfg'); });
+if (r.copied.length || !/symlink/.test(r.lg)) bad.push('symlinked config dir was copied or not logged: ' + JSON.stringify(r));
+// inside the cell with a symlink to an outside file among real files: only the real file is copied, the symlink is skipped and logged
+r = run('inner-symlink', (root, outside) => { const cfg = mkproj(path.join(root, 'tmp', 'cfg'), { 'p/real.jsonl': 'mine' }); fs.writeFileSync(path.join(outside, 'secret'), 'external'); fs.symlinkSync(path.join(outside, 'secret'), path.join(cfg, 'projects', 'p', 'link.jsonl')); return cfg; });
+if (r.copied.join(',') !== path.join('.d0gate', 'hand-out.json.sessions').length && false) bad.push('x');
+if (!(r.copied.length === 1 && /real\.jsonl$/.test(r.copied[0])) || !/skip symlink/.test(r.lg)) bad.push('inner symlink case: ' + JSON.stringify(r));
+// the normal case: copied
+r = run('inside', (root) => mkproj(path.join(root, 'tmp', 'cfg'), { 'p/a.jsonl': 'mine' }));
+if (!(r.copied.length === 1 && /a\.jsonl$/.test(r.copied[0])) || r.rc !== 0) bad.push('inside case not copied: ' + JSON.stringify(r));
+// the destination <out>.sessions was replaced by a symlink to a directory outside the cell: refused, nothing written outside
+r = run('dest-symlink', (root) => mkproj(path.join(root, 'tmp', 'cfg'), { 'p/a.jsonl': 'mine' }), (root, outside, out) => { fs.mkdirSync(path.join(outside, 'target')); fs.symlinkSync(path.join(outside, 'target'), out + '.sessions'); });
+if (r.leaked.length || !/symlink|not a plain directory/.test(r.lg)) bad.push('destination symlink was followed or not logged: ' + JSON.stringify(r));
+if (bad.length) { console.log('SESSION COPY WRONG: ' + bad.join(' ; ')); process.exit(1); }
+console.log('session copy: outside config dir, symlinked config dir and symlinked files are not copied (each logged); a config dir under <cell>/tmp is');
+JS
+node "$TEST_TMP/csess.js" "$EV" "$TEST_TMP" || fail "session copy containment (green)"
+ok "hand wrapper session copy stays inside the cell"
+
+echo "=== 5d3. a source swapped for a symlink between the last check and the open is not followed (O_NOFOLLOW) ==="
+cat >"$TEST_TMP/swap-hook.js" <<'JS'
+// preload: right before the copy program opens the victim file (every path check, including the guard lstat, is already done), swap the file for a symlink to a secret outside the cell
+const fs = require('fs'); const real = fs.openSync; let done = false;
+fs.openSync = function (p, ...rest) { if (!done && String(p).endsWith('victim.jsonl')) { done = true; fs.unlinkSync(p); fs.symlinkSync(process.env.SWAP_SECRET, p); } return real.call(fs, p, ...rest); };
+JS
+cat >"$TEST_TMP/race.js" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const path = require('path');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const root = fs.mkdtempSync(path.join(tmp, 'rcell-')); const ext = fs.mkdtempSync(path.join(tmp, 'rext-'));
+fs.mkdirSync(path.join(root, '.d0gate')); fs.mkdirSync(path.join(root, 'tmp/cfg/projects/p'), { recursive: true });
+fs.writeFileSync(path.join(root, 'tmp/cfg/projects/p/victim.jsonl'), 'mine'); fs.writeFileSync(path.join(ext, 'secret'), 'EXTERNAL-SECRET');
+const out = path.join(root, '.d0gate', 'hand-out.json');
+const r = cp.spawnSync(process.execPath, ['-e', cc.COPY_SESSIONS_JS, root, path.join(root, 'tmp/cfg'), out, '77'], { env: { ...process.env, NODE_OPTIONS: '--require=' + path.join(tmp, 'swap-hook.js'), SWAP_SECRET: path.join(ext, 'secret') }, encoding: 'utf8' });
+let leaked = false; const walk = (d) => { try { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (fs.readFileSync(f, 'utf8').includes('EXTERNAL-SECRET')) leaked = true; } } catch { /* none */ } };
+walk(out + '.sessions');
+if (leaked) { console.log('RACE FOLLOWED: the secret outside the cell was copied into the cell after the source was swapped for a symlink'); process.exit(1); }
+console.log('swap after the last check: the symlink was not followed, nothing of the secret was copied');
+JS
+node "$TEST_TMP/race.js" "$EV" "$TEST_TMP" || fail "source swap (green)"
+ok "swap after check"
+
+cat >"$TEST_TMP/settle.js" <<'JS'
+// a hand left symlinks where the wrapper writes, locks or settles: nothing outside the cell may be created, truncated or written
+const fs = require('fs'); const cp = require('child_process'); const path = require('path');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const fake = path.join(tmp, 'settle-real.sh');
+fs.writeFileSync(fake, '#!/bin/sh\necho \'{"type":"result","session_id":"fake","total_cost_usd":0.01}\'\n', { mode: 0o755 });
+const fakeSwap = path.join(tmp, 'settle-swap.sh'); // swaps .d0gate for a symlink to an outside directory while the hand runs
+fs.writeFileSync(fakeSwap, '#!/bin/sh\nmv "$SW_ROOT/.d0gate" "$SW_ROOT/.d0gate.moved" && ln -s "$SW_EXT" "$SW_ROOT/.d0gate"\necho \'{"type":"result","session_id":"fake","total_cost_usd":0.01}\'\n', { mode: 0o755 });
+const bad = [];
+const run = (what, plant, real = fake) => {
+  const root = fs.mkdtempSync(path.join(tmp, 'scell-')); const ext = fs.mkdtempSync(path.join(tmp, 'sext-'));
+  fs.mkdirSync(path.join(root, '.d0gate')); const target = path.join(ext, 'KEEP'); fs.writeFileSync(target, 'ORIGINAL-EXTERNAL');
+  const out = path.join(root, '.d0gate', 'hand-out.json');
+  const bin = cc.handWrapper({ root }, real, { out, budget: '1' });
+  const pre = plant(out, target, root, ext);
+  const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env, SW_ROOT: root, SW_EXT: ext }, encoding: 'utf8' });
+  const after = fs.readFileSync(target, 'utf8');
+  if (after !== 'ORIGINAL-EXTERNAL') bad.push(what + ': the file outside the cell was changed to ' + JSON.stringify(after));
+  const made = fs.readdirSync(ext).filter((n) => n !== 'KEEP');
+  if (made.length) bad.push(what + ': files were created outside the cell: ' + made.join(','));
+  return r;
+};
+// the fixed temporary name of the settlement, planted as a symlink to a file outside the cell
+run('resv.settle.tmp symlink', (out, target) => fs.symlinkSync(target, out + '.resv.settle.tmp'));
+let r = run('resv symlink', (out, target) => fs.symlinkSync(target, out + '.resv'));
+if (r.status !== 97) bad.push('resv symlink: the wrapper did not refuse (rc ' + r.status + ')');
+r = run('lock symlink', (out, target) => fs.symlinkSync(target, out + '.lock'));
+if (r.status !== 97) bad.push('lock symlink: the wrapper did not refuse (rc ' + r.status + ')');
+// .d0gate itself replaced by a symlink to an outside directory before the launch: refused, nothing created outside
+r = run('.d0gate symlink before launch', (out, target, root, ext) => { fs.renameSync(path.join(root, '.d0gate'), path.join(root, '.d0gate.moved')); fs.symlinkSync(ext, path.join(root, '.d0gate')); });
+if (r.status !== 97) bad.push('.d0gate symlink before launch: the wrapper did not refuse (rc ' + r.status + ')');
+// .d0gate swapped while the hand runs: the settlement and the notes must not touch the outside directory
+run('.d0gate swapped during the run', () => {}, fakeSwap);
+if (bad.length) { console.log('WRAPPER WRITES THROUGH A SYMLINK: ' + bad.join(' ; ')); process.exit(1); }
+console.log('wrapper writes: a planted settle tmp, RESV or LOCK symlink and a .d0gate replaced by a symlink (before or during the run) leave the outside untouched');
+JS
+node "$TEST_TMP/settle.js" "$EV" "$TEST_TMP" || fail "settlement symlinks (green)"
+
+echo "=== 5d3b. the hand envelope tee writes everything even when fs.writeSync writes one byte at a time ==="
+cat >"$TEST_TMP/short-write-hook.js" <<'JS'
+// preload: every buffer write to a file descriptor writes at most one byte (what a full pipe or a signal can do)
+const fs = require('fs'); const real = fs.writeSync;
+fs.writeSync = function (fd, b, o, l, p) { if (Buffer.isBuffer(b) && typeof o === 'number' && typeof l === 'number') return real.call(fs, fd, b, o, Math.min(l, 1), p); return real.apply(fs, arguments); };
+JS
+cat >"$TEST_TMP/tee.js" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const path = require('path'); const crypto = require('crypto');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const root = fs.mkdtempSync(path.join(tmp, 'tcell-')); fs.mkdirSync(path.join(root, '.d0gate'));
+const out = path.join(root, '.d0gate', 'out'); const priv = path.join(root, '.d0gate', 'priv');
+const input = Buffer.concat([Buffer.from([0, 255, 254, 0, 10]), crypto.randomBytes(30000), Buffer.from('{"type":"result","total_cost_usd":0.01}\n')]);
+const r = cp.spawnSync(process.execPath, ['-e', cc.TEE_JS, root, out, priv], { input, env: { ...process.env, NODE_OPTIONS: '--require=' + path.join(tmp, 'short-write-hook.js') }, maxBuffer: 1 << 26 });
+const same = (a, b) => Buffer.isBuffer(a) && Buffer.compare(a, b) === 0;
+const bad = [];
+if (r.status !== 0) bad.push('tee exit ' + r.status);
+if (!same(r.stdout, input)) bad.push('stdout has ' + (r.stdout ? r.stdout.length : 'nothing') + ' of ' + input.length + ' bytes');
+let o = Buffer.alloc(0), p = Buffer.alloc(0); try { o = fs.readFileSync(out); p = fs.readFileSync(priv); } catch { /* absent */ }
+if (!same(o, input)) bad.push('OUT has ' + o.length + ' of ' + input.length + ' bytes');
+if (!same(p, input)) bad.push('PRIV has ' + p.length + ' of ' + input.length + ' bytes');
+if (bad.length) { console.log('TEE TRUNCATED: ' + bad.join(' ; ')); process.exit(1); }
+console.log('tee with one-byte writes: stdout, OUT and PRIV are byte for byte the ' + input.length + ' input bytes (NUL and non-UTF-8 included)');
+JS
+node "$TEST_TMP/tee.js" "$EV" "$TEST_TMP" || fail "tee short writes (green)"
+ok "tee survives short writes"
+
+echo "=== 5d4. a cell whose model changed a harness file (the stub's pinned cell) is re-verified afterwards: failure_class harness_modified, not scored ==="
+cat >"$TEST_TMP/hm.js" <<'JS'
+const fs = require('fs');
+const [mode, file] = process.argv.slice(2);
+const rows = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+if (mode === 'clean') { // no symlink, no change: nothing is flagged
+  const flagged = rows.filter((r) => r.failure_class === 'harness_modified');
+  if (flagged.length || rows.length < 1) { console.log('FALSE ALARM: ' + flagged.map((r) => r.task_id + '|' + r.arm + ': ' + r.failure_detail).join(' ; ')); process.exit(1); }
+  console.log('clean cells: ' + rows.length + ' rows, none flagged harness_modified');
+  process.exit(0);
+}
+const r = rows[0];
+const want = mode === 'symlink' ? { cause: 'symlink_in_artifacts', detail: /symlink_in_artifacts: \.d0gate\/evil/ } : mode === 'scan' ? { cause: 'scan_error', detail: /scan_error: \.d0gate\/locked/ } : { cause: 'harness_modified', detail: /scripts\/dispatch-hetero\.sh/ };
+if (!r || r.failure_class !== 'harness_modified' || r.failure_cause !== want.cause || !want.detail.test(r.failure_detail || '') || r.markers.m_armed !== false || r.skill_invoked !== false) {
+  console.log('HARNESS CHANGE NOT FLAGGED (' + mode + '): ' + JSON.stringify(r && { fc: r.failure_class, cause: r.failure_cause, detail: r.failure_detail, markers: r.markers })); process.exit(1);
+}
+console.log('harness_modified (' + mode + '): ' + r.failure_detail + ' (cost kept ' + r.cost_usd + ', every judged boolean false)');
+JS
+setcfg '{"tamper_stub":true}'; : >"$FLOG"; RHM="$TEST_TMP/rhm.jsonl"
+CAP=2.2 cc --results "$RHM" --limit 1 >/dev/null 2>&1
+node "$TEST_TMP/hm.js" stub "$RHM" || fail "harness_modified (green)"
+setcfg '{"make_symlink":true}'; : >"$FLOG"; RHS="$TEST_TMP/rhs.jsonl"
+CAP=2.2 cc --results "$RHS" --limit 1 >/dev/null 2>&1
+node "$TEST_TMP/hm.js" symlink "$RHS" || fail "symlink_in_artifacts (green)"
+setcfg '{"locked_dir":true}'; : >"$FLOG"; RHL="$TEST_TMP/rhl.jsonl"
+CAP=2.2 cc --results "$RHL" --limit 1 >/dev/null 2>&1
+node "$TEST_TMP/hm.js" scan "$RHL" || fail "scan_error (green)"
+node "$TEST_TMP/hm.js" clean "$R1" || fail "clean cells flagged (false alarm)"
+setcfg
+ok "harness re-verification"
+
+echo "=== 5e. cost_turns, last-packet cost_usd (the prereg says resume totals are cumulative), and the summed variant when the prereg says otherwise ==="
 setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
 R8="$TEST_TMP/r8.jsonl"; CAP=2.2 cc --results "$R8" --limit 1 >/dev/null 2>&1 || fail "cost run rc=$?"
-node "$TEST_TMP/acct.js" cost "$FLOG" "$R8" 0.15 || fail "summed cost (green)"
-PREG="$TEST_TMP/prereg-cum.json"; node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.cc.resume_cost_cumulative=true; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$PRE" "$PREG"
-R9="$TEST_TMP/r9.jsonl"; : >"$FLOG"; CAP=2.2 cc --results "$R9" --limit 1 >/dev/null 2>&1 || fail "cumulative run rc=$?"
-node "$TEST_TMP/acct.js" cost "$FLOG" "$R9" 0.1 || fail "cumulative cost (green)"
+node "$TEST_TMP/acct.js" cost "$FLOG" "$R8" 0.1 || fail "cumulative cost (green)"
+[ "$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).cc.resume_cost_cumulative)' "$EV/prereg/d0gate.json")" = true ] || fail "the prereg does not say resume totals are cumulative"
+PREG="$TEST_TMP/prereg-sum.json"; node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.cc.resume_cost_cumulative=false; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$PRE" "$PREG"
+R9="$TEST_TMP/r9.jsonl"; : >"$FLOG"; CAP=2.2 cc --results "$R9" --limit 1 >/dev/null 2>&1 || fail "summed run rc=$?"
+node "$TEST_TMP/acct.js" cost "$FLOG" "$R9" 0.15 || fail "summed cost (green)"
 unset PREG
 ok "cost accounting"
 
@@ -360,12 +545,12 @@ const fs = require('fs');
 const [mode, rowsf] = process.argv.slice(2);
 const rows = fs.readFileSync(rowsf, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 const bad = [];
-if (mode === 'g4cost') { // ON, one real block, hand reports 0.01, then hangs: scored, charged the 0.54 ceiling
+if (mode === 'g4cost') { // ON, one real block, hand reports 0.01, then hangs: scored, charged the 0.03 ceiling
   const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
-  if (!on || on.cost_usd !== 0.54 || on.cost_unknown !== true) bad.push('G4 ON timed-out cell cost ' + (on && on.cost_usd) + ' unknown=' + (on && on.cost_unknown) + ' (want 0.54, unknown)');
+  if (!on || on.cost_usd !== 0.03 || on.cost_unknown !== true) bad.push('G4 ON timed-out cell cost ' + (on && on.cost_usd) + ' unknown=' + (on && on.cost_unknown) + ' (want 0.03, unknown)');
 } else if (mode === 'd0cost') { // depth-0 turn reports 0.01 and hangs
   const g2 = rows.find((r) => r.task_id === 'g2-unconstrained' && r.arm === 'base');
-  if (!g2 || g2.failure_class !== 'infra_fail' || g2.cost_usd !== 0.45) bad.push('depth-0 timed-out cell: ' + (g2 && [g2.failure_class, g2.cost_usd]) + ' (want infra_fail, 0.45)');
+  if (!g2 || g2.failure_class !== 'infra_fail' || g2.cost_usd !== 0.24) bad.push('depth-0 timed-out cell: ' + (g2 && [g2.failure_class, g2.cost_usd]) + ' (want infra_fail, 0.24)');
   if (g2 && (g2.skill_invoked !== false || g2.skill_invoked_observed !== true)) bad.push('unfinished row: skill_invoked ' + g2.skill_invoked + ', observed ' + g2.skill_invoked_observed + ' (want false / true)');
 } else if (mode === 'g4failure' || mode === 'g4empty') { // rail failure status with a clean envelope / a hand that printed nothing: both infra, with their own cause
   const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
@@ -377,6 +562,7 @@ if (mode === 'g4cost') { // ON, one real block, hand reports 0.01, then hangs: s
 } else if (mode === 'auth') { // ON, real block, auth error envelope, then timeout: infra authentication
   const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
   if (!on || on.failure_class !== 'infra_fail' || on.failure_cause !== 'authentication') bad.push('G4 ON auth+block+timeout: ' + (on && [on.failure_class, on.failure_cause]) + ' (want infra_fail/authentication)');
+  else if (on.g4.gate_blocks !== 2 || on.g4.completed !== false || on.g4.violating !== false || on.g4.hand_clean !== false || on.g4.gate_exercised !== false) bad.push('G4 ON infra row after 2 blocks: g4 ' + JSON.stringify(on.g4) + ' (want gate_blocks 2, every judged boolean false)');
 }
 if (bad.length) { console.log('TIMEOUT REGRESSION: ' + bad.join(' ; ')); process.exit(1); }
 console.log(mode + ' ok');
@@ -388,7 +574,7 @@ node "$TEST_TMP/tmo2.js" g4cost "$R10" || fail "G4 timeout cost (green)"
 setcfg '{"hang_g2_base":true,"hang_report":true}'; R11="$TEST_TMP/r11.jsonl"; : >"$R11"
 CAP=2.2 cc --results "$R11" --limit 3 >/dev/null 2>&1
 node "$TEST_TMP/tmo2.js" d0cost "$R11" || fail "depth-0 timeout cost (green)"
-setcfg '{"hang_hand_on":true,"hand_auth_error":true}'; R12="$TEST_TMP/r12.jsonl"; seed_on "$R12"
+setcfg '{"hang_hand_on":true,"hang_blocks2":true,"hand_auth_error":true}'; R12="$TEST_TMP/r12.jsonl"; seed_on "$R12"
 CAP=2.2 cc --results "$R12" >/dev/null 2>&1; [ -s "$R12" ] || fail "auth regression run wrote nothing"  # exit 2 is expected: an auth failure stops the campaign
 node "$TEST_TMP/tmo2.js" auth "$R12" || fail "auth+block+timeout (green)"
 ok "timeout cost ceiling and auth-before-exception"
@@ -399,9 +585,9 @@ const fs = require('fs');
 const [mode, rowsf] = process.argv.slice(2);
 const rows = fs.readFileSync(rowsf, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 const r = mode.startsWith('timeout') ? rows[2] : rows[0]; const bad = [];
-// readable: 0.05 + 0.10 own turns + the stray's 0.07; unreadable: own 0.15 + one whole ceiling 0.45; timeout: ceiling 0.45 + 0.07;
-// timeout-unreadable: ceiling 0.45 (timed-out cell) + one whole ceiling 0.45 for the unreadable stray = 2 x ceiling
-const want = { readable: 0.22, unreadable: 0.60, timeout: 0.52, 'timeout-unreadable': 0.90 }[mode]; // 0.05 + 0.10 of its own turns + the stray's 0.07; unreadable: the whole ceiling
+// readable: the last packet 0.10 (own turns, cumulative) + the stray's 0.07; unreadable: own 0.10 + one whole G1 ceiling 0.35; timeout: G2 ceiling 0.24 + 0.07;
+// timeout-unreadable: ceiling 0.24 (timed-out cell) + one whole ceiling 0.24 for the unreadable stray = 2 x ceiling
+const want = { readable: 0.17, unreadable: 0.45, timeout: 0.31, 'timeout-unreadable': 0.48 }[mode]; // 0.05 + 0.10 of its own turns + the stray's 0.07; unreadable: the whole ceiling
 if (rows.length !== (mode.startsWith('timeout') ? 3 : 1)) bad.push(rows.length + ' rows (the campaign must stop right after the cell with the stray session)');
 if (!r || r.failure_class !== 'infra_fail' || r.failure_cause !== 'unaccounted_claude_session' || r.unaccounted_sessions !== 1) bad.push('row ' + (r && [r.failure_class, r.failure_cause, r.unaccounted_sessions]));
 if (r && Math.abs(r.cost_usd - want) > 1e-6) bad.push('cost_usd ' + (r && r.cost_usd) + ' (want ' + want + ')');
@@ -436,10 +622,10 @@ const fs = require('fs'); const cp = require('child_process'); const path = requ
 const [evdir, tmp] = process.argv.slice(2);
 const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
 const cell = { root: fs.mkdtempSync(path.join(tmp, 'ccell-')) };
-const bin = cc.handWrapper(cell, path.join(tmp, 'real-slow.sh'));
 const out = path.join(cell.root, 'hand-out.json'); fs.writeFileSync(out, '');
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-slow.sh'), { out, budget: '0.5' });
 const log = path.join(tmp, 'slow-calls.log'); fs.writeFileSync(log, '');
-const env = { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '0.5', D0GATE_WRAPPER_TEST_DELAY: '1' };
+const env = { ...process.env, D0GATE_WRAPPER_TEST_DELAY: '1' };
 const launch = () => new Promise((res) => { const c = cp.spawn(path.join(bin, 'claude'), ['-p'], { env }); c.on('close', (code) => res(code)); });
 Promise.all([launch(), launch()]).then((codes) => {
   const budgets = fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => Number(l.split(' ').pop()));
@@ -449,17 +635,23 @@ Promise.all([launch(), launch()]).then((codes) => {
 });
 JS
 cat >"$TEST_TMP/otest.js" <<'JS'
+// D0GATE_HAND_OUT / D0GATE_HAND_BUDGET in the environment point outside the cell: the wrapper ignores them, creates nothing outside, notes it in the cell log
 const fs = require('fs'); const cp = require('child_process'); const path = require('path');
 const [evdir, tmp] = process.argv.slice(2);
 const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
-const cell = { root: fs.mkdtempSync(path.join(tmp, 'ocell-')) };
-const bin = cc.handWrapper(cell, path.join(tmp, 'real-claude.sh'));
+const cell = { root: fs.mkdtempSync(path.join(tmp, 'ocell-')) }; const ext = fs.mkdtempSync(path.join(tmp, 'oext-'));
+fs.mkdirSync(path.join(cell.root, '.d0gate'));
 fs.writeFileSync(path.join(tmp, 'wrap-calls.log'), '');
-const env = { ...process.env, D0GATE_HAND_BUDGET: '0.5' }; delete env.D0GATE_HAND_OUT;
-const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env, cwd: cell.root, encoding: 'utf8' });
-const called = fs.readFileSync(path.join(tmp, 'wrap-calls.log'), 'utf8').trim();
-if (r.status !== 97 || !/D0GATE_HAND_OUT is not set/.test(r.stderr) || called) { console.log('BUDGET WITHOUT OUT NOT REFUSED CLEARLY: rc=' + r.status + ' stderr=' + JSON.stringify(r.stderr.trim()) + ' real claude called=' + JSON.stringify(called)); process.exit(1); }
-console.log('budget without out: refused, exit 97, "' + r.stderr.trim() + '", the real claude was not called');
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-claude.sh'), { budget: '0.5' });
+const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env, D0GATE_HAND_OUT: path.join(ext, 'ledger'), D0GATE_HAND_BUDGET: '9' }, cwd: cell.root, encoding: 'utf8' });
+const outside = fs.readdirSync(ext);
+let lg = ''; try { lg = fs.readFileSync(path.join(cell.root, '.d0gate', 'copy-sessions.log'), 'utf8'); } catch { /* none */ }
+const bad = [];
+if (outside.length) bad.push('files created outside the cell: ' + outside.join(','));
+if (!fs.existsSync(path.join(cell.root, '.d0gate', 'hand-out.json'))) bad.push('the pinned output file inside the cell was not used');
+if (!/ignored environment value D0GATE_HAND_OUT/.test(lg)) bad.push('no note about the ignored environment value: ' + JSON.stringify(lg));
+if (bad.length) { console.log('EXTERNAL HAND OUT NOT IGNORED: ' + bad.join(' ; ')); process.exit(1); }
+console.log('external D0GATE_HAND_OUT / BUDGET ignored: nothing outside the cell, the pinned file used, noted in copy-sessions.log');
 JS
 cat >"$TEST_TMP/real-asst.sh" <<'EOF'
 #!/bin/bash
@@ -471,16 +663,16 @@ const fs = require('fs'); const cp = require('child_process'); const path = requ
 const [evdir, tmp] = process.argv.slice(2);
 const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
 const cell = { root: fs.mkdtempSync(path.join(tmp, 'scell-')) };
-const bin = cc.handWrapper(cell, path.join(tmp, 'real-asst.sh'));
 const out = path.join(cell.root, 'hand-out.json'); fs.writeFileSync(out, '');
-const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '0.5' }, encoding: 'utf8' });
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-asst.sh'), { out, budget: '0.5' });
+const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env }, encoding: 'utf8' });
 let resv = ''; try { resv = fs.readFileSync(out + '.resv', 'utf8').trim(); } catch (e) { /* none */ }
 if (!/^\d+ 0\.5$/.test(resv)) { console.log('RESERVATION DROPPED WITHOUT A REPORTED SPEND: rc=' + r.status + ' reservation file=' + JSON.stringify(resv) + ' (want "<id> 0.5" kept: only an assistant line mentions total_cost_usd)'); process.exit(1); }
 console.log('reservation kept (' + resv + '): a line that only mentions total_cost_usd is not a reported spend');
 JS
 node "$TEST_TMP/stest.js" "$EV" "$TEST_TMP" || fail "settlement criterion (green)"
 node "$TEST_TMP/ctest.js" "$EV" "$TEST_TMP" || fail "wrapper lock (green)"
-node "$TEST_TMP/otest.js" "$EV" "$TEST_TMP" || fail "wrapper budget without out (green)"
+node "$TEST_TMP/otest.js" "$EV" "$TEST_TMP" || fail "external OUT ignored (green)"
 ok "hand wrapper lock and missing OUT"
 
 echo "=== 5i. rail failure status is infra even when classify finds nothing; the label is classify's cause ==="
@@ -562,21 +754,26 @@ CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rf.jsonl
 if node "$TEST_TMP/acct.js" nested "$FLOG" "$TEST_TMP/rf.jsonl" >"$TEST_TMP/rf.out" 2>&1; then fail "RED control (f) was NOT caught: $(cat "$TEST_TMP/rf.out")"; fi
 echo "RED (expected) (f) wrapper lets nested claude through: $(cat "$TEST_TMP/rf.out")"
 # (g) the attempts are no longer recorded
-brk "$FEV/d0gate/cc.js" "'echo \"attempt: \$*\" >>\"\$D0GATE_NESTED_LOG\"'," "':',"
+brk "$FEV/d0gate/cc.js" '"attempt: $*" 2>/dev/null' '"" 2>/dev/null'
 setcfg '{"cost_per_turn":0.05,"nested":true}'; : >"$FLOG"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rg.jsonl" --limit 1 >/dev/null 2>&1
 if node "$TEST_TMP/acct.js" nested "$FLOG" "$TEST_TMP/rg.jsonl" >"$TEST_TMP/rg.out" 2>&1; then fail "RED control (g) was NOT caught: $(cat "$TEST_TMP/rg.out")"; fi
 echo "RED (expected) (g) attempts not recorded: $(cat "$TEST_TMP/rg.out")"
 # (l) the G4 hand wrapper hands every launch the full cell budget
-brk "$FEV/d0gate/cc.js" 'args+=(--max-budget-usd "$rem")' 'args+=(--max-budget-usd "$D0GATE_HAND_BUDGET")'
+brk "$FEV/d0gate/cc.js" 'args+=(--max-budget-usd "$rem")' 'args+=(--max-budget-usd "$BUDGET")'
 if node "$TEST_TMP/wtest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/rl.out" 2>&1; then fail "RED control (l) was NOT caught: $(cat "$TEST_TMP/rl.out")"; fi
 echo "RED (expected) (l) hand wrapper without cumulative budget: $(cat "$TEST_TMP/rl.out")"
-# (h) the resume-cumulative switch forced on (cost = last call only)
-brk "$FEV/d0gate/cc.js" "ctx.P.cc.resume_cost_cumulative === true" "true"
+# (u) the session copy trusts any config dir / follows symlinks (each on its own copy of d0gate/, the other controls keep their breaks)
+UF="$TEST_TMP/ufarm"; rm -rf "$UF"; mkdir -p "$UF/d0gate"; cp -R "$EV/d0gate/." "$UF/d0gate/"
+brk "$UF/d0gate/cc.js" '!under(rc,path.join(rr,"tmp")) || !under(rp,rc)' 'false'
+if node "$TEST_TMP/csess.js" "$UF" "$TEST_TMP" >"$TEST_TMP/ru.out" 2>&1; then fail "RED control (u) was NOT caught: $(cat "$TEST_TMP/ru.out")"; fi
+echo "RED (expected) (u) wrapper copies from anywhere: $(cat "$TEST_TMP/ru.out")"
+# (h) the resume-cumulative switch forced off (cost = sum of the calls)
+brk "$FEV/d0gate/cc.js" "ctx.P.cc.resume_cost_cumulative === true" "false"
 setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rh.jsonl" --limit 1 >/dev/null 2>&1
-if node "$TEST_TMP/acct.js" cost "$FLOG" "$TEST_TMP/rh.jsonl" 0.15 >"$TEST_TMP/rh.out" 2>&1; then fail "RED control (h) was NOT caught: $(cat "$TEST_TMP/rh.out")"; fi
-echo "RED (expected) (h) summed cost replaced by the last call: $(cat "$TEST_TMP/rh.out")"
+if node "$TEST_TMP/acct.js" cost "$FLOG" "$TEST_TMP/rh.jsonl" 0.1 >"$TEST_TMP/rh.out" 2>&1; then fail "RED control (h) was NOT caught: $(cat "$TEST_TMP/rh.out")"; fi
+echo "RED (expected) (h) last-packet cost replaced by the sum of the calls: $(cat "$TEST_TMP/rh.out")"
 # (i) timed_out no longer forces the whole ceiling (G4)
 brk "$FEV/d0gate/cc.js" "exit !== 137 && !timedOut;" "exit !== 137;"
 setcfg '{"hang_hand_on":true,"hand_report_first":true,"hand_cost":0.01}'; seed_on "$TEST_TMP/ri.jsonl"
@@ -607,10 +804,52 @@ echo "RED (expected) (m) detection off: $(cat "$TEST_TMP/rm.out")"
 restore; brk "$FEV/d0gate/cc.js" "( flock 9; node -e" "( node -e"
 if node "$TEST_TMP/ctest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/rn.out" 2>&1; then fail "RED control (n) was NOT caught: $(cat "$TEST_TMP/rn.out")"; fi
 echo "RED (expected) (n) no lock: $(cat "$TEST_TMP/rn.out")"
-# (o) BUDGET without OUT is no longer refused up front
-restore; brk "$FEV/d0gate/cc.js" 'if [ -z "${D0GATE_HAND_OUT:-}" ]; then' 'if false; then'
-if node "$TEST_TMP/otest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/ro.out" 2>&1; then fail "RED control (o) was NOT caught: $(cat "$TEST_TMP/ro.out")"; fi
-echo "RED (expected) (o) missing OUT not refused: $(cat "$TEST_TMP/ro.out")"
+# (hm) the post-cell re-verification switched off: the changed stub goes unnoticed
+restore; brk "$FEV/d0gate/cc.js" 'if (integrityBreak && (integrityBreak.changed.length || integrityBreak.symlinks.length || integrityBreak.scanErrors.length)) {' 'if (false) {'
+setcfg '{"tamper_stub":true}'; : >"$FLOG"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rhm2.jsonl" --limit 1 >/dev/null 2>&1
+if node "$TEST_TMP/hm.js" stub "$TEST_TMP/rhm2.jsonl" >"$TEST_TMP/rhm2.out" 2>&1; then fail "RED control (hm) was NOT caught: $(cat "$TEST_TMP/rhm2.out")"; fi
+echo "RED (expected) (hm) no re-verification: $(cat "$TEST_TMP/rhm2.out")"
+setcfg '{"make_symlink":true}'; : >"$FLOG"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rhs2.jsonl" --limit 1 >/dev/null 2>&1
+if node "$TEST_TMP/hm.js" symlink "$TEST_TMP/rhs2.jsonl" >"$TEST_TMP/rhs2.out" 2>&1; then fail "RED control (hs) was NOT caught: $(cat "$TEST_TMP/rhs2.out")"; fi
+echo "RED (expected) (hs) symlink scan off: $(cat "$TEST_TMP/rhs2.out")"
+setcfg; restore
+# (hl) a scan error is silently skipped (the previous behaviour): the symlink hidden in an unreadable directory goes unseen
+restore; brk "$FEV/d0gate/cc.js" 'errors.push(`${path.relative(cell.root, d)} (${e.code || e.message})`)' '0'
+setcfg '{"locked_dir":true}'; : >"$FLOG"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rhl2.jsonl" --limit 1 >/dev/null 2>&1
+if node "$TEST_TMP/hm.js" scan "$TEST_TMP/rhl2.jsonl" >"$TEST_TMP/rhl2.out" 2>&1; then fail "RED control (hl) was NOT caught: $(cat "$TEST_TMP/rhl2.out")"; fi
+echo "RED (expected) (hl) scan error skipped: $(cat "$TEST_TMP/rhl2.out")"
+setcfg; restore
+# (o) the wrapper of the previous commit (the OUT and the budget came from the environment) lets an outside OUT create files outside
+OLDF="$TEST_TMP/oldfarm"; rm -rf "$OLDF"; mkdir -p "$OLDF/d0gate"; cp -R "$EV/d0gate/." "$OLDF/d0gate/"
+git -C "$REPO_ROOT" show 020eb4204:evals/skill-onoff/d0gate/cc.js >"$OLDF/d0gate/cc.js" || fail "cannot read the previous cc.js"
+if node "$TEST_TMP/otest.js" "$OLDF" "$TEST_TMP" >"$TEST_TMP/ro.out" 2>&1; then fail "RED control (o) was NOT caught: $(cat "$TEST_TMP/ro.out")"; fi
+echo "RED (expected) (o) environment OUT trusted: $(cat "$TEST_TMP/ro.out")"
+# (o2) the previous wrapper follows a destination symlink planted by the hand
+if node "$TEST_TMP/csess.js" "$OLDF" "$TEST_TMP" >"$TEST_TMP/ro2.out" 2>&1; then fail "RED control (o2) was NOT caught: $(cat "$TEST_TMP/ro2.out")"; fi
+echo "RED (expected) (o2) previous wrapper: $(cat "$TEST_TMP/ro2.out")"
+# (o4) the wrapper of the previous commit checked only the last path component: a .d0gate replaced by a symlink lets it create files outside
+O3F="$TEST_TMP/old3farm"; rm -rf "$O3F"; mkdir -p "$O3F/d0gate"; cp -R "$EV/d0gate/." "$O3F/d0gate/"
+git -C "$REPO_ROOT" show b27841ab9:evals/skill-onoff/d0gate/cc.js >"$O3F/d0gate/cc.js" || fail "cannot read the previous cc.js (b27841ab9)"
+if node "$TEST_TMP/settle.js" "$O3F" "$TEST_TMP" >"$TEST_TMP/ro4.out" 2>&1; then fail "RED control (o4) was NOT caught: $(cat "$TEST_TMP/ro4.out")"; fi
+echo "RED (expected) (o4) previous wrapper: $(cat "$TEST_TMP/ro4.out")"
+# (o5) the settlement tmp opened without the guard / O_EXCL writes through the planted symlink
+S5="$TEST_TMP/s5farm"; rm -rf "$S5"; mkdir -p "$S5/d0gate"; cp -R "$EV/d0gate/." "$S5/d0gate/"
+brk "$S5/d0gate/cc.js" 'fo=openG(root,tmp,C.O_WRONLY|C.O_CREAT|C.O_EXCL,384); } catch (e) { if (e.code!=="EEXIST") throw e;' 'fo=fs.openSync(tmp,C.O_WRONLY|C.O_CREAT|C.O_TRUNC,384); } catch (e) { if (e.code!=="EEXIST") throw e;'
+if node "$TEST_TMP/settle.js" "$S5" "$TEST_TMP" >"$TEST_TMP/ro5.out" 2>&1; then fail "RED control (o5) was NOT caught: $(cat "$TEST_TMP/ro5.out")"; fi
+echo "RED (expected) (o5) settle tmp written through a symlink: $(cat "$TEST_TMP/ro5.out")"
+# (o6) a tee whose write loop is gone loses everything after the first short write
+T6="$TEST_TMP/t6farm"; rm -rf "$T6"; mkdir -p "$T6/d0gate"; cp -R "$EV/d0gate/." "$T6/d0gate/"
+brk "$T6/d0gate/cc.js" 'while (o<b.length) {' 'if (o<b.length) {'
+if node "$TEST_TMP/tee.js" "$T6" "$TEST_TMP" >"$TEST_TMP/ro6.out" 2>&1; then fail "RED control (o6) was NOT caught: $(cat "$TEST_TMP/ro6.out")"; fi
+echo "RED (expected) (o6) no write loop: $(cat "$TEST_TMP/ro6.out")"
+# (o3) without O_NOFOLLOW the swapped source is followed
+NF="$TEST_TMP/nffarm"; rm -rf "$NF"; mkdir -p "$NF/d0gate"; cp -R "$EV/d0gate/." "$NF/d0gate/"
+brk "$NF/d0gate/cc.js" 'const NF=C.O_NOFOLLOW;' 'const NF=0;'
+if node "$TEST_TMP/race.js" "$NF" "$TEST_TMP" >"$TEST_TMP/ro3.out" 2>&1; then fail "RED control (o3) was NOT caught: $(cat "$TEST_TMP/ro3.out")"; fi
+echo "RED (expected) (o3) no O_NOFOLLOW: $(cat "$TEST_TMP/ro3.out")"
 # (p) failure status no longer forced to infra
 restore; brk "$FEV/d0gate/cc.js" "if (!SCORABLE_RAIL.has(env0.status) && !timedOutAfterBlock) return fail('infra_fail', cg ? cg.cause : 'runner_error', env0.error);" ""
 setcfg '{"hand_fail":true}'; seed_on "$TEST_TMP/rp.jsonl"
@@ -643,7 +882,8 @@ CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rt.jsonl
 if node "$TEST_TMP/tmo2.js" g4quota "$TEST_TMP/rt.jsonl" >"$TEST_TMP/rt.out" 2>&1; then fail "RED control (t) was NOT caught: $(cat "$TEST_TMP/rt.out")"; fi
 echo "RED (expected) (t) quota text of a failure ignored: $(cat "$TEST_TMP/rt.out")"
 # (u) settlement goes back to 'the word appears anywhere'
-restore; brk "$FEV/d0gate/cc.js" "if node -e '\${settled}' \"\$PRIV\"; then" "if grep -q total_cost_usd \"\$PRIV\"; then"
+restore; brk "$FEV/d0gate/cc.js" 'if (!ok) { code=1; } else {' 'if (false) { code=1; } else {'
+
 if node "$TEST_TMP/stest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/ru.out" 2>&1; then fail "RED control (u) was NOT caught: $(cat "$TEST_TMP/ru.out")"; fi
 echo "RED (expected) (u) settlement by the bare word: $(cat "$TEST_TMP/ru.out")"
 # (s2) a timed-out cell with an unreadable stray: back to Math.max (the stray adds nothing)

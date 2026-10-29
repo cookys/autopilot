@@ -248,9 +248,10 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
     // the stray's spend comes on top of THAT, never on top of the reported sum, which can be lower than the ceiling.
     if (strays.length > 0) { // a claude of its own: charged what its trace says, or the whole ceiling when nothing readable; the campaign stops
       const readable = strays.reduce((a, x) => a + (x.cost === null ? 0 : x.cost), 0);
-      const unreadable = strays.some((x) => x.cost === null);
+      const unreadableN = strays.filter((x) => x.cost === null).length;
       keepCopy(keepDir, cell);
-      return failureRow(ctx, c, { ...o, cost: Number((unreadable ? Math.max(ceiling, o.cost + readable) : o.cost + readable).toFixed(6)), costUnknown: unreadable || o.costUnknown,
+      // every stray whose spend cannot be read is charged one whole ceiling of its own, on top of the cell's charge and the readable strays
+      return failureRow(ctx, c, { ...o, cost: Number((o.cost + readable + ceiling * unreadableN).toFixed(6)), costUnknown: unreadableN > 0 || o.costUnknown,
         cls: 'infra_fail', cause: 'unaccounted_claude_session', detail: `${strays.length} session file(s) not started by this cell's own turns: ${strays.map((x) => path.basename(x.f)).join(', ')}` });
     }
     if (fail) {
@@ -344,6 +345,13 @@ function lastJson(text) {
   for (let i = lines.length - 1; i >= 0; i--) { try { return JSON.parse(lines[i]); } catch { /* next */ } }
   return null;
 }
+// The blocked-timeout exception is for a hand that simply did not finish: a scorable rail state, or the plain failure a killed worker leaves.
+// An external-cause state such as engine_unavailable stays infra even when the hand also hung (this is checked here, not left to the
+// error-text tests, because a timed-out hand leaves no envelope to classify).
+function blockedTimeoutApplies(railStatus, on, hasBlock) {
+  const eligible = SCORABLE_RAIL.has(railStatus) || railStatus === 'failure';
+  return eligible && on === true && hasBlock === true;
+}
 function runG4(ctx, c, ceiling, budget, keepDir) {
   const t0 = Date.now();
   const cell = new Cell().init();
@@ -402,7 +410,7 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     // block record): the gate keeping the hand from finishing is the cost side the decision table measures. Anything else stays infra.
     let timedOutAfterBlock = false;
     if (timedOut) {
-      const blocked = on && Object.values(facts0.hook).some((recs) => recs.some((r) => r.decision === 'block'));
+      const blocked = blockedTimeoutApplies(env0.status, on, Object.values(facts0.hook).some((recs) => recs.some((r) => r.decision === 'block')));
       if (!blocked) return fail('infra_fail', 'runner_timeout', 'the rail timed the hand out');
       timedOutAfterBlock = true;
     }
@@ -441,4 +449,4 @@ function runCell(ctx, c, ceiling, budget, keepDir) {
   return row;
 }
 
-module.exports = { handWrapper, denyWrapper, runCell, shapeProblems, summary, classify, falseShape, whichClaude, REPO_ROOT, D0_MARKER };
+module.exports = { blockedTimeoutApplies, handWrapper, denyWrapper, runCell, shapeProblems, summary, classify, falseShape, whichClaude, REPO_ROOT, D0_MARKER };

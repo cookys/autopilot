@@ -398,10 +398,11 @@ cat >"$TEST_TMP/unac.js" <<'JS'
 const fs = require('fs');
 const [mode, rowsf] = process.argv.slice(2);
 const rows = fs.readFileSync(rowsf, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-const r = mode === 'timeout' ? rows[2] : rows[0]; const bad = [];
-const timeoutMode = mode === 'timeout'; const r3 = timeoutMode ? rows[2] : null;
-const want = mode === 'readable' ? 0.22 : mode === 'timeout' ? 0.52 : 0.45; // 0.05 + 0.10 of its own turns + the stray's 0.07; unreadable: the whole ceiling
-if (rows.length !== (mode === 'timeout' ? 3 : 1)) bad.push(rows.length + ' rows (the campaign must stop right after the cell with the stray session)');
+const r = mode.startsWith('timeout') ? rows[2] : rows[0]; const bad = [];
+// readable: 0.05 + 0.10 own turns + the stray's 0.07; unreadable: own 0.15 + one whole ceiling 0.45; timeout: ceiling 0.45 + 0.07;
+// timeout-unreadable: ceiling 0.45 (timed-out cell) + one whole ceiling 0.45 for the unreadable stray = 2 x ceiling
+const want = { readable: 0.22, unreadable: 0.60, timeout: 0.52, 'timeout-unreadable': 0.90 }[mode]; // 0.05 + 0.10 of its own turns + the stray's 0.07; unreadable: the whole ceiling
+if (rows.length !== (mode.startsWith('timeout') ? 3 : 1)) bad.push(rows.length + ' rows (the campaign must stop right after the cell with the stray session)');
 if (!r || r.failure_class !== 'infra_fail' || r.failure_cause !== 'unaccounted_claude_session' || r.unaccounted_sessions !== 1) bad.push('row ' + (r && [r.failure_class, r.failure_cause, r.unaccounted_sessions]));
 if (r && Math.abs(r.cost_usd - want) > 1e-6) bad.push('cost_usd ' + (r && r.cost_usd) + ' (want ' + want + ')');
 if (bad.length) { console.log('UNACCOUNTED SESSION MISSED: ' + bad.join(' ; ')); process.exit(1); }
@@ -417,6 +418,9 @@ node "$TEST_TMP/unac.js" unreadable "$R14" || fail "unaccounted (unreadable, gre
 setcfg '{"cost_per_turn":0.05,"sneak":true,"sneak_g2_only":true,"sneak_cost":0.07,"hang_g2_base":true,"hang_report":true}'; R17="$TEST_TMP/r17.jsonl"
 CAP=2.2 cc --results "$R17" >/dev/null 2>&1
 node "$TEST_TMP/unac.js" timeout "$R17" || fail "unaccounted on a timed-out cell (green)"
+setcfg '{"cost_per_turn":0.05,"sneak":true,"sneak_g2_only":true,"sneak_cost":0.07,"sneak_unreadable":true,"hang_g2_base":true,"hang_report":true}'; R19="$TEST_TMP/r19.jsonl"
+CAP=2.2 cc --results "$R19" >/dev/null 2>&1
+node "$TEST_TMP/unac.js" timeout-unreadable "$R19" || fail "unaccounted unreadable on a timed-out cell (green)"
 ok "unaccounted sessions detected and the campaign stopped"
 
 echo "=== 5h. hand wrapper: simultaneous launches share one budget under a lock; BUDGET without OUT is refused ==="
@@ -490,6 +494,19 @@ setcfg '{"hand_quota":true}'; R18="$TEST_TMP/r18.jsonl"; seed_on "$R18"
 CAP=2.2 cc --results "$R18" >"$TEST_TMP/r18.out" 2>"$TEST_TMP/r18.err"; rc=$?
 [ "$rc" = 2 ] && grep -q 'stopping the campaign: quota' "$TEST_TMP/r18.err" || { cat "$TEST_TMP/r18.err"; K="$R18.cells/g4-hand-effect/gate-on/1"; cat "$K/rail-stdout.json" "$K/rail-stderr.log" "$K/hand-out.json" 2>&1 | head -c 1500; tail -1 "$R18" | head -c 600; fail "a non-timeout quota failure must stop the campaign (rc=$rc)"; }
 node "$TEST_TMP/tmo2.js" g4quota "$R18" || fail "quota failure row (green)"
+cat >"$TEST_TMP/btest.js" <<'JS'
+const path = require('path');
+const cc = require(path.join(process.argv[2], 'd0gate', 'cc.js'));
+const cases = [ // [rail status, ON arm, a block record exists, expected]
+  ['failure', true, true, true], ['committed', true, true, true], ['no_op', true, true, true], ['dirty', true, true, true],
+  ['engine_unavailable', true, true, false], ['something_new', true, true, false],
+  ['failure', false, true, false], ['failure', true, false, false],
+];
+const bad = cases.filter(([st, on, blk, want]) => cc.blockedTimeoutApplies(st, on, blk) !== want).map((c) => c.slice(0, 3).join('/') + ' want ' + c[3]);
+if (bad.length) { console.log('BLOCKED-TIMEOUT EXCEPTION WRONG: ' + bad.join(' ; ')); process.exit(1); }
+console.log('blocked-timeout exception: applies only to ON + a block + (a scorable state or failure); engine_unavailable and unknown states stay infra (' + cases.length + ' cases)');
+JS
+node "$TEST_TMP/btest.js" "$EV" || fail "blocked-timeout whitelist (green)"
 ok "failure status and cause labels"
 
 echo "=== 6. negative controls: three runner copies each with ONE line broken, RED before the real runner is GREEN ==="
@@ -525,7 +542,7 @@ CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rc.jsonl
 if node "$TEST_TMP/check.js" isolation "$FLOG" "$CB" "$CLAUDE_CONFIG_DIR" >"$TEST_TMP/rc.out" 2>&1; then fail "RED control (c) was NOT caught: $(cat "$TEST_TMP/rc.out")"; fi
 echo "RED (expected) (c) real config dir: $(cat "$TEST_TMP/rc.out")"
 # (d) the timeout rule put back to 'always infra'
-brk "$FEV/d0gate/cc.js" "const blocked = on && " "const blocked = false && "
+brk "$FEV/d0gate/cc.js" "const blocked = blockedTimeoutApplies(" "const blocked = false && blockedTimeoutApplies("
 setcfg '{"hang_hand_on":true,"hang_hand_off":true}'; : >"$FLOG"
 RD="$TEST_TMP/rd.jsonl"; cp "$R4.seed" "$RD" 2>/dev/null || node -e 'const fs=require("fs"); const r=fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).slice(0,6).map((l)=>JSON.stringify({ ...JSON.parse(l), cost_usd: 0.05 })); fs.writeFileSync(process.argv[2], r.join("\n")+"\n");' "$R2" "$RD"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$RD" >/dev/null 2>&1
@@ -614,7 +631,7 @@ CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rr.jsonl
 if node "$TEST_TMP/tmo2.js" d0cost "$TEST_TMP/rr.jsonl" >"$TEST_TMP/rr.out" 2>&1; then fail "RED control (r) was NOT caught: $(cat "$TEST_TMP/rr.out")"; fi
 echo "RED (expected) (r) unfinished row keeps skill_invoked=true: $(cat "$TEST_TMP/rr.out")"
 # (s) a stray session on a timed-out cell is added to the reported sum instead of to the cell's charge
-restore; brk "$FEV/d0gate/cc.js" "Math.max(ceiling, o.cost + readable) : o.cost + readable" "Math.max(ceiling, mainCost + readable) : mainCost + readable"
+restore; brk "$FEV/d0gate/cc.js" "o.cost + readable + ceiling * unreadableN" "mainCost + readable + ceiling * unreadableN"
 setcfg '{"cost_per_turn":0.05,"sneak":true,"sneak_g2_only":true,"sneak_cost":0.07,"hang_g2_base":true,"hang_report":true}'
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rs.jsonl" >/dev/null 2>&1
 if node "$TEST_TMP/unac.js" timeout "$TEST_TMP/rs.jsonl" >"$TEST_TMP/rs.out" 2>&1; then fail "RED control (s) was NOT caught: $(cat "$TEST_TMP/rs.out")"; fi
@@ -629,6 +646,16 @@ echo "RED (expected) (t) quota text of a failure ignored: $(cat "$TEST_TMP/rt.ou
 restore; brk "$FEV/d0gate/cc.js" "if node -e '\${settled}' \"\$PRIV\"; then" "if grep -q total_cost_usd \"\$PRIV\"; then"
 if node "$TEST_TMP/stest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/ru.out" 2>&1; then fail "RED control (u) was NOT caught: $(cat "$TEST_TMP/ru.out")"; fi
 echo "RED (expected) (u) settlement by the bare word: $(cat "$TEST_TMP/ru.out")"
+# (s2) a timed-out cell with an unreadable stray: back to Math.max (the stray adds nothing)
+restore; brk "$FEV/d0gate/cc.js" "cost: Number((o.cost + readable + ceiling * unreadableN).toFixed(6))" "cost: Number((unreadableN > 0 ? Math.max(ceiling, o.cost + readable) : o.cost + readable).toFixed(6))"
+setcfg '{"cost_per_turn":0.05,"sneak":true,"sneak_g2_only":true,"sneak_cost":0.07,"sneak_unreadable":true,"hang_g2_base":true,"hang_report":true}'
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rs2.jsonl" >/dev/null 2>&1
+if node "$TEST_TMP/unac.js" timeout-unreadable "$TEST_TMP/rs2.jsonl" >"$TEST_TMP/rs2.out" 2>&1; then fail "RED control (s2) was NOT caught: $(cat "$TEST_TMP/rs2.out")"; fi
+echo "RED (expected) (s2) unreadable stray on a timed-out cell adds nothing: $(cat "$TEST_TMP/rs2.out")"
+# (v) the blocked-timeout exception bypasses the rail-state whitelist
+restore; brk "$FEV/d0gate/cc.js" "return eligible && on === true && hasBlock === true;" "return on === true && hasBlock === true;"
+if node "$TEST_TMP/btest.js" "$FEV" >"$TEST_TMP/rv.out" 2>&1; then fail "RED control (v) was NOT caught: $(cat "$TEST_TMP/rv.out")"; fi
+echo "RED (expected) (v) exception bypasses the whitelist: $(cat "$TEST_TMP/rv.out")"
 ok "negative controls red, real runner green (sections 2 to 5)"
 
 echo "=== 7. no real runner binary was started ==="

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://autopilot.local/schemas/gate-rules.schema.json",
+  "title": "GateRules",
+  "description": "Data-only rule list read by scripts/gate-verify.js (plan docs/plans/2026-10-26-depth0-per-turn-gate.md section 3.2). A rule never carries command text. Every path/glob is repo-relative, normalised, not absolute, no '..', realpath inside the repo (checked by the verifier; not expressible here). Globs support only literals, '*', '**' (whole segment) and '?'. At most 40 rules in total, ids unique across all kinds. What the worker changed is judged from the filesystem against the base object database (deleted, added, or different bytes/mode/symlink target), never from the worker's index, ignore rules or git config; the worktree walk skips .git, does not follow symlinks and stops with exit 2 after 200000 entries per operation. gate-verify.js is the authority; this file documents the shape and is pinned to it by scripts/gate-verify.test.js.",
+  "type": "object",
+  "required": ["v"],
+  "additionalProperties": false,
+  "properties": {
+    "v": { "const": 1 },
+    "forbid_paths": { "type": "array", "items": { "$ref": "#/$defs/forbidPath" } },
+    "require_files": { "type": "array", "items": { "$ref": "#/$defs/requireFile" } },
+    "require_text": { "type": "array", "items": { "$ref": "#/$defs/requireText" } },
+    "forbid_text": { "type": "array", "items": { "$ref": "#/$defs/forbidText" } },
+    "must_pass": { "type": "array", "items": { "$ref": "#/$defs/mustPass" } },
+    "features": { "type": "array", "items": { "$ref": "#/$defs/feature" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" },
+    "why": { "type": "string", "maxLength": 300 },
+    "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "glob": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^\\[\\]{}()!\\\\]+$" },
+    "text": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "argvFlag": { "description": "The only flags a registry argv may carry besides exported files. Pinned to ALLOWED_FLAGS in scripts/gate-verify.js by the test suite.", "enum": ["--test", "--no-warnings", "--check", "-I", "-B"] },
+    "forbidPath": {
+      "type": "object", "required": ["id", "glob"], "additionalProperties": false,
+      "properties": { "id": { "$ref": "#/$defs/id" }, "glob": { "$ref": "#/$defs/glob" }, "why": { "$ref": "#/$defs/why" } }
+    },
+    "requireFile": {
+      "type": "object", "required": ["id", "path"], "additionalProperties": false,
+      "properties": { "id": { "$ref": "#/$defs/id" }, "path": { "$ref": "#/$defs/path" }, "why": { "$ref": "#/$defs/why" } }
+    },
+    "requireText": {
+      "type": "object", "required": ["id", "path", "text"], "additionalProperties": false,
+      "properties": { "id": { "$ref": "#/$defs/id" }, "path": { "$ref": "#/$defs/path" }, "text": { "$ref": "#/$defs/text" }, "why": { "$ref": "#/$defs/why" } }
+    },
+    "forbidText": {
+      "type": "object", "required": ["id", "glob", "text"], "additionalProperties": false,
+      "properties": { "id": { "$ref": "#/$defs/id" }, "glob": { "$ref": "#/$defs/glob" }, "text": { "$ref": "#/$defs/text" }, "why": { "$ref": "#/$defs/why" } }
+    },
+    "mustPass": {
+      "type": "object", "required": ["id", "check"], "additionalProperties": false,
+      "properties": { "id": { "$ref": "#/$defs/id" }, "check": { "$ref": "#/$defs/id" }, "why": { "$ref": "#/$defs/why" } }
+    },
+    "feature": {
+      "type": "object", "required": ["id", "check"], "additionalProperties": false,
+      "properties": { "id": { "$ref": "#/$defs/id" }, "check": { "$ref": "#/$defs/id" }, "label": { "$ref": "#/$defs/why" }, "why": { "$ref": "#/$defs/why" } }
+    },
+    "checkRegistry": {
+      "description": ".claude/gate-checks.json, read from the base sha. Every file a check runs is listed in files and exported from base into a temp dir. argv[0] is a bare interpreter (node, sh, bash, python3, python) or an exported file (started by its exported path). Every other argv element is an exported file or exactly one of the value-less flags in $defs.argvFlag; any other element starting with '-' (joined short flags such as -cCODE, --x=y, a lone '-') is rejected. Value-taking flags are all rejected for now. A check that times out is an error (exit 2), not a violation.",
+      "type": "object", "required": ["v", "checks"], "additionalProperties": false,
+      "properties": {
+        "v": { "const": 1 },
+        "checks": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": {
+            "type": "object", "required": ["argv", "files"], "additionalProperties": false,
+            "properties": {
+              "argv": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1, "maxLength": 500 } },
+              "files": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/path" } },
+              "timeout_s": { "type": "integer", "minimum": 1, "maximum": 120 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

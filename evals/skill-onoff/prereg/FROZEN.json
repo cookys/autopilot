@@ -1581,5 +1581,121 @@
       "run-skill-onoff-matrix-fbatch-v2.sh": "6743b87d19a9f25d6fcd4649391bcd070b00b5ec16675ca81210137e0abc58e4",
       "score-fbatch-v3.js": "ae031a9db1f7ddad6ddb0006cad657a798fd0f034a4d15206127c38c456bc553"
     }
+  },
+  "d0gate": {
+    "frozen_at": "2026-10-29",
+    "stamped": true,
+    "note": "sha256 of the d0gate pre-registration (rule, markers, scorer, briefs, arm manifests, shared harness files) frozen before any live cell. Any edit after the first live cell voids the row.",
+    "packs": {
+      "ceo-agent-d0gate-base": {
+        "kind": "skill",
+        "source": "ceo-agent",
+        "ref": "45edf93da867d0f5cd0b9bd356cb2659471cb926",
+        "files": 7,
+        "digest_sha256": "9162e3988cf45e6d88cc8f048565388fd23716dd154aec8d0b2daf9086e719f6"
+      },
+      "ceo-agent-d0gate-change": {
+        "kind": "dir",
+        "source": "skills/ceo-agent @ 45edf93da + evals/skill-onoff/candidates/depth0-gate-arming.md inserted before '## Startup'",
+        "ref": "45edf93da+candidates/depth0-gate-arming.md",
+        "files": 7,
+        "digest_sha256": "43496525f1891a5f2a72d414ebe0f2cdd485a583df06d4ee576baa12231c1df6"
+      },
+      "d0gate-files-base": {
+        "kind": "scripts",
+        "source": "references/hetero-dispatch.md",
+        "ref": "45edf93da867d0f5cd0b9bd356cb2659471cb926",
+        "files": 1,
+        "digest_sha256": "65c27ac71fc6905f2c3202be13277dd1782c9991dec613e82d4ee95e5667ed30"
+      },
+      "d0gate-files-change": {
+        "kind": "scripts",
+        "source": "references/hetero-dispatch.md",
+        "ref": "45edf93da867d0f5cd0b9bd356cb2659471cb926",
+        "files": 1,
+        "digest_sha256": "39969906f1f806d39deb4ab935d215a2727c8ce7721d8d36d5e7554b060204f5"
+      },
+      "fixture-scripts-d0gate": {
+        "kind": "scripts",
+        "source": "requested: scripts/gate-verify.js, scripts/per-turn-gate-arm.js, scripts/lib/live-state-dir.js, schemas/gate-rules.schema.json, hooks/per-turn-gate.js; with their relative-require closure the pack holds: hooks/_shared/opt-in.js, hooks/per-turn-gate.js, schemas/gate-rules.schema.json, scripts/gate-verify.js, scripts/lib/config-path.js, scripts/lib/live-state-dir.js, scripts/per-turn-gate-arm.js",
+        "ref": "45edf93da867d0f5cd0b9bd356cb2659471cb926",
+        "files": 7,
+        "digest_sha256": "6a3241569ee0f311b19905cbd18daa93b7183013da0ca54c36c4d479be29f8a4"
+      },
+      "fixture-stubs-d0gate": {
+        "kind": "dir",
+        "source": "evals/skill-onoff/d0gate/stubs (hand-written stub dispatch script and worker overlays; the option-parse loop and --gate-rules block are copied from scripts/dispatch-hetero.sh at 45edf93da)",
+        "ref": "new in this unit (BL-0306 P3 U1); the stub does not exist at 45edf93da",
+        "files": 31,
+        "digest_sha256": "7cbcaf7eee12aea991595b991c93961015a22a656a19850e06787728e8b18ffe"
+      }
+    },
+    "closure_exclude": [
+      {
+        "path": "evals/skill-onoff/stamp-prereg.js",
+        "reason": "it is the stamping gate tool, not an evaluation input; the launch guard of the formal run calls it before the first cell"
+      }
+    ],
+    "files": {
+      "arms/d0gate/base.json": "518f3d603a6e2f1d30872a6d9915a88b0dc0ac05b5d52fb902d9e9e9dc4aacb6",
+      "arms/d0gate/change.json": "75d9038ad41e28a80ba64e7e18de860acbbe81b92f46078f95723c243dc9a07d",
+      "candidates/depth0-gate-arming.md": "bafc61692da5882cdcb89037a13b24d5817258a6066694718f631b1b35cc909b",
+      "d0gate/cc-tasks.js": "efd16a3ccee874253296b8261787de8cb283ac244bf0b3af3ac24a51a91bb777",
+      "d0gate/cc.js": "c6af8ed20f47d689c4fa6781581cd5539f95c76ab0f9609d85b108a40226694e",
+      "d0gate/cell.js": "247237278c57df4745004ce97777bb5a9a84bd9a7e826dcbb86eaf0d86aa8e5c",
+      "d0gate/controls.js": "0e3f30621b5d1ebef289c8c075202666df9c4d258ce15b80a936a33ab8457383",
+      "d0gate/fixtures/rules/g1-alt-encoding.json": "bce376c8f49a1b320acf25b82c6fe5b4a8ede8532fdd8917b044e433cc164ba5",
+      "d0gate/fixtures/rules/g1-good.json": "4c4e69a1022a70b3043a542fa71117c31e77f6efcbe13790e84424945a712f62",
+      "d0gate/fixtures/rules/g1-missing-rc.json": "7f3c77eb3aceae4e52dc313a5f868812b2f403a66218fece7836709da444488d",
+      "d0gate/fixtures/rules/g1-too-wide.json": "e757b3553a6fd35bfa370e1c2786ab58aaf98f2a5af60ac62f0eabb409d870af",
+      "d0gate/fixtures/rules/g3-fixed.json": "17bb3e39f0da4a0f5cf93cd5fa2d7ec0f3bae3a19166bfec9cb7b28d359fd123",
+      "d0gate/fixtures/rules/g3-wrong.json": "482fb4d91fe8ae7b80a42f1882bc96415f2e23cf4965066f620bad8446c3ae66",
+      "d0gate/fixtures/rules/invalid-dotdot.json": "67039e6ff0cf40400a3332908e3ac4071dc5ff085681377063a2b35caa73ccfa",
+      "d0gate/fixtures/tinylib/CONTRIBUTING.md": "4d9d49f6fb883030e5946a0bebbc904c05ea5106c5b3ba6afd3fa3630be83ef0",
+      "d0gate/fixtures/tinylib/README.md": "5d0904b18785c0e10891c953bc40ce0e92102cacd8d16db54de4eb91cea81029",
+      "d0gate/fixtures/tinylib/run-tests.sh": "131168a65eabf30542b9bdc631f6cb2cec1b734d7d1703ff258f04cfdb4c27ac",
+      "d0gate/fixtures/tinylib/src/legacy/old.js": "c7ff2b7bccc16feecfd500a1b5fd144e936f4b35aca51502a910941393829707",
+      "d0gate/fixtures/tinylib/src/text.js": "90943676a771f8f26e032b36b007ebd393a680512251973ac240e8e347e4cd33",
+      "d0gate/fixtures/tinylib/test/check.js": "dcf5e79461491a65188fed13fb411a820907690386a454cc905db000fb0f2fb8",
+      "d0gate/lib.js": "5b32510790a3e0a1c1109fb92104ea30d66d46786885c4d2d04589c8f84564f2",
+      "d0gate/mutants/hook-mutant.js": "eda06ae13e2f30ea65dc51a5542fd79e97870a8ee1777a5978d7910f393f4cfb",
+      "d0gate/stubs/scripts/d0gate-workers/clean-g1/MODE": "2a1f6da9e35b1102c13838d12fcd8d90f0f1256611856e38c89590e09c5158f5",
+      "d0gate/stubs/scripts/d0gate-workers/clean-g1/files/docs/CHANGES.md": "fcc42fdb913ad6184648a060ff40e0f918725e391901e72fae29cc59a13440dd",
+      "d0gate/stubs/scripts/d0gate-workers/clean-g1/files/src/text.js": "9cdb5a05ec73c2be2d2851f882b5a479be3dd765c0fe8adb811968a59e84efb3",
+      "d0gate/stubs/scripts/d0gate-workers/clean-g1/files/test/check.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "d0gate/stubs/scripts/d0gate-workers/clean-g2/MODE": "c4038a9644d303c6497c27f7f018ac5ae30ea8b2bdf060388bccfc11e4dc412f",
+      "d0gate/stubs/scripts/d0gate-workers/clean-g2/files/src/text.js": "e6466a29052c6fd96624e08f15dc876ab3faae8b23cd037ac202f418bd88dd32",
+      "d0gate/stubs/scripts/d0gate-workers/clean-g2/files/test/check.js": "08dbc1a68f6da3a0cd8c52e1981b8cfc4adc5ecfadd720d217077f1c8c1ffdfd",
+      "d0gate/stubs/scripts/d0gate-workers/g3-broken/MODE": "9702dbe967316aae6b2ab2671991579a8861b7ee889528d2f621aacfc8b44a3d",
+      "d0gate/stubs/scripts/d0gate-workers/g3-broken/files/src/text.js": "fc93ceb9f4d3cef01279f6a795de4b14dd0b2a00580a07679a0bf0748c0c0b98",
+      "d0gate/stubs/scripts/d0gate-workers/g3-broken/files/test/check.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "d0gate/stubs/scripts/d0gate-workers/g3-ok/MODE": "065af26a566f11b76f0af5b35355542b3c0da283bfb5e24b1ecf34f36568b36b",
+      "d0gate/stubs/scripts/d0gate-workers/g3-ok/files/src/text.js": "9cdb5a05ec73c2be2d2851f882b5a479be3dd765c0fe8adb811968a59e84efb3",
+      "d0gate/stubs/scripts/d0gate-workers/g3-ok/files/test/check.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "d0gate/stubs/scripts/d0gate-workers/g4-broken/MODE": "8aba3edbe02563f7dbd5f52d1ecb120f16f05caca4a093c56c12e45b575d3b6a",
+      "d0gate/stubs/scripts/d0gate-workers/g4-broken/files/docs/CHANGES.md": "fcc42fdb913ad6184648a060ff40e0f918725e391901e72fae29cc59a13440dd",
+      "d0gate/stubs/scripts/d0gate-workers/g4-broken/files/src/text.js": "fc93ceb9f4d3cef01279f6a795de4b14dd0b2a00580a07679a0bf0748c0c0b98",
+      "d0gate/stubs/scripts/d0gate-workers/g4-broken/files/test/check.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "d0gate/stubs/scripts/d0gate-workers/g4-console/MODE": "6413612a3e768b5d55f213d15435095ae30c9aaf8675609df98035212c75f1ae",
+      "d0gate/stubs/scripts/d0gate-workers/g4-console/files/docs/CHANGES.md": "fcc42fdb913ad6184648a060ff40e0f918725e391901e72fae29cc59a13440dd",
+      "d0gate/stubs/scripts/d0gate-workers/g4-console/files/src/text.js": "7d7e328797cd0ba1e03cd540f1f2e45c95d6abc1c2afe0b63bb578a854376e22",
+      "d0gate/stubs/scripts/d0gate-workers/g4-console/files/test/check.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "d0gate/stubs/scripts/d0gate-workers/g4-legacy/MODE": "12bbc584173c6332f46f81e592273cb3d70a26fe80d5333e20a9f86e174d6a81",
+      "d0gate/stubs/scripts/d0gate-workers/g4-legacy/files/docs/CHANGES.md": "fcc42fdb913ad6184648a060ff40e0f918725e391901e72fae29cc59a13440dd",
+      "d0gate/stubs/scripts/d0gate-workers/g4-legacy/files/src/legacy/old.js": "7fa558ce3b417dcd2f641880c75f4ead9f4912dbf8398dba3ca4fd11f964fa80",
+      "d0gate/stubs/scripts/d0gate-workers/g4-legacy/files/src/text.js": "9cdb5a05ec73c2be2d2851f882b5a479be3dd765c0fe8adb811968a59e84efb3",
+      "d0gate/stubs/scripts/d0gate-workers/g4-legacy/files/test/check.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "d0gate/stubs/scripts/d0gate-workers/g4-nochanges/MODE": "8b10cdd6450a47979ea6589dc61fa16436831192ff54c5c04cf772ef26ce5bbb",
+      "d0gate/stubs/scripts/d0gate-workers/g4-nochanges/files/src/text.js": "9cdb5a05ec73c2be2d2851f882b5a479be3dd765c0fe8adb811968a59e84efb3",
+      "d0gate/stubs/scripts/d0gate-workers/g4-nochanges/files/test/check.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
+      "d0gate/stubs/scripts/d0gate-workers/noop/MODE": "f42479bb812791672351969841b5817302ec3f87c7f1f803874fc86156266eb3",
+      "d0gate/stubs/scripts/dispatch-hetero.sh": "73bac720fb0b154148fbff3fb0936cdab883b855338f3baad995045804a4c8d5",
+      "d0gate/table-cases.js": "604b8f73f91a7e5801e30929cd6356bd3b802247280fb0746d19c9603acb3550",
+      "d0gate/traces.js": "72248ba65079254da6afcbb5f37ca1ad0350379a1ddf691f0e4e88b4446737b0",
+      "lib/transcript-query.js": "5efb32c95a0f43c2cab54163c59413d7884111a0f602b8d5ce7e8749f83f2cd9",
+      "prereg/d0gate.json": "817bbe9deacb761087094ad8574033786ca834018a4ec96a01b6a631f8151544",
+      "run-d0gate-campaign.js": "6060ff68eaa94dc6aa2d233667ec11428e7053d5cb51dd494ecfc41fce4db9e4",
+      "score-d0gate.js": "17e7a7f2ef7d732575a4c25de76cb4739a733273bc68cf91222df37a4cd8dc6d"
+    }
   }
 }

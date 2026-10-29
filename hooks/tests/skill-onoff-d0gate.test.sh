@@ -171,8 +171,13 @@ ONOFF_MAX_USD=4 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.jso
 [ "$rc" = 1 ] && grep -q 'exceeds ONOFF_MAX_USD' "$TEST_TMP/e1" || fail "RED control: cap 4 must refuse (rc=$rc: $(cat "$TEST_TMP/e1"))"; echo "RED (expected) cap 4: $(cat "$TEST_TMP/e1")"
 ONOFF_MAX_USD=25 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run >/dev/null 2>"$TEST_TMP/e2"; rc=$?
 [ "$rc" = 2 ] && grep -q 'never raised' "$TEST_TMP/e2" || fail "RED control: cap 25 must be refused (rc=$rc: $(cat "$TEST_TMP/e2"))"; echo "RED (expected) cap 25: $(cat "$TEST_TMP/e2")"
-S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/cc.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e3"; rc=$?
+S node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.status="draft (control copy)"; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$EV/prereg/d0gate.json" "$TEST_TMP/prereg-draft.json"
+S node "$EV/run-d0gate-campaign.js" --prereg "$TEST_TMP/prereg-draft.json" --results "$TEST_TMP/cc.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e3"; rc=$?
 [ "$rc" = 2 ] && grep -q 'not stamped' "$TEST_TMP/e3" || fail "RED control: cc formal on a draft prereg must be refused (rc=$rc: $(cat "$TEST_TMP/e3"))"; echo "RED (expected) cc formal, draft: $(cat "$TEST_TMP/e3")"
+# GREEN: the real row is stamped, so the formal launch guard gets past "not stamped" and "--check is not green" and stops at the pilot-results rule (nothing is launched)
+S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/cc-real.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e3g"; rc=$?
+[ "$rc" = 2 ] && grep -q -- '--pilot-results must hold' "$TEST_TMP/e3g" && ! grep -q 'not stamped\|--check is not green' "$TEST_TMP/e3g" || fail "GREEN control: the stamped real row must pass the stamp checks of the formal guard (rc=$rc: $(cat "$TEST_TMP/e3g"))"
+echo "GREEN (stamped row recognised by the formal guard, stops before any cell): $(cat "$TEST_TMP/e3g")"
 # U2 wired the cc runner (hooks/tests/skill-onoff-d0gate-cc.test.sh drives it with a fake claude). Here: with NO claude on PATH it must stop
 # before dispatching anything (the sentinel claude must not be reached either: PATH is an empty directory, node is called by absolute path).
 mkdir -p "$TEST_TMP/emptypath"
@@ -448,8 +453,14 @@ S node "$EV/stamp-prereg.js" --row d0gate --root "$RH" --check >/dev/null 2>&1 |
 echo "x" >>"$RH/d0gate/lib.js"
 S node "$EV/stamp-prereg.js" --row d0gate --root "$RH" --check >"$TEST_TMP/stamp-red.out" 2>&1 && fail "RED control: a changed frozen file must break --check"
 echo "RED (expected) $(cat "$TEST_TMP/stamp-red.out")"
-grep -q '"d0gate"' "$EV/prereg/FROZEN.json" && fail "the real FROZEN.json already holds d0gate (U1 must not stamp)"
-case "$(S node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status)' "$EV/prereg/d0gate.json")" in draft*) ;; *) fail "prereg status is not draft";; esac
+grep -q '"d0gate"' "$EV/prereg/FROZEN.json" || fail "the real FROZEN.json does not hold d0gate (the row must be stamped)"
+case "$(S node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status)' "$EV/prereg/d0gate.json")" in stamped*) ;; *) fail "prereg status is not stamped";; esac
+S node "$EV/stamp-prereg.js" --row d0gate --check >/dev/null 2>&1 || fail "the real row is stamped but stamp-prereg --check is not green (a frozen file changed after stamping)"
+# RED: the same real row with one frozen file changed (in a throwaway copy) must make --check AND the formal launch guard refuse
+echo "x" >>"$RH/d0gate/cell.js"
+S node "$RH/run-d0gate-campaign.js" --results "$TEST_TMP/cc-red.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e4"; rc=$?
+[ "$rc" = 2 ] && grep -q -- '--check is not green' "$TEST_TMP/e4" || fail "RED control: a changed frozen file must stop the formal launch guard (rc=$rc: $(cat "$TEST_TMP/e4"))"
+echo "RED (expected) formal guard after a frozen file changed: $(cat "$TEST_TMP/e4")"
 cat >"$TEST_TMP/localinfo.js" <<'EOF'
 // every string (keys and values) of the d0gate pack entries / pack_meta in the manifest, and of the whole prereg, must hold no machine-local text
 const fs = require('fs');
@@ -492,7 +503,7 @@ m.pack_meta["fixture-stubs-d0gate"].source = process.argv[3]; fs.writeFileSync(p
   echo "RED (expected) user root, planted $planted: $(cat "$TEST_TMP/li-root.out")"
 done
 echo "RED (expected) $(cat "$TEST_TMP/li-red.out")"
-ok "stamp rehearsal (real row untouched: draft, not in FROZEN.json)"
+ok "stamp rehearsal and the real row: stamped, --check green, a changed frozen file is caught"
 
 echo "=== 12. nothing written to the real stores (checked after every section that runs traces) ==="
 REAL_XDG="${XDG_RUNTIME_DIR:-/nonexistent}/autopilot"

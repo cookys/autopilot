@@ -160,7 +160,7 @@ echo "=== 1. --print-runner-pin prints a value and changes nothing ==="
 node "$EV/run-d0gate-campaign.js" --print-runner-pin >"$TEST_TMP/pin.out" || fail "--print-runner-pin rc=$?"
 node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(!/^9\.9\.9 \(Claude Code fake\); depth0 sonnet; hand haiku; rail sha256:[0-9a-f]{64}$/.test(j.runner_pin_value)||Object.keys(j.rail_files).length!==5) throw new Error(JSON.stringify(j)); console.log(j.runner_pin_value)' "$TEST_TMP/pin.out" || fail "pin value shape"
 [ "$(sha256sum "$EV/prereg/d0gate.json" | cut -d' ' -f1)" = "$REAL_PRE_SHA" ] || fail "the prereg changed"
-case "$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(p.status.split(" ")[0], /^2\.1\.\d+ \(Claude Code\); depth0 sonnet; hand haiku; rail sha256:[0-9a-f]{64}$/.test(p.runner_pin.value) ? "pinned" : "unpinned")' "$EV/prereg/d0gate.json")" in "draft pinned") ;; *) fail "prereg status was touched or the pin is not a runner pin value";; esac
+case "$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(p.status.split(" ")[0], /^2\.1\.\d+ \(Claude Code\); depth0 sonnet; hand haiku; rail sha256:[0-9a-f]{64}$/.test(p.runner_pin.value) ? "pinned" : "unpinned")' "$EV/prereg/d0gate.json")" in "stamped pinned") ;; *) fail "prereg is not stamped or the pin is not a runner pin value";; esac
 ok "runner pin"
 
 echo "=== 2. pilot, 9 cells through the fake claude (G2 base hangs on purpose: the timeout cell) ==="
@@ -261,7 +261,8 @@ CAP=2.2 cc --results "$R2" >"$TEST_TMP/r3.out" 2>"$TEST_TMP/r3.err"; rc=$?
 node -e 'const rows=require("fs").readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(JSON.parse); const k=new Set(rows.map((r)=>r.task_id+"|"+r.arm+"|"+r.rep)); if(k.size!==9||rows.some((r)=>r.failure_class!==null)) throw new Error("rows are not 9 distinct scored cells"); console.log("resume: 5 cells kept, 4 added, 9 distinct scored cells")' "$R2" || fail "resume rows"
 node "$TEST_TMP/check.js" shape "$EV" "$R2" || fail "shape after resume"
 # the formal launch guard of U1 is untouched
-node "$EV/run-d0gate-campaign.js" --prereg "$PRE" --results "$TEST_TMP/formal.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e1"; rc=$?
+node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.status="draft (control copy)"; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$PRE" "$TEST_TMP/prereg-draft.json"
+node "$EV/run-d0gate-campaign.js" --prereg "$TEST_TMP/prereg-draft.json" --results "$TEST_TMP/formal.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e1"; rc=$?
 [ "$rc" = 2 ] && grep -q 'not stamped' "$TEST_TMP/e1" || fail "formal cc on a draft must still be refused (rc=$rc: $(cat "$TEST_TMP/e1"))"
 echo "GREEN (formal guard): $(cat "$TEST_TMP/e1")"
 ok "budget guard, resume-by-cell, formal guard"

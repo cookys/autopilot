@@ -45,10 +45,18 @@
 // extra_runners. Each entry gets its own TMPDIR and XDG_RUNTIME_DIR; AUTOPILOT_TEST_TIMING_FACTOR defaults to N
 // for pool entries and 1 for the serial part (a value already in the environment wins). Output is buffered per
 // entry and printed whole, followed by its `rc=N <path>`; the summary line is unchanged and a
-// `slowest: <path> <s>s, ...` line (top 10) follows it. A pool entry that exits non-zero is re-run once,
-// alone, after the pool drains: rc 0 prints `flaky-under-parallel: <path> (rc=<pool rc> in pool)` then
-// `rc=0 <path>` and counts green; a second non-zero keeps its original output and rc. Works with
-// --entry-timeout, --attribute and --record.
+// `slowest: <path> <s>s, ...` line (top 10) is printed last, after any `attribution:` and `record:` lines
+// (so a consumer that reads the summary-then-record sequence sees the same order as without --jobs).
+// A pool entry that exits non-zero is re-run once, alone, after the pool drains: rc 0 prints
+// `flaky-under-parallel: <path> (rc=<pool rc> in pool)` (`(timeout in pool)` when the pool run was killed by
+// --entry-timeout) then `rc=0 <path>` and counts green; its record entry has `flaky_under_parallel: true`,
+// `pool_rc` and, for a pool timeout, `pool_timed_out: true`. A second non-zero makes the RERUN final: its output,
+// rc (124 when it timed out, listed in the summary's timeout list), record entry and --attribute input; the pool rc
+// is not shown. Works with --entry-timeout, --attribute and --record.
+// Captured output: when an entry's process exits, its pipes get a 300 ms grace to drain; output a background
+// grandchild writes later than that is cut off (the entry's group is then killed). Durations writes are
+// serialised between affected-suites instances by <tsv>.lock (10 s cap, then a warning and no write); run.sh
+// --parallel writes the same file with an atomic rename but does not take that lock.
 //
 // --entry-timeout <secs> (only with --run; default none): each executed entry runs in its own process
 // group and is killed after that many seconds (TERM, KILL 2s later); its rc is 124 and the summary
@@ -659,17 +667,23 @@ function readDurations(file) {
 function durationsApply(root) {
   return !!process.env.AUTOPILOT_TEST_DURATIONS_FILE || path.resolve(root) === path.resolve(__dirname, '..');
 }
+// The read-merge-rename below runs under the pid-lock helper scripts/lib/jsonl-store.js (<file>.lock), so concurrent
+// affected-suites runs keep each other's rows. run.sh --parallel writes the same file with its own atomic rename and no
+// lock (a shell writer cannot take this pid-lock): it is not mutually excluded, only affected-suites instances are.
+// A lock not obtained within 10 s skips the write with one warning on stderr; the run itself is never held up.
+const lockedRun = (opts, fn) => require('./lib/jsonl-store.js').withWriteLock(opts, fn);
 function recordDurations(root, results, timedOutPaths) {
   if (!durationsApply(root)) return;
   try {
     const file = durationsFile();
-    const merged = readDurations(file);
-    for (const r of results) if (!timedOutPaths.includes(r.path) && typeof r.seconds === 'number') merged.set(r.path, Math.round(r.seconds));
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = `${file}.tmp.${process.pid}`;
-    fs.writeFileSync(tmp, [...merged.entries()].sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)).map(([k, v]) => `${k}\t${v}\n`).join(''));
-    fs.renameSync(tmp, file);
-  } catch { /* history is advisory */ }
+    lockedRun({ storeDir: path.dirname(file), lockFile: `${file}.lock`, name: 'durations', timeoutMs: 10000 }, () => {
+      const merged = readDurations(file);
+      for (const r of results) if (!timedOutPaths.includes(r.path) && typeof r.seconds === 'number') merged.set(r.path, Math.round(r.seconds));
+      const tmp = `${file}.tmp.${process.pid}`;
+      fs.writeFileSync(tmp, [...merged.entries()].sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0)).map(([k, v]) => `${k}\t${v}\n`).join(''));
+      fs.renameSync(tmp, file);
+    });
+  } catch (e) { process.stderr.write(`affected-suites: durations not recorded: ${e.message}\n`); }
 }
 
 const JOB_TMPS = new Set();
@@ -719,7 +733,9 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
   };
   const finalize = (rel, r, flaky) => {
     if (r.timedOut) timedOut.push(rel);
-    results.push(flaky ? { path: rel, rc: r.rc, seconds: r.seconds, flaky_under_parallel: true } : { path: rel, rc: r.rc, seconds: r.seconds });
+    const row = { path: rel, rc: r.rc, seconds: r.seconds };
+    if (flaky) { row.flaky_under_parallel = true; row.pool_rc = flaky.pool_rc; if (flaky.pool_timed_out) row.pool_timed_out = true; }
+    results.push(row);
     if (r.rc !== 0) failed++;
   };
   try {
@@ -731,27 +747,28 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
       while (next < poolList.length) {
         const rel = poolList[next++];
         const r = await exec(rel, callerFactor === undefined ? jobs : callerFactor);
-        if (r.rc === 0) { emit(rel, r); finalize(rel, r, false); } else held.push({ rel, r });
+        if (r.rc === 0) { emit(rel, r); finalize(rel, r, null); } else held.push({ rel, r });
       }
     };
     await Promise.all(Array.from({ length: Math.min(jobs, poolList.length) }, worker));
-    // Serial rerun of every pool failure (BL-0331): green alone = flaky-under-parallel, still red = red as it was.
+    // Serial rerun of every pool failure (BL-0331): green alone = flaky-under-parallel; still red = the RERUN's output,
+    // rc, timeout state and record entry are final (the pool rc is not reported then).
     for (const { rel, r } of held) {
       const again = await exec(rel, 1);
       if (again.rc === 0) {
         emitChunks(again.chunks);
-        process.stdout.write(`flaky-under-parallel: ${rel} (rc=${r.rc} in pool)\n`);
+        process.stdout.write(`flaky-under-parallel: ${rel} (${r.timedOut ? 'timeout' : `rc=${r.rc}`} in pool)\n`);
         process.stdout.write(`rc=0 ${rel}\n`);
-        finalize(rel, again, true);
+        finalize(rel, again, { pool_rc: r.rc, pool_timed_out: r.timedOut });
       } else {
-        emit(rel, r);
-        finalize(rel, r, false);
+        emit(rel, again);
+        finalize(rel, again, null);
       }
     }
     for (const rel of [...serialList, ...doc.extra_runners]) {
       const r = await exec(rel, 1);
       emit(rel, r);
-      finalize(rel, r, false);
+      finalize(rel, r, null);
     }
   } finally {
     if (base) {
@@ -767,8 +784,7 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
   }
   process.stdout.write(`summary: ${results.length} run, ${failed} failed${timedOut.length ? ` (timeout: ${timedOut.join(' ')})` : ''}\n`);
   const slow = results.slice().sort((a, b) => b.seconds - a.seconds).slice(0, 10).map((r) => `${r.path} ${r.seconds}s`);
-  if (slow.length) process.stdout.write(`slowest: ${slow.join(', ')}\n`);
-  return { code: failed === 0 ? 0 : 1, results, budgetDoc: null, emptyFail, timedOutPaths: timedOut };
+  return { code: failed === 0 ? 0 : 1, results, budgetDoc: null, emptyFail, timedOutPaths: timedOut, slowest: slow.length ? `slowest: ${slow.join(', ')}\n` : '' };
 }
 
 async function runSelected(root, doc, alwaysRun, budget, entryTimeout, jobs) {
@@ -1048,6 +1064,7 @@ async function main(argv) {
           return 2;
         }
       }
+      if (ran.slowest) process.stdout.write(ran.slowest);
       return attrCode != null ? attrCode : ran.code;
     }
     const extra = doc.extra_runners.map((x) => x + '\n').join('');

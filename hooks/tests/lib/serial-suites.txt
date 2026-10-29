@@ -42,5 +42,5 @@ hooks/tests/paid-batch-auth-stop.test.sh
 hooks/bash-launch-guard.test.js
 # dispatch-hetero-gate-rules.test.sh:133 (timeout -s TERM 2)
 hooks/tests/dispatch-hetero-gate-rules.test.sh
-# dispatch-author-strict-roster.test.sh (timing-sensitive under serial load, BL-0334)
+# dispatch-author-strict-roster.test.sh: rc=1 under serial high load in the 2026-10-29 watchfix pre-push record (docs/backlog/pre-push-suite-speed.md row 5). No wall-clock assertion was found by grep in the file, so there is no file:line; cause unconfirmed, BL-0334 to pin it.
 hooks/tests/dispatch-author-strict-roster.test.sh

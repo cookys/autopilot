@@ -276,3 +276,123 @@ test('usage: --jobs needs --run, a positive integer, and excludes --budget-secon
     assert.strictEqual(x(['--run', '--jobs', '2', '--budget-seconds', '5']).status, 2);
   } finally { r.cleanup(); }
 });
+
+// ---- review round 1: rerun is final, pool-timeout label, slowest placement, durations lock ----
+
+function recRun(r, args, env = {}) {
+  const g = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...a], { cwd: r.dir }).toString().trim();
+  const base = g('rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(r.dir, 'scripts', 'seed.js'), 'changed\n');
+  g('add', '-A'); g('commit', '-qm', 'c');
+  const rec = path.join(r.dir, 'rec.json');
+  const e = { ...process.env, AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), ...env }; delete e.NODE_TEST_CONTEXT; delete e.NODE_TEST_WORKER_ID; delete e.AUTOPILOT_TEST_TIMING_FACTOR;
+  const p = spawnSync('node', [SEL, '--root', r.dir, '--base', base, '--head', 'HEAD', '--run', '--record', rec, ...args], { encoding: 'utf8', env: e });
+  return { p, doc: JSON.parse(fs.readFileSync(rec, 'utf8')) };
+}
+// Different result on the second run of the same suite: first = $1, second = $2 (a number, or "hang" to sleep).
+const twoStage = (first, second) => suite(`n="$PWD/.n-$(basename "$0")"; if [ ! -e "$n" ]; then : > "$n"; ${first}; fi; ${second}`);
+
+test('rerun still red: the rerun is final (rc 2 not the pool rc 1), in output and record', () => {
+  const r = makeRepo({ 'hooks/tests/x.test.sh': twoStage('echo pool-run; exit 1', 'echo rerun; exit 2'), 'hooks/tests/ok.test.sh': suite('true') });
+  try {
+    const { p, doc } = recRun(r, ['--jobs', '2']);
+    assert.match(p.stdout, /^rerun\nrc=2 hooks\/tests\/x\.test\.sh$/m);
+    assert.doesNotMatch(p.stdout, /pool-run|rc=1 hooks\/tests\/x/);
+    assert.match(p.stdout, /summary: 2 run, 1 failed\n/);
+    const x = doc.suites.find((s) => s.path === 'hooks/tests/x.test.sh');
+    assert.strictEqual(x.rc, 2);
+    assert.strictEqual(x.flaky_under_parallel, undefined);
+    assert.strictEqual(p.status, 1);
+  } finally { r.cleanup(); }
+});
+
+test('rerun times out after a pool rc=1: rc 124, summary timeout list and record say so', () => {
+  const r = makeRepo({ 'hooks/tests/x.test.sh': twoStage('exit 1', 'sleep 30') });
+  try {
+    const { p, doc } = recRun(r, ['--jobs', '2', '--entry-timeout', '1']);
+    assert.match(p.stdout, /^rc=124 hooks\/tests\/x\.test\.sh$/m);
+    assert.match(p.stdout, /summary: 1 run, 1 failed \(timeout: hooks\/tests\/x\.test\.sh\)\n/);
+    assert.strictEqual(doc.suites[0].rc, 124);
+    assert.strictEqual(p.status, 1);
+  } finally { r.cleanup(); }
+});
+
+test('pool timeout but green rerun is labelled "timeout in pool" and the record tells it from an rc flake', () => {
+  const r = makeRepo({ 'hooks/tests/t.test.sh': twoStage('sleep 30', 'true'), 'hooks/tests/f.test.sh': twoStage('exit 1', 'true') });
+  try {
+    const { p, doc } = recRun(r, ['--jobs', '2', '--entry-timeout', '1']);
+    assert.match(p.stdout, /^flaky-under-parallel: hooks\/tests\/t\.test\.sh \(timeout in pool\)$/m);
+    assert.match(p.stdout, /^flaky-under-parallel: hooks\/tests\/f\.test\.sh \(rc=1 in pool\)$/m);
+    const by = Object.fromEntries(doc.suites.map((s) => [s.path, s]));
+    assert.strictEqual(by['hooks/tests/t.test.sh'].pool_timed_out, true);
+    assert.strictEqual(by['hooks/tests/t.test.sh'].pool_rc, 124);
+    assert.strictEqual(by['hooks/tests/f.test.sh'].pool_timed_out, undefined);
+    assert.strictEqual(by['hooks/tests/f.test.sh'].pool_rc, 1);
+    assert.strictEqual(by['hooks/tests/f.test.sh'].flaky_under_parallel, true);
+    assert.match(p.stdout, /summary: 2 run, 0 failed\n/);
+    assert.strictEqual(p.status, 0);
+  } finally { r.cleanup(); }
+});
+
+test('with --jobs the slowest line comes after the record line', () => {
+  const r = makeRepo({ 'hooks/tests/a.test.sh': suite('true'), 'hooks/tests/b.test.sh': suite('true') });
+  try {
+    const { p } = recRun(r, ['--jobs', '2']);
+    assert.match(p.stdout, /summary: 2 run, 0 failed\nrecord: [^\n]+\nslowest: [^\n]+\n$/);
+  } finally { r.cleanup(); }
+});
+
+// Durations lock. A delay is injected between the read and the write of the tsv (in a runner copy, so the product has
+// no test seam); the same copy minus the lock must lose a row.
+const DELAY = "const merged = readDurations(file); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1200);";
+function runnerCopy({ noLock }) {
+  let src = fs.readFileSync(path.join(__dirname, 'affected-suites.js'), 'utf8');
+  const a1 = 'const merged = readDurations(file);';
+  const a2 = "const lockedRun = (opts, fn) => require('./lib/jsonl-store.js').withWriteLock(opts, fn);";
+  assert.ok(src.includes(a1) && src.includes(a2), 'mutation anchors drifted');
+  src = src.replace(a1, DELAY);
+  if (noLock) src = src.replace(a2, 'const lockedRun = (opts, fn) => fn();');
+  src = src.replace("require('./lib/jsonl-store.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'jsonl-store.js'))})`);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'durlock-'));
+  const f = path.join(dir, 'affected-suites.js');
+  fs.writeFileSync(f, src);
+  return f;
+}
+async function twoWriters(bin) {
+  const tsv = tmpTsv();
+  const repos = ['one', 'two'].map((n) => makeRepo({ [`hooks/tests/${n}.test.sh`]: suite('true') }));
+  try {
+    const e = { ...process.env, AUTOPILOT_TEST_DURATIONS_FILE: tsv };
+    delete e.NODE_TEST_CONTEXT; delete e.NODE_TEST_WORKER_ID;
+    await Promise.all(repos.map((r) => new Promise((resolve) => {
+      const c = require('child_process').spawn('node', [bin, '--root', r.dir, '--run', '--files', 'scripts/seed.js'], { env: e, stdio: 'ignore' });
+      c.on('close', resolve);
+    })));
+    return fs.readFileSync(tsv, 'utf8');
+  } finally { repos.forEach((r) => r.cleanup()); }
+}
+
+test('two runs writing durations at the same time keep both rows (lock); the same race without the lock loses one (negative control)', async () => {
+  const locked = await twoWriters(runnerCopy({ noLock: false }));
+  assert.match(locked, /hooks\/tests\/one\.test\.sh\t\d+\n/);
+  assert.match(locked, /hooks\/tests\/two\.test\.sh\t\d+\n/);
+  const raced = await twoWriters(runnerCopy({ noLock: true }));
+  const rows = raced.trim().split('\n').filter(Boolean);
+  assert.strictEqual(rows.length, 1, `without the lock one writer's row is overwritten, got ${JSON.stringify(rows)}`);
+});
+
+test('a lock that cannot be taken is a warning, not a hang or a failure', () => {
+  const r = makeRepo({ 'hooks/tests/a.test.sh': suite('true') });
+  try {
+    const tsv = tmpTsv();
+    // a live holder: this very test process
+    fs.writeFileSync(`${tsv}.lock`, String(process.pid));
+    const src = fs.readFileSync(SEL, 'utf8').replace('timeoutMs: 10000', 'timeoutMs: 300');
+    const bin = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lockto-')), 'affected-suites.js');
+    fs.writeFileSync(bin, src.replace("require('./lib/jsonl-store.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'jsonl-store.js'))})`));
+    const p = run(r.dir, [], { AUTOPILOT_TEST_DURATIONS_FILE: tsv }, bin);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.match(p.stderr, /durations not recorded: timed out waiting for durations lock/);
+    assert.strictEqual(fs.existsSync(tsv), false);
+  } finally { r.cleanup(); }
+});

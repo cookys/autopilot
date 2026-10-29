@@ -103,6 +103,7 @@ if (fmt === 'stream-json') {
     const payload = (a) => JSON.stringify({ session_id: sid, cwd: process.cwd(), stop_hook_active: a, prompt_id: 'p' });
     const hook = (a) => cp.spawnSync('sh', ['-c', cmd], { input: payload(a), encoding: 'utf8', env: process.env });
     hook(false);
+    if (CFG.hang_blocks2) hook(true); // a second block record before it hangs
     if (CFG.hang_hand_on) setInterval(() => {}, 1000); // blocked once, then never finishes: the rail times it out
     else { copy('clean-g1', process.cwd()); hook(true); hook(true); }
   } else if (CFG.hang_hand_off) { setInterval(() => {}, 1000); } else copy(CFG.hand_off_violate ? 'g4-console' : 'clean-g1', process.cwd());
@@ -358,6 +359,46 @@ JS
 node "$TEST_TMP/wtest.js" "$EV" "$TEST_TMP" || fail "hand wrapper cumulative budget (green)"
 ok "hand wrapper cumulative budget"
 
+echo "=== 5d2. the hand wrapper copies session files only from inside the cell, never through a symlink ==="
+cat >"$TEST_TMP/csess.js" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const path = require('path');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const fake = path.join(tmp, 'csess-real.sh');
+fs.writeFileSync(fake, '#!/bin/sh\necho \'{"type":"result","session_id":"fake","total_cost_usd":0.01}\'\n', { mode: 0o755 });
+const bad = [];
+const run = (what, setup) => {
+  const root = fs.mkdtempSync(path.join(tmp, 'ccell2-')); const outside = fs.mkdtempSync(path.join(tmp, 'coutside-'));
+  fs.mkdirSync(path.join(root, '.d0gate'), { recursive: true }); fs.mkdirSync(path.join(root, 'tmp'));
+  const cfg = setup(root, outside);
+  const bin = cc.handWrapper({ root }, fake);
+  const out = path.join(root, '.d0gate', 'hand-out.json'); fs.writeFileSync(out, '');
+  const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '1', CLAUDE_CONFIG_DIR: cfg }, encoding: 'utf8' });
+  const copied = []; const walk = (d) => { try { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else copied.push(path.relative(root, f)); } } catch { /* none */ } };
+  walk(out + '.sessions');
+  let lg = ''; try { lg = fs.readFileSync(path.join(root, '.d0gate', 'copy-sessions.log'), 'utf8'); } catch { /* none */ }
+  return { rc: r.status, copied, lg };
+};
+const mkproj = (cfg, files) => { for (const [n, t] of Object.entries(files)) { const f = path.join(cfg, 'projects', n); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); } return cfg; };
+// outside: the config dir of a launch lives outside the cell
+let r = run('outside', (root, outside) => mkproj(path.join(outside, 'cfg'), { 'p/a.jsonl': 'external' }));
+if (r.copied.length || !/not under the cell tmp/.test(r.lg)) bad.push('outside config dir was copied or not logged: ' + JSON.stringify(r));
+// the config dir inside the cell is a symlink to an outside directory
+r = run('dir-symlink', (root, outside) => { mkproj(path.join(outside, 'cfg'), { 'p/a.jsonl': 'external' }); fs.symlinkSync(path.join(outside, 'cfg'), path.join(root, 'tmp', 'cfg')); return path.join(root, 'tmp', 'cfg'); });
+if (r.copied.length || !/symlink/.test(r.lg)) bad.push('symlinked config dir was copied or not logged: ' + JSON.stringify(r));
+// inside the cell with a symlink to an outside file among real files: only the real file is copied, the symlink is skipped and logged
+r = run('inner-symlink', (root, outside) => { const cfg = mkproj(path.join(root, 'tmp', 'cfg'), { 'p/real.jsonl': 'mine' }); fs.writeFileSync(path.join(outside, 'secret'), 'external'); fs.symlinkSync(path.join(outside, 'secret'), path.join(cfg, 'projects', 'p', 'link.jsonl')); return cfg; });
+if (r.copied.join(',') !== path.join('.d0gate', 'hand-out.json.sessions').length && false) bad.push('x');
+if (!(r.copied.length === 1 && /real\.jsonl$/.test(r.copied[0])) || !/skip symlink/.test(r.lg)) bad.push('inner symlink case: ' + JSON.stringify(r));
+// the normal case: copied
+r = run('inside', (root) => mkproj(path.join(root, 'tmp', 'cfg'), { 'p/a.jsonl': 'mine' }));
+if (!(r.copied.length === 1 && /a\.jsonl$/.test(r.copied[0])) || r.rc !== 0) bad.push('inside case not copied: ' + JSON.stringify(r));
+if (bad.length) { console.log('SESSION COPY WRONG: ' + bad.join(' ; ')); process.exit(1); }
+console.log('session copy: outside config dir, symlinked config dir and symlinked files are not copied (each logged); a config dir under <cell>/tmp is');
+JS
+node "$TEST_TMP/csess.js" "$EV" "$TEST_TMP" || fail "session copy containment (green)"
+ok "hand wrapper session copy stays inside the cell"
+
 echo "=== 5e. cost_turns, last-packet cost_usd (the prereg says resume totals are cumulative), and the summed variant when the prereg says otherwise ==="
 setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
 R8="$TEST_TMP/r8.jsonl"; CAP=2.2 cc --results "$R8" --limit 1 >/dev/null 2>&1 || fail "cost run rc=$?"
@@ -392,6 +433,7 @@ if (mode === 'g4cost') { // ON, one real block, hand reports 0.01, then hangs: s
 } else if (mode === 'auth') { // ON, real block, auth error envelope, then timeout: infra authentication
   const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
   if (!on || on.failure_class !== 'infra_fail' || on.failure_cause !== 'authentication') bad.push('G4 ON auth+block+timeout: ' + (on && [on.failure_class, on.failure_cause]) + ' (want infra_fail/authentication)');
+  else if (on.g4.gate_blocks !== 2 || on.g4.completed !== false || on.g4.violating !== false || on.g4.hand_clean !== false || on.g4.gate_exercised !== false) bad.push('G4 ON infra row after 2 blocks: g4 ' + JSON.stringify(on.g4) + ' (want gate_blocks 2, every judged boolean false)');
 }
 if (bad.length) { console.log('TIMEOUT REGRESSION: ' + bad.join(' ; ')); process.exit(1); }
 console.log(mode + ' ok');
@@ -403,7 +445,7 @@ node "$TEST_TMP/tmo2.js" g4cost "$R10" || fail "G4 timeout cost (green)"
 setcfg '{"hang_g2_base":true,"hang_report":true}'; R11="$TEST_TMP/r11.jsonl"; : >"$R11"
 CAP=2.2 cc --results "$R11" --limit 3 >/dev/null 2>&1
 node "$TEST_TMP/tmo2.js" d0cost "$R11" || fail "depth-0 timeout cost (green)"
-setcfg '{"hang_hand_on":true,"hand_auth_error":true}'; R12="$TEST_TMP/r12.jsonl"; seed_on "$R12"
+setcfg '{"hang_hand_on":true,"hang_blocks2":true,"hand_auth_error":true}'; R12="$TEST_TMP/r12.jsonl"; seed_on "$R12"
 CAP=2.2 cc --results "$R12" >/dev/null 2>&1; [ -s "$R12" ] || fail "auth regression run wrote nothing"  # exit 2 is expected: an auth failure stops the campaign
 node "$TEST_TMP/tmo2.js" auth "$R12" || fail "auth+block+timeout (green)"
 ok "timeout cost ceiling and auth-before-exception"
@@ -577,7 +619,7 @@ CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rf.jsonl
 if node "$TEST_TMP/acct.js" nested "$FLOG" "$TEST_TMP/rf.jsonl" >"$TEST_TMP/rf.out" 2>&1; then fail "RED control (f) was NOT caught: $(cat "$TEST_TMP/rf.out")"; fi
 echo "RED (expected) (f) wrapper lets nested claude through: $(cat "$TEST_TMP/rf.out")"
 # (g) the attempts are no longer recorded
-brk "$FEV/d0gate/cc.js" "'echo \"attempt: \$*\" >>\"\$D0GATE_NESTED_LOG\"'," "':',"
+brk "$FEV/d0gate/cc.js" 'echo "attempt: $*" >>' ': >>'
 setcfg '{"cost_per_turn":0.05,"nested":true}'; : >"$FLOG"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rg.jsonl" --limit 1 >/dev/null 2>&1
 if node "$TEST_TMP/acct.js" nested "$FLOG" "$TEST_TMP/rg.jsonl" >"$TEST_TMP/rg.out" 2>&1; then fail "RED control (g) was NOT caught: $(cat "$TEST_TMP/rg.out")"; fi
@@ -586,6 +628,16 @@ echo "RED (expected) (g) attempts not recorded: $(cat "$TEST_TMP/rg.out")"
 brk "$FEV/d0gate/cc.js" 'args+=(--max-budget-usd "$rem")' 'args+=(--max-budget-usd "$D0GATE_HAND_BUDGET")'
 if node "$TEST_TMP/wtest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/rl.out" 2>&1; then fail "RED control (l) was NOT caught: $(cat "$TEST_TMP/rl.out")"; fi
 echo "RED (expected) (l) hand wrapper without cumulative budget: $(cat "$TEST_TMP/rl.out")"
+# (u) the session copy trusts any config dir / follows symlinks (each on its own copy of d0gate/, the other controls keep their breaks)
+UF="$TEST_TMP/ufarm"; rm -rf "$UF"; mkdir -p "$UF/d0gate"; cp -R "$EV/d0gate/." "$UF/d0gate/"
+brk "$UF/d0gate/cc.js" '!inside(rc,path.join(rr,"tmp")) || !inside(rp,rc)' 'false'
+if node "$TEST_TMP/csess.js" "$UF" "$TEST_TMP" >"$TEST_TMP/ru.out" 2>&1; then fail "RED control (u) was NOT caught: $(cat "$TEST_TMP/ru.out")"; fi
+echo "RED (expected) (u) wrapper copies from anywhere: $(cat "$TEST_TMP/ru.out")"
+cp "$EV/d0gate/cc.js" "$UF/d0gate/cc.js"
+brk "$UF/d0gate/cc.js" 'if (e.isSymbolicLink()) { log("skip symlink: "+a); continue; }' ''
+brk "$UF/d0gate/cc.js" 'else if (e.isFile()) fs.copyFileSync(a,b);' 'else if (fs.statSync(a).isFile()) fs.copyFileSync(a,b);'
+if node "$TEST_TMP/csess.js" "$UF" "$TEST_TMP" >"$TEST_TMP/ru2.out" 2>&1; then fail "RED control (u2) was NOT caught: $(cat "$TEST_TMP/ru2.out")"; fi
+echo "RED (expected) (u2) wrapper follows symlinks: $(cat "$TEST_TMP/ru2.out")"
 # (h) the resume-cumulative switch forced off (cost = sum of the calls)
 brk "$FEV/d0gate/cc.js" "ctx.P.cc.resume_cost_cumulative === true" "false"
 setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"

@@ -176,6 +176,8 @@ function keepProjects(keepDir, roots) {
 }
 const failureRow = (ctx, c, o) => ({
   row: ctx.P.row, task_id: c.task, arm: c.arm, rep: c.rep, ...falseShape(c), model: o.model, pilot: ctx.pilot, runner: 'cc',
+  // a G4 cell that failed after the gate already blocked it still reports those blocks (information field; every judged boolean stays false)
+  ...(c.task === T.G4 ? { g4: { ...falseShape(c).g4, gate_blocks: Number.isInteger(o.gateBlocks) && o.gateBlocks > 0 ? o.gateBlocks : 0 } } : {}),
   runner_version: ctx.runnerVersion, session_id: o.sessionId || '', duration_s: o.durationS, cost_usd: o.cost,
   cost_turns: o.costTurns || [], ...(o.nestedAttempts !== undefined ? { nested_claude_attempts: o.nestedAttempts } : {}),
   ...(o.unaccounted !== undefined ? { unaccounted_sessions: o.unaccounted } : {}),
@@ -325,16 +327,35 @@ function handWrapper(cell, realClaude) {
     'for (const l of fs.readFileSync(process.argv[1],"utf8").split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) ok=true; }',
     'process.exit(ok?0:1);',
   ].join(' ');
+  // no single quote may appear in this program (it is embedded in a single-quoted shell word)
+  const copySessions = [
+    'const fs=require("fs"),path=require("path"); const [root,cfg,out,id]=process.argv.slice(1);',
+    'const log=(m)=>{ try { fs.appendFileSync(path.join(root,".d0gate","copy-sessions.log"),m+"\\n"); } catch (e) {} };',
+    'const inside=(p,b)=>p===b||p.startsWith(b+path.sep);',
+    'let rr; try { rr=fs.realpathSync(root); } catch (e) { process.exit(0); }',
+    'if (!cfg) process.exit(0);',
+    'try {',
+    '  if (fs.lstatSync(cfg).isSymbolicLink() || fs.lstatSync(path.join(cfg,"projects")).isSymbolicLink()) { log("skip: config dir or its projects is a symlink: "+cfg); process.exit(0); }',
+    '  const rc=fs.realpathSync(cfg), rp=fs.realpathSync(path.join(cfg,"projects")), ro=fs.realpathSync(path.dirname(out));',
+    '  if (!inside(rc,path.join(rr,"tmp")) || !inside(rp,rc)) { log("skip: config dir "+rc+" is not under the cell tmp "+path.join(rr,"tmp")); process.exit(0); }',
+    '  if (!inside(ro,rr)) { log("skip: output dir "+ro+" is outside the cell "+rr); process.exit(0); }',
+    '  const w=(s,d)=>{ fs.mkdirSync(d,{recursive:true}); for (const e of fs.readdirSync(s,{withFileTypes:true})) { const a=path.join(s,e.name), b=path.join(d,e.name); if (e.isSymbolicLink()) { log("skip symlink: "+a); continue; } if (e.isDirectory()) w(a,b); else if (e.isFile()) fs.copyFileSync(a,b); } };',
+    '  w(rp, path.join(ro, path.basename(out)+".sessions", id));',
+    '} catch (e) { log("skip: "+e.message); }',
+  ].join(" ");
   fs.writeFileSync(path.join(bin, 'claude'), [
     '#!/bin/bash',
     `REAL='${realClaude.replace(/'/g, "'\\''")}'`,
+    `ROOT='${String(cell.root).replace(/'/g, "'\\''")}'`, // fixed when the wrapper is written; no environment value decides what may be copied
     'args=("$@")',
     'if [ -n "${D0GATE_HAND_BUDGET:-}" ]; then',
     '  if [ -z "${D0GATE_HAND_OUT:-}" ]; then echo "d0gate: D0GATE_HAND_BUDGET is set but D0GATE_HAND_OUT is not set; refusing to start claude" >&2; exit 97; fi',
     '  LOCK="$D0GATE_HAND_OUT.lock"; RESV="$D0GATE_HAND_OUT.resv"; PRIV="$D0GATE_HAND_OUT.$$"; ID="$$"',
     '  : >>"$D0GATE_HAND_OUT"',
-    // the rail seeds its own CLAUDE_CONFIG_DIR for the hand and removes it on exit: keep the hand own session files (its tool trajectory) before that
-    '  copy_sessions() { if [ -n "${CLAUDE_CONFIG_DIR:-}" ] && [ -d "$CLAUDE_CONFIG_DIR/projects" ]; then mkdir -p "$D0GATE_HAND_OUT.sessions/$ID" && cp -R "$CLAUDE_CONFIG_DIR/projects/." "$D0GATE_HAND_OUT.sessions/$ID/"; fi 2>/dev/null; return 0; }',
+    // the rail seeds its own CLAUDE_CONFIG_DIR for the hand (a mkdtemp under $TMPDIR, which the runner points at <cell>/tmp) and removes it on exit:
+    // keep the hand own session files (its tool trajectory) before that, but only when source and destination resolve inside THIS cell
+    // (source under <cell>/tmp, destination under the cell root); symlinks are never followed, they are skipped and logged to <cell>/.d0gate/copy-sessions.log
+    `  copy_sessions() { node -e '${copySessions}' "$ROOT" "${'$'}{CLAUDE_CONFIG_DIR:-}" "$D0GATE_HAND_OUT" "$ID" 2>/dev/null; return 0; }`,
     '  trap copy_sessions EXIT; trap "exit 143" TERM INT HUP',
     `  rem="$( ( flock 9; node -e '${reserve}' "$D0GATE_HAND_OUT" "$RESV" "$D0GATE_HAND_BUDGET" "$ID" ) 9>"$LOCK" )"`,
     '  if [ "$rem" = refuse ] || [ -z "$rem" ]; then echo "d0gate: the cell budget is spent or reserved; refusing to start another claude" >&2; exit 97; fi',
@@ -354,7 +375,8 @@ function denyWrapper(cell) {
   fs.mkdirSync(bin, { recursive: true });
   fs.writeFileSync(path.join(bin, 'claude'), [
     '#!/bin/bash',
-    'echo "attempt: $*" >>"$D0GATE_NESTED_LOG"',
+    // the log path is written into the wrapper with the cell root; an environment value cannot redirect where attempts are counted
+    `echo "attempt: $*" >>'${path.join(cell.root, '.d0gate', 'nested-attempts.log').replace(/'/g, "'\\''")}'`,
     'echo "d0gate: a depth-0 cell may not start claude; refused (the attempt is recorded)" >&2',
     'exit 97',
     '',
@@ -416,7 +438,9 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     // A hand the rail timed out may have spent after the last number it reported, and nothing measures that: its cell is charged the whole ceiling.
     const timedOut = env0.timed_out === true;
     const known = sum.costKnown && exit !== 124 && exit !== 137 && !timedOut;
-    const o = { model, sessionId: session, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number(sum.total.toFixed(6)) : ceiling, costUnknown: !known, costTurns: [Number(sum.total.toFixed(6))] };
+    // block records of the gated sessions in the cell (ON arm only; the OFF arm has no gated session)
+    const gateBlocks = on ? Object.values(facts0.hook).reduce((a, recs) => a + recs.filter((r) => r.decision === 'block').length, 0) : 0;
+    const o = { model, sessionId: session, gateBlocks, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number(sum.total.toFixed(6)) : ceiling, costUnknown: !known, costTurns: [Number(sum.total.toFixed(6))] };
     const keep = () => keepCopy(keepDir, cell, { 'hand-out.json': handOut, 'hand-prompt.txt': promptFile });
     if (keepDir) { fs.mkdirSync(keepDir, { recursive: true }); fs.writeFileSync(path.join(keepDir, 'rail-stdout.json'), out); fs.writeFileSync(path.join(keepDir, 'rail-stderr.log'), errText); }
     const fail = (cls, cause, detail) => { keep(); return failureRow(ctx, c, { ...o, cls, cause, detail }); };

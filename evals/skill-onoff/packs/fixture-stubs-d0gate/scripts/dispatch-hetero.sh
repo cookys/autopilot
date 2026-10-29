@@ -7,17 +7,21 @@
 # worker (scripts/d0gate-workers/<mode>) in a detached worktree. With --gate-rules it runs the REAL
 # scripts/per-turn-gate-arm.js arm/settings/disarm and the REAL hooks/per-turn-gate.js as the worker's Stop hook
 # (the way claude would at the end of a turn). The stub worker does not react to a block text: it only shows the
-# gate being exercised. The cell root is derived from where this file sits (<cell>/repo/scripts/), never from an environment
-# value; live/state files go to <cell>/live. Nothing here needs to be set by the caller.
-# Worker mode: D0GATE_WORKER (default clean-g1). Mutation hooks for negative controls: D0GATE_HOOK_CMD.
+# gate being exercised. The cell root is pinned inside the cell's own copy of this file when the cell is built, never taken from the
+# environment or from where the file is called; live/state files go to <cell>/live. Nothing here needs to be set by the caller.
 # Spend: none. It never starts claude, codex or any other runner.
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 ORIG_ARGV=("$@")
-# The cell root comes from the stub's own position, so a caller (a model that "fixes" an environment value) cannot move the ledger.
-CELL="$(cd "$SELF_DIR/../.." && pwd -P)"
-[ -f "$CELL/.d0gate/base_sha" ] || { echo "d0gate stub: this script is not installed inside a d0gate cell" >&2; exit 2; }
-# a differing environment value is ignored and flagged on every call record of this run
+# The cell root is written into this file when the cell materialises it (D0G_PINNED_CELL below); that value is the only thing that decides
+# where the ledger and the live files go. A copy or a symlink of this file elsewhere still writes into the real cell. Neither an
+# environment value nor the position this file is called from can move them; when either differs from the pinned cell, the call
+# record carries cell_env_override=true.
+D0G_PINNED_CELL=""
+CELL="$D0G_PINNED_CELL"
+[ -n "$CELL" ] && [ -d "$CELL/.d0gate" ] || { echo "d0gate stub: this copy was not materialised by a d0gate cell" >&2; exit 2; }
 ENV_OVERRIDE=false
+LOC_CELL="$(cd "$SELF_DIR/../.." 2>/dev/null && pwd -P)"
+[ "$LOC_CELL" = "$CELL" ] || ENV_OVERRIDE=true
 [ -n "${D0GATE_CELL:-}" ] && [ "$(cd "$D0GATE_CELL" 2>/dev/null && pwd -P)" != "$CELL" ] && ENV_OVERRIDE=true
 LIVE="$CELL/live"
 mkdir -p "$CELL/.d0gate" "$CELL/wt"; mkdir -p -m 700 "$LIVE"

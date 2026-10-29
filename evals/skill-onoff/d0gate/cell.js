@@ -60,6 +60,11 @@ class Cell {
     fs.writeFileSync(path.join(this.root, '.d0gate', 'base_sha'), `${this.baseSha}\n`);
     // install the fixture packs onto the repo root (untracked + excluded: the worker worktrees start from the base commit)
     for (const id of ['fixture-scripts-d0gate', 'fixture-stubs-d0gate']) L.copyTree(path.join(L.packsDir(), id), this.repo);
+    // pin the cell root into this cell's own copy of the stub: it is the only thing the stub trusts for where it writes
+    const stub = path.join(this.repo, 'scripts', 'dispatch-hetero.sh');
+    const pinned = fs.readFileSync(stub, 'utf8').replace(/^D0G_PINNED_CELL=""$/m, () => `D0G_PINNED_CELL='${fs.realpathSync(this.root).replace(/'/g, "'\\''")}'`);
+    if (!pinned.includes('D0G_PINNED_CELL=\'')) throw new Error('d0gate: the stub has no D0G_PINNED_CELL line to pin');
+    fs.writeFileSync(stub, pinned);
     fs.writeFileSync(path.join(this.repo, '.git', 'info', 'exclude'), 'scripts/\nhooks/\nschemas/\ngate/\n');
     fs.writeFileSync(path.join(this.root, 'config.json'), '{}\n');
     fs.writeFileSync(this.prompt, 'Implement the task described by the owner in this repository. Work in the repository root.\n');

@@ -300,33 +300,63 @@ ok "tmpfs base, --ledger, disarm trap"
 
 echo "=== 9c. stub cell root comes from the stub's own position, never from D0GATE_CELL; fixture rules match the rule list; gate_blocks ==="
 git -C "$REPO_ROOT" show 50e840543:evals/skill-onoff/d0gate/stubs/scripts/dispatch-hetero.sh >"$TEST_TMP/stub-old.sh" || fail "cannot read the stub at the base commit"
+git -C "$REPO_ROOT" show 278052bad:evals/skill-onoff/d0gate/stubs/scripts/dispatch-hetero.sh >"$TEST_TMP/stub-locderived.sh" || fail "cannot read the position-deriving stub"
 if grep -nE 'Needs D0GATE_CELL|D0GATE_CELL is not' "$D0/stubs/scripts/dispatch-hetero.sh" "$EV/packs/fixture-stubs-d0gate/scripts/dispatch-hetero.sh"; then fail "the stub still tells the model to set D0GATE_CELL"; fi
 cmp -s "$D0/stubs/scripts/dispatch-hetero.sh" "$EV/packs/fixture-stubs-d0gate/scripts/dispatch-hetero.sh" || fail "frozen stub pack differs from d0gate/stubs"
 S node -e '
 const { Cell } = require(process.argv[1] + "/d0gate/cell.js"); const fs = require("fs"); const path = require("path");
 const c = new Cell().init();
+// a copy or a symlink of the stub in a directory that LOOKS like a cell (<dir>/repo/scripts/ and <dir>/.d0gate/base_sha) while D0GATE_CELL names the real cell
+const lookalike = (name, how, src) => {
+  const d = fs.mkdtempSync(path.join(path.dirname(c.root), "d0gate-ext-" + name + "-"));
+  fs.mkdirSync(path.join(d, "repo", "scripts"), { recursive: true }); fs.mkdirSync(path.join(d, ".d0gate"));
+  fs.writeFileSync(path.join(d, ".d0gate", "base_sha"), "x\n");
+  const f = path.join(d, "repo", "scripts", "dispatch-hetero.sh");
+  if (how === "copy") fs.copyFileSync(src, f); else fs.symlinkSync(src, f);
+  return { d, f };
+};
+const callThrough = (f) => c.dispatch(["--runner", "claude-native", "--model", "m", "--prompt-file", c.prompt], { script: f, env: { D0GATE_CELL: c.root } });
+const realStub = path.join(c.repo, "scripts", "dispatch-hetero.sh");
+for (const how of ["copy", "symlink"]) {
+  // RED: the stub that derives the cell from its position builds the ledger outside the real cell
+  const bad = lookalike("red-" + how, how, how === "copy" ? process.argv[3] : (fs.copyFileSync(process.argv[3], path.join(c.repo, "scripts", "stub-locderived.sh")), path.join(c.repo, "scripts", "stub-locderived.sh")));
+  callThrough(bad.f);
+  if (!fs.existsSync(path.join(bad.d, ".d0gate", "ledger.jsonl"))) throw new Error("RED control cannot see the position-deriving stub (" + how + ") write outside");
+  console.log("RED (expected) position-derived stub, " + how + ": the ledger was created outside the real cell");
+  // GREEN: the pinned stub writes into the real cell wherever it is copied or linked
+  const before = c.facts().calls.filter((x) => x.accepted).length;
+  const good = lookalike("green-" + how, how, realStub);
+  callThrough(good.f);
+  if (fs.existsSync(path.join(good.d, ".d0gate", "ledger.jsonl"))) throw new Error("GREEN failed: ledger created outside the cell (" + how + ")");
+  const cl = c.facts().calls.filter((x) => x.accepted);
+  if (cl.length !== before + 1 || cl[cl.length - 1].cell_env_override !== true) throw new Error("GREEN failed: no flagged call in the real cell (" + how + ")");
+  console.log("GREEN pinned stub, " + how + ": ledger in the real cell, cell_env_override=true, nothing outside");
+  fs.rmSync(good.d, { recursive: true, force: true }); fs.rmSync(bad.d, { recursive: true, force: true });
+}
 const other = fs.mkdtempSync(path.join(path.dirname(c.root), "d0gate-other-"));
 fs.mkdirSync(path.join(other, ".d0gate"));
 // RED: the stub as it was at the base commit trusts the caller value, so the ledger lands in the wrong directory
 fs.copyFileSync(process.argv[2], path.join(c.repo, "scripts", "dispatch-hetero-old.sh"));
+const n0 = c.facts().calls.length;
 const r0 = c.std([], { worker: "clean-g1", script: path.join(c.repo, "scripts", "dispatch-hetero-old.sh"), env: { D0GATE_CELL: other } });
-const wrong = fs.existsSync(path.join(other, ".d0gate", "ledger.jsonl")) && c.facts().calls.length === 0;
+const wrong = fs.existsSync(path.join(other, ".d0gate", "ledger.jsonl")) && c.facts().calls.length === n0;
 if (!wrong) throw new Error("RED control cannot see the old stub misplace the ledger: rc=" + r0.rc + " " + r0.err);
-console.log("RED (expected) old stub with a caller D0GATE_CELL writes the ledger into the other directory, the cell sees 0 calls");
+console.log("RED (expected) old stub with a caller D0GATE_CELL writes the ledger into the other directory, the cell sees no new call");
 fs.rmSync(path.join(other, ".d0gate"), { recursive: true });
 // GREEN: the stub in the tree puts the ledger in its own cell and flags the override
+const nA = c.facts().calls.filter((x) => x.accepted).length;
 const r1 = c.std([], { worker: "clean-g1", env: { D0GATE_CELL: other } });
 const calls = c.facts().calls.filter((x) => x.accepted);
-if (r1.rc !== 0 || calls.length !== 1 || calls[0].cell_env_override !== true) throw new Error("override not flagged or call missing: " + JSON.stringify(calls) + r1.err);
+if (r1.rc !== 0 || calls.length !== nA + 1 || calls[nA].cell_env_override !== true) throw new Error("override not flagged or call missing: " + JSON.stringify(calls) + r1.err);
 if (fs.existsSync(path.join(other, ".d0gate"))) throw new Error("the stub wrote into the overriding directory");
 // the same value as the real cell root (spelled differently) is not an override
 const r2 = c.std([], { worker: "clean-g1", env: { D0GATE_CELL: c.root + "/." } });
 const calls2 = c.facts().calls.filter((x) => x.accepted);
-if (r2.rc !== 0 || calls2.length !== 2 || calls2[1].cell_env_override !== false) throw new Error("same-root value flagged: " + JSON.stringify(calls2[1]));
+if (r2.rc !== 0 || calls2.length !== nA + 2 || calls2[nA + 1].cell_env_override !== false) throw new Error("same-root value flagged: " + JSON.stringify(calls2[1]));
 const r3 = c.std([], { worker: "clean-g1", env: { D0GATE_CELL: "" } });
-if (r3.rc !== 0 || c.facts().calls.filter((x) => x.accepted)[2].cell_env_override !== false) throw new Error("empty value flagged");
+if (r3.rc !== 0 || c.facts().calls.filter((x) => x.accepted)[nA + 2].cell_env_override !== false) throw new Error("empty value flagged");
 console.log("GREEN stub under an overriding D0GATE_CELL: ledger in its own cell, cell_env_override=true; same root and empty value: false");
-fs.rmSync(other, { recursive: true, force: true }); c.destroy();' "$D0/.." "$TEST_TMP/stub-old.sh" || fail "section 9c stub cell root"
+fs.rmSync(other, { recursive: true, force: true }); c.destroy();' "$D0/.." "$TEST_TMP/stub-old.sh" "$TEST_TMP/stub-locderived.sh" || fail "section 9c stub cell root"
 # the rules live where the hand reads them (CONTRIBUTING.md) and agree with the rule list that scores the cell; the brief carries none of them
 S node -e '
 const fs = require("fs"); const path = require("path");

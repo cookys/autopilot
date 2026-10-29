@@ -7,8 +7,8 @@ BL-0306. Plan: docs/plans/2026-10-26-depth0-per-turn-gate.md
 - P0 done. Evidence: commit bfde42aa1 (0.0433 USD), docs/plans/evidence/2026-10-26-depth0-gate-p0.
 - P1 done, merged ae44b5a0a: scripts/gate-verify.js, schemas/gate-rules.schema.json, 183 tests, 87 mutations all shown red.
 - P2 done: hook wiring merged 7230a7f6e (lane d0gp2, three generations, four seats, full_range 45eec18f), then fix merge b60ab831a (the pre-merge suite found a SubagentStop group regression; per-turn-gate now joins the existing group).
-- P3 ON/OFF evaluation can start. Cap 20 USD approved; owner instruction: once acceptance passes, run P3 directly without asking again.
-- P4 (guidance) only after P3 PASS.
+- P3 done, verdict NOT-SHIP (2026-10-30; formal 3.84 USD, about 4.21 USD in total of the 20 USD cap). G3 change `m_not_wedged` 0/5 (the change arm stopped to ask the owner because the owner's list forbade the file the task edits; the frozen scoring counts that as wedged), G4 OFF 0 minus ON 0 < 0.4 (Haiku hand obeys the rules anyway). Evidence: docs/plans/evidence/2026-10-26-depth0-gate-p3.
+- P4 (guidance) not opened (needs a P3 PASS). Next step waits for owner decision card d-1ea8bb49: A fix guidance and G3 scoring then a new v2 row; B authorize depth-0 to fix the list then a new v2 row; C stop here.
 - Follow-on of BL-0055.
 
 ## Closed design questions (history; rows deleted)

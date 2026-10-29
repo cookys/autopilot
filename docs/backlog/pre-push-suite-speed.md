@@ -1,5 +1,9 @@
 # Pre-push suite speed: smaller selection and parallel run
 
+## Status
+
+BL-0330 and BL-0331 shipped in f4ed93332, BL-0332 in 77a881731 (all 2026-10-29). Measured: `--jobs 6` ran 696 suites in 79 minutes (13:21 to 14:40, host load about 35), while the serial run of 681 suites the same day took more than 6 hours. The watchfix range selection fell from 679 to 486 suites; the 400 target was not reached, correctness first. BL-0333 and BL-0334 remain open. The sections below stay as history.
+
 Research of 2026-10-29 (owner request: "縮小選取範圍或多核跑都一起研究一下?"), read-only; all simulated changes were made on a scratch copy (git archive of 30b557737), none in this repo. Line numbers below were re-checked against base 0a5439ba1.
 
 ## Trigger

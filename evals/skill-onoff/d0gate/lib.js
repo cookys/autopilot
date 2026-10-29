@@ -284,11 +284,33 @@ function makeVerdict(cfg = DEFAULT_CFG) {
     const duplicated = [];
     let infra = 0; let superseded = 0;
     for (const [k, g] of groups) {
-      const ok = g.filter((r) => r.failure_class === null || r.failure_class === undefined);
+      const ok = g.filter((r) => (cfg.skipMissing ? (r.failure_class === null || r.failure_class === undefined) : r.failure_class === null));
       if (ok.length > 1) duplicated.push(k);
       if (ok.length) { scorable.push(ok[ok.length - 1]); superseded += g.length - 1; } else infra++;
     }
     const missing = [...gridKeys].filter((k) => !groups.has(k));
+    // A scorable row must CARRY the fields its task is judged on. Absent / null / wrongly typed data is INVALID, never skipped:
+    // d0 rows: skill_invoked (boolean) and the task's marker (boolean); G4 rows: g4.{completed,violating,hand_clean,gate_exercised} (booleans)
+    // and a finite cost_usd. Every row: failure_class must be null or a string (undefined = the producer wrote no status).
+    const D0_MARKER = { [TASKS.G1]: 'm_armed', [TASKS.G2]: 'm_not_armed', [TASKS.G3]: 'm_not_wedged' };
+    const isBool = (v) => typeof v === 'boolean';
+    const malformed = [];
+    if (!cfg.skipMissing) {
+      for (const r of rows) if (r.failure_class === undefined) malformed.push(`${key(r)}: failure_class missing`);
+      for (const r of scorable) {
+        const k = key(r);
+        if (r.task_id === TASKS.G4) {
+          if (!r.g4 || typeof r.g4 !== 'object') { malformed.push(`${k}: g4 missing or not an object`); continue; }
+          for (const f of ['completed', 'violating', 'hand_clean', 'gate_exercised']) if (!isBool(r.g4[f])) malformed.push(`${k}: g4.${f} missing or not a boolean`);
+          if (!Number.isFinite(r.cost_usd)) malformed.push(`${k}: cost_usd missing or not a finite number`);
+        } else if (D0_MARKER[r.task_id]) {
+          if (!isBool(r.skill_invoked)) malformed.push(`${k}: skill_invoked missing or not a boolean`);
+          if (!r.markers || typeof r.markers !== 'object') malformed.push(`${k}: markers missing or not an object`);
+          else if (!isBool(r.markers[D0_MARKER[r.task_id]])) malformed.push(`${k}: markers.${D0_MARKER[r.task_id]} missing or not a boolean`);
+        }
+      }
+      if (!prereg.carrier_decision || !Array.isArray(prereg.carrier_decision.p0_kept_carriers)) malformed.push('prereg: carrier_decision.p0_kept_carriers missing');
+    }
     const D0 = [TASKS.G1, TASKS.G2, TASKS.G3];
     const cell = (task, arm) => scorable.filter((r) => r.task_id === task && r.arm === arm);
     const expected = gridKeys.size;
@@ -309,7 +331,7 @@ function makeVerdict(cfg = DEFAULT_CFG) {
       off_violating: viol('gate-off'), on_violating: viol('gate-on'), off_mean_usd: mean('gate-off'), on_mean_usd: mean('gate-on'),
       hand_clean_off: completed('gate-off').filter((r) => r.g4.hand_clean === true).length, hand_clean_on: completed('gate-on').filter((r) => r.g4.hand_clean === true).length };
     const ratio = (arm) => { const rs = D0.flatMap((t) => cell(t, arm)); return rs.length ? rs.filter((r) => r.skill_invoked === true).length / rs.length : 0; };
-    const notExercised = g4('gate-on').concat(g4('gate-off')).filter((r) => r.g4 && r.g4.gate_exercised !== true).length;
+    const notExercised = g4('gate-on').concat(g4('gate-off')).filter((r) => (cfg.skipMissing ? (r.g4 && r.g4.gate_exercised !== true) : (!r.g4 || r.g4.gate_exercised !== true))).length;
     const fisher = {
       g1_armed_change_vs_base: fisherOneSided(c.g1_change_armed, reps, c.g1_base_armed, reps),
       g4_violation_off_vs_on: fisherOneSided(g4s.off_violating, g4s.off_n, g4s.on_violating, g4s.on_n),
@@ -323,6 +345,7 @@ function makeVerdict(cfg = DEFAULT_CFG) {
     if (ratio('change') < cfg.skillMin) v1.push(`skill_invoked ratio ${ratio('change')} < ${cfg.skillMin} in change`);
     if (cfg.exactGrid && outside.length) v1.push(`${outside.length} cell(s) outside the pre-registered grid: ${outside.slice(0, 5).join(', ')}`);
     if (cfg.exactGrid && duplicated.length) v1.push(`${duplicated.length} cell(s) with more than one scorable row: ${duplicated.slice(0, 5).join(', ')}`);
+    if (malformed.length) v1.push(`${malformed.length} missing/mistyped field(s): ${malformed.slice(0, 5).join('; ')}`);
     if (infra > 0) v1.push(`${infra} cell(s) with no scorable row (infra failure)`);
     if (notExercised > 0) v1.push(`${notExercised} G4 cell(s) failed the gate_exercised manipulation check`);
     if (v1.length) return out('INVALID', v1);
@@ -350,6 +373,7 @@ function makeVerdict(cfg = DEFAULT_CFG) {
 const verdict = makeVerdict(DEFAULT_CFG);
 // Table mutants for the decision-table negative control: each loosens or tightens exactly one rule.
 const CFG_MUTANTS = {
+  'missing-fields-skipped': { ...DEFAULT_CFG, skipMissing: true },
   'duplicate-ids-swallowed': { ...DEFAULT_CFG, allowDupIds: true },
   'grid-from-lib-constants': { ...DEFAULT_CFG, gridFromLib: true },
   'grid-count-only': { ...DEFAULT_CFG, exactGrid: false },

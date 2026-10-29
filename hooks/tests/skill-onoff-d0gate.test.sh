@@ -247,16 +247,27 @@ c.destroy();' "$D0/.." || fail "isolation"
 [ -z "$(find "$HOME/.claude" -newer "$T0" -type f 2>/dev/null)" ] || echo "(scratch CLAUDE_CONFIG_DIR is empty or untouched by design)"
 ok "isolation"
 
+NONTMP=""
+for cand in "$TEST_TMP" /var/tmp "$HOME" "$REPO_ROOT"; do
+  [ -d "$cand" ] && [ -w "$cand" ] || continue
+  fst="$(stat -f -c %T "$cand" 2>/dev/null)"
+  case "$fst" in tmpfs|ramfs|"") continue;; esac
+  NONTMP="$cand"; echo "non-tmpfs candidate for the refusal control: $cand ($fst)"; break
+done
+[ -n "$NONTMP" ] || echo "SKIP reason: every candidate (TEST_TMP, /var/tmp, HOME, repo) is tmpfs or unreadable; the non-tmpfs refusal control cannot run here"
 echo "=== 9b. cell base must be tmpfs; --ledger does not break N; disarm runs on any exit ==="
 S node -e '
 const { Cell } = require(process.argv[1] + "/d0gate/cell.js"); const fs = require("fs"); const path = require("path");
-// 3: a disk directory is refused, with a clear error, and no cell is built
-let refused = false;
-try { new Cell({ base: process.argv[2] }); } catch (e) { refused = /not tmpfs/.test(e.message); console.log("RED (expected) " + e.message); }
-if (!refused) throw new Error("a non-tmpfs base was accepted");
-process.env.D0GATE_CELL_BASE = process.argv[2];
-const { cellBase } = require(process.argv[1] + "/d0gate/cell.js");
-try { cellBase(); throw new Error("D0GATE_CELL_BASE on disk was accepted"); } catch (e) { if (!/not tmpfs/.test(e.message)) throw e; }
+// 3: a disk directory is refused, with a clear error, and no cell is built (the directory is chosen by the shell from a
+// stat -f check, never assumed from the type of /tmp on the host; with none found this part prints SKIP and says why)
+if (process.argv[2]) {
+  let refused = false;
+  try { new Cell({ base: process.argv[2] }); } catch (e) { refused = /not tmpfs/.test(e.message); console.log("RED (expected) " + e.message); }
+  if (!refused) throw new Error("a non-tmpfs base was accepted");
+  process.env.D0GATE_CELL_BASE = process.argv[2];
+  const { cellBase } = require(process.argv[1] + "/d0gate/cell.js");
+  try { cellBase(); throw new Error("D0GATE_CELL_BASE on disk was accepted"); } catch (e) { if (!/not tmpfs/.test(e.message)) throw e; }
+} else console.log("SKIP: no non-tmpfs writable directory found among the candidates (non-tmpfs refusal not exercised on this host)");
 delete process.env.D0GATE_CELL_BASE;
 // 4: a --ledger option in the call must not redirect the stub ledger; the second call still counts N=2
 const c = new Cell().init();
@@ -281,7 +292,7 @@ console.log("GREEN disarm on early exit and on TERM (rc " + k.rc + ")");
 c.std(["--gate-rules", rules], { worker: "no-such-mode", env: { D0GATE_NO_DISARM: "1" } });
 if (!sw().length) throw new Error("control cannot see a left-behind switch file");
 console.log("RED (expected) with D0GATE_NO_DISARM=1 the switch file stays: " + sw().join(","));
-c.destroy();' "$D0/.." "$TEST_TMP" || fail "section 9b"
+c.destroy();' "$D0/.." "$NONTMP" || fail "section 9b"
 ok "tmpfs base, --ledger, disarm trap"
 
 echo "=== 10. P4 rehearsal: the candidate paragraph byte for byte passes check-guidance-eval; one changed byte fails ==="

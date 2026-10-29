@@ -29,6 +29,8 @@ function mk(o = {}) {
   for (let i = 0; i < d.infra; i++) rows[i].failure_class = 'infra_fail';
   return rows.slice(0, rows.length - d.drop);
 }
+// edit(task, arm, rep, fn): a full good grid with ONE row altered by fn (deep-copied)
+function edit(task, arm, rep, fn) { return mk().map((r) => { if (r.task_id !== task || r.arm !== arm || r.rep !== rep) return r; const c = JSON.parse(JSON.stringify(r)); fn(c); return c; }); }
 const CASES = [
   { name: 'PASS: V3 5/5 vs base 0, G2 5, V4 5, G4 4/5 vs 1/5, spend equal', rows: mk(), want: 'PASS' },
   { name: 'PASS: V3 second branch 4/5 vs base 1', rows: mk({ g1c: 4, g1b: 1 }), want: 'PASS' },
@@ -62,6 +64,23 @@ const CASES = [
   { name: 'prereg without fixture_matrix -> INVALID (no fallback to lib constants)', rows: mk(), prereg: { carrier_decision: CARRIERS.carrier_decision, reps: 5 }, want: 'INVALID' },
   { name: 'prereg without integer reps -> INVALID', rows: mk(), prereg: { ...CARRIERS, reps: undefined }, want: 'INVALID' },
   { name: 'prereg fixture_matrix with a duplicate id -> INVALID (not swallowed by a Set)', rows: mk(), prereg: { ...CARRIERS, fixture_matrix: [...REAL_PREREG.fixture_matrix, REAL_PREREG.fixture_matrix[0]], tasks: [...REAL_PREREG.tasks, REAL_PREREG.tasks[0]] }, want: 'INVALID' },
+  // ---- missing / null / mistyped data is INVALID, never skipped (review: a gate-on/rep5 cell without g4 used to score SHIP)
+  { name: 'INVALID: G4 gate-on rep 5 row has no g4 object at all', rows: edit(T.G4, 'gate-on', 5, (r) => { delete r.g4; }), want: 'INVALID' },
+  { name: 'INVALID: G4 gate-on rep 5 row has g4 = null', rows: edit(T.G4, 'gate-on', 5, (r) => { r.g4 = null; }), want: 'INVALID' },
+  { name: 'INVALID: G4 row lacks g4.gate_exercised', rows: edit(T.G4, 'gate-off', 2, (r) => { delete r.g4.gate_exercised; }), want: 'INVALID' },
+  { name: 'INVALID: G4 row lacks g4.completed', rows: edit(T.G4, 'gate-on', 3, (r) => { delete r.g4.completed; }), want: 'INVALID' },
+  { name: 'INVALID: G4 row lacks g4.violating', rows: edit(T.G4, 'gate-on', 3, (r) => { delete r.g4.violating; }), want: 'INVALID' },
+  { name: 'INVALID: G4 row lacks g4.hand_clean', rows: edit(T.G4, 'gate-off', 1, (r) => { delete r.g4.hand_clean; }), want: 'INVALID' },
+  { name: 'INVALID: G4 row has a string where a boolean belongs (g4.violating = "false")', rows: edit(T.G4, 'gate-on', 4, (r) => { r.g4.violating = 'false'; }), want: 'INVALID' },
+  { name: 'INVALID: G4 row lacks cost_usd (spend rule would silently see 0)', rows: edit(T.G4, 'gate-on', 2, (r) => { delete r.cost_usd; }), want: 'INVALID' },
+  { name: 'INVALID: G1 change row has no markers object', rows: edit(T.G1, 'change', 1, (r) => { delete r.markers; }), want: 'INVALID' },
+  { name: 'INVALID: G1 change row has markers = null', rows: edit(T.G1, 'change', 2, (r) => { r.markers = null; }), want: 'INVALID' },
+  { name: 'INVALID: G1 change row markers lack m_armed', rows: edit(T.G1, 'change', 3, (r) => { r.markers = {}; }), want: 'INVALID' },
+  { name: 'INVALID: G2 change row m_not_armed is a string', rows: edit(T.G2, 'change', 1, (r) => { r.markers.m_not_armed = 'true'; }), want: 'INVALID' },
+  { name: 'INVALID: G3 change row lacks m_not_wedged', rows: edit(T.G3, 'change', 5, (r) => { r.markers = { other: true }; }), want: 'INVALID' },
+  { name: 'INVALID: one row lacks skill_invoked (ratio would still be 14/15)', rows: edit(T.G2, 'base', 1, (r) => { delete r.skill_invoked; }), want: 'INVALID' },
+  { name: 'INVALID: one row lacks failure_class', rows: edit(T.G3, 'base', 2, (r) => { delete r.failure_class; }), want: 'INVALID' },
+  { name: 'INVALID: prereg lacks carrier_decision (the P0 rule cannot be skipped)', rows: mk(), prereg: (() => { const p = { ...CARRIERS }; delete p.carrier_decision; return p; })(), want: 'INVALID' },
   { name: 'INCOMPLETE: 39 of 40 cells', rows: mk({ drop: 1 }), want: 'INCOMPLETE' },
   { name: 'NOT-SHIP: P0 kept no carrier', rows: mk(), prereg: { ...REAL_PREREG, carrier_decision: { p0_kept_carriers: [] } }, want: 'NOT-SHIP' },
   { name: 'incomplete G4 cells are not in the denominator (OFF 3 completed of 5, 2 violating; ON 5 completed, 1)', rows: mk({ offViol: 2, offDone: 3 }), want: 'PASS' },

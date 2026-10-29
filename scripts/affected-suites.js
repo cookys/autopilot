@@ -116,13 +116,16 @@
 //      Shell and other non-JS files still drop full-line # and // comments only.
 //  11. A shared test helper (a non-suite .sh directly under hooks/tests/) that names a prose file (.md or .txt:
 //      `cp "$REPO_ROOT/hooks/README.md" ...`) creates no edge to it: it serves the few suites that call that
-//      function, not every suite that sources the helper. Trade-off: those few are not selected by a prose-only change.
+//      function, not every suite that sources the helper. Its callers (setup_sync_version_sandbox: the sync-version-*
+//      and semver suites) are still reached through scripts/sync-version.js naming README.md.
 //  12. A prose seed whose basename is shared by two or more tracked files (README.md, CHANGELOG.md) is reached only
 //      by a referrer that names a path ending in the seed's own path (hooks/README.md, "$ROOT/README.md"); a bare
-//      `README.md` in a list of file names pins nothing.
+//      `README.md` in a list of file names pins nothing. A path.join/path.resolve call whose quoted segments include the
+//      seed's directory (path.join(ROOT, 'hooks', 'README.md')) names it, and stays (for a root seed: a call with no other segment).
 //  13. A bare quoted word with no slash and no extension creates no weak edge to a JavaScript file whose stem is one
 //      plain lowercase word (residue, status, tree): it is an ordinary word in any text. Hyphenated stems, name.ext,
-//      slash mentions and strong require/source edges are unchanged.
+//      slash mentions and strong require/source edges are unchanged. A word that also appears as a quoted segment of a
+//      path.join/path.resolve call in the same file (path.join(ROOT, 'src', 'runners', 'review')) is a path, and stays.
 //  14. A "$VAR/name" path (a variable expansion directly before the slash, name closed by a quote or token end,
 //      "$TEST_TMP/session-mode") is a directory under a runtime root, not a mention of name.js: no slash-bare edge.
 //  15. Lazy require marker (BL-0332): a JavaScript line carrying `// affected-suites: lazy` declares that its
@@ -191,13 +194,6 @@ const ALWAYS_RUN = [
   ['hooks/tests/skill-onoff-stage-graph.test.sh', 'greps all of scripts/ for the probe ladder field (only probe-unknown.js may print it)'],
   ['hooks/tests/skill-count-metadata.test.sh', 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
   ['hooks/tests/qualify-recipe-credential-staging.test.sh', 'greps every docs/plans/evidence/*/administration/*/run.sh for staging variables'],
-];
-// Suites that run code through a lazily required path the graph cannot see (BL-0332: src/status/cli.js loads
-// runs-watch.js behind `// affected-suites: lazy`; these suites reach it by `status runs --watch` with the CLI in a
-// variable). Added to a selective result when a changed path matches. [path regex, suite, why]
-const COUPLED = [
-  [/^src\/status\/(runs-watch|git-env|residue)\.js$/, 'hooks/tests/runs-watch-lock.test.sh', 'runs `status runs --watch`, which loads runs-watch.js'],
-  [/^src\/status\/(runs-watch|git-env|residue)\.js$/, 'hooks/tests/review-server.test.sh', 'runs `status runs --watch`, which loads runs-watch.js'],
 ];
 // Prose cannot break a suite; mirrors are covered by the always-run codex-plugin-package suite.
 const PURE_DOC = /^(docs|website|skill-creator-workspace)\/|^[^/]+\.(md|txt)$/;
@@ -290,7 +286,20 @@ function blankLazyRequires(raw, file) {
 }
 // Rule 12 input: a prose-file mention that carries a directory part (hooks/README.md, "$ROOT/README.md").
 const RE_PROSE_PATH = /[A-Za-z0-9_.\-\/$"{}]*\/[A-Za-z0-9_][A-Za-z0-9_.\-]*\.(?:md|txt)\b/g;
+// A path built from separate string segments: path.join(ROOT, 'hooks', 'README.md'), require(path.join(r, 'src', 'review')).
+// One level of nested parentheses is allowed in the arguments.
+const RE_JOIN = /\b(?:join|resolve)\(((?:[^()]|\([^()]*\)){0,300})\)/g;
+const RE_QUOTED = /(['"`])([^'"`\n]+)\1/g;
 function mentions(text) {
+  const joinedSegs = new Set(), joinedProse = [];
+  for (const m of text.matchAll(RE_JOIN)) {
+    const words = new Set();
+    for (const q of m[1].matchAll(RE_QUOTED)) for (const w of q[2].split('/')) if (w) words.add(w);
+    for (const w of words) {
+      joinedSegs.add(w.replace(/\.[A-Za-z0-9]+$/, ''));
+      if (/\.(md|txt)$/.test(w)) joinedProse.push({ name: w, words });
+    }
+  }
   const proseNames = new Set(), exts = new Set(), bares = new Set(), slashBares = new Set(), globs = [], strong = new Set(), segs = new Set(), paths = new Set();
   for (const m of text.matchAll(RE_SEG)) segs.add(m[1]);
   for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) strong.add(base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''));
@@ -305,7 +314,7 @@ function mentions(text) {
   }
   for (const m of text.matchAll(RE_GLOB)) globs.push({ dir: globDir(m[1]), ext: m[2] || '' });
   for (const m of text.matchAll(RE_MIRROR_PATH)) paths.add(m[0]);
-  return { proseNames, exts, bares, slashBares, globs, strong, segs, paths };
+  return { joinedSegs, joinedProse, proseNames, exts, bares, slashBares, globs, strong, segs, paths };
 }
 
 const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', '.claude', 'node_modules']);
@@ -460,8 +469,12 @@ function referrersOf(graph, p) {
     // Rule 12: for a prose seed whose basename is shared (README.md, CHANGELOG.md), a bare `README.md` mention is no
     // edge; the referrer must name a path ending in the seed's own path (or the seed's path ends in the mention's).
     if (graph.genericProse.has(b)) {
-      const names = graph.refs.get(f).proseNames;
-      if (![...names].some((t) => t === p || p.endsWith('/' + t) || t.endsWith('/' + p))) continue;
+      const r = graph.refs.get(f);
+      const dir = p.includes('/') ? p.split('/').slice(-2, -1)[0] : null;
+      // A path built from segments (path.join(ROOT, 'hooks', 'README.md')) names the seed when its directory is one of
+      // the segments; for a root-level seed the call must carry no other segment.
+      const joined = r.joinedProse.some((e) => e.name === b && (dir ? e.words.has(dir) : e.words.size === 1));
+      if (!joined && ![...r.proseNames].some((t) => t === p || p.endsWith('/' + t) || t.endsWith('/' + p))) continue;
     }
     out.set(f, kind(f));
   }
@@ -475,7 +488,7 @@ function referrersOf(graph, p) {
       if (generic && k !== 'strong') continue;
       // Rule 13: a bare quoted word with no slash or extension cannot pin a JavaScript file whose stem is one plain
       // lowercase word (residue, status, tree): it is an ordinary word in any text. Hyphenated stems stay.
-      if (jsTarget && k !== 'strong' && /^[a-z]+$/.test(bare)) continue;
+      if (jsTarget && k !== 'strong' && /^[a-z]+$/.test(bare) && !graph.refs.get(f).joinedSegs.has(bare)) continue;
       out.set(f, k);
     }
     for (const f of graph.bySlashBare.get(bare) || []) if (!out.has(f)) out.set(f, kind(f));
@@ -571,9 +584,7 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   // Content-scanning suites ride along with every selective result that has a non-prose change.
   const alwaysRun = changed.some((p) => !isProse(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];
   for (const f of alwaysRun) if (!chains[f]) chains[f] = [f];
-  const coupled = COUPLED.filter(([re, f]) => present.has(f) && changed.some((p) => re.test(p))).map(([, f]) => f);
-  for (const f of coupled) if (!chains[f]) chains[f] = [f];
-  const all = [...new Set([...suites, ...alwaysRun, ...coupled])].sort();
+  const all = [...new Set([...suites, ...alwaysRun])].sort();
   Object.defineProperty(chains, '__hops', { value: shortestHops(changed, graph), enumerable: false });
   return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
 }

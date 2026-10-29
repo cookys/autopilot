@@ -752,33 +752,25 @@ else
   # dispatch-only stress run, passed independently.
   declare -a L2_FILES=()
   declare -a SERIAL_L2_FILES=()
+  declare -A SERIAL_SUITE_SET=()
+  while IFS= read -r _sl || [ -n "$_sl" ]; do
+    _sl="${_sl%%#*}"; _sl="${_sl//[[:space:]]/}"
+    [ -n "$_sl" ] && SERIAL_SUITE_SET["$_sl"]=1
+  done < "$TESTS_DIR/lib/serial-suites.txt"
+  unset _sl
   for file in "$TESTS_DIR"/*.test.sh "$REPO_ROOT"/scripts/*.test.sh; do
     [ -f "$file" ] || continue
     rel="${file#$REPO_ROOT/}"
     if [ -n "$FILTER" ] && [[ "$rel" != *"$FILTER"* ]]; then
       continue
     fi
-    case "$(basename "$file")" in
-      # codex-plugin-package REGENERATES the live repo mirror (platforms/codex/plugin/) —
-      # 14 non---check sync invocations — while dev-setup asserts on files inside that same
-      # tree. In the 8-way pool they raced: both reported FAILED on 2026-08-18 and both
-      # passed serially on the same tree. That is worse than a flake, because a red count
-      # that is partly noise stops being read: eleven REAL failures sat unnoticed behind it
-      # for a day. Proper fix is to make codex-plugin-package work on a scratch copy the way
-      # sync-all.test.sh already does; serializing is the right-sized fix until then.
-      # resolve-review-loop-consult-discuss-gate case (xix) `chmod 000`s the CANONICAL
-      # evals/consult-capability-evidence-corpus.json for two script runs; any pooled test
-      # that requires the consult grader in that window (verdict-stability D7 did, 2026-09-03:
-      # 12 EACCES failures, green standalone) dies with EACCES. Proper fix is a scratch copy;
-      # serializing is the right-sized fix until then (BACKLOG).
-      codex-plugin-package.test.sh|dev-setup.test.sh|resolve-review-loop-consult-discuss-gate.test.sh|\
-      dispatch-detach.test.sh|dispatch-hetero.test.sh|dispatch-lineage.test.sh|dispatch-pi.test.sh|sync-all.test.sh)
-        SERIAL_L2_FILES+=("$file")
-        ;;
-      *)
-        L2_FILES+=("$file")
-        ;;
-    esac
+    # The serial tail lives in hooks/tests/lib/serial-suites.txt (one source, also read by
+    # scripts/affected-suites.js --jobs); each entry there carries its reason.
+    if [ -n "${SERIAL_SUITE_SET[$rel]+x}" ]; then
+      SERIAL_L2_FILES+=("$file")
+    else
+      L2_FILES+=("$file")
+    fi
   done
   shopt -u nullglob
 

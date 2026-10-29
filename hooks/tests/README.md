@@ -33,7 +33,7 @@ node --test hooks/*.test.js
 bash hooks/tests/state-checkpoint-empty-stdin.test.sh
 ```
 
-The suite runs locally, not on GitHub: ordinary merges run the affected suites picked by `scripts/affected-suites.js`, and the whole `bash hooks/tests/run.sh` runs once before a release.
+The suite runs locally, not on GitHub: ordinary merges run the affected suites picked by `scripts/affected-suites.js`, and the whole `bash hooks/tests/run.sh` runs once before a release. `--run --jobs N` runs that selection through an N-worker pool (suites in `hooks/tests/lib/serial-suites.txt` still run alone, after the pool); the same list is the serial tail of `run.sh --parallel`.
 
 ## Layout
 

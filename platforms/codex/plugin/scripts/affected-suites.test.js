@@ -397,7 +397,7 @@ function gitSha(dir, ref) {
   return execFileSync('git', ['rev-parse', ref], { cwd: dir, stdio: 'pipe' }).toString().trim();
 }
 
-test('--record shape: schema 1, full shas, mode selective, suites are the executed {path, rc} list', () => {
+test('--record shape: schema 1, full shas, mode selective, suites are the executed {path, rc, seconds} list', () => {
   const r = makeRepo({
     ...LAYOUT,
     'scripts/rec-ok.js': 'console.log("ok");\n',
@@ -413,7 +413,7 @@ test('--record shape: schema 1, full shas, mode selective, suites are the execut
     assert.strictEqual(doc.head, gitSha(r.dir, head));
     assert.strictEqual(doc.base, gitSha(r.dir, r.base));
     assert.strictEqual(doc.mode, 'selective');
-    assert.deepStrictEqual(doc.suites, [{ path: 'hooks/tests/rec-ok.test.sh', rc: 0 }]);
+    assert.deepStrictEqual(doc.suites.map((s) => [s.path, s.rc, typeof s.seconds]), [['hooks/tests/rec-ok.test.sh', 0, 'number']]);
     assert.match(ran.stdout, /summary: 1 run, 0 failed\nrecord: /);
   } finally { r.cleanup(); }
 });

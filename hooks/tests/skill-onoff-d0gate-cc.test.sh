@@ -70,10 +70,13 @@ if (fmt === 'stream-json') {
   const emit = (o) => console.log(JSON.stringify(o));
   emit({ type: 'system', subtype: 'init', session_id: sid, model: 'fake-' + get('--model') });
   emit({ type: 'assistant', session_id: sid, message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: 'autopilot:ceo-agent' } }] } });
-  if (CFG.hang_g2_base && stdin.includes('capitalize') && !armed) setInterval(() => {}, 1000), setTimeout(() => {}, 600000);
+  if (CFG.hang_g2_base && stdin.includes('capitalize') && !armed) {
+    if (CFG.hang_report) emit({ type: 'result', subtype: 'success', is_error: false, result: 'ok', session_id: sid, total_cost_usd: 0.01 }); // spends, reports, then hangs
+    setInterval(() => {}, 1000);
+  }
   else {
     if (!get('--resume')) {
-      if (CFG.nested) cp.spawnSync('claude', ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' });
+      if (CFG.nested) for (let k = 0; k < 2; k++) cp.spawnSync('claude', ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' }); // the agent tries to start its own claude
       let rules = null; let task = null;
       if (stdin.includes('capitalize')) task = 'g2'; else if (stdin.includes('gate/rules.json')) { task = 'g3'; rules = 'gate/rules.json'; } else { task = 'g1'; if (armed) rules = path.join(RULES, 'g1-good.json'); }
       fs.writeFileSync('p.txt', 'do the work\n');
@@ -95,7 +98,10 @@ if (fmt === 'stream-json') {
     if (CFG.hang_hand_on) setInterval(() => {}, 1000); // blocked once, then never finishes: the rail times it out
     else { copy('clean-g1', process.cwd()); hook(true); hook(true); }
   } else if (CFG.hang_hand_off) { setInterval(() => {}, 1000); } else copy(CFG.hand_off_violate ? 'g4-console' : 'clean-g1', process.cwd());
-  if (!(settingsText ? CFG.hang_hand_on : CFG.hang_hand_off))
+  const hanging = settingsText ? CFG.hang_hand_on : CFG.hang_hand_off;
+  if (hanging && CFG.hand_auth_error) console.log(JSON.stringify({ type: 'result', subtype: 'error', is_error: true, result: 'authentication invalid api key', session_id: sid, total_cost_usd: 0 }));
+  else if (hanging && CFG.hand_report_first) console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, total_cost_usd: CFG.hand_cost }));
+  if (!hanging)
   console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, total_cost_usd: CFG.hand_cost }));
 }
 EOF
@@ -274,8 +280,8 @@ grep -q 'below the 0.45 USD cell ceiling' "$TEST_TMP/r6.err" || fail "the remain
 echo "GREEN (lock): $(grep 'locked to' "$TEST_TMP/r6.out")"
 ok "pilot cap locked"
 
-echo "=== 5d. a claude the depth-0 agent starts itself goes through the capped wrapper and is counted ==="
-setcfg '{"cost_per_turn":0.05,"nested":true,"nested_cost":0.07}'; : >"$FLOG"
+echo "=== 5d. a claude the depth-0 agent tries to start is refused and counted; the real (fake) claude is not called ==="
+setcfg '{"cost_per_turn":0.05,"nested":true}'; : >"$FLOG"
 R7="$TEST_TMP/r7.jsonl"; CAP=2.2 cc --results "$R7" --limit 1 >/dev/null 2>&1 || fail "nested run rc=$?"
 cat >"$TEST_TMP/acct.js" <<'JS'
 const fs = require('fs');
@@ -285,20 +291,48 @@ const row = fs.readFileSync(rowsf, 'utf8').split('\n').filter(Boolean).map((l) =
 const bad = [];
 const near = (a, b) => Math.abs(a - b) < 1e-6;
 if (mode === 'nested') {
-  const nested = calls.filter((j) => !j.argv.includes('--plugin-dir')); const main = calls.filter((j) => j.argv.includes('--plugin-dir'));
-  if (nested.length !== 1) bad.push('expected 1 nested call, got ' + nested.length);
-  else if (nested[0].budget !== '0.45') bad.push('nested call budget ' + nested[0].budget + ' (want the cell remaining 0.45)');
-  for (const m of main) if (m.argv.filter((a) => a === '--max-budget-usd').length !== 1) bad.push('a main turn went through the wrapper (two budget flags)');
-  if (main[1] && main[1].budget !== '0.33') bad.push('turn 2 budget ' + main[1].budget + ' (want 0.45 - 0.05 - 0.07 = 0.33)');
-  if (!near(row.cost_usd, 0.22) || !near(row.cost_nested_usd, 0.07)) bad.push('cost_usd ' + row.cost_usd + ' / nested ' + row.cost_nested_usd + ' (want 0.22 / 0.07)');
+  const reached = calls.filter((j) => !j.argv.includes('--plugin-dir')); const main = calls.filter((j) => j.argv.includes('--plugin-dir'));
+  if (reached.length) bad.push(reached.length + ' nested claude call(s) reached the real claude (want 0)');
+  if (row.nested_claude_attempts !== 2) bad.push('nested_claude_attempts ' + row.nested_claude_attempts + ' (want 2)');
+  for (const m of main) if (m.argv.filter((a) => a === '--max-budget-usd').length !== 1) bad.push('a main turn carries ' + m.argv.filter((a) => a === '--max-budget-usd').length + ' budget flags');
+  if (!near(row.cost_usd, 0.15)) bad.push('cost_usd ' + row.cost_usd + ' (want 0.15: the two turns only, nothing nested)');
 } else if (mode === 'cost') {
   if (!near(row.cost_usd, Number(want)) || JSON.stringify(row.cost_turns) !== '[0.05,0.1]') bad.push('cost_usd ' + row.cost_usd + ' cost_turns ' + JSON.stringify(row.cost_turns) + ' (want ' + want + ' / [0.05,0.1])');
 }
 if (bad.length) { console.log('ACCOUNTING WRONG: ' + bad.join(' ; ')); process.exit(1); }
-console.log(mode + ' accounting ok: cost_usd ' + row.cost_usd + ', cost_turns ' + JSON.stringify(row.cost_turns) + (row.cost_nested_usd ? ', nested ' + row.cost_nested_usd : ''));
+console.log(mode + ' ok: cost_usd ' + row.cost_usd + ', cost_turns ' + JSON.stringify(row.cost_turns) + (mode === 'nested' ? ', nested_claude_attempts ' + row.nested_claude_attempts + ', no call reached the real claude' : ''));
 JS
-node "$TEST_TMP/acct.js" nested "$FLOG" "$R7" || fail "nested accounting (green)"
-ok "nested claude capped and counted"
+node "$TEST_TMP/acct.js" nested "$FLOG" "$R7" || fail "nested refusal (green)"
+node "$TEST_TMP/check.js" shape "$EV" "$R7" || fail "shape with nested_claude_attempts"
+ok "nested claude refused and counted"
+
+echo "=== 5d2. G4 hand wrapper: every hand launch of one cell gets only what is left of the cell budget ==="
+cat >"$TEST_TMP/real-claude.sh" <<EOF
+#!/bin/bash
+echo "\$*" >>"$TEST_TMP/wrap-calls.log"
+printf '{"type":"result","session_id":"s%s","total_cost_usd":0.4}\n' "\$\$"
+EOF
+chmod +x "$TEST_TMP/real-claude.sh"
+cat >"$TEST_TMP/wtest.js" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const path = require('path');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const cell = { root: fs.mkdtempSync(path.join(tmp, 'wcell-')) };
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-claude.sh'));
+const out = path.join(cell.root, 'hand-out.json'); fs.writeFileSync(out, '');
+const log = path.join(tmp, 'wrap-calls.log'); fs.writeFileSync(log, '');
+const run = () => cp.spawnSync(path.join(bin, 'claude'), ['-p', '--output-format', 'json'], { env: { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '0.5' }, encoding: 'utf8' });
+const rcs = [run().status, run().status, run().status];
+const calls = fs.readFileSync(log, 'utf8').split('\n').filter(Boolean);
+const budgets = calls.map((l) => l.split(' ').pop());
+const bad = [];
+if (JSON.stringify(budgets) !== '["0.5","0.1"]') bad.push('budgets given to the launches ' + JSON.stringify(budgets) + ' (want ["0.5","0.1"]: the 2nd gets 0.5 - 0.4)');
+if (JSON.stringify(rcs) !== '[0,0,97]') bad.push('exit codes ' + JSON.stringify(rcs) + ' (want [0,0,97]: the 3rd launch is refused, 0.8 already spent of 0.5)');
+if (bad.length) { console.log('HAND WRAPPER WRONG: ' + bad.join(' ; ')); process.exit(1); }
+console.log('hand wrapper: launch 1 gets 0.5, launch 2 gets 0.1, launch 3 refused (exit 97), the real claude ran twice');
+JS
+node "$TEST_TMP/wtest.js" "$EV" "$TEST_TMP" || fail "hand wrapper cumulative budget (green)"
+ok "hand wrapper cumulative budget"
 
 echo "=== 5e. cost_turns, summed cost_usd, and prereg cc.resume_cost_cumulative ==="
 setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
@@ -309,6 +343,37 @@ R9="$TEST_TMP/r9.jsonl"; : >"$FLOG"; CAP=2.2 cc --results "$R9" --limit 1 >/dev/
 node "$TEST_TMP/acct.js" cost "$FLOG" "$R9" 0.1 || fail "cumulative cost (green)"
 unset PREG
 ok "cost accounting"
+
+echo "=== 5f. timeout regressions: a hand/turn that reported a small spend and then hung is charged the whole ceiling; an auth failure is infra even with a gate block ==="
+cat >"$TEST_TMP/tmo2.js" <<'JS'
+const fs = require('fs');
+const [mode, rowsf] = process.argv.slice(2);
+const rows = fs.readFileSync(rowsf, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+const bad = [];
+if (mode === 'g4cost') { // ON, one real block, hand reports 0.01, then hangs: scored, charged the 0.54 ceiling
+  const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
+  if (!on || on.cost_usd !== 0.54 || on.cost_unknown !== true) bad.push('G4 ON timed-out cell cost ' + (on && on.cost_usd) + ' unknown=' + (on && on.cost_unknown) + ' (want 0.54, unknown)');
+} else if (mode === 'd0cost') { // depth-0 turn reports 0.01 and hangs
+  const g2 = rows.find((r) => r.task_id === 'g2-unconstrained' && r.arm === 'base');
+  if (!g2 || g2.failure_class !== 'infra_fail' || g2.cost_usd !== 0.45) bad.push('depth-0 timed-out cell: ' + (g2 && [g2.failure_class, g2.cost_usd]) + ' (want infra_fail, 0.45)');
+} else if (mode === 'auth') { // ON, real block, auth error envelope, then timeout: infra authentication
+  const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
+  if (!on || on.failure_class !== 'infra_fail' || on.failure_cause !== 'authentication') bad.push('G4 ON auth+block+timeout: ' + (on && [on.failure_class, on.failure_cause]) + ' (want infra_fail/authentication)');
+}
+if (bad.length) { console.log('TIMEOUT REGRESSION: ' + bad.join(' ; ')); process.exit(1); }
+console.log(mode + ' ok');
+JS
+seed_on() { node -e 'const fs=require("fs"); const r=fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map(JSON.parse).filter((x)=>!(x.task_id==="g4-hand-effect"&&x.arm==="gate-on")).map((x)=>JSON.stringify({ ...x, cost_usd: 0.05 })); fs.writeFileSync(process.argv[2], r.join("\n")+"\n");' "$R2" "$1"; }
+setcfg '{"hang_hand_on":true,"hand_report_first":true,"hand_cost":0.01}'; R10="$TEST_TMP/r10.jsonl"; seed_on "$R10"
+CAP=2.2 cc --results "$R10" >/dev/null 2>&1 || fail "g4 cost regression run rc=$?"
+node "$TEST_TMP/tmo2.js" g4cost "$R10" || fail "G4 timeout cost (green)"
+setcfg '{"hang_g2_base":true,"hang_report":true}'; R11="$TEST_TMP/r11.jsonl"; : >"$R11"
+CAP=2.2 cc --results "$R11" --limit 3 >/dev/null 2>&1
+node "$TEST_TMP/tmo2.js" d0cost "$R11" || fail "depth-0 timeout cost (green)"
+setcfg '{"hang_hand_on":true,"hand_auth_error":true}'; R12="$TEST_TMP/r12.jsonl"; seed_on "$R12"
+CAP=2.2 cc --results "$R12" >/dev/null 2>&1; [ -s "$R12" ] || fail "auth regression run wrote nothing"  # exit 2 is expected: an auth failure stops the campaign
+node "$TEST_TMP/tmo2.js" auth "$R12" || fail "auth+block+timeout (green)"
+ok "timeout cost ceiling and auth-before-exception"
 
 echo "=== 6. negative controls: three runner copies each with ONE line broken, RED before the real runner is GREEN ==="
 FARM="$TEST_TMP/farm"; rm -rf "$FARM"; mkdir -p "$FARM/evals"; cp -R "$EV" "$FARM/evals/skill-onoff"
@@ -356,24 +421,46 @@ setcfg '{"cost_per_turn":0.22}'; : >"$FLOG"
 CAP=5 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/re.jsonl" >/dev/null 2>&1
 if node "$TEST_TMP/lock.js" x "$TEST_TMP/re.jsonl" >"$TEST_TMP/re.out" 2>&1; then fail "RED control (e) was NOT caught: $(cat "$TEST_TMP/re.out")"; fi
 echo "RED (expected) (e) pilot lock removed: $(cat "$TEST_TMP/re.out")"
-# (f) the wrapper no longer adds the cell budget to a nested claude
-brk "$FEV/d0gate/cc.js" 'args+=(--max-budget-usd "$D0GATE_HAND_BUDGET")' ':'
-setcfg '{"cost_per_turn":0.05,"nested":true,"nested_cost":0.07}'; : >"$FLOG"
+# (f) the depth-0 wrapper lets the claude through instead of refusing
+brk "$FEV/d0gate/cc.js" "'exit 97'," "'PATH=\"\${PATH#*:}\" exec claude \"\$@\"',"
+setcfg '{"cost_per_turn":0.05,"nested":true}'; : >"$FLOG"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rf.jsonl" --limit 1 >/dev/null 2>&1
 if node "$TEST_TMP/acct.js" nested "$FLOG" "$TEST_TMP/rf.jsonl" >"$TEST_TMP/rf.out" 2>&1; then fail "RED control (f) was NOT caught: $(cat "$TEST_TMP/rf.out")"; fi
-echo "RED (expected) (f) wrapper without a budget: $(cat "$TEST_TMP/rf.out")"
-# (g) the nested spend is not added to the cell cost
-brk "$FEV/d0gate/cc.js" "Number((mainCost + nested.total).toFixed(6))" "Number((mainCost + 0).toFixed(6))"
-setcfg '{"cost_per_turn":0.05,"nested":true,"nested_cost":0.07}'; : >"$FLOG"
+echo "RED (expected) (f) wrapper lets nested claude through: $(cat "$TEST_TMP/rf.out")"
+# (g) the attempts are no longer recorded
+brk "$FEV/d0gate/cc.js" "'echo \"attempt: \$*\" >>\"\$D0GATE_NESTED_LOG\"'," "':',"
+setcfg '{"cost_per_turn":0.05,"nested":true}'; : >"$FLOG"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rg.jsonl" --limit 1 >/dev/null 2>&1
 if node "$TEST_TMP/acct.js" nested "$FLOG" "$TEST_TMP/rg.jsonl" >"$TEST_TMP/rg.out" 2>&1; then fail "RED control (g) was NOT caught: $(cat "$TEST_TMP/rg.out")"; fi
-echo "RED (expected) (g) nested spend not counted: $(cat "$TEST_TMP/rg.out")"
+echo "RED (expected) (g) attempts not recorded: $(cat "$TEST_TMP/rg.out")"
+# (l) the G4 hand wrapper hands every launch the full cell budget
+brk "$FEV/d0gate/cc.js" 'args+=(--max-budget-usd "$rem")' 'args+=(--max-budget-usd "$D0GATE_HAND_BUDGET")'
+if node "$TEST_TMP/wtest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/rl.out" 2>&1; then fail "RED control (l) was NOT caught: $(cat "$TEST_TMP/rl.out")"; fi
+echo "RED (expected) (l) hand wrapper without cumulative budget: $(cat "$TEST_TMP/rl.out")"
 # (h) the resume-cumulative switch forced on (cost = last call only)
 brk "$FEV/d0gate/cc.js" "ctx.P.cc.resume_cost_cumulative === true" "true"
 setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rh.jsonl" --limit 1 >/dev/null 2>&1
 if node "$TEST_TMP/acct.js" cost "$FLOG" "$TEST_TMP/rh.jsonl" 0.15 >"$TEST_TMP/rh.out" 2>&1; then fail "RED control (h) was NOT caught: $(cat "$TEST_TMP/rh.out")"; fi
 echo "RED (expected) (h) summed cost replaced by the last call: $(cat "$TEST_TMP/rh.out")"
+# (i) timed_out no longer forces the whole ceiling (G4)
+brk "$FEV/d0gate/cc.js" "exit !== 137 && !timedOut;" "exit !== 137;"
+setcfg '{"hang_hand_on":true,"hand_report_first":true,"hand_cost":0.01}'; seed_on "$TEST_TMP/ri.jsonl"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/ri.jsonl" >/dev/null 2>&1
+if node "$TEST_TMP/tmo2.js" g4cost "$TEST_TMP/ri.jsonl" >"$TEST_TMP/ri.out" 2>&1; then fail "RED control (i) was NOT caught: $(cat "$TEST_TMP/ri.out")"; fi
+echo "RED (expected) (i) timed-out hand charged only what it reported: $(cat "$TEST_TMP/ri.out")"
+# (j) the blocked-timeout exception goes back in front of classify
+brk "$FEV/d0gate/cc.js" "if (hard) return fail(hard.cls, hard.cause, env0.error);" "if (hard && !(timedOut && on && Object.values(facts0.hook).some((recs) => recs.some((r) => r.decision === 'block')))) return fail(hard.cls, hard.cause, env0.error);"
+setcfg '{"hang_hand_on":true,"hand_auth_error":true}'; seed_on "$TEST_TMP/rj.jsonl"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rj.jsonl" >/dev/null 2>&1
+if node "$TEST_TMP/tmo2.js" auth "$TEST_TMP/rj.jsonl" >"$TEST_TMP/rj.out" 2>&1; then fail "RED control (j) was NOT caught: $(cat "$TEST_TMP/rj.out")"; fi
+echo "RED (expected) (j) exception before classify: $(cat "$TEST_TMP/rj.out")"
+# (k) depth-0: a timed-out turn is charged only what it reported
+brk "$FEV/d0gate/cc.js" "costTurnsKnown && !timedOut;" "costTurnsKnown;"
+setcfg '{"hang_g2_base":true,"hang_report":true}'; : >"$TEST_TMP/rk.jsonl"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rk.jsonl" --limit 3 >/dev/null 2>&1
+if node "$TEST_TMP/tmo2.js" d0cost "$TEST_TMP/rk.jsonl" >"$TEST_TMP/rk.out" 2>&1; then fail "RED control (k) was NOT caught: $(cat "$TEST_TMP/rk.out")"; fi
+echo "RED (expected) (k) depth-0 timeout charged only what it reported: $(cat "$TEST_TMP/rk.out")"
 ok "negative controls red, real runner green (sections 2 to 5)"
 
 echo "=== 7. no real runner binary was started ==="

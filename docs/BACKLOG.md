@@ -1442,7 +1442,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### Rerun and serial stage of the parallel run produce false reds
 - **Id**: BL-0335
-- **Status**: open
+- **Status**: shipped 53b8a434b 2026-10-29
 - **Since**: 2026-10-29
 - **Origin**: self
 - **Problem**: 平行模式的重跑和串行段會出假紅：有些套件在池內紅、串行重跑還是紅，但同一版本單獨直接跑是綠的，害人以為改動壞了。

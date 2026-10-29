@@ -285,13 +285,20 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     if (exit === 124 || exit === 137) return fail('infra_fail', 'runner_timeout', 'outer timeout');
     if (env0.status === 'precondition_failed' || exit === 2) return fail('infra_fail', 'precondition_failed', env0.error || env0.reason || errText.trim().split('\n').pop());
     if (!env0.status) return fail('infra_fail', 'rail_no_output', errText.trim().split('\n').pop());
-    if (env0.timed_out === true) return fail('infra_fail', 'runner_timeout', 'the rail timed the hand out');
+    // A hand the rail timed out is an observation, not an infra failure, when the gate demonstrably blocked it first (ON arm, at least one
+    // block record): the gate keeping the hand from finishing is the cost side the decision table measures. Anything else stays infra.
+    let timedOutAfterBlock = false;
+    if (env0.timed_out === true) {
+      const blocked = on && Object.values(facts0.hook).some((recs) => recs.some((r) => r.decision === 'block'));
+      if (!blocked) return fail('infra_fail', 'runner_timeout', 'the rail timed the hand out');
+      timedOutAfterBlock = true;
+    }
     if (sum.results.some((x) => x.subtype === 'error_max_budget_usd' && x.is_error === true)) return fail('infra_fail', 'budget_exceeded');
-    if (env0.status === 'failure') {
+    if (env0.status === 'failure' && !timedOutAfterBlock) {
       const g = classify(1, sum, `${errText}\n${env0.error || ''}`);
       return fail('infra_fail', g ? g.cause : 'runner_error', env0.error);
     }
-    if (!sum.costKnown) return fail('infra_fail', 'cost_unknown');
+    if (!sum.costKnown && !timedOutAfterBlock) return fail('infra_fail', 'cost_unknown');
     // derived ledger: one accepted dispatch, its arm state, its result (only status committed is a done worker)
     const lf = path.join(cell.root, '.d0gate', 'ledger.jsonl');
     const ts = Date.now();
@@ -299,13 +306,17 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     w({ kind: 'call', ts, n: 1, accepted: true, argv: JSON.stringify(['bash', ctx.railScript, ...argv]), cwd: cell.repo, repo: cell.repo, runner: 'claude-native',
       gate_rules_flag: on, gate_rules_file: on ? rules : '', rules_copy: '', rules_sha: '', base_sha: cell.baseSha, session });
     w({ kind: 'arm', ts, n: 1, armed: on && sessions.length > 0 });
-    w({ kind: 'result', ts, n: 1, status: env0.status === 'committed' ? 'done' : env0.status, worker: 'claude-native', branch: env0.branch || branch, result_sha: env0.commit || '', session });
+    w({ kind: 'result', ts, n: 1, status: (env0.status === 'committed' || (timedOutAfterBlock && env0.commit)) ? 'done' : (timedOutAfterBlock ? 'timed_out' : env0.status), worker: 'claude-native', branch: env0.branch || branch, result_sha: env0.commit || '', session });
     let scored;
     try { scored = TR.scoreCell(cell, c); } catch (e) { return fail('infra_fail', 'marker_error', e.message); }
     keep();
+    // the hand did not finish: completed and hand_clean are false whatever the tree looks like; violating is what the final tree (if any) shows
+    if (timedOutAfterBlock) scored.g4 = { ...scored.g4, completed: false, hand_clean: false };
     return {
       row: ctx.P.row, ...scored, model, pilot: ctx.pilot, runner: 'cc', runner_version: ctx.runnerVersion, session_id: session,
       model_seen: sum.modelSeen, rail_status: env0.status, duration_s: o.durationS, cost_usd: o.cost, failure_class: null,
+      ...(timedOutAfterBlock ? { failure_cause: 'timed_out_after_gate_block' } : {}),
+      ...(o.costUnknown ? { cost_unknown: true, cost_estimated: true } : {}),
     };
   } finally { cell.destroy(); }
 }

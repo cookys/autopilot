@@ -86,8 +86,11 @@ if (fmt === 'stream-json') {
     const cmd = JSON.parse(settingsText).hooks.Stop[0].hooks[0].command;
     const payload = (a) => JSON.stringify({ session_id: sid, cwd: process.cwd(), stop_hook_active: a, prompt_id: 'p' });
     const hook = (a) => cp.spawnSync('sh', ['-c', cmd], { input: payload(a), encoding: 'utf8', env: process.env });
-    hook(false); copy('clean-g1', process.cwd()); hook(true); hook(true);
-  } else copy(CFG.hand_off_violate ? 'g4-console' : 'clean-g1', process.cwd());
+    hook(false);
+    if (CFG.hang_hand_on) setInterval(() => {}, 1000); // blocked once, then never finishes: the rail times it out
+    else { copy('clean-g1', process.cwd()); hook(true); hook(true); }
+  } else if (CFG.hang_hand_off) { setInterval(() => {}, 1000); } else copy(CFG.hand_off_violate ? 'g4-console' : 'clean-g1', process.cwd());
+  if (!(settingsText ? CFG.hang_hand_on : CFG.hang_hand_off))
   console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, total_cost_usd: CFG.hand_cost }));
 }
 EOF
@@ -99,7 +102,7 @@ nfake() { grep -c "\"fmt\":\"$1\"" "$FLOG" || true; }
 
 # a prereg copy with a short per-turn timeout (the scorer-side checks use the real prereg)
 PRE="$TEST_TMP/prereg-test.json"
-node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.cc.timeout_s=4; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$EV/prereg/d0gate.json" "$PRE"
+node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.cc.timeout_s=4; p.cc.hand_timeout="3s"; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$EV/prereg/d0gate.json" "$PRE"
 REAL_PRE_SHA="$(sha256sum "$EV/prereg/d0gate.json" | cut -d' ' -f1)"
 cc() { ONOFF_MAX_USD="${CAP:-2.2}" node "${RUNNER_JS:-$EV/run-d0gate-campaign.js}" --prereg "$PRE" --runner cc --pilot "$@"; }
 
@@ -224,9 +227,35 @@ node "$EV/run-d0gate-campaign.js" --prereg "$PRE" --results "$TEST_TMP/formal.js
 echo "GREEN (formal guard): $(cat "$TEST_TMP/e1")"
 ok "budget guard, resume-by-cell, formal guard"
 
+echo "=== 5b. G4 rail timeouts: ON arm blocked then hung is SCORED (completed=false); OFF arm hung is infra ==="
+setcfg '{"hang_hand_on":true,"hang_hand_off":true}'; : >"$FLOG"
+R4="$TEST_TMP/r4.jsonl"; node -e 'const fs=require("fs"); const r=fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).slice(0,6).map((l)=>JSON.stringify({ ...JSON.parse(l), cost_usd: 0.05 })); fs.writeFileSync(process.argv[2], r.join("\n")+"\n");' "$R2" "$R4"  # the 6 depth-0 rows, cheap, so only the 3 G4 cells are todo and the cap is not the subject here
+CAP=2.2 cc --results "$R4" >"$TEST_TMP/r4.out" 2>"$TEST_TMP/r4.err"; rc=$?
+cat "$TEST_TMP/r4.out"; [ "$rc" = 0 ] || { cat "$TEST_TMP/r4.err"; fail "g4 timeout run rc=$rc"; }
+cat >"$TEST_TMP/tmo.js" <<'JS'
+const fs = require('fs');
+const rows = fs.readFileSync(process.argv[3], 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((r) => r.task_id === 'g4-hand-effect');
+const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort()) : x));
+const on = rows.filter((r) => r.arm === 'gate-on'); const off = rows.filter((r) => r.arm === 'gate-off');
+const bad = [];
+if (on.length !== 1 || on[0].failure_class !== null || on[0].failure_cause !== 'timed_out_after_gate_block' || on[0].g4.completed !== false || on[0].g4.hand_clean !== false || on[0].g4.gate_exercised !== true) bad.push('ON row: ' + canon(on[0]));
+if (off.length !== 2 || off.some((r) => r.failure_class !== 'infra_fail' || r.failure_cause !== 'runner_timeout')) bad.push('OFF rows: ' + canon(off.map((r) => [r.failure_class, r.failure_cause])));
+if (bad.length) { console.log('TIMEOUT RULE WRONG: ' + bad.join(' ; ')); process.exit(1); }
+console.log('ON blocked-then-hung: scored, completed=false, cause timed_out_after_gate_block; OFF hung x2: infra_fail/runner_timeout');
+JS
+node "$TEST_TMP/tmo.js" x "$R4" || fail "g4 timeout rule (green)"
+node -e '
+const fs=require("fs"); const rows=fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).map((l)=>JSON.parse(l));
+fs.writeFileSync(process.argv[2], rows.map((r)=>JSON.stringify({ ...r, pilot:false, model:r.task_id==="g4-hand-effect"?"haiku":"sonnet" })).join("\n")+"\n");' "$R4" "$TEST_TMP/r4-sc.jsonl"
+node "$EV/score-d0gate.js" --prereg "$EV/prereg/d0gate.json" --results "$TEST_TMP/r4-sc.jsonl" >"$TEST_TMP/r4-sc.out" 2>&1
+grep -q 'missing/mistyped' "$TEST_TMP/r4-sc.out" && fail "the timeout rows draw a missing/mistyped complaint: $(tail -1 "$TEST_TMP/r4-sc.out")"
+echo "scorer: no missing/mistyped on the timeout rows"
+node "$TEST_TMP/check.js" shape "$EV" "$R4" || fail "shape of timeout rows"
+ok "G4 timeout rule"
+
 echo "=== 6. negative controls: three runner copies each with ONE line broken, RED before the real runner is GREEN ==="
 FARM="$TEST_TMP/farm"; rm -rf "$FARM"; mkdir -p "$FARM/evals"; cp -R "$EV" "$FARM/evals/skill-onoff"
-for d in scripts hooks schemas; do [ -e "$REPO_ROOT/$d" ] && ln -s "$REPO_ROOT/$d" "$FARM/$d"; done
+for e in "$REPO_ROOT"/* "$REPO_ROOT"/.[!.]*; do b="$(basename "$e")"; case "$b" in evals|.git) ;; *) [ -e "$e" ] && ln -s "$e" "$FARM/$b";; esac; done  # the rail finds ../src from its own dir
 FEV="$FARM/evals/skill-onoff"
 brk() { local f="$1" before; before="$(sha256sum "$f" | cut -d' ' -f1)"; node -e 'const fs=require("fs"); const [f,from,to]=process.argv.slice(1); const t=fs.readFileSync(f,"utf8"); if(!t.includes(from)){console.error("pattern not found: "+from); process.exit(1);} fs.writeFileSync(f, t.split(from).join(to));' "$@" || fail "negative control: could not plant the break"; [ "$before" != "$(sha256sum "$f" | cut -d' ' -f1)" ] || fail "negative control: nothing changed ($2)"; }
 # (a) an unfinished cell that drops its marker boolean (and the runner's own shape guard switched off)
@@ -256,6 +285,14 @@ setcfg '{}'; : >"$FLOG"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rc.jsonl" --limit 1 >/dev/null 2>&1
 if node "$TEST_TMP/check.js" isolation "$FLOG" "$CB" "$CLAUDE_CONFIG_DIR" >"$TEST_TMP/rc.out" 2>&1; then fail "RED control (c) was NOT caught: $(cat "$TEST_TMP/rc.out")"; fi
 echo "RED (expected) (c) real config dir: $(cat "$TEST_TMP/rc.out")"
+# (d) the timeout rule put back to 'always infra'
+brk "$FEV/d0gate/cc.js" "const blocked = on && " "const blocked = false && "
+setcfg '{"hang_hand_on":true,"hang_hand_off":true}'; : >"$FLOG"
+RD="$TEST_TMP/rd.jsonl"; cp "$R4.seed" "$RD" 2>/dev/null || node -e 'const fs=require("fs"); const r=fs.readFileSync(process.argv[1],"utf8").split("\n").filter(Boolean).slice(0,6).map((l)=>JSON.stringify({ ...JSON.parse(l), cost_usd: 0.05 })); fs.writeFileSync(process.argv[2], r.join("\n")+"\n");' "$R2" "$RD"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$RD" >/dev/null 2>&1
+if node "$TEST_TMP/tmo.js" x "$RD" >"$TEST_TMP/rd.out" 2>&1; then fail "RED control (d) was NOT caught: $(cat "$TEST_TMP/rd.out")"; fi
+grep -q '"failure_cause":"runner_timeout"' "$RD" || fail "RED control (d) went red for the wrong reason (no runner_timeout row): $(cat "$TEST_TMP/rd.out")"
+echo "RED (expected) (d) timeout always infra: $(cat "$TEST_TMP/rd.out")"
 ok "negative controls red, real runner green (sections 2 to 5)"
 
 echo "=== 7. no real runner binary was started ==="

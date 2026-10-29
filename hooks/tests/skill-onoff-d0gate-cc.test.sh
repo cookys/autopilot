@@ -469,6 +469,33 @@ console.log('wrapper writes: a planted settle tmp, RESV or LOCK symlink and a .d
 JS
 node "$TEST_TMP/settle.js" "$EV" "$TEST_TMP" || fail "settlement symlinks (green)"
 
+echo "=== 5d3b. the hand envelope tee writes everything even when fs.writeSync writes one byte at a time ==="
+cat >"$TEST_TMP/short-write-hook.js" <<'JS'
+// preload: every buffer write to a file descriptor writes at most one byte (what a full pipe or a signal can do)
+const fs = require('fs'); const real = fs.writeSync;
+fs.writeSync = function (fd, b, o, l, p) { if (Buffer.isBuffer(b) && typeof o === 'number' && typeof l === 'number') return real.call(fs, fd, b, o, Math.min(l, 1), p); return real.apply(fs, arguments); };
+JS
+cat >"$TEST_TMP/tee.js" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const path = require('path'); const crypto = require('crypto');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const root = fs.mkdtempSync(path.join(tmp, 'tcell-')); fs.mkdirSync(path.join(root, '.d0gate'));
+const out = path.join(root, '.d0gate', 'out'); const priv = path.join(root, '.d0gate', 'priv');
+const input = Buffer.concat([Buffer.from([0, 255, 254, 0, 10]), crypto.randomBytes(30000), Buffer.from('{"type":"result","total_cost_usd":0.01}\n')]);
+const r = cp.spawnSync(process.execPath, ['-e', cc.TEE_JS, root, out, priv], { input, env: { ...process.env, NODE_OPTIONS: '--require=' + path.join(tmp, 'short-write-hook.js') }, maxBuffer: 1 << 26 });
+const same = (a, b) => Buffer.isBuffer(a) && Buffer.compare(a, b) === 0;
+const bad = [];
+if (r.status !== 0) bad.push('tee exit ' + r.status);
+if (!same(r.stdout, input)) bad.push('stdout has ' + (r.stdout ? r.stdout.length : 'nothing') + ' of ' + input.length + ' bytes');
+let o = Buffer.alloc(0), p = Buffer.alloc(0); try { o = fs.readFileSync(out); p = fs.readFileSync(priv); } catch { /* absent */ }
+if (!same(o, input)) bad.push('OUT has ' + o.length + ' of ' + input.length + ' bytes');
+if (!same(p, input)) bad.push('PRIV has ' + p.length + ' of ' + input.length + ' bytes');
+if (bad.length) { console.log('TEE TRUNCATED: ' + bad.join(' ; ')); process.exit(1); }
+console.log('tee with one-byte writes: stdout, OUT and PRIV are byte for byte the ' + input.length + ' input bytes (NUL and non-UTF-8 included)');
+JS
+node "$TEST_TMP/tee.js" "$EV" "$TEST_TMP" || fail "tee short writes (green)"
+ok "tee survives short writes"
+
 echo "=== 5d4. a cell whose model changed a harness file (the stub's pinned cell) is re-verified afterwards: failure_class harness_modified, not scored ==="
 cat >"$TEST_TMP/hm.js" <<'JS'
 const fs = require('fs');
@@ -812,6 +839,11 @@ S5="$TEST_TMP/s5farm"; rm -rf "$S5"; mkdir -p "$S5/d0gate"; cp -R "$EV/d0gate/."
 brk "$S5/d0gate/cc.js" 'fo=openG(root,tmp,C.O_WRONLY|C.O_CREAT|C.O_EXCL,384); } catch (e) { if (e.code!=="EEXIST") throw e;' 'fo=fs.openSync(tmp,C.O_WRONLY|C.O_CREAT|C.O_TRUNC,384); } catch (e) { if (e.code!=="EEXIST") throw e;'
 if node "$TEST_TMP/settle.js" "$S5" "$TEST_TMP" >"$TEST_TMP/ro5.out" 2>&1; then fail "RED control (o5) was NOT caught: $(cat "$TEST_TMP/ro5.out")"; fi
 echo "RED (expected) (o5) settle tmp written through a symlink: $(cat "$TEST_TMP/ro5.out")"
+# (o6) a tee whose write loop is gone loses everything after the first short write
+T6="$TEST_TMP/t6farm"; rm -rf "$T6"; mkdir -p "$T6/d0gate"; cp -R "$EV/d0gate/." "$T6/d0gate/"
+brk "$T6/d0gate/cc.js" 'while (o<b.length) {' 'if (o<b.length) {'
+if node "$TEST_TMP/tee.js" "$T6" "$TEST_TMP" >"$TEST_TMP/ro6.out" 2>&1; then fail "RED control (o6) was NOT caught: $(cat "$TEST_TMP/ro6.out")"; fi
+echo "RED (expected) (o6) no write loop: $(cat "$TEST_TMP/ro6.out")"
 # (o3) without O_NOFOLLOW the swapped source is followed
 NF="$TEST_TMP/nffarm"; rm -rf "$NF"; mkdir -p "$NF/d0gate"; cp -R "$EV/d0gate/." "$NF/d0gate/"
 brk "$NF/d0gate/cc.js" 'const NF=C.O_NOFOLLOW;' 'const NF=0;'

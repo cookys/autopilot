@@ -376,7 +376,9 @@ const GUARD_JS = [
   'const unlinkG=(root,f)=>{ guardPath(root,f); fs.unlinkSync(f); };',
   'const mkdirG=(root,d)=>{ guardPath(root,d); try { fs.mkdirSync(d,448); } catch (e) { if (e.code!=="EEXIST") throw e; } const st=fs.lstatSync(d); if (st.isSymbolicLink() || !st.isDirectory()) throw new Error("not a plain directory: "+d); };',
   'const readG=(root,f)=>{ const fd=openG(root,f,C.O_RDONLY); try { return fs.readFileSync(fd,"utf8"); } finally { fs.closeSync(fd); } };',
-  'const appendG=(root,f,text)=>{ const fd=openG(root,f,C.O_WRONLY|C.O_APPEND|C.O_CREAT,384); try { if (text) fs.writeSync(fd,text); } finally { fs.closeSync(fd); } };',
+  // writeAll: fs.writeSync may write only part of the buffer (a pipe, a signal); loop until everything is written; EAGAIN waits 5 ms and retries (at most 2000 times)
+  'const writeAll=(fd,data)=>{ const b=Buffer.isBuffer(data)?data:Buffer.from(String(data)); let o=0,t=0; while (o<b.length) { try { o+=fs.writeSync(fd,b,o,b.length-o); t=0; } catch (e) { if (e.code==="EAGAIN" && ++t<2000) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5); continue; } throw e; } } };',
+  'const appendG=(root,f,text)=>{ const fd=openG(root,f,C.O_WRONLY|C.O_APPEND|C.O_CREAT,384); try { if (text) writeAll(fd,text); } finally { fs.closeSync(fd); } };',
 ].join(" ");
 // guard check only: exit 3 when any listed path fails the guard
 const GUARD_CHECK_JS = GUARD_JS + ' const [root,...ts]=process.argv.slice(1); try { for (const t of ts) guardPath(root,t); } catch (e) { process.stderr.write(String(e.message)+"\\n"); process.exit(3); }';
@@ -385,9 +387,12 @@ const APPEND_JS = GUARD_JS + ' const [root,f,text]=process.argv.slice(1); try { 
 // tee for the hand envelope: stdin to stdout, to OUT (append) and to PRIV (fresh); a target that fails the guard is dropped, stdout always flows
 const TEE_JS = GUARD_JS + [
   ' const [root,out,priv]=process.argv.slice(1); const open=(t,fl)=>{ try { return openG(root,t,fl,384); } catch (e) { return -1; } };',
-  'const fo=open(out,C.O_WRONLY|C.O_APPEND|C.O_CREAT), fp=open(priv,C.O_WRONLY|C.O_CREAT|C.O_EXCL); const buf=Buffer.alloc(65536);',
+  'let fo=open(out,C.O_WRONLY|C.O_APPEND|C.O_CREAT), fp=open(priv,C.O_WRONLY|C.O_CREAT|C.O_EXCL); const buf=Buffer.alloc(65536);',
+  'const drop=(what,e)=>{ try { appendG(root,path.join(root,".d0gate","copy-sessions.log"),"tee: dropped the "+what+" target after a write error: "+e.message+"\\n"); } catch (x) {} };',
   'for (;;) { let n; try { n=fs.readSync(0,buf,0,buf.length,null); } catch (e) { if (e.code==="EAGAIN") continue; if (e.code==="EOF") break; throw e; } if (n<=0) break;',
-  '  for (const fd of [1,fo,fp]) { if (fd<0) continue; try { fs.writeSync(fd,buf,0,n); } catch (e) {} } }',
+  '  try { writeAll(1,buf.subarray(0,n)); } catch (e) { process.stderr.write("tee: stdout write failed: "+e.message+"\\n"); process.exit(4); }',
+  '  if (fo>=0) { try { writeAll(fo,buf.subarray(0,n)); } catch (e) { drop("hand output",e); fs.closeSync(fo); fo=-1; } }',
+  '  if (fp>=0) { try { writeAll(fp,buf.subarray(0,n)); } catch (e) { drop("private copy",e); fs.closeSync(fp); fp=-1; } } }',
 ].join(" ");
 // the reservation step (run under flock): how much budget is left; appends this launch reservation to RESV
 const RESERVE_JS = GUARD_JS + [
@@ -410,7 +415,7 @@ const SETTLE_JS = GUARD_JS + [
   '  if (!ok) { code=1; } else {',
   '    let keep=""; try { keep=readG(root,resv).split("\\n").filter((l)=>l && !l.startsWith(id+" ")).map((l)=>l+"\\n").join(""); } catch (e) { if (e.code!=="ENOENT") throw e; }',
   '    const tmp=resv+".settle.tmp"; let fo; try { fo=openG(root,tmp,C.O_WRONLY|C.O_CREAT|C.O_EXCL,384); } catch (e) { if (e.code!=="EEXIST") throw e; if (!fs.lstatSync(tmp).isFile()) throw e; unlinkG(root,tmp); fo=openG(root,tmp,C.O_WRONLY|C.O_CREAT|C.O_EXCL,384); }',
-  '    try { fs.writeSync(fo,keep); } finally { fs.closeSync(fo); } renameG(root,tmp,resv); }',
+  '    try { writeAll(fo,keep); } finally { fs.closeSync(fo); } renameG(root,tmp,resv); }',
   '} catch (e) { process.stderr.write(String(e.message)+"\\n"); code=3; }',
   'try { unlinkG(root,priv); } catch (e) {} process.exit(code);',
 ].join(" ");
@@ -431,7 +436,7 @@ const COPY_SESSIONS_JS = GUARD_JS + [
   '  if (!under(ro,rr)) { log("skip: output dir "+ro+" is outside the cell "+rr); process.exit(0); }',
   '  const top=path.join(path.dirname(path.resolve(out)),path.basename(out)+".sessions"); mkdirG(root,top); const dst=path.join(top,id); mkdirG(root,dst);',
   '  const one=(a,b)=>{ const st=fs.lstatSync(a); if (!st.isFile()) { log("skip not a plain file: "+a); return; } if (!under(fs.realpathSync(a),rp)) { log("skip source outside projects: "+a); return; }',
-  '    const fi=openG(root,a,C.O_RDONLY); try { const fo=openG(root,b,C.O_WRONLY|C.O_CREAT|C.O_EXCL,384); try { const buf=Buffer.alloc(65536); let n; while ((n=fs.readSync(fi,buf,0,buf.length,null))>0) fs.writeSync(fo,buf,0,n); } finally { fs.closeSync(fo); } } finally { fs.closeSync(fi); } };',
+  '    const fi=openG(root,a,C.O_RDONLY); try { const fo=openG(root,b,C.O_WRONLY|C.O_CREAT|C.O_EXCL,384); try { const buf=Buffer.alloc(65536); let n; while ((n=fs.readSync(fi,buf,0,buf.length,null))>0) writeAll(fo,buf.subarray(0,n)); } finally { fs.closeSync(fo); } } finally { fs.closeSync(fi); } };',
   '  const w=(s,d)=>{ for (const e of fs.readdirSync(s,{withFileTypes:true})) { const a=path.join(s,e.name), b=path.join(d,e.name); if (e.isSymbolicLink()) { log("skip symlink: "+a); continue; } if (e.isDirectory()) { mkdirG(root,b); w(a,b); } else if (e.isFile()) { try { one(a,b); } catch (err) { log("skip "+a+": "+err.message); } } } };',
   '  w(rp,dst);',
   '} catch (e) { log("skip: "+e.message); }',
@@ -595,7 +600,7 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     const w = (o2) => {
       try { const st = fs.lstatSync(path.join(cell.root, '.d0gate')); if (st.isSymbolicLink() || !st.isDirectory()) return; } catch { return; }
       let fd; try { fd = fs.openSync(lf, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600); } catch { return; }
-      try { fs.writeSync(fd, `${JSON.stringify(o2)}\n`); } finally { fs.closeSync(fd); }
+      try { fs.writeFileSync(fd, `${JSON.stringify(o2)}\n`); } finally { fs.closeSync(fd); }
     };
     w({ kind: 'call', ts, n: 1, accepted: true, argv: JSON.stringify(['bash', ctx.railScript, ...argv]), cwd: cell.repo, repo: cell.repo, runner: 'claude-native',
       gate_rules_flag: on, gate_rules_file: on ? rules : '', rules_copy: '', rules_sha: '', base_sha: cell.baseSha, session });
@@ -631,4 +636,4 @@ function runCell(ctx, c, ceiling, budget, keepDir) {
   return row;
 }
 
-module.exports = { COPY_SESSIONS_JS, GUARD_JS, takeSnapshot, snapshotBreaks, symlinksIn, blockedTimeoutApplies, handWrapper, denyWrapper, runCell, shapeProblems, summary, classify, falseShape, whichClaude, REPO_ROOT, D0_MARKER };
+module.exports = { COPY_SESSIONS_JS, TEE_JS, GUARD_JS, takeSnapshot, snapshotBreaks, symlinksIn, blockedTimeoutApplies, handWrapper, denyWrapper, runCell, shapeProblems, summary, classify, falseShape, whichClaude, REPO_ROOT, D0_MARKER };

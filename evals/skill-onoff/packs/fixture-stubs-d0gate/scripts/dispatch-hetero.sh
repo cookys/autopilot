@@ -60,7 +60,7 @@ ledger_append() {
     const o = { kind, ts: Date.now() };
     for (const p of kv) { const i = p.indexOf("="); const k = p.slice(0, i); const v = p.slice(i + 1); o[k] = v === "true" ? true : v === "false" ? false : /^-?[0-9]+$/.test(v) ? Number(v) : v; }
     const fd = fs.openSync(process.env.D0GATE_LEDGER, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600);
-    try { fs.writeSync(fd, JSON.stringify(o) + "\n"); } finally { fs.closeSync(fd); }' "$@"
+    try { fs.writeFileSync(fd, JSON.stringify(o) + "\n"); } finally { fs.closeSync(fd); }' "$@"
 }
 argv_json() { node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' -- "$@"; }
 die_precondition() {

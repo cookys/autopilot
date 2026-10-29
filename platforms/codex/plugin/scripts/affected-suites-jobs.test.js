@@ -119,9 +119,9 @@ test('each pool entry gets its own TMPDIR / XDG_RUNTIME_DIR and the timing facto
     assert.strictEqual(new Set(rows.map((x) => x[0])).size, 5);
     const poolRows = rows.filter((x) => x[2] === '3');
     assert.strictEqual(new Set(poolRows.map((x) => x[1])).size, 4); // pool entries: private XDG_RUNTIME_DIR each
-    for (const x of poolRows) assert.ok(x[1].startsWith(`${callerXdg}/asj.`) && /\/\d+$/.test(x[1]), x[1]); // under the caller's XDG, never under /tmp
+    for (const x of poolRows) assert.ok(x[1].startsWith(`${process.env.HOME}/.cache/autopilot`) && x[1].includes('/asj.') && /\/asj\.[^/]+$/.test(x[1]), x[1]); // per-run base under $HOME/.cache/autopilot, never under /tmp
     assert.deepStrictEqual(rows.filter((x) => x[2] === '1').map((x) => x[1]), [callerXdg]); // serial part: the caller's, like a direct run
-    for (const x of rows) assert.match(x[0], /asj\.[^/]+\/\d+$/);
+    for (const x of rows) assert.match(x[0], /\/asj\.[^/]+$/);
     assert.deepStrictEqual(rows.map((x) => x[2]).sort(), ['1', '3', '3', '3', '3']);
     fs.rmSync(path.join(r.dir, 'env.log'));
     run(r.dir, ['--jobs', '3'], { ...env, AUTOPILOT_TEST_TIMING_FACTOR: '7' });
@@ -419,10 +419,10 @@ test('a rerun never sees the pool run\'s TMPDIR: marker left by the first run do
   const mutated = path.join(r.dir, 'affected-suites-mutated.js');
   try {
     const src = fs.readFileSync(SEL, 'utf8');
-    const needle = 'const dir = path.join(base, String(idx));';
+    const needle = "const dir = fs.mkdtempSync(path.join(parent, 'asj.'));";
     assert.ok(src.includes(needle));
-    // every call uses directory "0" (the rerun reuses the pool run's directory)
-    fs.writeFileSync(mutated, src.replace(needle, "const dir = path.join(base, '0');").replace('fs.mkdirSync(dir, { mode: 0o700 });', 'fs.mkdirSync(dir, { recursive: true, mode: 0o700 });').replace('fs.mkdirSync(xdg, { mode: 0o700 });', 'fs.mkdirSync(xdg, { recursive: true, mode: 0o700 });').replace(/require\('\.\//g, "require('" + path.dirname(SEL) + '/'));
+    // every call uses one fixed directory (the rerun reuses the pool run's directory)
+    fs.writeFileSync(mutated, src.replace(needle, "const dir = path.join(parent, 'asj.fixed'); fs.mkdirSync(dir, { recursive: true });").replace(/require\('\.\//g, "require('" + path.dirname(SEL) + '/'));
     const p = run(r.dir, ['--jobs', '2'], env, mutated);
     assert.match(p.stdout, /marker-found/, 'negative control must go red: ' + p.stdout);
   } finally { r.cleanup(); }
@@ -476,19 +476,136 @@ test('the per-entry TMPDIR is 0700 and short (suites build unix socket paths und
   } finally { r.cleanup(); }
   r = makeRepo(files);
   try {
-    const q = run(r.dir, ['--jobs', '2'], env, mutate(r, "path.join(os.tmpdir(), 'asj.')", "path.join(os.tmpdir(), 'affected-suites-jobs-')"));
+    const q = run(r.dir, ['--jobs', '2'], env, mutate(r, "path.join(parent, 'asj.')", "path.join(parent, 'affected-suites-jobs-')"));
     assert.strictEqual(q.status, 1, 'negative control (long path) must go red');
   } finally { r.cleanup(); }
 });
 
-test('a process left behind in a pool entry\'s process group is gone before the serial part starts (guard; a setsid escapee is outside any group and out of scope)', () => {
-  const files = { 'hooks/tests/leaver.test.sh': suite('sleep 30 & echo $! > "$PWD/leaked.pid"; sleep 0.2'),
-    'hooks/tests/zser.test.sh': suite('kill -0 "$(cat "$PWD/leaked.pid")" 2>/dev/null && { echo leaked-alive; exit 1; }; exit 0'),
-    [SERIAL_LIST]: 'hooks/tests/zser.test.sh\n' };
-  const r = makeRepo(files);
+// Mutated copy of the runner (requires made absolute so it can live in the fixture dir).
+function mutantRunner(r, edits) {
+  const mutated = path.join(r.dir, 'affected-suites-mutated.js');
+  let src = fs.readFileSync(SEL, 'utf8');
+  for (const [from, to] of edits) { assert.ok(src.includes(from), `mutation anchor drifted: ${from}`); src = src.replace(from, to); }
+  fs.writeFileSync(mutated, src.replace(/require\('\.\//g, "require('" + path.dirname(SEL) + '/'));
+  return mutated;
+}
+const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+const killPidFile = (f) => { try { process.kill(Number(fs.readFileSync(f, 'utf8')), 'SIGKILL'); } catch { /* gone */ } };
+
+// leaver: one background child that stays in the entry's group, one that leaves it with setsid.
+const LEAVER = suite('sleep 30 >/dev/null 2>&1 & echo $! > "$PWD/same.pid"; setsid sleep 30 >/dev/null 2>&1 & echo $! > "$PWD/esc.pid"; sleep 0.3');
+const LEAK_FILES = {
+  'hooks/tests/leaver.test.sh': LEAVER,
+  'hooks/tests/zser.test.sh': suite('kill -0 "$(cat "$PWD/same.pid")" 2>/dev/null && { echo leaked-alive; exit 1; }; exit 0'),
+  [SERIAL_LIST]: 'hooks/tests/zser.test.sh\n',
+};
+
+test('a same-group background child is gone (confirmed) when its --jobs entry finishes; a setsid escapee is out of reach and stays; negative controls: no kill -> lingering red, no kill and no confirm -> the next entry sees it', () => {
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), AFFECTED_SUITES_GROUP_WAIT_MS: '400' };
+  let r = makeRepo(LEAK_FILES);
   try {
-    const p = run(r.dir, ['--jobs', '2'], { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv() });
-    assert.doesNotMatch(p.stdout, /leaked-alive/, p.stdout + p.stderr);
+    const p = run(r.dir, ['--jobs', '2'], env);
     assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.doesNotMatch(p.stdout + p.stderr, /leaked-alive|still alive/);
+    assert.strictEqual(pidAlive(Number(fs.readFileSync(path.join(r.dir, 'same.pid'), 'utf8'))), false);
+    assert.strictEqual(pidAlive(Number(fs.readFileSync(path.join(r.dir, 'esc.pid'), 'utf8'))), true, 'a setsid escapee is not tracked');
+  } finally { killPidFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
+  // negative control 1: the kill removed, the confirmation kept -> the survivor is reported and the entry fails
+  r = makeRepo(LEAK_FILES);
+  try {
+    const q = run(r.dir, ['--jobs', '2'], env, mutantRunner(r, [["if (pid && grouped) killGroup(pid, 'SIGKILL');", '']]));
+    assert.match(q.stderr, /hooks\/tests\/leaver\.test\.sh: process group \d+ still alive 400 ms after SIGKILL/, q.stderr);
+    assert.match(q.stdout, /^rc=1 hooks\/tests\/leaver\.test\.sh$/m);
+    assert.strictEqual(q.status, 1);
+  } finally { killPidFile(path.join(r.dir, 'same.pid')); killPidFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
+  // negative control 2: kill and confirmation both removed -> the same-group child is still alive for the next entry
+  r = makeRepo(LEAK_FILES);
+  try {
+    const q = run(r.dir, ['--jobs', '2'], env, mutantRunner(r, [["if (pid && grouped) killGroup(pid, 'SIGKILL');", ''], ['confirmGroup: true', 'confirmGroup: false']]));
+    assert.match(q.stdout, /leaked-alive/, q.stdout);
+    assert.strictEqual(q.status, 1);
+  } finally { killPidFile(path.join(r.dir, 'same.pid')); killPidFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
+});
+
+const dirsOf = (out) => out.trim().split('\n').map((l) => l.split(' '));
+const XDG_LOG = suite('echo "$XDG_RUNTIME_DIR" >> "$PWD/xdg.log"; d="$XDG_RUNTIME_DIR"; while [ -n "$d" ] && [ "$d" != / ] && [ "$d" != . ]; do [ -n "$(find "$d" -maxdepth 0 -perm /022)" ] && echo "$d" >> "$PWD/unsafe.log"; d=$(dirname "$d"); done; sleep 0.3');
+const XDG_FILES = () => { const f = {}; for (let i = 0; i < 4; i++) f[`hooks/tests/x${i}.test.sh`] = XDG_LOG; return f; };
+
+test('no caller XDG_RUNTIME_DIR: every pool entry still gets its own private XDG whose ancestors are not group/world writable; negative control: without the base the pool is not isolated', () => {
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), XDG_RUNTIME_DIR: '' };
+  let r = makeRepo(XDG_FILES());
+  try {
+    const p = run(r.dir, ['--jobs', '3'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    const dirs = fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n');
+    assert.strictEqual(dirs.length, 4);
+    assert.strictEqual(new Set(dirs).size, 4);
+    for (const d of dirs) { assert.ok(d.startsWith(`${process.env.HOME}/.cache/autopilot`) && d.includes('/asj.'), d); assert.ok(!fs.existsSync(d), 'removed after the run'); }
+    assert.strictEqual(fs.existsSync(path.join(r.dir, 'unsafe.log')), false, 'no ancestor of a pool XDG is group/world writable');
+    assert.doesNotMatch(p.stderr, /not XDG-isolated/);
+  } finally { r.cleanup(); }
+  r = makeRepo(XDG_FILES());
+  try {
+    const q = run(r.dir, ['--jobs', '3'], env, mutantRunner(r, [['function makeXdgBase() {', 'function makeXdgBase() { return null;']]));
+    const dirs = fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n');
+    assert.strictEqual(new Set(dirs).size, 1, 'negative control: no base = every entry shares the caller value');
+  } finally { r.cleanup(); }
+});
+
+test('a HOME whose ancestors are group/world writable (/tmp) is refused with one stderr line; negative control: without the ancestor check the pool is isolated under /tmp', () => {
+  const unsafeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'unsafe-home-'));
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), XDG_RUNTIME_DIR: '', HOME: unsafeHome };
+  let r = makeRepo(XDG_FILES());
+  try {
+    const p = run(r.dir, ['--jobs', '3'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.match(p.stderr, /no safe directory for private XDG_RUNTIME_DIRs/);
+    assert.strictEqual(new Set(fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n')).size, 1);
+  } finally { r.cleanup(); }
+  r = makeRepo(XDG_FILES());
+  try {
+    const q = run(r.dir, ['--jobs', '3'], env, mutantRunner(r, [['if (!ancestorsSafe(parent)) continue;', '']]));
+    const dirs = fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n');
+    assert.ok(dirs.every((d) => d.startsWith(unsafeHome)), 'negative control: isolated under the unsafe /tmp home');
+  } finally { r.cleanup(); fs.rmSync(unsafeHome, { recursive: true, force: true }); }
+});
+
+test('a long os.tmpdir() falls back to /tmp for per-entry TMPDIRs (short socket paths); negative control: without the fallback they get long', () => {
+  const longTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'long-tmpdir-parent-'));
+  const files = { 'hooks/tests/len.test.sh': suite('echo "${#TMPDIR} $TMPDIR" > "$PWD/len.log"') };
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), TMPDIR: longTmp };
+  let r = makeRepo(files);
+  try {
+    const p = run(r.dir, ['--jobs', '2'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    const [n, d] = fs.readFileSync(path.join(r.dir, 'len.log'), 'utf8').trim().split(' ');
+    assert.ok(Number(n) <= 20 && d.startsWith('/tmp/asj.'), `${n} ${d}`);
+    assert.match(p.stderr, /is long; per-entry TMPDIRs go under \/tmp/);
+  } finally { r.cleanup(); }
+  r = makeRepo(files);
+  try {
+    run(r.dir, ['--jobs', '2'], env, mutantRunner(r, [["const t = process.env.TMPDIR || '/tmp'; // what os.tmpdir() returns on Linux (minus the TMP/TEMP spellings)\n  if (t.length <= 5) return t;", "const t = process.env.TMPDIR || '/tmp';\n  return t;"]]));
+    const [n] = fs.readFileSync(path.join(r.dir, 'len.log'), 'utf8').trim().split(' ');
+    assert.ok(Number(n) > 40, `negative control: long (${n})`);
+  } finally { r.cleanup(); fs.rmSync(longTmp, { recursive: true, force: true }); }
+});
+
+test('the per-entry TMPDIR length does not grow with the entry count: a unix socket 89 characters below it (what engine-qualify-a builds) binds at any position; negative control: a counter in the path (position >= 1000) overflows sun_path', () => {
+  // the suite binds a socket at $TMPDIR + 89 characters; sun_path allows 108 bytes (measured: 108 binds, 109 EINVAL)
+  const body = `node -e "const n=require('net');const p=process.env.TMPDIR+'/'+'s'.repeat(88);n.createServer().listen(p,()=>process.exit(0)).on('error',(e)=>{console.log('bind '+e.code+' len='+Buffer.byteLength(p));process.exit(1)})"`;
+  const files = { 'hooks/tests/sock.test.sh': suite(body), 'hooks/tests/sock2.test.sh': suite(body), 'hooks/tests/sock3.test.sh': suite(body) };
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), TMPDIR: '/tmp' };
+  let r = makeRepo(files);
+  try {
+    const p = run(r.dir, ['--jobs', '2'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.doesNotMatch(p.stdout, /bind /);
+  } finally { r.cleanup(); }
+  r = makeRepo(files);
+  try {
+    const needle = "const dir = fs.mkdtempSync(path.join(parent, 'asj.'));";
+    const q = run(r.dir, ['--jobs', '2'], env, mutantRunner(r, [[needle, "const dir = path.join(fs.mkdtempSync(path.join(parent, 'asj.')), '1000'); fs.mkdirSync(dir);"]]));
+    assert.match(q.stdout, /bind EINVAL len=109/, q.stdout);
+    assert.strictEqual(q.status, 1);
   } finally { r.cleanup(); }
 });

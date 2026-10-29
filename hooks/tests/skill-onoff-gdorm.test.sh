@@ -457,10 +457,15 @@ echo "=== every FROZEN row that is ok at develop 778f39dee still checks ok ==="
 # Not ok there: stage-graph-g67 (FROZEN row not stamped), stage-graph-g8
 # (digest mismatch: packs/manifest.json, run-skill-onoff-eval.sh,
 # run-skill-onoff-matrix.sh, stamp-prereg.js). gdorm is this branch's row.
-# findings-batch was a draft (not stamped) at 778f39dee; it is stamped now (94b924092), so it is expected ok and listed in expect_ok.
-python3 - "$BASE" << 'PY' || fail "frozen row check"
+# Rows in STATUS_FOLLOWING (findings-batch, -v2, -v3, d0gate) follow their own prereg status: stamped = must check ok (a lost
+# stamp or a hash mismatch is a failure); draft (an amendment or a not-yet-stamped prereg waiting for the owner) = the FROZEN row
+# may be stale or absent on purpose, so ok is neither required nor forbidden.
+check_frozen_rows() {
+python3 - "$1" "${2:-}" << 'PY'
 import json, os, subprocess, sys
 base = sys.argv[1]
+only = sys.argv[2]  # optional: check just this row (copies of the dir lack the repo layout other rows need)
+STATUS_FOLLOWING = ("findings-batch", "findings-batch-v2", "findings-batch-v3", "d0gate")
 frozen = json.load(open(os.path.join(base, "prereg/FROZEN.json")))
 rows = []
 for key, val in frozen.items():
@@ -470,24 +475,18 @@ for key, val in frozen.items():
         continue
     if not os.path.isfile(os.path.join(base, "prereg", key + ".json")):
         continue
+    if only and key != only:
+        continue
     rows.append(key)
 expect_ok = {"qs", "qs-v2", "qs-v3", "dcard", "dcard-v2", "dcard-v3", "gdorm", "bpack"}
-# findings-batch follows its prereg status: stamped = must check ok (and a lost stamp is a failure); draft (an amendment waiting
-# for the owner to re-stamp) = its FROZEN row is stale on purpose, so ok is not required and not forbidden.
-fb_status = json.load(open(os.path.join(base, "prereg/findings-batch.json"))).get("status", "")
-fb_stamped = fb_status.startswith("stamped")
-if fb_stamped:
-    expect_ok.add("findings-batch")
-# findings-batch-v2 follows its own prereg status the same way: draft = not expected ok, stamped = must check ok.
-fb2_status = json.load(open(os.path.join(base, "prereg/findings-batch-v2.json"))).get("status", "")
-fb2_stamped = fb2_status.startswith("stamped")
-if fb2_stamped:
-    expect_ok.add("findings-batch-v2")
-# findings-batch-v3 the same way (draft until the owner's pilot has run and depth-0 stamps it).
-fb3_status = json.load(open(os.path.join(base, "prereg/findings-batch-v3.json"))).get("status", "")
-fb3_stamped = fb3_status.startswith("stamped")
-if fb3_stamped:
-    expect_ok.add("findings-batch-v3")
+stamped = {}
+for name in STATUS_FOLLOWING:
+    status = json.load(open(os.path.join(base, "prereg", name + ".json"))).get("status", "")
+    stamped[name] = status.startswith("stamped")
+    if stamped[name]:
+        expect_ok.add(name)
+if only:
+    expect_ok &= {only}
 env = os.environ.copy()
 env.pop("AUTOPILOT_SESSION_ID", None)
 env.pop("CLAUDE_CODE_SESSION_ID", None)
@@ -500,11 +499,43 @@ for row in rows:
     ok = p.returncode == 0
     if row in expect_ok and not ok:
         bad.append(f"{row} rc={p.returncode} {(p.stderr or p.stdout).strip().splitlines()[-1:]}")
-    elif row not in expect_ok and ok and not (row == "findings-batch" and not fb_stamped) and not (row == "findings-batch-v2" and not fb2_stamped) and not (row == "findings-batch-v3" and not fb3_stamped):
+    elif row not in expect_ok and ok and not (row in STATUS_FOLLOWING and not stamped[row]):
         bad.append(f"{row} unexpectedly ok")
 if bad:
     raise SystemExit("; ".join(bad))
 PY
+}
+check_frozen_rows "$BASE" || fail "frozen row check"
+
+echo "=== negative: status-following rows (d0gate) ==="
+# Draft status must not be required or forbidden to check ok; a stamped one with a broken frozen file must be reported.
+SF="$TEST_TMP/skill-onoff-sf"
+rm -rf "$SF"
+cp -a "$BASE" "$SF"
+python3 - "$SF/prereg/d0gate.json" << 'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["status"] = "draft " + d["status"]
+json.dump(d, open(p, "w"), indent=2)
+PY
+out=$(check_frozen_rows "$SF" d0gate 2>&1) || fail "d0gate draft status should not fail the frozen row check: $out"
+grep -q 'unexpectedly ok' <<<"$out" && fail "d0gate draft reported unexpectedly ok: $out"
+rm -rf "$SF"
+cp -a "$BASE" "$SF"
+python3 - "$SF/prereg/FROZEN.json" << 'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+f = d["d0gate"]["files"]
+k = sorted(f)[0]
+f[k] = "0" * 64
+json.dump(d, open(p, "w"), indent=2)
+PY
+if out=$(check_frozen_rows "$SF" d0gate 2>&1); then
+  fail "stamped d0gate with a wrong frozen hash must be reported"
+fi
+grep -q 'd0gate rc=' <<<"$out" || fail "wrong-hash failure not attributed to d0gate: $out"
 
 echo "=== negative: one byte in a copy of the shared runner voids dcard-v3 ==="
 COPY="$TEST_TMP/skill-onoff-copy"

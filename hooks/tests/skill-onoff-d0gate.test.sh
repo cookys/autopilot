@@ -167,8 +167,8 @@ if (g("g1-constrained") !== 10 || g("g2-unconstrained") !== 10 || g("g3-wrong-li
 console.log("dry-run: 40 cells, estimate " + j.cost_estimate_usd + " USD, x1.5 = " + j.cost_estimate_x1_5_usd + " <= cap " + j.max_usd);' "$DRY" || fail "dry-run shape"
 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run --pilot | tail -1 | S node -e 'const j = JSON.parse(require("fs").readFileSync(0, "utf8")); if (j.cells_total !== 9 || !(j.cost_estimate_usd * 1.5 <= j.max_usd) || j.max_usd !== 2.2) throw new Error(JSON.stringify(j)); console.log("pilot dry-run: 9 cells, estimate " + j.cost_estimate_usd + " x1.5 <= " + j.max_usd)' || fail "pilot dry-run"
 # negative controls
-ONOFF_MAX_USD=14 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run >/dev/null 2>"$TEST_TMP/e1"; rc=$?
-[ "$rc" = 1 ] && grep -q 'exceeds ONOFF_MAX_USD' "$TEST_TMP/e1" || fail "RED control: cap 14 must refuse (rc=$rc: $(cat "$TEST_TMP/e1"))"; echo "RED (expected) cap 14: $(cat "$TEST_TMP/e1")"
+ONOFF_MAX_USD=4 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run >/dev/null 2>"$TEST_TMP/e1"; rc=$?
+[ "$rc" = 1 ] && grep -q 'exceeds ONOFF_MAX_USD' "$TEST_TMP/e1" || fail "RED control: cap 4 must refuse (rc=$rc: $(cat "$TEST_TMP/e1"))"; echo "RED (expected) cap 4: $(cat "$TEST_TMP/e1")"
 ONOFF_MAX_USD=25 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.jsonl" --dry-run >/dev/null 2>"$TEST_TMP/e2"; rc=$?
 [ "$rc" = 2 ] && grep -q 'never raised' "$TEST_TMP/e2" || fail "RED control: cap 25 must be refused (rc=$rc: $(cat "$TEST_TMP/e2"))"; echo "RED (expected) cap 25: $(cat "$TEST_TMP/e2")"
 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/cc.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e3"; rc=$?
@@ -297,6 +297,64 @@ if (!sw().length) throw new Error("control cannot see a left-behind switch file"
 console.log("RED (expected) with D0GATE_NO_DISARM=1 the switch file stays: " + sw().join(","));
 c.destroy();' "$D0/.." "$NONTMP" || fail "section 9b"
 ok "tmpfs base, --ledger, disarm trap"
+
+echo "=== 9c. stub cell root comes from the stub's own position, never from D0GATE_CELL; fixture rules match the rule list; gate_blocks ==="
+git -C "$REPO_ROOT" show 50e840543:evals/skill-onoff/d0gate/stubs/scripts/dispatch-hetero.sh >"$TEST_TMP/stub-old.sh" || fail "cannot read the stub at the base commit"
+if grep -nE 'Needs D0GATE_CELL|D0GATE_CELL is not' "$D0/stubs/scripts/dispatch-hetero.sh" "$EV/packs/fixture-stubs-d0gate/scripts/dispatch-hetero.sh"; then fail "the stub still tells the model to set D0GATE_CELL"; fi
+cmp -s "$D0/stubs/scripts/dispatch-hetero.sh" "$EV/packs/fixture-stubs-d0gate/scripts/dispatch-hetero.sh" || fail "frozen stub pack differs from d0gate/stubs"
+S node -e '
+const { Cell } = require(process.argv[1] + "/d0gate/cell.js"); const fs = require("fs"); const path = require("path");
+const c = new Cell().init();
+const other = fs.mkdtempSync(path.join(path.dirname(c.root), "d0gate-other-"));
+fs.mkdirSync(path.join(other, ".d0gate"));
+// RED: the stub as it was at the base commit trusts the caller value, so the ledger lands in the wrong directory
+fs.copyFileSync(process.argv[2], path.join(c.repo, "scripts", "dispatch-hetero-old.sh"));
+const r0 = c.std([], { worker: "clean-g1", script: path.join(c.repo, "scripts", "dispatch-hetero-old.sh"), env: { D0GATE_CELL: other } });
+const wrong = fs.existsSync(path.join(other, ".d0gate", "ledger.jsonl")) && c.facts().calls.length === 0;
+if (!wrong) throw new Error("RED control cannot see the old stub misplace the ledger: rc=" + r0.rc + " " + r0.err);
+console.log("RED (expected) old stub with a caller D0GATE_CELL writes the ledger into the other directory, the cell sees 0 calls");
+fs.rmSync(path.join(other, ".d0gate"), { recursive: true });
+// GREEN: the stub in the tree puts the ledger in its own cell and flags the override
+const r1 = c.std([], { worker: "clean-g1", env: { D0GATE_CELL: other } });
+const calls = c.facts().calls.filter((x) => x.accepted);
+if (r1.rc !== 0 || calls.length !== 1 || calls[0].cell_env_override !== true) throw new Error("override not flagged or call missing: " + JSON.stringify(calls) + r1.err);
+if (fs.existsSync(path.join(other, ".d0gate"))) throw new Error("the stub wrote into the overriding directory");
+// the same value as the real cell root (spelled differently) is not an override
+const r2 = c.std([], { worker: "clean-g1", env: { D0GATE_CELL: c.root + "/." } });
+const calls2 = c.facts().calls.filter((x) => x.accepted);
+if (r2.rc !== 0 || calls2.length !== 2 || calls2[1].cell_env_override !== false) throw new Error("same-root value flagged: " + JSON.stringify(calls2[1]));
+const r3 = c.std([], { worker: "clean-g1", env: { D0GATE_CELL: "" } });
+if (r3.rc !== 0 || c.facts().calls.filter((x) => x.accepted)[2].cell_env_override !== false) throw new Error("empty value flagged");
+console.log("GREEN stub under an overriding D0GATE_CELL: ledger in its own cell, cell_env_override=true; same root and empty value: false");
+fs.rmSync(other, { recursive: true, force: true }); c.destroy();' "$D0/.." "$TEST_TMP/stub-old.sh" || fail "section 9c stub cell root"
+# the rules live where the hand reads them (CONTRIBUTING.md) and agree with the rule list that scores the cell; the brief carries none of them
+S node -e '
+const fs = require("fs"); const path = require("path");
+const d0 = process.argv[1] + "/d0gate";
+const T = require(d0 + "/cc-tasks.js"); const rules = JSON.parse(fs.readFileSync(d0 + "/fixtures/rules/g1-good.json", "utf8"));
+const contrib = fs.readFileSync(d0 + "/fixtures/tinylib/CONTRIBUTING.md", "utf8");
+const brief = T.handPrompt();
+const items = [rules.forbid_paths[0].glob.replace(/\*+$/, ""), rules.require_files[0].path, rules.forbid_text[0].text];
+if (items.length !== 3 || rules.forbid_paths.length !== 1 || rules.require_files.length !== 1 || rules.forbid_text.length !== 1) throw new Error("g1-good.json is no longer the three-rule list");
+for (const it of items) {
+  if (!contrib.includes(it)) throw new Error("CONTRIBUTING.md does not state the rule for " + it);
+}
+if (!contrib.includes(rules.forbid_text[0].glob.split("/")[0] + "/")) throw new Error("CONTRIBUTING.md names a different scope for the text rule");
+if (/rejected|Hard rules|docs\/CHANGES\.md|no console\.log/i.test(brief)) throw new Error("the hand brief still spells the rules out");
+if (!/contributing rules/.test(brief)) throw new Error("the hand brief does not point at the repo rules");
+if (/must|required|necessary/i.test(brief.split("Notes:")[1] || "")) throw new Error("a bait is written as a requirement");
+// a planted brief that lists the rules again (the old text) must be caught by the same check
+const old = T.RULES; if (!/rejected|Hard rules|docs\/CHANGES\.md|no console\.log/i.test("Hard rules from the owner, the work is rejected if one is broken:\n" + old)) throw new Error("RED control cannot see the old brief");
+console.log("GREEN fixture rules agree with g1-good.json, the brief only points at them; RED the old brief text is detected");' "$D0/.." || fail "section 9c rules agreement"
+# the gate_blocks field: counted in the ON arm from the real hook records, 0 in the OFF arm, and a row without it is INVALID (table-cases)
+S node -e '
+const { Cell } = require(process.argv[1] + "/d0gate/cell.js"); const TR = require(process.argv[1] + "/d0gate/traces.js"); const L = require(process.argv[1] + "/d0gate/lib.js");
+const on = new Cell().init(); on.std(["--gate-rules", on.putRules("g1-good.json")], { worker: "g4-console" });
+const off = new Cell().init(); off.std([], { worker: "g4-console" });
+const a = TR.scoreCell(on, { task: L.TASKS.G4, arm: "gate-on", rep: 1 }).g4, b = TR.scoreCell(off, { task: L.TASKS.G4, arm: "gate-off", rep: 1 }).g4;
+if (!(Number.isInteger(a.gate_blocks) && a.gate_blocks >= 1) || b.gate_blocks !== 0) throw new Error("gate_blocks " + JSON.stringify([a, b]));
+console.log("GREEN gate_blocks ON=" + a.gate_blocks + " OFF=" + b.gate_blocks); on.destroy(); off.destroy();' "$D0/.." || fail "section 9c gate_blocks"
+ok "stub cell root, rules agreement, gate_blocks"
 
 echo "=== 10. P4 rehearsal: the candidate paragraph byte for byte passes check-guidance-eval; one changed byte fails ==="
 MINI="$TEST_TMP/p4repo"; mkdir -p "$MINI/skills/ceo-agent"

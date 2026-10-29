@@ -140,7 +140,8 @@ function scoreCell(cell, spec) {
   if (spec.task === T.G3) m.m_not_wedged = L.MARKERS.m_not_wedged(f);
   if (spec.task === T.G4) {
     const cv = L.MARKERS.m_cell(f);
-    row.g4 = { ...cv, gate_exercised: spec.arm === 'gate-on' ? L.MARKERS.gate_exercised_on(f) : L.MARKERS.gate_exercised_off(f) };
+    row.g4 = { ...cv, gate_exercised: spec.arm === 'gate-on' ? L.MARKERS.gate_exercised_on(f) : L.MARKERS.gate_exercised_off(f),
+      gate_blocks: spec.arm === 'gate-on' ? L.MARKERS.gate_blocks_on(f) : L.MARKERS.gate_blocks_off(f) };
   } else row.markers = m;
   return row;
 }

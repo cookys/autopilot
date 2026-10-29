@@ -48,7 +48,10 @@ function shapeProblems(row) {
   if (!(row.failure_class === null || typeof row.failure_class === 'string')) p.push('failure_class');
   if (row.task_id === T.G4) {
     if (!row.g4 || typeof row.g4 !== 'object') p.push('g4');
-    else for (const f of ['gate_exercised', 'completed', 'violating', 'hand_clean']) if (!isBool(row.g4[f])) p.push(`g4.${f}`);
+    else {
+      for (const f of ['gate_exercised', 'completed', 'violating', 'hand_clean']) if (!isBool(row.g4[f])) p.push(`g4.${f}`);
+      if (!Number.isInteger(row.g4.gate_blocks) || row.g4.gate_blocks < 0) p.push('g4.gate_blocks');
+    }
   } else {
     if (!isBool(row.skill_invoked)) p.push('skill_invoked');
     if (!isBool(row.skill_invoked_observed)) p.push('skill_invoked_observed');
@@ -112,7 +115,7 @@ function classify(exit, sum, errText) {
 
 // ---------------------------------------------------------------- cell plumbing
 const falseShape = (c) => (c.task === T.G4
-  ? { g4: { gate_exercised: false, completed: false, violating: false, hand_clean: false } }
+  ? { g4: { gate_exercised: false, completed: false, violating: false, hand_clean: false, gate_blocks: 0 } }
   : { markers: { [D0_MARKER[c.task]]: false }, skill_invoked: false, skill_invoked_observed: false, nested_claude_attempts: 0, unaccounted_sessions: 0 });
 function cellEnv(cell, extra = {}) {
   const e = cell.env();
@@ -147,6 +150,29 @@ function keepCopy(keepDir, cell, extra = {}) {
     try { fs.copyFileSync(src, path.join(keepDir, name)); } catch { /* absent */ }
   }
   try { fs.cpSync(path.join(cell.live, 'per-turn-gate'), path.join(keepDir, 'per-turn-gate'), { recursive: true }); } catch { /* none */ }
+  keepProjects(keepDir, [{ label: 'projects', dir: path.join(cell.home, '.claude', 'projects') }, { label: 'hand-sessions', dir: path.join(cell.root, '.d0gate', 'hand-out.json.sessions') }]);
+}
+// The cell config dir is deleted with the cell, so the evidence about the claude sessions it saw is kept here: the file list of
+// <config>/projects/ (path and size, the direct evidence the stray-session check works from) and a copy of those files. A G4 hand runs in
+// a config dir the rail seeds and removes itself, so the claude wrapper copies the hand's session files (its tool trajectory; the
+// rail's envelope has only the final result) into hand-out.json.sessions/ and they are kept as hand-sessions/.
+function keepProjects(keepDir, roots) {
+  const list = [];
+  const walk = (label, root, d) => {
+    let ents = [];
+    try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      const f = path.join(d, e.name);
+      if (e.isDirectory()) walk(label, root, f);
+      else if (e.isFile()) { let size = null; try { size = fs.statSync(f).size; } catch { /* gone */ } list.push({ path: path.posix.join(label, path.relative(root, f).split(path.sep).join('/')), size }); }
+    }
+  };
+  for (const r of roots) {
+    walk(r.label, r.dir, r.dir);
+    if (list.some((x) => x.path.startsWith(`${r.label}/`))) { try { fs.cpSync(r.dir, path.join(keepDir, r.label), { recursive: true }); } catch { /* best effort */ } }
+  }
+  list.sort((a, b) => (a.path < b.path ? -1 : 1));
+  try { fs.writeFileSync(path.join(keepDir, 'projects-files.json'), `${JSON.stringify(list, null, 2)}\n`); } catch { /* best effort */ }
 }
 const failureRow = (ctx, c, o) => ({
   row: ctx.P.row, task_id: c.task, arm: c.arm, rep: c.rep, ...falseShape(c), model: o.model, pilot: ctx.pilot, runner: 'cc',
@@ -307,6 +333,9 @@ function handWrapper(cell, realClaude) {
     '  if [ -z "${D0GATE_HAND_OUT:-}" ]; then echo "d0gate: D0GATE_HAND_BUDGET is set but D0GATE_HAND_OUT is not set; refusing to start claude" >&2; exit 97; fi',
     '  LOCK="$D0GATE_HAND_OUT.lock"; RESV="$D0GATE_HAND_OUT.resv"; PRIV="$D0GATE_HAND_OUT.$$"; ID="$$"',
     '  : >>"$D0GATE_HAND_OUT"',
+    // the rail seeds its own CLAUDE_CONFIG_DIR for the hand and removes it on exit: keep the hand own session files (its tool trajectory) before that
+    '  copy_sessions() { if [ -n "${CLAUDE_CONFIG_DIR:-}" ] && [ -d "$CLAUDE_CONFIG_DIR/projects" ]; then mkdir -p "$D0GATE_HAND_OUT.sessions/$ID" && cp -R "$CLAUDE_CONFIG_DIR/projects/." "$D0GATE_HAND_OUT.sessions/$ID/"; fi 2>/dev/null; return 0; }',
+    '  trap copy_sessions EXIT; trap "exit 143" TERM INT HUP',
     `  rem="$( ( flock 9; node -e '${reserve}' "$D0GATE_HAND_OUT" "$RESV" "$D0GATE_HAND_BUDGET" "$ID" ) 9>"$LOCK" )"`,
     '  if [ "$rem" = refuse ] || [ -z "$rem" ]; then echo "d0gate: the cell budget is spent or reserved; refusing to start another claude" >&2; exit 97; fi',
     '  args+=(--max-budget-usd "$rem")',
@@ -388,7 +417,7 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     const timedOut = env0.timed_out === true;
     const known = sum.costKnown && exit !== 124 && exit !== 137 && !timedOut;
     const o = { model, sessionId: session, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number(sum.total.toFixed(6)) : ceiling, costUnknown: !known, costTurns: [Number(sum.total.toFixed(6))] };
-    const keep = () => keepCopy(keepDir, cell, { 'hand-out.json': handOut });
+    const keep = () => keepCopy(keepDir, cell, { 'hand-out.json': handOut, 'hand-prompt.txt': promptFile });
     if (keepDir) { fs.mkdirSync(keepDir, { recursive: true }); fs.writeFileSync(path.join(keepDir, 'rail-stdout.json'), out); fs.writeFileSync(path.join(keepDir, 'rail-stderr.log'), errText); }
     const fail = (cls, cause, detail) => { keep(); return failureRow(ctx, c, { ...o, cls, cause, detail }); };
     if (exit === 124 || exit === 137) return fail('infra_fail', 'runner_timeout', 'outer timeout');

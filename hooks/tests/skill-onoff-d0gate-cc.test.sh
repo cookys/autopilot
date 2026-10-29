@@ -96,6 +96,7 @@ if (fmt === 'stream-json') {
   }
 } else if (fmt === 'json') {
   const sid = get('--session-id') || 'fake-hand';
+  writeSession(sid, CFG.hand_cost); // the hand's own session file under <config>/projects (the runner keeps its file list and copies)
   if (settingsText) {
     copy('g4-console', process.cwd());
     const cmd = JSON.parse(settingsText).hooks.Stop[0].hooks[0].command;
@@ -168,7 +169,7 @@ node -e '
 const rows = require("fs").readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean).map(JSON.parse);
 const by = (t, a, r) => rows.find((x) => x.task_id === t && x.arm === a && x.rep === r);
 const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort()) : x));
-const eq = (got, want, what) => { if (canon(got) !== canon(want)) throw new Error(what + ": got " + canon(got) + " want " + canon(want)); };
+const GATE_ON_BLOCKS = 1; const eq = (got, want, what) => { if (canon(got) !== canon(want)) throw new Error(what + ": got " + canon(got) + " want " + canon(want)); };
 eq(by("g1-constrained","base",1).markers, { m_armed: false }, "g1 base");
 eq(by("g1-constrained","change",1).markers, { m_armed: true }, "g1 change");
 eq(by("g1-constrained","change",1).skill_invoked, true, "g1 change skill_invoked");
@@ -178,11 +179,24 @@ eq(by("g1-constrained","change",1).skill_invoked_observed, true, "g1 change obse
 eq(by("g2-unconstrained","change",1).markers, { m_not_armed: true }, "g2 change");
 eq(by("g3-wrong-list","base",1).markers, { m_not_wedged: true }, "g3 base");
 eq(by("g3-wrong-list","change",1).markers, { m_not_wedged: true }, "g3 change");
-for (const r of [1, 2]) eq(by("g4-hand-effect","gate-off",r).g4, { completed: true, violating: true, hand_clean: false, gate_exercised: true }, "g4 off " + r);
-eq(by("g4-hand-effect","gate-on",1).g4, { completed: true, violating: false, hand_clean: true, gate_exercised: true }, "g4 on");
+for (const r of [1, 2]) eq(by("g4-hand-effect","gate-off",r).g4, { completed: true, violating: true, hand_clean: false, gate_exercised: true, gate_blocks: 0 }, "g4 off " + r);
+eq(by("g4-hand-effect","gate-on",1).g4, { completed: true, violating: false, hand_clean: true, gate_exercised: true, gate_blocks: GATE_ON_BLOCKS }, "g4 on");
 for (const r of rows) { if (typeof r.cost_usd !== "number") throw new Error("cost"); if (r.runner !== "cc" || r.pilot !== true) throw new Error("runner/pilot"); }
-eq(hung.cost_usd, 0.45, "the timed out cell is charged its whole ceiling");
+eq(hung.cost_usd, 0.24, "the timed out cell is charged its whole ceiling (3 x 0.08)");
 console.log("rows as the fake world predicts: 8 scored + 1 timed-out cell with all fields present");' "$R1" || fail "row values"
+# the kept evidence of a G4 cell: the hand prompt in full, the hand output, and the file list (path, size) of the cell config projects/ plus the copies
+node -e '
+const fs = require("fs"); const path = require("path");
+const dir = process.argv[1] + ".cells/g4-hand-effect/gate-on/1";
+const T = require(process.argv[2] + "/d0gate/cc-tasks.js");
+const need = ["hand-prompt.txt", "hand-out.json", "projects-files.json", "ledger.jsonl"];
+for (const f of need) if (!fs.existsSync(path.join(dir, f))) throw new Error("kept evidence lacks " + f);
+if (fs.readFileSync(path.join(dir, "hand-prompt.txt"), "utf8") !== T.handPrompt()) throw new Error("kept hand prompt differs from the brief the hand got");
+const list = JSON.parse(fs.readFileSync(path.join(dir, "projects-files.json"), "utf8"));
+if (!Array.isArray(list) || list.length < 1 || list.some((x) => typeof x.path !== "string" || !Number.isInteger(x.size))) throw new Error("projects-files.json shape: " + JSON.stringify(list));
+if (!list.some((x) => x.path.startsWith("hand-sessions/"))) throw new Error("no hand session file kept: " + JSON.stringify(list));
+for (const x of list) if (!fs.existsSync(path.join(dir, x.path))) throw new Error("kept copy lacks " + x.path);
+console.log("kept for a G4 cell: " + need.join(", ") + "; projects/ lists " + list.length + " file(s): " + list.map((x) => x.path + " (" + x.size + " B)").join(", "));' "$R1" "$EV" || fail "kept G4 evidence"
 ok "9 cells, rows complete and as predicted"
 
 echo "=== 3. the scorer takes the cc rows (incl. the unfinished cell) without a field complaint ==="
@@ -208,15 +222,15 @@ const calls = require("fs").readFileSync(process.argv[1], "utf8").split("\n").fi
 const canon = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort()) : x));
 const eq = (got, want, what) => { if (canon(got) !== canon(want)) throw new Error(what + ": got " + canon(got) + " want " + canon(want)); };
 const d0 = calls.filter((j) => j.fmt === "stream-json"); const hands = calls.filter((j) => j.fmt === "json");
-// ceiling = 3 x the pilot unit estimate 0.15; turn 2 gets what turn 1 left (turn cost 0.05 in the fake)
-eq([d0[0].budget, d0[0].resume], ["0.45", null], "first cell turn 1"); eq(d0[1].budget, "0.4", "first cell turn 2 = 0.45 - 0.05"); eq(typeof d0[1].resume, "string", "turn 2 resumes");
+// ceiling = 3 x the pilot unit estimate 0.115 (G1); turn 2 gets what turn 1 left (turn cost 0.05 in the fake)
+eq([d0[0].budget, d0[0].resume], ["0.35", null], "first cell turn 1"); eq(d0[1].budget, "0.3", "first cell turn 2 = 0.35 - 0.05"); eq(typeof d0[1].resume, "string", "turn 2 resumes");
 for (const j of d0) { for (const f of ["--strict-mcp-config", "--dangerously-skip-permissions", "--verbose"]) if (!j.argv.includes(f)) throw new Error("missing " + f); eq(j.argv[j.argv.indexOf("--disallowedTools") + 1], "ScheduleWakeup", "disallowedTools"); eq(j.argv[j.argv.indexOf("--setting-sources") + 1], "project", "setting-sources"); if (!j.argv.includes("--plugin-dir")) throw new Error("no plugin dir"); eq(j.argv[j.argv.indexOf("--model") + 1], "haiku", "pilot model"); }
 // G4: ON carries the per-run --settings (the rail added it for --gate-rules), OFF does not; same budget cap through the wrapper
 eq(hands.map((j) => !!j.settings), [false, false, true], "hands with --settings (off, off, on)");
-eq(hands.map((j) => j.budget), ["0.45", "0.45", "0.54"], "hand budgets (3 x 0.15, 3 x 0.15, 3 x 0.18)");
+eq(hands.map((j) => j.budget), ["0.03", "0.03", "0.03"], "hand budgets (3 x 0.01 each)");
 const on = hands[2]; if (!/per-turn-gate\.js/.test(on.settings)) throw new Error("the ON settings do not run hooks/per-turn-gate.js");
 for (const h of hands) { eq(h.argv.includes("--settings"), !!h.settings, "settings flag"); eq(h.argv[h.argv.indexOf("--model") + 1], "haiku", "hand model"); }
-console.log("budgets 0.45 / 0.4 (turn 2); hands 0.45 0.45 0.54; ON hand has the gate settings, OFF hands do not");' "$FLOG" || fail "argv and budgets"
+console.log("budgets 0.35 / 0.3 (turn 2); hands 0.03 0.03 0.03; ON hand has the gate settings, OFF hands do not");' "$FLOG" || fail "argv and budgets"
 # the kept evidence of the ON cell shows the flagged dispatch and hook records; the OFF cell shows neither
 KEEP="$R1.cells/g4-hand-effect"
 grep -q '"gate_rules_flag":true' "$KEEP/gate-on/1/ledger.jsonl" && ls "$KEEP/gate-on/1/per-turn-gate"/*.jsonl >/dev/null 2>&1 || fail "ON cell evidence"
@@ -231,8 +245,8 @@ ok "isolation, flags, budgets, ON/OFF"
 
 echo "=== 5. budget guard: a cell whose ceiling does not fit is not dispatched; resume-by-cell fills only the gaps ==="
 setcfg '{"cost_per_turn":0.1}'; : >"$FLOG"
-R2="$TEST_TMP/r2.jsonl"; CAP=1.5 cc --results "$R2" >"$TEST_TMP/r2.out" 2>"$TEST_TMP/r2.err"; rc=$?
-[ "$rc" = 1 ] && grep -q 'below the 0.45 USD cell ceiling of g3-wrong-list|change|1' "$TEST_TMP/r2.err" || { cat "$TEST_TMP/r2.err"; fail "cap 1.5 must stop before g3 change (rc=$rc)"; }
+R2="$TEST_TMP/r2.jsonl"; CAP=1.0 cc --results "$R2" >"$TEST_TMP/r2.out" 2>"$TEST_TMP/r2.err"; rc=$?
+[ "$rc" = 1 ] && grep -q 'below the 0.35 USD cell ceiling of g3-wrong-list|change|1' "$TEST_TMP/r2.err" || { cat "$TEST_TMP/r2.err"; fail "cap 1.0 must stop before g3 change (rc=$rc)"; }
 echo "GREEN (guard): $(tail -1 "$TEST_TMP/r2.err")"
 [ "$(wc -l <"$R2")" = 5 ] && [ "$(nfake stream-json)" = 8 ] && [ "$(nfake json)" = 0 ] || fail "guard run: expected 5 rows and 8 depth-0 calls, got $(wc -l <"$R2") rows / $(nfake stream-json) calls"
 : >"$FLOG"
@@ -286,7 +300,7 @@ console.log('spent ' + spent.toFixed(3) + ' USD over ' + rows.length + ' cells, 
 JS
 [ "$rc" = 1 ] && grep -q 'locked to 2.2 USD' "$TEST_TMP/r6.out" || { cat "$TEST_TMP/r6.out" "$TEST_TMP/r6.err"; fail "pilot lock: expected the notice and exit 1 at the cap (rc=$rc)"; }
 node "$TEST_TMP/lock.js" x "$R6" || fail "pilot lock (green)"
-grep -q 'below the 0.45 USD cell ceiling' "$TEST_TMP/r6.err" || fail "the remaining-budget guard did not use the locked cap"
+grep -q 'below the 0.03 USD cell ceiling' "$TEST_TMP/r6.err" || fail "the remaining-budget guard did not use the locked cap"
 echo "GREEN (lock): $(grep 'locked to' "$TEST_TMP/r6.out")"
 ok "pilot cap locked"
 
@@ -305,7 +319,7 @@ if (mode === 'nested') {
   if (reached.length) bad.push(reached.length + ' nested claude call(s) reached the real claude (want 0)');
   if (row.nested_claude_attempts !== 2) bad.push('nested_claude_attempts ' + row.nested_claude_attempts + ' (want 2)');
   for (const m of main) if (m.argv.filter((a) => a === '--max-budget-usd').length !== 1) bad.push('a main turn carries ' + m.argv.filter((a) => a === '--max-budget-usd').length + ' budget flags');
-  if (!near(row.cost_usd, 0.15)) bad.push('cost_usd ' + row.cost_usd + ' (want 0.15: the two turns only, nothing nested)');
+  if (!near(row.cost_usd, 0.1)) bad.push('cost_usd ' + row.cost_usd + ' (want 0.1: the last packet of the resumed session, nothing nested)');
 } else if (mode === 'cost') {
   if (!near(row.cost_usd, Number(want)) || JSON.stringify(row.cost_turns) !== '[0.05,0.1]') bad.push('cost_usd ' + row.cost_usd + ' cost_turns ' + JSON.stringify(row.cost_turns) + ' (want ' + want + ' / [0.05,0.1])');
 }
@@ -344,13 +358,14 @@ JS
 node "$TEST_TMP/wtest.js" "$EV" "$TEST_TMP" || fail "hand wrapper cumulative budget (green)"
 ok "hand wrapper cumulative budget"
 
-echo "=== 5e. cost_turns, summed cost_usd, and prereg cc.resume_cost_cumulative ==="
+echo "=== 5e. cost_turns, last-packet cost_usd (the prereg says resume totals are cumulative), and the summed variant when the prereg says otherwise ==="
 setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
 R8="$TEST_TMP/r8.jsonl"; CAP=2.2 cc --results "$R8" --limit 1 >/dev/null 2>&1 || fail "cost run rc=$?"
-node "$TEST_TMP/acct.js" cost "$FLOG" "$R8" 0.15 || fail "summed cost (green)"
-PREG="$TEST_TMP/prereg-cum.json"; node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.cc.resume_cost_cumulative=true; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$PRE" "$PREG"
-R9="$TEST_TMP/r9.jsonl"; : >"$FLOG"; CAP=2.2 cc --results "$R9" --limit 1 >/dev/null 2>&1 || fail "cumulative run rc=$?"
-node "$TEST_TMP/acct.js" cost "$FLOG" "$R9" 0.1 || fail "cumulative cost (green)"
+node "$TEST_TMP/acct.js" cost "$FLOG" "$R8" 0.1 || fail "cumulative cost (green)"
+[ "$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).cc.resume_cost_cumulative)' "$EV/prereg/d0gate.json")" = true ] || fail "the prereg does not say resume totals are cumulative"
+PREG="$TEST_TMP/prereg-sum.json"; node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.cc.resume_cost_cumulative=false; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$PRE" "$PREG"
+R9="$TEST_TMP/r9.jsonl"; : >"$FLOG"; CAP=2.2 cc --results "$R9" --limit 1 >/dev/null 2>&1 || fail "summed run rc=$?"
+node "$TEST_TMP/acct.js" cost "$FLOG" "$R9" 0.15 || fail "summed cost (green)"
 unset PREG
 ok "cost accounting"
 
@@ -360,12 +375,12 @@ const fs = require('fs');
 const [mode, rowsf] = process.argv.slice(2);
 const rows = fs.readFileSync(rowsf, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 const bad = [];
-if (mode === 'g4cost') { // ON, one real block, hand reports 0.01, then hangs: scored, charged the 0.54 ceiling
+if (mode === 'g4cost') { // ON, one real block, hand reports 0.01, then hangs: scored, charged the 0.03 ceiling
   const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
-  if (!on || on.cost_usd !== 0.54 || on.cost_unknown !== true) bad.push('G4 ON timed-out cell cost ' + (on && on.cost_usd) + ' unknown=' + (on && on.cost_unknown) + ' (want 0.54, unknown)');
+  if (!on || on.cost_usd !== 0.03 || on.cost_unknown !== true) bad.push('G4 ON timed-out cell cost ' + (on && on.cost_usd) + ' unknown=' + (on && on.cost_unknown) + ' (want 0.03, unknown)');
 } else if (mode === 'd0cost') { // depth-0 turn reports 0.01 and hangs
   const g2 = rows.find((r) => r.task_id === 'g2-unconstrained' && r.arm === 'base');
-  if (!g2 || g2.failure_class !== 'infra_fail' || g2.cost_usd !== 0.45) bad.push('depth-0 timed-out cell: ' + (g2 && [g2.failure_class, g2.cost_usd]) + ' (want infra_fail, 0.45)');
+  if (!g2 || g2.failure_class !== 'infra_fail' || g2.cost_usd !== 0.24) bad.push('depth-0 timed-out cell: ' + (g2 && [g2.failure_class, g2.cost_usd]) + ' (want infra_fail, 0.24)');
   if (g2 && (g2.skill_invoked !== false || g2.skill_invoked_observed !== true)) bad.push('unfinished row: skill_invoked ' + g2.skill_invoked + ', observed ' + g2.skill_invoked_observed + ' (want false / true)');
 } else if (mode === 'g4failure' || mode === 'g4empty') { // rail failure status with a clean envelope / a hand that printed nothing: both infra, with their own cause
   const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
@@ -399,9 +414,9 @@ const fs = require('fs');
 const [mode, rowsf] = process.argv.slice(2);
 const rows = fs.readFileSync(rowsf, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
 const r = mode.startsWith('timeout') ? rows[2] : rows[0]; const bad = [];
-// readable: 0.05 + 0.10 own turns + the stray's 0.07; unreadable: own 0.15 + one whole ceiling 0.45; timeout: ceiling 0.45 + 0.07;
-// timeout-unreadable: ceiling 0.45 (timed-out cell) + one whole ceiling 0.45 for the unreadable stray = 2 x ceiling
-const want = { readable: 0.22, unreadable: 0.60, timeout: 0.52, 'timeout-unreadable': 0.90 }[mode]; // 0.05 + 0.10 of its own turns + the stray's 0.07; unreadable: the whole ceiling
+// readable: the last packet 0.10 (own turns, cumulative) + the stray's 0.07; unreadable: own 0.10 + one whole G1 ceiling 0.35; timeout: G2 ceiling 0.24 + 0.07;
+// timeout-unreadable: ceiling 0.24 (timed-out cell) + one whole ceiling 0.24 for the unreadable stray = 2 x ceiling
+const want = { readable: 0.17, unreadable: 0.45, timeout: 0.31, 'timeout-unreadable': 0.48 }[mode]; // 0.05 + 0.10 of its own turns + the stray's 0.07; unreadable: the whole ceiling
 if (rows.length !== (mode.startsWith('timeout') ? 3 : 1)) bad.push(rows.length + ' rows (the campaign must stop right after the cell with the stray session)');
 if (!r || r.failure_class !== 'infra_fail' || r.failure_cause !== 'unaccounted_claude_session' || r.unaccounted_sessions !== 1) bad.push('row ' + (r && [r.failure_class, r.failure_cause, r.unaccounted_sessions]));
 if (r && Math.abs(r.cost_usd - want) > 1e-6) bad.push('cost_usd ' + (r && r.cost_usd) + ' (want ' + want + ')');
@@ -571,12 +586,12 @@ echo "RED (expected) (g) attempts not recorded: $(cat "$TEST_TMP/rg.out")"
 brk "$FEV/d0gate/cc.js" 'args+=(--max-budget-usd "$rem")' 'args+=(--max-budget-usd "$D0GATE_HAND_BUDGET")'
 if node "$TEST_TMP/wtest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/rl.out" 2>&1; then fail "RED control (l) was NOT caught: $(cat "$TEST_TMP/rl.out")"; fi
 echo "RED (expected) (l) hand wrapper without cumulative budget: $(cat "$TEST_TMP/rl.out")"
-# (h) the resume-cumulative switch forced on (cost = last call only)
-brk "$FEV/d0gate/cc.js" "ctx.P.cc.resume_cost_cumulative === true" "true"
+# (h) the resume-cumulative switch forced off (cost = sum of the calls)
+brk "$FEV/d0gate/cc.js" "ctx.P.cc.resume_cost_cumulative === true" "false"
 setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rh.jsonl" --limit 1 >/dev/null 2>&1
-if node "$TEST_TMP/acct.js" cost "$FLOG" "$TEST_TMP/rh.jsonl" 0.15 >"$TEST_TMP/rh.out" 2>&1; then fail "RED control (h) was NOT caught: $(cat "$TEST_TMP/rh.out")"; fi
-echo "RED (expected) (h) summed cost replaced by the last call: $(cat "$TEST_TMP/rh.out")"
+if node "$TEST_TMP/acct.js" cost "$FLOG" "$TEST_TMP/rh.jsonl" 0.1 >"$TEST_TMP/rh.out" 2>&1; then fail "RED control (h) was NOT caught: $(cat "$TEST_TMP/rh.out")"; fi
+echo "RED (expected) (h) last-packet cost replaced by the sum of the calls: $(cat "$TEST_TMP/rh.out")"
 # (i) timed_out no longer forces the whole ceiling (G4)
 brk "$FEV/d0gate/cc.js" "exit !== 137 && !timedOut;" "exit !== 137;"
 setcfg '{"hang_hand_on":true,"hand_report_first":true,"hand_cost":0.01}'; seed_on "$TEST_TMP/ri.jsonl"

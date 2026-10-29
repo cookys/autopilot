@@ -3,18 +3,23 @@
 # It exists so the ON/OFF cells of the d0gate row can run with zero spend: it keeps the real rail's argument
 # parsing and its --gate-rules refusal rules byte for byte (the two blocks below are copied from
 # scripts/dispatch-hetero.sh at 45edf93da; hooks/tests/skill-onoff-d0gate.test.sh asserts they still match the real
-# file), records every call in $D0GATE_CELL/.d0gate/ledger.jsonl at call time, and then runs a DETERMINISTIC
+# file), records every call in <cell>/.d0gate/ledger.jsonl at call time, and then runs a DETERMINISTIC
 # worker (scripts/d0gate-workers/<mode>) in a detached worktree. With --gate-rules it runs the REAL
 # scripts/per-turn-gate-arm.js arm/settings/disarm and the REAL hooks/per-turn-gate.js as the worker's Stop hook
 # (the way claude would at the end of a turn). The stub worker does not react to a block text: it only shows the
-# gate being exercised. Needs D0GATE_CELL (cell root); live/state files go to $D0GATE_LIVE (default $D0GATE_CELL/live).
+# gate being exercised. The cell root is derived from where this file sits (<cell>/repo/scripts/), never from an environment
+# value; live/state files go to <cell>/live. Nothing here needs to be set by the caller.
 # Worker mode: D0GATE_WORKER (default clean-g1). Mutation hooks for negative controls: D0GATE_HOOK_CMD.
 # Spend: none. It never starts claude, codex or any other runner.
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 ORIG_ARGV=("$@")
-CELL="${D0GATE_CELL:-}"
-[ -n "$CELL" ] && [ -d "$CELL" ] || { echo "d0gate stub: D0GATE_CELL is not a directory" >&2; exit 2; }
-LIVE="${D0GATE_LIVE:-$CELL/live}"
+# The cell root comes from the stub's own position, so a caller (a model that "fixes" an environment value) cannot move the ledger.
+CELL="$(cd "$SELF_DIR/../.." && pwd -P)"
+[ -f "$CELL/.d0gate/base_sha" ] || { echo "d0gate stub: this script is not installed inside a d0gate cell" >&2; exit 2; }
+# a differing environment value is ignored and flagged on every call record of this run
+ENV_OVERRIDE=false
+[ -n "${D0GATE_CELL:-}" ] && [ "$(cd "$D0GATE_CELL" 2>/dev/null && pwd -P)" != "$CELL" ] && ENV_OVERRIDE=true
+LIVE="$CELL/live"
 mkdir -p "$CELL/.d0gate" "$CELL/wt"; mkdir -p -m 700 "$LIVE"
 export AUTOPILOT_LIVE_DIR="$LIVE"
 export AUTOPILOT_CONFIG_FILE="${AUTOPILOT_CONFIG_FILE:-$CELL/config.json}"
@@ -35,7 +40,7 @@ ledger_append() {
 }
 argv_json() { node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' -- "$@"; }
 die_precondition() {
-  ledger_append call accepted=false reason="$1" argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD"
+  ledger_append call accepted=false cell_env_override="$ENV_OVERRIDE" reason="$1" argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD"
   printf '{"status":"precondition_failed","reason":"%s"}\n' "$(printf '%s' "$1" | sed 's/"/\\"/g')"
   exit 2
 }
@@ -135,7 +140,7 @@ if [ -n "$GATE_RULES_FILE" ]; then
   RULES_SHA="$(sha256sum "$RULES_COPY" | cut -d' ' -f1)"
 fi
 GATE_FLAG=false; [ -n "$GATE_RULES_FILE" ] && GATE_FLAG=true
-ledger_append call n="$N" accepted=true argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD" repo="$REPO" runner="$RUNNER" \
+ledger_append call n="$N" accepted=true cell_env_override="$ENV_OVERRIDE" argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD" repo="$REPO" runner="$RUNNER" \
   gate_rules_flag="$GATE_FLAG" gate_rules_file="$GATE_RULES_FILE" rules_copy="$RULES_COPY" rules_sha="$RULES_SHA" base_sha="$BASE_SHA" session="$CHILD_SESSION_ID"
 WT="$CELL/wt/$N"
 git -C "$REPO" worktree add -q --detach "$WT" "$BASE_SHA" >/dev/null 2>&1 || die_precondition "cannot create the worker worktree"

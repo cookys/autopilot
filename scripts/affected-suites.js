@@ -131,7 +131,11 @@
 //      that file. A suite that names the target itself still reaches it by its own mention. Chosen over "every
 //      indented require is lazy": 192 indented requires exist, most always run when their function runs, and a weak
 //      edge still lets the strong edges behind it flood (tried: 678 -> 658); only a human who has checked the gate
-//      can say it stays closed under test, so the claim is explicit and greppable. Use it only with that check.
+//      can say it stays closed under test, so the claim is explicit and greppable.
+//      Conditions of use: only on a require() behind a gate that is certain NOT to run under test; re-check every
+//      marker when that gate's meaning changes; list them all with `git grep 'affected-suites: lazy'`.
+//      The marker and the whole `require('./x')` call must be on ONE line: a require split over lines, or a marker
+//      on the line above, is not recognised and the edge stays strong (the safe direction; nothing is dropped).
 // Contract/evidence: skills/quality-pipeline/references/test-policy.md, docs/plans/evidence/2026-10-13-affected-suites/miss-check.md.
 
 const { execFileSync, spawnSync, spawn } = require('child_process');
@@ -187,6 +191,13 @@ const ALWAYS_RUN = [
   ['hooks/tests/skill-onoff-stage-graph.test.sh', 'greps all of scripts/ for the probe ladder field (only probe-unknown.js may print it)'],
   ['hooks/tests/skill-count-metadata.test.sh', 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
   ['hooks/tests/qualify-recipe-credential-staging.test.sh', 'greps every docs/plans/evidence/*/administration/*/run.sh for staging variables'],
+];
+// Suites that run code through a lazily required path the graph cannot see (BL-0332: src/status/cli.js loads
+// runs-watch.js behind `// affected-suites: lazy`; these suites reach it by `status runs --watch` with the CLI in a
+// variable). Added to a selective result when a changed path matches. [path regex, suite, why]
+const COUPLED = [
+  [/^src\/status\/(runs-watch|git-env|residue)\.js$/, 'hooks/tests/runs-watch-lock.test.sh', 'runs `status runs --watch`, which loads runs-watch.js'],
+  [/^src\/status\/(runs-watch|git-env|residue)\.js$/, 'hooks/tests/review-server.test.sh', 'runs `status runs --watch`, which loads runs-watch.js'],
 ];
 // Prose cannot break a suite; mirrors are covered by the always-run codex-plugin-package suite.
 const PURE_DOC = /^(docs|website|skill-creator-workspace)\/|^[^/]+\.(md|txt)$/;
@@ -285,7 +296,7 @@ function mentions(text) {
   for (const m of text.matchAll(RE_REQ)) if (/^[.\/]/.test(m[1])) strong.add(base(m[1]).replace(/\.(js|mjs|cjs|json)$/, ''));
   for (const m of text.matchAll(RE_SRC)) strong.add(base(m[1]).replace(/\.(sh|bash|zsh)$/, ''));
   for (const m of text.matchAll(RE_EXT)) exts.add(m[0]);
-  for (const m of text.matchAll(RE_PROSE_PATH)) proseNames.add(m[0].replace(/^["{}$]*/, '').replace(/^\$\{?\w+\}?"?\//, ''));
+  for (const m of text.matchAll(RE_PROSE_PATH)) proseNames.add(m[0].replace(/^"?\$\{?\w+\}?"?\//, '').replace(/^["{}$]*/, ''));
   for (const m of text.matchAll(RE_BARE)) {
     if (m[0].startsWith('/')) {
       if (VAR_DIR_BEFORE.test(text.slice(Math.max(0, m.index - 80), m.index))) continue;
@@ -560,7 +571,9 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   // Content-scanning suites ride along with every selective result that has a non-prose change.
   const alwaysRun = changed.some((p) => !isProse(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];
   for (const f of alwaysRun) if (!chains[f]) chains[f] = [f];
-  const all = [...new Set([...suites, ...alwaysRun])].sort();
+  const coupled = COUPLED.filter(([re, f]) => present.has(f) && changed.some((p) => re.test(p))).map(([, f]) => f);
+  for (const f of coupled) if (!chains[f]) chains[f] = [f];
+  const all = [...new Set([...suites, ...alwaysRun, ...coupled])].sort();
   Object.defineProperty(chains, '__hops', { value: shortestHops(changed, graph), enumerable: false });
   return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
 }

@@ -1086,12 +1086,19 @@ function mutant(replacements) {
     assert.ok(src.includes(from), `mutation anchor missing: ${from}`);
     src = src.replace(from, to);
   }
-  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-mutant-')), 'affected-suites.js');
+  const md = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-mutant-'));
+  MUTANT_DIRS.push(md);
+  const f = path.join(md, 'affected-suites.js');
   fs.writeFileSync(f, src);
   return f;
 }
+const MUTANT_DIRS = [];
+test.after(() => { for (const d of MUTANT_DIRS) fs.rmSync(d, { recursive: true, force: true }); });
+// A mutant must RUN: a crash would turn a case red without showing that the rule's absence over-selects.
 function selectWith(bin, r, head) {
-  return JSON.parse(execFileSync('node', [bin, '--root', r.dir, '--base', r.base, '--head', head, '--json'], { stdio: 'pipe' }).toString());
+  const p = spawnSync('node', [bin, '--root', r.dir, '--base', r.base, '--head', head, '--json'], { stdio: 'pipe' });
+  assert.strictEqual(p.status, 0, `mutant crashed: ${p.stderr}`);
+  return JSON.parse(p.stdout.toString());
 }
 const LAZY_LAYOUT = {
   'scripts/lib/watcher.js': 'module.exports = 1;\n',
@@ -1123,7 +1130,7 @@ test('negative control: a top-level require is strong even next to the marker te
 
 test('negative control: with the marker rule off the gate suite is selected again (case turns red)', () => {
   const r = makeRepo(LAZY_LAYOUT);
-  const bin = mutant([['return raw.split(', 'return raw; void (']]);
+  const bin = mutant([["if (!/\\.(js|mjs|cjs)$/.test(file) || !LAZY_MARK.test(raw)) return raw;", 'return raw;']]);
   try {
     const head = r.change({ 'scripts/lib/watcher.js': 'module.exports = 4;\n' });
     assert.ok(!selectWith(SEL, r, head).suites.includes('hooks/tests/gate.test.sh'));
@@ -1177,4 +1184,62 @@ test('pseudo-edge: a shared prose basename and a one-word stem do not flood', ()
     assert.ok(out.suites.includes('hooks/tests/residue.test.sh') && !out.suites.includes('hooks/tests/lister.test.sh'));
     assert.ok(selectWith(noWord, r, h2).suites.includes('hooks/tests/lister.test.sh'), 'one-word mutant must over-select');
   } finally { r.cleanup(); }
+});
+
+const HELPER_LAYOUT = {
+  'hooks/README.md': 'a\n',
+  'hooks/tests/lib.sh': '#!/usr/bin/env bash\ncp "$REPO_ROOT/hooks/README.md" "$sandbox/hooks/README.md"\n',
+  'hooks/tests/via-lib.test.sh': '#!/usr/bin/env bash\nsource "$HERE/lib.sh"\necho hi\n',
+  'hooks/tests/direct.test.sh': '#!/usr/bin/env bash\ncat "$ROOT/hooks/README.md"\n',
+};
+
+test('rule 11: a prose file copied by the shared test helper selects the direct reader, not every sourcing suite', () => {
+  const r = makeRepo(HELPER_LAYOUT);
+  const bin = mutant([["if (/^(md|txt)$/.test(extOf(p)) && isSharedTestHelper(f)) continue;", '']]);
+  try {
+    const head = r.change({ 'hooks/README.md': 'b\n' });
+    const out = r.select(head);
+    assert.strictEqual(out.mode, 'selective');
+    assert.ok(out.suites.includes('hooks/tests/direct.test.sh'));
+    assert.ok(!out.suites.includes('hooks/tests/via-lib.test.sh'));
+    assert.ok(selectWith(bin, r, head).suites.includes('hooks/tests/via-lib.test.sh'), 'rule-11 mutant must over-select');
+  } finally { r.cleanup(); }
+});
+
+test('marker on a split require() is not recognised: the edge stays strong', () => {
+  const r = makeRepo({ ...LAZY_LAYOUT, 'scripts/split.js': "function f() {\n  const w = require(\n    './lib/watcher.js'); // affected-suites: lazy\n  return w;\n}\nmodule.exports = f;\n", 'hooks/tests/split.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/split.js"\n' });
+  try {
+    const head = r.change({ 'scripts/lib/watcher.js': 'module.exports = 9;\n' });
+    assert.ok(r.select(head).suites.includes('hooks/tests/split.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+// Real repo: every suite that really runs or names runs-watch must stay selected for a change to it.
+const REPO = path.join(__dirname, '..');
+function runsWatchSuites() {
+  const out = spawnSync('git', ['grep', '-lE', 'AUTOPILOT_RUNS_WATCH_AUTOSTART=1|status runs --watch|startWatcherDetached|runs-watch([^-A-Za-z0-9_]|$)', '--', 'hooks', 'scripts'], { cwd: REPO, stdio: 'pipe' }).stdout.toString();
+  return out.split('\n').filter((f) => /^(hooks\/[^/]+\.test\.js|scripts\/[^/]+\.test\.js|scripts\/lib\/[^/]+\.test\.js|hooks\/tests\/[^/]+\.test\.sh|scripts\/[^/]+\.test\.sh)$/.test(f) && fs.existsSync(path.join(REPO, f)));
+}
+function missingRunsWatch(bin) {
+  const p = spawnSync('node', [bin, '--root', REPO, '--files', 'src/status/runs-watch.js', '--json'], { stdio: 'pipe', maxBuffer: 1 << 28 });
+  assert.strictEqual(p.status, 0, String(p.stderr));
+  const sel = new Set(JSON.parse(p.stdout.toString()).suites);
+  return runsWatchSuites().filter((f) => !sel.has(f));
+}
+
+test('regression: a change to src/status/runs-watch.js selects every suite that runs or names it', () => {
+  const want = runsWatchSuites();
+  assert.ok(want.includes('hooks/tests/session-mode-watcher.test.sh'), 'derivation must find the watcher suite');
+  assert.ok(want.filter((f) => /runs-watch-/.test(f)).length >= 3, 'derivation must find the runs-watch-* suites');
+  assert.deepStrictEqual(missingRunsWatch(SEL), []);
+});
+
+test('negative control: without the COUPLED table the runs-watch regression goes red', () => {
+  const bin = mutant([['COUPLED.filter(', '[].filter(']]);
+  assert.ok(missingRunsWatch(bin).includes('hooks/tests/runs-watch-lock.test.sh'));
+});
+
+test('negative control: without suite-to-file mention edges the runs-watch regression goes red', () => {
+  const bin = mutant([['for (const f of graph.byExt.get(b) || []) {', 'for (const f of [...(graph.byExt.get(b) || [])].filter((x) => !isSuite(x))) {']]);
+  assert.ok(missingRunsWatch(bin).length > 0);
 });

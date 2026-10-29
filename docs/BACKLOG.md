@@ -1415,12 +1415,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### Live watcher idle-exits during long tool-only work and the panel shows unavailable
 - **Id**: BL-0327
-- **Status**: open
+- **Status**: shipped 30b557737 2026-10-29
 - **Since**: 2026-10-29
 - **Origin**: peer
 - **Reporter**: cookys/openclaw/fleet--claude
 - **Report**: 2026-10-29 fleet:01M628K0GA63KYQY11GERK89KW
-- **Reply**: 2026-10-29 fleet:01M628KJBMWHK5Y16QHJG2KV8B
+- **Reply**: 2026-10-29 fleet:01M636X7106YRD2SEDXKHG929X
 - **Problem**: 長時間只跑工具、沒有新訊息時，背景監看程式會自己結束，面板就一直顯示「無法取得」，直到下一則訊息；而且面板只叫人手動執行一行指令，沒說明原因，也沒說明下一則訊息會自動恢復，對一般使用者沒有幫助。
 - **Impact**: 長工作期間看不到進度面板，使用者以為系統壞了。
 - **Trigger**: work can start now; efficiency and experience fix
@@ -1432,12 +1432,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### Watcher log is flooded by repeated status task unavailable lines
 - **Id**: BL-0328
-- **Status**: open
+- **Status**: shipped 30b557737 2026-10-29
 - **Since**: 2026-10-29
 - **Origin**: peer
 - **Reporter**: cookys/openclaw/fleet--claude
 - **Report**: 2026-10-29 fleet:01M628K0GA63KYQY11GERK89KW
-- **Reply**: 2026-10-29 fleet:01M628KJBMWHK5Y16QHJG2KV8B
+- **Reply**: 2026-10-29 fleet:01M636X7106YRD2SEDXKHG929X
 - **Problem**: 背景監看程式的紀錄檔被同一行「任務狀態取得失敗」重複寫了十四萬多行、佔 12.8 MB，沒有輪替也沒有去重，真正有用的訊息被淹沒。
 - **Impact**: 紀錄檔無限成長，要查問題時找不到有用的行。
 - **Trigger**: work can start now
@@ -1449,12 +1449,12 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### Watcher cannot list git worktrees while the same command works by hand
 - **Id**: BL-0329
-- **Status**: open
+- **Status**: shipped 30b557737 2026-10-29
 - **Since**: 2026-10-29
 - **Origin**: peer
 - **Reporter**: cookys/openclaw/fleet--claude
 - **Report**: 2026-10-29 fleet:01M628K0GA63KYQY11GERK89KW
-- **Reply**: 2026-10-29 fleet:01M628KJBMWHK5Y16QHJG2KV8B
+- **Reply**: 2026-10-29 fleet:01M636X7106YRD2SEDXKHG929X
 - **Problem**: 背景監看程式裡列出工作樹的 git 指令失敗了五百多次，但在同一個專案手動執行卻正常，結果清理資訊檔一直沿用舊的內容。疑似背景啟動後的環境和手動不同。
 - **Impact**: 清理資訊停在舊狀態，面板上的殘留數量可能過時。
 - **Trigger**: work can start now
@@ -1466,7 +1466,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### Affected-suites runner records per-suite seconds and uses them to order runs
 - **Id**: BL-0330
-- **Status**: open
+- **Status**: shipped f4ed93332 2026-10-29
 - **Since**: 2026-10-29
 - **Origin**: owner
 - **Problem**: 耗時紀錄檔 test-durations.tsv 有 414 列，但停在 10/12、不含串行尾巴，這次選出的套件有 291 支沒有紀錄；run.sh 會依它慢檔優先，但 affected-suites.js 跑的時候既不更新也不使用這份資料。
@@ -1480,7 +1480,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### affected-suites gets --jobs N with a shared serial-suite list
 - **Id**: BL-0331
-- **Status**: open
+- **Status**: shipped f4ed93332 2026-10-29
 - **Since**: 2026-10-29
 - **Origin**: owner
 - **Problem**: 推送前套件目前只能一支一支串行跑，32 核機器只用到一核。
@@ -1494,7 +1494,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 ### Lazy post-gate require and pseudo edges stop inflating the suite selector
 - **Id**: BL-0332
-- **Status**: open
+- **Status**: shipped 77a881731 2026-10-29
 - **Since**: 2026-10-29
 - **Origin**: owner
 - **Problem**: 程式裡有兩處「條件成立才載入」的引用，測試環境根本不會執行，選取器卻當成一定會用到，結果改一個小檔就選出六百多支套件。

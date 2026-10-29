@@ -33,6 +33,7 @@ const SERIAL_LIST = 'hooks/tests/lib/serial-suites.txt';
 // and the last test compares a before/after listing of the real ~/.cache.
 const REAL_HOME = os.userInfo().homedir;
 const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'jobs-test-home-'));
+process.env.HOME = TEST_HOME; // every spawn that spreads process.env inherits the throwaway HOME too
 const realCacheListing = () => {
   const out = [];
   const c = path.join(REAL_HOME, '.cache');
@@ -41,21 +42,20 @@ const realCacheListing = () => {
   return out.sort();
 };
 const REAL_CACHE_BEFORE = realCacheListing();
-// A 0700 directory whose every ancestor is non-group/world-writable (under the test process's own XDG_RUNTIME_DIR), or null.
+// The product's own safety judgement (same function, not a copy).
+const { ancestorsSafe } = require(path.join(__dirname, 'affected-suites.js'));
+// A 0700 directory the product accepts as an XDG/HOME parent: mkdtemp under os.tmpdir(); null when even that place is
+// unsafe for the product (e.g. an isolation layer whose root ancestors belong to nobody).
 function safeDir(prefix) {
-  const x = process.env.XDG_RUNTIME_DIR;
-  if (!x || !path.isAbsolute(x)) return null;
   try {
-    const d = fs.mkdtempSync(path.join(x, prefix));
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
     fs.chmodSync(d, 0o700);
-    for (let q = d; ; q = path.dirname(q)) {
-      if ((fs.lstatSync(q).mode & 0o022) !== 0) { fs.rmSync(d, { recursive: true, force: true }); return null; }
-      if (path.dirname(q) === q) break;
-    }
-    return d;
-  } catch { return null; }
+    if (ancestorsSafe(d)) return d;
+    fs.rmSync(d, { recursive: true, force: true });
+  } catch { /* fall through */ }
+  return null;
 }
-const SKIP_NO_SAFE_DIR = "SKIP: no directory with non-group/world-writable ancestors under the test process's XDG_RUNTIME_DIR";
+const SKIP_NO_SAFE_DIR = 'SKIP: the product judges every directory under os.tmpdir() unsafe here (an ancestor owned by neither us nor root, or group/world-writable and not root-sticky)';
 
 function run(dir, args, env = {}, bin = SEL) {
   const e = { ...process.env, HOME: TEST_HOME, ...env };
@@ -519,11 +519,12 @@ function mutantRunner(r, edits) {
   fs.writeFileSync(mutated, src.replace(/require\('\.\//g, "require('" + path.dirname(SEL) + '/'));
   return mutated;
 }
-const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
-const killPidFile = (f) => { try { process.kill(Number(fs.readFileSync(f, 'utf8')), 'SIGKILL'); } catch { /* gone */ } };
+// Liveness by /proc (no signal at all); cleanup only ever signals a process GROUP (negative pgid), never a positive pid.
+const pidAlive = (pid) => fs.existsSync(`/proc/${pid}`);
+const killGroupFile = (f) => { try { process.kill(-Number(fs.readFileSync(f, 'utf8')), 'SIGKILL'); } catch { /* gone or no file */ } };
 
 // leaver: one background child that stays in the entry's group, one that leaves it with setsid.
-const LEAVER = suite('sleep 30 >/dev/null 2>&1 & echo $! > "$PWD/same.pid"; setsid sleep 30 >/dev/null 2>&1 & echo $! > "$PWD/esc.pid"; sleep 0.3');
+const LEAVER = suite('echo $$ > "$PWD/leader.pid"; sleep 30 >/dev/null 2>&1 & echo $! > "$PWD/same.pid"; setsid sleep 30 >/dev/null 2>&1 & echo $! > "$PWD/esc.pid"; sleep 0.3');
 const LEAK_FILES = {
   'hooks/tests/leaver.test.sh': LEAVER,
   'hooks/tests/zser.test.sh': suite('kill -0 "$(cat "$PWD/same.pid")" 2>/dev/null && { echo leaked-alive; exit 1; }; exit 0'),
@@ -539,7 +540,7 @@ test('a same-group background child is gone (confirmed) when its --jobs entry fi
     assert.doesNotMatch(p.stdout + p.stderr, /leaked-alive|still alive/);
     assert.strictEqual(pidAlive(Number(fs.readFileSync(path.join(r.dir, 'same.pid'), 'utf8'))), false);
     assert.strictEqual(pidAlive(Number(fs.readFileSync(path.join(r.dir, 'esc.pid'), 'utf8'))), true, 'a setsid escapee is not tracked');
-  } finally { killPidFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
+  } finally { killGroupFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
   // negative control 1: the kill removed, the confirmation kept -> the survivor is reported and the entry fails
   r = makeRepo(LEAK_FILES);
   try {
@@ -547,17 +548,17 @@ test('a same-group background child is gone (confirmed) when its --jobs entry fi
     assert.match(q.stderr, /hooks\/tests\/leaver\.test\.sh: process group \d+ still alive 400 ms after SIGKILL/, q.stderr);
     assert.match(q.stdout, /^rc=1 hooks\/tests\/leaver\.test\.sh$/m);
     assert.strictEqual(q.status, 1);
-  } finally { killPidFile(path.join(r.dir, 'same.pid')); killPidFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
+  } finally { killGroupFile(path.join(r.dir, 'leader.pid')); killGroupFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
   // negative control 2: kill and confirmation both removed -> the same-group child is still alive for the next entry
   r = makeRepo(LEAK_FILES);
   try {
     const q = run(r.dir, ['--jobs', '2'], env, mutantRunner(r, [["if (pid && grouped) killGroup(pid, 'SIGKILL');", ''], ['confirmGroup: true', 'confirmGroup: false']]));
     assert.match(q.stdout, /leaked-alive/, q.stdout);
     assert.strictEqual(q.status, 1);
-  } finally { killPidFile(path.join(r.dir, 'same.pid')); killPidFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
+  } finally { killGroupFile(path.join(r.dir, 'leader.pid')); killGroupFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
 });
 
-const XDG_LOG = suite('echo "$XDG_RUNTIME_DIR" >> "$PWD/xdg.log"; d="$XDG_RUNTIME_DIR"; while [ -n "$d" ] && [ "$d" != / ] && [ "$d" != . ]; do [ -n "$(find "$d" -maxdepth 0 -perm /022)" ] && echo "$d" >> "$PWD/unsafe.log"; d=$(dirname "$d"); done; sleep 0.3');
+const XDG_LOG = suite('echo "$XDG_RUNTIME_DIR" >> "$PWD/xdg.log"; d="$XDG_RUNTIME_DIR"; while [ -n "$d" ] && [ "$d" != / ] && [ "$d" != . ]; do [ -n "$(find "$d" -maxdepth 0 -perm /022 ! -perm -1000)" ] && echo "$d" >> "$PWD/unsafe.log"; d=$(dirname "$d"); done; sleep 0.3');
 const XDG_FILES = () => { const f = {}; for (let i = 0; i < 4; i++) f[`hooks/tests/x${i}.test.sh`] = XDG_LOG; return f; };
 
 test('no caller XDG_RUNTIME_DIR: every pool entry still gets its own private XDG under $HOME/.cache/autopilot-asj, ancestors not group/world writable; negative control: without the base the pool is not isolated', (t) => {
@@ -670,7 +671,7 @@ test('killGroup never signals a positive pid (a recycled pid could be someone el
 });
 
 test('a pool entry that lingered but passed its serial rerun keeps lingering_group:true next to flaky_under_parallel in the record', () => {
-  const files = { 'hooks/tests/leaver.test.sh': suite('sleep 30 >/dev/null 2>&1 & echo $! >> "$PWD/pids"; sleep 0.2'), 'scripts/seed.js': 'x\n' };
+  const files = { 'hooks/tests/leaver.test.sh': suite('echo $$ >> "$PWD/pids"; sleep 30 >/dev/null 2>&1 & sleep 0.2'), 'scripts/seed.js': 'x\n' };
   const r = makeRepo(files);
   try {
     const g = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...a], { cwd: r.dir }).toString().trim();
@@ -686,9 +687,43 @@ test('a pool entry that lingered but passed its serial rerun keeps lingering_gro
     assert.strictEqual(row.flaky_under_parallel, true);
     assert.strictEqual(row.lingering_group, true);
   } finally {
-    try { for (const l of fs.readFileSync(path.join(r.dir, 'pids'), 'utf8').split('\n').filter(Boolean)) { try { process.kill(Number(l), 'SIGKILL'); } catch { /* gone */ } } } catch { /* none */ }
+    try { for (const l of fs.readFileSync(path.join(r.dir, 'pids'), 'utf8').split('\n').filter(Boolean)) { try { process.kill(-Number(l), 'SIGKILL'); } catch { /* group gone */ } } } catch { /* none */ }
     r.cleanup();
   }
+});
+
+const STICKY_ANCHOR = 'const stickyRootDir = (st) => st.uid === 0 && (st.mode & 0o1000) !== 0;';
+test('a root-owned sticky ancestor (/tmp) is accepted, a non-sticky world-writable one is not; negative controls: sticky condition removed -> not isolated, accept-any-world-writable -> created in the 0777 place', (t) => {
+  const tmpSt = fs.statSync(os.tmpdir());
+  if ((tmpSt.mode & 0o1002) !== 0o1002 || tmpSt.uid !== 0) { t.skip('SKIP: os.tmpdir() here is not a root-owned sticky world-writable directory, so the sticky rule is not exercised'); return; }
+  const tempHome = safeDir('sticky-home-');
+  if (!tempHome) { t.skip(SKIP_NO_SAFE_DIR); return; }
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), XDG_RUNTIME_DIR: '', HOME: tempHome };
+  try {
+    let r = makeRepo(XDG_FILES());
+    try {
+      const p = run(r.dir, ['--jobs', '3'], env);
+      assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+      assert.strictEqual(new Set(fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n')).size, 4, 'isolated under a sticky /tmp ancestor');
+    } finally { r.cleanup(); }
+    r = makeRepo(XDG_FILES());
+    try {
+      run(r.dir, ['--jobs', '3'], env, mutantRunner(r, [[STICKY_ANCHOR, 'const stickyRootDir = () => false;']]));
+      assert.strictEqual(new Set(fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n')).size, 1, 'negative control: without the sticky rule the pool is not isolated');
+    } finally { r.cleanup(); }
+    const unsafeParent = fs.mkdtempSync(path.join(os.tmpdir(), 'unsafe-parent-'));
+    try {
+      fs.chmodSync(unsafeParent, 0o777);
+      const home = path.join(unsafeParent, 'home');
+      r = makeRepo(XDG_FILES());
+      try {
+        run(r.dir, ['--jobs', '3'], { ...env, HOME: home });
+        assert.strictEqual(fs.existsSync(home), false, 'real rule: nothing created in the 0777 non-sticky place');
+        run(r.dir, ['--jobs', '3'], { ...env, HOME: home }, mutantRunner(r, [[STICKY_ANCHOR, 'const stickyRootDir = () => true;']]));
+        assert.strictEqual(fs.existsSync(home), true, 'negative control: accept-any-world-writable creates it');
+      } finally { r.cleanup(); }
+    } finally { fs.rmSync(unsafeParent, { recursive: true, force: true }); }
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); }
 });
 
 test('the whole file left the real $HOME/.cache without a new autopilot-asj or asj.* entry', () => {

@@ -775,7 +775,10 @@ function emitChunks(chunks) {
 // - The private XDG_RUNTIME_DIR of a pool entry is <xdgBase>/asj.XXXXXX (also mkdtemp, fixed length). xdgBase is a
 //   per-run 0700 directory asj.XXXXXX, tried in this order: (a) under the caller's absolute XDG_RUNTIME_DIR, (b) only if
 //   (a) is unusable, under $HOME/.cache/autopilot-asj. Ancestors are checked BEFORE anything is created (an unsafe place
-//   gets no directory); every ancestor must be owned by us or root and not group/world writable (external-lifecycle-witness refuses /tmp, mode 1777, and 0775 parents). None
+//   gets no directory); every ancestor must be owned by us or root and not group/world writable, except a root-owned
+//   sticky directory such as /tmp (1777), where others cannot rename or delete what we create. Note external-lifecycle-witness is stricter and refuses even
+//   a sticky /tmp ancestor: with the pool XDG under /tmp it fails in the pool and passes its serial rerun (labelled
+//   flaky), so prefer a caller XDG_RUNTIME_DIR or a HOME outside /tmp. None
 //   usable = pool entries keep the caller's value and one stderr line says the pool is not isolated.
 // - Serial entries and reruns keep the caller's XDG_RUNTIME_DIR, like a direct `bash hooks/tests/x.test.sh`
 //   (dispatch-detach's no-setsid tuple lease fails with a per-entry one; nothing runs beside a serial entry).
@@ -795,13 +798,19 @@ function jobEnv(parent, factor, xdgBase, made) {
   return env;
 }
 
-// true when every level from `dir` up to / is a real directory owned by us or root without group/world write.
+// A root-owned directory with the sticky bit (/tmp, mode 1777) may be group/world writable: others can add entries but
+// cannot rename or delete ours, which is the usual way a shared temp root is used.
+const stickyRootDir = (st) => st.uid === 0 && (st.mode & 0o1000) !== 0;
+
+// true when every level from `dir` up to / is a real directory owned by us or root, and either not group/world writable
+// or a root-owned sticky directory. (Final directories we create are 0700 and ours.)
 function ancestorsSafe(dir) {
   const uid = typeof process.getuid === 'function' ? process.getuid() : null;
   for (let d = dir; ; d = path.dirname(d)) {
     let st;
     try { st = fs.lstatSync(d); } catch { return false; }
-    if (!st.isDirectory() || (st.mode & 0o022) !== 0 || (uid !== null && st.uid !== uid && st.uid !== 0)) return false;
+    if (!st.isDirectory() || (uid !== null && st.uid !== uid && st.uid !== 0)) return false;
+    if ((st.mode & 0o022) !== 0 && !stickyRootDir(st)) return false;
     if (path.dirname(d) === d) return true;
   }
 }
@@ -1220,5 +1229,5 @@ async function main(argv) {
   }
 }
 
-module.exports = { extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
+module.exports = { ancestorsSafe, extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
 if (require.main === module) main(process.argv.slice(2)).then((c) => { process.exitCode = c; });

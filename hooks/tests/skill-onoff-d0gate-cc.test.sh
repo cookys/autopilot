@@ -74,13 +74,15 @@ if (fmt === 'stream-json') {
   writeSession(sid, CFG.cost_per_turn * (get('--resume') ? 2 : 1));
   emit({ type: 'system', subtype: 'init', session_id: sid, model: 'fake-' + get('--model') });
   emit({ type: 'assistant', session_id: sid, message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: 'autopilot:ceo-agent' } }] } });
+  const doSneak = () => { if (CFG.sneak && (!CFG.sneak_g2_only || stdin.includes('capitalize'))) cp.spawnSync(process.argv[1], ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' }); }; // absolute path: the PATH wrapper is bypassed
   if (CFG.hang_g2_base && stdin.includes('capitalize') && !armed) {
+    if (!get('--resume')) doSneak();
     if (CFG.hang_report) emit({ type: 'result', subtype: 'success', is_error: false, result: 'ok', session_id: sid, total_cost_usd: 0.01 }); // spends, reports, then hangs
     setInterval(() => {}, 1000);
   }
   else {
     if (!get('--resume')) {
-      if (CFG.sneak) cp.spawnSync(process.argv[1], ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' }); // absolute path: the PATH wrapper is bypassed
+      doSneak();
       if (CFG.nested) for (let k = 0; k < 2; k++) cp.spawnSync('claude', ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' }); // the agent tries to start its own claude
       let rules = null; let task = null;
       if (stdin.includes('capitalize')) task = 'g2'; else if (stdin.includes('gate/rules.json')) { task = 'g3'; rules = 'gate/rules.json'; } else { task = 'g1'; if (armed) rules = path.join(RULES, 'g1-good.json'); }
@@ -108,7 +110,8 @@ if (fmt === 'stream-json') {
   else if (hanging && CFG.hand_report_first) console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, total_cost_usd: CFG.hand_cost }));
   if (!hanging && !CFG.hand_silent)
   console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: sid, total_cost_usd: CFG.hand_cost }));
-  if (!hanging && CFG.hand_fail) process.exit(1);
+  if (!hanging && CFG.hand_quota) console.error('usage limit reached');
+  if (!hanging && (CFG.hand_fail || CFG.hand_quota)) process.exit(1);
 }
 EOF
 chmod +x "$FB/claude"
@@ -368,6 +371,9 @@ if (mode === 'g4cost') { // ON, one real block, hand reports 0.01, then hangs: s
   const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
   const want = mode === 'g4failure' ? 'runner_error' : 'empty_output';
   if (!on || on.failure_class !== 'infra_fail' || on.failure_cause !== want) bad.push(mode + ': ' + (on && [on.failure_class, on.failure_cause, on.rail_status]) + ' (want infra_fail/' + want + ')');
+} else if (mode === 'g4quota') {
+  const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
+  if (!on || on.failure_class !== 'infra_fail' || on.failure_cause !== 'quota') bad.push('g4quota: ' + (on && [on.failure_class, on.failure_cause, on.rail_status]) + ' (want infra_fail/quota)');
 } else if (mode === 'auth') { // ON, real block, auth error envelope, then timeout: infra authentication
   const on = rows.find((r) => r.task_id === 'g4-hand-effect' && r.arm === 'gate-on');
   if (!on || on.failure_class !== 'infra_fail' || on.failure_cause !== 'authentication') bad.push('G4 ON auth+block+timeout: ' + (on && [on.failure_class, on.failure_cause]) + ' (want infra_fail/authentication)');
@@ -392,9 +398,10 @@ cat >"$TEST_TMP/unac.js" <<'JS'
 const fs = require('fs');
 const [mode, rowsf] = process.argv.slice(2);
 const rows = fs.readFileSync(rowsf, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-const r = rows[0]; const bad = [];
-const want = mode === 'readable' ? 0.22 : 0.45; // 0.05 + 0.10 of its own turns + the stray's 0.07; unreadable: the whole ceiling
-if (rows.length !== 1) bad.push(rows.length + ' rows (the campaign must stop after the first cell)');
+const r = mode === 'timeout' ? rows[2] : rows[0]; const bad = [];
+const timeoutMode = mode === 'timeout'; const r3 = timeoutMode ? rows[2] : null;
+const want = mode === 'readable' ? 0.22 : mode === 'timeout' ? 0.52 : 0.45; // 0.05 + 0.10 of its own turns + the stray's 0.07; unreadable: the whole ceiling
+if (rows.length !== (mode === 'timeout' ? 3 : 1)) bad.push(rows.length + ' rows (the campaign must stop right after the cell with the stray session)');
 if (!r || r.failure_class !== 'infra_fail' || r.failure_cause !== 'unaccounted_claude_session' || r.unaccounted_sessions !== 1) bad.push('row ' + (r && [r.failure_class, r.failure_cause, r.unaccounted_sessions]));
 if (r && Math.abs(r.cost_usd - want) > 1e-6) bad.push('cost_usd ' + (r && r.cost_usd) + ' (want ' + want + ')');
 if (bad.length) { console.log('UNACCOUNTED SESSION MISSED: ' + bad.join(' ; ')); process.exit(1); }
@@ -407,6 +414,9 @@ node "$TEST_TMP/unac.js" readable "$R13" || fail "unaccounted (readable, green)"
 setcfg '{"cost_per_turn":0.05,"sneak":true,"sneak_cost":0.07,"sneak_unreadable":true}'; R14="$TEST_TMP/r14.jsonl"
 CAP=2.2 cc --results "$R14" >/dev/null 2>&1
 node "$TEST_TMP/unac.js" unreadable "$R14" || fail "unaccounted (unreadable, green)"
+setcfg '{"cost_per_turn":0.05,"sneak":true,"sneak_g2_only":true,"sneak_cost":0.07,"hang_g2_base":true,"hang_report":true}'; R17="$TEST_TMP/r17.jsonl"
+CAP=2.2 cc --results "$R17" >/dev/null 2>&1
+node "$TEST_TMP/unac.js" timeout "$R17" || fail "unaccounted on a timed-out cell (green)"
 ok "unaccounted sessions detected and the campaign stopped"
 
 echo "=== 5h. hand wrapper: simultaneous launches share one budget under a lock; BUDGET without OUT is refused ==="
@@ -447,6 +457,24 @@ const called = fs.readFileSync(path.join(tmp, 'wrap-calls.log'), 'utf8').trim();
 if (r.status !== 97 || !/D0GATE_HAND_OUT is not set/.test(r.stderr) || called) { console.log('BUDGET WITHOUT OUT NOT REFUSED CLEARLY: rc=' + r.status + ' stderr=' + JSON.stringify(r.stderr.trim()) + ' real claude called=' + JSON.stringify(called)); process.exit(1); }
 console.log('budget without out: refused, exit 97, "' + r.stderr.trim() + '", the real claude was not called');
 JS
+cat >"$TEST_TMP/real-asst.sh" <<'EOF'
+#!/bin/bash
+echo '{"type":"assistant","message":"the words total_cost_usd appear here but this line reports no spend"}'
+EOF
+chmod +x "$TEST_TMP/real-asst.sh"
+cat >"$TEST_TMP/stest.js" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const path = require('path');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const cell = { root: fs.mkdtempSync(path.join(tmp, 'scell-')) };
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-asst.sh'));
+const out = path.join(cell.root, 'hand-out.json'); fs.writeFileSync(out, '');
+const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '0.5' }, encoding: 'utf8' });
+let resv = ''; try { resv = fs.readFileSync(out + '.resv', 'utf8').trim(); } catch (e) { /* none */ }
+if (!/^\d+ 0\.5$/.test(resv)) { console.log('RESERVATION DROPPED WITHOUT A REPORTED SPEND: rc=' + r.status + ' reservation file=' + JSON.stringify(resv) + ' (want "<id> 0.5" kept: only an assistant line mentions total_cost_usd)'); process.exit(1); }
+console.log('reservation kept (' + resv + '): a line that only mentions total_cost_usd is not a reported spend');
+JS
+node "$TEST_TMP/stest.js" "$EV" "$TEST_TMP" || fail "settlement criterion (green)"
 node "$TEST_TMP/ctest.js" "$EV" "$TEST_TMP" || fail "wrapper lock (green)"
 node "$TEST_TMP/otest.js" "$EV" "$TEST_TMP" || fail "wrapper budget without out (green)"
 ok "hand wrapper lock and missing OUT"
@@ -458,6 +486,10 @@ node "$TEST_TMP/tmo2.js" g4failure "$R15" || fail "failure status (green)"
 setcfg '{"hand_silent":true}'; R16="$TEST_TMP/r16.jsonl"; seed_on "$R16"
 CAP=2.2 cc --results "$R16" >/dev/null 2>&1; [ -s "$R16" ] || fail "silent run wrote nothing"
 node "$TEST_TMP/tmo2.js" g4empty "$R16" || fail "empty output label (green)"
+setcfg '{"hand_quota":true}'; R18="$TEST_TMP/r18.jsonl"; seed_on "$R18"
+CAP=2.2 cc --results "$R18" >"$TEST_TMP/r18.out" 2>"$TEST_TMP/r18.err"; rc=$?
+[ "$rc" = 2 ] && grep -q 'stopping the campaign: quota' "$TEST_TMP/r18.err" || { cat "$TEST_TMP/r18.err"; K="$R18.cells/g4-hand-effect/gate-on/1"; cat "$K/rail-stdout.json" "$K/rail-stderr.log" "$K/hand-out.json" 2>&1 | head -c 1500; tail -1 "$R18" | head -c 600; fail "a non-timeout quota failure must stop the campaign (rc=$rc)"; }
+node "$TEST_TMP/tmo2.js" g4quota "$R18" || fail "quota failure row (green)"
 ok "failure status and cause labels"
 
 echo "=== 6. negative controls: three runner copies each with ONE line broken, RED before the real runner is GREEN ==="
@@ -563,7 +595,7 @@ restore; brk "$FEV/d0gate/cc.js" 'if [ -z "${D0GATE_HAND_OUT:-}" ]; then' 'if fa
 if node "$TEST_TMP/otest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/ro.out" 2>&1; then fail "RED control (o) was NOT caught: $(cat "$TEST_TMP/ro.out")"; fi
 echo "RED (expected) (o) missing OUT not refused: $(cat "$TEST_TMP/ro.out")"
 # (p) failure status no longer forced to infra
-restore; brk "$FEV/d0gate/cc.js" "if (env0.status === 'failure' && !timedOutAfterBlock) return fail('infra_fail', cg ? cg.cause : 'runner_error', env0.error);" ""
+restore; brk "$FEV/d0gate/cc.js" "if (!SCORABLE_RAIL.has(env0.status) && !timedOutAfterBlock) return fail('infra_fail', cg ? cg.cause : 'runner_error', env0.error);" ""
 setcfg '{"hand_fail":true}'; seed_on "$TEST_TMP/rp.jsonl"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rp.jsonl" >/dev/null 2>&1
 if node "$TEST_TMP/tmo2.js" g4failure "$TEST_TMP/rp.jsonl" >"$TEST_TMP/rp.out" 2>&1; then fail "RED control (p) was NOT caught: $(cat "$TEST_TMP/rp.out")"; fi
@@ -581,6 +613,22 @@ setcfg '{"hang_g2_base":true,"hang_report":true}'; : >"$TEST_TMP/rr.jsonl"
 CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rr.jsonl" --limit 3 >/dev/null 2>&1
 if node "$TEST_TMP/tmo2.js" d0cost "$TEST_TMP/rr.jsonl" >"$TEST_TMP/rr.out" 2>&1; then fail "RED control (r) was NOT caught: $(cat "$TEST_TMP/rr.out")"; fi
 echo "RED (expected) (r) unfinished row keeps skill_invoked=true: $(cat "$TEST_TMP/rr.out")"
+# (s) a stray session on a timed-out cell is added to the reported sum instead of to the cell's charge
+restore; brk "$FEV/d0gate/cc.js" "Math.max(ceiling, o.cost + readable) : o.cost + readable" "Math.max(ceiling, mainCost + readable) : mainCost + readable"
+setcfg '{"cost_per_turn":0.05,"sneak":true,"sneak_g2_only":true,"sneak_cost":0.07,"hang_g2_base":true,"hang_report":true}'
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rs.jsonl" >/dev/null 2>&1
+if node "$TEST_TMP/unac.js" timeout "$TEST_TMP/rs.jsonl" >"$TEST_TMP/rs.out" 2>&1; then fail "RED control (s) was NOT caught: $(cat "$TEST_TMP/rs.out")"; fi
+echo "RED (expected) (s) stray on a timed-out cell undercharged: $(cat "$TEST_TMP/rs.out")"
+# (t) quota/auth wording in a non-timeout failure is no longer looked at
+restore; brk "$FEV/d0gate/cc.js" "(timedOut || !SCORABLE_RAIL.has(env0.status))" "timedOut"
+setcfg '{"hand_quota":true}'; seed_on "$TEST_TMP/rt.jsonl"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rt.jsonl" >/dev/null 2>&1
+if node "$TEST_TMP/tmo2.js" g4quota "$TEST_TMP/rt.jsonl" >"$TEST_TMP/rt.out" 2>&1; then fail "RED control (t) was NOT caught: $(cat "$TEST_TMP/rt.out")"; fi
+echo "RED (expected) (t) quota text of a failure ignored: $(cat "$TEST_TMP/rt.out")"
+# (u) settlement goes back to 'the word appears anywhere'
+restore; brk "$FEV/d0gate/cc.js" "if node -e '\${settled}' \"\$PRIV\"; then" "if grep -q total_cost_usd \"\$PRIV\"; then"
+if node "$TEST_TMP/stest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/ru.out" 2>&1; then fail "RED control (u) was NOT caught: $(cat "$TEST_TMP/ru.out")"; fi
+echo "RED (expected) (u) settlement by the bare word: $(cat "$TEST_TMP/ru.out")"
 ok "negative controls red, real runner green (sections 2 to 5)"
 
 echo "=== 7. no real runner binary was started ==="

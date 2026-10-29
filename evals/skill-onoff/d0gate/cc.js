@@ -26,6 +26,7 @@ const TASKS = require('./cc-tasks');
 const T = L.TASKS;
 const EVAL_DIR = L.EVAL_DIR;
 const REPO_ROOT = path.resolve(EVAL_DIR, '..', '..');
+const SCORABLE_RAIL = new Set(['committed', 'no_op', 'dirty', 'question_suspected']);
 const D0_MARKER = { [T.G1]: 'm_armed', [T.G2]: 'm_not_armed', [T.G3]: 'm_not_wedged' };
 const D0_WORKER = { [T.G1]: 'clean-g1', [T.G2]: 'clean-g2', [T.G3]: 'g3-ok' };
 const isBool = (v) => typeof v === 'boolean';
@@ -243,11 +244,13 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
     const knownSessions = new Set(transcript.flatMap((t) => readObjects(t).map((j) => j.session_id).filter((x) => typeof x === 'string')));
     const strays = sessionFiles(path.join(cell.home, '.claude')).filter((f) => !knownSessions.has(path.basename(f, '.jsonl'))).map((f) => ({ f, cost: lastCostIn(f) }));
     o.unaccounted = strays.length;
+    // o.cost is the cell's own charge (what its turns reported, or the whole ceiling when the cell timed out and the report cannot be trusted);
+    // the stray's spend comes on top of THAT, never on top of the reported sum, which can be lower than the ceiling.
     if (strays.length > 0) { // a claude of its own: charged what its trace says, or the whole ceiling when nothing readable; the campaign stops
       const readable = strays.reduce((a, x) => a + (x.cost === null ? 0 : x.cost), 0);
       const unreadable = strays.some((x) => x.cost === null);
       keepCopy(keepDir, cell);
-      return failureRow(ctx, c, { ...o, cost: Number((unreadable ? Math.max(ceiling, mainCost + readable) : mainCost + readable).toFixed(6)), costUnknown: unreadable || o.costUnknown,
+      return failureRow(ctx, c, { ...o, cost: Number((unreadable ? Math.max(ceiling, o.cost + readable) : o.cost + readable).toFixed(6)), costUnknown: unreadable || o.costUnknown,
         cls: 'infra_fail', cause: 'unaccounted_claude_session', detail: `${strays.length} session file(s) not started by this cell's own turns: ${strays.map((x) => path.basename(x.f)).join(', ')}` });
     }
     if (fail) {
@@ -289,6 +292,12 @@ function handWrapper(cell, realClaude) {
     'const d=Number(process.env.D0GATE_WRAPPER_TEST_DELAY||0); if (d>0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,d*1000);',
     'const amt=String(Number(rem.toFixed(4))); fs.appendFileSync(resv, id+" "+amt+"\\n"); process.stdout.write(amt);',
   ].join(' ');
+  // settlement uses the same test as the reservation step: a line of type result carrying a finite total_cost_usd (a mention of the word elsewhere is not a spend)
+  const settled = [
+    'const fs=require("fs"); let ok=false;',
+    'for (const l of fs.readFileSync(process.argv[1],"utf8").split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) ok=true; }',
+    'process.exit(ok?0:1);',
+  ].join(' ');
   fs.writeFileSync(path.join(bin, 'claude'), [
     '#!/bin/bash',
     `REAL='${realClaude.replace(/'/g, "'\\''")}'`,
@@ -301,7 +310,7 @@ function handWrapper(cell, realClaude) {
     '  if [ "$rem" = refuse ] || [ -z "$rem" ]; then echo "d0gate: the cell budget is spent or reserved; refusing to start another claude" >&2; exit 97; fi',
     '  args+=(--max-budget-usd "$rem")',
     '  "$REAL" "${args[@]}" | tee -a "$D0GATE_HAND_OUT" "$PRIV"; code="${PIPESTATUS[0]}"',
-    '  ( flock 9; if grep -q total_cost_usd "$PRIV"; then grep -v "^$ID " "$RESV" >"$RESV.tmp"; mv "$RESV.tmp" "$RESV"; fi ) 9>"$LOCK"',
+    `  ( flock 9; if node -e '${settled}' "$PRIV"; then grep -v "^$ID " "$RESV" >"$RESV.tmp"; mv "$RESV.tmp" "$RESV"; fi ) 9>"$LOCK"`,
     '  rm -f "$PRIV"; exit "$code"',
     'fi',
     'exec "$REAL" "${args[@]}"',
@@ -384,7 +393,7 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     const errBlob = `${errText}\n${env0.error || ''}`;
     const cg = classify(0, sum, errBlob);
     let hard = cg && !['empty_output', 'cost_unknown'].includes(cg.cause) ? cg : null;
-    if (!hard && timedOut) {
+    if (!hard && (timedOut || !SCORABLE_RAIL.has(env0.status))) { // quota/auth wording in the error text of a hand that did not end in a scorable state
       if (QUOTA_RE.test(errBlob)) hard = { cls: 'infra_fail', cause: 'quota' };
       else if (AUTH_RE.test(errBlob)) hard = { cls: 'infra_fail', cause: 'authentication' };
     }
@@ -398,7 +407,9 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
       timedOutAfterBlock = true;
     }
     // a failure status is infra whatever classify says (its cause when it has one); the only exception is the blocked timeout above
-    if (env0.status === 'failure' && !timedOutAfterBlock) return fail('infra_fail', cg ? cg.cause : 'runner_error', env0.error);
+    // only these rail states are an observation of the hand (committed, nothing to do, left dirty, asked a question); failure, engine_unavailable
+    // (seen: a quota stop) and any state not listed are infra
+    if (!SCORABLE_RAIL.has(env0.status) && !timedOutAfterBlock) return fail('infra_fail', cg ? cg.cause : 'runner_error', env0.error);
     if (cg && !timedOutAfterBlock) return fail('infra_fail', cg.cause);
     // derived ledger: one accepted dispatch, its arm state, its result (only status committed is a done worker)
     const lf = path.join(cell.root, '.d0gate', 'ledger.jsonl');

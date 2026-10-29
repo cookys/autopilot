@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # hooks/tests/skill-onoff-d0gate.test.sh - d0gate row instrument (BL-0306 P3, unit U1). ZERO SPEND.
 #
-# Files exercised here (named so the affected-suites selector reaches them): evals/skill-onoff/d0gate/lib.js, cell.js, traces.js, controls.js,
+# Files exercised here (named so the affected-suites selector reaches them): evals/skill-onoff/d0gate/lib.js, cell.js, traces.js, controls.js, cc.js, cc-tasks.js,
 # table-cases.js, mutants/hook-mutant.js, stubs/scripts/dispatch-hetero.sh, evals/skill-onoff/run-d0gate-campaign.js, score-d0gate.js.
 #
 # Every command below runs with a runner SENTINEL first on PATH (claude, codex, agy, opencode, kimi, grok, ...: log argv, exit 97);
@@ -173,8 +173,11 @@ ONOFF_MAX_USD=25 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/dry.js
 [ "$rc" = 2 ] && grep -q 'never raised' "$TEST_TMP/e2" || fail "RED control: cap 25 must be refused (rc=$rc: $(cat "$TEST_TMP/e2"))"; echo "RED (expected) cap 25: $(cat "$TEST_TMP/e2")"
 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/cc.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e3"; rc=$?
 [ "$rc" = 2 ] && grep -q 'not stamped' "$TEST_TMP/e3" || fail "RED control: cc formal on a draft prereg must be refused (rc=$rc: $(cat "$TEST_TMP/e3"))"; echo "RED (expected) cc formal, draft: $(cat "$TEST_TMP/e3")"
-S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/cc.jsonl" --runner cc --pilot >/dev/null 2>"$TEST_TMP/e4"; rc=$?
-[ "$rc" = 2 ] && grep -q 'not wired in U1' "$TEST_TMP/e4" || fail "cc pilot must stop at the U1 wall (rc=$rc: $(cat "$TEST_TMP/e4"))"; echo "RED (expected) cc pilot: $(cat "$TEST_TMP/e4")"
+# U2 wired the cc runner (hooks/tests/skill-onoff-d0gate-cc.test.sh drives it with a fake claude). Here: with NO claude on PATH it must stop
+# before dispatching anything (the sentinel claude must not be reached either: PATH is an empty directory, node is called by absolute path).
+mkdir -p "$TEST_TMP/emptypath"
+env PATH="$TEST_TMP/emptypath" "$(command -v node)" "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/cc.jsonl" --runner cc --pilot >/dev/null 2>"$TEST_TMP/e4"; rc=$?
+[ "$rc" = 2 ] && grep -q 'claude is not on PATH' "$TEST_TMP/e4" || fail "cc pilot without claude on PATH must stop (rc=$rc: $(cat "$TEST_TMP/e4"))"; echo "RED (expected) cc pilot, no claude: $(cat "$TEST_TMP/e4")"
 [ ! -s "$TEST_TMP/cc.jsonl" ] || fail "cc run wrote results"
 S node "$EV/run-d0gate-campaign.js" --results "$TEST_TMP/x.jsonl" --reps 2 --dry-run --runner cc >/dev/null 2>"$TEST_TMP/e5"; [ $? = 2 ] || fail "--reps must be refused outside a stub run"
 S node "$EV/score-d0gate.js" --prereg "$EV/prereg/d0gate.json" --results "$TEST_TMP/none.jsonl" >/dev/null 2>"$TEST_TMP/e6"; [ $? = 2 ] || fail "scorer must refuse a missing results file"

@@ -38,6 +38,14 @@
     "value": null,
     "note": "PLACEHOLDER: U2 fills this in BEFORE stamping with the claude CLI version string measured by `claude --version` on the pilot host (fbatch v3 pins \"2.1.309 (Claude Code)\" the same way); a formal cc run must refuse any other version. Not measured in U1 (no runner may be started)."
   },
+  "runner_pin_how": "U2: `node evals/skill-onoff/run-d0gate-campaign.js --print-runner-pin` prints the exact value (claude CLI version, both model aliases, one sha256 over the real rail files the G4 cells run). depth-0 writes it into runner_pin.value after the pilot and BEFORE stamping; a formal --runner cc run recomputes it and refuses any difference.",
+  "cc": {
+    "timeout_s": 600,
+    "hand_timeout": "9m",
+    "hand_outer_timeout_s": 720,
+    "disallowed_tools": "ScheduleWakeup",
+    "note": "timeout_s = wall limit of ONE claude -p turn of a depth-0 cell; hand_timeout = the rail's --timeout for a G4 hand (identical in both arms); hand_outer_timeout_s = the harness kill of the whole rail call; disallowed_tools is passed to every depth-0 claude -p (a pending wake-up keeps the process alive until the timeout, fbatch v2). Cell budget = min(remaining, 3 x the unit estimate) as --max-budget-usd; the G4 hand gets the same cap through a thin claude wrapper in the cell PATH that also tees the hand envelope (the rail prints no spend)."
+  },
   "reps": 5,
   "tasks": [
     "g1-constrained",
@@ -235,7 +243,8 @@
     "score-d0gate.js",
     "d0gate",
     "arms/d0gate",
-    "candidates/depth0-gate-arming.md"
+    "candidates/depth0-gate-arming.md",
+    "lib/transcript-query.js"
   ],
   "freeze_packs": [
     "ceo-agent-d0gate-base",
@@ -251,7 +260,8 @@
     "score-d0gate.js",
     "d0gate",
     "arms/d0gate",
-    "candidates/depth0-gate-arming.md"
+    "candidates/depth0-gate-arming.md",
+    "lib/transcript-query.js"
   ],
   "closure_exclude": [
     {

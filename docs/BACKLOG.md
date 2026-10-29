@@ -1469,8 +1469,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-29
 - **Origin**: owner
-- **Problem**: 目前推送前套件跑完沒有留下每支套件各花多久，耗時紀錄檔停在 10/12，所以永遠不知道哪幾支最慢，也沒辦法把慢的排前面。
-- **Impact**: 沒有耗時資料，後面所有提速（多核、縮小範圍）都沒有依據；這次 678 支串行跑了三小時以上，卻說不出時間花在哪。
+- **Problem**: 耗時紀錄檔 test-durations.tsv 有 414 列，但停在 10/12、不含串行尾巴，這次選出的套件有 291 支沒有紀錄；run.sh 會依它慢檔優先，但 affected-suites.js 跑的時候既不更新也不使用這份資料。
+- **Impact**: 推送前套件的排序與耗時估算用的是過期資料，慢的套件不會被排前面，也看不出時間花在哪；後續提速（多核、縮小範圍）缺少可信的依據。
 - **Trigger**: work can start now
 - **Trigger-Type**: ready
 - **Effort**: S
@@ -1498,7 +1498,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-29
 - **Origin**: owner
 - **Problem**: 程式裡有兩處「條件成立才載入」的引用，測試環境根本不會執行，選取器卻當成一定會用到，結果改一個小檔就選出六百多支套件。
-- **Impact**: 改動幾乎都會觸發近全部套件，約有四成是白跑；以這次為例 678 支可降到約 393 支，省約 1.9 小時。
+- **Impact**: 改動幾乎都會觸發近全部套件，約有四成白跑；以這次為例 678 支可降到約 393 支，約省 1.9 小時（推測：模擬選取結果乘歷史平均每支約 24 秒，未實測）。
 - **Trigger**: work can start now
 - **Trigger-Type**: ready
 - **Effort**: M
@@ -1518,7 +1518,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: owner request 2026-10-29 (suite speed research)
 - **Pointer**: docs/backlog/pre-push-suite-speed.md
-- **Context**: Add per-file contrib to --json. Negative control: single-suite diff reports exactly 1 sole-pulled. After BL-0332 (A2).
+- **Context**: Add per-file contrib to --json. Negative control: single-suite diff reports exactly 1 sole-pulled. After BL-0332 (contribution report).
 
 ### Time assertions scale with the timing factor and host-wide process scans are prefix-scoped
 - **Id**: BL-0334
@@ -1526,7 +1526,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-29
 - **Origin**: owner
 - **Problem**: 幾支測試用固定的短時間判斷（例如 2 秒內工人要啟動），機器忙的時候工人還沒起來就被判失敗；另有測試掃整台機器的程序，會看到別人的。
-- **Impact**: 2026-10-29 watchfix 推送前串行跑已因此紅過一次，平行跑時只會更常假紅，造成誤判與重跑。
+- **Impact**: 2026-10-29 watchfix 推送前套件串行跑已因此紅過一次；平行跑時假紅預期會更多（預測：負載 30+ 時牆鐘斷言在串行下就已紅），造成誤判與重跑。
 - **Trigger**: work can start now
 - **Trigger-Type**: ready
 - **Effort**: S

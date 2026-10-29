@@ -4,7 +4,7 @@ Research of 2026-10-29 (owner request: "縮小選取範圍或多核跑都一起�
 
 ## Trigger
 
-Before pushing watchfix, `affected-suites` selected 678 suites and ran them serially for more than 3 hours (history: 664 suites took 4.5 h, 413 suites took 3.5 h). The 32-core host sat at load 30+ for the whole run, and serial runs under that load already produced time-assertion reds (see BL-0334).
+Before pushing watchfix, `affected-suites` selected 678 suites and ran them serially for more than 3 hours; at the 3-hour mark only 448 of the 678 had finished (history: 664 suites took 4.5 h, 413 suites took 3.5 h). The 32-core host sat at load 30+ for the whole run, and serial runs under that load already produced time-assertion reds (see BL-0334).
 
 ## Direction A: select fewer suites
 
@@ -31,7 +31,7 @@ Note for later readers: `hooks/audit-log.js` is NOT an inflation source (only 23
 
 ### Inflation chain
 
-- `src/status/git-env.js` <- `src/status/runs-watch.js` <- `scripts/session-mode.js:612` (a `require('../src/status/runs-watch')` inside a function, after the `autostartDisabled` gate at :610) <- hub files. `hooks/tests/lib.sh` is sourced by 567 suites and reaches 611. The test environment sets `AUTOPILOT_RUNS_WATCH_AUTOSTART=0` (`hooks/tests/lib.sh:38`), so the require never executes in shell suites, yet it counts as a strong edge.
+- `src/status/git-env.js` <- `src/status/runs-watch.js` <- `scripts/session-mode.js:612` (a `require('../src/status/runs-watch')` inside a function, after the `autostartDisabled` gate at :610) <- hub files. `hooks/tests/lib.sh` is sourced by 567 suites, and through it 611 suites are selected. The test environment sets `AUTOPILOT_RUNS_WATCH_AUTOSTART=0` (`hooks/tests/lib.sh:38`), so the require never executes in shell suites, yet it counts as a strong edge.
 - Same shape: `src/status/cli.js:535` requires `./runs-watch` only in the `status --watch` branch; through `bin/autopilot.js` this pulls in 247-298 suites.
 - Pseudo edge: `hooks/tests/lib.sh:210` (`export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"`) is read as a bare-name mention of `session-mode.js`.
 - Common words: the stem `residue` maps to a single file, so a quoted `'residue'` anywhere becomes an edge (75 suites).
@@ -40,7 +40,7 @@ Note for later readers: `hooks/audit-log.js` is NOT an inflation source (only 23
 
 | Id | Option | Selection for this diff | Risk |
 |---|---|---|---|
-| A1 | Treat lazy (post-gate, in-function) `require` as a weak edge | 678 -> 393 (about 1.9 h saved) | low to medium; BL-0181 style misses; `runs-watch.js` alone still selects 354 |
+| A1 | Treat lazy (post-gate, in-function) `require` as a weak edge | 678 -> 393 (about 1.9 h saved; conjecture: simulated selection times the historical mean of about 24 s per suite, not measured) | low to medium; BL-0181 style misses; `runs-watch.js` alone still selects 354 |
 | A2 | `--max-weak 1` | 389 | medium to high, BL-0181 style |
 | A3 | Fix pseudo edges and common words (needs A1 alongside) | additional, small | low |
 | A4 | Function-level granularity | n/a | not recommended |
@@ -63,7 +63,7 @@ Verification harness for any selector change: `docs/plans/evidence/2026-10-13-af
 2. Temp file in the real worktree: `hooks/tests/check-phase-review-receipt.test.sh:1093-1096` (`$REPO_ROOT/scripts/hetero-review-loop.neg15r.js`).
 3. Create/delete branches or worktrees in the real repo: `context-window.test.sh:32-45`, `session-mode.test.sh:208`, `suite-residue-reaper.test.sh:613`; `test-snapshot.test.sh` lines 363/414/452/859/890/974/1134 use `git config --local` and `worktree add` on `$REPO_ROOT` (whether `REPO_ROOT` is a sandbox there is unconfirmed).
 4. Host-wide process scans: `dispatch-hetero-wall-timeout.test.sh:180-187`, `paid-batch-auth-stop.test.sh:105`.
-5. Wall-clock assertions: `hooks/bash-launch-guard.test.js:714,756,776` (200/100 ms), `hooks/tests/dispatch-hetero-gate-rules.test.sh:133` (`timeout -s TERM 2`), `dispatch-author-strict-roster`; these three already went rc=1 under serial high load. Only 3 suites use `test_timing_scale`; 62 shell suites contain a `sleep` of 2 s or more.
+5. Wall-clock assertions: `hooks/bash-launch-guard.test.js:714,756,776` (200/100 ms), `hooks/tests/dispatch-hetero-gate-rules.test.sh:133` (`timeout -s TERM 2`), `dispatch-author-strict-roster`; in the 2026-10-29 watchfix pre-push affected-suites record, `bash-launch-guard.test.js`, `dispatch-author-strict-roster.test.sh` and `dispatch-hetero-gate-rules.test.sh` were all rc=1 under serial high load (the first two are known pre-existing reds). Only 3 suites use `test_timing_scale`; 62 shell suites contain a `sleep` of 2 s or more.
 6. No fixed listening ports. 7. No `git config --global` writes. 8. `lib.sh` does not override `XDG_RUNTIME_DIR`.
 
 ### Design draft
@@ -77,16 +77,16 @@ Verification harness for any selector change: `docs/plans/evidence/2026-10-13-af
 
 ## Duration data today
 
-`push26`/`push28`/`pp-watchfix.log` carry no per-suite seconds. `~/.cache/autopilot/test-durations.tsv` stops at 10/12 (414 rows, median 3 s, no serial tail, 291 suites of this run have no record). Shape: top 10 take 32%, top 20 take 44%, top 50 take 69%. Conclusion: the runner has to record seconds for every suite itself (BL-0330).
+`push26`/`push28`/`pp-watchfix.log` carry no per-suite seconds. `~/.cache/autopilot/test-durations.tsv` stops at 10/12 (414 rows, median 3 s, no serial tail, 291 suites of this run have no record). Shape: top 10 take 32%, top 20 take 44%, top 50 take 69%. Note: `run.sh` already orders slowest-first from this file, but `affected-suites.js` neither updates nor uses it. Conclusion: the runner has to record seconds for every suite itself (BL-0330).
 
 ## Backlog rows and order
 
-BL-0330 (record durations, B2) -> BL-0331 (`--jobs`, B1) -> BL-0332 (lazy require, A1; may run in parallel with B1) -> BL-0333 (contribution report, A2), BL-0334 (time assertions and process scans, B3). A5 stays here as a possible second stage and is not queued.
+BL-0330 (record durations, B2) -> BL-0331 (`--jobs`, B1) -> BL-0332 (lazy require, A1; may run in parallel with B1) -> BL-0333 (contribution report), BL-0334 (time assertions and process scans, B3). A5 stays here as a possible second stage and is not queued.
 
 ## Acceptance and negative controls per row
 
 - BL-0330 (B2): `--run` always writes `seconds` per suite and updates the durations tsv, serial tail included. Negative control: delete the tsv; the runner falls back to name order without crashing.
 - BL-0331 (B1): on a 40-suite sample `--jobs 1` and `--jobs 8` give the same rc set; 3 consecutive runs add no new red; wall time at least 3x faster with load recorded. Negative control: moving a known non-parallel-safe suite out of the serial list must reproduce its red; two fixtures sharing a fixed path must be caught under parallel.
 - BL-0332 (A1): this diff selects at most 400; `miss-check-wide.js` N=60 has zero misses; all 28 breakers still hit. Negative control: a fixture with a lazy require whose path really executes is still selected; reverting to a strong edge turns the check red.
-- BL-0333 (A2): `--json` gains a `contrib` field (per changed file: suites pulled in, suites pulled in only by it).
+- BL-0333 (contribution report): `--json` gains a `contrib` field (per changed file: suites pulled in, suites pulled in only by it).
 - BL-0334 (B3): time assertions multiplied by `test_timing_scale` (only loosening upper bounds); `pgrep`/`ps` scans limited to the `TEST_TMP` prefix; `dispatch-hetero-gate-rules.test.sh` R2 (:133) waits for `FAKE_STARTED` instead of the fixed `timeout -s TERM 2` (already red once under serial load on 2026-10-29).

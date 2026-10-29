@@ -540,7 +540,7 @@ test('a same-group background child is gone (confirmed) when its --jobs entry fi
     assert.doesNotMatch(p.stdout + p.stderr, /leaked-alive|still alive/);
     assert.strictEqual(pidAlive(Number(fs.readFileSync(path.join(r.dir, 'same.pid'), 'utf8'))), false);
     assert.strictEqual(pidAlive(Number(fs.readFileSync(path.join(r.dir, 'esc.pid'), 'utf8'))), true, 'a setsid escapee is not tracked');
-  } finally { killGroupFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
+  } finally { killGroupFile(path.join(r.dir, 'leader.pid')); killGroupFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
   // negative control 1: the kill removed, the confirmation kept -> the survivor is reported and the entry fails
   r = makeRepo(LEAK_FILES);
   try {

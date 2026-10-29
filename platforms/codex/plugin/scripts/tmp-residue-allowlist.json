@@ -232,6 +232,11 @@
       "file": "scripts/dispatch-hetero.sh",
       "match": "seed-claude-config.js\" --parent",
       "reason": "Passes the temp root to the seed helper; the dir (registered claude-config-*) is removed right after the worker and in cleanup/abort_dispatch."
+    },
+    {
+      "file": "scripts/affected-suites.js",
+      "match": "const t = process.env.TMPDIR || '/tmp'",
+      "reason": "tmpParent() only reads the temp root to choose the parent of the asj.* directories (allocated and removed by runPool); it allocates nothing itself."
     }
   ]
 }

@@ -29,8 +29,36 @@ function makeRepo(files) {
 const suite = (body) => `#!/usr/bin/env bash\n: scripts/seed.js\n${body}\n`;
 const SERIAL_LIST = 'hooks/tests/lib/serial-suites.txt';
 
+// No test touches the real $HOME: every spawned runner gets a throwaway HOME (unsafe on purpose: it sits under /tmp),
+// and the last test compares a before/after listing of the real ~/.cache.
+const REAL_HOME = os.userInfo().homedir;
+const TEST_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'jobs-test-home-'));
+process.env.HOME = TEST_HOME; // every spawn that spreads process.env inherits the throwaway HOME too
+const realCacheListing = () => {
+  const out = [];
+  const c = path.join(REAL_HOME, '.cache');
+  try { for (const n of fs.readdirSync(c)) if (n === 'autopilot-asj' || n.startsWith('asj.')) out.push(n); } catch { /* none */ }
+  try { for (const n of fs.readdirSync(path.join(c, 'autopilot-asj'))) out.push(`autopilot-asj/${n}`); } catch { /* none */ }
+  return out.sort();
+};
+const REAL_CACHE_BEFORE = realCacheListing();
+// The product's own safety judgement (same function, not a copy).
+const { ancestorsSafe } = require(path.join(__dirname, 'affected-suites.js'));
+// A 0700 directory the product accepts as an XDG/HOME parent: mkdtemp under os.tmpdir(); null when even that place is
+// unsafe for the product (e.g. an isolation layer whose root ancestors belong to nobody).
+function safeDir(prefix) {
+  try {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    fs.chmodSync(d, 0o700);
+    if (ancestorsSafe(d)) return d;
+    fs.rmSync(d, { recursive: true, force: true });
+  } catch { /* fall through */ }
+  return null;
+}
+const SKIP_NO_SAFE_DIR = 'SKIP: the product judges every directory under os.tmpdir() unsafe here (an ancestor owned by neither us nor root, or group/world-writable and not root-sticky)';
+
 function run(dir, args, env = {}, bin = SEL) {
-  const e = { ...process.env, ...env };
+  const e = { ...process.env, HOME: TEST_HOME, ...env };
   delete e.NODE_TEST_CONTEXT; delete e.NODE_TEST_WORKER_ID;
   delete e.AUTOPILOT_TEST_TIMING_FACTOR;
   Object.assign(e, env);
@@ -103,26 +131,31 @@ test('--jobs 4 runs 8 one-second suites in clearly less wall time than serial, w
   } finally { r.cleanup(); }
 });
 
-test('each pool entry gets its own TMPDIR / XDG_RUNTIME_DIR and the timing factor defaults to N (a caller value wins; serial part gets 1)', () => {
+test('each pool entry gets its own TMPDIR / XDG_RUNTIME_DIR and the timing factor defaults to N (a caller value wins; serial part gets 1)', (t) => {
+  const callerXdg = safeDir('caller-xdg-');
+  if (!callerXdg) { t.skip(SKIP_NO_SAFE_DIR); return; }
   const files = {};
   for (let i = 0; i < 4; i++) files[`hooks/tests/e${i}.test.sh`] = suite(`echo "$TMPDIR $XDG_RUNTIME_DIR $AUTOPILOT_TEST_TIMING_FACTOR" >> "$PWD/env.log"`);
   files['hooks/tests/zser.test.sh'] = suite('echo "$TMPDIR $XDG_RUNTIME_DIR $AUTOPILOT_TEST_TIMING_FACTOR" >> "$PWD/env.log"');
   files[SERIAL_LIST] = 'hooks/tests/zser.test.sh\n';
   const r = makeRepo(files);
   try {
-    const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv() };
+    const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), XDG_RUNTIME_DIR: callerXdg }; // HOME is a throwaway (run()): proves HOME is not used
     const p = run(r.dir, ['--jobs', '3'], env);
     assert.strictEqual(p.status, 0, p.stdout + p.stderr);
     const rows = fs.readFileSync(path.join(r.dir, 'env.log'), 'utf8').trim().split('\n').map((l) => l.split(' '));
     assert.strictEqual(rows.length, 5);
     assert.strictEqual(new Set(rows.map((x) => x[0])).size, 5);
-    assert.strictEqual(new Set(rows.map((x) => x[1])).size, 5);
-    for (const x of rows) assert.match(x[0], /affected-suites-jobs-[^/]+\/\d+\/tmp$/);
+    const poolRows = rows.filter((x) => x[2] === '3');
+    assert.strictEqual(new Set(poolRows.map((x) => x[1])).size, 4); // pool entries: private XDG_RUNTIME_DIR each
+    for (const x of poolRows) assert.ok(x[1].startsWith(`${callerXdg}/asj.`) && /\/asj\.[^/]+$/.test(x[1]), x[1]); // per-run base under the caller's XDG, nothing under HOME
+    assert.deepStrictEqual(rows.filter((x) => x[2] === '1').map((x) => x[1]), [callerXdg]); // serial part: the caller's, like a direct run
+    for (const x of rows) assert.match(x[0], /\/asj\.[^/]+$/);
     assert.deepStrictEqual(rows.map((x) => x[2]).sort(), ['1', '3', '3', '3', '3']);
     fs.rmSync(path.join(r.dir, 'env.log'));
     run(r.dir, ['--jobs', '3'], { ...env, AUTOPILOT_TEST_TIMING_FACTOR: '7' });
     assert.deepStrictEqual(fs.readFileSync(path.join(r.dir, 'env.log'), 'utf8').trim().split('\n').map((l) => l.split(' ')[2]), ['7', '7', '7', '7', '7']);
-  } finally { r.cleanup(); }
+  } finally { r.cleanup(); fs.rmSync(callerXdg, { recursive: true, force: true }); }
 });
 
 // Suites that log "<start> <end>" (ns) to $PWD/times/<name>.
@@ -221,7 +254,7 @@ test('negative control b: a runner copy without the serial rerun turns the flaky
   const r = makeRepo(FLAKY_FILES);
   try {
     const src = fs.readFileSync(SEL, 'utf8');
-    const anchor = 'const again = await exec(rel, 1);';
+    const anchor = 'const again = await exec(rel, 1, false);';
     assert.ok(src.includes(anchor), 'mutation anchor drifted');
     const mutant = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mut-')), 'affected-suites.js');
     fs.writeFileSync(mutant, src.replace(anchor, 'const again = r;'));
@@ -395,4 +428,305 @@ test('a lock that cannot be taken is a warning, not a hang or a failure', () => 
     assert.match(p.stderr, /durations not recorded: timed out waiting for durations lock/);
     assert.strictEqual(fs.existsSync(tsv), false);
   } finally { r.cleanup(); }
+});
+
+// ---- jobsfix: false reds under --jobs (2026-10-29) ----
+
+test('a rerun never sees the pool run\'s TMPDIR: marker left by the first run does not poison the rerun; flaky is labelled (negative control: reuse the old dir -> red)', () => {
+  // first run leaves a marker in $TMPDIR and fails; a run that finds a marker fails; otherwise green
+  const files = { 'hooks/tests/marker.test.sh': suite('if [ -e "$TMPDIR/marker" ]; then echo marker-found; exit 1; fi; touch "$TMPDIR/marker"; exit 1'),
+    'hooks/tests/marker2.test.sh': suite('if [ -e "$TMPDIR/marker" ]; then echo marker-found; exit 1; fi; if [ ! -e "$PWD/.seen" ]; then touch "$TMPDIR/marker" "$PWD/.seen"; exit 1; fi; exit 0') };
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv() };
+  let r = makeRepo(files);
+  try {
+    const p = run(r.dir, ['--jobs', '2'], env);
+    assert.match(p.stdout, /^flaky-under-parallel: hooks\/tests\/marker2\.test\.sh \(rc=1 in pool\)\nrc=0 hooks\/tests\/marker2\.test\.sh$/m, p.stdout);
+    assert.doesNotMatch(p.stdout, /marker-found/);
+  } finally { r.cleanup(); }
+  // negative control: a runner copy whose rerun reuses the pool run's directory index must go red
+  r = makeRepo(files);
+  const mutated = path.join(r.dir, 'affected-suites-mutated.js');
+  try {
+    const src = fs.readFileSync(SEL, 'utf8');
+    const needle = "const dir = fs.mkdtempSync(path.join(parent, 'asj.'));";
+    assert.ok(src.includes(needle));
+    // every call uses one fixed directory (the rerun reuses the pool run's directory)
+    fs.writeFileSync(mutated, src.replace(needle, "const dir = path.join(parent, 'asj.fixed'); fs.mkdirSync(dir, { recursive: true });").replace(/require\('\.\//g, "require('" + path.dirname(SEL) + '/'));
+    const p = run(r.dir, ['--jobs', '2'], env, mutated);
+    assert.match(p.stdout, /marker-found/, 'negative control must go red: ' + p.stdout);
+  } finally { r.cleanup(); }
+});
+
+test('serial part keeps the caller\'s XDG_RUNTIME_DIR; a suite that fails under a per-entry one is green serial (negative control: a pool-style XDG for the serial part -> red)', (t) => {
+  // red when XDG_RUNTIME_DIR is a per-entry directory (as dispatch-detach was), green when it is the caller's
+  const files = { 'hooks/tests/xdgdep.test.sh': suite('[ "$XDG_RUNTIME_DIR" = "$EXPECT_XDG" ] || { echo per-entry-xdg; exit 1; }'),
+    [SERIAL_LIST]: 'hooks/tests/xdgdep.test.sh\n' };
+  const callerXdg = safeDir('caller-xdg-');
+  if (!callerXdg) { t.skip(SKIP_NO_SAFE_DIR); return; }
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), XDG_RUNTIME_DIR: callerXdg, EXPECT_XDG: callerXdg };
+  let r = makeRepo(files);
+  try {
+    const p = run(r.dir, ['--jobs', '2'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.doesNotMatch(p.stdout, /flaky-under-parallel|per-entry-xdg/);
+  } finally { r.cleanup(); }
+  r = makeRepo(files);
+  const mutated = path.join(r.dir, 'affected-suites-mutated.js');
+  try {
+    const src = fs.readFileSync(SEL, 'utf8');
+    const needle = 'isolateXdg ? xdgBase : null';
+    assert.ok(src.includes(needle));
+    fs.writeFileSync(mutated, src.replace(needle, 'xdgBase').replace(/require\('\.\//g, "require('" + path.dirname(SEL) + '/'));
+    const p = run(r.dir, ['--jobs', '2'], env, mutated);
+    assert.match(p.stdout, /per-entry-xdg/);
+    assert.strictEqual(p.status, 1);
+  } finally { r.cleanup(); }
+});
+
+test('the per-entry TMPDIR is 0700 and short (suites build unix socket paths under it: engine-qualify-a went red in pool and rerun with the long nested one); negative controls: 0775 and the old long prefix are red', () => {
+  const files = { 'hooks/tests/mode.test.sh': suite('m=$(stat -c %a "$TMPDIR"); echo "mode=$m len=${#TMPDIR}" > "$PWD/mode.log"; [ "$m" = 700 ] && [ "${#TMPDIR}" -le 24 ]') };
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), TMPDIR: '/tmp' };
+  const mutate = (r, from, to) => {
+    const mutated = path.join(r.dir, 'affected-suites-mutated.js');
+    const src = fs.readFileSync(SEL, 'utf8');
+    assert.ok(src.includes(from), `mutation anchor drifted: ${from}`);
+    fs.writeFileSync(mutated, src.replace(from, to).replace(/require\('\.\//g, "require('" + path.dirname(SEL) + '/'));
+    return mutated;
+  };
+  let r = makeRepo(files);
+  try {
+    const p = run(r.dir, ['--jobs', '2'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.match(fs.readFileSync(path.join(r.dir, 'mode.log'), 'utf8').trim(), /^mode=700 len=\d+$/);
+  } finally { r.cleanup(); }
+  r = makeRepo(files);
+  try {
+    const q = run(r.dir, ['--jobs', '2'], env, mutate(r, 'fs.chmodSync(dir, 0o700);', 'fs.chmodSync(dir, 0o775);'));
+    assert.strictEqual(q.status, 1, 'negative control (mode) must go red');
+  } finally { r.cleanup(); }
+  r = makeRepo(files);
+  try {
+    const q = run(r.dir, ['--jobs', '2'], env, mutate(r, "path.join(parent, 'asj.')", "path.join(parent, 'affected-suites-jobs-')"));
+    assert.strictEqual(q.status, 1, 'negative control (long path) must go red');
+  } finally { r.cleanup(); }
+});
+
+// Mutated copy of the runner (requires made absolute so it can live in the fixture dir).
+function mutantRunner(r, edits) {
+  const mutated = path.join(r.dir, 'affected-suites-mutated.js');
+  let src = fs.readFileSync(SEL, 'utf8');
+  for (const [from, to] of edits) { assert.ok(src.includes(from), `mutation anchor drifted: ${from}`); src = src.replace(from, to); }
+  fs.writeFileSync(mutated, src.replace(/require\('\.\//g, "require('" + path.dirname(SEL) + '/'));
+  return mutated;
+}
+// Liveness by /proc (no signal at all); cleanup only ever signals a process GROUP (negative pgid), never a positive pid.
+const pidAlive = (pid) => fs.existsSync(`/proc/${pid}`);
+const killGroupFile = (f) => { try { process.kill(-Number(fs.readFileSync(f, 'utf8')), 'SIGKILL'); } catch { /* gone or no file */ } };
+
+// leaver: one background child that stays in the entry's group, one that leaves it with setsid.
+const LEAVER = suite('echo $$ > "$PWD/leader.pid"; sleep 30 >/dev/null 2>&1 & echo $! > "$PWD/same.pid"; setsid sleep 30 >/dev/null 2>&1 & echo $! > "$PWD/esc.pid"; sleep 0.3');
+const LEAK_FILES = {
+  'hooks/tests/leaver.test.sh': LEAVER,
+  'hooks/tests/zser.test.sh': suite('kill -0 "$(cat "$PWD/same.pid")" 2>/dev/null && { echo leaked-alive; exit 1; }; exit 0'),
+  [SERIAL_LIST]: 'hooks/tests/zser.test.sh\n',
+};
+
+test('a same-group background child is gone (confirmed) when its --jobs entry finishes; a setsid escapee is out of reach and stays; negative controls: no kill -> lingering red, no kill and no confirm -> the next entry sees it', () => {
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), AFFECTED_SUITES_GROUP_WAIT_MS: '400' };
+  let r = makeRepo(LEAK_FILES);
+  try {
+    const p = run(r.dir, ['--jobs', '2'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.doesNotMatch(p.stdout + p.stderr, /leaked-alive|still alive/);
+    assert.strictEqual(pidAlive(Number(fs.readFileSync(path.join(r.dir, 'same.pid'), 'utf8'))), false);
+    assert.strictEqual(pidAlive(Number(fs.readFileSync(path.join(r.dir, 'esc.pid'), 'utf8'))), true, 'a setsid escapee is not tracked');
+  } finally { killGroupFile(path.join(r.dir, 'leader.pid')); killGroupFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
+  // negative control 1: the kill removed, the confirmation kept -> the survivor is reported and the entry fails
+  r = makeRepo(LEAK_FILES);
+  try {
+    const q = run(r.dir, ['--jobs', '2'], env, mutantRunner(r, [["if (pid && grouped) killGroup(pid, 'SIGKILL');", '']]));
+    assert.match(q.stderr, /hooks\/tests\/leaver\.test\.sh: process group \d+ still alive 400 ms after SIGKILL/, q.stderr);
+    assert.match(q.stdout, /^rc=1 hooks\/tests\/leaver\.test\.sh$/m);
+    assert.strictEqual(q.status, 1);
+  } finally { killGroupFile(path.join(r.dir, 'leader.pid')); killGroupFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
+  // negative control 2: kill and confirmation both removed -> the same-group child is still alive for the next entry
+  r = makeRepo(LEAK_FILES);
+  try {
+    const q = run(r.dir, ['--jobs', '2'], env, mutantRunner(r, [["if (pid && grouped) killGroup(pid, 'SIGKILL');", ''], ['confirmGroup: true', 'confirmGroup: false']]));
+    assert.match(q.stdout, /leaked-alive/, q.stdout);
+    assert.strictEqual(q.status, 1);
+  } finally { killGroupFile(path.join(r.dir, 'leader.pid')); killGroupFile(path.join(r.dir, 'esc.pid')); r.cleanup(); }
+});
+
+const XDG_LOG = suite('echo "$XDG_RUNTIME_DIR" >> "$PWD/xdg.log"; d="$XDG_RUNTIME_DIR"; while [ -n "$d" ] && [ "$d" != / ] && [ "$d" != . ]; do [ -n "$(find "$d" -maxdepth 0 -perm /022 ! -perm -1000)" ] && echo "$d" >> "$PWD/unsafe.log"; d=$(dirname "$d"); done; sleep 0.3');
+const XDG_FILES = () => { const f = {}; for (let i = 0; i < 4; i++) f[`hooks/tests/x${i}.test.sh`] = XDG_LOG; return f; };
+
+test('no caller XDG_RUNTIME_DIR: every pool entry still gets its own private XDG under $HOME/.cache/autopilot-asj, ancestors not group/world writable; negative control: without the base the pool is not isolated', (t) => {
+  const tempHome = safeDir('home-');
+  if (!tempHome) { t.skip(SKIP_NO_SAFE_DIR); return; }
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), XDG_RUNTIME_DIR: '', HOME: tempHome };
+  let r = makeRepo(XDG_FILES());
+  try {
+    const p = run(r.dir, ['--jobs', '3'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    const dirs = fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n');
+    assert.strictEqual(dirs.length, 4);
+    assert.strictEqual(new Set(dirs).size, 4);
+    for (const d of dirs) { assert.ok(d.startsWith(`${tempHome}/.cache/autopilot-asj/asj.`), d); assert.ok(!fs.existsSync(d), 'removed after the run'); }
+    assert.strictEqual(fs.existsSync(path.join(r.dir, 'unsafe.log')), false, 'no ancestor of a pool XDG is group/world writable');
+    assert.doesNotMatch(p.stderr, /not XDG-isolated/);
+  } finally { r.cleanup(); }
+  r = makeRepo(XDG_FILES());
+  try {
+    run(r.dir, ['--jobs', '3'], env, mutantRunner(r, [['function makeXdgBase() {', 'function makeXdgBase() { return null;']]));
+    const dirs = fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n');
+    assert.strictEqual(new Set(dirs).size, 1, 'negative control: no base = every entry shares the caller value');
+  } finally { r.cleanup(); fs.rmSync(tempHome, { recursive: true, force: true }); }
+});
+
+test('an unsafe place gets no directory at all (ancestors are checked before mkdir); negative control: check removed -> the directory appears', (t) => {
+  // an explicitly 0777 directory is the unsafe ancestor (does not assume os.tmpdir() is writable or what its mode is)
+  let unsafeParent;
+  try { unsafeParent = fs.mkdtempSync(path.join(os.tmpdir(), 'unsafe-parent-')); fs.chmodSync(unsafeParent, 0o777); } catch { t.skip('SKIP: cannot make a 0777 directory under os.tmpdir()'); return; }
+  const home = path.join(unsafeParent, 'home');
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), XDG_RUNTIME_DIR: '', HOME: home };
+  let r = makeRepo(XDG_FILES());
+  try {
+    const p = run(r.dir, ['--jobs', '3'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.match(p.stderr, /no safe directory for private XDG_RUNTIME_DIRs/);
+    assert.strictEqual(new Set(fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n')).size, 1);
+    assert.deepStrictEqual(fs.readdirSync(unsafeParent), [], 'nothing was created under the unsafe parent');
+  } finally { r.cleanup(); }
+  r = makeRepo(XDG_FILES());
+  try {
+    run(r.dir, ['--jobs', '3'], env, mutantRunner(r, [['if (!ancestorsSafe(e)) continue;', '']]));
+    assert.ok(fs.existsSync(path.join(home, '.cache', 'autopilot-asj')), 'negative control: without the pre-check the directory is created in the unsafe place');
+  } finally { r.cleanup(); fs.rmSync(unsafeParent, { recursive: true, force: true }); }
+});
+
+test('a long os.tmpdir() falls back to /tmp for per-entry TMPDIRs (short socket paths); negative control: without the fallback they get long', () => {
+  const longTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'long-tmpdir-parent-'));
+  const files = { 'hooks/tests/len.test.sh': suite('echo "${#TMPDIR} $TMPDIR" > "$PWD/len.log"') };
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), TMPDIR: longTmp };
+  let r = makeRepo(files);
+  try {
+    const p = run(r.dir, ['--jobs', '2'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    const [n, d] = fs.readFileSync(path.join(r.dir, 'len.log'), 'utf8').trim().split(' ');
+    assert.ok(Number(n) <= 20 && d.startsWith('/tmp/asj.'), `${n} ${d}`);
+    assert.match(p.stderr, /is long; per-entry TMPDIRs go under \/tmp/);
+  } finally { r.cleanup(); }
+  r = makeRepo(files);
+  try {
+    run(r.dir, ['--jobs', '2'], env, mutantRunner(r, [["const t = process.env.TMPDIR || '/tmp'; // what os.tmpdir() returns on Linux (minus the TMP/TEMP spellings)\n  if (t.length <= 5) return t;", "const t = process.env.TMPDIR || '/tmp';\n  return t;"]]));
+    const [n] = fs.readFileSync(path.join(r.dir, 'len.log'), 'utf8').trim().split(' ');
+    assert.ok(Number(n) > 40, `negative control: long (${n})`);
+  } finally { r.cleanup(); fs.rmSync(longTmp, { recursive: true, force: true }); }
+});
+
+test('the per-entry TMPDIR length does not grow with the entry count: a unix socket 89 characters below it (what engine-qualify-a builds) binds at any position; negative control: a counter in the path (position >= 1000) overflows sun_path', () => {
+  // the suite binds a socket at $TMPDIR + 89 characters; sun_path allows 108 bytes (measured: 108 binds, 109 EINVAL)
+  const body = `node -e "const n=require('net');const p=process.env.TMPDIR+'/'+'s'.repeat(88);n.createServer().listen(p,()=>process.exit(0)).on('error',(e)=>{console.log('bind '+e.code+' len='+Buffer.byteLength(p));process.exit(1)})"`;
+  const files = { 'hooks/tests/sock.test.sh': suite(body), 'hooks/tests/sock2.test.sh': suite(body), 'hooks/tests/sock3.test.sh': suite(body) };
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), TMPDIR: '/tmp' };
+  let r = makeRepo(files);
+  try {
+    const p = run(r.dir, ['--jobs', '2'], env);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.doesNotMatch(p.stdout, /bind /);
+  } finally { r.cleanup(); }
+  r = makeRepo(files);
+  try {
+    const needle = "const dir = fs.mkdtempSync(path.join(parent, 'asj.'));";
+    const q = run(r.dir, ['--jobs', '2'], env, mutantRunner(r, [[needle, "const dir = path.join(fs.mkdtempSync(path.join(parent, 'asj.')), '1000'); fs.mkdirSync(dir);"]]));
+    assert.match(q.stdout, /bind EINVAL len=109/, q.stdout);
+    assert.strictEqual(q.status, 1);
+  } finally { r.cleanup(); }
+});
+
+test('killGroup never signals a positive pid (a recycled pid could be someone else\'s); negative control: with the fallback restored the same run signals one', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'killlog-'));
+  const log = path.join(dir, 'kills.log');
+  const preload = path.join(dir, 'preload.js');
+  // logs every process.kill(pid > 0, signal != 0) made by the runner
+  fs.writeFileSync(preload, `const real = process.kill; process.kill = function (pid, sig) { if (pid > 0 && sig !== 0 && sig !== undefined) require('fs').appendFileSync(${JSON.stringify(log)}, pid + ' ' + sig + '\\n'); return real.apply(process, arguments); };\n`);
+  const files = { 'hooks/tests/quick.test.sh': suite('exit 0') };
+  const runWith = (r, bin) => {
+    const e = { ...process.env, HOME: TEST_HOME, AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv() }; delete e.NODE_TEST_CONTEXT; delete e.NODE_TEST_WORKER_ID;
+    return spawnSync('node', ['-r', preload, bin, '--root', r.dir, '--run', '--files', 'scripts/seed.js', '--jobs', '2'], { encoding: 'utf8', env: e });
+  };
+  let r = makeRepo(files);
+  try {
+    const p = runWith(r, SEL);
+    assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+    assert.strictEqual(fs.existsSync(log), false, 'no positive-pid kill: ' + (fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : ''));
+  } finally { r.cleanup(); }
+  r = makeRepo(files);
+  try {
+    const m = mutantRunner(r, [['catch { /* ESRCH: the group is already gone */ }', 'catch { try { process.kill(pid, sig); } catch { /* gone */ } }']]);
+    runWith(r, m);
+    assert.ok(fs.existsSync(log), 'negative control: the fallback signals a positive pid');
+  } finally { r.cleanup(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a pool entry that lingered but passed its serial rerun keeps lingering_group:true next to flaky_under_parallel in the record', () => {
+  const files = { 'hooks/tests/leaver.test.sh': suite('echo $$ >> "$PWD/pids"; sleep 30 >/dev/null 2>&1 & sleep 0.2'), 'scripts/seed.js': 'x\n' };
+  const r = makeRepo(files);
+  try {
+    const g = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...a], { cwd: r.dir }).toString().trim();
+    const base = g('rev-parse', 'HEAD');
+    fs.writeFileSync(path.join(r.dir, 'scripts', 'seed.js'), 'y\n'); g('add', '-A'); g('commit', '-qm', 'c');
+    // the first kill is skipped (its group survives), later ones work: the pool run lingers, the serial rerun is clean
+    const m = mutantRunner(r, [["if (pid && grouped) killGroup(pid, 'SIGKILL');", "if (pid && grouped && (globalThis.__k = (globalThis.__k || 0) + 1) > 1) killGroup(pid, 'SIGKILL');"]]);
+    const rec = path.join(r.dir, 'rec.json');
+    const e = { ...process.env, HOME: TEST_HOME, AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), AFFECTED_SUITES_GROUP_WAIT_MS: '300' }; delete e.NODE_TEST_CONTEXT; delete e.NODE_TEST_WORKER_ID;
+    const p = spawnSync('node', [m, '--root', r.dir, '--base', base, '--head', 'HEAD', '--run', '--jobs', '2', '--record', rec], { encoding: 'utf8', env: e });
+    const row = JSON.parse(fs.readFileSync(rec, 'utf8')).suites[0];
+    assert.strictEqual(row.rc, 0, p.stdout + p.stderr);
+    assert.strictEqual(row.flaky_under_parallel, true);
+    assert.strictEqual(row.lingering_group, true);
+  } finally {
+    try { for (const l of fs.readFileSync(path.join(r.dir, 'pids'), 'utf8').split('\n').filter(Boolean)) { try { process.kill(-Number(l), 'SIGKILL'); } catch { /* group gone */ } } } catch { /* none */ }
+    r.cleanup();
+  }
+});
+
+const STICKY_ANCHOR = 'const stickyRootDir = (st) => st.uid === 0 && (st.mode & 0o1000) !== 0;';
+test('a root-owned sticky ancestor (/tmp) is accepted, a non-sticky world-writable one is not; negative controls: sticky condition removed -> not isolated, accept-any-world-writable -> created in the 0777 place', (t) => {
+  const tmpSt = fs.statSync(os.tmpdir());
+  if ((tmpSt.mode & 0o1002) !== 0o1002 || tmpSt.uid !== 0) { t.skip('SKIP: os.tmpdir() here is not a root-owned sticky world-writable directory, so the sticky rule is not exercised'); return; }
+  const tempHome = safeDir('sticky-home-');
+  if (!tempHome) { t.skip(SKIP_NO_SAFE_DIR); return; }
+  const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv(), XDG_RUNTIME_DIR: '', HOME: tempHome };
+  try {
+    let r = makeRepo(XDG_FILES());
+    try {
+      const p = run(r.dir, ['--jobs', '3'], env);
+      assert.strictEqual(p.status, 0, p.stdout + p.stderr);
+      assert.strictEqual(new Set(fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n')).size, 4, 'isolated under a sticky /tmp ancestor');
+    } finally { r.cleanup(); }
+    r = makeRepo(XDG_FILES());
+    try {
+      run(r.dir, ['--jobs', '3'], env, mutantRunner(r, [[STICKY_ANCHOR, 'const stickyRootDir = () => false;']]));
+      assert.strictEqual(new Set(fs.readFileSync(path.join(r.dir, 'xdg.log'), 'utf8').trim().split('\n')).size, 1, 'negative control: without the sticky rule the pool is not isolated');
+    } finally { r.cleanup(); }
+    const unsafeParent = fs.mkdtempSync(path.join(os.tmpdir(), 'unsafe-parent-'));
+    try {
+      fs.chmodSync(unsafeParent, 0o777);
+      const home = path.join(unsafeParent, 'home');
+      r = makeRepo(XDG_FILES());
+      try {
+        run(r.dir, ['--jobs', '3'], { ...env, HOME: home });
+        assert.strictEqual(fs.existsSync(home), false, 'real rule: nothing created in the 0777 non-sticky place');
+        run(r.dir, ['--jobs', '3'], { ...env, HOME: home }, mutantRunner(r, [[STICKY_ANCHOR, 'const stickyRootDir = () => true;']]));
+        assert.strictEqual(fs.existsSync(home), true, 'negative control: accept-any-world-writable creates it');
+      } finally { r.cleanup(); }
+    } finally { fs.rmSync(unsafeParent, { recursive: true, force: true }); }
+  } finally { fs.rmSync(tempHome, { recursive: true, force: true }); }
+});
+
+test('the whole file left the real $HOME/.cache without a new autopilot-asj or asj.* entry', () => {
+  fs.rmSync(TEST_HOME, { recursive: true, force: true });
+  assert.deepStrictEqual(realCacheListing(), REAL_CACHE_BEFORE);
 });

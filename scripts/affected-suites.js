@@ -42,8 +42,16 @@
 // N>1 cannot be combined with --budget-seconds): suites not listed in hooks/tests/lib/serial-suites.txt (the
 // single source run.sh also reads) go through a pool of N workers, slowest first by the durations file
 // (no record = first, then name order); once the pool is empty the listed suites run one at a time, then
-// extra_runners. Each entry gets its own TMPDIR and XDG_RUNTIME_DIR; AUTOPILOT_TEST_TIMING_FACTOR defaults to N
-// for pool entries and 1 for the serial part (a value already in the environment wins). Output is buffered per
+// extra_runners. Every entry, and every rerun, gets a NEW short TMPDIR (mkdtemp /tmp/asj.XXXXXX, 0700, fixed length whatever the entry count; all removed at the end); pool entries also get a private XDG_RUNTIME_DIR under a per-run 0700
+// base under the caller's XDG_RUNTIME_DIR (else $HOME/.cache/autopilot-asj) whose ancestors are all non-group/world-writable and are checked before anything is created
+// (none usable = not isolated, one stderr line). The serial part (listed suites, reruns, extra_runners) keeps the
+// caller's XDG_RUNTIME_DIR, like a direct run (a per-entry one breaks dispatch-detach's no-setsid tuple lease). Path
+// length and the other reasons: see the comment above jobEnv. When a --jobs entry finishes its process group gets
+// SIGKILL and is then polled (20 ms steps, up to 5 s, AFFECTED_SUITES_GROUP_WAIT_MS) until it is gone (ESRCH; EPERM
+// counts as gone); a group still alive then gets a stderr line, the entry's rc becomes 1 if it was 0 (a survivor can
+// corrupt the next entry, so it must not pass silently) and the record row carries `lingering_group: true`. A process
+// that left the group with setsid is outside any group and is NOT tracked (an escape, not a failure).
+// AUTOPILOT_TEST_TIMING_FACTOR defaults to N for pool entries and 1 for the serial part (a value already in the environment wins). Output is buffered per
 // entry and printed whole, followed by its `rc=N <path>`; the summary line is unchanged and a
 // `slowest: <path> <s>s, ...` line (top 10) is printed last, after any `attribution:` and `record:` lines
 // (so a consumer that reads the summary-then-record sequence sees the same order as without --jobs).
@@ -587,7 +595,11 @@ function entryCommand(rel) {
 
 // Process groups of entries currently running with an --entry-timeout (killed on TERM/INT too).
 const ACTIVE = new Set();
-function killGroup(pid, sig) { try { process.kill(-pid, sig); } catch { try { process.kill(pid, sig); } catch { /* gone */ } } }
+// Signals the group only. No fallback to the positive pid: once the leader is gone its pid may belong to someone else.
+function killGroup(pid, sig) { try { process.kill(-pid, sig); } catch { /* ESRCH: the group is already gone */ } }
+
+// How long a --jobs entry's process group may outlive the entry after SIGKILL (AFFECTED_SUITES_GROUP_WAIT_MS, default 5000).
+function groupWaitMs() { const n = Number(process.env.AFFECTED_SUITES_GROUP_WAIT_MS); return Number.isFinite(n) && n >= 0 && process.env.AFFECTED_SUITES_GROUP_WAIT_MS !== undefined ? n : 5000; }
 
 // Resolves {rc, timedOut}. With timeoutSecs the entry runs in its own process group; on expiry the
 // group gets TERM, then KILL 2s later, and rc is 124. Without it the spawn is the plain inherit run.
@@ -625,11 +637,32 @@ function runEntry(root, rel, timeoutSecs, group, opts) {
       if (done) return;
       done = true;
       clearTimeout(termTimer);
-      if (child.pid && grouped) { killGroup(child.pid, 'SIGKILL'); ACTIVE.delete(child.pid); }
       clearTimeout(killTimer);
-      const rc = timedOut ? 124 : (code == null ? 1 : code);
-      if (!capture) process.stdout.write(`rc=${rc} ${rel}\n`);
-      resolve({ rc, timedOut, chunks });
+      const pid = child.pid;
+      if (pid && grouped) killGroup(pid, 'SIGKILL');
+      const settle = (lingering) => {
+        if (pid && grouped) ACTIVE.delete(pid);
+        let rc = timedOut ? 124 : (code == null ? 1 : code);
+        if (lingering) {
+          process.stderr.write(`affected-suites: ${rel}: process group ${pid} still alive ${groupWaitMs()} ms after SIGKILL; entry marked failed\n`);
+          if (rc === 0) rc = 1;
+        }
+        if (!capture) process.stdout.write(`rc=${rc} ${rel}\n`);
+        resolve({ rc, timedOut, chunks, lingering: !!lingering });
+      };
+      // --jobs only (opts.confirmGroup): wait, bounded, until the group is gone (ESRCH; EPERM = no longer ours = gone).
+      // The pid is seconds old here, so it cannot have been recycled into someone else's group.
+      if (pid && grouped && opts && opts.confirmGroup) {
+        const t0 = Date.now();
+        const poll = () => {
+          let alive = true;
+          try { process.kill(-pid, 0); } catch { alive = false; }
+          if (!alive) settle(false);
+          else if (Date.now() - t0 >= groupWaitMs()) settle(true);
+          else setTimeout(poll, 20);
+        };
+        poll();
+      } else settle(false);
     };
     child.on('error', () => finish(1));
     child.on('close', (code) => finish(code));
@@ -731,14 +764,88 @@ function emitChunks(chunks) {
   for (const [kind, d] of chunks || []) (kind === 'err' ? process.stderr : process.stdout).write(d);
 }
 
-// Per-entry TMPDIR / XDG_RUNTIME_DIR under a fresh directory; AUTOPILOT_TEST_TIMING_FACTOR defaults to N for pool entries (a caller value wins).
-function jobEnv(base, idx, factor) {
-  const dir = path.join(base, String(idx));
-  fs.mkdirSync(path.join(dir, 'tmp'), { recursive: true });
-  fs.mkdirSync(path.join(dir, 'xdg'), { recursive: true, mode: 0o700 });
-  const env = { ...process.env, TMPDIR: path.join(dir, 'tmp'), XDG_RUNTIME_DIR: path.join(dir, 'xdg') };
+// Per-entry env: every call (pool run or rerun) makes its own fresh directories with mkdtemp, so a name never depends
+// on how many entries ran before (a counter in the path once pushed engine-qualify-a's socket past sun_path at entry 1000).
+// - TMPDIR is <tmpParent>/asj.XXXXXX = /tmp/asj.XXXXXX, 15 characters, 0700, new each time. Suites build unix socket
+//   paths under $TMPDIR (engine-qualify-a's case broker); Linux sun_path is 108 bytes of path. Measured with the real
+//   suite: its socket path is TMPDIR plus 89 characters, so TMPDIR may be at most 19 characters (a 19-character one
+//   passes, 20 gives 109 bytes and EINVAL). 15 leaves 4 characters. tmpParent is os.tmpdir() only when that is at most
+//   5 characters ("/tmp"); a longer one falls back to /tmp with a stderr line, and when /tmp is not writable the long
+//   one is kept with a stderr warning.
+// - The private XDG_RUNTIME_DIR of a pool entry is <xdgBase>/asj.XXXXXX (also mkdtemp, fixed length). xdgBase is a
+//   per-run 0700 directory asj.XXXXXX, tried in this order: (a) under the caller's absolute XDG_RUNTIME_DIR, (b) only if
+//   (a) is unusable, under $HOME/.cache/autopilot-asj. Ancestors are checked BEFORE anything is created (an unsafe place
+//   gets no directory); every ancestor must be owned by us or root and not group/world writable, except a root-owned
+//   sticky directory such as /tmp (1777), where others cannot rename or delete what we create. Note external-lifecycle-witness is stricter and refuses even
+//   a sticky /tmp ancestor: with the pool XDG under /tmp it fails in the pool and passes its serial rerun (labelled
+//   flaky), so prefer a caller XDG_RUNTIME_DIR or a HOME outside /tmp. None
+//   usable = pool entries keep the caller's value and one stderr line says the pool is not isolated.
+// - Serial entries and reruns keep the caller's XDG_RUNTIME_DIR, like a direct `bash hooks/tests/x.test.sh`
+//   (dispatch-detach's no-setsid tuple lease fails with a per-entry one; nothing runs beside a serial entry).
+// Every directory made here is in `made` and removed when the run ends (also on TERM/INT via JOB_TMPS).
+// AUTOPILOT_TEST_TIMING_FACTOR defaults to N for pool entries (a caller value wins).
+function jobEnv(parent, factor, xdgBase, made) {
+  const dir = fs.mkdtempSync(path.join(parent, 'asj.'));
+  made.add(dir); JOB_TMPS.add(dir);
+  fs.chmodSync(dir, 0o700);
+  const env = { ...process.env, TMPDIR: dir };
+  if (xdgBase) {
+    const xdg = fs.mkdtempSync(path.join(xdgBase, 'asj.')); // inside xdgBase, removed with it
+    fs.chmodSync(xdg, 0o700);
+    env.XDG_RUNTIME_DIR = xdg;
+  }
   if (env.AUTOPILOT_TEST_TIMING_FACTOR === undefined) env.AUTOPILOT_TEST_TIMING_FACTOR = String(factor);
   return env;
+}
+
+// A root-owned directory with the sticky bit (/tmp, mode 1777) may be group/world writable: others can add entries but
+// cannot rename or delete ours, which is the usual way a shared temp root is used.
+const stickyRootDir = (st) => st.uid === 0 && (st.mode & 0o1000) !== 0;
+
+// true when every level from `dir` up to / is a real directory owned by us or root, and either not group/world writable
+// or a root-owned sticky directory. (Final directories we create are 0700 and ours.)
+function ancestorsSafe(dir) {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+  for (let d = dir; ; d = path.dirname(d)) {
+    let st;
+    try { st = fs.lstatSync(d); } catch { return false; }
+    if (!st.isDirectory() || (uid !== null && st.uid !== uid && st.uid !== 0)) return false;
+    if ((st.mode & 0o022) !== 0 && !stickyRootDir(st)) return false;
+    if (path.dirname(d) === d) return true;
+  }
+}
+
+// Per-run private base for the pool's XDG_RUNTIME_DIRs; null (and one stderr line) when no safe place exists.
+function makeXdgBase() {
+  // (a) the caller's absolute XDG_RUNTIME_DIR, (b) $HOME/.cache/autopilot-asj; only when no earlier one is usable.
+  const cands = [];
+  const x = process.env.XDG_RUNTIME_DIR;
+  if (x && path.isAbsolute(x)) cands.push(x);
+  if (process.env.HOME && path.isAbsolute(process.env.HOME)) cands.push(path.join(process.env.HOME, '.cache', 'autopilot-asj'));
+  for (const parent of cands) {
+    try {
+      // Safety first, creation second: the nearest existing ancestor (and everything above it) must be safe, so
+      // nothing is created in an unsafe place. Directories made below it are 0700.
+      let e = parent;
+      while (!fs.existsSync(e)) e = path.dirname(e);
+      if (!ancestorsSafe(e)) continue;
+      fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+      if (!ancestorsSafe(parent)) continue;
+      const b = fs.mkdtempSync(path.join(parent, 'asj.'));
+      fs.chmodSync(b, 0o700);
+      return b;
+    } catch { /* next candidate */ }
+  }
+  process.stderr.write('affected-suites: no safe directory for private XDG_RUNTIME_DIRs (every ancestor must be non-group/world-writable); pool entries are not XDG-isolated\n');
+  return null;
+}
+
+// Parent of the per-run TMPDIR base: os.tmpdir() when short, else /tmp (see the path-length note above).
+function tmpParent() {
+  const t = process.env.TMPDIR || '/tmp'; // what os.tmpdir() returns on Linux (minus the TMP/TEMP spellings)
+  if (t.length <= 5) return t;
+  try { fs.accessSync('/tmp', fs.constants.W_OK); process.stderr.write(`affected-suites: TMPDIR ${t} is long; per-entry TMPDIRs go under /tmp to keep unix socket paths short\n`); return '/tmp'; }
+  catch { process.stderr.write(`affected-suites: TMPDIR ${t} is long and /tmp is not writable; unix socket paths under per-entry TMPDIRs may exceed sun_path\n`); return t; }
 }
 
 async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
@@ -754,16 +861,17 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
     .map((rel, i) => ({ rel, i, s: hist.has(rel) ? hist.get(rel) : Infinity }))
     .sort((a, b) => (a.s !== b.s ? (a.s > b.s ? -1 : 1) : a.i - b.i)).map((x) => x.rel);
   const serialList = main.filter((r) => serialSet.has(r));
-  let base = null;
+  let tmpRoot = null;
+  let xdgBase = null;
+  const made = new Set();
   const results = [];
   const timedOut = [];
   let failed = 0;
-  let seq = 0;
   const callerFactor = process.env.AUTOPILOT_TEST_TIMING_FACTOR;
-  const exec = async (rel, factor) => {
+  const exec = async (rel, factor, isolateXdg) => {
     const t0 = Date.now();
-    const env = jobEnv(base, seq++, factor);
-    const r = await runEntry(root, rel, entryTimeout, true, { capture: true, env });
+    const env = jobEnv(tmpRoot, factor, isolateXdg ? xdgBase : null, made);
+    const r = await runEntry(root, rel, entryTimeout, true, { capture: true, env, confirmGroup: true });
     return { ...r, seconds: Math.round(Date.now() - t0) / 1000 };
   };
   const emit = (rel, r, extraLine) => {
@@ -774,19 +882,22 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
   const finalize = (rel, r, flaky) => {
     if (r.timedOut) timedOut.push(rel);
     const row = { path: rel, rc: r.rc, seconds: r.seconds };
+    if (r.lingering) row.lingering_group = true;
+    if (flaky && flaky.pool_lingering) row.lingering_group = true;
     if (flaky) { row.flaky_under_parallel = true; row.pool_rc = flaky.pool_rc; if (flaky.pool_timed_out) row.pool_timed_out = true; }
     results.push(row);
     if (r.rc !== 0) failed++;
   };
   try {
-    base = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-jobs-'));
-    JOB_TMPS.add(base);
+    tmpRoot = tmpParent();
+    xdgBase = makeXdgBase();
+    if (xdgBase) JOB_TMPS.add(xdgBase);
     const held = []; // non-zero pool results wait for their serial rerun before printing
     let next = 0;
     const worker = async () => {
       while (next < poolList.length) {
         const rel = poolList[next++];
-        const r = await exec(rel, callerFactor === undefined ? jobs : callerFactor);
+        const r = await exec(rel, callerFactor === undefined ? jobs : callerFactor, true);
         if (r.rc === 0) { emit(rel, r); finalize(rel, r, null); } else held.push({ rel, r });
       }
     };
@@ -794,26 +905,27 @@ async function runPool(root, doc, alwaysRun, jobs, entryTimeout) {
     // Serial rerun of every pool failure (BL-0331): green alone = flaky-under-parallel; still red = the RERUN's output,
     // rc, timeout state and record entry are final (the pool rc is not reported then).
     for (const { rel, r } of held) {
-      const again = await exec(rel, 1);
+      const again = await exec(rel, 1, false);
       if (again.rc === 0) {
         emitChunks(again.chunks);
         process.stdout.write(`flaky-under-parallel: ${rel} (${r.timedOut ? 'timeout' : `rc=${r.rc}`} in pool)\n`);
         process.stdout.write(`rc=0 ${rel}\n`);
-        finalize(rel, again, { pool_rc: r.rc, pool_timed_out: r.timedOut });
+        finalize(rel, again, { pool_rc: r.rc, pool_timed_out: r.timedOut, pool_lingering: !!r.lingering });
       } else {
         emit(rel, again);
         finalize(rel, again, null);
       }
     }
     for (const rel of [...serialList, ...doc.extra_runners]) {
-      const r = await exec(rel, 1);
+      const r = await exec(rel, 1, false);
       emit(rel, r);
       finalize(rel, r, null);
     }
   } finally {
-    if (base) {
-      JOB_TMPS.delete(base);
-      try { fs.rmSync(base, { recursive: true, force: true }); } catch { /* best effort */ }
+    for (const d of [...made, xdgBase]) {
+      if (!d) continue;
+      JOB_TMPS.delete(d);
+      try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ }
     }
   }
   let emptyFail = false;
@@ -1117,5 +1229,5 @@ async function main(argv) {
   }
 }
 
-module.exports = { extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
+module.exports = { ancestorsSafe, extraRunners, select, mentions, buildGraph, isSuite, isProse, entryCommand, computeDoc, FULL_TRIGGERS, gitTree, diskTree };
 if (require.main === module) main(process.argv.slice(2)).then((c) => { process.exitCode = c; });

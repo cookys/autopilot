@@ -82,6 +82,7 @@ if (fmt === 'stream-json') {
   }
   else {
     if (!get('--resume')) {
+      if (CFG.tamper_stub) { const f = 'scripts/dispatch-hetero.sh'; fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^D0G_PINNED_CELL=.*$/m, "D0G_PINNED_CELL='/tmp/elsewhere'")); } // the model edits a harness file
       doSneak();
       if (CFG.nested) for (let k = 0; k < 2; k++) cp.spawnSync('claude', ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' }); // the agent tries to start its own claude
       let rules = null; let task = null;
@@ -343,10 +344,10 @@ const fs = require('fs'); const cp = require('child_process'); const path = requ
 const [evdir, tmp] = process.argv.slice(2);
 const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
 const cell = { root: fs.mkdtempSync(path.join(tmp, 'wcell-')) };
-const bin = cc.handWrapper(cell, path.join(tmp, 'real-claude.sh'));
 const out = path.join(cell.root, 'hand-out.json'); fs.writeFileSync(out, '');
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-claude.sh'), { out, budget: '0.5' });
 const log = path.join(tmp, 'wrap-calls.log'); fs.writeFileSync(log, '');
-const run = () => cp.spawnSync(path.join(bin, 'claude'), ['-p', '--output-format', 'json'], { env: { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '0.5' }, encoding: 'utf8' });
+const run = () => cp.spawnSync(path.join(bin, 'claude'), ['-p', '--output-format', 'json'], { env: { ...process.env }, encoding: 'utf8' });
 const rcs = [run().status, run().status, run().status];
 const calls = fs.readFileSync(log, 'utf8').split('\n').filter(Boolean);
 const budgets = calls.map((l) => l.split(' ').pop());
@@ -367,17 +368,19 @@ const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
 const fake = path.join(tmp, 'csess-real.sh');
 fs.writeFileSync(fake, '#!/bin/sh\necho \'{"type":"result","session_id":"fake","total_cost_usd":0.01}\'\n', { mode: 0o755 });
 const bad = [];
-const run = (what, setup) => {
+const run = (what, setup, pre) => {
   const root = fs.mkdtempSync(path.join(tmp, 'ccell2-')); const outside = fs.mkdtempSync(path.join(tmp, 'coutside-'));
   fs.mkdirSync(path.join(root, '.d0gate'), { recursive: true }); fs.mkdirSync(path.join(root, 'tmp'));
   const cfg = setup(root, outside);
-  const bin = cc.handWrapper({ root }, fake);
   const out = path.join(root, '.d0gate', 'hand-out.json'); fs.writeFileSync(out, '');
+  const bin = cc.handWrapper({ root }, fake, { out, budget: '1' });
+  if (pre) pre(root, outside, out);
   const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '1', CLAUDE_CONFIG_DIR: cfg }, encoding: 'utf8' });
   const copied = []; const walk = (d) => { try { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else copied.push(path.relative(root, f)); } } catch { /* none */ } };
   walk(out + '.sessions');
   let lg = ''; try { lg = fs.readFileSync(path.join(root, '.d0gate', 'copy-sessions.log'), 'utf8'); } catch { /* none */ }
-  return { rc: r.status, copied, lg };
+  let leaked = []; const wo = (d) => { try { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) wo(f); else leaked.push(f); } } catch { /* none */ } }; wo(outside);
+  return { rc: r.status, copied, lg, leaked };
 };
 const mkproj = (cfg, files) => { for (const [n, t] of Object.entries(files)) { const f = path.join(cfg, 'projects', n); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, t); } return cfg; };
 // outside: the config dir of a launch lives outside the cell
@@ -393,11 +396,53 @@ if (!(r.copied.length === 1 && /real\.jsonl$/.test(r.copied[0])) || !/skip symli
 // the normal case: copied
 r = run('inside', (root) => mkproj(path.join(root, 'tmp', 'cfg'), { 'p/a.jsonl': 'mine' }));
 if (!(r.copied.length === 1 && /a\.jsonl$/.test(r.copied[0])) || r.rc !== 0) bad.push('inside case not copied: ' + JSON.stringify(r));
+// the destination <out>.sessions was replaced by a symlink to a directory outside the cell: refused, nothing written outside
+r = run('dest-symlink', (root) => mkproj(path.join(root, 'tmp', 'cfg'), { 'p/a.jsonl': 'mine' }), (root, outside, out) => { fs.mkdirSync(path.join(outside, 'target')); fs.symlinkSync(path.join(outside, 'target'), out + '.sessions'); });
+if (r.leaked.length || !/not a plain directory/.test(r.lg)) bad.push('destination symlink was followed or not logged: ' + JSON.stringify(r));
 if (bad.length) { console.log('SESSION COPY WRONG: ' + bad.join(' ; ')); process.exit(1); }
 console.log('session copy: outside config dir, symlinked config dir and symlinked files are not copied (each logged); a config dir under <cell>/tmp is');
 JS
 node "$TEST_TMP/csess.js" "$EV" "$TEST_TMP" || fail "session copy containment (green)"
 ok "hand wrapper session copy stays inside the cell"
+
+echo "=== 5d3. a source swapped for a symlink after its last check is not followed (O_NOFOLLOW) ==="
+cat >"$TEST_TMP/swap-hook.js" <<'JS'
+// preload: right after the copy program resolves the victim file (its last path check), swap the file for a symlink to a secret outside the cell
+const fs = require('fs'); const real = fs.realpathSync; let done = false;
+fs.realpathSync = function (p, ...rest) { const r = real.call(fs, p, ...rest); if (!done && String(p).endsWith('victim.jsonl')) { done = true; fs.unlinkSync(p); fs.symlinkSync(process.env.SWAP_SECRET, p); } return r; };
+JS
+cat >"$TEST_TMP/race.js" <<'JS'
+const fs = require('fs'); const cp = require('child_process'); const path = require('path');
+const [evdir, tmp] = process.argv.slice(2);
+const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
+const root = fs.mkdtempSync(path.join(tmp, 'rcell-')); const ext = fs.mkdtempSync(path.join(tmp, 'rext-'));
+fs.mkdirSync(path.join(root, '.d0gate')); fs.mkdirSync(path.join(root, 'tmp/cfg/projects/p'), { recursive: true });
+fs.writeFileSync(path.join(root, 'tmp/cfg/projects/p/victim.jsonl'), 'mine'); fs.writeFileSync(path.join(ext, 'secret'), 'EXTERNAL-SECRET');
+const out = path.join(root, '.d0gate', 'hand-out.json');
+const r = cp.spawnSync(process.execPath, ['-e', cc.COPY_SESSIONS_JS, root, path.join(root, 'tmp/cfg'), out, '77'], { env: { ...process.env, NODE_OPTIONS: '--require=' + path.join(tmp, 'swap-hook.js'), SWAP_SECRET: path.join(ext, 'secret') }, encoding: 'utf8' });
+let leaked = false; const walk = (d) => { try { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (fs.readFileSync(f, 'utf8').includes('EXTERNAL-SECRET')) leaked = true; } } catch { /* none */ } };
+walk(out + '.sessions');
+if (leaked) { console.log('RACE FOLLOWED: the secret outside the cell was copied into the cell after the source was swapped for a symlink'); process.exit(1); }
+console.log('swap after the last check: the symlink was not followed, nothing of the secret was copied');
+JS
+node "$TEST_TMP/race.js" "$EV" "$TEST_TMP" || fail "source swap (green)"
+ok "swap after check"
+
+echo "=== 5d4. a cell whose model changed a harness file (the stub's pinned cell) is re-verified afterwards: failure_class harness_modified, not scored ==="
+cat >"$TEST_TMP/hm.js" <<'JS'
+const fs = require('fs');
+const rows = fs.readFileSync(process.argv[2], 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+const r = rows[0];
+if (!r || r.failure_class !== 'harness_modified' || r.failure_cause !== 'harness_modified' || !/scripts\/dispatch-hetero\.sh/.test(r.failure_detail || '') || r.markers.m_armed !== false || r.skill_invoked !== false) {
+  console.log('HARNESS CHANGE NOT FLAGGED: ' + JSON.stringify(r && { fc: r.failure_class, cause: r.failure_cause, detail: r.failure_detail, markers: r.markers })); process.exit(1);
+}
+console.log('harness_modified: ' + r.failure_detail + ' (cost kept ' + r.cost_usd + ', every judged boolean false)');
+JS
+setcfg '{"tamper_stub":true}'; : >"$FLOG"; RHM="$TEST_TMP/rhm.jsonl"
+CAP=2.2 cc --results "$RHM" --limit 1 >/dev/null 2>&1
+node "$TEST_TMP/hm.js" "$RHM" || fail "harness_modified (green)"
+setcfg
+ok "harness re-verification"
 
 echo "=== 5e. cost_turns, last-packet cost_usd (the prereg says resume totals are cumulative), and the summed variant when the prereg says otherwise ==="
 setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
@@ -493,10 +538,10 @@ const fs = require('fs'); const cp = require('child_process'); const path = requ
 const [evdir, tmp] = process.argv.slice(2);
 const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
 const cell = { root: fs.mkdtempSync(path.join(tmp, 'ccell-')) };
-const bin = cc.handWrapper(cell, path.join(tmp, 'real-slow.sh'));
 const out = path.join(cell.root, 'hand-out.json'); fs.writeFileSync(out, '');
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-slow.sh'), { out, budget: '0.5' });
 const log = path.join(tmp, 'slow-calls.log'); fs.writeFileSync(log, '');
-const env = { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '0.5', D0GATE_WRAPPER_TEST_DELAY: '1' };
+const env = { ...process.env, D0GATE_WRAPPER_TEST_DELAY: '1' };
 const launch = () => new Promise((res) => { const c = cp.spawn(path.join(bin, 'claude'), ['-p'], { env }); c.on('close', (code) => res(code)); });
 Promise.all([launch(), launch()]).then((codes) => {
   const budgets = fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => Number(l.split(' ').pop()));
@@ -506,17 +551,23 @@ Promise.all([launch(), launch()]).then((codes) => {
 });
 JS
 cat >"$TEST_TMP/otest.js" <<'JS'
+// D0GATE_HAND_OUT / D0GATE_HAND_BUDGET in the environment point outside the cell: the wrapper ignores them, creates nothing outside, notes it in the cell log
 const fs = require('fs'); const cp = require('child_process'); const path = require('path');
 const [evdir, tmp] = process.argv.slice(2);
 const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
-const cell = { root: fs.mkdtempSync(path.join(tmp, 'ocell-')) };
-const bin = cc.handWrapper(cell, path.join(tmp, 'real-claude.sh'));
+const cell = { root: fs.mkdtempSync(path.join(tmp, 'ocell-')) }; const ext = fs.mkdtempSync(path.join(tmp, 'oext-'));
+fs.mkdirSync(path.join(cell.root, '.d0gate'));
 fs.writeFileSync(path.join(tmp, 'wrap-calls.log'), '');
-const env = { ...process.env, D0GATE_HAND_BUDGET: '0.5' }; delete env.D0GATE_HAND_OUT;
-const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env, cwd: cell.root, encoding: 'utf8' });
-const called = fs.readFileSync(path.join(tmp, 'wrap-calls.log'), 'utf8').trim();
-if (r.status !== 97 || !/D0GATE_HAND_OUT is not set/.test(r.stderr) || called) { console.log('BUDGET WITHOUT OUT NOT REFUSED CLEARLY: rc=' + r.status + ' stderr=' + JSON.stringify(r.stderr.trim()) + ' real claude called=' + JSON.stringify(called)); process.exit(1); }
-console.log('budget without out: refused, exit 97, "' + r.stderr.trim() + '", the real claude was not called');
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-claude.sh'), { budget: '0.5' });
+const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env, D0GATE_HAND_OUT: path.join(ext, 'ledger'), D0GATE_HAND_BUDGET: '9' }, cwd: cell.root, encoding: 'utf8' });
+const outside = fs.readdirSync(ext);
+let lg = ''; try { lg = fs.readFileSync(path.join(cell.root, '.d0gate', 'copy-sessions.log'), 'utf8'); } catch { /* none */ }
+const bad = [];
+if (outside.length) bad.push('files created outside the cell: ' + outside.join(','));
+if (!fs.existsSync(path.join(cell.root, '.d0gate', 'hand-out.json'))) bad.push('the pinned output file inside the cell was not used');
+if (!/ignored environment value D0GATE_HAND_OUT/.test(lg)) bad.push('no note about the ignored environment value: ' + JSON.stringify(lg));
+if (bad.length) { console.log('EXTERNAL HAND OUT NOT IGNORED: ' + bad.join(' ; ')); process.exit(1); }
+console.log('external D0GATE_HAND_OUT / BUDGET ignored: nothing outside the cell, the pinned file used, noted in copy-sessions.log');
 JS
 cat >"$TEST_TMP/real-asst.sh" <<'EOF'
 #!/bin/bash
@@ -528,16 +579,16 @@ const fs = require('fs'); const cp = require('child_process'); const path = requ
 const [evdir, tmp] = process.argv.slice(2);
 const cc = require(path.join(evdir, 'd0gate', 'cc.js'));
 const cell = { root: fs.mkdtempSync(path.join(tmp, 'scell-')) };
-const bin = cc.handWrapper(cell, path.join(tmp, 'real-asst.sh'));
 const out = path.join(cell.root, 'hand-out.json'); fs.writeFileSync(out, '');
-const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env, D0GATE_HAND_OUT: out, D0GATE_HAND_BUDGET: '0.5' }, encoding: 'utf8' });
+const bin = cc.handWrapper(cell, path.join(tmp, 'real-asst.sh'), { out, budget: '0.5' });
+const r = cp.spawnSync(path.join(bin, 'claude'), ['-p'], { env: { ...process.env }, encoding: 'utf8' });
 let resv = ''; try { resv = fs.readFileSync(out + '.resv', 'utf8').trim(); } catch (e) { /* none */ }
 if (!/^\d+ 0\.5$/.test(resv)) { console.log('RESERVATION DROPPED WITHOUT A REPORTED SPEND: rc=' + r.status + ' reservation file=' + JSON.stringify(resv) + ' (want "<id> 0.5" kept: only an assistant line mentions total_cost_usd)'); process.exit(1); }
 console.log('reservation kept (' + resv + '): a line that only mentions total_cost_usd is not a reported spend');
 JS
 node "$TEST_TMP/stest.js" "$EV" "$TEST_TMP" || fail "settlement criterion (green)"
 node "$TEST_TMP/ctest.js" "$EV" "$TEST_TMP" || fail "wrapper lock (green)"
-node "$TEST_TMP/otest.js" "$EV" "$TEST_TMP" || fail "wrapper budget without out (green)"
+node "$TEST_TMP/otest.js" "$EV" "$TEST_TMP" || fail "external OUT ignored (green)"
 ok "hand wrapper lock and missing OUT"
 
 echo "=== 5i. rail failure status is infra even when classify finds nothing; the label is classify's cause ==="
@@ -633,11 +684,6 @@ UF="$TEST_TMP/ufarm"; rm -rf "$UF"; mkdir -p "$UF/d0gate"; cp -R "$EV/d0gate/." 
 brk "$UF/d0gate/cc.js" '!inside(rc,path.join(rr,"tmp")) || !inside(rp,rc)' 'false'
 if node "$TEST_TMP/csess.js" "$UF" "$TEST_TMP" >"$TEST_TMP/ru.out" 2>&1; then fail "RED control (u) was NOT caught: $(cat "$TEST_TMP/ru.out")"; fi
 echo "RED (expected) (u) wrapper copies from anywhere: $(cat "$TEST_TMP/ru.out")"
-cp "$EV/d0gate/cc.js" "$UF/d0gate/cc.js"
-brk "$UF/d0gate/cc.js" 'if (e.isSymbolicLink()) { log("skip symlink: "+a); continue; }' ''
-brk "$UF/d0gate/cc.js" 'else if (e.isFile()) fs.copyFileSync(a,b);' 'else if (fs.statSync(a).isFile()) fs.copyFileSync(a,b);'
-if node "$TEST_TMP/csess.js" "$UF" "$TEST_TMP" >"$TEST_TMP/ru2.out" 2>&1; then fail "RED control (u2) was NOT caught: $(cat "$TEST_TMP/ru2.out")"; fi
-echo "RED (expected) (u2) wrapper follows symlinks: $(cat "$TEST_TMP/ru2.out")"
 # (h) the resume-cumulative switch forced off (cost = sum of the calls)
 brk "$FEV/d0gate/cc.js" "ctx.P.cc.resume_cost_cumulative === true" "false"
 setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
@@ -674,10 +720,26 @@ echo "RED (expected) (m) detection off: $(cat "$TEST_TMP/rm.out")"
 restore; brk "$FEV/d0gate/cc.js" "( flock 9; node -e" "( node -e"
 if node "$TEST_TMP/ctest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/rn.out" 2>&1; then fail "RED control (n) was NOT caught: $(cat "$TEST_TMP/rn.out")"; fi
 echo "RED (expected) (n) no lock: $(cat "$TEST_TMP/rn.out")"
-# (o) BUDGET without OUT is no longer refused up front
-restore; brk "$FEV/d0gate/cc.js" 'if [ -z "${D0GATE_HAND_OUT:-}" ]; then' 'if false; then'
-if node "$TEST_TMP/otest.js" "$FEV" "$TEST_TMP" >"$TEST_TMP/ro.out" 2>&1; then fail "RED control (o) was NOT caught: $(cat "$TEST_TMP/ro.out")"; fi
-echo "RED (expected) (o) missing OUT not refused: $(cat "$TEST_TMP/ro.out")"
+# (hm) the post-cell re-verification switched off: the changed stub goes unnoticed
+restore; brk "$FEV/d0gate/cc.js" 'if (integrityBreak && integrityBreak.length) {' 'if (false) {'
+setcfg '{"tamper_stub":true}'; : >"$FLOG"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rhm2.jsonl" --limit 1 >/dev/null 2>&1
+if node "$TEST_TMP/hm.js" "$TEST_TMP/rhm2.jsonl" >"$TEST_TMP/rhm2.out" 2>&1; then fail "RED control (hm) was NOT caught: $(cat "$TEST_TMP/rhm2.out")"; fi
+echo "RED (expected) (hm) no re-verification: $(cat "$TEST_TMP/rhm2.out")"
+setcfg; restore
+# (o) the wrapper of the previous commit (the OUT and the budget came from the environment) lets an outside OUT create files outside
+OLDF="$TEST_TMP/oldfarm"; rm -rf "$OLDF"; mkdir -p "$OLDF/d0gate"; cp -R "$EV/d0gate/." "$OLDF/d0gate/"
+git -C "$REPO_ROOT" show 020eb4204:evals/skill-onoff/d0gate/cc.js >"$OLDF/d0gate/cc.js" || fail "cannot read the previous cc.js"
+if node "$TEST_TMP/otest.js" "$OLDF" "$TEST_TMP" >"$TEST_TMP/ro.out" 2>&1; then fail "RED control (o) was NOT caught: $(cat "$TEST_TMP/ro.out")"; fi
+echo "RED (expected) (o) environment OUT trusted: $(cat "$TEST_TMP/ro.out")"
+# (o2) the previous wrapper follows a destination symlink planted by the hand
+if node "$TEST_TMP/csess.js" "$OLDF" "$TEST_TMP" >"$TEST_TMP/ro2.out" 2>&1; then fail "RED control (o2) was NOT caught: $(cat "$TEST_TMP/ro2.out")"; fi
+echo "RED (expected) (o2) previous wrapper: $(cat "$TEST_TMP/ro2.out")"
+# (o3) without O_NOFOLLOW the swapped source is followed
+NF="$TEST_TMP/nffarm"; rm -rf "$NF"; mkdir -p "$NF/d0gate"; cp -R "$EV/d0gate/." "$NF/d0gate/"
+brk "$NF/d0gate/cc.js" 'const NF=C.O_NOFOLLOW;' 'const NF=0;'
+if node "$TEST_TMP/race.js" "$NF" "$TEST_TMP" >"$TEST_TMP/ro3.out" 2>&1; then fail "RED control (o3) was NOT caught: $(cat "$TEST_TMP/ro3.out")"; fi
+echo "RED (expected) (o3) no O_NOFOLLOW: $(cat "$TEST_TMP/ro3.out")"
 # (p) failure status no longer forced to infra
 restore; brk "$FEV/d0gate/cc.js" "if (!SCORABLE_RAIL.has(env0.status) && !timedOutAfterBlock) return fail('infra_fail', cg ? cg.cause : 'runner_error', env0.error);" ""
 setcfg '{"hand_fail":true}'; seed_on "$TEST_TMP/rp.jsonl"

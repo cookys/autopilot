@@ -35,7 +35,7 @@ LOC_CELL="$(cd "$SELF_DIR/../.." 2>/dev/null && pwd -P)"
 LIVE="$CELL/live"
 mkdir -p "$CELL/.d0gate" "$CELL/wt"; mkdir -p -m 700 "$LIVE"
 export AUTOPILOT_LIVE_DIR="$LIVE"
-export AUTOPILOT_CONFIG_FILE="${AUTOPILOT_CONFIG_FILE:-$CELL/config.json}"
+export AUTOPILOT_CONFIG_FILE="$CELL/config.json"   # pinned: a caller value must not choose which file this script may create
 [ -f "$AUTOPILOT_CONFIG_FILE" ] || echo '{}' >"$AUTOPILOT_CONFIG_FILE"
 # the stub's own names carry a D0G_ prefix: the copied option loop below assigns LEDGER (--ledger), BRANCH, MODEL, ... itself
 D0G_LEDGER="$CELL/.d0gate/ledger.jsonl"

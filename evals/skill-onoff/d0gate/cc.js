@@ -143,6 +143,31 @@ function buildPlugin(dir, tree) {
     fs.copyFileSync(src, dst);
   }
 }
+// ---- harness integrity (a re-verification after the cell, NOT tamper protection: ADR-0001). The runner records the bytes of every harness
+// file it wrote into the cell (the stub copy with its pinned values, the installed fixture scripts/hooks/schemas, gate/rules.json, the
+// deny/hand wrapper, the plugin tree, the rule lists, the hand prompt) when the cell is built; after the cell it compares them with the
+// cell. A file that is gone or differs makes the row failure_class harness_modified (infra, never scored). Files the cell adds are ignored.
+const SNAP_DIRS = { d0: ['repo/scripts', 'repo/hooks', 'repo/schemas', 'repo/gate', 'bin-deny', 'plugin'], g4: ['repo/scripts', 'repo/hooks', 'repo/schemas', 'repo/gate', 'bin', 'rules'] };
+const SNAP_FILES = { d0: [], g4: ['hand-prompt.txt'] };
+const sha = (f) => require('crypto').createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+function takeSnapshot(cell, kind) {
+  const m = new Map();
+  const walk = (d) => {
+    let ents = [];
+    try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (e.isFile()) m.set(path.relative(cell.root, f), sha(f)); }
+  };
+  for (const d of SNAP_DIRS[kind]) walk(path.join(cell.root, d));
+  for (const f of SNAP_FILES[kind]) { try { m.set(f, sha(path.join(cell.root, f))); } catch { /* absent */ } }
+  return m;
+}
+function snapshotBreaks(cell, snap) {
+  const bad = [];
+  for (const [rel, h] of snap) { let now = null; try { const f = path.join(cell.root, rel); now = fs.lstatSync(f).isFile() ? sha(f) : 'not-a-file'; } catch { now = 'gone'; } if (now !== h) bad.push(rel); }
+  return bad;
+}
+let integrityBreak = null; // set by a cell's finally block, read by runCell
+function noteIntegrity(cell, snap) { integrityBreak = snap ? snapshotBreaks(cell, snap) : null; }
 function keepCopy(keepDir, cell, extra = {}) {
   if (!keepDir) return;
   fs.mkdirSync(keepDir, { recursive: true });
@@ -217,6 +242,7 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
   const t0 = Date.now();
   const cell = new Cell().init();
   const model = ctx.d0Model;
+  let snap = null;
   try {
     seedConfig(cell, ctx.srcConfigDir);
     const plugin = path.join(cell.root, 'plugin');
@@ -229,6 +255,7 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
     cell.pin({ worker: D0_WORKER[c.task] }); // the stub hand's mode is written into the cell's stub copy, not passed through the environment
     const bin = denyWrapper(cell);
     const baseEnv = cellEnv(cell, { PATH: `${bin}:${process.env.PATH || ''}`, D0GATE_NESTED_LOG: nestedLog });
+    snap = takeSnapshot(cell, 'd0');
     const prompts = TASKS.turns(c.task, ctx.P.invocation_prefix);
     const transcript = [];
     let sid = '';
@@ -300,16 +327,50 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
       ...(o.costUnknown ? { cost_unknown: true, cost_estimated: true } : {}),
       ...(c.arm === 'change' ? { arm_manifest_sha256: ctx.changeSha } : {}),
     };
-  } finally { cell.destroy(); }
+  } finally { noteIntegrity(cell, snap); cell.destroy(); }
 }
 
 // ---------------------------------------------------------------- G4 cell (real claude-native rail)
 // G4: the rail starts exactly one hand per dispatch, but a rail that started more than one for the same cell must still not pass the cell's
 // cap, so this wrapper adds up what the cell's earlier hand launches already reported (D0GATE_HAND_OUT) and gives each launch only what is
 // left (--max-budget-usd), refusing (exit 97) once nothing is. It also tees the envelope, because the rail prints no spend.
-function handWrapper(cell, realClaude) {
+// The program the hand wrapper runs at exit to keep the hand own session files. No single quote may appear in it (it is embedded in a
+// single-quoted shell word). Every path it reads or writes is checked: source config dir under <cell>/tmp, destination under the cell root;
+// each existing level of the destination is lstat-checked (a symlink is refused), directories are created one level at a time and
+// re-checked, files are opened with O_NOFOLLOW (source) and O_CREAT|O_EXCL|O_NOFOLLOW (destination, so nothing is written through an
+// existing file or link), and each source file is re-validated (lstat + realpath) right before it is opened. Best effort: the copy runs
+// after the hand claude has exited, and a swap between the last check and the open is caught only by O_NOFOLLOW.
+const COPY_SESSIONS_JS = [
+  'const fs=require("fs"),path=require("path"); const [root,cfg,out,id]=process.argv.slice(1);',
+  'const log=(m)=>{ try { fs.appendFileSync(path.join(root,".d0gate","copy-sessions.log"),m+"\\n"); } catch (e) {} };',
+  'const inside=(p,b)=>p===b||p.startsWith(b+path.sep);',
+  'const C=fs.constants; const NF=C.O_NOFOLLOW;',
+  'let rr; try { rr=fs.realpathSync(root); } catch (e) { process.exit(0); }',
+  'if (!cfg) process.exit(0);',
+  'const ensure=(d)=>{ let st; try { st=fs.lstatSync(d); } catch (e) { fs.mkdirSync(d); st=fs.lstatSync(d); } if (st.isSymbolicLink() || !st.isDirectory()) throw new Error("destination level is not a plain directory: "+d); };',
+  'try {',
+  '  if (fs.lstatSync(cfg).isSymbolicLink() || fs.lstatSync(path.join(cfg,"projects")).isSymbolicLink()) { log("skip: config dir or its projects is a symlink: "+cfg); process.exit(0); }',
+  '  const rc=fs.realpathSync(cfg), rp=fs.realpathSync(path.join(cfg,"projects")), ro=fs.realpathSync(path.dirname(out));',
+  '  if (!inside(rc,path.join(rr,"tmp")) || !inside(rp,rc)) { log("skip: config dir "+rc+" is not under the cell tmp "+path.join(rr,"tmp")); process.exit(0); }',
+  '  if (!inside(ro,rr)) { log("skip: output dir "+ro+" is outside the cell "+rr); process.exit(0); }',
+  '  const top=path.join(ro,path.basename(out)+".sessions"); ensure(top); const dst=path.join(top,id); ensure(dst);',
+  '  if (!inside(fs.realpathSync(dst),rr)) { log("skip: destination resolves outside the cell: "+dst); process.exit(0); }',
+  '  const one=(a,b)=>{ const st=fs.lstatSync(a); if (!st.isFile()) { log("skip not a plain file: "+a); return; } if (!inside(fs.realpathSync(a),rp)) { log("skip source outside projects: "+a); return; }',
+  '    const fi=fs.openSync(a,C.O_RDONLY|NF); try { const fo=fs.openSync(b,C.O_WRONLY|C.O_CREAT|C.O_EXCL|NF,384); try { const buf=Buffer.alloc(65536); let n; while ((n=fs.readSync(fi,buf,0,buf.length,null))>0) fs.writeSync(fo,buf,0,n); } finally { fs.closeSync(fo); } } finally { fs.closeSync(fi); } };',
+  '  const w=(s,d)=>{ for (const e of fs.readdirSync(s,{withFileTypes:true})) { const a=path.join(s,e.name), b=path.join(d,e.name); if (e.isSymbolicLink()) { log("skip symlink: "+a); continue; } if (e.isDirectory()) { ensure(b); w(a,b); } else if (e.isFile()) { try { one(a,b); } catch (err) { log("skip "+a+": "+err.message); } } } };',
+  '  w(rp,dst);',
+  '} catch (e) { log("skip: "+e.message); }',
+].join(" ");
+
+function handWrapper(cell, realClaude, opts = {}) {
   const bin = path.join(cell.root, 'bin');
   fs.mkdirSync(bin, { recursive: true });
+  // OUT (the tee target; LOCK, RESV and PRIV are derived from it) and BUDGET are fixed when the wrapper is written, like ROOT; an environment
+  // value that differs is ignored and noted in <cell>/.d0gate/copy-sessions.log. OUT must be inside the cell.
+  const out = path.resolve(opts.out || path.join(cell.root, '.d0gate', 'hand-out.json'));
+  if (!(out === path.resolve(cell.root) || out.startsWith(path.resolve(cell.root) + path.sep))) throw new Error(`d0gate: the hand output file ${out} is outside the cell ${cell.root}`);
+  const budget = opts.budget === undefined || opts.budget === null ? '' : String(opts.budget);
+  const sq = (v) => `'${String(v).replace(/'/g, "'\\''")}'`;
   // Everything between "read what is spent and reserved" and "write my reservation" runs under one flock, so two launches at the same time
   // cannot both see the same remaining budget. The reservation is settled after the run: dropped when the launch reported a spend (that
   // spend is then in D0GATE_HAND_OUT, which the tee fills live so a killed launch still leaves its envelope), kept when it did not.
@@ -328,42 +389,27 @@ function handWrapper(cell, realClaude) {
     'for (const l of fs.readFileSync(process.argv[1],"utf8").split("\\n")) { let j; try { j=JSON.parse(l); } catch { continue; } if (j && j.type==="result" && Number.isFinite(j.total_cost_usd)) ok=true; }',
     'process.exit(ok?0:1);',
   ].join(' ');
-  // no single quote may appear in this program (it is embedded in a single-quoted shell word)
-  const copySessions = [
-    'const fs=require("fs"),path=require("path"); const [root,cfg,out,id]=process.argv.slice(1);',
-    'const log=(m)=>{ try { fs.appendFileSync(path.join(root,".d0gate","copy-sessions.log"),m+"\\n"); } catch (e) {} };',
-    'const inside=(p,b)=>p===b||p.startsWith(b+path.sep);',
-    'let rr; try { rr=fs.realpathSync(root); } catch (e) { process.exit(0); }',
-    'if (!cfg) process.exit(0);',
-    'try {',
-    '  if (fs.lstatSync(cfg).isSymbolicLink() || fs.lstatSync(path.join(cfg,"projects")).isSymbolicLink()) { log("skip: config dir or its projects is a symlink: "+cfg); process.exit(0); }',
-    '  const rc=fs.realpathSync(cfg), rp=fs.realpathSync(path.join(cfg,"projects")), ro=fs.realpathSync(path.dirname(out));',
-    '  if (!inside(rc,path.join(rr,"tmp")) || !inside(rp,rc)) { log("skip: config dir "+rc+" is not under the cell tmp "+path.join(rr,"tmp")); process.exit(0); }',
-    '  if (!inside(ro,rr)) { log("skip: output dir "+ro+" is outside the cell "+rr); process.exit(0); }',
-    '  const w=(s,d)=>{ fs.mkdirSync(d,{recursive:true}); for (const e of fs.readdirSync(s,{withFileTypes:true})) { const a=path.join(s,e.name), b=path.join(d,e.name); if (e.isSymbolicLink()) { log("skip symlink: "+a); continue; } if (e.isDirectory()) w(a,b); else if (e.isFile()) fs.copyFileSync(a,b); } };',
-    '  w(rp, path.join(ro, path.basename(out)+".sessions", id));',
-    '} catch (e) { log("skip: "+e.message); }',
-  ].join(" ");
   fs.writeFileSync(path.join(bin, 'claude'), [
     '#!/bin/bash',
     `REAL='${realClaude.replace(/'/g, "'\\''")}'`,
-    `ROOT='${String(cell.root).replace(/'/g, "'\\''")}'`, // fixed when the wrapper is written; no environment value decides what may be copied
+    `ROOT=${sq(cell.root)}`, // fixed when the wrapper is written; no environment value decides what may be copied
+    `OUT=${sq(out)}`,
+    `BUDGET=${sq(budget)}`,
+    'note() { if [ -d "$ROOT/.d0gate" ]; then echo "ignored environment value $1" >>"$ROOT/.d0gate/copy-sessions.log"; fi; return 0; }',
+    'if [ -n "${D0GATE_HAND_OUT:-}" ] && [ "$D0GATE_HAND_OUT" != "$OUT" ]; then note "D0GATE_HAND_OUT=$D0GATE_HAND_OUT"; fi',
+    'if [ -n "${D0GATE_HAND_BUDGET:-}" ] && [ "$D0GATE_HAND_BUDGET" != "$BUDGET" ]; then note "D0GATE_HAND_BUDGET=$D0GATE_HAND_BUDGET"; fi',
     'args=("$@")',
-    // D0GATE_HAND_OUT / D0GATE_HAND_BUDGET stay environment values on purpose: only the runner sets them for the rail, and no model-controlled
-    // command runs between the runner and this wrapper in a G4 cell, so nothing the model does can change the wrapper environment.
-    'if [ -n "${D0GATE_HAND_BUDGET:-}" ]; then',
-    '  if [ -z "${D0GATE_HAND_OUT:-}" ]; then echo "d0gate: D0GATE_HAND_BUDGET is set but D0GATE_HAND_OUT is not set; refusing to start claude" >&2; exit 97; fi',
-    '  LOCK="$D0GATE_HAND_OUT.lock"; RESV="$D0GATE_HAND_OUT.resv"; PRIV="$D0GATE_HAND_OUT.$$"; ID="$$"',
-    '  : >>"$D0GATE_HAND_OUT"',
+    'if [ -n "$BUDGET" ]; then',
+    '  LOCK="$OUT.lock"; RESV="$OUT.resv"; PRIV="$OUT.$$"; ID="$$"',
+    '  : >>"$OUT"',
     // the rail seeds its own CLAUDE_CONFIG_DIR for the hand (a mkdtemp under $TMPDIR, which the runner points at <cell>/tmp) and removes it on exit:
-    // keep the hand own session files (its tool trajectory) before that, but only when source and destination resolve inside THIS cell
-    // (source under <cell>/tmp, destination under the cell root); symlinks are never followed, they are skipped and logged to <cell>/.d0gate/copy-sessions.log
-    `  copy_sessions() { node -e '${copySessions}' "$ROOT" "${'$'}{CLAUDE_CONFIG_DIR:-}" "$D0GATE_HAND_OUT" "$ID" 2>/dev/null; return 0; }`,
+    // keep the hand own session files (its tool trajectory) before that; see COPY_SESSIONS_JS for what is checked
+    `  copy_sessions() { node -e '${COPY_SESSIONS_JS}' "$ROOT" "${'$'}{CLAUDE_CONFIG_DIR:-}" "$OUT" "$ID" 2>/dev/null; return 0; }`,
     '  trap copy_sessions EXIT; trap "exit 143" TERM INT HUP',
-    `  rem="$( ( flock 9; node -e '${reserve}' "$D0GATE_HAND_OUT" "$RESV" "$D0GATE_HAND_BUDGET" "$ID" ) 9>"$LOCK" )"`,
+    `  rem="$( ( flock 9; node -e '${reserve}' "$OUT" "$RESV" "$BUDGET" "$ID" ) 9>"$LOCK" )"`,
     '  if [ "$rem" = refuse ] || [ -z "$rem" ]; then echo "d0gate: the cell budget is spent or reserved; refusing to start another claude" >&2; exit 97; fi',
     '  args+=(--max-budget-usd "$rem")',
-    '  "$REAL" "${args[@]}" | tee -a "$D0GATE_HAND_OUT" "$PRIV"; code="${PIPESTATUS[0]}"',
+    '  "$REAL" "${args[@]}" | tee -a "$OUT" "$PRIV"; code="${PIPESTATUS[0]}"',
     `  ( flock 9; if node -e '${settled}' "$PRIV"; then grep -v "^$ID " "$RESV" >"$RESV.tmp"; mv "$RESV.tmp" "$RESV"; fi ) 9>"$LOCK"`,
     '  rm -f "$PRIV"; exit "$code"',
     'fi',
@@ -410,13 +456,14 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
   const t0 = Date.now();
   const cell = new Cell().init();
   const model = ctx.g4Model;
+  let snap = null;
   try {
     seedConfig(cell, ctx.srcConfigDir);
     // the owner's one-time claude-native confirmation (the rail refuses without it); only that key is carried into the cell HOME
     fs.mkdirSync(path.join(cell.home, '.autopilot'), { recursive: true });
     fs.writeFileSync(path.join(cell.home, '.autopilot', 'config.json'), `${JSON.stringify({ implementer_claude_native: { confirmed_at: ctx.confirmedAt } })}\n`);
-    const bin = handWrapper(cell, ctx.realClaude);
     const handOut = path.join(cell.root, '.d0gate', 'hand-out.json');
+    const bin = handWrapper(cell, ctx.realClaude, { out: handOut, budget });
     fs.writeFileSync(handOut, '');
     const promptFile = path.join(cell.root, 'hand-prompt.txt');
     fs.writeFileSync(promptFile, TASKS.handPrompt());
@@ -425,7 +472,8 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     const branch = `d0g/g4-${c.arm}-${c.rep}`;
     const argv = ['--runner', 'claude-native', '--model', model, '--prompt-file', promptFile, '--context-window', 'off', '--base', cell.baseSha,
       '--branch', branch, '--timeout', ctx.P.cc.hand_timeout, ...(on ? ['--gate-rules', rules] : [])];
-    const env = cellEnv(cell, { PATH: `${bin}:${process.env.PATH || ''}`, D0GATE_HAND_OUT: handOut, D0GATE_HAND_BUDGET: String(budget) });
+    const env = cellEnv(cell, { PATH: `${bin}:${process.env.PATH || ''}` });
+    snap = takeSnapshot(cell, 'g4');
     const r = cp.spawnSync('timeout', ['--kill-after=30', String(ctx.P.cc.hand_outer_timeout_s), 'bash', ctx.railScript, ...argv],
       { cwd: cell.repo, env, encoding: 'utf8', maxBuffer: 1 << 28 });
     const exit = r.status === null ? 137 : r.status;
@@ -494,15 +542,21 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
       ...(timedOutAfterBlock ? { failure_cause: 'timed_out_after_gate_block' } : {}),
       ...(o.costUnknown ? { cost_unknown: true, cost_estimated: true } : {}),
     };
-  } finally { cell.destroy(); }
+  } finally { noteIntegrity(cell, snap); cell.destroy(); }
 }
 
 // runCell(ctx, c, ceiling, budget, keepDir) -> a row (always complete in shape)
 function runCell(ctx, c, ceiling, budget, keepDir) {
-  const row = c.task === T.G4 ? runG4(ctx, c, ceiling, budget, keepDir) : runD0(ctx, c, ceiling, budget, keepDir);
+  integrityBreak = null;
+  let row = c.task === T.G4 ? runG4(ctx, c, ceiling, budget, keepDir) : runD0(ctx, c, ceiling, budget, keepDir);
+  if (integrityBreak && integrityBreak.length) { // the cell changed a harness file: infra, not scored, the spend it caused is kept
+    row = failureRow(ctx, c, { model: row.model, sessionId: row.session_id, durationS: row.duration_s, cost: row.cost_usd, costTurns: row.cost_turns,
+      nestedAttempts: row.nested_claude_attempts, unaccounted: row.unaccounted_sessions, skillObserved: row.skill_invoked_observed, gateBlocks: row.g4 && row.g4.gate_blocks,
+      costUnknown: row.cost_unknown === true, cls: 'harness_modified', cause: 'harness_modified', detail: `changed or removed: ${integrityBreak.slice(0, 5).join(', ')}` });
+  }
   const probs = shapeProblems(row);
   if (probs.length) throw new Error(`cc runner produced an incomplete row for ${c.task}|${c.arm}|${c.rep}: ${probs.join(', ')}`);
   return row;
 }
 
-module.exports = { blockedTimeoutApplies, handWrapper, denyWrapper, runCell, shapeProblems, summary, classify, falseShape, whichClaude, REPO_ROOT, D0_MARKER };
+module.exports = { COPY_SESSIONS_JS, takeSnapshot, snapshotBreaks, blockedTimeoutApplies, handWrapper, denyWrapper, runCell, shapeProblems, summary, classify, falseShape, whichClaude, REPO_ROOT, D0_MARKER };

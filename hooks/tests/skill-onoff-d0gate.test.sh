@@ -239,7 +239,7 @@ S node -e '
 const fs = require("fs"); const cp = require("child_process"); const path = require("path");
 const { Cell } = require(process.argv[1] + "/d0gate/cell.js"); const L = require(process.argv[1] + "/d0gate/lib.js");
 const c = new Cell().init();
-const r = c.std(["--gate-rules", c.putRules("g1-good.json")], { worker: "clean-g1", env: { D0GATE_NO_DISARM: "1" } });
+const r = c.std(["--gate-rules", c.putRules("g1-good.json")], { worker: "clean-g1", noDisarm: "1" });
 if (r.rc !== 0) throw new Error("dispatch rc " + r.rc + r.err);
 const fstype = cp.spawnSync("findmnt", ["-T", c.root, "-o", "FSTYPE", "-n"], { encoding: "utf8" }).stdout.trim();
 if (!/^(tmpfs|ramfs)$/.test(fstype)) throw new Error("cell root is on " + fstype);
@@ -287,12 +287,12 @@ const rules = c.putRules("g1-good.json");
 const r3 = c.std(["--gate-rules", rules], { worker: "no-such-mode" });
 if (r3.rc === 0) throw new Error("bad worker mode did not exit non-zero");
 if (sw().length) throw new Error("switch file left after an early exit: " + sw());
-const k = c.sh("timeout -s TERM 3 bash scripts/dispatch-hetero.sh --runner claude-native --model m --prompt-file " + c.prompt + " --gate-rules " + rules, { worker: "clean-g1", env: { D0GATE_HOOK_CMD: "sleep 6" } });
+const k = c.sh("timeout -s TERM 3 bash scripts/dispatch-hetero.sh --runner claude-native --model m --prompt-file " + c.prompt + " --gate-rules " + rules, { worker: "clean-g1", hookCmd: "sleep 6" });
 for (let i = 0; i < 40 && sw().length; i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
 if (sw().length) throw new Error("switch file left after TERM: " + sw());
 console.log("GREEN disarm on early exit and on TERM (rc " + k.rc + ")");
 // red control: with the disarm switched off the same early exit DOES leave the switch file
-c.std(["--gate-rules", rules], { worker: "no-such-mode", env: { D0GATE_NO_DISARM: "1" } });
+c.std(["--gate-rules", rules], { worker: "no-such-mode", noDisarm: "1" });
 if (!sw().length) throw new Error("control cannot see a left-behind switch file");
 console.log("RED (expected) with D0GATE_NO_DISARM=1 the switch file stays: " + sw().join(","));
 c.destroy();' "$D0/.." "$NONTMP" || fail "section 9b"
@@ -300,6 +300,7 @@ ok "tmpfs base, --ledger, disarm trap"
 
 echo "=== 9c. stub cell root comes from the stub's own position, never from D0GATE_CELL; fixture rules match the rule list; gate_blocks ==="
 git -C "$REPO_ROOT" show 50e840543:evals/skill-onoff/d0gate/stubs/scripts/dispatch-hetero.sh >"$TEST_TMP/stub-old.sh" || fail "cannot read the stub at the base commit"
+git -C "$REPO_ROOT" show 37f631a9c:evals/skill-onoff/d0gate/stubs/scripts/dispatch-hetero.sh >"$TEST_TMP/stub-prefix.sh" || fail "cannot read the previous stub"
 git -C "$REPO_ROOT" show 278052bad:evals/skill-onoff/d0gate/stubs/scripts/dispatch-hetero.sh >"$TEST_TMP/stub-locderived.sh" || fail "cannot read the position-deriving stub"
 if grep -nE 'Needs D0GATE_CELL|D0GATE_CELL is not' "$D0/stubs/scripts/dispatch-hetero.sh" "$EV/packs/fixture-stubs-d0gate/scripts/dispatch-hetero.sh"; then fail "the stub still tells the model to set D0GATE_CELL"; fi
 cmp -s "$D0/stubs/scripts/dispatch-hetero.sh" "$EV/packs/fixture-stubs-d0gate/scripts/dispatch-hetero.sh" || fail "frozen stub pack differs from d0gate/stubs"
@@ -315,7 +316,7 @@ const lookalike = (name, how, src) => {
   if (how === "copy") fs.copyFileSync(src, f); else fs.symlinkSync(src, f);
   return { d, f };
 };
-const callThrough = (f) => c.dispatch(["--runner", "claude-native", "--model", "m", "--prompt-file", c.prompt], { script: f, env: { D0GATE_CELL: c.root } });
+const callThrough = (f) => c.dispatch(["--runner", "claude-native", "--model", "m", "--prompt-file", c.prompt], { script: f, rawEnv: { D0GATE_CELL: c.root } });
 const realStub = path.join(c.repo, "scripts", "dispatch-hetero.sh");
 for (const how of ["copy", "symlink"]) {
   // RED: the stub that derives the cell from its position builds the ledger outside the real cell
@@ -338,25 +339,41 @@ fs.mkdirSync(path.join(other, ".d0gate"));
 // RED: the stub as it was at the base commit trusts the caller value, so the ledger lands in the wrong directory
 fs.copyFileSync(process.argv[2], path.join(c.repo, "scripts", "dispatch-hetero-old.sh"));
 const n0 = c.facts().calls.length;
-const r0 = c.std([], { worker: "clean-g1", script: path.join(c.repo, "scripts", "dispatch-hetero-old.sh"), env: { D0GATE_CELL: other } });
+const r0 = c.std([], { worker: "clean-g1", script: path.join(c.repo, "scripts", "dispatch-hetero-old.sh"), rawEnv: { D0GATE_CELL: other } });
 const wrong = fs.existsSync(path.join(other, ".d0gate", "ledger.jsonl")) && c.facts().calls.length === n0;
 if (!wrong) throw new Error("RED control cannot see the old stub misplace the ledger: rc=" + r0.rc + " " + r0.err);
 console.log("RED (expected) old stub with a caller D0GATE_CELL writes the ledger into the other directory, the cell sees no new call");
 fs.rmSync(path.join(other, ".d0gate"), { recursive: true });
 // GREEN: the stub in the tree puts the ledger in its own cell and flags the override
 const nA = c.facts().calls.filter((x) => x.accepted).length;
-const r1 = c.std([], { worker: "clean-g1", env: { D0GATE_CELL: other } });
+const r1 = c.std([], { worker: "clean-g1", rawEnv: { D0GATE_CELL: other } });
 const calls = c.facts().calls.filter((x) => x.accepted);
 if (r1.rc !== 0 || calls.length !== nA + 1 || calls[nA].cell_env_override !== true) throw new Error("override not flagged or call missing: " + JSON.stringify(calls) + r1.err);
 if (fs.existsSync(path.join(other, ".d0gate"))) throw new Error("the stub wrote into the overriding directory");
 // the same value as the real cell root (spelled differently) is not an override
-const r2 = c.std([], { worker: "clean-g1", env: { D0GATE_CELL: c.root + "/." } });
+const r2 = c.std([], { worker: "clean-g1", rawEnv: { D0GATE_CELL: c.root + "/." } });
 const calls2 = c.facts().calls.filter((x) => x.accepted);
 if (r2.rc !== 0 || calls2.length !== nA + 2 || calls2[nA + 1].cell_env_override !== false) throw new Error("same-root value flagged: " + JSON.stringify(calls2[1]));
-const r3 = c.std([], { worker: "clean-g1", env: { D0GATE_CELL: "" } });
+const r3 = c.std([], { worker: "clean-g1", rawEnv: { D0GATE_CELL: "" } });
 if (r3.rc !== 0 || c.facts().calls.filter((x) => x.accepted)[nA + 2].cell_env_override !== false) throw new Error("empty value flagged");
 console.log("GREEN stub under an overriding D0GATE_CELL: ledger in its own cell, cell_env_override=true; same root and empty value: false");
-fs.rmSync(other, { recursive: true, force: true }); c.destroy();' "$D0/.." "$TEST_TMP/stub-old.sh" "$TEST_TMP/stub-locderived.sh" || fail "section 9c stub cell root"
+// the worker mode / hook command / no-disarm knobs are pinned too: a caller putting D0GATE_WORKER in front of the call changes nothing
+const prefix = path.join(c.repo, "scripts", "stub-prefix.sh");
+fs.writeFileSync(prefix, fs.readFileSync(process.argv[4], "utf8").replace(/^D0G_PINNED_CELL=""$/m, () => "D0G_PINNED_CELL=\x27" + fs.realpathSync(c.root) + "\x27"), { mode: 0o755 });
+const nB = c.facts().calls.filter((x) => x.accepted).length;
+c.dispatch(["--runner", "claude-native", "--model", "m", "--prompt-file", c.prompt], { script: prefix, rawEnv: { D0GATE_WORKER: "g4-console" } });
+const pre = c.facts().calls.filter((x) => x.accepted)[nB];
+if (!pre || pre.worker !== "g4-console") throw new Error("RED control cannot see the environment-driven worker of the previous stub: " + JSON.stringify(pre));
+console.log("RED (expected) previous stub with D0GATE_WORKER=g4-console in front of the call ran the worker " + pre.worker + " (pinned mode was clean-g1)");
+c.std([], { worker: "clean-g1", rawEnv: { D0GATE_WORKER: "g4-console" } });
+const cur = c.facts().calls.filter((x) => x.accepted)[nB + 1];
+if (!cur || cur.worker !== "clean-g1" || cur.knob_env_override !== true) throw new Error("GREEN failed: worker " + (cur && cur.worker) + " knob_env_override " + (cur && cur.knob_env_override));
+c.std([], { worker: "g4-console", rawEnv: { D0GATE_WORKER: "g4-console" } });
+const same = c.facts().calls.filter((x) => x.accepted)[nB + 2];
+if (!same || same.worker !== "g4-console" || same.knob_env_override !== false) throw new Error("an env value equal to the pinned mode was flagged: " + JSON.stringify(same));
+const hk = c.facts().calls.filter((x) => x.accepted)[nB + 1];
+console.log("GREEN pinned stub with D0GATE_WORKER=g4-console in front: ran " + cur.worker + ", knob_env_override=true; equal value: false");
+fs.rmSync(other, { recursive: true, force: true }); c.destroy();' "$D0/.." "$TEST_TMP/stub-old.sh" "$TEST_TMP/stub-locderived.sh" "$TEST_TMP/stub-prefix.sh" || fail "section 9c stub cell root"
 # the rules live where the hand reads them (CONTRIBUTING.md) and agree with the rule list that scores the cell; the brief carries none of them
 S node -e '
 const fs = require("fs"); const path = require("path");

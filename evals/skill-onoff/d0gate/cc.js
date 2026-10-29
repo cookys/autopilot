@@ -226,8 +226,9 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
     // zero-spend dispatch stub): the cell PATH starts with a wrapper that REFUSES (exit 97), runs nothing and records each attempt.
     const nestedLog = path.join(cell.root, '.d0gate', 'nested-attempts.log');
     fs.writeFileSync(nestedLog, '');
+    cell.pin({ worker: D0_WORKER[c.task] }); // the stub hand's mode is written into the cell's stub copy, not passed through the environment
     const bin = denyWrapper(cell);
-    const baseEnv = cellEnv(cell, { PATH: `${bin}:${process.env.PATH || ''}`, D0GATE_NESTED_LOG: nestedLog, D0GATE_WORKER: D0_WORKER[c.task] });
+    const baseEnv = cellEnv(cell, { PATH: `${bin}:${process.env.PATH || ''}`, D0GATE_NESTED_LOG: nestedLog });
     const prompts = TASKS.turns(c.task, ctx.P.invocation_prefix);
     const transcript = [];
     let sid = '';
@@ -348,6 +349,8 @@ function handWrapper(cell, realClaude) {
     `REAL='${realClaude.replace(/'/g, "'\\''")}'`,
     `ROOT='${String(cell.root).replace(/'/g, "'\\''")}'`, // fixed when the wrapper is written; no environment value decides what may be copied
     'args=("$@")',
+    // D0GATE_HAND_OUT / D0GATE_HAND_BUDGET stay environment values on purpose: only the runner sets them for the rail, and no model-controlled
+    // command runs between the runner and this wrapper in a G4 cell, so nothing the model does can change the wrapper environment.
     'if [ -n "${D0GATE_HAND_BUDGET:-}" ]; then',
     '  if [ -z "${D0GATE_HAND_OUT:-}" ]; then echo "d0gate: D0GATE_HAND_BUDGET is set but D0GATE_HAND_OUT is not set; refusing to start claude" >&2; exit 97; fi',
     '  LOCK="$D0GATE_HAND_OUT.lock"; RESV="$D0GATE_HAND_OUT.resv"; PRIV="$D0GATE_HAND_OUT.$$"; ID="$$"',

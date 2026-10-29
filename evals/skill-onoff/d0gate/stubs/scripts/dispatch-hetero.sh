@@ -19,6 +19,15 @@ ORIG_ARGV=("$@")
 D0G_PINNED_CELL=""
 CELL="$D0G_PINNED_CELL"
 [ -n "$CELL" ] && [ -d "$CELL/.d0gate" ] || { echo "d0gate stub: this copy was not materialised by a d0gate cell" >&2; exit 2; }
+# The worker mode, the hook command override and the no-disarm switch (negative-control knobs) are pinned the same way: the harness writes
+# them into this cell's copy, the stub reads only these, and an environment value that differs is ignored and flagged (knob_env_override).
+D0G_PINNED_WORKER=""
+D0G_PINNED_HOOK_CMD=""
+D0G_PINNED_NO_DISARM=""
+KNOB_OVERRIDE=false
+[ -n "${D0GATE_WORKER:-}" ] && [ "$D0GATE_WORKER" != "${D0G_PINNED_WORKER:-clean-g1}" ] && KNOB_OVERRIDE=true
+[ -n "${D0GATE_HOOK_CMD:-}" ] && [ "$D0GATE_HOOK_CMD" != "$D0G_PINNED_HOOK_CMD" ] && KNOB_OVERRIDE=true
+[ -n "${D0GATE_NO_DISARM:-}" ] && [ "$D0GATE_NO_DISARM" != "$D0G_PINNED_NO_DISARM" ] && KNOB_OVERRIDE=true
 ENV_OVERRIDE=false
 LOC_CELL="$(cd "$SELF_DIR/../.." 2>/dev/null && pwd -P)"
 [ "$LOC_CELL" = "$CELL" ] || ENV_OVERRIDE=true
@@ -44,7 +53,7 @@ ledger_append() {
 }
 argv_json() { node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' -- "$@"; }
 die_precondition() {
-  ledger_append call accepted=false cell_env_override="$ENV_OVERRIDE" reason="$1" argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD"
+  ledger_append call accepted=false cell_env_override="$ENV_OVERRIDE" knob_env_override="$KNOB_OVERRIDE" reason="$1" argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD"
   printf '{"status":"precondition_failed","reason":"%s"}\n' "$(printf '%s' "$1" | sed 's/"/\\"/g')"
   exit 2
 }
@@ -144,7 +153,7 @@ if [ -n "$GATE_RULES_FILE" ]; then
   RULES_SHA="$(sha256sum "$RULES_COPY" | cut -d' ' -f1)"
 fi
 GATE_FLAG=false; [ -n "$GATE_RULES_FILE" ] && GATE_FLAG=true
-ledger_append call n="$N" accepted=true cell_env_override="$ENV_OVERRIDE" argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD" repo="$REPO" runner="$RUNNER" \
+ledger_append call n="$N" accepted=true cell_env_override="$ENV_OVERRIDE" knob_env_override="$KNOB_OVERRIDE" argv="$(argv_json "${ORIG_ARGV[@]}")" cwd="$PWD" repo="$REPO" runner="$RUNNER" \
   gate_rules_flag="$GATE_FLAG" gate_rules_file="$GATE_RULES_FILE" rules_copy="$RULES_COPY" rules_sha="$RULES_SHA" base_sha="$BASE_SHA" session="$CHILD_SESSION_ID"
 WT="$CELL/wt/$N"
 git -C "$REPO" worktree add -q --detach "$WT" "$BASE_SHA" >/dev/null 2>&1 || die_precondition "cannot create the worker worktree"
@@ -155,7 +164,7 @@ if [ -n "$GATE_RULES_FILE" ]; then
     ARMED=true
     # disarm on ANY exit (early exit, error, TERM/INT/HUP), like the real rail's exit trap; the explicit disarm below stays (idempotent)
     trap 'exit 143' TERM INT HUP
-    trap '[ "${D0GATE_NO_DISARM:-0}" = 1 ] || node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$CHILD_SESSION_ID" >/dev/null 2>&1' EXIT
+    trap '[ "$D0G_PINNED_NO_DISARM" = 1 ] || node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$CHILD_SESSION_ID" >/dev/null 2>&1' EXIT
   fi
 fi
 ledger_append arm n="$N" armed="$ARMED"
@@ -165,19 +174,19 @@ if [ -n "$GATE_RULES_FILE" ] && [ "$ARMED" != true ]; then
   printf '{"status":"failed","reason":"gate-rules could not arm"}\n'
   exit 1
 fi
-MODE="${D0GATE_WORKER:-clean-g1}"
+MODE="${D0G_PINNED_WORKER:-clean-g1}"
 MD="$SELF_DIR/d0gate-workers/$MODE"
 [ -d "$MD" ] || { ledger_append result n="$N" status=bad_worker_mode; echo "d0gate stub: unknown worker mode $MODE" >&2; exit 2; }
 [ ! -d "$MD/files" ] || cp -R "$MD/files/." "$WT/"
 if [ "$ARMED" = true ]; then
   node "$SELF_DIR/per-turn-gate-arm.js" settings --out "$CELL/.d0gate/settings.$N.json" || true
-  HOOK_CMD="${D0GATE_HOOK_CMD:-$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).hooks.Stop[0].hooks[0].command)' "$CELL/.d0gate/settings.$N.json")}"
+  HOOK_CMD="${D0G_PINNED_HOOK_CMD:-$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).hooks.Stop[0].hooks[0].command)' "$CELL/.d0gate/settings.$N.json")}"
   : >"$CELL/.d0gate/hook-out.$N"
   for active in false true true true; do
     printf '{"session_id":"%s","cwd":"%s","stop_hook_active":%s,"prompt_id":"p"}' "$CHILD_SESSION_ID" "$WT" "$active" \
       | (cd "$WT" && D0GATE_SESSION="$CHILD_SESSION_ID" sh -c "$HOOK_CMD") >>"$CELL/.d0gate/hook-out.$N" 2>/dev/null || true
   done
-  [ "${D0GATE_NO_DISARM:-0}" = 1 ] || node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$CHILD_SESSION_ID" || true
+  [ "$D0G_PINNED_NO_DISARM" = 1 ] || node "$SELF_DIR/per-turn-gate-arm.js" disarm --session "$CHILD_SESSION_ID" || true
 fi
 BR="${BRANCH:-d0g/$N}"
 git -C "$WT" "${GIT_ID[@]}" checkout -q -b "$BR"

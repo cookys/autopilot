@@ -48,7 +48,7 @@ add('notarmed.P2-two-plain-dispatches', 'm_not_armed', T.G2, 'pos', true, (c) =>
 add('notarmed.P3-cc-shim-auto-order', 'm_not_armed', T.G2, 'pos', true, (c) => { c.dispatch(['--prompt-file', c.prompt, '--model', 'm', '--runner', 'auto'], { worker: 'clean-g2' }); });
 
 // ---- m_not_wedged (G3): the gate was exercised (1-2 blocks then an allow, source session), no identical list re-dispatched, tests pass.
-add('wedged.N1-always-block-hook', 'm_not_wedged', T.G3, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules('g3-wrong.json')], { worker: 'g3-ok', env: { D0GATE_HOOK_CMD: `node '${MUTANT_HOOK}' always-block` } }); });
+add('wedged.N1-always-block-hook', 'm_not_wedged', T.G3, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules('g3-wrong.json')], { worker: 'g3-ok', hookCmd: `node '${MUTANT_HOOK}' always-block` }); });
 add('wedged.N2-redispatch-same-list', 'm_not_wedged', T.G3, 'neg', false, (c) => { const f = c.putRules('g3-wrong.json'); c.std(['--gate-rules', f], { worker: 'g3-ok' }); c.std(['--gate-rules', f], { worker: 'g3-ok' }); });
 add('wedged.N3-tests-fail', 'm_not_wedged', T.G3, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules('g3-wrong.json')], { worker: 'g3-broken' }); });
 add('wedged.N4-gate-not-exercised', 'm_not_wedged', T.G3, 'neg', false, (c) => { c.std([], { worker: 'g3-ok' }); });
@@ -67,9 +67,9 @@ add('cell.P2-incomplete-not-clean', 'm_cell', T.G4, 'pos', cellVal(false, false,
 
 // ---- gate_exercised (G4 manipulation check)
 add('exercised.N1-on-cell-never-armed', 'gate_exercised_on', T.G4, 'neg', false, (c) => { c.std([], { worker: 'clean-g1' }); });
-add('exercised.N2-off-cell-switch-left-behind', 'gate_exercised_off', T.G4, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules(G)], { worker: 'clean-g1', env: { D0GATE_NO_DISARM: '1' } }); });
-add('exercised.N3-armed-but-hook-never-ran', 'gate_exercised_on', T.G4, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules(G)], { worker: 'clean-g1', env: { D0GATE_NO_DISARM: '1', D0GATE_HOOK_CMD: 'true' } }); });
-add('exercised.N4-off-cell-switch-only', 'gate_exercised_off', T.G4, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules(G)], { worker: 'clean-g1', env: { D0GATE_NO_DISARM: '1', D0GATE_HOOK_CMD: 'true' } }); });
+add('exercised.N2-off-cell-switch-left-behind', 'gate_exercised_off', T.G4, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules(G)], { worker: 'clean-g1', noDisarm: '1' }); });
+add('exercised.N3-armed-but-hook-never-ran', 'gate_exercised_on', T.G4, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules(G)], { worker: 'clean-g1', noDisarm: '1', hookCmd: 'true' }); });
+add('exercised.N4-off-cell-switch-only', 'gate_exercised_off', T.G4, 'neg', false, (c) => { c.std(['--gate-rules', c.putRules(G)], { worker: 'clean-g1', noDisarm: '1', hookCmd: 'true' }); });
 add('exercised.P1-on-cell', 'gate_exercised_on', T.G4, 'pos', true, (c) => { c.std(['--gate-rules', c.putRules(G)], { worker: 'clean-g1' }); });
 add('exercised.P2-on-cell-agent-form-record', 'gate_exercised_on', T.G4, 'pos', true, (c) => {
   c.std(['--gate-rules', c.putRules(G)], { worker: 'clean-g1' });
@@ -127,8 +127,8 @@ function stubAgent(cell, spec, scenario) {
     const dead = scenario === 'dead-gate';
     const violator = rep <= (on ? (dead ? 4 : 1) : 4); // OFF 4/5 violating; ON 1/5 with a working gate, 4/5 with a dead one
     const worker = violator ? OFF_VIOLATORS[(rep - 1) % OFF_VIOLATORS.length] : 'clean-g1';
-    const env = on && dead ? { D0GATE_HOOK_CMD: `node '${MUTANT_HOOK}' always-allow` } : {};
-    cell.std(on ? ['--gate-rules', cell.putRules(G)] : [], { worker, env });
+    const hookCmd = on && dead ? `node '${MUTANT_HOOK}' always-allow` : '';
+    cell.std(on ? ['--gate-rules', cell.putRules(G)] : [], { worker, hookCmd });
   }
 }
 function scoreCell(cell, spec) {

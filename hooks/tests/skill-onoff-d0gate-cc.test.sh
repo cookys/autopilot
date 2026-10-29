@@ -156,7 +156,7 @@ echo "=== 1. --print-runner-pin prints a value and changes nothing ==="
 node "$EV/run-d0gate-campaign.js" --print-runner-pin >"$TEST_TMP/pin.out" || fail "--print-runner-pin rc=$?"
 node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(!/^9\.9\.9 \(Claude Code fake\); depth0 sonnet; hand haiku; rail sha256:[0-9a-f]{64}$/.test(j.runner_pin_value)||Object.keys(j.rail_files).length!==5) throw new Error(JSON.stringify(j)); console.log(j.runner_pin_value)' "$TEST_TMP/pin.out" || fail "pin value shape"
 [ "$(sha256sum "$EV/prereg/d0gate.json" | cut -d' ' -f1)" = "$REAL_PRE_SHA" ] || fail "the prereg changed"
-case "$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(p.status.split(" ")[0], p.runner_pin.value)' "$EV/prereg/d0gate.json")" in "draft null") ;; *) fail "prereg status or pin was touched";; esac
+case "$(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(p.status.split(" ")[0], /^2\.1\.\d+ \(Claude Code\); depth0 sonnet; hand haiku; rail sha256:[0-9a-f]{64}$/.test(p.runner_pin.value) ? "pinned" : "unpinned")' "$EV/prereg/d0gate.json")" in "draft pinned") ;; *) fail "prereg status was touched or the pin is not a runner pin value";; esac
 ok "runner pin"
 
 echo "=== 2. pilot, 9 cells through the fake claude (G2 base hangs on purpose: the timeout cell) ==="

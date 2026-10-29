@@ -56,6 +56,10 @@ log({ fmt, argv, cwd: process.cwd(), HOME: process.env.HOME, CLAUDE_CONFIG_DIR: 
   ENGINE_CAPABILITY_DIR: process.env.ENGINE_CAPABILITY_DIR, STRIKE: process.env.AUTOPILOT_STRIKE_WRITER, TMPDIR: process.env.TMPDIR,
   cfgFiles: (() => { try { return fs.readdirSync(cfgDir).sort(); } catch (e) { return null; } })(), budget: get('--max-budget-usd'), resume: get('--resume') || null,
   settings: settingsText, prompt: stdin.slice(0, 100) });
+if (fmt === 'stream-json' && !get('--plugin-dir')) { // a claude the depth-0 agent started itself (Bash): report a spend of its own
+  console.log(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'nested', session_id: 'nested-' + process.pid, total_cost_usd: CFG.nested_cost }));
+  process.exit(0);
+}
 if (cfgDir && CFG.leak_marker) { try { fs.writeFileSync(path.join(cfgDir, 'leak-marker'), 'x'); } catch (e) { /* ignore */ } }
 const copy = (mode, dir) => { const src = path.join(WORKERS, mode, 'files'); if (fs.existsSync(src)) fs.cpSync(src, dir, { recursive: true }); };
 if (fmt === 'stream-json') {
@@ -69,6 +73,7 @@ if (fmt === 'stream-json') {
   if (CFG.hang_g2_base && stdin.includes('capitalize') && !armed) setInterval(() => {}, 1000), setTimeout(() => {}, 600000);
   else {
     if (!get('--resume')) {
+      if (CFG.nested) cp.spawnSync('claude', ['-p', '--model', 'haiku', '--output-format', 'stream-json', '--verbose'], { input: 'hi', env: process.env, encoding: 'utf8' });
       let rules = null; let task = null;
       if (stdin.includes('capitalize')) task = 'g2'; else if (stdin.includes('gate/rules.json')) { task = 'g3'; rules = 'gate/rules.json'; } else { task = 'g1'; if (armed) rules = path.join(RULES, 'g1-good.json'); }
       fs.writeFileSync('p.txt', 'do the work\n');
@@ -104,7 +109,7 @@ nfake() { grep -c "\"fmt\":\"$1\"" "$FLOG" || true; }
 PRE="$TEST_TMP/prereg-test.json"
 node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.cc.timeout_s=4; p.cc.hand_timeout="3s"; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$EV/prereg/d0gate.json" "$PRE"
 REAL_PRE_SHA="$(sha256sum "$EV/prereg/d0gate.json" | cut -d' ' -f1)"
-cc() { ONOFF_MAX_USD="${CAP:-2.2}" node "${RUNNER_JS:-$EV/run-d0gate-campaign.js}" --prereg "$PRE" --runner cc --pilot "$@"; }
+cc() { ONOFF_MAX_USD="${CAP:-2.2}" node "${RUNNER_JS:-$EV/run-d0gate-campaign.js}" --prereg "${PREG:-$PRE}" --runner cc --pilot "$@"; }
 
 # row/isolation checks (shared by the green runs and the negative controls)
 cat >"$TEST_TMP/check.js" <<'EOF'
@@ -209,7 +214,7 @@ REAL_XDG="$(getent passwd "$(id -un)" | cut -d: -f6)/.autopilot"
 ok "isolation, flags, budgets, ON/OFF"
 
 echo "=== 5. budget guard: a cell whose ceiling does not fit is not dispatched; resume-by-cell fills only the gaps ==="
-setcfg '{}'; : >"$FLOG"
+setcfg '{"cost_per_turn":0.1}'; : >"$FLOG"
 R2="$TEST_TMP/r2.jsonl"; CAP=1.5 cc --results "$R2" >"$TEST_TMP/r2.out" 2>"$TEST_TMP/r2.err"; rc=$?
 [ "$rc" = 1 ] && grep -q 'below the 0.45 USD cell ceiling of g3-wrong-list|change|1' "$TEST_TMP/r2.err" || { cat "$TEST_TMP/r2.err"; fail "cap 1.5 must stop before g3 change (rc=$rc)"; }
 echo "GREEN (guard): $(tail -1 "$TEST_TMP/r2.err")"
@@ -253,6 +258,58 @@ echo "scorer: no missing/mistyped on the timeout rows"
 node "$TEST_TMP/check.js" shape "$EV" "$R4" || fail "shape of timeout rows"
 ok "G4 timeout rule"
 
+echo "=== 5c. pilot cap is locked in the program: ONOFF_MAX_USD=5 with --pilot never spends past 2.2 ==="
+setcfg '{"cost_per_turn":0.22}'; : >"$FLOG"
+R6="$TEST_TMP/r6.jsonl"; CAP=5 cc --results "$R6" >"$TEST_TMP/r6.out" 2>"$TEST_TMP/r6.err"; rc=$?
+cat >"$TEST_TMP/lock.js" <<'JS'
+const fs = require('fs');
+const rows = fs.readFileSync(process.argv[3], 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+const spent = rows.reduce((a, r) => a + r.cost_usd, 0);
+if (spent > 2.2 + 1e-9) { console.log('PILOT CAP BROKEN: spent ' + spent.toFixed(3) + ' USD over ' + rows.length + ' cells (ONOFF_MAX_USD=5, pilot ceiling 2.2)'); process.exit(1); }
+console.log('spent ' + spent.toFixed(3) + ' USD over ' + rows.length + ' cells, within the 2.2 pilot ceiling');
+JS
+[ "$rc" = 1 ] && grep -q 'locked to 2.2 USD' "$TEST_TMP/r6.out" || { cat "$TEST_TMP/r6.out" "$TEST_TMP/r6.err"; fail "pilot lock: expected the notice and exit 1 at the cap (rc=$rc)"; }
+node "$TEST_TMP/lock.js" x "$R6" || fail "pilot lock (green)"
+grep -q 'below the 0.45 USD cell ceiling' "$TEST_TMP/r6.err" || fail "the remaining-budget guard did not use the locked cap"
+echo "GREEN (lock): $(grep 'locked to' "$TEST_TMP/r6.out")"
+ok "pilot cap locked"
+
+echo "=== 5d. a claude the depth-0 agent starts itself goes through the capped wrapper and is counted ==="
+setcfg '{"cost_per_turn":0.05,"nested":true,"nested_cost":0.07}'; : >"$FLOG"
+R7="$TEST_TMP/r7.jsonl"; CAP=2.2 cc --results "$R7" --limit 1 >/dev/null 2>&1 || fail "nested run rc=$?"
+cat >"$TEST_TMP/acct.js" <<'JS'
+const fs = require('fs');
+const [mode, log, rowsf, want] = process.argv.slice(2);
+const calls = fs.readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((j) => j.fmt === 'stream-json');
+const row = fs.readFileSync(rowsf, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l))[0];
+const bad = [];
+const near = (a, b) => Math.abs(a - b) < 1e-6;
+if (mode === 'nested') {
+  const nested = calls.filter((j) => !j.argv.includes('--plugin-dir')); const main = calls.filter((j) => j.argv.includes('--plugin-dir'));
+  if (nested.length !== 1) bad.push('expected 1 nested call, got ' + nested.length);
+  else if (nested[0].budget !== '0.45') bad.push('nested call budget ' + nested[0].budget + ' (want the cell remaining 0.45)');
+  for (const m of main) if (m.argv.filter((a) => a === '--max-budget-usd').length !== 1) bad.push('a main turn went through the wrapper (two budget flags)');
+  if (main[1] && main[1].budget !== '0.33') bad.push('turn 2 budget ' + main[1].budget + ' (want 0.45 - 0.05 - 0.07 = 0.33)');
+  if (!near(row.cost_usd, 0.22) || !near(row.cost_nested_usd, 0.07)) bad.push('cost_usd ' + row.cost_usd + ' / nested ' + row.cost_nested_usd + ' (want 0.22 / 0.07)');
+} else if (mode === 'cost') {
+  if (!near(row.cost_usd, Number(want)) || JSON.stringify(row.cost_turns) !== '[0.05,0.1]') bad.push('cost_usd ' + row.cost_usd + ' cost_turns ' + JSON.stringify(row.cost_turns) + ' (want ' + want + ' / [0.05,0.1])');
+}
+if (bad.length) { console.log('ACCOUNTING WRONG: ' + bad.join(' ; ')); process.exit(1); }
+console.log(mode + ' accounting ok: cost_usd ' + row.cost_usd + ', cost_turns ' + JSON.stringify(row.cost_turns) + (row.cost_nested_usd ? ', nested ' + row.cost_nested_usd : ''));
+JS
+node "$TEST_TMP/acct.js" nested "$FLOG" "$R7" || fail "nested accounting (green)"
+ok "nested claude capped and counted"
+
+echo "=== 5e. cost_turns, summed cost_usd, and prereg cc.resume_cost_cumulative ==="
+setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
+R8="$TEST_TMP/r8.jsonl"; CAP=2.2 cc --results "$R8" --limit 1 >/dev/null 2>&1 || fail "cost run rc=$?"
+node "$TEST_TMP/acct.js" cost "$FLOG" "$R8" 0.15 || fail "summed cost (green)"
+PREG="$TEST_TMP/prereg-cum.json"; node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.cc.resume_cost_cumulative=true; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$PRE" "$PREG"
+R9="$TEST_TMP/r9.jsonl"; : >"$FLOG"; CAP=2.2 cc --results "$R9" --limit 1 >/dev/null 2>&1 || fail "cumulative run rc=$?"
+node "$TEST_TMP/acct.js" cost "$FLOG" "$R9" 0.1 || fail "cumulative cost (green)"
+unset PREG
+ok "cost accounting"
+
 echo "=== 6. negative controls: three runner copies each with ONE line broken, RED before the real runner is GREEN ==="
 FARM="$TEST_TMP/farm"; rm -rf "$FARM"; mkdir -p "$FARM/evals"; cp -R "$EV" "$FARM/evals/skill-onoff"
 for e in "$REPO_ROOT"/* "$REPO_ROOT"/.[!.]*; do b="$(basename "$e")"; case "$b" in evals|.git) ;; *) [ -e "$e" ] && ln -s "$e" "$FARM/$b";; esac; done  # the rail finds ../src from its own dir
@@ -275,7 +332,7 @@ grep -q 'missing/mistyped' "$TEST_TMP/ra-sc.out" || fail "RED control (a): the s
 echo "RED (expected) (a) scorer: INVALID, missing/mistyped field(s)"
 # (b) the budget guard removed: the cap no longer stops the run
 brk "$FEV/run-d0gate-campaign.js" "if (remaining + 1e-9 < ceiling) die(" "if (false) die("
-setcfg '{}'; : >"$FLOG"
+setcfg '{"cost_per_turn":0.1}'; : >"$FLOG"
 RB="$TEST_TMP/rb.jsonl"; CAP=1.5 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$RB" >/dev/null 2>&1
 if [ "$(wc -l <"$RB")" = 5 ] && [ "$(nfake stream-json)" = 8 ]; then fail "RED control (b) was NOT caught: the guard-less runner also stopped at 5 cells"; fi
 echo "RED (expected) (b) guard removed: $(wc -l <"$RB") rows / $(nfake stream-json) depth-0 calls instead of 5 / 8 (the 1.5 USD cap is passed)"
@@ -293,6 +350,30 @@ CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$RD" >/dev/null 2>
 if node "$TEST_TMP/tmo.js" x "$RD" >"$TEST_TMP/rd.out" 2>&1; then fail "RED control (d) was NOT caught: $(cat "$TEST_TMP/rd.out")"; fi
 grep -q '"failure_cause":"runner_timeout"' "$RD" || fail "RED control (d) went red for the wrong reason (no runner_timeout row): $(cat "$TEST_TMP/rd.out")"
 echo "RED (expected) (d) timeout always infra: $(cat "$TEST_TMP/rd.out")"
+# (e) the pilot lock removed
+brk "$FEV/run-d0gate-campaign.js" "return ceiling; } // pilot lock" "return Number(text); } // pilot lock"
+setcfg '{"cost_per_turn":0.22}'; : >"$FLOG"
+CAP=5 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/re.jsonl" >/dev/null 2>&1
+if node "$TEST_TMP/lock.js" x "$TEST_TMP/re.jsonl" >"$TEST_TMP/re.out" 2>&1; then fail "RED control (e) was NOT caught: $(cat "$TEST_TMP/re.out")"; fi
+echo "RED (expected) (e) pilot lock removed: $(cat "$TEST_TMP/re.out")"
+# (f) the wrapper no longer adds the cell budget to a nested claude
+brk "$FEV/d0gate/cc.js" 'args+=(--max-budget-usd "$D0GATE_HAND_BUDGET")' ':'
+setcfg '{"cost_per_turn":0.05,"nested":true,"nested_cost":0.07}'; : >"$FLOG"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rf.jsonl" --limit 1 >/dev/null 2>&1
+if node "$TEST_TMP/acct.js" nested "$FLOG" "$TEST_TMP/rf.jsonl" >"$TEST_TMP/rf.out" 2>&1; then fail "RED control (f) was NOT caught: $(cat "$TEST_TMP/rf.out")"; fi
+echo "RED (expected) (f) wrapper without a budget: $(cat "$TEST_TMP/rf.out")"
+# (g) the nested spend is not added to the cell cost
+brk "$FEV/d0gate/cc.js" "Number((mainCost + nested.total).toFixed(6))" "Number((mainCost + 0).toFixed(6))"
+setcfg '{"cost_per_turn":0.05,"nested":true,"nested_cost":0.07}'; : >"$FLOG"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rg.jsonl" --limit 1 >/dev/null 2>&1
+if node "$TEST_TMP/acct.js" nested "$FLOG" "$TEST_TMP/rg.jsonl" >"$TEST_TMP/rg.out" 2>&1; then fail "RED control (g) was NOT caught: $(cat "$TEST_TMP/rg.out")"; fi
+echo "RED (expected) (g) nested spend not counted: $(cat "$TEST_TMP/rg.out")"
+# (h) the resume-cumulative switch forced on (cost = last call only)
+brk "$FEV/d0gate/cc.js" "ctx.P.cc.resume_cost_cumulative === true" "true"
+setcfg '{"cost_per_turn":0.05}'; : >"$FLOG"
+CAP=2.2 RUNNER_JS="$FEV/run-d0gate-campaign.js" cc --results "$TEST_TMP/rh.jsonl" --limit 1 >/dev/null 2>&1
+if node "$TEST_TMP/acct.js" cost "$FLOG" "$TEST_TMP/rh.jsonl" 0.15 >"$TEST_TMP/rh.out" 2>&1; then fail "RED control (h) was NOT caught: $(cat "$TEST_TMP/rh.out")"; fi
+echo "RED (expected) (h) summed cost replaced by the last call: $(cat "$TEST_TMP/rh.out")"
 ok "negative controls red, real runner green (sections 2 to 5)"
 
 echo "=== 7. no real runner binary was started ==="

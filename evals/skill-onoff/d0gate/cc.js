@@ -41,6 +41,7 @@ function shapeProblems(row) {
   if (!isBool(row.pilot)) p.push('pilot');
   if (typeof row.session_id !== 'string') p.push('session_id');
   if (num(row.cost_usd) === null) p.push('cost_usd');
+  if (!Array.isArray(row.cost_turns) || row.cost_turns.some((v) => num(v) === null)) p.push('cost_turns');
   if (!(row.failure_class === null || typeof row.failure_class === 'string')) p.push('failure_class');
   if (row.task_id === T.G4) {
     if (!row.g4 || typeof row.g4 !== 'object') p.push('g4');
@@ -142,6 +143,7 @@ function keepCopy(keepDir, cell, extra = {}) {
 const failureRow = (ctx, c, o) => ({
   row: ctx.P.row, task_id: c.task, arm: c.arm, rep: c.rep, ...falseShape(c), model: o.model, pilot: ctx.pilot, runner: 'cc',
   runner_version: ctx.runnerVersion, session_id: o.sessionId || '', duration_s: o.durationS, cost_usd: o.cost,
+  cost_turns: o.costTurns || [], ...(o.costNested ? { cost_nested_usd: o.costNested } : {}),
   ...(o.costUnknown ? { cost_unknown: true, cost_estimated: true } : {}), failure_class: o.cls, failure_cause: o.cause,
   ...(o.detail ? { failure_detail: String(o.detail).slice(0, 300) } : {}),
 });
@@ -161,21 +163,31 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
     const plugin = path.join(cell.root, 'plugin');
     buildPlugin(plugin, ctx.armTree(c.arm));
     if (c.task === T.G3) cell.putRules('g3-wrong.json', 'repo');
-    const env = cellEnv(cell, { D0GATE_WORKER: D0_WORKER[c.task] });
+    // The depth-0 turn itself runs the REAL claude by absolute path (counted once, from its own result events). The cell PATH starts with
+    // the capped wrapper, so a `claude` the agent starts itself (Bash) gets --max-budget-usd = what is left of the cell and its spend is
+    // teed to nested-out.jsonl and added to the cell's cost.
+    const nestedOut = path.join(cell.root, '.d0gate', 'nested-out.jsonl');
+    fs.writeFileSync(nestedOut, '');
+    const bin = handWrapper(cell, ctx.realClaude);
+    const baseEnv = cellEnv(cell, { PATH: `${bin}:${process.env.PATH || ''}`, D0GATE_HAND_OUT: nestedOut, D0GATE_WORKER: D0_WORKER[c.task] });
     const prompts = TASKS.turns(c.task, ctx.P.invocation_prefix);
     const transcript = [];
     let sid = '';
-    let cost1 = 0;
+    const costTurns = [];
+    let costTurnsKnown = true;
+    let nested = { total: 0, costKnown: true, results: [] };
     let fail = null;
     let exit = 0;
     let errAll = '';
     let sum = null;
     let timedOut = false;
     for (let i = 0; i < prompts.length; i++) {
-      const left = Number((budget - cost1).toFixed(4));
+      const spentSoFar = costTurns.reduce((a, b) => a + b, 0) + nested.total; // conservative: every call added, even if resume totals are cumulative
+      const left = Number((budget - spentSoFar).toFixed(4));
       if (i > 0 && left <= 0.0005) { fail = { cls: 'infra_fail', cause: 'budget_exceeded' }; break; }
       if (i > 0 && !sid) { fail = { cls: 'infra_fail', cause: 'resume_unavailable' }; break; }
-      const r = cp.spawnSync('timeout', [`--kill-after=15`, String(ctx.P.cc.timeout_s), 'claude', ...turnArgs(ctx, plugin, model, i > 0 ? sid : '', i === 0 ? budget : left)],
+      const env = { ...baseEnv, D0GATE_HAND_BUDGET: String(Math.max(left, 0.0005)) };
+      const r = cp.spawnSync('timeout', [`--kill-after=15`, String(ctx.P.cc.timeout_s), ctx.realClaude, ...turnArgs(ctx, plugin, model, i > 0 ? sid : '', i === 0 ? budget : left)],
         { cwd: cell.repo, env, input: prompts[i], encoding: 'utf8', maxBuffer: 1 << 28 });
       exit = r.status === null ? 137 : r.status;
       if (exit === 124 || exit === 137) timedOut = true;
@@ -185,7 +197,9 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
       sum = summary(transcript.join('\n'));
       if (!sid) sid = sum.sessionId;
       const turnSum = summary(out);
-      cost1 = sum.total;
+      costTurns.push(Number(turnSum.total.toFixed(6)));
+      if (!turnSum.costKnown) costTurnsKnown = false;
+      nested = summary(fs.readFileSync(nestedOut, 'utf8'));
       const f = classify(exit, turnSum, errAll);
       if (f) { fail = f; break; }
     }
@@ -194,8 +208,11 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
     const tmpT = tfile || path.join(cell.root, 'transcript.jsonl');
     if (!tfile) fs.writeFileSync(tmpT, transcript.join('\n'));
     const skillInvoked = cp.spawnSync(process.execPath, [path.join(EVAL_DIR, 'lib', 'transcript-query.js'), tmpT, 'skill-invoked', 'ceo-agent']).status === 0;
-    const known = sum && sum.costKnown && !timedOut;
-    const o = { model, sessionId: sid, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number(sum.total.toFixed(6)) : ceiling, costUnknown: !known };
+    // cost_usd: the sum of every call's last total_cost_usd (an over-estimate if resume totals are cumulative, never an under-estimate);
+    // prereg cc.resume_cost_cumulative=true switches to the last call's total (set only after the pilot transcripts show cumulative totals).
+    const known = costTurnsKnown && !timedOut && nested.results.every((r) => num(r.total_cost_usd) !== null);
+    const mainCost = ctx.P.cc.resume_cost_cumulative === true ? (costTurns[costTurns.length - 1] || 0) : costTurns.reduce((a, b) => a + b, 0);
+    const o = { model, sessionId: sid, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number((mainCost + nested.total).toFixed(6)) : ceiling, costUnknown: !known, costTurns, costNested: Number(nested.total.toFixed(6)) };
     if (fail) {
       keepCopy(keepDir, cell);
       const row = failureRow(ctx, c, { ...o, cls: fail.cls, cause: fail.cause, detail: errAll.trim().split('\n').pop() });
@@ -210,7 +227,8 @@ function runD0(ctx, c, ceiling, budget, keepDir) {
     keepCopy(keepDir, cell);
     return {
       row: ctx.P.row, ...scored, model, pilot: ctx.pilot, runner: 'cc', runner_version: ctx.runnerVersion, session_id: sid,
-      model_seen: sum.modelSeen, skill_invoked: skillInvoked, duration_s: o.durationS, cost_usd: o.cost, failure_class: null,
+      model_seen: sum.modelSeen, skill_invoked: skillInvoked, duration_s: o.durationS, cost_usd: o.cost, cost_turns: costTurns, cost_nested_usd: o.costNested, failure_class: null,
+      ...(o.costUnknown ? { cost_unknown: true, cost_estimated: true } : {}),
       ...(c.arm === 'change' ? { arm_manifest_sha256: ctx.changeSha } : {}),
     };
   } finally { cell.destroy(); }
@@ -278,7 +296,7 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     const sessions = Object.keys(facts0.hook);
     const session = sessions.length ? sessions[0] : (sum.sessionId || '');
     const known = sum.costKnown && exit !== 124 && exit !== 137;
-    const o = { model, sessionId: session, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number(sum.total.toFixed(6)) : ceiling, costUnknown: !known };
+    const o = { model, sessionId: session, durationS: Math.round((Date.now() - t0) / 1000), cost: known ? Number(sum.total.toFixed(6)) : ceiling, costUnknown: !known, costTurns: [Number(sum.total.toFixed(6))] };
     const keep = () => keepCopy(keepDir, cell, { 'hand-out.json': handOut });
     if (keepDir) { fs.mkdirSync(keepDir, { recursive: true }); fs.writeFileSync(path.join(keepDir, 'rail-stdout.json'), out); fs.writeFileSync(path.join(keepDir, 'rail-stderr.log'), errText); }
     const fail = (cls, cause, detail) => { keep(); return failureRow(ctx, c, { ...o, cls, cause, detail }); };
@@ -314,7 +332,7 @@ function runG4(ctx, c, ceiling, budget, keepDir) {
     if (timedOutAfterBlock) scored.g4 = { ...scored.g4, completed: false, hand_clean: false };
     return {
       row: ctx.P.row, ...scored, model, pilot: ctx.pilot, runner: 'cc', runner_version: ctx.runnerVersion, session_id: session,
-      model_seen: sum.modelSeen, rail_status: env0.status, duration_s: o.durationS, cost_usd: o.cost, failure_class: null,
+      model_seen: sum.modelSeen, rail_status: env0.status, duration_s: o.durationS, cost_usd: o.cost, cost_turns: o.costTurns, failure_class: null,
       ...(timedOutAfterBlock ? { failure_cause: 'timed_out_after_gate_block' } : {}),
       ...(o.costUnknown ? { cost_unknown: true, cost_estimated: true } : {}),
     };

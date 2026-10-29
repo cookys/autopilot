@@ -77,6 +77,8 @@ function capUsd() {
   if (raw === undefined || String(raw).trim() === '') return ceiling;
   const text = String(raw).trim();
   if (!/^[0-9]+(\.[0-9]+)?$/.test(text) || Number(text) <= 0) die('usage: ONOFF_MAX_USD must be a positive number');
+  // A pilot is locked INSIDE the program to the prereg pilot ceiling (pilot.max_usd): a larger ONOFF_MAX_USD is lowered, not trusted.
+  if (PILOT && Number(text) > ceiling + 1e-9) { console.log(`ONOFF_MAX_USD ${text} is above the pilot ceiling; locked to ${ceiling} USD (prereg pilot.max_usd)`); return ceiling; } // pilot lock
   if (Number(text) > ceiling + 1e-9) die(`ONOFF_MAX_USD ${text} exceeds the pre-registered ceiling ${ceiling} USD (${PILOT ? 'pilot.max_usd' : 'max_usd_default'}); the cap is never raised`);
   return Number(text);
 }

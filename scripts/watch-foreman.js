@@ -36,13 +36,14 @@ const path = require('path');
 // On-disk activity facts, shared with agent-liveness-check.js so the two cannot disagree about
 // what counts as a live worktree.
 const { classifyWorktree } = require('./lib/worktree-activity.js');
+const runtimePaths = require('./lib/runtime-paths.js');
 
 function parseArgs(argv) {
   const args = {
     ledger: '',
     root: '',
-    runsDir: process.env.AUTOPILOT_DISPATCH_RUNS_DIR
-      || path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs'),
+    runsDir: runtimePaths.runsDir(process.env),
+    runsDirExplicit: false,
     intervalSecs: 30,
     quietSecs: 600,
     maxSecs: 0,
@@ -51,7 +52,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--ledger') args.ledger = argv[++i] || '';
-    else if (a === '--runs-dir') args.runsDir = argv[++i] || '';
+    else if (a === '--runs-dir') { args.runsDir = argv[++i] || ''; args.runsDirExplicit = true; }
     else if (a === '--root') args.root = argv[++i] || '';
     else if (a === '--interval-secs') args.intervalSecs = Number(argv[++i]);
     else if (a === '--quiet-secs') args.quietSecs = Number(argv[++i]);
@@ -316,9 +317,19 @@ function tickLedger(args, nowMs) {
 
 function tickLeaves(args, nowMs) {
   let entries = [];
+  if (!args.runsDirExplicit) {
+    const ens = runtimePaths.ensureRunsDir(process.env);
+    if (!ens.ok) {
+      if (args.runsDirError !== ens.reason) { args.runsDirError = ens.reason; process.stderr.write(`watch-foreman: runs directory unusable: ${ens.reason}\n`); }
+      return;
+    }
+  }
   try {
     entries = fs.readdirSync(args.runsDir).filter((f) => f.endsWith('.manifest.json'));
-  } catch (_e) { return; }
+  } catch (e) {
+    if (args.runsDirError !== e.message) { args.runsDirError = e.message; process.stderr.write(`watch-foreman: cannot read runs directory ${args.runsDir}: ${e.message}\n`); }
+    return;
+  }
   for (const f of entries) {
     let m;
     try { m = JSON.parse(fs.readFileSync(path.join(args.runsDir, f), 'utf8')); } catch (_e) { continue; }

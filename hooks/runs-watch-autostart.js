@@ -41,6 +41,14 @@
  *     src/status/load-source.js isolatedEnv) with AUTOPILOT_LIVE_DIR unset: no cache and no watcher on the shared live
  *     dir; override with AUTOPILOT_LOAD_SOURCE_TRUST_ENV=1. startWatcherDetached enforces the same for session-mode `set`.
  *   - Never blocks: one 5 s-bounded probe, the watcher itself is detached (nohup, own session).
+ *   - Failure is visible (BL-0336): every launch is recorded (src/status/watcher-launch.js) and the watcher child reports ok / why
+ *     not under that launch id. This hook never waits for it: the NEXT SessionStart / UserPromptSubmit that takes the full path reads
+ *     the previous launch's result and, when it failed, returns `watcher 無法啟動：<reason>` (a live dir that cannot be used:
+ *     `live 目錄無法使用：<reason>`) from run(); the standalone SessionStart entry prints it as additionalContext and the
+ *     UserPromptSubmit host (advisory-relay.js) as systemMessage. Once per session and reason. PostToolUse never reads or reports it
+ *     and never makes a directory on its alive path (the band shows the same sentence from the same file).
+ *   - Temp directory (BL-0336): SessionStart / UserPromptSubmit make a TMPDIR that does not exist yet (scripts/lib/runtime-paths.js
+ *     ensureTmpdir) before anything uses it; PostToolUse does it only on the throttled full path that is about to spawn.
  *   - Fail-open: any problem is at most ONE stderr line, exit 0, no stdout.
  *   - Optional tuning: AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S / AUTOPILOT_RUNS_WATCH_INTERVAL_S (positive integers).
  */
@@ -53,6 +61,44 @@ const path = require('path');
 function execFileSync(...args) { return require('child_process').execFileSync(...args); }
 
 const TAG = 'runs-watch-autostart';
+
+// BL-0336: lazy, so the PostToolUse alive path loads neither module.
+let tmpEnsured = false;
+function ensureTmp() {
+  if (tmpEnsured) return;
+  tmpEnsured = true;
+  try {
+    const r = require('../scripts/lib/runtime-paths').ensureTmpdir(process.env);
+    if (!r.ok) process.stderr.write(`${TAG}: temp directory unusable: ${r.reason}\n`);
+  } catch (error) {
+    process.stderr.write(`${TAG}: temp directory not checked: ${error.message}\n`);
+  }
+}
+
+function launchDirOf(root, key) {
+  const { pointerPath } = require(path.join(root, 'src/status/live-pointer'));
+  return path.join(path.dirname(pointerPath()), 'review', key, 'live');
+}
+
+// Per-session memo for a report that has no launch record to live in (a live dir that cannot be used).
+function claimOnceFile(root, sid, reason) {
+  try {
+    const { pointerPath } = require(path.join(root, 'src/status/live-pointer'));
+    const file = path.join(path.dirname(pointerPath()), 'autostart-reported.json');
+    let memo = {};
+    try { memo = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch (_error) { /* none yet */ }
+    if (memo[sid] === reason) return false;
+    memo[sid] = reason;
+    const keep = Object.keys(memo).slice(-50);
+    const next = {};
+    for (const k of keep) next[k] = memo[k];
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const tmp = `${file}.tmp-${process.pid}`;
+    fs.writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 });
+    fs.renameSync(tmp, file);
+  } catch (_error) { /* cannot remember: report again next time */ }
+  return true;
+}
 
 function readPayload() {
   try {
@@ -325,6 +371,7 @@ function run(payload) {
   // /proc, no crypto, no git, no load-source). A stamp exists only where an earlier non-isolated run wrote it. Alive => done; a dead watcher
   // takes the full path at most once per ENSURE_THROTTLE_S per session; SessionStart / UserPromptSubmit are never throttled.
   const postToolUse = payload.hook_event_name === 'PostToolUse';
+  if (!postToolUse) ensureTmp();
   let livePostBase = null; // the base the PostToolUse stamp is read from; the full path below writes the stamp under the SAME path
   if (postToolUse) {
     const psid = typeof payload.session_id === 'string' ? payload.session_id : '';
@@ -378,6 +425,7 @@ function run(payload) {
   if (event !== 'SessionStart' && !quickOptIn(cwd, sid)) return;
   // PostToolUse: the full path is claimed (stamped) before any git runs. An isolated environment never starts a watcher: nothing to ensure.
   if (event === 'PostToolUse' && (isolated || !base || !claimEnsure(base, sid))) return;
+  if (event === 'PostToolUse') ensureTmp(); // the throttled full path is about to spawn: the only PostToolUse path that may make a directory
   const { scopeFromCwd } = require(path.join(root, 'src/status/project-key'));
   const scope = scopeFromCwd(cwd);
   if (!scope.project_key) return; // not a git repo: nothing to watch
@@ -402,6 +450,18 @@ function run(payload) {
   }
   if (isolated) return; // see above: never start a watcher on the shared live dir from an isolated environment
   const { startWatcherDetached, stableRepoRoot } = require(path.join(root, 'src/status/runs-watch'));
+  // The previous launch's result (never this run's: the watcher is not waited for). SessionStart / UserPromptSubmit only.
+  let report = null;
+  if (event !== 'PostToolUse') {
+    try {
+      const launchProto = require(path.join(root, 'src/status/watcher-launch'));
+      const dir = launchDirOf(root, scope.project_key);
+      const prev = launchProto.readLaunchReport(dir);
+      if (prev.state === 'failed' && launchProto.claimReport(dir, sid, prev.reason)) report = `watcher 無法啟動：${prev.reason}`;
+    } catch (error) {
+      process.stderr.write(`${TAG}: launch result not read: ${error.message}\n`);
+    }
+  }
   // The watcher outlives the session: start it in the MAIN checkout, not in the linked worktree the session happens to be in (a removed
   // worktree left it with a dead cwd and failing git calls, BL-0329). Not a standard layout (bare repo): the session's own top level.
   const opts = { key: scope.project_key, cwd: stableRepoRoot(scope.repo_identity) || topLevel(cwd), env: process.env, render: true };
@@ -413,17 +473,30 @@ function run(payload) {
   const r = startWatcherDetached(opts);
   if (r.status === 'flock_unavailable') {
     process.stderr.write(`${TAG}: watcher not started: flock(1) (util-linux) is not available on PATH\n`);
+  } else if (r.status === 'live_dir_unusable') {
+    process.stderr.write(`${TAG}: watcher not started: live directory unusable: ${r.message}\n`);
+    if (event !== 'PostToolUse' && claimOnceFile(root, sid || '-', r.message)) report = `live 目錄無法使用：${r.message}`;
   } else if (r.status === 'error') {
     process.stderr.write(`${TAG}: watcher not started: ${r.message}\n`);
   }
   // 'busy' (a watcher already holds the lock) and 'started' are both silent: the normal outcomes.
+  return report;
 }
 
 module.exports = { run };
 
 if (require.main === module) {
   try {
-    run(readPayload());
+    const payload = readPayload();
+    const report = run(payload);
+    // The one stdout this hook ever writes: a failure sentence (see header). SessionStart reads additionalContext; UserPromptSubmit
+    // is normally hosted by advisory-relay.js, which turns the returned sentence into a systemMessage; run on its own it prints it itself.
+    if (typeof report === 'string' && report) {
+      const out = payload.hook_event_name === 'UserPromptSubmit'
+        ? { systemMessage: report }
+        : { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: report } };
+      fs.writeSync(1, JSON.stringify(out));
+    }
   } catch (error) {
     process.stderr.write(`${TAG}: ${error.message}\n`);
   }

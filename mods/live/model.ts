@@ -1055,6 +1055,8 @@ export const stateText = (t: T) => ({
   // a snapshot whose sources have not moved stays ok; its watcher having left is a neutral note, not a fault
   watcherNote: (exitReason: string) => (exitReason === 'idle_exit' ? t('state.idle_note') : t('state.exited_note', { reason: exitReason })),
   unavailable: () => t('state.unavailable'),
+  // BL-0336: the launch result the autostart hook reports too (src/status/watcher-launch.js); same sentence, same file
+  watcherFailed: (reason: string) => t('state.watcher_failed', { reason }),
 })
 
 // ---- W3a pane sections: text built from the sources, drawn by pane.tsx ----

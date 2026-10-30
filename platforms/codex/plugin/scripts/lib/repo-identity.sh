@@ -217,14 +217,15 @@ ccshim_keep_transcript() {
   CHILD_TRANSCRIPT_PATH=""
   local scratch="${1:-}" rid="${2:-}" dir src dest safe
   { [ "${AUTOPILOT_DISPATCH_MANIFEST:-1}" = "0" ] || [ -z "$scratch" ] || [ -z "$rid" ] || [ -z "${CHILD_SESSION_ID:-}" ]; } && return 0
-  dir="${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}"
+  runs_dir_ensure || return 0
+  dir="$RUNS_DIR_ENSURED"
   safe="$(printf '%s' "$rid" | tr -c 'A-Za-z0-9._-' '-')"
   src="$(ls -1 "$scratch"/.claude/projects/*/"$CHILD_SESSION_ID".jsonl 2>/dev/null | head -1)" || src=""
   # A symlink source is never followed (a prompt-injected child could point it at any readable file).
   [ -n "$src" ] && [ -f "$src" ] && [ ! -L "$src" ] || return 0
   dest="$dir/${safe}.child-transcript.jsonl"
   # umask 077 + chmod 600 on the temp file BEFORE the rename: the transcript is never visible world-readable.
-  { mkdir -p "$dir" && rm -f "$dest.tmp.$$" && (umask 077; cp "$src" "$dest.tmp.$$") && chmod 600 "$dest.tmp.$$" \
+  { rm -f "$dest.tmp.$$" && (umask 077; cp "$src" "$dest.tmp.$$") && chmod 600 "$dest.tmp.$$" \
       && mv -f "$dest.tmp.$$" "$dest"; } 2>/dev/null \
     && CHILD_TRANSCRIPT_PATH="$dest" || rm -f "$dest.tmp.$$" 2>/dev/null
   return 0
@@ -263,5 +264,49 @@ repo_identity_resolve_fields() {
     REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": "git_rev_parse_failed"'
   fi
   _REPO_IDENTITY_FIELDS_KEY="$key"
+  return 0
+}
+
+# --- runtime directories (BL-0336) -----------------------------------------------------------------------------
+# The dispatch rails get their runs / temp directories from scripts/lib/runtime-paths.js, never from their own copy of the
+# path: the one place that knows the layout and the trust rules (owner, sticky shared roots, symlinks, 0700).
+#
+#   runs_dir_ensure
+#       sets RUNS_DIR_ENSURED to the runs directory (made when absent) and returns 0. A directory that cannot be used
+#       (someone else's, a symlink, writable by others, ...) returns 1 with ONE stderr line naming the reason, once per
+#       process; the caller then writes no manifest and carries on, exactly as the old `mkdir -p ... || return 0` did.
+#       The result is remembered while the directory still exists; a vanished one is checked again.
+#   runs_tmpdir_ensure
+#       makes a TMPDIR that is set but does not exist (the user's own choice); returns 1 with the reason on stderr when
+#       it cannot. An unset or existing TMPDIR costs nothing (no node).
+runs_dir_ensure() {
+  RUNS_DIR_ENSURED=""
+  if [ -n "${_RUNS_DIR_MEMO:-}" ] && [ -d "$_RUNS_DIR_MEMO" ]; then RUNS_DIR_ENSURED="$_RUNS_DIR_MEMO"; return 0; fi
+  [ -n "${_RUNS_DIR_FAILED:-}" ] && return 1
+  local _rd_js _rd_out
+  _rd_js="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/runtime-paths.js"
+  if ! command -v node >/dev/null 2>&1; then
+    _RUNS_DIR_FAILED=1
+    echo "dispatch: manifest not written: node is not on PATH, so the runs directory cannot be checked" >&2
+    return 1
+  fi
+  if _rd_out="$(node "$_rd_js" runs-dir --ensure 2>&1)"; then
+    _RUNS_DIR_MEMO="$_rd_out"; RUNS_DIR_ENSURED="$_rd_out"
+    return 0
+  fi
+  _RUNS_DIR_FAILED=1
+  echo "dispatch: manifest not written: $_rd_out" >&2
+  return 1
+}
+
+runs_tmpdir_ensure() {
+  if [ -z "${TMPDIR:-}" ] || [ -d "$TMPDIR" ]; then return 0; fi
+  local _rt_js _rt_out
+  _rt_js="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/runtime-paths.js"
+  command -v node >/dev/null 2>&1 || { echo "dispatch: TMPDIR=$TMPDIR does not exist and node is not on PATH to create it" >&2; return 1; }
+  if ! _rt_out="$(node "$_rt_js" tmpdir --ensure 2>&1)"; then
+    echo "dispatch: $_rt_out" >&2
+    return 1
+  fi
   return 0
 }

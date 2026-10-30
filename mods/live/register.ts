@@ -353,6 +353,17 @@ async function resolveT($: EngineInterface): Promise<T> {
   return makeT(resolveLocale({ config: ui === null ? undefined : ui.locale, env: envLocale, language, lang }))
 }
 
+// BL-0336: why the watcher did not come up, from the launch record the autostart hook also reads (<autopilot home>/review/<key>/live/):
+// the failed result of the CURRENT launch id, or null. Shown instead of "unavailable" / "stale" so the band says the same sentence the hook did.
+async function launchFailure($: EngineInterface, autopilotHome: string, key: string): Promise<string | null> {
+  const dir = autopilotHome + '/review/' + key + '/live/'
+  const rec = await readObject($, dir + 'watcher-launch.json')
+  if (rec === null || typeof rec.launch_id !== 'string' || !/^[0-9a-f]{16}$/.test(rec.launch_id)) return null
+  const res = await readObject($, dir + 'watcher-start.' + rec.launch_id + '.json')
+  if (res === null || res.launch_id !== rec.launch_id || res.ok !== false) return null
+  return typeof res.reason === 'string' && res.reason !== '' ? res.reason : 'unknown reason'
+}
+
 async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{ snap: LiveSnapshot; counts: Counts | null; acceptance: string | null }> {
   const none = (snap: LiveSnapshot) => ({ snap, counts: null, acceptance: null })
   const STATE_TEXT = stateText(t)
@@ -389,6 +400,8 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const found = baseFind.found
   const keyed = { project_key: scope.key, root_run_id: scope.root }
   if (found.envelope === null) {
+    const failure = await launchFailure($, autopilotHome, scope.key)
+    if (failure !== null) return none(plain('unavailable', STATE_TEXT.watcherFailed(failure), keyed))
     const malformed = finds.some(f => f.found.status === 'malformed')
     return none(malformed ? plain('unreadable', STATE_TEXT.unreadable, keyed) : plain('unavailable', STATE_TEXT.unavailable(), keyed))
   }
@@ -432,6 +445,8 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
     host_as_of: typeof env.host_today_as_of === 'string' ? env.host_today_as_of : null,
   }
   if (fresh.length === 0) {
+    const failure = await launchFailure($, autopilotHome, scope.key)
+    if (failure !== null) return { snap: plain('stale', STATE_TEXT.watcherFailed(failure), common), counts: null, acceptance: null }
     const at = published !== null && Number.isFinite(Date.parse(published)) ? hhmm(Date.parse(published)) : null
     // a watcher that is gone (writer null) over sources that moved: say what happened, not that the watcher is "not publishing"
     if (found.moved === true) return { snap: plain('stale', STATE_TEXT.staleMoved(at), common), counts: null, acceptance: null }

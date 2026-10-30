@@ -2115,20 +2115,7 @@
       "class": "path_seam",
       "default": null,
       "readers": [
-        "scripts/dispatch-author.sh",
-        "scripts/dispatch-hetero.sh",
-        "scripts/dispatch-review.sh",
-        "scripts/dispatch-status.js",
-        "scripts/dispatch-tree.js",
-        "scripts/lib/compaction-handoff.js",
-        "scripts/lib/plan-review-panel.js",
-        "scripts/lib/repo-identity.sh",
-        "scripts/lib/workflow-snapshot.js",
-        "scripts/watch-foreman.js",
-        "src/engine/autopilot-engine.js",
-        "src/status/cli.js",
-        "src/status/foreman-activity.js",
-        "src/status/runs-watch.js"
+        "scripts/lib/runtime-paths.js"
       ],
       "doc": null,
       "relates": []
@@ -3154,6 +3141,30 @@
     },
     {
       "name": "AUTOPILOT_RUNS_WATCH_LOCKED",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "src/status/runs-watch.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_WATCHER_LAUNCH_ID",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "src/status/runs-watch.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
+      "name": "AUTOPILOT_WATCHER_RESULT_PATH",
       "kind": "env",
       "audience": "internal",
       "class": "plumbing",

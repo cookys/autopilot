@@ -54,6 +54,7 @@
   "state.idle_note": "watcher 閒置中 · 有新變化時送出下一個訊息就會恢復",
   "state.exited_note": "watcher 已結束（{reason}）· 送出下一個訊息會重新啟動",
   "state.unavailable": "無法取得 · 目前讀不到這個專案的狀態",
+  "state.watcher_failed": "watcher 無法啟動：{reason}",
   "progress.frozen": "{pct}%（{done}/{total}）",
   "phase.task": "做：{subject}",
   "progress.unfrozen": "已完成 {n} 項",

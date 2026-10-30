@@ -4278,8 +4278,13 @@ class AutopilotEngine {
         || hasActiveRootWorkOrders
         || input.missionActive === true);
       if (hasCont) {
-        const manifestDir = input.continuationManifestDir || process.env.AUTOPILOT_DISPATCH_RUNS_DIR
-          || path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+        let manifestDir = input.continuationManifestDir;
+        if (!manifestDir) {
+          const ensuredRuns = require('../../scripts/lib/runtime-paths').ensureRunsDir(process.env);
+          manifestDir = ensuredRuns.path;
+          // An unusable runs directory is reported, not read as "no matching runs" in silence (BL-0336).
+          if (!ensuredRuns.ok) process.stderr.write(`engine: continuation runs directory unusable: ${ensuredRuns.reason}\n`);
+        }
         const matchingRuns = Array.isArray(input.continuationMatchingRuns)
           ? input.continuationMatchingRuns
           : Array.isArray(input.continuation_matching_runs)

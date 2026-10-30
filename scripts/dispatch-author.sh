@@ -133,6 +133,8 @@ _AUTHOR_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$_AUTHOR_SELF_DIR/lib/repo-identity.sh" ] && . "$_AUTHOR_SELF_DIR/lib/repo-identity.sh" || true
+# A TMPDIR that is set but missing is made before anything below uses it (BL-0336); a failure prints its reason and the run carries on.
+if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || true; fi
 # shellcheck source=/dev/null
 [ -r "$_AUTHOR_SELF_DIR/load-endpoints-env.sh" ] && . "$_AUTHOR_SELF_DIR/load-endpoints-env.sh" && autopilot_load_endpoints_env || true
 # Startup retention prune of OUR OWN aged ${TMPDIR} residue (raw logs, prompt temps,
@@ -1042,8 +1044,10 @@ AUTHOR_MANIFEST_ENDED_EPOCH=""
 AUTHOR_FINAL_STATUS=""
 write_author_manifest() {
   [ "${AUTOPILOT_DISPATCH_MANIFEST:-1}" = "0" ] && return 0
-  local dir="${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}"
-  { mkdir -p "$dir"; } 2>/dev/null || return 0
+  # BL-0336: the runs directory comes from scripts/lib/runtime-paths.js; unusable => no manifest, one stderr line, the run is unaffected
+  declare -F runs_dir_ensure >/dev/null 2>&1 || return 0
+  runs_dir_ensure || return 0
+  local dir="$RUNS_DIR_ENSURED"
   local safe_id; safe_id="$(printf '%s' "$AUTHOR_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
   AUTHOR_MANIFEST_FILE="$dir/${safe_id}.manifest.json"
   local tmp="$AUTHOR_MANIFEST_FILE.tmp.$$"

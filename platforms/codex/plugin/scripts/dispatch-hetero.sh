@@ -263,6 +263,8 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$SELF_DIR/lib/repo-identity.sh" ] && . "$SELF_DIR/lib/repo-identity.sh" || true
+# A TMPDIR that is set but missing is made before anything below uses it (BL-0336); a failure prints its reason and the run carries on.
+if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || true; fi
 # Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env (best-effort;
 # a rejected/absent file is a no-op and the cc-shim precondition fires normally). Loaded BEFORE
 # any endpoint/env consumption. resolution contract stays AUTOPILOT_ENDPOINT_<NAME>_* env vars.
@@ -377,7 +379,9 @@ ORPHAN_LOG="$ORPHAN_STATE_DIR/autopilot-orphan-worktrees.log"
 # Best-effort sidecar: a manifest write failure NEVER fails the dispatch. Disable with
 # AUTOPILOT_DISPATCH_MANIFEST=0 (legacy byte-identical escape hatch, minus the new
 # final-JSON fields). Telemetry only — no verdict/status semantics change.
-MANIFEST_DIR_PATH="${AUTOPILOT_DISPATCH_RUNS_DIR:-${TMPDIR:-/tmp}/autopilot-dispatch-runs}"
+# BL-0336: the directory comes from scripts/lib/runtime-paths.js (made when absent). Empty = unusable (reason already printed): no manifest.
+MANIFEST_DIR_PATH=""
+if [ "${AUTOPILOT_DISPATCH_MANIFEST:-1}" != "0" ] && declare -F runs_dir_ensure >/dev/null 2>&1 && runs_dir_ensure; then MANIFEST_DIR_PATH="$RUNS_DIR_ENSURED"; fi
 DISPATCH_RUN_ID=""
 DISPATCH_STARTED_EPOCH=""
 MANIFEST_FILE=""
@@ -1727,7 +1731,9 @@ die_resource_budget() {
 write_manifest() {
   [ "${AUTOPILOT_DISPATCH_MANIFEST:-1}" = "0" ] && return 0
   [ -n "${DISPATCH_RUN_ID:-}" ] || return 0
-  { mkdir -p "$MANIFEST_DIR_PATH"; } 2>/dev/null || return 0
+  declare -F runs_dir_ensure >/dev/null 2>&1 || return 0
+  runs_dir_ensure || return 0
+  MANIFEST_DIR_PATH="$RUNS_DIR_ENSURED"
   [ -n "${1:-}" ] && MANIFEST_PID_RECORDED="$1"
   local safe_id; safe_id="$(printf '%s' "$DISPATCH_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
   MANIFEST_FILE="$MANIFEST_DIR_PATH/${safe_id}.manifest.json"

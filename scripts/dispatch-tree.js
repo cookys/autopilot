@@ -19,7 +19,7 @@
 // Usage: node scripts/dispatch-tree.js [--session <id>] [--json] [--projects-dir D] [--runs-dir D] [--marker-dir D]
 //   --session      default $CLAUDE_CODE_SESSION_ID
 //   --projects-dir default $CLAUDE_CONFIG_DIR/projects, else ~/.claude/projects
-//   --runs-dir     default $AUTOPILOT_DISPATCH_RUNS_DIR, else ${TMPDIR:-/tmp}/autopilot-dispatch-runs
+//   --runs-dir     default $AUTOPILOT_DISPATCH_RUNS_DIR, else the runs directory of scripts/lib/runtime-paths.js
 //   --marker-dir   default $AUTOPILOT_SESSION_MODE_DIR, else ~/.autopilot/session-mode
 //
 // EXIT: 0 ok (a missing source directory is a warning, not an error: the tree is just smaller)
@@ -44,6 +44,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const runtimePaths = require('./lib/runtime-paths');
 
 let readAgentTreeLib = null;
 try { readAgentTreeLib = require('../hooks/cost-tracker-lib.js').readAgentTree; } catch { /* mirror without hooks/ */ }
@@ -240,7 +241,12 @@ function count(n, acc) {
 function build(opts) {
   const warnings = [];
   const projectsDir = opts.projectsDir || path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'projects');
-  const runsDir = opts.runsDir || process.env.AUTOPILOT_DISPATCH_RUNS_DIR || path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+  let runsDir = opts.runsDir;
+  if (!runsDir) {
+    const ens = runtimePaths.ensureRunsDir(process.env);
+    runsDir = ens.path;
+    if (!ens.ok) warnings.push(`runs directory unusable: ${ens.reason}`);
+  }
   const markerDir = opts.markerDir || process.env.AUTOPILOT_SESSION_MODE_DIR || path.join(os.homedir(), '.autopilot', 'session-mode');
   const sessionDir = findSessionDir(projectsDir, opts.session, warnings);
   if (!sessionDir) warnings.push(`no subagent record directory for session ${opts.session}`);

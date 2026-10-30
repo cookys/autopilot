@@ -36,6 +36,8 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { resolveLiveDir } = require('../../scripts/lib/live-state-dir');
+const runtimePaths = require('../../scripts/lib/runtime-paths');
+const launchProto = require('./watcher-launch');
 const { projectKey, scopeFromCwd } = require('./project-key');
 const { pointerPath, writeLivePointer } = require('./live-pointer');
 const { applySelectors } = require('./runs-fields');
@@ -100,9 +102,10 @@ function lockPathOf(env, key) {
   return path.join(liveBaseOf(env), 'runs', `${key}.lock`);
 }
 
+// Path only (no filesystem access): the hot per-tick reads use it. The directory is made once, by runWriter, through
+// runtimePaths.ensureRunsDir before the first tick.
 function manifestDirOf(env) {
-  return env.AUTOPILOT_DISPATCH_RUNS_DIR
-    || path.join(env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+  return runtimePaths.runsDir(env);
 }
 
 // --- reader (the contract every consumer follows) --------------------------------------
@@ -870,21 +873,25 @@ const WRAPPER = 'exec 9>"$1" || exit 1; flock -n 9 || exit 75; shift; export '
 // Probe by actually taking a lock: a flock(1) that answers --version but cannot lock is unusable.
 // -> { ok, reason }. reason separates a missing/unusable flock(1) from a probe-lock directory that cannot be
 // written (an unwritable TMPDIR), which is not a flock problem and must not be reported as one (BL-0109).
+// BL-0336: the temp directory is made first (a TMPDIR the user chose but that does not exist yet), and a temp
+// directory that cannot be used is its own state, 'tmpdir_unavailable', not a flock problem.
 const FLOCK_MISSING_REASON = 'flock(1) (util-linux) is required on PATH; no lockfile fallback';
 function flockProbe(env) {
   let dir = null;
+  const tmp = runtimePaths.ensureTmpdir(env);
+  if (!tmp.ok) return { ok: false, status: 'tmpdir_unavailable', reason: `the temp directory cannot be used: ${tmp.reason}; set TMPDIR to a writable directory` };
   try {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-watch-flock-'));
+    dir = fs.mkdtempSync(path.join(tmp.path, 'runs-watch-flock-'));
     const probe = path.join(dir, 'probe.lock');
     try {
       fs.writeFileSync(probe, '');
     } catch (error) {
-      return { ok: false, reason: `cannot write the flock probe lock in the temp directory (${error.code || error.message}); set TMPDIR to a writable directory` };
+      return { ok: false, status: 'tmpdir_unavailable', reason: `cannot write the flock probe lock in the temp directory (${error.code || error.message}); set TMPDIR to a writable directory` };
     }
     const r = spawnSync('flock', ['-n', probe, 'true'], { encoding: 'utf8', timeout: 5000, env });
-    return !r.error && r.status === 0 ? { ok: true, reason: null } : { ok: false, reason: FLOCK_MISSING_REASON };
+    return !r.error && r.status === 0 ? { ok: true, status: 'ok', reason: null } : { ok: false, status: 'flock_unavailable', reason: FLOCK_MISSING_REASON };
   } catch (error) {
-    return { ok: false, reason: `cannot write the flock probe lock in the temp directory (${error.code || error.message}); set TMPDIR to a writable directory` };
+    return { ok: false, status: 'tmpdir_unavailable', reason: `cannot write the flock probe lock in the temp directory (${error.code || error.message}); set TMPDIR to a writable directory` };
   } finally {
     if (dir) {
       try { fs.unlinkSync(path.join(dir, 'probe.lock')); } catch (_cleanup) { /* best effort */ }
@@ -956,7 +963,7 @@ function runWatchCli(opts) {
   }
 
   // An explicit AUTOPILOT_LIVE_DIR that fails a safety check is refused (never replaced): report it, do nothing.
-  try { liveBaseOf(env); } catch (error) { stderr.write(`${error.message}\n`); return 1; }
+  try { liveBaseOf(env); } catch (error) { stderr.write(`${error.message}\n`); reportLaunch(env, false, error.message); return 1; }
 
   if (stop) {
     const pid = holderFromEnvelope(env, key);
@@ -981,7 +988,8 @@ function runWatchCli(opts) {
 
   const flock = flockProbe(env);
   if (!flock.ok) {
-    stderr.write(`flock_unavailable: ${flock.reason}\n`);
+    stderr.write(`${flock.status || 'flock_unavailable'}: ${flock.reason}\n`);
+    reportLaunch(env, false, `${flock.status || 'flock_unavailable'}: ${flock.reason}`);
     return 2;
   }
 
@@ -1013,7 +1021,9 @@ const DEFAULT_BIN_PATH = path.join(__dirname, '..', '..', 'bin', 'autopilot.js')
 
 /**
  * Start the project watcher detached (used by `session-mode.js set`). Never throws.
- *   -> { status: 'started'|'busy'|'flock_unavailable'|'error', holder?, message? }
+ *   -> { status: 'started'|'busy'|'flock_unavailable'|'live_dir_unusable'|'error', holder?, message?, launch_id? }
+ * BL-0336: a launch id is minted and recorded (src/status/watcher-launch.js) before the spawn; the child reports its own
+ * start (ok or why not) under that id, and a spawn that fails in this process is reported by this process.
  * Foreground probe first: `flock -n <lock> true` (a detached `flock -n` that loses is silent, so it
  * could not name the holder). Held -> 'busy' with the holder pid from the envelope. Free -> spawn
  * `nohup sh -c <WRAPPER> ...` in its own session (detached), stdio to the watcher log, unref'd.
@@ -1027,7 +1037,13 @@ function startWatcherDetached({
     // it would write its fake projects and a bogus load-source.json into the real live dir (see src/status/load-source.js).
     const iso = isolatedEnv(env);
     if (iso.reason) return { status: 'isolated', message: iso.reason };
-    const lock = lockPathOf(env, key);
+    let lock;
+    try {
+      lock = lockPathOf(env, key);
+    } catch (error) {
+      // An explicit AUTOPILOT_LIVE_DIR that fails a safety check is refused (never replaced): say why, start nothing.
+      return { status: 'live_dir_unusable', message: error.message };
+    }
     fs.mkdirSync(path.dirname(lock), { recursive: true, mode: 0o700 });
     const probe = spawnSync('flock', ['-n', lock, 'true'], { encoding: 'utf8', timeout: 5000, env });
     if (probe.error) return { status: 'flock_unavailable', message: probe.error.message };
@@ -1038,22 +1054,52 @@ function startWatcherDetached({
       if (!onPath(bin, env)) return { status: 'error', message: `${bin} is not on PATH` };
     }
     const logFile = path.join(autopilotHomeOf(env), 'review', key, 'live', 'watcher.log');
-    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    const launchDirPath = path.dirname(logFile);
+    const launchDir = runtimePaths.ensurePrivateDir(launchDirPath);
+    if (!launchDir.ok) return { status: 'live_dir_unusable', message: launchDir.reason };
     rotateWatcherLog(logFile);
+    const launch = launchProto.beginLaunch(launchDirPath);
     const fd = fs.openSync(logFile, 'a');
     try {
-      const child = spawn('nohup', ['sh', ...watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render })], {
-        cwd, env, detached: true, stdio: ['ignore', fd, fd],
-      });
-      child.on('error', () => { /* a spawn failure is reported by the caller via the missing envelope */ });
+      const childEnv = { ...env, AUTOPILOT_WATCHER_LAUNCH_ID: launch.launch_id, AUTOPILOT_WATCHER_RESULT_PATH: launch.result_path };
+      let child = null;
+      let spawnError = null;
+      try {
+        child = spawn('nohup', ['sh', ...watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render })], {
+          cwd, env: childEnv, detached: true, stdio: ['ignore', fd, fd],
+        });
+        child.on('error', () => { /* reported below when the pid is missing; a later error shows as an unreported exit */ });
+      } catch (error) {
+        spawnError = error;
+      }
+      if (spawnError || !child || !Number.isInteger(child.pid)) {
+        const reason = `the watcher process could not be spawned: ${spawnError ? spawnError.message : 'no pid'}`;
+        launchProto.writeResult(launch.result_path, launch.launch_id, false, reason);
+        launchProto.recordPid(launchDirPath, launch.record, null);
+        return { status: 'error', message: reason, launch_id: launch.launch_id };
+      }
+      launchProto.recordPid(launchDirPath, launch.record, child.pid);
       child.unref();
     } finally {
       fs.closeSync(fd);
     }
-    return { status: 'started' };
+    return { status: 'started', launch_id: launch.launch_id };
   } catch (error) {
     return { status: 'error', message: error.message };
   }
+}
+
+// The launch this process belongs to (set by startWatcherDetached): report how it went under that id. Best effort:
+// a result that cannot be written must not change the watcher's own exit.
+function reportLaunch(env, ok, reason) {
+  const id = env.AUTOPILOT_WATCHER_LAUNCH_ID;
+  const file = env.AUTOPILOT_WATCHER_RESULT_PATH;
+  if (!id || !file) return;
+  try { launchProto.writeResult(file, id, ok, reason); } catch (_error) { /* best effort */ }
+}
+function launchReported(env) {
+  const file = env.AUTOPILOT_WATCHER_RESULT_PATH;
+  return Boolean(file) && fs.existsSync(file);
 }
 
 function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, cwd, env, stdout, stderr }) {
@@ -1063,6 +1109,7 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, 
     fs.mkdirSync(path.dirname(lock), { recursive: true, mode: 0o700 });
   } catch (error) {
     stderr.write(`watcher startup failed: live dir not writable: ${error.message}\n`);
+    reportLaunch(env, false, `live directory not writable: ${error.message}`);
     return 1;
   }
   // Async spawn, not spawnSync: a blocked parent cannot forward SIGTERM, and the inner writer (which holds
@@ -1084,6 +1131,7 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, 
   if (early) { try { child.kill(early); } catch (_e) { /* already gone */ } }
   child.on('error', (error) => {
     stderr.write(`watcher startup failed: ${error.message}\n`);
+    reportLaunch(env, false, error.message);
     finish(1);
   });
   child.on('exit', (status, signal) => {
@@ -1093,6 +1141,8 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, 
       finish(0);
       return;
     }
+    // The writer reports its own start; one that died without doing so is reported here, with how it ended.
+    if (status !== 0 && !launchReported(env)) reportLaunch(env, false, `the watcher exited ${signal ? `on ${signal}` : `with status ${status}`} before reporting (see watcher.log)`);
     finish(signal || status === null ? 1 : status);
   });
   return null; // the process stays alive until the child exits
@@ -1101,10 +1151,14 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, 
 function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, env, stderr }) {
   const fail = (message) => {
     stderr.write(`watcher startup failed: ${message}\n`);
+    reportLaunch(env, false, message);
     return 1;
   };
-  const manifestDir = manifestDirOf(env);
-  if (!fs.existsSync(manifestDir)) return fail(`manifest directory does not exist: ${manifestDir}`);
+  // BL-0336: the manifest directory is made here, by the one who needs it, BEFORE the first tick (it used to be a hard
+  // existsSync stop on a fresh boot). A directory that cannot be used ends the start with the reason, which the launch
+  // result hands to the hook and the band.
+  const ensuredRuns = runtimePaths.ensureRunsDir(env);
+  if (!ensuredRuns.ok) return fail(`dispatch runs directory unusable: ${ensuredRuns.reason}`);
   let watcher;
   let firstExit = null;
   try {
@@ -1119,6 +1173,7 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
     const first = watcher.tick();
     if (first.error) return fail(first.error);
     firstExit = first.exit || null;
+    reportLaunch(env, true, null);
     // One review server per host (plan R4.1): ensure it fail-open; it is detached, not our child.
     if (env.AUTOPILOT_REVIEW_SERVER_AUTOSTART !== '0') {
       try {
@@ -1157,5 +1212,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, rotateWatcherLog, WATCHER_LOG_MAX_BYTES, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
+  runWriter, lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
 };

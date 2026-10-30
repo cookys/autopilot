@@ -8,7 +8,7 @@
 // depth-0 could not locate, watch, or liveness-probe a run mid-flight. The worker
 // event stream is ALREADY streamed to a log file live (run_worker `> "$LOG" 2>&1`);
 // this tool parses that stream + probes liveness, and the dispatchers now emit a
-// START-time run manifest under ${TMPDIR}/autopilot-dispatch-runs/ that names it.
+// START-time run manifest under the dispatch-runs directory (scripts/lib/runtime-paths.js) that names it.
 //
 // TRUST BOUNDARY (unchanged): everything here is SCHEDULING telemetry, derived from
 // the harness event stream / kernel lock / cgroup / git — NEVER from worker
@@ -69,6 +69,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const runtimePaths = require('./lib/runtime-paths');
 
 const DEFAULT_STALL_SECS = 180;
 const FILES_TOUCHED_CAP = 50;
@@ -94,8 +95,19 @@ function stallLimitSecs(manifest, stallSecs) {
 
 function manifestDir(explicit) {
   if (explicit) return explicit;
-  if (process.env.AUTOPILOT_DISPATCH_RUNS_DIR) return process.env.AUTOPILOT_DISPATCH_RUNS_DIR;
-  return path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+  return runtimePaths.runsDir(process.env);
+}
+
+// manifestDir plus the BL-0336 ensure: a runs dir that does not exist yet is made (an empty one means "no
+// dispatches"); one that cannot be used says why instead of reading as empty. An explicit --dir is the caller's.
+function ensuredManifestDir(explicit) {
+  if (explicit) return { dir: explicit, error: null };
+  const r = runtimePaths.ensureRunsDir(process.env);
+  return { dir: r.path, error: r.ok ? null : r.reason };
+}
+function unusableRunsDir(reason) {
+  process.stderr.write(`dispatch-status: runs directory unusable: ${reason}\n`);
+  return 4;
 }
 
 function sanitizeRunId(id) {
@@ -836,13 +848,17 @@ function main(argv) {
       process.stderr.write('--days must be a positive integer\n');
       return 2;
     }
-    const out = reapRuns(manifestDir(args.dir), args.days, args.dryRun);
+    const ens = ensuredManifestDir(args.dir);
+    if (ens.error) return unusableRunsDir(ens.error);
+    const out = reapRuns(ens.dir, args.days, args.dryRun);
     process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
     return 0;
   }
 
   if (args.panels || args.panel) {
-    const dir = manifestDir(args.dir);
+    const ens = ensuredManifestDir(args.dir);
+    if (ens.error) return unusableRunsDir(ens.error);
+    const dir = ens.dir;
     const nowMs = Date.now();
     const summarize = (m, file) => {
       const seats = (Array.isArray(m.seats) ? m.seats : []).map((s) => {
@@ -926,7 +942,9 @@ function main(argv) {
   }
 
   if (args.list) {
-    const dir = manifestDir(args.dir);
+    const ens = ensuredManifestDir(args.dir);
+    if (ens.error) return unusableRunsDir(ens.error);
+    const dir = ens.dir;
     let entries = [];
     try {
       entries = fs.readdirSync(dir).filter((f) => f.endsWith('.manifest.json'));
@@ -967,7 +985,12 @@ function main(argv) {
   let manifest = null;
   let manifestPath = null;
   if (args.run) {
-    const dir = manifestDir(args.dir);
+    const ens = ensuredManifestDir(args.dir);
+    if (ens.error) {
+      process.stdout.write(`${JSON.stringify({ error: 'runs directory unusable', reason: ens.error, run_id: args.run })}\n`);
+      return 4;
+    }
+    const dir = ens.dir;
     manifestPath = path.join(dir, `${sanitizeRunId(args.run)}.manifest.json`);
     try {
       manifest = readManifest(manifestPath);

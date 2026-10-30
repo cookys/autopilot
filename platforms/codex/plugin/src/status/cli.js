@@ -154,14 +154,15 @@ function quotaHuman(rows, stdout) {
 
 function collectRuns({ enrichCap = DEFAULT_ENRICH_CAP, env = process.env, project = null } = {}) {
   const dispatch = path.join(ROOT, 'scripts', 'dispatch-status.js');
-  const list = parseJsonSafe(sh('node', [dispatch, '--list']).stdout);
+  const listRun = sh('node', [dispatch, '--list']);
+  const list = parseJsonSafe(listRun.stdout);
   const runs = Array.isArray(list) ? list : (list && Array.isArray(list.runs) ? list.runs : []);
   // Each probe is a liveness check, so enrichment is capped per call with bounded
   // rotation (src/status/runs-fields.js): the next call resumes where this one stopped.
-  const dir = process.env.AUTOPILOT_DISPATCH_RUNS_DIR
-    || path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+  const ensured = require('../../scripts/lib/runtime-paths').ensureRunsDir(process.env);
+  const dir = ensured.path;
   const { buildRunRows } = require('./runs-fields');
-  return buildRunRows({
+  const rows = buildRunRows({
     list: runs,
     enrichCap,
     dir,
@@ -169,12 +170,20 @@ function collectRuns({ enrichCap = DEFAULT_ENRICH_CAP, env = process.env, projec
     project,
     probeRun: (runId) => parseJsonSafe(sh('node', [dispatch, '--run', runId, '--stall-secs', '180']).stdout),
   });
+  // An unusable runs directory is not "no dispatches": carry the reason with the (empty) rows and say it once.
+  const dirError = ensured.ok ? (listRun.status === 4 ? (listRun.stderr.trim().split('\n').pop() || 'dispatch-status exit 4') : null) : `runs directory unusable: ${ensured.reason}`;
+  if (dirError) {
+    rows.runs_dir_error = dirError;
+    if (collectRuns.warned !== dirError) { collectRuns.warned = dirError; process.stderr.write(`status runs: ${dirError}\n`); }
+  }
+  return rows;
 }
 
 function runsHuman(runs, stdout) {
   const live = runs.filter((r) => !(r.ended_at || r.final_status));
   const done = runs.length - live.length;
   stdout.write(`RUNS (${live.length} live, ${done} finished manifests)\n`);
+  if (runs.runs_dir_error) stdout.write(`  ${runs.runs_dir_error}\n`);
   for (const r of live) {
     const stall = r.stall ? ' STALL(report-only — cross-check before reacting)' : '';
     stdout.write(`  LIVE ${r.run_id} role=${r.role || '?'} ${r.runner || '?'}/${r.model || '?'} phase=${r.phase || '?'} alive=${r.probe_age_s === null && r.alive === null ? undefined : r.alive}${stall}\n`);

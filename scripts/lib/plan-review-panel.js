@@ -10,9 +10,10 @@
 const fs = require('fs');
 const path = require('path');
 
+const runtimePaths = require('./runtime-paths');
+
 function runsDir() {
-  if (process.env.AUTOPILOT_DISPATCH_RUNS_DIR) return process.env.AUTOPILOT_DISPATCH_RUNS_DIR;
-  return path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+  return runtimePaths.runsDir(process.env);
 }
 
 function createPanelManifest({
@@ -52,9 +53,14 @@ function createPanelManifest({
       transport_status: null,
     })),
   };
+  let warnedReason = null;
   const flush = () => {
     try {
-      fs.mkdirSync(runsDir(), { recursive: true });
+      const ens = runtimePaths.ensureRunsDir(process.env);
+      if (!ens.ok) {
+        if (warnedReason !== ens.reason) { warnedReason = ens.reason; process.stderr.write(`plan-review panel manifest not written: runs directory unusable: ${ens.reason}\n`); }
+        return;
+      }
       body.updated_at = stamp();
       const tmp = `${file}.tmp-${process.pid}`;
       try {

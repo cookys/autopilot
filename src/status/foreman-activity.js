@@ -10,7 +10,7 @@
 // acquiring shell, see watch-foreman.js stageCondition):
 //   (a) context_tasks  <live>/context/<sid>.tasks.json   written by codeforge's opt-in `subagentStatusLine`. Only `written_at`
 //                      age counts, never a row's `status`; rows whose file is older than STALL_S are marked stale:true.
-//   (b) run_ledger     `${AUTOPILOT_DISPATCH_RUNS_DIR | TMPDIR/autopilot-dispatch-runs}/<root>.ledger.jsonl` and
+//   (b) run_ledger     `<runs dir (scripts/lib/runtime-paths.js)>/<root>.ledger.jsonl` and
 //                      `<git-common-dir>/autopilot/dispatch-runs/<root>.ledger.jsonl`: the latest row with run_id == root
 //                      -> stage + max(heartbeat_ts, ts). Same age-only rule as watch-foreman.js.
 //   (c) stamp          <live>/agents/<sid>/<agent_id>.json  (autopilot.agent-activity/1, the PostToolUse stamp written by the

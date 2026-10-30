@@ -211,16 +211,23 @@ function handle(p) {
 // UserPromptSubmit work for the host process (advisory-relay.js, default-on): end any pending wait, then
 // ensure the project watcher. The ensure sits outside the awaiting-owner knob (it has its own
 // AUTOPILOT_RUNS_WATCH_AUTOSTART switch) and never lets one job's failure stop the other.
+// Returns the autostart's failure sentence (or null) for the host to show as a systemMessage (BL-0336).
 function onUserPromptSubmit(p) {
   try { handle(p); } catch (e) { L.failOpen('awaiting-owner', e); }
-  try { require('./runs-watch-autostart.js').run(p); } catch (e) { L.failOpen('runs-watch-autostart', e); }
+  try {
+    const report = require('./runs-watch-autostart.js').run(p);
+    return typeof report === 'string' && report ? report : null;
+  } catch (e) { L.failOpen('runs-watch-autostart', e); return null; }
 }
 
 function main() {
   const p = L.readStdinJson();
   handle(p);
   if (p.hook_event_name === 'UserPromptSubmit') {
-    try { require('./runs-watch-autostart.js').run(p); } catch (e) { L.failOpen('runs-watch-autostart', e); }
+    try {
+      const report = require('./runs-watch-autostart.js').run(p);
+      if (typeof report === 'string' && report) require('fs').writeSync(1, JSON.stringify({ systemMessage: report }));
+    } catch (e) { L.failOpen('runs-watch-autostart', e); }
   }
 }
 

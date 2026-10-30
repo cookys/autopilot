@@ -54,6 +54,7 @@
   "state.idle_note": "watcher idle · resumes on your next message once something changes",
   "state.exited_note": "watcher exited ({reason}) · restarts on your next message",
   "state.unavailable": "unavailable · this project's status cannot be read right now",
+  "state.watcher_failed": "watcher failed to start: {reason}",
   "progress.frozen": "{pct}% ({done}/{total})",
   "phase.task": "doing: {subject}",
   "progress.unfrozen": "{n} done",

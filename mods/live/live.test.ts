@@ -770,6 +770,26 @@ for (const surface of SURFACES) {
     expect(await bandText($, surface)).toContain('unavailable')
   })
 
+  test('band: no envelope but a failed launch result reads the same failure sentence the hook returns; an ok result or a stale id does not (' + surface + ')', async ($, on) => {
+    const files = base()
+    const dir = AHOME + '/review/' + KEY + '/live/'
+    files[dir + 'watcher-launch.json'] = j({ launch_id: '0123456789abcdef', pid: 1, pid_start: 1, reported_sessions: [] })
+    files[dir + 'watcher-start.0123456789abcdef.json'] = j({ launch_id: '0123456789abcdef', ok: false, reason: 'dispatch runs directory unusable: /tmp/x is owned by uid 7' })
+    const w = worldEn(on, files)
+    delete w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json']
+    delete w.files[LIVE + '/runs/' + KEY + '.json']
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('watcher failed to start: dispatch runs directory unusable: /tmp/x is owned by uid 7')
+    // an ok result for the current launch id is not a failure
+    w.files[dir + 'watcher-start.0123456789abcdef.json'] = j({ launch_id: '0123456789abcdef', ok: true, reason: null })
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).not.toContain('failed to start')
+    // a failed result of an OLDER launch id (the record names another one) is not this launch's
+    w.files[dir + 'watcher-start.0123456789abcdef.json'] = j({ launch_id: 'ffffffffffffffff', ok: false, reason: 'old' })
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).not.toContain('failed to start')
+  })
+
   test('band: a malformed envelope is unreadable and never throws (' + surface + ')', async ($, on) => {
     const files = base()
     files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = '{"schema": '

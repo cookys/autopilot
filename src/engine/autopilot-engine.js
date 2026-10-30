@@ -190,6 +190,7 @@ const {
 const {
   admitContinuation,
   loadMatchingRunsFromManifestDir,
+  loadMatchingRunsFromDefaultRunsDir,
   workOrder,
 } = require('./continuation-admission');
 
@@ -4278,16 +4279,22 @@ class AutopilotEngine {
         || hasActiveRootWorkOrders
         || input.missionActive === true);
       if (hasCont) {
-        const manifestDir = input.continuationManifestDir || process.env.AUTOPILOT_DISPATCH_RUNS_DIR
-          || path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+        const manifestDir = input.continuationManifestDir;
+        const runsIdentity = {
+          root_run_id: identityRoot, branch: input.branch,
+          stage: resolvedImplementationStage, base_sha: input.base,
+        };
         const matchingRuns = Array.isArray(input.continuationMatchingRuns)
           ? input.continuationMatchingRuns
           : Array.isArray(input.continuation_matching_runs)
             ? input.continuation_matching_runs
-            : loadMatchingRunsFromManifestDir(manifestDir, {
-              root_run_id: identityRoot, branch: input.branch,
-              stage: resolvedImplementationStage, base_sha: input.base,
-            });
+            : manifestDir ? loadMatchingRunsFromManifestDir(manifestDir, runsIdentity)
+              : (() => {
+                // BL-0336: the default runs directory is made if absent; a refused one is never read, its reason is said.
+                const scan = loadMatchingRunsFromDefaultRunsDir(runsIdentity, process.env);
+                if (scan.unusable !== null) process.stderr.write(`engine: continuation runs directory unusable: ${scan.unusable}\n`);
+                return scan.runs;
+              })();
         let narrative = input.continuationNarrative || input.continuation_narrative || null;
         if (!narrative && process.env.AUTOPILOT_CONTINUATION_NARRATIVE) {
           try { narrative = JSON.parse(process.env.AUTOPILOT_CONTINUATION_NARRATIVE); }

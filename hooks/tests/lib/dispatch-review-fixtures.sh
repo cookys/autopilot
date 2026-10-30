@@ -719,8 +719,9 @@ NODE
 
 FAKE_NODE_DIR="$TEST_TMP/fake-node-bin"
 mkdir -p "$FAKE_NODE_DIR"
-cat > "$FAKE_NODE_DIR/node" <<'EOF'
-#!/usr/bin/env bash
+# The rails also call `node scripts/lib/runtime-paths.js ...` (BL-0336, runs_dir_ensure); that call must reach the real node and must not overwrite the adapter argv.
+printf '#!/usr/bin/env bash\ncase "${1:-}" in */runtime-paths.js) exec "%s" "$@" ;; esac\n' "$(command -v node)" > "$FAKE_NODE_DIR/node"
+cat >> "$FAKE_NODE_DIR/node" <<'EOF'
 printf '%s\n' "$@" > "$ANTHROPIC_ARGV_FILE"
 prompt_file=""
 while [ "$#" -gt 0 ]; do

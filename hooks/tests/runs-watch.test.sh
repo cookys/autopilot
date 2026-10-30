@@ -111,11 +111,14 @@ eq "yes" "$([ -f "$AHOME/live-pointer.json" ] && echo yes || echo no)" "live poi
 cp "$LIVE/runs/$KEY_A.json" "$SB/sample-live.json"; cp "$LIVE/runs/$KEY_A--root-1.json" "$SB/sample-scope.json"
 stop_watcher "$KEY_A" "$REPO_A"
 
-# --- 3. startup failure: manifest dir missing -> non-zero, one stderr line, lock free ------------------------
-(cd "$REPO_A" && wenv AUTOPILOT_DISPATCH_RUNS_DIR="$SB/does-not-exist" "$NODE" "$CLI" status runs --watch --project "$KEY_A" --interval 1 > "$SB/f.out" 2> "$SB/f.err" < /dev/null)
+# --- 3. startup failure: manifest dir unusable -> non-zero, one stderr line, lock free ------------------------
+# BL-0336: a MISSING manifest dir is no longer a failure (the writer makes it); one other users can write to is refused with a reason.
+RUNS_BAD="$SB/runs-open"; mkdir -p "$RUNS_BAD"; chmod 777 "$RUNS_BAD"
+(cd "$REPO_A" && wenv AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS_BAD" "$NODE" "$CLI" status runs --watch --project "$KEY_A" --interval 1 > "$SB/f.out" 2> "$SB/f.err" < /dev/null)
 FAIL_RC=$?
 eq "yes" "$([ "$FAIL_RC" -ne 0 ] && echo yes || echo no)" "startup failure exits non-zero (got $FAIL_RC)"
 eq "1" "$(wc -l < "$SB/f.err" | tr -d ' ')" "startup failure prints one stderr line"
+eq "yes" "$(grep -q 'runs directory unusable.*writable by other users' "$SB/f.err" && echo yes || echo no)" "...and it names the runs directory and why"
 flock -n "$LIVE/runs/$KEY_A.lock" true; eq "0" "$?" "lock is free after a startup failure"
 
 # --- 4. fake-clock core: heartbeat, freshness, observed_at, scope mismatch ----------------------------------
@@ -463,7 +466,7 @@ rm -f "$AHOME/session-mode/rearm.json"
 (cd "$REPO_A" && wenv "$NODE" "$CLI" status runs --stop --project "$IDENT_A" > "$SB/si.out" 2> "$SB/si.err" < /dev/null)
 eq "0" "$?" "--stop --project <repo_identity> is accepted (normalised to the project key)"
 eq "yes" "$(grep -q "for project $KEY_A" "$SB/si.out" && echo yes || echo no)" "--stop <repo_identity> reports the normalised project key"
-(cd "$REPO_A" && wenv AUTOPILOT_DISPATCH_RUNS_DIR="$SB/does-not-exist" "$NODE" "$CLI" status runs --watch --project "$IDENT_A" --interval 1 > "$SB/wi.out" 2> "$SB/wi.err" < /dev/null)
+(cd "$REPO_A" && wenv AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS_BAD" "$NODE" "$CLI" status runs --watch --project "$IDENT_A" --interval 1 > "$SB/wi.out" 2> "$SB/wi.err" < /dev/null)
 eq "yes" "$(grep -q 'must be a 16-hex' "$SB/wi.err" && echo no || echo yes)" "--watch --project <repo_identity> is not rejected as a bad key"
 (cd "$REPO_A" && wenv "$NODE" "$CLI" status runs --stop --project "not-a-key" > /dev/null 2> "$SB/sb.err" < /dev/null)
 eq "2" "$?" "--stop --project <garbage> is still rejected"

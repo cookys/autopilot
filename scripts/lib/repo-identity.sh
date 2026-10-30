@@ -290,7 +290,7 @@ runs_dir_ensure() {
     echo "dispatch: manifest not written: node is not on PATH, so the runs directory cannot be checked" >&2
     return 1
   fi
-  if _rd_out="$(node "$_rd_js" runs-dir --ensure 2>&1)"; then
+  if _rd_out="$(node "$_rd_js" runs-dir --ensure 2>&1)" && [ -d "$_rd_out" ]; then # -d: a `node` on PATH that is not node (a test stub) must not be taken for a path
     _RUNS_DIR_MEMO="$_rd_out"; RUNS_DIR_ENSURED="$_rd_out"
     return 0
   fi

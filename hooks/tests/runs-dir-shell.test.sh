@@ -41,6 +41,9 @@ scenario() {
     unset AUTOPILOT_DISPATCH_RUNS_DIR
     export TMPDIR="$W/tmpnew/x"
     runs_tmpdir_ensure; echo "tmp_rc=$?"; echo "tmp_mode=$(stat -c %a "$W/tmpnew/x" 2> /dev/null)"
+    ln -s "$W/tmpnew/x" "$W/tmplink"; export TMPDIR="$W/tmplink"
+    runs_tmpdir_ensure 2> "$W/tmplink.err"; echo "tmplink_rc=$?"; echo "tmplink_reason=$(grep -c 'symbolic link' "$W/tmplink.err")"
+    export TMPDIR=/dev/shm; runs_tmpdir_ensure; echo "sharedroot_rc=$?"
     echo plain > "$W/tmpfile"; export TMPDIR="$W/tmpfile"
     runs_tmpdir_ensure 2> "$W/tmp.err"; echo "tmpfile_rc=$?"; echo "tmpfile_reason=$(grep -c 'not a directory' "$W/tmp.err")"
   )
@@ -60,6 +63,9 @@ check() { # <lib dir> -> fails (exit 1 via assert) on the first broken expectati
   assert_eq "$(val refuse_mode)" "777" "an unusable directory is left as it was (not chmod-ed)"
   assert_eq "$(val tmp_rc)" "0" "a missing TMPDIR is made"
   assert_eq "$(val tmp_mode)" "700" "...mode 0700"
+  assert_eq "$(val tmplink_rc)" "1" "an EXISTING TMPDIR that is a symbolic link is refused"
+  assert_eq "$(val tmplink_reason)" "1" "...with its reason"
+  assert_eq "$(val sharedroot_rc)" "0" "a root-owned sticky shared root (/dev/shm) is accepted"
   assert_eq "$(val tmpfile_rc)" "1" "a TMPDIR that is a file is refused"
   assert_eq "$(val tmpfile_reason)" "1" "...with its reason"
 }
@@ -91,6 +97,7 @@ neg() { # <name> <from> <to> <expected failing message fragment>
   esac
 }
 neg no-ensure 'runs-dir --ensure' 'runs-dir' 'missing runs dir is made'
+neg existing-unchecked '[ -n "${TMPDIR:-}" ] || return 0' '[ -n "${TMPDIR:-}" ] || return 0; [ -d "$TMPDIR" ] && return 0' 'EXISTING TMPDIR that is a symbolic link'
 neg no-reason-line 'echo "dispatch: manifest not written: $_rd_out" >&2' ':' 'ONE stderr line'
 
 finalize_test

@@ -90,16 +90,19 @@ const checks = {
     assert.strictEqual(wl.claimReport(dir, 's1', 'r'), false, 'second time for the same session and reason');
     assert.strictEqual(wl.claimReport(dir, 's2', 'r'), true, 'another session is told');
     assert.strictEqual(wl.claimReport(dir, 's1', 'other reason'), true, 'a different reason is new');
-    // a new launch keeps who was told about the same reason (a failing watcher retried on every prompt must not nag)
+    assert.strictEqual(wl.claimReport(dir, 's1', 'r'), false, 'A -> B -> A: the first reason is not told again');
+    assert.strictEqual(wl.claimReport(dir, 's2', 'r'), false);
+    // a new launch keeps who was told about which reason (a failing watcher retried on every prompt must not nag)
     wl.beginLaunch(dir);
     assert.strictEqual(wl.claimReport(dir, 's1', 'other reason'), false);
+    assert.strictEqual(wl.claimReport(dir, 's1', 'r'), false);
   },
   reportedCap(wl) {
     const dir = tmp();
     wl.beginLaunch(dir);
     for (let i = 0; i < 80; i += 1) wl.claimReport(dir, `s${i}`, 'r');
     const rec = JSON.parse(fs.readFileSync(path.join(dir, wl.LAUNCH_FILE), 'utf8'));
-    assert.ok(rec.reported_sessions.length <= 50);
+    assert.ok(rec.reported.r.length <= 50);
   },
   spawnFailureResult(wl) {
     const dir = tmp();
@@ -119,10 +122,36 @@ const checks = {
   },
 };
 
+checks.claimConcurrent = (wl, file) => {
+  // 12 processes tell 12 different sessions the same reason at once: none may be lost (read-modify-write under a lock)
+  const dir = tmp();
+  wl.beginLaunch(dir);
+  const code = `const wl = require(${JSON.stringify(file)}); const ok = wl.claimReport(process.argv[1], process.argv[2], 'r'); process.stdout.write(String(ok));`;
+  const procs = [];
+  for (let i = 0; i < 12; i += 1) procs.push(require('child_process').spawn(process.execPath, ['-e', code, dir, `sess-${i}`], { stdio: ['ignore', 'pipe', 'inherit'] }));
+  return Promise.all(procs.map((p) => new Promise((res) => p.on('close', res)))).then(() => {
+    const rec = JSON.parse(fs.readFileSync(path.join(dir, wl.LAUNCH_FILE), 'utf8'));
+    assert.strictEqual(rec.reported.r.length, 12, `sessions lost: ${JSON.stringify(rec.reported.r)}`);
+  });
+};
+checks.pidGap = (wl) => {
+  // the parent has not written the pid yet: no verdict; the same record 5 minutes later (the parent died there) is a failure
+  const dir = tmp();
+  const cur = wl.beginLaunch(dir);
+  assert.strictEqual(wl.readLaunchReport(dir).state, 'pending', 'pid not written yet: pending');
+  const rec = JSON.parse(fs.readFileSync(path.join(dir, wl.LAUNCH_FILE), 'utf8'));
+  rec.started_at = new Date(Date.now() - 300000).toISOString();
+  fs.writeFileSync(path.join(dir, wl.LAUNCH_FILE), JSON.stringify(rec));
+  assert.strictEqual(wl.readLaunchReport(dir).state, 'failed');
+  assert.ok(cur);
+};
+
 const REAL = load(SRC);
 test('launch id: the report is about this launch, never an older result or the log', () => { checks.launchId(REAL); checks.launchIdPending(REAL); });
 test('exit without reporting: a dead launcher (or a recycled pid) is a failure, a live one is undecided', () => checks.exitWithoutReport(REAL));
 test('reported once: a session hears a reason once; others and new reasons are told', () => { checks.reportedOnce(REAL); checks.reportedCap(REAL); });
+test('reported once, in parallel: no session is lost to a concurrent read-modify-write', () => checks.claimConcurrent(REAL, SRC));
+test('a launch whose pid is not written yet is undecided (and a failure once the parent is long gone)', () => checks.pidGap(REAL));
 test('a spawn that failed in the parent leaves a failed result; an ok result reads ok', () => { checks.spawnFailureResult(REAL); checks.okResult(REAL); });
 
 // ---- negative controls: each broken copy must fail its row ----
@@ -139,7 +168,9 @@ const NEG = [
   return { state: 'pending', launch: rec };
 }\n` },
   { name: 'no pid liveness judgement', row: 'exitWithoutReport', from: 'if (launcherAlive(rec)) return', to: 'if (true) return' },
-  { name: 'no reported_sessions memory', row: 'reportedOnce', from: 'if (sessionId && sessions.includes(sessionId)) return false;', to: '' },
+  { name: 'no reported memory', row: 'reportedOnce', from: 'if (sessionId && list.includes(sessionId)) return false;', to: '' },
+  { name: 'one reason slot (a new reason resets the sessions)', row: 'reportedOnce', from: 'const list = Array.isArray(reported[reason]) ? reported[reason] : [];', to: 'const list = Array.isArray(reported[reason]) ? reported[reason] : []; for (const k of Object.keys(reported)) if (k !== reason) delete reported[k];' },
+  { name: 'pid-less launch judged at once', row: 'pidGap', from: 'if (Number.isFinite(age) && age < PID_GAP_MS) return', to: 'if (false) return' },
 ];
 for (const c of NEG) {
   test(`negative control: ${c.name} turns the "${c.row}" row red`, () => {
@@ -147,3 +178,9 @@ for (const c of NEG) {
     assert.throws(() => (c.row === 'launchId' ? (checks.launchId(wl), checks.launchIdPending(wl)) : checks[c.row](wl)), assert.AssertionError);
   });
 }
+
+test('negative control: an unlocked read-modify-write loses sessions in parallel', async () => {
+  const file = mutated('const release = lockFile(`${file}.lock`, 1000);\n  try {\n    let obj = readJson(file);', 'const release = null;\n  try {\n    let obj = readJson(file);');
+  const wl = load(file);
+  await assert.rejects(() => checks.claimConcurrent(wl, file), assert.AssertionError);
+});

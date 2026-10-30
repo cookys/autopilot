@@ -161,6 +161,13 @@ function collectRuns({ enrichCap = DEFAULT_ENRICH_CAP, env = process.env, projec
   // rotation (src/status/runs-fields.js): the next call resumes where this one stopped.
   const ensured = require('../../scripts/lib/runtime-paths').ensureRunsDir(process.env);
   const dir = ensured.path;
+  if (!ensured.ok) {
+    // A refused directory is never read (not even by the manifest enrichment): the reason is the answer.
+    const rows = [];
+    rows.runs_dir_error = `runs directory unusable: ${ensured.reason}`;
+    if (collectRuns.warned !== rows.runs_dir_error) { collectRuns.warned = rows.runs_dir_error; process.stderr.write(`status runs: ${rows.runs_dir_error}\n`); }
+    return rows;
+  }
   const { buildRunRows } = require('./runs-fields');
   const rows = buildRunRows({
     list: runs,

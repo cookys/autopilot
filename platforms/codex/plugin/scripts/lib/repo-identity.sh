@@ -277,8 +277,9 @@ repo_identity_resolve_fields() {
 #       process; the caller then writes no manifest and carries on, exactly as the old `mkdir -p ... || return 0` did.
 #       The result is remembered while the directory still exists; a vanished one is checked again.
 #   runs_tmpdir_ensure
-#       makes a TMPDIR that is set but does not exist (the user's own choice); returns 1 with the reason on stderr when
-#       it cannot. An unset or existing TMPDIR costs nothing (no node).
+#       makes a TMPDIR that is set but does not exist (the user's own choice) and checks an existing one the same way the Node
+#       side does; returns 1 with the reason on stderr when it cannot. Unset TMPDIR and a root-owned sticky shared root cost
+#       nothing (no node).
 runs_dir_ensure() {
   RUNS_DIR_ENSURED=""
   if [ -n "${_RUNS_DIR_MEMO:-}" ] && [ -d "$_RUNS_DIR_MEMO" ]; then RUNS_DIR_ENSURED="$_RUNS_DIR_MEMO"; return 0; fi
@@ -300,10 +301,14 @@ runs_dir_ensure() {
 }
 
 runs_tmpdir_ensure() {
-  if [ -z "${TMPDIR:-}" ] || [ -d "$TMPDIR" ]; then return 0; fi
+  # Unset TMPDIR means /tmp, a shared system root: nothing to make or check.
+  [ -n "${TMPDIR:-}" ] || return 0
+  # A real directory that is root-owned and sticky (/tmp, /dev/shm, /var/tmp) is a shared system root: taken as found, no node.
+  if [ -d "$TMPDIR" ] && [ ! -L "$TMPDIR" ] && [ -k "$TMPDIR" ] && [ "$(stat -c %u "$TMPDIR" 2>/dev/null)" = "0" ]; then return 0; fi
+  # Anything else the user chose: missing => made; existing => checked (owner, links, unsafe parents) by runtime-paths.js.
   local _rt_js _rt_out
   _rt_js="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/runtime-paths.js"
-  command -v node >/dev/null 2>&1 || { echo "dispatch: TMPDIR=$TMPDIR does not exist and node is not on PATH to create it" >&2; return 1; }
+  command -v node >/dev/null 2>&1 || { echo "dispatch: TMPDIR is set and node is not on PATH to check or create it" >&2; return 1; }
   if ! _rt_out="$(node "$_rt_js" tmpdir --ensure 2>&1)"; then
     echo "dispatch: $_rt_out" >&2
     return 1

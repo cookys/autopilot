@@ -80,47 +80,13 @@ function launchDirOf(root, key) {
   return path.join(path.dirname(pointerPath()), 'review', key, 'live');
 }
 
-// Per-session memo for a report that has no launch record to live in (a live dir that cannot be used).
+// Per-session memo for a report that has no launch record to live in (the directory for the record itself cannot be used). Per reason,
+// updated atomically (watcher-launch.js claimInFile).
 function claimOnceFile(root, sid, reason) {
   try {
     const { pointerPath } = require(path.join(root, 'src/status/live-pointer'));
-    const file = path.join(path.dirname(pointerPath()), 'autostart-reported.json');
-    let memo = {};
-    try { memo = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch (_error) { /* none yet */ }
-    if (memo[sid] === reason) return false;
-    memo[sid] = reason;
-    const keep = Object.keys(memo).slice(-50);
-    const next = {};
-    for (const k of keep) next[k] = memo[k];
-    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    const tmp = `${file}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 });
-    fs.renameSync(tmp, file);
-  } catch (_error) { /* cannot remember: report again next time */ }
-  return true;
-}
-
-function readPayload() {
-  try {
-    const raw = fs.readFileSync(0, 'utf8');
-    const value = raw.trim() ? JSON.parse(raw) : {};
-    return value && typeof value === 'object' ? value : {};
-  } catch (_error) {
-    return {};
-  }
-}
-
-let topLevelMemo = null; // one `git rev-parse --show-toplevel` per invocation
-function topLevel(cwd) {
-  if (topLevelMemo !== null) return topLevelMemo;
-  try {
-    topLevelMemo = execFileSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000,
-    }).trim() || cwd;
-  } catch (_error) {
-    topLevelMemo = cwd;
-  }
-  return topLevelMemo;
+    return require(path.join(root, 'src/status/watcher-launch')).claimInFile(path.join(path.dirname(pointerPath()), 'autostart-reported.json'), sid, reason);
+  } catch (_error) { return true; /* cannot remember: report again next time */ }
 }
 
 // Opt-in rule (see header). `.claude/*-config.md` in the work tree or in the main checkout (a linked worktree
@@ -475,7 +441,12 @@ function run(payload) {
     process.stderr.write(`${TAG}: watcher not started: flock(1) (util-linux) is not available on PATH\n`);
   } else if (r.status === 'live_dir_unusable') {
     process.stderr.write(`${TAG}: watcher not started: live directory unusable: ${r.message}\n`);
-    if (event !== 'PostToolUse' && claimOnceFile(root, sid || '-', r.message)) report = `live 目錄無法使用：${r.message}`;
+    // With a launch id the failure is in the launch result too (band, next hook): the same per-reason memo as the next run's read.
+    if (event !== 'PostToolUse') {
+      let first;
+      try { first = r.launch_id ? require(path.join(root, 'src/status/watcher-launch')).claimReport(launchDirOf(root, scope.project_key), sid || '-', r.message) : claimOnceFile(root, sid || '-', r.message); } catch (_e) { first = true; }
+      if (first) report = `live 目錄無法使用：${r.message}`;
+    }
   } else if (r.status === 'error') {
     process.stderr.write(`${TAG}: watcher not started: ${r.message}\n`);
   }

@@ -1734,6 +1734,7 @@ write_manifest() {
   declare -F runs_dir_ensure >/dev/null 2>&1 || return 0
   runs_dir_ensure || return 0
   MANIFEST_DIR_PATH="$RUNS_DIR_ENSURED"
+  [ -n "$MANIFEST_DIR_PATH" ] || return 0 # never build a manifest path from an empty directory (it would land in the cwd or at the root)
   [ -n "${1:-}" ] && MANIFEST_PID_RECORDED="$1"
   local safe_id; safe_id="$(printf '%s' "$DISPATCH_RUN_ID" | tr -c 'A-Za-z0-9._-' '-')"
   MANIFEST_FILE="$MANIFEST_DIR_PATH/${safe_id}.manifest.json"

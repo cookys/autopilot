@@ -32,6 +32,10 @@ const CASES = [
   { name: 'only one layer created', red: 'missing layers are created one at a time with mode 0700',
     from: [['for (const layer of verdict.would_create) {', 'for (const layer of verdict.would_create.slice(0, 1)) {'],
       ['round < MAX_LINK_DEPTH && verdict', 'round < 1 && verdict']], to: null },
+  { name: 'any g+w counts as private', red: 'g+w with a shared primary group (users) is writable by others; a user-private group is not; unreadable is shared',
+    from: 'return !ctx.groupPrivate;', to: 'return false;' },
+  { name: 'existing TMPDIR skips the private walk', red: 'existing TMPDIR: a link as the leaf, an unsafe ancestor and a leaf others could write are refused; a root-owned sticky root is taken as found',
+    from: 'const v = evaluatePrivateDir(dir, deps);\n  if (v.decision === \'refuse\') return', to: 'const v = { decision: \'ok\', path: dir, reason: null, would_create: [], would_tighten: false };\n  if (v.decision === \'refuse\') return' },
   { name: 'shared root chmod-ed too', red: 'a shared system root is never chmod-ed; only the private subdirectory is made',
     from: '    cur = next;\n  }\n  return { decision: \'ok\'', to: "    try { f.chmodSync(next, 0o700); } catch (_e) { /* mutation */ }\n    cur = next;\n  }\n  return { decision: 'ok'" },
 ];

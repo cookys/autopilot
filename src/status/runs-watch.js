@@ -1032,34 +1032,58 @@ function startWatcherDetached({
   key, cwd = process.cwd(), env = process.env, binPath = DEFAULT_BIN_PATH,
   interval = DEFAULT_INTERVAL_S, idleExit = DEFAULT_IDLE_EXIT_S, enrichCap = null, render = null,
 }) {
+  let release = null;
   try {
     // An isolated test environment (own HOME / CLAUDE_CONFIG_DIR) on the shared live dir must not start a watcher there:
     // it would write its fake projects and a bogus load-source.json into the real live dir (see src/status/load-source.js).
     const iso = isolatedEnv(env);
     if (iso.reason) return { status: 'isolated', message: iso.reason };
+    // The launch record's directory comes first: from here on EVERY failure of this process is written to the launch result,
+    // where the next hook and the band read it. A directory that cannot even hold the record is the one failure left to the
+    // hook's own report (status 'live_dir_unusable' with no launch_id).
+    const logFile = path.join(autopilotHomeOf(env), 'review', key, 'live', 'watcher.log');
+    const launchDirPath = path.dirname(logFile);
+    const launchDir = runtimePaths.ensurePrivateDir(launchDirPath);
+    if (!launchDir.ok) return { status: 'live_dir_unusable', message: launchDir.reason };
+    // One start at a time per project: a second session starting now must not overwrite the first one's record.
+    release = launchProto.lockLaunch(launchDirPath);
+    if (!release) return { status: 'busy', holder: holderFromEnvelope(env, key), launching: true };
+    // A failure of this process: record it as its own launch, result included, and say why.
+    const failed = (status, message) => {
+      const l = launchProto.beginLaunch(launchDirPath);
+      launchProto.writeResult(l.result_path, l.launch_id, false, message);
+      launchProto.recordPid(launchDirPath, l.record, null);
+      return { status, message, launch_id: l.launch_id };
+    };
     let lock;
     try {
       lock = lockPathOf(env, key);
     } catch (error) {
       // An explicit AUTOPILOT_LIVE_DIR that fails a safety check is refused (never replaced): say why, start nothing.
-      return { status: 'live_dir_unusable', message: error.message };
+      return failed('live_dir_unusable', error.message);
     }
     fs.mkdirSync(path.dirname(lock), { recursive: true, mode: 0o700 });
     const probe = spawnSync('flock', ['-n', lock, 'true'], { encoding: 'utf8', timeout: 5000, env });
-    if (probe.error) return { status: 'flock_unavailable', message: probe.error.message };
+    if (probe.error) return failed('flock_unavailable', `flock(1) cannot be run: ${probe.error.message}`);
     if (probe.status === 1) return { status: 'busy', holder: holderFromEnvelope(env, key) };
-    if (probe.status !== 0) return { status: 'error', message: `flock probe exited ${probe.status}` };
+    if (probe.status !== 0) return failed('error', `flock probe exited ${probe.status}`);
+    // A launch that is still starting (its launcher alive, nothing reported yet) is somebody else's: not ours to replace.
+    if (launchProto.readLaunchReport(launchDirPath).state === 'pending') return { status: 'busy', holder: holderFromEnvelope(env, key), launching: true };
     // The spawn below is async: a missing nohup/sh would only surface on the child's 'error' event, after 'started' was returned (BL-0109).
     for (const bin of ['nohup', 'sh']) {
-      if (!onPath(bin, env)) return { status: 'error', message: `${bin} is not on PATH` };
+      if (!onPath(bin, env)) return failed('error', `${bin} is not on PATH`);
     }
-    const logFile = path.join(autopilotHomeOf(env), 'review', key, 'live', 'watcher.log');
-    const launchDirPath = path.dirname(logFile);
-    const launchDir = runtimePaths.ensurePrivateDir(launchDirPath);
-    if (!launchDir.ok) return { status: 'live_dir_unusable', message: launchDir.reason };
-    rotateWatcherLog(logFile);
     const launch = launchProto.beginLaunch(launchDirPath);
-    const fd = fs.openSync(logFile, 'a');
+    let fd;
+    try {
+      rotateWatcherLog(logFile);
+      fd = fs.openSync(logFile, 'a');
+    } catch (error) {
+      const reason = `cannot open ${logFile}: ${error.message}`;
+      launchProto.writeResult(launch.result_path, launch.launch_id, false, reason);
+      launchProto.recordPid(launchDirPath, launch.record, null);
+      return { status: 'error', message: reason, launch_id: launch.launch_id };
+    }
     try {
       const childEnv = { ...env, AUTOPILOT_WATCHER_LAUNCH_ID: launch.launch_id, AUTOPILOT_WATCHER_RESULT_PATH: launch.result_path };
       let child = null;
@@ -1086,6 +1110,8 @@ function startWatcherDetached({
     return { status: 'started', launch_id: launch.launch_id };
   } catch (error) {
     return { status: 'error', message: error.message };
+  } finally {
+    if (release) release();
   }
 }
 
@@ -1138,6 +1164,7 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, 
     if (status === LOCK_BUSY_RC) {
       const holder = holderFromEnvelope(env, key);
       stdout.write(`writer_busy: project ${key} already has a watcher (pid ${holder === null ? 'unknown' : holder})\n`);
+      reportLaunch(env, true, null); // losing the lock means a watcher is running: not a failed start
       finish(0);
       return;
     }

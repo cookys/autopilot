@@ -245,7 +245,8 @@ function build(opts) {
   if (!runsDir) {
     const ens = runtimePaths.ensureRunsDir(process.env);
     runsDir = ens.path;
-    if (!ens.ok) warnings.push(`runs directory unusable: ${ens.reason}`);
+    // A refused directory is never read: no rails are loaded from it, the reason is the answer.
+    if (!ens.ok) { warnings.push(`runs directory unusable: ${ens.reason}`); runsDir = null; }
   }
   const markerDir = opts.markerDir || process.env.AUTOPILOT_SESSION_MODE_DIR || path.join(os.homedir(), '.autopilot', 'session-mode');
   const sessionDir = findSessionDir(projectsDir, opts.session, warnings);
@@ -255,7 +256,7 @@ function build(opts) {
   else if (marker.expired) warnings.push(`session marker is expired (started_at ${marker.started_at || 'unknown'}): rails joined through it may be incomplete`);
   const root = { kind: 'session', id: opts.session, children: [] };
   attachAgents(loadAgents(sessionDir), root);
-  attachRails(loadRails(runsDir, warnings), opts.session, marker, root);
+  if (runsDir) attachRails(loadRails(runsDir, warnings), opts.session, marker, root);
   strip(root); sortTree(root);
   return {
     schema_version: 1,

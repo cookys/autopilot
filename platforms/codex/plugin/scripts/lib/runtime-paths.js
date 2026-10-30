@@ -57,7 +57,29 @@ function defaults(deps) {
     uid: typeof d.uid === 'number' ? d.uid : getuid(),
     gid: typeof d.gid === 'number' ? d.gid : getgid(),
     home: d.home || os.homedir(),
+    username: d.username || (() => { try { return os.userInfo().username; } catch (_e) { return ''; } })(),
+    // text of /etc/group and /etc/passwd; null = unreadable (tests inject strings or null)
+    group: d.etc && 'group' in d.etc ? d.etc.group : readText('/etc/group'),
+    passwd: d.etc && 'passwd' in d.etc ? d.etc.passwd : readText('/etc/passwd'),
   };
+}
+
+function readText(file) {
+  try { return realFs.readFileSync(file, 'utf8'); } catch (_error) { return null; }
+}
+
+// Is our primary group a user-private group? Only then does g+w mean "still only us". Private when the group is named after
+// the user, or when nobody but the user is listed in it in /etc/group AND no other account has it as its primary group in
+// /etc/passwd. Either file unreadable, or no entry for the gid: shared (conservative).
+function groupIsPrivate(ctx) {
+  if (typeof ctx.group !== 'string' || typeof ctx.passwd !== 'string') return false;
+  const line = ctx.group.split('\n').map((l) => l.split(':')).find((f) => f.length >= 3 && Number(f[2]) === ctx.gid);
+  if (!line) return false;
+  if (ctx.username && line[0] === ctx.username) return true;
+  const members = (line[3] || '').split(',').map((m) => m.trim()).filter(Boolean);
+  if (members.some((m) => m !== ctx.username)) return false;
+  const others = ctx.passwd.split('\n').map((l) => l.split(':')).filter((f) => f.length >= 4 && Number(f[3]) === ctx.gid && f[0] !== ctx.username);
+  return others.length === 0;
 }
 
 function runsDir(env = process.env) {
@@ -77,12 +99,16 @@ function isUnder(child, parent) {
   return child === parent || child.startsWith(base);
 }
 
-// Someone other than us can write to this directory. g+w only counts when the group is not our own primary
-// group (with user-private groups, umask 002 makes every home directory g+w for a group of one).
+// Someone other than us can write to this directory. g+w is harmless only when the group is our own primary group AND that
+// group is user-private (umask 002 on user-private-group systems makes every home directory g+w for a group of one). On a
+// machine whose primary group is shared (users, staff), g+w lets the other members write: unsafe.
 function othersCanWrite(st, ctx) {
   const mode = st.mode & 0o7777;
   if (mode & 0o002) return true;
-  return Boolean(mode & 0o020) && st.gid !== ctx.gid;
+  if (!(mode & 0o020)) return false;
+  if (st.gid !== ctx.gid) return true;
+  if (ctx.groupPrivate === undefined) ctx.groupPrivate = groupIsPrivate(ctx);
+  return !ctx.groupPrivate;
 }
 
 function errText(error) {
@@ -201,13 +227,13 @@ function ensureRunsDir(env = process.env, deps) {
 
 // TMPDIR: unset -> /tmp, which is a shared system root and is only checked. Set and present -> checked, never
 // modified. Set and absent -> the user chose that place, so it is a private directory we may create.
-function evaluateTmpdir(env = process.env, deps) {
+function evaluateTmpdir(env = process.env, deps, linkDepth = 0) {
   const ctx = defaults(deps);
   const f = ctx.fs;
   const dir = path.resolve(tmpdirOf(env));
-  let st;
+  let ls;
   try {
-    st = f.statSync(dir);
+    ls = f.lstatSync(dir);
   } catch (error) {
     if (error && error.code === 'ENOENT') {
       if (!env.TMPDIR) return refuse(dir, `${dir} does not exist`);
@@ -215,16 +241,27 @@ function evaluateTmpdir(env = process.env, deps) {
     }
     return refuse(dir, `cannot inspect ${dir}: ${errText(error)}`);
   }
-  if (!st.isDirectory()) return refuse(dir, `${dir} exists and is not a directory`);
-  const sticky = (st.mode & 0o1000) !== 0;
-  const sharedRoot = st.uid === 0 && sticky;
-  if (st.uid !== ctx.uid && !sharedRoot) return refuse(dir, `TMPDIR ${dir} is owned by ${ownerText(st)} and is not a shared system directory (root-owned with the sticky bit)`);
-  try {
-    f.accessSync(dir, realFs.constants.W_OK);
-  } catch (error) {
-    return refuse(dir, `TMPDIR ${dir} is not writable by this user (${errText(error)})`);
+  // A root-owned link is a system layout (/tmp -> private/tmp): judge what it points at. Any other link is refused below.
+  if (ls.isSymbolicLink() && ls.uid === 0 && linkDepth < MAX_LINK_DEPTH) {
+    let real;
+    try { real = f.realpathSync(dir); } catch (error) { return refuse(dir, `cannot resolve the symbolic link ${dir}: ${errText(error)}`); }
+    return evaluateTmpdir({ ...env, TMPDIR: real }, deps, linkDepth + 1);
   }
-  return { decision: 'ok', path: dir, reason: null, would_create: [], would_tighten: false };
+  // A shared system root (root-owned, sticky, a real directory) is taken as found: never modified, nothing placed in its way.
+  if (!ls.isSymbolicLink() && ls.isDirectory() && ls.uid === 0 && (ls.mode & 0o1000) !== 0) {
+    try { f.accessSync(dir, realFs.constants.W_OK); } catch (error) { return refuse(dir, `TMPDIR ${dir} is not writable by this user (${errText(error)})`); }
+    return { decision: 'ok', path: dir, reason: null, would_create: [], would_tighten: false };
+  }
+  // Anything else is the user's own choice: it gets the private-directory walk (ancestors ours or root, no unsafe writable
+  // parent, no link as the leaf, a leaf that others could write to refused). It is only CHECKED: a looser mode that could be
+  // tightened is accepted as is, never chmod-ed.
+  const v = evaluatePrivateDir(dir, deps);
+  if (v.decision === 'refuse') return { ...v, reason: `TMPDIR: ${v.reason}` };
+  if (v.decision === 'tighten') return { decision: 'ok', path: dir, reason: null, would_create: [], would_tighten: false };
+  if (v.decision === 'ok') {
+    try { f.accessSync(dir, realFs.constants.W_OK); } catch (error) { return refuse(dir, `TMPDIR ${dir} is not writable by this user (${errText(error)})`); }
+  }
+  return v;
 }
 
 function ensureTmpdir(env = process.env, deps) {

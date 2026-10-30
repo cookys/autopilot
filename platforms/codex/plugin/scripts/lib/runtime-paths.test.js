@@ -268,11 +268,65 @@ test('gid rule: g+w with our own primary group does not count as other users', (
   const mid = path.join(root, 'mid');
   fs.mkdirSync(mid);
   fs.chmodSync(mid, 0o775);
-  assert.strictEqual(rp.ensurePrivateDir(path.join(mid, 'runs'), depsFor()).ok, true);
+  assert.strictEqual(rp.ensurePrivateDir(path.join(mid, 'runs'), depsFor({ username: 'me', etc: { group: `me:x:${MYGID}:\n`, passwd: '' } })).ok, true);
   const mid2 = path.join(root, 'mid2');
   fs.mkdirSync(mid2);
   fs.chmodSync(mid2, 0o775);
   const o = overlay({ [mid2]: { gid: MYGID + 1 } });
-  const r = rp.ensurePrivateDir(path.join(mid2, 'runs'), depsFor({ fs: o.fs }));
+  const r = rp.ensurePrivateDir(path.join(mid2, 'runs'), depsFor({ fs: o.fs, username: 'me', etc: { group: `me:x:${MYGID}:\n`, passwd: '' } }));
   assert.strictEqual(r.ok, false);
+});
+
+// ---- review round 1: g+w only with a user-private primary group ----
+test('g+w with a shared primary group (users) is writable by others; a user-private group is not; unreadable is shared', () => {
+  const root = fixture();
+  const mid = path.join(root, 'mid');
+  fs.mkdirSync(mid);
+  fs.chmodSync(mid, 0o775);
+  const gid = MYGID;
+  const privateEtc = { group: `me:x:${gid}:\n`, passwd: `me:x:${ME}:${gid}::/home/me:/bin/sh\n` };
+  const namedEtc = { group: `me:x:${gid}:\n`, passwd: '' };
+  const sharedByMember = { group: `users:x:${gid}:alice,bob\n`, passwd: `me:x:${ME}:${gid}::/h:/bin/sh\n` };
+  const sharedByPasswd = { group: `users:x:${gid}:\n`, passwd: `me:x:${ME}:${gid}::/h:/bin/sh\nalice:x:2000:${gid}::/h:/bin/sh\n` };
+  const soleMember = { group: `grp:x:${gid}:me\n`, passwd: `me:x:${ME}:${gid}::/h:/bin/sh\n` };
+  const ok = (etc, username = 'me') => rp.ensurePrivateDir(path.join(mid, `runs-${Math.random().toString(36).slice(2)}`), depsFor({ username, etc })).ok;
+  assert.strictEqual(ok(privateEtc), true, 'group named after the user');
+  assert.strictEqual(ok(namedEtc), true);
+  assert.strictEqual(ok(soleMember), true, 'a group whose only member is the user and that no other account uses as primary');
+  assert.strictEqual(ok(sharedByMember), false, 'another member listed in /etc/group');
+  assert.strictEqual(ok(sharedByPasswd), false, 'another account has it as its primary group');
+  assert.strictEqual(ok({ group: null, passwd: null }), false, 'unreadable /etc/group: shared');
+});
+
+// ---- review round 1: an EXISTING TMPDIR is judged like a private directory (lstat, ancestors, writable leaf) ----
+test('existing TMPDIR: a link as the leaf, an unsafe ancestor and a leaf others could write are refused; a root-owned sticky root is taken as found', () => {
+  const root = fixture();
+  const real = path.join(root, 'real');
+  fs.mkdirSync(real, { mode: 0o700 });
+  const link = path.join(root, 'tmplink');
+  fs.symlinkSync(real, link);
+  const l = rp.ensureTmpdir({ TMPDIR: link }, depsFor());
+  assert.strictEqual(l.ok, false);
+  assert.match(l.reason, /symbolic link/);
+  const open = path.join(root, 'open');
+  fs.mkdirSync(open);
+  fs.chmodSync(open, 0o777);
+  const unsafeAncestor = path.join(open, 'tmp');
+  fs.mkdirSync(unsafeAncestor, { mode: 0o700 });
+  const a = rp.ensureTmpdir({ TMPDIR: unsafeAncestor }, depsFor());
+  assert.strictEqual(a.ok, false);
+  assert.match(a.reason, /writable by other users/);
+  const wleaf = path.join(root, 'wleaf');
+  fs.mkdirSync(wleaf);
+  fs.chmodSync(wleaf, 0o777);
+  const w = rp.ensureTmpdir({ TMPDIR: wleaf }, depsFor());
+  assert.strictEqual(w.ok, false);
+  assert.strictEqual(modeOf(wleaf), 0o777, 'checked, not modified');
+  const shared = path.join(root, 'shared');
+  fs.mkdirSync(shared);
+  fs.chmodSync(shared, 0o1777);
+  const o = overlay({ [shared]: { uid: 0 } });
+  assert.strictEqual(rp.ensureTmpdir({ TMPDIR: shared }, depsFor({ fs: o.fs })).ok, true);
+  assert.strictEqual(modeOf(shared), 0o1777);
+  assert.deepStrictEqual(o.calls.chmod, []);
 });

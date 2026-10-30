@@ -163,12 +163,8 @@ function readLaunchReport(dir) {
 // The record file is shared with claimInFile, so it is read and written under the same `.lock`.
 // -> { launch_id, result_path, record }
 function beginLaunch(dir, now = new Date()) {
-  try {
-    for (const name of fs.readdirSync(dir)) {
-      if (name.startsWith(RESULT_PREFIX) && name.endsWith(RESULT_SUFFIX)) { try { fs.unlinkSync(path.join(dir, name)); } catch (_e) { /* best effort */ } }
-    }
-  } catch (_error) { /* dir listing is best effort */ }
   const file = path.join(dir, LAUNCH_FILE);
+  let result;
   const release = lockFile(`${file}.lock`, 1000);
   try {
     const prev = readJson(file);
@@ -182,10 +178,18 @@ function beginLaunch(dir, now = new Date()) {
       reported: prev && prev.reported && typeof prev.reported === 'object' ? prev.reported : {},
     };
     writeAtomic(file, `${JSON.stringify(record)}\n`);
-    return { launch_id, result_path: record.result_path, record };
+    result = { launch_id, result_path: record.result_path, record };
   } finally {
     if (release) release();
   }
+  // Only now, with the record naming the NEW launch: older results go. (Before the record is written a reader still holding the old
+  // launch_id would find its result gone and report "exited without reporting".)
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      if (name.startsWith(RESULT_PREFIX) && name.endsWith(RESULT_SUFFIX) && name !== path.basename(result.result_path)) { try { fs.unlinkSync(path.join(dir, name)); } catch (_e) { /* best effort */ } }
+    }
+  } catch (_error) { /* dir listing is best effort */ }
+  return result;
 }
 
 // Parent, AFTER the spawn. Updates only this launch's pid fields in the CURRENT record (memos written meanwhile are kept); a record

@@ -146,6 +146,24 @@ checks.claimLockHeld = (wl) => {
   assert.strictEqual(r, true, 'a claim that cannot get the lock still tells the user');
   assert.ok(before.equals(fs.readFileSync(file)), 'a claim without the lock must not rewrite the record');
 };
+checks.beginLaunchOrder = (wl) => {
+  // the old launch's result file must still be there for as long as the record still names the old launch
+  const dir = tmp();
+  const old = wl.beginLaunch(dir);
+  wl.writeResult(old.result_path, old.launch_id, true, null);
+  wl.recordPid(dir, old.record, deadPid());
+  assert.strictEqual(wl.readLaunchReport(dir).state, 'ok');
+  const real = fs.unlinkSync;
+  const seen = [];
+  fs.unlinkSync = function patched(f, ...rest) {
+    const out = real.call(this, f, ...rest);
+    if (path.basename(String(f)).startsWith(wl.RESULT_PREFIX)) seen.push(wl.readLaunchReport(dir));
+    return out;
+  };
+  try { wl.beginLaunch(dir); } finally { fs.unlinkSync = real; }
+  assert.ok(seen.length >= 1, 'the old result file was removed');
+  for (const r of seen) assert.notStrictEqual(r.reason, wl.NO_REPORT_REASON, `a reader between the two steps saw ${JSON.stringify(r.state)}/exited-without-reporting`);
+};
 checks.pidGap = (wl) => {
   // the parent has not written the pid yet: no verdict; the same record 5 minutes later (the parent died there) is a failure
   const dir = tmp();
@@ -164,6 +182,7 @@ test('exit without reporting: a dead launcher (or a recycled pid) is a failure, 
 test('reported once: a session hears a reason once; others and new reasons are told', () => { checks.reportedOnce(REAL); checks.reportedCap(REAL); });
 test('reported once, in parallel: no session is lost to a concurrent read-modify-write', () => checks.claimConcurrent(REAL, SRC));
 test('a claim that cannot get the record lock leaves the record untouched and still tells', () => checks.claimLockHeld(REAL));
+test('beginLaunch writes the new record before it removes older results (no reader sees a false exit-without-report)', () => checks.beginLaunchOrder(REAL));
 test('a launch whose pid is not written yet is undecided (and a failure once the parent is long gone)', () => checks.pidGap(REAL));
 test('a spawn that failed in the parent leaves a failed result; an ok result reads ok', () => { checks.spawnFailureResult(REAL); checks.okResult(REAL); });
 

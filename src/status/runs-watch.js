@@ -1051,7 +1051,7 @@ function startWatcherDetached({
     // A failure of this process: record it as its own launch, result included, and say why.
     const failed = (status, message) => {
       const l = launchProto.beginLaunch(launchDirPath);
-      launchProto.writeResult(l.result_path, l.launch_id, false, message);
+      launchProto.writeResult(l.result_path, l.launch_id, false, message, new Date(), status === 'live_dir_unusable' ? 'live_dir' : null);
       launchProto.recordPid(launchDirPath, l.record, null);
       return { status, message, launch_id: l.launch_id };
     };

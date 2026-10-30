@@ -446,7 +446,7 @@ function run(payload) {
       const launchProto = require(path.join(root, 'src/status/watcher-launch'));
       const dir = launchDirOf(root, scope.project_key);
       const prev = launchProto.readLaunchReport(dir);
-      if (prev.state === 'failed' && launchProto.claimReport(dir, sid, prev.reason)) report = `watcher 無法啟動：${prev.reason}`;
+      if (prev.state === 'failed' && launchProto.claimReport(dir, sid, prev.reason)) report = `${prev.kind === 'live_dir' ? 'live 目錄無法使用' : 'watcher 無法啟動'}：${prev.reason}`;
     } catch (error) {
       process.stderr.write(`${TAG}: launch result not read: ${error.message}\n`);
     }

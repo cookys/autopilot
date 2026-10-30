@@ -143,7 +143,7 @@ function readLaunchReport(dir) {
   if (!rec || typeof rec.launch_id !== 'string') return { state: 'none' };
   const result = readJson(resultPathOf(dir, rec.launch_id));
   if (result && result.launch_id === rec.launch_id) {
-    return result.ok === true ? { state: 'ok', launch: rec } : { state: 'failed', reason: String(result.reason || 'unknown reason'), launch: rec };
+    return result.ok === true ? { state: 'ok', launch: rec } : { state: 'failed', reason: String(result.reason || 'unknown reason'), kind: result.kind || null, launch: rec };
   }
   if (rec.pid === null || rec.pid === undefined) {
     // The parent has not written the pid yet (it is between the two writes): no verdict, unless it died there.
@@ -203,8 +203,10 @@ function recordPid(dir, record, pid) {
 }
 
 // Either side. file = the launch's result path.
-function writeResult(file, launchId, ok, reason, now = new Date()) {
-  writeAtomic(file, `${JSON.stringify({ launch_id: launchId, ok: Boolean(ok), reason: ok ? null : String(reason || 'unknown reason'), at: now.toISOString() })}\n`);
+function writeResult(file, launchId, ok, reason, now = new Date(), kind = null) {
+  const body = { launch_id: launchId, ok: Boolean(ok), reason: ok ? null : String(reason || 'unknown reason'), at: now.toISOString() };
+  if (kind) body.kind = String(kind); // 'live_dir': the failure is the live directory's, so the hook words it that way for every session
+  writeAtomic(file, `${JSON.stringify(body)}\n`);
 }
 
 // Marks (session, reason) as told in the launch record.

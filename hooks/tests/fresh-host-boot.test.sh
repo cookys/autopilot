@@ -148,8 +148,12 @@ for shape in exists missing; do
   hook "$SB/mut-refuse" UserPromptSubmit "sess-r-$shape"
   eq "yes" "$(printf '%s' "$HOOK_OUT" | grep -q '"systemMessage":"watcher 無法啟動：dispatch runs directory unusable: mutation' && echo yes || echo no)" "[refuse/$shape] the next UserPromptSubmit returns systemMessage 'watcher 無法啟動：<reason>'"
   eq "no" "$(printf '%s' "$HOOK_OUT" | grep -q 'STALE' && echo yes || echo no)" "[refuse/$shape] ...and never the stale reason"
+  # Every hook run starts a NEW (doomed) watcher, whose launch stays 'pending' until that child writes its result. A run that lands
+  # in that window sees a pending newest launch and says nothing; real prompts are seconds apart, so the test waits for each result.
+  wait_result 20 > /dev/null
   hook "$SB/mut-refuse" UserPromptSubmit "sess-r-$shape"
   eq "" "$HOOK_OUT" "[refuse/$shape] the same session is not told twice"
+  wait_result 20 > /dev/null
   hook "$SB/mut-refuse" UserPromptSubmit "sess-other-$shape"
   eq "yes" "$(printf '%s' "$HOOK_OUT" | grep -q '"systemMessage":"watcher 無法啟動：' && echo yes || echo no)" "[refuse/$shape] another session is told"
 done

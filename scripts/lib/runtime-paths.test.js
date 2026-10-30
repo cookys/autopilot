@@ -296,6 +296,11 @@ test('g+w with a shared primary group (users) is writable by others; a user-priv
   assert.strictEqual(ok(sharedByMember), false, 'another member listed in /etc/group');
   assert.strictEqual(ok(sharedByPasswd), false, 'another account has it as its primary group');
   assert.strictEqual(ok({ group: null, passwd: null }), false, 'unreadable /etc/group: shared');
+  // the group NAME proves nothing: a group called after the user can still have other members or other accounts using it
+  const sameNameMember = { group: `me:x:${gid}:alice\n`, passwd: `me:x:${ME}:${gid}::/h:/bin/sh\n` };
+  const sameNamePasswd = { group: `me:x:${gid}:\n`, passwd: `me:x:${ME}:${gid}::/h:/bin/sh\nalice:x:12345:${gid}::/h:/bin/sh\n` };
+  assert.strictEqual(ok(sameNameMember), false, 'same name as the user, but /etc/group lists another member');
+  assert.strictEqual(ok(sameNamePasswd), false, 'same name as the user, but another account has it as its primary gid');
 });
 
 // ---- review round 1: an EXISTING TMPDIR is judged like a private directory (lstat, ancestors, writable leaf) ----

@@ -75,7 +75,6 @@ function groupIsPrivate(ctx) {
   if (typeof ctx.group !== 'string' || typeof ctx.passwd !== 'string') return false;
   const line = ctx.group.split('\n').map((l) => l.split(':')).find((f) => f.length >= 3 && Number(f[2]) === ctx.gid);
   if (!line) return false;
-  if (ctx.username && line[0] === ctx.username) return true;
   const members = (line[3] || '').split(',').map((m) => m.trim()).filter(Boolean);
   if (members.some((m) => m !== ctx.username)) return false;
   const others = ctx.passwd.split('\n').map((l) => l.split(':')).filter((f) => f.length >= 4 && Number(f[3]) === ctx.gid && f[0] !== ctx.username);

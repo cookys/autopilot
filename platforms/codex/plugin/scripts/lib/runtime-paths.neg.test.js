@@ -34,6 +34,8 @@ const CASES = [
       ['round < MAX_LINK_DEPTH && verdict', 'round < 1 && verdict']], to: null },
   { name: 'any g+w counts as private', red: 'g+w with a shared primary group (users) is writable by others; a user-private group is not; unreadable is shared',
     from: 'return !ctx.groupPrivate;', to: 'return false;' },
+  { name: 'group named after the user is private without looking', red: 'g+w with a shared primary group (users) is writable by others; a user-private group is not; unreadable is shared',
+    from: '  const members = (line[3]', to: '  if (ctx.username && line[0] === ctx.username) return true;\n  const members = (line[3]' },
   { name: 'existing TMPDIR skips the private walk', red: 'existing TMPDIR: a link as the leaf, an unsafe ancestor and a leaf others could write are refused; a root-owned sticky root is taken as found',
     from: 'const v = evaluatePrivateDir(dir, deps);\n  if (v.decision === \'refuse\') return', to: 'const v = { decision: \'ok\', path: dir, reason: null, would_create: [], would_tighten: false };\n  if (v.decision === \'refuse\') return' },
   { name: 'shared root chmod-ed too', red: 'a shared system root is never chmod-ed; only the private subdirectory is made',

@@ -187,6 +187,21 @@ const wrongModel = runKimiAuthor({ ...base, model: 'k3' }, {
 });
 assert.strictEqual(wrongModel.status, 'precondition_failed');
 assert.strictEqual(wrongModel.error, 'kimi_model_must_be_kimi-code_k3');
+const unlistedModel = runKimiAuthor({ ...base, model: 'kimi-code/k9' }, {
+  scratchRoot: tmp,
+  rawRoot: tmp,
+});
+assert.strictEqual(unlistedModel.status, 'precondition_failed');
+assert.strictEqual(unlistedModel.error, 'kimi_model_must_be_kimi-code_k3');
+const k31 = runKimiAuthor({ ...base, model: 'kimi-code/k3.1-pro' }, {
+  scratchRoot: tmp,
+  rawRoot: tmp,
+});
+assert.strictEqual(k31.status, 'authored');
+assert.strictEqual(k31.model, 'kimi-code/k3.1-pro');
+assert.strictEqual(k31.transport_envelope.request_binding.model, 'kimi-code/k3.1-pro');
+const k31argv = JSON.parse(fs.readFileSync(path.join(capture, 'argv.json'), 'utf8'));
+assert.deepStrictEqual(k31argv.slice(0, 2), ['--model', 'kimi-code/k3.1-pro']);
 
 console.log('surface_detection=true');
 console.log('argv_vector_and_isolation=true');

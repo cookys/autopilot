@@ -11,7 +11,8 @@ const { createRunnerTransportEnvelope } = require('../transport/runner-envelope'
 const RUNNER = 'kimi';
 const MODEL = 'kimi-code/k3';
 // 2026-08-19 Revival 使用者改派：kimi 席擴充到 kimi-code/k3-256k（probe PONG-K3-256K 通過）。
-const ALLOWED_MODELS = new Set([MODEL, 'kimi-code/k3-256k']);
+// 2026-10-31 Owner 指定討論席 kimi-code/k3.1-pro（已在 official-qualification-defaults 取得資格）；author rail 同步收。
+const ALLOWED_MODELS = new Set([MODEL, 'kimi-code/k3-256k', 'kimi-code/k3.1-pro']);
 const REQUIRED_HELP_TOKENS = Object.freeze([
   '--model',
   '--prompt',

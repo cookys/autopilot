@@ -134,6 +134,18 @@ checks.claimConcurrent = (wl, file) => {
     assert.strictEqual(rec.reported.r.length, 12, `sessions lost: ${JSON.stringify(rec.reported.r)}`);
   });
 };
+
+checks.claimLockHeld = (wl) => {
+  // another process holds the record's lock (fresh mtime): the claim neither reads nor writes the record, and still tells the user
+  const dir = tmp();
+  wl.beginLaunch(dir);
+  const file = path.join(dir, wl.LAUNCH_FILE);
+  fs.writeFileSync(`${file}.lock`, '');
+  const before = fs.readFileSync(file);
+  const r = wl.claimReport(dir, 'sess-x', 'some reason');
+  assert.strictEqual(r, true, 'a claim that cannot get the lock still tells the user');
+  assert.ok(before.equals(fs.readFileSync(file)), 'a claim without the lock must not rewrite the record');
+};
 checks.pidGap = (wl) => {
   // the parent has not written the pid yet: no verdict; the same record 5 minutes later (the parent died there) is a failure
   const dir = tmp();
@@ -151,6 +163,7 @@ test('launch id: the report is about this launch, never an older result or the l
 test('exit without reporting: a dead launcher (or a recycled pid) is a failure, a live one is undecided', () => checks.exitWithoutReport(REAL));
 test('reported once: a session hears a reason once; others and new reasons are told', () => { checks.reportedOnce(REAL); checks.reportedCap(REAL); });
 test('reported once, in parallel: no session is lost to a concurrent read-modify-write', () => checks.claimConcurrent(REAL, SRC));
+test('a claim that cannot get the record lock leaves the record untouched and still tells', () => checks.claimLockHeld(REAL));
 test('a launch whose pid is not written yet is undecided (and a failure once the parent is long gone)', () => checks.pidGap(REAL));
 test('a spawn that failed in the parent leaves a failed result; an ok result reads ok', () => { checks.spawnFailureResult(REAL); checks.okResult(REAL); });
 
@@ -170,6 +183,7 @@ const NEG = [
   { name: 'no pid liveness judgement', row: 'exitWithoutReport', from: 'if (launcherAlive(rec)) return', to: 'if (true) return' },
   { name: 'no reported memory', row: 'reportedOnce', from: 'if (sessionId && list.includes(sessionId)) return false;', to: '' },
   { name: 'one reason slot (a new reason resets the sessions)', row: 'reportedOnce', from: 'const list = Array.isArray(reported[reason]) ? reported[reason] : [];', to: 'const list = Array.isArray(reported[reason]) ? reported[reason] : []; for (const k of Object.keys(reported)) if (k !== reason) delete reported[k];' },
+  { name: 'claim writes without the lock', row: 'claimLockHeld', from: '  if (!release) return true;\n  try {\n    let obj = readJson(file);', to: '  try {\n    let obj = readJson(file);' },
   { name: 'pid-less launch judged at once', row: 'pidGap', from: 'if (Number.isFinite(age) && age < PID_GAP_MS) return', to: 'if (false) return' },
 ];
 for (const c of NEG) {
@@ -180,7 +194,7 @@ for (const c of NEG) {
 }
 
 test('negative control: an unlocked read-modify-write loses sessions in parallel', async () => {
-  const file = mutated('const release = lockFile(`${file}.lock`, 1000);\n  try {\n    let obj = readJson(file);', 'const release = null;\n  try {\n    let obj = readJson(file);');
+  const file = mutated('const release = lockFile(`${file}.lock`, 1000);\n  if (!release) return true;\n  try {\n    let obj = readJson(file);', 'const release = null;\n  try {\n    let obj = readJson(file);');
   const wl = load(file);
   // The lost update is a race, so one round may not hit it: the broken copy must lose a session within a few rounds.
   let caught = false;

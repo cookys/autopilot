@@ -87,15 +87,19 @@ function lockFile(file, waitMs = 0) {
   }
 }
 
+// NOTE: this lock is released as soon as startWatcherDetached returns 'started'; it does not cover the detached watcher's whole life.
+// What keeps a losing second start out is the flock probe, and readLaunchReport's pending verdict (a live child pid is pending -> 'busy').
 function lockLaunch(dir) {
   return lockFile(path.join(dir, 'watcher-launch.lock'), 0);
 }
 
 // Marks (session, reason) as told in `file`'s `reported` map ({ reason: [sessions] }). -> true when this call is the first to
-// tell it. Read-modify-write under its own lock (waits up to 1 s; a lock that cannot be had is fail-open: the update goes ahead
-// unlocked rather than lose the report). The write is tmp + rename.
+// tell it. Read-modify-write under its own lock (waits up to 1 s). A lock that cannot be had is fail-open for the USER only: the
+// caller is told (true) but the file is neither read nor written, because the record is shared with beginLaunch/recordPid and an
+// unlocked write could put an old launch_id or pid back. The cost is a possible repeat of the sentence. The write is tmp + rename.
 function claimInFile(file, sessionId, reason) {
   const release = lockFile(`${file}.lock`, 1000);
+  if (!release) return true;
   try {
     let obj = readJson(file);
     if (!obj) {

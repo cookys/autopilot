@@ -89,6 +89,29 @@ function claimOnceFile(root, sid, reason) {
   } catch (_error) { return true; /* cannot remember: report again next time */ }
 }
 
+function readPayload() {
+  try {
+    const raw = fs.readFileSync(0, 'utf8');
+    const value = raw.trim() ? JSON.parse(raw) : {};
+    return value && typeof value === 'object' ? value : {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+let topLevelMemo = null; // one `git rev-parse --show-toplevel` per invocation
+function topLevel(cwd) {
+  if (topLevelMemo !== null) return topLevelMemo;
+  try {
+    topLevelMemo = execFileSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000,
+    }).trim() || cwd;
+  } catch (_error) {
+    topLevelMemo = cwd;
+  }
+  return topLevelMemo;
+}
+
 // Opt-in rule (see header). `.claude/*-config.md` in the work tree or in the main checkout (a linked worktree
 // whose config is untracked still belongs to an onboarded project).
 function hasProjectConfig(cwd) {

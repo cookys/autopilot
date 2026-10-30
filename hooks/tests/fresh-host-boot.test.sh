@@ -82,6 +82,14 @@ wait_result() { # waits up to $1 s for the current launch's result file; prints 
     sleep 0.1
   done
 }
+need_result() { # need_result <what> <secs>: sets RES to the result path of the current launch; a timeout is a FAIL naming the launch
+  local ldir="$CD/home/.autopilot/review/$KEY/live" id
+  RES="$(wait_result "$2")"
+  if [ -z "$RES" ]; then
+    id="$(node -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).launch_id)}catch(_){process.stdout.write("(no record)")}' "$ldir/watcher-launch.json")"
+    fail "$1: no result file for launch $id within $2 s (case dir $CD)"
+  fi
+}
 jfield() { node -e 'try{const v=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(v[process.argv[2]]))}catch(_){process.stdout.write("?")}' "$1" "$2"; }
 modeof() { stat -c %a "$1" 2> /dev/null; }
 
@@ -97,7 +105,7 @@ for shape in exists missing; do
   RUNS="$BTMP/autopilot-dispatch-runs"
   eq "700" "$(modeof "$RUNS")" "[$shape] the runs directory was made by the product, mode 0700"
   [ "$shape" = missing ] && eq "700" "$(modeof "$BTMP")" "[$shape] the TMPDIR the user named was made, mode 0700"
-  RES="$(wait_result 10)"
+  need_result "[good/$shape] first launch" 10
   eq "yes" "$([ -n "$RES" ] && echo yes || echo no)" "[$shape] this launch left a result file under its launch id"
   eq "true" "$(jfield "$RES" ok)" "[$shape] the result says ok"
   LID="$(jfield "$CD/home/.autopilot/review/$KEY/live/watcher-launch.json" launch_id)"
@@ -140,7 +148,7 @@ for shape in exists missing; do
   hook "$SB/mut-refuse" SessionStart "sess-r-$shape"
   wait_writer 5
   eq "no" "$([ -n "$W_PID" ] && echo yes || echo no)" "[refuse/$shape] a watcher that is refused its runs directory publishes nothing"
-  RES="$(wait_result 20)"
+  need_result "[refuse/$shape] first launch" 20
   eq "false" "$(jfield "$RES" ok)" "[refuse/$shape] this launch's result says it failed"
   eq "yes" "$(grep -q 'dispatch runs directory unusable: mutation: this directory is refused' "$RES" && echo yes || echo no)" "[refuse/$shape] with the reason the watcher gave"
   eq "no" "$(grep -q 'STALE' "$RES" && echo yes || echo no)" "[refuse/$shape] not the stale reason of an earlier launch"
@@ -150,10 +158,10 @@ for shape in exists missing; do
   eq "no" "$(printf '%s' "$HOOK_OUT" | grep -q 'STALE' && echo yes || echo no)" "[refuse/$shape] ...and never the stale reason"
   # Every hook run starts a NEW (doomed) watcher, whose launch stays 'pending' until that child writes its result. A run that lands
   # in that window sees a pending newest launch and says nothing; real prompts are seconds apart, so the test waits for each result.
-  wait_result 20 > /dev/null
+  need_result "[refuse/$shape] launch before the second prompt" 20
   hook "$SB/mut-refuse" UserPromptSubmit "sess-r-$shape"
   eq "" "$HOOK_OUT" "[refuse/$shape] the same session is not told twice"
-  wait_result 20 > /dev/null
+  need_result "[refuse/$shape] launch before the other session's prompt" 20
   hook "$SB/mut-refuse" UserPromptSubmit "sess-other-$shape"
   eq "yes" "$(printf '%s' "$HOOK_OUT" | grep -q '"systemMessage":"watcher 無法啟動：' && echo yes || echo no)" "[refuse/$shape] another session is told"
 done

@@ -380,6 +380,21 @@ function signatureOf(runs) {
  *   collect({enrichCap, project}) -> enriched run rows (injected; cli.js passes collectRuns)
  *   now() -> epoch ms
  */
+// The inputs whose change makes a published snapshot outdated, as [{ path, mtime_ms }] (mtime_ms null = absent). The envelope carries it so a
+// reader decides "has anything changed since this was published" by stat-ing the same paths, not by how old published_at is (a watcher that left
+// on purpose leaves a snapshot that stays true until one of these moves). Directories are watched by their own mtime: the writers of the dispatch
+// manifests and the session-mode markers create them by tmp + rename, which moves the directory's mtime. NOT covered (a known gap): the decision
+// ledger, the work-order progress and review receipts, and the per-session tasks / attention files the pane reads live itself.
+function sourceFingerprint(env) {
+  const home = env.HOME || os.homedir();
+  const paths = [manifestDirOf(env), markerDirOf(env), costsFileOf({ env, home })];
+  return paths.map((p) => {
+    let mtime = null;
+    try { mtime = fs.statSync(p).mtimeMs; } catch (_error) { /* absent */ }
+    return { path: p, mtime_ms: mtime };
+  });
+}
+
 function createWatcher({
   key, env = process.env, cwd = process.cwd(), collect, now = Date.now,
   interval = DEFAULT_INTERVAL_S, enrichCap = 8, pid = process.pid, idleExitS = null, render = null,
@@ -412,7 +427,7 @@ function createWatcher({
   const spendHistory = createSpendHistoryPublisher({ live, writeAtomic, log: (m) => log(m) }); // follow-up C: <live>/runs/spend-history.json (host-wide, one sample per 15 min, 48 h)
   const stageWalkSidecar = createStageWalkPublisher({ live, writeAtomic, log: (m) => log(m) }); // P7 D4: <live>/stage/<sid>.json
   const state = {
-    lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
+    lastSources: null, lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null, host_today_brain_usd: null, brain_cap_usd: brainSpend.read().brain_cap_usd },
     idleSince: null, lastPathsWhy: null, // lastPathsWhy: the last logged reason `git worktree list` failed (log again only when it changes)
     rootActiveAt: new Map(), droppedRoots: new Set(), // root retention (ROOT_RETENTION_S)
@@ -437,6 +452,7 @@ function createWatcher({
       valid_for_s: VALID_FOR_S,
       writer: extra.writer,
       ...(extra.exit_reason ? { exit_reason: extra.exit_reason } : {}),
+      ...(state.lastSources ? { sources: state.lastSources } : {}),
       runs,
       counts: state.lastCounts.get(rootRunId) || computeCounts(runs, interval, enrichCap, freshBoundOf(state.lastRuns || runs, interval, enrichCap)),
       sessions: state.lastCost.sessions,
@@ -701,6 +717,7 @@ function createWatcher({
   function tick() {
     const nowMs = now();
     let rows;
+    const sourcesBefore = sourceFingerprint(env); // taken BEFORE collect: a change during the read is seen as newer, never lost
     try {
       const all = collect({ enrichCap, project: key });
       const selected = applySelectors(all, { project: key });
@@ -718,6 +735,7 @@ function createWatcher({
       log('code changed, exiting');
       return { published: false, exit: 'code_changed' };
     }
+    state.lastSources = sourcesBefore; // this tick's view is current as of these stats (published on change or heartbeat, and by the final publish)
     const allMarkers = unexpiredMarkers(env, key, nowMs);
     const markers = allMarkers.filter(isOrchestratorMarker);
     const cost = { ...costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean)), ...brainSpend.read() };

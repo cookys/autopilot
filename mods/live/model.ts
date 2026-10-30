@@ -93,8 +93,8 @@ export type BandView = {
 }
 
 export type LiveSnapshot = {
-  // ok | stale | idle_exit | unavailable | unreadable | no-pointer | no-project
-  state: 'ok' | 'stale' | 'idle_exit' | 'unavailable' | 'unreadable' | 'no-pointer' | 'no-project'
+  // ok | stale | unavailable | unreadable | no-pointer | no-project
+  state: 'ok' | 'stale' | 'unavailable' | 'unreadable' | 'no-pointer' | 'no-project'
   // the exact band text (an ok snapshot: line 1, then the reason on its own line)
   text: string
   band: BandView | null // set for state ok only
@@ -116,6 +116,8 @@ export type LiveSnapshot = {
   // P7d: plan-review state + latest code-review round of this project (null = none published)
   review: ReviewView | null
   published_at: string | null
+  // a neutral line under the header when the snapshot's watcher has left (idle exit or another exit_reason) and nothing it read has changed; null = nothing to say
+  watcher_note: string | null
   session_as_of: string | null
   host_as_of: string | null
   // P7: the facts the panel's tabs draw (null = the fact is not published: the tab says "no data")
@@ -246,7 +248,23 @@ export function longestPrefixKey(real: string, maps: Json[]): string | null {
   return best === null ? null : best.key
 }
 
-export type EnvelopeCheck = { status: 'missing' | 'malformed' | 'fresh' | 'stale'; envelope: Json | null }
+// moved: set on a stale envelope whose writer is gone and whose sources changed since the publish (see sourcesMoved)
+export type EnvelopeCheck = { status: 'missing' | 'malformed' | 'fresh' | 'stale'; envelope: Json | null; moved?: boolean }
+
+// The envelope's `sources` (src/status/runs-watch.js sourceFingerprint): [{ path, mtime_ms }] the watcher read the snapshot from. null = the envelope carries none
+// (an older watcher): nothing can be said about change, so age alone keeps deciding.
+export function sourcesOf(env: Json): { path: string; mtime_ms: number | null }[] | null {
+  if (!Array.isArray(env.sources)) return null
+  const out: { path: string; mtime_ms: number | null }[] = []
+  for (const s of env.sources) {
+    if (!isObject(s) || typeof s.path !== 'string' || !s.path) return null
+    out.push({ path: s.path, mtime_ms: typeof s.mtime_ms === 'number' && Number.isFinite(s.mtime_ms) ? s.mtime_ms : null })
+  }
+  return out
+}
+// has this source moved since the watcher stat-ed it? `now` is the mtime now (null = absent). Newer, or present where it was absent, or gone where it was present.
+export const sourceMoved = (recorded: number | null, now: number | null): boolean => (recorded === null ? now !== null : now === null || now > recorded)
+
 
 // readEnvelope's contract (src/status/runs-watch.js): a wrong schema or a scope that is not the one wanted is a
 // MISSING file; fresh depends on published_at alone, never on when the mod read the file.
@@ -1024,8 +1042,10 @@ export const stateText = (t: T) => ({
   noProjectWt: (wt: number) => t('state.no_project_wt', { wt: GT.residue, n: wt, hint: RUNS_HINT }),
   unreadable: t('state.unreadable'),
   stale: (publishedAt: string | null) => (publishedAt ? t('state.stale_at', { at: publishedAt }) : t('state.stale')),
-  // the watcher exited on purpose after sitting idle (envelope exit_reason 'idle_exit'): not a fault, and it comes back with the owner's next message
-  idleExit: (publishedAt: string | null) => (publishedAt ? t('state.idle_exit_at', { at: publishedAt }) : t('state.idle_exit')),
+  // an old snapshot whose watcher is gone AND whose sources have moved since: the data really is outdated
+  staleMoved: (publishedAt: string | null) => (publishedAt ? t('state.stale_moved_at', { at: publishedAt }) : t('state.stale_moved')),
+  // a snapshot whose sources have not moved stays ok; its watcher having left is a neutral note, not a fault
+  watcherNote: (exitReason: string) => (exitReason === 'idle_exit' ? t('state.idle_note') : t('state.exited_note', { reason: exitReason })),
   unavailable: () => t('state.unavailable'),
 })
 

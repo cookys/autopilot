@@ -45,7 +45,7 @@ import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
-  acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
@@ -114,7 +114,7 @@ async function readObject($: EngineInterface, path: string): Promise<Json | null
 function plain(state: LiveSnapshot['state'], text: string, over: Partial<LiveSnapshot> = {}): LiveSnapshot {
   return {
     state, text, band: null, header: text, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null,
-    sections: NO_SECTIONS, review: null, published_at: null, session_as_of: null, host_as_of: null, detail: NO_DETAIL, ...over,
+    sections: NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: NO_DETAIL, ...over,
   }
 }
 
@@ -174,6 +174,20 @@ async function resolveScope($: EngineInterface, autopilotHome: string, liveBase:
   return key === null ? null : { key, root: null, marker: null, campaign: [] }
 }
 
+// An old envelope is outdated only if something it was built from has changed since: age alone says nothing (a watcher that exited on purpose leaves a
+// snapshot that stays true). Only a snapshot whose writer is gone (writer null, the final publish) can be judged by its sources; a writer that is listed but
+// stopped publishing is a stuck or dead one, and keeps the age verdict. No `sources` list (an older watcher) keeps the age verdict too.
+async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<EnvelopeCheck> {
+  const env = check.envelope as Json
+  const sources = sourcesOf(env)
+  if (sources === null) return check
+  for (const s of sources) {
+    const st = await $.fs.stat(s.path).catch(() => null)
+    if (sourceMoved(s.mtime_ms, st === null ? null : st.mtimeMs)) return { ...check, moved: true }
+  }
+  return { status: 'fresh', envelope: env }
+}
+
 // The envelope of one scope: the tmpfs file, then the SSD copy; a fresh one beats a stale one.
 async function findEnvelope($: EngineInterface, autopilotHome: string, liveBase: string, scope: Scope, nowMs: number): Promise<EnvelopeCheck> {
   const scopeKey = scopeKeyOf(scope.key, scope.root)
@@ -187,7 +201,7 @@ async function findEnvelope($: EngineInterface, autopilotHome: string, liveBase:
     if (check.status === 'stale' && stale === null) stale = check
     if (check.status === 'malformed') malformed = true
   }
-  if (stale !== null) return stale
+  if (stale !== null) return stale.envelope !== null && stale.envelope.writer === null ? await judgeByChange($, stale) : stale
   return { status: malformed ? 'malformed' : 'missing', envelope: null }
 }
 
@@ -377,8 +391,8 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   }
   if (fresh.length === 0) {
     const at = published !== null && Number.isFinite(Date.parse(published)) ? hhmm(Date.parse(published)) : null
-    // the watcher's last publish says it left on purpose (idle exit): a neutral state, not a broken watcher
-    if (found.envelope.exit_reason === 'idle_exit') return { snap: plain('idle_exit', STATE_TEXT.idleExit(at), common), counts: null, acceptance: null }
+    // a watcher that is gone (writer null) over sources that moved: say what happened, not that the watcher is "not publishing"
+    if (found.moved === true) return { snap: plain('stale', STATE_TEXT.staleMoved(at), common), counts: null, acceptance: null }
     return { snap: plain('stale', STATE_TEXT.stale(at), common), counts: null, acceptance: null }
   }
   // W3a sources. The per-session files are named by the sanitised sid; every sidecar is read for THIS scope only.
@@ -421,7 +435,8 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const band = bandView(env, jobModel, scope.key, nowMs, src, t)
   return {
     snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
-      ...common, band, header: headerText(env, sid, ctx, t), metrics: { ctx }, pending: jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions,
+      ...common, watcher_note: typeof env.exit_reason === 'string' && env.exit_reason !== '' && env.writer === null ? STATE_TEXT.watcherNote(env.exit_reason) : null,
+      band, header: headerText(env, sid, ctx, t), metrics: { ctx }, pending: jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions,
       sections: buildSections(src, foreman),
       review,
       detail: {

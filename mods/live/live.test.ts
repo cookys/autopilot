@@ -582,20 +582,46 @@ for (const surface of SURFACES) {
     expect(await bandText($, surface)).toContain('no project · ⚑6 · run:')
   })
 
-  test('band: an old envelope that says exit_reason idle_exit is the neutral idle state, not stale (' + surface + ')', async ($, on) => {
+  // age alone never makes a snapshot stale once its writer is gone: only a source that moved since the publish does (src/status/runs-watch.js sourceFingerprint)
+  const SRC = '/tmp/autopilot-dispatch-runs'
+  const oldWorld = (over: Record<string, unknown>, mtimeNow: number | null) => {
     const tree = base()
-    tree[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ exit_reason: 'idle_exit', writer: null }))
-    const w = worldEn(on, tree, NOW_STALE)
+    tree[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ writer: null, sources: [{ path: SRC, mtime_ms: 1000 }], ...over }))
+    const w = worldEn(on0(), tree, NOW_STALE)
+    if (mtimeNow !== null) w.stats[SRC] = { size: 0, mtimeMs: mtimeNow }
+    return w
+  }
+  let on0: () => any = () => null
+  test('band: an old publish whose writer left and whose sources did not move is ok, not stale (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({}, 1000)
     await start($, surface)
     const text = await bandText($, surface)
-    expect(text).toContain('idle-exited')
-    expect(text).toContain('resumes on your next message')
+    expect(text).toContain(FOUND)
     expect(text).not.toContain('stale')
-    expect(text).not.toContain('not publishing')
-    // any other exit_reason keeps the stale wording
-    w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ exit_reason: 'sigterm' }))
-    await w.clock.advance(5000)
-    expect(await bandText($, surface)).toContain('stale')
+  })
+  test('band: an old publish whose writer left and whose source moved is stale, and says what changed (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({}, 2000)
+    await start($, surface)
+    const text = await bandText($, surface)
+    expect(text).toContain('changed since the last publish at')
+    expect(text).not.toContain(FOUND)
+  })
+  test('pane: idle_exit with unmoved sources shows the data and a neutral idle note, no warning (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({ exit_reason: 'idle_exit' }, 1000)
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+    const p = await paneParts($, surface)
+    expect(p.head.join('\n')).toContain('watcher idle · resumes on your next message once something changes')
+    expect(p.head.join('\n')).not.toContain('stale')
+  })
+  test('band: a listed writer that stopped publishing stays stale whatever the sources did (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({ writer: { pid: 1, session_id: null, started_at: PUBLISHED } }, 1000)
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('the watcher is not publishing')
   })
 
   test('band: stale after valid_for_s; a re-read never makes an old envelope fresh (' + surface + ')', async ($, on) => {

@@ -107,6 +107,18 @@
       "type": "string",
       "minLength": 1
     },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "mtime_ms"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "mtime_ms": { "type": ["number", "null"] }
+        }
+      }
+    },
     "runs": {
       "type": "array",
       "items": {

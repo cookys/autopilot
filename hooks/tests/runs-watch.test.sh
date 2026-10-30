@@ -346,6 +346,9 @@ rm -f "$LIVE/runs/$KEY_A.json"
 eq "0" "$?" "--idle-exit 1 with no marker: exits 0 on its own"
 eq "null" "$(jq_file "$LIVE/runs/$KEY_A.json" 'j.writer')" "idle exit publishes writer: null"
 eq "idle_exit" "$(jq_file "$LIVE/runs/$KEY_A.json" 'j.exit_reason')" "idle exit publishes exit_reason idle_exit"
+# the envelope names what it was built from, so a reader can tell "something changed since" without trusting published_at's age (mods/live judgeByChange)
+eq "$RUNS $AHOME/session-mode $FAKE_HOME/.claude/metrics/costs.jsonl" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=>x.path).join(" ")')" "idle exit publishes sources: the manifest dir, the marker dir, the costs file"
+eq "true" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).length===3 && typeof j.sources[0].mtime_ms==="number" && typeof j.sources[1].mtime_ms==="number"')" "...the directories carry a numeric mtime_ms"
 flock -n "$LIVE/runs/$KEY_A.lock" true; eq "0" "$?" "lock is free after an idle exit"
 
 # unexpired marker (same project_key) keeps it running; once the marker expires it exits

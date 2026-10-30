@@ -127,7 +127,7 @@ else if (fs1 !== fs2) problems.push(`flag sets differ: stub ${fs1} vs real ${fs2
 const dirOf = (n) => { const d = path.join(tmp, n); fs.rmSync(d, { recursive: true, force: true }); fs.mkdirSync(d, { recursive: true }); return d; };
 // real: a scratch git repo (its decisions go into that repo's git-common-dir); stub: a scratch cell with .d0gate, the stub copy pinned to it
 const repo = dirOf('real-repo');
-for (const a of [['init', '-q'], ['-c', 'user.email=a@b.c', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'x']]) cp.spawnSync('git', a, { cwd: repo });
+for (const a of [['init', '-q'], ['-c', 'user.email=t@example.invalid', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'x']]) cp.spawnSync('git', a, { cwd: repo });
 const cell = dirOf('stub-cell'); fs.mkdirSync(path.join(cell, '.d0gate'));
 const stubCopy = path.join(tmp, 'stub-pinned.js');
 fs.writeFileSync(stubCopy, fs.readFileSync(stubFile, 'utf8').replace(/^const D0G_PINNED_CELL = .*;$/m, () => `const D0G_PINNED_CELL = ${JSON.stringify(cell)};`));

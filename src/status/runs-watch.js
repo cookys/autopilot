@@ -1051,6 +1051,7 @@ function startWatcherDetached({
     // A failure of this process: record it as its own launch, result included, and say why.
     const failed = (status, message) => {
       const l = launchProto.beginLaunch(launchDirPath);
+      if (!l) return { status: 'busy', holder: holderFromEnvelope(env, key), launching: true }; // the record is being written by another process
       launchProto.writeResult(l.result_path, l.launch_id, false, message, new Date(), status === 'live_dir_unusable' ? 'live_dir' : null);
       launchProto.recordPid(launchDirPath, l.record, null);
       return { status, message, launch_id: l.launch_id };
@@ -1074,6 +1075,7 @@ function startWatcherDetached({
       if (!onPath(bin, env)) return failed('error', `${bin} is not on PATH`);
     }
     const launch = launchProto.beginLaunch(launchDirPath);
+    if (!launch) return { status: 'busy', holder: holderFromEnvelope(env, key), launching: true }; // not ours to overwrite
     let fd;
     try {
       rotateWatcherLog(logFile);

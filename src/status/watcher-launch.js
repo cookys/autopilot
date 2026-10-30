@@ -159,13 +159,15 @@ function readLaunchReport(dir) {
   return { state: 'failed', reason: NO_REPORT_REASON, launch: rec };
 }
 
-// Parent, BEFORE the spawn (the caller holds lockLaunch). Removes older results, keeps who was already told about which reason.
-// The record file is shared with claimInFile, so it is read and written under the same `.lock`.
-// -> { launch_id, result_path, record }
+// Parent, BEFORE the spawn (the caller holds lockLaunch). Keeps who was already told about which reason. The record file is shared
+// with claimInFile and recordPid, so it is read and written under the same `.lock`; the removal of older results happens under that
+// lock too, AFTER the new record names the new launch (a reader holding the old launch_id would otherwise find its result gone and
+// report "exited without reporting"), and only for results of OTHER launches.
+// -> { launch_id, result_path, record }, or null when the lock cannot be had: nothing was written or removed (the caller is busy).
 function beginLaunch(dir, now = new Date()) {
   const file = path.join(dir, LAUNCH_FILE);
-  let result;
   const release = lockFile(`${file}.lock`, 1000);
+  if (!release) return null;
   try {
     const prev = readJson(file);
     const launch_id = newLaunchId();
@@ -178,27 +180,27 @@ function beginLaunch(dir, now = new Date()) {
       reported: prev && prev.reported && typeof prev.reported === 'object' ? prev.reported : {},
     };
     writeAtomic(file, `${JSON.stringify(record)}\n`);
-    result = { launch_id, result_path: record.result_path, record };
+    const result = { launch_id, result_path: record.result_path, record };
+    try {
+      for (const name of fs.readdirSync(dir)) {
+        if (name.startsWith(RESULT_PREFIX) && name.endsWith(RESULT_SUFFIX) && name !== path.basename(record.result_path)) { try { fs.unlinkSync(path.join(dir, name)); } catch (_e) { /* best effort */ } }
+      }
+    } catch (_error) { /* dir listing is best effort */ }
+    return result;
   } finally {
     if (release) release();
   }
-  // Only now, with the record naming the NEW launch: older results go. (Before the record is written a reader still holding the old
-  // launch_id would find its result gone and report "exited without reporting".)
-  try {
-    for (const name of fs.readdirSync(dir)) {
-      if (name.startsWith(RESULT_PREFIX) && name.endsWith(RESULT_SUFFIX) && name !== path.basename(result.result_path)) { try { fs.unlinkSync(path.join(dir, name)); } catch (_e) { /* best effort */ } }
-    }
-  } catch (_error) { /* dir listing is best effort */ }
-  return result;
 }
 
 // Parent, AFTER the spawn. Updates only this launch's pid fields in the CURRENT record (memos written meanwhile are kept); a record
-// that is no longer this launch's is left alone.
+// that is no longer this launch's is left alone. A lock that cannot be had means no update: the record keeps pid null, which the
+// reader treats as pending for PID_GAP_MS and as failed after that (a child that did report is read from its result file first).
 function recordPid(dir, record, pid) {
   record.pid = Number.isInteger(pid) ? pid : null;
   record.pid_start = Number.isInteger(pid) ? pidStartOf(pid) : null;
   const file = path.join(dir, LAUNCH_FILE);
   const release = lockFile(`${file}.lock`, 1000);
+  if (!release) return;
   try {
     const cur = readJson(file);
     if (!cur || cur.launch_id !== record.launch_id) return;

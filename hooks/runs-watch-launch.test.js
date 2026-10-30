@@ -164,6 +164,45 @@ checks.beginLaunchOrder = (wl) => {
   assert.ok(seen.length >= 1, 'the old result file was removed');
   for (const r of seen) assert.notStrictEqual(r.reason, wl.NO_REPORT_REASON, `a reader between the two steps saw ${JSON.stringify(r.state)}/exited-without-reporting`);
 };
+checks.beginLockHeld = (wl) => {
+  // the record's lock is held by someone else: beginLaunch writes nothing, removes nothing, and says so (null)
+  const dir = tmp();
+  const cur = wl.beginLaunch(dir);
+  wl.writeResult(cur.result_path, cur.launch_id, true, null);
+  const file = path.join(dir, wl.LAUNCH_FILE);
+  fs.writeFileSync(`${file}.lock`, '');
+  const before = fs.readFileSync(file);
+  const files = fs.readdirSync(dir).sort().join(',');
+  const r = wl.beginLaunch(dir);
+  assert.strictEqual(r, null, 'no lock, no launch');
+  assert.ok(before.equals(fs.readFileSync(file)), 'beginLaunch without the lock must not rewrite the record');
+  assert.strictEqual(fs.readdirSync(dir).sort().join(','), files, 'beginLaunch without the lock must not remove any result file');
+};
+checks.recordPidLockHeld = (wl) => {
+  const dir = tmp();
+  const cur = wl.beginLaunch(dir);
+  const file = path.join(dir, wl.LAUNCH_FILE);
+  fs.writeFileSync(`${file}.lock`, '');
+  const before = fs.readFileSync(file);
+  wl.recordPid(dir, cur.record, process.pid);
+  assert.ok(before.equals(fs.readFileSync(file)), 'recordPid without the lock must not rewrite the record');
+  // ... and the reader still reaches a verdict: pid null is pending, then failed once PID_GAP_MS has passed
+  assert.strictEqual(wl.readLaunchReport(dir).state, 'pending');
+  const rec = JSON.parse(before);
+  rec.started_at = new Date(Date.now() - 300000).toISOString();
+  fs.writeFileSync(file, JSON.stringify(rec));
+  assert.strictEqual(wl.readLaunchReport(dir).state, 'failed');
+};
+checks.beginKeepsNewerResult = (wl) => {
+  // only results of OTHER launches go; the new launch's own result path is never removed
+  const dir = tmp();
+  const a = wl.beginLaunch(dir);
+  wl.writeResult(a.result_path, a.launch_id, true, null);
+  const b = wl.beginLaunch(dir);
+  assert.ok(!fs.existsSync(a.result_path), 'the older launch result is removed');
+  wl.writeResult(b.result_path, b.launch_id, true, null);
+  assert.strictEqual(wl.readLaunchReport(dir).state, 'ok');
+};
 checks.pidGap = (wl) => {
   // the parent has not written the pid yet: no verdict; the same record 5 minutes later (the parent died there) is a failure
   const dir = tmp();
@@ -183,6 +222,9 @@ test('reported once: a session hears a reason once; others and new reasons are t
 test('reported once, in parallel: no session is lost to a concurrent read-modify-write', () => checks.claimConcurrent(REAL, SRC));
 test('a claim that cannot get the record lock leaves the record untouched and still tells', () => checks.claimLockHeld(REAL));
 test('beginLaunch writes the new record before it removes older results (no reader sees a false exit-without-report)', () => checks.beginLaunchOrder(REAL));
+test('beginLaunch without the record lock writes and removes nothing', () => checks.beginLockHeld(REAL));
+test('recordPid without the record lock writes nothing; the reader still reaches a verdict', () => checks.recordPidLockHeld(REAL));
+test('beginLaunch removes only the results of other launches', () => checks.beginKeepsNewerResult(REAL));
 test('a launch whose pid is not written yet is undecided (and a failure once the parent is long gone)', () => checks.pidGap(REAL));
 test('a spawn that failed in the parent leaves a failed result; an ok result reads ok', () => { checks.spawnFailureResult(REAL); checks.okResult(REAL); });
 
@@ -203,6 +245,11 @@ const NEG = [
   { name: 'no reported memory', row: 'reportedOnce', from: 'if (sessionId && list.includes(sessionId)) return false;', to: '' },
   { name: 'one reason slot (a new reason resets the sessions)', row: 'reportedOnce', from: 'const list = Array.isArray(reported[reason]) ? reported[reason] : [];', to: 'const list = Array.isArray(reported[reason]) ? reported[reason] : []; for (const k of Object.keys(reported)) if (k !== reason) delete reported[k];' },
   { name: 'claim writes without the lock', row: 'claimLockHeld', from: '  if (!release) return true;\n  try {\n    let obj = readJson(file);', to: '  try {\n    let obj = readJson(file);' },
+  { name: 'beginLaunch writes without the lock', row: 'beginLockHeld', from: '  if (!release) return null;\n', to: '' },
+  { name: 'recordPid writes without the lock', row: 'recordPidLockHeld', from: '  if (!release) return;\n  try {\n    const cur = readJson(file);', to: '  try {\n    const cur = readJson(file);' },
+  { name: 'beginLaunch removes older results before the record is written', row: 'beginLaunchOrder',
+    from: '    writeAtomic(file, `${JSON.stringify(record)}\\n`);\n    const result =',
+    to: '    for (const n of fs.readdirSync(dir)) if (n.startsWith(RESULT_PREFIX)) fs.unlinkSync(path.join(dir, n));\n    writeAtomic(file, `${JSON.stringify(record)}\\n`);\n    const result =' },
   { name: 'pid-less launch judged at once', row: 'pidGap', from: 'if (Number.isFinite(age) && age < PID_GAP_MS) return', to: 'if (false) return' },
 ];
 for (const c of NEG) {

@@ -136,6 +136,23 @@ async function checkConcurrent(root, rounds = 4) {
 
 test('parent-side failures (no flock, log cannot be opened, live dir refused) are written to the launch result', () => checkParentFailures(REPO));
 
+function checkRecordLockHeld(root) {
+  // the record's .lock is held by someone else: startWatcherDetached is busy, starts nothing and leaves the record as it was
+  const w = sandbox();
+  link(w, ['node', 'sh', 'nohup', 'flock', 'true']);
+  const first = drive(root, w, baseEnv(w)); // writes a record (the watcher child exits on its own: no bin given -> real bin, so only the record matters)
+  const file = path.join(w.ldir, 'watcher-launch.json');
+  const rec = fs.readFileSync(file);
+  fs.writeFileSync(`${file}.lock`, '');
+  const out = drive(root, w, baseEnv(w));
+  assert.notStrictEqual(out.r.status, 'started', 'no record lock, no start');
+  assert.ok(rec.equals(fs.readFileSync(file)), 'the record is untouched');
+  drop(w);
+  return first;
+}
+
+test('a record lock held by another process: busy, no start, record untouched', () => checkRecordLockHeld(REPO));
+
 test('two sessions starting at once: one start, the loser is busy and does not overwrite the record', { timeout: 120000 }, () => checkConcurrent(REPO));
 
 test('negative controls: each broken copy fails its row', { timeout: 400000 }, async () => {

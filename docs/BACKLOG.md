@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0339 -->
+<!-- next-id: BL-0345 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1490,3 +1490,99 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED 4124gs 2026-10-31, owner asked; depth-0 verified
 - **Pointer**: docs/backlog/brief-header-hint-guards.md
 - **Context**: hooks/lib/brief-header-template.js:76 joins lines with " | "; hooks/subagent-budget.js:498; dispatch-model-guard. Fix: copyable 3-line template incl. intentional form, one merged message, regression test.
+
+### engine-scorecard strip-expiry silently writes the real engine-capability store when only one directory is overridden
+- **Id**: BL-0339
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: peer
+- **Reporter**: peace (twgs-revival)
+- **Report**: 01M67HZPT918GAWJG237T0JG8N
+- **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
+- **Problem**: 成績單工具的去除期限指令同時動到兩個資料夾，一個放席位成績列，一個放證據與釘選。只改道其中一個時，另一個會悄悄寫進真實的資料夾。
+- **Impact**: 回報者的子代理對副本跑時，真實的證據與釘選被改寫，事後靠備份還原；資料安全問題。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED peace (twgs-revival) 2026-10-31, priority high (data safety)
+- **Pointer**: docs/backlog/engine-scorecard-strip-expiry-store-split.md
+- **Context**: Fix direction: refuse when only one of the two dirs is overridden, or list every path about to be written before writing. Add a negative control (one override only must be refused).
+
+### dispatch-review.sh cannot read only the last message and has no REWORK or STOP verdict
+- **Id**: BL-0340
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: peer
+- **Reporter**: peace (twgs-revival)
+- **Report**: 01M67HZPT918GAWJG237T0JG8N
+- **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
+- **Problem**: 審查派工腳本沒有「只讀最後一則訊息」的模式，判決詞彙也沒有 REWORK 或 STOP；回報者目前把判決塞在發現清單的一行裡承載。
+- **Impact**: 回報者靠繞路承載判決；判決詞彙刻意只有 SHIP-AS-IS／FIX-THEN-SHIP，擴充會牽動 receipt 與 finalize 契約。
+- **Trigger**: next edit to dispatch-review.sh or the verdict vocabulary, or a second peer asks for REWORK/STOP
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PEER-REPORTED peace (twgs-revival) 2026-10-31
+- **Pointer**: docs/backlog/dispatch-review-last-message-and-verdicts.md
+- **Context**: Evaluate first: a last-message-only read mode, and whether widening the verdict vocabulary is worth the receipt and finalize contract change.
+
+### Strike writer allowlist has no writer for project-embedded calibration
+- **Id**: BL-0341
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: peer
+- **Reporter**: peace (twgs-revival)
+- **Report**: 01M67HZPT918GAWJG237T0JG8N
+- **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
+- **Problem**: strike 寫入者的允許名單裡沒有「專案植入校準」這類寫入者，回報者只能暫借 qualification_admin 的身分寫入。
+- **Impact**: 回報者借用不屬於自己的寫入者身分，紀錄的來源標示不準確。
+- **Trigger**: next edit to the strike writer allowlist, or a second project embeds calibration
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED peace (twgs-revival) 2026-10-31
+- **Pointer**: docs/backlog/strike-writer-allowlist-calibration.md
+- **Context**: Decide whether to add a dedicated writer id for project-embedded calibration to the strike writer allowlist.
+
+### Scorecard stores written before 2026-10-26 need a manual strip-expiry on every machine or all seats read as unqualified
+- **Id**: BL-0342
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: peer
+- **Reporter**: peace (twgs-revival)
+- **Report**: 01M67HZPT918GAWJG237T0JG8N
+- **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
+- **Problem**: 2026-10-26 以前寫入的成績單資料，每台機器都要手動跑一次 strip-expiry，否則所有席位都被判不合格；說明文字有寫，但沒跑時的失敗方式很難看出原因。
+- **Impact**: 沒跑的機器上所有席位都判不合格，使用者不知道要補跑哪個指令。
+- **Trigger**: next edit to engine-scorecard store loading, or another machine reports all seats unqualified
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED peace (twgs-revival) 2026-10-31
+- **Pointer**: docs/backlog/scorecard-pre-1026-store-migration.md
+- **Context**: Evaluate migrating automatically on load, or an explicit prompt from doctor or SessionStart naming the strip-expiry command.
+
+### dispatch-author-kimi.js deletes the raw output when the runner fails, so the cause is invisible
+- **Id**: BL-0343
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: dispatch-author-kimi.js 在 runner 失敗時會刪掉原始輸出，錯誤原因看不到；例如 kimi 設定缺 k3.1-pro 時，只得到 runner_failed，無從追查。
+- **Impact**: kimi 派工失敗時只剩 runner_failed，要手動重跑才能找到原因。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: depth-0 finding 2026-10-31 (kimi31 session)
+- **Pointer**: docs/backlog/dispatch-author-kimi-keeps-raw-output.md
+- **Context**: Fix direction: keep the raw output on failure, or print the key error lines to stderr. Negative control: a failing runner must leave a readable cause.
+
+### runs-watch: a regular file at <live>/runs makes the parent mkdir fail with EEXIST and leaves no launch result
+- **Id**: BL-0344
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: 即時狀態資料夾裡的 runs 若是一般檔案而不是目錄，監看程式建立目錄會失敗，而且不留下任何啟動結果檔，面板看不到原因。
+- **Impact**: 面板上看不到失敗原因；舊版也一樣，屬既有缺口，不是新引入的退步。
+- **Trigger**: next edit to runs-watch.js launch path, or BL-0336 U2
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: BL-0336 U1 third-round acceptance finding 2026-10-31
+- **Pointer**: docs/backlog/runs-watch-runs-path-is-file.md
+- **Context**: Fix direction: detect a non-directory at <live>/runs and write a launch result file with the reason. Related to BL-0336 (missing-path assumptions).

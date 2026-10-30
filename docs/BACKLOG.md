@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0336 -->
+<!-- next-id: BL-0338 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1439,3 +1439,37 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: owner request 2026-10-29 (suite speed research)
 - **Pointer**: docs/backlog/pre-push-suite-speed.md
 - **Context**: Scale time asserts by test_timing_scale, prefix-scope pgrep, wait FAKE_STARTED in gate-rules R2 :133. Negative control: red under load before, green after (B3).
+
+### Runs watcher aborts on a fresh host when the dispatch manifest directory is missing
+- **Id**: BL-0336
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: peer
+- **Reporter**: llm-playground session on 4124gs
+- **Report**: 01M66YQ9Y3R3PC1DF2EK7HGXKH
+- **Reply**: 2026-10-31 01M66YQG8DWF6HCWJ9N335GH43
+- **Problem**: 新機器從沒派過工，狀態列常駐顯示「無法使用」：背景監看程式一啟動就因為清單目錄不存在而中止，自動啟動每次都悄悄失敗，也看不到原因。
+- **Impact**: 新機器狀態列一直壞；暫時解法是手動建目錄，重開機被清掉後又會再發生。
+- **Trigger**: after idlestate (stale-panel criterion) merges
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED llm-playground 2026-10-31
+- **Pointer**: docs/backlog/runs-watch-missing-manifest-dir.md
+- **Context**: Check at runs-watch.js:1059; autostart hooks/runs-watch-autostart.js. Fix: create dir 0700 or treat as no manifests; show failure reason in statusline/advisory.
+
+### Decision card opened from another repo's cwd lands in that repo and the panel never shows it
+- **Id**: BL-0337
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: peer
+- **Reporter**: hangar session (openclaw)
+- **Report**: 01M66YRNXRT5SNRXF6QDRV3JGF
+- **Reply**: none
+- **Problem**: 從別的專案目錄執行開決策卡指令時，卡片會寫進該目錄所在的專案，操作者的面板讀的是另一個專案，所以看不到卡，指令卻照常回傳編號、毫無警告。
+- **Impact**: 操作者漏看一張待決卡；這次改口頭回答，沒有損害，但可能再發生。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED hangar 2026-10-31
+- **Pointer**: docs/backlog/open-decision-cwd-scope.md
+- **Context**: Scope from process cwd git-common-dir; only unbound warns (~L275). Options: warn/refuse on repo mismatch, derive from session marker, fix SessionStart hint wording.

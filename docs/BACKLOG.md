@@ -1446,7 +1446,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-31
 - **Origin**: peer
 - **Reporter**: llm-playground session on 4124gs
-- **Report**: 01M66YQ9Y3R3PC1DF2EK7HGXKH；01M66YW3B1QS5VK0PNAA9JTBN0
+- **Report**: 01M66YQ9Y3R3PC1DF2EK7HGXKH
 - **Reply**: 2026-10-31 01M66YQG8DWF6HCWJ9N335GH43
 - **Problem**: 新機器或重開機清掉暫存目錄後，許多地方假設目錄、檔案或工具已存在，缺了就中止或悄悄失效；例子是狀態列常駐顯示無法使用，因為背景監看程式找不到清單目錄。
 - **Impact**: 新機器與重開機後多個功能悄悄壞掉，使用者看不到原因，只能手動補目錄。
@@ -1455,7 +1455,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PEER-REPORTED llm-playground 2026-10-31, scope widened by owner via 4124gs
 - **Pointer**: docs/backlog/missing-path-assumptions.md
-- **Context**: Example: runs-watch.js:1059 aborts on missing /tmp/autopilot-dispatch-runs. Design doc first (inventory, ensureDir helper, unavailable reason, doctor, empty-HOME test).
+- **Context**: Widened by owner (msg 01M66YW3B1QS5VK0PNAA9JTBN0). Eg runs-watch.js:1059 aborts on missing /tmp/autopilot-dispatch-runs. Design doc first (inventory, ensureDir helper, unavailable reason, doctor, empty-HOME test).
 
 ### Decision card opened from another repo's cwd lands in that repo and the panel never shows it
 - **Id**: BL-0337

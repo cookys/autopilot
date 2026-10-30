@@ -582,7 +582,7 @@ for (const surface of SURFACES) {
     expect(await bandText($, surface)).toContain('no project · ⚑6 · run:')
   })
 
-  // age alone never makes a snapshot stale once its writer is gone: only a source that moved since the publish does (src/status/runs-watch.js sourceFingerprint)
+  // age alone never makes a snapshot stale once its writer is gone: only a source that moved since the publish does (the watcher's sourceFingerprint)
   const SRC = '/tmp/autopilot-dispatch-runs'
   const oldWorld = (over: Record<string, unknown>, mtimeNow: number | null) => {
     const tree = base()

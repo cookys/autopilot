@@ -346,9 +346,11 @@ rm -f "$LIVE/runs/$KEY_A.json"
 eq "0" "$?" "--idle-exit 1 with no marker: exits 0 on its own"
 eq "null" "$(jq_file "$LIVE/runs/$KEY_A.json" 'j.writer')" "idle exit publishes writer: null"
 eq "idle_exit" "$(jq_file "$LIVE/runs/$KEY_A.json" 'j.exit_reason')" "idle exit publishes exit_reason idle_exit"
-# the envelope names what it was built from, so a reader can tell "something changed since" without trusting published_at's age (mods/live judgeByChange)
-eq "$RUNS $AHOME/session-mode $FAKE_HOME/.claude/metrics/costs.jsonl" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=>x.path).join(" ")')" "idle exit publishes sources: the manifest dir, the marker dir, the costs file"
-eq "true" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).length===3 && typeof j.sources[0].mtime_ms==="number" && typeof j.sources[1].mtime_ms==="number"')" "...the directories carry a numeric mtime_ms"
+# the envelope names what it was built from, for THIS project only, so a reader can tell "something of mine changed since" without trusting published_at's age
+eq "manifest marker" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=>x.role).join(" ")')" "idle exit publishes sources: a manifest group and a marker group (no costs file: it has no project key)"
+eq "$RUNS $AHOME/session-mode" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=>x.dir).join(" ")')" "...over the manifest dir and the marker dir"
+eq "repo_identity project_key" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=>x.match_field).join(" ")')" "...each narrowed by the field that says whose it is"
+eq "true" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).every(x=>typeof x.dir_mtime_ms==="number" && Array.isArray(x.files))')" "...with a numeric directory mtime and a file list"
 flock -n "$LIVE/runs/$KEY_A.lock" true; eq "0" "$?" "lock is free after an idle exit"
 
 # unexpired marker (same project_key) keeps it running; once the marker expires it exits

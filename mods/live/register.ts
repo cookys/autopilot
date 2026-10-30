@@ -177,13 +177,32 @@ async function resolveScope($: EngineInterface, autopilotHome: string, liveBase:
 // An old envelope is outdated only if something it was built from has changed since: age alone says nothing (a watcher that exited on purpose leaves a
 // snapshot that stays true). Only a snapshot whose writer is gone (writer null, the final publish) can be judged by its sources; a writer that is listed but
 // stopped publishing is a stuck or dead one, and keeps the age verdict. No `sources` list (an older watcher) keeps the age verdict too.
+// The sources are THIS project's (see sourceFingerprint): a listed file newer or gone is a change; a directory whose own mtime moved (anyone's create / rename /
+// delete) is listed and each file not seen before is read once and kept when it carries this project's match value. A file that is not this project's is
+// remembered by path (a manifest or marker never changes owner), so a busy directory costs one list per check and one read per new file, once.
+const notOurs = new Set<string>()
 async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<EnvelopeCheck> {
   const env = check.envelope as Json
-  const sources = sourcesOf(env)
-  if (sources === null) return check
-  for (const s of sources) {
-    const st = await $.fs.stat(s.path).catch(() => null)
-    if (sourceMoved(s.mtime_ms, st === null ? null : st.mtimeMs)) return { ...check, moved: true }
+  const groups = sourcesOf(env)
+  if (groups === null) return check
+  for (const g of groups) {
+    for (const f of g.files) {
+      const st = await $.fs.stat(f.path).catch(() => null)
+      if (sourceMoved(f.mtime_ms, st === null ? null : st.mtimeMs)) return { ...check, moved: true }
+    }
+    const dirSt = await $.fs.stat(g.dir).catch(() => null)
+    if (!sourceMoved(g.dir_mtime_ms, dirSt === null ? null : dirSt.mtimeMs)) continue
+    const known = new Set(g.files.map(f => f.path))
+    const names = (await $.fs.list(g.dir).catch(() => [])).filter(e => e.kind === 'file' && e.name.endsWith(g.suffix)).map(e => e.name)
+    for (const name of names) {
+      const p = g.dir.replace(/\/+$/, '') + '/' + name
+      const memo = p + '|' + g.match_field + '=' + g.match_value
+      if (known.has(p) || notOurs.has(memo)) continue
+      const parsed = parseJson((await readText($, p)) ?? '')
+      if (parsed.ok && isObject(parsed.value) && parsed.value[g.match_field] === g.match_value) return { ...check, moved: true }
+      if (notOurs.size > 20000) notOurs.clear()
+      notOurs.add(memo)
+    }
   }
   return { status: 'fresh', envelope: env }
 }

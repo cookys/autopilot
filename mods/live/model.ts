@@ -251,14 +251,22 @@ export function longestPrefixKey(real: string, maps: Json[]): string | null {
 // moved: set on a stale envelope whose writer is gone and whose sources changed since the publish (see sourcesMoved)
 export type EnvelopeCheck = { status: 'missing' | 'malformed' | 'fresh' | 'stale'; envelope: Json | null; moved?: boolean }
 
-// The envelope's `sources` (src/status/runs-watch.js sourceFingerprint): [{ path, mtime_ms }] the watcher read the snapshot from. null = the envelope carries none
-// (an older watcher): nothing can be said about change, so age alone keeps deciding.
-export function sourcesOf(env: Json): { path: string; mtime_ms: number | null }[] | null {
-  if (!Array.isArray(env.sources)) return null
-  const out: { path: string; mtime_ms: number | null }[] = []
-  for (const s of env.sources) {
-    if (!isObject(s) || typeof s.path !== 'string' || !s.path) return null
-    out.push({ path: s.path, mtime_ms: typeof s.mtime_ms === 'number' && Number.isFinite(s.mtime_ms) ? s.mtime_ms : null })
+// The envelope's `sources` (src/status/runs-watch.js sourceFingerprint): one group per directory the snapshot was built from, narrowed to THIS project:
+// { role, dir, dir_mtime_ms, suffix, match_field, match_value, files: [{ path, mtime_ms }] }. null = the envelope carries none (an older watcher, or one that did not
+// know the project's identity yet): nothing can be said about change, so age alone keeps deciding.
+export type SourceGroup = { role: string; dir: string; dir_mtime_ms: number | null; suffix: string; match_field: string; match_value: string; files: { path: string; mtime_ms: number | null }[] }
+export function sourcesOf(env: Json): SourceGroup[] | null {
+  if (!Array.isArray(env.sources) || env.sources.length === 0) return null
+  const out: SourceGroup[] = []
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+  for (const g of env.sources) {
+    if (!isObject(g) || typeof g.dir !== 'string' || !g.dir || typeof g.suffix !== 'string' || typeof g.match_field !== 'string' || typeof g.match_value !== 'string' || !g.match_field || !g.match_value || !Array.isArray(g.files)) return null
+    const files: SourceGroup['files'] = []
+    for (const f of g.files) {
+      if (!isObject(f) || typeof f.path !== 'string' || !f.path) return null
+      files.push({ path: f.path, mtime_ms: num(f.mtime_ms) })
+    }
+    out.push({ role: typeof g.role === 'string' ? g.role : '', dir: g.dir, dir_mtime_ms: num(g.dir_mtime_ms), suffix: g.suffix, match_field: g.match_field, match_value: g.match_value, files })
   }
   return out
 }

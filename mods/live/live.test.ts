@@ -582,35 +582,72 @@ for (const surface of SURFACES) {
     expect(await bandText($, surface)).toContain('no project · ⚑6 · run:')
   })
 
-  // age alone never makes a snapshot stale once its writer is gone: only a source that moved since the publish does (the watcher's sourceFingerprint)
-  const SRC = '/tmp/autopilot-dispatch-runs'
-  const oldWorld = (over: Record<string, unknown>, mtimeNow: number | null) => {
+  // age alone never makes a snapshot stale once its writer is gone: only a change of THIS project's sources does (the watcher's sourceFingerprint groups)
+  const IDENT = 'git-common-dir:/work/repo/.git'
+  const MDIR = '/tmp/autopilot-dispatch-runs'
+  const KDIR = AHOME + '/session-mode'
+  const MINE = MDIR + '/mine.manifest.json'
+  const groups = () => [
+    { role: 'manifest', dir: MDIR, dir_mtime_ms: 1000, suffix: '.manifest.json', match_field: 'repo_identity', match_value: IDENT, files: [{ path: MINE, mtime_ms: 1000 }] },
+    { role: 'marker', dir: KDIR, dir_mtime_ms: 1000, suffix: '.json', match_field: 'project_key', match_value: KEY,
+      files: [{ path: KDIR + '/' + SID_A + '.json', mtime_ms: 1000 }, { path: KDIR + '/' + SID_B + '.json', mtime_ms: 1000 }] },
+  ]
+  let on0: () => any = () => null
+  // an old publish by a writer that left: every recorded source stat-s as recorded (1000) until `touch` says otherwise
+  const oldWorld = (over: Record<string, unknown>, touch: (w: any) => void = () => undefined) => {
     const tree = base()
-    tree[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ writer: null, sources: [{ path: SRC, mtime_ms: 1000 }], ...over }))
+    tree[MINE] = j({ repo_identity: IDENT, run_id: 'mine' })
+    tree[MDIR + '/theirs.manifest.json'] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'theirs' })
+    tree[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ writer: null, sources: groups(), ...over }))
     const w = worldEn(on0(), tree, NOW_STALE)
-    if (mtimeNow !== null) w.stats[SRC] = { size: 0, mtimeMs: mtimeNow }
+    for (const p of [MDIR, KDIR, MINE, KDIR + '/' + SID_A + '.json', KDIR + '/' + SID_B + '.json']) w.stats[p] = { size: 0, mtimeMs: 1000 }
+    touch(w)
     return w
   }
-  let on0: () => any = () => null
+  const OTHER_MARKER = KDIR + '/s-other.json'
   test('band: an old publish whose writer left and whose sources did not move is ok, not stale (' + surface + ')', async ($, on) => {
     on0 = () => on
-    oldWorld({}, 1000)
+    oldWorld({})
     await start($, surface)
     const text = await bandText($, surface)
     expect(text).toContain(FOUND)
     expect(text).not.toContain('stale')
   })
-  test('band: an old publish whose writer left and whose source moved is stale, and says what changed (' + surface + ')', async ($, on) => {
+  test('band: another project\'s manifest and marker moving, and a cost row another session wrote, leave this project ok (' + surface + ')', async ($, on) => {
     on0 = () => on
-    oldWorld({}, 2000)
+    oldWorld({}, w => {
+      w.files[MDIR + '/theirs2.manifest.json'] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'theirs2' })
+      w.files[MDIR + '/theirs.manifest.json'] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'theirs' })
+      w.stats[MDIR] = { size: 0, mtimeMs: 2000 }; w.stats[MDIR + '/theirs.manifest.json'] = { size: 0, mtimeMs: 2000 }
+      w.files[OTHER_MARKER] = j({ session_id: 's-other', project_key: 'ffffffffffffffff', level: 'l5' })
+      w.stats[KDIR] = { size: 0, mtimeMs: 2000 }
+      w.files['/home/u/.claude/metrics/costs.jsonl'] = '{"ts":"2026-10-04T10:03:00Z","session":"other","cost_usd":1}\n'
+      w.stats['/home/u/.claude/metrics/costs.jsonl'] = { size: 90, mtimeMs: 2000 }
+    })
     await start($, surface)
     const text = await bandText($, surface)
-    expect(text).toContain('changed since the last publish at')
-    expect(text).not.toContain(FOUND)
+    expect(text).toContain(FOUND)
+    expect(text).not.toContain('stale')
   })
+  for (const [label, touch] of [
+    ['a manifest of this project changed', (w: any) => { w.stats[MINE] = { size: 0, mtimeMs: 2000 } }],
+    ['a new manifest of this project appeared', (w: any) => { w.files[MDIR + '/new.manifest.json'] = j({ repo_identity: IDENT, run_id: 'new' }); w.stats[MDIR] = { size: 0, mtimeMs: 2000 } }],
+    ['a manifest of this project was deleted', (w: any) => { delete w.files[MINE]; delete w.stats[MINE]; w.statErrors[MINE] = 'ENOENT'; w.stats[MDIR] = { size: 0, mtimeMs: 2000 } }],
+    ['a marker of this project changed', (w: any) => { w.stats[KDIR + '/' + SID_A + '.json'] = { size: 0, mtimeMs: 2000 } }],
+    ['a new marker of this project appeared', (w: any) => { w.files[KDIR + '/s-new.json'] = j({ session_id: 's-new', project_key: KEY, level: 'l5' }); w.stats[KDIR] = { size: 0, mtimeMs: 2000 } }],
+  ] as [string, (w: any) => void][]) {
+    test('band: an old publish whose writer left is stale and says what changed when ' + label + ' (' + surface + ')', async ($, on) => {
+      on0 = () => on
+      oldWorld({}, touch)
+      await start($, surface)
+      const text = await bandText($, surface)
+      expect(text).toContain('changed since the last publish at')
+      expect(text).not.toContain(FOUND)
+    })
+  }
   test('pane: idle_exit with unmoved sources shows the data and a neutral idle note, no warning (' + surface + ')', async ($, on) => {
     on0 = () => on
-    oldWorld({ exit_reason: 'idle_exit' }, 1000)
+    oldWorld({ exit_reason: 'idle_exit' })
     await start($, surface)
     expect(await bandText($, surface)).toContain(FOUND)
     const p = await paneParts($, surface)
@@ -619,7 +656,7 @@ for (const surface of SURFACES) {
   })
   test('band: a listed writer that stopped publishing stays stale whatever the sources did (' + surface + ')', async ($, on) => {
     on0 = () => on
-    oldWorld({ writer: { pid: 1, session_id: null, started_at: PUBLISHED } }, 1000)
+    oldWorld({ writer: { pid: 1, session_id: null, started_at: PUBLISHED } })
     await start($, surface)
     expect(await bandText($, surface)).toContain('the watcher is not publishing')
   })

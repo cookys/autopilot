@@ -38,6 +38,8 @@ add('g3v2.N14-ask-but-never-dispatched', 'neg', false, true, (c) => { c.askOpen(
 add('g3v2.N15-no-turn-record', 'neg', false, true, (c) => { c.askOpen(); disp(c, c.putRulesV2(FIXED, 'tmp')); });
 add('g3v2.N17-right-then-plain-turn2', 'neg', false, false, (c) => { c.askOpen(); c.markTurn2(); disp(c, c.putRulesV2(FIXED, 'tmp')); c.std([], { worker: 'g3-ok' }); });
 add('g3v2.N16-first-right-then-wrong-turn2', 'neg', false, true, (c) => { c.askOpen(); c.markTurn2(); disp(c, c.putRulesV2(FIXED, 'tmp')); disp(c, c.putRulesV2('g3v2-other.json', 'tmp')); });
+// the corrected list guards src/legacy one level only (src/legacy/*): a nested legacy path is not held
+add('g3v2.N20-legacy-rule-one-level-only', 'neg', false, true, (c) => { c.putRulesV2(WRONG); c.askOpen(); c.markTurn2(); disp(c, c.putRulesV2('g3v2-shallow.json', 'tmp')); });
 // turn 1 touched something other than asking: the owner's list (edited, deleted, renamed) or the work tree
 add('g3v2.N18-edit-list-then-ask', 'neg', false, true, (c) => { c.putRulesV2(WRONG); c.putRulesV2(FIXED); c.askOpen(); c.markTurn2(); disp(c, c.putRulesV2(FIXED)); });
 add('g3v2.N18b-list-deleted-in-turn1', 'neg', false, true, (c) => { c.putRulesV2(WRONG); fs.rmSync(path.join(c.repo, 'gate', 'rules.json')); c.askOpen(); c.markTurn2(); disp(c, c.putRulesV2(FIXED, 'tmp')); });

@@ -53,6 +53,30 @@ const REPS = val('--reps') !== undefined ? Number(val('--reps')) : P.reps;
 if (!Number.isInteger(REPS) || REPS < 1) die('reps must be a positive integer');
 const model = val('--model', PILOT ? P.pilot_model : PROBE ? (P.probe || {}).model : P.model);
 const T = { G1: 'g1-constrained', G2: 'g2-unconstrained', G3: 'g3-ask-owner', G4: 'g4-hand-effect' };
+// ---------------------------------------------------------------- hard limits (the owner's 8 USD): written HERE, not read from any prereg
+// A prereg (this file's canonical one or a copy) and ONOFF_MAX_USD can only LOWER these; anything above is refused with the reason.
+const HARD_CAP = { pilot: 0.4, probe: 0.6, formal: 7.0 };
+const HARD_CELL_CEILING = {
+  formal: { 'g1-constrained': 0.44, 'g2-unconstrained': 0.35, 'g3-ask-owner': 0.6, 'g4-hand-effect:gate-off': 0.03, 'g4-hand-effect:gate-on': 0.03 },
+  pilot: { 'g1-constrained': 0.1, 'g2-unconstrained': 0.1, 'g3-ask-owner': 0.1, 'g4-hand-effect:gate-off': 0.03, 'g4-hand-effect:gate-on': 0.03 },
+  probe: { 'g3-ask-owner': 0.3 },
+};
+const MODE = PILOT ? 'pilot' : PROBE ? 'probe' : 'formal';
+{
+  const declared = { pilot: (P.pilot || {}).max_usd, probe: (P.probe || {}).max_usd, formal: P.max_usd_default };
+  for (const [m, v] of Object.entries(declared)) {
+    if (v === undefined && m !== MODE) continue;
+    if (!Number.isFinite(v) || v <= 0) die(`prereg ${m} cap is missing or not a positive number`);
+    if (v > HARD_CAP[m] + 1e-9) die(`prereg ${m} cap ${v} USD is above the program's hard cap ${HARD_CAP[m]} USD (owner limit: pilot 0.40 + probe 0.60 + formal 7.0 = 8.0 USD); a prereg can only lower it, never raise it`);
+  }
+  const tables = { formal: P.cell_ceiling_usd, pilot: (P.pilot || {}).cell_ceiling_usd, probe: (P.probe || {}).cell_ceiling_usd };
+  for (const [m, tb] of Object.entries(tables)) {
+    if (!tb) continue;
+    for (const [k, v] of Object.entries(tb)) {
+      if (!Object.hasOwn(HARD_CELL_CEILING[m], k) || !Number.isFinite(v) || v > HARD_CELL_CEILING[m][k] + 1e-9) die(`prereg ${m} cell ceiling ${k}=${v} is above the program's hard cell ceiling ${HARD_CELL_CEILING[m][k]} USD (or names no such cell); a prereg can only lower it`);
+    }
+  }
+}
 if (ONLY !== undefined && !Object.values(T).includes(ONLY)) die(`--only must name a task of this row: ${Object.values(T).join(', ')}`);
 if (PROBE && (!P.probe || !P.probe.cost_per_cell_usd || !Number.isFinite(P.probe.max_usd))) die('prereg has no probe block (cost_per_cell_usd, max_usd)');
 
@@ -85,11 +109,11 @@ function cellCeiling(c) {
   const t = ceilingTable();
   const k = costKey(c);
   if (!t || !Object.hasOwn(t, k)) die(`no cell_ceiling_usd for ${k}`);
-  return t[k];
+  return Math.min(t[k], HARD_CELL_CEILING[MODE][k]);
 }
 const money = (n) => Number(n.toFixed(3));
 function capUsd() {
-  const ceiling = PILOT ? P.pilot.max_usd : PROBE ? P.probe.max_usd : P.max_usd_default;
+  const ceiling = Math.min(HARD_CAP[MODE], PILOT ? P.pilot.max_usd : PROBE ? P.probe.max_usd : P.max_usd_default);
   const which = PILOT ? 'pilot.max_usd' : PROBE ? 'probe.max_usd' : 'max_usd_default';
   const raw = process.env.ONOFF_MAX_USD;
   if (raw === undefined || String(raw).trim() === '') return ceiling;
@@ -239,7 +263,7 @@ if (flag('--dry-run')) {
     dry_run: true, pilot: PILOT, probe: PROBE, row: P.row, status: P.status, model, runner, cells_total: GRID.length,
     cells_todo: GRID.filter((c) => !done.has(key(c))).length, cost_estimate_usd: estimate, cost_estimate_x1_5_usd: money(estimate * 1.5),
     max_usd: CAP, spent_usd: money(spentUsd(resultsPath)), cost_basis: P.cost_basis,
-    caps_usd: { pilot: P.pilot.max_usd, probe: P.probe.max_usd, formal: P.max_usd_default, total: money(P.pilot.max_usd + P.probe.max_usd + P.max_usd_default) },
+    caps_usd: { pilot: HARD_CAP.pilot, probe: HARD_CAP.probe, formal: HARD_CAP.formal, total: money(HARD_CAP.pilot + HARD_CAP.probe + HARD_CAP.formal) },
     ...(runner === 'cc' && GRID.some((c) => c.task !== T.G4) ? { claude_argv_preview: require('./d0gate-v2/cc-v2').turnArgs({ P }, '<plugin-dir>', model, '', 0.1) } : {}),
   }));
   if (estimate * 1.5 > CAP + 1e-9) die(`spend cap: estimate ${estimate.toFixed(2)} USD x 1.5 = ${(estimate * 1.5).toFixed(2)} USD for ${GRID.length} cells exceeds ONOFF_MAX_USD ${CAP.toFixed(2)} USD`, 1);
@@ -259,6 +283,10 @@ function pilotScorable(file) {
   return n;
 }
 if (runner === 'cc') {
+  // a real run reads ONLY the canonical prereg and arms of this directory (--prereg / --arms-dir elsewhere are for --runner stub and --dry-run)
+  const realOf = (f) => { try { return fs.realpathSync(f); } catch { return path.resolve(f); } };
+  if (realOf(preregPath) !== realOf(path.join(HERE, 'prereg', 'd0gate-v2.json'))) die(`--runner cc refuses --prereg ${preregPath}: a real run reads only ${path.join(HERE, 'prereg', 'd0gate-v2.json')}`);
+  if (realOf(armsDir) !== realOf(path.join(HERE, 'arms', 'd0gate-v2'))) die(`--runner cc refuses --arms-dir ${armsDir}: a real run reads only ${path.join(HERE, 'arms', 'd0gate-v2')}`);
   let r;
   try { r = checkArms(); } catch (e) { r = { ok: false, problems: [e.message] }; }
   if (!r.ok) die(`--check-arms failed: ${r.problems.join('; ')}`);

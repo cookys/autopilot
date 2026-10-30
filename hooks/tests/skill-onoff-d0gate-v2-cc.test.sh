@@ -210,9 +210,10 @@ env PATH="$TEST_TMP/pbin:$SB:$PATH" node "$EV/run-d0gate-v2-campaign.js" --resul
 [ "$rc" = 2 ] && grep -q -- '--pilot-results must hold' "$TEST_TMP/probe-as-pilotres.err" || fail "RED control: the probe file must not be usable as --pilot-results (rc=$rc: $(cat "$TEST_TMP/probe-as-pilotres.err"))"
 echo "RED (expected): $(cat "$TEST_TMP/probe-as-pilotres.err")"
 # the scorer never reads a probe row
-D0GATE_ALLOW_STUB_ROWS=1 node "$EV/score-d0gate-v2.js" --prereg "$EV/prereg/d0gate-v2.json" --results "$PR" >"$TEST_TMP/probe-scored.out" 2>&1
+cp "$PR" "$TEST_TMP/probe-and-stub.jsonl"; printf '%s\n' '{"row":"d0gate-v2","task_id":"g1-constrained","arm":"base","rep":1,"model":"sonnet","runner":"stub","pilot":false,"failure_class":null}' >>"$TEST_TMP/probe-and-stub.jsonl"
+node "$EV/score-d0gate-v2.js" --prereg "$EV/prereg/d0gate-v2.json" --results "$TEST_TMP/probe-and-stub.jsonl" >"$TEST_TMP/probe-scored.out" 2>&1
 grep -q '"cells":0' "$TEST_TMP/probe-scored.out" || fail "the scorer counted a probe row: $(tail -1 "$TEST_TMP/probe-scored.out" | cut -c1-200)"
-echo "the scorer counted 0 cells of the probe file"
+echo "the scorer counted 0 cells of a file holding a probe row and a stub row (no D0GATE_ALLOW_STUB_ROWS)"
 # a probe cap smaller than one cell's ceiling refuses to dispatch (the ceiling 0.30 does not fit in 0.25)
 ONOFF_MAX_USD=0.25 env PATH="$TEST_TMP/pbin:$SB:$PATH" node "$EV/run-d0gate-v2-campaign.js" --results "$TEST_TMP/probe-small.jsonl" --runner cc --probe >/dev/null 2>"$TEST_TMP/probe-small.err"; rc=$?
 [ "$rc" = 1 ] && grep -q 'spend cap' "$TEST_TMP/probe-small.err" && [ ! -s "$TEST_TMP/probe-small.jsonl" ] || fail "RED control: a probe cap below the estimate must stop before any cell (rc=$rc: $(cat "$TEST_TMP/probe-small.err"))"

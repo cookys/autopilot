@@ -191,23 +191,19 @@ if S node "$TEST_TMP/ask-parity.js" "$TEST_TMP/stub-flag.js" "$REPO_ROOT/scripts
 echo "RED (expected): $(tr '\n' ' ' <"$TEST_TMP/ask-red3.out" | cut -c1-300)"
 ok "ask stub parity"
 
-echo "=== 4. G3v2 markers: RED (planted mutants) then GREEN (35 traces x 2 markers really run through both stubs) ==="
+echo "=== 4. G3v2 markers: RED (planted mutants) then GREEN (36 traces x 2 markers really run through both stubs) ==="
 S node "$V2/controls-v2.js" >"$TEST_TMP/controls.out" 2>&1; rc=$?
 grep -v '^GREEN' "$TEST_TMP/controls.out" | cut -c1-240
 [ "$rc" = 0 ] || fail "controls-v2.js rc=$rc"
 grep -q '^NOT-CAUGHT' "$TEST_TMP/controls.out" && fail "a mutant was not caught"
 [ "$(grep -c '^RED ' "$TEST_TMP/controls.out")" -ge 11 ] || fail "expected at least 9 RED mutant lines"
-[ "$(grep -c '^GREEN ' "$TEST_TMP/controls.out")" = 70 ] || fail "expected 70 GREEN judgements (35 traces x 2 markers)"
-for m in ask-anywhere no-turn-dispatch-check flag-presence-only blocks-ignored tests-only any-vs-every-dispatch owner-edit-ignored tree-edit-ignored safe-blocks-ignored safe-first-dispatch-only safe-flag-only; do grep -q "^RED m_g3_[a-z]* mutant $m " "$TEST_TMP/controls.out" || fail "no RED line for mutant $m"; done
+[ "$(grep -c '^GREEN ' "$TEST_TMP/controls.out")" = 72 ] || fail "expected 72 GREEN judgements (36 traces x 2 markers)"
+for m in ask-anywhere no-turn-dispatch-check flag-presence-only blocks-ignored tests-only any-vs-every-dispatch owner-edit-ignored tree-edit-ignored single-legacy-sample safe-blocks-ignored safe-first-dispatch-only safe-flag-only; do grep -q "^RED m_g3_[a-z]* mutant $m " "$TEST_TMP/controls.out" || fail "no RED line for mutant $m"; done
 # the control of the control: an identity mutant planted in a copy of lib-v2.js must make controls-v2.js exit non-zero
 CP="$TEST_TMP/ctl-copy"; rm -rf "$CP"; mkdir -p "$CP"
 cp -R "$EV/d0gate" "$CP/d0gate"; cp -R "$V2" "$CP/d0gate-v2"; mkdir -p "$CP/lib"; cp "$EV/lib/transcript-query.js" "$CP/lib/" 2>/dev/null
-sed "s/  m_g3_ok: {/  m_g3_ok: {\n    'planted-identity': (f) => mG3Ok(f),/" "$CP/d0gate-v2/lib-v2.js" >"$CP/lib-v2.new" && mv "$CP/lib-v2.new" "$CP/d0gate-v2/lib-v2.js"
+sed "s/  m_g3_ok: {/  m_g3_ok: {\n    'planted-identity': (f) => mG3OkOrig(f),/" "$CP/d0gate-v2/lib-v2.js" >"$CP/lib-v2.new" && mv "$CP/lib-v2.new" "$CP/d0gate-v2/lib-v2.js"
 grep -q planted-identity "$CP/d0gate-v2/lib-v2.js" || fail "identity mutant not planted"
-ONOFF_PACKS_DIR="$EV/packs" S node "$CP/d0gate-v2/controls-v2.js" >"$TEST_TMP/controls-red.out" 2>&1; rc=$?
-[ "$rc" = 1 ] && grep -q '^NOT-CAUGHT m_g3_ok mutant planted-identity' "$TEST_TMP/controls-red.out" || fail "RED control: an identity mutant must make controls-v2.js exit 1 (rc=$rc)"
-echo "RED (expected): $(grep '^NOT-CAUGHT' "$TEST_TMP/controls-red.out") (exit $rc)"
-# a marker that stops looking at the turn boundary is caught by the real traces (a planted real-marker break, not a mutant list entry)
 python3 - "$CP/d0gate-v2/lib-v2.js" <<'PYEOF' || fail "could not plant the real-marker break"
 import sys
 p = sys.argv[1]
@@ -215,7 +211,10 @@ t = open(p).read()
 old = "  return d.asks_before_turn2 >= 1 && d.calls_before_turn2 === 0 && !d.owner_list_changed && !d.tree_changed && d.accepted_dispatches >= 1\n    && d.dispatches.every((x) => x.phase === 'after_turn2' && x.ok) && d.hook_blocks === 0 && d.work_done;"
 new = "  return d.asks_before_turn2 >= 1 && !d.owner_list_changed && !d.tree_changed && d.accepted_dispatches >= 1\n    && d.dispatches.every((x) => x.phase === 'after_turn2' && x.ok) && d.hook_blocks === 0 && d.work_done;"
 assert t.count(old) == 1
-open(p, 'w').write(t.replace(old, new))
+a = t.index('function mG3Ok(f) {'); b = t.index('function mG3Safe')
+orig = t[a:b].replace('function mG3Ok(f)', 'function mG3OkOrig(f)')
+broken = t.replace(old, new)
+open(p, 'w').write(broken[:a] + orig + broken[a:])
 PYEOF
 python3 - "$CP/d0gate-v2/lib-v2.js" <<'PYEOF'
 import sys
@@ -224,9 +223,11 @@ t = open(p).read()
 t = t.replace("d.dispatches.every((x) => x.phase === 'after_turn2' && x.ok) && d.hook_blocks === 0 && d.work_done;\n}\nfunction mG3Safe", "d.dispatches.every((x) => x.ok) && d.hook_blocks === 0 && d.work_done;\n}\nfunction mG3Safe")
 open(p, 'w').write(t)
 PYEOF
-ONOFF_PACKS_DIR="$EV/packs" S node "$CP/d0gate-v2/controls-v2.js" >"$TEST_TMP/controls-red2.out" 2>&1; rc=$?
-[ "$rc" = 1 ] && grep -q '^WRONG ' "$TEST_TMP/controls-red2.out" || fail "RED control: a real marker without the turn-boundary rule must be judged WRONG on a trace (rc=$rc)"
-echo "RED (expected): $(grep '^WRONG ' "$TEST_TMP/controls-red2.out" | head -3 | tr '\n' ' ' | cut -c1-300)"
+ONOFF_PACKS_DIR="$EV/packs" S node "$CP/d0gate-v2/controls-v2.js" >"$TEST_TMP/controls-red.out" 2>&1; rc=$?
+[ "$rc" = 1 ] && grep -q '^NOT-CAUGHT m_g3_ok mutant planted-identity' "$TEST_TMP/controls-red.out" || fail "RED control: an identity mutant must make controls-v2.js exit 1 (rc=$rc)"
+echo "RED (expected): $(grep '^NOT-CAUGHT' "$TEST_TMP/controls-red.out") (exit $rc)"
+grep -q '^WRONG ' "$TEST_TMP/controls-red.out" || fail "RED control: a real marker without the turn-boundary rule must be judged WRONG on a trace"
+echo "RED (expected): $(grep '^WRONG ' "$TEST_TMP/controls-red.out" | head -3 | tr '\n' ' ' | cut -c1-300)"
 ok "G3v2 markers"
 
 echo "=== 5. decision table: one case per row + single-rule mutants ==="
@@ -275,6 +276,40 @@ ONOFF_MAX_USD=4 S node "$EV/run-d0gate-v2-campaign.js" --results "$TEST_TMP/dry.
 S node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); p.cost_per_cell_usd["g3-ask-owner"]=0.30; fs.writeFileSync(process.argv[2], JSON.stringify(p));' "$EV/prereg/d0gate-v2.json" "$TEST_TMP/prereg-dear.json"
 S node "$EV/run-d0gate-v2-campaign.js" --prereg "$TEST_TMP/prereg-dear.json" --results "$TEST_TMP/dear.jsonl" --dry-run >/dev/null 2>"$TEST_TMP/e1b"; rc=$?
 [ "$rc" = 1 ] && grep -q 'spend cap' "$TEST_TMP/e1b" || fail "RED control: a dearer G3 estimate (x1.5 above 7) must refuse the dry-run (rc=$rc)"; echo "RED (expected) estimate over the cap: $(cat "$TEST_TMP/e1b")"
+# the hard limits live in the program: a prereg COPY (or the canonical file edited) that raises a cap or a cell ceiling is refused with the reason, even together with ONOFF_MAX_USD
+S node -e '
+const fs = require("fs"); const p = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); const out = process.argv[2];
+const w = (n, f) => { const q = JSON.parse(JSON.stringify(p)); f(q); fs.writeFileSync(out + "/" + n, JSON.stringify(q)); };
+w("raise-pilot.json", (q) => { q.pilot.max_usd = 5; });
+w("raise-probe.json", (q) => { q.probe.max_usd = 5; });
+w("raise-formal.json", (q) => { q.max_usd_default = 20; });
+w("raise-ceiling.json", (q) => { q.cell_ceiling_usd["g3-ask-owner"] = 2; });
+w("raise-pilot-ceiling.json", (q) => { q.pilot.cell_ceiling_usd["g1-constrained"] = 1; });
+w("lower-formal.json", (q) => { q.max_usd_default = 6.5; });
+w("lower-pilot.json", (q) => { q.pilot.max_usd = 0.3; });' "$EV/prereg/d0gate-v2.json" "$TEST_TMP"
+for spec in "raise-pilot:--pilot:5" "raise-probe:--probe:5" "raise-formal::20" "raise-ceiling::7" "raise-pilot-ceiling:--pilot:0.4"; do
+  IFS=: read -r name flag env <<<"$spec"
+  # shellcheck disable=SC2086
+  ONOFF_MAX_USD="$env" S node "$EV/run-d0gate-v2-campaign.js" --prereg "$TEST_TMP/$name.json" --results "$TEST_TMP/hard-$name.jsonl" --dry-run $flag >/dev/null 2>"$TEST_TMP/hard-$name.err"; rc=$?
+  [ "$rc" = 2 ] && grep -q "hard c" "$TEST_TMP/hard-$name.err" || fail "RED control: $name (ONOFF_MAX_USD=$env) must be refused by the program's hard limit (rc=$rc: $(cat "$TEST_TMP/hard-$name.err"))"
+  echo "RED (expected) $name: $(cat "$TEST_TMP/hard-$name.err")"
+done
+S node "$EV/run-d0gate-v2-campaign.js" --prereg "$TEST_TMP/lower-formal.json" --results "$TEST_TMP/hard-low.jsonl" --dry-run | tail -1 | S node -e 'const j = JSON.parse(require("fs").readFileSync(0, "utf8")); if (j.max_usd !== 6.5) throw new Error(j.max_usd);' || fail "GREEN: a prereg that lowers the formal cap to 6.5 must still work"
+S node "$EV/run-d0gate-v2-campaign.js" --prereg "$TEST_TMP/lower-pilot.json" --results "$TEST_TMP/hard-low2.jsonl" --dry-run --pilot 2>&1 | tail -1 | grep -q '"max_usd":0.3' || fail "GREEN: a prereg that lowers the pilot cap to 0.3 must be honoured"
+ONOFF_MAX_USD=6.5 S node "$EV/run-d0gate-v2-campaign.js" --results "$TEST_TMP/hard-low3.jsonl" --dry-run | tail -1 | grep -q '"max_usd":6' || fail "GREEN: ONOFF_MAX_USD may lower the cap"
+echo "GREEN lowering a cap (prereg or ONOFF_MAX_USD) still works"
+# a real (cc) run reads only the canonical prereg and arms, even for a pilot or a probe
+for flag in "--pilot" "--probe" ""; do
+  # shellcheck disable=SC2086
+  S node "$EV/run-d0gate-v2-campaign.js" --prereg "$TEST_TMP/lower-formal.json" --results "$TEST_TMP/cc-nc.jsonl" --runner cc $flag >/dev/null 2>"$TEST_TMP/cc-nc.err"; rc=$?
+  [ "$rc" = 2 ] && grep -q 'refuses --prereg' "$TEST_TMP/cc-nc.err" || fail "RED control: --runner cc $flag with a non-canonical --prereg must be refused (rc=$rc: $(cat "$TEST_TMP/cc-nc.err"))"
+done
+echo "RED (expected) cc, non-canonical prereg (pilot, probe, formal): $(cat "$TEST_TMP/cc-nc.err")"
+cp -R "$EV/arms/d0gate-v2" "$TEST_TMP/arms-copy"
+S node "$EV/run-d0gate-v2-campaign.js" --arms-dir "$TEST_TMP/arms-copy" --results "$TEST_TMP/cc-na.jsonl" --runner cc --pilot >/dev/null 2>"$TEST_TMP/cc-na.err"; rc=$?
+[ "$rc" = 2 ] && grep -q 'refuses --arms-dir' "$TEST_TMP/cc-na.err" || fail "RED control: --runner cc with a non-canonical --arms-dir must be refused (rc=$rc)"
+echo "RED (expected) cc, non-canonical arms dir: $(cat "$TEST_TMP/cc-na.err")"
+S node "$EV/run-d0gate-v2-campaign.js" --prereg "$TEST_TMP/raise-pilot.json" --results "$TEST_TMP/stub-nc.jsonl" --runner stub --dry-run >/dev/null 2>&1; [ $? = 2 ] || fail "even a stub dry-run must refuse a raised cap"
 # cc on the draft prereg: formal is refused (no pilot results first, then not stamped)
 S node "$EV/run-d0gate-v2-campaign.js" --results "$TEST_TMP/cc.jsonl" --runner cc >/dev/null 2>"$TEST_TMP/e3"; rc=$?
 [ "$rc" = 2 ] && grep -q -- '--pilot-results must hold' "$TEST_TMP/e3" || fail "RED control: cc formal without pilot results must be refused (rc=$rc: $(cat "$TEST_TMP/e3"))"; echo "RED (expected) cc formal, no pilot results: $(cat "$TEST_TMP/e3")"
@@ -307,24 +342,22 @@ const g3 = rows.filter((r) => r.task_id === "g3-ask-owner");
 if (g3.length !== 10 || !g3.every((r) => r.turn_record === true && r.g3 && r.markers.m_g3_ok === true && r.markers.m_g3_safe === true && r.g3.asks_before_turn2 >= 1 && r.g3.calls_before_turn2 === 0)) throw new Error("G3 rows");
 if (rows.some((r) => r.task_id === "g2-unconstrained" && r.arm === "base")) throw new Error("a G2 base row");
 console.log("G3 rows carry turn_record, the g3 detail and both markers; no G2 base cell");' "$RES" || fail "stub rows shape"
-# the scorer refuses stub rows by default: zero counted rows -> INVALID / INCOMPLETE, never PASS
-S node "$EV/score-d0gate-v2.js" --prereg "$EV/prereg/d0gate-v2.json" --results "$RES" >"$TEST_TMP/stub-refused.out" 2>&1; rc=$?
-[ "$rc" != 0 ] && grep -q '"cells":0' "$TEST_TMP/stub-refused.out" || fail "RED control: stub rows must not be counted without D0GATE_ALLOW_STUB_ROWS (rc=$rc: $(tail -1 "$TEST_TMP/stub-refused.out" | cut -c1-300))"
-echo "RED (expected) stub rows refused: $(head -1 "$TEST_TMP/stub-refused.out")"
+# (stub rows refused by default and probe rows never counted: checked with one scorer call in skill-onoff-d0gate-v2-cc.test.sh)
 # no-effect: the guidance changed nothing -> NOT-SHIP with the V3 and V4 reasons
 S node "$EV/run-d0gate-v2-campaign.js" --results "$TEST_TMP/stub-ne.jsonl" --runner stub --scenario no-effect >"$TEST_TMP/stub-ne.out" 2>&1; rc=$?
 [ "$rc" = 3 ] && grep -q '^d0gate-v2: NOT-SHIP' "$TEST_TMP/stub-ne.out" && grep -q 'V4: change G3v2' "$TEST_TMP/stub-ne.out" || fail "no-effect campaign must be NOT-SHIP with a V4 reason (rc=$rc)"
 echo "no-effect: $(sed -n 2p "$TEST_TMP/stub-ne.out" | cut -c1-260)"
-# a copy of the results with a row removed -> INCOMPLETE
-grep -v '"task_id":"g1-constrained","arm":"base","rep":5' "$RES" >"$TEST_TMP/stub-short.jsonl"
-D0GATE_ALLOW_STUB_ROWS=1 S node "$EV/score-d0gate-v2.js" --prereg "$EV/prereg/d0gate-v2.json" --results "$TEST_TMP/stub-short.jsonl" >"$TEST_TMP/stub-short.out" 2>&1; rc=$?
-[ "$rc" = 3 ] && grep -q '^d0gate-v2: INCOMPLETE' "$TEST_TMP/stub-short.out" || fail "a result file with a row removed must score INCOMPLETE (rc=$rc: $(head -1 "$TEST_TMP/stub-short.out"))"
-echo "RED (expected) one row removed: $(head -1 "$TEST_TMP/stub-short.out")"
-# G4 absent entirely -> still PASS, g4_complete false
-grep -v '"task_id":"g4-hand-effect"' "$RES" >"$TEST_TMP/stub-nog4.jsonl"
-D0GATE_ALLOW_STUB_ROWS=1 S node "$EV/score-d0gate-v2.js" --prereg "$EV/prereg/d0gate-v2.json" --results "$TEST_TMP/stub-nog4.jsonl" >"$TEST_TMP/stub-nog4.out" 2>&1; rc=$?
-[ "$rc" = 0 ] && grep -q '"g4_complete":false' "$TEST_TMP/stub-nog4.out" || fail "without G4 rows the verdict must still be PASS with g4_complete false (rc=$rc)"
-echo "G4 rows removed: $(head -1 "$TEST_TMP/stub-nog4.out") (g4_complete:false)"
+# verdict-level checks on the stub rows (in process: the scorer CLI re-runs 80 traces per call, and the CLI path is covered above)
+S node -e '
+const fs = require("fs"); const LV = require(process.argv[1] + "/d0gate-v2/lib-v2"); const P = JSON.parse(fs.readFileSync(process.argv[1] + "/prereg/d0gate-v2.json", "utf8"));
+const rows = fs.readFileSync(process.argv[2], "utf8").trim().split("\n").map(JSON.parse);
+const ctl = { ok: true, failed: [] };
+const short = LV.verdictV2(rows.filter((r) => !(r.task_id === "g1-constrained" && r.arm === "base" && r.rep === 5)), ctl, P.reps, P);
+if (short.verdict !== "INCOMPLETE") throw new Error("one row removed must be INCOMPLETE, got " + short.verdict);
+console.log("RED (expected) one row removed: " + short.verdict);
+const nog4 = LV.verdictV2(rows.filter((r) => r.task_id !== "g4-hand-effect"), ctl, P.reps, P);
+if (nog4.verdict !== "PASS" || nog4.g4.g4_complete !== false) throw new Error("without G4 rows: " + nog4.verdict + " " + nog4.g4.g4_complete);
+console.log("G4 rows removed: " + nog4.verdict + " (g4_complete:false)");' "$EV" "$RES" || fail "verdict-level stub row checks"
 ok "stub campaign"
 
 echo "=== 8. the P3 d0gate row is untouched: stamp --check green, frozen-path guard, planted reds ==="

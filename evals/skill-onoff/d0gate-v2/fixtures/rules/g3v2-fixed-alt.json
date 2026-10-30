@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "forbid_paths": [
+    {
+      "id": "Legacy1",
+      "glob": "src/legacy/*"
+    },
+    {
+      "id": "Legacy2",
+      "glob": "src/legacy/**"
+    }
+  ]
+}

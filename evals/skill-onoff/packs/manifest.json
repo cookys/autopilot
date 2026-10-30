@@ -4654,6 +4654,18 @@
       "fixture-stubs-d0gate/scripts/d0gate-workers/g4-nochanges/files/test/check.js": "bb05229374d70ccb8861afd8070474f20f988f53d45321edcb467cc1475f085c",
       "fixture-stubs-d0gate/scripts/d0gate-workers/noop/MODE": "f42479bb812791672351969841b5817302ec3f87c7f1f803874fc86156266eb3",
       "fixture-stubs-d0gate/scripts/dispatch-hetero.sh": "73bac720fb0b154148fbff3fb0936cdab883b855338f3baad995045804a4c8d5"
+    },
+    "ceo-agent-d0gate-v2-change": {
+      "ceo-agent-d0gate-v2-change/SKILL.md": "e3a3c4a3949ec83e09e819142643d35e97cd5f4c9e0c63fd446148bdd8b26af0",
+      "ceo-agent-d0gate-v2-change/references/decision-matrix.md": "3bd75c299500374e730759fa919b539259b98188d4fed9a22e7b47c90d851e5c",
+      "ceo-agent-d0gate-v2-change/references/depth0-control-loop.md": "883ad1d56291d38a31a4289c37c01d282b156ef8726e3b375f9396e649d3fd83",
+      "ceo-agent-d0gate-v2-change/references/doa-and-templates.md": "2f39bd6d509ee37868835548c3eda7cdd8cbde8d9906e7cd81471c3091e792aa",
+      "ceo-agent-d0gate-v2-change/references/level-front-door.md": "0aa2ceede40c76757f972c2e012b630bac91ef27658440cef5980772bfb110b3",
+      "ceo-agent-d0gate-v2-change/references/task-prompt-templates.md": "b5d3202cf36f8b8674794ecc8289670475a5cc524627fd451895fea8f8ba0451",
+      "ceo-agent-d0gate-v2-change/references/tree-adapter.md": "14578dd7841cc9b0f47cc019c31e4362ad3f5b6c641b4ee0059cf65fd6beee09"
+    },
+    "fixture-stubs-d0gate-v2": {
+      "fixture-stubs-d0gate-v2/scripts/open-decision.js": "ffe7b9e9b10a70e813f060b69eba9d1fe68ef6f13abcc1cb5bb23059cbfee16b"
     }
   },
   "pack_meta": {
@@ -10858,6 +10870,16 @@
       "kind": "dir",
       "source": "evals/skill-onoff/d0gate/stubs (hand-written stub dispatch script and worker overlays; the option-parse loop and --gate-rules block are copied from scripts/dispatch-hetero.sh at 45edf93da)",
       "ref": "new in this unit (BL-0306 P3 U1); the stub does not exist at 45edf93da"
+    },
+    "ceo-agent-d0gate-v2-change": {
+      "kind": "dir",
+      "source": "skills/ceo-agent @ 45edf93da + evals/skill-onoff/candidates/depth0-gate-arming-v2.md inserted before '## Startup'",
+      "ref": "45edf93da+candidates/depth0-gate-arming-v2.md"
+    },
+    "fixture-stubs-d0gate-v2": {
+      "kind": "dir",
+      "source": "evals/skill-onoff/d0gate-v2/stubs (the ask stub scripts/open-decision.js; same CLI and exit-2 rules as scripts/open-decision.js, records into the cell ledger)",
+      "ref": "new in d0gate v2 U1; the stub does not exist at 45edf93da"
     }
   }
 }

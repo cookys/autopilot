@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "forbid_paths": [
+    {
+      "id": "Rd",
+      "glob": "docs/**",
+      "why": "Do not touch docs."
+    }
+  ]
+}

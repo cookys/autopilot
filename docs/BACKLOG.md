@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0338 -->
+<!-- next-id: BL-0339 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1440,22 +1440,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/pre-push-suite-speed.md
 - **Context**: Scale time asserts by test_timing_scale, prefix-scope pgrep, wait FAKE_STARTED in gate-rules R2 :133. Negative control: red under load before, green after (B3).
 
-### Runs watcher aborts on a fresh host when the dispatch manifest directory is missing
+### Missing paths, files or tools abort or silently disable autopilot on a fresh host or after a /tmp wipe
 - **Id**: BL-0336
 - **Status**: open
 - **Since**: 2026-10-31
 - **Origin**: peer
 - **Reporter**: llm-playground session on 4124gs
-- **Report**: 01M66YQ9Y3R3PC1DF2EK7HGXKH
+- **Report**: 01M66YQ9Y3R3PC1DF2EK7HGXKH；01M66YW3B1QS5VK0PNAA9JTBN0
 - **Reply**: 2026-10-31 01M66YQG8DWF6HCWJ9N335GH43
-- **Problem**: 新機器從沒派過工，狀態列常駐顯示「無法使用」：背景監看程式一啟動就因為清單目錄不存在而中止，自動啟動每次都悄悄失敗，也看不到原因。
-- **Impact**: 新機器狀態列一直壞；暫時解法是手動建目錄，重開機被清掉後又會再發生。
-- **Trigger**: after idlestate (stale-panel criterion) merges
+- **Problem**: 新機器或重開機清掉暫存目錄後，許多地方假設目錄、檔案或工具已存在，缺了就中止或悄悄失效；例子是狀態列常駐顯示無法使用，因為背景監看程式找不到清單目錄。
+- **Impact**: 新機器與重開機後多個功能悄悄壞掉，使用者看不到原因，只能手動補目錄。
+- **Trigger**: after idlestate (stale-panel criterion) merges; design first, owner reviews before any implementation
 - **Trigger-Type**: event
-- **Effort**: S
-- **Source**: PEER-REPORTED llm-playground 2026-10-31
-- **Pointer**: docs/backlog/runs-watch-missing-manifest-dir.md
-- **Context**: Check at runs-watch.js:1059; autostart hooks/runs-watch-autostart.js. Fix: create dir 0700 or treat as no manifests; show failure reason in statusline/advisory.
+- **Effort**: M
+- **Source**: PEER-REPORTED llm-playground 2026-10-31, scope widened by owner via 4124gs
+- **Pointer**: docs/backlog/missing-path-assumptions.md
+- **Context**: Example: runs-watch.js:1059 aborts on missing /tmp/autopilot-dispatch-runs. Design doc first (inventory, ensureDir helper, unavailable reason, doctor, empty-HOME test).
 
 ### Decision card opened from another repo's cwd lands in that repo and the panel never shows it
 - **Id**: BL-0337
@@ -1473,3 +1473,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED hangar 2026-10-31
 - **Pointer**: docs/backlog/open-decision-cwd-scope.md
 - **Context**: Scope from process cwd git-common-dir; only unbound warns (~L275). Options: warn/refuse on repo mismatch, derive from session marker, fix SessionStart hint wording.
+
+### SessionStart agent-brief hint is not copyable and the two dispatch guards reject it one at a time
+- **Id**: BL-0338
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: peer
+- **Reporter**: llm-playground session on 4124gs
+- **Report**: 01M66Z68PA0PZDR96C0XRKECP1
+- **Reply**: none
+- **Problem**: 開工提示把派工單頭三行串成一行，照抄會被預算守衛擋；改三行後，貴引擎又被模型守衛擋，因為提示沒寫「刻意使用」的寫法，兩道守衛各擋一次。
+- **Impact**: 每次在新 session 派貴引擎至少白擋兩次，浪費時間與額度。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PEER-REPORTED 4124gs 2026-10-31, owner asked; depth-0 verified
+- **Pointer**: docs/backlog/brief-header-hint-guards.md
+- **Context**: hooks/lib/brief-header-template.js:76 joins lines with " | "; hooks/subagent-budget.js:498; dispatch-model-guard. Fix: copyable 3-line template incl. intentional form, one merged message, regression test.

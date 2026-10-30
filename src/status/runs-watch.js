@@ -380,6 +380,51 @@ function signatureOf(runs) {
  *   collect({enrichCap, project}) -> enriched run rows (injected; cli.js passes collectRuns)
  *   now() -> epoch ms
  */
+// What a published snapshot was built from, FOR THIS PROJECT ONLY, so a reader can tell "has anything of mine changed since" without trusting published_at's
+// age (a watcher that left on purpose leaves a snapshot that stays true until one of these moves). Two directory groups, each
+//   { role, dir, dir_mtime_ms, suffix, match_field, match_value, files: [{ path, mtime_ms }] }
+//   manifest  the dispatch manifest dir; files = the manifests of this project's rows; match repo_identity === this project's identity
+//   marker    the session-mode dir; files = the markers whose project_key is this project's (any expiry); match project_key === this key
+// A reader says "moved" when a listed file is newer or gone, or, once the directory's own mtime moved (a create / rename / delete in it, by anyone),
+// when a file it has not seen yet carries this project's match value. Other projects' manifests and markers therefore never make this one outdated.
+// A file's mtime is recorded as min(mtime, tick start): one modified while the tick was collecting reads as newer later (conservative, never lost).
+// Not covered, by design: the costs file (rows carry a session and a cwd, not a project key; filtering needs a tail read per check, so the spend block
+// keeps its own as_of times instead), the decision ledger, work-order progress, review receipts, and the per-session tasks / attention files the pane reads live.
+function dirMtime(dir) {
+  try { return fs.statSync(dir).mtimeMs; } catch (_error) { return null; }
+}
+function fileEntries(paths, startMs) {
+  return paths.map((p) => {
+    let m = null;
+    try { m = Math.min(fs.statSync(p).mtimeMs, startMs); } catch (_error) { /* gone */ }
+    return { path: p, mtime_ms: m };
+  });
+}
+function markerFilesOf(dir, key) {
+  const out = [];
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch (_error) { return out; }
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    try {
+      const m = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
+      if (m && m.project_key === key) out.push(path.join(dir, name));
+    } catch (_error) { /* unreadable: not ours */ }
+  }
+  return out;
+}
+// dirs: the two directory mtimes taken BEFORE the tick's collect; null when the identity is unknown (nothing can be said about change then)
+function sourceFingerprint({ env, key, identity, rows, dirs, startMs }) {
+  if (!identity) return null;
+  const manifestDir = manifestDirOf(env);
+  const markerDir = markerDirOf(env);
+  const manifests = [...new Set(rows.map((r) => r && r.manifest).filter((p) => typeof p === 'string' && p))];
+  return [
+    { role: 'manifest', dir: manifestDir, dir_mtime_ms: dirs.manifest, suffix: '.manifest.json', match_field: 'repo_identity', match_value: identity, files: fileEntries(manifests, startMs) },
+    { role: 'marker', dir: markerDir, dir_mtime_ms: dirs.marker, suffix: '.json', match_field: 'project_key', match_value: key, files: fileEntries(markerFilesOf(markerDir, key), startMs) },
+  ];
+}
+
 function createWatcher({
   key, env = process.env, cwd = process.cwd(), collect, now = Date.now,
   interval = DEFAULT_INTERVAL_S, enrichCap = 8, pid = process.pid, idleExitS = null, render = null,
@@ -412,7 +457,7 @@ function createWatcher({
   const spendHistory = createSpendHistoryPublisher({ live, writeAtomic, log: (m) => log(m) }); // follow-up C: <live>/runs/spend-history.json (host-wide, one sample per 15 min, 48 h)
   const stageWalkSidecar = createStageWalkPublisher({ live, writeAtomic, log: (m) => log(m) }); // P7 D4: <live>/stage/<sid>.json
   const state = {
-    lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
+    lastSources: null, lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null, host_today_brain_usd: null, brain_cap_usd: brainSpend.read().brain_cap_usd },
     idleSince: null, lastPathsWhy: null, // lastPathsWhy: the last logged reason `git worktree list` failed (log again only when it changes)
     rootActiveAt: new Map(), droppedRoots: new Set(), // root retention (ROOT_RETENTION_S)
@@ -437,6 +482,7 @@ function createWatcher({
       valid_for_s: VALID_FOR_S,
       writer: extra.writer,
       ...(extra.exit_reason ? { exit_reason: extra.exit_reason } : {}),
+      ...(state.lastSources ? { sources: state.lastSources } : {}),
       runs,
       counts: state.lastCounts.get(rootRunId) || computeCounts(runs, interval, enrichCap, freshBoundOf(state.lastRuns || runs, interval, enrichCap)),
       sessions: state.lastCost.sessions,
@@ -701,6 +747,7 @@ function createWatcher({
   function tick() {
     const nowMs = now();
     let rows;
+    const dirsBefore = { manifest: dirMtime(manifestDirOf(env)), marker: dirMtime(markerDirOf(env)) }; // BEFORE collect: a change during the read is seen as newer, never lost
     try {
       const all = collect({ enrichCap, project: key });
       const selected = applySelectors(all, { project: key });
@@ -718,6 +765,7 @@ function createWatcher({
       log('code changed, exiting');
       return { published: false, exit: 'code_changed' };
     }
+    state.lastSources = sourceFingerprint({ env, key, identity, rows, dirs: dirsBefore, startMs: nowMs }); // this tick's view (published on change or heartbeat, and by the final publish)
     const allMarkers = unexpiredMarkers(env, key, nowMs);
     const markers = allMarkers.filter(isOrchestratorMarker);
     const cost = { ...costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean)), ...brainSpend.read() };

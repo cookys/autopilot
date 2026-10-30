@@ -170,6 +170,7 @@ type World = {
   writes: string[]
   reads: string[]
   lists: string[]
+  listErrors: Record<string, string> // $.fs.list rejects with this message
   statErrors: Record<string, string> // $.fs.stat rejects with this message (the engine passes a message only, no `code`)
   existsThrows: Set<string> // $.fs.exists rejects for these paths
   env: Record<string, string> // what $.env.get answers; a test may change it between ticks
@@ -182,7 +183,7 @@ const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(o
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], statErrors: {}, existsThrows: new Set(), order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
   // its own copy, so a test can change a variable between ticks
@@ -201,6 +202,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   on('fs.write', ($, e) => { w.writes.push(e.path); return { value: undefined } })
   on('fs.list', ($, e) => {
     w.lists.push(e.path)
+    if (w.listErrors[e.path] !== undefined) throw new Error(w.listErrors[e.path])
     const prefix = e.path.replace(/\/$/, '') + '/'
     const seen = new Map<string, 'file' | 'dir'>()
     for (const p of Object.keys(w.files)) {
@@ -580,6 +582,165 @@ for (const surface of SURFACES) {
     w.files['/srv/worktrees/proj/.git/autopilot-residue-auto.json'] = auto(6)
     await w.clock.advance(5000)
     expect(await bandText($, surface)).toContain('no project · ⚑6 · run:')
+  })
+
+  // age alone never makes a snapshot stale once its writer is gone: only a change of THIS project's sources does (the watcher's sourceFingerprint groups)
+  const IDENT = 'git-common-dir:/work/repo/.git'
+  const MDIR = '/tmp/autopilot-dispatch-runs'
+  const KDIR = AHOME + '/session-mode'
+  const MINE = MDIR + '/mine.manifest.json'
+  const groups = () => [
+    { role: 'manifest', dir: MDIR, dir_mtime_ms: 1000, suffix: '.manifest.json', match_field: 'repo_identity', match_value: IDENT, files: [{ path: MINE, mtime_ms: 1000 }] },
+    { role: 'marker', dir: KDIR, dir_mtime_ms: 1000, suffix: '.json', match_field: 'project_key', match_value: KEY,
+      files: [{ path: KDIR + '/' + SID_A + '.json', mtime_ms: 1000 }, { path: KDIR + '/' + SID_B + '.json', mtime_ms: 1000 }] },
+  ]
+  let on0: () => any = () => null
+  // an old publish by a writer that left: every recorded source stat-s as recorded (1000) until `touch` says otherwise
+  const oldWorld = (over: Record<string, unknown>, touch: (w: any) => void = () => undefined, now: number = NOW_STALE) => {
+    const tree = base()
+    tree[MINE] = j({ repo_identity: IDENT, run_id: 'mine' })
+    tree[MDIR + '/theirs.manifest.json'] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'theirs' })
+    tree[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ writer: null, sources: groups(), ...over }))
+    const w = worldEn(on0(), tree, now)
+    for (const p of [MDIR, KDIR, MINE, KDIR + '/' + SID_A + '.json', KDIR + '/' + SID_B + '.json']) w.stats[p] = { size: 0, mtimeMs: 1000 }
+    touch(w)
+    return w
+  }
+  const OTHER_MARKER = KDIR + '/s-other.json'
+  test('band: an old publish whose writer left and whose sources did not move is ok, not stale (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({})
+    await start($, surface)
+    const text = await bandText($, surface)
+    expect(text).toContain(FOUND)
+    expect(text).not.toContain('stale')
+  })
+  test('band: another project\'s manifest and marker moving, and a cost row another session wrote, leave this project ok (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({}, w => {
+      w.files[MDIR + '/theirs2.manifest.json'] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'theirs2' })
+      w.files[MDIR + '/theirs.manifest.json'] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'theirs' })
+      w.stats[MDIR] = { size: 0, mtimeMs: 2000 }; w.stats[MDIR + '/theirs.manifest.json'] = { size: 0, mtimeMs: 2000 }
+      w.files[OTHER_MARKER] = j({ session_id: 's-other', project_key: 'ffffffffffffffff', level: 'l5' })
+      w.stats[KDIR] = { size: 0, mtimeMs: 2000 }
+      w.files['/home/u/.claude/metrics/costs.jsonl'] = '{"ts":"2026-10-04T10:03:00Z","session":"other","cost_usd":1}\n'
+      w.stats['/home/u/.claude/metrics/costs.jsonl'] = { size: 90, mtimeMs: 2000 }
+    })
+    await start($, surface)
+    const text = await bandText($, surface)
+    expect(text).toContain(FOUND)
+    expect(text).not.toContain('stale')
+  })
+  for (const [label, touch] of [
+    ['a manifest of this project changed', (w: any) => { w.stats[MINE] = { size: 0, mtimeMs: 2000 } }],
+    ['a new manifest of this project appeared', (w: any) => { w.files[MDIR + '/new.manifest.json'] = j({ repo_identity: IDENT, run_id: 'new' }); w.stats[MDIR] = { size: 0, mtimeMs: 2000 } }],
+    ['a manifest of this project was deleted', (w: any) => { delete w.files[MINE]; delete w.stats[MINE]; w.statErrors[MINE] = 'ENOENT'; w.stats[MDIR] = { size: 0, mtimeMs: 2000 } }],
+    ['a listed manifest of this project can no longer be checked (EACCES)', (w: any) => { w.statErrors[MINE] = "EACCES: permission denied, stat '" + MINE + "'" }],
+    ['the manifest directory cannot be listed after its mtime moved (EACCES)', (w: any) => { w.stats[MDIR] = { size: 0, mtimeMs: 2000 }; w.listErrors[MDIR] = "EACCES: permission denied, scandir '" + MDIR + "'" }],
+    ['a marker of this project changed', (w: any) => { w.stats[KDIR + '/' + SID_A + '.json'] = { size: 0, mtimeMs: 2000 } }],
+    ['a new marker of this project appeared', (w: any) => { w.files[KDIR + '/s-new.json'] = j({ session_id: 's-new', project_key: KEY, level: 'l5' }); w.stats[KDIR] = { size: 0, mtimeMs: 2000 } }],
+  ] as [string, (w: any) => void][]) {
+    test('band: an old publish whose writer left is stale and says what changed when ' + label + ' (' + surface + ')', async ($, on) => {
+      on0 = () => on
+      oldWorld({}, touch)
+      await start($, surface)
+      const text = await bandText($, surface)
+      expect(text).toContain('changed since the last publish at')
+      expect(text).not.toContain(FOUND)
+    })
+  }
+  test('band: a new manifest that cannot be parsed yet is not stale, is not remembered, and is seen once it is repaired into this project\'s (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const NEWF = MDIR + '/half.manifest.json'
+    const w = oldWorld({}, w0 => { w0.files[NEWF] = '{"repo_identity": "git-comm'; w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND) // unreadable now: no verdict of change
+    w.files[NEWF] = j({ repo_identity: IDENT, run_id: 'half' }) // the rename landed: it is this project's
+    await w.clock.advance(5000)
+    const text = await bandText($, surface)
+    expect(text).toContain('changed since the last publish at')
+    expect(text).not.toContain(FOUND)
+  })
+  test('band: a new manifest that fails to read is retried, not remembered (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const NEWF = MDIR + '/late.manifest.json'
+    const w = oldWorld({}, w0 => { w0.files[NEWF] = j({ repo_identity: IDENT, run_id: 'late' }); w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+    const real = w.files[NEWF]
+    w.files[NEWF] = undefined as never // listed but unreadable (the test engine's read throws ENOENT for it) until the second poll
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+    w.files[NEWF] = real
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain('changed since the last publish at')
+  })
+  test('band: another project\'s new manifest is read once, however many polls follow, and leaves this project ok (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const FOREIGN = MDIR + '/foreign.manifest.json'
+    const w = oldWorld({}, w0 => { w0.files[FOREIGN] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'f' }); w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+    await start($, surface)
+    await w.clock.advance(5000)
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain(FOUND)
+    expect(w.reads.filter((p: string) => p === FOREIGN).length).toBe(1)
+  })
+  test('band: a writer that left and a source that moved is stale even while valid_for_s still runs (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({}, w => { w.stats[MINE] = { size: 0, mtimeMs: 2000 } }, NOW_FRESH)
+    await start($, surface)
+    const text = await bandText($, surface)
+    expect(text).toContain('changed since the last publish at')
+    expect(text).not.toContain(FOUND)
+  })
+  test('band: a writer that left and sources that did not move is ok while valid_for_s still runs (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({}, () => undefined, NOW_FRESH)
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+  })
+  for (const [label, content] of [
+    ['has no owner field', { run_id: 'x' }],
+    ['has a null owner field', { repo_identity: null, run_id: 'x' }],
+    ['has a non-string owner field', { repo_identity: 7, run_id: 'x' }],
+  ] as [string, Record<string, unknown>][]) {
+    test('band: a new manifest that ' + label + ' is not remembered as another project\'s and is seen once repaired into this project\'s (' + surface + ')', async ($, on) => {
+      on0 = () => on
+      const NEWF = MDIR + '/incomplete.manifest.json'
+      const w = oldWorld({}, w0 => { w0.files[NEWF] = j(content); w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+      await start($, surface)
+      expect(await bandText($, surface)).toContain(FOUND)
+      w.files[NEWF] = j({ repo_identity: IDENT, run_id: 'x' })
+      await w.clock.advance(5000)
+      expect(await bandText($, surface)).toContain('changed since the last publish at')
+    })
+  }
+  test('band: a listed file recorded as absent that cannot be stat-ed is a change (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const g = groups()
+    g[0].files[0].mtime_ms = null as never
+    oldWorld({ sources: g }, w => { w.statErrors[MINE] = 'ENOENT' })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('changed since the last publish at')
+  })
+  test('band: a sources list that is present but unreadable cannot confirm no change (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({ sources: 'garbage' })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('changed since the last publish at')
+  })
+  test('pane: idle_exit with unmoved sources shows the data and a neutral idle note, no warning (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({ exit_reason: 'idle_exit' })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+    const p = await paneParts($, surface)
+    expect(p.head.join('\n')).toContain('watcher idle · resumes on your next message once something changes')
+    expect(p.head.join('\n')).not.toContain('stale')
+  })
+  test('band: a listed writer that stopped publishing stays stale whatever the sources did (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({ writer: { pid: 1, session_id: null, started_at: PUBLISHED } })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('the watcher is not publishing')
   })
 
   test('band: stale after valid_for_s; a re-read never makes an old envelope fresh (' + surface + ')', async ($, on) => {

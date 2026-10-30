@@ -107,6 +107,34 @@
       "type": "string",
       "minLength": 1
     },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "dir", "dir_mtime_ms", "suffix", "match_field", "match_value", "files"],
+        "additionalProperties": false,
+        "properties": {
+          "role": { "type": "string", "minLength": 1 },
+          "dir": { "type": "string", "minLength": 1 },
+          "dir_mtime_ms": { "type": ["number", "null"] },
+          "suffix": { "type": "string" },
+          "match_field": { "type": "string", "minLength": 1 },
+          "match_value": { "type": "string", "minLength": 1 },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "mtime_ms"],
+              "additionalProperties": false,
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "mtime_ms": { "type": ["number", "null"] }
+              }
+            }
+          }
+        }
+      }
+    },
     "runs": {
       "type": "array",
       "items": {

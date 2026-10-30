@@ -116,6 +116,8 @@ export type LiveSnapshot = {
   // P7d: plan-review state + latest code-review round of this project (null = none published)
   review: ReviewView | null
   published_at: string | null
+  // a neutral line under the header when the snapshot's watcher has left (idle exit or another exit_reason) and nothing it read has changed; null = nothing to say
+  watcher_note: string | null
   session_as_of: string | null
   host_as_of: string | null
   // P7: the facts the panel's tabs draw (null = the fact is not published: the tab says "no data")
@@ -246,7 +248,31 @@ export function longestPrefixKey(real: string, maps: Json[]): string | null {
   return best === null ? null : best.key
 }
 
-export type EnvelopeCheck = { status: 'missing' | 'malformed' | 'fresh' | 'stale'; envelope: Json | null }
+// moved: set on a stale envelope whose writer is gone and whose sources changed since the publish (see sourcesMoved)
+export type EnvelopeCheck = { status: 'missing' | 'malformed' | 'fresh' | 'stale'; envelope: Json | null; moved?: boolean }
+
+// The envelope's `sources` (src/status/runs-watch.js sourceFingerprint): one group per directory the snapshot was built from, narrowed to THIS project:
+// { role, dir, dir_mtime_ms, suffix, match_field, match_value, files: [{ path, mtime_ms }] }. null = the envelope carries none (an older watcher, or one that did not
+// know the project's identity yet): nothing can be said about change, so age alone keeps deciding.
+export type SourceGroup = { role: string; dir: string; dir_mtime_ms: number | null; suffix: string; match_field: string; match_value: string; files: { path: string; mtime_ms: number | null }[] }
+export function sourcesOf(env: Json): SourceGroup[] | null {
+  if (!Array.isArray(env.sources) || env.sources.length === 0) return null
+  const out: SourceGroup[] = []
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+  for (const g of env.sources) {
+    if (!isObject(g) || typeof g.dir !== 'string' || !g.dir || typeof g.suffix !== 'string' || typeof g.match_field !== 'string' || typeof g.match_value !== 'string' || !g.match_field || !g.match_value || !Array.isArray(g.files)) return null
+    const files: SourceGroup['files'] = []
+    for (const f of g.files) {
+      if (!isObject(f) || typeof f.path !== 'string' || !f.path) return null
+      files.push({ path: f.path, mtime_ms: num(f.mtime_ms) })
+    }
+    out.push({ role: typeof g.role === 'string' ? g.role : '', dir: g.dir, dir_mtime_ms: num(g.dir_mtime_ms), suffix: g.suffix, match_field: g.match_field, match_value: g.match_value, files })
+  }
+  return out
+}
+// has this source moved since the watcher stat-ed it? `now` is the mtime now (null = absent). Newer, or present where it was absent, or gone where it was present.
+export const sourceMoved = (recorded: number | null, now: number | null): boolean => (recorded === null ? now !== null : now === null || now > recorded)
+
 
 // readEnvelope's contract (src/status/runs-watch.js): a wrong schema or a scope that is not the one wanted is a
 // MISSING file; fresh depends on published_at alone, never on when the mod read the file.
@@ -1024,6 +1050,10 @@ export const stateText = (t: T) => ({
   noProjectWt: (wt: number) => t('state.no_project_wt', { wt: GT.residue, n: wt, hint: RUNS_HINT }),
   unreadable: t('state.unreadable'),
   stale: (publishedAt: string | null) => (publishedAt ? t('state.stale_at', { at: publishedAt }) : t('state.stale')),
+  // an old snapshot whose watcher is gone AND whose sources have moved since: the data really is outdated
+  staleMoved: (publishedAt: string | null) => (publishedAt ? t('state.stale_moved_at', { at: publishedAt }) : t('state.stale_moved')),
+  // a snapshot whose sources have not moved stays ok; its watcher having left is a neutral note, not a fault
+  watcherNote: (exitReason: string) => (exitReason === 'idle_exit' ? t('state.idle_note') : t('state.exited_note', { reason: exitReason })),
   unavailable: () => t('state.unavailable'),
 })
 

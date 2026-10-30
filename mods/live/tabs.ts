@@ -46,7 +46,7 @@ export function headerLines(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   ]
   const verdict = ui.stateOf('verdict', b.kind.toUpperCase())
   const lines = ui.verdictHeader(u, { state: verdict, word: b.verdict, project: snap.detail.project ?? b.project, elapsed: b.elapsed === '—' ? '' : t('now.since', { e: b.elapsed }), metrics })
-  return wrapLines([...lines, ui.blank()], ctx.cols)
+  return wrapLines([...lines, ...(!snap.watcher_note ? [] : [ui.stateText(snap.watcher_note, 'header.verdict')]), ui.blank()], ctx.cols)
 }
 
 // ---- the overflow hint (live-pane height, coordinator ruling 2026-10-14): pane.tsx's own scroll state, not a fact of the session. While the window sits at the top

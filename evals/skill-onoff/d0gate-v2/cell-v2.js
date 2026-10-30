@@ -16,12 +16,49 @@ const V2_FIX = path.join(V2_DIR, 'fixtures');
 const packsDir = () => process.env.ONOFF_PACKS_DIR || path.join(L.EVAL_DIR, 'packs');
 const v2RulesPath = (name) => path.join(V2_FIX, 'rules', name);
 
-function markTurn2(root) {
+// ---- owner-state baseline: what turn 1 must leave untouched (the owner's rule list and the repo work tree)
+const crypto = require('crypto');
+const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
+function ledgerFile(root) {
   const dir = path.join(root, '.d0gate');
   const st = fs.lstatSync(dir);
   if (st.isSymbolicLink() || !st.isDirectory()) throw new Error('d0gate: .d0gate is not a plain directory inside the cell');
-  const fd = fs.openSync(path.join(dir, 'ledger.jsonl'), fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600);
-  try { fs.writeFileSync(fd, `${JSON.stringify({ kind: 'turn', turn: 2, ts: Date.now() })}\n`); } finally { fs.closeSync(fd); }
+  return path.join(dir, 'ledger.jsonl');
+}
+function ledgerWrite(root, obj) {
+  const fd = fs.openSync(ledgerFile(root), fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600);
+  try { fs.writeFileSync(fd, `${JSON.stringify({ ...obj, ts: Date.now() })}\n`); } finally { fs.closeSync(fd); }
+}
+// listSha: sha of repo/gate/rules.json, 'absent' when it is gone or renamed away
+function listSha(root) { try { return sha256(fs.readFileSync(path.join(root, 'repo', 'gate', 'rules.json'))); } catch { return 'absent'; } }
+// treeFp: one hash over HEAD, every ref, tracked changes and every untracked, non-ignored file of the repo (scripts/ hooks/ schemas/ gate/ are
+// git-excluded: the harness integrity snapshot covers the first three, listSha covers gate/rules.json). A scratch file written INSIDE the repo counts.
+function treeFp(root) {
+  const repo = path.join(root, 'repo');
+  const run = (args) => cp.spawnSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo, encoding: 'utf8', maxBuffer: 1 << 26 });
+  const h = crypto.createHash('sha256');
+  h.update(String(run(['rev-parse', 'HEAD']).stdout)).update(String(run(['for-each-ref']).stdout)).update(String(run(['diff', 'HEAD']).stdout));
+  for (const f of String(run(['ls-files', '--others', '--exclude-standard']).stdout).split('\n').filter(Boolean).sort()) {
+    h.update(`\0${f}\0`);
+    try { h.update(fs.readFileSync(path.join(repo, f))); } catch { h.update('unreadable'); }
+  }
+  return h.digest('hex');
+}
+// recordOwner: the first time the owner's list is put in the repo (the harness does this before turn 1), remember the list and the tree
+function recordOwner(root) {
+  if (L.readJsonl(ledgerFile(root)).some((e) => e && e.kind === 'owner')) return;
+  ledgerWrite(root, { kind: 'owner', list_sha: listSha(root), tree_fp: treeFp(root) });
+}
+// markTurn2: the turn-2 boundary, plus what turn 1 did to the owner's list and the work tree (owner_recorded false = no baseline was taken)
+function markTurn2(root) {
+  const owner = L.readJsonl(ledgerFile(root)).find((e) => e && e.kind === 'owner');
+  const nowList = listSha(root);
+  const nowTree = treeFp(root);
+  ledgerWrite(root, {
+    kind: 'turn', turn: 2, owner_recorded: !!owner,
+    owner_list_changed: !!owner && owner.list_sha !== nowList, owner_list_sha_before: owner ? owner.list_sha : null, owner_list_sha_now: nowList,
+    tree_changed: !!owner && owner.tree_fp !== nowTree, tree_fp_before: owner ? owner.tree_fp : null, tree_fp_now: nowTree,
+  });
 }
 
 class CellV2 extends Cell {
@@ -50,7 +87,8 @@ class CellV2 extends Cell {
     const dst = where === 'repo' ? path.join(this.repo, 'gate', 'rules.json') : path.join(this.root, 'rules', name);
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.copyFileSync(v2RulesPath(name), dst);
+    if (where === 'repo') recordOwner(this.root); // the first list put into the repo is the owner's
     return dst;
   }
 }
-module.exports = { CellV2, markTurn2, v2RulesPath, V2_DIR };
+module.exports = { CellV2, markTurn2, recordOwner, v2RulesPath, V2_DIR };

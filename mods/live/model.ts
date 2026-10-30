@@ -93,8 +93,8 @@ export type BandView = {
 }
 
 export type LiveSnapshot = {
-  // ok | stale | unavailable | unreadable | no-pointer | no-project
-  state: 'ok' | 'stale' | 'unavailable' | 'unreadable' | 'no-pointer' | 'no-project'
+  // ok | stale | idle_exit | unavailable | unreadable | no-pointer | no-project
+  state: 'ok' | 'stale' | 'idle_exit' | 'unavailable' | 'unreadable' | 'no-pointer' | 'no-project'
   // the exact band text (an ok snapshot: line 1, then the reason on its own line)
   text: string
   band: BandView | null // set for state ok only
@@ -1024,6 +1024,8 @@ export const stateText = (t: T) => ({
   noProjectWt: (wt: number) => t('state.no_project_wt', { wt: GT.residue, n: wt, hint: RUNS_HINT }),
   unreadable: t('state.unreadable'),
   stale: (publishedAt: string | null) => (publishedAt ? t('state.stale_at', { at: publishedAt }) : t('state.stale')),
+  // the watcher exited on purpose after sitting idle (envelope exit_reason 'idle_exit'): not a fault, and it comes back with the owner's next message
+  idleExit: (publishedAt: string | null) => (publishedAt ? t('state.idle_exit_at', { at: publishedAt }) : t('state.idle_exit')),
   unavailable: () => t('state.unavailable'),
 })
 

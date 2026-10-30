@@ -49,6 +49,8 @@
   "state.unreadable": "unreadable",
   "state.stale": "stale · the watcher is not publishing",
   "state.stale_at": "stale · last published {at} · the watcher is not publishing",
+  "state.idle_exit": "watcher idle-exited · resumes on your next message",
+  "state.idle_exit_at": "watcher idle-exited · last published {at} · resumes on your next message",
   "state.unavailable": "unavailable · this project's status cannot be read right now",
   "progress.frozen": "{pct}% ({done}/{total})",
   "phase.task": "doing: {subject}",

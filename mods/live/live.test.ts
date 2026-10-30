@@ -582,6 +582,22 @@ for (const surface of SURFACES) {
     expect(await bandText($, surface)).toContain('no project · ⚑6 · run:')
   })
 
+  test('band: an old envelope that says exit_reason idle_exit is the neutral idle state, not stale (' + surface + ')', async ($, on) => {
+    const tree = base()
+    tree[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ exit_reason: 'idle_exit', writer: null }))
+    const w = worldEn(on, tree, NOW_STALE)
+    await start($, surface)
+    const text = await bandText($, surface)
+    expect(text).toContain('idle-exited')
+    expect(text).toContain('resumes on your next message')
+    expect(text).not.toContain('stale')
+    expect(text).not.toContain('not publishing')
+    // any other exit_reason keeps the stale wording
+    w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ exit_reason: 'sigterm' }))
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain('stale')
+  })
+
   test('band: stale after valid_for_s; a re-read never makes an old envelope fresh (' + surface + ')', async ($, on) => {
     const w = worldEn(on, base(), NOW_STALE)
     await start($, surface)

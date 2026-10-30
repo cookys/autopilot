@@ -49,6 +49,8 @@
   "state.unreadable": "讀不到",
   "state.stale": "資料過舊 · watcher 沒有在發佈",
   "state.stale_at": "資料過舊 · 上次發佈 {at} · watcher 沒有在發佈",
+  "state.idle_exit": "watcher 已閒置結束 · 送出下一個訊息就會恢復",
+  "state.idle_exit_at": "watcher 已閒置結束 · 上次發佈 {at} · 送出下一個訊息就會恢復",
   "state.unavailable": "無法取得 · 目前讀不到這個專案的狀態",
   "progress.frozen": "{pct}%（{done}/{total}）",
   "phase.task": "做：{subject}",

@@ -377,6 +377,8 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   }
   if (fresh.length === 0) {
     const at = published !== null && Number.isFinite(Date.parse(published)) ? hhmm(Date.parse(published)) : null
+    // the watcher's last publish says it left on purpose (idle exit): a neutral state, not a broken watcher
+    if (found.envelope.exit_reason === 'idle_exit') return { snap: plain('idle_exit', STATE_TEXT.idleExit(at), common), counts: null, acceptance: null }
     return { snap: plain('stale', STATE_TEXT.stale(at), common), counts: null, acceptance: null }
   }
   // W3a sources. The per-session files are named by the sanitised sid; every sidecar is read for THIS scope only.

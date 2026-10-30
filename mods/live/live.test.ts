@@ -596,12 +596,12 @@ for (const surface of SURFACES) {
   ]
   let on0: () => any = () => null
   // an old publish by a writer that left: every recorded source stat-s as recorded (1000) until `touch` says otherwise
-  const oldWorld = (over: Record<string, unknown>, touch: (w: any) => void = () => undefined) => {
+  const oldWorld = (over: Record<string, unknown>, touch: (w: any) => void = () => undefined, now: number = NOW_STALE) => {
     const tree = base()
     tree[MINE] = j({ repo_identity: IDENT, run_id: 'mine' })
     tree[MDIR + '/theirs.manifest.json'] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'theirs' })
     tree[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ writer: null, sources: groups(), ...over }))
-    const w = worldEn(on0(), tree, NOW_STALE)
+    const w = worldEn(on0(), tree, now)
     for (const p of [MDIR, KDIR, MINE, KDIR + '/' + SID_A + '.json', KDIR + '/' + SID_B + '.json']) w.stats[p] = { size: 0, mtimeMs: 1000 }
     touch(w)
     return w
@@ -682,6 +682,50 @@ for (const surface of SURFACES) {
     await w.clock.advance(5000)
     expect(await bandText($, surface)).toContain(FOUND)
     expect(w.reads.filter((p: string) => p === FOREIGN).length).toBe(1)
+  })
+  test('band: a writer that left and a source that moved is stale even while valid_for_s still runs (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({}, w => { w.stats[MINE] = { size: 0, mtimeMs: 2000 } }, NOW_FRESH)
+    await start($, surface)
+    const text = await bandText($, surface)
+    expect(text).toContain('changed since the last publish at')
+    expect(text).not.toContain(FOUND)
+  })
+  test('band: a writer that left and sources that did not move is ok while valid_for_s still runs (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({}, () => undefined, NOW_FRESH)
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+  })
+  for (const [label, content] of [
+    ['has no owner field', { run_id: 'x' }],
+    ['has a null owner field', { repo_identity: null, run_id: 'x' }],
+    ['has a non-string owner field', { repo_identity: 7, run_id: 'x' }],
+  ] as [string, Record<string, unknown>][]) {
+    test('band: a new manifest that ' + label + ' is not remembered as another project\'s and is seen once repaired into this project\'s (' + surface + ')', async ($, on) => {
+      on0 = () => on
+      const NEWF = MDIR + '/incomplete.manifest.json'
+      const w = oldWorld({}, w0 => { w0.files[NEWF] = j(content); w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+      await start($, surface)
+      expect(await bandText($, surface)).toContain(FOUND)
+      w.files[NEWF] = j({ repo_identity: IDENT, run_id: 'x' })
+      await w.clock.advance(5000)
+      expect(await bandText($, surface)).toContain('changed since the last publish at')
+    })
+  }
+  test('band: a listed file recorded as absent that cannot be stat-ed is a change (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const g = groups()
+    g[0].files[0].mtime_ms = null as never
+    oldWorld({ sources: g }, w => { w.statErrors[MINE] = 'ENOENT' })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('changed since the last publish at')
+  })
+  test('band: a sources list that is present but unreadable cannot confirm no change (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({ sources: 'garbage' })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('changed since the last publish at')
   })
   test('pane: idle_exit with unmoved sources shows the data and a neutral idle note, no warning (' + surface + ')', async ($, on) => {
     on0 = () => on

@@ -180,7 +180,7 @@ async function resolveScope($: EngineInterface, autopilotHome: string, liveBase:
 // The sources are THIS project's (see sourceFingerprint): a listed file newer or gone is a change; a directory whose own mtime moved (anyone's create / rename /
 // delete) is listed and each file not seen before is read once and judged by this project's match value.
 // What counts as "not this project's", and what does not (an error is never an answer):
-//  - only a file that was READ and PARSED as an object whose match field is not this project's goes into `notOurs` (a manifest or marker never changes owner, so
+//  - only a file that was READ and PARSED as an object whose match field is a STRING that is not this project's goes into `notOurs` (a manifest or marker never changes owner, so
 //    it is never read again). A read or parse error is NOT cached: the next poll reads it again, so a file that is repaired into this project's is seen.
 //  - a new file that cannot be read or parsed right now does not make the snapshot stale this time: the writers create it by tmp + rename, so a half-written file
 //    is not normally visible; it is retried on the next poll.
@@ -189,16 +189,23 @@ async function resolveScope($: EngineInterface, autopilotHome: string, liveBase:
 const notOurs = new Set<string>()
 async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<EnvelopeCheck> {
   const env = check.envelope as Json
+  if (env.sources === undefined) return check // an older watcher: no list, the age verdict stands
+  const moved: EnvelopeCheck = { ...check, status: 'stale', moved: true }
   const groups = sourcesOf(env)
-  if (groups === null) return check
-  const moved: EnvelopeCheck = { ...check, moved: true }
+  if (groups === null) return moved // a list that is there but unreadable cannot confirm nothing changed
   for (const g of groups) {
     for (const f of g.files) {
       const st = await $.fs.stat(f.path).catch(() => null)
-      if (st === null ? f.mtime_ms !== null : sourceMoved(f.mtime_ms, st.mtimeMs)) return moved
+      if (st === null || sourceMoved(f.mtime_ms, st.mtimeMs)) return moved // a listed file that cannot be checked is a change, whatever was recorded
     }
     const dirSt = await $.fs.stat(g.dir).catch(() => null)
-    if (dirSt === null ? g.dir_mtime_ms === null : !sourceMoved(g.dir_mtime_ms, dirSt.mtimeMs)) continue
+    if (dirSt === null) {
+      // absent then and still absent is no change; any other failure (EACCES: the engine gives a message only) cannot be told from it by stat, so ask exists
+      const absent = await $.fs.exists(g.dir).then(x => !x).catch(() => false)
+      if (absent && g.dir_mtime_ms === null) continue
+      return moved
+    }
+    if (!sourceMoved(g.dir_mtime_ms, dirSt.mtimeMs)) continue
     let entries: { name: string; kind: string }[]
     try { entries = await $.fs.list(g.dir) } catch { return moved }
     const known = new Set(g.files.map(f => f.path))
@@ -211,7 +218,9 @@ async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<
       if (text === null) continue // unreadable now: not an answer, not cached, read again next poll
       const parsed = parseJson(text)
       if (!parsed.ok || !isObject(parsed.value)) continue // same: a half-written or foreign shape is retried
-      if (parsed.value[g.match_field] === g.match_value) return moved
+      const owner = parsed.value[g.match_field]
+      if (owner === g.match_value) return moved
+      if (typeof owner !== 'string') continue // field missing, null or not a string: an incomplete file, not another project's; read again next poll
       if (notOurs.size > 20000) notOurs.clear()
       notOurs.add(memo)
     }
@@ -227,12 +236,14 @@ async function findEnvelope($: EngineInterface, autopilotHome: string, liveBase:
   let stale: EnvelopeCheck | null = null
   let malformed = false
   for (const path of paths) {
-    const check = checkEnvelope(await readText($, path), want, nowMs)
+    let check = checkEnvelope(await readText($, path), want, nowMs)
+    // a writer that is gone (the final publish) leaves a snapshot judged by what it was built from, never by its age: a change makes it stale even while valid_for_s runs
+    if ((check.status === 'fresh' || check.status === 'stale') && check.envelope !== null && check.envelope.writer === null) check = await judgeByChange($, check)
     if (check.status === 'fresh') return check
     if (check.status === 'stale' && stale === null) stale = check
     if (check.status === 'malformed') malformed = true
   }
-  if (stale !== null) return stale.envelope !== null && stale.envelope.writer === null ? await judgeByChange($, stale) : stale
+  if (stale !== null) return stale
   return { status: malformed ? 'malformed' : 'missing', envelope: null }
 }
 

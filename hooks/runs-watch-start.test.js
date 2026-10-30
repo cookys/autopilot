@@ -101,8 +101,8 @@ wl.writeResult(process.env.AUTOPILOT_WATCHER_RESULT_PATH, process.env.AUTOPILOT_
 setTimeout(() => {}, 4000);
 `;
 
-async function checkConcurrent(root) {
-  for (let round = 0; round < 4; round += 1) {
+async function checkConcurrent(root, rounds = 4) {
+  for (let round = 0; round < rounds; round += 1) {
     const w = sandbox();
     link(w, ['node', 'sh', 'nohup', 'flock', 'true']);
     const fake = path.join(w.sb, 'fake-bin.js');
@@ -138,7 +138,7 @@ test('parent-side failures (no flock, log cannot be opened, live dir refused) ar
 
 test('two sessions starting at once: one start, the loser is busy and does not overwrite the record', { timeout: 120000 }, () => checkConcurrent(REPO));
 
-test('negative controls: each broken copy fails its row', { timeout: 240000 }, async () => {
+test('negative controls: each broken copy fails its row', { timeout: 400000 }, async () => {
   const cases = [
     ['flock failure returns before any record', 'src/status/runs-watch.js', "if (probe.error) return failed('flock_unavailable', `flock(1) cannot be run: ${probe.error.message}`);", "if (probe.error) return { status: 'flock_unavailable', message: probe.error.message };", 'parent'],
     ['log open failure leaves no result', 'src/status/runs-watch.js', 'const reason = `cannot open ${logFile}: ${error.message}`;\n      launchProto.writeResult(launch.result_path, launch.launch_id, false, reason);', 'const reason = `cannot open ${logFile}: ${error.message}`;', 'parent'],
@@ -151,9 +151,12 @@ test('negative controls: each broken copy fails its row', { timeout: 240000 }, a
     mutate(root, rel, from, to);
     if (extra) mutate(root, rel, extra, '');
     let caught = false;
-    try {
-      if (kind === 'parent') checkParentFailures(root); else await checkConcurrent(root);
-    } catch (e) { caught = e instanceof assert.AssertionError; }
+    // the concurrent row is a race: a broken copy may get through one round, so it gets several single-round tries
+    for (let attempt = 0; attempt < (kind === 'parent' ? 1 : 8) && !caught; attempt += 1) {
+      try {
+        if (kind === 'parent') checkParentFailures(root); else await checkConcurrent(root, 1);
+      } catch (e) { caught = e instanceof assert.AssertionError; }
+    }
     assert.ok(caught, `negative control "${name}" was not caught`);
     fs.rmSync(root, { recursive: true, force: true });
   }

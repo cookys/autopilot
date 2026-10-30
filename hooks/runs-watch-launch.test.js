@@ -182,5 +182,10 @@ for (const c of NEG) {
 test('negative control: an unlocked read-modify-write loses sessions in parallel', async () => {
   const file = mutated('const release = lockFile(`${file}.lock`, 1000);\n  try {\n    let obj = readJson(file);', 'const release = null;\n  try {\n    let obj = readJson(file);');
   const wl = load(file);
-  await assert.rejects(() => checks.claimConcurrent(wl, file), assert.AssertionError);
+  // The lost update is a race, so one round may not hit it: the broken copy must lose a session within a few rounds.
+  let caught = false;
+  for (let round = 0; round < 8 && !caught; round += 1) {
+    try { await checks.claimConcurrent(wl, file); } catch (e) { caught = e instanceof assert.AssertionError; }
+  }
+  assert.ok(caught, 'the unlocked read-modify-write was never seen to lose a session in 8 rounds');
 });

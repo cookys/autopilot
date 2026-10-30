@@ -178,28 +178,40 @@ async function resolveScope($: EngineInterface, autopilotHome: string, liveBase:
 // snapshot that stays true). Only a snapshot whose writer is gone (writer null, the final publish) can be judged by its sources; a writer that is listed but
 // stopped publishing is a stuck or dead one, and keeps the age verdict. No `sources` list (an older watcher) keeps the age verdict too.
 // The sources are THIS project's (see sourceFingerprint): a listed file newer or gone is a change; a directory whose own mtime moved (anyone's create / rename /
-// delete) is listed and each file not seen before is read once and kept when it carries this project's match value. A file that is not this project's is
-// remembered by path (a manifest or marker never changes owner), so a busy directory costs one list per check and one read per new file, once.
+// delete) is listed and each file not seen before is read once and judged by this project's match value.
+// What counts as "not this project's", and what does not (an error is never an answer):
+//  - only a file that was READ and PARSED as an object whose match field is not this project's goes into `notOurs` (a manifest or marker never changes owner, so
+//    it is never read again). A read or parse error is NOT cached: the next poll reads it again, so a file that is repaired into this project's is seen.
+//  - a new file that cannot be read or parsed right now does not make the snapshot stale this time: the writers create it by tmp + rename, so a half-written file
+//    is not normally visible; it is retried on the next poll.
+//  - a listed file or directory of this project that cannot be checked (stat fails: gone, or EACCES, the engine gives a message only) reads as changed (stale),
+//    and so does a directory that cannot be listed once its mtime moved: with no way to confirm nothing changed, the age verdict stands.
 const notOurs = new Set<string>()
 async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<EnvelopeCheck> {
   const env = check.envelope as Json
   const groups = sourcesOf(env)
   if (groups === null) return check
+  const moved: EnvelopeCheck = { ...check, moved: true }
   for (const g of groups) {
     for (const f of g.files) {
       const st = await $.fs.stat(f.path).catch(() => null)
-      if (sourceMoved(f.mtime_ms, st === null ? null : st.mtimeMs)) return { ...check, moved: true }
+      if (st === null ? f.mtime_ms !== null : sourceMoved(f.mtime_ms, st.mtimeMs)) return moved
     }
     const dirSt = await $.fs.stat(g.dir).catch(() => null)
-    if (!sourceMoved(g.dir_mtime_ms, dirSt === null ? null : dirSt.mtimeMs)) continue
+    if (dirSt === null ? g.dir_mtime_ms === null : !sourceMoved(g.dir_mtime_ms, dirSt.mtimeMs)) continue
+    let entries: { name: string; kind: string }[]
+    try { entries = await $.fs.list(g.dir) } catch { return moved }
     const known = new Set(g.files.map(f => f.path))
-    const names = (await $.fs.list(g.dir).catch(() => [])).filter(e => e.kind === 'file' && e.name.endsWith(g.suffix)).map(e => e.name)
-    for (const name of names) {
-      const p = g.dir.replace(/\/+$/, '') + '/' + name
+    for (const e of entries) {
+      if (e.kind !== 'file' || !e.name.endsWith(g.suffix)) continue
+      const p = g.dir.replace(/\/+$/, '') + '/' + e.name
       const memo = p + '|' + g.match_field + '=' + g.match_value
       if (known.has(p) || notOurs.has(memo)) continue
-      const parsed = parseJson((await readText($, p)) ?? '')
-      if (parsed.ok && isObject(parsed.value) && parsed.value[g.match_field] === g.match_value) return { ...check, moved: true }
+      const text = await readText($, p)
+      if (text === null) continue // unreadable now: not an answer, not cached, read again next poll
+      const parsed = parseJson(text)
+      if (!parsed.ok || !isObject(parsed.value)) continue // same: a half-written or foreign shape is retried
+      if (parsed.value[g.match_field] === g.match_value) return moved
       if (notOurs.size > 20000) notOurs.clear()
       notOurs.add(memo)
     }

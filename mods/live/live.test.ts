@@ -170,6 +170,7 @@ type World = {
   writes: string[]
   reads: string[]
   lists: string[]
+  listErrors: Record<string, string> // $.fs.list rejects with this message
   statErrors: Record<string, string> // $.fs.stat rejects with this message (the engine passes a message only, no `code`)
   existsThrows: Set<string> // $.fs.exists rejects for these paths
   env: Record<string, string> // what $.env.get answers; a test may change it between ticks
@@ -182,7 +183,7 @@ const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(o
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], statErrors: {}, existsThrows: new Set(), order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
   // its own copy, so a test can change a variable between ticks
@@ -201,6 +202,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   on('fs.write', ($, e) => { w.writes.push(e.path); return { value: undefined } })
   on('fs.list', ($, e) => {
     w.lists.push(e.path)
+    if (w.listErrors[e.path] !== undefined) throw new Error(w.listErrors[e.path])
     const prefix = e.path.replace(/\/$/, '') + '/'
     const seen = new Map<string, 'file' | 'dir'>()
     for (const p of Object.keys(w.files)) {
@@ -633,6 +635,8 @@ for (const surface of SURFACES) {
     ['a manifest of this project changed', (w: any) => { w.stats[MINE] = { size: 0, mtimeMs: 2000 } }],
     ['a new manifest of this project appeared', (w: any) => { w.files[MDIR + '/new.manifest.json'] = j({ repo_identity: IDENT, run_id: 'new' }); w.stats[MDIR] = { size: 0, mtimeMs: 2000 } }],
     ['a manifest of this project was deleted', (w: any) => { delete w.files[MINE]; delete w.stats[MINE]; w.statErrors[MINE] = 'ENOENT'; w.stats[MDIR] = { size: 0, mtimeMs: 2000 } }],
+    ['a listed manifest of this project can no longer be checked (EACCES)', (w: any) => { w.statErrors[MINE] = "EACCES: permission denied, stat '" + MINE + "'" }],
+    ['the manifest directory cannot be listed after its mtime moved (EACCES)', (w: any) => { w.stats[MDIR] = { size: 0, mtimeMs: 2000 }; w.listErrors[MDIR] = "EACCES: permission denied, scandir '" + MDIR + "'" }],
     ['a marker of this project changed', (w: any) => { w.stats[KDIR + '/' + SID_A + '.json'] = { size: 0, mtimeMs: 2000 } }],
     ['a new marker of this project appeared', (w: any) => { w.files[KDIR + '/s-new.json'] = j({ session_id: 's-new', project_key: KEY, level: 'l5' }); w.stats[KDIR] = { size: 0, mtimeMs: 2000 } }],
   ] as [string, (w: any) => void][]) {
@@ -645,6 +649,40 @@ for (const surface of SURFACES) {
       expect(text).not.toContain(FOUND)
     })
   }
+  test('band: a new manifest that cannot be parsed yet is not stale, is not remembered, and is seen once it is repaired into this project\'s (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const NEWF = MDIR + '/half.manifest.json'
+    const w = oldWorld({}, w0 => { w0.files[NEWF] = '{"repo_identity": "git-comm'; w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND) // unreadable now: no verdict of change
+    w.files[NEWF] = j({ repo_identity: IDENT, run_id: 'half' }) // the rename landed: it is this project's
+    await w.clock.advance(5000)
+    const text = await bandText($, surface)
+    expect(text).toContain('changed since the last publish at')
+    expect(text).not.toContain(FOUND)
+  })
+  test('band: a new manifest that fails to read is retried, not remembered (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const NEWF = MDIR + '/late.manifest.json'
+    const w = oldWorld({}, w0 => { w0.files[NEWF] = j({ repo_identity: IDENT, run_id: 'late' }); w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+    const real = w.files[NEWF]
+    w.files[NEWF] = undefined as never // listed but unreadable (the test engine's read throws ENOENT for it) until the second poll
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+    w.files[NEWF] = real
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain('changed since the last publish at')
+  })
+  test('band: another project\'s new manifest is read once, however many polls follow, and leaves this project ok (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const FOREIGN = MDIR + '/foreign.manifest.json'
+    const w = oldWorld({}, w0 => { w0.files[FOREIGN] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'f' }); w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+    await start($, surface)
+    await w.clock.advance(5000)
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain(FOUND)
+    expect(w.reads.filter((p: string) => p === FOREIGN).length).toBe(1)
+  })
   test('pane: idle_exit with unmoved sources shows the data and a neutral idle note, no warning (' + surface + ')', async ($, on) => {
     on0 = () => on
     oldWorld({ exit_reason: 'idle_exit' })

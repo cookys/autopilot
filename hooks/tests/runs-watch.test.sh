@@ -340,6 +340,11 @@ rm -f "$RUNS/live-gone.manifest.json"
 
 # --- --idle-exit ---------------------------------------------------------------------------------------------------
 rm -f "$LIVE/runs/$KEY_A.json"
+# fixtures for the sources' ownership: a manifest and a marker of ANOTHER project next to this project's (the marker is expired, so the idle exit still happens)
+mk_manifest theirs-run root-9 "$IDENT_B" null yes
+mkdir -p "$AHOME/session-mode"
+printf '{"session_id":"s-ours","level":"l5","project_key":"%s","expires_at":"%s"}\n' "$KEY_A" "$(date -u -d '-1 minute' +%Y-%m-%dT%H:%M:%SZ)" > "$AHOME/session-mode/s-ours.json"
+printf '{"session_id":"s-theirs","level":"l5","project_key":"%s","expires_at":"%s"}\n' "$KEY_B" "$(date -u -d '-1 minute' +%Y-%m-%dT%H:%M:%SZ)" > "$AHOME/session-mode/s-theirs.json"
 (cd "$REPO_A" && timeout 40 env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID HOME="$FAKE_HOME" CLAUDE_CONFIG_DIR="$FAKE_CLAUDE" XDG_RUNTIME_DIR="$FAKE_XDG" \
   AUTOPILOT_LIVE_DIR="$LIVE" AUTOPILOT_SESSION_MODE_DIR="$AHOME/session-mode" AUTOPILOT_DISPATCH_RUNS_DIR="$RUNS" ENGINE_CAPABILITY_DIR="$SB/cap" \
   "$NODE" "$CLI" status runs --watch --project "$KEY_A" --interval 1 --idle-exit 1 > "$SB/ie.out" 2> "$SB/ie.err" < /dev/null)
@@ -351,6 +356,10 @@ eq "manifest marker" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=
 eq "$RUNS $AHOME/session-mode" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=>x.dir).join(" ")')" "...over the manifest dir and the marker dir"
 eq "repo_identity project_key" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).map(x=>x.match_field).join(" ")')" "...each narrowed by the field that says whose it is"
 eq "true" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources||[]).every(x=>typeof x.dir_mtime_ms==="number" && Array.isArray(x.files))')" "...with a numeric directory mtime and a file list"
+# the lists name exactly this project's files: the other project's manifest and marker next to them are left out (a flipped match turns these red)
+eq "r1-run.manifest.json r2-run.manifest.json" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources.find(x=>x.role==="manifest").files).map(x=>x.path.split("/").pop()).sort().join(" ")')" "...the manifest group lists this project's manifests only"
+eq "s-ours.json" "$(jq_file "$LIVE/runs/$KEY_A.json" '(j.sources.find(x=>x.role==="marker").files).map(x=>x.path.split("/").pop()).sort().join(" ")')" "...the marker group lists this project's markers only"
+rm -f "$AHOME/session-mode/s-ours.json" "$AHOME/session-mode/s-theirs.json" "$RUNS/theirs-run.manifest.json"
 flock -n "$LIVE/runs/$KEY_A.lock" true; eq "0" "$?" "lock is free after an idle exit"
 
 # unexpired marker (same project_key) keeps it running; once the marker expires it exits

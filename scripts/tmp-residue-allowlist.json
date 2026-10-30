@@ -245,11 +245,6 @@
     },
     {
       "file": "scripts/lib/repo-identity.sh",
-      "match": "TMPDIR is set and node is not on PATH to check or create it",
-      "reason": "Error message text naming TMPDIR; allocates nothing."
-    },
-    {
-      "file": "scripts/lib/repo-identity.sh",
       "match": "[ -k \"$TMPDIR\" ]",
       "reason": "runs_tmpdir_ensure only tests whether the user's TMPDIR is a root-owned sticky shared root before delegating its check to scripts/lib/runtime-paths.js; it allocates nothing."
     }

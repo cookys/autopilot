@@ -169,7 +169,7 @@ Cluster (a).
 3. **`context-window.test.sh`**, 1 fail: "resolver reports an over-budget seat" — expects substring
    "cannot hold the intended input", not found. Root-cause not yet investigated (message-wording drift
    vs. threshold no longer crossed by the fixture — see brief at
-   `/tmp/claude-<uid>/-home-cookys-projects-autopilot/d68cce50-3194-4529-a972-fff8f06cd92b/scratchpad/briefs/D5-b2-remainder.md`
+   `/tmp/claude-<uid>/-home-<user>-projects-autopilot/d68cce50-3194-4529-a972-fff8f06cd92b/scratchpad/briefs/D5-b2-remainder.md`
    File four for the investigation approach, not yet executed for this file).
 4. **Cluster (d) remainder, not reached**: dispatch-hetero (9) / dispatch-detach residuals need
    verification against a scratch copy of `.claude/owner-kernel-governance.json` set to `enforce`

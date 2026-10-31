@@ -65,6 +65,21 @@
       "path": "docs/plans/_archive/2026/10/evidence/2026-10-02-final-panel-kimi-agy-isolation/spike-log.md",
       "category": "home_path",
       "reason": "the review-seat name is the bwrap sandbox mount point of the seat home, not a person home directory"
+    },
+    {
+      "path": ".mailmap",
+      "category": "email",
+      "reason": "git author identity used for landing commits; already public in every commit's author field"
+    },
+    {
+      "path": ".claude/skills/foreman-landing-pipeline/templates/hand-brief-common.md",
+      "category": "email",
+      "reason": "git author identity used for landing commits; already public in every commit's author field"
+    },
+    {
+      "path": ".claude/skills/foreman-landing-pipeline/templates/land-brief.md",
+      "category": "email",
+      "reason": "git author identity used for landing commits; already public in every commit's author field"
     }
   ]
 }

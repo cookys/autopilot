@@ -7,8 +7,8 @@
   "mission_campaign_id": "campaign-v2-9db2acf98eb82eb3c178ed700a16112f5c6cc9b56aceecff6e44e8f2e50816b7",
   "graph_node_id": "proof-parity-raw-log-2026-09-16",
   "graph_attempt": 1,
-  "contract_path": "$HOME/projects/autopilot/.git/autopilot/mission/artifacts/b1ad342b34cb2fb7628d426c9a0edb98e63fe99811be4a01f60dd34fe2a98fd2/proof-parity-raw-log-2026-09-16/attempt-1/campaign.json",
-  "seal_path": "$HOME/projects/autopilot/.git/autopilot/mission/artifacts/b1ad342b34cb2fb7628d426c9a0edb98e63fe99811be4a01f60dd34fe2a98fd2/proof-parity-raw-log-2026-09-16/attempt-1/campaign.seal.json",
+  "contract_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/b1ad342b34cb2fb7628d426c9a0edb98e63fe99811be4a01f60dd34fe2a98fd2/proof-parity-raw-log-2026-09-16/attempt-1/campaign.json",
+  "seal_path": "/home/cookys/projects/autopilot/.git/autopilot/mission/artifacts/b1ad342b34cb2fb7628d426c9a0edb98e63fe99811be4a01f60dd34fe2a98fd2/proof-parity-raw-log-2026-09-16/attempt-1/campaign.seal.json",
   "branch": "mission/b1ad342b34cb/proof-parity-raw-log-2026-09-16-a1",
   "base_sha": "b6a5e42e4593559055d2380ab793a1db5b7b6c6b",
   "state_hash": "9db6a47cb42efc889612d93db38933469e6cf7bf8eec77cc281a58d83b3a0cda"

@@ -182,9 +182,9 @@ reaper: reaped 0 stale residue entries (live 0, unknown 0, foreign 0)
 ✔ Part 3.3b: schema-changed fixture does not trigger canary when AUTOPILOT_NO_CANARY=1 (0.787593ms)
 ✔ Part 3.4: small-file fixture with byte-identical behavior (7.969985ms)
 brain generator: 46 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/brain-eval-generator.test.js (1102.582957ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/brain-eval-generator.test.js (1102.582957ms)
 brain grader: 40 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/brain-eval-grader.test.js (168.602845ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/brain-eval-grader.test.js (168.602845ms)
 ✔ extracts Bash tool_use from JSONL (2.608541ms)
 ✔ GREEN: two git Bash calls (0.67473ms)
 ✔ RED: three sleep >=30 (1.122122ms)
@@ -196,20 +196,20 @@ brain grader: 40 assertions passed
 ✔ GREEN: background until-loop with sleep >=30 (0.760652ms)
 ✔ RED: foreground sleep x 3 (0.434167ms)
 local OpenAI dispatch: 63 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/dispatch-local-openai.test.js (1915.915449ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/dispatch-local-openai.test.js (1915.915449ms)
 brain qualifier: 43 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/engine-qualify-brain.test.js (22495.502121ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/engine-qualify-brain.test.js (22495.502121ms)
 56 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/engine-qualify-consult.test.js (213182.967662ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/engine-qualify-consult.test.js (213182.967662ms)
 55 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/engine-qualify-discuss.test.js (165796.914278ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/engine-qualify-discuss.test.js (165796.914278ms)
 engine-qualify: --endpoint 'examlan' is PLAINTEXT to a private-range address (http://10.7.7.7:8001); the row will disclose transport_security=plaintext_private
 PASS [engine-qualify-impl] 72 assertions
-✔ $HOME/projects/autopilot-wt-p3/scripts/engine-qualify-impl.test.js (74049.60293ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/engine-qualify-impl.test.js (74049.60293ms)
 owner qualifier: 23 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/engine-qualify-owner.test.js (15360.794195ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/engine-qualify-owner.test.js (15360.794195ms)
 29 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/engine-qualify-va.test.js (39771.260665ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/engine-qualify-va.test.js (39771.260665ms)
 ✔ select: mechanical r0/r1/r2 climb then cap (1.475157ms)
 ✔ select: judgment defaults to rung 0 and climbs (0.222919ms)
 ✔ select: judgment with startRungJudgment 0 starts at rung 0 (0.147187ms)
@@ -246,9 +246,9 @@ owner qualifier: 23 assertions passed
 ✔ an older completed fetch cannot overwrite a newer current snapshot (21.422782ms)
 ✔ cache destination is re-resolved after fetch to catch ancestor swaps (5.14117ms)
 local engine probe: 50 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/local-engine-probe.test.js (708.537317ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/local-engine-probe.test.js (708.537317ms)
 profile cutover: 62 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/profile-cutover.test.js (608.901425ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/profile-cutover.test.js (608.901425ms)
 ✔ emit writes a valid event as one JSONL line (7.373281ms)
 ✔ emit appends (append-only, does not truncate) (1.29075ms)
 ✔ validateEvent rejects bad verdict enum (0.631449ms)
@@ -261,15 +261,15 @@ profile cutover: 62 assertions passed
 ✔ main appends a full --event and exits 0 (0.647459ms)
 ✔ main returns 2 on schema-invalid event and writes nothing (1.523328ms)
 qualification case broker: 42 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/qualification-case-broker.test.js (1327.02603ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/qualification-case-broker.test.js (1327.02603ms)
 42 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/qualification-consult-discuss-transport.test.js (1991.802159ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/qualification-consult-discuss-transport.test.js (1991.802159ms)
 202 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/qualification-review-provider.test.js (12398.295298ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/qualification-review-provider.test.js (12398.295298ms)
 445 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/va-eval-generator.test.js (1160.190734ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/va-eval-generator.test.js (1160.190734ms)
 29 assertions passed
-✔ $HOME/projects/autopilot-wt-p3/scripts/va-eval-grader.test.js (260.035152ms)
+✔ /home/cookys/projects/autopilot-wt-p3/scripts/va-eval-grader.test.js (260.035152ms)
 ✔ REJECTED: -0 (sign-lossy integer: JSON.stringify(-0) === "0") (7.795937ms)
 ✔ REJECTED: 1e2 (reformats to "100" on canonical re-serialize, byte-mismatch) (0.587726ms)
 ✔ REJECTED: .5 (invalid JSON at the parser layer — no leading digit before ".") (0.334299ms)
@@ -1485,7 +1485,7 @@ PASS [qualification-tier-mapping] 11 assertions
 PASS [qualification-review-provider] 2 assertions
 
 ──────── hooks/tests/qualify-recipe-credential-staging.test.sh ────────
-PASS: sourced $HOME/projects/autopilot-wt-p3/scripts/lib/qualify-stage-credentials.sh
+PASS: sourced /home/cookys/projects/autopilot-wt-p3/scripts/lib/qualify-stage-credentials.sh
 PASS: fresh seed: staged file + stamp created, content matches source
 PASS: rotated source: reseeded, content + stamp now match the rotated source
 PASS: unchanged source: staged file NOT re-copied (mtime + stamp untouched)
@@ -1507,8 +1507,8 @@ qualify-recipe-credential-staging: 15 passed, 0 failed
 PASS [qualification-feed-adopt] 51 assertions
 
 ──────── hooks/tests/reap-dispatch-branches.test.sh ────────
-$HOME/projects/autopilot-wt-p3/hooks/tests/reap-dispatch-branches.test.sh: line 261: 272632 Killed                     AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --inventory-file "$inventory" --yes --bundle-dir "$TEST_TMP/post-delete-crash-bundles" > /dev/null 2>&1
-$HOME/projects/autopilot-wt-p3/hooks/tests/reap-dispatch-branches.test.sh: line 308: 273514 Killed                     AUTOPILOT_REAP_TEST_HOOK_BEFORE_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --inventory-file "$inventory" --yes --bundle-dir "$TEST_TMP/pre-delete-crash-bundles" > /dev/null 2>&1
+/home/cookys/projects/autopilot-wt-p3/hooks/tests/reap-dispatch-branches.test.sh: line 261: 272632 Killed                     AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --inventory-file "$inventory" --yes --bundle-dir "$TEST_TMP/post-delete-crash-bundles" > /dev/null 2>&1
+/home/cookys/projects/autopilot-wt-p3/hooks/tests/reap-dispatch-branches.test.sh: line 308: 273514 Killed                     AUTOPILOT_REAP_TEST_HOOK_BEFORE_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --inventory-file "$inventory" --yes --bundle-dir "$TEST_TMP/pre-delete-crash-bundles" > /dev/null 2>&1
 PASS [reap-dispatch-branches] 135 assertions
 
 ──────── hooks/tests/reenabled-blockers.test.sh ────────
@@ -1524,7 +1524,7 @@ PASS [report-roster-field-consumers] 38 assertions
 PASS [resolve-config] 23 assertions
 
 ──────── hooks/tests/reap-dispatch-worktrees.test.sh ────────
-$HOME/projects/autopilot-wt-p3/scripts/reap-dispatch-worktrees.sh: line 468: 282453 Killed                     node - "$inventory_root_dir/$inventory_root_key.json" "$inventory_dir/$inventory_root_key.root.json" "$inventory_root_dir.registry.json" "$inventory_root_key" "$record_key" "$record" <<'NODE'
+/home/cookys/projects/autopilot-wt-p3/scripts/reap-dispatch-worktrees.sh: line 468: 282453 Killed                     node - "$inventory_root_dir/$inventory_root_key.json" "$inventory_dir/$inventory_root_key.root.json" "$inventory_root_dir.registry.json" "$inventory_root_key" "$record_key" "$record" <<'NODE'
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 const fs = require("fs");
@@ -1615,7 +1615,7 @@ root.journal_records = [...authorityValue.journal_records];
 replace(registry, `${JSON.stringify(registryValue)}\n`);
 NODE
 
-$HOME/projects/autopilot-wt-p3/hooks/tests/reap-dispatch-worktrees.test.sh: line 316: 283690 Killed                     AUTOPILOT_TEST_MODE=1 AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_MIRROR=1 "$CONTROLLER" reap --repo "$MIRROR_REPO" --root-run-id "$MIRROR_ROOT" --yes > /dev/null 2>&1
+/home/cookys/projects/autopilot-wt-p3/hooks/tests/reap-dispatch-worktrees.test.sh: line 316: 283690 Killed                     AUTOPILOT_TEST_MODE=1 AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_MIRROR=1 "$CONTROLLER" reap --repo "$MIRROR_REPO" --root-run-id "$MIRROR_ROOT" --yes > /dev/null 2>&1
 PASS [reap-dispatch-worktrees] 35 assertions
 
 ──────── hooks/tests/resolve-dispatch.test.sh ────────

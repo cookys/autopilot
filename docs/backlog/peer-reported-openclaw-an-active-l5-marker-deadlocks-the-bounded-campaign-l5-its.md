@@ -8,7 +8,7 @@ Relevant section of the original sidecar (English as written). The closed main c
 
 - **Two side effects the peer saw on the same run**: (a) the `precondition_failed` rejection reports `admission_release.status=released` while the durable state keeps `live_lease`, so the next launch hits `campaign_state_lease_open` and IMPLEMENTING is not a resumable phase — they wiped the ledger by hand; (b) the `verify_cmd` subprocess inherited a PATH without their `bats` install, so `campaign_verification` failed on a tree that passes by hand — a "command not found" arguably belongs in precondition, not verification.
 
-- **Repro artifacts for side effect (a)**, named by the peer 2026-09-12 and **held on their host, not here**: `/tmp/claude-<uid>/-home-cookys-projects-hangar/dde388b7-cbe4-4cd9-b7ac-51a122ba3821/scratchpad/{rollout-campaign.log,autopilot-ledger-bak.*}` — the second JSON result plus the backed-up `.git/autopilot` ledger still carrying `live_lease`. Paths recorded rather than contents; ask them for the files when this row is picked up, and treat them as a peer's artifacts until re-derived locally.
+- **Repro artifacts for side effect (a)**, named by the peer 2026-09-12 and **held on their host, not here**: `/tmp/claude-<uid>/-home-<user>-projects-hangar/dde388b7-cbe4-4cd9-b7ac-51a122ba3821/scratchpad/{rollout-campaign.log,autopilot-ledger-bak.*}` — the second JSON result plus the backed-up `.git/autopilot` ledger still carrying `live_lease`. Paths recorded rather than contents; ask them for the files when this row is picked up, and treat them as a peer's artifacts until re-derived locally.
 
 - **Effort**: S for the gate predicate; S including the test matrix case. The lease/release inconsistency is the larger of the two side effects.
 

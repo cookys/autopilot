@@ -1,6 +1,6 @@
 # Handoff — after distill v2.9.0 ship (2026-06-03)
 
-> Session `<host>-autopilot`. distill skill shipped + pushed. This captures open items + next.
+> Session `<host>`. distill skill shipped + pushed. This captures open items + next.
 
 ## Shipped ✅
 - **distill v2.9.0** merged + pushed: `origin/develop @ 61112b9`. autopilot ships the distiller; products route to a private `autopilot-distill-skills@skills-dir` pack (global) / `<project>/.claude/skills/` (project). Consumption verified end-to-end on a fresh session. Plan: [2026-06-03-distill-skill.md](2026-06-03-distill-skill.md) (archived). Project: [_archive/2026/06/2026-06-03-distill](../projects/_archive/2026/06/2026-06-03-distill/README.md).

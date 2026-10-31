@@ -115,7 +115,7 @@ v2.7.2 端到端只有 auto-compact 能完整 trigger：PreCompact → state-che
 
 ## MEMORY 已 sync（cross-session 持久）
 
-`$HOME/.claude/projects/-home-cookys-projects-hangar/memory/` 今天新加：
+`$HOME/.claude/projects/-home-<user>-projects-hangar/memory/` 今天新加：
 
 - `feedback_skill_creator_eval_proxy.md` — proxy isolation-test floor = 0%, 不是 routing precision
 - `reference_loop_tools.md` — `/loop` vs `/powerloop` 對比

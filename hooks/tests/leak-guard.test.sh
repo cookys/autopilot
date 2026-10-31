@@ -17,7 +17,7 @@ GHP="ghp_""$(printf 'b%.0s' $(seq 1 36))"
 REG="$TEST_TMP/registry.json"
 printf '{"version":1,"entries":[]}\n' > "$REG"
 
-export GIT_AUTHOR_NAME=lg GIT_AUTHOR_EMAIL=lg@example.invalid GIT_COMMITTER_NAME=lg GIT_COMMITTER_EMAIL=lg@example.invalid
+export GIT_AUTHOR_NAME=lg GIT_AUTHOR_EMAIL=lg@example.com GIT_COMMITTER_NAME=lg GIT_COMMITTER_EMAIL=lg@example.com
 R="$TEST_TMP/repo"
 git init -q "$R"
 git -C "$R" config core.hooksPath /dev/null
@@ -143,6 +143,35 @@ chk 0 "GPU word upper" "CUDA toolkit"
 chk 0 "GPU toolkit path" "/usr/local/$HOSTA/lib"
 chk 0 "bare ordinary word" "the $HOSTA toolkit is great"
 
+# ── NC5: new categories — email, composite host, flattened home, runtime ids (each red, with a green twin) ──
+MAIL="al""ice@corp""mail.org"
+printf 'contact %s\n' "$MAIL" > "$R/src/m.txt"; git -C "$R" add -A
+OUT="$(guard)"; assert_eq "$?" "1" "NC5a: a personal e-mail address is red"
+assert_contains "$OUT" "[email]" "NC5a: names email"
+reset_stage
+for ok in "noreply@anthropic.com" "bob@example.com" "bob@example.org" "bob@example.net"; do
+  chk 0 "allowed e-mail $ok" "mail $ok"
+done
+chk 1 "other noreply is not allowed" "mail noreply@corp""mail.org"
+chk 1 "composite host token" "on cookys-7840""hs today"
+chk 1 "composite host token, any prefix" "on lab-itx-""win-box"
+chk 1 "flattened home dir" "dir -ho""me-alice-projects-x"
+chk 1 "flattened Users dir" "dir -Us""ers-alice-projects-x"
+chk 0 "flattened placeholder" "dir -ho""me-<user>-projects-x"
+chk 1 "tmp/claude-1234" "see /tmp/claude-""1234"
+chk 0 "tmp/claude-<uid> placeholder" "see /tmp/claude-<uid>/x"
+chk 0 "run/user/<uid> placeholder" "see /run/user/<uid>/x"
+RC5="$TEST_TMP/rc5"; mkdir -p "$RC5"
+CH="cookys-7840""hs"; FH="-ho""me-alice-projects-x"; TC="/tmp/claude-""1234/y"; RU="/run/user/""1234/z"
+printf 'a %s\nb %s\nc %s\nd %s\ne %s\nf noreply@anthropic.com\n' "$MAIL" "$CH" "$FH" "$TC" "$RU" > "$RC5/in.md"
+node "$REDACT" "$RC5/in.md" >/dev/null 2>&1; assert_eq "$?" "0" "NC5 redact: write mode exits 0"
+assert_eq "$(cat "$RC5/in.md")" "$(printf 'a <email>\nb <host>\nc -home-<user>-projects-x\nd /tmp/claude-<uid>/y\ne /run/user/<uid>/z\nf noreply@anthropic.com')" "NC5 redact: output is exactly the expected placeholders"
+# a registry entry for the email category exempts a named file, and only for that category
+printf '{"version":1,"entries":[{"path":"src/m.txt","category":"email","reason":"git author identity"}]}\n' > "$TEST_TMP/mailreg.json"
+printf 'contact %s\n' "$MAIL" > "$R/src/m.txt"; git -C "$R" add -A
+OUT="$(REGISTRY="$TEST_TMP/mailreg.json" guard)"; assert_eq "$?" "0" "NC5 twin: per-file email registry entry is honoured"
+reset_stage
+
 # ── range mode (the CI shape) ──
 git -C "$R" checkout -q -b feat
 printf 'x %s\n' "$PERSONAL" > "$R/src/r.txt"; git -C "$R" add -A; git -C "$R" commit -q -m leak
@@ -175,7 +204,7 @@ RED="$(cat "$RT/in.md")"
 for orig in "$PERSONAL" "$TMPCL" "192.168.101.7" "$SK" "$RUNUSER" "@$HOSTA"; do
   assert_not_contains "$RED" "$orig" "redact: output has no original value ($(printf '%s' "$orig" | cut -c1-6)...)"
 done
-for ph in '$HOME/proj' '/tmp/claude-<user>' '<private-ip>' '<redacted-secret>' '/run/user/<user>' '@<host>'; do
+for ph in '$HOME/proj' '/tmp/claude-<uid>' '<private-ip>' '<redacted-secret>' '/run/user/<uid>' '@<host>'; do
   assert_contains "$RED" "$ph" "redact: output carries $ph"
 done
 assert_eq "$(stat -c %a "$RT/in.md")" "640" "redact: file mode preserved"
@@ -203,7 +232,7 @@ cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT/hooks/_shared/"
 node -e '
   const fs = require("fs"); const f = process.argv[1];
   const s = fs.readFileSync(f, "utf8");
-  const t = s.replace("out += text.slice(pos, h.index) + PLACEHOLDER[h.category];", "out += text.slice(pos, h.index + h.length);");
+  const t = s.replace("out += text.slice(pos, h.index) + (PLACEHOLDER[h.kind] || PLACEHOLDER[h.category]);", "out += text.slice(pos, h.index + h.length);");
   if (t === s) { process.stderr.write("mutation did not apply\n"); process.exit(3); }
   fs.writeFileSync(f, t);
 ' "$MUT/scripts/lib/personal-data-patterns.js"

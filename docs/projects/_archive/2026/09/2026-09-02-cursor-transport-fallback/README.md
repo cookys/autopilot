@@ -14,7 +14,7 @@ A required reviewer-class seat whose *transport* dies takes the whole frozen rou
 recoveries available today either cost a semantic generation (and generation 2 is the hard cap) or
 break the manifest freeze. Neither is right when the seat's model was never the problem.
 
-Routed from TWGameProject via fleet peer `<host>-twgs-dev`
+Routed from TWGameProject via fleet peer `<host>`
 (msg `msg_01M1G1JA5ZTH45Y5R7D77ZVFKC`); authorized by the operator in the autopilot session
 2026-09-02. Peer transport is never authorization — the operator authorized this directly.
 

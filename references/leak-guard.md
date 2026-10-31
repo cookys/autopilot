@@ -12,8 +12,9 @@ Keeps personal data out of tracked files. Two scripts share one pattern engine.
 
 ## What counts
 
-- Home paths under `/home` or `/Users` (the user name must not start with a dot), `/tmp/claude-<digits>`, `/run/user/<digits>`.
-- Host names: the local hostname and the fleet list. Ordinary words (`pico`, `cuda`, `gentoo`) count only in a host context: `@name`, `ssh name`, `name:` not followed by a digit, a `/name/` path segment not under `local|opt|lib|usr|share`, `name.local`, `cookys-name`. Lowercase only, so the GPU word never matches.
+- Home paths under `/home` or `/Users` (the user name must not start with a dot), including the flattened Claude Code project-dir form `-home-<user>-`; `/tmp/claude-<digits>`; `/run/user/<digits>`.
+- E-mail addresses, except `noreply@anthropic.com` and any address at `example.com`, `example.org` or `example.net` (a list, not any noreply). A git author identity that must stay is registered per file.
+- Host names: the local hostname and the fleet list. Ordinary words (`pico`, `cuda`, `gentoo`) count only in a host context: `@name`, `ssh name`, `name:` not followed by a digit, a `/name/` path segment not under `local|opt|lib|usr|share`, `name.local`, `cookys-name`. A hyphenated token that contains a strong name is replaced whole (a `cookys-` prefix plus a fleet name becomes `<host>`). Lowercase only, so the GPU word never matches.
 - Private IPv4: 10/8, 172.16/12, 192.168/16, 100.64/10.
 - Credential shapes: the prefixes of `hooks/_shared/secret-patterns.js` (reused, not copied).
 - A file named `.env` or `*.env`.
@@ -32,7 +33,7 @@ On a block it prints `file:line  [category]  value` for every hit and one runnab
 
 ## The redactor
 
-`node scripts/redact-personal.js [--check | --dry-run] FILE...` rewrites hits to `$HOME`, `<user>`, `<host>`, `<private-ip>`, `<redacted-secret>` through a tmp file and a rename. `--check` exits 1 on any hit and writes nothing. Binary files are skipped. Not wired to an evidence writer yet.
+`node scripts/redact-personal.js [--check | --dry-run] FILE...` rewrites hits to `$HOME` (flattened form `-home-<user>-`), `/tmp/claude-<uid>`, `/run/user/<uid>`, `<email>`, `<host>`, `<private-ip>`, `<redacted-secret>` through a tmp file and a rename. `--check` exits 1 on any hit and writes nothing. Binary files are skipped. Not wired to an evidence writer yet.
 
 ## Negative controls (all in the test)
 

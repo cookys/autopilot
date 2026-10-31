@@ -2,7 +2,7 @@
 
 Status: **shipped — v2.35.9** (merge `28bc2c78`; project README archived under `docs/projects/_archive/2026/09/2026-09-02-qualification-feed-adopt/`). Original handoff framing kept below for the record. Owner: the autopilot session on <host>. Board decisions and
 the feed contract are fixed (llm-playground plan 065, private repo); this doc carries everything
-needed here. Report back over the fleet relay to the llm-playground session on cookys-<host> with
+needed here. Report back over the fleet relay to the llm-playground session on <host> with
 the commit sha.
 
 ## Background (why)

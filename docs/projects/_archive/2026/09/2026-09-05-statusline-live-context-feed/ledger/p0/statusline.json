@@ -1,8 +1,8 @@
 {
   "session_id": "93196c52-25cb-47ca-821c-cec391832eed",
-  "transcript_path": "$HOME/.claude/projects/-home-user-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed.jsonl",
-  "cwd": "$HOME/projects/autopilot",
-  "scratchpad_dir": "$TMPDIR/-home-user-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed/scratchpad",
+  "transcript_path": "/home/cookys/.claude/projects/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed.jsonl",
+  "cwd": "/home/cookys/projects/autopilot",
+  "scratchpad_dir": "/tmp/claude-1000/-home-cookys-projects-autopilot/93196c52-25cb-47ca-821c-cec391832eed/scratchpad",
   "prompt_id": "ab0448cf-a3ff-41ca-9daa-ca13191d4888",
   "effort": {
     "level": "medium"
@@ -13,12 +13,12 @@
     "display_name": "Fable 5.1"
   },
   "workspace": {
-    "current_dir": "$HOME/projects/autopilot",
-    "project_dir": "$HOME/projects/autopilot",
+    "current_dir": "/home/cookys/projects/autopilot",
+    "project_dir": "/home/cookys/projects/autopilot",
     "added_dirs": [],
     "repo": {
       "host": "github.com",
-      "owner": "user",
+      "owner": "cookys",
       "name": "autopilot"
     }
   },

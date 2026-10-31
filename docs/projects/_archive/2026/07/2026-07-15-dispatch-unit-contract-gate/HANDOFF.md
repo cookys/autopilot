@@ -484,7 +484,7 @@
 2. `$HOME/projects/autopilot/docs/projects/2026-07-15-dispatch-unit-contract-gate/README.md` — scope audit, attempt ledger, and progress state.
 3. `$HOME/projects/autopilot/docs/plans/2026-07-15-dispatch-unit-contract-gate.md` — frozen authority/schema/units.
 4. `/tmp/autopilot-dispatch-contracts/dispatch-unit-contract-c1/C1-bootstrap-checklist.md` — full hashes, live probes, author outcomes, and quarantines.
-5. `$HOME/.claude/projects/-home-cookys-projects-autopilot/memory/project_dispatch-contract-authority.md` — cross-session probe/author landmines.
+5. `$HOME/.claude/projects/-home-<user>-projects-autopilot/memory/project_dispatch-contract-authority.md` — cross-session probe/author landmines.
 
 ## 陷阱
 

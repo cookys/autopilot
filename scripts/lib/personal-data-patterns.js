@@ -5,7 +5,8 @@
  * (rewrites). Node built-ins only.
  *
  * Categories (also the category names a leak-guard registry entry uses):
- *   home_path       /home/<user>, /Users/<user>   (user name must not start with ".")
+ *   home_path       /home/<user>, /Users/<user>   (user name must not start with ".");
+ *                   also the flattened Claude Code project-dir form  -home-<user>-
  *   tmp_claude_path /tmp/claude-<digits>
  *   run_user_path   /run/user/<digits>
  *   host            local hostname + the fleet host list (scripts/lib/leak-guard-hosts.json).
@@ -14,6 +15,7 @@
  *                   local|opt|lib|usr|share, "name.local", "cookys-name".
  *   private_ip      10/8, 172.16/12, 192.168/16, 100.64/10
  *   secret          the credential prefixes of hooks/_shared/secret-patterns.js (reused, not copied)
+ *   email           an e-mail address, except noreply@anthropic.com and the example.com/.org/.net domains
  *   env_file        a file NAMED ".env" or "*.env" (file-name check, see isEnvFileName)
  *
  * There is deliberately no benign-list here: a false positive is handled by a per-file
@@ -24,12 +26,14 @@ const fs = require('fs');
 const path = require('path');
 const secrets = require('../../hooks/_shared/secret-patterns');
 
-const CATEGORIES = ['home_path', 'tmp_claude_path', 'run_user_path', 'host', 'private_ip', 'secret', 'env_file'];
+const CATEGORIES = ['home_path', 'tmp_claude_path', 'run_user_path', 'host', 'private_ip', 'secret', 'email', 'env_file'];
 
 const PLACEHOLDER = {
   home_path: '$HOME',
-  tmp_claude_path: ['', 'tmp', 'claude-<user>'].join('/'), // the text a redacted path becomes, not a temp-root use
-  run_user_path: '/run/user/<user>',
+  tmp_claude_path: ['', 'tmp', 'claude-<uid>'].join('/'), // the text a redacted path becomes, not a temp-root use
+  run_user_path: '/run/user/<uid>',
+  home_flat: '-home-<user>-',
+  email: '<email>',
   host: '<host>',
   private_ip: '<private-ip>',
   secret: '<redacted-secret>',
@@ -47,6 +51,13 @@ function loadHosts() {
   const local = os.hostname().split('.')[0];
   if (local.length >= 4 && local.toLowerCase() !== 'localhost') strong.push(local);
   return { strong: [...new Set(strong)], contextual: j.contextual };
+}
+
+const MAIL_OK_DOMAINS = new Set(['example.com', 'example.org', 'example.net']);
+function isReportableEmail(s) {
+  const low = s.toLowerCase();
+  if (low === 'noreply@anthropic.com') return false;
+  return !MAIL_OK_DOMAINS.has(low.slice(low.lastIndexOf('@') + 1));
 }
 
 function isPrivateIp(s) {
@@ -67,9 +78,11 @@ function rules() {
   const C = contextual.map(escapeRe).join('|');
   const list = [
     { kind: 'home_path', category: 'home_path', re: /(?<![A-Za-z0-9_.-])\/(?:home|Users)\/(?!\.)[A-Za-z0-9_][A-Za-z0-9._-]*/g },
+    { kind: 'home_flat', category: 'home_path', re: /(?<![A-Za-z0-9_])-(?:home|Users)-(?!\.)[A-Za-z0-9_]+-/g },
     { kind: 'tmp_claude_path', category: 'tmp_claude_path', re: /(?<![A-Za-z0-9_.-])\/tmp\/claude-\d+/g },
     { kind: 'run_user_path', category: 'run_user_path', re: /(?<![A-Za-z0-9_.-])\/run\/user\/\d+/g },
-    { kind: 'host_strong', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_])(?:${S})(?![A-Za-z0-9_])`, 'gi') },
+    // a hyphenated token that contains a strong name goes whole: <user>-<fleet-name> -> <host>
+    { kind: 'host_strong', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_])(?:[A-Za-z0-9_]+-)*(?:${S})(?:-[A-Za-z0-9_]+)*(?![A-Za-z0-9_])`, 'gi') },
     // contextual names: case-sensitive lowercase, so the GPU "CUDA" never matches
     { kind: 'host_at', category: 'host', re: new RegExp(`(?<=@)(?:${C})(?![A-Za-z0-9_-])`, 'g') },
     { kind: 'host_ssh', category: 'host', re: new RegExp(`(?<=\\bssh\\s+(?:[\\w.-]+@)?)(?:${C})(?![A-Za-z0-9_-])`, 'g') },
@@ -77,6 +90,7 @@ function rules() {
     { kind: 'host_seg', category: 'host', re: new RegExp(`(?<!(?:local|opt|lib|usr|share)\\/)(?<=\\/)(?:${C})(?=\\/)`, 'g') },
     { kind: 'host_dotlocal', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_./-])(?:${C})(?=\\.local\\b)`, 'g') },
     { kind: 'host_cookys', category: 'host', re: new RegExp(`(?<![A-Za-z0-9_])cookys-(?:${C})(?![A-Za-z0-9_])`, 'g') },
+    { kind: 'email', category: 'email', re: /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![A-Za-z0-9-])/g, accept: isReportableEmail },
     { kind: 'private_ip', category: 'private_ip', re: /(?<![0-9.])(?:\d{1,3}\.){3}\d{1,3}(?![0-9]|\.\d)/g, accept: isPrivateIp },
   ];
   for (const { name, pattern } of secrets.patterns) {
@@ -119,7 +133,7 @@ function redact(text) {
   let out = '';
   let pos = 0;
   for (const h of hits) {
-    out += text.slice(pos, h.index) + PLACEHOLDER[h.category];
+    out += text.slice(pos, h.index) + (PLACEHOLDER[h.kind] || PLACEHOLDER[h.category]);
     pos = h.index + h.length;
   }
   out += text.slice(pos);

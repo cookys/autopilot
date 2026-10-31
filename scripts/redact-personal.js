@@ -5,7 +5,7 @@
  *
  *   node scripts/redact-personal.js [--check | --dry-run] [--json] FILE...
  *
- * Placeholders: $HOME  <user>  <host>  <private-ip>  <redacted-secret>.
+ * Placeholders: $HOME  -home-<user>-  /tmp/claude-<uid>  /run/user/<uid>  <email>  <host>  <private-ip>  <redacted-secret>.
  * --check    report only, write nothing, exit 1 when any file has a hit.
  * --dry-run  report what would change, write nothing, exit 0.
  * (default)  rewrite each file via tmp file + rename, exit 0.

@@ -92,13 +92,13 @@
       "sidecar": "docs/backlog/peer-reported-chatgpt-tunnel-host-via-cuda-a-non-claude-foreman-rail-and-two-con.md"
     },
     {
-      "title": "PEER-REPORTED (<host>, unverified locally): four dispatch-layer defects, three of them silent",
-      "slug": "peer-reported-<host>-unverified-locally-four-dispatch-layer-defects-three-of-the",
+      "title": "PEER-REPORTED (7840hs, unverified locally): four dispatch-layer defects, three of them silent",
+      "slug": "peer-reported-7840hs-unverified-locally-four-dispatch-layer-defects-three-of-the",
       "bytes_before": 4887,
       "bytes_after": 682,
       "moved_bytes": 4789,
       "moved_sha256": "37e6f761b1c425df333415ade4fb15fff48962cd56047f470fb359f7984c4382",
-      "sidecar": "docs/backlog/peer-reported-<host>-unverified-locally-four-dispatch-layer-defects-three-of-the.md"
+      "sidecar": "docs/backlog/peer-reported-7840hs-unverified-locally-four-dispatch-layer-defects-three-of-the.md"
     },
     {
       "title": "PEER-REPORTED (308 dogfood): acceptance records no accepted SHA, so containment cannot be checked mechanically",

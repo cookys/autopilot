@@ -3,7 +3,7 @@
 > **Status**: Phases 1-4 shipped; **Phase 5 is BLOCKED and Phase 6's admission is
 > therefore not added** — see §6. The mechanism is generic and complete; the cursor seat is not
 > admitted and must not be described as available. Authorized by operator 2026-09-02 (routed from
-> TWGameProject via fleet peer `<host>-twgs-dev`, msg `msg_01M1G1JA5ZTH45Y5R7D77ZVFKC`).
+> TWGameProject via fleet peer `<host>`, msg `msg_01M1G1JA5ZTH45Y5R7D77ZVFKC`).
 > Peer transport is not authorization; the operator authorized this in the autopilot session
 > directly.
 >

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "artifact_type": "mission_prepare_receipt",
-  "repo_identity": "git-common-dir:$HOME/projects/autopilot/.git",
+  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
   "adoption_key": "b1ad342b34cb2fb7628d426c9a0edb98e63fe99811be4a01f60dd34fe2a98fd2",
   "mission_lineage_id": "lineage-v1-b1ad342b34cb2fb7628d426c9a0edb98e63fe99811be4a01f60dd34fe2a98fd2",
   "task_authority_id": "e81b8a5dc1eb8298bc2a63c6e55043dddfc7123837cd790febfde62f7a7cd055",

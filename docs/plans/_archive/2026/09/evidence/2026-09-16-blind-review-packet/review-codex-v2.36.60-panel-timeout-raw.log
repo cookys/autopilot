@@ -8,7 +8,7 @@ NO-FINDING-PROOF: checked=buildReviewArgs validation/reservation and null compat
 Reading prompt from stdin...
 OpenAI Codex v0.154.0
 --------
-workdir: $HOME/projects/autopilot
+workdir: /home/cookys/projects/autopilot
 model: gpt-5.6-sol
 provider: openai
 approval: never

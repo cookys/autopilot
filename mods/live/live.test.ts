@@ -5877,3 +5877,159 @@ for (const surface of SURFACES) {
     expect(await shownTabOf($, surface)).toBe('decide')
   })
 }
+
+// BL-0352: the forge tab. The mod below this hook on the ui.render chain (codeforge's forge-stats) draws its label as ONE Text when it is asked for one row, and its full view
+// when it is asked for twelve or more. The hook below plays that mod: it records every ask and answers by maxRows, as forge-stats does.
+const FORGE_LABEL = 'forge 93 tok/s'
+for (const surface of SURFACES) {
+  type Ask = { maxRows: number; bodyColumns: number; requestId: unknown; hasSurvey: boolean; hasScroll: boolean; bodyRows: number | undefined }
+  const forgeMod = (w: World, asks: Ask[], answer: { label?: 'text' | 'box' | 'engine'; full?: 'box' | 'engine' } = {}) => {
+    w.lower = ($, e) => {
+      asks.push({ maxRows: e.props.maxRows, bodyColumns: e.props.bodyColumns, requestId: (e as { requestId?: unknown }).requestId, hasSurvey: e.props.hasSurvey, hasScroll: Object.prototype.hasOwnProperty.call(e.props, 'scroll'), bodyRows: e.props.scroll?.bodyRows })
+      const { Box, Text } = $.ui.resolve(e)
+      if (e.props.maxRows === 1) {
+        const kind = answer.label ?? 'text'
+        if (kind === 'text') return Text({ children: FORGE_LABEL })
+        if (kind === 'box') return Box({ children: [Text({ children: FORGE_LABEL })] })
+        return { type: 'engine' as const, ref: 0 }
+      }
+      if (e.props.maxRows >= 12 && (answer.full ?? 'box') === 'box') return Box({ flexDirection: 'column', children: Array.from({ length: 12 }, (_, i) => Text({ children: 'FERRIS-' + i })) })
+      return { type: 'engine' as const, ref: 0 }
+    }
+  }
+  const F_PROPS = { ...BAND_PROPS, maxRows: 20 }
+  const mount = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: { ...F_PROPS, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  const draw = async ($: any, press: string[] = [], props: Record<string, unknown> = {}) => {
+    await start($, surface)
+    for (const key of press) {
+      const ui = await mount($, props)
+      await ui.press({ key })
+      await ui.unmount()
+    }
+    const ui = await mount($, props)
+    const tree = (await ui.drawn()) as Node
+    const forge = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'forge')
+    await ui.unmount()
+    return { tree, forge, text: cellsOf(tree).map(c => c.text).join('|') }
+  }
+
+  test('forge tab: a Text of one string from the mod below becomes the last tab, a Button keyed forge; the band row alone when none is open (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($)
+    expect(d.forge, 'a Button keyed forge is drawn').toBeDefined()
+    expect(d.text).toContain(' ' + FORGE_LABEL + ' ')
+    expect(d.tree.type).toBe('Box')
+    expect(((d.tree.props as { flexDirection?: string } | undefined)?.flexDirection)).toBeUndefined() // one row: nothing is stacked
+    expect(asks.map(a => a.maxRows), 'one ask, for the label').toEqual([1])
+    expect(asks[0].bodyColumns).toBeGreaterThanOrEqual(5)
+    expect(asks[0].bodyColumns).toBeLessThanOrEqual(30)
+  })
+
+  test('forge tab: the ━ stands under the forge label, the last and an ASCII tab, and the full view is drawn under the rule (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, ['forge'])
+    const rows = ((d.tree.children || []) as Node[])
+    const bar = cellsOf(rows[0])
+    const label = bar.find(c => c.text === ' ' + FORGE_LABEL + ' ') as Cell
+    const mark = cellsOf(rows[1]).find(c => /^━+$/.test(c.text)) as Cell
+    expect(label).toBeDefined()
+    expect({ start: mark.start, width: mark.width }).toEqual({ start: label.start, width: label.width })
+    expect(d.text).toContain('FERRIS-0')
+    expect(d.text).toContain('FERRIS-11')
+  })
+
+  test('forge tab: opened, the mod below is asked twice in one draw, the label first (one row) and the full view after it, with the rest of the rows (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    await draw($, ['forge'])
+    // the last draw: label then expansion
+    const last = asks.slice(-2)
+    expect(last.map(a => a.maxRows)).toEqual([1, 20 - 2])
+    expect(last[1].bodyColumns).toBe(F_PROPS.bodyColumns)
+  })
+
+  test('forge tab: both asks carry the requestId as received (forge-stats draws its Raster under it) (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    await draw($, ['forge'])
+    expect(asks.length).toBeGreaterThanOrEqual(2)
+    for (const a of asks) expect(a.requestId).toBe('rq-band-1')
+  })
+
+  test('forge tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent in both asks (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    await draw($, ['forge'], { scroll: { offset: 0, bodyRows: 19 } })
+    expect(asks.slice(-2).map(a => a.bodyRows)).toEqual([0, 17])
+    asks.length = 0
+    const { scroll: _none, ...noScroll } = F_PROPS
+    await start($, surface)
+    const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: noScroll, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    await ui.press({ key: 'forge' })
+    await ui.unmount()
+    const again = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: noScroll, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    await again.drawn()
+    await again.unmount()
+    expect(asks.length).toBeGreaterThanOrEqual(2)
+    expect(asks.every(a => !a.hasScroll)).toBe(true)
+  })
+
+  test('forge tab: pressing it again closes it, and the full view is no longer asked for (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, ['forge', 'forge'])
+    expect(d.text).not.toContain('FERRIS')
+    expect(asks.slice(-1).map(a => a.maxRows)).toEqual([1])
+  })
+
+  test('forge tab: when the mod below answers nothing (the engine) or not a Text, there is no forge tab (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    for (const label of ['engine', 'box'] as const) {
+      forgeMod(w, [], { label })
+      const d = await draw($)
+      expect(d.forge, label).toBeUndefined()
+      expect(d.text, label).not.toContain('forge')
+    }
+  })
+
+  test('forge tab: no room for the full view (fewer than 12 rows under the rule) leaves the row alone and does not ask for it (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, ['forge'], { maxRows: 13 })
+    expect(d.text).not.toContain('FERRIS')
+    expect(asks.every(a => a.maxRows === 1)).toBe(true)
+    const e = await draw($, ['forge'], { maxRows: 14 })
+    expect(e.text).toContain('FERRIS-11')
+  })
+
+  test('forge tab: a maxRows that is NaN or missing asks nothing and draws no forge tab; the survey is passed down untouched (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    for (const bad of [Number.NaN, undefined]) {
+      const d = await draw($, [], { maxRows: bad })
+      expect(d.forge).toBeUndefined()
+      expect(d.text).toContain('ⓘ')
+    }
+    expect(asks).toEqual([])
+    const s = await draw($, [], { hasSurvey: true })
+    expect(s.text).not.toContain('ⓘ')
+    expect(asks.map(a => [a.maxRows, a.hasSurvey])).toEqual([[20, true]])
+  })
+
+  test('forge tab: with no lower mod at all (the engine alone) the row is the four tabs and nothing is stacked (' + surface + ')', async ($, on) => {
+    worldEn(on, richWorld())
+    const d = await draw($)
+    expect(d.forge).toBeUndefined()
+    expect(d.text).toContain('Now')
+  })
+}

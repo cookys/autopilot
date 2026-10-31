@@ -40,7 +40,8 @@ import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { SHOW_PRESS, showTarget } from './ui'
-import { BandBar, BarRule, barContent, stackBand } from './band'
+import { BandBar, BarRule, barContent, forgeLabelOf, stackBand } from './band'
+import { barStrip } from './tabs'
 import type { BarTabId } from './tabs'
 import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
@@ -49,7 +50,7 @@ import {
   acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
-  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
+  slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
 import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, QuotaWindow, Sources } from './model'
 
@@ -827,6 +828,12 @@ async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: 
   await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent) }))
 }
 
+// the forge tab: the widest label asked of the mod below, the narrowest worth asking for, the cells the indicator keeps at least, the rows the full forge view needs
+const FORGE_LABEL_MAX = 30
+const FORGE_LABEL_MIN = 5
+const BAND_MIN_COLS = 30
+const FORGE_FULL_ROWS = 12
+
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
 
 // After a press on a tab Button (a click, or Tab / arrows + Enter) the keyboard ring returns to the `›` chip, so the next Enter steps on instead of
@@ -915,13 +922,38 @@ export function registerLive(on: Parameters<Register>[0]): void {
     }
     const el = $.ui.resolve(e)
     const columns = e.props.bodyColumns
+    // a maxRows that is missing or not a number is no room: the mod below is not asked
     const rows = Number.isFinite(e.props.maxRows) ? e.props.maxRows : 0
     const t = tr
+    // What the mod below (codeforge's forge-stats) is asked: the same event, only maxRows, bodyColumns and scroll.bodyRows changed (bodyRows follows maxRows, never below 0; a scroll
+    // that was not there stays absent). requestId and every other field stay as received.
+    const lower = (maxRows: number, bodyColumns: number) => {
+      const scroll = e.props.scroll
+      return next({ ...e, props: { ...e.props, maxRows, bodyColumns, ...(scroll === undefined ? {} : { scroll: { ...scroll, bodyRows: Math.max(0, scroll.bodyRows - (e.props.maxRows - maxRows)) } }) } })
+    }
+    // The forge tab's label: one row, as wide as the room the other tabs and the indicator leave (at most FORGE_LABEL_MAX). Asked on every draw, before the open tab's content.
+    let forge: string | null = null
+    const labelCols = Math.min(FORGE_LABEL_MAX, columns - BAND_MIN_COLS - barStrip(snapshot, t, null, null).width - 3)
+    if (rows >= 1 && labelCols >= FORGE_LABEL_MIN) {
+      const text = forgeLabelOf(await lower(1, labelCols))
+      forge = text === null ? null : truncateToWidth(text, labelCols)
+    }
+    if (barTab === 'forge' && forge === null) barTab = null // the mod below stopped answering: the tab is gone
     const active = barTab
-    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, null)
-    // the content under the bar needs the rule row and its own rows; when they do not fit, the bar alone stays (the first row is always kept)
-    const content = active === null || active === 'forge' || active === 'decide' ? [] : barContent(el, snapshot, active, columns, t, { onSlot: slot, onOpen: (tab: PaneTab) => { void openOn(tab) } })
-    if (content.length === 0 || rows < 2 + content.length) return bar.node
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge)
+    const open = (tab: PaneTab) => { void openOn(tab) }
+    let content: unknown[] = []
+    if (active === 'forge') {
+      // the room under the bar and the rule; the mod below needs FORGE_FULL_ROWS of it. Asked AFTER the label: forge-stats keeps the last maxRows it was given to decide whether to blit.
+      if (rows - 2 >= FORGE_FULL_ROWS) {
+        const below = await lower(rows - 2, columns)
+        if (below !== undefined && below !== null && (below as { type?: string }).type !== 'engine') content = [below]
+      }
+    } else if (active !== null && active !== 'decide') {
+      content = barContent(el, snapshot, active, columns, t, { onSlot: slot, onOpen: open })
+      if (rows < 2 + content.length) content = [] // the rule and the rows do not fit: the first row alone stays
+    }
+    if (content.length === 0) return bar.node
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
 

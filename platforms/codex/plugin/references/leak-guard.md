@@ -33,7 +33,7 @@ On a block it prints `file:line  [category]  value` for every hit and one runnab
 
 ## The redactor
 
-`node scripts/redact-personal.js [--check | --dry-run] FILE...` rewrites hits to `$HOME` (flattened form `-home-<user>-`), `/tmp/claude-<uid>`, `/run/user/<uid>`, `<email>`, `<host>`, `<private-ip>`, `<redacted-secret>` through a tmp file and a rename. `--check` exits 1 on any hit and writes nothing. Binary files are skipped. Not wired to an evidence writer yet.
+`node scripts/redact-personal.js [--check | --dry-run] FILE...` rewrites hits to `$HOME` (flattened form `-home-<user>-`), `/tmp/claude-<uid>`, `/run/user/<uid>`, `<email>`, `<host>` (two or more distinct hosts on one line become `<host-a>`, `<host-b>` ... in order of appearance, a repeat reuses its letter), `<private-ip>`, `<redacted-secret>` through a tmp file and a rename. `--check` exits 1 on any hit and writes nothing. Binary files are skipped. Not wired to an evidence writer yet.
 
 ## Negative controls (all in the test)
 

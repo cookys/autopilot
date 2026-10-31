@@ -58,6 +58,8 @@ mkdir -p "$R/docs/plans/evidence/run1"; printf 'x %s\n' "$PERSONAL" > "$R/docs/p
 OUT="$(REGISTRY="$TEST_TMP/dirreg.json" guard)"; assert_eq "$?" "2" "NC1b: directory registry entry is refused (exit 2)"
 printf '{"version":1,"entries":[{"path":"docs/plans/evidence/*","category":"home_path","reason":"a glob entry"}]}\n' > "$TEST_TMP/globreg.json"
 OUT="$(REGISTRY="$TEST_TMP/globreg.json" guard)"; assert_eq "$?" "2" "NC1b: glob registry entry is refused (exit 2)"
+printf '{"version":1,"entries":[{"path":"docs/plans/evidence","category":"home_path","reason":"existing dir, no slash"}]}\n' > "$TEST_TMP/dirreg2.json"
+OUT="$(REGISTRY="$TEST_TMP/dirreg2.json" guard)"; assert_eq "$?" "2" "NC1b: existing directory without trailing slash is refused (exit 2)"
 printf '{"version":1,"entries":[{"path":"docs/plans/evidence/run1/out.md","category":"home_path","reason":"exact file, reasoned"}]}\n' > "$TEST_TMP/filereg.json"
 OUT="$(REGISTRY="$TEST_TMP/filereg.json" guard)"; assert_eq "$?" "0" "NC1b twin: exact file+category entry is honoured"
 printf '{"version":1,"entries":[{"path":"docs/plans/evidence/run1/out.md","category":"host","reason":"wrong category entry"}]}\n' > "$TEST_TMP/catreg.json"
@@ -149,7 +151,7 @@ printf 'contact %s\n' "$MAIL" > "$R/src/m.txt"; git -C "$R" add -A
 OUT="$(guard)"; assert_eq "$?" "1" "NC5a: a personal e-mail address is red"
 assert_contains "$OUT" "[email]" "NC5a: names email"
 reset_stage
-for ok in "noreply@anthropic.com" "bob@example.com" "bob@example.org" "bob@example.net"; do
+for ok in "noreply@anthr""opic.com" "bob@example.com" "bob@example.org" "bob@example.net"; do
   chk 0 "allowed e-mail $ok" "mail $ok"
 done
 chk 1 "other noreply is not allowed" "mail noreply@corp""mail.org"
@@ -163,9 +165,15 @@ chk 0 "tmp/claude-<uid> placeholder" "see /tmp/claude-<uid>/x"
 chk 0 "run/user/<uid> placeholder" "see /run/user/<uid>/x"
 RC5="$TEST_TMP/rc5"; mkdir -p "$RC5"
 CH="cookys-7840""hs"; FH="-ho""me-alice-projects-x"; TC="/tmp/claude-""1234/y"; RU="/run/user/""1234/z"
-printf 'a %s\nb %s\nc %s\nd %s\ne %s\nf noreply@anthropic.com\n' "$MAIL" "$CH" "$FH" "$TC" "$RU" > "$RC5/in.md"
+NR="noreply@anthr""opic.com"
+printf 'a %s\nb %s\nc %s\nd %s\ne %s\nf %s\n' "$MAIL" "$CH" "$FH" "$TC" "$RU" "$NR" > "$RC5/in.md"
 node "$REDACT" "$RC5/in.md" >/dev/null 2>&1; assert_eq "$?" "0" "NC5 redact: write mode exits 0"
-assert_eq "$(cat "$RC5/in.md")" "$(printf 'a <email>\nb <host>\nc -home-<user>-projects-x\nd /tmp/claude-<uid>/y\ne /run/user/<uid>/z\nf noreply@anthropic.com')" "NC5 redact: output is exactly the expected placeholders"
+assert_eq "$(cat "$RC5/in.md")" "$(printf 'a <email>\nb <host>\nc -home-<user>-projects-x\nd /tmp/claude-<uid>/y\ne /run/user/<uid>/z\nf %s' "$NR")" "NC5 redact: output is exactly the expected placeholders"
+# NC6: two distinct hosts on one line are lettered in order; a repeat reuses its letter; one host stays <host>
+H1="cookys-7840""hs"; H2="itx-""win"
+printf 'x %s and %s then %s again\ny only %s\n' "$H1" "$H2" "$H1" "$H2" > "$RC5/mh.md"
+node "$REDACT" "$RC5/mh.md" >/dev/null 2>&1; assert_eq "$?" "0" "NC6 redact: multi-host write mode exits 0"
+assert_eq "$(cat "$RC5/mh.md")" "$(printf 'x <host-a> and <host-b> then <host-a> again\ny only <host>')" "NC6 redact: distinct hosts on one line are lettered; single host stays <host>"
 # a registry entry for the email category exempts a named file, and only for that category
 printf '{"version":1,"entries":[{"path":"src/m.txt","category":"email","reason":"git author identity"}]}\n' > "$TEST_TMP/mailreg.json"
 printf 'contact %s\n' "$MAIL" > "$R/src/m.txt"; git -C "$R" add -A
@@ -232,7 +240,7 @@ cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT/hooks/_shared/"
 node -e '
   const fs = require("fs"); const f = process.argv[1];
   const s = fs.readFileSync(f, "utf8");
-  const t = s.replace("out += text.slice(pos, h.index) + (PLACEHOLDER[h.kind] || PLACEHOLDER[h.category]);", "out += text.slice(pos, h.index + h.length);");
+  const t = s.replace("out += text.slice(pos, h.index) + ph;", "out += text.slice(pos, h.index + h.length);");
   if (t === s) { process.stderr.write("mutation did not apply\n"); process.exit(3); }
   fs.writeFileSync(f, t);
 ' "$MUT/scripts/lib/personal-data-patterns.js"

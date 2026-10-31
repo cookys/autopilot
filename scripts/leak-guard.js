@@ -54,7 +54,7 @@ function parseArgs(argv) {
   return o;
 }
 
-function loadRegistry(file) {
+function loadRegistry(file, root) {
   let raw;
   try {
     raw = fs.readFileSync(file, 'utf8');
@@ -81,6 +81,11 @@ function loadRegistry(file) {
     if (e.path.endsWith('/') || e.path.startsWith('/') || e.path.startsWith('./') || e.path.split('/').includes('..')) {
       fail(2, `${at}: path must be a full repo-relative file path, not a directory (${e.path})`);
     }
+    try {
+      if (fs.statSync(path.join(root, e.path)).isDirectory()) {
+        fail(2, `${at}: path resolves to a directory under the repo root, not a file (${e.path})`);
+      }
+    } catch (err) { /* absent path: a stale entry, not a directory */ }
     if (!patterns.CATEGORIES.includes(e.category)) fail(2, `${at}: category must be one of ${patterns.CATEGORIES.join(', ')}`);
     if (typeof e.reason !== 'string' || e.reason.trim().length < 8) fail(2, `${at}: reason must say why (8+ chars)`);
     exempt.add(`${e.path}\0${e.category}`);
@@ -168,7 +173,7 @@ function main() {
   const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
   if (top.status !== 0) fail(2, 'not inside a git work tree');
   const root = top.stdout.trim();
-  const exempt = loadRegistry(o.registry ? path.resolve(o.registry) : path.join(root, DEFAULT_REGISTRY));
+  const exempt = loadRegistry(o.registry ? path.resolve(o.registry) : path.join(root, DEFAULT_REGISTRY), root);
 
   const seen = new Set();
   const findings = [];

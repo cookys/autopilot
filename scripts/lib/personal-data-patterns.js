@@ -127,13 +127,32 @@ function findAll(text) {
   return out;
 }
 
-/** Replace every hit with its placeholder. */
+/**
+ * Replace every hit with its placeholder. When one line carries 2+ DISTINCT host names they become
+ * <host-a>, <host-b>, ... in order of first appearance (a repeat reuses its letter); a single host stays <host>.
+ */
 function redact(text) {
   const hits = findAll(text);
+  const lineOf = (i) => text.lastIndexOf('\n', i - 1) + 1;
+  const perLine = new Map();
+  for (const h of hits) {
+    if (h.category !== 'host') continue;
+    const ln = lineOf(h.index);
+    if (!perLine.has(ln)) perLine.set(ln, new Map());
+    const m = perLine.get(ln);
+    const key = h.match.toLowerCase();
+    if (!m.has(key)) m.set(key, m.size);
+  }
+  const letter = (n) => (n < 26 ? String.fromCharCode(97 + n) : `${n + 1}`);
   let out = '';
   let pos = 0;
   for (const h of hits) {
-    out += text.slice(pos, h.index) + (PLACEHOLDER[h.kind] || PLACEHOLDER[h.category]);
+    let ph = PLACEHOLDER[h.kind] || PLACEHOLDER[h.category];
+    if (h.category === 'host') {
+      const m = perLine.get(lineOf(h.index));
+      if (m.size > 1) ph = `<host-${letter(m.get(h.match.toLowerCase()))}>`;
+    }
+    out += text.slice(pos, h.index) + ph;
     pos = h.index + h.length;
   }
   out += text.slice(pos);

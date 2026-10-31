@@ -901,12 +901,12 @@ The owner called the tab 「亂亂的」. Seven defects: (1) a worktree that is 
 ▾ 要你處理  1 · 285 MB ───────────────────────────────────────────────────
 ▲ agent-a16d390b66014e3cf                                    1d04h · 285 MB
   有 1349 個檔案沒提交，先看內容再決定要不要刪
-  $ git -C '$HOME/projects/autopilot/.claude/worktrees/
-    agent-a16d390b66014e3cf' status --short
+  $ git -C "$HOME/projects/autopilot/.claude/worktrees/
+    agent-a16d390b66014e3cf" status --short
 ▾ 可以直接清掉  2 · 313 MB ────────────────────────────────────────────────
 ◦ release-3.0.0                                              4d12h · 313 MB
   已合併，可以刪
-  $ git -C '$HOME/projects/autopilot' worktree remove '...'
+  $ git -C "$HOME/projects/autopilot" worktree remove '...'
 ▾ 自動清理 ───────────────────────────────────────────────────────────────
 上次        23h51m 前 · 沒有清掉東西
 ▾ 外掛來源 ───────────────────────────────────────────────────────────────

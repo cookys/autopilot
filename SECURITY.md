@@ -17,4 +17,13 @@ From now on `scripts/leak-guard.js` blocks personal paths, host names, private I
 ## Frozen objects
 
 - Historical evidence is not edited. It stays as published. Because the guard reads only added lines, it needs no exemption unless someone later edits it, and then only an exact per-file registry entry applies.
-- Sealed non-evidence files that carry personal data (seven files in the inventory, class B) are not edited in place. After the sealed-closure work lands, a cleaned successor object is produced and sealed in their place; the old versions remain only in history.
+- Sealed non-evidence files that carry personal data (class B, seven files) are not edited in place:
+  - `docs/plans/2026-08-04-platform-capability-trigger-activation.md`
+  - `evals/skill-onoff/prereg/findings-batch-v2.json`
+  - `evals/skill-onoff/prereg/findings-batch-v3.json`
+  - `evals/skill-onoff/prereg/findings-batch.json`
+  - `evals/skill-onoff/prereg/stage-graph-g67.json`
+  - `evals/skill-onoff/prereg/stage-graph-g67.md`
+  - `evals/skill-onoff/prereg/stage-graph-g8.json`
+
+  These still contain personal paths because their bytes are pinned by a frozen hash chain. Also deferred for the same reason: `evals/skill-onoff/packs/manifest.json` and `evals/skill-onoff/prereg/FROZEN.json` (frozen hash chain), and the archived evidence `platform-capabilities.json`, two copies including the codex mirror (signature over the content). After the sealed-closure work lands, a cleaned successor object is produced and sealed in their place; the old versions remain only in history.

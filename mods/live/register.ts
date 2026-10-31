@@ -909,13 +909,14 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const el = $.ui.resolve(e)
     const band = Band(el, snapshot, e.props.bodyColumns, info, tr, slot)
     // The band is BAND_ROWS tall. A mod below this hook on the ui.render chain (codeforge's forge-stats) draws in what is left: next() gets the same event
-    // with only props.maxRows reduced (requestId and every other field stay as received). Nothing left, or nothing drawn below (the host's own
-    // answer, `{ type: 'engine' }`, is empty here): the band alone, as before.
+    // with only props.maxRows and props.scroll.bodyRows reduced by the band's row (bodyRows is maxRows less the engine's `n more` row, so it gives up the row too,
+    // never below 0; a scroll that was not there stays absent). requestId and every other field stay as received. A maxRows that is missing or not a number is
+    // no room: next() is not called. Nothing left, or nothing drawn below (the host's own answer, `{ type: 'engine' }`, is empty here): the band alone, as before.
+    if (!Number.isFinite(e.props.maxRows)) return band
     const left = e.props.maxRows - BAND_ROWS
     if (left < 1) return band
-    // scroll.bodyRows is maxRows less the engine's `n more` row: it gives up the band's row too (never below 0)
-    const scroll = e.props.scroll === undefined ? e.props.scroll : { ...e.props.scroll, bodyRows: Math.max(0, e.props.scroll.bodyRows - BAND_ROWS) }
-    const below = await next({ ...e, props: { ...e.props, maxRows: left, scroll } })
+    const scroll = e.props.scroll
+    const below = await next({ ...e, props: { ...e.props, maxRows: left, ...(scroll === undefined ? {} : { scroll: { ...scroll, bodyRows: Math.max(0, scroll.bodyRows - BAND_ROWS) } }) } })
     if (below === undefined || below === null || (below as { type?: string }).type === 'engine') return band
     return stackBand(el, band, below)
   })

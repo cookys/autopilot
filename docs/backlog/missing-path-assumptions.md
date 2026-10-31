@@ -1,6 +1,6 @@
 # Missing paths, files or tools abort or silently disable autopilot (BL-0336)
 
-Reported 2026-10-31 by the llm-playground session on 4124gs (messages 01M66YQ9Y3R3PC1DF2EK7HGXKH, widened by the owner in 01M66YW3B1QS5VK0PNAA9JTBN0). Status: design first, owner reviews the design before any implementation.
+Reported 2026-10-31 by the llm-playground session on <host> (messages 01M66YQ9Y3R3PC1DF2EK7HGXKH, widened by the owner in 01M66YW3B1QS5VK0PNAA9JTBN0). Status: design first, owner reviews the design before any implementation.
 
 Trigger example: the statusline shows `autopilot [unavailable · run: autopilot status runs --watch --project ...]` on a host that never dispatched. `status runs --watch` aborts with "watcher startup failed: manifest directory does not exist: /tmp/autopilot-dispatch-runs" (`src/status/runs-watch.js:1059`; autostart `hooks/runs-watch-autostart.js`), and autostart fails silently. Manual `mkdir -m700` is lost on reboot.
 

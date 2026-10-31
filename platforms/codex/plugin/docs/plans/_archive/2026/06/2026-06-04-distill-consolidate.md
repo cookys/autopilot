@@ -257,7 +257,7 @@ the parity-test convention that `distill-scan.js` got this ship.
 ## v2 — Board-approved CORRECTED design (build target; supersedes §2/§5/§6 above)
 **Board decision 2026-06-04**: build the full consolidate engine, corrected per R1. The held-rebase design
 in §5/§6 is REPLACED by the abort-first merge design below. (Fleet evidence the same day: commit
-`ec7eeec` authored by `cookys+twgs-dev@gmail.com` proves a 2nd machine `twgs-dev` exists and pushes —
+`ec7eeec` authored by `<email>` proves a 2nd machine `twgs-dev` exists and pushes —
 the "no 2nd machine" deferral premise is materially weaker, though that push was to the autopilot repo,
 not yet the pack.)
 

@@ -186,9 +186,9 @@ reaper: reaped 1 stale residue entries (live 1, unknown 0, foreign 0)
 ✔ Part 3.4: small-file fixture with byte-identical behavior (0.673669ms)
 [transcript-reader-lib] WARNING: Schema canary fired. No tool events found in transcript for session sid-canary-test.
 brain generator: 46 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/brain-eval-generator.test.js (938.186726ms)
+✔ $HOME/projects/autopilot/scripts/brain-eval-generator.test.js (938.186726ms)
 brain grader: 40 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/brain-eval-grader.test.js (160.30877ms)
+✔ $HOME/projects/autopilot/scripts/brain-eval-grader.test.js (160.30877ms)
 ✔ extracts Bash tool_use from JSONL (5.872887ms)
 ✔ GREEN: two git Bash calls (0.703965ms)
 ✔ RED: three sleep >=30 (0.307609ms)
@@ -200,20 +200,20 @@ brain grader: 40 assertions passed
 ✔ GREEN: background until-loop with sleep >=30 (0.373122ms)
 ✔ RED: foreground sleep x 3 (0.317709ms)
 local OpenAI dispatch: 63 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/dispatch-local-openai.test.js (1547.547908ms)
+✔ $HOME/projects/autopilot/scripts/dispatch-local-openai.test.js (1547.547908ms)
 brain qualifier: 43 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/engine-qualify-brain.test.js (23440.594578ms)
+✔ $HOME/projects/autopilot/scripts/engine-qualify-brain.test.js (23440.594578ms)
 56 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/engine-qualify-consult.test.js (214638.408597ms)
+✔ $HOME/projects/autopilot/scripts/engine-qualify-consult.test.js (214638.408597ms)
 55 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/engine-qualify-discuss.test.js (164189.114463ms)
+✔ $HOME/projects/autopilot/scripts/engine-qualify-discuss.test.js (164189.114463ms)
 engine-qualify: --endpoint 'examlan' is PLAINTEXT to a private-range address (http://10.7.7.7:8001); the row will disclose transport_security=plaintext_private
 PASS [engine-qualify-impl] 72 assertions
-✔ /home/cookys/projects/autopilot/scripts/engine-qualify-impl.test.js (71631.697971ms)
+✔ $HOME/projects/autopilot/scripts/engine-qualify-impl.test.js (71631.697971ms)
 owner qualifier: 23 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/engine-qualify-owner.test.js (15860.208303ms)
+✔ $HOME/projects/autopilot/scripts/engine-qualify-owner.test.js (15860.208303ms)
 29 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/engine-qualify-va.test.js (38792.031205ms)
+✔ $HOME/projects/autopilot/scripts/engine-qualify-va.test.js (38792.031205ms)
 ✔ select: mechanical r0/r1/r2 climb then cap (3.158636ms)
 ✔ select: judgment defaults to rung 0 and climbs (0.282451ms)
 ✔ select: judgment with startRungJudgment 0 starts at rung 0 (0.209865ms)
@@ -271,9 +271,9 @@ owner qualifier: 23 assertions passed
 ✔ modelFamily: positive vectors (0.28693ms)
 ✔ modelFamily: negative vectors ⇒ unknown (0.094999ms)
 local engine probe: 50 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/local-engine-probe.test.js (678.549842ms)
+✔ $HOME/projects/autopilot/scripts/local-engine-probe.test.js (678.549842ms)
 profile cutover: 62 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/profile-cutover.test.js (548.39356ms)
+✔ $HOME/projects/autopilot/scripts/profile-cutover.test.js (548.39356ms)
 ✔ emit writes a valid event as one JSONL line (10.66033ms)
 ✔ emit appends (append-only, does not truncate) (0.640706ms)
 ✔ validateEvent rejects bad verdict enum (0.535789ms)
@@ -286,15 +286,15 @@ profile cutover: 62 assertions passed
 ✔ main appends a full --event and exits 0 (0.674309ms)
 ✔ main returns 2 on schema-invalid event and writes nothing (5.346956ms)
 qualification case broker: 42 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/qualification-case-broker.test.js (1304.388207ms)
+✔ $HOME/projects/autopilot/scripts/qualification-case-broker.test.js (1304.388207ms)
 42 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/qualification-consult-discuss-transport.test.js (1985.166184ms)
+✔ $HOME/projects/autopilot/scripts/qualification-consult-discuss-transport.test.js (1985.166184ms)
 202 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/qualification-review-provider.test.js (11946.67424ms)
+✔ $HOME/projects/autopilot/scripts/qualification-review-provider.test.js (11946.67424ms)
 445 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/va-eval-generator.test.js (666.337871ms)
+✔ $HOME/projects/autopilot/scripts/va-eval-generator.test.js (666.337871ms)
 29 assertions passed
-✔ /home/cookys/projects/autopilot/scripts/va-eval-grader.test.js (182.98369ms)
+✔ $HOME/projects/autopilot/scripts/va-eval-grader.test.js (182.98369ms)
 ✔ REJECTED: -0 (sign-lossy integer: JSON.stringify(-0) === "0") (9.812374ms)
 ✔ REJECTED: 1e2 (reformats to "100" on canonical re-serialize, byte-mismatch) (0.735505ms)
 ✔ REJECTED: .5 (invalid JSON at the parser layer — no leading digit before ".") (4.521443ms)
@@ -1510,7 +1510,7 @@ PASS [qualification-tier-mapping] 11 assertions
 PASS [qualification-review-provider] 2 assertions
 
 ──────── hooks/tests/qualify-recipe-credential-staging.test.sh ────────
-PASS: sourced /home/cookys/projects/autopilot/scripts/lib/qualify-stage-credentials.sh
+PASS: sourced $HOME/projects/autopilot/scripts/lib/qualify-stage-credentials.sh
 PASS: fresh seed: staged file + stamp created, content matches source
 PASS: rotated source: reseeded, content + stamp now match the rotated source
 PASS: unchanged source: staged file NOT re-copied (mtime + stamp untouched)
@@ -1532,8 +1532,8 @@ qualify-recipe-credential-staging: 15 passed, 0 failed
 PASS [qualification-feed-adopt] 51 assertions
 
 ──────── hooks/tests/reap-dispatch-branches.test.sh ────────
-/home/cookys/projects/autopilot/hooks/tests/reap-dispatch-branches.test.sh: line 261: 2263354 Killed                     AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --inventory-file "$inventory" --yes --bundle-dir "$TEST_TMP/post-delete-crash-bundles" > /dev/null 2>&1
-/home/cookys/projects/autopilot/hooks/tests/reap-dispatch-branches.test.sh: line 308: 2264974 Killed                     AUTOPILOT_REAP_TEST_HOOK_BEFORE_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --inventory-file "$inventory" --yes --bundle-dir "$TEST_TMP/pre-delete-crash-bundles" > /dev/null 2>&1
+$HOME/projects/autopilot/hooks/tests/reap-dispatch-branches.test.sh: line 261: 2263354 Killed                     AUTOPILOT_REAP_TEST_HOOK_AFTER_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --inventory-file "$inventory" --yes --bundle-dir "$TEST_TMP/post-delete-crash-bundles" > /dev/null 2>&1
+$HOME/projects/autopilot/hooks/tests/reap-dispatch-branches.test.sh: line 308: 2264974 Killed                     AUTOPILOT_REAP_TEST_HOOK_BEFORE_DELETE="$hook" bash "$SCRIPT" reap --repo "$repo" --into develop --inventory-file "$inventory" --yes --bundle-dir "$TEST_TMP/pre-delete-crash-bundles" > /dev/null 2>&1
 PASS [reap-dispatch-branches] 135 assertions
 
 ──────── hooks/tests/reenabled-blockers.test.sh ────────
@@ -1552,7 +1552,7 @@ PASS [resolve-config] 23 assertions
 PASS [resolve-dispatch] 137 assertions
 
 ──────── hooks/tests/reap-dispatch-worktrees.test.sh ────────
-/home/cookys/projects/autopilot/scripts/reap-dispatch-worktrees.sh: line 468: 2276415 Killed                     node - "$inventory_root_dir/$inventory_root_key.json" "$inventory_dir/$inventory_root_key.root.json" "$inventory_root_dir.registry.json" "$inventory_root_key" "$record_key" "$record" <<'NODE'
+$HOME/projects/autopilot/scripts/reap-dispatch-worktrees.sh: line 468: 2276415 Killed                     node - "$inventory_root_dir/$inventory_root_key.json" "$inventory_dir/$inventory_root_key.root.json" "$inventory_root_dir.registry.json" "$inventory_root_key" "$record_key" "$record" <<'NODE'
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 const fs = require("fs");
@@ -1643,7 +1643,7 @@ root.journal_records = [...authorityValue.journal_records];
 replace(registry, `${JSON.stringify(registryValue)}\n`);
 NODE
 
-/home/cookys/projects/autopilot/hooks/tests/reap-dispatch-worktrees.test.sh: line 316: 2278258 Killed                     AUTOPILOT_TEST_MODE=1 AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_MIRROR=1 "$CONTROLLER" reap --repo "$MIRROR_REPO" --root-run-id "$MIRROR_ROOT" --yes > /dev/null 2>&1
+$HOME/projects/autopilot/hooks/tests/reap-dispatch-worktrees.test.sh: line 316: 2278258 Killed                     AUTOPILOT_TEST_MODE=1 AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_MIRROR=1 "$CONTROLLER" reap --repo "$MIRROR_REPO" --root-run-id "$MIRROR_ROOT" --yes > /dev/null 2>&1
 PASS [reap-dispatch-worktrees] 35 assertions
 
 ──────── hooks/tests/resolve-doa.test.sh ────────
@@ -2125,7 +2125,7 @@ PASS [validate-link-check] 6 assertions
 PASS [verification-author-resolver] 31 assertions
 
 ──────── hooks/tests/tree-engine.test.sh ────────
-/home/cookys/projects/autopilot/hooks/tests/tree-engine.test.sh: line 190: 2474286 Killed                     ( for j in $(seq 1 "$VICTIM_TOTAL");
+$HOME/projects/autopilot/hooks/tests/tree-engine.test.sh: line 190: 2474286 Killed                     ( for j in $(seq 1 "$VICTIM_TOTAL");
 do
     EV="{\"schema_version\":1,\"ts\":\"2026-01-01T00:00:00Z\",\"node\":\"victim${j}\",\"type\":\"node_created\"}"; TREE_PROJECTS_DIR="$PROJECTS" node "$SCRIPT" emit crash "victim${j}" "$EV" 2> /dev/null;
 done )
@@ -2434,7 +2434,7 @@ PASS [codex-plugin-package] 118 assertions
 PASS [dev-setup] 32 assertions
 
 ──────── hooks/tests/dispatch-detach.test.sh (serial tail) ────────
-/home/cookys/projects/autopilot/hooks/tests/dispatch-detach.test.sh: line 104: 2725249 Killed                     DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" --branch feat/kill --prompt-file "$PROMPT" --agy-bin "$STUB_SLOW" --ledger "$LEDGER_A" --run-id rk --stage implement > "$TEST_TMP/kill-wrapper.out" 2> "$TEST_TMP/kill-wrapper.err"  (wd: /tmp/autopilot-test-dispatch-detach-aWWZaq/repo)
+$HOME/projects/autopilot/hooks/tests/dispatch-detach.test.sh: line 104: 2725249 Killed                     DISPATCH_HEARTBEAT_SECS=1 bash "$SCRIPT" --branch feat/kill --prompt-file "$PROMPT" --agy-bin "$STUB_SLOW" --ledger "$LEDGER_A" --run-id rk --stage implement > "$TEST_TMP/kill-wrapper.out" 2> "$TEST_TMP/kill-wrapper.err"  (wd: /tmp/autopilot-test-dispatch-detach-aWWZaq/repo)
 PASS [dispatch-detach] 74 assertions
 
 ──────── hooks/tests/dispatch-hetero.test.sh (serial tail) ────────

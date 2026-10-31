@@ -2,7 +2,7 @@
 
 Status: ✅ Shipped in v2.32.35 — merged as 0a8ef087d310a868a41ada53dfe4daf196e5b253 and pushed to `origin/develop`
 Branch: fix/verification-author-roster-gate
-Canonical source: `/home/cookys/projects/autopilot`
+Canonical source: `$HOME/projects/autopilot`
 
 Spec owner: depth-0 CEO (this document is the only design authority)
 Owner: GPT-5.3-Codex-Spark High (implementation only)
@@ -223,11 +223,11 @@ Distinction requirements:
 
 ## Verification commands (post-implementation)
 
-- `node /home/cookys/projects/autopilot/scripts/check-contract-schema.js`
-- `node - <<'NODE' ... require('/home/cookys/projects/autopilot/src/engine/resolve-review-loop.js') ...` for schema+JS parse-path assertions (`verification_author_*` presence and type checks).
-- `bash /home/cookys/projects/autopilot/scripts/resolve-review-loop.sh` with fixture configs for required tuple/absence/mismatch cases, then `--field` extraction checks for strict-mode selection provenance.
-- `bash /home/cookys/projects/autopilot/scripts/dispatch-author.sh --strict-roster ...` test harness cases using deterministic fake runners and forced exit-code assertions for each red case.
-- `bash /home/cookys/projects/autopilot/scripts/dispatch-author.sh` legacy non-strict path smoke: explicit `--runner`/`--model` remains callable and unchanged outside strict sessions.
+- `node $HOME/projects/autopilot/scripts/check-contract-schema.js`
+- `node - <<'NODE' ... require('$HOME/projects/autopilot/src/engine/resolve-review-loop.js') ...` for schema+JS parse-path assertions (`verification_author_*` presence and type checks).
+- `bash $HOME/projects/autopilot/scripts/resolve-review-loop.sh` with fixture configs for required tuple/absence/mismatch cases, then `--field` extraction checks for strict-mode selection provenance.
+- `bash $HOME/projects/autopilot/scripts/dispatch-author.sh --strict-roster ...` test harness cases using deterministic fake runners and forced exit-code assertions for each red case.
+- `bash $HOME/projects/autopilot/scripts/dispatch-author.sh` legacy non-strict path smoke: explicit `--runner`/`--model` remains callable and unchanged outside strict sessions.
 
 ## Exact likely touchpoints (implementation units)
 

@@ -1,6 +1,6 @@
 # dev-setup --harness agy --install fails validation on agy 1.4.7
 
-BL-0308. Peer report from twgs-revival (peace--claude-2), 2026-10-26, on 3.0.0-alpha.6: 3 errors, 4 warnings, agents loaded 0.
+BL-0308. Peer report from <host> (peace--claude-2), 2026-10-26, on 3.0.0-alpha.6: 3 errors, 4 warnings, agents loaded 0.
 
 Errors: the `tools:` frontmatter of `agents/planner.md`, `agents/reviewer.md` and `agents/debugger.md` is a comma-separated string; agy wants a `[]string`.
 

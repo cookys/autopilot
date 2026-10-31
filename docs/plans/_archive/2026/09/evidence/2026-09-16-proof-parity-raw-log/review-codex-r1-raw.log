@@ -9,7 +9,7 @@ FINDINGS:
 Reading prompt from stdin...
 OpenAI Codex v0.154.0
 --------
-workdir: /home/cookys/projects/autopilot
+workdir: $HOME/projects/autopilot
 model: gpt-5.6-sol
 provider: openai
 approval: never
@@ -50,7 +50,7 @@ Grade the diff against this spec. Spec-declared out-of-scope or handled-downstre
 # Review proof contract parity across bash and Node, and a rejected reviewer envelope keeps its raw_log
 
 > Status: execution plan for ONE managed deliverable (`/l5`, mission graph node
-> `proof-parity-raw-log-2026-09-16`) — the first of two cut from BACKLOG row "Managed rail (cuda P1):
+> `proof-parity-raw-log-2026-09-16`) — the first of two cut from BACKLOG row "Managed rail (<host> P1):
 > GLM tautological no_finding_proof stops full_diff_review; final panel seat transport_failed" (fired
 > 2026-09-16). This plan covers defects (ii) the proof validator false positive and (iii) `raw_log`
 > lost on a validator rejection. Defect (i) — the blind final panel refusing a pinned codex seat after
@@ -71,7 +71,7 @@ Grade the diff against this spec. Spec-declared out-of-scope or handled-downstre
   conclusion fields` — the same message the blacklist path uses. The operator reads "tautological"
   for a concrete proof. Reproduced locally: `checked=diff lines 1-40. evidence=ran tests.
   conclusion=nothing to fix` passes the battery and is rejected by Node with that message.
-- Field evidence: cuda saw it three times on GLM-5.2 (r2/r5/r7); revival.3d saw it three times on
+- Field evidence: <host> saw it three times on GLM-5.2 (r2/r5/r7); revival.3d saw it three times on
   `claude-fable-5` via `claude-native`, and the SAME diff with the SAME seats dispatched manually
   through `dispatch-review.sh` (outside the engine, no Node validator) passed every time. The only
   divergence between the two paths is the Node grammar.
@@ -178,7 +178,7 @@ rejected proof text is nowhere. The final-panel seat receipt (`autopilot-engine.
     changes/breaks `receipt_digest` (RED at base: schema rejects the key); `raw_log: ""` is rejected;
     an unrelated extra key with a recomputed valid digest is rejected by BOTH the composition seat
     validation and the JSON schema (preservation, green at base).
-- Docs: `docs/BACKLOG.md` cuda P1 row: Status stays `fired` (deliverable 2 pending), Context gains
+- Docs: `docs/BACKLOG.md` <host> P1 row: Status stays `fired` (deliverable 2 pending), Context gains
   "(ii)+(iii) shipped v2.36.57: Node grammar aligned, raw_log salvaged" and a one-line pointer to the
   second plan; `skills/l5/references/hetero-impl-loop.md` step 11 fixed list gains "proof grammar
   parity + raw_log on rejected envelopes v2.36.57" (+ mirror). `CHANGELOG.md` is NOT sealed, and neither
@@ -232,7 +232,7 @@ platforms/codex/plugin/skills/l5/references/hetero-impl-loop.md
 
 The next managed campaign's in-rail review on this host (GLM-5.2 or MiniMax) with a `.`-separated
 proof is `reviewed`, not `dispatch_review blocked`; and a deliberately tautological stub run shows
-`raw_log` in the blocked record. cuda/revival.3d re-run on their side is theirs to report.
+`raw_log` in the blocked record. <host>/revival.3d re-run on their side is theirs to report.
 
 ## 6. Follow-ups filed, not done here
 
@@ -270,7 +270,7 @@ R6: `campaign-composition.js` seat validation and `schemas/implementation-campai
 R7: `src/engine/implementation-campaign.js`, `src/engine/campaign-intake.js`, `src/campaign/cli.js`, `scripts/dispatch-anthropic-review.js` are byte-identical to base `0e3ea3cc`; no new event, CLI flag, or ledger row shape.
 R8: Every change-pinning assertion (R1 disagreement rows, R2 messages, R3 salvage, R4 engine, R5 seat raw_log, R6 schema) is recorded RED against base `0e3ea3cc` in the test header with the observed message; preservation guards labelled; suites use stubs only.
 R9: Suites green: `review-runner`, `dispatch-review`, `autopilot-engine`, `implementation-campaign-routing`, `implementation-campaign-receipt`, `qc-panel-honesty`, `status-task`, `implementation-campaign-state`; `bash scripts/check-canonical-invariants.sh`, `node scripts/check-js-syntax.js`, `bash scripts/sync-codex-plugin-skills.sh --check`, `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` pass.
-R10: Docs: cuda P1 BACKLOG row keeps Status `fired` and its Context records "(ii)+(iii) shipped v2.36.57"; l5 reference step 11 gains the fixed item (+ mirror); `git diff --name-only 0e3ea3cc HEAD` ⊆ §2.5 plus the committed plan/mission docs.
+R10: Docs: <host> P1 BACKLOG row keeps Status `fired` and its Context records "(ii)+(iii) shipped v2.36.57"; l5 reference step 11 gains the fixed item (+ mirror); `git diff --name-only 0e3ea3cc HEAD` ⊆ §2.5 plus the committed plan/mission docs.
 
 
 ## Depth-0 note to the reviewer
@@ -289,7 +289,7 @@ index b5286eac..7e6fc696 100644
 +++ b/docs/BACKLOG.md
 @@ -110,7 +110,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
  - **Effort**: Fix
- - **Source**: `cuda` via hangar-bridge 2026-09-16, msg `msg_01M2KKK4FVS88RA6DDAR2MN3GB`
+ - **Source**: `<host>` via hangar-bridge 2026-09-16, msg `msg_01M2KKK4FVS88RA6DDAR2MN3GB`
  - **Pointer**: docs/projects/ongoing-maintenance/HANDOFF.md
 -- **Context**: three defects (raw data msg `msg_01M2KKPZ75X780NYXR0KPDDBQS`): tautological-proof check rejects a concrete proof; no_verdict result omits raw_log; final panel refuses codex (blind-review no-tools profile) though dispatch-review.sh runs it.
 +- **Context**: (i) panel refuses pinned codex; (ii) proof rejects concrete proof; (iii) no_verdict omits raw_log. (ii)+(iii) shipped v2.36.57: Node grammar aligned with the battery, raw_log salvaged on rejection; (i) pre-spend admission next.

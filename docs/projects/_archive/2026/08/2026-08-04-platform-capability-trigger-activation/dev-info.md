@@ -26,7 +26,7 @@
   `platform-trigger-activation-r4-g2`, key
   `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`; Sol `READY`, Gemini
   `READY`, empty findings, terminal policy `generation_2_terminal`, `next_generation:null`; artifact
-  `/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
+  `$HOME/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
   (SHA-256 `5cbdfdeb86de9d85f4395a1e70f218e3ca72844c31684c76b2154399699dd1ed`)
 - D3 production receipt: [`evidence/codex-postcompact-production-live-receipt.json`](evidence/codex-postcompact-production-live-receipt.json), byte-for-byte source
   `/tmp/autopilot-d3-live-E8PkHl/depth0-production-live-final12/live-receipt.json`; file SHA-256

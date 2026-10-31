@@ -5,7 +5,7 @@
 **Branch**: `feat/qualification-feed-adopt`
 **Status**: all six phases shipped — v2.35.9
 
-Handed off from the llm-playground session on `cookys-7840hs` (plan pushed as `8a177cf0`);
+Handed off from the llm-playground session on `cookys-<host>` (plan pushed as `8a177cf0`);
 authorized by the operator in this session. Report back to instance
 `01M1G0G3C35PY9AQNC5HQDJ1MB` with the commit sha.
 

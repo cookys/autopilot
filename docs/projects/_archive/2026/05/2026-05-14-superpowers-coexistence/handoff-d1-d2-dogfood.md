@@ -65,7 +65,7 @@ autopilot v2.7.0 (superpowers coexistence) + v2.7.1 (routing tightening Fix) 已
 ### Step 0 — 確認環境
 
 ```bash
-cd /home/cookys/projects/autopilot
+cd $HOME/projects/autopilot
 git log --oneline -3       # 應看到 bae3f43 / 773edff / 0ce2155
 git status                  # 應 clean
 git rev-parse --abbrev-ref HEAD  # 應為 develop
@@ -74,16 +74,16 @@ git rev-parse --abbrev-ref HEAD  # 應為 develop
 確認 plugin install state：
 
 ```bash
-ls -la ~/.claude/plugins/cache/autopilot/autopilot/dev   # 應 symlink → /home/cookys/projects/autopilot
+ls -la ~/.claude/plugins/cache/autopilot/autopilot/dev   # 應 symlink → $HOME/projects/autopilot
 python3 -c "
 import json
-d = json.load(open('/home/cookys/.claude/plugins/installed_plugins.json'))
+d = json.load(open('$HOME/.claude/plugins/installed_plugins.json'))
 print(json.dumps(d.get('plugins', {}).get('autopilot@autopilot', []), indent=2))
 "   # 應顯示 installPath: .../dev, version: dev
 ```
 
 如果以上 OK → autopilot v2.7.0 已 dev-mode 掛載。**繼續 Step 1**。
-如果壞了 → 跑 `bash /home/cookys/projects/autopilot/scripts/dev-setup.sh` 重建 symlink。
+如果壞了 → 跑 `bash $HOME/projects/autopilot/scripts/dev-setup.sh` 重建 symlink。
 
 ### Step 1 — 裝 superpowers（user 必須打 slash command）
 
@@ -162,7 +162,7 @@ D-1 的核心是驗證 `!cat .claude/dispatch-config.md` chain delegation 確實
 
 **必須同 session 接著做**（避免 superpowers 重 install）。
 
-在 `/home/cookys/projects/autopilot/.claude/settings.json` 加：
+在 `$HOME/projects/autopilot/.claude/settings.json` 加：
 
 ```jsonc
 {
@@ -226,7 +226,7 @@ D-1 的核心是驗證 `!cat .claude/dispatch-config.md` chain delegation 確實
 
 ```
 我要繼續 autopilot v2.7.x 的 D-1 + D-2 scenario dogfood。
-完整 handoff 在 /home/cookys/projects/autopilot/docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/handoff-d1-d2-dogfood.md
+完整 handoff 在 $HOME/projects/autopilot/docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/handoff-d1-d2-dogfood.md
 請先讀那個檔，照「立即執行步驟」走。
 ```
 

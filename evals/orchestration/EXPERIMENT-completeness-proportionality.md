@@ -95,7 +95,7 @@ so the same oracle is valid for both arms.
 ## How to run
 
 ```bash
-cd /home/cookys/projects/autopilot
+cd $HOME/projects/autopilot
 for task in t18-proportional-waste t19-edge-case-escape; do
   for i in 1 2 3 4 5; do
     bash evals/orchestration/run-orchestration-eval.sh --task "$task" --arm maximal \

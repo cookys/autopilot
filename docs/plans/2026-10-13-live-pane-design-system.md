@@ -461,7 +461,7 @@ A decision opened by a press (`toggle` id `dec:<id>`). The bullet row stays wher
     hand/native worktrees, no WorktreeCreate takeover; rail worktrees
     carry the repo slug; …). Owner did not answer within 60s; A is
     reversible and the smallest surface.
-  $ decision-ledger.js veto --ledger /home/cookys/projects/autopilot/.git/
+  $ decision-ledger.js veto --ledger $HOME/projects/autopilot/.git/
     autopilot/ledger/decisions.jsonl --id intent-17-1
 ```
 
@@ -901,18 +901,18 @@ The owner called the tab 「亂亂的」. Seven defects: (1) a worktree that is 
 ▾ 要你處理  1 · 285 MB ───────────────────────────────────────────────────
 ▲ agent-a16d390b66014e3cf                                    1d04h · 285 MB
   有 1349 個檔案沒提交，先看內容再決定要不要刪
-  $ git -C '/home/cookys/projects/autopilot/.claude/worktrees/
+  $ git -C '$HOME/projects/autopilot/.claude/worktrees/
     agent-a16d390b66014e3cf' status --short
 ▾ 可以直接清掉  2 · 313 MB ────────────────────────────────────────────────
 ◦ release-3.0.0                                              4d12h · 313 MB
   已合併，可以刪
-  $ git -C '/home/cookys/projects/autopilot' worktree remove '...'
+  $ git -C '$HOME/projects/autopilot' worktree remove '...'
 ▾ 自動清理 ───────────────────────────────────────────────────────────────
 上次        23h51m 前 · 沒有清掉東西
 ▾ 外掛來源 ───────────────────────────────────────────────────────────────
-✓ 開發目錄 · /home/cookys/projects/autopilot · v3.0.0-alpha.6
+✓ 開發目錄 · $HOME/projects/autopilot · v3.0.0-alpha.6
   舊版快取 2.36.36 沒有程式在用，可以刪
-  $ rm -rf /home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36/
+  $ rm -rf $HOME/.claude/plugins/cache/autopilot/autopilot/2.36.36/
 ```
 
 - **Entry** (`ui.residueRows`): a name row (the state's mark for `judge`, the neutral `◦` for `clean`; the last path segment whole, a branch by its name; too long, it is cut from the **tail** with `…`; dim `age · size` at the right edge), the reason at column 2 (dim, `residue.why.<class>` in both locales; `dirty` takes its number from `^(\d+) uncommitted` and falls back to a sentence without one; an unmapped class shows `residue.class_raw` and the producer's text), and the producer's `command` through `ui.command` (`$`, wrapped, never cut), omitted when there is none. Nothing folds.

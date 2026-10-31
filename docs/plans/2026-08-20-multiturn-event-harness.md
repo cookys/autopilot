@@ -61,7 +61,7 @@ comparative or session-end-wrap claim is asked or answerable.)
   BOTH Write and Bash paths): creation of `.claude/session-start-sha`; creation of a plan
   doc under `docs/plans/`; creation of `docs/projects/*/README.md`; ≥1 forcing-function
   TaskCreate. Per-record timestamps only (evidence-discipline §12). Corpus root pinned
-  absolute: `/home/cookys/.claude/projects/`.
+  absolute: `$HOME/.claude/projects/`.
 - **Scanner validity gate (before Phase A)**: `archaeology-scan.js` must pass planted
   red/green on NON-corpus fixtures (the 2026-08-20 spike transcripts — sonnet/2.1.237,
   outside the corpus by the version+model filter: scanner MUST find their known

@@ -2,8 +2,8 @@
 
 **Date**: 2026-09-04 · **Target**: v2.35.15 · **Size**: L (hooks defaults + new hook + skill prose + docs)
 **狀態**: ✅ Shipped in v2.35.15 — merged as `72dfa052`
-**Trigger**: cuda quota digest 2026-09-04 (`cuda:~/projects/QUOTA-DIGEST-2026-09-04.md`, relayed over
-hangar-bridge; operator-confirmed scope on aimax395 2026-09-04): ≈$2,200 API-equivalent in 36 h, 79 % from
+**Trigger**: <host> quota digest 2026-09-04 (`<host>:~/projects/QUOTA-DIGEST-2026-09-04.md`, relayed over
+hangar-bridge; operator-confirmed scope on <host> 2026-09-04): ≈$2,200 API-equivalent in 36 h, 79 % from
 four resident Sonnet foremen (13–33 h alive, 1,900–7,400 Bash calls each, 34–97 万 cache-read per call,
 output ≈0). Burn shapes: (1) foreground polling (`true`×450, `while ! grep …; do sleep 10`, `tail -c
 8000 …output; ps -p`×40, `sleep 15; pgrep agy`×13); (2) waking after cache TTL and re-writing the whole
@@ -14,12 +14,12 @@ subagents → foremen auto-compact only at 967K.
 Audit (verified on this checkout 2026-09-04): the canonical rules exist as prose (`skills/l4|l5|l6/SKILL.md`
 foreman clause: no Monitor, no sleep polling, Bash ≤40) but the only enforcer, `check-foreman-polling.js`,
 runs post-hoc at depth-0 harvest; `context-budget`, `cost-tracker`, `dispatch-model-guard` are all opt-in
-(`hooks/opt-in-manifest.json`), unlisted in `settings.example.json`'s how-to, and never enabled on cuda;
+(`hooks/opt-in-manifest.json`), unlisted in `settings.example.json`'s how-to, and never enabled on <host>;
 no skill states a foreman lifetime, context ceiling or exit rule.
 
-## Board decision (2026-09-04, aimax395 operator)
+## Board decision (2026-09-04, <host> operator)
 
-All six digest proposals, no fleet-wide broadcast (report back to cuda only).
+All six digest proposals, no fleet-wide broadcast (report back to <host> only).
 
 ## Design
 
@@ -65,7 +65,7 @@ stderr line naming the total and the session — user-visible at depth-0, which 
 
 ### D5 — docs
 `hooks/README.md` tiers, `settings.example.json`, `docs/ironlaw-to-gate-map.md`, CHANGELOG v2.35.15
-(opt-in→default-on transition is a behaviour change: say so), BACKLOG rows, reply to cuda.
+(opt-in→default-on transition is a behaviour change: say so), BACKLOG rows, reply to <host>.
 
 ## Acceptance
 - `hooks/tests/foreman-guard.test.sh`: no marker → allow; marker+no agent_id → allow; marker+agent_id →

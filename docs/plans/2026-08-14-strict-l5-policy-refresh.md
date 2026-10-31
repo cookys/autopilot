@@ -15,7 +15,7 @@
 2. **現有 claim 已經對不上安裝的 CLI**：archived claim 的
    `target_identity.cli_version` 是 **0.146.0**、`binary_realpath` 指向
    `.../0.146.0-x86_64-unknown-linux-musl/bin/codex`，但機器上現在是
-   **0.147.0**（`/home/cookys/.codex/packages/standalone/releases/0.147.0-.../bin/codex`）。
+   **0.147.0**（`$HOME/.codex/packages/standalone/releases/0.147.0-.../bin/codex`）。
    即使不換模型，這條也該重簽。
 
 另外 `freshness.expires_at` 是 **2026-08-17**——整組 D4 claim 三天後到期。
@@ -97,9 +97,9 @@ behavior_class、observed_at、ttl_seconds、result、transport_binding）、
 
    | runner | binary_realpath | cli_version | claim 記的舊值 |
    |---|---|---|---|
-   | codex | `/home/cookys/.codex/packages/standalone/releases/0.147.0-x86_64-unknown-linux-musl/bin/codex` | 0.147.0 | **0.146.0** |
-   | grok | `/home/cookys/.grok/downloads/grok-1.0.3-linux-x86_64` | 1.0.3 | **0.2.118** |
-   | cc-shim（Claude Code CLI） | `/home/cookys/.local/share/claude/versions/2.1.232` | 2.1.232 | — |
+   | codex | `$HOME/.codex/packages/standalone/releases/0.147.0-x86_64-unknown-linux-musl/bin/codex` | 0.147.0 | **0.146.0** |
+   | grok | `$HOME/.grok/downloads/grok-1.0.3-linux-x86_64` | 1.0.3 | **0.2.118** |
+   | cc-shim（Claude Code CLI） | `$HOME/.local/share/claude/versions/2.1.232` | 2.1.232 | — |
 
    三者都能被 `extractVersion()` 正確解析（已驗）。
 3. **四條 transport surface 的真實證據已採集**（全部來自 `status: authored`

@@ -152,7 +152,7 @@ Architect 替代設計：**hook 自己撈 transcript，不靠 LLM 合規**。本
     "last_tool": "Edit",
     "last_tool_input_summary": "edit hooks/state-checkpoint.js",
     "tool_count_session": 42,
-    "cwd": "/home/cookys/projects/autopilot",
+    "cwd": "$HOME/projects/autopilot",
     "git_branch": "feat/v2.7.2-context-handoff-hardening"
   }
   ```

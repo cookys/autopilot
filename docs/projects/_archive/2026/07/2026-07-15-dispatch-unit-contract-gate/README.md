@@ -62,7 +62,7 @@ from repository truth.
 
 | Requirement | Mapping |
 |---|---|
-| `read /home/cookys/projects/autopilot/docs/projects/2026-07-15-dispatch-unit-contract-gate/HANDOFF.md 接續` | Resume Mode reality check, then execute HANDOFF `下一步` without reopening settled decisions; L-1 through C1 |
+| `read $HOME/projects/autopilot/docs/projects/2026-07-15-dispatch-unit-contract-gate/HANDOFF.md 接續` | Resume Mode reality check, then execute HANDOFF `下一步` without reopening settled decisions; L-1 through C1 |
 | “還有誰可以 review ? 用 gpt-5.5 or minimax 3” | C1 recovery evidence: MiniMax author attempt plus gpt-5.5 artifact and ledger reviews |
 | “用 agy 的 gemini 3.1 pro 試試?” | C1 AGY Gemini 3.1 Pro High author attempt, isolated RED/fidelity gate, and one review-driven repair |
 | “agy 有 opus 4.6 將就用?” | One strict-roster AGY Claude Opus 4.6 Thinking author attempt, containment proof, and no-artifact timeout classification |

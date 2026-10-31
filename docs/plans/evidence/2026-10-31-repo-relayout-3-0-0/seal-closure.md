@@ -266,7 +266,7 @@
 | `evals/skill-onoff/prereg/FROZEN.json` | O7、O8 | 本身是檢查器的資料，不被雜湊 |
 | `platform-capabilities.json` 兩份（含 codex 鏡像） | O11 | rc=0 |
 
-- 這 7 檔中第一筆在 `docs/plans/`，其餘 6 筆在 `evals/skill-onoff/prereg/`；整批不搬（O7、O8 都選 (b)）。清理個人資料要靠「後繼物件」，但 prereg 規則明說凍結列被改就作廢，所以後繼物件等於開新列（例如 d0gate-v2.1 這種做法），不是改舊檔。
+- 這 7 檔中第一筆在 `docs/plans/`，其餘 6 筆在 `evals/skill-onoff/prereg/`（O7、O8 都選 (b)，不搬）。第一筆不在 evals，在 P1 隨 plans 以位元組不變進 `project/`（見計畫 D9 第 4 點）。D9 已裁決不產生後繼物件；若要清理個人資料只能開新列，不改舊檔。
 
 ## 總表
 

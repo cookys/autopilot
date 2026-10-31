@@ -382,7 +382,7 @@ platforms/ 鏡像產物
    - 正規化後的失敗診斷：不符的檔清單、算出的 digest、錯誤碼。
    - 該物件及其雜湊引用檔的逐檔 sha256。
    - 每個階段合併前，經 layout-map 換算後，三樣都要與基準完全相同。基準紅物件「變得更壞」或位元組被動到，都算紅；原本紅的轉綠或消失，也要在該階段寫明原因。方法沿用 seal-closure「relay0 前後比對」的逐行比對（兩點跑相同指令、`diff` 輸出）。
-   - **基準紅完整清單，共 8 類，合計 26 個物件（8 graph、13 authority、g8、g67、amend-5、amend-7、rail digest、2026-08-14 收據各 1）加 2 份審查 artifact（以 frozen-walk 與 ta.sh 於 ca97d97b3 唯讀重跑核對）：**
+   - **基準紅完整清單，共 8 類，合計 27 個物件（8 graph、13 authority，加上 g8、g67、amend-5、amend-7、rail digest、2026-08-14 收據各 1，共 8＋13＋6）加 2 份審查 artifact（以 frozen-walk 與 ta.sh 於 ca97d97b3 唯讀重跑核對）：**
      1. 8 組 mission graph（`node scripts/mission-execution-graph-check.js` 產生）：backlog-actionable-successor、codex-payload-residual-spike、codex-payload-residual-spike-successor、hook-test-harness-determinism、plan-review-codex-trusted-cwd-fix、qualification-verdict-stability、reviewer-output-token-budget-successor、skill-transport-implementer-arm。
      2. 13 份 task-authority（比對 `mission_graph_digest` 與檢查器算出的 graph 摘要；產生器是 seal-closure 的 ta.sh，P1 一併進 repo）。路徑為 `docs/mission-<slug>-task-authority.json`，slug 為：
         agy-effort-rail-wording-2026-09-16、backlog-entry-migration、backlog-entry-schema、blind-review-packet-2026-09-16、disposition-resume-2026-09-16、final-panel-blind-admission-2026-09-16、final-panel-pins-2026-09-15、integration-ledger、ledger-rotation-order-2026-09-16、peer-residue-2026-09-15、proof-parity-raw-log-2026-09-16、qualification-verdict-stability（graph 本身也紅，檢查器 rc=2）、red-verification-repair-2026-09-16。
@@ -394,6 +394,11 @@ platforms/ 鏡像產物
      6. FROZEN 修訂 amend-7 的 `../../scripts/check-guidance-eval.js`（frozen-walk 走訪）。
      7. d0gate rail digest：預登錄 57d04ce6，現算 29dfe2ef（`run-d0gate-campaign.js --print-runner-pin`）。
      8. 2026-08-14 platform-capabilities（`platform-capability-claims.js validate-consumers`，claim-ID tampering，rc=1），以及 depth0-per-turn-gate 的 g1、g2 審查 artifact（plan sha256 不符，現算 45955cba，`check-phase-review-receipt.js`）。
+   - **合法修改的第二個出口**：適用對象是基準紅物件中，雜湊引用檔落在第 6 點排除清單內的，主要是 d0gate rail digest 與 O9 rail 檔（P4 必改），其次是 O12 的 `validate-*.js`（退役候選）。該物件的指紋可以在「依計畫修改那些檔」的那個階段變動，條件有三：
+     - 在 F1 新增集宣告「預期指紋變更」，附理由。
+     - 把新指紋寫回基準指紋檔，與 layout-map 一起送審。
+     - 未在排除清單內的引用檔仍然不得變動。
+     這是「轉綠或消失要寫明原因」之外的第二個出口。
    - 其餘 FROZEN 表（files、w2a-g、amend-2/3/4/6/8、qs 系列、dcard 系列、gdorm、bpack、findings-batch 系列、d0gate）frozen-walk 全部相符，列為綠。
    - **產生器**：frozen-walk 目前只在暫存，在 P1 lane 進 repo，成為正式檢查器；各類紅各自的檢查器見上列括號。基準指紋檔（逐物件三樣記錄）在 P1 lane 產出，作為 repo 內的證據檔。
    - 修改第一部分 §7「合併前全綠：所有封存物件的檢查器」：改為每個階段合併前，紅的集合與指紋必須與基準完全相同，不能新增紅。
@@ -425,7 +430,9 @@ platforms/ 鏡像產物
    - d0gate v2 U2 在 P4 之前停在乾淨點，不算 P4 前必須清空的進行中工作。
    - 現有 d0gate rail digest 已不符（57d04ce6 對 29dfe2ef），屬於基準紅（第 1 點）。
 4. **SECURITY.md 與 D8 修正（O7、O8、O11）**：
-   - B 類 7 檔（第一筆在 `docs/plans/`，其餘 6 筆在 `evals/skill-onoff/prereg/`）、`evals/skill-onoff/packs/manifest.json`、`prereg/FROZEN.json`、各份 platform-capabilities.json，都留在私有開發 repo，內容不改。
+   - `docs/plans/2026-08-04-platform-capability-trigger-activation.md`（B 類第一筆）不在 `evals/`：它在 P1 隨 plans 以位元組不變的方式進入 `project/`，依 C2，`project/` 不匯出。在 P1 之前，C2 匯出工具的明確排除清單要點名這個檔，負控制：把它放進收錄範圍，匯出必須紅。
+   - B 類其餘 6 檔在 `evals/skill-onoff/prereg/`，不搬。
+   - `evals/skill-onoff/packs/manifest.json`、`prereg/FROZEN.json`、各份 platform-capabilities.json，都留在私有開發 repo，內容不改。
    - 依 C2 與 D1，`evals/`、`evidence/`、`project/` 都不匯出。
    - 收回「§4 之後產生清理過的後繼物件」的承諾。
    - codex 鏡像裡那份 platform-capabilities.json 位在會匯出的 `platforms/` 底下，C2 匯出工具必須依 D1「任何深度的證據檔一律排除」擋下它。負控制路徑用「依 layout-map 換算後的 P4 後路徑」，不寫死現在的 `platforms/codex/plugin/docs/projects/...`。
@@ -444,7 +451,7 @@ platforms/ 鏡像產物
    - 負控制：在清單內的檔植入一個字元，改寫器必須拒絕。這份清單在 P1 lane 建立。
    - **依計畫允許修改的檔列為排除，各附理由，並接到第一部分 §1 的逐檔例外機制：**
      - O9 的 rail 檔（`dispatch-hetero.sh`、`per-turn-gate-arm.js`、`gate-verify.js`、`hooks/per-turn-gate.js`、`lib/seed-claude-config.js`）：P4 必改，該列已轉為存檔（第 3 點）。
-     - O8 的兩個 skill-onoff test.sh：P3 搬，列已轉為存檔。
+     - O8 的被釘測試檔：只有 `hooks/tests/skill-onoff-g67.test.sh` 與 `skill-onoff-g8.test.sh` 兩個（FROZEN 的 `../../hooks/tests/` 鍵實查只有這 2 個），P3 搬，列已轉為存檔。`skill-onoff-gdorm.test.sh` 在第 3 點有宣告，但 FROZEN 沒有釘它的位元組，不屬排除項。
      - O12 釘住的 `validate-*.js`：退役候選。
      - O10 repin 流程裡的兩份 SKILL.md（dev-flow、ceo-agent）：重釘流程本來就會改。
      - O14 anchors manifest 的 `file` 欄：P4 只改這一欄，區段雜湊不變。

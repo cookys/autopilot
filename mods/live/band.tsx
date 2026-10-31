@@ -11,6 +11,15 @@ import { dimProps, drawSeg } from './ui'
 
 type El = (props: any) => any
 
+// the band is this many rows tall (one Box of one line); the mods drawn below it are given the rows that remain
+export const BAND_ROWS = 1
+
+// the band over what a mod below it drew: autopilot on top, the other under it
+export function stackBand(el: { Box: El }, band: unknown, below: unknown) {
+  const { Box } = el
+  return <Box flexDirection="column">{band}{below}</Box>
+}
+
 export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, onInfo: () => void, t: T = T_EN, onSlot: (id: SlotId) => void = () => {}) {
   const { Box, Text, Button } = el
   // only the ⓘ autoFocuses: Ctrl+x Tab lands on it, as before the slots were controls

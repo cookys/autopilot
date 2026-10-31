@@ -71,6 +71,7 @@ import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
 import { paneRows, runAgedOut, runEndedMs, runSubject } from './model'
 import * as ui from './ui'
+import { BAND_ROWS } from './band'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -175,6 +176,7 @@ type World = {
   existsThrows: Set<string> // $.fs.exists rejects for these paths
   env: Record<string, string> // what $.env.get answers; a test may change it between ticks
   clock: ReturnType<typeof mock.clock>
+  lower: (($: any, e: any) => any) | null // a mod below the live band on the ui.render chain (BL-0352); null = the engine's own drawing alone
   order: string[] // 'open' / 'stat' / 'read' in the order the engine heard them (a press on a file path must open the viewer window before any read)
 }
 
@@ -183,7 +185,7 @@ const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(o
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), lower: null, order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
   // its own copy, so a test can change a variable between ticks
@@ -232,6 +234,8 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   on('session.root', () => ({ value: '/work/repo' }))
   on('session.start', () => ({ cwd: CWD }))
   on('session.end', () => ({ sessionId: w.sid.value }))
+  // the band hook calls next(e) (BL-0352): beneath it stands the engine, which answers `{ type: 'engine' }` (its own drawing) unless a test put a mod there
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => (w.lower !== null ? w.lower($, e) : { type: 'engine' as const, ref: 0 }))
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.open', async ($, e) => {
@@ -5711,3 +5715,116 @@ const HYGIENE_GOLDEN_76: string[] = [
   "▲ 開發目錄 · v2.37.0",
   "  落後遠端 3 個提交",
 ]
+
+// BL-0352: the AbovePrompt hook calls next(e) so a mod below it on the ui.render chain can draw too. The bottom hook below plays that mod: it records what it
+// was handed and answers a Box of rows, or the engine's own drawing (what a mod that yields passes up).
+for (const surface of SURFACES) {
+  type Got = { maxRows: number; requestId: unknown; hasSurvey: boolean }
+  const belowHook = (w: World, got: Got[], rows: number | null) => {
+    w.lower = ($, e) => {
+      got.push({ maxRows: e.props.maxRows, requestId: (e as { requestId?: unknown }).requestId, hasSurvey: e.props.hasSurvey })
+      if (rows === null) return { type: 'engine' as const, ref: 0 }
+      const { Box, Text } = $.ui.resolve(e)
+      return Box({ flexDirection: 'column', children: Array.from({ length: rows }, (_, i) => Text({ children: 'BELOW-' + i })) })
+    }
+  }
+  const mountBand = ($: any, props: Record<string, unknown>) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: { ...BAND_PROPS, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  const stable = (t: unknown): string => JSON.stringify(t).replace(/"handle":\d+/g, '"handle":0') // a press handle is numbered per mount
+  const draw = async ($: any, props: Record<string, unknown> = {}) => {
+    const ui = await mountBand($, props)
+    const tree = (await ui.drawn()) as Node
+    const info = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'info')
+    await ui.unmount()
+    return { tree, hasInfo: info !== undefined, text: walkTexts(tree).map(textOf).join('|') }
+  }
+
+  test('band over a lower mod: both are drawn, autopilot on top (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const got: Got[] = []
+    belowHook(w, got, 3)
+    await start($, surface)
+    const d = await draw($, { maxRows: 20 })
+    expect(d.hasInfo, 'the autopilot band is drawn').toBe(true)
+    expect(d.text).toContain('BELOW-0')
+    expect(d.text).toContain('BELOW-2')
+    const texts = walkTexts(d.tree).map(textOf)
+    expect(texts.findIndex(t => t.includes('ⓘ') || t.length > 0), 'a band Text comes first').toBe(0)
+    expect(texts.findIndex(t => t === 'BELOW-0'), 'the lower mod sits after the band Texts').toBeGreaterThan(0)
+    expect(got.length).toBeGreaterThan(0)
+  })
+
+  test('band over a lower mod: the lower mod is given maxRows less the band rows (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const got: Got[] = []
+    belowHook(w, got, 3)
+    await start($, surface)
+    await draw($, { maxRows: 20 })
+    expect(got.length).toBeGreaterThan(0)
+    for (const g of got) {
+      expect(g.maxRows).toBe(20 - BAND_ROWS)
+      expect(g.hasSurvey).toBe(false)
+    }
+  })
+
+  test('band over a lower mod: the lower mod gets the requestId as received (forge-stats draws its Raster under it) (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const got: Got[] = []
+    belowHook(w, got, 3)
+    await start($, surface)
+    await draw($, { maxRows: 20 })
+    expect(got.length).toBeGreaterThan(0)
+    for (const g of got) expect(g.requestId).toBe('rq-band-1')
+  })
+
+  test('band over a lower mod that draws nothing: the output is the band alone, as before (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const got: Got[] = []
+    belowHook(w, got, null)
+    await start($, surface)
+    const d = await draw($, { maxRows: 20 })
+    const alone = await draw($, { maxRows: 1 }) // no row is left for a lower mod: next() is not called, the band as it always was
+    expect(got.length, 'the lower mod was asked').toBeGreaterThan(0)
+    expect(stable(d.tree)).toBe(stable(alone.tree))
+    expect(d.tree.props?.flexDirection).toBeUndefined()
+    expect(d.hasInfo).toBe(true)
+  })
+
+  test('band over the host default (no lower mod at all): the band alone, as before (' + surface + ')', async ($, on) => {
+    worldEn(on, richWorld())
+    await start($, surface)
+    const d = await draw($, { maxRows: 20 })
+    const alone = await draw($, { maxRows: 1 })
+    expect(stable(d.tree)).toBe(stable(alone.tree))
+    expect(d.hasInfo).toBe(true)
+  })
+
+  test('band with a survey up: the event goes down untouched and autopilot draws nothing (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const got: Got[] = []
+    belowHook(w, got, 2)
+    await start($, surface)
+    const d = await draw($, { maxRows: 20, hasSurvey: true })
+    expect(d.hasInfo).toBe(false)
+    expect(d.text).toBe('BELOW-0|BELOW-1')
+    expect(got.map(g => g.maxRows)).toEqual([20])
+  })
+
+  test('band with no snapshot yet (the waiting text) still stacks over the lower mod (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const got: Got[] = []
+    belowHook(w, got, 2)
+    const d = await draw($, { maxRows: 20 }) // no start: the mod has read nothing
+    expect(d.hasInfo).toBe(true)
+    expect(d.text).toContain('BELOW-1')
+  })
+
+  test('band with one row to give: nothing is left for a lower mod, next() is not called (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const got: Got[] = []
+    belowHook(w, got, 2)
+    await start($, surface)
+    const d = await draw($, { maxRows: 1 })
+    expect(got).toEqual([])
+    expect(d.text).not.toContain('BELOW')
+  })
+}

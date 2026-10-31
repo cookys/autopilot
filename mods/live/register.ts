@@ -40,7 +40,7 @@ import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { SHOW_PRESS, showTarget } from './ui'
-import { Band } from './band'
+import { Band, BAND_ROWS, stackBand } from './band'
 import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
@@ -859,7 +859,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return next(e)
   })
 
-  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     viewport = e.viewport ? { columns: e.viewport.columns, isFullscreen: e.viewport.isFullscreen } : null
     if (e.props.hasSurvey) return next(e)
     // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (7 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
@@ -906,7 +906,16 @@ export function registerLive(on: Parameters<Register>[0]): void {
         if (seq === pressSeq) decided = null
       }
     }
-    return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info, tr, slot)
+    const el = $.ui.resolve(e)
+    const band = Band(el, snapshot, e.props.bodyColumns, info, tr, slot)
+    // The band is BAND_ROWS tall. A mod below this hook on the ui.render chain (codeforge's forge-stats) draws in what is left: next() gets the same event
+    // with only props.maxRows reduced (requestId and every other field stay as received). Nothing left, or nothing drawn below (the host's own
+    // answer, `{ type: 'engine' }`, is empty here): the band alone, as before.
+    const left = e.props.maxRows - BAND_ROWS
+    if (left < 1) return band
+    const below = await next({ ...e, props: { ...e.props, maxRows: left } })
+    if (below === undefined || below === null || (below as { type?: string }).type === 'engine') return band
+    return stackBand(el, band, below)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: await read($, DECIDE), inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }, decideScroll)))

@@ -45,7 +45,7 @@ export type StateId = (typeof STATE_IDS)[number]
 // terminal (P0 b). `↓` is East Asian Ambiguous and its width is still unchecked (`pending-owner`); the owner's 2026-10-14 ruling settled only its meaning (behind upstream, nothing else), see the plan §8. `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
 export const GLYPHS = {
   state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', stopped: '◌', skipped: '∅', unknown: '?' },
-  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', round: '↺', decisions: '◆', age: '◷', recommend: '★' },
+  structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', speed: 'ϟ', round: '↺', decisions: '◆', age: '◷', recommend: '★' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   scrollbar: { track: '│', thumb: '█' }, // §12.10: the scrolling window's right-hand column; track and thumb borrow the drawing of bandSep and the top spark step, a second meaning each (SHARED_GLYPHS)
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
@@ -1008,6 +1008,80 @@ export function strip<Id extends string = PaneTab>(u: Ctx, active: Id | null, ta
     ? [...bar(markAt, GLYPHS.structure.rule, { color: PALETTE.structure }), ...bar(markW, GLYPHS.structure.tabMark, { color: PALETTE.here, here: true }), ...bar(u.cols - markAt - markW, GLYPHS.structure.rule, { color: PALETTE.structure })]
     : bar(u.cols, GLYPHS.structure.rule, { color: PALETTE.structure })
   return { next, tabs: built.map(({ id, on, label }) => ({ id, on, label })), rule, rows: rows + 1, exact }
+}
+
+// ---- the forge label on the band's left, after the ⓘ: `│ ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1` (forge-stats answers it; the strip keeps one short `ϟ` tab that opens its full view) ----
+// Colours (owner ruling 2026-11-01, d-1081338d; plan section 12.11): the speed is `running` (how fast the running work goes: `ϟ` and the trend), its number default text, its unit dim,
+// the ` · ` `structure`, the pet dim; a speed of `—` (nothing measured) is `idle` as a whole. No new meaning for any role.
+// What the mod below (forge-stats) answers to a one-row ask, read into segments with a semantic role each. This is the ONLY place that reads the answer's shape.
+// Contract (agreed with codeforge): a row Box holding, in order, Box key="speed" / "trend" / "sep" / "pet", each wrapping Texts whose children are only strings (no colour).
+// The host strips a Text's `key` but keeps a Box's `props.key`, so the role is the Box's key. The space belongs to the LATER part (trend starts with ' ', sep is ' · ').
+// Narrowest answer: a row Box with one speed Box (`ϟ93`). The old shape (ONE Text of a string) stays as a fallback: the whole string is the speed part. A Box key we do not know is drawn as plain text (role 'text'), never dropped. null = nothing usable (undefined, null, the engine's own ref).
+export type ForgeRole = 'bolt' | 'value' | 'unit' | 'trend' | 'gap' | 'sep' | 'pet' | 'text'
+export type ForgeSegment = { role: ForgeRole; text: string }
+const SPEED_RE = /^ϟ( ?)(\d+|—)(?:( tok\/s))?$/
+const KNOWN_PARTS = ['speed', 'trend', 'sep', 'pet'] as const
+type PNode = { type?: unknown; props?: { key?: unknown }; children?: unknown }
+const stringsOf = (n: unknown): string | null => {
+  const k = (n as PNode | null | undefined)?.children
+  return Array.isArray(k) && k.length > 0 && k.every(c => typeof c === 'string') ? (k as string[]).join('') : null
+}
+const speedSegments = (speed: string): ForgeSegment[] => {
+  const m = SPEED_RE.exec(speed)
+  if (m === null) return [{ role: 'value', text: speed }]
+  const out: ForgeSegment[] = [{ role: 'bolt', text: 'ϟ' + m[1] }, { role: 'value', text: m[2] }]
+  if (m[3] !== undefined) out.push({ role: 'unit', text: m[3] })
+  return out
+}
+const trendSegments = (text: string): ForgeSegment[] => {
+  const lead = /^\s+/.exec(text)
+  const body = text.replace(/^\s+/, '')
+  return [...(lead === null ? [] : [{ role: 'gap' as const, text: lead[0] }]), ...(body === '' ? [] : [{ role: 'trend' as const, text: body }])]
+}
+export function forgeSegments(node: unknown): ForgeSegment[] | null {
+  const n = node as PNode | null | undefined
+  if (n === null || n === undefined || typeof n !== 'object') return null
+  if (n.type === 'Text') {
+    const label = stringsOf(n)?.replace(/\s+/g, ' ').trim()
+    return label === undefined || label === '' ? null : speedSegments(label)
+  }
+  if (n.type !== 'Box' || !Array.isArray(n.children) || n.children.length === 0) return null
+  const out: ForgeSegment[] = []
+  for (const c of n.children as PNode[]) {
+    if (c === null || typeof c !== 'object' || c.type !== 'Box' || !Array.isArray(c.children) || c.children.length === 0) return null
+    const text = (c.children as unknown[]).map(x => (typeof x === 'string' ? x : stringsOf(x))).reduce<string | null>((a, x) => (a === null || x === null ? null : a + x), '')
+    if (text === null) return null
+    const key = c.props?.key
+    const part = (KNOWN_PARTS as readonly unknown[]).includes(key) ? (key as (typeof KNOWN_PARTS)[number]) : null
+    if (part === 'speed') out.push(...speedSegments(text))
+    else if (part === 'trend') out.push(...trendSegments(text))
+    else out.push({ role: part ?? 'text', text })
+  }
+  return out.length === 0 ? null : out
+}
+// a segment's drawing: the palette role per semantic role. `idle` = the speed is `—`: the whole speed part is grey (the number and unit too), not blue
+function forgeSeg(g: ForgeSegment, idle: boolean): Seg {
+  switch (g.role) {
+    case 'bolt': case 'trend': return sg(g.text, { color: idle ? PALETTE.idle : PALETTE.running, role: 'glyph' })
+    case 'value': return sg(g.text, idle ? { color: PALETTE.idle, role: 'prose' } : { role: 'prose' })
+    case 'unit': return sg(g.text, idle ? { color: PALETTE.idle, dim: true, role: 'prose' } : { dim: true, role: 'prose' })
+    case 'sep': return sg(g.text, { color: PALETTE.structure, role: 'rule' })
+    case 'pet': return sg(g.text, { dim: true, role: 'prose' })
+    default: return sg(g.text, { role: 'prose' })
+  }
+}
+// the parts that fit `cols` cells: the pet (with its separator) goes first, then the trend (with its gap); null when even the speed does not fit
+export function forgeFit(parts: readonly ForgeSegment[], cols: number): ForgeSegment[] | null {
+  const w = (l: readonly ForgeSegment[]) => l.reduce((n, g) => n + displayWidth(g.text), 0)
+  const steps = [parts, parts.filter(g => g.role !== 'pet' && g.role !== 'sep'), parts.filter(g => g.role !== 'pet' && g.role !== 'sep' && g.role !== 'trend' && g.role !== 'gap')]
+  return steps.find(l => l.length > 0 && w(l) <= cols) ?? null
+}
+// the left cluster: `│ ` (structure) and the parts, each drawn by forgeSeg
+export type ForgeBar = { segs: Seg[]; width: number }
+export function forgeBar(parts: readonly ForgeSegment[]): ForgeBar {
+  const idle = parts.find(g => g.role === 'value')?.text === '—'
+  const segs: Seg[] = [sg('│ ', { color: PALETTE.structure, role: 'rule' }), ...parts.map(g => forgeSeg(g, idle))]
+  return { segs, width: segs.reduce((n, g) => n + displayWidth(g.text), 0) }
 }
 
 // a pressable control drawn as text: the action colour (`[ label ]`)

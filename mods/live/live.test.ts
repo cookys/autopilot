@@ -5878,19 +5878,30 @@ for (const surface of SURFACES) {
   })
 }
 
-// BL-0352: the forge tab. The mod below this hook on the ui.render chain (codeforge's forge-stats) draws its label as ONE Text when it is asked for one row, and its full view
-// when it is asked for twelve or more. The hook below plays that mod: it records every ask and answers by maxRows, as forge-stats does.
-const FORGE_LABEL = 'forge 93 tok/s'
+// BL-0352: the forge tab. The mod below this hook on the ui.render chain (codeforge's forge-stats) answers a one-row ask with a row Box of keyed part Boxes (speed, trend, sep, pet,
+// each wrapping one Text of strings) and its full view when it is asked for twelve or more. The hook below plays that mod: it records every ask and answers by maxRows, as forge-stats does.
+// The speed and the pet are drawn on the band's left after the ⓘ (in our own colours); the strip keeps one short tab, `ϟ`, that opens the full view.
+const FORGE_FULL = ['ϟ 93 tok/s', ' ▁▂▃▅▇', ' · ', 'Ferris Lv.1'] as const
+const FORGE_PETLESS = 'ϟ 93 tok/s ▁▂▃▅▇' // the same answer without sep and pet
+type ForgeAnswer = 'full' | 'petless' | 'speed' | 'notrend' | 'dash' | 'text' | 'unknown' | 'box' | 'engine'
 for (const surface of SURFACES) {
   type Ask = { maxRows: number; bodyColumns: number; requestId: unknown; hasSurvey: boolean; hasScroll: boolean; bodyRows: number | undefined }
-  const forgeMod = (w: World, asks: Ask[], answer: { label?: 'text' | 'box' | 'engine'; full?: 'box' | 'engine' } = {}) => {
+  const forgeMod = (w: World, asks: Ask[], answer: { label?: ForgeAnswer; full?: 'box' | 'engine' } = {}) => {
     w.lower = ($, e) => {
       asks.push({ maxRows: e.props.maxRows, bodyColumns: e.props.bodyColumns, requestId: (e as { requestId?: unknown }).requestId, hasSurvey: e.props.hasSurvey, hasScroll: Object.prototype.hasOwnProperty.call(e.props, 'scroll'), bodyRows: e.props.scroll?.bodyRows })
       const { Box, Text } = $.ui.resolve(e)
+      const part = (key: string, text: string) => Box({ key, children: [Text({ children: text })] })
+      const rowOf = (...kids: unknown[]) => Box({ flexDirection: 'row', children: kids })
       if (e.props.maxRows === 1) {
-        const kind = answer.label ?? 'text'
-        if (kind === 'text') return Text({ children: FORGE_LABEL })
-        if (kind === 'box') return Box({ children: [Text({ children: FORGE_LABEL })] })
+        const kind = answer.label ?? 'full'
+        if (kind === 'full') return rowOf(part('speed', FORGE_FULL[0]), part('trend', FORGE_FULL[1]), part('sep', FORGE_FULL[2]), part('pet', FORGE_FULL[3]))
+        if (kind === 'petless') return rowOf(part('speed', FORGE_FULL[0]), part('trend', FORGE_FULL[1]))
+        if (kind === 'speed') return rowOf(part('speed', 'ϟ93'))
+        if (kind === 'notrend') return rowOf(part('speed', 'ϟ — tok/s'), part('sep', ' · '), part('pet', 'Ferris Lv.1'))
+        if (kind === 'dash') return rowOf(part('speed', 'ϟ — tok/s'))
+        if (kind === 'text') return Text({ children: FORGE_PETLESS })
+        if (kind === 'unknown') return rowOf(part('speed', FORGE_FULL[0]), part('mood', ' (happy)'))
+        if (kind === 'box') return Box({ children: [Text({ children: FORGE_PETLESS })] })
         return { type: 'engine' as const, ref: 0 }
       }
       if (e.props.maxRows >= 12 && (answer.full ?? 'box') === 'box') return Box({ flexDirection: 'column', children: Array.from({ length: 12 }, (_, i) => Text({ children: 'FERRIS-' + i })) })
@@ -5908,18 +5919,24 @@ for (const surface of SURFACES) {
     }
     const ui = await mount($, props)
     const tree = (await ui.drawn()) as Node
-    const forge = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'forge')
+    const buttons = (await ui.findAll({ type: 'Button' })) as Node[]
+    const forge = buttons.find(b => b.props?.key === 'forge')
+    const speed = buttons.find(b => b.props?.key === 'speed')
     await ui.unmount()
-    return { tree, forge, text: cellsOf(tree).map(c => c.text).join('|') }
+    return { tree, forge, speed, speedText: speed === undefined ? null : walkTexts(speed).map(textOf).join(''), text: cellsOf(tree).map(c => c.text).join('|') }
   }
 
-  test('forge tab: a Text of one string from the mod below becomes the last tab, a Button keyed forge; the band row alone when none is open (' + surface + ')', async ($, on) => {
+  test('forge tab: the answer is drawn on the left after the ⓘ (speed, trend, sep, pet in order) and the strip gets one short last tab, a Button keyed forge; the band row alone when none is open (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     const asks: Ask[] = []
     forgeMod(w, asks)
     const d = await draw($)
     expect(d.forge, 'a Button keyed forge is drawn').toBeDefined()
-    expect(d.text).toContain(' ' + FORGE_LABEL + ' ')
+    expect(d.text).toContain(' ϟ ')
+    expect(d.speed, 'the speed cluster is a Button keyed speed').toBeDefined()
+    expect(d.speedText).toBe('│ ' + FORGE_FULL.join(''))
+    expect(((d.tree.children || []) as Node[]).map(c => c.props?.key).filter(k => k === 'info' || k === 'speed'), 'the speed cluster comes right after the ⓘ').toEqual(['info', 'speed'])
+    expect(d.text).not.toContain(' ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1 |') // the label is not a tab any more
     expect(d.tree.type).toBe('Box')
     expect(((d.tree.props as { flexDirection?: string } | undefined)?.flexDirection)).toBeUndefined() // one row: nothing is stacked
     expect(asks.map(a => a.maxRows), 'one ask, for the label').toEqual([1])
@@ -5927,20 +5944,48 @@ for (const surface of SURFACES) {
     expect(asks[0].bodyColumns).toBeLessThanOrEqual(30)
   })
 
-  test('forge tab: the ━ stands under the forge label, the last and an ASCII tab, and the full view is drawn under the rule (' + surface + ')', async ($, on) => {
+  test('forge tab: the ━ stands under the forge tab, the last and an ASCII-width one, and the full view is drawn under the rule (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     const asks: Ask[] = []
     forgeMod(w, asks)
     const d = await draw($, ['forge'])
     const rows = ((d.tree.children || []) as Node[])
     const bar = cellsOf(rows[0])
-    const label = bar.find(c => c.text === ' ' + FORGE_LABEL + ' ') as Cell
+    const label = bar.find(c => c.text === ' ϟ ') as Cell
     const mark = cellsOf(rows[1]).find(c => /^━+$/.test(c.text)) as Cell
     expect(label).toBeDefined()
     expect({ start: mark.start, width: mark.width }).toEqual({ start: label.start, width: label.width })
     expect(d.text).toContain('FERRIS-0')
     expect(d.text).toContain('FERRIS-11')
   })
+
+  test('forge tab: pressing the speed cluster on the left opens the same tab as the strip tab (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    forgeMod(w, [])
+    const d = await draw($, ['speed'])
+    expect(d.text).toContain('FERRIS-0')
+  })
+
+  // the answer's shapes: every row is the band row alone (no stacking) with the speed on the left and the one tab
+  const SHAPES: [ForgeAnswer, string][] = [
+    ['full', '│ ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1'],
+    ['petless', '│ ϟ 93 tok/s ▁▂▃▅▇'],
+    ['speed', '│ ϟ93'],
+    ['notrend', '│ ϟ — tok/s · Ferris Lv.1'],
+    ['dash', '│ ϟ — tok/s'],
+    ['text', '│ ϟ 93 tok/s ▁▂▃▅▇'], // the old shape: one Text, the whole string is the speed
+    ['unknown', '│ ϟ 93 tok/s (happy)'], // a key we do not know is drawn as plain text, not dropped
+  ]
+  for (const [kind, left] of SHAPES) {
+    test('forge tab: answer shape ' + kind + ' draws ' + JSON.stringify(left) + ' on the left and the one ϟ tab (' + surface + ')', async ($, on) => {
+      const w = worldEn(on, richWorld())
+      forgeMod(w, [], { label: kind })
+      const d = await draw($)
+      expect(d.speedText).toBe(left)
+      expect(d.forge).toBeDefined()
+      expect(d.text).toContain(' ϟ ')
+    })
+  }
 
   test('forge tab: opened, the mod below is asked twice in one draw, the label first (one row) and the full view after it, with the rest of the rows (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
@@ -5990,13 +6035,14 @@ for (const surface of SURFACES) {
     expect(asks.slice(-1).map(a => a.maxRows)).toEqual([1])
   })
 
-  test('forge tab: when the mod below answers nothing (the engine) or not a Text, there is no forge tab (' + surface + ')', async ($, on) => {
+  test('forge tab: when the mod below answers nothing (the engine) or a Box that is not made of keyed part Boxes, there is no forge tab and nothing on the left (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
-    for (const label of ['engine', 'box'] as const) {
+    for (const label of ['engine', 'box'] as const) { // undefined and null cannot be played through the chain (a hook that returns nothing is skipped); forgeSegments' own cases cover them
       forgeMod(w, [], { label })
       const d = await draw($)
       expect(d.forge, label).toBeUndefined()
-      expect(d.text, label).not.toContain('forge')
+      expect(d.speed, label).toBeUndefined()
+      expect(d.text, label).not.toContain('ϟ')
     }
   })
 
@@ -6103,4 +6149,106 @@ for (const surface of SURFACES) {
     const d = await rowsD($, ['tab:decide'])
     expect(d.rows.map(textD).join('\n')).toContain('目前沒有待你回答的問題')
   })
+}
+
+// ---- forgeSegments: the one place that reads the shape the mod below answered (contract with codeforge: roles are the part Boxes' props.key; the host strips a Text's key) ----
+{
+  const T = (text: string, key?: string) => ({ type: 'Text', props: key === undefined ? {} : { key }, children: [text] })
+  const B = (key: string | undefined, ...kids: unknown[]) => ({ type: 'Box', props: key === undefined ? { flexDirection: 'row' } : { key }, children: kids })
+  const row = (...parts: unknown[]) => B(undefined, ...parts)
+  const roles = (n: unknown) => (ui.forgeSegments(n) ?? []).map(g => g.role + ':' + g.text)
+  test('forgeSegments: four parts: the speed splits into bolt, value and unit; the trend into its gap and trend; sep and pet keep their text', () => {
+    expect(roles(row(B('speed', T('ϟ 93 tok/s')), B('trend', T(' ▁▂▃')), B('sep', T(' · ')), B('pet', T('Ferris Lv.1'))))).toEqual(['bolt:ϟ ', 'value:93', 'unit: tok/s', 'gap: ', 'trend:▁▂▃', 'sep: · ', 'pet:Ferris Lv.1'])
+  })
+  test('forgeSegments: the role is the Box key, never a Text key (a Text key that names another part is ignored)', () => {
+    expect(roles(row(B('speed', T('ϟ93', 'pet')), B('pet', T('Ferris', 'speed'))))).toEqual(['bolt:ϟ', 'value:93', 'pet:Ferris'])
+  })
+  test('forgeSegments: no sep and no pet; speed alone (the narrowest answer)', () => {
+    expect(roles(row(B('speed', T('ϟ 93 tok/s')), B('trend', T(' ▁▂'))))).toEqual(['bolt:ϟ ', 'value:93', 'unit: tok/s', 'gap: ', 'trend:▁▂'])
+    expect(roles(row(B('speed', T('ϟ93'))))).toEqual(['bolt:ϟ', 'value:93'])
+  })
+  test('forgeSegments: sep and pet without a trend; a speed of em dash; a pet name that holds a separator is kept whole', () => {
+    expect(roles(row(B('speed', T('ϟ — tok/s')), B('sep', T(' · ')), B('pet', T('a · b Lv.2'))))).toEqual(['bolt:ϟ ', 'value:—', 'unit: tok/s', 'sep: · ', 'pet:a · b Lv.2'])
+  })
+  test('forgeSegments: the old shape, one Text of a string, is the speed as a whole; a speed string we cannot read stays one value', () => {
+    expect(roles(T('ϟ 93 tok/s ▁▂ · Ferris Lv.1'))).toEqual(['value:ϟ 93 tok/s ▁▂ · Ferris Lv.1'])
+    expect(roles(row(B('speed', T('fast'))))).toEqual(['value:fast'])
+  })
+  test('forgeSegments: a key we do not know is plain text (role text), kept in its place', () => {
+    expect(roles(row(B('speed', T('ϟ93')), B('mood', T(' (happy)'))))).toEqual(['bolt:ϟ', 'value:93', 'text: (happy)'])
+    expect(roles(row(B(undefined, T('x'))))).toEqual(['text:x'])
+  })
+  test('forgeSegments: undefined, null, the engine ref, an empty Box, a Text child and a non-string child are nothing', () => {
+    for (const n of [undefined, null, { type: 'engine', ref: 0 }, row(), row(T('ϟ93')), row(B('speed', { type: 'Text', children: [{ x: 1 }] })), T('  '), 'str', 5]) expect(ui.forgeSegments(n), JSON.stringify(n)).toBeNull()
+  })
+  test('forgeFit: the pet and its sep go first, then the trend and its gap; the speed alone or nothing', () => {
+    const all = ui.forgeSegments(row(B('speed', T('ϟ 93 tok/s')), B('trend', T(' ▁▂▃')), B('sep', T(' · ')), B('pet', T('Ferris Lv.1')))) ?? []
+    const text = (l: ReturnType<typeof ui.forgeFit>) => (l ?? []).map(g => g.text).join('')
+    expect(text(ui.forgeFit(all, 40))).toBe('ϟ 93 tok/s ▁▂▃ · Ferris Lv.1')
+    expect(text(ui.forgeFit(all, 20))).toBe('ϟ 93 tok/s ▁▂▃')
+    expect(text(ui.forgeFit(all, 10))).toBe('ϟ 93 tok/s')
+    expect(ui.forgeFit(all, 9)).toBeNull()
+  })
+}
+
+// ---- the forge label's colours (plan section 12.11): one existing palette role per part, no new meaning ----
+{
+  const T = (text: string) => ({ type: 'Text', props: {}, children: [text] })
+  const B = (key: string, text: string) => ({ type: 'Box', props: { key }, children: [T(text)] })
+  const row = (...parts: unknown[]) => ({ type: 'Box', props: { flexDirection: 'row' }, children: parts })
+  const FULL = [B('speed', 'ϟ 93 tok/s'), B('trend', ' ▁▂▃'), B('sep', ' · '), B('pet', 'Ferris Lv.1')]
+  const segsOf = (parts: unknown[]) => ui.forgeBar(ui.forgeSegments(row(...parts)) ?? []).segs
+  const at = (segs: ReturnType<typeof segsOf>, text: string) => segs.find(g => g.text === text)
+  test('forgeBar: every part takes one existing role: ϟ and the trend running, the number default, the unit dim, the separator structure, the pet dim (never here)', () => {
+    const segs = segsOf(FULL)
+    expect(at(segs, '│ ')?.color).toBe(ui.PALETTE.structure)
+    expect(at(segs, 'ϟ ')?.color).toBe(ui.PALETTE.running)
+    expect(at(segs, '▁▂▃')?.color).toBe(ui.PALETTE.running)
+    expect(at(segs, '93')?.color).toBeUndefined(); expect(at(segs, '93')?.dim).toBeUndefined()
+    expect(at(segs, ' tok/s')?.color).toBeUndefined(); expect(at(segs, ' tok/s')?.dim).toBe(true)
+    expect(at(segs, ' · ')?.color).toBe(ui.PALETTE.structure)
+    expect(at(segs, 'Ferris Lv.1')?.color).toBeUndefined(); expect(at(segs, 'Ferris Lv.1')?.dim).toBe(true)
+    expect(segs.some(g => g.color === ui.PALETTE.here || g.color === ui.PALETTE.done), 'no part borrows here or done').toBe(false)
+    expect(segs.every(g => g.bold !== true), 'nothing is bold').toBe(true)
+  })
+  test('forgeBar: a speed of em dash is idle as a whole (bolt, number, unit and trend), never running', () => {
+    const segs = segsOf([B('speed', 'ϟ — tok/s'), B('sep', ' · '), B('pet', 'Ferris Lv.1')])
+    for (const text of ['ϟ ', '—', ' tok/s']) expect(at(segs, text)?.color, text).toBe(ui.PALETTE.idle)
+    expect(segs.some(g => g.color === ui.PALETTE.running)).toBe(false)
+    expect(at(segs, 'Ferris Lv.1')?.color).toBeUndefined(); expect(at(segs, 'Ferris Lv.1')?.dim).toBe(true)
+    const withTrend = segsOf([B('speed', 'ϟ — tok/s'), B('trend', ' ▁▂')])
+    expect(at(withTrend, '▁▂')?.color).toBe(ui.PALETTE.idle)
+  })
+  test('forgeBar: narrowed to ϟ93 the speed is still running (the bolt) with a default number', () => {
+    const fit = ui.forgeFit(ui.forgeSegments(row(...[B('speed', 'ϟ93'), ...FULL.slice(1)])) ?? [], 4)
+    expect(fit?.map(g => g.text).join('')).toBe('ϟ93')
+    const segs = segsOf([B('speed', 'ϟ93')])
+    expect(at(segs, 'ϟ')?.color).toBe(ui.PALETTE.running)
+    expect(at(segs, '93')?.color).toBeUndefined(); expect(at(segs, '93')?.dim).toBeUndefined()
+  })
+  test('forgeBar: an unknown part is default text, kept', () => {
+    const segs = segsOf([B('speed', 'ϟ93'), B('mood', ' (happy)')])
+    expect(at(segs, ' (happy)')?.color).toBeUndefined(); expect(at(segs, ' (happy)')?.dim).toBeUndefined()
+  })
+  for (const surface of SURFACES) {
+    test('forge label colours on the drawn band: the Texts of the speed Button carry those roles (' + surface + ')', async ($, on) => {
+      const w = worldEn(on, richWorld())
+      const full = [B('speed', 'ϟ 93 tok/s'), B('trend', ' ▁▂▃'), B('sep', ' · '), B('pet', 'Ferris Lv.1')]
+      w.lower = ($2, e) => {
+        const { Box, Text } = $2.ui.resolve(e)
+        const mk = (n: any): any => Box({ key: n.props.key, children: [Text({ children: n.children[0].children[0] })] })
+        return e.props.maxRows === 1 ? Box({ flexDirection: 'row', children: full.map(mk) }) : { type: 'engine' as const, ref: 0 }
+      }
+      await start($, surface)
+      const ui0 = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-fc', props: { ...BAND_PROPS, maxRows: 20 }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+      const speed = ((await ui0.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'speed') as Node
+      await ui0.unmount()
+      const byText = (t: string) => walkTexts(speed).find(n => textOf(n) === t)?.props as { color?: string; dimColor?: boolean } | undefined
+      expect(byText('ϟ ')?.color).toBe(ui.PALETTE.running)
+      expect(byText('▁▂▃')?.color).toBe(ui.PALETTE.running)
+      expect(byText(' · ')?.color).toBe(ui.PALETTE.structure)
+      expect(byText('Ferris Lv.1')).toMatchObject({ dimColor: true })
+      expect(byText('Ferris Lv.1')?.color).toBeUndefined()
+    })
+  }
 }

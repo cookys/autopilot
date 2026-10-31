@@ -1,6 +1,6 @@
 # Live pane design system — one IA, one visual vocabulary, enforced in code
 
-Status: **frozen** (2026-10-13) after two plan-review generations (§10, §10.2, §10.3; receipts in [`evidence/2026-10-13-live-pane/plan-review/`](evidence/2026-10-13-live-pane/plan-review/README.md)). Ready for P0; no product code changed yet. Amended in place on 2026-10-16 by [§12](#12-revision-2026-10-16-the-semantic-palette) (colour and emphasis only; where §3.2, §3.4 and §3.6 differ from §12, §12 wins), and on 2026-10-17 by [§12.10](#1210-a-scrolling-window-the-fixed-action-strip-and-the-scrollbar) (a scrolling window keeps its action strip fixed and draws a scrollbar; the 待決 tab and the viewer window use it; §12.9 point 4 changed for the send button). The dispatch tree (formerly P6) moved to [`2026-10-13-dispatch-tree.md`](2026-10-13-dispatch-tree.md).
+Status: **frozen** (2026-10-13) after two plan-review generations (§10, §10.2, §10.3; receipts in [`evidence/2026-10-13-live-pane/plan-review/`](evidence/2026-10-13-live-pane/plan-review/README.md)). Ready for P0; no product code changed yet. Amended in place on 2026-10-16 by [§12](#12-revision-2026-10-16-the-semantic-palette) (colour and emphasis only; where §3.2, §3.4 and §3.6 differ from §12, §12 wins), and on 2026-10-17 by [§12.10](#1210-a-scrolling-window-the-fixed-action-strip-and-the-scrollbar) (a scrolling window keeps its action strip fixed and draws a scrollbar; the 待決 tab and the viewer window use it; §12.9 point 4 changed for the send button). On 2026-11-01 [§12.11](#1211-the-forge-label-on-the-bands-left-owner-ruling-2026-11-01-d-1081338d) says which existing role each part of the forge label on the band takes (no role added, no meaning changed). The dispatch tree (formerly P6) moved to [`2026-10-13-dispatch-tree.md`](2026-10-13-dispatch-tree.md).
 Scope: the live mod's pane (`mods/live/pane.tsx`, `mods/live/model.ts`) and the glyphs it shares with the band (`mods/live/band.tsx`).
 Builds on the approved TUI v2 design: [`evidence/2026-10-10-tui-v2/ia.md`](evidence/2026-10-10-tui-v2/ia.md) (colour semantics, glyph vocabulary) and [`i18n.md`](evidence/2026-10-10-tui-v2/i18n.md).
 
@@ -959,3 +959,18 @@ Owner: 「C，連同 live 待決」. A window whose content is longer than the p
 6. **The cost: no wrapping.** The mod cuts the window into whole rows itself, so a code line wider than the room is cut at the edge (`truncate-end`), not wrapped; the answer text is wrapped by the mod to the width (CJK counted two cells) before it is cut. A summary answer sits INSIDE the scrolling content, above the file, so a long answer scrolls to its end like anything else and the strip never grows; hiding it starts the content at the top again.
 7. **Enforcement.** `scroll.test.ts` (thumb at top, middle and bottom; none when it fits; every `ui.scroll` key; clamp), `live.test.ts` ("SCROLL decide": the send row is the last child under the rule and not among the scrolling rows), `viewer.test.ts` ("SCROLL viewer"), and the ui-lint glyph tables (`scrollbar` is a table of its own). Negative controls, run red then restored: the strip drawn inside the scrolling rows, and a thumb that stops one cell short of the bottom.
 8. **The mod takes `ui.scroll` only while it drew a frame.** Each draw records whether it was a frame (`ScrollModel.framed`); `scrollHook` hands every other event to `next(e)`, so a host with no `bodyColumns`, no Button, no band, or another tab is scrolled by the engine. A page move (PgUp, PgDn) is capped to the rows on screen, so no row is skipped between two pages. A decide list that only grows (a new card arrives) keeps its place. Known limit: `$` has no focus API, so Tab cannot reach a button that is scrolled out of the window; scroll to it with the arrow keys first.
+
+### 12.11 The forge label on the band's left (owner ruling 2026-11-01, d-1081338d)
+
+Owner: 「A：藍色速度、灰色寵物，符合 §12」. The band row is the indicator, then `│ ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1` (the label the mod below, forge-stats, answers as keyed part Boxes), then the tabs; the strip keeps one short `ϟ` tab that opens the mod's full view, and pressing the speed on the left opens the same view. This adds no role and changes no meaning in §12.1; it only says which existing role each part of the label takes:
+
+| Part (the mod's Box key) | Role | Why this role |
+|---|---|---|
+| `ϟ` and the trend (`speed`, `trend`) | `running` | the speed is how fast the running work goes, the same "running now" as the `●N` beside it |
+| the number (`speed`) | default text | a value |
+| ` tok/s` (`speed`) | `dim` | a unit |
+| ` · ` (`sep`) | `structure` | a separator |
+| the pet (`pet`) | `dim` | secondary; the pet is not a state, so no state colour |
+| any part with a key we do not know | default text | drawn, never dropped |
+
+A speed of `—` (nothing measured) draws the whole speed part `idle`: nothing is running. Narrowing drops the pet with its separator first, then the trend, and the last form `ϟ93` is still `running`. `done` (green) and `here` (orange) are not used: a rate is not "finished" and a pet is not "where you are". Enforcement: `live.test.ts` ("forgeBar": one role per part, `—` is idle, `ϟ93` is running, a pet painted `here` is reported by the control).

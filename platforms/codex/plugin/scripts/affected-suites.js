@@ -242,27 +242,37 @@ const ALWAYS_RUN = [
 // A repo file that an evaluation pack copies (pack manifest entry `<pack id>/<relative path>`) is compared against the
 // repo by the pack's content suite, and no source reference shows it. [pack id regex, suite]
 const PACK_CONTENT_SUITES = [[/bpack/, `${HOOK_TESTS_DIR}/bpack-content.test.sh`]];
+// The id test is "contains", on purpose: skill packs are named `<skill>-bpack-<arm>` (ceo-agent-bpack-change), so a prefix
+// or exact match would miss them. Behaviour is fixed; do not narrow it.
 // -> Map(content suite -> changed files) for the changed files that some pack's manifest entry copies.
+// A skill pack (id starts with an existing skill directory name plus `-`, longest name wins) holds that skill's own
+// relative paths, so it matches only `skills/<name>/<rel>`; any other pack holds repo paths whole and matches `<rel>`.
 function packContentSuites(changed, headTree) {
   const out = new Map();
   let man;
   try { man = JSON.parse(headTree.read(PACK_MANIFEST)).packs; } catch { return out; }
   if (!man || typeof man !== 'object') return out;
+  const skills = [...new Set(headTree.files.map((f) => /^skills\/([^/]+)\//.exec(f)).filter(Boolean).map((m) => m[1]))];
+  const skillOf = (id) => skills.filter((s) => id.startsWith(s + '-')).sort((x, y) => y.length - x.length)[0] || null;
+  let candidates = 0, parsed = 0;
   for (const [id, files] of Object.entries(man)) {
     const hit = PACK_CONTENT_SUITES.find(([re]) => re.test(id));
-    if (!hit || !files || typeof files !== 'object') continue;
+    if (!hit) continue;
+    candidates++;
+    if (!files || typeof files !== 'object') continue;
+    const skill = skillOf(id);
     for (const entry of Object.keys(files)) {
       if (!entry.startsWith(id + '/')) continue;
+      parsed++;
       const rel = entry.slice(id.length + 1);
-      // A skill pack is `<skill>-...` holding that skill's own relative paths; other packs hold repo paths whole.
-      for (const p of changed) {
-        if (p === rel || (p.startsWith('skills/') && id.startsWith(p.split('/')[1] + '-') && p === `skills/${p.split('/')[1]}/${rel}`)) {
-          if (!out.has(hit[1])) out.set(hit[1], new Set());
-          out.get(hit[1]).add(p);
-        }
+      const want = skill ? `skills/${skill}/${rel}` : rel;
+      if (changed.includes(want)) {
+        if (!out.has(hit[1])) out.set(hit[1], new Set());
+        out.get(hit[1]).add(want);
       }
     }
   }
+  if (candidates > 0 && parsed === 0) process.stderr.write(`affected-suites: warning: ${PACK_MANIFEST} lists ${candidates} bpack pack(s) but no entry parsed as "<pack id>/<path>"; pack-content selection is inactive (manifest format drift?)\n`);
   return out;
 }
 // Prose cannot break a suite; mirrors are covered by the always-run codex-plugin-package suite.

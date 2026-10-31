@@ -1356,3 +1356,44 @@ test('a file copied by a bpack pack selects bpack-content; the mapping is what s
     } finally { fs.rmSync(copy, { recursive: true, force: true }); }
   } finally { r.cleanup(); }
 });
+
+// bpackfix g1: skill packs match only under skills/<name>/, the longest skill prefix wins, and a manifest whose
+// bpack entries do not parse warns on stderr.
+const packFx = () => {
+  const BP = 'hooks/tests/bpack-content.test.sh';
+  const man = (packs) => JSON.stringify({ packs });
+  const run = (extraFiles, change) => {
+    const r = makeRepo({ ...LAYOUT, 'hooks/tests/bpack-content.test.sh': '#!/usr/bin/env bash\ntrue\n', ...extraFiles });
+    try {
+      const head = r.change(change);
+      const res = require('child_process').spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head, '--json'], { encoding: 'utf8' });
+      return { out: JSON.parse(res.stdout), err: res.stderr };
+    } finally { r.cleanup(); }
+  };
+  return { BP, man, run, M: 'evals/skill-onoff/packs/manifest.json' };
+};
+test('pack matching 1: a root file sharing a relative path with a skill pack is not packed', () => {
+  const { BP, man, run, M } = packFx();
+  // a root file that only shares a relative path with a skill pack is not packed and keeps the unreferenced -> full verdict
+  const a = run({ [M]: man({ 'ceo-agent-bpack-change': { 'ceo-agent-bpack-change/references/card.md': 'x' } }), 'skills/ceo-agent/references/card.md': 'a\n', 'references/card.md': 'a\n' }, { 'references/card.md': 'b\n' });
+  assert.ok(!a.out.suites.includes(BP), 'root file named like a skill-pack path must not select bpack-content');
+  assert.strictEqual(a.out.mode, 'full');
+  assert.ok(a.out.unreferenced.includes('references/card.md'));
+});
+test('pack matching 2: longest skill prefix wins', () => {
+  const { BP, man, run, M } = packFx();
+  // skills `ceo` and `ceo-agent` both exist: ceo-agent-bpack-x belongs to ceo-agent only
+  const files2 = { [M]: man({ 'ceo-agent-bpack-x': { 'ceo-agent-bpack-x/references/c.md': 'x' } }), 'skills/ceo/references/c.md': 'a\n', 'skills/ceo-agent/references/c.md': 'a\n' };
+  const b1 = run(files2, { 'skills/ceo/references/c.md': 'b\n' });
+  assert.ok(!b1.out.suites.includes(BP), 'skill ceo must not claim the ceo-agent pack');
+  const b2 = run(files2, { 'skills/ceo-agent/references/c.md': 'b\n' });
+  assert.ok(b2.out.suites.includes(BP), 'skill ceo-agent owns its pack');
+});
+test('pack matching 3: unparsable bpack manifest entries warn on stderr', () => {
+  const { man, run, M } = packFx();
+  // a manifest with bpack packs but no parsable entry warns; a good manifest does not
+  const c = run({ [M]: man({ 'bpack-files-change': { 'references/x.md': 'x' } }), 'references/x.md': 'a\n' }, { 'references/x.md': 'b\n' });
+  assert.match(c.err, /no entry parsed/);
+  const d = run({ [M]: man({ 'bpack-files-change': { 'bpack-files-change/references/x.md': 'x' } }), 'references/x.md': 'a\n' }, { 'references/x.md': 'b\n' });
+  assert.doesNotMatch(d.err, /no entry parsed/);
+});

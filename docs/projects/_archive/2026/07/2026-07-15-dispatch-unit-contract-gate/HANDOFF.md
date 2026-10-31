@@ -4,7 +4,7 @@
 
 ## 現況
 
-- Repo: `/home/cookys/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
+- Repo: `$HOME/projects/autopilot`; branch: `feat/dispatch-unit-contract-gate` tracking
   `origin/feat/dispatch-unit-contract-gate`; the latest bounded l6 recovery ran from reviewed,
   pushed MiniMax-r4 authorization commit `85425435b831a39a13d875c07c2bf1909a2e788a`. Product tree remains clean;
   no accepted product/test code。
@@ -480,11 +480,11 @@
 
 ## Read-order
 
-1. `/home/cookys/projects/autopilot/docs/projects/2026-07-15-dispatch-unit-contract-gate/HANDOFF.md` — current blocker and exact safe resume condition.
-2. `/home/cookys/projects/autopilot/docs/projects/2026-07-15-dispatch-unit-contract-gate/README.md` — scope audit, attempt ledger, and progress state.
-3. `/home/cookys/projects/autopilot/docs/plans/2026-07-15-dispatch-unit-contract-gate.md` — frozen authority/schema/units.
+1. `$HOME/projects/autopilot/docs/projects/2026-07-15-dispatch-unit-contract-gate/HANDOFF.md` — current blocker and exact safe resume condition.
+2. `$HOME/projects/autopilot/docs/projects/2026-07-15-dispatch-unit-contract-gate/README.md` — scope audit, attempt ledger, and progress state.
+3. `$HOME/projects/autopilot/docs/plans/2026-07-15-dispatch-unit-contract-gate.md` — frozen authority/schema/units.
 4. `/tmp/autopilot-dispatch-contracts/dispatch-unit-contract-c1/C1-bootstrap-checklist.md` — full hashes, live probes, author outcomes, and quarantines.
-5. `/home/cookys/.claude/projects/-home-cookys-projects-autopilot/memory/project_dispatch-contract-authority.md` — cross-session probe/author landmines.
+5. `$HOME/.claude/projects/-home-<user>-projects-autopilot/memory/project_dispatch-contract-authority.md` — cross-session probe/author landmines.
 
 ## 陷阱
 

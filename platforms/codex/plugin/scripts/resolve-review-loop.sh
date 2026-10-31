@@ -1083,7 +1083,7 @@ process.exit(0);
   # read (above) and then silently overwritten here, so a config that named
   # MiniMax-M3@cc-shim/minimax resolved to opus/high@claude-native with only a generic
   # warning — and a Claude chair reviewing Claude's plan returns an empty finding list
-  # that is indistinguishable from a clean review (7840hs, 2026-09-12: READY with zero
+  # that is indistinguishable from a clean review (<host>, 2026-09-12: READY with zero
   # findings; the repaired seat found three blockers, one overturning a Phase premise).
   _plan_chair_declared=0
   if [[ -n "$PLAN_REV_ENGINE" && -n "$PLAN_REV_RUNNER" && -n "$PLAN_REV_EFFORT" ]]; then

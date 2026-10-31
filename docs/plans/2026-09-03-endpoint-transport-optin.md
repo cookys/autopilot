@@ -2,7 +2,7 @@
 
 **Date**: 2026-09-03 · **Target**: v2.35.11 · **Size**: L (3+ modules, config-format extension)
 **狀態**: ✅ Shipped in v2.35.11 — merged as `a4d5d8f9`
-**Trigger**: `qwen3.8-flash-next` (local SGLang on cookys-cuda, `http://192.168.101.7:8001`)
+**Trigger**: `qwen3.8-flash-next` (local SGLang on <host>, `http://<private-ip>:8001`)
 qualified 24/24 as implementer over cc-shim (`docs/plans/evidence/2026-09-03-flash-next-implementer-qualify/`),
 but daily routing via `implementer_endpoint:` cannot reach it: `resolve-endpoint.sh` accepts
 `http://` only for loopback, while the exam reached it through the raw `ANTHROPIC_BASE_URL`

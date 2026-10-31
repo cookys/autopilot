@@ -271,7 +271,7 @@ Phase 0's plan choice and the phone-steering question are closed: the dry run us
 
 ## Phase 0 result (2026-09-19)
 
-Ran on hangar `docs/plans/peer-advisory-availability.md`: three seats (aimax395/claude, cuda/claude, cuda/grok), three rounds,
+Ran on hangar `docs/plans/peer-advisory-availability.md`: three seats (<host-a>/claude, <host-b>/claude, <host-b>/grok), three rounds,
 ~45 min, unanimous on every question, the plan changed shape (offer/lessons split, tool-written stub + one-line asker obligation
 + gate, falsifiable P4). Evidence dir `docs/plans/evidence/2026-09-19-roundtable/` is **history**: `transcript.md`, `sends.jsonl`, `plan.diff`, `notes.md` (F1–F7, cost). Those two log names are the Phase 0 record only. They are not the live record; later phases use `room.jsonl` (§6). Write-back
 landed in hangar `b9438dd`. **Operator's verdict (cookys, 2026-09-19): worth it** — "值". Decision at the time: **do not build the skill yet;

@@ -1,12 +1,12 @@
 # Default dispatch topology — brain up, hands down
 
 Status: **design + rollout proposal, awaiting owner decisions (§8)**. Requested 2026-09-04 by the
-owner via the revival.3d CEO on cuda (fleet msg `msg_01M1MZ55SZFJYA5A68EW9PF8QW`). No code in this
+owner via the revival.3d CEO on <host> (fleet msg `msg_01M1MZ55SZFJYA5A68EW9PF8QW`). No code in this
 commit.
 
 ## 0. Context / thesis
 
-revival.3d evidence (cuda memories `quota-opus-foreman-cost`, `standing-foremen-burn-quota`,
+revival.3d evidence (<host> memories `quota-opus-foreman-cost`, `standing-foremen-burn-quota`,
 `foreman-cost-is-the-polling-loop`; autopilot `docs/plans/2026-09-04-foreman-cost-discipline.md`):
 a dozen implementation cuts in one day ran on sonnet while standing foremen burned ≈$1,180 in a day
 and a half. v2.35.15 put the *polling* burn behind gates (`foreman-guard`, cost hooks default-on).
@@ -82,8 +82,8 @@ Three gaps make the stated policy a wish rather than a default:
 
 | # | Phase | Size | Acceptance |
 |---|---|---|---|
-| P0 | **Measure first**: `cost-digest.js` over existing `costs.jsonl` on aimax395 + cuda; publish the day-by-tier table in this plan's evidence dir | S | the $1,180 shape is reproduced from the ledger, not from memory; threshold in P3 is chosen from this table |
-| P1 | **Topology resolver** + `implementer_ladder: auto` + rung-0 default | L | KR1 on aimax395 (18 qualified seats: expect ladder `gemini-3.8-flash low → medium → high`, `muse-spark`, `qwen3.8-flash-next`, `grok…`); on a scratch host with no runners → claude fallback ladder; unit tests for both; `--check` in `sync-all.sh` |
+| P0 | **Measure first**: `cost-digest.js` over existing `costs.jsonl` on <host-a> + <host-b>; publish the day-by-tier table in this plan's evidence dir | S | the $1,180 shape is reproduced from the ledger, not from memory; threshold in P3 is chosen from this table |
+| P1 | **Topology resolver** + `implementer_ladder: auto` + rung-0 default | L | KR1 on <host> (18 qualified seats: expect ladder `gemini-3.8-flash low → medium → high`, `muse-spark`, `qwen3.8-flash-next`, `grok…`); on a scratch host with no runners → claude fallback ladder; unit tests for both; `--check` in `sync-all.sh` |
 | P2 | **Routing flip + guard tightening + brief header** | S | KR2/KR3; `dispatch-model-guard.test.sh` gains mode-aware and header cases; `resolve-dispatch.test` pinned to sonnet |
 | P3 | **Cost fuse** warn-mode default-on; block after calibration week | S + 1 week | KR4; fuse fires on a synthetic ledger in tests; real-ledger warn lines observed on ≥2 hosts |
 | P4 | **Skill text + front-door canonical paragraph**; l3 posture per Q3 | S | prose↓ engine↑ ratchet holds; slash-entry probes green |
@@ -128,5 +128,5 @@ existing override files; cross-host quota pooling.
 
 ## Review log
 
-R0 author: autopilot session on aimax395, 2026-09-04. No review yet — this is a proposal for the
+R0 author: autopilot session on <host>, 2026-09-04. No review yet — this is a proposal for the
 owner; plan review (rubric-frozen, ≤2 generations) runs after §8 answers.

@@ -18,7 +18,7 @@
 | CHANGELOG / version bump / grep sync | P4.3 (`sync-version.js` 2.36.1, hook count 29) |
 | Dependent repo | codeforge P1 ships first, own commit + one hetero seat review |
 | Credit | none absorbed |
-| Dogfood target | this host (aimax395) is the P0 spike host and the P2 real-l4-run host |
+| Dogfood target | this host (<host>) is the P0 spike host and the P2 real-l4-run host |
 
 User-stated requirements ledger: RAM not SSD → KR4/§2.5; probe mount type never assume → §2.5; fake-findmnt fallback test → KR4/P1.1/P2.1; plan through hetero loop → done; gate depth-0 self-research → KR3/P3.
 

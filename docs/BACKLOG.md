@@ -10,7 +10,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 
 **FIRED queue (order, as of 2026-09-14)** — rows whose trigger has fired are worked in this order:
 
-1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`cookys-7840hs` four defects~~ v2.36.33 ·
+1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`<host>` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
@@ -108,15 +108,15 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-11
 - **Origin**: peer
-- **Reporter**: twgs-revival
+- **Reporter**: <host>
 - **Report**: 2026-09-11 peer
 - **Reply**: 2026-09-11 session 587b795f:2936
-- **Problem**: twgs-revival 回報：agy 改用 stream-json 輸入雖提高了內容上限，但超過上限後會無聲失敗而不報錯。我方已在本機驗證屬實，目前仍保留硬性上限檢查。 (draft)
+- **Problem**: <host> 回報：agy 改用 stream-json 輸入雖提高了內容上限，但超過上限後會無聲失敗而不報錯。我方已在本機驗證屬實，目前仍保留硬性上限檢查。 (draft)
 - **Impact**: 若有人移除上限檢查，超長內容會無聲出錯；現行檢查已擋住，只需保留該原則。 (draft)
 - **Trigger**: the next agy-rail dispatch refused by `agy_argv_ceiling_assert`, or any work that proposes routing `dispatch-review.sh` / `dispatch-hetero.sh` / `dispatch-author.sh` through stream-json.
 - **Trigger-Type**: event
 - **Effort**: S
-- **Source**: peer report from twgs-revival 2026-09-11, re-derived locally the same day with four probes; the since-removed `lib/agy-argv-ceiling.sh` guard, callers at…
+- **Source**: peer report from <host> 2026-09-11, re-derived locally the same day with four probes; the since-removed `lib/agy-argv-ceiling.sh` guard, callers at…
 - **Pointer**: docs/backlog/agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a.md
 - **Context**: agystdin 0221af27e: stdin stream-json shipped fail-closed (170000 B cap, empty-response and token-ceiling checks). Stays open: lifting the cap safely needs a per-host measurement or a tail-nonce self-check.
 
@@ -461,7 +461,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-08-25
 - **Origin**: peer
-- **Reporter**: cuda（推定）
+- **Reporter**: <host>（推定）
 - **Report**: 2026-08-24 peer
 - **Reply**: 2026-08-25 session 61892959:1108
 - **Problem**: 其他專案經 peer 通道要求新增「同儕協調」技能，讓多個 session 互相派工、溝通有統一做法。兩輪異質審查已裁定要做，但要先在各機器跑完實測才能動工。 (draft)
@@ -478,7 +478,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-09-06
 - **Origin**: peer
-- **Reporter**: cuda（revival.3d）
+- **Reporter**: <host>（revival.3d）
 - **Report**: 2026-09-06 peer
 - **Reply**: 2026-09-05 session e1e51201:1496
 - **Problem**: 可逆的候選改動仍要過發版核准。煮乾湖泊那條已評過但沒有資訊量，是否再測一次由擁有者決定。
@@ -486,7 +486,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: owner decides to open this; point 3 (reversible-candidate release gates) and an optional point-1 re-try remain
 - **Trigger-Type**: owner
 - **Effort**: M
-- **Source**: cuda revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on cuda (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
+- **Source**: <host> revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on <host> (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
 - **Pointer**: docs/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md
 - **Context**: Point 2 shipped in the 98e5c6e7d merge. BL-0147 is tracked separately. Owner decision card d-c9b50973 for text.
 
@@ -495,7 +495,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-03
 - **Origin**: peer
-- **Reporter**: cuda chatgpt-tunnel
+- **Reporter**: <host> chatgpt-tunnel
 - **Report**: 2026-10-03 peer
 - **Reply**: 2026-10-03 session 76c98aac:1628; 2026-10-15 reporter: no campaign run since 10-08, in_rail_review: single at seal is enough, shelve until hit
 - **Problem**: 其他專案的 campaign（自動化連續任務）建立後被封存，之後想在同一個 campaign 內改成「每次修復單獨審查、最後再整體審查」，目前做不到，只能在建立時選。 (draft)
@@ -503,7 +503,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: next peer/operator campaign needing per-repair single review plus a terminal panel inside one already-sealed campaign
 - **Trigger-Type**: event
 - **Effort**: M
-- **Source**: peer-reported cuda/chatgpt-tunnel 2026-10-03
+- **Source**: peer-reported <host>/chatgpt-tunnel 2026-10-03
 - **Pointer**: docs/backlog/sealed-campaign-review-station-migration.md
 - **Context**: single+terminal panel works at intake; only in-place migration of a sealed campaign's review_station is missing.
 
@@ -859,14 +859,14 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/2026-10-13-workflow-snapshot-at-compaction.md
 - **Context**: Prior row deleted in 0a9c9efac. BL-0147 covers T2 text only, not P3.
 
-### default-dispatch-topology P5 per-host rollout, cuda first
+### default-dispatch-topology P5 per-host rollout, <host> first
 - **Id**: BL-0244
 - **Status**: open
 - **Since**: 2026-10-19
 - **Origin**: self
-- **Problem**: 預設派工拓樸的逐主機推廣還沒做，原來說先從 cuda 那台開始。之後預設拓樸又改過，是否仍適用尚未確認。
+- **Problem**: 預設派工拓樸的逐主機推廣還沒做，原來說先從 <host> 那台開始。之後預設拓樸又改過，是否仍適用尚未確認。
 - **Impact**: 各主機可能一直用舊的拓樸設定，沒有人安排逐台更新。
-- **Trigger**: per-host rollout of the default dispatch topology, cuda first
+- **Trigger**: per-host rollout of the default dispatch topology, <host> first
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
@@ -892,7 +892,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-19
 - **Origin**: peer
-- **Reporter**: codepower twgs-revival
+- **Reporter**: codepower <host>
 - **Report**: 01M59ZPRRAH8CGMG59HHD8816N
 - **Reply**: 2026-10-19 01M59ZQBD887MCS212ZQY3MYDX
 - **Problem**: 第十一節降級並記錄整合之後，任務圖仍判定還沒準備好，也沒有辦法把節點標成結束。
@@ -900,16 +900,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: after a section 11 downgrade and record-integration, the mission graph still says not ready and nothing marks the node terminal
 - **Trigger-Type**: ready
 - **Effort**: M
-- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Source**: PEER-REPORTED codepower <host> 2026-10-19
 - **Pointer**: docs/backlog/mission-not-ready-after-section-11-downgrade.md
-- **Context**: See BL-0220. 2026-10-23 BLOCKED: no "section 11 downgrade" concept in the repo; need a minimal repro from codepower twgs-revival (detail in the Pointer); the fleet MCP was down, request not sent.
+- **Context**: See BL-0220. 2026-10-23 BLOCKED: no "section 11 downgrade" concept in the repo; need a minimal repro from codepower <host> (detail in the Pointer); the fleet MCP was down, request not sent.
 
 ### One command that writes the autocompact window and the context budget
 - **Id**: BL-0250
 - **Status**: open
 - **Since**: 2026-10-19
 - **Origin**: peer
-- **Reporter**: codepower twgs-revival
+- **Reporter**: codepower <host>
 - **Report**: 01M59WNDJSZG3Y6YTERWD9DF4J
 - **Reply**: 2026-10-19 01M59WPA9TSF4TR7ST9AJRWF4V
 - **Problem**: 每次工作階段開始的對齊檢查與完整提示已經出貨。剩下的是一道指令同時把兩處的建議值寫好，這件事還沒做。
@@ -917,7 +917,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: the owner asks for one command that writes both recommended values
 - **Trigger-Type**: event
 - **Effort**: S
-- **Source**: PEER-REPORTED codepower twgs-revival 2026-10-19
+- **Source**: PEER-REPORTED codepower <host> 2026-10-19
 - **Pointer**: docs/backlog/autocompact-window-context-budget-manual-align.md
 - **Context**: Alignment check and full prompt shipped in merge e993e0fc0. The one-command writer is not built.
 
@@ -997,7 +997,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-21
 - **Origin**: peer
-- **Reporter**: llm-playground claude-4 (c4140)；llm-playground claude-4 (c4140)；llm-playground claude-4 (c4140)
+- **Reporter**: llm-playground claude-4 (<host>)；llm-playground claude-4 (<host>)；llm-playground claude-4 (<host>)
 - **Report**: 01M5EWE5D6HT343H26BCXSHBPM；01M5EX8WGH1FT9MJDXYNQ2WGWN；01M5EY27E8E1PJVDB7B05FEENX
 - **Reply**: 2026-10-21 01M5EWEHPTPD4F0P6KAP5VDCAH；2026-10-21 01M5EX9883PHTTG3N2HPE08CG6；2026-10-21 01M5EY2GX2JCMJB1VX3TMF81EX
 - **Problem**: 跨工具的長駐席位沒有共用的用量紀律。交接時機、讀檔、輪詢、子代理與回覆節奏都靠各席自己拿捏。
@@ -1125,7 +1125,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-24
 - **Origin**: peer
-- **Reporter**: llm-playground c4140
+- **Reporter**: llm-playground <host>
 - **Report**: 01M5NBBZDBHD4Y53Q78QP2ZNKB
 - **Reply**: none
 - **Problem**: 長時間的工作階段不會回收背景工作：背景殼層、監看與等待迴圈會一直累積，tasks 目錄也越積越多。peer llm-playground 回報。
@@ -1133,7 +1133,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: a long session shows leftover background shells, or a state-checkpoint restore is edited
 - **Trigger-Type**: event
 - **Effort**: M
-- **Source**: PEER-REPORTED llm-playground c4140 2026-10-24
+- **Source**: PEER-REPORTED llm-playground <host> 2026-10-24
 - **Pointer**: docs/backlog/long-session-background-work-not-reaped.md
 
 ### fbtool P1: findings-write protection must land before the cc runner
@@ -1207,7 +1207,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-26
 - **Origin**: peer
-- **Reporter**: twgs-revival peace--claude-2
+- **Reporter**: <host> peace--claude-2
 - **Report**: 2026-10-26 fleet
 - **Reply**: 2026-10-26 fleet
 - **Problem**: 3.0.0-alpha.6 在 agy 1.4.7 安裝驗證失敗（3 個錯誤、4 個警告，載入的 agent 為 0）：三個 agent 檔的工具欄位格式不對，另有檔案不被載入或被截斷。
@@ -1215,7 +1215,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: someone needs the autopilot plugin itself installed on agy, or agy reviewers stop using cleanroom
 - **Trigger-Type**: event
 - **Effort**: M
-- **Source**: PEER-REPORTED twgs-revival (peace--claude-2) 2026-10-26, agy 1.4.7, 3.0.0-alpha.6
+- **Source**: PEER-REPORTED <host> (peace--claude-2) 2026-10-26, agy 1.4.7, 3.0.0-alpha.6
 - **Pointer**: docs/backlog/agy-147-plugin-install-validation.md
 - **Context**: Check first whether Claude Code and Codex read an array-form tools field; then edit the source files or convert at agy install time.
 
@@ -1224,7 +1224,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-26
 - **Origin**: peer
-- **Reporter**: twgs-revival peace--claude
+- **Reporter**: <host> peace--claude
 - **Report**: 2026-10-26 fleet
 - **Reply**: 2026-10-26 fleet
 - **Problem**: peer 回報編排者自己拖慢進度的七處：交接檔不分 owner 指示與前任判斷、停滯偵測看不到只改計畫不合入、DOA 內仍去問、審查迴圈不隨嚴重度縮編等。
@@ -1232,7 +1232,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: an ON/OFF eval slot opens for items 1, 5, 7, the item 3 DOA-table rows and the top-stale wiring (efficiency class, jumps the queue)
 - **Trigger-Type**: owner
 - **Effort**: L
-- **Source**: PEER-REPORTED twgs-revival (peace--claude) 2026-10-26
+- **Source**: PEER-REPORTED <host> (peace--claude) 2026-10-26
 - **Pointer**: docs/backlog/orchestrator-self-slowdown-seven-gaps.md
 - **Context**: Items 2, 6 shipped c9366c79a; item 3 mechanism shipped 4a34aa3a0; item 4 closed (d-f1aea07b, A). Left: top-stale wiring, item 3 DOA-table rows, items 1, 5, 7, all guidance needing ON/OFF eval. See sidecar.
 
@@ -1445,7 +1445,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-31
 - **Origin**: peer
-- **Reporter**: llm-playground session on 4124gs；llm-playground session on 4124gs
+- **Reporter**: llm-playground session on <host>；llm-playground session on <host>
 - **Report**: 01M66YQ9Y3R3PC1DF2EK7HGXKH；01M66YW3B1QS5VK0PNAA9JTBN0
 - **Reply**: 2026-10-31 01M66YQG8DWF6HCWJ9N335GH43；2026-10-31 01M66Z1CTT0FDC92N0WWARYBDP
 - **Problem**: 新機器或重開機清掉暫存目錄後，許多地方假設目錄、檔案或工具已存在，缺了就中止或悄悄失效；例子是狀態列常駐顯示無法使用，因為背景監看程式找不到清單目錄。
@@ -1453,7 +1453,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: U1 merged 700dce7db (2026-10-31), pushed, reporter notified (fleet msg 01M67VAETCTWH5C1ZPZKC2KJ65); U2 remains: doctor, detach/flock failure messages, F5 diagnostics, evaluateLiveDir
 - **Trigger-Type**: ready
 - **Effort**: M
-- **Source**: PEER-REPORTED llm-playground 2026-10-31, scope widened by owner via 4124gs
+- **Source**: PEER-REPORTED llm-playground 2026-10-31, scope widened by owner via <host>
 - **Pointer**: docs/backlog/missing-path-assumptions.md
 - **Context**: Widened by owner (second Report). Eg runs-watch.js:1059 aborts on missing /tmp/autopilot-dispatch-runs. Design doc first (inventory, ensureDir helper, unavailable reason, doctor, empty-HOME test).
 
@@ -1479,7 +1479,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-31
 - **Origin**: peer
-- **Reporter**: llm-playground session on 4124gs
+- **Reporter**: llm-playground session on <host>
 - **Report**: 01M66Z68PA0PZDR96C0XRKECP1
 - **Reply**: none
 - **Problem**: 開工提示把派工單頭三行串成一行，照抄會被預算守衛擋；改三行後，貴引擎又被模型守衛擋，因為提示沒寫「刻意使用」的寫法，兩道守衛各擋一次。
@@ -1487,7 +1487,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: work can start now
 - **Trigger-Type**: ready
 - **Effort**: S
-- **Source**: PEER-REPORTED 4124gs 2026-10-31, owner asked; depth-0 verified
+- **Source**: PEER-REPORTED <host> 2026-10-31, owner asked; depth-0 verified
 - **Pointer**: docs/backlog/brief-header-hint-guards.md
 - **Context**: hooks/lib/brief-header-template.js:76 joins lines with " | "; hooks/subagent-budget.js:498; dispatch-model-guard. Fix: copyable 3-line template incl. intentional form, one merged message, regression test.
 
@@ -1496,7 +1496,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-31
 - **Origin**: peer
-- **Reporter**: peace (twgs-revival)
+- **Reporter**: peace (<host>)
 - **Report**: 01M67HZPT918GAWJG237T0JG8N
 - **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
 - **Problem**: 成績單工具的去除期限指令同時動到兩個資料夾，一個放席位成績列，一個放證據與釘選。只改道其中一個時，另一個會悄悄寫進真實的資料夾。
@@ -1504,7 +1504,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: work can start now
 - **Trigger-Type**: ready
 - **Effort**: S
-- **Source**: PEER-REPORTED peace (twgs-revival) 2026-10-31, priority high (data safety)
+- **Source**: PEER-REPORTED peace (<host>) 2026-10-31, priority high (data safety)
 - **Pointer**: docs/backlog/engine-scorecard-strip-expiry-store-split.md
 - **Context**: Fix direction: refuse when only one of the two dirs is overridden, or list every path about to be written before writing. Add a negative control (one override only must be refused).
 
@@ -1513,7 +1513,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-31
 - **Origin**: peer
-- **Reporter**: peace (twgs-revival)
+- **Reporter**: peace (<host>)
 - **Report**: 01M67HZPT918GAWJG237T0JG8N
 - **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
 - **Problem**: 審查派工腳本沒有「只讀最後一則訊息」的模式，判決詞彙也沒有 REWORK 或 STOP；回報者目前把判決塞在發現清單的一行裡承載。
@@ -1521,7 +1521,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: next edit to dispatch-review.sh or the verdict vocabulary, or a second peer asks for REWORK/STOP
 - **Trigger-Type**: event
 - **Effort**: M
-- **Source**: PEER-REPORTED peace (twgs-revival) 2026-10-31
+- **Source**: PEER-REPORTED peace (<host>) 2026-10-31
 - **Pointer**: docs/backlog/dispatch-review-last-message-and-verdicts.md
 - **Context**: Evaluate first: a last-message-only read mode, and whether widening the verdict vocabulary is worth the receipt and finalize contract change.
 
@@ -1530,7 +1530,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-31
 - **Origin**: peer
-- **Reporter**: peace (twgs-revival)
+- **Reporter**: peace (<host>)
 - **Report**: 01M67HZPT918GAWJG237T0JG8N
 - **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
 - **Problem**: strike 寫入者的允許名單裡沒有「專案植入校準」這類寫入者，回報者只能暫借 qualification_admin 的身分寫入。
@@ -1538,7 +1538,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: next edit to the strike writer allowlist, or a second project embeds calibration
 - **Trigger-Type**: event
 - **Effort**: S
-- **Source**: PEER-REPORTED peace (twgs-revival) 2026-10-31
+- **Source**: PEER-REPORTED peace (<host>) 2026-10-31
 - **Pointer**: docs/backlog/strike-writer-allowlist-calibration.md
 - **Context**: Decide whether to add a dedicated writer id for project-embedded calibration to the strike writer allowlist.
 
@@ -1547,7 +1547,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-10-31
 - **Origin**: peer
-- **Reporter**: peace (twgs-revival)
+- **Reporter**: peace (<host>)
 - **Report**: 01M67HZPT918GAWJG237T0JG8N
 - **Reply**: 2026-10-31 01M67J17Z9Z9A3TADXHQCSBGXC
 - **Problem**: 2026-10-26 以前寫入的成績單資料，每台機器都要手動跑一次 strip-expiry，否則所有席位都被判不合格；說明文字有寫，但沒跑時的失敗方式很難看出原因。
@@ -1555,7 +1555,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: next edit to engine-scorecard store loading, or another machine reports all seats unqualified
 - **Trigger-Type**: event
 - **Effort**: S
-- **Source**: PEER-REPORTED peace (twgs-revival) 2026-10-31
+- **Source**: PEER-REPORTED peace (<host>) 2026-10-31
 - **Pointer**: docs/backlog/scorecard-pre-1026-store-migration.md
 - **Context**: Evaluate migrating automatically on load, or an explicit prompt from doctor or SessionStart naming the strip-expiry command.
 

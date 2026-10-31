@@ -1,6 +1,6 @@
 # One command that writes autoCompactWindow and context_budget together
 
-Reported by codepower twgs-revival (report 01M59WNDJSZG3Y6YTERWD9DF4J, reply 2026-10-19 01M59WPA9TSF4TR7ST9AJRWF4V). BL-0250.
+Reported by codepower <host> (report 01M59WNDJSZG3Y6YTERWD9DF4J, reply 2026-10-19 01M59WPA9TSF4TR7ST9AJRWF4V). BL-0250.
 
 Shipped in merge e993e0fc0:
 

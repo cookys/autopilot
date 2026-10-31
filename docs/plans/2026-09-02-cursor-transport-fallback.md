@@ -3,7 +3,7 @@
 > **Status**: Phases 1-4 shipped; **Phase 5 is BLOCKED and Phase 6's admission is
 > therefore not added** — see §6. The mechanism is generic and complete; the cursor seat is not
 > admitted and must not be described as available. Authorized by operator 2026-09-02 (routed from
-> TWGameProject via fleet peer `twgs-revival-twgs-dev`, msg `msg_01M1G1JA5ZTH45Y5R7D77ZVFKC`).
+> TWGameProject via fleet peer `<host>`, msg `msg_01M1G1JA5ZTH45Y5R7D77ZVFKC`).
 > Peer transport is not authorization; the operator authorized this in the autopilot session
 > directly.
 >
@@ -24,7 +24,7 @@ valid JSON, and asked for it as a fallback that preserves the reviewer's logical
 
 | Fact | How verified | Result |
 |------|--------------|--------|
-| `cursor-agent` present | `command -v cursor-agent; cursor-agent --version` | `/home/cookys/.local/bin/cursor-agent`, `2026.08.25-3e8eec8` (newer than the `2026.08.11-e8db854` in `src/harness/capabilities/cursor.json`) |
+| `cursor-agent` present | `command -v cursor-agent; cursor-agent --version` | `$HOME/.local/bin/cursor-agent`, `2026.08.25-3e8eec8` (newer than the `2026.08.11-e8db854` in `src/harness/capabilities/cursor.json`) |
 | `cursor-grok-4.6-xhigh` is a real enabled id | `scripts/lib/cursor-model.sh` `_CURSOR_BASE_OUT` table, `grok46`+`xhigh` row | yes, and `max` clamps to the same id |
 | cursor has **no** roster admission | `scripts/resolve-review-loop.sh` `UNQUALIFIED_RUNNERS="cursor"` | naming cursor in any seat is refused (exit 3) without an operator override |
 | cursor capability record is unverified | `src/harness/capabilities/cursor.json` | `status: unverified`, `harness_level: H0`, all eight capability fields `unverified` |

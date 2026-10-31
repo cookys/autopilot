@@ -683,7 +683,7 @@ function validateManifest(value) {
 // reviewer-class seat is WRITTEN INTO CONFIG on the implementer's runner. The legacy CLI
 // path here builds its manifest from --runner / --deep-runner without ever asking the
 // resolver, so `--deep-runner grok` against a grok implementer sailed through — one
-// predicate, two implementations, opposite answers on one population (7840hs, 2026-09-12:
+// predicate, two implementations, opposite answers on one population (<host>, 2026-09-12:
 // their plan 067 lost decorrelation this way and nothing said so). Ask the resolver for
 // the implementer runner and the operator's dual-seat decision, and apply the SAME rule.
 function normRunner(r) { return r === 'codex-cli' ? 'codex' : r; }
@@ -732,7 +732,7 @@ function legacyManifest(opts) {
   ];
   // `@none` is the roster convention for "native auth, no endpoint". The resolver reads it
   // as endpoint=null; forwarding it verbatim as --endpoint kills the seat at transport
-  // (7840hs measured both seats dying this way, 2026-09-12). Normalise to the same
+  // (<host> measured both seats dying this way, 2026-09-12). Normalise to the same
   // 'default' sentinel the literal keyword already gets.
   if (opts.deepEndpoint === '@none') opts.deepEndpoint = 'default';
   if (opts.endpoint === '@none') opts.endpoint = 'default';

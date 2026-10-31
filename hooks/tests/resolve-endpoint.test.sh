@@ -136,16 +136,16 @@ assert_file_absent "$SENTINEL" "no-endpoint path never calls the sibling resolve
 
 # ── transport policy: plaintext-private opt-in (v2.35.11) ───────────
 # private-range http WITHOUT the opt-in stays not-ready, and says why
-out="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://192.168.101.7:8001 AUTOPILOT_ENDPOINT_Q_TOKEN=t bash "$R" q 2>/dev/null)"; ec=$?
+out="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://192.168.1.7:8001 AUTOPILOT_ENDPOINT_Q_TOKEN=t bash "$R" q 2>/dev/null)"; ec=$?
 assert_exit_code "$ec" 1 "private http without opt-in → not-ready"
 assert_contains "$out" '"transport_optin_required"' "private http without opt-in names the marker"
 assert_contains "$out" '"transport_security":""' "not-ready row has empty transport_security"
 # WITH the opt-in: ready, disclosed, warned on stderr only
-out="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://192.168.101.7:8001 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>/dev/null)"; ec=$?
+out="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://192.168.1.7:8001 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>/dev/null)"; ec=$?
 assert_exit_code "$ec" 0 "private http with opt-in → ready"
 assert_contains "$out" '"transport_security":"plaintext_private"' "opt-in row discloses plaintext_private"
 jvalid "$out" && assert_eq ok ok "opt-in JSON valid" || fail "opt-in JSON invalid: $out"
-err="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://192.168.101.7:8001 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>&1 >/dev/null)"
+err="$(env -i AUTOPILOT_ENDPOINT_Q_URL=http://192.168.1.7:8001 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private bash "$R" q 2>&1 >/dev/null)"
 assert_contains "$err" 'PLAINTEXT' "opt-in warns on stderr"
 assert_not_contains "$out" 'PLAINTEXT' "warning is not on stdout"
 # every other private range + IPv6 ULA/link-local

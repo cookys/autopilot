@@ -1464,7 +1464,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     //      prompt asking it to spawn a child to run `hostname`. In every case the
     //      model either fabricated a plausible-looking FAKE value or printed a fake
     //      tool-call block as inert text — the CLI's own real hostname
-    //      ("cookys-aimax395") never appeared in any response, and no subagent ever
+    //      ("<host>") never appeared in any response, and no subagent ever
     //      actually ran.
     //
     // 🔴 CRITICAL FINDING that makes the comment below load-bearing: combining

@@ -1,0 +1,44 @@
+# Repo checks that must hold for every change that reaches the shared branches.
+# leak-guard: no personal data (paths, hosts, private IPs, credentials, .env files) in the lines a
+# change adds. It reads only added lines of base..head, so history is not re-judged.
+name: checks
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  leak-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: leak-guard on the added lines of base..head
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            BASE="$PR_BASE"; HEAD="$PR_HEAD"
+          else
+            BASE="$PUSH_BEFORE"; HEAD="$PUSH_AFTER"
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+              # new branch or rewritten history: compare against the default branch
+              BASE="$(git merge-base "origin/${{ github.event.repository.default_branch }}" "$HEAD")"
+            fi
+          fi
+          MB="$(git merge-base "$BASE" "$HEAD")"
+          node scripts/leak-guard.js --range "$MB..$HEAD"

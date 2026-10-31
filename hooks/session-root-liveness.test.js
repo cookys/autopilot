@@ -1,7 +1,7 @@
 /**
  * One session-root judgement (session-mode.js readSessionRoot) and its readers. Run: node --test hooks/session-root-liveness.test.js
  *
- * Origin (peer report 2026-10-27, twgs-revival session 5eb5d332): a session that outlived its 24 h marker lost its root in
+ * Origin (peer report 2026-10-27, <host> session 5eb5d332): a session that outlived its 24 h marker lost its root in
  * open-decision.js (card written to the unbound scope, stdout only the id) while the workflow snapshot still reported the
  * root. Contract:
  *   - alive = marker unexpired, OR marker expired but <live>/turn/<sid>.json is there with `since` inside one marker TTL

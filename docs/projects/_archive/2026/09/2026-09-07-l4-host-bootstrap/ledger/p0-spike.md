@@ -1,6 +1,6 @@
 # P0 spike — isolated l4 fail sites on the real roster (2026-09-07, re-run 2026-09-06 on the branch)
 
-Host: aimax395, autopilot's own resolved roster (grok-4.5/grok implementer, MiniMax-M3/cc-shim reviewer,
+Host: <host>, autopilot's own resolved roster (grok-4.5/grok implementer, MiniMax-M3/cc-shim reviewer,
 VA qoderclicn/Qwen3.8-Max-Preview, 3 QC seats). Each probe varies exactly one thing (g1 chair R9).
 
 | Probe | level | roster change | develop (before P1) | branch (after P1) |

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prints the first hetero run that flips from running to terminal within ~9.5 minutes.
-cd /home/cookys/projects/autopilot
+cd $HOME/projects/autopilot
 seen=""
 for i in $(seq 1 38); do
   for m in $(/bin/ls -t /tmp/autopilot-dispatch-runs/hetero-*.manifest.json | head -6); do

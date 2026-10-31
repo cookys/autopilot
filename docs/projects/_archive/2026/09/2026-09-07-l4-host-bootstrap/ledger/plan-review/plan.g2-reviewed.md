@@ -14,7 +14,7 @@ it resolves the roster once, derives a frozen invocation policy, live-probes eve
 `providerReadinessAuthority` + `qualificationProvider` that `campaign-intake.js`'s enforce-mode path
 (`consumeEnforcedProviderReadiness`, ~1280) and the engine's reviewer-qualification preflight consume.
 
-An l4 marker gets none of it. cuda's WIZHALL run (revival-world-city-war, Codex platform, owner-selected
+An l4 marker gets none of it. <host>'s WIZHALL run (revival-world-city-war, Codex platform, owner-selected
 agy `gemini-3.8-flash-low` implementer) therefore hit two walls in sequence:
 
 1. `reviewer_qualification` — **closed in v2.36.7** by waiving it at l4 with a `waived` ledger entry.
@@ -73,7 +73,7 @@ operator configured, with every uncertified seat recorded as such.**
 - **KR5** — `engine-lifecycle-observation.js` accepts `l4` in `OBSERVABLE_LEGACY_LEVELS` and `waived` in
   `OBSERVABLE_ENGINE_STATUSES`, so an l4 run's lifecycle observation serializes intact statuses (no
   `unknown` + hash). Verified by a unit test.
-- **KR6** — dogfood: cuda re-runs WIZHALL under l4 on the released version and reports intake reached
+- **KR6** — dogfood: <host> re-runs WIZHALL under l4 on the released version and reports intake reached
   (`dispatcher_called: true` or a later-phase rejection), not `provider_readiness_authority_missing`.
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
@@ -142,7 +142,7 @@ probe("C", "l5", { ...r, qc_panel_seats: [], qc_panel_seats_complete: false });'
 Expected today: `strict_l5_provider_bootstrap_invalid` for `level: 'l4'` (constructor guard) and
 `strict_l5_provider_roster_incomplete` for the VA/QC shape.
 
-**Spike run 2026-09-07 (aimax395, autopilot's own roster grok-4.5/grok + MiniMax-M3/cc-shim, VA present, 3 QC
+**Spike run 2026-09-07 (<host>, autopilot's own roster grok-4.5/grok + MiniMax-M3/cc-shim, VA present, 3 QC
 seats) — five isolated probes, each varying ONE thing (g1 chair R9 asked for the sites to be separated):**
 
 | Probe | level | roster change | result |
@@ -224,7 +224,7 @@ campaign-file rejection (same observable the L6 fixture uses).
 
 ### P5 — Dogfood (KR6, human-gated)
 
-cuda re-runs WIZHALL under l4 on the released develop; report the intake outcome and the ledger's
+<host> re-runs WIZHALL under l4 on the released develop; report the intake outcome and the ledger's
 `reviewer_qualification` entry (`waived` vs absent). Any new rejection code becomes a BACKLOG row, not a
 same-day patch.
 
@@ -234,7 +234,7 @@ merge → P5.
 ## 5. Test / validation
 
 Script-gated: P3 suites + `hooks/tests/run.sh --parallel` full run before merge (classify every red against
-clean develop, as in v2.36.2). Human-gated: P5 dogfood report from cuda; Board decision on §8.
+clean develop, as in v2.36.2). Human-gated: P5 dogfood report from <host>; Board decision on §8.
 
 Verification contract (dev-flow 驗證合約): `bash hooks/tests/autopilot-cli.test.sh &&
 bash hooks/tests/provider-readiness-consumer.test.sh && bash hooks/tests/autopilot-engine.test.sh` — RED on

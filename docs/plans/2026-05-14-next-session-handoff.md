@@ -115,7 +115,7 @@ v2.7.2 端到端只有 auto-compact 能完整 trigger：PreCompact → state-che
 
 ## MEMORY 已 sync（cross-session 持久）
 
-`/home/cookys/.claude/projects/-home-cookys-projects-hangar/memory/` 今天新加：
+`$HOME/.claude/projects/-home-<user>-projects-hangar/memory/` 今天新加：
 
 - `feedback_skill_creator_eval_proxy.md` — proxy isolation-test floor = 0%, 不是 routing precision
 - `reference_loop_tools.md` — `/loop` vs `/powerloop` 對比
@@ -183,7 +183,7 @@ git branch -a                    # 預期 develop + feat/v2.7.0-superpowers-coex
 
 ```
 我繼續 autopilot 工作。
-完整 handoff 在 /home/cookys/projects/autopilot/docs/plans/2026-05-14-next-session-handoff.md
+完整 handoff 在 $HOME/projects/autopilot/docs/plans/2026-05-14-next-session-handoff.md
 請先讀那個檔、照「立即執行步驟」走。Default 選項 1A（diagnose intent-capture stagnation）除非有別需求。
 ```
 

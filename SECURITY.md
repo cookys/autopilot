@@ -1,0 +1,29 @@
+# Security
+
+Draft. Report a vulnerability privately to the maintainers rather than in a public issue.
+
+## What the repository scan can and cannot see
+
+Before publication the full history was scanned for credentials: no confirmed real credential was found within what the scan covers. The scan does not cover:
+
+- custom tokens shorter than 32 characters;
+- blobs of 3 MB or more;
+- binary blobs.
+
+Those three classes are unverified, not clean. A pre-publication review of the large and binary blobs, and a manual review of short values in `key=value` and `"token":` contexts, is still owed.
+
+From now on `scripts/leak-guard.js` blocks personal paths, host names, private IPs, credential shapes and `.env` files in added lines (see `references/leak-guard.md`). It shares the same blind spots above.
+
+## Frozen objects
+
+- Historical evidence is not edited. It stays as published. Because the guard reads only added lines, it needs no exemption unless someone later edits it, and then only an exact per-file registry entry applies.
+- Sealed non-evidence files that carry personal data (class B, seven files) are not edited in place:
+  - `docs/plans/2026-08-04-platform-capability-trigger-activation.md`
+  - `evals/skill-onoff/prereg/findings-batch-v2.json`
+  - `evals/skill-onoff/prereg/findings-batch-v3.json`
+  - `evals/skill-onoff/prereg/findings-batch.json`
+  - `evals/skill-onoff/prereg/stage-graph-g67.json`
+  - `evals/skill-onoff/prereg/stage-graph-g67.md`
+  - `evals/skill-onoff/prereg/stage-graph-g8.json`
+
+  These still contain personal paths because their bytes are pinned by a frozen hash chain. Also deferred for the same reason: `evals/skill-onoff/packs/manifest.json` and `evals/skill-onoff/prereg/FROZEN.json` (frozen hash chain), and the archived evidence `platform-capabilities.json`, two copies including the codex mirror (signature over the content). After the sealed-closure work lands, a cleaned successor object is produced and sealed in their place; the old versions remain only in history.

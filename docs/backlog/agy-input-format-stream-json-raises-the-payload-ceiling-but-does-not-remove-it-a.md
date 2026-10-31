@@ -3,7 +3,7 @@
 Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-09-14
 
 - **Trigger**: the next agy-rail dispatch refused by `agy_argv_ceiling_assert`, or any work that proposes routing `dispatch-review.sh` / `dispatch-hetero.sh` / `dispatch-author.sh` through stream-json.
-- **Context**: a peer host (twgs-revival, 2026-09-11) reported that agy 1.2.0's `--input-format stream-json` reads NDJSON from stdin and so bypasses the 131072-byte `MAX_ARG_STRLEN` argv wall, measured at 208951 bytes with `status: SUCCESS`, and suggested the payload ceiling could be removed. **Re-derived on this host (agy 1.2.1) with a trailing-nonce probe — the transport claim holds, the conclusion does not.** Each probe put a unique token at the very END of the payload and asked for it back, so a partial read cannot answer:
+- **Context**: a peer host (<host>, 2026-09-11) reported that agy 1.2.0's `--input-format stream-json` reads NDJSON from stdin and so bypasses the 131072-byte `MAX_ARG_STRLEN` argv wall, measured at 208951 bytes with `status: SUCCESS`, and suggested the payload ceiling could be removed. **Re-derived on this host (agy 1.2.1) with a trailing-nonce probe — the transport claim holds, the conclusion does not.** Each probe put a unique token at the very END of the payload and asked for it back, so a partial read cannot answer:
 
 | payload | tail token returned | `result.status` |
 |---|---|---|
@@ -104,7 +104,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
   exactly where both hosts went wrong, so it is version-controlled next to the row it supports.
 - **Candidate**: keep `agy_argv_ceiling_assert` as a hard gate, add a stream-json transport behind it with its own empirically-derived ceiling (start conservative, e.g. 150 KB), and make the probe above a regression test with the nonce at the tail — never assert on `status` alone. Splitting the unit remains the correct answer above that.
 - **Effort**: S (transport + ceiling constant + the nonce regression test); the per-rail wiring is S each.
-- **Source**: peer report from twgs-revival 2026-09-11, re-derived locally the same day with four probes; the since-removed `lib/agy-argv-ceiling.sh` guard, callers at `dispatch-hetero.sh:2750`, `dispatch-author.sh:728`, `dispatch-review.sh:1398`.
+- **Source**: peer report from <host> 2026-09-11, re-derived locally the same day with four probes; the since-removed `lib/agy-argv-ceiling.sh` guard, callers at `dispatch-hetero.sh:2750`, `dispatch-author.sh:728`, `dispatch-review.sh:1398`.
 
 - **Update 2026-10-24 (later; agy 1.4.6 re-measured: the wall is in tokens, and a response-side check now backs the byte cap)**: tail-nonce probe through stdin stream-json, binary sha256 `128780f5776959ba6a991bde1f0a8b699eee37a59ed30deb9926147fedfa56c4`, model gemini-3.8-flash-high:
 
@@ -118,7 +118,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 
 - **Update 2026-10-28 (second peer hit: openclaw)**: fleet--claude (cookys/openclaw, on operator request) reported that the agy seat of `dispatch-plan-review` was stopped by `agy_stdin_ceiling`: the prompt was 177,755 B against the 170,000 B cap (plan plus rubric plus 10 context files), and both attempts exited 3. The operator asked whether the prompt could be sent in pieces. Replied the same day (message 01M60C0JDV1TQ3RDH7SHQ398K6) with these points:
   - stream-json on stdin is already how the prompt is sent (0221af27e; 877d397f2 for BL-0298), so there is no further transport to switch to.
-  - The cap exists because the wall is a deployment property that fails as an empty answer, not as an error: on this host 175 KB is fine, 200 KB returns SUCCESS with a blank body; the twgs-revival host was fine up to 449 KB.
+  - The cap exists because the wall is a deployment property that fails as an empty answer, not as an error: on this host 175 KB is fine, 200 KB returns SUCCESS with a blank body; the <host> host was fine up to 449 KB.
   - Sending in pieces is not implemented. The reasoning that it would not help (the wall sits on input tokens per call, so splitting the context across calls changes what the reviewer sees) is an inference, not a measured result.
   - Workaround on a host where the wall has been measured: raise `AUTOPILOT_AGY_STDIN_MAX_BYTES` or `AUTOPILOT_AGY_INPUT_TOKEN_CEILING`.
   - Future direction (unchanged from above): a tail nonce the rail checks before accepting the answer to a large prompt, so the cap can be lifted per host without fail-open risk.

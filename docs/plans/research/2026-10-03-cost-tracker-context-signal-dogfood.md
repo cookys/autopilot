@@ -17,10 +17,10 @@
 4. Default-on: hooks.json:191 comment "v2.35.15 default-on"; hooks/README.md:172; opt-out
    `AUTOPILOT_COST_TRACKER=false` (`cost-tracker.js:41`). Operator's `~/.autopilot/config.json` has no override.
 5. The cited doc pointer is wrong: `docs/ironlaw-to-gate-map.md` #6 (line 21) is "Foreman no polling /
-   Bash >40", not cache reads. The code comment (`cost-tracker.js:111`) calls it "cuda digest #6"; the message
+   Bash >40", not cache reads. The code comment (`cost-tracker.js:111`) calls it "<host> digest #6"; the message
    borrowed the number. Reader following the pointer finds an unrelated rule.
 6. Real context signal exists and was already true at the time:
-   `/run/user/1000/autopilot/context/76c98aac-....json` => `used_percentage:33`, `context_window_size:1000000`,
+   `/run/user/<uid>/autopilot/context/76c98aac-....json` => `used_percentage:33`, `context_window_size:1000000`,
    `total_input_tokens:334902`, current cache_read 332,034 (written by codeforge statusline; README.md:297).
    Consumers: `hooks/context-budget.js` (header lines 33-45; T1/T2 scaled to live window, `context-budget-lib.js:85`),
    `foreman-guard` (subagent rows), `depth0-delegate-gate`. Also `scripts/check-context-window.js` (pre-dispatch

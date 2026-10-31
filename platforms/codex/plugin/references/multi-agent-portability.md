@@ -34,7 +34,7 @@ Empirical `agy` 1.0.1 testing (2026-05-29) overturned earlier claims in this doc
 - **Root `plugin.json` is required by `agy plugin validate`** — removing it yields `Error: missing plugin.json`. So root `plugin.json` is NOT merely npm/GitHub metadata (as a later edit claimed) — it has a real consumer.
 - `agy plugin` full subcommand set (verified): `validate, install, uninstall, list, enable, disable, import, link`.
 
-### OpenCode Go (`opencode-go`) — endpoint routing is PER MODEL (verified 2026-09-21, cuda)
+### OpenCode Go (`opencode-go`) — endpoint routing is PER MODEL (verified 2026-09-21, <host>)
 
 Official table: <https://opencode.ai/docs/go/>. Authoritative live model list:
 `GET https://opencode.ai/zen/go/v1/models` with `Authorization: Bearer <key>` (31 ids).
@@ -353,7 +353,7 @@ P0a — probe task on disk after session A exited, fresh session B sees nothing,
 
 ```
 $ grep -rl "p0a-probe-tte-20260612" ~/.claude/tasks/
-/home/cookys/.claude/tasks/6995afc6-2f09-4598-88df-61c54782c97d/1.json
+$HOME/.claude/tasks/6995afc6-2f09-4598-88df-61c54782c97d/1.json
 $ claude -p --model haiku 'Use the TaskList tool and output its raw result verbatim...'
 NO_TASKS_VISIBLE
 $ claude -p --model haiku --resume 6995afc6-2f09-4598-88df-61c54782c97d '...TaskList...'

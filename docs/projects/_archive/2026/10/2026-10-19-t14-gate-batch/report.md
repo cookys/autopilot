@@ -44,7 +44,7 @@ C = control, G = gate. n = 30 valid runs each.
 
 ## Post-hoc observations
 
-Every item in this section is **post-hoc**. None of them changes the verdict. Each cites run ids and files under `/tmp/claude-1000/-home-cookys-projects-autopilot/e40cc506-6c9a-4bf7-bc9f-8a4187de5604/scratchpad/t14-s5/out/runs/<run>/attempt-1/`.
+Every item in this section is **post-hoc**. None of them changes the verdict. Each cites run ids and files under `/tmp/claude-<uid>/-home-<user>-projects-autopilot/e40cc506-6c9a-4bf7-bc9f-8a4187de5604/scratchpad/t14-s5/out/runs/<run>/attempt-1/`.
 
 ### A. What the retry did (post-hoc)
 
@@ -98,4 +98,4 @@ Copied into the repo:
 - `docs/plans/evidence/2026-10-19-t14-gate-experiment/analysis.txt`
 - `docs/plans/evidence/2026-10-19-t14-gate-experiment/schedule.json`
 
-The raw runs directory is `/tmp/claude-1000/-home-cookys-projects-autopilot/e40cc506-6c9a-4bf7-bc9f-8a4187de5604/scratchpad/t14-s5/out/runs` (60 run folders, 4.5 MB). It lives in session scratch and is not kept.
+The raw runs directory is `/tmp/claude-<uid>/-home-<user>-projects-autopilot/e40cc506-6c9a-4bf7-bc9f-8a4187de5604/scratchpad/t14-s5/out/runs` (60 run folders, 4.5 MB). It lives in session scratch and is not kept.

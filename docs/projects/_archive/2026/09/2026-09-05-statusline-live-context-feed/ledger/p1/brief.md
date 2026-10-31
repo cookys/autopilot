@@ -1,12 +1,12 @@
 # P1 brief — codeforge writes the live context files
 
-Repo: `/home/cookys/projects/codeforge` (Rust, bin `codeforge`, currently on `main`, clean). Work in a worktree:
-`git -C /home/cookys/projects/codeforge worktree add /home/cookys/projects/codeforge-wt-live -b feat/live-context-file main`
-and do everything inside `/home/cookys/projects/codeforge-wt-live`. Commit there; do NOT merge, do NOT touch `main`,
+Repo: `$HOME/projects/codeforge` (Rust, bin `codeforge`, currently on `main`, clean). Work in a worktree:
+`git -C $HOME/projects/codeforge worktree add $HOME/projects/codeforge-wt-live -b feat/live-context-file main`
+and do everything inside `$HOME/projects/codeforge-wt-live`. Commit there; do NOT merge, do NOT touch `main`,
 do NOT run `cargo install`, do NOT edit `~/.claude/settings.json`.
 
-Plan (read §2.5 and P1 only): `/home/cookys/projects/autopilot/docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md`.
-Real payloads to build fixtures from: `/home/cookys/projects/autopilot/docs/projects/2026-09-05-statusline-live-context-feed/ledger/p0/{statusline,subagent}.json`.
+Plan (read §2.5 and P1 only): `$HOME/projects/autopilot/docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md`.
+Real payloads to build fixtures from: `$HOME/projects/autopilot/docs/projects/2026-09-05-statusline-live-context-feed/ledger/p0/{statusline,subagent}.json`.
 
 ## Global Constraints (verbatim from plan §2.5 — do not paraphrase)
 
@@ -14,7 +14,7 @@ Real payloads to build fixtures from: `/home/cookys/projects/autopilot/docs/proj
 - Live-dir resolution order is fixed: `$AUTOPILOT_LIVE_DIR` → `$XDG_RUNTIME_DIR/autopilot` → `/dev/shm/autopilot-<uid>` → `/tmp/autopilot-<uid>`. **Every** candidate, the override included, is accepted ONLY if `findmnt -T <dir> -o FSTYPE -n` prints `tmpfs` or `ramfs`; if `findmnt` is absent, fall back to longest-prefix match in `/proc/mounts`; if neither works the candidate is rejected. When every candidate is rejected, use `~/.autopilot` as the base and print exactly one warning line per process. Never assume a path is RAM. A rejected override is skipped, not fatal.
 - Base-dir contract: the resolver returns a BASE; every consumer appends its own purpose segment (`context/`). Probe the candidate's nearest existing ancestor when the dir does not exist yet, then `create_dir_all` with mode 0700.
 - Two live files, one writer each, no merge: `<base>/context/<sid>.json` (main status line) and `<base>/context/<sid>.tasks.json` (subagent status line). Mode 0600, same-directory temp + rename. Each carries its own `written_at`. Neither writer reads the other's file.
-- `<sid>` sanitiser is normative: take the stdin `session_id` string; replace every Unicode scalar value not in `[A-Za-z0-9_-]` with one `_` (per scalar); then keep the first 64 scalars; empty input ⇒ `unknown`. Must pass the shared vector file you create at `/home/cookys/projects/autopilot/hooks/tests/fixtures/session-id-vectors.json` (array of `{input, expected}`: plain uuid, `a/b:c d`, CJK `會議123`, emoji, empty string, a 70-char string). Copy the same file into `tests/fixtures/` of codeforge and test against it.
+- `<sid>` sanitiser is normative: take the stdin `session_id` string; replace every Unicode scalar value not in `[A-Za-z0-9_-]` with one `_` (per scalar); then keep the first 64 scalars; empty input ⇒ `unknown`. Must pass the shared vector file you create at `$HOME/projects/autopilot/hooks/tests/fixtures/session-id-vectors.json` (array of `{input, expected}`: plain uuid, `a/b:c d`, CJK `會議123`, emoji, empty string, a 70-char string). Copy the same file into `tests/fixtures/` of codeforge and test against it.
 - Schemas (`schema_version: 1`):
   main: `{"schema_version":1,"session_id":"<raw session_id>","written_at":"<RFC3339 UTC>","cc_version":"<version>","model":{"id":…,"display_name":…},"context_window":{"context_window_size":…,"used_percentage":…,"total_input_tokens":…,"current_usage":{…}}}`
   tasks: `{"schema_version":1,"session_id":"<raw>","written_at":"<RFC3339 UTC>","tasks":[{"id","type","status","description","label","startTime","model","cwd","contextWindowSize","tokenCount"}]}` — copy each field only when present in stdin (`name` too if present); never invent values.
@@ -33,6 +33,6 @@ Real payloads to build fixtures from: `/home/cookys/projects/autopilot/docs/proj
 
 One change → `cargo test <module>` → `git add` that change → next. `cargo fmt` + `cargo clippy -- -D warnings` + full `cargo test` before the commit. Commit message starts `feat(live): statusline writes live context files (autopilot v2.36.1 P1)`.
 
-## Report (write to `/home/cookys/projects/autopilot/docs/projects/2026-09-05-statusline-live-context-feed/ledger/p1/report.json`)
+## Report (write to `$HOME/projects/autopilot/docs/projects/2026-09-05-statusline-live-context-feed/ledger/p1/report.json`)
 
 `{"status":"done|blocked","worktree":"…","branch":"feat/live-context-file","commit":"<sha>","tests":{"cmd":"cargo test","passed":N,"failed":N},"clippy":"clean|<msg>","files_changed":[…],"notes":"…"}` — JSON only; no prose claims of green without the numbers. Then reply with one line: the path of that report.

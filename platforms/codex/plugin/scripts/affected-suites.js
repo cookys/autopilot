@@ -245,15 +245,16 @@ const PACK_CONTENT_SUITES = [[/bpack/, `${HOOK_TESTS_DIR}/bpack-content.test.sh`
 // The id test is "contains", on purpose: skill packs are named `<skill>-bpack-<arm>` (ceo-agent-bpack-change), so a prefix
 // or exact match would miss them. Behaviour is fixed; do not narrow it.
 // -> Map(content suite -> changed files) for the changed files that some pack's manifest entry copies.
-// A skill pack (id starts with an existing skill directory name plus `-`, longest name wins) holds that skill's own
+// A skill pack (id `<skill>-bpack-...`) holds that skill's own
 // relative paths, so it matches only `skills/<name>/<rel>`; any other pack holds repo paths whole and matches `<rel>`.
 function packContentSuites(changed, headTree) {
   const out = new Map();
   let man;
   try { man = JSON.parse(headTree.read(PACK_MANIFEST)).packs; } catch { return out; }
   if (!man || typeof man !== 'object') return out;
-  const skills = [...new Set(headTree.files.map((f) => /^skills\/([^/]+)\//.exec(f)).filter(Boolean).map((m) => m[1]))];
-  const skillOf = (id) => skills.filter((s) => id.startsWith(s + '-')).sort((x, y) => y.length - x.length)[0] || null;
+  // Ownership comes from the pack id alone (`<skill>-bpack-...`), never from which skill directories exist in a tree:
+  // a deleted or renamed skill file, or a deleted skill directory, must not turn a skill pack into a root-path pack.
+  const skillOf = (id) => { const m = /^(.+?)-bpack-/.exec(id); return m ? m[1] : null; };
   let candidates = 0, parsed = 0;
   for (const [id, files] of Object.entries(man)) {
     const hit = PACK_CONTENT_SUITES.find(([re]) => re.test(id));

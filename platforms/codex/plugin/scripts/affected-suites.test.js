@@ -1397,3 +1397,26 @@ test('pack matching 3: unparsable bpack manifest entries warn on stderr', () => 
   const d = run({ [M]: man({ 'bpack-files-change': { 'bpack-files-change/references/x.md': 'x' } }), 'references/x.md': 'a\n' }, { 'references/x.md': 'b\n' });
   assert.doesNotMatch(d.err, /no entry parsed/);
 });
+
+// bpackfix g2: skill ownership comes from the pack id, so deleting or renaming a skill's only file, or the whole skill
+// directory, still selects bpack-content for skills/<name>/<rel> and never falls back to root-path matching.
+const g2Manifest = (packFx_) => packFx_.man({ 'ceo-agent-bpack-change': { 'ceo-agent-bpack-change/references/card.md': 'x' } });
+test('pack matching g2-1: deleting a skill pack file selects bpack-content', () => {
+  const fx = packFx();
+  const r = fx.run({ [fx.M]: g2Manifest(fx), 'skills/ceo-agent/references/card.md': 'a\n' }, { 'skills/ceo-agent/references/card.md': null });
+  assert.ok(r.out.suites.includes(fx.BP));
+});
+test('pack matching g2-2: renaming the only file of a skill (new skill dir) selects bpack-content', () => {
+  const fx = packFx();
+  // the new name is referenced by an unrelated suite so the rename is not judged unreferenced (full) for that reason
+  const r = fx.run({ [fx.M]: g2Manifest(fx), 'skills/ceo-agent/references/card.md': 'a\n', 'hooks/tests/ref.test.sh': '#!/usr/bin/env bash\ncat skills/ceo-core/references/card.md\n' },
+    { 'skills/ceo-agent/references/card.md': null, 'skills/ceo-core/references/card.md': 'a\n' });
+  assert.ok(r.out.suites.includes(fx.BP));
+});
+test('pack matching g2-3: with the skill directory gone from both trees the pack stays a skill pack (same-named root file is not selected)', () => {
+  const fx = packFx();
+  const r = fx.run({ [fx.M]: g2Manifest(fx), 'references/card.md': 'a\n' }, { 'references/card.md': 'b\n' });
+  assert.ok(!r.out.suites.includes(fx.BP), 'root references/card.md must not select the skill pack suite');
+  assert.strictEqual(r.out.mode, 'full');
+  assert.ok(r.out.unreferenced.includes('references/card.md'));
+});

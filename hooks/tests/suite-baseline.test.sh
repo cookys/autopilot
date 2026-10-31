@@ -261,6 +261,38 @@ node -e '
 const fs=require("fs");const d=process.argv[1],c=process.argv[2];
 const a=fs.readFileSync(d+"/xdg1","utf8").trim(),b=fs.readFileSync(d+"/xdg2","utf8").trim();
 process.exit(a!==b&&a.startsWith(c+"/")&&b.startsWith(c+"/")&&!fs.existsSync(a)&&!fs.existsSync(b)?0:1)' "$FX/stamps" "$T/xdgcaller" && ok || bad "caller XDG_RUNTIME_DIR: pool suites get distinct private dirs under it, removed after"
+# user systemd/bus stay reachable through the private XDG_RUNTIME_DIR (systemd-run --user reads $XDG_RUNTIME_DIR/systemd, not DBUS_SESSION_BUS_ADDRESS)
+mk xdgsys.test.sh 'for n in systemd bus; do if [ -e "$XDG_RUNTIME_DIR/$n" ]; then echo "$n=yes"; else echo "$n=no"; fi; done > "$FXSTAMPS/xdgsys"; echo "Summary: 1 passed, 0 failed"'
+printf '%s\n' hooks/tests/xdgsys.test.sh hooks/tests/xdg2.test.sh > "$T/ids-sys.txt"
+mkdir -p "$T/xdgsys/systemd"; : > "$T/xdgsys/bus"; chmod 700 "$T/xdgsys"
+rm -f "$FX/stamps"/*
+env -u DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$T/xdgsys" node "$SB" run-all --root "$FX" --ids "$T/ids-sys.txt" --jobs 2 >/dev/null 2>&1 </dev/null
+if grep -qx 'systemd=yes' "$FX/stamps/xdgsys" && grep -qx 'bus=yes' "$FX/stamps/xdgsys"; then ok; else bad "pool suite's private XDG lost the caller's systemd/bus entries"; fi
+mkdir -p "$T/xdgnone"; chmod 700 "$T/xdgnone"; rm -f "$FX/stamps"/*
+XDG_RUNTIME_DIR="$T/xdgnone" node "$SB" run-all --root "$FX" --ids "$T/ids-sys.txt" --jobs 2 >/dev/null 2>&1 </dev/null
+if grep -qx 'systemd=no' "$FX/stamps/xdgsys" && grep -qx 'bus=no' "$FX/stamps/xdgsys"; then ok; else bad "caller without systemd/bus: private XDG must not invent them"; fi
+
+# SKIP lines in a pool suite are reported (the same suite may run all its cases when serial)
+mk skippy.test.sh 'echo "SKIP: systemd-run --user --scope is unusable on this host"; echo "  SKIP assert_x: no working thing"; echo "Summary: 1 passed, 0 failed"'
+mk skippy-serial.test.sh 'echo "SKIP: unusable"; echo "Summary: 1 passed, 0 failed"'
+printf '# t\nhooks/tests/s1.test.sh\nhooks/tests/s2.test.sh\nhooks/tests/skippy-serial.test.sh\n' > "$FX/hooks/tests/lib/serial-suites.txt"
+printf '%s\n' hooks/tests/skippy.test.sh hooks/tests/skippy-serial.test.sh hooks/tests/xdg2.test.sh > "$T/ids-skip.txt"
+rm -f "$FX/stamps"/*
+node "$SB" run-all --root "$FX" --ids "$T/ids-skip.txt" --jobs 2 > "$T/skip.out" 2>/dev/null </dev/null
+grep -q '^skip-in-pool: hooks/tests/skippy.test.sh (2 SKIP lines)$' "$T/skip.out" && ok || bad "pool suite with SKIP lines is not marked"
+grep -q 'skip-in-pool: hooks/tests/skippy-serial' "$T/skip.out" && bad "serial-listed suite must not carry the pool SKIP marker" || ok
+grep -q 'skip-in-pool: hooks/tests/xdg2' "$T/skip.out" && bad "suite without SKIP lines must not be marked" || ok
+node "$SB" record --results "$T/skip.out" --root "$T/root0" --out "$T/skip.json" 2>"$T/skip.err" >/dev/null </dev/null
+node -e '
+const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).suites;
+process.exit(s["hooks/tests/skippy.test.sh"].skip_lines_in_pool===2&&s["hooks/tests/skippy.test.sh"].status==="pass"&&s["hooks/tests/xdg2.test.sh"].skip_lines_in_pool===undefined?0:1)' "$T/skip.json" && ok || bad "record stores skip_lines_in_pool and keeps status"
+grep -q 'ran with SKIP lines in the pool.*hooks/tests/skippy.test.sh' "$T/skip.err" && ok || bad "record lists SKIP-in-pool suites on stderr"
+# negative control: without the marker emission the SKIP assertion goes red
+sed 's/const skips = /const skipsOFF = /' "$SB" > "$T/mut-skip.js"
+if cmp -s "$SB" "$T/mut-skip.js"; then bad "SKIP negative control mutation did not hit"; else
+  node "$T/mut-skip.js" run-all --root "$FX" --ids "$T/ids-skip.txt" --jobs 2 > "$T/skip-mut.out" 2>/dev/null </dev/null
+  grep -q '^skip-in-pool:' "$T/skip-mut.out" && bad "negative control: marker still present without the detector" || ok
+fi
 rcis 2 "--jobs 0 is bad input" node "$SB" run-all --root "$FX" --ids "$T/ids-fl.txt" --jobs 0
 
 

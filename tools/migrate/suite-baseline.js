@@ -24,7 +24,11 @@
 //     is re-run once, alone, after the pool drains (the rerun's output and rc are the ones printed):
 //       green alone  -> `flaky-under-parallel: <path> (rc=P in pool)` (or `(timeout in pool)`) then `rc=0 <path>`
 //       red again    -> `red-in-both-runs: <path> (rc=P in pool, rc=S alone)` then `rc=S <path>`
-//     (same flaky line shape as `affected-suites.js --run --jobs`). A one-line tally goes to stderr.
+//     (same flaky line shape as `affected-suites.js --run --jobs`). A pool suite that passes but printed lines
+//     starting with SKIP gets `skip-in-pool: <path> (N SKIP lines)` before its rc line (cases may have been skipped
+//     because of the pool, e.g. no user systemd); `record` stores skip_lines_in_pool and lists them on stderr.
+//     The caller's $XDG_RUNTIME_DIR/systemd and /bus are symlinked into each pool suite's private XDG_RUNTIME_DIR.
+//     A one-line tally goes to stderr.
 //
 //   record  --results <file> --out <baseline.json> [--pending-results <file>] [--root <dir>] [--flaky-as-green]
 //     Reads the output of one full run. Accepted shapes:
@@ -146,6 +150,8 @@ function parseResults(file, what) {
     if (fm) marks.set(fm[1], { flaky: true, pool_rc: fm[2] === undefined ? 124 : Number(fm[2]) });
     const bm = /^red-in-both-runs: (\S+) \((?:timeout|rc=(\d+)) in pool, rc=\d+ alone\)\s*$/.exec(line);
     if (bm) marks.set(bm[1], { both_red: true, pool_rc: bm[2] === undefined ? 124 : Number(bm[2]) });
+    const sm = /^skip-in-pool: (\S+) \((\d+) SKIP lines\)\s*$/.exec(line);
+    if (sm) marks.set(sm[1], { ...(marks.get(sm[1]) || {}), skips: Number(sm[2]) });
     const m = /^rc=(\d+) (\S+)\s*$/.exec(line);
     if (m) { add(m[2], Number(m[1]), buf.join('\n')); buf = []; } else buf.push(line);
   }
@@ -161,6 +167,7 @@ function entry(id, r, flakyAsGreen) {
     e.flaky_under_parallel = true; e.pool_rc = r.pool_rc;
     if (!flakyAsGreen) e.status = 'fail';
   }
+  if (r.skips) e.skip_lines_in_pool = r.skips;
   if (r.both_red) { e.red_in_both_runs = true; e.pool_rc = r.pool_rc; }
   return e;
 }
@@ -181,6 +188,8 @@ function cmdRecord(o) {
   }
   const flaky = Object.keys(suites).filter((i) => suites[i].flaky_under_parallel);
   if (flaky.length) process.stderr.write(`suite-baseline: ${flaky.length} suite(s) red in the pool, green alone (stored as ${fg ? 'pass' : 'fail'}): ${flaky.join(' ')}\n`);
+  const skipped = Object.keys(suites).filter((i) => suites[i].skip_lines_in_pool);
+  if (skipped.length) process.stderr.write(`suite-baseline: ${skipped.length} suite(s) ran with SKIP lines in the pool (cases may have been skipped; compare their counts with a serial run): ${skipped.join(' ')}\n`);
   const both = Object.keys(suites).filter((i) => suites[i].red_in_both_runs);
   if (both.length) process.stderr.write(`suite-baseline: ${both.length} suite(s) red in both runs: ${both.join(' ')}\n`);
   const doc = { schema: 1, root_note: 'ids are repo-relative suite paths', suites };
@@ -332,6 +341,15 @@ async function runAllParallel(root, ids, secs, jobs, baseEnv) {
       if (xdgParent) { try { x = fs.mkdtempSync(path.join(xdgParent, 'sbj.')); MADE_DIRS.add(x); } catch { x = null; } }
       if (!x) { x = path.join(tmp, 'x'); fs.mkdirSync(x); }
       fs.chmodSync(x, 0o700); env.XDG_RUNTIME_DIR = x;
+      // `systemd-run --user` reaches the user manager through $XDG_RUNTIME_DIR/systemd (DBUS_SESSION_BUS_ADDRESS does
+      // not help it), so the caller's systemd and bus entries are linked into the private dir.
+      const callerXdg = process.env.XDG_RUNTIME_DIR;
+      if (callerXdg && path.isAbsolute(callerXdg)) {
+        for (const n of ['systemd', 'bus']) {
+          const src = path.join(callerXdg, n);
+          if (fs.existsSync(src)) { try { fs.symlinkSync(src, path.join(x, n)); } catch { /* suite sees no user systemd */ } }
+        }
+      }
     }
     if (callerFactor === undefined) env.AUTOPILOT_TEST_TIMING_FACTOR = String(pool ? jobs : 1);
     const r = await runOne(root, id, secs, env);
@@ -347,7 +365,10 @@ async function runAllParallel(root, ids, secs, jobs, baseEnv) {
       while (next < poolIds.length) {
         const id = poolIds[next++];
         const r = await exec(id, true);
-        if (r.rc === 0) emit(r, '', id); else held.push({ id, r });
+        if (r.rc === 0) {
+          const skips = (r.out.match(/^\s*SKIP\b/gm) || []).length;
+          emit(r, skips ? `skip-in-pool: ${id} (${skips} SKIP lines)\n` : '', id);
+        } else held.push({ id, r });
       }
     };
     await Promise.all(Array.from({ length: Math.min(jobs, poolIds.length) }, worker));

@@ -137,14 +137,14 @@ platforms/ 鏡像產物
 - 涵蓋平台：Claude Code 走 SessionStart；codex、opencode 由 dev-setup --check 列出。
 
 ## 6. 進行中工作與順序
-- 每個階段開始前，進行中的 lane 先合併或停在乾淨點。P4 前必須清空，目前有 BL-0336 U1、U2 與 d0gate v2 U2。
+- 每個階段開始前，進行中的 lane 先合併或停在乾淨點。P4 前必須清空，目前有 BL-0336 U1、U2 與 d0gate v2 U2（d0gate v2 U2 的處置見 D9 第 3 點）。
 - 其他分支用 `relayout-rebase` 依 layout-map 改寫自己的 diff。
 - 順序：§2 → §4 spike → P1 → P2 → P3 → P4 → P5。
 - 每個階段都是獨立 lane，走四席審查。P4 後發 alpha 給 owner 實測。
 
 ## 7. 驗收（每個階段）
 - 依 §2 基準比對套件的 ID、數量與結果。P3 以前用現行 run.sh，P3 以後用 tests/run.sh。
-- 合併前全綠：layout-lint、leak-guard、check-hook-inventory、hook-harness-matrix --check、check-claude-md-inventory、doc-drift-gate、check-plan-graduation、所有封存物件的檢查器、`sync-all.sh --check`（含 codex 與 opencode）。
+- 合併前全綠：layout-lint、leak-guard、check-hook-inventory、hook-harness-matrix --check、check-claude-md-inventory、doc-drift-gate、check-plan-graduation、所有封存物件的檢查器（比對規則見 D9 第 1 點）、`sync-all.sh --check`（含 codex 與 opencode）。
 - 另做一次 trigger 驗證：在被搬動的路徑改一個檔，確認對應的 sync trigger 會觸發。
 - 每個新檢查都附負控制，並記錄先紅後綠的輸出。
 
@@ -375,37 +375,81 @@ platforms/ 鏡像產物
 - 負控制：證據目錄下新建含個人路徑的檔必須紅（證明無目錄豁免）；登錄表不存在必須紅；三項植入（個人路徑、合成假金鑰、.env）先紅後綠；遮罩器關閉時其測試要紅。
 
 ## D9 §4 封存閉包裁決（depth-0，2026-10-31）
-依據：`docs/plans/evidence/2026-10-31-repo-relayout-3-0-0/seal-closure.md`（含「relay0 前後比對」一節）。
+依據：`docs/plans/evidence/2026-10-31-repo-relayout-3-0-0/seal-closure.md`（含「relay0 前後比對」一節）。第一代審查後，第 1、2、3、4、5、6 點已修，第 7 點為新增。
 
-1. **基準紅清單**：以下項目在 relay0 前（85b3189df）與現況（ca97d97b3）都是紅的，期間沒有 commit 動過它們，定為搬家前的基準紅。
-   - 8 組 mission graph（名單照 seal-closure 比對表）：backlog-actionable-successor、codex-payload-residual-spike、codex-payload-residual-spike-successor、hook-test-harness-determinism、plan-review-codex-trusted-cwd-fix、qualification-verdict-stability、reviewer-output-token-budget-successor、skill-transport-implementer-arm。
-   - 13 份 task-authority。
-   - FROZEN g8、g67。
-   - d0gate rail digest（預登錄 57d04ce6，現算 29dfe2ef）。
-   - 2026-08-14 platform-capabilities。
-   - depth0-per-turn-gate 的 g1、g2 審查 artifact。
-   - 修改 §7「合併前全綠：所有封存物件的檢查器」：改為每個階段合併前，紅的集合必須與基準紅完全相同。不能新增紅；原本紅的轉綠或消失，也要在該階段寫明原因。
-2. **sources manifest 的路徑基準（O1）**：manifest 照計畫進 `project/missions/`。
+1. **基準紅改成逐物件指紋**：下列物件在 relay0 前（85b3189df）與現況（ca97d97b3）都是紅的，期間沒有 commit 動過它們，定為搬家前的基準紅。只比「哪些物件紅」不夠，所以基準逐物件記三樣東西：
+   - 穩定識別：物件路徑。
+   - 正規化後的失敗診斷：不符的檔清單、算出的 digest、錯誤碼。
+   - 該物件及其雜湊引用檔的逐檔 sha256。
+   - 每個階段合併前，經 layout-map 換算後，三樣都要與基準完全相同。基準紅物件「變得更壞」或位元組被動到，都算紅；原本紅的轉綠或消失，也要在該階段寫明原因。方法沿用 seal-closure「relay0 前後比對」的逐行比對（兩點跑相同指令、`diff` 輸出）。
+   - **基準紅完整清單，共 8 類，合計 26 個物件（8 graph、13 authority、g8、g67、amend-5、amend-7、rail digest、2026-08-14 收據各 1）加 2 份審查 artifact（以 frozen-walk 與 ta.sh 於 ca97d97b3 唯讀重跑核對）：**
+     1. 8 組 mission graph（`node scripts/mission-execution-graph-check.js` 產生）：backlog-actionable-successor、codex-payload-residual-spike、codex-payload-residual-spike-successor、hook-test-harness-determinism、plan-review-codex-trusted-cwd-fix、qualification-verdict-stability、reviewer-output-token-budget-successor、skill-transport-implementer-arm。
+     2. 13 份 task-authority（比對 `mission_graph_digest` 與檢查器算出的 graph 摘要；產生器是 seal-closure 的 ta.sh，P1 一併進 repo）。路徑為 `docs/mission-<slug>-task-authority.json`，slug 為：
+        agy-effort-rail-wording-2026-09-16、backlog-entry-migration、backlog-entry-schema、blind-review-packet-2026-09-16、disposition-resume-2026-09-16、final-panel-blind-admission-2026-09-16、final-panel-pins-2026-09-15、integration-ledger、ledger-rotation-order-2026-09-16、peer-residue-2026-09-15、proof-parity-raw-log-2026-09-16、qualification-verdict-stability（graph 本身也紅，檢查器 rc=2）、red-verification-repair-2026-09-16。
+     3. FROZEN stage-graph-g8 列（`stamp-prereg.js --row stage-graph-g8 --check`，rc=2）：不符 4 檔：`packs/manifest.json`、`run-skill-onoff-eval.sh`、`run-skill-onoff-matrix.sh`、`stamp-prereg.js`。
+     4. FROZEN stage-graph-g67（frozen-walk 走訪）：
+        - 本體 5 個不符檔：`arms/g67/off.json`、`arms/g67/on.json`、`prereg/stage-graph-g67.json`、`prereg/stage-graph-g67.md`、`run-g67-campaign.js`。
+        - amend-1 不符 3 檔：`run-skill-onoff-eval.sh`、`packs/manifest.json`、`README.md`（`stamp-g67-amendment.js --check` 只報前述的 `run-skill-onoff-eval.sh` 與 `README.md`，rc=2；兩個產生器的差異都要記）。
+     5. FROZEN 修訂 amend-5 的 `lib/stage-graph-cell.js`（frozen-walk 走訪）。
+     6. FROZEN 修訂 amend-7 的 `../../scripts/check-guidance-eval.js`（frozen-walk 走訪）。
+     7. d0gate rail digest：預登錄 57d04ce6，現算 29dfe2ef（`run-d0gate-campaign.js --print-runner-pin`）。
+     8. 2026-08-14 platform-capabilities（`platform-capability-claims.js validate-consumers`，claim-ID tampering，rc=1），以及 depth0-per-turn-gate 的 g1、g2 審查 artifact（plan sha256 不符，現算 45955cba，`check-phase-review-receipt.js`）。
+   - 其餘 FROZEN 表（files、w2a-g、amend-2/3/4/6/8、qs 系列、dcard 系列、gdorm、bpack、findings-batch 系列、d0gate）frozen-walk 全部相符，列為綠。
+   - **產生器**：frozen-walk 目前只在暫存，在 P1 lane 進 repo，成為正式檢查器；各類紅各自的檢查器見上列括號。基準指紋檔（逐物件三樣記錄）在 P1 lane 產出，作為 repo 內的證據檔。
+   - 修改第一部分 §7「合併前全綠：所有封存物件的檢查器」：改為每個階段合併前，紅的集合與指紋必須與基準完全相同，不能新增紅。
+2. **sources manifest 的路徑基準（O1）與逐檔例外**：manifest 照計畫進 `project/missions/`。
    - 檢查器 `loadSourceCoverageManifest` 改以登錄表的基準目錄解析 `plan_path`，基準是 `project/`；bootstrap 階段為 `docs/`。manifest 位元組不變。
    - 仍保留防路徑穿越：解析結果必須在基準目錄內。
-   - 在 P1 lane 實作，屬機制改動。負控制：一個逃出基準目錄的 `plan_path` 必須紅。
-   - 不採「manifest 放 `project/` 根目錄」：那會讓 `project/` 根目錄堆 103 個 json，不符合 owner「開發 repo 也要整齊」的要求。
+   - **逐檔例外要能宣告自己的解析基準。** 進行中 mission 的 manifest 留在 `docs/` 時，它的解析基準就是 `docs/`。
+   - **所有讀 `plan_path` 的程式都走登錄表同一個解析器**，不各自寫死：
+     - `scripts/mission-execution-graph-check.js`（sources coverage 檢查器，`loadSourceCoverageManifest`）。
+     - `scripts/check-plan-graduation.js`（`plan_active_lineage` 讀 `plan_path`／`rubric_path`，第 479、610–638 行）。
+     - `scripts/lib/sealed-docs.js`（讀 `docs/mission-*-sources.json`，以 `plan_path` 相對 `docs/`）。
+     - `scripts/next-touch-validation.js`（寫死 `docs/mission-*-sources.json`、`path.join(repo, 'docs', source.plan_path)`；依第 3 點是退役候選，若仍保留就必須走同一解析器）。
+     - `scripts/scaffold-mission.js`（產生 `mission-<slug>-sources.json`，輸出目錄與其中的 `plan_path` 要一致）。
+   - 在 P1 lane 實作，屬機制改動。負控制：一個逃出基準目錄的 `plan_path` 必須紅；例外 manifest 用自己的基準時必須綠，改用全域基準時必須紅。
+   - 不採「manifest 放 `project/` 根目錄」。理由更正：選項 A 搬的是 43 個 sources manifest（不是 103 個；103 是 docs 根目錄所有 mission-*.json 的數量）。選 A 會讓同一個 mission 的 sources manifest 和它的 graph、authority 分在兩個目錄，而且 `project/` 根目錄會多出 43 個 json，不符合 owner「開發 repo 也要整齊」的要求。
 3. **凍結列變成只能存檔（O8、O9、O12）**：
    - 搬家後，以下凍結列只當歷史紀錄，不再當正式可重跑的評測：
      - FROZEN g67、g8，以及指向 `check-guidance-eval.js` 的外部鍵。
      - next-touch 驗證器的釘表。
    - 這些列不改寫舊檔。要重跑就重新預註冊。
+   - **受影響的套件走 F1 宣告，不改 pin。** 搬動被釘檔的那個階段，下列套件要在該階段的 F1 新增集宣告為「退役」或「預期結果改變」，各附理由；`git grep -l` 核對的完整名單如下，階段開工時要重跑一次：
+     - `hooks/tests/next-touch-validation.test.sh`、`next-touch-single-manifest-source.test.sh`（next-touch 驗證器與釘表）。
+     - `hooks/tests/skill-onoff-g67.test.sh`、`skill-onoff-g8.test.sh`、`skill-onoff-gdorm.test.sh`（g67、g8 列與其外部鍵）。
+     - `hooks/tests/hook-multiplexer-benchmark.test.sh`、`grok-implementer-ab.test.sh`（next-touch 釘表指向的 fixture 與證據）。
+     - `hooks/tests/mission-terminal-rollover.test.sh`、`mission-retire-on-integration.test.sh`（fixture 內含 hook-multiplexer-benchmark 與 next-touch 的歷史文字）。
+     - `hooks/tests/check-guidance-eval.test.sh`、`sealed-zero-diff-validator-parity.test.sh`、`uncalled-script-labels.test.sh`、`implementation-campaign-dogfood.test.sh`、`doc-drift-gate.test.sh`、`paid-batch-auth-stop.test.sh`、`session-marker-write-target.test.sh`（提到上述腳本或檔名，逐一判斷是否受影響）。
    - `next-touch-validation.js`、`validate-next-touch-*.js` 列為死碼退役候選，在 §3 處理「只剩測試引用」的腳本時一併評估。
-   - d0gate v2 何時蓋章，待 owner 裁決 d-6cc94c50，選項是 P4 後蓋章或照原順序先蓋。
+   - owner 裁決（d-6cc94c50，2026-10-31）：d0gate v2 的預註冊在 P4 合併後才蓋章，pin 記錄搬家後的位元組。
+   - d0gate v2 U2 在 P4 之前停在乾淨點，不算 P4 前必須清空的進行中工作。
+   - 現有 d0gate rail digest 已不符（57d04ce6 對 29dfe2ef），屬於基準紅（第 1 點）。
 4. **SECURITY.md 與 D8 修正（O7、O8、O11）**：
-   - B 類 7 檔、`evals/skill-onoff/packs/manifest.json`、`prereg/FROZEN.json`、各份 platform-capabilities.json，都留在私有開發 repo，內容不改。
+   - B 類 7 檔（第一筆在 `docs/plans/`，其餘 6 筆在 `evals/skill-onoff/prereg/`）、`evals/skill-onoff/packs/manifest.json`、`prereg/FROZEN.json`、各份 platform-capabilities.json，都留在私有開發 repo，內容不改。
    - 依 C2 與 D1，`evals/`、`evidence/`、`project/` 都不匯出。
    - 收回「§4 之後產生清理過的後繼物件」的承諾。
-   - codex 鏡像裡那份 `platforms/codex/plugin/docs/projects/_archive/.../evidence/platform-capabilities.json` 位在會匯出的 `platforms/` 底下，C2 匯出工具必須依 D1「任何深度的證據檔一律排除」擋下它，並把這個實際路徑列為匯出工具的負控制。
+   - codex 鏡像裡那份 platform-capabilities.json 位在會匯出的 `platforms/` 底下，C2 匯出工具必須依 D1「任何深度的證據檔一律排除」擋下它。負控制路徑用「依 layout-map 換算後的 P4 後路徑」，不寫死現在的 `platforms/codex/plugin/docs/projects/...`。
 5. **進行中的 mission（blind-review-2d-snapshot，O4）**：
-   - 它的 6 個檔在退場前留在 `docs/`。
-   - 若 P1 開始時仍未退場，登錄表加這 6 條逐檔例外，每條附理由。
-6. **改寫器的禁止改寫清單**：
-   - P1–P4 的路徑改寫器要讀一份獨立、可檢查的禁止改寫清單，涵蓋 seal-closure 總表的所有封存物件與其雜湊引用的檔，不只 `sealedDocFiles()` 的 34 張 graph。
-   - 負控制：在清單內的檔植入一個字元，改寫器必須拒絕。
-   - 這份清單在 P1 lane 建立。
+   - 實際路徑，共 6 檔，在退場前留在 `docs/`：
+     - `docs/mission-blind-review-2d-snapshot-2026-09-19-execution-graph.json`
+     - `docs/mission-blind-review-2d-snapshot-2026-09-19-sources.json`
+     - `docs/mission-blind-review-2d-snapshot-2026-09-19-task-authority.json`
+     - `docs/plans/2026-09-19-blind-review-2d-overlap.md`
+     - `docs/plans/2026-09-19-blind-review-2d-overlap.rubric.md`
+     - `docs/plans/2026-09-19-blind-review-2d-overlap.plan-review-manifest.json`（sources 沒有引用它，但與 plan 同 stem，`plan_active_lineage` 以 stem 判斷，所以跟著留）。
+   - `.claude/mission-routing-config.json` 不搬，所以不放進 docs 例外。更正：seal-closure O4 原寫「graph、sources、authority、plan、rubric 共 6 檔」只列 5 項，實際第 6 檔就是上列 manifest。
+   - 若 P1 開始時仍未退場，登錄表加這 6 條逐檔例外，每條附理由，且宣告解析基準為 `docs/`（見第 2 點）。
+6. **改寫器的禁止改寫清單（範圍只放位元組必須保持不變的檔）**：
+   - P1–P4 的路徑改寫器讀一份獨立、可檢查的禁止改寫清單，涵蓋 seal-closure 總表中位元組必須保持不變的封存物件與其雜湊引用的檔，不只 `sealedDocFiles()` 的 34 張 graph。
+   - 負控制：在清單內的檔植入一個字元，改寫器必須拒絕。這份清單在 P1 lane 建立。
+   - **依計畫允許修改的檔列為排除，各附理由，並接到第一部分 §1 的逐檔例外機制：**
+     - O9 的 rail 檔（`dispatch-hetero.sh`、`per-turn-gate-arm.js`、`gate-verify.js`、`hooks/per-turn-gate.js`、`lib/seed-claude-config.js`）：P4 必改，該列已轉為存檔（第 3 點）。
+     - O8 的兩個 skill-onoff test.sh：P3 搬，列已轉為存檔。
+     - O12 釘住的 `validate-*.js`：退役候選。
+     - O10 repin 流程裡的兩份 SKILL.md（dev-flow、ceo-agent）：重釘流程本來就會改。
+     - O14 anchors manifest 的 `file` 欄：P4 只改這一欄，區段雜湊不變。
+7. **匯出後執行期的收據依賴（O11）**：
+   - 查證結果（讀程式，未執行）：`scripts/dispatch-hetero.sh:2125` 與 `scripts/dispatch-review.sh:299` 的 `validate_d2_agy_claims` 把收據預設路徑寫死為 `$SELF_DIR/../docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json`，環境變數 `AUTOPILOT_PLATFORM_CAPABILITY_RECEIPT` 可覆蓋。收據不可讀時直接 `die_precondition "D2 capability claim validation failed"`，沒有預設行為。只有 agy 席位會走到（hetero 在不是 codex、grok 等其他 runner 時；review 在 agy 審查席），且之後還會 `--reprobe`。
+   - `scripts/sync-codex-plugin-skills.sh:102` 把同一份收據列在 `DOC_FILES`，同步進 codex 鏡像，所以會被帶進會匯出的 `platforms/` 底下。
+   - 裁決：匯出的執行期程式不得依賴未匯出的檔。C2 之前要有一條 lane 依證據二選一：(a) 收據缺少時，走有文件、有測試的預設行為；(b) 另外產生一份不含個人資料的執行期收據，並且匯出。
+   - 在這之前，D1 的引用檢查必須能對現行寫死的路徑轉紅，當作負控制。

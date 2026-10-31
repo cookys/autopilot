@@ -70,7 +70,7 @@
 4. 解析基準：相對 repo 根。
 5. 檢查器：`check-plan-graduation.js` 的 `plan_active_lineage`。目前它把這份 plan 列為「現行活躍譜系」，不讓它被歸檔。
 6. 階段：P1。
-7. 建議：**(b)**，這一組（graph、sources、authority、plan、rubric 共 6 檔）留在 `docs/` 原位，寫進登錄表逐檔例外，等 mission 做終局退場後再搬。
+7. 建議：**(b)**，這一組（graph、sources、authority、plan、rubric 共 5 檔，加上同 stem 的 plan-review-manifest 共 6 檔）留在 `docs/` 原位，寫進登錄表逐檔例外，等 mission 做終局退場後再搬。
    - 理由：活躍 admission 還在引用，搬了會讓執行中的 session 失去路由。
 8. 驗證：`check-plan-graduation.js --json` rc=0，已跑。退場流程沒有跑（會寫檔）。
 
@@ -266,7 +266,7 @@
 | `evals/skill-onoff/prereg/FROZEN.json` | O7、O8 | 本身是檢查器的資料，不被雜湊 |
 | `platform-capabilities.json` 兩份（含 codex 鏡像） | O11 | rc=0 |
 
-- 這 7 檔全在 `evals/`，不搬（O7、O8 都選 (b)）。清理個人資料要靠「後繼物件」，但 prereg 規則明說凍結列被改就作廢，所以後繼物件等於開新列（例如 d0gate-v2.1 這種做法），不是改舊檔。
+- 這 7 檔中第一筆在 `docs/plans/`，其餘 6 筆在 `evals/skill-onoff/prereg/`；整批不搬（O7、O8 都選 (b)）。清理個人資料要靠「後繼物件」，但 prereg 規則明說凍結列被改就作廢，所以後繼物件等於開新列（例如 d0gate-v2.1 這種做法），不是改舊檔。
 
 ## 總表
 

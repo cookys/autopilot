@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0348 -->
+<!-- next-id: BL-0352 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1628,3 +1628,59 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0336 U1 second-generation review suggestion 2026-10-31
 - **Pointer**: docs/backlog/status-runs-json-drops-runs-dir-error.md
 - **Context**: src/status/cli.js about L167-193. Fix: JSON mode emits an object, or the reason goes in a serializable place. Negative control: a rejected runs dir must show its reason in --json output.
+
+### leak-guard follow-ups from the relay0 review (revert false block plus six cut suggestions)
+- **Id**: BL-0348
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: 個資掃描把「還原」先前清掉的個人資料（如 revert 清理 commit）當成新增行擋下；relay0 審查另砍了六條邊角小建議。
+- **Impact**: revert 清理 commit 會被誤擋，得手動繞；其餘六條目前都沒有實際失敗，是邊角硬化。
+- **Trigger**: next revert of a redaction commit, or next edit to scripts/leak-guard.js or scripts/lib/personal-data-patterns.js
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: relay0 review g2 and g3 (CUT/FOLLOW-UP suggestions) plus depth-0 observation, 2026-10-31
+- **Pointer**: docs/backlog/leak-guard-relay0-follow-ups.md
+- **Context**: Fix direction per item is in the sidecar. Each change needs a negative control shown red before green.
+
+### Registry reader follow-ups from the relay2 review (four cut suggestions)
+- **Id**: BL-0349
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: relay2 審查砍了四條小建議：搬檔工具寫死路徑沒接登錄表、一個全域旗標不會回復、一個參數的讀取範圍變了沒註明、key 數敘述對不上。
+- **Impact**: 都不影響現行行為；P3、P4 搬檔時寫死路徑會漏跟、同一程序先後跑兩種模式會讀錯目錄，文件數字對不上會誤導讀者。
+- **Trigger**: relayout P3 or P4 starts, or next edit to scripts/check-plan-graduation.js
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: relay2 review g1 (753bac21) and g2 (1e396ce2, f162da8f, 5ca6c335), 2026-10-31
+- **Pointer**: docs/backlog/registry-reader-relay2-follow-ups.md
+- **Context**: Four small fixes, one commit; details in the sidecar.
+
+### Research doc quotes a code comment that no longer matches the code
+- **Id**: BL-0350
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: 一份研究文件引用成本追蹤程式的「digest #6」註解，但引文裡的主機名已換成 placeholder，和程式註解原文不一致。
+- **Impact**: 只是引文外觀不一致，沒有功能影響；讀者拿引文去對程式會對不上。
+- **Trigger**: next edit to hooks/cost-tracker.js or that research doc
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: relay0 review g2 suggestion research-doc-misquote, 2026-10-31
+- **Pointer**: docs/backlog/research-doc-quote-vs-code-comment.md
+- **Context**: Pick one: reword the doc to say the comment cites a host digest without quoting, or redact the code comment too. Do not write the real host name anywhere (leak-guard).
+
+### Top-level leftovers for relayout P phases: skill-creator-workspace, .qc, .autopilot/evidence
+- **Id**: BL-0351
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: 頂層還有三塊雜物沒決定去留：技能評測工作區（89 個追蹤檔）、審查判決檔目錄、評測報告目錄（2 個檔）。
+- **Impact**: 搬或刪之前若不查讀取者，會弄壞評測腳本、pre-push 關卡與下一次觸碰驗證。
+- **Trigger**: relayout P phase that touches the top level
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: relay2 layout work, 2026-10-31
+- **Pointer**: docs/backlog/top-level-leftovers-relayout.md
+- **Context**: Readers and risks per item are in the sidecar.

@@ -115,7 +115,7 @@ assert_contains "$OUT" "moved/old.md:3" "NC4 twin: only the added line (3) is na
 assert_not_contains "$OUT" "moved/old.md:2" "NC4 twin: the legacy line (2) is not named"
 reset_stage
 # an old hit that is left alone while the file is edited elsewhere stays green
-sed -i 's/^old note/old note edited/' "$R/src/old.md"; git -C "$R" add -A
+sed_mutate "$R/src/old.md" 's/^old note/old note edited/'; git -C "$R" add -A
 OUT="$(guard)"; assert_eq "$?" "0" "NC4: editing another line of a file with a legacy hit is green"
 reset_stage
 

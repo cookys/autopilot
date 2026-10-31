@@ -351,6 +351,23 @@ test('retention: droppedRoots forgets a root that no longer appears in rows, mar
   assert.ok(!fs.existsSync(envelopeOf(f, 'job-r10')));
 });
 
+test('retention: exited rows long finished are not re-adopted with a fresh window when collect flaps empty (stale review roots stayed alive for ever)', () => {
+  const f = fx();
+  const ended = iso(Date.now() - 6 * 864e5);
+  const mk = (root) => ({ run_id: root, role: 'reviewer', runner: 'codex', model: 's', started_at: ended, ended_at: ended, fact_at: ended, final_status: 'reviewed', parent_run_id: null, root_run_id: root, depth: 0, manifest: null, project: f.identity, source: { manifest: null, status_probe: null, exit_file: null }, observed_at: iso(Date.now()), probe_age_s: null, rc: 0, elapsed_s: 5, alive: null });
+  const rowsOn = { v: true };
+  const x = mkWatcher(f, () => (rowsOn.v ? [mk('review-old-1'), mk('review-old-2')] : []));
+  fs.mkdirSync(path.join(f.live, 'runs'), { recursive: true });
+  for (const r of ['review-old-1', 'review-old-2']) fs.writeFileSync(envelopeOf(f, r), '{}'); // left by an earlier watcher
+  x.tick();
+  assert.deepStrictEqual(scopeFiles(f), [], 'rows ended 6 days ago: the orphan envelopes go at once, no fresh window');
+  for (let i = 0; i < 6; i += 1) {
+    rowsOn.v = i % 2 === 1; // collect flaps: empty (droppedRoots forgets the root) / full again (rows re-adopt it)
+    x.tick(WINDOW_S * 2);
+    assert.deepStrictEqual(scopeFiles(f), [], `flap ${i}: nothing re-created`);
+  }
+});
+
 // ---------------------------------------------------------------- 4. scope assignment of session inputs
 
 test('inputs: with a root on the plain marker the session tasks and phase belong to its root scope, not the unbound scope', () => {

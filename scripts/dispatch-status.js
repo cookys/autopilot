@@ -993,4 +993,6 @@ function main(argv) {
   return 0;
 }
 
-process.exit(main(process.argv.slice(2)));
+// exitCode, not process.exit(): exiting right after a large stdout write to a pipe truncates the output (the --list JSON of a
+// few hundred manifests lost its tail, so every consumer parsed null and saw zero runs).
+process.exitCode = main(process.argv.slice(2));

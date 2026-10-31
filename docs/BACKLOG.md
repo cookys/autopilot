@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0352 -->
+<!-- next-id: BL-0354 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1684,3 +1684,34 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: relay2 layout work, 2026-10-31
 - **Pointer**: docs/backlog/top-level-leftovers-relayout.md
 - **Context**: Readers and risks per item are in the sidecar.
+
+### live mod 的 AbovePrompt band 不讓下層 mod 也能畫
+- **Id**: BL-0352
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: peer
+- **Reporter**: codeforge
+- **Report**: 2026-10-31 fleet message
+- **Reply**: none
+- **Problem**: autopilot 的提示上方版位直接回傳自己的畫面，從不把控制權交給下一層，所以排在它後面的 mod 永遠畫不出來。
+- **Impact**: codeforge 想在下方加一條三欄統計版位，實測被呼叫 0 次，無法顯示；任何後排 mod 都有同樣問題。
+- **Trigger**: relayout section 2 and section 4 done, or next edit to mods/live/register.ts
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED codeforge 2026-10-31 (fleet message)
+- **Pointer**: docs/backlog/live-band-yield-to-lower-mods.md
+- **Context**: Fix direction and four tests in the sidecar. UI change: before and after colour screenshots to the owner before merge (mods design system section 12). After merge reply to codeforge with the commit; version stays 3.0.0.
+
+### suite-baseline run-all 只能逐支串行，全套要約 9 小時（效率，插隊）
+- **Id**: BL-0353
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: 全套基準工具一次只跑一支套件；在 19e2511fa 上跑了 2.5 小時只完成 727 支裡的 201 支，推估全部約 9 小時。
+- **Impact**: 搬家計畫每個階段都要比對全套基準，每階段合併被拖住大半天；推送前檢查只好放寬成只跑受影響套件。
+- **Trigger**: before relayout P1 starts (must land first)
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: depth-0 observation 2026-10-31 on 19e2511fa; priority high, efficiency work jumps the queue (owner rule)
+- **Pointer**: docs/backlog/suite-baseline-run-all-parallel.md
+- **Context**: Fix direction and equivalence check in the sidecar. Add a negative control: a suite listed as serial must never overlap another.

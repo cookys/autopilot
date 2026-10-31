@@ -21,10 +21,12 @@ CHANGED=(
 
 # Frozen change-pack blobs for files the repo has since moved past (cnimpl added the claude-native implementer
 # paragraph to references/hetero-dispatch.md after the bpack run). Blob id of the file at 0967088f1.
+# relay0 (f34b094e4) replaced personal data in multi-agent-portability.md with placeholders; the pack keeps the stamped pre-relay0 blob (pack bytes unchanged, manifest digest unchanged).
 # doagate (BL-0309 item 3) rewrote the --not-authorized example in level-front-door.md; its pinned blob is the file at c3809424c.
 declare -A FROZEN_BLOB=(
   [references/hetero-dispatch.md]=463ae330c0ce1d323c396e254fa7e3ec17dede85
   [skills/ceo-agent/references/level-front-door.md]=f3b6dc5eaee3250dc59404cff1db8ef3513f6544
+  [references/multi-agent-portability.md]=c82572ce9b18828de9af25c750eed3b42eeb4031
 )
 
 # pack_of <repo path> <base|change> -> path of that file inside the arm's pack

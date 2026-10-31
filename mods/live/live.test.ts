@@ -5719,10 +5719,10 @@ const HYGIENE_GOLDEN_76: string[] = [
 // BL-0352: the AbovePrompt hook calls next(e) so a mod below it on the ui.render chain can draw too. The bottom hook below plays that mod: it records what it
 // was handed and answers a Box of rows, or the engine's own drawing (what a mod that yields passes up).
 for (const surface of SURFACES) {
-  type Got = { maxRows: number; requestId: unknown; hasSurvey: boolean }
+  type Got = { bodyRows: number | undefined; maxRows: number; requestId: unknown; hasSurvey: boolean }
   const belowHook = (w: World, got: Got[], rows: number | null) => {
     w.lower = ($, e) => {
-      got.push({ maxRows: e.props.maxRows, requestId: (e as { requestId?: unknown }).requestId, hasSurvey: e.props.hasSurvey })
+      got.push({ bodyRows: e.props.scroll?.bodyRows, maxRows: e.props.maxRows, requestId: (e as { requestId?: unknown }).requestId, hasSurvey: e.props.hasSurvey })
       if (rows === null) return { type: 'engine' as const, ref: 0 }
       const { Box, Text } = $.ui.resolve(e)
       return Box({ flexDirection: 'column', children: Array.from({ length: rows }, (_, i) => Text({ children: 'BELOW-' + i })) })
@@ -5764,6 +5764,16 @@ for (const surface of SURFACES) {
       expect(g.maxRows).toBe(20 - BAND_ROWS)
       expect(g.hasSurvey).toBe(false)
     }
+  })
+
+  test('band over a lower mod: the lower mod is given scroll.bodyRows less the band rows, never below 0 (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const got: Got[] = []
+    belowHook(w, got, 3)
+    await start($, surface)
+    await draw($, { maxRows: 20, scroll: { offset: 0, bodyRows: 19 } })
+    await draw($, { maxRows: 20, scroll: { offset: 0, bodyRows: 0 } })
+    expect(got.map(g => g.bodyRows)).toEqual([18, 0])
   })
 
   test('band over a lower mod: the lower mod gets the requestId as received (forge-stats draws its Raster under it) (' + surface + ')', async ($, on) => {

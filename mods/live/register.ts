@@ -913,7 +913,9 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // answer, `{ type: 'engine' }`, is empty here): the band alone, as before.
     const left = e.props.maxRows - BAND_ROWS
     if (left < 1) return band
-    const below = await next({ ...e, props: { ...e.props, maxRows: left } })
+    // scroll.bodyRows is maxRows less the engine's `n more` row: it gives up the band's row too (never below 0)
+    const scroll = e.props.scroll === undefined ? e.props.scroll : { ...e.props.scroll, bodyRows: Math.max(0, e.props.scroll.bodyRows - BAND_ROWS) }
+    const below = await next({ ...e, props: { ...e.props, maxRows: left, scroll } })
     if (below === undefined || below === null || (below as { type?: string }).type === 'engine') return band
     return stackBand(el, band, below)
   })

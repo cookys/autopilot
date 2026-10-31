@@ -291,4 +291,4 @@ Repo-relayout tooling (3.0.0) lives under `tools/`, not `scripts/`, so `check-cl
 
 | Tool | What it does / when to call it |
 |------|--------------------------------|
-| `tools/migrate/suite-baseline.js` | `list` / `run-all` / `record` / `compare`: record every suite's id, count and pass/fail before a relayout phase, then diff the run after it (layout-map renames, declared-new ids, `scripts/tests/` joins at P3). Exit 0 consistent, 1 differences, 2 bad input. Contract: the file header; test: `hooks/tests/suite-baseline.test.sh`. |
+| `tools/migrate/suite-baseline.js` | `list` / `run-all` / `record` / `compare` (`run-all --jobs N` runs non-serial-listed suites N at a time and serial-listed ones alone afterwards; pool failures are re-run alone and marked `flaky-under-parallel` / `red-in-both-runs`, which `record` reads, `--flaky-as-green` opts in): record every suite's id, count and pass/fail before a relayout phase, then diff the run after it (layout-map renames, declared-new ids, `scripts/tests/` joins at P3). Exit 0 consistent, 1 differences, 2 bad input. Contract: the file header; test: `hooks/tests/suite-baseline.test.sh`. |

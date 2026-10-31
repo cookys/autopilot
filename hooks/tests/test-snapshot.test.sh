@@ -1077,7 +1077,7 @@ hide_flock_path() {
     dirname basename realpath readlink head tr cut sort uniq tee xargs find stat \
     id timeout wc comm cmp diff which hostname getent stdbuf nice nohup expr \
     install od printf test getopt column jq perl awk gawk mawk busybox dash \
-    logger tee; do
+    logger node; do
     src="$(command -v "$cmd" 2>/dev/null || true)"
     if [ -n "$src" ] && [ -x "$src" ]; then
       ln -sfn "$src" "$shim/$cmd"

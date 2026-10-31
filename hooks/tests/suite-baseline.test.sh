@@ -119,5 +119,96 @@ mods=$(find "$REPO_ROOT/mods" -maxdepth 2 -name run-tests.sh | wc -l)
 if [ "$(wc -l < "$T/list.txt")" = "$(( $(wc -l < "$T/all.txt") + mods ))" ]; then ok; else bad "list count != affected-suites --list-all + mods"; fi
 grep -q '^scripts/tests/' "$T/list.txt" && bad "list must not include scripts/tests" || ok
 
+# ---- run-all --jobs (BL-0353): fixture suites only, never the real tree ----
+FX="$T/fx"; mkdir -p "$FX/hooks/tests/lib" "$FX/stamps"
+printf '# serial list\nhooks/tests/s1.test.sh\nhooks/tests/s2.test.sh\n' > "$FX/hooks/tests/lib/serial-suites.txt"
+mk() { printf '%s\n' "$2" > "$FX/hooks/tests/$1"; }
+stamp='echo "$1 $EPOCHREALTIME"'
+for n in p1 p2 p3 p4; do
+  mk "$n.test.sh" "echo ${n}-start >&1; echo \"\$EPOCHREALTIME\" > \"\$FXSTAMPS/$n.start\"; for i in 1 2 3; do echo ${n}-line-\$i; sleep 0.2; done; echo ${n}-err >&2; echo \"\$EPOCHREALTIME\" > \"\$FXSTAMPS/$n.end\"; echo 'Summary: 3 passed, 0 failed'"
+done
+for n in s1 s2; do
+  mk "$n.test.sh" "echo \"\$EPOCHREALTIME\" > \"\$FXSTAMPS/$n.start\"; sleep 0.6; echo \"\$EPOCHREALTIME\" > \"\$FXSTAMPS/$n.end\"; echo 'Summary: 2 passed, 0 failed'"
+done
+# red in the pool the first time (a flag file marks the first run), green alone
+mk flaky.test.sh 'if [ -e "$FXSTAMPS/flaky.flag" ]; then echo "Summary: 4 passed, 0 failed"; else : > "$FXSTAMPS/flaky.flag"; echo "Summary: 3 passed, 1 failed"; exit 1; fi'
+mk redboth.test.sh 'echo "Summary: 1 passed, 1 failed"; exit 1'
+mk tmpdir.test.sh 'case "$TMPDIR" in /tmp/sbj.*) echo "Summary: 1 passed, 0 failed" ;; *) echo "TMPDIR=$TMPDIR"; exit 1 ;; esac'
+export FXSTAMPS="$FX/stamps"
+printf '%s\n' hooks/tests/p1.test.sh hooks/tests/p2.test.sh hooks/tests/s1.test.sh hooks/tests/p3.test.sh hooks/tests/s2.test.sh hooks/tests/p4.test.sh > "$T/ids-ovl.txt"
+
+# --jobs 1 (and no --jobs) are byte-identical to the one-at-a-time format
+node "$SB" run-all --root "$FX" --ids "$T/ids-ovl.txt" > "$T/j0.out" 2>/dev/null </dev/null
+node "$SB" run-all --root "$FX" --ids "$T/ids-ovl.txt" --jobs 1 > "$T/j1.out" 2>/dev/null </dev/null
+{ for n in p1 p2; do printf '%s-start\n%s-line-1\n%s-line-2\n%s-line-3\nSummary: 3 passed, 0 failed\n%s-err\n\nrc=0 hooks/tests/%s.test.sh\n' $n $n $n $n $n $n; done; } > "$T/j-exp-head.txt"
+head -c 20 "$T/j1.out" | grep -q '^p1-start' && ok || bad "--jobs 1 starts with the first suite's own output"
+cmp -s "$T/j0.out" "$T/j1.out" && ok || bad "--jobs 1 output differs from no --jobs"
+printf 'p1-start\np1-line-1\np1-line-2\np1-line-3\nSummary: 3 passed, 0 failed\np1-err\n\nrc=0 hooks/tests/p1.test.sh\n' > "$T/p1-exp.txt"
+head -n 8 "$T/j1.out" | cmp -s - "$T/p1-exp.txt" && ok || bad "--jobs 1 first block is stdout, stderr, blank line, rc line (old format)"
+[ "$(grep -c '^rc=0 ' "$T/j1.out")" = 6 ] && ok || bad "--jobs 1 prints six rc lines"
+
+# overlap check: python-free, node reads the stamp files
+overlap() { node -e '
+const fs=require("fs");const d=process.argv[1];const g=(n,k)=>Number(fs.readFileSync(d+"/"+n+"."+k,"utf8"));
+let bad=0;
+for(const s of ["s1","s2"]){for(const o of ["p1","p2","p3","p4","s1","s2"]){if(o===s)continue;
+  if(g(s,"start")<g(o,"end")&&g(o,"start")<g(s,"end")){console.log("OVERLAP "+s+" "+o);bad=1}}}
+process.exit(bad)' "$FX/stamps"; }
+overlapped_pool() { node -e '
+const fs=require("fs");const d=process.argv[1];const g=(n,k)=>Number(fs.readFileSync(d+"/"+n+"."+k,"utf8"));
+process.exit(g("p1","start")<g("p2","end")&&g("p2","start")<g("p1","end")?0:1)' "$FX/stamps"; }
+
+rm -f "$FX/stamps"/*
+node "$SB" run-all --root "$FX" --ids "$T/ids-ovl.txt" --jobs 4 > "$T/jp.out" 2>"$T/jp.err" </dev/null
+overlap > "$T/ov.txt" && ok || { bad "serial-listed suites overlapped another suite (--jobs 4)"; cat "$T/ov.txt"; }
+overlapped_pool && ok || bad "pool suites p1/p2 did not run concurrently (--jobs 4 is not parallel)"
+[ "$(grep -c '^rc=0 ' "$T/jp.out")" = 6 ] && ok || bad "--jobs 4 prints six rc lines"
+grep -q '6 run (4 pooled, 2 serial)' "$T/jp.err" && ok || bad "--jobs 4 stderr tally"
+
+# no interleaving: each suite's lines are one contiguous block ending in its own rc line
+node -e '
+const L=require("fs").readFileSync(process.argv[1],"utf8").split("\n");
+let cur=null,bad=0;
+for(const l of L){const m=/^(p\d)-/.exec(l);const r=/^rc=\d+ hooks\/tests\/(\w+)\.test\.sh/.exec(l);
+  if(m){if(cur&&cur!==m[1])bad=1;cur=m[1]}
+  if(r){if(cur&&cur!==r[1])bad=1;cur=null}}
+process.exit(bad)' "$T/jp.out" && ok || bad "outputs of different suites interleaved"
+for n in p1 p2 p3 p4; do grep -c "^$n-line-" "$T/jp.out" | grep -q '^3$' && ok || bad "$n lost lines in --jobs 4 output"; done
+
+# NEGATIVE CONTROL: with the exclusivity removed (serial-listed suites join the pool) the overlap check goes red
+sed 's/const serial = serialSuites(root);/const serial = new Set();/' "$SB" > "$T/mut-sb.js"
+if cmp -s "$SB" "$T/mut-sb.js"; then bad "negative control mutation did not hit (anchor drifted)"; else
+  rm -f "$FX/stamps"/*
+  node "$T/mut-sb.js" run-all --root "$FX" --ids "$T/ids-ovl.txt" --jobs 6 > /dev/null 2>&1 </dev/null
+  if overlap >/dev/null; then bad "negative control: overlap check stayed green with exclusivity removed"; else ok; fi
+fi
+
+# flaky / red-in-both reruns, TMPDIR isolation
+printf '%s\n' hooks/tests/p1.test.sh hooks/tests/flaky.test.sh hooks/tests/redboth.test.sh hooks/tests/tmpdir.test.sh hooks/tests/s1.test.sh > "$T/ids-fl.txt"
+rm -f "$FX/stamps"/*
+node "$SB" run-all --root "$FX" --ids "$T/ids-fl.txt" --jobs 3 > "$T/fl.out" 2>"$T/fl.err" </dev/null
+grep -q '^flaky-under-parallel: hooks/tests/flaky.test.sh (rc=1 in pool)$' "$T/fl.out" && ok || bad "flaky marker line missing"
+grep -q '^rc=0 hooks/tests/flaky.test.sh$' "$T/fl.out" && ok || bad "flaky suite should end rc=0 after the rerun"
+grep -q '^red-in-both-runs: hooks/tests/redboth.test.sh (rc=1 in pool, rc=1 alone)$' "$T/fl.out" && ok || bad "red-in-both marker line missing"
+grep -q '^rc=1 hooks/tests/redboth.test.sh$' "$T/fl.out" && ok || bad "red-in-both suite should end rc=1"
+grep -q '^rc=0 hooks/tests/tmpdir.test.sh$' "$T/fl.out" && ok || bad "pool suite did not get its own /tmp/sbj.* TMPDIR"
+
+# record reads the markers: default conservative (fail), --flaky-as-green passes it; both-red stays fail
+mkdir -p "$T/root0"
+rcis 0 "record of a parallel run" node "$SB" record --results "$T/fl.out" --root "$T/root0" --out "$T/fl.json"
+node -e '
+const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).suites;
+const f=s["hooks/tests/flaky.test.sh"],b=s["hooks/tests/redboth.test.sh"];
+const ok=f.flaky_under_parallel===true&&f.pool_rc===1&&f.rc===0&&f.status==="fail"&&f.count===4&&b.red_in_both_runs===true&&b.status==="fail"&&!s["hooks/tests/p1.test.sh"].flaky_under_parallel;
+process.exit(ok?0:1)' "$T/fl.json" && ok || bad "record default: flaky stored as fail with flaky_under_parallel/pool_rc"
+grep -q 'red in the pool, green alone (stored as fail): hooks/tests/flaky.test.sh' "$T/fl.err" || true
+rcis 0 "record --flaky-as-green" node "$SB" record --results "$T/fl.out" --root "$T/root0" --out "$T/fl2.json" --flaky-as-green
+node -e '
+const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).suites;
+process.exit(s["hooks/tests/flaky.test.sh"].status==="pass"&&s["hooks/tests/flaky.test.sh"].flaky_under_parallel===true&&s["hooks/tests/redboth.test.sh"].status==="fail"?0:1)' "$T/fl2.json" && ok || bad "record --flaky-as-green: flaky pass (still marked), both-red still fail"
+node "$SB" record --results "$T/fl.out" --root "$T/root0" --out "$T/fl3.json" 2>&1 >/dev/null </dev/null | grep -q 'hooks/tests/flaky.test.sh' && ok || bad "record lists flaky suites on stderr"
+rcis 2 "--jobs 0 is bad input" node "$SB" run-all --root "$FX" --ids "$T/ids-fl.txt" --jobs 0
+
+
 echo "suite-baseline: $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

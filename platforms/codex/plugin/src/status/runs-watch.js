@@ -656,6 +656,19 @@ function createWatcher({
     return active;
   }
 
+  // Latest activity of an exited-only root as the rows tell it (fact_at = the terminal time of an exited run); `nowMs` when
+  // the root has no rows or any row without a usable time.
+  function lastEvidenceMs(rows, root, nowMs) {
+    let latest = -Infinity;
+    for (const r of rows) {
+      if (r.root_run_id !== root) continue;
+      const at = Date.parse(r.fact_at || r.ended_at || r.started_at);
+      if (!Number.isFinite(at)) return nowMs;
+      latest = Math.max(latest, at);
+    }
+    return Number.isFinite(latest) ? Math.min(latest, nowMs) : nowMs;
+  }
+
   function rootSegmentsOnDisk() {
     const out = [];
     const prefix = `${key}--`;
@@ -740,7 +753,10 @@ function createWatcher({
     for (const root of candidates) {
       if (activeRoots.has(root)) { state.rootActiveAt.set(root, nowMs); state.droppedRoots.delete(root); roots.add(root); continue; }
       if (state.droppedRoots.has(root)) continue; // stays dropped until a live signal returns (exited rows do not resurrect it)
-      if (!state.rootActiveAt.has(root)) state.rootActiveAt.set(root, nowMs);
+      // The idle clock of a root first seen now starts at its last evidence of activity, not at "now": a root whose runs all
+      // ended long ago (rows re-adopted after droppedRoots forgot it while `collect` was transiently empty) must not get a
+      // fresh retention window every time it reappears. Orphan files / markers without rows still start at "now".
+      if (!state.rootActiveAt.has(root)) state.rootActiveAt.set(root, lastEvidenceMs(rows, root, nowMs));
       if (nowMs - state.rootActiveAt.get(root) >= retentionS * 1000) {
         state.droppedRoots.add(root); state.rootActiveAt.delete(root); dropped.push(root);
       } else roots.add(root);

@@ -181,6 +181,7 @@ const SUITE_RUNNER = LAYOUT.path('suite_runner');
 const SERIAL_SUITES = LAYOUT.path('serial_suites');
 const SCRIPTS_LIB_DIR = LAYOUT.path('scripts_lib_dir');
 const EVALS_DIR = LAYOUT.path('evals_dir');
+const PACK_MANIFEST = LAYOUT.path('skill_onoff_pack_manifest');
 const SCRIPTS_DIR = LAYOUT.path('scripts_dir');
 const DOCS_DIR = LAYOUT.path('docs_dir');
 const CLAUDE_DIR = LAYOUT.path('claude_dir');
@@ -238,6 +239,32 @@ const ALWAYS_RUN = [
   [`${HOOK_TESTS_DIR}/skill-count-metadata.test.sh`, 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
   [`${HOOK_TESTS_DIR}/qualify-recipe-credential-staging.test.sh`, `greps every ${PLANS_EVIDENCE_DIR}/*/administration/*/run.sh for staging variables`],
 ];
+// A repo file that an evaluation pack copies (pack manifest entry `<pack id>/<relative path>`) is compared against the
+// repo by the pack's content suite, and no source reference shows it. [pack id regex, suite]
+const PACK_CONTENT_SUITES = [[/bpack/, `${HOOK_TESTS_DIR}/bpack-content.test.sh`]];
+// -> Map(content suite -> changed files) for the changed files that some pack's manifest entry copies.
+function packContentSuites(changed, headTree) {
+  const out = new Map();
+  let man;
+  try { man = JSON.parse(headTree.read(PACK_MANIFEST)).packs; } catch { return out; }
+  if (!man || typeof man !== 'object') return out;
+  for (const [id, files] of Object.entries(man)) {
+    const hit = PACK_CONTENT_SUITES.find(([re]) => re.test(id));
+    if (!hit || !files || typeof files !== 'object') continue;
+    for (const entry of Object.keys(files)) {
+      if (!entry.startsWith(id + '/')) continue;
+      const rel = entry.slice(id.length + 1);
+      // A skill pack is `<skill>-...` holding that skill's own relative paths; other packs hold repo paths whole.
+      for (const p of changed) {
+        if (p === rel || (p.startsWith('skills/') && id.startsWith(p.split('/')[1] + '-') && p === `skills/${p.split('/')[1]}/${rel}`)) {
+          if (!out.has(hit[1])) out.set(hit[1], new Set());
+          out.get(hit[1]).add(p);
+        }
+      }
+    }
+  }
+  return out;
+}
 // Prose cannot break a suite; mirrors are covered by the always-run codex-plugin-package suite.
 const PURE_DOC = new RegExp(`^(${reEsc(DOCS_DIR)}|website|skill-creator-workspace)\\/|^[^/]+\\.(md|txt)$`);
 const MIRROR = /^platforms\//;
@@ -286,7 +313,13 @@ function gitTree(root, ref) {
   }
   return {
     files: [...blobs.keys()],
-    read(p) { if (!cache) load(); return cache.has(p) ? cache.get(p) : null; },
+    read(p) {
+      if (!cache) load();
+      if (cache.has(p)) return cache.get(p);
+      // Only code files are batch-loaded; a single data file (the pack manifest) is read on demand.
+      if (!blobs.has(p) || isCode(p)) return null;
+      try { const b = git(root, ['cat-file', 'blob', blobs.get(p)]); return b.length <= MAX_BYTES ? b.toString('utf8') : null; } catch { return null; }
+    },
   };
 }
 
@@ -587,8 +620,12 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   // referrer is missing from `reached` even when its own walk hits a present suite.
   const reached = new Set(suites.flatMap((s) => chains[s]));
   const unreferenced = [];
+  const packed = packContentSuites(changed, headTree);
+  const packedFiles = new Set([...packed].filter(([f]) => present.has(f)).flatMap(([, ps]) => [...ps]));
   for (const p of changed) {
     if (isProse(p) || MIRROR.test(p)) continue;
+    if (packedFiles.has(p)) continue; // a pack content suite checks this file
+
     if (isSuite(p) && !present.has(p)) continue; // deleted suite: nothing left to run
     if (reached.has(p)) continue;
     const alone = walkParents([p], graph, maxWeak);
@@ -599,7 +636,9 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   // Content-scanning suites ride along with every selective result that has a non-prose change.
   const alwaysRun = changed.some((p) => !isProse(p)) ? ALWAYS_RUN.map(([f]) => f).filter((f) => present.has(f)) : [];
   for (const f of alwaysRun) if (!chains[f]) chains[f] = [f];
-  const all = [...new Set([...suites, ...alwaysRun])].sort();
+  const packSuites = [...packed.keys()].filter((f) => present.has(f));
+  for (const f of packSuites) if (!chains[f]) chains[f] = [f];
+  const all = [...new Set([...suites, ...alwaysRun, ...packSuites])].sort();
   Object.defineProperty(chains, '__hops', { value: shortestHops(changed, graph), enumerable: false });
   return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
 }

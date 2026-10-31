@@ -1317,3 +1317,42 @@ test('layout: prose under the registry docs_dir skips category names, a literal 
     assert.ok(out2.suites.includes('hooks/tests/plans-loop.test.sh'), `default docs_dir: ${JSON.stringify(out2.suites)}`);
   } finally { r2.cleanup(); }
 });
+
+// A file an evaluation pack copies is compared against the repo by the pack's content suite, which never
+// names it in source (the pack manifest is the only link). Changing it must select that suite.
+test('a file copied by a bpack pack selects bpack-content; the mapping is what selects it (negative control)', () => {
+  const manifest = JSON.stringify({ packs: {
+    'bpack-files-change': { 'bpack-files-change/references/packed.md': 'x' },
+    'ceo-agent-bpack-change': { 'ceo-agent-bpack-change/references/card.md': 'x' },
+    'other-pack': { 'other-pack/references/elsewhere.md': 'x' },
+  } });
+  const r = makeRepo({
+    ...LAYOUT,
+    'evals/skill-onoff/packs/manifest.json': manifest,
+    'hooks/tests/bpack-content.test.sh': '#!/usr/bin/env bash\ntrue\n',
+    'references/packed.md': 'a\n', 'references/elsewhere.md': 'a\n', 'references/plain.md': 'a\n',
+    'skills/ceo-agent/references/card.md': 'a\n', 'skills/other/references/card.md': 'a\n',
+  });
+  const BP = 'hooks/tests/bpack-content.test.sh';
+  const sel = (m) => r.select(r.change(m));
+  try {
+    { const o = sel({ 'references/packed.md': 'b\n' }); assert.ok(o.suites.includes(BP), 'repo path packed whole ' + JSON.stringify(o)); }
+    assert.ok(sel({ 'skills/ceo-agent/references/card.md': 'b\n' }).suites.includes(BP), 'skill-relative pack path');
+    assert.ok(!sel({ 'skills/other/references/card.md': 'b\n' }).suites.includes(BP), 'same relative path under another skill is not packed');
+    assert.ok(!sel({ 'references/elsewhere.md': 'b\n' }).suites.includes(BP), 'a non-bpack pack does not select the bpack suite');
+    assert.ok(!sel({ 'references/plain.md': 'b\n' }).suites.includes(BP), 'an unpacked file does not select it');
+    // Negative control: a selector copy with the mapping removed must NOT select it, so this test is red without the mapping.
+    const copy = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-mut-'));
+    try {
+      fs.cpSync(path.join(__dirname), path.join(copy, 'scripts'), { recursive: true });
+      const f = path.join(copy, 'scripts', 'affected-suites.js');
+      const src = fs.readFileSync(f, 'utf8');
+      const mut = src.replace(/const PACK_CONTENT_SUITES = \[.*\];/, 'const PACK_CONTENT_SUITES = [];');
+      assert.notStrictEqual(mut, src, 'mutation applied');
+      fs.writeFileSync(f, mut);
+      const head = r.change({ 'references/packed.md': 'c\n' });
+      const out = JSON.parse(execFileSync('node', [f, '--root', r.dir, '--base', r.base, '--head', head, '--json'], { stdio: 'pipe' }).toString());
+      assert.ok(!out.suites.includes(BP), 'without the mapping the pack suite is not selected');
+    } finally { fs.rmSync(copy, { recursive: true, force: true }); }
+  } finally { r.cleanup(); }
+});

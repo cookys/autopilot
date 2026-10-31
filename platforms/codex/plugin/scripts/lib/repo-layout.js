@@ -74,6 +74,7 @@ const DEFAULT_REGISTRY = {
     mission_routing_config: '.claude/mission-routing-config.json',
     owner_kernel_governance: '.claude/owner-kernel-governance.json',
     evals_dir: 'evals',
+    skill_onoff_pack_manifest: 'evals/skill-onoff/packs/manifest.json',
   },
 
   // Placement decision table (plan section 1 with the F2 correction: work records before docs).

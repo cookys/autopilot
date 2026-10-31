@@ -40,7 +40,8 @@ import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { SHOW_PRESS, showTarget } from './ui'
-import { Band, BAND_ROWS, stackBand } from './band'
+import { BandBar, BarRule, barContent, stackBand } from './band'
+import type { BarTabId } from './tabs'
 import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
@@ -70,6 +71,7 @@ let timer: { cancel: () => void } | undefined
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
 let paneTab: PaneTab = 'now'
+let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
 const folded = new Set<string>() // the Now sections the person folded (SECTION ids); kept across /clear, a view preference and not tied to the transcript
 const recentTracker = makeRecentTracker()
@@ -841,6 +843,7 @@ async function ringToNext($: EngineInterface): Promise<void> {
 // (mods/register.ts) registers the one hook and calls this and the viewer's start; the live mod's own tests use `register` below, which hooks it alone.
 export async function startLive($: EngineInterface): Promise<void> {
   paneTab = 'now'
+  barTab = null
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
   decided = null
@@ -892,12 +895,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // a slot pressed opens the pane on the tab that explains it (model.ts slotTab). It is a press like the ⓘ's: it takes a sequence number, so an
     // ⓘ press still in flight becomes stale and cannot drag the tab back, and it records its tab as `decided` while its open is in flight, so an
     // ⓘ landing meanwhile steps on from the slot's tab instead of reading a pane $.ui.panes() does not list yet.
-    const slot = async (id: SlotId) => {
+    const openOn = async (tab: PaneTab, unfold: string | null = null) => {
       const seq = ++pressSeq
-      const tab = slotTab(id)
       decided = Promise.resolve(tab)
       paneTab = tab
-      const unfold = slotUnfolds(id)
       if (unfold !== null) folded.delete(unfold)
       try {
         $.ui.invalidate('ui.render')
@@ -906,19 +907,22 @@ export function registerLive(on: Parameters<Register>[0]): void {
         if (seq === pressSeq) decided = null
       }
     }
+    const slot = (id: SlotId) => openOn(slotTab(id), slotUnfolds(id))
+    // a tab of the band row: the open tab is a memory state; pressing it again closes it
+    const onTab = (id: BarTabId) => {
+      barTab = barTab === id ? null : id
+      $.ui.invalidate('ui.render')
+    }
     const el = $.ui.resolve(e)
-    const band = Band(el, snapshot, e.props.bodyColumns, info, tr, slot)
-    // The band is BAND_ROWS tall. A mod below this hook on the ui.render chain (codeforge's forge-stats) draws in what is left: next() gets the same event
-    // with only props.maxRows and props.scroll.bodyRows reduced by the band's row (bodyRows is maxRows less the engine's `n more` row, so it gives up the row too,
-    // never below 0; a scroll that was not there stays absent). requestId and every other field stay as received. A maxRows that is missing or not a number is
-    // no room: next() is not called. Nothing left, or nothing drawn below (the host's own answer, `{ type: 'engine' }`, is empty here): the band alone, as before.
-    if (!Number.isFinite(e.props.maxRows)) return band
-    const left = e.props.maxRows - BAND_ROWS
-    if (left < 1) return band
-    const scroll = e.props.scroll
-    const below = await next({ ...e, props: { ...e.props, maxRows: left, ...(scroll === undefined ? {} : { scroll: { ...scroll, bodyRows: Math.max(0, scroll.bodyRows - BAND_ROWS) } }) } })
-    if (below === undefined || below === null || (below as { type?: string }).type === 'engine') return band
-    return stackBand(el, band, below)
+    const columns = e.props.bodyColumns
+    const rows = Number.isFinite(e.props.maxRows) ? e.props.maxRows : 0
+    const t = tr
+    const active = barTab
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, null)
+    // the content under the bar needs the rule row and its own rows; when they do not fit, the bar alone stays (the first row is always kept)
+    const content = active === null || active === 'forge' || active === 'decide' ? [] : barContent(el, snapshot, active, columns, t, { onSlot: slot, onOpen: (tab: PaneTab) => { void openOn(tab) } })
+    if (content.length === 0 || rows < 2 + content.length) return bar.node
+    return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: await read($, DECIDE), inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }, decideScroll)))

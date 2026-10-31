@@ -6,6 +6,8 @@
   "toast.execution": "execution axis: RUNNING {r0} to {r1} · EXITED {e0} to {e1} · UNKNOWN {u0} to {u1}",
   "toast.acceptance": "acceptance axis: {from} to {to}",
   "band.fam": "·{n}fam",
+  "bar.open": "Open panel",
+  "bar.dispatch": "Dispatch",
   "band.waiting": "live · waiting for the first snapshot",
   "pane.waiting": "waiting for the first snapshot",
   "pane.header": "session {session} · host {host} · ctx {ctx}",

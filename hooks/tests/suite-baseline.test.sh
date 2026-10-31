@@ -201,12 +201,44 @@ const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).suites;
 const f=s["hooks/tests/flaky.test.sh"],b=s["hooks/tests/redboth.test.sh"];
 const ok=f.flaky_under_parallel===true&&f.pool_rc===1&&f.rc===0&&f.status==="fail"&&f.count===4&&b.red_in_both_runs===true&&b.status==="fail"&&!s["hooks/tests/p1.test.sh"].flaky_under_parallel;
 process.exit(ok?0:1)' "$T/fl.json" && ok || bad "record default: flaky stored as fail with flaky_under_parallel/pool_rc"
-grep -q 'red in the pool, green alone (stored as fail): hooks/tests/flaky.test.sh' "$T/fl.err" || true
 rcis 0 "record --flaky-as-green" node "$SB" record --results "$T/fl.out" --root "$T/root0" --out "$T/fl2.json" --flaky-as-green
 node -e '
 const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).suites;
 process.exit(s["hooks/tests/flaky.test.sh"].status==="pass"&&s["hooks/tests/flaky.test.sh"].flaky_under_parallel===true&&s["hooks/tests/redboth.test.sh"].status==="fail"?0:1)' "$T/fl2.json" && ok || bad "record --flaky-as-green: flaky pass (still marked), both-red still fail"
-node "$SB" record --results "$T/fl.out" --root "$T/root0" --out "$T/fl3.json" 2>&1 >/dev/null </dev/null | grep -q 'hooks/tests/flaky.test.sh' && ok || bad "record lists flaky suites on stderr"
+node "$SB" record --results "$T/fl.out" --root "$T/root0" --out "$T/fl3.json" 2>"$T/rec.err" >/dev/null </dev/null
+grep -q 'red in the pool, green alone (stored as fail): hooks/tests/flaky.test.sh' "$T/rec.err" && ok || bad "record lists flaky suites on stderr"
+# timeout forms of both markers: synthetic lines record must read, and a real run that times out in the pool
+cat > "$T/to.txt" <<'X'
+Summary: 3 passed, 0 failed
+
+flaky-under-parallel: hooks/tests/ta.test.sh (timeout in pool)
+rc=0 hooks/tests/ta.test.sh
+Summary: 1 passed, 1 failed
+
+red-in-both-runs: hooks/tests/tb.test.sh (timeout in pool, rc=1 alone)
+rc=1 hooks/tests/tb.test.sh
+Summary: 1 passed, 1 failed
+
+red-in-both-runs: hooks/tests/tc.test.sh (rc=2 in pool, rc=124 alone)
+rc=124 hooks/tests/tc.test.sh
+X
+rcis 0 "record of timeout-form markers" node "$SB" record --results "$T/to.txt" --root "$T/root0" --out "$T/to.json"
+node -e '
+const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).suites;
+const a=s["hooks/tests/ta.test.sh"],b=s["hooks/tests/tb.test.sh"],c=s["hooks/tests/tc.test.sh"];
+process.exit(a.flaky_under_parallel&&a.pool_rc===124&&a.status==="fail"&&b.red_in_both_runs===true&&b.pool_rc===124&&c.red_in_both_runs===true&&c.pool_rc===2?0:1)' "$T/to.json" && ok || bad "record reads timeout forms (pool_rc 124) of flaky and red-in-both markers"
+mk slow-flaky.test.sh 'if [ -e "$FXSTAMPS/sf.flag" ]; then echo "Summary: 2 passed, 0 failed"; else : > "$FXSTAMPS/sf.flag"; sleep 30; fi'
+mk slow-red.test.sh 'sleep 30'
+printf '%s\n' hooks/tests/slow-flaky.test.sh hooks/tests/slow-red.test.sh > "$T/ids-to.txt"
+rm -f "$FX/stamps"/*
+node "$SB" run-all --root "$FX" --ids "$T/ids-to.txt" --jobs 2 --entry-timeout 1 > "$T/to-real.out" 2>/dev/null </dev/null
+grep -q '^flaky-under-parallel: hooks/tests/slow-flaky.test.sh (timeout in pool)$' "$T/to-real.out" && ok || bad "run-all flaky timeout marker"
+grep -q '^red-in-both-runs: hooks/tests/slow-red.test.sh (timeout in pool, rc=124 alone)$' "$T/to-real.out" && ok || bad "run-all red-in-both timeout marker"
+rcis 0 "record of the real timeout run" node "$SB" record --results "$T/to-real.out" --root "$T/root0" --out "$T/to-real.json"
+node -e '
+const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).suites;
+const a=s["hooks/tests/slow-flaky.test.sh"],b=s["hooks/tests/slow-red.test.sh"];
+process.exit(a.flaky_under_parallel&&a.pool_rc===124&&b.red_in_both_runs&&b.pool_rc===124&&b.rc===124?0:1)' "$T/to-real.json" && ok || bad "record reads the real run-all timeout markers"
 rcis 2 "--jobs 0 is bad input" node "$SB" run-all --root "$FX" --ids "$T/ids-fl.txt" --jobs 0
 
 

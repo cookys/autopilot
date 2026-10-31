@@ -144,8 +144,8 @@ function parseResults(file, what) {
   for (const line of raw.split('\n')) {
     const fm = /^flaky-under-parallel: (\S+) \((?:timeout|rc=(\d+)) in pool\)\s*$/.exec(line);
     if (fm) marks.set(fm[1], { flaky: true, pool_rc: fm[2] === undefined ? 124 : Number(fm[2]) });
-    const bm = /^red-in-both-runs: (\S+) \(rc=(\d+) in pool, rc=\d+ alone\)\s*$/.exec(line);
-    if (bm) marks.set(bm[1], { both_red: true, pool_rc: Number(bm[2]) });
+    const bm = /^red-in-both-runs: (\S+) \((?:timeout|rc=(\d+)) in pool, rc=\d+ alone\)\s*$/.exec(line);
+    if (bm) marks.set(bm[1], { both_red: true, pool_rc: bm[2] === undefined ? 124 : Number(bm[2]) });
     const m = /^rc=(\d+) (\S+)\s*$/.exec(line);
     if (m) { add(m[2], Number(m[1]), buf.join('\n')); buf = []; } else buf.push(line);
   }

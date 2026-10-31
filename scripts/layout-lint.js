@@ -8,7 +8,9 @@
  * Judges `git ls-files` (tracked files only; untracked files in the work tree are not looked at) and only
  * the rules in force at the registry's current stage:
  *   always:           top-level directory allowlist, root-file allowlist, tools/ subdirectory allowlist,
- *                     path keys point at something tracked, exceptions name a tracked file
+ *                     path keys point at something tracked, exceptions name a tracked file,
+ *                     every trigger in the sync manifest and every serial-suites entry (data files that cannot read
+ *                     the registry at run time) hits a tracked file and sits under a registry path (see checkDataPaths)
  *   from its stage:   each placement rule whose `active_from` is reached (first matching rule wins; a file
  *                     claimed by a not-yet-active rule is left alone)
  * Exit codes: 0 clean; 1 violations (each listed with the rule it hit); 2 the registry itself is
@@ -17,6 +19,7 @@
  * Test override: REPO_LAYOUT_REGISTRY or --registry points at another registry file; --repo-root at another repo.
  */
 
+const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const layout = require('./lib/repo-layout.js');
@@ -41,6 +44,56 @@ function trackedFiles(root) {
 
 function compile(match) {
   return { include: match.include.map((p) => new RegExp(p)), exclude: match.exclude.map((p) => new RegExp(p)) };
+}
+
+const GLOB_CH = /[*?[\]{}]/;
+
+/** Glob (`*`, `**`, `?`) to a RegExp over repo-relative posix paths. */
+function globToRegExp(g) {
+  let re = '';
+  for (let i = 0; i < g.length; i++) {
+    const c = g[i];
+    if (c === '*') {
+      if (g[i + 1] === '*') { re += '.*'; i++; } else re += '[^/]*';
+    } else if (c === '?') re += '[^/]';
+    else re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp('^' + re + '$');
+}
+
+/** Directory part of an entry that is literal (everything before the first segment with a glob character). */
+function literalPrefix(entry) {
+  const segs = entry.split('/');
+  const out = [];
+  for (const sg of segs) { if (GLOB_CH.test(sg)) break; out.push(sg); }
+  return out.join('/');
+}
+
+/**
+ * The sync manifest triggers and hooks/tests/lib/serial-suites.txt are data files: they cannot read the
+ * registry when they run, so a relayout generator moves their entries by hand. This check is what turns a
+ * missed entry red. Each entry must (1) hit at least one tracked file and (2) when it points into an area the
+ * registry governs (its first path segment is the first segment of some registry path), sit under a registry
+ * path value, or be a directory that contains one. Entries elsewhere (skills/, src/, ...) only get check (1).
+ * A suffix trigger (`*.js`) names no location and is not checked.
+ * `entries`: [{ where, entry, kind: 'exact'|'dir'|'suffix'|'glob' }].
+ */
+function checkDataPaths(entries, files, regPaths, bad, rule) {
+  const values = Object.values(regPaths);
+  const governed = new Set(values.map((v) => v.split('/')[0]));
+  const under = (p, v) => p === v || p.startsWith(v + '/');
+  for (const { where, entry, kind } of entries) {
+    if (kind === 'suffix') continue; // `*.js`-style: names no location, so it cannot go stale by a move
+    let hit;
+    if (kind === 'dir') hit = files.some((f) => f.startsWith(entry));
+    else if (kind === 'glob') { const re = globToRegExp(entry); hit = files.some((f) => re.test(f)); }
+    else hit = files.includes(entry);
+    if (!hit) { bad(rule, where, `${JSON.stringify(entry)} matches no tracked file`); continue; }
+    const prefix = kind === 'dir' ? entry.replace(/\/+$/, '') : literalPrefix(entry);
+    if (!prefix || !governed.has(prefix.split('/')[0])) continue;
+    const ok = values.some((v) => under(prefix, v) || under(v, prefix));
+    if (!ok) bad(rule, where, `${JSON.stringify(entry)} is not under any path in the registry (stale after a move?)`);
+  }
 }
 
 function main() {
@@ -119,6 +172,31 @@ function main() {
   // 4. exceptions name a tracked file
   for (const e of reg.exceptions) {
     if (!fileSet.has(e.path)) bad('exceptions', e.path, 'exception names a file that is not tracked (stale)');
+  }
+
+  // 3b. data files that cannot read the registry: sync manifest triggers and serial-suites entries
+  const dataFile = (key) => (reg.paths[key] && fileSet.has(reg.paths[key]) ? path.join(o.root, reg.paths[key]) : null);
+  const manifestFile = dataFile('sync_manifest');
+  if (manifestFile) {
+    let manifest = null;
+    try { manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8')); } catch (e) { bad('sync-manifest', reg.paths.sync_manifest, `unreadable: ${e.message}`); }
+    const entries = [];
+    for (const r of (manifest && Array.isArray(manifest.rituals) ? manifest.rituals : [])) {
+      for (const t of (Array.isArray(r.trigger) ? r.trigger : [])) {
+        const kind = t.endsWith('/') ? 'dir' : t.startsWith('*') ? 'suffix' : GLOB_CH.test(t) ? 'glob' : 'exact';
+        entries.push({ where: `${reg.paths.sync_manifest} ritual ${r.id}`, entry: t, kind });
+      }
+    }
+    checkDataPaths(entries, files, reg.paths, bad, 'sync-manifest:trigger');
+  }
+  const serialFile = dataFile('serial_suites');
+  if (serialFile) {
+    const entries = [];
+    for (const raw of fs.readFileSync(serialFile, 'utf8').split('\n')) {
+      const e = raw.replace(/#.*/, '').replace(/\s+/g, '');
+      if (e) entries.push({ where: reg.paths.serial_suites, entry: e, kind: GLOB_CH.test(e) ? 'glob' : 'exact' });
+    }
+    checkDataPaths(entries, files, reg.paths, bad, 'serial-suites');
   }
 
   // 5. placement rules in force at this stage

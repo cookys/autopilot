@@ -172,6 +172,40 @@ node -e '
 ' "$LAYOUT"
 assert_eq "$?" "0" "api: 8 rules, tools/ opens only migrate, unknown key throws"
 
+# ── data files that cannot read the registry: sync-manifest triggers and serial-suites entries ──
+mkdir -p "$R/scripts" "$R/hooks/tests/lib"
+echo "t" > "$R/hooks/tests/a.test.sh"; echo "s" > "$R/scripts/s.js"
+printf '%s\n' '# comment' 'hooks/tests/a.test.sh  # trailing' > "$R/hooks/tests/lib/serial-suites.txt"
+write_manifest() { # <trigger json array>
+  printf '{"rituals":[{"id":"r1","trigger":%s}]}\n' "$1" > "$R/scripts/sync-manifest.json"
+  git -C "$R" add -A
+}
+write_manifest '["scripts/", "hooks/tests/a.test.sh", "skills/", "*.js"]'
+DATA_PATHS='d.allowlists.top_dirs.push({ name: "scripts", purpose: "fixture" }, { name: "skills", purpose: "fixture" }); d.paths = { plans_dir: "docs/plans", hooks_dir: "hooks", hook_tests_dir: "hooks/tests", serial_suites: "hooks/tests/lib/serial-suites.txt", scripts_dir: "scripts", sync_manifest: "scripts/sync-manifest.json" }'
+mkreg "$TEST_TMP/reg-data.json" "$DATA_PATHS"
+OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "1" "data: skills/ names no tracked file, so the control is red for that entry"
+assert_contains "$OUT" '"skills/" matches no tracked file' "data: names the dead trigger"
+mkdir -p "$R/skills"; echo "k" > "$R/skills/k.md"; git -C "$R" add -A
+OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "0" "data twin: triggers that hit tracked files, outside governed areas and a suffix entry, are green"
+write_manifest '["scripts/", "docs/gone/x.md"]'
+OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "1" "data: a trigger pointing at a nonexistent path is red"
+assert_contains "$OUT" "sync-manifest:trigger" "data: names the rule"
+assert_contains "$OUT" '"docs/gone/x.md"' "data: names the entry"
+mkdir -p "$R/docs/old"; echo "o" > "$R/docs/old/x.md"
+write_manifest '["docs/old/x.md"]'
+OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "1" "data: a trigger that hits a file but sits under no registry path is red"
+assert_contains "$OUT" "is not under any path in the registry" "data: says it is under no registry path"
+mkreg "$TEST_TMP/reg-data-docs.json" "$DATA_PATHS; d.paths.old_docs = \"docs/old\""
+OUT="$(lint "$TEST_TMP/reg-data-docs.json")"; assert_eq "$?" "0" "data twin: once a registry path covers it the same trigger is green"
+write_manifest '["scripts/"]'
+printf '%s\n' 'hooks/tests/a.test.sh' 'hooks/tests/missing.test.sh' > "$R/hooks/tests/lib/serial-suites.txt"; git -C "$R" add -A
+OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "1" "data: a serial-suites entry naming no tracked file is red"
+assert_contains "$OUT" "[serial-suites]" "data: names the rule"
+assert_contains "$OUT" "hooks/tests/missing.test.sh" "data: names the entry"
+printf '%s\n' 'hooks/tests/a.test.sh' > "$R/hooks/tests/lib/serial-suites.txt"; git -C "$R" add -A
+OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "0" "data twin: a serial-suites file whose entries all exist is green"
+reset_repo
+
 # ── the real repo at its current stage ──
 OUT="$(cd "$REPO_ROOT" && node "$LINT" 2>&1)"; assert_eq "$?" "0" "real repo: layout-lint is clean at its current stage"
 

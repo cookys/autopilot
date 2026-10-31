@@ -55,14 +55,37 @@ unset __git_local_vars
 set -m
 
 TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOKS_DIR="$(cd "$TESTS_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$HOOKS_DIR/.." && pwd)"
+# The runner finds the repo root from its own location (the one literal left: its depth below the root).
+# Every other repo path comes from the layout registry (scripts/lib/repo-layout.js); a key the registry
+# cannot resolve stops the run here, there is no fallback to a literal path (that would be a path alias).
+REPO_ROOT="$(cd "$TESTS_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
+layout() { # layout VAR key
+  local _v
+  _v="$(node "$REPO_ROOT/scripts/lib/repo-layout.js" path "$2")" || {
+    echo "run.sh: layout registry cannot resolve path key '$2'" >&2
+    exit 2
+  }
+  printf -v "$1" '%s' "$_v"
+}
+layout HOOKS_DIR_REL hooks_dir
+layout HOOK_TESTS_DIR_REL hook_tests_dir
+layout SUITE_RUNNER suite_runner
+layout SERIAL_SUITES serial_suites
+layout SCRIPTS_DIR_REL scripts_dir
+layout SCRIPTS_LIB_DIR_REL scripts_lib_dir
+HOOKS_DIR="$REPO_ROOT/$HOOKS_DIR_REL"
+if ! [ "$REPO_ROOT/$HOOK_TESTS_DIR_REL" -ef "$TESTS_DIR" ]; then
+  echo "run.sh: this runner lives in $TESTS_DIR but the layout registry puts the suites in $REPO_ROOT/$HOOK_TESTS_DIR_REL" >&2
+  exit 2
+fi
+SCRIPTS_DIR="$REPO_ROOT/$SCRIPTS_DIR_REL"
+SCRIPTS_LIB_DIR="$REPO_ROOT/$SCRIPTS_LIB_DIR_REL"
 
 # shellcheck source=../../scripts/lib/prune-tmp-residue.sh
-[ -r "$REPO_ROOT/scripts/lib/prune-tmp-residue.sh" ] && . "$REPO_ROOT/scripts/lib/prune-tmp-residue.sh"
+[ -r "$SCRIPTS_LIB_DIR/prune-tmp-residue.sh" ] && . "$SCRIPTS_LIB_DIR/prune-tmp-residue.sh"
 # shellcheck source=../../scripts/lib/worktree-reap.sh
-[ -r "$REPO_ROOT/scripts/lib/worktree-reap.sh" ] && . "$REPO_ROOT/scripts/lib/worktree-reap.sh"
+[ -r "$SCRIPTS_LIB_DIR/worktree-reap.sh" ] && . "$SCRIPTS_LIB_DIR/worktree-reap.sh"
 # shellcheck source=lib/suite-residue-reap.sh
 [ -r "$TESTS_DIR/lib/suite-residue-reap.sh" ] && . "$TESTS_DIR/lib/suite-residue-reap.sh"
 # shellcheck source=lib/suite-oracle-lock.sh
@@ -282,11 +305,11 @@ for name in ("SIGINT", "SIGTERM", "SIGQUIT", "SIGPIPE", "SIGXFSZ"):
         signal.signal(s, signal.SIG_DFL)
 os.setsid()
 os.execvp("bash", ["bash"] + sys.argv[1:])
-' "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
+' "$TS_SNAP/repo/$SUITE_RUNNER" "$@"
     elif command -v setsid >/dev/null 2>&1; then
-      exec setsid bash "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
+      exec setsid bash "$TS_SNAP/repo/$SUITE_RUNNER" "$@"
     else
-      exec bash "$TS_SNAP/repo/hooks/tests/run.sh" "$@"
+      exec bash "$TS_SNAP/repo/$SUITE_RUNNER" "$@"
     fi
   ) &
   TS_CHILD_PID=$!
@@ -662,7 +685,7 @@ echo "════════ L1 unit tests (node --test) ═══════
 # unit tests used to live outside every scan glob and never ran in CI (found 2026-07-16;
 # scripts/lib/ added 2026-09-05 after the same thing happened to live-state-dir.test.js).
 shopt -s nullglob
-UNIT_FILES=("$HOOKS_DIR"/*.test.js "$REPO_ROOT"/scripts/*.test.js "$REPO_ROOT"/scripts/lib/*.test.js)
+UNIT_FILES=("$HOOKS_DIR"/*.test.js "$SCRIPTS_DIR"/*.test.js "$SCRIPTS_LIB_DIR"/*.test.js)
 shopt -u nullglob
 if [ "${#UNIT_FILES[@]}" -eq 0 ]; then
   echo "(no L1 unit tests yet)"
@@ -736,7 +759,7 @@ if [ "$PARALLEL" -eq 0 ]; then
     run_one "$file"
   done
   # scripts/*.test.sh — same never-scanned gap as the L1 note above.
-  for file in "$REPO_ROOT"/scripts/*.test.sh; do
+  for file in "$SCRIPTS_DIR"/*.test.sh; do
     run_one "$file"
   done
   shopt -u nullglob
@@ -756,9 +779,9 @@ else
   while IFS= read -r _sl || [ -n "$_sl" ]; do
     _sl="${_sl%%#*}"; _sl="${_sl//[[:space:]]/}"
     [ -n "$_sl" ] && SERIAL_SUITE_SET["$_sl"]=1
-  done < "$TESTS_DIR/lib/serial-suites.txt"
+  done < "$REPO_ROOT/$SERIAL_SUITES"
   unset _sl
-  for file in "$TESTS_DIR"/*.test.sh "$REPO_ROOT"/scripts/*.test.sh; do
+  for file in "$TESTS_DIR"/*.test.sh "$SCRIPTS_DIR"/*.test.sh; do
     [ -f "$file" ] || continue
     rel="${file#$REPO_ROOT/}"
     if [ -n "$FILTER" ] && [[ "$rel" != *"$FILTER"* ]]; then

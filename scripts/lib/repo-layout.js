@@ -67,6 +67,7 @@ const DEFAULT_REGISTRY = {
     leak_guard_registry: 'scripts/leak-guard-registry.json',
     codex_plugin_dir: 'platforms/codex/plugin',
     codex_hooks_json: 'platforms/codex/hooks/hooks.json',
+    opencode_plugin_dir: 'platforms/opencode/plugin',
     claude_dir: '.claude',
     mission_routing_config: '.claude/mission-routing-config.json',
     owner_kernel_governance: '.claude/owner-kernel-governance.json',

@@ -87,6 +87,7 @@ mk_pf() { # mk_pf <dir> <canonical-version>
   mkdir -p "$d/scripts/lib" "$d/.claude-plugin" "$d/docs/projects"
   cp "$REPO_ROOT/scripts/preflight-release.sh" "$d/scripts/"
   cp "$SEMVER" "$d/scripts/lib/"
+  cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$d/scripts/lib/"   # preflight-release resolves its repo paths through the layout registry
   printf '{ "name": "autopilot", "version": "%s" }\n' "$v" > "$d/.claude-plugin/plugin.json"
 }
 pf_result() { # pf_result <dir> <check-title-prefix> → ✓ or ✗ line following the title

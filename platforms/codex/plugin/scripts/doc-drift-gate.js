@@ -16,6 +16,14 @@
 
 const fs = require('fs');
 const path = require('path');
+// Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
+const LAYOUT = require('./lib/repo-layout.js');
+const PLANS_DIR = LAYOUT.path('plans_dir');
+const PLANS_EVIDENCE_DIR = LAYOUT.path('plans_evidence_dir');
+const PROJECTS_DIR = LAYOUT.path('projects_dir');
+const HOOK_TESTS_DIR = LAYOUT.path('hook_tests_dir');
+const CODEX_PLUGIN_DIR = LAYOUT.path('codex_plugin_dir');
+const EVALS_DIR = LAYOUT.path('evals_dir');
 // Guarded: a vendored copy of this gate without scripts/lib/ degrades to "nothing sealed".
 let sealedDocFiles = () => new Set();
 try {
@@ -36,20 +44,20 @@ const DEFAULT_EXCLUDES = [
   ".venv",
   ".opencode",
   "_bodies",
-  "platforms/codex/plugin",
+  CODEX_PLUGIN_DIR,
   // Byte-frozen eval fixtures (digest-pinned byte-copies of live skills; their relative
   // links intentionally dangle from the pack location — rewriting them would break the
   // byte-identity the skill-onoff arm-parity tests assert).
-  "evals/skill-onoff/packs",
+  `${EVALS_DIR}/skill-onoff/packs`,
   // Findings-batch cell fixtures: the READMEs/task.md under here are what the eval agent reads inside its own cell repo,
   // where `scripts/merge-lane.sh` etc. are the fixture's stubs (cc/stubs/scripts), not this repo's scripts/.
-  "evals/skill-onoff/fbatch/cc",
-  "evals/skill-onoff/fbatch/cc-v2", // findings-batch-v2 copy of the same fixtures
-  "evals/skill-onoff/fbatch/cc-v3", // findings-batch-v3 copy of the same fixtures
+  `${EVALS_DIR}/skill-onoff/fbatch/cc`,
+  `${EVALS_DIR}/skill-onoff/fbatch/cc-v2`, // findings-batch-v2 copy of the same fixtures
+  `${EVALS_DIR}/skill-onoff/fbatch/cc-v3`, // findings-batch-v3 copy of the same fixtures
   // Digest-pinned byte-copy fixture (frozen 2026-08-28) of .claude/review-loop-config.md;
   // its relative links intentionally dangle from hooks/tests/fixtures/ — rewriting them
   // would break the byte identity that hooks/tests/*.sh pin against.
-  "hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md",
+  `${HOOK_TESTS_DIR}/fixtures/pre-consult-discuss-review-loop-config.md`,
   // Fast path in front of the general nested-git-root rule below (isNestedGitRoot):
   // live background-agent worktrees under .claude/worktrees/ are separate git repos
   // whose scripts/... references resolve against THEIR OWN root, not this scan's
@@ -59,9 +67,9 @@ const DEFAULT_EXCLUDES = [
   // Verbatim consult transcripts quoting ANOTHER machine's absolute paths (frozen evidence:
   // rewriting them would falsify the record). Listed file by file on purpose — the rest of
   // docs/plans/evidence/ is live (new evidence lands there) and stays scanned.
-  "docs/plans/evidence/2026-09-16-blind-review-redesign/consult-gpt-6-astra.md",
-  "docs/plans/evidence/2026-09-16-red-verification-repair/consult-codex-answer.md",
-  "docs/plans/evidence/2026-09-21-foreman-exam-design-consult/gpt-6-astra-via-codex.md"
+  `${PLANS_EVIDENCE_DIR}/2026-09-16-blind-review-redesign/consult-gpt-6-astra.md`,
+  `${PLANS_EVIDENCE_DIR}/2026-09-16-red-verification-repair/consult-codex-answer.md`,
+  `${PLANS_EVIDENCE_DIR}/2026-09-21-foreman-exam-design-consult/gpt-6-astra-via-codex.md`
 ];
 
 // Regex configuration
@@ -293,8 +301,8 @@ const BARE_SCRIPT_RE = /`([A-Za-z0-9_-]+\.(?:sh|bash|js|mjs|cjs|ts|py|ps1))`/g;
 //     scripts (e.g. `scripts/check-doc-drift.py`), not autopilot's
 function isScriptRefExemptDoc(relPath) {
   const p = relPath.replace(/\\/g, '/');
-  return p.startsWith('docs/plans/')
-    || p.startsWith('docs/projects/')
+  return p.startsWith(`${PLANS_DIR}/`)
+    || p.startsWith(`${PROJECTS_DIR}/`)
     || p.startsWith('project-config-template/')
     || p === 'CHANGELOG.md';
 }

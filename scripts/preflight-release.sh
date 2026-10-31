@@ -16,6 +16,27 @@ set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 
+# Repo paths come from the layout registry (scripts/lib/repo-layout.js). A key the registry cannot
+# resolve stops the gate here: there is no fallback to a literal path, which would be a path alias.
+layout() { # layout VAR key
+  local _v
+  _v="$(node "$REPO/scripts/lib/repo-layout.js" path "$2")" || {
+    echo "preflight-release: layout registry cannot resolve path key '$2'" >&2
+    exit 2
+  }
+  printf -v "$1" '%s' "$_v"
+}
+layout PLANS_DIR plans_dir
+layout PROJECTS_DIR projects_dir
+layout PROJECTS_INDEX projects_index
+layout BACKLOG_FILE backlog_file
+layout METRICS_DIR metrics_dir
+layout SURFACE_BASELINE surface_lines_baseline
+layout SETTINGS_REFERENCE settings_reference
+layout CONFIG_KEYS config_keys
+layout HOOK_TESTS_DIR hook_tests_dir
+layout SCRIPTS_LIB_DIR scripts_lib_dir
+
 ONLY_SLASH_PROBE=0
 UPDATE_BASELINE=0
 # The slash-entry probe is 6 real paid LLM calls: it runs ONLY when explicitly opted in
@@ -37,7 +58,7 @@ for arg in "$@"; do
       echo "                      actual release; env equivalent AUTOPILOT_SLASH_PROBE_RELEASE=1)"
       echo "  --only-slash-probe  run only the slash-entry probe gate; still needs --with-slash-probe"
       echo "                      (without it: prints NOT RUN and exits 0, no paid call)"
-      echo "  --update-baseline   recompute + write docs/metrics/surface-lines.json, then exit"
+      echo "  --update-baseline   recompute + write $SURFACE_BASELINE, then exit"
       echo "  AUTOPILOT_SKIP_SLASH_PROBE=1 always wins: skips the probe even with --with-slash-probe"
       exit 0
       ;;
@@ -49,10 +70,10 @@ for arg in "$@"; do
 done
 
 if [ "$UPDATE_BASELINE" = "1" ]; then
-  V=$(node scripts/lib/semver.js from-json .claude-plugin/plugin.json 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+  V=$(node "$SCRIPTS_LIB_DIR/semver.js" from-json .claude-plugin/plugin.json 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
   P=$(find skills references -name '*.md' -type f | sort -u | xargs cat | wc -l)
   E=$(find src -name '*.js' -type f | sort -u | xargs cat | wc -l)
-  mkdir -p docs/metrics
+  mkdir -p "$METRICS_DIR"
   # Per-skill SKILL.md line map feeds the check-8 per-skill ratchet
   # (references/skill-contract-card.md "Measurable per-skill definition").
   node -e '
@@ -69,15 +90,15 @@ if [ "$UPDATE_BASELINE" = "1" ]; then
       skills,
       note: "north-star baseline (prose down, engine up) — refreshed at each release via preflight-release.sh --update-baseline; formula: find skills references -name *.md -type f | sort -u | xargs cat | wc -l (R1-F6 dedup, symlinks excluded by -type f); skills{} = per-SKILL.md line counts for the check-8 per-skill ratchet (references/skill-contract-card.md)",
     };
-    fs.writeFileSync("docs/metrics/surface-lines.json", JSON.stringify(out, null, 2) + "\n");
-  ' "$V" "$P" "$E"
-  echo "baseline updated: v$V prose=$P engine=$E skills=$(ls skills | wc -l) → docs/metrics/surface-lines.json"
+    fs.writeFileSync(process.argv[4], JSON.stringify(out, null, 2) + "\n");
+  ' "$V" "$P" "$E" "$SURFACE_BASELINE"
+  echo "baseline updated: v$V prose=$P engine=$E skills=$(ls skills | wc -l) → $SURFACE_BASELINE"
   exit 0
 fi
 
 CANONICAL=".claude-plugin/plugin.json"
 CHANGELOG="CHANGELOG.md"
-INDEX="docs/projects/INDEX.md"
+INDEX="$PROJECTS_INDEX"
 
 FAILS=0
 TOTAL=0
@@ -96,7 +117,7 @@ run_check() {
 VERSION=""
 if [ -f "$CANONICAL" ]; then
   # One parser (scripts/lib/semver.js): accepts N.N.N and N.N.N-(alpha|beta|rc).N.
-  VERSION=$(node "$REPO/scripts/lib/semver.js" from-json "$CANONICAL" 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+  VERSION=$(node "$REPO/$SCRIPTS_LIB_DIR/semver.js" from-json "$CANONICAL" 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
 fi
 
 # grep -E PATTERN FILE. Patterns end in a "[^0-9])" tail (the char after the version).
@@ -154,7 +175,7 @@ check_index_links_resolve() {
     # realpath-style resolution instead of excluding `../` links (which would
     # silently skip — and thus pass — a genuinely broken parent-relative link).
     local resolved
-    resolved="$(cd "docs/projects" 2>/dev/null && readlink -m "$clean")"
+    resolved="$(cd "$PROJECTS_DIR" 2>/dev/null && readlink -m "$clean")"
     if [ -z "$resolved" ] || [ ! -e "$resolved" ]; then
       echo "    missing: $clean (from INDEX link $target)" >&2
       missing=$((missing + 1))
@@ -203,7 +224,7 @@ check_slash_entry_probe() {
     return 1
   fi
 
-  AUTOPILOT_SLASH_PROBE=1 bash hooks/tests/slash-entry-probe.test.sh
+  AUTOPILOT_SLASH_PROBE=1 bash "$HOOK_TESTS_DIR/slash-entry-probe.test.sh"
 }
 
 # ─── 8. north-star surface measurement (prose↓ engine↑) ───
@@ -214,7 +235,6 @@ check_slash_entry_probe() {
 # current version's section — missing justification fails this release check.
 # Seed/refresh baseline: scripts/preflight-release.sh --update-baseline (run at each
 # release AFTER the gate passes, so the next release diffs against this one).
-SURFACE_BASELINE="docs/metrics/surface-lines.json"
 
 measure_surface() {
   SURF_PROSE=$(find skills references -name '*.md' -type f | sort -u | xargs cat | wc -l)
@@ -336,12 +356,12 @@ check_plan_graduation() {
       for (const v of j.violations || []) {
         if (REPORT_ONLY_CODES.has(v.code)) continue;
         const where = v.kind === "backlog_row" ? `BACKLOG row "${v.title}"`
-          : v.kind === "reference" ? `docs/plans/${v.stem}`
+          : v.kind === "reference" ? `${process.argv[3]}/${v.stem}`
             : v.path;
         console.error(`    ${v.code}: ${where} — ${v.detail}`);
       }
       console.error("    fix: node scripts/check-plan-graduation.js --fix");
-    ' "$out" "$REPO/scripts/check-plan-graduation.js" >&2
+    ' "$out" "$REPO/scripts/check-plan-graduation.js" "$PLANS_DIR" >&2
   fi
   rm -f "$out"
   return "$rc"
@@ -383,16 +403,16 @@ echo ""
 run_check "canonical version parseable from .claude-plugin/plugin.json" check_canonical_version
 run_check "CHANGELOG.md has a '## v$VERSION' entry" check_changelog_entry
 run_check "version mirrors in sync (sync-version.js --check)" check_version_mirrors
-run_check "docs/projects/INDEX.md references v$VERSION" check_index_has_version
+run_check "$PROJECTS_INDEX references v$VERSION" check_index_has_version
 run_check "all project README links in INDEX resolve to existing files" check_index_links_resolve
 run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
 run_check "user-setting changes are named in CHANGELOG Settings changes" check_settings_changelog
 run_check "slash-entry thin-shell probe (6 paid LLM probes; opt-in: --with-slash-probe; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
 run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
-run_check "plan graduation clean (docs/BACKLOG.md queue rows, released docs/plans/*.md archived)" check_plan_graduation
+run_check "plan graduation clean ($BACKLOG_FILE queue rows, released $PLANS_DIR/*.md archived)" check_plan_graduation
 run_check "temp-prefix registry gate (check-tmp-residue-registry.js, whole repo)" check_tmp_residue_gate
 run_check "official defaults snapshot age (build-qualification-defaults.js --check-snapshot-age, <= 30 days)" check_defaults_snapshot_age
-run_check "settings registry gate (check-config-docs.js: code <-> config-keys.json <-> docs/settings-reference.md)" check_config_docs_gate
+run_check "settings registry gate (check-config-docs.js: code <-> ${CONFIG_KEYS##*/} <-> $SETTINGS_REFERENCE)" check_config_docs_gate
 
 # ─── advisory: hook x harness support matrix staleness (BL-0231) ──────────────
 # NOT a check and NOT counted in $FAILS — hook-harness-matrix.js --check prints WARN for

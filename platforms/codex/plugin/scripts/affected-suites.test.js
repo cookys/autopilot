@@ -1086,7 +1086,8 @@ function mutant(replacements) {
   const md = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-mutant-'));
   MUTANT_DIRS.push(md);
   const f = path.join(md, 'affected-suites.js');
-  fs.writeFileSync(f, src);
+  // the copy lives outside scripts/, so its layout-registry require must point back at the real file
+  fs.writeFileSync(f, src.replace("require('./lib/repo-layout.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'repo-layout.js'))})`));
   return f;
 }
 const MUTANT_DIRS = [];

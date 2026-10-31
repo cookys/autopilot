@@ -143,6 +143,16 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const SCRIPT_DIR = __dirname;
+// Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
+const LAYOUT = require('./lib/repo-layout.js');
+const PLANS_DIR = LAYOUT.path('plans_dir');
+const PLANS_ARCHIVE_DIR = LAYOUT.path('plans_archive_dir');
+const PLANS_EVIDENCE_DIR = LAYOUT.path('plans_evidence_dir');
+const PROJECTS_INDEX = LAYOUT.path('projects_index');
+const PROJECTS_ARCHIVE_DIR = LAYOUT.path('projects_archive_dir');
+const BACKLOG_FILE = LAYOUT.path('backlog_file');
+const MISSION_ROUTING = LAYOUT.path('mission_routing_config');
+const MISSION_JSON_RE = new RegExp(`^${escapeRegExp(LAYOUT.path('missions_dir'))}/mission-[^/]*\\.json$`);
 const CLOSED_MARKERS = ['~~', 'CLOSED', 'SHIPPED', 'FIXED v', 'LANDED'];
 const BLOCKING_CODES = new Set([
   'backlog_row_has_plan',
@@ -161,7 +171,7 @@ const CODES = [...BLOCKING_CODES, ...REPORT_ONLY_CODES];
 // Rewritten/scanned for stray docs/plans/<stem> references; excluded because both files
 // are intentional HISTORY — a CHANGELOG entry or a deleted BACKLOG row is expected to
 // mention a plan path that no longer resolves, and neither should be rewritten in place.
-const REFERENCE_SCAN_EXCLUDE = new Set(['CHANGELOG.md', 'docs/BACKLOG.md']);
+const REFERENCE_SCAN_EXCLUDE = new Set(['CHANGELOG.md', BACKLOG_FILE]);
 
 function usage(code) {
   process.stderr.write(
@@ -261,14 +271,14 @@ function slugBoundaryRegExp(s) {
 // separate pattern for that shape (🟡 fix: the two were conflated before, so `--fix` moved
 // evidence/<stem>/ but never rewrote a reference INTO it).
 function planPathPrefixRegExp(stem) {
-  return new RegExp(`docs/plans/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
+  return new RegExp(`${escapeRegExp(PLANS_DIR)}/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
 }
 
 // The evidence-dir counterpart of planPathPrefixRegExp: matches `docs/plans/evidence/<stem>`
 // (the evidence dir itself, or any path beneath it), never a different stem with this one
 // as a prefix.
 function evidencePathPrefixRegExp(stem) {
-  return new RegExp(`docs/plans/evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
+  return new RegExp(`${escapeRegExp(PLANS_EVIDENCE_DIR)}/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
 }
 
 // BL-0171: docs-relative link forms (`](plans/<stem>.md)` in docs/scripts-inventory.md,
@@ -364,7 +374,7 @@ function isTableSeparatorRow(cells) {
 }
 
 function planIndexRegistration(repoRoot, stem) {
-  const indexPath = path.join(repoRoot, 'docs', 'projects', 'INDEX.md');
+  const indexPath = path.join(repoRoot, PROJECTS_INDEX);
   const text = readFileSafe(indexPath);
   if (text == null) return { indexExists: false, indexPath, matchedRows: [], activeRow: null };
   const lines = text.split(/\r?\n/);
@@ -589,7 +599,7 @@ function trackedReferenceFiles(repoRoot) {
 // that sha. Always resolved relative to repoRoot (see the --plans-dir limitation above).
 function loadActiveLineageStems(repoRoot) {
   const stems = new Set();
-  const routingPath = path.join(repoRoot, '.claude', 'mission-routing-config.json');
+  const routingPath = path.join(repoRoot, MISSION_ROUTING);
   const routingText = readFileSafe(routingPath);
   if (!routingText) return stems;
   let routing;
@@ -638,14 +648,14 @@ function loadActiveLineageStems(repoRoot) {
 // something that does not exist at all, active or archived.
 const DANGLING_REFERENCE_PATTERNS = [
   {
-    prefix: 'docs/plans/',
-    re: /docs\/plans\/(\d{4}-\d{2}-\d{2}-[A-Za-z0-9-]+)/g,
+    prefix: `${PLANS_DIR}/`,
+    re: new RegExp(`${escapeRegExp(PLANS_DIR)}/(\\d{4}-\\d{2}-\\d{2}-[A-Za-z0-9-]+)`, 'g'),
     exists: (plansDir, stem) => fs.existsSync(path.join(plansDir, `${stem}.md`))
       || Boolean(findExistingArchivedPlan(path.join(plansDir, '_archive'), stem)),
   },
   {
-    prefix: 'docs/plans/evidence/',
-    re: /docs\/plans\/evidence\/(\d{4}-\d{2}-\d{2}-[A-Za-z0-9-]+)/g,
+    prefix: `${PLANS_EVIDENCE_DIR}/`,
+    re: new RegExp(`${escapeRegExp(PLANS_EVIDENCE_DIR)}/(\\d{4}-\\d{2}-\\d{2}-[A-Za-z0-9-]+)`, 'g'),
     exists: (plansDir, stem) => fs.existsSync(path.join(plansDir, 'evidence', stem))
       || Boolean(findExistingArchivedEvidence(path.join(plansDir, '_archive'), stem)),
   },
@@ -763,7 +773,7 @@ function peerRowUnanswered(row) {
 function idNamedInPlan(repoRoot, stem, id) {
   if (!stem || !id) return false;
   const files = [path.join(repoRoot, 'docs', 'plans', `${stem}.md`)];
-  const archived = findExistingArchivedPlan(path.join(repoRoot, 'docs', 'plans', '_archive'), stem);
+  const archived = findExistingArchivedPlan(path.join(repoRoot, PLANS_ARCHIVE_DIR), stem);
   if (archived) files.push(archived);
   const re = new RegExp(escapeRegExp(id) + '(?![0-9])');
   return files.some((f) => {
@@ -828,14 +838,14 @@ function planStemForPointer(pointer) {
   if (!pointer || pointer === 'none') return null;
   // docs/plans/<X>.md or docs/plans/_archive/<X>.md — X is either a primary plan's own
   // basename (no further dot: stem === X) or a sidecar's (`<stem>.<tag>`: strip the tag).
-  let m = pointer.match(/^docs\/plans\/(?:_archive\/(?:\d{4}\/\d{2}\/)?)?([^/]+)\.md$/);
+  let m = pointer.match(new RegExp(`^(?:${escapeRegExp(PLANS_DIR)}/|${escapeRegExp(PLANS_ARCHIVE_DIR)}/(?:\\d{4}/\\d{2}/)?)([^/]+)\\.md$`));
   if (m) {
     const x = m[1];
     const lastDot = x.lastIndexOf('.');
     return lastDot === -1 ? x : x.slice(0, lastDot);
   }
   // docs/plans/evidence/<stem>/... (any depth beneath the evidence dir).
-  m = pointer.match(/^docs\/plans\/evidence\/([^/]+)\//);
+  m = pointer.match(new RegExp(`^${escapeRegExp(PLANS_EVIDENCE_DIR)}/([^/]+)/`));
   if (m) return m[1];
   return null;
 }
@@ -958,7 +968,7 @@ function planReferenced(repoRoot, plansDir, backlogText, changelogText, stem, sl
   const reSlug = slugBoundaryRegExp(needleSlug);
   if (changelogText && (reStem.test(changelogText) || reSlug.test(changelogText))) return true;
   if (backlogText && (reStem.test(backlogText) || reSlug.test(backlogText))) return true;
-  const indexPath = path.join(repoRoot, 'docs', 'projects', 'INDEX.md');
+  const indexPath = path.join(repoRoot, PROJECTS_INDEX);
   const indexText = readFileSafe(indexPath);
   if (indexText && (reStem.test(indexText) || reSlug.test(indexText))) return true;
   const evidenceDir = path.join(plansDir, 'evidence');
@@ -982,11 +992,11 @@ function releasedFullPlanMention(released, stem) {
   const text = released || '';
   const basename = `${stem}.md`;
   const paths = [
-    `docs/plans/${basename}`,
-    `docs/plans/_archive/${basename}`,
+    `${PLANS_DIR}/${basename}`,
+    `${PLANS_ARCHIVE_DIR}/${basename}`,
   ];
   const parts = stemDateParts(stem);
-  if (parts) paths.push(`docs/plans/_archive/${parts.year}/${parts.month}/${basename}`);
+  if (parts) paths.push(`${PLANS_ARCHIVE_DIR}/${parts.year}/${parts.month}/${basename}`);
   for (const variant of paths) {
     if (text.includes(variant)) return variant;
   }
@@ -1002,7 +1012,7 @@ function shippedPlanDecision(repoRoot, stem, releasedText, exclusions) {
   const skip = exclusions || {};
   if (skip.allowlist && skip.allowlist.has(stem)) return null;
   if (skip.activeLineageStems && skip.activeLineageStems.has(stem)) return null;
-  const plansRoot = path.join(repoRoot, 'docs', 'plans');
+  const plansRoot = path.join(repoRoot, PLANS_DIR);
   const archived = findExistingArchivedPlan(path.join(plansRoot, '_archive'), stem);
   if (archived) {
     const rel = path.relative(repoRoot, archived).split(path.sep).join('/');
@@ -1013,7 +1023,7 @@ function shippedPlanDecision(repoRoot, stem, releasedText, exclusions) {
   const match = releasedFullPlanMention(releasedText, stem);
   if (match) {
     return {
-      plan_path: `docs/plans/${basename}`,
+      plan_path: `${PLANS_DIR}/${basename}`,
       shipped: { released_changelog: match },
     };
   }
@@ -1039,9 +1049,9 @@ function run(opts) {
   const repoRoot = opts.repoRoot
     ? path.resolve(opts.repoRoot)
     : (gitToplevel(process.cwd()) || process.cwd());
-  const backlogPath = opts.backlog ? path.resolve(opts.backlog) : path.join(repoRoot, 'docs', 'BACKLOG.md');
+  const backlogPath = opts.backlog ? path.resolve(opts.backlog) : path.join(repoRoot, BACKLOG_FILE);
   const changelogPath = opts.changelog ? path.resolve(opts.changelog) : path.join(repoRoot, 'CHANGELOG.md');
-  const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, 'docs', 'plans');
+  const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, PLANS_DIR);
   const archiveDir = path.join(plansDir, '_archive');
   const allowlist = loadAllowlist(opts.allowlist ? path.resolve(opts.allowlist) : null);
   const activeLineageStems = loadActiveLineageStems(repoRoot);
@@ -1104,7 +1114,7 @@ function run(opts) {
           title: row.title,
           id: row.id || null,
           detail: `${own.map((v) => v.code).join(', ')} — but Origin is peer with an unanswered Reply; `
-            + `reply first, or write ${row.id || 'the row Id'} into ${stem ? `docs/plans/${stem}.md` : 'the plan'}`,
+            + `reply first, or write ${row.id || 'the row Id'} into ${stem ? `${PLANS_DIR}/${stem}.md` : 'the plan'}`,
         });
       } else {
         violations.push(...own);
@@ -1127,7 +1137,7 @@ function run(opts) {
         code: 'plan_stem_malformed',
         kind: 'plan',
         stem,
-        path: path.join('docs', 'plans', basename),
+        path: path.join(PLANS_DIR, basename),
         detail: 'stem is not a valid <YYYY-MM-DD>-<slug> (month must be 01-12, day 01-31) — '
           + 'rename the file before it can be registered or archived',
       });
@@ -1143,8 +1153,8 @@ function run(opts) {
         code: 'plan_unregistered',
         kind: 'plan',
         stem,
-        path: path.join('docs', 'plans', basename),
-        detail: `no docs/projects/INDEX.md row for this plan has Version "active" — paste: `
+        path: path.join(PLANS_DIR, basename),
+        detail: `no ${PROJECTS_INDEX} row for this plan has Version "active" — paste: `
           + registerTemplateRow(repoRoot, plansDir, archiveDir, stem),
       });
     }
@@ -1153,21 +1163,21 @@ function run(opts) {
         code: 'plan_active_lineage',
         kind: 'plan',
         stem,
-        path: path.join('docs', 'plans', basename),
-        detail: 'referenced by .claude/mission-routing-config.json\'s sources manifest (active campaign lineage, frozen source sha) — excluded from plan_released_not_archived',
+        path: path.join(PLANS_DIR, basename),
+        detail: 'referenced by ' + MISSION_ROUTING + '\'s sources manifest (active campaign lineage, frozen source sha) — excluded from plan_released_not_archived',
       });
       continue; // active lineage takes priority over released/orphan; never a move candidate
     }
     const pointerVariants = [
-      `docs/plans/${basename}`,
-      `docs/plans/_archive/${basename}`,
+      `${PLANS_DIR}/${basename}`,
+      `${PLANS_ARCHIVE_DIR}/${basename}`,
     ];
     if (planMentioned(releasedText, stem, slug, pointerVariants)) {
       violations.push({
         code: 'plan_released_not_archived',
         kind: 'plan',
         stem,
-        path: path.join('docs', 'plans', basename),
+        path: path.join(PLANS_DIR, basename),
         detail: `slug "${slug}" appears in a released CHANGELOG.md section`,
       });
       continue; // released takes priority; don't also report it orphaned
@@ -1177,8 +1187,8 @@ function run(opts) {
         code: 'plan_orphan',
         kind: 'plan',
         stem,
-        path: path.join('docs', 'plans', basename),
-        detail: 'no reference in CHANGELOG.md, docs/projects/INDEX.md, docs/plans/evidence/, or docs/BACKLOG.md',
+        path: path.join(PLANS_DIR, basename),
+        detail: `no reference in CHANGELOG.md, ${PROJECTS_INDEX}, ${PLANS_EVIDENCE_DIR}/, or ${BACKLOG_FILE}`,
       });
     }
   }
@@ -1380,8 +1390,8 @@ function rewritePlanReferences(repoRoot, stem) {
   const parts = stemDateParts(stem);
   const datedSeg = parts ? `${parts.year}/${parts.month}/` : '';
   const passes = [
-    { re: evidencePathPrefixRegExp(stem), replacement: `docs/plans/_archive/${datedSeg}evidence/${stem}` },
-    { re: planPathPrefixRegExp(stem), replacement: `docs/plans/_archive/${datedSeg}${stem}` },
+    { re: evidencePathPrefixRegExp(stem), replacement: `${PLANS_ARCHIVE_DIR}/${datedSeg}evidence/${stem}` },
+    { re: planPathPrefixRegExp(stem), replacement: `${PLANS_ARCHIVE_DIR}/${datedSeg}${stem}` },
     { re: relEvidencePathRegExp(stem), replacement: `plans/_archive/${datedSeg}evidence/${stem}`, relative: true },
     { re: relPlanPathRegExp(stem), replacement: `plans/_archive/${datedSeg}${stem}`, relative: true },
   ];
@@ -1406,12 +1416,12 @@ function rewritePlanReferences(repoRoot, stem) {
     for (const { re, replacement, relative } of passes) {
       // INDEX.md's docs-relative links are archiveIndexRow's job, scoped to the stem's OWN
       // registered rows (another row's prose mention is deliberately left alone).
-      if (relative && rel === 'docs/projects/INDEX.md') continue;
+      if (relative && rel === PROJECTS_INDEX) continue;
       // docs-relative links only make sense inside docs/ (a `plans/<stem>.md` string in src/ or an
       // external `.autopilot/plans/` path is not a link to this archive). docs/mission-*.json
       // (sources manifests, graphs) are mission-runtime inputs: next-touch-validation pins a
       // manifest's plan_path/rubric_path verbatim (SOURCE_AUTHORITY_INVALID), so never rewrite them.
-      if (relative && (!rel.startsWith('docs/') || /^docs\/mission-[^/]*\.json$/.test(rel))) continue;
+      if (relative && (!rel.startsWith('docs/') || MISSION_JSON_RE.test(rel))) continue;
       re.lastIndex = 0;
       if (!re.test(text)) continue;
       re.lastIndex = 0;
@@ -1521,12 +1531,12 @@ function rewriteLegacyArchiveReferences(repoRoot, stem) {
   const datedSeg = `${parts.year}/${parts.month}/`;
   const passes = [
     {
-      re: new RegExp(`docs/plans/_archive/evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
-      replacement: `docs/plans/_archive/${datedSeg}evidence/${stem}`,
+      re: new RegExp(`${escapeRegExp(PLANS_ARCHIVE_DIR)}/evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
+      replacement: `${PLANS_ARCHIVE_DIR}/${datedSeg}evidence/${stem}`,
     },
     {
-      re: new RegExp(`docs/plans/_archive/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
-      replacement: `docs/plans/_archive/${datedSeg}${stem}`,
+      re: new RegExp(`${escapeRegExp(PLANS_ARCHIVE_DIR)}/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g'),
+      replacement: `${PLANS_ARCHIVE_DIR}/${datedSeg}${stem}`,
     },
   ];
   const rewritten = [];
@@ -1619,7 +1629,7 @@ function archiveStems(repoRoot, plansDir, archiveDir, stems, shippedIn, activeLi
     const version = pairs ? pairs.get(stem) : (parsedShippedIn.all || 'shipped');
     const planPath = path.join(plansDir, `${stem}.md`);
     if (!fs.existsSync(planPath)) {
-      results.push({ stem, ok: false, reason: `not a live plan: docs/plans/${stem}.md does not exist` });
+      results.push({ stem, ok: false, reason: `not a live plan: ${PLANS_DIR}/${stem}.md does not exist` });
       continue;
     }
     if (!stemDateParts(stem)) {
@@ -1660,7 +1670,7 @@ function archiveStems(repoRoot, plansDir, archiveDir, stems, shippedIn, activeLi
 // into). Never invented by --fix; only --archive appends, and only when no row exists at
 // all to flip.
 function appendRegistryRow(repoRoot, rowText) {
-  const indexPath = path.join(repoRoot, 'docs', 'projects', 'INDEX.md');
+  const indexPath = path.join(repoRoot, PROJECTS_INDEX);
   const text = readFileSafe(indexPath);
   if (text == null) return false;
   const lines = text.split(/\r?\n/);
@@ -1722,10 +1732,10 @@ function migrateArchiveLayout(repoRoot, plansDir, archiveDir) {
     const legacyRewritten = rewriteLegacyArchiveReferences(repoRoot, stem);
     for (const f of legacyRewritten) referencesRewritten.add(f);
     for (const fz of legacyRewritten.frozen || []) referencesFrozen.set(fz.path, fz);
-    if (archiveIndexRow(repoRoot, stem, {}).changed) referencesRewritten.add('docs/projects/INDEX.md');
+    if (archiveIndexRow(repoRoot, stem, {}).changed) referencesRewritten.add(PROJECTS_INDEX);
   }
 
-  const projectsArchiveDir = path.join(repoRoot, 'docs', 'projects', '_archive');
+  const projectsArchiveDir = path.join(repoRoot, PROJECTS_ARCHIVE_DIR);
   let projEntries = [];
   try {
     projEntries = fs.readdirSync(projectsArchiveDir, { withFileTypes: true });
@@ -1752,8 +1762,8 @@ function migrateArchiveLayout(repoRoot, plansDir, archiveDir) {
     // (skills, references, other docs reaching in from elsewhere), and the BARE
     // `_archive/<name>` shape INDEX.md itself uses (INDEX.md lives inside docs/projects/,
     // so its own links to `_archive/` never carry the `docs/projects/` prefix).
-    const fromRel = `docs/projects/_archive/${ent.name}`;
-    const toRel = `docs/projects/_archive/${m[1]}/${m[2]}/${ent.name}`;
+    const fromRel = `${PROJECTS_ARCHIVE_DIR}/${ent.name}`;
+    const toRel = `${PROJECTS_ARCHIVE_DIR}/${m[1]}/${m[2]}/${ent.name}`;
     const bareFrom = `_archive/${ent.name}`;
     const bareTo = `_archive/${m[1]}/${m[2]}/${ent.name}`;
     const boundaryRe = new RegExp(`${escapeRegExp(fromRel)}(?![A-Za-z0-9-])`, 'g');
@@ -1802,7 +1812,7 @@ function main() {
 
   if (opts.registerTemplate) {
     const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
-    const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, 'docs', 'plans');
+    const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, PLANS_DIR);
     const archiveDir = path.join(plansDir, '_archive');
     process.stdout.write(`${registerTemplateRow(repoRoot, plansDir, archiveDir, opts.registerTemplate)}\n`);
     process.exit(0);
@@ -1810,7 +1820,7 @@ function main() {
 
   if (opts.migrateArchiveLayout) {
     const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
-    const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, 'docs', 'plans');
+    const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, PLANS_DIR);
     const archiveDir = path.join(plansDir, '_archive');
     const result = migrateArchiveLayout(repoRoot, plansDir, archiveDir);
     if (opts.json) {
@@ -1828,7 +1838,7 @@ function main() {
 
   if (opts.archive.length) {
     const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
-    const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, 'docs', 'plans');
+    const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, PLANS_DIR);
     const archiveDir = path.join(plansDir, '_archive');
     const activeLineageStems = loadActiveLineageStems(repoRoot);
     const results = archiveStems(repoRoot, plansDir, archiveDir, opts.archive, opts.shippedIn, activeLineageStems);
@@ -1920,7 +1930,7 @@ function main() {
     } else {
       for (const v of finalResult.violations) {
         const where = v.kind === 'backlog_row' ? `BACKLOG row "${v.title}"`
-          : v.kind === 'reference' ? `docs/plans/${v.stem}`
+          : v.kind === 'reference' ? `${PLANS_DIR}/${v.stem}`
             : v.kind === 'frozen_base' ? `--frozen-base ${v.ref}`
             : v.path;
         const tag = BLOCKING_CODES.has(v.code) ? v.code : `${v.code} (report-only)`;

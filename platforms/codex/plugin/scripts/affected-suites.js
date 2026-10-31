@@ -172,6 +172,18 @@ const { execFileSync, spawnSync, spawn } = require('child_process');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+// Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
+const LAYOUT = require('./lib/repo-layout.js');
+const HOOKS_DIR = LAYOUT.path('hooks_dir');
+const HOOKS_JSON = LAYOUT.path('hooks_json');
+const HOOK_TESTS_DIR = LAYOUT.path('hook_tests_dir');
+const SUITE_RUNNER = LAYOUT.path('suite_runner');
+const SERIAL_SUITES = LAYOUT.path('serial_suites');
+const SCRIPTS_LIB_DIR = LAYOUT.path('scripts_lib_dir');
+const EVALS_DIR = LAYOUT.path('evals_dir');
+const PLANS_DIR = LAYOUT.path('plans_dir');
+const PLANS_EVIDENCE_DIR = LAYOUT.path('plans_evidence_dir');
+const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
 
 const CODE_EXT = new Set(['js', 'mjs', 'cjs', 'sh', 'bash', 'zsh', 'py', 'ps1']);
 const DEFAULT_MAX_WEAK = 2;
@@ -179,8 +191,8 @@ const MAX_BYTES = 1024 * 1024;
 
 // Changes the static graph cannot judge: they alter how every hook / test / release is wired.
 const FULL_TRIGGERS = [
-  /^hooks\/hooks\.json$/,
-  /^hooks\/tests\/run\.sh$/,
+  new RegExp(`^${reEsc(HOOKS_JSON)}$`),
+  new RegExp(`^${reEsc(SUITE_RUNNER)}$`),
   /^package(-lock)?\.json$/,
   /^\.claude-plugin\//,
   /^\.github\//,
@@ -220,7 +232,7 @@ const ALWAYS_RUN = [
   ['hooks/tests/qualify-scorecard-vocabulary.test.sh', 'grep -rl a model-id charset over scripts/ and src/'],
   ['hooks/tests/skill-onoff-stage-graph.test.sh', 'greps all of scripts/ for the probe ladder field (only probe-unknown.js may print it)'],
   ['hooks/tests/skill-count-metadata.test.sh', 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
-  ['hooks/tests/qualify-recipe-credential-staging.test.sh', 'greps every docs/plans/evidence/*/administration/*/run.sh for staging variables'],
+  ['hooks/tests/qualify-recipe-credential-staging.test.sh', `greps every ${PLANS_EVIDENCE_DIR}/*/administration/*/run.sh for staging variables`],
 ];
 // Prose cannot break a suite; mirrors are covered by the always-run codex-plugin-package suite.
 const PURE_DOC = /^(docs|website|skill-creator-workspace)\/|^[^/]+\.(md|txt)$/;
@@ -228,10 +240,13 @@ const MIRROR = /^platforms\//;
 // A script under docs/ is code, not prose (a suite may scan it).
 const isProse = (p) => PURE_DOC.test(p) && !isCode(p);
 
+const SUITE_RES = [
+  new RegExp(`^${reEsc(HOOKS_DIR)}/[^/]+\\.test\\.js$`),
+  new RegExp(`^${reEsc(SCRIPTS_LIB_DIR)}/[^/]+\\.test\\.js$`),
+  new RegExp(`^${reEsc(HOOK_TESTS_DIR)}/[^/]+\\.test\\.sh$`),
+];
 function isSuite(p) {
-  return /^hooks\/[^/]+\.test\.js$/.test(p) || /^scripts\/[^/]+\.test\.js$/.test(p) ||
-    /^scripts\/lib\/[^/]+\.test\.js$/.test(p) || /^hooks\/tests\/[^/]+\.test\.sh$/.test(p) ||
-    /^scripts\/[^/]+\.test\.sh$/.test(p);
+  return SUITE_RES.some((re) => re.test(p)) || /^scripts\/[^/]+\.test\.js$/.test(p) || /^scripts\/[^/]+\.test\.sh$/.test(p);
 }
 const extOf = (p) => { const m = /\.([A-Za-z0-9]+)$/.exec(p); return m ? m[1] : ''; };
 const isCode = (p) => CODE_EXT.has(extOf(p));
@@ -330,11 +345,11 @@ function mentions(text) {
 
 const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', '.claude', 'node_modules']);
 // Category folders under docs/. Skipped only for a prose seed; other data files keep GENERIC_DIRS alone.
-const PROSE_DIR_SKIP = new Set(['plans', 'evidence', 'backlog', 'projects', 'adr']);
+const PROSE_DIR_SKIP = new Set([path.posix.basename(PLANS_DIR), path.posix.basename(PLANS_EVIDENCE_DIR), 'backlog', 'projects', 'adr']);
 // A non-suite .sh directly under hooks/tests/: shared helper, not a suite.
-const isSharedTestHelper = (p) => /^hooks\/tests\/[^/]+\.sh$/.test(p) && !isSuite(p);
+const isSharedTestHelper = (p) => new RegExp(`^${reEsc(HOOK_TESTS_DIR)}/[^/]+\\.sh$`).test(p) && !isSuite(p);
 // Mirrors, eval fixtures and docs are copies or prose: they never propagate a change to a suite.
-const NOT_PROPAGATING = /^(platforms|evals|docs|website|skill-creator-workspace|\.opencode)\//;
+const NOT_PROPAGATING = new RegExp(`^(platforms|${reEsc(EVALS_DIR)}|docs|website|skill-creator-workspace|\\.opencode)/`);
 // Full-line # and //, plus a trailing // through end of line, so a slash-star inside that comment
 // is never a block start. A slash-star starts a block only when it is the first non-blank on its
 // line. Anywhere else, including a regexp, it stays text. A star line is dropped only inside a block.
@@ -714,7 +729,7 @@ function orderForBudget(root, doc, suites) {
 function loadSerialSuites(root) {
   const set = new Set();
   try {
-    for (const line of fs.readFileSync(path.join(root, 'hooks', 'tests', 'lib', 'serial-suites.txt'), 'utf8').split('\n')) {
+    for (const line of fs.readFileSync(path.join(root, SERIAL_SUITES), 'utf8').split('\n')) {
       const t = line.replace(/#.*/, '').trim();
       if (t) set.add(t);
     }

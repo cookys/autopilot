@@ -25,6 +25,46 @@
       "path": "platforms/codex/plugin/scripts/endpoints.env.example",
       "category": "private_ip",
       "reason": "codex mirror of scripts/endpoints.env.example"
+    },
+    {
+      "path": "hooks/tests/endpoints-cli.test.sh",
+      "category": "private_ip",
+      "reason": "test asserts that a private-range LAN address is accepted while public ones are refused; the address shape is the subject under test"
+    },
+    {
+      "path": "hooks/tests/resolve-endpoint.test.sh",
+      "category": "private_ip",
+      "reason": "test asserts that a private-range LAN address is accepted while public ones are refused; the address shape is the subject under test"
+    },
+    {
+      "path": "mods/live/hygiene.test.ts",
+      "category": "home_path",
+      "reason": "fixture of recorded real output; assertions depend on the /home/<name> path shape (width, wrapping, prefix handling)"
+    },
+    {
+      "path": "mods/live/live.test.ts",
+      "category": "home_path",
+      "reason": "fixture of recorded real output; assertions depend on the /home/<name> path shape (width, wrapping, prefix handling)"
+    },
+    {
+      "path": "mods/live/review.test.ts",
+      "category": "home_path",
+      "reason": "fixture of recorded real output; assertions depend on the /home/<name> path shape (width, wrapping, prefix handling)"
+    },
+    {
+      "path": "hooks/tests/distill-scan-incremental.test.sh",
+      "category": "home_path",
+      "reason": "fixture of recorded real output; assertions depend on the /home/<name> path shape (width, wrapping, prefix handling)"
+    },
+    {
+      "path": "mods/live/live.test.ts",
+      "category": "tmp_claude_path",
+      "reason": "fixture of recorded background-task output; the scanner under test matches the /tmp/claude-<uid> path shape"
+    },
+    {
+      "path": "docs/plans/_archive/2026/10/evidence/2026-10-02-final-panel-kimi-agy-isolation/spike-log.md",
+      "category": "home_path",
+      "reason": "the review-seat name is the bwrap sandbox mount point of the seat home, not a person home directory"
     }
   ]
 }

@@ -71,6 +71,8 @@ import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
 import { paneRows, runAgedOut, runEndedMs, runSubject } from './model'
 import * as ui from './ui'
+import { BAND_ROWS } from './band'
+import { barStrip } from './tabs'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -175,6 +177,7 @@ type World = {
   existsThrows: Set<string> // $.fs.exists rejects for these paths
   env: Record<string, string> // what $.env.get answers; a test may change it between ticks
   clock: ReturnType<typeof mock.clock>
+  lower: (($: any, e: any) => any) | null // a mod below the live band on the ui.render chain (BL-0352); null = the engine's own drawing alone
   order: string[] // 'open' / 'stat' / 'read' in the order the engine heard them (a press on a file path must open the viewer window before any read)
 }
 
@@ -183,7 +186,8 @@ const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(o
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
+  barLocale = locale ?? 'zh-TW'
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), lower: null, order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
   // its own copy, so a test can change a variable between ticks
@@ -232,6 +236,8 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   on('session.root', () => ({ value: '/work/repo' }))
   on('session.start', () => ({ cwd: CWD }))
   on('session.end', () => ({ sessionId: w.sid.value }))
+  // the band hook calls next(e) (BL-0352): beneath it stands the engine, which answers `{ type: 'engine' }` (its own drawing) unless a test put a mod there
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => (w.lower !== null ? w.lower($, e) : { type: 'engine' as const, ref: 0 }))
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.open', async ($, e) => {
@@ -244,6 +250,26 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   on('ui.close', ($, e) => { w.panes = w.panes.filter(id => id !== e.id); return { value: undefined } })
   on('ui.panes', async () => { if (w.panesGate !== null) await w.panesGate; if (w.panesThrow) throw new Error('engine cannot list panes'); return { value: w.panes.map(id => ({ id, title: 'Autopilot', isShown: true, isFocused: false, isPlaced: true })) } })
   return w
+}
+
+
+// Layout E1: the band row also holds the tabs, which take their cells off the line's width. The cases below that read the line itself mount with the width plus the tabs' width and read
+// the tree without the gap and the tabs, so they still measure what the line draws at the width they name.
+let barLocale: 'en' | 'zh-TW' = 'zh-TW'
+const tabsW = (): number => barStrip(null, makeT(barLocale), null, null).width
+const isTabNode = (n: Node): boolean => typeof n.props?.key === 'string' && (n.props.key.startsWith('tab:') || n.props.key === 'forge')
+function lineOnly(tree: Node): Node {
+  const kids = (tree.children || []) as Node[]
+  return tree.type === 'Box' && kids.length > 5 ? { ...tree, children: kids.slice(0, kids.length - 5) } : tree // the gap and the four tabs
+}
+async function mountAbove($: any, spec: any) {
+  const ui = await $.ui.mount({ ...spec, props: { ...spec.props, bodyColumns: spec.props.bodyColumns + tabsW() + 1 } })
+  const out: Record<string, unknown> = {}
+  for (const k of Object.keys(ui)) out[k] = typeof ui[k] === 'function' ? ui[k].bind(ui) : ui[k]
+  for (const k of Object.getOwnPropertyNames(Object.getPrototypeOf(ui) ?? {})) if (k !== 'constructor' && typeof ui[k] === 'function') out[k] = ui[k].bind(ui)
+  out.drawn = async () => lineOnly(await ui.drawn())
+  out.findAll = async (q: unknown) => ((await ui.findAll(q)) as Node[]).filter(n => !isTabNode(n))
+  return out as any
 }
 
 const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 120, scroll: { offset: 0, bodyRows: 5 }, view: { agentId: undefined } }
@@ -304,7 +330,7 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
 
 // the real band (AbovePrompt): its drawn tree, the full line (Texts + the ⓘ label) and the ⓘ Button node
 async function bandLine($: any, surface: (typeof SURFACES)[number], columns = 120) {
-  const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: columns }, viewport: { columns: Math.max(columns, 20), rows: 50, isFullscreen: true } })
+  const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: columns }, viewport: { columns: Math.max(columns, 20), rows: 50, isFullscreen: true } })
   const tree = (await ui.drawn()) as Node
   const info = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'info') // the slots are Buttons too: the ⓘ is the one keyed info
   await ui.unmount()
@@ -838,7 +864,7 @@ for (const surface of SURFACES) {
     files[AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'] = j(model())
     const w = world(on, files)
     await start($, surface)
-    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     await w.clock.advance(5000)
     await w.clock.advance(5000)
     expect(w.opens.length).toBe(1)
@@ -1071,13 +1097,13 @@ for (const surface of SURFACES) {
     files[AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'] = j(model())
     const w = world(on, files)
     await start($, surface)
-    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 100, rows: 50, isFullscreen: true } })
+    const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 100, rows: 50, isFullscreen: true } })
     await w.clock.advance(5000)
     await w.clock.advance(5000)
     expect(w.opens.length).toBe(0)
     await band.unmount()
     // not fullscreen at 200 columns: still no pane
-    const band2 = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 200, rows: 50, isFullscreen: false } })
+    const band2 = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 200, rows: 50, isFullscreen: false } })
     await w.clock.advance(5000)
     expect(w.opens.length).toBe(0)
     await band2.unmount()
@@ -2199,7 +2225,7 @@ test('read-only: the mod never writes a file', async ($, on) => {
   files[AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'] = j(model())
   const w = world(on, files)
   await start($, 'terminal')
-  const band = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+  const band = await mountAbove($, { plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
   await w.clock.advance(20000)
   await band.unmount()
   expect(w.writes).toEqual([])
@@ -2652,7 +2678,7 @@ for (const surface of SURFACES) {
     const w = world(on, richWorld())
     await start($, surface)
     for (const cols of [209, 119, 60]) {
-      const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
+      const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
       const buttons = (await ui.findAll({ type: 'Button' })) as Drawn[]
       const info = buttons.find(b => b.props?.key === 'info') as Drawn
       expect(info.props?.plain).toBe(true)
@@ -2663,7 +2689,7 @@ for (const surface of SURFACES) {
       expect(buttons[buttons.length - 1]).toBe(info) // and it is still the last control on the line
       await ui.unmount()
     }
-    const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     await ui.press({ key: 'info' })
     await ui.unmount()
     expect(w.opens.map(o => o.id)).toEqual(['autopilot-live'])
@@ -2702,7 +2728,7 @@ for (const surface of SURFACES) {
       [60, ['verdict', 'dispatch', 'hygiene', 'info']],
     ]
     for (const [cols, keys] of cases) {
-      const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
+      const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
       const buttons = (await ui.findAll({ type: 'Button' })) as Drawn[]
       await ui.unmount()
       expect(buttons.map(b => b.props?.key)).toEqual(keys)
@@ -2713,7 +2739,7 @@ for (const surface of SURFACES) {
       }
     }
     const slotText = async (key: string) => {
-      const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+      const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
       const b = ((await ui.findAll({ type: 'Button' })) as Drawn[]).find(x => x.props?.key === key) as Node
       await ui.unmount()
       return textOf(b)
@@ -2726,9 +2752,9 @@ for (const surface of SURFACES) {
   test('P8 band: pressing a slot opens the pane, with the keyboard, on the tab that explains it (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
-    const pairs: [string, string][] = [['dispatch', 'dispatch'], ['decisions', 'review'], ['spend', 'spend'], ['hygiene', 'hygiene'], ['review', 'review'], ['unit', 'now'], ['verdict', 'now'], ['position', 'now']]
+    const pairs: [string, string][] = [['dispatch', 'dispatch'], ['decisions', 'decide'], ['spend', 'spend'], ['hygiene', 'hygiene'], ['review', 'review'], ['unit', 'now'], ['verdict', 'now'], ['position', 'now']]
     for (const [slot, tab] of pairs) {
-      const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+      const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
       await band.press({ key: slot })
       await band.unmount()
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
@@ -2754,7 +2780,7 @@ for (const surface of SURFACES) {
     await fold.press({ key: 'b' + at })
     await fold.unmount()
     expect((await rowsNow())[at].startsWith('▸ 位置')).toBe(true)
-    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+    const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
     await band.press({ key: 'position' })
     await band.unmount()
     expect((await rowsNow())[at].startsWith('▾ 位置')).toBe(true)
@@ -2765,7 +2791,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     let release: () => void = () => {}
     w.openGate = new Promise<void>(r => { release = r })
-    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const band = () => mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const a = await band()
     const pa = a.press({ key: 'info' }) // parked on the gate
     const b = await band()
@@ -2792,7 +2818,7 @@ for (const surface of SURFACES) {
   test('P7 band: the info press cycles the seven tabs while the pane is open; closed it opens on Now (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
-    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const band = () => mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
       const tab = (await activeKeyOf(pane))
@@ -2851,7 +2877,7 @@ for (const surface of SURFACES) {
   test('keyboard: › and the ⓘ share one order: a ⓘ press after a › press continues from the tab showing (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
-    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     await band.press({ key: 'info' }) // closed -> Now
     const pane = await paneTabs($, surface)
     await pane.press({ key: 'next' }) // -> Decide
@@ -2877,7 +2903,7 @@ for (const surface of SURFACES) {
     const w = world(on, richWorld())
     await start($, surface)
     w.panesThrow = true
-    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const band = () => mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
       const tab = (await activeKeyOf(pane))
@@ -2900,7 +2926,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     let release: () => void = () => {}
     w.openGate = new Promise<void>(r => { release = r })
-    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const band = () => mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const first = await band()
     const firstPress = first.press({ key: 'info' }) // the open is parked on the gate: the pane is not listed yet
     const second = await band()
@@ -2921,11 +2947,11 @@ for (const surface of SURFACES) {
     await start($, surface)
     let release: () => void = () => {}
     w.panesGate = new Promise<void>(r => { release = r })
-    const a = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const a = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pa = a.press({ key: 'info' })
-    const b = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const b = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pb = b.press({ key: 'info' })
-    const c = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const c = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pc = c.press({ key: 'info' })
     await new Promise(r => setTimeout(r, 20))
     release()
@@ -2939,7 +2965,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     let release: () => void = () => {}
     w.openGate = new Promise<void>(r => { release = r })
-    const a = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const a = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pa = a.press({ key: 'info' }) // parked on the open gate
     await new Promise(r => setTimeout(r, 20))
     await start($, surface) // session.start resets the press state while that press is in flight
@@ -2950,9 +2976,9 @@ for (const surface of SURFACES) {
     w.panes = [] // the person closed it
     let release2: () => void = () => {}
     w.panesGate = new Promise<void>(r => { release2 = r })
-    const b = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const b = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pb = b.press({ key: 'info' })
-    const c = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const c = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pc = c.press({ key: 'info' })
     await new Promise(r => setTimeout(r, 20))
     release2()
@@ -5019,7 +5045,7 @@ for (const surface of SURFACES) {
     const elsewhere = await mountPane()
     await elsewhere.press({ key: 'dispatch' })
     await elsewhere.unmount()
-    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+    const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
     await band.press({ key: 'quota' })
     await band.unmount()
     const pane = await mountPane()
@@ -5711,3 +5737,370 @@ const HYGIENE_GOLDEN_76: string[] = [
   "▲ 開發目錄 · v2.37.0",
   "  落後遠端 3 個提交",
 ]
+
+
+// Layout E1 (BL-0352): the band row holds the indicator on the left and the tabs on the right; an open tab draws its content under a rule whose `━` stands under the tab's label.
+// The lower mod (forge-stats) is not part of these cases: no tab but the four pane tabs is drawn while nothing below answers.
+const E1_PROPS = { ...BAND_PROPS, maxRows: 8 }
+type Cell = { text: string; start: number; width: number }
+// the leaf Texts of one row in drawing order with the column each starts in: widths are displayWidth (a Chinese character is two cells), never `.length`
+function cellsOf(row: Node): Cell[] {
+  const cells: Cell[] = []
+  let x = 0
+  const put = (text: string) => { const width = displayWidth(text); cells.push({ text, start: x, width }); x += width }
+  const walk = (n: Node | string) => {
+    if (typeof n === 'string') return put(n)
+    if (n.type === 'Text') return put(textOf(n))
+    if ((n.children || []).length === 0 && typeof n.props?.label === 'string') return put(n.props.label as string) // a Button the host drew from its label
+    for (const c of n.children || []) walk(c as Node | string)
+  }
+  walk(row)
+  return cells
+}
+for (const surface of SURFACES) {
+  const mountE1 = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-e1', props: { ...E1_PROPS, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  // press a tab (the host draws again on the next mount) and read the tree
+  const drawE1 = async ($: any, press: string[] = [], props: Record<string, unknown> = {}) => {
+    await start($, surface) // a new session: no tab open
+    for (const key of press) {
+      const ui = await mountE1($, props)
+      await ui.press({ key })
+      await ui.unmount()
+    }
+    const ui = await mountE1($, props)
+    const tree = (await ui.drawn()) as Node
+    await ui.unmount()
+    return tree
+  }
+  const rowsOf = (tree: Node): Node[] => (tree.type === 'Box' && (tree.props as { flexDirection?: string } | undefined)?.flexDirection === 'column' ? ((tree.children || []) as Node[]) : [tree])
+
+  for (const locale of ['zh-TW', 'en'] as const) {
+    const make = (on: On) => (locale === 'en' ? worldEn(on, richWorld()) : world(on, richWorld()))
+    test('E1 bar: the four pane tabs sit at the right edge of the band row in the strip style; none open draws the row alone (' + locale + ', ' + surface + ')', async ($, on) => {
+      make(on)
+      await start($, surface)
+      const tree = await drawE1($)
+      expect(rowsOf(tree).length, 'one row, no rule').toBe(1)
+      const t = makeT(locale)
+      const text = cellsOf(rowsOf(tree)[0]).map(c => c.text).join('')
+      for (const id of ['now', 'decide', 'dispatch', 'review']) expect(text).toContain(' ' + t('tab.' + id) + ' ')
+      expect(displayWidth(text), 'the row fills the width the band was given').toBe(E1_PROPS.bodyColumns)
+    })
+
+    // the rule's `━` must start and end in the same cells as the open tab's label, for a Chinese or an English label, at the left end, in the middle and at the right end
+    for (const id of ['now', 'dispatch', 'review'] as const) {
+      test('E1 rule: the ━ stands exactly under the open tab ' + id + ' (' + locale + ', ' + surface + ')', async ($, on) => {
+        make(on)
+        await start($, surface)
+        const tree = await drawE1($, ['tab:' + id])
+        const [barRow, ruleRow] = rowsOf(tree)
+        const label = ' ' + makeT(locale)('tab.' + id) + ' '
+        const tab = cellsOf(barRow).find(c => c.text === label)
+        expect(tab, 'the open tab is in the row').toBeDefined()
+        const mark = cellsOf(ruleRow).find(c => /^━+$/.test(c.text))
+        expect(mark, 'the rule has a ━ run').toBeDefined()
+        expect({ start: (mark as Cell).start, width: (mark as Cell).width }).toEqual({ start: (tab as Cell).start, width: (tab as Cell).width })
+        expect(cellsOf(ruleRow).map(c => c.text).join('').replace(/━/g, '─'), 'the rule is one row across the whole width').toBe('─'.repeat(E1_PROPS.bodyColumns))
+      })
+    }
+  }
+
+  test('E1 tabs: pressing the open tab again closes it; pressing another one moves the open tab (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    expect(rowsOf(await drawE1($, ['tab:now'])).length).toBeGreaterThan(1)
+    expect(rowsOf(await drawE1($, ['tab:now', 'tab:now'])).length, 'the same tab again').toBe(1)
+    const moved = await drawE1($, ['tab:now', 'tab:review'])
+    const mark = cellsOf(rowsOf(moved)[1]).find(c => /^━+$/.test(c.text)) as Cell
+    const review = cellsOf(rowsOf(moved)[0]).find(c => c.text === ' 審查 ') as Cell
+    expect(mark.start).toBe(review.start)
+  })
+
+  test('E1 tabs: a new session starts with no tab open (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    expect(rowsOf(await drawE1($, ['tab:now'])).length).toBeGreaterThan(1)
+    await start($, surface)
+    expect(rowsOf(await drawE1($)).length).toBe(1)
+  })
+
+  test('E1 現況: the project line has the project, the phase, the progress, the round and QC and the spend, and none of the lamps the left side already has; the buttons open the pane (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const rows = rowsOf(await drawE1($, ['tab:now']))
+    expect(rows.length, 'bar, rule, project line, buttons').toBe(4)
+    const line = walkTexts(rows[2]).map(textOf).join('')
+    expect(line).toMatch(/3\/5/)
+    expect(line).toMatch(/R3/)
+    expect(line).toMatch(/QC/)
+    expect(line).toMatch(/\$/)
+    expect(line).not.toMatch(/[●⊘⚑ⓘ]/)
+    const buttons = walkTexts(rows[3]).map(textOf).join('')
+    expect(buttons).toContain('[ 開面板 ]')
+    expect(buttons).toContain('[ 看派工 ]')
+    const open = await mountE1($)
+    await open.press({ key: 'open:dispatch' })
+    await open.unmount()
+    expect(w.opens.length).toBe(1)
+    expect(await shownTabOf($, surface)).toBe('dispatch')
+  })
+
+  for (const id of ['dispatch', 'review'] as const) {
+    test('E1 ' + id + ': one summary line from the band\'s own slots and an open-the-pane button (' + surface + ')', async ($, on) => {
+      const w = world(on, richWorld())
+      await start($, surface)
+      const rows = rowsOf(await drawE1($, ['tab:' + id]))
+      expect(rows.length, 'bar, rule, summary, button').toBe(4)
+      expect(walkTexts(rows[2]).map(textOf).join('').length).toBeGreaterThan(0)
+      expect(walkTexts(rows[3]).map(textOf).join('')).toContain('[ 開面板 ]')
+      const open = await mountE1($) // drawE1 above pressed the tab: it stays open
+      await open.press({ key: 'open:' + id })
+      await open.unmount()
+      expect(w.opens.length).toBe(1)
+      expect(await shownTabOf($, surface)).toBe(id)
+    })
+  }
+
+  test('E1 rows: when the content and its rule do not fit in maxRows the row alone stays (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    expect(rowsOf(await drawE1($, ['tab:now'], { maxRows: 3 })).length).toBe(1)
+    expect(rowsOf(await drawE1($, ['tab:now'], { maxRows: 4 })).length).toBe(4)
+  })
+
+  test('E1 ◆: pressing the decisions slot opens the 待決 tab (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const ui = await mountE1($, { bodyColumns: 250 }) // the decisions slot is drawn from 160 columns
+    await ui.press({ key: 'decisions' })
+    await ui.unmount()
+    expect(await shownTabOf($, surface)).toBe('decide')
+  })
+}
+
+// BL-0352: the forge tab. The mod below this hook on the ui.render chain (codeforge's forge-stats) draws its label as ONE Text when it is asked for one row, and its full view
+// when it is asked for twelve or more. The hook below plays that mod: it records every ask and answers by maxRows, as forge-stats does.
+const FORGE_LABEL = 'forge 93 tok/s'
+for (const surface of SURFACES) {
+  type Ask = { maxRows: number; bodyColumns: number; requestId: unknown; hasSurvey: boolean; hasScroll: boolean; bodyRows: number | undefined }
+  const forgeMod = (w: World, asks: Ask[], answer: { label?: 'text' | 'box' | 'engine'; full?: 'box' | 'engine' } = {}) => {
+    w.lower = ($, e) => {
+      asks.push({ maxRows: e.props.maxRows, bodyColumns: e.props.bodyColumns, requestId: (e as { requestId?: unknown }).requestId, hasSurvey: e.props.hasSurvey, hasScroll: Object.prototype.hasOwnProperty.call(e.props, 'scroll'), bodyRows: e.props.scroll?.bodyRows })
+      const { Box, Text } = $.ui.resolve(e)
+      if (e.props.maxRows === 1) {
+        const kind = answer.label ?? 'text'
+        if (kind === 'text') return Text({ children: FORGE_LABEL })
+        if (kind === 'box') return Box({ children: [Text({ children: FORGE_LABEL })] })
+        return { type: 'engine' as const, ref: 0 }
+      }
+      if (e.props.maxRows >= 12 && (answer.full ?? 'box') === 'box') return Box({ flexDirection: 'column', children: Array.from({ length: 12 }, (_, i) => Text({ children: 'FERRIS-' + i })) })
+      return { type: 'engine' as const, ref: 0 }
+    }
+  }
+  const F_PROPS = { ...BAND_PROPS, maxRows: 20 }
+  const mount = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: { ...F_PROPS, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  const draw = async ($: any, press: string[] = [], props: Record<string, unknown> = {}) => {
+    await start($, surface)
+    for (const key of press) {
+      const ui = await mount($, props)
+      await ui.press({ key })
+      await ui.unmount()
+    }
+    const ui = await mount($, props)
+    const tree = (await ui.drawn()) as Node
+    const forge = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'forge')
+    await ui.unmount()
+    return { tree, forge, text: cellsOf(tree).map(c => c.text).join('|') }
+  }
+
+  test('forge tab: a Text of one string from the mod below becomes the last tab, a Button keyed forge; the band row alone when none is open (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($)
+    expect(d.forge, 'a Button keyed forge is drawn').toBeDefined()
+    expect(d.text).toContain(' ' + FORGE_LABEL + ' ')
+    expect(d.tree.type).toBe('Box')
+    expect(((d.tree.props as { flexDirection?: string } | undefined)?.flexDirection)).toBeUndefined() // one row: nothing is stacked
+    expect(asks.map(a => a.maxRows), 'one ask, for the label').toEqual([1])
+    expect(asks[0].bodyColumns).toBeGreaterThanOrEqual(5)
+    expect(asks[0].bodyColumns).toBeLessThanOrEqual(30)
+  })
+
+  test('forge tab: the ━ stands under the forge label, the last and an ASCII tab, and the full view is drawn under the rule (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, ['forge'])
+    const rows = ((d.tree.children || []) as Node[])
+    const bar = cellsOf(rows[0])
+    const label = bar.find(c => c.text === ' ' + FORGE_LABEL + ' ') as Cell
+    const mark = cellsOf(rows[1]).find(c => /^━+$/.test(c.text)) as Cell
+    expect(label).toBeDefined()
+    expect({ start: mark.start, width: mark.width }).toEqual({ start: label.start, width: label.width })
+    expect(d.text).toContain('FERRIS-0')
+    expect(d.text).toContain('FERRIS-11')
+  })
+
+  test('forge tab: opened, the mod below is asked twice in one draw, the label first (one row) and the full view after it, with the rest of the rows (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    await draw($, ['forge'])
+    // the last draw: label then expansion
+    const last = asks.slice(-2)
+    expect(last.map(a => a.maxRows)).toEqual([1, 20 - 2])
+    expect(last[1].bodyColumns).toBe(F_PROPS.bodyColumns)
+  })
+
+  test('forge tab: both asks carry the requestId as received (forge-stats draws its Raster under it) (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    await draw($, ['forge'])
+    expect(asks.length).toBeGreaterThanOrEqual(2)
+    for (const a of asks) expect(a.requestId).toBe('rq-band-1')
+  })
+
+  test('forge tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent in both asks (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    await draw($, ['forge'], { scroll: { offset: 0, bodyRows: 19 } })
+    expect(asks.slice(-2).map(a => a.bodyRows)).toEqual([0, 17])
+    asks.length = 0
+    const { scroll: _none, ...noScroll } = F_PROPS
+    await start($, surface)
+    const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: noScroll, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    await ui.press({ key: 'forge' })
+    await ui.unmount()
+    const again = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: noScroll, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    await again.drawn()
+    await again.unmount()
+    expect(asks.length).toBeGreaterThanOrEqual(2)
+    expect(asks.every(a => !a.hasScroll)).toBe(true)
+  })
+
+  test('forge tab: pressing it again closes it, and the full view is no longer asked for (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, ['forge', 'forge'])
+    expect(d.text).not.toContain('FERRIS')
+    expect(asks.slice(-1).map(a => a.maxRows)).toEqual([1])
+  })
+
+  test('forge tab: when the mod below answers nothing (the engine) or not a Text, there is no forge tab (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    for (const label of ['engine', 'box'] as const) {
+      forgeMod(w, [], { label })
+      const d = await draw($)
+      expect(d.forge, label).toBeUndefined()
+      expect(d.text, label).not.toContain('forge')
+    }
+  })
+
+  test('forge tab: no room for the full view (fewer than 12 rows under the rule) leaves the row alone and does not ask for it (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, ['forge'], { maxRows: 13 })
+    expect(d.text).not.toContain('FERRIS')
+    expect(asks.every(a => a.maxRows === 1)).toBe(true)
+    const e = await draw($, ['forge'], { maxRows: 14 })
+    expect(e.text).toContain('FERRIS-11')
+  })
+
+  test('forge tab: a maxRows that is NaN or missing asks nothing and draws no forge tab; the survey is passed down untouched (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    for (const bad of [Number.NaN, undefined]) {
+      const d = await draw($, [], { maxRows: bad })
+      expect(d.forge).toBeUndefined()
+      expect(d.text).toContain('ⓘ')
+    }
+    expect(asks).toEqual([])
+    const s = await draw($, [], { hasSurvey: true })
+    expect(s.text).not.toContain('ⓘ')
+    expect(asks.map(a => [a.maxRows, a.hasSurvey])).toEqual([[20, true]])
+  })
+
+  test('forge tab: with no lower mod at all (the engine alone) the row is the four tabs and nothing is stacked (' + surface + ')', async ($, on) => {
+    worldEn(on, richWorld())
+    const d = await draw($)
+    expect(d.forge).toBeUndefined()
+    expect(d.text).toContain('Now')
+  })
+}
+
+// ---- layout E1, the 待決 tab on the band row: the pane's own lines, compact (the first question and the send row) ----
+for (const surface of SURFACES) {
+  const decideBand = (on: any, decisions: object[] = [DQ1, DQ2, DQ3]) => {
+    const files = base()
+    files[W_MODEL] = j(model({ needs_decision: true, decisions }))
+    const w = world(on, files)
+    const submits: { text: string; origin: unknown }[] = []
+    on('prompt.submit', ($: any, e: any) => { submits.push({ text: e.text, origin: e.origin }); return { text: e.text } })
+    return { w, submits }
+  }
+  const mountD = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-d', props: { ...BAND_PROPS, maxRows: 8, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  const rowsD = async ($: any, press: string[] = []) => {
+    for (const key of press) {
+      const ui = await mountD($)
+      await ui.press({ key })
+      await ui.unmount()
+    }
+    const ui = await mountD($)
+    const tree = (await ui.drawn()) as Node
+    const keys = ((await ui.findAll({ type: 'Button' })) as Node[]).map(b => b.props?.key as string)
+    const inputs = ((await ui.findAll({ type: 'Input' })) as Node[]).length
+    await ui.unmount()
+    return { rows: ((tree.children || []) as Node[]), keys, inputs }
+  }
+  const textD = (n: Node): string => cellsOf(n).map(c => c.text).join('')
+
+  test('E1 待決: the first question and its options and the send row, from the pane\'s own lines; no text field, not the other questions (' + surface + ')', async ($, on) => {
+    decideBand(on)
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide'])
+    const all = d.rows.map(textD)
+    expect(all[0]).toContain(' 待決 ')
+    expect(all[2]).toContain('1. P5 殘留分頁要不要把已清掉的也列出來')
+    expect(all.some(r => r.includes('[ ] ★ OK  [ ] 完整顯示'))).toBe(true)
+    expect(all[all.length - 1]).toContain('[ 送出（已答 0/3） ]')
+    expect(all.join('\n')).not.toContain('U6')
+    expect(d.inputs).toBe(0)
+    for (const k of ['pick:d-4290499d:0', 'pick:d-4290499d:1']) expect(d.keys, k).toContain(k)
+    expect(d.keys, 'nothing chosen: no send Button').not.toContain('submit')
+  })
+
+  test('E1 待決: the ━ stands under the 待決 tab, a Chinese label in the middle of the row (' + surface + ')', async ($, on) => {
+    decideBand(on)
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide'])
+    const label = cellsOf(d.rows[0]).find(c => c.text === ' 待決 ') as Cell
+    const mark = cellsOf(d.rows[1]).find(c => /^━+$/.test(c.text)) as Cell
+    expect(label).toBeDefined()
+    expect({ start: mark.start, width: mark.width }).toEqual({ start: label.start, width: label.width })
+  })
+
+  test('E1 待決: a pick on the band is the pane\'s pick (one state), and the send Button sends ONE prompt (' + surface + ')', async ($, on) => {
+    const { submits } = decideBand(on)
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide', 'pick:d-4290499d:1'])
+    expect(d.rows.map(textD).some(r => r.includes('[ ] ★ OK  [x] 完整顯示'))).toBe(true)
+    expect(d.keys).toContain('submit')
+    expect((await paneParts($, surface, 'decide')).texts).toContain('  選項      [ ] ★ OK  [x] 完整顯示')
+    await rowsD($, ['submit'])
+    expect(submits.length).toBe(1)
+    expect(submits[0].text).toContain('d-4290499d')
+  })
+
+  test('E1 待決: with nothing to answer the tab says so on one line (' + surface + ')', async ($, on) => {
+    decideBand(on, [])
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide'])
+    expect(d.rows.map(textD).join('\n')).toContain('目前沒有待你回答的問題')
+  })
+}

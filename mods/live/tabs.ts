@@ -71,6 +71,27 @@ export function stripOf(snap: LiveSnapshot | null, ctx: PaneCtx, tab: PaneTab, h
   const needs = snap === null ? {} : tabNeeds(snap)
   return ui.strip(uiCtxOf(ctx), tab, PANE_TABS.map(id => { const n = needs[id]; return { id, label: tabLabel(id, ctx.t), ...(n === undefined ? {} : { need: true }) } }), hasButton)
 }
+// ---- the band's own tab row (layout E1): the first four pane tabs and, when a mod below draws one, a forge tab, right-aligned on the band's row. The labels and their weights are
+// ui.strip()'s (` name ` per tab, one space after each); the rule under an open tab is built from the SAME widths (ui.tabRule), so the `━` stands exactly under the label by construction. ----
+export type BarTabId = 'now' | 'decide' | 'dispatch' | 'review' | 'forge'
+export const BAR_PANE_TABS = ['now', 'decide', 'dispatch', 'review'] as const
+export type BarTab = { id: BarTabId; label: Seg; width: number; start: number } // start counts from the row's first tab
+export type BarStrip = { tabs: BarTab[]; width: number } // width counts the space after each tab
+// forge: the forge tab's text (one string the mod below drew), or null for no forge tab
+export function barStrip(snap: LiveSnapshot | null, t: T, active: BarTabId | null, forge: string | null): BarStrip {
+  const needs = snap === null ? {} : tabNeeds(snap)
+  const list = BAR_PANE_TABS.map(id => ({ id: id as BarTabId, label: tabLabel(id, t), ...(needs[id] === undefined ? {} : { need: true }) }))
+  const built = ui.strip<BarTabId>({ t, cols: 100000 }, active, forge === null ? list : [...list, { id: 'forge' as const, label: forge }], false)
+  const tabs: BarTab[] = []
+  let x = 0
+  for (const b of built.tabs) {
+    const width = displayWidth(b.label.text)
+    tabs.push({ id: b.id, label: b.label, width, start: x })
+    x += width + 1
+  }
+  return { tabs, width: x }
+}
+export const barRule = (strip: BarStrip, columns: number, tabsAt: number, active: BarTabId | null): Seg[] => ui.tabRule(strip.tabs, columns, tabsAt, active)
 export const stripRows = (snap: LiveSnapshot, ctx: PaneCtx, tab: PaneTab, hasButton: boolean): { rows: number; exact: boolean } => { const s = stripOf(snap, ctx, tab, hasButton); return { rows: s.rows, exact: s.exact } }
 // every line is one drawn row: pane.tsx draws a blank line as a one-cell Text (an empty Text would take no row)
 export const treeRowCount = (strip: number, head: readonly PaneLine[], body: readonly PaneLine[], extra: number): number => strip + head.length + body.length + extra

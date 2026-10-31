@@ -1589,7 +1589,7 @@ export function plainBandText(reason: string, columns: number): string {
 export const PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
-const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'review', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
+const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'decide', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
 export const slotTab = (id: SlotId): PaneTab => SLOT_TAB[id]
 export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || id === 'unit' ? SECTION.where : id === 'quota' ? SECTION.limits : null)
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0345 -->
+<!-- next-id: BL-0348 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1450,7 +1450,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-31 01M66YQG8DWF6HCWJ9N335GH43；2026-10-31 01M66Z1CTT0FDC92N0WWARYBDP
 - **Problem**: 新機器或重開機清掉暫存目錄後，許多地方假設目錄、檔案或工具已存在，缺了就中止或悄悄失效；例子是狀態列常駐顯示無法使用，因為背景監看程式找不到清單目錄。
 - **Impact**: 新機器與重開機後多個功能悄悄壞掉，使用者看不到原因，只能手動補目錄。
-- **Trigger**: design approved by owner (d-4a10f129); U1 (runtime paths, watcher start, fresh-host test) in progress, U2 (doctor, tool messages) after U1 merges
+- **Trigger**: U1 merged 700dce7db (2026-10-31), pushed, reporter notified (fleet msg 01M67VAETCTWH5C1ZPZKC2KJ65); U2 remains: doctor, detach/flock failure messages, F5 diagnostics, evaluateLiveDir
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: PEER-REPORTED llm-playground 2026-10-31, scope widened by owner via 4124gs
@@ -1586,3 +1586,45 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0336 U1 third-round acceptance finding 2026-10-31
 - **Pointer**: docs/backlog/runs-watch-runs-path-is-file.md
 - **Context**: Fix direction: detect a non-directory at <live>/runs and write a launch result file with the reason. Related to BL-0336 (missing-path assumptions).
+
+### engine-effort-default.test.sh goes falsely red 4 cases every day from 00:00 to 01:00 UTC
+- **Id**: BL-0345
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: 其中一支引擎預設努力程度的測試，測試資料用「現在減一小時」當簽發時間，卻用「現在」的日期當資格日期；跨過 UTC 午夜時兩個日期對不上，回報成績單資格日期與能力證據不符，假紅 4 條。
+- **Impact**: 每天 UTC 00:00–01:00（台北 08:00–09:00）跑這支測試會假紅，容易被誤判成真的回歸；09:00 之後自己轉綠。
+- **Trigger**: work can start now
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: reproduced 2026-10-31 Taipei 08:40 on develop 7a5bd925d, green after 09:00
+- **Pointer**: docs/backlog/engine-effort-default-test-midnight-date-skew.md
+- **Context**: Fix: derive issued time and qualified_at date from the same single instant. Negative control: pin the clock to 00:30 UTC and the 4 cases must stay green.
+
+### runs-watch-start.test.js negative control "no start lock and no pending check" is a race and misses under heavy load
+- **Id**: BL-0346
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: 監看程式啟動測試裡「沒有啟動鎖也沒有待查檢查」這條負控制靠時間競態取得交錯，主機負載高（load 約 43）時偶爾漏抓一次。
+- **Impact**: 負控制偶爾漏抓，測試對這個防線的保護時有時無；U1 已加重試，但仍是靠機率。
+- **Trigger**: next edit to hooks/runs-watch-start.test.js or the watcher start lock, or another miss under load
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: observed in BL-0336 U1 fourth-generation review 2026-10-31
+- **Pointer**: docs/backlog/runs-watch-start-negative-control-race.md
+- **Context**: Fix direction: force the interleaving deterministically (a hook or barrier) instead of relying on timing. U1 added a retry as a stopgap.
+
+### status runs --json drops the reason when the runs directory is rejected
+- **Id**: BL-0347
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: status runs --json 在 runs 目錄被拒時，原因放在陣列的 runs_dir_error 屬性上，JSON.stringify 會丟掉它，所以 JSON 輸出看不到原因；stderr 與文字輸出有顯示。
+- **Impact**: 用 JSON 輸出的使用者與腳本拿到空結果，看不出是目錄被拒。
+- **Trigger**: next edit to src/status/cli.js runs output, or BL-0336 U2
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: BL-0336 U1 second-generation review suggestion 2026-10-31
+- **Pointer**: docs/backlog/status-runs-json-drops-runs-dir-error.md
+- **Context**: src/status/cli.js about L167-193. Fix: JSON mode emits an object, or the reason goes in a serializable place. Negative control: a rejected runs dir must show its reason in --json output.

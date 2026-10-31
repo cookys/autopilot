@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0354 -->
+<!-- next-id: BL-0355 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1715,3 +1715,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: depth-0 observation 2026-10-31 on 19e2511fa; priority high, efficiency work jumps the queue (owner rule)
 - **Pointer**: docs/backlog/suite-baseline-run-all-parallel.md
 - **Context**: Fix direction and equivalence check in the sidecar. Add a negative control: a suite listed as serial must never overlap another.
+
+### 審查席走 anthropic 相容 runner 時，資格考與日常審查的 effort 不一致
+- **Id**: BL-0354
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: peer
+- **Reporter**: peace
+- **Report**: 01M68NQPQT7HPEH2RASE0FRB7B
+- **Reply**: 2026-10-31 01M68NRJW96J2C0S63KV08ZH8Y
+- **Problem**: 資格考會把推理強度送給模型，日常審查派工卻完全不送，所以席位在高強度下考資格，審查時卻用端點的預設強度。
+- **Impact**: 只影響 runner 為 anthropic 相容的席位，資格紀錄和實際審查不在同一個分區；走 cc-shim 的席位不受影響。
+- **Trigger**: after the current 3.0.0 relayout round, or next edit to the anthropic-compatible branch of scripts/dispatch-review.sh
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED peace 2026-10-31 (fleet message)
+- **Pointer**: docs/backlog/anthropic-compatible-review-effort-gap.md
+- **Context**: Fix direction, negative control and the 41/42 re-run note are in the sidecar. Official default stays unchanged.

@@ -1691,8 +1691,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Since**: 2026-10-31
 - **Origin**: peer
 - **Reporter**: codeforge
-- **Report**: 2026-10-31 fleet message
-- **Reply**: none
+- **Report**: 01M68HGMJQF52M9MX1B1BMQ50N
+- **Reply**: 2026-10-31 01M68HH99K9GXAKYG0236176QX
 - **Problem**: autopilot 的提示上方版位直接回傳自己的畫面，從不把控制權交給下一層，所以排在它後面的 mod 永遠畫不出來。
 - **Impact**: codeforge 想在下方加一條三欄統計版位，實測被呼叫 0 次，無法顯示；任何後排 mod 都有同樣問題。
 - **Trigger**: relayout section 2 and section 4 done, or next edit to mods/live/register.ts

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0356 -->
+<!-- next-id: BL-0358 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1729,3 +1729,34 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: bandyield round 2 four-vendor review and acceptance, 2026-10-31
 - **Pointer**: docs/backlog/live-band-follow-ups.md
 - **Context**: Four independent items in the sidecar; they can be split when picked up.
+
+### autopilot 的 extension 機制：讓 codeforge 等套件由 autopilot 統一安裝與掛載
+- **Id**: BL-0356
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: peer
+- **Reporter**: codeforge
+- **Report**: 01M69BDD8K7CMWARG6NPDXMYSQ
+- **Reply**: 2026-11-01 01M69BE8CG8B760BH3WYM44AST
+- **Problem**: 一般使用者現在要分別裝 autopilot 和 codeforge 等套件，owner 說「不然一般 user 要裝一堆套件也是困擾」；band 在 host 端一次只有一條 mod 鏈，分頁由誰統一畫也沒有定案。
+- **Impact**: 使用者得自己湊齊多個套件並各自設定，hooks 與分頁互相搶位，體驗零碎。
+- **Trigger**: 3.0.0-alpha.7 released (relayout P1-P5 paths settled); owner chose to start from alpha.8, before 3.0.0 final
+- **Trigger-Type**: event
+- **Effort**: L
+- **Source**: PEER-REPORTED codeforge 2026-11-01 (owner decision on card d-0e2e6e0d; codeforge main b12c8d0, BACKLOG B31 and agent-coupling ADR)
+- **Pointer**: docs/backlog/extension-mechanism.md
+- **Context**: Consensus, contract pieces and plan-review focus are in the sidecar. Plan first, codeforge joins the plan review.
+
+### affected-suites 對純文件改動選出太多套件
+- **Id**: BL-0357
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: self
+- **Problem**: 一個只改備忘清單與兩個附屬文件的提交，選套件工具卻挑出三百八十支套件，跑一輪要一到兩小時，實作者只跑了一百一十支就停下。
+- **Impact**: 純文件的工作也要等很久，或只能接受只跑了一部分的驗收結果。
+- **Trigger**: next edit to scripts/affected-suites.js, or the next docs-only lane
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: BL-0352 archive commit acceptance, 2026-10-31
+- **Pointer**: docs/backlog/affected-suites-docs-only-fanout.md
+- **Context**: Investigation steps and the negative control are in the sidecar; whole-repo audits must stay selected.

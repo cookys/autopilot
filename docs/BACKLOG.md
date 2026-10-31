@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0358 -->
+<!-- next-id: BL-0359 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1760,3 +1760,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0352 archive commit acceptance, 2026-10-31
 - **Pointer**: docs/backlog/affected-suites-docs-only-fanout.md
 - **Context**: Investigation steps and the negative control are in the sidecar; whole-repo audits must stay selected.
+
+### band 加一個 fleet 分頁，由 autopilot 畫
+- **Id**: BL-0358
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: peer
+- **Reporter**: codeforge
+- **Report**: 01M69BHRJMNZ6XRXEERDTX62KG
+- **Reply**: 2026-11-01 01M69BJE67SRNZD4C6XN9F6Z0G
+- **Problem**: 想在 band 上直接看到 fleet 的狀態，現在要開終端打指令才看得到。
+- **Impact**: 要看在線的 peer、未讀訊息與待核准數量，都得離開畫面去打指令。
+- **Trigger**: after 3.0.0-alpha.7 ships, or when the BL-0356 plan is written
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PEER-REPORTED codeforge 2026-11-01; owner chose autopilot-drawn tab on card d-d99e2d99
+- **Pointer**: docs/backlog/band-fleet-tab.md
+- **Context**: No approve button on the tab (human-only tty gate); research how a mod reads fleet state first.

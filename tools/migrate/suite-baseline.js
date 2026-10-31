@@ -18,7 +18,7 @@
 //     by convention): suites NOT listed in hooks/tests/lib/serial-suites.txt (the file run.sh and
 //     affected-suites --jobs read) run up to N at a time; when the pool has drained, each listed suite runs alone,
 //     one at a time, so nothing ever overlaps it. Every suite gets its own TMPDIR (/tmp/sbj.XXXXXX, removed after)
-//     and, in the pool, a private XDG_RUNTIME_DIR under the caller's; AUTOPILOT_TEST_TIMING_FACTOR defaults to N for
+//     and, in the pool, a private XDG_RUNTIME_DIR (under the caller's when it has one, else inside that TMPDIR); AUTOPILOT_TEST_TIMING_FACTOR defaults to N for
 //     pool suites and 1 for serial ones (a value already in the environment wins). A suite's output is buffered and
 //     written whole, followed by its `rc=N <path>`, so outputs never interleave. A pool suite that exits non-zero
 //     is re-run once, alone, after the pool drains (the rerun's output and rc are the ones printed):
@@ -327,8 +327,11 @@ async function runAllParallel(root, ids, secs, jobs, baseEnv) {
   const exec = async (id, pool) => {
     const tmp = fs.mkdtempSync('/tmp/sbj.'); MADE_DIRS.add(tmp); fs.chmodSync(tmp, 0o700);
     const env = { ...baseEnv, TMPDIR: tmp };
-    if (pool && xdgParent) {
-      try { const x = fs.mkdtempSync(path.join(xdgParent, 'sbj.')); MADE_DIRS.add(x); fs.chmodSync(x, 0o700); env.XDG_RUNTIME_DIR = x; } catch { /* keep caller's */ }
+    if (pool) { // every pool suite gets its own XDG_RUNTIME_DIR: under the caller's when usable, else inside its private TMPDIR
+      let x = null;
+      if (xdgParent) { try { x = fs.mkdtempSync(path.join(xdgParent, 'sbj.')); MADE_DIRS.add(x); } catch { x = null; } }
+      if (!x) { x = path.join(tmp, 'x'); fs.mkdirSync(x); }
+      fs.chmodSync(x, 0o700); env.XDG_RUNTIME_DIR = x;
     }
     if (callerFactor === undefined) env.AUTOPILOT_TEST_TIMING_FACTOR = String(pool ? jobs : 1);
     const r = await runOne(root, id, secs, env);

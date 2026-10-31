@@ -239,6 +239,28 @@ node -e '
 const s=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).suites;
 const a=s["hooks/tests/slow-flaky.test.sh"],b=s["hooks/tests/slow-red.test.sh"];
 process.exit(a.flaky_under_parallel&&a.pool_rc===124&&b.red_in_both_runs&&b.pool_rc===124&&b.rc===124?0:1)' "$T/to-real.json" && ok || bad "record reads the real run-all timeout markers"
+# every pool suite has a private XDG_RUNTIME_DIR, with or without a caller one; serial-listed suites keep the caller's
+mk xdg1.test.sh 'echo "$XDG_RUNTIME_DIR" > "$FXSTAMPS/xdg1"; echo "$TMPDIR" > "$FXSTAMPS/xdg1.tmp"; sleep 0.5; echo "Summary: 1 passed, 0 failed"'
+mk xdg2.test.sh 'echo "$XDG_RUNTIME_DIR" > "$FXSTAMPS/xdg2"; echo "$TMPDIR" > "$FXSTAMPS/xdg2.tmp"; sleep 0.5; echo "Summary: 1 passed, 0 failed"'
+printf '%s\n' hooks/tests/xdg1.test.sh hooks/tests/xdg2.test.sh > "$T/ids-xdg.txt"
+xdgcheck() { # $1 = caller XDG or "" ; verifies private, distinct, 0700, removed
+  node -e '
+const fs=require("fs");const d=process.argv[1],caller=process.argv[2];
+const r=(n)=>fs.readFileSync(d+"/"+n,"utf8").trim();
+const a=r("xdg1"),b=r("xdg2"),ta=r("xdg1.tmp"),tb=r("xdg2.tmp");
+let ok=a&&b&&a!==b&&a!==caller&&b!==caller&&a.startsWith("/tmp/sbj.")&&b.startsWith("/tmp/sbj.")&&ta!==tb;
+if(caller)ok=ok&&a.startsWith(caller+"/")&&b.startsWith(caller+"/");
+process.exit(ok&&!fs.existsSync(a)&&!fs.existsSync(b)?0:1)' "$FX/stamps" "$1"
+}
+rm -f "$FX/stamps"/*
+env -u XDG_RUNTIME_DIR node "$SB" run-all --root "$FX" --ids "$T/ids-xdg.txt" --jobs 2 >/dev/null 2>&1 </dev/null
+xdgcheck "" && ok || bad "no caller XDG_RUNTIME_DIR: each pool suite should get its own private one under its TMPDIR"
+rm -f "$FX/stamps"/*; mkdir -p "$T/xdgcaller"; chmod 700 "$T/xdgcaller"
+XDG_RUNTIME_DIR="$T/xdgcaller" node "$SB" run-all --root "$FX" --ids "$T/ids-xdg.txt" --jobs 2 >/dev/null 2>&1 </dev/null
+node -e '
+const fs=require("fs");const d=process.argv[1],c=process.argv[2];
+const a=fs.readFileSync(d+"/xdg1","utf8").trim(),b=fs.readFileSync(d+"/xdg2","utf8").trim();
+process.exit(a!==b&&a.startsWith(c+"/")&&b.startsWith(c+"/")&&!fs.existsSync(a)&&!fs.existsSync(b)?0:1)' "$FX/stamps" "$T/xdgcaller" && ok || bad "caller XDG_RUNTIME_DIR: pool suites get distinct private dirs under it, removed after"
 rcis 2 "--jobs 0 is bad input" node "$SB" run-all --root "$FX" --ids "$T/ids-fl.txt" --jobs 0
 
 

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "path": "hooks/tests/leak-guard.test.sh",
+      "category": "private_ip",
+      "reason": "guard test: private-range fixtures are the subject under test"
+    },
+    {
+      "path": "scripts/lib/leak-guard-hosts.json",
+      "category": "host",
+      "reason": "the fleet host list the pattern engine reads is the data itself"
+    },
+    {
+      "path": "platforms/codex/plugin/scripts/lib/leak-guard-hosts.json",
+      "category": "host",
+      "reason": "codex mirror of scripts/lib/leak-guard-hosts.json"
+    },
+    {
+      "path": "scripts/endpoints.env.example",
+      "category": "private_ip",
+      "reason": "documented example endpoint address kept for operators to copy"
+    },
+    {
+      "path": "platforms/codex/plugin/scripts/endpoints.env.example",
+      "category": "private_ip",
+      "reason": "codex mirror of scripts/endpoints.env.example"
+    }
+  ]
+}

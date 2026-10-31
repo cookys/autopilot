@@ -7,6 +7,8 @@
 #   1. blind-dispatch.md issue-ref anti-rot grep (bespoke provenance guard, always).
 #   1b. scripts/check-tmp-residue-registry.js --staged (temp-prefix registry gate; staged shipped
 #      files + registry/reaper parity).
+#   1c. scripts/leak-guard.js --staged (personal data in added lines: paths, hosts, private IPs,
+#      credentials, .env files; per-file exemptions only, scripts/leak-guard-registry.json).
 #   2. scripts/sync-all.sh --check --changed — the manifest-driven sync/check rituals
 #      (version mirrors, agent-bodies, model-routing, codex + opencode payloads, README
 #      parity, hook inventory, canonical invariants, CLAUDE.md inventory). --changed
@@ -49,6 +51,17 @@ if ! TMP_GATE_OUT="$(node scripts/check-tmp-residue-registry.js --staged 2>&1)";
   echo "pre-commit: tmp-residue gate failed (unregistered temp reference)" >&2
   echo "─────────────────────────────────────────────────────────────" >&2
   echo "$TMP_GATE_OUT" >&2
+  exit 1
+fi
+
+# --- leak-guard: no personal data in the lines this commit adds ---
+# Added lines only (renames detected), so history is never re-judged. A missing or broken
+# registry fails the gate. The failure text carries a runnable redaction command.
+if ! LEAK_OUT="$(node scripts/leak-guard.js --staged 2>&1)"; then
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "pre-commit: leak-guard failed (personal data in added lines)" >&2
+  echo "─────────────────────────────────────────────────────────────" >&2
+  echo "$LEAK_OUT" >&2
   exit 1
 fi
 

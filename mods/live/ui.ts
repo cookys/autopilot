@@ -1022,8 +1022,11 @@ export type ForgeSegment = { role: ForgeRole; text: string }
 const SPEED_RE = /^ϟ( ?)(\d+|—)(?:( tok\/s))?$/
 const KNOWN_PARTS = ['speed', 'trend', 'sep', 'pet'] as const
 type PNode = { type?: unknown; props?: { key?: unknown }; children?: unknown }
+// the string a Text node holds: only a Text whose children are all strings (one or more) counts
 const stringsOf = (n: unknown): string | null => {
-  const k = (n as PNode | null | undefined)?.children
+  const t = n as PNode | null | undefined
+  if (t === null || t === undefined || typeof t !== 'object' || t.type !== 'Text') return null
+  const k = t.children
   return Array.isArray(k) && k.length > 0 && k.every(c => typeof c === 'string') ? (k as string[]).join('') : null
 }
 const speedSegments = (speed: string): ForgeSegment[] => {
@@ -1048,8 +1051,9 @@ export function forgeSegments(node: unknown): ForgeSegment[] | null {
   if (n.type !== 'Box' || !Array.isArray(n.children) || n.children.length === 0) return null
   const out: ForgeSegment[] = []
   for (const c of n.children as PNode[]) {
-    if (c === null || typeof c !== 'object' || c.type !== 'Box' || !Array.isArray(c.children) || c.children.length === 0) return null
-    const text = (c.children as unknown[]).map(x => (typeof x === 'string' ? x : stringsOf(x))).reduce<string | null>((a, x) => (a === null || x === null ? null : a + x), '')
+    // a part Box holds exactly ONE child, a Text of strings; anything else (no child, several, a bare string, a Box or another node) breaks the contract and the whole answer is nothing
+    if (c === null || typeof c !== 'object' || c.type !== 'Box' || !Array.isArray(c.children) || c.children.length !== 1) return null
+    const text = stringsOf(c.children[0])
     if (text === null) return null
     const key = c.props?.key
     const part = (KNOWN_PARTS as readonly unknown[]).includes(key) ? (key as (typeof KNOWN_PARTS)[number]) : null
@@ -1070,10 +1074,12 @@ function forgeSeg(g: ForgeSegment, idle: boolean): Seg {
     default: return sg(g.text, { role: 'prose' })
   }
 }
-// the parts that fit `cols` cells: the pet (with its separator) goes first, then the trend (with its gap); null when even the speed does not fit
+// the parts that fit `cols` cells: parts we do not know go first, then the pet (with its separator), then the trend (with its gap); null when even the speed does not fit
 export function forgeFit(parts: readonly ForgeSegment[], cols: number): ForgeSegment[] | null {
   const w = (l: readonly ForgeSegment[]) => l.reduce((n, g) => n + displayWidth(g.text), 0)
-  const steps = [parts, parts.filter(g => g.role !== 'pet' && g.role !== 'sep'), parts.filter(g => g.role !== 'pet' && g.role !== 'sep' && g.role !== 'trend' && g.role !== 'gap')]
+  const known = parts.filter(g => g.role !== 'text')
+  const noPet = known.filter(g => g.role !== 'pet' && g.role !== 'sep')
+  const steps = [parts, known, noPet, noPet.filter(g => g.role !== 'trend' && g.role !== 'gap')]
   return steps.find(l => l.length > 0 && w(l) <= cols) ?? null
 }
 // the left cluster: `│ ` (structure) and the parts, each drawn by forgeSeg

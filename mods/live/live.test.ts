@@ -6181,6 +6181,29 @@ for (const surface of SURFACES) {
   test('forgeSegments: undefined, null, the engine ref, an empty Box, a Text child and a non-string child are nothing', () => {
     for (const n of [undefined, null, { type: 'engine', ref: 0 }, row(), row(T('ϟ93')), row(B('speed', { type: 'Text', children: [{ x: 1 }] })), T('  '), 'str', 5]) expect(ui.forgeSegments(n), JSON.stringify(n)).toBeNull()
   })
+  test('forgeSegments: a part Box must hold exactly one Text of strings; each other shape makes the whole answer nothing (the old single Text still works)', () => {
+    const X = (type: string, ...kids: unknown[]) => ({ type, props: {}, children: kids })
+    const bad: [string, unknown][] = [
+      ['no child', row(B('speed', T('ϟ93')), { type: 'Box', props: { key: 'pet' }, children: [] })],
+      ['two Texts', row(B('speed', T('ϟ93'), T(' x')))],
+      ['a bare string', row({ type: 'Box', props: { key: 'speed' }, children: ['ϟ93'] })],
+      ['a Box instead of a Text', row({ type: 'Box', props: { key: 'speed' }, children: [B('speed', T('ϟ93'))] })],
+      ['a Button instead of a Text', row({ type: 'Box', props: { key: 'speed' }, children: [X('Button', 'ϟ93')] })],
+      ['a node of no type', row({ type: 'Box', props: { key: 'speed' }, children: [{ children: ['ϟ93'] }] })],
+      ['a Text holding a non-string', row({ type: 'Box', props: { key: 'speed' }, children: [{ type: 'Text', props: {}, children: ['ϟ', X('Text', 'x')] }] })],
+      ['a Text with no children', row({ type: 'Box', props: { key: 'speed' }, children: [{ type: 'Text', props: {}, children: [] }] })],
+      ['a good part and a bad one', row(B('speed', T('ϟ93')), { type: 'Box', props: { key: 'pet' }, children: ['Ferris'] })],
+    ]
+    for (const [name, n] of bad) expect(ui.forgeSegments(n), name).toBeNull()
+    expect(roles(T('ϟ93'))).toEqual(['bolt:ϟ', 'value:93'])
+  })
+  test('forgeFit: a very wide part we do not know goes first, so the speed alone is still drawn narrow; known parts keep their order', () => {
+    const wide = ui.forgeSegments(row(B('speed', T('ϟ93')), B('mood', T(' ' + 'x'.repeat(60))))) ?? []
+    expect((ui.forgeFit(wide, 4) ?? []).map(g => g.text).join('')).toBe('ϟ93')
+    expect((ui.forgeFit(wide, 100) ?? []).map(g => g.text).join('')).toContain('xxx')
+    const mixed = ui.forgeSegments(row(B('speed', T('ϟ 93 tok/s')), B('trend', T(' ▁▂')), B('mood', T(' ' + 'x'.repeat(30))), B('sep', T(' · ')), B('pet', T('Ferris Lv.1')))) ?? []
+    expect((ui.forgeFit(mixed, 30) ?? []).map(g => g.text).join('')).toBe('ϟ 93 tok/s ▁▂ · Ferris Lv.1')
+  })
   test('forgeFit: the pet and its sep go first, then the trend and its gap; the speed alone or nothing', () => {
     const all = ui.forgeSegments(row(B('speed', T('ϟ 93 tok/s')), B('trend', T(' ▁▂▃')), B('sep', T(' · ')), B('pet', T('Ferris Lv.1')))) ?? []
     const text = (l: ReturnType<typeof ui.forgeFit>) => (l ?? []).map(g => g.text).join('')

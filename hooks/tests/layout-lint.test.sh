@@ -204,6 +204,22 @@ assert_contains "$OUT" "[serial-suites]" "data: names the rule"
 assert_contains "$OUT" "hooks/tests/missing.test.sh" "data: names the entry"
 printf '%s\n' 'hooks/tests/a.test.sh' > "$R/hooks/tests/lib/serial-suites.txt"; git -C "$R" add -A
 OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "0" "data twin: a serial-suites file whose entries all exist is green"
+# relay2 g1: the prefix check is one way. A trigger that is a directory ABOVE a registry value (docs/ over docs/plans)
+# is not under any registry path, so it is red; before the fix the reverse containment let it through.
+write_manifest '["docs/"]'
+OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "1" "data: a directory trigger above a registry value (docs/ over docs/plans) is red"
+assert_contains "$OUT" '"docs/" is not under any path in the registry' "data: names the upper-directory trigger"
+write_manifest '["docs/old/x.md"]'
+mkreg "$TEST_TMP/reg-data-docs-root.json" "$DATA_PATHS; d.paths.docs_dir = \"docs\""
+OUT="$(lint "$TEST_TMP/reg-data-docs-root.json")"; assert_eq "$?" "0" "data twin: with docs_dir in the registry the same docs/ subtree is covered and green"
+write_manifest '["scripts/"]'
+# relay2 g1: a serial-suites file that is tracked but unreadable is a clean exit 2, not a stack trace.
+rm -f "$R/hooks/tests/lib/serial-suites.txt"
+OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "2" "data: a tracked serial-suites file missing on disk exits 2"
+assert_contains "$OUT" "cannot read hooks/tests/lib/serial-suites.txt" "data: says which file could not be read"
+assert_not_contains "$OUT" "node:internal" "data: no stack trace"
+printf '%s\n' 'hooks/tests/a.test.sh' > "$R/hooks/tests/lib/serial-suites.txt"; git -C "$R" add -A
+OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "0" "data twin: the file back on disk is green again"
 reset_repo
 
 # ── the real repo at its current stage ──

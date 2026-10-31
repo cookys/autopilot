@@ -74,7 +74,7 @@ function literalPrefix(entry) {
  * registry when they run, so a relayout generator moves their entries by hand. This check is what turns a
  * missed entry red. Each entry must (1) hit at least one tracked file and (2) when it points into an area the
  * registry governs (its first path segment is the first segment of some registry path), sit under a registry
- * path value, or be a directory that contains one. Entries elsewhere (skills/, src/, ...) only get check (1).
+ * path value (one way: a directory ABOVE a registry value is not under it and is red). Entries elsewhere (skills/, src/, ...) only get check (1).
  * A suffix trigger (`*.js`) names no location and is not checked.
  * `entries`: [{ where, entry, kind: 'exact'|'dir'|'suffix'|'glob' }].
  */
@@ -91,7 +91,7 @@ function checkDataPaths(entries, files, regPaths, bad, rule) {
     if (!hit) { bad(rule, where, `${JSON.stringify(entry)} matches no tracked file`); continue; }
     const prefix = kind === 'dir' ? entry.replace(/\/+$/, '') : literalPrefix(entry);
     if (!prefix || !governed.has(prefix.split('/')[0])) continue;
-    const ok = values.some((v) => under(prefix, v) || under(v, prefix));
+    const ok = values.some((v) => under(prefix, v));
     if (!ok) bad(rule, where, `${JSON.stringify(entry)} is not under any path in the registry (stale after a move?)`);
   }
 }
@@ -192,7 +192,12 @@ function main() {
   const serialFile = dataFile('serial_suites');
   if (serialFile) {
     const entries = [];
-    for (const raw of fs.readFileSync(serialFile, 'utf8').split('\n')) {
+    let serialText;
+    try { serialText = fs.readFileSync(serialFile, 'utf8'); } catch (e) {
+      process.stderr.write(`layout-lint: cannot read ${reg.paths.serial_suites}: ${e.message}\n`);
+      return 2;
+    }
+    for (const raw of serialText.split('\n')) {
       const e = raw.replace(/#.*/, '').replace(/\s+/g, '');
       if (e) entries.push({ where: reg.paths.serial_suites, entry: e, kind: GLOB_CH.test(e) ? 'glob' : 'exact' });
     }

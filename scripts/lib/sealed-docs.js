@@ -31,6 +31,7 @@ const path = require('path');
 const SHA256 = /^[0-9a-f]{64}$/;
 // Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
 const LAYOUT = require('./repo-layout.js');
+const DOCS_DIR = LAYOUT.path('docs_dir');
 const MISSIONS_DIR = LAYOUT.path('missions_dir');
 const EVALS_DIR = LAYOUT.path('evals_dir');
 
@@ -53,10 +54,10 @@ function addSealSpecs(sealed, repoRoot, dirRel) {
 
 function sealedDocFiles(repoRoot) {
   const sealed = new Set();
-  const docsDir = path.join(repoRoot, MISSIONS_DIR);
+  const docsDir = path.join(repoRoot, MISSIONS_DIR); // mission manifests, graphs and authorities live here
   let names = [];
   try { names = fs.readdirSync(docsDir); } catch { names = []; }
-  addSealSpecs(sealed, repoRoot, MISSIONS_DIR);
+  addSealSpecs(sealed, repoRoot, DOCS_DIR);
   addSealSpecs(sealed, repoRoot, EVALS_DIR);
   for (const name of names.sort()) {
     const rel = `${MISSIONS_DIR}/${name}`;
@@ -67,7 +68,7 @@ function sealedDocFiles(repoRoot) {
         if (!src || typeof src !== 'object') continue;
         for (const [pathKey, shaKey] of [['plan_path', 'plan_sha256'], ['rubric_path', 'rubric_sha256']]) {
           if (typeof src[pathKey] === 'string' && src[pathKey] && SHA256.test(String(src[shaKey] || ''))) {
-            sealed.add(path.posix.join(MISSIONS_DIR, src[pathKey].split(path.sep).join('/')));
+            sealed.add(path.posix.join(DOCS_DIR, src[pathKey].split(path.sep).join('/')));
           }
         }
       }

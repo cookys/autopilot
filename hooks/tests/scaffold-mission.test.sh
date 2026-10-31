@@ -214,6 +214,23 @@ assert cmds[-1] == sys.argv[2], cmds
 assert cmds.count(sys.argv[2]) == 1
 PY
 
+# relay2 g1: the emitted affected-suites command takes its directory from the registry scripts_dir.
+SREG="$TEST_TMP/scaffold-tooling-registry.json"
+node -e '
+  const r = JSON.parse(JSON.stringify(require(process.argv[1]).DEFAULT_REGISTRY));
+  r.paths.scripts_dir = "tooling"; require("fs").writeFileSync(process.argv[2], JSON.stringify(r));
+' "$REPO_ROOT/scripts/lib/repo-layout.js" "$SREG"
+RL="$TEST_TMP/repoL"
+make_repo "$RL"
+register_plan "$RL"
+# the rubric scaffolder lives under the REAL scripts dir, so a registry that moves scripts_dir gets the rubric hand-written (as the error says)
+cp "$R4/docs/plans/$PLAN_STEM.rubric.md" "$RL/docs/plans/"; git -C "$RL" add -A; git -C "$RL" commit -q -m rubric
+OUT=$(REPO_LAYOUT_REGISTRY="$SREG" gen "$RL" --authority-out "$TEST_TMP/authorityL.json" --required-change-path src/thing.js 2>&1); RC=$?
+assert_exit_code "$RC" "0" "layout: generation with a moved scripts_dir exits 0 ($OUT)"
+GL=$(cat "$RL/docs/mission-$PLAN_STEM-execution-graph.json")
+assert_contains "$GL" "node tooling/affected-suites.js --run --files src/thing.js" "layout: the default verify command follows scripts_dir"
+assert_not_contains "$GL" "node scripts/affected-suites.js" "layout negative control: no literal scripts/ affected-suites command is emitted"
+
 # 12. --no-affected-suites leaves the user commands alone.
 R5="$TEST_TMP/repo5"
 make_repo "$R5"

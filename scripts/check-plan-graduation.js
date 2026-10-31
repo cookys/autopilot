@@ -145,6 +145,7 @@ const { execFileSync } = require('child_process');
 const SCRIPT_DIR = __dirname;
 // Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
 const LAYOUT = require('./lib/repo-layout.js');
+const DOCS_DIR = LAYOUT.path('docs_dir');
 const PLANS_DIR = LAYOUT.path('plans_dir');
 const PLANS_ARCHIVE_DIR = LAYOUT.path('plans_archive_dir');
 const PLANS_EVIDENCE_DIR = LAYOUT.path('plans_evidence_dir');
@@ -153,6 +154,15 @@ const PROJECTS_ARCHIVE_DIR = LAYOUT.path('projects_archive_dir');
 const BACKLOG_FILE = LAYOUT.path('backlog_file');
 const MISSION_ROUTING = LAYOUT.path('mission_routing_config');
 const MISSION_JSON_RE = new RegExp(`^${escapeRegExp(LAYOUT.path('missions_dir'))}/mission-[^/]*\\.json$`);
+// An explicit --plans-dir is a self-contained plans tree: its `_archive` and `evidence` are its
+// siblings. Without it the registry keys decide, so a moved plans_archive_dir is followed.
+let PLANS_DIR_EXPLICIT = false; // set when the user passed --plans-dir
+function archiveDirFor(repoRoot, plansDir) {
+  return PLANS_DIR_EXPLICIT ? path.join(plansDir, '_archive') : path.join(repoRoot, PLANS_ARCHIVE_DIR);
+}
+function evidenceDirFor(repoRoot, plansDir) {
+  return PLANS_DIR_EXPLICIT ? path.join(plansDir, 'evidence') : path.join(repoRoot, PLANS_EVIDENCE_DIR);
+}
 const CLOSED_MARKERS = ['~~', 'CLOSED', 'SHIPPED', 'FIXED v', 'LANDED'];
 const BLOCKING_CODES = new Set([
   'backlog_row_has_plan',
@@ -214,7 +224,7 @@ function parseArgs(argv) {
     else if (a === '--repo-root') out.repoRoot = need();
     else if (a === '--backlog') out.backlog = need();
     else if (a === '--changelog') out.changelog = need();
-    else if (a === '--plans-dir') out.plansDir = need();
+    else if (a === '--plans-dir') { out.plansDir = need(); PLANS_DIR_EXPLICIT = true; }
     else if (a === '--allowlist') out.allowlist = need();
     else if (a === '--frozen-base') {
       out.frozenBase = need();
@@ -285,11 +295,14 @@ function evidencePathPrefixRegExp(stem) {
 // `](../plans/<stem>.md)` in docs/projects/INDEX.md) carry no `docs/` prefix, so the two
 // patterns above never see them. Match `plans/<stem>` / `plans/evidence/<stem>` NOT preceded by
 // `docs/` (that form belongs to the passes above) or a name character, never `plans/_archive/`.
+// The docs-relative spellings of the plans and evidence dirs, derived from the registry.
+const REL_PLANS = path.posix.relative(DOCS_DIR, PLANS_DIR);
+const REL_EVIDENCE = path.posix.relative(DOCS_DIR, PLANS_EVIDENCE_DIR);
 function relPlanPathRegExp(stem) {
-  return new RegExp(`(?<![A-Za-z0-9_.-])(?<!docs/)plans/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
+  return new RegExp(`(?<![A-Za-z0-9_.-])(?<!${escapeRegExp(DOCS_DIR)}/)${escapeRegExp(REL_PLANS)}/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
 }
 function relEvidencePathRegExp(stem) {
-  return new RegExp(`(?<![A-Za-z0-9_.-])(?<!docs/)plans/evidence/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
+  return new RegExp(`(?<![A-Za-z0-9_.-])(?<!${escapeRegExp(DOCS_DIR)}/)${escapeRegExp(REL_EVIDENCE)}/${escapeRegExp(stem)}(?![A-Za-z0-9-])`, 'g');
 }
 
 // --- dated archive layout ---
@@ -650,14 +663,14 @@ const DANGLING_REFERENCE_PATTERNS = [
   {
     prefix: `${PLANS_DIR}/`,
     re: new RegExp(`${escapeRegExp(PLANS_DIR)}/(\\d{4}-\\d{2}-\\d{2}-[A-Za-z0-9-]+)`, 'g'),
-    exists: (plansDir, stem) => fs.existsSync(path.join(plansDir, `${stem}.md`))
-      || Boolean(findExistingArchivedPlan(path.join(plansDir, '_archive'), stem)),
+    exists: (repoRoot, plansDir, stem) => fs.existsSync(path.join(plansDir, `${stem}.md`))
+      || Boolean(findExistingArchivedPlan(archiveDirFor(repoRoot, plansDir), stem)),
   },
   {
     prefix: `${PLANS_EVIDENCE_DIR}/`,
     re: new RegExp(`${escapeRegExp(PLANS_EVIDENCE_DIR)}/(\\d{4}-\\d{2}-\\d{2}-[A-Za-z0-9-]+)`, 'g'),
-    exists: (plansDir, stem) => fs.existsSync(path.join(plansDir, 'evidence', stem))
-      || Boolean(findExistingArchivedEvidence(path.join(plansDir, '_archive'), stem)),
+    exists: (repoRoot, plansDir, stem) => fs.existsSync(path.join(evidenceDirFor(repoRoot, plansDir), stem))
+      || Boolean(findExistingArchivedEvidence(archiveDirFor(repoRoot, plansDir), stem)),
   },
 ];
 
@@ -682,7 +695,7 @@ function planReferenceDangling(repoRoot, plansDir) {
   }
   const out = [];
   for (const { prefix, stem, exists, files } of byKey.values()) {
-    if (exists(plansDir, stem)) continue;
+    if (exists(repoRoot, plansDir, stem)) continue;
     const sortedFiles = [...files].sort();
     out.push({
       code: 'plan_reference_dangling',
@@ -770,10 +783,10 @@ function peerRowUnanswered(row) {
   return false;
 }
 
-function idNamedInPlan(repoRoot, stem, id) {
+function idNamedInPlan(repoRoot, plansDir, stem, id) {
   if (!stem || !id) return false;
-  const files = [path.join(repoRoot, 'docs', 'plans', `${stem}.md`)];
-  const archived = findExistingArchivedPlan(path.join(repoRoot, PLANS_ARCHIVE_DIR), stem);
+  const files = [path.join(plansDir, `${stem}.md`)];
+  const archived = findExistingArchivedPlan(archiveDirFor(repoRoot, plansDir), stem);
   if (archived) files.push(archived);
   const re = new RegExp(escapeRegExp(id) + '(?![0-9])');
   return files.some((f) => {
@@ -971,7 +984,7 @@ function planReferenced(repoRoot, plansDir, backlogText, changelogText, stem, sl
   const indexPath = path.join(repoRoot, PROJECTS_INDEX);
   const indexText = readFileSafe(indexPath);
   if (indexText && (reStem.test(indexText) || reSlug.test(indexText))) return true;
-  const evidenceDir = path.join(plansDir, 'evidence');
+  const evidenceDir = evidenceDirFor(repoRoot, plansDir);
   let evidenceEntries;
   try {
     evidenceEntries = fs.readdirSync(evidenceDir, { withFileTypes: true });
@@ -1012,14 +1025,13 @@ function shippedPlanDecision(repoRoot, stem, releasedText, exclusions) {
   const skip = exclusions || {};
   if (skip.allowlist && skip.allowlist.has(stem)) return null;
   if (skip.activeLineageStems && skip.activeLineageStems.has(stem)) return null;
-  const plansRoot = path.join(repoRoot, PLANS_DIR);
-  const archived = findExistingArchivedPlan(path.join(plansRoot, '_archive'), stem);
+  const archived = findExistingArchivedPlan(path.join(repoRoot, PLANS_ARCHIVE_DIR), stem);
   if (archived) {
     const rel = path.relative(repoRoot, archived).split(path.sep).join('/');
     return { plan_path: rel, shipped: { archived_path: rel } };
   }
   const basename = `${stem}.md`;
-  if (!fs.existsSync(path.join(plansRoot, basename))) return null;
+  if (!fs.existsSync(path.join(path.join(repoRoot, PLANS_DIR), basename))) return null;
   const match = releasedFullPlanMention(releasedText, stem);
   if (match) {
     return {
@@ -1046,13 +1058,14 @@ function deletionBasis(v) {
 // --- main check ---
 
 function run(opts) {
+  if (opts.plansDir) PLANS_DIR_EXPLICIT = true;
   const repoRoot = opts.repoRoot
     ? path.resolve(opts.repoRoot)
     : (gitToplevel(process.cwd()) || process.cwd());
   const backlogPath = opts.backlog ? path.resolve(opts.backlog) : path.join(repoRoot, BACKLOG_FILE);
   const changelogPath = opts.changelog ? path.resolve(opts.changelog) : path.join(repoRoot, 'CHANGELOG.md');
   const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, PLANS_DIR);
-  const archiveDir = path.join(plansDir, '_archive');
+  const archiveDir = archiveDirFor(repoRoot, plansDir);
   const allowlist = loadAllowlist(opts.allowlist ? path.resolve(opts.allowlist) : null);
   const activeLineageStems = loadActiveLineageStems(repoRoot);
 
@@ -1107,7 +1120,7 @@ function run(opts) {
     if (violations.length > rowStart && peerRowUnanswered(row)) {
       const own = violations.splice(rowStart);
       const stem = own.map((v) => v.stem).find(Boolean) || (row.pointer && row.pointer !== 'none' ? planStemForPointer(row.pointer) : null);
-      if (!idNamedInPlan(repoRoot, stem, row.id)) {
+      if (!idNamedInPlan(repoRoot, plansDir, stem, row.id)) {
         violations.push({
           code: 'peer_row_unanswered',
           kind: 'backlog_row',
@@ -1366,7 +1379,7 @@ function planFileMoveSet(repoRoot, plansDir, archiveDir, stem) {
     const sDstRel = path.relative(repoRoot, path.join(destDir, sidecar));
     if (fs.existsSync(path.join(repoRoot, sSrcRel))) moves.push({ from: sSrcRel, to: sDstRel });
   }
-  const evidenceDir = path.join(plansDir, 'evidence', stem);
+  const evidenceDir = path.join(evidenceDirFor(repoRoot, plansDir), stem);
   if (fs.existsSync(evidenceDir)) {
     const eSrcRel = path.relative(repoRoot, evidenceDir);
     const eDstRel = path.relative(repoRoot, path.join(destDir, 'evidence', stem));
@@ -1421,7 +1434,7 @@ function rewritePlanReferences(repoRoot, stem) {
       // external `.autopilot/plans/` path is not a link to this archive). docs/mission-*.json
       // (sources manifests, graphs) are mission-runtime inputs: next-touch-validation pins a
       // manifest's plan_path/rubric_path verbatim (SOURCE_AUTHORITY_INVALID), so never rewrite them.
-      if (relative && (!rel.startsWith('docs/') || MISSION_JSON_RE.test(rel))) continue;
+      if (relative && (!rel.startsWith(`${DOCS_DIR}/`) || MISSION_JSON_RE.test(rel))) continue;
       re.lastIndex = 0;
       if (!re.test(text)) continue;
       re.lastIndex = 0;
@@ -1813,7 +1826,7 @@ function main() {
   if (opts.registerTemplate) {
     const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
     const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, PLANS_DIR);
-    const archiveDir = path.join(plansDir, '_archive');
+    const archiveDir = archiveDirFor(repoRoot, plansDir);
     process.stdout.write(`${registerTemplateRow(repoRoot, plansDir, archiveDir, opts.registerTemplate)}\n`);
     process.exit(0);
   }
@@ -1821,7 +1834,7 @@ function main() {
   if (opts.migrateArchiveLayout) {
     const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
     const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, PLANS_DIR);
-    const archiveDir = path.join(plansDir, '_archive');
+    const archiveDir = archiveDirFor(repoRoot, plansDir);
     const result = migrateArchiveLayout(repoRoot, plansDir, archiveDir);
     if (opts.json) {
       process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -1839,7 +1852,7 @@ function main() {
   if (opts.archive.length) {
     const repoRoot = opts.repoRoot ? path.resolve(opts.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
     const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, PLANS_DIR);
-    const archiveDir = path.join(plansDir, '_archive');
+    const archiveDir = archiveDirFor(repoRoot, plansDir);
     const activeLineageStems = loadActiveLineageStems(repoRoot);
     const results = archiveStems(repoRoot, plansDir, archiveDir, opts.archive, opts.shippedIn, activeLineageStems);
     if (opts.json) {

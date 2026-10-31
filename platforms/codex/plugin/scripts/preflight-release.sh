@@ -35,6 +35,7 @@ layout SURFACE_BASELINE surface_lines_baseline
 layout SETTINGS_REFERENCE settings_reference
 layout CONFIG_KEYS config_keys
 layout HOOK_TESTS_DIR hook_tests_dir
+layout SCRIPTS_DIR scripts_dir
 layout SCRIPTS_LIB_DIR scripts_lib_dir
 
 ONLY_SLASH_PROBE=0
@@ -151,7 +152,7 @@ check_changelog_entry() {
 
 # ─── 3. version mirrors in sync with canonical ───
 check_version_mirrors() {
-  node scripts/sync-version.js --check >/dev/null 2>&1
+  node "$SCRIPTS_DIR/sync-version.js" --check >/dev/null 2>&1
 }
 
 # ─── 4. INDEX references the canonical version ───
@@ -186,11 +187,11 @@ check_index_links_resolve() {
 
 # ─── 6. opt-in CHANGELOG gate: set change ⇒ named in section ───
 check_optin_changelog() {
-  node scripts/check-optin-changelog.js
+  node "$SCRIPTS_DIR/check-optin-changelog.js"
 }
 
 check_settings_changelog() {
-  node scripts/check-settings-changelog.js
+  node "$SCRIPTS_DIR/check-settings-changelog.js"
 }
 
 # ─── 7. slash-entry thin-shell behavioral probe (B1/B2 release gate) ───
@@ -216,7 +217,7 @@ check_slash_entry_probe() {
   local probe_status
   local probe_state
 
-  probe_state="$(node scripts/engine-capability-state.js current --runner claude --model "$probe_model" --role probe)"
+  probe_state="$(node "$SCRIPTS_DIR/engine-capability-state.js" current --runner claude --model "$probe_model" --role probe)"
   probe_status="$(printf '%s' "$probe_state" | node -e 'const fs = require("fs"); const payload = fs.readFileSync(0, "utf8").trim(); if (!payload) process.exit(0); try { const data = JSON.parse(payload); process.stdout.write((data && data.capability && data.capability.quota && data.capability.quota.status) || ""); } catch { process.exit(0); }')"
 
   if [ "$probe_status" = "exhausted" ]; then
@@ -274,7 +275,7 @@ current_changelog_has_justification() {
 check_north_star() {
   measure_surface
   if [ ! -f "$SURFACE_BASELINE" ]; then
-    echo "    prose=$SURF_PROSE engine=$SURF_ENGINE (no baseline yet — seed with: scripts/preflight-release.sh --update-baseline)"
+    echo "    prose=$SURF_PROSE engine=$SURF_ENGINE (no baseline yet — seed with: $SCRIPTS_DIR/preflight-release.sh --update-baseline)"
     return 0
   fi
   local base_prose base_engine base_version
@@ -346,7 +347,7 @@ check_per_skill_ratchet() {
 check_plan_graduation() {
   local out
   out="$(mktemp)"
-  node scripts/check-plan-graduation.js --repo-root "$REPO" --json > "$out" 2>&1
+  node "$SCRIPTS_DIR/check-plan-graduation.js" --repo-root "$REPO" --json > "$out" 2>&1
   local rc=$?
   if [ "$rc" -ne 0 ]; then
     node -e '
@@ -360,8 +361,8 @@ check_plan_graduation() {
             : v.path;
         console.error(`    ${v.code}: ${where} — ${v.detail}`);
       }
-      console.error("    fix: node scripts/check-plan-graduation.js --fix");
-    ' "$out" "$REPO/scripts/check-plan-graduation.js" "$PLANS_DIR" >&2
+      console.error("    fix: node " + process.argv[4] + " --fix");
+    ' "$out" "$REPO/$SCRIPTS_DIR/check-plan-graduation.js" "$PLANS_DIR" "$SCRIPTS_DIR/check-plan-graduation.js" >&2
   fi
   rm -f "$out"
   return "$rc"
@@ -372,21 +373,21 @@ check_plan_graduation() {
 # or allowlisted with a reason, and the reaper's _SRR_PATTERNS equals the registry's
 # test-lockgated entries (scripts/check-tmp-residue-registry.js; plan 2026-10-12 tmp-residue).
 check_tmp_residue_gate() {
-  node scripts/check-tmp-residue-registry.js >&2
+  node "$SCRIPTS_DIR/check-tmp-residue-registry.js" >&2
 }
 
 # ─── 11. settings registry gate ───
 # Every AUTOPILOT_* env var / config.json key the code reads is registered in scripts/lib/config-keys.json, every
 # registered entry is still read, and every audience=user entry is on docs/settings-reference.md.
 check_config_docs_gate() {
-  node scripts/check-config-docs.js >&2
+  node "$SCRIPTS_DIR/check-config-docs.js" >&2
 }
 
 # BL-0194 P4a: when the recipe records a feed snapshot (build-qualification-defaults.js build --from-snapshot),
 # the official defaults must not be derived from one older than 30 days. A build-time gate, not a runtime
 # advisory. No snapshot recorded (the store-derived path) passes.
 check_defaults_snapshot_age() {
-  node scripts/build-qualification-defaults.js --check-snapshot-age >&2
+  node "$SCRIPTS_DIR/build-qualification-defaults.js" --check-snapshot-age >&2
 }
 
 if [ "$ONLY_SLASH_PROBE" = "1" ]; then
@@ -420,7 +421,7 @@ run_check "settings registry gate (check-config-docs.js: code <-> ${CONFIG_KEYS#
 # shown here at release prep; neither blocks the release.
 echo ""
 echo "── advisory: hook x harness matrix (60-day evidence staleness) ──"
-node scripts/hook-harness-matrix.js --check 2>&1 || echo "    NOTE: hook-harness-matrix.js --check exited non-zero (doc drift or bad evidence row) — advisory only"
+node "$SCRIPTS_DIR/hook-harness-matrix.js" --check 2>&1 || echo "    NOTE: hook-harness-matrix.js --check exited non-zero (doc drift or bad evidence row) — advisory only"
 
 # ─── advisory: roster-field report ───────────────────────────────────────────
 # NOT a check and NOT counted in $FAILS — it prints the roster's
@@ -430,7 +431,7 @@ node scripts/hook-harness-matrix.js --check 2>&1 || echo "    NOTE: hook-harness
 # says REPORT-HEALTH on stderr; that is a broken tool, not a release blocker.
 echo ""
 echo "── advisory: roster fields with no detected modeled match ──"
-node scripts/report-roster-field-consumers.js 2>&1 | sed -n '/no detected modeled match/,$p' || true
+node "$SCRIPTS_DIR/report-roster-field-consumers.js" 2>&1 | sed -n '/no detected modeled match/,$p' || true
 
 echo ""
 if [ "$FAILS" -eq 0 ]; then
@@ -444,6 +445,6 @@ if [ "$FAILS" -eq 0 ]; then
 else
   echo "❌ $FAILS / $TOTAL release-hygiene checks FAILED for v$VERSION"
   echo "   Fix: ensure CHANGELOG entry + INDEX row + project README exist for the"
-  echo "   canonical version, and run scripts/sync-version.js to align mirrors."
+  echo "   canonical version, and run $SCRIPTS_DIR/sync-version.js to align mirrors."
   exit "$FAILS"
 fi

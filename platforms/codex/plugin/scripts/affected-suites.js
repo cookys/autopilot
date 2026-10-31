@@ -181,9 +181,13 @@ const SUITE_RUNNER = LAYOUT.path('suite_runner');
 const SERIAL_SUITES = LAYOUT.path('serial_suites');
 const SCRIPTS_LIB_DIR = LAYOUT.path('scripts_lib_dir');
 const EVALS_DIR = LAYOUT.path('evals_dir');
+const SCRIPTS_DIR = LAYOUT.path('scripts_dir');
+const DOCS_DIR = LAYOUT.path('docs_dir');
+const CLAUDE_DIR = LAYOUT.path('claude_dir');
 const PLANS_DIR = LAYOUT.path('plans_dir');
 const PLANS_EVIDENCE_DIR = LAYOUT.path('plans_evidence_dir');
 const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
+const SUITE_IN_SCRIPTS_RE = new RegExp(`^${reEsc(SCRIPTS_DIR)}/[^/]+\\.test\\.(js|sh)$`);
 
 const CODE_EXT = new Set(['js', 'mjs', 'cjs', 'sh', 'bash', 'zsh', 'py', 'ps1']);
 const DEFAULT_MAX_WEAK = 2;
@@ -197,7 +201,7 @@ const FULL_TRIGGERS = [
   /^\.claude-plugin\//,
   /^\.github\//,
   /^\.githooks\//,
-  /^\.claude\/quality-gate-config\.md$/,
+  new RegExp(`^${reEsc(CLAUDE_DIR)}/quality-gate-config\\.md$`),
 ];
 
 // Entry points that run.sh does NOT run. Any changed path matching `re` adds `runner` to the result's
@@ -218,24 +222,24 @@ function extraRunners(changed) {
 // breaks them (a new file anywhere can turn them red), so they run on every selective result.
 // [path, why]
 const ALWAYS_RUN = [
-  ['hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh', 'Population B scans every file under hooks/ for reviewer_engine lines'],
-  ['hooks/tests/check-js-syntax.test.sh', 'syntax-checks every tracked JS file'],
-  ['hooks/tests/codex-plugin-package.test.sh', 'codex mirror must equal its sources (source edit without mirror sync, or mirror-only edit)'],
-  ['hooks/tests/test-identity-guard.test.sh', 'scans every *.test.sh for git identity writes'],
-  ['hooks/tests/test-suite-finalize-gate.test.sh', 'scans every *.test.sh for the finalize counter'],
-  ['hooks/tests/check-test-integrity.test.sh', 'real config must match every real suite file'],
-  ['hooks/tests/check-tmp-residue-registry.test.sh', 'scans the git index for tmp residue'],
-  ['hooks/tests/check-claude-md-inventory.test.sh', 'every shipped script must be named in CLAUDE.md'],
-  ['hooks/tests/check-hook-inventory.test.sh', 'hook files vs hooks.json vs docs'],
-  ['hooks/tests/check-canonical-invariants.test.sh', 'cross-file invariants over the real tree'],
-  ['hooks/tests/p6d-gates-repair-ladder.test.sh', 'grep -rln repair_lock over all of src/'],
-  ['hooks/tests/qualify-scorecard-vocabulary.test.sh', 'grep -rl a model-id charset over scripts/ and src/'],
-  ['hooks/tests/skill-onoff-stage-graph.test.sh', 'greps all of scripts/ for the probe ladder field (only probe-unknown.js may print it)'],
-  ['hooks/tests/skill-count-metadata.test.sh', 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
-  ['hooks/tests/qualify-recipe-credential-staging.test.sh', `greps every ${PLANS_EVIDENCE_DIR}/*/administration/*/run.sh for staging variables`],
+  [`${HOOK_TESTS_DIR}/resolve-review-loop-consult-discuss-switch.test.sh`, 'Population B scans every file under hooks/ for reviewer_engine lines'],
+  [`${HOOK_TESTS_DIR}/check-js-syntax.test.sh`, 'syntax-checks every tracked JS file'],
+  [`${HOOK_TESTS_DIR}/codex-plugin-package.test.sh`, 'codex mirror must equal its sources (source edit without mirror sync, or mirror-only edit)'],
+  [`${HOOK_TESTS_DIR}/test-identity-guard.test.sh`, 'scans every *.test.sh for git identity writes'],
+  [`${HOOK_TESTS_DIR}/test-suite-finalize-gate.test.sh`, 'scans every *.test.sh for the finalize counter'],
+  [`${HOOK_TESTS_DIR}/check-test-integrity.test.sh`, 'real config must match every real suite file'],
+  [`${HOOK_TESTS_DIR}/check-tmp-residue-registry.test.sh`, 'scans the git index for tmp residue'],
+  [`${HOOK_TESTS_DIR}/check-claude-md-inventory.test.sh`, 'every shipped script must be named in CLAUDE.md'],
+  [`${HOOK_TESTS_DIR}/check-hook-inventory.test.sh`, 'hook files vs hooks.json vs docs'],
+  [`${HOOK_TESTS_DIR}/check-canonical-invariants.test.sh`, 'cross-file invariants over the real tree'],
+  [`${HOOK_TESTS_DIR}/p6d-gates-repair-ladder.test.sh`, 'grep -rln repair_lock over all of src/'],
+  [`${HOOK_TESTS_DIR}/qualify-scorecard-vocabulary.test.sh`, 'grep -rl a model-id charset over scripts/ and src/'],
+  [`${HOOK_TESTS_DIR}/skill-onoff-stage-graph.test.sh`, 'greps all of scripts/ for the probe ladder field (only probe-unknown.js may print it)'],
+  [`${HOOK_TESTS_DIR}/skill-count-metadata.test.sh`, 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
+  [`${HOOK_TESTS_DIR}/qualify-recipe-credential-staging.test.sh`, `greps every ${PLANS_EVIDENCE_DIR}/*/administration/*/run.sh for staging variables`],
 ];
 // Prose cannot break a suite; mirrors are covered by the always-run codex-plugin-package suite.
-const PURE_DOC = /^(docs|website|skill-creator-workspace)\/|^[^/]+\.(md|txt)$/;
+const PURE_DOC = new RegExp(`^(${reEsc(DOCS_DIR)}|website|skill-creator-workspace)\\/|^[^/]+\\.(md|txt)$`);
 const MIRROR = /^platforms\//;
 // A script under docs/ is code, not prose (a suite may scan it).
 const isProse = (p) => PURE_DOC.test(p) && !isCode(p);
@@ -246,7 +250,7 @@ const SUITE_RES = [
   new RegExp(`^${reEsc(HOOK_TESTS_DIR)}/[^/]+\\.test\\.sh$`),
 ];
 function isSuite(p) {
-  return SUITE_RES.some((re) => re.test(p)) || /^scripts\/[^/]+\.test\.js$/.test(p) || /^scripts\/[^/]+\.test\.sh$/.test(p);
+  return SUITE_RES.some((re) => re.test(p)) || SUITE_IN_SCRIPTS_RE.test(p);
 }
 const extOf = (p) => { const m = /\.([A-Za-z0-9]+)$/.exec(p); return m ? m[1] : ''; };
 const isCode = (p) => CODE_EXT.has(extOf(p));
@@ -343,13 +347,15 @@ function mentions(text) {
   return { exts, bares, slashBares, globs, strong, segs, paths };
 }
 
-const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', '.claude', 'node_modules']);
+const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', 'node_modules',
+  // the registry's own top-level directory names, so a moved docs/scripts/hooks/evals tree stays generic
+  ...[CLAUDE_DIR, DOCS_DIR, SCRIPTS_DIR, HOOKS_DIR, EVALS_DIR].map((d) => d.split('/')[0])]);
 // Category folders under docs/. Skipped only for a prose seed; other data files keep GENERIC_DIRS alone.
 const PROSE_DIR_SKIP = new Set([path.posix.basename(PLANS_DIR), path.posix.basename(PLANS_EVIDENCE_DIR), 'backlog', 'projects', 'adr']);
 // A non-suite .sh directly under hooks/tests/: shared helper, not a suite.
 const isSharedTestHelper = (p) => new RegExp(`^${reEsc(HOOK_TESTS_DIR)}/[^/]+\\.sh$`).test(p) && !isSuite(p);
 // Mirrors, eval fixtures and docs are copies or prose: they never propagate a change to a suite.
-const NOT_PROPAGATING = new RegExp(`^(platforms|${reEsc(EVALS_DIR)}|docs|website|skill-creator-workspace|\\.opencode)/`);
+const NOT_PROPAGATING = new RegExp(`^(platforms|${reEsc(EVALS_DIR)}|${reEsc(DOCS_DIR)}|website|skill-creator-workspace|\\.opencode)/`);
 // Full-line # and //, plus a trailing // through end of line, so a slash-star inside that comment
 // is never a block start. A slash-star starts a block only when it is the first non-blank on its
 // line. Anywhere else, including a regexp, it stays text. A star line is dropped only inside a block.
@@ -507,7 +513,7 @@ function referrersOf(graph, p) {
     const parts = p.split('/').slice(0, -1);
     for (const c of parts) {
       if (GENERIC_DIRS.has(c)) continue;
-      if (p.startsWith('docs/') && isProse(p) && PROSE_DIR_SKIP.has(c)) continue;
+      if (p.startsWith(`${DOCS_DIR}/`) && isProse(p) && PROSE_DIR_SKIP.has(c)) continue;
       for (const f of graph.bySeg.get(c) || []) if (!out.has(f)) out.set(f, 'weak');
     }
   }
@@ -515,7 +521,7 @@ function referrersOf(graph, p) {
     if (!(g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)) && !out.has(g.file))) continue;
     // docs/plans/* names the category, not one plan. A glob with an extension reads content and stays.
     // A glob that also names a specific directory stays. Category names apply only under docs/.
-    if (p.startsWith('docs/') && isProse(p) && !g.ext && g.dir.split('/').every((c) => !c || GENERIC_DIRS.has(c) || PROSE_DIR_SKIP.has(c))) continue;
+    if (p.startsWith(`${DOCS_DIR}/`) && isProse(p) && !g.ext && g.dir.split('/').every((c) => !c || GENERIC_DIRS.has(c) || PROSE_DIR_SKIP.has(c))) continue;
     out.set(g.file, 'weak');
   }
   out.delete(p);

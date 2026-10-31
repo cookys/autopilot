@@ -284,3 +284,11 @@ This table is an INDEX, not a spec: one row = what it does + when to call it + p
 | [`scripts/roundtable-window.js`](../scripts/roundtable-window.js) | Window A: `open` / `tail` / `input` / `send` for one room inside tmux. Call when the operator should watch the room log and fleet-send an owner line. No skill file. Contract: [`docs/plans/2026-09-19-roundtable.md`](plans/2026-09-19-roundtable.md) §9. |
 
 Most scripts answer `<script> --help`, but **37 of 129 do not parse argv at all** — and several of those are installers that act immediately, so `--help` EXECUTES them (`dev-update.sh` pulls, `install-hooks.sh` rewrites `core.hooksPath`, `setup-symlinks.sh` recreates symlinks). Read the header comment before invoking an unfamiliar script. JSON-emitting scripts have stable schemas; exit codes follow each script's header.
+
+## Outside `scripts/`: `tools/migrate/`
+
+Repo-relayout tooling (3.0.0) lives under `tools/`, not `scripts/`, so `check-claude-md-inventory.js` does not scan it and CLAUDE.md does not list it.
+
+| Tool | What it does / when to call it |
+|------|--------------------------------|
+| `tools/migrate/suite-baseline.js` | `list` / `run-all` / `record` / `compare`: record every suite's id, count and pass/fail before a relayout phase, then diff the run after it (layout-map renames, declared-new ids, `scripts/tests/` joins at P3). Exit 0 consistent, 1 differences, 2 bad input. Contract: the file header; test: `hooks/tests/suite-baseline.test.sh`. |

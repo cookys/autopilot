@@ -19,6 +19,7 @@ mkdir -p "$SBX/scripts" "$SBX/hooks" "$SBX/.claude-plugin"
 
 cp "$REPO_ROOT/scripts/check-hook-inventory.js" "$SBX/scripts/"
 mkdir -p "$SBX/scripts/lib"; cp "$REPO_ROOT/scripts/lib/chain-command.js" "$SBX/scripts/lib/"   # the one chain-command parser
+cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$SBX/scripts/lib/"   # the layout registry: where the script finds hooks.json, the manifest and the README
 # wiring sources (the derivation inputs)
 cp "$REPO_ROOT/hooks/hooks.json"      "$SBX/hooks/hooks.json"
 # the real hooks.json registers the composed mods module (P1d, then the viewer mod): the sandbox needs that file so the shipped key resolves

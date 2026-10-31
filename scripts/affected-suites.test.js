@@ -1086,7 +1086,8 @@ function mutant(replacements) {
   const md = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-mutant-'));
   MUTANT_DIRS.push(md);
   const f = path.join(md, 'affected-suites.js');
-  fs.writeFileSync(f, src);
+  // the copy lives outside scripts/, so its layout-registry require must point back at the real file
+  fs.writeFileSync(f, src.replace("require('./lib/repo-layout.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'repo-layout.js'))})`));
   return f;
 }
 const MUTANT_DIRS = [];
@@ -1265,4 +1266,54 @@ test('negative control: dropping the suites\' file-name mention edges turns the 
 test('negative control: dropping the hooks/README.md mention edge loses hookq', () => {
   const bin = mutant([['for (const f of graph.byExt.get(b) || []) {', 'for (const f of []) {']]);
   assert.ok(missingFor(bin, 'hooks/README.md', ['hooks/hookq.test.js']).length > 0);
+});
+
+// ---- relay2 g1: the selector takes scripts_dir / docs_dir from the layout registry ---------------
+function withRegistry(edit, fn) {
+  const reg = JSON.parse(JSON.stringify(require('./lib/repo-layout.js').DEFAULT_REGISTRY));
+  edit(reg.paths);
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-reg-')), 'registry.json');
+  fs.writeFileSync(f, JSON.stringify(reg));
+  const prev = process.env.REPO_LAYOUT_REGISTRY;
+  process.env.REPO_LAYOUT_REGISTRY = f;
+  try { return fn(); } finally {
+    if (prev === undefined) delete process.env.REPO_LAYOUT_REGISTRY; else process.env.REPO_LAYOUT_REGISTRY = prev;
+    fs.rmSync(path.dirname(f), { recursive: true, force: true });
+  }
+}
+
+test('layout: a *.test.js directly under the registry scripts_dir is a suite, under the literal scripts/ it is not', () => {
+  const files = { ...LAYOUT, 'tooling/x.test.js': 'console.log(1);\n' };
+  const moved = withRegistry((p) => { p.scripts_dir = 'tooling'; }, () => {
+    const r = makeRepo(files);
+    try { return r.select(r.change({ 'tooling/x.test.js': 'console.log(2);\n' })); } finally { r.cleanup(); }
+  });
+  assert.ok(moved.suites.includes('tooling/x.test.js'), `moved scripts_dir: ${JSON.stringify(moved.suites)}`);
+  // negative control: the default registry keeps scripts/ as the suite directory, tooling/ is not one
+  const r2 = makeRepo(files);
+  try {
+    const out = r2.select(r2.change({ 'tooling/x.test.js': 'console.log(2);\n' }));
+    assert.ok(!out.suites.includes('tooling/x.test.js'), `default scripts_dir: ${JSON.stringify(out.suites)}`);
+  } finally { r2.cleanup(); }
+});
+
+test('layout: prose under the registry docs_dir skips category names, a literal docs/ no longer decides', () => {
+  const files = {
+    ...LAYOUT,
+    'manuals/plans/p.md': '# plan\n',
+    'hooks/tests/plans-loop.test.sh': '#!/usr/bin/env bash\nfor f in manuals/plans/evidence/; do echo "$f"; done\n',
+  };
+  const edit = (p) => { p.docs_dir = 'manuals'; p.plans_dir = 'manuals/plans'; p.plans_evidence_dir = 'manuals/plans/evidence'; };
+  const out = withRegistry(edit, () => {
+    const r = makeRepo(files);
+    try { return r.select(r.change({ 'manuals/plans/p.md': '# edited\n', 'scripts/other.js': 'console.log("changed");\n' })); } finally { r.cleanup(); }
+  });
+  assert.ok(!out.suites.includes('hooks/tests/plans-loop.test.sh'), `docs_dir=manuals: ${JSON.stringify(out.suites)}`);
+  assert.ok(out.suites.includes('hooks/tests/other.test.sh'));
+  // negative control: with docs_dir left at docs, manuals/ is not a docs tree and the category-only suite is selected
+  const r2 = makeRepo(files);
+  try {
+    const out2 = r2.select(r2.change({ 'manuals/plans/p.md': '# edited\n', 'scripts/other.js': 'console.log("changed");\n' }));
+    assert.ok(out2.suites.includes('hooks/tests/plans-loop.test.sh'), `default docs_dir: ${JSON.stringify(out2.suites)}`);
+  } finally { r2.cleanup(); }
 });

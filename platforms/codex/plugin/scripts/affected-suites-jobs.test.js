@@ -257,7 +257,7 @@ test('negative control b: a runner copy without the serial rerun turns the flaky
     const anchor = 'const again = await exec(rel, 1, false);';
     assert.ok(src.includes(anchor), 'mutation anchor drifted');
     const mutant = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mut-')), 'affected-suites.js');
-    fs.writeFileSync(mutant, src.replace(anchor, 'const again = r;'));
+    fs.writeFileSync(mutant, src.replace(anchor, 'const again = r;').replace("require('./lib/repo-layout.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'repo-layout.js'))})`));
     const env = { AUTOPILOT_TEST_DURATIONS_FILE: tmpTsv() };
     const p = run(r.dir, ['--jobs', '3'], env, mutant);
     assert.match(p.stdout, /^rc=1 hooks\/tests\/flaky\.test\.sh$/m);
@@ -385,7 +385,8 @@ function runnerCopy({ noLock }) {
   assert.ok(src.includes(a1) && src.includes(a2), 'mutation anchors drifted');
   src = src.replace(a1, DELAY);
   if (noLock) src = src.replace(a2, 'const lockedRun = (opts, fn) => fn();');
-  src = src.replace("require('./lib/jsonl-store.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'jsonl-store.js'))})`);
+  src = src.replace("require('./lib/jsonl-store.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'jsonl-store.js'))})`)
+    .replace("require('./lib/repo-layout.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'repo-layout.js'))})`);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'durlock-'));
   const f = path.join(dir, 'affected-suites.js');
   fs.writeFileSync(f, src);
@@ -422,7 +423,7 @@ test('a lock that cannot be taken is a warning, not a hang or a failure', () => 
     fs.writeFileSync(`${tsv}.lock`, String(process.pid));
     const src = fs.readFileSync(SEL, 'utf8').replace('timeoutMs: 10000', 'timeoutMs: 300');
     const bin = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lockto-')), 'affected-suites.js');
-    fs.writeFileSync(bin, src.replace("require('./lib/jsonl-store.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'jsonl-store.js'))})`));
+    fs.writeFileSync(bin, src.replace("require('./lib/jsonl-store.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'jsonl-store.js'))})`).replace("require('./lib/repo-layout.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'repo-layout.js'))})`));
     const p = run(r.dir, [], { AUTOPILOT_TEST_DURATIONS_FILE: tsv }, bin);
     assert.strictEqual(p.status, 0, p.stdout + p.stderr);
     assert.match(p.stderr, /durations not recorded: timed out waiting for durations lock/);

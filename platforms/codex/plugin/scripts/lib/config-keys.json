@@ -5310,7 +5310,7 @@
       "default": null,
       "readers": [
         "scripts/dispatch-hetero.sh",
-        "scripts/scaffold-mission.js"
+        "scripts/lib/repo-layout.js"
       ],
       "doc": "docs/settings-reference.md",
       "relates": [],

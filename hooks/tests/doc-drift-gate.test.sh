@@ -231,6 +231,45 @@ SEALED_LIST="$(node -e 'console.log([...require(process.argv[1]).sealedDocFiles(
 assert_eq "$SEALED_LIST" "docs/mission-x-execution-graph.json,docs/mission-z-execution-graph.json,docs/plans/sealed.md,docs/plans/sealed.rubric.md,evals/r-rubric.md" \
   "sealedDocFiles: task-authority-paired graph and seal.json spec_path added; digest-less authority, unpaired graph, plain doc not listed"
 
+# relay2 g1: sealed docs follow docs_dir for the doc tree and missions_dir only for the mission manifests.
+# Registry: manifests in project/, docs still in docs/. A manifest plan_path is relative to docs/.
+LREG="$TEST_TMP/sealed-moved-registry.json"
+node -e '
+  const r = JSON.parse(JSON.stringify(require(process.argv[1]).DEFAULT_REGISTRY));
+  r.paths.missions_dir = "project"; require("fs").writeFileSync(process.argv[2], JSON.stringify(r));
+' "$REPO_ROOT/scripts/lib/repo-layout.js" "$LREG"
+S2="$TEST_TMP/sealed-split"
+mkdir -p "$S2/project" "$S2/docs/plans" "$S2/evals"
+printf '# p\n' > "$S2/docs/plans/p.md"; printf '# e\n' > "$S2/evals/x.md"
+P2SHA="$(sha256sum "$S2/docs/plans/p.md" | cut -d' ' -f1)"
+printf '{"sources":[{"plan_path":"plans/p.md","plan_sha256":"%s"}]}\n' "$P2SHA" > "$S2/project/mission-m-sources.json"
+printf '{"spec_sha256":"%s","spec_path":"evals/x.md"}\n' "$P2SHA" > "$S2/docs/x.seal.json"
+SEALED_LIST="$(REPO_LAYOUT_REGISTRY="$LREG" node -e 'console.log([...require(process.argv[1]).sealedDocFiles(process.argv[2])].sort().join(","))' "$REPO_ROOT/scripts/lib/sealed-docs.js" "$S2")"
+assert_eq "$SEALED_LIST" "docs/plans/p.md,evals/x.md" \
+  "layout: docs-relative plan_path joins docs_dir (not missions_dir) and a *.seal.json in docs_dir is found when missions_dir moved"
+# Negative control: with a docs_dir that does not hold the seal, the seal spec is not listed (the scan really follows docs_dir).
+rm "$S2/docs/x.seal.json"
+SEALED_LIST="$(REPO_LAYOUT_REGISTRY="$LREG" node -e 'console.log([...require(process.argv[1]).sealedDocFiles(process.argv[2])].sort().join(","))' "$REPO_ROOT/scripts/lib/sealed-docs.js" "$S2")"
+assert_eq "$SEALED_LIST" "docs/plans/p.md" "layout negative control: no seal.json in docs_dir, no spec listed"
+
+# relay2 g1: script references follow scripts_dir. Registry: scripts_dir = tooling.
+TREG="$TEST_TMP/doc-drift-tooling-registry.json"
+node -e '
+  const r = JSON.parse(JSON.stringify(require(process.argv[1]).DEFAULT_REGISTRY));
+  r.paths.scripts_dir = "tooling"; require("fs").writeFileSync(process.argv[2], JSON.stringify(r));
+' "$REPO_ROOT/scripts/lib/repo-layout.js" "$TREG"
+T2="$TEST_TMP/tooling-refs"
+mkdir -p "$T2/docs" "$T2/tooling"
+printf '#!/bin/sh\n' > "$T2/tooling/real.sh"
+printf '# Guide\nRun `tooling/real.sh` then `tooling/ghost.sh`.\n' > "$T2/docs/guide.md"
+__GATE_OUT="$(REPO_LAYOUT_REGISTRY="$TREG" node "$GATE_JS" "$T2/docs" --repo-root "$T2" 2>&1)"; __GATE_EXIT=$?
+assert_exit_code "$__GATE_EXIT" 1 "layout: a missing script under the moved scripts_dir is drift"
+assert_contains "$__GATE_OUT" "tooling/ghost.sh" "layout: the gate names the missing script under scripts_dir"
+assert_not_contains "$__GATE_OUT" "tooling/real.sh" "layout: an existing script under scripts_dir is fine"
+# Negative control: with the default registry the same doc has no scripts/ refs, so the gate is green.
+run_gate "$T2/docs" --repo-root "$T2"
+assert_exit_code "$__GATE_EXIT" 0 "layout negative control: default scripts_dir does not read tooling/ refs"
+
 # 8. Testing invalid command arguments/usage errors (exit 2)
 echo "Testing invalid usage..."
 run_gate "--exclude" # missing arg

@@ -1623,4 +1623,42 @@ set +e
 assert_eq "$rc" "2" "--receipt without --fix exits 2"
 assert_contains "$(cat "$d/err")" "receipt" "--receipt without --fix writes a usage message on stderr"
 
+# --- relay2 g1: the plans keys of the layout registry decide where the gate reads. A registry that puts
+#     the plans under project/plans must be followed (a literal docs/plans read finds no plan there).
+LAY_REG="$TEST_TMP/moved-plans-registry.json"
+node -e '
+  const L = require(process.argv[1]); const r = JSON.parse(JSON.stringify(L.DEFAULT_REGISTRY));
+  r.paths.plans_dir = "project/plans"; r.paths.plans_archive_dir = "project/plans/_archive"; r.paths.plans_evidence_dir = "project/plans/evidence";
+  require("fs").writeFileSync(process.argv[2], JSON.stringify(r));
+' "$REPO_ROOT/scripts/lib/repo-layout.js" "$LAY_REG"
+d="$(fixture_repo moved-plans)"
+mkdir -p "$d/project/plans/evidence" "$d/project/plans/_archive"
+printf '\n<!-- next-id: BL-0005 -->\n' >> "$d/docs/BACKLOG.md"
+printf '# Plan\n\nCarries BL-0003.\n' > "$d/project/plans/2026-01-01-widget.md"
+printf '# Changelog\n\n## v1.2.3 - ships widget\n\n- landed. See project/plans/2026-01-01-widget.md.\n' > "$d/CHANGELOG.md"
+peer_row "$d/docs/BACKLOG.md" "Unanswered peer row named in plan" BL-0003 open project/plans/2026-01-01-widget.md unknown
+git -C "$d" add -A >/dev/null
+git -C "$d" -c user.email=t@t -c user.name=t commit -q -m init >/dev/null
+out="$(REPO_LAYOUT_REGISTRY="$LAY_REG" node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "0" "layout: a plan moved to plans_dir project/plans that names the peer Id answers the row (idNamedInPlan follows plans_dir)"
+# Negative control: the id is NOT in the moved plan -> the row is unanswered (the count is 1, so the 0 above is not vacuous).
+printf '# Plan\n\nNo ids here.\n' > "$d/project/plans/2026-01-01-widget.md"
+out="$(REPO_LAYOUT_REGISTRY="$LAY_REG" node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "1" "layout negative control: the moved plan not naming the Id leaves the peer row unanswered"
+# The default archive follows plans_archive_dir: an archived copy under the moved archive that names the Id answers it.
+rm "$d/project/plans/2026-01-01-widget.md"; mkdir -p "$d/project/plans/_archive/2026/01"
+printf '# Plan\n\nCarries BL-0003.\n' > "$d/project/plans/_archive/2026/01/2026-01-01-widget.md"
+out="$(REPO_LAYOUT_REGISTRY="$LAY_REG" node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "0" "layout: the default archive dir follows plans_archive_dir (an archived plan under the moved archive names the Id)"
+# An explicit --plans-dir is a self-contained tree: its _archive is its sibling, not the registry archive.
+# The only copy naming the Id sits under other/plans/_archive; the registry archive copy names none.
+printf '# Plan\n\nNo ids here.\n' > "$d/project/plans/_archive/2026/01/2026-01-01-widget.md"   # registry archive: shipped, names no Id
+mkdir -p "$d/other/plans/_archive/2026/01"
+printf '# Plan\n\nCarries BL-0003.\n' > "$d/other/plans/_archive/2026/01/2026-01-01-widget.md"
+out="$(REPO_LAYOUT_REGISTRY="$LAY_REG" node "$GATE" --repo-root "$d" --plans-dir "$d/other/plans" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "0" "layout: an explicit --plans-dir takes its _archive sibling (other/plans/_archive names the Id)"
+# Negative control: without --plans-dir the registry archive is read, and it holds no such copy.
+out="$(REPO_LAYOUT_REGISTRY="$LAY_REG" node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" peer_row_unanswered)" "1" "layout negative control: no --plans-dir reads the registry archive and ignores other/plans/_archive"
+
 finalize_test

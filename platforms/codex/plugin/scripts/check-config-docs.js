@@ -36,8 +36,14 @@
 
 const fs = require('fs');
 const path = require('path');
+// Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
+const LAYOUT = require('./lib/repo-layout.js');
+const HOOKS_DIR = LAYOUT.path('hooks_dir');
+const SCRIPTS_DIR = LAYOUT.path('scripts_dir');
+const CONFIG_KEYS = LAYOUT.path('config_keys');
+const SETTINGS_REFERENCE = LAYOUT.path('settings_reference');
 
-const SCAN_ROOTS = ['bin', 'hooks', 'scripts', 'src', 'mods'];
+const SCAN_ROOTS = ['bin', HOOKS_DIR, SCRIPTS_DIR, 'src', 'mods'];
 const SCAN_EXT = /\.(js|ts|tsx|mjs|sh|py)$/;
 const SKIP_DIRS = new Set(['node_modules', 'tests', '__tests__', 'fixtures', '.git']);
 const CFG_VARS = 'cfg|config|conf|user|userCfg|parsed|ucfg|j|cb|rc|settings|c';
@@ -62,8 +68,8 @@ function parseArgs(argv) {
       o[a.slice(2)] = path.resolve(argv[++i]);
     } else usage(2);
   }
-  if (!o.registry) o.registry = path.join(o.root, 'scripts/lib/config-keys.json');
-  if (!o.reference) o.reference = path.join(o.root, 'docs/settings-reference.md');
+  if (!o.registry) o.registry = path.join(o.root, CONFIG_KEYS);
+  if (!o.reference) o.reference = path.join(o.root, SETTINGS_REFERENCE);
   return o;
 }
 

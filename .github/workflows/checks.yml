@@ -42,3 +42,15 @@ jobs:
           fi
           MB="$(git merge-base "$BASE" "$HEAD")"
           node scripts/leak-guard.js --range "$MB..$HEAD"
+
+  layout-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: layout-lint on the tracked files
+        run: node scripts/layout-lint.js

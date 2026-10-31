@@ -16,6 +16,16 @@
 
 const fs = require('fs');
 const path = require('path');
+// Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
+const LAYOUT = require('./lib/repo-layout.js');
+const PLANS_DIR = LAYOUT.path('plans_dir');
+const PLANS_EVIDENCE_DIR = LAYOUT.path('plans_evidence_dir');
+const PROJECTS_DIR = LAYOUT.path('projects_dir');
+const HOOK_TESTS_DIR = LAYOUT.path('hook_tests_dir');
+const CODEX_PLUGIN_DIR = LAYOUT.path('codex_plugin_dir');
+const EVALS_DIR = LAYOUT.path('evals_dir');
+const SCRIPTS_DIR = LAYOUT.path('scripts_dir');
+const CLAUDE_DIR = LAYOUT.path('claude_dir');
 // Guarded: a vendored copy of this gate without scripts/lib/ degrades to "nothing sealed".
 let sealedDocFiles = () => new Set();
 try {
@@ -36,32 +46,32 @@ const DEFAULT_EXCLUDES = [
   ".venv",
   ".opencode",
   "_bodies",
-  "platforms/codex/plugin",
+  CODEX_PLUGIN_DIR,
   // Byte-frozen eval fixtures (digest-pinned byte-copies of live skills; their relative
   // links intentionally dangle from the pack location — rewriting them would break the
   // byte-identity the skill-onoff arm-parity tests assert).
-  "evals/skill-onoff/packs",
+  `${EVALS_DIR}/skill-onoff/packs`,
   // Findings-batch cell fixtures: the READMEs/task.md under here are what the eval agent reads inside its own cell repo,
   // where `scripts/merge-lane.sh` etc. are the fixture's stubs (cc/stubs/scripts), not this repo's scripts/.
-  "evals/skill-onoff/fbatch/cc",
-  "evals/skill-onoff/fbatch/cc-v2", // findings-batch-v2 copy of the same fixtures
-  "evals/skill-onoff/fbatch/cc-v3", // findings-batch-v3 copy of the same fixtures
+  `${EVALS_DIR}/skill-onoff/fbatch/cc`,
+  `${EVALS_DIR}/skill-onoff/fbatch/cc-v2`, // findings-batch-v2 copy of the same fixtures
+  `${EVALS_DIR}/skill-onoff/fbatch/cc-v3`, // findings-batch-v3 copy of the same fixtures
   // Digest-pinned byte-copy fixture (frozen 2026-08-28) of .claude/review-loop-config.md;
   // its relative links intentionally dangle from hooks/tests/fixtures/ — rewriting them
   // would break the byte identity that hooks/tests/*.sh pin against.
-  "hooks/tests/fixtures/pre-consult-discuss-review-loop-config.md",
+  `${HOOK_TESTS_DIR}/fixtures/pre-consult-discuss-review-loop-config.md`,
   // Fast path in front of the general nested-git-root rule below (isNestedGitRoot):
   // live background-agent worktrees under .claude/worktrees/ are separate git repos
   // whose scripts/... references resolve against THEIR OWN root, not this scan's
   // AUDIT_ROOT — scanning them here produces false drift for whichever repo isn't
   // the one currently checked out there.
-  ".claude/worktrees",
+  `${CLAUDE_DIR}/worktrees`,
   // Verbatim consult transcripts quoting ANOTHER machine's absolute paths (frozen evidence:
   // rewriting them would falsify the record). Listed file by file on purpose — the rest of
   // docs/plans/evidence/ is live (new evidence lands there) and stays scanned.
-  "docs/plans/evidence/2026-09-16-blind-review-redesign/consult-gpt-6-astra.md",
-  "docs/plans/evidence/2026-09-16-red-verification-repair/consult-codex-answer.md",
-  "docs/plans/evidence/2026-09-21-foreman-exam-design-consult/gpt-6-astra-via-codex.md"
+  `${PLANS_EVIDENCE_DIR}/2026-09-16-blind-review-redesign/consult-gpt-6-astra.md`,
+  `${PLANS_EVIDENCE_DIR}/2026-09-16-red-verification-repair/consult-codex-answer.md`,
+  `${PLANS_EVIDENCE_DIR}/2026-09-21-foreman-exam-design-consult/gpt-6-astra-via-codex.md`
 ];
 
 // Regex configuration
@@ -277,7 +287,7 @@ const SCRIPT_EXT_RE = /\.(sh|bash|js|mjs|cjs|ts|py|ps1)$/;
 // (`[x](../scripts/foo.sh)`) are validated by checkLinks instead, so anchoring here
 // loses no coverage. Stops at the extension (excludes a `:line@sha` evidence suffix);
 // glob/placeholder refs are filtered out below.
-const SCRIPT_REF_RE = /(?<![\w./-])(?:\.\/)?scripts\/[A-Za-z0-9_./-]+\.(?:sh|bash|js|mjs|cjs|ts|py|ps1)\b/g;
+const SCRIPT_REF_RE = new RegExp(`(?<![\\w./-])(?:\\.\\/)?${SCRIPTS_DIR.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\/[A-Za-z0-9_./-]+\\.(?:sh|bash|js|mjs|cjs|ts|py|ps1)\\b`, 'g');
 // Backticked BARE basename like `tree.sh` (no path). Only flagged when scripts/ holds
 // that stem under a DIFFERENT extension (a rename) — so `jest.config.js` or a consumer
 // script name never trips it, but `tree.sh` (→ scripts/tree.js) does. Non-backticked
@@ -293,8 +303,8 @@ const BARE_SCRIPT_RE = /`([A-Za-z0-9_-]+\.(?:sh|bash|js|mjs|cjs|ts|py|ps1))`/g;
 //     scripts (e.g. `scripts/check-doc-drift.py`), not autopilot's
 function isScriptRefExemptDoc(relPath) {
   const p = relPath.replace(/\\/g, '/');
-  return p.startsWith('docs/plans/')
-    || p.startsWith('docs/projects/')
+  return p.startsWith(`${PLANS_DIR}/`)
+    || p.startsWith(`${PROJECTS_DIR}/`)
     || p.startsWith('project-config-template/')
     || p === 'CHANGELOG.md';
 }
@@ -340,7 +350,7 @@ function checkScriptRefs(files) {
   // is a no-op.
   const scriptStems = new Map();
   try {
-    for (const f of fs.readdirSync(path.join(AUDIT_ROOT, 'scripts'))) {
+    for (const f of fs.readdirSync(path.join(AUDIT_ROOT, SCRIPTS_DIR))) {
       if (!SCRIPT_EXT_RE.test(f)) continue;
       const stem = f.replace(SCRIPT_EXT_RE, '');
       if (!scriptStems.has(stem)) scriptStems.set(stem, new Set());
@@ -381,7 +391,7 @@ function checkScriptRefs(files) {
           f => f.replace(SCRIPT_EXT_RE, '') === base && SCRIPT_EXT_RE.test(f)
         );
         if (sibling) {
-          hint = `did you mean scripts/${sibling}? (renamed)`;
+          hint = `did you mean ${SCRIPTS_DIR}/${sibling}? (renamed)`;
         }
       } catch { /* dir unreadable → keep generic hint */ }
       bad.push(`${relMd}: \`${ref}\` — ${hint}`);
@@ -393,7 +403,7 @@ function checkScriptRefs(files) {
     while ((bm = BARE_SCRIPT_RE.exec(text)) !== null) {
       const base = bm[1];
       if (seen.has(base)) continue;
-      if (fs.existsSync(path.join(AUDIT_ROOT, 'scripts', base))) continue; // real bare script ref
+      if (fs.existsSync(path.join(AUDIT_ROOT, SCRIPTS_DIR, base))) continue; // real bare script ref
       // A doc may describe a file that lives beside/under it (eval fixtures,
       // project-local scripts) — local existence beats the repo-scripts rename
       // heuristic. Shallow walk, only runs when a finding is about to be raised.
@@ -401,7 +411,7 @@ function checkScriptRefs(files) {
       const siblings = scriptStems.get(base.replace(SCRIPT_EXT_RE, ''));
       if (siblings && siblings.size > 0) {
         seen.add(base);
-        bad.push(`${relMd}: \`${base}\` — did you mean scripts/${[...siblings][0]}? (renamed; bare ref)`);
+        bad.push(`${relMd}: \`${base}\` — did you mean ${SCRIPTS_DIR}/${[...siblings][0]}? (renamed; bare ref)`);
       }
       // else: not a known autopilot script stem → not flagged (avoid prose false positives)
     }

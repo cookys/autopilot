@@ -18,6 +18,15 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
+// Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
+const LAYOUT = require('./lib/repo-layout.js');
+const PLANS_DIR = LAYOUT.path('plans_dir');
+const PLANS_ARCHIVE_DIR = LAYOUT.path('plans_archive_dir');
+const PROJECTS_INDEX = LAYOUT.path('projects_index');
+const MISSIONS_DIR = LAYOUT.path('missions_dir');
+const SCRIPTS_DIR = LAYOUT.path('scripts_dir');
+const MISSION_ROUTING = LAYOUT.path('mission_routing_config');
+const OWNER_KERNEL_GOVERNANCE = LAYOUT.path('owner_kernel_governance');
 const { freezeMissionExecutionGraph } = require('../src/engine/mission-execution-graph');
 const { resolveMissionPolicy } = require('../src/engine/mission-policy');
 const owner = require('../src/engine/owner-kernel');
@@ -97,7 +106,7 @@ function intOpt(value, fallback, label) {
 }
 
 function mirrorRootsFor(repoRoot) {
-  const script = path.join(repoRoot, 'scripts', 'sync-codex-plugin-skills.sh');
+  const script = path.join(repoRoot, SCRIPTS_DIR, 'sync-codex-plugin-skills.sh');
   if (!fs.existsSync(script)) return null;
   const r = spawnSync('bash', [script, '--mirror-roots-json'], { cwd: repoRoot, encoding: 'utf8' });
   if (r.status !== 0) throw new Refusal(`mirror roots unavailable: ${String(r.stderr).trim()}`);
@@ -120,7 +129,7 @@ function shellToken(s) {
 }
 
 function affectedSuitesCommand(paths) {
-  return ['node', 'scripts/affected-suites.js', '--run', '--files', ...paths].map(shellToken).join(' ');
+  return ['node', `${SCRIPTS_DIR}/affected-suites.js`, '--run', '--files', ...paths].map(shellToken).join(' ');
 }
 
 function relPath(label, p) {
@@ -187,15 +196,15 @@ function build(o) {
 
   // Pre-check 3: plan registered active in docs/projects/INDEX.md.
   const gate = require('./check-plan-graduation.js');
-  const indexExists = fs.existsSync(path.join(repoRoot, 'docs', 'projects', 'INDEX.md'));
-  const m = plan.match(/^docs\/plans\/([^/]+)\.md$/);
+  const indexExists = fs.existsSync(path.join(repoRoot, PROJECTS_INDEX));
+  const m = plan.match(new RegExp(`^${PLANS_DIR.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&')}/([^/]+)\\.md$`));
   let registerRow = null;
   if (indexExists && m) {
     const reg = gate.planIndexRegistration(repoRoot, m[1]);
     if (!reg.activeRow) {
-      registerRow = gate.registerTemplateRow(repoRoot, path.join(repoRoot, 'docs', 'plans'),
-        path.join(repoRoot, 'docs', 'plans', '_archive'), m[1]);
-      throw new Refusal(`spec_plan_unregistered: paste into docs/projects/INDEX.md (Version "active"): ${registerRow}`);
+      registerRow = gate.registerTemplateRow(repoRoot, path.join(repoRoot, PLANS_DIR),
+        path.join(repoRoot, PLANS_ARCHIVE_DIR), m[1]);
+      throw new Refusal(`spec_plan_unregistered: paste into ${PROJECTS_INDEX} (Version "active"): ${registerRow}`);
     }
   }
 
@@ -205,10 +214,10 @@ function build(o) {
   const rubricExisted = fs.existsSync(rubricAbs);
 
   const mirror = mirrorRootsFor(repoRoot);
-  const outDir = relPath('--out-dir', o.outDir || 'docs');
+  const outDir = relPath('--out-dir', o.outDir || MISSIONS_DIR);
   const sourcesRel = `${outDir}/mission-${slug}-sources.json`;
   const graphRel = `${outDir}/mission-${slug}-execution-graph.json`;
-  const governancePath = path.resolve(repoRoot, o.governance || '.claude/owner-kernel-governance.json');
+  const governancePath = path.resolve(repoRoot, o.governance || OWNER_KERNEL_GOVERNANCE);
   if (!fs.existsSync(governancePath)) throw new Refusal(`governance file not found: ${governancePath}`);
 
   const common = fs.realpathSync(path.resolve(repoRoot, (git(repoRoot, ['rev-parse', '--git-common-dir']) || '').trim()));
@@ -260,7 +269,7 @@ function build(o) {
 function ensureRubric(b, scratch) {
   if (b.rubricExisted) return fs.readFileSync(b.rubricAbs);
   const target = scratch || b.rubricAbs;
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'plan-rubric-scaffold.js'), '--plan', b.plan, '--out', target], {
+  const r = spawnSync(process.execPath, [path.join(ROOT, SCRIPTS_DIR, 'plan-rubric-scaffold.js'), '--plan', b.plan, '--out', target], {
     cwd: b.repoRoot, encoding: 'utf8',
   });
   if (r.status !== 0) throw new Refusal(`rubric generation failed (${String(r.stderr).trim()}); write ${b.rubric} by hand with R<n>: lines`);
@@ -447,8 +456,8 @@ function nextSteps(b, g) {
   return {
     commit: `git add ${b.rubric} ${b.sourcesRel} ${b.graphRel} && git commit (required_paths must exist at base; the envelope stays outside the repo)`,
     verify_at_base: 'run every verification_commands entry in a DETACHED scratch checkout of the base commit before sealing',
-    routing_config: `.claude/mission-routing-config.json -> {"schema_version":1,"graph_path":"${b.graphRel}","sources_path":"${b.sourcesRel}"}`,
-    legacy_reconcile: `node scripts/mission-terminal-reconcile.js legacy --repo-root . --graph-digest ${g.graphDigest}`,
+    routing_config: `${MISSION_ROUTING} -> {"schema_version":1,"graph_path":"${b.graphRel}","sources_path":"${b.sourcesRel}"}`,
+    legacy_reconcile: `node ${SCRIPTS_DIR}/mission-terminal-reconcile.js legacy --repo-root . --graph-digest ${g.graphDigest}`,
     prepare: `node bin/autopilot.js mission prepare --repo . --authority ${rel(b.authorityOut)} --graph ${b.graphRel} --out prepared.json`,
     grant: `node bin/autopilot.js mission grant --repo . --prepared prepared.json --node ${b.nodeId}`,
     dispatch_env: 'export ONLY AUTOPILOT_LEVEL=l5 and AUTOPILOT_ROOT_RUN_ID=<contract.mission_runtime.root_run_id>; never AUTOPILOT_SESSION_ID; do not pass --campaign-ledger',

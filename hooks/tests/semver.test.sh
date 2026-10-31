@@ -87,6 +87,7 @@ mk_pf() { # mk_pf <dir> <canonical-version>
   mkdir -p "$d/scripts/lib" "$d/.claude-plugin" "$d/docs/projects"
   cp "$REPO_ROOT/scripts/preflight-release.sh" "$d/scripts/"
   cp "$SEMVER" "$d/scripts/lib/"
+  cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$d/scripts/lib/"   # preflight-release resolves its repo paths through the layout registry
   printf '{ "name": "autopilot", "version": "%s" }\n' "$v" > "$d/.claude-plugin/plugin.json"
 }
 pf_result() { # pf_result <dir> <check-title-prefix> → ✓ or ✗ line following the title
@@ -140,6 +141,21 @@ for v in "1.2" "1.2.3-gamma.1" "01.2.3"; do
   : > "$PFB/CHANGELOG.md"
   assert_contains "$(pf_result "$PFB" "[1] canonical version parseable")" "✗" "preflight: malformed canonical '$v' fails check 1"
 done
+
+# relay2 g1: preflight-release runs its helper scripts from the registry scripts_dir, not a literal scripts/.
+PFREG="$TEST_TMP/pf-tooling-registry.json"
+node -e '
+  const r = JSON.parse(JSON.stringify(require(process.argv[1]).DEFAULT_REGISTRY));
+  r.paths.scripts_dir = "tooling"; require("fs").writeFileSync(process.argv[2], JSON.stringify(r));
+' "$REPO_ROOT/scripts/lib/repo-layout.js" "$PFREG"
+PFT="$TEST_TMP/pf-tooling"
+mk_pf "$PFT" "2.7.2"
+mkdir -p "$PFT/tooling"; printf 'process.exit(0);\n' > "$PFT/tooling/sync-version.js"   # stub: only exists under the moved scripts_dir
+printf '## v2.7.2 - x\n' > "$PFT/CHANGELOG.md"; printf '| x | v2.7.2 | y |\n' > "$PFT/docs/projects/INDEX.md"
+pf_result_reg() { (cd "$1" && REPO_LAYOUT_REGISTRY="$PFREG" AUTOPILOT_SKIP_SLASH_PROBE=1 bash scripts/preflight-release.sh 2>&1) | grep -A2 -F "$2" | sed -n 2,3p; }
+assert_contains "$(pf_result_reg "$PFT" "[3] version mirrors in sync")" "✓" "layout: with scripts_dir=tooling the mirror check runs tooling/sync-version.js"
+# negative control: the default registry looks in scripts/, where the stub does not exist, so the same check is red
+assert_contains "$(pf_result "$PFT" "[3] version mirrors in sync")" "✗" "layout negative control: the default scripts_dir does not find the stub"
 
 # ── 4. check-optin-changelog.js: version validation + pre-release section ──────
 OC="$TEST_TMP/oc"

@@ -6033,3 +6033,74 @@ for (const surface of SURFACES) {
     expect(d.text).toContain('Now')
   })
 }
+
+// ---- layout E1, the 待決 tab on the band row: the pane's own lines, compact (the first question and the send row) ----
+for (const surface of SURFACES) {
+  const decideBand = (on: any, decisions: object[] = [DQ1, DQ2, DQ3]) => {
+    const files = base()
+    files[W_MODEL] = j(model({ needs_decision: true, decisions }))
+    const w = world(on, files)
+    const submits: { text: string; origin: unknown }[] = []
+    on('prompt.submit', ($: any, e: any) => { submits.push({ text: e.text, origin: e.origin }); return { text: e.text } })
+    return { w, submits }
+  }
+  const mountD = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-d', props: { ...BAND_PROPS, maxRows: 8, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  const rowsD = async ($: any, press: string[] = []) => {
+    for (const key of press) {
+      const ui = await mountD($)
+      await ui.press({ key })
+      await ui.unmount()
+    }
+    const ui = await mountD($)
+    const tree = (await ui.drawn()) as Node
+    const keys = ((await ui.findAll({ type: 'Button' })) as Node[]).map(b => b.props?.key as string)
+    const inputs = ((await ui.findAll({ type: 'Input' })) as Node[]).length
+    await ui.unmount()
+    return { rows: ((tree.children || []) as Node[]), keys, inputs }
+  }
+  const textD = (n: Node): string => cellsOf(n).map(c => c.text).join('')
+
+  test('E1 待決: the first question and its options and the send row, from the pane\'s own lines; no text field, not the other questions (' + surface + ')', async ($, on) => {
+    decideBand(on)
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide'])
+    const all = d.rows.map(textD)
+    expect(all[0]).toContain(' 待決 ')
+    expect(all[2]).toContain('1. P5 殘留分頁要不要把已清掉的也列出來')
+    expect(all.some(r => r.includes('[ ] ★ OK  [ ] 完整顯示'))).toBe(true)
+    expect(all[all.length - 1]).toContain('[ 送出（已答 0/3） ]')
+    expect(all.join('\n')).not.toContain('U6')
+    expect(d.inputs).toBe(0)
+    for (const k of ['pick:d-4290499d:0', 'pick:d-4290499d:1']) expect(d.keys, k).toContain(k)
+    expect(d.keys, 'nothing chosen: no send Button').not.toContain('submit')
+  })
+
+  test('E1 待決: the ━ stands under the 待決 tab, a Chinese label in the middle of the row (' + surface + ')', async ($, on) => {
+    decideBand(on)
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide'])
+    const label = cellsOf(d.rows[0]).find(c => c.text === ' 待決 ') as Cell
+    const mark = cellsOf(d.rows[1]).find(c => /^━+$/.test(c.text)) as Cell
+    expect(label).toBeDefined()
+    expect({ start: mark.start, width: mark.width }).toEqual({ start: label.start, width: label.width })
+  })
+
+  test('E1 待決: a pick on the band is the pane\'s pick (one state), and the send Button sends ONE prompt (' + surface + ')', async ($, on) => {
+    const { submits } = decideBand(on)
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide', 'pick:d-4290499d:1'])
+    expect(d.rows.map(textD).some(r => r.includes('[ ] ★ OK  [x] 完整顯示'))).toBe(true)
+    expect(d.keys).toContain('submit')
+    expect((await paneParts($, surface, 'decide')).texts).toContain('  選項      [ ] ★ OK  [x] 完整顯示')
+    await rowsD($, ['submit'])
+    expect(submits.length).toBe(1)
+    expect(submits[0].text).toContain('d-4290499d')
+  })
+
+  test('E1 待決: with nothing to answer the tab says so on one line (' + surface + ')', async ($, on) => {
+    decideBand(on, [])
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide'])
+    expect(d.rows.map(textD).join('\n')).toContain('目前沒有待你回答的問題')
+  })
+}

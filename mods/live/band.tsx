@@ -6,9 +6,9 @@
 import { T_EN } from './i18n'
 import type { T } from './i18n'
 import { BAND_INFO_LABEL, BAND_SEP, displayWidth, layoutBand, plainBandText } from './model'
-import type { LiveSnapshot, PaneTab, Seg, SlotId } from './model'
+import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
 import { actionSeg, dimProps, drawSeg } from './ui'
-import { barRule, barStrip } from './tabs'
+import { barRule, barStrip, decideTabLines } from './tabs'
 import type { BarStrip, BarTabId } from './tabs'
 
 type El = (props: any) => any
@@ -121,4 +121,38 @@ export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSna
   if (tab === 'dispatch') return [...lineOf(['dispatch']), open]
   if (tab === 'review') return [...lineOf(['review', 'decisions']), open]
   return []
+}
+
+// the 待決 tab's compact form: the first open question's title and its options, then the send row the pane's own builder made (the same lines, the same press ids: a press is
+// decidePress, so a pick or a send here is the one the pane makes). No notes (a text field is the pane's); the rest of the questions are the pane's too.
+export function decideContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, state: DecideState, columns: number, t: T, onPress: (id: string) => void): unknown[] {
+  const { Box, Text, Button } = el
+  if (snap === null || snap.band === null) return []
+  const lines = decideTabLines(snap, { t, cols: columns, decide: { ...state, inputs: false } })
+  const picked: PaneLine[] = []
+  for (const l of lines) {
+    if (l.bar === true) continue
+    if (l.kind === 'item' || l.kind === 'choice') picked.push(l)
+    else if (picked.length > 0 && l.kind === 'blank') break
+  }
+  const bars = lines.filter(l => l.bar === true)
+  if (picked.length === 0) return [<Text key="none" {...dimProps()} wrap="truncate">{t('decide.none')}</Text>]
+  const drawLine = (l: PaneLine, k: string) => {
+    const runs: { press: string | undefined; segs: Seg[] }[] = []
+    for (const s of l.segs ?? [{ text: l.text }]) {
+      const last = runs[runs.length - 1]
+      if (last !== undefined && last.press === s.press) last.segs.push(s)
+      else runs.push({ press: s.press, segs: [s] })
+    }
+    return (
+      <Box key={k}>
+        {runs.map((r, j) => {
+          const texts = r.segs.map((s, n) => <Text key={'g' + n} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
+          const press = r.press
+          return press === undefined || Button === undefined ? <Box key={'r' + j}>{texts}</Box> : <Button key={press} plain onPress={() => onPress(press)}>{texts}</Button>
+        })}
+      </Box>
+    )
+  }
+  return [...picked.map((l, i) => drawLine(l, 'p' + i)), ...bars.map((l, i) => drawLine(l, 'b' + i))]
 }

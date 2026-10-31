@@ -40,7 +40,7 @@ import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { SHOW_PRESS, showTarget } from './ui'
-import { BandBar, BarRule, barContent, forgeLabelOf, stackBand } from './band'
+import { BandBar, BarRule, barContent, decideContent, forgeLabelOf, stackBand } from './band'
 import { barStrip } from './tabs'
 import type { BarTabId } from './tabs'
 import { Pane } from './pane'
@@ -949,10 +949,13 @@ export function registerLive(on: Parameters<Register>[0]): void {
         const below = await lower(rows - 2, columns)
         if (below !== undefined && below !== null && (below as { type?: string }).type !== 'engine') content = [below]
       }
-    } else if (active !== null && active !== 'decide') {
+    } else if (active === 'decide') {
+      // the pane's own 待決 lines, compact; a press is the pane's decidePress, and the draw is asked again once it has written the state
+      content = decideContent(el, snapshot, await read($, DECIDE), columns, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) })
+    } else if (active !== null) {
       content = barContent(el, snapshot, active, columns, t, { onSlot: slot, onOpen: open })
-      if (rows < 2 + content.length) content = [] // the rule and the rows do not fit: the first row alone stays
     }
+    if (active !== 'forge' && rows < 2 + content.length) content = [] // the rule and the rows do not fit: the first row alone stays
     if (content.length === 0) return bar.node
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })

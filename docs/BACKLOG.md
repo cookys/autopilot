@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0355 -->
+<!-- next-id: BL-0356 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1685,23 +1685,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/top-level-leftovers-relayout.md
 - **Context**: Readers and risks per item are in the sidecar.
 
-### live mod 的 AbovePrompt band 不讓下層 mod 也能畫
-- **Id**: BL-0352
-- **Status**: open
-- **Since**: 2026-10-31
-- **Origin**: peer
-- **Reporter**: codeforge
-- **Report**: 01M68HGMJQF52M9MX1B1BMQ50N
-- **Reply**: 2026-10-31 01M68HH99K9GXAKYG0236176QX
-- **Problem**: autopilot 的提示上方版位直接回傳自己的畫面，從不把控制權交給下一層，所以排在它後面的 mod 永遠畫不出來。
-- **Impact**: codeforge 想在下方加一條三欄統計版位，實測被呼叫 0 次，無法顯示；任何後排 mod 都有同樣問題。
-- **Trigger**: relayout section 2 and section 4 done, or next edit to mods/live/register.ts
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: PEER-REPORTED codeforge 2026-10-31 (fleet message)
-- **Pointer**: docs/backlog/live-band-yield-to-lower-mods.md
-- **Context**: Fix direction and four tests in the sidecar. UI change: before and after colour screenshots to the owner before merge (mods design system section 12). After merge reply to codeforge with the commit; version stays 3.0.0.
-
 ### suite-baseline run-all 只能逐支串行，全套要約 9 小時（效率，插隊）
 - **Id**: BL-0353
 - **Status**: open
@@ -1732,3 +1715,17 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED peace 2026-10-31 (fleet message)
 - **Pointer**: docs/backlog/anthropic-compatible-review-effort-gap.md
 - **Context**: Fix direction, negative control and the 41/42 re-run note are in the sidecar. Official default stays unchanged.
+
+### live band 後續四件：窄寬度溢出、重複 slot 按鈕、待決入口、R2 偶發紅
+- **Id**: BL-0355
+- **Status**: open
+- **Since**: 2026-10-31
+- **Origin**: self
+- **Problem**: band 讓下層疊放並加上分頁後，審查與驗收留下四個小缺口：分頁列在窄終端可能比欄寬還寬；「現況」「審查」分頁內重畫了 band 列已有的按鈕；待決數的入口只在寬終端出現；一支派工規則測試在高負載時偶發紅。
+- **Impact**: 窄終端可能破版；Tab 焦點多停幾格；窄終端無直達「待決」入口；全套同跑時 R2 測試偶發假紅。
+- **Trigger**: next edit to mods/live/band.tsx, or the next time dispatch-hetero-gate-rules.test.sh flakes
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: bandyield round 2 four-vendor review and acceptance, 2026-10-31
+- **Pointer**: docs/backlog/live-band-follow-ups.md
+- **Context**: Four independent items in the sidecar; they can be split when picked up.

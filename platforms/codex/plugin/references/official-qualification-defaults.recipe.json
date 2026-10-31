@@ -48,14 +48,14 @@
         334
       ],
       "role": "consult",
-      "reason": "2026-10-24/25 k3.1-pro / beam-free / longcat-2.0 sittings (llm-playground@cookys-7840hs, bundle docs/plans/evidence/2026-10-26-k31-beam-longcat-qualify) whose status is failed. Recorded faithfully in the scorecard; every failing case was transport_ok, so they are model answers. Not shipped as defaults: the bundle README proposes only the qualified rows for the official file."
+      "reason": "2026-10-24/25 k3.1-pro / beam-free / longcat-2.0 sittings (llm-playground@<host>, bundle docs/plans/evidence/2026-10-26-k31-beam-longcat-qualify) whose status is failed. Recorded faithfully in the scorecard; every failing case was transport_ok, so they are model answers. Not shipped as defaults: the bundle README proposes only the qualified rows for the official file."
     },
     {
       "event_ids": [
         340
       ],
       "role": "implementer",
-      "reason": "2026-10-24/25 k3.1-pro / beam-free / longcat-2.0 sittings (llm-playground@cookys-7840hs, bundle docs/plans/evidence/2026-10-26-k31-beam-longcat-qualify) whose status is failed. Recorded faithfully in the scorecard; every failing case was transport_ok, so they are model answers. Not shipped as defaults: the bundle README proposes only the qualified rows for the official file."
+      "reason": "2026-10-24/25 k3.1-pro / beam-free / longcat-2.0 sittings (llm-playground@<host>, bundle docs/plans/evidence/2026-10-26-k31-beam-longcat-qualify) whose status is failed. Recorded faithfully in the scorecard; every failing case was transport_ok, so they are model answers. Not shipped as defaults: the bundle README proposes only the qualified rows for the official file."
     },
     {
       "event_ids": [
@@ -63,7 +63,7 @@
         346
       ],
       "role": "reviewer",
-      "reason": "2026-10-24/25 k3.1-pro / beam-free / longcat-2.0 sittings (llm-playground@cookys-7840hs, bundle docs/plans/evidence/2026-10-26-k31-beam-longcat-qualify) whose status is failed. Recorded faithfully in the scorecard; every failing case was transport_ok, so they are model answers. Not shipped as defaults: the bundle README proposes only the qualified rows for the official file."
+      "reason": "2026-10-24/25 k3.1-pro / beam-free / longcat-2.0 sittings (llm-playground@<host>, bundle docs/plans/evidence/2026-10-26-k31-beam-longcat-qualify) whose status is failed. Recorded faithfully in the scorecard; every failing case was transport_ok, so they are model answers. Not shipped as defaults: the bundle README proposes only the qualified rows for the official file."
     },
     {
       "event_ids": [
@@ -71,7 +71,7 @@
         349
       ],
       "role": "verification_author",
-      "reason": "2026-10-24/25 k3.1-pro / beam-free / longcat-2.0 sittings (llm-playground@cookys-7840hs, bundle docs/plans/evidence/2026-10-26-k31-beam-longcat-qualify) whose status is failed. Recorded faithfully in the scorecard; every failing case was transport_ok, so they are model answers. Not shipped as defaults: the bundle README proposes only the qualified rows for the official file."
+      "reason": "2026-10-24/25 k3.1-pro / beam-free / longcat-2.0 sittings (llm-playground@<host>, bundle docs/plans/evidence/2026-10-26-k31-beam-longcat-qualify) whose status is failed. Recorded faithfully in the scorecard; every failing case was transport_ok, so they are model answers. Not shipped as defaults: the bundle README proposes only the qualified rows for the official file."
     }
   ],
   "entries": [

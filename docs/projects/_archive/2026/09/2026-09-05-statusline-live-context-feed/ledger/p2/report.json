@@ -1,6 +1,6 @@
 {
   "status": "done",
-  "worktree": "/home/cookys/projects/autopilot-wt-p2",
+  "worktree": "$HOME/projects/autopilot-wt-p2",
   "branch": "feat/v2.36.1-p2",
   "commits": [
     "d4c11998 test(hooks): RED — context-budget must consume the statusline live file (v2.36.1 P2)",
@@ -19,7 +19,7 @@
       "hooks/tests/resolve-review-loop-consult-discuss-switch.test.sh",
       "hooks/tests/resolve-review-loop-role-admission.test.sh"
     ],
-    "notes_on_failures": "All 3 reproduce byte-for-byte on the unmodified base branch (feat/v2.36.1-statusline-live-context-feed @ 04d40f5d, main tree /home/cookys/projects/autopilot) with the identical env var (AUTOPILOT_TOPOLOGY_FILE=/nonexistent) and command line, run directly outside this worktree — confirmed by re-running each of the three .test.sh files individually against the base checkout before this deliverable's commits existed there. Pre-existing/environmental (host topology/resolver-version drift), not touched by this deliverable's diff (verified via `git diff --stat 04d40f5d..HEAD` — none of the changed files intersect resolve-review-loop.sh, context-window.js, or their fixtures)."
+    "notes_on_failures": "All 3 reproduce byte-for-byte on the unmodified base branch (feat/v2.36.1-statusline-live-context-feed @ 04d40f5d, main tree $HOME/projects/autopilot) with the identical env var (AUTOPILOT_TOPOLOGY_FILE=/nonexistent) and command line, run directly outside this worktree — confirmed by re-running each of the three .test.sh files individually against the base checkout before this deliverable's commits existed there. Pre-existing/environmental (host topology/resolver-version drift), not touched by this deliverable's diff (verified via `git diff --stat 04d40f5d..HEAD` — none of the changed files intersect resolve-review-loop.sh, context-window.js, or their fixtures)."
   },
   "unit_tests": {
     "hooks/context-budget.test.js": { "passed": 33, "failed": 0 },

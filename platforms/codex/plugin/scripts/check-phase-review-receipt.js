@@ -661,7 +661,7 @@ function validateModeA(flags, opts = {}) {
         process.exit(1);
       }
 
-      // (3a) v2.36.3: an aborted generation is a recorded, non-reviewing attempt (7840hs report:
+      // (3a) v2.36.3: an aborted generation is a recorded, non-reviewing attempt (<host> report:
       // a branch that moved during collection left the phase permanently un-receiptable). It is
       // accepted ONLY as evidence that nothing was reviewed: it must not be the last entry (the
       // phase needs a finalized generation after it — an abort can never stand in for a review),
@@ -1051,7 +1051,7 @@ function validateModeA(flags, opts = {}) {
       process.exit(1);
     }
 
-    // v2.36.3 (7840hs): no closure may be attributed to an aborted generation — it produced no
+    // v2.36.3 (<host>): no closure may be attributed to an aborted generation — it produced no
     // findings, so "closed by absence in generation N" is meaningless for an aborted N. Checked
     // on the receipt's own closed_findings BEFORE the equality comparison below so a receipt
     // written by the pre-v2.36.3 finalize (which did exactly this) is refused with a named
@@ -1061,7 +1061,7 @@ function validateModeA(flags, opts = {}) {
     const namesAborted = (list) => (Array.isArray(list) ? list : [])
       .find((cf) => cf && abortedGens.has(cf.closed_by_generation));
     // The loop's finalize writes the stamps onto chain ENTRIES (chain[i].closed_findings), not a
-    // top-level receipt field — the 7840hs ledger carries `{id, closed_by_generation: 3}` on its
+    // top-level receipt field — the <host> ledger carries `{id, closed_by_generation: 3}` on its
     // g2 entry with g3 aborted — so the on-disk chain entries are scanned as well.
     const badReceiptClosure = namesAborted(receipt.closed_findings)
       || stampsOnDisk.map((l) => namesAborted(l)).find(Boolean);

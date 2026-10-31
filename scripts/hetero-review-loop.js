@@ -1087,7 +1087,7 @@ async function handleCollect(flags) {
     process.exit(1);
   }
 
-  // v2.36.5 (7840hs, plan 066): --allow-seat-gap used to write a pending-with-gap entry no
+  // v2.36.5 (<host>, plan 066): --allow-seat-gap used to write a pending-with-gap entry no
   // matter how many seats were lost, while check-phase-review-receipt requires reviewed seats
   // >= its trusted floor (--min-reviewed-seats / AUTOPILOT_MIN_REVIEWED_SEATS, default ALL
   // seats of the entry). A finalized generation below that floor is a historical fact the

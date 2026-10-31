@@ -2,7 +2,7 @@
   "schema_version": 1,
   "artifact_type": "lifecycle_residue_receipt",
   "issued_at": "2026-09-16T18:03:34.542Z",
-  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "repo_identity": "git-common-dir:$HOME/projects/autopilot/.git",
   "root_run_id": "campaign-v1-e1426d3a8b296b1e3f7a13475b460474be7ba9a5b53ee7888d38afa48abd52ca",
   "observed_head": "fb0040075430405e3a16578cd226c4be992494c5",
   "worktree_observation_digest": "58b9d2dec504ce74b8feb4f9748f619ee93939d54f2392b92f89355a438a5b23",
@@ -15,7 +15,7 @@
       "name": "mission/2130c723d81d/blind-review-packet-2026-09-16-a1",
       "tip": "ab22980d4c1aca622c593efc0365a7b8b1829bc7",
       "disposition": "reaped",
-      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-16/reap-20260916T180316Z-1898527.bundle",
+      "bundle": "$HOME/projects/autopilot/.git/autopilot-reap-bundles/2026-09-16/reap-20260916T180316Z-1898527.bundle",
       "acknowledged": false
     }
   ],

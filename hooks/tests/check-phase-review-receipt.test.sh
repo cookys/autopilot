@@ -998,7 +998,7 @@ assert_exit_code "$MS_HI_RC" "1" "case 16: --min-reviewed-seats above the review
 assert_contains "$MS_HI_OUT" "Generation 1 reviewed seats (2) below minimum required (3)" "case 16: refusal is the script's reviewed-seats minimum message"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Case 15 (v2.36.3, 7840hs report): an ABORTED generation followed by a finalized one is a valid
+# Case 15 (v2.36.3, <host> report): an ABORTED generation followed by a finalized one is a valid
 # chain. Before the fix `status !== 'finalized'` rejected every aborted entry, so a branch that
 # moved during collection (the loop's own --help example) left the phase permanently
 # un-receiptable. An aborted entry has no head; the next generation continues from its base.
@@ -1061,7 +1061,7 @@ rm -rf "$LEDGER/review-pab/g1"
 C15E_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15E_RC=$?
 assert_exit_code "$C15E_RC" "0" "case 15e: aborted generation without an evidence dir still exits 0"
 
-# 15g negative (the 7840hs field case): a receipt whose closed_findings attributes a closure to
+# 15g negative (the <host> field case): a receipt whose closed_findings attributes a closure to
 # the ABORTED generation is refused by name, before the generic mismatch comparison.
 write_pab "[ $PAB_G1_ABORTED, $PAB_G2_FINAL ]"
 write_receipt_json "pab" "{ \"kind\": \"review\", \"phase\": \"pab\", \"branch\": \"work\", \"phase_base_sha\": \"$PHASE_BASE\", \"chain\": [ $PAB_G1_ABORTED, $PAB_G2_FINAL ], \"verdict\": \"SHIP-AS-IS\", \"open_findings\": [], \"closed_findings\": [ { \"id\": \"F-stale\", \"closed_by_generation\": 1 } ], \"resolved_from\": \"test\", \"written_at\": \"2026-09-05T00:00:00Z\" }"

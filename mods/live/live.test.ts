@@ -3655,7 +3655,7 @@ test('Review tab: a ladder rung outside U0..U5 is clamped, never a negative repe
 
 // ---- wrapping (pure): long values wrap under the value column, nothing is clipped, nothing is wider than the pane ----
 test('wrapLines: a kv row wraps with a hanging indent of 12 cells, a long path breaks after a /, a token longer than the line is hard-broken, short lines are untouched', () => {
-  const long = '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36/some/deep/dir'
+  const long = '/home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36/some/deep/dir'
   const lines = wrapLines([{ text: 'cache       ' + long, hang: 12, segs: [{ text: 'cache       ', dim: true }, { text: long }] }], 40)
   expect(lines.length).toBeGreaterThan(1)
   for (const l of lines) expect(displayWidth(l.text)).toBeLessThanOrEqual(40)
@@ -3746,8 +3746,8 @@ test('band phase: a task-sourced phase renders in the session locale, not the pr
 })
 
 test('hygiene tab: a long cache dir and a long worktree command wrap in full at 60 columns; the name loses only its tail', () => {
-  const dir = '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36'
-  const target = '/home/cookys/projects/autopilot/.claude/worktrees/some-very-long-worktree-name-here-and-then-some-more-words'
+  const dir = '/home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36'
+  const target = '/home/ubuntu/projects/autopilot/.claude/worktrees/some-very-long-worktree-name-here-and-then-some-more-words'
   const snap = {
     header: 'h', sections: NO_SECTIONS,
     detail: {
@@ -4530,10 +4530,10 @@ test('now: a section heading runs a rule to the edge; pressing it folds the sect
 
 // ---- background work in the Now tab's working section: shells and watches from the messages, subagents from $.agent.list() ----
 // The texts are the shapes Claude Code wrote into a real transcript (ids and paths synthetic).
-const BG_OUT = '/tmp/claude-1000/proj/sid/tasks/bqd50316d.output'
+const BG_OUT = '/tmp/claude-2000/proj/sid/tasks/bqd50316d.output'
 const bgText = (id: string, out: string) => 'Command running in background with ID: ' + id + '. Output is being written to: ' + out + '. You will be notified when it completes.'
 const bgUse = (id: string, extra: Record<string, unknown> = {}, input: Record<string, unknown> = { command: 'bash hooks/tests/run.sh', description: 'full suite', run_in_background: true }) =>
-  ({ tool_use_id: 'toolu_' + id, tool: 'Bash', input, result: { stdout: '', stderr: '', interrupted: false, isImage: false, noOutputExpected: false, backgroundTaskId: id }, text: bgText(id, '/tmp/claude-1000/proj/sid/tasks/' + id + '.output'), ...extra })
+  ({ tool_use_id: 'toolu_' + id, tool: 'Bash', input, result: { stdout: '', stderr: '', interrupted: false, isImage: false, noOutputExpected: false, backgroundTaskId: id }, text: bgText(id, '/tmp/claude-2000/proj/sid/tasks/' + id + '.output'), ...extra })
 const monUse = (id: string) => ({ tool_use_id: 'toolu_' + id, tool: 'Monitor', input: { description: 'watch CI', command: 'gh run watch' }, result: { taskId: id, timeoutMs: 30000, persistent: false }, text: 'Monitor started (task ' + id + ', expires in 30s). You will be notified on each event.' })
 const note = (taskId: string, body: string) => U('<task-notification>\n<task-id>' + taskId + '</task-id>\n' + body + '\n</task-notification>')
 const doneNote = (taskId: string, status = 'completed') => note(taskId, '<tool-use-id>toolu_' + taskId + '</tool-use-id>\n<output-file>/tmp/x.output</output-file>\n<status>' + status + '</status>\n<summary>Background command "x" ' + status + '</summary>')
@@ -4573,7 +4573,7 @@ test('activity: without a stored result (headless) the ids come from the result 
   const shell = { ...bgUse('b9'), result: undefined }
   const mon = { ...monUse('m9'), result: undefined }
   const echoed = { tool_use_id: 'toolu_e', tool: 'Bash', input: { command: 'docker create alpine' }, result: undefined, text: 'Created container with ID: 3f2a9c.' }
-  expect(scanBackground([A('', [shell, mon, echoed])]).map(t => [t.id, t.kind, t.output])).toEqual([['b9', 'shell', '/tmp/claude-1000/proj/sid/tasks/b9.output'], ['m9', 'monitor', null]])
+  expect(scanBackground([A('', [shell, mon, echoed])]).map(t => [t.id, t.kind, t.output])).toEqual([['b9', 'shell', '/tmp/claude-2000/proj/sid/tasks/b9.output'], ['m9', 'monitor', null]])
 })
 
 test('activity: a status notification or a TaskStop ends a row; a Monitor event keeps it and becomes its tail', () => {

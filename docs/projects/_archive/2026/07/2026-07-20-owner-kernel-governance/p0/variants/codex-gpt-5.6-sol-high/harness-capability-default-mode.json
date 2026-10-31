@@ -103,7 +103,7 @@
           },
           "process_identity": {
             "uid": 1000,
-            "cwd": "/home/cookys/projects/autopilot"
+            "cwd": "$HOME/projects/autopilot"
           }
         },
         "execution_proof": "host_process_witnessed",

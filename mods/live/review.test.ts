@@ -44,7 +44,7 @@ const busyDecisions = (over: Record<string, unknown> = {}) => ({
     decision(2, 'Owner answered (supersedes intent-17-1): direction C = A plus moving the dispatch-rail worktrees (hand and native stay under the repo)'),
     decision(3, 'verify node, no qualified verifier seat (engine-scorecard current --role verifier: none admissible)', { decision_id: 'verify-17-1' }),
   ],
-  count: 3, irreversible: 0, writers: ['depth0'], undocumented: 32, identity: 'git-common-dir:/home/cookys/projects/autopilot/.git', root: null, ladder: null, ...over,
+  count: 3, irreversible: 0, writers: ['depth0'], undocumented: 32, identity: 'git-common-dir:/home/ubuntu/projects/autopilot/.git', root: null, ladder: null, ...over,
 })
 const QC_NOT_NEEDED = { state: 'not_needed', range: '5a2706ad1111111111..HEAD', protected_files_count: 0, evidence: null }
 
@@ -203,7 +203,7 @@ test('I23 golden: the opened decision and the first opened seat equal the §5.3 
     '    hand/native worktrees, no WorktreeCreate takeover; rail worktrees',
     '    carry the repo slug; …). Owner did not answer within 60s; A is',
     '    reversible and the smallest surface.',
-    '  $ decision-ledger.js veto --ledger /home/cookys/projects/autopilot/.git/',
+    '  $ decision-ledger.js veto --ledger /home/ubuntu/projects/autopilot/.git/',
     '    autopilot/ledger/decisions.jsonl --id intent-17-1',
   ])
   expect(dec.slice(at, at + 7).map(l => l.kind)).toEqual(['bullet', 'detail', 'detail', 'detail', 'detail', 'command', 'command'])

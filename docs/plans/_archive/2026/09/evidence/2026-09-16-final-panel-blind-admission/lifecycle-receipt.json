@@ -2,7 +2,7 @@
   "schema_version": 1,
   "artifact_type": "lifecycle_residue_receipt",
   "issued_at": "2026-09-16T12:20:29.288Z",
-  "repo_identity": "git-common-dir:/home/cookys/projects/autopilot/.git",
+  "repo_identity": "git-common-dir:$HOME/projects/autopilot/.git",
   "root_run_id": "campaign-v1-ba5300dd81ef71eac178243333ecbb4bee3ed6efd12da03a0f844f28e954292c",
   "observed_head": "931b31b2d7ad5eb9f6b8096c0e88b332cda3f75b",
   "worktree_observation_digest": "fe8944cde8553934920ce646c8cb5dc45a54693125c9b92fa0c8501cfa38d58f",
@@ -15,7 +15,7 @@
       "name": "mission/5718ecd1e83c/final-panel-blind-admission-2026-09-16-a1",
       "tip": "c3eb31f6fbc2c48bd7ca47e1426a99ace161e3ce",
       "disposition": "reaped",
-      "bundle": "/home/cookys/projects/autopilot/.git/autopilot-reap-bundles/2026-09-16/reap-20260916T122020Z-780501.bundle",
+      "bundle": "$HOME/projects/autopilot/.git/autopilot-reap-bundles/2026-09-16/reap-20260916T122020Z-780501.bundle",
       "acknowledged": false
     }
   ],

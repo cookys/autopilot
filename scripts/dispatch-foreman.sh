@@ -195,7 +195,7 @@ fi
 
 # The cap: the same knob hooks/foreman-guard.js reads, resolved the same way, so a non-Claude
 # foreman and a Claude foreman share ONE ironlaw constant (design §4, "two implementations of
-# one ironlaw is the shape that produced 7840hs (4)").
+# one ironlaw is the shape that produced <host> (4)").
 resolve_tool_cap() {
   local cap=40 cfg="${AUTOPILOT_CONFIG_FILE:-$HOME/.autopilot/config.json}" v
   if [ -f "$cfg" ]; then

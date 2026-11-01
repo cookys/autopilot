@@ -3,7 +3,7 @@
 
 > **Trigger**: L/XL project completed (after `finishing-a-development-branch`)
 > **XS/S/M tasks do not use this flow** — S audit trail lives in `<projects_dir>/ongoing-maintenance/`
-> **Paths**: `<plans_dir>`, `<projects_dir>`, `<archive_dir>`, `<index>`, `<backlog>` below are the values of `bash scripts/resolve-project-paths.sh --field plans_dir|projects_dir|archive_dir|index|backlog`.
+> **Paths**: `<plans_dir>`, `<projects_dir>`, `<archive_dir>`, `<index>`, `<backlog>` below are the values of `bash scripts/resolve-project-paths.sh --field plans_dir|projects_dir|archive_dir|index|backlog` (directories without a trailing `/`).
 
 ## Eligibility Check (before archiving)
 

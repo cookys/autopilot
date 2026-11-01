@@ -211,6 +211,18 @@ eq "non-git target with the header: skipped" "none" "$(bash "$R" --target "$NG" 
 eq "no registry: bare repo still none" "none" "$(bash "$R" --target "$BARE" --field backlog)"
 eq "no registry: source is not registry" "none" "$(bash "$R" --target "$BARE" --field source)"
 
+# 8e. A consumer whose config writes a directory WITHOUT the trailing slash: the exact glob dev-flow
+#     step 5 tells the model to run (extracted from SKILL.md, not retyped) must still list the plan files.
+NS="$TMP/noslash"; mkdir -p "$NS/.claude" "$NS/doc/rfc"; git -C "$NS" init -q
+printf '## Project Paths\n- Plans directory: `doc/rfc`\n' > "$NS/.claude/project-lifecycle-config.md"
+: > "$NS/doc/rfc/2026-01-01-a.md"; ln -s "$REPO_ROOT/scripts" "$NS/scripts"
+eq "fixture: plans_dir really has no trailing slash" "doc/rfc" "$(bash "$R" --target "$NS" --field plans_dir)"
+DF_CMD="$(grep -m1 -o 'Draft plan overlap: `[^`]*`' "$REPO_ROOT/skills/dev-flow/SKILL.md" | sed -E 's/^[^`]*`//; s/`$//')"
+[ -n "$DF_CMD" ] && ok "extracted dev-flow draft-plan glob: $DF_CMD" || no "extracted dev-flow draft-plan glob" "a command" "empty"
+DF_OUT="$(cd "$NS" && bash -c "$DF_CMD" 2>&1)"; DF_RC=$?
+eq "dev-flow draft-plan glob exits 0 on a slash-less plans_dir" "0" "$DF_RC"
+eq "dev-flow draft-plan glob lists the plan file" "doc/rfc/2026-01-01-a.md" "$DF_OUT"
+
 # 7. Envelope.
 node -e 'JSON.parse(process.argv[1])' "$(bash "$R" --target "$REPO_ROOT")" \
   && ok "emitted JSON parses" || no "emitted JSON parses" "valid JSON" "unparseable"

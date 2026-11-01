@@ -2,7 +2,7 @@
 
 The home for **plan authoring** discipline. Internalized from superpowers' `writing-plans` as a *template*
 (not a skill — a plan form never triggers standalone; it is invoked by `research-to-ship` Phase 2 and
-`dev-flow` `plan` node). Output a plan to `<plans_dir>/<YYYY-MM-DD>-<slug>.md` (`<plans_dir>` from `bash scripts/resolve-project-paths.sh --field plans_dir`; real date from the environment —
+`dev-flow` `plan` node). Output a plan to `<plans_dir>/<YYYY-MM-DD>-<slug>.md` (`<plans_dir>` from `bash scripts/resolve-project-paths.sh --field plans_dir`, without a trailing `/`; real date from the environment —
 never invent one).
 
 **Step 0 — register it**: before any review, paste `node scripts/check-plan-graduation.js

@@ -134,7 +134,7 @@ decision-maker. M runs 1–5 at `plan`; L/XL bugs run 1–7 at `diagnose`.
 3. Knowledge: `.claude/knowledge/` for prior learnings; unprocessed session digests
 4. In-progress projects: the INDEX from `bash scripts/resolve-project-paths.sh --field index` — an active project for this work ⇒
    Context Continuation instead of a new walk
-5. Draft plan overlap: `ls "$(bash scripts/resolve-project-paths.sh --field plans_dir)"*.md`: same feature / module / user story ⇒
+5. Draft plan overlap: `d=$(bash scripts/resolve-project-paths.sh --field plans_dir); ls "${d%/}/"*.md`: same feature / module / user story ⇒
    normal mode asks the user whether to adopt the draft; CEO mode decides within DOA
 6. (L, XL) Goal in the project README (below), both parent tasks created, Scope Completeness Audit done
 7. (L, XL) Ladder probe run — always, even when nothing looks unknown; its `eligible_max` picks `research` or `proposal`
@@ -260,7 +260,7 @@ reply. No human available ⇒ take the recommended option and record it (Session
 | Size | Plan |
 |------|------|
 | M | Entry gates 1–5 (§ intent) first. In-session: unit list (one task each), the verify command, acceptance |
-| L, XL | User-provided plan ⇒ use it. Needs design ⇒ EnterPlanMode → design → ExitPlanMode → user approval. Write it to `<plans_dir>/YYYY-MM-DD-<feature-name>.md` (`<plans_dir>` is `bash scripts/resolve-project-paths.sh --field plans_dir`) per [references/plan-template.md](../../references/plan-template.md) and confirm it is on disk (`ls`) before `--to plan-review` — no code before it. Project setup is mandatory even with a user-provided plan: project directory, branch, project index (bootstrap commands per project config) |
+| L, XL | User-provided plan ⇒ use it. Needs design ⇒ EnterPlanMode → design → ExitPlanMode → user approval. Write it to `<plans_dir>/YYYY-MM-DD-<feature-name>.md` (`<plans_dir>` is `bash scripts/resolve-project-paths.sh --field plans_dir`, without a trailing `/`) per [references/plan-template.md](../../references/plan-template.md) and confirm it is on disk (`ls`) before `--to plan-review` — no code before it. Project setup is mandatory even with a user-provided plan: project directory, branch, project index (bootstrap commands per project config) |
 
 **Consult before design (L, XL; the ladder's U1 at this call site)**: `node scripts/probe-unknown.js classify
 --ledger <ledger> --work-unit <phase> --terms <dependency terms, as at intent>`; call `bash scripts/dispatch-consult.sh --question-file

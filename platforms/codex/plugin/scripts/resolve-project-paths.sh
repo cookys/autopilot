@@ -138,7 +138,7 @@ common_dir() {  # common_dir <dir> → realpath of its git common dir, or fail
 # this repo's worktrees (a gitfile or .git symlink pointing here does not make a foreign dir ours),
 # and the registry file is a real file (no symlink) physically under TARGET/scripts/lib/.
 same_repo() {
-  local a b w t lib real
+  local a b w t lib
   a="$(common_dir "$TARGET")" || return 1
   b="$(common_dir "$SCRIPT_DIR")" || return 1
   [[ -n "$a" && "$a" == "$b" ]] || return 1
@@ -152,8 +152,7 @@ same_repo() {
   [[ "$found" -eq 0 ]] || return 1
   [[ ! -L "$REG_FILE" ]] || return 1
   lib="$(cd "$t/scripts/lib" 2>/dev/null && pwd -P)" || return 1
-  real="$(readlink -f "$REG_FILE" 2>/dev/null)" || return 1
-  [[ "$lib" == "$t/scripts/lib" && "$real" == "$lib/"* ]]
+  [[ "$lib" == "$t/scripts/lib" ]]
 }
 if [[ -z "$PROJECTS" || -z "$PLANS" || -z "$ARCHIVE" || -z "$BACKLOG" || -z "$INDEX" ]] \
    && [[ -f "$REG_FILE" ]] && same_repo && [[ "$(head -c 800 "$REG_FILE")" == *'the one registry of where things live'* ]]; then

@@ -3,7 +3,7 @@
 
 > **Trigger**: L/XL project after ExitPlanMode, or after user approves a plan
 > **Input**: Plan file (from system-reminder path or `<plans_dir>`)
-> **Paths**: `<plans_dir>`, `<projects_dir>`, `<index>` below are the values of `bash scripts/resolve-project-paths.sh --field plans_dir|projects_dir|index`.
+> **Paths**: `<plans_dir>`, `<projects_dir>`, `<index>` below are the values of `bash scripts/resolve-project-paths.sh --field plans_dir|projects_dir|index`, without a trailing `/`.
 
 ## Step 0: Draft Plan Overlap Check
 

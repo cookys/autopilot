@@ -124,7 +124,7 @@ The order below is what the rails actually accept; every step that cost a grant 
 done differently is marked. Paths are this repo's; a consumer substitutes its own.
 
 0. **Generator** (steps 1-3 and 5 mechanical parts): once the plan is written and committed,
-   (`<plans_dir>` is `bash scripts/resolve-project-paths.sh --field plans_dir`) `node scripts/scaffold-mission.js --plan <plans_dir>/<stem>.md --output-path <p>... [--create <p>...]
+   (`<plans_dir>` is `bash scripts/resolve-project-paths.sh --field plans_dir`, without a trailing `/`) `node scripts/scaffold-mission.js --plan <plans_dir>/<stem>.md --output-path <p>... [--create <p>...]
    --verify-cmd <cmd>...` writes the rubric (when absent), sources manifest, one-node graph (codex
    mirrors added, verify commands pre-checked for the intake argv shape; when `--required-change-path`
    is set, `node scripts/affected-suites.js --run --files` for those paths is appended unless
@@ -275,7 +275,7 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     line drifts the frozen source sha and every `session-mode set` is refused until routing is
     rolled back to a completed graph whose sources still match plus `mission-terminal-reconcile.js
     legacy` (2026-09-15). Then run `node scripts/check-plan-graduation.js --fix` — the plan
-    graduates to `docs/plans/_archive/<YYYY>/<MM>/` (dated, from the stem's own date) once its slug
+    graduates to `<plans_dir>/_archive/<YYYY>/<MM>/` (dated, from the stem's own date) once its slug
     lands in a released CHANGELOG section, its INDEX row flips `active` → the released version, and
     any BACKLOG row this campaign's plan now supersedes is deleted in the same pass.
     When the rail stops, degrade per the documented fallback

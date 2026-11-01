@@ -232,12 +232,16 @@ ln -s real/final.txt "$C/sbchain/l1"
 for n in $(seq 2 41); do ln -s "l$((n-1))" "$C/sbchain/l$n"; done
 ln -s . "$C/sbdot"
 G add -A; G commit -qm "synthetic chains"; B2="$(G rev-parse HEAD)"
+# a chain longer than the kernel's 40 follows is refused loudly (git checkouts cannot resolve it either); 40 follows still work
 synth "sbchain/l41" "$T/synth41.json"
-rcis 0 "41-link symlink chain: generator runs" node "$SB" build-no-rewrite --root "$C" --baseline "$T/synth41.json" --out "$T/nr41.json"
-node -e 'const s=new Set(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).entries.map(e=>e.path));process.exit(s.has("sbchain/real/final.txt")&&s.has("sbchain/l41")&&s.has("sbchain/l1")?0:1)' "$T/nr41.json" && ok || bad "41-link chain: every link and the final file are listed"
-rcis 0 "41-link chain untouched -> check-rewrite green" node "$SB" check-rewrite --root "$C" --range "$B2..$B2" --no-rewrite "$T/nr41.json"
+rcis 2 "41-link symlink chain: generator refuses (rc=2)" node "$SB" build-no-rewrite --root "$C" --baseline "$T/synth41.json" --out "$T/nr41.json"
+grep -q "chain longer than 40" "$T/err" && ok || bad "41-link chain: message names the 40-follow limit (stderr: $(head -2 "$T/err"))"
+synth "sbchain/l40" "$T/synth40.json"
+rcis 0 "40-link symlink chain: generator runs" node "$SB" build-no-rewrite --root "$C" --baseline "$T/synth40.json" --out "$T/nr41.json"
+node -e 'const s=new Set(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).entries.map(e=>e.path));process.exit(s.has("sbchain/real/final.txt")&&s.has("sbchain/l40")&&s.has("sbchain/l1")?0:1)' "$T/nr41.json" && ok || bad "40-link chain: every link and the final file are listed"
+rcis 0 "40-link chain untouched -> check-rewrite green" node "$SB" check-rewrite --root "$C" --range "$B2..$B2" --no-rewrite "$T/nr41.json"
 printf 'x' >> "$C/sbchain/real/final.txt"; G commit -qam "edit final"
-rcis 1 "41-link chain: the final file edited -> check-rewrite red" node "$SB" check-rewrite --root "$C" --range "$B2..HEAD" --no-rewrite "$T/nr41.json"
+rcis 1 "40-link chain: the final file edited -> check-rewrite red" node "$SB" check-rewrite --root "$C" --range "$B2..HEAD" --no-rewrite "$T/nr41.json"
 has "names the final file" "sbchain/real/final.txt: bytes changed"
 G reset -q --hard "$B2"
 synth "sbdot/sbdotfinal/final.txt" "$T/synthdot.json"
@@ -257,6 +261,20 @@ synth "sbchain/cyc-a/x" "$T/synthcyc.json"
 rcis 2 "symlink cycle: generator fails" node "$SB" build-no-rewrite --root "$C" --baseline "$T/synthcyc.json" --out "$T/nrcyc.json"
 grep -q "symlink cycle" "$T/err" && ok || bad "says it is a cycle (stderr: $(head -2 "$T/err"))"
 G reset -q --hard "$B2"; G clean -qfd
+# cycles whose remainder keeps growing must still end (and fast)
+ln -s dd/x "$C/sbchain/dd"; ln -s bb/x "$C/sbchain/aa"; ln -s aa/y "$C/sbchain/bb"; G add -A
+synth "sbchain/dd" "$T/synthdd.json"
+rcis 2 "growing cycle d -> d/x: generator ends with rc=2 (not a hang)" timeout 30 node "$SB" build-no-rewrite --root "$C" --baseline "$T/synthdd.json" --out "$T/nrdd.json"
+grep -q "chain longer than 40" "$T/err" && ok || bad "d -> d/x names the limit (stderr: $(head -2 "$T/err"))"
+synth "sbchain/aa" "$T/synthaa.json"
+rcis 2 "growing cycle a -> b/x, b -> a/y: generator ends with rc=2" timeout 30 node "$SB" build-no-rewrite --root "$C" --baseline "$T/synthaa.json" --out "$T/nraa.json"
+# cv3 link probes: up / absolute / outside links are not followed out of the repo; a cycle fails
+mkdir -p "$C/linktest"; echo data > "$C/linktest/final"; ln -s .. "$C/linktest/up"; ln -s /tmp/outside "$C/linktest/absolute"; ln -s ../../outside "$C/linktest/outside"; ln -s cb "$C/linktest/ca"; ln -s ca "$C/linktest/cb"; G add -A
+for pair in 'up/linktest/final:0' absolute:0 outside:0 ca:2; do
+  synth "linktest/${pair%%:*}" "$T/lk.json"
+  rcis "${pair##*:}" "link probe linktest/${pair%%:*}" timeout 30 node "$SB" build-no-rewrite --root "$C" --baseline "$T/lk.json" --out "$T/lk-out.json"
+done
+G reset -q --hard "$B2"; G clean -qfd
 G reset -q --hard "$BASE"
 
 # swap (A->B, B->A) and shift (A->B, C->A) layout-maps over listed files
@@ -274,6 +292,68 @@ rcis 1 "the same shift with only the first map entry -> red" node "$SB" check-re
 printf 'x' >> "$C/evals/shifted/a.md"; G commit -qam "shift+edit"
 rcis 1 "shift, then the moved file edited -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/shift.json"
 G reset -q --hard "$BASE"
+
+# ---- round 4: the swap/shift exemption only covers verified moves (cv3 attacks)
+DD=evals/consult-eval-rubric.seal.json
+cp "$C/$A" "$C/evals/copy-new.md"; printf x >> "$C/$A"; G add -A; G commit -qm fake-shift
+printf '{"%s":"evals/copy-new.md","evals/nonexistent.md":"%s"}\n' "$A" "$A" > "$T/fake.json"
+rcis 1 "fake shift (nonexistent C -> A, A edited after copying it away) -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/fake.json"
+G reset -q --hard "$BASE"; G clean -qfd
+# C exists but is not a listed file: the exemption does not apply
+mkdir -p "$C/evals/x"; echo unlisted > "$C/evals/x/unlisted.md"; G add -A; G commit -qm unlisted; BU="$(G rev-parse HEAD)"
+cp "$C/$A" "$C/evals/copy-new.md"; cp "$C/evals/x/unlisted.md" "$C/$A"; G add -A; G commit -qm "shift from unlisted"
+printf '{"%s":"evals/copy-new.md","evals/x/unlisted.md":"%s"}\n' "$A" "$A" > "$T/shift-unlisted.json"
+rcis 1 "shift whose source C exists but is not listed -> red" node "$SB" check-rewrite --root "$C" --range "$BU..HEAD" --layout-map "$T/shift-unlisted.json"
+G reset -q --hard "$BASE"; G clean -qfd
+# C is listed but the bytes now at A are not C's
+cp "$C/$A" "$C/evals/copy-new.md"; printf 'not C' > "$C/$A"; G add -A; G commit -qm "shift wrong bytes"
+printf '{"%s":"evals/copy-new.md","%s":"%s"}\n' "$A" "$B" "$A" > "$T/shift-wrong.json"
+rcis 1 "shift whose source C is listed but A holds other bytes -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/shift-wrong.json"
+G reset -q --hard "$BASE"; G clean -qfd
+# half swap, self map, three-cycle with an edit, collision (cv3 / cv2 probes)
+cp "$C/$A" "$C/$B"; G commit -qam half-swap
+rcis 1 "half swap (B overwritten with A, A unchanged) -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/swap.json"
+G reset -q --hard "$BASE"
+printf x >> "$C/$A"; G commit -qam identity-edit
+printf '{"%s":"%s"}\n' "$A" "$A" > "$T/self.json"
+rcis 1 "self map with an edit -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/self.json"
+G reset -q --hard "$BASE"
+cp "$C/$A" "$T/a0"; cp "$C/$B" "$C/$A"; cp "$C/$DD" "$C/$B"; cp "$T/a0" "$C/$DD"; printf x >> "$C/$DD"; G commit -qam cycle-edit
+printf '{"%s":"%s","%s":"%s","%s":"%s"}\n' "$A" "$DD" "$DD" "$B" "$B" "$A" > "$T/three.json"
+rcis 1 "three-cycle then an edit -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/three.json"
+G reset -q --hard "$BASE"
+mkdir -p "$C/evals/moved"; cp "$C/$A" "$C/evals/moved/common"; printf x >> "$C/$A"; G add -A; G commit -qm collision
+printf '{"%s":"evals/moved/common","%s":"evals/moved/common"}\n' "$A" "$DD" > "$T/collision.json"
+rcis 1 "two sources onto one destination -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/collision.json"
+G reset -q --hard "$BASE"; G clean -qfd
+G mv "$A" evals/moved-a.md; printf x >> "$C/$DD"; G commit -qam partial
+printf '{"evals/":"evals/moved/"}\n' > "$T/prefix.json"
+rcis 1 "directory-prefix map that does not match what moved -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/prefix.json"
+G reset -q --hard "$BASE"; G clean -qfd
+# compare: the fake shift on objects
+RB=docs/plans/evidence/2026-10-16-strict-l5-policy-refresh/platform-capabilities.json
+mkdir -p "$C/evidence/q"; cp "$C/$RB" "$C/evidence/q/platform-capabilities.json"; printf ' ' >> "$C/$RB"; G add -A
+rec "$T/cur.json"
+printf '{"%s":"evidence/q/platform-capabilities.json","docs/plans/evidence/nonexistent/platform-capabilities.json":"%s"}\n' "$RB" "$RB" > "$T/cfake.json"
+rcis 1 "compare: fake shift of an object (nonexistent source, original edited) -> red" cmpr --layout-map "$T/cfake.json"
+reset
+
+# compare: a shift of whole objects is verified as a group (status, diagnostics, every file fingerprint after the map)
+H1=1111111111111111111111111111111111111111111111111111111111111111; H2=2222222222222222222222222222222222222222222222222222222222222222
+H3=3333333333333333333333333333333333333333333333333333333333333333; H4=4444444444444444444444444444444444444444444444444444444444444444
+objs() { printf '{"schema":1,"tool":"seal-baseline","objects":{%s}}\n' "$1"; }
+ob() { printf '"%s":{"category":"t","status":"green","diagnostics":{},"files":{%s}}' "$1" "$2"; }
+objs "$(ob a/obj "\"a/obj\":\"$H1\"")","$(ob b/obj "\"b/obj\":\"$H3\",\"b/ref\":\"$H4\"")" > "$T/gb.json"
+printf '{"a/obj":"c/obj","b/obj":"a/obj","b/ref":"a/ref"}\n' > "$T/gmap.json"
+gcmp() { node "$SB" compare --baseline "$T/gb.json" --current "$T/gc.json" --layout-map "$T/gmap.json"; }
+objs "$(ob c/obj "\"c/obj\":\"$H1\"")","$(ob a/obj "\"a/obj\":\"$H3\",\"a/ref\":\"$H4\"")" > "$T/gc.json"
+rcis 0 "compare: legit shift of whole objects (main file and reference both moved) -> green" gcmp
+objs "$(ob c/obj "\"c/obj\":\"$H1\"")","$(ob a/obj "\"a/obj\":\"$H3\",\"b/ref\":\"$H4\"")" > "$T/gc.json"
+rcis 1 "compare: shift moves only the main file, the reference stays at the old path -> red" gcmp
+objs "$(ob c/obj "\"c/obj\":\"$H1\"")","$(ob a/obj "\"a/obj\":\"$H3\",\"a/ref\":\"$H2\"")" > "$T/gc.json"
+rcis 1 "compare: shift where one reference file's bytes changed -> red" gcmp
+objs "$(ob c/obj "\"c/obj\":\"$H1\"")","$(ob a/obj "\"a/obj\":\"$H2\",\"a/ref\":\"$H4\"")" > "$T/gc.json"
+rcis 1 "compare: shift where the main file's bytes changed -> red" gcmp
 
 # ---- input errors
 rcis 2 "no subcommand" node "$SB"

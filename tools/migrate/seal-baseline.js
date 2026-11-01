@@ -94,9 +94,7 @@ function makeMapper(map) {
     if (v && typeof v === 'object') { const r = {}; for (const k of Object.keys(v)) r[mapText(k)] = mapDeep(v[k]); return r; }
     return v;
   };
-  const destValues = new Set(Object.values(map));
-  const isDest = (p) => destValues.has(p) || dirKeys.some((k) => p.startsWith(map[k]));
-  return { mapPath, mapId, mapText, mapDeep, isDest };
+  return { mapPath, mapId, mapText, mapDeep };
 }
 
 // ------------------------------------------------------------------ repo access
@@ -321,12 +319,18 @@ function compareRecords(base, cur, M, declared) {
   const decl = new Map(); const used = new Set();
   for (const d of declared) { if (decl.has(d.object)) throw new InputError(`two declarations for ${d.object}`); decl.set(d.object, d); }
   const seenNew = new Set();
+  // an old id / old file path that is itself the target of another map entry is exempt only when what is there now is
+  // exactly the mapped baseline content of that other entry (a verified move into it)
+  const movedInto = (oldId) => Object.keys(base.objects).some((cid) => cid !== oldId && M.mapId(cid) === oldId && sameObject(base.objects[cid], cur.objects[oldId]));
+  const sameObject = (bo, co) => bo.status === co.status && canon(M.mapDeep(bo.diagnostics)) === canon(co.diagnostics)
+    && canon(Object.fromEntries(Object.entries(bo.files || {}).map(([f, h]) => [M.mapPath(f), h]))) === canon(co.files || {});
+  const fileMovedInto = (f, b, c) => Object.keys(b.files || {}).some((cf) => cf !== f && M.mapPath(cf) === f && b.files[cf] === (c.files || {})[f]);
   for (const baseId of Object.keys(base.objects)) {
     const b = base.objects[baseId]; const id = M.mapId(baseId);
     if (seenNew.has(id)) throw new InputError(`layout-map sends two baseline objects to ${id}`);
     seenNew.add(id);
     const c = cur.objects[id];
-    if (c && id !== baseId && !M.isDest(baseId) && cur.objects[baseId]) diffs.push(`object still present at its old path ${baseId} although the layout-map moves it to ${id}`);
+    if (c && id !== baseId && cur.objects[baseId] && !movedInto(baseId)) diffs.push(`object still present at its old path ${baseId} although the layout-map moves it to ${id}`);
     if (!c) { diffs.push(`object gone: ${baseId}${id !== baseId ? ` (expected as ${id})` : ''}`); continue; }
     const d = decl.get(id); if (d) used.add(id);
     const turnedGreen = b.status === 'red' && c.status === 'green';
@@ -349,7 +353,7 @@ function compareRecords(base, cur, M, declared) {
       const short = (x) => (x === undefined ? 'absent' : x === null ? 'missing' : x.slice(0, 12));
       diffs.push(`fingerprint changed: ${id} :: ${f} (${short(bs)} -> ${short(cs)})`);
     }
-    for (const f of Object.keys(b.files || {})) if (M.mapPath(f) !== f && !M.isDest(f) && (c.files || {})[f]) diffs.push(`moved file still referenced and present at its old path: ${id} :: ${f}`);
+    for (const f of Object.keys(b.files || {})) if (M.mapPath(f) !== f && (c.files || {})[f] && !fileMovedInto(f, b, c)) diffs.push(`moved file still referenced and present at its old path: ${id} :: ${f}`);
     if (d && !changed) diffs.push(`stale declaration (the object did not change): ${id}`);
     for (const f of Object.keys(declFiles)) if (!declUsed.has(f)) diffs.push(`declared file change did not happen as stated: ${id} :: ${f}`);
   }
@@ -414,7 +418,10 @@ function cmdCheckRewrite(o) {
     const origHead = movedPaths.length ? blobShas(root, m[2], movedPaths) : new Map();
     for (const e of list.entries) {
       const hp = M.mapPath(e.path); const hs = headSha.get(hp);
-      if (hp !== e.path && !M.isDest(e.path) && origHead.get(e.path) !== null) { diffs.push(`${e.path}: still present at ${m[2]} although the layout-map moves it to ${hp} (a copy, not a move)`); continue; }
+      // a listed path that a map entry fills may keep a file at head only if that file is exactly a verified move into it:
+      // the source is listed, exists at the base, and the bytes now at this path equal the source's listed sha256
+      const filledByMove = list.entries.some((c) => c.path !== e.path && M.mapPath(c.path) === e.path && baseSha.get(c.path) !== null && origHead.get(e.path) === c.sha256);
+      if (hp !== e.path && !filledByMove && origHead.get(e.path) !== null) { diffs.push(`${e.path}: still present at ${m[2]} although the layout-map moves it to ${hp} (a copy, not a move)`); continue; }
       if (hs === null) { diffs.push(`${e.path}: absent at ${m[2]}${hp !== e.path ? ` as ${hp}` : ''} (renamed without a layout-map entry, or deleted)`); continue; }
       if (hs !== e.sha256) diffs.push(`${hp}: bytes changed (listed ${e.sha256.slice(0, 12)}, now ${hs.slice(0, 12)}${baseSha.get(e.path) === hs ? '; the listing itself is stale at the base' : '; modified inside the range'})`);
     }
@@ -446,15 +453,14 @@ function cmdBuildNoRewrite(o) {
   // a referenced path that runs through tracked symlinks (an ancestor directory or the file itself) is protected as the
   // symlink blobs plus the file they finally resolve to, following links to links
   const chainPaths = (f) => {
-    const out = []; let parts = f.split('/'); let cur = ''; const seen = new Set();
+    const out = []; let parts = f.split('/'); let cur = ''; let follows = 0;
     for (let i = 0; i < parts.length; i++) {
       cur = cur ? `${cur}/${parts[i]}` : parts[i];
       if (!links.has(cur)) continue;
       out.push(cur);
       const rest = parts.slice(i + 1);
-      const key = `${cur}|${rest.join('/')}`; // same link reached with the same remainder twice = a cycle
-      if (seen.has(key)) throw new InputError(`symlink cycle through ${cur} while resolving ${f}`);
-      seen.add(key);
+      // the kernel gives up (ELOOP) after 40 symlink follows while resolving one path; so does this walk, loudly
+      if (++follows > 40) throw new InputError(`symlink cycle or chain longer than 40 while resolving ${f} (at ${cur})`);
       let link;
       try { link = fs.readlinkSync(path.join(root, cur)); } catch (e) { throw new InputError(`cannot read symlink ${cur}: ${e.code || e.message}`); }
       // a link to "." (or any ./x) joins to "./rest": normalize so it matches the tracked name

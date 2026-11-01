@@ -478,4 +478,20 @@ assert_not_contains "$OUT" "src/z.txt" "stale merge: the legitimate revert's own
 OUT="$(rguard "$BASE..HEAD")"; assert_eq "$?" "1" "anchor in range: a cleanup commit that is itself in the range gives no allowance (red)"
 back_to_master
 
+# ── review round 5: restore through a revert, then rename the file, stays blocked ──
+reset_stage; git -C "$R" checkout -q -B rv "$BASE"
+{ for i in 1 2 3 4 5 6 7 8; do echo "stable line number $i of the file"; done; printf 'legacy %s/x\n' "$PERSONAL"; } > "$R/src/big.txt"
+git -C "$R" add -A; git -C "$R" commit -q -m "add big"
+{ for i in 1 2 3 4 5 6 7 8; do echo "stable line number $i of the file"; done; echo "legacy clean line"; } > "$R/src/big.txt"
+git -C "$R" commit -q -am "redact big"; A="$(git -C "$R" rev-parse HEAD)"
+git -C "$R" revert --no-edit "$A" >/dev/null 2>&1; add_trailer "$A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "revert then rename: the plain revert is green"
+git -C "$R" mv src/big.txt src/big3.txt; git -C "$R" commit -q -m "rename after the revert"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert then rename: the restored line under the new name is red"
+assert_contains "$OUT" "src/big3.txt:9" "revert then rename: names the renamed file"
+# many findings in one file are attributed by a single blame call per file
+{ for i in $(seq 1 40); do printf 'row %s %s/q\n' "$i" "$PERSONAL"; done; } > "$R/src/many.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "many rows"
+OUT="$(rguard "$A..HEAD")"; assert_contains "$OUT" "src/many.txt:40" "many findings: every flagged line of a file is still reported"
+back_to_master
+
 finalize_test

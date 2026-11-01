@@ -227,12 +227,22 @@ function revertCandidates(root, o, head) {
   return cands;
 }
 
-/** The commit that introduced a line of the file as it stands at head ('' when blame cannot say). */
-function blameCommit(root, head, file, line) {
-  const r = spawnSync('git', ['blame', '-l', '--porcelain', '-L', `${line},${line}`, head, '--', file], { cwd: root, encoding: 'utf8' });
-  if (r.status !== 0) return '';
-  const m = (r.stdout || '').match(/^([0-9a-f]{40}) /);
-  return m ? m[1] : '';
+/**
+ * Line number -> commit that introduced it, for the given lines of a file as it stands at head: ONE blame
+ * call per file (several -L ranges, or the whole file when there are many lines). Missing lines map to ''.
+ */
+function blameFile(root, head, file, lines) {
+  const args = ['blame', '-l', '--porcelain'];
+  if (lines.length <= 500) for (const n of lines) args.push('-L', `${n},${n}`);
+  args.push(head, '--', file);
+  const r = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 1024 * 1024 * 1024 });
+  const map = new Map();
+  if (r.status !== 0) return map;
+  for (const l of (r.stdout || '').split('\n')) {
+    const m = l.match(/^([0-9a-f]{40}) \d+ (\d+)(?: \d+)?$/);
+    if (m) map.set(parseInt(m[2], 10), m[1]);
+  }
+  return map;
 }
 
 /**
@@ -276,11 +286,19 @@ function applyRevertAllowance(root, o, findings, texts) {
   }
   const covered = new Set();
   const tried = new Set();
+  const wanted = new Map(); // file -> flagged line numbers
+  for (const f of findings) {
+    if (f.category === 'env_file' || !f.line) continue;
+    if (!wanted.has(f.file)) wanted.set(f.file, new Set());
+    wanted.get(f.file).add(f.line);
+  }
+  const blamed = new Map();
+  for (const [file, set] of wanted) blamed.set(file, blameFile(root, head, file, [...set].sort((x, y) => x - y)));
   for (const f of findings) {
     const lk = `${f.file}\0${f.line}`;
     if (f.category === 'env_file' || !f.line || tried.has(lk)) continue;
     tried.add(lk);
-    const who = blameCommit(root, head, f.file, f.line);
+    const who = (blamed.get(f.file) || new Map()).get(f.line) || '';
     const own = grants.get(who);
     if (!own) continue;
     const k = `${f.file}\0${texts.get(lk)}`;

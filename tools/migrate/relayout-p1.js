@@ -733,7 +733,7 @@ function applyCtx(root, o, phase) {
 function cmdApply(o) {
   const root = resolveRoot(o);
   const phase = o.phase;
-  if (!['rename', 'refs-code', 'refs-docs', 'content'].includes(phase)) throw new InputError('apply --phase must be rename|refs-code|refs-docs|content (profiles repin, mirror regeneration and the no-rewrite.json path update are separate steps)');
+  if (!['rename', 'refs-code', 'refs-docs', 'content', 'no-rewrite'].includes(phase)) throw new InputError('apply --phase must be rename|refs-code|refs-docs|content|no-rewrite (profiles repin and mirror regeneration are separate steps: profiles-hash-repin skill, scripts/sync-all.sh)');
   const { P, sealedOld, refMap } = applyCtx(root, o, phase);
   if (P.problems.length) throw new InputError('plan has problems: ' + P.problems.join('; '));
   const git = (...a) => cp.execFileSync('git', ['-C', root, ...a], { encoding: 'utf8', maxBuffer: 256 << 20, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -751,6 +751,13 @@ function cmdApply(o) {
     // destinations that .gitignore matches (e.g. */tree/events.jsonl) were tracked before: add them explicitly or the rename becomes a delete
     cp.execFileSync('git', ['-C', root, 'add', '-f', '--pathspec-from-file=-', '--pathspec-file-nul'], { input: Object.values(P.map).join('\0') + '\0', maxBuffer: 64 << 20 });
     log.renamed = Object.keys(P.map).length;
+  } else if (phase === 'no-rewrite') {
+    // path fields follow the layout-map; sha256 values and everything else stay byte for byte
+    const f = path.join(root, 'tools/migrate/no-rewrite.json');
+    let n = 0;
+    const text = fs.readFileSync(f, 'utf8').replace(/("path":\s*")([^"]+)(")/g, (m, a, p, b) => { if (!P.map[p]) return m; n++; return a + P.map[p] + b; });
+    fs.writeFileSync(f, text);
+    log.paths_updated = n;
   } else if (phase === 'content') {
     const T = path.join(root, P.merge.target); const A = path.join(root, P.merge.absorbed_new);
     const first = fs.readFileSync(path.join(root, P.merge.target), 'utf8'); const second = fs.readFileSync(A, 'utf8');
@@ -759,11 +766,10 @@ function cmdApply(o) {
       const body = `# HANDOFF\n\n> Two live handoff documents were merged here (3.0.0 relayout P1). Each keeps its original text verbatim under its own heading; the originals are in git history.\n\n## A. Operator-pin work (was docs/HANDOFF.md)\n\n${fence(0, 'docs/HANDOFF.md')}\n${first.replace(/\s+$/, '')}\n\n## B. Ongoing maintenance (was docs/projects/ongoing-maintenance/HANDOFF.md)\n\n${fence(0, P.merge.absorbed_old)}\n${second.replace(/\s+$/, '')}\n`;
       fs.writeFileSync(T, body);
     }
-    git('rm', '-q', '-f', P.merge.absorbed_new);
+    fs.rmSync(A, { force: true }); // plain file operations: apply never touches the index after the rename phase
     const readme = path.join(root, 'docs/README.md');
     fs.writeFileSync(readme, DOCS_README);
-    for (const f of Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete')) git('rm', '-q', '-f', f);
-    git('add', '-A', 'docs', 'project');
+    for (const f of Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete')) fs.rmSync(path.join(root, f), { force: true });
     log.merged = [P.merge.target, P.merge.absorbed_old]; log.created = ['docs/README.md']; log.deleted = Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete');
   } else {
     Object.assign(log, rewriteRefs(root, P, sealedOld, refMap, phase));
@@ -783,6 +789,8 @@ const DOCS_README = `# autopilot documentation
 Work records are not documentation and live outside this directory: plans, projects, backlog, missions and handoff are under [../project/](../project/).
 `;
 
+const isTestFile = (f) => /\.test\.(js|cjs|mjs|ts|tsx|sh|py)$/.test(f) || /^(hooks|scripts)\/tests\//.test(f);
+const GENERIC_KEYS = new Set(['docs/BACKLOG.md', 'docs/projects/INDEX.md']);
 function rewriteRefs(root, P, sealedOld, refMap, phase) {
   const inv = {}; for (const [a, b] of Object.entries(P.map)) inv[b] = a;
   const skipPrefix = ['docs/plans/evidence/', 'profiles/', 'platforms/', '.opencode/plugin-package/', 'tools/migrate/relayout-p1.js', 'hooks/tests/relayout-p1.test.sh'];
@@ -792,7 +800,7 @@ function rewriteRefs(root, P, sealedOld, refMap, phase) {
   const oldTracked = new Set(files.map((f) => inv[f] || f));
   const tok = /docs\/[A-Za-z0-9_@.+\/-]+/g;
   const dirForm = /^docs\/(plans|projects|backlog|adr|upstream-bugs)(\/|$)|^docs\/mission-/;
-  const st = { files_changed: 0, token_replacements: 0, link_rewrites: 0, skipped_sealed: 0, skipped_excluded: 0, skipped_binary_or_large: 0, skipped_embedded: 0 };
+  const st = { skipped_generic_convention: 0, files_changed: 0, token_replacements: 0, link_rewrites: 0, skipped_sealed: 0, skipped_excluded: 0, skipped_binary_or_large: 0, skipped_embedded: 0 };
   const embedded = []; const dirHits = {}; const changed = [];
   for (const f of files) {
     if (docsSide(f) !== (phase === 'refs-docs')) continue;
@@ -821,13 +829,18 @@ function rewriteRefs(root, P, sealedOld, refMap, phase) {
     // 2. full repo-relative paths that are exact layout-map keys
     text = text.replace(tok, (m, idx, whole) => {
       const t = m.replace(/[.,;:)\]-]+$/, ''); const tail = m.slice(t.length);
-      const to = refMap[t];
+      let to = refMap[t];
+      // consumer-facing guidance (skills, references, agents, config templates) names docs/BACKLOG.md and docs/projects/INDEX.md as the
+      // CONVENTION of whatever repo it runs in, not this repo's own layout: those two generic keys are left alone there (reported)
+      if (to && GENERIC_KEYS.has(t) && /^(skills|references|agents|project-config-template)\//.test(f)) { st.skipped_generic_convention++; to = null; }
       if (!to) { if (dirForm.test(t) && !t.startsWith('docs/plans/evidence')) { const g = (/^docs\/[^/]+/.exec(t) || [''])[0]; (dirHits[g] = dirHits[g] || { count: 0, sample: [] }).count++; if (dirHits[g].sample.length < 5) dirHits[g].sample.push(`${f}: ${t}`); } return m; }
       const prev = whole[idx - 1];
       if (prev !== undefined && /[A-Za-z0-9_.-]/.test(prev)) { st.skipped_embedded++; return m; }
       if (prev === '/') {
         const before = whole.slice(Math.max(0, idx - 40), idx - 1);
-        const ok = whole.slice(idx - 3, idx) === '../' || /[}"')]$/.test(before) || /\$[A-Za-z_]+$/.test(before);
+        // in a test file a "$d/docs/..." or "$R/docs/..." path is a mktemp fixture tree, not this repo: only the repo-root variables count
+        const repoVar = /\$\{?(REPO_ROOT|REPO|ROOT|AUTOPILOT_ROOT|SELF_DIR\/\.\.|HOOKS_DIR\/\.\.)\}?$/.test(before);
+        const ok = whole.slice(idx - 3, idx) === '../' || repoVar || (!isTestFile(f) && (/[}"')]$/.test(before) || /\$[A-Za-z_]+$/.test(before)));
         if (!ok) { st.skipped_embedded++; if (embedded.length < 20) embedded.push(`${f}: ${whole.slice(Math.max(0, idx - 30), idx + t.length)}`); return m; }
       }
       st.token_replacements++;

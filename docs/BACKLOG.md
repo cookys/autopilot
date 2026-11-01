@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0366 -->
+<!-- next-id: BL-0369 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -13,6 +13,45 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`<host>` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
+
+### develop 上四支測試套件在 base 就是紅的
+- **Id**: BL-0366
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: self
+- **Problem**: 四支測試套件在主線的基準點就失敗，不在已知紅名單裡，也不知道從哪個提交開始紅；驗收時在基準與修改後各跑一次，失敗相同。
+- **Impact**: 完整套件跑出紅燈，真正的新壞掉會被這四支蓋住。
+- **Trigger**: next touch of runs-watch, the status CLI or the review rail, or the full-suite run before the 3.0.0 release
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: sealbase acceptance runs cv1 and cv2, 2026-11-01
+- **Pointer**: docs/backlog/four-suites-red-on-develop-base.md
+
+### 專案路徑解析的後續兩點
+- **Id**: BL-0367
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: self
+- **Problem**: 專案根目錄預設取目前所在目錄，在子目錄執行檢查會失敗而且訊息沒說用了哪個根；另有一個測試的讀取計數在走正規路徑時會漏算。
+- **Impact**: 使用者在子目錄執行會看到不明原因的失敗；漏算的計數讓測試可能假綠。
+- **Trigger**: next edit to graph-check, graduation or doc-drift-gate, or a report of a failure caused by running from a subdirectory
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: planpath acceptance, 3b39f9077, 2026-11-01
+- **Pointer**: docs/backlog/planpath-follow-ups.md
+
+### 封存基準檢查在搬檔時太慢
+- **Id**: BL-0368
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: self
+- **Problem**: 封存基準的改寫檢查對每筆清單條目都重掃全部約四千六百筆，一次檢查要算約兩千一百萬次路徑對應；結果正確但很慢。
+- **Impact**: 搬檔階段每次跑檢查都要等很久。
+- **Trigger**: P1 file-move lane uses check-rewrite and finds it slow
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: sealbase review, 6b31d2a67, 2026-11-01
+- **Pointer**: docs/backlog/seal-baseline-filledbymove-slow.md
 
 ### live pane 在來源沒變時仍顯示「資料過舊」
 - **Id**: BL-0365

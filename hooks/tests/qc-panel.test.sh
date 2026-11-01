@@ -590,13 +590,14 @@ fi
 QC_SBX="$TEST_TMP/qc-namespace"
 mkdir -p "$QC_SBX/scripts"
 cp "$SCRIPT" "$QC_SBX/scripts/qc-panel.js"
-mkdir -p "$QC_SBX/scripts/lib" && cp "$REPO_ROOT/scripts/lib/agy-stream-json.js" "$QC_SBX/scripts/lib/"   # qc-panel.js requires the shared agy transport
+mkdir -p "$QC_SBX/scripts/lib" && cp "$REPO_ROOT/scripts/lib/agy-stream-json.js" "$REPO_ROOT/scripts/lib/repo-layout.js" "$QC_SBX/scripts/lib/"   # qc-panel.js requires the shared agy transport
 NS1="$(cd "$QC_SBX" && node "$QC_SBX/scripts/qc-panel.js" \
   --report "$NULL_REPORT" --artifacts "$ARTIFACT" --proj sameproj --node node-a 2>"$TEST_TMP/ns1.err")"
 NS2="$(cd "$QC_SBX" && node "$QC_SBX/scripts/qc-panel.js" \
   --report "$NULL_REPORT" --artifacts "$ARTIFACT" --proj sameproj --node node-b 2>"$TEST_TMP/ns2.err")"
-DIR_A="$QC_SBX/docs/projects/sameproj/tree/panel/node-a"
-DIR_B="$QC_SBX/docs/projects/sameproj/tree/panel/node-b"
+QC_PROJ="$(layout_path projects_dir)"
+DIR_A="$QC_SBX/$QC_PROJ/sameproj/tree/panel/node-a"
+DIR_B="$QC_SBX/$QC_PROJ/sameproj/tree/panel/node-b"
 assert_file_exists "$DIR_A" "CHANGE-PINNING: node-a default out dir exists"
 assert_file_exists "$DIR_B" "CHANGE-PINNING: node-b default out dir exists"
 COUNT_A_BEFORE="$(find "$DIR_A" -type f | wc -l | tr -d ' ')"

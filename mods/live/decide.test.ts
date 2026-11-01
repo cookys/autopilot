@@ -47,9 +47,10 @@ test('DECIDE card: a section header with the count, then per question the title,
   const note = ls.findIndex(l => l.field !== undefined && l.field.key === 'note:d-4290499d')
   expect(bg).toBe(2)
   expect([bg < blocks, blocks < row, row < advice, advice < note], 'the order is 背景, 卡住, 選項, 建議, 補充').toEqual([true, true, true, true])
-  expect(t[row]).toBe('  選項      [ ] ★ OK  [ ] 完整顯示') // one row; the star marks the recommendation, on the option only
+  expect(t[row + 1]).toBe('            [ ] 完整顯示')
+  expect(t[row]).toBe('  選項      [ ] ★ OK') // the star marks the recommendation, on the option only
   expect(ls[row].segs?.filter(s => s.role === 'glyph').map(s => s.text)).toEqual([ui.GLYPHS.structure.recommend])
-  expect(pressIds([ls[row]])).toEqual(['pick:d-4290499d:0', 'pick:d-4290499d:1'])
+  expect(pressIds(ls.slice(row, row + 2))).toEqual(['pick:d-4290499d:0', 'pick:d-4290499d:1']) // one row per option
   expect(t[advice]).toBe('  建議      OK') // no reason given: the recommended option alone
   expect(t[note]).toBe('  補充')
   expect(ls[note].field?.placeholder).toBe('選填；都不要就直接寫你的答案')
@@ -58,7 +59,8 @@ test('DECIDE card: a section header with the count, then per question the title,
   for (const l of ls.filter(x => x.kind === 'kv')) expect(l.hang).toBe(12)
   // the second card is numbered 2 and has its own row; the third has no options, so it asks for a typed reply
   expect(t.some(x => x === '▲ 2. U6 要不要把建議也寫進回覆')).toBe(true)
-  expect(t.some(x => x === '  選項      [ ] 要  [ ] 不要')).toBe(true)
+  expect(t.some(x => x === '  選項      [ ] 要')).toBe(true)
+  expect(t.some(x => x === '            [ ] 不要')).toBe(true)
   expect(t.some(x => x === '▲ 3. 這個分支要叫什麼名字？')).toBe(true)
   const free = ls.find(l => l.field !== undefined && l.field.key === 'note:d-0000free')
   expect(free?.text.trim()).toBe('回覆')
@@ -110,7 +112,8 @@ test('DECIDE choose: the picked option is `[x]` in bold default text (no backgro
   const zh = makeT('zh-TW')
   const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ picks: { 'd-4290499d': 1 } })))
   const row = ls.find(l => l.kind === 'choice' && l.text.includes('完整顯示')) as PaneLine
-  expect(row.text.trimEnd()).toBe('  選項      [ ] ★ OK  [x] 完整顯示')
+  expect(row.text.trimEnd()).toBe('            [x] 完整顯示')
+  expect(texts(ls)).toContain('  選項      [ ] ★ OK') // the other option stays unpicked
   const picked = (row.segs ?? []).filter(s => s.text.includes('完整顯示') || s.text === '[x] ')
   expect(picked.length).toBeGreaterThan(0)
   for (const s of picked) { expect(s.color).toBe(ui.PALETTE.action); expect(s.bold).toBe(true); expect('backgroundColor' in s || 'inverse' in s).toBe(false) } // default text, bold: the picked option is on the bold whitelist
@@ -132,7 +135,8 @@ test('DECIDE sent: a question already sent says so, draws its options without Bu
   expect(texts(ls)[1]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來 · 已送出，等處理')
   expect(pressIds(ls).filter(p => p.startsWith('pick:d-4290499d'))).toEqual([])
   expect(ls.some(l => l.field?.key === 'note:d-4290499d')).toBe(false)
-  expect(texts(ls).some(x => x === '  選項      [x] ★ OK  [ ] 完整顯示')).toBe(true) // the choice made stays visible
+  expect(texts(ls).some(x => x === '  選項      [x] ★ OK')).toBe(true) // the choice made stays visible
+  expect(texts(ls).some(x => x === '            [ ] 完整顯示')).toBe(true)
   expect(pressIds(ls).some(p => p.startsWith('pick:d-c24ecfd9'))).toBe(true) // the other questions are still open
   // all sent: nothing left to send
   const all = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ sent: { 'd-4290499d': 5, 'd-c24ecfd9': 5, 'd-0000free': 5 } })))
@@ -257,7 +261,7 @@ test('DECIDE wrap: a closing mark never starts a continuation line (negative con
   for (const cols of [60, 66, 70, 76, 80]) {
     const ls = decideTabLines(snapOf([dec('d-1', 'q?', { background: bgText, options: [OPT('甲'), OPT('乙')] })]), ctxOf(zh, cols, view()))
     expect(startsClosed(ls), 'cols ' + cols).toEqual([])
-    expect(texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            ')).map(x => x.trim()).join('').replace(/^背景\s+/, '')).toBe(bgText) // nothing lost to the wrap
+    expect(texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            ')).filter(x => !/^\s+\[[ x]\] /.test(x)).map(x => x.trim()).join('').replace(/^背景\s+/, '')).toBe(bgText) // nothing lost to the wrap
   }
   expect(startsClosed([{ ...decideTabLines(snapOf(THREE), ctxOf(zh, 76, view()))[0], text: '            」只有' }])).toEqual(['            」只有'])
 })
@@ -272,7 +276,7 @@ test('DECIDE wrap: a run of closing marks, a space before a mark and an astral c
   const closing = /^\s+[）」』、。，；：！？)\]}】》〉,.;:!?]/
   for (const bg of cases) for (let cols = 40; cols <= 80; cols++) {
     const ls = decideTabLines(snapOf([dec('d-1', 'q?', { background: bg, options: [OPT('甲'), OPT('乙')] })]), ctxOf(zh, cols, view()))
-    const rows = texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            '))
+    const rows = texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            ')).filter(x => !/^\s+\[[ x]\] /.test(x))
     expect(rows.filter(x => closing.test(x.replace(/^  背景/, '    '))), 'cols ' + cols + ': ' + bg.slice(0, 12)).toEqual([])
     expect(rows.some(x => /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(x)), 'cols ' + cols + ': a lone surrogate').toBe(false)
     expect(rows.map(x => x.trim()).join('').replace(/^背景\s+/, '').replace(/ /g, ''), 'cols ' + cols + ': nothing lost').toBe(bg.replace(/ /g, ''))
@@ -343,7 +347,7 @@ test('DECIDE rows: 背景 → 卡住 → 選項 → 建議 → 補充, a row wit
   const full = (over: Partial<LiveDecision>) => decideTabLines(snapOf([dec('d-1', 'q?', { options: [OPT('甲'), OPT('乙')], ...over })]), ctxOf(zh, 76, view()))
   const one = (over: Partial<LiveDecision>) => texts(full(over))
   const all = one({ background: '為什麼問', recommendation: '甲', why: '少一屏', blocks: '下一個派工', source: 'lane-x', not_authorized: '深度零不能決定' })
-  const keys = ['  背景      為什麼問', '  卡住      下一個派工', '  選項      [ ] ★ 甲  [ ] 乙', '  建議      甲：少一屏', '  補充']
+  const keys = ['  背景      為什麼問', '  卡住      下一個派工', '  選項      [ ] ★ 甲', '            [ ] 乙', '  建議      甲', '            少一屏', '  補充']
   expect(keys.map(k => all.indexOf(k)), 'every row is there').not.toContain(-1)
   expect(keys.map(k => all.indexOf(k)), 'in this order').toEqual(keys.map(k => all.indexOf(k)).slice().sort((a, b) => a - b))
   expect(all.join('\n'), 'the source is data for the assistant, not the owner').not.toMatch(/lane-x|來源/)
@@ -442,4 +446,80 @@ test('DECIDE paths: showTarget reads the press id back; a malformed id is nothin
 test('DECIDE paths: a sent card links its paths too (reading the background does not need the card to be open)', () => {
   const ls = decideTabLines(snapOf(LINKED), ctxOf(makeT('en'), 120, view({ sent: { 'd-link0001': 1 } })))
   expect(linkSegsOf(ls).length).toBe(3)
+})
+
+// ---- BL-0369: a long card reads as lines (the owner picked layout A from screenshots) ----
+const HOSTA = dec('d-hosta', 'hostA 要 codeforge 修 bootstrap/install 的三點再發 v0.0.7，要做嗎？', {
+  background: 'hostA 的 ~/.claude/settings.json 是 symlink 到 dotfiles（進版控、全機共用）。三點：(1) hook 指令現在寫絕對路徑＋版號 /home/<user>/.local/share/codeforge/hooks/0.0.6/…，要改成 $HOME 開頭、不帶版號；(2) cleanupPeriodDays 3650 會隨 dotfiles 擴散到每台，要改 opt-in 或在 dry-run 標明；(3) 選做：settings.json 是 symlink 或在 git 裡時先警告。牽涉：B31 決定 hooks 之後改由 autopilot 的 opt-in 清單註冊，你也說過 hook 機制要和 fleet/autopilot 一起重新設計。',
+  options: [OPT('A 三點都做，發 v0.0.7'), OPT('B 只做 2、3，發 v0.0.7'), OPT('C 先不做')],
+  recommendation: 'A', why: '路徑帶版號＋絕對 home 是真的 bug：共用 settings.json 時每升一版、每換一台都要重寫；B31 之後 autopilot 註冊 hooks 也需要穩定、不帶版號的腳本路徑，這次改的不會白做',
+})
+const hostaRows = (cols = 88): PaneLine[] => decideTabLines(snapOf([HOSTA]), ctxOf(makeT('zh-TW'), cols, view()))
+
+test('DECIDE card layout: (1)(2)(3) each start a row, every option has its own row, 建議 is the option name then the reason on a row below', () => {
+  const ls = hostaRows()
+  const t = texts(ls)
+  const at = (needle: string): number => t.findIndex(x => x.includes(needle))
+  const [r1, r2, r3] = ['(1) hook', '(2) cleanupPeriodDays', '(3) 選做'].map(at)
+  expect([r1, r2, r3].every(x => x > 0), 'each item is found').toBe(true)
+  expect(new Set([r1, r2, r3]).size, 'three different rows').toBe(3)
+  for (const r of [r1, r2, r3]) expect(t[r].replace(/^ +/, '').startsWith('('), 'the item opens its row').toBe(true)
+  expect(t[at('  背景      ')]).not.toContain('(1)')
+  const opt = [at('[ ] ★ A'), at('[ ] B'), at('[ ] C')]
+  expect(opt.every(x => x > 0) && opt[1] === opt[0] + 1 && opt[2] === opt[1] + 1, 'one option per row, in order').toBe(true)
+  expect(t[opt[0]]).toBe('  選項      [ ] ★ A 三點都做，發 v0.0.7')
+  const adv = t.findIndex(x => x.startsWith('  建議      '))
+  expect(t[adv]).toBe('  建議      A 三點都做，發 v0.0.7')
+  expect(t[adv + 1].startsWith('            路徑帶版號'), 'the reason starts on the next row, hung at column 12').toBe(true)
+  expect(pressIds(ls.filter(l => l.kind === 'choice' && l.text.includes('[ ]')))).toEqual(['pick:d-hosta:0', 'pick:d-hosta:1', 'pick:d-hosta:2'])
+})
+
+const lead = (x: string): number => ui.displayWidth(x) - ui.displayWidth(x.replace(/^ +/, '')) // display cells of the leading spaces
+
+test('DECIDE card layout: a continuation row starts at the display column where its field\'s first row content starts; an item\'s continuation sits under the item text (wide characters counted)', () => {
+  for (const cols of [88, 76, 60]) {
+    const t = texts(hostaRows(cols))
+    for (const x of t) expect(ui.displayWidth(x), 'a row never overruns the pane').toBeLessThanOrEqual(cols - 1)
+    // each field: the first row's value starts at column 12 (the 2-cell indent plus the 10-cell key slot, wide key counted), and every row hung under it starts there too
+    for (const key of ['  背景      ', '  選項      ', '  建議      ']) {
+      const k = t.findIndex(x => x.startsWith(key))
+      expect(ui.displayWidth(key), key).toBe(12)
+      let n = 0
+      for (let i = k + 1; i < t.length && t[i].startsWith(' '.repeat(12)); i += 1, n += 1) expect(lead(t[i]) === 12 || lead(t[i]) === 16, key + ' row ' + i + ' [' + t[i] + ']').toBe(true)
+      expect(n, key + ' has hung rows').toBeGreaterThan(0)
+    }
+    for (const key of ['  選項      ', '  建議      ']) {
+      const k = t.findIndex(x => x.startsWith(key))
+      for (let i = k + 1; i < t.length && t[i].startsWith(' '.repeat(12)); i += 1) expect(lead(t[i]), key + ' row ' + i).toBe(12)
+    }
+    // an item: `(1) text` opens at column 12; the next row of the same item starts at 12 + the width of `(1) ` = 16, under `hook`, not under `(1)`
+    const item = t.findIndex(x => x.startsWith('            (1) hook'))
+    expect(item).toBeGreaterThan(0)
+    expect(ui.displayWidth(t[item].slice(0, t[item].indexOf('hook')))).toBe(16)
+    const next = t[item + 1]
+    if (!/^ {12}\(\d\)/.test(next)) expect(lead(next), 'continuation of item 1').toBe(16)
+  }
+})
+
+test('DECIDE card layout: a short background with no newline and no list is drawn exactly as the plain key/value row', () => {
+  const zh = makeT('zh-TW')
+  for (const bgText of ['為什麼問', '殘留分頁現在只列要人處理的；已清掉的在自動清理那段只有數字。版本 v1.2.3 與 2.5 倍都不是清單。', 'a b c ' + 'x'.repeat(120)]) {
+    const got = decideTabLines(snapOf([dec('d-s', 'q?', { background: bgText })]), ctxOf(zh, 76, view())).filter(l => l.kind === 'kv')
+    const want = ui.cardRow({ t: zh as never, cols: 76 }, '背景', bgText, { fact: 'decide.cards', subtle: true })
+    expect(got.map(l => l.text)).toEqual(want.map(l => l.text))
+    expect(JSON.stringify(got)).toBe(JSON.stringify(want))
+  }
+})
+
+test('DECIDE card layout (review): `1、` items split without a following space; `1.`/`1)` still need one; narrow panes never overrun', () => {
+  const p = ui.cardParas('背景：1、甲；2、乙')
+  expect(p.map(x => x.text)).toEqual(['背景：', '1、甲；', '2、乙'])
+  const w = ui.displayWidth('1、')
+  expect([p[1].hang, p[2].hang], 'the hang is the width of the marker as drawn').toEqual([w, w])
+  for (const keep of ['v1.2.3', '版本 2.5 已出', '見第1.點', '甲 - 乙 * 丙']) expect(ui.cardParas(keep), keep).toEqual([{ text: keep, hang: 0 }])
+  expect(ui.cardParas('- 甲\n- 乙').map(x => x.hang), 'a leading dash is an item').toEqual([2, 2])
+  for (const cols of [16, 17, 18, 20, 24]) {
+    const ls = decideTabLines(snapOf([dec('d-n', 'q?', { background: '背景：1、' + '甲'.repeat(12) + '；2、乙乙乙乙乙乙', options: [OPT('甲'), OPT('乙')] })]), ctxOf(makeT('zh-TW'), cols, view()))
+    for (const x of texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            ')).filter(x => !/^\s+\[[ x]\] /.test(x))) expect(ui.displayWidth(x), 'cols ' + cols + ' [' + x + ']').toBeLessThanOrEqual(cols - 1)
+  }
 })

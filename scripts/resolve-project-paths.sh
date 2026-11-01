@@ -23,9 +23,10 @@
 #   3. <target>/.claude/next-config.md
 #   4. <target>/.claude/dev-flow-config.md
 #   5. <target>/scripts/lib/repo-layout.js registry — executed ONLY when the target and this
-#      script's own repo are the same git repo (equal realpath of `git rev-parse --git-common-dir`;
-#      worktrees of one repo share it) and the file's header names it the layout registry.
-#      Any other repo, or either side not a git repo, skips the tier: never run a consumer's code.
+#      script's own repo are the same git repo (equal realpath of `git rev-parse --git-common-dir`,
+#      GIT_* location variables cleared), the target is one of that repo's worktrees, the file is a
+#      non-symlink physically under <target>/scripts/lib/, and its header names it the layout
+#      registry. Anything else skips the tier: never run a consumer's code.
 #   6. project-detect.js --target <target>
 #   7. "none"
 #
@@ -125,11 +126,34 @@ resolve_one 'Index';              INDEX="$RESOLVED"
 # from this plugin. The file is run only when it is this plugin's own repo (same_repo) and its
 # header names it the layout registry, with the test-override env cleared.
 REG_FILE="$TARGET/scripts/lib/repo-layout.js"
-same_repo() {  # true only when TARGET and the repo holding this script share one git common dir
-  local a b
-  a="$(cd "$TARGET" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" || return 1
-  b="$(cd "$SCRIPT_DIR" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" || return 1
-  [[ -n "$a" && "$a" == "$b" ]]
+# Every git call below runs with the GIT_* location variables cleared: a caller (or an attacker
+# who controls the environment) could otherwise point git at THIS repo while TARGET is foreign.
+git_clean() { env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git "$@"; }
+common_dir() {  # common_dir <dir> → realpath of its git common dir, or fail
+  local c; c="$(git_clean -C "$1" rev-parse --git-common-dir 2>/dev/null)" || return 1
+  [[ -n "$c" ]] || return 1
+  (cd "$1" && cd "$c" 2>/dev/null && pwd -P)
+}
+# True only when TARGET is this plugin's own repo: same git common dir, TARGET is itself one of
+# this repo's worktrees (a gitfile or .git symlink pointing here does not make a foreign dir ours),
+# and the registry file is a real file (no symlink) physically under TARGET/scripts/lib/.
+same_repo() {
+  local a b w t lib real
+  a="$(common_dir "$TARGET")" || return 1
+  b="$(common_dir "$SCRIPT_DIR")" || return 1
+  [[ -n "$a" && "$a" == "$b" ]] || return 1
+  t="$(cd "$TARGET" && pwd -P)" || return 1
+  local found=1
+  while IFS= read -r w; do
+    [[ "$w" == "worktree "* ]] || continue
+    w="${w#worktree }"
+    [[ "$(cd "$w" 2>/dev/null && pwd -P)" == "$t" ]] && { found=0; break; }
+  done < <(git_clean -C "$SCRIPT_DIR" worktree list --porcelain 2>/dev/null)
+  [[ "$found" -eq 0 ]] || return 1
+  [[ ! -L "$REG_FILE" ]] || return 1
+  lib="$(cd "$t/scripts/lib" 2>/dev/null && pwd -P)" || return 1
+  real="$(readlink -f "$REG_FILE" 2>/dev/null)" || return 1
+  [[ "$lib" == "$t/scripts/lib" && "$real" == "$lib/"* ]]
 }
 if [[ -z "$PROJECTS" || -z "$PLANS" || -z "$ARCHIVE" || -z "$BACKLOG" || -z "$INDEX" ]] \
    && [[ -f "$REG_FILE" ]] && same_repo && [[ "$(head -c 800 "$REG_FILE")" == *'the one registry of where things live'* ]]; then

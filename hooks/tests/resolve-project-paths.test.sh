@@ -16,6 +16,7 @@ PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); printf 'ok — %s\n' "$1"; }
 no() { FAIL=$((FAIL+1)); printf 'FAIL — %s\n     want: %s\n     got:  %s\n' "$1" "$2" "$3"; }
 eq() { [ "$2" = "$3" ] && ok "$1" || no "$1" "$2" "$3"; }
+ne() { [ "$2" != "$3" ] && ok "$1" || no "$1" "anything but $2" "$3"; }
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"; cleanup_test_tmp' EXIT
 P="$TMP/proj"; mkdir -p "$P"; git -C "$P" init -q
@@ -110,7 +111,7 @@ eq "autopilot: archive" "docs/projects/_archive/" "$(bash "$R" --target "$REPO_R
 #    root proves nothing. Assert the field values: a bare foreign repo must not resolve to
 #    autopilot's real layout, which we know exactly.
 AP_BACKLOG="$(bash "$R" --target "$REPO_ROOT" --field backlog)"
-[ "$AP_BACKLOG" = "$(node "$REPO_ROOT/scripts/lib/repo-layout.js" path backlog_file)" ] || { echo "fixture error: autopilot layout changed"; exit 1; }
+[ "$AP_BACKLOG" = "docs/BACKLOG.md" ] || { echo "fixture error: autopilot layout changed"; exit 1; }
 eq "foreign target: does not inherit autopilot's backlog ($AP_BACKLOG)" "none" "$(bash "$R" --target "$BARE" --field backlog)"
 eq "foreign target: does not inherit autopilot's projects_dir" "none" "$(bash "$R" --target "$BARE" --field projects_dir)"
 
@@ -157,7 +158,8 @@ mk_wt() {  # mk_wt <dir> <docs|project> — a worktree of THIS repo; P1 rewrites
 }
 RB="$TMP/reg-boot"; mk_wt "$RB" docs
 RP="$TMP/reg-p1";   mk_wt "$RP" project
-trap 'git -C "$REPO_ROOT" worktree remove --force "$RB" "$RP" 2>/dev/null; git -C "$REPO_ROOT" worktree prune; rm -rf "$TMP"; cleanup_test_tmp' EXIT
+RW="$TMP/reg-symlink"; mk_wt "$RW" docs
+trap 'git -C "$REPO_ROOT" worktree remove --force "$RB" 2>/dev/null; git -C "$REPO_ROOT" worktree remove --force "$RP" 2>/dev/null; git -C "$REPO_ROOT" worktree remove --force "$RW" 2>/dev/null; git -C "$REPO_ROOT" worktree prune; rm -rf "$TMP"; cleanup_test_tmp' EXIT
 eq "bootstrap registry: backlog -> docs/" "docs/BACKLOG.md" "$(bash "$R" --target "$RB" --field backlog)"
 eq "bootstrap registry: index -> docs/"   "docs/projects/INDEX.md" "$(bash "$R" --target "$RB" --field index)"
 eq "bootstrap registry: source is registry" "registry" "$(bash "$R" --target "$RB" --field source)"
@@ -179,6 +181,28 @@ MARK="$TMP/foreign-ran.marker"
 eq "foreign repo with the registry header: not answered by registry" "none" "$(bash "$R" --target "$FR" --field backlog)"
 eq "foreign repo: source is not registry" "none" "$(bash "$R" --target "$FR" --field source)"
 [ ! -e "$MARK" ] && ok "foreign repo-layout.js was never executed (no marker)" || no "foreign repo-layout.js was never executed" "no marker" "marker written"
+# Bypass controls: each foreign file would write $MARK if executed; each case must stay out of the registry.
+rm -f "$MARK"
+GD="$(git -C "$REPO_ROOT" rev-parse --absolute-git-dir)"; GC="$(cd "$GD" && cd "$(git rev-parse --git-common-dir)" && pwd -P)"
+# (1) GIT_DIR pointing at this repo, foreign target
+ne "bypass 1: GIT_DIR=<this repo> + foreign target: not registry" "registry" "$(GIT_DIR="$GD" bash "$R" --target "$FR" --field source)"
+[ ! -e "$MARK" ] && ok "bypass 1: foreign file not executed" || no "bypass 1: foreign file not executed" "no marker" "marker written"
+rm -f "$MARK"
+# (2) GIT_COMMON_DIR + GIT_WORK_TREE
+ne "bypass 2: GIT_COMMON_DIR+GIT_WORK_TREE: not registry" "registry" "$(GIT_COMMON_DIR="$GC" GIT_WORK_TREE="$FR" bash "$R" --target "$FR" --field source)"
+[ ! -e "$MARK" ] && ok "bypass 2: foreign file not executed" || no "bypass 2: foreign file not executed" "no marker" "marker written"
+rm -f "$MARK"
+# (3) a worktree of this repo whose scripts/lib/repo-layout.js is a symlink to a foreign file
+rm -f "$RW/scripts/lib/repo-layout.js"; ln -s "$FR/scripts/lib/repo-layout.js" "$RW/scripts/lib/repo-layout.js"
+ne "bypass 3: symlinked repo-layout.js in our worktree: not registry" "registry" "$(bash "$R" --target "$RW" --field source)"
+[ ! -e "$MARK" ] && ok "bypass 3: foreign file not executed" || no "bypass 3: foreign file not executed" "no marker" "marker written"
+rm -f "$MARK"
+# (4) a foreign dir whose .git is a gitfile pointing at this repo's git dir
+GF="$TMP/reg-gitfile"; mkdir -p "$GF/scripts/lib"; cp "$FR/scripts/lib/repo-layout.js" "$GF/scripts/lib/"
+printf 'gitdir: %s\n' "$GD" > "$GF/.git"
+ne "bypass 4: foreign gitfile -> this repo: not registry" "registry" "$(bash "$R" --target "$GF" --field source)"
+[ ! -e "$MARK" ] && ok "bypass 4: foreign file not executed" || no "bypass 4: foreign file not executed" "no marker" "marker written"
+rm -f "$MARK"
 # a non-git directory is skipped too
 NG="$TMP/reg-nogit"; mkdir -p "$NG/scripts/lib"; cp "$FR/scripts/lib/repo-layout.js" "$NG/scripts/lib/"
 eq "non-git target with the header: skipped" "none" "$(bash "$R" --target "$NG" --field backlog)"

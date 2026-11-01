@@ -29,8 +29,7 @@ git log origin/develop --since="${DAYS} days ago" --format="" --name-only | sort
 # Current count — adapt path to your project's index file
 grep -c '✅\|completed\|Completed' **/INDEX.md 2>/dev/null || echo 0
 # Count N days ago
-INDEX="$(bash scripts/resolve-project-paths.sh --field index)"  # none ⇒ skip this count
-git show "HEAD@{${DAYS} days ago}:${INDEX}" 2>/dev/null | grep -c '✅\|completed\|Completed' || echo 0  # adjust path
+git show "HEAD@{${DAYS} days ago}:$(bash scripts/resolve-project-paths.sh --field index)" 2>/dev/null | grep -c '✅\|completed\|Completed' || echo 0  # adjust path
 ```
 
 ### 1f. Review-loop lens (the effort git history can't see)

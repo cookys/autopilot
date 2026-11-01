@@ -2,11 +2,11 @@
 
 The home for **plan authoring** discipline. Internalized from superpowers' `writing-plans` as a *template*
 (not a skill — a plan form never triggers standalone; it is invoked by `research-to-ship` Phase 2 and
-`dev-flow` `plan` node). Output a plan to `<plans_dir>/<YYYY-MM-DD>-<slug>.md` (`bash scripts/resolve-project-paths.sh --field plans_dir`; `none` ⇒ ask, do not create; real date from the environment —
+`dev-flow` `plan` node). Output a plan to `<plans_dir>/<YYYY-MM-DD>-<slug>.md` (`<plans_dir>` from `bash scripts/resolve-project-paths.sh --field plans_dir`; real date from the environment —
 never invent one).
 
 **Step 0 — register it**: before any review, paste `node scripts/check-plan-graduation.js
---register-template <stem>`'s output row into the INDEX from `bash scripts/resolve-project-paths.sh --field index` (Version `active`; `none` or `index_exists` false ⇒ report, do not create). A plan file
+--register-template <stem>`'s output row into the INDEX (`bash scripts/resolve-project-paths.sh --field index`) (Version `active`). A plan file
 with no `active` INDEX row is `plan_unregistered` — `scripts/dispatch-plan-review.js` and
 `scripts/mission-execution-graph-check.js` both refuse an unregistered plan at the start of review.
 

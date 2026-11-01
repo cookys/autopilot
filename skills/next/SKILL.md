@@ -45,7 +45,7 @@ Details: [references/phase0-hygiene.md](references/phase0-hygiene.md)
 
 ### Phase 1: Scan All Sources
 
-Paths below come from `bash scripts/resolve-project-paths.sh --field <index|backlog>` (also `plans_dir`, `projects_dir`); `none` or `_exists` false ⇒ report that source as absent, do not create it.
+Paths below come from `bash scripts/resolve-project-paths.sh --field <index|backlog>`.
 
 | Category | Source | Method |
 |----------|--------|--------|

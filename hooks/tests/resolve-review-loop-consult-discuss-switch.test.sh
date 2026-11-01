@@ -159,9 +159,9 @@ for (const [key, oldVal] of Object.entries(oldJson)) {
   if (!(key in newJson)) { problems.push(`missing-in-new:${key}`); continue; }
   if (INTENTIONAL_DEFAULT_MOVE.has(key)) {
     const want = key === 'qc_panel'
-      ? ['gpt-6.1-sol', 'claude-opus', 'gemini-4-argon-high']
+      ? ['gpt-6.1-sol', 'claude-opus-5-5', 'gemini-4-argon-high']
       : [{role:'qc',runner:'codex',model:'gpt-6.1-sol',effort:'low',endpoint:null,family:'openai'},
-         {role:'qc',runner:'claude-native',model:'claude-opus',effort:'high',endpoint:null,family:'anthropic'},
+         {role:'qc',runner:'claude-native',model:'claude-opus-5-5',effort:'high',endpoint:null,family:'anthropic'},
          {role:'qc',runner:'agy',model:'gemini-4-argon-high',effort:'high',endpoint:null,family:'google'}];
     if (JSON.stringify(newJson[key]) !== JSON.stringify(want)) problems.push(`new-value-drift:${key}`);
     continue;

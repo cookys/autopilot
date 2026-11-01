@@ -52,6 +52,10 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+// Work-record locations come from the layout registry (docs/ at bootstrap, project/ from P1), never from literals here.
+const LAYOUT = require('./lib/repo-layout.js');
+const dirPrefix = (key) => LAYOUT.path(key).replace(/\/+$/, '') + '/';
+const uniq = (a) => [...new Set(a)];
 
 const SELF_EXCLUDES = ['scripts/check-stage-vocab.js', 'hooks/tests/check-stage-vocab.test.sh', 'platforms/codex/plugin/scripts/check-stage-vocab.js'];
 // marker_phase exemptions (P2b, plan §0.7). (1) Digest-frozen history that still names the removed phase flag: the frozen eval
@@ -62,15 +66,14 @@ const MARKER_PHASE_HISTORY = ['evals/skill-onoff/lib/p1w-markers.sh', 'hooks/tes
 const MARKER_PHASE_ALLOW_TOKEN = 'stage-vocab-allow';
 const EXCLUDE_PREFIXES = [
   'CHANGELOG.md',
-  'docs/plans/',
-  'docs/projects/_archive/',
+  ...uniq([dirPrefix('plans_dir'), dirPrefix('plans_evidence_dir'), dirPrefix('projects_archive_dir')]),
   'evals/skill-onoff/packs/',
   '.claude/worktrees/',
   'node_modules/',
   '.git/',
 ];
 const HISTORY_EXCLUDES = [
-  'docs/projects/',
+  dirPrefix('projects_dir'),
   'profiles/p0-sources/',
   'profiles/guided-baseline-dispositions.json',
   'evals/skill-onoff/lib/p1w-markers.sh',
@@ -85,7 +88,7 @@ const HISTORY_EXCLUDES = [
   'skill-creator-workspace/',
 ];
 const CODEX_MIRROR = 'platforms/codex/plugin/';
-const U4_EXCLUDE_PATHS = ['docs/BACKLOG.md', 'hooks/tests/mission-convergence.test.sh'];
+const U4_EXCLUDE_PATHS = [LAYOUT.path('backlog_file'), 'hooks/tests/mission-convergence.test.sh'];
 const TEXT_EXT = new Set(['.md', '.js', '.cjs', '.mjs', '.ts', '.tsx', '.sh', '.json', '.yml', '.yaml', '.txt', '.py']);
 const MAX_BYTES = 2 * 1024 * 1024;
 
@@ -242,6 +245,8 @@ function parseArgs(argv) {
   return o;
 }
 
+// A consuming project keeps its work records under docs/ (its own convention, not this repo's layout).
+const CONSUMER_DOCS = 'docs';
 function consumerFiles(dir) {
   const res = [];
   const addDir = (sub, re) => {
@@ -250,8 +255,8 @@ function consumerFiles(dir) {
     for (const f of fs.readdirSync(d)) if (re.test(f) && fs.statSync(path.join(d, f)).isFile()) res.push(norm(path.join(sub, f)));
   };
   addDir('.claude', /\.md$/);
-  addDir('docs/backlog', /\.md$/);
-  for (const f of ['BACKLOG.md', 'docs/BACKLOG.md']) if (fs.existsSync(path.join(dir, f))) res.push(f);
+  addDir(CONSUMER_DOCS + '/backlog', /\.md$/);
+  for (const f of ['BACKLOG.md', CONSUMER_DOCS + '/BACKLOG.md']) if (fs.existsSync(path.join(dir, f))) res.push(f);
   return res;
 }
 

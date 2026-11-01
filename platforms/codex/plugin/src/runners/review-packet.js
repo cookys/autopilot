@@ -5,13 +5,16 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+// Plan and evidence locations: this repo's from the layout registry (docs/ at bootstrap, project/ from P1; evidence may sit
+// beside the plans), plus the docs/plans convention of a consuming project.
+const LAYOUT = require('../../scripts/lib/repo-layout.js');
+const PLAN_ROOTS = [...new Set([LAYOUT.path('plans_dir'), ['docs', 'plans'].join('/')])];
+const DENIED_PLAN_GLOBS = PLAN_ROOTS.flatMap((root) => [`${root}/**/*.review.md`, `${root}/**/*.review.json`, `${root}/**/*disposition*.json`]);
 const DEFAULT_PACKET_DENY_LIST = Object.freeze([
   '.autopilot/**',
   '.qc/**',
-  'docs/plans/evidence/**',
-  'docs/plans/**/*.review.md',
-  'docs/plans/**/*.review.json',
-  'docs/plans/**/*disposition*.json',
+  ...new Set([`${LAYOUT.path('plans_evidence_dir')}/**`, ['docs', 'plans', 'evidence', '**'].join('/')]),
+  ...DENIED_PLAN_GLOBS,
   '**/*.receipt.json',
   '**/*.raw.log',
 ]);

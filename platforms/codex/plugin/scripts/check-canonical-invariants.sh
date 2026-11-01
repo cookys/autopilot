@@ -295,6 +295,14 @@ check_reference "code-review→blind-dispatch/VerifierIsolation" \
 # have no canonical counterpart and no parity gate, so they stay OUTSIDE the
 # allowlist; round-1 review 2026-08-21), tests, and docs. Everything else that
 # mentions the token is a rogue consumer.
+# Docs of this repo = docs/ plus the top directory of every work-record path the layout registry names
+# (plans, projects, backlog: docs/ at bootstrap, project/ from P1), so the allowlist follows a relayout.
+DOC_GLOBS=("docs/*")
+for _k in plans_dir projects_dir backlog_file; do
+  _p="$(node "$REPO/scripts/lib/repo-layout.js" path "$_k" 2>/dev/null)" || continue
+  _g="${_p%%/*}/*"
+  case " ${DOC_GLOBS[*]} " in *" $_g "*) ;; *) DOC_GLOBS+=("$_g") ;; esac
+done
 check_reader_allowlist "unratified-columns" \
   "unratified" \
   "scripts/dispatch-review.sh" \
@@ -307,7 +315,7 @@ check_reader_allowlist "unratified-columns" \
   "schemas/*" \
   "platforms/codex/plugin/*" \
   "hooks/tests/*" \
-  "docs/*" \
+  "${DOC_GLOBS[@]}" \
   "CHANGELOG.md" \
   "README.md" \
   "README.zh-TW.md"

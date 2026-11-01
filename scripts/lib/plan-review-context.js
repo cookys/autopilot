@@ -16,10 +16,19 @@ const ALLOWED_EXTENSIONS = new Set([
   '.js', '.cjs', '.mjs', '.ts', '.tsx', '.jsx', '.json', '.sh', '.py', '.rs', '.go',
   '.md', '.toml', '.yaml', '.yml', '.css', '.html', '.txt',
 ]);
-// Directories: evidence trees (live and archived, any depth under docs/plans), the backlog, VCS /
-// tooling state. Case-insensitive so docs/BACKLOG.md and docs/backlog/ both match.
+// Directories: evidence trees (live and archived, any depth under the plans dir and under the evidence dir's parent),
+// the backlog (file and notes dir), VCS / tooling state. Case-insensitive so a differently-cased BACKLOG.md and
+// backlog/ both match. Work-record locations come from the layout registry (docs/ at bootstrap, project/ from P1).
+const LAYOUT = require('./repo-layout.js');
+const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const WORK_RECORD_DENIED = [...new Set([
+  `${reEsc(LAYOUT.path('plans_dir'))}/(.*/)?evidence`,
+  `${reEsc(path.posix.dirname(LAYOUT.path('plans_evidence_dir')))}/(.*/)?evidence`,
+  reEsc(LAYOUT.path('backlog_dir')),
+  reEsc(LAYOUT.path('backlog_file')),
+])];
 const DENIED_DIRS = new RegExp(
-  '(^|/)(docs/plans/(.*/)?evidence|docs/backlog|docs/BACKLOG\\.md|\\.git|\\.claude|node_modules'
+  `(^|/)(${WORK_RECORD_DENIED.join('|')}|\\.git|\\.claude|node_modules`
   + '|review-output)(/|$)', 'i');
 // Basenames: review artifacts only (round outputs, dispositions, findings, verdicts, receipts).
 // Source files that merely mention review/findings in their name (adjudicate-findings.js,

@@ -5,12 +5,22 @@ const path = require('path');
 
 const SOURCE_EXT_RE = /\.(js|ts|py|sh|md)(\/|$)/i;
 
+// Work-record entries: this repo's locations from the layout registry (docs/ at bootstrap, project/ from P1) plus the docs/
+// convention of a consuming project.
+const LAYOUT = require('./repo-layout.js');
+const WORK_RECORD_EXCLUDES = [...new Set([
+  `${LAYOUT.path('projects_dir')}/**`,
+  `${LAYOUT.path('plans_evidence_dir')}/**`,
+  LAYOUT.path('backlog_file'),
+  ['docs', 'projects', '**'].join('/'),
+  ['docs', 'plans', 'evidence', '**'].join('/'),
+  ['docs', 'BACKLOG.md'].join('/'),
+])];
+
 const EXCLUDE_ALLOWLIST = [
   'platforms/**',
   'profiles/*.json',
-  'docs/projects/**',
-  'docs/plans/evidence/**',
-  'docs/BACKLOG.md',
+  ...WORK_RECORD_EXCLUDES,
   'package-lock.json',
   'yarn.lock',
   'pnpm-lock.yaml',

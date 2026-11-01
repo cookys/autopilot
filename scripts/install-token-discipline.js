@@ -34,7 +34,9 @@ const END = '<!-- autopilot:token-discipline end -->';
 const INSTALL_BEGIN = '<!-- install-block begin -->';
 const INSTALL_END = '<!-- install-block end -->';
 const REPO_ROOT = path.resolve(__dirname, '..');
-const SOURCE = path.join(REPO_ROOT, 'docs', 'token-discipline.md');
+// The doc is a user-reader doc: it sits in the registry's guide dir (docs/ at bootstrap, docs/guide/ from P1).
+const LAYOUT = require('./lib/repo-layout.js');
+const SOURCE = path.join(REPO_ROOT, LAYOUT.path('guide_dir'), 'token-discipline.md');
 const TOP_LEVEL_HINT_KEYS = new Set([
   'default_subagent_model',
   'default_subagent_reasoning_effort',

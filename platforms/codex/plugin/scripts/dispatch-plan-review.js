@@ -66,6 +66,7 @@ const { effortSeatTimeoutSeconds } = require('./lib/plan-review-timeout');
 const { createPanelManifest } = require('./lib/plan-review-panel');
 const { stageWrite } = require('./lib/stage-write');
 const { loadContextFiles, renderContextBlock } = require('./lib/plan-review-context');
+const LAYOUT = require('./lib/repo-layout.js'); // work-record locations (plans dir, projects index) come from the registry
 
 const SCRIPT_DIR = __dirname;
 const DISPATCH_AUTHOR = path.join(SCRIPT_DIR, 'dispatch-author.sh');
@@ -1716,12 +1717,14 @@ function exitControlledError(error) {
 function checkPlanRegistration(opts) {
   if (opts.allowUnregistered) return;
   const repoRoot = opts.repoRoot;
-  const plansDir = path.join(repoRoot, 'docs', 'plans');
-  const indexPath = path.join(repoRoot, 'docs', 'projects', 'INDEX.md');
+  const plansRel = LAYOUT.path('plans_dir');
+  const indexRel = LAYOUT.path('projects_index');
+  const plansDir = path.join(repoRoot, plansRel);
+  const indexPath = path.join(repoRoot, indexRel);
   if (!fs.existsSync(indexPath)) return;
   const rel = path.relative(plansDir, opts.planFile);
   if (rel.startsWith('..') || path.isAbsolute(rel) || rel.includes(path.sep) || !rel.endsWith('.md')) {
-    return; // not directly under docs/plans/ (e.g. a sidecar dir, or outside plansDir) — out of scope
+    return; // not directly under the plans dir (e.g. a sidecar dir, or outside plansDir) — out of scope
   }
   const stem = rel.slice(0, -3);
   const gate = require(path.join(__dirname, 'check-plan-graduation.js'));
@@ -1729,7 +1732,7 @@ function checkPlanRegistration(opts) {
   if (!registration.indexExists || registration.activeRow) return;
   const row = gate.registerTemplateRow(repoRoot, plansDir, path.join(plansDir, '_archive'), stem);
   throw new CliError(
-    `plan_unregistered: docs/plans/${stem}.md has no docs/projects/INDEX.md row with Version `
+    `plan_unregistered: ${plansRel}/${stem}.md has no ${indexRel} row with Version `
     + `"active" — paste: ${row}  (or pass --allow-unregistered for a scratch/consumer repo)`
   );
 }

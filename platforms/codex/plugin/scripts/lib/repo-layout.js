@@ -11,7 +11,7 @@
  * one layout in force per merge and NO path aliases: a reader asks `path(key)` and gets the path that
  * is valid at the current stage.
  *
- * API:  stage()  path(key)  rules({activeOnly})  allowlists()  exceptions()  validate(data)  load()
+ * API:  stage()  path(key)  (derived key: backlog_dir)  rules({activeOnly})  allowlists()  exceptions()  validate(data)  load()
  *       manifestBase(repoRoot, manifestFile)            the directory a sources manifest's plan_path/rubric_path
  *                                                       are relative to ({base, source: 'exception'|'registry'|'manifest-dir'})
  *       containedPath(base, rel)                        the single containment check (literal + realpath) both of them use
@@ -325,8 +325,21 @@ function checked(opts) {
 
 function stage(opts) { return checked(opts).stage; }
 
+// Derived keys are not stored: they are computed from stored ones, so a generator that moves the stored key moves them too.
+//   backlog_dir  the directory of the per-entry backlog note files: the directory that holds backlog_file when it is
+//                named backlog (project/backlog/), else a backlog/ sibling of it (docs/backlog/ beside docs/BACKLOG.md).
+//   guide_dir    the directory of the user-reader docs: the one that holds the settings reference (docs/, docs/guide/ from P1).
+const DERIVED_PATHS = {
+  guide_dir: (paths) => path.posix.dirname(paths.settings_reference),
+  backlog_dir: (paths) => {
+    const dir = path.posix.dirname(paths.backlog_file);
+    return path.posix.basename(dir) === 'backlog' ? dir : (dir === '.' ? 'backlog' : dir + '/backlog');
+  },
+};
+
 function pathOf(key, opts) {
   const d = checked(opts);
+  if (Object.prototype.hasOwnProperty.call(DERIVED_PATHS, key)) return DERIVED_PATHS[key](d.paths);
   if (!Object.prototype.hasOwnProperty.call(d.paths, key)) {
     throw new Error(`repo-layout: unknown path key ${JSON.stringify(key)} (known: ${Object.keys(d.paths).join(', ')})`);
   }

@@ -105,18 +105,34 @@ const FROZEN_EVIDENCE_SHA256 = Object.freeze({
   'evals/grok-implementer-ab/seed.json': '580a7a03b4d0e606d374329109f29d80de6774d72ca05dd077ae3c884e5d1239',
   'evals/grok-implementer-ab/tasks.json': 'bc136556a2cbb7445e7317df71fc5f3b3a9850f68241984aeb6a2e3aa12685c5',
 });
-const PLAN_PATH = 'docs/plans/2026-08-03-next-touch-debt-retirement.md';
-const RUBRIC_PATH = 'docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md';
+// Work-record locations come from the layout registry (docs/ at bootstrap, project/ from P1), never from literals here.
+const PLANS_DIR = LAYOUT.path('plans_dir');
+const PROJECTS_DIR = LAYOUT.path('projects_dir');
+const PROJECTS_ARCHIVE_DIR = LAYOUT.path('projects_archive_dir');
+const PROJECTS_INDEX = LAYOUT.path('projects_index');
+const BACKLOG_FILE = LAYOUT.path('backlog_file');
+const PROJECT_NAME = '2026-08-03-next-touch-debt-retirement';
+const PLAN_PATH = `${PLANS_DIR}/${PROJECT_NAME}.md`;
+const RUBRIC_PATH = `${PLANS_DIR}/${PROJECT_NAME}.rubric.md`;
 // Live checkout location (integration candidates are cut from the current tree); the project archive moved to
 // the dated layout in v2.36.80.
-const ARCHIVE_DIR = 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement';
+const ARCHIVE_DIR = `${PROJECTS_ARCHIVE_DIR}/2026/08/${PROJECT_NAME}`;
 // Sealed bundles (G8b bodies, product candidate b3dd078a) still name the flat layout; compare and read them there.
-const HISTORICAL_ARCHIVE_DIR = 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement';
-const AUTHORIZATION_PATH = 'docs/projects/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
+// These two are sealed VALUES (what historical bundles carry), not locations in the live tree: they stay as recorded.
+const HISTORICAL_ARCHIVE_DIR = `${LAYOUT.path('docs_dir')}/projects/_archive/${PROJECT_NAME}`;
+const AUTHORIZATION_PATH = `${PROJECTS_DIR}/${PROJECT_NAME}/evidence/authorization.json`;
 // Live checkout location (read from the working tree): the project archive moved to the dated layout in v2.36.80.
-const ARCHIVE_AUTHORIZATION_PATH = 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
+// Archived evidence trees wait for P2 in the docs/ tree while the rest of the archive follows the registry's archive dir,
+// so the archived authorization is looked for in both (registry location first).
+const ARCHIVE_AUTHORIZATION_CANDIDATES = [...new Set([
+  `${ARCHIVE_DIR}/evidence/authorization.json`,
+  `${LAYOUT.path('docs_dir')}/projects/_archive/2026/08/${PROJECT_NAME}/evidence/authorization.json`,
+])];
+function archiveAuthorizationRel(exists) {
+  return ARCHIVE_AUTHORIZATION_CANDIDATES.find(exists) || ARCHIVE_AUTHORIZATION_CANDIDATES[0];
+}
 // Sealed location: the value a historical bundle carries in `historical_archive_authorization_path`.
-const HISTORICAL_ARCHIVE_AUTHORIZATION_PATH = 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
+const HISTORICAL_ARCHIVE_AUTHORIZATION_PATH = `${HISTORICAL_ARCHIVE_DIR}/evidence/authorization.json`;
 // The manifest lives in the registry's missions dir; its plan_path/rubric_path resolve through the registry.
 const SOURCE_MANIFEST_PATH = `${LAYOUT.path('missions_dir')}/mission-next-touch-debt-retirement-sources.json`;
 const EXPECTED_AUTH_KEYS = [
@@ -362,7 +378,7 @@ function loadRepoAndAuthority(args, options = {}) {
     path.join(repoInfo.repo, AUTHORIZATION_PATH), repoInfo, 'active authorization receipt',
   );
   const archiveAuthorization = assertCanonicalRepoFile(
-    path.join(repoInfo.repo, ARCHIVE_AUTHORIZATION_PATH), repoInfo, 'archive authorization receipt',
+    path.join(repoInfo.repo, archiveAuthorizationRel((rel) => fs.existsSync(path.join(repoInfo.repo, rel)))), repoInfo, 'archive authorization receipt',
   );
   if (explicitAuthorization
       && explicitAuthorization !== activeAuthorization
@@ -422,8 +438,9 @@ function sourceDigests(repo) {
   if (!manifest || manifest.schema_version !== 1 || !Array.isArray(manifest.sources)
       || manifest.sources.length !== 1) fail('SOURCE_AUTHORITY_INVALID', 'source manifest is invalid');
   const source = manifest.sources[0];
-  if (source.plan_path !== PLAN_PATH.slice('docs/'.length)
-      || source.rubric_path !== RUBRIC_PATH.slice('docs/'.length)) {
+  const planBase = LAYOUT.path('manifest_plan_base');
+  if (source.plan_path !== path.posix.relative(planBase, PLAN_PATH)
+      || source.rubric_path !== path.posix.relative(planBase, RUBRIC_PATH)) {
     fail('SOURCE_AUTHORITY_INVALID', 'source manifest paths are not frozen');
   }
   let planFile;
@@ -461,8 +478,15 @@ function parseHeadingLedger(planText) {
   return result;
 }
 
+// The frozen admission base predates any relayout and carries the backlog in docs/; a candidate cut from the current tree
+// carries it where the registry says. Read whichever the ref has (registry location first).
+function backlogPathAt(repo, ref) {
+  return [...new Set([BACKLOG_FILE, `${LAYOUT.path('docs_dir')}/BACKLOG.md`])]
+    .find((rel) => candidateFileExists(repo, ref, rel)) || BACKLOG_FILE;
+}
+
 function headingsAt(repo, ref) {
-  return readGitFile(repo, ref, 'docs/BACKLOG.md').split('\n')
+  return readGitFile(repo, ref, backlogPathAt(repo, ref)).split('\n')
     .filter((line) => /^###\s+\S/u.test(line))
     .map((line) => line.replace(/^###\s+/u, '').trim());
 }
@@ -867,8 +891,8 @@ function validateTerminalIdentity(args, repoInfo, authorization, source, loaded,
   if (!SHA256.test(bundle.source_rubric_sha256 || '') || bundle.source_rubric_sha256 !== source.rubricSha) {
     fail('SOURCE_PLAN_RUBRIC_MISMATCH', 'terminal bundle rubric digest is not the active source digest');
   }
-  const candidatePlan = sha256(readGitFile(repoInfo.repo, candidate, PLAN_PATH));
-  const candidateRubric = sha256(readGitFile(repoInfo.repo, candidate, RUBRIC_PATH));
+  const candidatePlan = sha256(sourceAt(repoInfo.repo, candidate, PLAN_PATH));
+  const candidateRubric = sha256(sourceAt(repoInfo.repo, candidate, RUBRIC_PATH));
   if (candidatePlan !== source.planSha || candidateRubric !== source.rubricSha) {
     fail('SOURCE_PLAN_RUBRIC_MISMATCH', 'candidate plan/rubric bytes drift from the frozen source');
   }
@@ -1208,8 +1232,8 @@ function validateG8bIntegrationAuthorization(bundle, loaded, repoInfo, source, a
   if (sha256(readGitFile(repoInfo.repo, productCandidate, value.d8_report_path)) !== value.d8_report_sha256) {
     fail('G8B_D8_BINDING_MISMATCH', 'fresh G8b authority does not bind the exact D8 publication report');
   }
-  const productPlan = readGitFile(repoInfo.repo, productCandidate, PLAN_PATH);
-  const productRubric = readGitFile(repoInfo.repo, productCandidate, RUBRIC_PATH);
+  const productPlan = sourceAt(repoInfo.repo, productCandidate, PLAN_PATH);
+  const productRubric = sourceAt(repoInfo.repo, productCandidate, RUBRIC_PATH);
   const archivePlan = readGitFile(repoInfo.repo, productCandidate, value.archive_plan_path);
   const archiveRubric = readGitFile(repoInfo.repo, productCandidate, value.archive_rubric_path);
   const archiveAuthText = readGitFile(repoInfo.repo, productCandidate, value.historical_archive_authorization_path);
@@ -2085,20 +2109,28 @@ function candidateFileExists(repo, ref, relative) {
   return git(repo, ['cat-file', '-e', `${ref}:${relative}`], true).status === 0;
 }
 
+// The frozen plan and rubric are read at refs that may predate any relayout (the review base, the product candidate): the
+// registry location first, then the docs/plans location those commits carry.
+function sourceAt(repo, ref, registryRel) {
+  const historicalRel = `${LAYOUT.path('docs_dir')}/plans/${path.posix.basename(registryRel)}`;
+  const rel = [registryRel, historicalRel].find((r) => candidateFileExists(repo, ref, r)) || registryRel;
+  return readGitFile(repo, ref, rel);
+}
+
 function validateArchiveState(repo, candidate, source, authorization, historicalAuthorization = authorization) {
   const archivePlanPath = `${ARCHIVE_DIR}/2026-08-03-next-touch-debt-retirement.md`;
   const archiveRubricPath = `${ARCHIVE_DIR}/2026-08-03-next-touch-debt-retirement.rubric.md`;
-  const archiveAuthPath = `${ARCHIVE_DIR}/evidence/authorization.json`;
+  const archiveAuthPath = archiveAuthorizationRel((rel) => candidateFileExists(repo, candidate, rel));
   const archiveReadmePath = `${ARCHIVE_DIR}/README.md`;
-  for (const relative of [archivePlanPath, archiveRubricPath, archiveAuthPath, archiveReadmePath, 'docs/projects/INDEX.md']) {
+  for (const relative of [archivePlanPath, archiveRubricPath, archiveAuthPath, archiveReadmePath, PROJECTS_INDEX]) {
     if (!candidateFileExists(repo, candidate, relative)) fail('ARCHIVE_INCOMPLETE', `candidate is missing ${relative}`);
   }
   let candidatePlan;
-  try { candidatePlan = readGitFile(repo, candidate, PLAN_PATH); }
-  catch (_error) { candidatePlan = readGitFile(repo, REVIEW_BASE_SHA, PLAN_PATH); }
+  try { candidatePlan = sourceAt(repo, candidate, PLAN_PATH); }
+  catch (_error) { candidatePlan = sourceAt(repo, REVIEW_BASE_SHA, PLAN_PATH); }
   const candidateRubric = candidateFileExists(repo, candidate, RUBRIC_PATH)
-    ? readGitFile(repo, candidate, RUBRIC_PATH)
-    : readGitFile(repo, REVIEW_BASE_SHA, RUBRIC_PATH);
+    ? sourceAt(repo, candidate, RUBRIC_PATH)
+    : sourceAt(repo, REVIEW_BASE_SHA, RUBRIC_PATH);
   const archivePlan = readGitFile(repo, candidate, archivePlanPath);
   const archiveRubric = readGitFile(repo, candidate, archiveRubricPath);
   if (sha256(candidatePlan) !== source.planSha || sha256(candidateRubric) !== source.rubricSha
@@ -2113,12 +2145,12 @@ function validateArchiveState(repo, candidate, source, authorization, historical
   if (!/archived/u.test(readme) || /pending harness integrate|awaiting harness integrate/u.test(readme)) {
     fail('ARCHIVE_STATE_INVALID', 'archive README does not declare completed archival');
   }
-  const index = readGitFile(repo, candidate, 'docs/projects/INDEX.md');
+  const index = readGitFile(repo, candidate, PROJECTS_INDEX);
   if (!/_archive\/(?:2026\/08\/)?2026-08-03-next-touch-debt-retirement\/README\.md/u.test(index)
       || !/\|\s*archived\s*\|/u.test(index)) {
     fail('ARCHIVE_INDEX_INVALID', 'projects INDEX does not record the archived project');
   }
-  if (candidateFileExists(repo, candidate, 'docs/projects/2026-08-03-next-touch-debt-retirement/README.md')) {
+  if (candidateFileExists(repo, candidate, `${PROJECTS_DIR}/${PROJECT_NAME}/README.md`)) {
     fail('ARCHIVE_INCOMPLETE', 'active project README remains after archival');
   }
   return { archivePlanPath, archiveRubricPath, archiveAuthPath };
@@ -2136,7 +2168,7 @@ function validateTerminal(args = {}) {
   if (loaded.bundle.g8b_integration_authorization !== undefined) {
     const historical = loadRepoAndAuthority({
       repo: repoInfo.repo,
-      authorization: path.join(repoInfo.repo, ARCHIVE_AUTHORIZATION_PATH),
+      authorization: path.join(repoInfo.repo, archiveAuthorizationRel((rel) => fs.existsSync(path.join(repoInfo.repo, rel)))),
     }, { allowArchived: true });
     g8b = validateG8bIntegrationAuthorization(
       loaded.bundle,
@@ -2295,6 +2327,7 @@ function validateTerminal(args = {}) {
 
 module.exports = {
   ADMISSION_BASE_SHA,
+  archiveAuthorizationRel,
   assertFrozenEvidenceBytes,
   canonicalDigest,
   D8_EVALUATED_SHA,

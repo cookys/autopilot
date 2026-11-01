@@ -192,7 +192,7 @@ async function main() {
 
   if (!outDir) {
     if (proj && nodeId) {
-      outDir = path.join(repoRoot, 'docs', 'projects', proj, 'tree', 'panel', nodeId);
+      outDir = path.join(repoRoot, ...require('./lib/repo-layout.js').path('projects_dir').split('/'), proj, 'tree', 'panel', nodeId);
       if (runId) outDir = path.join(outDir, runId);
     } else {
       console.error("qc-panel.js: --out is required unless both --proj and --node are set");

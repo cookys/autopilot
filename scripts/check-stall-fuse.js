@@ -65,12 +65,18 @@ const fs = require('fs');
 
 const DEFAULT_THRESHOLD = 3;
 const DEFAULT_PROCESS_THRESHOLD = 3;
+// Process paths = this repo's work records, wherever the layout registry puts them (docs/ at bootstrap, project/ from P1),
+// plus the ADR directory (docs/adr stays in docs/).
+const LAYOUT = require('./lib/repo-layout.js');
+const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const dirRe = (key) => new RegExp(`^${escapeRe(LAYOUT.path(key).replace(/\/+$/u, ''))}/`, 'u');
 const PROCESS_PATTERNS = [
-  /^docs\/plans\//u,
-  /^docs\/projects\//u,
-  /^docs\/backlog\//u,
-  /^docs\/BACKLOG\.md$/u,
-  /^docs\/adr\//u,
+  dirRe('plans_dir'),
+  dirRe('plans_evidence_dir'),
+  dirRe('projects_dir'),
+  dirRe('backlog_dir'),
+  new RegExp(`^${escapeRe(LAYOUT.path('backlog_file'))}$`, 'u'),
+  new RegExp(`^${escapeRe(LAYOUT.path('docs_dir'))}/adr/`, 'u'),
 ];
 const VERIFICATION_PATTERNS = [
   /^hooks\/tests\//u,

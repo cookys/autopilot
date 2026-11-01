@@ -105,7 +105,7 @@ function main() {
   // is easy to forget: when the table moved out of CLAUDE.md this gate stayed
   // behind, so for a while a script could be missing from the inventory entirely
   // without failing anything.
-  const inventoryPath = path.join(REPO_ROOT, 'docs', 'scripts-inventory.md');
+  const inventoryPath = path.join(REPO_ROOT, require('./lib/repo-layout.js').path('scripts_inventory_doc'));
   let inventoryText = null;
   try {
     inventoryText = fs.readFileSync(inventoryPath, 'utf8');

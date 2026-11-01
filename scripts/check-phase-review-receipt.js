@@ -28,6 +28,12 @@ const deriveReceiptState = require('./lib/review-chain-derive');
 
 const { EXCLUDE_ALLOWLIST, isPathspecAllowed, loadConsumerExcludeAllowlist } = require('./lib/exclude-allowlist');
 const reviewPackets = require('./lib/review-packets');
+const LAYOUT = require('./lib/repo-layout.js');
+// Plans sit where the layout registry puts them (docs/plans at bootstrap, project/plans from P1) in this repo, and under the
+// docs/plans convention in a consuming project: a receipt may belong to either.
+const PLAN_ROOTS = [...new Set([LAYOUT.path('plans_dir'), ['docs', 'plans'].join('/')])];
+const planDirsAbs = (repoRoot) => PLAN_ROOTS.map((rel) => path.join(repoRoot, rel));
+const inPlanDirs = (repoRoot, name) => PLAN_ROOTS.map((rel) => path.join(repoRoot, rel, name));
 
 function deepEqual(a, b) {
   if (a === b) return true;
@@ -137,7 +143,7 @@ function resolvePlanFile(flags, planArtifact, dispositions, planArtifactPath, di
   const id = planArtifact.logical_plan_id;
   if (id) {
     const candidates = [
-      path.join(repoRoot, 'docs', 'plans', `${id}.md`),
+      ...inPlanDirs(repoRoot, `${id}.md`),
       path.join(repoRoot, `${id}.md`),
       path.join(path.dirname(planArtifactPath), `${id}.md`),
       path.join(path.dirname(planArtifactPath), 'plan.md'),
@@ -146,13 +152,13 @@ function resolvePlanFile(flags, planArtifact, dispositions, planArtifactPath, di
     ];
     const mSuff = id.match(/^(.+)-(\d{4}-\d{2}-\d{2})$/);
     if (mSuff) {
-      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mSuff[2]}-${mSuff[1]}.md`));
+      candidates.push(...inPlanDirs(repoRoot, `${mSuff[2]}-${mSuff[1]}.md`));
       candidates.push(path.join(path.dirname(planArtifactPath), `${mSuff[2]}-${mSuff[1]}.md`));
       candidates.push(path.join(path.dirname(dispositionsPath), `${mSuff[2]}-${mSuff[1]}.md`));
     }
     const mPref = id.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
     if (mPref) {
-      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mPref[2]}-${mPref[1]}.md`));
+      candidates.push(...inPlanDirs(repoRoot, `${mPref[2]}-${mPref[1]}.md`));
       candidates.push(path.join(path.dirname(planArtifactPath), `${mPref[2]}-${mPref[1]}.md`));
       candidates.push(path.join(path.dirname(dispositionsPath), `${mPref[2]}-${mPref[1]}.md`));
     }
@@ -161,7 +167,7 @@ function resolvePlanFile(flags, planArtifact, dispositions, planArtifactPath, di
     }
   }
   if (planArtifact.plan_sha256) {
-    const searchDirs = [path.dirname(planArtifactPath), path.dirname(dispositionsPath), path.join(repoRoot, 'docs', 'plans')];
+    const searchDirs = [path.dirname(planArtifactPath), path.dirname(dispositionsPath), ...planDirsAbs(repoRoot)];
     for (const d of searchDirs) {
       try {
         if (!fs.existsSync(d)) continue;
@@ -197,7 +203,7 @@ function resolveRubricFile(flags, planArtifact, dispositions, planArtifactPath, 
   const id = planArtifact.logical_plan_id;
   if (id) {
     const candidates = [
-      path.join(repoRoot, 'docs', 'plans', `${id}.rubric.md`),
+      ...inPlanDirs(repoRoot, `${id}.rubric.md`),
       path.join(repoRoot, `${id}.rubric.md`),
       path.join(path.dirname(planArtifactPath), `${id}.rubric.md`),
       path.join(path.dirname(planArtifactPath), 'rubric.md'),
@@ -206,13 +212,13 @@ function resolveRubricFile(flags, planArtifact, dispositions, planArtifactPath, 
     ];
     const mSuff = id.match(/^(.+)-(\d{4}-\d{2}-\d{2})$/);
     if (mSuff) {
-      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mSuff[2]}-${mSuff[1]}.rubric.md`));
+      candidates.push(...inPlanDirs(repoRoot, `${mSuff[2]}-${mSuff[1]}.rubric.md`));
       candidates.push(path.join(path.dirname(planArtifactPath), `${mSuff[2]}-${mSuff[1]}.rubric.md`));
       candidates.push(path.join(path.dirname(dispositionsPath), `${mSuff[2]}-${mSuff[1]}.rubric.md`));
     }
     const mPref = id.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
     if (mPref) {
-      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mPref[2]}-${mPref[1]}.rubric.md`));
+      candidates.push(...inPlanDirs(repoRoot, `${mPref[2]}-${mPref[1]}.rubric.md`));
       candidates.push(path.join(path.dirname(planArtifactPath), `${mPref[2]}-${mPref[1]}.rubric.md`));
       candidates.push(path.join(path.dirname(dispositionsPath), `${mPref[2]}-${mPref[1]}.rubric.md`));
     }
@@ -221,7 +227,7 @@ function resolveRubricFile(flags, planArtifact, dispositions, planArtifactPath, 
     }
   }
   if (planArtifact.rubric_sha256) {
-    const searchDirs = [path.dirname(planArtifactPath), path.dirname(dispositionsPath), path.join(repoRoot, 'docs', 'plans'), path.join(repoRoot, 'evals')];
+    const searchDirs = [path.dirname(planArtifactPath), path.dirname(dispositionsPath), ...planDirsAbs(repoRoot), path.join(repoRoot, 'evals')];
     for (const d of searchDirs) {
       try {
         if (!fs.existsSync(d)) continue;
@@ -1154,7 +1160,7 @@ function validateModeA(flags, opts = {}) {
         .split('\n')
         .map((p) => p.trim())
         .filter(Boolean);
-      const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === 'docs/projects/INDEX.md';
+      const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.path('projects_index') || p === ['docs', 'projects', 'INDEX.md'].join('/');
       const allAllowed = diffRes.status === 0
         && changedPaths.every((p) => isPathspecAllowed(p, consumerAllowlist) || sidecarAllowed(p));
       if (!allAllowed) {

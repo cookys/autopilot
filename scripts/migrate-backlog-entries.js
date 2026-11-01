@@ -291,8 +291,11 @@ function posixRel(repoRoot, abs) {
   return rel.split(path.sep).join('/');
 }
 
+// The backlog of a CONSUMING project sits under docs/ by convention; built from parts so a relayout rewrite of this
+// repo's own docs/ paths does not reach it.
+const CONSUMER_BACKLOG = ['docs', 'BACKLOG.md'].join('/');
 function sidecarHeader(title, headSha, date) {
-  return `# ${title}\n\nSource: docs/BACKLOG.md@${headSha}, migrated ${date}\n\n`;
+  return `# ${title}\n\nSource: ${CONSUMER_BACKLOG}@${headSha}, migrated ${date}\n\n`;
 }
 
 function unifiedDiff(oldText, newText, filename) {
@@ -441,7 +444,7 @@ function planTableMigration(text, cfg, repoRoot, opts) {
       if (name.endsWith('.md')) usedSlugs.add(name.slice(0, -3));
     }
   } catch { /* out-dir absent */ }
-  const backlogRel = posixRel(repoRoot, path.resolve(opts.backlog || 'docs/BACKLOG.md'));
+  const backlogRel = posixRel(repoRoot, path.resolve(opts.backlog || CONSUMER_BACKLOG));
 
   const lines = text.split('\n');
   const outLines = [];

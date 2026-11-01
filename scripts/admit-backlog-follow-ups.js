@@ -48,7 +48,7 @@ function hasExactKeys(value, keys) {
 function parseArgs(argv) {
   const options = {
     inputs: [],
-    backlog: path.resolve('docs/BACKLOG.md'),
+    backlog: path.resolve(require('./lib/repo-layout.js').path('backlog_file')),
     currentTicket: null,
     dryRun: false,
   };

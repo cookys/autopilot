@@ -103,7 +103,15 @@ const DEFAULT_CAPS = {
   row: 1600,
 };
 const POINTER_THRESHOLD = 600;
-const DEFAULT_ROOTS = ['docs/plans/', 'docs/projects/', 'docs/backlog/'];
+// Pointer roots: this repo's work-record locations from the layout registry (docs/ at bootstrap, project/ from P1; the plans
+// evidence dir may sit beside the plans dir), plus the docs/ convention of a consuming project that has no config.
+const LAYOUT = require('./lib/repo-layout.js');
+const CONSUMER_ROOTS = ['plans', 'projects', 'backlog'].map((d) => ['docs', d, ''].join('/'));
+const DEFAULT_ROOTS = [...new Set([
+  ...['plans_dir', 'projects_dir', 'backlog_dir'].map((k) => `${LAYOUT.path(k)}/`),
+  `${path.posix.dirname(LAYOUT.path('plans_evidence_dir'))}/`,
+  ...CONSUMER_ROOTS,
+])];
 // `shipped` carries the ship date as well as the version/sha: done_not_moved is measured from a
 // date, and a version alone has none (depth-0 probe, 2026-09-14).
 const STATUS_RE = /^(open|fired \d{4}-\d{2}-\d{2}|dropped \d{4}-\d{2}-\d{2}|shipped \S+ \d{4}-\d{2}-\d{2})$/;
@@ -983,10 +991,14 @@ function mentionsBasename(text, name) {
 }
 
 function checkSidecarOrphans(text, backlogPath) {
-  const dir = path.join(path.dirname(backlogPath), 'backlog');
+  // The note files sit in a backlog/ directory beside the backlog file, or in the directory that holds it when that is
+  // itself named backlog (project/backlog/BACKLOG.md); the backlog file is never its own sidecar.
+  const here = path.dirname(backlogPath);
+  const dir = path.basename(here) === 'backlog' ? here : path.join(here, 'backlog');
   let names;
   try {
-    names = fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
+    names = fs.readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith('.md') && path.join(dir, e.name) !== backlogPath).map((e) => e.name);
   } catch {
     return [];
   }
@@ -994,7 +1006,7 @@ function checkSidecarOrphans(text, backlogPath) {
     code: 'sidecar_orphan',
     title: n,
     field: 'Pointer',
-    detail: `docs/backlog/${n} is mentioned by no backlog row; delete it with its row`,
+    detail: `${path.basename(path.dirname(dir))}/${path.basename(dir)}/${n} is mentioned by no backlog row; delete it with its row`,
   }));
 }
 

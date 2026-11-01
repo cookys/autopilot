@@ -14,12 +14,21 @@
 // session config/state, plan docs. Deliberately NARROW — a generic
 // '**/handoff*.md' rule was rejected (GPT-OSS panel finding: it doubles as a
 // bypass by planting a handoff-named file in product territory).
-const ALLOWLIST_PREFIXES = [
-  'docs/projects/',
-  'docs/plans/',
+// The session's repo is a consuming project (docs/projects/, docs/plans/ by convention) or this repo, whose work
+// records sit where the layout registry says (docs/ at bootstrap, project/ from P1): both are allowed.
+const REGISTRY_RECORD_PREFIXES = (() => {
+  try {
+    const layout = require('../scripts/lib/repo-layout.js');
+    return ['projects_dir', 'plans_dir', 'backlog_dir'].map((k) => `${layout.path(k)}/`);
+  } catch (_e) { return []; }
+})();
+const ALLOWLIST_PREFIXES = [...new Set([
+  ['docs', 'projects', ''].join('/'),
+  ['docs', 'plans', ''].join('/'),
+  ...REGISTRY_RECORD_PREFIXES,
   '.claude/',
   '.autopilot/',
-];
+])];
 
 const GATED_LEVELS = new Set(['l4', 'l5', 'l6']);
 

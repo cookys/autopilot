@@ -1728,7 +1728,7 @@ function checkPlanRegistration(opts) {
   }
   const stem = rel.slice(0, -3);
   const gate = require(path.join(__dirname, 'check-plan-graduation.js'));
-  const registration = gate.planIndexRegistration(repoRoot, stem);
+  const registration = gate.planIndexRegistration(repoRoot, stem, indexRel);
   if (!registration.indexExists || registration.activeRow) return;
   const row = gate.registerTemplateRow(repoRoot, plansDir, path.join(plansDir, '_archive'), stem);
   throw new CliError(

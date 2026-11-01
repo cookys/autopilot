@@ -65,8 +65,9 @@ function gitToplevel(dir) {
 // plan_unregistered gate — see that script's planIndexRegistration/registerTemplateRow).
 // Auto-allowed (no refusal) when the target repo has no docs/projects/INDEX.md at all.
 function checkSpecPlanRegistration(graph, repoRoot) {
-  const plansRel = LAYOUT.pathFor(repoRoot, 'plans_dir');
-  const indexRel = LAYOUT.pathFor(repoRoot, 'projects_index');
+  // Mission graphs exist only in this repo and its clones, whose layout is the registry's (not a consuming project's docs/).
+  const plansRel = LAYOUT.path('plans_dir');
+  const indexRel = LAYOUT.path('projects_index');
   const indexPath = path.join(repoRoot, indexRel);
   if (!fs.existsSync(indexPath)) return;
   const gate = require('./check-plan-graduation.js');

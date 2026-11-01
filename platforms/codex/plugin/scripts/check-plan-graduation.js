@@ -386,9 +386,10 @@ function isTableSeparatorRow(cells) {
   return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c.trim()));
 }
 
-function planIndexRegistration(repoRoot, stem) {
-  // The registry's index path is this repo's; any other repo (a consuming project asking about its plans) keeps the docs/ convention.
-  const indexPath = path.join(repoRoot, LAYOUT.pathFor(repoRoot, 'projects_index'));
+// indexRel: the index file relative to repoRoot. Default: the registry's path (this gate and mission machinery work on this repo and
+// its clones). A caller that may be pointed at another repo (dispatch-plan-review) passes LAYOUT.pathFor(repoRoot, 'projects_index').
+function planIndexRegistration(repoRoot, stem, indexRel = PROJECTS_INDEX) {
+  const indexPath = path.join(repoRoot, indexRel);
   const text = readFileSafe(indexPath);
   if (text == null) return { indexExists: false, indexPath, matchedRows: [], activeRow: null };
   const lines = text.split(/\r?\n/);

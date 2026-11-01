@@ -148,6 +148,7 @@ Claude Code compacts when the context reaches **`autoCompactWindow` minus a fixe
 
 | Setting | What it does | Default | Environment variable |
 |---|---|---|---|
+| `onboard_hint` (config.json) | false stops the one-line suggestion to run `autopilot:onboard` at session start (shown on `startup` only, when the repo has `.claude/` but no `.claude/dispatch-config.md`). | `true` | `AUTOPILOT_ONBOARD_HINT`: Set to "0" to stop the startup onboard suggestion (either this or onboard_hint: false switches it off). |
 | `update_check` (config.json) | false stops the "Autopilot updated" notice at session start. | `true` | `AUTOPILOT_UPDATE_CHECK`: Set to "0" to stop the update notice (either this or update_check: false switches it off). |
 | `AUTOPILOT_CONFIG_PAIR_CHECK` | Set to "0" to stop the ordinary-session reminder when context_budget.t2 plus gap is above autoCompactWindow minus 33000. The same reminder is also off when `update_check` is false or `AUTOPILOT_UPDATE_CHECK` is "0". | on | |
 | `config_schema_version` (config.json) | The config.json format version you last reviewed. Missing counts as 0; the current version is 1. Autopilot never writes it. | `0` (missing) | none |

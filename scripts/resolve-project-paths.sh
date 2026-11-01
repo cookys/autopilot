@@ -33,7 +33,12 @@
 # says the project has no such location; it does not create one because a reference doc
 # once named `docs/`. An invented path fails silently: the file is written, nobody reads it.
 #
-# Output: JSON {projects_dir, plans_dir, archive_dir, backlog, backlog_config, index, source, target}
+# Output: JSON {projects_dir, plans_dir, archive_dir, backlog, backlog_config, index, source, target,
+#               projects_dir_exists, plans_dir_exists, archive_dir_exists, backlog_exists, index_exists}
+#   <field>_exists is true only when the resolved path is not `none` and exists under <target>
+#   (a directory for *_dir, a file for backlog/index). A detected default can name a path that was
+#   never created (fleet repo, 2026-11-01: backlog=docs/BACKLOG.md, no such file); a skill must treat
+#   backlog_exists=false like `none`: report, do not write.
 #   source ∈ {override, project-lifecycle-config, next-config, dev-flow-config, detected, none}
 #     — the source of the FIRST field that answered; individual fields may differ, so a
 #       field's own value is authoritative, not the aggregate label.
@@ -143,6 +148,20 @@ if [[ -f "$TARGET/.claude/backlog-config.md" ]]; then
   BACKLOG_CONFIG=".claude/backlog-config.md"
 fi
 
+# <value> exists under TARGET as a <d|f>? `none` and empty are never existing.
+path_exists() {  # path_exists <value> <d|f> → "true"|"false"
+  local v="$1" kind="$2" p
+  if [[ -z "$v" || "$v" == "none" ]]; then printf 'false'; return; fi
+  [[ "$v" == /* ]] && p="$v" || p="$TARGET/$v"
+  if [[ "$kind" == d ]]; then [[ -d "$p" ]] && printf 'true' || printf 'false'
+  else [[ -f "$p" ]] && printf 'true' || printf 'false'; fi
+}
+PROJECTS_EXISTS="$(path_exists "$PROJECTS" d)"
+PLANS_EXISTS="$(path_exists "$PLANS" d)"
+ARCHIVE_EXISTS="$(path_exists "$ARCHIVE" d)"
+BACKLOG_EXISTS="$(path_exists "$BACKLOG" f)"
+INDEX_EXISTS="$(path_exists "$INDEX" f)"
+
 if [[ -n "$FIELD" ]]; then
   case "$FIELD" in
     projects_dir) printf '%s\n' "$PROJECTS" ;;
@@ -151,6 +170,11 @@ if [[ -n "$FIELD" ]]; then
     backlog) printf '%s\n' "$BACKLOG" ;;
     backlog_config) printf '%s\n' "$BACKLOG_CONFIG" ;;
     index) printf '%s\n' "$INDEX" ;;
+    projects_dir_exists) printf '%s\n' "$PROJECTS_EXISTS" ;;
+    plans_dir_exists) printf '%s\n' "$PLANS_EXISTS" ;;
+    archive_dir_exists) printf '%s\n' "$ARCHIVE_EXISTS" ;;
+    backlog_exists) printf '%s\n' "$BACKLOG_EXISTS" ;;
+    index_exists) printf '%s\n' "$INDEX_EXISTS" ;;
     source) printf '%s\n' "$SOURCE" ;;
     target) printf '%s\n' "$TARGET" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
@@ -158,6 +182,7 @@ if [[ -n "$FIELD" ]]; then
   exit 0
 fi
 
-printf '{ "projects_dir": "%s", "plans_dir": "%s", "archive_dir": "%s", "backlog": "%s", "backlog_config": "%s", "index": "%s", "source": "%s", "target": "%s" }\n' \
+printf '{ "projects_dir": "%s", "plans_dir": "%s", "archive_dir": "%s", "backlog": "%s", "backlog_config": "%s", "index": "%s", "source": "%s", "target": "%s", "projects_dir_exists": %s, "plans_dir_exists": %s, "archive_dir_exists": %s, "backlog_exists": %s, "index_exists": %s }\n' \
   "$(json_escape "$PROJECTS")" "$(json_escape "$PLANS")" "$(json_escape "$ARCHIVE")" \
-  "$(json_escape "$BACKLOG")" "$(json_escape "$BACKLOG_CONFIG")" "$(json_escape "$INDEX")" "$SOURCE" "$(json_escape "$TARGET")"
+  "$(json_escape "$BACKLOG")" "$(json_escape "$BACKLOG_CONFIG")" "$(json_escape "$INDEX")" "$SOURCE" "$(json_escape "$TARGET")" \
+  "$PROJECTS_EXISTS" "$PLANS_EXISTS" "$ARCHIVE_EXISTS" "$BACKLOG_EXISTS" "$INDEX_EXISTS"

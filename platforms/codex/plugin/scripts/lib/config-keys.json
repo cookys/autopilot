@@ -1451,6 +1451,22 @@
       ]
     },
     {
+      "name": "onboard_hint",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "update",
+      "default": true,
+      "readers": [
+        "hooks/session-start.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_ONBOARD_HINT"
+      ],
+      "summary": "false stops the startup line that suggests autopilot:onboard in a repo with .claude/ but no onboard-written config.",
+      "type": "boolean"
+    },
+    {
       "name": "update_check",
       "kind": "config_key",
       "audience": "user",
@@ -5039,6 +5055,21 @@
         "topology.exclude_seats"
       ],
       "summary": "Where the derived dispatch topology is written and read."
+    },
+    {
+      "name": "AUTOPILOT_ONBOARD_HINT",
+      "kind": "env",
+      "audience": "user",
+      "group": "update",
+      "default": "on",
+      "readers": [
+        "hooks/session-start.js"
+      ],
+      "doc": "docs/settings-reference.md",
+      "relates": [
+        "onboard_hint"
+      ],
+      "summary": "Set to \"0\" to stop the startup onboard suggestion (either this or onboard_hint: false switches it off)."
     },
     {
       "name": "AUTOPILOT_UPDATE_CHECK",

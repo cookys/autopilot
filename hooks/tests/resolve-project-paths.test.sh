@@ -122,6 +122,30 @@ eq "declared backlog_config when the file exists" ".claude/backlog-config.md" "$
 rm -f "$P/.claude/backlog-config.md"
 eq "absent backlog_config is none" "none" "$(f backlog_config)"
 
+# 8b. *_exists: a resolved path that is not on disk must say so (fleet repo 2026-11-01:
+#     detected backlog=docs/BACKLOG.md, file never created, finish-flow silently had nowhere to write).
+cat > "$P/.claude/project-lifecycle-config.md" <<'CFG'
+## Project Paths
+- Backlog: `doc/DEBT.md`
+CFG
+eq "backlog_exists false when the resolved file is absent" "false" "$(f backlog_exists)"
+mkdir -p "$P/doc"; printf '# debt\n' > "$P/doc/DEBT.md"
+eq "backlog_exists true when the resolved file exists" "true" "$(f backlog_exists)"
+eq "backlog value itself is unchanged by the exists check" "doc/DEBT.md" "$(f backlog)"
+printf '## Project Paths\n- Backlog: `none`\n' > "$P/.claude/project-lifecycle-config.md"
+eq "backlog: none stays none" "none" "$(f backlog)"
+eq "backlog: none is never existing" "false" "$(f backlog_exists)"
+eq "exists is a JSON boolean in the envelope" "boolean" "$(node -e 'console.log(typeof JSON.parse(process.argv[1]).backlog_exists)' "$(bash "$R" --target "$P")")"
+eq "plans_dir_exists tracks the directory" "$([ -d "$P/$(f plans_dir)" ] && echo true || echo false)" "$(f plans_dir_exists)"
+eq "bare repo: every *_exists is false" "false" "$(bash "$R" --target "$BARE" --field backlog_exists)"
+rm -f "$P/.claude/project-lifecycle-config.md"
+
+# 8c. finish-flow's Deferred-items row must treat backlog_exists=false like `none` (report, do not write).
+FF="$REPO_ROOT/skills/finish-flow/SKILL.md"
+if grep -F 'backlog: none`, or `backlog_exists` false' "$FF" >/dev/null && grep -F -- '--field backlog_exists' "$FF" >/dev/null
+then ok "finish-flow Deferred items: backlog_exists=false triggers the no-backlog report"
+else no "finish-flow Deferred items: backlog_exists=false triggers the no-backlog report" "SKILL.md names backlog_exists" "absent"; fi
+
 # 7. Envelope.
 node -e 'JSON.parse(process.argv[1])' "$(bash "$R" --target "$REPO_ROOT")" \
   && ok "emitted JSON parses" || no "emitted JSON parses" "valid JSON" "unparseable"

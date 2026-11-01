@@ -345,6 +345,45 @@ function resolveRepoRoot(payloadCwd) {
   try { return fs.realpathSync(top); } catch { return null; }
 }
 
+// BL-0363: a repo with a `.claude/` dir but no onboard-written config (dispatch-config.md is the one
+// every onboard run writes, scripts/scaffold-config.js) has never run autopilot:onboard; its defaults are
+// then guesses (fleet repo: a missing backlog went unreported for weeks). One advisory line on startup only;
+// never blocks, never writes. Off: AUTOPILOT_ONBOARD_HINT=0 or config.json onboard_hint:false.
+const ONBOARD_MARKER = 'dispatch-config.md';
+
+function onboardHintOff(homeDir) {
+  if (process.env.AUTOPILOT_ONBOARD_HINT === '0') return true;
+  try {
+    const cfg = JSON.parse(fs.readFileSync(configPath({ home: homeDir }), 'utf8'));
+    return !!cfg && cfg.onboard_hint === false;
+  } catch {
+    return false;
+  }
+}
+
+function onboardHint(homeDir, cwd, source) {
+  if (source !== 'startup' || onboardHintOff(homeDir)) return '';
+  const top = resolveRepoRoot(cwd);
+  if (!top) return '';
+  const dirs = new Set([top]);
+  const common = runGit(cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  if (common) dirs.add(path.dirname(common)); // a linked worktree: the main checkout counts too
+  let home = homeDir;
+  try { home = fs.realpathSync(homeDir); } catch { /* keep */ }
+  let hasClaudeDir = false;
+  for (const dir of dirs) {
+    if (dir === home) return ''; // a dotfiles repo at $HOME: ~/.claude is the user dir, not a project's
+    try {
+      if (fs.statSync(path.join(dir, '.claude')).isDirectory()) hasClaudeDir = true;
+    } catch { /* no .claude */ }
+    if (fs.existsSync(path.join(dir, '.claude', ONBOARD_MARKER))) return '';
+  }
+  if (!hasClaudeDir) return '';
+  return '[Autopilot onboard] This repo has a .claude/ directory but no onboard-written config ('
+    + `.claude/${ONBOARD_MARKER}), so autopilot is running on guesses. Run autopilot:onboard to scaffold it. `
+    + '(Silence: onboard_hint=false in ~/.autopilot/config.json, or AUTOPILOT_ONBOARD_HINT=0.)';
+}
+
 function handoffEnabled(homeDir) {
   if (process.env.AUTOPILOT_HANDOFF_INJECT === '1') return true;
   const configFile = configPath({ home: homeDir });
@@ -628,6 +667,11 @@ function run() {
         if (pair) updateNotice = pair;
       } catch { /* advisory only */ }
     }
+
+    try {
+      const hint = onboardHint(homeDir, cwd, source);
+      if (hint) updateNotice = updateNotice ? `${updateNotice}\n\n${hint}` : hint;
+    } catch { /* advisory only */ }
 
     // Any source: t2 + gap must fit under window - 33000, else compaction comes before the T2 handoff reminder (with auto-compact set T2 never asks to stop). One line, no changes made.
     // BL-0205: model ids for context_budget.per_model, in priority order: the payload's own, then the

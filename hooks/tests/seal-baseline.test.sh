@@ -355,6 +355,23 @@ rcis 1 "compare: shift where one reference file's bytes changed -> red" gcmp
 objs "$(ob c/obj "\"c/obj\":\"$H1\"")","$(ob a/obj "\"a/obj\":\"$H2\",\"a/ref\":\"$H4\"")" > "$T/gc.json"
 rcis 1 "compare: shift where the main file's bytes changed -> red" gcmp
 
+# ---- recorder: a sources manifest's plan_path / rubric_path are relative to the REGISTRY's base for that manifest, not to the
+# manifest's own directory (D9.2; after P1 the manifests sit in project/missions/ while their base is project/)
+node "$C/scripts/lib/repo-layout.js" --json > "$T/reg0.json" </dev/null
+node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));r.paths.manifest_plan_base="docs/plans";fs.writeFileSync(process.argv[2],JSON.stringify(r));' "$T/reg0.json" "$T/reg-base.json"
+recbase() { REPO_LAYOUT_REGISTRY="$T/reg-base.json" node "${1:-$SB}" record --root "$C" --out "$T/rb.json" </dev/null >"$T/rec.out" 2>"$T/rec.err"; }
+refsbased() { node -e '
+const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).objects;
+const g=o["docs/mission-backlog-bc-execution-graph.json"];const f=Object.keys(g.files);
+const want="docs/plans/plans/2026-07-31-correctness-gates.md";   // base docs/plans + plan_path plans/<stem>.md
+process.exit(f.includes(want)&&!f.includes("docs/plans/2026-07-31-correctness-gates.md")?0:1)' "$T/rb.json"; }
+recbase && refsbased && ok || bad "recorder hashes plan_path under the registry base (graph and plan in different directories)"
+# negative control: the old recorder (plan_path joined to the manifest's directory) must fail the same assertion
+sed 's#path.posix.join(base, s\[k\])#path.posix.join(dir, s[k])#' "$SB" > "$T/sb-old.js"
+cmp -s "$SB" "$T/sb-old.js" && bad "negative control: the mutation did not change the tool"
+recbase "$T/sb-old.js"; if refsbased; then bad "negative control: old join(dir, plan_path) recorder must NOT satisfy the registry-base assertion"; else ok; fi
+recbase && refsbased && ok || bad "after restoring the recorder the registry-base assertion is green again"
+
 # ---- input errors
 rcis 2 "no subcommand" node "$SB"
 rcis 2 "compare without --baseline" node "$SB" compare --current "$T/cur.json"

@@ -3285,6 +3285,7 @@ function runCampaignIntake(input = {}, adapters = {}) {
 }
 
 module.exports = {
+  durableWaitBudgetWaived,
   isProvenExactReplayNoOp,
   defaultAdoptionAdmission,
   defaultContextGate,

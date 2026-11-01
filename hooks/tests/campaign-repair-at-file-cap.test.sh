@@ -418,6 +418,8 @@ if (hasHelper) {
     // BL-0360: the same two waits with the churn budget spent (file budget below the cap).
     ['AWAITING_DISPOSITION_CHURN_FULL', null, null],
     ['AWAITING_CONVERGENCE_ADJUDICATION_CHURN_FULL', null, null],
+    // BL-0360: ledger advanced PAST the wait (REVIEWING) with the churn budget spent: both sides must refuse.
+    ['REVIEWING_CHURN_FULL', null, null],
   ];
   for (const [phase, fx, st] of cases) {
     const observed = '2026-08-30T00:00:05.000Z';
@@ -440,6 +442,10 @@ if (hasHelper) {
       target = reviewingFixture('parity-convergence-churn', { usageFiles: 1, churnFull: true });
       state = toReviewing(target, { convergence: true });
     }
+    if (phase === 'REVIEWING_CHURN_FULL') {
+      target = reviewingFixture('parity-reviewing-churn', { usageFiles: 1, churnFull: true });
+      state = toReviewing(target);
+    }
     const projT = campaignCli.projectCampaign(campaignCli.loadRows(target.ledger), target.campaignId);
     preSpendCalls.length = 0;
     const cliResult = campaignCli.campaignResumeEligibility(projT, observed);
@@ -459,8 +465,8 @@ if (hasHelper) {
 // ---- G. BL-0360: a budget-spent durable wait is admitted AND the real engine still dispatches nothing,
 // mutates nothing and spends nothing. Real engine + real intake + real ledger; the implementer and
 // review dispatchers are spies. A fixture can force the wait branch to dispatch (SPY_FORCE_DISPATCH=1),
-// which must turn the spy assertions red (negative control).
-function engineResume(fx, label) {
+// which the spy must detect (negative control, run every time below).
+function engineResume(fx, label, { forceDispatch = false } = {}) {
   const spies = { impl: 0, review: 0 };
   const rev = (ref) => git(fx.repo, ['rev-parse', ref]);
   const proj = () => campaignCli.projectCampaign(campaignCli.loadRows(fx.ledger), fx.campaignId);
@@ -486,7 +492,7 @@ function engineResume(fx, label) {
       return { error: 'spy: reviewer must not run', status: 1, signal: null, stdout: '', stderr: '', parseError: null, result: null };
     },
   });
-  if (process.env.SPY_FORCE_DISPATCH === '1') {
+  if (forceDispatch) {
     // negative-control fixture: the wait branch itself calls the dispatcher
     const realIntake = eng.campaignIntake.bind(eng);
     eng.campaignIntake = (input) => {
@@ -509,6 +515,8 @@ function engineResume(fx, label) {
   console.log(`g_${label}_phase=${result.phase} rejection=${rej ? rej.code : 'none'}`);
   console.log(`g_${label}_impl_calls=${spies.impl}`);
   console.log(`g_${label}_review_calls=${spies.review}`);
+  console.log(`g_${label}_review_calls_ge1=${spies.review >= 1}`);
+  console.log(`g_${label}_dispatch_detected=${spies.impl > 0}`);
   console.log(`g_${label}_usage_unchanged=${spend(after.state.usage) === usageBefore}`);
   console.log(`g_${label}_head_unchanged=${rev(fx.branch) === headBefore}`);
   console.log(`g_${label}_intake_budget_rejected=${Boolean(rej && /budget_exhausted/.test(rej.code))}`);
@@ -523,6 +531,10 @@ function engineResume(fx, label) {
   const gBound = reviewingFixture('spy-boundary');
   toReviewing(gBound, { stopAtBoundary: true });
   engineResume(gBound, 'BOUNDARY_REJECTED');
+  // Negative control (always runs): the same wait fixture with the dispatcher forced to run must be detected.
+  const gNeg = reviewingFixture('spy-negative', { usageFiles: 4, churnFull: true });
+  toReviewing(gNeg, { disposition: true });
+  engineResume(gNeg, 'NEGATIVE_FORCED_DISPATCH', { forceDispatch: true });
 }
 
 // ---- D. admission advisory -------------------------------------------------------------
@@ -590,8 +602,9 @@ assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_cli_calls=AWAITING_C
 assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_intake_calls=AWAITING_CONVERGENCE_ADJUDICATION:4/4:repair=undefined->true" "AWAITING_CONVERGENCE_ADJUDICATION: intake still evaluated the predicate (TRUE) before waiving it"
 assert_contains "$OUT" "f_AWAITING_DISPOSITION_CHURN_FULL_blocked=cli:false,intake:false" "AWAITING_DISPOSITION with the churn budget spent: both sides admit"
 assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_CHURN_FULL_blocked=cli:false,intake:false" "AWAITING_CONVERGENCE_ADJUDICATION with the churn budget spent: both sides admit"
+assert_contains "$OUT" "f_REVIEWING_CHURN_FULL_blocked=cli:true,intake:true" "ledger advanced past the wait (REVIEWING) with the churn budget spent: both sides refuse (no stale waiver)"
 assert_contains "$OUT" "f_AWAITING_DISPOSITION_blocked=cli:false,intake:false" "AWAITING_DISPOSITION at 4/4 (repair phase): neither side refuses"
-for ph in BOUNDARY_REJECTED REVIEWING AWAITING_DISPOSITION AWAITING_CONVERGENCE_ADJUDICATION AWAITING_DISPOSITION_CHURN_FULL AWAITING_CONVERGENCE_ADJUDICATION_CHURN_FULL; do
+for ph in BOUNDARY_REJECTED REVIEWING AWAITING_DISPOSITION AWAITING_CONVERGENCE_ADJUDICATION AWAITING_DISPOSITION_CHURN_FULL AWAITING_CONVERGENCE_ADJUDICATION_CHURN_FULL REVIEWING_CHURN_FULL; do
   assert_contains "$OUT" "f_${ph}_parity=true" "$ph: cli.js and campaign-intake.js evaluate the pre-spend predicate identically (same calls, same verdict)"
 done
 assert_contains "$OUT" "f_AWAITING_DISPOSITION_intake_calls=AWAITING_DISPOSITION:4/4:repair=undefined->false" "intake really reached the predicate for the disposition resume (not vacuous parity)"
@@ -720,5 +733,8 @@ done
 # BOUNDARY_REJECTED with a bound git candidate is NOT a no-op: the engine resumes it into a full-diff review
 # (reviewer model calls), which is why the budget waiver excludes it (durableWaitBudgetWaived).
 assert_contains "$OUT" "g_BOUNDARY_REJECTED_impl_calls=0" "BOUNDARY_REJECTED resume never calls the implementer"
-assert_not_contains "$OUT" "g_BOUNDARY_REJECTED_review_calls=0" "BOUNDARY_REJECTED with a git candidate re-reviews (so it must not be budget-waived)"
+assert_contains "$OUT" "g_BOUNDARY_REJECTED_review_calls_ge1=true" "BOUNDARY_REJECTED with a git candidate re-reviews (>=1 review call), so it must not be budget-waived"
+# Negative control inside the suite: a wait branch that dispatches is detected by the same spy.
+assert_contains "$OUT" "g_NEGATIVE_FORCED_DISPATCH_dispatch_detected=true" "negative control: forcing a dispatch in the wait branch makes the spy see implementer calls > 0"
+assert_contains "$OUT" "g_AWAITING_DISPOSITION_dispatch_detected=false" "positive side: the unforced wait branch dispatches nothing"
 finalize_test

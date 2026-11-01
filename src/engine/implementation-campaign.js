@@ -102,6 +102,8 @@ function isProvenExactReplayNoOp(wait) {
 // the engine resumes that one into a full-diff review (model calls), so it is not a no-op.
 // ONE definition for campaign-intake.js and src/campaign/cli.js.
 function durableWaitBudgetWaived({ phase, wait, candidateReference } = {}) {
+  // The CURRENT ledger phase must itself be a durable wait; a mark that outlived the wait is ignored.
+  if (!NON_SUCCESS_DURABLE_STATES.has(phase)) return false;
   if (!isProvenExactReplayNoOp(wait)) return false;
   return !(phase === CAMPAIGN_STATES.BOUNDARY_REJECTED
     && candidateReference && candidateReference.kind === 'git_candidate');

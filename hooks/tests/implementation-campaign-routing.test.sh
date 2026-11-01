@@ -2072,6 +2072,17 @@ for (const [key, value] of broken) {
   assert.strictEqual(isProvenExactReplayNoOp({ ...proven, [key]: value }), false, `${key}=${value}`);
 }
 assert.strictEqual(isProvenExactReplayNoOp(undefined), false);
+// A stale all-true mark is worthless once the ledger has moved past the wait: the waiver reads the
+// CURRENT phase, so no non-wait phase is ever waived and a git-candidate BOUNDARY_REJECTED never is.
+const { durableWaitBudgetWaived } = require(path.join(process.argv[2], 'src', 'engine', 'campaign-intake'));
+for (const phase of ['PREPARED', 'IMPLEMENTING', 'VERTICAL_VERIFICATION', 'REVIEWING', 'ADJUDICATING', 'REPAIRING']) {
+  assert.strictEqual(durableWaitBudgetWaived({ phase, wait: proven, candidateReference: null }), false, `stale mark waived in ${phase}`);
+}
+for (const phase of ['BOUNDARY_REJECTED', 'AWAITING_DISPOSITION', 'AWAITING_CONVERGENCE_ADJUDICATION']) {
+  assert.strictEqual(durableWaitBudgetWaived({ phase, wait: proven, candidateReference: null }), true, `${phase} not waived`);
+}
+assert.strictEqual(durableWaitBudgetWaived({ phase: 'BOUNDARY_REJECTED', wait: proven, candidateReference: { kind: 'git_candidate' } }), false);
+assert.strictEqual(durableWaitBudgetWaived({ phase: 'AWAITING_DISPOSITION', wait: { ...proven, no_op: false }, candidateReference: null }), false);
 assert.strictEqual(isProvenExactReplayNoOp(null), false);
 assert.strictEqual(isProvenExactReplayNoOp({}), false);
 console.log('exact_replay_predicate_needs_all_fields=true');
@@ -2564,7 +2575,7 @@ NODE
 assert_exit_code "$?" "0" "T5 unbound preservation: $T5_RESUME"
 
 assert_contains "$T5_RESUME" "t5_unbound_preserved=true" \
-  "T5 $T5_LABEL exact-replay durable wait is admitted (four fields asserted)"
+  "T5 $T5_LABEL exact-replay durable wait is admitted (five marks asserted)"
 done
 
 # Red verification takes the repair path (plan 2026-09-16-red-verification-repair-path).

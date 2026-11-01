@@ -943,12 +943,11 @@ function campaignResumeEligibility(projection, observedAt) {
   // BL-0360: same predicate as campaign-intake.js. A durable wait adopts as an exact-replay
   // no-op (no dispatch, no mutation, no gate attempt), so a spent file/churn budget must not
   // refuse it; the file predicate is still evaluated, only its rejection is waived.
-  const exactReplayNoOp = NON_SUCCESS_DURABLE_STATES.has(projection.state.phase)
-    && durableWaitBudgetWaived({
-      phase: projection.state.phase,
-      wait: durableWaitNoOpMarks(),
-      candidateReference: projection.candidate_reference,
-    });
+  const exactReplayNoOp = durableWaitBudgetWaived({
+    phase: projection.state.phase,
+    wait: durableWaitNoOpMarks(),
+    candidateReference: projection.candidate_reference,
+  });
   const fileBudgetBlocked = !reviewingResumable && changedFilesPreSpendBlocked({
     phase: projection.state.phase,
     usage: projection.state.usage,

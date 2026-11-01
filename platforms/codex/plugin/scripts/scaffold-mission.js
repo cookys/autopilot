@@ -297,11 +297,18 @@ function generate(b, o) {
   // Sources manifest paths are relative to the manifest dir, which must contain plan and rubric.
   // The base the manifest's paths are relative to comes from the registry (repo-layout manifestBase):
   // the registered plan base (or the base a layout exception declares for that one manifest).
-  const planBase = path.relative(fs.realpathSync(b.repoRoot),
-    LAYOUT.manifestBase(b.repoRoot, path.join(b.repoRoot, b.sourcesRel)).base).split(path.sep).join('/') || '.';
+  const planBaseAbs = LAYOUT.manifestBase(b.repoRoot, path.join(b.repoRoot, b.sourcesRel)).base;
+  const planBase = path.relative(fs.realpathSync(b.repoRoot), planBaseAbs).split(path.sep).join('/') || '.';
   const rel = (p) => path.posix.relative(planBase, p);
   for (const p of [b.plan, b.rubric]) {
     if (rel(p).startsWith('..')) throw new Refusal(`--out-dir ${b.outDir} must contain ${p} (manifest paths stay under the plan base ${planBase})`, 1);
+    // every relative path written into the manifest goes through the one containment check
+    try { LAYOUT.containedPath(planBaseAbs, rel(p)); } catch (error) {
+      if (error && (error.code === 'MANIFEST_PATH_ESCAPE' || error.code === 'MANIFEST_BASE_INVALID')) {
+        throw new Refusal(`${p} cannot be a manifest source under the plan base ${planBase}: ${error.message}`, 1);
+      }
+      throw error;
+    }
   }
   const sources = {
     schema_version: 1,

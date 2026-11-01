@@ -6,6 +6,7 @@
 
 LAYOUT="$REPO_ROOT/scripts/lib/repo-layout.js"
 export GIT_AUTHOR_NAME=mp GIT_AUTHOR_EMAIL=mp@example.com GIT_COMMITTER_NAME=mp GIT_COMMITTER_EMAIL=mp@example.com
+GT="git -c user.name=t -c user.email=t@t -c commit.gpgsign=false"
 
 # mkreg <out> <js over d>: the default registry at stage P1 (manifests in project/missions, plans relative to project/).
 mkreg() {
@@ -58,6 +59,7 @@ mkreg "$TEST_TMP/bad.json" 'd.exceptions.push({ path: "x.json", rule: 6, reason:
 REPO_LAYOUT_REGISTRY="$TEST_TMP/bad.json" node "$LAYOUT" stage >/dev/null 2>&1
 assert_eq "2" "$?" "plan_base with .. is rejected by validate"
 # a manifest outside the repo keeps the historical base (its own directory)
+mkdir -p "$TEST_TMP/loose"
 OUT="$(node "$LAYOUT" manifest-path "$TEST_TMP/loose/m.json" plans/p.md --repo-root "$R" 2>&1)"
 assert_eq "$TEST_TMP/loose/plans/p.md" "$OUT" "outside-repo manifest resolves against its own dir"
 
@@ -81,7 +83,7 @@ write_manifest() { # <file>
     "$(sha "$R/project/plans/2026-08-03-p.md")" "$(sha "$R/project/plans/2026-08-03-p.rubric.md")" > "$1"
 }
 write_manifest "$R/project/missions/mission-p-sources.json"
-git -C "$R" init -q; git -C "$R" config commit.gpgsign false; git -C "$R" add -A; git -C "$R" commit -q -m fixture
+git -C "$R" init -q; $GT -C "$R" add -A; $GT -C "$R" commit -q -m fixture
 
 # ---- 5a. reader: mission-execution-graph-check (loadSourceCoverageManifest) ----
 loader() { REPO_LAYOUT_REGISTRY="$1" node -e '
@@ -112,8 +114,14 @@ assert_eq '["2026-08-03-p"]' "$(stems)" "plan-graduation: lineage stem from the 
 cp "$R/.claude/mission-routing-config.json" "$TEST_TMP/routing.bak"
 sed -i 's#mission-p-sources#mission-esc-sources#' "$R/.claude/mission-routing-config.json"
 sed -i 's#"rubric_path":"plans/2026-08-03-p.rubric.md"#"rubric_path":"../../outside.rubric.md"#' "$R/project/missions/mission-esc-sources.json"
-assert_eq '[]' "$(stems)" "plan-graduation: an escaping plan_path adds no stem"
+assert_contains "$(stems 2>&1)" "MANIFEST_PATH_ESCAPE" "plan-graduation: an escaping plan_path fails loudly (round 3: was 'adds no stem')"
 cp "$TEST_TMP/routing.bak" "$R/.claude/mission-routing-config.json"
+# sealed-docs fails closed on the same escaping manifest, then the manifest is parked so the later cases see a clean set
+sealed_err() { REPO_LAYOUT_REGISTRY="$1" node -e '
+  const s = require(process.argv[1] + "/scripts/lib/sealed-docs.js");
+  try { s.sealedDocFiles(process.argv[2]); console.log("NO-THROW"); } catch (e) { console.log("THROW " + e.code); }' "$REPO_ROOT" "$R"; }
+assert_eq "THROW MANIFEST_PATH_ESCAPE" "$(sealed_err "$P1")" "sealed-docs: an escaping sealed path throws instead of dropping out of the set"
+mv "$R/project/missions/mission-esc-sources.json" "$TEST_TMP/esc-sources.parked"
 
 # ---- 5c. reader: sealed-docs ----
 sealed() { REPO_LAYOUT_REGISTRY="$1" node -e '
@@ -146,9 +154,9 @@ cp "$REPO_ROOT/.claude/owner-kernel-governance.json" "$S/.claude/"; cp "$REPO_RO
 { cat "$FIX"; printf '\n## Deliverable contract\n- change src/thing.js and add scripts/new-tool.js\n'; } > "$S/project/plans/$STEM.md"
 printf '# Projects Index\n\n| Date | Name | Version | Commit | Links |\n|---|---|---|---|---|\n' > "$S/project/projects/INDEX.md"
 echo 'module.exports = 1;' | tee "$S/src/thing.js" > "$S/platforms/codex/plugin/src/thing.js"
-git -C "$S" add -A; git -C "$S" commit -q -m seed
+$GT -C "$S" add -A; $GT -C "$S" commit -q -m seed
 REPO_LAYOUT_REGISTRY="$P1" node "$REPO_ROOT/scripts/check-plan-graduation.js" --register-template "$STEM" --repo-root "$S" >> "$S/project/projects/INDEX.md"
-git -C "$S" add -A; git -C "$S" commit -q -m reg
+$GT -C "$S" add -A; $GT -C "$S" commit -q -m reg
 scaf() { REPO_LAYOUT_REGISTRY="$P1" node "$REPO_ROOT/scripts/scaffold-mission.js" --repo-root "$S" --plan "project/plans/$STEM.md" \
   --output-path src/thing.js --create scripts/new-tool.js --verify-cmd "node --check src/thing.js" "$@"; }
 OUT="$(scaf --check 2>&1)"; RC=$?
@@ -186,6 +194,8 @@ ln -s "$TEST_TMP/nowhere" "$CB/plans/dangling"
 assert_contains "$(contained "$CB" 'plans/dangling')" "ERR MANIFEST_PATH_ESCAPE symlink" "dangling symlink is red"
 # graph-check surfaces the escape code instead of repairing it
 ln -s "$TEST_TMP/coutside" "$R/project/plans/leak"
+cp "$R/project/missions/mission-p-sources.json" "$R/project/missions/mission-esc-sources.json"
+sed -i 's#"plans/2026-08-03-p.md"#"../../outside.md"#' "$R/project/missions/mission-esc-sources.json"
 cp "$R/project/missions/mission-p-sources.json" "$R/project/missions/mission-sym-sources.json"
 sed -i 's#"plans/2026-08-03-p.md"#"plans/leak/s.md"#' "$R/project/missions/mission-sym-sources.json"
 code_of() { REPO_LAYOUT_REGISTRY="$P1" node -e '
@@ -202,9 +212,9 @@ assert_contains "$(node -e '
   try { g.loadActiveLineageStems(process.argv[2]); console.log("NO-THROW"); } catch (e) { console.log("THROW " + e.message.slice(0, 60)); }' "$REPO_ROOT" "$R" "$BROKEN")" "THROW" "graduation: a broken registry fails loudly instead of yielding no stems"
 # linked worktrees: a manifest in a sibling worktree is governed by THAT worktree's root, in both directions
 W1="$TEST_TMP/w1"; mkdir -p "$W1/project/missions" "$W1/project/plans"
-git -C "$W1" init -q; git -C "$W1" config commit.gpgsign false
+git -C "$W1" init -q
 echo '{}' > "$W1/project/missions/mission-w-sources.json"; echo p > "$W1/project/plans/p.md"
-git -C "$W1" add -A; git -C "$W1" commit -q -m w; git -C "$W1" worktree add -q "$TEST_TMP/w2" -b w2 >/dev/null 2>&1
+$GT -C "$W1" add -A; $GT -C "$W1" commit -q -m w; $GT -C "$W1" worktree add -q "$TEST_TMP/w2" -b w2 || fail "worktree add failed"
 W1R="$(cd "$W1" && pwd -P)"; W2R="$(cd "$TEST_TMP/w2" && pwd -P)"
 OUT="$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-path "$W1R/project/missions/mission-w-sources.json" plans/p.md --repo-root "$W2R" 2>&1)"
 assert_eq "$W1R/project/plans/p.md" "$OUT" "linked worktree -> main: resolved under the manifest's own worktree root"
@@ -213,6 +223,42 @@ assert_eq "$W2R/project/plans/p.md" "$OUT" "main -> linked worktree: resolved un
 assert_contains "$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-base "$W1R/project/missions/mission-w-sources.json" --repo-root "$W2R" 2>&1)" '"source": "registry"' "linked worktree manifest is governed by the registry, not 'manifest-dir'"
 OUT="$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-base "$TEST_TMP/loose/m.json" --repo-root "$W1R" 2>&1)"
 assert_contains "$OUT" '"source": "manifest-dir"' "a manifest in no git repo keeps the manifest-dir base"
+
+# ---- 5g. round 3: unrelated repos, env-proof repo detection, scaffold containment, named missing base ----
+# an unrelated repo never borrows the caller's per-file exceptions
+U="$TEST_TMP/unrel"; mkdir -p "$U/docs" "$U/private"; git -C "$U" init -q; echo '{}' > "$U/docs/mission-x-sources.json"; echo SECRET > "$U/private/secret.md"
+mkreg "$TEST_TMP/p1-borrow.json" 'd.exceptions.push({ path: "docs/mission-x-sources.json", rule: 6, reason: "belongs to the caller repo", plan_base: "private" })'
+OUT="$(REPO_LAYOUT_REGISTRY="$TEST_TMP/p1-borrow.json" node "$LAYOUT" manifest-base "$U/docs/mission-x-sources.json" --repo-root "$R" 2>&1)"
+assert_contains "$OUT" '"source": "registry"' "unrelated repo: the caller's exception is not applied"
+assert_contains "$OUT" "unrel/docs\"" "unrelated repo: governed by its own built-in docs/ base, not the caller's plan_base"
+# the caller's own repo still honours the exception
+mkdir -p "$R/private"
+OUT="$(REPO_LAYOUT_REGISTRY="$TEST_TMP/p1-borrow.json" node "$LAYOUT" manifest-base "$R/docs/mission-x-sources.json" --repo-root "$R" 2>&1)"
+assert_contains "$OUT" '"source": "exception"' "caller's own repo: the exception applies"
+# repo detection is a file-system walk: GIT_DIR / GIT_CEILING_DIRECTORIES change nothing
+base_of() { REPO_LAYOUT_REGISTRY="$P1_EXC" node -e '
+  const L = require(process.argv[1]); console.log(JSON.stringify(L.manifestBase(process.argv[2], process.argv[3])));' "$LAYOUT" "$R" "$R/project/missions/mission-old-sources.json"; }
+PLAIN="$(base_of)"
+assert_eq "$(GIT_DIR="$TEST_TMP/absent" base_of)" "$PLAIN" "GIT_DIR set: same manifest base as without it"
+assert_eq "$(GIT_CEILING_DIRECTORIES="$TEST_TMP" base_of)" "$PLAIN" "GIT_CEILING_DIRECTORIES set: same manifest base as without it"
+envload() { REPO_LAYOUT_REGISTRY="$P1_EXC" node -e '
+  const g = require(process.argv[1] + "/scripts/mission-execution-graph-check.js");
+  try { g.loadSourceCoverageManifest(process.argv[2]); console.log("OK"); } catch (e) { console.log("CODE " + e.code); }' "$REPO_ROOT" "$1"; }
+assert_eq "$(GIT_DIR="$TEST_TMP/absent" envload "$R/project/missions/mission-old-sources.json")" "$(envload "$R/project/missions/mission-old-sources.json")" "graph-check without repoRoot: GIT_DIR does not change the result"
+assert_eq "$(GIT_CEILING_DIRECTORIES="$TEST_TMP" envload "$R/project/missions/mission-esc-sources.json")" "CODE MANIFEST_PATH_ESCAPE" "graph-check without repoRoot, GIT_CEILING_DIRECTORIES set: an escape is still refused"
+# a missing base is a named error, not a bare ENOENT
+assert_contains "$(node -e 'try { require(process.argv[1]).containedPath(process.argv[2], "plans/p.md"); } catch (e) { console.log(e.code); }' "$LAYOUT" "$TEST_TMP/no-base-here")" "MANIFEST_BASE_INVALID" "containedPath: a missing base directory is a named error"
+N="$TEST_TMP/nobase"; mkdir -p "$N/other"; git -C "$N" init -q; echo '{"schema_version":1,"sources":[{"plan_path":"a.md","rubric_path":"b.md","plan_sha256":"x","rubric_sha256":"y"}]}' > "$N/other/m.json"
+assert_contains "$(node -e '
+  const g = require(process.argv[1] + "/scripts/mission-execution-graph-check.js");
+  try { g.loadSourceCoverageManifest(process.argv[2], { repoRoot: process.argv[3] }); } catch (e) { console.log("CODE " + e.code + " " + e.message); }' "$REPO_ROOT" "$N/other/m.json" "$N")" "CODE MANIFEST_BASE_INVALID" "graph-check: a missing manifest base is a named error"
+# scaffold refuses a plan that is a symlink leading out of the plan base
+mkdir -p "$TEST_TMP/scaf-out"; mv "$S/project/plans/$STEM.md" "$TEST_TMP/scaf-out/plan.md"; ln -s "$TEST_TMP/scaf-out/plan.md" "$S/project/plans/$STEM.md"
+$GT -C "$S" add -A; $GT -C "$S" commit -q -m symlinked-plan
+rm -f "$S/project/missions/mission-$STEM-"*
+OUT="$(scaf --check 2>&1)"; RC=$?
+assert_neq "0" "$RC" "scaffold: a symlinked-out plan is refused"
+assert_contains "$OUT" "cannot be a manifest source" "scaffold: the refusal names the plan base containment"
 
 # ---- 6. F5: check-claude-md-inventory is red when docs/scripts-inventory.md is missing ----
 SBX="$TEST_TMP/inv"; mkdir -p "$SBX/scripts/lib" "$SBX/docs"

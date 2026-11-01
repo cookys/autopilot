@@ -23,8 +23,9 @@
 // authority, the task-authority envelopes themselves (their digests point at the graph/policy,
 // not at their own bytes), docs/plans/*.manifest.json.
 //
-// API: sealedDocFiles(repoRoot) -> Set<string> of repo-relative POSIX paths. Never throws;
-// unreadable manifests are skipped (their own validators report them). Built-ins only.
+// API: sealedDocFiles(repoRoot) -> Set<string> of repo-relative POSIX paths. Unreadable manifests are skipped
+// (their own validators report them), but a sealed plan/rubric path that cannot be resolved inside its manifest
+// base THROWS: the sealed set may never shrink silently. Built-ins only.
 
 const fs = require('fs');
 const path = require('path');
@@ -75,10 +76,8 @@ function sealedDocFiles(repoRoot) {
       for (const [pathKey, shaKey] of [['plan_path', 'plan_sha256'], ['rubric_path', 'rubric_sha256']]) {
         if (typeof src[pathKey] === 'string' && src[pathKey] && SHA256.test(String(src[shaKey] || ''))) {
           let abs;
-          try { abs = LAYOUT.resolveManifestPath(repoRoot, manifestRel, src[pathKey].split(path.sep).join('/')); } catch (error) {
-            if (error && error.code === 'MANIFEST_PATH_ESCAPE') continue; // names no plan; other failures are not hidden
-            throw error;
-          }
+          // fail closed: a plan that cannot be resolved must not silently drop out of the sealed set
+          abs = LAYOUT.resolveManifestPath(repoRoot, manifestRel, src[pathKey].split(path.sep).join('/'));
           sealed.add(path.relative(repoReal, abs).split(path.sep).join('/'));
         }
       }

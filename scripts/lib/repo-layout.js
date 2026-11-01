@@ -374,6 +374,13 @@ function containedPath(base, rel) {
   const bad = literalProblem(rel);
   if (bad) throw containmentError(`manifest path ${JSON.stringify(rel)} ${bad}`, 'literal');
   const baseReal = realOrResolved(path.resolve(base));
+  let baseIsDir = false;
+  try { baseIsDir = fs.statSync(baseReal).isDirectory(); } catch { /* reported below */ }
+  if (!baseIsDir) {
+    const e = new Error(`manifest base ${baseReal} does not exist or is not a directory (needed to resolve ${JSON.stringify(rel)})`);
+    e.code = 'MANIFEST_BASE_INVALID';
+    throw e;
+  }
   const target = path.resolve(baseReal, rel);
   if (!isInside(baseReal, target)) throw containmentError(`manifest path ${JSON.stringify(rel)} must stay under the manifest base ${baseReal}`, 'literal');
   let probe = target;
@@ -397,33 +404,64 @@ function containedPath(base, rel) {
   return target;
 }
 
-function gitToplevelOf(file) {
-  let dir = path.dirname(file);
-  while (!fs.existsSync(dir)) { const up = path.dirname(dir); if (up === dir) return null; dir = up; }
+/**
+ * Nearest ancestor directory of `file` that holds a `.git` (directory or file), or null. Pure file-system walk:
+ * no git process, so GIT_DIR / GIT_CEILING_DIRECTORIES / a missing git binary cannot change the answer.
+ * With `below`, only directories strictly under it are considered (a nested repo inside the caller's repo).
+ */
+function findRepoRoot(file, below) {
+  let dir = path.dirname(realOrResolved(path.resolve(file)));
+  const stop = below ? realOrResolved(path.resolve(below)) : null;
+  for (;;) {
+    if (stop && (dir === stop || !isInside(stop, dir))) return null;
+    if (fs.existsSync(path.join(dir, '.git'))) return dir;
+    const up = path.dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+}
+
+/** The common git dir of a repo or linked worktree root, read from the files git leaves behind (no git process). */
+function gitCommonDirOf(root) {
   try {
-    const out = require('child_process').execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], {
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    return out ? fs.realpathSync(out) : null;
+    const dotgit = path.join(root, '.git');
+    let gitdir = dotgit;
+    if (fs.statSync(dotgit).isFile()) {
+      const m = /^gitdir:\s*(.+)\s*$/m.exec(fs.readFileSync(dotgit, 'utf8'));
+      if (!m) return null;
+      gitdir = path.resolve(root, m[1]);
+    }
+    try { gitdir = path.resolve(gitdir, fs.readFileSync(path.join(gitdir, 'commondir'), 'utf8').trim()); } catch { /* not a linked worktree */ }
+    return fs.realpathSync(gitdir);
   } catch { return null; }
 }
 
+function builtinRegistry() {
+  const d = clone(DEFAULT_REGISTRY);
+  const errs = validate(d);
+  if (errs.length) throw new Error('repo-layout built-in registry is invalid:\n  ' + errs.join('\n  '));
+  return d;
+}
+
 /**
- * Which directory a sources manifest's plan_path/rubric_path are relative to. A manifest inside `repoRoot` is
- * governed by that repo's registry; a manifest in another worktree or checkout of git is governed by the
- * registry applied to ITS OWN working-tree root (never treated as "outside"); only a manifest in no git
- * repository at all (a scratch fixture) keeps the historical base, its own directory.
+ * Which directory a sources manifest's plan_path/rubric_path are relative to.
+ *  - The manifest's repo root is found by walking up to the nearest `.git` (no git process); inside the caller's
+ *    repoRoot the caller's root is used unless a nested repo sits between them.
+ *  - The caller's registry (and its per-file exceptions) applies to the caller's own repo and to linked worktrees
+ *    of it (same git common dir). A manifest in any OTHER repo is governed by the built-in registry alone: the
+ *    caller's exceptions and REPO_LAYOUT_REGISTRY never reach it.
+ *  - A manifest in no repo at all (a scratch fixture) keeps the historical base, its own directory.
  */
 function manifestBase(repoRoot, manifestFile, opts) {
-  const d = checked(opts);
-  let repoReal = realOrResolved(path.resolve(repoRoot));
-  const manifestReal = realOrResolved(path.resolve(repoReal, manifestFile));
-  let source = 'registry';
-  if (!isInside(repoReal, manifestReal)) {
-    const top = gitToplevelOf(manifestReal);
-    if (top && isInside(top, manifestReal)) repoReal = top;
-    else return { base: path.dirname(manifestReal), source: 'manifest-dir' };
-  }
+  const callerReg = checked(opts);
+  const callerReal = realOrResolved(path.resolve(repoRoot));
+  const manifestReal = realOrResolved(path.resolve(callerReal, manifestFile));
+  const inside = isInside(callerReal, manifestReal);
+  const top = inside ? (findRepoRoot(manifestReal, callerReal) || callerReal) : findRepoRoot(manifestReal);
+  if (!top) return { base: path.dirname(manifestReal), source: 'manifest-dir' };
+  const d = top === callerReal || (gitCommonDirOf(top) !== null && gitCommonDirOf(top) === gitCommonDirOf(callerReal))
+    ? callerReg : builtinRegistry();
+  const repoReal = top;
   const rel = path.relative(repoReal, manifestReal).split(path.sep).join('/');
   const ex = d.exceptions.find((e) => e.path === rel && e.plan_base !== undefined);
   if (ex) {
@@ -440,7 +478,7 @@ function manifestBase(repoRoot, manifestFile, opts) {
     }
     return { base, source: 'exception', rule: ex.rule, reason: ex.reason };
   }
-  return { base: path.join(repoReal, d.paths.manifest_plan_base), source };
+  return { base: path.join(repoReal, d.paths.manifest_plan_base), source: 'registry' };
 }
 
 /** Absolute path of one plan_path/rubric_path of a manifest; throws MANIFEST_PATH_ESCAPE when it leaves the base. */
@@ -468,7 +506,7 @@ function allowlists(opts) {
 
 function exceptions(opts) { return checked(opts).exceptions.map((e) => Object.assign({}, e)); }
 
-module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, rules, allowlists, exceptions, manifestBase, resolveManifestPath, containedPath, literalProblem, isActive, stageIndex };
+module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, rules, allowlists, exceptions, manifestBase, resolveManifestPath, containedPath, literalProblem, findRepoRoot, isActive, stageIndex };
 
 if (require.main === module) {
   const argv = process.argv.slice(2);

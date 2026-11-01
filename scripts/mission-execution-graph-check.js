@@ -127,10 +127,16 @@ function loadSourceCoverageManifest(manifestPath, opts) {
     throw new Error('source manifest must be a versioned non-empty source set');
   }
   const repoRootForBase = (opts && opts.noLayout) ? null
-    : ((opts && opts.repoRoot) || gitToplevel(path.dirname(canonicalManifest)));
-  const root = repoRootForBase
-    ? fs.realpathSync(LAYOUT.manifestBase(repoRootForBase, canonicalManifest).base)
-    : path.dirname(canonicalManifest);
+    : ((opts && opts.repoRoot) || LAYOUT.findRepoRoot(canonicalManifest));
+  let root = path.dirname(canonicalManifest);
+  if (repoRootForBase) {
+    const baseDir = LAYOUT.manifestBase(repoRootForBase, canonicalManifest).base;
+    try { root = fs.realpathSync(baseDir); } catch {
+      const missing = new Error(`source manifest base ${baseDir} does not exist`);
+      missing.code = 'MANIFEST_BASE_INVALID';
+      throw missing;
+    }
+  }
   const planIds = [];
   const rubricIds = [];
   const authoringUnitIds = [];

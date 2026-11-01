@@ -52,6 +52,7 @@ function gitToplevel(dir) {
   try {
     return require('child_process').execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], {
       encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch {
     return null;

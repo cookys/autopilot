@@ -163,8 +163,7 @@ function diffLines(text, sign) {
   return out;
 }
 
-function contentFindings(root, o, restored) {
-  const text = git(root, diffArgs(o, ['-U0']));
+function scanText(text, restored) {
   const out = [];
   for (const { file, line, content } of diffLines(text, '+')) {
     const rk = `${file}\0${content}`;
@@ -173,6 +172,24 @@ function contentFindings(root, o, restored) {
       const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
       out.push({ file, line, category: h.category, snippet });
     }
+  }
+  return out;
+}
+
+/**
+ * No revert allowance in the range: the whole range diff is scanned once (unchanged behaviour).
+ * With one or more allowances (a map of revert commit -> lines it may restore), each commit is scanned
+ * on its own diff and only the revert commit itself may spend its allowance, so a later commit that
+ * re-adds the same line gets no cover.
+ */
+function contentFindings(root, o, allowances) {
+  if (!allowances || allowances.size === 0) return scanText(git(root, diffArgs(o, ['-U0'])), null);
+  const out = [];
+  const commits = git(root, ['rev-list', '--reverse', '--no-merges', o.range]).split('\n').filter(Boolean);
+  for (const c of commits) {
+    const text = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--diff-filter=ACMRT', '--format=', '-U0', c]);
+    const own = allowances.get(c);
+    out.push(...scanText(text, own ? new Map(own) : null));
   }
   return out;
 }
@@ -191,8 +208,8 @@ function resolveCommit(root, ref) {
  * the revert adds is scanned as usual. (git revert runs no pre-commit hook, so --staged needs no path.)
  */
 function revertedLines(root, o) {
-  const restored = new Map(); // file\0text -> how many times the reverted commit removed it
-  if (o.mode !== 'range') return restored;
+  const allowances = new Map(); // revert commit -> Map(file\0text -> times the reverted commit removed it)
+  if (o.mode !== 'range') return allowances;
   const log = git(root, ['log', '--no-color', '--format=%H%x1f%B%x1e', o.range]);
   for (const rec of log.split('\x1e')) {
     const body = rec.split('\x1f')[1];
@@ -206,12 +223,14 @@ function revertedLines(root, o) {
     const b = resolveCommit(root, tr[1]);
     if (!a || a !== b) continue;
     const text = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--format=', '-U0', a]);
+    const restored = new Map();
+    allowances.set(rec.split('\x1f')[0].trim(), restored);
     for (const d of diffLines(text, '-')) {
       const k = `${d.file}\0${d.content}`;
       restored.set(k, (restored.get(k) || 0) + 1);
     }
   }
-  return restored;
+  return allowances;
 }
 
 function shq(s) {

@@ -393,4 +393,15 @@ assert_contains "$OUT" "src/old.md:3" "revert strict-4: the second copy (line 3)
 assert_not_contains "$OUT" "src/old.md:2" "revert strict-4: the first copy (line 2) is allowed"
 reset_stage; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null
 
+# ── review round 1, item 5: the allowance belongs to the revert commit, not to the whole range ──
+revert_setup; add_trailer "$A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "revert bind: the single legitimate revert stays green"
+printf 'old note\n' > "$R/src/old.md"; git -C "$R" commit -q -am "drop the line again"
+printf 'old note\nlegacy %s/x\n' "$PERSONAL" > "$R/src/old.md"; git -C "$R" commit -q -am "plain re-add, no trailer"
+OUT="$(rguard "$A..HEAD")"; RC=$?
+assert_eq "$RC" "1" "revert bind: revert, delete, then a trailer-less re-add of the same line is red"
+assert_contains "$OUT" "src/old.md:2" "revert bind: names the re-added line"
+assert_contains "$OUT" "1 personal-data finding(s)" "revert bind: exactly one finding (the legitimate revert's line stays allowed)"
+reset_stage; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null
+
 finalize_test

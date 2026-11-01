@@ -123,9 +123,9 @@ const cls=new Set(j.excluded.map(x=>x.class));
 for(const k of ["O8","O9","O10","O12","O14"]) e(cls.has(k),"exclusion class "+k);
 e(j.excluded.every(x=>x.reason&&x.reason.length>20),"every exclusion has a reason");
 e(j.excluded.every(x=>!set.has(x.path)),"no excluded path is also listed");
-const need=["scripts/dispatch-hetero.sh","scripts/per-turn-gate-arm.js","scripts/gate-verify.js","hooks/per-turn-gate.js","scripts/lib/seed-claude-config.js","hooks/tests/skill-onoff-g67.test.sh","hooks/tests/skill-onoff-g8.test.sh","skills/dev-flow/SKILL.md","skills/ceo-agent/SKILL.md","hooks/fixtures/supersession-anchors.json"];
+const need=["scripts/dispatch-hetero.sh","scripts/per-turn-gate-arm.js","scripts/gate-verify.js","hooks/per-turn-gate.js","scripts/lib/seed-claude-config.js","hooks/tests/skill-onoff-g67.test.sh","hooks/tests/skill-onoff-g8.test.sh","skills/dev-flow/SKILL.md","skills/ceo-agent/SKILL.md","hooks/fixtures/supersession-anchors.json","scripts/check-guidance-eval.js"];
 for(const p of need) e(j.excluded.some(x=>x.path===p),"excluded "+p);
-for(const p of ["docs/mission-qualification-verdict-stability-task-authority.json","docs/mission-hook-test-harness-determinism-execution-graph.json","evals/skill-onoff/prereg/FROZEN.json","evals/skill-onoff/packs/manifest.json","evals/consult-eval-rubric.seal.json","scripts/check-guidance-eval.js","hooks/tests/fixtures/mission-terminal-rollover/.frozen-evidence"]) e(set.has(p),"listed "+p);
+for(const p of ["docs/mission-qualification-verdict-stability-task-authority.json","docs/mission-hook-test-harness-determinism-execution-graph.json","evals/skill-onoff/prereg/FROZEN.json","evals/skill-onoff/packs/manifest.json","evals/consult-eval-rubric.seal.json","hooks/tests/fixtures/mission-terminal-rollover/.frozen-evidence"]) e(set.has(p),"listed "+p);
 ' "$NR" && ok || bad "no-rewrite.json shape, exclusions and members"
 rcis 0 "unchanged clone: range HEAD..HEAD is green" node "$SB" check-rewrite --root "$C" --range "$BASE..$BASE"
 
@@ -149,6 +149,15 @@ G reset -q --hard "$BASE"
 # an excluded (plan-allowed) file may change
 printf '\n// P4\n' >> "$C/scripts/gate-verify.js"; G commit -qam "rail"
 rcis 0 "an excluded rail file edited -> green (D9.6 exclusion)" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD"
+G reset -q --hard "$BASE"
+
+# D9 ruling: check-guidance-eval.js is excluded (amend-7 row is archive-only), other listed files stay protected
+printf '\n// P4\n' >> "$C/scripts/check-guidance-eval.js"; G commit -qam "cge"
+rcis 0 "check-guidance-eval.js edited by one character -> check-rewrite green (excluded, O8-ext)" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD"
+printf 'x' >> "$C/$TARGET"; G commit -qam "cge+listed"
+rcis 1 "same range plus a listed file edited -> still red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD"
+has "names the listed file" "$TARGET: bytes changed"
+hasnt "does not name the excluded file" "check-guidance-eval"
 G reset -q --hard "$BASE"
 
 # --files: what a rewriter is about to write

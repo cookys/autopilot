@@ -489,6 +489,7 @@ function cmdBuildNoRewrite(o) {
     if (via.has(f) && [...via.get(f)].some((t) => t === 'hash-pin:next-touch-validation.js')) exclude(f, 'O12', 'pinned by the next-touch validator table, a closed mission and a retirement candidate; P4 moves it');
   }
   for (const f of ['skills/dev-flow/SKILL.md', 'skills/ceo-agent/SKILL.md']) exclude(f, 'O10', 'the profiles-hash-repin flow rewrites these two by design (content_hash rows are repinned)');
+  exclude('scripts/check-guidance-eval.js', 'O8-ext', 'amend-7 pins it through a ../../ key; D9.3 turned the rows pointing at it into archive-only records (no longer a formally re-runnable evaluation), same reasoning as O8; P4 moves it and edits its require paths');
   exclude('hooks/fixtures/supersession-anchors.json', 'O14', 'P4 rewrites only its "file" field; the protected-region sha256 / bytes stay (checked by check-supersession-anchors.js)');
   const exSet = new Set(excl.map((e) => e.path));
   // check-rewrite compares git blobs: for a tracked symlink the blob is the link text, so hash that, not the target's bytes

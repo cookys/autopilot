@@ -28,6 +28,12 @@
   "was_candidate": true
  },
  {
+  "path": "scripts/check-guidance-eval.js",
+  "class": "O8-ext",
+  "reason": "amend-7 pins it through a ../../ key; D9.3 turned the rows pointing at it into archive-only records (no longer a formally re-runnable evaluation), same reasoning as O8; P4 moves it and edits its require paths",
+  "was_candidate": true
+ },
+ {
   "path": "scripts/dispatch-hetero.sh",
   "class": "O9",
   "reason": "rail file of the d0gate runner pin; P4 moves it and edits its require / SELF_DIR paths, and that row is archive-only after the move (D9.3)",
@@ -4708,7 +4714,6 @@
 {"path":"hooks/tests/fixtures/post-tool-chain/golden.json","sha256":"0475f1832485baa76446b9936aa438ecb62082bc7564396839bcbc5489055b65","via":["golden-fixture"]},
 {"path":"hooks/tests/fixtures/probe-unknown-v3.golden","sha256":"136d4b8367bb554e66d2166ec6bffd4c51e56754ea53d21ff11b1738499fff3a","via":["golden-fixture"]},
 {"path":"hooks/tests/fixtures/review-loop-config.frozen-2026-09-13.md","sha256":"971af597f985ed55557a09fef6587ee7548ef109b3bba0592215f3892f63317d","via":["golden-fixture"]},
-{"path":"platforms/codex/plugin/docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json","sha256":"dd1e59b16a1228c1ca2db4ba684e6f3da1432d7665e41c01b417b7a5788ac768","via":["baseline:platform-capabilities"]},
-{"path":"scripts/check-guidance-eval.js","sha256":"533a8a102b9f73586a7b440e916163fb0ff857c9c0f7468965ccf012cf2da5ce","via":["baseline:frozen-table"]}
+{"path":"platforms/codex/plugin/docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json","sha256":"dd1e59b16a1228c1ca2db4ba684e6f3da1432d7665e41c01b417b7a5788ac768","via":["baseline:platform-capabilities"]}
 ]
 }

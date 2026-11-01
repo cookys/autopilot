@@ -478,7 +478,15 @@ function manifestBase(repoRoot, manifestFile, opts) {
     }
     return { base, source: 'exception', rule: ex.rule, reason: ex.reason };
   }
-  return { base: path.join(repoReal, d.paths.manifest_plan_base), source: 'registry' };
+  const regBase = path.join(repoReal, d.paths.manifest_plan_base);
+  let regReal = null;
+  try { regReal = fs.realpathSync(regBase); } catch { /* absent: containedPath names it */ }
+  if (regReal !== null && regReal !== repoReal && !isInside(repoReal, regReal)) {
+    const e = new Error(`manifest base ${regBase} resolves outside the repo (${regReal})`);
+    e.code = 'MANIFEST_BASE_INVALID';
+    throw e;
+  }
+  return { base: regBase, source: 'registry' };
 }
 
 /** Absolute path of one plan_path/rubric_path of a manifest; throws MANIFEST_PATH_ESCAPE when it leaves the base. */

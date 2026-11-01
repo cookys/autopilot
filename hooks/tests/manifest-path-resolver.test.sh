@@ -246,6 +246,11 @@ envload() { REPO_LAYOUT_REGISTRY="$P1_EXC" node -e '
   try { g.loadSourceCoverageManifest(process.argv[2]); console.log("OK"); } catch (e) { console.log("CODE " + e.code); }' "$REPO_ROOT" "$1"; }
 assert_eq "$(GIT_DIR="$TEST_TMP/absent" envload "$R/project/missions/mission-old-sources.json")" "$(envload "$R/project/missions/mission-old-sources.json")" "graph-check without repoRoot: GIT_DIR does not change the result"
 assert_eq "$(GIT_CEILING_DIRECTORIES="$TEST_TMP" envload "$R/project/missions/mission-esc-sources.json")" "CODE MANIFEST_PATH_ESCAPE" "graph-check without repoRoot, GIT_CEILING_DIRECTORIES set: an escape is still refused"
+# a registry base that is itself a symlink out of the repo is refused
+X="$TEST_TMP/xbase"; mkdir -p "$X/repo" "$X/elsewhere"; git -C "$X/repo" init -q; ln -s "$X/elsewhere" "$X/repo/docs"; echo '{}' > "$X/repo/m.json"
+OUT="$(node "$LAYOUT" manifest-path "$X/repo/m.json" p.md --repo-root "$X/repo" 2>&1)"; RC=$?
+assert_eq "2" "$RC" "a global base that links outside the repo is red"
+assert_contains "$OUT" "resolves outside the repo" "the outside-the-repo base is named"
 # a missing base is a named error, not a bare ENOENT
 assert_contains "$(node -e 'try { require(process.argv[1]).containedPath(process.argv[2], "plans/p.md"); } catch (e) { console.log(e.code); }' "$LAYOUT" "$TEST_TMP/no-base-here")" "MANIFEST_BASE_INVALID" "containedPath: a missing base directory is a named error"
 N="$TEST_TMP/nobase"; mkdir -p "$N/other"; git -C "$N" init -q; echo '{"schema_version":1,"sources":[{"plan_path":"a.md","rubric_path":"b.md","plan_sha256":"x","rubric_sha256":"y"}]}' > "$N/other/m.json"

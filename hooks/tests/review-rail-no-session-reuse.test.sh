@@ -61,7 +61,7 @@ launched() { # <log> <runner>
 }
 
 SEEN_RUNNERS=0
-for spec in "claude-native:claude-haiku" "cc-shim:GLM-5.2" "codex:gpt-5.5" "grok:grok-4.5"; do
+for spec in "claude-native:claude-opus-5-5" "cc-shim:GLM-5.2" "codex:gpt-5.5" "grok:grok-4.5"; do
   runner="${spec%%:*}"; model="${spec#*:}"
   LOG="$TEST_TMP/argv-$runner.log"; : > "$LOG"
   run_runner "$DR" "$runner" "$model" "$LOG"
@@ -76,7 +76,7 @@ assert_eq "4" "$SEEN_RUNNERS" "guard observed the argv of all four runners (clau
 
 # claude-family runners mint a brand-new --session-id on every dispatch
 for runner in claude-native cc-shim; do
-  model=claude-haiku; [ "$runner" = cc-shim ] && model=GLM-5.2
+  model=claude-opus-5-5; [ "$runner" = cc-shim ] && model=GLM-5.2
   L1="$TEST_TMP/sid1-$runner.log"; L2="$TEST_TMP/sid2-$runner.log"; : > "$L1"; : > "$L2"
   run_runner "$DR" "$runner" "$model" "$L1"; run_runner "$DR" "$runner" "$model" "$L2"
   S1="$(grep -A1 '^--session-id$' "$L1" | tail -1)"; S2="$(grep -A1 '^--session-id$' "$L2" | tail -1)"
@@ -105,7 +105,7 @@ MUT="$TEST_TMP/mut"; mkdir -p "$MUT"; cp -r "$REPO_ROOT/scripts" "$MUT/scripts"
 for d in src schemas references .claude-plugin; do [ -e "$REPO_ROOT/$d" ] && ln -s "$REPO_ROOT/$d" "$MUT/$d"; done
 sed_mutate "$MUT/scripts/dispatch-review.sh" 's|exec "\$2" -p \${5:+--session-id "\$5"}|exec "$2" -p --resume 00000000-0000-4000-8000-000000000000 ${5:+--session-id "$5"}|'
 LOGM="$TEST_TMP/argv-mut.log"; : > "$LOGM"
-run_runner "$MUT/scripts/dispatch-review.sh" claude-native claude-haiku "$LOGM"
+run_runner "$MUT/scripts/dispatch-review.sh" claude-native claude-opus-5-5 "$LOGM"
 assert_contains "$(resume_hits "$LOGM" claude-native)" "--resume" "negative control: a --resume added to the claude argv is caught by the guard"
 
 finalize_test

@@ -506,7 +506,11 @@ function frozenAssetFiles(repoRoot) {
         if (typeof abs === 'string') frozen.add(path.relative(libRepoRoot, abs).split(path.sep).join('/'));
       }
     }
-  } catch { /* lib absent (e.g. a vendored copy): seal-file discovery above still applies */ }
+  } catch (e) {
+    // lib absent (e.g. a vendored copy): seal-file discovery above still applies. Any other failure would
+    // silently un-freeze pinned assets, so it propagates.
+    if (!e || e.code !== 'MODULE_NOT_FOUND') throw e;
+  }
   // Mission sources manifests (plan_sha256/rubric_sha256) and execution graphs carrying a
   // graph_digest seal bytes the mission runtime re-derives; a rewrite inside one reds
   // next-touch-validation ("active plan/rubric digest does not match source manifest") — the
@@ -516,10 +520,8 @@ function frozenAssetFiles(repoRoot) {
     for (const rel of require('./lib/sealed-docs.js').sealedDocFiles(repoRoot)) frozen.add(rel);
   } catch (e) {
     // Absent lib (e.g. a vendored copy): seal-file discovery above still applies. Anything else
-    // would silently un-freeze sealed files, so warn.
-    if (!e || e.code !== 'MODULE_NOT_FOUND') {
-      process.stderr.write(`check-plan-graduation: WARNING sealed-docs.js failed (${e && e.message}); sealed files may be rewritten\n`);
-    }
+    // (an unresolvable sealed path, a broken registry) would silently un-freeze sealed files: propagate.
+    if (!e || e.code !== 'MODULE_NOT_FOUND') throw e;
   }
   // Evidence frozen only by convention (no seal/pin to derive it from): an explicit, tracked
   // `.frozen-evidence` marker names it (BL-0096; 6559da33 rewrote the historical observed_paths of
@@ -638,10 +640,13 @@ function loadActiveLineageStems(repoRoot) {
     for (const key of ['plan_path', 'rubric_path']) {
       const rel = entry && entry[key];
       if (typeof rel !== 'string' || !rel) continue;
-      // Manifest paths are docs/-relative (e.g. "plans/<stem>.md" or
-      // "plans/<stem>.rubric.md") — take the basename, drop .md, then drop any further
-      // dot segment (a sidecar tag) to recover the PRIMARY stem.
-      const base = path.basename(rel).replace(/\.md$/, '');
+      // Manifest paths are relative to the manifest base the layout registry names (docs/ at
+      // bootstrap, project/ from P1; e.g. "plans/<stem>.md" or "plans/<stem>.rubric.md"). Resolve
+      // through the registry's one resolver; a path that escapes the base throws (it is never skipped, since
+      // the lineage is what keeps an archive from breaking a frozen sha). Take the basename, drop .md, then
+      // drop any further dot segment (a sidecar tag) to recover the PRIMARY stem.
+      const resolved = LAYOUT.resolveManifestPath(repoRoot, sourcesPath, rel);
+      const base = path.basename(resolved).replace(/\.md$/, '');
       const lastDot = base.lastIndexOf('.');
       stems.add(lastDot === -1 ? base : base.slice(0, lastDot));
     }

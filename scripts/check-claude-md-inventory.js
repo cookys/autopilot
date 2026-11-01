@@ -132,7 +132,10 @@ function main() {
     if (bytes > maxLineBytes) longLines.push({ line: idx + 1, bytes });
   });
 
-  const ok = missing.length === 0 && missingFromInventory.length === 0
+  // F5: an absent inventory file is red. It used to pass silently, which let the whole
+  // description-table check go dark the moment the file moved or was deleted.
+  const inventoryMissing = inventoryText === null;
+  const ok = missing.length === 0 && missingFromInventory.length === 0 && !inventoryMissing
     && totalBytes <= maxTotalBytes && longLines.length === 0;
 
   if (json) {
@@ -158,7 +161,7 @@ function main() {
         'To fix: add each basename to the matching group in the CLAUDE.md "Scripts inventory" list.\n');
     }
     if (inventoryText === null) {
-      process.stderr.write('docs/scripts-inventory.md is absent — the description table is the canonical index.\n');
+      process.stderr.write('docs/scripts-inventory.md is MISSING — the description table is the canonical index; the check cannot pass without it.\n');
     } else if (missingFromInventory.length === 0) {
       process.stdout.write(`docs/scripts-inventory.md: all ${scripts.length} scripts described\n`);
     } else {

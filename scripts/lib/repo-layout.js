@@ -12,10 +12,21 @@
  * is valid at the current stage.
  *
  * API:  stage()  path(key)  rules({activeOnly})  allowlists()  exceptions()  validate(data)  load()
+ *       manifestBase(repoRoot, manifestFile)            the directory a sources manifest's plan_path/rubric_path
+ *                                                       are relative to ({base, source: 'exception'|'registry'|'manifest-dir'})
+ *       containedPath(base, rel)                        the single containment check (literal + realpath) both of them use
+ *       resolveManifestPath(repoRoot, manifestFile, rel) absolute path of one plan_path/rubric_path; throws
+ *                                                       (code MANIFEST_PATH_ESCAPE) unless it stays inside that base
  * CLI:  node scripts/lib/repo-layout.js stage            print the stage
  *       node scripts/lib/repo-layout.js path <key>       print one path (exit 2 on unknown key)
  *       node scripts/lib/repo-layout.js --json           print the whole registry
  *       node scripts/lib/repo-layout.js rules [--active] | allowlists | exceptions
+ *       node scripts/lib/repo-layout.js manifest-base <manifest-file> [--repo-root DIR]
+ *       node scripts/lib/repo-layout.js manifest-path <manifest-file> <rel-path> [--repo-root DIR]   (exit 2 on escape)
+ * Manifest base (D9.2): a sources manifest resolves its plan_path / rubric_path against
+ * `paths.manifest_plan_base` (docs at bootstrap, project from P1). An exception that carries `plan_base`
+ * declares its own base for that one manifest (a manifest left in docs/ keeps docs/). The repo root is always
+ * given by the caller (CLI: --repo-root, default cwd); a manifest outside it is refused (MANIFEST_OUTSIDE_REPO).
  * Test override: env REPO_LAYOUT_REGISTRY=<json file> (or `--registry <file>`) replaces the whole
  * registry with that JSON, so tests never touch the real one.
  *
@@ -45,6 +56,7 @@ const DEFAULT_REGISTRY = {
     projects_archive_dir: 'docs/projects/_archive',
     backlog_file: 'docs/BACKLOG.md',
     missions_dir: 'docs',
+    manifest_plan_base: 'docs',
     metrics_dir: 'docs/metrics',
     surface_lines_baseline: 'docs/metrics/surface-lines.json',
     settings_reference: 'docs/settings-reference.md',
@@ -281,7 +293,7 @@ function validate(d) {
     for (const e of d.exceptions) {
       const tag = `exceptions[${JSON.stringify(e && e.path)}]`;
       if (!e || typeof e !== 'object') { errs.push('exceptions: entry is not an object'); continue; }
-      const extra = Object.keys(e).filter((k) => !['path', 'rule', 'reason'].includes(k));
+      const extra = Object.keys(e).filter((k) => !['path', 'rule', 'reason', 'plan_base'].includes(k));
       if (extra.length) errs.push(`${tag}: unknown field(s) ${extra.join(', ')}`);
       if (!isStr(e.path)) { errs.push(`${tag}: path missing`); continue; }
       if (GLOB_CHARS.test(e.path)) errs.push(`${tag}: path is a glob; exceptions are per exact file`);
@@ -289,6 +301,10 @@ function validate(d) {
       if (e.path.startsWith('/') || e.path.split('/').includes('..')) errs.push(`${tag}: path must be repo-relative`);
       if (!Number.isInteger(e.rule) || !ruleIds.has(e.rule)) errs.push(`${tag}: rule ${JSON.stringify(e.rule)} is not a defined rule id`);
       if (!isStr(e.reason)) errs.push(`${tag}: reason missing`);
+      if (e.plan_base !== undefined
+          && (!isStr(e.plan_base) || literalProblem(e.plan_base) || GLOB_CHARS.test(e.plan_base))) {
+        errs.push(`${tag}: plan_base ${JSON.stringify(e.plan_base)} must be a plain repo-relative path`);
+      }
       if (seen.has(e.path + '#' + e.rule)) errs.push(`${tag}: duplicate exception`);
       seen.add(e.path + '#' + e.rule);
     }
@@ -317,6 +333,135 @@ function pathOf(key, opts) {
   return d.paths[key];
 }
 
+function realOrResolved(p) {
+  try { return fs.realpathSync(p); } catch { /* not there yet: fall through */ }
+  let dir = path.dirname(p);
+  try { dir = fs.realpathSync(dir); } catch { /* keep the lexical dir */ }
+  return path.join(dir, path.basename(p));
+}
+
+function isInside(base, target) {
+  const rel = path.relative(base, target);
+  return rel !== '' && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel);
+}
+
+/** The ONE literal rule for a relative path inside a manifest base (plan_path, rubric_path, plan_base). Returns a reason or null. */
+function literalProblem(rel) {
+  if (typeof rel !== 'string' || rel.trim() === '') return 'must be a non-empty string';
+  if (rel.includes('\\')) return 'must not contain a backslash';
+  if (/^[A-Za-z]:/.test(rel)) return 'must not start with a drive letter';
+  if (rel.startsWith('//')) return 'must not be a UNC path';
+  if (rel.startsWith('/') || path.isAbsolute(rel)) return 'must be relative';
+  if (rel.split('/').includes('..')) return 'must not contain a ".." segment';
+  return null;
+}
+
+function containmentError(message, kind) {
+  const e = new Error(message);
+  e.code = 'MANIFEST_PATH_ESCAPE';
+  e.kind = kind;
+  return e;
+}
+
+/**
+ * The single containment check: `rel` must name a place inside `base`, literally and physically.
+ * Literal first (literalProblem), then physical: the longest existing prefix of the target and the base are both
+ * realpath'd and compared, so a symlink inside the base that points outside is refused. A dangling symlink on
+ * the way is refused as well. Returns the absolute path under the base (not realpath'd). Throws MANIFEST_PATH_ESCAPE
+ * (kind 'literal' | 'symlink').
+ */
+function containedPath(base, rel) {
+  const bad = literalProblem(rel);
+  if (bad) throw containmentError(`manifest path ${JSON.stringify(rel)} ${bad}`, 'literal');
+  const baseReal = realOrResolved(path.resolve(base));
+  let baseIsDir = false;
+  try { baseIsDir = fs.statSync(baseReal).isDirectory(); } catch { /* reported below */ }
+  if (!baseIsDir) {
+    const e = new Error(`manifest base ${baseReal} does not exist or is not a directory (needed to resolve ${JSON.stringify(rel)})`);
+    e.code = 'MANIFEST_BASE_INVALID';
+    throw e;
+  }
+  const target = path.resolve(baseReal, rel);
+  if (!isInside(baseReal, target)) throw containmentError(`manifest path ${JSON.stringify(rel)} must stay under the manifest base ${baseReal}`, 'literal');
+  let probe = target;
+  for (;;) {
+    try {
+      const real = fs.realpathSync(probe);
+      if (real !== baseReal && !isInside(baseReal, real)) {
+        throw containmentError(`manifest path ${JSON.stringify(rel)} resolves outside the manifest base ${baseReal} (symlink)`, 'symlink');
+      }
+      break;
+    } catch (e) {
+      if (e && e.code === 'MANIFEST_PATH_ESCAPE') throw e;
+      let dangling = false;
+      try { fs.lstatSync(probe); dangling = true; } catch { /* really absent */ }
+      if (dangling) throw containmentError(`manifest path ${JSON.stringify(rel)} runs through a dangling symlink`, 'symlink');
+      const up = path.dirname(probe);
+      if (up === probe || !isInside(baseReal, up)) break; // nothing between here and the base exists
+      probe = up;
+    }
+  }
+  return target;
+}
+
+/**
+ * Which directory a sources manifest's plan_path/rubric_path are relative to.
+ * `repoRoot` is REQUIRED and always comes from the caller: nothing is inferred from the manifest (no .git walk,
+ * no git process), so a forged .git cannot move a manifest into another "repo". The registry and its per-file
+ * exceptions are loaded for that repoRoot only. The manifest must lie inside repoRoot, literally and after
+ * realpath, else MANIFEST_OUTSIDE_REPO.
+ */
+function manifestBase(repoRoot, manifestFile, opts) {
+  if (typeof repoRoot !== 'string' || repoRoot === '') {
+    const e = new Error('repo-layout: repoRoot is required (the caller names the repo; it is never inferred from the manifest)');
+    e.code = 'MANIFEST_REPO_ROOT_REQUIRED';
+    throw e;
+  }
+  const d = checked(opts);
+  const callerLex = path.resolve(repoRoot);
+  const callerReal = realOrResolved(callerLex);
+  const lexical = path.resolve(callerLex, manifestFile);
+  const manifestReal = realOrResolved(lexical);
+  const outside = (why) => {
+    const e = new Error(`manifest ${JSON.stringify(String(manifestFile))} ${why} (repo root ${callerReal})`);
+    e.code = 'MANIFEST_OUTSIDE_REPO';
+    return e;
+  };
+  if (!isInside(callerLex, lexical) && !isInside(callerReal, lexical)) throw outside('is not inside the repo root');
+  if (!isInside(callerReal, manifestReal)) throw outside('resolves outside the repo root');
+  const repoReal = callerReal;
+  const rel = path.relative(repoReal, manifestReal).split(path.sep).join('/');
+  const ex = d.exceptions.find((e) => e.path === rel && e.plan_base !== undefined);
+  if (ex) {
+    const bad = literalProblem(ex.plan_base);
+    const base = path.join(repoReal, ex.plan_base);
+    let ok = !bad;
+    if (ok) {
+      try { const real = fs.realpathSync(base); ok = fs.statSync(real).isDirectory() && (real === repoReal || isInside(repoReal, real)); } catch { ok = false; }
+    }
+    if (!ok) {
+      const e = new Error(`exception for ${rel}: plan_base ${JSON.stringify(ex.plan_base)} is not an existing directory inside the repo${bad ? ` (${bad})` : ''}`);
+      e.code = 'MANIFEST_BASE_INVALID';
+      throw e;
+    }
+    return { base, source: 'exception', rule: ex.rule, reason: ex.reason };
+  }
+  const regBase = path.join(repoReal, d.paths.manifest_plan_base);
+  let regReal = null;
+  try { regReal = fs.realpathSync(regBase); } catch { /* absent: containedPath names it */ }
+  if (regReal !== null && regReal !== repoReal && !isInside(repoReal, regReal)) {
+    const e = new Error(`manifest base ${regBase} resolves outside the repo (${regReal})`);
+    e.code = 'MANIFEST_BASE_INVALID';
+    throw e;
+  }
+  return { base: regBase, source: 'registry' };
+}
+
+/** Absolute path of one plan_path/rubric_path of a manifest; throws MANIFEST_PATH_ESCAPE when it leaves the base. */
+function resolveManifestPath(repoRoot, manifestFile, relPath, opts) {
+  return containedPath(manifestBase(repoRoot, manifestFile, opts).base, relPath);
+}
+
 function isActive(rule, st) { return stageIndex(rule.active_from) <= stageIndex(st); }
 
 function rules(opts) {
@@ -337,14 +482,16 @@ function allowlists(opts) {
 
 function exceptions(opts) { return checked(opts).exceptions.map((e) => Object.assign({}, e)); }
 
-module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, rules, allowlists, exceptions, isActive, stageIndex };
+module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, rules, allowlists, exceptions, manifestBase, resolveManifestPath, containedPath, literalProblem, isActive, stageIndex };
 
 if (require.main === module) {
   const argv = process.argv.slice(2);
   let registry = '';
+  let repoRootArg = '';
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--registry') registry = argv[++i] || '';
+    else if (argv[i] === '--repo-root') repoRootArg = argv[++i] || '';
     else rest.push(argv[i]);
   }
   const opts = registry ? { registry } : {};
@@ -361,8 +508,15 @@ if (require.main === module) {
     } else if (cmd === 'rules') out(rules({ ...opts, activeOnly: rest.includes('--active') }));
     else if (cmd === 'allowlists') out(allowlists(opts));
     else if (cmd === 'exceptions') out(exceptions(opts));
+    else if (cmd === 'manifest-base') {
+      if (!rest[1]) { process.stderr.write('usage: repo-layout.js manifest-base <manifest-file> [--repo-root DIR]\n'); process.exit(2); }
+      out(manifestBase(repoRootArg || process.cwd(), rest[1], opts));
+    } else if (cmd === 'manifest-path') {
+      if (!rest[1] || rest[2] === undefined) { process.stderr.write('usage: repo-layout.js manifest-path <manifest-file> <rel-path> [--repo-root DIR]\n'); process.exit(2); }
+      out(resolveManifestPath(repoRootArg || process.cwd(), rest[1], rest[2], opts));
+    }
     else {
-      process.stderr.write('usage: repo-layout.js stage | path <key> | rules [--active] | allowlists | exceptions | --json  [--registry FILE]\n');
+      process.stderr.write('usage: repo-layout.js stage | path <key> | rules [--active] | allowlists | exceptions | manifest-base | manifest-path | --json  [--registry FILE]\n');
       process.exit(2);
     }
   } catch (e) {

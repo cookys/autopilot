@@ -1182,6 +1182,7 @@ function admitMissionRouting(options = {}) {
       graph: artifacts.graph,
       graphObject: graphJson,
       sources: artifacts.sources,
+      layoutRoot: repo.root, // the admitted repo names the manifest base; the manifest must lie inside it
     });
     requireExactLegacyTerminalDisposition(repo.root, graphResult.graph_digest);
     if (graphResult.policy_digest !== policy.resolution.policy_digest) {

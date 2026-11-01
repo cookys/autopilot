@@ -11,7 +11,8 @@
 // doc-drift link repair) because each tool kept its own partial list.
 //
 // What is sealed (derived from the repo, never a hand list):
-//   1. docs/mission-*-sources.json: each source's plan_path / rubric_path (relative to docs/),
+//   1. mission-*-sources.json (in the missions dir, plus any manifest a layout exception pins elsewhere):
+//      each source's plan_path / rubric_path (relative to the manifest base the registry names),
 //      counted only when the paired plan_sha256 / rubric_sha256 is present.
 //   2. docs/mission-*-execution-graph.json that carries a top-level `graph_digest`.
 //   3. docs/mission-<m>-execution-graph.json whose paired docs/mission-<m>-task-authority.json
@@ -22,8 +23,9 @@
 // authority, the task-authority envelopes themselves (their digests point at the graph/policy,
 // not at their own bytes), docs/plans/*.manifest.json.
 //
-// API: sealedDocFiles(repoRoot) -> Set<string> of repo-relative POSIX paths. Never throws;
-// unreadable manifests are skipped (their own validators report them). Built-ins only.
+// API: sealedDocFiles(repoRoot) -> Set<string> of repo-relative POSIX paths. Unreadable manifests are skipped
+// (their own validators report them), but a sealed plan/rubric path that cannot be resolved inside its manifest
+// base THROWS: the sealed set may never shrink silently. Built-ins only.
 
 const fs = require('fs');
 const path = require('path');
@@ -59,19 +61,33 @@ function sealedDocFiles(repoRoot) {
   try { names = fs.readdirSync(docsDir); } catch { names = []; }
   addSealSpecs(sealed, repoRoot, DOCS_DIR);
   addSealSpecs(sealed, repoRoot, EVALS_DIR);
+  // A manifest a layout exception pins outside the missions dir still seals its plan and rubric.
+  const pinned = LAYOUT.exceptions()
+    .filter((e) => e.plan_base !== undefined && /(^|\/)mission-[^/]*-sources\.json$/.test(e.path)
+      && path.posix.dirname(e.path) !== MISSIONS_DIR)
+    .map((e) => e.path);
+  let repoReal = path.resolve(repoRoot);
+  try { repoReal = fs.realpathSync(repoReal); } catch { /* keep lexical */ }
+  const sealManifest = (manifestRel) => {
+    const manifest = readJson(path.join(repoRoot, manifestRel));
+    const sources = manifest && Array.isArray(manifest.sources) ? manifest.sources : [];
+    for (const src of sources) {
+      if (!src || typeof src !== 'object') continue;
+      for (const [pathKey, shaKey] of [['plan_path', 'plan_sha256'], ['rubric_path', 'rubric_sha256']]) {
+        if (typeof src[pathKey] === 'string' && src[pathKey] && SHA256.test(String(src[shaKey] || ''))) {
+          let abs;
+          // fail closed: a plan that cannot be resolved must not silently drop out of the sealed set
+          abs = LAYOUT.resolveManifestPath(repoRoot, manifestRel, src[pathKey].split(path.sep).join('/'));
+          sealed.add(path.relative(repoReal, abs).split(path.sep).join('/'));
+        }
+      }
+    }
+  };
+  for (const manifestRel of pinned) sealManifest(manifestRel);
   for (const name of names.sort()) {
     const rel = `${MISSIONS_DIR}/${name}`;
     if (/^mission-.*-sources\.json$/.test(name)) {
-      const manifest = readJson(path.join(docsDir, name));
-      const sources = manifest && Array.isArray(manifest.sources) ? manifest.sources : [];
-      for (const src of sources) {
-        if (!src || typeof src !== 'object') continue;
-        for (const [pathKey, shaKey] of [['plan_path', 'plan_sha256'], ['rubric_path', 'rubric_sha256']]) {
-          if (typeof src[pathKey] === 'string' && src[pathKey] && SHA256.test(String(src[shaKey] || ''))) {
-            sealed.add(path.posix.join(DOCS_DIR, src[pathKey].split(path.sep).join('/')));
-          }
-        }
-      }
+      sealManifest(rel);
     } else if (/^mission-.*-execution-graph\.json$/.test(name)) {
       const graph = readJson(path.join(docsDir, name));
       if (graph && typeof graph === 'object' && typeof graph.graph_digest === 'string' && graph.graph_digest) {

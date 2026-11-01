@@ -23,6 +23,7 @@ const campaignCli = require('../src/campaign/cli');
 const verification = require('../src/engine/campaign-verification');
 const composition = require('../src/engine/campaign-composition');
 const mergeIntent = require('../src/status/merge-intent');
+const LAYOUT = require('./lib/repo-layout.js');
 const mergeExecutor = require('../src/merge/cli');
 const reconcile = require('./mission-terminal-reconcile');
 const { normalizeTaskAuthorityEnvelope } = require('../src/engine/owner-kernel/task-authority');
@@ -116,7 +117,8 @@ const AUTHORIZATION_PATH = 'docs/projects/2026-08-03-next-touch-debt-retirement/
 const ARCHIVE_AUTHORIZATION_PATH = 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
 // Sealed location: the value a historical bundle carries in `historical_archive_authorization_path`.
 const HISTORICAL_ARCHIVE_AUTHORIZATION_PATH = 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json';
-const SOURCE_MANIFEST_PATH = 'docs/mission-next-touch-debt-retirement-sources.json';
+// The manifest lives in the registry's missions dir; its plan_path/rubric_path resolve through the registry.
+const SOURCE_MANIFEST_PATH = `${LAYOUT.path('missions_dir')}/mission-next-touch-debt-retirement-sources.json`;
 const EXPECTED_AUTH_KEYS = [
   'schema_version', 'ticket', 'project', 'base_sha', 'branch', 'mission_lineage_id',
   'mission_policy_digest', 'mission_graph_digest', 'graph_node_id', 'roster',
@@ -424,12 +426,20 @@ function sourceDigests(repo) {
       || source.rubric_path !== RUBRIC_PATH.slice('docs/'.length)) {
     fail('SOURCE_AUTHORITY_INVALID', 'source manifest paths are not frozen');
   }
-  const planSha = sha256(fs.readFileSync(path.join(repo, 'docs', source.plan_path)));
-  const rubricSha = sha256(fs.readFileSync(path.join(repo, 'docs', source.rubric_path)));
+  let planFile;
+  let rubricFile;
+  try {
+    planFile = LAYOUT.resolveManifestPath(repo, manifestPath, source.plan_path);
+    rubricFile = LAYOUT.resolveManifestPath(repo, manifestPath, source.rubric_path);
+  } catch (error) {
+    fail('SOURCE_AUTHORITY_INVALID', error.message);
+  }
+  const planSha = sha256(fs.readFileSync(planFile));
+  const rubricSha = sha256(fs.readFileSync(rubricFile));
   if (source.plan_sha256 !== planSha || source.rubric_sha256 !== rubricSha) {
     fail('SOURCE_AUTHORITY_INVALID', 'active plan/rubric digest does not match source manifest');
   }
-  return { planSha, rubricSha, planText: fs.readFileSync(path.join(repo, PLAN_PATH), 'utf8') };
+  return { planSha, rubricSha, planText: fs.readFileSync(planFile, 'utf8') };
 }
 
 function parseHeadingLedger(planText) {

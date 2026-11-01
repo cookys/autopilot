@@ -534,10 +534,12 @@ assert.throws(
 
 const governancePath = path.join(tmp, 'governance.json');
 const graphPath = path.join(tmp, 'graph.json');
-const sourceRoot = path.join(tmp, 'source-root');
-fs.mkdirSync(sourceRoot);
-const sourcesPath = path.join(sourceRoot, 'sources.json');
+// The sources fixture lives inside a repo root (repoPath/docs is the registry plan base): a manifest outside
+// the caller's repo is refused, so the fixture is placed, not the assertions changed.
 const repoPath = path.join(tmp, 'repo');
+const sourceRoot = path.join(repoPath, 'docs');
+fs.mkdirSync(sourceRoot, { recursive: true });
+const sourcesPath = path.join(sourceRoot, 'sources.json');
 fs.mkdirSync(path.join(repoPath, '.claude'), { recursive: true });
 fs.writeFileSync(governancePath, JSON.stringify(governance));
 fs.writeFileSync(
@@ -562,7 +564,7 @@ const sourceManifest = {
   })),
 };
 fs.writeFileSync(sourcesPath, JSON.stringify(sourceManifest));
-const derivedCoverage = graphChecker.loadSourceCoverageManifest(sourcesPath);
+const derivedCoverage = graphChecker.loadSourceCoverageManifest(sourcesPath, { repoRoot: repoPath });
 const checkerGraph = {
   schema_version: 1,
   artifact_type: 'mission_execution_graph',
@@ -572,7 +574,7 @@ const checkerGraph = {
   ],
 };
 fs.writeFileSync(graphPath, JSON.stringify(checkerGraph));
-const checked = graphChecker.inspect({
+const checked = graphChecker.inspect({ layoutRoot: repoPath,
   governance: governancePath,
   graph: graphPath,
   sources: sourcesPath,
@@ -584,7 +586,7 @@ assert.equal(checked.mirror_rule, null);
 const mirrorRootsPath = path.join(tmp, 'mirror-roots.json');
 fs.writeFileSync(mirrorRootsPath, JSON.stringify({ root: 'platforms/codex/plugin', dirs: ['src', 'scripts'] }));
 assert.throws(
-  () => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }),
+  () => graphChecker.inspect({ layoutRoot: repoPath, governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }),
   /output_paths must enumerate every codex mirror: graph\.nodes\[0\]\(source-a\)\.campaign\.output_paths lacks the codex mirror of src\/output\.js \(platforms\/codex\/plugin\/src\/output\.js\)/,
 );
 const mirroredGraph = clone(checkerGraph);
@@ -594,7 +596,7 @@ for (const { campaign: c } of mirroredGraph.nodes) {
   c.max_changed_files = Math.max(c.max_changed_files, c.output_paths.length);
 }
 fs.writeFileSync(graphPath, JSON.stringify(mirroredGraph));
-const mirrored = graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath });
+const mirrored = graphChecker.inspect({ layoutRoot: repoPath, governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath });
 assert.equal(mirrored.status, 'READY');
 assert.deepEqual(mirrored.mirror_rule, { root: 'platforms/codex/plugin', dirs: ['src', 'scripts'], status: 'satisfied' });
 // a path outside every mirrored dir needs no mirror; a mirror path itself is never re-mirrored
@@ -602,18 +604,18 @@ const unmirroredDirGraph = clone(mirroredGraph);
 unmirroredDirGraph.nodes[0].campaign.output_paths = ['docs/x.md'];
 unmirroredDirGraph.nodes[0].campaign.allowed_path_prefixes = ['docs/', 'src/'];
 fs.writeFileSync(graphPath, JSON.stringify(unmirroredDirGraph));
-assert.equal(graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }).status, 'READY');
+assert.equal(graphChecker.inspect({ layoutRoot: repoPath, governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }).status, 'READY');
 // prefix-only membership (srcfoo/…) is not under src/
 const prefixTrapGraph = clone(mirroredGraph);
 prefixTrapGraph.nodes[0].campaign.output_paths = ['srcfoo/x.js'];
 prefixTrapGraph.nodes[0].campaign.allowed_path_prefixes = ['srcfoo/', 'src/'];
 fs.writeFileSync(graphPath, JSON.stringify(prefixTrapGraph));
-assert.equal(graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }).status, 'READY');
+assert.equal(graphChecker.inspect({ layoutRoot: repoPath, governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }).status, 'READY');
 // malformed mirror roots refuse
 fs.writeFileSync(mirrorRootsPath, JSON.stringify({ root: '/abs', dirs: ['src'] }));
-assert.throws(() => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }), /mirror roots must be/);
+assert.throws(() => graphChecker.inspect({ layoutRoot: repoPath, governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }), /mirror roots must be/);
 fs.writeFileSync(mirrorRootsPath, JSON.stringify({ root: 'platforms/codex/plugin', dirs: ['platforms/codex/plugin/src'] }));
-assert.throws(() => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }), /must not nest/);
+assert.throws(() => graphChecker.inspect({ layoutRoot: repoPath, governance: governancePath, graph: graphPath, sources: sourcesPath, mirrorRoots: mirrorRootsPath }), /must not nest/);
 fs.writeFileSync(graphPath, JSON.stringify(checkerGraph));
 
 // --- spec_plan_unregistered: a node's campaign.spec.path under docs/plans/ must have a
@@ -629,7 +631,7 @@ specGraph.nodes[0].campaign.allowed_path_prefixes = ['src/', 'docs/plans'];
 fs.writeFileSync(graphPath, JSON.stringify(specGraph));
 
 // No docs/projects/INDEX.md at all -> auto-allowed, READY.
-const specNoIndex = graphChecker.inspect({
+const specNoIndex = graphChecker.inspect({ layoutRoot: repoPath,
   governance: governancePath, graph: graphPath, sources: sourcesPath, repoRoot: specRepo,
 });
 assert.equal(specNoIndex.status, 'READY');
@@ -643,7 +645,7 @@ fs.writeFileSync(path.join(specRepo, 'docs', 'projects', 'INDEX.md'), [
   '',
 ].join('\n'));
 assert.throws(
-  () => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath, repoRoot: specRepo }),
+  () => graphChecker.inspect({ layoutRoot: repoPath, governance: governancePath, graph: graphPath, sources: sourcesPath, repoRoot: specRepo }),
   /spec_plan_unregistered/,
 );
 
@@ -656,7 +658,7 @@ fs.writeFileSync(path.join(specRepo, 'docs', 'projects', 'INDEX.md'), [
   '| 2026-01-01 | [widget](../plans/2026-01-01-widget.md) | active | — | [plan](../plans/2026-01-01-widget.md) |',
   '',
 ].join('\n'));
-const specRegistered = graphChecker.inspect({
+const specRegistered = graphChecker.inspect({ layoutRoot: repoPath,
   governance: governancePath, graph: graphPath, sources: sourcesPath, repoRoot: specRepo,
 });
 assert.equal(specRegistered.status, 'READY');
@@ -666,14 +668,14 @@ const omittedSourceGraph = clone(checkerGraph);
 omittedSourceGraph.nodes.pop();
 fs.writeFileSync(graphPath, JSON.stringify(omittedSourceGraph));
 assert.throws(
-  () => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath }),
+  () => graphChecker.inspect({ layoutRoot: repoPath, governance: governancePath, graph: graphPath, sources: sourcesPath }),
   /coverage is not exact/,
 );
 const inventedGraph = clone(checkerGraph);
 inventedGraph.nodes[0].source_plan_ids = [`plan-${hash('invented')}`];
 fs.writeFileSync(graphPath, JSON.stringify(inventedGraph));
 assert.throws(
-  () => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath }),
+  () => graphChecker.inspect({ layoutRoot: repoPath, governance: governancePath, graph: graphPath, sources: sourcesPath }),
   /coverage is not exact/,
 );
 const changedRubric = '## R1 Ready with changed semantics\n';
@@ -681,11 +683,11 @@ fs.writeFileSync(path.join(sourceRoot, sourceFiles[0].rubric), changedRubric);
 const changedRubricManifest = clone(sourceManifest);
 changedRubricManifest.sources[0].rubric_sha256 = hash(changedRubric);
 fs.writeFileSync(sourcesPath, JSON.stringify(changedRubricManifest));
-const changedRubricCoverage = graphChecker.loadSourceCoverageManifest(sourcesPath);
+const changedRubricCoverage = graphChecker.loadSourceCoverageManifest(sourcesPath, { repoRoot: repoPath });
 assert.notDeepEqual(changedRubricCoverage.rubricIds, derivedCoverage.rubricIds);
 fs.writeFileSync(graphPath, JSON.stringify(checkerGraph));
 assert.throws(
-  () => graphChecker.inspect({ governance: governancePath, graph: graphPath, sources: sourcesPath }),
+  () => graphChecker.inspect({ layoutRoot: repoPath, governance: governancePath, graph: graphPath, sources: sourcesPath }),
   /coverage is not exact/,
 );
 fs.writeFileSync(
@@ -695,11 +697,11 @@ fs.writeFileSync(
 const duplicateManifest = clone(sourceManifest);
 duplicateManifest.sources[0].rubric_sha256 = hash('## R1 Ready\n- R1: Duplicate\n');
 fs.writeFileSync(sourcesPath, JSON.stringify(duplicateManifest));
-assert.throws(() => graphChecker.loadSourceCoverageManifest(sourcesPath), /duplicate rubric IDs/);
+assert.throws(() => graphChecker.loadSourceCoverageManifest(sourcesPath, { repoRoot: repoPath }), /duplicate rubric IDs/);
 fs.writeFileSync(path.join(sourceRoot, sourceFiles[0].rubric), sourceFiles[0].rubricBytes);
 fs.writeFileSync(sourcesPath, JSON.stringify(sourceManifest));
 fs.appendFileSync(path.join(sourceRoot, sourceFiles[0].plan), 'drift\n');
-assert.throws(() => graphChecker.loadSourceCoverageManifest(sourcesPath), /content digest drifted/);
+assert.throws(() => graphChecker.loadSourceCoverageManifest(sourcesPath, { repoRoot: repoPath }), /content digest drifted/);
 fs.writeFileSync(path.join(sourceRoot, sourceFiles[0].plan), sourceFiles[0].planBytes);
 const outsideRubric = path.join(tmp, 'outside-rubric.md');
 fs.writeFileSync(outsideRubric, '## R9 Outside\n');
@@ -713,7 +715,7 @@ fs.writeFileSync(sourcesPath, JSON.stringify({
     rubric_sha256: hash('## R9 Outside\n'),
   }],
 }));
-assert.throws(() => graphChecker.loadSourceCoverageManifest(sourcesPath), /escapes the source manifest root/);
+assert.throws(() => graphChecker.loadSourceCoverageManifest(sourcesPath, { repoRoot: repoPath }), /escapes the source manifest root/);
 fs.symlinkSync(path.join(sourceRoot, sourceFiles[0].plan), path.join(sourceRoot, 'alias-plan.md'));
 fs.writeFileSync(sourcesPath, JSON.stringify({
   schema_version: 1,
@@ -726,7 +728,7 @@ fs.writeFileSync(sourcesPath, JSON.stringify({
     },
   ],
 }));
-assert.throws(() => graphChecker.loadSourceCoverageManifest(sourcesPath), /real targets must be unique/);
+assert.throws(() => graphChecker.loadSourceCoverageManifest(sourcesPath, { repoRoot: repoPath }), /real targets must be unique/);
 assert.equal(
   campaignChecker.projectMissionPolicy(repoPath).policy_digest,
   resolvedMission.policy_digest,

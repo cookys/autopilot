@@ -7,6 +7,7 @@ const {
   checkMissionGraphCoverage,
 } = require('../src/engine/mission-execution-graph');
 const { resolveMissionPolicy } = require('../src/engine/mission-policy');
+const LAYOUT = require('./lib/repo-layout.js');
 
 function usage() {
   return [
@@ -51,6 +52,7 @@ function gitToplevel(dir) {
   try {
     return require('child_process').execFileSync('git', ['-C', dir, 'rev-parse', '--show-toplevel'], {
       encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch {
     return null;
@@ -107,7 +109,22 @@ function contentBoundRubricId(planHash, rubricHash, rubricId) {
   return `R${BigInt(`0x${digest}`).toString(10)}`;
 }
 
-function loadSourceCoverageManifest(manifestPath) {
+// opts.repoRoot (REQUIRED unless opts.noLayout): the caller's repo. Its layout registry decides the manifest
+// base and the manifest must lie inside it (MANIFEST_OUTSIDE_REPO otherwise); nothing is inferred from the
+// manifest. opts.noLayout is the one explicit fixture mode (only code can pass it): the base is the manifest's own
+// directory, still checked by containedPath.
+function loadSourceCoverageManifest(manifestPath, opts) {
+  // Step 1, before the manifest is opened: the caller's repoRoot validates the LITERAL and the physical path
+  // (LAYOUT.manifestBase). A manifest outside the repo is refused without a single read of its bytes.
+  const repoRootForBase = (opts && opts.noLayout) ? null : (opts && opts.repoRoot);
+  if (!(opts && opts.noLayout) && !repoRootForBase) {
+    const missing = new Error('loadSourceCoverageManifest: opts.repoRoot is required');
+    missing.code = 'MANIFEST_REPO_ROOT_REQUIRED';
+    throw missing;
+  }
+  const literalManifest = path.resolve(manifestPath);
+  const baseDir = repoRootForBase ? LAYOUT.manifestBase(repoRootForBase, literalManifest).base : null;
+  // Step 2: only now canonicalise and read.
   let canonicalManifest;
   try {
     canonicalManifest = fs.realpathSync(manifestPath);
@@ -120,7 +137,14 @@ function loadSourceCoverageManifest(manifestPath) {
       || Object.keys(manifest).some((key) => !new Set(['schema_version', 'sources']).has(key))) {
     throw new Error('source manifest must be a versioned non-empty source set');
   }
-  const root = path.dirname(canonicalManifest);
+  let root = path.dirname(canonicalManifest);
+  if (baseDir) {
+    try { root = fs.realpathSync(baseDir); } catch {
+      const missing = new Error(`source manifest base ${baseDir} does not exist`);
+      missing.code = 'MANIFEST_BASE_INVALID';
+      throw missing;
+    }
+  }
   const planIds = [];
   const rubricIds = [];
   const authoringUnitIds = [];
@@ -140,17 +164,25 @@ function loadSourceCoverageManifest(manifestPath) {
         throw new Error(`source manifest.sources[${index}].${field} is required`);
       }
     }
-    const planPath = path.resolve(root, source.plan_path);
-    const rubricPath = path.resolve(root, source.rubric_path);
-    for (const [field, authored, resolved] of [
-      ['plan_path', source.plan_path, planPath],
-      ['rubric_path', source.rubric_path, rubricPath],
-    ]) {
-      if (path.isAbsolute(authored) || authored.includes('\\')
-          || resolved === root || !resolved.startsWith(`${root}${path.sep}`)) {
-        throw new Error(`source manifest.sources[${index}].${field} must stay under the manifest root`);
+    // One containment check for every reader (repo-layout containedPath); an escape is thrown, never repaired.
+    const resolveUnderBase = (field, authored) => {
+      try {
+        return repoRootForBase
+          ? LAYOUT.resolveManifestPath(repoRootForBase, literalManifest, authored)
+          : LAYOUT.containedPath(root, authored);
+      } catch (error) {
+        if (error.code === 'MANIFEST_PATH_ESCAPE') {
+          const wrapped = new Error(error.kind === 'symlink'
+            ? `source manifest.sources[${index}].${field} escapes the source manifest root`
+            : `source manifest.sources[${index}].${field} must stay under the manifest root`);
+          wrapped.code = error.code;
+          throw wrapped;
+        }
+        throw error;
       }
-    }
+    };
+    const planPath = resolveUnderBase('plan_path', source.plan_path);
+    const rubricPath = resolveUnderBase('rubric_path', source.rubric_path);
     const canonicalTargets = [];
     for (const [field, target] of [['plan_path', planPath], ['rubric_path', rubricPath]]) {
       let targetStat;
@@ -263,10 +295,10 @@ function inspect(options) {
     ? JSON.parse(JSON.stringify(options.graphObject))
     : readJson(options.graph, 'graph');
   const missionPolicy = resolveMissionPolicy(governance);
-  const coverage = loadSourceCoverageManifest(options.sources);
+  const repoRoot = options.repoRoot ? path.resolve(options.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
+  const coverage = loadSourceCoverageManifest(options.sources, { repoRoot: options.layoutRoot || repoRoot });
   const mirrorRoots = options.mirrorRoots ? loadMirrorRoots(options.mirrorRoots) : null;
   if (mirrorRoots) checkOutputPathMirrors(graph, mirrorRoots);
-  const repoRoot = options.repoRoot ? path.resolve(options.repoRoot) : (gitToplevel(process.cwd()) || process.cwd());
   checkSpecPlanRegistration(graph, repoRoot);
   const result = checkMissionGraphCoverage(graph, coverage, missionPolicy);
   const reservationTotals = Object.fromEntries([

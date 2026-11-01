@@ -14,21 +14,18 @@
 // session config/state, plan docs. Deliberately NARROW — a generic
 // '**/handoff*.md' rule was rejected (GPT-OSS panel finding: it doubles as a
 // bypass by planting a handoff-named file in product territory).
-// The session's repo is a consuming project (docs/projects/, docs/plans/ by convention) or this repo, whose work
-// records sit where the layout registry says (docs/ at bootstrap, project/ from P1): both are allowed.
-const REGISTRY_RECORD_PREFIXES = (() => {
-  try {
-    const layout = require('../scripts/lib/repo-layout.js');
-    return ['projects_dir', 'plans_dir', 'backlog_dir'].map((k) => `${layout.path(k)}/`);
-  } catch (_e) { return []; }
-})();
-const ALLOWLIST_PREFIXES = [...new Set([
-  ['docs', 'projects', ''].join('/'),
-  ['docs', 'plans', ''].join('/'),
-  ...REGISTRY_RECORD_PREFIXES,
-  '.claude/',
-  '.autopilot/',
-])];
+// The session's repo is a consuming project (docs/projects/, docs/plans/ by convention) or this repo, whose work records sit
+// where the layout registry says (docs/ at bootstrap, project/ from P1). The registry applies only to this repo, so the
+// prefixes are chosen per repo root (layout.pathFor): a consuming project always gets the docs/ convention.
+const layout = (() => { try { return require('../scripts/lib/repo-layout.js'); } catch (_e) { return null; } })();
+const FIXED_PREFIXES = ['.claude/', '.autopilot/'];
+function allowlistPrefixes(repoRoot) {
+  const keys = ['projects_dir', 'plans_dir'];
+  const rec = keys.map((k) => `${layout ? layout.pathFor(repoRoot, k) : ['docs', k === 'projects_dir' ? 'projects' : 'plans'].join('/')}/`);
+  return [...new Set([...rec, ...FIXED_PREFIXES])];
+}
+// This repo's own prefixes (no root given); kept as an export for callers that ask for the set.
+const ALLOWLIST_PREFIXES = allowlistPrefixes(null);
 
 const GATED_LEVELS = new Set(['l4', 'l5', 'l6']);
 
@@ -72,9 +69,9 @@ function classifyCodexGitProbe(result) {
   };
 }
 
-function isAllowlisted(relPath) {
+function isAllowlisted(relPath, repoRoot) {
   const p = String(relPath).replace(/\\/g, '/').replace(/^\.\//, '');
-  return ALLOWLIST_PREFIXES.some((pre) => p.startsWith(pre));
+  return allowlistPrefixes(repoRoot).some((pre) => p.startsWith(pre));
 }
 
 /**

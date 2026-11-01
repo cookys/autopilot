@@ -835,7 +835,7 @@ async function handleCollect(flags) {
 
   const consumerAllowlist = loadConsumerExcludeAllowlist(repoRoot);
   for (const pattern of excludedList) {
-    if (!isPathspecAllowed(pattern, consumerAllowlist)) {
+    if (!isPathspecAllowed(pattern, consumerAllowlist, repoRoot)) {
       console.error(`ERROR: Exclude pathspec '${pattern}' is not permitted by allowlist`);
       process.exit(1);
     }

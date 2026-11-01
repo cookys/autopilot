@@ -1341,6 +1341,6 @@ function main() {
   process.exit(result.ok && planned.manifest.preserved ? 0 : 1);
 }
 
-module.exports = { convertToReporterFields, parseRepliesTable, needsMigration, renderEntry };
+module.exports = { CONSUMER_BACKLOG, convertToReporterFields, parseRepliesTable, needsMigration, renderEntry };
 
 if (require.main === module) main();

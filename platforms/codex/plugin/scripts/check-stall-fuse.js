@@ -65,19 +65,25 @@ const fs = require('fs');
 
 const DEFAULT_THRESHOLD = 3;
 const DEFAULT_PROCESS_THRESHOLD = 3;
-// Process paths = this repo's work records, wherever the layout registry puts them (docs/ at bootstrap, project/ from P1),
+// Process paths = the work records of the repo the changed paths belong to (the process cwd): this repo's wherever the layout
+// registry puts them (docs/ at bootstrap, project/ from P1), the docs/ convention for any other repo (LAYOUT.pathFor decides),
 // plus the ADR directory (docs/adr stays in docs/).
 const LAYOUT = require('./lib/repo-layout.js');
 const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-const dirRe = (key) => new RegExp(`^${escapeRe(LAYOUT.path(key).replace(/\/+$/u, ''))}/`, 'u');
-const PROCESS_PATTERNS = [
-  dirRe('plans_dir'),
-  dirRe('plans_evidence_dir'),
-  dirRe('projects_dir'),
-  dirRe('backlog_dir'),
-  new RegExp(`^${escapeRe(LAYOUT.path('backlog_file'))}$`, 'u'),
-  new RegExp(`^${escapeRe(LAYOUT.path('docs_dir'))}/adr/`, 'u'),
-];
+function processPatterns(repoRoot) {
+  const L = (key) => LAYOUT.pathFor(repoRoot, key);
+  const dirRe = (key) => new RegExp(`^${escapeRe(L(key).replace(/\/+$/u, ''))}/`, 'u');
+  const seen = new Set();
+  return [
+    dirRe('plans_dir'),
+    dirRe('plans_evidence_dir'),
+    dirRe('projects_dir'),
+    dirRe('backlog_dir'),
+    new RegExp(`^${escapeRe(L('backlog_file'))}$`, 'u'),
+    new RegExp(`^${escapeRe(L('docs_dir'))}/adr/`, 'u'),
+  ].filter((re) => !seen.has(re.source) && seen.add(re.source));
+}
+let PROCESS_PATTERNS = null;
 const VERIFICATION_PATTERNS = [
   /^hooks\/tests\//u,
   /(^|\/)tests?\//u,
@@ -137,7 +143,7 @@ function isVerificationPath(candidate) {
 }
 
 function isProcessPath(candidate) {
-  return !isVerificationPath(candidate) && PROCESS_PATTERNS.some((pattern) => pattern.test(candidate));
+  return !isVerificationPath(candidate) && (PROCESS_PATTERNS || (PROCESS_PATTERNS = processPatterns(process.cwd()))).some((pattern) => pattern.test(candidate));
 }
 
 function git(args) {
@@ -270,4 +276,5 @@ function main() {
   else check(opts);
 }
 
-main();
+if (require.main === module) main();
+module.exports = { processPatterns };

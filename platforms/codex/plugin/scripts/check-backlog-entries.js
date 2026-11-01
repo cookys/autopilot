@@ -104,13 +104,12 @@ const DEFAULT_CAPS = {
 };
 const POINTER_THRESHOLD = 600;
 // Pointer roots: this repo's work-record locations from the layout registry (docs/ at bootstrap, project/ from P1; the plans
-// evidence dir may sit beside the plans dir), plus the docs/ convention of a consuming project that has no config.
+// evidence dir may sit beside the plans dir); any other repo (a consuming project) gets the docs/ convention, so the
+// registry's paths are never applied to it (LAYOUT.pathFor decides per repo root). No root = this repo's own.
 const LAYOUT = require('./lib/repo-layout.js');
-const CONSUMER_ROOTS = ['plans', 'projects', 'backlog'].map((d) => ['docs', d, ''].join('/'));
-const DEFAULT_ROOTS = [...new Set([
-  ...['plans_dir', 'projects_dir', 'backlog_dir'].map((k) => `${LAYOUT.path(k)}/`),
-  `${path.posix.dirname(LAYOUT.path('plans_evidence_dir'))}/`,
-  ...CONSUMER_ROOTS,
+const defaultRoots = (repoRoot) => [...new Set([
+  ...['plans_dir', 'projects_dir', 'backlog_dir'].map((k) => `${LAYOUT.pathFor(repoRoot, k)}/`),
+  `${path.posix.dirname(LAYOUT.pathFor(repoRoot, 'plans_evidence_dir'))}/`,
 ])];
 // `shipped` carries the ship date as well as the version/sha: done_not_moved is measured from a
 // date, and a version alone has none (depth-0 probe, 2026-09-14).
@@ -253,10 +252,10 @@ function parseConfigFile(filePath) {
   return cfg;
 }
 
-function builtinConfig() {
+function builtinConfig(repoRoot) {
   return {
     style: 'heading',
-    pointer_roots: DEFAULT_ROOTS.slice(),
+    pointer_roots: defaultRoots(repoRoot),
     id_pattern: null,
     mode: 'warn',
     allowlist_path: null,
@@ -1040,7 +1039,7 @@ function allowSet(allow) {
 }
 
 function loadGateConfig(opts, repoRoot) {
-  let cfg = builtinConfig();
+  let cfg = builtinConfig(repoRoot);
   let configPath = opts.config;
   if (!configPath) configPath = resolveBacklogConfigPath(repoRoot);
   if (configPath) {

@@ -21,15 +21,17 @@ const ALLOWED_EXTENSIONS = new Set([
 // backlog/ both match. Work-record locations come from the layout registry (docs/ at bootstrap, project/ from P1).
 const LAYOUT = require('./repo-layout.js');
 const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const WORK_RECORD_DENIED = [...new Set([
-  `${reEsc(LAYOUT.path('plans_dir'))}/(.*/)?evidence`,
-  `${reEsc(path.posix.dirname(LAYOUT.path('plans_evidence_dir')))}/(.*/)?evidence`,
-  reEsc(LAYOUT.path('backlog_dir')),
-  reEsc(LAYOUT.path('backlog_file')),
-])];
-const DENIED_DIRS = new RegExp(
-  `(^|/)(${WORK_RECORD_DENIED.join('|')}|\\.git|\\.claude|node_modules`
-  + '|review-output)(/|$)', 'i');
+// The registry describes this repo only; any other repo gets the docs/ convention (LAYOUT.pathFor decides per repo root).
+const deniedDirsFor = (repoRoot) => {
+  const L = (k) => LAYOUT.pathFor(repoRoot, k);
+  const workRecords = [...new Set([
+    `${reEsc(L('plans_dir'))}/(.*/)?evidence`,
+    `${reEsc(path.posix.dirname(L('plans_evidence_dir')))}/(.*/)?evidence`,
+    reEsc(L('backlog_dir')),
+    reEsc(L('backlog_file')),
+  ])];
+  return new RegExp(`(^|/)(${workRecords.join('|')}|\\.git|\\.claude|node_modules|review-output)(/|$)`, 'i');
+};
 // Basenames: review artifacts only (round outputs, dispositions, findings, verdicts, receipts).
 // Source files that merely mention review/findings in their name (adjudicate-findings.js,
 // lib/plan-review-findings.js) stay usable.
@@ -94,7 +96,7 @@ function loadContextFiles(rawPaths, { repoRoot, excluded = [] }) {
       throw new ContextError(`--context-file must be inside --repo-root: ${raw}`);
     }
     const rel = path.relative(root, real).split(path.sep).join('/');
-    if (DENIED_DIRS.test(rel) || DENIED_NAMES.some((re) => re.test(path.posix.basename(rel)))) {
+    if (deniedDirsFor(repoRoot).test(rel) || DENIED_NAMES.some((re) => re.test(path.posix.basename(rel)))) {
       throw new ContextError(`--context-file path is not allowed as blind context: ${rel}`);
     }
     if (excludedReal.has(real)) {
@@ -139,6 +141,7 @@ ${body}
 }
 
 module.exports = {
+  deniedDirsFor,
   loadContextFiles,
   renderContextBlock,
   MAX_FILES,

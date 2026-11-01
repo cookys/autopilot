@@ -203,8 +203,9 @@ function srcLedger(ctx) {
   if (file && !path.isAbsolute(file) && ctx.cwd) file = path.join(ctx.cwd, file);
   if (!file && ctx.cwd) {
     try {
-      // The session's repo is this repo (projects dir from the layout registry) or a consuming project (docs/projects).
-      const projectsRels = [...new Set([require('./repo-layout.js').path('projects_dir'), ['docs', 'projects'].join('/')])];
+      // The projects dir comes from the layout registry when the session's repo is this one, and is the docs/projects
+      // convention for any other repo (pathFor decides per repo root).
+      const projectsRels = [require('./repo-layout.js').pathFor(ctx.cwd, 'projects_dir')];
       let best = null;
       for (const rel of projectsRels) {
         const pdir = path.join(ctx.cwd, rel);

@@ -11,7 +11,7 @@
  * one layout in force per merge and NO path aliases: a reader asks `path(key)` and gets the path that
  * is valid at the current stage.
  *
- * API:  stage()  path(key)  (derived key: backlog_dir)  rules({activeOnly})  allowlists()  exceptions()  validate(data)  load()
+ * API:  stage()  path(key)  (derived keys: backlog_dir, guide_dir)  pathFor(repoRoot, key)  isSelfRepo(repoRoot)  rules({activeOnly})  allowlists()  exceptions()  validate(data)  load()
  *       manifestBase(repoRoot, manifestFile)            the directory a sources manifest's plan_path/rubric_path
  *                                                       are relative to ({base, source: 'exception'|'registry'|'manifest-dir'})
  *       containedPath(base, rel)                        the single containment check (literal + realpath) both of them use
@@ -38,6 +38,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 const STAGES = ['bootstrap', 'P1', 'P2', 'P3', 'P4', 'P5'];
 
@@ -346,6 +347,64 @@ function pathOf(key, opts) {
   return d.paths[key];
 }
 
+// ---- Which repo does a registry path apply to? ----
+// The registry describes THIS repo (the one holding this file). A reader that runs on another repo (a hook in a consuming
+// project, a script given --repo-root / --target / a cwd) must not look for this repo's work records there: such a repo
+// keeps them under docs/ by convention. isSelfRepo() decides, pathFor() applies it.
+//   isSelfRepo(root)  true when root and this file's repo share one git common dir (a worktree of this repo counts),
+//                     both compared by realpath. Not a git repo, or any git failure: false.
+//   pathFor(root, key) the registry path when root is this repo (or root is empty: the caller is this repo's own tool),
+//                     else the consuming-project docs/ convention for that key.
+// The consumer names are built from parts on purpose: a relayout generator rewrites this repo's own docs/ paths and must
+// not reach a convention that belongs to other repos.
+const CONSUMER_DOCS = 'docs';
+const CONSUMER_PATHS = {
+  docs_dir: CONSUMER_DOCS,
+  plans_dir: [CONSUMER_DOCS, 'plans'].join('/'),
+  plans_archive_dir: [CONSUMER_DOCS, 'plans', '_archive'].join('/'),
+  plans_evidence_dir: [CONSUMER_DOCS, 'plans', 'evidence'].join('/'),
+  projects_dir: [CONSUMER_DOCS, 'projects'].join('/'),
+  projects_index: [CONSUMER_DOCS, 'projects', 'INDEX.md'].join('/'),
+  projects_archive_dir: [CONSUMER_DOCS, 'projects', '_archive'].join('/'),
+  backlog_file: [CONSUMER_DOCS, 'BACKLOG.md'].join('/'),
+  backlog_dir: [CONSUMER_DOCS, 'backlog'].join('/'),
+};
+
+function gitCommonDir(dir) {
+  try {
+    const env = { ...process.env };
+    for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE']) delete env[k];
+    const r = spawnSync('git', ['-C', dir, 'rev-parse', '--git-common-dir'], { encoding: 'utf8', env });
+    if (r.status !== 0) return null;
+    const out = String(r.stdout || '').trim();
+    if (!out) return null;
+    return fs.realpathSync(path.resolve(dir, out));
+  } catch { return null; }
+}
+
+const SELF_ROOT = path.resolve(__dirname, '..', '..');
+const selfCache = new Map();
+let selfCommon;
+function isSelfRepo(repoRoot) {
+  if (typeof repoRoot !== 'string' || repoRoot === '') return false;
+  let key;
+  try { key = fs.realpathSync(path.resolve(repoRoot)); } catch { return false; }
+  if (selfCache.has(key)) return selfCache.get(key);
+  if (selfCommon === undefined) selfCommon = gitCommonDir(SELF_ROOT);
+  const theirs = selfCommon ? gitCommonDir(key) : null;
+  const same = !!(selfCommon && theirs && theirs === selfCommon);
+  selfCache.set(key, same);
+  return same;
+}
+
+function pathFor(repoRoot, key, opts) {
+  if (!repoRoot || isSelfRepo(repoRoot)) return pathOf(key, opts);
+  if (!Object.prototype.hasOwnProperty.call(CONSUMER_PATHS, key)) {
+    throw new Error(`repo-layout: no consuming-project convention for path key ${JSON.stringify(key)}`);
+  }
+  return CONSUMER_PATHS[key];
+}
+
 function realOrResolved(p) {
   try { return fs.realpathSync(p); } catch { /* not there yet: fall through */ }
   let dir = path.dirname(p);
@@ -495,7 +554,7 @@ function allowlists(opts) {
 
 function exceptions(opts) { return checked(opts).exceptions.map((e) => Object.assign({}, e)); }
 
-module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, rules, allowlists, exceptions, manifestBase, resolveManifestPath, containedPath, literalProblem, isActive, stageIndex };
+module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, pathFor, isSelfRepo, rules, allowlists, exceptions, manifestBase, resolveManifestPath, containedPath, literalProblem, isActive, stageIndex };
 
 if (require.main === module) {
   const argv = process.argv.slice(2);

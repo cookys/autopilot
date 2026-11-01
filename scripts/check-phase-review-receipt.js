@@ -29,11 +29,10 @@ const deriveReceiptState = require('./lib/review-chain-derive');
 const { EXCLUDE_ALLOWLIST, isPathspecAllowed, loadConsumerExcludeAllowlist } = require('./lib/exclude-allowlist');
 const reviewPackets = require('./lib/review-packets');
 const LAYOUT = require('./lib/repo-layout.js');
-// Plans sit where the layout registry puts them (docs/plans at bootstrap, project/plans from P1) in this repo, and under the
-// docs/plans convention in a consuming project: a receipt may belong to either.
-const PLAN_ROOTS = [...new Set([LAYOUT.path('plans_dir'), ['docs', 'plans'].join('/')])];
-const planDirsAbs = (repoRoot) => PLAN_ROOTS.map((rel) => path.join(repoRoot, rel));
-const inPlanDirs = (repoRoot, name) => PLAN_ROOTS.map((rel) => path.join(repoRoot, rel, name));
+// Plans sit where the layout registry puts them (docs/plans at bootstrap, project/plans from P1) when the repo is this one,
+// and under the docs/plans convention in any other repo (LAYOUT.pathFor decides per repo root).
+const planDirsAbs = (repoRoot) => [path.join(repoRoot, LAYOUT.pathFor(repoRoot, 'plans_dir'))];
+const inPlanDirs = (repoRoot, name) => planDirsAbs(repoRoot).map((d) => path.join(d, name));
 
 function deepEqual(a, b) {
   if (a === b) return true;
@@ -757,7 +756,7 @@ function validateModeA(flags, opts = {}) {
       // Item 7: Exclusion allowlist enforcement
       if (hasExclusions || packetSet) {
         for (const pattern of (hasExclusions ? rangeObj.excluded : [])) {
-          if (!isPathspecAllowed(pattern, consumerAllowlist)) {
+          if (!isPathspecAllowed(pattern, consumerAllowlist, repoRoot)) {
             console.error(`ERROR: Exclude pathspec '${pattern}' is not permitted by allowlist`);
             process.exit(1);
           }
@@ -1160,9 +1159,9 @@ function validateModeA(flags, opts = {}) {
         .split('\n')
         .map((p) => p.trim())
         .filter(Boolean);
-      const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.path('projects_index') || p === ['docs', 'projects', 'INDEX.md'].join('/');
+      const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.pathFor(repoRoot, 'projects_index');
       const allAllowed = diffRes.status === 0
-        && changedPaths.every((p) => isPathspecAllowed(p, consumerAllowlist) || sidecarAllowed(p));
+        && changedPaths.every((p) => isPathspecAllowed(p, consumerAllowlist, repoRoot) || sidecarAllowed(p));
       if (!allAllowed) {
         console.error(`Branch '${branch}' head has moved: expected '${lastEntry.head}', got '${currentBranchHead}'`);
         process.exit(1);

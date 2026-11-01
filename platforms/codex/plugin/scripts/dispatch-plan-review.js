@@ -1717,8 +1717,8 @@ function exitControlledError(error) {
 function checkPlanRegistration(opts) {
   if (opts.allowUnregistered) return;
   const repoRoot = opts.repoRoot;
-  const plansRel = LAYOUT.path('plans_dir');
-  const indexRel = LAYOUT.path('projects_index');
+  const plansRel = LAYOUT.pathFor(repoRoot, 'plans_dir');
+  const indexRel = LAYOUT.pathFor(repoRoot, 'projects_index');
   const plansDir = path.join(repoRoot, plansRel);
   const indexPath = path.join(repoRoot, indexRel);
   if (!fs.existsSync(indexPath)) return;

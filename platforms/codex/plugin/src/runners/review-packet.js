@@ -6,18 +6,24 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 // Plan and evidence locations: this repo's from the layout registry (docs/ at bootstrap, project/ from P1; evidence may sit
-// beside the plans), plus the docs/plans convention of a consuming project.
+// beside the plans); any other repo (a consuming project under review) gets the docs/plans convention. LAYOUT.pathFor
+// decides per repo.
 const LAYOUT = require('../../scripts/lib/repo-layout.js');
-const PLAN_ROOTS = [...new Set([LAYOUT.path('plans_dir'), ['docs', 'plans'].join('/')])];
-const DENIED_PLAN_GLOBS = PLAN_ROOTS.flatMap((root) => [`${root}/**/*.review.md`, `${root}/**/*.review.json`, `${root}/**/*disposition*.json`]);
-const DEFAULT_PACKET_DENY_LIST = Object.freeze([
-  '.autopilot/**',
-  '.qc/**',
-  ...new Set([`${LAYOUT.path('plans_evidence_dir')}/**`, ['docs', 'plans', 'evidence', '**'].join('/')]),
-  ...DENIED_PLAN_GLOBS,
-  '**/*.receipt.json',
-  '**/*.raw.log',
-]);
+function defaultDenyList(repo) {
+  const plans = LAYOUT.pathFor(repo, 'plans_dir');
+  return Object.freeze([
+    '.autopilot/**',
+    '.qc/**',
+    `${LAYOUT.pathFor(repo, 'plans_evidence_dir')}/**`,
+    `${plans}/**/*.review.md`,
+    `${plans}/**/*.review.json`,
+    `${plans}/**/*disposition*.json`,
+    '**/*.receipt.json',
+    '**/*.raw.log',
+  ]);
+}
+// This repo's own default list (no repo given), kept for callers that name it.
+const DEFAULT_PACKET_DENY_LIST = defaultDenyList(null);
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024;
 // Every ambient GIT_* variable is scrubbed before any git subprocess: GIT_DIR /
@@ -106,8 +112,8 @@ function otherGlobSyntax(pattern) {
   return segs.some((s) => s === '');
 }
 
-function normalizeDenyList(denyList) {
-  const raw = denyList == null ? [...DEFAULT_PACKET_DENY_LIST] : [...denyList];
+function normalizeDenyList(denyList, repo) {
+  const raw = denyList == null ? [...defaultDenyList(repo)] : [...denyList];
   for (const pattern of raw) {
     if (typeof pattern !== 'string' || otherGlobSyntax(pattern)) {
       throw new Error(`invalid deny-list pattern: ${pattern}`);
@@ -441,7 +447,7 @@ function buildReviewPacket({
       || !Buffer.isBuffer(inc.delta_diff))) {
     throw new Error('incremental packet descriptor malformed');
   }
-  const deny = normalizeDenyList(denyList);
+  const deny = normalizeDenyList(denyList, repo);
   const repoAbs = path.resolve(repo);
   const outAbs = path.resolve(outDir);
   const baseOid = String(runGit('git rev-parse --verify', ['rev-parse', '--verify', `${baseSha}^{commit}`], {
@@ -720,6 +726,7 @@ module.exports = {
   packetPathDenied,
   normalizeDenyList,
   DEFAULT_PACKET_DENY_LIST,
+  defaultDenyList,
   verifyTreeIntegrity,
   hashObject,
   hashPacketDir,

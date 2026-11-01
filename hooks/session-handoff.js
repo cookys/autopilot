@@ -27,8 +27,6 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const { parseTranscriptText } = require('./state-checkpoint-lib.js');
-// A consuming project keeps its projects under docs/projects (its own convention, not this repo's layout).
-const CONSUMER_PROJECTS_DIR = ['docs', 'projects'].join('/');
 const { clearHandoffKey } = require('../scripts/resolve-repo-placement.js');
 
 const ACT_REASONS = new Set(['clear', 'logout']);
@@ -113,10 +111,10 @@ function decide(repoRoot, parsed, sessionStartIso) {
 
   if (sessionStartIso) {
     try {
-      // The session's repo is this repo (projects dir from the layout registry) or a consuming project (docs/projects).
+      // The projects dir comes from the layout registry when the session's repo is this one, and is the docs/projects
+      // convention for any other repo (pathFor decides per repo root).
       const startMs = Date.parse(sessionStartIso);
-      const projectsDirs = [...new Set([require('../scripts/lib/repo-layout.js').path('projects_dir'), CONSUMER_PROJECTS_DIR])]
-        .map((rel) => path.join(repoRoot, rel));
+      const projectsDirs = [path.join(repoRoot, require('../scripts/lib/repo-layout.js').pathFor(repoRoot, 'projects_dir'))];
       scan: for (const projectsDir of projectsDirs) {
         if (Number.isNaN(startMs) || !fs.existsSync(projectsDir)) continue;
         for (const entry of fs.readdirSync(projectsDir)) {

@@ -7,7 +7,8 @@ import { T_EN } from './i18n'
 import type { T } from './i18n'
 import { BAND_INFO_LABEL, BAND_SEP, displayWidth, layoutBand, plainBandText } from './model'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
-import { actionSeg, dimProps, drawSeg } from './ui'
+import { actionSeg, dimProps, drawSeg, forgeBar, GLYPHS } from './ui'
+import type { ForgeSegment } from './ui'
 import { barRule, barStrip, decideTabLines } from './tabs'
 import type { BarStrip, BarTabId } from './tabs'
 
@@ -63,22 +64,19 @@ export function Band(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot 
 
 // ---- layout E1: the band row is the indicator on the left and the tabs on the right; an open tab draws its content under a rule ----
 
-// what the mod below answered to the one-row ask, if it is a Text of strings: the forge tab's text (anything else draws no forge tab). The tab is drawn in the strip's own style.
-export function forgeLabelOf(r: unknown): string | null {
-  const n = r as { type?: string; children?: unknown[] } | null | undefined
-  if (n === null || n === undefined || n.type !== 'Text' || !Array.isArray(n.children) || n.children.length === 0 || !n.children.every(c => typeof c === 'string')) return null
-  const text = (n.children as string[]).join('').replace(/\s+/g, ' ').trim()
-  return text === '' ? null : text
-}
-
 export type BarHandlers = { onInfo: () => void; onSlot: (id: SlotId) => void; onTab: (id: BarTabId) => void }
 
 // the row, and the column its tabs start in (the rule under it is built from that)
-export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | null, forge: string | null): { node: unknown; strip: BarStrip; tabsAt: number } {
+export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, columns: number, t: T, hd: BarHandlers, active: BarTabId | null, forge: readonly ForgeSegment[] | null): { node: unknown; strip: BarStrip; tabsAt: number } {
   const { Box, Text, Button } = el
-  const strip = barStrip(snap, t, active, forge)
-  const left = bandCells(el, snap, Math.max(1, columns - strip.width - 1), hd.onInfo, t, hd.onSlot)
-  const gap = Math.max(1, columns - left.width - strip.width)
+  // the forge label is read by forgeSegments (ui.ts): speed (and pet) sit on the left after the ⓘ, and the strip keeps a short forge tab that opens the full view
+  const fb = forge === null ? null : forgeBar(forge)
+  const strip = barStrip(snap, t, active, fb === null ? null : GLYPHS.structure.speed)
+  const forgeW = fb === null ? 0 : fb.width
+  const left = bandCells(el, snap, Math.max(1, columns - strip.width - 1 - forgeW), hd.onInfo, t, hd.onSlot)
+  const gap = Math.max(1, columns - left.width - forgeW - strip.width)
+  const texts = fb === null ? [] : fb.segs.map((s, i) => <Text key={'f' + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
+  const speed = fb === null ? [] : [Button === undefined ? <Box key="speed">{texts}</Box> : <Button key="speed" plain onPress={() => hd.onTab('forge')}>{texts}</Button>]
   const tabs = strip.tabs.map(b => {
     const draw = <Text key="l" {...drawSeg(b.label)} wrap="truncate">{b.label.text}</Text>
     return (
@@ -88,7 +86,7 @@ export function BandBar(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapsh
       </Box>
     )
   })
-  return { node: <Box>{left.nodes}<Text>{' '.repeat(gap)}</Text>{tabs}</Box>, strip, tabsAt: left.width + gap }
+  return { node: <Box>{left.nodes}{speed}<Text>{' '.repeat(gap)}</Text>{tabs}</Box>, strip, tabsAt: left.width + forgeW + gap }
 }
 
 // the rule under the bar

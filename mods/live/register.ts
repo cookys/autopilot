@@ -39,8 +39,9 @@ import { makeT, resolveLocale, T_EN } from './i18n'
 import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
-import { SHOW_PRESS, showTarget } from './ui'
-import { BandBar, BarRule, barContent, decideContent, forgeLabelOf, stackBand } from './band'
+import { forgeFit, forgeSegments, GLYPHS, SHOW_PRESS, showTarget } from './ui'
+import type { ForgeSegment } from './ui'
+import { BandBar, BarRule, barContent, decideContent, stackBand } from './band'
 import { barStrip } from './tabs'
 import type { BarTabId } from './tabs'
 import { Pane } from './pane'
@@ -48,7 +49,7 @@ import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
   acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
-  headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
+  layoutBand, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
@@ -932,11 +933,13 @@ export function registerLive(on: Parameters<Register>[0]): void {
       return next({ ...e, props: { ...e.props, maxRows, bodyColumns, ...(scroll === undefined ? {} : { scroll: { ...scroll, bodyRows: Math.max(0, scroll.bodyRows - (e.props.maxRows - maxRows)) } }) } })
     }
     // The forge tab's label: one row, as wide as the room the other tabs and the indicator leave (at most FORGE_LABEL_MAX). Asked on every draw, before the open tab's content.
-    let forge: string | null = null
-    const labelCols = Math.min(FORGE_LABEL_MAX, columns - BAND_MIN_COLS - barStrip(snapshot, t, null, null).width - 3)
+    let forge: ForgeSegment[] | null = null
+    // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest (at most FORGE_LABEL_MAX)
+    const indicatorMin = snapshot !== null && snapshot.band !== null ? Math.min(BAND_MIN_COLS, layoutBand(snapshot.band.slots, BAND_MIN_COLS).width) : BAND_MIN_COLS
+    const labelCols = Math.min(FORGE_LABEL_MAX, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed).width - 1 - 2)
     if (rows >= 1 && labelCols >= FORGE_LABEL_MIN) {
-      const text = forgeLabelOf(await lower(1, labelCols))
-      forge = text === null ? null : truncateToWidth(text, labelCols)
+      const parts = forgeSegments(await lower(1, labelCols))
+      forge = parts === null ? null : forgeFit(parts, labelCols)
     }
     if (barTab === 'forge' && forge === null) barTab = null // the mod below stopped answering: the tab is gone
     const active = barTab

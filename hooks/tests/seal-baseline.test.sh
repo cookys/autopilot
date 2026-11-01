@@ -2,10 +2,9 @@
 # seal-baseline.test.sh -- tools/migrate/seal-baseline.js and tools/migrate/no-rewrite.json (3.0.0 relayout, D9.1 / D9.6).
 # Every scenario that changes a file does it in a throwaway clone (never this repo). Each negative control is shown red
 # first (rc=1) and green again after the clone is reset. SEAL_BASELINE_JS may point at a mutated copy of the tool.
-set -u
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$(dirname "$0")/lib.sh"
 SB="${SEAL_BASELINE_JS:-$REPO_ROOT/tools/migrate/seal-baseline.js}"
-T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+T="$TEST_TMP"
 PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); }
 bad() { FAIL=$((FAIL+1)); echo "FAIL: $1"; }

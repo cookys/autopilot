@@ -766,7 +766,7 @@ const CHAT_USER_AGENT = 'autopilot-qualify/1.0';
 const HTTP_EFFORT_WIRE_VALUES = Object.freeze(['none', 'minimal', 'low', 'medium', 'high', 'xhigh']);
 // The messages protocol carries it as `output_config.effort`; both vendors that
 // accept it (MiniMax M3.1-Flash-Preview, Z.ai GLM-5.3) define `max`.
-const MESSAGES_EFFORT_WIRE_VALUES = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+const { MESSAGES_EFFORT_WIRE_VALUES } = require('./lib/effort-scale');
 // QRP_HTTP_THINKING (messages only) -> `thinking: {type}`, or '' for "send nothing".
 const HTTP_THINKING_WIRE_VALUES = Object.freeze(['adaptive', 'disabled']);
 function httpThinkingMode(raw, protocol) {

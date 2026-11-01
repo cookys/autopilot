@@ -11,6 +11,8 @@
 //                             # AUTOPILOT_MINIMAX_BASE_URL, or https://api.minimax.io/anthropic
 //       [--prompt-file <file>] # optional: exact message body to send instead of --diff-file
 //       [--raw]               # when present, output raw model response text only
+//       [--effort <v>]        # low|medium|high|xhigh|max -> body output_config.effort; omitted = no
+//                             # output_config (endpoint default effort)
 //       [--max-tokens <n>]    # response token cap (default 16384; thinking + verdict; large authoring
 //                             # payloads need more — a truncated response fail-closes)
 //
@@ -48,6 +50,8 @@ try {
   // Exact-token redaction below still protects runner auth if this script is copied standalone.
 }
 
+const { MESSAGES_EFFORT_WIRE_VALUES } = require('./lib/effort-scale');
+
 const RUNNER = 'anthropic-compatible';
 // Live-probed on 2026-07-01: appending /v1/messages gives
 // https://api.minimax.io/anthropic/v1/messages for MiniMax-M3.
@@ -55,9 +59,9 @@ const DEFAULT_BASE_URL = 'https://api.minimax.io/anthropic';
 const DEFAULT_TIMEOUT_MS = 300000;
 // Output budget covers thinking PLUS the verdict. A max-effort reviewer seat (GLM, MiniMax, ...)
 // can spend a 4096 cap entirely on thinking and return HTTP 200 / stop_reason=max_tokens with no
-// text block (peer-reported 2026-10-03). This runner sends no effort/thinking field (effort is
-// encoded in the model id), so the one cap serves every effort tier; the budget is sized for the
-// highest. Override per call with --max-tokens.
+// text block (peer-reported 2026-10-03). `--effort` only adds `output_config.effort` to the body; it
+// never changes this cap, so the one cap serves every effort tier and is sized for the highest.
+// No thinking field is ever sent. Override per call with --max-tokens.
 const DEFAULT_MAX_TOKENS = 16384;
 // Named failure: stop_reason=max_tokens with no text block. Still a failure (never a verdict).
 const OUTPUT_BUDGET_EXHAUSTED = 'output_budget_exhausted';
@@ -90,6 +94,7 @@ function parseArgs(argv) {
     promptFile: '',
     timeoutMs: DEFAULT_TIMEOUT_MS,
     maxTokens: DEFAULT_MAX_TOKENS,
+    effort: '',
     baseUrl: '',
     tokenEnv: '',
     raw: false,
@@ -112,6 +117,10 @@ function parseArgs(argv) {
         break;
       case '--max-tokens':
         out.maxTokens = Number(argv[++i]);
+        break;
+      case '--effort':
+        out.effort = argv[++i] || '';
+        out.effortSupplied = true;
         break;
       case '--base-url':
         out.baseUrl = argv[++i] || '';
@@ -467,12 +476,13 @@ function isTruncatedResponse(body) {
   return !!(body && typeof body === 'object' && body.stop_reason === 'max_tokens');
 }
 
-function postMessages({ endpointUrl, token, model, prompt, timeoutMs, maxTokens, rawLog }) {
+function postMessages({ endpointUrl, token, model, prompt, timeoutMs, maxTokens, effort, rawLog }) {
   const url = new URL(endpointUrl);
   const payload = JSON.stringify({
     model,
     max_tokens: maxTokens,
     messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+    ...(effort ? { output_config: { effort } } : {}),
   });
   const transport = url.protocol === 'https:' ? https : http;
 
@@ -623,6 +633,10 @@ async function main() {
     failPrecondition('--max-tokens must be a positive integer no greater than 200000');
   }
 
+  if (args.effortSupplied && !MESSAGES_EFFORT_WIRE_VALUES.includes(args.effort)) {
+    failPrecondition(`--effort must be one of ${MESSAGES_EFFORT_WIRE_VALUES.join('|')} (got: ${args.effort || '<empty>'})`);
+  }
+
   const baseUrl = resolveBaseUrl(args.baseUrl);
   const baseUrlError = validateBaseUrl(baseUrl);
   if (baseUrlError) {
@@ -644,6 +658,7 @@ async function main() {
       prompt,
       timeoutMs: args.timeoutMs,
       maxTokens: args.maxTokens,
+      effort: args.effort,
       rawLog,
     });
   } catch (err) {

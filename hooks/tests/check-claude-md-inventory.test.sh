@@ -13,6 +13,9 @@ cp "$REPO_ROOT/scripts/check-claude-md-inventory.js" "$SBX/scripts/"
 SCRIPT="$SBX/scripts/check-claude-md-inventory.js"
 
 write_fixture() {
+  # F5: the inventory file must exist (a missing one is red), and name every script in the sandbox.
+  mkdir -p "$SBX/docs"
+  printf 'check-claude-md-inventory.js\n' > "$SBX/docs/scripts-inventory.md"
   cat > "$SBX/CLAUDE.md" <<'EOF'
 # fixture
 

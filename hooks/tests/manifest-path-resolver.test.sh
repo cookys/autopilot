@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# manifest-path-resolver.test.sh - the one plan_path/rubric_path resolver in scripts/lib/repo-layout.js (3.0.0 relayout, D9.2)
+# and the five readers that must go through it. Every red case has a green twin; two in-test mutants prove the
+# traversal guard and the F5 inventory gate can fail. Registries are temp files (REPO_LAYOUT_REGISTRY), never the real one.
+. "$(dirname "$0")/lib.sh"
+
+LAYOUT="$REPO_ROOT/scripts/lib/repo-layout.js"
+export GIT_AUTHOR_NAME=mp GIT_AUTHOR_EMAIL=mp@example.com GIT_COMMITTER_NAME=mp GIT_COMMITTER_EMAIL=mp@example.com
+
+# mkreg <out> <js over d>: the default registry at stage P1 (manifests in project/missions, plans relative to project/).
+mkreg() {
+  node -e '
+    const { DEFAULT_REGISTRY } = require(process.argv[1]);
+    const d = JSON.parse(JSON.stringify(DEFAULT_REGISTRY));
+    d.stage = "P1";
+    Object.assign(d.paths, { missions_dir: "project/missions", manifest_plan_base: "project", plans_dir: "project/plans",
+      plans_archive_dir: "project/plans/_archive", projects_index: "project/projects/INDEX.md" });
+    eval(process.argv[3]);
+    require("fs").writeFileSync(process.argv[2], JSON.stringify(d, null, 2));
+  ' "$LAYOUT" "$1" "$2"
+}
+P1="$TEST_TMP/p1.json"; mkreg "$P1" ''
+P1_EXC="$TEST_TMP/p1-exc.json"
+mkreg "$P1_EXC" 'd.exceptions.push({ path: "project/missions/mission-old-sources.json", rule: 6, reason: "fixture: manifest keeps its plans under docs/", plan_base: "docs" })'
+
+R="$TEST_TMP/repo"; mkdir -p "$R"
+resolve() { node "$LAYOUT" manifest-path "$@" --repo-root "$R"; }
+
+# ---- 1. resolver: bootstrap base is docs/, P1 base is project/ ----
+OUT="$(resolve docs/mission-x-sources.json plans/p.md 2>&1)"; RC=$?
+assert_eq "0" "$RC" "bootstrap resolves"
+assert_eq "$(cd "$R" && pwd -P)/docs/plans/p.md" "$OUT" "bootstrap base is docs/"
+OUT="$(REPO_LAYOUT_REGISTRY="$P1" resolve project/missions/mission-x-sources.json plans/p.md 2>&1)"; RC=$?
+assert_eq "0" "$RC" "P1 resolves"
+assert_eq "$(cd "$R" && pwd -P)/project/plans/p.md" "$OUT" "P1 base is project/"
+
+# ---- 2. resolver: a path escape is red, its in-base twin is green ----
+for bad in '../../etc/x' '/etc/passwd' 'plans/../../x' '..' 'a\b'; do
+  REPO_LAYOUT_REGISTRY="$P1" resolve project/missions/mission-x-sources.json "$bad" >/dev/null 2>&1
+  assert_eq "2" "$?" "escape $bad is red"
+done
+REPO_LAYOUT_REGISTRY="$P1" resolve project/missions/mission-x-sources.json 'plans/../plans/p.md' >/dev/null 2>&1
+assert_eq "0" "$?" "in-base dotdot that stays inside is green"
+
+# ---- 3. per-file exception: its own base is green, dropping it falls back to the global base ----
+OUT="$(REPO_LAYOUT_REGISTRY="$P1_EXC" resolve project/missions/mission-old-sources.json plans/p.md 2>&1)"
+assert_eq "$(cd "$R" && pwd -P)/docs/plans/p.md" "$OUT" "exception manifest uses its own base docs/"
+OUT="$(REPO_LAYOUT_REGISTRY="$P1" resolve project/missions/mission-old-sources.json plans/p.md 2>&1)"
+assert_eq "$(cd "$R" && pwd -P)/project/plans/p.md" "$OUT" "without the exception the global base applies"
+OUT="$(REPO_LAYOUT_REGISTRY="$P1_EXC" resolve project/missions/mission-other-sources.json plans/p.md 2>&1)"
+assert_eq "$(cd "$R" && pwd -P)/project/plans/p.md" "$OUT" "other manifests keep the global base"
+# exception schema: plan_base must be plain and repo-relative
+mkreg "$TEST_TMP/bad.json" 'd.exceptions.push({ path: "x.json", rule: 6, reason: "r", plan_base: "../up" })'
+REPO_LAYOUT_REGISTRY="$TEST_TMP/bad.json" node "$LAYOUT" stage >/dev/null 2>&1
+assert_eq "2" "$?" "plan_base with .. is rejected by validate"
+# a manifest outside the repo keeps the historical base (its own directory)
+OUT="$(node "$LAYOUT" manifest-path "$TEST_TMP/loose/m.json" plans/p.md --repo-root "$R" 2>&1)"
+assert_eq "$TEST_TMP/loose/plans/p.md" "$OUT" "outside-repo manifest resolves against its own dir"
+
+# ---- 4. in-test mutant: without the traversal guard the escape goes through (so the test above can fail) ----
+MUT="$TEST_TMP/mut/repo-layout.js"; mkdir -p "$TEST_TMP/mut"
+sed "s#if (!isInside(base, resolved)) fail(\`must stay under the manifest base \${base}\`);#/* guard removed */#" "$LAYOUT" > "$MUT"
+if cmp -s "$LAYOUT" "$MUT"; then fail "mutant did not apply: traversal guard text moved"; fi
+REPO_LAYOUT_REGISTRY="$P1" node "$MUT" manifest-path project/missions/mission-x-sources.json '../../etc/x' --repo-root "$R" >/dev/null 2>&1
+assert_eq "0" "$?" "mutant (no guard) lets the escape through, so the red assertion above is load-bearing"
+
+# ---- fixture repo for the readers, laid out at P1 ----
+sha() { sha256sum "$1" | cut -d' ' -f1; }
+mkdir -p "$R/project/plans" "$R/project/missions" "$R/docs/plans" "$R/.claude"
+printf '# Plan P1\n' > "$R/project/plans/2026-08-03-p.md"
+printf 'R1: first\n' > "$R/project/plans/2026-08-03-p.rubric.md"
+# a decoy under docs/ with different bytes: a reader that still reads docs/ sees a digest mismatch or the wrong stem
+printf '# Plan decoy\n' > "$R/docs/plans/2026-08-03-p.md"
+printf 'R1: decoy\n' > "$R/docs/plans/2026-08-03-p.rubric.md"
+write_manifest() { # <file>
+  printf '{"schema_version":1,"sources":[{"plan_path":"plans/2026-08-03-p.md","rubric_path":"plans/2026-08-03-p.rubric.md","plan_sha256":"%s","rubric_sha256":"%s"}]}\n' \
+    "$(sha "$R/project/plans/2026-08-03-p.md")" "$(sha "$R/project/plans/2026-08-03-p.rubric.md")" > "$1"
+}
+write_manifest "$R/project/missions/mission-p-sources.json"
+git -C "$R" init -q; git -C "$R" config commit.gpgsign false; git -C "$R" add -A; git -C "$R" commit -q -m fixture
+
+# ---- 5a. reader: mission-execution-graph-check (loadSourceCoverageManifest) ----
+loader() { REPO_LAYOUT_REGISTRY="$1" node -e '
+  const g = require(process.argv[1] + "/scripts/mission-execution-graph-check.js");
+  try { const c = g.loadSourceCoverageManifest(process.argv[2], { repoRoot: process.argv[3] }); console.log("OK " + c.planIds.length); }
+  catch (e) { console.log("ERR " + e.message); }' "$REPO_ROOT" "$2" "${3:-$R}"; }
+assert_eq "OK 1" "$(loader "$P1" "$R/project/missions/mission-p-sources.json")" "graph-check reads the plan under project/ at P1"
+OUT="$(loader "$P1" "$R/project/missions/mission-p-sources.json")"
+# bootstrap registry + the same manifest: the global base is docs/, which holds the decoy -> digest drift, not a pass
+assert_contains "$(REPO_LAYOUT_REGISTRY= loader '' "$R/project/missions/mission-p-sources.json")" "ERR source manifest.sources[0] content digest drifted" "bootstrap base (docs/) sees the decoy, not project/"
+# escape in the manifest: red with the historical message
+cp "$R/project/missions/mission-p-sources.json" "$R/project/missions/mission-esc-sources.json"
+sed -i 's#"plans/2026-08-03-p.md"#"../../outside.md"#' "$R/project/missions/mission-esc-sources.json"
+assert_contains "$(loader "$P1" "$R/project/missions/mission-esc-sources.json")" "must stay under the manifest root" "graph-check: escaping plan_path is red"
+# exception manifest with its own base docs/
+write_manifest "$R/project/missions/mission-old-sources.json"
+sed -i "s#$(sha "$R/project/plans/2026-08-03-p.md")#$(sha "$R/docs/plans/2026-08-03-p.md")#; s#$(sha "$R/project/plans/2026-08-03-p.rubric.md")#$(sha "$R/docs/plans/2026-08-03-p.rubric.md")#" "$R/project/missions/mission-old-sources.json"
+assert_eq "OK 1" "$(loader "$P1_EXC" "$R/project/missions/mission-old-sources.json")" "graph-check: exception manifest green with its own base"
+assert_contains "$(loader "$P1" "$R/project/missions/mission-old-sources.json")" "content digest drifted" "graph-check: same manifest red under the global base"
+
+# ---- 5b. reader: check-plan-graduation (loadActiveLineageStems) ----
+cat > "$R/.claude/mission-routing-config.json" <<'JSON'
+{"schema_version":1,"graph_path":"project/missions/mission-p-execution-graph.json","sources_path":"project/missions/mission-p-sources.json"}
+JSON
+stems() { REPO_LAYOUT_REGISTRY="$P1" node -e '
+  const g = require(process.argv[1] + "/scripts/check-plan-graduation.js");
+  console.log(JSON.stringify([...g.loadActiveLineageStems(process.argv[2])].sort()));' "$REPO_ROOT" "$R"; }
+assert_eq '["2026-08-03-p"]' "$(stems)" "plan-graduation: lineage stem from the project/ manifest"
+cp "$R/.claude/mission-routing-config.json" "$TEST_TMP/routing.bak"
+sed -i 's#mission-p-sources#mission-esc-sources#' "$R/.claude/mission-routing-config.json"
+sed -i 's#"rubric_path":"plans/2026-08-03-p.rubric.md"#"rubric_path":"../../outside.rubric.md"#' "$R/project/missions/mission-esc-sources.json"
+assert_eq '[]' "$(stems)" "plan-graduation: an escaping plan_path adds no stem"
+cp "$TEST_TMP/routing.bak" "$R/.claude/mission-routing-config.json"
+
+# ---- 5c. reader: sealed-docs ----
+sealed() { REPO_LAYOUT_REGISTRY="$1" node -e '
+  const s = require(process.argv[1] + "/scripts/lib/sealed-docs.js");
+  console.log(JSON.stringify([...s.sealedDocFiles(process.argv[2])].sort()));' "$REPO_ROOT" "$R"; }
+assert_eq '["project/plans/2026-08-03-p.md","project/plans/2026-08-03-p.rubric.md"]' "$(sealed "$P1")" "sealed-docs: seals the project/ plan and rubric at P1"
+assert_contains "$(sealed "$P1_EXC")" '"docs/plans/2026-08-03-p.md"' "sealed-docs: exception manifest seals its docs/ plan"
+
+# ---- 5d. reader: next-touch-validation (sourceDigests) ----
+NT="$TEST_TMP/nt"; mkdir -p "$NT/project/plans" "$NT/project/missions" "$NT/docs/plans"
+NT_PLAN=2026-08-03-next-touch-debt-retirement
+printf 'plan at project\n' > "$NT/project/plans/$NT_PLAN.md"; printf 'R1: x\n' > "$NT/project/plans/$NT_PLAN.rubric.md"
+printf 'decoy at docs\n' > "$NT/docs/plans/$NT_PLAN.md"; printf 'R1: decoy\n' > "$NT/docs/plans/$NT_PLAN.rubric.md"
+printf '{"schema_version":1,"sources":[{"plan_path":"plans/%s.md","rubric_path":"plans/%s.rubric.md","plan_sha256":"%s","rubric_sha256":"%s"}]}\n' \
+  "$NT_PLAN" "$NT_PLAN" "$(sha "$NT/project/plans/$NT_PLAN.md")" "$(sha "$NT/project/plans/$NT_PLAN.rubric.md")" \
+  > "$NT/project/missions/mission-next-touch-debt-retirement-sources.json"
+nt() { REPO_LAYOUT_REGISTRY="$1" node -e '
+  const n = require(process.argv[1] + "/scripts/next-touch-validation.js");
+  try { n.sourceDigests(process.argv[2]); console.log("OK"); } catch (e) { console.log("ERR " + (e.code || "") + " " + e.message); }' "$REPO_ROOT" "$NT"; }
+assert_eq "OK" "$(nt "$P1")" "next-touch: reads the project/ plan at P1"
+assert_contains "$(REPO_LAYOUT_REGISTRY= nt '')" "ERR" "next-touch: bootstrap layout does not find the project/ manifest"
+
+# ---- 5e. reader: scaffold-mission (writes the manifest where the registry says, plan_path relative to the base) ----
+FIX="$REPO_ROOT/hooks/tests/fixtures/plan-rubric-scaffold-fixture.md"
+S="$TEST_TMP/scaf"; STEM=2026-10-13-demo
+mkdir -p "$S/.claude" "$S/project/plans" "$S/project/projects" "$S/project/missions" "$S/scripts" "$S/src" "$S/platforms/codex/plugin/src"
+git -C "$S" init -q -b main; git -C "$S" config user.email t@example.com; git -C "$S" config user.name t; git -C "$S" config commit.gpgsign false
+cp "$REPO_ROOT/.claude/owner-kernel-governance.json" "$S/.claude/"; cp "$REPO_ROOT/scripts/sync-codex-plugin-skills.sh" "$S/scripts/"
+{ cat "$FIX"; printf '\n## Deliverable contract\n- change src/thing.js and add scripts/new-tool.js\n'; } > "$S/project/plans/$STEM.md"
+printf '# Projects Index\n\n| Date | Name | Version | Commit | Links |\n|---|---|---|---|---|\n' > "$S/project/projects/INDEX.md"
+echo 'module.exports = 1;' | tee "$S/src/thing.js" > "$S/platforms/codex/plugin/src/thing.js"
+git -C "$S" add -A; git -C "$S" commit -q -m seed
+REPO_LAYOUT_REGISTRY="$P1" node "$REPO_ROOT/scripts/check-plan-graduation.js" --register-template "$STEM" --repo-root "$S" >> "$S/project/projects/INDEX.md"
+git -C "$S" add -A; git -C "$S" commit -q -m reg
+scaf() { REPO_LAYOUT_REGISTRY="$P1" node "$REPO_ROOT/scripts/scaffold-mission.js" --repo-root "$S" --plan "project/plans/$STEM.md" \
+  --output-path src/thing.js --create scripts/new-tool.js --verify-cmd "node --check src/thing.js" "$@"; }
+OUT="$(scaf --check 2>&1)"; RC=$?
+assert_eq "0" "$RC" "scaffold --check at P1 ($OUT)"
+OUT="$(scaf 2>&1)"; RC=$?
+assert_eq "0" "$RC" "scaffold at P1 ($OUT)"
+assert_file_exists "$S/project/missions/mission-$STEM-sources.json" "scaffold writes the manifest into the registry missions dir"
+assert_eq "plans/$STEM.md" "$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).sources[0].plan_path)' "$S/project/missions/mission-$STEM-sources.json")" "scaffold plan_path is relative to the registry plan base"
+assert_eq "OK 1" "$(loader "$P1" "$S/project/missions/mission-$STEM-sources.json" "$S" | sed 's/^OK .*/OK 1/')" "the scaffolded manifest loads through the resolver"
+
+# ---- 6. F5: check-claude-md-inventory is red when docs/scripts-inventory.md is missing ----
+SBX="$TEST_TMP/inv"; mkdir -p "$SBX/scripts/lib" "$SBX/docs"
+cp "$REPO_ROOT/scripts/check-claude-md-inventory.js" "$SBX/scripts/"
+printf '# f\ncheck-claude-md-inventory.js\n' > "$SBX/CLAUDE.md"
+printf 'check-claude-md-inventory.js\n' > "$SBX/docs/scripts-inventory.md"
+node "$SBX/scripts/check-claude-md-inventory.js" >/dev/null 2>&1
+assert_eq "0" "$?" "inventory present: green"
+mv "$SBX/docs/scripts-inventory.md" "$SBX/inv.away"
+OUT="$(node "$SBX/scripts/check-claude-md-inventory.js" 2>&1)"; RC=$?
+assert_eq "1" "$RC" "inventory missing: red"
+assert_contains "$OUT" "scripts-inventory.md is MISSING" "names the missing file"
+assert_contains "$(node "$SBX/scripts/check-claude-md-inventory.js" --json 2>&1)" '"ok":false' "json ok:false when missing"
+mv "$SBX/inv.away" "$SBX/docs/scripts-inventory.md"
+node "$SBX/scripts/check-claude-md-inventory.js" >/dev/null 2>&1
+assert_eq "0" "$?" "inventory restored: green again"
+# in-test mutant: the old 'absent is fine' behaviour lets the missing file through
+mkdir -p "$TEST_TMP/inv2/scripts" "$TEST_TMP/inv2/docs"
+sed 's/ && !inventoryMissing//' "$SBX/scripts/check-claude-md-inventory.js" > "$TEST_TMP/inv2/scripts/check-claude-md-inventory.js"
+cp "$SBX/CLAUDE.md" "$TEST_TMP/inv2/CLAUDE.md"
+if cmp -s "$SBX/scripts/check-claude-md-inventory.js" "$TEST_TMP/inv2/scripts/check-claude-md-inventory.js"; then fail "mutant did not apply: gate text moved"; fi
+node "$TEST_TMP/inv2/scripts/check-claude-md-inventory.js" >/dev/null 2>&1
+assert_eq "0" "$?" "mutant (absent passes) is green with the file missing, so the red assertion above is load-bearing"
+
+finalize_test

@@ -295,7 +295,11 @@ function generate(b, o) {
   const rubricSha = sha256(rubricBytes);
 
   // Sources manifest paths are relative to the manifest dir, which must contain plan and rubric.
-  const rel = (p) => path.posix.relative(b.outDir, p);
+  // The base the manifest's paths are relative to comes from the registry (repo-layout manifestBase):
+  // the registered plan base (or the base a layout exception declares for that one manifest).
+  const planBase = path.relative(fs.realpathSync(b.repoRoot),
+    LAYOUT.manifestBase(b.repoRoot, path.join(b.repoRoot, b.sourcesRel)).base).split(path.sep).join('/') || '.';
+  const rel = (p) => path.posix.relative(planBase, p);
   for (const p of [b.plan, b.rubric]) {
     if (rel(p).startsWith('..')) throw new Refusal(`--out-dir ${b.outDir} must contain ${p} (manifest paths stay under the manifest root)`, 1);
   }
@@ -311,7 +315,7 @@ function generate(b, o) {
   fs.writeFileSync(path.join(tmp, rel(b.plan)), planBytes);
   fs.writeFileSync(path.join(tmp, rel(b.rubric)), rubricBytes);
   fs.writeFileSync(path.join(tmp, 'sources.json'), `${JSON.stringify(sources)}\n`);
-  const coverage = graphCheck.loadSourceCoverageManifest(path.join(tmp, 'sources.json'));
+  const coverage = graphCheck.loadSourceCoverageManifest(path.join(tmp, 'sources.json'), { noLayout: true });
 
   const rubricNumbers = rubricBytes.toString('utf8').split(/\r?\n/)
     .map((l) => l.match(/^(?:#{2,6}\s+|\s*-\s+)?(R[0-9]+)(?:\s|:|$)/)).filter(Boolean).map((x) => x[1]);
@@ -445,6 +449,8 @@ function validate(b, expectedDigest, scratchDir, overrides = {}) {
     sources: overrides.sources || path.join(b.repoRoot, b.sourcesRel),
     mirrorRoots: mirrorFile || undefined,
     repoRoot: b.repoRoot,
+    // --check lays the artifacts out in a scratch tree: the manifest base is resolved against that tree.
+    layoutRoot: overrides.layoutRoot,
   });
   if (result.graph_digest !== expectedDigest) throw new Error('graph digest differs from the generated graph');
   return result;
@@ -482,7 +488,7 @@ function main() {
       fs.writeFileSync(path.join(tmp, b.rubric), g.rubricBytes);
       fs.writeFileSync(path.join(tmp, b.sourcesRel), JSON.stringify(g.sources));
       fs.writeFileSync(path.join(tmp, b.graphRel), JSON.stringify(g.graph));
-      validate(b, g.graphDigest, g.scratchDir, { graph: path.join(tmp, b.graphRel), sources: path.join(tmp, b.sourcesRel) });
+      validate(b, g.graphDigest, g.scratchDir, { graph: path.join(tmp, b.graphRel), sources: path.join(tmp, b.sourcesRel), layoutRoot: tmp });
     } else {
       writeAll(b, g, o);
     }

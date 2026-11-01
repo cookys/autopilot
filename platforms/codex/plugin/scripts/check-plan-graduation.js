@@ -638,10 +638,14 @@ function loadActiveLineageStems(repoRoot) {
     for (const key of ['plan_path', 'rubric_path']) {
       const rel = entry && entry[key];
       if (typeof rel !== 'string' || !rel) continue;
-      // Manifest paths are docs/-relative (e.g. "plans/<stem>.md" or
-      // "plans/<stem>.rubric.md") — take the basename, drop .md, then drop any further
-      // dot segment (a sidecar tag) to recover the PRIMARY stem.
-      const base = path.basename(rel).replace(/\.md$/, '');
+      // Manifest paths are relative to the manifest base the layout registry names (docs/ at
+      // bootstrap, project/ from P1; e.g. "plans/<stem>.md" or "plans/<stem>.rubric.md"). Resolve
+      // through the registry's one resolver, so a path that escapes the base names no plan and adds no
+      // stem. Take the basename, drop .md, then drop any further dot segment (a sidecar tag) to
+      // recover the PRIMARY stem.
+      let resolved;
+      try { resolved = LAYOUT.resolveManifestPath(repoRoot, sourcesPath, rel); } catch { continue; }
+      const base = path.basename(resolved).replace(/\.md$/, '');
       const lastDot = base.lastIndexOf('.');
       stems.add(lastDot === -1 ? base : base.slice(0, lastDot));
     }

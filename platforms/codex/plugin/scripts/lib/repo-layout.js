@@ -12,10 +12,20 @@
  * is valid at the current stage.
  *
  * API:  stage()  path(key)  rules({activeOnly})  allowlists()  exceptions()  validate(data)  load()
+ *       manifestBase(repoRoot, manifestFile)            the directory a sources manifest's plan_path/rubric_path
+ *                                                       are relative to ({base, source: 'exception'|'registry'|'manifest-dir'})
+ *       resolveManifestPath(repoRoot, manifestFile, rel) absolute path of one plan_path/rubric_path; throws
+ *                                                       (code MANIFEST_PATH_ESCAPE) unless it stays inside that base
  * CLI:  node scripts/lib/repo-layout.js stage            print the stage
  *       node scripts/lib/repo-layout.js path <key>       print one path (exit 2 on unknown key)
  *       node scripts/lib/repo-layout.js --json           print the whole registry
  *       node scripts/lib/repo-layout.js rules [--active] | allowlists | exceptions
+ *       node scripts/lib/repo-layout.js manifest-base <manifest-file> [--repo-root DIR]
+ *       node scripts/lib/repo-layout.js manifest-path <manifest-file> <rel-path> [--repo-root DIR]   (exit 2 on escape)
+ * Manifest base (D9.2): a sources manifest inside the repo resolves its plan_path / rubric_path against
+ * `paths.manifest_plan_base` (docs at bootstrap, project from P1). An exception that carries `plan_base`
+ * declares its own base for that one manifest (a manifest left in docs/ keeps docs/). A manifest outside the
+ * repo (a scratch fixture) keeps the historical meaning: relative to its own directory.
  * Test override: env REPO_LAYOUT_REGISTRY=<json file> (or `--registry <file>`) replaces the whole
  * registry with that JSON, so tests never touch the real one.
  *
@@ -45,6 +55,7 @@ const DEFAULT_REGISTRY = {
     projects_archive_dir: 'docs/projects/_archive',
     backlog_file: 'docs/BACKLOG.md',
     missions_dir: 'docs',
+    manifest_plan_base: 'docs',
     metrics_dir: 'docs/metrics',
     surface_lines_baseline: 'docs/metrics/surface-lines.json',
     settings_reference: 'docs/settings-reference.md',
@@ -281,7 +292,7 @@ function validate(d) {
     for (const e of d.exceptions) {
       const tag = `exceptions[${JSON.stringify(e && e.path)}]`;
       if (!e || typeof e !== 'object') { errs.push('exceptions: entry is not an object'); continue; }
-      const extra = Object.keys(e).filter((k) => !['path', 'rule', 'reason'].includes(k));
+      const extra = Object.keys(e).filter((k) => !['path', 'rule', 'reason', 'plan_base'].includes(k));
       if (extra.length) errs.push(`${tag}: unknown field(s) ${extra.join(', ')}`);
       if (!isStr(e.path)) { errs.push(`${tag}: path missing`); continue; }
       if (GLOB_CHARS.test(e.path)) errs.push(`${tag}: path is a glob; exceptions are per exact file`);
@@ -289,6 +300,10 @@ function validate(d) {
       if (e.path.startsWith('/') || e.path.split('/').includes('..')) errs.push(`${tag}: path must be repo-relative`);
       if (!Number.isInteger(e.rule) || !ruleIds.has(e.rule)) errs.push(`${tag}: rule ${JSON.stringify(e.rule)} is not a defined rule id`);
       if (!isStr(e.reason)) errs.push(`${tag}: reason missing`);
+      if (e.plan_base !== undefined
+          && (!isStr(e.plan_base) || e.plan_base.startsWith('/') || e.plan_base.split('/').includes('..') || GLOB_CHARS.test(e.plan_base))) {
+        errs.push(`${tag}: plan_base ${JSON.stringify(e.plan_base)} must be a plain repo-relative path`);
+      }
       if (seen.has(e.path + '#' + e.rule)) errs.push(`${tag}: duplicate exception`);
       seen.add(e.path + '#' + e.rule);
     }
@@ -317,6 +332,46 @@ function pathOf(key, opts) {
   return d.paths[key];
 }
 
+function realOrResolved(p) {
+  try { return fs.realpathSync(p); } catch { /* not there yet: fall through */ }
+  let dir = path.dirname(p);
+  try { dir = fs.realpathSync(dir); } catch { /* keep the lexical dir */ }
+  return path.join(dir, path.basename(p));
+}
+
+function isInside(base, target) {
+  const rel = path.relative(base, target);
+  return rel !== '' && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel);
+}
+
+/** Which directory a sources manifest's plan_path/rubric_path are relative to. See the header. */
+function manifestBase(repoRoot, manifestFile, opts) {
+  const d = checked(opts);
+  const repoReal = realOrResolved(path.resolve(repoRoot));
+  const manifestReal = realOrResolved(path.resolve(repoReal, manifestFile));
+  const legacy = { base: path.dirname(manifestReal), source: 'manifest-dir' };
+  if (!isInside(repoReal, manifestReal)) return legacy;
+  const rel = path.relative(repoReal, manifestReal).split(path.sep).join('/');
+  const ex = d.exceptions.find((e) => e.path === rel && e.plan_base !== undefined);
+  if (ex) return { base: path.join(repoReal, ex.plan_base), source: 'exception', rule: ex.rule, reason: ex.reason };
+  return { base: path.join(repoReal, d.paths.manifest_plan_base), source: 'registry' };
+}
+
+/** Absolute path of one plan_path/rubric_path of a manifest; throws MANIFEST_PATH_ESCAPE when it leaves the base. */
+function resolveManifestPath(repoRoot, manifestFile, relPath, opts) {
+  const fail = (why) => {
+    const e = new Error(`manifest path ${JSON.stringify(relPath)} ${why}`);
+    e.code = 'MANIFEST_PATH_ESCAPE';
+    throw e;
+  };
+  if (typeof relPath !== 'string' || relPath === '') fail('must be a non-empty string');
+  if (path.isAbsolute(relPath) || relPath.includes('\\')) fail('must be a relative posix path');
+  const { base } = manifestBase(repoRoot, manifestFile, opts);
+  const resolved = path.resolve(base, relPath);
+  if (!isInside(base, resolved)) fail(`must stay under the manifest base ${base}`);
+  return resolved;
+}
+
 function isActive(rule, st) { return stageIndex(rule.active_from) <= stageIndex(st); }
 
 function rules(opts) {
@@ -337,14 +392,16 @@ function allowlists(opts) {
 
 function exceptions(opts) { return checked(opts).exceptions.map((e) => Object.assign({}, e)); }
 
-module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, rules, allowlists, exceptions, isActive, stageIndex };
+module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, rules, allowlists, exceptions, manifestBase, resolveManifestPath, isActive, stageIndex };
 
 if (require.main === module) {
   const argv = process.argv.slice(2);
   let registry = '';
+  let repoRootArg = '';
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--registry') registry = argv[++i] || '';
+    else if (argv[i] === '--repo-root') repoRootArg = argv[++i] || '';
     else rest.push(argv[i]);
   }
   const opts = registry ? { registry } : {};
@@ -361,8 +418,15 @@ if (require.main === module) {
     } else if (cmd === 'rules') out(rules({ ...opts, activeOnly: rest.includes('--active') }));
     else if (cmd === 'allowlists') out(allowlists(opts));
     else if (cmd === 'exceptions') out(exceptions(opts));
+    else if (cmd === 'manifest-base') {
+      if (!rest[1]) { process.stderr.write('usage: repo-layout.js manifest-base <manifest-file> [--repo-root DIR]\n'); process.exit(2); }
+      out(manifestBase(repoRootArg || process.cwd(), rest[1], opts));
+    } else if (cmd === 'manifest-path') {
+      if (!rest[1] || rest[2] === undefined) { process.stderr.write('usage: repo-layout.js manifest-path <manifest-file> <rel-path> [--repo-root DIR]\n'); process.exit(2); }
+      out(resolveManifestPath(repoRootArg || process.cwd(), rest[1], rest[2], opts));
+    }
     else {
-      process.stderr.write('usage: repo-layout.js stage | path <key> | rules [--active] | allowlists | exceptions | --json  [--registry FILE]\n');
+      process.stderr.write('usage: repo-layout.js stage | path <key> | rules [--active] | allowlists | exceptions | manifest-base | manifest-path | --json  [--registry FILE]\n');
       process.exit(2);
     }
   } catch (e) {

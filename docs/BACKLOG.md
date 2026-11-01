@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0363 -->
+<!-- next-id: BL-0365 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1737,22 +1737,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED codeforge 2026-11-01 (fleet message), owner card d-7b0f7a4a
 - **Pointer**: docs/backlog/live-speed-handover-from-forge-stats.md
 - **Context**: Algorithm, handover order and the pet-label question are in the sidecar. Show the owner a screenshot before any UI change; reply to codeforge with the sha once live.
-
-### campaign intake 在檔案或 churn 預算耗盡時，仍拒絕已證實是 exact-replay no-op 的 resume
-- **Id**: BL-0360
-- **Status**: open
-- **Since**: 2026-11-01
-- **Origin**: peer
-- **Reporter**: openclaw fleet session
-- **Report**: 01M6AATV4Y687QQJS6R82F5JT8
-- **Reply**: 2026-11-01 01M6AAWACC09E4B5SK4ZDKJJ9M
-- **Problem**: 續跑流程已能把不會 dispatch、也不會改任何東西的 resume 標成 exact-replay no-op，但後面的檔案與 churn 預算檢查沒有替它放行。預算耗盡時，這種無害的 resume 仍被拒。
-- **Impact**: 預算剛好用完的 campaign 無法以 no-op 方式續跑到收尾。
-- **Trigger**: next edit to src/engine/campaign-intake.js, or a durable resume refused with campaign_file_budget_exhausted / campaign_churn_budget_exhausted
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: PEER-REPORTED openclaw 2026-11-01 (fleet msg; branch ff4b76968 only on openclaw, unmerged, QC pending)
-- **Pointer**: docs/backlog/campaign-intake-exact-replay-budget.md
 
 ### agent-call SKILL.md 沒有指向 FYI 寄件規則
 - **Id**: BL-0361

@@ -460,3 +460,15 @@ platforms/ 鏡像產物
    - `scripts/sync-codex-plugin-skills.sh:102` 把同一份收據列在 `DOC_FILES`，同步進 codex 鏡像，所以會被帶進會匯出的 `platforms/` 底下。
    - 裁決：匯出的執行期程式不得依賴未匯出的檔。C2 之前要有一條 lane 依證據二選一：(a) 收據缺少時，走有文件、有測試的預設行為；(b) 另外產生一份不含個人資料的執行期收據，並且匯出。
    - 在這之前，D1 的引用檢查必須能對現行寫死的路徑轉紅，當作負控制。
+
+## D10 P1 落地裁決（depth-0，2026-11-02；依據 p1-plan dry-run 與 simulate 比對）
+1. **4 個未分類檔**：`docs/review-candidate.md` 進 `docs/guide/`；`docs/training/README.md` 刪除（只是搬家墓碑）；`docs/COEXISTENCE-fable5.md` 進 `project/handoff/`；`docs/metrics/surface-lines.json` 留在原位，登錄表逐檔例外（讀它的是 `repo-layout.js` 與 `preflight-release.sh`）。
+2. **9 月前 plan 的歸檔**：既有 `check-plan-graduation` 現況回報 0 份未歸檔，計畫的 121 份是日期篩。改用三條件：日期早於 2026-09-01；INDEX 有 row 且不在進行中或規劃中；沒有被封存 sources manifest 釘住，也不是進行中 mission 的 lineage。共 71 份歸檔。被 sealed manifest 釘住的 16 個 stem 留在 `project/plans/` 不歸檔，因為 manifest 位元組不能改，`plan_path` 以 `project/` 為基準解析，歸檔會讓它解析不到。另有 1 份在規劃中、1 份沒有 INDEX row，同樣不歸檔。
+3. **歸檔目錄裡的證據檔**（221 個，`docs/plans/_archive/**/evidence/**` 與 `docs/projects/_archive/**/evidence/**`）留給 P2：規則 6 與 7 補排除，規則 8 補納入（P2 才啟用）。
+4. **D9.7 收據** `docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json` 留在原位，登錄表逐檔例外，理由引 D9.7「C2 前另開 lane 二選一」。`dispatch-hetero.sh`、`dispatch-review.sh`、`sync-codex-plugin-skills.sh` 三支不改。
+5. **D9.4**：`docs/plans/2026-08-04-platform-capability-trigger-activation.md` 位元組不變進 `project/plans/`，用測試斷言與 dry-run summary 的一段說明記錄，不寫成例外（例外的語意是「逃出規則」，schema 沒有目的地欄位）。
+6. **登錄表改動**：照 dry-run `plan.json` 的 `registry_changes` 核准，加上 surface-lines.json 與 D9.7 收據兩條例外，以及規則 6、7、8 的歸檔證據排除或納入。
+7. **HANDOFF**：合併 `docs/HANDOFF.md` 與 `docs/projects/ongoing-maintenance/HANDOFF.md`；`HANDOFF-l6-resilience.md` 與 `HANDOFF-engine-qualify-seats.md` 只改名。
+8. **INDEX**：P1 只把 INDEX.md 原樣搬到 `project/projects/`。拆分與 5 支讀者的改動另開 P1b。
+9. **引用改寫規則**：只改寫 layout-map 的精確 key（完整檔案路徑）；目錄形式的 `docs/plans`、`docs/projects` 不盲改，列清單逐類判斷。測試 fixture 以 mktemp 建 `docs/` 樹的不碰。D9.5 的 6 個檔與 `.claude/mission-routing-config.json` 搬完必須與原本一模一樣；封存 mission json 位元組不動；CHANGELOG 連結照改；profiles 雜湊鏈不用 sed，改走 `profiles-hash-repin` 順序，獨立 commit；`no-rewrite.json` 的 path 欄位跟著改、sha 不變，獨立 commit。
+10. **recorder 修正**：`seal-baseline.js` 的 recorder 把 sources 的 `plan_path` 當成相對 graph 所在目錄，與檢查器（走登錄表基準）不一致；P1 前改走 `repo-layout.js` 的 `manifestBase` / `resolveManifestPath`，並證明在 base 樹上重新 record 與已提交的 `seal-baseline.json` 位元組相同。

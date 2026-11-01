@@ -212,10 +212,10 @@ function srcLedger(ctx) {
         for (const e of names) {
           const f = path.join(pdir, e, 'ledger', 'decisions.jsonl');
           let st; try { st = fs.statSync(f); } catch { continue; }
-          if (ctx.now - st.mtimeMs <= STALE_MS && (!best || st.mtimeMs > best.m)) best = { f, m: st.mtimeMs };
+          if (ctx.now - st.mtimeMs <= STALE_MS && (!best || st.mtimeMs > best.m)) best = { f, m: st.mtimeMs, rel };
         }
       }
-      if (best) { file = best.f; how = 'newest <projects dir>/*/ledger by mtime, under 24h, may be another session\'s in this checkout'; }
+      if (best) { file = best.f; how = 'newest ' + best.rel + '/*/ledger by mtime, under 24h, may be another session\'s in this checkout'; }
     } catch { /* no projects dir */ }
   }
   if (!file) return absent('decision ledger', 'no ledger path in the task card and none modified in the last 24h');

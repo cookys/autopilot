@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0365 -->
+<!-- next-id: BL-0366 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -13,6 +13,22 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`<host>` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
+
+### live pane 在來源沒變時仍顯示「資料過舊」
+- **Id**: BL-0365
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: peer
+- **Reporter**: openclaw fleet session
+- **Report**: 01M6BK2FVVCH6BHAJJPE095XEQ
+- **Reply**: 2026-11-01 01M6BK34N1Z70RKBGGVJRX9X2J
+- **Problem**: 即時面板在沒有新變化時，也會跳出資料過舊、發佈者沒在發佈的提示，連 watcher 已正常結束的情形都算在內。使用者打字到一半也會被這則提示打斷。
+- **Impact**: 沒有新變化被誤報成過期，打字時畫面還跳動，使用者不知該不該處理。
+- **Trigger**: planpath and sealbase (migration plan P1 prerequisite lanes) merged; owner must approve before/after real-terminal screenshots before merge
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED openclaw 2026-11-01 (fleet msg; operator quote in sidecar; reply sha owed to the fleet session after merge)
+- **Pointer**: docs/backlog/live-pane-stale-text-when-nothing-changed.md
 
 ### 回合被判定主工作目錄被改動，但分支位置其實沒動
 - **Id**: BL-0285

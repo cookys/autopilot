@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "forbid_paths": [
+    {
+      "id": "Rw",
+      "glob": "src/text.js",
+      "why": "src/text.js is frozen."
+    },
+    {
+      "id": "Ra",
+      "glob": "src/legacy/**",
+      "why": "Do not touch src/legacy."
+    }
+  ]
+}

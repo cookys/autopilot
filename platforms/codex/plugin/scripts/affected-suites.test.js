@@ -1086,7 +1086,8 @@ function mutant(replacements) {
   const md = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-mutant-'));
   MUTANT_DIRS.push(md);
   const f = path.join(md, 'affected-suites.js');
-  fs.writeFileSync(f, src);
+  // the copy lives outside scripts/, so its layout-registry require must point back at the real file
+  fs.writeFileSync(f, src.replace("require('./lib/repo-layout.js')", `require(${JSON.stringify(path.join(__dirname, 'lib', 'repo-layout.js'))})`));
   return f;
 }
 const MUTANT_DIRS = [];
@@ -1265,4 +1266,157 @@ test('negative control: dropping the suites\' file-name mention edges turns the 
 test('negative control: dropping the hooks/README.md mention edge loses hookq', () => {
   const bin = mutant([['for (const f of graph.byExt.get(b) || []) {', 'for (const f of []) {']]);
   assert.ok(missingFor(bin, 'hooks/README.md', ['hooks/hookq.test.js']).length > 0);
+});
+
+// ---- relay2 g1: the selector takes scripts_dir / docs_dir from the layout registry ---------------
+function withRegistry(edit, fn) {
+  const reg = JSON.parse(JSON.stringify(require('./lib/repo-layout.js').DEFAULT_REGISTRY));
+  edit(reg.paths);
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-reg-')), 'registry.json');
+  fs.writeFileSync(f, JSON.stringify(reg));
+  const prev = process.env.REPO_LAYOUT_REGISTRY;
+  process.env.REPO_LAYOUT_REGISTRY = f;
+  try { return fn(); } finally {
+    if (prev === undefined) delete process.env.REPO_LAYOUT_REGISTRY; else process.env.REPO_LAYOUT_REGISTRY = prev;
+    fs.rmSync(path.dirname(f), { recursive: true, force: true });
+  }
+}
+
+test('layout: a *.test.js directly under the registry scripts_dir is a suite, under the literal scripts/ it is not', () => {
+  const files = { ...LAYOUT, 'tooling/x.test.js': 'console.log(1);\n' };
+  const moved = withRegistry((p) => { p.scripts_dir = 'tooling'; }, () => {
+    const r = makeRepo(files);
+    try { return r.select(r.change({ 'tooling/x.test.js': 'console.log(2);\n' })); } finally { r.cleanup(); }
+  });
+  assert.ok(moved.suites.includes('tooling/x.test.js'), `moved scripts_dir: ${JSON.stringify(moved.suites)}`);
+  // negative control: the default registry keeps scripts/ as the suite directory, tooling/ is not one
+  const r2 = makeRepo(files);
+  try {
+    const out = r2.select(r2.change({ 'tooling/x.test.js': 'console.log(2);\n' }));
+    assert.ok(!out.suites.includes('tooling/x.test.js'), `default scripts_dir: ${JSON.stringify(out.suites)}`);
+  } finally { r2.cleanup(); }
+});
+
+test('layout: prose under the registry docs_dir skips category names, a literal docs/ no longer decides', () => {
+  const files = {
+    ...LAYOUT,
+    'manuals/plans/p.md': '# plan\n',
+    'hooks/tests/plans-loop.test.sh': '#!/usr/bin/env bash\nfor f in manuals/plans/evidence/; do echo "$f"; done\n',
+  };
+  const edit = (p) => { p.docs_dir = 'manuals'; p.plans_dir = 'manuals/plans'; p.plans_evidence_dir = 'manuals/plans/evidence'; };
+  const out = withRegistry(edit, () => {
+    const r = makeRepo(files);
+    try { return r.select(r.change({ 'manuals/plans/p.md': '# edited\n', 'scripts/other.js': 'console.log("changed");\n' })); } finally { r.cleanup(); }
+  });
+  assert.ok(!out.suites.includes('hooks/tests/plans-loop.test.sh'), `docs_dir=manuals: ${JSON.stringify(out.suites)}`);
+  assert.ok(out.suites.includes('hooks/tests/other.test.sh'));
+  // negative control: with docs_dir left at docs, manuals/ is not a docs tree and the category-only suite is selected
+  const r2 = makeRepo(files);
+  try {
+    const out2 = r2.select(r2.change({ 'manuals/plans/p.md': '# edited\n', 'scripts/other.js': 'console.log("changed");\n' }));
+    assert.ok(out2.suites.includes('hooks/tests/plans-loop.test.sh'), `default docs_dir: ${JSON.stringify(out2.suites)}`);
+  } finally { r2.cleanup(); }
+});
+
+// A file an evaluation pack copies is compared against the repo by the pack's content suite, which never
+// names it in source (the pack manifest is the only link). Changing it must select that suite.
+test('a file copied by a bpack pack selects bpack-content; the mapping is what selects it (negative control)', () => {
+  const manifest = JSON.stringify({ packs: {
+    'bpack-files-change': { 'bpack-files-change/references/packed.md': 'x' },
+    'ceo-agent-bpack-change': { 'ceo-agent-bpack-change/references/card.md': 'x' },
+    'other-pack': { 'other-pack/references/elsewhere.md': 'x' },
+  } });
+  const r = makeRepo({
+    ...LAYOUT,
+    'evals/skill-onoff/packs/manifest.json': manifest,
+    'hooks/tests/bpack-content.test.sh': '#!/usr/bin/env bash\ntrue\n',
+    'references/packed.md': 'a\n', 'references/elsewhere.md': 'a\n', 'references/plain.md': 'a\n',
+    'skills/ceo-agent/references/card.md': 'a\n', 'skills/other/references/card.md': 'a\n',
+  });
+  const BP = 'hooks/tests/bpack-content.test.sh';
+  const sel = (m) => r.select(r.change(m));
+  try {
+    { const o = sel({ 'references/packed.md': 'b\n' }); assert.ok(o.suites.includes(BP), 'repo path packed whole ' + JSON.stringify(o)); }
+    assert.ok(sel({ 'skills/ceo-agent/references/card.md': 'b\n' }).suites.includes(BP), 'skill-relative pack path');
+    assert.ok(!sel({ 'skills/other/references/card.md': 'b\n' }).suites.includes(BP), 'same relative path under another skill is not packed');
+    assert.ok(!sel({ 'references/elsewhere.md': 'b\n' }).suites.includes(BP), 'a non-bpack pack does not select the bpack suite');
+    assert.ok(!sel({ 'references/plain.md': 'b\n' }).suites.includes(BP), 'an unpacked file does not select it');
+    // Negative control: a selector copy with the mapping removed must NOT select it, so this test is red without the mapping.
+    const copy = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-mut-'));
+    try {
+      fs.cpSync(path.join(__dirname), path.join(copy, 'scripts'), { recursive: true });
+      const f = path.join(copy, 'scripts', 'affected-suites.js');
+      const src = fs.readFileSync(f, 'utf8');
+      const mut = src.replace(/const PACK_CONTENT_SUITES = \[.*\];/, 'const PACK_CONTENT_SUITES = [];');
+      assert.notStrictEqual(mut, src, 'mutation applied');
+      fs.writeFileSync(f, mut);
+      const head = r.change({ 'references/packed.md': 'c\n' });
+      const out = JSON.parse(execFileSync('node', [f, '--root', r.dir, '--base', r.base, '--head', head, '--json'], { stdio: 'pipe' }).toString());
+      assert.ok(!out.suites.includes(BP), 'without the mapping the pack suite is not selected');
+    } finally { fs.rmSync(copy, { recursive: true, force: true }); }
+  } finally { r.cleanup(); }
+});
+
+// bpackfix g1: skill packs match only under skills/<name>/, the longest skill prefix wins, and a manifest whose
+// bpack entries do not parse warns on stderr.
+const packFx = () => {
+  const BP = 'hooks/tests/bpack-content.test.sh';
+  const man = (packs) => JSON.stringify({ packs });
+  const run = (extraFiles, change) => {
+    const r = makeRepo({ ...LAYOUT, 'hooks/tests/bpack-content.test.sh': '#!/usr/bin/env bash\ntrue\n', ...extraFiles });
+    try {
+      const head = r.change(change);
+      const res = require('child_process').spawnSync('node', [SEL, '--root', r.dir, '--base', r.base, '--head', head, '--json'], { encoding: 'utf8' });
+      return { out: JSON.parse(res.stdout), err: res.stderr };
+    } finally { r.cleanup(); }
+  };
+  return { BP, man, run, M: 'evals/skill-onoff/packs/manifest.json' };
+};
+test('pack matching 1: a root file sharing a relative path with a skill pack is not packed', () => {
+  const { BP, man, run, M } = packFx();
+  // a root file that only shares a relative path with a skill pack is not packed and keeps the unreferenced -> full verdict
+  const a = run({ [M]: man({ 'ceo-agent-bpack-change': { 'ceo-agent-bpack-change/references/card.md': 'x' } }), 'skills/ceo-agent/references/card.md': 'a\n', 'references/card.md': 'a\n' }, { 'references/card.md': 'b\n' });
+  assert.ok(!a.out.suites.includes(BP), 'root file named like a skill-pack path must not select bpack-content');
+  assert.strictEqual(a.out.mode, 'full');
+  assert.ok(a.out.unreferenced.includes('references/card.md'));
+});
+test('pack matching 2: longest skill prefix wins', () => {
+  const { BP, man, run, M } = packFx();
+  // skills `ceo` and `ceo-agent` both exist: ceo-agent-bpack-x belongs to ceo-agent only
+  const files2 = { [M]: man({ 'ceo-agent-bpack-x': { 'ceo-agent-bpack-x/references/c.md': 'x' } }), 'skills/ceo/references/c.md': 'a\n', 'skills/ceo-agent/references/c.md': 'a\n' };
+  const b1 = run(files2, { 'skills/ceo/references/c.md': 'b\n' });
+  assert.ok(!b1.out.suites.includes(BP), 'skill ceo must not claim the ceo-agent pack');
+  const b2 = run(files2, { 'skills/ceo-agent/references/c.md': 'b\n' });
+  assert.ok(b2.out.suites.includes(BP), 'skill ceo-agent owns its pack');
+});
+test('pack matching 3: unparsable bpack manifest entries warn on stderr', () => {
+  const { man, run, M } = packFx();
+  // a manifest with bpack packs but no parsable entry warns; a good manifest does not
+  const c = run({ [M]: man({ 'bpack-files-change': { 'references/x.md': 'x' } }), 'references/x.md': 'a\n' }, { 'references/x.md': 'b\n' });
+  assert.match(c.err, /no entry parsed/);
+  const d = run({ [M]: man({ 'bpack-files-change': { 'bpack-files-change/references/x.md': 'x' } }), 'references/x.md': 'a\n' }, { 'references/x.md': 'b\n' });
+  assert.doesNotMatch(d.err, /no entry parsed/);
+});
+
+// bpackfix g2: skill ownership comes from the pack id, so deleting or renaming a skill's only file, or the whole skill
+// directory, still selects bpack-content for skills/<name>/<rel> and never falls back to root-path matching.
+const g2Manifest = (packFx_) => packFx_.man({ 'ceo-agent-bpack-change': { 'ceo-agent-bpack-change/references/card.md': 'x' } });
+test('pack matching g2-1: deleting a skill pack file selects bpack-content', () => {
+  const fx = packFx();
+  const r = fx.run({ [fx.M]: g2Manifest(fx), 'skills/ceo-agent/references/card.md': 'a\n' }, { 'skills/ceo-agent/references/card.md': null });
+  assert.ok(r.out.suites.includes(fx.BP));
+});
+test('pack matching g2-2: renaming the only file of a skill (new skill dir) selects bpack-content', () => {
+  const fx = packFx();
+  // the new name is referenced by an unrelated suite so the rename is not judged unreferenced (full) for that reason
+  const r = fx.run({ [fx.M]: g2Manifest(fx), 'skills/ceo-agent/references/card.md': 'a\n', 'hooks/tests/ref.test.sh': '#!/usr/bin/env bash\ncat skills/ceo-core/references/card.md\n' },
+    { 'skills/ceo-agent/references/card.md': null, 'skills/ceo-core/references/card.md': 'a\n' });
+  assert.ok(r.out.suites.includes(fx.BP));
+});
+test('pack matching g2-3: with the skill directory gone from both trees the pack stays a skill pack (same-named root file is not selected)', () => {
+  const fx = packFx();
+  const r = fx.run({ [fx.M]: g2Manifest(fx), 'references/card.md': 'a\n' }, { 'references/card.md': 'b\n' });
+  assert.ok(!r.out.suites.includes(fx.BP), 'root references/card.md must not select the skill pack suite');
+  assert.strictEqual(r.out.mode, 'full');
+  assert.ok(r.out.unreferenced.includes('references/card.md'));
 });

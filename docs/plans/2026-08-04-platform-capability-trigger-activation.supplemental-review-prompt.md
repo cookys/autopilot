@@ -7,7 +7,7 @@ This instruction was consumed successfully and must not be dispatched, reopened,
 - Session: `platform-trigger-activation-r4-g2`
 - Session key: `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`
 - Controller artifact:
-  `/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
+  `$HOME/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
 - Artifact SHA-256: `5cbdfdeb86de9d85f4395a1e70f218e3ca72844c31684c76b2154399699dd1ed`
 - Frozen plan SHA-256: `08d89358d78b7487cb9daf0b9c537bcef68045125c564c960808b565f338dea6`
 - Frozen rubric SHA-256: `b0643fae8891911809af07890c45290821a47c251d657ae094fc8e1690905d1b`

@@ -1558,7 +1558,7 @@ assert_eq "$(node -e 'const o=JSON.parse(process.argv[1]);const s=o.find(x=>x.ki
   "prod: production-path salvage carries the STOP payload"
 assert_artifact_schema "$OUT" "prod: production-path artifact matches schema"
 
-# --- legacy CLI path applies the same-runner-dual-seat guard (7840hs item 4, 2026-09-13) ---
+# --- legacy CLI path applies the same-runner-dual-seat guard (<host> item 4, 2026-09-13) ---
 # The resolver refuses a reviewer-class seat written into config on the implementer's
 # runner. The legacy --runner/--deep-runner path built its manifest without asking, so the
 # guard had two implementations and only one fired. Fixture config pins the implementer

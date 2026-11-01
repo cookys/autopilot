@@ -1,6 +1,6 @@
 Design question (autopilot managed campaign rail; bash scripts/dispatch-review.sh, Node
 src/runners/review.js, src/engine/autopilot-engine.js, src/engine/campaign-intake.js). Three defects
-from one peer report (cuda P1, 2026-09-16) plus one local reproduction; the owner wants them worked
+from one peer report (<host> P1, 2026-09-16) plus one local reproduction; the owner wants them worked
 as one or two /l5 deliverables. Recommend the split and the shape of each fix.
 
 ## Defect A — final panel refuses a pinned codex seat AFTER the whole campaign ran
@@ -17,8 +17,8 @@ Measured: the operator's standing qc_panel pin is `[gpt-5.6-sol/codex, GLM-5.2/c
 MiniMax-M3/cc-shim]` (v2.36.46 lets pins admit seats). Intake accepts the roster
 (`campaign-intake.js` ~1413-1440 checks only qualification/pins), the campaign runs to the end
 (implement, verify, review, full_suite, adjudicate, convergence) and only then the codex seat is
-`transport_failed` → `final_panel_seat_transport_failed`, panel 2/3, campaign blocked. Seen on cuda
-(fleet-comms, twice) and on this host (campaign C today). cuda's manual `dispatch-review.sh --runner
+`transport_failed` → `final_panel_seat_transport_failed`, panel 2/3, campaign blocked. Seen on <host>
+(fleet-comms, twice) and on this host (campaign C today). <host>'s manual `dispatch-review.sh --runner
 codex --model gpt-5.6-sol` (no blind env) works every time.
 Options:
  (A1) Pre-spend: intake refuses a qc_panel seat whose runner is not in the blind allowlist with a
@@ -47,8 +47,8 @@ separator, added 2026-08-15 because kimi separated fields with a period. Node
 envelope through `parseReviewOutput` → the Node regex; a proof the shell accepted (labels present,
 non-`;` separators) throws `review output JSON no_finding_proof must contain non-tautological
 checked, evidence, and conclusion fields` — the same message the blacklist uses, so the operator
-reads "tautological" although the proof is concrete. cuda saw this three times on GLM-5.2 (r2/r5/r7);
-revival.3d (cuda) then reproduced it three times with `claude-fable-5` via `claude-native` — a
+reads "tautological" although the proof is concrete. <host> saw this three times on GLM-5.2 (r2/r5/r7);
+revival.3d (<host>) then reproduced it three times with `claude-fable-5` via `claude-native` — a
 different family — and reports that the SAME diff with the SAME seats dispatched manually through
 `dispatch-review.sh` (outside the engine) passed the proof every time. The rejected proof text was
 never logged by the engine (Defect C). The separator mismatch is the only divergence between the
@@ -64,7 +64,7 @@ JSON is machine-emitted by the shell and could be normalized there instead)?
 `dispatchReviewJson` (`src/runners/review.js` ~262-290): when `parseReviewOutput(stdout)` throws,
 the result is `{ result: null, parseError }`; the engine turns that into `no_verdict` with the
 validator message as reason and NO `raw_log` (the shell's envelope carried it in the discarded
-JSON). The operator cannot find the reviewer's text (cuda: "no_verdict result omits raw_log").
+JSON). The operator cannot find the reviewer's text (<host>: "no_verdict result omits raw_log").
 Fix shape: on parseError, attempt a lenient `JSON.parse(stdout)` and carry `raw_log` (and
 `runner`/`model`) as `salvaged` fields on the dispatch result; the engine's no_verdict outcome and the
 final-panel seat receipt include `raw_log` when present. No change to authority: `result` stays null.

@@ -1,7 +1,7 @@
 # P3 brief — depth-0 delegate gate
 
-Repo: `/home/cookys/projects/autopilot`. Base branch: the P2 branch once merged into `feat/v2.36.1-statusline-live-context-feed`
-(depth-0 tells you the exact base sha in the dispatch message). Worktree: `git worktree add /home/cookys/projects/autopilot-wt-p3 -b feat/v2.36.1-p3 <base>`.
+Repo: `$HOME/projects/autopilot`. Base branch: the P2 branch once merged into `feat/v2.36.1-statusline-live-context-feed`
+(depth-0 tells you the exact base sha in the dispatch message). Worktree: `git worktree add $HOME/projects/autopilot-wt-p3 -b feat/v2.36.1-p3 <base>`.
 Node ≥ 20.10, built-ins only. Plan (read §2.5 and P3 only): `docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md`.
 Read first: `hooks/foreman-guard.js` (the PreToolUse default-on pattern), `hooks/hooks.json`, `profiles/hook-classes.json`,
 `scripts/check-hook-inventory.js` header, `scripts/lib/live-state-dir.js` (from P2: `resolveLiveDir`, `readLive`, `modelFamily`).

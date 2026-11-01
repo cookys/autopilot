@@ -34,10 +34,10 @@ dispatch 可觀測性／review-loop roster 演進線的接續：v2.32.22–v2.32
 - `git log --oneline -9` → 對得上上面九版；`git status` clean。
 
 ## Read-order
-1. /home/cookys/projects/autopilot/CLAUDE.md — scripts inventory 已含本輪全部新面（watch-foreman、status CLI、reap、prune、tier/fallback 契約欄位）
-2. /home/cookys/projects/autopilot/docs/projects/INDEX.md — 本輪每版一列含完整脈絡與 merge SHA
-3. /home/cookys/projects/autopilot/docs/BACKLOG.md — 開放項（S3/R6/endpoint 維度/usrquota-d）與觸發條件
-4. /home/cookys/projects/autopilot/skills/ceo-agent/references/level-front-door.md — § Live sensing 儀式＋roster 選位規則（tier/fallback/偏好序）
+1. $HOME/projects/autopilot/CLAUDE.md — scripts inventory 已含本輪全部新面（watch-foreman、status CLI、reap、prune、tier/fallback 契約欄位）
+2. $HOME/projects/autopilot/docs/projects/INDEX.md — 本輪每版一列含完整脈絡與 merge SHA
+3. $HOME/projects/autopilot/docs/BACKLOG.md — 開放項（S3/R6/endpoint 維度/usrquota-d）與觸發條件
+4. $HOME/projects/autopilot/skills/ceo-agent/references/level-front-door.md — § Live sensing 儀式＋roster 選位規則（tier/fallback/偏好序）
 5. ~/.claude/projects/-home-cookys-projects-autopilot/memory/MEMORY.md — 本輪新增五條（usrquota、codex 分池、systemic-fix、observability 更新、tmp 教訓）
 
 ## 陷阱

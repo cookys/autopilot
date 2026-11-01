@@ -65,7 +65,7 @@ const OBSERVED_WINDOWS = {
   // (n=314, 2026-09-13) reports 500000, and a peer host measured n=299, all 500000. min-wins.
   // cursor-grok-4.6-low (the cursor rail wrapping the same model) has NO observation here
   // and is deliberately not listed: the wrapper may impose its own ceiling.
-  'grok-4.6': 500000, // n=314 (this host) + n=299 (7840hs), all 500000; model unattributed in signals
+  'grok-4.6': 500000, // n=314 (this host) + n=299 (<host>), all 500000; model unattributed in signals
   'grok-build': 512000, // n=5
   'grok-composer-2.5-fast': 200000, // n=33 (512000 also seen n=26 → min wins)
 };

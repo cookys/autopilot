@@ -534,7 +534,7 @@ assert_contains "$OUT" "--endpoint applies only to --runner anthropic-compatible
 
 # `--endpoint @none` is the roster convention for "native auth" (review-loop-config.md);
 # the resolver reads it as endpoint=null. A CLI-direct caller copying the roster value
-# verbatim must not die at the runner restriction (7840hs, 2026-09-12: both seats dead).
+# verbatim must not die at the runner restriction (<host>, 2026-09-12: both seats dead).
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --runner codex --model gpt-5.5 --prompt-file "$PROMPT" --bin "$STUB_COD" --endpoint @none 2>&1)"
 EXIT=$?
 assert_not_contains "$OUT" "--endpoint applies only to" "--endpoint @none is not an endpoint: no runner restriction error"

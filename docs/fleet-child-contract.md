@@ -2,10 +2,10 @@
 
 Claude-family children that autopilot launches (review seats, hands, probes, eval and profile runs) must declare
 themselves to fleet as short-lived workers, not interactive sessions. Without this, fleet registered them as
-interactive sessions and the aimax395 roster accumulated about 200 stale entries.
+interactive sessions and the <host> roster accumulated about 200 stale entries.
 
 Source: peer report from openclaw hangar (report 01M5A264B59E7ETAETJRAEBXJQ, converged in 01M5A28T490XEBJMD51RD5KNRM,
-reply 01M5A27RA0AFGZ3WCDYFVWQK5X), 2026-10-19; fleet commit 650f649 took effect on aimax395 the same day.
+reply 01M5A27RA0AFGZ3WCDYFVWQK5X), 2026-10-19; fleet commit 650f649 took effect on <host> the same day.
 This contract was taken from that exchange and has not been checked against fleet source.
 
 ## Variables

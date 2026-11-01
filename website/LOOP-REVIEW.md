@@ -61,7 +61,7 @@ Plan: [`LANDING-UX-PANEL.md`](./LANDING-UX-PANEL.md). Shipped in `Landing.vue` +
 
 ## LAN
 
-- Levels: http://192.168.101.4:5173/autopilot/zh-TW/levels  
-- Home: http://192.168.101.4:5173/autopilot/zh-TW/  
+- Levels: http://<private-ip>:5173/autopilot/zh-TW/levels  
+- Home: http://<private-ip>:5173/autopilot/zh-TW/  
 
 Hard refresh (Ctrl+Shift+R). Toggle **light** and check primary CTA + dual-day compare + demo tables.

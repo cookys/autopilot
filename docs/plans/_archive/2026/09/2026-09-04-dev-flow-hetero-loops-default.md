@@ -165,7 +165,7 @@ hetero implementer ladder; kimi as a plan-review runner; P5 fleet rollout of v2.
 
 ## Review log
 
-- R0 2026-09-04 (aimax395). G1: sol STOP / GLM CONDITIONAL / MiniMax CONDITIONAL, 20 findings, 11
+- R0 2026-09-04 (<host>). G1: sol STOP / GLM CONDITIONAL / MiniMax CONDITIONAL, 20 findings, 11
   blockers all accepted (artifact in the evidence dir). Folded: gate decision table with opt-out
   receipts; one knob transition table (native fallback, never `off`-by-accident); kimi RUNNERS edit
   cut (R6); scaffold contract fixed to ordinal ids + golden fixture; receipt binds `base..head` and

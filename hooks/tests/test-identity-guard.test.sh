@@ -288,6 +288,7 @@ p3_seed_hooks() {
   chmod +x "$dest/scripts/sync-all.sh"
   # pre-commit also runs the tmp-residue gate; this fixture only exercises the identity gate.
   printf '%s\n' "process.exit(0);" > "$dest/scripts/check-tmp-residue-registry.js"
+  printf '%s\n' "process.exit(0);" > "$dest/scripts/leak-guard.js"   # same: this fixture only exercises the identity gate
 }
 
 p3_init_repo() {

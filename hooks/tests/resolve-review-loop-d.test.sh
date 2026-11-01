@@ -365,7 +365,7 @@ printf -- '- consult_dispatch: Auto\n' > "$MISSPELL_CONSULT_CFG"
 assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MISSPELL_CONSULT_CFG" bash "$SCRIPT" >/dev/null 2>&1; echo $?)" \
   "misspelled consult_dispatch: Auto (case-sensitive) exits 3"
 
-# --- plan_review: auto honours a fully DECLARED chair (7840hs item 3, 2026-09-13) ---
+# --- plan_review: auto honours a fully DECLARED chair (<host> item 3, 2026-09-13) ---
 # Before: the declared plan_reviewer_* keys were read, then the auto block overwrote them
 # from topology / native fallback, so MiniMax-M3@cc-shim resolved to opus@claude-native
 # with a generic warning. The peer's plan got READY with zero findings from that chair.

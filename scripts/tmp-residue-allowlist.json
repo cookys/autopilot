@@ -237,6 +237,16 @@
       "file": "scripts/affected-suites.js",
       "match": "const t = process.env.TMPDIR || '/tmp'",
       "reason": "tmpParent() only reads the temp root to choose the parent of the asj.* directories (allocated and removed by runPool); it allocates nothing itself."
+    },
+    {
+      "file": "scripts/lib/repo-identity.sh",
+      "match": "[ -n \"${TMPDIR:-}\" ] || return 0",
+      "reason": "runs_tmpdir_ensure only tests whether the user's TMPDIR exists before delegating its creation to scripts/lib/runtime-paths.js; it allocates no temp path of its own."
+    },
+    {
+      "file": "scripts/lib/repo-identity.sh",
+      "match": "[ -k \"$TMPDIR\" ]",
+      "reason": "runs_tmpdir_ensure only tests whether the user's TMPDIR is a root-owned sticky shared root before delegating its check to scripts/lib/runtime-paths.js; it allocates nothing."
     }
   ]
 }

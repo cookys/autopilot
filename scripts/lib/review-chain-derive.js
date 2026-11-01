@@ -87,7 +87,7 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
     // failed to parse) produced NO reviewable result — it must contribute nothing. Before this
     // guard its empty findings set "closed by absence" every open verified finding from the
     // earlier generations (an abort was an audit escape), in both hetero-review-loop finalize
-    // and check-phase-review-receipt (7840hs report, 2026-09-05).
+    // and check-phase-review-receipt (<host> report, 2026-09-05).
     if (entry.status === 'aborted') continue;
     const gen = entry.generation || (i + 1);
 

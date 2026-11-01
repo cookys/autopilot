@@ -1,7 +1,7 @@
 /**
  * Table-driven phrase tests for hooks/owner-question-guard.js findOwnerQuestion. Run: node --test hooks/owner-question-guard-patterns.test.js
  * SHOULD = sentences that wait for the owner to approve / decide / answer (must be found); SHOULD_NOT = sentences that must pass.
- * Origin: the peer report of 2026-10-27 (twgs-revival PEACE): "要你批准", "會等你批准", "要我…嗎" were not found, so one push
+ * Origin: the peer report of 2026-10-27 (<host> PEACE): "要你批准", "會等你批准", "要我…嗎" were not found, so one push
  * question was asked 4-5 times without a card. Negative control: `git stash`-style removal of the new patterns turns the SHOULD
  * table red (see the commit message); the SHOULD_NOT table guards the other side (no pattern may be widened into a false alarm).
  * Pure function test: no I/O.

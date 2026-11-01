@@ -158,13 +158,23 @@ process.stdout.write(out.every(Boolean) ? 'same' : `differ ${JSON.stringify(out)
 JS
 eq "same" "$("$NODE" "$SB/ident.js" "$REPO_ROOT" "$REPO" "$SB/repo-wt" "$SB/repo-link" "$NONREPO")" "markerRepoIdentity == scopeFromCwd.repo_identity for main, linked worktree, symlink, non-repo"
 
-# --- 8. R4 fold: unwritable tmpdir -> one-line flock_unavailable exit 2, not a stack trace -------------------
-(cd "$REPO" && wenv TMPDIR="$SB/does/not/exist" "$NODE" "$CLI" status runs --watch --project "$KEY" > "$SB/tmp.out" 2> "$SB/tmp.err" < /dev/null)
-eq "2" "$?" "unwritable TMPDIR -> exit 2 flock_unavailable (no stack trace)"
-eq "yes" "$(grep -q flock_unavailable "$SB/tmp.err" && echo yes || echo no)" "unwritable TMPDIR: stderr names flock_unavailable"
-eq "yes" "$(grep -q TMPDIR "$SB/tmp.err" && echo yes || echo no)" "unwritable TMPDIR: the message names TMPDIR (BL-0109)"
-eq "no" "$(grep -q "required on PATH" "$SB/tmp.err" && echo yes || echo no)" "unwritable TMPDIR: not blamed on a missing flock(1)"
-eq "no" "$(grep -q "    at " "$SB/tmp.err" && echo yes || echo no)" "unwritable TMPDIR: no stack trace on stderr"
+# --- 8. R4 fold: a TMPDIR that cannot be used -> one-line tmpdir_unavailable exit 2, not a stack trace, not blamed on flock ----------
+# BL-0336: a TMPDIR that merely does not exist yet is MADE (case 8b); one that cannot be used (here: a regular file) is its own state.
+echo "not a directory" > "$SB/tmpfile"
+(cd "$REPO" && wenv TMPDIR="$SB/tmpfile" "$NODE" "$CLI" status runs --watch --project "$KEY" > "$SB/tmp.out" 2> "$SB/tmp.err" < /dev/null)
+eq "2" "$?" "unusable TMPDIR -> exit 2 tmpdir_unavailable (no stack trace)"
+eq "yes" "$(grep -q tmpdir_unavailable "$SB/tmp.err" && echo yes || echo no)" "unusable TMPDIR: stderr names tmpdir_unavailable"
+eq "yes" "$(grep -q TMPDIR "$SB/tmp.err" && echo yes || echo no)" "unusable TMPDIR: the message names TMPDIR (BL-0109)"
+eq "no" "$(grep -q "flock_unavailable\|required on PATH" "$SB/tmp.err" && echo yes || echo no)" "unusable TMPDIR: not blamed on a missing flock(1)"
+eq "no" "$(grep -q "    at " "$SB/tmp.err" && echo yes || echo no)" "unusable TMPDIR: no stack trace on stderr"
+# 8b: a TMPDIR that does not exist is created by the flock probe (0700) and the probe then succeeds
+cat > "$SB/probe.js" <<'JS'
+const rw = require(`${process.argv[2]}/src/status/runs-watch.js`);
+const r = rw.flockProbe(process.env);
+process.stdout.write(`${r.ok}|${r.status}`);
+JS
+eq "true|ok" "$(wenv TMPDIR="$SB/does/not/exist" "$NODE" "$SB/probe.js" "$REPO_ROOT")" "missing TMPDIR: the flock probe makes it and succeeds"
+eq "700" "$(stat -c %a "$SB/does/not/exist" 2> /dev/null)" "missing TMPDIR: made with mode 0700"
 
 # --- 9. R4 fold: final-publish fallback uses the project-wide fresh bound, and lastRuns is maintained ------
 cat > "$SB/fallback.js" <<'JS'

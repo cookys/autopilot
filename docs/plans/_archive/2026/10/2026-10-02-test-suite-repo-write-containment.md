@@ -4,7 +4,7 @@
 
 ## 0. Context / thesis
 
-From 2026-09-04 20:36 until 2026-10-02, the main clone on cookys-aimax395 carried a local
+From 2026-09-04 20:36 until 2026-10-02, the main clone on <host> carried a local
 `user.name=Test User` / `user.email=test@example.com` in `.git/config`, and 632 commits on `origin/develop`
 carry that author. The vector: git exports `GIT_DIR` to hooks in a linked worktree; a test's `git init` in a
 scratch dir then creates nothing, and its bare `git config user.name …` writes the real clone's shared config.
@@ -37,7 +37,7 @@ repo; the real repo's config is diffed around that run; and commits/pushes with 
 - No ref, config or worktree entry of the real repo changed during that run (mtime check on `.git/refs`,
   `packed-refs`, `config`, `worktrees`).
 - Cost: `git clone` (hardlinked objects; `--no-hardlinks` adds ~0.9 s) + `rsync -a --exclude .git` of the working tree = 3.2 s, 413 MB.
-- `git grep '/home/cookys' -- hooks/tests scripts src`: only fixture payload strings, no path a test writes.
+- `git grep '$HOME' -- hooks/tests scripts src`: only fixture payload strings, no path a test writes.
   No test runs push/fetch/pull/ls-remote against `$REPO_ROOT`.
 
 ## 1. Problem and honest scope

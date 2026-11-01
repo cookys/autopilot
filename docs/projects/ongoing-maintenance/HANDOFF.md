@@ -12,7 +12,7 @@
 - **副作用要知道**：已安裝的 plugin symlink 到這個 checkout，所以每次 `/l3`～`/l6` 的 `session-mode set` 現在都會啟動一支 per-project watcher，活到 idle-exit 為止（marker 過期後最多 24 小時）。停掉用 `node bin/autopilot.js status runs --stop --project <key>`；整個關掉用 `AUTOPILOT_RUNS_WATCH_AUTOSTART=0`。
 - mods 計畫 `docs/plans/2026-10-03-mods-visible-dispatch.md` 已凍結（G1、G2 皆 CONDITIONAL，depth-0 全數處置；依規則最多到 G2，不再開 G3）。凍結後有兩次有界修補：R4.1 回寫 owner 對 D1／D2 的裁決，R4.2 回寫 P0 spike 結果。凍結後又有 R4.3：P1a 出貨後更正「鎖的前提」二擇一 (ii) 的錯誤句（node 不會成為 `/proc/locks` 的 pid）。INDEX 列維持 `active`。
 - P0 spike（`docs/plans/evidence/2026-10-03-mods-spikes/README.md`）：S1 yes（modules 與 classic 能共載，D4 結案）、S2 partial、S5(a) partial（desktop 這台跑不到）、S5(b) yes、S6 no（P2 要新寫量測儀器）、S3 yes、S4 no（owner 經 ssh 進 tmux，終端內圖片不可行）。depth-0 從原始檔複驗了 S1、S5(a)、S5(b)，並推翻計畫一處事實：`flock(1)` 是 fork 不是 exec，P1a 的鎖驗收不能拿 `/proc/locks` 的 pid 比 `writer.pid`；P1a 的 R4／R5 實測證實這一點（驗持有者要看 `writer.pid` 的 fd 9）。
-- peer 備註：cuda 的 Q01 campaign 封存成 `review_station: panel`，因為 `in_rail_review: auto` 遇完整 panel 就解成 panel；支援的路線是 intake 前設 `single`（已寫進 l5 的 `hetero-impl-loop.md`）；已封存 campaign 的就地遷移登在 BACKLOG。
+- peer 備註：<host> 的 Q01 campaign 封存成 `review_station: panel`，因為 `in_rail_review: auto` 遇完整 panel 就解成 panel；支援的路線是 intake 前設 `single`（已寫進 l5 的 `hetero-impl-loop.md`）；已封存 campaign 的就地遷移登在 BACKLOG。
 - 研究文件在 `docs/plans/research/`（研究不是 plan）。
 
 ## 已決事項（不重議）
@@ -44,7 +44,7 @@
 
 ## 協作
 - fable = fleet `autopilot--claude-2`（claude-fable-5-1；起草 plan R0–R4）。
-- astra = fleet `fleet-cli`，在 aimax395（GPT-6-Astra；審過 R0／R1）；回覆會落在這台主機共用的 fleet-cli 收件匣，用 `fleet inbox --peek` 讀。
+- astra = fleet `fleet-cli`，在 <host>（GPT-6-Astra；審過 R0／R1）；回覆會落在這台主機共用的 fleet-cli 收件匣，用 `fleet inbox --peek` 讀。
 - hangar = `cookys/openclaw/hangar--claude`（fleet 設計者；cockpit 邊界建議在 fleet study）。
 - 廣播到 `@cookys` 需要人在真 tty 跑 `fleet approve`；優先直接發送。
 

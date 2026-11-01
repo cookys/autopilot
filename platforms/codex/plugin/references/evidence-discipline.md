@@ -1087,7 +1087,7 @@ current but measures a superseded stimulus.
 ## 47. A real-host proof that mutates the state it proves makes every later proof vacuous
 
 2026-09-28, v2.36.100: round 1's real-host proof for a live-dir permission fix `chmod`'d the real
-`/run/user/1000/autopilot` from 0775 to 0700 as a side effect of running it. Round 2's proof, and
+`/run/user/<uid>/autopilot` from 0775 to 0700 as a side effect of running it. Round 2's proof, and
 depth-0's own before/after check, then ran against that already-tightened 0700 dir and passed —
 while the round-2 rule still rejected the real production case (0775 under a private parent). Only
 the landing foreman's combined review across the full range caught it (🔴). Compounding it: the spec
@@ -1185,7 +1185,7 @@ evidence in `docs/plans/evidence/2026-10-03-v113-cost-tracker-context-signal/`.
 2026-10-04, mods P1a. `resolveLiveDir` accepts `AUTOPILOT_LIVE_DIR` only when it is RAM-backed and
 mode 0700; anything else is skipped and resolution continues to `$XDG_RUNTIME_DIR`, the operator's real
 live store. Three kinds of suite went green while doing exactly that: the R1 manifest suite set the override on
-`/tmp` (ext4 here), so `status runs` wrote its enrich cursor into `/run/user/1000/autopilot/`; two
+`/tmp` (ext4 here), so `status runs` wrote its enrich cursor into `/run/user/<uid>/autopilot/`; two
 suites isolated only `AUTOPILOT_SESSION_MODE_DIR` while the new code wrote the live pointer under
 `$HOME`; and the pre-existing `session-mode-null-admission` suite had no isolation at all and wrote real
 markers. The combined review and a before/after store diff caught them, not the suites.
@@ -1353,4 +1353,4 @@ Rule: "reads the same evidence" is not an impact analysis. When a fixture or a j
 - The acceptor builds the sequences itself and never reuses the hand's sequences.
 - Bound the instrument's scope from the real transcripts first: list the operations the models actually used (v1 and v2 moved develop only through the merge lane, 190 times) and state what is and is not guaranteed.
 
-Preventing artifact: `findings-batch-v3` preregistration with a content-judged `m_merge_blocked`, an `instrument_scope` block and a preflight that refuses to dispatch unless the journal hook fires. Evidence: commit e89a6a810, v2 result `/home/cookys/.autopilot/fbatch-v2/run/formal.jsonl`, v1 result `/home/cookys/.autopilot/fbatch-formal2/run/formal.jsonl`.
+Preventing artifact: `findings-batch-v3` preregistration with a content-judged `m_merge_blocked`, an `instrument_scope` block and a preflight that refuses to dispatch unless the journal hook fires. Evidence: commit e89a6a810, v2 result `$HOME/.autopilot/fbatch-v2/run/formal.jsonl`, v1 result `$HOME/.autopilot/fbatch-formal2/run/formal.jsonl`.

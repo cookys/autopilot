@@ -6,7 +6,7 @@
 
 ## 0. Context / thesis
 
-cuda `revival.3d` (2026-10-16 → 10-17) ran 104 sonnet subagents in a session with no session-mode level:
+<host> `revival.3d` (2026-10-16 → 10-17) ran 104 sonnet subagents in a session with no session-mode level:
 8758 API turns, about $715 at API prices for sonnet against $56 for the opus depth-0. Lanes were re-dispatched
 again and again (bootux about 11 times, loaderef about 10). Nothing in autopilot counted that:
 
@@ -83,7 +83,7 @@ Objective: no lane can silently exceed its relay or turn ceiling, in any session
 ## 2.6 Change-policy decisions
 
 - **Compatibility impact**: `published-compatible`. A new default-on hook that can deny a dispatch. Consumers
-  (cuda) learn the `Lane:` and `Budget-Ack:` lines from the l5 reference and the CHANGELOG; `mode: warn|off` is
+  (<host>) learn the `Lane:` and `Budget-Ack:` lines from the l5 reference and the CHANGELOG; `mode: warn|off` is
   the opt-out. No existing interface changes.
 - **Dependency decision**: `existing`. Reuses `parseAssistantTurns`/`costOf` (`hooks/cost-tracker-lib.js`),
   `openDecision`, `decision-ledger.js`, `live-state-dir.js`, `config-path.js`. `parseAssistantTurns` gains an
@@ -144,7 +144,7 @@ Negative controls (each shown red before green):
 13. Inject a 400 ms sleep per call — the latency test exceeds 300 ms p95 ⇒ red.
 
 Human-gated: one live dispatch in this repo after merge (hook prints the context line on a real Agent call).
-Replay of cuda's real transcripts is offered to cuda (they hold them); not a merge gate.
+Replay of <host>'s real transcripts is offered to <host> (they hold them); not a merge gate.
 
 ## 6. Risks + inversion
 
@@ -158,7 +158,7 @@ What guarantees failure:
 - Counting ignores in-flight background agents ⇒ transcripts are read directly, not `costs.jsonl` (negative
   control 6).
 - `transcript_path` absent on the Agent PreToolUse payload ⇒ fail-open with a stderr note. Local evidence that it
-  is present: foreman-guard, a PreToolUse hook, reads it (`hooks/foreman-guard.js:272-282`) and fired live on cuda.
+  is present: foreman-guard, a PreToolUse hook, reads it (`hooks/foreman-guard.js:272-282`) and fired live on <host>.
 
 ## 7. Out of scope
 
@@ -175,7 +175,7 @@ None; the owner settled lane key, escalation and thresholds on d-bdd886cb.
 
 ## Review log
 
-- R0: authored 2026-10-18 by depth-0 from the research of the two read-only reports and the cuda incident data.
+- R0: authored 2026-10-18 by depth-0 from the research of the two read-only reports and the <host> incident data.
   Manifest `docs/plans/2026-10-18-subagent-budget-gate.plan-review-manifest.json`, rubric `.rubric.md` beside it.
 - G1 (sol_chair STOP, minimax_deep CONDITIONAL; verdict CONDITIONAL): four findings, all accepted and folded —
   dadf2c6d (R1, lane totals no longer age-filtered), 271d9846 (R2, clock and window defined), b057b148 (R11,

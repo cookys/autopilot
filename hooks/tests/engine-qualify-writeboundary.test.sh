@@ -210,7 +210,7 @@ if [[ "$STRACE_RAN" == 1 ]]; then
 fi
 
 # --- ingest compatibility (llm-playground). Skip when the importer is absent. ---
-INGEST="/home/cookys/projects/llm-playground/scripts/eval/ingest-qualification-record.py"
+INGEST="${LLM_PLAYGROUND_DIR:-$HOME/projects/llm-playground}/scripts/eval/ingest-qualification-record.py"
 if [[ ! -f "$INGEST" ]]; then
   echo "SKIP ingest-qualification-record.py does not exist"
 else

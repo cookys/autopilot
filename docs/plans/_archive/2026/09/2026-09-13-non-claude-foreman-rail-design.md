@@ -102,7 +102,7 @@ translates stream events to `run-ledger.sh` records so `watch-foreman.js` works 
 | | |
 |---|---|
 | "verdict stays at depth 0" | **At risk, must be enforced by the rail.** kimi can run `git merge`. The rail must (a) run kimi under the v2.36.32 no-push hooksPath env, (b) put the worktree on a branch depth 0 later integrates, (c) treat any foreman-side integration as `boundary_rejected`. The contract is the same one dispatch-hetero already has for hands — "only IMPLEMENTS, verdict at depth 0" becomes "only ORCHESTRATES, verdict at depth 0" |
-| foreman-guard / 一刀一命 | **Must be re-implemented in the rail** — count tool calls in stream-json, force a handoff write at the cap. Two implementations of one ironlaw is the shape that produced 7840hs (4); mitigate by making the rail the only implementation for non-CC foremen and citing the same constant |
+| foreman-guard / 一刀一命 | **Must be re-implemented in the rail** — count tool calls in stream-json, force a handoff write at the cap. Two implementations of one ironlaw is the shape that produced <host> (4); mitigate by making the rail the only implementation for non-CC foremen and citing the same constant |
 | Main-checkout boundary | Inherited from v2.36.32 if kimi is launched through `run_worker`-equivalent env; **未驗證** that kimi's child processes inherit `GIT_CONFIG_*` (they should — it is env) |
 | Rail-owned enforcement the first draft missed ⟨consult⟩ | (1) **Audit-log placement**: P2 proves kimi edits files in its worktree; the stream-json capture and run-ledger must live OUTSIDE the worktree or the audited party can rewrite its own trail. (2) **Self-reported stream is not a ledger**: the rail must verify claimed actions at git level (commits exist, branch is where it says) rather than translate kimi's own events into ledger rows. (3) **Egress**: P4 shows MCP http/sse; nothing gates the foreman's outbound channels the way `foreman-guard` gates Claude — the rail needs an egress policy or an explicit "unbounded" receipt. (4) **Orphans at kill**: killing kimi at the cap does not kill depth-2 workers it dispatched; the rail needs process-group containment (dispatch-hetero's `setsid`/cgroup `run_worker` is the existing shape). (5) **Secrets in env**: the doc asked whether `GIT_CONFIG_*` reaches kimi's children; the symmetric question — what ELSE in the env reaches them — is the one that matters |
 | Transport | ACP (P4) or `-p` + `-r` (P1/P3). ACP gives session control (list/resume/fork) and MCP; `-p` is what dispatch-hetero already wires for the kimi implementer seat (argv-only with the byte gate). Start with `-p`/`-r`: it is proven, argv-gated, and the foreman's inputs are files anyway |
@@ -132,7 +132,7 @@ polling for its workers is the exact spin they measured — so (B) is a prerequi
 3. B's prerequisite (exit-file contract, (B) above) is unbuilt. Building B first means building
    (B) inside a foreman rail, which fixes it for foremen only — the split ruling again.
 
-If the operator's goal is specifically **Claude quota** (the cuda 2026-09-04 digest: four Sonnet
+If the operator's goal is specifically **Claude quota** (the <host> 2026-09-04 digest: four Sonnet
 foremen at 79% of spend), A does not address it and B is the only shape that does. That is a
 question for the operator, not this document; the document's claim is only that B must not skip
 the rail-side enforcement listed above.

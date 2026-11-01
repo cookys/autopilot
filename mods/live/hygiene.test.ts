@@ -18,16 +18,16 @@ const REAL_RESIDUE = {
   schema: 'autopilot.residue/1', project_key: KEY, at: '2026-10-15T21:11:32.126Z', reapable_worktrees: 3, by_class: { dirty: 2, 'clean-integrated': 3 }, source: 'repo-residue-sweep scan',
   needs_human_count: 3, needs_human_bytes: 627445760,
   needs_human: [
-    { kind: 'worktree', class: 'dirty', age_days: 1.19, bytes: 298819584, reason: '1349 uncommitted path(s)', command: "git -C '/home/cookys/projects/autopilot/.claude/worktrees/agent-a16d390b66014e3cf' status --short", path: '/home/cookys/projects/autopilot/.claude/worktrees/agent-a16d390b66014e3cf' },
-    { kind: 'worktree', class: 'clean-integrated', age_days: 0, bytes: null, reason: 'HEAD is an ancestor of the integration ref', command: "git -C '/home/cookys/projects/autopilot' worktree remove '/home/cookys/projects/autopilot/.claude/worktrees/lane-loadsrc'", path: '/home/cookys/projects/autopilot/.claude/worktrees/lane-loadsrc' },
-    { kind: 'worktree', class: 'clean-integrated', age_days: 4.54, bytes: 328626176, reason: 'HEAD is an ancestor of the integration ref', command: "git -C '/home/cookys/projects/autopilot' worktree remove '/home/cookys/projects/autopilot/.claude/worktrees/release-3.0.0'", path: '/home/cookys/projects/autopilot/.claude/worktrees/release-3.0.0' },
+    { kind: 'worktree', class: 'dirty', age_days: 1.19, bytes: 298819584, reason: '1349 uncommitted path(s)', command: "git -C '/home/ubuntu/projects/autopilot/.claude/worktrees/agent-a16d390b66014e3cf' status --short", path: '/home/ubuntu/projects/autopilot/.claude/worktrees/agent-a16d390b66014e3cf' },
+    { kind: 'worktree', class: 'clean-integrated', age_days: 0, bytes: null, reason: 'HEAD is an ancestor of the integration ref', command: "git -C '/home/ubuntu/projects/autopilot' worktree remove '/home/ubuntu/projects/autopilot/.claude/worktrees/lane-loadsrc'", path: '/home/ubuntu/projects/autopilot/.claude/worktrees/lane-loadsrc' },
+    { kind: 'worktree', class: 'clean-integrated', age_days: 4.54, bytes: 328626176, reason: 'HEAD is an ancestor of the integration ref', command: "git -C '/home/ubuntu/projects/autopilot' worktree remove '/home/ubuntu/projects/autopilot/.claude/worktrees/release-3.0.0'", path: '/home/ubuntu/projects/autopilot/.claude/worktrees/release-3.0.0' },
   ],
   auto_ran_at: '2026-10-14T21:19:10.325Z', auto_removed_count: 0, auto_archived_count: 0,
 }
 const REAL_LOAD = {
   schema: 'autopilot.load-source/1', checked_at: '2026-10-15T21:11:20.292Z', plugin_version: '3.0.0-alpha.6', source: 'dev', source_basis: 'dev_link', marketplace: 'directory',
-  marketplace_path: '/home/cookys/projects/autopilot', marketplace_is_dev: true, dev_link_ok: true, behind_upstream: 0, flags: ['stale_cache_dirs'],
-  stale_cache_dirs: [{ dir: '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36', in_use_pids: ['1808913', '2097570'], alive: [] }],
+  marketplace_path: '/home/ubuntu/projects/autopilot', marketplace_is_dev: true, dev_link_ok: true, behind_upstream: 0, flags: ['stale_cache_dirs'],
+  stale_cache_dirs: [{ dir: '/home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36', in_use_pids: ['1808913', '2097570'], alive: [] }],
 }
 const band = { kind: 'running', key: 'suggestion', why: 'ok', verdictReason: null, mark: '●', verdict: 'v', head: '', progress: '—', progressDim: false, reason: null, project: 'repo', elapsed: '10m', phase: '—', slots: [] }
 const snapOf = (residue: object | null, ls: object | null): LiveSnapshot => ({
@@ -154,7 +154,7 @@ test('reason: a class nobody mapped is yours to judge, with the class and the pr
 test('command: shown as the producer wrote it, `$` first, wrapped and never cut; no command, no line', () => {
   const out = hyg(snapOf(REAL_RESIDUE, REAL_LOAD))
   const at = out.findIndex(l => l.startsWith('  $ git -C '))
-  expect(out.slice(at, at + 2).map(l => l.trim()).join('').replace(/\s/g, '').includes("git-C'/home/cookys/projects/autopilot/.claude/worktrees/agent-a16d390b66014e3cf'status--short".replace(/\s/g, ''))).toBe(true)
+  expect(out.slice(at, at + 2).map(l => l.trim()).join('').replace(/\s/g, '').includes("git-C'/home/ubuntu/projects/autopilot/.claude/worktrees/agent-a16d390b66014e3cf'status--short".replace(/\s/g, ''))).toBe(true)
   for (const l of out) expect(ui.displayWidth(l)).toBeLessThanOrEqual(75)
   const none = hyg(snapOf(resWith([entry({ command: null })]), null))
   expect(none.some(l => l.includes('$'))).toBe(false)
@@ -203,9 +203,9 @@ const sourceRows = (ls: object, t: typeof ZH = ZH): string[] => { const o = hyg(
 test('plugin source: only stale cache dirs is fine (✓) with the sentence and the delete command; no chip on the header', () => {
   const out = sourceRows(REAL_LOAD)
   expect(out[0]).toMatch(/^▾ 外掛來源 ─+$/)
-  expect(out[1]).toBe('✓ 開發目錄 · /home/cookys/projects/autopilot · v3.0.0-alpha.6')
+  expect(out[1]).toBe('✓ 開發目錄 · /home/ubuntu/projects/autopilot · v3.0.0-alpha.6')
   expect(out[2]).toBe('  舊版快取 2.36.36 沒有程式在用，可以刪')
-  expect(out[3]).toBe('  $ rm -rf /home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36/')
+  expect(out[3]).toBe('  $ rm -rf /home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36/')
   expect(out.length).toBe(4)
   expect(out.join('\n')).not.toContain('▲')
   // a copy a live program still uses: the sentence names the pid and offers no delete
@@ -225,11 +225,11 @@ test('plugin source: negative control, every flag that really misleads is ▲ an
 })
 test('plugin source: a sentence per flag, the fix command from the marketplace path (never a fixed home), the rest in the producer words', () => {
   const mk = sourceRows({ ...REAL_LOAD, marketplace: 'github', flags: ['marketplace_not_directory', 'marketplace_not_this_repo'], stale_cache_dirs: [] })
-  expect(mk.slice(2)).toEqual(['  市集不是指向這個 repo 的目錄，/reload-plugins 可能載到舊版', '  $ bash /home/cookys/projects/autopilot/scripts/dev-setup.sh'])
+  expect(mk.slice(2)).toEqual(['  市集不是指向這個 repo 的目錄，/reload-plugins 可能載到舊版', '  $ bash /home/ubuntu/projects/autopilot/scripts/dev-setup.sh'])
   const link = sourceRows({ ...REAL_LOAD, flags: ['dev_link_missing_or_stale'], stale_cache_dirs: [], marketplace_path: '/srv/other/repo' })
   expect(link.slice(2)).toEqual(['  開發連結不見了或過期', '  $ bash /srv/other/repo/scripts/dev-setup.sh'])
   expect(sourceRows({ ...REAL_LOAD, flags: ['dev_link_missing_or_stale'], stale_cache_dirs: [], marketplace_path: null }).slice(2)).toEqual(['  開發連結不見了或過期']) // no path, no command
-  expect(sourceRows({ ...REAL_LOAD, flags: [], stale_cache_dirs: [], behind_upstream: 3 }).slice(1)).toEqual(['▲ 開發目錄 · /home/cookys/projects/autopilot · v3.0.0-alpha.6', '  落後遠端 3 個提交'])
+  expect(sourceRows({ ...REAL_LOAD, flags: [], stale_cache_dirs: [], behind_upstream: 3 }).slice(1)).toEqual(['▲ 開發目錄 · /home/ubuntu/projects/autopilot · v3.0.0-alpha.6', '  落後遠端 3 個提交'])
   expect(sourceRows({ ...REAL_LOAD, flags: ['mystery'], stale_cache_dirs: [] }).slice(2)).toEqual(['  其他旗標：mystery'])
   expect(sourceRows({ ...REAL_LOAD, source: 'cache:2.36.36', flags: [], stale_cache_dirs: [] })[1]).toBe('▲ 快取版 2.36.36')
   expect(sourceRows({ ...REAL_LOAD, source: 'unknown', flags: [], stale_cache_dirs: [], plugin_version: null })[1]).toBe('▲ 讀不到外掛來源')
@@ -251,23 +251,23 @@ const GOLDEN_ZH_76: string[] = [
   "▾ 要你處理  1 · 285 MB ────────────────────────────────────────────────────",
   "▲ agent-a16d390b66014e3cf                                    1d04h · 285 MB",
   "  有 1349 個檔案沒提交，先看內容再決定要不要刪",
-  "  $ git -C '/home/cookys/projects/autopilot/.claude/worktrees/",
+  "  $ git -C '/home/ubuntu/projects/autopilot/.claude/worktrees/",
   "    agent-a16d390b66014e3cf' status --short",
   "▾ 可以直接清掉  2 · 313 MB ────────────────────────────────────────────────",
   "◦ lane-loadsrc                                                           0s",
   "  已合併，可以刪",
-  "  $ git -C '/home/cookys/projects/autopilot' worktree remove '/home/cookys/",
+  "  $ git -C '/home/ubuntu/projects/autopilot' worktree remove '/home/ubuntu/",
   "    projects/autopilot/.claude/worktrees/lane-loadsrc'",
   "◦ release-3.0.0                                              4d12h · 313 MB",
   "  已合併，可以刪",
-  "  $ git -C '/home/cookys/projects/autopilot' worktree remove '/home/cookys/",
+  "  $ git -C '/home/ubuntu/projects/autopilot' worktree remove '/home/ubuntu/",
   "    projects/autopilot/.claude/worktrees/release-3.0.0'",
   "▾ 自動清理 ────────────────────────────────────────────────────────────────",
   "上次        23h51m 前 · 沒有清掉東西",
   "▾ 外掛來源 ────────────────────────────────────────────────────────────────",
-  "✓ 開發目錄 · /home/cookys/projects/autopilot · v3.0.0-alpha.6",
+  "✓ 開發目錄 · /home/ubuntu/projects/autopilot · v3.0.0-alpha.6",
   "  舊版快取 2.36.36 沒有程式在用，可以刪",
-  "  $ rm -rf /home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36/",
+  "  $ rm -rf /home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36/",
 ]
 
 test('tab name: 殘留 turns yellow when the 外掛來源 row shows ▲ even with nothing to judge, and not for an old cache copy alone', () => {
@@ -369,7 +369,7 @@ test('cleanup buttons: after a press the entry says cleared, or why not and then
   const at = failed.findIndex(l => l.startsWith('  沒清掉：busy'))
   expect(at).toBeGreaterThan(0)
   expect(failed[at + 1].startsWith('  $ git -C')).toBe(true)
-  const both = texts(withButtons(s, Object.fromEntries([...paths, '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36'].map(p => [p, { ok: true, note: '' }]))))
+  const both = texts(withButtons(s, Object.fromEntries([...paths, '/home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36'].map(p => [p, { ok: true, note: '' }]))))
   expect(both.filter(l => l === '  已清掉').length).toBe(3)
   expect(both.some(l => l.includes('全部清掉'))).toBe(false)
 })

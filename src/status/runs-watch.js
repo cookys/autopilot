@@ -36,6 +36,8 @@ const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { resolveLiveDir } = require('../../scripts/lib/live-state-dir');
+const runtimePaths = require('../../scripts/lib/runtime-paths');
+const launchProto = require('./watcher-launch');
 const { projectKey, scopeFromCwd } = require('./project-key');
 const { pointerPath, writeLivePointer } = require('./live-pointer');
 const { applySelectors } = require('./runs-fields');
@@ -100,9 +102,10 @@ function lockPathOf(env, key) {
   return path.join(liveBaseOf(env), 'runs', `${key}.lock`);
 }
 
+// Path only (no filesystem access): the hot per-tick reads use it. The directory is made once, by runWriter, through
+// runtimePaths.ensureRunsDir before the first tick.
 function manifestDirOf(env) {
-  return env.AUTOPILOT_DISPATCH_RUNS_DIR
-    || path.join(env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+  return runtimePaths.runsDir(env);
 }
 
 // --- reader (the contract every consumer follows) --------------------------------------
@@ -380,6 +383,51 @@ function signatureOf(runs) {
  *   collect({enrichCap, project}) -> enriched run rows (injected; cli.js passes collectRuns)
  *   now() -> epoch ms
  */
+// What a published snapshot was built from, FOR THIS PROJECT ONLY, so a reader can tell "has anything of mine changed since" without trusting published_at's
+// age (a watcher that left on purpose leaves a snapshot that stays true until one of these moves). Two directory groups, each
+//   { role, dir, dir_mtime_ms, suffix, match_field, match_value, files: [{ path, mtime_ms }] }
+//   manifest  the dispatch manifest dir; files = the manifests of this project's rows; match repo_identity === this project's identity
+//   marker    the session-mode dir; files = the markers whose project_key is this project's (any expiry); match project_key === this key
+// A reader says "moved" when a listed file is newer or gone, or, once the directory's own mtime moved (a create / rename / delete in it, by anyone),
+// when a file it has not seen yet carries this project's match value. Other projects' manifests and markers therefore never make this one outdated.
+// A file's mtime is recorded as min(mtime, tick start): one modified while the tick was collecting reads as newer later (conservative, never lost).
+// Not covered, by design: the costs file (rows carry a session and a cwd, not a project key; filtering needs a tail read per check, so the spend block
+// keeps its own as_of times instead), the decision ledger, work-order progress, review receipts, and the per-session tasks / attention files the pane reads live.
+function dirMtime(dir) {
+  try { return fs.statSync(dir).mtimeMs; } catch (_error) { return null; }
+}
+function fileEntries(paths, startMs) {
+  return paths.map((p) => {
+    let m = null;
+    try { m = Math.min(fs.statSync(p).mtimeMs, startMs); } catch (_error) { /* gone */ }
+    return { path: p, mtime_ms: m };
+  });
+}
+function markerFilesOf(dir, key) {
+  const out = [];
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch (_error) { return out; }
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    try {
+      const m = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
+      if (m && m.project_key === key) out.push(path.join(dir, name));
+    } catch (_error) { /* unreadable: not ours */ }
+  }
+  return out;
+}
+// dirs: the two directory mtimes taken BEFORE the tick's collect; null when the identity is unknown (nothing can be said about change then)
+function sourceFingerprint({ env, key, identity, rows, dirs, startMs }) {
+  if (!identity) return null;
+  const manifestDir = manifestDirOf(env);
+  const markerDir = markerDirOf(env);
+  const manifests = [...new Set(rows.map((r) => r && r.manifest).filter((p) => typeof p === 'string' && p))];
+  return [
+    { role: 'manifest', dir: manifestDir, dir_mtime_ms: dirs.manifest, suffix: '.manifest.json', match_field: 'repo_identity', match_value: identity, files: fileEntries(manifests, startMs) },
+    { role: 'marker', dir: markerDir, dir_mtime_ms: dirs.marker, suffix: '.json', match_field: 'project_key', match_value: key, files: fileEntries(markerFilesOf(markerDir, key), startMs) },
+  ];
+}
+
 function createWatcher({
   key, env = process.env, cwd = process.cwd(), collect, now = Date.now,
   interval = DEFAULT_INTERVAL_S, enrichCap = 8, pid = process.pid, idleExitS = null, render = null,
@@ -412,7 +460,7 @@ function createWatcher({
   const spendHistory = createSpendHistoryPublisher({ live, writeAtomic, log: (m) => log(m) }); // follow-up C: <live>/runs/spend-history.json (host-wide, one sample per 15 min, 48 h)
   const stageWalkSidecar = createStageWalkPublisher({ live, writeAtomic, log: (m) => log(m) }); // P7 D4: <live>/stage/<sid>.json
   const state = {
-    lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
+    lastSources: null, lastSignature: null, lastPublishMs: null, lastRuns: null, lastObservedAt: null, lastPaths: null,
     roots: new Set(), lastCounts: new Map(), lastCost: { sessions: {}, host_today_usd: null, host_today_as_of: null, host_today_brain_usd: null, brain_cap_usd: brainSpend.read().brain_cap_usd },
     idleSince: null, lastPathsWhy: null, // lastPathsWhy: the last logged reason `git worktree list` failed (log again only when it changes)
     rootActiveAt: new Map(), droppedRoots: new Set(), // root retention (ROOT_RETENTION_S)
@@ -437,6 +485,7 @@ function createWatcher({
       valid_for_s: VALID_FOR_S,
       writer: extra.writer,
       ...(extra.exit_reason ? { exit_reason: extra.exit_reason } : {}),
+      ...(state.lastSources ? { sources: state.lastSources } : {}),
       runs,
       counts: state.lastCounts.get(rootRunId) || computeCounts(runs, interval, enrichCap, freshBoundOf(state.lastRuns || runs, interval, enrichCap)),
       sessions: state.lastCost.sessions,
@@ -714,6 +763,7 @@ function createWatcher({
   function tick() {
     const nowMs = now();
     let rows;
+    const dirsBefore = { manifest: dirMtime(manifestDirOf(env)), marker: dirMtime(markerDirOf(env)) }; // BEFORE collect: a change during the read is seen as newer, never lost
     try {
       const all = collect({ enrichCap, project: key });
       const selected = applySelectors(all, { project: key });
@@ -731,6 +781,7 @@ function createWatcher({
       log('code changed, exiting');
       return { published: false, exit: 'code_changed' };
     }
+    state.lastSources = sourceFingerprint({ env, key, identity, rows, dirs: dirsBefore, startMs: nowMs }); // this tick's view (published on change or heartbeat, and by the final publish)
     const allMarkers = unexpiredMarkers(env, key, nowMs);
     const markers = allMarkers.filter(isOrchestratorMarker);
     const cost = { ...costs.summary(nowMs, markers.map((m) => m.session_id).filter(Boolean)), ...brainSpend.read() };
@@ -838,21 +889,25 @@ const WRAPPER = 'exec 9>"$1" || exit 1; flock -n 9 || exit 75; shift; export '
 // Probe by actually taking a lock: a flock(1) that answers --version but cannot lock is unusable.
 // -> { ok, reason }. reason separates a missing/unusable flock(1) from a probe-lock directory that cannot be
 // written (an unwritable TMPDIR), which is not a flock problem and must not be reported as one (BL-0109).
+// BL-0336: the temp directory is made first (a TMPDIR the user chose but that does not exist yet), and a temp
+// directory that cannot be used is its own state, 'tmpdir_unavailable', not a flock problem.
 const FLOCK_MISSING_REASON = 'flock(1) (util-linux) is required on PATH; no lockfile fallback';
 function flockProbe(env) {
   let dir = null;
+  const tmp = runtimePaths.ensureTmpdir(env);
+  if (!tmp.ok) return { ok: false, status: 'tmpdir_unavailable', reason: `the temp directory cannot be used: ${tmp.reason}; set TMPDIR to a writable directory` };
   try {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-watch-flock-'));
+    dir = fs.mkdtempSync(path.join(tmp.path, 'runs-watch-flock-'));
     const probe = path.join(dir, 'probe.lock');
     try {
       fs.writeFileSync(probe, '');
     } catch (error) {
-      return { ok: false, reason: `cannot write the flock probe lock in the temp directory (${error.code || error.message}); set TMPDIR to a writable directory` };
+      return { ok: false, status: 'tmpdir_unavailable', reason: `cannot write the flock probe lock in the temp directory (${error.code || error.message}); set TMPDIR to a writable directory` };
     }
     const r = spawnSync('flock', ['-n', probe, 'true'], { encoding: 'utf8', timeout: 5000, env });
-    return !r.error && r.status === 0 ? { ok: true, reason: null } : { ok: false, reason: FLOCK_MISSING_REASON };
+    return !r.error && r.status === 0 ? { ok: true, status: 'ok', reason: null } : { ok: false, status: 'flock_unavailable', reason: FLOCK_MISSING_REASON };
   } catch (error) {
-    return { ok: false, reason: `cannot write the flock probe lock in the temp directory (${error.code || error.message}); set TMPDIR to a writable directory` };
+    return { ok: false, status: 'tmpdir_unavailable', reason: `cannot write the flock probe lock in the temp directory (${error.code || error.message}); set TMPDIR to a writable directory` };
   } finally {
     if (dir) {
       try { fs.unlinkSync(path.join(dir, 'probe.lock')); } catch (_cleanup) { /* best effort */ }
@@ -924,7 +979,7 @@ function runWatchCli(opts) {
   }
 
   // An explicit AUTOPILOT_LIVE_DIR that fails a safety check is refused (never replaced): report it, do nothing.
-  try { liveBaseOf(env); } catch (error) { stderr.write(`${error.message}\n`); return 1; }
+  try { liveBaseOf(env); } catch (error) { stderr.write(`${error.message}\n`); reportLaunch(env, false, error.message); return 1; }
 
   if (stop) {
     const pid = holderFromEnvelope(env, key);
@@ -949,7 +1004,8 @@ function runWatchCli(opts) {
 
   const flock = flockProbe(env);
   if (!flock.ok) {
-    stderr.write(`flock_unavailable: ${flock.reason}\n`);
+    stderr.write(`${flock.status || 'flock_unavailable'}: ${flock.reason}\n`);
+    reportLaunch(env, false, `${flock.status || 'flock_unavailable'}: ${flock.reason}`);
     return 2;
   }
 
@@ -981,7 +1037,9 @@ const DEFAULT_BIN_PATH = path.join(__dirname, '..', '..', 'bin', 'autopilot.js')
 
 /**
  * Start the project watcher detached (used by `session-mode.js set`). Never throws.
- *   -> { status: 'started'|'busy'|'flock_unavailable'|'error', holder?, message? }
+ *   -> { status: 'started'|'busy'|'flock_unavailable'|'live_dir_unusable'|'error', holder?, message?, launch_id? }
+ * BL-0336: a launch id is minted and recorded (src/status/watcher-launch.js) before the spawn; the child reports its own
+ * start (ok or why not) under that id, and a spawn that fails in this process is reported by this process.
  * Foreground probe first: `flock -n <lock> true` (a detached `flock -n` that loses is silent, so it
  * could not name the holder). Held -> 'busy' with the holder pid from the envelope. Free -> spawn
  * `nohup sh -c <WRAPPER> ...` in its own session (detached), stdio to the watcher log, unref'd.
@@ -990,38 +1048,102 @@ function startWatcherDetached({
   key, cwd = process.cwd(), env = process.env, binPath = DEFAULT_BIN_PATH,
   interval = DEFAULT_INTERVAL_S, idleExit = DEFAULT_IDLE_EXIT_S, enrichCap = null, render = null,
 }) {
+  let release = null;
   try {
     // An isolated test environment (own HOME / CLAUDE_CONFIG_DIR) on the shared live dir must not start a watcher there:
     // it would write its fake projects and a bogus load-source.json into the real live dir (see src/status/load-source.js).
     const iso = isolatedEnv(env);
     if (iso.reason) return { status: 'isolated', message: iso.reason };
-    const lock = lockPathOf(env, key);
+    // The launch record's directory comes first: from here on EVERY failure of this process is written to the launch result,
+    // where the next hook and the band read it. A directory that cannot even hold the record is the one failure left to the
+    // hook's own report (status 'live_dir_unusable' with no launch_id).
+    const logFile = path.join(autopilotHomeOf(env), 'review', key, 'live', 'watcher.log');
+    const launchDirPath = path.dirname(logFile);
+    const launchDir = runtimePaths.ensurePrivateDir(launchDirPath);
+    if (!launchDir.ok) return { status: 'live_dir_unusable', message: launchDir.reason };
+    // One start at a time per project: a second session starting now must not overwrite the first one's record.
+    release = launchProto.lockLaunch(launchDirPath);
+    if (!release) return { status: 'busy', holder: holderFromEnvelope(env, key), launching: true };
+    // A failure of this process: record it as its own launch, result included, and say why.
+    const failed = (status, message) => {
+      const l = launchProto.beginLaunch(launchDirPath);
+      if (!l) return { status: 'busy', holder: holderFromEnvelope(env, key), launching: true }; // the record is being written by another process
+      launchProto.writeResult(l.result_path, l.launch_id, false, message, new Date(), status === 'live_dir_unusable' ? 'live_dir' : null);
+      launchProto.recordPid(launchDirPath, l.record, null);
+      return { status, message, launch_id: l.launch_id };
+    };
+    let lock;
+    try {
+      lock = lockPathOf(env, key);
+    } catch (error) {
+      // An explicit AUTOPILOT_LIVE_DIR that fails a safety check is refused (never replaced): say why, start nothing.
+      return failed('live_dir_unusable', error.message);
+    }
     fs.mkdirSync(path.dirname(lock), { recursive: true, mode: 0o700 });
     const probe = spawnSync('flock', ['-n', lock, 'true'], { encoding: 'utf8', timeout: 5000, env });
-    if (probe.error) return { status: 'flock_unavailable', message: probe.error.message };
+    if (probe.error) return failed('flock_unavailable', `flock(1) cannot be run: ${probe.error.message}`);
     if (probe.status === 1) return { status: 'busy', holder: holderFromEnvelope(env, key) };
-    if (probe.status !== 0) return { status: 'error', message: `flock probe exited ${probe.status}` };
+    if (probe.status !== 0) return failed('error', `flock probe exited ${probe.status}`);
+    // A launch that is still starting (its launcher alive, nothing reported yet) is somebody else's: not ours to replace.
+    if (launchProto.readLaunchReport(launchDirPath).state === 'pending') return { status: 'busy', holder: holderFromEnvelope(env, key), launching: true };
     // The spawn below is async: a missing nohup/sh would only surface on the child's 'error' event, after 'started' was returned (BL-0109).
     for (const bin of ['nohup', 'sh']) {
-      if (!onPath(bin, env)) return { status: 'error', message: `${bin} is not on PATH` };
+      if (!onPath(bin, env)) return failed('error', `${bin} is not on PATH`);
     }
-    const logFile = path.join(autopilotHomeOf(env), 'review', key, 'live', 'watcher.log');
-    fs.mkdirSync(path.dirname(logFile), { recursive: true });
-    rotateWatcherLog(logFile);
-    const fd = fs.openSync(logFile, 'a');
+    const launch = launchProto.beginLaunch(launchDirPath);
+    if (!launch) return { status: 'busy', holder: holderFromEnvelope(env, key), launching: true }; // not ours to overwrite
+    let fd;
     try {
-      const child = spawn('nohup', ['sh', ...watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render })], {
-        cwd, env, detached: true, stdio: ['ignore', fd, fd],
-      });
-      child.on('error', () => { /* a spawn failure is reported by the caller via the missing envelope */ });
+      rotateWatcherLog(logFile);
+      fd = fs.openSync(logFile, 'a');
+    } catch (error) {
+      const reason = `cannot open ${logFile}: ${error.message}`;
+      launchProto.writeResult(launch.result_path, launch.launch_id, false, reason);
+      launchProto.recordPid(launchDirPath, launch.record, null);
+      return { status: 'error', message: reason, launch_id: launch.launch_id };
+    }
+    try {
+      const childEnv = { ...env, AUTOPILOT_WATCHER_LAUNCH_ID: launch.launch_id, AUTOPILOT_WATCHER_RESULT_PATH: launch.result_path };
+      let child = null;
+      let spawnError = null;
+      try {
+        child = spawn('nohup', ['sh', ...watchLaunchArgv({ lock, key, interval, idleExit, enrichCap, binPath, render })], {
+          cwd, env: childEnv, detached: true, stdio: ['ignore', fd, fd],
+        });
+        child.on('error', () => { /* reported below when the pid is missing; a later error shows as an unreported exit */ });
+      } catch (error) {
+        spawnError = error;
+      }
+      if (spawnError || !child || !Number.isInteger(child.pid)) {
+        const reason = `the watcher process could not be spawned: ${spawnError ? spawnError.message : 'no pid'}`;
+        launchProto.writeResult(launch.result_path, launch.launch_id, false, reason);
+        launchProto.recordPid(launchDirPath, launch.record, null);
+        return { status: 'error', message: reason, launch_id: launch.launch_id };
+      }
+      launchProto.recordPid(launchDirPath, launch.record, child.pid);
       child.unref();
     } finally {
       fs.closeSync(fd);
     }
-    return { status: 'started' };
+    return { status: 'started', launch_id: launch.launch_id };
   } catch (error) {
     return { status: 'error', message: error.message };
+  } finally {
+    if (release) release();
   }
+}
+
+// The launch this process belongs to (set by startWatcherDetached): report how it went under that id. Best effort:
+// a result that cannot be written must not change the watcher's own exit.
+function reportLaunch(env, ok, reason) {
+  const id = env.AUTOPILOT_WATCHER_LAUNCH_ID;
+  const file = env.AUTOPILOT_WATCHER_RESULT_PATH;
+  if (!id || !file) return;
+  try { launchProto.writeResult(file, id, ok, reason); } catch (_error) { /* best effort */ }
+}
+function launchReported(env) {
+  const file = env.AUTOPILOT_WATCHER_RESULT_PATH;
+  return Boolean(file) && fs.existsSync(file);
 }
 
 function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, cwd, env, stdout, stderr }) {
@@ -1031,6 +1153,7 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, 
     fs.mkdirSync(path.dirname(lock), { recursive: true, mode: 0o700 });
   } catch (error) {
     stderr.write(`watcher startup failed: live dir not writable: ${error.message}\n`);
+    reportLaunch(env, false, `live directory not writable: ${error.message}`);
     return 1;
   }
   // Async spawn, not spawnSync: a blocked parent cannot forward SIGTERM, and the inner writer (which holds
@@ -1052,15 +1175,19 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, 
   if (early) { try { child.kill(early); } catch (_e) { /* already gone */ } }
   child.on('error', (error) => {
     stderr.write(`watcher startup failed: ${error.message}\n`);
+    reportLaunch(env, false, error.message);
     finish(1);
   });
   child.on('exit', (status, signal) => {
     if (status === LOCK_BUSY_RC) {
       const holder = holderFromEnvelope(env, key);
       stdout.write(`writer_busy: project ${key} already has a watcher (pid ${holder === null ? 'unknown' : holder})\n`);
+      reportLaunch(env, true, null); // losing the lock means a watcher is running: not a failed start
       finish(0);
       return;
     }
+    // The writer reports its own start; one that died without doing so is reported here, with how it ended.
+    if (status !== 0 && !launchReported(env)) reportLaunch(env, false, `the watcher exited ${signal ? `on ${signal}` : `with status ${status}`} before reporting (see watcher.log)`);
     finish(signal || status === null ? 1 : status);
   });
   return null; // the process stays alive until the child exits
@@ -1069,10 +1196,14 @@ function launchUnderLock({ key, interval, idleExit, enrichCap, binPath, render, 
 function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, env, stderr }) {
   const fail = (message) => {
     stderr.write(`watcher startup failed: ${message}\n`);
+    reportLaunch(env, false, message);
     return 1;
   };
-  const manifestDir = manifestDirOf(env);
-  if (!fs.existsSync(manifestDir)) return fail(`manifest directory does not exist: ${manifestDir}`);
+  // BL-0336: the manifest directory is made here, by the one who needs it, BEFORE the first tick (it used to be a hard
+  // existsSync stop on a fresh boot). A directory that cannot be used ends the start with the reason, which the launch
+  // result hands to the hook and the band.
+  const ensuredRuns = runtimePaths.ensureRunsDir(env);
+  if (!ensuredRuns.ok) return fail(`dispatch runs directory unusable: ${ensuredRuns.reason}`);
   let watcher;
   let firstExit = null;
   try {
@@ -1087,6 +1218,7 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
     const first = watcher.tick();
     if (first.error) return fail(first.error);
     firstExit = first.exit || null;
+    reportLaunch(env, true, null);
     // One review server per host (plan R4.1): ensure it fail-open; it is detached, not our child.
     if (env.AUTOPILOT_REVIEW_SERVER_AUTOSTART !== '0') {
       try {
@@ -1125,5 +1257,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, rotateWatcherLog, WATCHER_LOG_MAX_BYTES, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
+  runWriter, lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
 };

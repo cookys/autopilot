@@ -1,0 +1,5 @@
+{
+  "_note": "Host names for scripts/lib/personal-data-patterns.js. 'strong' terms are distinctive enough to match anywhere; 'contextual' terms are ordinary words and match only in a host context (see the lib). The local os.hostname() is added at run time.",
+  "strong": ["cookys-aimax395", "aimax395", "4124gs", "c4140", "7840hs", "itx-win", "itx-wsl", "twgs-revival"],
+  "contextual": ["pico", "cuda", "gentoo"]
+}

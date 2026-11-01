@@ -244,11 +244,11 @@ assert_contains "$set_warn_out" "Warning: repo has no git remote. Overlay is key
 
 # ── 10. --transport plaintext-private (v2.35.11) ──
 # private http WITHOUT the flag is refused at write time, with a pointer to the flag
-pt_refused="$(run set lan --url http://192.168.101.7:8001 2>&1)"; ec=$?
+pt_refused="$(run set lan --url http://192.168.1.7:8001 2>&1)"; ec=$?
 assert_exit_code "$ec" 2 "set private http without --transport exits 2"
 assert_contains "$pt_refused" 'plaintext-private' "refusal names the opt-in flag"
 # WITH the flag: written, warned, disclosed in list/which/doctor
-pt_out="$(printf 'placeholder' | run set lan --url http://192.168.101.7:8001 --token-stdin --transport plaintext-private 2>&1)"; ec=$?
+pt_out="$(printf 'placeholder' | run set lan --url http://192.168.1.7:8001 --token-stdin --transport plaintext-private 2>&1)"; ec=$?
 assert_exit_code "$ec" 0 "set --transport plaintext-private exits 0"
 assert_contains "$pt_out" 'Warning: plaintext-private' "set warns about plaintext"
 assert_contains "$pt_out" 'LAN_TRANSPORT' "set reports the _TRANSPORT key"

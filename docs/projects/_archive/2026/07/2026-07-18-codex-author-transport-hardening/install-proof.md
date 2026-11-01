@@ -10,9 +10,9 @@
 ## Install command / result
 - Marketplace: `autopilot-local` (ROOT `platforms/codex`, local non-git)
 - `codex plugin remove autopilot@autopilot-local` → removed
-- `codex plugin add autopilot@autopilot-local` → `Installed plugin root: /home/cookys/.codex/plugins/cache/autopilot-local/autopilot/2.32.54`
+- `codex plugin add autopilot@autopilot-local` → `Installed plugin root: $HOME/.codex/plugins/cache/autopilot-local/autopilot/2.32.54`
 - `codex plugin list` → `autopilot@autopilot-local  installed, enabled  2.32.54`
-- Absolute installed dispatcher path: `/home/cookys/.codex/plugins/cache/autopilot-local/autopilot/2.32.54/scripts/dispatch-author.sh`
+- Absolute installed dispatcher path: `$HOME/.codex/plugins/cache/autopilot-local/autopilot/2.32.54/scripts/dispatch-author.sh`
 
 ## Three-way SHA256 equality (canonical == generated package == installed cache)
 
@@ -21,7 +21,7 @@
 | scripts/dispatch-author.sh | `50220d85678d8c2cd6bbb5e4b41a3ace49664b3ddca455680817fafa7837d349` | ✅ | ✅ | ✅ |
 | scripts/lib/dispatch-author-codex-transport.sh | `65a3bdbd03bc34c198456d075a78b1a03969d0bf8debc0fbf6604a24be813adb` | ✅ | ✅ | ✅ |
 
-Package path: `platforms/codex/plugin/<file>`; installed path: `/home/cookys/.codex/plugins/cache/autopilot-local/autopilot/2.32.54/<file>`.
+Package path: `platforms/codex/plugin/<file>`; installed path: `$HOME/.codex/plugins/cache/autopilot-local/autopilot/2.32.54/<file>`.
 Both files: canonical == package == installed (verified byte-identical SHA256).
 
 ## Freshness

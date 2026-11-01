@@ -1,6 +1,6 @@
 # Orchestrator slows itself down: seven process gaps from a peer
 
-BL-0309. Peer report from twgs-revival (peace--claude), 2026-10-26, "the orchestrator slows its own progress"; replied the same day. Efficiency class, so it jumps the queue. Guidance changes need ON/OFF eval evidence first.
+BL-0309. Peer report from <host> (peace--claude), 2026-10-26, "the orchestrator slows its own progress"; replied the same day. Efficiency class, so it jumps the queue. Guidance changes need ON/OFF eval evidence first.
 
 1. The handoff template does not separate owner instructions from the predecessor's judgement, and resume says to run item 1 of the next steps directly (`skills/handoff/SKILL.md` lines 69-73 and 126-128). Wanted: a grading plus a premise column. Guidance, needs eval.
 2. The stall fuse cannot see "plan edited, nothing pushed or merged". Wanted: a process-doc category, and a hint when the top of the next-pick queue has not moved.

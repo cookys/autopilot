@@ -12,12 +12,12 @@ assert_file_exists "$SCAN" "scanner present"
 # --- fixture: a fake ~/.claude/projects tree with one session whose command sequence
 #     repeats git add → git commit → git log 3× so the trigram crosses the ≥3× gate ---
 ROOT="$TEST_TMP/projects"
-PROJ="$ROOT/-home-cookys-projects-demo"
+PROJ="$ROOT/-home-ubuntu-projects-demo"
 mkdir -p "$PROJ"
 emit_session() {  # emit_session <file> <repeats>
   local f="$1" n="$2" i
   : > "$f"
-  printf '%s\n' '{"type":"user","cwd":"/home/cookys/projects/demo","message":{"content":"please ship it"}}' >> "$f"
+  printf '%s\n' '{"type":"user","cwd":"/home/ubuntu/projects/demo","message":{"content":"please ship it"}}' >> "$f"
   for ((i = 0; i < n; i++)); do
     printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"git add -A"}}]}}' >> "$f"
     printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"git commit -m wip"}}]}}' >> "$f"

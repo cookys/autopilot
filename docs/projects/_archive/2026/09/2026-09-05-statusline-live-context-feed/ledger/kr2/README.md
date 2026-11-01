@@ -2,7 +2,7 @@
 
 Setup: `session-mode.js set --level l4` for this repo (TTL 1 h), `~/.autopilot/config.json` `context_budget.t2` temporarily 1000
 (backup restored afterwards, marker cleared; verified `active: false`). Live files written by the installed codeforge
-(`/run/user/1000/autopilot/context/<sid>.tasks.json`). Probe: one sonnet subagent attempting three Bash calls.
+(`/run/user/<uid>/autopilot/context/<sid>.tasks.json`). Probe: one sonnet subagent attempting three Bash calls.
 
 Verbatim denials the probe received (relayed by the probe, three attempts):
 

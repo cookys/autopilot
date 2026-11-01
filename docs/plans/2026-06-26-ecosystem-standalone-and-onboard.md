@@ -147,7 +147,7 @@ work target is the **autopilot repo** (dev clone just fast-forwarded to **2.25.1
 
 1. **`/l5`'s native foreman uses `Agent(isolation:"worktree")`, which worktrees the *current* session repo.**
    From a hangar-bridge-rooted session it would isolate the **wrong repo**. Run `/l5` from a Claude Code
-   session **rooted in `/home/cookys/projects/autopilot`**.
+   session **rooted in `$HOME/projects/autopilot`**.
 2. **The loaded plugin (2.25.5) lags the source (2.25.12)** being edited, and the edits are self-referential
    (autopilot editing its own skills/scripts). **Restart Claude Code** in the autopilot repo first so the
    loaded plugin == the working tree (the dev clone, via `scripts/dev-setup.sh` symlink, makes edits live).

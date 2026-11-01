@@ -413,6 +413,7 @@ assert_eq "$c_small" "nocut" "budget: a small note is not marked cut"
 # negative control: the old fixed 2200 cap -> the budget assertions must go red
 # Mutants are required from TEST_TMP, so the shared buffer module must sit beside them.
 cp "$REPO_ROOT/scripts/lib/autocompact-window.js" "$TEST_TMP/autocompact-window.js"
+cp "$REPO_ROOT/scripts/lib/runtime-paths.js" "$TEST_TMP/runtime-paths.js" # compaction-handoff.js requires it (BL-0336); the mutants live in $TEST_TMP
 sed_mutant "$LIB" "$TEST_TMP/mut-fixed.js" 's/model: 4000 }/model: 2200 }/'
 sed_mutate "$TEST_TMP/mut-fixed.js" 's/Math.max(SECTION_CAPS.model, BODY_CAP - fixed - othersLen())/SECTION_CAPS.model/'
 read -r m_mut _ _ <<< "$(measure "$TEST_TMP/mut-fixed.js" 12000 full)"

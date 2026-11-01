@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 'use strict';
 
+// BL-0336: a TMPDIR the user chose but that does not exist yet is made here before anything uses it (one stat when it
+// exists); one that cannot be used is said once instead of surfacing as ENOENT from deep inside a run.
+{
+  const tmp = require('../scripts/lib/runtime-paths').ensureTmpdir(process.env);
+  if (!tmp.ok) process.stderr.write(`autopilot: temp directory unusable: ${tmp.reason}\n`);
+}
+
 const fs = require('fs');
 const path = require('path');
 const { dispatchReview } = require('../src/runners/review');

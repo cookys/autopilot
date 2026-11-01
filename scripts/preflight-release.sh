@@ -16,6 +16,28 @@ set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 
+# Repo paths come from the layout registry (scripts/lib/repo-layout.js). A key the registry cannot
+# resolve stops the gate here: there is no fallback to a literal path, which would be a path alias.
+layout() { # layout VAR key
+  local _v
+  _v="$(node "$REPO/scripts/lib/repo-layout.js" path "$2")" || {
+    echo "preflight-release: layout registry cannot resolve path key '$2'" >&2
+    exit 2
+  }
+  printf -v "$1" '%s' "$_v"
+}
+layout PLANS_DIR plans_dir
+layout PROJECTS_DIR projects_dir
+layout PROJECTS_INDEX projects_index
+layout BACKLOG_FILE backlog_file
+layout METRICS_DIR metrics_dir
+layout SURFACE_BASELINE surface_lines_baseline
+layout SETTINGS_REFERENCE settings_reference
+layout CONFIG_KEYS config_keys
+layout HOOK_TESTS_DIR hook_tests_dir
+layout SCRIPTS_DIR scripts_dir
+layout SCRIPTS_LIB_DIR scripts_lib_dir
+
 ONLY_SLASH_PROBE=0
 UPDATE_BASELINE=0
 # The slash-entry probe is 6 real paid LLM calls: it runs ONLY when explicitly opted in
@@ -37,7 +59,7 @@ for arg in "$@"; do
       echo "                      actual release; env equivalent AUTOPILOT_SLASH_PROBE_RELEASE=1)"
       echo "  --only-slash-probe  run only the slash-entry probe gate; still needs --with-slash-probe"
       echo "                      (without it: prints NOT RUN and exits 0, no paid call)"
-      echo "  --update-baseline   recompute + write docs/metrics/surface-lines.json, then exit"
+      echo "  --update-baseline   recompute + write $SURFACE_BASELINE, then exit"
       echo "  AUTOPILOT_SKIP_SLASH_PROBE=1 always wins: skips the probe even with --with-slash-probe"
       exit 0
       ;;
@@ -49,10 +71,10 @@ for arg in "$@"; do
 done
 
 if [ "$UPDATE_BASELINE" = "1" ]; then
-  V=$(node scripts/lib/semver.js from-json .claude-plugin/plugin.json 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+  V=$(node "$SCRIPTS_LIB_DIR/semver.js" from-json .claude-plugin/plugin.json 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
   P=$(find skills references -name '*.md' -type f | sort -u | xargs cat | wc -l)
   E=$(find src -name '*.js' -type f | sort -u | xargs cat | wc -l)
-  mkdir -p docs/metrics
+  mkdir -p "$METRICS_DIR"
   # Per-skill SKILL.md line map feeds the check-8 per-skill ratchet
   # (references/skill-contract-card.md "Measurable per-skill definition").
   node -e '
@@ -69,15 +91,15 @@ if [ "$UPDATE_BASELINE" = "1" ]; then
       skills,
       note: "north-star baseline (prose down, engine up) — refreshed at each release via preflight-release.sh --update-baseline; formula: find skills references -name *.md -type f | sort -u | xargs cat | wc -l (R1-F6 dedup, symlinks excluded by -type f); skills{} = per-SKILL.md line counts for the check-8 per-skill ratchet (references/skill-contract-card.md)",
     };
-    fs.writeFileSync("docs/metrics/surface-lines.json", JSON.stringify(out, null, 2) + "\n");
-  ' "$V" "$P" "$E"
-  echo "baseline updated: v$V prose=$P engine=$E skills=$(ls skills | wc -l) → docs/metrics/surface-lines.json"
+    fs.writeFileSync(process.argv[4], JSON.stringify(out, null, 2) + "\n");
+  ' "$V" "$P" "$E" "$SURFACE_BASELINE"
+  echo "baseline updated: v$V prose=$P engine=$E skills=$(ls skills | wc -l) → $SURFACE_BASELINE"
   exit 0
 fi
 
 CANONICAL=".claude-plugin/plugin.json"
 CHANGELOG="CHANGELOG.md"
-INDEX="docs/projects/INDEX.md"
+INDEX="$PROJECTS_INDEX"
 
 FAILS=0
 TOTAL=0
@@ -96,7 +118,7 @@ run_check() {
 VERSION=""
 if [ -f "$CANONICAL" ]; then
   # One parser (scripts/lib/semver.js): accepts N.N.N and N.N.N-(alpha|beta|rc).N.
-  VERSION=$(node "$REPO/scripts/lib/semver.js" from-json "$CANONICAL" 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+  VERSION=$(node "$REPO/$SCRIPTS_LIB_DIR/semver.js" from-json "$CANONICAL" 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
 fi
 
 # grep -E PATTERN FILE. Patterns end in a "[^0-9])" tail (the char after the version).
@@ -130,7 +152,7 @@ check_changelog_entry() {
 
 # ─── 3. version mirrors in sync with canonical ───
 check_version_mirrors() {
-  node scripts/sync-version.js --check >/dev/null 2>&1
+  node "$SCRIPTS_DIR/sync-version.js" --check >/dev/null 2>&1
 }
 
 # ─── 4. INDEX references the canonical version ───
@@ -154,7 +176,7 @@ check_index_links_resolve() {
     # realpath-style resolution instead of excluding `../` links (which would
     # silently skip — and thus pass — a genuinely broken parent-relative link).
     local resolved
-    resolved="$(cd "docs/projects" 2>/dev/null && readlink -m "$clean")"
+    resolved="$(cd "$PROJECTS_DIR" 2>/dev/null && readlink -m "$clean")"
     if [ -z "$resolved" ] || [ ! -e "$resolved" ]; then
       echo "    missing: $clean (from INDEX link $target)" >&2
       missing=$((missing + 1))
@@ -165,11 +187,11 @@ check_index_links_resolve() {
 
 # ─── 6. opt-in CHANGELOG gate: set change ⇒ named in section ───
 check_optin_changelog() {
-  node scripts/check-optin-changelog.js
+  node "$SCRIPTS_DIR/check-optin-changelog.js"
 }
 
 check_settings_changelog() {
-  node scripts/check-settings-changelog.js
+  node "$SCRIPTS_DIR/check-settings-changelog.js"
 }
 
 # ─── 7. slash-entry thin-shell behavioral probe (B1/B2 release gate) ───
@@ -195,7 +217,7 @@ check_slash_entry_probe() {
   local probe_status
   local probe_state
 
-  probe_state="$(node scripts/engine-capability-state.js current --runner claude --model "$probe_model" --role probe)"
+  probe_state="$(node "$SCRIPTS_DIR/engine-capability-state.js" current --runner claude --model "$probe_model" --role probe)"
   probe_status="$(printf '%s' "$probe_state" | node -e 'const fs = require("fs"); const payload = fs.readFileSync(0, "utf8").trim(); if (!payload) process.exit(0); try { const data = JSON.parse(payload); process.stdout.write((data && data.capability && data.capability.quota && data.capability.quota.status) || ""); } catch { process.exit(0); }')"
 
   if [ "$probe_status" = "exhausted" ]; then
@@ -203,7 +225,7 @@ check_slash_entry_probe() {
     return 1
   fi
 
-  AUTOPILOT_SLASH_PROBE=1 bash hooks/tests/slash-entry-probe.test.sh
+  AUTOPILOT_SLASH_PROBE=1 bash "$HOOK_TESTS_DIR/slash-entry-probe.test.sh"
 }
 
 # ─── 8. north-star surface measurement (prose↓ engine↑) ───
@@ -214,7 +236,6 @@ check_slash_entry_probe() {
 # current version's section — missing justification fails this release check.
 # Seed/refresh baseline: scripts/preflight-release.sh --update-baseline (run at each
 # release AFTER the gate passes, so the next release diffs against this one).
-SURFACE_BASELINE="docs/metrics/surface-lines.json"
 
 measure_surface() {
   SURF_PROSE=$(find skills references -name '*.md' -type f | sort -u | xargs cat | wc -l)
@@ -254,7 +275,7 @@ current_changelog_has_justification() {
 check_north_star() {
   measure_surface
   if [ ! -f "$SURFACE_BASELINE" ]; then
-    echo "    prose=$SURF_PROSE engine=$SURF_ENGINE (no baseline yet — seed with: scripts/preflight-release.sh --update-baseline)"
+    echo "    prose=$SURF_PROSE engine=$SURF_ENGINE (no baseline yet — seed with: $SCRIPTS_DIR/preflight-release.sh --update-baseline)"
     return 0
   fi
   local base_prose base_engine base_version
@@ -326,7 +347,7 @@ check_per_skill_ratchet() {
 check_plan_graduation() {
   local out
   out="$(mktemp)"
-  node scripts/check-plan-graduation.js --repo-root "$REPO" --json > "$out" 2>&1
+  node "$SCRIPTS_DIR/check-plan-graduation.js" --repo-root "$REPO" --json > "$out" 2>&1
   local rc=$?
   if [ "$rc" -ne 0 ]; then
     node -e '
@@ -336,12 +357,12 @@ check_plan_graduation() {
       for (const v of j.violations || []) {
         if (REPORT_ONLY_CODES.has(v.code)) continue;
         const where = v.kind === "backlog_row" ? `BACKLOG row "${v.title}"`
-          : v.kind === "reference" ? `docs/plans/${v.stem}`
+          : v.kind === "reference" ? `${process.argv[3]}/${v.stem}`
             : v.path;
         console.error(`    ${v.code}: ${where} — ${v.detail}`);
       }
-      console.error("    fix: node scripts/check-plan-graduation.js --fix");
-    ' "$out" "$REPO/scripts/check-plan-graduation.js" >&2
+      console.error("    fix: node " + process.argv[4] + " --fix");
+    ' "$out" "$REPO/$SCRIPTS_DIR/check-plan-graduation.js" "$PLANS_DIR" "$SCRIPTS_DIR/check-plan-graduation.js" >&2
   fi
   rm -f "$out"
   return "$rc"
@@ -352,21 +373,21 @@ check_plan_graduation() {
 # or allowlisted with a reason, and the reaper's _SRR_PATTERNS equals the registry's
 # test-lockgated entries (scripts/check-tmp-residue-registry.js; plan 2026-10-12 tmp-residue).
 check_tmp_residue_gate() {
-  node scripts/check-tmp-residue-registry.js >&2
+  node "$SCRIPTS_DIR/check-tmp-residue-registry.js" >&2
 }
 
 # ─── 11. settings registry gate ───
 # Every AUTOPILOT_* env var / config.json key the code reads is registered in scripts/lib/config-keys.json, every
 # registered entry is still read, and every audience=user entry is on docs/settings-reference.md.
 check_config_docs_gate() {
-  node scripts/check-config-docs.js >&2
+  node "$SCRIPTS_DIR/check-config-docs.js" >&2
 }
 
 # BL-0194 P4a: when the recipe records a feed snapshot (build-qualification-defaults.js build --from-snapshot),
 # the official defaults must not be derived from one older than 30 days. A build-time gate, not a runtime
 # advisory. No snapshot recorded (the store-derived path) passes.
 check_defaults_snapshot_age() {
-  node scripts/build-qualification-defaults.js --check-snapshot-age >&2
+  node "$SCRIPTS_DIR/build-qualification-defaults.js" --check-snapshot-age >&2
 }
 
 if [ "$ONLY_SLASH_PROBE" = "1" ]; then
@@ -383,16 +404,16 @@ echo ""
 run_check "canonical version parseable from .claude-plugin/plugin.json" check_canonical_version
 run_check "CHANGELOG.md has a '## v$VERSION' entry" check_changelog_entry
 run_check "version mirrors in sync (sync-version.js --check)" check_version_mirrors
-run_check "docs/projects/INDEX.md references v$VERSION" check_index_has_version
+run_check "$PROJECTS_INDEX references v$VERSION" check_index_has_version
 run_check "all project README links in INDEX resolve to existing files" check_index_links_resolve
 run_check "opt-in change is named in the CHANGELOG" check_optin_changelog
 run_check "user-setting changes are named in CHANGELOG Settings changes" check_settings_changelog
 run_check "slash-entry thin-shell probe (6 paid LLM probes; opt-in: --with-slash-probe; skip: AUTOPILOT_SKIP_SLASH_PROBE=1)" check_slash_entry_probe
 run_check "north-star surface lines (prose↓ engine↑; +5% needs CHANGELOG justification)" check_north_star
-run_check "plan graduation clean (docs/BACKLOG.md queue rows, released docs/plans/*.md archived)" check_plan_graduation
+run_check "plan graduation clean ($BACKLOG_FILE queue rows, released $PLANS_DIR/*.md archived)" check_plan_graduation
 run_check "temp-prefix registry gate (check-tmp-residue-registry.js, whole repo)" check_tmp_residue_gate
 run_check "official defaults snapshot age (build-qualification-defaults.js --check-snapshot-age, <= 30 days)" check_defaults_snapshot_age
-run_check "settings registry gate (check-config-docs.js: code <-> config-keys.json <-> docs/settings-reference.md)" check_config_docs_gate
+run_check "settings registry gate (check-config-docs.js: code <-> ${CONFIG_KEYS##*/} <-> $SETTINGS_REFERENCE)" check_config_docs_gate
 
 # ─── advisory: hook x harness support matrix staleness (BL-0231) ──────────────
 # NOT a check and NOT counted in $FAILS — hook-harness-matrix.js --check prints WARN for
@@ -400,7 +421,7 @@ run_check "settings registry gate (check-config-docs.js: code <-> config-keys.js
 # shown here at release prep; neither blocks the release.
 echo ""
 echo "── advisory: hook x harness matrix (60-day evidence staleness) ──"
-node scripts/hook-harness-matrix.js --check 2>&1 || echo "    NOTE: hook-harness-matrix.js --check exited non-zero (doc drift or bad evidence row) — advisory only"
+node "$SCRIPTS_DIR/hook-harness-matrix.js" --check 2>&1 || echo "    NOTE: hook-harness-matrix.js --check exited non-zero (doc drift or bad evidence row) — advisory only"
 
 # ─── advisory: roster-field report ───────────────────────────────────────────
 # NOT a check and NOT counted in $FAILS — it prints the roster's
@@ -410,7 +431,7 @@ node scripts/hook-harness-matrix.js --check 2>&1 || echo "    NOTE: hook-harness
 # says REPORT-HEALTH on stderr; that is a broken tool, not a release blocker.
 echo ""
 echo "── advisory: roster fields with no detected modeled match ──"
-node scripts/report-roster-field-consumers.js 2>&1 | sed -n '/no detected modeled match/,$p' || true
+node "$SCRIPTS_DIR/report-roster-field-consumers.js" 2>&1 | sed -n '/no detected modeled match/,$p' || true
 
 echo ""
 if [ "$FAILS" -eq 0 ]; then
@@ -424,6 +445,6 @@ if [ "$FAILS" -eq 0 ]; then
 else
   echo "❌ $FAILS / $TOTAL release-hygiene checks FAILED for v$VERSION"
   echo "   Fix: ensure CHANGELOG entry + INDEX row + project README exist for the"
-  echo "   canonical version, and run scripts/sync-version.js to align mirrors."
+  echo "   canonical version, and run $SCRIPTS_DIR/sync-version.js to align mirrors."
   exit "$FAILS"
 fi

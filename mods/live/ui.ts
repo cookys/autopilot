@@ -970,17 +970,17 @@ export function drawSeg(s: Seg): { color: ThemeKey | undefined; bold: boolean | 
 }
 
 // `need`: the tab holds something for the owner, so its name is drawn attention bold (the colour of `▲ 要你決定`)
-export type StripTab = { id: PaneTab; label: string; need?: boolean }
-export type Strip = {
+export type StripTab<Id extends string = PaneTab> = { id: Id; label: string; need?: boolean }
+export type Strip<Id extends string = PaneTab> = {
   next: Seg | null // the next-tab chip `›`
-  tabs: { id: PaneTab; on: boolean; label: Seg }[]
+  tabs: { id: Id; on: boolean; label: Seg }[]
   rule: Seg[] // the baseline under the strip; on one row it carries the active mark (`━` under the active label)
   rows: number // drawn rows: the strip's wrapped rows + the baseline
   exact: boolean // the strip fits one row, so `rows` is certain and the `━` mark is drawn
 }
 // Q1 (owner 2026-10-13, revised 2026-10-16): no background; the active tab name is bold default text (attention bold when it needs the owner) and the `here` colour
 // is only the run of `━` in the baseline; a strip that wraps falls back to bold alone. The `›` next-page button is an action, not a place: dim.
-export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNext: boolean): Strip {
+export function strip<Id extends string = PaneTab>(u: Ctx, active: Id | null, tabs: readonly StripTab<Id>[], hasNext: boolean): Strip<Id> {
   const next = hasNext ? sg(GLYPHS.structure.goto, { dim: true, role: 'glyph' }) : null
   const built = tabs.map(tb => {
     const on = tb.id === active
@@ -1008,6 +1008,19 @@ export function strip(u: Ctx, active: PaneTab, tabs: readonly StripTab[], hasNex
     ? [...bar(markAt, GLYPHS.structure.rule, { color: PALETTE.structure }), ...bar(markW, GLYPHS.structure.tabMark, { color: PALETTE.here, here: true }), ...bar(u.cols - markAt - markW, GLYPHS.structure.rule, { color: PALETTE.structure })]
     : bar(u.cols, GLYPHS.structure.rule, { color: PALETTE.structure })
   return { next, tabs: built.map(({ id, on, label }) => ({ id, on, label })), rule, rows: rows + 1, exact }
+}
+
+// a pressable control drawn as text: the action colour (`[ label ]`)
+export const actionSeg = (text: string): Seg => sg(text, { role: 'prose', color: PALETTE.action })
+
+// the rule under a row of tabs that sit at `tabsAt` (layout E1): `─` (structure) across `columns`, `━` (here) under the open tab. Widths are the strip's own (`start` and `width` per tab), so the
+// mark stands exactly under the label.
+export function tabRule<Id extends string>(tabs: readonly { id: Id; width: number; start: number }[], columns: number, tabsAt: number, active: Id | null): Seg[] {
+  const on = active === null ? undefined : tabs.find(b => b.id === active)
+  const line = (n: number, glyph: string, o: SegOpts): Seg[] => (n > 0 ? [sg(glyph.repeat(n), { role: 'rule', ...o })] : [])
+  if (on === undefined) return line(columns, GLYPHS.structure.rule, { color: PALETTE.structure })
+  const at = tabsAt + on.start
+  return [...line(at, GLYPHS.structure.rule, { color: PALETTE.structure }), ...line(on.width, GLYPHS.structure.tabMark, { color: PALETTE.here, here: true }), ...line(columns - at - on.width, GLYPHS.structure.rule, { color: PALETTE.structure })]
 }
 
 // a hint at the right edge of a made line: in the gap when the line leaves room, else in the run of blanks the one-line header already holds; null = no room

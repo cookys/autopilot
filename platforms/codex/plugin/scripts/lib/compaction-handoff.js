@@ -26,6 +26,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const runtimePaths = require('./runtime-paths');
 
 // Claude Code reserves a fixed buffer under the auto-compact window: /context prints
 // "Autocompact buffer: 33k" (measured on CC 2.1.30x). Compaction fires at window - this.
@@ -154,18 +155,21 @@ function ageText(iso, now) {
 }
 
 function dispatchRunsDir(dirs) {
-  return dirs.dispatchRuns || process.env.AUTOPILOT_DISPATCH_RUNS_DIR
-    || path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+  return dirs.dispatchRuns || runtimePaths.runsDir(process.env);
 }
 
 // Reuses `dispatch-status.js --list` (the manifest reader) rather than parsing manifests again.
 function dispatchSection({ sessionId, roots, now, dirs, statusScript, deadlineAt }) {
   const script = statusScript || path.join(__dirname, '..', 'dispatch-status.js');
   const dir = dispatchRunsDir(dirs);
+  if (!dirs.dispatchRuns) {
+    const ens = runtimePaths.ensureRunsDir(process.env);
+    if (!ens.ok) return unavailable(`runs directory unusable: ${ens.reason}`);
+  }
   if (msLeft(deadlineAt) <= 0) return unavailable(DEADLINE_REASON);
   const r = spawnSync(process.execPath, [script, '--list', '--dir', dir], { timeout: boundedTimeout(DISPATCH_TIMEOUT_MS, deadlineAt), encoding: 'utf8' });
   if (r.error) return unavailable(`dispatch-status failed: ${r.error.code || r.error.message}`);
-  if (r.status !== 0) return unavailable(`dispatch-status exit ${r.status}`);
+  if (r.status !== 0) return unavailable(`dispatch-status exit ${r.status}${r.stderr ? `: ${String(r.stderr).trim().split('\n').pop().slice(0, 200)}` : ''}`);
   let rows;
   try { rows = JSON.parse(r.stdout); } catch { return unavailable('dispatch-status output is not JSON'); }
   if (!Array.isArray(rows)) return unavailable('dispatch-status output is not a list');

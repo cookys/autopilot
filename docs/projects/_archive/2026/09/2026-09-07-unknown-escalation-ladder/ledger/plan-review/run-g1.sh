@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-cd /home/cookys/projects/autopilot
+cd $HOME/projects/autopilot
 . scripts/load-endpoints-env.sh; autopilot_load_endpoints_env >/dev/null 2>&1
 node scripts/dispatch-plan-review.js \
   --repo-root "$PWD" \

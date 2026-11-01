@@ -23,7 +23,7 @@ Implementation commit: `727bdf9`
 
 - `bash hooks/tests/merge-intent.test.sh` — PASS, 24 assertions.
 - `bash hooks/tests/status-task.test.sh` — PASS, including all P2 named cases.
-- `node /tmp/lsm-p2-independent-verification.js /home/cookys/projects/autopilot` — PASS.
+- `node /tmp/lsm-p2-independent-verification.js $HOME/projects/autopilot` — PASS.
 - JS syntax and both edited schema JSON files — PASS.
 - Completeness, error-path, secret, scope, canonical-invariant, skill-validation, and diff checks —
   PASS / zero new findings.

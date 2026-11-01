@@ -474,4 +474,12 @@ function loadMatchingRunsFromManifestDir(manifestDir, identity = {}) { if (!isSt
       if (identity && isStr(identity.root_run_id)&& !runMatchesIdentity(normalized, identity)) continue;
       runs.push(normalized);} catch (_e) { /* skip corrupt */ }}
   return runs;}
-module.exports = { ARTIFACT_TYPE, DURABLE_ARTIFACT_TYPE, SCHEMA_VERSION, TERMINAL_CAMPAIGN_PHASES, admitContinuation, authenticateCheckpointEvidence, buildCheckpoint, checkAcceptedCommit, checkpointDigest, checkpointMissingFields, isCompleteCheckpoint, loadCheckpointFile, loadMatchingRunsFromManifestDir, normalizeRunRecord, observeGitCommit, rehydrateCheckpoint, requireReconcileReceipt, resolveAuthoritativeIdentity, runMatchesIdentity, workOrder };
+// The default runs directory (scripts/lib/runtime-paths.js): made when absent; a directory it REFUSES (someone else's, writable by
+// others, a link) is never read, because a manifest planted in it is not evidence. -> { runs, unusable: reason|null } (BL-0336).
+function loadMatchingRunsFromDefaultRunsDir(identity = {}, env = process.env) {
+  const ensured = require('../../scripts/lib/runtime-paths').ensureRunsDir(env);
+  if (!ensured.ok) return { runs: [], unusable: ensured.reason };
+  return { runs: loadMatchingRunsFromManifestDir(ensured.path, identity), unusable: null };
+}
+
+module.exports = { loadMatchingRunsFromDefaultRunsDir, ARTIFACT_TYPE, DURABLE_ARTIFACT_TYPE, SCHEMA_VERSION, TERMINAL_CAMPAIGN_PHASES, admitContinuation, authenticateCheckpointEvidence, buildCheckpoint, checkAcceptedCommit, checkpointDigest, checkpointMissingFields, isCompleteCheckpoint, loadCheckpointFile, loadMatchingRunsFromManifestDir, normalizeRunRecord, observeGitCommit, rehydrateCheckpoint, requireReconcileReceipt, resolveAuthoritativeIdentity, runMatchesIdentity, workOrder };

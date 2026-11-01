@@ -71,6 +71,8 @@ import { EN, ZH_TW } from './locales'
 import type { Slot } from './model'
 import { paneRows, runAgedOut, runEndedMs, runSubject } from './model'
 import * as ui from './ui'
+import { BAND_ROWS } from './band'
+import { barStrip } from './tabs'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -170,10 +172,12 @@ type World = {
   writes: string[]
   reads: string[]
   lists: string[]
+  listErrors: Record<string, string> // $.fs.list rejects with this message
   statErrors: Record<string, string> // $.fs.stat rejects with this message (the engine passes a message only, no `code`)
   existsThrows: Set<string> // $.fs.exists rejects for these paths
   env: Record<string, string> // what $.env.get answers; a test may change it between ticks
   clock: ReturnType<typeof mock.clock>
+  lower: (($: any, e: any) => any) | null // a mod below the live band on the ui.render chain (BL-0352); null = the engine's own drawing alone
   order: string[] // 'open' / 'stat' / 'read' in the order the engine heard them (a press on a file path must open the viewer window before any read)
 }
 
@@ -182,7 +186,8 @@ const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(o
 
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
-  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], statErrors: {}, existsThrows: new Set(), order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
+  barLocale = locale ?? 'zh-TW'
+  const w: World = { files, sid: { value: sid }, cwdReal: { value: CWD }, stats: {}, toasts: [], panes: [], opens: [], panesThrow: false, panesGate: null, openGate: null, writes: [], reads: [], lists: [], listErrors: {}, statErrors: {}, existsThrows: new Set(), lower: null, order: [], env: { HOME, ...(locale === null ? {} : { AUTOPILOT_LOCALE: locale }), ...env }, clock: undefined as never }
   w.clock = mock.clock(on, { now: nowMs })
   // the suite pins zh-TW: the band words these cases assert are the zh-TW table's. Answered here rather than by mock.env, which keeps
   // its own copy, so a test can change a variable between ticks
@@ -201,6 +206,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   on('fs.write', ($, e) => { w.writes.push(e.path); return { value: undefined } })
   on('fs.list', ($, e) => {
     w.lists.push(e.path)
+    if (w.listErrors[e.path] !== undefined) throw new Error(w.listErrors[e.path])
     const prefix = e.path.replace(/\/$/, '') + '/'
     const seen = new Map<string, 'file' | 'dir'>()
     for (const p of Object.keys(w.files)) {
@@ -230,6 +236,8 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   on('session.root', () => ({ value: '/work/repo' }))
   on('session.start', () => ({ cwd: CWD }))
   on('session.end', () => ({ sessionId: w.sid.value }))
+  // the band hook calls next(e) (BL-0352): beneath it stands the engine, which answers `{ type: 'engine' }` (its own drawing) unless a test put a mod there
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => (w.lower !== null ? w.lower($, e) : { type: 'engine' as const, ref: 0 }))
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.open', async ($, e) => {
@@ -242,6 +250,26 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   on('ui.close', ($, e) => { w.panes = w.panes.filter(id => id !== e.id); return { value: undefined } })
   on('ui.panes', async () => { if (w.panesGate !== null) await w.panesGate; if (w.panesThrow) throw new Error('engine cannot list panes'); return { value: w.panes.map(id => ({ id, title: 'Autopilot', isShown: true, isFocused: false, isPlaced: true })) } })
   return w
+}
+
+
+// Layout E1: the band row also holds the tabs, which take their cells off the line's width. The cases below that read the line itself mount with the width plus the tabs' width and read
+// the tree without the gap and the tabs, so they still measure what the line draws at the width they name.
+let barLocale: 'en' | 'zh-TW' = 'zh-TW'
+const tabsW = (): number => barStrip(null, makeT(barLocale), null, null).width
+const isTabNode = (n: Node): boolean => typeof n.props?.key === 'string' && (n.props.key.startsWith('tab:') || n.props.key === 'forge')
+function lineOnly(tree: Node): Node {
+  const kids = (tree.children || []) as Node[]
+  return tree.type === 'Box' && kids.length > 5 ? { ...tree, children: kids.slice(0, kids.length - 5) } : tree // the gap and the four tabs
+}
+async function mountAbove($: any, spec: any) {
+  const ui = await $.ui.mount({ ...spec, props: { ...spec.props, bodyColumns: spec.props.bodyColumns + tabsW() + 1 } })
+  const out: Record<string, unknown> = {}
+  for (const k of Object.keys(ui)) out[k] = typeof ui[k] === 'function' ? ui[k].bind(ui) : ui[k]
+  for (const k of Object.getOwnPropertyNames(Object.getPrototypeOf(ui) ?? {})) if (k !== 'constructor' && typeof ui[k] === 'function') out[k] = ui[k].bind(ui)
+  out.drawn = async () => lineOnly(await ui.drawn())
+  out.findAll = async (q: unknown) => ((await ui.findAll(q)) as Node[]).filter(n => !isTabNode(n))
+  return out as any
 }
 
 const BAND_PROPS = { hasSurvey: false, isWorking: false, maxRows: 6, bodyColumns: 120, scroll: { offset: 0, bodyRows: 5 }, view: { agentId: undefined } }
@@ -302,7 +330,7 @@ async function bandParts($: any, surface: (typeof SURFACES)[number], columns = 1
 
 // the real band (AbovePrompt): its drawn tree, the full line (Texts + the ⓘ label) and the ⓘ Button node
 async function bandLine($: any, surface: (typeof SURFACES)[number], columns = 120) {
-  const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: columns }, viewport: { columns: Math.max(columns, 20), rows: 50, isFullscreen: true } })
+  const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: columns }, viewport: { columns: Math.max(columns, 20), rows: 50, isFullscreen: true } })
   const tree = (await ui.drawn()) as Node
   const info = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'info') // the slots are Buttons too: the ⓘ is the one keyed info
   await ui.unmount()
@@ -582,6 +610,165 @@ for (const surface of SURFACES) {
     expect(await bandText($, surface)).toContain('no project · ⚑6 · run:')
   })
 
+  // age alone never makes a snapshot stale once its writer is gone: only a change of THIS project's sources does (the watcher's sourceFingerprint groups)
+  const IDENT = 'git-common-dir:/work/repo/.git'
+  const MDIR = '/tmp/autopilot-dispatch-runs'
+  const KDIR = AHOME + '/session-mode'
+  const MINE = MDIR + '/mine.manifest.json'
+  const groups = () => [
+    { role: 'manifest', dir: MDIR, dir_mtime_ms: 1000, suffix: '.manifest.json', match_field: 'repo_identity', match_value: IDENT, files: [{ path: MINE, mtime_ms: 1000 }] },
+    { role: 'marker', dir: KDIR, dir_mtime_ms: 1000, suffix: '.json', match_field: 'project_key', match_value: KEY,
+      files: [{ path: KDIR + '/' + SID_A + '.json', mtime_ms: 1000 }, { path: KDIR + '/' + SID_B + '.json', mtime_ms: 1000 }] },
+  ]
+  let on0: () => any = () => null
+  // an old publish by a writer that left: every recorded source stat-s as recorded (1000) until `touch` says otherwise
+  const oldWorld = (over: Record<string, unknown>, touch: (w: any) => void = () => undefined, now: number = NOW_STALE) => {
+    const tree = base()
+    tree[MINE] = j({ repo_identity: IDENT, run_id: 'mine' })
+    tree[MDIR + '/theirs.manifest.json'] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'theirs' })
+    tree[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({ writer: null, sources: groups(), ...over }))
+    const w = worldEn(on0(), tree, now)
+    for (const p of [MDIR, KDIR, MINE, KDIR + '/' + SID_A + '.json', KDIR + '/' + SID_B + '.json']) w.stats[p] = { size: 0, mtimeMs: 1000 }
+    touch(w)
+    return w
+  }
+  const OTHER_MARKER = KDIR + '/s-other.json'
+  test('band: an old publish whose writer left and whose sources did not move is ok, not stale (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({})
+    await start($, surface)
+    const text = await bandText($, surface)
+    expect(text).toContain(FOUND)
+    expect(text).not.toContain('stale')
+  })
+  test('band: another project\'s manifest and marker moving, and a cost row another session wrote, leave this project ok (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({}, w => {
+      w.files[MDIR + '/theirs2.manifest.json'] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'theirs2' })
+      w.files[MDIR + '/theirs.manifest.json'] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'theirs' })
+      w.stats[MDIR] = { size: 0, mtimeMs: 2000 }; w.stats[MDIR + '/theirs.manifest.json'] = { size: 0, mtimeMs: 2000 }
+      w.files[OTHER_MARKER] = j({ session_id: 's-other', project_key: 'ffffffffffffffff', level: 'l5' })
+      w.stats[KDIR] = { size: 0, mtimeMs: 2000 }
+      w.files['/home/u/.claude/metrics/costs.jsonl'] = '{"ts":"2026-10-04T10:03:00Z","session":"other","cost_usd":1}\n'
+      w.stats['/home/u/.claude/metrics/costs.jsonl'] = { size: 90, mtimeMs: 2000 }
+    })
+    await start($, surface)
+    const text = await bandText($, surface)
+    expect(text).toContain(FOUND)
+    expect(text).not.toContain('stale')
+  })
+  for (const [label, touch] of [
+    ['a manifest of this project changed', (w: any) => { w.stats[MINE] = { size: 0, mtimeMs: 2000 } }],
+    ['a new manifest of this project appeared', (w: any) => { w.files[MDIR + '/new.manifest.json'] = j({ repo_identity: IDENT, run_id: 'new' }); w.stats[MDIR] = { size: 0, mtimeMs: 2000 } }],
+    ['a manifest of this project was deleted', (w: any) => { delete w.files[MINE]; delete w.stats[MINE]; w.statErrors[MINE] = 'ENOENT'; w.stats[MDIR] = { size: 0, mtimeMs: 2000 } }],
+    ['a listed manifest of this project can no longer be checked (EACCES)', (w: any) => { w.statErrors[MINE] = "EACCES: permission denied, stat '" + MINE + "'" }],
+    ['the manifest directory cannot be listed after its mtime moved (EACCES)', (w: any) => { w.stats[MDIR] = { size: 0, mtimeMs: 2000 }; w.listErrors[MDIR] = "EACCES: permission denied, scandir '" + MDIR + "'" }],
+    ['a marker of this project changed', (w: any) => { w.stats[KDIR + '/' + SID_A + '.json'] = { size: 0, mtimeMs: 2000 } }],
+    ['a new marker of this project appeared', (w: any) => { w.files[KDIR + '/s-new.json'] = j({ session_id: 's-new', project_key: KEY, level: 'l5' }); w.stats[KDIR] = { size: 0, mtimeMs: 2000 } }],
+  ] as [string, (w: any) => void][]) {
+    test('band: an old publish whose writer left is stale and says what changed when ' + label + ' (' + surface + ')', async ($, on) => {
+      on0 = () => on
+      oldWorld({}, touch)
+      await start($, surface)
+      const text = await bandText($, surface)
+      expect(text).toContain('changed since the last publish at')
+      expect(text).not.toContain(FOUND)
+    })
+  }
+  test('band: a new manifest that cannot be parsed yet is not stale, is not remembered, and is seen once it is repaired into this project\'s (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const NEWF = MDIR + '/half.manifest.json'
+    const w = oldWorld({}, w0 => { w0.files[NEWF] = '{"repo_identity": "git-comm'; w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND) // unreadable now: no verdict of change
+    w.files[NEWF] = j({ repo_identity: IDENT, run_id: 'half' }) // the rename landed: it is this project's
+    await w.clock.advance(5000)
+    const text = await bandText($, surface)
+    expect(text).toContain('changed since the last publish at')
+    expect(text).not.toContain(FOUND)
+  })
+  test('band: a new manifest that fails to read is retried, not remembered (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const NEWF = MDIR + '/late.manifest.json'
+    const w = oldWorld({}, w0 => { w0.files[NEWF] = j({ repo_identity: IDENT, run_id: 'late' }); w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+    const real = w.files[NEWF]
+    w.files[NEWF] = undefined as never // listed but unreadable (the test engine's read throws ENOENT for it) until the second poll
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+    w.files[NEWF] = real
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain('changed since the last publish at')
+  })
+  test('band: another project\'s new manifest is read once, however many polls follow, and leaves this project ok (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const FOREIGN = MDIR + '/foreign.manifest.json'
+    const w = oldWorld({}, w0 => { w0.files[FOREIGN] = j({ repo_identity: 'git-common-dir:/other/repo/.git', run_id: 'f' }); w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+    await start($, surface)
+    await w.clock.advance(5000)
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).toContain(FOUND)
+    expect(w.reads.filter((p: string) => p === FOREIGN).length).toBe(1)
+  })
+  test('band: a writer that left and a source that moved is stale even while valid_for_s still runs (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({}, w => { w.stats[MINE] = { size: 0, mtimeMs: 2000 } }, NOW_FRESH)
+    await start($, surface)
+    const text = await bandText($, surface)
+    expect(text).toContain('changed since the last publish at')
+    expect(text).not.toContain(FOUND)
+  })
+  test('band: a writer that left and sources that did not move is ok while valid_for_s still runs (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({}, () => undefined, NOW_FRESH)
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+  })
+  for (const [label, content] of [
+    ['has no owner field', { run_id: 'x' }],
+    ['has a null owner field', { repo_identity: null, run_id: 'x' }],
+    ['has a non-string owner field', { repo_identity: 7, run_id: 'x' }],
+  ] as [string, Record<string, unknown>][]) {
+    test('band: a new manifest that ' + label + ' is not remembered as another project\'s and is seen once repaired into this project\'s (' + surface + ')', async ($, on) => {
+      on0 = () => on
+      const NEWF = MDIR + '/incomplete.manifest.json'
+      const w = oldWorld({}, w0 => { w0.files[NEWF] = j(content); w0.stats[MDIR] = { size: 0, mtimeMs: 2000 } })
+      await start($, surface)
+      expect(await bandText($, surface)).toContain(FOUND)
+      w.files[NEWF] = j({ repo_identity: IDENT, run_id: 'x' })
+      await w.clock.advance(5000)
+      expect(await bandText($, surface)).toContain('changed since the last publish at')
+    })
+  }
+  test('band: a listed file recorded as absent that cannot be stat-ed is a change (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    const g = groups()
+    g[0].files[0].mtime_ms = null as never
+    oldWorld({ sources: g }, w => { w.statErrors[MINE] = 'ENOENT' })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('changed since the last publish at')
+  })
+  test('band: a sources list that is present but unreadable cannot confirm no change (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({ sources: 'garbage' })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('changed since the last publish at')
+  })
+  test('pane: idle_exit with unmoved sources shows the data and a neutral idle note, no warning (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({ exit_reason: 'idle_exit' })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain(FOUND)
+    const p = await paneParts($, surface)
+    expect(p.head.join('\n')).toContain('watcher idle · resumes on your next message once something changes')
+    expect(p.head.join('\n')).not.toContain('stale')
+  })
+  test('band: a listed writer that stopped publishing stays stale whatever the sources did (' + surface + ')', async ($, on) => {
+    on0 = () => on
+    oldWorld({ writer: { pid: 1, session_id: null, started_at: PUBLISHED } })
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('the watcher is not publishing')
+  })
+
   test('band: stale after valid_for_s; a re-read never makes an old envelope fresh (' + surface + ')', async ($, on) => {
     const w = worldEn(on, base(), NOW_STALE)
     await start($, surface)
@@ -607,6 +794,26 @@ for (const surface of SURFACES) {
     w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json'] = j(envelope({}, 'some-other-root')) // wrong root
     await w.clock.advance(5000)
     expect(await bandText($, surface)).toContain('unavailable')
+  })
+
+  test('band: no envelope but a failed launch result reads the same failure sentence the hook returns; an ok result or a stale id does not (' + surface + ')', async ($, on) => {
+    const files = base()
+    const dir = AHOME + '/review/' + KEY + '/live/'
+    files[dir + 'watcher-launch.json'] = j({ launch_id: '0123456789abcdef', pid: 1, pid_start: 1, reported_sessions: [] })
+    files[dir + 'watcher-start.0123456789abcdef.json'] = j({ launch_id: '0123456789abcdef', ok: false, reason: 'dispatch runs directory unusable: /tmp/x is owned by uid 7' })
+    const w = worldEn(on, files)
+    delete w.files[LIVE + '/runs/' + KEY + '--' + ROOT + '.json']
+    delete w.files[LIVE + '/runs/' + KEY + '.json']
+    await start($, surface)
+    expect(await bandText($, surface)).toContain('watcher failed to start: dispatch runs directory unusable: /tmp/x is owned by uid 7')
+    // an ok result for the current launch id is not a failure
+    w.files[dir + 'watcher-start.0123456789abcdef.json'] = j({ launch_id: '0123456789abcdef', ok: true, reason: null })
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).not.toContain('failed to start')
+    // a failed result of an OLDER launch id (the record names another one) is not this launch's
+    w.files[dir + 'watcher-start.0123456789abcdef.json'] = j({ launch_id: 'ffffffffffffffff', ok: false, reason: 'old' })
+    await w.clock.advance(5000)
+    expect(await bandText($, surface)).not.toContain('failed to start')
   })
 
   test('band: a malformed envelope is unreadable and never throws (' + surface + ')', async ($, on) => {
@@ -657,7 +864,7 @@ for (const surface of SURFACES) {
     files[AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'] = j(model())
     const w = world(on, files)
     await start($, surface)
-    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+    const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     await w.clock.advance(5000)
     await w.clock.advance(5000)
     expect(w.opens.length).toBe(1)
@@ -890,13 +1097,13 @@ for (const surface of SURFACES) {
     files[AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'] = j(model())
     const w = world(on, files)
     await start($, surface)
-    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 100, rows: 50, isFullscreen: true } })
+    const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 100, rows: 50, isFullscreen: true } })
     await w.clock.advance(5000)
     await w.clock.advance(5000)
     expect(w.opens.length).toBe(0)
     await band.unmount()
     // not fullscreen at 200 columns: still no pane
-    const band2 = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 200, rows: 50, isFullscreen: false } })
+    const band2 = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 200, rows: 50, isFullscreen: false } })
     await w.clock.advance(5000)
     expect(w.opens.length).toBe(0)
     await band2.unmount()
@@ -2018,7 +2225,7 @@ test('read-only: the mod never writes a file', async ($, on) => {
   files[AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'] = j(model())
   const w = world(on, files)
   await start($, 'terminal')
-  const band = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
+  const band = await mountAbove($, { plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
   await w.clock.advance(20000)
   await band.unmount()
   expect(w.writes).toEqual([])
@@ -2471,7 +2678,7 @@ for (const surface of SURFACES) {
     const w = world(on, richWorld())
     await start($, surface)
     for (const cols of [209, 119, 60]) {
-      const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
+      const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
       const buttons = (await ui.findAll({ type: 'Button' })) as Drawn[]
       const info = buttons.find(b => b.props?.key === 'info') as Drawn
       expect(info.props?.plain).toBe(true)
@@ -2482,7 +2689,7 @@ for (const surface of SURFACES) {
       expect(buttons[buttons.length - 1]).toBe(info) // and it is still the last control on the line
       await ui.unmount()
     }
-    const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     await ui.press({ key: 'info' })
     await ui.unmount()
     expect(w.opens.map(o => o.id)).toEqual(['autopilot-live'])
@@ -2521,7 +2728,7 @@ for (const surface of SURFACES) {
       [60, ['verdict', 'dispatch', 'hygiene', 'info']],
     ]
     for (const [cols, keys] of cases) {
-      const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
+      const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
       const buttons = (await ui.findAll({ type: 'Button' })) as Drawn[]
       await ui.unmount()
       expect(buttons.map(b => b.props?.key)).toEqual(keys)
@@ -2532,7 +2739,7 @@ for (const surface of SURFACES) {
       }
     }
     const slotText = async (key: string) => {
-      const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+      const ui = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
       const b = ((await ui.findAll({ type: 'Button' })) as Drawn[]).find(x => x.props?.key === key) as Node
       await ui.unmount()
       return textOf(b)
@@ -2545,9 +2752,9 @@ for (const surface of SURFACES) {
   test('P8 band: pressing a slot opens the pane, with the keyboard, on the tab that explains it (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
-    const pairs: [string, string][] = [['dispatch', 'dispatch'], ['decisions', 'review'], ['spend', 'spend'], ['hygiene', 'hygiene'], ['review', 'review'], ['unit', 'now'], ['verdict', 'now'], ['position', 'now']]
+    const pairs: [string, string][] = [['dispatch', 'dispatch'], ['decisions', 'decide'], ['spend', 'spend'], ['hygiene', 'hygiene'], ['review', 'review'], ['unit', 'now'], ['verdict', 'now'], ['position', 'now']]
     for (const [slot, tab] of pairs) {
-      const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+      const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
       await band.press({ key: slot })
       await band.unmount()
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
@@ -2573,7 +2780,7 @@ for (const surface of SURFACES) {
     await fold.press({ key: 'b' + at })
     await fold.unmount()
     expect((await rowsNow())[at].startsWith('▸ 位置')).toBe(true)
-    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+    const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
     await band.press({ key: 'position' })
     await band.unmount()
     expect((await rowsNow())[at].startsWith('▾ 位置')).toBe(true)
@@ -2584,7 +2791,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     let release: () => void = () => {}
     w.openGate = new Promise<void>(r => { release = r })
-    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const band = () => mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const a = await band()
     const pa = a.press({ key: 'info' }) // parked on the gate
     const b = await band()
@@ -2611,7 +2818,7 @@ for (const surface of SURFACES) {
   test('P7 band: the info press cycles the seven tabs while the pane is open; closed it opens on Now (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
-    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const band = () => mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
       const tab = (await activeKeyOf(pane))
@@ -2670,7 +2877,7 @@ for (const surface of SURFACES) {
   test('keyboard: › and the ⓘ share one order: a ⓘ press after a › press continues from the tab showing (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
-    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     await band.press({ key: 'info' }) // closed -> Now
     const pane = await paneTabs($, surface)
     await pane.press({ key: 'next' }) // -> Decide
@@ -2696,7 +2903,7 @@ for (const surface of SURFACES) {
     const w = world(on, richWorld())
     await start($, surface)
     w.panesThrow = true
-    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const band = () => mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const shownTab = async () => {
       const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
       const tab = (await activeKeyOf(pane))
@@ -2719,7 +2926,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     let release: () => void = () => {}
     w.openGate = new Promise<void>(r => { release = r })
-    const band = () => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const band = () => mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const first = await band()
     const firstPress = first.press({ key: 'info' }) // the open is parked on the gate: the pane is not listed yet
     const second = await band()
@@ -2740,11 +2947,11 @@ for (const surface of SURFACES) {
     await start($, surface)
     let release: () => void = () => {}
     w.panesGate = new Promise<void>(r => { release = r })
-    const a = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const a = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pa = a.press({ key: 'info' })
-    const b = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const b = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pb = b.press({ key: 'info' })
-    const c = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const c = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pc = c.press({ key: 'info' })
     await new Promise(r => setTimeout(r, 20))
     release()
@@ -2758,7 +2965,7 @@ for (const surface of SURFACES) {
     await start($, surface)
     let release: () => void = () => {}
     w.openGate = new Promise<void>(r => { release = r })
-    const a = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const a = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pa = a.press({ key: 'info' }) // parked on the open gate
     await new Promise(r => setTimeout(r, 20))
     await start($, surface) // session.start resets the press state while that press is in flight
@@ -2769,9 +2976,9 @@ for (const surface of SURFACES) {
     w.panes = [] // the person closed it
     let release2: () => void = () => {}
     w.panesGate = new Promise<void>(r => { release2 = r })
-    const b = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const b = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pb = b.press({ key: 'info' })
-    const c = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    const c = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     const pc = c.press({ key: 'info' })
     await new Promise(r => setTimeout(r, 20))
     release2()
@@ -3474,7 +3681,7 @@ test('Review tab: a ladder rung outside U0..U5 is clamped, never a negative repe
 
 // ---- wrapping (pure): long values wrap under the value column, nothing is clipped, nothing is wider than the pane ----
 test('wrapLines: a kv row wraps with a hanging indent of 12 cells, a long path breaks after a /, a token longer than the line is hard-broken, short lines are untouched', () => {
-  const long = '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36/some/deep/dir'
+  const long = '/home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36/some/deep/dir'
   const lines = wrapLines([{ text: 'cache       ' + long, hang: 12, segs: [{ text: 'cache       ', dim: true }, { text: long }] }], 40)
   expect(lines.length).toBeGreaterThan(1)
   for (const l of lines) expect(displayWidth(l.text)).toBeLessThanOrEqual(40)
@@ -3565,8 +3772,8 @@ test('band phase: a task-sourced phase renders in the session locale, not the pr
 })
 
 test('hygiene tab: a long cache dir and a long worktree command wrap in full at 60 columns; the name loses only its tail', () => {
-  const dir = '/home/cookys/.claude/plugins/cache/autopilot/autopilot/2.36.36'
-  const target = '/home/cookys/projects/autopilot/.claude/worktrees/some-very-long-worktree-name-here-and-then-some-more-words'
+  const dir = '/home/ubuntu/.claude/plugins/cache/autopilot/autopilot/2.36.36'
+  const target = '/home/ubuntu/projects/autopilot/.claude/worktrees/some-very-long-worktree-name-here-and-then-some-more-words'
   const snap = {
     header: 'h', sections: NO_SECTIONS,
     detail: {
@@ -4349,10 +4556,10 @@ test('now: a section heading runs a rule to the edge; pressing it folds the sect
 
 // ---- background work in the Now tab's working section: shells and watches from the messages, subagents from $.agent.list() ----
 // The texts are the shapes Claude Code wrote into a real transcript (ids and paths synthetic).
-const BG_OUT = '/tmp/claude-1000/proj/sid/tasks/bqd50316d.output'
+const BG_OUT = '/tmp/claude-2000/proj/sid/tasks/bqd50316d.output'
 const bgText = (id: string, out: string) => 'Command running in background with ID: ' + id + '. Output is being written to: ' + out + '. You will be notified when it completes.'
 const bgUse = (id: string, extra: Record<string, unknown> = {}, input: Record<string, unknown> = { command: 'bash hooks/tests/run.sh', description: 'full suite', run_in_background: true }) =>
-  ({ tool_use_id: 'toolu_' + id, tool: 'Bash', input, result: { stdout: '', stderr: '', interrupted: false, isImage: false, noOutputExpected: false, backgroundTaskId: id }, text: bgText(id, '/tmp/claude-1000/proj/sid/tasks/' + id + '.output'), ...extra })
+  ({ tool_use_id: 'toolu_' + id, tool: 'Bash', input, result: { stdout: '', stderr: '', interrupted: false, isImage: false, noOutputExpected: false, backgroundTaskId: id }, text: bgText(id, '/tmp/claude-2000/proj/sid/tasks/' + id + '.output'), ...extra })
 const monUse = (id: string) => ({ tool_use_id: 'toolu_' + id, tool: 'Monitor', input: { description: 'watch CI', command: 'gh run watch' }, result: { taskId: id, timeoutMs: 30000, persistent: false }, text: 'Monitor started (task ' + id + ', expires in 30s). You will be notified on each event.' })
 const note = (taskId: string, body: string) => U('<task-notification>\n<task-id>' + taskId + '</task-id>\n' + body + '\n</task-notification>')
 const doneNote = (taskId: string, status = 'completed') => note(taskId, '<tool-use-id>toolu_' + taskId + '</tool-use-id>\n<output-file>/tmp/x.output</output-file>\n<status>' + status + '</status>\n<summary>Background command "x" ' + status + '</summary>')
@@ -4392,7 +4599,7 @@ test('activity: without a stored result (headless) the ids come from the result 
   const shell = { ...bgUse('b9'), result: undefined }
   const mon = { ...monUse('m9'), result: undefined }
   const echoed = { tool_use_id: 'toolu_e', tool: 'Bash', input: { command: 'docker create alpine' }, result: undefined, text: 'Created container with ID: 3f2a9c.' }
-  expect(scanBackground([A('', [shell, mon, echoed])]).map(t => [t.id, t.kind, t.output])).toEqual([['b9', 'shell', '/tmp/claude-1000/proj/sid/tasks/b9.output'], ['m9', 'monitor', null]])
+  expect(scanBackground([A('', [shell, mon, echoed])]).map(t => [t.id, t.kind, t.output])).toEqual([['b9', 'shell', '/tmp/claude-2000/proj/sid/tasks/b9.output'], ['m9', 'monitor', null]])
 })
 
 test('activity: a status notification or a TaskStop ends a row; a Monitor event keeps it and becomes its tail', () => {
@@ -4838,7 +5045,7 @@ for (const surface of SURFACES) {
     const elsewhere = await mountPane()
     await elsewhere.press({ key: 'dispatch' })
     await elsewhere.unmount()
-    const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
+    const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: { ...BAND_PROPS, bodyColumns: 209 }, viewport: { columns: 209, rows: 50, isFullscreen: true } })
     await band.press({ key: 'quota' })
     await band.unmount()
     const pane = await mountPane()
@@ -5530,3 +5737,370 @@ const HYGIENE_GOLDEN_76: string[] = [
   "▲ 開發目錄 · v2.37.0",
   "  落後遠端 3 個提交",
 ]
+
+
+// Layout E1 (BL-0352): the band row holds the indicator on the left and the tabs on the right; an open tab draws its content under a rule whose `━` stands under the tab's label.
+// The lower mod (forge-stats) is not part of these cases: no tab but the four pane tabs is drawn while nothing below answers.
+const E1_PROPS = { ...BAND_PROPS, maxRows: 8 }
+type Cell = { text: string; start: number; width: number }
+// the leaf Texts of one row in drawing order with the column each starts in: widths are displayWidth (a Chinese character is two cells), never `.length`
+function cellsOf(row: Node): Cell[] {
+  const cells: Cell[] = []
+  let x = 0
+  const put = (text: string) => { const width = displayWidth(text); cells.push({ text, start: x, width }); x += width }
+  const walk = (n: Node | string) => {
+    if (typeof n === 'string') return put(n)
+    if (n.type === 'Text') return put(textOf(n))
+    if ((n.children || []).length === 0 && typeof n.props?.label === 'string') return put(n.props.label as string) // a Button the host drew from its label
+    for (const c of n.children || []) walk(c as Node | string)
+  }
+  walk(row)
+  return cells
+}
+for (const surface of SURFACES) {
+  const mountE1 = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-e1', props: { ...E1_PROPS, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  // press a tab (the host draws again on the next mount) and read the tree
+  const drawE1 = async ($: any, press: string[] = [], props: Record<string, unknown> = {}) => {
+    await start($, surface) // a new session: no tab open
+    for (const key of press) {
+      const ui = await mountE1($, props)
+      await ui.press({ key })
+      await ui.unmount()
+    }
+    const ui = await mountE1($, props)
+    const tree = (await ui.drawn()) as Node
+    await ui.unmount()
+    return tree
+  }
+  const rowsOf = (tree: Node): Node[] => (tree.type === 'Box' && (tree.props as { flexDirection?: string } | undefined)?.flexDirection === 'column' ? ((tree.children || []) as Node[]) : [tree])
+
+  for (const locale of ['zh-TW', 'en'] as const) {
+    const make = (on: On) => (locale === 'en' ? worldEn(on, richWorld()) : world(on, richWorld()))
+    test('E1 bar: the four pane tabs sit at the right edge of the band row in the strip style; none open draws the row alone (' + locale + ', ' + surface + ')', async ($, on) => {
+      make(on)
+      await start($, surface)
+      const tree = await drawE1($)
+      expect(rowsOf(tree).length, 'one row, no rule').toBe(1)
+      const t = makeT(locale)
+      const text = cellsOf(rowsOf(tree)[0]).map(c => c.text).join('')
+      for (const id of ['now', 'decide', 'dispatch', 'review']) expect(text).toContain(' ' + t('tab.' + id) + ' ')
+      expect(displayWidth(text), 'the row fills the width the band was given').toBe(E1_PROPS.bodyColumns)
+    })
+
+    // the rule's `━` must start and end in the same cells as the open tab's label, for a Chinese or an English label, at the left end, in the middle and at the right end
+    for (const id of ['now', 'dispatch', 'review'] as const) {
+      test('E1 rule: the ━ stands exactly under the open tab ' + id + ' (' + locale + ', ' + surface + ')', async ($, on) => {
+        make(on)
+        await start($, surface)
+        const tree = await drawE1($, ['tab:' + id])
+        const [barRow, ruleRow] = rowsOf(tree)
+        const label = ' ' + makeT(locale)('tab.' + id) + ' '
+        const tab = cellsOf(barRow).find(c => c.text === label)
+        expect(tab, 'the open tab is in the row').toBeDefined()
+        const mark = cellsOf(ruleRow).find(c => /^━+$/.test(c.text))
+        expect(mark, 'the rule has a ━ run').toBeDefined()
+        expect({ start: (mark as Cell).start, width: (mark as Cell).width }).toEqual({ start: (tab as Cell).start, width: (tab as Cell).width })
+        expect(cellsOf(ruleRow).map(c => c.text).join('').replace(/━/g, '─'), 'the rule is one row across the whole width').toBe('─'.repeat(E1_PROPS.bodyColumns))
+      })
+    }
+  }
+
+  test('E1 tabs: pressing the open tab again closes it; pressing another one moves the open tab (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    expect(rowsOf(await drawE1($, ['tab:now'])).length).toBeGreaterThan(1)
+    expect(rowsOf(await drawE1($, ['tab:now', 'tab:now'])).length, 'the same tab again').toBe(1)
+    const moved = await drawE1($, ['tab:now', 'tab:review'])
+    const mark = cellsOf(rowsOf(moved)[1]).find(c => /^━+$/.test(c.text)) as Cell
+    const review = cellsOf(rowsOf(moved)[0]).find(c => c.text === ' 審查 ') as Cell
+    expect(mark.start).toBe(review.start)
+  })
+
+  test('E1 tabs: a new session starts with no tab open (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    expect(rowsOf(await drawE1($, ['tab:now'])).length).toBeGreaterThan(1)
+    await start($, surface)
+    expect(rowsOf(await drawE1($)).length).toBe(1)
+  })
+
+  test('E1 現況: the project line has the project, the phase, the progress, the round and QC and the spend, and none of the lamps the left side already has; the buttons open the pane (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    await start($, surface)
+    const rows = rowsOf(await drawE1($, ['tab:now']))
+    expect(rows.length, 'bar, rule, project line, buttons').toBe(4)
+    const line = walkTexts(rows[2]).map(textOf).join('')
+    expect(line).toMatch(/3\/5/)
+    expect(line).toMatch(/R3/)
+    expect(line).toMatch(/QC/)
+    expect(line).toMatch(/\$/)
+    expect(line).not.toMatch(/[●⊘⚑ⓘ]/)
+    const buttons = walkTexts(rows[3]).map(textOf).join('')
+    expect(buttons).toContain('[ 開面板 ]')
+    expect(buttons).toContain('[ 看派工 ]')
+    const open = await mountE1($)
+    await open.press({ key: 'open:dispatch' })
+    await open.unmount()
+    expect(w.opens.length).toBe(1)
+    expect(await shownTabOf($, surface)).toBe('dispatch')
+  })
+
+  for (const id of ['dispatch', 'review'] as const) {
+    test('E1 ' + id + ': one summary line from the band\'s own slots and an open-the-pane button (' + surface + ')', async ($, on) => {
+      const w = world(on, richWorld())
+      await start($, surface)
+      const rows = rowsOf(await drawE1($, ['tab:' + id]))
+      expect(rows.length, 'bar, rule, summary, button').toBe(4)
+      expect(walkTexts(rows[2]).map(textOf).join('').length).toBeGreaterThan(0)
+      expect(walkTexts(rows[3]).map(textOf).join('')).toContain('[ 開面板 ]')
+      const open = await mountE1($) // drawE1 above pressed the tab: it stays open
+      await open.press({ key: 'open:' + id })
+      await open.unmount()
+      expect(w.opens.length).toBe(1)
+      expect(await shownTabOf($, surface)).toBe(id)
+    })
+  }
+
+  test('E1 rows: when the content and its rule do not fit in maxRows the row alone stays (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    expect(rowsOf(await drawE1($, ['tab:now'], { maxRows: 3 })).length).toBe(1)
+    expect(rowsOf(await drawE1($, ['tab:now'], { maxRows: 4 })).length).toBe(4)
+  })
+
+  test('E1 ◆: pressing the decisions slot opens the 待決 tab (' + surface + ')', async ($, on) => {
+    world(on, richWorld())
+    await start($, surface)
+    const ui = await mountE1($, { bodyColumns: 250 }) // the decisions slot is drawn from 160 columns
+    await ui.press({ key: 'decisions' })
+    await ui.unmount()
+    expect(await shownTabOf($, surface)).toBe('decide')
+  })
+}
+
+// BL-0352: the forge tab. The mod below this hook on the ui.render chain (codeforge's forge-stats) draws its label as ONE Text when it is asked for one row, and its full view
+// when it is asked for twelve or more. The hook below plays that mod: it records every ask and answers by maxRows, as forge-stats does.
+const FORGE_LABEL = 'forge 93 tok/s'
+for (const surface of SURFACES) {
+  type Ask = { maxRows: number; bodyColumns: number; requestId: unknown; hasSurvey: boolean; hasScroll: boolean; bodyRows: number | undefined }
+  const forgeMod = (w: World, asks: Ask[], answer: { label?: 'text' | 'box' | 'engine'; full?: 'box' | 'engine' } = {}) => {
+    w.lower = ($, e) => {
+      asks.push({ maxRows: e.props.maxRows, bodyColumns: e.props.bodyColumns, requestId: (e as { requestId?: unknown }).requestId, hasSurvey: e.props.hasSurvey, hasScroll: Object.prototype.hasOwnProperty.call(e.props, 'scroll'), bodyRows: e.props.scroll?.bodyRows })
+      const { Box, Text } = $.ui.resolve(e)
+      if (e.props.maxRows === 1) {
+        const kind = answer.label ?? 'text'
+        if (kind === 'text') return Text({ children: FORGE_LABEL })
+        if (kind === 'box') return Box({ children: [Text({ children: FORGE_LABEL })] })
+        return { type: 'engine' as const, ref: 0 }
+      }
+      if (e.props.maxRows >= 12 && (answer.full ?? 'box') === 'box') return Box({ flexDirection: 'column', children: Array.from({ length: 12 }, (_, i) => Text({ children: 'FERRIS-' + i })) })
+      return { type: 'engine' as const, ref: 0 }
+    }
+  }
+  const F_PROPS = { ...BAND_PROPS, maxRows: 20 }
+  const mount = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: { ...F_PROPS, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  const draw = async ($: any, press: string[] = [], props: Record<string, unknown> = {}) => {
+    await start($, surface)
+    for (const key of press) {
+      const ui = await mount($, props)
+      await ui.press({ key })
+      await ui.unmount()
+    }
+    const ui = await mount($, props)
+    const tree = (await ui.drawn()) as Node
+    const forge = ((await ui.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'forge')
+    await ui.unmount()
+    return { tree, forge, text: cellsOf(tree).map(c => c.text).join('|') }
+  }
+
+  test('forge tab: a Text of one string from the mod below becomes the last tab, a Button keyed forge; the band row alone when none is open (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($)
+    expect(d.forge, 'a Button keyed forge is drawn').toBeDefined()
+    expect(d.text).toContain(' ' + FORGE_LABEL + ' ')
+    expect(d.tree.type).toBe('Box')
+    expect(((d.tree.props as { flexDirection?: string } | undefined)?.flexDirection)).toBeUndefined() // one row: nothing is stacked
+    expect(asks.map(a => a.maxRows), 'one ask, for the label').toEqual([1])
+    expect(asks[0].bodyColumns).toBeGreaterThanOrEqual(5)
+    expect(asks[0].bodyColumns).toBeLessThanOrEqual(30)
+  })
+
+  test('forge tab: the ━ stands under the forge label, the last and an ASCII tab, and the full view is drawn under the rule (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, ['forge'])
+    const rows = ((d.tree.children || []) as Node[])
+    const bar = cellsOf(rows[0])
+    const label = bar.find(c => c.text === ' ' + FORGE_LABEL + ' ') as Cell
+    const mark = cellsOf(rows[1]).find(c => /^━+$/.test(c.text)) as Cell
+    expect(label).toBeDefined()
+    expect({ start: mark.start, width: mark.width }).toEqual({ start: label.start, width: label.width })
+    expect(d.text).toContain('FERRIS-0')
+    expect(d.text).toContain('FERRIS-11')
+  })
+
+  test('forge tab: opened, the mod below is asked twice in one draw, the label first (one row) and the full view after it, with the rest of the rows (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    await draw($, ['forge'])
+    // the last draw: label then expansion
+    const last = asks.slice(-2)
+    expect(last.map(a => a.maxRows)).toEqual([1, 20 - 2])
+    expect(last[1].bodyColumns).toBe(F_PROPS.bodyColumns)
+  })
+
+  test('forge tab: both asks carry the requestId as received (forge-stats draws its Raster under it) (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    await draw($, ['forge'])
+    expect(asks.length).toBeGreaterThanOrEqual(2)
+    for (const a of asks) expect(a.requestId).toBe('rq-band-1')
+  })
+
+  test('forge tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent in both asks (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    await draw($, ['forge'], { scroll: { offset: 0, bodyRows: 19 } })
+    expect(asks.slice(-2).map(a => a.bodyRows)).toEqual([0, 17])
+    asks.length = 0
+    const { scroll: _none, ...noScroll } = F_PROPS
+    await start($, surface)
+    const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: noScroll, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    await ui.press({ key: 'forge' })
+    await ui.unmount()
+    const again = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: noScroll, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+    await again.drawn()
+    await again.unmount()
+    expect(asks.length).toBeGreaterThanOrEqual(2)
+    expect(asks.every(a => !a.hasScroll)).toBe(true)
+  })
+
+  test('forge tab: pressing it again closes it, and the full view is no longer asked for (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, ['forge', 'forge'])
+    expect(d.text).not.toContain('FERRIS')
+    expect(asks.slice(-1).map(a => a.maxRows)).toEqual([1])
+  })
+
+  test('forge tab: when the mod below answers nothing (the engine) or not a Text, there is no forge tab (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    for (const label of ['engine', 'box'] as const) {
+      forgeMod(w, [], { label })
+      const d = await draw($)
+      expect(d.forge, label).toBeUndefined()
+      expect(d.text, label).not.toContain('forge')
+    }
+  })
+
+  test('forge tab: no room for the full view (fewer than 12 rows under the rule) leaves the row alone and does not ask for it (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, ['forge'], { maxRows: 13 })
+    expect(d.text).not.toContain('FERRIS')
+    expect(asks.every(a => a.maxRows === 1)).toBe(true)
+    const e = await draw($, ['forge'], { maxRows: 14 })
+    expect(e.text).toContain('FERRIS-11')
+  })
+
+  test('forge tab: a maxRows that is NaN or missing asks nothing and draws no forge tab; the survey is passed down untouched (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    for (const bad of [Number.NaN, undefined]) {
+      const d = await draw($, [], { maxRows: bad })
+      expect(d.forge).toBeUndefined()
+      expect(d.text).toContain('ⓘ')
+    }
+    expect(asks).toEqual([])
+    const s = await draw($, [], { hasSurvey: true })
+    expect(s.text).not.toContain('ⓘ')
+    expect(asks.map(a => [a.maxRows, a.hasSurvey])).toEqual([[20, true]])
+  })
+
+  test('forge tab: with no lower mod at all (the engine alone) the row is the four tabs and nothing is stacked (' + surface + ')', async ($, on) => {
+    worldEn(on, richWorld())
+    const d = await draw($)
+    expect(d.forge).toBeUndefined()
+    expect(d.text).toContain('Now')
+  })
+}
+
+// ---- layout E1, the 待決 tab on the band row: the pane's own lines, compact (the first question and the send row) ----
+for (const surface of SURFACES) {
+  const decideBand = (on: any, decisions: object[] = [DQ1, DQ2, DQ3]) => {
+    const files = base()
+    files[W_MODEL] = j(model({ needs_decision: true, decisions }))
+    const w = world(on, files)
+    const submits: { text: string; origin: unknown }[] = []
+    on('prompt.submit', ($: any, e: any) => { submits.push({ text: e.text, origin: e.origin }); return { text: e.text } })
+    return { w, submits }
+  }
+  const mountD = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-d', props: { ...BAND_PROPS, maxRows: 8, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  const rowsD = async ($: any, press: string[] = []) => {
+    for (const key of press) {
+      const ui = await mountD($)
+      await ui.press({ key })
+      await ui.unmount()
+    }
+    const ui = await mountD($)
+    const tree = (await ui.drawn()) as Node
+    const keys = ((await ui.findAll({ type: 'Button' })) as Node[]).map(b => b.props?.key as string)
+    const inputs = ((await ui.findAll({ type: 'Input' })) as Node[]).length
+    await ui.unmount()
+    return { rows: ((tree.children || []) as Node[]), keys, inputs }
+  }
+  const textD = (n: Node): string => cellsOf(n).map(c => c.text).join('')
+
+  test('E1 待決: the first question and its options and the send row, from the pane\'s own lines; no text field, not the other questions (' + surface + ')', async ($, on) => {
+    decideBand(on)
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide'])
+    const all = d.rows.map(textD)
+    expect(all[0]).toContain(' 待決 ')
+    expect(all[2]).toContain('1. P5 殘留分頁要不要把已清掉的也列出來')
+    expect(all.some(r => r.includes('[ ] ★ OK  [ ] 完整顯示'))).toBe(true)
+    expect(all[all.length - 1]).toContain('[ 送出（已答 0/3） ]')
+    expect(all.join('\n')).not.toContain('U6')
+    expect(d.inputs).toBe(0)
+    for (const k of ['pick:d-4290499d:0', 'pick:d-4290499d:1']) expect(d.keys, k).toContain(k)
+    expect(d.keys, 'nothing chosen: no send Button').not.toContain('submit')
+  })
+
+  test('E1 待決: the ━ stands under the 待決 tab, a Chinese label in the middle of the row (' + surface + ')', async ($, on) => {
+    decideBand(on)
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide'])
+    const label = cellsOf(d.rows[0]).find(c => c.text === ' 待決 ') as Cell
+    const mark = cellsOf(d.rows[1]).find(c => /^━+$/.test(c.text)) as Cell
+    expect(label).toBeDefined()
+    expect({ start: mark.start, width: mark.width }).toEqual({ start: label.start, width: label.width })
+  })
+
+  test('E1 待決: a pick on the band is the pane\'s pick (one state), and the send Button sends ONE prompt (' + surface + ')', async ($, on) => {
+    const { submits } = decideBand(on)
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide', 'pick:d-4290499d:1'])
+    expect(d.rows.map(textD).some(r => r.includes('[ ] ★ OK  [x] 完整顯示'))).toBe(true)
+    expect(d.keys).toContain('submit')
+    expect((await paneParts($, surface, 'decide')).texts).toContain('  選項      [ ] ★ OK  [x] 完整顯示')
+    await rowsD($, ['submit'])
+    expect(submits.length).toBe(1)
+    expect(submits[0].text).toContain('d-4290499d')
+  })
+
+  test('E1 待決: with nothing to answer the tab says so on one line (' + surface + ')', async ($, on) => {
+    decideBand(on, [])
+    await start($, surface)
+    const d = await rowsD($, ['tab:decide'])
+    expect(d.rows.map(textD).join('\n')).toContain('目前沒有待你回答的問題')
+  })
+}

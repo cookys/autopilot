@@ -51,7 +51,7 @@ test('BL-0032: a resolution naming no open verified finding is reported as unmat
 });
 
 test('v2.36.3: an ABORTED generation closes nothing — the open finding survives it (was: closed by absence)', () => {
-  // 7840hs report 2026-09-05: hetero-review-loop finalize and check-phase-review-receipt both
+  // <host> report 2026-09-05: hetero-review-loop finalize and check-phase-review-receipt both
   // fed the aborted generation's (non-existent ⇒ empty) findings into this routine, so an abort
   // — branch moved during collection, or a seat's findings failed to parse — silently closed
   // every open verified finding. An abort reviewed nothing and must contribute nothing.
@@ -83,7 +83,7 @@ test('v2.36.3: finalized / aborted / finalized — the closure is attributed to 
 });
 
 test('v2.36.3: a stale/forged closed_findings stamp on a chain entry is ignored — closure comes from evidence only', () => {
-  // The field case (7840hs, plan 066): the pre-fix derive stamped g2 with
+  // The field case (<host>, plan 066): the pre-fix derive stamped g2 with
   // {id, closed_by_generation: 3} where g3 was the ABORTED generation. Re-deriving must not
   // honour that stamp: with no later finalized generation the finding is still open.
   const chain = [

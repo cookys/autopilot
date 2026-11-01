@@ -63,4 +63,28 @@ d = tree('stale', [{ ...good, verified_at: '2026-05-01' }]);
 run(d, '--write');
 const s = run(d, '--check');
 assert.equal(s.status, 0); assert.match(s.stderr, /WARN .*older than 60 days/);
+// relay2 g1: hooks_dir and scripts_dir come from the layout registry (REPO_LAYOUT_REGISTRY).
+const regFile = (name, edit) => {
+  const r = JSON.parse(JSON.stringify(require('./lib/repo-layout.js').DEFAULT_REGISTRY));
+  edit(r.paths);
+  const f = path.join(tmp, name + '.json');
+  fs.writeFileSync(f, JSON.stringify(r));
+  return f;
+};
+const runWith = (reg, d, ...a) => spawnSync('node', [SCRIPT, '--repo', d, '--today', '2026-10-16', ...a], { encoding: 'utf8', env: { ...process.env, REPO_LAYOUT_REGISTRY: reg } });
+const baseDoc = fs.readFileSync(path.join(tmp, 'ok', 'docs/hook-harness-matrix.md'), 'utf8');
+assert.match(baseDoc, /`scripts\/check-hook-inventory\.js`/, 'default scripts_dir is named in the doc');
+const toolReg = regFile('tooling-reg', (p) => { p.scripts_dir = 'tooling'; });
+const t1 = tree('lay-scripts', [good]);
+assert.equal(runWith(toolReg, t1, '--write').status, 0);
+const toolDoc = fs.readFileSync(path.join(t1, 'docs/hook-harness-matrix.md'), 'utf8');
+assert.match(toolDoc, /`tooling\/check-hook-inventory\.js`/, 'the doc names the registry scripts_dir');
+assert.doesNotMatch(toolDoc, /`scripts\/check-hook-inventory\.js`/, 'no literal scripts/ left in the doc');
+// the hook command regex follows hooks_dir: with hooks_dir moved away, the plain hooks/<stem>.js commands are no longer read
+const hookReg = regFile('hooks-reg', (p) => { p.hooks_dir = 'hooks/default'; });
+const t2 = tree('lay-hooks', [good]);
+assert.equal(runWith(hookReg, t2, '--write').status, 0);
+const hookDoc = fs.readFileSync(path.join(t2, 'docs/hook-harness-matrix.md'), 'utf8');
+const rows = (t) => t.split('\n').filter((l) => l.startsWith('| `')).length;
+assert.ok(rows(hookDoc) < rows(baseDoc), `hooks_dir=hooks/default must drop the stems read from hooks/<stem>.js (${rows(hookDoc)} vs ${rows(baseDoc)})`);
 console.log('hook-harness-matrix: all assertions passed');

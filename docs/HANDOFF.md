@@ -128,7 +128,7 @@ CHANGELOG 要單獨一段講「修正已出貨的 v2.36.26 繞道」。INDEX 列
 ## 驗證方式
 
 ```bash
-cd /home/cookys/projects/autopilot
+cd $HOME/projects/autopilot
 git status --porcelain                                          # 空
 git log --oneline -1                                            # 3faffd27
 bash hooks/tests/pending-revocation-fold.test.sh | tail -1      # 63 passed, 0 failed

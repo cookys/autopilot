@@ -53,7 +53,7 @@ The exact D2/D3/D4 consumer-manifest repair stayed in the same R4 lineage. Gener
 `platform-trigger-activation-r4-g2` produced terminal semantic `READY` under
 `generation_2_terminal`: both Sol and Gemini returned `READY`, findings were empty, and
 `next_generation` is `null`. The immutable artifact is
-`/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
+`$HOME/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
 (SHA-256 `5cbdfdeb86de9d85f4395a1e70f218e3ca72844c31684c76b2154399699dd1ed`).
 Implementation is merged. D1 emitted the closed [platform capability receipt](evidence/platform-capabilities.json): D2 owns two required IDs, D3 four, and D4 six; all required claims pass immediate version re-probe, while five optional IDs retain four blocked negative findings plus the validated Claude hook baseline. D2 now consumes its exact two-claim set before every agy provider invocation, captures the native JSON envelope privately, preserves only the response framing in worker-visible logs, and admits only validated usage into result/scorecard telemetry.
 

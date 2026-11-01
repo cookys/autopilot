@@ -2,7 +2,7 @@
 'use strict';
 
 // P1 acceptance for the foreman capability-exam generator (brief:
-// /tmp/claude-1000/foreman-impl-brief.md; spec: docs/plans/evidence/
+// $TMPDIR/foreman-impl-brief.md; spec: docs/plans/evidence/
 // 2026-09-21-foreman-exam-design-consult/claude-fable-5-1-SPEC.md).
 // Every validator/assertion this suite relies on is proven able to go red
 // (evidence-discipline discipline: a green test must be shown to be capable of failing).

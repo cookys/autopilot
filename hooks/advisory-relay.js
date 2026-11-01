@@ -86,6 +86,14 @@ function closeDecideReply(payload) {
   }
 }
 
+// BL-0336: the autostart's failure sentence (watcher could not start / live dir unusable) is the only thing this host adds to
+// stdout besides the advisory blob; it travels as a systemMessage, in the same JSON object when both exist.
+let sysMsg = null;
+function bye() {
+  try { if (sysMsg) fs.writeSync(1, JSON.stringify({ systemMessage: sysMsg })); } catch { /* fail-open */ }
+  process.exit(0);
+}
+
 try {
   let raw;
   try { raw = fs.readFileSync(0, 'utf8'); }
@@ -93,7 +101,7 @@ try {
   let payload;
   try { payload = JSON.parse(raw); } catch { process.exit(0); }
   try {
-    if (payload && typeof payload === 'object') require('./awaiting-owner.js').onUserPromptSubmit(payload);
+    if (payload && typeof payload === 'object') sysMsg = require('./awaiting-owner.js').onUserPromptSubmit(payload) || null;
   } catch (e) {
     process.stderr.write(`advisory-relay: live-state hosting fail-open: ${e && e.message ? e.message : e}\n`);
   }
@@ -102,30 +110,30 @@ try {
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
   }
-  if (process.env.AUTOPILOT_ADVISORY_RELAY === 'off') process.exit(0);
+  if (process.env.AUTOPILOT_ADVISORY_RELAY === 'off') bye();
   const sid = payload && payload.session_id;
   if (typeof sid !== 'string' || sid.length === 0) {
     process.stderr.write('advisory-relay: debug missing/empty session_id; queue not drained\n');
-    process.exit(0);
+    bye();
   }
 
   const { resolveLiveDir, sanitizeSessionId } = require('../scripts/lib/live-state-dir.js');
   const qfile = path.join(resolveLiveDir().base, 'advisory-queue', `${sanitizeSessionId(sid)}.jsonl`);
 
   let st;
-  try { st = fs.lstatSync(qfile); } catch { process.exit(0); }
-  if (!st.isFile() || st.size === 0) process.exit(0);
+  try { st = fs.lstatSync(qfile); } catch { bye(); }
+  if (!st.isFile() || st.size === 0) bye();
 
   const tmp = `${qfile}.drain.${process.pid}.${Date.now()}`;
   try { fs.renameSync(qfile, tmp); } catch (e) {
-    if (e && e.code === 'ENOENT') process.exit(0);
-    process.exit(0);
+    if (e && e.code === 'ENOENT') bye();
+    bye();
   }
 
   let body = '';
   try { body = fs.readFileSync(tmp, 'utf8'); } catch {
     try { fs.unlinkSync(tmp); } catch { /* ignore */ }
-    process.exit(0);
+    bye();
   }
 
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
@@ -159,11 +167,13 @@ try {
         hookEventName: 'UserPromptSubmit',
         additionalContext: texts.join('\n'),
       },
+      ...(sysMsg ? { systemMessage: sysMsg } : {}),
     }));
+    sysMsg = null;
   }
 
   try { fs.unlinkSync(tmp); } catch { /* ignore */ }
-  process.exit(0);
+  bye();
 } catch {
-  process.exit(0);
+  bye();
 }

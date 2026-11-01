@@ -1,4 +1,4 @@
-# P0 spike — real payloads and the id mapping (2026-09-05, aimax395, CC 2.1.260)
+# P0 spike — real payloads and the id mapping (2026-09-05, <host>, CC 2.1.260)
 
 Method: `~/.claude/settings.json` `statusLine.command` → `sl-tee.sh` (tee stdin to tmpfs, exec `codeforge statusline`),
 `subagentStatusLine.command` → `sub-tee.sh` (tee, print nothing), plus a throwaway PreToolUse `Bash|Read` hook

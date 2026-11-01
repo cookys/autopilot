@@ -169,7 +169,7 @@ assert_file_exists "$LEDGER/review-p6/chain.json" "case 6: chain.json written"
 assert_contains "$(cat "$LEDGER/review-p6/chain.json")" '"status": "pending-with-gap"' "case 6: status is pending-with-gap"
 assert_contains "$C6_OUT" "receipt floor is 1 (AUTOPILOT_MIN_REVIEWED_SEATS)" "case 6: WARN names the floor and its source"
 
-# Case 6b (v2.36.5, 7840hs plan 066): the SAME gap with the DEFAULT floor (all seats) is not
+# Case 6b (v2.36.5, <host> plan 066): the SAME gap with the DEFAULT floor (all seats) is not
 # written as a pending entry the checker would refuse forever — it is recorded aborted
 # (seat_gap_below_min), exit 1, and the message names counts, floor and the remedy.
 C6B_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p6b --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex,m2/med@agy" --allow-seat-gap 2>&1); C6B_RC=$?

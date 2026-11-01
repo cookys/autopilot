@@ -41,7 +41,14 @@ const path = require('path');
 const { parseChainCommand } = require('./lib/chain-command.js');
 
 const REPO = path.resolve(__dirname, '..');
-const HOOKS_DIR = path.join(REPO, 'hooks');
+// Paths come from the layout registry (scripts/lib/repo-layout.js), never from literals here.
+const LAYOUT = require('./lib/repo-layout.js');
+const HOOKS_DIR_REL = LAYOUT.path('hooks_dir');
+const HOOKS_JSON = LAYOUT.path('hooks_json');
+const OPT_IN_MANIFEST = LAYOUT.path('opt_in_manifest');
+const HOOKS_README = LAYOUT.path('hooks_readme');
+const POST_TOOL_CHAIN_LIB = LAYOUT.path('post_tool_chain_lib');
+const HOOKS_DIR = path.join(REPO, HOOKS_DIR_REL);
 
 // hooks/ scripts that are NOT hooks themselves (libs, tests, diagnostics, backups).
 const NON_HOOK = [
@@ -61,8 +68,9 @@ function readJson(rel) {
 
 // basename of a hook command → script stem (no extension), e.g.
 // "node ${CLAUDE_PLUGIN_ROOT}/hooks/mcp-health.js pre" → "mcp-health"
+const HOOK_CMD_RE = new RegExp(`${HOOKS_DIR_REL.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&')}/([A-Za-z0-9_-]+)\\.(js|sh)`);
 function stemFromCommand(cmd) {
-  const m = cmd.match(/hooks\/([A-Za-z0-9_-]+)\.(js|sh)/);
+  const m = cmd.match(HOOK_CMD_RE);
   return m ? m[1] : null;
 }
 
@@ -87,9 +95,9 @@ const MULTIPLEXER_EVENT_TABLE = {
 // one parser (quotes, escapes, ordered members; an unparseable chain command is an error, never a default list).
 // MEMBERS has one source, hooks/post-tool-chain-lib.js, read as text (not require'd: it pulls in hooks/_shared).
 function chainMembersList() {
-  const src = fs.readFileSync(path.join(HOOKS_DIR, 'post-tool-chain-lib.js'), 'utf8');
+  const src = fs.readFileSync(path.join(REPO, POST_TOOL_CHAIN_LIB), 'utf8');
   const lit = src.match(/const MEMBERS = \[([^\]]*)\]/);
-  if (!lit) throw new Error('cannot find MEMBERS in hooks/post-tool-chain-lib.js');
+  if (!lit) throw new Error(`cannot find MEMBERS in ${POST_TOOL_CHAIN_LIB}`);
   return [...lit[1].matchAll(/'([A-Za-z0-9_-]+)'/g)].map((x) => x[1]);
 }
 
@@ -98,23 +106,23 @@ function stemsFromHookBlock(eventMap, problems) {
   for (const event of Object.keys(eventMap || {})) {
     const seen = new Map(); // stem -> how it was registered in this event ('direct' | 'chain')
     const note = (stem, how) => {
-      if (problems && seen.has(stem)) problems.push(`hooks/hooks.json: ${event}: "${stem}" registered more than once (${seen.get(stem)} and ${how})`);
+      if (problems && seen.has(stem)) problems.push(`${HOOKS_JSON}: ${event}: "${stem}" registered more than once (${seen.get(stem)} and ${how})`);
       seen.set(stem, how);
     };
     for (const matcher of eventMap[event]) {
       for (const h of matcher.hooks || []) {
         let chain = null;
-        try { chain = parseChainCommand(h.command || ''); } catch (e) { if (problems) problems.push(`hooks/hooks.json: ${event}: ${e.message}`); continue; }
+        try { chain = parseChainCommand(h.command || ''); } catch (e) { if (problems) problems.push(`${HOOKS_JSON}: ${event}: ${e.message}`); continue; }
         if (chain) {
           let defaults = [];
-          try { defaults = chainMembersList(); } catch (e) { if (problems) problems.push(`hooks/hooks.json: ${event}: ${e.message}`); }
+          try { defaults = chainMembersList(); } catch (e) { if (problems) problems.push(`${HOOKS_JSON}: ${event}: ${e.message}`); }
           // Order: the members must appear in MEMBERS order (plan 2.5: the registration order within one event is preserved).
           const idx = chain.members.map((m) => defaults.indexOf(m));
           if (problems && idx.some((i, k) => i >= 0 && k > 0 && idx[k - 1] >= 0 && i < idx[k - 1])) {
-            problems.push(`hooks/hooks.json: ${event}: post-tool-chain members [${chain.members.join(' ')}] are out of MEMBERS order [${defaults.join(' ')}]`);
+            problems.push(`${HOOKS_JSON}: ${event}: post-tool-chain members [${chain.members.join(' ')}] are out of MEMBERS order [${defaults.join(' ')}]`);
           }
           for (const stem of chain.members) {
-            if (problems && !defaults.includes(stem)) problems.push(`hooks/hooks.json: ${event}: post-tool-chain member "${stem}" is not in the chain's MEMBERS`);
+            if (problems && !defaults.includes(stem)) problems.push(`${HOOKS_JSON}: ${event}: post-tool-chain member "${stem}" is not in the chain's MEMBERS`);
             note(stem, 'chain');
             out.add(stem);
           }
@@ -139,25 +147,25 @@ function stemsFromHookBlock(eventMap, problems) {
 // to an existing regular .ts/.tsx file under <repo>/mods/. Returns a list of error strings.
 function validateModules(modules) {
   if (modules === undefined) return [];
-  if (!Array.isArray(modules)) return ['hooks/hooks.json: "modules" must be an array of paths'];
+  if (!Array.isArray(modules)) return [`${HOOKS_JSON}: "modules" must be an array of paths`];
   const errs = [];
   const modsRoot = path.join(REPO, 'mods') + path.sep;
   for (const m of modules) {
-    if (typeof m !== 'string' || !m) { errs.push(`hooks/hooks.json: modules entry is not a non-empty string: ${JSON.stringify(m)}`); continue; }
+    if (typeof m !== 'string' || !m) { errs.push(`${HOOKS_JSON}: modules entry is not a non-empty string: ${JSON.stringify(m)}`); continue; }
     const abs = path.resolve(HOOKS_DIR, m);
-    if (!abs.startsWith(modsRoot)) { errs.push(`hooks/hooks.json: module "${m}" must live under mods/`); continue; }
-    if (!/\.tsx?$/.test(abs)) { errs.push(`hooks/hooks.json: module "${m}" must end in .ts or .tsx`); continue; }
+    if (!abs.startsWith(modsRoot)) { errs.push(`${HOOKS_JSON}: module "${m}" must live under mods/`); continue; }
+    if (!/\.tsx?$/.test(abs)) { errs.push(`${HOOKS_JSON}: module "${m}" must end in .ts or .tsx`); continue; }
     let st = null;
     try { st = fs.statSync(abs); } catch (e) { /* missing */ }
-    if (!st) errs.push(`hooks/hooks.json: module "${m}" does not exist`);
-    else if (!st.isFile()) errs.push(`hooks/hooks.json: module "${m}" is not a regular file`);
+    if (!st) errs.push(`${HOOKS_JSON}: module "${m}" does not exist`);
+    else if (!st.isFile()) errs.push(`${HOOKS_JSON}: module "${m}" is not a regular file`);
   }
   return errs;
 }
 
 function deriveInventory() {
-  const hooksJson = readJson('hooks/hooks.json');
-  const manifest = readJson('hooks/opt-in-manifest.json');
+  const hooksJson = readJson(HOOKS_JSON);
+  const manifest = readJson(OPT_IN_MANIFEST);
 
   const modules = hooksJson.modules;
   const modErrors = validateModules(modules);
@@ -318,11 +326,11 @@ function runCheck(inv) {
   // hooks/README.md — canonical hooks doc: intro PROSE tally + Tier headers + Tier-A
   // membership (the count-blind class — 2026-06-22). A stale prose number escaped both
   // gates once (v2.23.0); the intro-tally regex survives the disabled tier going to zero.
-  checkTally(errors, 'hooks/README.md', /opt-in\*\* \(Tier B/, inv, ['defaultOn', 'optIn']);
-  checkHeaderCount(errors, 'hooks/README.md', /Default-On \(\d+ hooks\)/, inv.defaultOn.length);
-  checkHeaderCount(errors, 'hooks/README.md', /Opt-In \(\d+ hooks\)/, inv.optIn.length);
-  checkTierAMembership(errors, 'hooks/README.md', inv);
-  checkTierBMembership(errors, 'hooks/README.md', inv);
+  checkTally(errors, HOOKS_README, /opt-in\*\* \(Tier B/, inv, ['defaultOn', 'optIn']);
+  checkHeaderCount(errors, HOOKS_README, /Default-On \(\d+ hooks\)/, inv.defaultOn.length);
+  checkHeaderCount(errors, HOOKS_README, /Opt-In \(\d+ hooks\)/, inv.optIn.length);
+  checkTierAMembership(errors, HOOKS_README, inv);
+  checkTierBMembership(errors, HOOKS_README, inv);
 
   if (errors.length) {
     console.error('Hook inventory drift:\n');

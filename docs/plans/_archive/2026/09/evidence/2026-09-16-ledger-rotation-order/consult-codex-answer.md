@@ -28,7 +28,7 @@ The starting digest is:
 intakePayload.initial_state.last_output_artifact_digest
 ```
 
-which initial-state validation requires to equal `contract_digest`. It is not `initial_state_digest`; starting there would create an immediate false gap. See [implementation-campaign.js](/home/cookys/projects/autopilot/src/engine/implementation-campaign.js:616).
+which initial-state validation requires to equal `contract_digest`. It is not `initial_state_digest`; starting there would create an immediate false gap. See [implementation-campaign.js]($HOME/projects/autopilot/src/engine/implementation-campaign.js:616).
 
 “Two events share an input digest” is not, by itself, a fork. `RESUMED` is a legitimate self-edge `D → D`; the following event may also start at `D`. The current live ledger contains two such `RESUMED` cases, both paired with `terminal_stop`, so the proposed simple fork rule would reject two real histories.
 
@@ -38,7 +38,7 @@ Define a fork as multiple distinct complete valid replays. Before ordering:
 - Reject the same idempotency key bound to different event digests.
 - Permit self-edges when only one complete reducer-valid traversal exists.
 
-Repair-generation ordering remains fail-closed because the recovered sequence still passes the reducer’s generation and transition checks at [implementation-campaign.js](/home/cookys/projects/autopilot/src/engine/implementation-campaign.js:833).
+Repair-generation ordering remains fail-closed because the recovered sequence still passes the reducer’s generation and transition checks at [implementation-campaign.js]($HOME/projects/autopilot/src/engine/implementation-campaign.js:833).
 
 The intake and other journals should not be inserted into the walked event chain:
 

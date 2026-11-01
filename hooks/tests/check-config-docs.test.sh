@@ -143,6 +143,21 @@ assert_eq "$EXIT" "2" "(g2) missing registry is exit 2"
 node "$SCRIPT" --bogus >/dev/null 2>&1
 assert_eq "$?" "2" "unknown flag is exit 2"
 
+# --- relay2 g1: the scan root for scripts is the registry's scripts_dir, not a literal "scripts"
+mk_fixture
+mkdir -p "$FX/tooling"
+echo "const v = process.env.AUTOPILOT_MOVED_ONLY;" > "$FX/tooling/m.js"
+LREG="$TEST_TMP/cfgdocs-moved-registry.json"
+node -e '
+  const r = JSON.parse(JSON.stringify(require(process.argv[1]).DEFAULT_REGISTRY));
+  r.paths.scripts_dir = "tooling"; require("fs").writeFileSync(process.argv[2], JSON.stringify(r));
+' "$REPO_ROOT/scripts/lib/repo-layout.js" "$LREG"
+run
+assert_eq "$EXIT" "0" "layout negative control: with scripts_dir=scripts the file under tooling/ is not scanned (green)"
+REPO_LAYOUT_REGISTRY="$LREG" run --json
+assert_eq "$EXIT" "1" "layout: with scripts_dir=tooling the scan follows the registry and sees the unregistered env var"
+assert_contains "$OUT" "AUTOPILOT_MOVED_ONLY" "layout: the finding names the var read under the moved scripts_dir"
+
 # --- the real repo is green
 OUT="$(node "$SCRIPT" --json 2>&1)"; EXIT=$?
 assert_eq "$EXIT" "0" "real repo is in sync"

@@ -14,7 +14,7 @@ Add a named `isBlindDiscoveryCapableRunner()` capability representing the curren
 - `claude-native`
 - `anthropic-compatible`
 
-Use it in [campaign-intake.js](/home/cookys/projects/autopilot/src/engine/campaign-intake.js:1413) before any mission/generation claim. Keep the runtime guard in [dispatch-review.sh](/home/cookys/projects/autopilot/scripts/dispatch-review.sh:288) unchanged as defense in depth.
+Use it in [campaign-intake.js]($HOME/projects/autopilot/src/engine/campaign-intake.js:1413) before any mission/generation claim. Keep the runtime guard in [dispatch-review.sh]($HOME/projects/autopilot/scripts/dispatch-review.sh:288) unchanged as defense in depth.
 
 Use a distinct rejection such as `final_panel_seat_blind_incompatible`, in the same pre-spend class as `final_panel_seat_unqualified`. Reusing “unqualified” would prescribe the wrong remedy: a standing pin can fix qualification, but cannot make `codex` blind-capable.
 
@@ -75,7 +75,7 @@ Return distinct failures:
 - Shape failure: ordered labels are missing, a value is empty, or an allowed separator is absent.
 - Semantic failure: a parsed field normalizes to a blacklist entry.
 
-Normalizing the shell output to semicolons is acceptable as an additional canonicalization step, but it should not justify keeping [review.js](/home/cookys/projects/autopilot/src/runners/review.js:48) semicolon-only. Node is an independent validation boundary, and the accepted contract should not depend on which producer serialized it.
+Normalizing the shell output to semicolons is acceptable as an additional canonicalization step, but it should not justify keeping [review.js]($HOME/projects/autopilot/src/runners/review.js:48) semicolon-only. Node is an independent validation boundary, and the accepted contract should not depend on which producer serialized it.
 
 Drive both validators from one shared test-vector table. Required valid rows:
 
@@ -97,7 +97,7 @@ Required invalid rows:
 
 Agree, with two provenance guards.
 
-On a validation failure in [dispatchReviewJson](/home/cookys/projects/autopilot/src/runners/review.js:228):
+On a validation failure in [dispatchReviewJson]($HOME/projects/autopilot/src/runners/review.js:228):
 
 - Keep `result: null`.
 - Keep the original `parseError`.
@@ -120,7 +120,7 @@ Suggested internal shape:
 }
 ```
 
-Propagate `raw_log` to the engine’s blocked/no-verdict result and to the failed seat receipt built in [autopilot-engine.js](/home/cookys/projects/autopilot/src/engine/autopilot-engine.js:4986).
+Propagate `raw_log` to the engine’s blocked/no-verdict result and to the failed seat receipt built in [autopilot-engine.js]($HOME/projects/autopilot/src/engine/autopilot-engine.js:4986).
 
 Make `raw_log` an optional diagnostic field on the closed final-panel-seat shape:
 
@@ -129,7 +129,7 @@ Make `raw_log` an optional diagnostic field on the closed final-panel-seat shape
 - Successful receipts can continue omitting it, preserving their stable shape/digest.
 - When present, include it in the receipt digest like other fields.
 
-I found no current review/campaign consumer that treats `raw_log` presence as verdict authority. Authority comes from `result`, `status`, `verdict`, and `review_digest`. Nevertheless, add an explicit regression because the seat schema and exact-key validation in [campaign-composition.js](/home/cookys/projects/autopilot/src/engine/campaign-composition.js:315) and [implementation-campaign-receipt.schema.json](/home/cookys/projects/autopilot/schemas/implementation-campaign-receipt.schema.json:210) must be updated carefully.
+I found no current review/campaign consumer that treats `raw_log` presence as verdict authority. Authority comes from `result`, `status`, `verdict`, and `review_digest`. Nevertheless, add an explicit regression because the seat schema and exact-key validation in [campaign-composition.js]($HOME/projects/autopilot/src/engine/campaign-composition.js:315) and [implementation-campaign-receipt.schema.json]($HOME/projects/autopilot/schemas/implementation-campaign-receipt.schema.json:210) must be updated carefully.
 
 ## Red-first assertions
 

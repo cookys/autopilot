@@ -3,7 +3,7 @@
 Not scored. Not used for V2 or V3. The pilot checks wiring only (plan section 4); Haiku results say nothing about Sonnet.
 
 - Run: `run-fbatch-campaign.js --runner cc --pilot`, model Haiku, CLI `2.1.309 (Claude Code)`, 2026-10-26 about 02:50 Taipei (UTC+8), ONOFF_MAX_USD 3.
-- Raw rows: `evals/skill-onoff/results/fbatch-pilot.jsonl` (+ `.runner-pin`). The rows keep the cost the old runner computed (`cost_usd`, every result added); the table below recomputes it. Per-cell transcripts: `/home/cookys/.autopilot/fbatch-pilot/run/pilot.jsonl.cells/` (outside the repo).
+- Raw rows: `evals/skill-onoff/results/fbatch-pilot.jsonl` (+ `.runner-pin`). The rows keep the cost the old runner computed (`cost_usd`, every result added); the table below recomputes it. Per-cell transcripts: `$HOME/.autopilot/fbatch-pilot/run/pilot.jsonl.cells/` (outside the repo).
 
 ## Cells
 

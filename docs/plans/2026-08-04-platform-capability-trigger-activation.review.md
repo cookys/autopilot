@@ -13,7 +13,7 @@
 - Frozen rubric SHA-256: `851531ee781e01ce59456eaed1eec8a557f7ee4edc09bb8f189a5dd1358da560`
 - Frozen manifest SHA-256: `0b0e4be04999232bcccbc728c80b579efe20c7e82539c851c96245f8ed20c331`
 - Controller artifact:
-  `/home/cookys/.autopilot/plan-review/86c6fe1a48cd998176137a2e3f982dd1884c66de67ccb0bf13461f79ba84801e/generation-01.json`
+  `$HOME/.autopilot/plan-review/86c6fe1a48cd998176137a2e3f982dd1884c66de67ccb0bf13461f79ba84801e/generation-01.json`
 - Artifact SHA-256: `9e2a50e1fbcb48ce73108f3fe3979b1b5458aa1bdbc14ae48b5897dc694225d1`
 
 The artifact is terminal with `verdict:CONDITIONAL`,
@@ -42,7 +42,7 @@ semantic verdict. It is never reopened, relabelled, or used to authorize generat
 - Frozen rubric SHA-256: `c5e0228093da7f0cb39fea4e7e132ac8aeb246b49dcfabe21798e9daac34df51`
 - Frozen manifest SHA-256: `a3368b3db19ef1a88849d72faa3198c2ba5519c2fe9ba17e95bafc94a392b10b`
 - Controller artifact:
-  `/home/cookys/.autopilot/plan-review/600fa0d7e15caa3cc8c738fdd62e429da596742c2824f8f07ddb09dab7877bc9/generation-01.json`
+  `$HOME/.autopilot/plan-review/600fa0d7e15caa3cc8c738fdd62e429da596742c2824f8f07ddb09dab7877bc9/generation-01.json`
 - Artifact SHA-256: `eb32cabf963f0296c0d877d8a961e9e10df3b016192e539be020ea73da1cc08b`
 
 The controller artifact is terminal `CONDITIONAL` with policy
@@ -77,7 +77,7 @@ R3's frozen semantic repair remains the executable content inherited by R4:
 - Generation 1 session: `platform-trigger-activation-r4-g1`
 - Generation 1 session key: `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`
 - Generation 1 controller artifact:
-  `/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-01.json`
+  `$HOME/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-01.json`
 - Generation 1 artifact SHA-256: `805b805d5bd4fe5d150ed079d42e0319bde3fe23a46fe3c9d3f170888d40486d`
 - Frozen generation 2 plan SHA-256: `08d89358d78b7487cb9daf0b9c537bcef68045125c564c960808b565f338dea6`
 - Frozen rubric SHA-256: `b0643fae8891911809af07890c45290821a47c251d657ae094fc8e1690905d1b`
@@ -89,7 +89,7 @@ R3's frozen semantic repair remains the executable content inherited by R4:
 - Generation 2 session: `platform-trigger-activation-r4-g2`
 - Generation 2 session key: `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`
 - Generation 2 controller artifact:
-  `/home/cookys/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
+  `$HOME/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
 - Generation 2 artifact SHA-256: `5cbdfdeb86de9d85f4395a1e70f218e3ca72844c31684c76b2154399699dd1ed`
 - Generation 2 result: terminal `READY`, semantic `READY`, policy `generation_2_terminal`,
   `findings:[]`, `next_generation:null`

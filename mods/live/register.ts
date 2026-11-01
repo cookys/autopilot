@@ -40,15 +40,17 @@ import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { SHOW_PRESS, showTarget } from './ui'
-import { Band } from './band'
+import { BandBar, BarRule, barContent, decideContent, forgeLabelOf, stackBand } from './band'
+import { barStrip } from './tabs'
+import type { BarTabId } from './tabs'
 import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
-  acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
-  slotTab, slotUnfolds, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
+  slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
 import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, QuotaWindow, Sources } from './model'
 
@@ -70,6 +72,7 @@ let timer: { cancel: () => void } | undefined
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
 let paneTab: PaneTab = 'now'
+let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
 const folded = new Set<string>() // the Now sections the person folded (SECTION ids); kept across /clear, a view preference and not tied to the transcript
 const recentTracker = makeRecentTracker()
@@ -114,7 +117,7 @@ async function readObject($: EngineInterface, path: string): Promise<Json | null
 function plain(state: LiveSnapshot['state'], text: string, over: Partial<LiveSnapshot> = {}): LiveSnapshot {
   return {
     state, text, band: null, header: text, pending: [], project_key: null, root_run_id: null, link: null, rows: null, gates: null,
-    sections: NO_SECTIONS, review: null, published_at: null, session_as_of: null, host_as_of: null, detail: NO_DETAIL, ...over,
+    sections: NO_SECTIONS, review: null, published_at: null, watcher_note: null, session_as_of: null, host_as_of: null, detail: NO_DETAIL, ...over,
   }
 }
 
@@ -174,6 +177,60 @@ async function resolveScope($: EngineInterface, autopilotHome: string, liveBase:
   return key === null ? null : { key, root: null, marker: null, campaign: [] }
 }
 
+// An old envelope is outdated only if something it was built from has changed since: age alone says nothing (a watcher that exited on purpose leaves a
+// snapshot that stays true). Only a snapshot whose writer is gone (writer null, the final publish) can be judged by its sources; a writer that is listed but
+// stopped publishing is a stuck or dead one, and keeps the age verdict. No `sources` list (an older watcher) keeps the age verdict too.
+// The sources are THIS project's (see sourceFingerprint): a listed file newer or gone is a change; a directory whose own mtime moved (anyone's create / rename /
+// delete) is listed and each file not seen before is read once and judged by this project's match value.
+// What counts as "not this project's", and what does not (an error is never an answer):
+//  - only a file that was READ and PARSED as an object whose match field is a STRING that is not this project's goes into `notOurs` (a manifest or marker never changes owner, so
+//    it is never read again). A read or parse error is NOT cached: the next poll reads it again, so a file that is repaired into this project's is seen.
+//  - a new file that cannot be read or parsed right now does not make the snapshot stale this time: the writers create it by tmp + rename, so a half-written file
+//    is not normally visible; it is retried on the next poll.
+//  - a listed file or directory of this project that cannot be checked (stat fails: gone, or EACCES, the engine gives a message only) reads as changed (stale),
+//    and so does a directory that cannot be listed once its mtime moved: with no way to confirm nothing changed, the age verdict stands.
+const notOurs = new Set<string>()
+async function judgeByChange($: EngineInterface, check: EnvelopeCheck): Promise<EnvelopeCheck> {
+  const env = check.envelope as Json
+  if (env.sources === undefined) return check // an older watcher: no list, the age verdict stands
+  const moved: EnvelopeCheck = { ...check, status: 'stale', moved: true }
+  const groups = sourcesOf(env)
+  if (groups === null) return moved // a list that is there but unreadable cannot confirm nothing changed
+  for (const g of groups) {
+    for (const f of g.files) {
+      const st = await $.fs.stat(f.path).catch(() => null)
+      if (st === null || sourceMoved(f.mtime_ms, st.mtimeMs)) return moved // a listed file that cannot be checked is a change, whatever was recorded
+    }
+    const dirSt = await $.fs.stat(g.dir).catch(() => null)
+    if (dirSt === null) {
+      // absent then and still absent is no change; any other failure (EACCES: the engine gives a message only) cannot be told from it by stat, so ask exists
+      const absent = await $.fs.exists(g.dir).then(x => !x).catch(() => false)
+      if (absent && g.dir_mtime_ms === null) continue
+      return moved
+    }
+    if (!sourceMoved(g.dir_mtime_ms, dirSt.mtimeMs)) continue
+    let entries: { name: string; kind: string }[]
+    try { entries = await $.fs.list(g.dir) } catch { return moved }
+    const known = new Set(g.files.map(f => f.path))
+    for (const e of entries) {
+      if (e.kind !== 'file' || !e.name.endsWith(g.suffix)) continue
+      const p = g.dir.replace(/\/+$/, '') + '/' + e.name
+      const memo = p + '|' + g.match_field + '=' + g.match_value
+      if (known.has(p) || notOurs.has(memo)) continue
+      const text = await readText($, p)
+      if (text === null) continue // unreadable now: not an answer, not cached, read again next poll
+      const parsed = parseJson(text)
+      if (!parsed.ok || !isObject(parsed.value)) continue // same: a half-written or foreign shape is retried
+      const owner = parsed.value[g.match_field]
+      if (owner === g.match_value) return moved
+      if (typeof owner !== 'string') continue // field missing, null or not a string: an incomplete file, not another project's; read again next poll
+      if (notOurs.size > 20000) notOurs.clear()
+      notOurs.add(memo)
+    }
+  }
+  return { status: 'fresh', envelope: env }
+}
+
 // The envelope of one scope: the tmpfs file, then the SSD copy; a fresh one beats a stale one.
 async function findEnvelope($: EngineInterface, autopilotHome: string, liveBase: string, scope: Scope, nowMs: number): Promise<EnvelopeCheck> {
   const scopeKey = scopeKeyOf(scope.key, scope.root)
@@ -182,7 +239,9 @@ async function findEnvelope($: EngineInterface, autopilotHome: string, liveBase:
   let stale: EnvelopeCheck | null = null
   let malformed = false
   for (const path of paths) {
-    const check = checkEnvelope(await readText($, path), want, nowMs)
+    let check = checkEnvelope(await readText($, path), want, nowMs)
+    // a writer that is gone (the final publish) leaves a snapshot judged by what it was built from, never by its age: a change makes it stale even while valid_for_s runs
+    if ((check.status === 'fresh' || check.status === 'stale') && check.envelope !== null && check.envelope.writer === null) check = await judgeByChange($, check)
     if (check.status === 'fresh') return check
     if (check.status === 'stale' && stale === null) stale = check
     if (check.status === 'malformed') malformed = true
@@ -297,6 +356,17 @@ async function resolveT($: EngineInterface): Promise<T> {
   return makeT(resolveLocale({ config: ui === null ? undefined : ui.locale, env: envLocale, language, lang }))
 }
 
+// BL-0336: why the watcher did not come up, from the launch record the autostart hook also reads (<autopilot home>/review/<key>/live/):
+// the failed result of the CURRENT launch id, or null. Shown instead of "unavailable" / "stale" so the band says the same sentence the hook did.
+async function launchFailure($: EngineInterface, autopilotHome: string, key: string): Promise<string | null> {
+  const dir = autopilotHome + '/review/' + key + '/live/'
+  const rec = await readObject($, dir + 'watcher-launch.json')
+  if (rec === null || typeof rec.launch_id !== 'string' || !/^[0-9a-f]{16}$/.test(rec.launch_id)) return null
+  const res = await readObject($, dir + 'watcher-start.' + rec.launch_id + '.json')
+  if (res === null || res.launch_id !== rec.launch_id || res.ok !== false) return null
+  return typeof res.reason === 'string' && res.reason !== '' ? res.reason : 'unknown reason'
+}
+
 async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{ snap: LiveSnapshot; counts: Counts | null; acceptance: string | null }> {
   const none = (snap: LiveSnapshot) => ({ snap, counts: null, acceptance: null })
   const STATE_TEXT = stateText(t)
@@ -333,6 +403,8 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const found = baseFind.found
   const keyed = { project_key: scope.key, root_run_id: scope.root }
   if (found.envelope === null) {
+    const failure = await launchFailure($, autopilotHome, scope.key)
+    if (failure !== null) return none(plain('unavailable', STATE_TEXT.watcherFailed(failure), keyed))
     const malformed = finds.some(f => f.found.status === 'malformed')
     return none(malformed ? plain('unreadable', STATE_TEXT.unreadable, keyed) : plain('unavailable', STATE_TEXT.unavailable(), keyed))
   }
@@ -376,7 +448,11 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
     host_as_of: typeof env.host_today_as_of === 'string' ? env.host_today_as_of : null,
   }
   if (fresh.length === 0) {
+    const failure = await launchFailure($, autopilotHome, scope.key)
+    if (failure !== null) return { snap: plain('stale', STATE_TEXT.watcherFailed(failure), common), counts: null, acceptance: null }
     const at = published !== null && Number.isFinite(Date.parse(published)) ? hhmm(Date.parse(published)) : null
+    // a watcher that is gone (writer null) over sources that moved: say what happened, not that the watcher is "not publishing"
+    if (found.moved === true) return { snap: plain('stale', STATE_TEXT.staleMoved(at), common), counts: null, acceptance: null }
     return { snap: plain('stale', STATE_TEXT.stale(at), common), counts: null, acceptance: null }
   }
   // W3a sources. The per-session files are named by the sanitised sid; every sidecar is read for THIS scope only.
@@ -419,7 +495,8 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
   const band = bandView(env, jobModel, scope.key, nowMs, src, t)
   return {
     snap: plain('ok', bandLine1(band) + (band.reason === null ? '' : '\n' + band.reason), {
-      ...common, band, header: headerText(env, sid, ctx, t), metrics: { ctx }, pending: jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions,
+      ...common, watcher_note: typeof env.exit_reason === 'string' && env.exit_reason !== '' && env.writer === null ? STATE_TEXT.watcherNote(env.exit_reason) : null,
+      band, header: headerText(env, sid, ctx, t), metrics: { ctx }, pending: jobModel === null || !jobModel.needs_decision ? [] : jobModel.decisions,
       sections: buildSections(src, foreman),
       review,
       detail: {
@@ -751,6 +828,12 @@ async function pruneDecide($: EngineInterface, listed: ReadonlySet<string>, ok: 
   await update($, DECIDE, s => ({ ...s, picks: keep(s.picks), notes: keep(s.notes), sent: keep(s.sent) }))
 }
 
+// the forge tab: the widest label asked of the mod below, the narrowest worth asking for, the cells the indicator keeps at least, the rows the full forge view needs
+const FORGE_LABEL_MAX = 30
+const FORGE_LABEL_MIN = 5
+const BAND_MIN_COLS = 30
+const FORGE_FULL_ROWS = 12
+
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
 
 // After a press on a tab Button (a click, or Tab / arrows + Enter) the keyboard ring returns to the `›` chip, so the next Enter steps on instead of
@@ -767,6 +850,7 @@ async function ringToNext($: EngineInterface): Promise<void> {
 // (mods/register.ts) registers the one hook and calls this and the viewer's start; the live mod's own tests use `register` below, which hooks it alone.
 export async function startLive($: EngineInterface): Promise<void> {
   paneTab = 'now'
+  barTab = null
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
   decided = null
@@ -785,7 +869,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return next(e)
   })
 
-  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     viewport = e.viewport ? { columns: e.viewport.columns, isFullscreen: e.viewport.isFullscreen } : null
     if (e.props.hasSurvey) return next(e)
     // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (7 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
@@ -818,12 +902,10 @@ export function registerLive(on: Parameters<Register>[0]): void {
     // a slot pressed opens the pane on the tab that explains it (model.ts slotTab). It is a press like the ⓘ's: it takes a sequence number, so an
     // ⓘ press still in flight becomes stale and cannot drag the tab back, and it records its tab as `decided` while its open is in flight, so an
     // ⓘ landing meanwhile steps on from the slot's tab instead of reading a pane $.ui.panes() does not list yet.
-    const slot = async (id: SlotId) => {
+    const openOn = async (tab: PaneTab, unfold: string | null = null) => {
       const seq = ++pressSeq
-      const tab = slotTab(id)
       decided = Promise.resolve(tab)
       paneTab = tab
-      const unfold = slotUnfolds(id)
       if (unfold !== null) folded.delete(unfold)
       try {
         $.ui.invalidate('ui.render')
@@ -832,7 +914,50 @@ export function registerLive(on: Parameters<Register>[0]): void {
         if (seq === pressSeq) decided = null
       }
     }
-    return Band($.ui.resolve(e), snapshot, e.props.bodyColumns, info, tr, slot)
+    const slot = (id: SlotId) => openOn(slotTab(id), slotUnfolds(id))
+    // a tab of the band row: the open tab is a memory state; pressing it again closes it
+    const onTab = (id: BarTabId) => {
+      barTab = barTab === id ? null : id
+      $.ui.invalidate('ui.render')
+    }
+    const el = $.ui.resolve(e)
+    const columns = e.props.bodyColumns
+    // a maxRows that is missing or not a number is no room: the mod below is not asked
+    const rows = Number.isFinite(e.props.maxRows) ? e.props.maxRows : 0
+    const t = tr
+    // What the mod below (codeforge's forge-stats) is asked: the same event, only maxRows, bodyColumns and scroll.bodyRows changed (bodyRows follows maxRows, never below 0; a scroll
+    // that was not there stays absent). requestId and every other field stay as received.
+    const lower = (maxRows: number, bodyColumns: number) => {
+      const scroll = e.props.scroll
+      return next({ ...e, props: { ...e.props, maxRows, bodyColumns, ...(scroll === undefined ? {} : { scroll: { ...scroll, bodyRows: Math.max(0, scroll.bodyRows - (e.props.maxRows - maxRows)) } }) } })
+    }
+    // The forge tab's label: one row, as wide as the room the other tabs and the indicator leave (at most FORGE_LABEL_MAX). Asked on every draw, before the open tab's content.
+    let forge: string | null = null
+    const labelCols = Math.min(FORGE_LABEL_MAX, columns - BAND_MIN_COLS - barStrip(snapshot, t, null, null).width - 3)
+    if (rows >= 1 && labelCols >= FORGE_LABEL_MIN) {
+      const text = forgeLabelOf(await lower(1, labelCols))
+      forge = text === null ? null : truncateToWidth(text, labelCols)
+    }
+    if (barTab === 'forge' && forge === null) barTab = null // the mod below stopped answering: the tab is gone
+    const active = barTab
+    const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge)
+    const open = (tab: PaneTab) => { void openOn(tab) }
+    let content: unknown[] = []
+    if (active === 'forge') {
+      // the room under the bar and the rule; the mod below needs FORGE_FULL_ROWS of it. Asked AFTER the label: forge-stats keeps the last maxRows it was given to decide whether to blit.
+      if (rows - 2 >= FORGE_FULL_ROWS) {
+        const below = await lower(rows - 2, columns)
+        if (below !== undefined && below !== null && (below as { type?: string }).type !== 'engine') content = [below]
+      }
+    } else if (active === 'decide') {
+      // the pane's own 待決 lines, compact; a press is the pane's decidePress, and the draw is asked again once it has written the state
+      content = decideContent(el, snapshot, await read($, DECIDE), columns, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) })
+    } else if (active !== null) {
+      content = barContent(el, snapshot, active, columns, t, { onSlot: slot, onOpen: open })
+    }
+    if (active !== 'forge' && rows < 2 + content.length) content = [] // the rule and the rows do not fit: the first row alone stays
+    if (content.length === 0) return bar.node
+    return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: await read($, DECIDE), inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }, decideScroll)))

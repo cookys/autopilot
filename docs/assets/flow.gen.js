@@ -196,5 +196,5 @@ const out = {
   'flow.zh-TW.svg': gen(ZH,DARK),
   'flow.zh-TW.light.svg': gen(ZH,LIGHT),
 };
-for (const [f,c] of Object.entries(out)) fs.writeFileSync(`/home/cookys/projects/autopilot/docs/assets/${f}`, c);
+for (const [f,c] of Object.entries(out)) fs.writeFileSync(require("path").join(__dirname, f), c);
 console.log('wrote', Object.keys(out).join(', '));

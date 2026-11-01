@@ -1,7 +1,7 @@
-# HANDOFF — 座位考場（2026-09-22，cuda）
+# HANDOFF — 座位考場（2026-09-22，<host>）
 
 > 與同目錄 `HANDOFF.md`（wave-1 落地）是**不同線**，別互相覆蓋。
-> 本機 cookys-cuda，fleet handle `cuda`。HEAD `1341dce8`，樹乾淨，領先 origin 4 個 commit，v2.36.87。
+> 本機 <host>，fleet handle `<host>`。HEAD `1341dce8`，樹乾淨，領先 origin 4 個 commit，v2.36.87。
 
 ## 一句話
 
@@ -64,12 +64,12 @@ v1 的 4/5 天花板是**一種 plant**：`reversal`，18 場 trial 有 17 場�
 
 | 工作 | 怎麼查 | 備註 |
 |---|---|---|
-| **fable-5.1 答「如何讓考卷證明席位坐得上」** | `/tmp/claude-1000/seat-fable.json`（`status` 欄）；產出在 `raw_log` 指的檔案 | 90m 額度 |
-| **gpt-6-astra 同一題** | `/tmp/claude-1000/seat-astra.json` | 90m 額度 |
+| **fable-5.1 答「如何讓考卷證明席位坐得上」** | `/tmp/claude-<uid>/seat-fable.json`（`status` 欄）；產出在 `raw_log` 指的檔案 | 90m 額度 |
+| **gpt-6-astra 同一題** | `/tmp/claude-<uid>/seat-astra.json` | 90m 額度 |
 | **foreman phase-1（sonnet）** | agent id `ae139808f35cb0e2f`，用 SendMessage 戳 | U2 dispatch 已跑 47 分鐘 |
 | **foreman 的 U2 grok dispatch** | `pgrep -f "hetero/foreman-generator-u2"` | ⚠️ **沒有 timeout 會停它**，見下 |
 
-題目本文：`/tmp/claude-1000/seatability-question.md`（5.9 KB，五題，含所有硬約束）。
+題目本文：`/tmp/claude-<uid>/seatability-question.md`（5.9 KB，五題，含所有硬約束）。
 接手後**先自己審再交出去**，特別是第 5 題（可證明性）最容易給出漂亮但做不出來的答案。
 
 ## 這個 session 修掉的五個缺陷（全部同一家族）

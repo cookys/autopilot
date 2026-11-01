@@ -2,8 +2,8 @@
 
 **Plan**: [`docs/plans/_archive/2026/09/2026-09-04-default-dispatch-topology.md`](../../plans/_archive/2026/09/2026-09-04-default-dispatch-topology.md)
 **Branch**: `feat/default-dispatch-topology` · **Target**: v2.35.16 (PATCH: new hook + scripts, no new skill/agent)
-**Requested**: owner via the revival.3d CEO on cuda, 2026-09-04 (`msg_01M1MZ55SZFJYA5A68EW9PF8QW`)
-**Status**: P0–P4 shipped in v2.35.16 (qc three-seat FIX-THEN-SHIP → six fixes → sol delta SHIP after one refuted finding); P5 (fleet rollout, cuda first) is a follow-up
+**Requested**: owner via the revival.3d CEO on <host>, 2026-09-04 (`msg_01M1MZ55SZFJYA5A68EW9PF8QW`)
+**Status**: P0–P4 shipped in v2.35.16 (qc three-seat FIX-THEN-SHIP → six fixes → sol delta SHIP after one refuted finding); P5 (fleet rollout, <host> first) is a follow-up
 
 ## Topology of this project's own execution (dogfood)
 

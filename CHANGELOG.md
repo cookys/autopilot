@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- layout-lint (3.0.0 relayout section 2, no version bump): `scripts/lib/repo-layout.js` is the one registry of repo paths (stage bootstrap to P5, 38 named path keys, the 8-row placement decision table with work records before docs, top-level and root-file allowlists, per-file exceptions) and `scripts/layout-lint.js` checks the tracked files against it, enforcing only the rules of the current stage. No file moves and no reader changes yet; `hooks/tests/layout-lint.test.sh` carries the negative controls and CI runs the lint.
+- suite-baseline (3.0.0 relayout section 2, no version bump): `tools/migrate/suite-baseline.js` (`list`, `run-all`, `record`, `compare`) records each suite's id, count and pass/fail from one full run and diffs two runs through a layout-map, so a file move cannot silently drop, add or change a suite; the two `scripts/tests/` suites are held as `pending_join: "P3"`. Test with negative controls: `hooks/tests/suite-baseline.test.sh`.
+- layout readers (3.0.0 relayout section 2, no version bump): `check-plan-graduation.js`, `affected-suites.js`, `doc-drift-gate.js`, `check-config-docs.js`, `scaffold-mission.js`, `lib/sealed-docs.js`, `check-hook-inventory.js`, `hook-harness-matrix.js`, `preflight-release.sh` and `hooks/tests/run.sh` now take their repo paths from `scripts/lib/repo-layout.js` instead of literals (the two shell readers stop with rc 2 when a key cannot be resolved, with no fallback); behaviour at stage bootstrap is unchanged. `hooks/post-tool-chain-lib.js` is left alone on purpose: its only path is a require of a sibling file in the same directory. Review fixes: no reader bypasses a key the registry has any more (plans archive and evidence dirs, `scripts_dir`, `docs_dir`, `claude_dir`, `hooks_dir` in the readers that still held literals; sealed-docs scans `docs_dir` and uses `missions_dir` only for mission manifests), each with a regression test that moves the key in a temporary registry. `layout-lint` also checks that every sync-manifest trigger and every serial-suites entry hits a tracked file and sits under a registry path (one way: a directory above a registry value is red; an unreadable serial-suites file exits 2), with negative controls in `hooks/tests/layout-lint.test.sh`. The registry gains the `opencode_plugin_dir`, `codex_platform_dir` and `codex_hooks_dir` keys (38 named paths), and the `.claude/owner-kernel-governance.json` reader in `config-keys.json` is now `scripts/lib/repo-layout.js`.
+- leak-guard (3.0.0 open-source prep, script plus hook wiring, no version bump): `scripts/leak-guard.js` blocks personal paths, host names, private IPs, credential shapes and `.env` files in the lines a commit adds (pre-commit and `.github/workflows/checks.yml`; per-file exemptions only in `scripts/leak-guard-registry.json`), and `scripts/redact-personal.js` rewrites them to placeholders. Draft `SECURITY.md` added. Contract: `references/leak-guard.md`.
+- 3.0.0 section 0 cleanup (docs and code, no version bump): personal paths, host names, private IPs and emails in tracked files replaced with placeholders; test fixtures that must keep a hit are registered per file in `scripts/leak-guard-registry.json`. Archived machine-generated evidence (`.json`, `.log`, `.out`, `.patch`, `.diff` under `docs/`) is left as recorded and deferred to the P2 relocation. The guard also blocks e-mail addresses (`noreply@anthropic.com` and the example.com/.org/.net domains excepted), flattened Claude Code project dirs (`-home-<user>-`) and a hyphenated token containing a fleet host name (the whole token becomes `<host>`); runtime paths now redact to `/tmp/claude-<uid>` and `/run/user/<uid>`. Deferred: two evals JSON files (`evals/skill-onoff/packs/manifest.json`, `prereg/FROZEN.json`), three `.jsonl` evidence files, and the archived `platform-capabilities.json` evidence (its signed `binary_realpath` would turn 8 tests red if edited).
+- kimi-k31-author (mechanism, no version bump): the kimi author rail (`src/runners/kimi.js`) now accepts `kimi-code/k3.1-pro` beside `kimi-code/k3` and `kimi-code/k3-256k`; before, `dispatch-author-kimi.js --model kimi-code/k3.1-pro` stopped with `kimi_model_must_be_kimi-code_k3` although the model holds an official qualification. The allow-list stays a closed set (`kimi-code/k9` is still refused). Test: `hooks/tests/dispatch-author-kimi.test.sh`.
+- ensureu1-r1 (BL-0336 U1 review round 1, mechanism, no version bump): (1) a runs directory that `ensureRunsDir` refuses is never read: the engine's continuation scan (`loadMatchingRunsFromDefaultRunsDir`), `dispatch-tree` and `status runs` return the reason instead of reading a manifest planted in a 0777 directory. (2) An EXISTING TMPDIR is judged like a private directory (lstat, ancestors, a leaf others could write; a root-owned sticky root is taken as found and never chmod-ed); the shell `runs_tmpdir_ensure` checks it through node unless it is such a root. (3) Every parent-side failure after the record directory exists (flock missing, `watcher.log` cannot be opened, an explicit live dir refused) is written to the launch result, so the band and the next hook read it; only a record directory that cannot be made stays with the hook's own report. (4) The "told once" memo keeps a session list PER reason (A, B, A is told A once) and updates atomically under a lock. (5) g+w counts as "not other users" only for a user-private primary group (named after the user, or no other member and no other account using it; unreadable `/etc/group` = shared). (6)(7) Two sessions starting at once: one start lock plus a "launch still pending" check mean the loser neither overwrites the winner's record nor reads as a failure (a lost lock, exit 75, writes an ok result); a record whose pid is not written yet is undecided for 30 s. Tests: `hooks/runs-dir-refused-readers.test.js`, `hooks/runs-watch-start.test.js`, additions to `scripts/lib/runtime-paths.test.js`, `hooks/runs-watch-launch.test.js` and `hooks/tests/runs-dir-shell.test.sh`, each with negative controls.
+
+- ensureu1 (BL-0336 U1, mechanism plus text, no version bump): a fresh host (reboot, new machine) no longer stops the watcher on a missing dispatch-runs directory, and a failure now says why. Reproduced first: with `${TMPDIR:-/tmp}/<runs dir>` absent, `runWriter` ended `watcher startup failed: manifest directory does not exist` and the autostart hook printed nothing. (1) New `scripts/lib/runtime-paths.js`: the one source of the runs-dir and TMPDIR paths, with pure `evaluate*` (never mkdir/chmod) and creating `ensure*` returning `{ok,path,reason}`; trust rules in its header (every ancestor ours or root; a writable ancestor only when root-owned and sticky and never chmod-ed; root-owned symlinks followed, our own only below HOME with our own target; a 0755 leaf tightened to 0700, a leaf others could write refused untouched; missing layers made one by one at 0700). Shell callers use `node scripts/lib/runtime-paths.js runs-dir --ensure`. (2) Every place that rebuilt the path now calls it (dispatch-status, dispatch-tree, watch-foreman, plan-review-panel, compaction-handoff, workflow-snapshot, `status runs`, the engine's continuation read, runs-watch, the three dispatch rails and repo-identity.sh); a reader whose directory cannot be used shows the reason instead of an empty list. `bin/autopilot.js`, the autostart hook and the rails make a TMPDIR that is set but missing. (3) `runWriter` calls `ensureRunsDir` before its first tick; `flockProbe` makes the TMPDIR first and a TMPDIR that cannot be used is `tmpdir_unavailable`, not `flock_unavailable`. (4) Launch records (`src/status/watcher-launch.js`): every start writes `watcher-launch.json` (launch id, pid, pid start time, sessions already told) and the watcher child answers under that id in `watcher-start.<id>.json`; the next SessionStart / UserPromptSubmit that takes the full path returns `watcher 無法啟動：<reason>` (additionalContext / systemMessage), a dead launcher with no result reads as an unreported exit, a live directory that cannot be used reads `live 目錄無法使用：<reason>`, each once per session and reason; the band shows the same sentence from the same file. PostToolUse never reads the record and makes no directory on its alive path. Tests with negative controls: `scripts/lib/runtime-paths.test.js` + `.neg.test.js`, `hooks/runs-watch-launch.test.js`, `hooks/runs-watch-ensure.test.js`, `hooks/runs-watch-hotpath.test.js`, `hooks/tests/fresh-host-boot.test.sh`, `hooks/tests/runs-dir-shell.test.sh`, `hooks/tests/runtime-paths-drift.test.sh`, and `mods/live/live.test.ts`. The old `session-mode-watcher` test 8 (a nonexistent TMPDIR is an error) is replaced: that TMPDIR is now made, a TMPDIR that is a file is `tmpdir_unavailable`.
+
+- idlestate-4 (review fixes at the boundary, mechanism, no version bump): an envelope whose writer is gone (writer null) and that carries `sources` is judged by them always, not only once `valid_for_s` has passed: a change of this project's manifest or marker makes it stale at once. A file is remembered as another project's only when its owner field exists, is a string and differs (a missing, null or non-string field is an incomplete file, read again). A listed file that cannot be stat-ed is a change whatever mtime was recorded; a `sources` value that is present but unreadable cannot confirm no change; a directory that cannot be stat-ed is unchanged only when it was absent before and `exists` says it still is. Tests in `mods/live/live.test.ts`, red on the old code (12 of 664 per run).
+- idlestate-3 (review fixes, mechanism, no version bump): the mod no longer treats an error as "not this project's". Only a file that was read and parsed as an object with another owner is remembered; a read or parse error is not cached and is retried on the next poll (the writers create files by tmp + rename, so a half-written one is not normally visible; it makes the snapshot stale only once it parses as this project's). A listed file that cannot be checked (stat fails) and a directory that cannot be listed after its mtime moved read as changed (stale). `hooks/tests/runs-watch.test.sh` now checks which paths `sources` lists (this project's manifests and markers only, with another project's next to them); flipping the marker or manifest ownership test turns it red.
+- idlestate-2 (owner d-e5365e8a: filter by project, mechanism, no version bump): the `sources` an envelope carries are now this project's only. Two directory groups, each `{ role, dir, dir_mtime_ms, suffix, match_field, match_value, files }`: the manifest directory (files = the manifests of this project's rows, `manifest` path of each row; match `repo_identity`) and the session-mode directory (files = the markers whose `project_key` is this project's); the costs file is dropped (its rows carry a session and a cwd, not a project key, so a per-project check needs a tail read; the spend block keeps its own as_of times). The mod calls a snapshot outdated when a listed file is newer or gone, or when a directory's own mtime moved and a file it had not seen carries this project's match value (listed once, each new file read once, foreign ones remembered by path). Another project's dispatch, another session's marker or cost row never make this project stale. Not covered: the decision ledger, work-order progress, review receipts, per-session tasks and attention files. Tests: `mods/live/live.test.ts` (foreign changes stay ok; a changed, new or deleted manifest and a changed or new marker of this project are stale; each with a negative control) and `hooks/tests/runs-watch.test.sh`.
+- idlestate (BL-0327 gap, mechanism plus text, no version bump): the live mod no longer calls a snapshot `stale` because it is old. Age says nothing once the watcher is gone; what makes data outdated is that something it was built from changed. The watcher now writes `sources: [{ path, mtime_ms }]` into every envelope (the dispatch manifest directory, the session-mode marker directory, the costs file; stat-ed before each tick's collect; `schemas/runs-live.schema.json` and the codex mirror carry it). The mod, for an old envelope whose `writer` is null (the final publish), stats those paths: none moved means ok with the data as usual (plus a neutral dim note under the header when `exit_reason` is set: `state.idle_note` for `idle_exit`, `state.exited_note` for another reason); a moved one means stale with `state.stale_moved(_at)` ("changed since the last publish"). A listed writer that stopped publishing, or an envelope with no `sources` (an older watcher), keeps the age verdict. Known gap: the decision ledger, work-order progress, review receipts and the per-session tasks and attention files are not in the list. Tests: `mods/live/live.test.ts` (four cases per surface, negative controls red) and `hooks/tests/runs-watch.test.sh` (sources in the idle-exit envelope).
+
 - jobsfix (BL-0335, mechanism, no version bump): `affected-suites.js --jobs` no longer reports false reds from its own environment. Reproduced: `external-lifecycle-witness` failed in the pool AND in the serial rerun because the per-entry `XDG_RUNTIME_DIR` sat under `/tmp` and a 0775 directory, and the suite refuses a group/world-writable ancestor; `engine-qualify-a` failed the same way because the per-entry `TMPDIR` (`/tmp/affected-suites-jobs-XXXXXX/<n>/tmp`) was too long for the unix socket path its case broker builds under `$TMPDIR` (a plain `mktemp -d` TMPDIR passes); `dispatch-detach` failed in the serial part because a per-entry `XDG_RUNTIME_DIR` breaks its no-setsid tuple lease. Now: `TMPDIR` is a fresh `mkdtemp` `/tmp/asj.XXXXXX` per call (15 characters whatever the entry count, 0700; an entry counter in the path overflowed the 108-byte socket path at entry 1000, review round 1); pool entries get a private `XDG_RUNTIME_DIR` under the caller's (`external-lifecycle-witness` also refuses `/tmp` as an ancestor, so never under `/tmp`; none without a caller XDG), the serial list, reruns and extra runners keep the caller's (like a direct run) with a fresh `TMPDIR`; reruns always take a new directory (they already did; now tested); when a `--jobs` entry finishes its process group is SIGKILLed and confirmed gone (ESRCH, 5 s cap); a survivor makes the entry rc 1 with `lingering_group` in the record (a `setsid` escapee is outside any group and not tracked); the pool XDGs go under a private 0700 base, tried in order: the caller's absolute `XDG_RUNTIME_DIR`, then `$HOME/.cache/autopilot-asj` only if that is unusable, else one stderr line says the pool is not isolated; ancestors are checked before anything is created (owned by us or root, not group/world writable, except a root-owned sticky directory such as `/tmp`), and `killGroup` signals only the group (no positive-pid fallback, a recycled pid could be someone else's). The `capture mode already enabled` line seen in the 2026-10-29 log is an expected message of a passing suite, not the cause.
 
 - srunner (BL-0330, BL-0331, mechanism, no version bump): `affected-suites.js --run` now records each entry's wall seconds (`seconds` in the `--record` suites, the `rc=N <path>` line unchanged) and merges them into `~/.cache/autopilot/test-durations.tsv`, the file `run.sh --parallel` already uses (a fixture `--root` writes it only when `AUTOPILOT_TEST_DURATIONS_FILE` is set). New `--jobs N` (default 1, output byte-for-byte unchanged): suites off the serial list run in an N-worker pool, slowest first, each with its own `TMPDIR` and `XDG_RUNTIME_DIR`, `AUTOPILOT_TEST_TIMING_FACTOR` defaulting to N, output buffered per suite; the listed suites and `extra_runners` follow one at a time; a pool failure is re-run once alone and, if green, printed as `flaky-under-parallel` and recorded with `flaky_under_parallel: true`. The serial list is now one file, `hooks/tests/lib/serial-suites.txt`, read by `run.sh` and the runner, and gains the classes the backlog named (live-tree temp file, real-repo branch/worktree changes, host-wide process scans, wall-clock assertions). Tests: `scripts/affected-suites-jobs.test.js`, with negative controls for the serial list, the serial rerun and the durations file.
@@ -193,9 +208,9 @@
 
 - BL-0147 (c): `docs/settings-reference.md` now documents per-model `modelSettings.<model-id>.autoCompactWindow` (with the do-not-set-`CLAUDE_CODE_AUTO_COMPACT_WINDOW` warning and subagent frontmatter) and records the first measured compaction point (window minus 33K, preTokens about 500K at window 533000).
 
-- BL-0147 (follow-up, asked by the c4140 peer): the compaction checkpoint now gives the model's own handoff note at least 4000 bytes (was a fixed 2200) plus whatever git, dispatch and marker leave unused, with the transcript tail taking the remainder inside the same body cap (`scripts/lib/compaction-handoff.js`); the reader also waits and re-reads a note modified in the last 2 seconds and marks one that is still changing as possibly incomplete.
+- BL-0147 (follow-up, asked by the <host> peer): the compaction checkpoint now gives the model's own handoff note at least 4000 bytes (was a fixed 2200) plus whatever git, dispatch and marker leave unused, with the transcript tail taking the remainder inside the same body cap (`scripts/lib/compaction-handoff.js`); the reader also waits and re-reads a note modified in the last 2 seconds and marks one that is still changing as possibly incomplete.
 
-- BL-0205 (reported by c4140 llm-playground lead on the owner's behalf): `context_budget.per_model` sets T1/T2 per model, keyed by a model-id glob matched against the statusline live file's `model.id` (most literal characters wins; no match or no id keeps the top-level tiers; env T1/T2 still win; the SessionStart budget warning reads it too, taking the model id from the SessionStart payload, else the session's live file). Bad keys and values are ignored with a warning. New suites `hooks/context-budget-per-model.test.js` and `hooks/tests/session-start-budget-per-model.test.sh`.
+- BL-0205 (reported by <host> llm-playground lead on the owner's behalf): `context_budget.per_model` sets T1/T2 per model, keyed by a model-id glob matched against the statusline live file's `model.id` (most literal characters wins; no match or no id keeps the top-level tiers; env T1/T2 still win; the SessionStart budget warning reads it too, taking the model id from the SessionStart payload, else the session's live file). Bad keys and values are ignored with a warning. New suites `hooks/context-budget-per-model.test.js` and `hooks/tests/session-start-budget-per-model.test.sh`.
 
 - BL-0204: opencode is now a packet-tier blind-review seat (`reviewSeatTier` in `final-panel-qualification.js`, `dispatch-review.sh`, `resolve-review-loop.sh`), so a review-only campaign no longer refuses a qc_panel that seats opencode (`final_panel_seat_blind_incompatible`); its deny-all refuses tools before they run (live adversarial run, 31 assertions, positive controls seen executing) and the rail still refuses to spawn when the deny-all assert fails.
 
@@ -486,7 +501,7 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 - **鎖等待改成睡眠，不再空轉吃 CPU**（BL-0137）：`foreman-guard`、`depth0-delegate-gate`、`cost-fuse` 搶不到鎖時，每次重試前用 `Atomics.wait` 睡 15 ms。測試比對等待期間的 CPU 時間與實際經過時間，並改在暫存家目錄裡跑。
 - **probe-unknown 在 worktree 裡也找得到主目錄的記憶**（BL-0003）：預設記憶目錄改從主 checkout 推算，路徑裡每個非英數字元都換成 `-`。
 - **兩支 hook 測試的小修正**（BL-0143）：`child-session-identity` 斷言 detached containment 的規劃值，`setsid` 不支援 `--wait` 時跳過；`blocked-dispatch-guidance` 的 `assert_eq` 改成實際值在前的參數順序。
-- **`pkill -f`／`pgrep -f` 比對到自己時改成直接擋下**（BL-0148，c4140 llm-playground 回報）：Claude Code 跑指令時，包住指令的 shell 的命令列裡就有那段 pattern，所以 `pgrep -f foo` 會找到自己，等待迴圈永遠不會結束，`pkill -f foo` 會殺掉自己。c4140 實測三個背景迴圈空轉了 1.5 小時到將近兩天。這條規則原本只警告，模型照樣執行；現在預設拒絕，連子代理也一樣。拒絕訊息列出改寫方式：寫 pidfile 再用 PID、`[f]oo` 單字元括號、把 pattern 拆成兩個變數拼接。要放寬，設 `depth0_delegate_gate.pkill_self_match`，或環境變數 `AUTOPILOT_BASH_GUARD_PKILL_MODE`，值為 `warn` 或 `off`。`hooks/bash-launch-guard.test.js` 移植了 c4140 的 27 個案例（llm-playground `d45fc6d86`），包括 heredoc 和引號的陷阱。已知還沒擋到、以及會誤擋的寫法列在 BL-0153。
+- **`pkill -f`／`pgrep -f` 比對到自己時改成直接擋下**（BL-0148，<host> llm-playground 回報）：Claude Code 跑指令時，包住指令的 shell 的命令列裡就有那段 pattern，所以 `pgrep -f foo` 會找到自己，等待迴圈永遠不會結束，`pkill -f foo` 會殺掉自己。<host> 實測三個背景迴圈空轉了 1.5 小時到將近兩天。這條規則原本只警告，模型照樣執行；現在預設拒絕，連子代理也一樣。拒絕訊息列出改寫方式：寫 pidfile 再用 PID、`[f]oo` 單字元括號、把 pattern 拆成兩個變數拼接。要放寬，設 `depth0_delegate_gate.pkill_self_match`，或環境變數 `AUTOPILOT_BASH_GUARD_PKILL_MODE`，值為 `warn` 或 `off`。`hooks/bash-launch-guard.test.js` 移植了 <host> 的 27 個案例（llm-playground `d45fc6d86`），包括 heredoc 和引號的陷阱。已知還沒擋到、以及會誤擋的寫法列在 BL-0153。
 - **v2.36.114 審查留下的小項目**（BL-0103）：campaign 收件的建議事項（例如 `campaign_file_cap_no_first_pass_headroom`）改由 `bin/autopilot.js` 寫到 stderr，stdout 的 JSON 不受影響。AWAITING_CONVERGENCE_ADJUDICATION 維持 `>=`，理由寫在 `REPAIR_RESUME_PHASES` 旁；引擎那個呼叫點對已收件的 campaign 不會執行，日後要讓這個階段走修復，就把它加進這張清單。`hooks/tests/campaign-repair-at-file-cap.test.sh` 新增 Stage F：逐個階段讓 cli.js 和 campaign-intake.js 實際跑同一個判斷並比對結果，包含檔數 4/4 時兩邊都擋下的情況；四個突變的紅燈紀錄寫在測試檔開頭。
 - **v2.36.112 審查留下的小項目**（BL-0101）：`hooks/tests/run.sh` 的 Summary 會列出 SKIP 行（serial、parallel、serial tail 三條路徑都收）。serial 改成先寫進暫存檔、跑完再印，不再經過管線，留在背景的程序拖不住 run.sh；stderr 一併收進來，中斷時暫存檔由 EXIT trap 清掉。代價是 serial 不再即時輸出。`dispatch-local-openai.js` 收到 `finish_reason=length` 且內容只有空白時，判為 `output_budget_exhausted`。`campaign-resume` 的 B3 改成整行比對 `campaign_resume_git_drift`。新增 `hooks/tests/run-summary-skip.test.sh`。
 - **設了自動壓縮視窗時，T2 不再叫你停下**（BL-0124）：`autoCompactWindow` 設在 T2 門檻以下時，T2 的提示改成「自動壓縮已設在 Nk，不要停、不要請使用者 /clear，到下個階段邊界寫 handoff」。沒設視窗、值不合法、視窗高於 T2，或設了 `DISABLE_AUTO_COMPACT` 時，仍然是 STOP。只有到 T2 才讀視窗設定。ON/OFF 評測（sonnet 26 次）：舊文字 10/10 叫停，新文字 10/10 繼續，對照組 6/6 照常叫停；證據 `docs/plans/evidence/2026-10-14-t2-wording-onoff/`。新增 hook 層測試 `hooks/tests/context-budget-t2-autocompact.test.sh` 與 lib 層 `hooks/context-budget-t2-autocompact.test.js`。已知疑點：T2 觸發時 context 已超過視窗，當下壓縮可能其實沒發生（BL-0147）。
@@ -799,7 +814,7 @@ prose-justification: 本版新增 status／watcher 程式與 reference（referen
 ## v2.36.114 — 第一輪就改滿所有 scope 路徑的 campaign 現在能修補
 
 - **問題與改動（逐列）**：
-  - （J）第一輪就改滿所有 scope 路徑的 campaign 無法修補（第二次發生；第一次見 v2.36 CHANGELOG 約 :1195）：修補類 resume 的寫入預算檢查用 `>=`，與 reducer 的 `>` 不一致。現在修補類 resume 的預算檢查改用與 reducer 一致的 `>`（累計不重複路徑），新增路徑超出仍擋；admission 對 cap ≤ scope 路徑數且有修補輪的 campaign 發出 `campaign_file_cap_no_first_pass_headroom` 提醒；schema 補欄位說明。Peer-reported（cuda）＋第二次發生。
+  - （J）第一輪就改滿所有 scope 路徑的 campaign 無法修補（第二次發生；第一次見 v2.36 CHANGELOG 約 :1195）：修補類 resume 的寫入預算檢查用 `>=`，與 reducer 的 `>` 不一致。現在修補類 resume 的預算檢查改用與 reducer 一致的 `>`（累計不重複路徑），新增路徑超出仍擋；admission 對 cap ≤ scope 路徑數且有修補輪的 campaign 發出 `campaign_file_cap_no_first_pass_headroom` 提醒；schema 補欄位說明。Peer-reported（<host>）＋第二次發生。
   - 修補輪：review 兩個 🟡 已修——提醒經真實 intake 驗證（斷言 `control.advisories`）；引擎修補閘以行為測試加 mutation check 驗證（新增 `campaign-repair-engine-at-file-cap` 套件，匯出 `campaignMutationBudgetStatus`）。
 - **驗證**：整套 `--parallel 16` 396 檔全過（第一輪 diff）；修補後重跑相關套件與 L1：`scripts/import-aa-capabilities.test.js` 22 項在本機紅，於 origin/develop 同樣紅（pre-existing，/tmp 內有 `.git` 使「cache 在 git worktree 內」檢查觸發）；check-js-syntax、codex 鏡像、validate.sh 通過。review：claude-fable-5-1 第二輪 SHIP-AS-IS（review-1791024600-335312-08ba）。
 - **已知後續（review 🔵）**：見 `docs/BACKLOG.md`「v2.36.114 review follow-ups」；含第二個 `campaignMutationBudgetStatus` 呼叫點（約 :10458）角色、fixture 用 N=4/1 而非 12、`control.advisories` 新鍵的 consumer deep-equal 快照。
@@ -845,7 +860,7 @@ prose-justification: 本版不新增 skill 或 reference 文字；僅改 campaig
 
 ## v2.36.110 — readiness probe 接受 nonce 完全相符的單行 frame；frame_format 成為具名失敗並保留診斷
 
-- **問題**（peer 回報，cuda/chatgpt-tunnel，2026-10-03）：claude-native／claude-fable-5／max 以「開頭 marker＋`OK`＋結尾 marker」寫在同一行回應 readiness probe。dispatch-author 要求 marker 各自獨立成行，回報 `truncated/frame_missing`，coordinator 再把它併成 `transport_failure`，receipt 也沒留下任何能解釋的線索。
+- **問題**（peer 回報，<host>/chatgpt-tunnel，2026-10-03）：claude-native／claude-fable-5／max 以「開頭 marker＋`OK`＋結尾 marker」寫在同一行回應 readiness probe。dispatch-author 要求 marker 各自獨立成行，回報 `truncated/frame_missing`，coordinator 再把它併成 `transport_failure`，receipt 也沒留下任何能解釋的線索。
 - **改了什麼**：（a）**只有 readiness probe** 多接受一種嚴格形式：`<open-marker>OK<close-marker>` 單行，兩個 marker 必須帶本次執行自己的 marker id、payload 必須恰為 `OK`，前後只容許空白；id 不符、其他 payload、多餘文字一律仍判未就緒。一般 author／review 的 parser 未動，單行 frame 對 author 仍是 truncated/exit 5。（b）兩個 marker 都在、但不在獨立行時，dispatch-author 改回報具名的 `frame_format`（仍為 truncated/5，並附 `frame_derived`），不再是 `frame_missing`；probe 新增 `frame_format` outcome（readiness 為 unknown，不是 blocked）；失敗的 probe 在 `live_probe.diagnostics` 保留有界且去除密鑰的 stderr 尾端與 dispatch-result 摘要。真正的 transport／quota／auth 失敗狀態不變。
 - **驗證**：新增 `provider-readiness-single-line-frame`（44 條，先紅後綠）與 dispatch-author 單行案例；consumer sweep 全綠、L1 層 408/408、整套 `--parallel 16` 387 檔全綠。review：claude-fable-5-1 SHIP-AS-IS。
 - **已知後續（review 🔵 CUT/FOLLOW-UP）**：(1) 版本外若有字串比對 `frame_missing` 的呼叫端，遇到兩 marker 都在的輸出會改見 `frame_format`（本 repo 內僅測試引用）；(2) probe 接受形式用 `.trim()`，略寬於字面 `^…$`，nonce／payload／無多餘文字仍精確；(3) diagnostics 僅留 `status`／`error`／`exit_status` 與 512 byte stderr 尾端。
@@ -1588,7 +1603,7 @@ prose-justification: none（無 SKILL/reference 文字變動）。
 
 prose-justification: none（無 SKILL/reference 文字變動）。
 
-## v2.36.72 — 第二輪平行：三條 fired 列（managed rail 兩條＋cuda 回報的 backlog migration），三個 sonnet 工頭、各自 clone、grok hands
+## v2.36.72 — 第二輪平行：三條 fired 列（managed rail 兩條＋<host> 回報的 backlog migration），三個 sonnet 工頭、各自 clone、grok hands
 
 - **A repair branch 由 rail 自己導出**（`src/engine/autopilot-engine.js`、`campaign-dispatch-projection.js`＋鏡像）：row 說的是
   「disposition resume 拒 caller `--branch`」，實際是 managed loop 的 `implement` closure 從不導 repair branch（`currentBranch = branch`），
@@ -1596,7 +1611,7 @@ prose-justification: none（無 SKILL/reference 文字變動）。
   `buildRepairBranchName(branch, round, currentBase)`，該函式改委派 projection 的 `expectedBranch`（單一擁有者，null base → `-base`）；
   非 strict 與 round 1 行為不變。新 suite `autopilot-engine-repair-branch` 含 strict round-1 對照與 generation 1..3 parity pin。
 - **B backlog table migration 三缺陷**（`scripts/migrate-backlog-entries.js`、`check-backlog-entries.js` 匯出 `runCheck`、
-  `references/backlog-entry.md`＋鏡像；cuda 2026-09-16 回報）：未映射 status 不再默默變 `open`——整列 verbatim 進 sidecar＋manifest
+  `references/backlog-entry.md`＋鏡像；<host> 2026-09-16 回報）：未映射 status 不再默默變 `open`——整列 verbatim 進 sidecar＋manifest
   `unmapped_status` error，`--apply` 沒 `--allow-unmapped-to-sidecar` 就拒；`## Columns` 外的欄位在 plan 期報 `unmapped_column`、不寫檔；
   `preserved` 改為位元組帳算（output＋sidecar＋dropped=∅，`bytes_before === bytes_after + moved + normalized − synthesized`，
   normalized 從真正的 normaliser 算，不是殘差——reviewer 抓到 r1 的 `x === x`）；`--apply` 跑 gate、紅就還原原檔。
@@ -2070,7 +2085,7 @@ prose-justification: 本版對 prose 面沒有增量（純 engine／test／BACKL
 
 prose-justification: 本版 prose 增量只有 `references/blind-dispatch.md` 的 "Packet blinding" 一節（46 行，含鏡像）——它是新機制的 canonical 說明，不是指引；engine 面 +1200 行。
 
-## v2.36.58 — managed rail：final panel 的 blind-incompatible 席位在 intake 就拒（cuda P1 之二）
+## v2.36.58 — managed rail：final panel 的 blind-incompatible 席位在 intake 就拒（<host> P1 之二）
 
 - `src/engine/final-panel-qualification.js`：`BLIND_DISCOVERY_CAPABLE_RUNNERS`（`anthropic-compatible`、`cc-shim`、
   `claude-native`、`qoderclicn`）＋`isBlindDiscoveryCapableRunner()`——一份 canonical 集合。`src/engine/campaign-intake.js`：
@@ -2079,7 +2094,7 @@ prose-justification: 本版 prose 增量只有 `references/blind-dispatch.md` �
   blind-discovery review … pins and overrides do not bypass containment`）；standing pin／`override_admitted_seats`／ladder 都
   不能放行；unqualified＋incompatible 報 incompatible（先決順序）。之前：pin 有 codex 席時 campaign 跑完 implement／verify／
   review／full_suite／adjudicate／convergence，才在 final panel `transport_failed`（`dispatch-review.sh` 的 blind gate 拒 codex），
-  cuda 兩次、本機 C 一次。
+  <host> 兩次、本機 C 一次。
 - `scripts/resolve-review-loop.sh --check-scorecard`：每個 blind-incompatible qc 席一條 `capability_warnings[]`＋⚠ stderr，
   report-only、不建議 pin；沒帶旗標不印。`scripts/dispatch-review.sh` 只加註解指向 Node 常數，`case` 不動。
 - 測試：state suite intake 區塊（endpoint 渲染、兩席兩行、claim spy base 1／head 0、override／pin／precedence／kimi／cursor 拒、
@@ -2095,17 +2110,17 @@ prose-justification: 本版 prose 增量只有 `references/blind-dispatch.md` �
   scope 全過，**wall budget 5635 s > 我封的 5400 s** 在 convergence 停（六個 suite 跑兩遍要 ~40 分鐘；下次 budget 要算兩遍
   suite）→ 降級 l3；codex 第二家族兩條 🟠（parity 只測 gate 訊息缺席＝假綠；admitted control 太弱）修於 `c3eb31f6`，pin-store
   fixture 要求駁回（intake 讀 roster override，pin→override 在 resolver 層有 suite）；merge `931b31b2`、`zero_residue: true`。
-- cuda 回報 v2.36.57 已在他們的 GLM-5.3 席位驗證有效（同 diff：.54 時代 no_verdict → .57 reviewed SHIP-AS-IS）。
+- <host> 回報 v2.36.57 已在他們的 GLM-5.3 席位驗證有效（同 diff：.54 時代 no_verdict → .57 reviewed SHIP-AS-IS）。
 
 prose-justification: 本版對 prose 面沒有增量（l5 recipe 6b／11 各一句）。
 
 ---
 
-## v2.36.57 — review proof 文法 bash／Node 對齊（shape 與 tautology 分開報）；validator 拒絕的 envelope 保留 raw_log（cuda P1 之一）
+## v2.36.57 — review proof 文法 bash／Node 對齊（shape 與 tautology 分開報）；validator 拒絕的 envelope 保留 raw_log（<host> P1 之一）
 
 - `src/runners/review.js`：`isValidNoFindingProof` 原本只認 `;` 分隔（`^checked=(.+);\s*evidence=(.+);\s*conclusion=(.+)$`），
   而 `dispatch-review.sh` 的 battery 從 2026-08-15 起接受任何標點／空白分隔——engine 把 shell 已收的 `reviewed` envelope 再過
-  一次 Node validator，`.`／`,`／空白分隔的 proof 就被以「non-tautological」訊息打掉。cuda 在 GLM-5.2 量到三次、revival.3d 在
+  一次 Node validator，`.`／`,`／空白分隔的 proof 就被以「non-tautological」訊息打掉。<host> 在 GLM-5.2 量到三次、revival.3d 在
   `claude-fable-5`／`claude-native` 量到三次，同一 diff 手派 `dispatch-review.sh` 全過。現在兩邊同一文法（分隔符一個以上、
   `[space ; , .]`），capture 先照 blacklist 的正規化（小寫、去頭尾空白標點）——正規化後為空＝**shape** 失敗，命中 blacklist＝
   **tautology** 失敗，Node 兩個不同訊息、bash 沿用既有兩條 `BATTERY_FAIL_REASON`；blacklist 內容不動。
@@ -2138,7 +2153,7 @@ prose-justification: 本版對 prose 面沒有增量（l5 recipe 11 只是把一
 
 - `src/engine/autopilot-engine.js` `performReview`：composition 在 verification 紅時照契約先跑 full-diff barrier，review
   adapter 卻無條件 journal `REVIEW_COMPLETED`，reducer 在 `VERTICAL_VERIFICATION` 拒收（`cannot apply review_completed
-  while campaign is VERTICAL_VERIFICATION`）→ barrier 停 → TERMINAL_STOP，reviewer 花了、repair 一代都沒有（cuda
+  while campaign is VERTICAL_VERIFICATION`）→ barrier 停 → TERMINAL_STOP，reviewer 花了、repair 一代都沒有（<host>
   `48ffc2fd…`、openclaw `cfadd975…` 各量到一次）。現在 journal 用述詞 `scope !== 'final' && verticalFailed !== true`
   包住（含 resume-digest replay 分支），不是 try/catch 吞錯；紅候選的 review 照跑、digest 留在 controller full-diff gate
   journal 與 repair ticket，campaign 走 reducer 本來就有的 `VERTICAL_VERIFICATION → REPAIR_AUTHORIZED → REPAIRING` 邊。
@@ -2157,11 +2172,11 @@ prose-justification: 本版對 prose 面沒有增量（l5 recipe 11 只是把一
   （G1/G2 與 GLM／codex 兩家族都照字面要求了）；試過（`8ab3a51e`）後駁回，binding 由 composition 層的 adapter payload
   guard 斷言，routing 測試釘住結構形狀。plan §5 的真 campaign dogfood **延後**：routing block 已經用真 appender、真
   ledger、真 git commit 走完整條紅→repair→綠→review_completed(1)，活 campaign 只多 transport；下一個自然紅的 campaign
-  （cuda／openclaw）就是量測點。
+  （<host>／openclaw）就是量測點。
 - 流程（`docs/plans/evidence/2026-09-16-red-verification-repair/`）：consult codex 建議 (a)＋點出相鄰的 path-binding
   blocker；七個 verification suite **先在 base 跑綠再封**（B 的教訓）；plan 兩代 hetero review（G1 一條、G2 四條全 fold）；
   /l5 campaign hand（cursor-grok-4.6-low）`d986afbf` verify 綠、in-rail MiniMax SHIP-AS-IS、full_suite、adjudicate、
-  convergence 都通，final panel GLM FIX-THEN-SHIP／MiniMax SHIP-AS-IS／**codex 席 transport_failed**（cuda P1 那條，本機
+  convergence 都通，final panel GLM FIX-THEN-SHIP／MiniMax SHIP-AS-IS／**codex 席 transport_failed**（<host> P1 那條，本機
   第三次量到）→ 降級 l3，codex 第二家族 review 同一條 🟠 駁回，git 證據 merge `5117590c`、record-integration → reap →
   `zero_residue: true`。
 
@@ -2199,7 +2214,7 @@ prose-justification: 本版對 prose 面沒有增量（l5 recipe 11 只是把一
   算期望）修於 `e1813ad0` 改凍結字面；git 證據 merge `6d83e121`、record-integration → reap → `zero_residue: true`。
   dogfood：真 agy 1.2.3 `dispatch-review.sh --model gemini-flash-medium` 回 SHIP-AS-IS 並印 fold note。
 - 同時登 BACKLOG（peer 回報）：openclaw 的 agy flash/low implementer no-go、verify_cmd 跑在無依賴的 detached worktree
-  且輸出不落 ledger、PreToolUse(Bash) 三規則 hook 提案；gentoo 的 context-budget 無 model-id 視窗來源；C row 併入
+  且輸出不落 ledger、PreToolUse(Bash) 三規則 hook 提案；<host> 的 context-budget 無 model-id 視窗來源；C row 併入
   openclaw 的第二次量測。
 
 prose-justification: 本版對 prose 面沒有增量（usage 一行加註 `--probe` 語意）。
@@ -2239,7 +2254,7 @@ prose-justification: 本版對 prose 面沒有增量（l5 recipe 11 只是把一
 - `src/engine/campaign-intake.js`：`defaultGenerationClaim` 的 durable-wait 分支（`BOUNDARY_REJECTED`／`AWAITING_DISPOSITION`／
   `AWAITING_CONVERGENCE_ADJUDICATION`）原本把 raw `candidate_reference` 直接當 `resume_candidate`、跳過 `verifyResumeCandidate`，
   所以 `scope_implementation_sha` 從沒被填，engine 的 repair-scope contract 拿到 undefined、`check-repair-scope.js` 以
-  「implementation_sha must be an immutable full 40-hex commit object ID」exit 2（cuda 對 fleet-comms 端到端量到，2026-09-16；
+  「implementation_sha must be an immutable full 40-hex commit object ID」exit 2（<host> 對 fleet-comms 端到端量到，2026-09-16；
   BACKLOG 原先的診斷「沒人設 `initial_candidate_reference`」是錯的——`projectCampaign` 有設）。現在 git_candidate 的
   durable-wait resume 一律走 `verifyResumeCandidate`（同一形狀：`commit`＝目前 candidate、`scope_implementation_sha`＝第一代
   candidate，churn 基線不漂），並在 **Mission claim 之前**多一道 read-only preflight：branch tip／tree／ancestry 漂了或
@@ -2271,10 +2286,10 @@ prose-justification: 本版對 prose 面沒有增量（l5 recipe 11 只是把一
   （trigger：`skills/ceo-agent/SKILL.md`、`skills/dev-flow/SKILL.md`、`profiles/`）。v2.36.49 修的兩條漂移各活了兩天，因為
   沒有任何 hook 跑它們；現在動到那些檔案就跑（0.2 s 與 2.9 s）。`sync-all.test.sh` 29 綠。
 - `skills/l5/references/hetero-impl-loop.md`：recipe 9 補「resume 帶 `--campaign-disposition-authority` 時要拿掉
-  `--campaign-disposition-policy`」（cuda 2026-09-16）；recipe 11 改寫已修／未修清單，並加 merge 後兩條規矩：先跑
+  `--campaign-disposition-policy`」（<host> 2026-09-16）；recipe 11 改寫已修／未修清單，並加 merge 後兩條規矩：先跑
   `record-integration.js` 再砍分支；merge 後別再改 plan（連 Review log 都會讓 source sha 漂、所有 level 的
   `session-mode set` 被拒，2026-09-15 量到）。
-- BACKLOG（cuda 對 fleet-comms 的 managed campaign 端到端量測，v2.36.41 說的量測點終於來了）：disposition resume 死在
+- BACKLOG（<host> 對 fleet-comms 的 managed campaign 端到端量測，v2.36.41 說的量測點終於來了）：disposition resume 死在
   `check-repair-scope.js`——`scope_implementation_sha` 從沒被設（`campaign-intake.js:621-633` 讀
   `initial_candidate_reference`，repo 裡沒人寫它；ledger 的 `candidate_ref` 就在那裡）→ **fired，下一刀**；另兩條小的
   wording／文件（VA 席錯誤訊息、CLI `status readiness --probe`）。
@@ -2285,7 +2300,7 @@ prose-justification: 本版 prose 面 +2 句（l5 recipe 9／11）。
 
 ## v2.36.51 — `migrate-backlog-entries.js` 支援 table style：外部表頭一次轉成 schema 欄，lossy 列原行逐字進 sidecar
 
-revival.3d（cuda 轉達，2026-09-16）的 BACKLOG 是 196 KB 的 markdown 表，多個 `##` 段各一張表、表頭是 `id｜標題｜狀態｜體量｜
+revival.3d（<host> 轉達，2026-09-16）的 BACKLOG 是 196 KB 的 markdown 表，多個 `##` 段各一張表、表頭是 `id｜標題｜狀態｜體量｜
 來源｜spec｜備註`，狀態欄裡塞著狀態字、`Trigger：…` 和長日誌。v2.36.39 的遷移腳本對 table style 只會 `exit 2`。
 
 - `migrate-backlog-entries.js`：`style: table` 時每張表重寫成 `| Id | Title | Status | Trigger | Effort | Source | Pointer |
@@ -2326,7 +2341,7 @@ prose-justification: 本版 prose 面 +1 句（hetero-dispatch.md 的 Outcome st
 `codex-plugin-package.test.sh` 在 develop 上紅了 9 條、`profile-context-isolation.test.sh` 紅 2 條，兩個原因都是「出貨時
 沒把鏈補上」：
 
-- `schemas/review-loop-contract.schema.json`：v2.36.33（7840hs 四缺陷）讓 resolver 多吐 `plan_review_same_family_as_depth0`，
+- `schemas/review-loop-contract.schema.json`：v2.36.33（<host> 四缺陷）讓 resolver 多吐 `plan_review_same_family_as_depth0`，
   schema 的 `x-field-order`／`required`／`properties` 都沒加，`check-contract-schema.js` 從此 DRIFT（codex 套件裡的鏡像
   gate 也一起紅）。補上（boolean，89 欄）。
 - `profiles/`：v2.36.33 的 Project Paths reader 改了 `skills/ceo-agent/SKILL.md:299-302`（+3 行），v2.36.38 的 backlog
@@ -2586,7 +2601,7 @@ sidecar 是搬出來的既有文字（BACKLOG 淨減 133 KB），不是新 prose
 
 ## v2.36.38 — backlog 一列是 pointer 不是工作日誌：schema、gate（warn）、DI、寫入者統一引用
 
-cuda 代 revival.3d 的請求（BACKLOG「PEER-REPORTED (cuda, for revival.3d)」），plan
+<host> 代 revival.3d 的請求（BACKLOG「PEER-REPORTED (<host>, for revival.3d)」），plan
 `docs/plans/2026-09-14-backlog-entry-schema.md` 過 hetero plan review G1 後由 /l5 managed campaign 實作
 Phase 1–3（Phase 4 遷移＋flip 另一個 mission）。
 
@@ -2747,9 +2762,9 @@ ACP。`/l5` 改走這條軌是 skill 變更，另一個 PATCH。
 prose-justification: 本版 prose 增量（+29 行，自基線 +8%）是 `references/hetero-dispatch.md` 新的
 「A non-Claude foreman」契約段——六條軌道執法各對應一個機制與測試案例——沒有任何 SKILL.md 變動。
 
-## v2.36.33 — 7840hs 回報的四條派工層缺陷，四條都在本機重現後修掉
+## v2.36.33 — <host> 回報的四條派工層缺陷，四條都在本機重現後修掉
 
-`cookys-7840hs` 2026-09-12 針對 v2.36.22 回報四條，三條是無聲的。每一條都先在這台機器重現才動手；
+`<host>` 2026-09-12 針對 v2.36.22 回報四條，三條是無聲的。每一條都先在這台機器重現才動手；
 (2) 在 develop 上已經不會硬失敗（`UNKNOWN_WINDOW` 現在 exit 0、`blocked:false`），但缺的那列是真的缺。
 
 ### (1) `--endpoint @none` 是文件寫明的慣例，派工層卻拒絕它
@@ -3741,7 +3756,7 @@ owner 2026-09-06：「要用比較貴的 subagent／沒填 model name，現在�
   不算。沒填 model 維持 v2.36.2 的 deny＋重派理由。`mode: ask`、`on_missing_model: ask` 仍可選回對話框；`warn`／`off` 不變；亂值 → `remind`
   （fail-closed 但不彈窗）。測試 76（新增：預設 remind＝deny 帶提醒、ack 放行、ack 不在首行不算、`mode: ask` 還原對話框）。docs：hooks/README
   兩處、`project-config-template/dispatch-guard-config.md`、front-door 一行。
-- **`platforms/codex/skill-adapters/lifecycle.md`**（cuda codex-astra 2026-09-06 回報）：原句「continue only when READY」在 shadow 模式讀成
+- **`platforms/codex/skill-adapters/lifecycle.md`**（<host> codex-astra 2026-09-06 回報）：原句「continue only when READY」在 shadow 模式讀成
   停機，與 CC canon（dev-flow／ceo-agent：`SHADOW` 觀察限定、記 `admitted`／`would_block` 後走非 managed 流程）矛盾。改成鏡射 canon：READY 才走
   managed engine route；SHADOW 走一般流程不宣稱 enforce receipt、不呼叫 managed route（managed CLI 會拒非 READY marker）；shadow→enforce 是該 repo
   owner 的政策決定。七個 Codex thin-shell 鏡像重生。
@@ -3780,7 +3795,7 @@ prose-justification: no `skills/*/SKILL.md` line count grew this release (refere
 
 ## v2.36.7 — l4 marker 下 engine implement-review 不再卡在 reviewer_qualification：豁免並記帳（owner 裁定 2026-09-06）
 
-cuda 的 WIZHALL（revival-world-city-war，owner 指定 /l4 配 agy gemini-3.8-flash-low）：`bin/autopilot.js` 只在 l5/l6 建 strict
+<host> 的 WIZHALL（revival-world-city-war，owner 指定 /l4 配 agy gemini-3.8-flash-low）：`bin/autopilot.js` 只在 l5/l6 建 strict
 provider bootstrap，managed enforce 下那是 `reviewer_qualified` 唯一可信來源，所以 l4 marker 配 engine implement-review 的預設
 `requireQualifiedReviewer=true` **永遠**在 reviewer_qualification 被擋——不是席次沒資格，是這一關在 l4 根本不可能通過。
 owner 原話「直接讓他過身分檢查，不要以後再被擋」，在本 session 拍板選「l4 下自動豁免並記帳」。
@@ -3801,9 +3816,9 @@ owner 原話「直接讓他過身分檢查，不要以後再被擋」，在本 s
 
 prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
 
-## v2.36.6 — never-started Mission claim 有合法出口；`campaign status` 分得出 not_started（cuda revival.3d 回報 2026-09-06）
+## v2.36.6 — never-started Mission claim 有合法出口；`campaign status` 分得出 not_started（<host> revival.3d 回報 2026-09-06）
 
-cuda 的 QUIET-a：`mission grant` 鑄了 `campaign-v2-…` id 發了 claim，engine 嘗試在 dev_flow_admission 被 session marker absent 擋下
+<host> 的 QUIET-a：`mission grant` 鑄了 `campaign-v2-…` id 發了 claim，engine 嘗試在 dev_flow_admission 被 session marker absent 擋下
 （零副作用），campaign 從未 append ledger；`campaign status` 回 `not_found`，`mission withdraw` 因 ledger 查無 campaign 拒絕——claim 成孤兒，
 沒有任何合法出口。
 
@@ -3824,7 +3839,7 @@ cuda 的 QUIET-a：`mission grant` 鑄了 `campaign-v2-…` id 發了 claim，en
 
 prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
 
-## v2.36.5 — `--allow-seat-gap` 不再寫下 checker 永遠拒收的世代（7840hs 回報 2026-09-06）
+## v2.36.5 — `--allow-seat-gap` 不再寫下 checker 永遠拒收的世代（<host> 回報 2026-09-06）
 
 同族第三件（與 aborted 世代、closure-by-absence 同形：collect 寫得進去、checker 事後永遠拒收、無法補救）。plan 066 的 agy 席因 prompt 超過
 `MAX_ARG_STRLEN`（131071）兩代 no_verdict，`--allow-seat-gap` 讓 collect 照常寫下 2/3 席的條目；`check-phase-review-receipt` 的席數門檻
@@ -3837,28 +3852,28 @@ prose-justification: no `skills/*/SKILL.md` line count grew this release (no ski
   門檻不論有無 gap 都套用（review 🟠：全席 reviewed 但門檻高於席數，原本仍寫 pending）；別名 `--min-seats`／`--min_reviewed_seats` 與 checker 同序。
 - 測試：預設門檻下 1/2 席 ⇒ aborted＋無 head＋下一代照常接續 finalize；`AUTOPILOT_MIN_REVIEWED_SEATS=1` 下同形狀 ⇒ pending-with-gap 並 WARN；
   0/1 席（既有 2c、7）改斷言 aborted；垃圾門檻拒絕。三個新案在修前紅。
-- 7840hs 另兩點記 BACKLOG：`EXCLUDE_ALLOWLIST` 寫死 autopilot 自己的目錄、消費端 repo 無法用 `--exclude` 縮 payload；agy argv 上限可在
+- <host> 另兩點記 BACKLOG：`EXCLUDE_ALLOWLIST` 寫死 autopilot 自己的目錄、消費端 repo 無法用 `--exclude` 縮 payload；agy argv 上限可在
   collect 前算出、提早報錯而不是燒掉整輪席次。
 
 prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
 
-## v2.36.4 — grok 席前言黏框架被定位器誤殺（cuda R21 qc 回報 2026-09-05）
+## v2.36.4 — grok 席前言黏框架被定位器誤殺（<host> R21 qc 回報 2026-09-05）
 
-cuda 在 revival-world-city-war R21 qc 三席 8 次 collect 裡，grok-4.6 席 5 次被記 no_verdict，raw_log 卻都有完整框架與 VERDICT，
+<host> 在 revival-world-city-war R21 qc 三席 8 次 collect 裡，grok-4.6 席 5 次被記 no_verdict，raw_log 卻都有完整框架與 VERDICT，
 結論與另兩席一致。比對 3 成功／4 失敗：失敗的都是 grok `--output-format plain` 先吐一句前言，**同一行無換行**直接接
 `<<<AUTOPILOT-REVIEW-…>>>`；共用定位器規則 7（前導行含框架詞彙卻不是精確框架行 ⇒ 硬拒）正確 fail-closed，但丟掉了真審查。
 
 - **`scripts/dispatch-review.sh` grok 分支**：擷取 RAW_LOG 後、進定位器前做一次正規化——在第一個「`<<<AUTOPILOT-REVIEW-` 不在第 1 欄、且尚未出現
   精確 BEGIN 行」的行插入換行；前言成為獨立 chrome 行，仍受規則 7（殘留詞彙）、8（預算）、9（洩漏）檢查，框架成為精確行。框架之後一律不動。
-  只在 grok 分支（cuda 建議 A，不放寬安全欄）；RAW_LOG 保留原始位元組，parse／salvage 走正規化檔。
+  只在 grok 分支（<host> 建議 A，不放寬安全欄）；RAW_LOG 保留原始位元組，parse／salvage 走正規化檔。
 - 測試：grok 黏合形狀 reviewed；前言本身含框架詞彙 ⇒ 仍規則 7 且永不 SHIP；同形狀走 codex ⇒ 仍規則 7（證明只在 grok 生效）。正向案在修前紅。
-- cuda 順帶指出 grok-4.6 在 scorecard 只有 implementer 資格，坐 qc reviewer 席是 2026-08-25 的 user-explicit override——未在本版處理，記於此。
+- <host> 順帶指出 grok-4.6 在 scorecard 只有 implementer 資格，坐 qc reviewer 席是 2026-08-25 的 user-explicit override——未在本版處理，記於此。
 
 prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
 
-## v2.36.3 — 中止的 review 世代不再讓 phase receipt 永久卡死，也不再悄悄關掉未結 finding（7840hs 回報 2026-09-05）
+## v2.36.3 — 中止的 review 世代不再讓 phase receipt 永久卡死，也不再悄悄關掉未結 finding（<host> 回報 2026-09-05）
 
-7840hs（llm-playground plan 066）踩到：collect 期間 commit 讓 branch head 移動，`hetero-review-loop` 照設計把那代寫成 `aborted`
+<host>（llm-playground plan 066）踩到：collect 期間 commit 讓 branch head 移動，`hetero-review-loop` 照設計把那代寫成 `aborted`
 （無 head、無 findings），下一代照 `--help` 繼續收；審查 14 → 7 → 3 → 0 完全收斂，但 `check-phase-review-receipt.js` 對
 `status !== 'finalized'` 一律 exit 1，機器收據永遠拿不到，且沒有旗標能合法繞過。修的時候發現第二個更嚴重的洞。
 
@@ -3869,13 +3884,13 @@ prose-justification: no `skills/*/SKILL.md` line count grew this release (no ski
   不能是最後一筆（中止永遠不能代替審查）、不得帶 head、下一代必須從它的 base 接、它的 range.json 若在必須同 base；不讀
   findings／dispositions／seats。其他非 finalized 狀態照舊拒絕。checker 測試 15／15a–15f（最後一筆中止、帶 head、下一代跳 base、
   range base 不符各自 exit 1；finalized／aborted(parse_failed)／finalized 三代鏈 exit 0）。
-- **7840hs 覆核後追加**：他的 ledger 上這個洞真的發動過——gen-2 s1 的 MUST-FIX（tracked-under-ignored 檔案讓 agent_diff 假空）被
+- **<host> 覆核後追加**：他的 ledger 上這個洞真的發動過——gen-2 s1 的 MUST-FIX（tracked-under-ignored 檔案讓 agent_diff 假空）被
   記成 `closed_by_generation: 3`，3 正是中止那代。兩件跟進：(1) derive 不再把 chain 條目上既有的 `closed_findings` 戳記當輸入
   （戳記是這支程式的輸出，ADR-0001：closure 只從 findings＋dispositions 證據重推導；否則舊碼寫的錯誤戳記會在每次重推導時
   繼續關掉那條 finding，偽造的戳記也能無證據關 finding）；(2) checker 在比對 receipt 之前先斷言 receipt 與重推導的
   `closed_findings` 都不得把 closure 歸給 aborted 世代，戳記在 chain 條目上（loop 的真實形狀）或 receipt 上都掃；訊息具名並給補救：舊碼寫的 receipt 再 collect＋finalize 一代即可
   （finalize 拒絕重跑已 finalized 的世代）。derive test 6 案、checker 66 assertions。finalize 讀不到較早世代的 findings／dispositions 改 fail-closed（原本吞錯當空，現在空就是「全部關掉」）。
-- 兩支腳本 `--help` 寫明規則；codex 鏡像同步。走的是 7840hs 建議的 (a)（checker 豁免＋後續 finalized 條件），沒動 loop 的寫入形狀。
+- 兩支腳本 `--help` 寫明規則；codex 鏡像同步。走的是 <host> 建議的 (a)（checker 豁免＋後續 finalized 條件），沒動 loop 的寫入形狀。
 
 prose-justification: no `skills/*/SKILL.md` line count grew this release (no skill files touched).
 
@@ -3994,11 +4009,11 @@ QC（union-on-verified-critical，三席 gpt-5.6-sol@max／GLM-5.2／MiniMax-M3�
 
 prose-justification: no `skills/*/SKILL.md` line count grew this release (dev-flow 733→727, ceo-agent 550→542, research-to-ship and agent-call line-neutral; the new `hetero-review` SKILL.md is 56 lines, under the 250 cap).
 
-## v2.35.16 — 預設派遣拓樸：brain up, hands down（owner 2026-09-04 經 cuda 轉達）
+## v2.35.16 — 預設派遣拓樸：brain up, hands down（owner 2026-09-04 經 <host> 轉達）
 
-revival.3d 的實證（cuda memory `quota-opus-foreman-cost`、`standing-foremen-burn-quota`）：一天十幾把實作刀全跑在
+revival.3d 的實證（<host> memory `quota-opus-foreman-cost`、`standing-foremen-burn-quota`）：一天十幾把實作刀全跑在
 sonnet、常駐工頭一天半燒 $1,180。v2.35.15 把「輪詢燒法」擋在迴圈裡；這一版處理另一半——**實作勞力預設落在哪一層**。
-設計與 rollout：`docs/plans/2026-09-04-default-dispatch-topology.md`（P0–P4 本版出貨；P5 逐主機 rollout 另開，cuda 優先）。
+設計與 rollout：`docs/plans/2026-09-04-default-dispatch-topology.md`（P0–P4 本版出貨；P5 逐主機 rollout 另開，<host> 優先）。
 
 三層拓樸：**T0 brain**（depth-0 fable/opus：brief、裁決、merge，不下場）／**T1 hands**（有 hetero 就從最便宜的合格 rung
 起、紅了爬一階；沒有就 haiku→sonnet）／**T2 judge**（跨家族 qc）。三個缺口對應三個新件：
@@ -4008,7 +4023,7 @@ sonnet、常駐工頭一天半燒 $1,180。v2.35.15 把「輪詢燒法」擋在�
   `~/.autopilot/topology.json`，`--check` 抓漂移。排序是 effort 等級→延遲→名稱（沒有可靠價格資料，檔頭明寫）。
   `resolve-review-loop.sh` 新值 `implementer_ladder: auto` 展開該檔（缺檔 ⇒ 單 rung + `capability_warnings` 一條）；
   rung 0 現在對 `judgment` 單元也是起點（`ladder_start_rung_judgment: 1` 還原舊行為）。template 預設 `auto`。
-  本機（aimax395）推導出 19 階：`gemini-3.8-flash-low/low@agy` 起、`kimi` 列為 `candidates_to_qualify`。
+  本機（<host>）推導出 19 階：`gemini-3.8-flash-low/low@agy` 起、`kimi` 列為 `candidates_to_qualify`。
 - **路由翻轉**（P2）：`resolve-dispatch.sh` implementer 預設 opus→**sonnet**，新角色 `hands`→haiku；`references/model-routing.md`
   同步。`dispatch-model-guard` 新增 `guarded_models_implementing`（預設 `fable,opus`，只對非 plan-mode 派工生效，reviewer／
   debugger 的 plan-mode opus 不受影響）與 `require_engine_header`（派工單第一行必須是 `Engine: <model>…` 且與 `model:` 一致，
@@ -4044,8 +4059,8 @@ prose-justification: no `skills/*/SKILL.md` line count grew this release (l3/l4/
 
 ## v2.35.15 — 工頭的鐵律終於進了迴圈：foreman-guard、三個成本 hook 改 default-on、一刀一命
 
-cuda 2026-09-04 的 quota digest（`cuda:~/projects/QUOTA-DIGEST-2026-09-04.md`，經 hangar-bridge 轉來、
-operator 在 aimax395 確認範圍）：36 小時燒掉約 $2,200 API 等值，79% 來自四個常駐 Sonnet 工頭——活 13–33
+<host> 2026-09-04 的 quota digest（`<host>:~/projects/QUOTA-DIGEST-2026-09-04.md`，經 hangar-bridge 轉來、
+operator 在 <host> 確認範圍）：36 小時燒掉約 $2,200 API 等值，79% 來自四個常駐 Sonnet 工頭——活 13–33
 小時、各 1,900–7,400 次 Bash、每次 call 拖 34–97 万 cache-read、輸出趨近零。燒法是前景輪詢（`true`×450、
 `while ! grep …; do sleep 10; done`、`tail -c 8000 …output; ps -p`）、cache TTL 到了醒來整份重寫、接手時整份讀
 brief＋rulings＋14,648 行 ledger＋2.6 萬行 kernel 原始碼。稽核（本 checkout 核過）：規則早就在 prose 裡（l4–l6
@@ -4073,7 +4088,7 @@ brief＋rulings＋14,648 行 ledger＋2.6 萬行 kernel 原始碼。稽核（本
   不繼承 `[1m]`／Fable（967K 才 auto-compact 就是乘數）。
 - **誠實限制**：`context-budget` 對子代理刻意跳過（它只讀得到父 transcript），所以工頭自己的 context 量不到；
   工頭的天花板是 Bash 上限＋一刀一命。BACKLOG 記「等 CC 在 hook payload 提供子代理 transcript」。
-- 沒有 fleet-wide 廣播（operator 決定），只回報 cuda。
+- 沒有 fleet-wide 廣播（operator 決定），只回報 <host>。
 prose-justification: `skills/l4|l5|l6/SKILL.md` 各加 2 行（工頭一刀一命與接手上限——這兩條是 digest
 的直接對策，不放在 skill 裡工頭就看不到）；`dev-flow`／`agent-call`／`engine-onboarding` 的成長是先前版本已
 justify、baseline（v2.35.2）尚未刷新所致。
@@ -4144,7 +4159,7 @@ prose-justification: no `skills/*/SKILL.md` changed this release; `dev-flow`／`
 
 ## v2.35.11 — 考過的部署要能照原樣上線：named endpoint 的傳輸政策與考試對齊
 
-`qwen3.8-flash-next`（cookys-cuda 上的本機 SGLang，`http://192.168.101.7:8001`）以 cc-shim 走
+`qwen3.8-flash-next`（<host> 上的本機 SGLang，`http://<private-ip>:8001`）以 cc-shim 走
 live-rail 考過 implementer 24/24（`docs/plans/evidence/2026-09-03-flash-next-implementer-qualify/`），
 但日常路由到不了它：`implementer_endpoint:` 經 `resolve-endpoint.sh` 只接受 https 或 loopback
 http，而考試是靠 `ANTHROPIC_BASE_URL` 原始 env 穿透打到 LAN。最強的證據路徑比路由路徑更寬鬆，
@@ -4226,7 +4241,7 @@ prose-justification: 沒有 `skills/*/SKILL.md` 變更；文字都在 `reference
 
 ## v2.35.9 — 座位有 effort、考試身分不綁 plugin 版本、可從 feed 採納（而且什麼都自己重算）
 
-llm-playground（7840hs）交接的四項，加上追查過程中發現的兩個真缺陷。
+llm-playground（<host>）交接的四項，加上追查過程中發現的兩個真缺陷。
 
 **effort 進 seat identity。** 座位原本是 (engine, runner, role)，所以同一個引擎在不同 effort 的兩次
 施測是**同一個座位**、latest-wins。真實資料不是假設：grok-4.6@high FAILED（23/24，一次 integrity
@@ -4390,7 +4405,7 @@ prose-justification: no `skills/*/SKILL.md` changed this release.
 
 ## v2.35.7 — agy 死路三修：預設 model 死字串、alias 比對從未對過真 CLI、argv 天花板無聲失敗；watcher 改看磁碟事實
 
-Fleet peer（PEACE / twgs-revival）回報的三項 upstream 請求（#2/#3/#4），加上追修時發現的一個更嚴重的
+Fleet peer（PEACE / <host>）回報的三項 upstream 請求（#2/#3/#4），加上追修時發現的一個更嚴重的
 既有缺陷。
 
 **agy alias 解析從未對真的 `agy models` 生效（🔴，追修時實測發現）。** `agy models` 印的是

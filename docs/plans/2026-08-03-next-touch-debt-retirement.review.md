@@ -20,7 +20,7 @@
 ## Generation 1 — semantic conditional; repair authorized
 
 - Controller artifact:
-  `/home/cookys/.autopilot/plan-review/6066dba471bcff2f3437281cec78dd31a12e9848481cf83260ccc337758bebf0/generation-01.json`
+  `$HOME/.autopilot/plan-review/6066dba471bcff2f3437281cec78dd31a12e9848481cf83260ccc337758bebf0/generation-01.json`
 - Artifact SHA-256: `f4e8a90207fdc7103dd43f39e9ad0c594eed2e49cd3ad5f9d4a4753532c3619b`
 - Result: `CONDITIONAL`, semantic `CONDITIONAL`, non-terminal, policy `depth_0_adjudication_required`.
 - Architecture (`codex/gpt-5.6-sol@max`) returned `STOP` with nine blocker findings; operations-skeptic
@@ -35,7 +35,7 @@ no implementation, full suite, push, or backlog mutation was performed.
 ## Generation 2 — terminal transport exhaustion
 
 - Controller artifact:
-  `/home/cookys/.autopilot/plan-review/6066dba471bcff2f3437281cec78dd31a12e9848481cf83260ccc337758bebf0/generation-02.json`
+  `$HOME/.autopilot/plan-review/6066dba471bcff2f3437281cec78dd31a12e9848481cf83260ccc337758bebf0/generation-02.json`
 - Artifact SHA-256: `683aaf10187e87853055aca0c6e84e697ef80c54dfb241e5b49a1b6c81252245`
 - Result: `CONDITIONAL`, semantic verdict `null`, terminal, policy
   `required_seat_transport_exhausted`; `repair_authorized:false`; no generation 3 is permitted.
@@ -73,7 +73,7 @@ that session. The plan and rubric bytes are unchanged.
 - Session key: `1fbdf9c247cf1133b70629fac480659dcd094d370d89afb3b6132c1bc1c0ae41`
 - Manifest SHA-256: `9e1e4db992c369182e440755914252b7096e482447515faa9b51ae0e3084692a`
 - Controller artifact:
-  `/home/cookys/.autopilot/plan-review/1fbdf9c247cf1133b70629fac480659dcd094d370d89afb3b6132c1bc1c0ae41/generation-01.json`
+  `$HOME/.autopilot/plan-review/1fbdf9c247cf1133b70629fac480659dcd094d370d89afb3b6132c1bc1c0ae41/generation-01.json`
 - Artifact SHA-256: `9083ff23de59af3857ca47a936c26a062708f09d8b5d25bd45c88222d609adec`
 - Result: terminal `CONDITIONAL`, semantic verdict `null`, policy
   `required_seat_transport_exhausted`; no generation 2 is authorized for this session.
@@ -101,7 +101,7 @@ and accepted six MiniMax/operations blockers in:
 - Logical plan: `next-touch-debt-retirement-2026-08-03-glm-minimax-promptfix-20260804`
 - Ticket: `next-touch-debt-retirement-glm-minimax-promptfix-20260804`
 - Session key: `535cdf05e90650db9d6a1e3a9ff347b3597910122c2a90a29cd8c71d2d0e1dc3`
-- Generation 1 artifact: `/home/cookys/.autopilot/plan-review/535cdf05e90650db9d6a1e3a9ff347b3597910122c2a90a29cd8c71d2d0e1dc3/generation-01.json`
+- Generation 1 artifact: `$HOME/.autopilot/plan-review/535cdf05e90650db9d6a1e3a9ff347b3597910122c2a90a29cd8c71d2d0e1dc3/generation-01.json`
 - Generation 1 result: `CONDITIONAL`, semantic `CONDITIONAL`, depth-0 repair authorized.
 
 Generation 2 reached the hard two-generation ceiling. GLM parsed one `CONDITIONAL` response, but
@@ -110,7 +110,7 @@ inner double quotes (for example `--ledger "$MISSION_LEDGER"`) into string value
 therefore failed at byte positions 8,123 and 12,261. This is a model-output/schema-encoding failure,
 not quota, authentication, or transport failure.
 
-- Generation 2 artifact: `/home/cookys/.autopilot/plan-review/535cdf05e90650db9d6a1e3a9ff347b3597910122c2a90a29cd8c71d2d0e1dc3/generation-02.json`
+- Generation 2 artifact: `$HOME/.autopilot/plan-review/535cdf05e90650db9d6a1e3a9ff347b3597910122c2a90a29cd8c71d2d0e1dc3/generation-02.json`
 - Generation 2 artifact SHA-256: `6bc835a22ea936083f1785e12c8b1ceb9c8368f5a373716b6fa3c6063261eed2`
 - Result: terminal `CONDITIONAL`, semantic verdict `null`, policy `required_seat_transport_exhausted`;
   no generation 3 and no implementation authorization.
@@ -132,7 +132,7 @@ review identity, not generation 3 of the terminal MiniMax session.
 - Session key: `be97e991fce6092acd7955f5f312976332576af7431e7af63f231e7fac804488`
 - Plan SHA-256: `f29f43889a08dff65fa5af15c8b7e8609931158c82df00d902836d9f4a226114`
 - Rubric SHA-256: `16ca0694ed6edbcfcb55b471e3a0da28bc81d04a246901105c1f9d4f1b4c0975`
-- Artifact: `/home/cookys/.autopilot/plan-review/be97e991fce6092acd7955f5f312976332576af7431e7af63f231e7fac804488/generation-01.json`
+- Artifact: `$HOME/.autopilot/plan-review/be97e991fce6092acd7955f5f312976332576af7431e7af63f231e7fac804488/generation-01.json`
 - Artifact SHA-256: `d3ae074bb55ae9d58d8d950836f3cfee68a5471c4e3d08d615bedbb1e01e3a6f`
 
 Both required seats completed successfully: GLM strict parser and agy extracted parser, two distinct

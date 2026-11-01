@@ -27,6 +27,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const runtimePaths = require('./runtime-paths');
 
 const STALE_MS = 24 * 3600 * 1000;
 const AGENT_STALE_MS = 30 * 60 * 1000;
@@ -227,15 +228,19 @@ function srcLedger(ctx) {
 }
 
 function srcDispatches(ctx) {
-  const dir = ctx.dirs.dispatchRuns || process.env.AUTOPILOT_DISPATCH_RUNS_DIR
-    || path.join(process.env.TMPDIR || '/tmp', 'autopilot-dispatch-runs');
+  let dir = ctx.dirs.dispatchRuns;
+  if (!dir) {
+    const ens = runtimePaths.ensureRunsDir(process.env);
+    if (!ens.ok) return absent('dispatches', `runs directory unusable: ${ens.reason}`);
+    dir = ens.path;
+  }
   const m = ctx.marker;
   const roots = new Set();
   if (m && m.root_run_id) roots.add(m.root_run_id);
   if (m && Array.isArray(m.campaign_roots)) for (const r of m.campaign_roots) roots.add(r);
   if (!roots.size) return absent('dispatches', 'no root run id in the marker to match manifests against');
   let names;
-  try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.manifest.json')); } catch { return absent('dispatches', 'no dispatch-runs directory'); }
+  try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.manifest.json')); } catch (e) { return absent('dispatches', `cannot read the runs directory: ${e.code || e.message}`); }
   const rows = names.map((n) => { try { return { n, m: fs.statSync(path.join(dir, n)).mtimeMs }; } catch { return null; } })
     .filter(Boolean).sort((a, b) => b.m - a.m).slice(0, MANIFEST_READ_CAP);
   const live = [];

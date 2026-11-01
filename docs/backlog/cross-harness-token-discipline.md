@@ -1,6 +1,6 @@
 # Cross-harness token discipline
 
-BL-0271. Reported by llm-playground claude-4 (c4140).
+BL-0271. Reported by llm-playground claude-4 (<host>).
 
 - Report 01M5EWE5D6HT343H26BCXSHBPM, reply 2026-10-21 01M5EWEHPTPD4F0P6KAP5VDCAH.
 - Report 01M5EX8WGH1FT9MJDXYNQ2WGWN, reply 2026-10-21 01M5EX9883PHTTG3N2HPE08CG6.
@@ -22,7 +22,7 @@ Codex settings to spike, all unverified: model_auto_compact_token_limit, default
 
 Whether agy reads AGENTS.md or GEMINI.md at runtime is unmeasured.
 
-agy (c4140 argon, gemini-4-argon, a single conversation) made 5532 calls, with an average context of 157K, about 25K after compaction, and compaction at about 290K for 89 compactions in total; the fields were inferred from the conversations database protobuf and there is no official schema. The agy subagent configuration follows the official documentation at antigravity.google/docs/subagents: global ~/.gemini/config/agents/NAME.md and workspace .agents/agents/NAME.md, YAML frontmatter fields name and description (both required), model (inherit, flash or pro), tools, subagent, mainAgent, commandExecutionPolicy, mcpServers, skills; there is no per-subagent effort and no concurrency cap (nesting depth cap is 10); a misspelled tool name makes the subagent hang; whether flash maps to gemini-3.8-flash is untested. Source: fleet message 01M5EY27E8E1PJVDB7B05FEENX, reply 2026-10-21 01M5EY2GX2JCMJB1VX3TMF81EX.
+agy (<host> argon, gemini-4-argon, a single conversation) made 5532 calls, with an average context of 157K, about 25K after compaction, and compaction at about 290K for 89 compactions in total; the fields were inferred from the conversations database protobuf and there is no official schema. The agy subagent configuration follows the official documentation at antigravity.google/docs/subagents: global ~/.gemini/config/agents/NAME.md and workspace .agents/agents/NAME.md, YAML frontmatter fields name and description (both required), model (inherit, flash or pro), tools, subagent, mainAgent, commandExecutionPolicy, mcpServers, skills; there is no per-subagent effort and no concurrency cap (nesting depth cap is 10); a misspelled tool name makes the subagent hang; whether flash maps to gemini-3.8-flash is untested. Source: fleet message 01M5EY27E8E1PJVDB7B05FEENX, reply 2026-10-21 01M5EY2GX2JCMJB1VX3TMF81EX.
 
 Trigger-Type owner. Effort M. Confirm with the owner before adopting the rules.
 
@@ -44,7 +44,7 @@ Local spike on this host (foreman). Versions: codex-cli 0.163.0 (`codex --versio
 | agy global instruction files | `HOME=<temp dir with copied OAuth token>`, `agy -p` plus a one-line question | agy 1.4.4 | confirmed | Loads global `~/.gemini/GEMINI.md`, global `~/.gemini/AGENTS.md`, and the workspace AGENTS.md. All three codewords returned. Load order was not observed. |
 | agy subagent file and aliases | `~/.gemini/config/agents/NAME.md`; `agy agents`; `agy --agent NAME`; `invoke_subagent` | agy 1.4.4 | confirmed | Frontmatter `name`, `description`, `model` is listed and runnable, and the main model can call it via `invoke_subagent`. `model` accepts only `flash`, `pro`, `inherit` (case-insensitive) or an absent field. `gemini-3.8-flash-low`, `gemini-3.8-flash`, `sonnet`, and `zzz-nonexistent-9` were silently not listed. |
 | Whether `flash` resolves to `gemini-3.8-flash` | agy log and transcript of `invoke_subagent` | agy 1.4.4 | unverifiable | Log shows no subagent model. The recorded call carried Model "inherit". `agy models` lists `gemini-4-argon-{low,medium,high}`, `gemini-3.8-flash-{low,medium,high}`, `claude-opus-5-5-*`, `claude-sonnet-5-5-*`, `gpt-oss-120b-medium`. `--agent NAME` left the main label at Gemini 4 Argon (Medium). `--model gemini-3.8-flash-low` changed it to Gemini 3.8 Flash (Low). |
-| `commandExecutionPolicy` sandbox vs GPU | peer measurement, c4140 argon; not run locally | peer (agy) | unverifiable | Peer measured, not reproduced locally. Not recorded as a capability. |
+| `commandExecutionPolicy` sandbox vs GPU | peer measurement, <host> argon; not run locally | peer (agy) | unverifiable | Peer measured, not reproduced locally. Not recorded as a capability. |
 | Compaction thresholds hard-coded for `gemini-4-argon` | not tested | peer claim | unverifiable | Unverified peer claim. |
 | `settings.json` `contextWindow` only 256K/512K/900K | not tested | peer claim | unverifiable | Unverified peer claim. |
 

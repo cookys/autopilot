@@ -22,8 +22,10 @@
 #   2. <target>/.claude/project-lifecycle-config.md   ← what scaffold-config.js writes
 #   3. <target>/.claude/next-config.md
 #   4. <target>/.claude/dev-flow-config.md
-#   5. project-detect.js --target <target>
-#   6. "none"
+#   5. <target>/scripts/lib/repo-layout.js registry (only a file that identifies itself as the
+#      autopilot layout registry; a consumer repo has none and falls through)
+#   6. project-detect.js --target <target>
+#   7. "none"
 #
 # Tier 2-4 are read from the TARGET, never from this plugin's own .claude/. The installed
 # plugin ships a .claude/ directory, so inheriting it across repos would hand a consuming
@@ -39,7 +41,7 @@
 #   (a directory for *_dir, a file for backlog/index). A detected default can name a path that was
 #   never created (fleet repo, 2026-11-01: backlog=docs/BACKLOG.md, no such file); a skill must treat
 #   backlog_exists=false like `none`: report, do not write.
-#   source ∈ {override, project-lifecycle-config, next-config, dev-flow-config, detected, none}
+#   source ∈ {override, project-lifecycle-config, next-config, dev-flow-config, registry, detected, none}
 #     — the source of the FIRST field that answered; individual fields may differ, so a
 #       field's own value is authoritative, not the aggregate label.
 #
@@ -115,6 +117,25 @@ resolve_one 'Plans directory';    PLANS="$RESOLVED"
 resolve_one 'Archive';            ARCHIVE="$RESOLVED"
 resolve_one 'Backlog';            BACKLOG="$RESOLVED"
 resolve_one 'Index';              INDEX="$RESOLVED"
+
+# Tier 5: the TARGET's own layout registry (autopilot repo only; relayout moves the work-record
+# paths and the registry is the one place that knows the current stage). Read from TARGET, never
+# from this plugin: a consumer repo has no such file and must not inherit ours. The file is run only
+# when its header names it the layout registry, with the test-override env cleared.
+REG_FILE="$TARGET/scripts/lib/repo-layout.js"
+if [[ -z "$PROJECTS$PLANS$ARCHIVE$BACKLOG$INDEX" || -z "$PROJECTS" || -z "$PLANS" || -z "$ARCHIVE" || -z "$BACKLOG" || -z "$INDEX" ]] \
+   && [[ -f "$REG_FILE" ]] && [[ "$(head -c 800 "$REG_FILE")" == *'the one registry of where things live'* ]]; then
+  reg_get() { env -u REPO_LAYOUT_REGISTRY node "$REG_FILE" path "$1" 2>/dev/null; }
+  _answered=0
+  for _f in projects_dir:projects_dir:PROJECTS:/ plans_dir:plans_dir:PLANS:/ projects_archive_dir:archive_dir:ARCHIVE:/ backlog_file:backlog:BACKLOG: projects_index:index:INDEX:; do
+    IFS=: read -r _rk _ _var _suf <<< "$_f"
+    [[ -n "${!_var}" ]] && continue
+    _v="$(reg_get "$_rk")"
+    [[ -n "$_v" ]] || continue
+    printf -v "$_var" '%s' "${_v%/}$_suf"; _answered=1
+  done
+  [[ "$SOURCE" == "none" && "$_answered" -eq 1 ]] && SOURCE="registry"
+fi
 
 # Anything the config did not answer falls to detection, which owns doc/ vs docs/.
 if [[ -z "$PROJECTS$PLANS$ARCHIVE$BACKLOG$INDEX" ]] \

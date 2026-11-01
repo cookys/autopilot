@@ -110,7 +110,7 @@ eq "autopilot: archive" "docs/projects/_archive/" "$(bash "$R" --target "$REPO_R
 #    root proves nothing. Assert the field values: a bare foreign repo must not resolve to
 #    autopilot's real layout, which we know exactly.
 AP_BACKLOG="$(bash "$R" --target "$REPO_ROOT" --field backlog)"
-[ "$AP_BACKLOG" = "docs/BACKLOG.md" ] || { echo "fixture error: autopilot layout changed"; exit 1; }
+[ "$AP_BACKLOG" = "$(node "$REPO_ROOT/scripts/lib/repo-layout.js" path backlog_file)" ] || { echo "fixture error: autopilot layout changed"; exit 1; }
 eq "foreign target: does not inherit autopilot's backlog ($AP_BACKLOG)" "none" "$(bash "$R" --target "$BARE" --field backlog)"
 eq "foreign target: does not inherit autopilot's projects_dir" "none" "$(bash "$R" --target "$BARE" --field projects_dir)"
 
@@ -145,6 +145,40 @@ FF="$REPO_ROOT/skills/finish-flow/SKILL.md"
 if grep -F 'backlog: none`, or `backlog_exists` false' "$FF" >/dev/null && grep -F -- '--field backlog_exists' "$FF" >/dev/null
 then ok "finish-flow Deferred items: backlog_exists=false triggers the no-backlog report"
 else no "finish-flow Deferred items: backlog_exists=false triggers the no-backlog report" "SKILL.md names backlog_exists" "absent"; fi
+
+# 8d. The target's own layout registry answers before detection (relayout: stage bootstrap -> docs/,
+#     stage P1 -> project/). Only the TARGET's file counts; a consumer repo without one is unchanged.
+mk_reg_target() {  # mk_reg_target <dir> <docs|project>  — real registry, work-record paths rewritten for P1
+  local d="$1" base="$2"
+  mkdir -p "$d/scripts/lib"; git -C "$d" init -q
+  if [ "$base" = project ]; then
+    sed -E "s#'docs/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive|BACKLOG.md)'#'project/\1'#" \
+      "$REPO_ROOT/scripts/lib/repo-layout.js" > "$d/scripts/lib/repo-layout.js"
+  else
+    cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$d/scripts/lib/repo-layout.js"
+  fi
+}
+RB="$TMP/reg-boot"; mk_reg_target "$RB" docs
+RP="$TMP/reg-p1";   mk_reg_target "$RP" project
+eq "bootstrap registry: backlog -> docs/" "docs/BACKLOG.md" "$(bash "$R" --target "$RB" --field backlog)"
+eq "bootstrap registry: index -> docs/"   "docs/projects/INDEX.md" "$(bash "$R" --target "$RB" --field index)"
+eq "P1 registry: backlog -> project/"     "project/BACKLOG.md" "$(bash "$R" --target "$RP" --field backlog)"
+eq "P1 registry: index -> project/"       "project/projects/INDEX.md" "$(bash "$R" --target "$RP" --field index)"
+eq "P1 registry: plans_dir -> project/"   "project/plans/" "$(bash "$R" --target "$RP" --field plans_dir)"
+eq "P1 registry: projects_dir -> project/" "project/projects/" "$(bash "$R" --target "$RP" --field projects_dir)"
+eq "P1 registry: archive_dir -> project/" "project/projects/_archive/" "$(bash "$R" --target "$RP" --field archive_dir)"
+eq "P1 registry: source is registry"      "registry" "$(bash "$R" --target "$RP" --field source)"
+# a config block still outranks the registry
+mkdir -p "$RP/.claude"; printf '## Project Paths\n- Backlog: `doc/DEBT.md`\n' > "$RP/.claude/project-lifecycle-config.md"
+eq "config block outranks the registry" "doc/DEBT.md" "$(bash "$R" --target "$RP" --field backlog)"
+# a foreign file at the same path (no registry header) is never executed or trusted
+FR="$TMP/reg-foreign"; mkdir -p "$FR/scripts/lib"; git -C "$FR" init -q
+printf 'console.log("project/EVIL.md")\n' > "$FR/scripts/lib/repo-layout.js"
+eq "foreign repo-layout.js is ignored" "none" "$(bash "$R" --target "$FR" --field backlog)"
+# a consumer repo without a registry keeps the pre-registry behaviour
+eq "no registry: bare repo still none" "none" "$(bash "$R" --target "$BARE" --field backlog)"
+# the plugin's own registry is not inherited by a target that lacks one
+eq "no registry: source is not registry" "none" "$(bash "$R" --target "$BARE" --field source)"
 
 # 7. Envelope.
 node -e 'JSON.parse(process.argv[1])' "$(bash "$R" --target "$REPO_ROOT")" \

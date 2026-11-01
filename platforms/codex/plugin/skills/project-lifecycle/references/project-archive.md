@@ -2,13 +2,16 @@
 # Project Archive
 
 > **Trigger**: L/XL project completed (after `finishing-a-development-branch`)
-> **XS/S/M tasks do not use this flow** — S audit trail lives in `docs/projects/ongoing-maintenance/` (or the project-configured projects path — e.g. `docs/` plural)
+> **XS/S/M tasks do not use this flow** — S audit trail lives in `$PROJECTS_DIR/ongoing-maintenance/`
+> **Paths**: resolve before use, never type a literal `docs/…`:
+> `PLANS_DIR=$(bash scripts/resolve-project-paths.sh --field plans_dir)`, likewise `projects_dir` → `$PROJECTS_DIR`, `archive_dir` → `$ARCHIVE_DIR`, `index` → `$INDEX`, `backlog` → `$BACKLOG`.
+> `none` or `*_exists` false ⇒ report it, do not create the location.
 
 ## Eligibility Check (before archiving)
 
 A project is eligible for archive when:
 - **100% of phases completed**, OR
-- **Core phases completed** + remaining phases explicitly recorded in `docs/BACKLOG.md` with trigger conditions
+- **Core phases completed** + remaining phases explicitly recorded in `$BACKLOG` with trigger conditions
 
 **Cannot archive if**: any incomplete phase is not accounted for in BACKLOG, or deferred items lack trigger conditions.
 
@@ -21,7 +24,7 @@ Eligibility check:
 
 ## Step 1: README Status Verification (LLM judgment)
 
-Read `docs/projects/{PROJECT}/README.md` and verify:
+Read `$PROJECTS_DIR/{PROJECT}/README.md` and verify:
 
 - [ ] All Phase statuses show completion (not in-progress or pending)
 - [ ] Phases moved to Backlog are marked paused with corresponding BACKLOG.md entry
@@ -56,7 +59,7 @@ The script performs: mv to `_archive/` -> update `projects/INDEX.md` (remove + a
 These items require judgment and must not be skipped:
 
 - [ ] **Proposals archive** — check `docs/proposals/` for related files. If found, move to `docs/proposals/_archive/` and update proposals INDEX if one exists.
-- [ ] **`~/.claude/plans/` cleanup** — check for leftover plan files from Plan Mode. Archive to `docs/plans/_archive/`.
+- [ ] **`~/.claude/plans/` cleanup** — check for leftover plan files from Plan Mode. Archive to `$PLANS_DIR/_archive/`.
 - [ ] **BACKLOG.md sync** — **delete** completed items (not strikethrough). Add any newly identified follow-up items with trigger conditions.
 - [ ] **Documentation sync** — run `git diff --name-only develop` and verify: if game logic/architecture/proto/skill files changed, corresponding docs are updated.
 - [ ] **Mission routing continuity** — if `.claude/mission-routing-config.json` points inside the project directory being moved, update `graph_path` to the archived path in the same archive change. Then run `bash hooks/tests/mission-routing-admission.test.sh` and `bash hooks/tests/session-mode.test.sh`; both must pass before closeout.
@@ -68,16 +71,16 @@ During archive, scan for orphaned or inconsistent entries across project trackin
 
 ```bash
 # Check for projects still marked Active but with all phases done:
-grep -l "in progress" docs/projects/*/README.md 2>/dev/null
+grep -l "in progress" "$PROJECTS_DIR"/*/README.md 2>/dev/null
 
 # Check for plan files that should have been archived:
-ls docs/plans/*.md 2>/dev/null | grep -v INDEX | grep -v _archive
+ls "$PLANS_DIR"*.md 2>/dev/null | grep -v INDEX | grep -v _archive
 
 # Check for empty Active table entries pointing to _archive/:
-grep "_archive" docs/projects/INDEX.md 2>/dev/null
+grep "_archive" "$INDEX" 2>/dev/null
 
 # Check for "in progress" markers that should be resolved:
-grep -rn "in progress\|In Progress\|IN PROGRESS" docs/projects/INDEX.md 2>/dev/null
+grep -rn "in progress\|In Progress\|IN PROGRESS" "$INDEX" 2>/dev/null
 ```
 
 The sweep above scans INDEX→filesystem. That direction alone cannot see anything the INDEX never
@@ -85,14 +88,14 @@ mentioned, so run the reverse direction too — filesystem→INDEX:
 
 ```bash
 # REVERSE 1: archived project dirs not listed in INDEX
-for d in docs/projects/_archive/*/; do
+for d in "$ARCHIVE_DIR"*/; do
   [ -d "$d" ] || continue
   name=$(basename "$d")
-  grep -q "$name" docs/projects/INDEX.md || echo "ORPHAN PROJECT: $name not in INDEX"
+  grep -q "$name" "$INDEX" || echo "ORPHAN PROJECT: $name not in INDEX"
 done
 
 # REVERSE 2: project dirs whose README says COMPLETE but that never moved to _archive/
-for d in docs/projects/*/; do
+for d in "$PROJECTS_DIR"/*/; do
   case "$(basename "$d")" in _archive|ongoing-maintenance) continue ;; esac
   grep -qi "status.*COMPLETE" "$d/README.md" 2>/dev/null \
     && echo "UNARCHIVED COMPLETE: $(basename "$d") is done but still outside _archive/"
@@ -101,7 +104,7 @@ done
 # REVERSE 3: branches named in the Active section that no longer exist.
 # Scope to the Active table only — the Completed table legitimately names branches that are gone,
 # and scanning the whole file reports every one of them as stale.
-sed -n '/^## 進行中/,/^## 已完成/p' docs/projects/INDEX.md 2>/dev/null \
+sed -n '/^## 進行中/,/^## 已完成/p' "$INDEX" 2>/dev/null \
   | grep -oE '`(feat|fix|mission)/[A-Za-z0-9._/-]+`' \
   | tr -d '`' | sort -u | while read -r branch; do
   git rev-parse --verify --quiet "$branch" >/dev/null \
@@ -111,7 +114,7 @@ done
 ```
 
 **For each finding:**
-- Orphaned plan file (project already archived) → move to `docs/plans/_archive/`
+- Orphaned plan file (project already archived) → move to `$PLANS_DIR/_archive/`
 - Active table entry pointing to `_archive/` → remove from Active, ensure in Archived
 - "In progress" marker on completed project → update to final status
 - Empty Active table row → remove
@@ -129,9 +132,9 @@ Auto-trigger after archive completes. Scans all work sources and recommends next
 
 | Script Error | Diagnosis | Recovery |
 |-------------|-----------|----------|
-| `Archive destination already exists` | Duplicate archive attempt or name collision | Check `docs/projects/_archive/` for existing dir. If duplicate, skip mv. If name collision, rename. |
-| `indexUpdated: false` | INDEX.md format changed or project entry not found | Manually edit `docs/projects/INDEX.md`: remove from active, add to archived section, update count. |
-| `plansArchived: []` (expected plans) | Plan filename does not contain project short name | Manually find plan in `docs/plans/`, move to `docs/plans/_archive/`, update `docs/plans/INDEX.md`. |
+| `Archive destination already exists` | Duplicate archive attempt or name collision | Check `$ARCHIVE_DIR` for existing dir. If duplicate, skip mv. If name collision, rename. |
+| `indexUpdated: false` | INDEX.md format changed or project entry not found | Manually edit `$INDEX`: remove from active, add to archived section, update count. |
+| `plansArchived: []` (expected plans) | Plan filename does not contain project short name | Manually find plan in `$PLANS_DIR`, move to `$PLANS_DIR/_archive/`, update `$PLANS_DIR/INDEX.md`. |
 | Script crashes (non-JSON output) | Node.js error or missing dependency | Read error message. Common fix: `node --version` check (needs 18+). If script bug, perform steps manually. |
 | Partial completion (archived=true but indexUpdated=false) | Script succeeded on mv but failed on INDEX update | Do NOT re-run script (would fail on "already exists"). Manually fix INDEX only. |
 
@@ -139,10 +142,10 @@ Auto-trigger after archive completes. Scans all work sources and recommends next
 
 If the script fails completely, perform these steps manually:
 
-1. `mv docs/projects/{PROJECT} docs/projects/_archive/`
-2. Edit `docs/projects/INDEX.md`: remove from active section, add to archived section
-3. Move matching plans: `mv docs/plans/{plan}.md docs/plans/_archive/`
-4. Edit `docs/plans/INDEX.md`: update status
+1. `mv "$PROJECTS_DIR/{PROJECT}" "$ARCHIVE_DIR"`
+2. Edit `$INDEX`: remove from active section, add to archived section
+3. Move matching plans: `mv "$PLANS_DIR/{plan}.md" "$PLANS_DIR/_archive/"`
+4. Edit `$PLANS_DIR/INDEX.md`: update status
 5. Proceed with Step 3 (LLM post-processing)
 
 ## See Also

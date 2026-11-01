@@ -529,11 +529,24 @@ const legacyResumed = runCampaignComposition({
 assert.notStrictEqual(legacyResumed.phase, 'disposition_resume', legacyResumed.reason);
 assert.strictEqual(third.events[0], 'DISPOSITION_RESUMED');
 console.log('legacy_empty_snapshot_resumes=true');
+
+// An incomplete registry never emits DISPOSITION_RESUMED and never reaches ready.
+const incompleteAdapters = adapters(provider, { controllers: [], events: [] });
+incompleteAdapters.adjudicate = () => ({ registry_complete: false, repair_gate_passed: false, reason: 'registry incomplete', must_fix_now: [], follow_up: [], rejected: [] });
+const incompleteSink = { controllers: [], events: [] };
+incompleteAdapters.onCampaignEvent = (event) => incompleteSink.events.push(event.event_type);
+incompleteAdapters.onControllerUpdate = (controller) => { incompleteSink.controllers.push(JSON.parse(JSON.stringify(controller))); };
+const incomplete = runCampaignComposition({ promptBytes: 0, maxRepairGenerations: 1, minPanelSize: 1, controller: persisted,
+  resume: resumeFrom(persisted, persisted.findings_snapshot || persisted.unresolved_findings) }, incompleteAdapters);
+assert.strictEqual(incompleteSink.events.includes('DISPOSITION_RESUMED'), false, `incomplete registry emitted ${JSON.stringify(incompleteSink.events)}`);
+assert.notStrictEqual(incomplete.status, 'ready');
+assert.notStrictEqual(incomplete.phase, 'terminal_ready');
+console.log('incomplete_registry_skips_disposition_resumed=true');
 NODE
 )"
 assert_exit_code "$?" "0" "disposition resume process exits zero: $DISPOSITION_RESUME_OUT"
 for key in awaiting_disposition_snapshot_nonempty disposition_resume_rebinds_snapshot \
-  legacy_empty_snapshot_resumes; do
+  legacy_empty_snapshot_resumes incomplete_registry_skips_disposition_resumed; do
   assert_contains "$DISPOSITION_RESUME_OUT" "$key=true" "disposition resume proves $key"
 done
 
@@ -1885,6 +1898,201 @@ assert_contains "$DISP_RESUME_OUT" "wall_clock_paused_resume_admitted=true" \
   "resume past max_wall_seconds admitted while parked at awaiting_disposition"
 assert_contains "$DISP_RESUME_OUT" "t3_preclaim_drift=true" "T3 pre-claim drift refused"
 
+# BL-0360 negative control: a mutation-capable resume (VERTICAL_VERIFICATION, a
+# bound git candidate) with a full budget stays rejected. The reducer caps changed_files
+# at max_changed_files and repair phases block only above it, so the budget that bites
+# here is churn.
+MUT_CONTRACT="$DISP_CONTRACT.mutation.json"
+git -C "$DISP_WT" reset --hard "$C0" >/dev/null
+git -C "$DISP_SBX" replace -d "$C1" >/dev/null 2>&1 || true
+MUT_JOURNAL="$(node - "$REPO_ROOT" "$DISP_SBX" "$DISP_WT" "$DISP_CONTRACT" "$DISP_PROMPT" \
+  "$DISP_BASE" "$C0" "$C0_TREE" <<'NODE'
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const [
+  root, repo, worktree, contractPath, promptFile, base, c0, c0Tree,
+] = process.argv.slice(2);
+const {
+  CAMPAIGN_EVENTS,
+  appendCampaignEvent,
+  canonicalDigest,
+  createWriterFence,
+  runCampaignIntake,
+} = require(path.join(root, 'src', 'engine'));
+const { worktreeInstanceId } = require(path.join(root, 'src', 'engine', 'repair-lineage-cleanup'));
+const mutationContract = `${contractPath}.mutation.json`;
+const mutationSeal = `${contractPath}.mutation.seal.json`;
+const contract = JSON.parse(fs.readFileSync(contractPath, 'utf8'));
+contract.ticket = 'icc-disp-mutation-budget';
+fs.writeFileSync(mutationContract, `${JSON.stringify(contract, null, 2)}\n`);
+const sealed = spawnSync(process.execPath, [
+  path.join(root, 'scripts', 'implementation-campaign-check.js'),
+  'seal', '--contract', mutationContract, '--repo', repo,
+  '--mission-mode', 'shadow', '--out', mutationSeal,
+], { encoding: 'utf8' });
+assert.strictEqual(sealed.status, 0, sealed.stderr || sealed.stdout);
+const adapters = {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+};
+let control = runCampaignIntake({
+  repo, contractPath: mutationContract, sealPath: mutationSeal, promptFile,
+  branch: 'impl/disp-resume', base,
+  roster: { implementer_engine: 'fixture-implementer' },
+  observedAt: '2026-09-16T00:00:00.000Z',
+}, adapters);
+assert.strictEqual(control.status, 'admitted', JSON.stringify(control.rejection || control));
+const mutationId = control.campaign_id;
+const lineage = {
+  lineage_id: mutationId,
+  branch: 'impl/disp-resume',
+  worktree,
+  provider_session_id: null,
+  provider_session_reused: false,
+  provider_session_non_reuse_reason: 'runner_resume_not_verified:fixture',
+  worktree_reused: false,
+  worktree_instance_id: worktreeInstanceId(worktree),
+  cleanup_epoch: 1,
+  cleanup_receipt_id: null,
+  generation: 0,
+  inherited_churn: 0,
+  delta_churn: 2,
+  retention_owner: mutationId,
+  retention_reason: 'implementation-campaign-repair-lineage',
+  retention_expires_at: 2000000000,
+  terminal_worktree_disposition: 'active',
+  transcript_reused: false,
+  transcript_source_digest: 'a'.repeat(64),
+  review_input_mode: 'full_diff_generation',
+  new_input_bytes: 17,
+  new_input_tokens: 23,
+  input_token_measurement: 'provider_reported',
+  finding_occurrences: [],
+  accepted_invariant_ids: [`acceptance:${'c'.repeat(64)}`],
+  accepted_invariants: ['preserve durable invariant'],
+  accepted_invariants_source_commit: c0,
+  accepted_invariants_digest: canonicalDigest({
+    schema: 1,
+    assertions: ['preserve durable invariant'],
+    source_commit: c0,
+  }),
+  prior_review_finding_ids: [],
+  previous_repair_finding_count: null,
+  non_reduction_rounds: 0,
+  repair_scope_paths: ['src/value.txt'],
+  repair_scope_seal: null,
+};
+const gitCandidate = {
+  kind: 'git_candidate',
+  commit: c0,
+  tree_sha: c0Tree,
+  branch: 'impl/disp-resume',
+  base,
+  writer_fence: createWriterFence({
+    campaignId: mutationId,
+    stageIdentity: 'campaign-implementation',
+    candidateCommit: c0,
+    candidateTreeSha: c0Tree,
+    implementationResult: {
+      status: 'committed',
+      implementation: { commit: c0 },
+      implementationResult: { error: null, signal: null, status: 0 },
+    },
+  }),
+  repair_lineage: lineage,
+};
+control = { ...control, current_state: appendCampaignEvent({
+  repo, campaignControl: control, observedAt: '2026-09-16T00:00:01.000Z',
+  eventType: CAMPAIGN_EVENTS.IMPLEMENTATION_STARTED, generation: 0,
+  stageIdentity: 'campaign-mutation:0', payload: { sealed_contract: true },
+}).state };
+control = { ...control, current_state: appendCampaignEvent({
+  repo, campaignControl: control, observedAt: '2026-09-16T00:00:02.000Z',
+  eventType: CAMPAIGN_EVENTS.IMPLEMENTATION_COMPLETED, generation: 0,
+  stageIdentity: 'campaign-mutation:0',
+  payload: { scope_check_passed: true, scope_check_digest: 'd'.repeat(64) },
+  artifactReference: gitCandidate,
+  usage: { changed_files: 4, churn: 15 },
+}).state };
+console.log(`mut_seal=${mutationSeal}`);
+console.log('mutation_journal=true');
+NODE
+)"
+assert_exit_code "$?" "0" "mutation-capable journal: $MUT_JOURNAL"
+MUT_SEAL="$(printf '%s\n' "$MUT_JOURNAL" | sed -n 's/^mut_seal=//p')"
+MUT_RESUME="$(node - "$REPO_ROOT" "$DISP_SBX" "$MUT_CONTRACT" "$MUT_SEAL" "$DISP_PROMPT" "$DISP_BASE" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const [root, repo, contractPath, sealPath, promptFile, base] = process.argv.slice(2);
+const { runCampaignIntake } = require(path.join(root, 'src', 'engine'));
+const blocked = runCampaignIntake({
+  repo, contractPath, sealPath, promptFile,
+  branch: 'impl/disp-resume', base,
+  roster: { implementer_engine: 'fixture-implementer' },
+  observedAt: '2026-09-16T00:00:03.000Z',
+  resume: true,
+}, {
+  readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+  contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+  occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+});
+assert.strictEqual(blocked.status, 'blocked', JSON.stringify(blocked));
+assert.strictEqual(
+  blocked.rejection.code,
+  'campaign_churn_budget_exhausted',
+  JSON.stringify(blocked.rejection || blocked),
+);
+console.log('mutation_capable_full_budget_blocked=true');
+NODE
+)"
+assert_exit_code "$?" "0" "mutation-capable resume blocked: $MUT_RESUME"
+assert_contains "$MUT_RESUME" "mutation_capable_full_budget_blocked=true" \
+  "full-budget mutation-capable resume stays rejected"
+
+# BL-0360 negative control: the budget bypass needs ALL five proof fields. Any one
+# broken field (or an absent mark) keeps the budget rejection.
+EXACT_REPLAY_PRED="$(node - "$REPO_ROOT" <<'NODE'
+'use strict';
+const assert = require('assert');
+const path = require('path');
+const { isProvenExactReplayNoOp } = require(path.join(process.argv[2], 'src', 'engine', 'campaign-intake'));
+const proven = { exact_replay: true, no_op: true, dispatcher_called: false, mutation_attempts: 0, gate_attempts: 0 };
+assert.strictEqual(isProvenExactReplayNoOp(proven), true);
+const broken = [
+  ['exact_replay', false], ['no_op', false], ['dispatcher_called', true],
+  ['mutation_attempts', 1], ['gate_attempts', 1],
+  ['exact_replay', undefined], ['mutation_attempts', undefined], ['dispatcher_called', undefined],
+];
+for (const [key, value] of broken) {
+  assert.strictEqual(isProvenExactReplayNoOp({ ...proven, [key]: value }), false, `${key}=${value}`);
+}
+assert.strictEqual(isProvenExactReplayNoOp(undefined), false);
+// A stale all-true mark is worthless once the ledger has moved past the wait: the waiver reads the
+// CURRENT phase, so no non-wait phase is ever waived and a git-candidate BOUNDARY_REJECTED never is.
+const { durableWaitBudgetWaived } = require(path.join(process.argv[2], 'src', 'engine', 'campaign-intake'));
+for (const phase of ['PREPARED', 'IMPLEMENTING', 'VERTICAL_VERIFICATION', 'REVIEWING', 'ADJUDICATING', 'REPAIRING']) {
+  assert.strictEqual(durableWaitBudgetWaived({ phase, wait: proven, candidateReference: null }), false, `stale mark waived in ${phase}`);
+}
+for (const phase of ['BOUNDARY_REJECTED', 'AWAITING_DISPOSITION', 'AWAITING_CONVERGENCE_ADJUDICATION']) {
+  assert.strictEqual(durableWaitBudgetWaived({ phase, wait: proven, candidateReference: null }), true, `${phase} not waived`);
+}
+assert.strictEqual(durableWaitBudgetWaived({ phase: 'BOUNDARY_REJECTED', wait: proven, candidateReference: { kind: 'git_candidate' } }), false);
+assert.strictEqual(durableWaitBudgetWaived({ phase: 'AWAITING_DISPOSITION', wait: { ...proven, no_op: false }, candidateReference: null }), false);
+assert.strictEqual(isProvenExactReplayNoOp(null), false);
+assert.strictEqual(isProvenExactReplayNoOp({}), false);
+console.log('exact_replay_predicate_needs_all_fields=true');
+NODE
+)"
+assert_exit_code "$?" "0" "exact-replay predicate: $EXACT_REPLAY_PRED"
+assert_contains "$EXACT_REPLAY_PRED" "exact_replay_predicate_needs_all_fields=true" \
+  "any single broken proof field keeps the budget rejection"
+git -C "$DISP_WT" reset --hard "$C1" >/dev/null
+
 DISP_ENGINE_OUT="$(
   DISP_C0="$DISP_C0" DISP_C1="$DISP_C1" DISP_BASE_SHA="$DISP_BASE" \
   node - "$REPO_ROOT" "$DISP_SBX" "$DISP_WT" "$DISP_CONTRACT" "$DISP_SEAL" \
@@ -2197,7 +2405,13 @@ NODE
 assert_exit_code "$?" "0" "T4 engine scope check: $DISP_ENGINE_OUT"
 assert_contains "$DISP_ENGINE_OUT" "t4_engine_scope=true" "T4 engine spy recorded C0 implementation_sha"
 
-T5_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
+# BL-0360: T5 plain (no usage) plus three exhausted-budget variants. An exact-replay
+# durable wait dispatches nothing and mutates nothing, so a spent budget must not refuse it.
+for T5_CASE in "plain||" "files_and_churn_full|-fc|{\"changed_files\":4,\"churn\":15}" \
+  "churn_only_full|-ch|{\"changed_files\":1,\"churn\":15}" \
+  "files_at_cap|-fi|{\"changed_files\":4,\"churn\":0}"; do
+T5_LABEL="${T5_CASE%%|*}"; T5_REST="${T5_CASE#*|}"; T5_VARIANT="${T5_REST%%|*}"; T5_USAGE="${T5_REST#*|}"
+T5_OUT="$(node - "$REPO_ROOT" "$TEST_TMP" "$T5_VARIANT" "$T5_USAGE" <<'NODE'
 'use strict';
 const assert = require('assert');
 const fs = require('fs');
@@ -2205,12 +2419,14 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const root = process.argv[2];
 const tmp = process.argv[3];
+const variant = process.argv[4] || '';
+const usage = process.argv[5] ? JSON.parse(process.argv[5]) : undefined;
 const {
   CAMPAIGN_EVENTS,
   appendCampaignEvent,
   runCampaignIntake,
 } = require(path.join(root, 'src', 'engine'));
-const repo = path.join(tmp, 'unbound-resume-repo');
+const repo = path.join(tmp, `unbound-resume-repo${variant}`);
 fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
 fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
 const git = (args, cwd = repo) => spawnSync('git', ['-C', cwd, ...args], {
@@ -2249,9 +2465,9 @@ git(['commit', '-qm', 'base']);
 const base = git(['rev-parse', 'HEAD']).stdout.trim();
 git(['checkout', '-qb', 'impl/unbound-resume']);
 const commonDir = fs.realpathSync(path.resolve(repo, git(['rev-parse', '--git-common-dir']).stdout.trim()));
-const contractPath = path.join(tmp, 'unbound-campaign.json');
-const sealPath = path.join(tmp, 'unbound-campaign.seal.json');
-const promptFile = path.join(tmp, 'unbound-prompt.txt');
+const contractPath = path.join(tmp, `unbound-campaign${variant}.json`);
+const sealPath = path.join(tmp, `unbound-campaign${variant}.seal.json`);
+const promptFile = path.join(tmp, `unbound-prompt${variant}.txt`);
 fs.writeFileSync(promptFile, 'unbound\n');
 fs.writeFileSync(contractPath, `${JSON.stringify({
   schema_version: 1,
@@ -2306,6 +2522,7 @@ control = { ...control, current_state: appendCampaignEvent({
     boundary_receipt_digest: digest,
   },
   artifactReference: { kind: 'campaign_boundary_rejected', digest },
+  ...(usage ? { usage } : {}),
 }).state };
 console.log(`t5_repo=${repo}`);
 console.log(`t5_contract=${contractPath}`);
@@ -2343,6 +2560,11 @@ const resumed = runCampaignIntake({
 assert.strictEqual(resumed.status, 'admitted', JSON.stringify(resumed.rejection || resumed));
 const wait = resumed.generation_claim.resume_durable_wait;
 assert.strictEqual(wait.candidate_ref, 'unbound-candidate');
+assert.strictEqual(wait.exact_replay, true);
+assert.strictEqual(wait.no_op, true);
+assert.strictEqual(wait.dispatcher_called, false);
+assert.strictEqual(wait.mutation_attempts, 0);
+assert.strictEqual(wait.gate_attempts, 0);
 assert.ok(
   resumed.generation_claim.resume_candidate == null,
   `resume_candidate=${JSON.stringify(resumed.generation_claim.resume_candidate)}`,
@@ -2351,8 +2573,10 @@ console.log('t5_unbound_preserved=true');
 NODE
 )"
 assert_exit_code "$?" "0" "T5 unbound preservation: $T5_RESUME"
+
 assert_contains "$T5_RESUME" "t5_unbound_preserved=true" \
-  "T5 BOUNDARY_REJECTED unbound-candidate still admits without resume_candidate"
+  "T5 $T5_LABEL exact-replay durable wait is admitted (five marks asserted)"
+done
 
 # Red verification takes the repair path (plan 2026-09-16-red-verification-repair-path).
 # T6 (preservation, green at base): reviewer finding with no explicit path on a

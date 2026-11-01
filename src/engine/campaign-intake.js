@@ -18,6 +18,9 @@ const {
   campaignIdFor,
   canonicalDigest,
   changedFilesPreSpendBlocked,
+  durableWaitNoOpMarks,
+  durableWaitBudgetWaived,
+  isProvenExactReplayNoOp,
   estimateRepairRoundSeconds,
   formatRepairRoundBudgetShortfall,
   boundCampaignArtifactDigest,
@@ -1334,11 +1337,7 @@ function defaultGenerationClaim({
         boundary_rejected: boundary,
         awaiting_disposition: awaiting,
         candidate_ref: candidateRef,
-        exact_replay: true,
-        dispatcher_called: false,
-        mutation_attempts: 0,
-        gate_attempts: 0,
-        no_op: true,
+        ...durableWaitNoOpMarks(),
       };
       // Prefer a bound git candidate when present so later stages can re-attach.
       if (existing.candidate_reference
@@ -1414,18 +1413,34 @@ function defaultGenerationClaim({
       && (Boolean(existing.resume_candidate) || reviewCandidate);
     // closeOnly spends nothing (it only writes TERMINAL_STOP, which may overrun), so no budget check
     // below may refuse it; the terminal-state and lease checks above this point stay in force.
-    if (!closeOnly && !reviewingResumable && changedFilesPreSpendBlocked({
+    // An exhausted file/churn budget still admits a proven exact-replay durable wait:
+    // resume_durable_wait is marked no dispatch / no mutation / no gate attempt, so the
+    // resume spends nothing. Every mutation-capable resume and every unmarked durable
+    // state keeps both rejections.
+    const exactReplayNoOp = durableWaitBudgetWaived({
+      phase: existing.state.phase,
+      wait: existing.resume_durable_wait,
+      candidateReference: existing.candidate_reference,
+    });
+    // The shared predicate is still evaluated on every path (cli.js parity); only its
+    // rejection is waived for the proven no-op.
+    const fileBudgetBlocked = !closeOnly && !reviewingResumable && changedFilesPreSpendBlocked({
       phase: existing.state.phase,
       usage: existing.state.usage,
       limits: existing.state.limits,
-    })) {
+    });
+    // Usage above the hard ceiling is an invariant breach, not exhaustion: never waived.
+    const overFileCeiling = existing.state.usage.changed_files
+      > existing.state.limits.max_changed_files;
+    if (fileBudgetBlocked && !(exactReplayNoOp && !overFileCeiling)) {
       return rejected(
         'campaign_generation',
         'campaign_file_budget_exhausted',
         'durable campaign has no changed-file budget remaining',
       );
     }
-    if (!closeOnly && existing.state.usage.churn >= existing.state.limits.max_churn) {
+    if (!closeOnly && !exactReplayNoOp
+        && existing.state.usage.churn >= existing.state.limits.max_churn) {
       return rejected(
         'campaign_generation',
         'campaign_churn_budget_exhausted',
@@ -3270,6 +3285,8 @@ function runCampaignIntake(input = {}, adapters = {}) {
 }
 
 module.exports = {
+  durableWaitBudgetWaived,
+  isProvenExactReplayNoOp,
   defaultAdoptionAdmission,
   defaultContextGate,
   reviewCandidatePanelRejection,

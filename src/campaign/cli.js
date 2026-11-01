@@ -10,6 +10,8 @@ const {
   campaignClockElapsedSeconds,
   canonicalDigest,
   changedFilesPreSpendBlocked,
+  durableWaitNoOpMarks,
+  durableWaitBudgetWaived,
   resolveCampaignEventLeaseIdentity,
   normalizeCampaignArtifactReference,
   reduceCampaignState,
@@ -938,18 +940,30 @@ function campaignResumeEligibility(projection, observedAt) {
   // changed-file cap itself (campaignMutationBudgetStatus), so the cap gates writing
   // resumes only. Repair-type phases block only above the cap (changedFilesPreSpendBlocked,
   // the same predicate campaign-intake.js and campaignMutationBudgetStatus use).
-  if (!reviewingResumable && changedFilesPreSpendBlocked({
+  // BL-0360: same predicate as campaign-intake.js. A durable wait adopts as an exact-replay
+  // no-op (no dispatch, no mutation, no gate attempt), so a spent file/churn budget must not
+  // refuse it; the file predicate is still evaluated, only its rejection is waived.
+  const exactReplayNoOp = durableWaitBudgetWaived({
+    phase: projection.state.phase,
+    wait: durableWaitNoOpMarks(),
+    candidateReference: projection.candidate_reference,
+  });
+  const fileBudgetBlocked = !reviewingResumable && changedFilesPreSpendBlocked({
     phase: projection.state.phase,
     usage: projection.state.usage,
     limits: projection.state.limits,
-  })) {
+  });
+  // Usage above the hard ceiling is an invariant breach, not exhaustion: never waived.
+  const overFileCeiling = projection.state.usage.changed_files
+    > projection.state.limits.max_changed_files;
+  if (fileBudgetBlocked && !(exactReplayNoOp && !overFileCeiling)) {
     return {
       status: 'blocked',
       reason: 'campaign changed-file budget is exhausted',
       reason_code: 'campaign_file_budget_exhausted',
     };
   }
-  if (projection.state.usage.churn >= projection.state.limits.max_churn) {
+  if (!exactReplayNoOp && projection.state.usage.churn >= projection.state.limits.max_churn) {
     return {
       status: 'blocked',
       reason: 'campaign churn budget is exhausted',

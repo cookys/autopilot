@@ -44,7 +44,7 @@ cat > "$SB/driver.js" <<'JS'
 const fs = require('fs'); const path = require('path');
 const [, , repoRoot, key, ident, D, outRoot, logFile] = process.argv;
 const { createWatcher } = require(path.join(repoRoot, 'src/status/runs-watch.js'));
-let T = Date.parse('2026-10-04T03:00:00.000Z');
+let T = Date.parse('2026-10-04T01:30:00.000Z');
 const out = (k, v) => process.stdout.write(`${k}=${v}\n`);
 const W = (p, v) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, v); };
 const mf = path.join(D, 'manifests', 'r1.manifest.json');

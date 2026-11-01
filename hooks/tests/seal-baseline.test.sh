@@ -364,4 +364,5 @@ echo '{' > "$T/broken.json"
 rcis 2 "compare with a broken baseline" node "$SB" compare --baseline "$T/broken.json" --current "$T/cur.json"
 
 echo "seal-baseline: $PASS passed, $FAIL failed"
-[ "$FAIL" = 0 ]
+[ "$FAIL" = 0 ] || fail "$FAIL seal-baseline assertion(s) failed"
+finalize_test

@@ -37,7 +37,7 @@ const { createWatcher } = require(path.join(repoRoot, 'src/status/runs-watch.js'
 const { scopeFromCwd } = require(path.join(repoRoot, 'src/status/project-key.js'));
 const key = scopeFromCwd(wt).project_key;
 const out = (k, v) => process.stdout.write(`${k}=${v}\n`);
-let T = Date.parse('2026-10-04T03:00:00.000Z');
+let T = Date.parse('2026-10-04T01:30:00.000Z');
 const w = createWatcher({ key, env: process.env, cwd: wt, collect: () => [], now: () => T, interval: 10 });
 w.start();
 const live = process.env.AUTOPILOT_LIVE_DIR;
@@ -129,7 +129,7 @@ const key = scopeFromCwd(main).project_key;
 const mf = path.join(sb, 'tp-manifest.json'); fs.writeFileSync(mf, JSON.stringify({ run_id: 'r1', root_run_id: 'RX', ledger: path.join(sb, 'tp-ledger.jsonl'), branch: 'x' })); fs.writeFileSync(path.join(sb, 'tp-ledger.jsonl'), '');
 const row = { run_id: 'r1', role: 'hand', runner: 'claude', model: 'sonnet', started_at: '2026-10-04T01:00:00.000Z', ended_at: '2026-10-04T01:09:00.000Z', parent_run_id: null, root_run_id: 'RX', depth: 1, manifest: mf,
   project: scopeFromCwd(main).repo_identity, source: { manifest: mf, status_probe: null, exit_file: path.join(sb, 'tp.exit') }, fact_at: '2026-10-04T01:00:00.000Z', observed_at: '2026-10-04T01:00:00.000Z', probe_age_s: null, rc: 0, final_status: 'ok', elapsed_s: 5, alive: null, phase: 'exited' };
-let T = Date.parse('2026-10-04T03:00:00.000Z');
+let T = Date.parse('2026-10-04T01:30:00.000Z');
 const w = createWatcher({ key, env: process.env, cwd: main, collect: () => [row], now: () => T, interval: 10, render: { outRoot: path.join(sb, 'tp-out') } });
 w.start();
 process.env.GIT_DIR = '/nonexistent'; // set after construction, as an inherited hook environment would carry it

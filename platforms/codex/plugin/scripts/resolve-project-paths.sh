@@ -22,8 +22,10 @@
 #   2. <target>/.claude/project-lifecycle-config.md   ← what scaffold-config.js writes
 #   3. <target>/.claude/next-config.md
 #   4. <target>/.claude/dev-flow-config.md
-#   5. <target>/scripts/lib/repo-layout.js registry (only a file that identifies itself as the
-#      autopilot layout registry; a consumer repo has none and falls through)
+#   5. <target>/scripts/lib/repo-layout.js registry — executed ONLY when the target and this
+#      script's own repo are the same git repo (equal realpath of `git rev-parse --git-common-dir`;
+#      worktrees of one repo share it) and the file's header names it the layout registry.
+#      Any other repo, or either side not a git repo, skips the tier: never run a consumer's code.
 #   6. project-detect.js --target <target>
 #   7. "none"
 #
@@ -120,11 +122,17 @@ resolve_one 'Index';              INDEX="$RESOLVED"
 
 # Tier 5: the TARGET's own layout registry (autopilot repo only; relayout moves the work-record
 # paths and the registry is the one place that knows the current stage). Read from TARGET, never
-# from this plugin: a consumer repo has no such file and must not inherit ours. The file is run only
-# when its header names it the layout registry, with the test-override env cleared.
+# from this plugin. The file is run only when it is this plugin's own repo (same_repo) and its
+# header names it the layout registry, with the test-override env cleared.
 REG_FILE="$TARGET/scripts/lib/repo-layout.js"
-if [[ -z "$PROJECTS$PLANS$ARCHIVE$BACKLOG$INDEX" || -z "$PROJECTS" || -z "$PLANS" || -z "$ARCHIVE" || -z "$BACKLOG" || -z "$INDEX" ]] \
-   && [[ -f "$REG_FILE" ]] && [[ "$(head -c 800 "$REG_FILE")" == *'the one registry of where things live'* ]]; then
+same_repo() {  # true only when TARGET and the repo holding this script share one git common dir
+  local a b
+  a="$(cd "$TARGET" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" || return 1
+  b="$(cd "$SCRIPT_DIR" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" || return 1
+  [[ -n "$a" && "$a" == "$b" ]]
+}
+if [[ -z "$PROJECTS" || -z "$PLANS" || -z "$ARCHIVE" || -z "$BACKLOG" || -z "$INDEX" ]] \
+   && [[ -f "$REG_FILE" ]] && same_repo && [[ "$(head -c 800 "$REG_FILE")" == *'the one registry of where things live'* ]]; then
   reg_get() { env -u REPO_LAYOUT_REGISTRY node "$REG_FILE" path "$1" 2>/dev/null; }
   _answered=0
   for _f in projects_dir:projects_dir:PROJECTS:/ plans_dir:plans_dir:PLANS:/ projects_archive_dir:archive_dir:ARCHIVE:/ backlog_file:backlog:BACKLOG: projects_index:index:INDEX:; do

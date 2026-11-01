@@ -146,23 +146,22 @@ if grep -F 'backlog: none`, or `backlog_exists` false' "$FF" >/dev/null && grep 
 then ok "finish-flow Deferred items: backlog_exists=false triggers the no-backlog report"
 else no "finish-flow Deferred items: backlog_exists=false triggers the no-backlog report" "SKILL.md names backlog_exists" "absent"; fi
 
-# 8d. The target's own layout registry answers before detection (relayout: stage bootstrap -> docs/,
-#     stage P1 -> project/). Only the TARGET's file counts; a consumer repo without one is unchanged.
-mk_reg_target() {  # mk_reg_target <dir> <docs|project>  — real registry, work-record paths rewritten for P1
-  local d="$1" base="$2"
-  mkdir -p "$d/scripts/lib"; git -C "$d" init -q
-  if [ "$base" = project ]; then
-    sed -E "s#'docs/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive|BACKLOG.md)'#'project/\1'#" \
-      "$REPO_ROOT/scripts/lib/repo-layout.js" > "$d/scripts/lib/repo-layout.js"
-  else
-    cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$d/scripts/lib/repo-layout.js"
+# 8d. The layout registry answers before detection (relayout: stage bootstrap -> docs/, stage P1 ->
+#     project/), but ONLY for a target in the same git repo as this script (equal git-common-dir):
+#     a consumer's repo-layout.js is never executed, whatever its header says.
+mk_wt() {  # mk_wt <dir> <docs|project> — a worktree of THIS repo; P1 rewrites its registry paths
+  git -C "$REPO_ROOT" worktree add -q --detach "$1" HEAD >/dev/null 2>&1 || return 1
+  if [ "$2" = project ]; then
+    sed -i -E "s#'docs/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive|BACKLOG.md)'#'project/\\1'#" "$1/scripts/lib/repo-layout.js"
   fi
 }
-RB="$TMP/reg-boot"; mk_reg_target "$RB" docs
-RP="$TMP/reg-p1";   mk_reg_target "$RP" project
+RB="$TMP/reg-boot"; mk_wt "$RB" docs
+RP="$TMP/reg-p1";   mk_wt "$RP" project
+trap 'git -C "$REPO_ROOT" worktree remove --force "$RB" "$RP" 2>/dev/null; git -C "$REPO_ROOT" worktree prune; rm -rf "$TMP"; cleanup_test_tmp' EXIT
 eq "bootstrap registry: backlog -> docs/" "docs/BACKLOG.md" "$(bash "$R" --target "$RB" --field backlog)"
 eq "bootstrap registry: index -> docs/"   "docs/projects/INDEX.md" "$(bash "$R" --target "$RB" --field index)"
-eq "P1 registry: backlog -> project/"     "project/BACKLOG.md" "$(bash "$R" --target "$RP" --field backlog)"
+eq "bootstrap registry: source is registry" "registry" "$(bash "$R" --target "$RB" --field source)"
+eq "P1 registry (worktree of this repo): backlog -> project/" "project/BACKLOG.md" "$(bash "$R" --target "$RP" --field backlog)"
 eq "P1 registry: index -> project/"       "project/projects/INDEX.md" "$(bash "$R" --target "$RP" --field index)"
 eq "P1 registry: plans_dir -> project/"   "project/plans/" "$(bash "$R" --target "$RP" --field plans_dir)"
 eq "P1 registry: projects_dir -> project/" "project/projects/" "$(bash "$R" --target "$RP" --field projects_dir)"
@@ -171,13 +170,21 @@ eq "P1 registry: source is registry"      "registry" "$(bash "$R" --target "$RP"
 # a config block still outranks the registry
 mkdir -p "$RP/.claude"; printf '## Project Paths\n- Backlog: `doc/DEBT.md`\n' > "$RP/.claude/project-lifecycle-config.md"
 eq "config block outranks the registry" "doc/DEBT.md" "$(bash "$R" --target "$RP" --field backlog)"
-# a foreign file at the same path (no registry header) is never executed or trusted
+# NEGATIVE CONTROL: another git repo carrying a repo-layout.js with the real header, which writes a
+# marker file the moment it runs. It must neither run nor answer.
 FR="$TMP/reg-foreign"; mkdir -p "$FR/scripts/lib"; git -C "$FR" init -q
-printf 'console.log("project/EVIL.md")\n' > "$FR/scripts/lib/repo-layout.js"
-eq "foreign repo-layout.js is ignored" "none" "$(bash "$R" --target "$FR" --field backlog)"
+MARK="$TMP/foreign-ran.marker"
+{ sed -n '1,12p' "$REPO_ROOT/scripts/lib/repo-layout.js"
+  printf ' */\nrequire("fs").writeFileSync(%s, "ran");\nconsole.log("project/EVIL.md");\n' "\"$MARK\""; } > "$FR/scripts/lib/repo-layout.js"
+eq "foreign repo with the registry header: not answered by registry" "none" "$(bash "$R" --target "$FR" --field backlog)"
+eq "foreign repo: source is not registry" "none" "$(bash "$R" --target "$FR" --field source)"
+[ ! -e "$MARK" ] && ok "foreign repo-layout.js was never executed (no marker)" || no "foreign repo-layout.js was never executed" "no marker" "marker written"
+# a non-git directory is skipped too
+NG="$TMP/reg-nogit"; mkdir -p "$NG/scripts/lib"; cp "$FR/scripts/lib/repo-layout.js" "$NG/scripts/lib/"
+eq "non-git target with the header: skipped" "none" "$(bash "$R" --target "$NG" --field backlog)"
+[ ! -e "$MARK" ] && ok "non-git repo-layout.js was never executed" || no "non-git repo-layout.js never executed" "no marker" "marker written"
 # a consumer repo without a registry keeps the pre-registry behaviour
 eq "no registry: bare repo still none" "none" "$(bash "$R" --target "$BARE" --field backlog)"
-# the plugin's own registry is not inherited by a target that lacks one
 eq "no registry: source is not registry" "none" "$(bash "$R" --target "$BARE" --field source)"
 
 # 7. Envelope.

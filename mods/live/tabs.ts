@@ -346,7 +346,7 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     const id = d.id
     const sent = id !== null && dv.sent[id] !== undefined
     out.push(...ui.cardTitle(u, sent ? sentState : needYou, (i + 1) + '. ' + d.question + staleSuffix(d, t), sent ? t('decide.sent') : undefined, { fact: F, sent }))
-    if (d.background !== null) out.push(...ui.cardRow(u, t('decide.k_background'), d.background, { fact: F, subtle: true }))
+    if (d.background !== null) out.push(...ui.cardParaRows(u, t('decide.k_background'), ui.cardParas(d.background), { fact: F, subtle: true }))
     if (d.blocks !== null) out.push(...ui.cardRow(u, t('decide.k_blocks'), d.blocks, { fact: F }))
     const pick = decidePick(d, dv)
     const rec = recommendedIndex(d)
@@ -357,7 +357,8 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     }
     if (d.recommendation !== null) { // the recommended option's own label when it matches one, else the recommendation as written; the reason follows after a colon
       const what = rec === null ? d.recommendation : d.options[rec].label
-      out.push(...ui.cardRow(u, t('decide.k_advice'), d.why === null ? what : t('decide.advice', { what, why: d.why }), { fact: F }))
+      out.push(...ui.cardRow(u, t('decide.k_advice'), what, { fact: F })) // the option name on the first row, the reason on its own rows below
+      if (d.why !== null) out.push(...ui.cardRow(u, '', d.why, { fact: F }))
     }
     if (!sent) {
       if (id !== null && dv.inputs && !dialog) out.push(ui.fieldRow(u, t(d.options.length > 0 ? 'decide.note' : 'decide.reply'), { key: 'note:' + id, placeholder: t(d.options.length > 0 ? 'decide.note_ph' : 'decide.reply_ph'), value: dv.notes[id] ?? '', fact: F }))

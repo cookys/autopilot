@@ -278,7 +278,6 @@
   "decide.k_blocks": "Blocks",
   "decide.k_options": "Options",
   "decide.k_advice": "Advice",
-  "decide.advice": "{what}: {why}",
   "decide.submit_note": "answers are pasted into this conversation",
   "decide.none": "no question waits for your answer",
   "decide.sent": "sent, waiting for the session",

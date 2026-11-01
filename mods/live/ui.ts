@@ -615,8 +615,38 @@ export function cardRow(u: Ctx, key: string, value: string, o: { fact: FactId; s
   return wrapPlain(value, room, room).map((piece, i) =>
     lineOf('kv', [...(i === 0 ? cardLead(key) : [cardHang()]), ...linkSegs(piece, { role: 'prose', ...(o.subtle === true ? { dim: true } : {}) })], { hang: KEY_W, fact: o.fact }))
 }
-// the options of one question: the key `選項` at column 2, then rows of at most `cols - 1` cells from column 12: `[x] ★ label` (picked: bold default text) beside `[ ] label`, two
-// cells between options. A press-less choice is drawn plain (a question already sent), its picked mark kept. The star marks the recommendation here and nowhere else.
+// ---- a long card value (BL-0369). The asker writes one string; the renderer cuts it where the text itself marks a point. ----
+// a paragraph break is a newline, or a `(1)` / `（1）` / `1.` / `1)` item marker that follows a space or a sentence mark; a line that starts `- ` or `* ` is an item as well
+const ITEM_AT = /(?:^|(?<=[\s。；;：:]))(?=(?:\(\d{1,2}\)|（\d{1,2}）|\d{1,2}[.)、]\s))/u
+const ITEM_HEAD = /^(\(\d{1,2}\)\s?|（\d{1,2}）\s?|\d{1,2}[.)、]\s|[-*•]\s)/u
+export type CardPara = { text: string; hang: number } // hang: cells an item's continuation lines are indented, so they sit under the item's text and not under its marker
+export function cardParas(value: string): CardPara[] {
+  const out: CardPara[] = []
+  for (const line of value.split('\n')) {
+    if (line.trim() === '') continue
+    for (const piece of line.split(ITEM_AT)) {
+      const text = piece.trim().replace(/^[；;]\s*/u, '')
+      if (text === '') continue
+      const m = ITEM_HEAD.exec(text)
+      out.push({ text, hang: m === null ? 0 : displayWidth(m[0]) })
+    }
+  }
+  return out
+}
+// the value as its own rows: every paragraph on a new row, an item's continuation rows hang under its text; the key shows on the first row only. One paragraph = cardRow.
+export function cardParaRows(u: Ctx, key: string, paras: readonly CardPara[], o: { fact: FactId; subtle?: boolean }): PaneLine[] {
+  const room = Math.max(1, u.cols - 1 - KEY_W)
+  const rows: PaneLine[] = []
+  for (const p of paras) {
+    wrapPlain(p.text, room, Math.max(1, room - p.hang)).forEach((piece, i) => {
+      const lead = rows.length === 0 ? cardLead(key) : [cardHang()]
+      const indent: Seg[] = i === 0 || p.hang === 0 ? [] : [sg(' '.repeat(p.hang))]
+      rows.push(lineOf('kv', [...lead, ...indent, ...linkSegs(piece, { role: 'prose', ...(o.subtle === true ? { dim: true } : {}) })], { hang: KEY_W + p.hang, fact: o.fact }))
+    })
+  }
+  return rows
+}
+// the options of one question: the key `選項` at column 2, then one row per option from column 12: `[x] ★ label` (picked: bold default text), `[ ] label`. A press-less choice is drawn plain (a question already sent), its picked mark kept. The star marks the recommendation here and nowhere else.
 export function choiceRows(u: Ctx, key: string, choices: readonly Choice[], o: { fact: FactId }): PaneLine[] {
   const room = u.cols - 1 - KEY_W
   const piece = (c: Choice): Seg[] => {
@@ -627,18 +657,7 @@ export function choiceRows(u: Ctx, key: string, choices: readonly Choice[], o: {
     const used = displayWidth(head) + star.reduce((n, x) => n + displayWidth(x.text), 0)
     return [sg(head, { role: 'prose', ...pick, ...press }), ...star, sg(cutProse(c.label, Math.max(1, room - used)), { role: 'prose', ...pick, ...press })]
   }
-  const rows: Seg[][] = []
-  let cur: Seg[] = []
-  let w = 0
-  for (const c of choices) {
-    const segs = piece(c)
-    const cw = segs.reduce((n, x) => n + displayWidth(x.text), 0)
-    if (cur.length > 0 && w + 2 + cw > room) { rows.push(cur); cur = []; w = 0 }
-    if (cur.length > 0) { cur.push(sg('  ')); w += 2 }
-    cur.push(...segs)
-    w += cw
-  }
-  if (cur.length > 0) rows.push(cur)
+  const rows: Seg[][] = choices.map(piece)
   return rows.map((r, i) => lineOf('choice', [...(i === 0 ? cardLead(key) : [cardHang()]), ...r], { fact: o.fact }))
 }
 // the send row: `[ label ]` at column 2, bold default text and pressable under `press`, dim and inert without it (nothing chosen yet, or already sent), then a dim `note` saying where

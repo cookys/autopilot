@@ -404,4 +404,60 @@ assert_contains "$OUT" "src/old.md:2" "revert bind: names the re-added line"
 assert_contains "$OUT" "1 personal-data finding(s)" "revert bind: exactly one finding (the legitimate revert's line stays allowed)"
 reset_stage; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null
 
+# ── review round 3: one shared ledger for the range; merge commits are scanned; self-scan holes ──
+back_to_master() { reset_stage; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null; }
+# (1) two revert commits naming the same cleanup commit share ONE allowance
+revert_setup; add_trailer "$A"
+printf 'old note\n' > "$R/src/old.md"; git -C "$R" commit -q -am "drop the line again"
+printf 'old note\nlegacy %s/x\n' "$PERSONAL" > "$R/src/old.md"
+git -C "$R" commit -q -am "Revert again" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; RC=$?
+assert_eq "$RC" "1" "ledger: a second revert commit naming the same cleanup gets no second allowance (red)"
+assert_contains "$OUT" "1 personal-data finding(s)" "ledger: exactly the second restore is named"
+back_to_master
+# (2) an evil merge: legitimate revert in the range, personal data introduced by the merge commit itself
+revert_setup; add_trailer "$A"
+git -C "$R" checkout -q -B side; echo s > "$R/src/side.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "side work"
+git -C "$R" checkout -q rv; echo m > "$R/src/main.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "main work"
+git -C "$R" merge -q --no-ff --no-commit side >/dev/null 2>&1
+printf 'evil %s/q\n' "$PERSONAL" > "$R/src/merge.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "merge side"
+OUT="$(rguard "$A..HEAD")"; RC=$?
+assert_eq "$RC" "1" "merge: personal data added by a merge commit (range tip is the merge) is red"
+assert_contains "$OUT" "src/merge.txt:1" "merge: names the merge's file"
+assert_not_contains "$OUT" "side.txt" "merge: side-branch content already scanned is not re-reported"
+back_to_master
+# (2b) a merge cannot use the allowance even with a revert message and trailer
+revert_setup
+git -C "$R" checkout -q -B side "$A"; echo s > "$R/src/side.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "side work"
+git -C "$R" checkout -q -B mrg "$A"; echo m > "$R/src/main.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "main work"
+git -C "$R" merge -q --no-ff --no-commit side >/dev/null 2>&1
+printf 'old note\nlegacy %s/x\n' "$PERSONAL" > "$R/src/old.md"; git -C "$R" add -A
+git -C "$R" commit -q -m "Merge side" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "merge: a merge commit with a revert message and trailer gets no allowance (red)"
+back_to_master
+# (3) self-scan: typechange inside a trailer range
+revert_setup; add_trailer "$A"
+ln -s a.txt "$R/src/lk"; git -C "$R" add -A; git -C "$R" commit -q -m "add link"
+rm "$R/src/lk"; printf 'in %s\n' "$PERSONAL" > "$R/src/lk"; git -C "$R" add -A; git -C "$R" commit -q -m "link becomes a file"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "self-scan typechange: symlink to file swap with personal data in a trailer range is red"
+assert_contains "$OUT" "src/lk:1" "self-scan typechange: names the file"
+back_to_master
+# (4) self-scan: a root commit inside the range
+revert_setup; add_trailer "$A"; REVTIP="$(git -C "$R" rev-parse HEAD)"
+git -C "$R" checkout -q --orphan orph; git -C "$R" rm -rfq . ; printf 'root %s/r\n' "$PERSONAL" > "$R/root.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "unrelated root"
+git -C "$R" commit -q --allow-empty -m "Revert z" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$BASE..HEAD")"; assert_eq "$?" "1" "self-scan root: a root commit inside a trailer range is scanned (red)"
+assert_contains "$OUT" "root.txt:1" "self-scan root: names the root commit's file"
+back_to_master
+# (5) self-scan: rename plus edit across commits, an emptied commit and a binary file in a trailer range are scanned like the whole-range diff
+revert_setup; add_trailer "$A"
+git -C "$R" commit -q --allow-empty -m "empty"
+printf 'bin\0data\n' > "$R/src/blob.bin"; git -C "$R" add -A; git -C "$R" commit -q -m "binary"
+git -C "$R" mv src/old.md src/old2.md; git -C "$R" commit -q -m "pure rename"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "self-scan empty/binary/pure rename: nothing added, green"
+printf 'more %s/z\n' "$PERSONAL" >> "$R/src/old2.md"; git -C "$R" commit -q -am "edit after rename"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "self-scan rename then edit: the added line is red"
+assert_contains "$OUT" "src/old2.md" "self-scan rename then edit: names the new path"
+back_to_master
+
 finalize_test

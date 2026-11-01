@@ -163,33 +163,41 @@ function diffLines(text, sign) {
   return out;
 }
 
-function scanText(text, restored) {
+/** Added lines of a combined (--cc) merge diff: only lines new against EVERY parent (all columns '+'). */
+function combinedAdded(text, nParents) {
   const out = [];
-  for (const { file, line, content } of diffLines(text, '+')) {
-    const rk = `${file}\0${content}`;
-    if (restored && restored.get(rk) > 0) { restored.set(rk, restored.get(rk) - 1); continue; }
-    for (const h of patterns.findAll(content)) {
-      const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
-      out.push({ file, line, category: h.category, snippet });
+  let file = '';
+  let line = 0;
+  let inHunk = false;
+  for (const l of text.split('\n')) {
+    if (l.startsWith('diff --cc ') || l.startsWith('diff --combined ')) {
+      inHunk = false;
+      file = unquote(l.slice(l.indexOf(' ', 7) + 1));
+      continue;
     }
+    if (l.startsWith('@@@')) {
+      const m = l.match(/\+(\d+)/);
+      line = m ? parseInt(m[1], 10) : 0;
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk || !file || l.length < nParents) continue;
+    const cols = l.slice(0, nParents);
+    if (cols === '+'.repeat(nParents)) out.push({ file, line, content: l.slice(nParents) });
+    if (!cols.includes('-')) line++;
   }
   return out;
 }
 
-/**
- * No revert allowance in the range: the whole range diff is scanned once (unchanged behaviour).
- * With one or more allowances (a map of revert commit -> lines it may restore), each commit is scanned
- * on its own diff and only the revert commit itself may spend its allowance, so a later commit that
- * re-adds the same line gets no cover.
- */
-function contentFindings(root, o, allowances) {
-  if (!allowances || allowances.size === 0) return scanText(git(root, diffArgs(o, ['-U0'])), null);
+/** take(file, content) -> true when a revert allowance covers the added line (and spends it). */
+function scanAdded(added, take) {
   const out = [];
-  const commits = git(root, ['rev-list', '--reverse', '--no-merges', o.range]).split('\n').filter(Boolean);
-  for (const c of commits) {
-    const text = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--diff-filter=ACMRT', '--format=', '-U0', c]);
-    const own = allowances.get(c);
-    out.push(...scanText(text, own ? new Map(own) : null));
+  for (const { file, line, content } of added) {
+    if (take && take(file, content)) continue;
+    for (const h of patterns.findAll(content)) {
+      const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
+      out.push({ file, line, category: h.category, snippet });
+    }
   }
   return out;
 }
@@ -201,36 +209,78 @@ function resolveCommit(root, ref) {
   return r.status === 0 ? r.stdout.trim() : '';
 }
 
-/**
- * Range mode only. A commit in the range is a deliberate revert of a redaction when its message carries
- * both git's own "This reverts commit <sha>." and the trailer "Leak-Guard-Allow-Revert: <sha>" naming the
- * SAME commit. Only the lines that commit removed may come back, file and text identical; anything else
- * the revert adds is scanned as usual. (git revert runs no pre-commit hook, so --staged needs no path.)
- */
-function revertedLines(root, o) {
-  const allowances = new Map(); // revert commit -> Map(file\0text -> times the reverted commit removed it)
-  if (o.mode !== 'range') return allowances;
-  const log = git(root, ['log', '--no-color', '--format=%H%x1f%B%x1e', o.range]);
+/** Every commit of the range, parents before children, with its parents and full message. */
+function rangeCommits(root, o) {
+  const log = git(root, ['log', '--no-color', '--topo-order', '--reverse', '--format=%H%x1f%P%x1f%B%x1e', o.range]);
+  const out = [];
   for (const rec of log.split('\x1e')) {
-    const body = rec.split('\x1f')[1];
-    if (!body) continue;
-    const rv = body.match(/^This reverts commit ([0-9a-f]{7,40})\.\s*$/m);
+    const f = rec.split('\x1f');
+    if (f.length < 3 || !f[0].trim()) continue;
+    out.push({ sha: f[0].trim(), parents: f[1].trim() ? f[1].trim().split(/\s+/) : [], body: f.slice(2).join('\x1f') });
+  }
+  return out;
+}
+
+/**
+ * Range mode only. A NON-merge commit is a deliberate revert of a redaction when its message carries
+ * both git's own "This reverts commit <sha>." and the trailer "Leak-Guard-Allow-Revert: <sha>" naming the
+ * SAME commit. The range has ONE shared ledger: (reverted sha, file, text) -> how many times that commit
+ * removed the line. Every revert commit of that sha spends from the same entry, so a second trailer for the
+ * same cleanup finds it used up. A merge commit never gets an allowance, whatever its message says.
+ * (git revert runs no pre-commit hook, so --staged needs no path.)
+ * @returns {{ledger: Map<string, number>, reverts: Map<string, string>}} reverts: revert commit -> reverted sha
+ */
+function revertLedger(root, commits) {
+  const ledger = new Map();
+  const reverts = new Map();
+  const loaded = new Set();
+  for (const c of commits) {
+    if (c.parents.length > 1) continue;
+    const rv = c.body.match(/^This reverts commit ([0-9a-f]{7,40})\.\s*$/m);
     // only the final trailer block counts (git's own parser), not any line that looks like a trailer
-    const parsed = spawnSync('git', ['interpret-trailers', '--parse'], { cwd: root, input: body, encoding: 'utf8' });
+    const parsed = spawnSync('git', ['interpret-trailers', '--parse'], { cwd: root, input: c.body, encoding: 'utf8' });
     const tr = parsed.status === 0 ? (parsed.stdout || '').match(new RegExp(`^${REVERT_TRAILER}:\\s*([0-9a-f]{7,40})\\s*$`, 'm')) : null;
     if (!rv || !tr) continue;
     const a = resolveCommit(root, rv[1]);
-    const b = resolveCommit(root, tr[1]);
-    if (!a || a !== b) continue;
+    if (!a || a !== resolveCommit(root, tr[1])) continue;
+    reverts.set(c.sha, a);
+    if (loaded.has(a)) continue;
+    loaded.add(a);
     const text = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--format=', '-U0', a]);
-    const restored = new Map();
-    allowances.set(rec.split('\x1f')[0].trim(), restored);
     for (const d of diffLines(text, '-')) {
-      const k = `${d.file}\0${d.content}`;
-      restored.set(k, (restored.get(k) || 0) + 1);
+      const k = `${a}\0${d.file}\0${d.content}`;
+      ledger.set(k, (ledger.get(k) || 0) + 1);
     }
   }
-  return allowances;
+  return { ledger, reverts };
+}
+
+/**
+ * No revert trailer in the range: the whole range diff is scanned once (unchanged behaviour).
+ * Otherwise every commit is scanned on its own (a merge on what it introduces itself, via --cc), and only
+ * a revert commit can spend the shared ledger, so a later commit re-adding the same line gets no cover.
+ */
+function contentFindings(root, o, commits) {
+  const { ledger, reverts } = o.mode === 'range' ? revertLedger(root, commits) : { ledger: new Map(), reverts: new Map() };
+  if (reverts.size === 0) return scanAdded(diffLines(git(root, diffArgs(o, ['-U0'])), '+'), null);
+  const out = [];
+  for (const c of commits) {
+    if (c.parents.length > 1) {
+      const text = git(root, ['show', '--no-color', '--no-ext-diff', '--cc', '--format=', '-U0', c.sha]);
+      out.push(...scanAdded(combinedAdded(text, c.parents.length), null));
+      continue;
+    }
+    const text = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--diff-filter=ACMRT', '--format=', '-U0', c.sha]);
+    const a = reverts.get(c.sha);
+    const take = a ? (file, content) => {
+      const k = `${a}\0${file}\0${content}`;
+      if (!(ledger.get(k) > 0)) return false;
+      ledger.set(k, ledger.get(k) - 1);
+      return true;
+    } : null;
+    out.push(...scanAdded(diffLines(text, '+'), take));
+  }
+  return out;
 }
 
 function shq(s) {
@@ -246,7 +296,7 @@ function main() {
 
   const seen = new Set();
   const findings = [];
-  for (const f of [...envNameFindings(root, o), ...contentFindings(root, o, revertedLines(root, o))]) {
+  for (const f of [...envNameFindings(root, o), ...contentFindings(root, o, o.mode === 'range' ? rangeCommits(root, o) : [])]) {
     if (exempt.has(`${f.file}\0${f.category}`)) continue;
     const key = `${f.file}\0${f.line}\0${f.category}\0${f.snippet}`;
     if (seen.has(key)) continue;

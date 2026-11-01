@@ -173,7 +173,7 @@ try {
 
   const costsFile = path.join(metricsDir, 'costs.jsonl');
   fs.appendFileSync(costsFile, rows);
-  // Cumulative cache-read report (v2.35.15, cuda digest #6): the money is in cache_read
+  // Cumulative cache-read report (v2.35.15, <host> digest #6): the money is in cache_read
   // on long-lived sessions, and nobody saw it accumulate. Sum THIS session's rows and
   // print one stderr line the first time the total crosses the threshold and at each
   // doubling after. Threshold: ~/.autopilot/config.json cost_tracker.cache_read_warn_tokens

@@ -644,7 +644,10 @@ function loadActiveLineageStems(repoRoot) {
       // stem. Take the basename, drop .md, then drop any further dot segment (a sidecar tag) to
       // recover the PRIMARY stem.
       let resolved;
-      try { resolved = LAYOUT.resolveManifestPath(repoRoot, sourcesPath, rel); } catch { continue; }
+      try { resolved = LAYOUT.resolveManifestPath(repoRoot, sourcesPath, rel); } catch (error) {
+        if (error && error.code === 'MANIFEST_PATH_ESCAPE') continue; // names no plan; anything else is a real failure
+        throw error;
+      }
       const base = path.basename(resolved).replace(/\.md$/, '');
       const lastDot = base.lastIndexOf('.');
       stems.add(lastDot === -1 ? base : base.slice(0, lastDot));

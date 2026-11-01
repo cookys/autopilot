@@ -75,7 +75,10 @@ function sealedDocFiles(repoRoot) {
       for (const [pathKey, shaKey] of [['plan_path', 'plan_sha256'], ['rubric_path', 'rubric_sha256']]) {
         if (typeof src[pathKey] === 'string' && src[pathKey] && SHA256.test(String(src[shaKey] || ''))) {
           let abs;
-          try { abs = LAYOUT.resolveManifestPath(repoRoot, manifestRel, src[pathKey].split(path.sep).join('/')); } catch { continue; }
+          try { abs = LAYOUT.resolveManifestPath(repoRoot, manifestRel, src[pathKey].split(path.sep).join('/')); } catch (error) {
+            if (error && error.code === 'MANIFEST_PATH_ESCAPE') continue; // names no plan; other failures are not hidden
+            throw error;
+          }
           sealed.add(path.relative(repoReal, abs).split(path.sep).join('/'));
         }
       }

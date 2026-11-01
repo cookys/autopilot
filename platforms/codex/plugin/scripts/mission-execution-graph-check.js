@@ -129,7 +129,7 @@ function loadSourceCoverageManifest(manifestPath, opts) {
   const repoRootForBase = (opts && opts.noLayout) ? null
     : ((opts && opts.repoRoot) || gitToplevel(path.dirname(canonicalManifest)));
   const root = repoRootForBase
-    ? LAYOUT.manifestBase(repoRootForBase, canonicalManifest).base
+    ? fs.realpathSync(LAYOUT.manifestBase(repoRootForBase, canonicalManifest).base)
     : path.dirname(canonicalManifest);
   const planIds = [];
   const rubricIds = [];
@@ -150,24 +150,25 @@ function loadSourceCoverageManifest(manifestPath, opts) {
         throw new Error(`source manifest.sources[${index}].${field} is required`);
       }
     }
-    const resolveUnderBase = (authored) => {
-      if (!repoRootForBase) return path.resolve(root, authored);
-      try { return LAYOUT.resolveManifestPath(repoRootForBase, canonicalManifest, authored); } catch (error) {
-        if (error.code === 'MANIFEST_PATH_ESCAPE') return path.resolve(root, authored);
+    // One containment check for every reader (repo-layout containedPath); an escape is thrown, never repaired.
+    const resolveUnderBase = (field, authored) => {
+      try {
+        return repoRootForBase
+          ? LAYOUT.resolveManifestPath(repoRootForBase, canonicalManifest, authored)
+          : LAYOUT.containedPath(root, authored);
+      } catch (error) {
+        if (error.code === 'MANIFEST_PATH_ESCAPE') {
+          const wrapped = new Error(error.kind === 'symlink'
+            ? `source manifest.sources[${index}].${field} escapes the source manifest root`
+            : `source manifest.sources[${index}].${field} must stay under the manifest root`);
+          wrapped.code = error.code;
+          throw wrapped;
+        }
         throw error;
       }
     };
-    const planPath = resolveUnderBase(source.plan_path);
-    const rubricPath = resolveUnderBase(source.rubric_path);
-    for (const [field, authored, resolved] of [
-      ['plan_path', source.plan_path, planPath],
-      ['rubric_path', source.rubric_path, rubricPath],
-    ]) {
-      if (path.isAbsolute(authored) || authored.includes('\\')
-          || resolved === root || !resolved.startsWith(`${root}${path.sep}`)) {
-        throw new Error(`source manifest.sources[${index}].${field} must stay under the manifest root`);
-      }
-    }
+    const planPath = resolveUnderBase('plan_path', source.plan_path);
+    const rubricPath = resolveUnderBase('rubric_path', source.rubric_path);
     const canonicalTargets = [];
     for (const [field, target] of [['plan_path', planPath], ['rubric_path', rubricPath]]) {
       let targetStat;

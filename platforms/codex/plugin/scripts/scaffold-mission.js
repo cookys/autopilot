@@ -301,7 +301,7 @@ function generate(b, o) {
     LAYOUT.manifestBase(b.repoRoot, path.join(b.repoRoot, b.sourcesRel)).base).split(path.sep).join('/') || '.';
   const rel = (p) => path.posix.relative(planBase, p);
   for (const p of [b.plan, b.rubric]) {
-    if (rel(p).startsWith('..')) throw new Refusal(`--out-dir ${b.outDir} must contain ${p} (manifest paths stay under the manifest root)`, 1);
+    if (rel(p).startsWith('..')) throw new Refusal(`--out-dir ${b.outDir} must contain ${p} (manifest paths stay under the plan base ${planBase})`, 1);
   }
   const sources = {
     schema_version: 1,

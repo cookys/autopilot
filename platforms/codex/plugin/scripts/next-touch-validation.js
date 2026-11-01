@@ -439,7 +439,7 @@ function sourceDigests(repo) {
   if (source.plan_sha256 !== planSha || source.rubric_sha256 !== rubricSha) {
     fail('SOURCE_AUTHORITY_INVALID', 'active plan/rubric digest does not match source manifest');
   }
-  return { planSha, rubricSha, planText: fs.readFileSync(path.join(repo, PLAN_PATH), 'utf8') };
+  return { planSha, rubricSha, planText: fs.readFileSync(planFile, 'utf8') };
 }
 
 function parseHeadingLedger(planText) {

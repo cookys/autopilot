@@ -23,7 +23,7 @@ P1="$TEST_TMP/p1.json"; mkreg "$P1" ''
 P1_EXC="$TEST_TMP/p1-exc.json"
 mkreg "$P1_EXC" 'd.exceptions.push({ path: "project/missions/mission-old-sources.json", rule: 6, reason: "fixture: manifest keeps its plans under docs/", plan_base: "docs" })'
 
-R="$TEST_TMP/repo"; mkdir -p "$R"
+R="$TEST_TMP/repo"; mkdir -p "$R/docs" "$R/project"
 resolve() { node "$LAYOUT" manifest-path "$@" --repo-root "$R"; }
 
 # ---- 1. resolver: bootstrap base is docs/, P1 base is project/ ----
@@ -40,7 +40,11 @@ for bad in '../../etc/x' '/etc/passwd' 'plans/../../x' '..' 'a\b'; do
   assert_eq "2" "$?" "escape $bad is red"
 done
 REPO_LAYOUT_REGISTRY="$P1" resolve project/missions/mission-x-sources.json 'plans/../plans/p.md' >/dev/null 2>&1
-assert_eq "0" "$?" "in-base dotdot that stays inside is green"
+assert_eq "2" "$?" "round 2: any .. segment is refused by the one literal rule (was green when it stayed inside)"
+REPO_LAYOUT_REGISTRY="$P1" resolve project/missions/mission-x-sources.json 'C:/x.md' >/dev/null 2>&1
+assert_eq "2" "$?" "drive-letter plan_path is red"
+REPO_LAYOUT_REGISTRY="$P1" resolve project/missions/mission-x-sources.json '//srv/share/x.md' >/dev/null 2>&1
+assert_eq "2" "$?" "UNC-style plan_path is red"
 
 # ---- 3. per-file exception: its own base is green, dropping it falls back to the global base ----
 OUT="$(REPO_LAYOUT_REGISTRY="$P1_EXC" resolve project/missions/mission-old-sources.json plans/p.md 2>&1)"
@@ -59,7 +63,7 @@ assert_eq "$TEST_TMP/loose/plans/p.md" "$OUT" "outside-repo manifest resolves ag
 
 # ---- 4. in-test mutant: without the traversal guard the escape goes through (so the test above can fail) ----
 MUT="$TEST_TMP/mut/repo-layout.js"; mkdir -p "$TEST_TMP/mut"
-sed "s#if (!isInside(base, resolved)) fail(\`must stay under the manifest base \${base}\`);#/* guard removed */#" "$LAYOUT" > "$MUT"
+sed 's#^function containedPath(base, rel) {#function containedPath(base, rel) { return path.resolve(base, rel); /* guard removed */#' "$LAYOUT" > "$MUT"
 if cmp -s "$LAYOUT" "$MUT"; then fail "mutant did not apply: traversal guard text moved"; fi
 REPO_LAYOUT_REGISTRY="$P1" node "$MUT" manifest-path project/missions/mission-x-sources.json '../../etc/x' --repo-root "$R" >/dev/null 2>&1
 assert_eq "0" "$?" "mutant (no guard) lets the escape through, so the red assertion above is load-bearing"
@@ -85,7 +89,6 @@ loader() { REPO_LAYOUT_REGISTRY="$1" node -e '
   try { const c = g.loadSourceCoverageManifest(process.argv[2], { repoRoot: process.argv[3] }); console.log("OK " + c.planIds.length); }
   catch (e) { console.log("ERR " + e.message); }' "$REPO_ROOT" "$2" "${3:-$R}"; }
 assert_eq "OK 1" "$(loader "$P1" "$R/project/missions/mission-p-sources.json")" "graph-check reads the plan under project/ at P1"
-OUT="$(loader "$P1" "$R/project/missions/mission-p-sources.json")"
 # bootstrap registry + the same manifest: the global base is docs/, which holds the decoy -> digest drift, not a pass
 assert_contains "$(REPO_LAYOUT_REGISTRY= loader '' "$R/project/missions/mission-p-sources.json")" "ERR source manifest.sources[0] content digest drifted" "bootstrap base (docs/) sees the decoy, not project/"
 # escape in the manifest: red with the historical message
@@ -131,6 +134,7 @@ nt() { REPO_LAYOUT_REGISTRY="$1" node -e '
   const n = require(process.argv[1] + "/scripts/next-touch-validation.js");
   try { n.sourceDigests(process.argv[2]); console.log("OK"); } catch (e) { console.log("ERR " + (e.code || "") + " " + e.message); }' "$REPO_ROOT" "$NT"; }
 assert_eq "OK" "$(nt "$P1")" "next-touch: reads the project/ plan at P1"
+assert_eq "plan at project" "$(REPO_LAYOUT_REGISTRY="$P1" node -e 'console.log(require(process.argv[1] + "/scripts/next-touch-validation.js").sourceDigests(process.argv[2]).planText.trim())' "$REPO_ROOT" "$NT")" "next-touch: planText is the resolved project/ plan, not the docs/ decoy"
 assert_contains "$(REPO_LAYOUT_REGISTRY= nt '')" "ERR" "next-touch: bootstrap layout does not find the project/ manifest"
 
 # ---- 5e. reader: scaffold-mission (writes the manifest where the registry says, plan_path relative to the base) ----
@@ -154,6 +158,61 @@ assert_eq "0" "$RC" "scaffold at P1 ($OUT)"
 assert_file_exists "$S/project/missions/mission-$STEM-sources.json" "scaffold writes the manifest into the registry missions dir"
 assert_eq "plans/$STEM.md" "$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).sources[0].plan_path)' "$S/project/missions/mission-$STEM-sources.json")" "scaffold plan_path is relative to the registry plan base"
 assert_eq "OK 1" "$(loader "$P1" "$S/project/missions/mission-$STEM-sources.json" "$S" | sed 's/^OK .*/OK 1/')" "the scaffolded manifest loads through the resolver"
+
+# ---- 5f. round 2: one containment function (literal + realpath), linked worktrees, loud failures ----
+G="$REPO_ROOT/scripts/lib/repo-layout.js"
+contained() { node -e 'try { console.log("OK " + require(process.argv[1]).containedPath(process.argv[2], process.argv[3])); } catch (e) { console.log("ERR " + e.code + " " + (e.kind || "")); }' "$G" "$1" "$2"; }
+CB="$TEST_TMP/cbase"; mkdir -p "$CB/plans" "$TEST_TMP/coutside"; echo x > "$TEST_TMP/coutside/s.md"; echo y > "$CB/plans/ok.md"
+assert_contains "$(contained "$CB" 'plans/ok.md')" "OK " "containedPath: plain file green"
+for bad in 'a\b' 'C:/x' 'C:x' '//srv/x' '/etc/x' 'plans/../x' '..'; do
+  assert_contains "$(contained "$CB" "$bad")" "ERR MANIFEST_PATH_ESCAPE literal" "containedPath: $bad refused literally"
+done
+# plan_base goes through the same literal rule (registry validate) ...
+for badbase in 'a\b' 'C:/x' '//srv/x' '../up' '/tmp'; do
+  mkreg "$TEST_TMP/badb.json" "d.exceptions.push({ path: 'x.json', rule: 6, reason: 'r', plan_base: $(node -e 'console.log(JSON.stringify(process.argv[1]))' "$badbase") })"
+  REPO_LAYOUT_REGISTRY="$TEST_TMP/badb.json" node "$LAYOUT" stage >/dev/null 2>&1
+  assert_eq "2" "$?" "plan_base $badbase is rejected by validate"
+done
+# ... and a plan_base that names no directory turns red instead of falling back to the global base
+mkreg "$TEST_TMP/nobase.json" 'd.exceptions.push({ path: "project/missions/mission-nb-sources.json", rule: 6, reason: "fixture", plan_base: "no-such-dir" })'
+OUT="$(REPO_LAYOUT_REGISTRY="$TEST_TMP/nobase.json" resolve project/missions/mission-nb-sources.json plans/p.md 2>&1)"; RC=$?
+assert_eq "2" "$RC" "missing plan_base directory is red"
+assert_contains "$OUT" "not an existing directory" "missing plan_base is named"
+# symlink inside the base that points outside: red; a link that stays inside: green
+ln -s "$TEST_TMP/coutside" "$CB/plans/escape"; ln -s "$CB/plans" "$CB/inner"
+assert_contains "$(contained "$CB" 'plans/escape/s.md')" "ERR MANIFEST_PATH_ESCAPE symlink" "symlink out of the base is red"
+assert_contains "$(contained "$CB" 'inner/ok.md')" "OK " "symlink that stays inside the base is green"
+ln -s "$TEST_TMP/nowhere" "$CB/plans/dangling"
+assert_contains "$(contained "$CB" 'plans/dangling')" "ERR MANIFEST_PATH_ESCAPE symlink" "dangling symlink is red"
+# graph-check surfaces the escape code instead of repairing it
+ln -s "$TEST_TMP/coutside" "$R/project/plans/leak"
+cp "$R/project/missions/mission-p-sources.json" "$R/project/missions/mission-sym-sources.json"
+sed -i 's#"plans/2026-08-03-p.md"#"plans/leak/s.md"#' "$R/project/missions/mission-sym-sources.json"
+code_of() { REPO_LAYOUT_REGISTRY="$P1" node -e '
+  const g = require(process.argv[1] + "/scripts/mission-execution-graph-check.js");
+  try { g.loadSourceCoverageManifest(process.argv[2], { repoRoot: process.argv[3] }); console.log("OK"); }
+  catch (e) { console.log("CODE " + e.code + " " + e.message); }' "$REPO_ROOT" "$1" "$R"; }
+assert_contains "$(code_of "$R/project/missions/mission-esc-sources.json")" "CODE MANIFEST_PATH_ESCAPE" "graph-check throws MANIFEST_PATH_ESCAPE for a literal escape"
+assert_contains "$(code_of "$R/project/missions/mission-sym-sources.json")" "CODE MANIFEST_PATH_ESCAPE source manifest.sources[0].plan_path escapes the source manifest root" "graph-check throws MANIFEST_PATH_ESCAPE for a symlink escape"
+# graduation: an escape adds no stem, but a broken registry is not swallowed
+BROKEN="$TEST_TMP/broken-registry.json"; echo '{ not json' > "$BROKEN"
+assert_contains "$(node -e '
+  const g = require(process.argv[1] + "/scripts/check-plan-graduation.js");
+  process.env.REPO_LAYOUT_REGISTRY = process.argv[3];
+  try { g.loadActiveLineageStems(process.argv[2]); console.log("NO-THROW"); } catch (e) { console.log("THROW " + e.message.slice(0, 60)); }' "$REPO_ROOT" "$R" "$BROKEN")" "THROW" "graduation: a broken registry fails loudly instead of yielding no stems"
+# linked worktrees: a manifest in a sibling worktree is governed by THAT worktree's root, in both directions
+W1="$TEST_TMP/w1"; mkdir -p "$W1/project/missions" "$W1/project/plans"
+git -C "$W1" init -q; git -C "$W1" config commit.gpgsign false
+echo '{}' > "$W1/project/missions/mission-w-sources.json"; echo p > "$W1/project/plans/p.md"
+git -C "$W1" add -A; git -C "$W1" commit -q -m w; git -C "$W1" worktree add -q "$TEST_TMP/w2" -b w2 >/dev/null 2>&1
+W1R="$(cd "$W1" && pwd -P)"; W2R="$(cd "$TEST_TMP/w2" && pwd -P)"
+OUT="$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-path "$W1R/project/missions/mission-w-sources.json" plans/p.md --repo-root "$W2R" 2>&1)"
+assert_eq "$W1R/project/plans/p.md" "$OUT" "linked worktree -> main: resolved under the manifest's own worktree root"
+OUT="$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-path "$W2R/project/missions/mission-w-sources.json" plans/p.md --repo-root "$W1R" 2>&1)"
+assert_eq "$W2R/project/plans/p.md" "$OUT" "main -> linked worktree: resolved under the manifest's own worktree root"
+assert_contains "$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-base "$W1R/project/missions/mission-w-sources.json" --repo-root "$W2R" 2>&1)" '"source": "registry"' "linked worktree manifest is governed by the registry, not 'manifest-dir'"
+OUT="$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-base "$TEST_TMP/loose/m.json" --repo-root "$W1R" 2>&1)"
+assert_contains "$OUT" '"source": "manifest-dir"' "a manifest in no git repo keeps the manifest-dir base"
 
 # ---- 6. F5: check-claude-md-inventory is red when docs/scripts-inventory.md is missing ----
 SBX="$TEST_TMP/inv"; mkdir -p "$SBX/scripts/lib" "$SBX/docs"

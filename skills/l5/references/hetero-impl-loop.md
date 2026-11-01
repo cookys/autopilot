@@ -282,6 +282,20 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
     (`session-mode.js set --level l3 --entry-level l5 --fallback precondition_failed --size <size> [--urgent] [--bug]`), repair on
     the mission branch in its retained worktree, merge on git evidence, and file the rail defect.
 
+## Depth-0 hands off the main checkout while a round runs (`boundary_rejected: main checkout mutated`)
+
+The commonest cause of `boundary_rejected: main checkout mutated` is not a second foreman or a fetch: it is
+depth-0 itself committing (a README or log note, even on the feature branch) or checking out while
+`engine implement-review` is mid-round. The rail fingerprints HEAD, branch, every ref except its own branch,
+diff, config and index; any delta discards the round AFTER implementation (the candidate stays on the campaign
+branch, no review ran). From launch to receipt make zero commits, checkouts or fetches in the main checkout; write
+notes from a separate worktree or after the receipt. Recovery: `--resume` re-enters verify and review on the
+committed candidate. Two launch traps from the same runs: take `--base` from the contract's `base_sha`, not from
+`git rev-parse HEAD` after committing contract and seal (`campaign_binding_mismatch`); commit
+`campaign.seal.json` and restore `.claude/session-start-sha` before launch (`campaign_repo_precondition_failed: dirty`).
+Source: hangar sessions 2026-09-19 (own-commit case and a P4 recurrence). A separate, unexplained variant (the
+reflog proves HEAD never moved) is tracked as a BACKLOG hypothesis (BL-0285 in `docs/BACKLOG.md`, `docs/backlog/main-checkout-mutated-with-no-head-movement.md`).
+
 ## Parallel units (measured 2026-09-18, v2.36.70: four rows, four kimi-code/k3 foremen, 44 min)
 
 One `.git` holds one rail: `scripts/lib/main-checkout-boundary.sh` fingerprints every ref except the

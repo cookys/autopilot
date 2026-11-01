@@ -69,3 +69,7 @@ otherwise "who changed this box" becomes the next thing someone has to investiga
 **Cite the message id, not the member.** Attribution disputes are settled by the message id
 (each message and receipt carries one) and by a third party's copy, not by either party's
 memory: quote `from` as the full address plus `message_id`.
+
+## Mark no-reply messages FYI
+
+A message that needs no answer and no action (a status note, a progress report, a closing ack, "done", "thanks") should be marked FYI so the receiving courier may hold it (up to 60 minutes by default) instead of waking an idle session. MCP `send` / `reply`: `fyi=true`. Shell: `FLEET_FYI=1 fleet send|reply ...` (an environment variable, not a flag: an older CLI would read `--fyi` as an address or body, while it ignores an unknown env var). Never mark FYI a message that asks for work, needs a reply, carries a GO / STOP decision, or needs a human. The courier ignores the mark for `urgent` / `needs_human` priority and for `@channel` broadcasts, and the tool result says so (`fyi: false` plus `fyi_note`). Mixed versions degrade to an immediate push with no error. Contract: the fleet repo's `docs/operations.md` (FYI deferred delivery).

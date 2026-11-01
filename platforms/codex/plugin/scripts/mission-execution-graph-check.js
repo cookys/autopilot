@@ -114,6 +114,17 @@ function contentBoundRubricId(planHash, rubricHash, rubricId) {
 // manifest. opts.noLayout is the one explicit fixture mode (only code can pass it): the base is the manifest's own
 // directory, still checked by containedPath.
 function loadSourceCoverageManifest(manifestPath, opts) {
+  // Step 1, before the manifest is opened: the caller's repoRoot validates the LITERAL and the physical path
+  // (LAYOUT.manifestBase). A manifest outside the repo is refused without a single read of its bytes.
+  const repoRootForBase = (opts && opts.noLayout) ? null : (opts && opts.repoRoot);
+  if (!(opts && opts.noLayout) && !repoRootForBase) {
+    const missing = new Error('loadSourceCoverageManifest: opts.repoRoot is required');
+    missing.code = 'MANIFEST_REPO_ROOT_REQUIRED';
+    throw missing;
+  }
+  const literalManifest = path.resolve(manifestPath);
+  const baseDir = repoRootForBase ? LAYOUT.manifestBase(repoRootForBase, literalManifest).base : null;
+  // Step 2: only now canonicalise and read.
   let canonicalManifest;
   try {
     canonicalManifest = fs.realpathSync(manifestPath);
@@ -126,19 +137,8 @@ function loadSourceCoverageManifest(manifestPath, opts) {
       || Object.keys(manifest).some((key) => !new Set(['schema_version', 'sources']).has(key))) {
     throw new Error('source manifest must be a versioned non-empty source set');
   }
-  const repoRootForBase = (opts && opts.noLayout) ? null : (opts && opts.repoRoot);
-  if (!(opts && opts.noLayout) && !repoRootForBase) {
-    const missing = new Error('loadSourceCoverageManifest: opts.repoRoot is required');
-    missing.code = 'MANIFEST_REPO_ROOT_REQUIRED';
-    throw missing;
-  }
-  // The LITERAL absolute manifest path goes to the resolver: it checks the literal path against repoRoot
-  // first and the realpath second, so an outside alias of an inside manifest is refused. Only reading uses
-  // the canonical path.
-  const literalManifest = path.resolve(manifestPath);
   let root = path.dirname(canonicalManifest);
-  if (repoRootForBase) {
-    const baseDir = LAYOUT.manifestBase(repoRootForBase, literalManifest).base;
+  if (baseDir) {
     try { root = fs.realpathSync(baseDir); } catch {
       const missing = new Error(`source manifest base ${baseDir} does not exist`);
       missing.code = 'MANIFEST_BASE_INVALID';

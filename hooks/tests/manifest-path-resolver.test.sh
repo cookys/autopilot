@@ -331,6 +331,21 @@ assert_eq "OK 1" "$(aload "$ALR/docs/m.json" "$AL/root-alias")" "symlinked repo 
 # a subdirectory as repoRoot keeps refusing a manifest above it
 assert_eq "CODE MANIFEST_OUTSIDE_REPO" "$(aload "$ALR/docs/m.json" "$ALR/sub")" "a repoRoot subdirectory still refuses a manifest outside it"
 
+# ---- 5j. round 6: the repo check comes BEFORE any read of the manifest ----
+mkdir -p "$TEST_TMP/rbc"; cp "$AL/repo/docs/m.json" "$TEST_TMP/rbc/outside.json"; printf '{ not json' > "$TEST_TMP/rbc/broken.json"
+reads_of() { node -e '
+  const fs = require("fs");
+  const g = require(process.argv[1] + "/scripts/mission-execution-graph-check.js");
+  const target = process.argv[2]; let reads = 0; const old = fs.readFileSync;
+  fs.readFileSync = function (f, ...a) { if (String(f) === target) reads++; return old.call(this, f, ...a); };
+  let code = "none";
+  try { g.loadSourceCoverageManifest(target, { repoRoot: process.argv[3] }); } catch (e) { code = e.code || e.message.slice(0, 40); }
+  fs.readFileSync = old; console.log("reads=" + reads + " code=" + code);' "$REPO_ROOT" "$1" "$ALR"; }
+assert_eq "reads=0 code=MANIFEST_OUTSIDE_REPO" "$(reads_of "$TEST_TMP/rbc/outside.json")" "an outside manifest is refused with zero reads of its bytes"
+assert_eq "reads=0 code=MANIFEST_OUTSIDE_REPO" "$(reads_of "$TEST_TMP/rbc/broken.json")" "an outside manifest with broken JSON is MANIFEST_OUTSIDE_REPO, not a JSON error"
+assert_eq "reads=0 code=MANIFEST_OUTSIDE_REPO" "$(reads_of "$AL/outside.json")" "an outside alias is refused with zero reads"
+assert_contains "$(reads_of "$ALR/docs/m.json")" "reads=1" "control: an inside manifest is read (so the counter can see reads)"
+
 # ---- 6. F5: check-claude-md-inventory is red when docs/scripts-inventory.md is missing ----
 SBX="$TEST_TMP/inv"; mkdir -p "$SBX/scripts/lib" "$SBX/docs"
 cp "$REPO_ROOT/scripts/check-claude-md-inventory.js" "$SBX/scripts/"

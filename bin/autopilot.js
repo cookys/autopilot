@@ -412,7 +412,27 @@ if (args.length === 0 || args[0] === '-h' || args[0] === '--help' || args[0] ===
 }
 
 if (args[0] === 'status') {
-  const statusRc = runStatusCli(args.slice(1), { cwd: process.cwd() });
+  // process.exit() truncates a pipe's stdout at ~64 KiB when written asynchronously; write the status
+  // output with fs.writeSync (retrying EAGAIN on a non-blocking pipe) so it is complete before the exit below.
+  const syncStdout = {
+    isTTY: process.stdout.isTTY,
+    columns: process.stdout.columns,
+    write(text) {
+      const buf = Buffer.from(String(text), 'utf8');
+      let off = 0;
+      while (off < buf.length) {
+        try {
+          off += fs.writeSync(1, buf, off, buf.length - off);
+        } catch (error) {
+          if (error && error.code === 'EAGAIN') { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1 + Math.floor(Math.random() * 10)); continue; }
+          if (error && error.code === 'EPIPE') return true;
+          throw error;
+        }
+      }
+      return true;
+    },
+  };
+  const statusRc = runStatusCli(args.slice(1), { cwd: process.cwd(), stdout: syncStdout });
   // null = a long-lived watcher (status runs --watch) that exits from its own signal handler;
   // return so the dispatch below does not run and fail the usage check.
   if (statusRc !== null) process.exit(statusRc);

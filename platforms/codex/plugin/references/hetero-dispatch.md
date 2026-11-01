@@ -626,6 +626,10 @@ scripts/dispatch-status.js --reap [--days N] [--dry-run]  # retention reaper (se
 scripts/dispatch-tree.js [--session <id>] [--json]  # read-only session tree (not the dormant task-tree scripts/tree.js, ADR-0002): subagents + nested rails under one session; unconnected branches flagged untracked
 ```
 
+- **Long work outside a dispatch rail** (e.g. an acceptance script running `bwrap ... codex exec` directly) writes no
+  manifest, so the panel cannot see it. Wrap it: `node scripts/register-external-run.js wrap --role verifier --label "<what>" -- <argv...>`
+  (or `start --pid <pid>` / `end --run-id <id> --rc <n>` around it). It writes only a `runner:"external"` manifest into the same dir;
+  `root_run_id` comes from the session marker (`--session` or `$CLAUDE_CODE_SESSION_ID`). A start with neither `--pid` nor `--lock` is refused (rc 2).
 - **Liveness** (advisory ordering): flock probe on the worktree lifetime lock (same contract as
   `_wt_is_live`; survives detach — the child inherits the fd) → cgroup scope → pid. Any positive
   signal ⇒ `alive:true` / `phase:"running"`; finalized manifest (`ended_at`) ⇒ `"exited"`.

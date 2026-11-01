@@ -223,6 +223,14 @@ DF_OUT="$(cd "$NS" && bash -c "$DF_CMD" 2>&1)"; DF_RC=$?
 eq "dev-flow draft-plan glob exits 0 on a slash-less plans_dir" "0" "$DF_RC"
 eq "dev-flow draft-plan glob lists the plan file" "doc/rfc/2026-01-01-a.md" "$DF_OUT"
 
+# 8f. The same command with a resolver that fails / prints nothing must fail loudly, never fall through to
+#     the filesystem root (d empty -> "/"*.md).
+EM="$TMP/emptyres"; mkdir -p "$EM/scripts"; printf '#!/usr/bin/env bash\nexit 1\n' > "$EM/scripts/resolve-project-paths.sh"
+DE_OUT="$(cd "$EM" && bash -c "$DF_CMD" 2>&1)"; DE_RC=$?
+[ "$DE_RC" -ne 0 ] && ok "dev-flow draft-plan glob fails when the resolver yields nothing (rc=$DE_RC)" || no "dev-flow draft-plan glob fails on empty resolver" "rc != 0" "rc=0"
+case "$DE_OUT" in *"parameter null or not set"*) ok "empty resolver: explicit unset-parameter error";; *) no "empty resolver: explicit unset-parameter error" "parameter null or not set" "$DE_OUT";; esac
+case "$DE_OUT" in */\*.md*) no "empty resolver: nothing is listed from the filesystem root" "no /*.md" "$DE_OUT";; *) ok "empty resolver: nothing is listed from the filesystem root";; esac
+
 # 7. Envelope.
 node -e 'JSON.parse(process.argv[1])' "$(bash "$R" --target "$REPO_ROOT")" \
   && ok "emitted JSON parses" || no "emitted JSON parses" "valid JSON" "unparseable"

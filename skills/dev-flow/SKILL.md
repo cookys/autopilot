@@ -134,7 +134,7 @@ decision-maker. M runs 1–5 at `plan`; L/XL bugs run 1–7 at `diagnose`.
 3. Knowledge: `.claude/knowledge/` for prior learnings; unprocessed session digests
 4. In-progress projects: the INDEX from `bash scripts/resolve-project-paths.sh --field index` — an active project for this work ⇒
    Context Continuation instead of a new walk
-5. Draft plan overlap: `d=$(bash scripts/resolve-project-paths.sh --field plans_dir); ls "${d%/}/"*.md`: same feature / module / user story ⇒
+5. Draft plan overlap: `d=$(bash scripts/resolve-project-paths.sh --field plans_dir); d=${d%/}; ls "${d:?}"/*.md`: same feature / module / user story ⇒
    normal mode asks the user whether to adopt the draft; CEO mode decides within DOA
 6. (L, XL) Goal in the project README (below), both parent tasks created, Scope Completeness Audit done
 7. (L, XL) Ladder probe run — always, even when nothing looks unknown; its `eligible_max` picks `research` or `proposal`

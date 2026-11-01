@@ -355,7 +355,7 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
       out.push(...ui.choiceRows(u, t('decide.k_options'), d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(sent || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F }))
       if (pick !== null && d.options[pick].description !== '') out.push(...ui.cardRow(u, '', d.options[pick].description, { fact: F, subtle: true }))
     }
-    if (d.recommendation !== null) { // the recommended option's own label when it matches one, else the recommendation as written; the reason follows after a colon
+    if (d.recommendation !== null) { // the recommended option's own label when it matches one, else the recommendation as written; the reason goes on the row below it
       const what = rec === null ? d.recommendation : d.options[rec].label
       out.push(...ui.cardRow(u, t('decide.k_advice'), what, { fact: F })) // the option name on the first row, the reason on its own rows below
       if (d.why !== null) out.push(...ui.cardRow(u, '', d.why, { fact: F }))

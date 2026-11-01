@@ -47,6 +47,7 @@ test('DECIDE card: a section header with the count, then per question the title,
   const note = ls.findIndex(l => l.field !== undefined && l.field.key === 'note:d-4290499d')
   expect(bg).toBe(2)
   expect([bg < blocks, blocks < row, row < advice, advice < note], 'the order is 背景, 卡住, 選項, 建議, 補充').toEqual([true, true, true, true])
+  expect(t[row + 1]).toBe('            [ ] 完整顯示')
   expect(t[row]).toBe('  選項      [ ] ★ OK') // the star marks the recommendation, on the option only
   expect(ls[row].segs?.filter(s => s.role === 'glyph').map(s => s.text)).toEqual([ui.GLYPHS.structure.recommend])
   expect(pressIds(ls.slice(row, row + 2))).toEqual(['pick:d-4290499d:0', 'pick:d-4290499d:1']) // one row per option
@@ -59,6 +60,7 @@ test('DECIDE card: a section header with the count, then per question the title,
   // the second card is numbered 2 and has its own row; the third has no options, so it asks for a typed reply
   expect(t.some(x => x === '▲ 2. U6 要不要把建議也寫進回覆')).toBe(true)
   expect(t.some(x => x === '  選項      [ ] 要')).toBe(true)
+  expect(t.some(x => x === '            [ ] 不要')).toBe(true)
   expect(t.some(x => x === '▲ 3. 這個分支要叫什麼名字？')).toBe(true)
   const free = ls.find(l => l.field !== undefined && l.field.key === 'note:d-0000free')
   expect(free?.text.trim()).toBe('回覆')
@@ -111,6 +113,7 @@ test('DECIDE choose: the picked option is `[x]` in bold default text (no backgro
   const ls = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ picks: { 'd-4290499d': 1 } })))
   const row = ls.find(l => l.kind === 'choice' && l.text.includes('完整顯示')) as PaneLine
   expect(row.text.trimEnd()).toBe('            [x] 完整顯示')
+  expect(texts(ls)).toContain('  選項      [ ] ★ OK') // the other option stays unpicked
   const picked = (row.segs ?? []).filter(s => s.text.includes('完整顯示') || s.text === '[x] ')
   expect(picked.length).toBeGreaterThan(0)
   for (const s of picked) { expect(s.color).toBe(ui.PALETTE.action); expect(s.bold).toBe(true); expect('backgroundColor' in s || 'inverse' in s).toBe(false) } // default text, bold: the picked option is on the bold whitelist
@@ -133,6 +136,7 @@ test('DECIDE sent: a question already sent says so, draws its options without Bu
   expect(pressIds(ls).filter(p => p.startsWith('pick:d-4290499d'))).toEqual([])
   expect(ls.some(l => l.field?.key === 'note:d-4290499d')).toBe(false)
   expect(texts(ls).some(x => x === '  選項      [x] ★ OK')).toBe(true) // the choice made stays visible
+  expect(texts(ls).some(x => x === '            [ ] 完整顯示')).toBe(true)
   expect(pressIds(ls).some(p => p.startsWith('pick:d-c24ecfd9'))).toBe(true) // the other questions are still open
   // all sent: nothing left to send
   const all = decideTabLines(snapOf(THREE), ctxOf(zh, 76, view({ sent: { 'd-4290499d': 5, 'd-c24ecfd9': 5, 'd-0000free': 5 } })))
@@ -451,8 +455,6 @@ const HOSTA = dec('d-hosta', 'hostA 要 codeforge 修 bootstrap/install 的三�
   recommendation: 'A', why: '路徑帶版號＋絕對 home 是真的 bug：共用 settings.json 時每升一版、每換一台都要重寫；B31 之後 autopilot 註冊 hooks 也需要穩定、不帶版號的腳本路徑，這次改的不會白做',
 })
 const hostaRows = (cols = 88): PaneLine[] => decideTabLines(snapOf([HOSTA]), ctxOf(makeT('zh-TW'), cols, view()))
-// the display column where a row's content starts: the cells of the leading spaces plus, on a key row, the 10-cell key slot behind the 2-cell indent
-const startCol = (l: PaneLine): number => ui.displayWidth(l.text) - ui.displayWidth(l.text.replace(/^ +/, ''))
 
 test('DECIDE card layout: (1)(2)(3) each start a row, every option has its own row, 建議 is the option name then the reason on a row below', () => {
   const ls = hostaRows()
@@ -506,5 +508,18 @@ test('DECIDE card layout: a short background with no newline and no list is draw
     const want = ui.cardRow({ t: zh as never, cols: 76 }, '背景', bgText, { fact: 'decide.cards', subtle: true })
     expect(got.map(l => l.text)).toEqual(want.map(l => l.text))
     expect(JSON.stringify(got)).toBe(JSON.stringify(want))
+  }
+})
+
+test('DECIDE card layout (review): `1、` items split without a following space; `1.`/`1)` still need one; narrow panes never overrun', () => {
+  const p = ui.cardParas('背景：1、甲；2、乙')
+  expect(p.map(x => x.text)).toEqual(['背景：', '1、甲；', '2、乙'])
+  const w = ui.displayWidth('1、')
+  expect([p[1].hang, p[2].hang], 'the hang is the width of the marker as drawn').toEqual([w, w])
+  for (const keep of ['v1.2.3', '版本 2.5 已出', '見第1.點', '甲 - 乙 * 丙']) expect(ui.cardParas(keep), keep).toEqual([{ text: keep, hang: 0 }])
+  expect(ui.cardParas('- 甲\n- 乙').map(x => x.hang), 'a leading dash is an item').toEqual([2, 2])
+  for (const cols of [16, 17, 18, 20, 24]) {
+    const ls = decideTabLines(snapOf([dec('d-n', 'q?', { background: '背景：1、' + '甲'.repeat(12) + '；2、乙乙乙乙乙乙', options: [OPT('甲'), OPT('乙')] })]), ctxOf(makeT('zh-TW'), cols, view()))
+    for (const x of texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            ')).filter(x => !/^\s+\[[ x]\] /.test(x))) expect(ui.displayWidth(x), 'cols ' + cols + ' [' + x + ']').toBeLessThanOrEqual(cols - 1)
   }
 })

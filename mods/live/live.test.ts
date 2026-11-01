@@ -1447,7 +1447,8 @@ for (const surface of SURFACES) {
     expect(pane.texts.some(t => t.includes('要合併 plan 還是拆開？'))).toBe(false)
     const cards = (await paneParts($, surface, 'decide')).texts
     expect(cards[1]).toBe('▲ 1. 要合併 plan 還是拆開？')
-    expect(cards).toContain('  選項      [ ] 合併') // the options are one row of Buttons; the one-line description of an option shows once it is picked
+    expect(cards).toContain('  選項      [ ] 合併') // one row per option, each a Button; the one-line description of an option shows once it is picked
+    expect(cards).toContain('            [ ] 拆開')
     const disp = await paneParts($, surface, 'dispatch') // the table is still there, on its own tab, and so is the Link
     expect(disp.texts.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)
     expect(disp.texts.some(t => t.startsWith('審查 ›'))).toBe(true) // the former 審查關卡 section is one pointer row to 審查
@@ -5462,7 +5463,9 @@ for (const surface of SURFACES) {
     const rows = await decideRows($)
     expect(rows[1]).toBe('▲ 1. P5 殘留分頁要不要把已清掉的也列出來')
     expect(rows).toContain('  選項      [ ] ★ OK')
+    expect(rows).toContain('            [ ] 完整顯示')
     expect(rows).toContain('  選項      [ ] 要')
+    expect(rows).toContain('            [ ] 不要')
     expect(rows[rows.length - 1]).toBe('  [ 送出（已答 0/3） ]  答案會貼進這個對話送出')
     const buttons = await keysOf($, 'Button')
     for (const k of ['pick:d-4290499d:0', 'pick:d-4290499d:1', 'pick:d-c24ecfd9:0', 'pick:d-c24ecfd9:1']) expect(buttons, k).toContain(k)
@@ -5478,13 +5481,17 @@ for (const surface of SURFACES) {
     await act($, 'pick:d-4290499d:1')
     let rows = await decideRows($)
     expect(rows).toContain('  選項      [ ] ★ OK')
+    expect(rows).toContain('            [x] 完整顯示')
     expect(rows[rows.length - 1]).toBe('  [ 送出（已答 1/3） ]  答案會貼進這個對話送出')
     expect(await keysOf($, 'Button')).toContain('submit')
     await act($, 'pick:d-4290499d:0') // another option of the same question replaces the pick
-    expect(await decideRows($)).toContain('  選項      [x] ★ OK')
+    const swapped = await decideRows($)
+    expect(swapped).toContain('  選項      [x] ★ OK')
+    expect(swapped).toContain('            [ ] 完整顯示')
     await act($, 'pick:d-4290499d:0') // the same one again: unpicked
     rows = await decideRows($)
     expect(rows).toContain('  選項      [ ] ★ OK')
+    expect(rows).toContain('            [ ] 完整顯示')
     expect(await keysOf($, 'Button')).not.toContain('submit')
   })
 
@@ -5509,6 +5516,7 @@ for (const surface of SURFACES) {
     const rows = await decideRows($)
     expect(rows[1]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來 · 已送出，等處理')
     expect(rows).toContain('  選項      [x] ★ OK')
+    expect(rows).toContain('            [ ] 完整顯示')
     expect(rows[rows.length - 1]).toBe('  [ 全部已送出，等處理 ]')
     expect((await keysOf($, 'Button')).filter(k => k.startsWith('pick:') || k === 'submit')).toEqual([])
     expect(await keysOf($, 'Input')).toEqual([])
@@ -5715,6 +5723,7 @@ for (const surface of SURFACES) {
     await phone.unmount()
     const again = await mountPhone()
     expect(rowsOf((await again.drawn()) as Node)).toContain('  選項      [x] ★ OK')
+    expect(rowsOf((await again.drawn()) as Node)).toContain('            [ ] 完整顯示')
     await again.unmount()
   })
 }
@@ -6114,6 +6123,7 @@ for (const surface of SURFACES) {
     const all = d.rows.map(textD)
     expect(all[0]).toContain(' 待決 ')
     expect(all[2]).toContain('1. P5 殘留分頁要不要把已清掉的也列出來')
+    expect(all.some(r => r.includes('[ ] ★ OK'))).toBe(true)
     expect(all.some(r => r.includes('[ ] 完整顯示'))).toBe(true)
     expect(all[all.length - 1]).toContain('[ 送出（已答 0/3） ]')
     expect(all.join('\n')).not.toContain('U6')
@@ -6138,7 +6148,9 @@ for (const surface of SURFACES) {
     const d = await rowsD($, ['tab:decide', 'pick:d-4290499d:1'])
     expect(d.rows.map(textD).some(r => r.includes('[x] 完整顯示'))).toBe(true)
     expect(d.keys).toContain('submit')
+    expect(d.rows.map(textD).some(r => r.includes('[ ] ★ OK'))).toBe(true)
     expect((await paneParts($, surface, 'decide')).texts).toContain('  選項      [ ] ★ OK')
+    expect((await paneParts($, surface, 'decide')).texts).toContain('            [x] 完整顯示')
     await rowsD($, ['submit'])
     expect(submits.length).toBe(1)
     expect(submits[0].text).toContain('d-4290499d')

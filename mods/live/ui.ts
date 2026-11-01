@@ -617,8 +617,8 @@ export function cardRow(u: Ctx, key: string, value: string, o: { fact: FactId; s
 }
 // ---- a long card value (BL-0369). The asker writes one string; the renderer cuts it where the text itself marks a point. ----
 // a paragraph break is a newline, or a `(1)` / `（1）` / `1.` / `1)` item marker that follows a space or a sentence mark; a line that starts `- ` or `* ` is an item as well
-const ITEM_AT = /(?:^|(?<=[\s。；;：:]))(?=(?:\(\d{1,2}\)|（\d{1,2}）|\d{1,2}[.)、]\s))/u
-const ITEM_HEAD = /^(\(\d{1,2}\)\s?|（\d{1,2}）\s?|\d{1,2}[.)、]\s|[-*•]\s)/u
+const ITEM_AT = /(?:^|(?<=[\s。；;：:]))(?=(?:\(\d{1,2}\)|（\d{1,2}）|\d{1,2}(?:[.)]\s|、)))/u
+const ITEM_HEAD = /^(\(\d{1,2}\)\s?|（\d{1,2}）\s?|\d{1,2}(?:[.)]\s|、)|[-*•]\s)/u
 export type CardPara = { text: string; hang: number } // hang: cells an item's continuation lines are indented, so they sit under the item's text and not under its marker
 export function cardParas(value: string): CardPara[] {
   const out: CardPara[] = []
@@ -637,7 +637,8 @@ export function cardParas(value: string): CardPara[] {
 export function cardParaRows(u: Ctx, key: string, paras: readonly CardPara[], o: { fact: FactId; subtle?: boolean }): PaneLine[] {
   const room = Math.max(1, u.cols - 1 - KEY_W)
   const rows: PaneLine[] = []
-  for (const p of paras) {
+  for (const para of paras) {
+    const p = { ...para, hang: Math.max(0, Math.min(para.hang, room - 2)) } // a hang leaves the continuation two cells (one wide character), so a row stays inside cols - 1
     wrapPlain(p.text, room, Math.max(1, room - p.hang)).forEach((piece, i) => {
       const lead = rows.length === 0 ? cardLead(key) : [cardHang()]
       const indent: Seg[] = i === 0 || p.hang === 0 ? [] : [sg(' '.repeat(p.hang))]

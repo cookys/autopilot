@@ -153,7 +153,8 @@ function diffLines(text, sign) {
       inHunk = true;
       continue;
     }
-    const file = plus && plus !== '/dev/null' ? plus : minus;
+    // an added line belongs to the new path, a removed line to the old one (they differ on a rename)
+    const file = sign === '-' ? (minus && minus !== '/dev/null' ? minus : plus) : (plus && plus !== '/dev/null' ? plus : minus);
     if (inHunk && l.startsWith(sign) && file && file !== '/dev/null') {
       out.push({ file, line, content: l.slice(1) });
       line++;
@@ -166,7 +167,8 @@ function contentFindings(root, o, restored) {
   const text = git(root, diffArgs(o, ['-U0']));
   const out = [];
   for (const { file, line, content } of diffLines(text, '+')) {
-    if (restored && restored.has(`${file}\0${content}`)) continue;
+    const rk = `${file}\0${content}`;
+    if (restored && restored.get(rk) > 0) { restored.set(rk, restored.get(rk) - 1); continue; }
     for (const h of patterns.findAll(content)) {
       const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
       out.push({ file, line, category: h.category, snippet });
@@ -189,20 +191,25 @@ function resolveCommit(root, ref) {
  * the revert adds is scanned as usual. (git revert runs no pre-commit hook, so --staged needs no path.)
  */
 function revertedLines(root, o) {
-  const restored = new Set();
+  const restored = new Map(); // file\0text -> how many times the reverted commit removed it
   if (o.mode !== 'range') return restored;
   const log = git(root, ['log', '--no-color', '--format=%H%x1f%B%x1e', o.range]);
   for (const rec of log.split('\x1e')) {
     const body = rec.split('\x1f')[1];
     if (!body) continue;
-    const rv = body.match(/^This reverts commit ([0-9a-f]{7,40})\.?\s*$/m);
-    const tr = body.match(new RegExp(`^${REVERT_TRAILER}:\\s*([0-9a-f]{7,40})\\s*$`, 'm'));
+    const rv = body.match(/^This reverts commit ([0-9a-f]{7,40})\.\s*$/m);
+    // only the final trailer block counts (git's own parser), not any line that looks like a trailer
+    const parsed = spawnSync('git', ['interpret-trailers', '--parse'], { cwd: root, input: body, encoding: 'utf8' });
+    const tr = parsed.status === 0 ? (parsed.stdout || '').match(new RegExp(`^${REVERT_TRAILER}:\\s*([0-9a-f]{7,40})\\s*$`, 'm')) : null;
     if (!rv || !tr) continue;
     const a = resolveCommit(root, rv[1]);
     const b = resolveCommit(root, tr[1]);
     if (!a || a !== b) continue;
     const text = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--format=', '-U0', a]);
-    for (const d of diffLines(text, '-')) restored.add(`${d.file}\0${d.content}`);
+    for (const d of diffLines(text, '-')) {
+      const k = `${d.file}\0${d.content}`;
+      restored.set(k, (restored.get(k) || 0) + 1);
+    }
   }
   return restored;
 }

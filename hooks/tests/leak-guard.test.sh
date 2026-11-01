@@ -354,4 +354,43 @@ assert_not_contains "$LABELS" "<host-27>" "host letters: no numeric fallback"
 assert_contains "$LABELS" "<host-aa>" "host letters: the 27th host is aa"
 assert_contains "$LABELS" "<host-ab>" "host letters: the 28th host is ab"
 
+# ── review round 1: the revert path reads the message and the diff strictly ──
+# (1) the trailer must be in the final trailer block, not a line followed by another paragraph
+revert_setup
+git -C "$R" log -1 --format=%B | git -C "$R" interpret-trailers --trailer "Leak-Guard-Allow-Revert: $A" > "$TEST_TMP/msg1"
+printf '\nA closing paragraph after the trailer.\n' >> "$TEST_TMP/msg1"
+git -C "$R" commit -q --amend -F "$TEST_TMP/msg1"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert strict-1: a trailer followed by another paragraph is not a trailer (red)"
+# (2) the full stop of 'This reverts commit <sha>.' is required
+revert_setup
+git -C "$R" commit -q --amend -m "Revert x" -m "This reverts commit $A" -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert strict-2: 'This reverts commit <sha>' without the full stop is red"
+git -C "$R" commit -q --amend -m "Revert x" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "revert strict-2 twin: with the full stop and a trailer block it is green"
+# (3) a redaction that also renames the file: the revert restores the line under the OLD path
+reset_stage; git -C "$R" checkout -q -B rn "$BASE"
+{ for i in 1 2 3 4 5 6 7 8; do echo "stable line number $i of the file"; done; printf 'legacy %s/x\n' "$PERSONAL"; } > "$R/src/big.txt"
+git -C "$R" add -A; git -C "$R" commit -q -m "add big"
+git -C "$R" mv src/big.txt src/big2.txt
+{ for i in 1 2 3 4 5 6 7 8; do echo "stable line number $i of the file"; done; echo "legacy clean line"; } > "$R/src/big2.txt"
+git -C "$R" add -A; git -C "$R" commit -q -m "redact and rename big"
+A="$(git -C "$R" rev-parse HEAD)"
+git -C "$R" revert --no-edit "$A" >/dev/null 2>&1; add_trailer "$A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "revert strict-3: redact+rename then revert restores the line under the old path (green)"
+git -C "$R" reset -q --soft "$A"; git -C "$R" reset -q
+git -C "$R" checkout -q -- . ; git -C "$R" clean -qfd
+printf 'legacy %s/x\n' "$PERSONAL" > "$R/src/other.txt"; git -C "$R" add -A
+git -C "$R" commit -q -m "Revert x" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert strict-3 NC: the same line added to a different file is red"
+assert_contains "$OUT" "src/other.txt:1" "revert strict-3 NC: names the other file"
+# (4) a restored line is allowed as many times as the reverted commit removed it
+revert_setup
+git -C "$R" reset -q --soft "$A"
+printf 'old note\nlegacy %s/x\nlegacy %s/x\n' "$PERSONAL" "$PERSONAL" > "$R/src/old.md"
+git -C "$R" commit -q -am "Revert x" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert strict-4: adding the removed line back twice is red"
+assert_contains "$OUT" "src/old.md:3" "revert strict-4: the second copy (line 3) is named"
+assert_not_contains "$OUT" "src/old.md:2" "revert strict-4: the first copy (line 2) is allowed"
+reset_stage; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null
+
 finalize_test

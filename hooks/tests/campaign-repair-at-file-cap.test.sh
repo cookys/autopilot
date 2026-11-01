@@ -91,6 +91,15 @@ for (const phase of ['AWAITING_DISPOSITION', 'BOUNDARY_REJECTED', 'VERTICAL_VERI
 console.log(`a_PREPARED_at_cap=${code(at('PREPARED', 4))}`);
 console.log(`a_PREPARED_below_cap=${code(at('PREPARED', 3))}`);
 console.log(`a_IMPLEMENTING_at_cap=${code(at('IMPLEMENTING', 4))}`);
+console.log(`a_boundary_unbound_churn_cap=${code({
+  ...at('BOUNDARY_REJECTED', 4), candidate_reference: null, state: { ...at('BOUNDARY_REJECTED', 4).state, usage: { changed_files: 4, churn: 8 } },
+})}`);
+console.log(`a_boundary_git_candidate_churn_cap=${code({
+  ...at('BOUNDARY_REJECTED', 4), state: { ...at('BOUNDARY_REJECTED', 4).state, usage: { changed_files: 4, churn: 8 } },
+})}`);
+console.log(`a_vertical_churn_cap=${code({
+  ...at('VERTICAL_VERIFICATION', 4), state: { ...at('VERTICAL_VERIFICATION', 4).state, usage: { changed_files: 4, churn: 8 } },
+})}`);
 console.log(`a_disposition_churn_cap=${code({
   ...at('AWAITING_DISPOSITION', 4), state: { ...at('AWAITING_DISPOSITION', 4).state, usage: { changed_files: 4, churn: 8 } },
 })}`);
@@ -118,7 +127,7 @@ function git(repo, args) {
 }
 // A real ledger whose campaign reaches REVIEWING through BOUNDARY_REJECTED (committed
 // candidate bound) -> vertical_verified, exactly the reducer edge production uses.
-function reviewingFixture(name, { usageFiles = null } = {}) {
+function reviewingFixture(name, { usageFiles = null, churnFull = false } = {}) {
   const repo = path.join(testTmp, name, 'repo');
   fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
   git(repo, ['init', '-q']);
@@ -183,7 +192,7 @@ function reviewingFixture(name, { usageFiles = null } = {}) {
   return {
     repo, base: baseSha, branch, candidate, worktree, contract, contractPath, sealPath,
     promptFile, control, ledger: opened.ledger, campaignId: opened.campaignId, commonDir,
-    usageFiles,
+    usageFiles, churnFull,
   };
 }
 function boundaryResult(fx) {
@@ -234,7 +243,10 @@ function toReviewing(fx, { disposition = false, stopAtBoundary = false, converge
     stageIdentity: 'campaign-verification:fixture',
     payload: { passed: true, evidence_digest: evidence },
     artifactReference: { kind: 'verification_receipt', digest: evidence },
-    ...(fx.usageFiles === null ? {} : { usage: { changed_files: fx.usageFiles } }),
+    ...(fx.usageFiles === null ? {} : { usage: {
+      changed_files: fx.usageFiles,
+      ...(fx.churnFull ? { churn: fx.control.current_state.limits.max_churn } : {}),
+    } }),
   });
   assert.strictEqual(appended.state.phase, icc.CAMPAIGN_STATES.REVIEWING);
   let last = appended;
@@ -403,6 +415,9 @@ if (hasHelper) {
     ['REVIEWING', fxReviewing, toReviewing(fxReviewing)],
     ['AWAITING_DISPOSITION', fxB, null],
     ['AWAITING_CONVERGENCE_ADJUDICATION', null, null],
+    // BL-0360: the same two waits with the churn budget spent (file budget below the cap).
+    ['AWAITING_DISPOSITION_CHURN_FULL', null, null],
+    ['AWAITING_CONVERGENCE_ADJUDICATION_CHURN_FULL', null, null],
   ];
   for (const [phase, fx, st] of cases) {
     const observed = '2026-08-30T00:00:05.000Z';
@@ -413,24 +428,101 @@ if (hasHelper) {
       state = toReviewing(target, { disposition: true });
     }
     if (phase === 'AWAITING_CONVERGENCE_ADJUDICATION') {
-      // first-pass `>=`: 4/4 is the predicate-TRUE row, so both sides must REFUSE
+      // first-pass `>=`: 4/4 is the predicate-TRUE row; the wait is an exact-replay no-op, so BOTH sides admit
       target = reviewingFixture('parity-convergence', { usageFiles: 4 });
+      state = toReviewing(target, { convergence: true });
+    }
+    if (phase === 'AWAITING_DISPOSITION_CHURN_FULL') {
+      target = reviewingFixture('parity-disposition-churn', { usageFiles: 1, churnFull: true });
+      state = toReviewing(target, { disposition: true });
+    }
+    if (phase === 'AWAITING_CONVERGENCE_ADJUDICATION_CHURN_FULL') {
+      target = reviewingFixture('parity-convergence-churn', { usageFiles: 1, churnFull: true });
       state = toReviewing(target, { convergence: true });
     }
     const projT = campaignCli.projectCampaign(campaignCli.loadRows(target.ledger), target.campaignId);
     preSpendCalls.length = 0;
     const cliResult = campaignCli.campaignResumeEligibility(projT, observed);
     const cliCallsT = preSpendCalls.splice(0).join(';') || 'none';
-    const cliBlocked = cliResult.reason_code === 'campaign_file_budget_exhausted';
+    const isBudget = (c) => c === 'campaign_file_budget_exhausted' || c === 'campaign_churn_budget_exhausted';
+    const cliBlocked = isBudget(cliResult.reason_code);
     const claimed = claim(target, state);
     const intakeCalls = preSpendCalls.splice(0).join(';') || 'none';
-    const intakeBlocked = claimed.code === 'campaign_file_budget_exhausted'
-      || claimed.reason_code === 'campaign_file_budget_exhausted';
+    const intakeBlocked = isBudget(claimed.code) || isBudget(claimed.reason_code);
     console.log(`f_${phase}_cli_calls=${cliCallsT}`);
     console.log(`f_${phase}_intake_calls=${intakeCalls}`);
     console.log(`f_${phase}_blocked=cli:${cliBlocked},intake:${intakeBlocked}`);
     console.log(`f_${phase}_parity=${cliCallsT === intakeCalls && cliBlocked === intakeBlocked}`);
   }
+}
+
+// ---- G. BL-0360: a budget-spent durable wait is admitted AND the real engine still dispatches nothing,
+// mutates nothing and spends nothing. Real engine + real intake + real ledger; the implementer and
+// review dispatchers are spies. A fixture can force the wait branch to dispatch (SPY_FORCE_DISPATCH=1),
+// which must turn the spy assertions red (negative control).
+function engineResume(fx, label) {
+  const spies = { impl: 0, review: 0 };
+  const rev = (ref) => git(fx.repo, ['rev-parse', ref]);
+  const proj = () => campaignCli.projectCampaign(campaignCli.loadRows(fx.ledger), fx.campaignId);
+  const spend = (u) => JSON.stringify([u.changed_files, u.churn, u.repair_generations]);
+  const usageBefore = spend(proj().state.usage);
+  const headBefore = rev(fx.branch);
+  const eng = new AutopilotEngine({
+    cwd: fx.repo,
+    clock: () => '2026-08-30T00:00:10.000Z',
+    campaignIntake(input) {
+      return intake.runCampaignIntake(input, {
+        readiness: () => ({ owner: 'provider_readiness', status: 'ready' }),
+        contextGate: () => ({ owner: 'context_window', status: 'ready' }),
+        occupancy: () => ({ owner: 'worktree_lifecycle', status: 'ready' }),
+      });
+    },
+    implementationDispatcher() {
+      spies.impl += 1;
+      return { error: 'spy: implementer must not run', status: 1, signal: null, stdout: '', stderr: '', parseError: null, result: null };
+    },
+    reviewDispatcher() {
+      spies.review += 1;
+      return { error: 'spy: reviewer must not run', status: 1, signal: null, stdout: '', stderr: '', parseError: null, result: null };
+    },
+  });
+  if (process.env.SPY_FORCE_DISPATCH === '1') {
+    // negative-control fixture: the wait branch itself calls the dispatcher
+    const realIntake = eng.campaignIntake.bind(eng);
+    eng.campaignIntake = (input) => {
+      const out = realIntake(input);
+      if (out && out.generation_claim && out.generation_claim.resume_durable_wait) {
+        eng.implementationDispatcher({});
+      }
+      return out;
+    };
+  }
+  let result;
+  try {
+    result = eng.runImplementationReviewLoop({
+      promptFile: fx.promptFile, branch: fx.branch, base: fx.base, roster,
+      campaignContract: fx.contractPath, campaignSeal: fx.sealPath, resume: true,
+    });
+  } catch (e) { result = { phase: `threw:${e.message.slice(0, 120)}` }; }
+  const after = proj();
+  const rej = result.campaign_control && result.campaign_control.rejection;
+  console.log(`g_${label}_phase=${result.phase} rejection=${rej ? rej.code : 'none'}`);
+  console.log(`g_${label}_impl_calls=${spies.impl}`);
+  console.log(`g_${label}_review_calls=${spies.review}`);
+  console.log(`g_${label}_usage_unchanged=${spend(after.state.usage) === usageBefore}`);
+  console.log(`g_${label}_head_unchanged=${rev(fx.branch) === headBefore}`);
+  console.log(`g_${label}_intake_budget_rejected=${Boolean(rej && /budget_exhausted/.test(rej.code))}`);
+}
+{
+  const gDisp = reviewingFixture('spy-disposition', { usageFiles: 4, churnFull: true });
+  toReviewing(gDisp, { disposition: true });
+  engineResume(gDisp, 'AWAITING_DISPOSITION');
+  const gConv = reviewingFixture('spy-convergence', { usageFiles: 4, churnFull: true });
+  toReviewing(gConv, { convergence: true });
+  engineResume(gConv, 'AWAITING_CONVERGENCE_ADJUDICATION');
+  const gBound = reviewingFixture('spy-boundary');
+  toReviewing(gBound, { stopAtBoundary: true });
+  engineResume(gBound, 'BOUNDARY_REJECTED');
 }
 
 // ---- D. admission advisory -------------------------------------------------------------
@@ -461,7 +553,14 @@ done
 assert_contains "$OUT" "a_PREPARED_at_cap=campaign_file_budget_exhausted" "first pass (PREPARED) at the cap stays refused"
 assert_contains "$OUT" "a_PREPARED_below_cap=resumable" "first pass below the cap resumes"
 assert_contains "$OUT" "a_IMPLEMENTING_at_cap=campaign_resume_phase_unsupported" "IMPLEMENTING at the cap stays unsupported"
-assert_contains "$OUT" "a_disposition_churn_cap=campaign_churn_budget_exhausted" "churn cap still blocks a disposition resume at the file cap"
+# BL-0360: a durable wait (AWAITING_DISPOSITION) is an exact-replay no-op, so a spent churn budget no longer
+# refuses it; a mutation-capable resume (VERTICAL_VERIFICATION) with the same spent churn is still refused.
+assert_contains "$OUT" "a_disposition_churn_cap=resumable" "churn cap no longer blocks an exact-replay durable wait (disposition) at the file cap"
+# BOUNDARY_REJECTED: with a git candidate the engine resumes into a full-diff review (model calls), so it is NOT a
+# no-op and the spent churn budget still refuses it; with no bound candidate it is the exact-replay no-op.
+assert_contains "$OUT" "a_boundary_unbound_churn_cap=resumable" "BOUNDARY_REJECTED without a git candidate is an exact-replay no-op: churn cap waived"
+assert_contains "$OUT" "a_boundary_git_candidate_churn_cap=campaign_churn_budget_exhausted" "BOUNDARY_REJECTED with a git candidate re-reviews: churn cap still refuses"
+assert_contains "$OUT" "a_vertical_churn_cap=campaign_churn_budget_exhausted" "churn cap still blocks a mutation-capable resume (VERTICAL_VERIFICATION)"
 assert_contains "$OUT" "a_disposition_wall_exhausted=campaign_wall_budget_exhausted" "wall budget still blocks a disposition resume"
 # B. real ledger
 assert_contains "$OUT" "b_phase=AWAITING_DISPOSITION usage_files=4 cap=4" "fixture parks a real ledger in AWAITING_DISPOSITION at the file cap"
@@ -484,12 +583,15 @@ assert_contains "$OUT" "c_intake_uses_helper=true" "campaign-intake.js uses the 
 assert_contains "$OUT" "c_engine_uses_helper=true" "campaignMutationBudgetStatus uses the shared predicate"
 assert_contains "$OUT" "c_table=PREPARED:3=false,PREPARED:4=true,PREPARED:5=true,IMPLEMENTING:3=false,IMPLEMENTING:4=true,IMPLEMENTING:5=true,BOUNDARY_REJECTED:3=false,BOUNDARY_REJECTED:4=false,BOUNDARY_REJECTED:5=true,VERTICAL_VERIFICATION:3=false,VERTICAL_VERIFICATION:4=false,VERTICAL_VERIFICATION:5=true,ADJUDICATING:3=false,ADJUDICATING:4=false,ADJUDICATING:5=true,AWAITING_DISPOSITION:3=false,AWAITING_DISPOSITION:4=false,AWAITING_DISPOSITION:5=true,REPAIRING:3=false,REPAIRING:4=false,REPAIRING:5=true,REVIEWING:3=false,REVIEWING:4=true,REVIEWING:5=true" "predicate table: >= for first pass, > for repair phases"
 # F. cli.js vs campaign-intake.js side by side
-# BL-0360: intake evaluates the predicate (TRUE here) but waives the rejection for a proven exact-replay
-# no-op durable wait (no dispatch, no mutation, no gate attempt); cli.js eligibility still refuses.
-assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_blocked=cli:true,intake:false" "AWAITING_CONVERGENCE_ADJUDICATION at 4/4 (predicate true): cli refuses, intake admits the exact-replay no-op"
+# BL-0360: the predicate is TRUE here (first-pass `>=`) and both sides still evaluate it, but a durable wait is
+# a proven exact-replay no-op (no dispatch, no mutation, no gate attempt), so BOTH cli.js and intake admit it.
+assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_blocked=cli:false,intake:false" "AWAITING_CONVERGENCE_ADJUDICATION at 4/4 (predicate true): both sides admit the exact-replay no-op"
+assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_cli_calls=AWAITING_CONVERGENCE_ADJUDICATION:4/4:repair=undefined->true" "AWAITING_CONVERGENCE_ADJUDICATION: cli still evaluated the predicate (TRUE) before waiving it"
 assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_intake_calls=AWAITING_CONVERGENCE_ADJUDICATION:4/4:repair=undefined->true" "AWAITING_CONVERGENCE_ADJUDICATION: intake still evaluated the predicate (TRUE) before waiving it"
+assert_contains "$OUT" "f_AWAITING_DISPOSITION_CHURN_FULL_blocked=cli:false,intake:false" "AWAITING_DISPOSITION with the churn budget spent: both sides admit"
+assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_CHURN_FULL_blocked=cli:false,intake:false" "AWAITING_CONVERGENCE_ADJUDICATION with the churn budget spent: both sides admit"
 assert_contains "$OUT" "f_AWAITING_DISPOSITION_blocked=cli:false,intake:false" "AWAITING_DISPOSITION at 4/4 (repair phase): neither side refuses"
-for ph in BOUNDARY_REJECTED REVIEWING AWAITING_DISPOSITION; do
+for ph in BOUNDARY_REJECTED REVIEWING AWAITING_DISPOSITION AWAITING_CONVERGENCE_ADJUDICATION AWAITING_DISPOSITION_CHURN_FULL AWAITING_CONVERGENCE_ADJUDICATION_CHURN_FULL; do
   assert_contains "$OUT" "f_${ph}_parity=true" "$ph: cli.js and campaign-intake.js evaluate the pre-spend predicate identically (same calls, same verdict)"
 done
 assert_contains "$OUT" "f_AWAITING_DISPOSITION_intake_calls=AWAITING_DISPOSITION:4/4:repair=undefined->false" "intake really reached the predicate for the disposition resume (not vacuous parity)"
@@ -607,4 +709,16 @@ assert_contains "$(cat "$CLI_ERRF")" "ADVISORY cli_probe_code: cli probe message
 assert_eq "$(grep -x 'ADVISORY cli_probe_bare' "$CLI_ERRF")" "ADVISORY cli_probe_bare" "real CLI prints a message-less advisory without a trailing colon"
 assert_not_contains "$(cat "$CLI_OUTF")" "ADVISORY" "stdout carries no advisory text"
 assert_eq "$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).status)' "$CLI_OUTF")" "converged" "stdout is a single parseable JSON result"
+# G. BL-0360 spies: real engine resume of a budget-spent durable wait.
+for ph in AWAITING_DISPOSITION AWAITING_CONVERGENCE_ADJUDICATION; do
+  assert_contains "$OUT" "g_${ph}_intake_budget_rejected=false" "$ph with a spent churn budget is admitted by the real intake"
+  assert_contains "$OUT" "g_${ph}_impl_calls=0" "$ph budget-spent resume: the implementer dispatcher is never called"
+  assert_contains "$OUT" "g_${ph}_review_calls=0" "$ph budget-spent resume: the review dispatcher is never called"
+  assert_contains "$OUT" "g_${ph}_usage_unchanged=true" "$ph budget-spent resume: changed_files/churn/repair_generations do not grow"
+  assert_contains "$OUT" "g_${ph}_head_unchanged=true" "$ph budget-spent resume: the campaign branch HEAD does not move"
+done
+# BOUNDARY_REJECTED with a bound git candidate is NOT a no-op: the engine resumes it into a full-diff review
+# (reviewer model calls), which is why the budget waiver excludes it (durableWaitBudgetWaived).
+assert_contains "$OUT" "g_BOUNDARY_REJECTED_impl_calls=0" "BOUNDARY_REJECTED resume never calls the implementer"
+assert_not_contains "$OUT" "g_BOUNDARY_REJECTED_review_calls=0" "BOUNDARY_REJECTED with a git candidate re-reviews (so it must not be budget-waived)"
 finalize_test

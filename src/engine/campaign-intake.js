@@ -18,6 +18,9 @@ const {
   campaignIdFor,
   canonicalDigest,
   changedFilesPreSpendBlocked,
+  durableWaitNoOpMarks,
+  durableWaitBudgetWaived,
+  isProvenExactReplayNoOp,
   estimateRepairRoundSeconds,
   formatRepairRoundBudgetShortfall,
   boundCampaignArtifactDigest,
@@ -1334,11 +1337,7 @@ function defaultGenerationClaim({
         boundary_rejected: boundary,
         awaiting_disposition: awaiting,
         candidate_ref: candidateRef,
-        exact_replay: true,
-        dispatcher_called: false,
-        mutation_attempts: 0,
-        gate_attempts: 0,
-        no_op: true,
+        ...durableWaitNoOpMarks(),
       };
       // Prefer a bound git candidate when present so later stages can re-attach.
       if (existing.candidate_reference
@@ -1418,7 +1417,11 @@ function defaultGenerationClaim({
     // resume_durable_wait is marked no dispatch / no mutation / no gate attempt, so the
     // resume spends nothing. Every mutation-capable resume and every unmarked durable
     // state keeps both rejections.
-    const exactReplayNoOp = isProvenExactReplayNoOp(existing.resume_durable_wait);
+    const exactReplayNoOp = durableWaitBudgetWaived({
+      phase: existing.state.phase,
+      wait: existing.resume_durable_wait,
+      candidateReference: existing.candidate_reference,
+    });
     // The shared predicate is still evaluated on every path (cli.js parity); only its
     // rejection is waived for the proven no-op.
     const fileBudgetBlocked = !closeOnly && !reviewingResumable && changedFilesPreSpendBlocked({
@@ -1426,7 +1429,10 @@ function defaultGenerationClaim({
       usage: existing.state.usage,
       limits: existing.state.limits,
     });
-    if (fileBudgetBlocked && !exactReplayNoOp) {
+    // Usage above the hard ceiling is an invariant breach, not exhaustion: never waived.
+    const overFileCeiling = existing.state.usage.changed_files
+      > existing.state.limits.max_changed_files;
+    if (fileBudgetBlocked && !(exactReplayNoOp && !overFileCeiling)) {
       return rejected(
         'campaign_generation',
         'campaign_file_budget_exhausted',
@@ -3276,18 +3282,6 @@ function runCampaignIntake(input = {}, adapters = {}) {
     pre_spend_no_effect_receipt: null,
     ...(reviewCandidateContinuation ? { review_candidate_continuation: reviewCandidateContinuation } : {}),
   };
-}
-
-// A durable-wait resume is a proven exact-replay no-op only when ALL five marks hold.
-function isProvenExactReplayNoOp(wait) {
-  return Boolean(
-    wait
-    && wait.exact_replay === true
-    && wait.no_op === true
-    && wait.dispatcher_called === false
-    && wait.mutation_attempts === 0
-    && wait.gate_attempts === 0,
-  );
 }
 
 module.exports = {

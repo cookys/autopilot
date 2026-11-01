@@ -74,6 +74,38 @@ const REPAIR_RESUME_PHASES = new Set([
   CAMPAIGN_STATES.AWAITING_DISPOSITION,
   CAMPAIGN_STATES.REPAIRING,
 ]);
+// The marks every durable-wait resume (NON_SUCCESS_DURABLE_STATES) carries: adopting the wait
+// dispatches nothing, mutates nothing and spends no gate attempt. ONE definition for
+// campaign-intake.js (stamps resume_durable_wait) and src/campaign/cli.js (eligibility).
+function durableWaitNoOpMarks() {
+  return {
+    exact_replay: true,
+    dispatcher_called: false,
+    mutation_attempts: 0,
+    gate_attempts: 0,
+    no_op: true,
+  };
+}
+// A durable-wait resume is a proven exact-replay no-op only when ALL five marks hold.
+function isProvenExactReplayNoOp(wait) {
+  return Boolean(
+    wait
+    && wait.exact_replay === true
+    && wait.no_op === true
+    && wait.dispatcher_called === false
+    && wait.mutation_attempts === 0
+    && wait.gate_attempts === 0,
+  );
+}
+// Whether a spent file/churn budget is waived for this durable-wait resume. Waived only for a
+// proven exact-replay no-op, and never for a BOUNDARY_REJECTED wait that carries a git candidate:
+// the engine resumes that one into a full-diff review (model calls), so it is not a no-op.
+// ONE definition for campaign-intake.js and src/campaign/cli.js.
+function durableWaitBudgetWaived({ phase, wait, candidateReference } = {}) {
+  if (!isProvenExactReplayNoOp(wait)) return false;
+  return !(phase === CAMPAIGN_STATES.BOUNDARY_REJECTED
+    && candidateReference && candidateReference.kind === 'git_candidate');
+}
 // `repair` overrides the phase-derived choice (the engine knows the dispatch kind).
 function changedFilesPreSpendBlocked({ phase, usage, limits, repair } = {}) {
   const used = usage && usage.changed_files;
@@ -1470,6 +1502,9 @@ module.exports = {
   REPAIR_RESUME_PHASES,
   CampaignStateError,
   changedFilesPreSpendBlocked,
+  durableWaitNoOpMarks,
+  durableWaitBudgetWaived,
+  isProvenExactReplayNoOp,
   campaignClockElapsedSeconds,
   estimateRepairRoundSeconds,
   formatRepairRoundBudgetShortfall,

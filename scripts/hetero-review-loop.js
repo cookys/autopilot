@@ -15,6 +15,7 @@ const { spawn, spawnSync } = require('child_process');
 const deriveReceiptState = require('./lib/review-chain-derive');
 const { isSafeSeatId } = require('./lib/seat-id-guard');
 const { stageWrite, familyOfEngine } = require('./lib/stage-write');
+const { invalidSeatModels } = require('./lib/seat-model-id');
 
 function assertSafeSeatId(id) {
   if (!isSafeSeatId(id)) {
@@ -793,6 +794,15 @@ async function handleCollect(flags) {
       console.error(`ERROR: Seat ${seat.id || `s${idx}`} missing engine`);
       process.exit(2);
     }
+  }
+
+  // BL-0364: refuse a seat whose model the runner's CLI would reject at startup, before any
+  // dispatch and before g<N>/ exists — such a seat would otherwise burn the generation as a seat_gap.
+  const badModels = invalidSeatModels(seats);
+  if (badModels.length) {
+    for (const b of badModels) console.error(`ERROR: ${b.message}`);
+    console.error('ERROR: no seat was dispatched and generation ' + generation + ' was not consumed; fix the seat model and collect again');
+    process.exit(2);
   }
 
   // Read the caller's spec BEFORE g<N>/ exists: exiting after the mkdir strands the generation

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0360 -->
+<!-- next-id: BL-0363 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1629,19 +1629,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/status-runs-json-drops-runs-dir-error.md
 - **Context**: src/status/cli.js about L167-193. Fix: JSON mode emits an object, or the reason goes in a serializable place. Negative control: a rejected runs dir must show its reason in --json output.
 
-### leak-guard follow-ups from the relay0 review (revert false block plus six cut suggestions)
-- **Id**: BL-0348
-- **Status**: open
-- **Since**: 2026-10-31
-- **Origin**: self
-- **Problem**: 個資掃描把「還原」先前清掉的個人資料（如 revert 清理 commit）當成新增行擋下；relay0 審查另砍了六條邊角小建議。
-- **Impact**: revert 清理 commit 會被誤擋，得手動繞；其餘六條目前都沒有實際失敗，是邊角硬化。
-- **Trigger**: next revert of a redaction commit, or next edit to scripts/leak-guard.js or scripts/lib/personal-data-patterns.js
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: relay0 review g2 and g3 (CUT/FOLLOW-UP suggestions) plus depth-0 observation, 2026-10-31
-- **Pointer**: docs/backlog/leak-guard-relay0-follow-ups.md
-- **Context**: Fix direction per item is in the sidecar. Each change needs a negative control shown red before green.
 
 ### Registry reader follow-ups from the relay2 review (four cut suggestions)
 - **Id**: BL-0349
@@ -1657,19 +1644,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/registry-reader-relay2-follow-ups.md
 - **Context**: Four small fixes, one commit; details in the sidecar.
 
-### Research doc quotes a code comment that no longer matches the code
-- **Id**: BL-0350
-- **Status**: open
-- **Since**: 2026-10-31
-- **Origin**: self
-- **Problem**: 一份研究文件引用成本追蹤程式的「digest #6」註解，但引文裡的主機名已換成 placeholder，和程式註解原文不一致。
-- **Impact**: 只是引文外觀不一致，沒有功能影響；讀者拿引文去對程式會對不上。
-- **Trigger**: next edit to hooks/cost-tracker.js or that research doc
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: relay0 review g2 suggestion research-doc-misquote, 2026-10-31
-- **Pointer**: docs/backlog/research-doc-quote-vs-code-comment.md
-- **Context**: Pick one: reword the doc to say the comment cites a host digest without quoting, or redact the code comment too. Do not write the real host name anywhere (leak-guard).
 
 ### Top-level leftovers for relayout P phases: skill-creator-workspace, .qc, .autopilot/evidence
 - **Id**: BL-0351
@@ -1763,3 +1737,49 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED codeforge 2026-11-01 (fleet message), owner card d-7b0f7a4a
 - **Pointer**: docs/backlog/live-speed-handover-from-forge-stats.md
 - **Context**: Algorithm, handover order and the pet-label question are in the sidecar. Show the owner a screenshot before any UI change; reply to codeforge with the sha once live.
+
+### campaign intake 在檔案或 churn 預算耗盡時，仍拒絕已證實是 exact-replay no-op 的 resume
+- **Id**: BL-0360
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: peer
+- **Reporter**: openclaw fleet session
+- **Report**: 01M6AATV4Y687QQJS6R82F5JT8
+- **Reply**: 2026-11-01 01M6AAWACC09E4B5SK4ZDKJJ9M
+- **Problem**: 續跑流程已能把不會 dispatch、也不會改任何東西的 resume 標成 exact-replay no-op，但後面的檔案與 churn 預算檢查沒有替它放行。預算耗盡時，這種無害的 resume 仍被拒。
+- **Impact**: 預算剛好用完的 campaign 無法以 no-op 方式續跑到收尾。
+- **Trigger**: next edit to src/engine/campaign-intake.js, or a durable resume refused with campaign_file_budget_exhausted / campaign_churn_budget_exhausted
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED openclaw 2026-11-01 (fleet msg; branch ff4b76968 only on openclaw, unmerged, QC pending)
+- **Pointer**: docs/backlog/campaign-intake-exact-replay-budget.md
+
+### agent-call SKILL.md 沒有指向 FYI 寄件規則
+- **Id**: BL-0361
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: peer
+- **Reporter**: hangar
+- **Report**: 01M6ACKW3XX6KSGQDVA31SQDKR
+- **Reply**: 2026-11-01 01M6ACM9T44SZ88EKG392KF0H3
+- **Problem**: agent-call 技能只在定址段連到定址參考文件，而且只要求送頻道廣播前才讀。一般的送出與回覆讀不到新增的「不需回覆的訊息要標 FYI」那一段。
+- **Impact**: 不需要回覆的訊息沒有標 FYI，會叫醒閒置的 session。
+- **Trigger**: next edit to skills/agent-call/SKILL.md
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED hangar 2026-11-01 (fleet message; hangar BACKLOG row waits on our sha)
+- **Pointer**: docs/backlog/agent-call-fyi-pointer.md
+- **Context**: SKILL.md needs one line pointing at the section in references/peer-addressing.md (db0fb565a). Guidance change: apply the mechanism-vs-guidance test first. Reply to hangar with the sha.
+
+### leak-guard 還原放行的兩條硬化
+- **Id**: BL-0362
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: self
+- **Problem**: 還原放行有兩處沒有測到：同一檔超過 500 行 finding 時改走整檔 blame 的路徑沒有單元測試；blame 標頭的比對寫死 40 位 SHA-1，SHA-256 的 repo 會解析不到，所有放行都失效。
+- **Impact**: 只影響放行，掃描本身不受影響；兩者出錯時都是不放行、不會漏放；目前 repo 是 SHA-1。
+- **Trigger**: next edit to scripts/leak-guard.js
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: leakfu review g5 (CUT/FOLLOW-UP suggestions), 2026-11-01
+- **Pointer**: docs/backlog/leak-guard-restore-hardening.md

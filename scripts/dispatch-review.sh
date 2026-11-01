@@ -1966,6 +1966,11 @@ elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   if [ "$MAX_TOKENS_SUPPLIED" -eq 1 ]; then
     ANTHROPIC_ARGS+=(--max-tokens "$MAX_TOKENS")
   fi
+  # Same explicit-only effort the cc-shim path forwards: qualification sends output_config.effort, so the
+  # daily review must too. Unspecified / `default` sends nothing (endpoint default runs).
+  if [ -n "$CLAUDE_EFFORT_ARG" ]; then
+    ANTHROPIC_ARGS+=(--effort "$CLAUDE_EFFORT_ARG")
+  fi
   node "$ANTHROPIC_JS" "${ANTHROPIC_ARGS[@]}" > "$RAW_LOG" 2>>"$RAW_LOG"
   ANTHROPIC_RC=$?
   if [ "$ANTHROPIC_RC" -ne 0 ]; then

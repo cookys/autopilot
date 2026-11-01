@@ -103,8 +103,14 @@ function isDifferentiated(family) {
   return Boolean(row && row.evidence && row.evidence.status === 'measured');
 }
 
+// The `output_config.effort` values an Anthropic-compatible /v1/messages endpoint accepts (MiniMax
+// M3.1-Flash-Preview, Z.ai GLM-5.3 both define `max`). One list for the qualification provider and the
+// daily review runner, so a seat is examined and reviewed on the same wire vocabulary.
+const MESSAGES_EFFORT_WIRE_VALUES = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+
 module.exports = {
   EFFORT_ORDER,
+  MESSAGES_EFFORT_WIRE_VALUES,
   IDENTITY,
   UNKNOWN_RANK,
   FAMILY_SCALES,

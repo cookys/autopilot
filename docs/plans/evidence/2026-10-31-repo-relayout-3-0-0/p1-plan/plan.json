@@ -4,20 +4,21 @@
  "phase": "P1",
  "mode": "plan",
  "options": {
-  "archivedEvidence": "move"
+  "archivedEvidence": "stay"
  },
  "counts": {
-  "archived-evidence": 221,
+  "archived-evidence-stay": 220,
   "asset-stay": 12,
   "backlog": 114,
   "backlog-main": 1,
+  "delete": 1,
   "dev": 9,
-  "evidence-p2-stay": 12101,
-  "exception-stay": 7,
-  "guide": 6,
+  "evidence-p2-stay": 12105,
+  "exception-stay": 9,
+  "guide": 7,
   "handoff": 4,
+  "handoff-other": 1,
   "mission": 100,
-  "pending": 4,
   "plan-active": 133,
   "plan-archived": 156,
   "plan-archived-now": 71,
@@ -27,13 +28,12 @@
   "project-archived": 616,
   "project-index": 1
  },
- "renames": 1498,
+ "renames": 1281,
  "merge": {
   "target": "project/handoff/HANDOFF.md",
-  "sources": [
-   "docs/HANDOFF.md",
-   "docs/projects/ongoing-maintenance/HANDOFF.md"
-  ]
+  "sources": [],
+  "absorbed_old": "docs/projects/ongoing-maintenance/HANDOFF.md",
+  "absorbed_new": "project/handoff/HANDOFF-ongoing-maintenance.md"
  },
  "content_ops": {
   "new_files": [
@@ -129,28 +129,7 @@
   }
  },
  "pending": {
-  "files": [
-   {
-    "file": "docs/COEXISTENCE-fable5.md",
-    "why": "a parallel-session protocol that calls itself \"untracked by design\" yet is tracked; rule 6's handoff pattern does not claim it, and it is neither a guide nor a contributor doc",
-    "proposal": "project/handoff/COEXISTENCE-fable5.md"
-   },
-   {
-    "file": "docs/metrics/surface-lines.json",
-    "why": "not markdown, so no placement rule claims it; it is the release-gate baseline read through registry key paths.surface_lines_baseline",
-    "proposal": "leave in place (docs/metrics/) until P4 decides where gate data lives"
-   },
-   {
-    "file": "docs/review-candidate.md",
-    "why": "docs-inventory section 2 lists it as a contributor doc, but its header addresses an operator OUTSIDE the repository (a user-facing how-to, 675 lines)",
-    "proposal": "docs/guide/review-candidate.md"
-   },
-   {
-    "file": "docs/training/README.md",
-    "why": "a 6-line tombstone (\"moved to its own repo\"), neither user nor contributor documentation",
-    "proposal": "delete it, or docs/guide/training/README.md"
-   }
-  ],
+  "files": [],
   "pre_sept_not_archived_stems": {
    "2026-07-08-fable-skills-absorption": {
     "kind": "in-flight",
@@ -489,6 +468,16 @@
     "path": "docs/plans/2026-09-19-blind-review-2d-overlap.rubric.md",
     "rule": 6,
     "reason": "D9.5: mission-blind-review-2d-snapshot-2026-09-19 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires"
+   },
+   {
+    "path": "docs/metrics/surface-lines.json",
+    "rule": 7,
+    "reason": "D10.1: release-gate baseline read through paths.surface_lines_baseline (repo-layout.js, preflight-release.sh); not markdown, stays in docs/metrics/"
+   },
+   {
+    "path": "docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json",
+    "rule": 6,
+    "reason": "D10.4 / D9.7: dispatch-hetero.sh:2125, dispatch-review.sh:299 and sync-codex-plugin-skills.sh:102 hard-code this path; the C2 lane (D9.7, a or b) decides its future, so it stays and those three scripts are not changed"
    }
   ],
   "exceptions_kept": [
@@ -505,22 +494,12 @@
   }
  },
  "residual_lint": {
-  "files_left_in_docs": 12124,
+  "files_left_in_docs": 12347,
   "flagged_by_active_rule_after_move": [
-   {
-    "file": "docs/COEXISTENCE-fable5.md",
-    "rule": "#7 reader-docs",
-    "cat": "pending"
-   },
-   {
-    "file": "docs/review-candidate.md",
-    "rule": "#7 reader-docs",
-    "cat": "pending"
-   },
    {
     "file": "docs/training/README.md",
     "rule": "#7 reader-docs",
-    "cat": "pending"
+    "cat": "delete"
    }
   ],
   "destinations_flagged_by_an_active_rule": []
@@ -528,8 +507,8 @@
  "no_rewrite": {
   "listed_total": 4634,
   "listed_under_docs": 376,
-  "will_be_renamed_only": 319,
-  "of_which_into_an_archive_dir": 103,
+  "will_be_renamed_only": 299,
+  "of_which_into_an_archive_dir": 83,
   "stay_in_docs_evidence_p2": 51,
   "stay_in_docs_other": [
    "docs/mission-blind-review-2d-snapshot-2026-09-19-execution-graph.json",
@@ -537,7 +516,27 @@
    "docs/mission-blind-review-2d-snapshot-2026-09-19-task-authority.json",
    "docs/plans/2026-09-19-blind-review-2d-overlap.md",
    "docs/plans/2026-09-19-blind-review-2d-overlap.plan-review-manifest.json",
-   "docs/plans/2026-09-19-blind-review-2d-overlap.rubric.md"
+   "docs/plans/2026-09-19-blind-review-2d-overlap.rubric.md",
+   "docs/plans/_archive/2026/09/evidence/2026-09-14-backlog-entry-schema/g1-artifact.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-blind-review-packet/g1-artifact.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-blind-review-packet/g1-receipt.txt",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-blind-review-packet/lifecycle-receipt.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-blind-review-packet/v2g1-artifact.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-blind-review-packet/v2g2-artifact.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-final-panel-blind-admission/g1-artifact.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-final-panel-blind-admission/g1-receipt.txt",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-final-panel-blind-admission/g2-artifact.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-final-panel-blind-admission/lifecycle-receipt.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-ledger-rotation-order/g1-artifact.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-ledger-rotation-order/g1-receipt.txt",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-ledger-rotation-order/g2-artifact.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-ledger-rotation-order/lifecycle-receipt.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-proof-parity-raw-log/g1-artifact.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-proof-parity-raw-log/g1-receipt.txt",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-proof-parity-raw-log/g2-artifact.json",
+   "docs/plans/_archive/2026/09/evidence/2026-09-16-proof-parity-raw-log/lifecycle-receipt.json",
+   "docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json",
+   "docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json"
   ],
   "listed_files_that_a_content_operation_would_write": [],
   "listed_files_merged_away": [],
@@ -547,441 +546,8 @@
    "sha256_in_no_rewrite": "08d89358d78b7487cb9daf0b9c537bcef68045125c564c960808b565f338dea6"
   }
  },
- "simulation": [
-  {
-   "check": "seal-baseline check-rewrite --range base..simulated-head --layout-map (the renames only)",
-   "rc": 0,
-   "out": [
-    "seal-baseline check-rewrite: ok (4634 listed files untouched)"
-   ],
-   "err": []
-  },
-  {
-   "check": "seal-baseline check-rewrite --files (HANDOFF sources, INDEX.md, docs/README.md: the files a content operation writes)",
-   "rc": 0,
-   "out": [
-    "seal-baseline check-rewrite: ok (4634 listed files untouched)"
-   ],
-   "err": []
-  }
- ],
- "reference_estimate": {
-  "method": "every tracked non-binary text file; every token matching docs/[A-Za-z0-9_@.+/-]+ (trailing punctuation trimmed) that is an exact layout-map key, a plan stem without .md, or a merged-HANDOFF source. Directory-form tokens (docs/plans, docs/projects/..., not resolvable to one file) are counted separately.",
-  "by_category": {
-   "docs itself": {
-    "files": 407,
-    "refs": 1713
-   },
-   "evals": {
-    "files": 27,
-    "refs": 56
-   },
-   "evidence (stays, P2)": {
-    "files": 376,
-    "refs": 10572
-   },
-   "other: .claude/": {
-    "files": 11,
-    "refs": 43
-   },
-   "other: .githooks/": {
-    "files": 1,
-    "refs": 1
-   },
-   "other: .gitignore": {
-    "files": 1,
-    "refs": 4
-   },
-   "other: AGENTS.md": {
-    "files": 1,
-    "refs": 2
-   },
-   "other: CHANGELOG.md": {
-    "files": 1,
-    "refs": 220
-   },
-   "other: CLAUDE.md": {
-    "files": 1,
-    "refs": 15
-   },
-   "other: README.md": {
-    "files": 1,
-    "refs": 19
-   },
-   "other: README.zh-TW.md": {
-    "files": 1,
-    "refs": 19
-   },
-   "other: SECURITY.md": {
-    "files": 1,
-    "refs": 2
-   },
-   "other: profiles/": {
-    "files": 3,
-    "refs": 377
-   },
-   "other: schemas/": {
-    "files": 2,
-    "refs": 2
-   },
-   "other: skill-creator-workspace/": {
-    "files": 14,
-    "refs": 34
-   },
-   "other: tools/": {
-    "files": 1,
-    "refs": 327
-   },
-   "other: website/": {
-    "files": 1,
-    "refs": 2
-   },
-   "platforms mirror": {
-    "files": 198,
-    "refs": 1182
-   },
-   "runtime: agents/": {
-    "files": 2,
-    "refs": 2
-   },
-   "runtime: hooks/": {
-    "files": 16,
-    "refs": 32
-   },
-   "runtime: mods/": {
-    "files": 10,
-    "refs": 26
-   },
-   "runtime: project-config-template/": {
-    "files": 4,
-    "refs": 8
-   },
-   "runtime: references/": {
-    "files": 24,
-    "refs": 84
-   },
-   "runtime: scripts/": {
-    "files": 88,
-    "refs": 503
-   },
-   "runtime: skills/": {
-    "files": 34,
-    "refs": 120
-   },
-   "runtime: src/": {
-    "files": 8,
-    "refs": 11
-   },
-   "sealed (no-rewrite)": {
-    "files": 1534,
-    "refs": 7751
-   },
-   "tests": {
-    "files": 141,
-    "refs": 1245
-   }
-  },
-  "groups": {
-   "runtime_skills_references_scripts_hooks_src_mods_agents_project_config_template": {
-    "files": 186,
-    "refs": 786
-   },
-   "tests": {
-    "files": 141,
-    "refs": 1245
-   },
-   "evals": {
-    "files": 27,
-    "refs": 56
-   },
-   "docs_itself": {
-    "files": 407,
-    "refs": 1713
-   },
-   "sealed_not_rewritable": {
-    "files": 1534,
-    "refs": 7751
-   },
-   "platforms_mirror": {
-    "files": 198,
-    "refs": 1182
-   },
-   "evidence_stays_p2": {
-    "files": 376,
-    "refs": 10572
-   },
-   "other_roots": {
-    "files": 40,
-    "refs": 1067
-   }
-  },
-  "sealed_files_naming_a_moved_path_by_group": {
-   "docs/mission-*.json": 56,
-   "docs/plans (top level)": 34,
-   "docs/plans/_archive": 23,
-   "docs/plans/evidence": 10,
-   "docs/projects/_archive": 2,
-   "evals/brain-eval-generator.js": 1,
-   "evals/brain-eval-grader.js": 1,
-   "evals/impl-capability-evidence-corpus.json": 1,
-   "evals/impl-oracle-driver.cjs": 1,
-   "evals/skill-onoff": 1166,
-   "evals/va-eval-generator.js": 1,
-   "hooks/tests": 17
-  },
-  "directory_form_refs": {
-   "docs/adr": 6,
-   "docs/backlog": 670,
-   "docs/mission-*": 189,
-   "docs/plans": 3816,
-   "docs/projects": 2764
-  },
-  "sources_manifest_pins": {
-   "sources_manifests": 43,
-   "plan_or_rubric_pins": 110,
-   "pinned_targets_whose_new_path_differs_from_project_plus_plan_path": 0
-  },
-  "docs_relative_markdown_links_into_moved_files": {
-   "files": 70,
-   "links": 716
-  },
-  "distinct_old_paths_referenced": 1423,
-  "top_old_paths": [
-   [
-    "docs/BACKLOG.md",
-    2114
-   ],
-   [
-    "docs/projects/INDEX.md",
-    965
-   ],
-   [
-    "docs/plans/2026-10-06-dev-flow-stage-graph.md",
-    923
-   ],
-   [
-    "docs/settings-reference.md",
-    462
-   ],
-   [
-    "docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md",
-    200
-   ],
-   [
-    "docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md",
-    151
-   ],
-   [
-    "docs/plans/2026-08-03-next-touch-debt-retirement.md",
-    128
-   ],
-   [
-    "docs/plans/_archive/2026/07/2026-07-04-quality-floor-engine.md",
-    94
-   ],
-   [
-    "docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md",
-    94
-   ],
-   [
-    "docs/plans/2026-06-22-ceo-fleet-autonomy.md",
-    94
-   ],
-   [
-    "docs/adr/0002-task-tree-and-qc-panel-dormant.md",
-    94
-   ],
-   [
-    "docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md",
-    90
-   ]
-  ],
-  "binary_files_skipped": 214
- },
- "sync_coverage": [
-  {
-   "file": "scripts/sync-manifest.json",
-   "docs_tokens": 13,
-   "moved_hits": 13,
-   "hits": [
-    {
-     "line": 67,
-     "token": "docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md",
-     "to": "project/plans/_archive/2026/06/2026-06-04-distill-consolidate.md"
-    },
-    {
-     "line": 68,
-     "token": "docs/plans/2026-06-22-ceo-fleet-autonomy.md",
-     "to": "project/plans/_archive/2026/06/2026-06-22-ceo-fleet-autonomy.md"
-    },
-    {
-     "line": 69,
-     "token": "docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md",
-     "to": "project/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md"
-    },
-    {
-     "line": 70,
-     "token": "docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json",
-     "to": "project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json"
-    },
-    {
-     "line": 71,
-     "token": "docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md",
-     "to": "project/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md"
-    },
-    {
-     "line": 126,
-     "token": "docs/hook-harness-matrix.md",
-     "to": "docs/dev/hook-harness-matrix.md"
-    },
-    {
-     "line": 131,
-     "token": "docs/settings-reference.md",
-     "to": "docs/guide/settings-reference.md"
-    },
-    {
-     "line": 134,
-     "token": "docs/settings-reference.md",
-     "to": "docs/guide/settings-reference.md"
-    },
-    {
-     "line": 143,
-     "token": "docs/settings-reference.md",
-     "to": "docs/guide/settings-reference.md"
-    },
-    {
-     "line": 173,
-     "token": "docs/BACKLOG.md",
-     "to": "project/backlog/BACKLOG.md"
-    },
-    {
-     "line": 175,
-     "token": "docs/BACKLOG.md",
-     "to": "project/backlog/BACKLOG.md"
-    },
-    {
-     "line": 176,
-     "token": "docs/BACKLOG.md",
-     "to": "project/backlog/BACKLOG.md"
-    },
-    {
-     "line": 179,
-     "token": "docs/BACKLOG.md",
-     "to": "project/backlog/BACKLOG.md"
-    }
-   ]
-  },
-  {
-   "file": "scripts/sync-codex-plugin-skills.sh",
-   "docs_tokens": 6,
-   "moved_hits": 6,
-   "hits": [
-    {
-     "line": 99,
-     "token": "docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md",
-     "to": "project/plans/_archive/2026/06/2026-06-04-distill-consolidate.md"
-    },
-    {
-     "line": 100,
-     "token": "docs/plans/2026-06-22-ceo-fleet-autonomy.md",
-     "to": "project/plans/_archive/2026/06/2026-06-22-ceo-fleet-autonomy.md"
-    },
-    {
-     "line": 101,
-     "token": "docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md",
-     "to": "project/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md"
-    },
-    {
-     "line": 102,
-     "token": "docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json",
-     "to": "project/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json"
-    },
-    {
-     "line": 103,
-     "token": "docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json",
-     "to": "project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json"
-    },
-    {
-     "line": 104,
-     "token": "docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md",
-     "to": "project/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md"
-    }
-   ]
-  },
-  {
-   "file": "scripts/sync-opencode-plugin.sh",
-   "docs_tokens": 0,
-   "moved_hits": 0,
-   "hits": []
-  },
-  {
-   "file": "hooks/tests/run.sh",
-   "docs_tokens": 1,
-   "moved_hits": 1,
-   "hits": [
-    {
-     "line": 400,
-     "token": "docs/BACKLOG.md",
-     "to": "project/backlog/BACKLOG.md"
-    }
-   ]
-  },
-  {
-   "file": "hooks/tests/lib/serial-suites.txt",
-   "docs_tokens": 1,
-   "moved_hits": 1,
-   "hits": [
-    {
-     "line": 45,
-     "token": "docs/backlog/pre-push-suite-speed.md",
-     "to": "project/backlog/pre-push-suite-speed.md"
-    }
-   ]
-  },
-  {
-   "file": "scripts/affected-suites.js",
-   "docs_tokens": 6,
-   "moved_hits": 2,
-   "hits": [
-    {
-     "line": 133,
-     "token": "docs/plans/",
-     "to": null
-    },
-    {
-     "line": 566,
-     "token": "docs/plans/",
-     "to": null
-    }
-   ]
-  },
-  {
-   "file": "scripts/lib/sealed-docs.js",
-   "docs_tokens": 4,
-   "moved_hits": 4,
-   "hits": [
-    {
-     "line": 17,
-     "token": "docs/mission",
-     "to": null
-    },
-    {
-     "line": 18,
-     "token": "docs/mission",
-     "to": null
-    },
-    {
-     "line": 18,
-     "token": "docs/mission",
-     "to": null
-    },
-    {
-     "line": 24,
-     "token": "docs/plans/",
-     "to": null
-    }
-   ]
-  }
- ],
+ "simulation": null,
+ "reference_estimate": null,
+ "sync_coverage": null,
  "problems": []
 }

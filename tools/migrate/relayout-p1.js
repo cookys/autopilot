@@ -15,14 +15,20 @@
 //     claim wins, so the F2 correction -- work records before reader docs -- is the registry's order, not a constant here).
 //     A file the rules claim but this tool has no destination for, and a file nothing claims, is never guessed: it stays put
 //     and goes on the "pending ruling" list.
-//     --archived-evidence: where the evidence trees INSIDE docs/plans/_archive and docs/projects/_archive go (move = rule 6
-//       as written, they travel with their archive; stay = left for P2). Default move.
+//     --archived-evidence: where the evidence trees INSIDE docs/plans/_archive and docs/projects/_archive go (stay = left for P2,
+//       with rule 6 and 7 excluding them and rule 8 claiming them; move = rule 6 as written, they travel with their archive). Default stay (D10.3).
 //     --with-refs: also estimate the reference rewrite (git-tracked text files that name a path in the layout-map).
 //     --simulate: apply the layout-map in a throwaway shared clone, commit it, and run seal-baseline check-rewrite over it.
 //   check-f2 [--root <dir>] [--registry <file>]
 //     F2 negative control probe: one plan md and one handoff md must classify to project/. Exit 1 when either does not.
 //   classify <path>... [--root <dir>] [--registry <file>]   print the category and destination of the given paths
-//   apply                                                     not implemented in this round (exit 2)
+//   apply --phase rename|refs-code|refs-docs|content [--root <dir>] [--log <file>]
+//     Mutates the work tree of --root (it never commits). rename: git-less file moves per the layout-map plus the registry patch of
+//     scripts/lib/repo-layout.js (stage P1, path keys, project/ top dir, exceptions, archived-evidence rule excludes).
+//     refs-code / refs-docs: rewrite exact layout-map keys (full file paths) in tracked text files, markdown relative links in
+//     docs; never in sealed (no-rewrite) files, evidence, profiles, platforms mirrors, this tool, or the D9.5 / routing files.
+//     content: merge the two HANDOFF.md, create docs/README.md, delete docs/training/README.md.
+//     Not in apply: profiles repin, mirror regeneration (sync-all.sh) and the no-rewrite.json path update.
 //
 // Exit: 0 ok, 1 check-f2 failed or the plan found an internal inconsistency, 2 bad input.
 
@@ -90,16 +96,18 @@ const DEST6 = [
   { re: /^docs\/(mission-[^/]+\.json)$/, to: (m) => `project/missions/${m[1]}` },
 ];
 // Rule 7 (reader docs). Explicit per-file table: guide = users, dev = contributors. Seeded from docs-inventory section 2.
-const GUIDE = ['installation.md', 'configuration.md', 'settings-reference.md', 'skills.md', 'coexistence.md', 'token-discipline.md'];
+const GUIDE = ['review-candidate.md', 'installation.md', 'configuration.md', 'settings-reference.md', 'skills.md', 'coexistence.md', 'token-discipline.md'];
 const DEV = ['architecture.md', 'hook-harness-matrix.md', 'ironlaw-to-gate-map.md', 'fleet-child-contract.md', 'ladder-run.md', 'qc-metric-emit.md'];
 const DEV_DIRS = ['adr', 'upstream-bugs'];
-// Judgement calls that must not be guessed: file -> why, plus a proposal (never applied).
-const PENDING_FIXED = {
-  'docs/review-candidate.md': { why: 'docs-inventory section 2 lists it as a contributor doc, but its header addresses an operator OUTSIDE the repository (a user-facing how-to, 675 lines)', proposal: 'docs/guide/review-candidate.md' },
-  'docs/training/README.md': { why: 'a 6-line tombstone ("moved to its own repo"), neither user nor contributor documentation', proposal: 'delete it, or docs/guide/training/README.md' },
-  'docs/COEXISTENCE-fable5.md': { why: 'a parallel-session protocol that calls itself "untracked by design" yet is tracked; rule 6\'s handoff pattern does not claim it, and it is neither a guide nor a contributor doc', proposal: 'project/handoff/COEXISTENCE-fable5.md' },
-  'docs/metrics/surface-lines.json': { why: 'not markdown, so no placement rule claims it; it is the release-gate baseline read through registry key paths.surface_lines_baseline', proposal: 'leave in place (docs/metrics/) until P4 decides where gate data lives' },
-};
+// D10.1 rulings (depth-0, 2026-11-02): the four files the dry run left unclassified.
+const PENDING_FIXED = {}; // nothing is left pending; a new unclassifiable file still lands here, never guessed
+const DELETE = { 'docs/training/README.md': 'D10.1: a 6-line tombstone ("moved to its own repo"); deleted in the content phase' };
+const DECIDED_MOVES = { 'docs/COEXISTENCE-fable5.md': 'project/handoff/COEXISTENCE-fable5.md' }; // D10.1
+// D10.1 / D10.4: per-file registry exceptions that stay in docs/ (rule 7 = reader docs / docs data, rule 6 = work records)
+const DECIDED_EXCEPTIONS = [
+  { path: 'docs/metrics/surface-lines.json', rule: 7, reason: 'D10.1: release-gate baseline read through paths.surface_lines_baseline (repo-layout.js, preflight-release.sh); not markdown, stays in docs/metrics/' },
+  { path: 'docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json', rule: 6, reason: 'D10.4 / D9.7: dispatch-hetero.sh:2125, dispatch-review.sh:299 and sync-codex-plugin-skills.sh:102 hard-code this path; the C2 lane (D9.7, a or b) decides its future, so it stays and those three scripts are not changed' },
+];
 const ASSET_PREFIX = 'docs/assets/';
 const SHIP_CUTOFF = '2026-09-01'; // plan section 3 P1: plans dated before September that have shipped are archived
 
@@ -118,7 +126,7 @@ const PATH_KEY_STAYS = {
 };
 
 // ------------------------------------------------------------------ inputs read from the work tree
-function readJson(root, rel) { try { return JSON.parse(fs.readFileSync(path.join(root, rel), 'utf8')); } catch { return null; } }
+function readJson(root, rel) { try { return JSON.parse(fs.readFileSync(path.resolve(root, rel), 'utf8')); } catch { return null; } }
 function planStem(name) { const m = /^(\d{4})-(\d{2})-(\d{2})-([A-Za-z0-9-]+)/.exec(name); return m ? { stem: m[0], y: m[1], mo: m[2], d: m[3], date: `${m[1]}-${m[2]}-${m[3]}` } : null; }
 
 /** INDEX.md rows per plan stem -> 'in-flight' | 'shipped' | 'unregistered'. */
@@ -191,6 +199,7 @@ function buildContext(root, reg, files, opts) {
       proposedExceptions.push(e);
     }
   }
+  for (const e of DECIDED_EXCEPTIONS) if (files.includes(e.path)) proposedExceptions.push(Object.assign({}, e));
   for (const e of proposedExceptions) exceptions.set(e.path, e);
   const activeStems = new Set();
   for (const e of proposedExceptions) { const ps = planStem(path.posix.basename(e.path)); if (ps && e.path.startsWith('docs/plans/')) activeStems.add(ps.stem); }
@@ -208,6 +217,8 @@ function buildContext(root, reg, files, opts) {
 function classify(f, ctx) {
   if (!f.startsWith('docs/')) return { cat: 'outside-docs' };
   if (ctx.exceptions.has(f)) { const e = ctx.exceptions.get(f); return { cat: 'exception-stay', rule: e.rule, why: e.reason }; }
+  if (DELETE[f]) return { cat: 'delete', why: DELETE[f] };
+  if (DECIDED_MOVES[f]) return { cat: 'handoff-other', rule: 7, to: DECIDED_MOVES[f] };
   if (PENDING_FIXED[f]) return { cat: 'pending', why: PENDING_FIXED[f].why, proposal: PENDING_FIXED[f].proposal };
   if (f.startsWith(ASSET_PREFIX)) return { cat: 'asset-stay', why: 'docs/assets stays in docs/ (rule 7 excludes it)' };
   const rule = claimingRule(ctx.compiled, f);
@@ -259,7 +270,7 @@ function buildPlan(root, o) {
   const layout = require(path.join(root, 'scripts/lib/repo-layout.js'));
   const reg = loadRegistry(layout, o);
   const files = trackedFiles(root);
-  const opts = { archivedEvidence: o['archived-evidence'] || 'move' };
+  const opts = { archivedEvidence: o['archived-evidence'] || 'stay' };
   if (!['move', 'stay'].includes(opts.archivedEvidence)) throw new InputError('--archived-evidence must be move or stay');
   const ctx = buildContext(root, reg, files, opts);
   const docs = files.filter((f) => f.startsWith('docs/'));
@@ -268,14 +279,16 @@ function buildPlan(root, o) {
 
   const map = {};
   for (const f of docs) { const c = cls[f]; if (c.to) map[f] = c.to; }
-  // handoff: the two live HANDOFF.md merge into one target (a content operation, not a rename); the others are plain renames
-  const handoffs = (byCat.handoff || []).map((f) => ({ f, c: cls[f] }));
-  const merge = { target: 'project/handoff/HANDOFF.md', sources: [] };
-  for (const { f, c } of handoffs) {
-    if (c.handoffName === 'HANDOFF.md') merge.sources.push(f);
+  // handoff: both live HANDOFF.md are plain renames here (commit 2 stays 100% renames); the content phase appends the second to
+  // the first and removes it. References to the absorbed file are rewritten to the merged target (refAlias).
+  const merge = { target: 'project/handoff/HANDOFF.md', sources: [], absorbed_old: 'docs/projects/ongoing-maintenance/HANDOFF.md', absorbed_new: 'project/handoff/HANDOFF-ongoing-maintenance.md' };
+  for (const f of byCat.handoff || []) {
+    const c = cls[f];
+    if (f === 'docs/HANDOFF.md') map[f] = merge.target;
+    else if (f === merge.absorbed_old) map[f] = merge.absorbed_new;
     else map[f] = `project/handoff/${c.handoffName}`;
   }
-  merge.sources.sort();
+  const handoffs = (byCat.handoff || []).map((f) => ({ f, c: cls[f] }));
 
   const problems = [];
   const seen = new Map(); const tracked = new Set(files);
@@ -297,10 +310,10 @@ function buildPlan(root, o) {
 }
 
 function handoffMerge(root, merge, handoffs) {
-  const sizes = merge.sources.map((f) => ({ path: f, lines: fs.readFileSync(path.join(root, f), 'utf8').split('\n').length }));
+  const sizes = ['docs/HANDOFF.md', merge.absorbed_old].map((f) => ({ path: f, lines: fs.readFileSync(path.join(root, f), 'utf8').split('\n').length }));
   return {
     target: merge.target, sources: sizes,
-    kept_separate: handoffs.filter(({ c }) => c.handoffName !== 'HANDOFF.md').map(({ f, c }) => ({ path: f, to: `project/handoff/${c.handoffName}` })),
+    kept_separate: handoffs.filter(({ f }) => f !== 'docs/HANDOFF.md' && f !== merge.absorbed_old).map(({ f, c }) => ({ path: f, to: `project/handoff/${c.handoffName}` })),
     proposal: 'Interpretation to confirm: "the two HANDOFF files" = the two live HANDOFF.md (docs/ root; projects/ongoing-maintenance/). Concatenate them under one H1 with an H2 per source (its original first heading kept verbatim, with an italic line giving the source path and its last-touch commit), write the result to the target, and git rm both sources. Nothing is dropped; git history keeps each original. The other two (HANDOFF-l6-resilience.md is a completed-campaign tombstone; HANDOFF-engine-qualify-seats.md says it is a different line "do not overwrite") are plain renames into project/handoff/. References to either merged source are rewritten to the target.',
   };
 }
@@ -401,7 +414,7 @@ function simulate(root, P) {
     const r = cp.spawnSync('node', [path.join(c, 'tools/migrate/seal-baseline.js'), 'check-rewrite', '--root', c, '--range', `${head}..HEAD`, '--layout-map', mf], { encoding: 'utf8', maxBuffer: 64 << 20 });
     res.push({ check: 'seal-baseline check-rewrite --range base..simulated-head --layout-map (the renames only)', rc: r.status, out: scrub(r.stdout), err: scrub(r.stderr).filter(Boolean) });
     const fl = path.join(tmp, 'files.txt');
-    fs.writeFileSync(fl, [...P.merge.sources, 'docs/projects/INDEX.md', 'docs/README.md'].join('\n') + '\n');
+    fs.writeFileSync(fl, [P.merge.target, P.merge.absorbed_new, 'docs/projects/INDEX.md', 'docs/README.md'].join('\n') + '\n');
     const r2 = cp.spawnSync('node', [path.join(c, 'tools/migrate/seal-baseline.js'), 'check-rewrite', '--root', c, '--files', fl, '--layout-map', mf], { encoding: 'utf8' });
     res.push({ check: 'seal-baseline check-rewrite --files (HANDOFF sources, INDEX.md, docs/README.md: the files a content operation writes)', rc: r2.status, out: scrub(r2.stdout), err: scrub(r2.stderr).filter(Boolean) });
   } catch (e) { res.push({ check: 'simulation', rc: 2, out: [], err: scrub(e.message).slice(0, 2) }); }
@@ -518,6 +531,7 @@ function residualLint(P) {
   const left = P.files.filter((f) => f.startsWith('docs/') && !(f in P.map) && !P.merge.sources.includes(f));
   const flagged = [];
   for (const f of left) {
+    if (P.cls[f].cat === 'archived-evidence-stay') continue; // excluded by the rule 6/7 patch (patchRegistry)
     const r = claimingRule(P.ctx.compiled, f);
     if (r && activeAtP1(r) && !excepted.has(`${r.id}\0${f}`)) flagged.push({ file: f, rule: `#${r.id} ${r.name}`, cat: P.cls[f].cat });
   }
@@ -564,7 +578,7 @@ function renderSummary(P, X) {
   L.push('| category | files | destination |');
   L.push('|---|---:|---|');
   const dest = {
-    guide: 'docs/guide/', dev: 'docs/dev/', handoff: 'project/handoff/ (4 files in, 3 out: two merge into one)', mission: 'project/missions/',
+    guide: 'docs/guide/', dev: 'docs/dev/', handoff: 'project/handoff/ (renames; the two HANDOFF.md merge in the content phase)', 'handoff-other': 'project/handoff/', delete: 'deleted in the content phase (D10.1)', mission: 'project/missions/',
     'plan-active': 'project/plans/', 'plan-archived-now': 'project/plans/_archive/YYYY/MM/ (pre-September, shipped)', 'plan-pre-sept-not-archived': 'project/plans/ (pre-September, not provably archivable)',
     'plan-archived': 'project/plans/_archive/ (already archived)', 'plan-research': 'project/plans/research/', project: 'project/projects/', 'project-archived': 'project/projects/_archive/',
     'project-index': 'project/projects/INDEX.md (split, content operation)', 'backlog-main': 'project/backlog/BACKLOG.md', backlog: 'project/backlog/', 'archived-evidence': 'rides with its archive (see rulings)',
@@ -669,13 +683,168 @@ function cmdClassify(o) {
   return 0;
 }
 
+
+// ------------------------------------------------------------------ apply
+const RULE_PATCH = { archivedEvidenceRe: '^docs/(plans|projects)/_archive/.+/evidence/' };
+const q = (v) => `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+
+/** Edit the DEFAULT_REGISTRY literal of scripts/lib/repo-layout.js. Every edit must hit exactly once or the apply stops. */
+function patchRegistry(src, P) {
+  let t = src;
+  const once = (from, to, what) => {
+    const n = t.split(from).length - 1;
+    if (n !== 1) throw new InputError(`registry patch "${what}" matched ${n} times (want 1)`);
+    t = t.replace(from, () => to);
+  };
+  once("  stage: 'bootstrap',", "  stage: 'P1',", 'stage');
+  for (const c of registryChanges(P).paths) once(`    ${c.key}: ${q(c.from)},`, `    ${c.key}: ${q(c.to)},`, `paths.${c.key}`);
+  once("      { name: 'references',", `      { name: 'project', purpose: 'work records: plans, projects, backlog, missions, handoff (moved out of docs/ by P1)', since: 'P1' },\n      { name: 'references',`, 'top_dirs project');
+  once("        exclude: ['^docs/plans/evidence/'],\n      },\n    },\n    {\n      id: 7,", `        exclude: ['^docs/plans/evidence/', ${q(RULE_PATCH.archivedEvidenceRe)}],\n      },\n    },\n    {\n      id: 7,`, 'rule 6 exclude');
+  once("exclude: ['^docs/(guide|dev)/', '^docs/README\\\\.md$', '^docs/assets/', '^docs/plans/evidence/'],", `exclude: ['^docs/(guide|dev)/', '^docs/README\\\\.md$', '^docs/assets/', '^docs/plans/evidence/', ${q(RULE_PATCH.archivedEvidenceRe)}],`, 'rule 7 exclude');
+  once("match: { include: ['^docs/plans/evidence/'], exclude: [] },", `match: { include: ['^docs/plans/evidence/', ${q(RULE_PATCH.archivedEvidenceRe)}], exclude: [] },`, 'rule 8 include');
+  const ex = P.ctx.proposedExceptions.map((e) => `    {\n      path: ${q(e.path)},\n      rule: ${e.rule},\n      reason: ${q(e.reason)},${e.plan_base ? `\n      plan_base: ${q(e.plan_base)},` : ''}\n    },\n`).join('');
+  once("    },\n  ],\n};\n\nfunction clone", `    },\n${ex}  ],\n};\n\nfunction clone`, 'exceptions');
+  return t;
+}
+
+const MERGE = { target: 'project/handoff/HANDOFF.md', sources: [], absorbed_old: 'docs/projects/ongoing-maintenance/HANDOFF.md', absorbed_new: 'project/handoff/HANDOFF-ongoing-maintenance.md' };
+const DEFAULT_LAYOUT_MAP = 'docs/plans/evidence/2026-10-31-repo-relayout-3-0-0/p1-plan/layout-map.json';
+/** rename plans from the live tree; every later phase reads the committed layout-map (the tree is already moved). */
+function applyCtx(root, o, phase) {
+  const nr = readJson(root, 'tools/migrate/no-rewrite.json');
+  const sealedOld = new Set(((nr && nr.entries) || []).map((e) => e.path));
+  let P;
+  if (phase === 'rename') {
+    const st = loadRegistry(require(path.join(root, 'scripts/lib/repo-layout.js')), o).stage;
+    if (st !== 'bootstrap') throw new InputError(`registry stage is ${st}; rename expects bootstrap`);
+    P = buildPlan(root, o);
+  }
+  else {
+    const layout = require(path.join(root, 'scripts/lib/repo-layout.js'));
+    const map = readJson(root, o['layout-map'] || DEFAULT_LAYOUT_MAP);
+    if (!map) throw new InputError(`cannot read the layout-map ${o['layout-map'] || DEFAULT_LAYOUT_MAP}`);
+    const reg = loadRegistry(layout, o);
+    P = { map, merge: MERGE, reg, problems: [], cls: Object.fromEntries(Object.keys(DELETE).map((k) => [k, { cat: 'delete' }])), ctx: { proposedExceptions: reg.exceptions } };
+  }
+  const refMap = Object.assign({}, P.map, { [P.merge.absorbed_old]: P.merge.target });
+  return { P, sealedOld, refMap };
+}
+
+function cmdApply(o) {
+  const root = resolveRoot(o);
+  const phase = o.phase;
+  if (!['rename', 'refs-code', 'refs-docs', 'content'].includes(phase)) throw new InputError('apply --phase must be rename|refs-code|refs-docs|content (profiles repin, mirror regeneration and the no-rewrite.json path update are separate steps)');
+  const { P, sealedOld, refMap } = applyCtx(root, o, phase);
+  if (P.problems.length) throw new InputError('plan has problems: ' + P.problems.join('; '));
+  const git = (...a) => cp.execFileSync('git', ['-C', root, ...a], { encoding: 'utf8', maxBuffer: 256 << 20, stdio: ['ignore', 'pipe', 'pipe'] });
+  const log = { phase };
+  if (phase === 'rename') {
+    if (P.reg.stage !== 'bootstrap') throw new InputError(`registry stage is ${P.reg.stage}; rename expects bootstrap`);
+    for (const [a, b] of Object.entries(P.map)) {
+      if (!fs.existsSync(path.join(root, a))) throw new InputError(`missing source ${a}`);
+      fs.mkdirSync(path.dirname(path.join(root, b)), { recursive: true });
+      fs.renameSync(path.join(root, a), path.join(root, b));
+    }
+    const rl = path.join(root, 'scripts/lib/repo-layout.js');
+    fs.writeFileSync(rl, patchRegistry(fs.readFileSync(rl, 'utf8'), P));
+    git('add', '-A', 'docs', 'project', 'scripts/lib/repo-layout.js');
+    // destinations that .gitignore matches (e.g. */tree/events.jsonl) were tracked before: add them explicitly or the rename becomes a delete
+    cp.execFileSync('git', ['-C', root, 'add', '-f', '--pathspec-from-file=-', '--pathspec-file-nul'], { input: Object.values(P.map).join('\0') + '\0', maxBuffer: 64 << 20 });
+    log.renamed = Object.keys(P.map).length;
+  } else if (phase === 'content') {
+    const T = path.join(root, P.merge.target); const A = path.join(root, P.merge.absorbed_new);
+    const first = fs.readFileSync(path.join(root, P.merge.target), 'utf8'); const second = fs.readFileSync(A, 'utf8');
+    if (!first.includes('merged from')) {
+      const fence = (src, oldPath) => `<!-- merged from ${oldPath}; the original file's history is in git -->\n`;
+      const body = `# HANDOFF\n\n> Two live handoff documents were merged here (3.0.0 relayout P1). Each keeps its original text verbatim under its own heading; the originals are in git history.\n\n## A. Operator-pin work (was docs/HANDOFF.md)\n\n${fence(0, 'docs/HANDOFF.md')}\n${first.replace(/\s+$/, '')}\n\n## B. Ongoing maintenance (was docs/projects/ongoing-maintenance/HANDOFF.md)\n\n${fence(0, P.merge.absorbed_old)}\n${second.replace(/\s+$/, '')}\n`;
+      fs.writeFileSync(T, body);
+    }
+    git('rm', '-q', '-f', P.merge.absorbed_new);
+    const readme = path.join(root, 'docs/README.md');
+    fs.writeFileSync(readme, DOCS_README);
+    for (const f of Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete')) git('rm', '-q', '-f', f);
+    git('add', '-A', 'docs', 'project');
+    log.merged = [P.merge.target, P.merge.absorbed_old]; log.created = ['docs/README.md']; log.deleted = Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete');
+  } else {
+    Object.assign(log, rewriteRefs(root, P, sealedOld, refMap, phase));
+  }
+  if (o.log) fs.writeFileSync(path.resolve(o.log), JSON.stringify(log, null, 1) + '\n');
+  process.stdout.write(`relayout-p1 apply ${phase}: ${JSON.stringify(Object.fromEntries(Object.entries(log).filter(([, v]) => typeof v !== 'object')))}\n`);
+  return 0;
+}
+
+const DOCS_README = `# autopilot documentation
+
+- [guide/](guide/): for people who use autopilot: installation, configuration, settings reference, skills, coexistence, token discipline, operator review how-to.
+- [dev/](dev/): for people who work on autopilot: architecture, ADRs, hook and harness maps, contracts, upstream bug notes.
+- [assets/](assets/): images used by the READMEs and the site.
+- [scripts-inventory.md](scripts-inventory.md): the canonical index of every script (pinned here until the P4 move).
+
+Work records are not documentation and live outside this directory: plans, projects, backlog, missions and handoff are under [../project/](../project/).
+`;
+
+function rewriteRefs(root, P, sealedOld, refMap, phase) {
+  const inv = {}; for (const [a, b] of Object.entries(P.map)) inv[b] = a;
+  const skipPrefix = ['docs/plans/evidence/', 'profiles/', 'platforms/', '.opencode/plugin-package/', 'tools/migrate/relayout-p1.js', 'hooks/tests/relayout-p1.test.sh'];
+  const skipExact = new Set(['tools/migrate/no-rewrite.json', 'project/plans/2026-10-31-repo-relayout-3-0-0.md', P.reg.paths.mission_routing_config, ...P.ctx.proposedExceptions.map((e) => e.path)]);
+  const docsSide = (f) => f.startsWith('docs/') || f.startsWith('project/') || /^(CHANGELOG|CLAUDE|AGENTS|SECURITY|README(\.zh-TW)?)\.md$/.test(f);
+  const files = cp.execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8', maxBuffer: 256 << 20 }).split('\0').filter(Boolean).sort();
+  const oldTracked = new Set(files.map((f) => inv[f] || f));
+  const tok = /docs\/[A-Za-z0-9_@.+\/-]+/g;
+  const dirForm = /^docs\/(plans|projects|backlog|adr|upstream-bugs)(\/|$)|^docs\/mission-/;
+  const st = { files_changed: 0, token_replacements: 0, link_rewrites: 0, skipped_sealed: 0, skipped_excluded: 0, skipped_binary_or_large: 0, skipped_embedded: 0 };
+  const embedded = []; const dirHits = {}; const changed = [];
+  for (const f of files) {
+    if (docsSide(f) !== (phase === 'refs-docs')) continue;
+    const old = inv[f] || f;
+    if (sealedOld.has(old)) { st.skipped_sealed++; continue; }
+    if (skipExact.has(f) || skipExact.has(old) || skipPrefix.some((p) => f.startsWith(p)) || /^docs\/(plans|projects)\/_archive\/.+\/evidence\//.test(f)) { st.skipped_excluded++; continue; }
+    const abs = path.join(root, f);
+    let buf; try { const stt = fs.lstatSync(abs); if (!stt.isFile() || stt.size > 6 << 20) { st.skipped_binary_or_large++; continue; } buf = fs.readFileSync(abs); } catch { continue; }
+    if (buf.includes(0)) { st.skipped_binary_or_large++; continue; }
+    let text = buf.toString('utf8'); const orig = text;
+    // 1. markdown relative links in files that lived under docs/ (resolved against the OLD directory, written against the NEW one)
+    if (old.startsWith('docs/') && f.endsWith('.md')) {
+      text = text.replace(/(\]\(|^\[[^\]\n]+\]:\s*)(<?)([^)\s>]+)/gm, (m, pre, lt, target) => {
+        if (/^([a-z][a-z0-9+.-]*:|#|\/)/i.test(target)) return m;
+        const m2 = /^([^#?]*)([#?].*)?$/.exec(target); const bare = m2[1]; if (!bare) return m;
+        const oldTarget = path.posix.normalize(path.posix.join(path.posix.dirname(old), bare));
+        if (!oldTracked.has(oldTarget)) return m;
+        const newTarget = refMap[oldTarget] || oldTarget;
+        let rel = path.posix.relative(path.posix.dirname(f), newTarget);
+        if (bare.startsWith('./') && !rel.startsWith('.')) rel = './' + rel;
+        if (rel === bare) return m;
+        st.link_rewrites++;
+        return pre + lt + rel + (m2[2] || '');
+      });
+    }
+    // 2. full repo-relative paths that are exact layout-map keys
+    text = text.replace(tok, (m, idx, whole) => {
+      const t = m.replace(/[.,;:)\]-]+$/, ''); const tail = m.slice(t.length);
+      const to = refMap[t];
+      if (!to) { if (dirForm.test(t) && !t.startsWith('docs/plans/evidence')) { const g = (/^docs\/[^/]+/.exec(t) || [''])[0]; (dirHits[g] = dirHits[g] || { count: 0, sample: [] }).count++; if (dirHits[g].sample.length < 5) dirHits[g].sample.push(`${f}: ${t}`); } return m; }
+      const prev = whole[idx - 1];
+      if (prev !== undefined && /[A-Za-z0-9_.-]/.test(prev)) { st.skipped_embedded++; return m; }
+      if (prev === '/') {
+        const before = whole.slice(Math.max(0, idx - 40), idx - 1);
+        const ok = whole.slice(idx - 3, idx) === '../' || /[}"')]$/.test(before) || /\$[A-Za-z_]+$/.test(before);
+        if (!ok) { st.skipped_embedded++; if (embedded.length < 20) embedded.push(`${f}: ${whole.slice(Math.max(0, idx - 30), idx + t.length)}`); return m; }
+      }
+      st.token_replacements++;
+      return to + tail;
+    });
+    if (text !== orig) { fs.writeFileSync(abs, text); st.files_changed++; changed.push(f); }
+  }
+  return Object.assign(st, { changed_files: changed, embedded_samples: embedded, directory_form_hits_left_alone: dirHits });
+}
+
 function main() {
   const o = parseArgs(process.argv.slice(2));
   const cmd = o._[0];
   if (cmd === 'plan') return cmdPlan(o);
   if (cmd === 'check-f2') return cmdCheckF2(o);
   if (cmd === 'classify') return cmdClassify(o);
-  if (cmd === 'apply') { process.stderr.write('relayout-p1 apply: not implemented in this round (dry run only)\n'); return 2; }
+  if (cmd === 'apply') return cmdApply(o);
   throw new InputError('usage: relayout-p1.js plan|check-f2|classify|apply ... (see the file header)');
 }
 try { process.exitCode = main(); } catch (e) {

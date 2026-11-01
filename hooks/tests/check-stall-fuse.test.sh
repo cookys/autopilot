@@ -129,7 +129,8 @@ docs/notes.md
 src/a.js
 hooks/tests/$L_PLANS/x.test.sh
 EOF
-OUT="$(node "$SCRIPT" classify --names "$TEST_TMP/pnames.txt")"
+# classify reads the work-record layout of the repo it runs in: run it from the scratch dir (not this repo) so the docs/ names above are the process paths
+OUT="$(cd "$TEST_TMP" && node "$SCRIPT" classify --names "$TEST_TMP/pnames.txt")"
 assert_contains "$OUT" '"process_files":4' "process paths counted (verification-looking path excluded)"
 assert_contains "$OUT" '"product_files":6' "process paths stay inside product_files (split unchanged)"
 cat > "$TEST_TMP/proc.jsonl" <<'EOF'

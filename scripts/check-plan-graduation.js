@@ -387,7 +387,8 @@ function isTableSeparatorRow(cells) {
 }
 
 function planIndexRegistration(repoRoot, stem) {
-  const indexPath = path.join(repoRoot, PROJECTS_INDEX);
+  // The registry's index path is this repo's; any other repo (a consuming project asking about its plans) keeps the docs/ convention.
+  const indexPath = path.join(repoRoot, LAYOUT.pathFor(repoRoot, 'projects_index'));
   const text = readFileSafe(indexPath);
   if (text == null) return { indexExists: false, indexPath, matchedRows: [], activeRow: null };
   const lines = text.split(/\r?\n/);

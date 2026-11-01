@@ -484,9 +484,12 @@ assert_contains "$OUT" "c_intake_uses_helper=true" "campaign-intake.js uses the 
 assert_contains "$OUT" "c_engine_uses_helper=true" "campaignMutationBudgetStatus uses the shared predicate"
 assert_contains "$OUT" "c_table=PREPARED:3=false,PREPARED:4=true,PREPARED:5=true,IMPLEMENTING:3=false,IMPLEMENTING:4=true,IMPLEMENTING:5=true,BOUNDARY_REJECTED:3=false,BOUNDARY_REJECTED:4=false,BOUNDARY_REJECTED:5=true,VERTICAL_VERIFICATION:3=false,VERTICAL_VERIFICATION:4=false,VERTICAL_VERIFICATION:5=true,ADJUDICATING:3=false,ADJUDICATING:4=false,ADJUDICATING:5=true,AWAITING_DISPOSITION:3=false,AWAITING_DISPOSITION:4=false,AWAITING_DISPOSITION:5=true,REPAIRING:3=false,REPAIRING:4=false,REPAIRING:5=true,REVIEWING:3=false,REVIEWING:4=true,REVIEWING:5=true" "predicate table: >= for first pass, > for repair phases"
 # F. cli.js vs campaign-intake.js side by side
-assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_blocked=cli:true,intake:true" "AWAITING_CONVERGENCE_ADJUDICATION at 4/4 (predicate true): both sides refuse with campaign_file_budget_exhausted"
+# BL-0360: intake evaluates the predicate (TRUE here) but waives the rejection for a proven exact-replay
+# no-op durable wait (no dispatch, no mutation, no gate attempt); cli.js eligibility still refuses.
+assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_blocked=cli:true,intake:false" "AWAITING_CONVERGENCE_ADJUDICATION at 4/4 (predicate true): cli refuses, intake admits the exact-replay no-op"
+assert_contains "$OUT" "f_AWAITING_CONVERGENCE_ADJUDICATION_intake_calls=AWAITING_CONVERGENCE_ADJUDICATION:4/4:repair=undefined->true" "AWAITING_CONVERGENCE_ADJUDICATION: intake still evaluated the predicate (TRUE) before waiving it"
 assert_contains "$OUT" "f_AWAITING_DISPOSITION_blocked=cli:false,intake:false" "AWAITING_DISPOSITION at 4/4 (repair phase): neither side refuses"
-for ph in BOUNDARY_REJECTED REVIEWING AWAITING_DISPOSITION AWAITING_CONVERGENCE_ADJUDICATION; do
+for ph in BOUNDARY_REJECTED REVIEWING AWAITING_DISPOSITION; do
   assert_contains "$OUT" "f_${ph}_parity=true" "$ph: cli.js and campaign-intake.js evaluate the pre-spend predicate identically (same calls, same verdict)"
 done
 assert_contains "$OUT" "f_AWAITING_DISPOSITION_intake_calls=AWAITING_DISPOSITION:4/4:repair=undefined->false" "intake really reached the predicate for the disposition resume (not vacuous parity)"

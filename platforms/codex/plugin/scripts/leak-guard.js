@@ -5,7 +5,7 @@
  *
  *   node scripts/leak-guard.js [--staged | --range A..B] [--registry FILE] [--json]
  *
- * Scans ONLY the lines a change ADDS (git diff -U0 --find-renames, filter ACMR), so history is
+ * Scans ONLY the lines a change ADDS (git diff -U0 --find-renames, filter ACMRT), so history is
  * never re-judged and a pure rename of an old file adds nothing. Patterns: scripts/lib/
  * personal-data-patterns.js (home/tmp/run paths, host names, private IPs, credential shapes,
  * and a file named .env or *.env).
@@ -81,11 +81,13 @@ function loadRegistry(file, root) {
     if (e.path.endsWith('/') || e.path.startsWith('/') || e.path.startsWith('./') || e.path.split('/').includes('..')) {
       fail(2, `${at}: path must be a full repo-relative file path, not a directory (${e.path})`);
     }
+    let st = null;
     try {
-      if (fs.statSync(path.join(root, e.path)).isDirectory()) {
-        fail(2, `${at}: path resolves to a directory under the repo root, not a file (${e.path})`);
-      }
+      st = fs.statSync(path.join(root, e.path));
     } catch (err) { /* absent path: a stale entry, not a directory */ }
+    if (st && st.isDirectory()) {
+      fail(2, `${at}: path resolves to a directory under the repo root, not a file (${e.path})`);
+    }
     if (!patterns.CATEGORIES.includes(e.category)) fail(2, `${at}: category must be one of ${patterns.CATEGORIES.join(', ')}`);
     if (typeof e.reason !== 'string' || e.reason.trim().length < 8) fail(2, `${at}: reason must say why (8+ chars)`);
     exempt.add(`${e.path}\0${e.category}`);
@@ -110,7 +112,7 @@ function unquote(p) {
 }
 
 function diffArgs(o, extra) {
-  const a = ['diff', '--no-color', '--no-ext-diff', '--find-renames', '--diff-filter=ACMR', ...extra];
+  const a = ['diff', '--no-color', '--no-ext-diff', '--find-renames', '--diff-filter=ACMRT', ...extra];
   if (o.mode === 'staged') a.push('--cached');
   else a.push(o.range);
   return a;
@@ -133,35 +135,184 @@ function envNameFindings(root, o) {
   return out;
 }
 
-function contentFindings(root, o) {
-  const text = git(root, diffArgs(o, ['-U0']));
+/** Walk a -U0 diff and yield {file, line, content} for every added ('+') or removed ('-') line. */
+function diffLines(text, sign) {
   const out = [];
-  let file = '';
+  let minus = '';
+  let plus = '';
   let line = 0;
   let inHunk = false;
+  const clean = (p) => { const u = unquote(p); return u.startsWith('a/') || u.startsWith('b/') ? u.slice(2) : u; };
   for (const l of text.split('\n')) {
-    if (l.startsWith('diff --git ')) { inHunk = false; file = ''; continue; }
-    if (!inHunk && l.startsWith('+++ ')) {
-      const p = unquote(l.slice(4));
-      file = p.startsWith('b/') ? p.slice(2) : p;
-      continue;
-    }
+    if (l.startsWith('diff --git ')) { inHunk = false; minus = ''; plus = ''; continue; }
+    if (!inHunk && l.startsWith('--- ')) { minus = clean(l.slice(4)); continue; }
+    if (!inHunk && l.startsWith('+++ ')) { plus = clean(l.slice(4)); continue; }
     if (l.startsWith('@@ ')) {
-      const m = l.match(/\+(\d+)/);
+      const m = l.match(sign === '+' ? /\+(\d+)/ : /-(\d+)/);
       line = m ? parseInt(m[1], 10) : 0;
       inHunk = true;
       continue;
     }
-    if (inHunk && l.startsWith('+') && file) {
-      const content = l.slice(1);
-      for (const h of patterns.findAll(content)) {
-        const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
-        out.push({ file, line, category: h.category, snippet });
-      }
+    // an added line belongs to the new path, a removed line to the old one (they differ on a rename)
+    const file = sign === '-' ? (minus && minus !== '/dev/null' ? minus : plus) : (plus && plus !== '/dev/null' ? plus : minus);
+    if (inHunk && l.startsWith(sign) && file && file !== '/dev/null') {
+      out.push({ file, line, content: l.slice(1) });
       line++;
     }
   }
   return out;
+}
+
+/** Findings in the added lines of a diff, plus the text of each flagged line (file\0line -> text). */
+function scanAdded(added) {
+  const out = [];
+  const texts = new Map();
+  for (const { file, line, content } of added) {
+    for (const h of patterns.findAll(content)) {
+      const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
+      out.push({ file, line, category: h.category, snippet });
+      texts.set(`${file}\0${line}`, content);
+    }
+  }
+  return { findings: out, texts };
+}
+
+/** The whole base..head diff is the floor: whatever it flags is blocked unless a revert allowance below covers it. */
+function contentFindings(root, o) {
+  return scanAdded(diffLines(git(root, diffArgs(o, ['-U0'])), '+'));
+}
+
+const REVERT_TRAILER = 'Leak-Guard-Allow-Revert';
+
+function resolveCommit(root, ref) {
+  const r = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { cwd: root, encoding: 'utf8' });
+  return r.status === 0 ? r.stdout.trim() : '';
+}
+
+function rangeHead(root, range) {
+  // split at the three-dot form first, then the two-dot form; the right side is the whole ref (it may contain dots)
+  let i = range.indexOf('...');
+  let n = 3;
+  if (i < 0) { i = range.indexOf('..'); n = 2; }
+  if (i < 0) return ''; // no right side we can name: fail closed (no allowance)
+  const right = range.slice(i + n);
+  return resolveCommit(root, right || 'HEAD'); // 'base..' means HEAD, as in git; unresolvable -> '' -> fail closed
+}
+
+/**
+ * Valid revert commits of the range: sha -> reverted (anchor) sha. One git log reads every message; only a
+ * message that contains the trailer key is parsed. Valid = not a merge, the trailer is in the final trailer
+ * block (git's own parser), "This reverts commit <sha>." has its full stop, both shas resolve to the same
+ * commit, and that anchor is an ancestor of the range head but not itself part of the range.
+ */
+function revertCandidates(root, o, head) {
+  const cands = new Map();
+  const log = git(root, ['log', '--no-color', '--topo-order', '--reverse', '--format=%H%x00%P%x00%B%x00', o.range]).split('\0');
+  const isAncestor = new Map();
+  const inRange = new Set();
+  for (let i = 0; i + 2 < log.length; i += 3) inRange.add(log[i].trim());
+  for (let i = 0; i + 2 < log.length; i += 3) {
+    const sha = log[i].trim();
+    const parents = log[i + 1].trim() ? log[i + 1].trim().split(/\s+/) : [];
+    const body = log[i + 2];
+    if (!sha || parents.length > 1 || !body.includes(`${REVERT_TRAILER}:`)) continue;
+    const rv = body.match(/^This reverts commit ([0-9a-f]{7,40})\.\s*$/m);
+    const parsed = spawnSync('git', ['interpret-trailers', '--parse'], { cwd: root, input: body, encoding: 'utf8' });
+    const tr = parsed.status === 0 ? (parsed.stdout || '').match(new RegExp(`^${REVERT_TRAILER}:\\s*([0-9a-f]{7,40})\\s*$`, 'm')) : null;
+    if (!rv || !tr) continue;
+    const a = resolveCommit(root, rv[1]);
+    if (!a || a !== resolveCommit(root, tr[1])) continue;
+    // an anchor inside the range may have been the commit that first introduced the data: that is new, not legacy
+    if (inRange.has(a)) continue;
+    if (!isAncestor.has(a)) {
+      isAncestor.set(a, spawnSync('git', ['merge-base', '--is-ancestor', a, head], { cwd: root }).status === 0);
+    }
+    if (isAncestor.get(a)) cands.set(sha, a);
+  }
+  return cands;
+}
+
+/**
+ * Line number -> commit that introduced it, for the given lines of a file as it stands at head: ONE blame
+ * call per file (several -L ranges, or the whole file when there are many lines). Missing lines map to ''.
+ */
+function blameFile(root, head, file, lines) {
+  const args = ['blame', '-l', '--porcelain'];
+  if (lines.length <= 500) for (const n of lines) args.push('-L', `${n},${n}`);
+  args.push(head, '--', file);
+  const r = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 1024 * 1024 * 1024 });
+  const map = new Map();
+  if (r.status !== 0) return map;
+  for (const l of (r.stdout || '').split('\n')) {
+    const m = l.match(/^([0-9a-f]{40}) \d+ (\d+)(?: \d+)?$/);
+    if (m) map.set(parseInt(m[2], 10), m[1]);
+  }
+  return map;
+}
+
+/**
+ * Range mode. Drops the findings of lines that a deliberate revert put back. Only content findings can be
+ * covered (never env_file). A flagged line is covered when `git blame` at the range head says a valid
+ * revert commit of this range introduced it AND the shared ledger still holds that line: the ledger key is
+ * (anchor sha, file, text), counted by how often the anchor removed it (old path on a rename). Every revert
+ * commit of one anchor spends from the same entry for the lines it added itself. A merge, an older commit or anything unproven stays blocked.
+ * Blame and the log run only when the whole-range scan already has a content finding.
+ */
+function applyRevertAllowance(root, o, findings, texts) {
+  if (o.mode !== 'range' || !findings.some((f) => f.category !== 'env_file')) return findings;
+  const head = rangeHead(root, o.range);
+  if (!head) return findings;
+  const cands = revertCandidates(root, o, head);
+  if (cands.size === 0) return findings;
+  // Shared ledger: (anchor, file, text) -> times the anchor removed that line. Every valid revert commit,
+  // oldest first, spends it for the lines it ITSELF added, whether or not they survive to the head, so a
+  // second trailer for the same cleanup finds the entry used up. What a revert commit won is its grant.
+  const ledger = new Map();
+  const loaded = new Set();
+  const grants = new Map(); // revert commit -> Map(file\0text -> lines it may still put back)
+  for (const [sha, a] of cands) {
+    if (!loaded.has(a)) {
+      loaded.add(a);
+      const text = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--format=', '-U0', a]);
+      for (const d of diffLines(text, '-')) {
+        const k = `${a}\0${d.file}\0${d.content}`;
+        ledger.set(k, (ledger.get(k) || 0) + 1);
+      }
+    }
+    const own = new Map();
+    const added = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--diff-filter=ACMRT', '--format=', '-U0', sha]);
+    for (const d of diffLines(added, '+')) {
+      const k = `${a}\0${d.file}\0${d.content}`;
+      if (!(ledger.get(k) > 0)) continue;
+      ledger.set(k, ledger.get(k) - 1);
+      own.set(`${d.file}\0${d.content}`, (own.get(`${d.file}\0${d.content}`) || 0) + 1);
+    }
+    grants.set(sha, own);
+  }
+  const covered = new Set();
+  const tried = new Set();
+  const wanted = new Map(); // file -> flagged line numbers
+  for (const f of findings) {
+    if (f.category === 'env_file' || !f.line) continue;
+    if (!wanted.has(f.file)) wanted.set(f.file, new Set());
+    wanted.get(f.file).add(f.line);
+  }
+  const blamed = new Map();
+  for (const [file, set] of wanted) blamed.set(file, blameFile(root, head, file, [...set].sort((x, y) => x - y)));
+  for (const f of findings) {
+    const lk = `${f.file}\0${f.line}`;
+    if (f.category === 'env_file' || !f.line || tried.has(lk)) continue;
+    tried.add(lk);
+    const who = (blamed.get(f.file) || new Map()).get(f.line) || '';
+    const own = grants.get(who);
+    if (!own) continue;
+    const k = `${f.file}\0${texts.get(lk)}`;
+    if (!(own.get(k) > 0)) continue;
+    own.set(k, own.get(k) - 1);
+    covered.add(lk);
+  }
+  // only content findings can be covered; env_file (and any non-content category) always stays
+  return findings.filter((f) => f.category === 'env_file' || !covered.has(`${f.file}\0${f.line}`));
 }
 
 function shq(s) {
@@ -176,8 +327,11 @@ function main() {
   const exempt = loadRegistry(o.registry ? path.resolve(o.registry) : path.join(root, DEFAULT_REGISTRY), root);
 
   const seen = new Set();
+  const content = contentFindings(root, o);
   const findings = [];
-  for (const f of [...envNameFindings(root, o), ...contentFindings(root, o)]) {
+  const candidates = [...envNameFindings(root, o), ...content.findings];
+  const kept = applyRevertAllowance(root, o, candidates, content.texts);
+  for (const f of kept) {
     if (exempt.has(`${f.file}\0${f.category}`)) continue;
     const key = `${f.file}\0${f.line}\0${f.category}\0${f.snippet}`;
     if (seen.has(key)) continue;
@@ -197,9 +351,9 @@ function main() {
   for (const f of findings) out.push(`  ${f.file}${f.line ? `:${f.line}` : ''}  [${f.category}]  ${f.snippet}`);
   const fixable = [...new Set(findings.filter((f) => f.category !== 'env_file').map((f) => f.file))];
   if (fixable.length) {
-    const rel = path.relative(process.cwd(), path.join(__dirname, 'redact-personal.js')) || 'scripts/redact-personal.js';
+    // absolute paths for the script and the files: the command runs as printed from any directory
     out.push('Redact (rewrites the whole file, then re-stage it):');
-    out.push(`  node ${shq(rel)} ${fixable.map(shq).join(' ')}`);
+    out.push(`  node ${shq(path.join(__dirname, 'redact-personal.js'))} ${fixable.map((f) => shq(path.join(root, f))).join(' ')}`);
   }
   if (findings.some((f) => f.category === 'env_file')) out.push('An .env file cannot be redacted: unstage it (git rm --cached) and keep it out of the repo.');
   out.push(`A file that must keep a hit gets one entry (path, category, reason) in ${DEFAULT_REGISTRY}; directories and globs are refused.`);

@@ -247,4 +247,269 @@ node -e '
 assert_eq "$?" "0" "redact mutation: replacement switched off in the copy"
 assert_eq "$(redaction_ok "$MUT/scripts/lib")" "FAIL" "redact mutation: with replacement off the redaction check is RED"
 
+# ── BL-0348 item 1: a deliberate path for reverting a redaction commit (range mode only) ──
+revert_setup() { # leaves $A = the cleanup commit, HEAD = a plain `git revert` of it on branch rv
+  reset_stage; git -C "$R" checkout -q -B rv "$BASE"
+  printf 'old note\nlegacy clean line\n' > "$R/src/old.md"; git -C "$R" commit -q -am "redact old.md"
+  A="$(git -C "$R" rev-parse HEAD)"
+  git -C "$R" revert --no-edit "$A" >/dev/null 2>&1
+}
+add_trailer() { # add_trailer <sha>
+  git -C "$R" log -1 --format=%B | git -C "$R" interpret-trailers --trailer "Leak-Guard-Allow-Revert: $1" | git -C "$R" commit -q --amend -F -
+}
+rguard() { (cd "$R" && node "$GUARD" --range "$1" --registry "$REG" 2>&1); }
+revert_setup
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert NC-a: a plain git revert that restores a cleaned line is red (no trailer)"
+add_trailer "$A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "revert twin: revert message + matching Leak-Guard-Allow-Revert trailer is green"
+revert_setup; add_trailer "$BASE"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert NC-b: trailer naming the wrong sha is red"
+revert_setup
+git -C "$R" commit -q --amend -m "restore line" -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert NC-c: trailer without a 'This reverts commit' line is red"
+revert_setup
+git -C "$R" reset -q --soft "$A"
+printf 'old note\nlegacy %s/x\nextra %s/zzz\n' "$PERSONAL" "$PERSONAL" > "$R/src/old.md"
+git -C "$R" commit -q -am "Revert x" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; RC=$?
+assert_eq "$RC" "1" "revert NC-d: a new personal line smuggled into the revert is red"
+assert_contains "$OUT" "src/old.md:3" "revert NC-d: the new line (3) is named"
+assert_not_contains "$OUT" "src/old.md:2" "revert NC-d: the restored line (2) is not named"
+reset_stage; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null
+
+# ── BL-0348 item 2: a local host name that is a plain word only counts in host contexts ──
+hostcount() { # hostcount <fake hostname> <text> <lib dir>
+  node -e '
+    const os = require("os"); os.hostname = () => process.argv[1];
+    const p = require(process.argv[3] + "/personal-data-patterns.js");
+    process.stdout.write(String(p.findAll(process.argv[2]).length));
+  ' "$1" "$2" "$3"
+}
+hostword_ok() { # hostword_ok <lib dir> -> OK | FAIL
+  local w="tea""pot" d="lab7""box"
+  if [ "$(hostcount "$w" "the $w kettle" "$1")" = "0" ] && [ "$(hostcount "$w" "ssh $w now" "$1")" = "1" ] \
+     && [ "$(hostcount "$w" "$w: busy" "$1")" = "1" ] && [ "$(hostcount "$d" "run on $d today" "$1")" = "1" ]; then printf OK; else printf FAIL; fi
+}
+assert_eq "$(hostword_ok "$REPO_ROOT/scripts/lib")" "OK" "hostname word: plain-word local host is context-only, a distinctive one (digit/hyphen) stays strong"
+MUT2="$TEST_TMP/mut2"; mkdir -p "$MUT2/scripts/lib" "$MUT2/hooks/_shared"
+cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$REPO_ROOT"/scripts/lib/leak-guard-hosts.json "$MUT2/scripts/lib/"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT2/hooks/_shared/"
+node -e '
+  const fs = require("fs"); const f = process.argv[1];
+  const s = fs.readFileSync(f, "utf8");
+  const t = s.replace("/[-0-9_]/.test(local)", "true");
+  if (t === s) { process.stderr.write("mutation did not apply\n"); process.exit(3); }
+  fs.writeFileSync(f, t);
+' "$MUT2/scripts/lib/personal-data-patterns.js"
+assert_eq "$?" "0" "hostname word mutation: demotion switched off in the copy"
+assert_eq "$(hostword_ok "$MUT2/scripts/lib")" "FAIL" "hostname word mutation: with demotion off the check is RED"
+
+# ── BL-0348 item 3: the printed redaction command runs from any directory ──
+mkdir -p "$R/docs/plans/evidence/run1"; printf 'ran in %s\n' "$PERSONAL" > "$R/docs/plans/evidence/run1/out.md"; git -C "$R" add -A
+OUT="$(guard)"; CMD="$(printf '%s\n' "$OUT" | grep '^  node ' | head -1)"
+OTHER="$TEST_TMP/elsewhere"; mkdir -p "$OTHER"
+(cd "$OTHER" && eval "$CMD" >/dev/null 2>&1)
+git -C "$R" add -A
+OUT="$(guard)"; assert_eq "$?" "0" "redact-cmd cwd: the printed command, run from an unrelated directory, turns red into green"
+reset_stage
+
+# ── BL-0348 item 4: a symlink swapped for a regular file (typechange) is scanned ──
+ln -s a.txt "$R/src/link"; git -C "$R" add -A; git -C "$R" commit -q -m "add link"; TBASE="$(git -C "$R" rev-parse HEAD)"
+rm "$R/src/link"; printf 'ran in %s\n' "$PERSONAL" > "$R/src/link"; git -C "$R" add -A
+OUT="$(guard)"; assert_eq "$?" "1" "typechange: symlink replaced by a regular file with a personal path is red"
+assert_contains "$OUT" "src/link:1" "typechange: names the file"
+git -C "$R" reset -q --hard "$TBASE"; git -C "$R" clean -qfd
+rm "$R/src/link"; printf 'clean text\n' > "$R/src/link"; git -C "$R" add -A
+OUT="$(guard)"; assert_eq "$?" "0" "typechange twin: a clean symlink-to-file swap is green"
+git -C "$R" reset -q --hard "$BASE"; git -C "$R" clean -qfd
+
+# ── BL-0348 item 6: a failing registry check must exit (fail() is not swallowed) ──
+MUT3="$TEST_TMP/mut3"; mkdir -p "$MUT3/scripts/lib" "$MUT3/hooks/_shared"
+cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$REPO_ROOT"/scripts/lib/leak-guard-hosts.json "$MUT3/scripts/lib/"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT3/hooks/_shared/"
+node -e '
+  const fs = require("fs"); const s = fs.readFileSync(process.argv[1], "utf8");
+  const t = s.replace("process.stderr.write(`leak-guard: ${msg}\\n`);\n  process.exit(code);", "process.stderr.write(`leak-guard: ${msg}\\n`);");
+  if (t === s) { process.stderr.write("mutation did not apply\n"); process.exit(3); }
+  fs.writeFileSync(process.argv[2], t);
+' "$REPO_ROOT/scripts/leak-guard.js" "$MUT3/scripts/leak-guard.js"
+assert_eq "$?" "0" "stat-try mutation: fail() made non-exiting in the copy"
+mkdir -p "$R/docs/plans/evidence/run1"; printf 'x %s\n' "$PERSONAL" > "$R/docs/plans/evidence/run1/out.md"; git -C "$R" add -A
+(cd "$R" && node "$MUT3/scripts/leak-guard.js" --staged --registry "$TEST_TMP/dirreg2.json" >/dev/null 2>&1); MRC=$?
+assert_eq "$([ "$MRC" = 2 ] && echo same || echo differs)" "differs" "stat-try mutation: with fail() not exiting, the dirreg2 case is RED (rc is no longer 2)"
+OUT="$(REGISTRY="$TEST_TMP/dirreg2.json" guard)"; assert_eq "$?" "2" "stat-try twin: the real script still exits 2 on a directory entry"
+reset_stage
+
+# ── BL-0348 item 7: more than 26 distinct hosts on one line get unique letter labels ──
+MH="$RC5/many.md"
+node -e '
+  const hs = []; for (let i = 0; i < 28; i++) hs.push("p" + i + "-7840" + "hs");
+  require("fs").writeFileSync(process.argv[1], "x " + hs.join(" ") + "\n");
+' "$MH"
+node "$REDACT" "$MH" >/dev/null 2>&1; assert_eq "$?" "0" "host letters: 28-host line redacts"
+LABELS="$(grep -o '<host-[a-z0-9]*>' "$MH")"
+assert_eq "$(printf '%s\n' "$LABELS" | wc -l | tr -d ' ')" "28" "host letters: 28 labels written"
+assert_eq "$(printf '%s\n' "$LABELS" | sort -u | wc -l | tr -d ' ')" "28" "host letters: all 28 labels are distinct"
+assert_not_contains "$LABELS" "<host-27>" "host letters: no numeric fallback"
+assert_contains "$LABELS" "<host-aa>" "host letters: the 27th host is aa"
+assert_contains "$LABELS" "<host-ab>" "host letters: the 28th host is ab"
+
+# ── review round 1: the revert path reads the message and the diff strictly ──
+# (1) the trailer must be in the final trailer block, not a line followed by another paragraph
+revert_setup
+git -C "$R" log -1 --format=%B | git -C "$R" interpret-trailers --trailer "Leak-Guard-Allow-Revert: $A" > "$TEST_TMP/msg1"
+printf '\nA closing paragraph after the trailer.\n' >> "$TEST_TMP/msg1"
+git -C "$R" commit -q --amend -F "$TEST_TMP/msg1"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert strict-1: a trailer followed by another paragraph is not a trailer (red)"
+# (2) the full stop of 'This reverts commit <sha>.' is required
+revert_setup
+git -C "$R" commit -q --amend -m "Revert x" -m "This reverts commit $A" -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert strict-2: 'This reverts commit <sha>' without the full stop is red"
+git -C "$R" commit -q --amend -m "Revert x" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "revert strict-2 twin: with the full stop and a trailer block it is green"
+# (3) a redaction that also renames the file: the revert restores the line under the OLD path
+reset_stage; git -C "$R" checkout -q -B rn "$BASE"
+{ for i in 1 2 3 4 5 6 7 8; do echo "stable line number $i of the file"; done; printf 'legacy %s/x\n' "$PERSONAL"; } > "$R/src/big.txt"
+git -C "$R" add -A; git -C "$R" commit -q -m "add big"
+git -C "$R" mv src/big.txt src/big2.txt
+{ for i in 1 2 3 4 5 6 7 8; do echo "stable line number $i of the file"; done; echo "legacy clean line"; } > "$R/src/big2.txt"
+git -C "$R" add -A; git -C "$R" commit -q -m "redact and rename big"
+A="$(git -C "$R" rev-parse HEAD)"
+git -C "$R" revert --no-edit "$A" >/dev/null 2>&1; add_trailer "$A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "revert strict-3: redact+rename then revert restores the line under the old path (green)"
+git -C "$R" reset -q --soft "$A"; git -C "$R" reset -q
+git -C "$R" checkout -q -- . ; git -C "$R" clean -qfd
+printf 'legacy %s/x\n' "$PERSONAL" > "$R/src/other.txt"; git -C "$R" add -A
+git -C "$R" commit -q -m "Revert x" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert strict-3 NC: the same line added to a different file is red"
+assert_contains "$OUT" "src/other.txt:1" "revert strict-3 NC: names the other file"
+# (4) a restored line is allowed as many times as the reverted commit removed it
+revert_setup
+git -C "$R" reset -q --soft "$A"
+printf 'old note\nlegacy %s/x\nlegacy %s/x\n' "$PERSONAL" "$PERSONAL" > "$R/src/old.md"
+git -C "$R" commit -q -am "Revert x" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert strict-4: adding the removed line back twice is red"
+assert_contains "$OUT" "src/old.md:3" "revert strict-4: the second copy (line 3) is named"
+assert_not_contains "$OUT" "src/old.md:2" "revert strict-4: the first copy (line 2) is allowed"
+reset_stage; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null
+
+# ── review round 1, item 5: the allowance belongs to the revert commit, not to the whole range ──
+revert_setup; add_trailer "$A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "revert bind: the single legitimate revert stays green"
+printf 'old note\n' > "$R/src/old.md"; git -C "$R" commit -q -am "drop the line again"
+printf 'old note\nlegacy %s/x\n' "$PERSONAL" > "$R/src/old.md"; git -C "$R" commit -q -am "plain re-add, no trailer"
+OUT="$(rguard "$A..HEAD")"; RC=$?
+assert_eq "$RC" "1" "revert bind: revert, delete, then a trailer-less re-add of the same line is red"
+assert_contains "$OUT" "src/old.md:2" "revert bind: names the re-added line"
+assert_contains "$OUT" "1 personal-data finding(s)" "revert bind: exactly one finding (the legitimate revert's line stays allowed)"
+reset_stage; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null
+
+# ── review round 3: one shared ledger for the range; merge commits are scanned; self-scan holes ──
+back_to_master() { reset_stage; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null; }
+# (1) two revert commits naming the same cleanup commit share ONE allowance
+revert_setup; add_trailer "$A"
+printf 'old note\n' > "$R/src/old.md"; git -C "$R" commit -q -am "drop the line again"
+printf 'old note\nlegacy %s/x\n' "$PERSONAL" > "$R/src/old.md"
+git -C "$R" commit -q -am "Revert again" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; RC=$?
+assert_eq "$RC" "1" "ledger: a second revert commit naming the same cleanup gets no second allowance (red)"
+assert_contains "$OUT" "1 personal-data finding(s)" "ledger: exactly the second restore is named"
+back_to_master
+# (2) an evil merge: legitimate revert in the range, personal data introduced by the merge commit itself
+revert_setup; add_trailer "$A"
+git -C "$R" checkout -q -B side; echo s > "$R/src/side.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "side work"
+git -C "$R" checkout -q rv; echo m > "$R/src/main.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "main work"
+git -C "$R" merge -q --no-ff --no-commit side >/dev/null 2>&1
+printf 'evil %s/q\n' "$PERSONAL" > "$R/src/merge.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "merge side"
+OUT="$(rguard "$A..HEAD")"; RC=$?
+assert_eq "$RC" "1" "merge: personal data added by a merge commit (range tip is the merge) is red"
+assert_contains "$OUT" "src/merge.txt:1" "merge: names the merge's file"
+assert_not_contains "$OUT" "side.txt" "merge: side-branch content already scanned is not re-reported"
+back_to_master
+# (2b) a merge cannot use the allowance even with a revert message and trailer
+revert_setup
+git -C "$R" checkout -q -B side "$A"; echo s > "$R/src/side.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "side work"
+git -C "$R" checkout -q -B mrg "$A"; echo m > "$R/src/main.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "main work"
+git -C "$R" merge -q --no-ff --no-commit side >/dev/null 2>&1
+printf 'old note\nlegacy %s/x\n' "$PERSONAL" > "$R/src/old.md"; git -C "$R" add -A
+git -C "$R" commit -q -m "Merge side" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "merge: a merge commit with a revert message and trailer gets no allowance (red)"
+back_to_master
+# (3) self-scan: typechange inside a trailer range
+revert_setup; add_trailer "$A"
+ln -s a.txt "$R/src/lk"; git -C "$R" add -A; git -C "$R" commit -q -m "add link"
+rm "$R/src/lk"; printf 'in %s\n' "$PERSONAL" > "$R/src/lk"; git -C "$R" add -A; git -C "$R" commit -q -m "link becomes a file"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "self-scan typechange: symlink to file swap with personal data in a trailer range is red"
+assert_contains "$OUT" "src/lk:1" "self-scan typechange: names the file"
+back_to_master
+# (4) self-scan: a root commit inside the range
+revert_setup; add_trailer "$A"; REVTIP="$(git -C "$R" rev-parse HEAD)"
+git -C "$R" checkout -q --orphan orph; git -C "$R" rm -rfq . ; printf 'root %s/r\n' "$PERSONAL" > "$R/root.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "unrelated root"
+git -C "$R" commit -q --allow-empty -m "Revert z" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$BASE..HEAD")"; assert_eq "$?" "1" "self-scan root: a root commit inside a trailer range is scanned (red)"
+assert_contains "$OUT" "root.txt:1" "self-scan root: names the root commit's file"
+back_to_master
+# (5) self-scan: rename plus edit across commits, an emptied commit and a binary file in a trailer range are scanned like the whole-range diff
+revert_setup; add_trailer "$A"
+git -C "$R" commit -q --allow-empty -m "empty"
+printf 'bin\0data\n' > "$R/src/blob.bin"; git -C "$R" add -A; git -C "$R" commit -q -m "binary"
+git -C "$R" mv src/a.txt src/a3.txt; git -C "$R" commit -q -m "pure rename"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "self-scan empty/binary/pure rename: nothing added, green"
+printf 'more %s/z\n' "$PERSONAL" >> "$R/src/a3.txt"; git -C "$R" commit -q -am "edit after rename"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "self-scan rename then edit: the added line is red"
+assert_contains "$OUT" "src/a3.txt" "self-scan rename then edit: names the new path"
+back_to_master
+
+# ── review round 4: the whole-range diff is the floor; blame decides which revert commit may cover a line ──
+# (cv3) stale merge: a side branch forked before the cleanup, the merge picks its old personal line back
+reset_stage; git -C "$R" checkout -q -B rv "$BASE"
+printf 'old note\nlegacy clean line\n' > "$R/src/old.md"; git -C "$R" commit -q -am "redact old.md"
+printf 'z %s/zz\n' "$PERSONAL" > "$R/src/z.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "z old"
+printf 'z clean\n' > "$R/src/z.txt"; git -C "$R" commit -q -am "cleanup z"; ZC="$(git -C "$R" rev-parse HEAD)"
+printf 'z %s/zz\n' "$PERSONAL" > "$R/src/z.txt"; git -C "$R" commit -q -am "Revert z" -m "This reverts commit $ZC." -m "Leak-Guard-Allow-Revert: $ZC"
+git -C "$R" checkout -q -B stale "$BASE"; echo s > "$R/src/side.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "stale side"
+git -C "$R" checkout -q rv; git -C "$R" merge -q --no-ff --no-commit stale >/dev/null 2>&1
+printf 'old note\nlegacy %s/x\n' "$PERSONAL" > "$R/src/old.md"; git -C "$R" add -A; git -C "$R" commit -q -m "merge picks the stale side"
+OUT="$(rguard "$ZC..HEAD")"; RC=$?
+assert_eq "$RC" "1" "stale merge: a merge that picks the old side's personal line back is red although the range has a valid revert"
+assert_contains "$OUT" "src/old.md:2" "stale merge: names the line the merge put back"
+assert_not_contains "$OUT" "src/z.txt" "stale merge: the legitimate revert's own line stays allowed"
+# an anchor inside the range may be where the data first entered: no allowance
+OUT="$(rguard "$BASE..HEAD")"; assert_eq "$?" "1" "anchor in range: a cleanup commit that is itself in the range gives no allowance (red)"
+back_to_master
+
+# ── review round 5: restore through a revert, then rename the file, stays blocked ──
+reset_stage; git -C "$R" checkout -q -B rv "$BASE"
+{ for i in 1 2 3 4 5 6 7 8; do echo "stable line number $i of the file"; done; printf 'legacy %s/x\n' "$PERSONAL"; } > "$R/src/big.txt"
+git -C "$R" add -A; git -C "$R" commit -q -m "add big"
+{ for i in 1 2 3 4 5 6 7 8; do echo "stable line number $i of the file"; done; echo "legacy clean line"; } > "$R/src/big.txt"
+git -C "$R" commit -q -am "redact big"; A="$(git -C "$R" rev-parse HEAD)"
+git -C "$R" revert --no-edit "$A" >/dev/null 2>&1; add_trailer "$A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "revert then rename: the plain revert is green"
+git -C "$R" mv src/big.txt src/big3.txt; git -C "$R" commit -q -m "rename after the revert"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert then rename: the restored line under the new name is red"
+assert_contains "$OUT" "src/big3.txt:9" "revert then rename: names the renamed file"
+# many findings in one file are attributed by a single blame call per file
+{ for i in $(seq 1 40); do printf 'row %s %s/q\n' "$i" "$PERSONAL"; done; } > "$R/src/many.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "many rows"
+OUT="$(rguard "$A..HEAD")"; assert_contains "$OUT" "src/many.txt:40" "many findings: every flagged line of a file is still reported"
+back_to_master
+
+# ── review round 5 extras: env_file is never covered; the range end is parsed whole ──
+reset_stage; git -C "$R" checkout -q -B rv "$BASE"
+printf 'k legacy %s/x\n' "$PERSONAL" > "$R/.env"; git -C "$R" add -A; git -C "$R" commit -q -m "old env"
+git -C "$R" rm -q .env; git -C "$R" commit -q -m "drop env"; A="$(git -C "$R" rev-parse HEAD)"
+git -C "$R" revert --no-edit "$A" >/dev/null 2>&1; add_trailer "$A"
+OUT="$(rguard "$A..HEAD")"; RC=$?
+assert_eq "$RC" "1" "env cover: a legitimate revert that brings a .env file back is still red"
+assert_contains "$OUT" "[env_file]" "env cover: the env_file finding is kept"
+assert_not_contains "$OUT" "[home_path]" "env cover: the covered content line is still allowed"
+back_to_master
+revert_setup; add_trailer "$A"
+git -C "$R" branch -f rel-1.2 rv; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null
+OUT="$(rguard "$A..rel-1.2")"; assert_eq "$?" "0" "range end: a dotted branch name as the end, checkout elsewhere, covers the legitimate revert (green)"
+OUT="$(rguard "$A...rel-1.2")"; assert_eq "$?" "0" "range end: the three-dot form works"
+OUT="$(rguard "$A..nonexistent-1.2")"; assert_eq "$?" "2" "range end: an unknown end ref is an error, not a pass"
+git -C "$R" checkout -q -f rv; OUT="$(rguard "$A..")"; assert_eq "$?" "0" "range end: 'base..' means HEAD"
+back_to_master
+
 finalize_test

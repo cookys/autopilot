@@ -324,6 +324,7 @@ function compareRecords(base, cur, M, declared) {
     if (seenNew.has(id)) throw new InputError(`layout-map sends two baseline objects to ${id}`);
     seenNew.add(id);
     const c = cur.objects[id];
+    if (c && id !== baseId && cur.objects[baseId]) diffs.push(`object still present at its old path ${baseId} although the layout-map moves it to ${id}`);
     if (!c) { diffs.push(`object gone: ${baseId}${id !== baseId ? ` (expected as ${id})` : ''}`); continue; }
     const d = decl.get(id); if (d) used.add(id);
     const turnedGreen = b.status === 'red' && c.status === 'green';
@@ -335,15 +336,19 @@ function compareRecords(base, cur, M, declared) {
       if (d && d.diagnostics !== undefined) { if (canon(d.diagnostics) !== cd) diffs.push(`diagnostics differ from the declared ones: ${id}`); }
       else if (!(turnedGreen && d && d.status === 'green')) diffs.push(`diagnostics changed: ${id}\n    baseline: ${bd}\n    current:  ${cd}`);
     } else if (d && d.diagnostics !== undefined && canon(d.diagnostics) !== cd) diffs.push(`diagnostics differ from the declared ones: ${id}`);
+    let changed = b.status !== c.status || bd !== cd;
     const declFiles = (d && d.files) || {}; const declUsed = new Set();
     const baseMapped = new Map(Object.entries(b.files || {}).map(([f, s]) => [M.mapPath(f), s]));
     for (const f of new Set([...baseMapped.keys(), ...Object.keys(c.files || {})])) {
       const bs = baseMapped.has(f) ? baseMapped.get(f) : undefined; const cs = (c.files || {})[f];
       if (bs === cs) continue;
+      changed = true;
       if (Object.prototype.hasOwnProperty.call(declFiles, f) && (declFiles[f] === (cs === undefined ? null : cs))) { declUsed.add(f); continue; }
       const short = (x) => (x === undefined ? 'absent' : x === null ? 'missing' : x.slice(0, 12));
       diffs.push(`fingerprint changed: ${id} :: ${f} (${short(bs)} -> ${short(cs)})`);
     }
+    for (const f of Object.keys(b.files || {})) if (M.mapPath(f) !== f && (c.files || {})[f]) diffs.push(`moved file still referenced and present at its old path: ${id} :: ${f}`);
+    if (d && !changed) diffs.push(`stale declaration (the object did not change): ${id}`);
     for (const f of Object.keys(declFiles)) if (!declUsed.has(f)) diffs.push(`declared file change did not happen as stated: ${id} :: ${f}`);
   }
   for (const id of Object.keys(cur.objects)) {
@@ -403,8 +408,11 @@ function cmdCheckRewrite(o) {
     const paths = list.entries.map((e) => e.path);
     const baseSha = blobShas(root, m[1], paths);
     const headSha = blobShas(root, m[2], paths.map((p) => M.mapPath(p)));
+    const movedPaths = paths.filter((p) => M.mapPath(p) !== p);
+    const origHead = movedPaths.length ? blobShas(root, m[2], movedPaths) : new Map();
     for (const e of list.entries) {
       const hp = M.mapPath(e.path); const hs = headSha.get(hp);
+      if (hp !== e.path && origHead.get(e.path) !== null) { diffs.push(`${e.path}: still present at ${m[2]} although the layout-map moves it to ${hp} (a copy, not a move)`); continue; }
       if (hs === null) { diffs.push(`${e.path}: absent at ${m[2]}${hp !== e.path ? ` as ${hp}` : ''} (renamed without a layout-map entry, or deleted)`); continue; }
       if (hs !== e.sha256) diffs.push(`${hp}: bytes changed (listed ${e.sha256.slice(0, 12)}, now ${hs.slice(0, 12)}${baseSha.get(e.path) === hs ? '; the listing itself is stale at the base' : '; modified inside the range'})`);
     }
@@ -416,7 +424,9 @@ function cmdCheckRewrite(o) {
     for (const e of list.entries) { protectedSet.set(e.path, e.path); protectedSet.set(M.mapPath(e.path), e.path); }
     for (const line of text.split('\n').map((x) => x.trim()).filter(Boolean)) {
       const norm = path.posix.normalize(line.replace(/^\.\//, ''));
-      if (protectedSet.has(norm)) diffs.push(`${norm}: a rewriter would write a no-rewrite file`);
+      const parts = norm.split('/'); let hit = null;
+      for (let i = 1; i <= parts.length && !hit; i++) { const pre = parts.slice(0, i).join('/'); if (protectedSet.has(pre)) hit = pre; }
+      if (hit) diffs.push(`${norm}: a rewriter would write ${hit === norm ? 'a no-rewrite file' : `through the listed path ${hit}`}`);
     }
   }
   for (const d of diffs) process.stdout.write(`RED ${d}\n`);
@@ -430,7 +440,31 @@ function cmdBuildNoRewrite(o) {
   const base = loadRecord(o.baseline, '--baseline');
   const tracked = trackedFiles(root); const has = new Set(tracked);
   const via = new Map(); // path -> Set(tags)
-  const take = (f, tag) => { if (has.has(f)) { if (!via.has(f)) via.set(f, new Set()); via.get(f).add(tag); } };
+  const links = new Set(cp.execFileSync('git', ['-C', root, 'ls-files', '-s', '-z'], { encoding: 'utf8', maxBuffer: 256 << 20 }).split('\0').filter((l) => l.startsWith('120000 ')).map((l) => l.split('\t')[1]));
+  // a referenced path that runs through tracked symlinks (an ancestor directory or the file itself) is protected as the
+  // symlink blobs plus the file they finally resolve to, following links to links
+  const chainPaths = (f) => {
+    const out = []; let parts = f.split('/'); let cur = ''; let guard = 0;
+    for (let i = 0; i < parts.length; i++) {
+      cur = cur ? `${cur}/${parts[i]}` : parts[i];
+      if (!links.has(cur)) continue;
+      out.push(cur);
+      if (++guard > 40) break;
+      let t; try { t = path.posix.normalize(path.posix.join(path.posix.dirname(cur), fs.readlinkSync(path.join(root, cur)))); } catch { break; }
+      if (t.startsWith('../') || t.startsWith('/')) break;
+      parts = [...t.split('/'), ...parts.slice(i + 1)]; cur = ''; i = -1;
+    }
+    out.push(parts.join('/'));
+    return out;
+  };
+  const take = (f, tag) => {
+    const paths = chainPaths(f);
+    for (const q of paths) {
+      if (!has.has(q)) continue;
+      const t = q === f ? tag : (links.has(q) ? 'symlink-chain' : `symlink-target:${tag}`);
+      if (!via.has(q)) via.set(q, new Set()); via.get(q).add(t);
+    }
+  };
   const under = (dir) => tracked.filter((f) => f.startsWith(dir.endsWith('/') ? dir : `${dir}/`));
   const bn = (f) => path.posix.basename(f);
 
@@ -493,7 +527,6 @@ function cmdBuildNoRewrite(o) {
   exclude('hooks/fixtures/supersession-anchors.json', 'O14', 'P4 rewrites only its "file" field; the protected-region sha256 / bytes stay (checked by check-supersession-anchors.js)');
   const exSet = new Set(excl.map((e) => e.path));
   // check-rewrite compares git blobs: for a tracked symlink the blob is the link text, so hash that, not the target's bytes
-  const links = new Set(cp.execFileSync('git', ['-C', root, 'ls-files', '-s', '-z'], { encoding: 'utf8', maxBuffer: 256 << 20 }).split('\0').filter((l) => l.startsWith('120000 ')).map((l) => l.split('\t')[1]));
   const entryHash = (f) => { if (!links.has(f)) return shaOf(root, f); try { return sha256(Buffer.from(fs.readlinkSync(path.join(root, f)))); } catch { return null; } };
   const entries = [...via.keys()].filter((f) => !exSet.has(f)).sort().map((f) => ({ path: f, sha256: entryHash(f), via: [...via.get(f)].sort() }));
   const missing = entries.filter((e) => e.sha256 === null);

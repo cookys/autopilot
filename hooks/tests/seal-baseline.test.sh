@@ -170,6 +170,61 @@ rcis 1 "--files naming the mapped name of a listed file -> red" node "$SB" check
 printf 'evals/moved/consult-eval-rubric.md\n' > "$T/w-mapped.txt"
 rcis 1 "--files naming the post-move name, with layout-map -> red" node "$SB" check-rewrite --root "$C" --files "$T/w-mapped.txt" --layout-map "$T/rw-map.json"
 
+# ---- round 2: symlink reference chains, copy-not-move, stale declarations, cv1 probes
+node -e '
+const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const s=new Set(j.entries.map(x=>x.path));
+process.exit(["evals/skill-onoff/tasks/g8-flow/repo","evals/skill-onoff/tasks/g8-l4/repo","evals/skill-onoff/tasks/g6-l4/repo/cli.js"].every(p=>s.has(p))?0:1)' "$NR" && ok || bad "the g8 repo symlinks and their resolved target are listed"
+LINK=evals/skill-onoff/tasks/g8-flow/repo
+rm "$C/$LINK"; ln -s ../stage-graph-s-feature/repo "$C/$LINK"; G add -A; G commit -qm "redirect"
+rcis 1 "g8-flow/repo symlink redirected to a different directory -> check-rewrite --range red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD"
+has "names the symlink" "$LINK: bytes changed"
+printf '%s\n' "$LINK" > "$T/w-link.txt"
+rcis 1 "--files naming the symlink -> red" node "$SB" check-rewrite --root "$C" --files "$T/w-link.txt"
+printf '%s/cli.js\n' "$LINK" > "$T/w-thru.txt"
+rcis 1 "--files naming a file reached through the symlink -> red" node "$SB" check-rewrite --root "$C" --files "$T/w-thru.txt"
+G reset -q --hard "$BASE"
+rcis 0 "symlink restored -> green" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD"
+
+# copy, not move: the original stays (edited), the destination holds the original bytes
+mkdir -p "$C/evals/moved"; cp "$C/$TARGET" "$C/evals/moved/consult-eval-rubric.md"; printf 'x' >> "$C/$TARGET"; G add -A; G commit -qm "copy"
+rcis 1 "copy instead of move (original edited, destination = original bytes) with layout-map -> check-rewrite red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/rw-map.json"
+has "says it is a copy" "a copy, not a move"
+G reset -q --hard "$BASE"
+# the same copy where the original is left untouched is still not a move
+mkdir -p "$C/evals/moved"; cp "$C/$TARGET" "$C/evals/moved/consult-eval-rubric.md"; G add -A; G commit -qm "copy2"
+rcis 1 "pure copy (original untouched) with layout-map -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/rw-map.json"
+G reset -q --hard "$BASE"
+
+# compare: copy of a green object to a mapped place while the original stays
+mkdir -p "$C/evidence/copied"; cp "$C/$GREEN" "$C/evidence/copied/platform-capabilities.json"; printf ' ' >> "$C/$GREEN"; G add -A
+rec "$T/cur.json"
+printf '{"%s":"evidence/copied/platform-capabilities.json"}\n' "$GREEN" > "$T/map2.json"
+rcis 1 "compare: object copied, original still present, with layout-map -> red" cmpr --layout-map "$T/map2.json"
+has "reports the old path" "still present at its old path"
+reset
+
+# stale declaration: states only a status, the object did not change
+rec "$T/cur.json"
+printf '[{"object":"%s","reason":"stale","status":"red"}]\n' "$RED" > "$T/decl-stale2.json"
+rcis 1 "compare: status-only declaration for an unchanged object -> red" cmpr --declared-changes "$T/decl-stale2.json"
+has "lists the stale declaration" "stale declaration"
+rcis 0 "compare: no declaration for the same unchanged state -> green" cmpr
+
+# cv1 probes (wrong map, delete, same-bytes symlink, declaration for another object)
+P=docs/plans/2026-08-04-platform-capability-trigger-activation.md
+printf '{"%s":"README.md"}\n' "$P" > "$T/map-wrong.json"
+rcis 1 "probe: layout-map onto a different existing file -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/map-wrong.json"
+G rm -q "$P"; G commit -qm delete
+rcis 1 "probe: protected plan deleted -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD"
+G reset -q --hard "$BASE"
+cp "$C/$P" "$T/same-bytes"; rm "$C/$P"; ln -s "$T/same-bytes" "$C/$P"; G add "$P"; G commit -qm symlink
+rcis 1 "probe: protected plan replaced by a symlink to identical bytes -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD"
+G reset -q --hard "$BASE"
+printf 'x' >> "$C/evals/skill-onoff/run-g67-campaign.js"; rec "$T/cur.json"
+printf '[{"object":"%s","reason":"other object"}]\n' "$RED" > "$T/decl-other.json"
+rcis 1 "probe: change declared for another object -> red" cmpr --declared-changes "$T/decl-other.json"
+reset
+
 # ---- input errors
 rcis 2 "no subcommand" node "$SB"
 rcis 2 "compare without --baseline" node "$SB" compare --current "$T/cur.json"

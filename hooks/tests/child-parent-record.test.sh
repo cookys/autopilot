@@ -179,11 +179,11 @@ check_pass() {
   fi
 }
 
-run_claude_rail author-native "$AUTHOR" --runner claude-native --model claude-haiku --prompt-file "$PROMPT" --bin "$BINDIR/claude" --timeout 60s
+run_claude_rail author-native "$AUTHOR" --runner claude-native --model haiku --prompt-file "$PROMPT" --bin "$BINDIR/claude" --timeout 60s
 check_pass "(e) author claude-native" "$E_RUNS" "$E_MD" "$E_DUMP"
 run_claude_rail author-ccshim "$AUTHOR" --runner cc-shim --model MiniMax-M3 --prompt-file "$PROMPT" --bin "$BINDIR/claude" --timeout 60s
 check_pass "(e) author cc-shim" "$E_RUNS" "$E_MD" "$E_DUMP"
-run_claude_rail review-native "$REVIEW" --runner claude-native --model claude-haiku --diff-file "$DIFF" --bin "$BINDIR/claude"
+run_claude_rail review-native "$REVIEW" --runner claude-native --model haiku --diff-file "$DIFF" --bin "$BINDIR/claude"
 check_pass "(e) review claude-native" "$E_RUNS" "$E_MD" "$E_DUMP"
 run_claude_rail review-ccshim "$REVIEW" --runner cc-shim --model MiniMax-M3 --endpoint TESTEP --diff-file "$DIFF" --bin "$BINDIR/claude"
 check_pass "(e) review cc-shim" "$E_RUNS" "$E_MD" "$E_DUMP"

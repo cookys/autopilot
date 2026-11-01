@@ -56,7 +56,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
 - independent_harness: on
-- qc_panel: gpt-6.1-sol, claude-opus, gemini-flash
+- qc_panel: gpt-6.1-sol, claude-opus-5-5, gemini-flash
 - qc_panel_runners: codex, claude-native, agy
 - qc_panel_efforts: low, high, high
 - qc_panel_endpoints: @none, @none, @none

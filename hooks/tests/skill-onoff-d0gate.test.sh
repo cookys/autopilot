@@ -292,7 +292,7 @@ const rules = c.putRules("g1-good.json");
 const r3 = c.std(["--gate-rules", rules], { worker: "no-such-mode" });
 if (r3.rc === 0) throw new Error("bad worker mode did not exit non-zero");
 if (sw().length) throw new Error("switch file left after an early exit: " + sw());
-const k = c.sh("timeout -s TERM 3 bash scripts/dispatch-hetero.sh --runner claude-native --model m --prompt-file " + c.prompt + " --gate-rules " + rules, { worker: "clean-g1", hookCmd: "sleep 6" });
+const k = c.sh("timeout -s TERM 3 bash scripts/dispatch-hetero.sh --runner claude-native --model opus --prompt-file " + c.prompt + " --gate-rules " + rules, { worker: "clean-g1", hookCmd: "sleep 6" });
 for (let i = 0; i < 40 && sw().length; i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
 if (sw().length) throw new Error("switch file left after TERM: " + sw());
 console.log("GREEN disarm on early exit and on TERM (rc " + k.rc + ")");

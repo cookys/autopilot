@@ -85,12 +85,12 @@ DEF_PLAN_GROWTH_STOP_RATIO="1.50"
 DEF_HARNESS="on"
 # Terminal depth-0 qc panel (v2.25.9): a DISJOINT-FAMILY panel, not a single reviewer.
 # Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
-DEF_QC_PANEL="gpt-6.1-sol, claude-opus, gemini-flash"
+DEF_QC_PANEL="gpt-6.1-sol, claude-opus-5-5, gemini-flash"
 DEF_QC_PANEL_RUNNERS="codex, claude-native, agy"
 DEF_QC_PANEL_EFFORTS="low, high, high"
 DEF_QC_PANEL_ENDPOINTS="@none, @none, @none"
 # Engines with recorded reviewer calibration/spike evidence (qc_panel: all-calibrated roster)
-QC_ALL_CALIBRATED="gpt-6.1-sol, claude-opus, gemini-flash, grok-4.7, MiniMax-M3"
+QC_ALL_CALIBRATED="gpt-6.1-sol, claude-opus-5-5, gemini-flash, grok-4.7, MiniMax-M3"
 DEF_QC_AGG="union-on-verified-critical"
 DEF_IN_RAIL_REVIEW="auto"
 DEF_PROVIDER_READINESS_RECEIPT_TTL_SECONDS="300"

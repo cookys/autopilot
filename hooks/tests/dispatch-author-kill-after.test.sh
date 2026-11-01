@@ -44,7 +44,7 @@ run_hang() {
   start=$(date +%s)
   set +e
   out="$(timeout -k 2 20s env DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_AUTHOR_KILL_GRACE_SECS=2 \
-    "$SCRIPT" --runner "$runner" --model gpt-test --prompt-file "$PROMPT" --bin "$bin" --timeout 2s 2>&1)"
+    "$SCRIPT" --runner "$runner" --model "${RUN_HANG_MODEL:-gpt-test}" --prompt-file "$PROMPT" --bin "$bin" --timeout 2s 2>&1)"
   exit_code=$?
   set -e
   elapsed=$(( $(date +%s) - start ))
@@ -134,7 +134,7 @@ exec sleep $CLAUDE_SLEEP_SECS
 EOF
 chmod +x "$STUB_CLAUDE_HANG"
 
-CLAUDE_HANG_RAW="$(run_hang claude-native "$STUB_CLAUDE_HANG")"
+CLAUDE_HANG_RAW="$(RUN_HANG_MODEL=haiku run_hang claude-native "$STUB_CLAUDE_HANG")"
 CLAUDE_HANG_ELAPSED="$(printf '%s\n' "$CLAUDE_HANG_RAW" | sed -n '1p')"
 CLAUDE_HANG_EXIT="$(printf '%s\n' "$CLAUDE_HANG_RAW" | sed -n '2p')"
 CLAUDE_HANG_OUT="$(printf '%s\n' "$CLAUDE_HANG_RAW" | sed -n '3,$p')"
@@ -163,7 +163,7 @@ chmod +x "$STUB_CLAUDE_OK"
 
 CLAUDE_OK_START=$(date +%s)
 CLAUDE_OK_OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_AUTHOR_KILL_GRACE_SECS=2 \
-  "$SCRIPT" --runner claude-native --model gpt-test --prompt-file "$PROMPT" --bin "$STUB_CLAUDE_OK" --timeout 2s 2>&1)"
+  "$SCRIPT" --runner claude-native --model haiku --prompt-file "$PROMPT" --bin "$STUB_CLAUDE_OK" --timeout 2s 2>&1)"
 CLAUDE_OK_EXIT=$?
 CLAUDE_OK_ELAPSED=$(( $(date +%s) - CLAUDE_OK_START ))
 assert_eq "0" "$CLAUDE_OK_EXIT" "normal claude-native stub exits 0"
@@ -182,7 +182,7 @@ chmod +x "$STUB_CLAUDE_KILL"
 
 set +e
 CLAUDE_KILL_OUT="$(DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_AUTHOR_KILL_GRACE_SECS=2 \
-  "$SCRIPT" --runner claude-native --model gpt-test --prompt-file "$PROMPT" --bin "$STUB_CLAUDE_KILL" --timeout 30s 2>&1)"
+  "$SCRIPT" --runner claude-native --model haiku --prompt-file "$PROMPT" --bin "$STUB_CLAUDE_KILL" --timeout 30s 2>&1)"
 CLAUDE_KILL_EXIT=$?
 set -e
 assert_neq "0" "$CLAUDE_KILL_EXIT" "claude-native early self-SIGKILL dispatch exit is non-zero (exit=${CLAUDE_KILL_EXIT})"

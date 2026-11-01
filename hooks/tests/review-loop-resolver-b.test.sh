@@ -448,6 +448,7 @@ assert_r47_hetero_review_loop_j() {
   cp "$REPO_ROOT/scripts/lib/exclude-allowlist.js" "$DRIVER_DIR/lib/"
   cp "$REPO_ROOT/scripts/lib/review-packets.js" "$DRIVER_DIR/lib/"
   cp "$REPO_ROOT/scripts/lib/stage-write.js" "$DRIVER_DIR/lib/"
+  cp "$REPO_ROOT/scripts/lib/seat-model-id.js" "$DRIVER_DIR/lib/"
   cp "$REPO_ROOT/scripts/check-redispatch-prompt.sh" "$DRIVER_DIR/check-redispatch-prompt.sh"
   chmod +x "$DRIVER_DIR/check-redispatch-prompt.sh"
 

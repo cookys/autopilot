@@ -69,11 +69,11 @@ check() {
   eq "$role" "$(dv "$d" FLEET_ROLE)" "$label: FLEET_ROLE == $role"
 }
 
-run_rail author-native X_UNUSED=1 "$AUTHOR" --runner claude-native --model claude-haiku --prompt-file "$PROMPT" --bin "$BINDIR/claude" --timeout 60s
+run_rail author-native X_UNUSED=1 "$AUTHOR" --runner claude-native --model haiku --prompt-file "$PROMPT" --bin "$BINDIR/claude" --timeout 60s
 check "author claude-native" hand "$E_DUMP"
 run_rail author-ccshim X_UNUSED=1 "$AUTHOR" --runner cc-shim --model MiniMax-M3 --prompt-file "$PROMPT" --bin "$BINDIR/claude" --timeout 60s
 check "author cc-shim" hand "$E_DUMP"
-run_rail review-native X_UNUSED=1 "$REVIEW" --runner claude-native --model claude-haiku --diff-file "$DIFF" --bin "$BINDIR/claude"
+run_rail review-native X_UNUSED=1 "$REVIEW" --runner claude-native --model haiku --diff-file "$DIFF" --bin "$BINDIR/claude"
 check "review claude-native" review-seat "$E_DUMP"
 run_rail review-ccshim X_UNUSED=1 "$REVIEW" --runner cc-shim --model MiniMax-M3 --endpoint TESTEP --diff-file "$DIFF" --bin "$BINDIR/claude"
 check "review cc-shim" review-seat "$E_DUMP"
@@ -162,10 +162,10 @@ mkdir -p "$TEST_TMP/slash-tmp"
 assert_contains "$(cat "$d.cargv" 2>/dev/null)" "--strict-mcp-config" "run-skill-opt: trailing-slash TMPDIR still reaches the real claude (no self-exec)"
 
 # an inherited durable lifetime never survives: a child is never promoted to durable
-run_rail review-durable FLEET_LIFETIME=durable "$REVIEW" --runner claude-native --model claude-haiku --diff-file "$DIFF" --bin "$BINDIR/claude"
+run_rail review-durable FLEET_LIFETIME=durable "$REVIEW" --runner claude-native --model haiku --diff-file "$DIFF" --bin "$BINDIR/claude"
 check "review with inherited FLEET_LIFETIME=durable" review-seat "$E_DUMP"
 # an inherited FLEET_PARENT (a fleet address) wins over the CC session id
-run_rail review-parent FLEET_PARENT=ns/courier/member "$REVIEW" --runner claude-native --model claude-haiku --diff-file "$DIFF" --bin "$BINDIR/claude"
+run_rail review-parent FLEET_PARENT=ns/courier/member "$REVIEW" --runner claude-native --model haiku --diff-file "$DIFF" --bin "$BINDIR/claude"
 eq "ns/courier/member" "$(dv "$E_DUMP" FLEET_PARENT)" "inherited FLEET_PARENT is kept"
 
 # the mint function itself: role argument, default role, idempotence

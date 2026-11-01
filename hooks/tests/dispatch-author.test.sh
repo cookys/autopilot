@@ -827,27 +827,27 @@ assert_eq "$(normalize_argv < "$AUTHOR_CC_ARGV" | sed -E 's#^\{"hooks":.*#SETTIN
 for _au_runner in cc-shim claude-native; do
   rm -f "$AUTHOR_CC_ARGV"
   OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
-    DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model mini --prompt-file "$PROMPT" \
+    DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model haiku --prompt-file "$PROMPT" \
     --bin "$TEST_TMP/author-cc-argv" 2>&1)"; EXIT=$?
   assert_eq "0" "$EXIT" "author $_au_runner without --effort exit 0"
   assert_not_contains "$(cat "$AUTHOR_CC_ARGV")" "--effort" "author $_au_runner without --effort sends no --effort"
   for _au_eff in low medium high xhigh max; do
     rm -f "$AUTHOR_CC_ARGV"
     OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
-      DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model mini --prompt-file "$PROMPT" \
+      DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model haiku --prompt-file "$PROMPT" \
       --bin "$TEST_TMP/author-cc-argv" --effort "$_au_eff" 2>&1)"; EXIT=$?
     assert_eq "0" "$EXIT" "author $_au_runner --effort $_au_eff exit 0"
     assert_contains "$(tr '\n' ' ' < "$AUTHOR_CC_ARGV")" "--effort $_au_eff " "author $_au_runner forwards --effort $_au_eff to claude"
   done
   rm -f "$AUTHOR_CC_ARGV"
   OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
-    DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model mini --prompt-file "$PROMPT" \
+    DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model haiku --prompt-file "$PROMPT" \
     --bin "$TEST_TMP/author-cc-argv" --effort default 2>&1)"; EXIT=$?
   assert_eq "0" "$EXIT" "author $_au_runner --effort default exit 0"
   assert_not_contains "$(cat "$AUTHOR_CC_ARGV")" "--effort" "author $_au_runner --effort default sends no --effort"
   rm -f "$AUTHOR_CC_ARGV"
   OUT="$(env ANTHROPIC_BASE_URL="http://127.0.0.1:9/v1" ANTHROPIC_AUTH_TOKEN="t" AUTOPILOT_SETTLE_MS=0 \
-    DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model mini --prompt-file "$PROMPT" \
+    DISPATCH_QUIET=1 "$SCRIPT" --runner "$_au_runner" --model haiku --prompt-file "$PROMPT" \
     --bin "$TEST_TMP/author-cc-argv" --effort ultra 2>&1)"; EXIT=$?
   assert_eq "2" "$EXIT" "author $_au_runner invalid --effort ultra exits 2"
   assert_contains "$OUT" "precondition_failed" "author $_au_runner invalid effort is a precondition failure"

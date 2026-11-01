@@ -1937,6 +1937,10 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # cc-shim's explicit bearer token, there is no HOME-independent credential to pass instead).
   # BL-0290: the child gets CLAUDE_CONFIG_DIR = a seeded 0700 dir holding ONLY a copy of
   # .credentials.json (never the real config dir, which a child can reset); removed on every exit path.
+  # BL-0364: `claude --model` rejects a bare family name (claude-opus -> unrecognized_model); refuse it
+  # here, before the credentials seed and before claude is ever started.
+  _CNATIVE_MODEL_ERR="$(node "$_REVIEW_SELF_DIR/lib/seat-model-id.js" check "$MODEL" 2>&1)" \
+    || die_precondition "claude-native refused: $_CNATIVE_MODEL_ERR"
   CNATIVE_CFG="$(node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")" \
     || die_precondition "claude-native refused: could not seed a credentials-only config dir (source .credentials.json missing/unreadable); the child is never given the real claude config dir"
   CNATIVE_CWD="$(mktemp -d -t dispatch-review-cnativecwd-XXXXXX)"

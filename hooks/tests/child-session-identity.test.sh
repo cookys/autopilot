@@ -78,9 +78,9 @@ check_case() { # <name> <runs> <log> <parent-or-empty>
 PARENT="aaaaaaaa-1111-2222-3333-444444444444"
 CWD_ID="$(cd "$SBX" && node -e 'process.stdout.write(process.cwd().replace(/[^a-zA-Z0-9_-]/g,"_").slice(0,64))')"
 declare -A CMDS
-CMDS[author-native]="$AUTHOR --runner claude-native --model claude-haiku --prompt-file $PROMPT --bin $BINDIR/claude"
+CMDS[author-native]="$AUTHOR --runner claude-native --model haiku --prompt-file $PROMPT --bin $BINDIR/claude"
 CMDS[author-ccshim]="$AUTHOR --runner cc-shim --model MiniMax-M3 --prompt-file $PROMPT --bin $BINDIR/claude"
-CMDS[review-native]="$REVIEW --runner claude-native --model claude-haiku --diff-file $DIFF --bin $BINDIR/claude"
+CMDS[review-native]="$REVIEW --runner claude-native --model haiku --diff-file $DIFF --bin $BINDIR/claude"
 CMDS[review-ccshim]="$REVIEW --runner cc-shim --model MiniMax-M3 --endpoint TESTEP --diff-file $DIFF --bin $BINDIR/claude"
 CMDS[hetero-ccshim]="$HETERO --runner cc-shim --model MiniMax-M3 --effort high --branch feat/csid-BRX --prompt-file $PROMPT"
 

@@ -1407,6 +1407,10 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # First-party Claude authoring transport. It keeps ambient native auth but
   # otherwise uses the same scratch-cwd/no-tools posture as the reviewer rail.
   # BL-0290: seeded 0700 dir holding ONLY a copy of .credentials.json; never the real config dir.
+  # BL-0364: `claude --model` rejects a bare family name (claude-opus -> unrecognized_model); refuse it
+  # here, before the credentials seed and before claude is ever started.
+  _CNATIVE_MODEL_ERR="$(node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seat-model-id.js" check "$MODEL" 2>&1)" \
+    || die_precondition "claude-native refused: $_CNATIVE_MODEL_ERR"
   CNATIVE_CFG="$(node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")" \
     || die_precondition "claude-native refused: could not seed a credentials-only config dir (source .credentials.json missing/unreadable); the child is never given the real claude config dir"
   CNATIVE_CWD="$(mktemp -d)"

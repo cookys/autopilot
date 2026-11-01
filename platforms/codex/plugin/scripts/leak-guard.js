@@ -190,8 +190,13 @@ function resolveCommit(root, ref) {
 }
 
 function rangeHead(root, range) {
-  const m = range.match(/\.{2,3}([^.]*)$/);
-  return resolveCommit(root, m && m[1] ? m[1] : 'HEAD');
+  // split at the three-dot form first, then the two-dot form; the right side is the whole ref (it may contain dots)
+  let i = range.indexOf('...');
+  let n = 3;
+  if (i < 0) { i = range.indexOf('..'); n = 2; }
+  if (i < 0) return ''; // no right side we can name: fail closed (no allowance)
+  const right = range.slice(i + n);
+  return resolveCommit(root, right || 'HEAD'); // 'base..' means HEAD, as in git; unresolvable -> '' -> fail closed
 }
 
 /**
@@ -306,7 +311,8 @@ function applyRevertAllowance(root, o, findings, texts) {
     own.set(k, own.get(k) - 1);
     covered.add(lk);
   }
-  return findings.filter((f) => !covered.has(`${f.file}\0${f.line}`));
+  // only content findings can be covered; env_file (and any non-content category) always stays
+  return findings.filter((f) => f.category === 'env_file' || !covered.has(`${f.file}\0${f.line}`));
 }
 
 function shq(s) {

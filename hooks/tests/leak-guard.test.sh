@@ -494,4 +494,22 @@ assert_contains "$OUT" "src/big3.txt:9" "revert then rename: names the renamed f
 OUT="$(rguard "$A..HEAD")"; assert_contains "$OUT" "src/many.txt:40" "many findings: every flagged line of a file is still reported"
 back_to_master
 
+# ── review round 5 extras: env_file is never covered; the range end is parsed whole ──
+reset_stage; git -C "$R" checkout -q -B rv "$BASE"
+printf 'k legacy %s/x\n' "$PERSONAL" > "$R/.env"; git -C "$R" add -A; git -C "$R" commit -q -m "old env"
+git -C "$R" rm -q .env; git -C "$R" commit -q -m "drop env"; A="$(git -C "$R" rev-parse HEAD)"
+git -C "$R" revert --no-edit "$A" >/dev/null 2>&1; add_trailer "$A"
+OUT="$(rguard "$A..HEAD")"; RC=$?
+assert_eq "$RC" "1" "env cover: a legitimate revert that brings a .env file back is still red"
+assert_contains "$OUT" "[env_file]" "env cover: the env_file finding is kept"
+assert_not_contains "$OUT" "[home_path]" "env cover: the covered content line is still allowed"
+back_to_master
+revert_setup; add_trailer "$A"
+git -C "$R" branch -f rel-1.2 rv; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null
+OUT="$(rguard "$A..rel-1.2")"; assert_eq "$?" "0" "range end: a dotted branch name as the end, checkout elsewhere, covers the legitimate revert (green)"
+OUT="$(rguard "$A...rel-1.2")"; assert_eq "$?" "0" "range end: the three-dot form works"
+OUT="$(rguard "$A..nonexistent-1.2")"; assert_eq "$?" "2" "range end: an unknown end ref is an error, not a pass"
+git -C "$R" checkout -q -f rv; OUT="$(rguard "$A..")"; assert_eq "$?" "0" "range end: 'base..' means HEAD"
+back_to_master
+
 finalize_test

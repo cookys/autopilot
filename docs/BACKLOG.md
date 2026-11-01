@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0359 -->
+<!-- next-id: BL-0360 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1685,37 +1685,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/backlog/top-level-leftovers-relayout.md
 - **Context**: Readers and risks per item are in the sidecar.
 
-### suite-baseline run-all 只能逐支串行，全套要約 9 小時（效率，插隊）
-- **Id**: BL-0353
-- **Status**: open
-- **Since**: 2026-10-31
-- **Origin**: self
-- **Problem**: 全套基準工具一次只跑一支套件；在 19e2511fa 上跑了 2.5 小時只完成 727 支裡的 201 支，推估全部約 9 小時。
-- **Impact**: 搬家計畫每個階段都要比對全套基準，每階段合併被拖住大半天；推送前檢查只好放寬成只跑受影響套件。
-- **Trigger**: before relayout P1 starts (must land first)
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: depth-0 observation 2026-10-31 on 19e2511fa; priority high, efficiency work jumps the queue (owner rule)
-- **Pointer**: docs/backlog/suite-baseline-run-all-parallel.md
-- **Context**: Fix direction and equivalence check in the sidecar. Add a negative control: a suite listed as serial must never overlap another.
-
-### 審查席走 anthropic 相容 runner 時，資格考與日常審查的 effort 不一致
-- **Id**: BL-0354
-- **Status**: open
-- **Since**: 2026-10-31
-- **Origin**: peer
-- **Reporter**: peace
-- **Report**: 01M68NQPQT7HPEH2RASE0FRB7B
-- **Reply**: 2026-10-31 01M68NRJW96J2C0S63KV08ZH8Y
-- **Problem**: 資格考會把推理強度送給模型，日常審查派工卻完全不送，所以席位在高強度下考資格，審查時卻用端點的預設強度。
-- **Impact**: 只影響 runner 為 anthropic 相容的席位，資格紀錄和實際審查不在同一個分區；走 cc-shim 的席位不受影響。
-- **Trigger**: after the current 3.0.0 relayout round, or next edit to the anthropic-compatible branch of scripts/dispatch-review.sh
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: PEER-REPORTED peace 2026-10-31 (fleet message)
-- **Pointer**: docs/backlog/anthropic-compatible-review-effort-gap.md
-- **Context**: Fix direction, negative control and the 41/42 re-run note are in the sidecar. Official default stays unchanged.
-
 ### live band 後續四件：窄寬度溢出、重複 slot 按鈕、待決入口、R2 偶發紅
 - **Id**: BL-0355
 - **Status**: open
@@ -1777,3 +1746,20 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED codeforge 2026-11-01; owner chose autopilot-drawn tab on card d-d99e2d99
 - **Pointer**: docs/backlog/band-fleet-tab.md
 - **Context**: No approve button on the tab (human-only tty gate); research how a mod reads fleet state first.
+
+### 速度量測與顯示從 forge-stats 移交給 live mod（分頁 ϟ 標籤、速度欄、最近請求表）
+- **Id**: BL-0359
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: peer
+- **Reporter**: codeforge
+- **Report**: 01M6A95050YK4D480QJXK54QDW
+- **Reply**: 2026-11-01 01M6A95N5HQ26507XPERC9JFVJ
+- **Problem**: owner 在 codeforge 的卡片 d-7b0f7a4a 選 A：速度整包改由 autopilot 量測並繪製，含分頁列的 ϟ 標籤、速度欄（平均、最佳、最新、首字、走勢）與最近請求表。forge-stats 之後只畫 Ferris、寵物、記憶與大腦。
+- **Impact**: 移交前 live mod 仍讀 codeforge 的 keyed Box；我們上線並把 sha 告訴 codeforge 後，他們才移除自己的速度程式，中間沒有空窗。
+- **Trigger**: after 3.0.0-alpha.7 ships (the mods path moves during the relayout, same reason as BL-0358)
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PEER-REPORTED codeforge 2026-11-01 (fleet message), owner card d-7b0f7a4a
+- **Pointer**: docs/backlog/live-speed-handover-from-forge-stats.md
+- **Context**: Algorithm, handover order and the pet-label question are in the sidecar. Show the owner a screenshot before any UI change; reply to codeforge with the sha once live.

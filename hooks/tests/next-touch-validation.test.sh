@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 . "$(dirname "$0")/lib.sh"
 
+# The Mission files and plan this suite validates sit where the live layout registry says (docs/ at bootstrap, project/ from P1).
+# The node blocks below read them from the environment rather than naming a directory.
+NTV_PROJECT=2026-08-03-next-touch-debt-retirement
+export NTV_PLAN="$(layout_path plans_dir)/$NTV_PROJECT.md"
+export NTV_RUBRIC="$(layout_path plans_dir)/$NTV_PROJECT.rubric.md"
+export NTV_ARCH_AUTH="$(node -e 'const fs=require("fs"),path=require("path");const root=process.argv[1];console.log(require(path.join(root,"scripts/next-touch-validation.js")).archiveAuthorizationRel((r)=>fs.existsSync(path.join(root,r))))' "$REPO_ROOT")"
+# the sealed historical value that bundles carry: it stays as recorded, whatever the live layout is
+export NTV_HIST_DIR="$(layout_path docs_dir)/projects/_archive/$NTV_PROJECT"
+# the graph node's spec is read at the frozen admission base, which predates any relayout: the backlog is in docs/ there
+export NTV_BACKLOG="$(layout_path docs_dir)/BACKLOG.md"
+
 # The Mission artifacts this suite validates against are not versioned — they
 # were the residue of one real run on one machine, so a clean clone had nothing
 # to read and the suite crashed on ENOENT. Build the equivalent once here and
@@ -69,7 +80,7 @@ export NTV_DEVELOP_SHA
 MISSION_COMMON="$(git -C "$NTV_FIXTURE_REPO" rev-parse --git-common-dir)"
 case "$MISSION_COMMON" in /*) ;; *) MISSION_COMMON="$NTV_FIXTURE_REPO/$MISSION_COMMON" ;; esac
 MISSION_LEDGER="$MISSION_COMMON/autopilot/implementation-campaign.jsonl"
-ARCHIVE_AUTH="$NTV_FIXTURE_REPO/docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json"
+ARCHIVE_AUTH="$NTV_FIXTURE_REPO/$NTV_ARCH_AUTH"
 expect_failure "reservation authorization path escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$TEST_TMP/auth.json" --ledger "$MISSION_LEDGER" --pre-spend
 ln -s "$ARCHIVE_AUTH" "$TEST_TMP/auth-link.json"
 expect_failure "reservation authorization symlink escape" AUTHORITY_PATH_ESCAPE node "$REPO_ROOT/scripts/validate-next-touch-reservation.js" --repo "$NTV_FIXTURE_REPO" --authorization "$TEST_TMP/auth-link.json" --ledger "$MISSION_LEDGER" --pre-spend
@@ -85,7 +96,7 @@ const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'next-touch-auth-path-'));
 const repo = path.join(parent, 'repo');
 execFileSync('git', ['init', '-q', repo]);
-const auth = path.join(repo, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json');
+const auth = path.join(repo, process.env.NTV_ARCH_AUTH);
 fs.mkdirSync(path.dirname(auth), { recursive: true });
 const external = path.join(parent, 'external-auth.json');
 fs.writeFileSync(external, '{}\n');
@@ -211,7 +222,7 @@ const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const source = validation.sourceDigests(root);
 const historical = validation.loadRepoAndAuthority({
   repo: root,
-  authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+  authorization: path.join(root, process.env.NTV_ARCH_AUTH),
 }).authorization;
 const common = repoInfo.common;
 const directory = fs.mkdtempSync(path.join(validation.canonicalAuthorityRoot(repoInfo), 'g8b-validation-'));
@@ -219,7 +230,7 @@ const bundlePath = path.join(directory, 'terminal.json');
 const g8bPath = path.join(directory, 'g8b.json');
 const develop = process.env.NTV_DEVELOP_SHA;
 const archiveAuth = JSON.parse(fs.readFileSync(
-  path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+  path.join(root, process.env.NTV_ARCH_AUTH),
   'utf8',
 ));
 const roster = {
@@ -243,8 +254,8 @@ const makeBody = (overrides = {}) => ({
   mission_policy_digest: '3'.repeat(64),
   mission_graph_digest: '4'.repeat(64),
   policy_hash: '5'.repeat(64),
-  source_plan_path: 'docs/plans/2026-08-03-next-touch-debt-retirement.md',
-  source_rubric_path: 'docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md',
+  source_plan_path: process.env.NTV_PLAN,
+  source_rubric_path: process.env.NTV_RUBRIC,
   source_plan_sha256: source.planSha,
   source_rubric_sha256: source.rubricSha,
   admission_base_sha: validation.ADMISSION_BASE_SHA,
@@ -261,9 +272,9 @@ const makeBody = (overrides = {}) => ({
   d8_publication_sha: validation.D8_PUBLICATION_SHA,
   d8_report_path: '.autopilot/evidence/grok-implementer-ab.json',
   d8_report_sha256: '804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b',
-  archive_plan_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.md',
-  archive_rubric_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.rubric.md',
-  historical_archive_authorization_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json',
+  archive_plan_path: `${process.env.NTV_HIST_DIR}/2026-08-03-next-touch-debt-retirement.md`,
+  archive_rubric_path: `${process.env.NTV_HIST_DIR}/2026-08-03-next-touch-debt-retirement.rubric.md`,
+  historical_archive_authorization_path: `${process.env.NTV_HIST_DIR}/evidence/authorization.json`,
   historical_archive_authorization_sha256: '3266fb2c98133e788e23eec3e261a902c40529e0363ece2b12e01c9e31a338ba',
   historical_archive_authorization_digest: validation.canonicalDigest(archiveAuth),
   task_authority_ref: { path: 'task-authority.json', task_authority_id: '2'.repeat(64) },
@@ -369,7 +380,7 @@ const plan = run(makeBody({ source_plan_sha256: 'f'.repeat(64) }));
 if (!plan || plan.code !== 'G8B_BINDING_MISMATCH') throw new Error('cross-plan G8b receipt was accepted');
 const d8 = run(makeBody({ d8_report_sha256: 'f'.repeat(64) }));
 if (!d8 || d8.code !== 'G8B_BINDING_MISMATCH') throw new Error('cross-D8 G8b receipt was accepted');
-const cliBypass = run(makeBody(), { authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') });
+const cliBypass = run(makeBody(), { authorization: path.join(root, process.env.NTV_ARCH_AUTH) });
 if (!cliBypass || cliBypass.code !== 'G8B_CLI_BYPASS_REJECTED') throw new Error('CLI authority bypass was accepted');
 fs.rmSync(directory, { recursive: true, force: true });
 console.log('G8b authority missing/tamper/lineage/cross-binding/CLI negatives passed');
@@ -392,7 +403,7 @@ const composition = require(path.join(root, 'src/engine/campaign-composition'));
 const source = validation.sourceDigests(root);
 const historical = validation.loadRepoAndAuthority({
   repo: root,
-  authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+  authorization: path.join(root, process.env.NTV_ARCH_AUTH),
 }).authorization;
 const rootInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const authorityEnvelopePath = path.join(
@@ -438,13 +449,13 @@ try {
       },
       campaign: {
         profile: 'poc',
-        allowed_path_prefixes: ['docs/'],
+        allowed_path_prefixes: [`${require('path').posix.dirname(process.env.NTV_BACKLOG)}/`],
         spec: {
-          path: 'docs/BACKLOG.md',
+          path: process.env.NTV_BACKLOG,
           section: 'Mission authority store 與 cross-harness enforcement hardening',
         },
-        required_paths: ['docs/BACKLOG.md'],
-        output_paths: ['docs/BACKLOG.md'],
+        required_paths: [process.env.NTV_BACKLOG],
+        output_paths: [process.env.NTV_BACKLOG],
         max_changed_files: 1,
         baseline_churn: 10,
         max_growth_ratio: 1.5,
@@ -652,8 +663,8 @@ try {
     mission_policy_digest: taskAuthority.mission_policy_digest,
     mission_graph_digest: graphDigest,
     policy_hash: taskAuthority.policy_hash,
-    source_plan_path: validation.PLAN_PATH || 'docs/plans/2026-08-03-next-touch-debt-retirement.md',
-    source_rubric_path: validation.RUBRIC_PATH || 'docs/plans/2026-08-03-next-touch-debt-retirement.rubric.md',
+    source_plan_path: validation.PLAN_PATH || process.env.NTV_PLAN,
+    source_rubric_path: validation.RUBRIC_PATH || process.env.NTV_RUBRIC,
     source_plan_sha256: source.planSha,
     source_rubric_sha256: source.rubricSha,
     admission_base_sha: validation.ADMISSION_BASE_SHA,
@@ -670,9 +681,9 @@ try {
     d8_publication_sha: validation.D8_PUBLICATION_SHA,
     d8_report_path: '.autopilot/evidence/grok-implementer-ab.json',
     d8_report_sha256: '804706b6fe50994abfc332190342dba0c49dad1b1f06c166ac69547461728c6b',
-    archive_plan_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.md',
-    archive_rubric_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/2026-08-03-next-touch-debt-retirement.rubric.md',
-    historical_archive_authorization_path: 'docs/projects/_archive/2026-08-03-next-touch-debt-retirement/evidence/authorization.json',
+    archive_plan_path: `${process.env.NTV_HIST_DIR}/2026-08-03-next-touch-debt-retirement.md`,
+    archive_rubric_path: `${process.env.NTV_HIST_DIR}/2026-08-03-next-touch-debt-retirement.rubric.md`,
+    historical_archive_authorization_path: `${process.env.NTV_HIST_DIR}/evidence/authorization.json`,
     historical_archive_authorization_sha256: '3266fb2c98133e788e23eec3e261a902c40529e0363ece2b12e01c9e31a338ba',
     historical_archive_authorization_digest: validation.canonicalDigest(historical),
     task_authority_ref: { path: path.basename(paths.taskAuthority), task_authority_id: taskAuthority.task_authority_id },
@@ -1291,7 +1302,7 @@ const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
 const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
-const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') }).authorization;
+const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, process.env.NTV_ARCH_AUTH) }).authorization;
 const source = validation.sourceDigests(root);
 const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 validation.validateArchiveState(root, head, source, auth);
@@ -1365,7 +1376,7 @@ const ntvFixtureRepo = process.argv[3];
 const validation = require(path.join(root, 'scripts/next-touch-validation'));
 const runtime = require(path.join(root, 'src/mission/runtime'));
 const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
-const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json') }).authorization;
+const auth = validation.loadRepoAndAuthority({ repo: root, authorization: path.join(root, process.env.NTV_ARCH_AUTH) }).authorization;
 const missionRoot = path.join(repoInfo.common, 'autopilot/mission');
 const bundle = {
   prepared_receipt: path.join(missionRoot, 'next-touch-debt-retirement/successor-prepared.json'),
@@ -1752,7 +1763,7 @@ const runtime = require(path.join(root, 'src/mission/runtime'));
 const repoInfo = runtime.canonicalRepository(ntvFixtureRepo);
 const auth = validation.loadRepoAndAuthority({
   repo: root,
-  authorization: path.join(root, 'docs/projects/_archive/2026/08/2026-08-03-next-touch-debt-retirement/evidence/authorization.json'),
+  authorization: path.join(root, process.env.NTV_ARCH_AUTH),
 }).authorization;
 const prepared = JSON.parse(fs.readFileSync(
   path.join(repoInfo.common, 'autopilot/mission/next-touch-debt-retirement/successor-prepared.json'), 'utf8',

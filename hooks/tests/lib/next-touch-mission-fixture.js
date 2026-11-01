@@ -28,10 +28,11 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const ARCHIVE_AUTHORIZATION = path.join(
-  'docs', 'projects', '_archive', '2026', '08', '2026-08-03-next-touch-debt-retirement',
-  'evidence', 'authorization.json',
-);
+// The fixture mimics THIS repo: the archived authorization sits where the validator looks for it (the registry's archive
+// dir, or the docs/ tree where archived evidence waits for P2), whatever stage the live registry is at.
+const LIVE_ROOT = path.join(__dirname, '..', '..', '..');
+const ARCHIVE_AUTHORIZATION = require(path.join(LIVE_ROOT, 'scripts', 'next-touch-validation.js'))
+  .archiveAuthorizationRel((rel) => fs.existsSync(path.join(LIVE_ROOT, rel)));
 const PREPARED_RELATIVE = path.join(
   'autopilot', 'mission', 'next-touch-debt-retirement', 'successor-prepared.json',
 );

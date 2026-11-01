@@ -5,7 +5,7 @@
 # RED at 7e5033278b0ad5cc08030d27db5ef9d5d1ee37ef (git rev-parse HEAD of this run): the live SessionStart output passed the check (exit 0). The same check against a copy of that output with the pointer line removed exited 1, reason "pointer count 0".
 . "$(dirname "$0")/lib.sh"
 
-DOC="$REPO_ROOT/docs/token-discipline.md"
+DOC="$REPO_ROOT/$(layout_path guide_dir)/token-discipline.md"
 LINE="Cross-harness token discipline (advisory only): read ${DOC}."
 SHOW='To show the owner a file or a diff, use the show tool; do not paste the content.'
 OPEN="Anything that needs the owner's decision or answer: open a card with node ${REPO_ROOT}/scripts/open-decision.js open --question <q> --option <label>::<desc> --option <label>::<desc> --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>] (at least two options, or --free-text when the owner answers in typed text; --not-authorized is required and refused when the DOA lets you decide it) and write the card id (d- + 8 hex) in the reply."

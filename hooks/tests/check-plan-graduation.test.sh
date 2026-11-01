@@ -8,6 +8,8 @@
 . "$(dirname "$0")/lib.sh"
 
 GATE="$REPO_ROOT/scripts/check-plan-graduation.js"
+# Every fixture is a repo that keeps its work records under docs/ (docs/plans, docs/projects/INDEX.md, docs/BACKLOG.md).
+export REPO_LAYOUT_REGISTRY="$(docs_layout_registry)"
 
 # fixture_repo <name> — a fresh git repo with the minimum plan-graduation shape.
 fixture_repo() {
@@ -1627,7 +1629,7 @@ assert_contains "$(cat "$d/err")" "receipt" "--receipt without --fix writes a us
 #     the plans under project/plans must be followed (a literal docs/plans read finds no plan there).
 LAY_REG="$TEST_TMP/moved-plans-registry.json"
 node -e '
-  const L = require(process.argv[1]); const r = JSON.parse(JSON.stringify(L.DEFAULT_REGISTRY));
+  const L = require(process.argv[1]); const r = JSON.parse(JSON.stringify(L.load()));
   r.paths.plans_dir = "project/plans"; r.paths.plans_archive_dir = "project/plans/_archive"; r.paths.plans_evidence_dir = "project/plans/evidence";
   require("fs").writeFileSync(process.argv[2], JSON.stringify(r));
 ' "$REPO_ROOT/scripts/lib/repo-layout.js" "$LAY_REG"

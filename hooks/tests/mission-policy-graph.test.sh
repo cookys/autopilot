@@ -14,6 +14,8 @@ const fs = require('fs');
 const path = require('path');
 const root = process.argv[2];
 const tmp = process.argv[3];
+// The fixtures below mimic THIS repo: work-record locations come from the live layout registry (docs/ at bootstrap, project/ from P1).
+const layout = require(path.join(root, 'scripts/lib/repo-layout.js'));
 const owner = require(path.join(root, 'src/engine/owner-kernel'));
 const missionPolicy = require(path.join(root, 'src/engine/mission-policy'));
 const graphApi = require(path.join(root, 'src/engine/mission-execution-graph'));
@@ -534,10 +536,10 @@ assert.throws(
 
 const governancePath = path.join(tmp, 'governance.json');
 const graphPath = path.join(tmp, 'graph.json');
-// The sources fixture lives inside a repo root (repoPath/docs is the registry plan base): a manifest outside
+// The sources fixture lives inside a repo root (repoPath/<manifest_plan_base> is the registry plan base): a manifest outside
 // the caller's repo is refused, so the fixture is placed, not the assertions changed.
 const repoPath = path.join(tmp, 'repo');
-const sourceRoot = path.join(repoPath, 'docs');
+const sourceRoot = path.join(repoPath, layout.path('manifest_plan_base'));
 fs.mkdirSync(sourceRoot, { recursive: true });
 const sourcesPath = path.join(sourceRoot, 'sources.json');
 fs.mkdirSync(path.join(repoPath, '.claude'), { recursive: true });
@@ -622,12 +624,14 @@ fs.writeFileSync(graphPath, JSON.stringify(checkerGraph));
 //     docs/projects/INDEX.md row with Version "active" (shares the lookup with
 //     scripts/check-plan-graduation.js's own plan_unregistered gate). ---
 const specRepo = path.join(tmp, 'spec-repo');
-fs.mkdirSync(path.join(specRepo, 'docs', 'plans'), { recursive: true });
-fs.mkdirSync(path.join(specRepo, 'docs', 'projects'), { recursive: true });
-fs.writeFileSync(path.join(specRepo, 'docs', 'plans', '2026-01-01-widget.md'), '# Plan\n');
+const specPlansRel = layout.path('plans_dir');
+const specIndexRel = layout.path('projects_index');
+fs.mkdirSync(path.join(specRepo, specPlansRel), { recursive: true });
+fs.mkdirSync(path.dirname(path.join(specRepo, specIndexRel)), { recursive: true });
+fs.writeFileSync(path.join(specRepo, specPlansRel, '2026-01-01-widget.md'), '# Plan\n');
 const specGraph = clone(checkerGraph);
-specGraph.nodes[0].campaign.spec.path = 'docs/plans/2026-01-01-widget.md';
-specGraph.nodes[0].campaign.allowed_path_prefixes = ['src/', 'docs/plans'];
+specGraph.nodes[0].campaign.spec.path = `${specPlansRel}/2026-01-01-widget.md`;
+specGraph.nodes[0].campaign.allowed_path_prefixes = ['src/', specPlansRel];
 fs.writeFileSync(graphPath, JSON.stringify(specGraph));
 
 // No docs/projects/INDEX.md at all -> auto-allowed, READY.
@@ -637,7 +641,7 @@ const specNoIndex = graphChecker.inspect({ layoutRoot: repoPath,
 assert.equal(specNoIndex.status, 'READY');
 
 // INDEX.md exists, no row for the plan -> spec_plan_unregistered.
-fs.writeFileSync(path.join(specRepo, 'docs', 'projects', 'INDEX.md'), [
+fs.writeFileSync(path.join(specRepo, specIndexRel), [
   '# Index', '',
   '## 進行中 (In Progress)', '',
   '| Date | Project | Version | Merge | Plan |',
@@ -650,7 +654,7 @@ assert.throws(
 );
 
 // A row with Version "active" registers the plan -> READY again.
-fs.writeFileSync(path.join(specRepo, 'docs', 'projects', 'INDEX.md'), [
+fs.writeFileSync(path.join(specRepo, specIndexRel), [
   '# Index', '',
   '## 進行中 (In Progress)', '',
   '| Date | Project | Version | Merge | Plan |',

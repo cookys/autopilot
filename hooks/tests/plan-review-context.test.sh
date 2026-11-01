@@ -8,17 +8,19 @@ FIXTURES="$REPO_ROOT/hooks/tests/fixtures/plan-review"
 REPO="$TEST_TMP/repo"
 STATE_DIR="$TEST_TMP/state"
 MANIFEST="$TEST_TMP/manifest.json"
-mkdir -p "$REPO/src" "$REPO/docs/plans/evidence/x" "$STATE_DIR"
+# The fixture repo mimics THIS repo: plans, their evidence and the backlog sit where the live layout registry says.
+PD="$(layout_path plans_dir)"; EV="$(layout_path plans_evidence_dir)"; BF="$(layout_path backlog_file)"
+mkdir -p "$REPO/src" "$REPO/$EV/x" "$REPO/$PD" "$REPO/$(dirname "$BF")" "$STATE_DIR"
 git -C "$REPO" init -q
 printf '%s\n' '# Plan' 'Uses src/a.js.' >"$REPO/plan.md"
 printf '%s\n' '# Rubric' '- R1: next-slice readiness' >"$REPO/rubric.md"
 printf 'module.exports = 1;\n' >"$REPO/src/a.js"
 printf 'module.exports = 2;\n' >"$REPO/src/b.js"
-printf 'verdict: STOP\n' >"$REPO/docs/plans/evidence/x/round1.md"
+printf 'verdict: STOP\n' >"$REPO/$EV/x/round1.md"
 printf '{}\n' >"$REPO/decisions.json"
-mkdir -p "$REPO/docs/plans/_archive/2026/09/evidence/m" "$REPO/scripts/lib" "$TEST_TMP/dump"
-printf '{}\n' >"$REPO/docs/plans/_archive/2026/09/evidence/m/notes.json"
-printf '# backlog\n' >"$REPO/docs/BACKLOG.md"
+mkdir -p "$REPO/$PD/_archive/2026/09/evidence/m" "$REPO/scripts/lib" "$TEST_TMP/dump"
+printf '{}\n' >"$REPO/$PD/_archive/2026/09/evidence/m/notes.json"
+printf '# backlog\n' >"$REPO/$BF"
 printf '{}\n' >"$REPO/src/g1-out.json"
 printf '{}\n' >"$REPO/src/g1-dispositions.json"
 printf '{}\n' >"$REPO/src/review-codex-r2.json"
@@ -62,30 +64,30 @@ refused() { # name expected-substring args...
   assert_contains "$out" "$want" "$name message"
 }
 
-refused evidence "not allowed as blind context" --context-file docs/plans/evidence/x/round1.md
+refused evidence "not allowed as blind context" --context-file "$EV/x/round1.md"
 refused disposition "not allowed as blind context" --context-file decisions.json
-refused archive "not allowed as blind context" --context-file docs/plans/_archive/2026/09/evidence/m/notes.json
-refused backlog "not allowed as blind context" --context-file docs/BACKLOG.md
-printf '# b\n' >"$REPO/docs/Backlog.md"
-refused backlogcase "not allowed as blind context" --context-file docs/Backlog.md
+refused archive "not allowed as blind context" --context-file "$PD/_archive/2026/09/evidence/m/notes.json"
+refused backlog "not allowed as blind context" --context-file "$BF"
+printf '# b\n' >"$REPO/$(dirname "$BF")/Backlog.md"
+refused backlogcase "not allowed as blind context" --context-file "$(dirname "$BF")/Backlog.md"
 # Real repo shapes of plan-review artifacts (git ls-files docs/plans): all refused.
 for shape in x.g1-artifact.json x.g2-dispositions.json x.g1-disposition.json x.r2g1-disposition.json \
   x.glm-minimax-promptfix.g1-disposition.json x.plan-review-manifest.json x.review.md x.review.json \
   x.review-config.md x.supplemental-review-prompt.md x.plan.as-reviewed-g1.md \
   x.manifest.json x.r2-manifest.json x.r4-g1-disposition.json; do
-  printf '{}\n' >"$REPO/docs/plans/$shape"
-  refused "shape-$shape" "not allowed as blind context" --context-file "docs/plans/$shape"
+  printf '{}\n' >"$REPO/$PD/$shape"
+  refused "shape-$shape" "not allowed as blind context" --context-file "$PD/$shape"
 done
 # Authored plan docs are not review artifacts and stay usable (rejected only by extension/size rules).
-printf '# p\n' >"$REPO/docs/plans/2026-01-01-review-path-efficiency.md"
+printf '# p\n' >"$REPO/$PD/2026-01-01-review-path-efficiency.md"
 sed 's/ctx-plan/ctx-planok/' "$MANIFEST" >"$TEST_TMP/planok.json"
-OUT="$(USE_MANIFEST="$TEST_TMP/planok.json" run_ctx t-planok --context-file docs/plans/2026-01-01-review-path-efficiency.md)"; RC=$?
+OUT="$(USE_MANIFEST="$TEST_TMP/planok.json" run_ctx t-planok --context-file "$PD/2026-01-01-review-path-efficiency.md")"; RC=$?
 assert_exit_code "$RC" "0" "a plan doc whose slug mentions review is accepted: $OUT"
 # Narrow anchors: plan slugs that merely contain g1-artifact, and a bare manifest.json, stay usable.
-printf '# p\n' >"$REPO/docs/plans/2026-01-01-g1-artifact-cleanup.md"
+printf '# p\n' >"$REPO/$PD/2026-01-01-g1-artifact-cleanup.md"
 printf '{}\n' >"$REPO/src/manifest.json"
 sed 's/ctx-plan/ctx-narrow/' "$MANIFEST" >"$TEST_TMP/narrow.json"
-OUT="$(USE_MANIFEST="$TEST_TMP/narrow.json" run_ctx t-narrow --context-file docs/plans/2026-01-01-g1-artifact-cleanup.md --context-file src/manifest.json)"; RC=$?
+OUT="$(USE_MANIFEST="$TEST_TMP/narrow.json" run_ctx t-narrow --context-file "$PD/2026-01-01-g1-artifact-cleanup.md" --context-file src/manifest.json)"; RC=$?
 assert_exit_code "$RC" "0" "slug containing g1-artifact and bare manifest.json are accepted: $OUT"
 refused outjson "not allowed as blind context" --context-file src/g1-out.json
 refused gdisp "not allowed as blind context" --context-file src/g1-dispositions.json

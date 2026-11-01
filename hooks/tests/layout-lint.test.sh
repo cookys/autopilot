@@ -30,6 +30,7 @@ mkreg() { # <out> <js statement over d>
   node -e '
     const { DEFAULT_REGISTRY } = require(process.argv[1]);
     const d = JSON.parse(JSON.stringify(DEFAULT_REGISTRY));
+    d.stage = "bootstrap";   // the fixtures start from the bootstrap stage whatever stage the live registry is at
     d.paths = {}; d.exceptions = [];
     d.allowlists.top_dirs = ["src","docs","tools","hooks"].map((n) => ({ name: n, purpose: "fixture" }));
     d.allowlists.root_files = [{ name: "README.md", purpose: "fixture" }];
@@ -221,6 +222,22 @@ assert_not_contains "$OUT" "node:internal" "data: no stack trace"
 printf '%s\n' 'hooks/tests/a.test.sh' > "$R/hooks/tests/lib/serial-suites.txt"; git -C "$R" add -A
 OUT="$(lint "$TEST_TMP/reg-data.json")"; assert_eq "$?" "0" "data twin: the file back on disk is green again"
 reset_repo
+
+# ── derived path keys (backlog_dir, guide_dir) follow the stored keys they derive from ──
+# (the file names are written in two pieces: a path rewriter that follows a relayout would rewrite them whole)
+derived() { # <js over d> <key>: the derived path of a registry built from the live default and changed by <js>
+  node -e '
+    const L = require(process.argv[1]); const d = JSON.parse(JSON.stringify(L.DEFAULT_REGISTRY));
+    eval(process.argv[2]);
+    const f = process.argv[4]; require("fs").writeFileSync(f, JSON.stringify(d));
+  ' "$LAYOUT" "$1" "$2" "$TEST_TMP/derived.json" && REPO_LAYOUT_REGISTRY="$TEST_TMP/derived.json" node "$LAYOUT" path "$2"
+}
+assert_eq "$(derived 'd.paths.backlog_file = "docs" + "/BACKLOG.md"' backlog_dir)" "docs/backlog" "derived: backlog beside docs/ keeps its notes in docs/backlog"
+assert_eq "$(derived 'd.paths.backlog_file = "project" + "/backlog/BACKLOG.md"' backlog_dir)" "project/backlog" "derived: backlog inside a backlog/ dir is its own notes dir"
+assert_eq "$(derived 'd.paths.settings_reference = "docs" + "/settings-reference.md"' guide_dir)" "docs" "derived: guide dir at bootstrap is docs/"
+assert_eq "$(derived 'd.paths.settings_reference = "docs" + "/guide/settings-reference.md"' guide_dir)" "docs/guide" "derived: guide dir follows the settings reference"
+# negative control: a key that is neither stored nor derived is still refused (exit 2), derivation is not a catch-all
+REPO_LAYOUT_REGISTRY="$TEST_TMP/derived.json" node "$LAYOUT" path no_such_dir >/dev/null 2>&1; assert_eq "$?" "2" "derived negative control: an unknown key is refused"
 
 # ── the real repo at its current stage ──
 OUT="$(cd "$REPO_ROOT" && node "$LINT" 2>&1)"; assert_eq "$?" "0" "real repo: layout-lint is clean at its current stage"

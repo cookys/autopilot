@@ -239,7 +239,8 @@ rc=$?
 set -e
 assert_eq "$rc" "0" "--self-test exits 0"
 
-mkdir -p "$TEST_TMP/mutroot/scripts" "$TEST_TMP/mutroot/references"
+mkdir -p "$TEST_TMP/mutroot/scripts/lib" "$TEST_TMP/mutroot/references"
+cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$TEST_TMP/mutroot/scripts/lib/"   # the mutants load the layout registry beside them
 cp "$REPO_ROOT/references/stage-graph.json" "$TEST_TMP/mutroot/references/"
 mut="$TEST_TMP/mutroot/scripts/check-mut.js"
 sed_mutant "$GATE" "$mut" "s/Status: 'pending'/Status: 'open'/"

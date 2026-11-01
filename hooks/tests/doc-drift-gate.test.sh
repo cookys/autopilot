@@ -7,6 +7,9 @@ set -uo pipefail
 
 # Paths to script under test
 GATE_JS="$REPO_ROOT/scripts/doc-drift-gate.js"
+# Every sandbox below is a repo that keeps its docs and mission manifests under docs/; the live registry of this checkout
+# (docs/ at bootstrap, project/ from P1) must not decide where the gate looks for them.
+export REPO_LAYOUT_REGISTRY="$(docs_layout_registry)"
 
 # Create a temporary sandbox repo directory inside TEST_TMP
 SANDBOX="$TEST_TMP/sandbox"
@@ -235,7 +238,7 @@ assert_eq "$SEALED_LIST" "docs/mission-x-execution-graph.json,docs/mission-z-exe
 # Registry: manifests in project/, docs still in docs/. A manifest plan_path is relative to docs/.
 LREG="$TEST_TMP/sealed-moved-registry.json"
 node -e '
-  const r = JSON.parse(JSON.stringify(require(process.argv[1]).DEFAULT_REGISTRY));
+  const r = JSON.parse(JSON.stringify(require(process.argv[1]).load()));
   r.paths.missions_dir = "project"; require("fs").writeFileSync(process.argv[2], JSON.stringify(r));
 ' "$REPO_ROOT/scripts/lib/repo-layout.js" "$LREG"
 S2="$TEST_TMP/sealed-split"
@@ -255,7 +258,7 @@ assert_eq "$SEALED_LIST" "docs/plans/p.md" "layout negative control: no seal.jso
 # relay2 g1: script references follow scripts_dir. Registry: scripts_dir = tooling.
 TREG="$TEST_TMP/doc-drift-tooling-registry.json"
 node -e '
-  const r = JSON.parse(JSON.stringify(require(process.argv[1]).DEFAULT_REGISTRY));
+  const r = JSON.parse(JSON.stringify(require(process.argv[1]).load()));
   r.paths.scripts_dir = "tooling"; require("fs").writeFileSync(process.argv[2], JSON.stringify(r));
 ' "$REPO_ROOT/scripts/lib/repo-layout.js" "$TREG"
 T2="$TEST_TMP/tooling-refs"

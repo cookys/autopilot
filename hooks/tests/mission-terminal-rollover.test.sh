@@ -40,6 +40,8 @@ FIXTURE="$LIVE_ROOT/hooks/tests/fixtures/mission-terminal-rollover"
 RECONCILE="$LIVE_ROOT/scripts/mission-terminal-reconcile.js"
 ADMISSION="$LIVE_ROOT/scripts/mission-routing-admission.js"
 PASS=0; FAIL=0
+# The scratch clone is a clone of THIS repo: its mission files sit where the live layout registry says (docs/ at bootstrap, project/missions from P1).
+MDIR="$(layout_path missions_dir)"; PD="$(layout_path plans_dir)"
 
 ok()  { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf 'FAIL: %s\n' "$1"; }
@@ -93,7 +95,7 @@ STORE="$MROOT/terminal-rollovers.json"
 mkdir -p "$(dirname "$MROOT")"
 cp -R "$FIXTURE/mission" "$MROOT"
 cp "$FIXTURE/mission-next-touch-debt-retirement-execution-graph.json" \
-   "$FIXTURE/mission-next-touch-debt-retirement-sources.json" "$ROOT/docs/"
+   "$FIXTURE/mission-next-touch-debt-retirement-sources.json" "$ROOT/$MDIR/"
 
 # mission-routing-admission.js additionally requires (unconditionally, not just
 # for the graph under test) that registry.json's repo_identity, EVERY mission
@@ -263,8 +265,8 @@ grep -q '"writes":0' < <(printf '%s' "$(roll "$INTEGRATED")") \
 cat > "$ROOT/.claude/mission-routing-config.json" <<CONFIGJSON
 {
   "schema_version": 1,
-  "graph_path": "docs/mission-next-touch-debt-retirement-execution-graph.json",
-  "sources_path": "docs/mission-next-touch-debt-retirement-sources.json"
+  "graph_path": "$MDIR/mission-next-touch-debt-retirement-execution-graph.json",
+  "sources_path": "$MDIR/mission-next-touch-debt-retirement-sources.json"
 }
 CONFIGJSON
 
@@ -276,12 +278,21 @@ CONFIGJSON
 # absent repo-relative file path in the scratch clone (the clone is
 # disposable; the live tree is never touched). Not limited to hooks/tests:
 # any host-side move of a path the frozen graph names must not turn this red.
+# A sealed graph can also name a plan the live tree moved (docs/plans/x.md after the plans moved to project/plans/):
+# its content is copied from where the live registry has it, because admission reads the spec from the commit, so the
+# materialised files are committed in the clone.
 while IFS= read -r p; do
-  [ -n "$p" ] && [ ! -e "$ROOT/$p" ] && mkdir -p "$(dirname "$ROOT/$p")" && : > "$ROOT/$p"
+  if [ -n "$p" ] && [ ! -e "$ROOT/$p" ]; then
+    mkdir -p "$(dirname "$ROOT/$p")"
+    if [[ "$p" == */plans/* ]] && [ -f "$ROOT/$PD/$(basename "$p")" ]; then cp "$ROOT/$PD/$(basename "$p")" "$ROOT/$p"; else : > "$ROOT/$p"; fi
+  fi
 done < <(node -e '
 const g=require(process.argv[1]);const out=new Set();
 JSON.stringify(g,(k,v)=>{if(typeof v==="string"&&/^(hooks|scripts|src|docs|skills|references|agents|platforms|\.claude)\/[A-Za-z0-9_.\/-]+\.[A-Za-z0-9]+$/.test(v))out.add(v);return v});
-console.log([...out].join("\n"))' "$ROOT/docs/mission-next-touch-debt-retirement-execution-graph.json")
+console.log([...out].join("\n"))' "$ROOT/$MDIR/mission-next-touch-debt-retirement-execution-graph.json")
+if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then
+  git -C "$ROOT" add -A && git -C "$ROOT" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm "materialise sealed graph paths" >/dev/null 2>&1
+fi
 
 # requireExactLegacyTerminalDisposition() (mission-routing-admission.js) also
 # checks a legacy-terminal-dispositions.json artifact whose current_graph_digest

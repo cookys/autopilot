@@ -96,6 +96,36 @@ print_autopilot_frame_markers() {
   extract_autopilot_frame_markers "$prefix" "$prompt"
 }
 
+# Layout-registry helpers (3.0.0 relayout). A fixture that models THIS repo takes its paths from the live registry
+# (layout_path: always the LIVE registry, ignoring REPO_LAYOUT_REGISTRY); a fixture that models a repo keeping its work records under docs/ (a consuming project) runs the
+# scripts under test with REPO_LAYOUT_REGISTRY=$(docs_layout_registry), so it is green at any stage of the live one.
+__LIB_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+layout_path() { (cd "$__LIB_REPO_ROOT" && env -u REPO_LAYOUT_REGISTRY node scripts/lib/repo-layout.js path "$1"); }
+docs_layout_registry() {
+  local f="$TEST_TMP/docs-layout-registry.json"
+  [ -s "$f" ] || node "$__LIB_REPO_ROOT/hooks/tests/lib/docs-layout-registry.js" "$f" || return 1
+  printf '%s' "$f"
+}
+
+# materialise_graph_named_paths <repo-clone>: the repo's active Mission graph is sealed (its digest is bound into the routing
+# config), so the repo-relative files it names cannot follow a relayout of the live tree (a sealed graph that names
+# docs/BACKLOG.md keeps naming it after the backlog moved). Admission requires every named path to exist, so a scratch
+# clone gets an empty file for each absent one (the clone is disposable; the live tree is never touched).
+materialise_graph_named_paths() {
+  node -e '
+    const fs = require("fs"), path = require("path");
+    const repo = process.argv[1];
+    const cfg = JSON.parse(fs.readFileSync(path.join(repo, ".claude/mission-routing-config.json"), "utf8"));
+    const graph = JSON.parse(fs.readFileSync(path.join(repo, cfg.graph_path), "utf8"));
+    const names = new Set();
+    JSON.stringify(graph, (k, v) => { if (typeof v === "string" && /^(hooks|scripts|src|docs|project|skills|references|agents|platforms|\.claude)\/[A-Za-z0-9_.\/-]+\.[A-Za-z0-9]+$/.test(v)) names.add(v); return v; });
+    for (const n of names) {
+      const abs = path.join(repo, n);
+      if (!fs.existsSync(abs)) { fs.mkdirSync(path.dirname(abs), { recursive: true }); fs.writeFileSync(abs, ""); }
+    }
+  ' "$1"
+}
+
 if [ "${AUTOPILOT_TEST_LIB_HELPERS_ONLY:-}" = 1 ]; then
   return 0 2>/dev/null || exit 0
 fi

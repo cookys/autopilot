@@ -13,31 +13,34 @@
 SCRIPT="$REPO_ROOT/scripts/check-config-docs.js"
 N=0
 
+# The fixture mimics THIS repo, so its reference doc sits where the live registry says (docs/ at bootstrap, docs/guide/ from P1).
+REF_REL="$(cd "$REPO_ROOT" && node scripts/lib/repo-layout.js path settings_reference)"
+
 # mk_fixture: a green fake repo in $FX
 mk_fixture() {
   N=$((N + 1))
   FX="$TEST_TMP/fx$N"
-  mkdir -p "$FX/hooks" "$FX/scripts/lib" "$FX/docs" "$FX/project-config-template"
+  mkdir -p "$FX/hooks" "$FX/scripts/lib" "$FX/$(dirname "$REF_REL")" "$FX/project-config-template"
   cat > "$FX/hooks/a.js" <<'EOF'
 // reads ~/.autopilot/config.json through config-path; see x-config.md for the project file
 const cfg = JSON.parse('{}');
 const v = process.env.AUTOPILOT_FOO || cfg.my_key;
 EOF
   echo "# x" > "$FX/project-config-template/x-config.md"
-  cat > "$FX/scripts/lib/config-keys.json" <<'EOF'
+  cat > "$FX/scripts/lib/config-keys.json" <<EOF
 {
   "ignore": { "env": {}, "config": {}, "templates": {} },
   "entries": [
-    { "name": "AUTOPILOT_FOO", "kind": "env", "audience": "user", "group": "g", "default": null, "readers": ["hooks/a.js"], "doc": "docs/settings-reference.md", "relates": [], "summary": "foo" },
-    { "name": "my_section.my_key", "kind": "config_key", "audience": "user", "group": "g", "default": 1, "readers": ["hooks/a.js"], "doc": "docs/settings-reference.md", "relates": [], "summary": "key" },
-    { "name": ".claude/x-config.md", "kind": "project_di", "audience": "user", "group": "project", "default": null, "template": "project-config-template/x-config.md", "readers": ["hooks/a.js"], "doc": "docs/settings-reference.md", "relates": [], "summary": "x" },
+    { "name": "AUTOPILOT_FOO", "kind": "env", "audience": "user", "group": "g", "default": null, "readers": ["hooks/a.js"], "doc": "$REF_REL", "relates": [], "summary": "foo" },
+    { "name": "my_section.my_key", "kind": "config_key", "audience": "user", "group": "g", "default": 1, "readers": ["hooks/a.js"], "doc": "$REF_REL", "relates": [], "summary": "key" },
+    { "name": ".claude/x-config.md", "kind": "project_di", "audience": "user", "group": "project", "default": null, "template": "project-config-template/x-config.md", "readers": ["hooks/a.js"], "doc": "$REF_REL", "relates": [], "summary": "x" },
     { "name": "AUTOPILOT_INTERNAL_THING", "kind": "env", "audience": "internal", "class": "plumbing", "default": null, "readers": ["hooks/a.js"], "doc": null, "relates": [] }
   ]
 }
 EOF
   # the internal entry needs a reader that contains its name
   echo "// AUTOPILOT_INTERNAL_THING is set for child processes" >> "$FX/hooks/a.js"
-  printf '# ref\n`AUTOPILOT_FOO`\n`my_section.my_key`\n`.claude/x-config.md`\n' > "$FX/docs/settings-reference.md"
+  printf '# ref\n`AUTOPILOT_FOO`\n`my_section.my_key`\n`.claude/x-config.md`\n' > "$FX/$REF_REL"
 }
 
 run() { OUT="$(node "$SCRIPT" --root "$FX" "$@" 2>&1)"; EXIT=$?; }
@@ -86,7 +89,7 @@ assert_contains "$OUT" "does not exist" "(b2) says the reader is gone"
 
 # --- (c) a user setting is not on the reference page -> RED
 mk_fixture
-printf '# ref\n`my_section.my_key`\n`.claude/x-config.md`\n' > "$FX/docs/settings-reference.md"
+printf '# ref\n`my_section.my_key`\n`.claude/x-config.md`\n' > "$FX/$REF_REL"
 run --json
 assert_eq "$EXIT" "1" "(c) a user setting missing from the reference is red"
 assert_eq "$(count_of)" "1:user_undocumented" "(c) exactly one user_undocumented finding"
@@ -94,7 +97,7 @@ assert_contains "$OUT" "AUTOPILOT_FOO" "(c) names the undocumented setting"
 
 # --- (c2) a longer name does not count as a mention of a shorter one
 mk_fixture
-printf '# ref\n`AUTOPILOT_FOO_EXTRA`\n`my_section.my_key`\n`.claude/x-config.md`\n' > "$FX/docs/settings-reference.md"
+printf '# ref\n`AUTOPILOT_FOO_EXTRA`\n`my_section.my_key`\n`.claude/x-config.md`\n' > "$FX/$REF_REL"
 run --json
 assert_eq "$EXIT" "1" "(c2) AUTOPILOT_FOO_EXTRA is not a mention of AUTOPILOT_FOO"
 

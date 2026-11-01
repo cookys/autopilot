@@ -94,7 +94,9 @@ function makeMapper(map) {
     if (v && typeof v === 'object') { const r = {}; for (const k of Object.keys(v)) r[mapText(k)] = mapDeep(v[k]); return r; }
     return v;
   };
-  return { mapPath, mapId, mapText, mapDeep };
+  const destValues = new Set(Object.values(map));
+  const isDest = (p) => destValues.has(p) || dirKeys.some((k) => p.startsWith(map[k]));
+  return { mapPath, mapId, mapText, mapDeep, isDest };
 }
 
 // ------------------------------------------------------------------ repo access
@@ -324,7 +326,7 @@ function compareRecords(base, cur, M, declared) {
     if (seenNew.has(id)) throw new InputError(`layout-map sends two baseline objects to ${id}`);
     seenNew.add(id);
     const c = cur.objects[id];
-    if (c && id !== baseId && cur.objects[baseId]) diffs.push(`object still present at its old path ${baseId} although the layout-map moves it to ${id}`);
+    if (c && id !== baseId && !M.isDest(baseId) && cur.objects[baseId]) diffs.push(`object still present at its old path ${baseId} although the layout-map moves it to ${id}`);
     if (!c) { diffs.push(`object gone: ${baseId}${id !== baseId ? ` (expected as ${id})` : ''}`); continue; }
     const d = decl.get(id); if (d) used.add(id);
     const turnedGreen = b.status === 'red' && c.status === 'green';
@@ -347,7 +349,7 @@ function compareRecords(base, cur, M, declared) {
       const short = (x) => (x === undefined ? 'absent' : x === null ? 'missing' : x.slice(0, 12));
       diffs.push(`fingerprint changed: ${id} :: ${f} (${short(bs)} -> ${short(cs)})`);
     }
-    for (const f of Object.keys(b.files || {})) if (M.mapPath(f) !== f && (c.files || {})[f]) diffs.push(`moved file still referenced and present at its old path: ${id} :: ${f}`);
+    for (const f of Object.keys(b.files || {})) if (M.mapPath(f) !== f && !M.isDest(f) && (c.files || {})[f]) diffs.push(`moved file still referenced and present at its old path: ${id} :: ${f}`);
     if (d && !changed) diffs.push(`stale declaration (the object did not change): ${id}`);
     for (const f of Object.keys(declFiles)) if (!declUsed.has(f)) diffs.push(`declared file change did not happen as stated: ${id} :: ${f}`);
   }
@@ -412,7 +414,7 @@ function cmdCheckRewrite(o) {
     const origHead = movedPaths.length ? blobShas(root, m[2], movedPaths) : new Map();
     for (const e of list.entries) {
       const hp = M.mapPath(e.path); const hs = headSha.get(hp);
-      if (hp !== e.path && origHead.get(e.path) !== null) { diffs.push(`${e.path}: still present at ${m[2]} although the layout-map moves it to ${hp} (a copy, not a move)`); continue; }
+      if (hp !== e.path && !M.isDest(e.path) && origHead.get(e.path) !== null) { diffs.push(`${e.path}: still present at ${m[2]} although the layout-map moves it to ${hp} (a copy, not a move)`); continue; }
       if (hs === null) { diffs.push(`${e.path}: absent at ${m[2]}${hp !== e.path ? ` as ${hp}` : ''} (renamed without a layout-map entry, or deleted)`); continue; }
       if (hs !== e.sha256) diffs.push(`${hp}: bytes changed (listed ${e.sha256.slice(0, 12)}, now ${hs.slice(0, 12)}${baseSha.get(e.path) === hs ? '; the listing itself is stale at the base' : '; modified inside the range'})`);
     }
@@ -444,15 +446,21 @@ function cmdBuildNoRewrite(o) {
   // a referenced path that runs through tracked symlinks (an ancestor directory or the file itself) is protected as the
   // symlink blobs plus the file they finally resolve to, following links to links
   const chainPaths = (f) => {
-    const out = []; let parts = f.split('/'); let cur = ''; let guard = 0;
+    const out = []; let parts = f.split('/'); let cur = ''; const seen = new Set();
     for (let i = 0; i < parts.length; i++) {
       cur = cur ? `${cur}/${parts[i]}` : parts[i];
       if (!links.has(cur)) continue;
       out.push(cur);
-      if (++guard > 40) break;
-      let t; try { t = path.posix.normalize(path.posix.join(path.posix.dirname(cur), fs.readlinkSync(path.join(root, cur)))); } catch { break; }
-      if (t.startsWith('../') || t.startsWith('/')) break;
-      parts = [...t.split('/'), ...parts.slice(i + 1)]; cur = ''; i = -1;
+      const rest = parts.slice(i + 1);
+      const key = `${cur}|${rest.join('/')}`; // same link reached with the same remainder twice = a cycle
+      if (seen.has(key)) throw new InputError(`symlink cycle through ${cur} while resolving ${f}`);
+      seen.add(key);
+      let link;
+      try { link = fs.readlinkSync(path.join(root, cur)); } catch (e) { throw new InputError(`cannot read symlink ${cur}: ${e.code || e.message}`); }
+      // a link to "." (or any ./x) joins to "./rest": normalize so it matches the tracked name
+      const next = path.posix.normalize([path.posix.join(path.posix.dirname(cur), link), ...rest].join('/'));
+      if (next === '.' || next.startsWith('../') || next.startsWith('/')) break;
+      parts = next.split('/'); cur = ''; i = -1;
     }
     out.push(parts.join('/'));
     return out;

@@ -225,6 +225,56 @@ printf '[{"object":"%s","reason":"other object"}]\n' "$RED" > "$T/decl-other.jso
 rcis 1 "probe: change declared for another object -> red" cmpr --declared-changes "$T/decl-other.json"
 reset
 
+# ---- round 3: long / "." / cyclic symlink chains, swap and shift layout-maps
+synth() { printf '{"schema":1,"tool":"seal-baseline","objects":{"x":{"category":"t","status":"green","diagnostics":{},"files":{"%s":null}}}}\n' "$1" > "$2"; }
+mkdir -p "$C/sbchain/real" "$C/sbdotfinal"; echo final > "$C/sbchain/real/final.txt"; echo dotfinal > "$C/sbdotfinal/final.txt"
+ln -s real/final.txt "$C/sbchain/l1"
+for n in $(seq 2 41); do ln -s "l$((n-1))" "$C/sbchain/l$n"; done
+ln -s . "$C/sbdot"
+G add -A; G commit -qm "synthetic chains"; B2="$(G rev-parse HEAD)"
+synth "sbchain/l41" "$T/synth41.json"
+rcis 0 "41-link symlink chain: generator runs" node "$SB" build-no-rewrite --root "$C" --baseline "$T/synth41.json" --out "$T/nr41.json"
+node -e 'const s=new Set(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).entries.map(e=>e.path));process.exit(s.has("sbchain/real/final.txt")&&s.has("sbchain/l41")&&s.has("sbchain/l1")?0:1)' "$T/nr41.json" && ok || bad "41-link chain: every link and the final file are listed"
+rcis 0 "41-link chain untouched -> check-rewrite green" node "$SB" check-rewrite --root "$C" --range "$B2..$B2" --no-rewrite "$T/nr41.json"
+printf 'x' >> "$C/sbchain/real/final.txt"; G commit -qam "edit final"
+rcis 1 "41-link chain: the final file edited -> check-rewrite red" node "$SB" check-rewrite --root "$C" --range "$B2..HEAD" --no-rewrite "$T/nr41.json"
+has "names the final file" "sbchain/real/final.txt: bytes changed"
+G reset -q --hard "$B2"
+synth "sbdot/sbdotfinal/final.txt" "$T/synthdot.json"
+rcis 0 "symlink to '.': generator runs" node "$SB" build-no-rewrite --root "$C" --baseline "$T/synthdot.json" --out "$T/nrdot.json"
+node -e 'const s=new Set(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).entries.map(e=>e.path));process.exit(s.has("sbdotfinal/final.txt")&&s.has("sbdot")?0:1)' "$T/nrdot.json" && ok || bad "'.' link: the final file (reached as ./sbdotfinal/final.txt) is listed"
+printf 'x' >> "$C/sbdotfinal/final.txt"; G commit -qam "edit dot final"
+rcis 1 "'.' link: the final file edited -> check-rewrite red" node "$SB" check-rewrite --root "$C" --range "$B2..HEAD" --no-rewrite "$T/nrdot.json"
+G reset -q --hard "$B2"
+# negative control: without the normalize step the '.' case loses the final file
+sed 's/const next = path.posix.normalize(/const next = String(/' "$SB" > "$T/mut-norm.js"
+if cmp -s "$SB" "$T/mut-norm.js"; then bad "normalize mutation did not hit"; else
+  node "$T/mut-norm.js" build-no-rewrite --root "$C" --baseline "$T/synthdot.json" --out "$T/nrdot-mut.json" >/dev/null 2>&1 </dev/null
+  node -e 'const s=new Set(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).entries.map(e=>e.path));process.exit(s.has("sbdotfinal/final.txt")?1:0)' "$T/nrdot-mut.json" && ok || bad "negative control: without normalize the '.' final file is still listed"
+fi
+ln -s cyc-b "$C/sbchain/cyc-a"; ln -s cyc-a "$C/sbchain/cyc-b"; G add -A
+synth "sbchain/cyc-a/x" "$T/synthcyc.json"
+rcis 2 "symlink cycle: generator fails" node "$SB" build-no-rewrite --root "$C" --baseline "$T/synthcyc.json" --out "$T/nrcyc.json"
+grep -q "symlink cycle" "$T/err" && ok || bad "says it is a cycle (stderr: $(head -2 "$T/err"))"
+G reset -q --hard "$B2"; G clean -qfd
+G reset -q --hard "$BASE"
+
+# swap (A->B, B->A) and shift (A->B, C->A) layout-maps over listed files
+A=evals/consult-eval-rubric.md; B=evals/discuss-eval-rubric.md
+G mv "$A" evals/swap.tmp; G mv "$B" "$A"; G mv evals/swap.tmp "$B"; G commit -qm swap
+printf '{"%s":"%s","%s":"%s"}\n' "$A" "$B" "$B" "$A" > "$T/swap.json"
+rcis 0 "swap of two listed files, with the swap layout-map -> green" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/swap.json"
+printf 'x' >> "$C/$B"; G commit -qam "swap+edit"
+rcis 1 "swap, then one of the two edited -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/swap.json"
+G reset -q --hard "$BASE"
+mkdir -p "$C/evals/shifted"; G mv "$A" evals/shifted/a.md; G mv "$B" "$A"; G commit -qm shift
+printf '{"%s":"evals/shifted/a.md","%s":"%s"}\n' "$A" "$B" "$A" > "$T/shift.json"
+rcis 0 "shift (A->B, C->A) with the shift layout-map -> green" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/shift.json"
+rcis 1 "the same shift with only the first map entry -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/rw-map.json"
+printf 'x' >> "$C/evals/shifted/a.md"; G commit -qam "shift+edit"
+rcis 1 "shift, then the moved file edited -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/shift.json"
+G reset -q --hard "$BASE"
+
 # ---- input errors
 rcis 2 "no subcommand" node "$SB"
 rcis 2 "compare without --baseline" node "$SB" compare --current "$T/cur.json"

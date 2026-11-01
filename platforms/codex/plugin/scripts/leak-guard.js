@@ -163,43 +163,23 @@ function diffLines(text, sign) {
   return out;
 }
 
-/** Added lines of a combined (--cc) merge diff: only lines new against EVERY parent (all columns '+'). */
-function combinedAdded(text, nParents) {
+/** Findings in the added lines of a diff, plus the text of each flagged line (file\0line -> text). */
+function scanAdded(added) {
   const out = [];
-  let file = '';
-  let line = 0;
-  let inHunk = false;
-  for (const l of text.split('\n')) {
-    if (l.startsWith('diff --cc ') || l.startsWith('diff --combined ')) {
-      inHunk = false;
-      file = unquote(l.slice(l.indexOf(' ', 7) + 1));
-      continue;
-    }
-    if (l.startsWith('@@@')) {
-      const m = l.match(/\+(\d+)/);
-      line = m ? parseInt(m[1], 10) : 0;
-      inHunk = true;
-      continue;
-    }
-    if (!inHunk || !file || l.length < nParents) continue;
-    const cols = l.slice(0, nParents);
-    if (cols === '+'.repeat(nParents)) out.push({ file, line, content: l.slice(nParents) });
-    if (!cols.includes('-')) line++;
-  }
-  return out;
-}
-
-/** take(file, content) -> true when a revert allowance covers the added line (and spends it). */
-function scanAdded(added, take) {
-  const out = [];
+  const texts = new Map();
   for (const { file, line, content } of added) {
-    if (take && take(file, content)) continue;
     for (const h of patterns.findAll(content)) {
       const snippet = h.category === 'secret' ? `${h.match.slice(0, 4)}…` : h.match;
       out.push({ file, line, category: h.category, snippet });
+      texts.set(`${file}\0${line}`, content);
     }
   }
-  return out;
+  return { findings: out, texts };
+}
+
+/** The whole base..head diff is the floor: whatever it flags is blocked unless a revert allowance below covers it. */
+function contentFindings(root, o) {
+  return scanAdded(diffLines(git(root, diffArgs(o, ['-U0'])), '+'));
 }
 
 const REVERT_TRAILER = 'Leak-Guard-Allow-Revert';
@@ -209,78 +189,106 @@ function resolveCommit(root, ref) {
   return r.status === 0 ? r.stdout.trim() : '';
 }
 
-/** Every commit of the range, parents before children, with its parents and full message. */
-function rangeCommits(root, o) {
-  const log = git(root, ['log', '--no-color', '--topo-order', '--reverse', '--format=%H%x1f%P%x1f%B%x1e', o.range]);
-  const out = [];
-  for (const rec of log.split('\x1e')) {
-    const f = rec.split('\x1f');
-    if (f.length < 3 || !f[0].trim()) continue;
-    out.push({ sha: f[0].trim(), parents: f[1].trim() ? f[1].trim().split(/\s+/) : [], body: f.slice(2).join('\x1f') });
-  }
-  return out;
+function rangeHead(root, range) {
+  const m = range.match(/\.{2,3}([^.]*)$/);
+  return resolveCommit(root, m && m[1] ? m[1] : 'HEAD');
 }
 
 /**
- * Range mode only. A NON-merge commit is a deliberate revert of a redaction when its message carries
- * both git's own "This reverts commit <sha>." and the trailer "Leak-Guard-Allow-Revert: <sha>" naming the
- * SAME commit. The range has ONE shared ledger: (reverted sha, file, text) -> how many times that commit
- * removed the line. Every revert commit of that sha spends from the same entry, so a second trailer for the
- * same cleanup finds it used up. A merge commit never gets an allowance, whatever its message says.
- * (git revert runs no pre-commit hook, so --staged needs no path.)
- * @returns {{ledger: Map<string, number>, reverts: Map<string, string>}} reverts: revert commit -> reverted sha
+ * Valid revert commits of the range: sha -> reverted (anchor) sha. One git log reads every message; only a
+ * message that contains the trailer key is parsed. Valid = not a merge, the trailer is in the final trailer
+ * block (git's own parser), "This reverts commit <sha>." has its full stop, both shas resolve to the same
+ * commit, and that anchor is an ancestor of the range head but not itself part of the range.
  */
-function revertLedger(root, commits) {
-  const ledger = new Map();
-  const reverts = new Map();
-  const loaded = new Set();
-  for (const c of commits) {
-    if (c.parents.length > 1) continue;
-    const rv = c.body.match(/^This reverts commit ([0-9a-f]{7,40})\.\s*$/m);
-    // only the final trailer block counts (git's own parser), not any line that looks like a trailer
-    const parsed = spawnSync('git', ['interpret-trailers', '--parse'], { cwd: root, input: c.body, encoding: 'utf8' });
+function revertCandidates(root, o, head) {
+  const cands = new Map();
+  const log = git(root, ['log', '--no-color', '--topo-order', '--reverse', '--format=%H%x00%P%x00%B%x00', o.range]).split('\0');
+  const isAncestor = new Map();
+  const inRange = new Set();
+  for (let i = 0; i + 2 < log.length; i += 3) inRange.add(log[i].trim());
+  for (let i = 0; i + 2 < log.length; i += 3) {
+    const sha = log[i].trim();
+    const parents = log[i + 1].trim() ? log[i + 1].trim().split(/\s+/) : [];
+    const body = log[i + 2];
+    if (!sha || parents.length > 1 || !body.includes(`${REVERT_TRAILER}:`)) continue;
+    const rv = body.match(/^This reverts commit ([0-9a-f]{7,40})\.\s*$/m);
+    const parsed = spawnSync('git', ['interpret-trailers', '--parse'], { cwd: root, input: body, encoding: 'utf8' });
     const tr = parsed.status === 0 ? (parsed.stdout || '').match(new RegExp(`^${REVERT_TRAILER}:\\s*([0-9a-f]{7,40})\\s*$`, 'm')) : null;
     if (!rv || !tr) continue;
     const a = resolveCommit(root, rv[1]);
     if (!a || a !== resolveCommit(root, tr[1])) continue;
-    reverts.set(c.sha, a);
-    if (loaded.has(a)) continue;
-    loaded.add(a);
-    const text = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--format=', '-U0', a]);
-    for (const d of diffLines(text, '-')) {
-      const k = `${a}\0${d.file}\0${d.content}`;
-      ledger.set(k, (ledger.get(k) || 0) + 1);
+    // an anchor inside the range may have been the commit that first introduced the data: that is new, not legacy
+    if (inRange.has(a)) continue;
+    if (!isAncestor.has(a)) {
+      isAncestor.set(a, spawnSync('git', ['merge-base', '--is-ancestor', a, head], { cwd: root }).status === 0);
     }
+    if (isAncestor.get(a)) cands.set(sha, a);
   }
-  return { ledger, reverts };
+  return cands;
+}
+
+/** The commit that introduced a line of the file as it stands at head ('' when blame cannot say). */
+function blameCommit(root, head, file, line) {
+  const r = spawnSync('git', ['blame', '-l', '--porcelain', '-L', `${line},${line}`, head, '--', file], { cwd: root, encoding: 'utf8' });
+  if (r.status !== 0) return '';
+  const m = (r.stdout || '').match(/^([0-9a-f]{40}) /);
+  return m ? m[1] : '';
 }
 
 /**
- * No revert trailer in the range: the whole range diff is scanned once (unchanged behaviour).
- * Otherwise every commit is scanned on its own (a merge on what it introduces itself, via --cc), and only
- * a revert commit can spend the shared ledger, so a later commit re-adding the same line gets no cover.
+ * Range mode. Drops the findings of lines that a deliberate revert put back. Only content findings can be
+ * covered (never env_file). A flagged line is covered when `git blame` at the range head says a valid
+ * revert commit of this range introduced it AND the shared ledger still holds that line: the ledger key is
+ * (anchor sha, file, text), counted by how often the anchor removed it (old path on a rename). Every revert
+ * commit of one anchor spends from the same entry for the lines it added itself. A merge, an older commit or anything unproven stays blocked.
+ * Blame and the log run only when the whole-range scan already has a content finding.
  */
-function contentFindings(root, o, commits) {
-  const { ledger, reverts } = o.mode === 'range' ? revertLedger(root, commits) : { ledger: new Map(), reverts: new Map() };
-  if (reverts.size === 0) return scanAdded(diffLines(git(root, diffArgs(o, ['-U0'])), '+'), null);
-  const out = [];
-  for (const c of commits) {
-    if (c.parents.length > 1) {
-      const text = git(root, ['show', '--no-color', '--no-ext-diff', '--cc', '--format=', '-U0', c.sha]);
-      out.push(...scanAdded(combinedAdded(text, c.parents.length), null));
-      continue;
+function applyRevertAllowance(root, o, findings, texts) {
+  if (o.mode !== 'range' || !findings.some((f) => f.category !== 'env_file')) return findings;
+  const head = rangeHead(root, o.range);
+  if (!head) return findings;
+  const cands = revertCandidates(root, o, head);
+  if (cands.size === 0) return findings;
+  // Shared ledger: (anchor, file, text) -> times the anchor removed that line. Every valid revert commit,
+  // oldest first, spends it for the lines it ITSELF added, whether or not they survive to the head, so a
+  // second trailer for the same cleanup finds the entry used up. What a revert commit won is its grant.
+  const ledger = new Map();
+  const loaded = new Set();
+  const grants = new Map(); // revert commit -> Map(file\0text -> lines it may still put back)
+  for (const [sha, a] of cands) {
+    if (!loaded.has(a)) {
+      loaded.add(a);
+      const text = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--format=', '-U0', a]);
+      for (const d of diffLines(text, '-')) {
+        const k = `${a}\0${d.file}\0${d.content}`;
+        ledger.set(k, (ledger.get(k) || 0) + 1);
+      }
     }
-    const text = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--diff-filter=ACMRT', '--format=', '-U0', c.sha]);
-    const a = reverts.get(c.sha);
-    const take = a ? (file, content) => {
-      const k = `${a}\0${file}\0${content}`;
-      if (!(ledger.get(k) > 0)) return false;
+    const own = new Map();
+    const added = git(root, ['show', '--no-color', '--no-ext-diff', '--find-renames', '--diff-filter=ACMRT', '--format=', '-U0', sha]);
+    for (const d of diffLines(added, '+')) {
+      const k = `${a}\0${d.file}\0${d.content}`;
+      if (!(ledger.get(k) > 0)) continue;
       ledger.set(k, ledger.get(k) - 1);
-      return true;
-    } : null;
-    out.push(...scanAdded(diffLines(text, '+'), take));
+      own.set(`${d.file}\0${d.content}`, (own.get(`${d.file}\0${d.content}`) || 0) + 1);
+    }
+    grants.set(sha, own);
   }
-  return out;
+  const covered = new Set();
+  const tried = new Set();
+  for (const f of findings) {
+    const lk = `${f.file}\0${f.line}`;
+    if (f.category === 'env_file' || !f.line || tried.has(lk)) continue;
+    tried.add(lk);
+    const who = blameCommit(root, head, f.file, f.line);
+    const own = grants.get(who);
+    if (!own) continue;
+    const k = `${f.file}\0${texts.get(lk)}`;
+    if (!(own.get(k) > 0)) continue;
+    own.set(k, own.get(k) - 1);
+    covered.add(lk);
+  }
+  return findings.filter((f) => !covered.has(`${f.file}\0${f.line}`));
 }
 
 function shq(s) {
@@ -295,8 +303,11 @@ function main() {
   const exempt = loadRegistry(o.registry ? path.resolve(o.registry) : path.join(root, DEFAULT_REGISTRY), root);
 
   const seen = new Set();
+  const content = contentFindings(root, o);
   const findings = [];
-  for (const f of [...envNameFindings(root, o), ...contentFindings(root, o, o.mode === 'range' ? rangeCommits(root, o) : [])]) {
+  const candidates = [...envNameFindings(root, o), ...content.findings];
+  const kept = applyRevertAllowance(root, o, candidates, content.texts);
+  for (const f of kept) {
     if (exempt.has(`${f.file}\0${f.category}`)) continue;
     const key = `${f.file}\0${f.line}\0${f.category}\0${f.snippet}`;
     if (seen.has(key)) continue;

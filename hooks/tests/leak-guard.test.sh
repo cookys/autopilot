@@ -453,11 +453,29 @@ back_to_master
 revert_setup; add_trailer "$A"
 git -C "$R" commit -q --allow-empty -m "empty"
 printf 'bin\0data\n' > "$R/src/blob.bin"; git -C "$R" add -A; git -C "$R" commit -q -m "binary"
-git -C "$R" mv src/old.md src/old2.md; git -C "$R" commit -q -m "pure rename"
+git -C "$R" mv src/a.txt src/a3.txt; git -C "$R" commit -q -m "pure rename"
 OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "self-scan empty/binary/pure rename: nothing added, green"
-printf 'more %s/z\n' "$PERSONAL" >> "$R/src/old2.md"; git -C "$R" commit -q -am "edit after rename"
+printf 'more %s/z\n' "$PERSONAL" >> "$R/src/a3.txt"; git -C "$R" commit -q -am "edit after rename"
 OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "self-scan rename then edit: the added line is red"
-assert_contains "$OUT" "src/old2.md" "self-scan rename then edit: names the new path"
+assert_contains "$OUT" "src/a3.txt" "self-scan rename then edit: names the new path"
+back_to_master
+
+# ── review round 4: the whole-range diff is the floor; blame decides which revert commit may cover a line ──
+# (cv3) stale merge: a side branch forked before the cleanup, the merge picks its old personal line back
+reset_stage; git -C "$R" checkout -q -B rv "$BASE"
+printf 'old note\nlegacy clean line\n' > "$R/src/old.md"; git -C "$R" commit -q -am "redact old.md"
+printf 'z %s/zz\n' "$PERSONAL" > "$R/src/z.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "z old"
+printf 'z clean\n' > "$R/src/z.txt"; git -C "$R" commit -q -am "cleanup z"; ZC="$(git -C "$R" rev-parse HEAD)"
+printf 'z %s/zz\n' "$PERSONAL" > "$R/src/z.txt"; git -C "$R" commit -q -am "Revert z" -m "This reverts commit $ZC." -m "Leak-Guard-Allow-Revert: $ZC"
+git -C "$R" checkout -q -B stale "$BASE"; echo s > "$R/src/side.txt"; git -C "$R" add -A; git -C "$R" commit -q -m "stale side"
+git -C "$R" checkout -q rv; git -C "$R" merge -q --no-ff --no-commit stale >/dev/null 2>&1
+printf 'old note\nlegacy %s/x\n' "$PERSONAL" > "$R/src/old.md"; git -C "$R" add -A; git -C "$R" commit -q -m "merge picks the stale side"
+OUT="$(rguard "$ZC..HEAD")"; RC=$?
+assert_eq "$RC" "1" "stale merge: a merge that picks the old side's personal line back is red although the range has a valid revert"
+assert_contains "$OUT" "src/old.md:2" "stale merge: names the line the merge put back"
+assert_not_contains "$OUT" "src/z.txt" "stale merge: the legitimate revert's own line stays allowed"
+# an anchor inside the range may be where the data first entered: no allowance
+OUT="$(rguard "$BASE..HEAD")"; assert_eq "$?" "1" "anchor in range: a cleanup commit that is itself in the range gives no allowance (red)"
 back_to_master
 
 finalize_test

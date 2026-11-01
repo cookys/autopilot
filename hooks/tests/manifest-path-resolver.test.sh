@@ -60,8 +60,9 @@ REPO_LAYOUT_REGISTRY="$TEST_TMP/bad.json" node "$LAYOUT" stage >/dev/null 2>&1
 assert_eq "2" "$?" "plan_base with .. is rejected by validate"
 # a manifest outside the repo keeps the historical base (its own directory)
 mkdir -p "$TEST_TMP/loose"
-OUT="$(node "$LAYOUT" manifest-path "$TEST_TMP/loose/m.json" plans/p.md --repo-root "$R" 2>&1)"
-assert_eq "$TEST_TMP/loose/plans/p.md" "$OUT" "outside-repo manifest resolves against its own dir"
+OUT="$(node "$LAYOUT" manifest-path "$TEST_TMP/loose/m.json" plans/p.md --repo-root "$R" 2>&1)"; RC=$?
+assert_eq "2" "$RC" "round 4: a manifest outside the repo root is refused (was: resolved against its own dir)"
+assert_contains "$OUT" "is not inside the repo root" "the outside-repo refusal is named"
 
 # ---- 4. in-test mutant: without the traversal guard the escape goes through (so the test above can fail) ----
 MUT="$TEST_TMP/mut/repo-layout.js"; mkdir -p "$TEST_TMP/mut"
@@ -216,21 +217,26 @@ git -C "$W1" init -q
 echo '{}' > "$W1/project/missions/mission-w-sources.json"; echo p > "$W1/project/plans/p.md"
 $GT -C "$W1" add -A; $GT -C "$W1" commit -q -m w; $GT -C "$W1" worktree add -q "$TEST_TMP/w2" -b w2 || fail "worktree add failed"
 W1R="$(cd "$W1" && pwd -P)"; W2R="$(cd "$TEST_TMP/w2" && pwd -P)"
-OUT="$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-path "$W1R/project/missions/mission-w-sources.json" plans/p.md --repo-root "$W2R" 2>&1)"
-assert_eq "$W1R/project/plans/p.md" "$OUT" "linked worktree -> main: resolved under the manifest's own worktree root"
-OUT="$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-path "$W2R/project/missions/mission-w-sources.json" plans/p.md --repo-root "$W1R" 2>&1)"
-assert_eq "$W2R/project/plans/p.md" "$OUT" "main -> linked worktree: resolved under the manifest's own worktree root"
-assert_contains "$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-base "$W1R/project/missions/mission-w-sources.json" --repo-root "$W2R" 2>&1)" '"source": "registry"' "linked worktree manifest is governed by the registry, not 'manifest-dir'"
-OUT="$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-base "$TEST_TMP/loose/m.json" --repo-root "$W1R" 2>&1)"
-assert_contains "$OUT" '"source": "manifest-dir"' "a manifest in no git repo keeps the manifest-dir base"
+# round 4: the repo root is the caller's; a manifest in a sibling worktree is outside it, in both directions
+for pair in "$W1R:$W2R" "$W2R:$W1R"; do
+  OUT="$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-path "${pair%%:*}/project/missions/mission-w-sources.json" plans/p.md --repo-root "${pair##*:}" 2>&1)"; RC=$?
+  assert_eq "2" "$RC" "sibling worktree manifest is refused (repo root ${pair##*:})"
+  assert_contains "$OUT" "is not inside the repo root" "sibling worktree refusal is named"
+done
+OUT="$(REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-path "$W2R/project/missions/mission-w-sources.json" plans/p.md --repo-root "$W2R" 2>&1)"
+assert_eq "$W2R/project/plans/p.md" "$OUT" "a linked worktree used as its own repo root resolves under itself"
+OUT="$(cd "$W2R" && REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-path project/missions/mission-w-sources.json plans/p.md 2>&1)"
+assert_eq "$W2R/project/plans/p.md" "$OUT" "CLI without --repo-root takes the cwd as the repo root"
+(cd "$W1R" && REPO_LAYOUT_REGISTRY="$P1" node "$LAYOUT" manifest-path "$W2R/project/missions/mission-w-sources.json" plans/p.md >/dev/null 2>&1)
+assert_eq "2" "$?" "CLI without --repo-root: a manifest outside the cwd repo is refused"
 
 # ---- 5g. round 3: unrelated repos, env-proof repo detection, scaffold containment, named missing base ----
 # an unrelated repo never borrows the caller's per-file exceptions
 U="$TEST_TMP/unrel"; mkdir -p "$U/docs" "$U/private"; git -C "$U" init -q; echo '{}' > "$U/docs/mission-x-sources.json"; echo SECRET > "$U/private/secret.md"
 mkreg "$TEST_TMP/p1-borrow.json" 'd.exceptions.push({ path: "docs/mission-x-sources.json", rule: 6, reason: "belongs to the caller repo", plan_base: "private" })'
-OUT="$(REPO_LAYOUT_REGISTRY="$TEST_TMP/p1-borrow.json" node "$LAYOUT" manifest-base "$U/docs/mission-x-sources.json" --repo-root "$R" 2>&1)"
-assert_contains "$OUT" '"source": "registry"' "unrelated repo: the caller's exception is not applied"
-assert_contains "$OUT" "unrel/docs\"" "unrelated repo: governed by its own built-in docs/ base, not the caller's plan_base"
+OUT="$(REPO_LAYOUT_REGISTRY="$TEST_TMP/p1-borrow.json" node "$LAYOUT" manifest-base "$U/docs/mission-x-sources.json" --repo-root "$R" 2>&1)"; RC=$?
+assert_eq "2" "$RC" "unrelated repo: the manifest is refused, so the caller's exception cannot reach it"
+assert_contains "$OUT" "is not inside the repo root" "unrelated repo refusal is named"
 # the caller's own repo still honours the exception
 mkdir -p "$R/private"
 OUT="$(REPO_LAYOUT_REGISTRY="$TEST_TMP/p1-borrow.json" node "$LAYOUT" manifest-base "$R/docs/mission-x-sources.json" --repo-root "$R" 2>&1)"
@@ -243,9 +249,9 @@ assert_eq "$(GIT_DIR="$TEST_TMP/absent" base_of)" "$PLAIN" "GIT_DIR set: same ma
 assert_eq "$(GIT_CEILING_DIRECTORIES="$TEST_TMP" base_of)" "$PLAIN" "GIT_CEILING_DIRECTORIES set: same manifest base as without it"
 envload() { REPO_LAYOUT_REGISTRY="$P1_EXC" node -e '
   const g = require(process.argv[1] + "/scripts/mission-execution-graph-check.js");
-  try { g.loadSourceCoverageManifest(process.argv[2]); console.log("OK"); } catch (e) { console.log("CODE " + e.code); }' "$REPO_ROOT" "$1"; }
-assert_eq "$(GIT_DIR="$TEST_TMP/absent" envload "$R/project/missions/mission-old-sources.json")" "$(envload "$R/project/missions/mission-old-sources.json")" "graph-check without repoRoot: GIT_DIR does not change the result"
-assert_eq "$(GIT_CEILING_DIRECTORIES="$TEST_TMP" envload "$R/project/missions/mission-esc-sources.json")" "CODE MANIFEST_PATH_ESCAPE" "graph-check without repoRoot, GIT_CEILING_DIRECTORIES set: an escape is still refused"
+  try { g.loadSourceCoverageManifest(process.argv[2], { repoRoot: process.argv[3] }); console.log("OK"); } catch (e) { console.log("CODE " + e.code); }' "$REPO_ROOT" "$1" "$R"; }
+assert_eq "$(GIT_DIR="$TEST_TMP/absent" envload "$R/project/missions/mission-old-sources.json")" "$(envload "$R/project/missions/mission-old-sources.json")" "graph-check: GIT_DIR does not change the result"
+assert_eq "$(GIT_CEILING_DIRECTORIES="$TEST_TMP" envload "$R/project/missions/mission-esc-sources.json")" "CODE MANIFEST_PATH_ESCAPE" "graph-check, GIT_CEILING_DIRECTORIES set: an escape is still refused"
 # a registry base that is itself a symlink out of the repo is refused
 X="$TEST_TMP/xbase"; mkdir -p "$X/repo" "$X/elsewhere"; git -C "$X/repo" init -q; ln -s "$X/elsewhere" "$X/repo/docs"; echo '{}' > "$X/repo/m.json"
 OUT="$(node "$LAYOUT" manifest-path "$X/repo/m.json" p.md --repo-root "$X/repo" 2>&1)"; RC=$?
@@ -264,6 +270,38 @@ rm -f "$S/project/missions/mission-$STEM-"*
 OUT="$(scaf --check 2>&1)"; RC=$?
 assert_neq "0" "$RC" "scaffold: a symlinked-out plan is refused"
 assert_contains "$OUT" "cannot be a manifest source" "scaffold: the refusal names the plan base containment"
+
+# ---- 5h. round 4: the repo root is never inferred from the manifest (forged .git cannot re-home a manifest) ----
+FG="$TEST_TMP/forged"; mkdir -p "$FG/repo/docs/nest/docs" "$FG/other"; git -C "$FG/repo" init -q
+echo '{}' > "$FG/repo/docs/nest/m.json"; echo '{}' > "$FG/other/m.json"
+node -e '
+  const { DEFAULT_REGISTRY } = require(process.argv[1]); const d = JSON.parse(JSON.stringify(DEFAULT_REGISTRY));
+  d.exceptions.push({ path: "m.json", rule: 6, reason: "caller only", plan_base: "docs" });
+  require("fs").writeFileSync(process.argv[2], JSON.stringify(d));' "$LAYOUT" "$FG/reg.json"
+FGR="$(cd "$FG/repo" && pwd -P)"
+fbase() { REPO_LAYOUT_REGISTRY="$FG/reg.json" node "$LAYOUT" manifest-base "$1" --repo-root "$FGR" 2>&1; }
+assert_contains "$(fbase "$FGR/docs/nest/m.json")" "\"base\": \"$FGR/docs\"" "nested manifest without a .git: caller's repo base"
+mkdir "$FG/repo/docs/nest/.git"
+assert_contains "$(fbase "$FGR/docs/nest/m.json")" "\"base\": \"$FGR/docs\"" "forged empty .git directory does not re-home the manifest"
+rmdir "$FG/repo/docs/nest/.git"; echo 'not a repo' > "$FG/repo/docs/nest/.git"
+assert_contains "$(fbase "$FGR/docs/nest/m.json")" "\"base\": \"$FGR/docs\"" "forged text .git file does not re-home the manifest"
+echo "gitdir: $FGR/.git" > "$FG/other/.git"
+OUT="$(fbase "$FG/other/m.json")"; RC=0; REPO_LAYOUT_REGISTRY="$FG/reg.json" node "$LAYOUT" manifest-base "$FG/other/m.json" --repo-root "$FGR" >/dev/null 2>&1 || RC=$?
+assert_eq "2" "$RC" "a forged gitdir pointing at the caller's repo is refused"
+assert_contains "$OUT" "is not inside the repo root" "forged gitdir refusal is named"
+ln -s "$FGR/docs/nest" "$FG/alias"
+OUT="$(fbase "$FG/alias/m.json")"
+assert_contains "$OUT" "is not inside the repo root" "an outside symlink alias into the repo is refused"
+assert_contains "$(node -e 'try { require(process.argv[1]).manifestBase(undefined, "m.json"); } catch (e) { console.log(e.code); }' "$LAYOUT")" "MANIFEST_REPO_ROOT_REQUIRED" "manifestBase: repoRoot is required"
+assert_contains "$(node -e '
+  const g = require(process.argv[1] + "/scripts/mission-execution-graph-check.js");
+  try { g.loadSourceCoverageManifest(process.argv[2]); } catch (e) { console.log(e.code); }' "$REPO_ROOT" "$R/project/missions/mission-p-sources.json")" "MANIFEST_REPO_ROOT_REQUIRED" "graph-check: repoRoot is required"
+# frozenAssetFiles must not return a smaller set when a sealed path cannot be resolved
+FZ="$TEST_TMP/frozen"; mkdir -p "$FZ/docs/plans"; git -C "$FZ" init -q
+echo '{"schema_version":1,"sources":[{"plan_path":"../external.md","rubric_path":"plans/r.md","plan_sha256":"'$(printf 'a%.0s' $(seq 64))'","rubric_sha256":"'$(printf 'b%.0s' $(seq 64))'"}]}' > "$FZ/docs/mission-x-sources.json"
+assert_contains "$(node -e '
+  const g = require(process.argv[1] + "/scripts/check-plan-graduation.js");
+  try { g.frozenAssetFiles(process.argv[2]); console.log("RETURNED"); } catch (e) { console.log("THREW " + e.code); }' "$REPO_ROOT" "$FZ" 2>/dev/null)" "THREW MANIFEST_PATH_ESCAPE" "frozenAssetFiles: a resolution error propagates instead of shrinking the frozen set"
 
 # ---- 6. F5: check-claude-md-inventory is red when docs/scripts-inventory.md is missing ----
 SBX="$TEST_TMP/inv"; mkdir -p "$SBX/scripts/lib" "$SBX/docs"

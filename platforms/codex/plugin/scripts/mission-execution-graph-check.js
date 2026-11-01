@@ -109,10 +109,10 @@ function contentBoundRubricId(planHash, rubricHash, rubricId) {
   return `R${BigInt(`0x${digest}`).toString(10)}`;
 }
 
-// opts.repoRoot (optional): the repo whose layout registry decides the manifest base. Without it the
-// repo is the git toplevel of the manifest's directory; a manifest outside any repo keeps the historical
-// base (its own directory). opts.noLayout forces that historical base (scratch fixtures that build their
-// own root). The base itself comes from the registry (repo-layout manifestBase).
+// opts.repoRoot (REQUIRED unless opts.noLayout): the caller's repo. Its layout registry decides the manifest
+// base and the manifest must lie inside it (MANIFEST_OUTSIDE_REPO otherwise); nothing is inferred from the
+// manifest. opts.noLayout is the one explicit fixture mode (only code can pass it): the base is the manifest's own
+// directory, still checked by containedPath.
 function loadSourceCoverageManifest(manifestPath, opts) {
   let canonicalManifest;
   try {
@@ -126,8 +126,12 @@ function loadSourceCoverageManifest(manifestPath, opts) {
       || Object.keys(manifest).some((key) => !new Set(['schema_version', 'sources']).has(key))) {
     throw new Error('source manifest must be a versioned non-empty source set');
   }
-  const repoRootForBase = (opts && opts.noLayout) ? null
-    : ((opts && opts.repoRoot) || LAYOUT.findRepoRoot(canonicalManifest));
+  const repoRootForBase = (opts && opts.noLayout) ? null : (opts && opts.repoRoot);
+  if (!(opts && opts.noLayout) && !repoRootForBase) {
+    const missing = new Error('loadSourceCoverageManifest: opts.repoRoot is required');
+    missing.code = 'MANIFEST_REPO_ROOT_REQUIRED';
+    throw missing;
+  }
   let root = path.dirname(canonicalManifest);
   if (repoRootForBase) {
     const baseDir = LAYOUT.manifestBase(repoRootForBase, canonicalManifest).base;

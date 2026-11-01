@@ -97,6 +97,7 @@ const currentGraph = inspectMissionGraph({
   graph: path.join(root, routingConfig.graph_path),
   governance: path.join(root, '.claude', 'owner-kernel-governance.json'),
   sources: path.join(root, routingConfig.sources_path),
+  layoutRoot: root, // the manifest sits inside this repo root (caller names the repo)
 });
 assert.equal(dogfood.deliverable_count, currentGraph.deliverables);
 assert.equal(dogfood.source_authoring_unit_count, currentGraph.coverage.authoring_unit_count);
@@ -307,6 +308,7 @@ assert.equal(compressed.admission.deliverable_count, 4);
   const opts = {
     governance: path.join(repo, '.claude', 'owner-kernel-governance.json'),
     sources: path.join(repo, routingCfg.sources_path),
+    layoutRoot: repo, // the manifest sits inside this repo root (caller names the repo)
   };
   const fromPath = inspectMissionGraph({ ...opts, graph: graphPath });
   const original = fs.readFileSync(graphPath, 'utf8');

@@ -45,9 +45,9 @@ function parseOpts(argv, valued, flags) {
 
 function iso(ms) { return new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z'); }
 
-function runsDirOrFail() {
+function runsDirOrFail(rc = 1) {
   const r = require('./lib/runtime-paths').ensureRunsDir(process.env);
-  if (!r.ok) fail(`runs dir unusable: ${r.reason}`, 1);
+  if (!r.ok) fail(`runs dir unusable: ${r.reason}`, rc);
   return r.path;
 }
 
@@ -59,14 +59,24 @@ function resolveSession(opts, cwd, identity) {
   const sm = require('./session-mode');
   const sid = opts.session || process.env.CLAUDE_CODE_SESSION_ID || '';
   let root = opts['root-run-id'] || null;
-  let sessionId = sid ? sm.normalizeSessionId(sid) : null;
+  let sessionId = null;
   let note = null;
+  // The caller names the session; nothing is taken from a marker that is not provably this project's. The session
+  // id and the marker's root are filled together, and only for a marker whose repo_identity is non-null and equal
+  // to the identity of --cwd (a null identity on either side never matches).
   if (sid) {
     const rec = sm.readSessionRecord(sid);
-    if (!rec) note = `no live session marker for session ${sessionId}`;
-    else if (typeof rec.repo_identity === 'string' && identity && rec.repo_identity !== identity) note = `session ${sessionId} belongs to another project (${rec.repo_identity})`;
-    else if (!root && typeof rec.root_run_id === 'string' && rec.root_run_id) root = rec.root_run_id;
-    else if (!root) note = `session marker of ${sessionId} carries no root_run_id`;
+    if (!rec) note = `no live session marker for session ${sm.normalizeSessionId(sid)}`;
+    else if (!identity) note = `the project identity of ${cwd} is unknown, so the marker of session ${sm.normalizeSessionId(sid)} cannot be bound`;
+    else if (typeof rec.repo_identity !== 'string' || rec.repo_identity === '') note = `session marker of ${sm.normalizeSessionId(sid)} has no repo_identity`;
+    else if (rec.repo_identity !== identity) note = `session ${sm.normalizeSessionId(sid)} belongs to another project (${rec.repo_identity})`;
+    else {
+      sessionId = sm.normalizeSessionId(sid);
+      if (!root) {
+        if (typeof rec.root_run_id === 'string' && rec.root_run_id) root = rec.root_run_id;
+        else note = `session marker of ${sessionId} carries no root_run_id`;
+      }
+    }
   } else if (!root) note = 'no --session and no CLAUDE_CODE_SESSION_ID';
   if (!root) process.stderr.write(`register-external-run: root_run_id left empty (${note}); the run lands in the project overall file\n`);
   return { root, sessionId };
@@ -161,26 +171,32 @@ function cmdWrap(argv) {
   if (sep < 0 || sep === argv.length - 1) fail('wrap needs `-- <argv...>`');
   const o = parseOpts(argv.slice(0, sep), START_VALUED.filter((v) => v !== '--pid' && v !== '--lock'), ['--json']);
   const cmd = argv.slice(sep + 1);
+  // Everything that can be refused happens BEFORE the child exists: options, runs dir, manifest content, signal handlers.
   if (!o.role || !o.label) fail('--role and --label are required');
+  runsDirOrFail(2);
+  const manifest = buildManifest(o, 1); // pid 1 is a placeholder, replaced by the child's pid right after spawn
   let signalled = false;
-  const child = spawn(cmd[0], cmd.slice(1), { stdio: 'inherit' });
+  let child = null;
+  for (const sig of ['SIGTERM', 'SIGINT']) {
+    process.on(sig, () => {
+      signalled = true;
+      if (child) { try { child.kill(sig); } catch (_e) { /* already gone */ } } else process.exit(128 + (require('os').constants.signals[sig] || 0));
+    });
+  }
+  child = spawn(cmd[0], cmd.slice(1), { stdio: 'inherit' });
   child.on('error', (e) => {
     process.stderr.write(`register-external-run: cannot start ${cmd[0]}: ${e.message}\n`);
     process.exit(127);
   });
-  child.on('spawn', () => {
-    const manifest = buildManifest(o, child.pid);
-    commitStart(manifest);
-    if (o.json) process.stderr.write(`${JSON.stringify({ run_id: manifest.run_id })}\n`);
-    for (const sig of ['SIGTERM', 'SIGINT']) {
-      process.on(sig, () => { signalled = true; try { child.kill(sig); } catch (_e) { /* already gone */ } });
-    }
-    child.on('exit', (code, sigName) => {
-      const rc = code !== null ? code : 128 + (require('os').constants.signals[sigName] || 0);
-      const killed = signalled || code === null;
-      endManifest(manifest.run_id, rc, killed ? 'killed' : undefined);
-      process.exit(rc);
-    });
+  if (!child.pid) return;
+  manifest.pid = child.pid;
+  commitStart(manifest);
+  if (o.json) process.stderr.write(`${JSON.stringify({ run_id: manifest.run_id })}\n`);
+  child.on('exit', (code, sigName) => {
+    const rc = code !== null ? code : 128 + (require('os').constants.signals[sigName] || 0);
+    const killed = signalled || code === null;
+    endManifest(manifest.run_id, rc, killed ? 'killed' : undefined);
+    process.exit(rc);
   });
 }
 

@@ -424,7 +424,7 @@ if (args[0] === 'status') {
         try {
           off += fs.writeSync(1, buf, off, buf.length - off);
         } catch (error) {
-          if (error && error.code === 'EAGAIN') continue;
+          if (error && error.code === 'EAGAIN') { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1 + Math.floor(Math.random() * 10)); continue; }
           if (error && error.code === 'EPIPE') return true;
           throw error;
         }

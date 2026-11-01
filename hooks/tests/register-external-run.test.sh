@@ -124,4 +124,47 @@ assert_eq "ok" "$pass_msg" "big output exceeds 128 KB (got $SIZE)"
 PARSED=$(AUTOPILOT_DISPATCH_RUNS_DIR="$BIG" node "$CLI" status runs --json | cat | node -e 'try{process.stdout.write(String(JSON.parse(require("fs").readFileSync(0,"utf8")).length))}catch(e){process.stdout.write("PARSE_FAIL")}')
 assert_eq "400" "$PARSED" "piped status runs --json parses completely"
 
+# --- 8. round 2: marker binding, wrap preparation, shell identity, SIGKILL semantics ---------------
+mk_marker() { # sid identity-json root
+  node -e 'const [dir,sid,ident,root,now]=process.argv.slice(1);require("fs").writeFileSync(dir+"/"+sid+".json",JSON.stringify({session_id:sid,level:null,repo_root:"/x",started_at:new Date(+now).toISOString(),expires_at:new Date(+now+3600e3).toISOString(),repo_identity:JSON.parse(ident),project_key:"0123456789abcdef",root_run_id:root}))' "$SB/sm" "$1" "$2" "$3" "$NOW_MS"
+}
+mk_marker nullid null "R-null"
+mk_marker otherid '"git-common-dir:/somewhere/else/.git"' "R-other"
+for sid in nullid otherid; do
+  OUT=$(CLAUDE_CODE_SESSION_ID="$sid" node "$REG" start --role r --label "m-$sid" --pid "$SLEEP_PID" 2>"$SB/err")
+  assert_eq "null" "$(manifest_field "$SB/runs/$OUT.manifest.json" root_run_id)" "marker $sid (identity null/mismatch): root not applied"
+  assert_eq "null" "$(manifest_field "$SB/runs/$OUT.manifest.json" session_id)" "marker $sid (identity null/mismatch): session not taken"
+  assert_contains "$(cat "$SB/err")" "root_run_id left empty" "marker $sid: stderr explains"
+done
+# --cwd that names no project: identity null -> the matching marker is not applied either
+mkdir -p "$SB/nogit"
+OUT=$(CLAUDE_CODE_SESSION_ID="$SID" node "$REG" start --role r --label nocwd --pid "$SLEEP_PID" --cwd "$SB/nogit" 2>"$SB/err")
+assert_eq "null" "$(manifest_field "$SB/runs/$OUT.manifest.json" root_run_id)" "unknown cwd identity: root not applied"
+assert_eq "null" "$(manifest_field "$SB/runs/$OUT.manifest.json" session_id)" "unknown cwd identity: session not taken"
+assert_contains "$(cat "$SB/err")" "identity" "unknown cwd identity: stderr names the cause"
+
+# shell twin of the identity function agrees with the manifest
+SHELL_IDENT=$(bash -c '. "$1/scripts/lib/repo-identity.sh"; repo_identity_of "$1"' _ "$REPO_ROOT")
+assert_eq "$SHELL_IDENT" "$(manifest_field "$MF" repo_identity)" "manifest repo_identity equals repo-identity.sh"
+
+# wrap with an unusable runs dir: rc 2, the child never starts
+touch "$SB/afile"
+rm -f "$SB/child-ran"
+AUTOPILOT_DISPATCH_RUNS_DIR="$SB/afile/runs" node "$REG" wrap --role r --label bad -- sh -c "touch '$SB/child-ran'" >/dev/null 2>&1
+assert_eq "2" "$?" "wrap with unusable runs dir -> rc 2"
+assert_file_absent "$SB/child-ran" "wrap with unusable runs dir starts no child"
+
+# SIGKILL of the wrapper: the child keeps working, so the run stays alive until the child is gone
+CLAUDE_CODE_SESSION_ID="$SID" node "$REG" wrap --role verifier --label wsk -- sleep 60 2>/dev/null &
+WSK=$!
+for _ in $(seq 1 50); do grep -qs '"label": "wsk"' "$SB/runs"/*.manifest.json && break; sleep 0.1; done
+SKF=$(grep -l '"label": "wsk"' "$SB/runs"/*.manifest.json)
+SKID=$(manifest_field "$SKF" run_id); SKPID=$(manifest_field "$SKF" pid)
+kill -KILL "$WSK"; wait "$WSK" 2>/dev/null
+probe_alive() { node "$REPO_ROOT/scripts/dispatch-status.js" --run "$SKID" --stall-secs 180 | node -e 'const j=JSON.parse(require("fs").readFileSync(0,"utf8"));process.stdout.write(String(j.alive!==undefined?j.alive:(j.liveness&&j.liveness.alive)))'; }
+assert_eq "true" "$(probe_alive)" "after SIGKILL of wrapper, live child -> alive"
+kill -TERM "$SKPID" 2>/dev/null
+for _ in $(seq 1 50); do kill -0 "$SKPID" 2>/dev/null || break; sleep 0.1; done
+assert_eq "false" "$(probe_alive)" "after the child is gone -> not alive"
+
 finalize_test

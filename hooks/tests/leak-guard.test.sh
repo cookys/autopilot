@@ -247,4 +247,111 @@ node -e '
 assert_eq "$?" "0" "redact mutation: replacement switched off in the copy"
 assert_eq "$(redaction_ok "$MUT/scripts/lib")" "FAIL" "redact mutation: with replacement off the redaction check is RED"
 
+# ── BL-0348 item 1: a deliberate path for reverting a redaction commit (range mode only) ──
+revert_setup() { # leaves $A = the cleanup commit, HEAD = a plain `git revert` of it on branch rv
+  reset_stage; git -C "$R" checkout -q -B rv "$BASE"
+  printf 'old note\nlegacy clean line\n' > "$R/src/old.md"; git -C "$R" commit -q -am "redact old.md"
+  A="$(git -C "$R" rev-parse HEAD)"
+  git -C "$R" revert --no-edit "$A" >/dev/null 2>&1
+}
+add_trailer() { # add_trailer <sha>
+  git -C "$R" log -1 --format=%B | git -C "$R" interpret-trailers --trailer "Leak-Guard-Allow-Revert: $1" | git -C "$R" commit -q --amend -F -
+}
+rguard() { (cd "$R" && node "$GUARD" --range "$1" --registry "$REG" 2>&1); }
+revert_setup
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert NC-a: a plain git revert that restores a cleaned line is red (no trailer)"
+add_trailer "$A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "0" "revert twin: revert message + matching Leak-Guard-Allow-Revert trailer is green"
+revert_setup; add_trailer "$BASE"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert NC-b: trailer naming the wrong sha is red"
+revert_setup
+git -C "$R" commit -q --amend -m "restore line" -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; assert_eq "$?" "1" "revert NC-c: trailer without a 'This reverts commit' line is red"
+revert_setup
+git -C "$R" reset -q --soft "$A"
+printf 'old note\nlegacy %s/x\nextra %s/zzz\n' "$PERSONAL" "$PERSONAL" > "$R/src/old.md"
+git -C "$R" commit -q -am "Revert x" -m "This reverts commit $A." -m "Leak-Guard-Allow-Revert: $A"
+OUT="$(rguard "$A..HEAD")"; RC=$?
+assert_eq "$RC" "1" "revert NC-d: a new personal line smuggled into the revert is red"
+assert_contains "$OUT" "src/old.md:3" "revert NC-d: the new line (3) is named"
+assert_not_contains "$OUT" "src/old.md:2" "revert NC-d: the restored line (2) is not named"
+reset_stage; git -C "$R" checkout -q -f master 2>/dev/null || git -C "$R" checkout -q -f main 2>/dev/null
+
+# ── BL-0348 item 2: a local host name that is a plain word only counts in host contexts ──
+hostcount() { # hostcount <fake hostname> <text> <lib dir>
+  node -e '
+    const os = require("os"); os.hostname = () => process.argv[1];
+    const p = require(process.argv[3] + "/personal-data-patterns.js");
+    process.stdout.write(String(p.findAll(process.argv[2]).length));
+  ' "$1" "$2" "$3"
+}
+hostword_ok() { # hostword_ok <lib dir> -> OK | FAIL
+  local w="tea""pot" d="lab7""box"
+  if [ "$(hostcount "$w" "the $w kettle" "$1")" = "0" ] && [ "$(hostcount "$w" "ssh $w now" "$1")" = "1" ] \
+     && [ "$(hostcount "$w" "$w: busy" "$1")" = "1" ] && [ "$(hostcount "$d" "run on $d today" "$1")" = "1" ]; then printf OK; else printf FAIL; fi
+}
+assert_eq "$(hostword_ok "$REPO_ROOT/scripts/lib")" "OK" "hostname word: plain-word local host is context-only, a distinctive one (digit/hyphen) stays strong"
+MUT2="$TEST_TMP/mut2"; mkdir -p "$MUT2/scripts/lib" "$MUT2/hooks/_shared"
+cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$REPO_ROOT"/scripts/lib/leak-guard-hosts.json "$MUT2/scripts/lib/"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT2/hooks/_shared/"
+node -e '
+  const fs = require("fs"); const f = process.argv[1];
+  const s = fs.readFileSync(f, "utf8");
+  const t = s.replace("/[-0-9_]/.test(local)", "true");
+  if (t === s) { process.stderr.write("mutation did not apply\n"); process.exit(3); }
+  fs.writeFileSync(f, t);
+' "$MUT2/scripts/lib/personal-data-patterns.js"
+assert_eq "$?" "0" "hostname word mutation: demotion switched off in the copy"
+assert_eq "$(hostword_ok "$MUT2/scripts/lib")" "FAIL" "hostname word mutation: with demotion off the check is RED"
+
+# ── BL-0348 item 3: the printed redaction command runs from any directory ──
+mkdir -p "$R/docs/plans/evidence/run1"; printf 'ran in %s\n' "$PERSONAL" > "$R/docs/plans/evidence/run1/out.md"; git -C "$R" add -A
+OUT="$(guard)"; CMD="$(printf '%s\n' "$OUT" | grep '^  node ' | head -1)"
+OTHER="$TEST_TMP/elsewhere"; mkdir -p "$OTHER"
+(cd "$OTHER" && eval "$CMD" >/dev/null 2>&1)
+git -C "$R" add -A
+OUT="$(guard)"; assert_eq "$?" "0" "redact-cmd cwd: the printed command, run from an unrelated directory, turns red into green"
+reset_stage
+
+# ── BL-0348 item 4: a symlink swapped for a regular file (typechange) is scanned ──
+ln -s a.txt "$R/src/link"; git -C "$R" add -A; git -C "$R" commit -q -m "add link"; TBASE="$(git -C "$R" rev-parse HEAD)"
+rm "$R/src/link"; printf 'ran in %s\n' "$PERSONAL" > "$R/src/link"; git -C "$R" add -A
+OUT="$(guard)"; assert_eq "$?" "1" "typechange: symlink replaced by a regular file with a personal path is red"
+assert_contains "$OUT" "src/link:1" "typechange: names the file"
+git -C "$R" reset -q --hard "$TBASE"; git -C "$R" clean -qfd
+rm "$R/src/link"; printf 'clean text\n' > "$R/src/link"; git -C "$R" add -A
+OUT="$(guard)"; assert_eq "$?" "0" "typechange twin: a clean symlink-to-file swap is green"
+git -C "$R" reset -q --hard "$BASE"; git -C "$R" clean -qfd
+
+# ── BL-0348 item 6: a failing registry check must exit (fail() is not swallowed) ──
+MUT3="$TEST_TMP/mut3"; mkdir -p "$MUT3/scripts/lib" "$MUT3/hooks/_shared"
+cp "$REPO_ROOT"/scripts/lib/personal-data-patterns.js "$REPO_ROOT"/scripts/lib/leak-guard-hosts.json "$MUT3/scripts/lib/"
+cp "$REPO_ROOT/hooks/_shared/secret-patterns.js" "$MUT3/hooks/_shared/"
+node -e '
+  const fs = require("fs"); const s = fs.readFileSync(process.argv[1], "utf8");
+  const t = s.replace("process.stderr.write(`leak-guard: ${msg}\\n`);\n  process.exit(code);", "process.stderr.write(`leak-guard: ${msg}\\n`);");
+  if (t === s) { process.stderr.write("mutation did not apply\n"); process.exit(3); }
+  fs.writeFileSync(process.argv[2], t);
+' "$REPO_ROOT/scripts/leak-guard.js" "$MUT3/scripts/leak-guard.js"
+assert_eq "$?" "0" "stat-try mutation: fail() made non-exiting in the copy"
+mkdir -p "$R/docs/plans/evidence/run1"; printf 'x %s\n' "$PERSONAL" > "$R/docs/plans/evidence/run1/out.md"; git -C "$R" add -A
+(cd "$R" && node "$MUT3/scripts/leak-guard.js" --staged --registry "$TEST_TMP/dirreg2.json" >/dev/null 2>&1); MRC=$?
+assert_eq "$([ "$MRC" = 2 ] && echo same || echo differs)" "differs" "stat-try mutation: with fail() not exiting, the dirreg2 case is RED (rc is no longer 2)"
+OUT="$(REGISTRY="$TEST_TMP/dirreg2.json" guard)"; assert_eq "$?" "2" "stat-try twin: the real script still exits 2 on a directory entry"
+reset_stage
+
+# ── BL-0348 item 7: more than 26 distinct hosts on one line get unique letter labels ──
+MH="$RC5/many.md"
+node -e '
+  const hs = []; for (let i = 0; i < 28; i++) hs.push("p" + i + "-7840" + "hs");
+  require("fs").writeFileSync(process.argv[1], "x " + hs.join(" ") + "\n");
+' "$MH"
+node "$REDACT" "$MH" >/dev/null 2>&1; assert_eq "$?" "0" "host letters: 28-host line redacts"
+LABELS="$(grep -o '<host-[a-z0-9]*>' "$MH")"
+assert_eq "$(printf '%s\n' "$LABELS" | wc -l | tr -d ' ')" "28" "host letters: 28 labels written"
+assert_eq "$(printf '%s\n' "$LABELS" | sort -u | wc -l | tr -d ' ')" "28" "host letters: all 28 labels are distinct"
+assert_not_contains "$LABELS" "<host-27>" "host letters: no numeric fallback"
+assert_contains "$LABELS" "<host-aa>" "host letters: the 27th host is aa"
+assert_contains "$LABELS" "<host-ab>" "host letters: the 28th host is ab"
+
 finalize_test

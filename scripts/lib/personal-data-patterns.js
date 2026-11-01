@@ -49,8 +49,15 @@ function loadHosts() {
   if (!Array.isArray(j.strong) || !Array.isArray(j.contextual)) throw new Error(`${file}: need "strong" and "contextual" arrays`);
   const strong = j.strong.slice();
   const local = os.hostname().split('.')[0];
-  if (local.length >= 4 && local.toLowerCase() !== 'localhost') strong.push(local);
-  return { strong: [...new Set(strong)], contextual: j.contextual };
+  const contextual = j.contextual.slice();
+  if (local.length >= 4 && local.toLowerCase() !== 'localhost') {
+    // A name with a digit, hyphen or underscore is distinctive: match it anywhere. A plain word (a machine
+    // named like a common English word) would block every added use of that word, so it only counts in a
+    // host context (lowercase, like the other contextual names).
+    if (/[-0-9_]/.test(local)) strong.push(local);
+    else contextual.push(local.toLowerCase());
+  }
+  return { strong: [...new Set(strong)], contextual: [...new Set(contextual)] };
 }
 
 const MAIL_OK_DOMAINS = new Set(['example.com', 'example.org', 'example.net']);
@@ -143,7 +150,12 @@ function redact(text) {
     const key = h.match.toLowerCase();
     if (!m.has(key)) m.set(key, m.size);
   }
-  const letter = (n) => (n < 26 ? String.fromCharCode(97 + n) : `${n + 1}`);
+  // a, b ... z, aa, ab ... (bijective base 26): every index gets its own label, no collision past 26
+  const letter = (n) => {
+    let s = '';
+    for (let k = n + 1; k > 0; k = Math.floor((k - 1) / 26)) s = String.fromCharCode(97 + ((k - 1) % 26)) + s;
+    return s;
+  };
   let out = '';
   let pos = 0;
   for (const h of hits) {

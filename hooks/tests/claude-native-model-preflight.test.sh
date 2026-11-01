@@ -67,6 +67,12 @@ assert_contains "$OUT" '"dispatcher_called": false' "hetero: nothing was dispatc
 export AUTOPILOT_CONFIG_FILE="$TEST_TMP/no-config.json" AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-topology.json"
 cp "$REPO_ROOT/project-config-template/review-loop-config.md" "$TEST_TMP/tpl.md"
 sed -i -E 's/^- reviewer_engine:.*/- reviewer_engine: claude-opus/; s/^- reviewer_runner:.*/- reviewer_runner: claude-native/' "$TEST_TMP/tpl.md"
+# Pin the consult/discuss switches explicitly so the fixture never rides a changed default (the
+# consult-discuss-switch suite's Population B rule). Appended last; a later key line wins.
+cat >> "$TEST_TMP/tpl.md" <<'PIN'
+- consult_dispatch: off
+- discuss_dispatch: off
+PIN
 R_ENGINE=$(cd "$TEST_TMP" && REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/tpl.md" "$REPO_ROOT/scripts/resolve-review-loop.sh" --field reviewer_engine 2>/dev/null)
 R_RUNNER=$(cd "$TEST_TMP" && REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/tpl.md" "$REPO_ROOT/scripts/resolve-review-loop.sh" --field reviewer_runner 2>/dev/null)
 assert_eq "$R_ENGINE/$R_RUNNER" "claude-opus/claude-native" "resolver passes the configured reviewer_engine through unchanged"

@@ -280,7 +280,7 @@
     },
     {
       "path": "skills/dev-flow/SKILL.md",
-      "sha256": "169b3489c1a071ff23a2017dbba4f48d046a4eb49888a0b7186c5f67bf0468f9",
+      "sha256": "e1232a69c261d72ecbb358fcc915a079133f468739bb3c94abbac33eee584a9c",
       "segments": [
         {
           "id": "dev.frontmatter",

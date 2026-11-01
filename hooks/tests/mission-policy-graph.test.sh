@@ -624,8 +624,10 @@ fs.writeFileSync(graphPath, JSON.stringify(checkerGraph));
 //     docs/projects/INDEX.md row with Version "active" (shares the lookup with
 //     scripts/check-plan-graduation.js's own plan_unregistered gate). ---
 const specRepo = path.join(tmp, 'spec-repo');
-const specPlansRel = layout.path('plans_dir');
-const specIndexRel = layout.path('projects_index');
+// spec-repo is a scratch repo, not this repo: it keeps plans and the projects index under the docs/ convention (the registry describes this repo only)
+const specDocs = require(path.join(root, 'hooks/tests/lib/docs-layout-registry.js')).DOCS_PATHS;
+const specPlansRel = specDocs.plans_dir;
+const specIndexRel = specDocs.projects_index;
 fs.mkdirSync(path.join(specRepo, specPlansRel), { recursive: true });
 fs.mkdirSync(path.dirname(path.join(specRepo, specIndexRel)), { recursive: true });
 fs.writeFileSync(path.join(specRepo, specPlansRel, '2026-01-01-widget.md'), '# Plan\n');

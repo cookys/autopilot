@@ -118,8 +118,8 @@ assert_eq "1" "$FUSE_WIRED" "round protocol wires both strike flags on the fuse 
 assert_eq "1" "$AUDIT_WIRED" "round protocol wires both strike flags on the conformance audit"
 
 # ── BL-0309 gap 2: process-document class (additive) ──
-# the process paths are this repo's work records, wherever the live layout registry puts them
-L_PLANS="$(layout_path plans_dir)"; L_BACKLOG="$(layout_path backlog_file)"; L_BACKLOG_DIR="$(layout_path backlog_dir)"; L_INDEX="$(layout_path projects_index)"
+# the process paths are this repo's work records, wherever the docs/ convention (the scratch tree is not this repo)
+L_PLANS="$(fixture_path plans_dir)"; L_BACKLOG="$(fixture_path backlog_file)"; L_BACKLOG_DIR="$(fixture_path backlog_dir)"; L_INDEX="$(fixture_path projects_index)"
 cat > "$TEST_TMP/pnames.txt" <<EOF
 $L_PLANS/2026-10-27-x.md
 $L_BACKLOG

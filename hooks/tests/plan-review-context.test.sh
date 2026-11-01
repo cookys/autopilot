@@ -9,7 +9,7 @@ REPO="$TEST_TMP/repo"
 STATE_DIR="$TEST_TMP/state"
 MANIFEST="$TEST_TMP/manifest.json"
 # The fixture repo mimics THIS repo: plans, their evidence and the backlog sit where the live layout registry says.
-PD="$(layout_path plans_dir)"; EV="$(layout_path plans_evidence_dir)"; BF="$(layout_path backlog_file)"
+PD="$(fixture_path plans_dir)"; EV="$(fixture_path plans_evidence_dir)"; BF="$(fixture_path backlog_file)"
 mkdir -p "$REPO/src" "$REPO/$EV/x" "$REPO/$PD" "$REPO/$(dirname "$BF")" "$STATE_DIR"
 git -C "$REPO" init -q
 printf '%s\n' '# Plan' 'Uses src/a.js.' >"$REPO/plan.md"

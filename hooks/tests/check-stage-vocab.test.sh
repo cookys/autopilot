@@ -14,10 +14,10 @@ PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); echo "ok: $*"; }
 bad() { FAIL=$((FAIL+1)); echo "FAIL: $*" >&2; }
 
-# The scratch tree mimics THIS repo: its work-record dirs are wherever the live layout registry puts them.
-PLANS="$(layout_path plans_dir)"; PROJ_ARCHIVE="$(layout_path projects_archive_dir)"; PROJ_INDEX="$(layout_path projects_index)"
-BACKLOG="$(layout_path backlog_file)"
-PLANS_RE="${PLANS//\//\\/}"; PROJ_ARCHIVE_RE="${PROJ_ARCHIVE//\//\\/}"; PROJECTS_RE="$(layout_path projects_dir)"; PROJECTS_RE="${PROJECTS_RE//\//\\/}"
+# The scratch tree mimics THIS repo: its work-record dirs are wherever the docs/ convention (the scratch tree is not this repo).
+PLANS="$(fixture_path plans_dir)"; PROJ_ARCHIVE="$(fixture_path projects_archive_dir)"; PROJ_INDEX="$(fixture_path projects_index)"
+BACKLOG="$(fixture_path backlog_file)"
+PLANS_RE="${PLANS//\//\\/}"; PROJ_ARCHIVE_RE="${PROJ_ARCHIVE//\//\\/}"; PROJECTS_RE="$(fixture_path projects_dir)"; PROJECTS_RE="${PROJECTS_RE//\//\\/}"
 R="$TEST_TMP/tree"
 mkdir -p "$R/skills/dev-flow" "$R/skills/other" "$R/$PLANS" "$R/$PROJ_ARCHIVE/x" "$R/$(dirname "$BACKLOG")" \
   "$R/evals/skill-onoff/packs/p" "$R/scripts" "$R/hooks/tests" "$R/node_modules/m"

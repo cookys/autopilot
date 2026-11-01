@@ -101,6 +101,9 @@ print_autopilot_frame_markers() {
 # scripts under test with REPO_LAYOUT_REGISTRY=$(docs_layout_registry), so it is green at any stage of the live one.
 __LIB_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 layout_path() { (cd "$__LIB_REPO_ROOT" && env -u REPO_LAYOUT_REGISTRY node scripts/lib/repo-layout.js path "$1"); }
+# fixture_path <key>: where a scratch repo that is NOT this repo keeps that work record. The registry describes this repo only
+# (scripts/lib/repo-layout.js pathFor); every other repo a script is pointed at gets the docs/ convention, at any live stage.
+fixture_path() { (cd "$__LIB_REPO_ROOT" && REPO_LAYOUT_REGISTRY="$(docs_layout_registry)" node scripts/lib/repo-layout.js path "$1"); }
 docs_layout_registry() {
   local f="$TEST_TMP/docs-layout-registry.json"
   [ -s "$f" ] || node "$__LIB_REPO_ROOT/hooks/tests/lib/docs-layout-registry.js" "$f" || return 1

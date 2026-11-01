@@ -1600,7 +1600,7 @@ assert_contains "$DUAL_OUT3" "allow_same_runner_dual_seat is ON" "legacy CLI: â€
 #     scripts/check-plan-graduation.js's own plan_unregistered gate) ---
 REG_REPO="$TEST_TMP/reg-repo"
 # the fixture mimics THIS repo: plans and the projects index sit where the live layout registry says
-REG_PLANS="$(layout_path plans_dir)"; REG_INDEX="$(layout_path projects_index)"
+REG_PLANS="$(fixture_path plans_dir)"; REG_INDEX="$(fixture_path projects_index)"
 mkdir -p "$REG_REPO/$REG_PLANS" "$REG_REPO/$(dirname "$REG_INDEX")"
 git -C "$REG_REPO" init -q
 REG_PLAN="$REG_REPO/$REG_PLANS/2026-01-01-widget.md"

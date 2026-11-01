@@ -132,9 +132,13 @@ function loadSourceCoverageManifest(manifestPath, opts) {
     missing.code = 'MANIFEST_REPO_ROOT_REQUIRED';
     throw missing;
   }
+  // The LITERAL absolute manifest path goes to the resolver: it checks the literal path against repoRoot
+  // first and the realpath second, so an outside alias of an inside manifest is refused. Only reading uses
+  // the canonical path.
+  const literalManifest = path.resolve(manifestPath);
   let root = path.dirname(canonicalManifest);
   if (repoRootForBase) {
-    const baseDir = LAYOUT.manifestBase(repoRootForBase, canonicalManifest).base;
+    const baseDir = LAYOUT.manifestBase(repoRootForBase, literalManifest).base;
     try { root = fs.realpathSync(baseDir); } catch {
       const missing = new Error(`source manifest base ${baseDir} does not exist`);
       missing.code = 'MANIFEST_BASE_INVALID';
@@ -164,7 +168,7 @@ function loadSourceCoverageManifest(manifestPath, opts) {
     const resolveUnderBase = (field, authored) => {
       try {
         return repoRootForBase
-          ? LAYOUT.resolveManifestPath(repoRootForBase, canonicalManifest, authored)
+          ? LAYOUT.resolveManifestPath(repoRootForBase, literalManifest, authored)
           : LAYOUT.containedPath(root, authored);
       } catch (error) {
         if (error.code === 'MANIFEST_PATH_ESCAPE') {

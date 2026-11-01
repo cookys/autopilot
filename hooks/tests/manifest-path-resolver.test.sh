@@ -303,6 +303,34 @@ assert_contains "$(node -e '
   const g = require(process.argv[1] + "/scripts/check-plan-graduation.js");
   try { g.frozenAssetFiles(process.argv[2]); console.log("RETURNED"); } catch (e) { console.log("THREW " + e.code); }' "$REPO_ROOT" "$FZ" 2>/dev/null)" "THREW MANIFEST_PATH_ESCAPE" "frozenAssetFiles: a resolution error propagates instead of shrinking the frozen set"
 
+# ---- 5i. round 5: the manifest's LITERAL path must be inside the repo root too (outside alias of an inside manifest) ----
+AL="$TEST_TMP/alias"; mkdir -p "$AL/repo/docs" "$AL/repo/sub/docs"; git -C "$AL/repo" init -q
+echo P > "$AL/repo/docs/p.md"; echo 'R1: yes' > "$AL/repo/docs/r.md"
+printf '{"schema_version":1,"sources":[{"plan_path":"p.md","rubric_path":"r.md","plan_sha256":"%s","rubric_sha256":"%s"}]}\n' "$(sha "$AL/repo/docs/p.md")" "$(sha "$AL/repo/docs/r.md")" > "$AL/repo/docs/m.json"
+ALR="$(cd "$AL/repo" && pwd -P)"
+ln -s "$ALR/docs/m.json" "$AL/outside.json"; ln -s "$ALR" "$AL/root-alias"
+aload() { node -e '
+  const g = require(process.argv[1] + "/scripts/mission-execution-graph-check.js");
+  try { console.log("OK " + g.loadSourceCoverageManifest(process.argv[2], { repoRoot: process.argv[3] }).planIds.length); } catch (e) { console.log("CODE " + e.code); }' "$REPO_ROOT" "$1" "$2"; }
+assert_eq "OK 1" "$(aload "$ALR/docs/m.json" "$ALR")" "alias contract: the real manifest in the real repo root is accepted"
+assert_eq "CODE MANIFEST_OUTSIDE_REPO" "$(aload "$AL/outside.json" "$ALR")" "graph-check API: an outside symlink alias of an inside manifest is refused"
+assert_contains "$(node -e 'try { require(process.argv[1]).manifestBase(process.argv[3], process.argv[2]); } catch (e) { console.log(e.code); }' "$LAYOUT" "$AL/outside.json" "$ALR")" "MANIFEST_OUTSIDE_REPO" "manifestBase API: an outside symlink alias is refused"
+node "$LAYOUT" manifest-path "$AL/outside.json" p.md --repo-root "$ALR" >/dev/null 2>&1
+assert_eq "2" "$?" "CLI: an outside symlink alias is rc=2"
+# the formal graph-check CLI on a real, green mission: the real sources pass, an outside alias of them does not
+GC="$REPO_ROOT/scripts/mission-execution-graph-check.js"; MS=containment-gates
+(cd "$REPO_ROOT" && node "$GC" --graph docs/mission-$MS-execution-graph.json --governance .claude/owner-kernel-governance.json --sources docs/mission-$MS-sources.json --repo-root . >/dev/null 2>&1)
+assert_eq "0" "$?" "graph-check CLI control: the real sources manifest passes"
+ln -s "$REPO_ROOT/docs/mission-$MS-sources.json" "$AL/real-alias.json"
+OUT="$(cd "$REPO_ROOT" && node "$GC" --graph docs/mission-$MS-execution-graph.json --governance .claude/owner-kernel-governance.json --sources "$AL/real-alias.json" --repo-root . 2>&1)"; RC=$?
+assert_eq "2" "$RC" "graph-check CLI: --sources <outside alias> --repo-root . is rc=2"
+assert_contains "$OUT" "is not inside the repo root" "graph-check CLI: the alias refusal is named"
+# a repoRoot that is itself a symlink: alias path and real path both accepted
+assert_eq "OK 1" "$(aload "$AL/root-alias/docs/m.json" "$AL/root-alias")" "symlinked repo root: manifest given through the alias is accepted"
+assert_eq "OK 1" "$(aload "$ALR/docs/m.json" "$AL/root-alias")" "symlinked repo root: manifest given through the real path is accepted"
+# a subdirectory as repoRoot keeps refusing a manifest above it
+assert_eq "CODE MANIFEST_OUTSIDE_REPO" "$(aload "$ALR/docs/m.json" "$ALR/sub")" "a repoRoot subdirectory still refuses a manifest outside it"
+
 # ---- 6. F5: check-claude-md-inventory is red when docs/scripts-inventory.md is missing ----
 SBX="$TEST_TMP/inv"; mkdir -p "$SBX/scripts/lib" "$SBX/docs"
 cp "$REPO_ROOT/scripts/check-claude-md-inventory.js" "$SBX/scripts/"

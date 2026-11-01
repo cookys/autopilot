@@ -47,9 +47,9 @@ run_case() {
   local -a cmd
   local runner=claude-native; [ "${CASE_RUNNER:-}" = cc-shim ] && runner=cc-shim
   if [ "$kind" = review ]; then
-    cmd=("$sd/dispatch-review.sh" --runner "$runner" ${CASE_RUNNER:+--endpoint TESTEP} --model m --diff-file "$TEST_TMP/d.diff" --bin "$STUB" --timeout 20s)
+    cmd=("$sd/dispatch-review.sh" --runner "$runner" ${CASE_RUNNER:+--endpoint TESTEP} --model haiku --diff-file "$TEST_TMP/d.diff" --bin "$STUB" --timeout 20s)
   else
-    cmd=("$sd/dispatch-author.sh" --runner "$runner" --model m --prompt-file "$TEST_TMP/p.txt" --bin "$STUB" --timeout 20s)
+    cmd=("$sd/dispatch-author.sh" --runner "$runner" --model haiku --prompt-file "$TEST_TMP/p.txt" --bin "$STUB" --timeout 20s)
   fi
   if [ "$mode" = term ]; then
     # short-lived helper child of this test; waited below
@@ -128,7 +128,7 @@ cat > "$LEAK_INNER" <<'INNER'
 . "$1"
 export TMPDIR="$OUTER_TMP/leak-tmp"; mkdir -p "$TMPDIR"
 rm -f "$STUB_REC"
-"$2/dispatch-author.sh" --runner claude-native --model m --prompt-file "$OUTER_TMP/p.txt" --bin "$STUB" --timeout 20s >/dev/null 2>&1 < /dev/null
+"$2/dispatch-author.sh" --runner claude-native --model haiku --prompt-file "$OUTER_TMP/p.txt" --bin "$STUB" --timeout 20s >/dev/null 2>&1 < /dev/null
 echo $?
 INNER
 LIB_ORIG="$REPO_ROOT/hooks/tests/lib.sh"

@@ -2283,6 +2283,13 @@ if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
 fi
 
 
+# BL-0364: a claude-native worker passes --model verbatim to the claude CLI, which rejects a bare family
+# name (claude-opus -> unrecognized_model). Refuse it before anything is created.
+if [ "${IS_CNATIVE:-0}" -eq 1 ] && [ "$MODEL_IS_DEFAULT" -eq 0 ]; then
+  _CNATIVE_MODEL_ERR="$(node "$SELF_DIR/lib/seat-model-id.js" check "$MODEL" 2>&1)" \
+    || die_precondition "claude-native refused: $_CNATIVE_MODEL_ERR"
+fi
+
 if [ "$IS_CODEX" -eq 0 ] && [ "$IS_GROK" -eq 0 ] && [ "$IS_CCSHIM" -eq 0 ] \
    && [ "$IS_PI" -eq 0 ] && [ "$IS_QODER" -eq 0 ] && [ "$IS_CURSOR" -eq 0 ] && [ "$IS_OPENCODE" -eq 0 ] && [ "$IS_KIMI" -eq 0 ] && [ "$IS_CNATIVE" -eq 0 ]; then
   # `|| die` in the PARENT: agy_resolve_model_alias deliberately never dies inside `$( )`,

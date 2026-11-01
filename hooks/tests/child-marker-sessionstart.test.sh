@@ -70,9 +70,9 @@ one_manifest() { find "$1" -name '*.manifest.json' | head -1; }
 
 PARENT="aaaaaaaa-1111-2222-3333-444444444444"
 declare -A CMDS
-CMDS[author-native]="$AUTHOR --runner claude-native --model claude-haiku --prompt-file $PROMPT --bin @BIN@"
+CMDS[author-native]="$AUTHOR --runner claude-native --model haiku --prompt-file $PROMPT --bin @BIN@"
 CMDS[author-ccshim]="$AUTHOR --runner cc-shim --model MiniMax-M3 --prompt-file $PROMPT --bin @BIN@"
-CMDS[review-native]="$REVIEW --runner claude-native --model claude-haiku --diff-file $DIFF --bin @BIN@"
+CMDS[review-native]="$REVIEW --runner claude-native --model haiku --diff-file $DIFF --bin @BIN@"
 CMDS[review-ccshim]="$REVIEW --runner cc-shim --model MiniMax-M3 --endpoint TESTEP --diff-file $DIFF --bin @BIN@"
 
 # run_shape <shape> <stub-bin> <tag> -> sets MD (marker dir), RUNS, LOG
@@ -163,7 +163,7 @@ QD="$TEST_TMP/q'uote"; mkdir -p "$QD"; cp -R "$REPO_ROOT/scripts" "$QD/scripts"
 QLOG="$TEST_TMP/log-quote"; : > "$QLOG"; QRUNS="$TEST_TMP/runs-quote"; mkdir -p "$QRUNS"
 QERR="$( cd "$SBX" && timeout 90 env -u REPO_ROOT -u CONSUMING_REPO_ROOT AUTOPILOT_DISPATCH_RUNS_DIR="$QRUNS" STUB_LOG="$QLOG" \
     AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/markers-quote" AUTOPILOT_RUNS_WATCH_AUTOSTART=0 PATH="$BINDIR:$PATH" CLAUDE_CODE_SESSION_ID="$PARENT" \
-    "$QD/scripts/dispatch-review.sh" --runner claude-native --model claude-haiku --diff-file "$DIFF" --bin "$BINDIR/claude" 2>&1 >/dev/null )" || true
+    "$QD/scripts/dispatch-review.sh" --runner claude-native --model haiku --diff-file "$DIFF" --bin "$BINDIR/claude" 2>&1 >/dev/null )" || true
 case "$QERR" in *"contains a quote or backslash"*) eq ok ok "quoted scripts path: the rail warns on stderr that the child marker hook is not installed" ;; *) fail "quoted scripts path: no warning on stderr (got: ${QERR:0:200})" ;; esac
 eq "SETTINGS:" "$(grep '^SETTINGS:' "$QLOG" | head -1)" "quoted scripts path: the claude child is launched without --settings"
 

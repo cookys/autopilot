@@ -207,7 +207,7 @@ for PARITY_RUNNER in $SCHEMA_RUNNERS; do
     anthropic-compatible) PARITY_EXTRA=(--endpoint PARITYEP --context-window off); PARITY_PATH="$PARITY_FAKE_NODE:$PATH" ;;
   esac
   PARITY_OUT="$(PATH="$PARITY_PATH" AUTOPILOT_BLIND_DISCOVERY=1 DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 \
-    "$SCRIPT" --runner "$PARITY_RUNNER" --model fixture --diff-file "$DIFF" --bin "$PARITY_STUB" "${PARITY_EXTRA[@]}" 2>&1)"; PARITY_EXIT=$?
+    "$SCRIPT" --runner "$PARITY_RUNNER" --model haiku --diff-file "$DIFF" --bin "$PARITY_STUB" "${PARITY_EXTRA[@]}" 2>&1)"; PARITY_EXIT=$?
   JS_TIER="$(node -e '
 const { reviewSeatTier } = require(process.argv[1]);
 process.stdout.write(reviewSeatTier(process.argv[2]));

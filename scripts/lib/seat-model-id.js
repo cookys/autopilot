@@ -33,4 +33,15 @@ function invalidSeatModels(seats) {
   return bad;
 }
 
+// CLI for the shell dispatchers: `node seat-model-id.js check <model>` -> exit 0 valid, 1 invalid
+// (the reason on stdout, for the caller's precondition message).
+if (require.main === module) {
+  const model = process.argv[3];
+  if (process.argv[2] !== 'check') { console.error('usage: seat-model-id.js check <model>'); process.exit(2); }
+  if (isClaudeNativeModel(model)) process.exit(0);
+  const r = invalidSeatModels([{ id: 'model', runner: 'claude-native', engine: model }])[0];
+  process.stdout.write(r.message.replace(/^seat model \(runner claude-native\) /, '') + '\n');
+  process.exit(1);
+}
+
 module.exports = { CLAUDE_CLI_ALIASES, isClaudeNativeModel, invalidSeatModels };

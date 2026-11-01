@@ -1014,24 +1014,24 @@ for _rv_runner in cc-shim claude-native; do
   _rv_ep=(); [ "$_rv_runner" = "cc-shim" ] && _rv_ep=(--endpoint TESTEP)
   # Unspecified effort: the script default (xhigh) is a constant, not a seat decision => nothing is sent.
   rm -f "$REVIEW_CC_ARGV"
-  OUT="$(AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner "$_rv_runner" --model mini --diff-file "$DIFF" \
+  OUT="$(AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner "$_rv_runner" --model haiku --diff-file "$DIFF" \
     --bin "$TEST_TMP/review-cc-stub" ${_rv_ep[@]+"${_rv_ep[@]}"} 2>&1)"; EXIT=$?
   assert_eq "0" "$EXIT" "review $_rv_runner without --effort exit 0"
   assert_not_contains "$(cat "$REVIEW_CC_ARGV")" "--effort" "review $_rv_runner without --effort sends no --effort"
   for _rv_eff in low medium high xhigh max; do
     rm -f "$REVIEW_CC_ARGV"
-    OUT="$(AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner "$_rv_runner" --model mini --diff-file "$DIFF" \
+    OUT="$(AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner "$_rv_runner" --model haiku --diff-file "$DIFF" \
       --bin "$TEST_TMP/review-cc-stub" --effort "$_rv_eff" ${_rv_ep[@]+"${_rv_ep[@]}"} 2>&1)"; EXIT=$?
     assert_eq "0" "$EXIT" "review $_rv_runner --effort $_rv_eff exit 0"
     assert_contains "$(tr '\n' ' ' < "$REVIEW_CC_ARGV")" "--effort $_rv_eff " "review $_rv_runner forwards --effort $_rv_eff to claude"
   done
   rm -f "$REVIEW_CC_ARGV"
-  OUT="$(AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner "$_rv_runner" --model mini --diff-file "$DIFF" \
+  OUT="$(AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner "$_rv_runner" --model haiku --diff-file "$DIFF" \
     --bin "$TEST_TMP/review-cc-stub" --effort default ${_rv_ep[@]+"${_rv_ep[@]}"} 2>&1)"; EXIT=$?
   assert_eq "0" "$EXIT" "review $_rv_runner --effort default exit 0"
   assert_not_contains "$(cat "$REVIEW_CC_ARGV")" "--effort" "review $_rv_runner --effort default sends no --effort"
   rm -f "$REVIEW_CC_ARGV"
-  OUT="$(AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner "$_rv_runner" --model mini --diff-file "$DIFF" \
+  OUT="$(AUTOPILOT_SETTLE_MS=0 "$SCRIPT" --runner "$_rv_runner" --model haiku --diff-file "$DIFF" \
     --bin "$TEST_TMP/review-cc-stub" --effort ultra ${_rv_ep[@]+"${_rv_ep[@]}"} 2>&1)"; EXIT=$?
   assert_eq "2" "$EXIT" "review $_rv_runner invalid --effort ultra exits 2"
   assert_contains "$OUT" "precondition_failed" "review $_rv_runner invalid effort is a precondition failure"

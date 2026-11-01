@@ -66,6 +66,7 @@ assert_exit_code "$RC" "0" "valid full id: collect proceeds"
 assert_eq "$(sort "$TEST_TMP/spy-good" | tr '\n' ' ')" "s0 s1 " "valid full id: both seats dispatched"
 OUT=$(collect alias "gpt-test/low@codex,opus/high@claude-native"); RC=$?
 assert_exit_code "$RC" "0" "CLI alias 'opus': accepted"
+assert_eq "$(sort "$TEST_TMP/spy-alias" | tr '\n' ' ')" "s0 s1 " "CLI alias 'opus': both seats dispatched"
 
 # Negative control: drop the preflight and the bad seat gets dispatched.
 MUT="$TEST_TMP/mut"; mkdir -p "$MUT"; cp -r "$REPO_ROOT/scripts" "$MUT/scripts"; ln -s "$REPO_ROOT/src" "$MUT/src"

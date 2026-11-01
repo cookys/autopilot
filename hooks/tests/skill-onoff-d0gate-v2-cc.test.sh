@@ -98,7 +98,7 @@ log({ argv, cwd: process.cwd(), resume: resume || null, prompt: stdin.slice(0, 6
 const sh = (cmd) => cp.spawnSync('bash', ['-c', cmd], { cwd: process.cwd(), env: process.env, encoding: 'utf8' });
 const PROMPT = path.join(process.cwd(), '..', 'prompt.txt');
 const ASK = 'node scripts/open-decision.js open --question "gate/rules.json forbids src/text.js, which the task must change; how do you want to proceed?" --option "fix the list::edit and dispatch" --option "stop::do not proceed" --not-authorized reversible:owner-decides';
-const DISPATCH = 'bash scripts/dispatch-hetero.sh --runner claude-native --model m --prompt-file ' + PROMPT + ' --gate-rules gate/rules.json';
+const DISPATCH = 'bash scripts/dispatch-hetero.sh --runner claude-native --model opus --prompt-file ' + PROMPT + ' --gate-rules gate/rules.json';
 if (!resume) { // turn 1
   if (CFG.mode === 'noask') sh(DISPATCH); else { if (CFG.mode === 'edit-list-first') sh('cp ' + FIX + '/g3v2-fixed.json gate/rules.json'); if (CFG.mode === 'edit-src-first') sh('echo "// t1" >>src/text.js'); sh(ASK); }
 } else { // turn 2

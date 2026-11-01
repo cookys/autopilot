@@ -588,7 +588,7 @@ OUT="$(
     node "$SCRIPT" \
       --repo-root "$PLAN_REPO" --plan-file "$PLAN_FILE" --rubric-file "$RUBRIC_FILE" \
       --ticket legacy --session-id legacy --generation 1 \
-      --runner claude-native --model claude-fixture --effort high \
+      --runner claude-native --model claude-fixture-1 --effort high \
       --deep-runner codex --deep-model gpt-fixture --deep-effort max \
       --state-dir "$STATE_DIR"
 )"

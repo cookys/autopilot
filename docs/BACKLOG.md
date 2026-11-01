@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0369 -->
+<!-- next-id: BL-0370 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -14,13 +14,26 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
-### develop 上四支測試套件在 base 就是紅的
+### live pane 決策卡的長背景與選項難讀
+- **Id**: BL-0369
+- **Status**: open
+- **Since**: 2026-11-01
+- **Origin**: owner
+- **Problem**: 其他專案用 open-decision 開的決策卡，背景欄是一整段長文字，pane 只做硬折行；要點、脈絡、檔案路徑擠在同一段，選項全擠在同一行，owner 讀得很難過。
+- **Impact**: owner 要回的決策卡難以掃讀，容易漏看要點或選錯。
+- **Trigger**: owner picks a layout from the before/after screenshots
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: owner report with screenshot, 2026-11-01
+- **Pointer**: docs/backlog/decision-card-long-background-layout.md
+
+### develop 上五支測試套件在 base 就是紅的
 - **Id**: BL-0366
 - **Status**: open
 - **Since**: 2026-11-01
 - **Origin**: self
-- **Problem**: 四支測試套件在主線的基準點就失敗，不在已知紅名單裡，也不知道從哪個提交開始紅；驗收時在基準與修改後各跑一次，失敗相同。
-- **Impact**: 完整套件跑出紅燈，真正的新壞掉會被這四支蓋住。
+- **Problem**: 五支測試套件在主線的基準點就失敗，不在已知紅名單裡，也不知道從哪個提交開始紅；驗收時在基準與修改後各跑一次，失敗相同。
+- **Impact**: 完整套件跑出紅燈，真正的新壞掉會被這五支蓋住。
 - **Trigger**: next touch of runs-watch, the status CLI or the review rail, or the full-suite run before the 3.0.0 release
 - **Trigger-Type**: event
 - **Effort**: M

@@ -79,16 +79,40 @@ export const mainSteps = (list: readonly Step[]): Step[] => list.filter(s => !s.
 /** The last `n` main requests long enough to time; most steps of a working turn are a lone tool call with no rate. */
 export const recentTimed = (list: readonly Step[], n: number): Step[] => mainSteps(list).filter(s => s.tps !== null).slice(-n)
 
-/** `1.2s`, `840ms`, `14s`, `2m05s`; null is a dash (the caller passes the dash it draws). */
+/** A count of a million or more in at most 5 cells: `1.2M`, `34M`, `5.6B`, `999T`; past a thousand trillion it is `>999T` (a stored sample can hold any number, the columns have a width). */
+function compact(n: number): string {
+  let v = n / 1e6
+  for (const unit of ['M', 'B', 'T']) {
+    if (v < 999.5) return (v < 9.95 ? v.toFixed(1) : String(Math.round(v))) + unit
+    v /= 1000
+  }
+  return '>999T'
+}
+
+/**
+ * `1.2s`, `840ms`, `14s`, `2m05s`, `1h15m`; null is a dash (the caller passes the dash it draws). Never wider than 6 cells: from 100 hours up it is `>99h`.
+ */
 export function fmtMs(ms: number | null, dash: string): string {
   if (ms === null || !Number.isFinite(ms)) return dash
   if (ms < 1000) return `${Math.round(ms)}ms`
   if (ms < 10_000) return `${(ms / 1000).toFixed(1)}s`
   if (ms < 60_000) return `${Math.floor(ms / 1000)}s`
-  return `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0')}s`
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0')}s`
+  if (ms < 360_000_000) return `${Math.floor(ms / 3_600_000)}h${String(Math.floor((ms % 3_600_000) / 60_000)).padStart(2, '0')}m`
+  return '>99h'
 }
-export const fmtTps = (tps: number | null, dash: string): string => (tps === null || !Number.isFinite(tps) ? dash : String(Math.round(tps)))
-export const fmtCount = (n: number): string => n.toLocaleString('en-US')
+/** A rate in at most 6 cells: whole tokens per second under a million, `1.2M` and on above that. */
+export function fmtTps(tps: number | null, dash: string): string {
+  if (tps === null || !Number.isFinite(tps)) return dash
+  const r = Math.round(tps)
+  return r < 1_000_000 ? String(r) : compact(r)
+}
+/** A token count in at most 7 cells: with thousands separators under a million (`999,999`), `1.2M` and on above that. */
+export function fmtCount(n: number): string {
+  if (!Number.isFinite(n)) return '>999T'
+  const r = Math.round(n)
+  return r < 1_000_000 ? r.toLocaleString('en-US') : compact(r)
+}
 export const shortModel = (m: string): string => m.replace(/^claude-/, '').replace(/-\d{8}$/, '').replace(/\[1m\]$/, '')
 
 const nonNeg = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
@@ -111,7 +135,7 @@ export function petTag(text: string | null): string | null {
     if (raw === null || typeof raw !== 'object' || raw.schema !== PET_SCHEMA) return null
     const p = raw.pet
     if (p === null || p === undefined || typeof p.name !== 'string' || p.name === '' || typeof p.level !== 'number' || !Number.isFinite(p.level)) return null
-    return `${p.name} Lv.${Math.floor(p.level)}`
+    return `${p.name} Lv.${fmtCount(Math.max(0, Math.floor(p.level)))}`
   } catch (_e) {
     return null
   }

@@ -3,9 +3,9 @@
 // Run through `bash mods/live/run-tests.sh`. The method is codeforge 405b214's `stepRate`; the numbers pinned below are the 2026-11-02 case that showed 3578 tok/s for ~83.
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
-import { isStep, fmtMs, fmtTps, KEEP_STEPS, MIN_DECODE_MS, petTag, recentTimed, serverToolMs, STEPS_SHAPE, stepRate, summarize, validSteps } from './speed'
+import { isStep, fmtCount, fmtMs, fmtTps, KEEP_STEPS, MIN_DECODE_MS, petTag, recentTimed, serverToolMs, STEPS_SHAPE, stepRate, summarize, validSteps } from './speed'
 import type { Step } from './speed'
-import { COL_GAP, recentColumn, SPEED_COL_W, SPEED_ROWS, speedColumn, speedLabelParts, speedView, sparkline } from './speedview'
+import { COL_GAP, RECENT_W, recentColumn, SPEED_COL_W, SPEED_ROWS, speedColumn, speedLabelParts, speedView, sparkline } from './speedview'
 import * as ui from './ui'
 
 const step = (over: Partial<Step> = {}): Step => ({ at: 1, model: 'claude-opus-5-5', isSubagent: false, ttftMs: 1000, decodeMs: 2000, outTokens: 200, tps: 100, ...over })
@@ -111,6 +111,44 @@ test('fmtMs / fmtTps: sub-second, seconds, minutes and the dash', () => {
   expect(fmtMs(null, '-')).toBe('-')
   expect(fmtTps(82.6, '-')).toBe('83')
   expect(fmtTps(null, '-')).toBe('-')
+})
+
+const HUGE = [1e30, Number.MAX_SAFE_INTEGER, 1e21, 1e15, 999_999.6, 1_000_000, 1.2e9, 123_456_789_012_345, 1e300, Number.MAX_VALUE]
+const lineText = (l: { text: string }[]): string => l.map(g => g.text).join('')
+
+test('fmt*: a stored sample can hold any number, but each number column keeps its width (abbreviated, never cut into a wrong number)', () => {
+  for (const n of HUGE) {
+    expect(ui.displayWidth(fmtTps(n, '-')), 'fmtTps ' + n).toBeLessThanOrEqual(RECENT_W.tps)
+    expect(ui.displayWidth(fmtMs(n, '-')), 'fmtMs ' + n).toBeLessThanOrEqual(RECENT_W.ttft)
+    expect(ui.displayWidth(fmtCount(n)), 'fmtCount ' + n).toBeLessThanOrEqual(RECENT_W.out)
+  }
+  expect(fmtCount(1_234_567)).toBe('1.2M')
+  expect(fmtCount(999_999)).toBe('999,999')
+  expect(fmtCount(999_999.6)).toBe('1.0M')
+  expect(fmtTps(34_000_000, '-')).toBe('34M')
+  expect(fmtCount(5.6e9)).toBe('5.6B')
+  expect(fmtCount(1e30)).toBe('>999T')
+  expect(fmtMs(4_500_000, '-')).toBe('1h15m')
+  expect(fmtMs(1e30, '-')).toBe('>99h')
+})
+
+test('a stored sample with huge numbers never widens the recent table, the speed column or the label past their declared widths', () => {
+  const t = makeT('en')
+  for (const n of HUGE) {
+    const big = step({ outTokens: n, ttftMs: n, decodeMs: n, tps: n })
+    const tiny = step({ outTokens: n, ttftMs: n, decodeMs: 1e-30, tps: n }) // a rate over a near-zero window is huge too
+    for (const steps of [[big], [big, big], [tiny, big, step()]]) {
+      const recent = recentColumn(steps, 10, 46, t)
+      for (const l of recent.lines) expect(ui.displayWidth(lineText(l)), 'recent ' + n).toBeLessThanOrEqual(recent.width)
+      const col = speedColumn(steps, t)
+      for (const l of col.lines) expect(ui.displayWidth(lineText(l)), 'speed column ' + n).toBeLessThanOrEqual(col.width)
+      for (const l of speedView(steps, 10, 120, t).columns.flatMap(c => c.lines.map(x => ({ l: x, w: c.width })))) expect(ui.displayWidth(lineText(l.l))).toBeLessThanOrEqual(l.w)
+      const label = speedLabelParts(steps, 'Ferris Lv.' + fmtCount(n)) ?? []
+      expect(ui.displayWidth(label.find(g => g.role === 'value')?.text ?? ''), 'label value ' + n).toBeLessThanOrEqual(RECENT_W.tps)
+    }
+  }
+  const pet = petTag(JSON.stringify({ schema: 'codeforge.pet-view/1', pet: { name: 'F', level: 1e30 } })) ?? ''
+  expect(pet).toBe('F Lv.>999T')
 })
 
 test('petTag: codeforge.pet-view/1 with a pet is `Name Lv.N`; another schema, no pet, bad JSON and a missing file are null', () => {

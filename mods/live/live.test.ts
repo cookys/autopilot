@@ -72,6 +72,7 @@ import type { Slot } from './model'
 import { paneRows, runAgedOut, runEndedMs, runSubject } from './model'
 import * as ui from './ui'
 import { BAND_ROWS } from './band'
+import { COL_GAP, RECENT_COL_W, SPEED_COL_W } from './speedview'
 import { barStrip } from './tabs'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -6115,16 +6116,27 @@ for (const surface of SURFACES) {
   test('speed tab: a measurement that throws (a null entry in serverToolUses) leaves the turn alone: its result still comes back, and nothing is recorded (' + surface + ')', async ($, on) => {
     worldEn(on, richWorld())
     await start($, surface)
-    TURN_PLAN = [{ before: 10, after: 10, tokens: 5, badTools: true }]; TURN_AT = 0
-    const stream = $.turn.step({ turnId: 't1', index: 0, model: 'opus', messageCount: 1 })
-    for await (const _ of stream) {
-      // drained
+    // 100 + 100 ms is over MIN_DECODE_MS (150), so a sample that was recorded WOULD be timed and would draw a label: its absence below is the measurement's, not the window's
+    TURN_PLAN = [{ before: 100, after: 100, tokens: 5, badTools: true }, { before: 100, after: 100, tokens: 5 }]; TURN_AT = 0
+    const labelOf = async () => {
+      const ui = await mount($)
+      const buttons = (await ui.findAll({ type: 'Button' })) as Node[]
+      await ui.unmount()
+      return buttons.find(b => b.props?.key === 'speed')
     }
-    await stream.result // rejects when the measurement's failure reached the turn
-    const ui = await mount($)
-    const tree = (await ui.findAll({ type: 'Button' })) as Node[]
-    await ui.unmount()
-    expect(tree.some(b => b.props?.key === 'speed'), 'no sample was recorded: no label').toBe(false)
+    const chunks: unknown[] = []
+    const stream = $.turn.step({ turnId: 't1', index: 0, model: 'opus', messageCount: 1 })
+    for await (const c of stream) chunks.push(c)
+    await stream.result // rejects when the measurement's failure reached the turn (the harness hands no value back, so completing without a throw is the check)
+    expect(chunks.length, 'both chunks pass through unchanged').toBe(2)
+    expect(await labelOf(), 'the failed measurement recorded nothing: no label, no bad sample').toBeUndefined()
+    // control: the very same request without the bad entry is timed and draws the label, so the empty band above was not an artefact of too short a window
+    const stream2 = $.turn.step({ turnId: 't1', index: 1, model: 'opus', messageCount: 1 })
+    for await (const _ of stream2) { /* drained */ }
+    await stream2.result
+    const label = await labelOf()
+    expect(label, 'a good request of the same length is recorded').toBeDefined()
+    expect(walkTexts(label as Node).map(textOf).join('')).toMatch(/^│ ϟ \d+ tok\/s$/)
   })
 
   // a node's drawn width: a Box with a `width` is that wide, a row is its children side by side, a column the widest child, a Text its display width
@@ -6142,14 +6154,17 @@ for (const surface of SURFACES) {
     for (const c of (n.children || []) as (Node | string)[]) { const f = find(c, key); if (f !== null) return f }
     return null
   }
-  test('speed tab: at 30, 40, 60, 100 and 120 columns the open speed view never draws wider than the band, and a column it cannot give is left out, not cut (' + surface + ')', async ($, on) => {
+  // The thresholds are read from the source: speedview.ts decides which columns exist (the recent table only when its full RECENT_COL_W is left beside the speed column), register.ts decides when the
+  // forge tab (and so the view) exists at all (the label's room, labelCols >= FORGE_LABEL_MIN, needs the band wide enough: 30 columns is the indicator's own minimum and leaves none).
+  test('speed tab: at 30 to 120 columns the open speed view exists exactly where the tab does, never draws wider than the band, and the recent table is left out whole, not cut, when its ' + RECENT_COL_W + ' cells do not fit (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     forgeMod(w, [])
     await start($, surface)
     TURN_PLAN = TWO; TURN_AT = 0
     await runPlan($, TWO.map(p => p.agent))
     const seen: string[] = []
-    for (const columns of [30, 40, 60, 100, 120]) {
+    const withView: number[] = []
+    for (const columns of [30, 40, 60, 81, 82, 100, 120]) {
       const props = { bodyColumns: columns, maxRows: 20 }
       const a = await mount($, props)
       const hasTab = ((await a.findAll({ type: 'Button' })) as Node[]).some(b => b.props?.key === 'forge')
@@ -6160,11 +6175,26 @@ for (const surface of SURFACES) {
       await b.unmount()
       const view = find(tree, 'speedview')
       seen.push(columns + ':' + (hasTab ? (view === null ? 'tab, no view' : 'view ' + widthOf(view)) : 'no tab'))
-      if (view !== null) expect(widthOf(view), 'columns=' + columns).toBeLessThanOrEqual(columns)
+      expect(view !== null, 'columns=' + columns + ': the view is there exactly when the tab is').toBe(hasTab)
+      if (view !== null) {
+        withView.push(columns)
+        const text = cellsOf(view).map(c => c.text).join('|')
+        expect(widthOf(view), 'columns=' + columns).toBeLessThanOrEqual(columns)
+        expect(text, 'columns=' + columns + ': the speed column is always there').toContain(EN['speed.avg'])
+        const speedW = Math.min(SPEED_COL_W, columns)
+        const fits = columns - speedW - COL_GAP >= RECENT_COL_W
+        expect(text.includes(EN['reqs.title']), 'columns=' + columns + ': the recent table is there only when its full width fits').toBe(fits)
+        // a table that is left out is left out whole: none of its header words are drawn either
+        expect(text.includes(EN['reqs.model']), 'columns=' + columns + ': no cut-off table header').toBe(fits)
+      } else {
+        expect(columns, 'a band too narrow for the label has no tab').toBeLessThan(SPEED_COL_W + COL_GAP + RECENT_COL_W)
+      }
       // toggle the tab off again for the next width
       if (hasTab) { const c = await mount($, props); await c.press({ key: 'forge' }); await c.unmount() }
     }
     console.log('speed view widths: ' + seen.join(' | '))
+    expect(withView.includes(100) && withView.includes(120), 'the view is drawn at 100 and 120 columns').toBe(true)
+    expect(seen[0].endsWith('no tab') && seen[1].endsWith('no tab'), 'at 30 and 40 columns there is no room for the label, so no tab and no view').toBe(true)
   })
 
   test('speed tab: the label colours on the drawn band: ϟ and the trend running, the number default, the unit dim (' + surface + ')', async ($, on) => {

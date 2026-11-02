@@ -48,6 +48,8 @@ const KEY_W = 12
 export const SPEED_COL_W = 34
 export const RECENT_COL_W = 46
 export const COL_GAP = 2
+/** The recent table's number columns, in cells. fmtTps, fmtMs and fmtCount are each never wider than their column (speed.ts), so padLeft only ever pads. */
+export const RECENT_W = { tps: 6, ttft: 7, out: 7 }
 /** Narrower than this the speed view is not drawn (the key column and the longest value would not fit); from here up the speed column takes `min(34, columns)`. */
 export const SPEED_MIN_COLS = 26
 /** The rows the speed column takes (title + average, best, latest, first token, trend, requests); the table is cut to the rows left. */
@@ -79,7 +81,7 @@ export function speedColumn(steps: readonly Step[], t: T, width: number = SPEED_
 export function recentColumn(steps: readonly Step[], rows: number, width: number, t: T): SpeedColumn {
   const title = [seg(t('reqs.title'))]
   if (steps.length === 0) return { lines: [title, [seg(DASH + ' ' + t('speed.none'), { dim: true })]], width }
-  const W = { tps: 6, ttft: 7, out: 7 }
+  const W = RECENT_W
   const header = [seg('  ' + padLeft(t('reqs.tps'), W.tps) + ' ' + padLeft(t('reqs.ttft'), W.ttft) + ' ' + padLeft(t('reqs.out'), W.out) + '  ' + t('reqs.model'), { dim: true })]
   const shown = steps.slice(-Math.max(1, rows - 2)).reverse()
   const body = shown.map((s): Seg[] => {

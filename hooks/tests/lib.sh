@@ -122,8 +122,10 @@ materialise_graph_named_paths() {
     const graph = JSON.parse(fs.readFileSync(path.join(repo, cfg.graph_path), "utf8"));
     const names = new Set();
     JSON.stringify(graph, (k, v) => { if (typeof v === "string" && /^(hooks|scripts|src|docs|project|skills|references|agents|platforms|\.claude)\/[A-Za-z0-9_.\/-]+\.[A-Za-z0-9]+$/.test(v)) names.add(v); return v; });
-    // A named path is only ever created INSIDE the clone: an absolute path or a ".." segment is refused outright (nothing is
-    // written), and the resolved path must still sit under the clone root.
+    // Only strings that match the repo-relative pattern above are collected. Anything else (an absolute path such as /abs/x.md,
+    // or any other string) is not collected: it is skipped and never written, and it does not fail the call.
+    // For a collected path the real defences are: a ".." segment is refused outright (the pattern admits "."), and the
+    // resolved path must still sit under the clone root. Nothing is written when any collected path is refused.
     // A symlink inside the clone must not carry a write out of it either: the nearest EXISTING ancestor of the target is
     // resolved with realpath and has to stay under the clone root (also resolved).
     const root = path.resolve(repo);
@@ -134,7 +136,7 @@ materialise_graph_named_paths() {
     for (const n of names) {
       const abs = path.resolve(root, n);
       const real = nearestReal(abs);
-      if (path.isAbsolute(n) || n.split("/").includes("..") || !(abs + path.sep).startsWith(root + path.sep)
+      if (n.split("/").includes("..") || !(abs + path.sep).startsWith(root + path.sep)
           || real === null || !(real === realRoot || (real + path.sep).startsWith(realRoot + path.sep))) {
         console.error("materialise_graph_named_paths: refusing a graph-named path outside the clone: " + n);
         process.exit(2);

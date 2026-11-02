@@ -623,6 +623,16 @@ assert_eq "$(json_has_code "$o" sidecar_orphan)" "yes" "note.md is an orphan tho
 assert_contains "$o" "docs/backlog/note.md" "the orphan reported is note.md"
 assert_not_contains "$o" "docs/backlog/kept-note.md is" "kept-note.md is not reported"
 
+# A backlog file that sits inside a directory named backlog/ (the relayout form): its notes are that directory's other .md files,
+# and the backlog file is never its own orphan.
+d="$(repo sc-inside)"; mkdir -p "$d/area/backlog"
+printf '%s\n' '### Inside row' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: none' > "$d/area/backlog/BACKLOG.md"
+printf 'n\n' > "$d/area/backlog/lonely.md"
+o="$(node "$GATE" --backlog "$d/area/backlog/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" sidecar_orphan)" "yes" "backlog file inside backlog/: an unmentioned sibling note is an orphan"
+assert_contains "$o" "backlog/lonely.md" "the orphan reported is lonely.md"
+assert_not_contains "$o" "backlog/BACKLOG.md is mentioned" "the backlog file is not reported as its own orphan"
+
 # Trigger-Type (BL-0212). Required once a file uses the field; value and calendar date are separate codes.
 # RED at 604b9ff14: 116 passed, 5 failed — missing_field/bad_trigger_type/bad_trigger_date absent (got 'no'), valid ready+date exited 1.
 tt_row() { # <title> [trigger-type line or empty]

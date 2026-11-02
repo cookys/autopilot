@@ -192,6 +192,17 @@ C3="$TEST_TMP/clone3"; mkclone "$C3" "{\"a\":\"$D/../../outside3.md\"}"
 ( . "$TEST_TMP/unguarded.sh"; materialise_graph_named_paths "$C3" 2>/dev/null )
 [ -e "$TEST_TMP/outside3.md" ] && pass "control: without the guard the file lands outside the clone" || fail "control: unguarded variant did not write outside (the test cannot tell)"
 
+# strings outside the collected pattern (an absolute path) are skipped: no failure, no write, in or out of the clone
+ABSROOT="$TEST_TMP/abs-root"; ABSX="$ABSROOT/abs/x.md"
+C7="$TEST_TMP/clone7"; mkclone "$C7" "{\"a\":\"$ABSX\",\"b\":\"$D/ok7.md\"}"
+M7ERR="$TEST_TMP/m7.err"; : > "$M7ERR"
+listout() { find "$TEST_TMP" \( -path "$C7" -o -path "$TEST_TMP/hostile-*" -o -path "$M7ERR" \) -prune -o -type f -print | sort; }
+BEFORE_OUT="$(listout)"
+materialise_graph_named_paths "$C7" 2>"$M7ERR"; assert_eq "0" "$?" "materialise: an absolute-path string in the graph does not fail the call"
+[ ! -e "$ABSROOT" ] && pass "materialise: the absolute path's directory was not created" || fail "materialise: created the absolute path's directory"
+assert_eq "$BEFORE_OUT" "$(listout)" "materialise: the set of files outside the clone is unchanged"
+[ ! -e "$C7/abs/x.md" ] && [ ! -e "$C7$ABSX" ] && pass "materialise: no copy of the absolute path appears inside the clone" || fail "materialise: wrote the absolute path into the clone"
+[ -f "$C7/$D/ok7.md" ] && pass "materialise: the relative path of the same graph is still created" || fail "materialise: relative sibling not created"
 # symlinks inside the clone must not carry a write out of it
 OUTSIDE="$TEST_TMP/outside-dir"; mkdir -p "$OUTSIDE"
 C4="$TEST_TMP/clone4"; mkclone "$C4" "{\"a\":\"$D/x.md\"}"; ln -s "$OUTSIDE" "$C4/$D"

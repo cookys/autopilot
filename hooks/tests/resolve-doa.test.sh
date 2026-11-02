@@ -226,4 +226,101 @@ OUT="$(run_doa --role implementer --tier sonnet)"; EXIT=$?
 assert_eq "0" "$EXIT"                                      "sanitize: clean input still works"
 assert_contains "$OUT" '"preset":"cloud-high-trust"'       "sanitize: clean input correct preset"
 
+# ── 16. --target: production class (operator-console A2) ────────────────────
+# RED when the production judgment is removed: (a) production_denied/exit 10 cases fail;
+# RED when $DOA_CONFIG_OVERRIDE may read the Target table: (f) override cases fail.
+PROD_REPO="$TEST_TMP/prod-repo"; mkdir -p "$PROD_REPO/.claude"; git -C "$PROD_REPO" init -q
+cat > "$PROD_REPO/.claude/doa-config.md" <<'CFG'
+# DOA
+
+## Production Targets
+
+| Target | Class |
+|--------|-------|
+| example-prod | production |
+| example-staging | staging |
+| both-ways | staging |
+| both-ways | production |
+
+## Other
+CFG
+tgt() { (cd "$PROD_REPO" && env -u DOA_CONFIG_OVERRIDE bash "$SCRIPT" --role implementer --tier sonnet "$@" 2>&1); }
+
+# (a) listed production target
+OUT="$(tgt --target example-prod)"; EXIT=$?
+assert_eq "10" "$EXIT" "(a) production target: exit 10"
+assert_contains "$OUT" '"decision":"production_denied"' "(a) production target: production_denied"
+assert_not_contains "$OUT" '"actions"' "(a) production target: no action table (refused, not escalated)"
+# duplicate name with conflicting classes: the strictest wins
+OUT="$(tgt --target both-ways)"; EXIT=$?
+assert_eq "10" "$EXIT" "(a) conflicting duplicate rows: production wins"
+# (c) unlisted target fails closed, with a code distinct from production_denied
+OUT="$(tgt --target not-on-the-list)"; EXIT=$?
+assert_eq "11" "$EXIT" "(c) unlisted target: exit 11"
+assert_contains "$OUT" '"decision":"target_unlisted"' "(c) unlisted target: target_unlisted"
+assert_not_contains "$OUT" 'production_denied' "(c) unlisted is distinguishable from production_denied"
+OUT="$(tgt --target Example-Prod)"; EXIT=$?
+assert_eq "11" "$EXIT" "(c) names are exact: wrong case is unlisted"
+OUT="$(tgt --target 'example-*')"; EXIT=$?
+assert_eq "11" "$EXIT" "(c) no glob: wildcard is not a name"
+OUT="$(tgt --target '')"; EXIT=$?
+assert_eq "11" "$EXIT" "(c) empty target fails closed"
+# (d) staging == the existing class (same bytes as a call without --target)
+STG="$(tgt --target example-staging)"; STG_EXIT=$?
+NOT="$(tgt)"; NOT_EXIT=$?
+assert_eq "0" "$STG_EXIT" "(d) staging: exit 0"
+assert_eq "$NOT" "$STG" "(d) staging output is byte-identical to the no-target result"
+# no config file / no section at all: fail closed
+NOCFG="$TEST_TMP/nocfg-repo"; mkdir -p "$NOCFG"; git -C "$NOCFG" init -q
+OUT="$(cd "$NOCFG" && env -u DOA_CONFIG_OVERRIDE bash "$SCRIPT" --role implementer --tier sonnet --target example-staging 2>&1)"; EXIT=$?
+assert_eq "11" "$EXIT" "(c) no config in the repo: fail closed"
+# (g) malformed table: fail closed, even for a name that parses as staging
+for bad in '| example-prod | prodution |' '| example-prod | production | extra |' '| example prod | production |'; do
+  BADREPO="$TEST_TMP/bad-repo"; rm -rf "$BADREPO"; mkdir -p "$BADREPO/.claude"; git -C "$BADREPO" init -q
+  printf '## Production Targets\n\n| Target | Class |\n|---|---|\n%s\n| example-staging | staging |\n' "$bad" > "$BADREPO/.claude/doa-config.md"
+  OUT="$(cd "$BADREPO" && env -u DOA_CONFIG_OVERRIDE bash "$SCRIPT" --role implementer --tier sonnet --target example-staging 2>&1)"; EXIT=$?
+  assert_eq "11" "$EXIT" "(g) malformed row [$bad]: fail closed"
+  assert_contains "$OUT" 'malformed' "(g) malformed row [$bad]: reason says malformed"
+done
+# (f) $DOA_CONFIG_OVERRIDE can never relax the table
+O1="$TEST_TMP/ov-relax.md"; printf '## Production Targets\n\n| Target | Class |\n|---|---|\n| example-prod | staging |\n' > "$O1"
+O2="$TEST_TMP/ov-empty.md"; printf '| Role | Model tier | Preset |\n|---|---|---|\n| implementer | sonnet | cloud-high-trust |\n' > "$O2"
+for ov in "$O1" "$O2" /dev/null/nonexistent; do
+  OUT="$(cd "$PROD_REPO" && DOA_CONFIG_OVERRIDE="$ov" bash "$SCRIPT" --role implementer --tier sonnet --target example-prod 2>&1)"; EXIT=$?
+  assert_eq "10" "$EXIT" "(f) override [$ov] cannot relax production"
+  assert_contains "$OUT" 'production_denied' "(f) override [$ov]: still production_denied"
+done
+# the override cannot ADD a staging name either
+OUT="$(cd "$PROD_REPO" && DOA_CONFIG_OVERRIDE="$O1" bash "$SCRIPT" --role implementer --tier sonnet --target only-in-override 2>&1)"; EXIT=$?
+assert_eq "11" "$EXIT" "(f) a target only the override lists stays unlisted"
+# --target without a value is a usage error
+OUT="$(bash "$SCRIPT" --role implementer --tier sonnet --target 2>&1)"; EXIT=$?
+assert_eq "2" "$EXIT" "--target without a value: exit 2"
+# the repo's own committed config lists the production section (shipped file is parseable)
+OUT="$(cd "$REPO_ROOT" && env -u DOA_CONFIG_OVERRIDE bash "$SCRIPT" --role implementer --tier sonnet --target example-prod 2>&1)"; EXIT=$?
+assert_eq "10" "$EXIT" "repo's own .claude/doa-config.md lists example-prod as production"
+
+# (e) no --target: byte-identical to the pre-change script (develop version), stdout+stderr+exit
+BASE_SCRIPT="$TEST_TMP/resolve-doa.base.sh"
+if git -C "$REPO_ROOT" show 39c180e35:scripts/resolve-doa.sh > "$BASE_SCRIPT" 2>/dev/null; then
+  mkdir -p "$TEST_TMP/base/scripts"; cp "$BASE_SCRIPT" "$TEST_TMP/base/scripts/resolve-doa.sh"
+  cmp_one() {
+    local a b
+    a="$(cd "$PROD_REPO" && env -u DOA_CONFIG_OVERRIDE bash "$SCRIPT" "$@" 2>&1; echo "rc=$?")"
+    b="$(cd "$PROD_REPO" && env -u DOA_CONFIG_OVERRIDE bash "$TEST_TMP/base/scripts/resolve-doa.sh" "$@" 2>&1; echo "rc=$?")"
+    assert_eq "$b" "$a" "(e) no --target, byte-identical to base: $*"
+  }
+  cmp_one --role implementer --tier sonnet
+  cmp_one --role manager --tier haiku
+  cmp_one --role bogus --tier sonnet
+  cmp_one --role implementer --tier mystery
+  cmp_one implementer sonnet
+  cmp_one --role 'a|b' --tier sonnet
+  cmp_one --help
+  cmp_one --bogus
+  cmp_one
+else
+  echo "SKIP (e): base commit not available in this checkout"
+fi
+
 finalize_test

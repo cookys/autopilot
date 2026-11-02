@@ -6,7 +6,7 @@
  *
  *   node scripts/open-decision.js open  --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text
  *                                       [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>]
- *                                       [--doa-role <role>] [--doa-tier <tier>] [--source <who/where>]
+ *                                       [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>]
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
  *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn)
  *   node scripts/open-decision.js show  [--root-run-id <id>] [--json] [--cwd <dir>]    (lists every open question)
@@ -28,6 +28,10 @@
  * the session do alone (autonomous / logged) is refused: exit 3, decide it yourself. Plain sessions only need a known boundary.
  * If resolve-doa cannot be run, the DOA-independent boundaries (irreversible + the Board rows, `escalate` in every preset) are
  * still accepted with a stderr warning, and the other classes are refused (a gate that cannot verify must not wave them through).
+ * --target <name> (optional): the deploy target the question is about. It is judged by `resolve-doa.sh --target` BEFORE any boundary
+ * check, in every session mode and for every boundary: production_denied (exit 10) refuses the card, and so does target_unlisted /
+ * a failing resolver (fail closed) -> exit 6, nothing is written. A production target is refused, never escalated to the owner.
+ * Without --target nothing changes. The caller reports --target itself; a wrong label is an accepted residual risk (see resolve-doa.sh).
  * --option may repeat; at least two are REQUIRED (none or one -> exit 2); a question the owner answers in typed text passes --free-text instead (options null; --free-text with --option -> exit 2). Everything except
  * --question is optional text for the owner; an empty value is stored as null. Writes take a lock and rename atomically.
  * Node built-ins only. This script writes nothing outside the decisions directory.
@@ -36,6 +40,7 @@
  *
  * `open` also ensures a watcher publishes the card (src/status/card-visibility.js: the autostart hook's start path, plus the plain session marker).
  * Exit: 0 ok (show: at least one open) | 1 show: none open | 2 usage / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure |
+ *       6 open refused: --target is a production target, unlisted, or could not be judged (refuse, never escalate; nothing is written) |
  *       5 open: the card IS written and its id printed, but no live panel will show it (isolated env, no flock, unusable live dir, a watcher without --render); stderr names the reason and what to do.
  *       Library callers (openDecision) are unaffected: only the CLI `open` ensures and reports. AUTOPILOT_RUNS_WATCH_AUTOSTART=0 skips the ensure (the hook's own switch).
  */
@@ -55,7 +60,7 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
-  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--doa-role <role>] [--doa-tier <tier>] [--source <who/where>] [--root-run-id <id>]\n'
+  process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--root-run-id <id>]\n'
     + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js show [--root-run-id <id>] [--json]\n');
   return 2;
 }
@@ -113,6 +118,20 @@ function runResolveDoa(cwd, role, tier) {
     return { actions: j.actions, preset: j.preset, source: j.source };
   } catch (error) {
     return { failure: error.message };
+  }
+}
+
+// -> { refused?: string } ; --target is judged by resolve-doa before anything else. Only a clean exit 0 (staging) lets the card on.
+function checkTarget(cwd, role, tier, target) {
+  try {
+    const r = spawnSync('bash', [RESOLVE_DOA, '--role', role, '--tier', tier, '--target', target], { cwd, encoding: 'utf8', timeout: 10000 });
+    if (r.error) return { refused: `resolve-doa could not run (${r.error.message}); fail closed` };
+    if (r.status === 0) return {};
+    if (r.status === 10) return { refused: `production_denied: "${target}" is a production target; agents may not act on it and no card can authorise it (refuse, never escalate)` };
+    if (r.status === 11) return { refused: `target_unlisted: "${target}" is not on the production table (or the table is malformed); fail closed` };
+    return { refused: `resolve-doa --target failed (exit ${r.status}: ${String(r.stderr || '').trim().split('\n')[0] || 'no output'}); fail closed` };
+  } catch (error) {
+    return { refused: `resolve-doa --target failed (${error.message}); fail closed` };
   }
 }
 
@@ -229,9 +248,21 @@ function showText(entries) {
   return `${out.join('\n')}\n`;
 }
 
+// --target is lifted out before parse(): the flag set of parse() is pinned byte-for-byte by the frozen ask stub of the
+// d0gate-v2 evaluation (hooks/tests/skill-onoff-d0gate-v2.test.sh), which must not change.
+function takeTarget(argv) {
+  const i = argv.indexOf('--target');
+  if (i < 0) return { rest: argv };
+  if (i + 1 >= argv.length) return { error: '--target needs a value' };
+  return { rest: [...argv.slice(0, i), ...argv.slice(i + 2)], target: argv[i + 1] };
+}
+
 function main(argv) {
-  const args = parse(argv);
+  const tk = takeTarget(argv);
+  if (tk.error) return usage(tk.error);
+  const args = parse(tk.rest);
   if (args.error) return usage(args.error);
+  if (tk.target !== undefined) args.target = tk.target;
   const cmd = args._[0];
   if (!['open', 'close', 'show'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
@@ -266,6 +297,10 @@ function main(argv) {
   if (!args.option.length && !args['free-text']) return usage('a decision card needs at least two --option <label>::<description>; for a question answered in typed text pass --free-text');
   const options = args.option.length ? parseOptions(args.option) : null;
   if (options && options.some((o) => !o.label)) return usage('--option labels must be non-empty');
+  if (args.target !== undefined) {
+    const t = checkTarget(path.resolve(args.cwd || process.cwd()), args['doa-role'] || 'manager', args['doa-tier'] || 'sonnet', args.target);
+    if (t.refused) { process.stderr.write(`open-decision: refused: ${t.refused}\n`); return 6; }
+  }
   const gate = checkNotAuthorized(args['not-authorized'], { cwd: path.resolve(args.cwd || process.cwd()), role: args['doa-role'] || 'manager', tier: args['doa-tier'] || 'sonnet', autonomous: isAutonomous() });
   if (gate.code === 2) return usage(gate.message);
   if (gate.code === 3) { process.stderr.write(`open-decision: refused: ${gate.message}\n`); return 3; }

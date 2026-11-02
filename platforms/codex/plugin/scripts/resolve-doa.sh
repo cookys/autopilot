@@ -26,6 +26,34 @@
 # Note: flock(1) is Linux-native (util-linux). On macOS install via Homebrew
 #   (brew install util-linux). This script does not use flock itself; this note
 #   is here to mirror tree.sh's portability caveat for awareness.
+#
+# ── Production targets (--target <name>), added for operator-console A2 ──────
+#   scripts/resolve-doa.sh --role implementer --tier sonnet --target example-prod
+# Only when --target is given is a target judged; without it the output and exit
+# code are byte-identical to before. The target is looked up, by EXACT name (no
+# glob, case-sensitive), in the `## Production Targets` section of the COMMITTED
+# repo-root config: <git toplevel of $PWD>/.claude/doa-config.md (the $PWD copy if
+# $PWD is not in a git checkout). Row shape: `| Target | Class |`, Class is exactly
+# `production` or `staging`.
+#   production      → stdout {"decision":"production_denied",...}, exit 10. Refused,
+#                     never escalated: no card, no "go" turns it into permission.
+#   staging         → the ordinary preset JSON, identical to the no --target call.
+#   not on the table, section/file missing, invalid target name, or ANY malformed row
+#   in the table (misspelt class, wrong column count, bad name) → fail closed:
+#                     stdout {"decision":"target_unlisted",...}, exit 11.
+#   A name listed twice with different classes is production (the strictest wins).
+# $DOA_CONFIG_OVERRIDE is IGNORED for this table (chosen over "may only tighten"):
+# an override file can pick presets but can never relax, or even add to, the
+# production list; only the committed repo config decides.
+# Exit codes added: 10 production_denied | 11 target_unlisted / table untrusted.
+# (0 and 2 keep their meaning; 10 and 11 collide with no other exit of this script.)
+# Accepted residual risks (master plan §6, line 341; line 54):
+#   1. The caller self-reports --target. A mislabelled target (naming prod as a
+#      staging name, or an unlisted name that is then rejected) is not detected
+#      here; same class as the plan's "request mislabels production". No command
+#      content is parsed (separate item).
+#   2. An agent that edits the table is not stopped, only visible in git history.
+#      Every change to the list must be a reviewed commit.
 
 set -uo pipefail
 
@@ -34,12 +62,17 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 ROLE=""
 MODEL_TIER=""
+TARGET=""
+TARGET_SET=0
 
 # Parse flags or positional args
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --role)   ROLE="$2";       shift 2 ;;
     --tier)   MODEL_TIER="$2"; shift 2 ;;
+    --target)
+      [[ $# -lt 2 ]] && { echo "--target needs a value" >&2; exit 2; }
+      TARGET="$2"; TARGET_SET=1; shift 2 ;;
     -h|--help)
       sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -81,6 +114,62 @@ fi
 
 # Override-row column values flow into printf-built JSON; allowlist them.
 valid_token() { [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]]; }
+
+# ── Production target gate (only with --target) ──────────────────────────────
+# Reads the committed repo-root config; $DOA_CONFIG_OVERRIDE is deliberately not consulted.
+target_table_config() {
+  local top
+  top="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  [[ -z "$top" ]] && top="$PWD"
+  printf '%s/.claude/doa-config.md' "$top"
+}
+
+# stdout: production | staging | unlisted | malformed
+classify_target() {
+  local target="$1" cfg
+  cfg="$(target_table_config)"
+  [[ -f "$cfg" ]] || { echo unlisted; return; }
+  awk -F'|' -v want="$target" '
+    function trim(x) { gsub(/^[ \t]+|[ \t]+$/, "", x); return x }
+    /^[ \t]*```/ { fence = !fence; next }
+    fence { next }
+    /^## / { insec = ($0 ~ /^## Production Targets[ \t]*$/); next }
+    !insec { next }
+    /^[ \t]*\|/ {
+      if (NF != 4) { bad = 1; next }
+      name = trim($2); cls = trim($3)
+      if (name == "Target" && cls == "Class") next
+      if (name ~ /^:?-+:?$/ && cls ~ /^:?-+:?$/) next
+      if (name !~ /^[A-Za-z0-9._-]+$/ || (cls != "production" && cls != "staging")) { bad = 1; next }
+      if (name == want) { if (cls == "production") prod = 1; else stg = 1 }
+    }
+    END {
+      if (bad) print "malformed"
+      else if (prod) print "production"
+      else if (stg) print "staging"
+      else print "unlisted"
+    }' "$cfg"
+}
+
+if [[ "$TARGET_SET" -eq 1 ]]; then
+  if ! [[ "$TARGET" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    printf '{"decision":"target_unlisted","reason":"invalid target name","role":"%s","model_tier":"%s"}\n' "$ROLE" "$MODEL_TIER"
+    exit 11
+  fi
+  target_class="$(classify_target "$TARGET")"
+  case "$target_class" in
+    production)
+      printf '{"decision":"production_denied","target":"%s","role":"%s","model_tier":"%s","source":"production-table"}\n' "$TARGET" "$ROLE" "$MODEL_TIER"
+      exit 10
+      ;;
+    staging) ;;  # falls through to the ordinary class below
+    *)
+      printf '{"decision":"target_unlisted","target":"%s","reason":"%s","role":"%s","model_tier":"%s"}\n' "$TARGET" \
+        "$([[ "$target_class" == malformed ]] && echo 'production table malformed' || echo 'target not on the production table')" "$ROLE" "$MODEL_TIER"
+      exit 11
+      ;;
+  esac
+fi
 
 # ── Preset → action-policy tables ────────────────────────────────────────────
 # Presets are canonical; project overrides can only select a preset by name.

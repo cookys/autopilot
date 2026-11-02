@@ -30,15 +30,24 @@ function watcherLaunchOpts({ key, scope, topLevel, env }) {
   return opts;
 }
 
-// A watcher somebody started by hand without --render holds the lock but writes no job page: the card would still be invisible.
-function holderRendersPages(pid, key) {
+// What is known about the process holding the project lock. Only a POSITIVE confirmation counts: 'renders' = a live `status runs --watch`
+// of this project whose argv carries --render. 'no_render' = confirmed without it. 'unknown' = no such pid, argv unreadable, or an argv
+// that is not recognisably the project's watcher: the card is then not known to be seen, and the caller fails loudly.
+// `--project <key>` and `--project=<key>` are both read.
+function holderState(pid, key) {
   try {
+    if (!Number.isInteger(pid) || pid <= 0) return 'unknown';
     const argv = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
-    const at = argv.indexOf('--project');
-    if (!(` ${argv.join(' ')} `.includes(' status runs --watch ') && at !== -1 && argv[at + 1] === key)) return true; // not judgeable: assume fine
-    return argv.includes('--render');
+    if (argv.length === 0) return 'unknown';
+    let project = null;
+    for (let i = 0; i < argv.length; i += 1) {
+      if (argv[i] === '--project') { project = argv[i + 1]; break; }
+      if (argv[i].startsWith('--project=')) { project = argv[i].slice('--project='.length); break; }
+    }
+    if (!(` ${argv.join(' ')} `.includes(' status runs --watch ') && project === key)) return 'unknown';
+    return argv.includes('--render') ? 'renders' : 'no_render';
   } catch (_error) {
-    return true;
+    return 'unknown';
   }
 }
 
@@ -83,10 +92,12 @@ function ensureCardVisible({ cwd, sessionId = '', env = process.env } = {}) {
     const r = startWatcherDetached(opts);
     if (r.status === 'started') return { ok: true, status: 'started' };
     if (r.status === 'busy') {
-      if (Number.isInteger(r.holder) && !holderRendersPages(r.holder, scope.project_key)) {
-        return { ok: false, reason: `the project watcher (pid ${r.holder}) runs without --render, so it writes no page for the cards, and it could not be stopped`, action: `stop it (kill ${r.holder}) so a rendering one can start` };
-      }
-      return { ok: true, status: 'busy' };
+      const state = holderState(r.holder, scope.project_key);
+      if (state === 'renders') return { ok: true, status: 'busy' };
+      const who = Number.isInteger(r.holder) && r.holder > 0 ? `pid ${r.holder}` : 'an unidentified process';
+      const stop = `run \`autopilot status runs --stop --project ${scope.project_key}\` and open the card again (the autostart watcher is \`autopilot status runs --watch --project ${scope.project_key} --render\`)`;
+      if (state === 'no_render') return { ok: false, reason: `the project watcher (${who}) runs without --render, so it writes no page for the cards, and it could not be stopped`, action: stop };
+      return { ok: false, reason: `the project lock is held by ${who}, which cannot be confirmed to be a rendering watcher of this project (no such process, unreadable or unrecognised command line), so the card is not known to be shown`, action: stop };
     }
     if (r.status === 'flock_unavailable') return { ok: false, reason: `flock(1) is not available: ${r.message || 'util-linux flock not on PATH'}`, action: 'install util-linux (flock) so the watcher can start' };
     if (r.status === 'live_dir_unusable') return { ok: false, reason: `the live directory cannot be used: ${r.message}`, action: 'fix or unset AUTOPILOT_LIVE_DIR / XDG_RUNTIME_DIR' };

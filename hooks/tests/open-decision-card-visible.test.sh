@@ -15,13 +15,14 @@
 # Every watcher this suite starts is killed BY PID in the trap; the live dir is a /dev/shm tmpdir.
 . "$(dirname "$0")/lib.sh"
 
-SB="$TEST_TMP/cv"; mkdir -p "$SB"
+SB="$TEST_TMP/cv"; mkdir -p "$SB"; EXTRA_PIDS=""
 LIVE="$(mktemp -d -p /dev/shm autopilot-test-cv-XXXXXX)"; chmod 700 "$LIVE"
 OD="$REPO_ROOT/scripts/open-decision.js"
 HOOK="$REPO_ROOT/hooks/runs-watch-autostart.js"
 GIT="git -c user.email=t@t -c user.name=t -c init.defaultBranch=develop -c commit.gpgsign=false"
 cleanup_cv() {
   local f p
+  for p in $EXTRA_PIDS; do kill -9 "$p" 2>/dev/null; done
   for f in "$LIVE"/runs/*.json; do
     p="$(node -e 'try{const e=JSON.parse(require("fs").readFileSync(process.argv[1]));if(e.writer&&e.writer.pid)process.stdout.write(String(e.writer.pid))}catch(_){}' "$f" 2>/dev/null)"
     [ -n "$p" ] && kill -9 "$p" 2>/dev/null
@@ -156,5 +157,42 @@ cenv s6 node -e 'const r=require(process.argv[1]+"/scripts/open-decision.js").op
 payload | cenv s6 node "$HOOK"
 for i in $(seq 1 100); do [ -f "$LIVE/runs/$KEY.json" ] && break; sleep 0.2; done
 assert_file_exists "$LIVE/runs/$KEY.json" "S6 an open card opts the project in: the hook started a watcher"
+
+# ---- S9: the lock holder cannot be confirmed as a rendering watcher -> exit 5, never a silent 0 ----
+# A real rendering watcher holds the lock (stopped, so it cannot rewrite its envelope); the envelope's writer pid is then pointed at a
+# process the check must not trust: no such pid / unreadable argv (a kernel thread) / an argv that is not `status runs --watch --project <key>`.
+envelope_pid_set() { node -e 'const fs=require("fs");const f=process.argv[1];const e=JSON.parse(fs.readFileSync(f));e.writer.pid=Number(process.argv[2]);fs.writeFileSync(f,JSON.stringify(e))' "$LIVE/runs/$KEY.json" "$1"; }
+holder_case() { # holder_case <name> <label> <fake pid>
+  newrepo "$1"
+  open_card "$1" "Q-$1-a?"
+  local i real; for i in $(seq 1 100); do real="$(envpid "$KEY")"; [ -n "$real" ] && break; sleep 0.2; done
+  EXTRA_PIDS="$EXTRA_PIDS $real"; kill -STOP "$real"
+  envelope_pid_set "$3"
+  open_card "$1" "Q-$1-b?"
+  assert_eq "5" "$OPEN_RC" "S9 $2: exit 5"
+  assert_contains "$(cat "$SB/err")" "cannot be confirmed" "S9 $2: stderr says the holder cannot be confirmed"
+  assert_contains "$(cat "$SB/err")" "status runs --stop --project $KEY" "S9 $2: stderr says what to do"
+  kill -9 "$real" 2>/dev/null
+}
+holder_case s9a "holder pid does not exist" 4194000
+holder_case s9b "holder argv unreadable (kernel thread)" 2
+newrepo s9c
+open_card s9c "Q-s9c-a?"
+for i in $(seq 1 100); do REAL9="$(envpid "$KEY")"; [ -n "$REAL9" ] && break; sleep 0.2; done
+EXTRA_PIDS="$EXTRA_PIDS $REAL9"; kill -STOP "$REAL9"
+( exec -a x node -e 'setTimeout(()=>{},120000)' -- status runs --watch --proj="$KEY" --render ) & ODD=$!
+EXTRA_PIDS="$EXTRA_PIDS $ODD"; sleep 0.5; envelope_pid_set "$ODD"
+open_card s9c "Q-s9c-b?"
+assert_eq "5" "$OPEN_RC" "S9 unrecognised argv: exit 5"
+assert_contains "$(cat "$SB/err")" "cannot be confirmed" "S9 unrecognised argv: stderr says the holder cannot be confirmed"
+assert_eq "yes" "$(cmdline_has "$ODD" --proj=)" "S9 control: the odd-argv process was alive and unrecognisable"
+kill -9 "$ODD" 2>/dev/null
+# the standard `--project=<key>` spelling of a rendering watcher IS confirmed
+( exec -a x node -e 'setTimeout(()=>{},120000)' -- status runs --watch --project="$KEY" --render ) & EQ=$!
+EXTRA_PIDS="$EXTRA_PIDS $EQ"; sleep 0.5; envelope_pid_set "$EQ"
+open_card s9c "Q-s9c-c?"
+assert_eq "0" "$OPEN_RC" "S9 '--project=<key>' with --render is confirmed: exit 0"
+assert_eq "yes" "$(cmdline_has "$EQ" --project=)" "S9 control: the --project= process was alive"
+kill -9 "$EQ" 2>/dev/null
 
 finalize_test

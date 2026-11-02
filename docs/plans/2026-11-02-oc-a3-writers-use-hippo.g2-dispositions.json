@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "autopilot-oc-a3-hippo-writers",
+  "generation": 2,
+  "findings": [
+    {
+      "fingerprint": "bbec3788380bd0558f1e47476d3f5b897e3a31b836011c791c2291de5d1b0def",
+      "disposition": "accepted_blocker",
+      "rationale": "A3.4 step 9: in a store repo every commit and merge runs hippo check whatever paths it touches; without hippo pre-commit and pre-merge-commit exit 1; post-merge/post-rewrite always mark when they cannot check; unrelated-commit and non-.hippo merge cases added; KR-A3.4 updated."
+    },
+    {
+      "fingerprint": "f53916e4ef775c8c59c2c3a102b4fc6b84d7c8fb9c1d544edfc6ba9b2ca00636",
+      "disposition": "accepted_nonblocking",
+      "rationale": "A3.2 rule A now judges clauses: exempt only when the verb's object is project-record.js or a hippo read; mixed read/hand-edit fixture exits 1."
+    },
+    {
+      "fingerprint": "40a279d95df44fd94ab3a6eda333f13952b34bc4a8afee931792df65df7e3ee8",
+      "disposition": "accepted_blocker",
+      "rationale": "C6 now scrubs GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_COMMON_DIR, GIT_OBJECT_DIRECTORY, GIT_ALTERNATE_OBJECT_DIRECTORIES, GIT_PREFIX, pins GIT_CONFIG_NOSYSTEM/GIT_CONFIG_GLOBAL/XDG_CONFIG_HOME, and pre-flights rev-parse --show-toplevel per temp repo."
+    },
+    {
+      "fingerprint": "7494fb4f9aaca06025326bb62b367b797b2ce29112c84004c9c879ca01e3897a",
+      "disposition": "accepted_blocker",
+      "rationale": "Section 3.3: spool entries record worktree, branch and target; flush replays only matching entries under an O_EXCL lock with stale-pid recovery; A3.1 adds concurrent-flush and cross-worktree tests, red-checked."
+    },
+    {
+      "fingerprint": "d025349cffa20e4efc9d543eeaeee587ec401f979529388335f45dc76664cb9a",
+      "disposition": "accepted_blocker",
+      "rationale": "Ledger is the single owner of one-way decisions: A3.4 step 6 runs only in hippo/hippo-problems/spool, skips rows with source project-record, passes --key from the ledger row id; files-mode decision new marks its row; W20 text updated; tests for one row / one record."
+    },
+    {
+      "fingerprint": "df81097058204e1978d248d6087b90982e12fce33ae3c0d4729c7c37d64dbc41",
+      "disposition": "accepted_blocker",
+      "rationale": "backlog_frozen is per commit (pre-commit staged vs HEAD; pre-push each commit of the push range vs first parent), checked only when the parent tree has repo.toml; notices move into the store commit; a commit deleting repo.toml (rollback) is exempt; controls added."
+    },
+    {
+      "fingerprint": "3791700655c34e8e07496627fa3c5b361cc4781038b9e5b2b9bfb40f2bda026a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Marker moved to the per-worktree git dir; two-worktree case added."
+    },
+    {
+      "fingerprint": "f931bfff926adfe8b2df5a7dbb26515725ee43823abfd0394ad05dd17604addc",
+      "disposition": "accepted_nonblocking",
+      "rationale": "post-rewrite chain line added running the post-merge logic; fast-forward covered by post-merge; rebase case added."
+    },
+    {
+      "fingerprint": "a576eaa1089f7e9160630a02218c176ad96724a42fa22230705b49c0484ba484",
+      "disposition": "accepted_nonblocking",
+      "rationale": "C1 gains a scoped exception for hippo-sandbox.sh fixtures in sandbox temp repos with a tempdir assertion."
+    },
+    {
+      "fingerprint": "d1e5fbed61b54165b0ea4d73d81cf7f6e8470f1c592cdb3d5d75379ce771d405",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Same fold as the rule A clause change; mixed writer/hand-edit fixture exits 1."
+    },
+    {
+      "fingerprint": "7a8ca9cc6a4ff5ff462342db9832f0739cfbb0b92205dfc778b7f40ac2fc3ee1",
+      "disposition": "accepted_nonblocking",
+      "rationale": "C8 now puts scripts- and hook-inventory rows in the wiring commit; mechanism commits hold code and tests only."
+    },
+    {
+      "fingerprint": "66ce33050a1fec109792b8beef3dc51e4bc725646eb635072e54c273d8ecf5f3",
+      "disposition": "accepted_nonblocking",
+      "rationale": "A3.4 acceptance adds red-checked min_plugin_version, marker, problems and spool lines and the migrate refusal; A3.7 mirror-exclusion test is red-checked."
+    },
+    {
+      "fingerprint": "f04de73fa8d48dd459deed94af49386736f8f39e17b23f735842827ae8d50b4a",
+      "disposition": "accepted_nonblocking",
+      "rationale": "A3.6 cells run with a deny rule on the credential path; the checker refuses transcripts with the path or token-shaped strings; planted negative control added."
+    },
+    {
+      "fingerprint": "3ca5d4c1f71f692727867c55b17c2245efc77c5185a526c99d7ca7639e4f7b95",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Added to the P1.4 input list in section 7: once hippo init exists, new/import refuse without repo.toml."
+    }
+  ]
+}

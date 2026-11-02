@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "logical_plan_id": "autopilot-oc-a3-hippo-writers",
+  "generation": 1,
+  "findings": [
+    {
+      "fingerprint": "6fbe0eb6ebd75615ba56c7dfa15f359354d1bec3f10db4628516b0f03edfe0fc",
+      "disposition": "accepted_blocker",
+      "rationale": "Store bootstrap goes through the hippo CLI only: new P1.4 input `hippo init --id --visibility`, run by the operator (A3.3 step 1, A3.7 commit 1); no script or shell writes repo.toml."
+    },
+    {
+      "fingerprint": "0d6eb238d2ea1425cd5c0b86e0535b822993eacff5decb3157d7249fee45c1c1",
+      "disposition": "accepted_blocker",
+      "rationale": "scripts/hippo-git-hook.sh fails closed when hippo is missing and .hippo/ paths are staged or merged; post-merge writes an unchecked-merge marker that blocks commits until hippo check runs (A3.4 step 9)."
+    },
+    {
+      "fingerprint": "11a040f9e9e717de43ff989db325ec469896c8ed82927447418fd9ec847b1c15",
+      "disposition": "accepted_blocker",
+      "rationale": "A3.1 files-mode matrix covers every subcommand incl. reply/close/supersede/handoff close and handoff --decision/--lesson files; A3.5 handoff and learn text routes both states through project-record.js."
+    },
+    {
+      "fingerprint": "9bb812895c33f95a7ca2cbfec20d49b914f5b2ead0b3c658628c639b95562827",
+      "disposition": "accepted_blocker",
+      "rationale": "A3.2 rule A broadened (lowercase backlog forms for W4/W12), rule C required-writer list for W20/W21, W1/W9 templates moved into project-record.js; check-plan-graduation check mode + negative control in A3.4."
+    },
+    {
+      "fingerprint": "4e033b39b1259794e2902a089a36dda9015b5c3cedc69cd48b5660eb298247bd",
+      "disposition": "accepted_blocker",
+      "rationale": "repo.toml created by `hippo init` run by the operator (no model redirection); Q3 reconciled: .hippo/ dev-repo-only, mirror exclusion wired in A3.7 via repo-layout.js, and the cutover waits for the dev/release split."
+    },
+    {
+      "fingerprint": "b323da7fe0aa81956df64cb33e4458ee6ec9da661f29f8bb69a5650fc5ec371c",
+      "disposition": "accepted_blocker",
+      "rationale": "New hippo-problems state surfaces check exit 3 offending files (detect + session-start); guard refuses Bash .hippo paths when hippo is absent; pre-commit/pre-merge-commit exit non-zero for .hippo paths without hippo."
+    },
+    {
+      "fingerprint": "5951cb7ac2a52ee070605619fe1360fe4832de93d2c857d92ce3dabc2670ca81",
+      "disposition": "accepted_blocker",
+      "rationale": "backlog new gains --context/--context-file and global --target/--key; write-time validation via the shared lib/backlog-rules.js runs in both modes before any write."
+    },
+    {
+      "fingerprint": "5db4f65e575bf996a22f23dd78428bd5c4a9da6c608bc9334479eb543ce68cbd",
+      "disposition": "accepted_blocker",
+      "rationale": "A3.3, A3.4 and A3.6 run on the shared sandbox harness (sandbox HOME, temp HIPPO_CONFIG_DIR, temp repos); KR1 cells and their test included."
+    },
+    {
+      "fingerprint": "779615fef0549b2f6df897e4fab2d77ff58593692842e1d78d502e8fa7affb73",
+      "disposition": "accepted_blocker",
+      "rationale": "Files-mode matrix per subcommand with golden-file cases; superseded added to the §3.2 mapping (hippo status set is kind-independent) with a parity fixture."
+    },
+    {
+      "fingerprint": "8160434edbd078280585897dfd1e549caa8ad8e5e91a6374e352b6c9ccd5bbc1",
+      "disposition": "accepted_blocker",
+      "rationale": "§3.3 step contract: root key k and child keys k.n, per-step skip by key/edge/status lookups, refusal reports created ids and resumes via --key; fault points after each step type, each red-checked."
+    },
+    {
+      "fingerprint": "d15f230c34ac5240452c3698e17c85654c2a2daa3fe45fc05e5884c1955c8042",
+      "disposition": "accepted_blocker",
+      "rationale": "Plugin-dir case uses a temp copy; lib/hippo.js takes HIPPO_BIN else PATH; harness sets git identity and HIPPO_ACTOR, asserts detect=hippo, and traps checkout changes."
+    },
+    {
+      "fingerprint": "94e905907e143acc64ad2c46849f9de087e4aa37efd3143a52cafc5d08f621d4",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: fail-closed hooks and guard without hippo, backlog_frozen keyed on repo.toml presence, exit 3 surfaced, guard engages only in store repos; negative controls with hippo hidden."
+    },
+    {
+      "fingerprint": "0131e58da381fb008a0fb41c3f46bc3d608d6f00fe34e42a8d02e06eefd1cdf3",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: bootstrap is an operator-run `hippo init` (no mkdir/printf); depth-0 never runs it in the real checkout; the rehearsal uses the same command."
+    },
+    {
+      "fingerprint": "5ac3baa201a46fc3749a1d2b7e67ccd6514d8c7e318ffbaf5e34e5f568299d76",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: report mode in validate.sh until A3.7 --enforce; seeded allowlist + re-pin; project-record.js lines are not findings; handoff unit joins the cutover and backlog_frozen covers ADR/handoff files; only the lesson unit may stay held via pending."
+    },
+    {
+      "fingerprint": "dcd0898524d76ddc5d5046af06ba8d5a2d829d7eede0850c26111c40283e03bf",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: cutover includes the plugin version bump, .claude/record-store.json min_plugin_version warning in session-start, and refile instructions in the frozen notice."
+    },
+    {
+      "fingerprint": "637edfb7aed46409412a1c79d33fb798b1e4e98a6398d9e5e4e00c874be1a668",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: without a courier no holder is written; a fixed 'not observed' line plus git-read branch/commit; progress only as labelled narrative."
+    },
+    {
+      "fingerprint": "e4ad309e2f37afd281c09a85d1be26e41a1e3adf971602b4ca003d5d31f29a72",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: project-record.js prints and returns full 26-char ULIDs; skill text passes them to fleet --hippo and resume lines; tested in A3.1."
+    },
+    {
+      "fingerprint": "1fe7f5621b013bea82b610dea392480ad60573fc1a6b46d6413ae183ad20ab0b",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: every phase splits mechanism and wiring/guidance commits; A3.7 lists its commits (store, githooks, frozen notices, guidance per unit, version)."
+    },
+    {
+      "fingerprint": "ad36e102e3abb0e722038142c701e2285bb1bbf8753aedb22a904c3b17e569ac",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: temp HIPPO_CONFIG_DIR seeded with a leak-guard copy, KR1 cells under a plugin-free sandbox HOME with an operator-placed 0600 credential, env header enforced by the route checker."
+    },
+    {
+      "fingerprint": "77ec584822cc7b9a346a591fc8bdaa00c97aff0e339e74f98cd3eddf75064338",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: check-backlog-entries --reconcile (backlog_unimported) runs at the cutover pre-merge-commit/post-merge with a negative control; repair is a provenance-keyed import of missing ids only."
+    },
+    {
+      "fingerprint": "41e0c62031b32b5149b5a02019158f13cd2493a1fe8301c8177bbf7d3ae00e89",
+      "disposition": "accepted_nonblocking",
+      "rationale": "Folded: rollback exports hippo list --since before the revert; flush in files state exits 2 and never creates repo.toml; session-start warns on a non-empty spool in any state; test added."
+    }
+  ]
+}

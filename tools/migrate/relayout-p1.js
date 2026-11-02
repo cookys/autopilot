@@ -28,7 +28,7 @@
 //     refs-code / refs-docs: rewrite exact layout-map keys (full file paths) in tracked text files, markdown relative links in
 //     docs; never in sealed (no-rewrite) files, evidence, profiles, platforms mirrors, this tool, or the D9.5 / routing files.
 //     content: merge the two HANDOFF.md (the absorbed file is deleted), create docs/README.md, delete docs/training/README.md, follow the
-//       decide.test.ts card selector (見 docs/plans -> 見 project/plans).
+//       decide.test.ts card selector (見 docs/plans -> 見 project/plans), keep the stay-behind archive evidence out of check-stage-vocab.
 //     Not in apply: profiles repin, mirror regeneration (sync-all.sh) and the no-rewrite.json path update.
 //
 // Exit: 0 ok, 1 check-f2 failed or the plan found an internal inconsistency, 2 bad input.
@@ -779,6 +779,17 @@ function cmdApply(o) {
       const n = src.split(from).length - 1;
       if (n === 1) { fs.writeFileSync(dt, src.replace(from, () => "l.text.includes('見 project/plans')")); log.selector_fixed = 'mods/live/decide.test.ts'; }
       else if (n > 1) throw new InputError(`mods/live/decide.test.ts selector matched ${n} times (want 1)`);
+    }
+    // scripts/check-stage-vocab.js excludes history by the registry's keys; once the archives moved, the evidence trees P1 leaves inside the old
+    // archive directories (P2 moves them) fall out of that list. Add the two stay-behind prefixes, only for a moved layout, exactly once.
+    const sv = path.join(root, 'scripts/check-stage-vocab.js');
+    if (fs.existsSync(sv)) {
+      const src = fs.readFileSync(sv, 'utf8');
+      const a = "  EXCLUDE_PREFIXES = [\n    'CHANGELOG.md',\n    ...uniq([dirPrefix('plans_dir'), dirPrefix('plans_evidence_dir'), dirPrefix('projects_archive_dir')]),\n";
+      const b = "  // P1 leaves the evidence trees INSIDE the two archives where they were (P2 moves them): they are history too, and the registry's\n  // path keys no longer name them once the archives themselves have moved\n  const stayBehind = dirPrefix('plans_dir') === 'docs/plans/' ? [] : ['docs/plans/_archive/', 'docs/projects/_archive/'];\n  EXCLUDE_PREFIXES = [\n    'CHANGELOG.md',\n    ...uniq([dirPrefix('plans_dir'), dirPrefix('plans_evidence_dir'), dirPrefix('projects_archive_dir'), ...stayBehind]),\n";
+      const n = src.split(a).length - 1;
+      if (n === 1) { fs.writeFileSync(sv, src.replace(a, () => b)); log.stage_vocab_fixed = 'scripts/check-stage-vocab.js'; }
+      else if (n > 1 || !src.includes('const stayBehind')) throw new InputError(`scripts/check-stage-vocab.js exclude list matched ${n} times (want 1)`);
     }
     log.merged = [P.merge.target, P.merge.absorbed_old]; log.created = ['docs/README.md']; log.deleted = Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete');
   } else {

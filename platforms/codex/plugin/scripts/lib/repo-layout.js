@@ -11,7 +11,7 @@
  * one layout in force per merge and NO path aliases: a reader asks `path(key)` and gets the path that
  * is valid at the current stage.
  *
- * API:  stage()  path(key)  (derived keys: backlog_dir, guide_dir)  pathFor(repoRoot, key)  isSelfRepo(repoRoot)  rules({activeOnly})  allowlists()  exceptions()  validate(data)  load()
+ * API:  stage()  path(key)  (derived keys: backlog_dir, guide_dir)  pathFor(repoRoot, key)  isThisProject(repoRoot)  rules({activeOnly})  allowlists()  exceptions()  validate(data)  load()
  *       manifestBase(repoRoot, manifestFile)            the directory a sources manifest's plan_path/rubric_path
  *                                                       are relative to ({base, source: 'exception'|'registry'|'manifest-dir'})
  *       containedPath(base, rel)                        the single containment check (literal + realpath) both of them use
@@ -38,7 +38,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 
 const STAGES = ['bootstrap', 'P1', 'P2', 'P3', 'P4', 'P5'];
 
@@ -347,14 +346,20 @@ function pathOf(key, opts) {
   return d.paths[key];
 }
 
-// ---- Which repo does a registry path apply to? ----
-// The registry describes THIS repo (the one holding this file). A reader that runs on another repo (a hook in a consuming
-// project, a script given --repo-root / --target / a cwd) must not look for this repo's work records there: such a repo
-// keeps them under docs/ by convention. isSelfRepo() decides, pathFor() applies it.
-//   isSelfRepo(root)  true when root and this file's repo share one git common dir (a worktree of this repo counts),
-//                     both compared by realpath. Not a git repo, or any git failure: false.
-//   pathFor(root, key) the registry path when root is this repo (or root is empty: the caller is this repo's own tool),
-//                     else the consuming-project docs/ convention for that key.
+// ---- Which project does a registry path apply to? ----
+// The registry describes THIS project (the plugin that holds this file). A reader that runs on another repo (a hook in a
+// consuming project, a script given --repo-root / --target / a cwd) must not look for this project's work records there: such
+// a repo keeps them under docs/ by convention. isThisProject() decides, pathFor() applies it.
+//   isThisProject(root)  true when root carries this project's identity, judged by CONTENT, never by git: root has
+//                        .claude-plugin/plugin.json (or the codex mirror's .codex-plugin/plugin.json) whose "name" equals the name in this plugin's own plugin.json, AND root has
+//                        scripts/lib/repo-layout.js. So a worktree, an independent git clone, a non-git copy (a review rail's
+//                        scratch cwd) and a marketplace-cache install all count; an ordinary repo, or one whose plugin.json
+//                        names another plugin, does not. An unreadable or unparsable file means false. This only chooses a path
+//                        (nothing of root is executed), which is why a content test is enough here.
+//                        Known limit: a root at another stage than this plugin (an old bootstrap clone read by a P1 plugin) is
+//                        still treated as this project, so it gets THIS plugin's registry.
+//   pathFor(root, key)   the registry path when root is this project (or root is empty: the caller is this project's own tool),
+//                        else the consuming-project docs/ convention for that key.
 // The consumer names are built from parts on purpose: a relayout generator rewrites this repo's own docs/ paths and must
 // not reach a convention that belongs to other repos.
 const CONSUMER_DOCS = 'docs';
@@ -370,35 +375,33 @@ const CONSUMER_PATHS = {
   backlog_dir: [CONSUMER_DOCS, 'backlog'].join('/'),
 };
 
-function gitCommonDir(dir) {
-  try {
-    const env = { ...process.env };
-    for (const k of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE']) delete env[k];
-    const r = spawnSync('git', ['-C', dir, 'rev-parse', '--git-common-dir'], { encoding: 'utf8', env });
-    if (r.status !== 0) return null;
-    const out = String(r.stdout || '').trim();
-    if (!out) return null;
-    return fs.realpathSync(path.resolve(dir, out));
-  } catch { return null; }
-}
-
 const SELF_ROOT = path.resolve(__dirname, '..', '..');
-const selfCache = new Map();
-let selfCommon;
-function isSelfRepo(repoRoot) {
+// The identity file is .claude-plugin/plugin.json; the codex mirror of the plugin ships the same manifest as .codex-plugin/plugin.json.
+function pluginName(root) {
+  for (const dir of ['.claude-plugin', '.codex-plugin']) {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(root, dir, 'plugin.json'), 'utf8'));
+      if (typeof j.name === 'string' && j.name !== '') return j.name;
+    } catch { /* try the next manifest */ }
+  }
+  return null;
+}
+const identityCache = new Map();
+function isThisProject(repoRoot) {
   if (typeof repoRoot !== 'string' || repoRoot === '') return false;
-  let key;
-  try { key = fs.realpathSync(path.resolve(repoRoot)); } catch { return false; }
-  if (selfCache.has(key)) return selfCache.get(key);
-  if (selfCommon === undefined) selfCommon = gitCommonDir(SELF_ROOT);
-  const theirs = selfCommon ? gitCommonDir(key) : null;
-  const same = !!(selfCommon && theirs && theirs === selfCommon);
-  selfCache.set(key, same);
+  const key = path.resolve(repoRoot);
+  if (identityCache.has(key)) return identityCache.get(key);
+  const mine = pluginName(SELF_ROOT);
+  let same = false;
+  if (mine !== null && pluginName(key) === mine) {
+    try { same = fs.statSync(path.join(key, 'scripts', 'lib', 'repo-layout.js')).isFile(); } catch { same = false; }
+  }
+  identityCache.set(key, same);
   return same;
 }
 
 function pathFor(repoRoot, key, opts) {
-  if (!repoRoot || isSelfRepo(repoRoot)) return pathOf(key, opts);
+  if (!repoRoot || isThisProject(repoRoot)) return pathOf(key, opts);
   if (!Object.prototype.hasOwnProperty.call(CONSUMER_PATHS, key)) {
     throw new Error(`repo-layout: no consuming-project convention for path key ${JSON.stringify(key)}`);
   }
@@ -554,7 +557,7 @@ function allowlists(opts) {
 
 function exceptions(opts) { return checked(opts).exceptions.map((e) => Object.assign({}, e)); }
 
-module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, pathFor, isSelfRepo, rules, allowlists, exceptions, manifestBase, resolveManifestPath, containedPath, literalProblem, isActive, stageIndex };
+module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, pathFor, isThisProject, rules, allowlists, exceptions, manifestBase, resolveManifestPath, containedPath, literalProblem, isActive, stageIndex };
 
 if (require.main === module) {
   const argv = process.argv.slice(2);

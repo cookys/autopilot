@@ -124,10 +124,18 @@ materialise_graph_named_paths() {
     JSON.stringify(graph, (k, v) => { if (typeof v === "string" && /^(hooks|scripts|src|docs|project|skills|references|agents|platforms|\.claude)\/[A-Za-z0-9_.\/-]+\.[A-Za-z0-9]+$/.test(v)) names.add(v); return v; });
     // A named path is only ever created INSIDE the clone: an absolute path or a ".." segment is refused outright (nothing is
     // written), and the resolved path must still sit under the clone root.
+    // A symlink inside the clone must not carry a write out of it either: the nearest EXISTING ancestor of the target is
+    // resolved with realpath and has to stay under the clone root (also resolved).
     const root = path.resolve(repo);
+    const realRoot = fs.realpathSync(root);
+    const lexists = (d) => { try { fs.lstatSync(d); return true; } catch { return false; } };
+    // a dangling symlink exists for lstat but cannot be resolved: that is refused too (null)
+    const nearestReal = (abs) => { let d = abs; while (!lexists(d)) d = path.dirname(d); try { return fs.realpathSync(d); } catch { return null; } };
     for (const n of names) {
       const abs = path.resolve(root, n);
-      if (path.isAbsolute(n) || n.split("/").includes("..") || !(abs + path.sep).startsWith(root + path.sep)) {
+      const real = nearestReal(abs);
+      if (path.isAbsolute(n) || n.split("/").includes("..") || !(abs + path.sep).startsWith(root + path.sep)
+          || real === null || !(real === realRoot || (real + path.sep).startsWith(realRoot + path.sep))) {
         console.error("materialise_graph_named_paths: refusing a graph-named path outside the clone: " + n);
         process.exit(2);
       }

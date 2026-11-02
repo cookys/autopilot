@@ -752,9 +752,9 @@ function loadBacklogGate() {
 function backlogFieldConfig(gate, repoRoot) {
   try {
     const p = gate.resolveBacklogConfigPath(repoRoot);
-    return p ? gate.mergeConfig(gate.builtinConfig(), gate.parseConfigFile(p)) : gate.builtinConfig();
+    return p ? gate.mergeConfig(gate.builtinConfig(repoRoot), gate.parseConfigFile(p)) : gate.builtinConfig(repoRoot);
   } catch {
-    return gate.builtinConfig();
+    return gate.builtinConfig(repoRoot);
   }
 }
 

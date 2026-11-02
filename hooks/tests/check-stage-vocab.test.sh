@@ -14,7 +14,7 @@ PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); echo "ok: $*"; }
 bad() { FAIL=$((FAIL+1)); echo "FAIL: $*" >&2; }
 
-# The scratch tree mimics THIS repo: its work-record dirs are wherever the docs/ convention (the scratch tree is not this repo).
+# The scratch tree is NOT this project: a scan of another root gets the docs/ convention for its work-record dirs (fixture_path), whatever the live registry says.
 PLANS="$(fixture_path plans_dir)"; PROJ_ARCHIVE="$(fixture_path projects_archive_dir)"; PROJ_INDEX="$(fixture_path projects_index)"
 BACKLOG="$(fixture_path backlog_file)"
 PLANS_RE="${PLANS//\//\\/}"; PROJ_ARCHIVE_RE="${PROJ_ARCHIVE//\//\\/}"; PROJECTS_RE="$(fixture_path projects_dir)"; PROJECTS_RE="${PROJECTS_RE//\//\\/}"

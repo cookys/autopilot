@@ -8,7 +8,7 @@ FIXTURES="$REPO_ROOT/hooks/tests/fixtures/plan-review"
 REPO="$TEST_TMP/repo"
 STATE_DIR="$TEST_TMP/state"
 MANIFEST="$TEST_TMP/manifest.json"
-# The fixture repo mimics THIS repo: plans, their evidence and the backlog sit where the live layout registry says.
+# The fixture repo is a scratch repo, NOT this project: plans, their evidence and the backlog sit under the docs/ convention (fixture_path), whatever the live registry says.
 PD="$(fixture_path plans_dir)"; EV="$(fixture_path plans_evidence_dir)"; BF="$(fixture_path backlog_file)"
 mkdir -p "$REPO/src" "$REPO/$EV/x" "$REPO/$PD" "$REPO/$(dirname "$BF")" "$STATE_DIR"
 git -C "$REPO" init -q

@@ -322,7 +322,7 @@ function unifiedDiff(oldText, newText, filename) {
 }
 
 function loadCfg(opts, repoRoot) {
-  let cfg = builtinConfig();
+  let cfg = builtinConfig(repoRoot);
   let configPath = opts.config;
   if (configPath) {
     cfg = mergeConfig(cfg, parseConfigFile(configPath));
@@ -1220,7 +1220,7 @@ function mainToReporterFields(args) {
   const { text: converted, stats } = convertToReporterFields(text, drafts, parseRepliesTable(repliesText), titleFirstSeen(repoRoot, rel));
   // Gate the converted text with the backlog's own config (written to a temp copy beside nothing real).
   let cfg;
-  try { cfg = loadCfg(args, repoRoot); } catch { cfg = mergeConfig(builtinConfig(), { style: 'heading' }); }
+  try { cfg = loadCfg(args, repoRoot); } catch { cfg = mergeConfig(builtinConfig(repoRoot), { style: 'heading' }); }
   const { violations } = gate.collectViolations(converted, cfg, repoRoot, Date.now());
   const counts = {};
   for (const v of violations) {

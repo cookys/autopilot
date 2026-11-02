@@ -3,8 +3,8 @@
 #   1. bootstrap sets: every list / allowlist / deny list / prefix set a consumer builds from the registry equals, at stage
 #      bootstrap, the literal it replaced (hooks/tests/lib/layout-bootstrap-sets.js). Control: a consumer that adds a key the old
 #      literal did not have is caught.
-#   2. self repo only: the registry describes THIS repo; a reader running on another repo gets the docs/ convention
-#      (repo-layout.js isSelfRepo / pathFor). Control: a reader that applies the registry path to any repo is caught.
+#   2. this project only: the registry describes THIS repo; a reader running on another repo gets the docs/ convention
+#      (repo-layout.js isThisProject / pathFor). Control: a reader that applies the registry path to any repo is caught.
 #   3. materialise_graph_named_paths never writes outside the clone. Control: without the guard it does.
 #   4. backlog_dir derivation for a backlog file at the root and inside backlog/.
 # The docs/ names are built from $D on purpose: a relayout rewrite of this repo's own docs/ paths must not reach fixtures that
@@ -49,6 +49,7 @@ fs.writeFileSync(process.argv[2], JSON.stringify(r));' "$BS" "$P1REG"
 GITC=(-c user.email=t@t -c user.name=t -c commit.gpgsign=false -c core.hooksPath=/dev/null)
 SELF="$TEST_TMP/self"; mkdir -p "$SELF/scripts/lib" "$SELF/hooks"
 cp -r "$REPO_ROOT/scripts/lib/." "$SELF/scripts/lib/"; cp "$REPO_ROOT/hooks/orchestrator-edit-gate-lib.js" "$SELF/hooks/"
+mkdir -p "$SELF/.claude-plugin"; cp "$REPO_ROOT/.claude-plugin/plugin.json" "$SELF/.claude-plugin/"
 git -C "$SELF" init -q; git -C "$SELF" add -A; git -C "$SELF" "${GITC[@]}" commit -q -m seed
 SELFWT="$TEST_TMP/self-wt"; git -C "$SELF" worktree add -q "$SELFWT" 2>/dev/null
 OTHER="$TEST_TMP/other"; mkdir -p "$OTHER"; git -C "$OTHER" init -q
@@ -62,14 +63,50 @@ for root in "$SELFWT" "$OTHER"; do
   done
 done
 RL="$SELF/scripts/lib/repo-layout.js"
-IS() { REPO_LAYOUT_REGISTRY="$P1REG" node -e 'process.stdout.write(String(require(process.argv[1]).isSelfRepo(process.argv[2])))' "$RL" "$1"; }
+IS() { REPO_LAYOUT_REGISTRY="$P1REG" node -e 'process.stdout.write(String(require(process.argv[1]).isThisProject(process.argv[2])))' "${ISLIB:-$RL}" "$1"; }
 PF() { REPO_LAYOUT_REGISTRY="$P1REG" node -e 'process.stdout.write(require(process.argv[1]).pathFor(process.argv[2], process.argv[3]))' "$RL" "$1" "$2"; }
-assert_eq "true" "$(IS "$SELF")" "isSelfRepo: the repo holding repo-layout.js"
-assert_eq "true" "$(IS "$SELFWT")" "isSelfRepo: a worktree of that repo counts"
-assert_eq "false" "$(IS "$OTHER")" "isSelfRepo: another git repo is not"
-assert_eq "false" "$(IS "$PLAIN")" "isSelfRepo: a directory that is not a git repo is not"
-assert_eq "false" "$(IS "$TEST_TMP/no-such-dir")" "isSelfRepo: a missing directory is not"
-assert_eq "false" "$(IS "")" "isSelfRepo: an empty root is not"
+# identity is judged by content (plugin name + the registry lib), never by git
+SELFCLONE="$TEST_TMP/self-clone"; git clone -q --no-hardlinks "$SELF" "$SELFCLONE" 2>/dev/null
+NOGIT="$TEST_TMP/nogit-copy"; mkdir -p "$NOGIT/.claude-plugin" "$NOGIT/scripts/lib"
+cp "$SELF/.claude-plugin/plugin.json" "$NOGIT/.claude-plugin/"; cp "$SELF/scripts/lib/repo-layout.js" "$NOGIT/scripts/lib/"
+OTHERPLUG="$TEST_TMP/other-plugin"; mkdir -p "$OTHERPLUG/.claude-plugin" "$OTHERPLUG/scripts/lib"
+printf '{"name":"some-other-plugin"}' > "$OTHERPLUG/.claude-plugin/plugin.json"; cp "$SELF/scripts/lib/repo-layout.js" "$OTHERPLUG/scripts/lib/"
+NOLIB="$TEST_TMP/no-lib"; mkdir -p "$NOLIB/.claude-plugin"; cp "$SELF/.claude-plugin/plugin.json" "$NOLIB/.claude-plugin/"
+BADJSON="$TEST_TMP/bad-json"; mkdir -p "$BADJSON/.claude-plugin" "$BADJSON/scripts/lib"; printf '{not json' > "$BADJSON/.claude-plugin/plugin.json"; cp "$SELF/scripts/lib/repo-layout.js" "$BADJSON/scripts/lib/"
+assert_eq "true" "$(IS "$SELF")" "isThisProject: the project holding repo-layout.js"
+assert_eq "true" "$(IS "$SELFWT")" "isThisProject: a worktree counts"
+assert_eq "true" "$(IS "$SELFCLONE")" "isThisProject: an independent git clone counts"
+assert_eq "true" "$(IS "$NOGIT")" "isThisProject: a non-git copy with the two identity files counts"
+assert_eq "false" "$(IS "$OTHER")" "isThisProject: an ordinary repo is not"
+assert_eq "false" "$(IS "$OTHERPLUG")" "isThisProject: another plugin's repo (different plugin.json name) is not"
+assert_eq "false" "$(IS "$NOLIB")" "isThisProject: plugin.json alone, without scripts/lib/repo-layout.js, is not"
+assert_eq "false" "$(IS "$BADJSON")" "isThisProject: an unparsable plugin.json is not"
+assert_eq "false" "$(IS "$PLAIN")" "isThisProject: a plain directory is not"
+assert_eq "false" "$(IS "$TEST_TMP/no-such-dir")" "isThisProject: a missing directory is not"
+assert_eq "false" "$(IS "")" "isThisProject: an empty root is not"
+# a registry lib with no plugin.json next to it (a bare sandbox copy) knows no identity: nothing is this project
+BARE="$TEST_TMP/bare"; mkdir -p "$BARE/scripts/lib"; cp "$SELF/scripts/lib/repo-layout.js" "$BARE/scripts/lib/"
+assert_eq "false" "$(ISLIB="$BARE/scripts/lib/repo-layout.js" IS "$SELF")" "isThisProject: a lib without its own plugin.json treats every root as another project"
+# control: the old test (same git common dir) fails the clone and the non-git copy
+MUTID="$TEST_TMP/mut-identity"; mkdir -p "$MUTID/scripts/lib" "$MUTID/.claude-plugin"; cp "$SELF/.claude-plugin/plugin.json" "$MUTID/.claude-plugin/"; cp "$SELF/scripts/lib/repo-layout.js" "$MUTID/scripts/lib/"
+git -C "$MUTID" init -q; git -C "$MUTID" add -A; git -C "$MUTID" "${GITC[@]}" commit -q -m seed
+MUTWT="$TEST_TMP/mut-identity-wt"; git -C "$MUTID" worktree add -q "$MUTWT" 2>/dev/null
+node -e '
+const fs = require("fs"); const f = process.argv[1]; let s = fs.readFileSync(f, "utf8");
+const a = "function isThisProject(repoRoot) {";
+if (!s.includes(a)) process.exit(3);
+s = s.replace(a, "function __identity(repoRoot) {") + "\nconst __cp = require(\"child_process\");\nconst __common = (d) => { const r = __cp.spawnSync(\"git\", [\"-C\", d, \"rev-parse\", \"--git-common-dir\"], { encoding: \"utf8\" }); return r.status === 0 ? fs.realpathSync(path.resolve(d, r.stdout.trim())) : null; };\nfunction isThisProject(repoRoot) { const m = __common(SELF_ROOT); const t = repoRoot ? __common(repoRoot) : null; return !!(m && t && m === t); }\nmodule.exports.isThisProject = isThisProject;\n";
+fs.writeFileSync(f, s);' "$MUTID/scripts/lib/repo-layout.js"
+assert_eq "0" "$?" "control: the git-common-dir variant is applied"
+MIS() { REPO_LAYOUT_REGISTRY="$P1REG" node -e 'process.stdout.write(String(require(process.argv[1]).isThisProject(process.argv[2])))' "$MUTID/scripts/lib/repo-layout.js" "$1"; }
+assert_eq "true" "$(MIS "$MUTWT")" "control: the git variant still accepts a worktree"
+assert_eq "false" "$(MIS "$SELFCLONE")" "control: the git variant rejects an independent clone (the old defect)"
+assert_eq "false" "$(MIS "$NOGIT")" "control: the git variant rejects a non-git copy (the old defect)"
+# the review packet deny list for a non-git copy, under a P1 registry, carries the project/plans patterns
+OUT="$(REPO_LAYOUT_REGISTRY="$P1REG" node -e 'process.stdout.write(JSON.stringify(require(process.argv[1]).defaultDenyList(process.argv[2])))' "$REPO_ROOT/src/runners/review-packet.js" "$NOGIT")"
+assert_contains "$OUT" "project/plans/**/*.review.md" "defaultDenyList(non-git copy) at P1 denies project/plans review artifacts"
+OUT="$(REPO_LAYOUT_REGISTRY="$P1REG" node -e 'process.stdout.write(JSON.stringify(require(process.argv[1]).defaultDenyList(process.argv[2])))' "$REPO_ROOT/src/runners/review-packet.js" "$OTHER")"
+assert_not_contains "$OUT" "project/plans" "defaultDenyList(ordinary repo) at P1 keeps the docs/ patterns"
 assert_eq "project/plans" "$(PF "$SELFWT" plans_dir)" "pathFor: this repo's worktree gets the registry path"
 assert_eq "$D/plans" "$(PF "$OTHER" plans_dir)" "pathFor: another repo gets the docs/ convention"
 assert_eq "$D/BACKLOG.md" "$(PF "$PLAIN" backlog_file)" "pathFor: a non-git directory gets the docs/ convention"
@@ -125,6 +162,20 @@ sed -n '/^materialise_graph_named_paths()/,/^}/p' "$REPO_ROOT/hooks/tests/lib.sh
 C3="$TEST_TMP/clone3"; mkclone "$C3" "{\"a\":\"$D/../../outside3.md\"}"
 ( . "$TEST_TMP/unguarded.sh"; materialise_graph_named_paths "$C3" 2>/dev/null )
 [ -e "$TEST_TMP/outside3.md" ] && pass "control: without the guard the file lands outside the clone" || fail "control: unguarded variant did not write outside (the test cannot tell)"
+
+# symlinks inside the clone must not carry a write out of it
+OUTSIDE="$TEST_TMP/outside-dir"; mkdir -p "$OUTSIDE"
+C4="$TEST_TMP/clone4"; mkclone "$C4" "{\"a\":\"$D/x.md\"}"; ln -s "$OUTSIDE" "$C4/$D"
+materialise_graph_named_paths "$C4" 2>"$TEST_TMP/m4.err"; assert_eq "2" "$?" "materialise: a path below a symlinked directory that leaves the clone is refused"
+[ ! -e "$OUTSIDE/x.md" ] && pass "materialise: nothing written through the directory symlink" || fail "materialise: wrote through the directory symlink"
+C5="$TEST_TMP/clone5"; mkclone "$C5" "{\"a\":\"scripts/z.js\"}"; mkdir -p "$C5/scripts"; ln -s "$TEST_TMP/outside5.md" "$C5/scripts/z.js"
+materialise_graph_named_paths "$C5" 2>/dev/null; assert_eq "2" "$?" "materialise: a dangling symlink as the target itself is refused"
+[ ! -e "$TEST_TMP/outside5.md" ] && pass "materialise: nothing written through the dangling symlink" || fail "materialise: wrote through the dangling symlink"
+# control: without the realpath check the same write lands outside
+sed -n '/^materialise_graph_named_paths()/,/^}/p' "$REPO_ROOT/hooks/tests/lib.sh" | sed 's/const real = nearestReal(abs);/const real = realRoot;/' > "$TEST_TMP/norealpath.sh"
+C6="$TEST_TMP/clone6"; mkclone "$C6" "{\"a\":\"$D/x6.md\"}"; ln -s "$OUTSIDE" "$C6/$D"
+( . "$TEST_TMP/norealpath.sh"; materialise_graph_named_paths "$C6" 2>/dev/null )
+[ -e "$OUTSIDE/x6.md" ] && pass "control: without the realpath check the write lands outside" || fail "control: no-realpath variant did not write outside (the test cannot tell)"
 
 # ---- 4. backlog_dir derivation ------------------------------------------------------------------------------------------------
 bd() { # <backlog_file value> -> backlog_dir

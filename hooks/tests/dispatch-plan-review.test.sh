@@ -1599,7 +1599,7 @@ assert_contains "$DUAL_OUT3" "allow_same_runner_dual_seat is ON" "legacy CLI: â€
 # --- plan_unregistered refusal (shares docs/projects/INDEX.md registry with
 #     scripts/check-plan-graduation.js's own plan_unregistered gate) ---
 REG_REPO="$TEST_TMP/reg-repo"
-# the fixture mimics THIS repo: plans and the projects index sit where the live layout registry says
+# the fixture is a scratch repo, NOT this project: plans and the projects index sit under the docs/ convention (fixture_path), whatever the live registry says
 REG_PLANS="$(fixture_path plans_dir)"; REG_INDEX="$(fixture_path projects_index)"
 mkdir -p "$REG_REPO/$REG_PLANS" "$REG_REPO/$(dirname "$REG_INDEX")"
 git -C "$REG_REPO" init -q

@@ -22,7 +22,8 @@ function defaultDenyList(repo) {
     '**/*.raw.log',
   ]);
 }
-// This repo's own default list (no repo given), kept for callers that name it.
+// This repo's own default list (no repo given). Code that reviews a repo asks defaultDenyList(repo); this constant is for
+// callers that mean this repo itself.
 const DEFAULT_PACKET_DENY_LIST = defaultDenyList(null);
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024;
@@ -148,8 +149,8 @@ function matchGlob(pathSegs, patSegs, pi, gi) {
   return matchGlob(pathSegs, patSegs, pi + 1, gi + 1);
 }
 
-function packetPathDenied(repoPath, denyList) {
-  const list = denyList == null ? DEFAULT_PACKET_DENY_LIST : denyList;
+function packetPathDenied(repoPath, denyList, repo) {
+  const list = denyList == null ? defaultDenyList(repo) : denyList;
   const posix = String(repoPath).replace(/^\.\//, '');
   if (posix === '' || posix === '.') return false;
   const pathSegs = posix.split('/');

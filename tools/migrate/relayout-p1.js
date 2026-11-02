@@ -791,13 +791,28 @@ function cmdApply(o) {
       if (n === 1) { fs.writeFileSync(sv, src.replace(a, () => b)); log.stage_vocab_fixed = 'scripts/check-stage-vocab.js'; }
       else if (n > 1 || !src.includes('const stayBehind')) throw new InputError(`scripts/check-stage-vocab.js exclude list matched ${n} times (want 1)`);
     }
+    log.redacted = redactMasks(root, [P.merge.target]);
     log.merged = [P.merge.target, P.merge.absorbed_old]; log.created = ['docs/README.md']; log.deleted = Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete');
   } else {
     Object.assign(log, rewriteRefs(root, P, sealedOld, refMap, phase));
+    if (phase === 'refs-docs') log.redacted = redactMasks(root, REDACT_ARCHIVED_PLANS);
   }
   if (o.log) fs.writeFileSync(path.resolve(o.log), JSON.stringify(log, null, 1) + '\n');
   process.stdout.write(`relayout-p1 apply ${phase}: ${JSON.stringify(Object.fromEntries(Object.entries(log).filter(([, v]) => typeof v !== 'object')))}\n`);
   return 0;
+}
+
+// D10.11: leak-guard reads a moved-and-edited file as all-added lines, so the personal-data masks (scripts/redact-personal.js placeholders) are
+// kept on the merged HANDOFF and on the two archived plans whose links the rewrite touches. Redacting is idempotent; files that are absent are skipped.
+const REDACT_ARCHIVED_PLANS = ['project/plans/_archive/2026/06/2026-06-03-distill-handoff.md', 'project/plans/_archive/2026/10/2026-10-13-review-only-external-candidate.md'];
+function redactMasks(root, files) {
+  const done = [];
+  for (const f of files) {
+    if (!fs.existsSync(path.join(root, f))) continue;
+    cp.execFileSync('node', [path.join(root, 'scripts/redact-personal.js'), path.join(root, f)], { stdio: ['ignore', 'ignore', 'inherit'] });
+    done.push(f);
+  }
+  return done;
 }
 
 const DOCS_README = `# autopilot documentation

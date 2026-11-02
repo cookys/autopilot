@@ -377,11 +377,35 @@ const CONSUMER_PATHS = {
 
 const SELF_ROOT = path.resolve(__dirname, '..', '..');
 // The identity file is .claude-plugin/plugin.json; the codex mirror of the plugin ships the same manifest as .codex-plugin/plugin.json.
+// The root under test is someone else's repo, so its files are read defensively: only a regular file (lstat: a symlink, FIFO or
+// device is never followed or opened for reading) of at most IDENTITY_MAX_BYTES, opened with O_NOFOLLOW|O_NONBLOCK and checked
+// again with fstat on the descriptor (the entry may be swapped after the lstat). Anything else reads as nothing.
+const IDENTITY_MAX_BYTES = 64 * 1024;
+function readSmallRegularFile(file) {
+  let fd = -1;
+  try {
+    const before = fs.lstatSync(file);
+    if (!before.isFile() || before.size > IDENTITY_MAX_BYTES) return null;
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    const st = fs.fstatSync(fd);
+    if (!st.isFile() || st.size > IDENTITY_MAX_BYTES) return null;
+    const buf = Buffer.alloc(st.size);
+    let off = 0;
+    while (off < st.size) {
+      const n = fs.readSync(fd, buf, off, st.size - off, off);
+      if (n <= 0) break;
+      off += n;
+    }
+    return buf.toString('utf8', 0, off);
+  } catch { return null; } finally { if (fd >= 0) { try { fs.closeSync(fd); } catch { /* already closed */ } } }
+}
 function pluginName(root) {
   for (const dir of ['.claude-plugin', '.codex-plugin']) {
+    const text = readSmallRegularFile(path.join(root, dir, 'plugin.json'));
+    if (text === null) continue;
     try {
-      const j = JSON.parse(fs.readFileSync(path.join(root, dir, 'plugin.json'), 'utf8'));
-      if (typeof j.name === 'string' && j.name !== '') return j.name;
+      const j = JSON.parse(text);
+      if (j && typeof j.name === 'string' && j.name !== '') return j.name;
     } catch { /* try the next manifest */ }
   }
   return null;
@@ -394,7 +418,7 @@ function isThisProject(repoRoot) {
   const mine = pluginName(SELF_ROOT);
   let same = false;
   if (mine !== null && pluginName(key) === mine) {
-    try { same = fs.statSync(path.join(key, 'scripts', 'lib', 'repo-layout.js')).isFile(); } catch { same = false; }
+    try { same = fs.lstatSync(path.join(key, 'scripts', 'lib', 'repo-layout.js')).isFile(); } catch { same = false; } // lstat: a symlink is not the lib
   }
   identityCache.set(key, same);
   return same;

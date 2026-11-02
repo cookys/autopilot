@@ -84,6 +84,35 @@ assert_eq "false" "$(IS "$BADJSON")" "isThisProject: an unparsable plugin.json i
 assert_eq "false" "$(IS "$PLAIN")" "isThisProject: a plain directory is not"
 assert_eq "false" "$(IS "$TEST_TMP/no-such-dir")" "isThisProject: a missing directory is not"
 assert_eq "false" "$(IS "")" "isThisProject: an empty root is not"
+# hostile identity files in a repo under review: never followed, never blocked on, never read past the cap
+mkhostile() { # <name> -> dir with a valid-looking lib and the registry copy
+  local d="$TEST_TMP/hostile-$1"; mkdir -p "$d/.claude-plugin" "$d/scripts/lib"; cp "$SELF/scripts/lib/repo-layout.js" "$d/scripts/lib/"; printf '%s' "$d"
+}
+H_ZERO="$(mkhostile zero)"; ln -s /dev/zero "$H_ZERO/.claude-plugin/plugin.json"
+H_FIFO="$(mkhostile fifo)"; mkfifo "$H_FIFO/.claude-plugin/plugin.json"
+H_BIG="$(mkhostile big)"; node -e 'const n=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).name;require("fs").writeFileSync(process.argv[2],JSON.stringify({name:n,pad:"x".repeat(200000)}))' "$SELF/.claude-plugin/plugin.json" "$H_BIG/.claude-plugin/plugin.json"
+H_LINKPLUG="$(mkhostile linkplug)"; ln -s "$SELF/.claude-plugin/plugin.json" "$H_LINKPLUG/.claude-plugin/plugin.json"
+H_LINKLIB="$TEST_TMP/hostile-linklib"; mkdir -p "$H_LINKLIB/.claude-plugin" "$H_LINKLIB/scripts/lib"; cp "$SELF/.claude-plugin/plugin.json" "$H_LINKLIB/.claude-plugin/"; ln -s "$SELF/scripts/lib/repo-layout.js" "$H_LINKLIB/scripts/lib/repo-layout.js"
+ISB() { # bounded: a hang or crash is a failure, reported as the word HANG
+  local out; out="$(REPO_LAYOUT_REGISTRY="$P1REG" timeout 10 bash -c 'ulimit -v 4000000; exec node -e "process.stdout.write(String(require(process.argv[1]).isThisProject(process.argv[2])))" "$0" "$1"' "${ISLIB:-$RL}" "$1" 2>/dev/null)"; local rc=$?
+  [ "$rc" = 0 ] && printf '%s' "$out" || printf 'HANG'
+}
+assert_eq "false" "$(ISB "$H_ZERO")" "isThisProject: plugin.json symlinked to /dev/zero is false, promptly"
+assert_eq "false" "$(ISB "$H_FIFO")" "isThisProject: plugin.json as a FIFO is false, promptly"
+assert_eq "false" "$(ISB "$H_BIG")" "isThisProject: plugin.json over the size cap is false"
+assert_eq "false" "$(ISB "$H_LINKPLUG")" "isThisProject: plugin.json as a symlink (even to the real one) is false"
+assert_eq "false" "$(ISB "$H_LINKLIB")" "isThisProject: scripts/lib/repo-layout.js as a symlink is false"
+assert_eq "true" "$(ISB "$SELFCLONE")" "isThisProject: the ordinary clone still counts"
+# control: the unbounded reader (plain readFileSync / statSync) hangs or accepts them
+MUTRD="$TEST_TMP/mut-reader"; mkdir -p "$MUTRD/scripts/lib" "$MUTRD/.claude-plugin"; cp "$SELF/.claude-plugin/plugin.json" "$MUTRD/.claude-plugin/"; cp "$SELF/scripts/lib/repo-layout.js" "$MUTRD/scripts/lib/"
+node "$HELP/layout-mutate-reader.js" "$MUTRD/scripts/lib/repo-layout.js"
+assert_eq "0" "$?" "control: the unbounded-reader variant is applied"
+export ISLIB="$MUTRD/scripts/lib/repo-layout.js"
+assert_eq "HANG" "$(ISB "$H_ZERO")" "control: unbounded reader hangs or exhausts memory on /dev/zero"
+assert_eq "HANG" "$(ISB "$H_FIFO")" "control: unbounded reader blocks on a FIFO"
+assert_eq "true" "$(ISB "$H_BIG")" "control: unbounded reader accepts an oversize plugin.json"
+assert_eq "true" "$(ISB "$H_LINKLIB")" "control: unbounded reader follows a symlinked repo-layout.js"
+unset ISLIB
 # a registry lib with no plugin.json next to it (a bare sandbox copy) knows no identity: nothing is this project
 BARE="$TEST_TMP/bare"; mkdir -p "$BARE/scripts/lib"; cp "$SELF/scripts/lib/repo-layout.js" "$BARE/scripts/lib/"
 assert_eq "false" "$(ISLIB="$BARE/scripts/lib/repo-layout.js" IS "$SELF")" "isThisProject: a lib without its own plugin.json treats every root as another project"

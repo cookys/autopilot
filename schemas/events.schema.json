@@ -334,8 +334,7 @@
         "head",
         "seats",
         "reviewed_seats",
-        "total_seats",
-        "findings_total"
+        "total_seats"
       ],
       "properties": {
         "phase": {
@@ -382,8 +381,11 @@
           "minimum": 0
         },
         "findings_total": {
-          "type": "integer",
-          "minimum": 0
+          "type": [
+            "integer",
+            "null"
+          ],
+          "title": "optional: absent when g<N>/findings.json is missing (the event is kept, warning findings_missing)"
         },
         "findings_by_severity": {
           "type": [
@@ -773,7 +775,8 @@
           "type": [
             "string",
             "null"
-          ]
+          ],
+          "title": "status = row.status, else row.state; both present with different values: status wins and the reader warns status_state_conflict"
         },
         "reason": {
           "type": [

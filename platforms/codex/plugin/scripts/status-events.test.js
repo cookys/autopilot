@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { validateJsonSchema, readJson } = require('./validate-json-schema');
+const { validateJsonSchema, readJson, canonical } = require('./validate-json-schema');
 const { parseInstant, parseInstantMs } = require('../src/status/events/instant');
 const repoLayout = require('./lib/repo-layout');
 const fixtureLib = require('./lib/events-fixture');
@@ -104,7 +104,7 @@ test('fixture-golden-covers-all-8-kinds-with-unique-ordered-ids', () => {
   assert.equal(new Set(ids).size, ids.length, 'ids are unique');
   const sorted = [...GOLDEN].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   assert.deepEqual(GOLDEN, sorted, 'golden list is in (ts, id) order');
-  assert.equal(GOLDEN.length, 22);
+  assert.equal(GOLDEN.length, 24);
   for (const event of GOLDEN) assert.equal(event.project_key, FX.projectKey);
 });
 
@@ -115,6 +115,7 @@ test('fixture-literal-golden-ids', () => {
     'dispatch.started:fx-run-done', 'dispatch.started:fx-run-live', 'dispatch.ended:fx-run-done',
     'qc.verdict:c32883fa590c3f1538a0743f77a41faae4dc5520', 'qc.verdict:9403e1b493da7cd7b5964d2c5eaeb4ba3fb59cbf',
     'review.collected:7cf288e31760:E1:g1', 'review.collected:545dd77e083f:E1:g1', 'review.finalized:545dd77e083f:E1:g1',
+    'review.collected:23596bebea3f:E2:g1',
   ]) assert.ok(ids.has(literal), literal);
   // the two review ledgers share the phase name E1 and keep distinct histories through phase_base12
   assert.equal(sha256hex(FX.commits.c1).slice(0, 12), '7cf288e31760');
@@ -142,10 +143,9 @@ test('fixture-hash-ids-recomputed-from-the-bytes-on-disk', () => {
       if (row.kind === 'stage') stageRows.push(row);
     }
   }
-  assert.equal(stageRows.length, 2);
+  assert.equal(stageRows.length, 3);
   for (const row of stageRows) {
-    const canonical = JSON.stringify(Object.fromEntries(Object.keys(row).sort().map((k) => [k, row[k]])));
-    assert.ok(ids.has(`run.stage:${sha256hex(canonical).slice(0, 24)}`), row.stage);
+    assert.ok(ids.has(`run.stage:${sha256hex(canonical(row)).slice(0, 24)}`), row.stage); // the validator's canonical(), the one shared implementation
   }
 });
 
@@ -170,13 +170,14 @@ test('fixture-stores-hold-the-planned-shapes-and-foreign-rows', () => {
   assert.ok(costLines.some((l) => JSON.parse(l).cwd === FX.paths.removedWorktree) && !fs.existsSync(FX.paths.removedWorktree), 'a removed-worktree row');
   assert.ok(costLines.some((l) => JSON.parse(l).ts === '2026-02-30T00:00:00Z'), 'an impossible-date row');
 
-  const chains = Object.entries(FX.paths.reviewLedgers).map(([name, dir]) => [name, JSON.parse(fs.readFileSync(path.join(dir, name === 'foreign' ? 'review-E9' : 'review-E1', 'chain.json'), 'utf8'))]);
-  assert.equal(chains.length, 3);
+  const chains = Object.entries(FX.paths.reviewLedgers).map(([name, dir]) => [name, JSON.parse(fs.readFileSync(path.join(dir, name === 'foreign' ? 'review-E9' : name === 'c' ? 'review-E2' : 'review-E1', 'chain.json'), 'utf8'))]);
+  assert.equal(chains.length, 4);
   assert.equal(chains.find(([n]) => n === 'foreign')[1][0].base, FOREIGN_BASE);
   assert.equal(spawnSync('git', ['cat-file', '-e', FOREIGN_BASE], { cwd: FX.repoDir, env: FX.env }).status !== 0, true, 'foreign base absent from the repo');
   assert.equal(chains.find(([n]) => n === 'a')[1][0].base, FX.commits.c1);
   assert.equal(chains.find(([n]) => n === 'b')[1][0].base, FX.commits.c2);
-  assert.equal(fs.readFileSync(FX.paths.reviewPointer, 'utf8').trim().split('\n').length, 2, 'pointer lists the two project ledgers, not the foreign one');
+  assert.equal(fs.readFileSync(FX.paths.reviewPointer, 'utf8').trim().split('\n').length, 3, 'pointer lists the three project ledgers, not the foreign one');
+  assert.equal(fs.existsSync(path.join(FX.paths.reviewLedgers.c, 'review-E2', 'g1', 'findings.json')), false, 'ledger c has no findings.json');
 
   const decisions = fs.readFileSync(FX.paths.decisionLedger, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
   assert.deepEqual(decisions.map((r) => r.kind), ['decision', 'decision', 'decision', 'veto', 'ladder', 'note', 'decision']);
@@ -188,7 +189,7 @@ test('fixture-stores-hold-the-planned-shapes-and-foreign-rows', () => {
 
   const kinds = (file) => fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l).kind);
   assert.deepEqual(kinds(FX.paths.runLedgerRotated), ['stage', 'heartbeat']);
-  assert.deepEqual(kinds(FX.paths.runLedger), ['heartbeat', 'journal', 'stage']);
+  assert.deepEqual(kinds(FX.paths.runLedger), ['heartbeat', 'journal', 'stage', 'stage']);
 });
 
 test('fixture-golden-leaks-no-path-token-or-hidden-field', () => {
@@ -373,4 +374,29 @@ test('doc-has-a-kinds-table-row-per-kind-and-the-consumer-table', () => {
   assert.ok(/^\| consumer \| reads \(kind\.field\) \|$/m.test(DOC));
   for (const consumer of ['C1 `hangar console project <name>`', 'C1 `decisions`', 'A4 anomaly cards', 'G1 dashboard', '| all |']) assert.ok(DOC.includes(consumer), consumer);
   assert.ok(/telemetry projection, not attestation/i.test(DOC));
+});
+
+test('schema-review-collected-findings-total-is-optional', () => {
+  const withoutFindings = GOLDEN.find((e) => e.kind === 'review.collected' && !('findings_total' in e.data));
+  assert.ok(withoutFindings, 'a golden review.collected without findings_total exists (findings.json missing)');
+  assert.equal(withoutFindings.data.phase, 'E2');
+  assert.equal(isValid(ENVELOPE([withoutFindings])), true, 'the event is kept, not dropped');
+  assert.equal(SCHEMA.$defs.data_review_collected.required.includes('findings_total'), false);
+  const bad = clone(withoutFindings);
+  bad.data.findings_total = 'many';
+  assert.equal(isValid(ENVELOPE([bad])), false, 'when present it still has to be an integer');
+});
+
+test('golden-run-stage-status-prefers-status-over-state', () => {
+  const byStage = Object.fromEntries(GOLDEN.filter((e) => e.kind === 'run.stage').map((e) => [e.data.stage, e.data.status]));
+  assert.deepEqual(byStage, { implement: 'running', verify: 'ok', review: 'done' });
+  // the three row shapes: only state, both with different values, only status
+  const rows = FX.runRows;
+  assert.deepEqual([rows.stage1.status, rows.stage1.state], [undefined, 'running']);
+  assert.deepEqual([rows.stage2.status, rows.stage2.state], ['ok', 'terminal']);
+  assert.deepEqual([rows.stage3.status, rows.stage3.state], ['done', undefined]);
+});
+
+test('doc-names-the-reader-warnings-and-rules', () => {
+  for (const needle of ['`findings_missing`', '`status_state_conflict`', '`findings_total?`', 'never dropped', '`status` wins']) assert.ok(DOC.includes(needle), needle);
 });

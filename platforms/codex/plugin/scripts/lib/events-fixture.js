@@ -22,17 +22,13 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { scopeFromCwd } = require('../../src/status/project-key');
+const { canonical } = require('../validate-json-schema');
 
 const sha256hex = (text) => crypto.createHash('sha256').update(text).digest('hex');
 
-// key-sorted compact JSON of the parsed row: the "canonical row" of the id rules (docs/dev/events-contract.md).
-function canonicalJson(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
+// The "canonical row" of the id rules is the validator's canonical() (key-sorted compact JSON): one implementation,
+// shared with scripts/validate-json-schema.js and, later, the E2 readers.
+const canonicalJson = canonical;
 
 // Commit shas are constants under the pinned env below (same tree, message, author, committer, dates, parent).
 const FIXTURE_COMMITS = {
@@ -138,6 +134,7 @@ function buildFixture({ dir }) {
       a: path.join(root, 'ledgers', 'review-a'),
       b: path.join(root, 'ledgers', 'review-b'),
       foreign: path.join(root, 'ledgers', 'review-foreign'),
+      c: path.join(root, 'ledgers', 'review-c'),
     },
     removedWorktree: path.join(root, 'worktrees', 'fx-run-done'),
     liveWorktree: path.join(root, 'worktrees', 'fx-run-live'),
@@ -194,7 +191,7 @@ function buildFixture({ dir }) {
   function reviewLedger(ledgerDir, { phase, base, head, collectedAt, finalizedAt, findings }) {
     const phaseDir = path.join(ledgerDir, `review-${phase}`);
     writeFile(path.join(ledgerDir, `phase-${phase}.base`), `${base}\n`);
-    writeFile(path.join(phaseDir, 'g1', 'findings.json'), JSON.stringify({ findings }, null, 2) + '\n');
+    if (findings) writeFile(path.join(phaseDir, 'g1', 'findings.json'), JSON.stringify({ findings }, null, 2) + '\n');
     const entry = {
       generation: 1, base, head, seats, reviewed_seats: 2, total_seats: 2, reviewed_seats_count: 2, total_seats_count: 2,
       status: finalizedAt ? 'finalized' : 'pending', collected_at: collectedAt,
@@ -222,7 +219,11 @@ function buildFixture({ dir }) {
   reviewLedger(paths.reviewLedgers.foreign, {
     phase: 'E9', base: FOREIGN_BASE, head: FOREIGN_BASE, collectedAt: '2026-11-01T09:05:00.000Z', findings: [],
   });
-  writeFile(paths.reviewPointer, `${paths.reviewLedgers.a}\n${paths.reviewLedgers.b}\n`);
+  // phase E2 has no g1/findings.json at all: its review.collected event keeps going, without findings_total
+  const reviewC = reviewLedger(paths.reviewLedgers.c, {
+    phase: 'E2', base: c3, head: c3, collectedAt: '2026-11-01T09:30:00.000Z', findings: null,
+  });
+  writeFile(paths.reviewPointer, `${paths.reviewLedgers.a}\n${paths.reviewLedgers.b}\n${paths.reviewLedgers.c}\n`);
 
   // ---- decision ledgers (rows per the scripts/decision-ledger.js header) -------------------------------------------
   const dRow = (over) => ({ schema_version: 1, repo_identity: identity, root_run_id: null, ...over });
@@ -240,22 +241,24 @@ function buildFixture({ dir }) {
   writeFile(paths.workOrderLedger, jsonl([decisionRows.d7]));
 
   // ---- run ledger with a rotated segment ---------------------------------------------------------------------------
+  // Three stage-row shapes: only `state` (run-ledger.sh stage-acquire rows), `status` and `state` that differ, only `status`.
   const runRows = {
     stage1: { kind: 'stage', ts: '2026-11-01T08:11:30Z', run_id: 'fx-run-done', stage: 'implement', state: 'running', generation: 1, nonce: 'n-1', pid: 4242, reason: null },
     hb1: { kind: 'heartbeat', ts: '2026-11-01T08:12:30Z', run_id: 'fx-run-done', stage: 'implement', generation: 1 },
     hb2: { kind: 'heartbeat', ts: '2026-11-01T08:15:00.000Z', run_id: 'fx-run-done', stage: 'implement', generation: 1 },
     journal: { kind: 'journal', ts: '2026-11-01T08:16:00.000Z', run_id: 'fx-run-done', text: 'progress note' },
     stage2: { kind: 'stage', ts: '2026-11-01T08:20:00.000Z', run_id: 'fx-run-done', stage: 'verify', state: 'terminal', generation: 2, status: 'ok', reason: 'all checks green' },
+    stage3: { kind: 'stage', ts: '2026-11-01T08:22:00.000Z', run_id: 'fx-run-done', stage: 'review', generation: 3, status: 'done' },
   };
   writeFile(paths.runLedgerRotated, jsonl([runRows.stage1, runRows.hb1]));
-  writeFile(paths.runLedger, jsonl([runRows.hb2, runRows.journal, runRows.stage2]));
+  writeFile(paths.runLedger, jsonl([runRows.hb2, runRows.journal, runRows.stage2, runRows.stage3]));
 
   return {
     dir: root, repoDir, foreignDir, identity, foreignIdentity,
     projectKey: scope.project_key, repoName: path.basename(repoDir),
     env, paths, commits: { c1, c2, c3 }, tokenShaped: tokenShaped(),
     manifests: { done, live, foreign: foreignManifest },
-    cost, decisionRows, runRows, reviewEntries: { a: reviewA, b: reviewB },
+    cost, decisionRows, runRows, reviewEntries: { a: reviewA, b: reviewB, c: reviewC },
   };
 }
 
@@ -304,27 +307,32 @@ function goldenEvents(fx) {
 
   // review: id key = <first 12 hex of sha256(base)>:<phase>:g<generation>
   const reviewData = (entry, phase, findings) => {
-    const bySeverity = {};
-    for (const f of findings) bySeverity[f.severity] = (bySeverity[f.severity] || 0) + 1;
-    return {
+    const d = {
       phase, phase_base12: sha256hex(entry.base).slice(0, 12), generation: entry.generation, base: entry.base, head: entry.head,
       seats: entry.seats, reviewed_seats: entry.reviewed_seats, total_seats: entry.total_seats,
-      findings_total: findings.length, findings_by_severity: bySeverity,
     };
+    if (findings) { // findings.json absent: the event is kept, findings_total and findings_by_severity are left out
+      const bySeverity = {};
+      for (const f of findings) bySeverity[f.severity] = (bySeverity[f.severity] || 0) + 1;
+      d.findings_total = findings.length;
+      d.findings_by_severity = bySeverity;
+    }
+    return d;
   };
-  const pushReview = (entry, findings) => {
+  const pushReview = (entry, findings, phase = 'E1') => {
     const base12 = sha256hex(entry.base).slice(0, 12);
-    const idKey = `${base12}:E1:g${entry.generation}`;
-    out.push(ev('review.collected', idKey, entry.collected_at, 'review_ledger', {}, reviewData(entry, 'E1', findings)));
+    const idKey = `${base12}:${phase}:g${entry.generation}`;
+    out.push(ev('review.collected', idKey, entry.collected_at, 'review_ledger', {}, reviewData(entry, phase, findings)));
     if (entry.status === 'finalized') {
       out.push(ev('review.finalized', idKey, entry.finalized_at, 'review_ledger', {}, {
-        phase: 'E1', phase_base12: base12, generation: entry.generation, verdict: 'SHIP-AS-IS', open_findings: 0,
+        phase, phase_base12: base12, generation: entry.generation, verdict: 'SHIP-AS-IS', open_findings: 0,
         reviewed_seats: entry.reviewed_seats, total_seats: entry.total_seats, dispositions_sha256: entry.dispositions_sha256,
       }));
     }
   };
   pushReview(fx.reviewEntries.a, [{ severity: 'Major' }, { severity: 'Minor' }]);
   pushReview(fx.reviewEntries.b, [{ severity: 'Minor' }]);
+  pushReview(fx.reviewEntries.c, null, 'E2');
 
   // qc.verdict: id key = commit sha; ts = committer date normalised to UTC.
   out.push(ev('qc.verdict', fx.commits.c2, '2026-11-01T08:30:00.000Z', 'git_trailer', {}, { commit: fx.commits.c2, verdict: 'PASS', subject: 'feat: add thing', basis: 'self_reported' }));
@@ -350,13 +358,16 @@ function goldenEvents(fx) {
   // run.stage: sha256(canonical row)[0:24]; only kind:"stage" rows; ts normalised to .sssZ
   const stageEvent = (row) => {
     const data = { run_id: row.run_id, stage: row.stage, generation: row.generation, basis: 'self_reported' };
-    if (row.status) data.status = row.status;
+    // status wins; state is read only when status is absent (docs/dev/events-contract.md, run.stage)
+    const status = row.status || row.state;
+    if (status) data.status = status;
     if (row.reason) data.reason = row.reason;
     const ts = row.ts.length === 20 ? `${row.ts.slice(0, -1)}.000Z` : row.ts;
     return ev('run.stage', sha256hex(canonicalJson(row)).slice(0, 24), ts, 'run_ledger', { run: row.run_id }, data);
   };
   out.push(stageEvent(fx.runRows.stage1));
   out.push(stageEvent(fx.runRows.stage2));
+  out.push(stageEvent(fx.runRows.stage3));
 
   return out.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }

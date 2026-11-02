@@ -254,22 +254,24 @@ function argvRootOf(argv) {
 //   null                       no live watcher of this project
 //   { state:'current', pid }   its recorded root + version are ours (a legacy record without them: its argv root is ours)
 //   { state:'stale', pid, argvRoot, recordedRoot }
+function lockPathIn(base, key) { return path.join(base, 'runs', `${key}.lock`); }
+
 function inspectWatcher(base, key, root) {
   try {
     const env = JSON.parse(fs.readFileSync(path.join(base, 'runs', `${key}.json`), 'utf8'));
     const w = env && env.writer;
-    const pid = w && w.pid;
-    if (!Number.isInteger(pid) || pid <= 0) return null;
-    const argv = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
-    const at = argv.indexOf('--project');
-    if (!(` ${argv.join(' ')} `.includes(' status runs --watch ') && at !== -1 && argv[at + 1] === key)) return null;
+    // The pid in the envelope is a CLAIM. Only a structural confirmation (entry point, project, an fd on the project lock:
+    // watcher-identity.js) makes it a watcher; anything else is "no live watcher" and is never touched.
+    const id = require('../src/status/watcher-identity').classifyWatcher(w && w.pid, key, lockPathIn(base, key));
+    if (!id) return null;
+    const pid = id.pid;
     const own = ownIdentity(root);
     const recordedRoot = typeof w.plugin_root === 'string' && w.plugin_root ? w.plugin_root : null;
-    const argvRoot = argvRootOf(argv);
+    const argvRoot = id.argvRoot;
     // A watcher started without --render (a hand-run `status runs --watch` of an older install) holds the project lock but writes no job
     // page, so no owner card ever shows. Never accepted as 'current': it is replaced like an old install's (reapStale, then a start with
-    // the render argv). It is judged by its argv alone, the one place a hand-run watcher states it.
-    if (!argv.includes('--render')) return { state: 'stale', pid, argvRoot, recordedRoot, reason: 'no_render' };
+    // the render argv).
+    if (id.state === 'no_render') return { state: 'stale', pid, argvRoot, recordedRoot, reason: 'no_render' };
     if (recordedRoot !== null) {
       if (recordedRoot === own.root && (w.plugin_version || null) === own.version) return { state: 'current', pid };
     } else if (argvRoot === null || argvRoot === own.root) return { state: 'current', pid }; // legacy writer block: only the argv root can be compared (none named = cannot tell)
@@ -284,12 +286,12 @@ const REAP_WAIT_MS = 2000;
 // SIGTERM a stale watcher, then wait (bounded) for it to go. Never signals a pid that is not, RIGHT NOW, a `runs --watch` of this
 // project whose own argv points at the recorded root (a recycled pid, or a record that disagrees with the process, is left alone).
 // Fail-open: any problem returns false and the caller carries on exactly as before.
-function reapStale(stale, key) {
+function reapStale(stale, key, lockPath) {
   try {
-    const argv = fs.readFileSync(`/proc/${stale.pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
-    const at = argv.indexOf('--project');
-    if (!(` ${argv.join(' ')} `.includes(' status runs --watch ') && at !== -1 && argv[at + 1] === key)) return false;
-    const root = argvRootOf(argv);
+    // Re-confirmed structurally RIGHT NOW (a recycled pid, a decoy, or a process that gave up the lock is never signalled).
+    const id = require('../src/status/watcher-identity').classifyWatcher(stale.pid, key, lockPath);
+    if (!id) return false;
+    const root = id.argvRoot;
     if (root === null || (stale.recordedRoot !== null && root !== stale.recordedRoot)) return false;
     process.kill(stale.pid, 'SIGTERM');
     const end = Date.now() + REAP_WAIT_MS;
@@ -418,7 +420,7 @@ function run(payload) {
   const sid = typeof payload.session_id === 'string' ? payload.session_id : '';
   // The pointer must still exist too (a deleted pointer is restored by the full path).
   let fast = base ? watcherAliveFast(base, cwd, root) : null;
-  if (fast && fast.stale) { reapStale(fast.stale, fast.key); fast = null; } // WATCHVER: an old install's watcher goes; the full path starts a current one
+  if (fast && fast.stale) { reapStale(fast.stale, fast.key, lockPathIn(base, fast.key)); fast = null; } // WATCHVER: an old install's watcher goes; the full path starts a current one
   if (fast && fs.existsSync(require(path.join(root, 'src/status/live-pointer')).pointerPath())) {
     if (event === 'PostToolUse' && sid && /^[A-Za-z0-9._-]{1,128}$/.test(sid)) { const w = inspectWatcher(base, fast.project_key, root); if (w && w.state === 'current') fillEnsureStamp(base, sid, cwd, fast.project_key, w.pid, root); }
     if (event !== 'SessionStart' || !sid) return;
@@ -459,7 +461,7 @@ function run(payload) {
   }
   if (base) { // WATCHVER: no cache yet (first SessionStart) or the cache path was skipped: the same check against the lock holder
     const w = inspectWatcher(base, scope.project_key, root);
-    if (w && w.state === 'stale') reapStale(w, scope.project_key);
+    if (w && w.state === 'stale') reapStale(w, scope.project_key, lockPathIn(base, scope.project_key));
     if (w && w.state === 'current' && event === 'PostToolUse') fillEnsureStamp(base, sid, cwd, scope.project_key, w.pid, root);
   }
   if (isolated) return; // see above: never start a watcher on the shared live dir from an isolated environment

@@ -135,7 +135,7 @@ export function petTag(text: string | null): string | null {
     if (raw === null || typeof raw !== 'object' || raw.schema !== PET_SCHEMA) return null
     const p = raw.pet
     if (p === null || p === undefined || typeof p.name !== 'string' || p.name === '' || typeof p.level !== 'number' || !Number.isFinite(p.level)) return null
-    return `${p.name} Lv.${fmtCount(Math.max(0, Math.floor(p.level)))}`
+    return `${p.name} Lv.${fmtTps(Math.max(0, Math.floor(p.level)), '0')}`
   } catch (_e) {
     return null
   }

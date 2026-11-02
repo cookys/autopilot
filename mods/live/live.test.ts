@@ -6164,7 +6164,10 @@ for (const surface of SURFACES) {
     await runPlan($, TWO.map(p => p.agent))
     const seen: string[] = []
     const withView: number[] = []
-    for (const columns of [30, 40, 60, 81, 82, 100, 120]) {
+    // the two widths either side of the recent table's threshold are derived from speedview.ts's constants, not typed in
+    const narrow = SPEED_COL_W + COL_GAP + RECENT_COL_W - 1 // a view, but the recent table's full width does not fit
+    const wide = narrow + 1 // exactly enough
+    for (const columns of [30, 40, 60, narrow, wide, 100, 120]) {
       const props = { bodyColumns: columns, maxRows: 20 }
       const a = await mount($, props)
       const hasTab = ((await a.findAll({ type: 'Button' })) as Node[]).some(b => b.props?.key === 'forge')
@@ -6193,7 +6196,8 @@ for (const surface of SURFACES) {
       if (hasTab) { const c = await mount($, props); await c.press({ key: 'forge' }); await c.unmount() }
     }
     console.log('speed view widths: ' + seen.join(' | '))
-    expect(withView.includes(100) && withView.includes(120), 'the view is drawn at 100 and 120 columns').toBe(true)
+    expect(withView.includes(narrow), 'a view is drawn at ' + narrow + ' columns, so the recent table\'s absence there was checked').toBe(true)
+    expect(withView.includes(wide) && withView.includes(100) && withView.includes(120), 'the view is drawn at ' + wide + ', 100 and 120 columns').toBe(true)
     expect(seen[0].endsWith('no tab') && seen[1].endsWith('no tab'), 'at 30 and 40 columns there is no room for the label, so no tab and no view').toBe(true)
   })
 

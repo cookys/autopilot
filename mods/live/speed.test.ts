@@ -143,10 +143,11 @@ test('a stored sample with huge numbers never widens the recent table, the speed
       const col = speedColumn(steps, t)
       for (const l of col.lines) expect(ui.displayWidth(lineText(l)), 'speed column ' + n).toBeLessThanOrEqual(col.width)
       for (const l of speedView(steps, 10, 120, t).columns.flatMap(c => c.lines.map(x => ({ l: x, w: c.width })))) expect(ui.displayWidth(lineText(l.l))).toBeLessThanOrEqual(l.w)
-      const label = speedLabelParts(steps, 'Ferris Lv.' + fmtCount(n)) ?? []
+      const label = speedLabelParts(steps, 'Ferris Lv.' + fmtTps(n, '-')) ?? []
       expect(ui.displayWidth(label.find(g => g.role === 'value')?.text ?? ''), 'label value ' + n).toBeLessThanOrEqual(RECENT_W.tps)
     }
   }
+  expect(petTag(JSON.stringify({ schema: 'codeforge.pet-view/1', pet: { name: 'Ferris', level: 1234 } }))).toBe('Ferris Lv.1234') // no thousands separator
   const pet = petTag(JSON.stringify({ schema: 'codeforge.pet-view/1', pet: { name: 'F', level: 1e30 } })) ?? ''
   expect(pet).toBe('F Lv.>999T')
 })

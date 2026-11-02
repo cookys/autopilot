@@ -400,3 +400,18 @@ test('golden-run-stage-status-prefers-status-over-state', () => {
 test('doc-names-the-reader-warnings-and-rules', () => {
   for (const needle of ['`findings_missing`', '`status_state_conflict`', '`findings_total?`', 'never dropped', '`status` wins']) assert.ok(DOC.includes(needle), needle);
 });
+
+test('doc-cost-turn-row-states-the-worktree-fallback', () => {
+  const row = DOC.split('\n').find((line) => line.startsWith('| `cost.turn` |'));
+  assert.ok(row, 'cost.turn row');
+  for (const needle of ['worktree fallback', 'git worktree list --porcelain', "manifests' `worktree` fields", 'no longer exists', 'rows_filtered', 'no warning']) {
+    assert.ok(row.includes(needle), `cost.turn row mentions: ${needle}`);
+  }
+  // the fixture keeps the removed-worktree row, so the contract has to say how
+  assert.ok(GOLDEN.some((e) => e.kind === 'cost.turn' && e.data.session === 's-fx-2'));
+});
+
+test('instant-rejects-a-trailing-newline', () => {
+  assert.equal(parseInstant('2026-11-02T08:00:00Z\n'), null);
+  assert.equal(parseInstant('\n2026-11-02T08:00:00Z'), null);
+});

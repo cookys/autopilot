@@ -1,0 +1,430 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "oc-a1",
+  "logical_plan_id": "autopilot-oc-a1-events",
+  "session_id": "506f335d-8848-4ee1-9d8e-9d1c7caefe6c",
+  "session_key": "5057c48881fa6faa807161ec6c8dca6cdf774a23febbf1c2093cf778c893bb71",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "8f6ae29aa31597a03e92b85fd6939828ca7eb12c3f13e2293e72be5f47f1a4b5",
+  "manifest_sha256": "e2515d4d3487da4e35c81c4812e105a481e473e5bc48b640fbf8717bb7c1dc54",
+  "plan_sha256": "4710078102b2e83ba0257670b0533fc462e8a2144088967c857e0414314f8f9d",
+  "growth_ratio": {
+    "numerator": 49976,
+    "denominator": 37749
+  },
+  "growth_warning": true,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "eb47739edeb8ab393dd04033d632e95b33ca97150036f235f0683bd1e7d33e89"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-op8OZA/stdout",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "d6651d6ad287c44e00f808538f743a50dfce3dc234a63f32a25fa33991a90d32"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-argon-high",
+          "operation": "plan-review",
+          "request_digest": "d96f8f5b1d1c39d8848a1f53bea849450b46912d03b4f94d0ca18b628cceed58"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-iGUKjN",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "e716d0fcbe0689495c118d236d2ec3f4a8035cdf785d52548520abc7b7ae3a80"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-opus-5-5",
+          "operation": "plan-review",
+          "request_digest": "7549fae5dce952a0eb9c98d757819198d6ad1bb88556ced8810ade66763cd419"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "4c5a98641f8bb183f5c2aafe67a521f4d281f4406c973414a330e4beeba3f490",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-BQXUS1",
+          "digest": "4c5a98641f8bb183f5c2aafe67a521f4d281f4406c973414a330e4beeba3f490"
+        },
+        "receipt_digest": "36d54f413d2b2aec6f7bf3495efd39118b8c8c30f10e03f5a2758faecb2aa93c"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "family": "google",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "E1 kinds table, decision.row data.basis; consumer table row G1",
+      "claim": "The contract labels veto and ladder decision rows as basis 'observed'. Any process, including an agent session, can write those rows. G1 renders every row that is not 'self_reported' as verified state. So model-authored rows would be displayed as observed truth, which contradicts the rule that state is never taken from a model's own claim.",
+      "evidence": "scripts/decision-ledger.js: KINDS includes 'veto', and append() only skips the decision_id/rationale check when kind is 'veto' or a telemetry kind. That means 'decision-ledger.js append --kind veto --json ...' succeeds for any caller. The veto() mode is a plain CLI with no tty or operator check; '(operator-authored)' appears only in a header comment. Ladder rows also pass validateLadderRow from any caller's append, so being written by probe-unknown.js or dispatch-consult.sh is a convention, not an observation. The header itself says 'PLAIN TELEMETRY ... nothing verifies the ledger itself'. Plan E1 sets basis 'observed for veto rows, which only the operator authors, and ladder rows', and the G1 row only excludes data.basis=self_reported from verified rendering.",
+      "evidence_reference": "scripts/decision-ledger.js (header lines on veto and ADR-0001, KINDS, append(), veto()); plan section 4 E1 kinds table row decision.row; E1 consumer table row G1",
+      "repair": "Before freezing E1, set decision.row basis to 'self_reported' for every row_kind, because the ledger has no authenticated writer. Alternatively, add a distinct value such as 'convention' that G1 must also refuse to render as verified, and state this in the consumer table. Add a fixture case where an agent-style 'append --kind veto' row comes out with a non-observed basis, plus a red-check.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "978a00b9b50f83a4dfafdad20c4dfba6b86ade08612395c78544c695932a2ab1"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "E1 command contract and envelope.project; E3 index.js; E4 cli.js exit codes",
+      "claim": "The plan never says what the command returns when the project itself cannot be resolved (cwd outside a git repo, git missing, scopeFromCwd failing). It also says nothing about a failure outside the per-reader try/catch, such as an exception in merge, cursor encoding or the envelope build. Without a rule, those paths fall through to Node's uncaught-exception exit 1. R15 allows only 0 for source problems and 2 for usage errors.",
+      "evidence": "E1 only defines exit 2 for a mismatching --project and for bad_cursor, and envelope.project.project_key is a required '<16 hex>'. E2 step 5 handles 'not a repo' only for the qc source (git_unavailable). The decision ledgers, run-ledger work-order discovery, the review pointer file and the project filter all derive from <git-common-dir>. E3 says index.js 'runs the readers ... each in its own try/catch' but puts no guard around merge.js or cursor.js. No KR-A1.3 or readonly case runs from a cwd outside a repo or with git absent from PATH.",
+      "evidence_reference": "plan section 4 E1 'The command' and Envelope; E2 step 5; E3 'index.js'; E4 step 1; rubric R15",
+      "repair": "Decide in E1 and write it into the schema doc. Option (a): an unresolvable project is a usage error, exit 2 with a named code such as project_unresolved. Option (b): exit 0 with project null (schema made nullable), every git-bound source absent, and one warning. Also wrap collectEvents in the E4 cli branch with a top-level catch whose exit code and warning code are documented. Add degrade cases for cwd outside a repo and for PATH without git.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7e45502ec1c47bf104d6f7a551b4188dc0ea14cb2c5d2a7020bfa0b0c71c6c26"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "E3 cursor.js size bound and w/s halving; consumer argv passing",
+      "claim": "The cursor is not actually bounded, and its stated size is wrong. The hints map h has no cap. The w estimate is about 2x low. The halving rule cannot terminate, and it loses the no-duplicate guarantee, when more than 2000 delivered events share the watermark millisecond. A cursor passed on argv can then exceed the Linux 128 KiB single-argument limit, so the console's spawn fails with E2BIG.",
+      "evidence": "E3 caps w at 2000 pairs and claims 'about 40 KB encoded'. One pair ['<12 hex>',1793000000000] is about 31 bytes plus a separator, so about 64 KB of JSON and about 85 KB as base64url. h gets one entry per hinted file, keyed '<source>:<head hash>' (sha256 hex) plus an offset, with no cap. run.stage alone hints every run-ledger file and segment named by manifests (the bench uses 2000 manifests). The risk-table mitigation for 'Cursor grows without bound' names only the w cap. Cost rows of one Stop batch share one ts. Once s has halved to 0, w must still hold every delivered event at ts == t, because the earlier '<= (t, last id)' comparison was removed. If that set is over 2000, halving never fits, and dropping pairs re-delivers events.",
+      "evidence_reference": "plan section 4 E3 Cursor ('Size bound', 'Hints h'), section 6 risk row 'Cursor grows without bound'; E1 cost.turn id note on shared ts",
+      "repair": "Cap h, for example by keeping hints only for the N largest files or files above a size threshold, since small files are cheap to re-read. Shorten the head key to 12-16 hex. Recompute and document the true encoded bound. Define a terminating rule for the equal-ts case, for example ending a page before a ts group that cannot fit, or an exact-ts (t, last id) floor only for ts == t. Add a cursor-size assertion (for example <= 64 KiB) at the KR-A1.5 sizes and an equal-ts-over-cap test. Optionally accept the cursor from a file or stdin.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7d9db83e0eb3334b6b821b7bbbc46c881f778f46b7a18482daba37032502cde0"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "KR-A1.3 warning rules; E2 step 1 configured-source list; E2 step 4 pointer file writer; E2 step 2 cwd_unresolved",
+      "claim": "Several warnings will fire on every call during normal operation. That trains the operator to ignore warnings, and it keeps sources[].state at 'absent' or degraded. The pointer file is also written with an unlocked read-check-append and is never pruned.",
+      "evidence": "KR-A1.3 and E2 step 1 treat 'a review root named by flag, pointer or archive config' as a configured source, so a missing root raises source_absent. The pointer file is append-only, written by collect ('appended if absent'). The events command is read-only and cannot prune it. Every review ledger dir that is later removed (worktree or tmp cleanup) therefore produces a source_absent warning and review state 'absent' indefinitely. costs.jsonl is host-wide, so rows of deleted cwds from any repo that match no project worktree raise cwd_unresolved on every cold read, forever. Two concurrent collect calls race on the existence check.",
+      "evidence_reference": "plan section 2 KR-A1.3; section 4 E2 steps 1, 2 and 4; section 2.6 second writer change; section 8 Q1",
+      "repair": "Classify pointer-listed roots as optional discovery candidates (rows_filtered, no warning), or have collect drop entries whose dir no longer exists. Dedupe and trim pointer lines on read. Do the pointer append under the existing ledger write lock, or as a single O_APPEND write, and dedupe. Report cwd_unresolved as a count in sources[] without degrading state, or limit it to cwds under the repo root or known worktree parents. Add a degrade case 'pointer lists a removed ledger' with the expected warning outcome.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1d3e2d1bc27b9b6cfde0d6b999c54237c1a86d6305c192c0e002852d6159640f"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "E2 step 4 review.js roots (archive dir, AUTOPILOT_EVENTS_REVIEW_LEDGERS); fixture; risk row on host-wide sources",
+      "claim": "The review source reads host-wide roots without any project filter, and the archive layout is still unknown. Other repos' review history can therefore be emitted under this project's project_key. That breaks the plan's own promise that 'events of other repos are never returned', and the read-only and degrade contract for this source cannot be tested before E2.",
+      "evidence": "E2 step 4 adds review_ledger_archive.dir (host config, resolved as review-ledger-copy.js does) and an env path list as roots, and says 'the author records the archive's real directory layout in the doc', so the layout is not yet known. Chain entries carry base and head but no repo identity, and no filter is specified. The fixture has foreign rows for cost (foreign cwd) and has no foreign review ledger, although the risk table claims 'a foreign row per source in the fixture'.",
+      "evidence_reference": "plan section 4 E2 step 4; E1 command '--project' paragraph; E1 Fixture list; section 6 risk row 'Host-wide sources leak other projects' activity'",
+      "repair": "Record the archive layout before E2. Filter review entries to the project, for example by a per-project archive subdir or by checking that the chain base commit exists in the project repo (git cat-file -e, memoised per call). Add a foreign review ledger to the fixture, with a red-check that removes the filter.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "987bb18cdcbf7bd719f50580033ab30c818dd37382915203ef6924c95234d65a"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "KR-A1.6 readonly-* scope; E4 bin/autopilot.js startup; KR-A1.5 bench",
+      "claim": "The read-only proof and the performance bench do not cover the real process the console polls. bin/autopilot.js eagerly loads the engine, runners, readiness and session-mode modules before it reaches the status branch, and the readonly digest does not include the sandbox HOME or an existing TMPDIR. The bench times the library, not the binary.",
+      "evidence": "bin/autopilot.js requires src/runners/review, src/engine/resolve-review-loop, src/harness/cli, src/endpoints/cli, src/campaign/cli, src/merge/cli, src/readiness/provider-bootstrap, src/engine, src/engine/campaign-intake and scripts/session-mode at top level. The plan only skips the ensureTmpdir block. KR-A1.6 digests the repo, live dir, sources and a missing TMPDIR. runtime-paths.js ensureRunsDir/ensurePrivateDir create directories when called. E4 step 4 describes the bench as timing 'cold and warm reads', with no binary startup.",
+      "evidence_reference": "bin/autopilot.js lines 5-33 and the 'status' branch; scripts/lib/runtime-paths.js ensurePrivateDir; plan KR-A1.6, KR-A1.5, E4 steps 1 and 4",
+      "repair": "Extend readonly-* to digest the whole sandbox HOME and TMPDIR, and add a case where the runs dir is absent and must stay absent. Either dispatch 'status events' before the eager requires or verify they have no side effects. Add one bench line timing a warm resume through the real binary against the KR-A1.5 bound.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "05ceb7571bc3b19a3a80f530d17facc58f6c198ee68dd04032b76add4865724e"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "E1 kinds table run.stage; consumer table G1",
+      "claim": "run.stage has no basis field, but G1 renders run.stage.stage as state. The plan does not establish whether stage rows are written only by software or can be appended by a model session. So the same self-report risk handled for qc.verdict and decision.row is left open for task-stage state.",
+      "evidence": "E1 run.stage data has run_id, stage, generation, status?, reason?, with no basis. The G1 row lists 'run.stage.stage' among rendered fields and only guards rows with data.basis=self_reported. The plan cites run-ledger.sh only for rotation (ledger_scan_files) and names no writer of kind:'stage' rows.",
+      "evidence_reference": "plan section 4 E1 kinds table row run.stage; E1 consumer table row G1",
+      "repair": "Before E1 is frozen, record which processes write kind:'stage' rows. Add basis to run.stage: 'self_reported' unless only engine or dispatcher code writes them. State the G1 rendering rule for it.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a5f0b98fbb660bdd2b34432edc0a4e3a8a8b12f196531e500132386cc75150f9"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "E4 scripts/check-events-contract.js; versioning rule 'additive-only after merge'",
+      "claim": "Nothing mechanically enforces the additive-only rule. Every gate check compares the doc, schema, consumer table and fixture with each other, so removing or retyping a field in the schema and the doc in the same commit passes.",
+      "evidence": "E4 step 2 checks (i) schema properties appear in the doc, (ii) consumer-table fields exist in the schema, (iii) doc examples equal the fixture, (iv) the doc path resolves. None compares against a frozen /1 baseline. The risk row 'Kind creep' claims 'gate enforces'.",
+      "evidence_reference": "plan section 4 E4 step 2; section 6 risk row 'Kind creep'; rubric R15 'additive-only after merge'",
+      "repair": "At merge, commit a baseline (kind, field, JSON type, required or optional) for autopilot.events/1. The gate fails when a baseline field is missing, changes type or loses an allowed null, and accepts only additions. Add a red-check that retypes one field in both schema and doc.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6d2a5d102f942778ca22023915f240967d07ba141a9264842bf1cfa8349633bf"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "E2 step 1 jsonl-tail.js hint validation; E3 hints keyed by head hash",
+      "claim": "The head hash covers 'the first 256 bytes', so it changes as a young file grows toward 256 bytes. Normal resumes then get spurious cursor_hint_stale warnings and full re-reads. Files shorter than 256 bytes with identical content (for example all empty files) also share a key in h.",
+      "evidence": "E2 step 1: a hint is used only if sha256(first 256 bytes) == head, otherwise a full re-read with cursor_hint_stale. E3 keys h by '<source>:<head hash>'. A per-root decision ledger or a fresh run-ledger segment starts below 256 bytes, and its head digest changes on every append until it passes 256 bytes.",
+      "evidence_reference": "plan section 4 E2 step 1; E3 'Hints h'",
+      "repair": "Store the head length with the hash and validate only that prefix. Skip hints for files under 256 bytes, since re-reading them is cheap. Do not emit cursor_hint_stale when a short head simply grew. Add a resume case that appends to a 100-byte ledger and expects no warning.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4ab305db3395169da3f4c586a8c70aa3c29a8d02d99440b14697d303c0e84705"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "7d9db83e0eb3334b6b821b7bbbc46c881f778f46b7a18482daba37032502cde0",
+      "rubric_id": "R15",
+      "affected_surface": "E3 cursor.js size bound and w/s halving; consumer argv passing",
+      "claim": "The cursor is not actually bounded, and its stated size is wrong. The hints map h has no cap. The w estimate is about 2x low. The halving rule cannot terminate, and it loses the no-duplicate guarantee, when more than 2000 delivered events share the watermark millisecond. A cursor passed on argv can then exceed the Linux 128 KiB single-argument limit, so the console's spawn fails with E2BIG.",
+      "evidence_reference": "plan section 4 E3 Cursor ('Size bound', 'Hints h'), section 6 risk row 'Cursor grows without bound'; E1 cost.turn id note on shared ts",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1d3e2d1bc27b9b6cfde0d6b999c54237c1a86d6305c192c0e002852d6159640f",
+      "rubric_id": "R15",
+      "affected_surface": "KR-A1.3 warning rules; E2 step 1 configured-source list; E2 step 4 pointer file writer; E2 step 2 cwd_unresolved",
+      "claim": "Several warnings will fire on every call during normal operation. That trains the operator to ignore warnings, and it keeps sources[].state at 'absent' or degraded. The pointer file is also written with an unlocked read-check-append and is never pruned.",
+      "evidence_reference": "plan section 2 KR-A1.3; section 4 E2 steps 1, 2 and 4; section 2.6 second writer change; section 8 Q1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "987bb18cdcbf7bd719f50580033ab30c818dd37382915203ef6924c95234d65a",
+      "rubric_id": "R15",
+      "affected_surface": "E2 step 4 review.js roots (archive dir, AUTOPILOT_EVENTS_REVIEW_LEDGERS); fixture; risk row on host-wide sources",
+      "claim": "The review source reads host-wide roots without any project filter, and the archive layout is still unknown. Other repos' review history can therefore be emitted under this project's project_key. That breaks the plan's own promise that 'events of other repos are never returned', and the read-only and degrade contract for this source cannot be tested before E2.",
+      "evidence_reference": "plan section 4 E2 step 4; E1 command '--project' paragraph; E1 Fixture list; section 6 risk row 'Host-wide sources leak other projects' activity'",
+      "disposition": null
+    },
+    {
+      "fingerprint": "05ceb7571bc3b19a3a80f530d17facc58f6c198ee68dd04032b76add4865724e",
+      "rubric_id": "R15",
+      "affected_surface": "KR-A1.6 readonly-* scope; E4 bin/autopilot.js startup; KR-A1.5 bench",
+      "claim": "The read-only proof and the performance bench do not cover the real process the console polls. bin/autopilot.js eagerly loads the engine, runners, readiness and session-mode modules before it reaches the status branch, and the readonly digest does not include the sandbox HOME or an existing TMPDIR. The bench times the library, not the binary.",
+      "evidence_reference": "bin/autopilot.js lines 5-33 and the 'status' branch; scripts/lib/runtime-paths.js ensurePrivateDir; plan KR-A1.6, KR-A1.5, E4 steps 1 and 4",
+      "disposition": null
+    },
+    {
+      "fingerprint": "a5f0b98fbb660bdd2b34432edc0a4e3a8a8b12f196531e500132386cc75150f9",
+      "rubric_id": "R6",
+      "affected_surface": "E1 kinds table run.stage; consumer table G1",
+      "claim": "run.stage has no basis field, but G1 renders run.stage.stage as state. The plan does not establish whether stage rows are written only by software or can be appended by a model session. So the same self-report risk handled for qc.verdict and decision.row is left open for task-stage state.",
+      "evidence_reference": "plan section 4 E1 kinds table row run.stage; E1 consumer table row G1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "6d2a5d102f942778ca22023915f240967d07ba141a9264842bf1cfa8349633bf",
+      "rubric_id": "R15",
+      "affected_surface": "E4 scripts/check-events-contract.js; versioning rule 'additive-only after merge'",
+      "claim": "Nothing mechanically enforces the additive-only rule. Every gate check compares the doc, schema, consumer table and fixture with each other, so removing or retyping a field in the schema and the doc in the same commit passes.",
+      "evidence_reference": "plan section 4 E4 step 2; section 6 risk row 'Kind creep'; rubric R15 'additive-only after merge'",
+      "disposition": null
+    },
+    {
+      "fingerprint": "4ab305db3395169da3f4c586a8c70aa3c29a8d02d99440b14697d303c0e84705",
+      "rubric_id": "R15",
+      "affected_surface": "E2 step 1 jsonl-tail.js hint validation; E3 hints keyed by head hash",
+      "claim": "The head hash covers 'the first 256 bytes', so it changes as a young file grows toward 256 bytes. Normal resumes then get spurious cursor_hint_stale warnings and full re-reads. Files shorter than 256 bytes with identical content (for example all empty files) also share a key in h.",
+      "evidence_reference": "plan section 4 E2 step 1; E3 'Hints h'",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-11-02T11:29:31.894Z"
+}

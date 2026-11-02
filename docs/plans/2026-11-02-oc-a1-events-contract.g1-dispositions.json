@@ -1,0 +1,107 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "autopilot-oc-a1-events",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "93cb0da73eddfdafc844c316c14b0b0f7262f59778ff454082a688a24aad3f42",
+   "disposition": "accepted_nonblocking",
+   "rationale": "E4 step 1 and KR-A1.6: bin/autopilot.js skips ensureTmpdir for status events; executable-level test with nonexistent TMPDIR."
+  },
+  {
+   "fingerprint": "58c7ed14e90db72a55637932fcbc2bf77b81be6d9141aa884e1f3898a5450770",
+   "disposition": "accepted_blocker",
+   "rationale": "KR-A1.3 and E2 step 1: source_absent code; configured absent source warns once, optional candidate silent, empty file ok."
+  },
+  {
+   "fingerprint": "cd602083d4fc30494c8634d8aa4bf642b85ec64c78153773911d1b5993644b54",
+   "disposition": "accepted_blocker",
+   "rationale": "E3 Cursor: w = [hash, ts] pairs, filter drops iff in w or ts < t-s, next-w rule, KR-A1.2 restated; red-checks b,c,f."
+  },
+  {
+   "fingerprint": "c4a8b3f9f835be67563fd45baeeccd3bc11977d1504e23a31e41570ab4cc48c2",
+   "disposition": "accepted_blocker",
+   "rationale": "E1 cost.turn id: #n counted from read start, valid because identical lines share ts and the hint never passes the first in-window line; E2 red-check (i)."
+  },
+  {
+   "fingerprint": "c159859eb9d1f2955779e5ad8ea785070c639c7b1231293d3d3a7d25c110f563",
+   "disposition": "accepted_blocker",
+   "rationale": "E1 Fixture: goldens computed in test with own sha256 from literal rows, pinned git env, doc examples normalised, repo_identity removed from envelope."
+  },
+  {
+   "fingerprint": "4052cdefeefeeb669356768fac2908059cbd4f5411ca2d32fa672dd24135a0c6",
+   "disposition": "accepted_blocker",
+   "rationale": "E1 ts rule: parseInstant RFC 3339 grammar (Z or offset, normalised .sssZ); fixture rows with +01:00 commit, second-precision manifest, malformed ts."
+  },
+  {
+   "fingerprint": "9fa29caa5fcaeb4b5066937682f9d27ebe0bff2c2034e48d6007c8db3bcd5f49",
+   "disposition": "accepted_blocker",
+   "rationale": "E1 kinds table: phase_base12 in review ids; repeated decision rows distinct via sha suffix; two-ledgers-one-phase fixture; E3 case x, E2 red-check f."
+  },
+  {
+   "fingerprint": "8d5e00e8a28c47eb5f7212c8fae6bf5ffdd47e63cd730080023962f89eb5e469",
+   "disposition": "accepted_nonblocking",
+   "rationale": "E3 Cursor hints: per-event offset, next hint = min(undelivered line start, first in-window line start); resume case ix and red-check e."
+  },
+  {
+   "fingerprint": "1392a2b8ed4b23704ab2ede2d439cf74e42924e2573a76b3e1fb15706bd951be",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Same as F1: source_absent added to code enum and KR-A1.3 reworded."
+  },
+  {
+   "fingerprint": "208fefb7debe64072fd6ae1f26e333af3dc03e2eaa99b46b7bf7e21e62c62ac4",
+   "disposition": "accepted_nonblocking",
+   "rationale": "E1 Open sets paragraph: kind/source/code/row_kind open, additions additive under /1, /1.1 wording dropped."
+  },
+  {
+   "fingerprint": "caa88dbb402575d018bdb13fcbd5687a85c104816e425fcdcf2c13879a6ee997",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Envelope exposes project_key and repo_name only; repo_identity internal; full-envelope leak grep in Risks."
+  },
+  {
+   "fingerprint": "a1d7a2c9f726aee88f959538d843477d9b5618d80584b05395ab2c03a98c32fe",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Consumer table: absence of dispatch.ended is not running, liveness from status runs; data.basis self_reported|observed on qc.verdict and decision.row; G1 rule."
+  },
+  {
+   "fingerprint": "1cb603250d318afb468aaae5b32addfc152d1a60c1c55e73a8cb58b0415fc7c9",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Section 7: feed is read locally; no contracts/gen entry needed, remote crossing only inside an F1 opaque payload."
+  },
+  {
+   "fingerprint": "fd3b0627c19b09031d7ee5b8d3ccbc18fec2e0a03e8404555fb01db9c14ab05c",
+   "disposition": "accepted_nonblocking",
+   "rationale": "E2 step 2: worktree-path prefix fallback (git worktree list, manifest worktree), cwd_unresolved warning, removed-worktree fixture row."
+  },
+  {
+   "fingerprint": "1d01c44aef6b632c87f2daaea303a8a3a2c30b4e79b7618d0404fe95ff6a4e3a",
+   "disposition": "accepted_nonblocking",
+   "rationale": "E2 step 5: late-reachable older-dated commits documented out of contract for resumed reads; cold read sees them."
+  },
+  {
+   "fingerprint": "51eaf8d929510cb29a69bf670f035636f739fd677168e336a30cab17292bafdf",
+   "disposition": "accepted_nonblocking",
+   "rationale": "KR-A1.6/E4 step 1 skip ensureTmpdir with TMPDIR-absent case; --project restricted to cwd own key, other key exits 2."
+  },
+  {
+   "fingerprint": "90276d8f0a4ed61d72aa0458ba91bf06102720a46b020057cff572fa30962acb",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Section 5: explicit env allowlist, GIT_CONFIG_NOSYSTEM/GLOBAL, memo scoped per call, uid 0 permission cases skipped with reason."
+  },
+  {
+   "fingerprint": "2f4573aecf746c7b7e2702bd7e8a0ebd2a5128fb87821d1e1d182559eb4e4ce1",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Doc moved to docs/dev/events-contract.md (rule 7 reader-docs); ledger pointer folded into 2.6, file map, E2 step 4 and assertions."
+  },
+  {
+   "fingerprint": "facc25638013dd13a46290c4622af8ca0ffdaa738f8b9a75f92e8c5a45fb3df3",
+   "disposition": "accepted_nonblocking",
+   "rationale": "E1 Not-exposed paragraph and E2 file map: deterministic redaction (redact.js over personal-data-redact.js) with sources[].redactions and token-rationale fixture."
+  },
+  {
+   "fingerprint": "0fd1868e848dee485649f41e8072cd9ec1c3d787801558f6e70a0e06c3020749",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Checked scripts/validate-json-schema.js: supports oneOf/const/enum/required/additionalProperties/pattern; E1 schema uses only those plus a negative case per kind."
+  }
+ ]
+}

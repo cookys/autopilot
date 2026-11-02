@@ -1,0 +1,52 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "autopilot-oc-a1-events",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "978a00b9b50f83a4dfafdad20c4dfba6b86ade08612395c78544c695932a2ab1",
+   "disposition": "accepted_blocker",
+   "rationale": "decision.row basis is self_reported for every row_kind (veto and ladder included); G1 rule and C1 label updated; fixture agent-style veto row plus red-check."
+  },
+  {
+   "fingerprint": "7e45502ec1c47bf104d6f7a551b4188dc0ea14cb2c5d2a7020bfa0b0c71c6c26",
+   "disposition": "accepted_blocker",
+   "rationale": "E1 Project and failure rules: project_unresolved exit 2; top-level internal_error catch, exit 0, input cursor echoed; E3 cases vi-b, vi-c and red-check z."
+  },
+  {
+   "fingerprint": "7d9db83e0eb3334b6b821b7bbbc46c881f778f46b7a18482daba37032502cde0",
+   "disposition": "accepted_nonblocking",
+   "rationale": "E3 size bound: w cap 1000, h cap 16 for files >= 64 KiB, 12-hex heads, true encoded bound <= 64 KiB, e floor for an equal-ts group over the cap, stdin cursor, size assertion and red-check g."
+  },
+  {
+   "fingerprint": "1d3e2d1bc27b9b6cfde0d6b999c54237c1a86d6305c192c0e002852d6159640f",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Pointer roots are optional candidates, deduped on read, single O_APPEND write under the ledger lock; cwd_unresolved is now a sources[].rows_filtered count only; removed-ledger degrade case."
+  },
+  {
+   "fingerprint": "987bb18cdcbf7bd719f50580033ab30c818dd37382915203ef6924c95234d65a",
+   "disposition": "accepted_nonblocking",
+   "rationale": "E2 step 4: base-commit-exists project filter, archive layout recorded as step 0, foreign review ledger in the fixture with red-check."
+  },
+  {
+   "fingerprint": "05ceb7571bc3b19a3a80f530d17facc58f6c198ee68dd04032b76add4865724e",
+   "disposition": "accepted_nonblocking",
+   "rationale": "E4: status events fast path before ensureTmpdir and the eager requires; readonly digests whole HOME and TMPDIR plus absent runs dir; bench line through the real binary."
+  },
+  {
+   "fingerprint": "a5f0b98fbb660bdd2b34432edc0a4e3a8a8b12f196531e500132386cc75150f9",
+   "disposition": "accepted_nonblocking",
+   "rationale": "run.stage gets basis self_reported (run-ledger.sh stage-* is a plain CLI); G1 rule covers it."
+  },
+  {
+   "fingerprint": "6d2a5d102f942778ca22023915f240967d07ba141a9264842bf1cfa8349633bf",
+   "disposition": "accepted_nonblocking",
+   "rationale": "E4 gate check (v) against committed schemas/events.baseline.json plus retype red-check."
+  },
+  {
+   "fingerprint": "4ab305db3395169da3f4c586a8c70aa3c29a8d02d99440b14697d303c0e84705",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Hints only for files >= 64 KiB so the 256-byte head is stable; no cursor_hint_stale for grown short files; short ledgers are always read whole."
+  }
+ ]
+}

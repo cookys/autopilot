@@ -10,6 +10,7 @@ unset AUTOPILOT_LEVEL AUTOPILOT_ROOT_RUN_ID AUTOPILOT_MISSION_ROOT_RUN_ID \
 SOURCE_ROOT="$REPO_ROOT"
 git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
 git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
+materialise_graph_named_paths "$TEST_TMP/hermetic-repo"
 REPO_ROOT="$TEST_TMP/hermetic-repo"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
@@ -175,9 +176,12 @@ assert.equal(
   dogfood.admission_digest,
 );
 
+// The synthetic repo mimics THIS repo: manifest plans sit under the live registry's plan base (docs/ at bootstrap, project/ from P1).
+const planBase = require(path.join(root, 'scripts/lib/repo-layout.js')).path('manifest_plan_base');
 const repo = path.join(tmp, 'synthetic-repo');
 fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
-fs.mkdirSync(path.join(repo, 'docs', 'sources'), { recursive: true });
+fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+fs.mkdirSync(path.join(repo, planBase, 'sources'), { recursive: true });
 execFileSync('git', ['init', '-q', repo]);
 const governance = JSON.parse(fs.readFileSync(
   path.join(root, '.claude', 'owner-kernel-governance.json'),
@@ -218,8 +222,8 @@ for (let sourceIndex = 0; sourceIndex < 4; sourceIndex += 1) {
   const rubric = '- R1: bounded deliverable acceptance\n';
   const planName = `sources/plan-${sourceIndex}.md`;
   const rubricName = `sources/rubric-${sourceIndex}.md`;
-  fs.writeFileSync(path.join(repo, 'docs', planName), plan);
-  fs.writeFileSync(path.join(repo, 'docs', rubricName), rubric);
+  fs.writeFileSync(path.join(repo, planBase, planName), plan);
+  fs.writeFileSync(path.join(repo, planBase, rubricName), rubric);
   const planHash = hash(plan);
   const rubricHash = hash(rubric);
   manifest.sources.push({
@@ -255,15 +259,15 @@ function graphNode(index) {
     },
     campaign: {
       profile: 'poc',
-      allowed_path_prefixes: ['docs'],
+      allowed_path_prefixes: [...new Set(['docs', planBase])],
       max_changed_files: 1,
       baseline_churn: 10,
       max_growth_ratio: 1.5,
       max_extra_churn: 5,
       max_repair_generations: 0,
       max_wall_seconds: 100,
-      spec: { path: `docs/sources/plan-${index}.md`, section: `Phase ${index}-0: coverage only` },
-      required_paths: [`docs/sources/plan-${index}.md`],
+      spec: { path: `${planBase}/sources/plan-${index}.md`, section: `Phase ${index}-0: coverage only` },
+      required_paths: [`${planBase}/sources/plan-${index}.md`],
       output_paths: [`docs/output-${index}.txt`],
       // Absent outputs require explicit create authority under Mission admission.
       authorized_creates: [`docs/output-${index}.txt`],
@@ -832,9 +836,12 @@ const {
   deriveCampaignDispatchUnit,
 } = require(path.join(root, 'src/engine/campaign-dispatch-projection'));
 
+// The fixture mimics THIS repo: manifest plans sit under the live registry's plan base (docs/ at bootstrap, project/ from P1).
+const planBase = require(path.join(root, 'scripts/lib/repo-layout.js')).path('manifest_plan_base');
 const repo = path.join(tmp, 'ordinary-noop-repo');
 const dispatchModel = 'Gemini 3.5 Flash (High)';
-fs.mkdirSync(path.join(repo, 'docs', 'sources'), { recursive: true });
+fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+fs.mkdirSync(path.join(repo, planBase, 'sources'), { recursive: true });
 fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
 execFileSync('git', ['-C', repo, 'init', '-q']);
 execFileSync('git', ['-C', repo, 'config', 'user.email', 't@t']);
@@ -912,10 +919,10 @@ const planBody = '# Phase 0-0: ordinary noop coverage\n';
 const rubricBody = '- R1: exact ordinary no-op authority\n';
 const planBodyN2 = '# Phase 0-1: ordinary remaining coverage\n';
 const rubricBodyN2 = '- R2: exact one-of-many authority\n';
-fs.writeFileSync(path.join(repo, 'docs', 'sources', 'plan-0.md'), planBody);
-fs.writeFileSync(path.join(repo, 'docs', 'sources', 'rubric-0.md'), rubricBody);
-fs.writeFileSync(path.join(repo, 'docs', 'sources', 'plan-1.md'), planBodyN2);
-fs.writeFileSync(path.join(repo, 'docs', 'sources', 'rubric-1.md'), rubricBodyN2);
+fs.writeFileSync(path.join(repo, planBase, 'sources', 'plan-0.md'), planBody);
+fs.writeFileSync(path.join(repo, planBase, 'sources', 'rubric-0.md'), rubricBody);
+fs.writeFileSync(path.join(repo, planBase, 'sources', 'plan-1.md'), planBodyN2);
+fs.writeFileSync(path.join(repo, planBase, 'sources', 'rubric-1.md'), rubricBodyN2);
 const planDigest = sha256(planBody);
 const rubricDigest = sha256(rubricBody);
 const planId = `plan-${planDigest}`;
@@ -950,7 +957,7 @@ const graph = {
     },
     campaign: {
       profile: 'poc',
-      allowed_path_prefixes: ['docs'],
+      allowed_path_prefixes: [...new Set(['docs', planBase])],
       max_changed_files: 1,
       baseline_churn: 10,
       max_growth_ratio: 1.5,
@@ -958,13 +965,13 @@ const graph = {
       max_repair_generations: 1,
       max_wall_seconds: 100,
       spec: {
-        path: `docs/sources/plan-${index}.md`,
+        path: `${planBase}/sources/plan-${index}.md`,
         section: index === 0
           ? 'Phase 0-0: ordinary noop coverage'
           : 'Phase 0-1: ordinary remaining coverage',
       },
-      required_paths: [`docs/sources/plan-${index}.md`],
-      output_paths: [`docs/sources/plan-${index}.md`],
+      required_paths: [`${planBase}/sources/plan-${index}.md`],
+      output_paths: [`${planBase}/sources/plan-${index}.md`],
     },
   })),
 };
@@ -1038,7 +1045,7 @@ const intent = {
     domains: ['autopilot'],
     languages: ['javascript'],
     allowed_tools: ['git'],
-    artifact_roots: ['docs'],
+    artifact_roots: [...new Set(['docs', planBase])],
   },
 };
 const acceptance = {
@@ -1147,12 +1154,12 @@ const evidenceBinding = {
 const historical = ctrl.buildHistoricalOutputsAtCommit({
   gitCwd: repo,
   acceptedCommit: baseSha,
-  paths: ['docs/sources/plan-0.md'],
+  paths: [`${planBase}/sources/plan-0.md`],
   binding: evidenceBinding,
 });
 const histRecord = historical.record;
 const histDigest = historical.digest;
-const pathDig = historical.outputs['docs/sources/plan-0.md'];
+const pathDig = historical.outputs[`${planBase}/sources/plan-0.md`];
 const noop = ctrl.buildNoOpReceipt({
   baseSha,
   acceptanceDigest,
@@ -1272,12 +1279,12 @@ assert.strictEqual(loaded.noOpReceipt.dispatcher_called, false);
 const { admitExecutableMissionDelta } = ctrl;
 const delta = admitExecutableMissionDelta({
   repoRoot: repo,
-  allowedPathPrefixes: ['docs'],
-  requiredPaths: ['docs/sources/plan-0.md'],
-  outputPaths: ['docs/sources/plan-0.md'],
+  allowedPathPrefixes: [...new Set(['docs', planBase])],
+  requiredPaths: [`${planBase}/sources/plan-0.md`],
+  outputPaths: [`${planBase}/sources/plan-0.md`],
   authorizedCreates: [],
   historicalOutputs: loaded.historicalOutputs,
-  currentBytesByPath: { 'docs/sources/plan-0.md': pathDig },
+  currentBytesByPath: { [`${planBase}/sources/plan-0.md`]: pathDig },
   noOpReceipt: loaded.noOpReceipt,
   baseSha,
   strictOutputCreates: true,
@@ -1512,7 +1519,7 @@ const evidenceBindingN2 = {
 const historicalN2 = ctrl.buildHistoricalOutputsAtCommit({
   gitCwd: repo,
   acceptedCommit: baseSha,
-  paths: ['docs/sources/plan-1.md'],
+  paths: [`${planBase}/sources/plan-1.md`],
   binding: evidenceBindingN2,
 });
 const noopN2 = ctrl.buildNoOpReceipt({

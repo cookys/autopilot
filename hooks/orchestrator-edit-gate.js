@@ -132,7 +132,7 @@ function inMarkedNestedWorktree(repoRoot, target) {
       isSubagent: Boolean(payload.agent_id), // SPIKE-1 identity
       inRepoRoot,
       inDispatchWorktree: !inRepoRoot && hasWorktreeMarkerAbove(target),
-      allowlisted: inRepoRoot && isAllowlisted(path.relative(inMainCheckout ? mainRoot : repoRoot, target)),
+      allowlisted: inRepoRoot && isAllowlisted(path.relative(inMainCheckout ? mainRoot : repoRoot, target), inMainCheckout ? mainRoot : repoRoot),
     });
 
     if (d.action === 'gate') {

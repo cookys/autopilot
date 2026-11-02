@@ -10,18 +10,21 @@
 SBX="$TEST_TMP/repo"
 mkdir -p "$SBX/scripts/lib"
 cp "$REPO_ROOT/scripts/check-claude-md-inventory.js" "$SBX/scripts/"
+cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$SBX/scripts/lib/"
 SCRIPT="$SBX/scripts/check-claude-md-inventory.js"
 
 write_fixture() {
   # F5: the inventory file must exist (a missing one is red), and name every script in the sandbox.
-  mkdir -p "$SBX/docs"
-  printf 'check-claude-md-inventory.js\n' > "$SBX/docs/scripts-inventory.md"
+  INV_REL="$(layout_path scripts_inventory_doc)"
+  mkdir -p "$SBX/$(dirname "$INV_REL")"
+  printf 'check-claude-md-inventory.js\nrepo-layout.js\n' > "$SBX/$INV_REL"
   cat > "$SBX/CLAUDE.md" <<'EOF'
 # fixture
 
 | Script | Purpose |
 |--------|---------|
 | check-claude-md-inventory.js | membership + size gate. |
+| lib/repo-layout.js | layout registry the gate reads. |
 EOF
 }
 write_fixture
@@ -29,7 +32,7 @@ write_fixture
 # 1. clean sandbox → exit 0, reports counts
 OUT="$(node "$SCRIPT" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "clean sandbox exit 0"
-assert_contains "$OUT" "all 1 scripts named" "clean sandbox reports membership"
+assert_contains "$OUT" "all 2 scripts named" "clean sandbox reports membership"
 assert_contains "$OUT" "bytes" "clean sandbox reports size"
 
 # 2. --help → exit 0

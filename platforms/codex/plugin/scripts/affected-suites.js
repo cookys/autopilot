@@ -184,6 +184,10 @@ const EVALS_DIR = LAYOUT.path('evals_dir');
 const PACK_MANIFEST = LAYOUT.path('skill_onoff_pack_manifest');
 const SCRIPTS_DIR = LAYOUT.path('scripts_dir');
 const DOCS_DIR = LAYOUT.path('docs_dir');
+// Prose roots: docs/ plus the top directory of every work-record location the registry names (plans, projects, backlog,
+// missions: docs/ at bootstrap, project/ from P1). A change under any of them is prose, never code.
+const PROSE_ROOTS = [...new Set([DOCS_DIR, ...['plans_dir', 'projects_dir', 'backlog_file', 'missions_dir'].map((k) => LAYOUT.path(k))].map((d) => d.split('/')[0]))];
+const underProseRoot = (p) => PROSE_ROOTS.some((r) => p.startsWith(`${r}/`));
 const CLAUDE_DIR = LAYOUT.path('claude_dir');
 const PLANS_DIR = LAYOUT.path('plans_dir');
 const PLANS_EVIDENCE_DIR = LAYOUT.path('plans_evidence_dir');
@@ -277,7 +281,7 @@ function packContentSuites(changed, headTree) {
   return out;
 }
 // Prose cannot break a suite; mirrors are covered by the always-run codex-plugin-package suite.
-const PURE_DOC = new RegExp(`^(${reEsc(DOCS_DIR)}|website|skill-creator-workspace)\\/|^[^/]+\\.(md|txt)$`);
+const PURE_DOC = new RegExp(`^(${PROSE_ROOTS.map(reEsc).join('|')}|website|skill-creator-workspace)\\/|^[^/]+\\.(md|txt)$`);
 const MIRROR = /^platforms\//;
 // A script under docs/ is code, not prose (a suite may scan it).
 const isProse = (p) => PURE_DOC.test(p) && !isCode(p);
@@ -393,13 +397,13 @@ function mentions(text) {
 
 const GENERIC_DIRS = new Set(['fixtures', 'fixture', 'golden', 'data', 'lib', 'tests', 'scripts', 'hooks', 'src', 'bin', 'docs', 'evals', 'platforms', 'skills', 'agents', 'references', 'schemas', 'profiles', 'mods', 'plugin', 'codex', 'node_modules',
   // the registry's own top-level directory names, so a moved docs/scripts/hooks/evals tree stays generic
-  ...[CLAUDE_DIR, DOCS_DIR, SCRIPTS_DIR, HOOKS_DIR, EVALS_DIR].map((d) => d.split('/')[0])]);
+  ...[CLAUDE_DIR, DOCS_DIR, SCRIPTS_DIR, HOOKS_DIR, EVALS_DIR].map((d) => d.split('/')[0]), ...PROSE_ROOTS]);
 // Category folders under docs/. Skipped only for a prose seed; other data files keep GENERIC_DIRS alone.
 const PROSE_DIR_SKIP = new Set([path.posix.basename(PLANS_DIR), path.posix.basename(PLANS_EVIDENCE_DIR), 'backlog', 'projects', 'adr']);
 // A non-suite .sh directly under hooks/tests/: shared helper, not a suite.
 const isSharedTestHelper = (p) => new RegExp(`^${reEsc(HOOK_TESTS_DIR)}/[^/]+\\.sh$`).test(p) && !isSuite(p);
 // Mirrors, eval fixtures and docs are copies or prose: they never propagate a change to a suite.
-const NOT_PROPAGATING = new RegExp(`^(platforms|${reEsc(EVALS_DIR)}|${reEsc(DOCS_DIR)}|website|skill-creator-workspace|\\.opencode)/`);
+const NOT_PROPAGATING = new RegExp(`^(platforms|${reEsc(EVALS_DIR)}|${PROSE_ROOTS.map(reEsc).join('|')}|website|skill-creator-workspace|\\.opencode)/`);
 // Full-line # and //, plus a trailing // through end of line, so a slash-star inside that comment
 // is never a block start. A slash-star starts a block only when it is the first non-blank on its
 // line. Anywhere else, including a regexp, it stays text. A star line is dropped only inside a block.
@@ -557,7 +561,7 @@ function referrersOf(graph, p) {
     const parts = p.split('/').slice(0, -1);
     for (const c of parts) {
       if (GENERIC_DIRS.has(c)) continue;
-      if (p.startsWith(`${DOCS_DIR}/`) && isProse(p) && PROSE_DIR_SKIP.has(c)) continue;
+      if (underProseRoot(p) && isProse(p) && PROSE_DIR_SKIP.has(c)) continue;
       for (const f of graph.bySeg.get(c) || []) if (!out.has(f)) out.set(f, 'weak');
     }
   }
@@ -565,7 +569,7 @@ function referrersOf(graph, p) {
     if (!(g.dir && p.slice(0, Math.max(p.lastIndexOf('/'), 0)) === g.dir && (!g.ext || p.endsWith(g.ext)) && !out.has(g.file))) continue;
     // docs/plans/* names the category, not one plan. A glob with an extension reads content and stays.
     // A glob that also names a specific directory stays. Category names apply only under docs/.
-    if (p.startsWith(`${DOCS_DIR}/`) && isProse(p) && !g.ext && g.dir.split('/').every((c) => !c || GENERIC_DIRS.has(c) || PROSE_DIR_SKIP.has(c))) continue;
+    if (underProseRoot(p) && isProse(p) && !g.ext && g.dir.split('/').every((c) => !c || GENERIC_DIRS.has(c) || PROSE_DIR_SKIP.has(c))) continue;
     out.set(g.file, 'weak');
   }
   out.delete(p);

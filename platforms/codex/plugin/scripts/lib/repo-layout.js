@@ -11,7 +11,7 @@
  * one layout in force per merge and NO path aliases: a reader asks `path(key)` and gets the path that
  * is valid at the current stage.
  *
- * API:  stage()  path(key)  rules({activeOnly})  allowlists()  exceptions()  validate(data)  load()
+ * API:  stage()  path(key)  (derived keys: backlog_dir, guide_dir)  pathFor(repoRoot, key)  isThisProject(repoRoot)  rules({activeOnly})  allowlists()  exceptions()  validate(data)  load()
  *       manifestBase(repoRoot, manifestFile)            the directory a sources manifest's plan_path/rubric_path
  *                                                       are relative to ({base, source: 'exception'|'registry'|'manifest-dir'})
  *       containedPath(base, rel)                        the single containment check (literal + realpath) both of them use
@@ -325,12 +325,111 @@ function checked(opts) {
 
 function stage(opts) { return checked(opts).stage; }
 
+// Derived keys are not stored: they are computed from stored ones, so a generator that moves the stored key moves them too.
+//   backlog_dir  the directory of the per-entry backlog note files: the directory that holds backlog_file when it is
+//                named backlog (project/backlog/), else a backlog/ sibling of it (docs/backlog/ beside docs/BACKLOG.md).
+//   guide_dir    the directory of the user-reader docs: the one that holds the settings reference (docs/, docs/guide/ from P1).
+const DERIVED_PATHS = {
+  guide_dir: (paths) => path.posix.dirname(paths.settings_reference),
+  backlog_dir: (paths) => {
+    const dir = path.posix.dirname(paths.backlog_file);
+    return path.posix.basename(dir) === 'backlog' ? dir : (dir === '.' ? 'backlog' : dir + '/backlog');
+  },
+};
+
 function pathOf(key, opts) {
   const d = checked(opts);
+  if (Object.prototype.hasOwnProperty.call(DERIVED_PATHS, key)) return DERIVED_PATHS[key](d.paths);
   if (!Object.prototype.hasOwnProperty.call(d.paths, key)) {
     throw new Error(`repo-layout: unknown path key ${JSON.stringify(key)} (known: ${Object.keys(d.paths).join(', ')})`);
   }
   return d.paths[key];
+}
+
+// ---- Which project does a registry path apply to? ----
+// The registry describes THIS project (the plugin that holds this file). A reader that runs on another repo (a hook in a
+// consuming project, a script given --repo-root / --target / a cwd) must not look for this project's work records there: such
+// a repo keeps them under docs/ by convention. isThisProject() decides, pathFor() applies it.
+//   isThisProject(root)  true when root carries this project's identity, judged by CONTENT, never by git: root has
+//                        .claude-plugin/plugin.json (or the codex mirror's .codex-plugin/plugin.json) whose "name" equals the name in this plugin's own plugin.json, AND root has
+//                        scripts/lib/repo-layout.js. So a worktree, an independent git clone, a non-git copy (a review rail's
+//                        scratch cwd) and a marketplace-cache install all count; an ordinary repo, or one whose plugin.json
+//                        names another plugin, does not. An unreadable or unparsable file means false. This only chooses a path
+//                        (nothing of root is executed), which is why a content test is enough here.
+//                        Known limit: a root at another stage than this plugin (an old bootstrap clone read by a P1 plugin) is
+//                        still treated as this project, so it gets THIS plugin's registry.
+//   pathFor(root, key)   the registry path when root is this project (or root is empty: the caller is this project's own tool),
+//                        else the consuming-project docs/ convention for that key.
+// The consumer names are built from parts on purpose: a relayout generator rewrites this repo's own docs/ paths and must
+// not reach a convention that belongs to other repos.
+const CONSUMER_DOCS = 'docs';
+const CONSUMER_PATHS = {
+  docs_dir: CONSUMER_DOCS,
+  plans_dir: [CONSUMER_DOCS, 'plans'].join('/'),
+  plans_archive_dir: [CONSUMER_DOCS, 'plans', '_archive'].join('/'),
+  plans_evidence_dir: [CONSUMER_DOCS, 'plans', 'evidence'].join('/'),
+  projects_dir: [CONSUMER_DOCS, 'projects'].join('/'),
+  projects_index: [CONSUMER_DOCS, 'projects', 'INDEX.md'].join('/'),
+  projects_archive_dir: [CONSUMER_DOCS, 'projects', '_archive'].join('/'),
+  backlog_file: [CONSUMER_DOCS, 'BACKLOG.md'].join('/'),
+  backlog_dir: [CONSUMER_DOCS, 'backlog'].join('/'),
+};
+
+const SELF_ROOT = path.resolve(__dirname, '..', '..');
+// The identity file is .claude-plugin/plugin.json; the codex mirror of the plugin ships the same manifest as .codex-plugin/plugin.json.
+// The root under test is someone else's repo, so its files are read defensively: only a regular file (lstat: a symlink, FIFO or
+// device is never followed or opened for reading) of at most IDENTITY_MAX_BYTES, opened with O_NOFOLLOW|O_NONBLOCK and checked
+// again with fstat on the descriptor (the entry may be swapped after the lstat). Anything else reads as nothing.
+const IDENTITY_MAX_BYTES = 64 * 1024;
+function readSmallRegularFile(file) {
+  let fd = -1;
+  try {
+    const before = fs.lstatSync(file);
+    if (!before.isFile() || before.size > IDENTITY_MAX_BYTES) return null;
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    const st = fs.fstatSync(fd);
+    if (!st.isFile() || st.size > IDENTITY_MAX_BYTES) return null;
+    const buf = Buffer.alloc(st.size);
+    let off = 0;
+    while (off < st.size) {
+      const n = fs.readSync(fd, buf, off, st.size - off, off);
+      if (n <= 0) break;
+      off += n;
+    }
+    return buf.toString('utf8', 0, off);
+  } catch { return null; } finally { if (fd >= 0) { try { fs.closeSync(fd); } catch { /* already closed */ } } }
+}
+function pluginName(root) {
+  for (const dir of ['.claude-plugin', '.codex-plugin']) {
+    const text = readSmallRegularFile(path.join(root, dir, 'plugin.json'));
+    if (text === null) continue;
+    try {
+      const j = JSON.parse(text);
+      if (j && typeof j.name === 'string' && j.name !== '') return j.name;
+    } catch { /* try the next manifest */ }
+  }
+  return null;
+}
+const identityCache = new Map();
+function isThisProject(repoRoot) {
+  if (typeof repoRoot !== 'string' || repoRoot === '') return false;
+  const key = path.resolve(repoRoot);
+  if (identityCache.has(key)) return identityCache.get(key);
+  const mine = pluginName(SELF_ROOT);
+  let same = false;
+  if (mine !== null && pluginName(key) === mine) {
+    try { same = fs.lstatSync(path.join(key, 'scripts', 'lib', 'repo-layout.js')).isFile(); } catch { same = false; } // lstat: a symlink is not the lib
+  }
+  identityCache.set(key, same);
+  return same;
+}
+
+function pathFor(repoRoot, key, opts) {
+  if (!repoRoot || isThisProject(repoRoot)) return pathOf(key, opts);
+  if (!Object.prototype.hasOwnProperty.call(CONSUMER_PATHS, key)) {
+    throw new Error(`repo-layout: no consuming-project convention for path key ${JSON.stringify(key)}`);
+  }
+  return CONSUMER_PATHS[key];
 }
 
 function realOrResolved(p) {
@@ -482,7 +581,7 @@ function allowlists(opts) {
 
 function exceptions(opts) { return checked(opts).exceptions.map((e) => Object.assign({}, e)); }
 
-module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, rules, allowlists, exceptions, manifestBase, resolveManifestPath, containedPath, literalProblem, isActive, stageIndex };
+module.exports = { STAGES, DEFAULT_REGISTRY, load, validate, stage, path: pathOf, pathFor, isThisProject, rules, allowlists, exceptions, manifestBase, resolveManifestPath, containedPath, literalProblem, isActive, stageIndex };
 
 if (require.main === module) {
   const argv = process.argv.slice(2);

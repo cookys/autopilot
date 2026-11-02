@@ -14,7 +14,7 @@ assert_contains "$(cat "$PREFLIGHT")" "hook-harness-matrix.js --check" "prefligh
 assert_eq "$(grep -c 'run_check .*hook-harness-matrix' "$PREFLIGHT")" "0" "hook matrix staleness is advisory, not a counted run_check"
 
 # 2. Negative control on the check itself: the one evidence row (2026-08-05) warns at 62 days, not at 59.
-F="$TEST_TMP/fx"; mkdir -p "$F/hooks" "$F/platforms/codex/hooks" "$F/docs"
+F="$TEST_TMP/fx"; mkdir -p "$F/hooks" "$F/platforms/codex/hooks" "$F/$(dirname "$(layout_path hook_harness_matrix_doc)")"
 cp "$REPO_ROOT/hooks/hooks.json" "$F/hooks/hooks.json"
 cp "$REPO_ROOT/platforms/codex/hooks/hooks.json" "$F/platforms/codex/hooks/hooks.json"
 node - "$REPO_ROOT" "$F" <<'JS'

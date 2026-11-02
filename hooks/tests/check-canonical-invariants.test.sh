@@ -24,6 +24,8 @@ mkdir -p "$SBX/scripts" \
 cp "$REPO_ROOT/scripts/check-canonical-invariants.sh" "$SBX/scripts/"
 cp "$REPO_ROOT/scripts/check-reference-sizes.js" "$SBX/scripts/"
 cp "$REPO_ROOT/scripts/check-stage-vocab.js" "$SBX/scripts/"
+mkdir -p "$SBX/scripts/lib"
+cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$SBX/scripts/lib/"
 cp "$REPO_ROOT/scripts/check-supersession-anchors.js" "$SBX/scripts/"
 # Supersession-anchor gate seeds: the manifest names exact files, so the sandbox must
 # carry them or the gate fails for a reason that has nothing to do with the case under

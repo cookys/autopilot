@@ -14,8 +14,12 @@ PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); echo "ok: $*"; }
 bad() { FAIL=$((FAIL+1)); echo "FAIL: $*" >&2; }
 
+# The scratch tree is NOT this project: a scan of another root gets the docs/ convention for its work-record dirs (fixture_path), whatever the live registry says.
+PLANS="$(fixture_path plans_dir)"; PROJ_ARCHIVE="$(fixture_path projects_archive_dir)"; PROJ_INDEX="$(fixture_path projects_index)"
+BACKLOG="$(fixture_path backlog_file)"
+PLANS_RE="${PLANS//\//\\/}"; PROJ_ARCHIVE_RE="${PROJ_ARCHIVE//\//\\/}"; PROJECTS_RE="$(fixture_path projects_dir)"; PROJECTS_RE="${PROJECTS_RE//\//\\/}"
 R="$TEST_TMP/tree"
-mkdir -p "$R/skills/dev-flow" "$R/skills/other" "$R/docs/plans" "$R/docs/projects/_archive/x" \
+mkdir -p "$R/skills/dev-flow" "$R/skills/other" "$R/$PLANS" "$R/$PROJ_ARCHIVE/x" "$R/$(dirname "$BACKLOG")" \
   "$R/evals/skill-onoff/packs/p" "$R/scripts" "$R/hooks/tests" "$R/node_modules/m"
 
 # old stage ids (hits) and decoys
@@ -23,7 +27,7 @@ printf 'Run finish-flow L-5.2 then H-9.3 and S-scope-gate.\n' > "$R/skills/dev-f
 printf 'See step F.2 of finish-flow.\n' >> "$R/skills/dev-flow/SKILL.md"
 printf 'Version 2.5 and section 3.1, HTML-5, L-50, v2.L-5x are fine. Plain S.1 outside flow context.\n' > "$R/skills/other/notes.md"
 # size enum
-printf -- '- **Effort**: Fix\n- **Effort**: H\n- **Effort**: M\n' > "$R/docs/BACKLOG.md"
+printf -- '- **Effort**: Fix\n- **Effort**: H\n- **Effort**: M\n' > "$R/$BACKLOG"
 printf -- '---\ndescription: Size a task (S/L/H/Fix) first\n---\n' > "$R/skills/other/SKILL.md"
 # marker phase
 printf 'node scripts/session-mode.js set --phase L-3\nconst x = { phase_set_at: 1 };\n' > "$R/scripts/uses-phase.js"
@@ -43,7 +47,7 @@ printf 'The probe never emits U4 as owner.\n' > "$R/scripts/u4-neg-3.md"
 printf 'U4 experiment.\nThe owner stops here and U5 escalates.\n' > "$R/scripts/u4-neg-4.md"
 printf 'U4 runs an experiment on a branch.\nIt is cheap and fast.\n' > "$R/scripts/u4-experiment.md"
 # excluded paths: each carries a hit that must be ignored
-for f in CHANGELOG.md docs/plans/p.md docs/projects/_archive/x/r.md evals/skill-onoff/packs/p/a.md node_modules/m/i.md; do
+for f in CHANGELOG.md "$PLANS/p.md" "$PROJ_ARCHIVE/x/r.md" evals/skill-onoff/packs/p/a.md node_modules/m/i.md; do
   printf 'L-5.2 and H-9 and phase_set_at\n' > "$R/$f"
 done
 printf 'U4 owner stop\n' > "$R/hooks/tests/mission-convergence.test.sh"
@@ -55,11 +59,11 @@ printf '{"phase_set_at": 1}\n' > "$R/hooks/tests/fixtures/session-marker/valid-o
 for f in profiles/p0-sources/abc.txt profiles/guided-baseline-dispositions.json evals/skill-onoff/lib-r4/p1w-markers.sh \
          evals/skill-onoff/archaeology-scan.js evals/skill-onoff/prereg/p.md hooks/tests/skill-onoff-markers.test.sh \
          evals/engine-capabilities/no-skill-claim.expected.txt hooks/tests/migrate-backlog-entries.test.sh \
-         skill-creator-workspace/results/r.md docs/projects/INDEX.md; do
+         skill-creator-workspace/results/r.md "$PROJ_INDEX"; do
   mkdir -p "$R/$(dirname "$f")" "$R/platforms/codex/plugin/$(dirname "$f")"
   printf 'L-5.2 and H-9\n' > "$R/$f"; printf 'L-5.2 and H-9\n' > "$R/platforms/codex/plugin/$f"
 done
-mkdir -p "$R/platforms/codex/plugin/docs/plans"; printf 'L-5.2\n' > "$R/platforms/codex/plugin/docs/plans/p.md"
+mkdir -p "$R/platforms/codex/plugin/$PLANS"; printf 'L-5.2\n' > "$R/platforms/codex/plugin/$PLANS/p.md"
 # the near-miss: a sibling of an excluded file is still scanned
 mkdir -p "$R/profiles/p0-sources-extra"; printf 'L-5.2\n' > "$R/profiles/p0-sources-extra/x.txt"
 # >64 KiB of findings, to prove stdout is not truncated through a pipe
@@ -85,9 +89,9 @@ chk "old stage H-9.3 detected" 'has("old_stage_id","skills/dev-flow/SKILL.md","H
 chk "S-scope-gate detected" 'has("old_stage_id","skills/dev-flow/SKILL.md","S-scope-gate")'
 chk "F.2 detected in flow context" 'has("old_stage_id","skills/dev-flow/SKILL.md","F.2")'
 chk "decoys (semver, HTML-5, L-50, S.1 outside flow) not flagged" '!f.some((x) => x.file === "skills/other/notes.md")'
-chk "Effort Fix detected" 'has("old_size_enum","docs/BACKLOG.md","Fix")'
-chk "Effort H detected" 'has("old_size_enum","docs/BACKLOG.md","H")'
-chk "Effort M not flagged" '!f.some((x) => x.file === "docs/BACKLOG.md" && x.text.includes("M"))'
+chk "Effort Fix detected" 'has("old_size_enum","'"$BACKLOG"'","Fix")'
+chk "Effort H detected" 'has("old_size_enum","'"$BACKLOG"'","H")'
+chk "Effort M not flagged" '!f.some((x) => x.file === "'"$BACKLOG"'" && x.text.includes("M"))'
 chk "description H detected" 'f.some((x) => x.category === "old_size_enum" && x.file === "skills/other/SKILL.md")'
 chk "phase_set_at detected" 'has("marker_phase","scripts/uses-phase.js","phase_set_at")'
 chk "session-mode --phase detected" 'has("marker_phase","scripts/uses-phase.js","--phase")'
@@ -98,16 +102,18 @@ for n in 1 2 3 4 5 6 7 8 9; do chk "U4-as-owner phrasing $n flagged" "has(\"owne
 for n in 1 2 3 4; do chk "U4 negative fixture $n not flagged" "!f.some((x) => x.file === \"scripts/u4-neg-$n.md\")"; done
 chk "U4 experiment not flagged" '!f.some((x) => x.file === "scripts/u4-experiment.md")'
 chk "U4 path exclusion (mission-convergence.test.sh)" '!f.some((x) => x.file === "hooks/tests/mission-convergence.test.sh")'
-chk "excluded paths ignored" '!f.some((x) => /^(CHANGELOG\.md|docs\/plans\/|docs\/projects\/_archive\/|evals\/skill-onoff\/packs\/|node_modules\/)/.test(x.file))'
-chk "history/frozen paths and codex mirrors excluded" '!f.some((x) => /^(platforms\/codex\/plugin\/)?(profiles\/p0-sources\/|profiles\/guided-baseline-dispositions\.json$|evals\/skill-onoff\/(lib-r4|prereg)\/|evals\/skill-onoff\/archaeology-scan|hooks\/tests\/(skill-onoff-markers|migrate-backlog)|evals\/engine-capabilities\/|skill-creator-workspace\/|docs\/projects\/|docs\/plans\/)/.test(x.file))'
+chk "excluded paths ignored" '!f.some((x) => /^(CHANGELOG\.md|'"$PLANS_RE"'\/|'"$PROJ_ARCHIVE_RE"'\/|evals\/skill-onoff\/packs\/|node_modules\/)/.test(x.file))'
+chk "history/frozen paths and codex mirrors excluded" '!f.some((x) => /^(platforms\/codex\/plugin\/)?(profiles\/p0-sources\/|profiles\/guided-baseline-dispositions\.json$|evals\/skill-onoff\/(lib-r4|prereg)\/|evals\/skill-onoff\/archaeology-scan|hooks\/tests\/(skill-onoff-markers|migrate-backlog)|evals\/engine-capabilities\/|skill-creator-workspace\/|'"$PROJECTS_RE"'\/|'"$PLANS_RE"'\/)/.test(x.file))'
 chk "sibling of an excluded file still scanned" 'has("old_stage_id","profiles/p0-sources-extra/x.txt","L-5.2")'
 chk "counts present per category" '["old_stage_id","old_size_enum","marker_phase","owner_u4"].every((k) => Number.isInteger(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).counts[k]))'
 
 # --- --repo consumer mode ---------------------------------------------------------
-C="$TEST_TMP/consumer"; mkdir -p "$C/.claude" "$C/docs"
+# a consuming project keeps its backlog under docs/ (its own convention, whatever this repo's layout is)
+CDOCS=docs
+C="$TEST_TMP/consumer"; mkdir -p "$C/.claude" "$C/$CDOCS"
 printf 'Merge during L-5.3 and quality at L-5.2.\n' > "$C/.claude/finish-flow-config.md"
-printf -- '- **Effort**: Fix\n- **Effort**: H\n- **Effort**: L\n' > "$C/docs/BACKLOG.md"
-printf 'L-5 in src is not scanned\n' > "$C/docs/other.md"
+printf -- '- **Effort**: Fix\n- **Effort**: H\n- **Effort**: L\n' > "$C/$CDOCS/BACKLOG.md"
+printf 'L-5 in src is not scanned\n' > "$C/$CDOCS/other.md"
 COUT="$TEST_TMP/repo.json"
 rc=0; node "$CHK" --repo "$C" > "$COUT" 2>/dev/null || rc=$?
 [ "$rc" -eq 0 ] && ok "--repo exits 0" || bad "--repo exit $rc"
@@ -119,9 +125,9 @@ const r = [
   d.mode === "repo",
   hint("L-5.3", ".claude/finish-flow-config.md") === "finish",
   hint("L-5.2", ".claude/finish-flow-config.md") === "qc-gate",
-  hint("Fix", "docs/BACKLOG.md") === "S",
-  hint("H", "docs/BACKLOG.md") === "S!",
-  !f.some((x) => x.file === "docs/other.md"),
+  hint("Fix", "'"$CDOCS"'/BACKLOG.md") === "S",
+  hint("H", "'"$CDOCS"'/BACKLOG.md") === "S!",
+  !f.some((x) => x.file === "'"$CDOCS"'/other.md"),
   f.length === 4,
 ];
 console.log(r.every(Boolean) ? "yes" : "no " + JSON.stringify(r));

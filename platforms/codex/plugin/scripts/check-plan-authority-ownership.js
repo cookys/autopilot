@@ -3,6 +3,8 @@
 
 const fs = require('fs');
 const path = require('path');
+// Plan and project locations come from the layout registry (docs/ at bootstrap, project/ from P1).
+const LAYOUT = require('./lib/repo-layout.js');
 
 const REQUIRED_AUTHORITIES = new Set([
   'campaign_generation',
@@ -34,7 +36,7 @@ function loadManifest(file) {
 // directory made every archived portfolio plan invisible, so each manifest claim
 // reported a marker mismatch. A marker found in two locations is still a duplicate.
 function listPortfolioPlans(repoRoot) {
-  const plansRel = 'docs/plans';
+  const plansRel = LAYOUT.path('plans_dir');
   const dirs = [plansRel, `${plansRel}/_archive`];
   const archiveAbs = path.join(repoRoot, plansRel, '_archive');
   const isDir = (abs) => fs.existsSync(abs) && fs.statSync(abs).isDirectory();
@@ -65,7 +67,8 @@ function main() {
     process.argv[2]
       || path.join(
         repoRoot,
-        'docs/projects/_archive/2026/07/2026-07-26-mission-convergence-portfolio/authority-ownership.json',
+        LAYOUT.path('projects_archive_dir'),
+        '2026/07/2026-07-26-mission-convergence-portfolio/authority-ownership.json',
       ),
   );
   const manifest = loadManifest(manifestPath);
@@ -105,9 +108,9 @@ function main() {
     claimsByPlan.get(claim.plan).add(claim.authority);
 
     const planPath = path.resolve(repoRoot, claim.plan);
-    const relative = path.relative(path.join(repoRoot, 'docs', 'plans'), planPath);
+    const relative = path.relative(path.join(repoRoot, LAYOUT.path('plans_dir')), planPath);
     if (relative.startsWith('..') || path.isAbsolute(relative) || !relative.endsWith('.md')) {
-      fail(`claim ${index} plan is outside docs/plans`);
+      fail(`claim ${index} plan is outside ${LAYOUT.path('plans_dir')}`);
     } else if (!fs.existsSync(planPath)) {
       fail(`claim ${index} plan does not exist: ${claim.plan}`);
     }

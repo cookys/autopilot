@@ -291,8 +291,11 @@ function posixRel(repoRoot, abs) {
   return rel.split(path.sep).join('/');
 }
 
+// The backlog of a CONSUMING project sits under docs/ by convention; built from parts so a relayout rewrite of this
+// repo's own docs/ paths does not reach it.
+const CONSUMER_BACKLOG = ['docs', 'BACKLOG.md'].join('/');
 function sidecarHeader(title, headSha, date) {
-  return `# ${title}\n\nSource: docs/BACKLOG.md@${headSha}, migrated ${date}\n\n`;
+  return `# ${title}\n\nSource: ${CONSUMER_BACKLOG}@${headSha}, migrated ${date}\n\n`;
 }
 
 function unifiedDiff(oldText, newText, filename) {
@@ -319,7 +322,7 @@ function unifiedDiff(oldText, newText, filename) {
 }
 
 function loadCfg(opts, repoRoot) {
-  let cfg = builtinConfig();
+  let cfg = builtinConfig(repoRoot);
   let configPath = opts.config;
   if (configPath) {
     cfg = mergeConfig(cfg, parseConfigFile(configPath));
@@ -441,7 +444,7 @@ function planTableMigration(text, cfg, repoRoot, opts) {
       if (name.endsWith('.md')) usedSlugs.add(name.slice(0, -3));
     }
   } catch { /* out-dir absent */ }
-  const backlogRel = posixRel(repoRoot, path.resolve(opts.backlog || 'docs/BACKLOG.md'));
+  const backlogRel = posixRel(repoRoot, path.resolve(opts.backlog || CONSUMER_BACKLOG));
 
   const lines = text.split('\n');
   const outLines = [];
@@ -1217,7 +1220,7 @@ function mainToReporterFields(args) {
   const { text: converted, stats } = convertToReporterFields(text, drafts, parseRepliesTable(repliesText), titleFirstSeen(repoRoot, rel));
   // Gate the converted text with the backlog's own config (written to a temp copy beside nothing real).
   let cfg;
-  try { cfg = loadCfg(args, repoRoot); } catch { cfg = mergeConfig(builtinConfig(), { style: 'heading' }); }
+  try { cfg = loadCfg(args, repoRoot); } catch { cfg = mergeConfig(builtinConfig(repoRoot), { style: 'heading' }); }
   const { violations } = gate.collectViolations(converted, cfg, repoRoot, Date.now());
   const counts = {};
   for (const v of violations) {
@@ -1338,6 +1341,6 @@ function main() {
   process.exit(result.ok && planned.manifest.preserved ? 0 : 1);
 }
 
-module.exports = { convertToReporterFields, parseRepliesTable, needsMigration, renderEntry };
+module.exports = { CONSUMER_BACKLOG, convertToReporterFields, parseRepliesTable, needsMigration, renderEntry };
 
 if (require.main === module) main();

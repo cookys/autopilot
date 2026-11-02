@@ -239,7 +239,8 @@ rc=$?
 set -e
 assert_eq "$rc" "0" "--self-test exits 0"
 
-mkdir -p "$TEST_TMP/mutroot/scripts" "$TEST_TMP/mutroot/references"
+mkdir -p "$TEST_TMP/mutroot/scripts/lib" "$TEST_TMP/mutroot/references"
+cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$TEST_TMP/mutroot/scripts/lib/"   # the mutants load the layout registry beside them
 cp "$REPO_ROOT/references/stage-graph.json" "$TEST_TMP/mutroot/references/"
 mut="$TEST_TMP/mutroot/scripts/check-mut.js"
 sed_mutant "$GATE" "$mut" "s/Status: 'pending'/Status: 'open'/"
@@ -621,6 +622,16 @@ o="$(node "$GATE" --backlog "$d/docs/BACKLOG.md" --mode block --json 2>/dev/null
 assert_eq "$(json_has_code "$o" sidecar_orphan)" "yes" "note.md is an orphan though kept-note.md is mentioned"
 assert_contains "$o" "docs/backlog/note.md" "the orphan reported is note.md"
 assert_not_contains "$o" "docs/backlog/kept-note.md is" "kept-note.md is not reported"
+
+# A backlog file that sits inside a directory named backlog/ (the relayout form): its notes are that directory's other .md files,
+# and the backlog file is never its own orphan.
+d="$(repo sc-inside)"; mkdir -p "$d/area/backlog"
+printf '%s\n' '### Inside row' '- **Status**: open' '- **Trigger**: when tests run' '- **Effort**: S' '- **Source**: suite' '- **Pointer**: none' > "$d/area/backlog/BACKLOG.md"
+printf 'n\n' > "$d/area/backlog/lonely.md"
+o="$(node "$GATE" --backlog "$d/area/backlog/BACKLOG.md" --mode block --json 2>/dev/null || true)"
+assert_eq "$(json_has_code "$o" sidecar_orphan)" "yes" "backlog file inside backlog/: an unmentioned sibling note is an orphan"
+assert_contains "$o" "backlog/lonely.md" "the orphan reported is lonely.md"
+assert_not_contains "$o" "backlog/BACKLOG.md is mentioned" "the backlog file is not reported as its own orphan"
 
 # Trigger-Type (BL-0212). Required once a file uses the field; value and calendar date are separate codes.
 # RED at 604b9ff14: 116 passed, 5 failed — missing_field/bad_trigger_type/bad_trigger_date absent (got 'no'), valid ready+date exited 1.

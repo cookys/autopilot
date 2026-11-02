@@ -1599,9 +1599,11 @@ assert_contains "$DUAL_OUT3" "allow_same_runner_dual_seat is ON" "legacy CLI: �
 # --- plan_unregistered refusal (shares docs/projects/INDEX.md registry with
 #     scripts/check-plan-graduation.js's own plan_unregistered gate) ---
 REG_REPO="$TEST_TMP/reg-repo"
-mkdir -p "$REG_REPO/docs/plans" "$REG_REPO/docs/projects"
+# the fixture is a scratch repo, NOT this project: plans and the projects index sit under the docs/ convention (fixture_path), whatever the live registry says
+REG_PLANS="$(fixture_path plans_dir)"; REG_INDEX="$(fixture_path projects_index)"
+mkdir -p "$REG_REPO/$REG_PLANS" "$REG_REPO/$(dirname "$REG_INDEX")"
 git -C "$REG_REPO" init -q
-REG_PLAN="$REG_REPO/docs/plans/2026-01-01-widget.md"
+REG_PLAN="$REG_REPO/$REG_PLANS/2026-01-01-widget.md"
 printf '%s\n' '# Plan' 'Build the next vertical slice.' >"$REG_PLAN"
 
 # No docs/projects/INDEX.md at all -> auto-allowed, no refusal.
@@ -1611,7 +1613,7 @@ NOIDX_OUT="$(AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 node "$SCRIPT" --repo-root
 assert_not_contains "$NOIDX_OUT" "plan_unregistered" \
   "no docs/projects/INDEX.md at all auto-allows (no plan_unregistered refusal)"
 
-cat >"$REG_REPO/docs/projects/INDEX.md" <<'MD'
+cat >"$REG_REPO/$REG_INDEX" <<'MD'
 # Index
 
 ## 進行中 (In Progress)
@@ -1641,7 +1643,7 @@ ALLOW_OUT="$(AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 node "$SCRIPT" --repo-root
 assert_not_contains "$ALLOW_OUT" "plan_unregistered" "--allow-unregistered lifts the refusal"
 
 # An active-registered plan passes without the flag.
-python3 - "$REG_REPO/docs/projects/INDEX.md" <<'PY'
+python3 - "$REG_REPO/$REG_INDEX" <<'PY'
 import sys
 p = sys.argv[1]
 s = open(p).read()

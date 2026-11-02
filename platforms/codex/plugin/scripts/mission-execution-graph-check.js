@@ -65,15 +65,19 @@ function gitToplevel(dir) {
 // plan_unregistered gate — see that script's planIndexRegistration/registerTemplateRow).
 // Auto-allowed (no refusal) when the target repo has no docs/projects/INDEX.md at all.
 function checkSpecPlanRegistration(graph, repoRoot) {
-  const indexPath = path.join(repoRoot, 'docs', 'projects', 'INDEX.md');
+  // Mission graphs exist only in this repo and its clones, whose layout is the registry's (not a consuming project's docs/).
+  const plansRel = LAYOUT.path('plans_dir');
+  const indexRel = LAYOUT.path('projects_index');
+  const indexPath = path.join(repoRoot, indexRel);
   if (!fs.existsSync(indexPath)) return;
   const gate = require('./check-plan-graduation.js');
-  const plansDir = path.join(repoRoot, 'docs', 'plans');
+  const plansDir = path.join(repoRoot, plansRel);
+  const specPathRe = new RegExp(`^${plansRel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/([^/]+)\\.md(?:#.*)?$`);
   const missing = [];
   for (const [index, node] of (graph.nodes || []).entries()) {
     const specPath = node && node.campaign && node.campaign.spec && node.campaign.spec.path;
     if (typeof specPath !== 'string') continue;
-    const m = specPath.match(/^docs\/plans\/([^/]+)\.md(?:#.*)?$/);
+    const m = specPath.match(specPathRe);
     if (!m) continue;
     const stem = m[1];
     if (stem.startsWith('_archive')) continue; // archived — out of the registry's scope
@@ -81,7 +85,7 @@ function checkSpecPlanRegistration(graph, repoRoot) {
     if (!registration.indexExists || registration.activeRow) continue;
     const row = gate.registerTemplateRow(repoRoot, plansDir, path.join(plansDir, '_archive'), stem);
     const label = `graph.nodes[${index}]${node && node.id ? `(${node.id})` : ''}`;
-    missing.push(`${label}.campaign.spec.path (${specPath}) has no docs/projects/INDEX.md row `
+    missing.push(`${label}.campaign.spec.path (${specPath}) has no ${indexRel} row `
       + `with Version "active" — paste: ${row}`);
   }
   if (missing.length > 0) {

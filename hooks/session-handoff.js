@@ -111,9 +111,12 @@ function decide(repoRoot, parsed, sessionStartIso) {
 
   if (sessionStartIso) {
     try {
-      const projectsDir = path.join(repoRoot, 'docs', 'projects');
+      // The projects dir comes from the layout registry when the session's repo is this one, and is the docs/projects
+      // convention for any other repo (pathFor decides per repo root).
       const startMs = Date.parse(sessionStartIso);
-      if (!Number.isNaN(startMs) && fs.existsSync(projectsDir)) {
+      const projectsDirs = [path.join(repoRoot, require('../scripts/lib/repo-layout.js').pathFor(repoRoot, 'projects_dir'))];
+      scan: for (const projectsDir of projectsDirs) {
+        if (Number.isNaN(startMs) || !fs.existsSync(projectsDir)) continue;
         for (const entry of fs.readdirSync(projectsDir)) {
           if (entry === '_archive' || entry.startsWith('.')) continue;
           const entryPath = path.join(projectsDir, entry);
@@ -121,7 +124,7 @@ function decide(repoRoot, parsed, sessionStartIso) {
           try { st = fs.statSync(entryPath); } catch { continue; }
           if (st.mtimeMs >= startMs - 1000) {
             reasons.push('active_project');
-            break;
+            break scan;
           }
         }
       }

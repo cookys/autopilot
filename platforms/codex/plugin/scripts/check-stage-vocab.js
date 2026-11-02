@@ -52,6 +52,42 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+// Work-record locations come from the layout registry (docs/ at bootstrap, project/ from P1), never from literals here.
+const LAYOUT = require('./lib/repo-layout.js');
+// The registry describes this repo only: a scan of another root (--root <other repo>) gets the docs/ convention
+// (LAYOUT.pathFor decides per root). A prefix already covered by another prefix of the list is dropped.
+const uniq = (a) => [...new Set(a)].filter((x, _i, all) => !all.some((o) => o !== x && x.startsWith(o)));
+let EXCLUDE_PREFIXES;
+let HISTORY_EXCLUDES;
+let U4_EXCLUDE_PATHS;
+function configureLayout(root) {
+  const dirPrefix = (key) => LAYOUT.pathFor(root, key).replace(/\/+$/, '') + '/';
+  EXCLUDE_PREFIXES = [
+    'CHANGELOG.md',
+    ...uniq([dirPrefix('plans_dir'), dirPrefix('plans_evidence_dir'), dirPrefix('projects_archive_dir')]),
+    'evals/skill-onoff/packs/',
+    '.claude/worktrees/',
+    'node_modules/',
+    '.git/',
+  ];
+  HISTORY_EXCLUDES = [
+    dirPrefix('projects_dir'),
+    'profiles/p0-sources/',
+    'profiles/guided-baseline-dispositions.json',
+    'evals/skill-onoff/lib/p1w-markers.sh',
+    'evals/skill-onoff/lib-r4/p1w-markers.sh',
+    'evals/skill-onoff/archaeology-scan.js',
+    'evals/skill-onoff/prereg/',
+    'hooks/tests/skill-onoff-p1w-markers.test.sh',
+    'hooks/tests/skill-onoff-markers.test.sh',
+    'evals/engine-capabilities/no-skill-claim.expected.txt',
+    'hooks/tests/check-backlog-entries.test.sh',
+    'hooks/tests/migrate-backlog-entries.test.sh',
+    'skill-creator-workspace/',
+  ];
+  U4_EXCLUDE_PATHS = [LAYOUT.pathFor(root, 'backlog_file'), 'hooks/tests/mission-convergence.test.sh'];
+}
+configureLayout(null); // this repo's own, until main() knows the scanned root
 
 const SELF_EXCLUDES = ['scripts/check-stage-vocab.js', 'hooks/tests/check-stage-vocab.test.sh', 'platforms/codex/plugin/scripts/check-stage-vocab.js'];
 // marker_phase exemptions (P2b, plan §0.7). (1) Digest-frozen history that still names the removed phase flag: the frozen eval
@@ -60,32 +96,7 @@ const SELF_EXCLUDES = ['scripts/check-stage-vocab.js', 'hooks/tests/check-stage-
 // the rejection message itself). Exempt from marker_phase only.
 const MARKER_PHASE_HISTORY = ['evals/skill-onoff/lib/p1w-markers.sh', 'hooks/tests/skill-onoff-p1w-markers.test.sh', 'hooks/tests/session-mode-phase.test.sh'];
 const MARKER_PHASE_ALLOW_TOKEN = 'stage-vocab-allow';
-const EXCLUDE_PREFIXES = [
-  'CHANGELOG.md',
-  'docs/plans/',
-  'docs/projects/_archive/',
-  'evals/skill-onoff/packs/',
-  '.claude/worktrees/',
-  'node_modules/',
-  '.git/',
-];
-const HISTORY_EXCLUDES = [
-  'docs/projects/',
-  'profiles/p0-sources/',
-  'profiles/guided-baseline-dispositions.json',
-  'evals/skill-onoff/lib/p1w-markers.sh',
-  'evals/skill-onoff/lib-r4/p1w-markers.sh',
-  'evals/skill-onoff/archaeology-scan.js',
-  'evals/skill-onoff/prereg/',
-  'hooks/tests/skill-onoff-p1w-markers.test.sh',
-  'hooks/tests/skill-onoff-markers.test.sh',
-  'evals/engine-capabilities/no-skill-claim.expected.txt',
-  'hooks/tests/check-backlog-entries.test.sh',
-  'hooks/tests/migrate-backlog-entries.test.sh',
-  'skill-creator-workspace/',
-];
 const CODEX_MIRROR = 'platforms/codex/plugin/';
-const U4_EXCLUDE_PATHS = ['docs/BACKLOG.md', 'hooks/tests/mission-convergence.test.sh'];
 const TEXT_EXT = new Set(['.md', '.js', '.cjs', '.mjs', '.ts', '.tsx', '.sh', '.json', '.yml', '.yaml', '.txt', '.py']);
 const MAX_BYTES = 2 * 1024 * 1024;
 
@@ -242,6 +253,8 @@ function parseArgs(argv) {
   return o;
 }
 
+// A consuming project keeps its work records under docs/ (its own convention, not this repo's layout).
+const CONSUMER_DOCS = 'docs';
 function consumerFiles(dir) {
   const res = [];
   const addDir = (sub, re) => {
@@ -250,8 +263,8 @@ function consumerFiles(dir) {
     for (const f of fs.readdirSync(d)) if (re.test(f) && fs.statSync(path.join(d, f)).isFile()) res.push(norm(path.join(sub, f)));
   };
   addDir('.claude', /\.md$/);
-  addDir('docs/backlog', /\.md$/);
-  for (const f of ['BACKLOG.md', 'docs/BACKLOG.md']) if (fs.existsSync(path.join(dir, f))) res.push(f);
+  addDir(CONSUMER_DOCS + '/backlog', /\.md$/);
+  for (const f of ['BACKLOG.md', CONSUMER_DOCS + '/BACKLOG.md']) if (fs.existsSync(path.join(dir, f))) res.push(f);
   return res;
 }
 
@@ -262,6 +275,7 @@ function main() {
     process.stderr.write(`check-stage-vocab: not a directory: ${base}\n`);
     process.exit(2);
   }
+  configureLayout(base);
   const findings = [];
   const add = (category, file, line, text, match, hint) => {
     const f = { category, file, line, match, text: clip(text) };
@@ -291,4 +305,5 @@ function main() {
   process.exit(o.gate && total > 0 ? 1 : 0);
 }
 
-main();
+if (require.main === module) main();
+module.exports = { configureLayout, layoutSets: () => ({ EXCLUDE_PREFIXES, HISTORY_EXCLUDES, U4_EXCLUDE_PATHS }) };

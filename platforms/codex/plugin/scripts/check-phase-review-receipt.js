@@ -28,6 +28,11 @@ const deriveReceiptState = require('./lib/review-chain-derive');
 
 const { EXCLUDE_ALLOWLIST, isPathspecAllowed, loadConsumerExcludeAllowlist } = require('./lib/exclude-allowlist');
 const reviewPackets = require('./lib/review-packets');
+const LAYOUT = require('./lib/repo-layout.js');
+// Plans sit where the layout registry puts them (docs/plans at bootstrap, project/plans from P1) when the repo is this one,
+// and under the docs/plans convention in any other repo (LAYOUT.pathFor decides per repo root).
+const planDirsAbs = (repoRoot) => [path.join(repoRoot, LAYOUT.pathFor(repoRoot, 'plans_dir'))];
+const inPlanDirs = (repoRoot, name) => planDirsAbs(repoRoot).map((d) => path.join(d, name));
 
 function deepEqual(a, b) {
   if (a === b) return true;
@@ -137,7 +142,7 @@ function resolvePlanFile(flags, planArtifact, dispositions, planArtifactPath, di
   const id = planArtifact.logical_plan_id;
   if (id) {
     const candidates = [
-      path.join(repoRoot, 'docs', 'plans', `${id}.md`),
+      ...inPlanDirs(repoRoot, `${id}.md`),
       path.join(repoRoot, `${id}.md`),
       path.join(path.dirname(planArtifactPath), `${id}.md`),
       path.join(path.dirname(planArtifactPath), 'plan.md'),
@@ -146,13 +151,13 @@ function resolvePlanFile(flags, planArtifact, dispositions, planArtifactPath, di
     ];
     const mSuff = id.match(/^(.+)-(\d{4}-\d{2}-\d{2})$/);
     if (mSuff) {
-      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mSuff[2]}-${mSuff[1]}.md`));
+      candidates.push(...inPlanDirs(repoRoot, `${mSuff[2]}-${mSuff[1]}.md`));
       candidates.push(path.join(path.dirname(planArtifactPath), `${mSuff[2]}-${mSuff[1]}.md`));
       candidates.push(path.join(path.dirname(dispositionsPath), `${mSuff[2]}-${mSuff[1]}.md`));
     }
     const mPref = id.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
     if (mPref) {
-      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mPref[2]}-${mPref[1]}.md`));
+      candidates.push(...inPlanDirs(repoRoot, `${mPref[2]}-${mPref[1]}.md`));
       candidates.push(path.join(path.dirname(planArtifactPath), `${mPref[2]}-${mPref[1]}.md`));
       candidates.push(path.join(path.dirname(dispositionsPath), `${mPref[2]}-${mPref[1]}.md`));
     }
@@ -161,7 +166,7 @@ function resolvePlanFile(flags, planArtifact, dispositions, planArtifactPath, di
     }
   }
   if (planArtifact.plan_sha256) {
-    const searchDirs = [path.dirname(planArtifactPath), path.dirname(dispositionsPath), path.join(repoRoot, 'docs', 'plans')];
+    const searchDirs = [path.dirname(planArtifactPath), path.dirname(dispositionsPath), ...planDirsAbs(repoRoot)];
     for (const d of searchDirs) {
       try {
         if (!fs.existsSync(d)) continue;
@@ -197,7 +202,7 @@ function resolveRubricFile(flags, planArtifact, dispositions, planArtifactPath, 
   const id = planArtifact.logical_plan_id;
   if (id) {
     const candidates = [
-      path.join(repoRoot, 'docs', 'plans', `${id}.rubric.md`),
+      ...inPlanDirs(repoRoot, `${id}.rubric.md`),
       path.join(repoRoot, `${id}.rubric.md`),
       path.join(path.dirname(planArtifactPath), `${id}.rubric.md`),
       path.join(path.dirname(planArtifactPath), 'rubric.md'),
@@ -206,13 +211,13 @@ function resolveRubricFile(flags, planArtifact, dispositions, planArtifactPath, 
     ];
     const mSuff = id.match(/^(.+)-(\d{4}-\d{2}-\d{2})$/);
     if (mSuff) {
-      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mSuff[2]}-${mSuff[1]}.rubric.md`));
+      candidates.push(...inPlanDirs(repoRoot, `${mSuff[2]}-${mSuff[1]}.rubric.md`));
       candidates.push(path.join(path.dirname(planArtifactPath), `${mSuff[2]}-${mSuff[1]}.rubric.md`));
       candidates.push(path.join(path.dirname(dispositionsPath), `${mSuff[2]}-${mSuff[1]}.rubric.md`));
     }
     const mPref = id.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
     if (mPref) {
-      candidates.push(path.join(repoRoot, 'docs', 'plans', `${mPref[2]}-${mPref[1]}.rubric.md`));
+      candidates.push(...inPlanDirs(repoRoot, `${mPref[2]}-${mPref[1]}.rubric.md`));
       candidates.push(path.join(path.dirname(planArtifactPath), `${mPref[2]}-${mPref[1]}.rubric.md`));
       candidates.push(path.join(path.dirname(dispositionsPath), `${mPref[2]}-${mPref[1]}.rubric.md`));
     }
@@ -221,7 +226,7 @@ function resolveRubricFile(flags, planArtifact, dispositions, planArtifactPath, 
     }
   }
   if (planArtifact.rubric_sha256) {
-    const searchDirs = [path.dirname(planArtifactPath), path.dirname(dispositionsPath), path.join(repoRoot, 'docs', 'plans'), path.join(repoRoot, 'evals')];
+    const searchDirs = [path.dirname(planArtifactPath), path.dirname(dispositionsPath), ...planDirsAbs(repoRoot), path.join(repoRoot, 'evals')];
     for (const d of searchDirs) {
       try {
         if (!fs.existsSync(d)) continue;
@@ -751,7 +756,7 @@ function validateModeA(flags, opts = {}) {
       // Item 7: Exclusion allowlist enforcement
       if (hasExclusions || packetSet) {
         for (const pattern of (hasExclusions ? rangeObj.excluded : [])) {
-          if (!isPathspecAllowed(pattern, consumerAllowlist)) {
+          if (!isPathspecAllowed(pattern, consumerAllowlist, repoRoot)) {
             console.error(`ERROR: Exclude pathspec '${pattern}' is not permitted by allowlist`);
             process.exit(1);
           }
@@ -1154,9 +1159,9 @@ function validateModeA(flags, opts = {}) {
         .split('\n')
         .map((p) => p.trim())
         .filter(Boolean);
-      const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === 'docs/projects/INDEX.md';
+      const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.pathFor(repoRoot, 'projects_index');
       const allAllowed = diffRes.status === 0
-        && changedPaths.every((p) => isPathspecAllowed(p, consumerAllowlist) || sidecarAllowed(p));
+        && changedPaths.every((p) => isPathspecAllowed(p, consumerAllowlist, repoRoot) || sidecarAllowed(p));
       if (!allAllowed) {
         console.error(`Branch '${branch}' head has moved: expected '${lastEntry.head}', got '${currentBranchHead}'`);
         process.exit(1);

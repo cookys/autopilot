@@ -3,6 +3,8 @@
 # RED at f52f04b9256a4403b90dc4aba306c0871d335cc3: FAIL requiring mirrored session-start.js succeeds (expected 0, got 1); Cannot find module '../../../hooks/lib/brief-header-template.js'
 # RED at 0dd55318e: scratch copy of sync-codex-plugin-skills.sh with LC_ALL=C removed from both comm calls, GNU comm shim, LC_ALL=en_US.utf8: FAIL UTF-8 --check has no extra drift line for brief-header-template.js: unexpected 'brief-header-template.js' in output; FAIL UTF-8 --check does not warn that comm input is unsorted: unexpected 'not in sorted order' in output. 139 passed, 2 failed.
 . "$(dirname "$0")/lib.sh"
+# A linked plan doc is packaged at the path it has in this repo: the registry archive dir (docs/ at bootstrap, project/ from P1).
+export CODEX_LINKED_DOC="$(layout_path plans_archive_dir)/2026/06/2026-06-26-trust-tiered-review-policy.md"
 
 PLUGIN_DIR="$REPO_ROOT/platforms/codex/plugin"
 MARKETPLACE_ROOT="$REPO_ROOT/platforms/codex"
@@ -832,7 +834,7 @@ print('skill_harness_maintenance_exists', fs.existsSync(path.join(pluginDir, 'sk
 print('support_reference_exists', fs.existsSync(path.join(pluginDir, 'references', 'model-routing.md')));
 print('support_script_exists', fs.existsSync(path.join(pluginDir, 'scripts', 'dispatch-review.sh')));
 print('support_template_exists', fs.existsSync(path.join(pluginDir, 'project-config-template', 'review-loop-config.md')));
-print('support_doc_exists', fs.existsSync(path.join(pluginDir, 'docs', 'plans', '_archive', '2026', '06', '2026-06-26-trust-tiered-review-policy.md')));
+print('support_doc_exists', fs.existsSync(path.join(pluginDir, process.env.CODEX_LINKED_DOC)));
 
 const pluginReal = fs.realpathSync(pluginDir);
 
@@ -919,7 +921,7 @@ console.log(`installed_harness_maintenance=${Boolean(installedPath) && fs.exists
 console.log(`installed_reference=${Boolean(installedPath) && fs.existsSync(`${installedPath}/references/model-routing.md`)}`);
 console.log(`installed_script=${Boolean(installedPath) && fs.existsSync(`${installedPath}/scripts/dispatch-review.sh`)}`);
 console.log(`installed_template=${Boolean(installedPath) && fs.existsSync(`${installedPath}/project-config-template/review-loop-config.md`)}`);
-console.log(`installed_doc=${Boolean(installedPath) && fs.existsSync(`${installedPath}/docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md`)}`);
+console.log(`installed_doc=${Boolean(installedPath) && fs.existsSync(`${installedPath}/${process.env.CODEX_LINKED_DOC}`)}`);
 NODE
 )"
   assert_contains "$INSTALLED_CACHE_OUT" "installed_dev_flow=true" "Installed Codex plugin cache contains dev-flow skill"

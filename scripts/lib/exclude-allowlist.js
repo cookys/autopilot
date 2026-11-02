@@ -5,12 +5,16 @@ const path = require('path');
 
 const SOURCE_EXT_RE = /\.(js|ts|py|sh|md)(\/|$)/i;
 
-const EXCLUDE_ALLOWLIST = [
-  'platforms/**',
-  'profiles/*.json',
-  'docs/projects/**',
-  'docs/plans/evidence/**',
-  'docs/BACKLOG.md',
+// Work-record entries: this repo's locations from the layout registry (docs/ at bootstrap, project/ from P1); any other repo
+// (a consuming project under review) gets the docs/ convention. LAYOUT.pathFor decides per repo root.
+const LAYOUT = require('./repo-layout.js');
+const workRecordExcludes = (repoRoot) => [
+  `${LAYOUT.pathFor(repoRoot, 'projects_dir')}/**`,
+  `${LAYOUT.pathFor(repoRoot, 'plans_evidence_dir')}/**`,
+  LAYOUT.pathFor(repoRoot, 'backlog_file'),
+];
+const BASE_BEFORE = ['platforms/**', 'profiles/*.json'];
+const EXCLUDE_BASE_AFTER = [
   'package-lock.json',
   'yarn.lock',
   'pnpm-lock.yaml',
@@ -27,6 +31,9 @@ const EXCLUDE_ALLOWLIST = [
   'lockfiles',
   'generated/**',
 ];
+// The allowlist for one repo root; no root = this repo's own.
+const excludeAllowlistFor = (repoRoot) => [...BASE_BEFORE, ...workRecordExcludes(repoRoot), ...EXCLUDE_BASE_AFTER];
+const EXCLUDE_ALLOWLIST = excludeAllowlistFor(null);
 
 function matchesAllowlist(normalized, list) {
   if (!Array.isArray(list)) return false;
@@ -75,9 +82,9 @@ function loadConsumerExcludeAllowlist(repoRoot) {
   }
 }
 
-function isPathspecAllowed(pathspec, consumerList) {
+function isPathspecAllowed(pathspec, consumerList, repoRoot) {
   const normalized = String(pathspec || '').trim();
-  if (matchesAllowlist(normalized, EXCLUDE_ALLOWLIST)) return true;
+  if (matchesAllowlist(normalized, repoRoot ? excludeAllowlistFor(repoRoot) : EXCLUDE_ALLOWLIST)) return true;
   const extra = Array.isArray(consumerList)
     ? consumerList.filter(isAcceptedConsumerRow)
     : [];
@@ -86,6 +93,7 @@ function isPathspecAllowed(pathspec, consumerList) {
 
 module.exports = {
   EXCLUDE_ALLOWLIST,
+  excludeAllowlistFor,
   isPathspecAllowed,
   isAcceptedConsumerRow,
   parseConsumerExcludeAllowlist,

@@ -169,10 +169,14 @@ assert_file_absent "$CODEX_D/AGENTS.md" "dry-run writes no Codex file"
 assert_file_absent "$HOME_D/.gemini/GEMINI.md" "dry-run writes no agy file"
 assert_contains "$OUT" "dry-run" "dry-run prints what it would write"
 
-# missing docs source: copy of the script with no docs/token-discipline.md
+# The doc sits in the registry's guide dir (docs/ at bootstrap, docs/guide/ from P1); a copied script needs the registry beside it.
+GUIDE_DIR="$(cd "$ROOT" && node scripts/lib/repo-layout.js path guide_dir)"
+
+# missing docs source: copy of the script with no token-discipline.md
 COPY="$(mktemp -d)"
-mkdir -p "$COPY/scripts"
+mkdir -p "$COPY/scripts/lib"
 cp "$SCRIPT" "$COPY/scripts/install-token-discipline.js"
+cp "$ROOT/scripts/lib/repo-layout.js" "$COPY/scripts/lib/repo-layout.js"
 OUT="$(HOME="$HOME_D" CODEX_HOME="$CODEX_D" node "$COPY/scripts/install-token-discipline.js" install 2>&1)"; EC=$?
 if [[ "$EC" -ne 0 ]]; then ok "missing docs source exits non-zero"; else fail "missing docs source exits non-zero (got 0)"; fi
 assert_file_absent "$CODEX_D/AGENTS.md" "missing source writes nothing"
@@ -193,9 +197,10 @@ done
 # doc without install-block markers: real script refuses; a mutant that ignores markers writes
 marker_tree() {
   local dest="$1" doc="$2" script_src="$3"
-  mkdir -p "$dest/scripts" "$dest/docs"
+  mkdir -p "$dest/scripts/lib" "$dest/$GUIDE_DIR"
   cp "$script_src" "$dest/scripts/install-token-discipline.js"
-  printf '%s\n' "$doc" > "$dest/docs/token-discipline.md"
+  cp "$ROOT/scripts/lib/repo-layout.js" "$dest/scripts/lib/repo-layout.js"
+  printf '%s\n' "$doc" > "$dest/$GUIDE_DIR/token-discipline.md"
 }
 
 BASE="$(new_home)"

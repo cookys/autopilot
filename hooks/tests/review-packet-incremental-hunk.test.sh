@@ -28,7 +28,8 @@ fs.writeFileSync(path.join(tmp, 'spec.md'), 'spec\n');
 function load(mutate, name) {
   let src = fs.readFileSync(path.join(root, 'src/runners/review-packet.js'), 'utf8');
   if (mutate) { const m = mutate(src); if (m === src) throw new Error('mutation no-op'); src = m; }
-  src = src.replace(/require\('\.\.\/engine\/review-increment'\)/g, `require(${JSON.stringify(path.join(root, 'src/engine/review-increment'))})`)
+  src = src.replace(/require\('\.\.\/\.\.\/scripts\/lib\/repo-layout\.js'\)/g, `require(${JSON.stringify(path.join(root, 'scripts/lib/repo-layout.js'))})`)
+    .replace(/require\('\.\.\/engine\/review-increment'\)/g, `require(${JSON.stringify(path.join(root, 'src/engine/review-increment'))})`)
     .replace(/require\('\.\/([a-z-]+)'\)/g, (_m, n) => `require(${JSON.stringify(path.join(root, 'src/runners', n))})`);
   const f = path.join(tmp, `${name}-review-packet.js`);
   fs.writeFileSync(f, src);

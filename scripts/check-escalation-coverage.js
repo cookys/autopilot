@@ -73,15 +73,19 @@ function main() {
   }
 
   const baseDir = process.env.REPO_ROOT || path.resolve(__dirname, '..');
-  let eventsPath = path.join(baseDir, 'docs/projects', project, 'tree/events.jsonl');
+  // Project ledgers sit where the layout registry puts the projects (docs/projects at bootstrap, project/projects from P1).
+  const LAYOUT = require('./lib/repo-layout.js');
+  const liveEvents = path.join(baseDir, LAYOUT.path('projects_dir'), project, 'tree/events.jsonl');
+  const archiveEvents = path.join(baseDir, LAYOUT.path('projects_archive_dir'), project, 'tree/events.jsonl');
+  let eventsPath = liveEvents;
   if (!fs.existsSync(eventsPath)) {
-    eventsPath = path.join(baseDir, 'docs/projects/_archive', project, 'tree/events.jsonl');
+    eventsPath = archiveEvents;
   }
 
   if (!fs.existsSync(eventsPath)) {
     console.error(`Error: Project events ledger not found for '${project}' at:`);
-    console.error(`  - ${path.join(baseDir, 'docs/projects', project, 'tree/events.jsonl')}`);
-    console.error(`  - ${path.join(baseDir, 'docs/projects/_archive', project, 'tree/events.jsonl')}`);
+    console.error(`  - ${liveEvents}`);
+    console.error(`  - ${archiveEvents}`);
     process.exit(2);
   }
 

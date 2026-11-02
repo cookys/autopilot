@@ -5,16 +5,26 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const DEFAULT_PACKET_DENY_LIST = Object.freeze([
-  '.autopilot/**',
-  '.qc/**',
-  'docs/plans/evidence/**',
-  'docs/plans/**/*.review.md',
-  'docs/plans/**/*.review.json',
-  'docs/plans/**/*disposition*.json',
-  '**/*.receipt.json',
-  '**/*.raw.log',
-]);
+// Plan and evidence locations: this repo's from the layout registry (docs/ at bootstrap, project/ from P1; evidence may sit
+// beside the plans); any other repo (a consuming project under review) gets the docs/plans convention. LAYOUT.pathFor
+// decides per repo.
+const LAYOUT = require('../../scripts/lib/repo-layout.js');
+function defaultDenyList(repo) {
+  const plans = LAYOUT.pathFor(repo, 'plans_dir');
+  return Object.freeze([
+    '.autopilot/**',
+    '.qc/**',
+    `${LAYOUT.pathFor(repo, 'plans_evidence_dir')}/**`,
+    `${plans}/**/*.review.md`,
+    `${plans}/**/*.review.json`,
+    `${plans}/**/*disposition*.json`,
+    '**/*.receipt.json',
+    '**/*.raw.log',
+  ]);
+}
+// This repo's own default list (no repo given). Code that reviews a repo asks defaultDenyList(repo); this constant is for
+// callers that mean this repo itself.
+const DEFAULT_PACKET_DENY_LIST = defaultDenyList(null);
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024;
 // Every ambient GIT_* variable is scrubbed before any git subprocess: GIT_DIR /
@@ -103,8 +113,8 @@ function otherGlobSyntax(pattern) {
   return segs.some((s) => s === '');
 }
 
-function normalizeDenyList(denyList) {
-  const raw = denyList == null ? [...DEFAULT_PACKET_DENY_LIST] : [...denyList];
+function normalizeDenyList(denyList, repo) {
+  const raw = denyList == null ? [...defaultDenyList(repo)] : [...denyList];
   for (const pattern of raw) {
     if (typeof pattern !== 'string' || otherGlobSyntax(pattern)) {
       throw new Error(`invalid deny-list pattern: ${pattern}`);
@@ -139,8 +149,8 @@ function matchGlob(pathSegs, patSegs, pi, gi) {
   return matchGlob(pathSegs, patSegs, pi + 1, gi + 1);
 }
 
-function packetPathDenied(repoPath, denyList) {
-  const list = denyList == null ? DEFAULT_PACKET_DENY_LIST : denyList;
+function packetPathDenied(repoPath, denyList, repo) {
+  const list = denyList == null ? defaultDenyList(repo) : denyList;
   const posix = String(repoPath).replace(/^\.\//, '');
   if (posix === '' || posix === '.') return false;
   const pathSegs = posix.split('/');
@@ -438,7 +448,7 @@ function buildReviewPacket({
       || !Buffer.isBuffer(inc.delta_diff))) {
     throw new Error('incremental packet descriptor malformed');
   }
-  const deny = normalizeDenyList(denyList);
+  const deny = normalizeDenyList(denyList, repo);
   const repoAbs = path.resolve(repo);
   const outAbs = path.resolve(outDir);
   const baseOid = String(runGit('git rev-parse --verify', ['rev-parse', '--verify', `${baseSha}^{commit}`], {
@@ -717,6 +727,7 @@ module.exports = {
   packetPathDenied,
   normalizeDenyList,
   DEFAULT_PACKET_DENY_LIST,
+  defaultDenyList,
   verifyTreeIntegrity,
   hashObject,
   hashPacketDir,

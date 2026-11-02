@@ -203,14 +203,20 @@ function srcLedger(ctx) {
   if (file && !path.isAbsolute(file) && ctx.cwd) file = path.join(ctx.cwd, file);
   if (!file && ctx.cwd) {
     try {
-      const pdir = path.join(ctx.cwd, 'docs', 'projects');
+      // The projects dir comes from the layout registry when the session's repo is this one, and is the docs/projects
+      // convention for any other repo (pathFor decides per repo root).
+      const projectsRels = [require('./repo-layout.js').pathFor(ctx.cwd, 'projects_dir')];
       let best = null;
-      for (const e of fs.readdirSync(pdir)) {
-        const f = path.join(pdir, e, 'ledger', 'decisions.jsonl');
-        let st; try { st = fs.statSync(f); } catch { continue; }
-        if (ctx.now - st.mtimeMs <= STALE_MS && (!best || st.mtimeMs > best.m)) best = { f, m: st.mtimeMs };
+      for (const rel of projectsRels) {
+        const pdir = path.join(ctx.cwd, rel);
+        let names; try { names = fs.readdirSync(pdir); } catch { continue; }
+        for (const e of names) {
+          const f = path.join(pdir, e, 'ledger', 'decisions.jsonl');
+          let st; try { st = fs.statSync(f); } catch { continue; }
+          if (ctx.now - st.mtimeMs <= STALE_MS && (!best || st.mtimeMs > best.m)) best = { f, m: st.mtimeMs, rel };
+        }
       }
-      if (best) { file = best.f; how = 'newest docs/projects/*/ledger by mtime, under 24h, may be another session\'s in this checkout'; }
+      if (best) { file = best.f; how = 'newest ' + best.rel + '/*/ledger by mtime, under 24h, may be another session\'s in this checkout'; }
     } catch { /* no projects dir */ }
   }
   if (!file) return absent('decision ledger', 'no ledger path in the task card and none modified in the last 24h');

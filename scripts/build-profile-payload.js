@@ -265,9 +265,7 @@ function writeRuleMigration(outPath, migration) {
 function baselineRecord(repoRoot) {
   const baselinePath = path.join(
     repoRoot,
-    'docs',
-    'projects',
-    '_archive',
+    ...require('./lib/repo-layout.js').path('projects_archive_dir').split('/'), // docs/projects/_archive at bootstrap, project/projects/_archive from P1
     '2026',
     '07',
     '2026-07-26-capability-adaptive-profiles',

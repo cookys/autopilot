@@ -91,7 +91,7 @@ function validateProjName(projName) {
 }
 
 const repoRoot = path.resolve(__dirname, '..');
-const defaultProjectsDir = path.join(repoRoot, 'docs/projects');
+const defaultProjectsDir = path.join(repoRoot, require('./lib/repo-layout.js').path('projects_dir'));
 const treeProjectsDir = process.env.TREE_PROJECTS_DIR || defaultProjectsDir;
 
 function getProjTreeDir(projName) {

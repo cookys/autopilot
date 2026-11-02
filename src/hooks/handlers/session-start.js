@@ -27,7 +27,8 @@ function shellQuotePath(p) {
   return `'${String(p).replace(/'/g, `'\\''`)}'`;
 }
 const OPEN_DECISION_CMD = shellQuotePath(OPEN_DECISION_JS);
-const TOKEN_DISCIPLINE_DOC = path.join(__dirname, '..', '..', '..', 'docs', 'token-discipline.md');
+// A user-reader doc: it sits in the layout registry's guide dir (docs/ at bootstrap, docs/guide/ from P1).
+const TOKEN_DISCIPLINE_DOC = path.join(__dirname, '..', '..', '..', ...require('../../../scripts/lib/repo-layout.js').path('guide_dir').split('/'), 'token-discipline.md');
 const DECISION_SCHEMA = 'autopilot.decision/2';
 
 // Open cards the way scripts/open-decision.js show does. Read failure => no line.

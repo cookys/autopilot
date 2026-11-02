@@ -386,8 +386,10 @@ function isTableSeparatorRow(cells) {
   return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c.trim()));
 }
 
-function planIndexRegistration(repoRoot, stem) {
-  const indexPath = path.join(repoRoot, PROJECTS_INDEX);
+// indexRel: the index file relative to repoRoot. Default: the registry's path (this gate and mission machinery work on this repo and
+// its clones). A caller that may be pointed at another repo (dispatch-plan-review) passes LAYOUT.pathFor(repoRoot, 'projects_index').
+function planIndexRegistration(repoRoot, stem, indexRel = PROJECTS_INDEX) {
+  const indexPath = path.join(repoRoot, indexRel);
   const text = readFileSafe(indexPath);
   if (text == null) return { indexExists: false, indexPath, matchedRows: [], activeRow: null };
   const lines = text.split(/\r?\n/);
@@ -750,9 +752,9 @@ function loadBacklogGate() {
 function backlogFieldConfig(gate, repoRoot) {
   try {
     const p = gate.resolveBacklogConfigPath(repoRoot);
-    return p ? gate.mergeConfig(gate.builtinConfig(), gate.parseConfigFile(p)) : gate.builtinConfig();
+    return p ? gate.mergeConfig(gate.builtinConfig(repoRoot), gate.parseConfigFile(p)) : gate.builtinConfig(repoRoot);
   } catch {
-    return gate.builtinConfig();
+    return gate.builtinConfig(repoRoot);
   }
 }
 

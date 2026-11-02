@@ -34,12 +34,15 @@ const GITIGNORE_MARKER = '# autopilot runtime state (keep .claude/*-config.md tr
 // Fallback when detect found NO doc dir (project_paths null). Default to the
 // plural `docs/` — the common modern convention and what the golden output uses;
 // the detector picks up an existing `doc/` (singular) when present.
+// These are a CONSUMING project's conventions, not this repo's layout (which the layout registry owns), so they are built
+// from parts: a relayout rewrite of this repo's own docs/ paths must not reach them.
+const CONSUMER_DOCS = 'docs';
 const DEFAULT_PATHS = {
-  projects_dir: 'docs/projects/',
-  plans_dir: 'docs/plans/',
-  backlog: 'docs/BACKLOG.md',
-  index: 'docs/projects/INDEX.md',
-  archive_dir: 'docs/projects/_archive/',
+  projects_dir: `${CONSUMER_DOCS}/projects/`,
+  plans_dir: `${CONSUMER_DOCS}/plans/`,
+  backlog: `${CONSUMER_DOCS}/BACKLOG.md`,
+  index: `${CONSUMER_DOCS}/projects/INDEX.md`,
+  archive_dir: `${CONSUMER_DOCS}/projects/_archive/`,
 };
 
 function printUsageAndExit(code) {
@@ -482,4 +485,5 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) main();
+module.exports = { DEFAULT_PATHS };

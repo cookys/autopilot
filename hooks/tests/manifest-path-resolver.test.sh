@@ -5,6 +5,9 @@
 . "$(dirname "$0")/lib.sh"
 
 LAYOUT="$REPO_ROOT/scripts/lib/repo-layout.js"
+# "Bootstrap" cases below mean a repo that keeps its work records under docs/: they run on that registry, not the live one
+# (which is docs/ at stage bootstrap and project/ from P1). P1 cases pass their own explicit registry.
+BOOT="$(docs_layout_registry)"; export REPO_LAYOUT_REGISTRY="$BOOT"
 export GIT_AUTHOR_NAME=mp GIT_AUTHOR_EMAIL=mp@example.com GIT_COMMITTER_NAME=mp GIT_COMMITTER_EMAIL=mp@example.com
 GT="git -c user.name=t -c user.email=t@t -c commit.gpgsign=false"
 
@@ -93,7 +96,7 @@ loader() { REPO_LAYOUT_REGISTRY="$1" node -e '
   catch (e) { console.log("ERR " + e.message); }' "$REPO_ROOT" "$2" "${3:-$R}"; }
 assert_eq "OK 1" "$(loader "$P1" "$R/project/missions/mission-p-sources.json")" "graph-check reads the plan under project/ at P1"
 # bootstrap registry + the same manifest: the global base is docs/, which holds the decoy -> digest drift, not a pass
-assert_contains "$(REPO_LAYOUT_REGISTRY= loader '' "$R/project/missions/mission-p-sources.json")" "ERR source manifest.sources[0] content digest drifted" "bootstrap base (docs/) sees the decoy, not project/"
+assert_contains "$(loader "$BOOT" "$R/project/missions/mission-p-sources.json")" "ERR source manifest.sources[0] content digest drifted" "bootstrap base (docs/) sees the decoy, not project/"
 # escape in the manifest: red with the historical message
 cp "$R/project/missions/mission-p-sources.json" "$R/project/missions/mission-esc-sources.json"
 sed -i 's#"plans/2026-08-03-p.md"#"../../outside.md"#' "$R/project/missions/mission-esc-sources.json"
@@ -144,7 +147,7 @@ nt() { REPO_LAYOUT_REGISTRY="$1" node -e '
   try { n.sourceDigests(process.argv[2]); console.log("OK"); } catch (e) { console.log("ERR " + (e.code || "") + " " + e.message); }' "$REPO_ROOT" "$NT"; }
 assert_eq "OK" "$(nt "$P1")" "next-touch: reads the project/ plan at P1"
 assert_eq "plan at project" "$(REPO_LAYOUT_REGISTRY="$P1" node -e 'console.log(require(process.argv[1] + "/scripts/next-touch-validation.js").sourceDigests(process.argv[2]).planText.trim())' "$REPO_ROOT" "$NT")" "next-touch: planText is the resolved project/ plan, not the docs/ decoy"
-assert_contains "$(REPO_LAYOUT_REGISTRY= nt '')" "ERR" "next-touch: bootstrap layout does not find the project/ manifest"
+assert_contains "$(nt "$BOOT")" "ERR" "next-touch: bootstrap layout does not find the project/ manifest"
 
 # ---- 5e. reader: scaffold-mission (writes the manifest where the registry says, plan_path relative to the base) ----
 FIX="$REPO_ROOT/hooks/tests/fixtures/plan-rubric-scaffold-fixture.md"
@@ -275,7 +278,7 @@ assert_contains "$OUT" "cannot be a manifest source" "scaffold: the refusal name
 FG="$TEST_TMP/forged"; mkdir -p "$FG/repo/docs/nest/docs" "$FG/other"; git -C "$FG/repo" init -q
 echo '{}' > "$FG/repo/docs/nest/m.json"; echo '{}' > "$FG/other/m.json"
 node -e '
-  const { DEFAULT_REGISTRY } = require(process.argv[1]); const d = JSON.parse(JSON.stringify(DEFAULT_REGISTRY));
+  const L = require(process.argv[1]); const d = JSON.parse(JSON.stringify(L.load()));
   d.exceptions.push({ path: "m.json", rule: 6, reason: "caller only", plan_base: "docs" });
   require("fs").writeFileSync(process.argv[2], JSON.stringify(d));' "$LAYOUT" "$FG/reg.json"
 FGR="$(cd "$FG/repo" && pwd -P)"
@@ -319,10 +322,11 @@ node "$LAYOUT" manifest-path "$AL/outside.json" p.md --repo-root "$ALR" >/dev/nu
 assert_eq "2" "$?" "CLI: an outside symlink alias is rc=2"
 # the formal graph-check CLI on a real, green mission: the real sources pass, an outside alias of them does not
 GC="$REPO_ROOT/scripts/mission-execution-graph-check.js"; MS=containment-gates
-(cd "$REPO_ROOT" && node "$GC" --graph docs/mission-$MS-execution-graph.json --governance .claude/owner-kernel-governance.json --sources docs/mission-$MS-sources.json --repo-root . >/dev/null 2>&1)
+MDIR="$(layout_path missions_dir)"   # the real mission files sit wherever the LIVE registry says
+(cd "$REPO_ROOT" && env -u REPO_LAYOUT_REGISTRY node "$GC" --graph $MDIR/mission-$MS-execution-graph.json --governance .claude/owner-kernel-governance.json --sources $MDIR/mission-$MS-sources.json --repo-root . >/dev/null 2>&1)
 assert_eq "0" "$?" "graph-check CLI control: the real sources manifest passes"
-ln -s "$REPO_ROOT/docs/mission-$MS-sources.json" "$AL/real-alias.json"
-OUT="$(cd "$REPO_ROOT" && node "$GC" --graph docs/mission-$MS-execution-graph.json --governance .claude/owner-kernel-governance.json --sources "$AL/real-alias.json" --repo-root . 2>&1)"; RC=$?
+ln -s "$REPO_ROOT/$MDIR/mission-$MS-sources.json" "$AL/real-alias.json"
+OUT="$(cd "$REPO_ROOT" && env -u REPO_LAYOUT_REGISTRY node "$GC" --graph $MDIR/mission-$MS-execution-graph.json --governance .claude/owner-kernel-governance.json --sources "$AL/real-alias.json" --repo-root . 2>&1)"; RC=$?
 assert_eq "2" "$RC" "graph-check CLI: --sources <outside alias> --repo-root . is rc=2"
 assert_contains "$OUT" "is not inside the repo root" "graph-check CLI: the alias refusal is named"
 # a repoRoot that is itself a symlink: alias path and real path both accepted
@@ -349,8 +353,9 @@ assert_contains "$(reads_of "$ALR/docs/m.json")" "reads=1" "control: an inside m
 # ---- 6. F5: check-claude-md-inventory is red when docs/scripts-inventory.md is missing ----
 SBX="$TEST_TMP/inv"; mkdir -p "$SBX/scripts/lib" "$SBX/docs"
 cp "$REPO_ROOT/scripts/check-claude-md-inventory.js" "$SBX/scripts/"
-printf '# f\ncheck-claude-md-inventory.js\n' > "$SBX/CLAUDE.md"
-printf 'check-claude-md-inventory.js\n' > "$SBX/docs/scripts-inventory.md"
+cp "$LAYOUT" "$SBX/scripts/lib/"   # the checker asks the registry where the inventory doc is
+printf '# f\ncheck-claude-md-inventory.js repo-layout.js\n' > "$SBX/CLAUDE.md"
+printf 'check-claude-md-inventory.js repo-layout.js\n' > "$SBX/docs/scripts-inventory.md"
 node "$SBX/scripts/check-claude-md-inventory.js" >/dev/null 2>&1
 assert_eq "0" "$?" "inventory present: green"
 mv "$SBX/docs/scripts-inventory.md" "$SBX/inv.away"
@@ -362,7 +367,8 @@ mv "$SBX/inv.away" "$SBX/docs/scripts-inventory.md"
 node "$SBX/scripts/check-claude-md-inventory.js" >/dev/null 2>&1
 assert_eq "0" "$?" "inventory restored: green again"
 # in-test mutant: the old 'absent is fine' behaviour lets the missing file through
-mkdir -p "$TEST_TMP/inv2/scripts" "$TEST_TMP/inv2/docs"
+mkdir -p "$TEST_TMP/inv2/scripts/lib" "$TEST_TMP/inv2/docs"
+cp "$LAYOUT" "$TEST_TMP/inv2/scripts/lib/"
 sed 's/ && !inventoryMissing//' "$SBX/scripts/check-claude-md-inventory.js" > "$TEST_TMP/inv2/scripts/check-claude-md-inventory.js"
 cp "$SBX/CLAUDE.md" "$TEST_TMP/inv2/CLAUDE.md"
 if cmp -s "$SBX/scripts/check-claude-md-inventory.js" "$TEST_TMP/inv2/scripts/check-claude-md-inventory.js"; then fail "mutant did not apply: gate text moved"; fi

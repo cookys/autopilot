@@ -118,16 +118,19 @@ assert_eq "1" "$FUSE_WIRED" "round protocol wires both strike flags on the fuse 
 assert_eq "1" "$AUDIT_WIRED" "round protocol wires both strike flags on the conformance audit"
 
 # ── BL-0309 gap 2: process-document class (additive) ──
-cat > "$TEST_TMP/pnames.txt" <<'EOF'
-docs/plans/2026-10-27-x.md
-docs/BACKLOG.md
-docs/backlog/foo.md
-docs/projects/INDEX.md
+# the process paths are the work records of the repo classify runs in; it runs from a scratch dir (not this project), so they follow the docs/ convention (fixture_path)
+L_PLANS="$(fixture_path plans_dir)"; L_BACKLOG="$(fixture_path backlog_file)"; L_BACKLOG_DIR="$(fixture_path backlog_dir)"; L_INDEX="$(fixture_path projects_index)"
+cat > "$TEST_TMP/pnames.txt" <<EOF
+$L_PLANS/2026-10-27-x.md
+$L_BACKLOG
+$L_BACKLOG_DIR/foo.md
+$L_INDEX
 docs/notes.md
 src/a.js
-hooks/tests/docs/plans/x.test.sh
+hooks/tests/$L_PLANS/x.test.sh
 EOF
-OUT="$(node "$SCRIPT" classify --names "$TEST_TMP/pnames.txt")"
+# classify reads the work-record layout of the repo it runs in: run it from the scratch dir (not this repo) so the docs/ names above are the process paths
+OUT="$(cd "$TEST_TMP" && node "$SCRIPT" classify --names "$TEST_TMP/pnames.txt")"
 assert_contains "$OUT" '"process_files":4' "process paths counted (verification-looking path excluded)"
 assert_contains "$OUT" '"product_files":6' "process paths stay inside product_files (split unchanged)"
 cat > "$TEST_TMP/proc.jsonl" <<'EOF'
@@ -153,7 +156,7 @@ node "$SCRIPT" check --bursts "$TEST_TMP/proc.jsonl" --process-threshold 4 >/dev
 assert_exit_code "$?" "0" "process threshold honored"
 
 # ── BL-0309 gap 2 (caller wiring): the documented classify command writes the row itself ──
-REPO="$TEST_TMP/burstrepo"; mkdir -p "$REPO/docs/plans"
+REPO="$TEST_TMP/burstrepo"; mkdir -p "$REPO/$L_PLANS"
 (
   cd "$REPO" && git init -q -b develop . && git config user.email t@t && git config user.name t
   echo a > README.md && git add -A && git commit -qm base
@@ -161,7 +164,7 @@ REPO="$TEST_TMP/burstrepo"; mkdir -p "$REPO/docs/plans"
 ) >/dev/null 2>&1
 BURSTS="$TEST_TMP/camp-bursts.jsonl"; : > "$BURSTS"
 run_burst() { # $1 id ; commits one plan-only change then runs the documented command
-  ( cd "$REPO" && BASE="$(git rev-parse HEAD)" && echo "$1" >> "docs/plans/p.md" && git add -A && git commit -qm "$1" \
+  ( cd "$REPO" && BASE="$(git rev-parse HEAD)" && echo "$1" >> "$L_PLANS/p.md" && git add -A && git commit -qm "$1" \
     && git diff --name-only "$BASE"..HEAD > "$TEST_TMP/burst-names.txt" \
     && node "$SCRIPT" classify --names "$TEST_TMP/burst-names.txt" --burst-id "$1" --burst-base "$BASE" \
          --integration-ref develop --append "$BURSTS" >/dev/null )

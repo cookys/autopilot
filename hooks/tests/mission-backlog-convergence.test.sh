@@ -185,6 +185,7 @@ assert_exit_code "$?" "0" "provenance and qualification assertions"
 # or process override is introduced for this fixture.
 MISSION_FIXTURE_REPO="$TEST_TMP/legacy-mission-repo"
 git clone -q --no-local "$REPO_ROOT" "$MISSION_FIXTURE_REPO"
+materialise_graph_named_paths "$MISSION_FIXTURE_REPO"
 
 # Resolve the current graph through the ordinary production admission path
 # before the isolated repository has any historical Mission authority.
@@ -204,8 +205,9 @@ const { execFileSync } = require('child_process');
 const [root, repo] = process.argv.slice(2);
 const mission = require(path.join(root, 'src', 'engine', 'mission-convergence'));
 const { LEGACY } = require(path.join(root, 'scripts', 'mission-terminal-reconcile'));
+const missionsDir = require(path.join(root, 'scripts', 'lib', 'repo-layout.js')).path('missions_dir');
 const executionGraph = JSON.parse(fs.readFileSync(
-  path.join(root, 'docs', 'mission-backlog-bc-execution-graph.json'),
+  path.join(root, missionsDir, 'mission-backlog-bc-execution-graph.json'),
   'utf8',
 ));
 assert.strictEqual(executionGraph.graph_digest, LEGACY.graph_digest);

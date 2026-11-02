@@ -227,7 +227,7 @@ function timeoutSecondsFromArgs(args) {
 }
 
 function buildPacketOnce(identity = {}) {
-  const { buildReviewPacket, DEFAULT_PACKET_DENY_LIST } = require('./review-packet');
+  const { buildReviewPacket, defaultDenyList } = require('./review-packet');
   const packetRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'autopilot-review-shared-'));
   fs.chmodSync(packetRoot, 0o700);
   const packetDir = path.join(packetRoot, 'packet');
@@ -240,7 +240,7 @@ function buildPacketOnce(identity = {}) {
       diffFile: identity.diffFile,
       specFile: identity.specFile === undefined ? null : identity.specFile,
       outDir: packetDir,
-      denyList: [...DEFAULT_PACKET_DENY_LIST, ...denyExtra],
+      denyList: [...defaultDenyList(identity.repo), ...denyExtra],
       ...(identity.incremental ? { incremental: identity.incremental } : {}),
     });
     const manifest = JSON.parse(fs.readFileSync(built.manifest_path, 'utf8'));

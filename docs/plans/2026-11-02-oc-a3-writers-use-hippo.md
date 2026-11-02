@@ -42,6 +42,7 @@ From the hippo repo `develop` (`docs/spec.md` §15.1, `docs/evidence/p1.2/decisi
 | `hippo init` | **not in hippo; new P1.4 input from A3** | today the first `hippo new`/`import` creates `.hippo/repo.toml` itself (`ctx.rs` `init_store`) with `visibility = "internal"` and an id from the directory name; nothing sets `id`/`visibility`, and only a human may hand-edit `repo.toml` (spec §2.1). A3 needs `hippo init --id <id> --visibility public\|internal`, refusing when `repo.toml` exists. **Dependency of A3.3 and A3.7** |
 | codex hook payload (D16, D20) | open in hippo | codex snippet unverified; for codex sessions the pre-commit journal and `body_sha` are the authority (D21) |
 | native Windows run | open in hippo | cross-built only (`make windows-build`); see §3.3, A3.7 |
+| P1.5 distribution | not delivered (added 2026-11-02) | **precondition of A3.7**: no host has `hippo` installed today |
 
 Fleet (D2) delivered (release `5e594f2`): `fleet task open <title...> [--parent] [--pid] [--hippo <ref>]`, `fleet
 task update <id> <progress...>`, `fleet task close <id> [--note]`, `fleet task show|list`, `fleet tasks --mine
@@ -532,6 +533,8 @@ changes).
 Old plugins: skill text comes from the loaded plugin, not `develop`; hosts working in this repo install the bump as
 part of the cutover; until then `session-start` warns (A3.4 step 8) and `backlog_frozen` at pre-push catches file
 edits, with refile steps in the notice.
+Hippo on every committing host (precondition, checked first): hippo P1.5 ships the binary to every account that commits
+in this repo, native Windows included; `hippo --version` transcript per host in the cutover evidence. One host short = no cutover.
 Windows: `project-record.js where` + one `backlog new` + `flush` on a native Windows host (host from env/config),
 transcript saved; while hippo's native run is open it shows `spool` and the warning, not silence (and commits there are refused).
 Rollback, in order: (1) `hippo list --since <cutover date> --history --json > <evidence dir>/rollback-records.json`
@@ -620,3 +623,4 @@ No open questions remain.
   CONDITIONAL); 14 findings, 5 blocking. Depth-0 accepted all 5 blockers; all 9 non-blocking folded, none refuted.
   Dispositions: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g2-dispositions.json`. Rubric and §2.5 unchanged.
 - Review artifacts: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g1-artifact.json`, `.g2-artifact.json`. A first g2 dispatch stopped on `plan_growth_hard_stop` (1.506x, zero seats); plan shrunk in b01b94726 and the lock reopened per the dispatch-plan-review.js recipe. Receipt: `check-phase-review-receipt.js --plan-file <plan at b01b94726> --plan-artifact <g2 artifact> --dispositions <g2 dispositions>` exit 0 (2026-11-02). Generation 2 terminal at the cap: sol STOP, argon READY, opus CONDITIONAL; all 5 g2 blockers accepted and folded in 257f0a573 (not seat-reviewed).
+- 2026-11-02 depth-0 addition after the receipt (not seat-reviewed): precondition for A3.7: hippo P1.5 installs `hippo` on every committing host, native Windows included, with a per-host `hippo --version` transcript.

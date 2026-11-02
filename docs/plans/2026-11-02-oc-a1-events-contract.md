@@ -277,11 +277,13 @@ Every new test is red-checked (restore the old behaviour, watch it fail); the tr
 
 ## 8. Open questions
 
-For depth-0 / operator (none blocks E1; Q1 shapes E2 step 4):
+Decided by depth-0 on 2026-11-02 (CEO mode, operator delegated; two-way decisions):
 
-1. **The review ledger root has no fixed default** (callers pass `--ledger <dir>` to `hetero-review-loop.js`). A1 discovers it from `--review-ledger`, an env path list, manifests' `ledger` field and the archive dir. Should `collect` also write a pointer under `<git-common-dir>/autopilot/` so discovery needs no configuration? (Small additive change in the file already touched for `collected_at`; recommended: yes.)
-2. **Quota %** is named in master A4's anomaly list but no autopilot store holds a percentage. Accept "status + `reset_at` from `status quota`" as A4's quota signal and defer `quota.observed`, or add the kind to A1 now?
-3. Expose `decision.row.rationale` (<= 240 chars) to the console, or only `class`/`reversibility`? This plan: exposed, because the decisions panel needs a human-readable line.
+1. **Review ledger discovery**: yes. `collect` writes a pointer under `<git-common-dir>/autopilot/` (additive change in the file already touched for `collected_at`); E2 step 4 reads the pointer first, then `--review-ledger`, the env path list, manifests' `ledger` field and the archive dir.
+2. **Quota**: A4's quota signal is the status plus `reset_at` from `status quota`; no `quota.observed` kind in A1. A later kind is an additive schema change (`autopilot.events/1` stays valid).
+3. **`decision.row.rationale`** (<= 240 chars) is exposed to the console; the decisions panel needs a human-readable line.
+
+No open questions remain.
 
 ## Review log
 

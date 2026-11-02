@@ -249,9 +249,11 @@ function buildFixture({ dir }) {
     journal: { kind: 'journal', ts: '2026-11-01T08:16:00.000Z', run_id: 'fx-run-done', text: 'progress note' },
     stage2: { kind: 'stage', ts: '2026-11-01T08:20:00.000Z', run_id: 'fx-run-done', stage: 'verify', state: 'terminal', generation: 2, status: 'ok', reason: 'all checks green' },
     stage3: { kind: 'stage', ts: '2026-11-01T08:22:00.000Z', run_id: 'fx-run-done', stage: 'review', generation: 3, status: 'done' },
+    // status is present but empty: presence decides, so the empty string is kept and state (a different value) conflicts
+    stage4: { kind: 'stage', ts: '2026-11-01T08:23:00.000Z', run_id: 'fx-run-done', stage: 'merge', state: 'terminal', generation: 4, status: '' },
   };
   writeFile(paths.runLedgerRotated, jsonl([runRows.stage1, runRows.hb1]));
-  writeFile(paths.runLedger, jsonl([runRows.hb2, runRows.journal, runRows.stage2, runRows.stage3]));
+  writeFile(paths.runLedger, jsonl([runRows.hb2, runRows.journal, runRows.stage2, runRows.stage3, runRows.stage4]));
 
   return {
     dir: root, repoDir, foreignDir, identity, foreignIdentity,
@@ -358,9 +360,10 @@ function goldenEvents(fx) {
   // run.stage: sha256(canonical row)[0:24]; only kind:"stage" rows; ts normalised to .sssZ
   const stageEvent = (row) => {
     const data = { run_id: row.run_id, stage: row.stage, generation: row.generation, basis: 'self_reported' };
-    // status wins; state is read only when status is absent (docs/dev/events-contract.md, run.stage)
-    const status = row.status || row.state;
-    if (status) data.status = status;
+    // status wins whenever the row HAS a status property (even ''); state is read only when the property is absent
+    const has = (k) => Object.prototype.hasOwnProperty.call(row, k);
+    if (has('status')) data.status = row.status;
+    else if (has('state')) data.status = row.state;
     if (row.reason) data.reason = row.reason;
     const ts = row.ts.length === 20 ? `${row.ts.slice(0, -1)}.000Z` : row.ts;
     return ev('run.stage', sha256hex(canonicalJson(row)).slice(0, 24), ts, 'run_ledger', { run: row.run_id }, data);
@@ -368,8 +371,16 @@ function goldenEvents(fx) {
   out.push(stageEvent(fx.runRows.stage1));
   out.push(stageEvent(fx.runRows.stage2));
   out.push(stageEvent(fx.runRows.stage3));
+  out.push(stageEvent(fx.runRows.stage4));
 
   return out.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+// Reader warnings the fixture must provoke, as the E2 readers are to report them (aggregated per source and code).
+// status_state_conflict: a run.stage row with both properties and different values.
+function goldenWarnings(fx) {
+  const conflicts = Object.values(fx.runRows).filter((r) => r.kind === 'stage' && 'status' in r && 'state' in r && r.status !== r.state);
+  return [{ source: 'runledger', code: 'status_state_conflict', count: conflicts.length }];
 }
 
 function goldenEnvelope(fx) {
@@ -425,5 +436,5 @@ function normaliseExample(value, fx) {
 }
 
 module.exports = {
-  FIXTURE_COMMITS, FOREIGN_BASE, buildFixture, canonicalJson, exampleEvent, goldenEnvelope, goldenEvents, normaliseExample, sha256hex, tokenShaped,
+  FIXTURE_COMMITS, FOREIGN_BASE, buildFixture, canonicalJson, exampleEvent, goldenEnvelope, goldenEvents, goldenWarnings, normaliseExample, sha256hex, tokenShaped,
 };

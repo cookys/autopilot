@@ -16,7 +16,7 @@ const { parseInstant, parseInstantMs } = require('../src/status/events/instant')
 const repoLayout = require('./lib/repo-layout');
 const fixtureLib = require('./lib/events-fixture');
 
-const { FIXTURE_COMMITS, FOREIGN_BASE, buildFixture, exampleEvent, goldenEnvelope, goldenEvents, normaliseExample, sha256hex } = fixtureLib;
+const { FIXTURE_COMMITS, FOREIGN_BASE, buildFixture, exampleEvent, goldenEnvelope, goldenEvents, goldenWarnings, normaliseExample, sha256hex } = fixtureLib;
 
 const REPO = path.join(__dirname, '..');
 const SCHEMA_FILE = path.join(REPO, repoLayout.path('events_schema'));
@@ -104,7 +104,7 @@ test('fixture-golden-covers-all-8-kinds-with-unique-ordered-ids', () => {
   assert.equal(new Set(ids).size, ids.length, 'ids are unique');
   const sorted = [...GOLDEN].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   assert.deepEqual(GOLDEN, sorted, 'golden list is in (ts, id) order');
-  assert.equal(GOLDEN.length, 24);
+  assert.equal(GOLDEN.length, 25);
   for (const event of GOLDEN) assert.equal(event.project_key, FX.projectKey);
 });
 
@@ -143,7 +143,7 @@ test('fixture-hash-ids-recomputed-from-the-bytes-on-disk', () => {
       if (row.kind === 'stage') stageRows.push(row);
     }
   }
-  assert.equal(stageRows.length, 3);
+  assert.equal(stageRows.length, 4);
   for (const row of stageRows) {
     assert.ok(ids.has(`run.stage:${sha256hex(canonical(row)).slice(0, 24)}`), row.stage); // the validator's canonical(), the one shared implementation
   }
@@ -189,7 +189,7 @@ test('fixture-stores-hold-the-planned-shapes-and-foreign-rows', () => {
 
   const kinds = (file) => fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l).kind);
   assert.deepEqual(kinds(FX.paths.runLedgerRotated), ['stage', 'heartbeat']);
-  assert.deepEqual(kinds(FX.paths.runLedger), ['heartbeat', 'journal', 'stage', 'stage']);
+  assert.deepEqual(kinds(FX.paths.runLedger), ['heartbeat', 'journal', 'stage', 'stage', 'stage']);
 });
 
 test('fixture-golden-leaks-no-path-token-or-hidden-field', () => {
@@ -389,12 +389,16 @@ test('schema-review-collected-findings-total-is-optional', () => {
 
 test('golden-run-stage-status-prefers-status-over-state', () => {
   const byStage = Object.fromEntries(GOLDEN.filter((e) => e.kind === 'run.stage').map((e) => [e.data.stage, e.data.status]));
-  assert.deepEqual(byStage, { implement: 'running', verify: 'ok', review: 'done' });
+  assert.deepEqual(byStage, { implement: 'running', verify: 'ok', review: 'done', merge: '' });
   // the three row shapes: only state, both with different values, only status
   const rows = FX.runRows;
   assert.deepEqual([rows.stage1.status, rows.stage1.state], [undefined, 'running']);
   assert.deepEqual([rows.stage2.status, rows.stage2.state], ['ok', 'terminal']);
   assert.deepEqual([rows.stage3.status, rows.stage3.state], ['done', undefined]);
+  // a present-but-empty status is a status: it is kept (not replaced by state) and conflicts with the other value
+  assert.deepEqual([rows.stage4.status, rows.stage4.state], ['', 'terminal']);
+  assert.equal(GOLDEN.find((e) => e.kind === 'run.stage' && e.data.stage === 'merge').data.status, '');
+  assert.deepEqual(goldenWarnings(FX), [{ source: 'runledger', code: 'status_state_conflict', count: 2 }], 'stage2 and stage4 conflict; stage1 and stage3 do not');
 });
 
 test('doc-names-the-reader-warnings-and-rules', () => {
@@ -414,4 +418,38 @@ test('doc-cost-turn-row-states-the-worktree-fallback', () => {
 test('instant-rejects-a-trailing-newline', () => {
   assert.equal(parseInstant('2026-11-02T08:00:00Z\n'), null);
   assert.equal(parseInstant('\n2026-11-02T08:00:00Z'), null);
+});
+
+test('schema-counts-have-a-zero-floor', () => {
+  const review = clone(GOLDEN.find((e) => e.kind === 'review.collected'));
+  assert.equal(isValid(ENVELOPE([review])), true);
+  const probes = [
+    ['review.collected', 'findings_total'], ['review.finalized', 'open_findings'], ['dispatch.started', 'depth'], ['dispatch.started', 'timeout_seconds'],
+  ];
+  for (const [kind, field] of probes) {
+    const event = clone(GOLDEN.find((e) => e.kind === kind));
+    event.data[field] = 0;
+    assert.equal(isValid(ENVELOPE([event])), true, `${kind}.${field} = 0`);
+    event.data[field] = null;
+    assert.equal(isValid(ENVELOPE([event])), true, `${kind}.${field} = null`);
+    event.data[field] = -1;
+    assert.equal(isValid(ENVELOPE([event])), false, `${kind}.${field} = -1 must fail`);
+  }
+});
+
+test('doc-run-stage-row-states-presence-rule', () => {
+  const row = DOC.split('\n').find((line) => line.startsWith('| `run.stage` |'));
+  for (const needle of ['whenever the row has a `status` property, even an empty string', 'the chosen value is kept as it is', '`status_state_conflict`']) assert.ok(row.includes(needle), needle);
+});
+
+// The E1 evidence file records this suite's own run. It must list exactly the tests the file declares, with their count.
+test('evidence-e1-lists-exactly-the-tests-of-this-suite', () => {
+  const evidenceFile = path.join(REPO, repoLayout.path('plans_evidence_dir'), '2026-11-02-oc-a1-events', 'e1-contract.txt');
+  const evidence = fs.readFileSync(evidenceFile, 'utf8');
+  const source = fs.readFileSync(__filename, 'utf8');
+  const declared = [...source.matchAll(/^test\('([^']+)'/gm)].map((m) => m[1]);
+  for (const kind of KINDS) declared.push(`schema-negative-${kind}`);
+  const listed = [...evidence.matchAll(/^✔ (\S+)$/gm)].map((m) => m[1]);
+  assert.deepEqual([...listed].sort(), [...declared].sort(), 'evidence lists every declared test, no more, no less');
+  assert.ok(evidence.includes(`ℹ tests ${declared.length}\nℹ pass ${declared.length}\nℹ fail 0`), `evidence records ${declared.length} tests, all passing`);
 });

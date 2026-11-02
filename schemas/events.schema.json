@@ -63,13 +63,15 @@
           "type": [
             "integer",
             "null"
-          ]
+          ],
+          "minimum": 0
         },
         "timeout_seconds": {
           "type": [
             "integer",
             "null"
-          ]
+          ],
+          "minimum": 0
         }
       }
     },
@@ -385,6 +387,7 @@
             "integer",
             "null"
           ],
+          "minimum": 0,
           "title": "optional: absent when g<N>/findings.json is missing (the event is kept, warning findings_missing)"
         },
         "findings_by_severity": {
@@ -481,7 +484,8 @@
           "type": [
             "integer",
             "null"
-          ]
+          ],
+          "minimum": 0
         },
         "reviewed_seats": {
           "type": "integer",
@@ -776,7 +780,7 @@
             "string",
             "null"
           ],
-          "title": "status = row.status, else row.state; both present with different values: status wins and the reader warns status_state_conflict"
+          "title": "status = row.status when the row has a status property (even an empty string), else row.state; both properties present with different values: status wins and the reader warns status_state_conflict"
         },
         "reason": {
           "type": [

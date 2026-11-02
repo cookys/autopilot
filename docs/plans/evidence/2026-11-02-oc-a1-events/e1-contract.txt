@@ -3,48 +3,57 @@ A1 events contract, phase E1 evidence (2026-11-03)
 ## Plan deviation recorded (PM ruling G7)
 Third registry key schemas_dir='schemas' added beside events_contract_doc and events_schema. Reason: registering schemas/events.schema.json makes schemas/ a governed area in scripts/layout-lint.js, which then reports the sync-manifest entries pointing into schemas/ as stale. Accepted by PM as a deviation from the two keys named in the plan file map.
 
-## node --test scripts/status-events.test.js
-✔ instant-accepts-rfc3339-and-normalises-to-utc-millis (2.029547ms)
-✔ instant-rejects-lenient-and-impossible-forms (0.350732ms)
-✔ instant-ms-agrees-with-string-form-and-feeds-the-envelope-pattern (0.355921ms)
-✔ fixture-env-is-an-explicit-allowlist (0.8909ms)
-✔ fixture-commit-shas-are-pinned-constants (38.322035ms)
-✔ fixture-golden-covers-all-8-kinds-with-unique-ordered-ids (0.336034ms)
-✔ fixture-literal-golden-ids (0.240905ms)
-✔ fixture-hash-ids-recomputed-from-the-bytes-on-disk (0.455148ms)
-✔ fixture-stores-hold-the-planned-shapes-and-foreign-rows (5.98716ms)
-✔ fixture-golden-leaks-no-path-token-or-hidden-field (1.138016ms)
-✔ fixture-writes-only-under-its-own-dir (0.375629ms)
-✔ schema-file-is-supported-by-the-repo-validator (104.646065ms)
-✔ schema-golden-events-validate (28.666448ms)
-✔ schema-error-object-is-the-second-top-level-shape (5.208292ms)
-✔ schema-red-check-cost-turn-without-ts-fails (5.99736ms)
-✔ schema-negative-dispatch.started (16.216961ms)
-✔ schema-negative-dispatch.ended (13.195333ms)
-✔ schema-negative-cost.turn (12.897882ms)
-✔ schema-negative-review.collected (12.808233ms)
-✔ schema-negative-review.finalized (9.254672ms)
-✔ schema-negative-qc.verdict (8.178392ms)
-✔ schema-negative-decision.row (5.821709ms)
-✔ schema-negative-run.stage (5.211007ms)
-✔ schema-negative-event-level-fields (4.672591ms)
-✔ schema-negative-envelope-fields (7.185309ms)
-✔ schema-open-sets-accept-unknown-values (3.626309ms)
-✔ schema-known-kinds-are-exactly-the-doc-kinds (0.260371ms)
-✔ doc-registry-keys-resolve-and-point-at-the-files (161.543539ms)
-✔ doc-examples-equal-the-normalised-fixture-events (2.237239ms)
-✔ doc-has-a-kinds-table-row-per-kind-and-the-consumer-table (0.73687ms)
-✔ schema-review-collected-findings-total-is-optional (2.452965ms)
-✔ golden-run-stage-status-prefers-status-over-state (0.29179ms)
-✔ doc-names-the-reader-warnings-and-rules (0.117171ms)
-ℹ tests 33
-ℹ pass 33
+## node --test scripts/status-events.test.js (names in execution order, timings stripped)
+✔ instant-accepts-rfc3339-and-normalises-to-utc-millis
+✔ instant-rejects-lenient-and-impossible-forms
+✔ instant-ms-agrees-with-string-form-and-feeds-the-envelope-pattern
+✔ fixture-env-is-an-explicit-allowlist
+✔ fixture-commit-shas-are-pinned-constants
+✔ fixture-golden-covers-all-8-kinds-with-unique-ordered-ids
+✔ fixture-literal-golden-ids
+✔ fixture-hash-ids-recomputed-from-the-bytes-on-disk
+✔ fixture-stores-hold-the-planned-shapes-and-foreign-rows
+✔ fixture-golden-leaks-no-path-token-or-hidden-field
+✔ fixture-writes-only-under-its-own-dir
+✔ schema-file-is-supported-by-the-repo-validator
+✔ schema-golden-events-validate
+✔ schema-error-object-is-the-second-top-level-shape
+✔ schema-red-check-cost-turn-without-ts-fails
+✔ schema-negative-dispatch.started
+✔ schema-negative-dispatch.ended
+✔ schema-negative-cost.turn
+✔ schema-negative-review.collected
+✔ schema-negative-review.finalized
+✔ schema-negative-qc.verdict
+✔ schema-negative-decision.row
+✔ schema-negative-run.stage
+✔ schema-negative-event-level-fields
+✔ schema-negative-envelope-fields
+✔ schema-open-sets-accept-unknown-values
+✔ schema-known-kinds-are-exactly-the-doc-kinds
+✔ doc-registry-keys-resolve-and-point-at-the-files
+✔ doc-examples-equal-the-normalised-fixture-events
+✔ doc-has-a-kinds-table-row-per-kind-and-the-consumer-table
+✔ schema-review-collected-findings-total-is-optional
+✔ golden-run-stage-status-prefers-status-over-state
+✔ doc-names-the-reader-warnings-and-rules
+✔ doc-cost-turn-row-states-the-worktree-fallback
+✔ instant-rejects-a-trailing-newline
+✔ schema-counts-have-a-zero-floor
+✔ doc-run-stage-row-states-presence-rule
+✔ evidence-e1-lists-exactly-the-tests-of-this-suite
+ℹ tests 38
+ℹ pass 38
 ℹ fail 0
 
-## negative controls (red, then restored green)
-- findings_total made required in the schema: red = schema-golden-events-validate, schema-review-collected-findings-total-is-optional, schema-file-is-supported-by-the-repo-validator, doc-has-a-kinds-table-row-per-kind-and-the-consumer-table (4 failed, 29 passed); restored: 33 passed, 0 failed
-- golden run.stage rule changed to state-first (row.state || row.status): red = golden-run-stage-status-prefers-status-over-state (1 failed, 32 passed); restored: 33 passed, 0 failed
-- earlier: ts removed from the event required list, parseInstant offsets dropped, doc example edited, cost id slice changed: each red, restored green
+## negative controls (each: wrong form restored in place, suite red, then restored and green)
+- findings_total minimum 0 removed from the schema: red = schema-counts-have-a-zero-floor (36 pass, 1 fail)
+- fixture picks run.stage status with `row.status || row.state` (empty status replaced by state): red = golden-run-stage-status-prefers-status-over-state (36 pass, 1 fail)
+- evidence file no longer matching the suite (test list or count stale): red = evidence-e1-lists-exactly-the-tests-of-this-suite
+- contract cost.turn row without the worktree fallback text: red = doc-cost-turn-row-states-the-worktree-fallback (34 pass, 1 fail)
+- findings_total made required in the schema: red = schema-review-collected-findings-total-is-optional and 3 others (29 pass, 4 fail)
+- run.stage rule state-first: red = golden-run-stage-status-prefers-status-over-state
+- ts removed from the event required list; parseInstant offsets dropped; doc example edited; cost id slice changed: each red, restored green
 
 ## related suites (16)
 rc=0 hooks/tests/check-claude-md-inventory.test.sh

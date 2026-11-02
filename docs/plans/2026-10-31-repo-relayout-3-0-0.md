@@ -474,3 +474,4 @@ platforms/ 鏡像產物
 10. **recorder 修正**：`seal-baseline.js` 的 recorder 把 sources 的 `plan_path` 當成相對 graph 所在目錄，與檢查器（走登錄表基準）不一致；P1 前改走 `repo-layout.js` 的 `manifestBase` / `resolveManifestPath`，並證明在 base 樹上重新 record 與已提交的 `seal-baseline.json` 位元組相同。
 11. **個資遮罩保留**：leak-guard 把搬移後又被改過的檔當成全是新增行來掃。合併後的 `project/handoff/HANDOFF.md`，以及連結被改寫的兩份封存 plan（`2026-06-03-distill-handoff.md`、`2026-10-13-review-only-external-candidate.md`），上面的 `scripts/redact-personal.js` 遮罩（`<email>`、`<host>` 之類的佔位符）照舊保留，不為了通過掃描而還原，也不加 `leak-guard-registry.json` 例外。改寫器在 refs-docs 與 content 階段對這三個檔跑一次 redact-personal，重跑結果相同。
 12. **BACKLOG 欄位上限**：路徑改寫讓 t14 gate-batch 那一列的 Source 多出 3 個位元組，超過 160 的上限，而上限是 block 等級的檢查。改寫器在 content 階段把那個括號裡的「already」拿掉，其他字不動。
+13. **resolve-project-paths 測試**：這支測試用 HEAD 的登錄表造「bootstrap」與「P1」兩個 worktree，原本是把 `docs/` 改成 `project/`。HEAD 本身變成 P1 之後方向要反過來：bootstrap 那個把 `project/` 改回 `docs/`，P1 那個就是 HEAD，backlog 是 `project/backlog/BACKLOG.md`。改寫器在 content 階段逐處精確替換，每處必須恰好命中一次。

@@ -794,6 +794,7 @@ function cmdApply(o) {
     log.redacted = redactMasks(root, [P.merge.target]);
     log.project_config_dirs = followProjectConfig(root);
     log.backlog_source_trimmed = trimBacklogSource(root);
+    log.resolver_test_followed = followResolverTest(root);
     log.merged = [P.merge.target, P.merge.absorbed_old]; log.created = ['docs/README.md']; log.deleted = Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete');
   } else {
     Object.assign(log, rewriteRefs(root, P, sealedOld, refMap, phase));
@@ -832,6 +833,31 @@ function trimBacklogSource(root) {
   if (n > 1) throw new InputError(`backlog Source trim matched ${n} times (want at most 1)`);
   if (n === 0) return false;
   fs.writeFileSync(f, src.replace(from, () => '2026-07-08-t14-reinject/report.md corrected)'));
+  return true;
+}
+
+/** hooks/tests/resolve-project-paths.test.sh builds a "bootstrap" and a "P1" worktree of THIS repo by patching HEAD's registry paths. Written against a
+ *  bootstrap HEAD it patched docs -> project; once HEAD is P1 the direction flips: the bootstrap fixture patches project -> docs, the P1 fixture is
+ *  HEAD itself, and its backlog is project/backlog/BACKLOG.md. Every replacement must hit exactly once or the apply stops (D10.13). */
+function followResolverTest(root) {
+  const f = path.join(root, 'hooks/tests/resolve-project-paths.test.sh');
+  if (!fs.existsSync(f)) return false;
+  let t = fs.readFileSync(f, 'utf8');
+  if (t.includes('# P1 is HEAD itself')) return false;
+  const once = (from, to, what) => {
+    const n = t.split(from).length - 1;
+    if (n !== 1) throw new InputError(`resolve-project-paths test patch "${what}" matched ${n} times (want 1)`);
+    t = t.replace(from, () => to);
+  };
+  once('eq "autopilot: archive" "docs/projects/_archive/"', 'eq "autopilot: archive" "project/projects/_archive/"', 'autopilot archive');
+  once('mk_wt() {  # mk_wt <dir> <docs|project> — a worktree of THIS repo; P1 rewrites its registry paths', 'mk_wt() {  # mk_wt <dir> <docs|project> — a worktree of THIS repo; P1 is HEAD itself, the bootstrap fixture patches its registry paths back to docs/', 'mk_wt head');
+  once('  if [ "$2" = project ]; then\n    sed -i -E "s#\'docs/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive|BACKLOG.md)\'#\'project/\\\\1\'#" "$1/scripts/lib/repo-layout.js"\n  fi',
+    '  if [ "$2" = docs ]; then\n    sed -i -E "s#\'project/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive)\'#\'docs/\\\\1\'#; s#\'project/backlog/BACKLOG.md\'#\'docs/BACKLOG.md\'#" "$1/scripts/lib/repo-layout.js"\n  fi', 'mk_wt sed');
+  once('eq "bootstrap registry: backlog -> docs/" "project/backlog/BACKLOG.md"', 'eq "bootstrap registry: backlog -> docs/" "docs/BACKLOG.md"', 'bootstrap backlog');
+  once('eq "bootstrap registry: index -> docs/"   "project/projects/INDEX.md"', 'eq "bootstrap registry: index -> docs/"   "docs/projects/INDEX.md"', 'bootstrap index');
+  once('"project/BACKLOG.md" "$(bash "$R" --target "$RP" --field backlog)"', '"project/backlog/BACKLOG.md" "$(bash "$R" --target "$RP" --field backlog)"', 'P1 backlog');
+  once('RP="$TMP/reg-p1"; ', '# P1 is HEAD itself\nRP="$TMP/reg-p1"; ', 'marker');
+  fs.writeFileSync(f, t);
   return true;
 }
 

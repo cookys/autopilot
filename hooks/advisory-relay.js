@@ -32,11 +32,13 @@ function closeDecideReply(payload) {
   if (lines[0] !== DECIDE_REPLY_HEAD) return;
   const ids = [];
   const seen = new Set();
+  const idLine = new Map();
   for (const line of lines.slice(1)) {
     const m = DECIDE_ID.exec(line);
     if (!m || seen.has(m[0])) continue;
     seen.add(m[0]);
     ids.push(m[0]);
+    idLine.set(m[0], line);
   }
   if (ids.length === 0) return;
   let closeDecisionById;
@@ -54,7 +56,19 @@ function closeDecideReply(payload) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
   }
+  // F4 verify-before-act: on a host whose courier speaks `fleet decision`, a line is acted on (its card closed) only after
+  // `fleet decision verify` accepts its answer_id (the last ｜ field). One call per card, never a retry or a sleep here.
+  // No courier on this host: today's behaviour.
+  let fd = null;
+  try { const m = require('../scripts/lib/fleet-decision.js'); if (m.supported()) fd = m; } catch (_e) { fd = null; }
+  const unverified = [];
   for (const id of ids) {
+    if (fd) {
+      const line = idLine.get(id);
+      const aid = line.split('｜').pop().trim();
+      const v = /^[0-9A-Za-z]{20,40}$/.test(aid) ? fd.verify(id, aid, line) : { ok: false, outcome: 'unverified' };
+      if (!v.ok) { unverified.push(`${id} (${v.outcome})`); continue; }
+    }
     // closeDecisionById locks before it looks up the id, so a locked scope file
     // returns status error even when this card is not in it. Keep every error
     // and keep walking; a later scope file may still hold the card. One line is
@@ -83,6 +97,11 @@ function closeDecideReply(payload) {
     if (!closed && failures.length > 0) {
       process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${failures.join('; ')}\n`);
     }
+  }
+  if (unverified.length > 0) {
+    const note = `unverified [待決回覆]: ${unverified.join(', ')}; the courier did not confirm these answers, so they are NOT acted on and their cards stay open. Tell the owner.`;
+    process.stderr.write(`advisory-relay: ${note}\n`);
+    sysMsg = sysMsg ? `${sysMsg}\n${note}` : note;
   }
 }
 

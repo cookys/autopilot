@@ -30,6 +30,10 @@
  * still accepted with a stderr warning, and the other classes are refused (a gate that cannot verify must not wave them through).
  * --kind <decide|go> (optional): the card's kind, stored as `kind` on the entry (same names as fleet's DecisionKind). Absent = unspecified;
  * entries without it read as before. Any other value -> exit 7, nothing is written.
+ * close [--option <label> | --free-text <text>] (F4 claim-before-act): when the owner's answer is given, close first runs `fleet decision claim` for
+ * the card (scripts/lib/fleet-decision.js). Already answered on the console (claim exit 3) -> the printed console answer is what to act on, and the
+ * card is closed; courier unreachable (exit 9) -> retried a bounded number of times, then exit 8 and the card stays open. A host with no fleet
+ * binary, or one without `fleet decision`, closes as before. Without --option/--free-text close is a plain ledger close (a withdrawal, not an answer).
  * --target <name> (optional): the deploy target the question is about. It is judged by `resolve-doa.sh --target` BEFORE any boundary
  * check, in every session mode and for every boundary: production_denied (exit 10) refuses the card, and so does target_unlisted /
  * a failing resolver (fail closed) -> exit 6, nothing is written. A production target is refused, never escalated to the owner.
@@ -42,6 +46,7 @@
  *
  * `open` also ensures a watcher publishes the card (src/status/card-visibility.js: the autostart hook's start path, plus the plain session marker).
  * Exit: 0 ok (show: at least one open) | 1 show: none open | 2 usage / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure |
+ *       8 close refused: the card's answer could not be claimed on the fleet courier (unreachable after bounded retries, or an unusable reply); the card stays OPEN |
  *       7 open refused: --kind is not decide|go (nothing is written) |
  *       6 open refused: --target is a production target, unlisted, or could not be judged (refuse, never escalate; nothing is written) |
  *       5 open: the card IS written and its id printed, but no live panel will show it (isolated env, no flock, unusable live dir, a watcher without --render); stderr names the reason and what to do.
@@ -263,6 +268,15 @@ function takeKind(argv) {
   return { rest: [...argv.slice(0, i), ...argv.slice(i + 2)], kind: argv[i + 1] };
 }
 
+// close only: `--free-text <text>` takes a value there (on `open` it is a bare switch, so parse() must keep seeing it unchanged).
+function takeFreeText(argv) {
+  if (argv[0] !== 'close') return { rest: argv };
+  const i = argv.indexOf('--free-text');
+  if (i < 0) return { rest: argv };
+  if (i + 1 >= argv.length) return { error: 'close --free-text needs a value' };
+  return { rest: [...argv.slice(0, i), ...argv.slice(i + 2)], freeText: argv[i + 1] };
+}
+
 function takeTarget(argv) {
   const i = argv.indexOf('--target');
   if (i < 0) return { rest: argv };
@@ -270,13 +284,37 @@ function takeTarget(argv) {
   return { rest: [...argv.slice(0, i), ...argv.slice(i + 2)], target: argv[i + 1] };
 }
 
+// F4 claim-before-act for `close --option/--free-text`: -> { code: 0 } to go on closing, { code: 8 } to leave the card open.
+function claimBeforeClose(args) {
+  const open = projectScopeFiles(args.cwd).some((f) => readFile(f).some((e) => e.id === args.id));
+  if (!open) return { code: 0 }; // not open: the plain close below says so
+  const fd = require('./lib/fleet-decision.js');
+  if (!fd.supported()) return { code: 0 }; // no courier on this host: today's behaviour
+  const c = fd.claim(args.id, args.option.length ? { option: args.option[0] } : { freeText: args.closeFreeText });
+  if (c.outcome === 'claimed') return { code: 0 };
+  if (c.outcome === 'already_answered') {
+    process.stderr.write(`open-decision: ${args.id} was already answered on the console; act on that answer, not on yours, and tell the owner\n`);
+    process.stdout.write(`already answered on the console: ${JSON.stringify(c.json)}\n`);
+    return { code: 0 };
+  }
+  if (c.outcome === 'unknown' || c.outcome === 'card_closed') {
+    process.stderr.write(`open-decision: note: courier says ${c.outcome} for ${args.id}; closing the ledger entry\n`);
+    return { code: 0 };
+  }
+  process.stderr.write(`open-decision: ERROR: ${args.id} NOT closed and NOT answered: claim ${c.outcome === 'unreachable' ? `failed, courier unreachable after ${c.attempts} attempts` : 'failed'}${c.detail ? ` (${c.detail})` : ''}; the answer is held. Tell the owner, and run the same close again once the courier is back\n`);
+  return { code: 8 };
+}
+
 function main(argv) {
   const kk = takeKind(argv);
   if (kk.error) return usage(kk.error);
-  const tk = takeTarget(kk.rest);
+  const ft = takeFreeText(kk.rest);
+  if (ft.error) return usage(ft.error);
+  const tk = takeTarget(ft.rest);
   if (tk.error) return usage(tk.error);
   const args = parse(tk.rest);
   if (kk.kind !== undefined) args.kind = kk.kind;
+  if (ft.freeText !== undefined) args.closeFreeText = ft.freeText;
   if (args.error) return usage(args.error);
   if (tk.target !== undefined) args.target = tk.target;
   const cmd = args._[0];
@@ -296,6 +334,12 @@ function main(argv) {
   }
   if (cmd === 'close') {
     if (typeof args.id !== 'string' || !SAFE_ID.test(args.id)) return usage('close needs --id <id> (see `show`)');
+    const answered = args.option.length > 0 || args.closeFreeText !== undefined;
+    if (args.option.length > 1 || (args.option.length && args.closeFreeText !== undefined)) return usage('close takes one --option <label> or one --free-text <text>');
+    if (answered) {
+      const g = claimBeforeClose(args);
+      if (g.code !== 0) return g.code;
+    }
     let r = { status: 'absent' };
     for (const f of projectScopeFiles(args.cwd)) {
       r = closeDecisionById(f, args.id);

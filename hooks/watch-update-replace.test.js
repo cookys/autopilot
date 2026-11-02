@@ -183,13 +183,13 @@ test('a recycled pid (unrelated cmdline) named by the envelope is never signalle
 
 test('a decoy whose argv looks like a watcher but names no root, or another root than the record, is never signalled', () => {
   const f = fx();
-  const p1 = decoy(f, ['status', 'runs', '--watch', '--project', f.key]);
+  const p1 = decoy(f, ['status', 'runs', '--watch', '--project', f.key, '--render']);
   writeEnv(f, { pid: p1, session_id: null, started_at: new Date().toISOString(), plugin_root: '/old/root', plugin_version: '0.0.1' });
   runHook(f, 'SessionStart');
   sleep(300);
   assert.ok(alive(p1), 'argv names no plugin root: left alone');
   const f2 = fx();
-  const p2 = decoy(f2, [path.join('/some/other/root', 'bin', 'autopilot.js'), 'status', 'runs', '--watch', '--project', f2.key]);
+  const p2 = decoy(f2, [path.join('/some/other/root', 'bin', 'autopilot.js'), 'status', 'runs', '--watch', '--project', f2.key, '--render']);
   writeEnv(f2, { pid: p2, session_id: null, started_at: new Date().toISOString(), plugin_root: '/old/root', plugin_version: '0.0.1' });
   runHook(f2, 'SessionStart');
   sleep(300);
@@ -198,7 +198,7 @@ test('a decoy whose argv looks like a watcher but names no root, or another root
 
 test('legacy writer block whose argv names no root cannot be judged: treated as current (fast path: no spawn, nothing signalled)', () => {
   const f = fx();
-  const pid = decoy(f, ['status', 'runs', '--watch', '--project', f.key]);
+  const pid = decoy(f, ['status', 'runs', '--watch', '--project', f.key, '--render']);
   writeEnv(f, { pid, session_id: null, started_at: new Date().toISOString() }); // no plugin_root / plugin_version
   const h = crypto.createHash('sha1').update(f.repo).digest('hex').slice(0, 16);
   fs.mkdirSync(path.join(f.live, 'autostart'), { recursive: true });

@@ -681,7 +681,7 @@ function fastPathFixture() {
   const f = fx(); optIn(f);
   const sc = scopeFromCwd(f.repo);
   const cwd = fs.realpathSync(f.repo);
-  const w = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(()=>{},60000)', 'status', 'runs', '--watch', '--project', sc.project_key], { stdio: 'ignore', detached: true });
+  const w = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(()=>{},60000)', 'status', 'runs', '--watch', '--project', sc.project_key, '--render'], { stdio: 'ignore', detached: true });
   w.unref();
   const name = require('crypto').createHash('sha1').update(cwd).digest('hex').slice(0, 16);
   fs.mkdirSync(path.join(f.live, 'autostart'), { recursive: true });

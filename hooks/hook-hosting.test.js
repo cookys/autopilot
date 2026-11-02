@@ -283,7 +283,7 @@ const KEY = 'abcdef0123456789';
 
 function fakeWatcher() {
   // argv carries `status runs --watch --project <KEY>`, exactly what isWatcherFor() checks
-  const p = spawn(process.execPath, ['-e', 'setTimeout(()=>{},120000)', 'status', 'runs', '--watch', '--project', KEY], { stdio: 'ignore', detached: true });
+  const p = spawn(process.execPath, ['-e', 'setTimeout(()=>{},120000)', 'status', 'runs', '--watch', '--project', KEY, '--render'], { stdio: 'ignore', detached: true });
   p.unref();
   return p;
 }

@@ -153,7 +153,7 @@ else no "finish-flow Deferred items: backlog_exists=false triggers the no-backlo
 mk_wt() {  # mk_wt <dir> <docs|project> — a worktree of THIS repo; P1 rewrites its registry paths
   git -C "$REPO_ROOT" worktree add -q --detach "$1" HEAD >/dev/null 2>&1 || return 1
   if [ "$2" = project ]; then
-    sed -i -E "s#'docs/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive|BACKLOG.md)'#'project/\\1'#" "$1/scripts/lib/repo-layout.js"
+    sed_mutate "$1/scripts/lib/repo-layout.js" -E "s#'docs/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive|BACKLOG.md)'#'project/\\1'#" || return 1
   fi
 }
 RB="$TMP/reg-boot"; mk_wt "$RB" docs

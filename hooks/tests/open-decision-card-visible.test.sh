@@ -180,19 +180,28 @@ newrepo s9c
 open_card s9c "Q-s9c-a?"
 for i in $(seq 1 100); do REAL9="$(envpid "$KEY")"; [ -n "$REAL9" ] && break; sleep 0.2; done
 EXTRA_PIDS="$EXTRA_PIDS $REAL9"; kill -STOP "$REAL9"
-( exec -a x node -e 'setTimeout(()=>{},120000)' -- status runs --watch --proj="$KEY" --render ) & ODD=$!
-EXTRA_PIDS="$EXTRA_PIDS $ODD"; sleep 0.5; envelope_pid_set "$ODD"
-open_card s9c "Q-s9c-b?"
-assert_eq "5" "$OPEN_RC" "S9 unrecognised argv: exit 5"
-assert_contains "$(cat "$SB/err")" "cannot be confirmed" "S9 unrecognised argv: stderr says the holder cannot be confirmed"
-assert_eq "yes" "$(cmdline_has "$ODD" --proj=)" "S9 control: the odd-argv process was alive and unrecognisable"
-kill -9 "$ODD" 2>/dev/null
-# the standard `--project=<key>` spelling of a rendering watcher IS confirmed
-( exec -a x node -e 'setTimeout(()=>{},120000)' -- status runs --watch --project="$KEY" --render ) & EQ=$!
-EXTRA_PIDS="$EXTRA_PIDS $EQ"; sleep 0.5; envelope_pid_set "$EQ"
-open_card s9c "Q-s9c-c?"
-assert_eq "0" "$OPEN_RC" "S9 '--project=<key>' with --render is confirmed: exit 0"
-assert_eq "yes" "$(cmdline_has "$EQ" --project=)" "S9 control: the --project= process was alive"
-kill -9 "$EQ" 2>/dev/null
+fake_holder() { # fake_holder <label> <expected rc> <argv...>: a sleeper the envelope names as the writer
+  local label="$1" want="$2"; shift 2
+  ( exec -a x "$@" ) & local pid=$!
+  EXTRA_PIDS="$EXTRA_PIDS $pid"; sleep 0.5; envelope_pid_set "$pid"
+  assert_eq "yes" "$(cmdline_has "$pid" status)" "S9 control ($label): the fake holder is alive"
+  open_card s9c "Q-$label?"
+  assert_eq "$want" "$OPEN_RC" "S9 $label: exit $want"
+  [ "$want" = 5 ] && assert_contains "$(cat "$SB/err")" "cannot be confirmed" "S9 $label: stderr says the holder cannot be confirmed"
+  kill -9 "$pid" 2>/dev/null
+}
+mkdir -p "$SB/fake/bin"; printf 'setTimeout(()=>{},120000)\n' > "$SB/fake/bin/autopilot.js"
+# argv that merely names the watcher, behind a plain `node -e`: wrong entry point, no lock fd
+fake_holder "argv only, wrong entry point" 5 node -e 'setTimeout(()=>{},120000)' -- status runs --watch --project="$KEY" --render
+# unrecognisable argv
+fake_holder "unrecognised argv" 5 node -e 'setTimeout(()=>{},120000)' -- status runs --watch --proj="$KEY" --render
+# the right entry point and the right argv, but it holds no fd on the lock file
+fake_holder "right entry and argv, no lock fd" 5 node "$SB/fake/bin/autopilot.js" status runs --watch --project="$KEY" --render
+fake_holder "right entry and argv (spaced form), no lock fd" 5 node "$SB/fake/bin/autopilot.js" status runs --watch --project "$KEY" --render
+# a real rendering watcher holds the lock: a second card is confirmed
+newrepo s9d
+open_card s9d "Q-s9d-a?"; for i in $(seq 1 100); do [ -n "$(envpid "$KEY")" ] && break; sleep 0.2; done
+open_card s9d "Q-s9d-b?"
+assert_eq "0" "$OPEN_RC" "S9 a real rendering watcher holds the lock: a second open is confirmed (exit 0)"
 
 finalize_test

@@ -30,21 +30,35 @@ function watcherLaunchOpts({ key, scope, topLevel, env }) {
   return opts;
 }
 
-// What is known about the process holding the project lock. Only a POSITIVE confirmation counts: 'renders' = a live `status runs --watch`
-// of this project whose argv carries --render. 'no_render' = confirmed without it. 'unknown' = no such pid, argv unreadable, or an argv
-// that is not recognisably the project's watcher: the card is then not known to be seen, and the caller fails loudly.
-// `--project <key>` and `--project=<key>` are both read.
-function holderState(pid, key) {
+// What is known about the process holding the project lock. Only a POSITIVE, structural confirmation counts ('renders'):
+//   1. it is the watcher's entry point: argv = node <path>/bin/autopilot.js status runs --watch ...  (watchLaunchArgv's shape),
+//   2. it is THIS project's: `--project <key>` or `--project=<key>`,
+//   3. it really holds the project's lock: one of /proc/<pid>/fd points at the lock file (runs-watch.js lockPathOf; the wrapper
+//      `exec 9>"$LOCK"; flock -n 9 ...; exec node` leaves fd 9 on it in the node process),
+//   4. and it was started with --render.
+// 'no_render' = 1-3 confirmed, 4 not. 'unknown' = anything else: no /proc (not Linux), no such pid, unreadable argv or fd directory, a
+// different entry point, no fd on the lock. The caller then fails loudly: the card is not known to be shown.
+function holderState(pid, key, env) {
   try {
     if (!Number.isInteger(pid) || pid <= 0) return 'unknown';
     const argv = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
-    if (argv.length === 0) return 'unknown';
+    if (argv.length < 5 || path.basename(argv[1]) !== 'autopilot.js' || argv[2] !== 'status' || argv[3] !== 'runs' || argv[4] !== '--watch') return 'unknown';
     let project = null;
-    for (let i = 0; i < argv.length; i += 1) {
+    for (let i = 5; i < argv.length; i += 1) {
       if (argv[i] === '--project') { project = argv[i + 1]; break; }
       if (argv[i].startsWith('--project=')) { project = argv[i].slice('--project='.length); break; }
     }
-    if (!(` ${argv.join(' ')} `.includes(' status runs --watch ') && project === key)) return 'unknown';
+    if (project !== key) return 'unknown';
+    const lock = require('./runs-watch').lockPathOf(env, key);
+    let real = lock;
+    try { real = fs.realpathSync(lock); } catch (_error) { /* the lock file is gone: no fd can match it */ }
+    let holds = false;
+    for (const fd of fs.readdirSync(`/proc/${pid}/fd`)) {
+      let target = null;
+      try { target = fs.readlinkSync(`/proc/${pid}/fd/${fd}`); } catch (_error) { continue; }
+      if (target === lock || target === real) { holds = true; break; }
+    }
+    if (!holds) return 'unknown';
     return argv.includes('--render') ? 'renders' : 'no_render';
   } catch (_error) {
     return 'unknown';
@@ -92,12 +106,12 @@ function ensureCardVisible({ cwd, sessionId = '', env = process.env } = {}) {
     const r = startWatcherDetached(opts);
     if (r.status === 'started') return { ok: true, status: 'started' };
     if (r.status === 'busy') {
-      const state = holderState(r.holder, scope.project_key);
+      const state = holderState(r.holder, scope.project_key, env);
       if (state === 'renders') return { ok: true, status: 'busy' };
       const who = Number.isInteger(r.holder) && r.holder > 0 ? `pid ${r.holder}` : 'an unidentified process';
       const stop = `run \`autopilot status runs --stop --project ${scope.project_key}\` and open the card again (the autostart watcher is \`autopilot status runs --watch --project ${scope.project_key} --render\`)`;
       if (state === 'no_render') return { ok: false, reason: `the project watcher (${who}) runs without --render, so it writes no page for the cards, and it could not be stopped`, action: stop };
-      return { ok: false, reason: `the project lock is held by ${who}, which cannot be confirmed to be a rendering watcher of this project (no such process, unreadable or unrecognised command line), so the card is not known to be shown`, action: stop };
+      return { ok: false, reason: `the project lock is held by ${who}, which cannot be confirmed to be a rendering watcher of this project (no such process, unreadable or unrecognised command line, or it holds no fd on the project lock), so the card is not known to be shown`, action: stop };
     }
     if (r.status === 'flock_unavailable') return { ok: false, reason: `flock(1) is not available: ${r.message || 'util-linux flock not on PATH'}`, action: 'install util-linux (flock) so the watcher can start' };
     if (r.status === 'live_dir_unusable') return { ok: false, reason: `the live directory cannot be used: ${r.message}`, action: 'fix or unset AUTOPILOT_LIVE_DIR / XDG_RUNTIME_DIR' };

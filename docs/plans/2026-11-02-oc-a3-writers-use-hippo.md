@@ -100,9 +100,9 @@ Plan-local constraints (A3; copied verbatim into every A3 dispatch):
 - **C3 no hand-edit text.** Skill, reference, agent and config-template text never tells a model to edit `docs/BACKLOG.md`, `docs/backlog/*`, an ADR file, a `HANDOFF*.md` or a knowledge file, in either store state; writes name `scripts/project-record.js` (which writes the files itself in files mode), reads name `hippo search|related|show|list`.
 - **C4 no implicit store.** `project-record.js` writes through hippo only where `.hippo/repo.toml` exists and never calls `hippo new`/`import` in a repo without one; a store is created only by the operator's `hippo init` (A3.7) or the A3.3 rehearsal in a scratch clone.
 - **C5 counters.** Usage counters never go to git or a hippo field; they go to A1 events or the hub.
-- **C6 isolation.** Every test and rehearsal runs under a sandbox `HOME`, a temp `HIPPO_CONFIG_DIR` and temp git repos, with `GIT_AUTHOR_*`/`GIT_COMMITTER_*` and `HIPPO_ACTOR` set and the caller's git env scrubbed (unset `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_PREFIX`; `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=$HOME/.gitconfig`, `XDG_CONFIG_HOME=$HOME/.config`); before any write a pre-flight asserts `git rev-parse --show-toplevel` in each temp repo equals the temp path; none targets this checkout (a plugin-directory case uses a temp copy of the plugin tree); each suite asserts on exit that this checkout's `git status --porcelain` and `.hippo/` are unchanged.
+- **C6 isolation.** Every test and rehearsal runs under a sandbox `HOME`, a temp `HIPPO_CONFIG_DIR` and temp git repos, with `GIT_AUTHOR_*`/`GIT_COMMITTER_*` and `HIPPO_ACTOR` set and the caller's git env scrubbed (unset `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_PREFIX`, `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT` and every `GIT_CONFIG_KEY_<n>`/`GIT_CONFIG_VALUE_<n>`; `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=$HOME/.gitconfig`, `XDG_CONFIG_HOME=$HOME/.config`); before any write a pre-flight asserts `git rev-parse --show-toplevel` in each temp repo equals the temp path and `git config --show-origin core.hooksPath` is empty or points inside the temp tree (red-check: a suite started under `git -c core.hooksPath=<outside dir>` fails the pre-flight); none targets this checkout (a plugin-directory case uses a temp copy of the plugin tree); each suite asserts on exit that this checkout's `git status --porcelain` and `.hippo/` are unchanged.
 - **C7 full ids.** hippo ids that leave hippo (fleet `--hippo`, resume lines, `--relates`/`--decides`, spool files) are full 26-character ULIDs; prefixes are display-only.
-- **C8 commit split.** Each phase lands as at least two commits: mechanism (scripts, hooks, tests only) and wiring/guidance (scripts- and hook-inventory rows, CLAUDE.md grouped list, references, README, `sync-codex-plugin-skills.sh` docs, skill text); a mechanism commit never edits requirement text (CLAUDE.md "機制 vs 指引").
+- **C8 commit split.** Each phase lands as at least two commits: mechanism (scripts, hooks, tests, and the scripts-/hook-inventory rows and counts its own gates check) and wiring/guidance ( CLAUDE.md grouped list, references, README, `sync-codex-plugin-skills.sh` docs, skill text); a mechanism commit never edits requirement text (CLAUDE.md "機制 vs 指引").
 - **C9 negative controls.** Every new or changed check ships with a negative control shown red before green (`references/evidence-discipline.md` §58).
 - Node >= 20.10, built-ins only, no new npm dependency.
 
@@ -173,7 +173,7 @@ legacy target and are checked by rule C. All writes below go through `project-re
 | W17 | `references/knowledge-routing.md:98-101, :123` | `backlog_path` sink = row | sink = `backlog new` |
 | W18 | `references/acceptance-patterns.md:79`, `references/probe-playbook.md:120` | "record + BACKLOG with trigger" | `backlog new` |
 | W19 | `project-config-template/{doc-drift-config.md:67, dev-flow-config.md:21, :52-55, next-config.md:7, project-lifecycle-config.md:8, knowledge-routing-config.md:16, :26, backlog-config.md}` | backlog path knobs | knobs stay (files mode) + "with a hippo store this path is read-only provenance" |
-| W20 | `skills/dev-flow/SKILL.md:44-48` + `decision-ledger.js` | owner-proxy decision -> ledger row (untracked telemetry) | ledger unchanged (A1 source) and the single owner of one-way decisions (A3.4 step 6); dev-flow says so and names `decision new` only for decisions outside the ledger (rule C) |
+| W20 | `skills/dev-flow/SKILL.md:44-48` + `decision-ledger.js` | owner-proxy decision -> ledger row (untracked telemetry) | ledger unchanged (A1 source) and the single owner of one-way decisions (A3.4 step 6); dev-flow says so and names `decision new --ledger-row <id>` (rule C) |
 | W21 | `skills/think-tank/SKILL.md`, `skills/think-tank-dialectic/SKILL.md` | verdict only in chat | once accepted: `decision new --title <question -> choice> --rationale-file -` (rule C) |
 
 Readers to move to hippo: `skills/next/SKILL.md:33, :52, :60, :68-73, :91, :123, :131`; handoff Resume; learn Flow 1
@@ -253,7 +253,7 @@ A3.1 -> A3.4
 hippo P1.4 (importer mapping + `hippo init`) + A3.1 -> A3.3 (rehearsal on a scratch copy)
 A3.2 + A3.4 -> A3.5 (guidance; branch held, not merged)
 A3.3 + A3.5 -> A3.6 (KR1 through the skills)
-A3.5 + A3.6 + A4 -> A5 (separate plan) ; A5 verdict + hippo P1.3 (KR2) + hippo init + relayout 3.0.0 dev/release split -> A3.7 (ship + cutover)
+A3.5 + A3.6 + A4 -> A5 (separate plan) ; A5 verdict + hippo P1.3 (KR2) + hippo init + hippo P1.5 (every committing account) + relayout 3.0.0 dev/release split -> A3.7 (ship + cutover)
 ```
 
 A3.1, A3.2, A3.4 are mechanism, inert in autopilot until a store exists, mergeable to `develop` after review (A3.2
@@ -279,8 +279,9 @@ Steps:
      new Reply bullet); step: edit.
    - `backlog close <id> done|cancelled|superseded [--commit <sha>] [--by <ref>]` -> peer check, `hippo close`,
      then `link implemented_by git:<sha>` / `relates_to <ref>`; steps: close, optional link.
-   - `decision new --title <t> --rationale-file <f>|- [--area <a>] [--relates <id>]… [--decides <id>]…` -> `hippo
-     new decision --status active …`, `link <issue> decided_by <decision>` per `--decides`; steps: create, N links.
+   - `decision new --title <t> --rationale-file <f>|- [--ledger-row <row id>] [--area <a>] [--relates <id>]… [--decides <id>]…`
+     -> `hippo new decision --status active …` with key `sha256(<row id>)[0:16]` when `--ledger-row` is given
+     (idempotent; a repeat is a no-op), else a fresh key; `link <issue> decided_by <decision>` per `--decides`; steps: create, N links.
    - `decision supersede <old> …` / `adr supersede <old> …` -> `new`, `link <new> supersedes <old>`, `close <old>
      superseded`; three steps.
    - `adr new --title <t> --body-file <f>|- [--status active|open]` -> `hippo new adr`; `lesson new --title <t>
@@ -401,7 +402,11 @@ Acceptance: KR-A3.3 on the scratch copy; transcript and skipped list in the evid
    commit (pre-commit: staged vs `HEAD`; pre-push: every commit of `<remote sha>..<local sha>`, `origin/develop..`
    for a new branch, against its first parent) whose parent tree has `.hippo/repo.toml` and that changes or adds
    the backlog file, a sidecar, an ADR or a handoff file, whatever `detect` says; a commit deleting `repo.toml`
-   (rollback) is exempt. Pre-push passes `--hippo` whenever `repo.toml` exists; without hippo, rules needing
+   (rollback) is exempt. Pre-push additionally diffs the frozen paths over the whole range whenever the local tip
+   has `repo.toml`: tree of the tip versus tree of `<remote sha>` (new branch: `git merge-base origin/develop <tip>`);
+   any difference blocks, so an edit made on a pre-cutover lane and carried in by a merge or fast-forward is caught
+   whatever the per-commit first parents are (red-check: a pre-cutover lane edits a backlog row, merges develop,
+   is pushed: blocked). Pre-push passes `--hippo` whenever `repo.toml` exists; without hippo, rules needing
    `export` report `hippo_unavailable` and block. `--reconcile`: every `BL-`/`ADR-` id in the frozen files needs a
    record with that provenance `value`, else `backlog_unimported` (block) naming ids; repair = provenance-keyed
    import of only those ids (P1.4 importer, idempotent, touches no existing record).
@@ -413,8 +418,10 @@ Acceptance: KR-A3.3 on the scratch copy; transcript and skipped list in the evid
    Effort/Trigger-Type; `backlog_digest` = SHA-256 of `data`.
 5. `migrate-backlog-entries.js`: exits 2 in hippo mode ("the backlog is a hippo store; nothing to migrate").
 6. `decision-ledger.js append --kind decision` with `reversibility: one-way`, only when `record_store` is `hippo`,
-   `hippo-problems` or `spool` and the row lacks `source: project-record`: then `project-record.js decision new --key
-   <sha256(ledger row id)[0:16]>` (row id in the body), so a repeat or dev-flow's own call is a no-op; a failure
+   `hippo-problems` or `spool` and the row lacks `source: project-record`: then `project-record.js decision new --ledger-row <row id>` (row id in the body), so a repeat or a
+   `decision new --ledger-row` call for the same row is a no-op; in hippo mode a `decision new` without
+   `--ledger-row` whose title equals an active decision filed from the ledger in the last 24 h exits 2
+   (`decision_from_ledger: pass --ledger-row <id>`), so a duplicate fails loudly instead of landing; a failure
    warns and never fails the append.
 7. `hooks/hippo-edit-guard.js` (matcher `Edit|MultiEdit|Write|NotebookEdit|Bash`): exits 0 at once unless the
    target repo (top level of the tool path or Bash cwd) has `.hippo/repo.toml`, so store-less repos never spawn
@@ -426,9 +433,13 @@ Acceptance: KR-A3.3 on the scratch copy; transcript and skipped list in the evid
 8. `hooks/session-start.js`: one line each for a non-empty spool (any state, count), `hippo-problems` (offending
    files), an unchecked-merge marker (step 9), a loaded plugin older than `.claude/record-store.json`
    `min_plugin_version`.
-9. `scripts/hippo-git-hook.sh <pre-commit|pre-merge-commit|post-merge|post-rewrite>` (POSIX sh). No `repo.toml`:
-   exit 0. Otherwise every commit and merge is checked, whatever paths it touches (C2). Hippo available: `hippo
-   --json check` (exit 3: offending file passed through, refuse) then `exec hippo hook <name>` (exit code kept).
+9. `scripts/hippo-git-hook.sh <pre-commit|pre-merge-commit|post-merge|post-rewrite>` (POSIX sh). The `repo.toml` test reads the staged index for
+   pre-commit/pre-merge-commit (`git cat-file -e :.hippo/repo.toml`) and `HEAD` for post-* hooks, so a rollback
+   revert that deletes it is not checked. No `repo.toml`: exit 0. Otherwise every commit and merge is checked,
+   whatever paths it touches (C2). Hippo available: `exec hippo hook <name>` (exit code kept), which refuses only
+   problems the commit introduces (hippo spec 11.5: New = P(staged) \ P(HEAD)), so a store in `hippo-problems`
+   keeps accepting commits that add no problem; the full `hippo check` exit 3 is reported by `session-start`, not
+   enforced per commit.
    Hippo missing: pre-commit and pre-merge-commit exit 1 (`hippo not found ($HIPPO_BIN / PATH); refusing a commit
    in a hippo store`); post-merge and post-rewrite (rebase, `pull --rebase`; cannot block) write `<git dir>/autopilot/
    hippo-unchecked` (per worktree, `git rev-parse --git-dir`) with the sha and print an error whenever they cannot
@@ -536,7 +547,8 @@ edits, with refile steps in the notice.
 Hippo on every committing host (precondition, checked first): hippo P1.5 ships the binary to every account that commits
 in this repo, native Windows included; `hippo --version` transcript per host in the cutover evidence. One host short = no cutover.
 Windows: `project-record.js where` + one `backlog new` + `flush` on a native Windows host (host from env/config),
-transcript saved; while hippo's native run is open it shows `spool` and the warning, not silence (and commits there are refused).
+transcript saved. The per-host evidence is the P1.5 transcript (`hippo --version`, binary sha256, a `hippo check`
+and a hook-refusal run), not `--version` alone; a host whose native run is open is a host short (no cutover).
 Rollback, in order: (1) `hippo list --since <cutover date> --history --json > <evidence dir>/rollback-records.json`
 before the revert; (2) `git revert -m 1 <merge>` (skill text, hooks, gates); (3) the operator refiles the export
 with `project-record.js backlog new` (files mode); (4) spool: `flush` exits 2 in files state, `session-start` keeps

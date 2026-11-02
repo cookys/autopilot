@@ -1,0 +1,382 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "oc-a3-closure",
+  "logical_plan_id": "autopilot-oc-a3-hippo-writers-closure",
+  "session_id": "506f335d-8848-4ee1-9d8e-9d1c7caefe6c",
+  "session_key": "6541ed79490aa964c30bb2e7078f5f5718a92a3ce1048cba05eec9bfdba6ccf1",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "39d9a8ba1d07e0c97671ed039bcce3007452d49671827cee882c24902ca54293",
+  "manifest_sha256": "6e8e51aff1f1b2bab603213453299313aaeb3d4a291aebe71c8af7e37e3c5d60",
+  "plan_sha256": "b0e15b1796627494caf724e72164508ef677638369ba15734a012d5329634746",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "0763941bb9875e1e62ac165260ea90bf77eef0fb585051740f81be5cd9c2bf05"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a0c6829c59451be3a2383982fc937756f6bbe366c7cabc8253018c27fcf2f7b6",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-JduOMb/stdout",
+          "digest": "a0c6829c59451be3a2383982fc937756f6bbe366c7cabc8253018c27fcf2f7b6"
+        },
+        "receipt_digest": "bf34567a79fb16bd0771c806bdbbe78f91b1e5b385817b1c6765e996a98d7867"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-argon-high",
+          "operation": "plan-review",
+          "request_digest": "d24dbf446a099f1ffb36f1c412c6c88a89525cf4d7732b49f3286b5d4065506e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-uR2PTQ",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "9682b8bd7281f05599576bb9f87278ed67f1c68e124e46724db4febc24782aa9"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-opus-5-5",
+          "operation": "plan-review",
+          "request_digest": "ba54f2256dae984d8c084efb9206890a4b5468ca0d3db53b436e91c3796cccf2"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "6f556c7b0c2879ff3173ada79316755be790af47c7823a4758b8cb90bf4883e5",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-AzVh06",
+          "digest": "6f556c7b0c2879ff3173ada79316755be790af47c7823a4758b8cb90bf4883e5"
+        },
+        "receipt_digest": "32c5eb1e7bfc561d09d649f6dd44684e81b0e80f9e974cb5055f7d72b927d8a0"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "family": "google",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R22",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "C6 isolation and hooks/tests/lib/hippo-sandbox.sh",
+      "claim": "The accepted isolation blocker remains partially unresolved: inherited command-scope git configuration can still route sandbox operations through operator hooks.",
+      "evidence": "The revised C6 unsets repository-location variables and overrides global configuration paths, but leaves GIT_CONFIG_PARAMETERS and GIT_CONFIG_COUNT/GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n intact. These can propagate core.hooksPath from the invoking git process into sandbox git commands. A temp repository can therefore pass the new show-toplevel preflight while its commits execute hooks outside the sandbox; sandbox HOME and GIT_CONFIG_GLOBAL do not override command-scope configuration.",
+      "evidence_reference": "Closure context: accepted blocking finding for hippo-sandbox.sh; diff under review: C6 isolation replacement; A3.1 and A3.4 sandbox commit and guard-installation tests.",
+      "repair": "Explicitly clear inherited command-scope git configuration, including GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT and indexed GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n variables, before constructing the sandbox environment. Add a red-before-green control that supplies an external core.hooksPath through those variables and verifies sandbox operations neither execute nor modify the external hooks.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "52f6bcb7f640eaaccd5523a8a0333b092a1f55bfdd1c008fd966216f6f674eaa"
+    },
+    {
+      "rubric_id": "R23",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/hippo-git-hook.sh (A3.4 step 9) x KR-A3.3 import tolerance x section 3.3 hippo-problems state x A3.7 commit 1",
+      "claim": "The new hook refuses every commit and merge in a store repo when 'hippo --json check' exits 3, whatever paths the commit touches. Unchanged plan text still lets the store be cut over while check exits 3: KR-A3.3 accepts 'hippo check exits 0 or lists only problems also in the P1.4 evidence', and A3.7 commit 1 runs A3.3 steps 2-4, which only run 'hippo check' and do not require exit 0. Section 3.3 also still describes hippo-problems as a working state that session-start reports 'until check exits 0'. Together, a cutover with known import problems locks every committer out of the repo from commit 2 on, including commits for unrelated code. The only ways out are --no-verify or emergency hippo repairs, and the plan defines neither as part of the cutover.",
+      "evidence": "Diff A3.4 step 9: 'Otherwise every commit and merge is checked, whatever paths it touches (C2). Hippo available: hippo --json check (exit 3: offending file passed through, refuse)'. Unchanged KR-A3.3: 'hippo check exits 0 or lists only problems also in the P1.4 evidence'. Unchanged section 3.3 row hippo-problems: 'session-start repeats them until check exits 0'.",
+      "evidence_reference": "Plan section 2 KR-A3.3; section 3.3 state table row hippo-problems; A3.4 step 9 (diff hunk @@ -418,23 +426,28 @@); A3.7 commit 1",
+      "repair": "Add a cutover precondition to A3.7 commit 1: 'hippo check' exits 0 on the imported store before the store commit, and every problem the P1.4 evidence tolerates is fixed with hippo commands or kept out of the import. Tighten KR-A3.3 for the real cutover to require exit 0 (the tolerance applies to the A3.3 rehearsal only). In section 3.3, state that hippo-problems blocks all commits until repaired. Name the repair path: hippo resolve/relink/doctor in the worktree, then a commit, which passes because the check runs on the repaired tree. Add a hippo-git-hook test for that path.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b52eb01519fc39414014556053a69fe08ca0e8a447cc2e9bbce349fff44ee9a9"
+    },
+    {
+      "rubric_id": "R23",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "decision-ledger.js step 6 (A3.4) x project-record.js decision new hippo mode (A3.1) x dev-flow W20 / rule C",
+      "claim": "The g2 double-filing blocker is resolved only in files mode. In hippo mode, step 6 files the ledger row with key sha256(ledger row id)[0:16]. A model call to 'project-record.js decision new' from dev-flow gets a fresh random key, because the A3.1 interface has no ledger-row input from which to derive the same key. The diff claims 'so a repeat or dev-flow's own call is a no-op', and the acceptance case 'hippo mode plus dev-flow's call one decision record' cannot pass with the specified mechanism. Deduplication rests entirely on the model obeying the W20 wording, while rule C still requires the 'project-record.js decision new' string in dev-flow/SKILL.md, so the model sees the command.",
+      "evidence": "Diff A3.4 step 6: 'then project-record.js decision new --key <sha256(ledger row id)[0:16]> (row id in the body), so a repeat or dev-flow's own call is a no-op'. A3.1 step 2: 'decision new --title <t> --rationale-file <f>|- [--area <a>] [--relates <id>]... [--decides <id>]...' has no ledger-row flag. A3.1 step contract: otherwise 'a fresh key printed at once'. Diff acceptance: 'hippo mode plus dev-flow's call one decision record'.",
+      "evidence_reference": "A3.4 step 6 and A3.4 acceptance (diff hunks @@ -406,8 +412,10 @@ and @@ -418,23 +426,28 @@); A3.1 step 2 decision new; section 3.1 W20",
+      "repair": "Add '--ledger-row <id>' to 'project-record.js decision new'. When it is given, the root key is sha256(id)[0:16], the same derivation step 6 uses. dev-flow text (W20) must pass --ledger-row whenever it files a decision that also has a ledger row. Make step 6 call through the same flag. Reword the acceptance as: ledger append then 'decision new --ledger-row <same id>', in either order, yields one record, red-checked by removing the key derivation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "44f4c6c40982e67ecdb5091157c9eff547cdb590ea26f7d9a201c021f0ce99ef"
+    },
+    {
+      "rubric_id": "R23",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "check-backlog-entries.js backlog_frozen per-commit first-parent base (A3.4 step 1) x A3.7 old-plugin protection",
+      "claim": "The new diff base (each commit against its first parent, checked only when that parent's tree has repo.toml) misses frozen-file edits from pre-cutover branches. A lane created before the cutover edits the backlog with an old plugin, merges develop in (the merge commit's first parent is the lane tip, which has no repo.toml), and is fast-forwarded into develop. Pre-push then sees only commits whose first parents lack repo.toml, so backlog_frozen never fires. --reconcile catches only ids that are new and unimported. A row edited, replied or deleted (files-mode 'done' deletes rows) passes silently, which splits the truth. This contradicts unchanged A3.7 text: 'backlog_frozen at pre-push catches file edits'.",
+      "evidence": "Diff A3.4 step 1: 'each commit (... against its first parent) whose parent tree has .hippo/repo.toml and that changes or adds the backlog file, a sidecar, an ADR or a handoff file'. Unchanged A3.7: 'until then session-start warns (A3.4 step 8) and backlog_frozen at pre-push catches file edits'. A3.4 step 1: --reconcile only checks that each BL-/ADR- id has a record.",
+      "evidence_reference": "A3.4 step 1 (diff hunk @@ -393,9 +397,11 @@); A3.7 'Old plugins' paragraph",
+      "repair": "Compare frozen files to their snapshot at the freeze commit instead of the parent. For every pushed commit whose own tree has .hippo/repo.toml, the backlog file, sidecars, ADR and handoff files must be byte-equal to their content at the commit that introduced repo.toml (the 'frozen at <commit>' notice names it). The store commit itself and commits deleting repo.toml stay exempt. Add a negative control: a pre-cutover lane edits a row, merges develop, and is fast-forwarded, giving backlog_frozen.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b7b8b19b3e7eef581c17ca8f983fe2954bb7f3a38dc62fbd6091f86f7ed2970f"
+    },
+    {
+      "rubric_id": "R23",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/hippo-git-hook.sh 'No repo.toml: exit 0' x A3.7 rollback step 2",
+      "claim": "The fail-closed hook does not say whether its repo.toml test reads HEAD, the index or the worktree. The rollback revert deletes repo.toml in the same commit, and rollback is the likely response when hippo is broken or missing. If the test reads HEAD, the revert commit is refused, because hippo is missing or check exits 3, and rollback needs --no-verify. backlog_frozen got an explicit repo.toml-deletion exemption; the git hook got none.",
+      "evidence": "Diff A3.4 step 9: 'No repo.toml: exit 0. Otherwise every commit and merge is checked ... Hippo missing: pre-commit and pre-merge-commit exit 1'. A3.7 rollback: '(2) git revert -m 1 <merge>'. A3.4 step 1: 'a commit deleting repo.toml (rollback) is exempt' (backlog_frozen only).",
+      "evidence_reference": "A3.4 step 9; A3.7 Rollback paragraph",
+      "repair": "Specify that hippo-git-hook.sh tests for repo.toml in the index (staged tree) for pre-commit and in the merge result for pre-merge-commit, so a commit deleting repo.toml passes. Add a hippo-git-hook test: hippo hidden, the revert of a store merge commits without --no-verify.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f838d6cb3f861254c376e2e3a8ebad8fd87a9a2d67888a240a27dfaf141881d1"
+    },
+    {
+      "rubric_id": "R23",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "A3.7 P1.5 precondition (added after receipt) x A3.7 Windows paragraph x fail-closed git hook",
+      "claim": "Two parts added in the diff contradict each other. The new precondition says every committing account, native Windows included, has hippo, and 'one host short = no cutover'. The Windows paragraph still expects a host whose native run is open to land in spool 'and commits there are refused'. The per-host evidence is only 'hippo --version', which a cross-built hippo.exe can pass while 'hippo check' or the hooks fail. Since every commit now runs hippo check, such a host can no longer commit at all. The section 4 dependency graph also omits P1.5 from A3.7's inputs.",
+      "evidence": "Diff A3.7: 'hippo P1.5 ships the binary to every account that commits in this repo, native Windows included; hippo --version transcript per host ... One host short = no cutover.' and 'while hippo's native run is open it shows spool and the warning, not silence (and commits there are refused)'. Section 4 graph: 'A5 verdict + hippo P1.3 (KR2) + hippo init + relayout 3.0.0 dev/release split -> A3.7'.",
+      "evidence_reference": "A3.7 precondition and Windows paragraphs (diff hunk @@ -519,8 +533,10 @@); section 4 phase graph; section 0 dependency table P1.5 row",
+      "repair": "Make the per-host evidence 'hippo --version' plus 'hippo -C <scratch clone> check' plus one commit through the chained hooks in a scratch clone. State that a host whose native hippo run fails is not a committing host, or that the cutover waits for it. Add P1.5 to A3.7's inputs in the section 4 graph.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "25c57fa8e5c76aeb21145dc0c31cca00be074ffdac834a3f80c55536d4b4ca27"
+    },
+    {
+      "rubric_id": "R19",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "C8 commit split x A3.4 hook inventory check",
+      "claim": "C8 now moves the scripts- and hook-inventory rows out of the mechanism commit. The A3.4 mechanism commit adds hooks/hippo-edit-guard.js and the hooks.json entry. If check-hook-inventory.js or sync-version.js --hook-count runs in the commit-time gates, the mechanism commit fails its own gate until the wiring commit lands, which pushes implementers toward --no-verify or merged commits.",
+      "evidence": "Diff C8: 'mechanism (scripts, hooks, tests only) and wiring/guidance (scripts- and hook-inventory rows, ...)'. A3.4 acceptance: 'Hook inventory and counts updated (scripts/check-hook-inventory.js, sync-version.js --hook-count)'.",
+      "evidence_reference": "Section 2.5 C8; A3.4 acceptance and Verify",
+      "repair": "State which commit carries hooks.json registration and the hook count. Either land the hooks.json entry with the inventory row in the wiring commit, so the mechanism commit adds an unregistered script only, or confirm check-hook-inventory.js is not a per-commit gate.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f3bfef0e257c982a6edcf25c55abce84c781813c720a2c2a5683ccd787144113"
+    },
+    {
+      "rubric_id": "R22",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "C6 git env scrub (hooks/tests/lib/hippo-sandbox.sh)",
+      "claim": "The scrub list omits command-line config that git passes through the environment: GIT_CONFIG_PARAMETERS, and GIT_CONFIG_COUNT with GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n. A suite started under 'git -c core.hooksPath=...' or from a hook launched that way inherits these, and they override the sandbox gitconfig in temp repos. The rev-parse pre-flight does not detect config overrides.",
+      "evidence": "Diff C6 unsets GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_COMMON_DIR, GIT_OBJECT_DIRECTORY, GIT_ALTERNATE_OBJECT_DIRECTORIES, GIT_PREFIX and sets GIT_CONFIG_NOSYSTEM, GIT_CONFIG_GLOBAL, XDG_CONFIG_HOME; there is no mention of GIT_CONFIG_PARAMETERS or GIT_CONFIG_COUNT.",
+      "evidence_reference": "Section 2.5 C6 (diff hunk @@ -94,14 +95,14 @@)",
+      "repair": "Add GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT and GIT_CONFIG_KEY_*/GIT_CONFIG_VALUE_* to the unset list. Add a sandbox self-test that runs under 'git -c core.hooksPath=/nonexistent' and asserts the temp repo does not see it.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cfee514ccc0850fe1be2afbd227246a77e922c8761473586def5174b554aa25b"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "f838d6cb3f861254c376e2e3a8ebad8fd87a9a2d67888a240a27dfaf141881d1",
+      "rubric_id": "R23",
+      "affected_surface": "scripts/hippo-git-hook.sh 'No repo.toml: exit 0' x A3.7 rollback step 2",
+      "claim": "The fail-closed hook does not say whether its repo.toml test reads HEAD, the index or the worktree. The rollback revert deletes repo.toml in the same commit, and rollback is the likely response when hippo is broken or missing. If the test reads HEAD, the revert commit is refused, because hippo is missing or check exits 3, and rollback needs --no-verify. backlog_frozen got an explicit repo.toml-deletion exemption; the git hook got none.",
+      "evidence_reference": "A3.4 step 9; A3.7 Rollback paragraph",
+      "disposition": null
+    },
+    {
+      "fingerprint": "25c57fa8e5c76aeb21145dc0c31cca00be074ffdac834a3f80c55536d4b4ca27",
+      "rubric_id": "R23",
+      "affected_surface": "A3.7 P1.5 precondition (added after receipt) x A3.7 Windows paragraph x fail-closed git hook",
+      "claim": "Two parts added in the diff contradict each other. The new precondition says every committing account, native Windows included, has hippo, and 'one host short = no cutover'. The Windows paragraph still expects a host whose native run is open to land in spool 'and commits there are refused'. The per-host evidence is only 'hippo --version', which a cross-built hippo.exe can pass while 'hippo check' or the hooks fail. Since every commit now runs hippo check, such a host can no longer commit at all. The section 4 dependency graph also omits P1.5 from A3.7's inputs.",
+      "evidence_reference": "A3.7 precondition and Windows paragraphs (diff hunk @@ -519,8 +533,10 @@); section 4 phase graph; section 0 dependency table P1.5 row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "f3bfef0e257c982a6edcf25c55abce84c781813c720a2c2a5683ccd787144113",
+      "rubric_id": "R19",
+      "affected_surface": "C8 commit split x A3.4 hook inventory check",
+      "claim": "C8 now moves the scripts- and hook-inventory rows out of the mechanism commit. The A3.4 mechanism commit adds hooks/hippo-edit-guard.js and the hooks.json entry. If check-hook-inventory.js or sync-version.js --hook-count runs in the commit-time gates, the mechanism commit fails its own gate until the wiring commit lands, which pushes implementers toward --no-verify or merged commits.",
+      "evidence_reference": "Section 2.5 C8; A3.4 acceptance and Verify",
+      "disposition": null
+    },
+    {
+      "fingerprint": "cfee514ccc0850fe1be2afbd227246a77e922c8761473586def5174b554aa25b",
+      "rubric_id": "R22",
+      "affected_surface": "C6 git env scrub (hooks/tests/lib/hippo-sandbox.sh)",
+      "claim": "The scrub list omits command-line config that git passes through the environment: GIT_CONFIG_PARAMETERS, and GIT_CONFIG_COUNT with GIT_CONFIG_KEY_n/GIT_CONFIG_VALUE_n. A suite started under 'git -c core.hooksPath=...' or from a hook launched that way inherits these, and they override the sandbox gitconfig in temp repos. The rev-parse pre-flight does not detect config overrides.",
+      "evidence_reference": "Section 2.5 C6 (diff hunk @@ -94,14 +95,14 @@)",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-11-02T13:54:35.522Z"
+}

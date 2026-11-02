@@ -1,0 +1,42 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "autopilot-oc-a3-hippo-writers-closure",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "22d6c331f1cbb3f50f1f24791978018e9a74fc20f281a11d2ddc79477c95a637",
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: the range diff contradicted the store-commit exemption. Base tree is now the remote sha / merge-base only when it already has repo.toml, else the store-introducing commit, so the store commit's notices are outside the diff; positive acceptance case: cutover branch and post-cutover develop push against pre-cutover origin/develop pass without --no-verify."
+  },
+  {
+   "fingerprint": "a5507a0374a4d0ef21e46ba83cab4c1922cee727911fb61ad0a36f3a0c3d8694",
+   "disposition": "accepted_blocker",
+   "rationale": "Same fix as 22d6c331f1."
+  },
+  {
+   "fingerprint": "691c042ec2d0e3bd643cfce8e9e8c2e17d497661af9f143da4c35e8d92b9ed9b",
+   "disposition": "accepted_blocker",
+   "rationale": "Same fix as 22d6c331f1; the A3.4 acceptance case for the store commit can now be green."
+  },
+  {
+   "fingerprint": "a6af4d6542dfcc4a6ccc58f566ec74813330fb78cd0fbe7c7bee1564b052189f",
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: post-merge/post-rewrite no longer exec; they run hippo hook <name> and keep its result: exit 3 is printed and left to hippo-problems (spec 11.5, no lockout); the marker is written only when hippo is missing or could not check, and is cleared once a check runs (exit 0 or 3). Verified hippo P1.2 guard.rs ships all four hook names; acceptance adds the fast-forward and hidden-hippo cases."
+  },
+  {
+   "fingerprint": "1f51075562b24508ac02731c7efd787cb4103c029d16e5387d55cb9a3d8bec14",
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: files-mode decision new --ledger-row <id> is now a no-op (the row is the decision); acceptance asserts one ledger row after the append plus dev-flow's call."
+  },
+  {
+   "fingerprint": "8038df505376d55c0500dfb5ab8fc543262cdc72a02af70caa1bc7e4c6a3f893",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: file map row and A3.1 step 5 now put inventory rows in the mechanism commit, matching C8."
+  },
+  {
+   "fingerprint": "d08872d565681d6814f52f3d3a034d0f4dfb5e2f5b9bec0d9f91e2a1f2c90de2",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: section 4 graph names the native Windows run P1.5b; review-log wording points to the full P1.5 transcript."
+  }
+ ]
+}

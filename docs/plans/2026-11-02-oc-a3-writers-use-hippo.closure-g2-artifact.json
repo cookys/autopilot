@@ -1,0 +1,342 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "oc-a3-closure",
+  "logical_plan_id": "autopilot-oc-a3-hippo-writers-closure",
+  "session_id": "506f335d-8848-4ee1-9d8e-9d1c7caefe6c",
+  "session_key": "6541ed79490aa964c30bb2e7078f5f5718a92a3ce1048cba05eec9bfdba6ccf1",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "39d9a8ba1d07e0c97671ed039bcce3007452d49671827cee882c24902ca54293",
+  "manifest_sha256": "6e8e51aff1f1b2bab603213453299313aaeb3d4a291aebe71c8af7e37e3c5d60",
+  "plan_sha256": "e417bad8cf0163278b8a9d83de46f57235ddb277df98bd393a916be7e98ef2a8",
+  "growth_ratio": {
+    "numerator": 64166,
+    "denominator": 62483
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "49abb49f63589477303a382db9c5340d9a88f2d7bed74aadf75680773ed0d517"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "98f1899186c01cf3d19ec53191d15dc743cd240776646beb94520451c8c9d73e",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-UExhqK/stdout",
+          "digest": "98f1899186c01cf3d19ec53191d15dc743cd240776646beb94520451c8c9d73e"
+        },
+        "receipt_digest": "2da109f6cd75aae0afa905f33038ca831132704d4d4c6ab991a2e09108c4b6fb"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-argon-high",
+          "operation": "plan-review",
+          "request_digest": "bb0a78034525cdcce705e88b5e3193e083de8e037801687a390817b14403366c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9289bb2f6a4d689e766fb6089e298edf6a45137bccedb26e3efedf79ee779235",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-sGqpca",
+          "digest": "9289bb2f6a4d689e766fb6089e298edf6a45137bccedb26e3efedf79ee779235"
+        },
+        "receipt_digest": "cec81569d9b1b848cb5580302c56906dd063469b365a24915ba20ecf529dd68e"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-opus-5-5",
+          "operation": "plan-review",
+          "request_digest": "204a2592c41d8aaec2a6880446d8116306229e3d23526797b6bd8c88fd20bd38"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "9498ba018320fcab45c1879e9b189fcadaa7f16452f96fcb710cd156c0b9a400",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-ldq5UJ",
+          "digest": "9498ba018320fcab45c1879e9b189fcadaa7f16452f96fcb710cd156c0b9a400"
+        },
+        "receipt_digest": "ced9d2a028435216f4af7ef17ef61979be620c94f034dd466aea815befe36e3a"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "family": "google",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R23",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "A3.4 step 1 backlog_frozen aggregate pre-push check and A3.7 store commit",
+      "claim": "The accepted generation-2 cutover blocker remains unresolved: the aggregate pre-push check rejects the frozen notices added by the authorized store commit.",
+      "evidence": "A3.7 commit 1 changes the backlog, ADR and handoff files to add frozen notices. Its parent lacks repo.toml, so the per-commit check permits it. However, A3.4 additionally blocks any frozen-path difference between the local tip and the remote SHA, or the merge base for a new branch, whenever the tip has repo.toml. Pushing the cutover against pre-cutover develop therefore includes those notices in the aggregate difference and fails backlog_frozen despite the per-commit exception.",
+      "evidence_reference": "Closure context: accepted blocking finding check-backlog-entries.js backlog_frozen versus A3.7 cutover commit order; current plan A3.4 step 1 aggregate range check and A3.7 commit 1.",
+      "repair": "Define an adoption-aware aggregate baseline. When the range starts without a store, permit the specified notices in the first store commit and compare subsequent frozen-path changes against that commit, while retaining detection of edits arriving from pre-cutover lanes. Add red-before-green acceptance cases proving both the initial cutover push succeeds and a pre-cutover lane carrying a backlog edit is rejected.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "22d6c331f1cbb3f50f1f24791978018e9a74fc20f281a11d2ddc79477c95a637"
+    },
+    {
+      "rubric_id": "R23",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Section 4 A3.4 step 1 (check-backlog-entries.js backlog_frozen pre-push whole-range diff) x Section 4 A3.7 step 1 (store cutover commit)",
+      "claim": "The new whole-range pre-push diff in A3.4 step 1 compares the local tip against '<remote sha>' (or 'git merge-base origin/develop <tip>' for a new branch) whenever the local tip has '.hippo/repo.toml', without requiring that the diff base already be at or after the store-introducing commit. Because A3.7 commit 1 adds both '.hippo/repo.toml' and the frozen-notice lines to the backlog, ADR, and handoff files while 'origin/develop' (the pre-cutover remote base) lacks them, pushing the A3.7 cutover branch (or pushing 'develop' at cutover, or pushing an existing pre-cutover remote branch that cleanly merges post-cutover 'develop') still fails 'backlog_frozen' at pre-push, leaving the generation-2 cutover blocker unresolved and contradicting A3.4 step 1's per-commit exemption and A3.7 step 1.",
+      "evidence": "A3.4 step 1 first exempts the store-creating commit in the per-commit check ('each commit ... whose parent tree has .hippo/repo.toml and that changes or adds the backlog file, a sidecar, an ADR or a handoff file') and A3.7 step 1 relies on this ('commits .hippo/, hippo's guard files and the frozen notices ... its parent has no repo.toml, so backlog_frozen passes'). However, the next sentence added in A3.4 step 1 states: 'Pre-push additionally diffs the frozen paths over the whole range whenever the local tip has repo.toml: tree of the tip versus tree of <remote sha> (new branch: git merge-base origin/develop <tip>); any difference blocks'. When pushing the cutover branch (or pushing 'develop' after merging cutover), the local tip has '.hippo/repo.toml' and the frozen notices from A3.7 commit 1, whereas '<remote sha>' and 'git merge-base origin/develop <tip>' point to the pre-cutover tree without the frozen notices, so the whole-range tree diff sees every frozen-notice edit and blocks the push. Likewise, any pre-cutover branch already pushed to the remote ('<remote sha>' before cutover) that later merges post-cutover 'develop' without touching frozen files has '<remote sha>' without notices and '<tip>' with notices, and is also blocked.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a3-writers-use-hippo.md:A3.4 step 1, A3.4 Acceptance, A3.7 step 1",
+      "repair": "In A3.4 step 1, anchor the whole-range frozen-path diff base to the store boundary: when the local tip has '.hippo/repo.toml', compare the frozen paths in the tree of '<tip>' against the tree of '<remote sha>' (or 'git merge-base origin/develop <tip>' for a new branch) if that base tree already contains '.hippo/repo.toml', and otherwise against the tree of the commit in '<tip>'s ancestry that introduced '.hippo/repo.toml' (A3.7 commit 1). This preserves the red-check that blocks a pre-cutover lane carrying frozen-file edits across a merge of post-cutover 'develop' (since '<tip>' then differs from the store-introducing commit on those paths) while allowing the A3.7 cutover push and clean pre-cutover remote branches that merge 'develop' to pass.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "argon_deep",
+          "runner": "agy",
+          "model": "gemini-4-argon-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a5507a0374a4d0ef21e46ba83cab4c1922cee727911fb61ad0a36f3a0c3d8694"
+    },
+    {
+      "rubric_id": "R23",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "A3.4 step 1 backlog_frozen pre-push whole-range diff x A3.7 commit 1 (store commit carrying frozen notices)",
+      "claim": "The fold for the g2 backlog_frozen blocker added two rules that contradict each other. The per-commit rule exempts the store commit because its parent has no repo.toml. The later whole-range pre-push diff blocks on any frozen-path difference between the tip tree and the remote or merge-base tree whenever the tip has repo.toml. The cutover branch and the first develop push after the cutover merge both carry the notice lines in the frozen files, so the range diff blocks them. The g2 blocker (the cutover fails its own gate and needs --no-verify) is therefore not resolved, and the A3.4 acceptance case 'the store commit carrying the notices ... pass' cannot be green.",
+      "evidence": "A3.4 step 1: 'Pre-push additionally diffs the frozen paths over the whole range whenever the local tip has repo.toml: tree of the tip versus tree of <remote sha> (new branch: git merge-base origin/develop <tip>); any difference blocks'. A3.7 commit 1 adds 'one line atop the backlog file, each ADR and handoff file'. A3.7 commit 2 wires pre-push with backlog_frozen, so the cutover branch push runs it. For that new branch, the merge-base is pre-cutover develop, so the notice lines differ.",
+      "evidence_reference": "Plan A3.4 step 1 (backlog_frozen, range diff sentence); A3.7 commits 1-2; A3.4 acceptance negative controls; closure-context g2 blocker 'check-backlog-entries.js backlog_frozen x A3.7 cutover commit order'",
+      "repair": "Define the range-diff base as the tree of the first commit in the range whose own tree has repo.toml (the store commit) when the range contains it, else the remote or merge-base tree. Equivalently, exempt the frozen-path changes introduced by a commit whose parent lacks repo.toml. Add a negative control: pushing the cutover branch as a new branch, and pushing develop after the cutover merge, both pass. Keep the existing red case (a pre-cutover lane edit carried in by a merge is blocked).",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "691c042ec2d0e3bd643cfce8e9e8c2e17d497661af9f143da4c35e8d92b9ed9b"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "A3.4 step 9 scripts/hippo-git-hook.sh (post-merge/post-rewrite with hippo present; marker clearing) x section 3.3 hippo-problems state",
+      "claim": "The rewritten step 9 has two internal contradictions. (1) 'Hippo available: exec hippo hook <name>' replaces the shell, yet post-merge and post-rewrite must 'write ... hippo-unchecked ... whenever they cannot check or the check fails'. After exec, the script cannot write the marker on a failed check. With hippo present, a fast-forward or rebase that brings in a problem therefore leaves no marker. Because pre-commit only refuses problems the commit introduces (P(staged) minus P(HEAD)), and the problem is already in HEAD, no later commit ever refuses it. The after-merge check reduces to an ignored exit code. It is also not stated that hippo P1.2 provides 'hippo hook post-rewrite' or 'pre-merge-commit'. (2) The marker is cleared only when a full 'hippo check' exits 0. In a store already in hippo-problems, a marker written on a hippo-less host is never cleared, so every commit in that worktree is refused. This contradicts the same step's statement that a hippo-problems store 'keeps accepting commits that add no problem'.",
+      "evidence": "A3.4 step 9: 'Hippo available: exec hippo hook <name> (exit code kept), which refuses only problems the commit introduces (hippo spec 11.5: New = P(staged) \\ P(HEAD)), so a store in hippo-problems keeps accepting commits that add no problem'; 'post-merge and post-rewrite ... write <git dir>/autopilot/hippo-unchecked ... whenever they cannot check or the check fails'; 'the next pre-commit in that worktree runs hippo check and clears it on exit 0, and every commit there is refused while it exists'. Acceptance tests the marker only with 'hippo hidden'.",
+      "evidence_reference": "Plan A3.4 step 9 and its acceptance list; section 3.3 hippo-problems row; KR-A3.4; C2",
+      "repair": "For post-merge and post-rewrite, do not exec: run hippo's check, compare against the pre-merge or pre-rewrite tree (ORIG_HEAD), and write the marker when the merge or rewrite introduced a problem or hippo could not run. Clear the marker when the differential check against the marker's recorded base shows no introduced problem, not when the full check exits 0. Name 'hippo hook post-rewrite' and 'pre-merge-commit' as P1.4 inputs if P1.2 lacks them. Add hippo-present cases: an ff merge or rebase introducing a corrupted record writes the marker and blocks the next commit; a hippo-problems store with a stale marker accepts a problem-free commit after a clean differential check.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a6af4d6542dfcc4a6ccc58f566ec74813330fb78cd0fbe7c7bee1564b052189f"
+    },
+    {
+      "rubric_id": "R23",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "W20 dev-flow text (rule C) x A3.1 files-mode matrix 'decision new' x A3.4 step 6",
+      "claim": "The g2 dual-writer blocker is resolved for hippo mode, where the ledger-row key makes the second call a no-op, but not for files mode. W20 now tells dev-flow to call 'decision new --ledger-row <id>' in either store state (C3: both states write through project-record.js). In files mode, 'decision new' is defined as 'decision-ledger.js append --kind decision --source project-record', which appends a second ledger row for a decision the ledger already holds. Each one-way owner-proxy decision is then double-counted in the A1 telemetry source. The acceptance case 'files mode one ledger row' tests only the bare append, not append plus dev-flow's call, so the duplicate goes undetected.",
+      "evidence": "W20: 'ledger unchanged (A1 source) and the single owner of one-way decisions (A3.4 step 6); dev-flow says so and names decision new --ledger-row <id> (rule C)'. A3.1 matrix: 'decision new ... decision-ledger entry only (decision-ledger.js append --kind decision --source project-record ...)'. A3.4 step 6 skips the auto-call only for record_store files, not dev-flow's explicit call. Acceptance: 'files mode one ledger row, no recursion, hippo mode plus dev-flow's call one decision record'.",
+      "evidence_reference": "Plan section 3.1 W20; A3.1 step 3 files-mode matrix; A3.4 step 6 and acceptance; closure-context g2 blocker 'decision-ledger.js step 6 x project-record.js decision new files mode x dev-flow W20 rule C'",
+      "repair": "In files mode, make 'decision new --ledger-row <id>' a no-op with an info line when that ledger row exists, and append only when no --ledger-row is given. Alternatively, have W20 tell dev-flow not to call decision new for ledger-owned one-way decisions and drop that W20 requirement from rule C. Extend the acceptance case to files mode plus dev-flow's call yields exactly one ledger row, red-checked.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1f51075562b24508ac02731c7efd787cb4103c029d16e5387d55cb9a3d8bec14"
+    },
+    {
+      "rubric_id": "R19",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "C8 commit split vs section 3 file map wiring row and A3.1 step 5",
+      "claim": "The g2 non-blocking contradiction about where inventory rows land was folded in the opposite direction and still contradicts other text. C8 now puts 'the scripts-/hook-inventory rows and counts its own gates check' in the mechanism commit. The section 3 file map says docs/scripts-inventory.md is 'always in the wiring commit (C8)', and A3.1 step 5 puts the 'inventory row' in the wiring commit.",
+      "evidence": "C8: 'mechanism (scripts, hooks, tests, and the scripts-/hook-inventory rows and counts its own gates check)'. Section 3 row: 'docs/scripts-inventory.md, CLAUDE.md grouped list, ... | wiring ..., always in the wiring commit (C8)'. A3.1 step 5: 'Wiring (inventory row, grouped list, reference ...) in the wiring commit'.",
+      "evidence_reference": "Plan section 2.5 C8; section 3 file map; A3.1 step 5",
+      "repair": "Align the section 3 row and A3.1 step 5 with C8: inventory rows and counts checked by the phase's own gates go in the mechanism commit; the CLAUDE.md grouped list and references go in wiring.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8038df505376d55c0500dfb5ab8fc543262cdc72a02af70caa1bc7e4c6a3f893"
+    },
+    {
+      "rubric_id": "R23",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "A3.7 'Hippo on every committing host' precondition; section 4 dependency graph; section 7 P1.x inputs",
+      "claim": "The post-receipt amendment makes native Windows hippo a hard cutover precondition ('a host whose native run is open is a host short'). However, the hippo 'native Windows run' item appears only as an open row. It is not named as a dependency in the section 4 graph, which lists only P1.5, nor in the section 7 P1.x input list. The review log also records the precondition as a '--version transcript', while A3.7 says --version alone is insufficient.",
+      "evidence": "Section 4: '... + hippo P1.5 (every committing account) + relayout ... -> A3.7'. Hippo table: 'native Windows run | open in hippo'. A3.7: 'a host whose native run is open is a host short (no cutover)'. Review log: 'with a per-host hippo --version transcript'.",
+      "evidence_reference": "Plan section 0 hippo table; section 4; A3.7 Windows and precondition paragraphs; Review log last entry",
+      "repair": "No current change; follow-up only. Optionally, name the hippo native Windows run as an explicit A3.7 dependency in section 4 and section 7, and align the review-log wording with the A3.7 per-host evidence list.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d08872d565681d6814f52f3d3a034d0f4dfb5e2f5b9bec0d9f91e2a1f2c90de2"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "8038df505376d55c0500dfb5ab8fc543262cdc72a02af70caa1bc7e4c6a3f893",
+      "rubric_id": "R19",
+      "affected_surface": "C8 commit split vs section 3 file map wiring row and A3.1 step 5",
+      "claim": "The g2 non-blocking contradiction about where inventory rows land was folded in the opposite direction and still contradicts other text. C8 now puts 'the scripts-/hook-inventory rows and counts its own gates check' in the mechanism commit. The section 3 file map says docs/scripts-inventory.md is 'always in the wiring commit (C8)', and A3.1 step 5 puts the 'inventory row' in the wiring commit.",
+      "evidence_reference": "Plan section 2.5 C8; section 3 file map; A3.1 step 5",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d08872d565681d6814f52f3d3a034d0f4dfb5e2f5b9bec0d9f91e2a1f2c90de2",
+      "rubric_id": "R23",
+      "affected_surface": "A3.7 'Hippo on every committing host' precondition; section 4 dependency graph; section 7 P1.x inputs",
+      "claim": "The post-receipt amendment makes native Windows hippo a hard cutover precondition ('a host whose native run is open is a host short'). However, the hippo 'native Windows run' item appears only as an open row. It is not named as a dependency in the section 4 graph, which lists only P1.5, nor in the section 7 P1.x input list. The review log also records the precondition as a '--version transcript', while A3.7 says --version alone is insufficient.",
+      "evidence_reference": "Plan section 0 hippo table; section 4; A3.7 Windows and precondition paragraphs; Review log last entry",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-11-02T14:03:32.037Z"
+}

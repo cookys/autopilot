@@ -1,0 +1,47 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "autopilot-oc-a3-hippo-writers-closure",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "52f6bcb7f640eaaccd5523a8a0333b092a1f55bfdd1c008fd966216f6f674eaa",
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: C6 now also unsets GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT and every GIT_CONFIG_KEY_n/VALUE_n, and the pre-flight asserts core.hooksPath is empty or inside the temp tree, red-checked under git -c core.hooksPath=<outside>."
+  },
+  {
+   "fingerprint": "b52eb01519fc39414014556053a69fe08ca0e8a447cc2e9bbce349fff44ee9a9",
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: the wrapper ran a full hippo check per commit. A3.4 step 9 now execs hippo hook <name>, which refuses only problems the commit introduces (hippo spec 11.5 New = P(staged) minus P(HEAD)); a store in hippo-problems keeps accepting clean commits; full check exit 3 is reported by session-start. Consistent with KR-A3.3 and the 3.3 state table."
+  },
+  {
+   "fingerprint": "44f4c6c40982e67ecdb5091157c9eff547cdb590ea26f7d9a201c021f0ce99ef",
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: A3.1 decision new gains --ledger-row <id> (key sha256(row id)[0:16], idempotent); step 6 uses it; W20 names decision new --ledger-row; a hippo-mode decision new without --ledger-row whose title matches a ledger-filed decision in the last 24 h exits 2 (zero-choice, loud)."
+  },
+  {
+   "fingerprint": "b7b8b19b3e7eef581c17ca8f983fe2954bb7f3a38dc62fbd6091f86f7ed2970f",
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: pre-push now also diffs frozen paths over the whole range (tip tree vs remote sha or merge-base with origin/develop) when the tip has repo.toml; red-check: pre-cutover lane edit carried in by merge is blocked."
+  },
+  {
+   "fingerprint": "f838d6cb3f861254c376e2e3a8ebad8fd87a9a2d67888a240a27dfaf141881d1",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: the repo.toml test reads the staged index for pre-commit/pre-merge-commit, so a rollback revert deleting it is not checked."
+  },
+  {
+   "fingerprint": "25c57fa8e5c76aeb21145dc0c31cca00be074ffdac834a3f80c55536d4b4ca27",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: Windows paragraph no longer expects a spool host to commit; per-host evidence is the P1.5 transcript (version, sha256, hippo check, hook-refusal run); section 4 graph lists P1.5 as an A3.7 input."
+  },
+  {
+   "fingerprint": "f3bfef0e257c982a6edcf25c55abce84c781813c720a2c2a5683ccd787144113",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: C8 mechanism commit carries the inventory rows and counts its own gates check."
+  },
+  {
+   "fingerprint": "cfee514ccc0850fe1be2afbd227246a77e922c8761473586def5174b554aa25b",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Same fix as 52f6bcb7f6."
+  }
+ ]
+}

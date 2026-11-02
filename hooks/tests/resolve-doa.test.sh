@@ -275,7 +275,7 @@ NOCFG="$TEST_TMP/nocfg-repo"; mkdir -p "$NOCFG"; git -C "$NOCFG" init -q
 OUT="$(cd "$NOCFG" && env -u DOA_CONFIG_OVERRIDE bash "$SCRIPT" --role implementer --tier sonnet --target example-staging 2>&1)"; EXIT=$?
 assert_eq "11" "$EXIT" "(c) no config in the repo: fail closed"
 # (g) malformed table: fail closed, even for a name that parses as staging
-for bad in '| example-prod | prodution |' '| example-prod | production | extra |' '| example prod | production |'; do
+for bad in '| example-prod | prodution |' '| example-prod | production | extra |' '| example prod | production |' '| example-staging | staging | garbage' 'x | example-staging | staging |' '| example-staging | staging |x' '| example-staging | | staging |' '| example-staging | staging' 'example-staging | staging |'; do
   BADREPO="$TEST_TMP/bad-repo"; rm -rf "$BADREPO"; mkdir -p "$BADREPO/.claude"; git -C "$BADREPO" init -q
   printf '## Production Targets\n\n| Target | Class |\n|---|---|\n%s\n| example-staging | staging |\n' "$bad" > "$BADREPO/.claude/doa-config.md"
   OUT="$(cd "$BADREPO" && env -u DOA_CONFIG_OVERRIDE bash "$SCRIPT" --role implementer --tier sonnet --target example-staging 2>&1)"; EXIT=$?

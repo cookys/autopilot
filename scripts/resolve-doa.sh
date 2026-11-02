@@ -135,8 +135,10 @@ classify_target() {
     fence { next }
     /^## / { insec = ($0 ~ /^## Production Targets[ \t]*$/); next }
     !insec { next }
+    /\|/ && !/^[ \t]*\|/ { bad = 1; next }   # a pipe row that does not start with "|"
     /^[ \t]*\|/ {
-      if (NF != 4) { bad = 1; next }
+      # exactly 2 inner cells, and nothing but blanks outside the outer pipes
+      if (NF != 4 || trim($1) != "" || trim($NF) != "") { bad = 1; next }
       name = trim($2); cls = trim($3)
       if (name == "Target" && cls == "Class") next
       if (name ~ /^:?-+:?$/ && cls ~ /^:?-+:?$/) next

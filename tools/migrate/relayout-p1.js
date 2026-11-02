@@ -28,7 +28,7 @@
 //     refs-code / refs-docs: rewrite exact layout-map keys (full file paths) in tracked text files, markdown relative links in
 //     docs; never in sealed (no-rewrite) files, evidence, profiles, platforms mirrors, this tool, or the D9.5 / routing files.
 //     content: merge the two HANDOFF.md (the absorbed file is deleted), create docs/README.md, delete docs/training/README.md, follow the
-//       decide.test.ts card selector (見 docs/plans -> 見 project/plans), keep the stay-behind archive evidence out of check-stage-vocab.
+//       decide.test.ts card selector (見 docs/plans -> 見 project/plans), keep the stay-behind archive evidence out of check-stage-vocab, follow the directory-form paths in the four project config files.
 //     Not in apply: profiles repin, mirror regeneration (sync-all.sh) and the no-rewrite.json path update.
 //
 // Exit: 0 ok, 1 check-f2 failed or the plan found an internal inconsistency, 2 bad input.
@@ -792,6 +792,7 @@ function cmdApply(o) {
       else if (n > 1 || !src.includes('const stayBehind')) throw new InputError(`scripts/check-stage-vocab.js exclude list matched ${n} times (want 1)`);
     }
     log.redacted = redactMasks(root, [P.merge.target]);
+    log.project_config_dirs = followProjectConfig(root);
     log.merged = [P.merge.target, P.merge.absorbed_old]; log.created = ['docs/README.md']; log.deleted = Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete');
   } else {
     Object.assign(log, rewriteRefs(root, P, sealedOld, refMap, phase));
@@ -800,6 +801,23 @@ function cmdApply(o) {
   if (o.log) fs.writeFileSync(path.resolve(o.log), JSON.stringify(log, null, 1) + '\n');
   process.stdout.write(`relayout-p1 apply ${phase}: ${JSON.stringify(Object.fromEntries(Object.entries(log).filter(([, v]) => typeof v !== 'object')))}\n`);
   return 0;
+}
+
+/** This repo's own project configuration names its work-record directories in directory form (docs/plans/, docs/projects/, docs/backlog/),
+ *  which the exact-key rewriter leaves alone. Follow them in the four files that say so; the backlog pointer roots also keep the evidence tree
+ *  that stays under docs/ (D10.3). Each file is rewritten once; a second run finds nothing to change. */
+const PROJECT_CONFIG_FILES = ['.claude/backlog-config.md', '.claude/dev-flow-config.md', '.claude/finish-flow-config.md', '.claude/skills/foreman-landing-pipeline/templates/closeout-brief.md'];
+function followProjectConfig(root) {
+  const changed = [];
+  for (const f of PROJECT_CONFIG_FILES) {
+    const abs = path.join(root, f);
+    if (!fs.existsSync(abs)) continue;
+    const src = fs.readFileSync(abs, 'utf8');
+    let out = src.replace(/docs\/(projects|backlog)\//g, 'project/$1/').replace(/docs\/plans\/(?!evidence\/)/g, 'project/plans/');
+    if (f === '.claude/backlog-config.md' && !out.includes('- docs/plans/evidence/')) out = out.replace('- project/backlog/\n', '- project/backlog/\n- docs/plans/evidence/\n');
+    if (out !== src) { fs.writeFileSync(abs, out); changed.push(f); }
+  }
+  return changed;
 }
 
 // D10.11: leak-guard reads a moved-and-edited file as all-added lines, so the personal-data masks (scripts/redact-personal.js placeholders) are

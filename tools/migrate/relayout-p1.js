@@ -793,6 +793,7 @@ function cmdApply(o) {
     }
     log.redacted = redactMasks(root, [P.merge.target]);
     log.project_config_dirs = followProjectConfig(root);
+    log.backlog_source_trimmed = trimBacklogSource(root);
     log.merged = [P.merge.target, P.merge.absorbed_old]; log.created = ['docs/README.md']; log.deleted = Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete');
   } else {
     Object.assign(log, rewriteRefs(root, P, sealedOld, refMap, phase));
@@ -818,6 +819,20 @@ function followProjectConfig(root) {
     if (out !== src) { fs.writeFileSync(abs, out); changed.push(f); }
   }
   return changed;
+}
+
+/** The rewritten archive path makes the Source field of the t14 gate-batch row 3 bytes longer than the 160 cap (the cap is a block-level gate).
+ *  Drop the word "already" from that one parenthesis (D10.12); nothing else in the row changes. */
+function trimBacklogSource(root) {
+  const f = path.join(root, 'project/backlog/BACKLOG.md');
+  if (!fs.existsSync(f)) return false;
+  const src = fs.readFileSync(f, 'utf8');
+  const from = '2026-07-08-t14-reinject/report.md already corrected)';
+  const n = src.split(from).length - 1;
+  if (n > 1) throw new InputError(`backlog Source trim matched ${n} times (want at most 1)`);
+  if (n === 0) return false;
+  fs.writeFileSync(f, src.replace(from, () => '2026-07-08-t14-reinject/report.md corrected)'));
+  return true;
 }
 
 // D10.11: leak-guard reads a moved-and-edited file as all-added lines, so the personal-data masks (scripts/redact-personal.js placeholders) are

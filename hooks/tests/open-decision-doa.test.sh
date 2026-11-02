@@ -86,4 +86,35 @@ assert_contains "$G_AUTO" "不要開卡" "guard (autonomous): inside the DOA, do
 assert_contains "$G_PLAIN" "--not-authorized" "guard (plain) names --not-authorized"
 assert_not_contains "$G_PLAIN" "不要開卡" "guard (plain) does not say do not open a card"
 assert_not_contains "$G_NONE" "不要開卡" "guard (no marker) does not say do not open a card"
+
+# 9. --target: a production target is refused, never escalated (operator-console A2). Exit 5, no card file, every session mode and boundary.
+PR="$TEST_TMP/prodrepo"; mkdir -p "$PR/.claude"; $GIT -C "$PR" init -q; $GIT -C "$PR" commit -q --allow-empty -m base
+printf '## Production Targets\n\n| Target | Class |\n|---|---|\n| example-prod | production |\n| example-staging | staging |\n' > "$PR/.claude/doa-config.md"
+marker auto2 l3; marker plain2 null
+odt() { # <sid> <args...> in PR
+  local sid="$1"; shift
+  OUT="$(AUTOPILOT_SESSION_ID="$sid" node "$OD" open --cwd "$PR" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" "$@" 2>"$TEST_TMP/err")"; RC=$?
+  ERR="$(cat "$TEST_TMP/err")"
+}
+noscope() { assert_eq "$(command ls "$PR/.git/autopilot/decisions" 2>/dev/null)" "" "$1"; }
+for sid in auto2 plain2; do
+  odt "$sid" --not-authorized irreversible --target example-prod
+  assert_eq "$RC" 6 "(b) $sid: production target, irreversible: refused exit 6"; assert_contains "$ERR" "production_denied" "(b) $sid: refusal says production_denied"; assert_eq "$OUT" "" "(b) $sid: no card id printed"
+  noscope "(b) $sid: production target left no card file"
+done
+odt plain2 --not-authorized scope-expansion --target example-prod; assert_eq "$RC" 6 "(b) a Board boundary does not get a production target a card"
+noscope "(b) Board boundary: no card file"
+odt auto2 --not-authorized irreversible --target not-listed; assert_eq "$RC" 6 "(c) unlisted target: refused exit 6"; assert_contains "$ERR" "target_unlisted" "(c) refusal says target_unlisted"
+noscope "(c) unlisted target: no card file"
+odt auto2 --not-authorized irreversible --target example-prod --doa-tier "a b"; assert_eq "$RC" 6 "(b) resolver failure with --target fails closed"
+noscope "(b) resolver failure: no card file"
+# (d) staging: the existing class decides, nothing else changes
+odt auto2 --not-authorized irreversible --target example-staging; assert_eq "$RC" 0 "(d) staging, irreversible (escalate): exit 0 as without --target"; assert_contains "$OUT" "d-" "(d) staging: card id printed"
+odt auto2 --not-authorized reversible --target example-staging;   assert_eq "$RC" 3 "(d) staging, reversible (inside DOA): exit 3 as without --target"
+# no --target: unchanged
+odt auto2 --not-authorized irreversible; assert_eq "$RC" 0 "no --target: unchanged"
+# $DOA_CONFIG_OVERRIDE cannot relax production for open-decision either
+printf '## Production Targets\n\n| Target | Class |\n|---|---|\n| example-prod | staging |\n' > "$TEST_TMP/ov.md"
+OUT="$(DOA_CONFIG_OVERRIDE="$TEST_TMP/ov.md" AUTOPILOT_SESSION_ID=auto2 node "$OD" open --cwd "$PR" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible --target example-prod 2>"$TEST_TMP/err")"; RC=$?
+assert_eq "$RC" 6 "(f) override file cannot make a production target openable"
 finalize_test

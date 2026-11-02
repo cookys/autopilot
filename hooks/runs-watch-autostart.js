@@ -10,7 +10,8 @@
  *   - Scope (never every git repo on the host): start only when the repo opted in — it has autopilot project
  *     config (`.claude/*-config.md`, what `onboard` writes, e.g. dispatch-config.md; looked up in the work tree
  *     and in the main checkout) OR an unexpired orchestrator (l3-l6) session-mode marker exists for its
- *     project_key OR this session's own unexpired marker (any level) exists OR AUTOPILOT_RUNS_WATCH_AUTOSTART=1
+ *     project_key OR this session's own unexpired marker (any level) exists OR the project holds an open owner card (decision-input.js
+ *     hasOpenDecision: a card nobody can see is a defect) OR AUTOPILOT_RUNS_WATCH_AUTOSTART=1
  *     forces it. =0 disables. Non-git cwd: silent no-op.
  *   - Cost of "not opted in" (mods P1W MARKER): on UserPromptSubmit the opt-in signals are first read WITHOUT
  *     spawning git (walk up from cwd to the nearest `.git`; a linked worktree's `.git` file leads to the main
@@ -35,6 +36,9 @@
  *     payload, so a watcher that idle-exited during a long tool-only stretch (no prompt, no orchestrator marker) comes back on the next
  *     tool call. Same fast path (zero spawn when alive); the full path is throttled to once per 60 s per session
  *     (`<live>/autostart/<sid>.ensure` mtime). Accepted gap: one tool call longer than the idle window leaves no PostToolUse.
+ *   - A live watcher that runs WITHOUT --render (hand-run `status runs --watch` before it rendered by default) is not accepted: it is stopped
+ *     (SIGTERM, bounded wait, the same guards as WATCHVER's reap) and a rendering one is started in its place; one writer at a time stays
+ *     guaranteed by the project lock (the new watcher cannot take it until the old process is gone).
  *   - SessionEnd does NOT stop the watcher (other sessions may share it); idle-exit handles it. Because a plain session holds no
  *     liveness signal during a long tool-only stretch, the watcher may idle-exit there; the next tool call (PostToolUse ensure) restarts it.
  *   - Isolated environment (HOME is not the real home, or CLAUDE_CONFIG_DIR is not the real ~/.claude — see
@@ -147,10 +151,13 @@ function ownMarkerLive(sid) {
   }
 }
 
-function optedIn(cwd, key, root, sid) {
+function optedIn(cwd, scope, root, sid) {
+  const key = scope.project_key;
   if (process.env.AUTOPILOT_RUNS_WATCH_AUTOSTART === '1') return true;
   if (hasProjectConfig(cwd)) return true;
   if (ownMarkerLive(sid)) return true;
+  // An open owner card is an opt-in on its own: a card nobody can see is the failure this guards (BL cardvis). Same read as the pane's.
+  try { if (require(path.join(root, 'src/status/decision-input')).hasOpenDecision({ identity: scope.repo_identity, key })) return true; } catch (_error) { /* unreadable: not a card */ }
   try {
     const rw = require(path.join(root, 'src/status/runs-watch'));
     return rw.unexpiredMarkers(process.env, key, Date.now()).filter(rw.isOrchestratorMarker).length > 0;
@@ -162,6 +169,16 @@ function optedIn(cwd, key, root, sid) {
 function hasConfigFile(dir) {
   try {
     return fs.readdirSync(path.join(dir, '.claude')).some((n) => /-config\.md$/.test(n));
+  } catch (_error) {
+    return false;
+  }
+}
+
+// A cheap "might hold an open card": any `*.json` in <git-common-dir>/autopilot/decisions. A pre-filter only (no parse, no git): the full path
+// below judges the files with decision-input.js before anything starts.
+function hasDecisionFiles(commonDir) {
+  try {
+    return fs.readdirSync(path.join(commonDir, 'autopilot', 'decisions')).some((n) => n.endsWith('.json'));
   } catch (_error) {
     return false;
   }
@@ -179,6 +196,7 @@ function quickOptIn(cwd, sid) {
     try { st = fs.statSync(path.join(dir, '.git')); } catch (_error) { /* not here */ }
     if (st) {
       if (hasConfigFile(dir)) return true;
+      if (st.isDirectory() && hasDecisionFiles(path.join(dir, '.git'))) return true;
       if (st.isFile()) {
         try {
           const m = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(path.join(dir, '.git'), 'utf8'));
@@ -186,6 +204,7 @@ function quickOptIn(cwd, sid) {
           if (gitdir) {
             const common = path.resolve(gitdir, fs.readFileSync(path.join(gitdir, 'commondir'), 'utf8').trim());
             if (path.basename(common) === '.git' && hasConfigFile(path.dirname(common))) return true;
+            if (hasDecisionFiles(common)) return true;
           }
         } catch (_error) { /* submodule / unreadable: top level only */ }
       }
@@ -245,6 +264,10 @@ function inspectWatcher(base, key, root) {
     const own = ownIdentity(root);
     const recordedRoot = typeof w.plugin_root === 'string' && w.plugin_root ? w.plugin_root : null;
     const argvRoot = argvRootOf(argv);
+    // A watcher started without --render (a hand-run `status runs --watch` of an older install) holds the project lock but writes no job
+    // page, so no owner card ever shows. Never accepted as 'current': it is replaced like an old install's (reapStale, then a start with
+    // the render argv). It is judged by its argv alone, the one place a hand-run watcher states it.
+    if (!argv.includes('--render')) return { state: 'stale', pid, argvRoot, recordedRoot, reason: 'no_render' };
     if (recordedRoot !== null) {
       if (recordedRoot === own.root && (w.plugin_version || null) === own.version) return { state: 'current', pid };
     } else if (argvRoot === null || argvRoot === own.root) return { state: 'current', pid }; // legacy writer block: only the argv root can be compared (none named = cannot tell)
@@ -418,7 +441,7 @@ function run(payload) {
   const { scopeFromCwd } = require(path.join(root, 'src/status/project-key'));
   const scope = scopeFromCwd(cwd);
   if (!scope.project_key) return; // not a git repo: nothing to watch
-  if (!optedIn(cwd, scope.project_key, root, sid)) return; // not an autopilot project: never start a watcher for it
+  if (!optedIn(cwd, scope, root, sid)) return; // not an autopilot project: never start a watcher for it
   if (base) writeCache(base, cwd, scope.project_key, scope, topLevel(cwd));
   if (event === 'SessionStart' && sid) {
     try {
@@ -438,7 +461,7 @@ function run(payload) {
     if (w && w.state === 'current' && event === 'PostToolUse') fillEnsureStamp(base, sid, cwd, scope.project_key, w.pid, root);
   }
   if (isolated) return; // see above: never start a watcher on the shared live dir from an isolated environment
-  const { startWatcherDetached, stableRepoRoot } = require(path.join(root, 'src/status/runs-watch'));
+  const { startWatcherDetached } = require(path.join(root, 'src/status/runs-watch'));
   // The previous launch's result (never this run's: the watcher is not waited for). SessionStart / UserPromptSubmit only.
   let report = null;
   if (event !== 'PostToolUse') {
@@ -453,12 +476,7 @@ function run(payload) {
   }
   // The watcher outlives the session: start it in the MAIN checkout, not in the linked worktree the session happens to be in (a removed
   // worktree left it with a dead cwd and failing git calls, BL-0329). Not a standard layout (bare repo): the session's own top level.
-  const opts = { key: scope.project_key, cwd: stableRepoRoot(scope.repo_identity) || topLevel(cwd), env: process.env, render: true };
-  // Optional tuning (tests use it to make the watcher idle-exit in seconds); defaults are the watcher's own.
-  const idle = Number(process.env.AUTOPILOT_RUNS_WATCH_IDLE_EXIT_S);
-  const interval = Number(process.env.AUTOPILOT_RUNS_WATCH_INTERVAL_S);
-  if (Number.isInteger(idle) && idle > 0) opts.idleExit = idle;
-  if (Number.isInteger(interval) && interval > 0) opts.interval = interval;
+  const opts = require(path.join(root, 'src/status/card-visibility')).watcherLaunchOpts({ key: scope.project_key, scope, topLevel: topLevel(cwd), env: process.env });
   const r = startWatcherDetached(opts);
   if (r.status === 'flock_unavailable') {
     process.stderr.write(`${TAG}: watcher not started: flock(1) (util-linux) is not available on PATH\n`);
@@ -477,7 +495,7 @@ function run(payload) {
   return report;
 }
 
-module.exports = { run };
+module.exports = { run, inspectWatcher, reapStale };
 
 if (require.main === module) {
   try {

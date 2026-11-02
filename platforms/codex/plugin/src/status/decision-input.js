@@ -90,4 +90,11 @@ function readDecision({ commonDir, key, identity, nowMs, liveBase }) {
   }
 }
 
-module.exports = { readDecision, decisionFile, sessionGone, STALE_MS };
+// Does this project hold at least one open card (any scope file)? The same read as the pane's data source, so "open" means the same thing
+// to the opt-in rule of hooks/runs-watch-autostart.js, the unbound job page of the watcher and `open-decision.js` (BL cardvis).
+function hasOpenDecision({ identity, key, nowMs = Date.now() }) {
+  const commonDir = typeof identity === 'string' ? (/^git-common-dir:(.+)$/.exec(identity) || [])[1] : null;
+  return readDecision({ commonDir, key, identity, nowMs, liveBase: null }) !== null;
+}
+
+module.exports = { readDecision, hasOpenDecision, decisionFile, sessionGone, STALE_MS };

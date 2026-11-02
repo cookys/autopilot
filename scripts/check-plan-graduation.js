@@ -43,7 +43,9 @@
  *                                 existing destination is left untouched
  *   plan_active_lineage           report-only, non-blocking: the plan is named by
  *                                 `.claude/mission-routing-config.json`'s sources manifest
- *                                 (a live campaign lineage with a frozen source sha) —
+ *                                 (a live campaign lineage with a frozen source sha), or
+ *                                 is sealed (plan_sha256/rubric_sha256) by ANY mission sources
+ *                                 manifest, routed or retired (lib/sealed-docs.js) —
  *                                 implicitly excluded from plan_released_not_archived;
  *                                 moving it would invalidate the frozen sha
  *   peer_row_unanswered           a row that would otherwise be backlog_row_has_plan /
@@ -610,12 +612,33 @@ function trackedReferenceFiles(repoRoot) {
   return out.split('\0').filter(Boolean).filter((f) => !REFERENCE_SCAN_EXCLUDE.has(f));
 }
 
+// Every plan/rubric a mission sources manifest seals (plan_sha256/rubric_sha256) is kept in place,
+// routed or not: a sealed graph is re-validated against those bytes, so archiving the file would make
+// the retired graph unverifiable. The sealed set comes from lib/sealed-docs.js, which resolves each
+// manifest path through the layout registry (so the same rule holds under docs/plans and project/plans).
+function addSealedPlanStems(repoRoot, stems) {
+  let sealed;
+  try {
+    sealed = require('./lib/sealed-docs.js').sealedDocFiles(repoRoot);
+  } catch (e) {
+    if (!e || e.code !== 'MODULE_NOT_FOUND') throw e;
+    return;
+  }
+  for (const rel of sealed) {
+    if (!rel.endsWith('.md')) continue;
+    const base = path.posix.basename(rel).replace(/\.md$/, '');
+    const lastDot = base.lastIndexOf('.');
+    stems.add(lastDot === -1 ? base : base.slice(0, lastDot));
+  }
+}
+
 // .claude/mission-routing-config.json -> its sources_path manifest -> the set of plan
 // stems named by any entry's plan_path/rubric_path. Those stems are an active campaign
 // lineage with a frozen source sha: archiving the plan file would silently invalidate
 // that sha. Always resolved relative to repoRoot (see the --plans-dir limitation above).
-function loadActiveLineageStems(repoRoot) {
+function loadActiveLineageStems(repoRoot, { includeSealed = false } = {}) {
   const stems = new Set();
+  if (includeSealed) addSealedPlanStems(repoRoot, stems);
   const routingPath = path.join(repoRoot, MISSION_ROUTING);
   const routingText = readFileSafe(routingPath);
   if (!routingText) return stems;
@@ -1074,7 +1097,8 @@ function run(opts) {
   const plansDir = opts.plansDir ? path.resolve(opts.plansDir) : path.join(repoRoot, PLANS_DIR);
   const archiveDir = archiveDirFor(repoRoot, plansDir);
   const allowlist = loadAllowlist(opts.allowlist ? path.resolve(opts.allowlist) : null);
-  const activeLineageStems = loadActiveLineageStems(repoRoot);
+  // The scan (and so --fix) keeps every sealed plan in place; an explicit --archive <stem> only refuses the routed lineage.
+  const activeLineageStems = loadActiveLineageStems(repoRoot, { includeSealed: true });
 
   const { text: backlogText, rows } = collectBacklogRows(backlogPath, repoRoot);
   const changelogText = readFileSafe(changelogPath) || '';
@@ -1184,7 +1208,7 @@ function run(opts) {
         kind: 'plan',
         stem,
         path: path.join(PLANS_DIR, basename),
-        detail: 'referenced by ' + MISSION_ROUTING + '\'s sources manifest (active campaign lineage, frozen source sha) — excluded from plan_released_not_archived',
+        detail: 'referenced by ' + MISSION_ROUTING + '\'s sources manifest, or sealed by a mission sources manifest (frozen source sha) — excluded from plan_released_not_archived',
       });
       continue; // active lineage takes priority over released/orphan; never a move candidate
     }

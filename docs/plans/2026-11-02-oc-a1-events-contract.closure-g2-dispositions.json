@@ -1,0 +1,37 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "autopilot-oc-a1-events-closure",
+ "generation": 2,
+ "findings": [
+  {
+   "fingerprint": "f5b5ce22e7324e16a37a9ed56bf31bb2a806a6c3b728d5467d48185b55b6d424",
+   "disposition": "accepted_blocker",
+   "rationale": "Valid regression from the closure-g1 fold. Depth-0 fold at the cap: cursor gains coverage floor f (forward-only); every read uses L = max(t - s, f); next w pruned at max(newT - s, f), so the slack regrows only as newT passes f and never reopens pruned history; red-checks s2/s3 with case cursor-overflow-nodup."
+  },
+  {
+   "fingerprint": "731d9661e0fa66b795d7249164ada315b6d84acae174ed0bcc1f22e66bd80465",
+   "disposition": "accepted_blocker",
+   "rationale": "Same defect as f5b5ce22e7; also e becomes [group ts, greatest id] kept until the group ts falls below L, so an oversized group cannot be re-emitted after t advances (red-check s3)."
+  },
+  {
+   "fingerprint": "a7cd0b93e5f75f9765f20a551a323408d6831f606230a1af80af983b4a1e5174",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: every exit-2 path prints the same error object under --json, described in events.schema.json as a second top-level shape."
+  },
+  {
+   "fingerprint": "7184466a52933927e37f9f4fdc373845b0b5e0151e0047d3fd705e1aa3e94192",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: uncaughtException/unhandledRejection handlers route to the same fallback; stream error events become rejections in jsonl-tail.js."
+  },
+  {
+   "fingerprint": "465609f25a459403e2c3ec8275eb1e9b1725722803eeb23e6d6b43a4973c4573",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: one git cat-file --batch-check process per call for all bases."
+  },
+  {
+   "fingerprint": "bdbe4979ee6a604117bd43f788cb3af0261fe57539ffd7ce95a36ae1d2dade59",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: default decision ledger dropped from the warning list; an absent default ledger or runs dir is state absent with no warning."
+  }
+ ]
+}

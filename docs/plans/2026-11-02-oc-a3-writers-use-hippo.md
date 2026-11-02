@@ -141,7 +141,7 @@ Plan-local constraints (A3; copied verbatim into every A3 dispatch):
 | `scripts/lib/repo-layout.js` | `.hippo/` registered dev-repo-only so the 3.0.0 release mirror excludes it (§8 Q3) | A3.7 |
 | `.claude/record-store.json` (new) | `{ "min_plugin_version": "<A3 version>" }` for `session-start` | A3.7 |
 | backlog file, `docs/adr/*.md`, handoff files | one frozen-notice line; content untouched | A3.7 |
-| `docs/scripts-inventory.md`, CLAUDE.md grouped list, `docs/projects/INDEX.md`, `CHANGELOG.md` | wiring (CLAUDE.md "When adding a new script"), always in the wiring commit (C8) | A3.1, 2, 4, 6 |
+| `docs/scripts-inventory.md`, CLAUDE.md grouped list, `docs/projects/INDEX.md`, `CHANGELOG.md` | inventory rows: mechanism commit (C8, its own gates check counts them); grouped list, INDEX, CHANGELOG: wiring commit | A3.1, 2, 4, 6 |
 | `hooks/tests/{project-record,check-hippo-writer-text,hippo-edit-guard,backlog-hippo-mode,hippo-git-hook,check-kr1-skill-route}.test.sh` (new) + `hooks/tests/lib/hippo-sandbox.sh` | tests; hippo-mode cases need `HIPPO_BIN` and print `SKIPPED: HIPPO_BIN unset` otherwise (acceptance requires a run with it). The harness implements C6 (`HIPPO_ACTOR=test/a3`) with a checkout-unchanged exit trap | per phase |
 | `docs/plans/evidence/2026-11-02-oc-a3-writers-use-hippo/` | transcripts | all |
 
@@ -253,7 +253,7 @@ A3.1 -> A3.4
 hippo P1.4 (importer mapping + `hippo init`) + A3.1 -> A3.3 (rehearsal on a scratch copy)
 A3.2 + A3.4 -> A3.5 (guidance; branch held, not merged)
 A3.3 + A3.5 -> A3.6 (KR1 through the skills)
-A3.5 + A3.6 + A4 -> A5 (separate plan) ; A5 verdict + hippo P1.3 (KR2) + hippo init + hippo P1.5 (every committing account) + relayout 3.0.0 dev/release split -> A3.7 (ship + cutover)
+A3.5 + A3.6 + A4 -> A5 (separate plan) ; A5 verdict + hippo P1.3 (KR2) + hippo init + hippo P1.5 (every committing account, incl. the native Windows run P1.5b) + relayout 3.0.0 dev/release split -> A3.7 (ship + cutover)
 ```
 
 A3.1, A3.2, A3.4 are mechanism, inert in autopilot until a store exists, mergeable to `develop` after review (A3.2
@@ -306,7 +306,7 @@ Steps:
    | `backlog close … done` | peer check, delete row and sidecar (today's Done handling) |
    | `backlog close … cancelled` | peer check, `Status: dropped <date>` in place |
    | `backlog close … superseded --by <ref>` | peer check, delete the row (W14), print `superseded by <ref>` for the commit message |
-   | `decision new` / `decision supersede <old>` | decision-ledger entry only (`decision-ledger.js append --kind decision --source project-record`, `supersedes: <old>` when superseding; untracked) + info line `record store: files; decision kept in the ledger only` |
+   | `decision new` / `decision supersede <old>` | with `--ledger-row <id>`: no-op (the row already is the decision; info line `record store: files; ledger row <id> is the decision`); otherwise decision-ledger entry only (`decision-ledger.js append --kind decision --source project-record`, `supersedes: <old>` when superseding; untracked) + info line `record store: files; decision kept in the ledger only` |
    | `adr new` | `<adr dir>/NNNN-<slug>.md` from the template, next free number |
    | `adr supersede <old>` | `adr new` with `Supersedes: ADR-<old>`, old file's status line -> `Superseded by ADR-<new>` |
    | `lesson new` | append to `<knowledge_dir>/<category>.md` + INDEX line (today's format); no `git add -f` (separate asked step) |
@@ -314,7 +314,7 @@ Steps:
    | `handoff close <path>` | delete that `HANDOFF.md` (today's Resume step 5) |
    | `flush` | exit 2 per §3.3 when the spool is non-empty, else 0 |
 4. Resolvers and `project-detect.js` gain `record_store`.
-5. Wiring (inventory row, grouped list, reference; SKILL table rows in A3.5) in the wiring commit.
+5. Inventory row in the mechanism commit (C8); grouped list, reference and SKILL table rows (A3.5) in the wiring commit.
 
 Acceptance (`hooks/tests/project-record.test.sh` on `hippo-sandbox.sh`; temp-repo stores are made with `hippo
 import` of a one-row fixture, P1.2's only store-creating command, until `hippo init` lands):
@@ -403,10 +403,13 @@ Acceptance: KR-A3.3 on the scratch copy; transcript and skipped list in the evid
    for a new branch, against its first parent) whose parent tree has `.hippo/repo.toml` and that changes or adds
    the backlog file, a sidecar, an ADR or a handoff file, whatever `detect` says; a commit deleting `repo.toml`
    (rollback) is exempt. Pre-push additionally diffs the frozen paths over the whole range whenever the local tip
-   has `repo.toml`: tree of the tip versus tree of `<remote sha>` (new branch: `git merge-base origin/develop <tip>`);
+   has `repo.toml`: tree of the tip versus the base tree, where base = `<remote sha>` (new branch: `git merge-base origin/develop <tip>`)
+   when that base's tree has `repo.toml`, else the store-introducing commit (`git log --diff-filter=A --format=%H
+   <tip> -- .hippo/repo.toml`, the earliest), so the store commit's own frozen notices are never in the diff;
    any difference blocks, so an edit made on a pre-cutover lane and carried in by a merge or fast-forward is caught
    whatever the per-commit first parents are (red-check: a pre-cutover lane edits a backlog row, merges develop,
-   is pushed: blocked). Pre-push passes `--hippo` whenever `repo.toml` exists; without hippo, rules needing
+   is pushed: blocked; positive case: the A3.7 cutover branch, and develop right after the cutover merge, pushed
+   against pre-cutover `origin/develop` pass without `--no-verify`). Pre-push passes `--hippo` whenever `repo.toml` exists; without hippo, rules needing
    `export` report `hippo_unavailable` and block. `--reconcile`: every `BL-`/`ADR-` id in the frozen files needs a
    record with that provenance `value`, else `backlog_unimported` (block) naming ids; repair = provenance-keyed
    import of only those ids (P1.4 importer, idempotent, touches no existing record).
@@ -436,15 +439,19 @@ Acceptance: KR-A3.3 on the scratch copy; transcript and skipped list in the evid
 9. `scripts/hippo-git-hook.sh <pre-commit|pre-merge-commit|post-merge|post-rewrite>` (POSIX sh). The `repo.toml` test reads the staged index for
    pre-commit/pre-merge-commit (`git cat-file -e :.hippo/repo.toml`) and `HEAD` for post-* hooks, so a rollback
    revert that deletes it is not checked. No `repo.toml`: exit 0. Otherwise every commit and merge is checked,
-   whatever paths it touches (C2). Hippo available: `exec hippo hook <name>` (exit code kept), which refuses only
+   whatever paths it touches (C2). Hippo available: pre-commit and pre-merge-commit `exec hippo hook <name>` (hippo P1.2 ships all four hook names;
+   exit code kept), which refuses only
    problems the commit introduces (hippo spec 11.5: New = P(staged) \ P(HEAD)), so a store in `hippo-problems`
    keeps accepting commits that add no problem; the full `hippo check` exit 3 is reported by `session-start`, not
    enforced per commit.
    Hippo missing: pre-commit and pre-merge-commit exit 1 (`hippo not found ($HIPPO_BIN / PATH); refusing a commit
-   in a hippo store`); post-merge and post-rewrite (rebase, `pull --rebase`; cannot block) write `<git dir>/autopilot/
-   hippo-unchecked` (per worktree, `git rev-parse --git-dir`) with the sha and print an error whenever they cannot
-   check or the check fails (fast-forwards reach post-merge too); the next pre-commit in that worktree runs
-   `hippo check` and clears it on exit 0, and every commit there is refused while it exists. A host without a
+   in a hippo store`); post-merge and post-rewrite (rebase, `pull --rebase`, fast-forwards; cannot block) do not `exec`: they run
+   `hippo hook <name>` and keep its result. Exit 3 (problems now in `HEAD`) prints the problems as an error and
+   leaves them to the `hippo-problems` state (reported by `session-start`; spec 11.5 semantics, no lockout). Hippo
+   missing, or any exit other than 0/3 (could not check), writes `<git dir>/autopilot/hippo-unchecked` (per
+   worktree, `git rev-parse --git-dir`) with the sha; the next pre-commit in that worktree runs `hippo check` and
+   clears the marker when the check ran (exit 0 or 3; exit 3 is reported, not enforced), and refuses commits only
+   while the check cannot run. A host without a
    working hippo cannot commit in a store repo (accepted cost; writes still spool).
 Acceptance (`backlog-hippo-mode`, `hippo-edit-guard`, `hippo-git-hook` tests + existing suites, all on
 `hippo-sandbox.sh`): each step has a hippo-mode case and an unchanged files-mode case. Negative controls, each
@@ -457,7 +464,8 @@ refused; Bash in a repo without `repo.toml` -> allowed, no hippo spawned (spy bi
 staging `.hippo/` and one staging only an unrelated file refused, merges changing and not changing `.hippo/`
 refused at pre-merge-commit, fast-forward and rebase write the marker and the next commit is refused, a check in
 worktree B leaves worktree A's marker; hippo present: corrupted record -> pre-commit exit 3 naming the file; one-way ledger append: files mode one ledger
-row, no recursion, hippo mode plus dev-flow's call one decision record; migrate in hippo mode exits 2;
+row after the append plus dev-flow's `decision new --ledger-row` call, no recursion; a fast-forward bringing a
+problem into `HEAD` prints it and writes no marker, a later clean commit passes, hippo hidden writes the marker, hippo mode plus dev-flow's call one decision record; migrate in hippo mode exits 2;
 session-start spool, problems, marker and `min_plugin_version` lines each red-checked by removing their check. Hook inventory and counts updated
 (`scripts/check-hook-inventory.js`, `sync-version.js --hook-count`).
 Verify: `bash hooks/tests/backlog-hippo-mode.test.sh`; `bash hooks/tests/hippo-edit-guard.test.sh`; `bash
@@ -635,4 +643,4 @@ No open questions remain.
   CONDITIONAL); 14 findings, 5 blocking. Depth-0 accepted all 5 blockers; all 9 non-blocking folded, none refuted.
   Dispositions: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g2-dispositions.json`. Rubric and §2.5 unchanged.
 - Review artifacts: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g1-artifact.json`, `.g2-artifact.json`. A first g2 dispatch stopped on `plan_growth_hard_stop` (1.506x, zero seats); plan shrunk in b01b94726 and the lock reopened per the dispatch-plan-review.js recipe. Receipt: `check-phase-review-receipt.js --plan-file <plan at b01b94726> --plan-artifact <g2 artifact> --dispositions <g2 dispositions>` exit 0 (2026-11-02). Generation 2 terminal at the cap: sol STOP, argon READY, opus CONDITIONAL; all 5 g2 blockers accepted and folded in 257f0a573 (not seat-reviewed).
-- 2026-11-02 depth-0 addition after the receipt (not seat-reviewed): precondition for A3.7: hippo P1.5 installs `hippo` on every committing host, native Windows included, with a per-host `hippo --version` transcript.
+- 2026-11-02 depth-0 addition after the receipt (not seat-reviewed): precondition for A3.7: hippo P1.5 installs `hippo` on every committing host, native Windows included, with the per-host P1.5 transcript (`--version`, sha256, `hippo check`, hook-refusal run; superseded by the A3.7 text). Closure review generations 1-2 (logical id `autopilot-oc-a3-hippo-writers-closure`) folded in this file; artifacts and dispositions beside it.

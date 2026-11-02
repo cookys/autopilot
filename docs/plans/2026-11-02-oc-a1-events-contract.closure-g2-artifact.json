@@ -1,0 +1,334 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "oc-a1-closure",
+  "logical_plan_id": "autopilot-oc-a1-events-closure",
+  "session_id": "506f335d-8848-4ee1-9d8e-9d1c7caefe6c",
+  "session_key": "b6c0e8ff500bc0a18643519f574513e1ceff10399463c26998795ad1926f486d",
+  "generation": 2,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": true,
+  "policy_reason": "generation_cap_requires_depth_0_adjudication",
+  "rubric_sha256": "bf2de5fb824c4d03a26dda87fd30ea1957231480866c4c1e77dc691fe9017c5a",
+  "manifest_sha256": "bffc48dd71ae86e7d9bb82adb16481192f404c75d4528e35a277c449aafe2292",
+  "plan_sha256": "3a84aea6b940176c49a5ab1b51c1e8552b60fd8211229a2ae51e7a6f577ab53e",
+  "growth_ratio": {
+    "numerator": 57865,
+    "denominator": 56854
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "6af7bccf72ad377f90343c3381038b9a402b7eb5f7183a083501559425cbf998"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "65d8d1840b1ee737f796b76ad49dfe20c42bb12a3fea41c7be17bd04c7dc6c01",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-hWUlVu/stdout",
+          "digest": "65d8d1840b1ee737f796b76ad49dfe20c42bb12a3fea41c7be17bd04c7dc6c01"
+        },
+        "receipt_digest": "b2185f15217418b78d9e3ea5b7455aabe36e0c464c0ee247b2e8509813af2399"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-argon-high",
+          "operation": "plan-review",
+          "request_digest": "11f05a1a67f767494fc440f43f4324935f0a990a0eb4ecf3c1212ab26d6af3d6"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-DtyHjj",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "8dbaa51820a846b199560dfde9ec76fb6db192b7c266f68107a45b16c66a76be"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-opus-5-5",
+          "operation": "plan-review",
+          "request_digest": "073bb5e19ad74d1bc506cd9624aa800c96b83452be120f4402828552886fc36f"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "0c06066fefaf7d10dd21be47199362b08cdd9898c48402ca1f0c351a1377dd6d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-gerfK3",
+          "digest": "0c06066fefaf7d10dd21be47199362b08cdd9898c48402ca1f0c351a1377dd6d"
+        },
+        "receipt_digest": "4fb8e6f7ac1ad734495639a842c07c83f82862b323ddf346032b8040626787b6"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "family": "google",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "E3 cursor size bound, slack restoration, w pruning and e floor",
+      "claim": "Restoring the default slack reopens history whose delivered IDs were discarded during overflow, producing duplicates and contradicting KR-A1.2.",
+      "evidence": "Deliver 1000 events at instant T, then an event at T+1000 ms. The combined window exceeds 1000 pairs, so halving slack eventually excludes T and removes its delivered IDs from w. A subsequent quiet page restores 300000 ms of slack. Events at T now fall inside the window but have no deduplication entries, so they are emitted again. Likewise, an oversized group omitted from w and represented by e loses its protection when t advances, because e only filters events at the current t.",
+      "evidence_reference": "Plan E3: Next w prunes delivered pairs; Size bound restores default s on subsequent pages and omits oversized groups from w; e filters only ts == t. Closure diff adds the e mechanism, while the current plan explicitly requires cursor-s-restore.",
+      "repair": "Define a persistent lower bound that prevents discarded delivered history from becoming eligible again, including groups previously represented by e. Reconcile slack restoration with that bound and qualify the restoration guarantee. Add overflow-then-quiet-page and oversized-group-then-newer-event tests proving zero duplicates across subsequent resumes, with and without hints.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "f5b5ce22e7324e16a37a9ed56bf31bb2a806a6c3b728d5467d48185b55b6d424"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "E3 cursor.js size bound: s recomputed per page and never carried forward, e floor, next-w rule; E3 red-check (s) / case cursor-s-restore; KR-A1.2",
+      "claim": "The fold resolves both generation-2 blockers. However, the cursor-bound fold adds a new defect: it makes s regrow to the default on the next page. w is pruned to the shrunk window and is never refilled for the gap, so the next resume's floor moves backwards below what w covers. Events already delivered in that gap are then delivered again. The same thing happens to an e-group once t advances. This contradicts the plan's own guarantee that in-order events are never duplicated or lost, and KR-A1.2's 0 duplicates.",
+      "evidence": "Plan E3 Size bound says: 's is recomputed on every page and never carried forward: each page starts from the default s (300 000 ms) and halves it only as far as this page's w needs to fit the cap ... The next page that fits at the default s restores it.' The filter drops an event iff its id hash is in w or its ts < t - s. Next w = previous w pruned to ts >= newT - s, union this page's ids with ts >= newT - s. Scenario, step 1: page P1 overflows and s shrinks to s1, so w holds only pairs with ts >= t1 - s1. Events delivered on P1 or earlier with ts in [t1 - 300000, t1 - s1) are now in no w. Step 2: page P2 delivers a few events with newT shortly after t1 and resets s to 300000. Its cursor floor newT - 300000 is below t1 - s1. Step 3: P3 re-reads from that floor, and the gap events are neither in w nor below the floor, so they are re-delivered. The e case behaves the same way. A group of more than 1000 events at one instant is omitted from w, and e applies only while ts == t. After t advances and s returns to 300000, the whole group falls inside the window again and is duplicated. Red-check (s) and case cursor-s-restore only check that a late row inside the default slack is delivered. They never check that the earlier pages' rows are not repeated. The pre-amendment diff text in the closure context only shrank s, so this re-delivery path is new.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E3 'Size bound' bullet, 'Filter' and 'Next w' bullets, Red-checks (s) and (g), KR-A1.2; closure context diff hunk @@ -221,7 +224,7 @@ (cursor size bound)",
+      "repair": "Make the window floor monotone. (1) Carry an explicit floor f (epoch ms) in the cursor. (2) The filter drops ts < max(t - s, f). (3) The next cursor sets f' = max(f, newT - s'), so the effective slack can only regrow as fast as t moves past the old floor. (4) Carry e as an [ts, id] pair that stays in force until f' is greater than its ts. Replace case cursor-s-restore with this test: an overflow page, then a page with newT < t1 + 300000, then a third page. The concatenated ids must have no duplicate and the e-group must appear exactly once. Add a red-check: drop f, or reset the floor from the default s, and duplicates must appear. Document that late rows older than the carried floor stay out of contract until the floor moves past them.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "731d9661e0fa66b795d7249164ada315b6d84acae174ed0bcc1f22e66bd80465"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "E1 Project and failure rules (1) JSON error object; schemas/events.schema.json; E4 check-events-contract.js baseline (v)",
+      "claim": "The new --json error object {schema, error:{code}} uses the pinned schema string, but schemas/events.schema.json does not describe it. Baseline check (v) freezes it anyway, so the frozen baseline has no schema source for the gate to compare against. The plan also does not say whether the other exit-2 paths (bad_cursor, usage) emit the same object under --json.",
+      "evidence": "The file map defines events.schema.json as 'the envelope and one data shape per kind'. Rule (1) prints the error object with schema 'autopilot.events/1'. Check (v) lists 'the project_unresolved error object' in the baseline. Checks (i) and (ii) cover only data shapes. Case (vi-b) asserts the JSON error object but does not validate it against any schema. bad_cursor is exit 2 with no stated stdout shape.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules', section 3 file map row schemas/events.schema.json, E4 step 2 (v)",
+      "repair": "Add the error object as a second top-level branch in events.schema.json, with error.code as an open-set string. Use that one shape for every exit-2 path under --json (project_unresolved, bad_cursor, usage). Validate it in vi-b, vi and vii.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "a7cd0b93e5f75f9765f20a551a323408d6831f606230a1af80af983b4a1e5174"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "E1 rule (3) top-level catch; E4 bin/autopilot.js fast path; jsonl-tail.js I/O model",
+      "claim": "The single top-level try/catch only catches synchronous throws and awaited rejections. A stream 'error' event or an unhandled rejection from async I/O in a reader still ends in Node's default exit 1. That would break the plan's claim that exit codes are only 0 and 2.",
+      "evidence": "Rule (3) says the command 'never ends in Node's uncaught-exception exit 1'. Its only mechanism is 'one top-level catch in the CLI branch'. jsonl-tail reads in 64 KiB chunks but does not say whether it uses sync reads or streams. Red-check (z) injects faults only in merge, cursor and envelope.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules' (3), E2 step 1, E3 Red-checks (z)",
+      "repair": "Either require synchronous fs and child_process calls in all events modules, or have the fast path install uncaughtException and unhandledRejection handlers that emit the internal_error fallback envelope. Add a fault seam that throws asynchronously.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "7184466a52933927e37f9f4fdc373845b0b5e0151e0047d3fd705e1aa3e94192"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "E2 step 4 review project filter (git cat-file -e per base, memo per call); KR-A1.5 warm resume",
+      "claim": "The new review project filter spawns one git process per distinct base on every call, because the memo lives only inside one call. At the KR-A1.5 size of 500 review phases, warm polls can spend a large share of the 1.5 s budget on process spawns.",
+      "evidence": "Step 4 runs 'git cat-file -e <base>^{commit}, memoised inside the call' on entries from every chain.json. The plan specifies no mtime pre-skip for review files. KR-A1.5 sets warm resume <= 1.5 s with 500 review phases.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E2 step 4, KR-A1.5",
+      "repair": "Resolve all distinct bases through one git cat-file --batch-check process per call, and skip chain.json files whose mtime is older than the window floor. Report review reader time as its own line in the bench.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "465609f25a459403e2c3ec8275eb1e9b1725722803eeb23e6d6b43a4973c4573"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "future",
+      "severity": "non-blocking",
+      "affected_surface": "E2 step 1 configured-source list; KR-A1.3 warning rules",
+      "claim": "The fold of the generation-2 warning-noise finding is only partial. A fresh or decision-free repo has no default decision ledger, and a host may have no dispatch runs dir. Both are listed as configured sources, so every poll emits source_absent with state absent. Read-only case readonly-* already treats an absent runs dir as a normal state.",
+      "evidence": "Step 1 lists as configured sources 'the costs file path, the default decision ledger, the manifests dir'. One readonly-* case has 'the dispatch runs dir is absent and must stay absent'. The original generation-2 finding raised exactly this kind of standing warning.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E2 step 1, E4 Verify readonly-*, closure context generation-2 non-blocking finding on KR-A1.3",
+      "repair": "No current change required. As a follow-up, treat an absent default decision ledger and an absent runs dir as state absent without a warning (a not-yet-created store), and keep source_absent for explicitly configured paths (env or flag).",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "bdbe4979ee6a604117bd43f788cb3af0261fe57539ffd7ce95a36ae1d2dade59"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "a7cd0b93e5f75f9765f20a551a323408d6831f606230a1af80af983b4a1e5174",
+      "rubric_id": "R16",
+      "affected_surface": "E1 Project and failure rules (1) JSON error object; schemas/events.schema.json; E4 check-events-contract.js baseline (v)",
+      "claim": "The new --json error object {schema, error:{code}} uses the pinned schema string, but schemas/events.schema.json does not describe it. Baseline check (v) freezes it anyway, so the frozen baseline has no schema source for the gate to compare against. The plan also does not say whether the other exit-2 paths (bad_cursor, usage) emit the same object under --json.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules', section 3 file map row schemas/events.schema.json, E4 step 2 (v)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "7184466a52933927e37f9f4fdc373845b0b5e0151e0047d3fd705e1aa3e94192",
+      "rubric_id": "R15",
+      "affected_surface": "E1 rule (3) top-level catch; E4 bin/autopilot.js fast path; jsonl-tail.js I/O model",
+      "claim": "The single top-level try/catch only catches synchronous throws and awaited rejections. A stream 'error' event or an unhandled rejection from async I/O in a reader still ends in Node's default exit 1. That would break the plan's claim that exit codes are only 0 and 2.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules' (3), E2 step 1, E3 Red-checks (z)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "465609f25a459403e2c3ec8275eb1e9b1725722803eeb23e6d6b43a4973c4573",
+      "rubric_id": "R16",
+      "affected_surface": "E2 step 4 review project filter (git cat-file -e per base, memo per call); KR-A1.5 warm resume",
+      "claim": "The new review project filter spawns one git process per distinct base on every call, because the memo lives only inside one call. At the KR-A1.5 size of 500 review phases, warm polls can spend a large share of the 1.5 s budget on process spawns.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E2 step 4, KR-A1.5",
+      "disposition": null
+    },
+    {
+      "fingerprint": "bdbe4979ee6a604117bd43f788cb3af0261fe57539ffd7ce95a36ae1d2dade59",
+      "rubric_id": "R16",
+      "affected_surface": "E2 step 1 configured-source list; KR-A1.3 warning rules",
+      "claim": "The fold of the generation-2 warning-noise finding is only partial. A fresh or decision-free repo has no default decision ledger, and a host may have no dispatch runs dir. Both are listed as configured sources, so every poll emits source_absent with state absent. Read-only case readonly-* already treats an absent runs dir as a normal state.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E2 step 1, E4 Verify readonly-*, closure context generation-2 non-blocking finding on KR-A1.3",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": null,
+  "reviewed_at": "2026-11-02T14:02:37.390Z"
+}

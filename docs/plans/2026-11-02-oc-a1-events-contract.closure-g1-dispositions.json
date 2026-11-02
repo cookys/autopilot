@@ -1,0 +1,52 @@
+{
+ "schema_version": 1,
+ "logical_plan_id": "autopilot-oc-a1-events-closure",
+ "generation": 1,
+ "findings": [
+  {
+   "fingerprint": "3c92c466d971bcd314cb76a20c489d2e6fd150a9d62d3d094ad702a7553229df",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: E2 step 4 now states a clone or fork sharing the base commit is indistinguishable and accepted as the same project (documented limit)."
+  },
+  {
+   "fingerprint": "cf7b83c51e658206f1d69a10e069a77425e0a86dbf3b72cd6c75921c49bb0733",
+   "disposition": "accepted_blocker",
+   "rationale": "Valid: s was carried forward with no restore. E3 size bound now recomputes s per page from the default 300000 ms, halving only for that page's w, warning window_overflow on that page; new red-check (s) / case cursor-s-restore."
+  },
+  {
+   "fingerprint": "dbdff7e4179c636b6e127a2300f4f7e49128cf4c41e3de82d2aaf142a3b678c7",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: the frozen baseline (E4 step 2 v) now includes the project_unresolved error object, so its shape is gated and documented."
+  },
+  {
+   "fingerprint": "430035e0a1e1890ca4907d1bbfa71e04af20d0a7aaea7cc4e7beff60c2f75680",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: E2 step 5 git_unavailable now covers only a repo/git that disappears after resolution; 'the git repo' removed from the configured-source list."
+  },
+  {
+   "fingerprint": "ff0cce35b6ed344c86465faed4836a75ec6aaed24fd91bd7e9a37070b6f70c03",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: E1 grammar now defines '-' as cursor from stdin."
+  },
+  {
+   "fingerprint": "d6d96ee3da6bdb2695cd6a47c3abac045469cbbe6558812d2df726e3fc4de05d",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: the internal_error fallback returns the synthetic cursor the --since value decodes to when no cursor was given."
+  },
+  {
+   "fingerprint": "813e8233516e0525f9a22ac3fdf80b4301ec3e0d6b6c897ec39abc65f000f1af",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: G1 rule now fails closed: only a basis listed as observed renders as observed; unknown or missing basis renders as recorded."
+  },
+  {
+   "fingerprint": "622250f3aa5196f10c47db3cb0c93421b10b45aee05eceedbe6f12a58b0d7522",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded with 3c92: 'never emits another repo's history' narrowed to unrelated repos plus the documented shared-history limit."
+  },
+  {
+   "fingerprint": "d1702a38ac57ca7f5c9913c2018b70de8a5e9f52425f4163e24cc83d6c00f546",
+   "disposition": "accepted_nonblocking",
+   "rationale": "Folded: the baseline now lists envelope and event-level fields too."
+  }
+ ]
+}

@@ -1,0 +1,438 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "oc-a1-closure",
+  "logical_plan_id": "autopilot-oc-a1-events-closure",
+  "session_id": "506f335d-8848-4ee1-9d8e-9d1c7caefe6c",
+  "session_key": "b6c0e8ff500bc0a18643519f574513e1ceff10399463c26998795ad1926f486d",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "bf2de5fb824c4d03a26dda87fd30ea1957231480866c4c1e77dc691fe9017c5a",
+  "manifest_sha256": "bffc48dd71ae86e7d9bb82adb16481192f404c75d4528e35a277c449aafe2292",
+  "plan_sha256": "e46cc468ef5d03ad6846a334dad5825fe5979db626958b2a6e729fc3bbf0dbd8",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "f920fe5ac584d65787bb46708c13efb64db3cd9cf5d9bb4d9fecc1a02dbce35c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "2d6ff0d418f1a4408cf4ba311fb03a605edb24acaccd80db22c5119e67e27d8f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-agGVhx/stdout",
+          "digest": "2d6ff0d418f1a4408cf4ba311fb03a605edb24acaccd80db22c5119e67e27d8f"
+        },
+        "receipt_digest": "f370f9111fae4afdcfb958d608065dfe0d8e0180a626263d7aa34e9607ea8870"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-argon-high",
+          "operation": "plan-review",
+          "request_digest": "9cb74b6f421a42c05bf15613dcc781151bb771a45afbbbc5cbcf4506f10e598e"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-fOfUSw",
+          "digest": "979513977e8640f3737cd9088df2f05eaddf5b7fb1244bbc2bba89eeec31801d"
+        },
+        "receipt_digest": "ba279b3c7603c772ffabb6da25c1e9f71a581b69187762517db4cf8733bbb63b"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-opus-5-5",
+          "operation": "plan-review",
+          "request_digest": "1fa1e63764c5e10b6b1fdc3d051254cf2715c5b8755220fd89febcc1f45db481"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "447d5878090d0d19bfe86dff05f0661d71dc196c11db4ce29f3d708d1e7c343f",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-2hPMLM",
+          "digest": "447d5878090d0d19bfe86dff05f0661d71dc196c11db4ce29f3d708d1e7c343f"
+        },
+        "receipt_digest": "bf38b7aba0057955dd081b03cc035e1d60b6d13293fd7565e754c44bdd43d096"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "family": "google",
+      "verdict": "READY"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R16",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "E2 step 4 review.js project filter and foreign-review fixture",
+      "claim": "The new base-commit existence filter does not establish project ownership. A foreign clone or fork sharing that commit can still contribute review events under this project's project_key.",
+      "evidence": "E2 step 4 accepts an entry whenever its base commit exists in the project repository. Two repositories with different git common directories can contain the same commit. The added foreign-ledger fixture tests only a base absent from the target repository, so it cannot detect this case. This remains a limitation of the previously non-blocking isolation finding, rather than an unresolved accepted blocker.",
+      "evidence_reference": "Closure diff: E2 step 4 project-filter addition; E1 fixture foreign-review-ledger addition; unchanged E1 command rule that events of other repositories are never returned.",
+      "repair": "Before shipping the review reader, bind discovered archive entries to project identity rather than commit existence alone, define handling for legacy entries lacking that identity, and add a foreign-repository fixture that shares the target's base commit.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "3c92c466d971bcd314cb76a20c489d2e6fd150a9d62d3d094ad702a7553229df"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "E3 cursor.js size bound (window_overflow s-halving, e floor); KR-A1.2 late-row guarantee",
+      "claim": "The diff lowers the w cap from 2000 to 1000 pairs and lets s halve down to 0. Nothing ever restores s to its default. The cursor carries s forward, so once overflow happens the shrunken s is permanent. After that, rows that arrive late are silently dropped on every later poll. KR-A1.2 and E2 step 2 treat late rows as normal for cost and decision sources.",
+      "evidence": "Changed text: 'When w would exceed the cap the cursor first shrinks s (halving), pruning older pairs ... with s down to 0 only the final ts group could remain'. Unchanged text: next w is pruned to 'ts >= newT - s', and the filter drops 'ts < t - s'. Only the synthetic --since cursor sets s to the default. No rule raises s again. A cap of 1000 pairs over a 300 s window is about 3.3 events/s for one project, which a burst of parallel dispatches with per-turn cost rows reaches. E2 step 2 says cost rows 'can carry ts earlier than rows already read'. With s at 0, any row whose ts is even 1 ms before t but appended after the read is lost, and the only signal is one window_overflow warning on the page that shrank s.",
+      "evidence_reference": "Plan E3 'Size bound' bullet and 'Next w' bullet; KR-A1.2; E2 step 2; closure diff hunk @@ -221,7 +224,7 @@",
+      "repair": "Add a recovery rule to the cursor contract. On every page, set the next s to the largest value up to the default (300000) whose pruned w fits the cap. s then shrinks only while the overflow lasts and returns once the window drains. While s is below the default, every response carries window_overflow (or a dedicated slack_reduced code) with the current s. Add a resume test: a 1500-event burst, then quiet pages, assert s returns to 300000 and a late row inside 300 s after recovery is delivered. Add a red-check: never restore s, and the late row is lost.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "cf7b83c51e658206f1d69a10e069a77425e0a86dbf3b72cd6c75921c49bb0733"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "E1 project and failure rules (project_unresolved JSON); schemas/events.schema.json; consumer table row 'all'; schemas/events.baseline.json",
+      "claim": "The new project_unresolved stdout object uses the pinned schema string autopilot.events/1 but has none of the envelope's required fields. The schema, the doc consumer table and the baseline gate do not cover it. A consumer that checks only the schema string and then reads events or cursor gets a shape it cannot parse. The shape would also be frozen by accident at merge.",
+      "evidence": "Diff: 'with --json stdout is {schema:autopilot.events/1, error:{code:project_unresolved}}' and 'project_key stays a required non-null string in the envelope'. E1 consumer rule: consumers 'pin schema == autopilot.events/1'. check-events-contract checks (i)-(v) cover only data shapes, the consumer table and examples.",
+      "evidence_reference": "Plan E1 'Project and failure rules' (1); §2.6 Consumers; E4 step 2",
+      "repair": "Define the error object in the schema as a oneOf branch (or give it a distinct schema string such as autopilot.events.error/1). List error.code in the doc and the 'all' consumer row. Add one example and one schema-validation case for it.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dbdff7e4179c636b6e127a2300f4f7e49128cf4c41e3de82d2aaf142a3b678c7"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "E2 step 1 configured-source list ('the git repo'); E2 step 5 qc.js; KR-A1.3 degrade-qc-absent",
+      "claim": "Two parts of the plan now disagree on what happens when git or the repo is missing. The new rule exits 2 with project_unresolved when cwd is outside a repo or git is not on PATH. E2 step 5 still says 'Missing git or not a repo -> git_unavailable, state degraded' with exit 0. The changed step 1 still lists 'the git repo' as a configured source that yields source_absent. KR-A1.3's 'absent' case for the qc source cannot be built at executable level.",
+      "evidence": "Diff rule (1) vs unchanged E2 step 5 text, and the diff's own step 1 configured-source list",
+      "evidence_reference": "Plan E1 'Project and failure rules'; E2 steps 1 and 5; KR-A1.3",
+      "repair": "Narrow git_unavailable to git failures after the project has resolved (exec failure, timeout, git log error). Remove 'the git repo' from the source_absent list. State that the qc degrade cases are injected through the reader ctx and not through PATH.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "430035e0a1e1890ca4907d1bbfa71e04af20d0a7aaea7cc4e7beff60c2f75680"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "E3 size bound ('--since -' stdin); E1 command grammar",
+      "claim": "The diff introduces '--since -' (cursor read from stdin). The unchanged E1 grammar still says any value other than 0 or an ISO instant is a cursor and that a non-decoding value exits 2 bad_cursor. As written, '-' is rejected.",
+      "evidence": "Diff: 'The console may also pass it on stdin (--since -)'. E1: '--since <cursor|ISO-8601|0>' and 'Any other value is a cursor; one that does not decode ... exits 2 with bad_cursor'.",
+      "evidence_reference": "Plan E1 'The command'; E3 'Size bound'",
+      "repair": "Add '-' to the E1 grammar and usage text (read one cursor from stdin, trimmed; empty stdin is a usage error). Add a cursor-* case that passes the cursor on stdin.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ff0cce35b6ed344c86465faed4836a75ec6aaed24fd91bd7e9a37070b6f70c03"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "E1 failure rule (3) internal_error fallback",
+      "claim": "The fallback returns 'the input cursor unchanged', but the input is not always a cursor. When --since is omitted, it is 0 or an ISO instant, and the value echoed in the cursor field is undefined. A consumer storing that field may then get bad_cursor on retry, or lose its starting point.",
+      "evidence": "Diff rule (3): 'the input cursor returned unchanged'. E1: '--since omitted or 0' and '--since <ISO-8601>'.",
+      "evidence_reference": "Plan E1 'Project and failure rules' (3)",
+      "repair": "Specify the fallback cursor for each input form. For a cursor, echo it verbatim. For 0, omitted or ISO, echo the synthetic cursor built from that input (or the literal accepted --since value). Assert this in case (vi-c) for each form.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d6d96ee3da6bdb2695cd6a47c3abac045469cbbe6558812d2df726e3fc4de05d"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "Consumer table G1 row (basis rendering rule)",
+      "claim": "The G1 rule fails open. Only basis=self_reported is barred from rendering as verified, while basis is declared an open set. A future or unknown basis value, or a writer bug that omits basis on a self-reported kind, would be rendered as observed state.",
+      "evidence": "Diff G1 row: 'every data.basis=self_reported value ... must not be rendered as verified state' and 'basis is an open set (an observed value may be added later, additively)'",
+      "evidence_reference": "Plan E1 consumer table, G1 row",
+      "repair": "Invert the rule. On kinds that define basis, only an explicitly allow-listed observed value may be rendered as verified. Any other value, including an unknown or missing one, renders as claimed.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "813e8233516e0525f9a22ac3fdf80b4301ec3e0d6b6c897ec39abc65f000f1af"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "implementation-spike",
+      "severity": "non-blocking",
+      "affected_surface": "E2 step 4 review.js project filter",
+      "claim": "The new filter keeps an entry when its base commit exists in the project repo. That does not separate repos that share history, such as separate clones, forks or worktrees-turned-clones of the same upstream. So the added claim that 'a host-wide archive never emits another repo's history' is overstated. Another clone's reviews would appear under this project_key.",
+      "evidence": "Diff: 'an entry is kept only if its base commit exists in the project repo (git cat-file -e <base>^{commit}) ... so a host-wide archive never emits another repo's history'",
+      "evidence_reference": "Plan E2 step 4",
+      "repair": "Either soften the claim to 'never emits history of repos sharing no commit with this one' and document the shared-history case, or also require the ledger root to come from this project's pointer file, a manifest with matching repo_identity, or an explicit flag or env entry.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "622250f3aa5196f10c47db3cb0c93421b10b45aee05eceedbe6f12a58b0d7522"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "E4 step 2 (v) baseline check; schemas/events.baseline.json",
+      "claim": "The frozen baseline lists fields per kind only, meaning data shapes. Removing or retyping an envelope field (has_more, cursor, generated_at, sources[].state) or an event-level field (ts_basis, root_run_id, source) would still pass the gate. R15 additive-only covers the whole autopilot.events/1 schema.",
+      "evidence": "Diff: 'written at merge: per kind, each field with JSON type, required or optional, nullable'",
+      "evidence_reference": "Plan E4 step 2 (v)",
+      "repair": "Extend the baseline and check (v) to the envelope, the common event fields, sources[] and warnings[] entries. Add a red-check that removes has_more from both schema and doc, and the gate exits 1.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": false,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d1702a38ac57ca7f5c9913c2018b70de8a5e9f52425f4163e24cc83d6c00f546"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "3c92c466d971bcd314cb76a20c489d2e6fd150a9d62d3d094ad702a7553229df",
+      "rubric_id": "R16",
+      "affected_surface": "E2 step 4 review.js project filter and foreign-review fixture",
+      "claim": "The new base-commit existence filter does not establish project ownership. A foreign clone or fork sharing that commit can still contribute review events under this project's project_key.",
+      "evidence_reference": "Closure diff: E2 step 4 project-filter addition; E1 fixture foreign-review-ledger addition; unchanged E1 command rule that events of other repositories are never returned.",
+      "disposition": null
+    },
+    {
+      "fingerprint": "dbdff7e4179c636b6e127a2300f4f7e49128cf4c41e3de82d2aaf142a3b678c7",
+      "rubric_id": "R15",
+      "affected_surface": "E1 project and failure rules (project_unresolved JSON); schemas/events.schema.json; consumer table row 'all'; schemas/events.baseline.json",
+      "claim": "The new project_unresolved stdout object uses the pinned schema string autopilot.events/1 but has none of the envelope's required fields. The schema, the doc consumer table and the baseline gate do not cover it. A consumer that checks only the schema string and then reads events or cursor gets a shape it cannot parse. The shape would also be frozen by accident at merge.",
+      "evidence_reference": "Plan E1 'Project and failure rules' (1); §2.6 Consumers; E4 step 2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "430035e0a1e1890ca4907d1bbfa71e04af20d0a7aaea7cc4e7beff60c2f75680",
+      "rubric_id": "R16",
+      "affected_surface": "E2 step 1 configured-source list ('the git repo'); E2 step 5 qc.js; KR-A1.3 degrade-qc-absent",
+      "claim": "Two parts of the plan now disagree on what happens when git or the repo is missing. The new rule exits 2 with project_unresolved when cwd is outside a repo or git is not on PATH. E2 step 5 still says 'Missing git or not a repo -> git_unavailable, state degraded' with exit 0. The changed step 1 still lists 'the git repo' as a configured source that yields source_absent. KR-A1.3's 'absent' case for the qc source cannot be built at executable level.",
+      "evidence_reference": "Plan E1 'Project and failure rules'; E2 steps 1 and 5; KR-A1.3",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ff0cce35b6ed344c86465faed4836a75ec6aaed24fd91bd7e9a37070b6f70c03",
+      "rubric_id": "R16",
+      "affected_surface": "E3 size bound ('--since -' stdin); E1 command grammar",
+      "claim": "The diff introduces '--since -' (cursor read from stdin). The unchanged E1 grammar still says any value other than 0 or an ISO instant is a cursor and that a non-decoding value exits 2 bad_cursor. As written, '-' is rejected.",
+      "evidence_reference": "Plan E1 'The command'; E3 'Size bound'",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d6d96ee3da6bdb2695cd6a47c3abac045469cbbe6558812d2df726e3fc4de05d",
+      "rubric_id": "R16",
+      "affected_surface": "E1 failure rule (3) internal_error fallback",
+      "claim": "The fallback returns 'the input cursor unchanged', but the input is not always a cursor. When --since is omitted, it is 0 or an ISO instant, and the value echoed in the cursor field is undefined. A consumer storing that field may then get bad_cursor on retry, or lose its starting point.",
+      "evidence_reference": "Plan E1 'Project and failure rules' (3)",
+      "disposition": null
+    },
+    {
+      "fingerprint": "813e8233516e0525f9a22ac3fdf80b4301ec3e0d6b6c897ec39abc65f000f1af",
+      "rubric_id": "R6",
+      "affected_surface": "Consumer table G1 row (basis rendering rule)",
+      "claim": "The G1 rule fails open. Only basis=self_reported is barred from rendering as verified, while basis is declared an open set. A future or unknown basis value, or a writer bug that omits basis on a self-reported kind, would be rendered as observed state.",
+      "evidence_reference": "Plan E1 consumer table, G1 row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "622250f3aa5196f10c47db3cb0c93421b10b45aee05eceedbe6f12a58b0d7522",
+      "rubric_id": "R16",
+      "affected_surface": "E2 step 4 review.js project filter",
+      "claim": "The new filter keeps an entry when its base commit exists in the project repo. That does not separate repos that share history, such as separate clones, forks or worktrees-turned-clones of the same upstream. So the added claim that 'a host-wide archive never emits another repo's history' is overstated. Another clone's reviews would appear under this project_key.",
+      "evidence_reference": "Plan E2 step 4",
+      "disposition": null
+    },
+    {
+      "fingerprint": "d1702a38ac57ca7f5c9913c2018b70de8a5e9f52425f4163e24cc83d6c00f546",
+      "rubric_id": "R15",
+      "affected_surface": "E4 step 2 (v) baseline check; schemas/events.baseline.json",
+      "claim": "The frozen baseline lists fields per kind only, meaning data shapes. Removing or retyping an envelope field (has_more, cursor, generated_at, sources[].state) or an event-level field (ts_basis, root_run_id, source) would still pass the gate. R15 additive-only covers the whole autopilot.events/1 schema.",
+      "evidence_reference": "Plan E4 step 2 (v)",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-11-02T13:53:49.226Z"
+}

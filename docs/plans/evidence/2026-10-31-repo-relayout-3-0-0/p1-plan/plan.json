@@ -9,17 +9,17 @@
  "counts": {
   "archived-evidence-stay": 220,
   "asset-stay": 12,
-  "backlog": 114,
+  "backlog": 120,
   "backlog-main": 1,
   "delete": 1,
   "dev": 9,
   "evidence-p2-stay": 12105,
-  "exception-stay": 9,
+  "exception-stay": 7,
   "guide": 7,
   "handoff": 4,
   "handoff-other": 1,
-  "mission": 100,
-  "plan-active": 133,
+  "mission": 103,
+  "plan-active": 158,
   "plan-archived": 156,
   "plan-archived-now": 71,
   "plan-pre-sept-not-archived": 50,
@@ -28,7 +28,7 @@
   "project-archived": 616,
   "project-index": 1
  },
- "renames": 1281,
+ "renames": 1315,
  "merge": {
   "target": "project/handoff/HANDOFF.md",
   "sources": [],
@@ -67,21 +67,21 @@
    "proposal": "Interpretation to confirm: \"the two HANDOFF files\" = the two live HANDOFF.md (docs/ root; projects/ongoing-maintenance/). Concatenate them under one H1 with an H2 per source (its original first heading kept verbatim, with an italic line giving the source path and its last-touch commit), write the result to the target, and git rm both sources. Nothing is dropped; git history keeps each original. The other two (HANDOFF-l6-resilience.md is a completed-campaign tombstone; HANDOFF-engine-qualify-seats.md says it is a different line \"do not overwrite\") are plain renames into project/handoff/. References to either merged source are rewritten to the target."
   },
   "index_split": {
-   "bytes": 266733,
-   "lines": 559,
+   "bytes": 267380,
+   "lines": 562,
    "sections": [
     {
      "heading": "進行中 (In Progress)",
      "line": 7,
-     "rows": 55,
+     "rows": 58,
      "years": {
-      "2026": 55
+      "2026": 58
      },
      "target": "project/projects/INDEX.md"
     },
     {
      "heading": "已完成 (Completed)",
-     "line": 67,
+     "line": 70,
      "rows": 211,
      "years": {
       "2026": 211
@@ -90,7 +90,7 @@
     },
     {
      "heading": "Fix ships (no project dir — per dev-flow Fix-size convention)",
-     "line": 283,
+     "line": 286,
      "rows": 231,
      "years": {
       "2026": 231
@@ -99,7 +99,7 @@
     },
     {
      "heading": "歷史債 (Historical Debt — pre-2026-04-12, not retrofitted)",
-     "line": 521,
+     "line": 524,
      "rows": 4,
      "years": {
       "2026": 2
@@ -108,7 +108,7 @@
     },
     {
      "heading": "規劃中 (Drafted — plan only, not yet started)",
-     "line": 537,
+     "line": 540,
      "rows": 5,
      "years": {
       "2026": 5
@@ -117,7 +117,7 @@
     },
     {
      "heading": "歸檔 (Archived)",
-     "line": 554,
+     "line": 557,
      "rows": 1,
      "years": {
       "2026": 1
@@ -439,35 +439,25 @@
   },
   "exceptions_add": [
    {
-    "path": "docs/mission-blind-review-2d-snapshot-2026-09-19-execution-graph.json",
+    "path": "docs/mission-routing-successor-2026-11-03-execution-graph.json",
     "rule": 6,
-    "reason": "D9.5: mission-blind-review-2d-snapshot-2026-09-19 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires"
+    "reason": "D9.5: mission-routing-successor-2026-11-03 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires"
    },
    {
-    "path": "docs/mission-blind-review-2d-snapshot-2026-09-19-sources.json",
+    "path": "docs/mission-routing-successor-2026-11-03-sources.json",
     "rule": 6,
-    "reason": "D9.5: mission-blind-review-2d-snapshot-2026-09-19 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires",
+    "reason": "D9.5: mission-routing-successor-2026-11-03 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires",
     "plan_base": "docs"
    },
    {
-    "path": "docs/mission-blind-review-2d-snapshot-2026-09-19-task-authority.json",
+    "path": "docs/plans/2026-11-03-routing-successor.md",
     "rule": 6,
-    "reason": "D9.5: mission-blind-review-2d-snapshot-2026-09-19 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires"
+    "reason": "D9.5: mission-routing-successor-2026-11-03 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires"
    },
    {
-    "path": "docs/plans/2026-09-19-blind-review-2d-overlap.md",
+    "path": "docs/plans/2026-11-03-routing-successor.rubric.md",
     "rule": 6,
-    "reason": "D9.5: mission-blind-review-2d-snapshot-2026-09-19 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires"
-   },
-   {
-    "path": "docs/plans/2026-09-19-blind-review-2d-overlap.plan-review-manifest.json",
-    "rule": 6,
-    "reason": "D9.5: mission-blind-review-2d-snapshot-2026-09-19 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires"
-   },
-   {
-    "path": "docs/plans/2026-09-19-blind-review-2d-overlap.rubric.md",
-    "rule": 6,
-    "reason": "D9.5: mission-blind-review-2d-snapshot-2026-09-19 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires"
+    "reason": "D9.5: mission-routing-successor-2026-11-03 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires"
    },
    {
     "path": "docs/metrics/surface-lines.json",
@@ -494,7 +484,7 @@
   }
  },
  "residual_lint": {
-  "files_left_in_docs": 12347,
+  "files_left_in_docs": 12345,
   "flagged_by_active_rule_after_move": [
    {
     "file": "docs/training/README.md",
@@ -505,18 +495,12 @@
   "destinations_flagged_by_an_active_rule": []
  },
  "no_rewrite": {
-  "listed_total": 4634,
-  "listed_under_docs": 376,
-  "will_be_renamed_only": 299,
-  "of_which_into_an_archive_dir": 83,
+  "listed_total": 4683,
+  "listed_under_docs": 377,
+  "will_be_renamed_only": 306,
+  "of_which_into_an_archive_dir": 84,
   "stay_in_docs_evidence_p2": 51,
   "stay_in_docs_other": [
-   "docs/mission-blind-review-2d-snapshot-2026-09-19-execution-graph.json",
-   "docs/mission-blind-review-2d-snapshot-2026-09-19-sources.json",
-   "docs/mission-blind-review-2d-snapshot-2026-09-19-task-authority.json",
-   "docs/plans/2026-09-19-blind-review-2d-overlap.md",
-   "docs/plans/2026-09-19-blind-review-2d-overlap.plan-review-manifest.json",
-   "docs/plans/2026-09-19-blind-review-2d-overlap.rubric.md",
    "docs/plans/_archive/2026/09/evidence/2026-09-14-backlog-entry-schema/g1-artifact.json",
    "docs/plans/_archive/2026/09/evidence/2026-09-16-blind-review-packet/g1-artifact.json",
    "docs/plans/_archive/2026/09/evidence/2026-09-16-blind-review-packet/g1-receipt.txt",
@@ -547,7 +531,425 @@
   }
  },
  "simulation": null,
- "reference_estimate": null,
- "sync_coverage": null,
+ "reference_estimate": {
+  "method": "every tracked non-binary text file; every token matching docs/[A-Za-z0-9_@.+/-]+ (trailing punctuation trimmed) that is an exact layout-map key, a plan stem without .md, or a merged-HANDOFF source. Directory-form tokens (docs/plans, docs/projects/..., not resolvable to one file) are counted separately.",
+  "by_category": {
+   "docs itself": {
+    "files": 421,
+    "refs": 1861
+   },
+   "evals": {
+    "files": 23,
+    "refs": 35
+   },
+   "evidence (stays, P2)": {
+    "files": 379,
+    "refs": 12234
+   },
+   "other: .claude/": {
+    "files": 11,
+    "refs": 43
+   },
+   "other: .githooks/": {
+    "files": 1,
+    "refs": 1
+   },
+   "other: .gitignore": {
+    "files": 1,
+    "refs": 4
+   },
+   "other: AGENTS.md": {
+    "files": 1,
+    "refs": 2
+   },
+   "other: CHANGELOG.md": {
+    "files": 1,
+    "refs": 223
+   },
+   "other: CLAUDE.md": {
+    "files": 1,
+    "refs": 15
+   },
+   "other: README.md": {
+    "files": 1,
+    "refs": 21
+   },
+   "other: README.zh-TW.md": {
+    "files": 1,
+    "refs": 21
+   },
+   "other: SECURITY.md": {
+    "files": 1,
+    "refs": 2
+   },
+   "other: profiles/": {
+    "files": 3,
+    "refs": 377
+   },
+   "other: schemas/": {
+    "files": 2,
+    "refs": 2
+   },
+   "other: skill-creator-workspace/": {
+    "files": 14,
+    "refs": 34
+   },
+   "other: tools/": {
+    "files": 2,
+    "refs": 413
+   },
+   "other: website/": {
+    "files": 1,
+    "refs": 2
+   },
+   "platforms mirror": {
+    "files": 189,
+    "refs": 1070
+   },
+   "runtime: agents/": {
+    "files": 2,
+    "refs": 2
+   },
+   "runtime: hooks/": {
+    "files": 17,
+    "refs": 33
+   },
+   "runtime: mods/": {
+    "files": 10,
+    "refs": 26
+   },
+   "runtime: project-config-template/": {
+    "files": 4,
+    "refs": 8
+   },
+   "runtime: references/": {
+    "files": 23,
+    "refs": 82
+   },
+   "runtime: scripts/": {
+    "files": 87,
+    "refs": 464
+   },
+   "runtime: skills/": {
+    "files": 27,
+    "refs": 56
+   },
+   "runtime: src/": {
+    "files": 9,
+    "refs": 10
+   },
+   "sealed (no-rewrite)": {
+    "files": 1544,
+    "refs": 7791
+   },
+   "tests": {
+    "files": 135,
+    "refs": 1203
+   }
+  },
+  "groups": {
+   "runtime_skills_references_scripts_hooks_src_mods_agents_project_config_template": {
+    "files": 179,
+    "refs": 681
+   },
+   "tests": {
+    "files": 135,
+    "refs": 1203
+   },
+   "evals": {
+    "files": 23,
+    "refs": 35
+   },
+   "docs_itself": {
+    "files": 421,
+    "refs": 1861
+   },
+   "sealed_not_rewritable": {
+    "files": 1544,
+    "refs": 7791
+   },
+   "platforms_mirror": {
+    "files": 189,
+    "refs": 1070
+   },
+   "evidence_stays_p2": {
+    "files": 379,
+    "refs": 12234
+   },
+   "other_roots": {
+    "files": 41,
+    "refs": 1160
+   }
+  },
+  "sealed_files_naming_a_moved_path_by_group": {
+   "docs/mission-*.json": 57,
+   "docs/plans (top level)": 35,
+   "docs/plans/_archive": 23,
+   "docs/plans/evidence": 12,
+   "docs/projects/_archive": 3,
+   "evals/brain-eval-generator.js": 1,
+   "evals/brain-eval-grader.js": 1,
+   "evals/clean": 2,
+   "evals/impl-capability-evidence-corpus.json": 1,
+   "evals/impl-oracle-driver.cjs": 1,
+   "evals/skill-onoff": 1171,
+   "evals/va-eval-generator.js": 1,
+   "hooks/tests": 17
+  },
+  "directory_form_refs": {
+   "docs/adr": 17,
+   "docs/backlog": 678,
+   "docs/mission-*": 163,
+   "docs/plans": 10684,
+   "docs/projects": 2829,
+   "docs/upstream-bugs": 1
+  },
+  "sources_manifest_pins": {
+   "sources_manifests": 44,
+   "plan_or_rubric_pins": 112,
+   "pinned_targets_whose_new_path_differs_from_project_plus_plan_path": 0
+  },
+  "docs_relative_markdown_links_into_moved_files": {
+   "files": 64,
+   "links": 713
+  },
+  "distinct_old_paths_referenced": 1298,
+  "top_old_paths": [
+   [
+    "docs/BACKLOG.md",
+    2129
+   ],
+   [
+    "docs/plans/2026-10-06-dev-flow-stage-graph.md",
+    924
+   ],
+   [
+    "docs/projects/INDEX.md",
+    922
+   ],
+   [
+    "docs/settings-reference.md",
+    459
+   ],
+   [
+    "docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md",
+    201
+   ],
+   [
+    "docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md",
+    151
+   ],
+   [
+    "docs/plans/2026-08-03-next-touch-debt-retirement.md",
+    126
+   ],
+   [
+    "docs/plans/2026-06-22-ceo-fleet-autonomy.md",
+    96
+   ],
+   [
+    "docs/plans/_archive/2026/07/2026-07-04-quality-floor-engine.md",
+    95
+   ],
+   [
+    "docs/plans/_archive/2026/08/2026-08-28-consult-discuss-qualification.md",
+    95
+   ],
+   [
+    "docs/adr/0002-task-tree-and-qc-panel-dormant.md",
+    95
+   ],
+   [
+    "docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md",
+    91
+   ]
+  ],
+  "binary_files_skipped": 214
+ },
+ "sync_coverage": [
+  {
+   "file": "scripts/sync-manifest.json",
+   "docs_tokens": 13,
+   "moved_hits": 13,
+   "hits": [
+    {
+     "line": 67,
+     "token": "docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md",
+     "to": "project/plans/_archive/2026/06/2026-06-04-distill-consolidate.md"
+    },
+    {
+     "line": 68,
+     "token": "docs/plans/2026-06-22-ceo-fleet-autonomy.md",
+     "to": "project/plans/_archive/2026/06/2026-06-22-ceo-fleet-autonomy.md"
+    },
+    {
+     "line": 69,
+     "token": "docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md",
+     "to": "project/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md"
+    },
+    {
+     "line": 70,
+     "token": "docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json",
+     "to": "project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json"
+    },
+    {
+     "line": 71,
+     "token": "docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md",
+     "to": "project/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md"
+    },
+    {
+     "line": 126,
+     "token": "docs/hook-harness-matrix.md",
+     "to": "docs/dev/hook-harness-matrix.md"
+    },
+    {
+     "line": 131,
+     "token": "docs/settings-reference.md",
+     "to": "docs/guide/settings-reference.md"
+    },
+    {
+     "line": 134,
+     "token": "docs/settings-reference.md",
+     "to": "docs/guide/settings-reference.md"
+    },
+    {
+     "line": 143,
+     "token": "docs/settings-reference.md",
+     "to": "docs/guide/settings-reference.md"
+    },
+    {
+     "line": 173,
+     "token": "docs/BACKLOG.md",
+     "to": "project/backlog/BACKLOG.md"
+    },
+    {
+     "line": 175,
+     "token": "docs/BACKLOG.md",
+     "to": "project/backlog/BACKLOG.md"
+    },
+    {
+     "line": 176,
+     "token": "docs/BACKLOG.md",
+     "to": "project/backlog/BACKLOG.md"
+    },
+    {
+     "line": 179,
+     "token": "docs/BACKLOG.md",
+     "to": "project/backlog/BACKLOG.md"
+    }
+   ]
+  },
+  {
+   "file": "scripts/sync-codex-plugin-skills.sh",
+   "docs_tokens": 6,
+   "moved_hits": 6,
+   "hits": [
+    {
+     "line": 99,
+     "token": "docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md",
+     "to": "project/plans/_archive/2026/06/2026-06-04-distill-consolidate.md"
+    },
+    {
+     "line": 100,
+     "token": "docs/plans/2026-06-22-ceo-fleet-autonomy.md",
+     "to": "project/plans/_archive/2026/06/2026-06-22-ceo-fleet-autonomy.md"
+    },
+    {
+     "line": 101,
+     "token": "docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md",
+     "to": "project/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md"
+    },
+    {
+     "line": 102,
+     "token": "docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json",
+     "to": null
+    },
+    {
+     "line": 103,
+     "token": "docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json",
+     "to": "project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json"
+    },
+    {
+     "line": 104,
+     "token": "docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md",
+     "to": "project/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md"
+    }
+   ]
+  },
+  {
+   "file": "scripts/sync-opencode-plugin.sh",
+   "docs_tokens": 0,
+   "moved_hits": 0,
+   "hits": []
+  },
+  {
+   "file": "hooks/tests/run.sh",
+   "docs_tokens": 1,
+   "moved_hits": 1,
+   "hits": [
+    {
+     "line": 400,
+     "token": "docs/BACKLOG.md",
+     "to": "project/backlog/BACKLOG.md"
+    }
+   ]
+  },
+  {
+   "file": "hooks/tests/lib/serial-suites.txt",
+   "docs_tokens": 1,
+   "moved_hits": 1,
+   "hits": [
+    {
+     "line": 45,
+     "token": "docs/backlog/pre-push-suite-speed.md",
+     "to": "project/backlog/pre-push-suite-speed.md"
+    }
+   ]
+  },
+  {
+   "file": "scripts/affected-suites.js",
+   "docs_tokens": 6,
+   "moved_hits": 2,
+   "hits": [
+    {
+     "line": 133,
+     "token": "docs/plans/",
+     "to": null
+    },
+    {
+     "line": 570,
+     "token": "docs/plans/",
+     "to": null
+    }
+   ]
+  },
+  {
+   "file": "scripts/lib/sealed-docs.js",
+   "docs_tokens": 4,
+   "moved_hits": 4,
+   "hits": [
+    {
+     "line": 17,
+     "token": "docs/mission",
+     "to": null
+    },
+    {
+     "line": 18,
+     "token": "docs/mission",
+     "to": null
+    },
+    {
+     "line": 18,
+     "token": "docs/mission",
+     "to": null
+    },
+    {
+     "line": 24,
+     "token": "docs/plans/",
+     "to": null
+    }
+   ]
+  }
+ ],
  "problems": []
 }

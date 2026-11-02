@@ -101,6 +101,7 @@ const DEST6 = [
   { re: /^docs\/projects\/ongoing-maintenance\/(HANDOFF[^/]*\.md)$/, handoff: true },
   { re: /^docs\/plans\/_archive\/(.+)$/, to: (m) => `project/plans/_archive/${m[1]}`, archivedEvidence: true },
   { re: /^docs\/plans\/research\/(.+)$/, to: (m) => `project/plans/research/${m[1]}` },
+  { re: /^docs\/plans\/context\/(.+)$/, to: (m) => `project/plans/context/${m[1]}` }, // operator-console closure kits (A1/A3), added on develop after the first plan run
   { re: /^docs\/plans\/([^/]+)$/, plan: true },
   { re: /^docs\/projects\/_archive\/(.+)$/, to: (m) => `project/projects/_archive/${m[1]}`, archivedEvidence: true },
   { re: /^docs\/projects\/(.+)$/, to: (m) => `project/projects/${m[1]}` },

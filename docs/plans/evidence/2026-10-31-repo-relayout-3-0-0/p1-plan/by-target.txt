@@ -147,7 +147,7 @@ project/handoff/ (6)
   project/handoff/HANDOFF-ongoing-maintenance.md
   project/handoff/HANDOFF.md (merged from 2 sources)
 
-project/missions/ (100)
+project/missions/ (103)
   project/missions/mission-agy-effort-rail-wording-2026-09-16-execution-graph.json
   project/missions/mission-agy-effort-rail-wording-2026-09-16-sources.json
   project/missions/mission-agy-effort-rail-wording-2026-09-16-task-authority.json
@@ -163,6 +163,9 @@ project/missions/ (100)
   project/missions/mission-backlog-entry-schema-execution-graph.json
   project/missions/mission-backlog-entry-schema-sources.json
   project/missions/mission-backlog-entry-schema-task-authority.json
+  project/missions/mission-blind-review-2d-snapshot-2026-09-19-execution-graph.json
+  project/missions/mission-blind-review-2d-snapshot-2026-09-19-sources.json
+  project/missions/mission-blind-review-2d-snapshot-2026-09-19-task-authority.json
   project/missions/mission-blind-review-cleanroom-intake-2026-09-17-execution-graph.json
   project/missions/mission-blind-review-cleanroom-intake-2026-09-17-sources.json
   project/missions/mission-blind-review-cleanroom-intake-2026-09-17-task-authority.json
@@ -249,7 +252,7 @@ project/missions/ (100)
   project/missions/mission-skill-transport-implementer-arm-execution-graph.json
   project/missions/mission-skill-transport-implementer-arm-sources.json
 
-project/plans/ (183)
+project/plans/ (208)
   project/plans/2026-07-08-fable-skills-absorption.md
   project/plans/2026-07-29-bounded-backlog-intake.md
   project/plans/2026-07-29-bounded-backlog-intake.rubric.md
@@ -352,6 +355,9 @@ project/plans/ (183)
   project/plans/2026-09-18-blind-review-panel-station.md
   project/plans/2026-09-18-blind-review-panel-station.plan-review-manifest.json
   project/plans/2026-09-18-blind-review-panel-station.rubric.md
+  project/plans/2026-09-19-blind-review-2d-overlap.md
+  project/plans/2026-09-19-blind-review-2d-overlap.plan-review-manifest.json
+  project/plans/2026-09-19-blind-review-2d-overlap.rubric.md
   project/plans/2026-09-19-roundtable.md
   project/plans/2026-09-25-foreman-guard-role-caps-reserve.g1-artifact.json
   project/plans/2026-09-25-foreman-guard-role-caps-reserve.g1-dispositions.json
@@ -433,6 +439,28 @@ project/plans/ (183)
   project/plans/2026-10-26-depth0-per-turn-gate.plan-review-manifest.json
   project/plans/2026-10-26-depth0-per-turn-gate.rubric.md
   project/plans/2026-10-31-repo-relayout-3-0-0.md
+  project/plans/2026-11-02-oc-a1-events-contract.closure-g1-artifact.json
+  project/plans/2026-11-02-oc-a1-events-contract.closure-g1-dispositions.json
+  project/plans/2026-11-02-oc-a1-events-contract.closure-g2-artifact.json
+  project/plans/2026-11-02-oc-a1-events-contract.closure-g2-dispositions.json
+  project/plans/2026-11-02-oc-a1-events-contract.g1-artifact.json
+  project/plans/2026-11-02-oc-a1-events-contract.g1-dispositions.json
+  project/plans/2026-11-02-oc-a1-events-contract.g2-artifact.json
+  project/plans/2026-11-02-oc-a1-events-contract.g2-dispositions.json
+  project/plans/2026-11-02-oc-a1-events-contract.md
+  project/plans/2026-11-02-oc-a1-events-contract.plan-review-manifest.json
+  project/plans/2026-11-02-oc-a1-events-contract.rubric.md
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.closure-g1-artifact.json
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.closure-g1-dispositions.json
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.closure-g2-artifact.json
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.closure-g2-dispositions.json
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.g1-artifact.json
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.g1-dispositions.json
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.g2-artifact.json
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.g2-dispositions.json
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.md
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.plan-review-manifest.json
+  project/plans/2026-11-02-oc-a3-writers-use-hippo.rubric.md
 
 project/plans/_archive/2026/03/ (1)
   project/plans/_archive/2026/03/2026-03-26-skill-description-optimization.md
@@ -676,6 +704,14 @@ project/plans/_archive/2026/10/ (16)
   project/plans/_archive/2026/10/2026-10-13-l5-mission-scaffold-generator.md
   project/plans/_archive/2026/10/2026-10-13-review-only-external-candidate.md
   project/plans/_archive/2026/10/2026-10-24-findings-batch.md
+
+project/plans/context/ (6)
+  project/plans/context/oc-a1-closure-context.md
+  project/plans/context/oc-a1.closure-manifest.json
+  project/plans/context/oc-a1.closure-rubric.md
+  project/plans/context/oc-a3-closure-context.md
+  project/plans/context/oc-a3.closure-manifest.json
+  project/plans/context/oc-a3.closure-rubric.md
 
 project/plans/research/ (6)
   project/plans/research/2026-10-03-claude-code-mods-integration.md

@@ -1,0 +1,74 @@
+{
+  "artifact_type": "mission_execution_graph",
+  "calculated_batches": 1,
+  "calculated_depth": 1,
+  "graph_digest": "1907f83b21ee4c9910a080f58ca6064c39699dab765a330d75d73cbf4be34453",
+  "nodes": [
+    {
+      "acceptance_ids": [
+        "accept-R1",
+        "accept-R2",
+        "accept-R3",
+        "accept-R4",
+        "accept-R5",
+        "accept-R6",
+        "accept-R7",
+        "accept-R8"
+      ],
+      "campaign": {
+        "allowed_path_prefixes": [
+          ".claude",
+          "docs"
+        ],
+        "baseline_churn": 1600,
+        "max_changed_files": 9,
+        "max_extra_churn": 800,
+        "max_growth_ratio": 1.5,
+        "max_repair_generations": 2,
+        "max_wall_seconds": 3600,
+        "output_paths": [
+          ".claude/mission-routing-config.json"
+        ],
+        "profile": "standard",
+        "required_paths": [
+          ".claude/mission-routing-config.json",
+          "docs/plans/2026-11-03-routing-successor.md",
+          "docs/plans/2026-11-03-routing-successor.rubric.md"
+        ],
+        "spec": {
+          "path": "docs/plans/2026-11-03-routing-successor.md",
+          "section": "4. Deliverable contract"
+        }
+      },
+      "dependencies": [],
+      "gate_attempt_budget": 3,
+      "id": "routing-successor",
+      "reservation": {
+        "campaigns": 1,
+        "canonical_changed_files": 9,
+        "engine_attempts": 2,
+        "external_wait_seconds": 1800,
+        "output_bytes": 8000000,
+        "tool_calls": 450,
+        "wall_seconds": 10800
+      },
+      "source_plan_ids": [
+        "plan-57b2704f5afd8b80e9f0cdeed979463b566982632bf47a53c60228aab5ba920f"
+      ],
+      "source_rubric_ids": [
+        "R101706621705479975262663845988866834919783192835706638435798353855861007523752",
+        "R25493974108889256973959757358462762257668956474629049526409952636332354108409",
+        "R51693849443338654442442411878863348527177132755634030575322764957820935200962",
+        "R57777899979495815154572400505660197617156666684285394439918494540789934175002",
+        "R79639516494971019998739926241900634265459910702211678989331783706634290022683",
+        "R80674231385869671632533724278119624079629549633550218061961011014853553864740",
+        "R87820482186193195263282803071492620930093752805492938022693730852933327530067",
+        "R8852442481832930835132813302169131335680415855483129498736785219297828176471"
+      ],
+      "verification_commands": [
+        "node scripts/mission-execution-graph-check.js --graph docs/mission-routing-successor-2026-11-03-execution-graph.json --governance .claude/owner-kernel-governance.json --sources docs/mission-routing-successor-2026-11-03-sources.json"
+      ]
+    }
+  ],
+  "schema_version": 1
+}

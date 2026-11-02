@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-11-03-routing-successor.md",
+      "rubric_path": "plans/2026-11-03-routing-successor.rubric.md",
+      "plan_sha256": "57b2704f5afd8b80e9f0cdeed979463b566982632bf47a53c60228aab5ba920f",
+      "rubric_sha256": "02c3b542edcf41f89f089a6350d6e14b52bb92e7511bb338f8996d5c43135099"
+    }
+  ]
+}

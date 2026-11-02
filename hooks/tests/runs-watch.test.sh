@@ -458,6 +458,36 @@ eq "null" "$(cj "$RE" 'j.plus3')" "3 s after expiry (N = 5) still does not exit"
 eq "idle_exit" "$(cj "$RE" 'j.plus6')" "N s after expiry the watcher idle-exits"
 rm -f "$AHOME/session-mode/rearm.json"
 
+# --- open owner card holds the watcher (a plain session waiting on the owner fires no prompt / tool call) ---------------
+# RED with the openDecisionCount term removed from sessionLive: (a) expected 'none', got 'idle_exit'.
+cat > "$SB/card-hold.js" <<'JS'
+const R = process.argv[2];
+const { createWatcher } = require(`${R}/src/status/runs-watch.js`);
+const fs = require('fs');
+const path = require('path');
+const [key, cwd, ident, mode] = process.argv.slice(3);
+const common = ident.replace(/^git-common-dir:/, '');
+const dir = path.join(common, 'autopilot', 'decisions');
+fs.mkdirSync(dir, { recursive: true });
+const file = path.join(dir, `${key}.json`);
+const card = (project_key, repo_identity) => JSON.stringify({ schema: 'autopilot.decision/2', root_run_id: null, repo_identity, project_key, decisions: [{ id: 'card1', question: 'which?' }] });
+if (mode === 'open') fs.writeFileSync(file, card(key, ident));
+if (mode === 'foreign') fs.writeFileSync(file, card('someotherproject', 'git-common-dir:/elsewhere/.git'));
+let t = Date.parse('2026-10-04T12:00:00Z');
+const w = createWatcher({ key, cwd, collect: () => [], now: () => t, interval: 1, idleExitS: 5 });
+w.start();
+let exit = 'none';
+for (let i = 0; i < 40 && exit === 'none'; i += 1) { const r = w.tick(); if (r.exit) exit = r.exit; t += 1000; } // 40 s = 8 idle windows
+try { fs.unlinkSync(file); } catch (_error) { /* none written */ }
+process.stdout.write(JSON.stringify({ exit }));
+JS
+CH="$(wenv AUTOPILOT_COSTS_FILE="$SB/absent-costs.jsonl" "$NODE" "$SB/card-hold.js" "$REPO_ROOT" "$KEY_A" "$REPO_A" "$IDENT_A" open)"
+eq "none" "$(cj "$CH" 'j.exit')" "an open card of this project: no idle exit past the idle window (8 windows)"
+CH="$(wenv AUTOPILOT_COSTS_FILE="$SB/absent-costs.jsonl" "$NODE" "$SB/card-hold.js" "$REPO_ROOT" "$KEY_A" "$REPO_A" "$IDENT_A" closed)"
+eq "idle_exit" "$(cj "$CH" 'j.exit')" "card closed (no file): the watcher idle-exits"
+CH="$(wenv AUTOPILOT_COSTS_FILE="$SB/absent-costs.jsonl" "$NODE" "$SB/card-hold.js" "$REPO_ROOT" "$KEY_A" "$REPO_A" "$IDENT_A" foreign)"
+eq "idle_exit" "$(cj "$CH" 'j.exit')" "only another project's card: the watcher idle-exits"
+
 # --- R6 review repair -------------------------------------------------------------------------------
 # RED at 367affdd (R6 cases): --stop --project <repo_identity>: expected '0', got '2' (stderr names the 16-hex rule);
 #   --watch --project <repo_identity>: rc 2 instead of a normal start; envelope validates against

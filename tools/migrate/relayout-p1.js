@@ -794,7 +794,10 @@ const GENERIC_KEYS = new Set(['docs/BACKLOG.md', 'docs/projects/INDEX.md']);
 function rewriteRefs(root, P, sealedOld, refMap, phase) {
   const inv = {}; for (const [a, b] of Object.entries(P.map)) inv[b] = a;
   const skipPrefix = ['docs/plans/evidence/', 'profiles/', 'platforms/', '.opencode/plugin-package/', 'tools/migrate/relayout-p1.js', 'hooks/tests/relayout-p1.test.sh'];
-  const skipExact = new Set(['tools/migrate/no-rewrite.json', 'project/plans/2026-10-31-repo-relayout-3-0-0.md', P.reg.paths.mission_routing_config, ...P.ctx.proposedExceptions.map((e) => e.path)]);
+  // O8 / O8-ext / O9 / O12 files are hash-pinned by baseline-red rows (D9.1, D9.3, D9.6): P1 leaves their bytes alone, P3 / P4 change them with a declared fingerprint change
+  const nrx = readJson(root, 'tools/migrate/no-rewrite.json');
+  const pinnedExcluded = ((nrx && nrx.excluded) || []).filter((e) => /^(O8|O8-ext|O9|O12)$/.test(e.class)).map((e) => e.path);
+  const skipExact = new Set([...pinnedExcluded, 'tools/migrate/no-rewrite.json', 'project/plans/2026-10-31-repo-relayout-3-0-0.md', P.reg.paths.mission_routing_config, ...P.ctx.proposedExceptions.map((e) => e.path)]);
   const docsSide = (f) => f.startsWith('docs/') || f.startsWith('project/') || /^(CHANGELOG|CLAUDE|AGENTS|SECURITY|README(\.zh-TW)?)\.md$/.test(f);
   const files = cp.execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8', maxBuffer: 256 << 20 }).split('\0').filter(Boolean).sort();
   const oldTracked = new Set(files.map((f) => inv[f] || f));

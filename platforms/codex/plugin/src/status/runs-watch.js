@@ -992,8 +992,11 @@ function runWatchCli(opts) {
     const pid = holderFromEnvelope(env, key);
     if (!pid) { stdout.write(`no watcher running for project ${key}\n`); return 0; }
     if (!cmdlineOf(pid)) { stdout.write(`watcher pid ${pid} for project ${key} is not running\n`); return 0; }
-    if (!isWatcherFor(pid, key)) {
-      stderr.write(`refusing to stop pid ${pid}: its command line is not 'status runs --watch --project ${key}'\n`);
+    // Structural, like every signal to a pid read from a file (watcher-identity.js): entry point + project + an fd on this project's lock.
+    const lockFile = lockPathOf(env, key);
+    const holder = () => require('./watcher-identity').classifyWatcher(pid, key, lockFile);
+    if (!holder()) {
+      stderr.write(`refusing to stop pid ${pid}: it is not confirmed as the 'status runs --watch --project ${key}' process holding ${lockFile}\n`);
       return 1;
     }
     try { process.kill(pid, 'SIGTERM'); } catch (error) {
@@ -1001,7 +1004,7 @@ function runWatchCli(opts) {
       return 1;
     }
     for (let i = 0; i < 50 && cmdlineOf(pid); i += 1) sleepMs(100);
-    if (isWatcherFor(pid, key)) {
+    if (holder()) {
       stderr.write(`still running pid ${pid} after SIGTERM (watcher for project ${key})\n`);
       return 1;
     }

@@ -677,17 +677,31 @@ test('watcher tick publishes the session phase (source session) from a plain mar
 
 // ---------------------------------------------------------------- repair 1: SessionStart ensure on the zero-spawn fast path
 
+// A stand-in that is a watcher by the structural definition (src/status/watcher-identity.js): node <x>/bin/autopilot.js status runs --watch
+// --project <key> [--render], holding an fd on the project's lock file. Returns once the fd exists.
+function structuralFakeWatcher(dir, live, key, { render = true } = {}) {
+  const bin = path.join(dir, 'fakebin', 'bin'); fs.mkdirSync(bin, { recursive: true });
+  const script = path.join(bin, 'autopilot.js');
+  fs.writeFileSync(script, "const fs=require('fs');fs.mkdirSync(require('path').dirname(process.env.FAKE_LOCK),{recursive:true});fs.openSync(process.env.FAKE_LOCK,'a');setTimeout(()=>{},120000)\n");
+  const lock = path.join(live, 'runs', `${key}.lock`);
+  const child = require('child_process').spawn(process.execPath, [script, 'status', 'runs', '--watch', '--project', key, ...(render ? ['--render'] : [])], { stdio: 'ignore', detached: true, env: { ...process.env, FAKE_LOCK: lock } });
+  child.unref();
+  const end = Date.now() + 5000;
+  const holds = () => { try { return fs.readdirSync(`/proc/${child.pid}/fd`).some((n) => { try { return fs.readlinkSync(`/proc/${child.pid}/fd/${n}`) === lock; } catch { return false; } }); } catch { return false; } };
+  while (Date.now() < end && !holds()) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+  return child;
+}
+
 function fastPathFixture() {
   const f = fx(); optIn(f);
   const sc = scopeFromCwd(f.repo);
   const cwd = fs.realpathSync(f.repo);
-  const w = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(()=>{},60000)', 'status', 'runs', '--watch', '--project', sc.project_key, '--render'], { stdio: 'ignore', detached: true });
-  w.unref();
+  const w = structuralFakeWatcher(f.base, f.live, sc.project_key);
   const name = require('crypto').createHash('sha1').update(cwd).digest('hex').slice(0, 16);
   fs.mkdirSync(path.join(f.live, 'autostart'), { recursive: true });
   fs.writeFileSync(path.join(f.live, 'autostart', `${name}.json`), JSON.stringify({ cwd, project_key: sc.project_key, repo_identity: sc.repo_identity, repo_root: cwd }));
   fs.mkdirSync(path.join(f.live, 'runs'), { recursive: true });
-  fs.writeFileSync(path.join(f.live, 'runs', `${sc.project_key}.json`), JSON.stringify({ schema: 'x', writer: { pid: w.pid } }));
+  fs.writeFileSync(path.join(f.live, 'runs', `${sc.project_key}.json`), JSON.stringify({ schema: 'x', writer: { pid: w.pid, plugin_root: fs.realpathSync(path.join(__dirname, '..')), plugin_version: JSON.parse(fs.readFileSync(path.join(__dirname, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version } }));
   fs.mkdirSync(path.join(f.home, '.autopilot'), { recursive: true });
   fs.writeFileSync(path.join(f.home, '.autopilot', 'live-pointer.json'), '{}');
   const bin = path.join(f.base, 'bin'); fs.mkdirSync(bin);

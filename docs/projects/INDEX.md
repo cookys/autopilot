@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-11-02 | [operator console A3: autopilot writers use hippo (draft, awaiting plan review)](../plans/2026-11-02-oc-a3-writers-use-hippo.md) | active | plan/oc-a3-hippo-writers | [plan](../plans/2026-11-02-oc-a3-writers-use-hippo.md) |
 | 2026-10-31 | [repo relayout 3.0.0: plan, addendum C (private dev repo plus public release repo), section 4 seal-closure rulings](../plans/2026-10-31-repo-relayout-3-0-0.md) | active | — | [plan](../plans/2026-10-31-repo-relayout-3-0-0.md) |
 | 2026-10-26 | [depth-0 decides the per-turn gate (session-scoped switch, generic verifier, subagent coverage)](../plans/2026-10-26-depth0-per-turn-gate.md) | active | — | [plan](../plans/2026-10-26-depth0-per-turn-gate.md) |
 | 2026-10-24 | [BL-0055 phase 2: per-turn gate as an opt-in Stop-hook adapter, ON/OFF evaluation design (draft, awaiting plan review)](../plans/2026-10-24-per-turn-gate-phase2.md) | active | — | [plan](../plans/2026-10-24-per-turn-gate-phase2.md) |

@@ -477,6 +477,44 @@ node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev
 assert_file_exists "$d/docs/plans/2026-09-19-blind-review-2d-overlap.md" \
   "--fix never moves an active-lineage plan (defense in depth even if somehow doomed)"
 
+# --- Hardening A2: a plan SEALED by a mission sources manifest that routing no longer names (a retired
+#     graph) is kept in place too: archiving it would make the sealed graph unverifiable. A released plan
+#     no manifest seals is still reported. ---
+d="$(fixture_repo sealed-retired)"
+for st in 2026-09-19-sealed-thing 2026-09-20-unsealed-thing; do
+  printf '# Plan\n' > "$d/docs/plans/$st.md"
+done
+printf '# Rubric\n' > "$d/docs/plans/2026-09-19-sealed-thing.rubric.md"
+cat > "$d/CHANGELOG.md" <<'MD'
+# Changelog
+
+## v1.2.3 — ships sealed-thing and unsealed-thing
+
+- landed the things.
+MD
+H64="$(printf 'a%.0s' $(seq 1 64))"
+cat > "$d/docs/mission-old-sources.json" <<JSON
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "plan_path": "plans/2026-09-19-sealed-thing.md",
+      "rubric_path": "plans/2026-09-19-sealed-thing.rubric.md",
+      "plan_sha256": "$H64",
+      "rubric_sha256": "$H64"
+    }
+  ]
+}
+JSON
+out="$(node "$GATE" --repo-root "$d" --json)"
+assert_eq "$(json_count "$out" plan_released_not_archived)" "1" \
+  "only the plan no manifest seals is plan_released_not_archived"
+assert_eq "$(json_count "$out" plan_active_lineage)" "1" "the sealed plan is reported as plan_active_lineage"
+git -C "$d" add -A
+node "$GATE" --repo-root "$d" --fix --json --receipt "$d/fix-receipt.json" >/dev/null
+assert_file_exists "$d/docs/plans/2026-09-19-sealed-thing.md" "--fix never moves a sealed plan"
+assert_file_absent "$d/docs/plans/2026-09-20-unsealed-thing.md" "--fix still archives the unsealed released plan"
+
 # --- Hardening B: --fix rewrites docs/plans/<stem> references in OTHER tracked text
 #     files (a skill doc linking the plan), except CHANGELOG.md and docs/BACKLOG.md ---
 d="$(fixture_repo rewrite-references)"

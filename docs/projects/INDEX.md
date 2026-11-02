@@ -8,6 +8,7 @@
 
 | Date | Project | Target version | Branch |
 |------|---------|----------------|--------|
+| 2026-11-03 | [mission routing hands over to a successor graph before the relayout P1 merge](../plans/2026-11-03-routing-successor.md) | active | — | [plan](../plans/2026-11-03-routing-successor.md) |
 | 2026-11-02 | [A1 events contract: autopilot status events, schema autopilot.events/1 (operator-console D3 A1)](../plans/2026-11-02-oc-a1-events-contract.md) | active | — | [plan](../plans/2026-11-02-oc-a1-events-contract.md) |
 | 2026-11-02 | [operator console A3: autopilot writers use hippo (plan-reviewed, frozen)](../plans/2026-11-02-oc-a3-writers-use-hippo.md) | active | — | [plan](../plans/2026-11-02-oc-a3-writers-use-hippo.md) |
 | 2026-10-31 | [repo relayout 3.0.0: plan, addendum C (private dev repo plus public release repo), section 4 seal-closure rulings](../plans/2026-10-31-repo-relayout-3-0-0.md) | active | — | [plan](../plans/2026-10-31-repo-relayout-3-0-0.md) |

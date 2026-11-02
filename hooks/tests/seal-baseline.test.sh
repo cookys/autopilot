@@ -31,7 +31,7 @@ node -e '
 const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));const o=j.objects;const ids=Object.keys(o);
 const e=(c,m)=>{if(!c){console.log("BAD "+m);process.exit(1)}};
 const cat=(c,s)=>ids.filter(i=>o[i].category===c&&(!s||o[i].status===s)).length;
-e(cat("mission-graph")===37&&cat("mission-graph","red")===8,"8 of 37 graphs red");
+e(cat("mission-graph")===38&&cat("mission-graph","red")===8,"8 of 38 graphs red");
 e(cat("task-authority")===23&&cat("task-authority","red")===13,"13 of 23 authorities red");
 e(cat("stamp-row")===13&&cat("stamp-row","red")===1&&o["evals/skill-onoff/prereg/stage-graph-g8.json"].status==="red","g8 is the one red stamp row");
 e(o["evals/skill-onoff/prereg/stage-graph-g67.json#amend-1-plugin-scripts"].status==="red","g67 amendment generator red");

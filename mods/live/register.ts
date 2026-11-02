@@ -902,13 +902,18 @@ export function registerLive(on: Parameters<Register>[0]): void {
       yield chunk
     }
     const result = await stream.result
-    const usage = result.usage
-    if (usage) {
-      const outTokens = usage.output_tokens ?? 0
-      const { decodeMs, tps } = stepRate({ sent, first, last, outTokens, thinkingStreamed, serverToolMs: serverToolMs(result.serverToolUses) })
-      const step: Step = { at: Date.now(), model: usage.model ?? e.model, isSubagent: e.agentId !== undefined, ttftMs: first !== null ? first - sent : null, decodeMs, outTokens, tps }
-      await update($, STEPS, list => [...validSteps(list), step].slice(-KEEP_STEPS))
-      $.ui.invalidate('ui.render')
+    // Measuring must never break the turn: whatever fails below (the rate, the state write, the redraw) is dropped, and the result is returned either way.
+    try {
+      const usage = result.usage
+      if (usage) {
+        const outTokens = usage.output_tokens ?? 0
+        const { decodeMs, tps } = stepRate({ sent, first, last, outTokens, thinkingStreamed, serverToolMs: serverToolMs(result.serverToolUses) })
+        const step: Step = { at: Date.now(), model: usage.model ?? e.model, isSubagent: e.agentId !== undefined, ttftMs: first !== null ? first - sent : null, decodeMs, outTokens, tps }
+        await update($, STEPS, list => [...validSteps(list), step].slice(-KEEP_STEPS))
+        await $.ui.invalidate('ui.render')
+      }
+    } catch (_e) {
+      // a sample lost is a sample lost; the turn goes on
     }
     return result
   })
@@ -993,6 +998,8 @@ export function registerLive(on: Parameters<Register>[0]): void {
     let content: unknown[] = []
     if (active === 'forge') {
       // the room under the bar and the rule: the speed view (ours) and, when there is room for it, the mod below's full view (Ferris, pet, memory, brain)
+      // When this tab is shut the mod below is not asked and its element is not in our tree. Its Raster is then not mounted, so its `$.ui.blit` is denied (host contract: `{ deny }` when nothing of the
+      // caller's is mounted there) and the screen shows only our tree: no stale picture (checked in a real terminal, BL-0359 round 2). The mod resends its frame once it is drawn again.
       const room = rows - 2
       if (room >= SPEED_ROWS) {
         const stack = SPEED_PLACEMENT === 'stack'
@@ -1004,7 +1011,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
           const answer = await lower(belowRows, belowCols)
           if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') below = answer
         }
-        content = speedContent(el, view.columns, below, SPEED_PLACEMENT)
+        if (view.columns.length > 0) content = speedContent(el, view.columns, below, SPEED_PLACEMENT)
       }
     } else if (active === 'decide') {
       // the pane's own 待決 lines, compact; a press is the pane's decidePress, and the draw is asked again once it has written the state

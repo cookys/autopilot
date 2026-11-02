@@ -3,7 +3,7 @@
 // Run through `bash mods/live/run-tests.sh`. The method is codeforge 405b214's `stepRate`; the numbers pinned below are the 2026-11-02 case that showed 3578 tok/s for ~83.
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
-import { fmtMs, fmtTps, KEEP_STEPS, MIN_DECODE_MS, petTag, recentTimed, serverToolMs, STEPS_SHAPE, stepRate, summarize, validSteps } from './speed'
+import { isStep, fmtMs, fmtTps, KEEP_STEPS, MIN_DECODE_MS, petTag, recentTimed, serverToolMs, STEPS_SHAPE, stepRate, summarize, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, recentColumn, SPEED_COL_W, SPEED_ROWS, speedColumn, speedLabelParts, speedView, sparkline } from './speedview'
 import * as ui from './ui'
@@ -49,12 +49,40 @@ test('serverToolMs: a tool with an end is subtracted, one without (the advisor) 
   expect(serverToolMs([{ startedAt: 900, endedAt: 800 }]), 'a clock that ran backwards subtracts nothing').toBe(0)
 })
 
-test('the stored list: 200 kept, the shape tag steps-2 (a list under another tag is dropped by the state layer), anything that is not a list of samples is empty', () => {
+test('the stored list: 200 kept, the shape tag steps-2 (a list under another tag is dropped by the state layer), anything that is not a list is empty', () => {
   expect(KEEP_STEPS).toBe(200)
   expect(STEPS_SHAPE).toBe('steps-2')
   expect(validSteps(undefined)).toEqual([])
   expect(validSteps({ a: 1 })).toEqual([])
-  expect(validSteps([step(), { nope: true }, null, step({ model: 'x' })]).map(s => s.model)).toEqual(['claude-opus-5-5', 'x'])
+})
+
+test('validSteps checks every field: a bad sample is dropped alone, the good ones stay', () => {
+  const good = step()
+  const bad: [string, unknown][] = [
+    ['missing at', { ...good, at: undefined }],
+    ['missing model', { ...good, model: undefined }],
+    ['empty model', { ...good, model: '' }],
+    ['model of the wrong type', { ...good, model: 5 }],
+    ['isSubagent a string', { ...good, isSubagent: 'no' }],
+    ['missing isSubagent', { ...good, isSubagent: undefined }],
+    ['NaN outTokens', { ...good, outTokens: Number.NaN }],
+    ['Infinity outTokens', { ...good, outTokens: Number.POSITIVE_INFINITY }],
+    ['negative outTokens', { ...good, outTokens: -1 }],
+    ['outTokens null (only the three timing fields may be null)', { ...good, outTokens: null }],
+    ['negative at', { ...good, at: -5 }],
+    ['negative tps', { ...good, tps: -3 }],
+    ['NaN decodeMs', { ...good, decodeMs: Number.NaN }],
+    ['string ttftMs', { ...good, ttftMs: '12' }],
+    ['missing tps', { ...good, tps: undefined }],
+    ['null', null],
+    ['a string', 'x'],
+  ]
+  for (const [name, s] of bad) {
+    expect(isStep(s), name).toBe(false)
+    expect(validSteps([good, s, step({ model: 'kept' })]).map(x => x.model), name + ': the others survive').toEqual([good.model, 'kept'])
+  }
+  expect(isStep({ ...good, ttftMs: null, decodeMs: null, tps: null }), 'the three timing fields may be null').toBe(true)
+  expect(isStep({ ...good, outTokens: 0, tps: 0 })).toBe(true)
 })
 
 test('summarize: the average is token-weighted (total tokens over total writing time), best and latest are the timed ones, the first-token delay is the median over all requests', () => {
@@ -192,15 +220,27 @@ for (const locale of ['zh-TW', 'en'] as const) {
     }
   })
 
-  test('speed view (' + locale + '): the table joins the speed column when 40 cells are left beside it, and `used` says what the mod below has left', () => {
+  test('speed view (' + locale + '): the table joins the speed column only when its full 46 cells are left beside it, and `used` says what the mod below has left', () => {
     const wide = speedView(steps, 12, 120, t)
     expect(wide.columns.length).toBe(2)
     expect(wide.used).toBe(SPEED_COL_W + COL_GAP + 46)
-    const mid = speedView(steps, 12, SPEED_COL_W + COL_GAP + 40, t)
+    const mid = speedView(steps, 12, SPEED_COL_W + COL_GAP + 46, t)
     expect(mid.columns.length).toBe(2)
-    expect(mid.columns[1].width).toBe(40)
-    const narrow = speedView(steps, 12, SPEED_COL_W + COL_GAP + 39, t)
+    expect(mid.columns[1].width).toBe(46)
+    const narrow = speedView(steps, 12, SPEED_COL_W + COL_GAP + 45, t)
     expect(narrow.columns.length).toBe(1)
     expect(narrow.used).toBe(SPEED_COL_W)
+  })
+
+  test('speed view (' + locale + '): at every width it never draws wider than it was given (the table goes first, then the speed column shrinks) and under 26 cells it draws nothing', () => {
+    for (const columns of [20, 25, 26, 30, 34, 36, 40, 60, 75, 76, 81, 82, 120]) {
+      const v = speedView(steps, 12, columns, t)
+      if (columns < 26) { expect(v.columns, 'columns=' + columns).toEqual([]); continue }
+      expect(v.columns.length, 'columns=' + columns).toBeGreaterThan(0)
+      const total = v.columns.reduce((n, c) => n + c.width, 0) + COL_GAP * (v.columns.length - 1)
+      expect(total, 'columns=' + columns).toBeLessThanOrEqual(columns)
+      expect(v.used, 'columns=' + columns).toBe(total)
+      for (const c of v.columns) for (const line of c.lines) expect(ui.displayWidth(line.map(g => g.text).join('')), 'columns=' + columns + ' ' + JSON.stringify(line.map(g => g.text))).toBeLessThanOrEqual(c.width)
+    }
   })
 }

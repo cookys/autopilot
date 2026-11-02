@@ -548,3 +548,25 @@ test('prompt.submit allowlist controls: the call, the bracket forms, destructuri
   assert.equal(submitUses("on('prompt.submit', ($, e) => e)").length, 0)
   assert.ok(/\basUser\b/.test(code('$.prompt.submit({ text, asUser: true })')))
 })
+
+// BL-0359 (round 2): the speed measurement runs inside the model request's own stream hook, so a failure in it must never reach the turn. The measuring step (from `await stream.result`
+// to `return result`) is one try with a catch. The test kit does not show the difference (the host already isolates a hook that throws), so the rule reads the source; the control plants the unguarded form.
+const MEASURE_GUARDED = src => {
+  const from = src.indexOf("on('turn.step'")
+  if (from < 0) return ['no turn.step hook']
+  const tail = code(src.slice(from))
+  const a = tail.indexOf('await stream.result')
+  const b = tail.indexOf('return result', a)
+  if (a < 0 || b < 0) return ['the hook does not await the result and return it']
+  const body = tail.slice(a, b)
+  return /\btry\s*\{/.test(body) && /\}\s*catch\b/.test(body) ? [] : ['the measurement between `await stream.result` and `return result` is not inside try / catch']
+}
+test('turn.step measurement: everything between awaiting the result and returning it is inside try / catch', () => {
+  assert.deepEqual(MEASURE_GUARDED(read('register.ts')), [])
+})
+test('turn.step measurement control: the unguarded form, and a catch-less try, are reported (negative control)', () => {
+  const guarded = "on('turn.step', async function* ($, e, next) {\n const result = await stream.result\n try { await update($) } catch (_e) { }\n return result\n})"
+  assert.deepEqual(MEASURE_GUARDED(guarded), [])
+  assert.ok(MEASURE_GUARDED(guarded.replace('try {', '{').replace('catch (_e)', 'finally')).length > 0)
+  assert.ok(MEASURE_GUARDED("on('turn.step', async function* () {\n const result = await stream.result\n await update($)\n return result\n})").length > 0)
+})

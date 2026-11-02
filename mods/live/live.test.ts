@@ -185,7 +185,7 @@ type World = {
 const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(on, files, nowMs, sid, 'en')
 
 // BL-0359: the bottom of the chain stands for the API. A test sets TURN_PLAN; each `$.turn.step` plays the next planned request: hidden thinking (`before`), then the text (`after`).
-type Plan = { before: number; after: number; tokens: number; model?: string; agent?: string; thinking?: boolean }
+type Plan = { before: number; after: number; tokens: number; model?: string; agent?: string; thinking?: boolean; badTools?: boolean }
 const spin = (ms: number) => { const t = performance.now(); while (performance.now() - t < ms) { /* busy: the clock is the stream's */ } }
 let TURN_PLAN: Plan[] = []
 let TURN_AT = 0
@@ -250,7 +250,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
     yield (f.thinking === true ? { kind: 'thinking', index: 0, text: 'hm' } : { kind: 'text', index: 0, text: 'a' }) as { kind: 'thinking' | 'text'; index: number; text: string }
     spin(f.after)
     yield { kind: 'text', index: 0, text: 'b' } as const
-    return { turnId: e.turnId, index: e.index, answer: 'ab', toolUses: [], stopReason: 'end_turn', usage: { input_tokens: 10, output_tokens: f.tokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: f.model ?? 'claude-opus-5-5' } } as const
+    return { turnId: e.turnId, index: e.index, answer: 'ab', toolUses: [], stopReason: 'end_turn', ...(f.badTools === true ? { serverToolUses: [null] as never } : {}), usage: { input_tokens: 10, output_tokens: f.tokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: f.model ?? 'claude-opus-5-5' } } as const
   })
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
@@ -6110,6 +6110,61 @@ for (const surface of SURFACES) {
     const s = await draw($, on, TWO, [], { hasSurvey: true })
     expect(s.text).not.toContain('ⓘ')
     expect(asks.map(a => [a.maxRows, a.hasSurvey])).toEqual([[20, true]])
+  })
+
+  test('speed tab: a measurement that throws (a null entry in serverToolUses) leaves the turn alone: its result still comes back, and nothing is recorded (' + surface + ')', async ($, on) => {
+    worldEn(on, richWorld())
+    await start($, surface)
+    TURN_PLAN = [{ before: 10, after: 10, tokens: 5, badTools: true }]; TURN_AT = 0
+    const stream = $.turn.step({ turnId: 't1', index: 0, model: 'opus', messageCount: 1 })
+    for await (const _ of stream) {
+      // drained
+    }
+    await stream.result // rejects when the measurement's failure reached the turn
+    const ui = await mount($)
+    const tree = (await ui.findAll({ type: 'Button' })) as Node[]
+    await ui.unmount()
+    expect(tree.some(b => b.props?.key === 'speed'), 'no sample was recorded: no label').toBe(false)
+  })
+
+  // a node's drawn width: a Box with a `width` is that wide, a row is its children side by side, a column the widest child, a Text its display width
+  const widthOf = (n: Node | string): number => {
+    if (typeof n === 'string') return displayWidth(n)
+    const w = (n.props as { width?: number } | undefined)?.width
+    if (typeof w === 'number') return w
+    if (n.type === 'Text') return displayWidth(textOf(n))
+    const kids = (n.children || []) as (Node | string)[]
+    return (n.props as { flexDirection?: string } | undefined)?.flexDirection === 'column' ? Math.max(0, ...kids.map(widthOf)) : kids.reduce((s, c) => s + widthOf(c), 0)
+  }
+  const find = (n: Node | string, key: string): Node | null => {
+    if (typeof n === 'string') return null
+    if (n.props?.key === key) return n
+    for (const c of (n.children || []) as (Node | string)[]) { const f = find(c, key); if (f !== null) return f }
+    return null
+  }
+  test('speed tab: at 30, 40, 60, 100 and 120 columns the open speed view never draws wider than the band, and a column it cannot give is left out, not cut (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    forgeMod(w, [])
+    await start($, surface)
+    TURN_PLAN = TWO; TURN_AT = 0
+    await runPlan($, TWO.map(p => p.agent))
+    const seen: string[] = []
+    for (const columns of [30, 40, 60, 100, 120]) {
+      const props = { bodyColumns: columns, maxRows: 20 }
+      const a = await mount($, props)
+      const hasTab = ((await a.findAll({ type: 'Button' })) as Node[]).some(b => b.props?.key === 'forge')
+      if (hasTab) await a.press({ key: 'forge' })
+      await a.unmount()
+      const b = await mount($, props)
+      const tree = (await b.drawn()) as Node
+      await b.unmount()
+      const view = find(tree, 'speedview')
+      seen.push(columns + ':' + (hasTab ? (view === null ? 'tab, no view' : 'view ' + widthOf(view)) : 'no tab'))
+      if (view !== null) expect(widthOf(view), 'columns=' + columns).toBeLessThanOrEqual(columns)
+      // toggle the tab off again for the next width
+      if (hasTab) { const c = await mount($, props); await c.press({ key: 'forge' }); await c.unmount() }
+    }
+    console.log('speed view widths: ' + seen.join(' | '))
   })
 
   test('speed tab: the label colours on the drawn band: ϟ and the trend running, the number default, the unit dim (' + surface + ')', async ($, on) => {

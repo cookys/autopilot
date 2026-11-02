@@ -91,10 +91,16 @@ export const fmtTps = (tps: number | null, dash: string): string => (tps === nul
 export const fmtCount = (n: number): string => n.toLocaleString('en-US')
 export const shortModel = (m: string): string => m.replace(/^claude-/, '').replace(/-\d{8}$/, '').replace(/\[1m\]$/, '')
 
-/** The `$.state` value, or an empty list when it is not a list of samples. */
-export function validSteps(raw: unknown): Step[] {
-  return Array.isArray(raw) ? raw.filter((s): s is Step => typeof s === 'object' && s !== null && typeof (s as Step).model === 'string' && typeof (s as Step).outTokens === 'number') : []
+const nonNeg = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
+const nonNegOrNull = (v: unknown): v is number | null => v === null || nonNeg(v)
+/** One stored sample, checked field by field: a bad one is dropped by `validSteps`, never trusted. */
+export function isStep(s: unknown): s is Step {
+  if (typeof s !== 'object' || s === null) return false
+  const o = s as Record<string, unknown>
+  return nonNeg(o.at) && typeof o.model === 'string' && o.model !== '' && typeof o.isSubagent === 'boolean' && nonNegOrNull(o.ttftMs) && nonNegOrNull(o.decodeMs) && nonNeg(o.outTokens) && nonNegOrNull(o.tps)
 }
+/** The `$.state` value: the samples that pass `isStep`, or an empty list when it is not a list. One bad sample does not void the rest. */
+export const validSteps = (raw: unknown): Step[] => (Array.isArray(raw) ? raw.filter(isStep) : [])
 
 /** codeforge's `codeforge.pet-view/1` snapshot (`<live base>/codeforge/pet.json`) as the label's pet tag `Name Lv.N`, or null when it holds no pet. */
 export const PET_SCHEMA = 'codeforge.pet-view/1'

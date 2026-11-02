@@ -45,11 +45,13 @@ Details: [references/phase0-hygiene.md](references/phase0-hygiene.md)
 
 ### Phase 1: Scan All Sources
 
+Paths below come from `bash scripts/resolve-project-paths.sh --field <index|backlog>`.
+
 | Category | Source | Method |
 |----------|--------|--------|
-| **Dev** | `docs/projects/INDEX.md` | Find in-progress projects' next Phase |
-| | `docs/projects/INDEX.md` rows with Version `active` | The plan registry (`check-plan-graduation.js`'s `plan_unregistered` gate) — plans in design/implementation stage |
-| | `docs/BACKLOG.md` | Check if trigger conditions are met |
+| **Dev** | `<index>` | Find in-progress projects' next Phase |
+| | `<index>` rows with Version `active` | The plan registry (`check-plan-graduation.js`'s `plan_unregistered` gate) — plans in design/implementation stage |
+| | `<backlog>` | Check if trigger conditions are met |
 | | `docs/proposals/` | List pending proposals |
 | **Maintenance** | `improvement-queue.json` | Pending items (from Phase 0) |
 | | [B] `skills/*/SKILL.md` | Skills > 200 lines |
@@ -57,7 +59,7 @@ Details: [references/phase0-hygiene.md](references/phase0-hygiene.md)
 | | [B] `~/.autopilot/distill/scan-state.json` | mtime > 14 days OR file missing (scan never ran) → list "distill frequency scan overdue" under Maintenance |
 | **Knowledge** | `session-digests/` | Phase 0 results |
 | | [B] `knowledge/*.md` | `last-verified` > 30 days |
-| **Tech Debt** | `docs/BACKLOG.md` tech-debt | List all (even unmet triggers) |
+| **Tech Debt** | `<backlog>` tech-debt | List all (even unmet triggers) |
 | | [C] `src/` | TODO/FIXME count |
 | | [C] `git log --since="30 days ago"` | Untouched src/ subdirectories |
 
@@ -120,7 +122,7 @@ If all sources empty: suggest `/next --deep` or propose new features.
 When a depth-0 brain picks the next item WITHOUT the user (CEO mode idle
 transition), the pick is a proxy decision and goes through
 [`scripts/next-pick.js`](../../scripts/next-pick.js): `parse` extracts
-machine-readable candidate rows from `docs/BACKLOG.md`, `pick` ranks them
+machine-readable candidate rows from the resolved `<backlog>`, `pick` ranks them
 deterministically from a materialized record (user class-weights outrank every
 system signal; L/XL-effort or urgent (`!`/`急`) rows, `board`-tagged, and `hard-problem` rows queue
 ask-first and are NEVER auto-picked) and appends the pick + record to the

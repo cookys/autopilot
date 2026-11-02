@@ -22,8 +22,13 @@
 #   2. <target>/.claude/project-lifecycle-config.md   ← what scaffold-config.js writes
 #   3. <target>/.claude/next-config.md
 #   4. <target>/.claude/dev-flow-config.md
-#   5. project-detect.js --target <target>
-#   6. "none"
+#   5. <target>/scripts/lib/repo-layout.js registry — executed ONLY when the target and this
+#      script's own repo are the same git repo (equal realpath of `git rev-parse --git-common-dir`,
+#      GIT_* location variables cleared), the target is one of that repo's worktrees, the file is a
+#      non-symlink physically under <target>/scripts/lib/, and its header names it the layout
+#      registry. Anything else skips the tier: never run a consumer's code.
+#   6. project-detect.js --target <target>
+#   7. "none"
 #
 # Tier 2-4 are read from the TARGET, never from this plugin's own .claude/. The installed
 # plugin ships a .claude/ directory, so inheriting it across repos would hand a consuming
@@ -39,7 +44,7 @@
 #   (a directory for *_dir, a file for backlog/index). A detected default can name a path that was
 #   never created (fleet repo, 2026-11-01: backlog=docs/BACKLOG.md, no such file); a skill must treat
 #   backlog_exists=false like `none`: report, do not write.
-#   source ∈ {override, project-lifecycle-config, next-config, dev-flow-config, detected, none}
+#   source ∈ {override, project-lifecycle-config, next-config, dev-flow-config, registry, detected, none}
 #     — the source of the FIRST field that answered; individual fields may differ, so a
 #       field's own value is authoritative, not the aggregate label.
 #
@@ -115,6 +120,53 @@ resolve_one 'Plans directory';    PLANS="$RESOLVED"
 resolve_one 'Archive';            ARCHIVE="$RESOLVED"
 resolve_one 'Backlog';            BACKLOG="$RESOLVED"
 resolve_one 'Index';              INDEX="$RESOLVED"
+
+# Tier 5: the TARGET's own layout registry (autopilot repo only; relayout moves the work-record
+# paths and the registry is the one place that knows the current stage). Read from TARGET, never
+# from this plugin. The file is run only when it is this plugin's own repo (same_repo) and its
+# header names it the layout registry, with the test-override env cleared.
+REG_FILE="$TARGET/scripts/lib/repo-layout.js"
+# Every git call below runs with the GIT_* location variables cleared: a caller (or an attacker
+# who controls the environment) could otherwise point git at THIS repo while TARGET is foreign.
+git_clean() { env -u GIT_DIR -u GIT_COMMON_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git "$@"; }
+common_dir() {  # common_dir <dir> → realpath of its git common dir, or fail
+  local c; c="$(git_clean -C "$1" rev-parse --git-common-dir 2>/dev/null)" || return 1
+  [[ -n "$c" ]] || return 1
+  (cd "$1" && cd "$c" 2>/dev/null && pwd -P)
+}
+# True only when TARGET is this plugin's own repo: same git common dir, TARGET is itself one of
+# this repo's worktrees (a gitfile or .git symlink pointing here does not make a foreign dir ours),
+# and the registry file is a real file (no symlink) physically under TARGET/scripts/lib/.
+same_repo() {
+  local a b w t lib
+  a="$(common_dir "$TARGET")" || return 1
+  b="$(common_dir "$SCRIPT_DIR")" || return 1
+  [[ -n "$a" && "$a" == "$b" ]] || return 1
+  t="$(cd "$TARGET" && pwd -P)" || return 1
+  local found=1
+  while IFS= read -r w; do
+    [[ "$w" == "worktree "* ]] || continue
+    w="${w#worktree }"
+    [[ "$(cd "$w" 2>/dev/null && pwd -P)" == "$t" ]] && { found=0; break; }
+  done < <(git_clean -C "$SCRIPT_DIR" worktree list --porcelain 2>/dev/null)
+  [[ "$found" -eq 0 ]] || return 1
+  [[ ! -L "$REG_FILE" ]] || return 1
+  lib="$(cd "$t/scripts/lib" 2>/dev/null && pwd -P)" || return 1
+  [[ "$lib" == "$t/scripts/lib" ]]
+}
+if [[ -z "$PROJECTS" || -z "$PLANS" || -z "$ARCHIVE" || -z "$BACKLOG" || -z "$INDEX" ]] \
+   && [[ -f "$REG_FILE" ]] && same_repo && [[ "$(head -c 800 "$REG_FILE")" == *'the one registry of where things live'* ]]; then
+  reg_get() { env -u REPO_LAYOUT_REGISTRY node "$REG_FILE" path "$1" 2>/dev/null; }
+  _answered=0
+  for _f in projects_dir:projects_dir:PROJECTS:/ plans_dir:plans_dir:PLANS:/ projects_archive_dir:archive_dir:ARCHIVE:/ backlog_file:backlog:BACKLOG: projects_index:index:INDEX:; do
+    IFS=: read -r _rk _ _var _suf <<< "$_f"
+    [[ -n "${!_var}" ]] && continue
+    _v="$(reg_get "$_rk")"
+    [[ -n "$_v" ]] || continue
+    printf -v "$_var" '%s' "${_v%/}$_suf"; _answered=1
+  done
+  [[ "$SOURCE" == "none" && "$_answered" -eq 1 ]] && SOURCE="registry"
+fi
 
 # Anything the config did not answer falls to detection, which owns doc/ vs docs/.
 if [[ -z "$PROJECTS$PLANS$ARCHIVE$BACKLOG$INDEX" ]] \

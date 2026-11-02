@@ -16,6 +16,7 @@ PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); printf 'ok — %s\n' "$1"; }
 no() { FAIL=$((FAIL+1)); printf 'FAIL — %s\n     want: %s\n     got:  %s\n' "$1" "$2" "$3"; }
 eq() { [ "$2" = "$3" ] && ok "$1" || no "$1" "$2" "$3"; }
+ne() { [ "$2" != "$3" ] && ok "$1" || no "$1" "anything but $2" "$3"; }
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"; cleanup_test_tmp' EXIT
 P="$TMP/proj"; mkdir -p "$P"; git -C "$P" init -q
@@ -145,6 +146,90 @@ FF="$REPO_ROOT/skills/finish-flow/SKILL.md"
 if grep -F 'backlog: none`, or `backlog_exists` false' "$FF" >/dev/null && grep -F -- '--field backlog_exists' "$FF" >/dev/null
 then ok "finish-flow Deferred items: backlog_exists=false triggers the no-backlog report"
 else no "finish-flow Deferred items: backlog_exists=false triggers the no-backlog report" "SKILL.md names backlog_exists" "absent"; fi
+
+# 8d. The layout registry answers before detection (relayout: stage bootstrap -> docs/, stage P1 ->
+#     project/), but ONLY for a target in the same git repo as this script (equal git-common-dir):
+#     a consumer's repo-layout.js is never executed, whatever its header says.
+mk_wt() {  # mk_wt <dir> <docs|project> — a worktree of THIS repo; P1 rewrites its registry paths
+  git -C "$REPO_ROOT" worktree add -q --detach "$1" HEAD >/dev/null 2>&1 || return 1
+  if [ "$2" = project ]; then
+    sed -i -E "s#'docs/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive|BACKLOG.md)'#'project/\\1'#" "$1/scripts/lib/repo-layout.js"
+  fi
+}
+RB="$TMP/reg-boot"; mk_wt "$RB" docs
+RP="$TMP/reg-p1";   mk_wt "$RP" project
+RW="$TMP/reg-symlink"; mk_wt "$RW" docs
+trap 'git -C "$REPO_ROOT" worktree remove --force "$RB" 2>/dev/null; git -C "$REPO_ROOT" worktree remove --force "$RP" 2>/dev/null; git -C "$REPO_ROOT" worktree remove --force "$RW" 2>/dev/null; git -C "$REPO_ROOT" worktree prune; rm -rf "$TMP"; cleanup_test_tmp' EXIT
+eq "bootstrap registry: backlog -> docs/" "docs/BACKLOG.md" "$(bash "$R" --target "$RB" --field backlog)"
+eq "bootstrap registry: index -> docs/"   "docs/projects/INDEX.md" "$(bash "$R" --target "$RB" --field index)"
+eq "bootstrap registry: source is registry" "registry" "$(bash "$R" --target "$RB" --field source)"
+eq "P1 registry (worktree of this repo): backlog -> project/" "project/BACKLOG.md" "$(bash "$R" --target "$RP" --field backlog)"
+eq "P1 registry: index -> project/"       "project/projects/INDEX.md" "$(bash "$R" --target "$RP" --field index)"
+eq "P1 registry: plans_dir -> project/"   "project/plans/" "$(bash "$R" --target "$RP" --field plans_dir)"
+eq "P1 registry: projects_dir -> project/" "project/projects/" "$(bash "$R" --target "$RP" --field projects_dir)"
+eq "P1 registry: archive_dir -> project/" "project/projects/_archive/" "$(bash "$R" --target "$RP" --field archive_dir)"
+eq "P1 registry: source is registry"      "registry" "$(bash "$R" --target "$RP" --field source)"
+# a config block still outranks the registry
+mkdir -p "$RP/.claude"; printf '## Project Paths\n- Backlog: `doc/DEBT.md`\n' > "$RP/.claude/project-lifecycle-config.md"
+eq "config block outranks the registry" "doc/DEBT.md" "$(bash "$R" --target "$RP" --field backlog)"
+# NEGATIVE CONTROL: another git repo carrying a repo-layout.js with the real header, which writes a
+# marker file the moment it runs. It must neither run nor answer.
+FR="$TMP/reg-foreign"; mkdir -p "$FR/scripts/lib"; git -C "$FR" init -q
+MARK="$TMP/foreign-ran.marker"
+{ sed -n '1,12p' "$REPO_ROOT/scripts/lib/repo-layout.js"
+  printf ' */\nrequire("fs").writeFileSync(%s, "ran");\nconsole.log("project/EVIL.md");\n' "\"$MARK\""; } > "$FR/scripts/lib/repo-layout.js"
+eq "foreign repo with the registry header: not answered by registry" "none" "$(bash "$R" --target "$FR" --field backlog)"
+eq "foreign repo: source is not registry" "none" "$(bash "$R" --target "$FR" --field source)"
+[ ! -e "$MARK" ] && ok "foreign repo-layout.js was never executed (no marker)" || no "foreign repo-layout.js was never executed" "no marker" "marker written"
+# Bypass controls: each foreign file would write $MARK if executed; each case must stay out of the registry.
+rm -f "$MARK"
+GD="$(git -C "$REPO_ROOT" rev-parse --absolute-git-dir)"; GC="$(cd "$GD" && cd "$(git rev-parse --git-common-dir)" && pwd -P)"
+# (1) GIT_DIR pointing at this repo, foreign target
+ne "bypass 1: GIT_DIR=<this repo> + foreign target: not registry" "registry" "$(GIT_DIR="$GD" bash "$R" --target "$FR" --field source)"
+[ ! -e "$MARK" ] && ok "bypass 1: foreign file not executed" || no "bypass 1: foreign file not executed" "no marker" "marker written"
+rm -f "$MARK"
+# (2) GIT_COMMON_DIR + GIT_WORK_TREE
+ne "bypass 2: GIT_COMMON_DIR+GIT_WORK_TREE: not registry" "registry" "$(GIT_COMMON_DIR="$GC" GIT_WORK_TREE="$FR" bash "$R" --target "$FR" --field source)"
+[ ! -e "$MARK" ] && ok "bypass 2: foreign file not executed" || no "bypass 2: foreign file not executed" "no marker" "marker written"
+rm -f "$MARK"
+# (3) a worktree of this repo whose scripts/lib/repo-layout.js is a symlink to a foreign file
+rm -f "$RW/scripts/lib/repo-layout.js"; ln -s "$FR/scripts/lib/repo-layout.js" "$RW/scripts/lib/repo-layout.js"
+ne "bypass 3: symlinked repo-layout.js in our worktree: not registry" "registry" "$(bash "$R" --target "$RW" --field source)"
+[ ! -e "$MARK" ] && ok "bypass 3: foreign file not executed" || no "bypass 3: foreign file not executed" "no marker" "marker written"
+rm -f "$MARK"
+# (4) a foreign dir whose .git is a gitfile pointing at this repo's git dir
+GF="$TMP/reg-gitfile"; mkdir -p "$GF/scripts/lib"; cp "$FR/scripts/lib/repo-layout.js" "$GF/scripts/lib/"
+printf 'gitdir: %s\n' "$GD" > "$GF/.git"
+ne "bypass 4: foreign gitfile -> this repo: not registry" "registry" "$(bash "$R" --target "$GF" --field source)"
+[ ! -e "$MARK" ] && ok "bypass 4: foreign file not executed" || no "bypass 4: foreign file not executed" "no marker" "marker written"
+rm -f "$MARK"
+# a non-git directory is skipped too
+NG="$TMP/reg-nogit"; mkdir -p "$NG/scripts/lib"; cp "$FR/scripts/lib/repo-layout.js" "$NG/scripts/lib/"
+eq "non-git target with the header: skipped" "none" "$(bash "$R" --target "$NG" --field backlog)"
+[ ! -e "$MARK" ] && ok "non-git repo-layout.js was never executed" || no "non-git repo-layout.js never executed" "no marker" "marker written"
+# a consumer repo without a registry keeps the pre-registry behaviour
+eq "no registry: bare repo still none" "none" "$(bash "$R" --target "$BARE" --field backlog)"
+eq "no registry: source is not registry" "none" "$(bash "$R" --target "$BARE" --field source)"
+
+# 8e. A consumer whose config writes a directory WITHOUT the trailing slash: the exact glob dev-flow
+#     step 5 tells the model to run (extracted from SKILL.md, not retyped) must still list the plan files.
+NS="$TMP/noslash"; mkdir -p "$NS/.claude" "$NS/doc/rfc"; git -C "$NS" init -q
+printf '## Project Paths\n- Plans directory: `doc/rfc`\n' > "$NS/.claude/project-lifecycle-config.md"
+: > "$NS/doc/rfc/2026-01-01-a.md"; ln -s "$REPO_ROOT/scripts" "$NS/scripts"
+eq "fixture: plans_dir really has no trailing slash" "doc/rfc" "$(bash "$R" --target "$NS" --field plans_dir)"
+DF_CMD="$(grep -m1 -o 'Draft plan overlap: `[^`]*`' "$REPO_ROOT/skills/dev-flow/SKILL.md" | sed -E 's/^[^`]*`//; s/`$//')"
+[ -n "$DF_CMD" ] && ok "extracted dev-flow draft-plan glob: $DF_CMD" || no "extracted dev-flow draft-plan glob" "a command" "empty"
+DF_OUT="$(cd "$NS" && bash -c "$DF_CMD" 2>&1)"; DF_RC=$?
+eq "dev-flow draft-plan glob exits 0 on a slash-less plans_dir" "0" "$DF_RC"
+eq "dev-flow draft-plan glob lists the plan file" "doc/rfc/2026-01-01-a.md" "$DF_OUT"
+
+# 8f. The same command with a resolver that fails / prints nothing must fail loudly, never fall through to
+#     the filesystem root (d empty -> "/"*.md).
+EM="$TMP/emptyres"; mkdir -p "$EM/scripts"; printf '#!/usr/bin/env bash\nexit 1\n' > "$EM/scripts/resolve-project-paths.sh"
+DE_OUT="$(cd "$EM" && bash -c "$DF_CMD" 2>&1)"; DE_RC=$?
+[ "$DE_RC" -ne 0 ] && ok "dev-flow draft-plan glob fails when the resolver yields nothing (rc=$DE_RC)" || no "dev-flow draft-plan glob fails on empty resolver" "rc != 0" "rc=0"
+case "$DE_OUT" in *"parameter null or not set"*) ok "empty resolver: explicit unset-parameter error";; *) no "empty resolver: explicit unset-parameter error" "parameter null or not set" "$DE_OUT";; esac
+case "$DE_OUT" in */\*.md*) no "empty resolver: nothing is listed from the filesystem root" "no /*.md" "$DE_OUT";; *) ok "empty resolver: nothing is listed from the filesystem root";; esac
 
 # 7. Envelope.
 node -e 'JSON.parse(process.argv[1])' "$(bash "$R" --target "$REPO_ROOT")" \

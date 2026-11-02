@@ -52,7 +52,7 @@ file-structure map, bite-sized phases with dev-flow sizes (XS–XL, `!` for urge
 open questions only the user can answer. Run the template's self-review (scope coverage / placeholder
 scan / dependency map) before the gate. Use the **real current date** from the environment — never invent.
 Register it (plan-template.md Step 0: paste `check-plan-graduation.js --register-template <stem>`'s row
-into `docs/projects/INDEX.md`) — Phase 3's plan review refuses an unregistered plan.
+into the INDEX from `bash scripts/resolve-project-paths.sh --field index`) — Phase 3's plan review refuses an unregistered plan.
 **Gate**: "plan good to send to review, or revise first?"
 
 ### Phase 3 — Bounded plan readiness  · delegate → `autopilot:hetero-review` (PINNED)

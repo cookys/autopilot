@@ -316,7 +316,7 @@ Classify into one of four outcomes:
 ├── XS/S-size fix (< 5 min) → fix now, treat as Major
 ├── False positive / by-design → close with written rationale
 ├── Independent task needing more analysis → create next task with context
-└── Has clear trigger condition → add to docs/BACKLOG.md with trigger
+└── Has clear trigger condition → add to the backlog with trigger (`bash scripts/resolve-project-paths.sh --field backlog`)
 ```
 
 ### Example Processing Table

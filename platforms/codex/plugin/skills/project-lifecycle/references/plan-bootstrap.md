@@ -2,7 +2,8 @@
 # Plan Bootstrap (Plan Mode -> Project Setup)
 
 > **Trigger**: L/XL project after ExitPlanMode, or after user approves a plan
-> **Input**: Plan file (from system-reminder path or `docs/plans/`)
+> **Input**: Plan file (from system-reminder path or `<plans_dir>`)
+> **Paths**: `<plans_dir>`, `<projects_dir>`, `<index>` below are the values of `bash scripts/resolve-project-paths.sh --field plans_dir|projects_dir|index`, without a trailing `/`.
 
 ## Step 0: Draft Plan Overlap Check
 
@@ -10,7 +11,8 @@ Before bootstrapping, check if any existing draft plans overlap with this plan:
 
 ```bash
 # List draft plans (status: draft in frontmatter or no status field)
-for f in docs/plans/*.md; do
+PLANS_DIR=$(bash scripts/resolve-project-paths.sh --field plans_dir); PLANS_DIR=${PLANS_DIR%/}
+for f in "${PLANS_DIR:?}"/*.md; do
   grep -q 'status: approved' "$f" 2>/dev/null || echo "$f"
 done
 ```
@@ -33,7 +35,7 @@ For each draft plan, check overlap against the plan being bootstrapped:
 |--------|-------------|
 | ExitPlanMode | Plan path appears in system-reminder |
 | Not found | `ls -lt ~/.claude/plans/*.md | head -5` |
-| User-provided plan | Write to `docs/plans/<name>.md` first, then continue |
+| User-provided plan | Write to `<plans_dir>/<name>.md` first, then continue |
 
 **Validation**: open the plan file and confirm it contains an actionable goal, acceptance criteria,
 scope, and source coverage. Phase/P0 headings, modules, review seats, tests, and retries are
@@ -69,13 +71,13 @@ headings remain provenance/coverage; they are never copied directly into impleme
 3. Verifies every source plan/rubric maps exactly once and every deliverable stays within policy
    count, critical-path, parallel, batch, gate-attempt, and aggregate reservation ceilings
 4. Creates one project tracker row per deliverable, with source authoring units nested as coverage
-5. Creates `docs/projects/YYYY-MM-DD-<name>/` directory
+5. Creates `<projects_dir>/YYYY-MM-DD-<name>/` directory
 6. Generates `README.md` with: project description, historical implementation ledger, current
    deliverable table, dependency graph, and parallel execution opportunities
 7. Generates `dev-info.md` with branch and base info
 8. Copies plan file into project directory
 9. Creates git branch `feature/<name>` (or uses `--branch`)
-10. Updates `docs/projects/INDEX.md` (adds active project entry)
+10. Updates `<index>` (adds active project entry)
 11. Runs `git add` on all new files
 
 ### Expected Output
@@ -124,7 +126,7 @@ When bootstrapping or re-admitting after partial integration:
 1. **Check `deliverablesAdmitted`** — it must equal the frozen graph node count and stay within
    policy. A plan with 34 headings and a three-node successor graph reports coverage units for the
    active source set and three deliverables, never one task per authoring heading.
-2. **Check `indexUpdated`** — if false, INDEX insertion failed. Manually add the project entry to `docs/projects/INDEX.md`.
+2. **Check `indexUpdated`** — if false, INDEX insertion failed. Manually add the project entry to `<index>`.
 3. **Review generated README.md** — verify goals, success criteria, and scope were correctly extracted. Fix any inaccuracies.
 4. **Check `deliverableDeps`** against the admitted graph. Never infer dependencies from heading order.
 5. **Check admission identity** — policy, graph, and source coverage digests must match the
@@ -139,24 +141,24 @@ When bootstrapping or re-admitting after partial integration:
 | Error | Cause | Recovery |
 |-------|-------|----------|
 | `Project dir already exists` | Re-running bootstrap or name collision | Check if the existing dir is from a prior attempt. If so, reuse it (`--name` with different name, or delete and retry). |
-| `Plan file not found` | Wrong path or file moved | Check `~/.claude/plans/` and `docs/plans/`. Copy the file to the expected location. |
+| `Plan file not found` | Wrong path or file moved | Check `~/.claude/plans/` and `<plans_dir>`. Copy the file to the expected location. |
 | Source headings absent | Plan uses prose/tables instead of standard headings | Record the files as source coverage; do not invent placeholder phases. |
 | Graph/source coverage mismatch | A source was omitted, duplicated, drifted, or invented | Correct the caller-authored graph/manifest and rerun Mission admission. |
 | Deliverable/critical-path/reservation limit | The graph exceeds project policy | Regroup source metadata inside bounded deliverables or tighten scope; never split gates/retries into more nodes. |
-| INDEX insertion failed | INDEX.md format changed or active section marker missing | Manually edit `docs/projects/INDEX.md` to add the new project entry. |
+| INDEX insertion failed | INDEX.md format changed or active section marker missing | Manually edit `<index>` to add the new project entry. |
 | Branch already exists | Branch name collision | Use `--branch feature/<alternate-name>` or delete the stale branch first. |
 | Script crashes | Node.js version or missing module | Check `node --version` (needs 18+). If persistent, create project structure manually per `project-lifecycle (structure)`. |
 
 ## Manual Bootstrap (When Script Unavailable)
 
 1. Freeze and admit the caller-authored deliverable graph before any TaskCreate or branch effect
-2. Create dir: `mkdir -p docs/projects/YYYY-MM-DD-<name>`
+2. Create dir: `mkdir -p <projects_dir>/YYYY-MM-DD-<name>`
 3. Create README.md using template from `project-lifecycle (structure)` with source coverage nested
    under admitted deliverables
 4. Create dev-info.md with branch info
-5. Copy plan: `cp <plan-path> docs/projects/YYYY-MM-DD-<name>/plan.md`
+5. Copy plan: `cp <plan-path> <projects_dir>/YYYY-MM-DD-<name>/plan.md`
 6. Create branch: `git checkout -b feature/<name>`
-7. Update `docs/projects/INDEX.md`
+7. Update `<index>`
 8. `git add` all new files
 
 ## See Also

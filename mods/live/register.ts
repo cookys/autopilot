@@ -39,9 +39,13 @@ import { makeT, resolveLocale, T_EN } from './i18n'
 import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
-import { forgeFit, forgeSegments, GLYPHS, SHOW_PRESS, showTarget } from './ui'
+import { forgeFit, GLYPHS, SHOW_PRESS, showTarget } from './ui'
 import type { ForgeSegment } from './ui'
-import { BandBar, BarRule, barContent, decideContent, stackBand } from './band'
+import { BandBar, BarRule, barContent, decideContent, speedContent, stackBand } from './band'
+import type { SpeedPlacement } from './band'
+import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
+import type { Step } from './speed'
+import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { barStrip } from './tabs'
 import type { BarTabId } from './tabs'
 import { Pane } from './pane'
@@ -67,9 +71,13 @@ const MAX_CAMPAIGN_ROOTS = 8 // session-mode.js CAMPAIGN_ROOTS_MAX
 let snapshot: LiveSnapshot | null = null
 // the 待決 tab's picks, notes and what was already sent, by decision id (the contract is types/index.d.ts, named by plugin.json)
 const DECIDE = atom({ plugin: 'autopilot', key: 'decide' } as const, NO_DECIDE)
+// the timed model requests (speed.ts); a list stored under another shape tag is dropped, it was timed by another method
+const STEPS = atom({ plugin: 'autopilot', key: 'steps' } as const, [] as Step[], { shape: STEPS_SHAPE })
 const SURFACES_WITH_INPUT = new Set<string>(['terminal', 'desktop', 'vscode']) // the elements tables with an `Input`; a phone has none (the resolved table hands out a stand-in for it, so the surface is what tells)
 const DECIDE_KEEP_MS = 24 * 3600 * 1000 // a sent question the session never closed is forgotten after a day
 let timer: { cancel: () => void } | undefined
+let liveBaseSeen: string | null = null // the live base the pointer named on the last tick (codeforge's pet.json sits under it)
+let petText: string | null = null // `Name Lv.N` from codeforge's pet.json, read each tick only while SPEED_LABEL_PET is on
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
 let paneTab: PaneTab = 'now'
@@ -380,6 +388,7 @@ async function buildSnapshot($: EngineInterface, nowMs: number, t: T): Promise<{
     return none(plain('unreadable', STATE_TEXT.unreadable))
   }
   const liveBase = parsed.value.live_base.replace(/\/+$/, '')
+  liveBaseSeen = liveBase
   const autopilotHome = typeof parsed.value.autopilot_home === 'string' && parsed.value.autopilot_home ? parsed.value.autopilot_home.replace(/\/+$/, '') : home + '/.autopilot'
 
   const sid = await $.session.id()
@@ -638,6 +647,7 @@ async function refresh($: EngineInterface): Promise<void> {
     } catch (_e) {
       // garnish too: keep the previous rows
     }
+    if (SPEED_LABEL_PET) petText = petTag(liveBaseSeen === null ? null : await readText($, liveBaseSeen + '/codeforge/pet.json'))
     snapshot = { ...built.snap, recent, activity, account: { account, quota } }
     await pruneDecide($, new Set(built.snap.pending.flatMap(d => (d.id === null ? [] : [d.id]))), built.snap.state === 'ok', nowMs).catch(() => undefined)
     $.ui.invalidate('ui.render')
@@ -834,6 +844,10 @@ const FORGE_LABEL_MAX = 30
 const FORGE_LABEL_MIN = 5
 const BAND_MIN_COLS = 30
 const FORGE_FULL_ROWS = 12
+const FORGE_BELOW_MIN_COLS = 26 // the narrowest the mod below is asked for its view (forge-stats draws a one-row summary under this)
+// Owner previews (BL-0359), two choices open until the owner picks: where the speed view sits against the mod below, and whether the label carries the pet (read from codeforge's pet.json).
+const SPEED_PLACEMENT: SpeedPlacement = 'beside'
+const SPEED_LABEL_PET = false
 
 const nextTab = (t: PaneTab): PaneTab => PANE_TABS[(PANE_TABS.indexOf(t) + 1) % PANE_TABS.length]
 
@@ -868,6 +882,35 @@ export function registerLive(on: Parameters<Register>[0]): void {
       timer = undefined
     }
     return next(e)
+  })
+
+  // Time every model request from its stream (BL-0359): send -> first content chunk -> last chunk. The rate's window is picked by stepRate (speed.ts): hidden thinking is written
+  // before the first chunk, so it counts from send. Chunks are yielded unchanged; a request without usage records nothing.
+  on('turn.step', async function* ($, e, next) {
+    const sent = performance.now()
+    let first: number | null = null
+    let last: number | null = null
+    let thinkingStreamed = false
+    const stream = next(e)
+    for await (const chunk of stream) {
+      if (chunk.kind !== 'engine') {
+        const now = performance.now()
+        if (first === null) first = now
+        last = now
+        if (chunk.kind === 'thinking' && chunk.text.length > 0) thinkingStreamed = true
+      }
+      yield chunk
+    }
+    const result = await stream.result
+    const usage = result.usage
+    if (usage) {
+      const outTokens = usage.output_tokens ?? 0
+      const { decodeMs, tps } = stepRate({ sent, first, last, outTokens, thinkingStreamed, serverToolMs: serverToolMs(result.serverToolUses) })
+      const step: Step = { at: Date.now(), model: usage.model ?? e.model, isSubagent: e.agentId !== undefined, ttftMs: first !== null ? first - sent : null, decodeMs, outTokens, tps }
+      await update($, STEPS, list => [...validSteps(list), step].slice(-KEEP_STEPS))
+      $.ui.invalidate('ui.render')
+    }
+    return result
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -932,25 +975,36 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const scroll = e.props.scroll
       return next({ ...e, props: { ...e.props, maxRows, bodyColumns, ...(scroll === undefined ? {} : { scroll: { ...scroll, bodyRows: Math.max(0, scroll.bodyRows - (e.props.maxRows - maxRows)) } }) } })
     }
-    // The forge tab's label: one row, as wide as the room the other tabs and the indicator leave (at most FORGE_LABEL_MAX). Asked on every draw, before the open tab's content.
+    // The speed label (BL-0359): the live mod measures it itself (speed.ts), so the mod below is no longer asked for a one-row label and two speeds can never stand on the band.
+    // One row, as wide as the room the other tabs and the indicator leave (at most FORGE_LABEL_MAX); none while no request was timed.
     let forge: ForgeSegment[] | null = null
+    const steps = validSteps(await read($, STEPS))
     // the label sits on the left after the ⓘ (`│ ` + label) and a short forge tab joins the strip; the indicator keeps what it needs at its narrowest, the label gets the rest (at most FORGE_LABEL_MAX)
     const indicatorMin = snapshot !== null && snapshot.band !== null ? Math.min(BAND_MIN_COLS, layoutBand(snapshot.band.slots, BAND_MIN_COLS).width) : BAND_MIN_COLS
     const labelCols = Math.min(FORGE_LABEL_MAX, columns - indicatorMin - barStrip(snapshot, t, null, GLYPHS.structure.speed).width - 1 - 2)
     if (rows >= 1 && labelCols >= FORGE_LABEL_MIN) {
-      const parts = forgeSegments(await lower(1, labelCols))
+      const parts = speedLabelParts(steps, SPEED_LABEL_PET ? petText : null)
       forge = parts === null ? null : forgeFit(parts, labelCols)
     }
-    if (barTab === 'forge' && forge === null) barTab = null // the mod below stopped answering: the tab is gone
+    if (barTab === 'forge' && forge === null) barTab = null // nothing is timed (or no room): the tab is gone
     const active = barTab
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge)
     const open = (tab: PaneTab) => { void openOn(tab) }
     let content: unknown[] = []
     if (active === 'forge') {
-      // the room under the bar and the rule; the mod below needs FORGE_FULL_ROWS of it. Asked AFTER the label: forge-stats keeps the last maxRows it was given to decide whether to blit.
-      if (rows - 2 >= FORGE_FULL_ROWS) {
-        const below = await lower(rows - 2, columns)
-        if (below !== undefined && below !== null && (below as { type?: string }).type !== 'engine') content = [below]
+      // the room under the bar and the rule: the speed view (ours) and, when there is room for it, the mod below's full view (Ferris, pet, memory, brain)
+      const room = rows - 2
+      if (room >= SPEED_ROWS) {
+        const stack = SPEED_PLACEMENT === 'stack'
+        const view = speedView(steps, stack ? SPEED_ROWS : Math.min(room, FORGE_FULL_ROWS), columns, t)
+        const belowRows = stack ? room - SPEED_ROWS : room
+        const belowCols = stack ? columns : columns - view.used - COL_GAP
+        let below: unknown | null = null
+        if (belowRows >= FORGE_FULL_ROWS && belowCols >= FORGE_BELOW_MIN_COLS) {
+          const answer = await lower(belowRows, belowCols)
+          if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') below = answer
+        }
+        content = speedContent(el, view.columns, below, SPEED_PLACEMENT)
       }
     } else if (active === 'decide') {
       // the pane's own 待決 lines, compact; a press is the pane's decidePress, and the draw is asked again once it has written the state

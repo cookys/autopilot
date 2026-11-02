@@ -12,8 +12,19 @@ export type LiveDecideState = {
   clean?: Record<string, { ok: boolean; note: string }>
 }
 
+// One timed model request (mods/live/speed.ts `Step`); the list keeps the last 200 under the shape tag `steps-2`.
+export type LiveStep = {
+  at: number
+  model: string
+  isSubagent: boolean
+  ttftMs: number | null
+  decodeMs: number | null
+  outTokens: number
+  tps: number | null
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    autopilot: { decide: LiveDecideState }
+    autopilot: { decide: LiveDecideState; steps: Shaped<LiveStep[]> }
   }
 }

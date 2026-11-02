@@ -10,6 +10,8 @@ import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from '
 import { actionSeg, dimProps, drawSeg, forgeBar, GLYPHS } from './ui'
 import type { ForgeSegment } from './ui'
 import { barRule, barStrip, decideTabLines } from './tabs'
+import { COL_GAP } from './speedview'
+import type { SpeedColumn } from './speedview'
 import type { BarStrip, BarTabId } from './tabs'
 
 type El = (props: any) => any
@@ -153,4 +155,23 @@ export function decideContent(el: { Box: El; Text: El; Button?: El }, snap: Live
     )
   }
   return [...picked.map((l, i) => drawLine(l, 'p' + i)), ...bars.map((l, i) => drawLine(l, 'b' + i))]
+}
+
+// ---- the speed view under the tabs (BL-0359): the speed column and the recent-requests table, and the mod below (codeforge's forge-stats: Ferris, pet, memory, brain) ----
+
+// where the speed view sits against the mod below: `beside` = one row, ours on the left and the mod's view on the right; `stack` = ours on top, the mod's view under it
+export type SpeedPlacement = 'beside' | 'stack'
+
+export function speedContent(el: { Box: El; Text: El }, cols: readonly SpeedColumn[], below: unknown | null, placement: SpeedPlacement): unknown[] {
+  const { Box, Text } = el
+  const column = (c: SpeedColumn, k: string) => (
+    <Box key={k} flexDirection="column" width={c.width} flexShrink={0}>
+      {c.lines.map((line, i) => <Box key={'l' + i}>{line.map((s, j) => <Text key={'s' + j} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)}</Box>)}
+    </Box>
+  )
+  const gap = (k: string) => <Box key={k} width={COL_GAP} flexShrink={0}><Text>{' '.repeat(COL_GAP)}</Text></Box>
+  const ours = cols.flatMap((c, i) => (i === 0 ? [column(c, 'c0')] : [gap('g' + i), column(c, 'c' + i)]))
+  if (below === null) return [<Box key="speedview" flexDirection="row">{ours}</Box>]
+  if (placement === 'beside') return [<Box key="speedview" flexDirection="row">{ours}{gap('gb')}{below}</Box>]
+  return [<Box key="speedview" flexDirection="row">{ours}</Box>, below]
 }

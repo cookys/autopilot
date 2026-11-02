@@ -184,6 +184,12 @@ type World = {
 // the English table: state texts, toasts and the English-only cases
 const worldEn = (on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A) => world(on, files, nowMs, sid, 'en')
 
+// BL-0359: the bottom of the chain stands for the API. A test sets TURN_PLAN; each `$.turn.step` plays the next planned request: hidden thinking (`before`), then the text (`after`).
+type Plan = { before: number; after: number; tokens: number; model?: string; agent?: string; thinking?: boolean }
+const spin = (ms: number) => { const t = performance.now(); while (performance.now() - t < ms) { /* busy: the clock is the stream's */ } }
+let TURN_PLAN: Plan[] = []
+let TURN_AT = 0
+
 // Registers the bottom hooks (what the engine would answer) for one test.
 function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en' | 'zh-TW' | null = 'zh-TW', env: Record<string, string> = {}): World {
   barLocale = locale ?? 'zh-TW'
@@ -238,6 +244,14 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
   on('session.end', () => ({ sessionId: w.sid.value }))
   // the band hook calls next(e) (BL-0352): beneath it stands the engine, which answers `{ type: 'engine' }` (its own drawing) unless a test put a mod there
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => (w.lower !== null ? w.lower($, e) : { type: 'engine' as const, ref: 0 }))
+  on('turn.step', async function* ($, e) {
+    const f = TURN_PLAN[TURN_AT++] as Plan
+    spin(f.before)
+    yield (f.thinking === true ? { kind: 'thinking', index: 0, text: 'hm' } : { kind: 'text', index: 0, text: 'a' }) as { kind: 'thinking' | 'text'; index: number; text: string }
+    spin(f.after)
+    yield { kind: 'text', index: 0, text: 'b' } as const
+    return { turnId: e.turnId, index: e.index, answer: 'ab', toolUses: [], stopReason: 'end_turn', usage: { input_tokens: 10, output_tokens: f.tokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: f.model ?? 'claude-opus-5-5' } } as const
+  })
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.open', async ($, e) => {
@@ -5888,40 +5902,41 @@ for (const surface of SURFACES) {
   })
 }
 
-// BL-0352: the forge tab. The mod below this hook on the ui.render chain (codeforge's forge-stats) answers a one-row ask with a row Box of keyed part Boxes (speed, trend, sep, pet,
-// each wrapping one Text of strings) and its full view when it is asked for twelve or more. The hook below plays that mod: it records every ask and answers by maxRows, as forge-stats does.
-// The speed and the pet are drawn on the band's left after the ⓘ (in our own colours); the strip keeps one short tab, `ϟ`, that opens the full view.
-const FORGE_FULL = ['ϟ 93 tok/s', ' ▁▂▃▅▇', ' · ', 'Ferris Lv.1'] as const
-const FORGE_PETLESS = 'ϟ 93 tok/s ▁▂▃▅▇' // the same answer without sep and pet
-type ForgeAnswer = 'full' | 'petless' | 'speed' | 'notrend' | 'dash' | 'text' | 'unknown' | 'box' | 'engine'
+// BL-0359: the speed tab. The live mod times each model request from its own `turn.step` stream (speed.ts) and draws the result: the label on the band's left after the ⓘ
+// (`│ ϟ 83 tok/s ▁▂▃▅▇`) and, when the strip's one short `ϟ` tab is open, the speed column and the recent-requests table. It no longer asks the mod below (codeforge's forge-stats) for a
+// one-row label, so two speeds can never stand on the band; the mod below is asked only for its full view (Ferris, pet, memory, brain), beside ours.
+// The hook below plays the mod below: it records every ask and answers a full view when it is asked for twelve rows or more, and, for the OLD contract, a keyed speed label when asked for one row.
+// (the bottom of the chain that stands for the API is registered by world(): it plays TURN_PLAN, one planned request per call)
+async function runPlan($: any, agents: (string | undefined)[]) {
+  for (let i = 0; i < agents.length; i++) {
+    const stream = $.turn.step({ turnId: 't1', index: i, model: 'opus', messageCount: 1, ...(agents[i] === undefined ? {} : { agentId: agents[i] }) })
+    for await (const _ of stream) {
+      // drained: the hook times the stream as it passes
+    }
+    await stream.result
+  }
+}
+// the OLD contract's answer to a one-row ask: a keyed speed label. The band must not draw it (BL-0359).
+const OLD_LABEL = ['ϟ 93 tok/s', ' ▁▂▃▅▇', ' · ', 'Ferris Lv.1'] as const
 for (const surface of SURFACES) {
   type Ask = { maxRows: number; bodyColumns: number; requestId: unknown; hasSurvey: boolean; hasScroll: boolean; bodyRows: number | undefined }
-  const forgeMod = (w: World, asks: Ask[], answer: { label?: ForgeAnswer; full?: 'box' | 'engine' } = {}) => {
+  const forgeMod = (w: World, asks: Ask[]) => {
     w.lower = ($, e) => {
       asks.push({ maxRows: e.props.maxRows, bodyColumns: e.props.bodyColumns, requestId: (e as { requestId?: unknown }).requestId, hasSurvey: e.props.hasSurvey, hasScroll: Object.prototype.hasOwnProperty.call(e.props, 'scroll'), bodyRows: e.props.scroll?.bodyRows })
       const { Box, Text } = $.ui.resolve(e)
       const part = (key: string, text: string) => Box({ key, children: [Text({ children: text })] })
-      const rowOf = (...kids: unknown[]) => Box({ flexDirection: 'row', children: kids })
-      if (e.props.maxRows === 1) {
-        const kind = answer.label ?? 'full'
-        if (kind === 'full') return rowOf(part('speed', FORGE_FULL[0]), part('trend', FORGE_FULL[1]), part('sep', FORGE_FULL[2]), part('pet', FORGE_FULL[3]))
-        if (kind === 'petless') return rowOf(part('speed', FORGE_FULL[0]), part('trend', FORGE_FULL[1]))
-        if (kind === 'speed') return rowOf(part('speed', 'ϟ93'))
-        if (kind === 'notrend') return rowOf(part('speed', 'ϟ — tok/s'), part('sep', ' · '), part('pet', 'Ferris Lv.1'))
-        if (kind === 'dash') return rowOf(part('speed', 'ϟ — tok/s'))
-        if (kind === 'text') return Text({ children: FORGE_PETLESS })
-        if (kind === 'unknown') return rowOf(part('speed', FORGE_FULL[0]), part('mood', ' (happy)'))
-        if (kind === 'box') return Box({ children: [Text({ children: FORGE_PETLESS })] })
-        return { type: 'engine' as const, ref: 0 }
-      }
-      if (e.props.maxRows >= 12 && (answer.full ?? 'box') === 'box') return Box({ flexDirection: 'column', children: Array.from({ length: 12 }, (_, i) => Text({ children: 'FERRIS-' + i })) })
+      if (e.props.maxRows === 1) return Box({ flexDirection: 'row', children: [part('speed', OLD_LABEL[0]), part('trend', OLD_LABEL[1]), part('sep', OLD_LABEL[2]), part('pet', OLD_LABEL[3])] })
+      if (e.props.maxRows >= 12) return Box({ flexDirection: 'column', children: Array.from({ length: 12 }, (_, i) => Text({ children: 'FERRIS-' + i })) })
       return { type: 'engine' as const, ref: 0 }
     }
   }
   const F_PROPS = { ...BAND_PROPS, maxRows: 20 }
   const mount = ($: any, props: Record<string, unknown> = {}) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: { ...F_PROPS, ...props }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
-  const draw = async ($: any, press: string[] = [], props: Record<string, unknown> = {}) => {
+  // a session, the planned requests timed through the mod's own hook, then the presses and one last mount
+  const draw = async ($: any, on: On, plan: Plan[], press: string[] = [], props: Record<string, unknown> = {}) => {
     await start($, surface)
+    TURN_PLAN = plan; TURN_AT = 0
+    await runPlan($, plan.map(p => p.agent))
     for (const key of press) {
       const ui = await mount($, props)
       await ui.press({ key })
@@ -5935,158 +5950,177 @@ for (const surface of SURFACES) {
     await ui.unmount()
     return { tree, forge, speed, speedText: speed === undefined ? null : walkTexts(speed).map(textOf).join(''), text: cellsOf(tree).map(c => c.text).join('|') }
   }
+  // 120 tokens over >= 300 ms of hidden thinking and 100 ms of text: a rate of at most 300 tok/s from send, ~1200 if only the text were timed
+  const FAST: Plan = { before: 300, after: 100, tokens: 120 }
+  const TWO: Plan[] = [FAST, { ...FAST, tokens: 60 }]
 
-  test('forge tab: the answer is drawn on the left after the ⓘ (speed, trend, sep, pet in order) and the strip gets one short last tab, a Button keyed forge; the band row alone when none is open (' + surface + ')', async ($, on) => {
+  test('speed tab: while nothing is timed there is no label and no tab, and the mod below is not asked for a one-row label (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     const asks: Ask[] = []
     forgeMod(w, asks)
-    const d = await draw($)
-    expect(d.forge, 'a Button keyed forge is drawn').toBeDefined()
-    expect(d.text).toContain(' ϟ ')
-    expect(d.speed, 'the speed cluster is a Button keyed speed').toBeDefined()
-    expect(d.speedText).toBe('│ ' + FORGE_FULL.join(''))
-    expect(((d.tree.children || []) as Node[]).map(c => c.props?.key).filter(k => k === 'info' || k === 'speed'), 'the speed cluster comes right after the ⓘ').toEqual(['info', 'speed'])
-    expect(d.text).not.toContain(' ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1 |') // the label is not a tab any more
-    expect(d.tree.type).toBe('Box')
-    expect(((d.tree.props as { flexDirection?: string } | undefined)?.flexDirection)).toBeUndefined() // one row: nothing is stacked
-    expect(asks.map(a => a.maxRows), 'one ask, for the label').toEqual([1])
-    expect(asks[0].bodyColumns).toBeGreaterThanOrEqual(5)
-    expect(asks[0].bodyColumns).toBeLessThanOrEqual(30)
+    const d = await draw($, on, [])
+    expect(d.forge).toBeUndefined()
+    expect(d.speed).toBeUndefined()
+    expect(d.text).not.toContain('ϟ')
+    expect(asks.filter(a => a.maxRows === 1), 'no one-row ask').toEqual([])
   })
 
-  test('forge tab: the ━ stands under the forge tab, the last and an ASCII-width one, and the full view is drawn under the rule (' + surface + ')', async ($, on) => {
+  test('speed tab: a timed request draws the label on the left after the ⓘ (ours, ϟ N tok/s and a trend from two requests) and the strip gets one short last tab, a Button keyed forge (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     const asks: Ask[] = []
     forgeMod(w, asks)
-    const d = await draw($, ['forge'])
+    const d = await draw($, on, TWO)
+    expect(d.forge, 'a Button keyed forge is drawn').toBeDefined()
+    expect(d.speed, 'the label is a Button keyed speed').toBeDefined()
+    expect(d.speedText).toMatch(/^│ ϟ \d+ tok\/s [▁▂▃▄▅▆▇█]{2}$/)
+    expect(((d.tree.children || []) as Node[]).map(c => c.props?.key).filter(k => k === 'info' || k === 'speed'), 'the label comes right after the ⓘ').toEqual(['info', 'speed'])
+    expect(d.text).toContain(' ϟ ')
+    expect(((d.tree.props as { flexDirection?: string } | undefined)?.flexDirection)).toBeUndefined() // one row: nothing is stacked
+  })
+
+  test('speed tab: only ONE speed stands on the band: the old keyed label the mod below would answer is never asked for and never drawn (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, on, TWO, ['forge'])
+    expect(asks.filter(a => a.maxRows === 1)).toEqual([])
+    expect(d.text).not.toContain('93 tok/s')
+    expect(d.text).not.toContain('Ferris Lv.1')
+    expect(d.text.split('ϟ').length - 1, 'three bolts, all ours: the label, the strip tab and the speed view\'s title').toBe(3)
+  })
+
+  test('speed tab: the label does not time from the first visible chunk: hidden thinking counts from send (hook level, ' + surface + ')', async ($, on) => {
+    worldEn(on, richWorld())
+    const d = await draw($, on, [{ before: 400, after: 150, tokens: 100 }])
+    const tps = Number(/ϟ (\d+) tok\/s/.exec(d.speedText ?? '')?.[1])
+    // 100 tokens over >= 550 ms: at most ~182 tok/s. Timing only the text (>= 150 ms) would read up to ~667.
+    expect(tps).toBeGreaterThan(0)
+    expect(tps).toBeLessThanOrEqual(185)
+  })
+
+  test('speed tab: thinking that streams as text is timed from its first chunk, not from send (hook level, ' + surface + ')', async ($, on) => {
+    worldEn(on, richWorld())
+    const d = await draw($, on, [{ before: 400, after: 150, tokens: 100, thinking: true }])
+    const tps = Number(/ϟ (\d+) tok\/s/.exec(d.speedText ?? '')?.[1])
+    // the first chunk (thinking) comes after 400 ms; the window is the 150 ms after it: >= 100 / 0.2 s. From send it would be at most ~182.
+    expect(tps).toBeGreaterThan(300)
+  })
+
+  test('speed tab: opened, the ━ stands under the forge tab and the speed view is drawn under the rule: the speed column, the recent-requests table and the mod below beside them (' + surface + ')', async ($, on) => {
+    const w = world(on, richWorld())
+    const asks: Ask[] = []
+    forgeMod(w, asks)
+    const d = await draw($, on, [FAST, { ...FAST, model: 'claude-haiku-4-5-20251001', agent: 'sub-1' }], ['forge'])
     const rows = ((d.tree.children || []) as Node[])
     const bar = cellsOf(rows[0])
     const label = bar.find(c => c.text === ' ϟ ') as Cell
     const mark = cellsOf(rows[1]).find(c => /^━+$/.test(c.text)) as Cell
     expect(label).toBeDefined()
     expect({ start: mark.start, width: mark.width }).toEqual({ start: label.start, width: label.width })
+    for (const word of ['速度', '平均', '最佳', '最新', '首字', '走勢', '請求', '最近請求', '輸出', '模型', '子代理', 'opus-5-5', 'haiku-4-5']) expect(d.text, word).toContain(word)
     expect(d.text).toContain('FERRIS-0')
     expect(d.text).toContain('FERRIS-11')
+    expect(asks.slice(-1).map(a => a.maxRows), 'the mod below is asked once, for the rows under the rule').toEqual([20 - 2])
   })
 
-  test('forge tab: pressing the speed cluster on the left opens the same tab as the strip tab (' + surface + ')', async ($, on) => {
+  test('speed tab: the speed view is drawn in English too, and the subagent request is marked (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     forgeMod(w, [])
-    const d = await draw($, ['speed'])
+    const d = await draw($, on, [FAST, { ...FAST, agent: 'sub-1' }], ['forge'])
+    for (const word of ['Speed', 'average', 'best', 'latest', 'first token', 'trend', 'Recent requests', 'subagent']) expect(d.text, word).toContain(word)
+  })
+
+  test('speed tab: pressing the label on the left opens the same tab as the strip tab (' + surface + ')', async ($, on) => {
+    const w = worldEn(on, richWorld())
+    forgeMod(w, [])
+    const d = await draw($, on, TWO, ['speed'])
+    expect(d.text).toContain('Recent requests')
     expect(d.text).toContain('FERRIS-0')
   })
 
-  // the answer's shapes: every row is the band row alone (no stacking) with the speed on the left and the one tab
-  const SHAPES: [ForgeAnswer, string][] = [
-    ['full', '│ ϟ 93 tok/s ▁▂▃▅▇ · Ferris Lv.1'],
-    ['petless', '│ ϟ 93 tok/s ▁▂▃▅▇'],
-    ['speed', '│ ϟ93'],
-    ['notrend', '│ ϟ — tok/s · Ferris Lv.1'],
-    ['dash', '│ ϟ — tok/s'],
-    ['text', '│ ϟ 93 tok/s ▁▂▃▅▇'], // the old shape: one Text, the whole string is the speed
-    ['unknown', '│ ϟ 93 tok/s (happy)'], // a key we do not know is drawn as plain text, not dropped
-  ]
-  for (const [kind, left] of SHAPES) {
-    test('forge tab: answer shape ' + kind + ' draws ' + JSON.stringify(left) + ' on the left and the one ϟ tab (' + surface + ')', async ($, on) => {
-      const w = worldEn(on, richWorld())
-      forgeMod(w, [], { label: kind })
-      const d = await draw($)
-      expect(d.speedText).toBe(left)
-      expect(d.forge).toBeDefined()
-      expect(d.text).toContain(' ϟ ')
-    })
-  }
-
-  test('forge tab: opened, the mod below is asked twice in one draw, the label first (one row) and the full view after it, with the rest of the rows (' + surface + ')', async ($, on) => {
+  test('speed tab: the ask for the full view carries the requestId as received (forge-stats draws its Raster under it) (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     const asks: Ask[] = []
     forgeMod(w, asks)
-    await draw($, ['forge'])
-    // the last draw: label then expansion
-    const last = asks.slice(-2)
-    expect(last.map(a => a.maxRows)).toEqual([1, 20 - 2])
-    expect(last[1].bodyColumns).toBe(F_PROPS.bodyColumns)
-  })
-
-  test('forge tab: both asks carry the requestId as received (forge-stats draws its Raster under it) (' + surface + ')', async ($, on) => {
-    const w = worldEn(on, richWorld())
-    const asks: Ask[] = []
-    forgeMod(w, asks)
-    await draw($, ['forge'])
-    expect(asks.length).toBeGreaterThanOrEqual(2)
+    await draw($, on, TWO, ['forge'])
+    expect(asks.length).toBeGreaterThanOrEqual(1)
     for (const a of asks) expect(a.requestId).toBe('rq-band-1')
   })
 
-  test('forge tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent in both asks (' + surface + ')', async ($, on) => {
+  test('speed tab: scroll.bodyRows follows maxRows and never goes below 0; a scroll that was not there stays absent (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     const asks: Ask[] = []
     forgeMod(w, asks)
-    await draw($, ['forge'], { scroll: { offset: 0, bodyRows: 19 } })
-    expect(asks.slice(-2).map(a => a.bodyRows)).toEqual([0, 17])
+    await draw($, on, TWO, ['forge'], { scroll: { offset: 0, bodyRows: 19 } })
+    expect(asks.slice(-1).map(a => a.bodyRows)).toEqual([17])
     asks.length = 0
     const { scroll: _none, ...noScroll } = F_PROPS
     await start($, surface)
+    TURN_PLAN = TWO; TURN_AT = 0
+    await runPlan($, TWO.map(p => p.agent))
     const ui = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: noScroll, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     await ui.press({ key: 'forge' })
     await ui.unmount()
     const again = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-band-1', props: noScroll, viewport: { columns: 120, rows: 50, isFullscreen: true } })
     await again.drawn()
     await again.unmount()
-    expect(asks.length).toBeGreaterThanOrEqual(2)
+    expect(asks.length).toBeGreaterThanOrEqual(1)
     expect(asks.every(a => !a.hasScroll)).toBe(true)
   })
 
-  test('forge tab: pressing it again closes it, and the full view is no longer asked for (' + surface + ')', async ($, on) => {
+  test('speed tab: pressing it again closes it, and the speed view is gone (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     const asks: Ask[] = []
     forgeMod(w, asks)
-    const d = await draw($, ['forge', 'forge'])
+    const d = await draw($, on, TWO, ['forge', 'forge'])
     expect(d.text).not.toContain('FERRIS')
-    expect(asks.slice(-1).map(a => a.maxRows)).toEqual([1])
+    expect(d.text).not.toContain('Recent requests')
   })
 
-  test('forge tab: when the mod below answers nothing (the engine) or a Box that is not made of keyed part Boxes, there is no forge tab and nothing on the left (' + surface + ')', async ($, on) => {
-    const w = worldEn(on, richWorld())
-    for (const label of ['engine', 'box'] as const) { // undefined and null cannot be played through the chain (a hook that returns nothing is skipped); forgeSegments' own cases cover them
-      forgeMod(w, [], { label })
-      const d = await draw($)
-      expect(d.forge, label).toBeUndefined()
-      expect(d.speed, label).toBeUndefined()
-      expect(d.text, label).not.toContain('ϟ')
-    }
+  test('speed tab: the mod below answering nothing (the engine) leaves the speed view alone, ours (' + surface + ')', async ($, on) => {
+    worldEn(on, richWorld())
+    const d = await draw($, on, TWO, ['forge'])
+    expect(d.text).toContain('Recent requests')
+    expect(d.text).not.toContain('FERRIS')
   })
 
-  test('forge tab: no room for the full view (fewer than 12 rows under the rule) leaves the row alone and does not ask for it (' + surface + ')', async ($, on) => {
+  test('speed tab: room for the speed view needs 8 rows under the rule, the mod below 12 more beside it: 9 rows leaves the row alone, 10 draws ours, 14 the mod below too (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     const asks: Ask[] = []
     forgeMod(w, asks)
-    const d = await draw($, ['forge'], { maxRows: 13 })
-    expect(d.text).not.toContain('FERRIS')
-    expect(asks.every(a => a.maxRows === 1)).toBe(true)
-    const e = await draw($, ['forge'], { maxRows: 14 })
-    expect(e.text).toContain('FERRIS-11')
+    const a = await draw($, on, TWO, ['forge'], { maxRows: 9 })
+    expect(a.text).not.toContain('Recent requests')
+    const b = await draw($, on, TWO, ['forge'], { maxRows: 10 })
+    expect(b.text).toContain('Recent requests')
+    expect(b.text).not.toContain('FERRIS')
+    const c = await draw($, on, TWO, ['forge'], { maxRows: 14 })
+    expect(c.text).toContain('FERRIS-11')
   })
 
-  test('forge tab: a maxRows that is NaN or missing asks nothing and draws no forge tab; the survey is passed down untouched (' + surface + ')', async ($, on) => {
+  test('speed tab: a maxRows that is NaN or missing draws no label and asks nothing; the survey is passed down untouched (' + surface + ')', async ($, on) => {
     const w = worldEn(on, richWorld())
     const asks: Ask[] = []
     forgeMod(w, asks)
     for (const bad of [Number.NaN, undefined]) {
-      const d = await draw($, [], { maxRows: bad })
+      const d = await draw($, on, TWO, [], { maxRows: bad })
       expect(d.forge).toBeUndefined()
       expect(d.text).toContain('ⓘ')
     }
     expect(asks).toEqual([])
-    const s = await draw($, [], { hasSurvey: true })
+    const s = await draw($, on, TWO, [], { hasSurvey: true })
     expect(s.text).not.toContain('ⓘ')
     expect(asks.map(a => [a.maxRows, a.hasSurvey])).toEqual([[20, true]])
   })
 
-  test('forge tab: with no lower mod at all (the engine alone) the row is the four tabs and nothing is stacked (' + surface + ')', async ($, on) => {
+  test('speed tab: the label colours on the drawn band: ϟ and the trend running, the number default, the unit dim (' + surface + ')', async ($, on) => {
     worldEn(on, richWorld())
-    const d = await draw($)
-    expect(d.forge).toBeUndefined()
-    expect(d.text).toContain('Now')
+    const d = await draw($, on, TWO)
+    const byText = (t: string) => walkTexts(d.speed as Node).find(n => textOf(n) === t)?.props as { color?: string; dimColor?: boolean } | undefined
+    expect(byText('ϟ ')?.color).toBe(ui.PALETTE.running)
+    const trend = walkTexts(d.speed as Node).find(n => /^[▁▂▃▄▅▆▇█]+$/.test(textOf(n)))
+    expect(trend?.props?.color).toBe(ui.PALETTE.running)
+    expect(byText(' tok/s')).toMatchObject({ dimColor: true })
+    expect(walkTexts(d.speed as Node).every(n => n.props?.bold !== true)).toBe(true)
   })
 }
 
@@ -6266,25 +6300,4 @@ for (const surface of SURFACES) {
     const segs = segsOf([B('speed', 'ϟ93'), B('mood', ' (happy)')])
     expect(at(segs, ' (happy)')?.color).toBeUndefined(); expect(at(segs, ' (happy)')?.dim).toBeUndefined()
   })
-  for (const surface of SURFACES) {
-    test('forge label colours on the drawn band: the Texts of the speed Button carry those roles (' + surface + ')', async ($, on) => {
-      const w = worldEn(on, richWorld())
-      const full = [B('speed', 'ϟ 93 tok/s'), B('trend', ' ▁▂▃'), B('sep', ' · '), B('pet', 'Ferris Lv.1')]
-      w.lower = ($2, e) => {
-        const { Box, Text } = $2.ui.resolve(e)
-        const mk = (n: any): any => Box({ key: n.props.key, children: [Text({ children: n.children[0].children[0] })] })
-        return e.props.maxRows === 1 ? Box({ flexDirection: 'row', children: full.map(mk) }) : { type: 'engine' as const, ref: 0 }
-      }
-      await start($, surface)
-      const ui0 = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-fc', props: { ...BAND_PROPS, maxRows: 20 }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
-      const speed = ((await ui0.findAll({ type: 'Button' })) as Node[]).find(b => b.props?.key === 'speed') as Node
-      await ui0.unmount()
-      const byText = (t: string) => walkTexts(speed).find(n => textOf(n) === t)?.props as { color?: string; dimColor?: boolean } | undefined
-      expect(byText('ϟ ')?.color).toBe(ui.PALETTE.running)
-      expect(byText('▁▂▃')?.color).toBe(ui.PALETTE.running)
-      expect(byText(' · ')?.color).toBe(ui.PALETTE.structure)
-      expect(byText('Ferris Lv.1')).toMatchObject({ dimColor: true })
-      expect(byText('Ferris Lv.1')?.color).toBeUndefined()
-    })
-  }
 }

@@ -1,7 +1,7 @@
 'use strict';
 // src/status/runs-watch.js — the per-project runs watcher (mods plan P1a R4a).
 //
-//   autopilot status runs --watch --project <key> [--interval 10] [--idle-exit 3600] [--render [<out-root>]]
+//   autopilot status runs --watch --project <key> [--interval 10] [--idle-exit 3600] [--render [<out-root>] | --no-render]   (render is the default)
 //   autopilot status runs --stop  --project <key>
 //
 // One watcher process per project is the ONLY writer of the live projection:
@@ -673,6 +673,13 @@ function createWatcher({
     const groups = groupByRoot(rows);
     for (const k of [...groups.keys()]) if (k !== UNBOUND && state.droppedRoots.has(k)) groups.delete(k);
     for (const root of roots) if (!groups.has(root) && !state.droppedRoots.has(root)) groups.set(root, []);
+    // The unbound job page (what the pane reads when the session has no marker root) exists whenever the project holds an open card, with
+    // or without runs; once rendered it stays in the set so closing the last card re-renders it empty instead of leaving the card on the page.
+    if (!groups.has(UNBOUND)) {
+      let cards = false;
+      try { cards = require('./decision-input').hasOpenDecision({ identity, key, nowMs }); } catch (_error) { /* no cards known */ }
+      if (cards || rs.seen.has(UNBOUND)) groups.set(UNBOUND, []);
+    }
     for (const [k, g] of groups) {
       let sig;
       try { sig = renderSignature(k, g, nowMs); } catch (error) { log(`render signature failed for ${k === UNBOUND ? 'unbound' : k}: ${error.message}`); continue; }

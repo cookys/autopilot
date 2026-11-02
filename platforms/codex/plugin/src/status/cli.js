@@ -457,7 +457,17 @@ function runStatusCli(argv, {
     render = hasValue ? next : true;
     args.splice(renderIndex, hasValue ? 2 : 1);
   }
+  // --no-render: the explicit way to watch without job pages. A bare --watch renders, exactly as the autostart hook's argv does
+  // (watchLaunchArgv): a watcher without pages holds the project lock yet shows no owner card (BL cardvis).
+  const noRenderIndex = args.indexOf('--no-render');
+  const noRender = noRenderIndex !== -1;
+  if (noRender) args.splice(noRenderIndex, 1);
   const watch = sub === 'runs' && args.includes('--watch');
+  if (noRender && render !== null) {
+    stderr.write('--no-render and --render exclude each other\n');
+    return 2;
+  }
+  if (watch && render === null && !noRender) render = true;
   const stop = sub === 'runs' && args.includes('--stop');
   for (const a of args) {
     if (a !== '--json' && a !== '--probe' && !(a === '--tree' && sub === 'runs')
@@ -467,8 +477,8 @@ function runStatusCli(argv, {
     }
   }
 
-  if (render !== null && !watch) {
-    stderr.write('--render is only valid with status runs --watch\n');
+  if ((render !== null || noRender) && !watch) {
+    stderr.write('--render / --no-render is only valid with status runs --watch\n');
     return 2;
   }
   for (const [name, sel] of Object.entries(selectors)) {

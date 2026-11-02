@@ -34,7 +34,10 @@
  * The library functions openDecision / closeDecisionById are also called by hooks/ask-decision.js (depth-0 AskUserQuestion
  * adds an entry with `origin: "ask_user_question"`; mods P1W HOOKQ).
  *
- * Exit: 0 ok (show: at least one open) | 1 show: none open | 2 usage / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure.
+ * `open` also ensures a watcher publishes the card (src/status/card-visibility.js: the autostart hook's start path, plus the plain session marker).
+ * Exit: 0 ok (show: at least one open) | 1 show: none open | 2 usage / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure |
+ *       5 open: the card IS written and its id printed, but no live panel will show it (isolated env, no flock, unusable live dir, a watcher without --render); stderr names the reason and what to do.
+ *       Library callers (openDecision) are unaffected: only the CLI `open` ensures and reports. AUTOPILOT_RUNS_WATCH_AUTOSTART=0 skips the ensure (the hook's own switch).
  */
 
 const crypto = require('crypto');
@@ -272,10 +275,20 @@ function main(argv) {
     options, recommendation: args.recommendation, why: args.why, blocks: args.blocks, not_authorized: args['not-authorized'], source: args.source,
   });
   if (r.status === 'ok' && !root) {
-    // The card is in the unbound scope: a panel scoped to a session root will not list it. Say so, once, on stderr (stdout stays the bare id).
-    process.stderr.write(`open-decision: warning: card ${r.id} written to the UNBOUND scope (${sess.why || 'no root'}); scope_key=${r.scope_key} file=${r.file}; pass --root-run-id <id> to bind it to a session root\n`);
+    // The card is in the unbound scope. Every panel of the project lists it (src/status/decision-input.js reads all scope files), so this is
+    // information, not a loss: say once on stderr where it went (stdout stays the bare id).
+    process.stderr.write(`open-decision: note: card ${r.id} written to the UNBOUND scope (${sess.why || 'no root'}); scope_key=${r.scope_key} file=${r.file}; every panel of this project lists unbound cards too, and --root-run-id <id> would bind it to one session root\n`);
   }
-  if (r.status === 'ok') { process.stdout.write(args.json ? `${JSON.stringify({ ok: true, id: r.id, file: r.file, scope_key: r.scope_key })}\n` : `${r.id}\n`); return 0; }
+  if (r.status === 'ok') {
+    process.stdout.write(args.json ? `${JSON.stringify({ ok: true, id: r.id, file: r.file, scope_key: r.scope_key })}\n` : `${r.id}\n`);
+    // A card written is not a card seen: make sure a watcher publishes it. The card stays written and its id printed either way.
+    const vis = require('../src/status/card-visibility').ensureCardVisible({ cwd: path.resolve(args.cwd || process.cwd()), sessionId: sess.session || '', env: process.env });
+    if (!vis.ok) {
+      process.stderr.write(`open-decision: ERROR: card ${r.id} was written but will NOT appear in any live panel: ${vis.reason}; please ${vis.action}\n`);
+      return 5;
+    }
+    return 0;
+  }
   process.stderr.write(`open-decision: ${r.message}\n`);
   return 4;
 }

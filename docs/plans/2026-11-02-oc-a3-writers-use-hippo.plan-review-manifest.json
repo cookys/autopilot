@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_manifest",
+  "logical_plan_id": "autopilot-oc-a3-hippo-writers",
+  "minimum_distinct_families": 3,
+  "max_attempts_per_seat": 2,
+  "seats": [
+    {
+      "id": "sol_chair",
+      "runner": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "endpoint": "default",
+      "role": "chair",
+      "family": "openai",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    },
+    {
+      "id": "argon_deep",
+      "runner": "agy",
+      "model": "gemini-4-argon-high",
+      "effort": "high",
+      "endpoint": "@none",
+      "role": "deep-reviewer",
+      "family": "google",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    },
+    {
+      "id": "opus_skeptic",
+      "runner": "claude-native",
+      "model": "claude-opus-5-5",
+      "effort": "high",
+      "endpoint": "@none",
+      "role": "operations-skeptic",
+      "family": "anthropic",
+      "readiness_status": "ready",
+      "qualification_status": "qualified",
+      "required": true,
+      "excluded_families": [],
+      "fallbacks": []
+    }
+  ]
+}

@@ -527,19 +527,15 @@ without evidence.
 - Adopting hippo in repos other than autopilot (each repo runs A3.3 itself; parent §8 order).
 - Any change to hippo itself; gaps found go to the hippo repo as P1.4 inputs.
 
-## 8. Open questions (operator)
+## 8. Open questions
 
-1. **`reported_by` and host-named couriers.** A fleet address carries the courier name, and the per-user leak
-   guard refuses it when that name is a host name, so many peer reports cannot be linked. Proposal: A3 keeps
-   the message id in the body and a `reporter:` tag, and skips the link with a warning. A4 asks fleet or hippo
-   for a host-free target form (for example the message id alone). A: accept the proposal (recommended);
-   B: block A3 until the target form exists.
-2. **`.claude/knowledge/` lessons.** They are local (gitignored) and hippo v1 has no importer for them.
-   A: leave them as they are and send only new lessons to hippo (recommended; no hippo spec change); B: ask hippo
-   for an `--from knowledge-dir` source (a spec change, D1 scope).
-3. **Public release repo (3.0.0 relayout addendum C).** Should `.hippo/` ship in the public release repo or
-   only live in the private dev repo? A: dev repo only; the release mirror excludes `.hippo/` (recommended; no
-   record is published by accident); B: ship it (records are `public` anyway).
+Decided by depth-0 on 2026-11-02 (CEO mode, operator delegated; two-way decisions, recommended options taken):
+
+1. **`reported_by` with host-named couriers**: A. A3 keeps the message id in the body and a `reporter:` tag, and skips the link with a warning; A4 asks fleet or hippo for a host-free target form.
+2. **`.claude/knowledge/` lessons**: A. Existing lessons stay where they are; only new lessons go to hippo. No hippo spec change.
+3. **Public release repo**: A. `.hippo/` lives only in the private dev repo; the release mirror excludes it.
+
+No open questions remain.
 
 ## Review log
 

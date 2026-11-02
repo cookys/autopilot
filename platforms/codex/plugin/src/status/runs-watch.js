@@ -14,6 +14,9 @@
 // tasks/attention update for ROOT_RETENTION_S (the idle-exit window) is dropped from state.roots and its live files
 // (envelope, .decisions.json, .foreman.json, sources/<scope>.json, the review/<key>/live fallback copy) are removed.
 // Review pages under <autopilot_home>/review/ are durable and never touched here.
+// Lifetime: the watcher idle-exits after the idle window with nothing live. A session counts as live while a project marker is
+// unexpired, a tasks/attention file of the project was updated in the window, or an owner card of the project is still open
+// (<git-common-dir>/autopilot/decisions/); the owner reading a card fires no prompt and no tool call, so only the card says so.
 // A watcher does not outlive a plugin update (mods P1W WATCHVER): code-fingerprint.js fingerprints the modules at start and every tick
 // re-checks; on a content change the tick returns { exit: 'code_changed' } (log `code changed, exiting`) so the next autostart starts a current one.
 // --render (mods plan P1b B3): the same process also republishes the owner review page of every execution root
@@ -42,7 +45,7 @@ const { projectKey, scopeFromCwd } = require('./project-key');
 const { pointerPath, writeLivePointer } = require('./live-pointer');
 const { applySelectors } = require('./runs-fields');
 const { latestProgress } = require('./work-order-progress');
-const { commonDirOf } = require('./scope-key');
+const { commonDirOf, listScopeFiles, readScopeFile } = require('./scope-key');
 const { publishTurnEffective } = require('./turn-effective');
 const { readWatchInputs } = require('./watch-inputs');
 const { ensureReviewServer } = require('./review-server');
@@ -208,6 +211,21 @@ function recentSessionFiles(env, key, nowMs, windowS) {
         if (v && v.project_key === key && Number.isFinite(at) && nowMs - at < windowS * 1000) n += 1;
       } catch (_error) { /* unreadable / foreign shape: not a live session */ }
     }
+  }
+  return n;
+}
+
+// Owner cards still open for this project: entries across every scope file of <git-common-dir>/autopilot/decisions/ that
+// belongs to this project_key + repo_identity (the same reader the job page uses, src/status/decision-input.js). A card has
+// no expiry field: it is open until `open-decision.js close` removes it (the file goes with the last one).
+// An owner deciding is a live session even though it fires no prompt and no tool call.
+function openDecisionCount(identity, key) {
+  const common = commonDirOf(identity);
+  if (!common) return 0;
+  let n = 0;
+  for (const file of listScopeFiles(path.join(common, 'autopilot', 'decisions'), key)) {
+    const sf = readScopeFile(file, { schema: 'autopilot.decision/2', projectKey: key, identity });
+    if (sf) n += sf.value.decisions.filter((e) => e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question).length;
   }
   return n;
 }
@@ -849,9 +867,10 @@ function createWatcher({
       try { renderPass(rows, nowMs, roots); } catch (error) { log(`render pass failed: ${error.message}`); }
     }
     // Idle exit: N consecutive seconds with nothing confirmed live and nothing unknown, and no
-    // unexpired session-mode marker of this project (a live session keeps the watcher up).
+    // unexpired session-mode marker of this project and no open owner card of it (a live session keeps the watcher up).
     const total = counts.get(null);
-    const sessionLive = markers.length > 0 || recentSessionFiles(env, key, nowMs, idleExitS || DEFAULT_IDLE_EXIT_S) > 0;
+    const sessionLive = markers.length > 0 || recentSessionFiles(env, key, nowMs, idleExitS || DEFAULT_IDLE_EXIT_S) > 0
+      || openDecisionCount(identity, key) > 0; // an open owner card: the owner is deciding, no prompt or tool call needed
     if (sessionLive) {
       state.idleSince = null; // a live session holds the watcher open; the clock restarts when it ends
     } else if (total.confirmed_live === 0 && total.unknown === 0) {
@@ -1257,5 +1276,5 @@ function runWriter({ key, interval, idleExit, enrichCap, collect, render, cwd, e
 
 module.exports = {
   taskPollDue, TASK_SETTLED_POLL_MS, rotateWatcherLog, WATCHER_LOG_MAX_BYTES, SCHEMA, VALID_FOR_S, HEARTBEAT_S, LOCK_BUSY_RC, DEFAULT_IDLE_EXIT_S, createWatcher, readEnvelope, runWatchCli,
-  runWriter, lockPathOf, onPath, recentSessionFiles, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
+  runWriter, lockPathOf, onPath, recentSessionFiles, openDecisionCount, isWatcherFor, flockAvailable, flockProbe, startWatcherDetached, watchLaunchArgv, worktreePaths, stableRepoRoot, computeCounts, unexpiredMarkers, isOrchestratorMarker, createCostReader,
 };

@@ -28,7 +28,9 @@
  *     without a session id never create one. Same opt-out knob (=0 disables the marker too).
  *   - Lifetime: the watcher idle-exits on its own. It counts a session as live while an orchestrator (l3-l6)
  *     session-mode marker is unexpired (a plain-session marker, level null, does not count) or
- *     `<live>/tasks|attention/<sid>.json` of this project was updated within the idle window.
+ *     `<live>/tasks|attention/<sid>.json` of this project was updated within the idle window, or an owner card of this project is still
+ *     open (`<git-common-dir>/autopilot/decisions/`, written by scripts/open-decision.js): an owner deciding fires no prompt and no tool
+ *     call, so the open card holds the watcher; the idle clock restarts when the last card is closed.
  *     A plain or dev-flow session holds no orchestrator marker, so this hook ALSO runs on UserPromptSubmit and re-ensures cheaply
  *     (foreground `flock -n` probe; spawn only when free; one spawn attempt per prompt).
  *     PostToolUse ensure (BL-0327): audit-log.js, which already runs on every tool call, also calls `run(payload)` with the PostToolUse

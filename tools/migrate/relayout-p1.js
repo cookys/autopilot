@@ -1081,8 +1081,8 @@ function followResolverTest(io) {
   };
   once('eq "autopilot: archive" "docs/projects/_archive/"', 'eq "autopilot: archive" "project/projects/_archive/"', 'autopilot archive');
   once('mk_wt() {  # mk_wt <dir> <docs|project> — a worktree of THIS repo; P1 rewrites its registry paths', 'mk_wt() {  # mk_wt <dir> <docs|project> — a worktree of THIS repo; P1 is HEAD itself, the bootstrap fixture patches its registry paths back to docs/', 'mk_wt head');
-  once('  if [ "$2" = project ]; then\n    sed -i -E "s#\'docs/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive|BACKLOG.md)\'#\'project/\\\\1\'#" "$1/scripts/lib/repo-layout.js"\n  fi',
-    '  if [ "$2" = docs ]; then\n    sed -i -E "s#\'project/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive)\'#\'docs/\\\\1\'#; s#\'project/backlog/BACKLOG.md\'#\'docs/BACKLOG.md\'#" "$1/scripts/lib/repo-layout.js"\n  fi', 'mk_wt sed');
+  once('  if [ "$2" = project ]; then\n    sed_mutate "$1/scripts/lib/repo-layout.js" -E "s#\'docs/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive|BACKLOG.md)\'#\'project/\\\\1\'#" || return 1\n  fi',
+    '  if [ "$2" = docs ]; then\n    sed_mutate "$1/scripts/lib/repo-layout.js" -E "s#\'project/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive)\'#\'docs/\\\\1\'#" || return 1\n    sed_mutate "$1/scripts/lib/repo-layout.js" -E "s#\'project/backlog/BACKLOG.md\'#\'docs/BACKLOG.md\'#" || return 1\n  fi', 'mk_wt sed');
   once('eq "autopilot: backlog" "docs/BACKLOG.md"', 'eq "autopilot: backlog" "project/backlog/BACKLOG.md"', 'autopilot backlog');
   once('[ "$AP_BACKLOG" = "docs/BACKLOG.md" ]', '[ "$AP_BACKLOG" = "project/backlog/BACKLOG.md" ]', 'fixture check');
   once('"project/BACKLOG.md" "$(bash "$R" --target "$RP" --field backlog)"', '"project/backlog/BACKLOG.md" "$(bash "$R" --target "$RP" --field backlog)"', 'P1 backlog');

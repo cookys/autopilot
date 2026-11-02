@@ -551,6 +551,17 @@ test('prompt.submit allowlist controls: the call, the bracket forms, destructuri
 
 // BL-0359 (round 2): the speed measurement runs inside the model request's own stream hook, so a failure in it must never reach the turn. The measuring step (from `await stream.result`
 // to `return result`) is one try with a catch. The test kit does not show the difference (the host already isolates a hook that throws), so the rule reads the source; the control plants the unguarded form.
+// the index just past the `}` that closes the `{` at `open`; string literals are skipped. -1 when it never closes.
+const closeBrace = (src, open) => {
+  let depth = 0
+  for (let i = open; i < src.length; i += 1) {
+    const c = src[i]
+    if (c === "'" || c === '"' || c === '`') { const q = c; i += 1; while (i < src.length && src[i] !== q) { if (src[i] === '\\') i += 1; i += 1 } continue }
+    if (c === '{') depth += 1
+    else if (c === '}') { depth -= 1; if (depth === 0) return i + 1 }
+  }
+  return -1
+}
 const MEASURE_GUARDED = src => {
   const from = src.indexOf("on('turn.step'")
   if (from < 0) return ['no turn.step hook']
@@ -558,11 +569,32 @@ const MEASURE_GUARDED = src => {
   const a = tail.indexOf('await stream.result')
   const b = tail.indexOf('return result', a)
   if (a < 0 || b < 0) return ['the hook does not await the result and return it']
-  const body = tail.slice(a, b)
-  return /\btry\s*\{/.test(body) && /\}\s*catch\b/.test(body) ? [] : ['the measurement between `await stream.result` and `return result` is not inside try / catch']
+  const afterStatement = tail.indexOf('\n', a)
+  const body = tail.slice(afterStatement < 0 || afterStatement > b ? a : afterStatement, b).trim()
+  // the whole stretch (comments are already gone) is ONE `try { ... } catch ... { ... }`: nothing before the try, nothing after the catch block
+  const t = /^try\s*\{/.exec(body)
+  if (t === null) return ['the measurement is not one try block: something stands before `try {`, or there is none']
+  const tryEnd = closeBrace(body, t[0].length - 1)
+  if (tryEnd < 0) return ['the try block never closes']
+  const c = /^\s*catch\b[^{]*\{/.exec(body.slice(tryEnd))
+  if (c === null) return ['the try block has no catch']
+  const catchEnd = closeBrace(body, tryEnd + c[0].length - 1)
+  if (catchEnd < 0) return ['the catch block never closes']
+  return body.slice(catchEnd).trim() === '' ? [] : ['a statement stands after the catch block, outside the protection']
 }
-test('turn.step measurement: everything between awaiting the result and returning it is inside try / catch', () => {
+test('turn.step measurement: everything between awaiting the result and returning it is ONE try / catch', () => {
   assert.deepEqual(MEASURE_GUARDED(read('register.ts')), [])
+})
+test('turn.step measurement control: a try after an unguarded statement, a statement before the try, one after the catch, no try, a catch-less try (negative controls, round 3)', () => {
+  const hook = inner => "on('turn.step', async function* ($, e, next) {\n const result = await stream.result\n" + inner + "\n return result\n})"
+  const guarded = "try { await update($); await $.ui.invalidate('x') } catch (_e) { /* lost */ }"
+  assert.deepEqual(MEASURE_GUARDED(hook(guarded)), [])
+  assert.deepEqual(MEASURE_GUARDED(hook('// why\n' + guarded)), [], 'a comment before the try is fine')
+  assert.ok(MEASURE_GUARDED(hook("await update($)\n try { await $.ui.invalidate('x') } catch (_e) { }")).length > 0, 'unguarded statement + guarded block')
+  assert.ok(MEASURE_GUARDED(hook("const rate = stepRate(t)\n" + guarded)).length > 0, 'a statement before the try')
+  assert.ok(MEASURE_GUARDED(hook(guarded + "\n await update($)")).length > 0, 'a statement after the catch')
+  assert.ok(MEASURE_GUARDED(hook('await update($)')).length > 0, 'no try at all')
+  assert.ok(MEASURE_GUARDED(hook("try { await update($) } finally { }")).length > 0, 'a try with no catch')
 })
 test('turn.step measurement control: the unguarded form, and a catch-less try, are reported (negative control)', () => {
   const guarded = "on('turn.step', async function* ($, e, next) {\n const result = await stream.result\n try { await update($) } catch (_e) { }\n return result\n})"

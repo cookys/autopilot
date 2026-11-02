@@ -27,7 +27,8 @@
 //     scripts/lib/repo-layout.js (stage P1, path keys, project/ top dir, exceptions, archived-evidence rule excludes).
 //     refs-code / refs-docs: rewrite exact layout-map keys (full file paths) in tracked text files, markdown relative links in
 //     docs; never in sealed (no-rewrite) files, evidence, profiles, platforms mirrors, this tool, or the D9.5 / routing files.
-//     content: merge the two HANDOFF.md, create docs/README.md, delete docs/training/README.md.
+//     content: merge the two HANDOFF.md (the absorbed file is deleted), create docs/README.md, delete docs/training/README.md, follow the
+//       decide.test.ts card selector (見 docs/plans -> 見 project/plans).
 //     Not in apply: profiles repin, mirror regeneration (sync-all.sh) and the no-rewrite.json path update.
 //
 // Exit: 0 ok, 1 check-f2 failed or the plan found an internal inconsistency, 2 bad input.
@@ -770,6 +771,15 @@ function cmdApply(o) {
     const readme = path.join(root, 'docs/README.md');
     fs.writeFileSync(readme, DOCS_README);
     for (const f of Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete')) fs.rmSync(path.join(root, f), { force: true });
+    // refs-code rewrote the card text that mods/live/decide.test.ts feeds the pane (docs/plans/<file> became project/plans/<file>), but the
+    // line that SELECTS that card by its leading words is a directory-form hit the rewriter leaves alone: follow it here, exactly once
+    const dt = path.join(root, 'mods/live/decide.test.ts');
+    if (fs.existsSync(dt)) {
+      const src = fs.readFileSync(dt, 'utf8'); const from = "l.text.includes('見 docs/plans')";
+      const n = src.split(from).length - 1;
+      if (n === 1) { fs.writeFileSync(dt, src.replace(from, () => "l.text.includes('見 project/plans')")); log.selector_fixed = 'mods/live/decide.test.ts'; }
+      else if (n > 1) throw new InputError(`mods/live/decide.test.ts selector matched ${n} times (want 1)`);
+    }
     log.merged = [P.merge.target, P.merge.absorbed_old]; log.created = ['docs/README.md']; log.deleted = Object.keys(P.cls).filter((k) => P.cls[k].cat === 'delete');
   } else {
     Object.assign(log, rewriteRefs(root, P, sealedOld, refMap, phase));

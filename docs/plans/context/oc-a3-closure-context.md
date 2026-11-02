@@ -4,62 +4,48 @@ This plan already passed two review generations. Generation 2's accepted finding
 by the author without being reviewed again. This closure review checks only that fold (and any later
 amendment listed below). The full current plan is the plan under review; this file lists what changed.
 
-## Generation-2 findings and how depth-0 disposed of them
+## Findings raised by generation 2 (reviewer claims; check the diff resolves each blocking one)
 
 ### [blocking] A3.4 step 9: scripts/hippo-git-hook.sh
-- Disposition: accepted_blocker — A3.4 step 9: in a store repo every commit and merge runs hippo check whatever paths it touches; without hippo pre-commit and pre-merge-commit exit 1; post-merge/post-rewrite always mark when they cannot check; unrelated-commit and non-.hippo merge cases added; KR-A3.4 updated.
 - Claim: The git-hook policy explicitly permits commits and merges without hippo check in an initialized store, contrary to R10.
 
 ### [non-blocking] A3.2 Rule A exemptions and text-gate fixtures
-- Disposition: accepted_nonblocking — A3.2 rule A now judges clauses: exempt only when the verb's object is project-record.js or a hippo read; mixed read/hand-edit fixture exits 1.
 - Claim: Rule A's proximity exemption can hide a direct hand-edit instruction merely because the same line mentions a hippo read command.
 
 ### [blocking] hooks/tests/lib/hippo-sandbox.sh (A3.1 onward, every suite)
-- Disposition: accepted_blocker — C6 now scrubs GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, GIT_COMMON_DIR, GIT_OBJECT_DIRECTORY, GIT_ALTERNATE_OBJECT_DIRECTORIES, GIT_PREFIX, pins GIT_CONFIG_NOSYSTEM/GIT_CONFIG_GLOBAL/XDG_CONFIG_HOME, and pre-flights rev-parse --show-toplevel per temp repo.
 - Claim: The C6 isolation recipe pins HOME, HIPPO_CONFIG_DIR, temp repos, GIT_AUTHOR_*/GIT_COMMITTER_* and HIPPO_ACTOR, but says nothing about git environment inherited from the caller. When a suite runs from inside a git hook (validate.sh or affected-suites under pre-commit/pre-push), GIT_DIR, GIT_INDEX_FILE, GIT_WORK_TREE, GIT_COMMON_DIR and GIT_OBJECT_DIRECTORY point at this checkout. A 'temp repo' git init/commit, a hippo import, or hippo's self-installed guards then act on this checkout's index, objects and hooks. Separately, an operator-set XDG_CONFIG_HOME or GIT_CONFIG_GLOBAL bypasses the sandbox HOME for global git config. The exit trap only notices this after the damage is done.
 
 ### [blocking] scripts/lib/hippo.js spool + flush (A3.1), section 3.3 step contract
-- Disposition: accepted_blocker — Section 3.3: spool entries record worktree, branch and target; flush replays only matching entries under an O_EXCL lock with stale-pid recovery; A3.1 adds concurrent-flush and cross-worktree tests, red-checked.
 - Claim: Records live as files on git branches, one tree per worktree, but the spool is one directory per git common dir that all worktrees share, and every run in state hippo flushes first. A write spooled in worktree A (lane branch a) is replayed by whichever worktree next runs project-record.js, so it lands on an unrelated branch that may be thrown away, and the record is lost. The idempotency lookup ('hippo list --tag <key> --history') only sees the current branch's history, so a later --key retry from A creates a duplicate. Two concurrent sessions flushing the shared spool both pass the list-then-create check (TOCTOU) and both create. The plan names no flush lock and no branch binding, so KR-A3.4's 'replays every step exactly once' does not hold under worktrees or concurrency.
 
 ### [blocking] decision-ledger.js step 6 (A3.4) x project-record.js decision new files mode (A3.1) x dev-flow W20 rule C
-- Disposition: accepted_blocker — Ledger is the single owner of one-way decisions: A3.4 step 6 runs only in hippo/hippo-problems/spool, skips rows with source project-record, passes --key from the ledger row id; files-mode decision new marks its row; W20 text updated; tests for one row / one record.
 - Claim: The plan gives two writers for the same one-way decision, and they loop in files mode. (a) Files mode: a ledger append with reversibility one-way calls 'project-record.js decision new'. In files mode that call is defined as 'decision-ledger.js append --kind decision', which writes a second ledger row, the A1 telemetry source. If reversibility is forwarded, the two calls recurse. (b) Hippo mode: rule C requires dev-flow to contain 'project-record.js decision new', so the model files the decision, and the ledger append also auto-files it. Neither call carries a shared --key, so each one-way decision gets two decision records. Autopilot code's write path into hippo is therefore not single-writer and not idempotent.
 
 ### [blocking] check-backlog-entries.js backlog_frozen (A3.4 step 1) x A3.7 cutover commit order
-- Disposition: accepted_blocker — backlog_frozen is per commit (pre-commit staged vs HEAD; pre-push each commit of the push range vs first parent), checked only when the parent tree has repo.toml; notices move into the store commit; a commit deleting repo.toml (rollback) is exempt; controls added.
 - Claim: backlog_frozen blocks any diff that changes the backlog, sidecar, ADR or handoff files while .hippo/repo.toml exists, and the plan defines no diff base or exemption. In A3.7, commit 1 creates repo.toml, commit 2 wires pre-push with backlog_frozen, and commit 3 edits exactly those files to add the frozen notice. Pushing the cutover branch therefore fails its own gate. The only way through is --no-verify, a gate bypass on the very cutover that is meant to establish the rule that frozen files are never edited by hand. The rollback path has the same problem: if a partial revert leaves repo.toml in place, refiling with files mode is blocked too.
 
 ### [non-blocking] scripts/hippo-git-hook.sh unchecked-merge marker (A3.4 step 9)
-- Disposition: accepted_nonblocking — Marker moved to the per-worktree git dir; two-worktree case added.
 - Claim: The marker lives in the git common dir, which all worktrees share, and any pre-commit that passes hippo check clears it. A passing check in worktree B therefore clears the marker for an unchecked merge in worktree A, and A's commits that do not touch .hippo/ stop being refused. Pre-push hippo_unavailable and check-on-read limit the exposure, but the marker no longer means what section 3.3 says it means.
 
 ### [non-blocking] git hook wiring (A3.4 step 9, A3.7 commit 2)
-- Disposition: accepted_nonblocking — post-rewrite chain line added running the post-merge logic; fast-forward covered by post-merge; rebase case added.
 - Claim: Only pre-commit, pre-merge-commit and post-merge are wired. Fast-forward merges skip pre-merge-commit, and rebase or 'git pull --rebase' runs no merge hook at all. Records from another session can therefore enter the tree without the 'after merge' check. Hippo-side check-on-read and pre-push hippo_unavailable mostly cover the gap, but the plan does not name rebase as a path.
 
 ### [non-blocking] hooks/tests (A3.1 hippo-problems case, A3.4 corrupted-record case) vs C1
-- Disposition: accepted_nonblocking — C1 gains a scoped exception for hippo-sandbox.sh fixtures in sandbox temp repos with a tempdir assertion.
 - Claim: C1 is copied verbatim into every dispatch and says no autopilot script or shell redirection creates, appends to or rewrites a .hippo/ path. Yet two acceptance cases need the test harness to corrupt a record file under a temp repo's .hippo/. An implementer following C1 literally must refuse these cases, or will quietly treat C1 as advisory.
 
 ### [non-blocking] scripts/check-hippo-writer-text.js rule A suppression (A3.2)
-- Disposition: accepted_nonblocking — Same fold as the rule A clause change; mixed writer/hand-edit fixture exits 1.
 - Claim: Rule A suppresses a finding whenever the line names project-record.js or a hippo read within 80 characters. A sentence that tells the model to edit the backlog file and also mentions project-record.js therefore passes, for example a line saying to update the BACKLOG.md row and then run project-record.js. No fixture covers this mixed case.
 
 ### [non-blocking] C8 commit split vs section 3 wiring row and A3.1 step 5
-- Disposition: accepted_nonblocking — C8 now puts scripts- and hook-inventory rows in the wiring commit; mechanism commits hold code and tests only.
 - Claim: C8 puts 'inventory rows' in the mechanism commit. The section 3 file map and A3.1 step 5 put docs/scripts-inventory.md and the inventory row in the wiring commit. Implementers get conflicting instructions on which commit carries the inventory edit.
 
 ### [non-blocking] session-start.js warnings (A3.4 step 8), repo-layout.js mirror exclusion test (A3.7), hippo mode of admit/next-pick/migrate (A3.4 steps 2,4,5)
-- Disposition: accepted_nonblocking — A3.4 acceptance adds red-checked min_plugin_version, marker, problems and spool lines and the migrate refusal; A3.7 mirror-exclusion test is red-checked.
 - Claim: Several new or changed checks have no stated red-before-green control: the min_plugin_version warning (the main guard against old plugins hitting frozen files), the unchecked-marker and hippo-problems session-start lines, the release-mirror exclusion test that keeps .hippo/ out of the public mirror, and the migrate-backlog-entries refusal in hippo mode.
 
 ### [non-blocking] A3.6 headless KR1 cells and committed transcripts
-- Disposition: accepted_nonblocking — A3.6 cells run with a deny rule on the credential path; the checker refuses transcripts with the path or token-shaped strings; planted negative control added.
 - Claim: The Claude credential sits as a 0600 file in the sandbox HOME of a headless session that has Bash and Read. The transcripts are then committed to the evidence dir. A cell that reads files under HOME would put credential material both in the model's view and in git, and the plan has no scan for this.
 
 ### [non-blocking] hooks/hippo-edit-guard.js early exit in store-less repos; hippo ctx.rs init_store
-- Disposition: accepted_nonblocking — Added to the P1.4 input list in section 7: once hippo init exists, new/import refuse without repo.toml.
 - Claim: The guard exits 0 at once in repos without repo.toml, and in hippo P1.2 the first 'hippo new' or 'import' creates repo.toml implicitly. A model that runs hippo new directly in a consumer repo, outside project-record.js, still creates a store with default id and visibility, which is exactly the implicit store that C4 forbids.
 
 ## Diff under review (plan file only)

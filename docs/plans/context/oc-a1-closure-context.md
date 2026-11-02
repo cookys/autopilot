@@ -4,42 +4,33 @@ This plan already passed two review generations. Generation 2's accepted finding
 by the author without being reviewed again. This closure review checks only that fold (and any later
 amendment listed below). The full current plan is the plan under review; this file lists what changed.
 
-## Generation-2 findings and how depth-0 disposed of them
+## Findings raised by generation 2 (reviewer claims; check the diff resolves each blocking one)
 
 ### [blocking] E1 kinds table, decision.row data.basis; consumer table row G1
-- Disposition: accepted_blocker — decision.row basis is self_reported for every row_kind (veto and ladder included); G1 rule and C1 label updated; fixture agent-style veto row plus red-check.
 - Claim: The contract labels veto and ladder decision rows as basis 'observed'. Any process, including an agent session, can write those rows. G1 renders every row that is not 'self_reported' as verified state. So model-authored rows would be displayed as observed truth, which contradicts the rule that state is never taken from a model's own claim.
 
 ### [blocking] E1 command contract and envelope.project; E3 index.js; E4 cli.js exit codes
-- Disposition: accepted_blocker — E1 Project and failure rules: project_unresolved exit 2; top-level internal_error catch, exit 0, input cursor echoed; E3 cases vi-b, vi-c and red-check z.
 - Claim: The plan never says what the command returns when the project itself cannot be resolved (cwd outside a git repo, git missing, scopeFromCwd failing). It also says nothing about a failure outside the per-reader try/catch, such as an exception in merge, cursor encoding or the envelope build. Without a rule, those paths fall through to Node's uncaught-exception exit 1. R15 allows only 0 for source problems and 2 for usage errors.
 
 ### [non-blocking] E3 cursor.js size bound and w/s halving; consumer argv passing
-- Disposition: accepted_nonblocking — E3 size bound: w cap 1000, h cap 16 for files >= 64 KiB, 12-hex heads, true encoded bound <= 64 KiB, e floor for an equal-ts group over the cap, stdin cursor, size assertion and red-check g.
 - Claim: The cursor is not actually bounded, and its stated size is wrong. The hints map h has no cap. The w estimate is about 2x low. The halving rule cannot terminate, and it loses the no-duplicate guarantee, when more than 2000 delivered events share the watermark millisecond. A cursor passed on argv can then exceed the Linux 128 KiB single-argument limit, so the console's spawn fails with E2BIG.
 
 ### [non-blocking] KR-A1.3 warning rules; E2 step 1 configured-source list; E2 step 4 pointer file writer; E2 step 2 cwd_unresolved
-- Disposition: accepted_nonblocking — Pointer roots are optional candidates, deduped on read, single O_APPEND write under the ledger lock; cwd_unresolved is now a sources[].rows_filtered count only; removed-ledger degrade case.
 - Claim: Several warnings will fire on every call during normal operation. That trains the operator to ignore warnings, and it keeps sources[].state at 'absent' or degraded. The pointer file is also written with an unlocked read-check-append and is never pruned.
 
 ### [non-blocking] E2 step 4 review.js roots (archive dir, AUTOPILOT_EVENTS_REVIEW_LEDGERS); fixture; risk row on host-wide sources
-- Disposition: accepted_nonblocking — E2 step 4: base-commit-exists project filter, archive layout recorded as step 0, foreign review ledger in the fixture with red-check.
 - Claim: The review source reads host-wide roots without any project filter, and the archive layout is still unknown. Other repos' review history can therefore be emitted under this project's project_key. That breaks the plan's own promise that 'events of other repos are never returned', and the read-only and degrade contract for this source cannot be tested before E2.
 
 ### [non-blocking] KR-A1.6 readonly-* scope; E4 bin/autopilot.js startup; KR-A1.5 bench
-- Disposition: accepted_nonblocking — E4: status events fast path before ensureTmpdir and the eager requires; readonly digests whole HOME and TMPDIR plus absent runs dir; bench line through the real binary.
 - Claim: The read-only proof and the performance bench do not cover the real process the console polls. bin/autopilot.js eagerly loads the engine, runners, readiness and session-mode modules before it reaches the status branch, and the readonly digest does not include the sandbox HOME or an existing TMPDIR. The bench times the library, not the binary.
 
 ### [non-blocking] E1 kinds table run.stage; consumer table G1
-- Disposition: accepted_nonblocking — run.stage gets basis self_reported (run-ledger.sh stage-* is a plain CLI); G1 rule covers it.
 - Claim: run.stage has no basis field, but G1 renders run.stage.stage as state. The plan does not establish whether stage rows are written only by software or can be appended by a model session. So the same self-report risk handled for qc.verdict and decision.row is left open for task-stage state.
 
 ### [non-blocking] E4 scripts/check-events-contract.js; versioning rule 'additive-only after merge'
-- Disposition: accepted_nonblocking — E4 gate check (v) against committed schemas/events.baseline.json plus retype red-check.
 - Claim: Nothing mechanically enforces the additive-only rule. Every gate check compares the doc, schema, consumer table and fixture with each other, so removing or retyping a field in the schema and the doc in the same commit passes.
 
 ### [non-blocking] E2 step 1 jsonl-tail.js hint validation; E3 hints keyed by head hash
-- Disposition: accepted_nonblocking — Hints only for files >= 64 KiB so the 256-byte head is stable; no cursor_hint_stale for grown short files; short ledgers are always read whole.
 - Claim: The head hash covers 'the first 256 bytes', so it changes as a young file grows toward 256 bytes. Normal resumes then get spurious cursor_hint_stale warnings and full re-reads. Files shorter than 256 bytes with identical content (for example all empty files) also share a key in h.
 
 ## Diff under review (plan file only)

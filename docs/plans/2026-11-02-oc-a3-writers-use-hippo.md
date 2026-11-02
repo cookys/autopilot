@@ -619,3 +619,4 @@ No open questions remain.
 - G2 2026-11-02: plan review generation 2 (terminal, at cap) = CONDITIONAL (openai STOP, google READY, anthropic
   CONDITIONAL); 14 findings, 5 blocking. Depth-0 accepted all 5 blockers; all 9 non-blocking folded, none refuted.
   Dispositions: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g2-dispositions.json`. Rubric and §2.5 unchanged.
+- Review artifacts: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g1-artifact.json`, `.g2-artifact.json`. A first g2 dispatch stopped on `plan_growth_hard_stop` (1.506x, zero seats); plan shrunk in b01b94726 and the lock reopened per the dispatch-plan-review.js recipe. Receipt: `check-phase-review-receipt.js --plan-file <plan at b01b94726> --plan-artifact <g2 artifact> --dispositions <g2 dispositions>` exit 0 (2026-11-02). Generation 2 terminal at the cap: sol STOP, argon READY, opus CONDITIONAL; all 5 g2 blockers accepted and folded in 257f0a573 (not seat-reviewed).

@@ -1,0 +1,777 @@
+{
+  "schema_version": 1,
+  "artifact_type": "plan_review_artifact",
+  "ticket": "oc-a3",
+  "logical_plan_id": "autopilot-oc-a3-hippo-writers",
+  "session_id": "506f335d-8848-4ee1-9d8e-9d1c7caefe6c",
+  "session_key": "07931ab1365b97dc4fb743efe7c5787bdc25f793b5497f62e5db4ef5cbf3cb5c",
+  "generation": 1,
+  "verdict": "CONDITIONAL",
+  "semantic_verdict": "CONDITIONAL",
+  "terminal": false,
+  "policy_reason": "depth_0_adjudication_required",
+  "rubric_sha256": "84d117650ea7188f3c795ea2ff3fd8b74dccc35469ce609588ed488ca425d2a7",
+  "manifest_sha256": "9d665c3f84216692c9872d75b4bf6088e61f1693962d140ad2398c420d9c3341",
+  "plan_sha256": "8b1f655d4427fbf4be226cba2bed7e3b01dfb810d2b7be941db51fac3753d9fe",
+  "growth_ratio": {
+    "numerator": 1,
+    "denominator": 1
+  },
+  "growth_warning": false,
+  "transport_status": "complete",
+  "attempts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "codex",
+          "model": "gpt-6.1-sol",
+          "operation": "plan-review",
+          "request_digest": "59634b692f5ba909e3d25e5a21fb40e52ca0324b2c713732cad0479d094960a7"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "a530b7f398cad86c4dafab08ff44cd890f262741a6d6d3e4065a4d5412bb0261",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-codex-CyZ7tF/stdout",
+          "digest": "a530b7f398cad86c4dafab08ff44cd890f262741a6d6d3e4065a4d5412bb0261"
+        },
+        "receipt_digest": "851f48bac44801c99d6cdd6b22876ac3b76ae36c94298e017d09f9452c9f7cd0"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-argon-high",
+          "operation": "plan-review",
+          "request_digest": "6eb33583d287a2c85c1f6ab2cd136710bf9eea0471a8457b43b13d52a8cfa4e8"
+        },
+        "outcome": {
+          "classification": "exit_failure",
+          "exit_status": 3,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "ec39d9905601221d93454705308cc3cf8522d2c10e71aca65de2cf52dac8f2f9",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-sPjy9H",
+          "digest": "ec39d9905601221d93454705308cc3cf8522d2c10e71aca65de2cf52dac8f2f9"
+        },
+        "receipt_digest": "4d13afc0d791b9cf850bd985e205801cbf9daae90618da82be1319aa8ffb8e4a"
+      },
+      "transport_status": "exit_failure",
+      "parser_status": "not_attempted",
+      "semantic_status": "unavailable",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "attempt": 2,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "agy",
+          "model": "gemini-4-argon-high",
+          "operation": "plan-review",
+          "request_digest": "8330f0b3a499ecbf473362d194f65a4ba56e751d56098679168f4277c1b25b9c"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "439d39f8292f4198ad07f8faf92bb1c819936c0acdd45dae15cf39934ad0e584",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-3NxxBV",
+          "digest": "439d39f8292f4198ad07f8faf92bb1c819936c0acdd45dae15cf39934ad0e584"
+        },
+        "receipt_digest": "4ac3610e4844289af169eec381f3008d2eccf6af9aef3795fdc268ddc2df5b39"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "attempt": 1,
+      "transport_envelope": {
+        "schema_version": 1,
+        "artifact_type": "runner_transport_envelope",
+        "request_binding": {
+          "runner": "claude-native",
+          "model": "claude-opus-5-5",
+          "operation": "plan-review",
+          "request_digest": "cf470fcb7f4b5e5575e74a0176de1be9899daa95b474c9e362cb0e0e8dc67c59"
+        },
+        "outcome": {
+          "classification": "success",
+          "exit_status": 0,
+          "signal": null,
+          "error_code": null
+        },
+        "output_digests": {
+          "stdout_sha256": "49889e3b51658507c864710609d6f88aa25f2d5bc6b6c8ab3837eb8f436edcc7",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "private_raw_reference": {
+          "kind": "private-file",
+          "locator": "/tmp/dispatch-author-log-HGBmRn",
+          "digest": "49889e3b51658507c864710609d6f88aa25f2d5bc6b6c8ab3837eb8f436edcc7"
+        },
+        "receipt_digest": "90aeb3068ede255e9a9dc12bde8714d912cbdb1459ed91a3f03d235073aa80e3"
+      },
+      "transport_status": "success",
+      "parser_status": "strict",
+      "semantic_status": "available",
+      "unratified_semantic_status": "unavailable"
+    }
+  ],
+  "substitutions": [],
+  "reviewer_verdicts": [
+    {
+      "seat_id": "sol_chair",
+      "target_id": "sol_chair",
+      "family": "openai",
+      "verdict": "STOP"
+    },
+    {
+      "seat_id": "argon_deep",
+      "target_id": "argon_deep",
+      "family": "google",
+      "verdict": "CONDITIONAL"
+    },
+    {
+      "seat_id": "opus_skeptic",
+      "target_id": "opus_skeptic",
+      "family": "anthropic",
+      "verdict": "CONDITIONAL"
+    }
+  ],
+  "findings": [
+    {
+      "rubric_id": "R15",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "A3.3 step 1 and A3.7 cutover step 1",
+      "claim": "The planned bootstrap directly writes under .hippo/ from an autopilot-run script, contradicting the CLI-only writer boundary.",
+      "evidence": "A3.3 assigns execution to the autopilot depth-0 session and uses shell redirection to create .hippo/repo.toml. Calling this a script step rather than a model edit does not exempt autopilot code from R15. A3.7 repeats this bootstrap in the real checkout.",
+      "evidence_reference": "Plan §2.5 plan-local constraints; §4 A3.3 step 1; §4 A3.7 cutover step 1",
+      "repair": "Replace direct config-file creation with a supported hippo CLI bootstrap operation. If none exists, declare that capability as a dependency before import and cutover; do not introduce a script exception to R15.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "6fbe0eb6ebd75615ba56c7dfa15f359354d1bec3f10db4628516b0f03edfe0fc"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "Store-present behavior when hippo is unavailable; commit and merge hook chains",
+      "claim": "The hook policy explicitly permits commits and merges without the mandatory hippo validation.",
+      "evidence": "The proposed pre-commit, pre-merge-commit and post-merge chains invoke hippo only when it is on PATH; otherwise they print a warning and succeed. Thus a checkout containing a hippo store can pass these lifecycle points without running hippo check. Spooling unavailable writes does not satisfy validation of existing records.",
+      "evidence_reference": "Plan §3 file-structure map, .githooks entries; §4 A3.7 cutover step 1; frozen rubric R10",
+      "repair": "For a checkout with .hippo/repo.toml, require an available validator before commit and merge, and require validation after merge with offending filenames reported. Preserve spool degradation for pending writes, but do not let a warning substitute for mandatory store validation.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "sol_chair",
+          "runner": "codex",
+          "model": "gpt-6.1-sol"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0d6eb238d2ea1425cd5c0b86e0535b822993eacff5decb3157d7249fee45c1c1"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/project-record.js, skills/handoff/SKILL.md, skills/learn/SKILL.md (§3.3, §4 A3.1 step 2, §4 A3.5 steps 4-5)",
+      "claim": "Files-mode behavior in project-record.js is only specified for 4 of the 10 write subcommands, and §4 A3.5 step 5 keeps direct HANDOFF.md file-edit flow in skill text for files mode, violating R16.",
+      "evidence": "§4 A3.1 step 2 defines 10 record-writing subcommands (backlog new, backlog reply, backlog close, decision new, decision supersede, adr new, adr supersede, lesson new, handoff new, handoff close), plus --decision-file and --lesson-file on handoff new, but the 'Files mode:' specification only defines backlog new, adr new, lesson new, and handoff new. Meanwhile, §4 A3.5 step 5 states 'files mode keeps today's HANDOFF.md flow' in skills/handoff/SKILL.md, which instructs models to write/replace and delete HANDOFF.md directly instead of routing all writes through scripts/project-record.js.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a3-writers-use-hippo.md §3.3, §4 A3.1 step 2, §4 A3.5 steps 4-5",
+      "repair": "Specify deterministic files-mode behavior inside scripts/project-record.js for all remaining write subcommands (backlog reply, backlog close, decision new, decision supersede, adr supersede, handoff close, and handoff new --decision-file/--lesson-file) and remove any direct HANDOFF.md or knowledge file write/delete instructions from skills/handoff/SKILL.md and skills/learn/SKILL.md so skills always invoke scripts/project-record.js in both hippo and files modes.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "argon_deep",
+          "runner": "agy",
+          "model": "gemini-4-argon-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "11a040f9e9e717de43ff989db325ec469896c8ed82927447418fd9ec847b1c15"
+    },
+    {
+      "rubric_id": "R20",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/check-hippo-writer-text.js, scripts/check-plan-graduation.js, hooks/tests/check-hippo-writer-text.test.sh, hooks/tests/backlog-hippo-mode.test.sh (§2 KR-A3.1, §3.1, §4 A3.2, §4 A3.4, §4 A3.5)",
+      "claim": "The text gate detection rule in §4 A3.2 cannot match §3.1 inventory rows W4, W12, W20, or W21, making KR-A3.1 and the A3.2/A3.5 per-row revert red-checks impossible to pass as written, and §4 A3.4 omits the check-mode behavior and negative control for check-plan-graduation.js.",
+      "evidence": "§2 KR-A3.1, §4 A3.2, and §4 A3.5 require check-hippo-writer-text.js to report the §3.1 set on the current tree and exit 1 when reverting any single W-row hunk of §3.1. However, §4 A3.2 matches write verbs within 80 chars of 'BACKLOG(\\.md)?|docs/backlog/|backlog (row|entry|item)|docs/adr|ADR(\\.md| file)|HANDOFF(\\.md)?|\\.claude/knowledge/|knowledge file'. W4 ('open backlog', 'record in backlog') and W12 ('record a revisit trigger in the project backlog') use lowercase 'backlog' without 'row|entry|item'; W20 (decision-ledger.js) and W21 (chat-only Decision Brief) contain none of those target strings before A3.5; and W1/W9 retain files-mode templates containing BACKLOG.md/ADR write text despite KR-A3.1 limiting the allowlist to read/history mentions. Additionally, §4 A3.4 step 3 only describes check-plan-graduation.js --fix and omits its non-fix check behavior over hippo body Pointer bullets and its R20 negative control in A3.4 Acceptance.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a3-writers-use-hippo.md §2 KR-A3.1, §3.1 W1/W4/W9/W12/W20/W21, §4 A3.2, §4 A3.4 step 3 & Acceptance, §4 A3.5 Acceptance",
+      "repair": "Broaden the lowercase backlog pattern in §4 A3.2 to cover W4 and W12 (e.g., 'project backlog' and 'open/record in backlog'), add a required-writer check or separate assertion for W20/W21 (which add project-record.js decision new where no legacy file target existed), explicitly address files-mode template lines in W1/W9 in the gate rules, and specify check-plan-graduation.js check-mode hippo behavior plus a negative control in §4 A3.4 Acceptance.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "argon_deep",
+          "runner": "agy",
+          "model": "gemini-4-argon-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "9bb812895c33f95a7ca2cbfec20d49b914f5b2ead0b3c658628c639b95562827"
+    },
+    {
+      "rubric_id": "R15",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": ".hippo/repo.toml bootstrap and visibility (§4 A3.3 step 1, §4 A3.7 step 1, §6, §8 Q3)",
+      "claim": "Phase A3.3 and A3.7 instruct the depth-0 model session to create .hippo/repo.toml via shell redirection without creating .hippo/ first, which is blocked by the PreToolUse hook and violates R10/R15, while §4 A3.3/§6 and §8 Q3 contradict each other on whether .hippo/ is public or excluded from the public release mirror.",
+      "evidence": "§4 A3.3 step 1 (reused in §4 A3.7 step 1) states: 'Who runs it: the autopilot depth-0 session ... printf ... > .hippo/repo.toml'. First, on a fresh clone .hippo/ does not exist, so the redirection fails without mkdir -p .hippo. Second, the depth-0 session is a model session subject to hippo-edit-guard.js / hippo hook claude-pretooluse, which refuses Bash writes under .hippo/ (§0, §4 A3.4 step 7, R10, R15). Third, §4 A3.3 step 1 and §6 set visibility = 'public' ('The autopilot repo is public, so its records are public'), contradicting §8 Q3 ('A. .hippo/ lives only in the private dev repo; the release mirror excludes it') and omitting any release-mirror exclusion wiring from §3/§4.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a3-writers-use-hippo.md §0, §4 A3.3 step 1, §4 A3.4 step 7, §4 A3.7 step 1, §6, §8 Q3",
+      "repair": "Reconcile §4 A3.3/§6 with §8 Q3 on whether .hippo/ is shipped in the public repo or excluded from the release mirror (and if excluded, wire the mirror exclusion into §3/§4), and perform .hippo/repo.toml creation via a hippo CLI init/import flag or an operator/script bootstrap outside model Bash redirection into .hippo/.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "argon_deep",
+          "runner": "agy",
+          "model": "gemini-4-argon-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "4e033b39b1259794e2902a089a36dda9015b5c3cedc69cd48b5660eb298247bd"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/lib/hippo.js, hooks/hippo-edit-guard.js, hooks/session-start.js, .githooks/pre-commit (§3.3, §4 A3.4 steps 7-8, §4 A3.7 step 1)",
+      "claim": "lib/hippo.js detect treats hippo check exit code 3 as a normal healthy store without surfacing the offending file, and missing-binary fallbacks in hippo-edit-guard.js and .githooks/pre-commit allow direct Bash writes and commits under .hippo/ when hippo is not on PATH.",
+      "evidence": "In §3.3, state 'hippo' has condition 'store present, hippo --json check runs (exit 0 or 3)'. Exit 3 is hippo's rule/validation failure code when hippo check detects a corrupted or hand-edited record. Treating exit 3 as state 'hippo' swallows the check failure on read instead of naming the offending file (violating R10) and leaves hooks/session-start.js (§4 A3.4 step 8: 'when detect is spool (count) or the store is unreadable') without any 'unreadable' state in §3.3. Furthermore, when hippo is not on PATH, §4 A3.4 step 7 disables the Bash check in hippo-edit-guard.js and §4 A3.7 step 1 makes .githooks/pre-commit warn and exit 0 even when files under .hippo/ are staged.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a3-writers-use-hippo.md §3.3, §4 A3.4 steps 7-8, §4 A3.7 step 1",
+      "repair": "Separate hippo check exit 3 from healthy exit 0 in lib/hippo.js detect so check failures surface the offending file and trigger the unreadable-store warning in session-start.js; in hippo-edit-guard.js, refuse Bash commands referencing .hippo/ even when hippo is absent from PATH; and in .githooks/pre-commit and pre-merge-commit, exit non-zero if .hippo/ paths are staged while hippo is not on PATH.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "argon_deep",
+          "runner": "agy",
+          "model": "gemini-4-argon-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "b323da7fe0aa81956df64cb33e4458ee6ec9da661f29f8bb69a5650fc5ec371c"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/project-record.js (§3.1 W2, §3.2, §4 A3.1 step 2 & Acceptance)",
+      "claim": "The closed flag list for project-record.js backlog new in §4 A3.1 omits --context and --target, breaking parity with the §3.2 mapping table and the A3.1 parity test, and omits write-time backlog entry validation in hippo mode promised by §3.1 W2.",
+      "evidence": "§3.2 specifies that both the P1.4 importer and project-record.js write 'Problem, Impact, Trigger, Source, Pointer, Context, Report, Reply' as body bullets, and §4 A3.1 Acceptance requires show --json parity between hippo import and project-record.js backlog new. However, §4 A3.1 step 2 defines a closed flag list ('The field list is closed. An unknown flag exits 2') for backlog new that omits --context (or --context-file) and omits the global --target <dir> flag from §3.3. In addition, §3.1 W2 removes caller invocations of check-backlog-entries.js because 'the gate runs inside project-record.js', but §4 A3.1 step 2 only runs check-backlog-entries.js in files mode and leaves --problem-file and --impact optional in hippo mode.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a3-writers-use-hippo.md §3.1 W2, §3.2, §3.3, §4 A3.1 step 2 & Acceptance",
+      "repair": "Add [--context <c>|--context-file <f>|-] and [--target <dir>] to the closed flag specification of project-record.js in §4 A3.1 step 2, and enforce the check-backlog-entries.js field/peer/cap rules inside project-record.js in hippo mode as well as files mode.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "argon_deep",
+          "runner": "agy",
+          "model": "gemini-4-argon-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5951cb7ac2a52ee070605619fe1360fe4832de93d2c857d92ce3dabc2670ca81"
+    },
+    {
+      "rubric_id": "R22",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/backlog-hippo-mode.test.sh, hooks/tests/hippo-edit-guard.test.sh, hooks/tests/check-kr1-skill-route.test.sh, A3.3/A3.6 scratch runs (§4 A3.3, §4 A3.4, §4 A3.6)",
+      "claim": "Phases A3.3, A3.4, and A3.6 omit sandbox HOME and temp HIPPO_CONFIG_DIR isolation, allowing test and scratch rehearsal runs to mutate the operator's hippo config.",
+      "evidence": "R22 requires all tests to run under a sandbox HOME, a temp HIPPO_CONFIG_DIR, and temp git repos without touching the operator's hippo config. §4 A3.1 explicitly specifies sandbox HOME/HIPPO_CONFIG_DIR and temp repos for project-record.test.sh, but §4 A3.3 (scratch clone rehearsal with repo id 'autopilot'), §4 A3.4 (backlog-hippo-mode.test.sh and hippo-edit-guard.test.sh), and §4 A3.6 (check-kr1-skill-route.test.sh and the 10 headless claude -p cells) do not set a sandbox HOME or temp HIPPO_CONFIG_DIR, which causes hippo commands to read/write the operator's real $HIPPO_CONFIG_DIR/repos.toml and leak-guard.toml.",
+      "evidence_reference": "docs/plans/2026-11-02-oc-a3-writers-use-hippo.md §4 A3.1 Acceptance, §4 A3.3 steps 1-4, §4 A3.4 Acceptance, §4 A3.6",
+      "repair": "Explicitly require a sandbox HOME, a temp HIPPO_CONFIG_DIR, and temp git repos in §4 A3.3, §4 A3.4 Acceptance, and §4 A3.6 (both the headless KR1 cells and check-kr1-skill-route.test.sh).",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "argon_deep",
+          "runner": "agy",
+          "model": "gemini-4-argon-high"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5db4f65e575bf996a22f23dd78428bd5c4a9da6c608bc9334479eb543ce68cbd"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/project-record.js files mode (A3.1) and the A3.5 skill text that depends on it",
+      "claim": "Files mode is specified for only four subcommands: backlog new, adr new, lesson new and handoff new. Seven others have no files-mode behaviour: backlog reply, backlog close (done|cancelled|superseded), decision new, decision supersede, adr supersede and handoff close. Every consumer repo without a store runs in files mode (§2.6), and the migrated text for W7, W8, W14, W15 Resume, W20 and W21 must name a write for exactly these operations. A3.5 would then have two bad options. It can keep hand-edit text for files mode, which violates R16 and leaves KR-A3.1 red. Or it can call subcommands that fail outside hippo, which breaks the published-compatible promise. A second gap: §3.2 maps only done and cancelled, but A3.1 and W14 issue 'backlog close ... superseded', and the shared importer mapping does not carry that status.",
+      "evidence": "§4 A3.1 step 2 'Files mode: the same subcommands write today's formats' lists only backlog new, adr new, lesson new and handoff new. §3.1 W7 'delete that row', W8 'delete completed items', W14 'is deleted', W15 'deletes on resume'. §2.6 'Consumer repos without a hippo store keep their exact behaviour'. §3.2 Status row maps only shipped -> done and dropped -> cancelled.",
+      "evidence_reference": "§4 A3.1 step 2 (Files mode bullet); §3.1 W7, W8, W14, W15, W20, W21; §2.6 Compatibility impact; §3.2 Status row",
+      "repair": "Before A3.1 starts, add a files-mode table to §4 A3.1 with one row per subcommand. backlog close: set Status shipped/dropped in place, or remove the row, matching today's text per W-row. backlog reply: rewrite the Reply bullet. decision new/supersede: name the files sink (decision ledger only, or an ADR file), or exit 2 with a named message that the skill text handles. adr supersede: write a new ADR file and update the status of the old one. handoff close: remove HANDOFF.md. Give each row a golden-file case in project-record.test.sh. Add 'superseded' to §3.2 with the hippo status it maps to, and confirm hippo accepts that status for kind issue, so writer and importer agree.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "779615fef0549b2f6df897e4fab2d77ff58593692842e1d78d502e8fa7affb73"
+    },
+    {
+      "rubric_id": "R20",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "scripts/lib/hippo.js spool flush and project-record.js multi-command writes (A3.1)",
+      "claim": "Several subcommands run more than one hippo command. backlog new is hippo new plus N relates_to links plus a reported_by link. handoff new is a handoff-note plus N decision or lesson records, each linked. decision supersede is new plus link plus close. The idempotency design keys only the first create: flush finds key:<k> and skips the whole write. A crash after the create but before the links or child records therefore loses those edges and records for good, while reporting success. In direct hippo mode, a refusal partway through the sequence also leaves a partial write. Example: the leak guard refuses one lesson (exit 3, state refused, no spool), so the handoff is half written. A retry then creates a second note, because the key comes from the spool id. The only fault-injection point is after-create, so the negative control cannot turn any of this red.",
+      "evidence": "§3.3 'every write carries a tag key:<16 hex> (from the spool id, ...) ... Before creating a record, flush checks hippo list --tag key:<k> --history --json for that key, so a crash between the write and the spool-file removal never duplicates'. §4 A3.1 step 2 handoff new 'then one decision new / lesson new per file, each linked relates_to the note'. A3.1 acceptance 'PROJECT_RECORD_FAULT=after-create -> rerun creates nothing new'. KR-A3.4 'flush replays each spooled write exactly once'.",
+      "evidence_reference": "§3.3 Idempotency paragraph; §4 A3.1 step 2 and acceptance (spool bullet); §2 KR-A3.4",
+      "repair": "Decide in A3.1 that a write is an ordered list of steps, each with a deterministic key: key:<k> for the root, key:<k>.<n> for each child record. Derive k from the invocation: the spool id, or in direct mode a key computed before the first hippo call and printed so a retry can pass --key. Replay and retry resume step by step: skip a create whose key exists, and skip a link that hippo related already shows. Define what a refused step does to steps already done: report the created ids and the failed step, exit non-zero, and never re-create the root. Confirm that list --tag and --history exist in the P1.2 CLI. Add fault points after each step type (after-create, after-first-link, after-first-child), and red-check each by removing the per-step key lookup.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "8160434edbd078280585897dfd1e549caa8ad8e5e91a6374e352b6c9ccd5bbc1"
+    },
+    {
+      "rubric_id": "R22",
+      "class": "decision-now",
+      "severity": "blocking",
+      "affected_surface": "hooks/tests/project-record.test.sh (A3.1) and binary resolution in scripts/lib/hippo.js",
+      "claim": "Three A3.1 test cases can reach the real checkout or the operator's hippo. (1) The case 'the plugin's own dir is refused as target' must run project-record.js with --target set to the plugin dir, which in this repo is this checkout. The mandated red-check removes the refusal, and the run then appends a row to this checkout's docs/BACKLOG.md today; after A3.7 it writes an op into this checkout's .hippo/. (2) Tests set HIPPO_BIN, but lib/hippo.js is specified to run execFileSync('hippo', argv) from PATH. Hippo-mode cases therefore run whatever hippo the operator has installed, and the 'binary hidden' case is ambiguous. (3) A sandbox HOME has no git identity, so hippo exits 5 (no actor), and every hippo-mode case silently lands in spool.",
+      "evidence": "§4 A3.1 acceptance 'the plugin's own dir is refused as target' and 'the four §3.3 states, each red-checked'. §3.3 'It is never the plugin's own install directory'. §3.3 Windows 'lib/hippo.js uses child_process.execFileSync('hippo', argv) with no shell'. §3 file map tests row 'each needs HIPPO_BIN (a built hippo)'. §3.3 spool row 'exit 5 (environment: unsupported format, lock timeout, no actor)'.",
+      "evidence_reference": "§4 A3.1 Acceptance; §3.3 store-state table and Windows paragraph; §3 file map hooks/tests row",
+      "repair": "Run the plugin-dir case against a temp copy of the plugin tree, pointing the resolver's plugin-root input at a tempdir, never at the checkout. Add a harness assertion that this checkout's git status and .hippo/ (if any) are unchanged after the suite. Specify that lib/hippo.js takes the binary from HIPPO_BIN when set and from PATH otherwise. The hidden case unsets HIPPO_BIN and uses a PATH without hippo. Inside the harness, set GIT_AUTHOR_* and GIT_COMMITTER_*, and set the hippo actor in the temp HIPPO_CONFIG_DIR. Add a case asserting that detect returns hippo, not spool, in the configured sandbox.",
+      "blocks_next_slice_or_immediate_integrity": true,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": true,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "d15f230c34ac5240452c3698e17c85654c2a2daa3fe45fc05e5884c1955c8042"
+    },
+    {
+      "rubric_id": "R10",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "hooks/hippo-edit-guard.js fallback (A3.4), .githooks chain lines (A3.7), pre-push mode selection for check-backlog-entries.js (A3.4)",
+      "claim": "Consider a host where the store exists but hippo is missing. This is the spool state the plan expects on Windows and on fresh hosts. There, every layer that enforces direct-write refusal drops to a warning at the same time. The guard checks only Edit/Write and announces that the shell check is off. The pre-commit chain line only warns, so neither hippo check nor the write journal runs. Pre-push passes --hippo only when detect says hippo, so it is unstated whether backlog_frozen fires in spool state. A Bash append to .hippo/ops can therefore be committed and pushed unchecked. Two smaller gaps: detect treats check exit 3 as the healthy hippo state without surfacing the offending file. And the default-on guard, whose matcher includes Bash, spawns hippo on every Bash call even in consumer repos that have no store.",
+      "evidence": "§4 A3.4 step 7 'Otherwise refuse Edit/Write/MultiEdit/NotebookEdit whose path has a .hippo component, and print one warning per session that the shell check is off'. §4 A3.7 step 1: the chain line only echoes a warning when hippo is not on PATH. A3.4 step 1 '.githooks/pre-push passes --hippo when detect says hippo'. §3.3 hippo row '(exit 0 or 3)'. R10 requires hippo check before commit.",
+      "evidence_reference": "§4 A3.4 steps 1 and 7; §4 A3.7 step 1; §3.3 store-state table",
+      "repair": "Decide now, for the A3.4 design, what happens when .hippo/repo.toml exists and hippo is absent. The autopilot pre-commit chain refuses a commit whose staged paths include .hippo/; this is fail-closed only for that case, with a message naming the missing binary. The guard refuses Bash commands whose argv or redirection names a .hippo path. backlog_frozen keys on repo.toml presence, not on detect = hippo. In detect, exit 3 keeps state hippo but prints check's offending-file line on stderr, and session-start repeats it. The guard engages hippo delegation only when the target repo has .hippo/repo.toml. Add negative controls for each of these with hippo hidden from PATH.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "94e905907e143acc64ad2c46849f9de087e4aa37efd3143a52cafc5d08f621d4"
+    },
+    {
+      "rubric_id": "R17",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "store creation in A3.3 step 1 and A3.7 step 1",
+      "claim": "The store-creation step cannot run as written, and it conflicts with the plan's own guards. First, printf writes .hippo/repo.toml without a preceding mkdir, so it fails on a fresh clone. Second, in A3.7 the depth-0 session runs it in the real checkout after A3.4 has merged the default-on guard. That guard delegates to hippo hook claude-pretooluse, which refuses shell writes under .hippo/, so the step is either refused or needs an unstated bypass. Third, it makes a model the author of the one file under .hippo/ that the plan says only a human may write by hand. That undercuts the explicit-creation rule.",
+      "evidence": "§4 A3.3 step 1: printf ... > .hippo/repo.toml with no mkdir. 'Who runs it: the autopilot depth-0 session'. 'This is the only file under .hippo/ a human may write by hand (spec §2.1)'. §0 decisions row 'the hook refuses shell writes under .hippo/ as well as Edit/Write'. §4 A3.7 step 1 'the A3.3 steps 1-4 in the real checkout'.",
+      "evidence_reference": "§4 A3.3 step 1; §4 A3.7 Cutover step 1; §0 g1 faf96399 / g2 a695030a row",
+      "repair": "Make store creation an explicit step that the operator runs. One option is a reviewed script that does mkdir -p, writes repo.toml with the id and visibility, and refuses if repo.toml exists; the operator runs it at a tty. The other is a hippo init command, requested as a P1.4 input. State that the depth-0 session never runs this step in the real checkout, and that the guard refusing the session's own attempt is the expected behaviour. Use the same script in the A3.3 scratch rehearsal so the rehearsal exercises it.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "0131e58da381fb008a0fb41c3f46bc3d608d6f00fe34e42a8d02e06eefd1cdf3"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "scripts/check-hippo-writer-text.js, its allowlist and validate.sh wiring (A3.2), against KR-A3.1 and the A3.7 ship rule",
+      "claim": "(1) A3.2 wires the gate into validate.sh and can merge to develop on its own. But the gate is red on the current tree by design, reporting the §3.1 set, until A3.5 merges in A3.7. develop's validate.sh would stay red for the whole A5 and P1.3 wait. (2) The A3.7 ship rule lets the lesson and handoff units stay held while the cutover ships. KR-A3.1 requires exit 0 on the shipped tree, and the allowlist may only shrink, so a held unit's W15 and W16 lines can neither pass nor be allowlisted. A held handoff unit also keeps text that replaces and deletes handoff files the cutover has just frozen, and backlog_frozen covers only the backlog file and sidecars. (3) The targets include BACKLOG(.md)? next to verbs such as record and file. The plan does not state case sensitivity or that a line naming project-record.js is compliant, so a migrated line such as 'record it with project-record.js backlog new' can match. (4) Entries are keyed by line_sha256 and additions are refused. The initial reasoned read-only entries therefore have no bootstrap path, and any later edit to an allowlisted line breaks the gate for good.",
+      "evidence": "§4 A3.2 'Wire into scripts/validate.sh' and 'on the current tree it reports the §3.1 set (expected red)'. §4 'A3.1, A3.2 and A3.4 are mechanism ... mergeable to develop on their own'. KR-A3.1 'exits 0 on the shipped tree'. §4 A3.7 'The lesson and handoff units may ship separately, or stay held if they fail, without blocking the cutover', and step 2 puts a frozen notice on each handoff file. A3.4 step 1 backlog_frozen covers 'the frozen backlog file or adds a sidecar'. A3.2 'may only be removed (--update-allowlist refuses additions)'.",
+      "evidence_reference": "§4 A3.2; §4 phase preamble; §2 KR-A3.1; §4 A3.7 Ship rule and step 2; §4 A3.4 step 1",
+      "repair": "Decide in A3.2. Wire the gate into validate.sh in report-only mode (exit 0, prints the count) until the A3.7 merge flips it to blocking, or seed a separate shrink-only pending list with the baseline. Write the initial allowlist once, with reasons, in the A3.2 commit. Add a re-pin command that accepts a changed hash only when the line still matches the same reason class. State that lines naming project-record.js or a hippo read command are not findings, and add a fixture for that. Then pick one fix for held units. Either make the handoff unit part of the cutover set. Or extend backlog_frozen to the frozen handoff and ADR files, and have KR-A3.1 explicitly exclude the lines of held units.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "5ac3baa201a46fc3749a1d2b7e67ccd6514d8c7e318ffbaf5e34e5f568299d76"
+    },
+    {
+      "rubric_id": "R16",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "A3.7 cutover vs the skill text that running sessions actually load",
+      "claim": "The plan guards against old skill text meeting a frozen backlog by shipping guidance, import and freeze in one merge. But a session's skill text comes from the plugin it loaded, not from the repo's develop tree. Sessions on other hosts, and long-running sessions, keep pre-A3 text after the merge. That text tells the model to edit the frozen BACKLOG, ADR and handoff files. Only pre-push backlog_frozen catches the backlog part, and only after the work is done.",
+      "evidence": "§6 risk table 'Old skills against a frozen backlog | guidance, import and freeze ship in one merge (A3.7)'. §4 phase preamble 'so no session ever runs old skill text against a frozen backlog'. §2.6 Version PATCH. A3.6 loads the plugin with --plugin-dir, which shows skills come from a plugin install, not the checkout.",
+      "evidence_reference": "§6 risk table; §4 phase preamble; §2.6 Version; §4 A3.6",
+      "repair": "Add to A3.7 that the cutover merge is followed by a plugin version bump, which the hosts working in this repo install before the freeze takes effect; alternatively, stage the freeze behind it. In a repo with .hippo/repo.toml, session-start warns when the loaded plugin predates the A3 version recorded at cutover. State in the frozen notice how a pre-A3 session's refused push is handled.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "dcd0898524d76ddc5d5046af06ba8d5a2d829d7eede0850c26111c40283e03bf"
+    },
+    {
+      "rubric_id": "R6",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "handoff unit, no-courier branch (A3.5 step 5)",
+      "claim": "When fleet whoami fails, the plan writes holder and progress into the handoff-note body. The holder then becomes a model's own claim stored in a git record. R6 says task state is observed by the courier and never taken from a model's claim. Card Q12 places live coordination state in the fleet task tree, not in git. A session resuming on another host would read a stale, self-asserted holder as fact.",
+      "evidence": "§4 A3.5 step 5 'no fleet courier (fleet whoami fails): holder and progress go into the note body with a warning line'. §0 Card Q12 'live coordination state = fleet task tree, not git'. §0 'The courier attributes the task to the caller's seat from the caller's pids'.",
+      "evidence_reference": "§4 A3.5 step 5 (last bullet); §0 decisions table Card Q12; §0 fleet side paragraph",
+      "repair": "In the no-courier branch, write no holder. The note body gets a fixed line saying the holder was not observed because there was no fleet courier, plus the branch and last commit read from git rather than typed by the model. Resume treats the holder as unknown and relies on the existing drift check. Keep progress narrative only in fleet task update or the note's next-step text, labelled as narrative.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "637edfb7aed46409412a1c79d33fb798b1e4e98a6398d9e5e4e00c874be1a668"
+    },
+    {
+      "rubric_id": "R8",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "project-record.js id output; handoff resume line and fleet task --hippo reference (A3.1, A3.5)",
+      "claim": "The plan stores hippo ids outside hippo: fleet task open --hippo <note id>, the paste-ready resume line, and --relates/--decides arguments in skill text. It never says these are full ULIDs. If project-record.js prints hippo's display prefix, those stored references are short prefixes, and they can become ambiguous as the store grows.",
+      "evidence": "§4 A3.5 step 5: fleet task open with --hippo <note id>, and 'the reply gives hippo show <note id> (run in the same worktree) as the paste-ready resume line'. §3.2 'new records get no number (ULID; display suffix)'. R8 'short prefixes are display-only'.",
+      "evidence_reference": "§4 A3.5 step 5; §3.2 Id row; §4 A3.1 step 2",
+      "repair": "State in A3.1 that project-record.js prints the full ULID as id and returns it in --json, and shows the prefix only for display. A3.5 text passes the full id to fleet task open --hippo and uses it in the resume line. Add a test asserting that the id printed for the resume line, and the value passed to --hippo, is a 26-character ULID.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "e4ad309e2f37afd281c09a85d1be26e41a1e3adf971602b4ca003d5d31f29a72"
+    },
+    {
+      "rubric_id": "R19",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "wiring commits in A3.1/A3.2/A3.4/A3.6 and the A3.7 merge",
+      "claim": "The file map puts edits to the CLAUDE.md grouped list, docs/scripts-inventory.md and hooks/README.md into the mechanism phases A3.1, A3.2, A3.4 and A3.6. A3.4 step 7 also edits sync-codex-plugin-skills.sh documentation. CLAUDE.md is autopilot's requirement text. A3.7 is a single merge combining githooks, the pre-push switch, frozen notices and guidance, and it states no commit split. Nothing in the plan says the guidance part of each phase lands as a separate commit.",
+      "evidence": "§3 file map row 'docs/scripts-inventory.md, CLAUDE.md grouped list, docs/projects/INDEX.md, CHANGELOG.md | ... | A3.1, A3.2, A3.4, A3.6'. hooks/README.md in the A3.4 row. §4 A3.4 step 7 sync-codex-plugin-skills.sh documents hippo's codex hooks. §4 A3.7 'one merge'.",
+      "evidence_reference": "§3 file-structure map; §4 A3.4 step 7; §4 A3.7 Cutover",
+      "repair": "Add a line to §4: each mechanism phase lands as at least two commits. One is mechanism (scripts, hooks, tests, inventory). The other is wiring and guidance (CLAUDE.md list, references, README text). A3.7 lists its commits: store import; githooks and pre-push switch; frozen notices; one per held guidance unit.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "1fe7f5621b013bea82b610dea392480ad60573fc1a6b46d6413ae183ad20ab0b"
+    },
+    {
+      "rubric_id": "R22",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "A3.3 import rehearsal and A3.6 headless KR1 cells (also reused by A5 ON/OFF)",
+      "claim": "A3.3 runs hippo import on a scratch clone, and A3.6 runs ten claude -p cells. Neither sets a temp HIPPO_CONFIG_DIR or a sandbox HOME. hippo then reads, and may write, the operator's repos.toml; it could register the scratch store under id autopilot, which later collides with the real store. The claude -p cells load the operator's installed plugins and settings alongside --plugin-dir. An installed pre-A3 or A3 autopilot can then sway the route check either way and invalidate the pre-A3 negative control. A sandbox HOME in turn needs Claude auth, and R14 forbids moving that through chat or a model's view.",
+      "evidence": "§4 A3.3 'on a scratch clone in a tempdir (never this checkout)', with no config isolation stated. §3.3 'resolved through the user's $HIPPO_CONFIG_DIR/repos.toml'. §4 A3.6 'claude -p, the A3.5 plugin via --plugin-dir, cwd = the A3.3 scratch copy'. §6 'per-user leak-guard.toml for host names'.",
+      "evidence_reference": "§4 A3.3 Who runs it; §4 A3.6 Steps and Negative control; §3.3 Multi-repo paragraph; §6 Public repo row",
+      "repair": "In A3.3 and A3.6, export a temp HIPPO_CONFIG_DIR seeded only with a copy of the operator's leak-guard.toml, so leak refusals stay real. Run claude -p under a sandbox HOME with no installed plugins; an operator-run script places the auth credential there as a 0600 file. Record both env values in each transcript header, and have check-kr1-skill-route.js refuse transcripts whose header lacks them.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "ad36e102e3abb0e722038142c701e2285bb1bbf8753aedb22a904c3b17e569ac"
+    },
+    {
+      "rubric_id": "R20",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "A3.7 step 3 cutover window",
+      "claim": "The last re-import runs on the cutover branch before the merge, and re-import after the freeze is forbidden. A BACKLOG or ADR change can land in the gap: merged to develop between that re-import and the cutover merge, or brought in by the merge itself. It then sits in the frozen file but never reaches hippo. backlog_frozen judges only later diffs, so the row silently drops out of the live store. No check detects this gap.",
+      "evidence": "§4 A3.7 step 3 'before the merge, re-run the imports once more so rows added by sessions merged in the meantime are picked up ... Re-import after the freeze is not used, because it would overwrite record changes made in hippo'. A3.4 step 1 backlog_frozen applies 'for any diff that changes the frozen backlog file'.",
+      "evidence_reference": "§4 A3.7 Cutover step 3; §4 A3.4 step 1; §6 concurrent-sessions row",
+      "repair": "Add a reconcile check to check-backlog-entries.js --hippo with a new code, for example backlog_unimported. Every BL- and ADR- id in the frozen files must have a hippo record whose provenance value equals it. Run the check in the cutover merge's pre-merge-commit and post-merge. Its negative control: a fixture row added after import turns it red. File any missing ids with an import keyed on provenance that covers only those ids and touches no existing record.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "77ec584822cc7b9a346a591fc8bdaa00c97aff0e339e74f98cd3eddf75064338"
+    },
+    {
+      "rubric_id": "R17",
+      "class": "decision-now",
+      "severity": "non-blocking",
+      "affected_surface": "A3.7 rollback, and spool files left behind when the state returns to files",
+      "claim": "Rollback lists post-cutover records with hippo list --since after git revert -m 1. The revert removes .hippo/ from the tree, so the listing must run before the revert or against the pre-revert commit; the plan orders it after. Spool files written while the store existed also stay under the git common dir after the revert. detect then returns files, flush runs only in state hippo, and session-start warns only in state spool. Those writes are kept silently and never replayed. The plan also does not say whether flush in files mode replays into files format or refuses, and it must not recreate a store.",
+      "evidence": "§4 A3.7 Rollback 'git revert -m 1 <merge> ... records written in hippo after the cutover are listed with hippo list --since <cutover date> and refiled as rows'. §3.3 'Every project-record.js run in state hippo flushes first'. A3.4 step 8 'one warning line when detect is spool'. §3 file map session-start row 'while the spool is non-empty'.",
+      "evidence_reference": "§4 A3.7 Rollback; §3.3 fallback rationale; §4 A3.4 step 8; §3 file map hooks/session-start.js row",
+      "repair": "Reorder the rollback: first export hippo list --since <cutover> --json to the evidence dir, then revert. Define flush in files state: either replay each spooled write through the files-mode writer, with one info line per write, or refuse with exit 2 naming the count. In both cases, session-start warns whenever the spool dir is non-empty, whatever the state, and flush never writes .hippo/repo.toml. Add a test: spool two writes, remove repo.toml, then run session-start and flush.",
+      "blocks_next_slice_or_immediate_integrity": false,
+      "cannot_defer_to_spike": true,
+      "rubric_mapped": true,
+      "candidate_blocker": false,
+      "provenance": [
+        {
+          "seat_id": "opus_skeptic",
+          "runner": "claude-native",
+          "model": "claude-opus-5-5"
+        }
+      ],
+      "duplicate_reports": [],
+      "disposition": null,
+      "fingerprint": "41e0c62031b32b5149b5a02019158f13cd2493a1fe8301c8177bbf7d3ae00e89"
+    }
+  ],
+  "backlog_candidates": [
+    {
+      "fingerprint": "94e905907e143acc64ad2c46849f9de087e4aa37efd3143a52cafc5d08f621d4",
+      "rubric_id": "R10",
+      "affected_surface": "hooks/hippo-edit-guard.js fallback (A3.4), .githooks chain lines (A3.7), pre-push mode selection for check-backlog-entries.js (A3.4)",
+      "claim": "Consider a host where the store exists but hippo is missing. This is the spool state the plan expects on Windows and on fresh hosts. There, every layer that enforces direct-write refusal drops to a warning at the same time. The guard checks only Edit/Write and announces that the shell check is off. The pre-commit chain line only warns, so neither hippo check nor the write journal runs. Pre-push passes --hippo only when detect says hippo, so it is unstated whether backlog_frozen fires in spool state. A Bash append to .hippo/ops can therefore be committed and pushed unchecked. Two smaller gaps: detect treats check exit 3 as the healthy hippo state without surfacing the offending file. And the default-on guard, whose matcher includes Bash, spawns hippo on every Bash call even in consumer repos that have no store.",
+      "evidence_reference": "§4 A3.4 steps 1 and 7; §4 A3.7 step 1; §3.3 store-state table",
+      "disposition": null
+    },
+    {
+      "fingerprint": "0131e58da381fb008a0fb41c3f46bc3d608d6f00fe34e42a8d02e06eefd1cdf3",
+      "rubric_id": "R17",
+      "affected_surface": "store creation in A3.3 step 1 and A3.7 step 1",
+      "claim": "The store-creation step cannot run as written, and it conflicts with the plan's own guards. First, printf writes .hippo/repo.toml without a preceding mkdir, so it fails on a fresh clone. Second, in A3.7 the depth-0 session runs it in the real checkout after A3.4 has merged the default-on guard. That guard delegates to hippo hook claude-pretooluse, which refuses shell writes under .hippo/, so the step is either refused or needs an unstated bypass. Third, it makes a model the author of the one file under .hippo/ that the plan says only a human may write by hand. That undercuts the explicit-creation rule.",
+      "evidence_reference": "§4 A3.3 step 1; §4 A3.7 Cutover step 1; §0 g1 faf96399 / g2 a695030a row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "5ac3baa201a46fc3749a1d2b7e67ccd6514d8c7e318ffbaf5e34e5f568299d76",
+      "rubric_id": "R16",
+      "affected_surface": "scripts/check-hippo-writer-text.js, its allowlist and validate.sh wiring (A3.2), against KR-A3.1 and the A3.7 ship rule",
+      "claim": "(1) A3.2 wires the gate into validate.sh and can merge to develop on its own. But the gate is red on the current tree by design, reporting the §3.1 set, until A3.5 merges in A3.7. develop's validate.sh would stay red for the whole A5 and P1.3 wait. (2) The A3.7 ship rule lets the lesson and handoff units stay held while the cutover ships. KR-A3.1 requires exit 0 on the shipped tree, and the allowlist may only shrink, so a held unit's W15 and W16 lines can neither pass nor be allowlisted. A held handoff unit also keeps text that replaces and deletes handoff files the cutover has just frozen, and backlog_frozen covers only the backlog file and sidecars. (3) The targets include BACKLOG(.md)? next to verbs such as record and file. The plan does not state case sensitivity or that a line naming project-record.js is compliant, so a migrated line such as 'record it with project-record.js backlog new' can match. (4) Entries are keyed by line_sha256 and additions are refused. The initial reasoned read-only entries therefore have no bootstrap path, and any later edit to an allowlisted line breaks the gate for good.",
+      "evidence_reference": "§4 A3.2; §4 phase preamble; §2 KR-A3.1; §4 A3.7 Ship rule and step 2; §4 A3.4 step 1",
+      "disposition": null
+    },
+    {
+      "fingerprint": "dcd0898524d76ddc5d5046af06ba8d5a2d829d7eede0850c26111c40283e03bf",
+      "rubric_id": "R16",
+      "affected_surface": "A3.7 cutover vs the skill text that running sessions actually load",
+      "claim": "The plan guards against old skill text meeting a frozen backlog by shipping guidance, import and freeze in one merge. But a session's skill text comes from the plugin it loaded, not from the repo's develop tree. Sessions on other hosts, and long-running sessions, keep pre-A3 text after the merge. That text tells the model to edit the frozen BACKLOG, ADR and handoff files. Only pre-push backlog_frozen catches the backlog part, and only after the work is done.",
+      "evidence_reference": "§6 risk table; §4 phase preamble; §2.6 Version; §4 A3.6",
+      "disposition": null
+    },
+    {
+      "fingerprint": "637edfb7aed46409412a1c79d33fb798b1e4e98a6398d9e5e4e00c874be1a668",
+      "rubric_id": "R6",
+      "affected_surface": "handoff unit, no-courier branch (A3.5 step 5)",
+      "claim": "When fleet whoami fails, the plan writes holder and progress into the handoff-note body. The holder then becomes a model's own claim stored in a git record. R6 says task state is observed by the courier and never taken from a model's claim. Card Q12 places live coordination state in the fleet task tree, not in git. A session resuming on another host would read a stale, self-asserted holder as fact.",
+      "evidence_reference": "§4 A3.5 step 5 (last bullet); §0 decisions table Card Q12; §0 fleet side paragraph",
+      "disposition": null
+    },
+    {
+      "fingerprint": "e4ad309e2f37afd281c09a85d1be26e41a1e3adf971602b4ca003d5d31f29a72",
+      "rubric_id": "R8",
+      "affected_surface": "project-record.js id output; handoff resume line and fleet task --hippo reference (A3.1, A3.5)",
+      "claim": "The plan stores hippo ids outside hippo: fleet task open --hippo <note id>, the paste-ready resume line, and --relates/--decides arguments in skill text. It never says these are full ULIDs. If project-record.js prints hippo's display prefix, those stored references are short prefixes, and they can become ambiguous as the store grows.",
+      "evidence_reference": "§4 A3.5 step 5; §3.2 Id row; §4 A3.1 step 2",
+      "disposition": null
+    },
+    {
+      "fingerprint": "1fe7f5621b013bea82b610dea392480ad60573fc1a6b46d6413ae183ad20ab0b",
+      "rubric_id": "R19",
+      "affected_surface": "wiring commits in A3.1/A3.2/A3.4/A3.6 and the A3.7 merge",
+      "claim": "The file map puts edits to the CLAUDE.md grouped list, docs/scripts-inventory.md and hooks/README.md into the mechanism phases A3.1, A3.2, A3.4 and A3.6. A3.4 step 7 also edits sync-codex-plugin-skills.sh documentation. CLAUDE.md is autopilot's requirement text. A3.7 is a single merge combining githooks, the pre-push switch, frozen notices and guidance, and it states no commit split. Nothing in the plan says the guidance part of each phase lands as a separate commit.",
+      "evidence_reference": "§3 file-structure map; §4 A3.4 step 7; §4 A3.7 Cutover",
+      "disposition": null
+    },
+    {
+      "fingerprint": "ad36e102e3abb0e722038142c701e2285bb1bbf8753aedb22a904c3b17e569ac",
+      "rubric_id": "R22",
+      "affected_surface": "A3.3 import rehearsal and A3.6 headless KR1 cells (also reused by A5 ON/OFF)",
+      "claim": "A3.3 runs hippo import on a scratch clone, and A3.6 runs ten claude -p cells. Neither sets a temp HIPPO_CONFIG_DIR or a sandbox HOME. hippo then reads, and may write, the operator's repos.toml; it could register the scratch store under id autopilot, which later collides with the real store. The claude -p cells load the operator's installed plugins and settings alongside --plugin-dir. An installed pre-A3 or A3 autopilot can then sway the route check either way and invalidate the pre-A3 negative control. A sandbox HOME in turn needs Claude auth, and R14 forbids moving that through chat or a model's view.",
+      "evidence_reference": "§4 A3.3 Who runs it; §4 A3.6 Steps and Negative control; §3.3 Multi-repo paragraph; §6 Public repo row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "77ec584822cc7b9a346a591fc8bdaa00c97aff0e339e74f98cd3eddf75064338",
+      "rubric_id": "R20",
+      "affected_surface": "A3.7 step 3 cutover window",
+      "claim": "The last re-import runs on the cutover branch before the merge, and re-import after the freeze is forbidden. A BACKLOG or ADR change can land in the gap: merged to develop between that re-import and the cutover merge, or brought in by the merge itself. It then sits in the frozen file but never reaches hippo. backlog_frozen judges only later diffs, so the row silently drops out of the live store. No check detects this gap.",
+      "evidence_reference": "§4 A3.7 Cutover step 3; §4 A3.4 step 1; §6 concurrent-sessions row",
+      "disposition": null
+    },
+    {
+      "fingerprint": "41e0c62031b32b5149b5a02019158f13cd2493a1fe8301c8177bbf7d3ae00e89",
+      "rubric_id": "R17",
+      "affected_surface": "A3.7 rollback, and spool files left behind when the state returns to files",
+      "claim": "Rollback lists post-cutover records with hippo list --since after git revert -m 1. The revert removes .hippo/ from the tree, so the listing must run before the revert or against the pre-revert commit; the plan orders it after. Spool files written while the store existed also stay under the git common dir after the revert. detect then returns files, flush runs only in state hippo, and session-start warns only in state spool. Those writes are kept silently and never replayed. The plan also does not say whether flush in files mode replays into files format or refuses, and it must not recreate a store.",
+      "evidence_reference": "§4 A3.7 Rollback; §3.3 fallback rationale; §4 A3.4 step 8; §3 file map hooks/session-start.js row",
+      "disposition": null
+    }
+  ],
+  "accepted_blocker_count": 0,
+  "repair_authorized": false,
+  "next_generation": 2,
+  "reviewed_at": "2026-11-02T11:40:21.485Z"
+}

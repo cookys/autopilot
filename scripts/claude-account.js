@@ -48,6 +48,48 @@ const PURPOSE_RE = /^[a-z0-9-]{1,32}$/;
 const SCRUB_MARK = Buffer.from('[token-scrubbed]');
 const THROTTLE_COOLDOWN_MINUTES = 5; // plain server throttle: shorter than a quota exhaustion
 const DEFAULT_MAX_ATTEMPTS = 3;
+const TERM_GRACE_MS = 5000; // SIGTERM/SIGINT forwarded to the child; still alive after this => SIGKILL
+
+/**
+ * Linux: run the child under `setpriv --pdeathsig KILL` so it is SIGKILLed by the kernel when this wrapper
+ * dies by a signal Node cannot catch (SIGKILL from a uutils `timeout`, which signals only its direct child).
+ * The token stays in the child env only; setpriv execs the real command and adds nothing to argv but itself.
+ * Absent setpriv (or non-Linux) => unchanged argv (residual risk: wrapper SIGKILL can orphan the child).
+ */
+let setprivBin;
+function pdeathsigPrefix() {
+  if (setprivBin === undefined) {
+    setprivBin = null;
+    if (process.platform === 'linux') {
+      for (const c of ['/usr/bin/setpriv', '/bin/setpriv']) {
+        if (!fs.existsSync(c)) continue;
+        const r = spawnSync(c, ['--pdeathsig', 'KILL', 'true'], { stdio: 'ignore' });
+        if (r.status === 0) { setprivBin = c; break; }
+      }
+    }
+  }
+  return setprivBin ? [setprivBin, '--pdeathsig', 'KILL', '--'] : [];
+}
+
+/** Forward SIGTERM/SIGINT to the child, escalate to SIGKILL after TERM_GRACE_MS. Returns a disposer. */
+function installSignalForwarding(child) {
+  let killTimer = null;
+  const fwd = (sig) => () => {
+    try { child.kill(sig); } catch (_) { /* gone */ }
+    if (!killTimer) {
+      killTimer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (_) { /* gone */ } }, TERM_GRACE_MS);
+    }
+  };
+  const onTerm = fwd('SIGTERM');
+  const onInt = fwd('SIGINT');
+  process.on('SIGTERM', onTerm);
+  process.on('SIGINT', onInt);
+  return () => {
+    if (killTimer) clearTimeout(killTimer);
+    process.removeListener('SIGTERM', onTerm);
+    process.removeListener('SIGINT', onInt);
+  };
+}
 
 class Stop extends Error {
   constructor(code, line, auditOutcome) {
@@ -363,7 +405,8 @@ function execAttempt(ctx, args) {
     };
     try {
       if (stdinFile) inFd = fs.openSync(stdinFile, 'r');
-      child = spawn(argv[0], argv.slice(1), {
+      const full = pdeathsigPrefix().concat(argv);
+      child = spawn(full[0], full.slice(1), {
         env, cwd: cwd || undefined, stdio: [inFd === null ? 'ignore' : inFd, 'pipe', 'pipe'],
       });
     } catch (e) {
@@ -378,15 +421,10 @@ function execAttempt(ctx, args) {
     if (timeoutSecs) {
       timer = setTimeout(() => { timedOut = true; try { child.kill('SIGKILL'); } catch (_) { /* gone */ } }, timeoutSecs * 1000);
     }
-    const fwd = (sig) => () => { try { child.kill(sig); } catch (_) { /* gone */ } };
-    const onTerm = fwd('SIGTERM');
-    const onInt = fwd('SIGINT');
-    process.on('SIGTERM', onTerm);
-    process.on('SIGINT', onInt);
+    const dispose = installSignalForwarding(child);
     child.on('close', (code) => {
       if (timer) clearTimeout(timer);
-      process.removeListener('SIGTERM', onTerm);
-      process.removeListener('SIGINT', onInt);
+      dispose();
       result.code = code;
       finish();
     });
@@ -622,16 +660,15 @@ async function cmdExec(ctx, argv) {
   }
   return new Promise((resolve) => {
     let child;
-    try { child = spawn(cmd[0], cmd.slice(1), { env, stdio: 'inherit' }); } catch (e) {
+    try { const full = pdeathsigPrefix().concat(cmd); child = spawn(full[0], full.slice(1), { env, stdio: 'inherit' }); } catch (e) {
       ctx.err(`child_spawn_failed (${e && e.code ? e.code : 'error'})`);
       resolve(EXIT.CHILD_ERROR);
       return;
     }
-    const fwd = (sig) => () => { try { child.kill(sig); } catch (_) { /* gone */ } };
-    process.on('SIGTERM', fwd('SIGTERM'));
-    process.on('SIGINT', fwd('SIGINT'));
-    child.on('error', (e) => { ctx.err(`child_spawn_failed (${e && e.code ? e.code : 'error'})`); resolve(EXIT.CHILD_ERROR); });
+    const dispose = installSignalForwarding(child);
+    child.on('error', (e) => { dispose(); ctx.err(`child_spawn_failed (${e && e.code ? e.code : 'error'})`); resolve(EXIT.CHILD_ERROR); });
     child.on('close', (code, sig) => {
+      dispose();
       const exitCode = code === null ? 128 + (os.constants.signals[sig] || 0) : code;
       auditLine(ctx, { alias, purpose, attempt: 1, outcome: exitCode === 0 ? 'ok' : 'other_failure' }, [token]);
       resolve(exitCode);

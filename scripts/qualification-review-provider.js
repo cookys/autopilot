@@ -1165,6 +1165,7 @@ function resolveCliBin(kind) {
 const { grokEffortClamp } = require('./lib/grok-effort');
 
 // Tool-less agent + post-run audit: single owner shared with dispatch-review.sh.
+const accountRail = require('./lib/account-rail');
 const agyContainment = require('./lib/agy-containment');
 const agyStream = require('./lib/agy-stream-json');
 const kimiContainment = require('./lib/kimi-containment');
@@ -1565,7 +1566,16 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
   // and the exam scored it as a MODEL miss (`known-bad sensitivity miss`) because
   // a dead transport and a wrong answer look identical from the oracle's side.
   let cloneHome = null;
-  if (process.env.QRP_CLI_HOME) {
+  // G37 (plan W4/A5): once a registry exists the claude exam runs through the account layer and the
+  // dedicated exam-dir path below is not touched. A broken registry fails closed (nothing is spawned).
+  let accountStdinDir = null;
+  let useAccount = false;
+  if (kind === 'claude') {
+    const layer = accountRail.layerState({ env: process.env, purpose: 'qualify' });
+    if (layer.state === 'invalid') throw new Error(`account layer invalid, claude exam not run: ${layer.detail}`);
+    useAccount = layer.state === 'active';
+  }
+  if (process.env.QRP_CLI_HOME && !useAccount) {
     const template = process.env.QRP_CLI_HOME;
     // Guard the template size: pointing this at a real home (589 MB observed) would
     // copy it per case. A credential-only seed is ~16 KB, so anything large means
@@ -1732,8 +1742,19 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     childEnv = { ...childEnv, FLEET_LIFETIME: 'ephemeral', FLEET_ROLE: 'eval-run' };
     if (parent) childEnv.FLEET_PARENT = parent; else delete childEnv.FLEET_PARENT;
   }
+  let spawnBin = bin;
+  let spawnArgs = args;
+  if (useAccount) {
+    // The prompt rides a 0600 file (claude-account.js `run --stdin`); the token never reaches this process.
+    accountStdinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qrp-clihome-acct-'));
+    const stdinFile = path.join(accountStdinDir, 'prompt');
+    fs.writeFileSync(stdinFile, prompt, { mode: 0o600 });
+    const w = accountRail.wrapClaude(bin, args, { purpose: 'qualify', stdinFile });
+    spawnBin = w.command;
+    spawnArgs = w.args;
+  }
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, {
+    const child = spawn(spawnBin, spawnArgs, {
       detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: childEnv,
       ...(opencodeDir ? { cwd: opencodeDir } : {}),
     });
@@ -1757,6 +1778,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       if (promptFile) fs.rmSync(path.dirname(promptFile), { recursive: true, force: true });
       if (kimiAgentDir) fs.rmSync(kimiAgentDir, { recursive: true, force: true });
       if (opencodeRoot) fs.rmSync(opencodeRoot, { recursive: true, force: true });
+      if (accountStdinDir) fs.rmSync(accountStdinDir, { recursive: true, force: true });
       // A clean exit proves nothing about containment (the fallback-to-default
       // agent also exits 0) — audit agy's own log and transcript BEFORE the clone,
       // the only copy of them, is removed.
@@ -1912,7 +1934,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
     child.stdin.once('error', () => {});
     // agy gets one stream-json line; argv/file-mode kinds already carry the prompt; close stdin immediately so a
     // CLI that waits on it cannot hang the exam until the timeout.
-    child.stdin.end(promptViaAgyStream ? agyStream.encodeUserLine(prompt) : ((promptViaArgv || promptViaFile) ? '' : prompt));
+    child.stdin.end(promptViaAgyStream ? agyStream.encodeUserLine(prompt) : ((promptViaArgv || promptViaFile || useAccount) ? '' : prompt));
   });
 }
 

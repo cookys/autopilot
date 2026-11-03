@@ -229,6 +229,7 @@ local runtime 或 agentic local runner。
 | **安裝與開發** —— 每個平台、dev mode | [docs/guide/installation.md](docs/guide/installation.md) |
 | **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/dev/architecture.md](docs/dev/architecture.md) |
 | **只審查的候選範圍審查** —— 對別人寫好的 commit 範圍做受管審查（英文文件） | [docs/guide/review-candidate.md](docs/guide/review-candidate.md) |
+| **Claude 帳號** —— 帳號別名與訂閱間的自動切換（英文文件） | [docs/guide/accounts.md](docs/guide/accounts.md) |
 | **Hooks** —— 40 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 

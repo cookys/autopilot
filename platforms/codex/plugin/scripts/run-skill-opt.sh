@@ -19,6 +19,15 @@ AUTOPILOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SKILL_CREATOR_DIR="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
 CRED_FILE="$HOME/.claude/.credentials.json"
 
+# G37 W5 (A10): with an account registry this run goes through claude-account.js (below) and never reads $CRED_FILE; a broken
+# registry stops here before any spawn. No registry (or mode_off) = the credentials-file path below is unchanged.
+# shellcheck source=lib/eval-account.sh
+_EA_LIB="$AUTOPILOT_DIR/scripts/lib/eval-account.sh"
+[ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper ${_EA_LIB} is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
+. "$_EA_LIB"
+eval_account_probe skill-opt || exit $?
+
+if [[ "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
 # Extract OAuth token
 if [[ ! -f "$CRED_FILE" ]]; then
   echo "ERROR: $CRED_FILE not found. Are you logged into Claude Code?" >&2
@@ -42,6 +51,7 @@ if remaining < 5:
     sys.exit(1)
 print(f'Token valid for {remaining:.0f} more minutes', file=sys.stderr)
 "
+fi
 
 EVAL_FILE="$AUTOPILOT_DIR/skill-creator-workspace/evals/${SKILL_NAME}-evals.json"
 SKILL_PATH="$AUTOPILOT_DIR/skills/$SKILL_NAME"
@@ -67,7 +77,9 @@ echo "Skill: $SKILL_PATH" >&2
 echo "Results: $RESULTS_DIR" >&2
 echo "" >&2
 
-export ANTHROPIC_API_KEY="$TOKEN"
+if [[ "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
+  export ANTHROPIC_API_KEY="$TOKEN"
+fi
 
 # OAuth tokens can only call Haiku via the Messages API.
 # Eval (claude -p) uses the CLI's own auth and can use any model.
@@ -108,10 +120,21 @@ chmod +x "$WRAPPER_DIR/claude"
 # Per-run record dir (a STOP marker of an earlier run must never block this one).
 claude_capture_begin "$RESULTS_DIR/claude-calls-$(date +%Y%m%d-%H%M%S)-$$"
 export PATH="$WRAPPER_DIR:$PATH"
+# G37 W5: under claude-account.js exec the environment is an allowlist, so the capture variables the wrapper needs are written into
+# the wrapper itself (the wrapper does not call the account layer again: its caller, the python run below, is already inside it).
+if [[ "${EVAL_ACCOUNT_ACTIVE:-0}" == 1 ]]; then
+  {
+    head -n 1 "$WRAPPER_DIR/claude"
+    printf 'export CLAUDE_CAPTURE_TAIL=%q CLAUDE_CAPTURE_JS=%q EVAL_CALL_RECORD_DIR=%q\n' "$CLAUDE_CAPTURE_TAIL" "$CLAUDE_CAPTURE_JS" "$EVAL_CALL_RECORD_DIR"
+    tail -n +2 "$WRAPPER_DIR/claude"
+  } > "$WRAPPER_DIR/claude.baked"
+  mv "$WRAPPER_DIR/claude.baked" "$WRAPPER_DIR/claude"
+  chmod +x "$WRAPPER_DIR/claude"
+fi
 
 cd "$SKILL_CREATOR_DIR"
 PY_RC=0
-python3 -c "
+PYCODE="
 import sys, os, json
 # Monkey-patch: force Haiku + refresh token before each SDK call
 import scripts.improve_description as imp
@@ -119,14 +142,20 @@ import anthropic
 
 _orig = imp.improve_description
 _cred_file = os.path.expanduser('~/.claude/.credentials.json')
+# Under claude-account.js exec (AUTOPILOT_ACCOUNT set) the token is the alias token in this process env; no credentials file is read
+# and ANTHROPIC_API_KEY is not exported (the claude children must authenticate with the OAuth token, not with an API-key variable).
+_acct = bool(os.environ.get('AUTOPILOT_ACCOUNT'))
 
 def _patched(*args, **kwargs):
-    # Re-read token every call (handles OAuth refresh mid-run)
-    token = json.load(open(_cred_file))['claudeAiOauth']['accessToken']
-    os.environ['ANTHROPIC_API_KEY'] = token
+    if _acct:
+        token = os.environ['CLAUDE_CODE_OAUTH_TOKEN']
+    else:
+        # Re-read token every call (handles OAuth refresh mid-run)
+        token = json.load(open(_cred_file))['claudeAiOauth']['accessToken']
+        os.environ['ANTHROPIC_API_KEY'] = token
     # Force new client with fresh token
     kwargs['client'] = anthropic.Anthropic(api_key=token)
-    override = os.environ.get('IMPROVE_MODEL_OVERRIDE')
+    override = os.environ.get('IMPROVE_MODEL_OVERRIDE') or 'claude-haiku-4-5-20251001'
     if override:
         kwargs['model'] = override
     print(f'[patch] improve: fresh token + {override}', file=sys.stderr)
@@ -151,7 +180,12 @@ sys.argv = [
     '--results-dir', '$RESULTS_DIR',
 ]
 rl.main()
-" || PY_RC=$?
+"
+if [[ "${EVAL_ACCOUNT_ACTIVE:-0}" == 1 ]]; then
+  node "$EVAL_ACCOUNT_JS" exec --pick --purpose skill-opt -- python3 -c "$PYCODE" || PY_RC=$?
+else
+  python3 -c "$PYCODE" || PY_RC=$?
+fi
 
 # BL-0294: run_loop / run_eval swallow every claude failure, so the batch verdict comes from the captured call records (the first
 # authentication failure stops later calls at the wrapper; this is the final check and the exit code).

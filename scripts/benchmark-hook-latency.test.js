@@ -60,7 +60,7 @@ function withCtx(fn) {
 }
 
 function run(ctx, args, env = {}) {
-  const e = { ...process.env, BENCH_CLAUDE_BIN: ctx.stub, BENCH_CREDENTIALS: ctx.creds, STUB_LOG: ctx.log, ...env };
+  const e = { ...process.env, BENCH_CLAUDE_BIN: ctx.stub, BENCH_CREDENTIALS: ctx.creds, STUB_LOG: ctx.log, AUTOPILOT_ACCOUNTS_DIR: path.join(ctx.dir, 'no-accounts'), ...env };
   return spawnSync('node', [BIN, ...args], { encoding: 'utf8', env: e, cwd: REPO, timeout: 120000 });
 }
 

@@ -5736,6 +5736,141 @@
       "doc": "docs/dev/events-contract.md",
       "relates": [],
       "note": "Colon-separated review ledger directories the events feed reads in addition to the git-common-dir pointer file."
+    },
+    {
+      "name": "AUTOPILOT_ACCOUNTS_DIR",
+      "kind": "env",
+      "audience": "user",
+      "group": "accounts",
+      "default": null,
+      "readers": [
+        "scripts/lib/account-registry.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Directory of the account registry and token store; point it at a throwaway directory to try the layer without touching the real one."
+    },
+    {
+      "name": "accounts.mode",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "needle": "mode",
+      "default": "auto",
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "`auto` (default; used when an account registry exists) or `off` (the legacy path, audited as mode_off).",
+      "type": "enum",
+      "allowed": [
+        "auto",
+        "off"
+      ]
+    },
+    {
+      "name": "accounts.refuse_all_tight",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "needle": "refuse_all_tight",
+      "default": false,
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "true makes pick/run refuse (exit 3) when every alias is at or above 90% used, instead of using the least tight.",
+      "type": "boolean"
+    },
+    {
+      "name": "accounts.cooldown_default_minutes",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "needle": "cooldown_default_minutes",
+      "default": 30,
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Minutes an alias is skipped after a quota 429 when no reset time is known; a plain throttle uses the shorter of this and 5.",
+      "type": "number"
+    },
+    {
+      "name": "accounts.max_attempts",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "needle": "max_attempts",
+      "default": 3,
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Most aliases one run tries before giving up with exit 4.",
+      "type": "number"
+    },
+    {
+      "name": "AUTOPILOT_ACCOUNT_MODE",
+      "kind": "env",
+      "audience": "user",
+      "group": "accounts",
+      "default": null,
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "accounts.mode"
+      ],
+      "summary": "Overrides accounts.mode for one shell (auto or off)."
+    },
+    {
+      "name": "AUTOPILOT_ACCOUNT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/account-env.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [],
+      "note": "Set by the account layer in every child env: the alias the child runs as (codeforge G36 reads it for usage attribution)."
+    },
+    {
+      "name": "AUTOPILOT_CONFIG",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [],
+      "note": "Absolute path of the operator config.json handed to account children so nested calls read the same file."
+    },
+    {
+      "name": "AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/tests/lib.sh",
+        "hooks/tests/run.sh",
+        "scripts/affected-suites.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [
+        "AUTOPILOT_ACCOUNTS_DIR"
+      ],
+      "note": "Test runners pin AUTOPILOT_ACCOUNTS_DIR to a path that does not exist so no suite reads the operator's real account registry; 1 keeps the caller's value (only the isolation negative control in scripts/account-rails.test.js uses it)."
     }
   ]
 }

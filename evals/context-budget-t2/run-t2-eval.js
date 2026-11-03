@@ -14,6 +14,10 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { budgetDecision } = require('../../hooks/context-budget-lib.js');
 const authStop = require('../../scripts/lib/auth-stop.js');
+// G37 W5 (A12): with an account registry the claude calls go through claude-account.js (no credentials-only config dir needed).
+let evalAccount = null;
+try { evalAccount = require('../../scripts/lib/eval-account.js'); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+if (!evalAccount && !process.argv.includes('--dry')) { console.error('eval-account: the account-layer helper is missing; refusing to start (nothing was spawned)'); process.exit(2); }
 
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i >= 0 ? process.argv[i + 1] : d; };
 const MODEL = arg('--model', 'sonnet');
@@ -30,7 +34,14 @@ if (CFGDIR) {
     console.error('refusing: CLAUDE_EVAL_CONFIG_DIR is the real ~/.claude'); process.exit(2);
   }
 }
-if (!CFGDIR &&!process.argv.includes('--dry')) { console.error('set CLAUDE_EVAL_CONFIG_DIR'); process.exit(2); }
+// A broken registry stops here, before any spawn; no registry (or mode_off) keeps the config-dir path below unchanged.
+let accountActive = false;
+if (evalAccount && !process.argv.includes('--dry')) {
+  const g = evalAccount.gate('run-t2-eval');
+  if (g.state === 'broken') process.exit(g.exit);
+  accountActive = g.state === 'active';
+}
+if (!CFGDIR && !accountActive && !process.argv.includes('--dry')) { console.error('set CLAUDE_EVAL_CONFIG_DIR'); process.exit(2); }
 
 const base = { t1: 100000, t2: 300000, step: 25000, inferredWindow: 1000000, windowSource: 'statusline' };
 const cases = [
@@ -76,9 +87,11 @@ if (process.argv.includes('--dry')) {
 const results = [];
 for (const j of jobs) {
   const msg = messageFor(j.c, j.arm);
-  const r = spawnSync('claude', ['-p', prompt(j.c, msg), '--model', MODEL, '--tools', '', '--system-prompt', SYSTEM,
-    '--disable-slash-commands', '--setting-sources', '', '--strict-mcp-config'], {
-    env: { ...process.env, CLAUDE_CONFIG_DIR: CFGDIR }, encoding: 'utf8', timeout: 180000,
+  const claudeArgs = ['-p', prompt(j.c, msg), '--model', MODEL, '--tools', '', '--system-prompt', SYSTEM,
+    '--disable-slash-commands', '--setting-sources', '', '--strict-mcp-config'];
+  const spec = accountActive ? evalAccount.wrap('claude', claudeArgs, 't2-eval') : { cmd: 'claude', args: claudeArgs };
+  const r = spawnSync(spec.cmd, spec.args, {
+    env: accountActive ? { ...process.env } : { ...process.env, CLAUDE_CONFIG_DIR: CFGDIR }, encoding: 'utf8', timeout: 180000,
   });
   const out = r.stdout || '';
   // BL-0294: the first authentication failure stops the run (every later call fails the same way).

@@ -263,6 +263,9 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$SELF_DIR/lib/repo-identity.sh" ] && . "$SELF_DIR/lib/repo-identity.sh" || true
+# G37: the one reading of `claude-account.js env-check` (legacy | active | invalid). Sourced hard (no fail-open):
+# a missing copy makes account_layer_state print nothing, and every caller treats anything but legacy/active as invalid.
+. "$SELF_DIR/lib/account-state.sh"
 # A TMPDIR that is set but missing is made before anything below uses it (BL-0336); a failure prints its reason and the run carries on.
 if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || true; fi
 # Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env (best-effort;
@@ -290,6 +293,13 @@ IS_CCSHIM=0           # claude-code CLI pointed at an arbitrary Anthropic-compat
 IS_PI=0
 IS_CNATIVE=0         # claude-native implementer (first-party Claude CLI, native auth) — owner-confirmation gated
 CNATIVE_CONFIG_DIR=""  # seeded CLAUDE_CONFIG_DIR (only .credentials.json); removed on every exit path
+# G37 W3: account layer state for claude-native. Prints legacy (no registry, or mode off: the seeded
+# path below is unchanged) | active (registry present: the worker goes through claude-account.js run and
+# the seeded dir is never created) | invalid (registry broken: caller must refuse, nothing is spawned).
+# Only the alias metadata is read here; the token never enters this shell.
+cnative_account_state() {
+  account_layer_state "$SELF_DIR/claude-account.js" hetero-impl
+}
 PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
 CCSHIM_PROMPT_FILE="" # cc-shim combined prompt temp; same trap-reap rationale
@@ -2424,9 +2434,15 @@ elif [ "$IS_CNATIVE" -eq 1 ]; then
   node "$SELF_DIR/run-approval.js" claude-native-status >/dev/null 2>&1 \
     || die_precondition "--runner claude-native needs a one-time owner confirmation: depth 0 must ask the owner once (first-party Claude implementer on native auth), and after a yes run 'node scripts/run-approval.js confirm-claude-native'. No flag on this command grants it."
   command -v claude >/dev/null 2>&1 || die_precondition "claude binary not found (claude-native drives the Claude Code CLI)"
-  # Fail closed pre-spend: the child gets ONLY a seeded copy of .credentials.json, so it must exist.
-  node "$SELF_DIR/lib/seed-claude-config.js" --check \
-    || die_precondition "claude-native refused: source .credentials.json is missing/unreadable (see seed-claude-config message above); the child is never given the real claude config dir"
+  case "$(cnative_account_state)" in
+    active) : ;;  # G37: the account registry is the only auth; the seeded .credentials.json path is not touched
+    legacy)
+      # Fail closed pre-spend: the child gets ONLY a seeded copy of .credentials.json, so it must exist.
+      node "$SELF_DIR/lib/seed-claude-config.js" --check \
+        || die_precondition "claude-native refused: source .credentials.json is missing/unreadable (see seed-claude-config message above); the child is never given the real claude config dir"
+      ;;
+    *) die_precondition "claude-native refused: the account registry exists but is not usable, or its env-check output is unrecognised (node scripts/claude-account.js env-check --any); nothing was spawned" ;;
+  esac
 else
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
 fi
@@ -3922,6 +3938,21 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   fi
   if [ "$GATE_RUN_OK" -eq 0 ]; then
     :
+  elif [ "$IS_CNATIVE" -eq 1 ] && { _CN_STATE="$(cnative_account_state)"; [ "$_CN_STATE" != legacy ]; }; then
+    # G37 W3: registry present. claude-account.js reads the token itself and builds the child env; the
+    # token never touches this shell, argv or LOG. A registry that went bad since preflight (invalid, or
+    # an env-check output nobody recognises) is not spawned. The push/fetch block (HANDS_GIT_ENV) is not on
+    # the account allowlist, so it rides in the inner argv through env(1). --settings (gate-rules) is kept.
+    if [ "$_CN_STATE" = active ]; then
+      CNATIVE_ARGV=(env ${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"} claude -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL"
+        --strict-mcp-config --dangerously-skip-permissions ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"}
+        ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json)
+      run_worker node "$SELF_DIR/claude-account.js" run --purpose hetero-impl --cwd "$WT" \
+        --stdin "$CCSHIM_PROMPT_FILE" --stdout "$CCSHIM_ENVELOPE" -- "${CNATIVE_ARGV[@]}"
+    else
+      echo "claude-native: account registry not usable; worker not started" > "$LOG"
+      AGENT_EXIT=1
+    fi
   elif [ "$IS_CNATIVE" -eq 1 ]; then
     # Fresh 0700 dir with only a 0600 .credentials.json; removed right after the worker (success AND
     # failure), and by cleanup/abort_dispatch if the dispatcher dies first. A seeding failure never spawns.

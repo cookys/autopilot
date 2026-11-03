@@ -104,7 +104,7 @@ timeout 5 bash "$DR" --runner cc-shim --model x --diff-file "$NOOP" --endpoint >
 
 # 9c. exit-code readiness gate: a url with a "ready":true substring but url_unsafe (resolver
 # exits 1) must be REJECTED — the dispatcher trusts the exit code, not a stdout grep (R5)
-out="$(env -i PATH="$PATH" '''AUTOPILOT_ENDPOINT_EVIL_URL=http://evil/"ready":true''' AUTOPILOT_ENDPOINT_EVIL_TOKEN=t bash "$DH" --runner cc-shim --branch t/e --base HEAD --prompt-file "$NOOP" --endpoint evil 2>&1)"; ec=$?
+out="$(env -i AUTOPILOT_ACCOUNTS_DIR="${AUTOPILOT_ACCOUNTS_DIR:-$TEST_TMP/no-accounts}" PATH="$PATH" '''AUTOPILOT_ENDPOINT_EVIL_URL=http://evil/"ready":true''' AUTOPILOT_ENDPOINT_EVIL_TOKEN=t bash "$DH" --runner cc-shim --branch t/e --base HEAD --prompt-file "$NOOP" --endpoint evil 2>&1)"; ec=$?
 assert_exit_code "$ec" 2 "spoofed ready substring rejected via exit-code gate"
 
 # 10. JS --token-env: unset named token + fallback token set → fail-closed (no fallback)
@@ -130,7 +130,7 @@ exit 99
 EOF
 chmod +x "$STUBDIR/resolve-endpoint.sh"
 # run with NO --endpoint; the sibling stub must never be invoked
-env -i PATH="$PATH" ANTHROPIC_COMPATIBLE_BASE_URL=https://x.invalid/anthropic ANTHROPIC_COMPATIBLE_AUTH_TOKEN=t \
+env -i AUTOPILOT_ACCOUNTS_DIR="${AUTOPILOT_ACCOUNTS_DIR:-$TEST_TMP/no-accounts}" PATH="$PATH" ANTHROPIC_COMPATIBLE_BASE_URL=https://x.invalid/anthropic ANTHROPIC_COMPATIBLE_AUTH_TOKEN=t \
   bash "$STUBDIR/dispatch-review.sh" --runner anthropic-compatible --model x --diff-file "$NOOP" --timeout 2s >/dev/null 2>&1 || true
 assert_file_absent "$SENTINEL" "no-endpoint path never calls the sibling resolver"
 
@@ -182,11 +182,11 @@ assert_exit_code "$ec" 1 "generic-compatible private http stays not-ready (opt-i
 # the --endpoint block runs before the cc-shim binary precondition, so the notice is printed
 # and the run then fails closed uncharged (no engine is ever spawned).
 DHREPO="$(mktemp -d)"; git -C "$DHREPO" init -q; git -C "$DHREPO" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
-dherr="$(cd "$DHREPO" && env -i PATH=/usr/bin:/bin HOME="$DHREPO" AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2:1 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private \
+dherr="$(cd "$DHREPO" && env -i AUTOPILOT_ACCOUNTS_DIR="${AUTOPILOT_ACCOUNTS_DIR:-$TEST_TMP/no-accounts}" PATH=/usr/bin:/bin HOME="$DHREPO" AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2:1 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private \
   bash "$DH" --runner cc-shim --model m --endpoint q --branch x --prompt-file /dev/null --base HEAD --timeout 1s --context-window off 2>&1 >/dev/null || true)"
 assert_contains "$dherr" 'PLAINTEXT to a private-range address' "dispatch-hetero --endpoint prints the plaintext notice on stderr"
 # ...and DISPATCH_QUIET (which silences operational chatter) must NOT silence the disclosure
-dherrq="$(cd "$DHREPO" && env -i PATH=/usr/bin:/bin HOME="$DHREPO" DISPATCH_QUIET=1 AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2:1 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private \
+dherrq="$(cd "$DHREPO" && env -i AUTOPILOT_ACCOUNTS_DIR="${AUTOPILOT_ACCOUNTS_DIR:-$TEST_TMP/no-accounts}" PATH=/usr/bin:/bin HOME="$DHREPO" DISPATCH_QUIET=1 AUTOPILOT_ENDPOINT_Q_URL=http://10.0.0.2:1 AUTOPILOT_ENDPOINT_Q_TOKEN=t AUTOPILOT_ENDPOINT_Q_TRANSPORT=plaintext-private \
   bash "$DH" --runner cc-shim --model m --endpoint q --branch x --prompt-file /dev/null --base HEAD --timeout 1s --context-window off 2>&1 >/dev/null || true)"
 assert_contains "$dherrq" 'PLAINTEXT to a private-range address' "DISPATCH_QUIET does not silence the plaintext notice"
 assert_not_contains "$dherrq" 'may run for MANY minutes' "DISPATCH_QUIET still silences the operational heads-up"

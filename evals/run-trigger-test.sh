@@ -16,6 +16,19 @@ PLUGIN_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 RESULTS_DIR="${AUTOPILOT_EVAL_RESULTS_DIR:-/tmp/autopilot-evals/$(date +%s)}"
 mkdir -p "$RESULTS_DIR"
 
+# G37 W5 (A12): with an account registry every claude call goes through claude-account.js (PATH wrapper, token only in the child
+# env); a broken registry stops here before any spawn. No registry = unchanged.
+# shellcheck source=../scripts/lib/eval-account.sh
+_EA_LIB="$SCRIPT_DIR/../scripts/lib/eval-account.sh"
+[ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper ${_EA_LIB} is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
+. "$_EA_LIB"
+eval_account_probe trigger-test || exit $?
+if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
+  EA_BIN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/trigger-test-ea-XXXXXX")"
+  trap 'rm -rf "$EA_BIN_DIR"' EXIT
+  eval_account_use_path_wrapper "$EA_BIN_DIR"
+fi
+
 echo "=== Autopilot Skill Trigger Tests ==="
 echo "Plugin dir: $PLUGIN_DIR"
 echo "Results: $RESULTS_DIR"

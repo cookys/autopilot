@@ -1,0 +1,175 @@
+diff --git a/evals/orchestration/run-p2-batch-loop.js b/evals/orchestration/run-p2-batch-loop.js
+index 1c11f9b76..f9bde6de4 100755
+--- a/evals/orchestration/run-p2-batch-loop.js
++++ b/evals/orchestration/run-p2-batch-loop.js
+@@ -39,6 +39,13 @@ async function main(argv) {
+   const o = parseArgs(argv);
+   const wrapper = path.resolve(o.wrapper || path.join(__dirname, 'run-p2-batch.js'));
+   const w = require(wrapper);
++  // G37 W5 (A12): the loop restarts the wrapper above, which is refused with an account registry; refuse here too, before any spawn.
++  // A broken registry or a missing helper also stops the loop (exit 2).
++  try {
++    const g = require('../../scripts/lib/eval-account.js').gate('run-p2-batch-loop');
++    if (g.state === 'broken') return g.exit;
++    if (g.state === 'active') { process.stderr.write('run-p2-batch-loop: an account registry is configured; the wrapper it restarts needs its own per-run HOME, which the account layer replaces, so the run is refused (plan G37 A12)\n'); return 2; }
++  } catch (e) { if (!e || e.code !== 'MODULE_NOT_FOUND') throw e; process.stderr.write('run-p2-batch-loop: the account-layer helper is missing; refusing to start (nothing was spawned)\n'); return 2; }
+   const manifest = JSON.parse(fs.readFileSync(o.manifest, 'utf8'));
+   const runDir = path.resolve(o['run-dir']);
+   fs.mkdirSync(runDir, { recursive: true });
+diff --git a/evals/orchestration/run-p2-batch.js b/evals/orchestration/run-p2-batch.js
+index 090a8944d..2c57cdc25 100644
+--- a/evals/orchestration/run-p2-batch.js
++++ b/evals/orchestration/run-p2-batch.js
+@@ -1254,6 +1254,13 @@ function main(argv) {
+     const first = rangeArg('--first'), last = rangeArg('--last');
+     if (first < 0 || last < 0 || (first && last && first > last)) { process.stderr.write(`usage: --first and --last must be integers from 1 to ${nIds}, first not after last\n`); return 2; }
+     const clone = path.resolve(opt['--clone'] || process.cwd());
++    // G37 W5 (A12): every id runs in its own per-run HOME that holds a credentials copy, and the account layer would replace that HOME,
++    // so with an account registry the run is refused (exit 2); a broken registry or a missing helper also stops (exit 2), before any spawn.
++    try {
++      const g = require('../../scripts/lib/eval-account.js').gate('run-p2-batch');
++      if (g.state === 'broken') return g.exit;
++      if (g.state === 'active') { process.stderr.write('run-p2-batch: an account registry is configured; the per-run HOME this wrapper needs is replaced by the account layer, so the run is refused (plan G37 A12)\n'); return 2; }
++    } catch (e) { if (!e || e.code !== 'MODULE_NOT_FOUND') throw e; process.stderr.write('run-p2-batch: the account-layer helper is missing; refusing to start (nothing was spawned)\n'); return 2; }
+     fs.mkdirSync(runDir, { recursive: true });
+     const ctx = makeCtx({ runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, parentPid: opt['--parent-pid'] ? Number(opt['--parent-pid']) : undefined, credSource: opt['--credentials-source'] ? path.resolve(opt['--credentials-source']) : undefined, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
+     let code = 0;
+diff --git a/evals/skill-onoff/run-d0gate-campaign.js b/evals/skill-onoff/run-d0gate-campaign.js
+index c912e2801..10273be60 100644
+--- a/evals/skill-onoff/run-d0gate-campaign.js
++++ b/evals/skill-onoff/run-d0gate-campaign.js
+@@ -251,6 +251,14 @@ function runCc() {
+   if (typeof CC.disallowed_tools !== 'string' || !CC.disallowed_tools.split(/[ ,]+/).includes('ScheduleWakeup')) die('prereg cc.disallowed_tools missing or does not name ScheduleWakeup');
+   if (typeof P.invocation_prefix !== 'string' || !P.invocation_prefix.trim()) die('prereg invocation_prefix missing');
+   const cc = require('./d0gate/cc');
++  // G37 W5 (A12): a broken account registry stops here before any claude spawn. With a usable registry the cells would lose their own
++  // HOME and CLAUDE_CONFIG_DIR (the account layer replaces both with the alias dirs), and the unaccounted-session check reads the cell
++  // config dir; running them anyway would silently weaken that check, so the run is refused. A missing helper also stops (exit 2).
++  try {
++    const g = require('../../scripts/lib/eval-account.js').gate('run-d0gate-campaign');
++    if (g.state === 'broken') process.exit(g.exit);
++    if (g.state === 'active') die('an account registry is configured; the d0gate cells need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so this campaign is refused until depth-0 decides the cell design (plan G37 A12)', 2);
++  } catch (e) { if (!e || e.code !== 'MODULE_NOT_FOUND') throw e; die('the account-layer helper is missing; refusing to start (nothing was spawned)', 2); }
+   const claudeBin = cc.whichClaude('/nonexistent');
+   if (!claudeBin) die('claude is not on PATH', 2);
+   const ver = claudeVersion();
+diff --git a/evals/skill-onoff/run-skill-onoff-eval-bpack.sh b/evals/skill-onoff/run-skill-onoff-eval-bpack.sh
+index 689f3c19e..be0fd8c48 100755
+--- a/evals/skill-onoff/run-skill-onoff-eval-bpack.sh
++++ b/evals/skill-onoff/run-skill-onoff-eval-bpack.sh
+@@ -269,6 +269,19 @@ fi
+ # config dir can leak the operator's installed plugins into the OFF arm (G1-F9),
+ # so both HOME and CLAUDE_CONFIG_DIR are always exported to scratch paths.
+ mkdir -p "$SCRATCH_CONFIG"
++# G37 W5 (A12): this runner needs its own scratch HOME and CLAUDE_CONFIG_DIR (the OFF arm must not see the operator's plugins), and the
++# account layer replaces both with the alias dirs. So with an account registry the run is refused (exit 2) until a cell design for
++# account-backed arms exists; a broken registry or a missing helper also stops here (exit 2), before any spawn and before any credentials copy.
++if [ "$RUNNER" = "cc" ]; then
++  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
++  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper $_EA_LIB is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
++  . "$_EA_LIB"
++  eval_account_probe skill-onoff || exit $?
++  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
++    echo "skill-onoff: an account registry is configured; this runner's arms need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so the run is refused (plan G37 A12)" >&2
++    exit 2
++  fi
++fi
+ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+   cp "${HOME}/.claude/.credentials.json" "$SCRATCH_CONFIG/"
+   chmod 600 "$SCRATCH_CONFIG/.credentials.json"
+diff --git a/evals/skill-onoff/run-skill-onoff-eval-fbatch-v2.sh b/evals/skill-onoff/run-skill-onoff-eval-fbatch-v2.sh
+index e3375c07b..7b8ee118f 100755
+--- a/evals/skill-onoff/run-skill-onoff-eval-fbatch-v2.sh
++++ b/evals/skill-onoff/run-skill-onoff-eval-fbatch-v2.sh
+@@ -290,6 +290,19 @@ fi
+ # config dir can leak the operator's installed plugins into the OFF arm (G1-F9),
+ # so both HOME and CLAUDE_CONFIG_DIR are always exported to scratch paths.
+ mkdir -p "$SCRATCH_CONFIG"
++# G37 W5 (A12): this runner needs its own scratch HOME and CLAUDE_CONFIG_DIR (the OFF arm must not see the operator's plugins), and the
++# account layer replaces both with the alias dirs. So with an account registry the run is refused (exit 2) until a cell design for
++# account-backed arms exists; a broken registry or a missing helper also stops here (exit 2), before any spawn and before any credentials copy.
++if [ "$RUNNER" = "cc" ]; then
++  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
++  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper $_EA_LIB is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
++  . "$_EA_LIB"
++  eval_account_probe skill-onoff || exit $?
++  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
++    echo "skill-onoff: an account registry is configured; this runner's arms need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so the run is refused (plan G37 A12)" >&2
++    exit 2
++  fi
++fi
+ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+   cp "${HOME}/.claude/.credentials.json" "$SCRATCH_CONFIG/"
+   chmod 600 "$SCRATCH_CONFIG/.credentials.json"
+diff --git a/evals/skill-onoff/run-skill-onoff-eval-fbatch.sh b/evals/skill-onoff/run-skill-onoff-eval-fbatch.sh
+index adc402d26..39c12a47e 100755
+--- a/evals/skill-onoff/run-skill-onoff-eval-fbatch.sh
++++ b/evals/skill-onoff/run-skill-onoff-eval-fbatch.sh
+@@ -284,6 +284,19 @@ fi
+ # config dir can leak the operator's installed plugins into the OFF arm (G1-F9),
+ # so both HOME and CLAUDE_CONFIG_DIR are always exported to scratch paths.
+ mkdir -p "$SCRATCH_CONFIG"
++# G37 W5 (A12): this runner needs its own scratch HOME and CLAUDE_CONFIG_DIR (the OFF arm must not see the operator's plugins), and the
++# account layer replaces both with the alias dirs. So with an account registry the run is refused (exit 2) until a cell design for
++# account-backed arms exists; a broken registry or a missing helper also stops here (exit 2), before any spawn and before any credentials copy.
++if [ "$RUNNER" = "cc" ]; then
++  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
++  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper $_EA_LIB is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
++  . "$_EA_LIB"
++  eval_account_probe skill-onoff || exit $?
++  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
++    echo "skill-onoff: an account registry is configured; this runner's arms need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so the run is refused (plan G37 A12)" >&2
++    exit 2
++  fi
++fi
+ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+   cp "${HOME}/.claude/.credentials.json" "$SCRATCH_CONFIG/"
+   chmod 600 "$SCRATCH_CONFIG/.credentials.json"
+diff --git a/evals/skill-onoff/run-skill-onoff-eval-gdorm.sh b/evals/skill-onoff/run-skill-onoff-eval-gdorm.sh
+index 3a7886054..97b24a253 100755
+--- a/evals/skill-onoff/run-skill-onoff-eval-gdorm.sh
++++ b/evals/skill-onoff/run-skill-onoff-eval-gdorm.sh
+@@ -269,6 +269,19 @@ fi
+ # config dir can leak the operator's installed plugins into the OFF arm (G1-F9),
+ # so both HOME and CLAUDE_CONFIG_DIR are always exported to scratch paths.
+ mkdir -p "$SCRATCH_CONFIG"
++# G37 W5 (A12): this runner needs its own scratch HOME and CLAUDE_CONFIG_DIR (the OFF arm must not see the operator's plugins), and the
++# account layer replaces both with the alias dirs. So with an account registry the run is refused (exit 2) until a cell design for
++# account-backed arms exists; a broken registry or a missing helper also stops here (exit 2), before any spawn and before any credentials copy.
++if [ "$RUNNER" = "cc" ]; then
++  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
++  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper $_EA_LIB is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
++  . "$_EA_LIB"
++  eval_account_probe skill-onoff || exit $?
++  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
++    echo "skill-onoff: an account registry is configured; this runner's arms need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so the run is refused (plan G37 A12)" >&2
++    exit 2
++  fi
++fi
+ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+   cp "${HOME}/.claude/.credentials.json" "$SCRATCH_CONFIG/"
+   chmod 600 "$SCRATCH_CONFIG/.credentials.json"
+diff --git a/evals/skill-onoff/run-skill-onoff-eval.sh b/evals/skill-onoff/run-skill-onoff-eval.sh
+index 2cd2f8832..646b2a396 100755
+--- a/evals/skill-onoff/run-skill-onoff-eval.sh
++++ b/evals/skill-onoff/run-skill-onoff-eval.sh
+@@ -266,6 +266,19 @@ fi
+ # config dir can leak the operator's installed plugins into the OFF arm (G1-F9),
+ # so both HOME and CLAUDE_CONFIG_DIR are always exported to scratch paths.
+ mkdir -p "$SCRATCH_CONFIG"
++# G37 W5 (A12): this runner needs its own scratch HOME and CLAUDE_CONFIG_DIR (the OFF arm must not see the operator's plugins), and the
++# account layer replaces both with the alias dirs. So with an account registry the run is refused (exit 2) until a cell design for
++# account-backed arms exists; a broken registry or a missing helper also stops here (exit 2), before any spawn and before any credentials copy.
++if [ "$RUNNER" = "cc" ]; then
++  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
++  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper $_EA_LIB is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
++  . "$_EA_LIB"
++  eval_account_probe skill-onoff || exit $?
++  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
++    echo "skill-onoff: an account registry is configured; this runner's arms need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so the run is refused (plan G37 A12)" >&2
++    exit 2
++  fi
++fi
+ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+   cp "${HOME}/.claude/.credentials.json" "$SCRATCH_CONFIG/"
+   chmod 600 "$SCRATCH_CONFIG/.credentials.json"

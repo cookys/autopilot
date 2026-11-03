@@ -79,6 +79,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# G37 W5 (A9): with an account registry every claude call of this batch goes through claude-account.js; a broken registry stops the
+# batch here, before any spawn. No registry (or mode_off) = the path below is unchanged.
+_EVAL_SELF_DIR0="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/eval-account.sh
+[ -r "$_EVAL_SELF_DIR0/lib/eval-account.sh" ] || { echo "eval-account: the account-layer helper $_EVAL_SELF_DIR0/lib/eval-account.sh is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
+. "$_EVAL_SELF_DIR0/lib/eval-account.sh"
+eval_account_probe eval-batch || exit $?
+
 extract_loaded_plugins() {
   local log_file="$1"
   local loaded=""
@@ -142,6 +150,8 @@ fi
 # design in claude-call-capture.js). The tail ends in `exec claude`, keeps the kill semantics, and refuses to start a claude after an
 # earlier call died on authentication. No record dir (selftest) = the plain pass-through it always was.
 EXTRA_ARGS=("$@" --strict-mcp-config --setting-sources project,local "${PLUGIN_ARGS[@]}")
+# G37 W5: with an account registry the claude below runs under `claude-account.js exec --pick` (token only in the child env).
+[ -n "${EVAL_ACCOUNT_SH:-}" ] && . "$EVAL_ACCOUNT_SH" && eval_account_wrap_claude
 . "$CLAUDE_CAPTURE_TAIL"
 EOF
 chmod +x "$WRAPPER_DIR/claude"

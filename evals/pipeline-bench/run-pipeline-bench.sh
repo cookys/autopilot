@@ -127,7 +127,16 @@ cp -r "$TASK_DIR/repo"/. "$TEMP_REPO"/
 )
 BASE_SHA=$(git -C "$TEMP_REPO" rev-parse HEAD)
 
-if [ "${ORCH_CC_SHIM:-0}" != "1" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+# G37 W5 (A12): with an account registry every claude call of this runner goes through claude-account.js (PATH wrapper, token only in
+# the child env) and no credentials file is copied; a broken registry stops here before any spawn. No registry = unchanged.
+if [ "${ORCH_CC_SHIM:-0}" != "1" ]; then
+  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
+  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper ${_EA_LIB} is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
+  . "$_EA_LIB"
+  eval_account_probe pipeline-bench || exit $?
+  eval_account_use_path_wrapper "$SCRATCH_HOME/.ea-bin"
+fi
+if [ "${ORCH_CC_SHIM:-0}" != "1" ] && [ "${EVAL_ACCOUNT_ACTIVE:-0}" != "1" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
   mkdir -p "$SCRATCH_HOME/.claude"
   cp "${HOME}/.claude/.credentials.json" "$SCRATCH_HOME/.claude/"
   chmod 600 "$SCRATCH_HOME/.claude/.credentials.json"

@@ -11,6 +11,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CLI="$ROOT/scripts/engine-capability-state.js"
 PASS=0; FAIL=0
 TESTDIR="$(mktemp -d)"
+# G37: never consult the real account registry (a wired caller reads it); this path does not exist
+export AUTOPILOT_ACCOUNTS_DIR="$TESTDIR/no-accounts"
 export ENGINE_CAPABILITY_DIR="$TESTDIR"
 trap 'rm -rf "$TESTDIR"' EXIT
 
@@ -244,6 +246,17 @@ legacy_only=$(node "$CLI" current --runner codex --model gpt-5.5 --role implemen
   && [ "$neighbor_status" = "unknown" ] \
   && ok "14: live exact effort/no-endpoint probe authorizes only matching strict tuple" \
   || bad "14: probe_effort=$probe_effort probe_endpoint=$probe_endpoint exact=$exact_status neighbor=$neighbor_status exact_after_legacy=$exact_after_legacy legacy_only=$legacy_only"
+
+# 15. G37 S3: claude -p wraps a plain HTTP 429 as "(not your usage limit)"; that is rate_limited, not quota
+FIX15="$ROOT/docs/plans/evidence/2026-11-03-g37-account-spikes/fixtures"
+res429=$(node -e "process.stdout.write(require(process.argv[1]).result)" "$FIX15/s3-claude-p-429.envelope.json")
+res429u=$(node -e "process.stdout.write(require(process.argv[1]).result)" "$FIX15/s3-claude-p-429-usage.envelope.json")
+c15a=$(node "$CLI" classify-error --string "$res429")
+c15b=$(node "$CLI" classify-error --string "$res429u")
+c15c=$(node "$CLI" classify-error --string "You have hit your usage limit")
+[ "$c15a" = "rate_limited" ] && [ "$c15b" = "quota_exhausted" ] && [ "$c15c" = "quota_exhausted" ] \
+  && ok "15: claude -p 429 envelope (not your usage limit) is rate_limited; real usage-limit text stays quota_exhausted" \
+  || bad "15: plain429=$c15a usage429=$c15b bare=$c15c"
 
 echo "----"
 echo "engine-capability-state unit tests: $PASS passed, $FAIL failed"

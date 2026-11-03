@@ -305,6 +305,14 @@ function runCc() {
   if (typeof CC.disallowed_tools !== 'string' || !CC.disallowed_tools.split(/[ ,]+/).includes('ScheduleWakeup')) die('prereg cc.disallowed_tools missing or does not name ScheduleWakeup');
   if (typeof P.invocation_prefix !== 'string' || !P.invocation_prefix.trim()) die('prereg invocation_prefix missing');
   const cc = require('./d0gate-v2/cc-v2');
+  // G37 W5 (A12): a broken account registry stops here before any claude spawn. With a usable registry the cells would lose their own
+  // HOME and CLAUDE_CONFIG_DIR (the account layer replaces both with the alias dirs), and the unaccounted-session check reads the cell
+  // config dir; running them anyway would silently weaken that check, so the run is refused. No registry = the credentials-copy path.
+  try {
+    const g = require('../../scripts/lib/eval-account.js').gate('run-d0gate-v2-campaign');
+    if (g.state === 'broken') process.exit(g.exit);
+    if (g.state === 'active') die('an account registry is configured; the d0gate cells need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so this campaign is refused until depth-0 decides the cell design (plan G37 A12)', 2);
+  } catch (e) { if (!e || e.code !== 'MODULE_NOT_FOUND') throw e; die('the account-layer helper is missing; refusing to start (nothing was spawned)', 2); }
   const claudeBin = cc.whichClaude('/nonexistent');
   if (!claudeBin) die('claude is not on PATH', 2);
   const ver = claudeVersion();

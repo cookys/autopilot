@@ -1140,6 +1140,7 @@ CCSHIM_CWD=""
 AGY_CWD=""
 QODER_CWD=""
 CNATIVE_CWD=""
+CNATIVE_ACCOUNT=0
 CNATIVE_CFG=""   # seeded credentials-only CLAUDE_CONFIG_DIR for claude-native (BL-0290)
 CURSOR_CWD=""
 CURSOR_ERR=""
@@ -1413,17 +1414,42 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # here, before the credentials seed and before claude is ever started.
   _CNATIVE_MODEL_ERR="$(node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seat-model-id.js" check "$MODEL" 2>&1)" \
     || die_precondition "claude-native refused: $_CNATIVE_MODEL_ERR"
+  # G37 W2 (plan 2.6, 5.5 item 6): once an account registry exists the rail goes through
+  # claude-account.js run; the seeded credentials path below is then never touched. Only the
+  # words "unconfigured" / "mode_off" select the legacy path; any env-check failure is fatal.
+  _CNATIVE_ACCT_JS="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/claude-account.js"
+  . "$_AUTHOR_SELF_DIR/lib/account-state.sh"
+  CNATIVE_ACCOUNT=0
+  case "$(account_layer_state "$_CNATIVE_ACCT_JS" author)" in
+    legacy) ;;
+    active) CNATIVE_ACCOUNT=1 ;;
+    *) die_precondition "claude-native refused: account registry check failed or its env-check output is unrecognised (claude-account.js env-check --any); no spawn, no fallback to the seeded credentials path" ;;
+  esac
+  if [ "$CNATIVE_ACCOUNT" = "0" ]; then
   CNATIVE_CFG="$(node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")" \
     || die_precondition "claude-native refused: could not seed a credentials-only config dir (source .credentials.json missing/unreadable); the child is never given the real claude config dir"
+  fi
   CNATIVE_CWD="$(mktemp -d)"
   set +e
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
   author_kill_grace
   AUTHOR_TIMEOUT_START=$SECONDS
   # Prompt is fed with < "$4" inside the exec'd child. Do not redirect this timeout's stdin.
+  if [ "$CNATIVE_ACCOUNT" = "1" ]; then
+    # Token never appears in bash or argv: claude-account.js reads it and sets it in the child env only.
+    CNATIVE_WRAP_ERR="${RUNNER_ERR_FILE}.wrap"
+    timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
+      node "$_CNATIVE_ACCT_JS" run --purpose author --stdin "$PROMPT_FILE" --stdout "$RAW_LOG" --stderr "$RUNNER_ERR_FILE" --cwd "$CNATIVE_CWD" -- \
+      "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} \
+      2>"$CNATIVE_WRAP_ERR"
+    RUNNER_EXIT=$?
+    cat "$CNATIVE_WRAP_ERR" >> "$RUNNER_ERR_FILE" 2>/dev/null || true
+    rm -f "$CNATIVE_WRAP_ERR"
+  else
   timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} CLAUDE_CONFIG_DIR="$CNATIVE_CFG" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
     _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
-  RUNNER_EXIT=$?
+    RUNNER_EXIT=$?
+  fi
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
   rm -rf "$CNATIVE_CWD" "$CNATIVE_CFG"; CNATIVE_CWD=""; CNATIVE_CFG=""

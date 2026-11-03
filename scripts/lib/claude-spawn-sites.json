@@ -1,0 +1,409 @@
+{
+  "schema_version": 1,
+  "note": "Every file that can start a claude process (plan G37 5.9). status: wired (reaches the account layer, covered_by tests name it), out_of_scope (reason), frozen_legacy (digest-frozen replay runner, reason and locked_by). Checked by scripts/check-claude-spawn-sites.js.",
+  "sites": [
+    {
+      "file": "evals/context-budget-t2/run-t2-eval.js",
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "evals/orchestration/run-orchestration-eval.sh",
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "evals/orchestration/run-p2-batch-loop.js",
+      "status": "frozen_legacy",
+      "reason": "launcher of the pinned P2 batch wrapper (PM ruling A, plan N9 exception): it is driven by the same replay tests and is frozen with the wrapper it starts, so it does not go through the account layer; wiring patch evals/skill-onoff/prereg/refreeze/g37-account-wiring.patch",
+      "locked_by": "hooks/tests/lib-p2.sh",
+      "lock_key": "run-p2-batch-loop.js"
+    },
+    {
+      "file": "evals/orchestration/run-p2-batch.js",
+      "status": "frozen_legacy",
+      "reason": "replay runner of the pinned P2 batch (PM ruling A, plan N9 exception): the manifests carry the sha256 of run-p2-batch.js and the preregistration tests 4.5 / 5.5 compare it, so the batch keeps the operator's credentials file and does not go through the account layer; wiring patch evals/skill-onoff/prereg/refreeze/g37-account-wiring.patch, re-pin the manifests after applying it",
+      "locked_by": "hooks/tests/p2-batch-loop.test.sh"
+    },
+    {
+      "file": "evals/orchestration/run-t14-gate-batch.js",
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "evals/pipeline-bench/run-pipeline-bench.sh",
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "evals/reviewer-bench/panel-cmd-claude.sh",
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "evals/reviewer-bench/panel-cmd-contract-claude.sh",
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "evals/reviewer-bench/panel-cmd-syscontract-claude.sh",
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "evals/run-trigger-test.sh",
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "evals/skill-onoff/d0gate-v2/cc-v2.js",
+      "status": "out_of_scope",
+      "reason": "cell runner module of the d0gate-v2 campaign; its only caller run-d0gate-v2-campaign.js (wired) calls eval-account gate() and refuses to start when a registry exists, so no cell can reach this spawn with an account registry in place (git grep: no other require of cc-v2)"
+    },
+    {
+      "file": "evals/skill-onoff/d0gate/cc-tasks.js",
+      "status": "out_of_scope",
+      "reason": "prompt text that tells a cell to run dispatch-hetero.sh --runner claude-native; it is data, no process is started here"
+    },
+    {
+      "file": "evals/skill-onoff/d0gate/cc.js",
+      "status": "frozen_legacy",
+      "reason": "real-cell runner module of the frozen d0gate row (the runner pin of run-d0gate-campaign.js lists it, and tools/migrate/no-rewrite.json holds its sha256); reachable only through run-d0gate-campaign.js, so it is replay-only and not wired",
+      "locked_by": "tools/migrate/no-rewrite.json",
+      "lock_key": "\"evals/skill-onoff/d0gate/cc.js\""
+    },
+    {
+      "file": "evals/skill-onoff/d0gate/cell.js",
+      "status": "out_of_scope",
+      "reason": "frozen d0gate cell helper (tools/migrate/no-rewrite.json); the hit is the list SENTINEL_NAMES of PATH sentinel names, no process is started here"
+    },
+    {
+      "file": "evals/skill-onoff/d0gate/traces.js",
+      "status": "out_of_scope",
+      "reason": "trace fixtures for the d0gate marker scorer: strings that contain dispatch-hetero.sh command lines, no process is started here"
+    },
+    {
+      "file": "evals/skill-onoff/run-d0gate-campaign.js",
+      "status": "frozen_legacy",
+      "reason": "digest-frozen replay runner (PM ruling A, plan N9 exception): its bytes are pinned by the prereg freeze, so it keeps the operator's logged-in credentials and does not go through the account layer; the wiring patch is evals/skill-onoff/prereg/refreeze/g37-account-wiring.patch and must be applied and re-frozen before any new campaign",
+      "locked_by": "evals/skill-onoff/prereg/FROZEN.json",
+      "lock_key": "\"run-d0gate-campaign.js\""
+    },
+    {
+      "file": "evals/skill-onoff/run-d0gate-v2-campaign.js",
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/account-rails.test.js"
+      ]
+    },
+    {
+      "file": "evals/skill-onoff/run-fbatch-campaign.js",
+      "status": "out_of_scope",
+      "reason": "digest-frozen campaign driver; it only runs `command -v claude` and `claude --version` to pin the runner version, no model call; its cells run the frozen run-skill-onoff-eval-fbatch*.sh"
+    },
+    {
+      "file": "evals/skill-onoff/run-fbatch-v2-campaign.js",
+      "status": "out_of_scope",
+      "reason": "digest-frozen campaign driver; it only runs `command -v claude` and `claude --version` to pin the runner version, no model call; its cells run the frozen run-skill-onoff-eval-fbatch*.sh"
+    },
+    {
+      "file": "evals/skill-onoff/run-fbatch-v3-campaign.js",
+      "status": "out_of_scope",
+      "reason": "digest-frozen campaign driver; it only runs `command -v claude` and `claude --version` to pin the runner version, no model call; its cells run the frozen run-skill-onoff-eval-fbatch*.sh"
+    },
+    {
+      "file": "evals/skill-onoff/run-g67-campaign.js",
+      "status": "out_of_scope",
+      "reason": "digest-frozen campaign driver; it only runs `command -v claude` to find the pinned binary and reads its version, no model call; its cells run the frozen run-skill-onoff-eval.sh"
+    },
+    {
+      "file": "evals/skill-onoff/run-skill-onoff-eval-bpack.sh",
+      "status": "frozen_legacy",
+      "reason": "digest-frozen replay runner (PM ruling A, plan N9 exception): its bytes are pinned by the prereg freeze, so it keeps the operator's logged-in credentials and does not go through the account layer; the wiring patch is evals/skill-onoff/prereg/refreeze/g37-account-wiring.patch and must be applied and re-frozen before any new campaign",
+      "locked_by": "evals/skill-onoff/prereg/FROZEN.json",
+      "lock_key": "\"run-skill-onoff-eval-bpack.sh\""
+    },
+    {
+      "file": "evals/skill-onoff/run-skill-onoff-eval-fbatch-v2.sh",
+      "status": "frozen_legacy",
+      "reason": "digest-frozen replay runner (PM ruling A, plan N9 exception): its bytes are pinned by the prereg freeze, so it keeps the operator's logged-in credentials and does not go through the account layer; the wiring patch is evals/skill-onoff/prereg/refreeze/g37-account-wiring.patch and must be applied and re-frozen before any new campaign",
+      "locked_by": "evals/skill-onoff/prereg/FROZEN.json",
+      "lock_key": "\"run-skill-onoff-eval-fbatch-v2.sh\""
+    },
+    {
+      "file": "evals/skill-onoff/run-skill-onoff-eval-fbatch.sh",
+      "status": "frozen_legacy",
+      "reason": "digest-frozen replay runner (PM ruling A, plan N9 exception): its bytes are pinned by the prereg freeze, so it keeps the operator's logged-in credentials and does not go through the account layer; the wiring patch is evals/skill-onoff/prereg/refreeze/g37-account-wiring.patch and must be applied and re-frozen before any new campaign",
+      "locked_by": "evals/skill-onoff/prereg/FROZEN.json",
+      "lock_key": "\"run-skill-onoff-eval-fbatch.sh\""
+    },
+    {
+      "file": "evals/skill-onoff/run-skill-onoff-eval-gdorm.sh",
+      "status": "frozen_legacy",
+      "reason": "digest-frozen replay runner (PM ruling A, plan N9 exception): its bytes are pinned by the prereg freeze, so it keeps the operator's logged-in credentials and does not go through the account layer; the wiring patch is evals/skill-onoff/prereg/refreeze/g37-account-wiring.patch and must be applied and re-frozen before any new campaign",
+      "locked_by": "evals/skill-onoff/prereg/FROZEN.json",
+      "lock_key": "\"run-skill-onoff-eval-gdorm.sh\""
+    },
+    {
+      "file": "evals/skill-onoff/run-skill-onoff-eval.sh",
+      "status": "frozen_legacy",
+      "reason": "digest-frozen replay runner (PM ruling A, plan N9 exception): its bytes are pinned by the prereg freeze, so it keeps the operator's logged-in credentials and does not go through the account layer; the wiring patch is evals/skill-onoff/prereg/refreeze/g37-account-wiring.patch and must be applied and re-frozen before any new campaign",
+      "locked_by": "evals/skill-onoff/prereg/FROZEN.json",
+      "lock_key": "\"run-skill-onoff-eval.sh\""
+    },
+    {
+      "file": "evals/skill-onoff/run-skill-onoff-matrix-bpack.sh",
+      "status": "out_of_scope",
+      "reason": "digest-frozen matrix driver; its only claude call is `claude --version` (VERSION_CMD, no model call); the cells it starts run run-skill-onoff-eval*.sh, which are registered frozen_legacy"
+    },
+    {
+      "file": "evals/skill-onoff/run-skill-onoff-matrix-fbatch-v2.sh",
+      "status": "out_of_scope",
+      "reason": "digest-frozen matrix driver; its only claude call is `claude --version` (VERSION_CMD, no model call); the cells it starts run run-skill-onoff-eval*.sh, which are registered frozen_legacy"
+    },
+    {
+      "file": "evals/skill-onoff/run-skill-onoff-matrix-fbatch.sh",
+      "status": "out_of_scope",
+      "reason": "digest-frozen matrix driver; its only claude call is `claude --version` (VERSION_CMD, no model call); the cells it starts run run-skill-onoff-eval*.sh, which are registered frozen_legacy"
+    },
+    {
+      "file": "evals/skill-onoff/run-skill-onoff-matrix-gdorm.sh",
+      "status": "out_of_scope",
+      "reason": "digest-frozen matrix driver; its only claude call is `claude --version` (VERSION_CMD, no model call); the cells it starts run run-skill-onoff-eval*.sh, which are registered frozen_legacy"
+    },
+    {
+      "file": "evals/skill-onoff/run-skill-onoff-matrix.sh",
+      "status": "out_of_scope",
+      "reason": "digest-frozen matrix driver; its only claude call is `claude --version` (VERSION_CMD, no model call); the cells it starts run run-skill-onoff-eval*.sh, which are registered frozen_legacy"
+    },
+    {
+      "file": "evals/test-helpers.sh",
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "scripts/benchmark-hook-latency.js",
+      "status": "wired",
+      "group": "A8",
+      "covered_by": [
+        "scripts/account-rails-w4.test.js"
+      ]
+    },
+    {
+      "file": "scripts/check-claude-spawn-sites.js",
+      "status": "out_of_scope",
+      "reason": "this gate: its own detection patterns contain the strings it looks for; it starts no claude"
+    },
+    {
+      "file": "scripts/claude-account.js",
+      "status": "wired",
+      "group": "account-layer",
+      "covered_by": [
+        "scripts/claude-account.test.js"
+      ]
+    },
+    {
+      "file": "scripts/dev-setup.sh",
+      "status": "out_of_scope",
+      "reason": "plan 4.1 B3: `claude plugin marketplace add` registers the dev marketplace, no model call"
+    },
+    {
+      "file": "scripts/dispatch-author.sh",
+      "status": "wired",
+      "group": "A3",
+      "covered_by": [
+        "hooks/tests/dispatch-author-account-rail.test.sh"
+      ]
+    },
+    {
+      "file": "scripts/dispatch-hetero.sh",
+      "status": "wired",
+      "group": "A1",
+      "covered_by": [
+        "scripts/dispatch-hetero-account.test.js"
+      ]
+    },
+    {
+      "file": "scripts/dispatch-review.sh",
+      "status": "wired",
+      "group": "A2",
+      "covered_by": [
+        "hooks/tests/dispatch-review-account-rail.test.sh"
+      ]
+    },
+    {
+      "file": "scripts/hook-harness-matrix.js",
+      "status": "out_of_scope",
+      "reason": "false positive: the hit is the harness label list ['claude', 'Claude Code']; no process is started"
+    },
+    {
+      "file": "scripts/lane-reopen.js",
+      "status": "wired",
+      "group": "P4",
+      "covered_by": [
+        "scripts/lane-reopen.test.js"
+      ]
+    },
+    {
+      "file": "scripts/lib/account-rail.js",
+      "status": "wired",
+      "group": "account-layer",
+      "covered_by": [
+        "scripts/account-rails-w4.test.js"
+      ]
+    },
+    {
+      "file": "scripts/lib/account-registry.js",
+      "status": "out_of_scope",
+      "reason": "false positive: the hit is the local variable realClaude (the real ~/.claude path used by the path-escape check); the registry reader starts no process"
+    },
+    {
+      "file": "scripts/lib/claude-call-capture-exec.sh",
+      "status": "out_of_scope",
+      "reason": "exec tail of the PATH `claude` wrapper sourced by run-eval-batch.sh and run-skill-opt.sh; both call eval_account_wrap_claude first, so REAL_CLAUDE and EXTRA_ARGS already hold the claude-account.js exec form; this file chooses no credential"
+    },
+    {
+      "file": "scripts/lib/eval-account.js",
+      "status": "wired",
+      "group": "account-layer",
+      "covered_by": [
+        "scripts/account-rails.test.js"
+      ]
+    },
+    {
+      "file": "scripts/lib/eval-account.sh",
+      "status": "wired",
+      "group": "account-layer",
+      "covered_by": [
+        "scripts/account-rails.test.js"
+      ]
+    },
+    {
+      "file": "scripts/lib/transcript-adapters/index.js",
+      "status": "out_of_scope",
+      "reason": "false positive: the hit is the adapter registry key ['claude', adapter]; the adapter parses transcripts and starts nothing"
+    },
+    {
+      "file": "scripts/preflight-release.sh",
+      "status": "out_of_scope",
+      "reason": "false positive: `--runner claude` is an argument to engine-capability-state.js (a state lookup), not a claude process"
+    },
+    {
+      "file": "scripts/probe-engine-capability.sh",
+      "status": "wired",
+      "group": "A4",
+      "covered_by": [
+        "scripts/account-rails-w4.test.js"
+      ]
+    },
+    {
+      "file": "scripts/probe-harness-capabilities.sh",
+      "status": "out_of_scope",
+      "reason": "reads `claude --version` and `claude --help` only to record the binary identity; no model call"
+    },
+    {
+      "file": "scripts/probe-skill-frontmatter-portability.sh",
+      "status": "out_of_scope",
+      "reason": "plan 4.0 F4 and 4.1 A11: runs `claude --bare`, which reads ANTHROPIC_API_KEY only (OAuth and keychain are never read), so there is no subscription credential for the account layer to supply; also `claude plugin validate` and `--version`"
+    },
+    {
+      "file": "scripts/probe-todo-tools-pin.js",
+      "status": "wired",
+      "group": "A7",
+      "covered_by": [
+        "scripts/account-rails-w4.test.js"
+      ]
+    },
+    {
+      "file": "scripts/qc-panel.js",
+      "status": "wired",
+      "group": "A6",
+      "covered_by": [
+        "scripts/account-rails-w4.test.js"
+      ]
+    },
+    {
+      "file": "scripts/qualification-review-provider.js",
+      "status": "wired",
+      "group": "A5",
+      "covered_by": [
+        "scripts/account-rails-w4.test.js"
+      ]
+    },
+    {
+      "file": "scripts/run-eval-batch.sh",
+      "status": "wired",
+      "group": "A9",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "scripts/run-skill-opt.sh",
+      "status": "wired",
+      "group": "A10",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
+    },
+    {
+      "file": "src/engine/profile-runtime.js",
+      "status": "out_of_scope",
+      "reason": "plan 4.1 B2: invokeClaude runs `claude -p --bare`, which requires ANTHROPIC_API_KEY (API billing) and refuses every routed provider, so it is not a subscription OAuth call"
+    }
+  ],
+  "reviewed_non_spawns": [
+    {
+      "file": "evals/skill-onoff/lib/g67-cell.js",
+      "reason": "reads one `claude -p` stream-json transcript; the string appears only in comments"
+    },
+    {
+      "file": "evals/skill-onoff/lib/g8-cell.js",
+      "reason": "reads one `claude -p` stream-json transcript; the string appears only in comments"
+    },
+    {
+      "file": "evals/skill-onoff/lib/stage-graph-cell.js",
+      "reason": "reads one `claude -p` stream-json transcript; the string appears only in comments"
+    },
+    {
+      "file": "evals/skill-onoff/lib/transcript-query.js",
+      "reason": "queries a `claude -p` transcript; the string appears only in comments"
+    },
+    {
+      "file": "evals/skill-transport/run-matrix.sh",
+      "reason": "reaches claude only through dispatch-review.sh --runner claude-native, which is wired (A2); it holds no claude command of its own"
+    },
+    {
+      "file": "evals/skill-transport/run-implementer-matrix.sh",
+      "reason": "reaches claude only through the dispatch rails, which are wired (A1, A2); it holds no claude command of its own"
+    }
+  ]
+}

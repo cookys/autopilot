@@ -1,0 +1,24 @@
+{
+ "schema": "g37.path-contract-fixture/1",
+ "note": "Plan section 2.5 path contract restated as table cases. Paths are symbolic: REAL_HOME is the passwd-entry home (never $HOME), ACCT is the accounts dir, tmp-relative names are created by the test under mktemp -d. L1/L4 tests build these shapes in a tempdir with an injected real home.",
+ "real_home_source": "passwd entry (os.userInfo().homedir, injectable in tests); the HOME env var is ignored",
+ "cases": [
+  {"id":"P1","what":"accounts dir under real home (default REAL_HOME/.config/autopilot/accounts)","expect":"accept"},
+  {"id":"P2","what":"child HOME equals REAL_HOME","expect":"refuse"},
+  {"id":"P3","what":"child CLAUDE_CONFIG_DIR realpath equals REAL_HOME/.claude","expect":"refuse"},
+  {"id":"P4","what":"child CLAUDE_CONFIG_DIR realpath lies inside REAL_HOME/.claude","expect":"refuse"},
+  {"id":"P5","what":"alias dir is a symlink","expect":"refuse"},
+  {"id":"P6","what":"alias/claude is a symlink (even to a safe dir)","expect":"refuse"},
+  {"id":"P7","what":"alias/home is a symlink","expect":"refuse"},
+  {"id":"P8","what":"alias/claude is a symlink whose realpath is REAL_HOME/.claude","expect":"refuse"},
+  {"id":"P9","what":"HOME env var differs from passwd home (HOME points at a tempdir)","expect":"real home still the passwd home"},
+  {"id":"P10","what":"child env carries absolute AUTOPILOT_ACCOUNTS_DIR, AUTOPILOT_LIVE_DIR, AUTOPILOT_STATE_DIR, AUTOPILOT_CONFIG, XDG_RUNTIME_DIR","expect":"all five present and absolute"},
+  {"id":"P11","what":"token passed only as CLAUDE_CODE_OAUTH_TOKEN in the child env","expect":"absent from argv, audit, receipts"}
+ ],
+ "alias_grammar": {
+  "regex": "^[a-z0-9-]{1,24}$",
+  "accept": ["main","spare","a","acct-1234567","team-a1","a23456789012345678901234"],
+  "refuse": ["","Main","a_b","a b","a.b","a234567890123456789012345","acct-0123abcd","codex-0123abcd","../x"],
+  "reserved_shapes": ["^acct-[0-9a-f]{8}$","^codex-[0-9a-f]{8}$"]
+ }
+}

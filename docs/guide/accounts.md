@@ -79,7 +79,7 @@ Opt-in spike, run by hand only (no suite runs it). It builds a throwaway registr
 node scripts/claude-account.js selftest --real-binary
 ```
 
-Expected: exit 0 and the line `selftest: fake token -> 401, ambient login not used`. It passes only when all three hold: the account layer returned 6 (auth stop), the output holds no normal answer (`is_error:false`), and the child's `HOME` and `CLAUDE_CONFIG_DIR` were inside the throwaway directory. Any failed condition is printed and the exit code is 1; if the answer came back, your own login was used: stop and report it. `--binary <path>` picks another `claude`. Paste the transcript into the P8 note.
+Expected: exit 0 and the line `selftest: fake token -> 401, ambient login not used`. It passes only when all of these hold: the account layer returned 6 (auth stop) and there is positive evidence of an auth stop (the line `STOP_AUTH alias=probe` or a parsed `is_error:true` envelope with `api_error_status` 401; a bare exit 6, empty output or an unrelated error does not count), the output holds no normal answer (`is_error:false`), and the child's `HOME` and `CLAUDE_CONFIG_DIR` were inside the throwaway directory. The probe is a small shell script that records those two values and then `exec`s the binary, so no extra process sits between the account layer and `claude`. Any failed condition is printed and the exit code is 1; if the answer came back, your own login was used: stop and report it. `--binary <path>` picks another `claude`. Paste the transcript into the P8 note.
 
 ## O7. One real headless call per alias
 
@@ -103,7 +103,7 @@ Expected: one line `<alias> class=<ok|unknown|tight> used=<fraction or -> source
 node scripts/claude-account.js selftest --simulate-429 <A>
 ```
 
-Expected: `<A> rate_limited -> <B> ok`, then `node scripts/claude-account.js status` shows `<A>` with `cooldown_until` (UTC+8). Alias `<A>` is pointed at a local HTTP server inside this command that answers every request itself with a `rate_limit_error` 429 and forwards nothing; no request for `<A>` leaves the machine. `<B>` is the next alias and makes one real call (`say OK`, haiku) on its real route. `node scripts/claude-account.js cooldown --clear <A>` releases the cooldown. Plain `node scripts/claude-account.js selftest` still runs the 5 shim checks only.
+Expected: `<A> rate_limited -> <B> ok`, then `node scripts/claude-account.js status` shows `<A>` with `cooldown_until` (UTC+8). Alias `<A>` runs with a `FAKE-` token (never its own) and is pointed at a local HTTP server inside this command that answers every request itself with a `rate_limit_error` 429 and forwards nothing; no request for `<A>` leaves the machine. `<B>` is the next alias and makes one real call (`say OK`, haiku) on its real route. `node scripts/claude-account.js cooldown --clear <A>` releases the cooldown. Plain `node scripts/claude-account.js selftest` still runs the 5 shim checks only.
 
 ## O10. Roll back
 

@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { makeFixture } = require('./lib/account-fixtures/shim-install.js');
+const { cli, EXIT } = require('./claude-account.js');
 
 const SCRIPTS = __dirname;
 const WRAPPER = path.join(SCRIPTS, 'claude-account.js');
@@ -82,6 +83,10 @@ test('a1: TERM to the wrapper (run) escalates to SIGKILL for a TERM-ignoring chi
     assert.ok(await waitFor(() => !alive(child), 9000), 'child killed within TERM grace + slack');
     await Promise.race([exited(p), sleep(3000)]);
     assert.ok(p.exitCode !== null || p.signalCode, 'wrapper exited');
+    // the child died by SIGKILL (128+9): never a clean 0, never an unreadable null
+    assert.strictEqual(p.exitCode, 137, 'wrapper exit code is 128+signal');
+    const audit = fs.readFileSync(w.fx.auditFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    assert.ok(audit.length > 0 && audit.every((l) => l.outcome === 'other_failure'), `audit outcome: ${JSON.stringify(audit.map((l) => l.outcome))}`);
   } finally { w.cleanup(); }
 });
 
@@ -169,4 +174,30 @@ test('c: TERM to dispatch-review.sh - the account path leaves no more orphans th
   assert.strictEqual(legacy.viaWrapper, false, 'legacy path does not go through the wrapper');
   assert.strictEqual(account.viaWrapper, true, 'account path goes through the wrapper');
   assert.ok(account.dead || !legacy.dead, `account path regressed against legacy (legacy dead=${legacy.dead}, account dead=${account.dead})`);
+});
+
+// A child binary that does not exist or cannot be executed: with setpriv in front the shell-out would answer 127;
+// it must map to the same exit code a direct ENOENT spawn error gets (EXIT.CHILD_ERROR), for run and for exec.
+async function goCli(fx, args) {
+  let err = '';
+  const code = await cli(args, { env: fx.env, realHome: fx.realHome, warn: () => {}, write: (fd, d) => { if (fd === 2) err += d.toString(); } });
+  return { code, err };
+}
+test('d: missing or non-executable child binary maps to the spawn-failure exit code (run and exec)', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    const noexec = path.join(fx.root, 'not-exec');
+    fs.writeFileSync(noexec, '#!/bin/sh\nexit 0\n', { mode: 0o644 });
+    const missing = path.join(fx.root, 'no-such-binary');
+    for (const [label, args, want] of [
+      ['run missing', ['run', '--alias', 'a', '--purpose', 'sig', '--', missing], /child_spawn_failed \(ENOENT\)/],
+      ['run bare name', ['run', '--alias', 'a', '--purpose', 'sig', '--', 'no-such-binary-xyz'], /child_spawn_failed \(ENOENT\)/],
+      ['run not executable', ['run', '--alias', 'a', '--purpose', 'sig', '--', noexec], /child_spawn_failed \(EACCES\)/],
+      ['exec missing', ['exec', '--alias', 'a', '--purpose', 'sig', '--', missing], /child_spawn_failed \(ENOENT\)/],
+    ]) {
+      const r = await goCli(fx, args);
+      assert.strictEqual(r.code, EXIT.CHILD_ERROR, `${label}: ${r.err}`);
+      assert.match(r.err, want, label);
+    }
+  } finally { fx.cleanup(); }
 });

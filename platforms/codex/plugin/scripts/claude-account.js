@@ -75,6 +75,26 @@ function pdeathsigPrefix() {
   return setprivBin ? [setprivBin, '--pdeathsig', 'KILL', '--'] : [];
 }
 
+/**
+ * With setpriv in front, a missing or non-executable child binary no longer surfaces as a spawn 'error' event
+ * (setpriv itself starts fine and then exits 127). Resolve the command the way execvp would and return the
+ * errno code a direct spawn would have reported ('ENOENT' / 'EACCES'), or null when it can be executed.
+ */
+function preflightExec(cmd0, env, cwd) {
+  const isExe = (p) => { try { return fs.statSync(p).isFile(); } catch (_) { return false; } };
+  const canX = (p) => { try { fs.accessSync(p, fs.constants.X_OK); return true; } catch (_) { return false; } };
+  const cands = cmd0.includes('/')
+    ? [path.resolve(cwd || process.cwd(), cmd0)]
+    : String((env && env.PATH) || '').split(':').map((d) => path.resolve(cwd || process.cwd(), d || '.', cmd0));
+  let found = false;
+  for (const c of cands) {
+    if (!isExe(c)) continue;
+    found = true;
+    if (canX(c)) return null;
+  }
+  return found ? 'EACCES' : 'ENOENT';
+}
+
 /** Forward SIGTERM/SIGINT to the child, escalate to SIGKILL after TERM_GRACE_MS. Returns a disposer. */
 function installSignalForwarding(child) {
   let killTimer = null;
@@ -409,7 +429,10 @@ function execAttempt(ctx, args) {
     };
     try {
       if (stdinFile) inFd = fs.openSync(stdinFile, 'r');
-      const full = pdeathsigPrefix().concat(argv);
+      const prefix = pdeathsigPrefix();
+      const full = prefix.concat(argv);
+      const pre = prefix.length ? preflightExec(argv[0], env, cwd) : null;
+      if (pre) { result.spawnError = pre; finish(); return; }
       child = spawn(full[0], full.slice(1), {
         env, cwd: cwd || undefined, stdio: [inFd === null ? 'ignore' : inFd, 'pipe', 'pipe'],
       });
@@ -426,10 +449,11 @@ function execAttempt(ctx, args) {
       timer = setTimeout(() => { timedOut = true; try { child.kill('SIGKILL'); } catch (_) { /* gone */ } }, timeoutSecs * 1000);
     }
     const dispose = installSignalForwarding(child);
-    child.on('close', (code) => {
+    child.on('close', (code, sig) => {
       if (timer) clearTimeout(timer);
       dispose();
-      result.code = code;
+      // Killed by a signal: report 128+signal like exec does, never null (which would read as a clean spawn).
+      result.code = code === null ? 128 + (os.constants.signals[sig] || 0) : code;
       finish();
     });
   });
@@ -667,7 +691,11 @@ async function cmdExec(ctx, argv) {
   }
   return new Promise((resolve) => {
     let child;
-    try { const full = pdeathsigPrefix().concat(cmd); child = spawn(full[0], full.slice(1), { env, stdio: 'inherit' }); } catch (e) {
+    try {
+      const prefix = pdeathsigPrefix();
+      const pre = prefix.length ? preflightExec(cmd[0], env, undefined) : null;
+      if (pre) { const er = new Error(pre); er.code = pre; throw er; }
+      const full = prefix.concat(cmd); child = spawn(full[0], full.slice(1), { env, stdio: 'inherit' }); } catch (e) {
       ctx.err(`child_spawn_failed (${e && e.code ? e.code : 'error'})`);
       resolve(EXIT.CHILD_ERROR);
       return;
@@ -747,13 +775,20 @@ function insideDir(child, parent) {
 
 /**
  * Pure verdict of the --real-binary spike (plan O6). Returns the list of failed conditions (empty = pass).
- *   1 exit 6 (auth stop)   2 no normal answer (no is_error:false result)   3 child HOME and CLAUDE_CONFIG_DIR
- *   are inside the throwaway dir and not the real home or its ~/.claude.
+ *   1 exit 6 (auth stop) AND positive evidence of an auth stop: the wrapper's `STOP_AUTH alias=probe` line in
+ *     the captured output, or a parsed envelope with is_error === true and api_error_status === 401. A bare
+ *     exit 6 proves nothing (run passes a child's own exit code through); unparseable output does not pass.
+ *   2 no normal answer (no is_error:false result)   3 child HOME and CLAUDE_CONFIG_DIR are inside the throwaway
+ *   dir and not the real home or its ~/.claude.
  */
 function judgeRealBinary(x) {
   const bad = [];
   if (x.code !== EXIT.AUTH) bad.push(`exit_not_auth (got ${x.code}, want ${EXIT.AUTH})`);
   const env = parseEnvelope(x.stdout || '');
+  const markerRe = /(^|\n)(claude-account: )?STOP_AUTH alias=probe(\n|$)/;
+  const marker = markerRe.test(String(x.stderr || '')) || markerRe.test(String(x.stdout || ''));
+  const env401 = !!(env && env.is_error === true && env.api_error_status === 401);
+  if (!marker && !env401) bad.push('no_auth_stop_evidence (need STOP_AUTH alias=probe or a 401 envelope)');
   if (env && env.is_error === false) bad.push('normal_answer_returned (ambient login used?)');
   const o = x.observed;
   if (!o || !o.home || !o.config_dir) {
@@ -769,16 +804,25 @@ function judgeRealBinary(x) {
   return bad;
 }
 
+/**
+ * Records HOME and CLAUDE_CONFIG_DIR (one per line) and then EXECs the real binary: exec replaces this shell, so
+ * no extra process sits between the setpriv-guarded wrapper child and claude (a timeout or signal reaches claude
+ * itself, and pdeathsig survives the execve).
+ */
 const PROBE_SRC = [
-  "'use strict';",
-  "const fs = require('fs');",
-  "const { spawnSync } = require('child_process');",
-  "const [rec, bin, ...args] = process.argv.slice(2);",
-  "fs.writeFileSync(rec, JSON.stringify({ home: process.env.HOME || null, config_dir: process.env.CLAUDE_CONFIG_DIR || null }));",
-  "const r = spawnSync(bin, args, { stdio: 'inherit', env: process.env });",
-  "process.exitCode = r.error ? 127 : (r.status === null ? 128 : r.status);",
+  '#!/bin/sh',
+  'rec=$1; bin=$2; shift 2',
+  'printf "%s\\n%s\\n" "${HOME-}" "${CLAUDE_CONFIG_DIR-}" > "$rec"',
+  'exec "$bin" "$@"',
   '',
 ].join('\n');
+
+function readObserved(file) {
+  try {
+    const [home, configDir] = fs.readFileSync(file, 'utf8').split('\n');
+    return { home: home || null, config_dir: configDir || null };
+  } catch (_) { return null; }
+}
 
 function resolveBinaryOpt(v) {
   if (v === undefined) return 'claude';
@@ -805,8 +849,8 @@ async function selftestRealBinary(ctx, binary) {
     fs.chmodSync(regFile, 0o600);
     const cfgFile = path.join(base, 'config.json');
     fs.writeFileSync(cfgFile, '{}');
-    const probe = path.join(base, 'probe.js');
-    fs.writeFileSync(probe, PROBE_SRC);
+    const probe = path.join(base, 'probe.sh');
+    fs.writeFileSync(probe, PROBE_SRC, { mode: 0o700 });
     const rec = path.join(base, 'observed.json');
     const outFile = path.join(base, 'stdout.json');
     const env = {
@@ -815,12 +859,11 @@ async function selftestRealBinary(ctx, binary) {
     };
     const sctx = quietCtx(makeCtx({ env, realHome: ctx.realHome, now: ctx.now, uid: ctx.uid, warn: () => {} }));
     const code = await cmdRun(sctx, ['--alias', 'probe', '--purpose', 'selftest', '--timeout', '180', '--stdout', outFile, '--',
-      process.execPath, probe, rec, binary, ...SELFTEST_PROMPT]);
+      '/bin/sh', probe, rec, binary, ...SELFTEST_PROMPT]);
     let stdout = '';
     try { stdout = fs.readFileSync(outFile, 'utf8'); } catch (_) { /* none */ }
-    let observed = null;
-    try { observed = JSON.parse(fs.readFileSync(rec, 'utf8')); } catch (_) { /* child never started */ }
-    const bad = judgeRealBinary({ code, stdout, observed, tmpRoot: base, realHome: ctx.realHome });
+    const observed = readObserved(rec);
+    const bad = judgeRealBinary({ code, stdout, stderr: sctx.captured.join(''), observed, tmpRoot: base, realHome: ctx.realHome });
     if (bad.length) {
       for (const b of bad) ctx.err(`selftest FAIL ${b}`);
       return SELFTEST_FAIL;
@@ -853,6 +896,8 @@ function startLocal429Server() {
   });
 }
 
+const SIM_FAKE_TOKEN = 'FAKE-simulate-429-local-only';
+
 async function selftestSimulate429(ctx, aliasA, binary) {
   const checked = loadChecked(ctx, 'selftest');
   if (!checked.configured) throw new Stop(EXIT.INVALID, 'registry_not_configured', null);
@@ -871,6 +916,8 @@ async function selftestSimulate429(ctx, aliasA, binary) {
     a.childEnvExtra = {
       [aliasA]: {
         ANTHROPIC_BASE_URL: srv.base,
+        // The local server must never see A's real token: step 1 sends a fake one.
+        CLAUDE_CODE_OAUTH_TOKEN: SIM_FAKE_TOKEN,
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1', CLAUDE_CODE_MAX_RETRIES: '0',
       },
     };
@@ -982,7 +1029,7 @@ async function cli(argv, deps) {
   }
 }
 
-module.exports = { cli, createScrubber, classifyAttempt, parseEnvelope, judgeRealBinary, EXIT };
+module.exports = { cli, createScrubber, classifyAttempt, parseEnvelope, judgeRealBinary, PROBE_SRC, EXIT };
 
 if (require.main === module) {
   cli(process.argv.slice(2)).then((c) => { process.exitCode = c; });

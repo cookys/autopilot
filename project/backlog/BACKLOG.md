@@ -14,19 +14,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
 
-### affected-suites misses a changed script's own suite (false green)
-- **Id**: BL-0371
-- **Status**: open
-- **Since**: 2026-11-04
-- **Origin**: self
-- **Problem**: 選測工具收到無效的檔案路徑時不吭聲，照樣回報選出一串套件；觸發點是 zsh 沒把變數切成多個參數，九個路徑併成一個不存在的路徑，結果少選測試而假綠。另外改動腳本的同名套件現在也改成必選。
-- **Impact**: 選取器漏掉改動腳本自己的套件，每條 lane 的驗收都可能拿到假綠。
-- **Trigger**: PM 排序：G40 P1 之後的第 1 項（第 2 項是 bl-ap-streamjson）
-- **Trigger-Type**: ready
-- **Effort**: S
-- **Source**: PM 2026-11-04 incident report, plancwd base 0fd2de921 head d56d3ec29
-- **Pointer**: project/backlog/affected-suites-misses-a-changed-scripts-own-suite.md
-
 ### bl-ap-streamjson：json 與 stream-json 的 result 位元組是否一致
 - **Id**: BL-0372
 - **Status**: open

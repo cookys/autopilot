@@ -131,7 +131,7 @@ for shape in exists missing; do
   wait_writer 5
   eq "no" "$([ -n "$W_PID" ] && echo yes || echo no)" "[nomake/$shape] with the shared ensure broken NO watcher comes up (the good case above is not vacuous)"
   eq "no" "$([ -d "$BTMP/autopilot-dispatch-runs" ] && echo yes || echo no)" "[nomake/$shape] ...and the runs directory does not exist"
-  eq "yes" "$(printf '%s' "$HOOK_OUT" | grep -q 'additionalContext":"live 目錄無法使用：' && echo yes || echo no)" "[nomake/$shape] the hook says the directory cannot be used instead of staying silent"
+  eq "yes" "$(grep -q 'additionalContext":"live 目錄無法使用：' <<<"$HOOK_OUT" && echo yes || echo no)" "[nomake/$shape] the hook says the directory cannot be used instead of staying silent"
 done
 
 # ---- negative control 2: the watcher refuses the runs directory -> a failed launch result, reported by the next hook run -----
@@ -154,8 +154,8 @@ for shape in exists missing; do
   eq "no" "$(grep -q 'STALE' "$RES" && echo yes || echo no)" "[refuse/$shape] not the stale reason of an earlier launch"
   # the NEXT hook run reports it, once per session
   hook "$SB/mut-refuse" UserPromptSubmit "sess-r-$shape"
-  eq "yes" "$(printf '%s' "$HOOK_OUT" | grep -q '"systemMessage":"watcher 無法啟動：dispatch runs directory unusable: mutation' && echo yes || echo no)" "[refuse/$shape] the next UserPromptSubmit returns systemMessage 'watcher 無法啟動：<reason>'"
-  eq "no" "$(printf '%s' "$HOOK_OUT" | grep -q 'STALE' && echo yes || echo no)" "[refuse/$shape] ...and never the stale reason"
+  eq "yes" "$(grep -q '"systemMessage":"watcher 無法啟動：dispatch runs directory unusable: mutation' <<<"$HOOK_OUT" && echo yes || echo no)" "[refuse/$shape] the next UserPromptSubmit returns systemMessage 'watcher 無法啟動：<reason>'"
+  eq "no" "$(grep -q 'STALE' <<<"$HOOK_OUT" && echo yes || echo no)" "[refuse/$shape] ...and never the stale reason"
   # Every hook run starts a NEW (doomed) watcher, whose launch stays 'pending' until that child writes its result. A run that lands
   # in that window sees a pending newest launch and says nothing; real prompts are seconds apart, so the test waits for each result.
   need_result "[refuse/$shape] launch before the second prompt" 20
@@ -163,7 +163,7 @@ for shape in exists missing; do
   eq "" "$HOOK_OUT" "[refuse/$shape] the same session is not told twice"
   need_result "[refuse/$shape] launch before the other session's prompt" 20
   hook "$SB/mut-refuse" UserPromptSubmit "sess-other-$shape"
-  eq "yes" "$(printf '%s' "$HOOK_OUT" | grep -q '"systemMessage":"watcher 無法啟動：' && echo yes || echo no)" "[refuse/$shape] another session is told"
+  eq "yes" "$(grep -q '"systemMessage":"watcher 無法啟動：' <<<"$HOOK_OUT" && echo yes || echo no)" "[refuse/$shape] another session is told"
 done
 
 # ---- a live directory that cannot be used is named, once per session (plan B: 'live 目錄無法使用：<reason>') ----------------
@@ -171,11 +171,11 @@ new_case livedir
 BTMP="$CD/tmp"; mkdir -p "$BTMP"
 REAL_LIVE="$CLIVE"; CLIVE="$CD/live-is-a-symlink"; ln -s "$REAL_LIVE" "$CLIVE"
 hook "$REPO_ROOT" SessionStart "sess-live"
-eq "yes" "$(printf '%s' "$HOOK_OUT" | grep -q 'additionalContext":"live 目錄無法使用：' && echo yes || echo no)" "[livedir] SessionStart returns 'live 目錄無法使用：<reason>' as additionalContext"
-eq "yes" "$(printf '%s' "$HOOK_OUT" | grep -q 'symlink' && echo yes || echo no)" "[livedir] ...and the reason says why (a symlink)"
+eq "yes" "$(grep -q 'additionalContext":"live 目錄無法使用：' <<<"$HOOK_OUT" && echo yes || echo no)" "[livedir] SessionStart returns 'live 目錄無法使用：<reason>' as additionalContext"
+eq "yes" "$(grep -q 'symlink' <<<"$HOOK_OUT" && echo yes || echo no)" "[livedir] ...and the reason says why (a symlink)"
 hook "$REPO_ROOT" UserPromptSubmit "sess-live"
 eq "" "$HOOK_OUT" "[livedir] the same session is not told twice"
 hook "$REPO_ROOT" UserPromptSubmit "sess-live-2"
-eq "yes" "$(printf '%s' "$HOOK_OUT" | grep -q '"systemMessage":"live 目錄無法使用：' && echo yes || echo no)" "[livedir] another session gets it as a systemMessage"
+eq "yes" "$(grep -q '"systemMessage":"live 目錄無法使用：' <<<"$HOOK_OUT" && echo yes || echo no)" "[livedir] another session gets it as a systemMessage"
 
 finalize_test

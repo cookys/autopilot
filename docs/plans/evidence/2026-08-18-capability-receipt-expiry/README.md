@@ -72,7 +72,7 @@ was swallowing them, so a warning would have reached nobody.
 Rationale, in the repo's own terms: what makes a claim true *now* is re-derived live on every
 call (`--version` is spawned each time) and the contract not being contradicted. Wall-clock age
 of a record is tamper-evidence about that record, which
-[ADR-0001](../../../adr/0001-verification-over-attestation.md) explicitly does not count as
+[ADR-0001](../../../dev/adr/0001-verification-over-attestation.md) explicitly does not count as
 verification.
 
 ## Verification

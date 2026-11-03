@@ -8,7 +8,7 @@
  * Control file: shim-control.json next to the installed shim (the child env is an allowlist, so no
  * env var can carry the control path):
  *   { "log": "<abs file>", "default": <response>, "tokens": { "<token>": <response> } }
- * <response> = { "exit": 0, "stdout": "...", "stderr": "...", "leak": "plain"|"split", "hangMs": 0 }
+ * <response> = { "exit": 0, "stdout": "...", "stderr": "...", "leak": "plain"|"split"|"prefix", "hangMs": 0 }
  *
  * Each call appends one JSON line to `log`: argv, env NAMES (sorted), a sha256-first-8 fingerprint
  * of the presented token (never the token), HOME, CLAUDE_CONFIG_DIR, cwd, AUTOPILOT_ACCOUNT, and
@@ -66,7 +66,9 @@ function main() {
   sleep(resp.hangMs || 0);
   if (resp.leak) {
     for (const fd of [1, 2]) {
-      if (resp.leak === 'split') {
+      if (resp.leak === 'prefix') {
+        w(fd, 'leak:' + token.slice(0, -1));
+      } else if (resp.leak === 'split') {
         const h = Math.floor(token.length / 2);
         w(fd, 'leak:' + token.slice(0, h));
         sleep(60);

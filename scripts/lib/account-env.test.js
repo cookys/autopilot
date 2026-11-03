@@ -70,3 +70,29 @@ test('prepareHome writes ssh Include and links only under home/.ssh', () => {
   assert.deepStrictEqual(E.prepareHome({ homeDir: home, realHome: path.join(root, 'nope') }), { ssh: false });
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('XDG-only git identity is referenced; ~/.gitconfig wins when both exist', () => {
+  const only = (p) => p === '/h/.config/git/config';
+  assert.strictEqual(E.buildEnv(base({ exists: only })).GIT_CONFIG_GLOBAL, '/h/.config/git/config');
+  assert.strictEqual(E.buildEnv(base({ exists: only, callerEnv: { XDG_CONFIG_HOME: '/x' } })).GIT_CONFIG_GLOBAL, undefined);
+  const both = (p) => p === '/h/.gitconfig' || p === '/h/.config/git/config';
+  assert.strictEqual(E.buildEnv(base({ exists: both })).GIT_CONFIG_GLOBAL, '/h/.gitconfig');
+});
+
+test('prepareHome refuses links and a home equal to the real home; never writes through a link', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'g37-env-'));
+  const real = path.join(root, 'real');
+  fs.mkdirSync(path.join(real, '.ssh'), { recursive: true });
+  fs.writeFileSync(path.join(real, '.ssh', 'config'), 'REAL\n');
+  assert.throws(() => E.prepareHome({ homeDir: real, realHome: real }), { reason: 'home_unsafe' });
+  const h1 = path.join(root, 'h1');
+  fs.mkdirSync(h1);
+  fs.symlinkSync(path.join(real, '.ssh'), path.join(h1, '.ssh'));
+  assert.throws(() => E.prepareHome({ homeDir: h1, realHome: real }), { reason: 'ssh_path_is_link' });
+  const h2 = path.join(root, 'h2');
+  fs.mkdirSync(path.join(h2, '.ssh'), { recursive: true });
+  fs.symlinkSync(path.join(real, '.ssh', 'config'), path.join(h2, '.ssh', 'config'));
+  assert.throws(() => E.prepareHome({ homeDir: h2, realHome: real }), { reason: 'ssh_path_is_link' });
+  assert.strictEqual(fs.readFileSync(path.join(real, '.ssh', 'config'), 'utf8'), 'REAL\n');
+  fs.rmSync(root, { recursive: true, force: true });
+});

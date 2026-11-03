@@ -1,6 +1,6 @@
 # dev-flow stage graph — execution log
 
-Plan: [`../../2026-10-06-dev-flow-stage-graph.md`](../../2026-10-06-dev-flow-stage-graph.md) (R2 FROZEN). This file records what happened while executing it; the plan itself is not edited after freeze.
+Plan: [`../../2026-10-06-dev-flow-stage-graph.md`](../../../../project/plans/2026-10-06-dev-flow-stage-graph.md) (R2 FROZEN). This file records what happened while executing it; the plan itself is not edited after freeze.
 
 ## Train A landings (develop)
 

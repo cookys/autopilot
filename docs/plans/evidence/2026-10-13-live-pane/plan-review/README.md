@@ -1,6 +1,6 @@
 # Live pane design system — plan review receipts
 
-Plan: [`docs/plans/2026-10-13-live-pane-design-system.md`](../../../2026-10-13-live-pane-design-system.md)
+Plan: [`project/plans/2026-10-13-live-pane-design-system.md`](../../../../../project/plans/2026-10-13-live-pane-design-system.md)
 Logical plan id / ticket: `live-pane-design-system-2026-10-13-r2`
 
 | File | What it is |

@@ -273,6 +273,26 @@ assert_not_contains "$__GATE_OUT" "tooling/real.sh" "layout: an existing script 
 run_gate "$T2/docs" --repo-root "$T2"
 assert_exit_code "$__GATE_EXIT" 0 "layout negative control: default scripts_dir does not read tooling/ refs"
 
+# Plans evidence stays period-accurate history when the plans dir lives elsewhere (live layout: plans_dir = project/plans,
+# plans_evidence_dir = docs/plans/evidence). Registry: plans moved out, evidence did not.
+PREG="$TEST_TMP/doc-drift-plans-moved-registry.json"
+node -e '
+  const r = JSON.parse(JSON.stringify(require(process.argv[1]).load()));
+  r.paths.plans_dir = "project/plans"; r.paths.plans_evidence_dir = "docs/plans/evidence";
+  require("fs").writeFileSync(process.argv[2], JSON.stringify(r));
+' "$REPO_ROOT/scripts/lib/repo-layout.js" "$PREG"
+P2="$TEST_TMP/plans-moved-refs"
+mkdir -p "$P2/docs/plans/evidence/x" "$P2/docs/guide" "$P2/scripts"
+printf '# Old brief\nIt ran `scripts/ghost-removed.sh` back then.\n' > "$P2/docs/plans/evidence/x/brief.md"
+__GATE_OUT="$(REPO_LAYOUT_REGISTRY="$PREG" node "$GATE_JS" "$P2/docs" --repo-root "$P2" 2>&1)"; __GATE_EXIT=$?
+assert_exit_code "$__GATE_EXIT" 0 "plans evidence naming a since-removed script is history, not drift (plans dir moved out)"
+# Negative control: the same reference in an active operational doc is still drift, so the exemption is not a blanket pass.
+printf '# Guide\nRun `scripts/ghost-removed.sh`.\n' > "$P2/docs/guide/g.md"
+__GATE_OUT="$(REPO_LAYOUT_REGISTRY="$PREG" node "$GATE_JS" "$P2/docs" --repo-root "$P2" 2>&1)"; __GATE_EXIT=$?
+assert_exit_code "$__GATE_EXIT" 1 "same missing-script reference in an active doc still fails"
+assert_contains "$__GATE_OUT" "docs/guide/g.md" "the active doc is the reported failure"
+assert_not_contains "$__GATE_OUT" "evidence/x/brief.md" "the evidence file is not reported"
+
 # 8. Testing invalid command arguments/usage errors (exit 2)
 echo "Testing invalid usage..."
 run_gate "--exclude" # missing arg

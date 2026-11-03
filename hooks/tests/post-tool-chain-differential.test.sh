@@ -454,7 +454,7 @@ unit_neg() { # <label> <sed command>
   local out rc
   out="$(PTC_LIB="$MUT/u-$label/post-tool-chain-lib.js" HOME="$HOOK_HOME" node --test "$HOOKS_DIR/post-tool-chain.test.js" 2>&1 < /dev/null)"; rc=$?
   [ "$rc" -ne 0 ] || fail "unit negative control '$label' was NOT detected"
-  printf '%s\n' "$out" | grep -Eq 'fail [1-9]' || fail "unit negative control '$label': no failing test reported"
+  grep -Eq 'fail [1-9]' <<<"$out" || fail "unit negative control '$label': no failing test reported"
 }
 unit_neg no-failopen-note 's/    else err.push(/    else void (/'
 unit_neg context-not-merged 's/    if (events.length === 1) {/    if (false) {/'

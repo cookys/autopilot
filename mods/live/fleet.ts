@@ -190,7 +190,7 @@ export const fleetView = (feed: FleetFeed, nowMs: number): FleetView => ({ lanes
 
 // ---- the published summary (PM G33a): what another plugin (codeforge's forge-stats band) reads from the `$.state` atom `autopilot.fleet` ----
 // Shape `v: 1`, agreed with the readers; a reader that sees another `v` draws nothing. Counts follow the state the Fleet tab draws for each in-flight row (the caller passes
-// that classification, ui.ts `stateOf('fleetTask', …)`, so no rule is restated here): `needYou` ▲, `failed` ✗, `stuck` ⊘, `running` ●, `waiting` ⧗, over in-flight and
+// that classification, ui.ts `stateOf('fleetTask', …)`, so no rule is restated here): `needYou` ▲, `failed` ✗, `stuck` ⊘, `running` ●, `waiting` ⋯, over in-flight and
 // upcoming rows alike (an open row nobody accepted for an hour is drawn ⊘ too). A row in any other state (pending, findings) is in no count. `topStuck` is the first row with a stuck rule in the tab's own order (lanes stuck-first, rows stuck-first). `title` stops at
 // FLEET_TITLE_MAX characters, ending in `…` when cut, so the reader knows it is not whole; the reader cuts it to its own width.
 export const FLEET_SUMMARY_V = 1

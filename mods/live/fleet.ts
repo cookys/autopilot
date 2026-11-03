@@ -187,3 +187,49 @@ export function makeFleetFeed(ttlMs = FLEET_TTL_MS): FleetFeed {
 }
 
 export const fleetView = (feed: FleetFeed, nowMs: number): FleetView => ({ lanes: fleetLanes(feed.rows(), nowMs), fetchedMs: feed.fetchedMs(), error: feed.error(), nowMs, capped: feed.capped() })
+
+// ---- the published summary (PM G33a): what another plugin (codeforge's forge-stats band) reads from the `$.state` atom `autopilot.fleet` ----
+// Shape `v: 1`, agreed with the readers; a reader that sees another `v` draws nothing. Counts follow the state the Fleet tab draws for each in-flight row (the caller passes
+// that classification, ui.ts `stateOf('fleetTask', …)`, so no rule is restated here): `needYou` ▲, `failed` ✗, `stuck` ⊘, `running` ●, `waiting` ⧗, over in-flight and
+// upcoming rows alike (an open row nobody accepted for an hour is drawn ⊘ too). A row in any other state (pending, findings) is in no count. `topStuck` is the first row with a stuck rule in the tab's own order (lanes stuck-first, rows stuck-first). `title` stops at
+// FLEET_TITLE_MAX characters, ending in `…` when cut, so the reader knows it is not whole; the reader cuts it to its own width.
+export const FLEET_SUMMARY_V = 1
+export const FLEET_TITLE_MAX = 200
+export type FleetCountKey = 'needYou' | 'failed' | 'stuck' | 'running' | 'waiting'
+export type FleetCounts = Record<FleetCountKey, number>
+export type FleetSummary = {
+  v: 1
+  fetchedMs: number | null
+  error: string | null
+  capped: number
+  totals: FleetCounts
+  lanes: ({ lane: string; host: string } & FleetCounts)[]
+  topStuck: { lane: string; host: string; title: string; ageMs: number | null; rule: StuckReason } | null
+}
+// the state id of one in-flight row as the Fleet tab draws it (a StateId of ui.ts)
+export type FleetClassifier = (task: FleetTask) => string
+const COUNT_OF: Readonly<Record<string, FleetCountKey>> = { need_you: 'needYou', failed: 'failed', stalled: 'stuck', running: 'running', waiting: 'waiting' }
+const noCounts = (): FleetCounts => ({ needYou: 0, failed: 0, stuck: 0, running: 0, waiting: 0 })
+
+export function capTitle(title: string): string {
+  const chars = [...title]
+  return chars.length <= FLEET_TITLE_MAX ? title : chars.slice(0, FLEET_TITLE_MAX - 1).join('') + '…'
+}
+
+export function fleetSummary(view: FleetView, classify: FleetClassifier): FleetSummary {
+  const totals = noCounts()
+  let topStuck: FleetSummary['topStuck'] = null
+  const lanes = view.lanes.map(l => {
+    const counts = noCounts()
+    for (const task of [...l.inflight, ...l.upcoming]) {
+      const key = COUNT_OF[classify(task)]
+      if (key !== undefined) {
+        counts[key]++
+        totals[key]++
+      }
+      if (topStuck === null && task.stuck !== null) topStuck = { lane: l.lane, host: l.host, title: capTitle(task.title), ageMs: task.ageMs, rule: task.stuck }
+    }
+    return { lane: l.lane, host: l.host, ...counts }
+  })
+  return { v: FLEET_SUMMARY_V, fetchedMs: view.fetchedMs, error: view.error, capped: view.capped, totals, lanes, topStuck }
+}

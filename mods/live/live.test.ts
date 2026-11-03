@@ -231,7 +231,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
     if (w.statErrors[e.path] !== undefined) throw new Error(w.statErrors[e.path])
     return statOf(e)
   })
-  const statOf = (e: { path: string; resolve?: boolean }) => (w.stats[e.path] !== undefined ? { value: { kind: 'file' as const, ...w.stats[e.path], isLink: false } } : {
+  const statOf = (e: { path: string; resolve?: boolean }) => (w.stats[e.path] !== undefined ? { value: { kind: 'file' as const, isLink: false, ...w.stats[e.path] } } : {
     value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false, realPath: e.resolve ? (e.path === CWD ? w.cwdReal.value : e.path) : undefined },
   })
   on('session.id', () => {
@@ -3253,6 +3253,132 @@ test('G23 Fleet tab: data age, owner cards, lanes in flight before upcoming, stu
   await pressRow($, 'terminal', 'fleet', t => t.includes('KR2 runs'))
   const quiet = (await paneParts($, 'terminal', 'fleet')).texts
   expect(quiet[quiet.findIndex(t => t.includes('KR2 runs')) + 1]).toContain('seat not observed since 5h00m ago')
+})
+// G33a: the feed publishes the summary `autopilot.fleet` (fleet.ts FleetSummary, v 1) for codeforge's forge-stats, and with no band tab open the band gives its second row to the
+// mod below when that mod's heartbeat says it draws the summary row. The reader is an inline plugin loaded beneath the one under test: it reads the atom with `$.state.get`
+// on the ui.render chain and draws one line, or passes when there is nothing to read.
+const g33Alive = (over: Record<string, unknown> = {}) => j({ schema: 'codeforge.mod-alive/1', session_id: SID_A, written_at_ms: NOW_FRESH - 1000, layout: 'band', summary_row: true, ...over })
+// The reader runs in its own environment (an inline plugin's register sees no test variable): it reports each ask through `$.fs.write('/g33-reader/<maxRows>/<v>')`,
+// which the world records in w.writes.
+const G33_READER = {
+  name: 'forge-reader',
+  tier: 'append' as const,
+  register: ((on: any) => {
+    on('ui.render', { component: 'AbovePrompt' }, async ($: any, e: any, next: any) => {
+      const read = await $.state.get({ plugin: 'autopilot', key: 'fleet' })
+      const value = read.value
+      await $.fs.write('/g33-reader/' + e.props.maxRows + '/' + (value === undefined ? 'none' : value.v), '')
+      if (value === undefined || value.v !== 1) return next(e)
+      const { Text } = $.ui.resolve(e)
+      const t = value.totals
+      const top = value.topStuck
+      return Text({ children: 'FLEET ▲' + t.needYou + ' ✗' + t.failed + ' ⊘' + t.stuck + ' ●' + t.running + ' ⧗' + t.waiting + ' top ' + (top === null ? '-' : top.title + ' (' + top.rule + ')') })
+    })
+  }) as any,
+}
+// a heartbeat file and its stat (a regular file of its UTF-8 size, unless the test says otherwise)
+const g33Put = (w: World, text: string, stat: Record<string, unknown> = {}) => {
+  const path = LIVE + '/codeforge/mod-alive/' + SID_A + '.json'
+  w.files[path] = text
+  ;(w.stats as Record<string, unknown>)[path] = { size: new TextEncoder().encode(text).length, mtimeMs: 0, ...stat }
+}
+const g33Asks = (w: World) => w.writes.filter(p => p.startsWith('/g33-reader/')).map(p => p.slice('/g33-reader/'.length))
+const g33Band = async ($: any, maxRows = BAND_PROPS.maxRows) => {
+  const ui = await $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'AbovePrompt', requestId: 'rq-g33', props: { ...BAND_PROPS, maxRows }, viewport: { columns: 120, rows: 50, isFullscreen: true } })
+  const texts = walkTexts((await ui.drawn()) as Node).map(textOf)
+  await ui.unmount()
+  return texts
+}
+const g33Ran = (on: On) => {
+  const ran: string[] = []
+  on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: g23Tasks(NOW_FRESH), stderr: '' } } })
+  return ran
+}
+test('G33a: with forge-stats\' band alive the feed runs without the Fleet tab, publishes `autopilot.fleet` v 1, and the band hands its second row to the reader beneath (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+  const ran = g33Ran(on)
+  const w = worldEn(on, base())
+  g33Put(w, g33Alive())
+  await start($, 'terminal')
+  await w.clock.advance(5_000) // one tick: the heartbeat is 6 s old, so the feed runs although the pane shows another tab
+  g33Put(w, g33Alive({ written_at_ms: NOW_FRESH + 9_000 })) // forge-stats rewrites it every 2 s
+  await w.clock.advance(5_000) // the run's write settled; this tick is inside the TTL: no second run
+  expect(ran).toEqual(['fleet tasks --tree --json'])
+  const texts = await g33Band($)
+  // the fixture: one running row, one waiting row, two stalled (an open row nobody accepted for two hours, a seat quiet five hours); the first flagged row in the tab order
+  expect(texts.at(-1)).toBe('FLEET ▲0 ✗0 ⊘2 ●1 ⧗1 top [REG a2] DOA class (unaccepted)')
+  expect(g33Asks(w).at(-1)).toBe('1/1') // asked for exactly one row, read v 1
+  // one row granted: the band row alone, the reader is not asked
+  const asked = g33Asks(w).length
+  await g33Band($, 1)
+  expect(g33Asks(w).length).toBe(asked)
+})
+test('G33a: an alive forge-stats without `summary_row` (an older one) still gets the feed but is never asked for the second row; before any run the reader finds nothing and passes (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+  const ran = g33Ran(on)
+  const w = worldEn(on, base())
+  g33Put(w, g33Alive({ summary_row: undefined }))
+  await start($, 'terminal')
+  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([]) // no tick yet: not asked
+  await w.clock.advance(5_000)
+  expect(ran).toEqual(['fleet tasks --tree --json']) // alive: the summary is kept fresh
+  const texts = await g33Band($)
+  expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
+  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([]) // never handed the one-row ask
+})
+test('G33a: no fetch for a heartbeat that is stale, another session\'s, the pane layout, another schema, unreadable or too big; the band stays one row (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+  const ran = g33Ran(on)
+  const w = worldEn(on, base())
+  await start($, 'terminal')
+  for (const bad of [g33Alive({ written_at_ms: NOW_FRESH - 60_000 }), g33Alive({ session_id: 'sid-other' }), g33Alive({ layout: 'pane' }), g33Alive({ schema: 'codeforge.mod-alive/2' }), '{not json', g33Alive({ pad: 'x'.repeat(5000) })]) {
+    g33Put(w, bad)
+    await w.clock.advance(5_000)
+  }
+  expect(ran).toEqual([])
+  const texts = await g33Band($)
+  expect(texts.some(t => t.startsWith('FLEET'))).toBe(false)
+  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
+})
+test('G33a review g1: the heartbeat is stat-checked and bounded: a link, a non-file, a size over 4 KiB in UTF-8 bytes (CJK under it in length) or a read error is no heartbeat, and the tick goes on (terminal)', { plugins: [G33_READER] }, async ($, on) => {
+  const ran = g33Ran(on)
+  const w = worldEn(on, base())
+  await start($, 'terminal')
+  const path = LIVE + '/codeforge/mod-alive/' + SID_A + '.json'
+  const at = (ms: number) => g33Alive({ written_at_ms: NOW_FRESH + ms })
+  // a symbolic link (to /dev/zero, a FIFO, a big file, …): not read at all
+  g33Put(w, at(4_000), { isLink: true })
+  await w.clock.advance(5_000)
+  // what the path leads to is not a regular file
+  g33Put(w, at(9_000), { kind: 'other' })
+  await w.clock.advance(5_000)
+  // the stat says too big: not read
+  g33Put(w, at(14_000), { size: 4097 })
+  await w.clock.advance(5_000)
+  // the stat lied (swapped after it): the text is over 4 KiB in UTF-8 bytes though under 4096 UTF-16 units
+  const cjk = at(19_000).replace('"band"', '"band","pad":"' + '中'.repeat(1400) + '"')
+  expect(cjk.length).toBeLessThan(4096)
+  w.files[path] = cjk
+  ;(w.stats as Record<string, unknown>)[path] = { size: 100, mtimeMs: 0 }
+  await w.clock.advance(5_000)
+  // the stat fails (EACCES, ELOOP, …)
+  w.statErrors[path] = 'EACCES: permission denied, stat'
+  await w.clock.advance(5_000)
+  delete w.statErrors[path]
+  // the read fails (EISDIR, …): the file is gone after the stat
+  ;(w.stats as Record<string, unknown>)[path] = { size: 10, mtimeMs: 0 }
+  delete w.files[path]
+  await w.clock.advance(5_000)
+  expect(ran).toEqual([])
+  expect(g33Asks(w).filter(a => a.startsWith('1/'))).toEqual([])
+  // and the ticks went on: a good heartbeat now is seen on the next tick
+  g33Put(w, at(34_000))
+  await w.clock.advance(5_000)
+  expect(ran).toEqual(['fleet tasks --tree --json'])
+  await g33Band($)
+  expect(g33Asks(w).filter(a => a.startsWith('1/')).length).toBe(1) // handed the second row
+  // an error after a good beat takes the row back (the last answer is not kept)
+  w.statErrors[path] = 'ELOOP: too many symbolic links, stat'
+  await w.clock.advance(5_000)
+  await g33Band($)
+  expect(g33Asks(w).filter(a => a.startsWith('1/')).length).toBe(1)
 })
 test('G23 Fleet tab: a failing `fleet` says so, and the tab is not fetched while another tab shows (terminal)', async ($, on) => {
   const ran: string[] = []

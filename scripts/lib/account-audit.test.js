@@ -105,7 +105,7 @@ test('formatTaipei crosses the date line', () => {
 test('N5c (audit half): status shows UTC+8, ENOENT is empty, tampered lines are never echoed', () => {
   const dir = tmp();
   const file = path.join(dir, 'a.jsonl');
-  assert.deepStrictEqual(A.readAudit(file), { records: [], invalid: 0 });
+  assert.deepStrictEqual(A.readAudit(file), { records: [], invalid: 0, bytesRead: 0 });
   A.appendAudit(ok(), { path: file, now: NOW });
   // tamper: a line carrying a token, a line with an extra key, and garbage
   fs.appendFileSync(file, JSON.stringify({ ...A.buildRecord(ok(), NOW), purpose: 'tok-' + TOKEN }) + '\n');
@@ -128,4 +128,33 @@ test('negative control: skipping validation lets a token through (proves the gua
   fs.writeFileSync(file, JSON.stringify(bad) + '\n');
   assert.strictEqual(A.validateRecord(bad, { tokens: [TOKEN.toLowerCase()] }).ok, false);
   assert.strictEqual(A.validateRecord(bad, { tokens: [] }).ok, true, 'without the live-token list only the grammar blocks it');
+});
+
+test('rejection messages never echo the offending string (key or value)', () => {
+  const secret = ['sk', 'ant', 'oat01', 'FAKEabcdefghijklmnop'].join('-');
+  const frags = [];
+  for (let i = 0; i + 8 <= secret.length; i++) frags.push(secret.slice(i, i + 8));
+  const msgs = [];
+  for (const input of [ok({ [secret]: 1 }), ok({ purpose: secret }), ok({ alias: secret }), ok({ outcome: secret })]) {
+    try { A.appendAudit(input, { path: path.join(tmp(), 'a.jsonl'), now: NOW }); } catch (e) { msgs.push(e.message + '\n' + e.stack); }
+  }
+  const full = { ...A.buildRecord(ok(), NOW), [secret]: 1 };
+  msgs.push(A.validateRecord(full).reason);
+  assert.strictEqual(msgs.length, 5);
+  for (const m of msgs) for (const f of frags) assert.ok(!m.includes(f), 'leaked fragment ' + f.length);
+  assert.match(msgs[4], /^extra_keys:1 fp=[0-9a-f]{8}$/);
+});
+
+test('readAudit reads only the tail of a large file and skips the cut first line', () => {
+  const file = path.join(tmp(), 'big.jsonl');
+  const line = JSON.stringify(A.buildRecord(ok(), NOW)) + '\n';
+  const n = Math.ceil((2 * 1024 * 1024) / line.length);
+  fs.writeFileSync(file, line.repeat(n), { mode: 0o600 });
+  const last = A.buildRecord(ok({ alias: 'last-one' }), NOW + 5);
+  fs.appendFileSync(file, JSON.stringify(last) + '\n');
+  const res = A.readAudit(file);
+  assert.ok(res.bytesRead <= 256 * 1024, 'read ' + res.bytesRead);
+  assert.strictEqual(res.invalid, 0, 'cut first line must be skipped, not counted');
+  assert.ok(res.records.length > 1000 && res.records.length < n);
+  assert.strictEqual(res.records[res.records.length - 1].alias, 'last-one');
 });

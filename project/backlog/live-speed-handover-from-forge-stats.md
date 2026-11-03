@@ -37,4 +37,4 @@ The expanded area keeps asking downward with `lower(rows - 2, columns)`. This be
 
 ## Colors
 
-Follow `docs/plans/2026-10-13-live-pane-design-system.md` section 12.
+Follow `project/plans/2026-10-13-live-pane-design-system.md` section 12.

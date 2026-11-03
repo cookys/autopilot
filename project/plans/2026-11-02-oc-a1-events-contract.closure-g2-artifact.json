@@ -179,7 +179,7 @@
       "affected_surface": "E3 cursor.js size bound: s recomputed per page and never carried forward, e floor, next-w rule; E3 red-check (s) / case cursor-s-restore; KR-A1.2",
       "claim": "The fold resolves both generation-2 blockers. However, the cursor-bound fold adds a new defect: it makes s regrow to the default on the next page. w is pruned to the shrunk window and is never refilled for the gap, so the next resume's floor moves backwards below what w covers. Events already delivered in that gap are then delivered again. The same thing happens to an e-group once t advances. This contradicts the plan's own guarantee that in-order events are never duplicated or lost, and KR-A1.2's 0 duplicates.",
       "evidence": "Plan E3 Size bound says: 's is recomputed on every page and never carried forward: each page starts from the default s (300 000 ms) and halves it only as far as this page's w needs to fit the cap ... The next page that fits at the default s restores it.' The filter drops an event iff its id hash is in w or its ts < t - s. Next w = previous w pruned to ts >= newT - s, union this page's ids with ts >= newT - s. Scenario, step 1: page P1 overflows and s shrinks to s1, so w holds only pairs with ts >= t1 - s1. Events delivered on P1 or earlier with ts in [t1 - 300000, t1 - s1) are now in no w. Step 2: page P2 delivers a few events with newT shortly after t1 and resets s to 300000. Its cursor floor newT - 300000 is below t1 - s1. Step 3: P3 re-reads from that floor, and the gap events are neither in w nor below the floor, so they are re-delivered. The e case behaves the same way. A group of more than 1000 events at one instant is omitted from w, and e applies only while ts == t. After t advances and s returns to 300000, the whole group falls inside the window again and is duplicated. Red-check (s) and case cursor-s-restore only check that a late row inside the default slack is delivered. They never check that the earlier pages' rows are not repeated. The pre-amendment diff text in the closure context only shrank s, so this re-delivery path is new.",
-      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E3 'Size bound' bullet, 'Filter' and 'Next w' bullets, Red-checks (s) and (g), KR-A1.2; closure context diff hunk @@ -221,7 +224,7 @@ (cursor size bound)",
+      "evidence_reference": "project/plans/2026-11-02-oc-a1-events-contract.md E3 'Size bound' bullet, 'Filter' and 'Next w' bullets, Red-checks (s) and (g), KR-A1.2; closure context diff hunk @@ -221,7 +224,7 @@ (cursor size bound)",
       "repair": "Make the window floor monotone. (1) Carry an explicit floor f (epoch ms) in the cursor. (2) The filter drops ts < max(t - s, f). (3) The next cursor sets f' = max(f, newT - s'), so the effective slack can only regrow as fast as t moves past the old floor. (4) Carry e as an [ts, id] pair that stays in force until f' is greater than its ts. Replace case cursor-s-restore with this test: an overflow page, then a page with newT < t1 + 300000, then a third page. The concatenated ids must have no duplicate and the e-group must appear exactly once. Add a red-check: drop f, or reset the floor from the default s, and duplicates must appear. Document that late rows older than the carried floor stay out of contract until the floor moves past them.",
       "blocks_next_slice_or_immediate_integrity": true,
       "cannot_defer_to_spike": true,
@@ -203,7 +203,7 @@
       "affected_surface": "E1 Project and failure rules (1) JSON error object; schemas/events.schema.json; E4 check-events-contract.js baseline (v)",
       "claim": "The new --json error object {schema, error:{code}} uses the pinned schema string, but schemas/events.schema.json does not describe it. Baseline check (v) freezes it anyway, so the frozen baseline has no schema source for the gate to compare against. The plan also does not say whether the other exit-2 paths (bad_cursor, usage) emit the same object under --json.",
       "evidence": "The file map defines events.schema.json as 'the envelope and one data shape per kind'. Rule (1) prints the error object with schema 'autopilot.events/1'. Check (v) lists 'the project_unresolved error object' in the baseline. Checks (i) and (ii) cover only data shapes. Case (vi-b) asserts the JSON error object but does not validate it against any schema. bad_cursor is exit 2 with no stated stdout shape.",
-      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules', section 3 file map row schemas/events.schema.json, E4 step 2 (v)",
+      "evidence_reference": "project/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules', section 3 file map row schemas/events.schema.json, E4 step 2 (v)",
       "repair": "Add the error object as a second top-level branch in events.schema.json, with error.code as an open-set string. Use that one shape for every exit-2 path under --json (project_unresolved, bad_cursor, usage). Validate it in vi-b, vi and vii.",
       "blocks_next_slice_or_immediate_integrity": false,
       "cannot_defer_to_spike": false,
@@ -227,7 +227,7 @@
       "affected_surface": "E1 rule (3) top-level catch; E4 bin/autopilot.js fast path; jsonl-tail.js I/O model",
       "claim": "The single top-level try/catch only catches synchronous throws and awaited rejections. A stream 'error' event or an unhandled rejection from async I/O in a reader still ends in Node's default exit 1. That would break the plan's claim that exit codes are only 0 and 2.",
       "evidence": "Rule (3) says the command 'never ends in Node's uncaught-exception exit 1'. Its only mechanism is 'one top-level catch in the CLI branch'. jsonl-tail reads in 64 KiB chunks but does not say whether it uses sync reads or streams. Red-check (z) injects faults only in merge, cursor and envelope.",
-      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules' (3), E2 step 1, E3 Red-checks (z)",
+      "evidence_reference": "project/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules' (3), E2 step 1, E3 Red-checks (z)",
       "repair": "Either require synchronous fs and child_process calls in all events modules, or have the fast path install uncaughtException and unhandledRejection handlers that emit the internal_error fallback envelope. Add a fault seam that throws asynchronously.",
       "blocks_next_slice_or_immediate_integrity": false,
       "cannot_defer_to_spike": false,
@@ -251,7 +251,7 @@
       "affected_surface": "E2 step 4 review project filter (git cat-file -e per base, memo per call); KR-A1.5 warm resume",
       "claim": "The new review project filter spawns one git process per distinct base on every call, because the memo lives only inside one call. At the KR-A1.5 size of 500 review phases, warm polls can spend a large share of the 1.5 s budget on process spawns.",
       "evidence": "Step 4 runs 'git cat-file -e <base>^{commit}, memoised inside the call' on entries from every chain.json. The plan specifies no mtime pre-skip for review files. KR-A1.5 sets warm resume <= 1.5 s with 500 review phases.",
-      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E2 step 4, KR-A1.5",
+      "evidence_reference": "project/plans/2026-11-02-oc-a1-events-contract.md E2 step 4, KR-A1.5",
       "repair": "Resolve all distinct bases through one git cat-file --batch-check process per call, and skip chain.json files whose mtime is older than the window floor. Report review reader time as its own line in the bench.",
       "blocks_next_slice_or_immediate_integrity": false,
       "cannot_defer_to_spike": false,
@@ -275,7 +275,7 @@
       "affected_surface": "E2 step 1 configured-source list; KR-A1.3 warning rules",
       "claim": "The fold of the generation-2 warning-noise finding is only partial. A fresh or decision-free repo has no default decision ledger, and a host may have no dispatch runs dir. Both are listed as configured sources, so every poll emits source_absent with state absent. Read-only case readonly-* already treats an absent runs dir as a normal state.",
       "evidence": "Step 1 lists as configured sources 'the costs file path, the default decision ledger, the manifests dir'. One readonly-* case has 'the dispatch runs dir is absent and must stay absent'. The original generation-2 finding raised exactly this kind of standing warning.",
-      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E2 step 1, E4 Verify readonly-*, closure context generation-2 non-blocking finding on KR-A1.3",
+      "evidence_reference": "project/plans/2026-11-02-oc-a1-events-contract.md E2 step 1, E4 Verify readonly-*, closure context generation-2 non-blocking finding on KR-A1.3",
       "repair": "No current change required. As a follow-up, treat an absent default decision ledger and an absent runs dir as state absent without a warning (a not-yet-created store), and keep source_absent for explicitly configured paths (env or flag).",
       "blocks_next_slice_or_immediate_integrity": false,
       "cannot_defer_to_spike": false,
@@ -299,7 +299,7 @@
       "rubric_id": "R16",
       "affected_surface": "E1 Project and failure rules (1) JSON error object; schemas/events.schema.json; E4 check-events-contract.js baseline (v)",
       "claim": "The new --json error object {schema, error:{code}} uses the pinned schema string, but schemas/events.schema.json does not describe it. Baseline check (v) freezes it anyway, so the frozen baseline has no schema source for the gate to compare against. The plan also does not say whether the other exit-2 paths (bad_cursor, usage) emit the same object under --json.",
-      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules', section 3 file map row schemas/events.schema.json, E4 step 2 (v)",
+      "evidence_reference": "project/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules', section 3 file map row schemas/events.schema.json, E4 step 2 (v)",
       "disposition": null
     },
     {
@@ -307,7 +307,7 @@
       "rubric_id": "R15",
       "affected_surface": "E1 rule (3) top-level catch; E4 bin/autopilot.js fast path; jsonl-tail.js I/O model",
       "claim": "The single top-level try/catch only catches synchronous throws and awaited rejections. A stream 'error' event or an unhandled rejection from async I/O in a reader still ends in Node's default exit 1. That would break the plan's claim that exit codes are only 0 and 2.",
-      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules' (3), E2 step 1, E3 Red-checks (z)",
+      "evidence_reference": "project/plans/2026-11-02-oc-a1-events-contract.md E1 'Project and failure rules' (3), E2 step 1, E3 Red-checks (z)",
       "disposition": null
     },
     {
@@ -315,7 +315,7 @@
       "rubric_id": "R16",
       "affected_surface": "E2 step 4 review project filter (git cat-file -e per base, memo per call); KR-A1.5 warm resume",
       "claim": "The new review project filter spawns one git process per distinct base on every call, because the memo lives only inside one call. At the KR-A1.5 size of 500 review phases, warm polls can spend a large share of the 1.5 s budget on process spawns.",
-      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E2 step 4, KR-A1.5",
+      "evidence_reference": "project/plans/2026-11-02-oc-a1-events-contract.md E2 step 4, KR-A1.5",
       "disposition": null
     },
     {
@@ -323,7 +323,7 @@
       "rubric_id": "R16",
       "affected_surface": "E2 step 1 configured-source list; KR-A1.3 warning rules",
       "claim": "The fold of the generation-2 warning-noise finding is only partial. A fresh or decision-free repo has no default decision ledger, and a host may have no dispatch runs dir. Both are listed as configured sources, so every poll emits source_absent with state absent. Read-only case readonly-* already treats an absent runs dir as a normal state.",
-      "evidence_reference": "docs/plans/2026-11-02-oc-a1-events-contract.md E2 step 1, E4 Verify readonly-*, closure context generation-2 non-blocking finding on KR-A1.3",
+      "evidence_reference": "project/plans/2026-11-02-oc-a1-events-contract.md E2 step 1, E4 Verify readonly-*, closure context generation-2 non-blocking finding on KR-A1.3",
       "disposition": null
     }
   ],

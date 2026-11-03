@@ -100,7 +100,7 @@
 **總共 17 個檔案**（8 新增 + 9 修改）：
 
 **新增 (8)**：
-1. `docs/plans/_archive/2026/04/2026-04-11-think-tank-dialectic.md`（本文件）
+1. `project/plans/_archive/2026/04/2026-04-11-think-tank-dialectic.md`（本文件）
 2. `skills/think-tank-dialectic/SKILL.md`
 3. `skills/think-tank-dialectic/references/role-prompts.md`
 4. `skills/think-tank-dialectic/references/brief-template.md`

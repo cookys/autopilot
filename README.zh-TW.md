@@ -51,7 +51,7 @@ Claude Code 仍是最完整的 host。Autopilot 讓 AI coding agent **把整件�
 - **抓出那種「假完成」** —— 無 stub/TODO 掃描、你的測試、真正的程式碼審查，在 quality gate 合併前跑（以及上面那個可選的 pre-push hook）。
 - **會記住，所以你的 repo 不會爛掉** —— 記下教訓、追蹤專案、告訴你下一步做什麼，並從 `.claude/` 裡一個 markdown 檔適應你的 repo。
 
-它優先以 Claude Code plugin 出貨 —— **30 個 skill、3 個方法論 agent、40 個 hook（26 default-on、14 opt-in）、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/coexistence.md) 也能並存。
+它優先以 Claude Code plugin 出貨 —— **30 個 skill、3 個方法論 agent、40 個 hook（26 default-on、14 opt-in）、零相依** —— 並在其他 harness 有相容 skill、agent 或 plugin surface 時，保留同一套方法論的可攜路徑。可完全獨立運作，若你有 [`superpowers`](docs/guide/coexistence.md) 也能並存。
 
 > 這份 README 是 Claude 寫的，並透過 Autopilot 自己的「第二引擎審查」流程，由 GPT-5.5 與 Gemini 對抗式審查而成。
 
@@ -153,7 +153,7 @@ implementer／reviewer／verification-author／QC roster 對上 Autopilot 凍結
 
 > **Try saying：** *「CEO 模式，幫我處理」* · *「全權處理」* · *「/l4 把重連系統做掉」*
 
-**→ 各級行為、預設值、override flags（`--expand` / `-x` / `--solo`）與完整範例：[docs/skills.md](docs/skills.md)。**
+**→ 各級行為、預設值、override flags（`--expand` / `-x` / `--solo`）與完整範例：[docs/guide/skills.md](docs/guide/skills.md)。**
 
 ### 信任模型
 
@@ -181,7 +181,7 @@ local runtime 或 agentic local runner。
 
 > **Try saying：** *「設一個 GLM reviewer」* · *「用 MiniMax 當 /l5 implementer」*
 
-**→ 憑證放置、subscription-≻-API-key 階梯與可直接複製的設定：[docs/installation.md](docs/installation.md#heterogeneous-engine-credentials-optional--unlocks-the-strong-reviewimpl-roster)。**
+**→ 憑證放置、subscription-≻-API-key 階梯與可直接複製的設定：[docs/guide/installation.md](docs/guide/installation.md#heterogeneous-engine-credentials-optional--unlocks-the-strong-reviewimpl-roster)。**
 
 ### 📈 自我改進
 
@@ -189,7 +189,7 @@ local runtime 或 agentic local runner。
 
 > **Try saying：** *「記下來供下次使用」* · *「回顧這週」* · *「最高優先是什麼？」*
 
-**→ 全部 30 個 skill 的完整目錄、三種認知模式、以及彼此如何組合：[docs/skills.md](docs/skills.md)。**
+**→ 全部 30 個 skill 的完整目錄、三種認知模式、以及彼此如何組合：[docs/guide/skills.md](docs/guide/skills.md)。**
 
 ### 🔗 聯絡 persistent peer
 
@@ -215,7 +215,7 @@ local runtime 或 agentic local runner。
 | **OpenCode** | 在這個 repo 使用 `.agents/skills/`；agents 走 `.opencode/opencode.json` | 共用 skills、方法論 agent bodies、OpenCode plugin wrapper | Optional TypeScript deps 只在編輯 wrapper 時需要；hook parity 屬平台特定問題 |
 | **Antigravity（`agy`）** | `./scripts/install-antigravity.sh` | 受 guard 保護的 `agy plugin validate` / install / list 流程，採 export-then-install | Runtime hook firing 仍未驗證；install 不代表 hook behavior parity |
 
-完整各平台說明、Windows 注意事項與貢獻者 **dev-mode** 流程在 **[docs/installation.md](docs/installation.md)**。已驗證的 capability 邊界在 **[references/multi-agent-portability.md](references/multi-agent-portability.md)**。
+完整各平台說明、Windows 注意事項與貢獻者 **dev-mode** 流程在 **[docs/guide/installation.md](docs/guide/installation.md)**。已驗證的 capability 邊界在 **[references/multi-agent-portability.md](references/multi-agent-portability.md)**。
 
 ## Learn More
 
@@ -223,12 +223,12 @@ local runtime 或 agentic local runner。
 
 | 主題 | 文件 |
 |------|------|
-| **全部 30 個 skill** + 三種模式 + 如何組合 | [docs/skills.md](docs/skills.md) |
-| **Superpowers 並存** —— 三種情境、遷移 | [docs/coexistence.md](docs/coexistence.md) |
-| **各專案設定** —— `.claude/` 注入模型 | [docs/configuration.md](docs/configuration.md) |
-| **安裝與開發** —— 每個平台、dev mode | [docs/installation.md](docs/installation.md) |
-| **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/architecture.md](docs/architecture.md) |
-| **只審查的候選範圍審查** —— 對別人寫好的 commit 範圍做受管審查（英文文件） | [docs/review-candidate.md](docs/review-candidate.md) |
+| **全部 30 個 skill** + 三種模式 + 如何組合 | [docs/guide/skills.md](docs/guide/skills.md) |
+| **Superpowers 並存** —— 三種情境、遷移 | [docs/guide/coexistence.md](docs/guide/coexistence.md) |
+| **各專案設定** —— `.claude/` 注入模型 | [docs/guide/configuration.md](docs/guide/configuration.md) |
+| **安裝與開發** —— 每個平台、dev mode | [docs/guide/installation.md](docs/guide/installation.md) |
+| **架構與設計** —— 哲學、方法論 agent、致謝 | [docs/dev/architecture.md](docs/dev/architecture.md) |
+| **只審查的候選範圍審查** —— 對別人寫好的 commit 範圍做受管審查（英文文件） | [docs/guide/review-candidate.md](docs/guide/review-candidate.md) |
 | **Hooks** —— 40 個 runtime 強制 hook（分層見該文件） | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 

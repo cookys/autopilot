@@ -1,6 +1,6 @@
 # Autopilot — Architecture & Design
 
-> Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
+> Part of [Autopilot](../../README.md). Detail docs: [Skills](../guide/skills.md) · [Coexistence](../guide/coexistence.md) · [Configuration](../guide/configuration.md) · [Installation](../guide/installation.md) · [Architecture](architecture.md) · [Hooks](../../hooks/README.md)
 
 This page covers *why* Autopilot is built the way it is: the problem it solves, its design philosophy, the read-only methodology agents, recommended companions, and prior-art credits.
 
@@ -77,7 +77,7 @@ The three agents carry autopilot's **Three Red Lines** into the agent layer:
 2. **Fact-driven** — every claim cites `file_path:line_number`; "probably" / "likely" are violations
 3. **Exhaustiveness** — full checklists run; clean items explicitly listed; silent omission is a violation
 
-See [`agents/README.md`](../agents/README.md) for dispatch boundary, unified Output Contract, enum grammar, and the "autopilot methodology / role / project-specific" layer cake.
+See [`agents/README.md`](../../agents/README.md) for dispatch boundary, unified Output Contract, enum grammar, and the "autopilot methodology / role / project-specific" layer cake.
 
 ---
 
@@ -87,14 +87,14 @@ Autopilot's engine layer is the host-neutral execution core underneath the prose
 
 | Module | Responsibility |
 |--------|----------------|
-| [`bin/autopilot.js`](../bin/autopilot.js) | Public CLI front door: `dispatch review`, `engine review-loop`, `engine implement-review`, and `harness report`. |
+| [`bin/autopilot.js`](../../bin/autopilot.js) | Public CLI front door: `dispatch review`, `engine review-loop`, `engine implement-review`, and `harness report`. |
 | [`src/engine/`](../src/engine/) | `AutopilotEngine` orchestration plus the `resolve-review-loop.sh` wrapper for roster resolution, read-only review dispatch, heterogeneous implementation dispatch, repair-loop prompting, and immutable-base verification. |
 | [`src/runners/`](../src/runners/) | Thin JS wrappers around artifact-verified shell dispatchers (`dispatch-hetero.sh`, `dispatch-review.sh`) with schema validation and parse-fail visibility. |
 | [`src/harness/`](../src/harness/) | Harness capability state, stale/attention reporting, and read-only capability CLI surfaces. |
 | [`src/hooks/`](../src/hooks/) | Host-neutral hook normalizers and handlers used by Claude wrappers and Codex hook probes. |
-| [`src/engine/execution-profile.js`](../src/engine/execution-profile.js) + [`profile-payload.js`](../src/engine/profile-payload.js) | Admit an exact role/deployment first, then compile one content-addressed `guided` or `autonomous` payload without changing authority. |
-| [`src/engine/capability-evidence.js`](../src/engine/capability-evidence.js) | Typed role/scope/deployment evidence lifecycle. Disk rows remain provisional telemetry; a live host verifier is the session-admission boundary. |
-| [`src/engine/local-deployment.js`](../src/engine/local-deployment.js) | Optional local endpoint identity/capacity probe and one-slot Autopilot lease; it does not turn a raw chat API into an agentic runner. |
+| [`src/engine/execution-profile.js`](../../src/engine/execution-profile.js) + [`profile-payload.js`](../../src/engine/profile-payload.js) | Admit an exact role/deployment first, then compile one content-addressed `guided` or `autonomous` payload without changing authority. |
+| [`src/engine/capability-evidence.js`](../../src/engine/capability-evidence.js) | Typed role/scope/deployment evidence lifecycle. Disk rows remain provisional telemetry; a live host verifier is the session-admission boundary. |
+| [`src/engine/local-deployment.js`](../../src/engine/local-deployment.js) | Optional local endpoint identity/capacity probe and one-slot Autopilot lease; it does not turn a raw chat API into an agentic runner. |
 
 The central DI contract is `new AutopilotEngine({ reviewLoopResolver, reviewDispatcher, implementationDispatcher, diffProvider, repairPromptWriter, clock, cwd })`. Production uses the shell-backed defaults; tests inject fakes at these seams so loop behavior can be verified without calling live engines.
 
@@ -113,7 +113,7 @@ Layering rule: the engine wraps the artifact-verified shell dispatchers; it does
 
 The Owner Kernel decision/acceptance state machine and its supervised isolation substrate were
 retired on 2026-08-16 — rationale, two-generation review chain, and quarry anchors in
-`docs/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`. What remains under `src/engine/owner-kernel/`
+`project/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`. What remains under `src/engine/owner-kernel/`
 is a keeper-only barrel of five shared primitives with live consumers: `canonical` (canonical JSON
 + sha256), `errors`, `actions` (action-catalog normalization), `policy`
 (`resolveGovernancePolicy` over the project governance config), and `task-authority`

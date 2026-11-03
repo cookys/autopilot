@@ -51,7 +51,7 @@ Claude Code is still the most complete host. Autopilot makes AI coding agents **
 - **Catches the "done" that isn't** — a no-stub/no-TODO scan, your tests, and a real code review, run in the quality gate before you merge (and in the optional pre-push hook above).
 - **Remembers, so your repo doesn't rot** — captures the lessons, tracks the project, tells you what to do next, and adapts to your repo from a single markdown file in `.claude/`.
 
-It ships first as a Claude Code plugin — **30 skills, 3 methodology agents, 40 hooks (26 default-on, 14 opt-in), zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/coexistence.md) plugin if you have it.
+It ships first as a Claude Code plugin — **30 skills, 3 methodology agents, 40 hooks (26 default-on, 14 opt-in), zero dependencies** — and keeps the same methodology portable where other harnesses expose compatible skill, agent, or plugin surfaces. It works fully on its own, and also plays nicely with the [`superpowers`](docs/guide/coexistence.md) plugin if you have it.
 
 > This README was written by Claude and adversarially reviewed by GPT-5.5 and Gemini through Autopilot's own second-engine review flow.
 
@@ -153,7 +153,7 @@ flows remain explicitly non-strict.
 
 > **Try saying:** *"CEO mode, handle it"* · *"全權處理"* · *"/l4 ship the reconnect system"*
 
-**→ Per-level behaviour, presets, override flags (`--expand` / `-x` / `--solo`), and full examples: [docs/skills.md](docs/skills.md).**
+**→ Per-level behaviour, presets, override flags (`--expand` / `-x` / `--solo`), and full examples: [docs/guide/skills.md](docs/guide/skills.md).**
 
 ### Trust Model
 
@@ -181,7 +181,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 > **Try saying:** *"set up a GLM reviewer"* · *"use MiniMax as the /l5 implementer"*
 
-**→ Credential placement, the subscription-≻-API-key ladder, and the copy-paste setup: [docs/installation.md](docs/installation.md#heterogeneous-engine-credentials-optional--unlocks-the-strong-reviewimpl-roster).**
+**→ Credential placement, the subscription-≻-API-key ladder, and the copy-paste setup: [docs/guide/installation.md](docs/guide/installation.md#heterogeneous-engine-credentials-optional--unlocks-the-strong-reviewimpl-roster).**
 
 ### 📈 Improve over time
 
@@ -189,7 +189,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 
 > **Try saying:** *"record this for next time"* · *"回顧這週"* · *"what's the highest priority?"*
 
-**→ Full catalog of all 30 skills, the three cognitive modes, and how they compose: [docs/skills.md](docs/skills.md).**
+**→ Full catalog of all 30 skills, the three cognitive modes, and how they compose: [docs/guide/skills.md](docs/guide/skills.md).**
 
 ### 🔗 Contact a persistent peer
 
@@ -216,7 +216,7 @@ Claude alone is enough. But point autopilot at a **second engine family** and it
 | **OpenCode** | Open this repo with `.agents/skills/`; use `.opencode/opencode.json` for agents | Shared skills, methodology agent bodies, and an OpenCode plugin wrapper | Optional TypeScript deps are only needed when editing the wrapper; hook parity is platform-specific |
 | **Antigravity (`agy`)** | `./scripts/install-antigravity.sh` | Guarded `agy plugin validate` / install / list flow with export-then-install | Runtime hook firing is still unverified; install does not imply hook behavior parity |
 
-Full per-platform instructions, Windows notes, and the contributor **dev-mode** workflow are in **[docs/installation.md](docs/installation.md)**. Verified capability boundaries live in **[references/multi-agent-portability.md](references/multi-agent-portability.md)**.
+Full per-platform instructions, Windows notes, and the contributor **dev-mode** workflow are in **[docs/guide/installation.md](docs/guide/installation.md)**. Verified capability boundaries live in **[references/multi-agent-portability.md](references/multi-agent-portability.md)**.
 
 ## Learn More
 
@@ -224,12 +224,12 @@ The deep material, moved out of this page so it stays an onboarding tour:
 
 | Topic | Doc |
 |-------|-----|
-| **All 30 skills** + three modes + how they compose | [docs/skills.md](docs/skills.md) |
-| **Superpowers coexistence** — three scenarios, migration | [docs/coexistence.md](docs/coexistence.md) |
-| **Per-project configuration** — the `.claude/` injection model | [docs/configuration.md](docs/configuration.md) |
-| **Installation & development** — every platform, dev mode | [docs/installation.md](docs/installation.md) |
-| **Architecture & design** — philosophy, methodology agents, credits | [docs/architecture.md](docs/architecture.md) |
-| **Review-only candidate review** — managed review of a range someone else wrote | [docs/review-candidate.md](docs/review-candidate.md) |
+| **All 30 skills** + three modes + how they compose | [docs/guide/skills.md](docs/guide/skills.md) |
+| **Superpowers coexistence** — three scenarios, migration | [docs/guide/coexistence.md](docs/guide/coexistence.md) |
+| **Per-project configuration** — the `.claude/` injection model | [docs/guide/configuration.md](docs/guide/configuration.md) |
+| **Installation & development** — every platform, dev mode | [docs/guide/installation.md](docs/guide/installation.md) |
+| **Architecture & design** — philosophy, methodology agents, credits | [docs/dev/architecture.md](docs/dev/architecture.md) |
+| **Review-only candidate review** — managed review of a range someone else wrote | [docs/guide/review-candidate.md](docs/guide/review-candidate.md) |
 | **Hooks** — 25 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 

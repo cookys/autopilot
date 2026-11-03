@@ -5,8 +5,8 @@
 **Size:** L (one deliverable, four phases that build on each other)
 **Branch:** `feat/worktree-placement-rule`
 **Project:** [`docs/projects/_archive/2026/10/2026-10-12-worktree-placement/`](../projects/_archive/2026/10/2026-10-12-worktree-placement/README.md) — goal and the seven success criteria live there; this plan references them as C1–C7.
-**Source:** [`docs/backlog/worktree-and-handoff-placement-has-no-rule.md`](../backlog/worktree-and-handoff-placement-has-no-rule.md) (gaps 1–8).
-**Spike:** [`evidence/2026-10-12-worktree-placement/spike-native-worktree.md`](evidence/2026-10-12-worktree-placement/spike-native-worktree.md).
+**Source:** [`project/backlog/worktree-and-handoff-placement-has-no-rule.md`](../backlog/worktree-and-handoff-placement-has-no-rule.md) (gaps 1–8).
+**Spike:** [`evidence/2026-10-12-worktree-placement/spike-native-worktree.md`](../../docs/plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md).
 **Direction:** C (owner, decision `intent-17-2`): everything in A, plus the hetero / foreman / batch rails create their worktrees under `<main checkout>/.claude/worktrees/`. No `WorktreeCreate` takeover.
 
 Citations (`file:line`) are provenance, not reading assignments: every fact this plan needs is stated in the text.
@@ -182,7 +182,7 @@ time (memory: parallel suites interfere). Per-phase hetero code review (quality-
 
 1. `references/worktree-placement.md`: the rule (one root per repo; who creates what where; names; marker follows
    the session; handoff keys and why they differ; fallback; the owner's pull line for gap 8).
-2. Backlog file: each gap marked per the table below; a `docs/BACKLOG.md` row for the finish-flow gap-8 line.
+2. Backlog file: each gap marked per the table below; a `project/backlog/BACKLOG.md` row for the finish-flow gap-8 line.
 
    | Gap | Disposition |
    |---|---|

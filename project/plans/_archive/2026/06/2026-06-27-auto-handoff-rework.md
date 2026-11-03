@@ -6,19 +6,19 @@
 
 ## 0. Why (the bug that forced this)
 
-The shipped v2.25.14 `session-handoff` hook writes the handoff INTO the repo (`docs/HANDOFF.md` / `HANDOFF.auto.md`). The decorrelated design review caught — and an empirical repro **confirmed** — a 🔴 **dirty-tree self-poisoning feedback loop**: the auto-written file is itself an uncommitted repo change, so `decide()`'s `dirty` signal fires on the NEXT (even trivial) session, which re-writes, forever. The foreman, the depth-0 review, and all 27 test assertions missed it because none exercised the **cross-session** loop. A second 🔴: folding the inject into the **default-on** `session-start.js` would turn any repo's `docs/HANDOFF.md` into injected context (prompt-injection surface).
+The shipped v2.25.14 `session-handoff` hook writes the handoff INTO the repo (`project/handoff/HANDOFF.md` / `HANDOFF.auto.md`). The decorrelated design review caught — and an empirical repro **confirmed** — a 🔴 **dirty-tree self-poisoning feedback loop**: the auto-written file is itself an uncommitted repo change, so `decide()`'s `dirty` signal fires on the NEXT (even trivial) session, which re-writes, forever. The foreman, the depth-0 review, and all 27 test assertions missed it because none exercised the **cross-session** loop. A second 🔴: folding the inject into the **default-on** `session-start.js` would turn any repo's `project/handoff/HANDOFF.md` into injected context (prompt-injection surface).
 
 ## 1. OKR / KRs
 
 - **O**: `/clear` → next session resumes with the prior session's context, ZERO asking, with NO repo writes and NO default-on ingestion of repo files.
 - **KR1**: the machine handoff is written to `~/.autopilot/handoff/<repo-root-hash>.md` (+ `<hash>.meta.json`), NEVER into the repo. Mirrors the existing `compaction-state` mechanism (write to `~/.autopilot` → inject once on resume → consume).
 - **KR2**: both halves are opt-in. Writer = the existing opt-in SessionEnd hook (reworked). Reader = a **default-off** config/env gate INSIDE the Tier-A `session-start.js` (one coordinator, so it can also suppress the overlapping intent-hint).
-- **KR3**: no repo file is ever written or auto-injected. `docs/HANDOFF.md` stays 100% human-authored. The marker-guard, `HANDOFF.auto.md` sidecar, and all manual-vs-auto freshness/role logic are DELETED.
+- **KR3**: no repo file is ever written or auto-injected. `project/handoff/HANDOFF.md` stays 100% human-authored. The marker-guard, `HANDOFF.auto.md` sidecar, and all manual-vs-auto freshness/role logic are DELETED.
 - **KR4**: a cross-session feedback-loop test exists (the test class that would have caught the 🔴).
 
 ## 2. Global Constraints (into every dispatch)
 
-- **No repo writes, ever.** Machine state only under `~/.autopilot/handoff/`. `docs/HANDOFF.md` is never written or read-for-injection by this feature.
+- **No repo writes, ever.** Machine state only under `~/.autopilot/handoff/`. `project/handoff/HANDOFF.md` is never written or read-for-injection by this feature.
 - **Both halves opt-in.** Writer opt-in (SessionEnd hook, unchanged tier). Reader behind a **default-off** gate (`~/.autopilot/config.json` `handoff_inject:true` OR env `AUTOPILOT_HANDOFF_INJECT=1`). A default install must do nothing.
 - **Repo root, not cwd.** `git -C <payload.cwd> rev-parse --show-toplevel`, canonicalized, hashed → the state key. Bail if not a git repo.
 - **Atomicity both sides.** Writer: temp file → fsync/close → atomic `rename()` into place (body published only after it is complete; meta first or body-last so the reader never sees a half-written body). Reader: atomic `rename()` `<hash>.md`→`<hash>.consuming.<pid>` BEFORE reading (a racing SessionStart that loses finds nothing), then read → emit → unlink.
@@ -30,14 +30,14 @@ The shipped v2.25.14 `session-handoff` hook writes the handoff INTO the repo (`d
 
 | File | New/Edit | Responsibility |
 |------|----------|----------------|
-| `hooks/session-handoff.js` | **rework** | Writer. Resolve repo root (`git -C cwd rev-parse --show-toplevel`). decide-if-needed (dirty / commits-since-session-start / active-project-touched / substantive ≥3 turns or ≥12 tools) — UNCHANGED signals, now immune to self-poisoning. Write `~/.autopilot/handoff/<hash>.md` + `<hash>.meta.json` via temp→atomic-rename (chmod 600). **DELETE** all `docs/HANDOFF.md`/`HANDOFF.auto.md`/marker-guard code. Fail-open. |
+| `hooks/session-handoff.js` | **rework** | Writer. Resolve repo root (`git -C cwd rev-parse --show-toplevel`). decide-if-needed (dirty / commits-since-session-start / active-project-touched / substantive ≥3 turns or ≥12 tools) — UNCHANGED signals, now immune to self-poisoning. Write `~/.autopilot/handoff/<hash>.md` + `<hash>.meta.json` via temp→atomic-rename (chmod 600). **DELETE** all `project/handoff/HANDOFF.md`/`HANDOFF.auto.md`/marker-guard code. Fail-open. |
 | `hooks/session-start.js` | **edit** | Reader. Behind default-off gate. On source ∈ {clear,startup} (never compact): atomic rename-consume `~/.autopilot/handoff/<hash>.md`, validate meta, inject as <10k DATA block, suppress the intent-hint when a handoff block is injected, TTL-clean ancient files without injecting. |
 | `hooks/session-handoff-lib.js` (or reuse `state-checkpoint-lib`) | **new/edit** | Shared: repo-root-hash, atomic publish/consume helpers, the render. Keep DRY with state-checkpoint. |
 | `settings.example.json` | **edit** | Update the SessionEnd writer note (now writes `~/.autopilot`, not repo); document the default-off `AUTOPILOT_HANDOFF_INJECT` reader gate. |
 | `hooks/tests/session-handoff.test.sh` | **rework** | Drop marker-guard/sidecar cases. Add: writes-to-`~/.autopilot`-not-repo; **cross-session feedback-loop** (a trivial session after a real one does NOT re-fire — the 🔴 regression lock); atomic publish (no half-written read); repo-root-from-subdir. |
-| `hooks/tests/session-start-handoff-inject.test.sh` | **new** | Reader: default-off (no gate → no inject); gated inject on clear/startup; atomic consume-once (second start injects nothing); <10k cap/truncate; intent-hint suppression; TTL-clean; never reads `docs/HANDOFF.md`. |
+| `hooks/tests/session-start-handoff-inject.test.sh` | **new** | Reader: default-off (no gate → no inject); gated inject on clear/startup; atomic consume-once (second start injects nothing); <10k cap/truncate; intent-hint suppression; TTL-clean; never reads `project/handoff/HANDOFF.md`. |
 | `hooks/README.md` | **edit** | Update the session-handoff Tier-B row (writes `~/.autopilot`, not repo) + note the default-off inject gate. |
-| `CHANGELOG.md` / `docs/projects/INDEX.md` | **edit** | v2.25.15 rework entry (supersedes the v2.25.14 repo-write design; cite the dirty-poisoning 🔴). |
+| `CHANGELOG.md` / `project/projects/INDEX.md` | **edit** | v2.25.15 rework entry (supersedes the v2.25.14 repo-write design; cite the dirty-poisoning 🔴). |
 
 ## 4. Phases
 
@@ -58,10 +58,10 @@ The shipped v2.25.14 `session-handoff` hook writes the handoff INTO the repo (`d
 | reader: source gate | injects on clear/startup, never compact |
 | reader: cap | a >10k handoff is truncated; total additionalContext < 10k |
 | reader: precedence | handoff injected ⇒ intent-hint suppressed |
-| reader: never repo | `docs/HANDOFF.md` is never read |
+| reader: never repo | `project/handoff/HANDOFF.md` is never read |
 
 ## 6. Out of scope
-- Any human-visible repo handoff file for this feature (review: keep `docs/HANDOFF.md` human-only; invisible `~/.autopilot` state is strictly cleaner).
+- Any human-visible repo handoff file for this feature (review: keep `project/handoff/HANDOFF.md` human-only; invisible `~/.autopilot` state is strictly cleaner).
 - Cross-machine handoff sync.
 
 ## 7. Review log

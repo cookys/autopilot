@@ -52,4 +52,4 @@
   (`dca5b29cd944ce5fec27ed3e1e228bb949dd7e84da016840cccb2d380f186127`),
   `TASK_STATUS_INPUT_UNAVAILABLE`. No task-status receipt was forged.
 - Closeout authority: effective `/l4`; strict `/l5` provider-readiness CLI trust root is deferred to
-  `docs/BACKLOG.md`.
+  `project/backlog/BACKLOG.md`.

@@ -55,7 +55,7 @@ The exact D2/D3/D4 consumer-manifest repair stayed in the same R4 lineage. Gener
 `next_generation` is `null`. The immutable artifact is
 `$HOME/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
 (SHA-256 `5cbdfdeb86de9d85f4395a1e70f218e3ca72844c31684c76b2154399699dd1ed`).
-Implementation is merged. D1 emitted the closed [platform capability receipt](evidence/platform-capabilities.json): D2 owns two required IDs, D3 four, and D4 six; all required claims pass immediate version re-probe, while five optional IDs retain four blocked negative findings plus the validated Claude hook baseline. D2 now consumes its exact two-claim set before every agy provider invocation, captures the native JSON envelope privately, preserves only the response framing in worker-visible logs, and admits only validated usage into result/scorecard telemetry.
+Implementation is merged. D1 emitted the closed [platform capability receipt](../../../../../../docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json): D2 owns two required IDs, D3 four, and D4 six; all required claims pass immediate version re-probe, while five optional IDs retain four blocked negative findings plus the validated Claude hook baseline. D2 now consumes its exact two-claim set before every agy provider invocation, captures the native JSON envelope privately, preserves only the response framing in worker-visible logs, and admits only validated usage into result/scorecard telemetry.
 
 D3 now ships one Codex-native production `PostCompact` registration (`manual|auto`) from canonical
 sources outside the generated package. The adapter translates the official payload into the existing
@@ -74,7 +74,7 @@ dispatcher calls. Lower levels retain their explicit non-strict behavior and are
 
 ## D3 production evidence
 
-The exact [Codex production live receipt](evidence/codex-postcompact-production-live-receipt.json)
+The exact [Codex production live receipt](../../../../../../docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/codex-postcompact-production-live-receipt.json)
 is a byte-for-byte copy of
 `/tmp/autopilot-d3-live-E8PkHl/depth0-production-live-final12/live-receipt.json`.
 Its file SHA-256 is `789a0cfb1975adafbfd162ce28ee1dee943999bfba805077c9857597c212a461`,

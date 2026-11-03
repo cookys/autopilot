@@ -46,7 +46,7 @@
     {
       "id": "22814c72113973fc9c311e367e471b097f9c7429964a5030ed6d69c8cade977c",
       "disposition": "verified",
-      "rationale": "Confirmed: exclusions are caller-chosen and blindly honoured. Bind --exclude to a frozen allowlist in the driver (platforms/**, profiles/*.json, docs/projects/**, docs/plans/evidence/**, docs/BACKLOG.md, lockfiles), record full-range and filtered digests, and have the checker reject exclusions outside the allowlist."
+      "rationale": "Confirmed: exclusions are caller-chosen and blindly honoured. Bind --exclude to a frozen allowlist in the driver (platforms/**, profiles/*.json, docs/projects/**, docs/plans/evidence/**, project/backlog/BACKLOG.md, lockfiles), record full-range and filtered digests, and have the checker reject exclusions outside the allowlist."
     },
     {
       "id": "d3b4a27eef540eae1644847a7b434be8c4f76a9089d972835a95dd852fcb2457",

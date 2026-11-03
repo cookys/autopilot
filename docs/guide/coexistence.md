@@ -1,6 +1,6 @@
 # Autopilot — Superpowers Coexistence
 
-> Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
+> Part of [Autopilot](../../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](../dev/architecture.md) · [Hooks](../../hooks/README.md)
 
 Autopilot is standalone-capable. This page covers how it coexists with the optional `superpowers` plugin: the layered model, the three deployment scenarios, and the migration note.
 
@@ -66,7 +66,7 @@ Autopilot runs fully standalone. Orchestrators fall through to autopilot's own f
 
 > **One standalone gap to know**: the red-green-refactor **TDD coding loop** has no native autopilot skill — `autopilot:test-strategy` is *orthogonal* (test pyramid / baseline / failure funnel), not a TDD substitute. For TDD specifically, install `superpowers` (`test-driven-development`) or run the red-green cycle by hand.
 
-No `.claude/dispatch-config.md` needed — the defaults documented at the top of [`project-config-template/dispatch-config.md`](../project-config-template/dispatch-config.md) match this scenario.
+No `.claude/dispatch-config.md` needed — the defaults documented at the top of [`project-config-template/dispatch-config.md`](../../project-config-template/dispatch-config.md) match this scenario.
 
 ### C. You have `superpowers` user-level but want pure-autopilot in a specific project
 

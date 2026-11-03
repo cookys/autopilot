@@ -1,6 +1,6 @@
 # Closure rubric — 2026-11-02-oc-a1-events-contract.md
 
-> Source plan: docs/plans/2026-11-02-oc-a1-events-contract.md
+> Source plan: project/plans/2026-11-02-oc-a1-events-contract.md
 
 R1: No hosted CI: never add `.github/workflows` in any repo of this plan.
 R2: In fleet, run courier tests only via `make courier-test` (never bare `cargo test`); every new test uses a sandbox HOME or explicit tempdir and touches no process-global state.

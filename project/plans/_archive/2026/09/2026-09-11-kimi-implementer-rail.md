@@ -65,7 +65,7 @@ the operator's own choice.
 | `scripts/resolve-dispatch.sh` | `valid_token` accepts one `/` (KR2); comment names the grammar |
 | `hooks/tests/dispatch-kimi.test.sh` | new — stub `kimi` binary: records argv, honours `-m`/`-p`, writes a file → `committed`; no-edit → `no_op`; nonzero → `failure`; oversize prompt → `precondition_failed` pre-spend; `auto` does not select kimi; EDIT-ONLY directive present in the recorded `-p` |
 | `hooks/tests/resolve-dispatch*.test.sh` | KR2 cases: `kimi-code/k3` accepted, `a/b/c` and `/x` and `x/` rejected |
-| `docs/BACKLOG.md` | close "resolve-dispatch.sh cannot express a namespaced model alias" |
+| `project/backlog/BACKLOG.md` | close "resolve-dispatch.sh cannot express a namespaced model alias" |
 | `docs/plans/evidence/2026-09-11-kimi-rail/` | real dispatch transcript (KR1) + the fleet-comms config flip (KR3) |
 | `~/projects/fleet-comms/.claude/review-loop-config.md` | separate repo, separate commit: `implementer_engine: kimi-code/k3`, `implementer_runner: kimi`, `implementer_effort: high` (nominal), with the 2026-09-08 operator note |
 

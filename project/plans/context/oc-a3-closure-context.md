@@ -50,7 +50,7 @@ amendment listed below). The full current plan is the plan under review; this fi
 
 ## Diff under review (plan file only)
 
-### git diff b01b94726..36529b8f1 -- docs/plans/2026-11-02-oc-a3-writers-use-hippo.md
+### git diff b01b94726..36529b8f1 -- project/plans/2026-11-02-oc-a3-writers-use-hippo.md
 
 ```diff
 diff --git a/docs/plans/2026-11-02-oc-a3-writers-use-hippo.md b/docs/plans/2026-11-02-oc-a3-writers-use-hippo.md
@@ -81,7 +81,7 @@ index 18295e106..ea5cc9c64 100644
 -- **C1 CLI-only writes.** Nothing writes under `.hippo/` except the `hippo` CLI, including store bootstrap and `.hippo/repo.toml`: no autopilot script, hook, shell redirection or model edit creates, appends to, renames or deletes a `.hippo/` path. autopilot runs the binary with an argv array (no shell string). A missing hippo capability is named as a hippo P1.x dependency, never worked around.
 +- **C1 CLI-only writes.** Nothing writes under `.hippo/` except the `hippo` CLI, including store bootstrap and `.hippo/repo.toml`: no autopilot script, hook, shell redirection or model edit creates, appends to, renames or deletes a `.hippo/` path. autopilot runs the binary with an argv array (no shell string). A missing hippo capability is named as a hippo P1.x dependency, never worked around. Sole exception: a `hippo-sandbox.sh` fixture may corrupt a record in a sandbox temp repo after asserting the path is under its tempdir.
  - **C2 no check bypass.** In a checkout with `.hippo/repo.toml`, no commit and no merge skips `hippo check`: without hippo, the guard and git hooks fail closed for `.hippo/` paths; a `hippo check` exit 3 surfaces the offending file unmodified.
- - **C3 no hand-edit text.** Skill, reference, agent and config-template text never tells a model to edit `docs/BACKLOG.md`, `docs/backlog/*`, an ADR file, a `HANDOFF*.md` or a knowledge file, in either store state; writes name `scripts/project-record.js` (which writes the files itself in files mode), reads name `hippo search|related|show|list`.
+ - **C3 no hand-edit text.** Skill, reference, agent and config-template text never tells a model to edit `project/backlog/BACKLOG.md`, `docs/backlog/*`, an ADR file, a `HANDOFF*.md` or a knowledge file, in either store state; writes name `scripts/project-record.js` (which writes the files itself in files mode), reads name `hippo search|related|show|list`.
  - **C4 no implicit store.** `project-record.js` writes through hippo only where `.hippo/repo.toml` exists and never calls `hippo new`/`import` in a repo without one; a store is created only by the operator's `hippo init` (A3.7) or the A3.3 rehearsal in a scratch clone.
  - **C5 counters.** Usage counters never go to git or a hippo field; they go to A1 events or the hub.
 -- **C6 isolation.** Every test and rehearsal runs under a sandbox `HOME`, a temp `HIPPO_CONFIG_DIR` and temp git repos, with `GIT_AUTHOR_*`/`GIT_COMMITTER_*` and `HIPPO_ACTOR` set; none targets this checkout (a plugin-directory case uses a temp copy of the plugin tree); each suite asserts on exit that this checkout's `git status --porcelain` and `.hippo/` are unchanged.
@@ -310,8 +310,8 @@ index 18295e106..ea5cc9c64 100644
    §2.5 global block, rubric and dispositions untouched.
 +- G2 2026-11-02: plan review generation 2 (terminal, at cap) = CONDITIONAL (openai STOP, google READY, anthropic
 +  CONDITIONAL); 14 findings, 5 blocking. Depth-0 accepted all 5 blockers; all 9 non-blocking folded, none refuted.
-+  Dispositions: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g2-dispositions.json`. Rubric and §2.5 unchanged.
-+- Review artifacts: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g1-artifact.json`, `.g2-artifact.json`. A first g2 dispatch stopped on `plan_growth_hard_stop` (1.506x, zero seats); plan shrunk in b01b94726 and the lock reopened per the dispatch-plan-review.js recipe. Receipt: `check-phase-review-receipt.js --plan-file <plan at b01b94726> --plan-artifact <g2 artifact> --dispositions <g2 dispositions>` exit 0 (2026-11-02). Generation 2 terminal at the cap: sol STOP, argon READY, opus CONDITIONAL; all 5 g2 blockers accepted and folded in 257f0a573 (not seat-reviewed).
++  Dispositions: `project/plans/2026-11-02-oc-a3-writers-use-hippo.g2-dispositions.json`. Rubric and §2.5 unchanged.
++- Review artifacts: `project/plans/2026-11-02-oc-a3-writers-use-hippo.g1-artifact.json`, `.g2-artifact.json`. A first g2 dispatch stopped on `plan_growth_hard_stop` (1.506x, zero seats); plan shrunk in b01b94726 and the lock reopened per the dispatch-plan-review.js recipe. Receipt: `check-phase-review-receipt.js --plan-file <plan at b01b94726> --plan-artifact <g2 artifact> --dispositions <g2 dispositions>` exit 0 (2026-11-02). Generation 2 terminal at the cap: sol STOP, argon READY, opus CONDITIONAL; all 5 g2 blockers accepted and folded in 257f0a573 (not seat-reviewed).
 +- 2026-11-02 depth-0 addition after the receipt (not seat-reviewed): precondition for A3.7: hippo P1.5 installs `hippo` on every committing host, native Windows included, with a per-host `hippo --version` transcript.
 
 ```

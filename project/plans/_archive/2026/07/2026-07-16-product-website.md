@@ -50,11 +50,11 @@ Ship a **static product site** under **`website/`** in this repository:
 
 | Route | Source of truth (curate from) |
 |-------|-------------------------------|
-| `/install` | `docs/installation.md` + README install |
-| `/skills` | `docs/skills.md` |
-| `/architecture` | `docs/architecture.md` |
+| `/install` | `docs/guide/installation.md` + README install |
+| `/skills` | `docs/guide/skills.md` |
+| `/architecture` | `docs/dev/architecture.md` |
 | `/multi-harness` | installation + multi-agent-portability summary |
-| `/configuration` | `docs/configuration.md` (phase 2 if MVP slim) |
+| `/configuration` | `docs/guide/configuration.md` (phase 2 if MVP slim) |
 | `/hooks` | `hooks/README.md` (phase 2) |
 | `/releases` | CHANGELOG milestones (link + highlights) |
 
@@ -71,7 +71,7 @@ Prefer **deep-link to GitHub** for `references/*`, scripts inventory, schemas. O
 
 ## Scaffold deliverables (this plan's first ship)
 
-1. `docs/plans/_archive/2026/07/2026-07-16-product-website.md` (this file)
+1. `project/plans/_archive/2026/07/2026-07-16-product-website.md` (this file)
 2. `website/` VitePress project with EN + zh-TW
 3. Pages: home, philosophy, levels, skills, install, architecture, multi-harness, proof, roadmap
 4. Assets under `website/public/assets/` (copied from `docs/assets/`; brand SSOT remains `docs/assets/`)

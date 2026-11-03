@@ -72,7 +72,7 @@ Only this row is executable. The source phases below are coverage and gates insi
 
 The B foreman may modify only the exact campaign output paths. It must not touch:
 
-- `docs/BACKLOG.md`, `docs/projects/INDEX.md`, `CHANGELOG.md`, `CLAUDE.md`;
+- `project/backlog/BACKLOG.md`, `project/projects/INDEX.md`, `CHANGELOG.md`, `CLAUDE.md`;
 - version manifests or release metadata;
 - `src/engine/*`;
 - C-line scripts/tests.

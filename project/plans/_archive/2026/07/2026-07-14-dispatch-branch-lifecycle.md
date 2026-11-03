@@ -95,7 +95,7 @@ most valuable output is the thing that never lands) and unbounded branch accumul
 | `CLAUDE.md` | Scripts inventory row |
 | `CHANGELOG.md` + version mirrors | v2.32.37 (PATCH: new script + gate wiring) via `sync-version.js` |
 | `platforms/codex/plugin/**` | Payload sync via `sync-codex-plugin-skills.sh` (pre-commit gate enforces) |
-| `docs/BACKLOG.md` | Mark the entry shipped at finish |
+| `project/backlog/BACKLOG.md` | Mark the entry shipped at finish |
 
 ## 4. Phases
 

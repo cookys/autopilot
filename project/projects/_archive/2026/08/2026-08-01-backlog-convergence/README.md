@@ -1,8 +1,8 @@
 # Backlog convergence
 
 > **Status**: Product complete; archived after local merge `952df77ad3ce785a046425f025cce43270f3b85f`
-> **Plan**: [`docs/plans/2026-08-01-backlog-convergence-plan-set.md`](../../../plans/2026-08-01-backlog-convergence-plan-set.md)
-> **Mission graph**: [`docs/mission-backlog-convergence-execution-graph.json`](../../../mission-backlog-convergence-execution-graph.json)
+> **Plan**: [`project/plans/2026-08-01-backlog-convergence-plan-set.md`](../../../plans/2026-08-01-backlog-convergence-plan-set.md)
+> **Mission graph**: [`project/missions/mission-backlog-convergence-execution-graph.json`](../../../mission-backlog-convergence-execution-graph.json)
 > **Target branch**: `feat/v2.34.1-backlog-convergence`
 > **Workflow**: CEO `/l4` attempt `l4-backlog-convergence-20260801T195654Z`, one bounded deliverable, no external publish
 

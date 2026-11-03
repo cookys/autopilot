@@ -1,6 +1,6 @@
 # Rubric — 2026-10-16-bl0194-qualification-registry-move.md (Revision 2026-10-19)
 
-> Source plan: docs/plans/2026-10-16-bl0194-qualification-registry-move.md
+> Source plan: project/plans/2026-10-16-bl0194-qualification-registry-move.md
 
 R1: [owner direction carried] Both owner sentences of 2026-10-19 are quoted and every section the revision touches (thesis, KRs, constraints, write path, read side, phases) agrees with them; no older paragraph still says autopilot is where exams start or that the feed is never admission evidence.
 R2: [trust modes defined] `qualification_feed.trust` auto (default) / confirm / off is defined precisely enough to implement: what admission does in each mode, where the confirm prompt appears and what is recorded once the user confirms, and how off is shown byte-identical to no feed.

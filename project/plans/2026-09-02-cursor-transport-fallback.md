@@ -7,7 +7,7 @@
 > Peer transport is not authorization; the operator authorized this in the autopilot session
 > directly.
 >
-> **Predecessor**: [`2026-08-26-cursor-cli-adaptor.md`](2026-08-26-cursor-cli-adaptor.md) shipped
+> **Predecessor**: [`2026-08-26-cursor-cli-adaptor.md`](_archive/2026/08/2026-08-26-cursor-cli-adaptor.md) shipped
 > the cursor rail (Phases 1–4) and left Phase 5 — Stage-1 **implementer** qualification on
 > `cursor-grok-4.6-high-fast` — outstanding. This plan is **not** that phase and does not
 > substitute for it.

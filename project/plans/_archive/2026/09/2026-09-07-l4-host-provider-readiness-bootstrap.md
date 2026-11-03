@@ -116,9 +116,9 @@ operator configured, with every uncertified seat recorded as such.**
 | `hooks/tests/autopilot-engine.test.sh` | KR4 interplay: certified reviewer ⇒ no `waived`; uncertified ⇒ `waived`. |
 | `hooks/tests/engine-lifecycle-observation*.test.sh` (or nearest existing) | KR5 unit. |
 | `skills/ceo-agent/references/level-front-door.md` | Foreman section: l4 now compiles the bootstrap; the "real l4 wall" paragraph added in v2.36.7 is rewritten to the new state. |
-| `references/multi-agent-portability.md`, `docs/installation.md` | The two "Strict-L5 provider boundary" mentions gain l4. |
-| `docs/BACKLOG.md` | Close the "l4 host provider-readiness bootstrap" row; close/annotate "Managed campaigns under an l4 marker can never satisfy reviewer_qualification". |
-| `CHANGELOG.md`, `docs/projects/INDEX.md`, `docs/projects/2026-09-07-l4-host-bootstrap/README.md` | Release mechanics (L-3 project dir, L-5 archive). |
+| `references/multi-agent-portability.md`, `docs/guide/installation.md` | The two "Strict-L5 provider boundary" mentions gain l4. |
+| `project/backlog/BACKLOG.md` | Close the "l4 host provider-readiness bootstrap" row; close/annotate "Managed campaigns under an l4 marker can never satisfy reviewer_qualification". |
+| `CHANGELOG.md`, `project/projects/INDEX.md`, `docs/projects/2026-09-07-l4-host-bootstrap/README.md` | Release mechanics (L-3 project dir, L-5 archive). |
 | `platforms/codex/plugin/**` | Mirrors of every touched `bin/`, `src/`, `skills/`, `references/` file (sync script). |
 
 ## 4. Phases
@@ -221,7 +221,7 @@ campaign-file rejection (same observable the L6 fixture uses).
 - `level-front-door.md` foreman section: replace the v2.36.7 "real l4 wall" clause with: l4 compiles the
   bootstrap with the l4 roster profile; uncertified seats run under the advisory override and are recorded;
   the reviewer waiver applies only when the bootstrap does not certify the reviewer.
-- `references/multi-agent-portability.md:185`, `docs/installation.md` mention.
+- `references/multi-agent-portability.md:185`, `docs/guide/installation.md` mention.
 - BACKLOG: close the two rows; CHANGELOG `v2.36.8`; INDEX row; project README progress; version bump.
 
 ### P5 — Dogfood (KR6, human-gated)
@@ -276,4 +276,4 @@ No open questions remain; the three answers are binding on P1–P4.
 - g1 (2026-09-07, plan sha `a0c29650…`): sol chair STOP · MiniMax READY → CONDITIONAL. 3 findings: R3 (QC invariant not isolated by the negative control), R5 (thesis "nothing is waived" vs KR4), R9 (P0 probe did not reproduce the sites separately). All three `accepted_blocker`/`accepted_nonblocking` and folded (`ledger/plan-review/g1-disposition.json`). Growth 1.09×.
 - g2 (terminal by cap, plan sha `43060d6a…`): sol READY · MiniMax CONDITIONAL → CONDITIONAL. 1 non-blocking finding: R7 (P3 advisory-case assertions not enumerated) → `accepted_nonblocking`, folded into P3 (`g2-disposition.json`). Zero unrepaired, zero deferred blockers.
 - Freeze: `check-phase-review-receipt.js --plan-artifact g2.adjudicated.json --dispositions g2.dispositions.checker.json --plan-file plan.g2-reviewed.md --rubric-file <rubric>` — result recorded in `ledger/plan-review/README.md`. `plan.g2-reviewed.md` is the byte-exact plan g2 reviewed; the post-freeze delta is the single R7 fold above.
-- R0: this document (sha at g1 dispatch recorded in the ledger). Manifest: `docs/plans/_archive/2026/09/2026-09-07-l4-host-provider-readiness-bootstrap.plan-review-manifest.json` (sol chair codex/max + MiniMax-M3 evidence skeptic cc-shim/high, 2 families, 2 attempts/seat). Frozen rubric: `docs/plans/_archive/2026/09/2026-09-07-l4-host-provider-readiness-bootstrap.rubric.md` (R1–R13). Ledger: `docs/projects/2026-09-07-l4-host-bootstrap/ledger/plan-review/`.
+- R0: this document (sha at g1 dispatch recorded in the ledger). Manifest: `docs/plans/_archive/2026/09/2026-09-07-l4-host-provider-readiness-bootstrap.plan-review-manifest.json` (sol chair codex/max + MiniMax-M3 evidence skeptic cc-shim/high, 2 families, 2 attempts/seat). Frozen rubric: `project/plans/_archive/2026/09/2026-09-07-l4-host-provider-readiness-bootstrap.rubric.md` (R1–R13). Ledger: `docs/projects/2026-09-07-l4-host-bootstrap/ledger/plan-review/`.

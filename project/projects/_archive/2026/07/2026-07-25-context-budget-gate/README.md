@@ -1,7 +1,7 @@
 # context-budget-gate
 
 **Target version**: v2.32.58 | **Branch**: `feat/v2.32.58-context-budget-gate` | **Size**: L
-**Plan**: [`docs/plans/2026-07-25-context-budget-gate.md`](../../../plans/2026-07-25-context-budget-gate.md)
+**Plan**: [`project/plans/_archive/2026/07/2026-07-25-context-budget-gate.md`](../../../plans/2026-07-25-context-budget-gate.md)
 
 ## Project Goal
 
@@ -111,7 +111,7 @@
 `run_verify_cmd` `cd`s into the base worktree but executes `$VERIFY_CMD` by the CALLER's absolute
 path (deliberate, per its header comment). autopilot's `hooks/tests/*.test.sh` all derive
 `REPO_ROOT` from `$0` through `lib.sh`, so the "base" run actually exercised the head tree and
-was trivially green. Recorded in `docs/BACKLOG.md` with two candidate fixes.
+was trivially green. Recorded in `project/backlog/BACKLOG.md` with two candidate fixes.
 
 Manual procedure with the same artifact discipline:
 

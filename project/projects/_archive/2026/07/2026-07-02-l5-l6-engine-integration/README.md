@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-> **Final goal**: Complete Phase 7 of `docs/plans/2026-07-01-cross-harness-engine-infrastructure.md` by moving `/l5` and `/l6` implementation/review orchestration onto the `AutopilotEngine` API and engine CLI.
+> **Final goal**: Complete Phase 7 of `project/plans/_archive/2026/07/2026-07-01-cross-harness-engine-infrastructure.md` by moving `/l5` and `/l6` implementation/review orchestration onto the `AutopilotEngine` API and engine CLI.
 > **Success criteria**:
 > 1. `AutopilotEngine` can run a DI-tested implementer -> review -> repair loop with ledger rows for every dispatched unit; verified by `bash hooks/tests/autopilot-engine.test.sh`.
 > 2. The CLI exposes the same path without direct shell orchestration from the skills; verified by `bash hooks/tests/autopilot-cli.test.sh`.

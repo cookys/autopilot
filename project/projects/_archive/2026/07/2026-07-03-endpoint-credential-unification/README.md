@@ -1,6 +1,6 @@
 # Endpoint Credential Unification + Declarative Invoke Infra
 
-- **Plan**: [`docs/plans/2026-07-03-endpoint-credential-unification.md`](../../../plans/2026-07-03-endpoint-credential-unification.md)
+- **Plan**: [`project/plans/_archive/2026/07/2026-07-03-endpoint-credential-unification.md`](../../../plans/2026-07-03-endpoint-credential-unification.md)
 - **Branch**: `feat/v2.31.6-endpoint-credential-unification`
 - **Target version**: v2.31.6
 
@@ -23,7 +23,7 @@
 > 3. `resolve-review-loop.sh` emits `implementer_endpoint` + `reviewer_endpoint` from
 >    `review-loop-config.md`; absent → `""`; a set value flows to `--endpoint` in `/l5`/`/l6`
 >    prose. Verified by resolver test + prose reference.
-> 4. `docs/installation.md` + `README.md` + `README.zh-TW.md` document the canonical placement
+> 4. `docs/guide/installation.md` + `README.md` + `README.zh-TW.md` document the canonical placement
 >    and the subscription-≻-API-key ladder; `check-readme-parity.js` green.
 > 5. `bin/autopilot.js`-free: no new runtime dependency; Node built-ins only for the `.js` twin.
 >

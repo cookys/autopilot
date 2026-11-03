@@ -41,8 +41,8 @@ autopilot v2.7.0 (superpowers coexistence) + v2.7.1 (routing tightening Fix) 已
 | 項目 | Commit | 概述 |
 |---|---|---|
 | v2.7.0 ship | `eb70999` (merge to develop) | 4 fallback skills 補回 (debug/test-strategy/team/profiling) + dispatch-config.md 6 chains + 6 orchestrator skills 接 `!cat` preprocessor + brand tagline 改寫 + 版本 2.5.0→2.7.0 sync |
-| v2.7.0 archive | `42efa16` | docs/projects/INDEX.md 移到已完成；project dir 移進 _archive/ |
-| Scenario B dogfood | `773edff` + `bae3f43` | 9 case routing 測試完成，記錄在 `docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` |
+| v2.7.0 archive | `42efa16` | project/projects/INDEX.md 移到已完成；project dir 移進 _archive/ |
+| Scenario B dogfood | `773edff` + `bae3f43` | 9 case routing 測試完成，記錄在 `project/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` |
 | v2.7.1 description tightening | `bae3f43` | 3 個 SKILL.md description 根據 dogfood evidence 微調，single-reviewer approve-for-commit |
 | Eval baseline | `5dd1bac` + `0ce2155` | 16/16 skill 全有 eval；2.5% 觸發率是 proxy 機制的 baseline，非退化 |
 
@@ -181,7 +181,7 @@ D-1 的核心是驗證 `!cat .claude/dispatch-config.md` chain delegation 確實
 
 ### Step 6 — Append findings 到 dogfood log
 
-把 D-1 + D-2 結果 append 進 `docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md`，標題 `## D-1 Scenario A Dogfood Results` + `## D-2 Scenario C Dogfood Results`。
+把 D-1 + D-2 結果 append 進 `project/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md`，標題 `## D-1 Scenario A Dogfood Results` + `## D-2 Scenario C Dogfood Results`。
 
 **QA 提醒**：log 明文標示「verification log，不是 automated regression test」。
 
@@ -238,9 +238,9 @@ D-1 的核心是驗證 `!cat .claude/dispatch-config.md` chain delegation 確實
 |---|---|
 | `CHANGELOG.md` (v2.7.0 entry, top) | 已 ship 的範圍 / migration callout |
 | `README.md` + `README.zh-TW.md` `## Superpowers Coexistence` 段 | 三情境（A/B/C）的範例 config |
-| `docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` | scenario B 9 case 結果，append D-1/D-2 用 |
-| `docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/README.md` | v2.7.0 ship 紀錄 |
-| `docs/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md` | 原 plan + r1/r2 review history |
+| `project/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` | scenario B 9 case 結果，append D-1/D-2 用 |
+| `project/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/README.md` | v2.7.0 ship 紀錄 |
+| `project/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md` | 原 plan + r1/r2 review history |
 | `project-config-template/dispatch-config.md` | chain schema 模板，Step 4 用 |
 | `skills/{debug,test-strategy,team,profiling}/SKILL.md` | 4 個 v2.7.0 fallback skill 本體 |
 | `scripts/run-eval-batch.sh` | 16-skill eval batch runner（用了 `superpowers:skill-creator`）|

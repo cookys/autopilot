@@ -41,4 +41,4 @@ built, and the policy forks taken conservatively so the operator can reverse the
 
 ## Review stopping rule
 
-Three decorrelated rounds. After round 3 depth 0 adjudicates by re-derivation and records residuals in `docs/BACKLOG.md`.
+Three decorrelated rounds. After round 3 depth 0 adjudicates by re-derivation and records residuals in `project/backlog/BACKLOG.md`.

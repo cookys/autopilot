@@ -25,7 +25,7 @@ None beyond the item above.
 
 ### Summary
 Overall risk: **Low**
-This is a tight, well-evidenced parity-bug fix: the shell-side resolver and a sibling test already treated `anthropic-compatible` as a valid `reviewer_runner`, but the JS-side validator (consumed by the production engine layer) was one enum entry behind, meaning a real config value already documented and used elsewhere in the repo (`dispatch-review.sh`, `schemas/runner-result.schema.json`, `docs/BACKLOG.md`, CHANGELOG) would have thrown inside `autopilot-engine.js`. Both the canonical and mirrored Codex-plugin copies were updated identically, and the new test correctly exercises shell↔JS parity rather than duplicating existing coverage.
+This is a tight, well-evidenced parity-bug fix: the shell-side resolver and a sibling test already treated `anthropic-compatible` as a valid `reviewer_runner`, but the JS-side validator (consumed by the production engine layer) was one enum entry behind, meaning a real config value already documented and used elsewhere in the repo (`dispatch-review.sh`, `schemas/runner-result.schema.json`, `project/backlog/BACKLOG.md`, CHANGELOG) would have thrown inside `autopilot-engine.js`. Both the canonical and mirrored Codex-plugin copies were updated identically, and the new test correctly exercises shell↔JS parity rather than duplicating existing coverage.
 
 Top 3 priorities to fix:
 1. (Minor, optional) Harden `hooks/tests/contract-parity.test.sh:153` to use an absolute path for the `require()` instead of relying on cwd == REPO_ROOT, matching the pattern already used elsewhere in the same file.

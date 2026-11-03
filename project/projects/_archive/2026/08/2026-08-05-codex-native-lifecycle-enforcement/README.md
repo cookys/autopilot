@@ -17,7 +17,7 @@ Base: `e22003b426898a325bffa01fc1f9c9814f6e06d0`
 
 The D1 reservation was respected: the first real call proved request-bound structured blocking; the
 second one-shot session exercised allow, deny, and broken controls. No third D1 call was made. The
-sanitized receipt is [codex-pre-effect-production-live-receipt.json](evidence/codex-pre-effect-production-live-receipt.json).
+sanitized receipt is [codex-pre-effect-production-live-receipt.json](../../../../../../docs/projects/_archive/2026/08/2026-08-05-codex-native-lifecycle-enforcement/evidence/codex-pre-effect-production-live-receipt.json).
 The single final D4 package probe uses three Codex sessions: no-admission, a combined
 L3/L5/managed-Engine sequence, and the broken-adapter control. Its receipt hashes the unregistered
 probe source/generated adapter and current manifests separately and requires byte equality. The run admitted

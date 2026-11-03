@@ -3,7 +3,7 @@
 **日期：** 2026-05-14
 **狀態：** ✅ Option D shipped (commit `a80c19d`, develop) — short-term remediation in place; Option A (Claude Code core agent-invokable reload) tracked as long-term watch item.
 **Size：** S–M (depends on chosen option, see §3) — Option D landed as S-size (~70 lines + hooks.json registration, 2-round review)
-**Origin：** D-1 + D-2 dogfood verification on `develop@f5c1d0a`, loud finding #3 (`docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` 之 D-2 §Reload behaviour)
+**Origin：** D-1 + D-2 dogfood verification on `develop@f5c1d0a`, loud finding #3 (`project/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` 之 D-2 §Reload behaviour)
 
 ---
 
@@ -139,6 +139,6 @@
 
 ## 8. References
 
-- D-1 + D-2 dogfood log: `docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` §D-2 loud finding
+- D-1 + D-2 dogfood log: `project/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` §D-2 loud finding
 - 既有 hook 範例: `hooks/hooks.json` + `hooks/*` (可參考 watcher pattern)
 - 相關 skill: `quality-pipeline` (作為 `!cat` 注入的既有先例)

@@ -1,6 +1,6 @@
 # Rubric — 2026-10-12-worktree-placement.md
 
-> Source plan: docs/plans/2026-10-12-worktree-placement.md
+> Source plan: project/plans/2026-10-12-worktree-placement.md
 
 R1: C1 — a marker created in the main checkout and used from a linked worktree of the same repo measures E1 in that worktree; the plan's test is red at base and the D5 identity check keeps a different repo's cwd from taking over the marker.
 R2: C2 — the base_ref rule (D6) is fully specified for local-behind, local-ahead, diverged and one-side-missing, needs no fetch, and each case has a test.

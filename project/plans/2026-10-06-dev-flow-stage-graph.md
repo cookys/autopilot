@@ -50,7 +50,7 @@ None of this is recorded mechanically outside `/l5–/l6` campaigns. Claude-only
 ## 2. OKR / KRs
 
 - **KR1 — real-machine gate.** The gate re-run passes per field (`references/evidence-discipline.md` §54) in every mode: dev-flow, `/l3`, ceo, `/l4`, `/l5`, `/l6`.
-  - The band shows `size·level·stage [unit k/N] [·n族]` (owner ruling 2026-10-14, recorded in `docs/plans/2026-10-13-live-pane-design-system.md` §8 item 7: the band separator is `·`; `▸` only ever means folded).
+  - The band shows `size·level·stage [unit k/N] [·n族]` (owner ruling 2026-10-14, recorded in `project/plans/2026-10-13-live-pane-design-system.md` §8 item 7: the band separator is `·`; `▸` only ever means folded).
   - Each slot is derived from a marker field (§2.9), with no dash placeholder.
   - Each check has a colored screenshot (same file, §55).
 - **KR2 — rail tests.** Every rail row in §2.7 has a deterministic test that runs the rail against a temp marker and asserts `stage`, `stage_set_at` and, where applicable, `review_families`.
@@ -60,7 +60,7 @@ None of this is recorded mechanically outside `/l5–/l6` campaigns. Claude-only
   - the old size enum `Fix`/`H` in effort fields and descriptions;
   - the marker `phase` field;
   - owner-rung `U4`.
-- **KR5 — backlog.** `docs/BACKLOG.md` passes `check-backlog-entries.js` after migration.
+- **KR5 — backlog.** `project/backlog/BACKLOG.md` passes `check-backlog-entries.js` after migration.
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
@@ -214,7 +214,7 @@ The terminal node is finish, or the post-finish code-review on the urgent-low pa
 | `scripts/check-guidance-eval.js` (new) | §2.8 cut gate, called by `preflight-release.sh` | P0 (written), P8 (wired) |
 | Guidance manifest files (§2.8) | Graph vocabulary; ladder text | P4b, P5 |
 | `profiles/*`, `platforms/codex/plugin/*`, `evals/skill-onoff/packs/*` | Hash re-pin, mirror sync, pack freeze | P5 |
-| `scripts/{check-backlog-entries,next-pick,migrate-backlog-entries}.js`, `docs/BACKLOG.md` | Effort = sizes + suffix; migration | P6 |
+| `scripts/{check-backlog-entries,next-pick,migrate-backlog-entries}.js`, `project/backlog/BACKLOG.md` | Effort = sizes + suffix; migration | P6 |
 | `scripts/lib/semver.js` (new), `scripts/sync-version.js`, `scripts/preflight-release.sh`, `scripts/check-optin-changelog.js`, `hooks/session-start.js` | Pre-release support through one parser | P-R |
 | `mods/live/{band.tsx,pane.tsx,model.ts}`, `docs/plans/evidence/2026-10-04-mods-p1c/gate/check.js` | V4a band + ⓘ panel; per-field gate | P7 |
 
@@ -357,7 +357,7 @@ Phase sizes use the **pre-plan** vocabulary (S/L/H/Fix), because the new one doe
 - **Exhaustion** is unchanged: a used rung is never repeated; when all rungs are spent, the result is `recommend:none, reason:budget-exhausted`.
 - **U5 owner** is reached only by the caller's own stop. classify never emits it.
 
-**P4b (Train B)** renumbers owner U4 → U5 in `probe-unknown.js`, `decision-ledger.js`, `hooks/tests/probe-unknown.test.sh` and their mirrors. It is driven by grep, not by a line catalog, because P4a shifts the lines. The unrelated `U4` in `docs/BACKLOG.md` and `mission-convergence.test.sh` is excluded by path in `check-stage-vocab.js`.
+**P4b (Train B)** renumbers owner U4 → U5 in `probe-unknown.js`, `decision-ledger.js`, `hooks/tests/probe-unknown.test.sh` and their mirrors. It is driven by grep, not by a line catalog, because P4a shifts the lines. The unrelated `U4` in `project/backlog/BACKLOG.md` and `mission-convergence.test.sh` is excluded by path in `check-stage-vocab.js`.
 
 **Acceptance:**
 - `probe-unknown.test.sh` has planted cases for each new rung's eligibility, receipt and exhaustion, and for classify never emitting U5.
@@ -397,7 +397,7 @@ Phase sizes use the **pre-plan** vocabulary (S/L/H/Fix), because the new one doe
    - parses the suffix;
    - human gate = `L|XL` or urgent;
    - tie-break `XS > S > M`.
-3. Migrate `docs/BACKLOG.md`.
+3. Migrate `project/backlog/BACKLOG.md`.
 
 **Acceptance:** KR5, plus a fixture for each old value.
 
@@ -492,11 +492,11 @@ None. Resolved 2026-10-06:
 ## Review log
 
 - **R0** (2026-10-06, Claude Opus 5.5 at depth-0): drafted from the owner discussion and the proposal-page answers.
-  - Frozen rubric: `docs/plans/2026-10-06-dev-flow-stage-graph.rubric.md` (R1–R11).
-  - Manifest: `docs/plans/2026-10-06-dev-flow-stage-graph.plan-review-manifest.json`, `logical_plan_id: dev-flow-stage-graph-2026-10-06`.
+  - Frozen rubric: `project/plans/2026-10-06-dev-flow-stage-graph.rubric.md` (R1–R11).
+  - Manifest: `project/plans/2026-10-06-dev-flow-stage-graph.plan-review-manifest.json`, `logical_plan_id: dev-flow-stage-graph-2026-10-06`.
   - Seats: sol chair (openai), grok deep (xai), MiniMax consult; minimum 2 families.
 - **G1** (2026-10-06): CONDITIONAL. Transport was complete (3/3 seats), with 16 blocker candidates.
-  - Artifact: `docs/plans/2026-10-06-dev-flow-stage-graph.g1-artifact.json`.
+  - Artifact: `project/plans/2026-10-06-dev-flow-stage-graph.g1-artifact.json`.
   - Depth-0 dispositions: `….g1-dispositions.json` — 9 accepted blockers; the rest duplicates or accepted non-blocking; none rejected.
 - **R1** was the bounded repair of the accepted G1 blockers and nothing else:
   - §2.7 graph and writers;
@@ -525,7 +525,7 @@ None. Resolved 2026-10-06:
   - per-phase discovery wiring;
   - Train B as one atomic landing.
 - **FROZEN** (2026-10-06). The criterion: after depth-0 adjudication of G2, no construct- or mechanism-level finding is left unanswered (each one is folded or refuted). This is not a zero-findings criterion. Receipt gate: `check-phase-review-receipt.js --plan-artifact ….g2-artifact.json --dispositions ….g2-dispositions.json` rc=0, run against the reviewed R1 text (`git show 7c8a941f:<plan>`, sha256 `18dfc0a2…`), because the artifact binds the plan bytes the panel saw.
-- **Execution deviations** are bookkeeping, not a re-review. They are logged in [`evidence/2026-10-06-stage-graph/README.md`](evidence/2026-10-06-stage-graph/README.md):
+- **Execution deviations** are bookkeeping, not a re-review. They are logged in [`evidence/2026-10-06-stage-graph/README.md`](../../docs/plans/evidence/2026-10-06-stage-graph/README.md):
   - **§2.7 E1 bump and `high_risk`** measure `base_ref` against the working tree plus untracked files, instead of `..HEAD`. qc-gate runs before commit, so `..HEAD` would never fire.
   - **P0 first rung** is `eligible_max`, not `recommend`. `recommend` depends on the host roster.
   - **`stage-graph.js next` from `research`** needs `--research`. `stage-advance.js` passes it, and P3 rails calling `next` directly must pass it too.

@@ -90,7 +90,7 @@ run errors). Depth-0-owned collection (per-run auth-liveness circuit breaker + r
    the *tie with the prose pack* is the load-bearing observation, and that is robust to n:
    two different delivery mechanisms for the same constraint text produced the same ~18-20%.
 
-### Follow-up (tracked in `docs/BACKLOG.md`)
+### Follow-up (tracked in `project/backlog/BACKLOG.md`)
 Per-turn mechanical **verification/gating** (reject a turn whose output violates a
 constraint, force a retry) is the untested lever left — distinct from re-injection, which
 this measurement shows is not the answer. Re-injection is now available as a harness knob if

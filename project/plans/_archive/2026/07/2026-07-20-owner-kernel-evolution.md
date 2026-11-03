@@ -148,7 +148,7 @@ governance validator, decision script, review schema, or review dispatcher is ad
 | `skills/ceo-agent/references/level-front-door.md` | Delete after alias cycle | Translation is executable SSOT; generated `owner-kernel translate-level --all` output replaces hand-maintained prose. |
 | `skills/think-tank*.md` | Narrow | Counsel and rare stalemate escalation only; delete acceptance/review implications. |
 | `skills/quality-pipeline/SKILL.md` | Narrow | Executable verification plus policy-selected challenge; delete model gates duplicated in CEO and `/lN` bodies. |
-| `docs/architecture.md`, `docs/configuration.md` | Update | Owner/counsel/worker/challenger/evidence model and project policy. |
+| `docs/dev/architecture.md`, `docs/guide/configuration.md` | Update | Owner/counsel/worker/challenger/evidence model and project policy. |
 | `evals/orchestration/` and existing test surfaces | Extend | Frozen comparison corpus, negative controls, and transition tests. |
 
 Generated Codex payload files remain sync outputs, not manual edit targets.

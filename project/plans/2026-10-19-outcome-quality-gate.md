@@ -2,7 +2,7 @@
 
 > Status: active · Owner: cookys · Frame: M, three deliverables (record writer, checker, hook wiring)
 > Source: BL-0050 (row removed when this plan took over; the original entry file is in git at 57c4093f1). Owner ruled 2026-10-19: write the plan first.
-> Binding constraint: [ADR-0001](../adr/0001-verification-over-attestation.md) Decision 5 (`docs/adr/0001-verification-over-attestation.md`): no hash chains, event ledgers, witness receipts, attestation issuers, trust roots.
+> Binding constraint: [ADR-0001](../../docs/dev/adr/0001-verification-over-attestation.md) Decision 5 (`docs/dev/adr/0001-verification-over-attestation.md`): no hash chains, event ledgers, witness receipts, attestation issuers, trust roots.
 
 ## 0. Context / thesis
 
@@ -238,7 +238,7 @@ confirms; per `CLAUDE.md` Versioning a new script is a PATCH otherwise).
 | S1 record writer | `scripts/affected-suites.js` add `--record <path>` (writes after `--run`; refuses without `--run`) | 45 | `scripts/affected-suites.test.js` +3 cases (record shape, rc captured, no record without `--run`) | `node --test scripts/affected-suites.test.js` |
 | S2 checker | new `scripts/check-test-outcome.js` (options, record load, selection recompute via `require('./affected-suites.js')`, worktree, sample re-run, JSON verdict) | 260 | `scripts/check-test-outcome.test.js` unit cases for each failure code | `node --test scripts/check-test-outcome.test.js` |
 | S3 wiring | `scripts/resolve-qc-gate.sh` (`outcome`, `outcome_rerun`, `outcome_sample`, `outcome_budget_s`, env override); `.githooks/pre-push` (stage after `:131`, before the violations print); `project-config-template/qc-gate-config.md` (documented keys, default off) | 70 | `hooks/tests/qc-outcome-gate.test.sh` (controls 1-9) + `hooks/tests/qc-gate.test.sh` unchanged | `bash hooks/tests/qc-outcome-gate.test.sh && bash hooks/tests/qc-gate.test.sh` |
-| S4 wiring docs | `docs/scripts-inventory.md` row; `CLAUDE.md` grouped name list ("Diff scanning" or "Verification"); `skills/quality-pipeline/references/test-policy.md` (producer command, after `:91`); `references/four-layer-design.md:40` S1 row status; `docs/BACKLOG.md` BL-0050 status | 40 | `node scripts/check-claude-md-inventory.js` | `node scripts/check-claude-md-inventory.js && node scripts/check-reference-sizes.js && node scripts/check-config-docs.js` |
+| S4 wiring docs | `docs/scripts-inventory.md` row; `CLAUDE.md` grouped name list ("Diff scanning" or "Verification"); `skills/quality-pipeline/references/test-policy.md` (producer command, after `:91`); `references/four-layer-design.md:40` S1 row status; `project/backlog/BACKLOG.md` BL-0050 status | 40 | `node scripts/check-claude-md-inventory.js` | `node scripts/check-claude-md-inventory.js && node scripts/check-reference-sizes.js && node scripts/check-config-docs.js` |
 
 Verification commands list fast fixed checks only. Note `.githooks/` is in `FULL_TRIGGERS`
 (`scripts/affected-suites.js:55-63`), so the selector will answer `full` for S3; the fixed list above is used instead of the

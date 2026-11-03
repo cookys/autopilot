@@ -1,8 +1,8 @@
 # Autopilot settings reference
 
-> Part of [Autopilot](../README.md). The project-level `.claude/*-config.md` files and how they are injected are explained in [configuration.md](configuration.md); this page covers everything else you can set: the machine-local `~/.autopilot/config.json`, `AUTOPILOT_*` environment variables, and the Claude Code settings autopilot depends on. Hook behavior in detail: [hooks/README.md](../hooks/README.md).
+> Part of [Autopilot](../../README.md). The project-level `.claude/*-config.md` files and how they are injected are explained in [configuration.md](configuration.md); this page covers everything else you can set: the machine-local `~/.autopilot/config.json`, `AUTOPILOT_*` environment variables, and the Claude Code settings autopilot depends on. Hook behavior in detail: [hooks/README.md](../../hooks/README.md).
 
-This page lists the settings meant for you to change. The machine-readable inventory behind it, including the internal variables (test seams, paths, ids autopilot passes to its own child processes), is [`scripts/lib/config-keys.json`](../scripts/lib/config-keys.json). [`scripts/check-config-docs.js`](../scripts/check-config-docs.js) keeps the two in step with the code: a setting the code reads must be registered, a registered setting must still be read, and every user setting must appear on this page.
+This page lists the settings meant for you to change. The machine-readable inventory behind it, including the internal variables (test seams, paths, ids autopilot passes to its own child processes), is [`scripts/lib/config-keys.json`](../../scripts/lib/config-keys.json). [`scripts/check-config-docs.js`](../../scripts/check-config-docs.js) keeps the two in step with the code: a setting the code reads must be registered, a registered setting must still be read, and every user setting must appear on this page.
 
 ## Where settings live and which one wins
 
@@ -25,7 +25,7 @@ This page lists the settings meant for you to change. The machine-readable inven
 - **`AUTOPILOT_CONTEXT_BUDGET_MODE`** understands `off` and `once`; any other value is ignored (the config key also accepts `warn`).
 - **Zero values.** In the config, `context_budget.t1` or `t2` set to `0` disables that tier; in the environment a value of `0` is ignored.
 
-**Default-on and opt-in hooks.** A default-on hook runs unless you turn it off; an opt-in hook is wired but inert until you enable it with `hooks.<stem>` or `AUTOPILOT_HOOK_<STEM>`. The stems and tiers are in [hooks/README.md](../hooks/README.md). Each default-on hook has its own exit knob, listed in the "Hook switches" section below.
+**Default-on and opt-in hooks.** A default-on hook runs unless you turn it off; an opt-in hook is wired but inert until you enable it with `hooks.<stem>` or `AUTOPILOT_HOOK_<STEM>`. The stems and tiers are in [hooks/README.md](../../hooks/README.md). Each default-on hook has its own exit knob, listed in the "Hook switches" section below.
 
 ## Context budget, compaction and handoff
 
@@ -235,31 +235,31 @@ These are plain-markdown files you place in a project's `.claude/` directory. Ho
 
 | File | Customizes |
 |---|---|
-| `.claude/backlog-config.md` | Backlog entry schema options and pointer rule. ([template](../project-config-template/backlog-config.md)) |
-| `.claude/debug-config.md` | Project-specific debug tools and log paths. ([template](../project-config-template/debug-config.md)) |
-| `.claude/dev-flow-config.md` | Size rules, quality gates, build commands, special rules. ([template](../project-config-template/dev-flow-config.md)) |
-| `.claude/dispatch-config.md` | Which dispatcher, reviewer and methodology autopilot delegates to when other plugins are installed. ([template](../project-config-template/dispatch-config.md)) |
-| `.claude/dispatch-guard-config.md` | Per-project gate on expensive-model dispatch (dispatch-model-guard). ([template](../project-config-template/dispatch-guard-config.md)) |
-| `.claude/doa-config.md` | Delegated Operations Authority presets for subagent dispatch. ([template](../project-config-template/doa-config.md)) |
-| `.claude/doc-drift-config.md` | Doc-to-code domains the doc-sync skill audits. ([template](../project-config-template/doc-drift-config.md)) |
-| `.claude/execution-boundary-config.md` | sanctioned_roots, protected refs and allow_sql for the opt-in exec-boundary hook. ([template](../project-config-template/execution-boundary-config.md)) |
-| `.claude/finish-flow-config.md` | Closing-sequence overrides (merge target, archive procedure, per-size quality gate). ([template](../project-config-template/finish-flow-config.md)) |
-| `.claude/knowledge-routing-config.md` | Where durable knowledge lands (handoff, learn, distill). ([template](../project-config-template/knowledge-routing-config.md)) |
-| `.claude/loop.md` | Default prompt for a bare /loop. ([template](../project-config-template/loop.md)) |
-| `.claude/model-routing-config.md` | Subagent model and mode per role. ([template](../project-config-template/model-routing-config.md)) |
-| `.claude/next-config.md` | Work source paths for the next skill. ([template](../project-config-template/next-config.md)) |
-| `.claude/owner-kernel-governance.json` | Project governance: mission-convergence enforcement and budgets, guidance defaults, red lines, rosters (the file name is historical; the file is live). ([template](../project-config-template/governance-config.md)) |
-| `.claude/profiling-config.md` | Profiling tools and metrics collection. ([template](../project-config-template/profiling-config.md)) |
-| `.claude/project-lifecycle-config.md` | Project paths and bootstrap/archive scripts. ([template](../project-config-template/project-lifecycle-config.md)) |
-| `.claude/qc-gate-config.md` | Strength of the QC forcing function at push and finish-flow. ([template](../project-config-template/qc-gate-config.md)) |
-| `.claude/quality-gate-config.md` | Test, scan and review commands. ([template](../project-config-template/quality-gate-config.md)) |
-| `.claude/review-loop-config.md` | Engine roster and loop policy of the heterogeneous review pipeline. ([template](../project-config-template/review-loop-config.md)) |
-| `.claude/skill-routing.md` | Maps keywords to your project domain skills. ([template](../project-config-template/skill-routing.md)) |
-| `.claude/task-class-config.md` | Autonomous front-door routing and next-pick weighting. ([template](../project-config-template/task-class-config.md)) |
-| `.claude/team-config.md` | Team role templates for your tech stack. ([template](../project-config-template/team-config.md)) |
-| `.claude/test-integrity-config.md` | Mode and rules of the test-integrity gate. ([template](../project-config-template/test-integrity-config.md)) |
-| `.claude/test-strategy-config.md` | Test commands, pyramid ratios, coverage thresholds. ([template](../project-config-template/test-strategy-config.md)) |
-| `.claude/worktree-teardown-config.md` | Per-project cleanup seam for hetero worktrees. ([template](../project-config-template/worktree-teardown-config.md)) |
+| `.claude/backlog-config.md` | Backlog entry schema options and pointer rule. ([template](../../project-config-template/backlog-config.md)) |
+| `.claude/debug-config.md` | Project-specific debug tools and log paths. ([template](../../project-config-template/debug-config.md)) |
+| `.claude/dev-flow-config.md` | Size rules, quality gates, build commands, special rules. ([template](../../project-config-template/dev-flow-config.md)) |
+| `.claude/dispatch-config.md` | Which dispatcher, reviewer and methodology autopilot delegates to when other plugins are installed. ([template](../../project-config-template/dispatch-config.md)) |
+| `.claude/dispatch-guard-config.md` | Per-project gate on expensive-model dispatch (dispatch-model-guard). ([template](../../project-config-template/dispatch-guard-config.md)) |
+| `.claude/doa-config.md` | Delegated Operations Authority presets for subagent dispatch. ([template](../../project-config-template/doa-config.md)) |
+| `.claude/doc-drift-config.md` | Doc-to-code domains the doc-sync skill audits. ([template](../../project-config-template/doc-drift-config.md)) |
+| `.claude/execution-boundary-config.md` | sanctioned_roots, protected refs and allow_sql for the opt-in exec-boundary hook. ([template](../../project-config-template/execution-boundary-config.md)) |
+| `.claude/finish-flow-config.md` | Closing-sequence overrides (merge target, archive procedure, per-size quality gate). ([template](../../project-config-template/finish-flow-config.md)) |
+| `.claude/knowledge-routing-config.md` | Where durable knowledge lands (handoff, learn, distill). ([template](../../project-config-template/knowledge-routing-config.md)) |
+| `.claude/loop.md` | Default prompt for a bare /loop. ([template](../../project-config-template/loop.md)) |
+| `.claude/model-routing-config.md` | Subagent model and mode per role. ([template](../../project-config-template/model-routing-config.md)) |
+| `.claude/next-config.md` | Work source paths for the next skill. ([template](../../project-config-template/next-config.md)) |
+| `.claude/owner-kernel-governance.json` | Project governance: mission-convergence enforcement and budgets, guidance defaults, red lines, rosters (the file name is historical; the file is live). ([template](../../project-config-template/governance-config.md)) |
+| `.claude/profiling-config.md` | Profiling tools and metrics collection. ([template](../../project-config-template/profiling-config.md)) |
+| `.claude/project-lifecycle-config.md` | Project paths and bootstrap/archive scripts. ([template](../../project-config-template/project-lifecycle-config.md)) |
+| `.claude/qc-gate-config.md` | Strength of the QC forcing function at push and finish-flow. ([template](../../project-config-template/qc-gate-config.md)) |
+| `.claude/quality-gate-config.md` | Test, scan and review commands. ([template](../../project-config-template/quality-gate-config.md)) |
+| `.claude/review-loop-config.md` | Engine roster and loop policy of the heterogeneous review pipeline. ([template](../../project-config-template/review-loop-config.md)) |
+| `.claude/skill-routing.md` | Maps keywords to your project domain skills. ([template](../../project-config-template/skill-routing.md)) |
+| `.claude/task-class-config.md` | Autonomous front-door routing and next-pick weighting. ([template](../../project-config-template/task-class-config.md)) |
+| `.claude/team-config.md` | Team role templates for your tech stack. ([template](../../project-config-template/team-config.md)) |
+| `.claude/test-integrity-config.md` | Mode and rules of the test-integrity gate. ([template](../../project-config-template/test-integrity-config.md)) |
+| `.claude/test-strategy-config.md` | Test commands, pyramid ratios, coverage thresholds. ([template](../../project-config-template/test-strategy-config.md)) |
+| `.claude/worktree-teardown-config.md` | Per-project cleanup seam for hetero worktrees. ([template](../../project-config-template/worktree-teardown-config.md)) |
 
 ## Things that look like settings but are not wired
 

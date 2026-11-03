@@ -1,8 +1,8 @@
 # worktree-placement — one rule for where worktrees and handoffs go
 
-Source: [`docs/backlog/worktree-and-handoff-placement-has-no-rule.md`](../../../../../backlog/worktree-and-handoff-placement-has-no-rule.md) (owner question 2026-10-12, gaps 1–8).
-Spike: [`docs/plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md`](../../../../../plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md).
-Plan: [`docs/plans/2026-10-12-worktree-placement.md`](../../../../../plans/2026-10-12-worktree-placement.md).
+Source: [`project/backlog/worktree-and-handoff-placement-has-no-rule.md`](../../../../../backlog/worktree-and-handoff-placement-has-no-rule.md) (owner question 2026-10-12, gaps 1–8).
+Spike: [`docs/plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md`](../../../../../../docs/plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md).
+Plan: [`project/plans/2026-10-12-worktree-placement.md`](../../../../../plans/2026-10-12-worktree-placement.md).
 Direction: C — decision `intent-17-2` in the decision ledger (owner's answer; supersedes `intent-17-1`, which had recorded A on the owner's behalf).
 
 ## Project Goal

@@ -1,6 +1,6 @@
 ## 目標
 
-實作 `docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.md` 的 P0 起全部階段。
+實作 `project/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.md` 的 P0 起全部階段。
 **P0/P1/P2/P2b 已出貨**（v2.36.23–26，在 `origin/develop`）。**D4（plan P3）實作完成、未出貨**，
 分支 `feat/d4-strike-fold-pending-revocation`，HEAD `3faffd27`，工作樹乾淨。
 
@@ -56,7 +56,7 @@ live 文件都要加 `operator_pin` 欄位，已 pin 的案例填物件，再加
 
 ## 接手第二件事：openclaw 回報的 l5 marker gate（owner 2026-09-12 已授權，排在後面）
 
-繞道修完、D4 出貨之後做這個，不要平行開。細節在 `docs/BACKLOG.md` 的
+繞道修完、D4 出貨之後做這個，不要平行開。細節在 `project/backlog/BACKLOG.md` 的
 `PEER-REPORTED … bounded non-Mission campaigns` 那列（commit `1cb55127`）。
 
 一句話：`check_session_mode_gate` 要求一份 bounded contract 不會帶的 strict projection，
@@ -141,6 +141,6 @@ bash scripts/sync-codex-plugin-skills.sh --check; echo $?       # 0
 
 1. 本檔「接手第一件事」整段。
 2. `docs/plans/_archive/2026/09/evidence/2026-09-11-operator-pin-supersedes-qualification/d4-qc-panel.md`（PROBE B/C 的實跑輸出）。
-3. `docs/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.md` §2（KR1/KR3/KR4/KR11）與 §2.5（硬約束）。
-4. `docs/BACKLOG.md` 的 managed-campaign 那列與 L5-24h 那列。
+3. `project/plans/_archive/2026/09/2026-09-11-operator-pin-supersedes-qualification.md` §2（KR1/KR3/KR4/KR11）與 §2.5（硬約束）。
+4. `project/backlog/BACKLOG.md` 的 managed-campaign 那列與 L5-24h 那列。
 5. `references/evidence-discipline.md` §32。

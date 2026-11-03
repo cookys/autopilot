@@ -15,4 +15,4 @@ First real run of `scripts/hetero-review-loop.js collect` over the D2 diff (`1e5
   re-run from generation 1 over the full range after D2-repair integrates.
 
 Depth-0 adjudication of the 14 MUST-FIX findings: all accepted (sol 9, GLM 4, MiniMax 1); the 7
-CUT/FOLLOW-UP findings are in `docs/BACKLOG.md` (2026-09-04 rows).
+CUT/FOLLOW-UP findings are in `project/backlog/BACKLOG.md` (2026-09-04 rows).

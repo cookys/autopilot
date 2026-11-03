@@ -1,6 +1,6 @@
 # opencode implementer rail + muse-spark-1.3 administration (v2.35.12)
 
-**Branch**: `feat/v2.35.12-opencode-implementer-rail` · **Plan**: [`docs/plans/2026-09-03-opencode-implementer-rail.md`](../../../plans/2026-09-03-opencode-implementer-rail.md) · **Status**: ✅ Shipped in v2.35.12 — merged as `3949e2ab`
+**Branch**: `feat/v2.35.12-opencode-implementer-rail` · **Plan**: [`project/plans/2026-09-03-opencode-implementer-rail.md`](../../../plans/2026-09-03-opencode-implementer-rail.md) · **Status**: ✅ Shipped in v2.35.12 — merged as `3949e2ab`
 
 ## Project Goal
 

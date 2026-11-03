@@ -42,8 +42,8 @@
 |---|---|---|---|
 | **T1** | `scripts/sync-version.sh` 一鍵改 plugin.json + marketplace.json + hooks.json + README headers | **Node.js** script (per Ops r1#1)：CLI `--version X --hook-count N --skill-count M [--dry-run]`；per-file backup → atomic temp+rename → per-file exact-count verify；on any verify fail → restore from backup + exit non-zero | `scripts/sync-version.js`（new，rename from .sh per Node convention）|
 | **T2** | `.gitignore` 加 `.in_use/`（only）；**NOT** blanket `skill-creator-workspace/results/` | `.in_use/` 純 session lock OK ignore；但 results/ 有 tracked baseline（v2.7.0 / v2.7.2_155325），blanket 會 hide future intentional baselines。**改用 pattern**：`skill-creator-workspace/results/*/2026-05-14_154034/`（only the noise dirs from today's non-baseline runs，明示） | `.gitignore` |
-| **T3** | `docs/BACKLOG.md` 建立 + **seed 今天 deferred items**（Ops/QA r1）| 新檔 + 3 entries：context-handoff symlink homedir diag、failure counter cleanup、disable flag malformed STALE handling。Format example + trigger field mandatory（per autopilot dev-flow code-review.md backlog spec）| `docs/BACKLOG.md`（new）|
-| **T4** | finish-flow L-5.5 加 INDEX stale-qualifier guard | **r1 r1 fix — regex 全 pattern**：`grep -E '\\((pending\|target\|in progress\|WIP\|TBD\|draft)\\)' docs/projects/INDEX.md` 必空；emit 匹配行 on failure（surface cause not just count）| `skills/finish-flow/SKILL.md` L-5.5 sub-task description |
+| **T3** | `project/backlog/BACKLOG.md` 建立 + **seed 今天 deferred items**（Ops/QA r1）| 新檔 + 3 entries：context-handoff symlink homedir diag、failure counter cleanup、disable flag malformed STALE handling。Format example + trigger field mandatory（per autopilot dev-flow code-review.md backlog spec）| `project/backlog/BACKLOG.md`（new）|
+| **T4** | finish-flow L-5.5 加 INDEX stale-qualifier guard | **r1 r1 fix — regex 全 pattern**：`grep -E '\\((pending\|target\|in progress\|WIP\|TBD\|draft)\\)' project/projects/INDEX.md` 必空；emit 匹配行 on failure（surface cause not just count）| `skills/finish-flow/SKILL.md` L-5.5 sub-task description |
 | **T5** | hook-order disclaimer 確認 + CHANGELOG top-of-file comment specify location | `hooks/README.md` Hook order section v2.7.2 已含 cross-matcher caveat ✓；新加：CHANGELOG.md 開頭加 HTML comment block 標 release-template + 寫 hook-order semantics reminder | `hooks/README.md` confirm + `CHANGELOG.md`（top HTML comment） |
 
 **P1a single commit**: T1 alone（~150 lines new script + smoke-test fixture）。
@@ -100,12 +100,12 @@
 |---|---|---|---|
 | L-2.5 | 3-reviewer plan loop — r1 absorbed | — | done |
 | **P1a** | T1 alone：`scripts/sync-version.js`（Node.js，hardened spec）| `scripts/sync-version.js`（new）| ~40min |
-| **P1b** | T2 + T3 + T4 + T5 batch | `.gitignore` + `docs/BACKLOG.md`（new）+ `skills/finish-flow/SKILL.md` + `hooks/README.md` confirm + `CHANGELOG.md` | ~20min |
+| **P1b** | T2 + T3 + T4 + T5 batch | `.gitignore` + `project/backlog/BACKLOG.md`（new）+ `skills/finish-flow/SKILL.md` + `hooks/README.md` confirm + `CHANGELOG.md` | ~20min |
 | L-5 | finish-flow 6 sub-tasks | merge + archive + INDEX + push | ~15min |
 
 **T6 default = stay Tier 2**（CEO author defends per QA r1 punt critique）。No P2。Trigger sharpened to「sample 4 in same sub-category」— 等真痛點再啟動。
 
-**Plan archive after P1 (per Ops r1 #5)**：本 plan 不變 immortal roadmap — P1 ship 後，Tier 2-3 餘下 20 entries graduate to `docs/BACKLOG.md`（T3 同 commit 建的檔）。plan doc 隨 project archive 進 `_archive/`，BACKLOG.md 變 live 唯一 source of truth for future me。
+**Plan archive after P1 (per Ops r1 #5)**：本 plan 不變 immortal roadmap — P1 ship 後，Tier 2-3 餘下 20 entries graduate to `project/backlog/BACKLOG.md`（T3 同 commit 建的檔）。plan doc 隨 project archive 進 `_archive/`，BACKLOG.md 變 live 唯一 source of truth for future me。
 
 ## 5. Acceptance
 
@@ -115,7 +115,7 @@
 4. ✅ `scripts/sync-version.js`（Node）可執行 + `--dry-run` flag + per-file exact-count `grep -c` verify + `.bak.$$` backup
 5. ✅ **T1 verify spec test**：對當前 plugin.json (2.7.2 → fake 2.9.9) 跑 `--dry-run` → 應 print proposed diff + exit 0；再用 invalid hook-count（e.g. -1）→ exit non-zero + 不寫檔
 6. ✅ `.gitignore` 加 `.in_use/`（only），**不**加 blanket `results/`（per Ops r1 #2 tracked baseline 保留）
-7. ✅ `docs/BACKLOG.md` 存在 + 預植 ≥3 entries（from today's context-handoff Suggestions：symlink homedir、failure counter cleanup、disable flag malformed）+ entry format with mandatory trigger field
+7. ✅ `project/backlog/BACKLOG.md` 存在 + 預植 ≥3 entries（from today's context-handoff Suggestions：symlink homedir、failure counter cleanup、disable flag malformed）+ entry format with mandatory trigger field
 8. ✅ `skills/finish-flow/SKILL.md` L-5.5 含 multi-pattern regex `grep -E '\\((pending\|target\|in progress\|WIP\|TBD\|draft)\\)'`，emit matched lines on failure
 9. ✅ `CHANGELOG.md` 頂部加 HTML comment template + hook-order semantic disclaimer
 10. ✅ Plan 通過 3-reviewer loop r1（all CONDITIONAL→absorbed）；r2 optional per CEO DOA

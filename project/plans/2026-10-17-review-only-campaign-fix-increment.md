@@ -1,6 +1,6 @@
 # Plan — BL-0146 a returned review-only campaign reviews the fix, not the whole range again
 
-> Status: D1-D5 landed (2026-10-17), default `adoption.return_review` stays `full`; D5 evidence in `evidence/2026-10-17-review-only-increment/README.md`; flipping the default is the owner's call. (Was: draft for owner, plan only, no code.) Backlog: BL-0146 (follow-up of BL-0090 / `docs/backlog/review-candidate-follow-ups.md`). Operator doc: `docs/review-candidate.md`.
+> Status: D1-D5 landed (2026-10-17), default `adoption.return_review` stays `full`; D5 evidence in `evidence/2026-10-17-review-only-increment/README.md`; flipping the default is the owner's call. (Was: draft for owner, plan only, no code.) Backlog: BL-0146 (follow-up of BL-0090 / `docs/backlog/review-candidate-follow-ups.md`). Operator doc: `docs/guide/review-candidate.md`.
 > Placement: INDEX row `active`. Per the backlog entry the plan comes first: new reuse key, touched-files re-check, cumulative context packet.
 
 ## 0. Problem
@@ -118,7 +118,7 @@ Rules:
 
 ### 2.7 Contract surface
 
-`adoption.return_review` in the sealed contract: `"full"` (default, today) or `"incremental"`. Sealed, so the operator opts in per campaign and the seal pins the choice (schema `schemas/implementation-campaign-contract.schema.json`, checker `scripts/implementation-campaign-check.js`, `docs/review-candidate.md` section 2.1 table). Default stays `full` until the A/B in D5 passes; flipping the default is an owner decision and a separate commit.
+`adoption.return_review` in the sealed contract: `"full"` (default, today) or `"incremental"`. Sealed, so the operator opts in per campaign and the seal pins the choice (schema `schemas/implementation-campaign-contract.schema.json`, checker `scripts/implementation-campaign-check.js`, `docs/guide/review-candidate.md` section 2.1 table). Default stays `full` until the A/B in D5 passes; flipping the default is an owner decision and a separate commit.
 
 ## 3. Deliverables
 
@@ -127,8 +127,8 @@ Rules:
 | D1 | Eligibility and sets: per-file digests, changed/carried/re-check sets, size guard, shared-surface guard, reference expansion with cap, `full` fallback with reason | new `src/engine/review-increment.js`; new test under `hooks/tests/` | unit cases incl. every fallback reason; negative controls (section 4) |
 | D2 | Incremental binding and seat store station: per-seat reuse with re-derivation, tuple and digest checks, gate-journal key | `src/engine/final-panel-seat-store.js`, `src/engine/campaign-composition.js:2084` region | reuse hit on identical binding; miss on each changed component |
 | D3 | Context packet and explicit closure: spec addendum generator, `resolutions[]` in the seat schema and normalizer, blind-evidence check | `src/engine/autopilot-engine.js` (packet build near `:5846`), `src/engine/product-review-normalizer.js`, `scripts/check-blind-evidence.sh` tests | silence never closes; addendum contains no verdict or author text Addendum open since 2026-10-17 (d-3cf4dc4c): generator `buildPriorRoundAddendum`, incremental path only. |
-| D4 | Wiring and contract field: `returnedHead` branch, receipt disclosure, schema and checker, operator doc | `src/engine/autopilot-engine.js:7778` region, `src/engine/campaign-intake.js`, schema, checker, `docs/review-candidate.md` | end-to-end return in a temp repo with stub dispatcher, both modes |
-| D5 | Evidence: A/B on planted returns, cost measurement, default decision input; BACKLOG BL-0146 removed with its sidecar line, CHANGELOG `Unreleased` line | `docs/plans/evidence/2026-10-17-review-only-increment/`, `docs/BACKLOG.md`, `docs/backlog/review-candidate-follow-ups.md` | table of cost and misses; owner reads it before any default flip. **Done 2026-10-17**: [`evidence/2026-10-17-review-only-increment/README.md`](evidence/2026-10-17-review-only-increment/README.md) (default stays `full`; follow-ups BL-0201 to BL-0204) |
+| D4 | Wiring and contract field: `returnedHead` branch, receipt disclosure, schema and checker, operator doc | `src/engine/autopilot-engine.js:7778` region, `src/engine/campaign-intake.js`, schema, checker, `docs/guide/review-candidate.md` | end-to-end return in a temp repo with stub dispatcher, both modes |
+| D5 | Evidence: A/B on planted returns, cost measurement, default decision input; BACKLOG BL-0146 removed with its sidecar line, CHANGELOG `Unreleased` line | `docs/plans/evidence/2026-10-17-review-only-increment/`, `project/backlog/BACKLOG.md`, `docs/backlog/review-candidate-follow-ups.md` | table of cost and misses; owner reads it before any default flip. **Done 2026-10-17**: [`evidence/2026-10-17-review-only-increment/README.md`](../../docs/plans/evidence/2026-10-17-review-only-increment/README.md) (default stays `full`; follow-ups BL-0201 to BL-0204) |
 
 Order, serial: D1, then D2, then D3 (D3 edits `autopilot-engine.js` and builds on D2's binding), then D4, then D5. At D1 start, re-verify every `file:line` in section 0 against the then-current tree and fix the cites in this plan. D1-D4 are mechanism for an opt-in mode, no change to the default requirement list.
 
@@ -176,7 +176,7 @@ Cost evidence (D5, not a gate): per return, count seat model calls and fresh inp
 - **R1 Cross-file regression missed.** The whole value is the carry, and the carry is a bet that unchanged files stay fine. Controls: reference expansion, shared-surface guard, size guard, opt-in, disclosure, A4. Residual: a behavioural dependency with no textual reference (config read by string, dynamic dispatch) is missed. That residual is why the default stays `full` and why the final line of the receipt says `incremental`.
 - **R2 Anchoring on listed findings.** Seats given the prior list may stop looking elsewhere. Controls: claims only, no verdicts, delta is still reviewed fresh, A8. Residual accepted; measured in D5 by planting a new bug next to a listed finding.
 - **R3 The addendum becomes a laundering channel** if it grows free text. Controls: fixed shape, built only from re-normalized stored findings and Git, scanner kept on.
-- **R4 Receipt readers assume `ready` means whole-range reviewed.** Control: `review_scope` field and doc text in `docs/review-candidate.md` (what `incremental` does and does not claim).
+- **R4 Receipt readers assume `ready` means whole-range reviewed.** Control: `review_scope` field and doc text in `docs/guide/review-candidate.md` (what `incremental` does and does not claim).
 - **R5 Resume complexity:** two modes share one seat store. Control: distinct station name and binding, A6.
 - **R6 Reference cap tuning** may fall back to full so often the feature rarely pays. Measured in D5.
 

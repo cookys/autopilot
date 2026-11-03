@@ -18,5 +18,5 @@ Reported by the openclaw fleet session (report 01M6BK2FVVCH6BHAJJPE095XEQ, reply
 ## Constraints
 
 - Trigger: after the two migration-plan P1 prerequisite lanes (planpath, sealbase) merge.
-- UI text and state change: before merge, show the owner real-terminal before and after screenshots and get confirmation (docs/plans/2026-10-13-live-pane-design-system.md section 12: one colour one meaning; colours only through PALETTE in mods/live/ui.ts).
+- UI text and state change: before merge, show the owner real-terminal before and after screenshots and get confirmation (project/plans/2026-10-13-live-pane-design-system.md section 12: one colour one meaning; colours only through PALETTE in mods/live/ui.ts).
 - After the fix merges, send the sha back to the fleet session.

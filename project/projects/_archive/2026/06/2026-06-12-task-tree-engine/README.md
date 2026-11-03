@@ -2,8 +2,8 @@
 
 > **Status**: Complete (2026-06-12) — execution state lives in [`tree/events.jsonl`](tree/events.jsonl); read via `scripts/tree.sh report 2026-06-12-task-tree-engine <node>`. Shadow calibration ongoing; graduation = Board decision (see BACKLOG checkpoint)
 > **Branch**: `feat/task-tree-engine`
-> **Plan**: [`docs/plans/_archive/2026/06/2026-06-12-task-tree-engine.md`](../../../plans/_archive/2026/06/2026-06-12-task-tree-engine.md) (R1 dialectic converged, 10 binding amendments)
-> **Spec**: [`docs/plans/_archive/2026/06/2026-06-12-task-tree-engine-design-spec.md`](../../../plans/_archive/2026/06/2026-06-12-task-tree-engine-design-spec.md) (Board-approved)
+> **Plan**: [`project/plans/_archive/2026/06/2026-06-12-task-tree-engine.md`](../../../plans/_archive/2026/06/2026-06-12-task-tree-engine.md) (R1 dialectic converged, 10 binding amendments)
+> **Spec**: [`project/plans/_archive/2026/06/2026-06-12-task-tree-engine-design-spec.md`](../../../plans/_archive/2026/06/2026-06-12-task-tree-engine-design-spec.md) (Board-approved)
 > **Mode**: CEO (involvement 3); graduation of verification authority is explicitly a Board decision, NOT within CEO DOA.
 
 ## Intent (this README owns intent only — per plan amendment 7, execution state will move into the tree once P1 ships; until then the phase table below is transitional)
@@ -50,5 +50,5 @@
 
 ## Decision log
 
-- 2026-06-12 (execution session): P0–P7 all shipped in one CEO-mode session. Manager (Fable, depth 0) dispatched sonnet implementers in worktrees + blind sonnet reviewer rounds per phase group (P1: 4 rounds; P2+P3: 3; P4/5/6: 3); all integration verified by artifacts (cherry-pick + rerun), never self-report. Dogfood: this project's own execution state lives in `tree/events.jsonl` (P0–P7 nodes, verdicts with commit-anchored evidence pointers). First live panel run disagreed with the authoritative reviewer (panel fail / reviewer pass — strict extras interpretation): recorded as calibration sample #1, baseline=self_report. Graduation checkpoint: docs/BACKLOG.md + session task; Board-only.
+- 2026-06-12 (execution session): P0–P7 all shipped in one CEO-mode session. Manager (Fable, depth 0) dispatched sonnet implementers in worktrees + blind sonnet reviewer rounds per phase group (P1: 4 rounds; P2+P3: 3; P4/5/6: 3); all integration verified by artifacts (cherry-pick + rerun), never self-report. Dogfood: this project's own execution state lives in `tree/events.jsonl` (P0–P7 nodes, verdicts with commit-anchored evidence pointers). First live panel run disagreed with the authoritative reviewer (panel fail / reviewer pass — strict extras interpretation): recorded as calibration sample #1, baseline=self_report. Graduation checkpoint: project/backlog/BACKLOG.md + session task; Board-only.
 - 2026-06-12: research-to-ship Phases 0-4 completed in one arc (brainstorm spec → survey with skeptic corrections → plan → R1 dialectic HIGH-consensus downgrade → 10 binding amendments → this project). Execution (Phase 5) begins in a fresh session per the externalized-state philosophy this project itself implements.

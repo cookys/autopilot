@@ -53,7 +53,7 @@ generations.
 - Baseline: `219aac2`
 - Candidate: `77213a8`
 - Scope: Phase 2 only from
-  `docs/plans/_archive/2026/07/2026-07-26-implementation-campaign-convergence-control.md`.
+  `project/plans/_archive/2026/07/2026-07-26-implementation-campaign-convergence-control.md`.
 - Review correctness, authorization boundaries, fail-closed behavior, and regressions.
   Do not request optional refactors or style changes.
 

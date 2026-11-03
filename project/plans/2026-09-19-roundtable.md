@@ -160,7 +160,7 @@ Phase 1 is implemented. The helper is `scripts/lib/room-log.js` (append under th
 
 ## 10. Window B — mod pane
 
-`mods/roundtable/` reads the same `room.jsonl`. Colours go through `PALETTE` in `mods/live/ui.ts` only, per `docs/plans/2026-10-13-live-pane-design-system.md` section 12 (one theme key, one meaning; no theme-key literal outside `PALETTE`).
+`mods/roundtable/` reads the same `room.jsonl`. Colours go through `PALETTE` in `mods/live/ui.ts` only, per `project/plans/2026-10-13-live-pane-design-system.md` section 12 (one theme key, one meaning; no theme-key literal outside `PALETTE`).
 
 **Spike resolved: INPUT-WORKS** (real Claude Code 2.1.303, tmux, `Input` on terminal / desktop / vscode; mobile has no Input). The pane has an Input. The owner types and presses Enter. `label` must not end with a colon (the field draws its own). Do not set `closeOnEscape` (Esc would close the pane). `$.fs.read` plus `$.clock.every` about once a second is the live read. Notes: `scratchpad/ceo/roundtable/spike/SPIKE.md` (read-only spike; not rewritten here).
 

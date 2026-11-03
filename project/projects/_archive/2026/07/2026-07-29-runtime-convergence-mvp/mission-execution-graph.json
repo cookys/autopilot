@@ -54,7 +54,7 @@
         "max_repair_generations": 1,
         "max_wall_seconds": 3600,
         "spec": {
-          "path": "docs/plans/2026-07-29-durable-continuation-identity.md",
+          "path": "project/plans/2026-07-29-durable-continuation-identity.md",
           "section": "Deliverable contract"
         },
         "required_paths": [
@@ -126,7 +126,7 @@
         "max_repair_generations": 1,
         "max_wall_seconds": 3600,
         "spec": {
-          "path": "docs/plans/_archive/2026/07/2026-07-29-qc-panel-honesty.md",
+          "path": "project/plans/_archive/2026/07/2026-07-29-qc-panel-honesty.md",
           "section": "Deliverable contract"
         },
         "required_paths": [

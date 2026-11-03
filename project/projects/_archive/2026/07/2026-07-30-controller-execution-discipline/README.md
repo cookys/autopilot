@@ -2,7 +2,7 @@
 
 Status: completed — final qualification repair merged to `develop` and archived
 
-Plan: `docs/plans/2026-07-30-controller-execution-discipline.md`
+Plan: `project/plans/2026-07-30-controller-execution-discipline.md`
 
 This project consolidates the related controller, Mission admission, compaction recovery, and
 resource-lifecycle backlog into one frozen deliverable. It intentionally uses one combined

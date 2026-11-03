@@ -63,7 +63,7 @@ Landed in `hooks/state-checkpoint.js` (a `PostCompact` entry in `hooks.json` reu
 - No trust machinery (ADR-0001): the snapshot is a read of state, never a signed claim.
 - A missing source is a named "absent" line, never an invented value.
 - No version bump (held at 3.0.0); CHANGELOG Unreleased entry in zh-TW.
-- Do not touch `mods/live/` or `docs/plans/2026-10-13-live-pane-design-system.md`.
+- Do not touch `mods/live/` or `project/plans/2026-10-13-live-pane-design-system.md`.
 
 ## 2.6 Change-policy decisions
 

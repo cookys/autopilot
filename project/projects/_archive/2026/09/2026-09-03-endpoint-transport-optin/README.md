@@ -1,6 +1,6 @@
 # Endpoint transport opt-in + exam/routing parity (v2.35.11)
 
-**Branch**: `feat/v2.35.11-endpoint-transport-optin` · **Plan**: [`docs/plans/2026-09-03-endpoint-transport-optin.md`](../../../plans/2026-09-03-endpoint-transport-optin.md) · **Status**: ✅ Shipped in v2.35.11 — merged as `a4d5d8f9`
+**Branch**: `feat/v2.35.11-endpoint-transport-optin` · **Plan**: [`project/plans/2026-09-03-endpoint-transport-optin.md`](../../../plans/2026-09-03-endpoint-transport-optin.md) · **Status**: ✅ Shipped in v2.35.11 — merged as `a4d5d8f9`
 
 ## Project Goal
 

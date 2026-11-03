@@ -50,11 +50,11 @@ The actual user goal: a first-time reader should, in **under one screen**, under
 
 | File | Receives (moved from README.md §) | Responsibility |
 |------|-----------------------------------|----------------|
-| `docs/skills.md` | "The Solution" 23-skill table · "Skill Boundaries" · "How They Work Together" diagram · "Three Modes of Operation" | The full skill catalog + how skills compose. |
-| `docs/coexistence.md` | "Coexistence Model" · "Superpowers Coexistence" (A/B/C + migration note) · "How does it work with Superpowers" (3-layer) · "Why do descriptions use quoted trigger phrases" | Everything about the Superpowers relationship. |
-| `docs/configuration.md` | "Cross-Repository Configuration (Injection)" + diagram · "Available Config Files" table · C++/skill-routing examples · "Team Setup" | Per-project `.claude/` injection model. |
-| `docs/installation.md` | OpenCode · Codex · Antigravity · Windows · pre-commit gate · "Known Limitation" · "Update" · "Development" (dev mode / cache layout / branch workflow) | Every install path beyond the 2-command CC default + contributor setup. |
-| `docs/architecture.md` | "The Problem" / "The Solution" (long form) · "Design Philosophy" · "Methodology Agents" · "Recommended Companions" (voltagent) · "Inspired By" credits | Why it's built this way + attribution. |
+| `docs/guide/skills.md` | "The Solution" 23-skill table · "Skill Boundaries" · "How They Work Together" diagram · "Three Modes of Operation" | The full skill catalog + how skills compose. |
+| `docs/guide/coexistence.md` | "Coexistence Model" · "Superpowers Coexistence" (A/B/C + migration note) · "How does it work with Superpowers" (3-layer) · "Why do descriptions use quoted trigger phrases" | Everything about the Superpowers relationship. |
+| `docs/guide/configuration.md` | "Cross-Repository Configuration (Injection)" + diagram · "Available Config Files" table · C++/skill-routing examples · "Team Setup" | Per-project `.claude/` injection model. |
+| `docs/guide/installation.md` | OpenCode · Codex · Antigravity · Windows · pre-commit gate · "Known Limitation" · "Update" · "Development" (dev mode / cache layout / branch workflow) | Every install path beyond the 2-command CC default + contributor setup. |
+| `docs/dev/architecture.md` | "The Problem" / "The Solution" (long form) · "Design Philosophy" · "Methodology Agents" · "Recommended Companions" (voltagent) · "Inspired By" credits | Why it's built this way + attribution. |
 
 > **Not created:** `docs/hooks.md`. The full hooks tables already live in `hooks/README.md` (canonical). README's Learn-More table links there. *(F3: hooks/README.md is lightly extended with the relocated Override + Secret-Detection notes — still no new file.)*
 
@@ -72,8 +72,8 @@ The actual user goal: a first-time reader should, in **under one screen**, under
 | `scripts/check-hook-inventory.js` | Drop the README.md/zh-TW **body** assertions; keep the badge assertion. (See §4 Phase 3.) |
 | `hooks/README.md` | **(spec-review F3)** Gains `## Override` + `## Secret Detection` relocated from README:565–573 (`autopilot.<hookName>=false`, `AUTOPILOT_PROTECTED_BRANCHES`, `autopilot.costTracker=false`, secret-pattern coverage note). Canonical hooks doc = correct home. Supersedes the earlier "untouched" constraint. Note: each added `##`/`###` here is fine — `check-hook-inventory.js` already pins this file's tier headers; adding non-tier H2s doesn't affect its header-count asserts. |
 | `scripts/__tests__` or `hooks/tests/*` for hook-inventory (if any) | Update expectations to match the rewired script. (Verify existence first; `grep -rl check-hook-inventory hooks/tests scripts`.) |
-| `CLAUDE.md` | Line ~98: `README.md#superpowers-coexistence` → `docs/coexistence.md`. |
-| `README.md` internal links | The two `#superpowers-coexistence` self-links → point at `docs/coexistence.md` (or drop, since that content left the file). |
+| `CLAUDE.md` | Line ~98: `README.md#superpowers-coexistence` → `docs/guide/coexistence.md`. |
+| `README.md` internal links | The two `#superpowers-coexistence` self-links → point at `docs/guide/coexistence.md` (or drop, since that content left the file). |
 
 ---
 
@@ -82,13 +82,13 @@ The actual user goal: a first-time reader should, in **under one screen**, under
 ### Phase 0 — Branch + scaffolding (Fix)
 
 1. `git checkout develop && git pull && git checkout -b feat/onboarding-readme-revamp`.
-2. `git mv` is not applicable (content is a subset of a file). Create empty `docs/skills.md`, `docs/coexistence.md`, `docs/configuration.md`, `docs/installation.md`, `docs/architecture.md` with a single H1 each (e.g. `# Autopilot — Skills Catalog`).
+2. `git mv` is not applicable (content is a subset of a file). Create empty `docs/guide/skills.md`, `docs/guide/coexistence.md`, `docs/guide/configuration.md`, `docs/guide/installation.md`, `docs/dev/architecture.md` with a single H1 each (e.g. `# Autopilot — Skills Catalog`).
 - **Done when**: branch exists; 5 stub docs present.
 
 ### Phase 1 — Populate detail docs by relocating README content (Fix → mechanical, verbatim)
 
 For each detail doc in the §3 map, **cut** the named sections out of the *current* `README.md` and **paste** them into the target doc under sensible H2s, preserving every table/diagram/prose block byte-for-byte (Global Constraint: verbatim move). Add a one-line back-link at the top of each detail doc pointing to the root README — a `> Part of Autopilot …` blockquote linking to `../README.md` (correct from `docs/*.md`, one level deep) plus sibling-doc links.
-- Fix internal anchors that now point within the moved doc (e.g. if `docs/coexistence.md` references its own sections).
+- Fix internal anchors that now point within the moved doc (e.g. if `docs/guide/coexistence.md` references its own sections).
 - **Done when**: all 5 docs contain their mapped content; a `diff` of (old README sections) vs (new doc bodies) shows no dropped lines except heading-level adjustments. **Acceptance check**: `grep` for 3 spot-canaries that must survive the move — `Boil the Lake`, `Dissent Quota`, `!\`command\`` injection note — each now resolves in a `docs/*.md`, not README.
 
 ### Phase 2 — Rewrite slim `README.md` (L)
@@ -97,7 +97,7 @@ Replace the body (keep hero block: title, tagline, badges, lang-switch — UNCHA
 
 ```
 (hero — title + 1-line tagline + badge row + EN | 正體中文)
-## What Is Autopilot?         ← 1 short para + 3–4 "you get" bullets; 1 line "standalone, coexists with Superpowers → docs/coexistence.md"
+## What Is Autopilot?         ← 1 short para + 3–4 "you get" bullets; 1 line "standalone, coexists with Superpowers → docs/guide/coexistence.md"
 ## Quick Start                ← CC install (2 cmds) + "then just talk to Claude" + 2–3 try-saying examples
 ## What It Does               ← 1 intro line, then 4 buckets:
 ### ✍️  Build code            ← dev-flow · quality-pipeline · finish-flow + one "Try: …" line
@@ -106,7 +106,7 @@ Replace the body (keep hero block: title, tagline, badges, lang-switch — UNCHA
 ### 📈  Improve over time     ← learn · retro · next · distill + "Try: …"
 ## A Day With Autopilot       ← the ONE good visual: the dev-flow S/L size-routing ASCII (condensed from current lines 159–171)
 ## Install                    ← CC (2 cmds, primary) inline
-### Other platforms           ← 1 line + → docs/installation.md (OpenCode / Codex / Antigravity / Windows)
+### Other platforms           ← 1 line + → docs/guide/installation.md (OpenCode / Codex / Antigravity / Windows)
 ## Learn More                 ← table of links to the 5 detail docs + hooks/README.md + CHANGELOG
 ## License                    ← MIT + inline links to CHANGELOG / Origin one-liner
 ```
@@ -130,7 +130,7 @@ Mirror Phase 2's structure **heading-for-heading** (6× `##`, 5× `###`, same or
    - Update the header comment block (the "2026-06-22 class" note ~line 17) to say README carries only the badge; tier tables + membership are asserted on `hooks/README.md`.
 2. **Tests**: `grep -rl check-hook-inventory hooks/tests scripts/__tests__ 2>/dev/null`; if a test pins the README assertions, update its expected error set. If none, note "no test rewire needed."
 3. **Link fixups**:
-   - `CLAUDE.md` ~line 98: `README.md#superpowers-coexistence` → `docs/coexistence.md`.
+   - `CLAUDE.md` ~line 98: `README.md#superpowers-coexistence` → `docs/guide/coexistence.md`.
    - Any remaining repo-wide `README.md#<anchor>` to a now-moved section: `grep -rn 'README.md#' --include='*.md'` and repoint to the detail doc. (The two CHANGELOG/plan links to `docs/projects/.../README.md#review-background` are a DIFFERENT file — leave them.)
 4. **Release hygiene (PATCH)**: this rewires shipped gating code → PATCH bump.
    - **(F1)** `node scripts/sync-version.js --version 2.25.12 --hook-count 20 --skill-count 23 --opt-in-count 12 --disabled-count 0` — `--skill-count` is REQUIRED (`sync-version.js:157-164`); pass all count flags (`--disabled-count` footgun).
@@ -182,7 +182,7 @@ Human-gated: a read-through of the slim `README.md` for newcomer tone (Board app
 ## 8. Open questions (Board only)
 
 1. README target length — ~180 lines acceptable, or push harder toward ~120 (which would mean even the "What It Does" buckets shrink to one line each)? *Default if unanswered: ~180.*
-2. Keep the "Inspired By" credits discoverable from README's Learn-More table (attribution courtesy for adapted gstack/superpowers/Council/etc. content), or fully tuck into `docs/architecture.md`? *Default: link it from Learn-More.*
+2. Keep the "Inspired By" credits discoverable from README's Learn-More table (attribution courtesy for adapted gstack/superpowers/Council/etc. content), or fully tuck into `docs/dev/architecture.md`? *Default: link it from Learn-More.*
 
 ---
 

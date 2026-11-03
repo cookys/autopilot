@@ -1,7 +1,7 @@
 # `verify_strength` as a review-density axis — ordered precursors
 
 **Status**: precursor (1) shipped 2026-07-09 (v2.32.11); (2) and (3) scheduled as D7 in [`2026-08-03-next-touch-debt-retirement.md`](2026-08-03-next-touch-debt-retirement.md).
-**Source**: `docs/BACKLOG.md` § "`verify_strength` as the third density input" (Effort L) + `docs/plans/_archive/2026/07/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
+**Source**: `project/backlog/BACKLOG.md` § "`verify_strength` as the third density input" (Effort L) + `project/plans/_archive/2026/07/2026-07-08-observation-first-skills.md` § Non-goals / Scope C.
 **Evidence anchor**: the escape cliff where `t2 × medium` verification produced **100% escapes** (pipeline-bench archive report) — verification QUALITY is currently invisible to `resolve-review-loop.sh`'s density/risk routing, so a weak suite buys the same review depth as a strong one.
 
 ## Why this is decomposed, not done in one shot
@@ -33,7 +33,7 @@ Shipping the density axis before those exist would route on a number nobody can 
 
 **What**: `resolve-review-loop.sh` reads a `verify_strength` signal (from Segment 2, or an explicit `--verify-strength` / config key) and folds it into the same risk/density machinery that already consumes diff-lines / source-trust / protected-path — a weak suite RAISES required review depth (more families, higher effort, `l1_required`), a strong suite may LOWER it. Must be **additive** to the current schema (byte-identical prefix, new keys appended — same discipline as the `--domain` / `min_panel_size` additions) and **fail-safe** (unknown/absent strength ⇒ treat as weakest ⇒ most review, never least).
 **Why last**: it's the consumer; routing on a score is meaningless until Segment 2 can produce one, and dangerous unless fail-closed.
-**Depends on**: Segment 2 (the score) + the existing risk-tiered-review policy (`docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md`).
+**Depends on**: Segment 2 (the score) + the existing risk-tiered-review policy (`project/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md`).
 **Effort**: M.
 
 ---

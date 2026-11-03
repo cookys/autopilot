@@ -5,7 +5,7 @@ Source: docs/BACKLOG.md@05f97302492d26112f877bc2a97acb2578aca8df, migrated 2026-
 - **Trigger**: P2-4 verdict note merged and owner answers d-32849d39 (was, until 2026-10-25: the Haiku 5.5 batch finishes and is judged).
 - **Context**: Per-turn re-injection moved vocabulary but did not produce a statistically conclusive behavior lift. As of 2026-09-14 the untested lever was mechanical verification at every turn: reject constraint-violating output and force a bounded retry. Keep this distinct from re-injection and measure against the existing t14 baseline. Since 2026-10-25 the per-turn gate hook exists, is opt-in (default off), and passed both the Haiku 4.5 (P2-3r2) and Haiku 5.5 (P2-3-h55) evaluations (see Status below).
 - **Effort**: M.
-- **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
+- **Source**: project/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior project/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
 
 
 ## Status 2026-10-25

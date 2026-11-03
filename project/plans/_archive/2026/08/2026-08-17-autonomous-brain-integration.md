@@ -7,7 +7,7 @@
 ## 0. Context / thesis
 
 Three weeks of gpt-5.6-sol depth-0 operation are forensically documented in
-[`sol-pathology.md`](evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md)
+[`sol-pathology.md`](../../../../../docs/plans/_archive/2026/08/evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md)
 (12 failure shapes F1–F12). Synthesis: the orchestrator never lost reasoning quality — it
 lost **state fidelity**. Compaction erased prior rulings; the brain refilled the gap by
 redesigning its own process mid-run, at quadratic re-verification cost. Written promises

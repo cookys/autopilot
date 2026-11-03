@@ -1,17 +1,17 @@
 # Surface-Area Reduction — B Group (thin-shelling)
 
-> Plan: [`docs/plans/2026-07-04-surface-area-reduction.md`](../../../plans/2026-07-04-surface-area-reduction.md) (CONVERGED — MiniMax-M3 ×2 + gpt-5.5 ×2 SHIP-AS-IS)
+> Plan: [`project/plans/_archive/2026/07/2026-07-04-surface-area-reduction.md`](../../../plans/2026-07-04-surface-area-reduction.md) (CONVERGED — MiniMax-M3 ×2 + gpt-5.5 ×2 SHIP-AS-IS)
 > Branch: `feat/v2.31.16-surface-area-b` · Target: v2.31.16 (PATCH — no new skill/agent)
 
 ## Project Goal
 
-> **Final goal**: Reduce prose surface area with ZERO entry-point loss and ZERO feature loss — thin-shell `/l3`–`/l6` + `/think-tank-dialectic`, dedup `model-routing.md` to one canonical, tier-layout `docs/skills.md`, and wire the north-star prose/engine measurement into `preflight-release.sh`.
+> **Final goal**: Reduce prose surface area with ZERO entry-point loss and ZERO feature loss — thin-shell `/l3`–`/l6` + `/think-tank-dialectic`, dedup `model-routing.md` to one canonical, tier-layout `docs/guide/skills.md`, and wire the north-star prose/engine measurement into `preflight-release.sh`.
 >
 > **Success criteria** (from plan acceptance, all verifiable):
 > 1. B1: `hooks/tests/slash-entry-probe.test.sh` exists, covers ALL 5 entries (/l3–/l6 + /think-tank-dialectic), wired into `preflight-release.sh`, and passes (evidence = artifact-level Read of front-door / per-level reference, not self-report). Four lN SKILL.md **bodies** total ≤80 lines (frontmatter excluded). **Frontmatter byte-identical** (git diff on frontmatter = empty).
 > 2. B2: think-tank-dialectic body (337 lines) migrated to `skills/think-tank/references/dialectic-mode.md`; shell keeps 3–5-line semantic summary + MUST-READ; both skills' frontmatter diff empty; one live trigger of `/think-tank-dialectic` shows it loads dialectic-mode.md.
 > 3. B3: edit canonical → sync script updates 4 copies (byte-equal); hand-edit a copy → pre-commit blocks (byte-parity check in `check-canonical-invariants.sh`); canonical has no relative links (lint).
-> 4. B4 step 1: `docs/skills.md` reorganized into core/delegation/pioneer; ZERO frontmatter changes; `check-readme-parity.js` + `validate.sh` green.
+> 4. B4 step 1: `docs/guide/skills.md` reorganized into core/delegation/pioneer; ZERO frontmatter changes; `check-readme-parity.js` + `validate.sh` green.
 > 5. §4: `preflight-release.sh` prints prose/engine line counts + delta vs baseline; baseline captured this release; +5% WARNING threshold armed for FUTURE releases only.
 >
 > **Scope boundary**:
@@ -27,7 +27,7 @@
 | Dimension | Verdict | Coverage |
 |-----------|---------|----------|
 | Source code + tests | YES | P1–P5 phases; new `slash-entry-probe.test.sh`; existing `validate.sh` + parity gates re-run |
-| User-facing docs | YES | `docs/skills.md` (B4); CLAUDE.md scripts-inventory rows for new sync script |
+| User-facing docs | YES | `docs/guide/skills.md` (B4); CLAUDE.md scripts-inventory rows for new sync script |
 | API / interface reference | N/A | No public interface change; frontmatter (routing surface) locked byte-identical by acceptance |
 | Config templates | N/A | No config format change |
 | CHANGELOG | YES | v2.31.16 entry (P5 closes; written at finish-flow) |
@@ -51,7 +51,7 @@
 | P1 | B1 — thin-shell l3–l6 (bodies 79 lines total, frontmatter byte-identical), per-level references, slash-entry-probe release gate | ✅ done |
 | P2 | B2 — dialectic body → think-tank/references/dialectic-mode.md (6 refs alongside, 2 `dialectic-`-prefixed) | ✅ done |
 | P3 | B3 — model-routing canonical + sync-model-routing.sh + mirror/lint gates (discovery: all 4 "copies" were symlinks → real files) | ✅ done |
-| P4 | B4 step 1 — docs/skills.md three-tier layout (zero frontmatter changes) | ✅ done |
+| P4 | B4 step 1 — docs/guide/skills.md three-tier layout (zero frontmatter changes) | ✅ done |
 | P5 | §4 — north-star measurement in preflight-release + baseline seeded (v2.31.15: prose=10545 engine=3185; re-seed at release) | ✅ done |
 
 ## Acceptance evidence (2026-07-04)

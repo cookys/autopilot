@@ -8,7 +8,7 @@
     "profiles/*.json",
     "docs/projects/**",
     "docs/plans/evidence/**",
-    "docs/BACKLOG.md"
+    "project/backlog/BACKLOG.md"
   ],
   "diff_bytes": 51232
 }

@@ -7,7 +7,7 @@ Decision cards opened by other projects with `scripts/open-decision.js` are show
 ## Constraints
 
 - UI change: build before/after screenshots first and let the owner choose (plan A light, plan B structured).
-- Follow `docs/plans/2026-10-13-live-pane-design-system.md` section 12: one colour one meaning, bold whitelist, colours only through PALETTE in `mods/live/ui.ts`.
+- Follow `project/plans/2026-10-13-live-pane-design-system.md` section 12: one colour one meaning, bold whitelist, colours only through PALETTE in `mods/live/ui.ts`.
 - Fix in the renderer; do not require the card author to change how they write.
 
 ## Trigger

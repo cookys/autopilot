@@ -1,10 +1,10 @@
 # Autopilot — Installation & Development
 
-> Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
+> Part of [Autopilot](../../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](../dev/architecture.md) · [Hooks](../../hooks/README.md)
 
 Install paths beyond the two-command Claude Code default (OpenCode, Codex, Antigravity, Grok Build, Windows), plus the contributor dev-mode workflow.
 
-> **Claude Code users**: the 2-command install is in the [main README](../README.md#install). This page covers everything else.
+> **Claude Code users**: the 2-command install is in the [main README](../../README.md#install). This page covers everything else.
 
 ---
 
@@ -235,7 +235,7 @@ Working **inside this clone** also surfaces skills via `.agents/skills` as proje
 - **Update after `git pull`.** Local installs record `source_path`. Prefer `grok plugin update` and re-check with `grok inspect`; if skills look stale, re-run `grok plugin install <path> --trust`.
 - **Uninstall:** `grok plugin uninstall autopilot` (confirm flag if prompted).
 
-Capability matrix: [`src/harness/capabilities/grok.json`](../src/harness/capabilities/grok.json).
+Capability matrix: [`src/harness/capabilities/grok.json`](../../src/harness/capabilities/grok.json).
 
 ### Windows
 
@@ -310,7 +310,7 @@ The 14 **opt-in** hooks (Tier B — accumulator, batch-format, branch-protection
 { "hooks": { "branch-protection": true, "commit-secret-scan": true, "test-runner": true } }
 ```
 
-A per-hook env override also works: `AUTOPILOT_HOOK_<STEM>=1` (stem upper-cased, `-`→`_`, e.g. `AUTOPILOT_HOOK_BRANCH_PROTECTION=1`). The authoritative list is [`hooks/opt-in-manifest.json`](../hooks/opt-in-manifest.json); per-hook behaviour is documented in [`hooks/README.md`](../hooks/README.md) (Tier B).
+A per-hook env override also works: `AUTOPILOT_HOOK_<STEM>=1` (stem upper-cased, `-`→`_`, e.g. `AUTOPILOT_HOOK_BRANCH_PROTECTION=1`). The authoritative list is [`hooks/opt-in-manifest.json`](../../hooks/opt-in-manifest.json); per-hook behaviour is documented in [`hooks/README.md`](../../hooks/README.md) (Tier B).
 
 **Enable vs. configure — two separate mechanisms:**
 
@@ -401,7 +401,7 @@ scripts/load-endpoints-env.sh --init
 mkdir -p ~/.autopilot && cp scripts/endpoints.env.example ~/.autopilot/endpoints.env && chmod 600 ~/.autopilot/endpoints.env
 ```
 
-The canonical template is tracked at [`scripts/endpoints.env.example`](../scripts/endpoints.env.example)
+The canonical template is tracked at [`scripts/endpoints.env.example`](../../scripts/endpoints.env.example)
 (what `--init` copies). Fill it with `AUTOPILOT_ENDPOINT_<NAME>_URL` + `_TOKEN` pairs (`<NAME>` is
 `[A-Za-z0-9_]`, your own logical label — `glm`, `minimax`, `local_llama`, …):
 
@@ -438,7 +438,7 @@ automatically (no `--endpoint` on the command line):
 
 Leave a `*_endpoint` empty to use the raw `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` env instead
 (byte-identical to the pre-endpoint behaviour). See
-[`project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md)
+[`project-config-template/review-loop-config.md`](../../project-config-template/review-loop-config.md)
 for the full roster and the per-provider endpoint/model table.
 
 ### by-repo vs by-user — a deliberate split

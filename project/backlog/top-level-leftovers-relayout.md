@@ -11,5 +11,5 @@ Readers found with `git grep -n` on 2026-10-31.
 - Risk: pre-push accepts `.qc/<sha>.verdict.json` as push evidence; moving or deleting it without changing those readers blocks or silently unblocks pushes.
 
 ## .autopilot/evidence/ (grok-implementer-ab.json, hook-multiplexer-benchmark.json)
-- Readers: scripts/next-touch-validation.js (D8 and D6 report paths), scripts/run-grok-implementer-ab.sh, docs/mission-next-touch-debt-retirement-execution-graph.json and its fixtures (digest pinned), several plans.
+- Readers: scripts/next-touch-validation.js (D8 and D6 report paths), scripts/run-grok-implementer-ab.sh, project/missions/mission-next-touch-debt-retirement-execution-graph.json and its fixtures (digest pinned), several plans.
 - Risk: the Mission graph is digest-pinned, so moving the files breaks validation and the pin; deleting makes next-touch validation fail.

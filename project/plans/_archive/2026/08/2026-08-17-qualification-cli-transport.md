@@ -5,7 +5,7 @@
 > Continuation of BACKLOG "Reviewer-seat full qualifications on the now-working rail".
 > Inherits the brain-seat exam suite's deferred P5 real administration (Board
 > 2026-08-17 D1: incumbent Claude seat had no exam transport — OAuth only, no raw
-> token). Plan precedents: `docs/plans/2026-08-17-brain-seat-exam-suite.md` (frozen,
+> token). Plan precedents: `project/plans/_archive/2026/08/2026-08-17-brain-seat-exam-suite.md` (frozen,
 > two-generation review) and its synthesis D1–D4.
 
 ## 1. Goal

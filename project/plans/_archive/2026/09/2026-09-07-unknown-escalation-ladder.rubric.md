@@ -1,6 +1,6 @@
 # Rubric — 2026-09-07-unknown-escalation-ladder.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md
+> Source plan: project/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md
 
 R1: Node ≥ 20.10, built-ins only; no new npm dependencies.
 R2: New scripts emit one JSON object on stdout, human lines on stderr, exit 0 on any classification; non-zero only for usage errors or `--strict`.

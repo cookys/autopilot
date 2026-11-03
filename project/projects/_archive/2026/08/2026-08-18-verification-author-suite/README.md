@@ -20,7 +20,7 @@
 > explorer suites, multi-file integration-scale harness authoring (v1 is
 > single-module, reviewer-corpus scale).
 
-Plan: [`docs/plans/2026-08-18-verification-author-suite.md`](../../plans/2026-08-18-verification-author-suite.md)
+Plan: [`project/plans/_archive/2026/08/2026-08-18-verification-author-suite.md`](../../plans/2026-08-18-verification-author-suite.md)
 Mission admission: READY (enforce), deliverable_count 1.
 
 ## Scope completeness audit (L-1.5)
@@ -63,7 +63,7 @@ per-module skill rows configured for `scripts/`/`evals/` — N/A recorded.
   the contract). v3 pushes it further: the submission becomes pure DATA (an
   ordered declared test plan) and no candidate code executes at all —
   eliminating the trace-forgery, harness-sandbox, and white-box problems by
-  construction. v3 plan: `docs/plans/2026-08-18-verification-author-suite-v3.md`,
+  construction. v3 plan: `project/plans/_archive/2026/08/2026-08-18-verification-author-suite-v3.md`,
   fresh review lineage.
 
 - 2026-08-18: PATCH version (v2.34.17) per the brain-suite precedent (a new

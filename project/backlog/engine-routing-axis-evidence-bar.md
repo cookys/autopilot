@@ -1,6 +1,6 @@
 # Engine-routing axis — evidence bar for ANY model-to-worktype default
 
-No sidecar existed in history. Original row text from 5d0b29c1d^:docs/BACKLOG.md (effort label reworded from "n/a" to S so the stage-vocab scanner does not see a non-enum after an Effort label; the prose still says this is a standing bar, not a build):
+No sidecar existed in history. Original row text from 5d0b29c1d^:project/backlog/BACKLOG.md (effort label reworded from "n/a" to S so the stage-vocab scanner does not see a non-enum after an Effort label; the prose still says this is a standing bar, not a build):
 
 > ### Engine-routing axis — evidence bar for ANY model→worktype default (domain AND lifecycle-phase BOTH survey-refuted)
 > - **Trigger**: before hardcoding ANY `domain→engine` OR `phase→engine` default (i.e. a prerequisite that gates the "Domain-aware routing" entry above AND any future "route plan/test/review/debug to model X" idea). Fires whenever someone proposes a static model→worktype table.

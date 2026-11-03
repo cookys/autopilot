@@ -2,11 +2,11 @@
 
 <!-- next-id: BL-0370 -->
 
-One entry = one index row per [`references/backlog-entry.md`](../references/backlog-entry.md); evidence lives at
+One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
-`node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` (config `.claude/backlog-config.md`, `mode: block`;
+`node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md` (config `.claude/backlog-config.md`, `mode: block`;
 residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-09-14 by
-`scripts/migrate-backlog-entries.js` (manifest `docs/backlog/MIGRATION-2026-09-14.json`).
+`scripts/migrate-backlog-entries.js` (manifest `project/backlog/MIGRATION-2026-09-14.json`).
 
 **FIRED queue (order, as of 2026-09-14)** — rows whose trigger has fired are worked in this order:
 
@@ -25,7 +25,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: owner report with screenshot, 2026-11-01
-- **Pointer**: docs/backlog/decision-card-long-background-layout.md
+- **Pointer**: project/backlog/decision-card-long-background-layout.md
 
 ### develop 上五支測試套件在 base 就是紅的
 - **Id**: BL-0366
@@ -38,7 +38,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: sealbase acceptance runs cv1 and cv2, 2026-11-01
-- **Pointer**: docs/backlog/four-suites-red-on-develop-base.md
+- **Pointer**: project/backlog/four-suites-red-on-develop-base.md
 
 ### 專案路徑解析的後續兩點
 - **Id**: BL-0367
@@ -51,7 +51,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: planpath acceptance, 3b39f9077, 2026-11-01
-- **Pointer**: docs/backlog/planpath-follow-ups.md
+- **Pointer**: project/backlog/planpath-follow-ups.md
 
 ### 封存基準檢查在搬檔時太慢
 - **Id**: BL-0368
@@ -64,7 +64,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: sealbase review, 6b31d2a67, 2026-11-01
-- **Pointer**: docs/backlog/seal-baseline-filledbymove-slow.md
+- **Pointer**: project/backlog/seal-baseline-filledbymove-slow.md
 
 ### live pane 在來源沒變時仍顯示「資料過舊」
 - **Id**: BL-0365
@@ -80,7 +80,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED openclaw 2026-11-01 (fleet msg; operator quote in sidecar; reply sha owed to the fleet session after merge)
-- **Pointer**: docs/backlog/live-pane-stale-text-when-nothing-changed.md
+- **Pointer**: project/backlog/live-pane-stale-text-when-nothing-changed.md
 
 ### 回合被判定主工作目錄被改動，但分支位置其實沒動
 - **Id**: BL-0285
@@ -96,7 +96,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED hangar 2026-10-23 (bundle docs/hangar-harvest-2026-10 ea8b40a95); session d12f8e4c 2026-09-19, hypothesis, unreproduced
-- **Pointer**: docs/backlog/main-checkout-mutated-with-no-head-movement.md
+- **Pointer**: project/backlog/main-checkout-mutated-with-no-head-movement.md
 
 ### mods Now tab: a background row may never end after a session resume
 - **Id**: BL-0002
@@ -109,7 +109,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: feat/mods-activity review, 2026-10-12 (UNVERIFIED live behavior)
-- **Pointer**: docs/backlog/mods-activity-row-never-ends.md
+- **Pointer**: project/backlog/mods-activity-row-never-ends.md
 - **Context**: Half fixed in b36936691: a retained background row is dropped when the transcript is unreadable and the session id changed. Left: resume; probe quitting mid `sleep 600`, find a transcript signal.
 
 ### Cross-repo dispatch has no worktree or handoff rule
@@ -123,7 +123,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: worktree-placement gap 5, deferred by the plan (D12), 2026-10-12
-- **Pointer**: docs/backlog/worktree-and-handoff-placement-has-no-rule.md
+- **Pointer**: project/backlog/worktree-and-handoff-placement-has-no-rule.md
 - **Context**: Owner 2026-10-17: keep as is, set no rule now; decide when a real case appears. Rails resolve placement from their own --from repo root; nothing says which repo root, marker or handoff a cross-repo run uses.
 
 ### Host Conformance tool — authorized by the 2026-08-23 consolidation decision, never built
@@ -137,7 +137,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: 2026-09-20 remote-branch triage (decision branch merged at 47b52eac; deliverable absent)
-- **Pointer**: docs/backlog/host-conformance-tool.md
+- **Pointer**: project/backlog/host-conformance-tool.md
 - **Context**: Owner 2026-10-17: stays approved, wait for the trigger. Needs its own registered plan; the decision doc lists the six report sections.
 
 ### Foreman rail residuals (v2.36.34) — accepted and named, not hidden
@@ -151,7 +151,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: `docs/plans/2026-09-13-foreman-rail-b-build.md`, ship-time adjudication.
-- **Pointer**: docs/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md
+- **Pointer**: project/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md
 - **Context**: cgroup item fixed in 64259622f (each foreman worker turn in a systemd user scope, shared scripts/lib/worker-containment.sh). Open: egress, Write/Edit uncounted, inline hands die with the foreman.
 
 ### PEER-REPORTED (hangar): register preview/review servers with lab-ingress instead of ad-hoc 0.0.0.0 ports
@@ -168,7 +168,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: peer
 - **Effort**: M
 - **Source**: fleet `01M45R3JWAVVZ5WDTQ4M89A503` from hangar--claude-2 (2026-10-05, on cookys' request); replied `01M45R4M3V0999MB5HEV8E7R84`
-- **Pointer**: docs/backlog/lab-ingress-preview-integration.md
+- **Pointer**: project/backlog/lab-ingress-preview-integration.md
 - **Context**: review server self-registers; a PreToolUse hook (not skill text) routes ad-hoc previews to `lab preview` with a LAN-bound registered fallback; registry format co-defined with hangar.
 
 ### agy `--input-format stream-json` raises the payload ceiling but does NOT remove it — and above it the failure is SILENT
@@ -185,7 +185,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: peer report from <host> 2026-09-11, re-derived locally the same day with four probes; the since-removed `lib/agy-argv-ceiling.sh` guard, callers at…
-- **Pointer**: docs/backlog/agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a.md
+- **Pointer**: project/backlog/agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a.md
 - **Context**: agystdin 0221af27e: stdin stream-json shipped fail-closed (170000 B cap, empty-response and token-ceiling checks). Stays open: lifting the cap safely needs a per-host measurement or a tail-nonce self-check.
 
 ### Main-checkout boundary: accepted residuals of an accident guard that is not a sandbox
@@ -199,7 +199,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: v2.36.32 review round 6, 2026-09-13, adjudicated at depth 0 by re-derivation.
-- **Pointer**: docs/backlog/main-checkout-boundary-accepted-residuals-of-an-accident-guard-that-is-not-a-san.md
+- **Pointer**: project/backlog/main-checkout-boundary-accepted-residuals-of-an-accident-guard-that-is-not-a-san.md
 - **Context**: v2.36.32's detection layer fingerprints every ref, HEAD, symbolic-ref target, staged/unstaged diff content, and a size+mtime+type+link-target walk of every entry outside `.git`.
 
 ### Apply two-tier + pooled verdict to reviewer/implementer/owner/verification_author/brain
@@ -213,7 +213,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: `docs/plans/2026-08-29-qualification-verdict-stability.md` D8
-- **Pointer**: docs/backlog/apply-two-tier-pooled-verdict-to-reviewer-implementer-owner-verification-author.md
+- **Pointer**: project/backlog/apply-two-tier-pooled-verdict-to-reviewer-implementer-owner-verification-author.md
 - **Context**: `foldPooledVerdict`, `(VERDICT_Z, VERDICT_TAU)`, and the D3 error-class → tier map
 
 ### Codex payload install-time generation（2026-08-02 residual spike：NO-GO）
@@ -226,8 +226,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: Codex 提供受支援的 native plugin lifecycle：在 plugin install **與** Git marketplace upgrade/refetch 兩條適用路徑上，都能於 payload discovery 前自動執行 deterministic generator，且 generator…
 - **Trigger-Type**: peer
 - **Effort**: L
-- **Source**: health-roadmap P6 Brief（2026-07-17）；[`codex-payload-residual-spike`](projects/_archive/2026/08/2026-08-02-codex-payload-residual-spike/README.md)…
-- **Pointer**: docs/backlog/codex-payload-install-time-generation-2026-08-02-residual-spike-no-go.md
+- **Source**: health-roadmap P6 Brief（2026-07-17）；[`codex-payload-residual-spike`](../projects/_archive/2026/08/2026-08-02-codex-payload-residual-spike/README.md)…
+- **Pointer**: project/backlog/codex-payload-install-time-generation-2026-08-02-residual-spike-no-go.md
 - **Context**: codex-cli 0.146.0 的 logged-in `codex exec` 已實證 installed Autopilot cache payload 與 linked support reference 可被讀取，且 audit 結果正確。殘餘 probe 同時反證把 local source 當 Git refresh：generation A…
 
 ### Release-time payload branch（B）重啟條件
@@ -241,7 +241,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: health-roadmap P6 Decision Brief（2026-07-17）
-- **Pointer**: docs/backlog/release-time-payload-branch-b.md
+- **Pointer**: project/backlog/release-time-payload-branch-b.md
 - **Context**: Generic push/PR test CI 已存在，但 B 仍需新建 tag→payload publication→push-credential 的 release path；於多 PATCH/日的節奏下，每個 Codex 可見修復多四個失敗點；QA 判 test-signal 時點最差（user…
 
 ### autopilot effort vocabulary has no `minimal` — the muse-spark contributor tier cannot be examined at its cheapest setting
@@ -255,7 +255,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: v2.35.14 probe (`CHANGELOG.md`); opencode models.dev `reasoning_options` for the model
-- **Pointer**: docs/backlog/autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno.md
+- **Pointer**: project/backlog/autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno.md
 - **Context**: Owner 2026-10-17: do not add `minimal` now; wait for a second need. `dispatch-hetero.sh` (`--effort` enum), `engine-scorecard.js` (`EFFORT_VALUES`), `src/engine/capability-evidence.js`, `schemas/review-loop-contract.schema.json`, `implementer-ladder.js` and the seat-hash partition all enumerate…
 
 ### Dispatch justification check for acceptance-oracle tasks — P6D incident follow-up
@@ -268,8 +268,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: an owner-approved project opens the dispatch-justification check; it must ship a planted negative case showing unjustified heavy dispatch for an acceptance-oracle task is blocked
 - **Trigger-Type**: owner
 - **Effort**: L
-- **Source**: [`2026-08-21-p6d-orchestration-incident`](projects/_archive/2026/08/2026-08-21-p6d-orchestration-incident/README.md) (incl. Fable 5 judgment).
-- **Pointer**: docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md
+- **Source**: [`2026-08-21-p6d-orchestration-incident`](../projects/_archive/2026/08/2026-08-21-p6d-orchestration-incident/README.md) (incl. Fable 5 judgment).
+- **Pointer**: project/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md
 - **Context**: Owner 2026-10-17: narrowed to the unshipped dispatch-justification control, keep waiting. Origin: a bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
 
 ### Implementer suite hardening backlog (pre-merge review round-1 cut list)
@@ -282,8 +282,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 第三場實作者正式施測之前（Stage-0 機械化與 live-rail smoke 應先落），或 reviewer 再報同類；config labelling 要改 grader 並重封資產，屬 owner 決定。
 - **Trigger-Type**: event
 - **Effort**: M
-- **Source**: autopilot:reviewer pre-merge round-1,2026-08-22;`docs/plans/2026-08-22-implementer-qualification-suite.md` §6-§8。
-- **Pointer**: docs/backlog/implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list.md
+- **Source**: autopilot:reviewer pre-merge round-1,2026-08-22;`project/plans/_archive/2026/08/2026-08-22-implementer-qualification-suite.md` §6-§8。
+- **Pointer**: project/backlog/implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list.md
 - **Context**: 2026-10-16 and 2026-10-19 landed fixtures, TTL, --trials tests and the implementer-exam hardening tests (969c46043); open: Stage-0 mechanisation, live-rail smoke, consumer matrix, config labelling.
 
 ### Brain-seat sittings in the shipped qualification defaults (v2 artifact)
@@ -297,7 +297,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: v2.34.36 official-qualification-defaults ship;`references/qualification-defaults.md` § "What this does NOT do"。
-- **Pointer**: docs/backlog/brain-seat-sittings-in-the-shipped-qualification-defaults-v2-artifact.md
+- **Pointer**: project/backlog/brain-seat-sittings-in-the-shipped-qualification-defaults-v2-artifact.md
 - **Context**: v2.34.36 ships official defaults for `implementer` / `reviewer` / `verification_author` — all scorecard rows.
 
 ### Durable repair-lock — 解鎖路徑先行,鎖才准回來(P6D KR3 的第二階段)
@@ -311,7 +311,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: 2026-08-21 pre-merge review(autopilot:reviewer);`docs/projects/_archive/2026-08-21-p6d-corrective-gates/`(歸檔後)。
-- **Pointer**: docs/backlog/durable-repair-lock-p6d-kr3.md
+- **Pointer**: project/backlog/durable-repair-lock-p6d-kr3.md
 - **Context**: v2.34.32 原出貨 durable claim-bound repair lock + 四 Mission 後盾,pre-merge review 兩枚 🔴 殺掉:解鎖路僅存於 mission-v2 ready/follow_up 排水(legacy receipt 永無解)、bypass enum…
 
 ### Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）
@@ -325,7 +325,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: G2 review finding（MiniMax R8, 2026-08-16）;strategy thread 2026-08-16
-- **Pointer**: docs/backlog/skill-contract-card-rewrites-under-g2-minimax-r8.md
+- **Pointer**: project/backlog/skill-contract-card-rewrites-under-g2-minimax-r8.md
 - **Context**: 童子軍規則的漸近線——把重量級 skills（dev-flow、quality-pipeline 候選）改寫為 contract-card shape（trigger/inputs/decision-table/engine-pointers）。未評測前不得重寫。
 
 ### Strike-decay deferrals — the five mechanisms the panel cut from the first instrument
@@ -339,7 +339,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: hetero design panel 2026-08-22 synthesis §5/§6 + cut list; deferred by scope=Hold on the M-size first cut.
-- **Pointer**: docs/backlog/strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume.md
+- **Pointer**: project/backlog/strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume.md
 - **Context**: Deliberately NOT built in v2.34.35, each with a reason rather than an omission.
 
 ### Scaffold-tier effect A/B measurement（four-layer D6 promised row — repaired 2026-08-18）
@@ -353,7 +353,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: four-layer-redesign D6 closeout leftover（2026-08-17）;audit 2026-08-18（dev-flow-contract-card prologue）.
-- **Pointer**: docs/backlog/scaffold-tier-effect-a-b-measurement-four-layer-d6-promised-row-repaired-2026-08.md
+- **Pointer**: project/backlog/scaffold-tier-effect-a-b-measurement-four-layer-d6-promised-row-repaired-2026-08.md
 - **Context**: v2.34.11 shipped capability-tiered scaffolding with fail-closed T2, but `references/scaffold-tiers.md` Non-goals explicitly disclaims any tier→outcome effect claim — the A/B was deferred.
 
 ### Qualification CLI transport — runtime identity capture (codex and other CLIs)
@@ -367,7 +367,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: peer
 - **Effort**: S
 - **Source**: v2.34.15 pre-merge review; hardening round 2026-08-17; claude side shipped 2026-10-18.
-- **Pointer**: docs/backlog/qualification-cli-transport-runtime-identity-capture.md
+- **Pointer**: project/backlog/qualification-cli-transport-runtime-identity-capture.md
 - **Context**: claude side done (`modelUsage` checked, fail closed; see Pointer). Other CLI kinds return no model id, so identity stays operator-asserted.
 
 ### t14 long-horizon per-turn verification gate
@@ -380,8 +380,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: P2-4 verdict note merged and owner answers d-32849d39. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
 - **Trigger-Type**: event
 - **Effort**: M
-- **Source**: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
-- **Pointer**: docs/plans/2026-10-20-per-turn-gate.md
+- **Source**: project/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior project/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
+- **Pointer**: project/plans/2026-10-20-per-turn-gate.md
 - **Context**: p2-3r2 PASS (670b3ffaf): M3 ON 28/30 vs C 1/30. p2-3-h55 PASS (a10bceef5): M3 ON 23/30 vs C 0/30, Fisher p 8.71e-11, cost 2.10 USD. Details in sidecar.
 
 ### Mission graph scheduler 與 portfolio optimization
@@ -395,7 +395,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: 2026-07-28 Mission Convergence Portfolio 34-phase runaway audit；`governance-correction.md`
-- **Pointer**: docs/backlog/mission-graph-scheduler-portfolio-optimization.md
+- **Pointer**: project/backlog/mission-graph-scheduler-portfolio-optimization.md
 - **Context**: v2.34.0 只需要機械阻止 phase explosion：bounded deliverable count、DAG、parallel/batch/depth/gate budget 與 ready-node admission。Critical-path optimization、dynamic reorder、跨 repo portfolio、priority queue、進度…
 
 ### Mission authority store 與 cross-harness enforcement hardening
@@ -409,7 +409,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: 2026-07-28 Mission P1/P2 parity audit與獨立 Architect/Ops/Skeptic review；`governance-correction.md`
-- **Pointer**: docs/backlog/mission-authority-store-cross-harness-enforcement-hardening.md
+- **Pointer**: project/backlog/mission-authority-store-cross-harness-enforcement-hardening.md
 - **Context**: 本次只實作 current-host 可驗證的 Git-common-dir durable registry、CAS 與 fail-closed adapter。防惡意本機程序需要獨立 UID、root-owned/remote daemon 或具 authenticity 的 authority service；精確 provider…
 
 ### `check-test-integrity.sh` warn → block needs an accuracy record first
@@ -423,7 +423,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: 2026-08-23 v2.34.38 test-integrity coverage ship。
-- **Pointer**: docs/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md
+- **Pointer**: project/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md
 - **Context**: Rules 1-2 shipped (merge 1ce92330d, tirules). Left: rule 3 (substitution pairing), then a re-replay of the same 60 merges under 5% FP (was 91.7%, 7b84a5520). Mode stays warn. See sidecar.
 
 ### certified-clean 語料庫重建 — evals/clean/ 已重定性為「已合併真實 diff 對照集」,絕對 specificity 門檻需要真 certified 集
@@ -437,7 +437,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: 2026-07-10 L6-r2 WS-A campaign;MiniMax R2 的「reviewer-circular 標注」警告實證。
-- **Pointer**: docs/backlog/certified-clean-evals-clean-diff-specificity-certified.md
+- **Pointer**: project/backlog/certified-clean-evals-clean-diff-specificity-certified.md
 - **Context**: 2026-07-10 syscontract campaign 實測:12 個「clean」標籤(merged-未被翻 標注法)倒了 5 個(舊01/舊03/06/08/新03),其中新03 的 flag 還抓到當日 develop 現行真 bug(ladder-run.sh pipefail,v2.32.18 修)。全火力…
 
 ### Domain-aware routing — consume the `work_domain` telemetry to route reviewer/implementer by diff domain
@@ -451,7 +451,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: 2026-06-26 domain-telemetry ship (Phase 4); the deferred KR4 of the plan.
-- **Pointer**: docs/backlog/domain-aware-routing-consume-the-work-domain-telemetry-to-route-reviewer-impleme.md
+- **Pointer**: project/backlog/domain-aware-routing-consume-the-work-domain-telemetry-to-route-reviewer-impleme.md
 - **Context**: `/l5` 現已把 resolved `reviewer_runner` 傳入 `dispatch-review.sh`，所以舊 prerequisite (1) 已完成；domain probe 仍只輸出 `work_domain`/`domain_source` telemetry，沒有 domain-conditioned roster 或 two-pass…
 
 ### L1 block-mode override re-enable — needs a REAL isolation boundary (cgroup is NOT enough)
@@ -465,7 +465,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: test-integrity-l1 (v2.25.7) + W1/W2/W3 ship (v2.25.8); gpt-5.5 review verdict in session 2026-06-26; spec §8.3 / §12.
-- **Pointer**: docs/backlog/l1-block-mode-override-re-enable-needs-a-real-isolation-boundary-cgroup-is-not-e.md
+- **Pointer**: project/backlog/l1-block-mode-override-re-enable-needs-a-real-isolation-boundary-cgroup-is-not-e.md
 - **Context**: The override stays **DEFERRED**.
 
 ### `/l5` hetero-parallel width fan-out (machinery built, deliberately unwired)
@@ -479,7 +479,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: 2026-06-23 `docs/plans/2026-06-23-l4-l5-dep-graph-fanout.md` scope-cut + Phase L ship (`577ba8d`).
-- **Pointer**: docs/backlog/l5-hetero-parallel-width-fan-out-machinery-built-deliberately-unwired.md
+- **Pointer**: project/backlog/l5-hetero-parallel-width-fan-out-machinery-built-deliberately-unwired.md
 - **Context**: Phase L shipped `/l4` homogeneous (Claude) batch fan-out.
 
 ### First local runner capability semantics（availability/load，不是 quota）
@@ -493,7 +493,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: 2026-07-14 status CLI design + 2026-07-31 code audit。
-- **Pointer**: docs/backlog/first-local-runner-capability-semantics-availability-load-quota.md
+- **Pointer**: project/backlog/first-local-runner-capability-semantics-availability-load-quota.md
 - **Context**: named endpoint identity 與獨立的 local-deployment availability/load observation schema 已實作；剩餘工作縮為第一個真實 local runner 的 observation→capability-state producer bridge。不得把現有 metered quota…
 
 ### HETO task-return detection can miss completed work
@@ -507,7 +507,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: user-reported intermittent missed HETO return detection (2026-08-05)
-- **Pointer**: docs/backlog/heto-task-return-detection-can-miss-completed-work.md
+- **Pointer**: project/backlog/heto-task-return-detection-can-miss-completed-work.md
 - **Context**: The controller can remain waiting when HETO has completed a dispatched task but the return detector does not fire; inspect event names, buffering/flush, timeout, and terminal-state reconciliation without treating silence as success.
 
 ### No route for external field experience contributed INTO autopilot itself
@@ -521,7 +521,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: knowledge-routing fix set, foreman first-pass review (2026-08-24)
-- **Pointer**: docs/backlog/no-route-for-external-field-experience-contributed-into-autopilot-itself.md
+- **Pointer**: project/backlog/no-route-for-external-field-experience-contributed-into-autopilot-itself.md
 - **Context**: Owner 2026-10-18: project knowledge, separate from peer reports; tied to the codeforge/mnemos ecosystem (codeforge is the first Mnemos source, a memory daemon). The route likely belongs with its project-knowledge flow.
 
 ### `peer-coordination` skill — ruled in, blocked on a spike sweep
@@ -538,7 +538,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: cross-repo request via peer relay, 2026-08-24/25; ruled by two-round heterogeneous panel
-- **Pointer**: docs/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md
+- **Pointer**: project/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md
 - **Context**: autopilot models subordinates (`team`, `l3`–`l6`) and future-self (`handoff`) but has
 
 ### CEO/dev-flow: reversible-candidate release gates and optional Boil-the-Lake re-try
@@ -555,7 +555,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: <host> revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on <host> (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
-- **Pointer**: docs/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md
+- **Pointer**: project/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md
 - **Context**: Point 2 shipped in the 98e5c6e7d merge. BL-0147 is tracked separately. Owner decision card d-c9b50973 for text.
 
 ### Sealed-campaign review-station migration
@@ -572,7 +572,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: peer-reported <host>/chatgpt-tunnel 2026-10-03
-- **Pointer**: docs/backlog/sealed-campaign-review-station-migration.md
+- **Pointer**: project/backlog/sealed-campaign-review-station-migration.md
 - **Context**: single+terminal panel works at intake; only in-place migration of a sealed campaign's review_station is missing.
 
 ### mods P5 proxy-decision reminders (writer first)
@@ -586,7 +586,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: owner request and C4 research, 2026-10-04
-- **Pointer**: docs/backlog/mods-p5-proxy-decision-reminders.md
+- **Pointer**: project/backlog/mods-p5-proxy-decision-reminders.md
 - **Context**: no live decision ledger exists and nothing writes proxy-decision rows, so the live band cannot show them yet; writer, then watcher sidecar, then display.
 
 ### mods/live recent conversation: groups expand by mouse only
@@ -600,7 +600,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: peer
 - **Effort**: S
 - **Source**: now-recent-turns screenshot run, merge `82d34da4`, 2026-10-12
-- **Pointer**: docs/backlog/mods-live-recent-groups-keyboard.md
+- **Pointer**: project/backlog/mods-live-recent-groups-keyboard.md
 - **Context**: 2026-10-17 measured on Claude Code 2.1.301: in-pane Button hotkey draws its prefix but keys go to the input box; focus stays on top tabs only. Host blocks it; reported to Claude Code.
 
 ### autocompact: users never learn to set autoCompactWindow; T2 still says STOP
@@ -628,7 +628,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: dispatch tree plan, step 4 deferred by owner ruling 2026-10-13
-- **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
+- **Pointer**: project/plans/2026-10-13-dispatch-tree.md
 - **Context**: Plan §4, D4. Carry root/parent/depth as remote-reported telemetry, never an edge (the far side is an LLM relaying it; G1 finding 56a3391e). Needs a fleet dispatch field plus a receiver record, shown as a labelled hint.
 ### Compaction handoff: T2 text and the remaining checks
 - **Id**: BL-0147
@@ -655,7 +655,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: peer
 - **Effort**: M
 - **Source**: owner, 2026-10-15
-- **Pointer**: docs/plans/2026-10-16-bl0194-qualification-registry-move.md
+- **Pointer**: project/plans/2026-10-16-bl0194-qualification-registry-move.md
 - **Context**: Exam moves to llm-playground intake after SWE34, via engine-qualify headless. Trust auto/confirm/off (default auto). P5–P7; P3 optional, off; P4b is a residual pull.
 
 ### 依功能把 autopilot 分成 hetero engine、flow、lab 三塊（拆法未定）
@@ -669,7 +669,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: owner, 2026-10-18（放棄 tier 欄位時順帶提出，以後再說）
-- **Pointer**: docs/backlog/split-autopilot-into-hetero-engine-flow-lab.md
+- **Pointer**: project/backlog/split-autopilot-into-hetero-engine-flow-lab.md
 - **Context**: 拆法未定（候選深度見 sidecar）；owner 2026-10-18 說以後再說，不主動推進。
 
 ### roundtable Phase 1 - the /roundtable skill, distilled from several manual rooms
@@ -683,7 +683,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: L
 - **Source**: original operator 2026-09-19 Phase 0 ("值,先詳細寫成 plan 留 backlog,我們應該多經歷幾輪再來繼續"); restored 2026-10-19; dropped by 5f3aa3b1d
-- **Pointer**: docs/plans/2026-09-19-roundtable.md
+- **Pointer**: project/plans/2026-09-19-roundtable.md
 - **Context**: Room-log: utterances append to room.jsonl; windows only read it. Windows A and B built and owner-approved 2026-10-19. Fleet transport excepts hetero discussion; review stays hetero. Skill still waits on its trigger. Detail is in Pointer.
 
 ### roundtable - a non-Claude seat is addressed through the host's switchboard courier handle (Phase 0 finding F1)
@@ -714,7 +714,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: peer
 - **Effort**: S
 - **Source**: openclaw fleet relay 2026-09-12; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md
+- **Pointer**: project/backlog/peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md
 - **Context**: Main claim shipped in v2.36.28. Original effort label was Fix. (a) may be partly covered by v2.36.71, unconfirmed.
 
 ### Managed rail: already-scrambled carry-only ledger segments cannot project
@@ -728,7 +728,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: l5 plan 2026-09-16, writer-only; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/managed-rail-scrambled-carry-reader-recovery.md
+- **Pointer**: project/backlog/managed-rail-scrambled-carry-reader-recovery.md
 - **Context**: Reader recovery for rotation-carry rows, or a locked migration proving digests unchanged. Re-sized L on 2026-09-19.
 
 ### Roster qualification: Explorer formal suite
@@ -742,7 +742,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: v2.34.15 qualification 2026-08-17; restored 2026-10-19; dropped by 5f3aa3b1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/roster-qualification-remaining-legs-explorer-suite-brain-re-sit-implementer-leg.md
+- **Pointer**: project/backlog/roster-qualification-remaining-legs-explorer-suite-brain-re-sit-implementer-leg.md
 - **Context**: Implementer leg already shipped. This row is only the Explorer formal suite. Brain re-sit lives in another row.
 
 ### consult_dispatch has no seat once the qc panel consumes the roster
@@ -756,7 +756,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: measured 2026-09-11 fleet-comms; restored 2026-10-19; dropped by 41f1bff64; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/consult-dispatch-no-seat-after-qc-panel.md
+- **Pointer**: project/backlog/consult-dispatch-no-seat-after-qc-panel.md
 - **Context**: Warning half merged (consultseat 51290f69a). Left: topology eligibility plus a new config key. Native-fallback seats are dispatched, not refused; see sidecar.
 
 ### Per-hook by per-harness support matrix with verification dates
@@ -770,7 +770,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: owner 2026-09-07 dirty-tree hook; restored 2026-10-19; dropped by 061cc11c7; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that.md
+- **Pointer**: project/backlog/per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that.md
 - **Context**: Old id BL-0026. 2cdefb419 wired only the 60-day advisory into preflight. Left: most cells unverified (no fired evidence), plus owner call on grok/agy native rows. See sidecar.
 
 ### Engine-routing axis: evidence bar for any model-to-worktype default
@@ -784,7 +784,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: 2026-06-29 dual-agent survey; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/engine-routing-axis-evidence-bar.md
+- **Pointer**: project/backlog/engine-routing-axis-evidence-bar.md
 - **Context**: Original label was a standing evidence bar, recorded here as effort S. Domain-aware routing lost this prerequisite.
 
 ### Official codex plugin as a peer consult channel
@@ -798,7 +798,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: 2026-07-05 orchestrator-economy; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/official-codex-plugin-peer-consult-spike.md
+- **Pointer**: project/backlog/official-codex-plugin-peer-consult-spike.md
 - **Context**: Consult channel shipped. No follow-up row for review calibration or the rescue write sandbox posture.
 
 ### PostToolUse dispatch dies after /clear
@@ -812,7 +812,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: 2026-05-14 v2.7.2 post-clear diagnostic; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/posttooluse-dispatch-dies-after-clear.md
+- **Pointer**: project/backlog/posttooluse-dispatch-dies-after-clear.md
 - **Context**: Docs shipped in v2.8.1. Detection spike and the upstream report were never done.
 
 ### Investigate the /reload-plugins hook count discrepancy
@@ -826,7 +826,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: 2026-05-14 v2.7.2 reload verification; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/reload-plugins-hook-count-discrepancy.md
+- **Pointer**: project/backlog/reload-plugins-hook-count-discrepancy.md
 - **Context**: Reported 11 hooks while the file had 13. Live hooks still fired. Cosmetic only.
 
 ### Upstream report for agy install symlinked-destination truncation
@@ -840,7 +840,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: 2026-06-11 incident plus sandbox repro; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/agy-install-symlinked-dest-upstream-report.md
+- **Pointer**: project/backlog/agy-install-symlinked-dest-upstream-report.md
 - **Context**: Guard shipped in v2.15.1. The upstream report still needs the owner account and identity consent.
 
 ### Move large dispatch calibration scratch off the quota path
@@ -854,7 +854,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: 2026-07-13 usrquota diagnosis; restored 2026-10-19; dropped by 5d0b29c1d; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/dispatch-calibration-scratch-non-quota-path.md
+- **Pointer**: project/backlog/dispatch-calibration-scratch-non-quota-path.md
 - **Context**: No script producing the swe-calibrate scratch directories was found, so it may no longer exist. 2026-10-23: git log -S finds no swe-calibrate producer ever in scripts, evals or src; not closed, an external tool may still make them.
 
 ### Watcher roots set has no upper bound
@@ -868,7 +868,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: mods P1a reviews, 2026-10-04; restored 2026-10-19; dropped by a1cc180cb; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/mods-p1a-known-follow-ups.md
+- **Pointer**: project/backlog/mods-p1a-known-follow-ups.md
 - **Context**: Old id BL-0109. Everything else in that row was already fixed. P3 owns the bound.
 
 ### Cursor seat admission stays blocked until tool-deny or a portable sandbox
@@ -882,8 +882,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/plans/2026-09-02-cursor-transport-fallback.md
-- **Context**: Also docs/plans/2026-08-26-cursor-cli-adaptor.md. Seat blocked: cursor-agent cannot enforce tool-deny.
+- **Pointer**: project/plans/2026-09-02-cursor-transport-fallback.md
+- **Context**: Also project/plans/_archive/2026/08/2026-08-26-cursor-cli-adaptor.md. Seat blocked: cursor-agent cannot enforce tool-deny.
 
 ### mods-visible-dispatch: P2 guard-port Phase 2 merged, latency unmeasured, P4 parked
 - **Id**: BL-0241
@@ -896,7 +896,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: owner ruling 2026-10-23 d-585003b0 (partial keep); 2026-10-19 deletion audit, restored; docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/plans/2026-10-03-mods-visible-dispatch.md
+- **Pointer**: project/plans/2026-10-03-mods-visible-dispatch.md
 - **Context**: Phase 2 merged 59905f025 (gport2) by owner d-0ed54425=A: KR1 only reached 5 spawns, KR2 latency unmeasured, host load ~35. reload-watch and failure-escalation stay separate. P4 parked.
 
 ### dispatch-tree step 5 and R blocked by the D0 probes
@@ -910,7 +910,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/plans/2026-10-13-dispatch-tree.md
+- **Pointer**: project/plans/2026-10-13-dispatch-tree.md
 - **Context**: Fleet step is tracked by BL-0144. Step 5 and R stay blocked on the D0 probes.
 
 ### workflow-snapshot P3: handoff reads the snapshot and dev-flow calls task-card
@@ -924,7 +924,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: original backlog row; restored 2026-10-19; dropped by 0a9c9efac; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/plans/2026-10-13-workflow-snapshot-at-compaction.md
+- **Pointer**: project/plans/2026-10-13-workflow-snapshot-at-compaction.md
 - **Context**: Prior row deleted in 0a9c9efac. BL-0147 covers T2 text only, not P3.
 
 ### default-dispatch-topology P5 per-host rollout, <host> first
@@ -938,7 +938,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/default-dispatch-topology-p5-rollout.md
+- **Pointer**: project/backlog/default-dispatch-topology-p5-rollout.md
 - **Context**: Archived plan P0-P4 shipped in v2.35.16. P5 per-host rollout was left untracked.
 
 ### eval-router-judge harness was never built
@@ -952,7 +952,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: docs/backlog/eval-router-judge-harness-unbuilt.md
+- **Pointer**: project/backlog/eval-router-judge-harness-unbuilt.md
 - **Context**: Low priority. The harness was never built. The plan is archived.
 
 ### Mission stays not ready after a section 11 downgrade
@@ -969,7 +969,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: PEER-REPORTED codepower <host> 2026-10-19
-- **Pointer**: docs/backlog/mission-not-ready-after-section-11-downgrade.md
+- **Pointer**: project/backlog/mission-not-ready-after-section-11-downgrade.md
 - **Context**: See BL-0220. 2026-10-23 BLOCKED: no "section 11 downgrade" concept in the repo; need a minimal repro from codepower <host> (detail in the Pointer); the fleet MCP was down, request not sent.
 
 ### One command that writes the autocompact window and the context budget
@@ -986,7 +986,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED codepower <host> 2026-10-19
-- **Pointer**: docs/backlog/autocompact-window-context-budget-manual-align.md
+- **Pointer**: project/backlog/autocompact-window-context-budget-manual-align.md
 - **Context**: Alignment check and full prompt shipped in merge e993e0fc0. The one-command writer is not built.
 
 ### agy 1.4.2 headless large output prints SUCCESS envelope but process does not exit
@@ -1003,7 +1003,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: peer
 - **Effort**: S
 - **Source**: PEER-REPORTED codepower 2026-10-20
-- **Pointer**: docs/backlog/agy-142-headless-envelope-no-exit.md
+- **Pointer**: project/backlog/agy-142-headless-envelope-no-exit.md
 - **Context**: Probably affects the agy review seat. 2026-10-23: agy-served claude-sonnet-5-5-low hands parked on their own background tasks until the dispatch wall timeout; see sidecar.
 
 ### t14 batch driver does not re-run infra failures and cannot see mid-run OAuth expiry
@@ -1017,7 +1017,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: t14 second experiment batch, 2026-10-20
-- **Pointer**: docs/backlog/t14-batch-driver-infra-rerun-oauth.md
+- **Pointer**: project/backlog/t14-batch-driver-infra-rerun-oauth.md
 - **Context**: G-15 runner_timeout and C-16 runner_error were left at attempt 1. Depth-0 did not supplement this batch. Detail is in the Pointer.
 
 ### P6 feed-trust follow-ups: confirm-mode answer step, plan wording, reject-then-confirm, repeated stderr
@@ -1031,7 +1031,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: hetero-review p6trust g2
-- **Pointer**: docs/backlog/p6-trust-followups.md
+- **Pointer**: project/backlog/p6-trust-followups.md
 - **Context**: Items 3 and 4 merged (feedtrust d079b69bb). Items 1 and 2 left; item 1 is skill text at skills/engine-onboarding/SKILL.md:77 and needs eval evidence.
 
 ### familyOfEngine has no deepseek arm
@@ -1045,7 +1045,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: hderive g2 review 38be393a
-- **Pointer**: docs/backlog/deferred-review-2026-10-21.md
+- **Pointer**: project/backlog/deferred-review-2026-10-21.md
 
 ### qualification-sweep does not read the headless pins file
 - **Id**: BL-0267
@@ -1058,7 +1058,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: hderive g1 27ae0ab9
-- **Pointer**: docs/backlog/deferred-review-2026-10-21.md
+- **Pointer**: project/backlog/deferred-review-2026-10-21.md
 
 ### Cross-harness token discipline for resident seats
 - **Id**: BL-0271
@@ -1074,7 +1074,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: PEER llm-playground claude-4 2026-10-21
-- **Pointer**: docs/backlog/cross-harness-token-discipline.md
+- **Pointer**: project/backlog/cross-harness-token-discipline.md
 - **Context**: Item 4: owner chose P0 only (d-02c60498); p0spike 8eee6eac0 settled the seven hook facts; P1-P3 not started.
 
 ### Guidance cut gate is red on develop and not in preflight
@@ -1088,7 +1088,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: dwire merge 215d9084c, 2026-10-21 discoverability audit
-- **Pointer**: docs/backlog/guidance-cut-gate-red-not-in-preflight.md
+- **Pointer**: project/backlog/guidance-cut-gate-red-not-in-preflight.md
 - **Context**: The check against base 3.0.0-alpha.3 exits 1. The evidence-discipline digest does not match the pack.
 
 ### Review deferrals from 2026-10-21
@@ -1102,7 +1102,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: dmech, dwire and bl215 reviews, 2026-10-21
-- **Pointer**: docs/backlog/review-deferrals-2026-10-21.md
+- **Pointer**: project/backlog/review-deferrals-2026-10-21.md
 - **Context**: Fixed: fixa, bl273, runnerk, fixb, fixc, bl276r, tokrace (aa49e22e8, tokmech), pidbound (7e9b235e1). Left: dnone, deval, three dcard-v3 items, repo-residue-sweep mkdtemp throw; see sidecar.
 
 ### Remaining entry gaps from the 2026-10-21 discoverability audit
@@ -1130,7 +1130,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: BL-0275 relabel, 2026-10-22
-- **Pointer**: docs/backlog/uncalled-scripts-guidance-follow-ups.md
+- **Pointer**: project/backlog/uncalled-scripts-guidance-follow-ups.md
 - **Context**: two need eval, one needs an owner decision, one is blocked by a sealed graph pin. (c) closed by ADR-0002 (qc-panel dormant).
 
 ### dispatch-hetero test suites leave detached child processes behind
@@ -1144,7 +1144,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: observed on this host, 2026-10-23
-- **Pointer**: docs/backlog/dispatch-hetero-suite-detached-children.md
+- **Pointer**: project/backlog/dispatch-hetero-suite-detached-children.md
 - **Context**: Processes were bash -c IN_DETACHED_CHILD=1 ... detached_main from /tmp/autopilot-test-dispatch-hetero-*. Add cleanup in the suite.
 
 ### Seat schema admits / and . in engine and model; audit path-building consumers
@@ -1158,7 +1158,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: 2026-10-24 oqseat review (lane/oqseat, not yet on develop)
-- **Pointer**: docs/backlog/seat-schema-slash-dot-path-consumers.md
+- **Pointer**: project/backlog/seat-schema-slash-dot-path-consumers.md
 - **Context**: The widening is on lane/oqseat, not yet on develop; develop's isSafeSeatId still rejects them. Details in sidecar.
 
 ### resolve-review-loop.sh family_of case table has no direct test
@@ -1172,7 +1172,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: 2026-10-24 oqseat review
-- **Pointer**: docs/backlog/family-of-case-table-no-direct-test.md
+- **Pointer**: project/backlog/family-of-case-table-no-direct-test.md
 - **Context**: The JS familyOf suite is on lane/oqseat; bash family_of is only touched indirectly today. Details in sidecar.
 
 ### plan-review: author-side precondition_failed burns the logical id
@@ -1186,7 +1186,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: bldone9 2026-10-24 code reading
-- **Pointer**: docs/backlog/plan-review-precondition-burns-logical-id.md
+- **Pointer**: project/backlog/plan-review-precondition-burns-logical-id.md
 
 ### Long sessions never reap their background work
 - **Id**: BL-0297
@@ -1202,7 +1202,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: PEER-REPORTED llm-playground <host> 2026-10-24
-- **Pointer**: docs/backlog/long-session-background-work-not-reaped.md
+- **Pointer**: project/backlog/long-session-background-work-not-reaped.md
 
 ### fbtool P1: findings-write protection must land before the cc runner
 - **Id**: BL-0299
@@ -1215,7 +1215,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: bldone9 2026-10-24 fbtool P1 note
-- **Pointer**: docs/backlog/fbtool-p1-findings-write-protection.md
+- **Pointer**: project/backlog/fbtool-p1-findings-write-protection.md
 
 ### Claude Code upstream report draft (owner decides whether to send)
 - **Id**: BL-0301
@@ -1228,7 +1228,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: XS
 - **Source**: bldone9 2026-10-24 observations on CC 2.1.309
-- **Pointer**: docs/backlog/claude-code-upstream-report-draft.md
+- **Pointer**: project/backlog/claude-code-upstream-report-draft.md
 
 ### run-implementer-matrix.sh pins a stale implementer pack digest
 - **Id**: BL-0303
@@ -1241,7 +1241,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: BL-0294 hand finding 2026-10-25
-- **Pointer**: docs/backlog/implementer-matrix-stale-pack-digest.md
+- **Pointer**: project/backlog/implementer-matrix-stale-pack-digest.md
 
 ### bash-launch-guard test timing assertion fails under high host load
 - **Id**: BL-0305
@@ -1254,7 +1254,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: 2026-10-25 pre-push suite runs at 670b3ffaf and 1d38cfefb
-- **Pointer**: docs/backlog/bash-launch-guard-timing-assertion-load.md
+- **Pointer**: project/backlog/bash-launch-guard-timing-assertion-load.md
 
 ### depth-0 per-turn gate: P3 NOT-SHIP, next step waits for owner
 - **Id**: BL-0306
@@ -1267,7 +1267,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: L
 - **Source**: owner d-32849d39 (A, default off), d-6f6b706f (A: P0 cap 1 USD, P3 cap 20 USD), d-b3bc7aef (BL-0318 option B); plan merged 4ebcb428b
-- **Pointer**: docs/backlog/depth0-per-turn-gate-status.md
+- **Pointer**: project/backlog/depth0-per-turn-gate-status.md
 - **Context**: P1 ae44b5a0a; P2 7230a7f6e, b60ab831a; P3 NOT-SHIP (G3 scoring gap, G4 no violation), evidence docs/plans/evidence/2026-10-26-depth0-gate-p3; row kept for A/B. Detail at Pointer.
 
 ### dev-setup --harness agy --install fails validation on agy 1.4.7
@@ -1284,7 +1284,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: PEER-REPORTED <host> (peace--claude-2) 2026-10-26, agy 1.4.7, 3.0.0-alpha.6
-- **Pointer**: docs/backlog/agy-147-plugin-install-validation.md
+- **Pointer**: project/backlog/agy-147-plugin-install-validation.md
 - **Context**: Check first whether Claude Code and Codex read an array-form tools field; then edit the source files or convert at agy install time.
 
 ### Orchestrator slows itself down: seven process gaps from a peer
@@ -1301,7 +1301,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: L
 - **Source**: PEER-REPORTED <host> (peace--claude) 2026-10-26
-- **Pointer**: docs/backlog/orchestrator-self-slowdown-seven-gaps.md
+- **Pointer**: project/backlog/orchestrator-self-slowdown-seven-gaps.md
 - **Context**: Items 2, 6 shipped c9366c79a; item 3 mechanism shipped 4a34aa3a0; item 4 closed (d-f1aea07b, A). Left: top-stale wiring, item 3 DOA-table rows, items 1, 5, 7, all guidance needing ON/OFF eval. See sidecar.
 
 ### Stamped eval rows may have lost files from their frozen set
@@ -1315,7 +1315,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: fbstamp closure-scan observation 2026-10-26
-- **Pointer**: docs/backlog/stamped-rows-missing-frozen-files.md
+- **Pointer**: project/backlog/stamped-rows-missing-frozen-files.md
 - **Context**: Past batch evidence must not be edited; this is a read-only check. transcript-query.js unchanged since 10/4.
 
 ### affected-suites selects about 500 suites for the fbatch stub
@@ -1329,7 +1329,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: fbland and fbrestamp acceptance runs 2026-10-26
-- **Pointer**: docs/backlog/affected-suites-overselects-on-stub-basename.md
+- **Pointer**: project/backlog/affected-suites-overselects-on-stub-basename.md
 
 ### skill-onoff-markers suite is occasionally red, suspected $RANDOM directory collision
 - **Id**: BL-0312
@@ -1342,7 +1342,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: XS
 - **Source**: pre-push suite runs 2026-10-26
-- **Pointer**: docs/backlog/skill-onoff-markers-random-dir-collision.md
+- **Pointer**: project/backlog/skill-onoff-markers-random-dir-collision.md
 
 ### Suites red on base at every pre-push run: one list
 - **Id**: BL-0313
@@ -1355,7 +1355,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: pre-push suite runs 2026-10-26 to 10-27 (noexpiry, agyargv2, fbland, fbv3)
-- **Pointer**: docs/backlog/base-red-suite-list.md
+- **Pointer**: project/backlog/base-red-suite-list.md
 - **Context**: bash-launch-guard timing is BL-0305 and is not repeated here.
 
 ### Capability probe classifies errors from a merged stderr file after agy-stream-json
@@ -1369,7 +1369,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: bltidy14 candidate (1), 2026-10-26
-- **Pointer**: docs/backlog/probe-classify-error-loses-agy-stdout-signals.md
+- **Pointer**: project/backlog/probe-classify-error-loses-agy-stdout-signals.md
 - **Context**: Same class, minor: dispatch-review.sh AGY_OUT rescue, cleanroom-launch.sh OUT_FILE.
 
 ### Two suites go red under load: paid-batch-auth-stop and agy-stdin-transport
@@ -1383,7 +1383,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: bltidy14 candidates (3) and (4), 2026-10-26
-- **Pointer**: docs/backlog/intermittent-red-paid-batch-auth-stop-agy-stdin.md
+- **Pointer**: project/backlog/intermittent-red-paid-batch-auth-stop-agy-stdin.md
 
 ### fbatch v3 pilot could confirm the develop journal only indirectly
 - **Id**: BL-0317
@@ -1396,7 +1396,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: findings-batch-v3 pilot closure 2026-10-27 (self)
-- **Pointer**: docs/backlog/fbatch-v3-journal-indirect-evidence.md
+- **Pointer**: project/backlog/fbatch-v3-journal-indirect-evidence.md
 - **Context**: Direct evidence needs the runner to keep the journal file before the cell repo is cleaned.
 
 ### The library path openDecision() skips the --not-authorized and DOA checks
@@ -1410,7 +1410,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: doagate merge 4a34aa3a0 and depth-0 ruling 2026-10-28 (self)
-- **Pointer**: docs/backlog/open-decision-library-path-unchecked.md
+- **Pointer**: project/backlog/open-decision-library-path-unchecked.md
 - **Context**: Depth-0 ruling on doagate deliberately did not add the check to the library path; first inventory what boundary each of the three callers' cards belongs to, then decide whether to add it. Follow-on of BL-0309.
 
 ### A review seat that fails once voids the whole generation
@@ -1424,7 +1424,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: bltidy20 handoff list 2026-10-28; idle cap shipped ae247356e, paid-batch auth stop shipped 8183aaaf2
-- **Pointer**: docs/backlog/review-seat-fault-no-auto-redispatch.md
+- **Pointer**: project/backlog/review-seat-fault-no-auto-redispatch.md
 
 ### The severity table edit in code-review was never measured
 - **Id**: BL-0323
@@ -1437,7 +1437,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: bltidy20 handoff list 2026-10-28; edit in 33224ad72
-- **Pointer**: docs/backlog/code-review-tier-table-edit-not-evaluated.md
+- **Pointer**: project/backlog/code-review-tier-table-edit-not-evaluated.md
 
 ### Find out which rail starts grok with the fleet server loaded
 - **Id**: BL-0324
@@ -1450,7 +1450,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: bltidy20 handoff list 2026-10-28 (self)
-- **Pointer**: docs/backlog/grok-loads-fleet-under-session-tree.md
+- **Pointer**: project/backlog/grok-loads-fleet-under-session-tree.md
 
 ### Other Stop hooks run git on the worker tree and read its own .git/config
 - **Id**: BL-0325
@@ -1463,7 +1463,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: BL-0319 closeout, 2026-10-29 (self)
-- **Pointer**: docs/backlog/stop-hooks-git-isolation.md
+- **Pointer**: project/backlog/stop-hooks-git-isolation.md
 - **Context**: Same class as the closed BL-0319; per-turn-gate is handled, the hooks listed at Pointer are not. Follow-on of BL-0306.
 
 ### Per-turn gate P2 known limits to settle in P3 design
@@ -1477,7 +1477,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: d0gp2 P2 merge review, 2026-10-29 (self)
-- **Pointer**: docs/backlog/depth0-per-turn-gate-status.md
+- **Pointer**: project/backlog/depth0-per-turn-gate-status.md
 - **Context**: Five limits listed at Pointer under Known limits of P2. Follow-on of BL-0306.
 
 ### Selection result reports each changed file's contribution
@@ -1491,7 +1491,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: owner request 2026-10-29 (suite speed research)
-- **Pointer**: docs/backlog/pre-push-suite-speed.md
+- **Pointer**: project/backlog/pre-push-suite-speed.md
 - **Context**: Contribution report: add per-file contrib to --json. Negative control: single-suite diff reports exactly 1 sole-pulled. After BL-0332.
 
 ### Time assertions scale with the timing factor and host-wide process scans are prefix-scoped
@@ -1505,7 +1505,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: owner request 2026-10-29 (suite speed research)
-- **Pointer**: docs/backlog/pre-push-suite-speed.md
+- **Pointer**: project/backlog/pre-push-suite-speed.md
 - **Context**: Scale time asserts by test_timing_scale, prefix-scope pgrep, wait FAKE_STARTED in gate-rules R2 :133. Negative control: red under load before, green after (B3).
 
 ### Missing paths, files or tools abort or silently disable autopilot on a fresh host or after a /tmp wipe
@@ -1522,7 +1522,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: M
 - **Source**: PEER-REPORTED llm-playground 2026-10-31, scope widened by owner via <host>
-- **Pointer**: docs/backlog/missing-path-assumptions.md
+- **Pointer**: project/backlog/missing-path-assumptions.md
 - **Context**: Widened by owner (second Report). Eg runs-watch.js:1059 aborts on missing /tmp/autopilot-dispatch-runs. Design doc first (inventory, ensureDir helper, unavailable reason, doctor, empty-HOME test).
 
 ### Decision card opened from another repo's cwd lands in that repo and the panel never shows it
@@ -1539,7 +1539,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: PEER-REPORTED hangar 2026-10-31
-- **Pointer**: docs/backlog/open-decision-cwd-scope.md
+- **Pointer**: project/backlog/open-decision-cwd-scope.md
 - **Context**: Scope from process cwd git-common-dir; only unbound warns (~L275). Options: warn/refuse on repo mismatch, derive from session marker, fix SessionStart hint wording.
 
 ### SessionStart agent-brief hint is not copyable and the two dispatch guards reject it one at a time
@@ -1556,7 +1556,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: PEER-REPORTED <host> 2026-10-31, owner asked; depth-0 verified
-- **Pointer**: docs/backlog/brief-header-hint-guards.md
+- **Pointer**: project/backlog/brief-header-hint-guards.md
 - **Context**: hooks/lib/brief-header-template.js:76 joins lines with " | "; hooks/subagent-budget.js:498; dispatch-model-guard. Fix: copyable 3-line template incl. intentional form, one merged message, regression test.
 
 ### engine-scorecard strip-expiry silently writes the real engine-capability store when only one directory is overridden
@@ -1573,7 +1573,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: PEER-REPORTED peace (<host>) 2026-10-31, priority high (data safety)
-- **Pointer**: docs/backlog/engine-scorecard-strip-expiry-store-split.md
+- **Pointer**: project/backlog/engine-scorecard-strip-expiry-store-split.md
 - **Context**: Fix direction: refuse when only one of the two dirs is overridden, or list every path about to be written before writing. Add a negative control (one override only must be refused).
 
 ### dispatch-review.sh cannot read only the last message and has no REWORK or STOP verdict
@@ -1590,7 +1590,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: PEER-REPORTED peace (<host>) 2026-10-31
-- **Pointer**: docs/backlog/dispatch-review-last-message-and-verdicts.md
+- **Pointer**: project/backlog/dispatch-review-last-message-and-verdicts.md
 - **Context**: Evaluate first: a last-message-only read mode, and whether widening the verdict vocabulary is worth the receipt and finalize contract change.
 
 ### Strike writer allowlist has no writer for project-embedded calibration
@@ -1607,7 +1607,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED peace (<host>) 2026-10-31
-- **Pointer**: docs/backlog/strike-writer-allowlist-calibration.md
+- **Pointer**: project/backlog/strike-writer-allowlist-calibration.md
 - **Context**: Decide whether to add a dedicated writer id for project-embedded calibration to the strike writer allowlist.
 
 ### Scorecard stores written before 2026-10-26 need a manual strip-expiry on every machine or all seats read as unqualified
@@ -1624,7 +1624,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED peace (<host>) 2026-10-31
-- **Pointer**: docs/backlog/scorecard-pre-1026-store-migration.md
+- **Pointer**: project/backlog/scorecard-pre-1026-store-migration.md
 - **Context**: Evaluate migrating automatically on load, or an explicit prompt from doctor or SessionStart naming the strip-expiry command.
 
 ### dispatch-author-kimi.js deletes the raw output when the runner fails, so the cause is invisible
@@ -1638,7 +1638,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: depth-0 finding 2026-10-31 (kimi31 session)
-- **Pointer**: docs/backlog/dispatch-author-kimi-keeps-raw-output.md
+- **Pointer**: project/backlog/dispatch-author-kimi-keeps-raw-output.md
 - **Context**: Fix direction: keep the raw output on failure, or print the key error lines to stderr. Negative control: a failing runner must leave a readable cause.
 
 ### runs-watch: a regular file at <live>/runs makes the parent mkdir fail with EEXIST and leaves no launch result
@@ -1652,7 +1652,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: BL-0336 U1 third-round acceptance finding 2026-10-31
-- **Pointer**: docs/backlog/runs-watch-runs-path-is-file.md
+- **Pointer**: project/backlog/runs-watch-runs-path-is-file.md
 - **Context**: Fix direction: detect a non-directory at <live>/runs and write a launch result file with the reason. Related to BL-0336 (missing-path assumptions).
 
 ### engine-effort-default.test.sh goes falsely red 4 cases every day from 00:00 to 01:00 UTC
@@ -1666,7 +1666,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: reproduced 2026-10-31 Taipei 08:40 on develop 7a5bd925d, green after 09:00
-- **Pointer**: docs/backlog/engine-effort-default-test-midnight-date-skew.md
+- **Pointer**: project/backlog/engine-effort-default-test-midnight-date-skew.md
 - **Context**: Fix: derive issued time and qualified_at date from the same single instant. Negative control: pin the clock to 00:30 UTC and the 4 cases must stay green.
 
 ### runs-watch-start.test.js negative control "no start lock and no pending check" is a race and misses under heavy load
@@ -1680,7 +1680,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: observed in BL-0336 U1 fourth-generation review 2026-10-31
-- **Pointer**: docs/backlog/runs-watch-start-negative-control-race.md
+- **Pointer**: project/backlog/runs-watch-start-negative-control-race.md
 - **Context**: Fix direction: force the interleaving deterministically (a hook or barrier) instead of relying on timing. U1 added a retry as a stopgap.
 
 ### status runs --json drops the reason when the runs directory is rejected
@@ -1694,7 +1694,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: BL-0336 U1 second-generation review suggestion 2026-10-31
-- **Pointer**: docs/backlog/status-runs-json-drops-runs-dir-error.md
+- **Pointer**: project/backlog/status-runs-json-drops-runs-dir-error.md
 - **Context**: src/status/cli.js about L167-193. Fix: JSON mode emits an object, or the reason goes in a serializable place. Negative control: a rejected runs dir must show its reason in --json output.
 
 
@@ -1709,7 +1709,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: relay2 review g1 (753bac21) and g2 (1e396ce2, f162da8f, 5ca6c335), 2026-10-31
-- **Pointer**: docs/backlog/registry-reader-relay2-follow-ups.md
+- **Pointer**: project/backlog/registry-reader-relay2-follow-ups.md
 - **Context**: Four small fixes, one commit; details in the sidecar.
 
 
@@ -1724,7 +1724,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: relay2 layout work, 2026-10-31
-- **Pointer**: docs/backlog/top-level-leftovers-relayout.md
+- **Pointer**: project/backlog/top-level-leftovers-relayout.md
 - **Context**: Readers and risks per item are in the sidecar.
 
 ### live band 後續四件：窄寬度溢出、重複 slot 按鈕、待決入口、R2 偶發紅
@@ -1738,7 +1738,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: bandyield round 2 four-vendor review and acceptance, 2026-10-31
-- **Pointer**: docs/backlog/live-band-follow-ups.md
+- **Pointer**: project/backlog/live-band-follow-ups.md
 - **Context**: Four independent items in the sidecar; they can be split when picked up.
 
 ### autopilot 的 extension 機制：讓 codeforge 等套件由 autopilot 統一安裝與掛載
@@ -1755,7 +1755,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: L
 - **Source**: PEER-REPORTED codeforge 2026-11-01 (owner decision on card d-0e2e6e0d; codeforge main b12c8d0, BACKLOG B31 and agent-coupling ADR)
-- **Pointer**: docs/backlog/extension-mechanism.md
+- **Pointer**: project/backlog/extension-mechanism.md
 - **Context**: Consensus, contract pieces and plan-review focus are in the sidecar. Plan first, codeforge joins the plan review.
 
 ### affected-suites 對純文件改動選出太多套件
@@ -1769,7 +1769,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: BL-0352 archive commit acceptance, 2026-10-31
-- **Pointer**: docs/backlog/affected-suites-docs-only-fanout.md
+- **Pointer**: project/backlog/affected-suites-docs-only-fanout.md
 - **Context**: Investigation steps and the negative control are in the sidecar; whole-repo audits must stay selected.
 
 ### band 加一個 fleet 分頁，由 autopilot 畫
@@ -1786,7 +1786,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: PEER-REPORTED codeforge 2026-11-01; owner chose autopilot-drawn tab on card d-d99e2d99
-- **Pointer**: docs/backlog/band-fleet-tab.md
+- **Pointer**: project/backlog/band-fleet-tab.md
 - **Context**: No approve button on the tab (human-only tty gate); research how a mod reads fleet state first.
 
 ### 速度量測與顯示從 forge-stats 移交給 live mod（分頁 ϟ 標籤、速度欄、最近請求表）
@@ -1803,7 +1803,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: PEER-REPORTED codeforge 2026-11-01 (fleet message), owner card d-7b0f7a4a
-- **Pointer**: docs/backlog/live-speed-handover-from-forge-stats.md
+- **Pointer**: project/backlog/live-speed-handover-from-forge-stats.md
 - **Context**: Algorithm, handover order and the pet-label question are in the sidecar. Show the owner a screenshot before any UI change; reply to codeforge with the sha once live.
 
 ### agent-call SKILL.md 沒有指向 FYI 寄件規則
@@ -1820,7 +1820,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: PEER-REPORTED hangar 2026-11-01 (fleet message; hangar BACKLOG row waits on our sha)
-- **Pointer**: docs/backlog/agent-call-fyi-pointer.md
+- **Pointer**: project/backlog/agent-call-fyi-pointer.md
 - **Context**: SKILL.md needs one line pointing at the section in references/peer-addressing.md (db0fb565a). Guidance change: apply the mechanism-vs-guidance test first. Reply to hangar with the sha.
 
 ### leak-guard 還原放行的兩條硬化
@@ -1834,4 +1834,4 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: leakfu review g5 (CUT/FOLLOW-UP suggestions), 2026-11-01
-- **Pointer**: docs/backlog/leak-guard-restore-hardening.md
+- **Pointer**: project/backlog/leak-guard-restore-hardening.md

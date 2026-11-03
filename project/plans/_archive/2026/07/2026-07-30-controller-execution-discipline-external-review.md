@@ -98,6 +98,6 @@ suites on `6af53524` and passed all of them: 195, 276, and 12 assertions respect
 worktree was clean before and after verification.
 
 M1–M10 plus the lower-severity observations were consolidated into nine bounded follow-ups and
-admitted to `docs/BACKLOG.md`. Admission receipt:
+admitted to `project/backlog/BACKLOG.md`. Admission receipt:
 `f172bf5643e83ba5cc446671190bc5275bd72d7b76372c2ee006a55aeb55a6de`
 (9 admitted, 0 duplicate, 0 rejected, current ticket not reopened).

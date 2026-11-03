@@ -1,7 +1,7 @@
 # D2-repair-2 ledger
 
 Deliverable: D2-repair-2 — repair the 19 verified (4 Critical) + 1 deferred depth-0 findings from
-the generation-1 review of the new hetero-review driver/checker (`docs/projects/_archive/2026/09/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g1/dispositions.json`).
+the generation-1 review of the new hetero-review driver/checker (`project/projects/_archive/2026/09/2026-09-04-dev-flow-hetero-loops/ledger/review-core/g1/dispositions.json`).
 
 Foreman branch: `worktree-agent-aef93d16ebb646335` (worktree `agent-aef93d16ebb646335`).
 Base: `0701589b8f2dd22523a6dbcfedc749cfae499dd9`. Head: `3a9342d042cbfa9bd3d750a4c287dce3e38519d1`.
@@ -69,7 +69,7 @@ All of the above are squashed into `3a9342d0` on the final branch; individual cu
 `scripts/check-phase-review-receipt.js`, `hooks/tests/hetero-review-loop.test.sh`,
 `hooks/tests/check-phase-review-receipt.test.sh`, `skills/dev-flow/SKILL.md`,
 `skills/dev-flow/references/hetero-loops.md`, `README.md`, `README.zh-TW.md`, `AGENTS.md`,
-`CLAUDE.md`, `docs/architecture.md`, `docs/skills.md`, `docs/assets/hero.svg`,
+`CLAUDE.md`, `docs/dev/architecture.md`, `docs/guide/skills.md`, `docs/assets/hero.svg`,
 `docs/scripts-inventory.md`, mirrored `platforms/codex/plugin/**` equivalents.
 
 ## Open issues

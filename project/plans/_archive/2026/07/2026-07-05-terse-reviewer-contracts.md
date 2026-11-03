@@ -74,7 +74,7 @@ broken nested-loop in a test file) rather than being a genuine reviewer over-fla
 single-shot, non-iterated fixes before this table was filled in.
 
 **Clean-diff provenance rule (added 2026-07-10, binding for any future corpus rebuild)**: do not source
-clean-diff cases from a subsystem with a known multi-round bug-fixing history (check `docs/BACKLOG.md` /
+clean-diff cases from a subsystem with a known multi-round bug-fixing history (check `project/backlog/BACKLOG.md` /
 commit messages for "round N fix" / repeated same-file fix commits before selecting) — "merged into develop"
 is not sufficient evidence of correctness for a commit that is one round in an actively-iterated campaign;
 prefer single-shot, uncontroversial fixes from stable subsystems, and skim each candidate diff's actual
@@ -401,7 +401,7 @@ limitation noted in §7 (no runner exposes a temperature/seed knob; the re-run r
 substitute, not a determinism claim).
 
 Not folded (single-source from MiniMax-M3, not corroborated by the other 4, and MiniMax-M3 has a known
-central-finding false-positive rate from a prior campaign — see `docs/BACKLOG.md` "MiniMax-M3 … reviewer
+central-finding false-positive rate from a prior campaign — see `project/backlog/BACKLOG.md` "MiniMax-M3 … reviewer
 校準"): unbounded per-contract-leg cost budgeting, and the §4 #3 / §6 Superpowers-evidence wording-consistency
 nit. Partially folded: clean-diff "known-good" provenance/circularity concern → added as an explicit accepted
 limitation in §7 (not a blocking gate — out of scope to fully resolve here).

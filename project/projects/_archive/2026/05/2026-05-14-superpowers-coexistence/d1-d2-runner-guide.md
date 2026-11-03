@@ -143,7 +143,7 @@ rm .claude/settings.local.json
 
 ## Step 4 — Append findings to dogfood log
 
-Open `docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` and append:
+Open `project/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md` and append:
 
 ```markdown
 ## D-1 Scenario A Dogfood Results — 2026-05-14 (other env)
@@ -181,7 +181,7 @@ Open `docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-
 ## Step 5 — Commit + push
 
 ```bash
-git add docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md
+git add project/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/dogfood-routing-log.md
 git status   # confirm ONLY the log is staged. settings.local.json must be gone or unstaged.
 git commit -m "docs(dogfood): D-1 + D-2 scenario routing verification (other env)"
 git push origin develop

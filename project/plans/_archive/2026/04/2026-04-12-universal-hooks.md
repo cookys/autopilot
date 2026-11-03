@@ -115,7 +115,7 @@ Ship A r1 review 發現的問題，Ship B 的 hook 設計從一開始就納入�
 ### 檔案總清單（估算）
 
 **新增 (18)**：
-1. 本 plan doc（`docs/plans/2026-04-12-universal-hooks.md`，已存在）
+1. 本 plan doc（`project/plans/_archive/2026/04/2026-04-12-universal-hooks.md`，已存在）
 2. `docs/projects/YYYY-MM-DD-universal-hooks-ship-b/README.md`（在 dev-flow L-1 時建，不在此 plan scope）
 3. `hooks/README.md`
 4. `hooks/_shared/secret-patterns.js`（共用 secret regex 模組）

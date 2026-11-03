@@ -20,7 +20,7 @@
 - Lessons recorded in cross-session memory: `worktree-dispatch-gotchas`,
   `bash-int-pgroup-trap`, `preflight-opencode-flaky-under-load`.
 
-## Deferred (gated, in `docs/BACKLOG.md`) — NOT part of this project's scope
+## Deferred (gated, in `project/backlog/BACKLOG.md`) — NOT part of this project's scope
 
 Full `role × task-type` routing table; engines beyond Claude+Gemini (codex/grok/gpt,
 per-engine smoke test); tree-engine foreman coordinator (post-graduation); multi-node

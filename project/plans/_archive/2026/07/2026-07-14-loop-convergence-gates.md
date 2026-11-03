@@ -87,7 +87,7 @@ node scripts/check-loop-convergence.js <file1.json> <file2.json> ...
   zero-exec round then green) ⇒ PASS (proves the ≥2-consecutive threshold).
 
 ## Rules → gates map
-`docs/ironlaw-to-gate-map.md` — the single source of truth table + review-only list.
+`docs/dev/ironlaw-to-gate-map.md` — the single source of truth table + review-only list.
 
 ## Provenance discipline (this branch)
 - Implementer: `gpt-5.3-codex-spark` (`--runner codex`) via canonical `engine implement-review`.

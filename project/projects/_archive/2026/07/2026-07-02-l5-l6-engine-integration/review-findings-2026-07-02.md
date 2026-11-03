@@ -31,7 +31,7 @@ All verified live on this branch at HEAD (`8fbfc68`) on 2026-07-02:
 
 **Files**: `scripts/sync-codex-plugin-skills.sh`, `.githooks/pre-commit`, `scripts/preflight-portability.sh`, `hooks/tests/codex-plugin-package.test.sh`, `hooks/tests/run.sh`.
 
-**Context**: `platforms/codex/plugin/**` (~30k lines) is a committed generated mirror produced by `sync-codex-plugin-skills.sh` (rm -rf + rsync of `skills/ bin/ src/ hooks/_shared/ references/ scripts/ project-config-template/` + 4 doc files). The committed-mirror choice itself is correct — Codex install does not copy through symlinked skill dirs (design doc Phase 5, `docs/plans/2026-07-01-cross-harness-engine-infrastructure.md:744-776`) — but:
+**Context**: `platforms/codex/plugin/**` (~30k lines) is a committed generated mirror produced by `sync-codex-plugin-skills.sh` (rm -rf + rsync of `skills/ bin/ src/ hooks/_shared/ references/ scripts/ project-config-template/` + 4 doc files). The committed-mirror choice itself is correct — Codex install does not copy through symlinked skill dirs (design doc Phase 5, `project/plans/_archive/2026/07/2026-07-01-cross-harness-engine-infrastructure.md:744-776`) — but:
 
 - The sync script has **no `--check` (read-only drift-report) mode**; its only mode is a destructive rebuild.
 - The drift test `codex-plugin-package.test.sh` exists and works, but is wired into **no gate**: not `.githooks/pre-commit`, not `.githooks/pre-push`, not `preflight-portability.sh`, not `preflight-release.sh`. `hooks/tests/run.sh` exists but is likewise not referenced by any hook/preflight.
@@ -74,16 +74,16 @@ All verified live on this branch at HEAD (`8fbfc68`) on 2026-07-02:
 
 ### F4. Architecture/reference docs are silent on the new engine layer
 
-**Files**: `docs/architecture.md`, `skills/ceo-agent/references/level-front-door.md`, (minor: `CLAUDE.md` "Where context lives" table).
+**Files**: `docs/dev/architecture.md`, `skills/ceo-agent/references/level-front-door.md`, (minor: `CLAUDE.md` "Where context lives" table).
 
-**Context**: the branch's largest structural addition — `src/engine/` (AutopilotEngine, resolve-review-loop bridge), `src/harness/` (capability state + probes), `src/runners/` (implementer/review JS wrappers), `src/hooks/` (host-neutral handlers + per-harness normalizers), `bin/autopilot.js` (CLI: `dispatch review` / `engine review-loop` / `engine implement-review` / `harness report`) — appears in `docs/architecture.md` only as two count bumps (lines 27, 86). `level-front-door.md` (the /l4-/l6 shared main-flow reference) still describes the pre-engine `dispatch-hetero.sh` direct-dispatch flow and never mentions `engine implement-review`, contradicting the updated l5/l6 SKILL.md ("canonical path").
+**Context**: the branch's largest structural addition — `src/engine/` (AutopilotEngine, resolve-review-loop bridge), `src/harness/` (capability state + probes), `src/runners/` (implementer/review JS wrappers), `src/hooks/` (host-neutral handlers + per-harness normalizers), `bin/autopilot.js` (CLI: `dispatch review` / `engine review-loop` / `engine implement-review` / `harness report`) — appears in `docs/dev/architecture.md` only as two count bumps (lines 27, 86). `level-front-door.md` (the /l4-/l6 shared main-flow reference) still describes the pre-engine `dispatch-hetero.sh` direct-dispatch flow and never mentions `engine implement-review`, contradicting the updated l5/l6 SKILL.md ("canonical path").
 
 **Fix**:
-1. Add a `src/` engine-layer section to `docs/architecture.md`: the four modules, the DI contract (`AutopilotEngine({reviewLoopResolver, reviewDispatcher, implementationDispatcher, diffProvider, repairPromptWriter, clock, cwd})`), the loop semantics (immutable base SHA; per-round repair branch `X-repair-rN-<sha7>`; reviewer sees cumulative base..commit diff as text; converged/non_converged/blocked statuses; exit 0 only on converged), and the layering rule (engine wraps — never replaces — the artifact-verified shell dispatchers).
+1. Add a `src/` engine-layer section to `docs/dev/architecture.md`: the four modules, the DI contract (`AutopilotEngine({reviewLoopResolver, reviewDispatcher, implementationDispatcher, diffProvider, repairPromptWriter, clock, cwd})`), the loop semantics (immutable base SHA; per-round repair branch `X-repair-rN-<sha7>`; reviewer sees cumulative base..commit diff as text; converged/non_converged/blocked statuses; exit 0 only on converged), and the layering rule (engine wraps — never replaces — the artifact-verified shell dispatchers).
 2. Update `level-front-door.md`'s /l5 delta paragraph to name `bin/autopilot.js engine implement-review` as the canonical impl-loop entry (internally `dispatch-hetero.sh`), keeping direct shell as compatibility fallback — mirror the l5 SKILL.md wording so the two stay consistent (consider whether a `check-canonical-invariants.sh` `repeat` seed should pin the shared phrase).
 3. Add `bin/autopilot.js` / `src/engine/` pointers to CLAUDE.md "Where context lives".
 
-**Acceptance**: `grep -n 'src/engine\|bin/autopilot' docs/architecture.md skills/ceo-agent/references/level-front-door.md` hits in both; doc-sync deterministic gate (`node scripts/doc-drift-gate.js` if wired) still green; `bash scripts/check-canonical-invariants.sh` passes.
+**Acceptance**: `grep -n 'src/engine\|bin/autopilot' docs/dev/architecture.md skills/ceo-agent/references/level-front-door.md` hits in both; doc-sync deterministic gate (`node scripts/doc-drift-gate.js` if wired) still green; `bash scripts/check-canonical-invariants.sh` passes.
 
 ---
 

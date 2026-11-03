@@ -1,7 +1,7 @@
 # Handoff — 2026-05-14 End-of-Day (post v2.7.3 + observations)
 
 **建立**：2026-05-14 ~19:30 local
-**狀態**：✅ Consumed — fresh observations 已 promote 到 [`docs/BACKLOG.md`](../BACKLOG.md)（`/reload-plugins` hook count discrepancy、PostToolUse dispatch dies after `/clear`）。本 doc 保留為歷史 snapshot。
+**狀態**：✅ Consumed — fresh observations 已 promote 到 [`project/backlog/BACKLOG.md`](../../../../backlog/BACKLOG.md)（`/reload-plugins` hook count discrepancy、PostToolUse dispatch dies after `/clear`）。本 doc 保留為歷史 snapshot。
 **目的**：context clear 後新 session 接續執行
 **現況**（建立當時）：`develop` 在 `871fd77`、無 active branch、無 uncommitted changes、全 push 過
 
@@ -9,7 +9,7 @@
 
 ## TL;DR — 1 段話進入狀況
 
-今天 ship 3 個 L-size（**v2.7.0** superpowers-coexistence / **v2.7.2** context-handoff-hardening / **v2.7.3** retro-roundup）+ 多 Fix-cycle，total ~40 commits。Plans 已寫 6 個進 `docs/plans/`、roadmap 進 `docs/BACKLOG.md`（7 entries trigger-bound）。**剩下 fresh observation 沒解的 2 個**：(1) intent-capture 自動觸發在 reload 後 burst 跑了 ~20 次就停、(2) `/reload-plugins` 報 11 hooks 但實際 13。Real auto-compact (~150K threshold) 等被動觸發、就會自然驗 v2.7.2 端到端。
+今天 ship 3 個 L-size（**v2.7.0** superpowers-coexistence / **v2.7.2** context-handoff-hardening / **v2.7.3** retro-roundup）+ 多 Fix-cycle，total ~40 commits。Plans 已寫 6 個進 `docs/plans/`、roadmap 進 `project/backlog/BACKLOG.md`（7 entries trigger-bound）。**剩下 fresh observation 沒解的 2 個**：(1) intent-capture 自動觸發在 reload 後 burst 跑了 ~20 次就停、(2) `/reload-plugins` 報 11 hooks 但實際 13。Real auto-compact (~150K threshold) 等被動觸發、就會自然驗 v2.7.2 端到端。
 
 ---
 
@@ -89,19 +89,19 @@ v2.7.2 端到端只有 auto-compact 能完整 trigger：PreCompact → state-che
 
 | File | 內容 | Trigger |
 |---|---|---|
-| `docs/plans/_archive/2026/05/2026-05-14-eval-router-judge.md` | API-direct router-judge 取代 skill-creator proxy isolation-test | 下次 routing tightening 痛點 |
-| `docs/plans/_archive/2026/05/2026-05-14-test-suite.md` | autopilot 自動化 test 框架（3-layer pyramid） | 下次出現 v2.7.3-class「reviewer-跑了-才抓到」bug，OR v2.7.4 release 前 |
-| `docs/plans/_archive/2026/05/2026-05-14-reload-plugins-agent-invokable.md` | Option D shipped (`reload-watch.js`); Option A 等 upstream Claude Code | upstream 動作 |
-| `docs/plans/2026-05-14-powerloop-learnings.md` | B/A adopted in v2.7.2, C/D explicit skip | (closed) |
-| `docs/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md` | v2.7.0 ship | (closed) |
-| `docs/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md` | v2.7.2 ship | (closed) |
-| `docs/plans/_archive/2026/05/2026-05-14-retro-roundup.md` | v2.7.3 ship | (closed) |
+| `project/plans/_archive/2026/05/2026-05-14-eval-router-judge.md` | API-direct router-judge 取代 skill-creator proxy isolation-test | 下次 routing tightening 痛點 |
+| `project/plans/_archive/2026/05/2026-05-14-test-suite.md` | autopilot 自動化 test 框架（3-layer pyramid） | 下次出現 v2.7.3-class「reviewer-跑了-才抓到」bug，OR v2.7.4 release 前 |
+| `project/plans/_archive/2026/05/2026-05-14-reload-plugins-agent-invokable.md` | Option D shipped (`reload-watch.js`); Option A 等 upstream Claude Code | upstream 動作 |
+| `project/plans/_archive/2026/05/2026-05-14-powerloop-learnings.md` | B/A adopted in v2.7.2, C/D explicit skip | (closed) |
+| `project/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md` | v2.7.0 ship | (closed) |
+| `project/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md` | v2.7.2 ship | (closed) |
+| `project/plans/_archive/2026/05/2026-05-14-retro-roundup.md` | v2.7.3 ship | (closed) |
 
 ---
 
 ## BACKLOG（7 entries，trigger-bound）
 
-詳細 `docs/BACKLOG.md`：
+詳細 `project/backlog/BACKLOG.md`：
 
 1. **`/compact` silent-miss documentation** — README warn / upstream feedback / fallback discovery（剛新增）
 2. **intent-capture auto-fire stagnation post-reload** — 下次 reload + 長 session 觀察（剛新增）
@@ -156,7 +156,7 @@ git branch -a                    # 預期 develop + feat/v2.7.0-superpowers-coex
 
 ### Step 3（若選 1B）— test-suite Phase 1
 
-照 `docs/plans/_archive/2026/05/2026-05-14-test-suite.md` §4 Phase P1：
+照 `project/plans/_archive/2026/05/2026-05-14-test-suite.md` §4 Phase P1：
 - 建 `hooks/tests/run.sh` umbrella
 - 建 `hooks/tests/fixtures/` dir
 - 寫 state-checkpoint R10-A 為 PoC test case
@@ -173,7 +173,7 @@ git branch -a                    # 預期 develop + feat/v2.7.0-superpowers-coex
 1. **session 載新 hooks 需要 `/reload-plugins`**（per D-2 dogfood loud finding 已知 + reload-watch hook 已 ship 提示 user）。但 reload 後**沒持續觸發**（Obs-1）是新發現
 2. **`/compact` 不能拿來測 state-checkpoint**（已修 ENXIO branch，但根本 limitation 在）
 3. **MEMORY.md 累積到 21 條 entries** — 接近 health audit 觸發點 200 lines（autopilot:learn 自動規則）。如果觸發、要 split 或 cleanup
-4. **`docs/projects/INDEX.md` finish-flow grep guard 已 active**：下次 ship 進 archive 時 `(pending) | (target) | (in progress) | (WIP) | (TBD) | (draft)` 任一 leak 進 INDEX 都會 fail L-5.5
+4. **`project/projects/INDEX.md` finish-flow grep guard 已 active**：下次 ship 進 archive 時 `(pending) | (target) | (in progress) | (WIP) | (TBD) | (draft)` 任一 leak 進 INDEX 都會 fail L-5.5
 
 ---
 
@@ -194,8 +194,8 @@ git branch -a                    # 預期 develop + feat/v2.7.0-superpowers-coex
 | 路徑 | 用途 |
 |---|---|
 | `CHANGELOG.md` | v2.7.2 entry（top）+ RELEASE TEMPLATE comment + 完整 v2.7.0/v2.7.1 history |
-| `docs/projects/INDEX.md` | 已完成 list 含 v2.7.0/v2.7.2/v2.7.3 + 進行中 = None |
-| `docs/BACKLOG.md` | 7 trigger-bound entries（剛新增 3 條來自今天 observation）|
+| `project/projects/INDEX.md` | 已完成 list 含 v2.7.0/v2.7.2/v2.7.3 + 進行中 = None |
+| `project/backlog/BACKLOG.md` | 7 trigger-bound entries（剛新增 3 條來自今天 observation）|
 | `hooks/state-checkpoint.js` | Node JSONL parser PreCompact hook (v2.7.2)，剛加 ENXIO graceful skip |
 | `hooks/intent-capture.js` | Per-cwd resume hint PostToolUse hook (v2.7.2) |
 | `hooks/session-start.sh` | SessionStart with compaction recovery + per-cwd intent hint (v2.7.2)|

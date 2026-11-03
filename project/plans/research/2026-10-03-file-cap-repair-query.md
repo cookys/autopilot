@@ -39,7 +39,7 @@
   No sizing guidance in skills/l5, skills/l6, references/, docs/.
 - Prior art: CHANGELOG.md:1195-1198 (v2.36.6x): a 13-path campaign with cap 13 hit `changed_files 13 >= max_changed_files 13`
   on repair -> TERMINAL_STOP, degraded to l3; "changed_files cap uses >= to block repair" was recorded as a rail defect
-  (BACKLOG entry not found by grep in docs/BACKLOG.md today; likely archived or unrecorded - verify before citing).
+  (BACKLOG entry not found by grep in project/backlog/BACKLOG.md today; likely archived or unrecorded - verify before citing).
   v2.36.111 fixed only the REVIEWING variant (CHANGELOG.md:29).
 
 ## 4. Answer

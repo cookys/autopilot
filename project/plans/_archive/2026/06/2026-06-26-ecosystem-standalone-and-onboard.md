@@ -32,7 +32,7 @@ assumed ecosystem. The 296-hit / ~40-file superpowers footprint is dominated by 
 records (coexistence plan, internalize-trio plan, archive) that should be **kept**, not scrubbed.
 
 **Overlap risk (must coordinate):** `feat/onboarding-readme-revamp` (plan `2026-06-26-onboarding-readme-revamp.md`,
-partly merged) is already relocating the README's superpowers-coexistence content into `docs/coexistence.md`.
+partly merged) is already relocating the README's superpowers-coexistence content into `docs/guide/coexistence.md`.
 (B)'s README-facing edits MUST build on that branch's end-state, not collide with it.
 
 ## 1. Problem statement
@@ -93,7 +93,7 @@ separately fixture-tested so the testable core stays testable even though the pr
 1. **Audit** the ~40-file footprint into a **keep / flip** table (keep = historical/optional record;
    flip = states or implies a superpowers-first default). Most hits are keep.
 2. **Flip** the small flip-set: template intros that imply third-party as the baseline; `quality-gate-config`
-   /`dispatch-config` wording; `docs/coexistence.md` + `docs/configuration.md` positioning; AGENTS.md +
+   /`dispatch-config` wording; `docs/guide/coexistence.md` + `docs/guide/configuration.md` positioning; AGENTS.md +
    CLAUDE.md "what autopilot assumes" surfaces — **name autopilot+codeforge+mnemos as the default ecosystem**.
    Drop voltagent as an assumed peer (keep any factual mention as "not supported / out of scope").
 3. **Coordinate README** edits with `feat/onboarding-readme-revamp` (rebase onto its end-state; touch only
@@ -171,7 +171,7 @@ All phases shipped on `feat/ecosystem-standalone-onboard` (off develop, unpushed
 |-------|--------|---------|
 | P0 | `820b178` | Triage doc (`triage-superpowers-footprint.md`); FLIP set = 8 surfaces, Board-approved |
 | P1 | `3ffe666` | Premise flip (12 surfaces); `/l5` hetero + gpt-5.5 2-round → SHIP. Engine overridden to `/l5`+gpt-5.5 (was `/l4`) by Board |
-| P1.5 | `d728d44` | **(interleaved)** install/update-UX feedback → `version-drift-check` hook + `dev-update.sh` + `docs/installation.md` restructure; v2.25.13 |
+| P1.5 | `d728d44` | **(interleaved)** install/update-UX feedback → `version-drift-check` hook + `dev-update.sh` + `docs/guide/installation.md` restructure; v2.25.13 |
 | P2 | `e259613` | `project-detect.js` + 9 fixtures + 83-assert test; golden-exact vs hangar-bridge; gpt-5.5 8-round (caught path-traversal + symlink escape) |
 | P3 | `1cb6286` | `scaffold-config.js` + 45-assert test; reproduces golden mechanical values; gpt-5.5 4-round |
 | P4 | `0d2bf2a` | `skills/onboard/SKILL.md` (judgment layer); depth-0 + gpt-5.5 3-round |

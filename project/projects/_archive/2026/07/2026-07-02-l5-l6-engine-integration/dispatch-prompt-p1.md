@@ -2,7 +2,7 @@
 
 ## Goal
 
-Complete Phase 7 of `docs/plans/2026-07-01-cross-harness-engine-infrastructure.md`: make `/l5` and `/l6` use an `AutopilotEngine`/CLI path for implementer -> review -> repair orchestration, while preserving existing shell contracts.
+Complete Phase 7 of `project/plans/_archive/2026/07/2026-07-01-cross-harness-engine-infrastructure.md`: make `/l5` and `/l6` use an `AutopilotEngine`/CLI path for implementer -> review -> repair orchestration, while preserving existing shell contracts.
 
 ## Scope
 

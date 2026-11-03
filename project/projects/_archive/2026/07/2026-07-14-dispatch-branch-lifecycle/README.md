@@ -33,7 +33,7 @@
 
 | Phase | Content | Status |
 |-------|---------|--------|
-| P0 | Plan 撰寫（docs/plans/2026-07-14-dispatch-branch-lifecycle.md） | complete |
+| P0 | Plan 撰寫（project/plans/_archive/2026/07/2026-07-14-dispatch-branch-lifecycle.md） | complete |
 | P1 | Hetero loop review of plan（agy Gemini + cc-shim GLM，5 generations；無未決 Critical/Major） | complete |
 | P2 | 實作（TDD：fixture tests 先行；MiniMax verification-author artifact + foreman fallback） | complete |
 | P3 | 實作 diff hetero review loop + 文件 wiring | complete |

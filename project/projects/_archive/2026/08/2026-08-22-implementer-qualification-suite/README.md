@@ -2,7 +2,7 @@
 
 > Target version: v2.34.34 (PATCH — new scripts/evals, no new skill/agent; VA-suite precedent v2.34.17)
 > Branch: `feat/v2.34.34-implementer-qualification-suite`
-> Plan: [`docs/plans/2026-08-22-implementer-qualification-suite.md`](../../plans/2026-08-22-implementer-qualification-suite.md)
+> Plan: [`project/plans/_archive/2026/08/2026-08-22-implementer-qualification-suite.md`](../../plans/2026-08-22-implementer-qualification-suite.md)
 > Approved plan-mode snapshot: `~/.claude/plans/snuggly-churning-orbit.md`
 
 ## Project Goal

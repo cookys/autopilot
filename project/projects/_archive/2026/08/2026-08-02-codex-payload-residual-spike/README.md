@@ -2,8 +2,8 @@
 
 > Status: COMPLETE — NO-GO; locally merged to `develop` as `ded66265523285595e6a9498355d4c6273c37116`
 > Owner: depth-0 CEO + existing worktree-isolated L4 foreman transcript
-> Plan: [`docs/plans/2026-08-02-codex-payload-residual-spike.md`](../../../plans/2026-08-02-codex-payload-residual-spike.md)
-> Boundary correction: [`docs/plans/_archive/2026/08/2026-08-02-codex-payload-residual-spike-mirror-correction.md`](../../../plans/_archive/2026/08/2026-08-02-codex-payload-residual-spike-mirror-correction.md)
+> Plan: [`project/plans/2026-08-02-codex-payload-residual-spike.md`](../../../plans/2026-08-02-codex-payload-residual-spike.md)
+> Boundary correction: [`project/plans/_archive/2026/08/2026-08-02-codex-payload-residual-spike-mirror-correction.md`](../../../plans/_archive/2026/08/2026-08-02-codex-payload-residual-spike-mirror-correction.md)
 
 ## Goal
 

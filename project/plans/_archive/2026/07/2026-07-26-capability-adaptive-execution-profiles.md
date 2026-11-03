@@ -600,9 +600,9 @@ The completion receipt explains:
 | `references/model-routing.md` | Route only after capability floor; keep role and depth policy aligned. |
 | `references/hetero-dispatch.md` | Add local raw transport and explicitly separate it from agentic implementation. |
 | `CLAUDE.md` | Add new deterministic scripts to the inventory. |
-| `README.md`, `README.zh-TW.md`, `docs/architecture.md` | Explain one product, profiles, project default/task override, and local limitations. |
+| `README.md`, `README.zh-TW.md`, `docs/dev/architecture.md` | Explain one product, profiles, project default/task override, and local limitations. |
 | `scripts/sync-codex-plugin-skills.sh` output | Regenerate Codex support payload from canonical files; never hand-edit mirrors. |
-| `CHANGELOG.md`, `docs/projects/INDEX.md`, version manifests | Release and project lifecycle closure. |
+| `CHANGELOG.md`, `project/projects/INDEX.md`, version manifests | Release and project lifecycle closure. |
 
 ## 4. Phases
 

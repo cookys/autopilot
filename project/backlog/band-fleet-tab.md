@@ -21,7 +21,7 @@ The owner wants to see fleet state directly on the band. Today it takes a termin
 - Reading must never block a band redraw: cache the result and use a timeout.
 
 ## Layout
-Per the owner rule, build a real-terminal preview first and let the owner choose. Colours follow design-system section 12 (docs/plans/2026-10-13-live-pane-design-system.md): one colour one meaning, colours only through PALETTE.
+Per the owner rule, build a real-terminal preview first and let the owner choose. Colours follow design-system section 12 (project/plans/2026-10-13-live-pane-design-system.md): one colour one meaning, colours only through PALETTE.
 
 ## Relation to BL-0356 (extension mechanism)
 The fleet tab is an autopilot-owned tab and need not wait for the extension contract. It must still mount the same way BL-0356 plans for tabs, so nothing needs rework later.

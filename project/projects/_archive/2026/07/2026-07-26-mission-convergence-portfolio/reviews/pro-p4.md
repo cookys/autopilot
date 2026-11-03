@@ -78,7 +78,7 @@ Other findings:
   boundary.
 - Implementer/verification-author/QC qualification cannot be inferred from transport probes or
   disk scorecards. The missing authority-bound provider is valuable and was added to
-  `docs/BACKLOG.md` with an ICC P4/Mission integration trigger.
+  `project/backlog/BACKLOG.md` with an ICC P4/Mission integration trigger.
 
 ### Terminal Panel
 

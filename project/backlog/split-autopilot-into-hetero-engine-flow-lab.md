@@ -10,7 +10,7 @@ Three groups by function:
 
 How to split is undecided; three candidate depths, cheapest first:
 
-1. Regroup only in the documentation (`docs/skills.md` already has a core/delegation/pioneer layout).
+1. Regroup only in the documentation (`docs/guide/skills.md` already has a core/delegation/pioneer layout).
 2. Reorganise directories and naming inside this repo.
 3. Split into separate plugins.
 

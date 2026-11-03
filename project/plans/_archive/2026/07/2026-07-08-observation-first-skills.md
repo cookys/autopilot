@@ -1,7 +1,7 @@
 # Observation-first skills — 驗證合約必答 + 密度去硬編碼 + 演化規則
 
 > Status: R3 — R2 判定:gpt-5.5/grok/GLM SHIP-AS-IS;opus 1 blocking(紅綠 base-run 語意)+ MiniMax 2 kernels,本版吸收
-> Evidence base: `docs/projects/_archive/2026/07/2026-07-06-eval-instruments/report.md`
+> Evidence base: `project/projects/_archive/2026/07/2026-07-06-eval-instruments/report.md`
 
 ## 背景:量測已定案的五件事
 

@@ -20,7 +20,7 @@ With `context_budget.seat` set to `resident`, the context-budget T2 reminder say
 
 ## Known per-harness facts
 
-Measured on 2026-10-21. Sources: notes in `src/harness/capabilities/codex.json` and `src/harness/capabilities/agy.json`, and the "2026-10-21 local measurement" section of `docs/backlog/cross-harness-token-discipline.md`. Only confirmed and refuted rows are stated as facts. Runtime effect of the Codex config keys was not observed.
+Measured on 2026-10-21. Sources: notes in `src/harness/capabilities/codex.json` and `src/harness/capabilities/agy.json`, and the "2026-10-21 local measurement" section of `project/backlog/cross-harness-token-discipline.md`. Only confirmed and refuted rows are stated as facts. Runtime effect of the Codex config keys was not observed.
 
 - Confirmed, codex-cli 0.163.0: a global `AGENTS.md` in `CODEX_HOME` is loaded, and that text appeared before the repo `AGENTS.md`. `CODEX_HOME` is the config directory.
 - Confirmed, codex-cli 0.163.0, `codex doctor`: `model_auto_compact_token_limit` and `compact_prompt` are accepted at the top level. The official config reference lists both there.

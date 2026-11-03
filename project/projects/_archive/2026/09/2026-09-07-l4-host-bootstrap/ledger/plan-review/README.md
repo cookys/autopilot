@@ -9,7 +9,7 @@ logical_plan_id: `l4-host-provider-readiness-bootstrap-2026-09-07` · manifest: 
 
 ## Freeze
 
-`node scripts/check-phase-review-receipt.js --plan-artifact g2.adjudicated.json --dispositions g2.dispositions.checker.json --plan-file plan.g2-reviewed.md --rubric-file docs/plans/_archive/2026/09/2026-09-07-l4-host-provider-readiness-bootstrap.rubric.md` → **exit 0** (2026-09-07).
+`node scripts/check-phase-review-receipt.js --plan-artifact g2.adjudicated.json --dispositions g2.dispositions.checker.json --plan-file plan.g2-reviewed.md --rubric-file project/plans/_archive/2026/09/2026-09-07-l4-host-provider-readiness-bootstrap.rubric.md` → **exit 0** (2026-09-07).
 
 - `plan.g2-reviewed.md` is the byte-exact plan g2 reviewed (sha `43060d6a…`, equals the artifact's `plan_sha256`).
 - `g2.adjudicated.json` = `g2.stdout.json` + the R7 disposition applied with the repo's own `applyDispositions` (`adjudicate.js`, copied from the 2026-09-05 ledger with paths changed); `g2.dispositions.checker.json` is the same decision in the checker's shape.

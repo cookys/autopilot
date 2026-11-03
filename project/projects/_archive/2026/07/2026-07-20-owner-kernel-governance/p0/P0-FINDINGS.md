@@ -18,7 +18,7 @@
 >
 > **Run**: `owner-kernel-p0-1784543437001` · **Base**: `366311c` · **Date**: 2026-07-20
 > **Refresh**: 2026-07-23 supervised profile, canonical evidence composition, and three-task spike
-> **Plan**: [`docs/plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md`](../../../plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md) § P0
+> **Plan**: [`project/plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md`](../../../plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md) § P0
 
 ## Reproduce
 

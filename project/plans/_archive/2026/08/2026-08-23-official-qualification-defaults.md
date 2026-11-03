@@ -102,8 +102,8 @@ mechanical no-confidence path as any self-qualified seat.
 | `skills/onboard/SKILL.md` | Asks the question when a consuming repo enables a hetero role. | edit |
 | `hooks/tests/qualification-defaults.test.sh` | Schema validity, generation determinism, hand-edit negative. | new |
 | `hooks/tests/qualification-defaults-adoption.test.sh` | Adoption round-trip: admissible + strike-able + remedy. | new |
-| `docs/BACKLOG.md` | This row resolved; roster-qualification row updated. | edit |
-| `docs/projects/2026-08-23-official-qualification-defaults/` + `docs/projects/INDEX.md` | Project tracking. | new |
+| `project/backlog/BACKLOG.md` | This row resolved; roster-qualification row updated. | edit |
+| `docs/projects/2026-08-23-official-qualification-defaults/` + `project/projects/INDEX.md` | Project tracking. | new |
 | `CHANGELOG.md`, `.claude-plugin/plugin.json` (+ mirrors) | PATCH bump. | edit |
 | `CLAUDE.md` | Three new script basenames in the grouped inventory. | edit |
 | `docs/scripts-inventory.md` | Three new index rows. | edit |

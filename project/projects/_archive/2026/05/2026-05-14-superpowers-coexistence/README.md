@@ -1,7 +1,7 @@
 # Superpowers Coexistence — v2.7.0
 
 **Status**: Complete — merged as v2.7.0 and archived.
-**Plan doc**: [`docs/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md`](../../../plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md)
+**Plan doc**: [`project/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md`](../../../plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md)
 **Branch**: `feat/v2.7.0-superpowers-coexistence`
 **CHANGELOG**: [v2.7.0 entry shipped](../../../../CHANGELOG.md)
 
@@ -51,7 +51,7 @@
 ## Files touched (25 total, +1400 / -68)
 
 **新增（5）**：
-- `docs/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md` — plan doc
+- `project/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md` — plan doc
 - `docs/projects/2026-05-14-superpowers-coexistence/README.md` — 本檔
 - `project-config-template/dispatch-config.md` — 6 chains schema
 - `skills/{debug,test-strategy,team,profiling}/SKILL.md` — 從 `f08812c^` restore
@@ -66,7 +66,7 @@
 - `CHANGELOG.md` — v2.7.0 entry（newest-first，含 migration callout）
 - `.claude-plugin/{plugin,marketplace}.json` — 2.5→2.7 + tagline + 16 skills
 - `hooks/hooks.json` — description (v2.7.0)
-- `docs/projects/INDEX.md` — 進行中 row
+- `project/projects/INDEX.md` — 進行中 row
 
 ## Risks（pointer to plan §5）
 
@@ -89,7 +89,7 @@ git merge --no-ff feat/v2.7.0-superpowers-coexistence
 
 ## Links
 
-- Plan doc: [`docs/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md`](../../../plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md)
+- Plan doc: [`project/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md`](../../../plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md)
 - CHANGELOG: [v2.7.0 entry](../../../../CHANGELOG.md)
 - Previous v2.0 刪除 commit: `f08812c`（4 個被砍 skill 的源檔）
 - r1 + r2 + final review 完整紀錄: plan §9

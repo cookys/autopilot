@@ -1,19 +1,19 @@
 # Plan — t14 per-turn verification gate experiment (BL-0055)
 
-> Status: S1-S6 done, verdict FAIL (FAIL-TRADE). Report: docs/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md · Owner: cookys · Branch: lane/bl0055 · Frame: M, one experiment, four build slices then one run
-> Source: BL-0055 (`docs/BACKLOG.md:311-321`). Decision: panel card d-8bc3d286, 2026-10-19 ("open the experiment").
+> Status: S1-S6 done, verdict FAIL (FAIL-TRADE). Report: project/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md · Owner: cookys · Branch: lane/bl0055 · Frame: M, one experiment, four build slices then one run
+> Source: BL-0055 (`project/backlog/BACKLOG.md:311-321`). Decision: panel card d-8bc3d286, 2026-10-19 ("open the experiment").
 > Pre-registration: the thresholds in §2 are frozen when this plan is committed. Nothing in §2 changes after the first pilot run.
 
 ## 0. Context / thesis
 
 - Series so far. Prose asset packs failed to hold the t14 constraints: ON 3/17 vs OFF 1/18, p=0.279
-  (`docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md:5-9`). Per-turn re-injection (driver prepends the verbatim
+  (`project/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md:5-9`). Per-turn re-injection (driver prepends the verbatim
 CONSTRAINTS.md every turn) then scored 3/15 against the reused OFF 1/18, one-tailed Fisher p=0.234
   (`report.md:64-70`). The report's reading: the model fails to honour constraints it is looking at, so the remaining lever is "hard
   verification/gating" (`report.md:84-87`, `:93-97`). It also says a decisive read needs n>=30 per arm (`report.md:88-91`).
 - **Path correction.** BACKLOG's Source field points at `docs/projects/_archive/2026-07-08-t14-reinject/report.md`
-  (`docs/BACKLOG.md:319`). The real path has `2026/07/` in it: `docs/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md` (plus
-  `reinject-results.jsonl` beside it). The sidecar `docs/backlog/t14-long-horizon-per-turn-verification-gate.md:8` carries the same wrong
+  (`project/backlog/BACKLOG.md:319`). The real path has `2026/07/` in it: `project/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md` (plus
+  `reinject-results.jsonl` beside it). The sidecar `project/backlog/t14-long-horizon-per-turn-verification-gate.md:8` carries the same wrong
   path. Fix both at S6. The two Source-path fixes were already in place by S6 (BACKLOG.md and the sidecar both carry the 2026/07 path) and are verified at S6.
 - Weak points of the old data this plan must not inherit: OFF was reused, not run beside ON (`report.md:48-51`); all 15 ON rows ran on
   `runner_version` 2.1.204 (`reinject-results.jsonl:1`) while the installed CLI is 2.1.303
@@ -103,7 +103,7 @@ Definitions. Arms: C (control, no gate) and G (gate). `n` = 30 valid runs each. 
 | `evals/orchestration/analyze-t14-gate.js` | New. Recomputes M1-M3 from `oracle.log`, Fisher, applies the §2 rules, prints the verdict |
 | `hooks/tests/t14-turn-verifier.test.sh`, `orchestration-eval-gate.test.sh`, `t14-gate-batch.test.sh` | New. Verifier + negative controls; harness plumbing and byte-identical-off probe; driver resume/stop (fake `claude`) |
 | `evals/orchestration/README.md` | Document `--gate` beside the multi-turn runner note (`README.md:36`) |
-| `docs/projects/<new>/`, `docs/BACKLOG.md`, `docs/backlog/t14-long-horizon-...md`, `CHANGELOG.md` | Report; BL-0055 update with the corrected path |
+| `docs/projects/<new>/`, `project/backlog/BACKLOG.md`, `docs/backlog/t14-long-horizon-...md`, `CHANGELOG.md` | Report; BL-0055 update with the corrected path |
 
 ### 3.1 Verifier interface (`verify-turn.js`)
 
@@ -203,7 +203,7 @@ bash hooks/tests/orchestration-eval.test.sh && bash hooks/tests/orchestration-ev
 node --check evals/orchestration/run-t14-gate-batch.js evals/orchestration/analyze-t14-gate.js \
   evals/orchestration/tasks/t14-constraint-horizon/gate/verify-turn.js
 node scripts/affected-suites.js --base develop
-node scripts/doc-drift-gate.js && node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md
+node scripts/doc-drift-gate.js && node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md
 ```
 
 Byte-identical-off probe (as in `report.md:34-36`): run the stub runner with no `--gate` on the base-commit harness and on the branch

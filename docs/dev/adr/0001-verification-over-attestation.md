@@ -13,8 +13,8 @@ roots was chartered on a gpt-5.6-sol panel dissent ("a system that decides nothi
 nothing"). Attribution matters and is recorded honestly: **the vocabulary was in the
 owner-approved founding plan from day one; sol drove the shadow→production promotion; a human
 signed every gate.** The failure mode was Goodhart drift of process machinery, not a rogue engine.
-History: [`../plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md`](../plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md),
-[`../plans/_archive/2026/08/2026-08-10-owner-kernel-promotion.md`](../plans/_archive/2026/08/2026-08-10-owner-kernel-promotion.md).
+History: [`../plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md`](../../../project/plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md),
+[`../plans/_archive/2026/08/2026-08-10-owner-kernel-promotion.md`](../../../project/plans/_archive/2026/08/2026-08-10-owner-kernel-promotion.md).
 
 Architecture review (2026-08-16) found the decisive defect: every acceptance check was
 format/hash/policy evaluation **over submitted claims**; independent re-derivation existed
@@ -22,22 +22,22 @@ nowhere (the kernel could not even run a test), and truth entered only through c
 verifier adapters that were never implemented. The machinery guaranteed *record integrity* and
 *emitter authentication* — while the only real threat in a single-user deployment is *claim
 veracity*. Its answer to "did the agent lie?" was "the lie is now immutably recorded, with
-correct provenance." Full chain: [`../plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`](../plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md).
+correct provenance." Full chain: [`../plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`](../../../project/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md).
 
 An industry survey (dual-agent, adversarial) then bounded the replacement:
-[`../plans/2026-08-16-four-layer-redesign-survey.md`](../plans/2026-08-16-four-layer-redesign-survey.md).
+[`../plans/2026-08-16-four-layer-redesign-survey.md`](../../../project/plans/_archive/2026/08/2026-08-16-four-layer-redesign-survey.md).
 
 ## Decision
 
 1. **Remove the trust chain and its substrate entirely** (v2.34.10). Keepers: five shared
    primitives (`canonical/errors/actions/policy/task-authority`) + the live governance config.
 2. **Govern by verification contracts, not attestation**: what "done" must prove lives in
-   [`../../references/evidence-contract.md`](../../references/evidence-contract.md); enforcement
+   [`../../references/evidence-contract.md`](../../../references/evidence-contract.md); enforcement
    is small gates on existing rails, each shipped with a planted red case (v2.34.11): the
    blind-evidence lint, the exec-boundary deny hook, the holdout gate, the cascade
    `--prior-status`.
 3. **Scaffolding is capability-indexed, never flat** — T0/T1/T2 fail-closed from measured
-   qualification ([`../../references/scaffold-tiers.md`](../../references/scaffold-tiers.md)).
+   qualification ([`../../references/scaffold-tiers.md`](../../../references/scaffold-tiers.md)).
 4. **Verification is decorrelated, single-round, cascade-escalated** — one verdict per seat per
    generation, depth-0 adjudicates, never rebuttal rounds; escalation seats a fresh
    disjoint-family reviewer.
@@ -46,9 +46,9 @@ An industry survey (dual-agent, adversarial) then bounded the replacement:
    claim; only independent re-derivation (re-run, re-scan, decorrelated review) verifies.
    A deliverable that starts to need trust machinery is a stop-and-review, not a design choice.
 
-Rule→enforcer table: [`../../references/four-layer-design.md`](../../references/four-layer-design.md).
+Rule→enforcer table: [`../../references/four-layer-design.md`](../../../references/four-layer-design.md).
 Epistemics (why green is not proof; why same-author verification inherits the author's blind
-spots): [`../../references/evidence-discipline.md`](../../references/evidence-discipline.md) §8.
+spots): [`../../references/evidence-discipline.md`](../../../references/evidence-discipline.md) §8.
 
 ## Consequences and direction
 

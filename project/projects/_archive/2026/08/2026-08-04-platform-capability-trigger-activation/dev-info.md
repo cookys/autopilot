@@ -15,7 +15,7 @@
 - Tag/publish state: not performed or claimed by this archive record
 - Pull request: none opened by this closeout
 - Mission shape: one deliverable with ordered internal gates D1 → D2 → D3 → D4
-- Plan: [`docs/plans/2026-08-04-platform-capability-trigger-activation.md`](../../../plans/2026-08-04-platform-capability-trigger-activation.md)
+- Plan: [`project/plans/2026-08-04-platform-capability-trigger-activation.md`](../../../plans/2026-08-04-platform-capability-trigger-activation.md)
 - Plan review generation 1: ticket `platform-trigger-activation-r4-20260804`, session
   `platform-trigger-activation-r4-g1`, key
   `9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab`; Sol `CONDITIONAL`, Gemini
@@ -28,7 +28,7 @@
   `READY`, empty findings, terminal policy `generation_2_terminal`, `next_generation:null`; artifact
   `$HOME/.autopilot/plan-review/9d76ee510ba046bd6aab6484cfb193b5e376afcfe689490d1c484ff063363bab/generation-02.json`
   (SHA-256 `5cbdfdeb86de9d85f4395a1e70f218e3ca72844c31684c76b2154399699dd1ed`)
-- D3 production receipt: [`evidence/codex-postcompact-production-live-receipt.json`](evidence/codex-postcompact-production-live-receipt.json), byte-for-byte source
+- D3 production receipt: [`evidence/codex-postcompact-production-live-receipt.json`](../../../../../../docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/codex-postcompact-production-live-receipt.json), byte-for-byte source
   `/tmp/autopilot-d3-live-E8PkHl/depth0-production-live-final12/live-receipt.json`; file SHA-256
   `789a0cfb1975adafbfd162ce28ee1dee943999bfba805077c9857597c212a461`, internal digest
   `96e7859cef39132aa3c80aa4e55ea0672c07d8838c4238994cbb0f3f25be762a`, driver SHA-256

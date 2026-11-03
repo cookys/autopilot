@@ -28,7 +28,7 @@ Status legend: ☐ todo · ◑ in-progress · ☑ done (gpt-5.5 SHIP-AS-IS)
 | 16 | EXTEND | 🟡 Minor | Eval harness covers 16/24 skills; generate skill list + report missing eval sets | `scripts/run-eval-batch.sh:2,53` | **both** |
 | 17 | FIX | 🟠 Major | **(discovered during validation, not by engines)** `check-hook-inventory.test.sh` broken on develop: sandbox never copies `hooks/opt-in-manifest.json` (a derivation input since v2.26.2) → script ENOENTs → 17/18 assertions fail; also stale `8 default-on` vs current `10`. Test-only (no-bump). | `hooks/tests/check-hook-inventory.test.sh:16,44,63,70` | (validation) |
 
-Dropped (engine claimed, NOT verified / already backlogged / false-positive): codex's "no DO item beyond BACKLOG"; any item already in `docs/BACKLOG.md` (opt-in multiplexer, domain routing, hetero-dispatch skill wrapper).
+Dropped (engine claimed, NOT verified / already backlogged / false-positive): codex's "no DO item beyond BACKLOG"; any item already in `project/backlog/BACKLOG.md` (opt-in multiplexer, domain routing, hetero-dispatch skill wrapper).
 
 ## Execution order (cheapest-correct first; gpt-5.5 loop-reviews each batch to SHIP-AS-IS)
 

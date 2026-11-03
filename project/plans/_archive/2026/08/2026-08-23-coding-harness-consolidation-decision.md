@@ -25,7 +25,7 @@ A local supervisor service or Pi/DSH primary runtime is not an active phase. Sec
 
 Review evidence:
 
-- `docs/projects/2026-08-23-coding-harness-consolidation/reviews/r1-architect.md`
+- `project/projects/2026-08-23-coding-harness-consolidation/reviews/r1-architect.md`
 - `.../r1-maintainer-ops.md`
 - `.../r1-skeptic-product.md`
 - `.../r1-eval-verifier.md`

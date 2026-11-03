@@ -103,14 +103,14 @@ Ingestion from member sessions:
   (runbook `runbooks/unattended-budget-guard.md`); fuchikoma ROADMAP P1.3 "billing-layer hard cap + kill-switch".
 - Autopilot already has producer-side machine-readable state (candidates to publish from): `scripts/tree.js board-status`
   and `report` (task-tree JSONL), `scripts/run-ledger.sh` (stage state machine), `scripts/dispatch-status.js` (mid-run
-  phase/liveness/usage/stall JSON), `scripts/next-pick.js parse` (BACKLOG row machine fields), `docs/projects/INDEX.md`
+  phase/liveness/usage/stall JSON), `scripts/next-pick.js parse` (BACKLOG row machine fields), `project/projects/INDEX.md`
   (In Progress / archived tables), `scripts/check-plan-graduation.js`, `build-rehydration-bundle.js`, `~/.autopilot/*` stores.
   Nothing today emits one per-project, versioned, cross-consumer "progress snapshot". (INFERRED from the inventory.)
 - Integration points between fleet and autopilot (grep "autopilot" in fleet v2): only
   1. channel `autopilot` (`deploy/rehearsal/access/channels/autopilot.yml`: owner-namespace cookys, kind project,
      posters all, auto-join opt-in, cross-namespace-dispatch false) and its use in access tests (`courier/crates/core/src/access.rs`);
   2. hub/CHANGES.md mention. No consumer contract, no schema, no doc. In fleet-comms: plan review runs used autopilot
-     plan-review; autopilot `docs/plans/2026-09-19-roundtable.md` consumes fleet send/receipts (v1 wording `fleet-cockpit status`).
+     plan-review; autopilot `project/plans/2026-09-19-roundtable.md` consumes fleet send/receipts (v1 wording `fleet-cockpit status`).
 - Documented consumer-facing contracts that DO exist: the `.proto` IDL + `contracts/fixtures`, `fleet status --json`/
   `fleet task list --json`/`fleet inbox --json`/`fleet whoami --json`, `sessions-*.json` snapshots and `state.jsonl`
   (described in `plugins/lib/session-observe.ts` header; used by hangar fleet-pulse). Stability promise = additive-only (contracts).

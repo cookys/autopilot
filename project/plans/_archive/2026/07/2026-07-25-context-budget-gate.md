@@ -4,7 +4,7 @@
 **Target version**: v2.32.58
 **Size**: L
 **狀態**: ✅ Shipped in v2.32.58 — merged as `945edac`
-**Project**: [`docs/projects/_archive/2026/07/2026-07-25-context-budget-gate/`](../projects/_archive/2026/07/2026-07-25-context-budget-gate/README.md)
+**Project**: [`docs/projects/_archive/2026/07/2026-07-25-context-budget-gate/`](../../../../projects/_archive/2026/07/2026-07-25-context-budget-gate/README.md)
 
 ## Motivation — measured, not assumed
 
@@ -129,7 +129,7 @@ Red-green: the new test file must be **RED on base** (the gate does not exist th
 > from `$0` via `lib.sh`, so the base run actually exercises the head tree and is always green
 > (`NOT_RED_ON_BASE`). Manual procedure used instead: detached worktree at base → apply ONLY the
 > test-file patch → `cd` in → run by relative path. Result: **base exit 1 (RED), head 48
-> assertions PASS (GREEN)**. Tool defect recorded in `docs/BACKLOG.md`.
+> assertions PASS (GREEN)**. Tool defect recorded in `project/backlog/BACKLOG.md`.
 
 Negative controls the test must include:
 - an over-budget prompt is **blocked** (not merely warned),
@@ -143,7 +143,7 @@ Negative controls the test must include:
 **In scope**: the five phases above; all three dispatch rails; Codex payload mirror.
 
 **Out of scope** (documented, not silently dropped):
-- Compressing tool *output* (rtk-style) — already in `docs/BACKLOG.md` with a measured ~11%
+- Compressing tool *output* (rtk-style) — already in `project/backlog/BACKLOG.md` with a measured ~11%
   ROI ceiling; a different lever from input budgeting.
 - Reducing review-loop round count — the data explicitly refutes this as a cost lever.
 - agy / opencode telemetry ingestion — agy has **no token fields at all** (91% of its

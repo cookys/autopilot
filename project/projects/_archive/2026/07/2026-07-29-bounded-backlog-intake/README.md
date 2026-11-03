@@ -46,7 +46,7 @@ gate; they are not phases.
 Objective verification:
 
 ```bash
-test -s docs/projects/_archive/2026/07/2026-07-29-bounded-backlog-intake/reviews/joint-review.md
+test -s project/projects/_archive/2026/07/2026-07-29-bounded-backlog-intake/reviews/joint-review.md
 ```
 
 The report must additionally enumerate C1–C11 exactly once and record all four engine outcomes.

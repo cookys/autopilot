@@ -1,6 +1,6 @@
 # Rubric — 2026-10-20-per-turn-gate.md
 
-> Source plan: docs/plans/2026-10-20-per-turn-gate.md
+> Source plan: project/plans/2026-10-20-per-turn-gate.md
 
 R1: [evidence faithful] The plan states the BL-0055 round 1 and round 2 results accurately (n, M1/M2/M3 per arm, Fisher p, verdicts, the two infra failures, the unexplained C-arm drop) and does not claim more than haiku-4-5 on one task set supports.
 R2: [oracle gap closed honestly] The plan explains which parts of the experiment gate depended on task-specific knowledge (verifier = oracle in plain clothes) and gives a concrete, implementable replacement for real tasks (rule checks and feature acceptance as machine commands in the brief, named tests and existing check scripts), with uncovered rules reported but never blocking.

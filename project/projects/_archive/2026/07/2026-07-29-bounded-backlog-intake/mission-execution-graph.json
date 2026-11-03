@@ -52,13 +52,13 @@
         "max_repair_generations": 0,
         "max_wall_seconds": 3600,
         "spec": {
-          "path": "docs/plans/2026-07-29-bounded-backlog-intake.md",
+          "path": "project/plans/2026-07-29-bounded-backlog-intake.md",
           "section": "Bounded review deliverable"
         },
         "required_paths": [
-          "docs/BACKLOG.md",
-          "docs/plans/2026-07-29-bounded-backlog-intake.md",
-          "docs/plans/2026-07-29-bounded-backlog-intake.rubric.md"
+          "project/backlog/BACKLOG.md",
+          "project/plans/2026-07-29-bounded-backlog-intake.md",
+          "project/plans/2026-07-29-bounded-backlog-intake.rubric.md"
         ],
         "output_paths": [
           "docs/projects/2026-07-29-bounded-backlog-intake/reviews/joint-review.md"

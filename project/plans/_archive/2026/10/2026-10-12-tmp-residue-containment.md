@@ -88,7 +88,7 @@ Each KR is one command that exits 0 on pass; the new test files encode the scena
 | File | Change | Phase |
 |---|---|---|
 | `scripts/engine-qualify-{consult,discuss}.test.js`, `scripts/validate-json-schema.test.js` + codex mirrors | merge `49f98412` | 1 |
-| `docs/BACKLOG.md` | drop the row "Engine review-loop diff files are never deleted" (superseded) | 1 |
+| `project/backlog/BACKLOG.md` | drop the row "Engine review-loop diff files are never deleted" (superseded) | 1 |
 | `hooks/tests/run.sh` (L1 block near :526-560) | create `apl1.XXXXXX`, hold `.autopilot-live.lock` in it, run `node --test` with `TMPDIR=<dir>`, remove on exit | 1 |
 | `hooks/tests/lib/suite-residue-reap.sh` (`_SRR_PATTERNS` :212) | add `apl1.*` as lock-gated | 1 |
 | `scripts/qualification-consult-discuss-transport.test.js:44` | use the inherited `TMPDIR` when its path is short enough, else a short dir it removes | 1 |
@@ -113,7 +113,7 @@ Each KR is one command that exits 0 on pass; the new test files encode the scena
 Dependency map: phase 1 lands the registry and `tmp-residue.js` core first; phases 2, 3 and 4 each depend on phase 1 only; phase 4 also reads the kinds phase 3 adds. Each phase's acceptance is its KR command(s) exiting 0 plus the full suite green; nothing else counts as done.
 
 ### Phase 1 — Registry core, then contain test temp dirs (size M)
-1. Merge `worktree-agent-a776e40555efd8f67`; delete the superseded BACKLOG row; `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` exit 0.
+1. Merge `worktree-agent-a776e40555efd8f67`; delete the superseded BACKLOG row; `node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md` exit 0.
 2. Create `scripts/lib/tmp-residue-registry.json` with every kind (§2.5) and today's prefixes (phase 3 step 1 list), and `scripts/lib/tmp-residue.js` with `patterns` and `new-since` (KR1 semantics) only.
 3. `run.sh` L1 block:
    - `L1_TMP="$(mktemp -d "${TMPDIR:-/tmp}/apl1.XXXXXX")"`; hold `flock` on `$L1_TMP/.autopilot-live.lock` for the run (sidecar convention of `hooks/tests/lib.sh:243-255`); export `AUTOPILOT_L1_TMP="$L1_TMP"`.
@@ -195,8 +195,8 @@ Assumptions carried: the AF_UNIX 108-byte limit bounds the per-run dir path; all
 - **G2** (2026-10-12): CONDITIONAL, terminal (generation cap; sol STOP, grok STOP, MiniMax CONDITIONAL). 17 findings, 11 blocker candidates; depth-0 accepted all 11 (2 and 8 are one fold; 11 and 16 duplicate 0 and 10). As-reviewed sha256 `a3781c0c…`.
 - **R2** bounded repair of the G2 accepted blockers only: per-instance owned dirs; owner pid+start-time liveness for runtime scratch; registry is the only registration source and the gate checks reaper parity itself; occurrence = any temp-root reference; KR1 under `set -e` with a defined scan universe; registry core moved to phase 1; `apt.*` holds its own lock; rule (b) allocation inside the `try`; `*.test.*` excluded everywhere. Frozen after R2 (no G3).
 - **R0** (2026-10-12, depth-0 Opus 5.5): drafted from the read-only inventory of 2026-10-11 and the proposal answers.
-  - Frozen rubric: `docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.rubric.md` (R1–R8).
-  - Manifest: `docs/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.plan-review-manifest.json`, `logical_plan_id: tmp-residue-containment-2026-10-12`.
+  - Frozen rubric: `project/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.rubric.md` (R1–R8).
+  - Manifest: `project/plans/_archive/2026/10/2026-10-12-tmp-residue-containment.plan-review-manifest.json`, `logical_plan_id: tmp-residue-containment-2026-10-12`.
   - Seats: sol chair (openai, not required: codex quota has run dry before), grok deep (xai, required), MiniMax consult; minimum 2 families.
 - **Implementation adjudications (depth-0, 2026-10-12)**:
   - KR1 excludes `/tmp/sessions` (external, kind `live`) and `source: session-hook` counters written by the live session running the suite.

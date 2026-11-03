@@ -22,7 +22,7 @@ The review loop converged all findings on one conclusion — **measure now, rout
 - **KR1**: `scripts/probe-diff-domain.sh` emits a robust dominant `work_domain` (numstat-weighted; explicit inline exclude list; rename/binary/deletion/degenerate cases pinned; deterministic; LLM-free).
 - **KR2**: `resolve-review-loop.sh` inserts exactly **two** keys immediately before the closing `}` of the existing JSON: `work_domain` and `domain_source`. **`domain_source` enum (pinned — R5-🟡):** `explicit` (a valid `--domain` was given), `auto` (a successful `--auto-domain` probe), `none` (no domain flag / non-git / empty diff / probe failure). Test = **(a)** the pre-existing output string is an exact prefix with only `, "work_domain": "…", "domain_source": "…"` inserted before `}` (order/spacing preserved), and **(b)** semantic JSON equality of all old keys (R4-🟡: not "byte-identical via parse-delete").
 - **KR3**: `/l5` runs the probe **post-impl** over `<base_sha>..<commit>` where **`base_sha` is an immutable SHA** — `/l5` dispatches with `--base "$(git rev-parse <chosen-base>)"` (NOT a ref like `develop`, which can advance after dispatch — R5-🟠) and `dispatch-hetero.sh` records `base_sha` + `commit` in its outcome JSON; the probe uses those. NOT ambient `HEAD` (the hetero worktree is removed on success — R4-🟠). Records `work_domain` in the run-summary ledger (canonical: `skills/ceo-agent/references/level-front-door.md` + `skills/l5/SKILL.md`). No routing.
-- **KR4 (deferred)**: domain routing (reviewer + implementer) is OUT, prerequisites in `docs/BACKLOG.md`.
+- **KR4 (deferred)**: domain routing (reviewer + implementer) is OUT, prerequisites in `project/backlog/BACKLOG.md`.
 
 ## 2.5 Global Constraints (copied verbatim into every dispatch)
 
@@ -43,7 +43,7 @@ The review loop converged all findings on one conclusion — **measure now, rout
 | `skills/ceo-agent/references/level-front-door.md` | **edit** | `work_domain` column in the canonical run-summary ledger contract. |
 | `skills/l5/SKILL.md` | **edit** | Post-impl: `resolve-review-loop.sh --auto-domain <base..commit-from-outcome-JSON>`; record `work_domain` in the ledger (telemetry only). |
 | `CLAUDE.md` | **edit** | Inventory row for `probe-diff-domain.sh`; note the resolver's two telemetry keys. |
-| `docs/BACKLOG.md` | **edit** | Deferred **domain routing** + prerequisites: (1) `/l5` honors `reviewer_runner` via `dispatch-review.sh`; (2) two-pass resolve; (3) pre-impl planned-scope signal for implementer routing; (4) per-project per-domain n≥30 calibration; (5) inner-reviewer-family field vs panel-only `cross_family_*`. |
+| `project/backlog/BACKLOG.md` | **edit** | Deferred **domain routing** + prerequisites: (1) `/l5` honors `reviewer_runner` via `dispatch-review.sh`; (2) two-pass resolve; (3) pre-impl planned-scope signal for implementer routing; (4) per-project per-domain n≥30 calibration; (5) inner-reviewer-family field vs panel-only `cross_family_*`. |
 | `hooks/tests/resolve-review-loop.test.sh` + probe `*.test.sh` | **edit/new** | §5. |
 
 ## 4. Phases
@@ -61,7 +61,7 @@ Post-impl probe over the outcome-JSON range; `work_domain` column in both ledger
 - **Done when**: ledger shows the column; `/l5` records it from the outcome range (test with caller `HEAD` unchanged).
 
 ### Phase 4 — BACKLOG + inventory + tests + release (Fix)
-Deferred-routing BACKLOG (5 prereqs); CLAUDE.md inventory; §5 tests. PATCH bump: `node scripts/sync-version.js --version <next> --hook-count 20 --skill-count 23 --opt-in-count 12 --disabled-count 0`; CHANGELOG; `docs/projects/INDEX.md` row; `bash scripts/preflight-release.sh`.
+Deferred-routing BACKLOG (5 prereqs); CLAUDE.md inventory; §5 tests. PATCH bump: `node scripts/sync-version.js --version <next> --hook-count 20 --skill-count 23 --opt-in-count 12 --disabled-count 0`; CHANGELOG; `project/projects/INDEX.md` row; `bash scripts/preflight-release.sh`.
 - **Done when**: §5 green; release-hygiene 5/5.
 
 ## 5. Test / validation

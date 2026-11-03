@@ -55,7 +55,7 @@ Self-validation after generation: runs `inspect()` from `mission-execution-graph
 
 Outputs: the three repo files (rubric if generated, sources, graph) and the envelope outside the repo. stdout is one JSON object: `status`, paths, `plan_sha256`, `rubric_sha256`, `graph_digest`, and `next_steps` (including `mission_lineage_id`) (`commit`, `verify_at_base`, `routing_config`, `legacy_reconcile` = `mission-terminal-reconcile.js legacy --graph-digest <d>`, `prepare`, `grant`, `dispatch_env`).
 
-Deliberately NOT done: the script does not edit `docs/projects/INDEX.md`, `.claude/mission-routing-config.json`, run the legacy reconcile, run `prepare`/`grant`, or run the `verification_commands` at base. Those mutate shared state or spend a grant; they stay a depth-0 decision and are listed in `next_steps`. The detached-checkout base run of the verify commands also stays manual (recipe step 3).
+Deliberately NOT done: the script does not edit `project/projects/INDEX.md`, `.claude/mission-routing-config.json`, run the legacy reconcile, run `prepare`/`grant`, or run the `verification_commands` at base. Those mutate shared state or spend a grant; they stay a depth-0 decision and are listed in `next_steps`. The detached-checkout base run of the verify commands also stays manual (recipe step 3).
 
 ## 4. Verification
 New `hooks/tests/scaffold-mission.test.sh`, in a temp git repo seeded with a plan, governance file and INDEX row:

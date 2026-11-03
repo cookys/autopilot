@@ -70,7 +70,7 @@ have a **fragmented credential surface** and a **manual-only invoke path**:
 
 ### C. Docs + value-prop
 
-- **`docs/installation.md`** new section: *Heterogeneous engine credentials* — the one canonical
+- **`docs/guide/installation.md`** new section: *Heterogeneous engine credentials* — the one canonical
   placement (`~/.autopilot/endpoints.env`), the `AUTOPILOT_ENDPOINT_<NAME>_*` convention, a
   copy-paste stub, and the declarative `review-loop-config.md` wiring.
 - **`README.md` + `README.zh-TW.md`** engine section: "fill an endpoint → strong hetero power",
@@ -113,7 +113,7 @@ have a **fragmented credential surface** and a **manual-only invoke path**:
   catch a `set -u` fatal during expansion) — surfaced by the `resolve-endpoint` `env -i`
   regression; fixed with `${HOME:-}` + a dedicated test case.
 - **P3 (onboard link)**: the Codex plugin payload link-check caught an unresolvable
-  `../../docs/installation.md` link (installation.md isn't in the payload `DOC_FILES`, and
+  `../../docs/guide/installation.md` link (installation.md isn't in the payload `DOC_FILES`, and
   adding it cascades); fixed by referencing it as a code-span path instead.
 - **Pre-merge decorrelated review**: `dispatch-review.sh --runner codex --model gpt-5.5
   --effort high` on the security-critical diff (`load-endpoints-env.sh` + `.js` twin +

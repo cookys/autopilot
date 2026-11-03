@@ -4,7 +4,7 @@
 ## 0. Context / thesis
 Approved bundle analysis (`bundles.md`, depth-0 2026-09-21) splits 49/103 BACKLOG `S`/`Fix` rows into 6 file-disjoint bundles for parallel hetero-impl per `skills/l5/references/hetero-impl-loop.md` §Parallel units. This is **B1**, 7 rows, wave 2 (wave1=B2/B3/B4/B5/B6 simultaneous; wave2=B1 alone after wave1 `rc=`).
 
-## 0.1 BACKLOG rows (verbatim Title/Trigger/Context from `docs/BACKLOG.md` @ develop 47b52eac; long quotes `…`-trimmed to fit 8 KB, full text there)
+## 0.1 BACKLOG rows (verbatim Title/Trigger/Context from `project/backlog/BACKLOG.md` @ develop 47b52eac; long quotes `…`-trimmed to fit 8 KB, full text there)
 - **Row 23** (S) `probe-unknown.js classify` spawns `resolve-r…
   Trig: a foreman round-end ledger or `cost-tracker` sample showing `probe-unknown.js classify` taking ≥ 10 s wall tim…
   Ctx: v2.36.15 P1/P2 read `unknown_escalation`, the three budgets, `consult_dispatch`, `consult_resolved_from` and `…
@@ -65,7 +65,7 @@ All exit 0. No human gate (Hold-scope autonomous).
 **Inversion**: two bundles sharing one `.git`/worktree ⇒ `main-checkout-boundary.sh` flags `main_checkout_mutated`. Mitigation: one clone per bundle, never shared.
 
 ## 7. Out of scope
-Other bundles' files: B2 review-loop-resolver-b (hetero-review-loop.js, check-phase-review-receipt.js, dispatch-plan-review.js); B3 managed-rail-core-engine (autopilot-engine.js, implementation-campaign.js, campaign-composition.js); B4 qualification-scorecard-tools (engine-scorecard.js +6 scripts, endpoints/cli.js); B5 hooks-live-state-misc (context-budget.js, dispatch-model-guard.js, depth0-delegate-gate.js, dispatch-review.sh, live-state-dir.js, 3 SKILL.md); B6 dispatch-lifecycle-residue-mission (run-ledger.sh, reap-dispatch-*.sh, prune-tmp-residue.sh, mission-policy.js, mission/runtime.js) — full maps in each bundle's own §3. · `docs/BACKLOG.md`, `CHANGELOG.md`, `.claude-plugin/plugin.json` · §5 suites (run-only; new assertions live only in `hooks/tests/review-loop-resolver-a.test.sh`) · the 52 excluded rows (not-fired, needs decision, >S/Fix, malformed row 31, CI-coupled — see bundle-analysis).
+Other bundles' files: B2 review-loop-resolver-b (hetero-review-loop.js, check-phase-review-receipt.js, dispatch-plan-review.js); B3 managed-rail-core-engine (autopilot-engine.js, implementation-campaign.js, campaign-composition.js); B4 qualification-scorecard-tools (engine-scorecard.js +6 scripts, endpoints/cli.js); B5 hooks-live-state-misc (context-budget.js, dispatch-model-guard.js, depth0-delegate-gate.js, dispatch-review.sh, live-state-dir.js, 3 SKILL.md); B6 dispatch-lifecycle-residue-mission (run-ledger.sh, reap-dispatch-*.sh, prune-tmp-residue.sh, mission-policy.js, mission/runtime.js) — full maps in each bundle's own §3. · `project/backlog/BACKLOG.md`, `CHANGELOG.md`, `.claude-plugin/plugin.json` · §5 suites (run-only; new assertions live only in `hooks/tests/review-loop-resolver-a.test.sh`) · the 52 excluded rows (not-fired, needs decision, >S/Fix, malformed row 31, CI-coupled — see bundle-analysis).
 
 ## 8. Open questions
 None — scope/order/risk fixed by the approved analysis.

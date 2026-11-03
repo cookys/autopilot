@@ -92,7 +92,7 @@ Key results:
 | `references/hetero-dispatch.md` | Update invariants: skill transport is a measured capability, not assumed. |
 | `references/multi-agent-portability.md` | Move fast-changing skill/quota probe facts into capability records; keep docs as summaries. |
 | `CLAUDE.md` and `AGENTS.md` | Add the new scripts to the deterministic tooling inventory after implementation. |
-| `docs/BACKLOG.md` | Close or replace any existing quota/fallback routing leaf when the project ships. |
+| `project/backlog/BACKLOG.md` | Close or replace any existing quota/fallback routing leaf when the project ships. |
 
 ## 4. Phases
 
@@ -278,7 +278,7 @@ Implementation steps:
 - Update `project-config-template/review-loop-config.md` with `skill_mode` and quota advisory fields.
 - Update `CLAUDE.md` and `AGENTS.md` script inventories.
 - Add release note and version sync if the implementation is externally visible.
-- Update `docs/BACKLOG.md` to close the quota/fallback-routing leaf or replace it with a narrower follow-up.
+- Update `project/backlog/BACKLOG.md` to close the quota/fallback-routing leaf or replace it with a narrower follow-up.
 
 Acceptance:
 

@@ -1,6 +1,6 @@
 # Managed rail: already-scrambled carry-only ledger segments cannot project — reader recovery or locked migration
 
-Original row from 5f3aa3b1d^:docs/BACKLOG.md:
+Original row from 5f3aa3b1d^:project/backlog/BACKLOG.md:
 
 > ### Managed rail: already-scrambled carry-only ledger segments cannot project — reader recovery or locked migration
 > - **Status**: open

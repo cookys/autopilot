@@ -243,7 +243,7 @@ Phase 3 boundary; the second is what makes Phase 5 the admission site.
 ```bash
 elif [ "$IS_CURSOR" -eq 1 ]; then
   # cursor-agent (Cursor CLI). Probe-verified 2026-08-26 (2026.08.11-e8db854), see
-  # docs/plans/2026-08-26-cursor-cli-adaptor.md §0.1:
+  # project/plans/_archive/2026/08/2026-08-26-cursor-cli-adaptor.md §0.1:
   #   P4/P5 cwd AND --workspace anchor edits → no agy-style absolute-path anchor.
   #   P6 edit-only by default → wrapper commits, same rail as grok/qoderclicn.
   #   P3 --trust is MANDATORY headlessly. P8 -f auto-approves tools. P7 -p reads stdin.
@@ -551,8 +551,8 @@ not as rates.
 - **R0 author**: Claude Opus 5 (1M), session 3b029952, 2026-08-26. Sources: live probes of
   `cursor-agent 2026.08.11-e8db854` (§0.1), grep inventory of `scripts/dispatch-hetero.sh` and
   the runner-enum consumers at `cd3f5f85`, `autopilot:engine-onboarding`, `references/plan-template.md`.
-- **Manifest**: `docs/plans/2026-08-26-cursor-cli-adaptor.plan-review-manifest.json`
-- **Frozen rubric**: `docs/plans/2026-08-26-cursor-cli-adaptor.rubric.md`
+- **Manifest**: `project/plans/_archive/2026/08/2026-08-26-cursor-cli-adaptor.plan-review-manifest.json`
+- **Frozen rubric**: `project/plans/_archive/2026/08/2026-08-26-cursor-cli-adaptor.rubric.md`
 - **Pre-review note**: `scripts/dispatch-plan-review.js` did not parse at `cd3f5f85` (R-5). It
   was repaired before this plan could be dispatched; that repair is a separate PATCH-class
   change and is not part of this plan's phases.

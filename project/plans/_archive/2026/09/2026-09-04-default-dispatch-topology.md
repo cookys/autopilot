@@ -7,7 +7,7 @@ commit.
 ## 0. Context / thesis
 
 revival.3d evidence (<host> memories `quota-opus-foreman-cost`, `standing-foremen-burn-quota`,
-`foreman-cost-is-the-polling-loop`; autopilot `docs/plans/2026-09-04-foreman-cost-discipline.md`):
+`foreman-cost-is-the-polling-loop`; autopilot `project/plans/2026-09-04-foreman-cost-discipline.md`):
 a dozen implementation cuts in one day ran on sonnet while standing foremen burned ≈$1,180 in a day
 and a half. v2.35.15 put the *polling* burn behind gates (`foreman-guard`, cost hooks default-on).
 This plan is the second half: **where implementation labor lands by default**.

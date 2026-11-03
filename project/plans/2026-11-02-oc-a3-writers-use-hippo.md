@@ -54,7 +54,7 @@ events`, `autopilot.events/1`) is not delivered.
 The goal: any agent on any machine finds and records project knowledge cheaply and safely.
 
 1. **Writers edit files by hand.** Every skill that defers work, records a decision or lesson, or hands off, tells
-   the model to edit `docs/BACKLOG.md`, a sidecar, an ADR file, a knowledge file or `HANDOFF.md` (§3.1); that is
+   the model to edit `project/backlog/BACKLOG.md`, a sidecar, an ADR file, a knowledge file or `HANDOFF.md` (§3.1); that is
    where number collisions, lost rows and prose-only relations come from.
 2. **Readers grep.** `/next`, handoff resume, `learn` dedup and review skills `grep`/`sed` the same files.
 3. **The handoff mixes three lifetimes**: holder and progress (minutes), decisions and pitfalls (months), next
@@ -97,7 +97,7 @@ Plan-local constraints (A3; copied verbatim into every A3 dispatch):
 
 - **C1 CLI-only writes.** Nothing writes under `.hippo/` except the `hippo` CLI, including store bootstrap and `.hippo/repo.toml`: no autopilot script, hook, shell redirection or model edit creates, appends to, renames or deletes a `.hippo/` path. autopilot runs the binary with an argv array (no shell string). A missing hippo capability is named as a hippo P1.x dependency, never worked around. Sole exception: a `hippo-sandbox.sh` fixture may corrupt a record in a sandbox temp repo after asserting the path is under its tempdir.
 - **C2 no check bypass.** In a checkout with `.hippo/repo.toml`, no commit and no merge skips `hippo check`: without hippo, the guard and git hooks fail closed for `.hippo/` paths; a `hippo check` exit 3 surfaces the offending file unmodified.
-- **C3 no hand-edit text.** Skill, reference, agent and config-template text never tells a model to edit `docs/BACKLOG.md`, `docs/backlog/*`, an ADR file, a `HANDOFF*.md` or a knowledge file, in either store state; writes name `scripts/project-record.js` (which writes the files itself in files mode), reads name `hippo search|related|show|list`.
+- **C3 no hand-edit text.** Skill, reference, agent and config-template text never tells a model to edit `project/backlog/BACKLOG.md`, `docs/backlog/*`, an ADR file, a `HANDOFF*.md` or a knowledge file, in either store state; writes name `scripts/project-record.js` (which writes the files itself in files mode), reads name `hippo search|related|show|list`.
 - **C4 no implicit store.** `project-record.js` writes through hippo only where `.hippo/repo.toml` exists and never calls `hippo new`/`import` in a repo without one; a store is created only by the operator's `hippo init` (A3.7) or the A3.3 rehearsal in a scratch clone.
 - **C5 counters.** Usage counters never go to git or a hippo field; they go to A1 events or the hub.
 - **C6 isolation.** Every test and rehearsal runs under a sandbox `HOME`, a temp `HIPPO_CONFIG_DIR` and temp git repos, with `GIT_AUTHOR_*`/`GIT_COMMITTER_*` and `HIPPO_ACTOR` set and the caller's git env scrubbed (unset `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_PREFIX`, `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT` and every `GIT_CONFIG_KEY_<n>`/`GIT_CONFIG_VALUE_<n>`; `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=$HOME/.gitconfig`, `XDG_CONFIG_HOME=$HOME/.config`); before any write a pre-flight asserts `git rev-parse --show-toplevel` in each temp repo equals the temp path and `git config --show-origin core.hooksPath` is empty or points inside the temp tree (red-check: a suite started under `git -c core.hooksPath=<outside dir>` fails the pre-flight); none targets this checkout (a plugin-directory case uses a temp copy of the plugin tree); each suite asserts on exit that this checkout's `git status --porcelain` and `.hippo/` are unchanged.
@@ -141,7 +141,7 @@ Plan-local constraints (A3; copied verbatim into every A3 dispatch):
 | `scripts/lib/repo-layout.js` | `.hippo/` registered dev-repo-only so the 3.0.0 release mirror excludes it (§8 Q3) | A3.7 |
 | `.claude/record-store.json` (new) | `{ "min_plugin_version": "<A3 version>" }` for `session-start` | A3.7 |
 | backlog file, `docs/adr/*.md`, handoff files | one frozen-notice line; content untouched | A3.7 |
-| `docs/scripts-inventory.md`, CLAUDE.md grouped list, `docs/projects/INDEX.md`, `CHANGELOG.md` | inventory rows: mechanism commit (C8, its own gates check counts them); grouped list, INDEX, CHANGELOG: wiring commit | A3.1, 2, 4, 6 |
+| `docs/scripts-inventory.md`, CLAUDE.md grouped list, `project/projects/INDEX.md`, `CHANGELOG.md` | inventory rows: mechanism commit (C8, its own gates check counts them); grouped list, INDEX, CHANGELOG: wiring commit | A3.1, 2, 4, 6 |
 | `hooks/tests/{project-record,check-hippo-writer-text,hippo-edit-guard,backlog-hippo-mode,hippo-git-hook,check-kr1-skill-route}.test.sh` (new) + `hooks/tests/lib/hippo-sandbox.sh` | tests; hippo-mode cases need `HIPPO_BIN` and print `SKIPPED: HIPPO_BIN unset` otherwise (acceptance requires a run with it). The harness implements C6 (`HIPPO_ACTOR=test/a3`) with a checkout-unchanged exit trap | per phase |
 | `docs/plans/evidence/2026-11-02-oc-a3-writers-use-hippo/` | transcripts | all |
 
@@ -163,7 +163,7 @@ legacy target and are checked by rule C. All writes below go through `project-re
 | W7 | `skills/finish-flow/SKILL.md:123-126` | deferred rows; "delete that row"; triggered pickup | `backlog new`; `backlog close <id> done --commit <sha>`; pickup = `hippo list --kind issue --status open --tag trigger:ready` |
 | W8 | `skills/project-lifecycle/references/project-archive.md:11, :13, :18-19, :27, :60` | rows for remaining phases; "delete completed items" | `backlog new`; `backlog close` |
 | W9 | `skills/project-lifecycle/references/templates.md:28-40, :78-80`; `project-structure.md:7, :34, :38-45, :110, :122` | ADR.md and BACKLOG.md templates | `adr new` -> `hippo new adr`; both templates move into `project-record.js`; the reference keeps a one-line pointer ("`project-record.js adr new` / `backlog new` writes this; files mode only") |
-| W10 | `skills/next/references/phase0-hygiene.md:59` | "add it to docs/BACKLOG.md" | `backlog new` |
+| W10 | `skills/next/references/phase0-hygiene.md:59` | "add it to project/backlog/BACKLOG.md" | `backlog new` |
 | W11 | `skills/doc-sync/SKILL.md:128, :148` | "open a BACKLOG item" | `backlog new` |
 | W12 | `skills/ceo-agent/references/decision-matrix.md:19` | "record a revisit trigger in the project backlog" | `backlog new --trigger-type event` |
 | W13 | `skills/ceo-agent/references/depth0-control-loop.md:458, :517-519` | findings via `admit-backlog-follow-ups.js` | script gains hippo mode (A3.4); destination word only |
@@ -630,17 +630,17 @@ No open questions remain.
   `docs/plans/2026-11-01-operator-console.md` §0-§2.6, §4 D1/D3, §5, §6, review log, g1/g2 dispositions), hippo
   repo `develop` `5d30a61` (`docs/spec.md`, `docs/evidence/p1.2/decisions.md`, `bench/kr1-queries.md`, `hippo
   --help`, `cmd_import.rs`), fleet `fleet task --help` (F2), autopilot `origin/develop` `94150b6b9`.
-- Rubric: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.rubric.md` (scaffolded, not yet frozen). Manifest: to be
+- Rubric: `project/plans/2026-11-02-oc-a3-writers-use-hippo.rubric.md` (scaffolded, not yet frozen). Manifest: to be
   written before the first review generation.
 - G1 2026-11-02: plan review generation 1 = CONDITIONAL (openai STOP, google CONDITIONAL, anthropic
   CONDITIONAL); 21 findings, 11 blocking; all 11 blockers accepted, all 10 non-blocking folded, none refuted.
-  Dispositions: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g1-dispositions.json` (each lists its change).
+  Dispositions: `project/plans/2026-11-02-oc-a3-writers-use-hippo.g1-dispositions.json` (each lists its change).
   New hippo input: `hippo init --id --visibility` (P1.4). Rubric unchanged (frozen).
 - R1.1 2026-11-02: size trim for the generation-2 growth limit (constraints labelled C1-C9 and cited instead of
   restated; tables and prose condensed). No requirement, acceptance item, verify command or dependency dropped;
   §2.5 global block, rubric and dispositions untouched.
 - G2 2026-11-02: plan review generation 2 (terminal, at cap) = CONDITIONAL (openai STOP, google READY, anthropic
   CONDITIONAL); 14 findings, 5 blocking. Depth-0 accepted all 5 blockers; all 9 non-blocking folded, none refuted.
-  Dispositions: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g2-dispositions.json`. Rubric and §2.5 unchanged.
-- Review artifacts: `docs/plans/2026-11-02-oc-a3-writers-use-hippo.g1-artifact.json`, `.g2-artifact.json`. A first g2 dispatch stopped on `plan_growth_hard_stop` (1.506x, zero seats); plan shrunk in b01b94726 and the lock reopened per the dispatch-plan-review.js recipe. Receipt: `check-phase-review-receipt.js --plan-file <plan at b01b94726> --plan-artifact <g2 artifact> --dispositions <g2 dispositions>` exit 0 (2026-11-02). Generation 2 terminal at the cap: sol STOP, argon READY, opus CONDITIONAL; all 5 g2 blockers accepted and folded in 257f0a573 (not seat-reviewed).
+  Dispositions: `project/plans/2026-11-02-oc-a3-writers-use-hippo.g2-dispositions.json`. Rubric and §2.5 unchanged.
+- Review artifacts: `project/plans/2026-11-02-oc-a3-writers-use-hippo.g1-artifact.json`, `.g2-artifact.json`. A first g2 dispatch stopped on `plan_growth_hard_stop` (1.506x, zero seats); plan shrunk in b01b94726 and the lock reopened per the dispatch-plan-review.js recipe. Receipt: `check-phase-review-receipt.js --plan-file <plan at b01b94726> --plan-artifact <g2 artifact> --dispositions <g2 dispositions>` exit 0 (2026-11-02). Generation 2 terminal at the cap: sol STOP, argon READY, opus CONDITIONAL; all 5 g2 blockers accepted and folded in 257f0a573 (not seat-reviewed).
 - 2026-11-02 depth-0 addition after the receipt (not seat-reviewed): precondition for A3.7: hippo P1.5 installs `hippo` on every committing host, native Windows included, with the per-host P1.5 transcript (`--version`, sha256, `hippo check`, hook-refusal run; superseded by the A3.7 text). Closure review generations 1-2 (logical id `autopilot-oc-a3-hippo-writers-closure`) folded in this file; artifacts and dispositions beside it.

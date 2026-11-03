@@ -36,7 +36,7 @@ with level l4/l5/l6 (`scripts/session-mode.js readMarker`) AND the payload carri
 - `Monitor` from a foreman/worker: DENIED (ironlaw #6; depth-0 keeps Monitor).
 - Modes: `foreman_guard.mode` in `~/.autopilot/config.json` or `AUTOPILOT_FOREMAN_GUARD_MODE` =
   `block` (default) | `warn` | `off`; `foreman_guard.bash_cap` (default 40). Fail-open on any error.
-- `docs/ironlaw-to-gate-map.md` row 6 moves from "post-hoc only" to this hook + the post-hoc checker.
+- `docs/dev/ironlaw-to-gate-map.md` row 6 moves from "post-hoc only" to this hook + the post-hoc checker.
 
 ### D2 — three opt-in hooks become default-on
 `context-budget` (PostToolUse `.*`), `dispatch-model-guard` (PreToolUse `Task|Agent`), `cost-tracker`
@@ -64,7 +64,7 @@ crosses `cost_tracker.cache_read_warn_tokens` (default 50,000,000) and each doub
 stderr line naming the total and the session — user-visible at depth-0, which is where the money is.
 
 ### D5 — docs
-`hooks/README.md` tiers, `settings.example.json`, `docs/ironlaw-to-gate-map.md`, CHANGELOG v2.35.15
+`hooks/README.md` tiers, `settings.example.json`, `docs/dev/ironlaw-to-gate-map.md`, CHANGELOG v2.35.15
 (opt-in→default-on transition is a behaviour change: say so), BACKLOG rows, reply to <host>.
 
 ## Acceptance

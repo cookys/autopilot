@@ -47,14 +47,14 @@ role evidence at all**, because `engine-qualify.js:283` knows only
 role, so no engine can *earn* those seats. The gate is real for one runner and vacuous for every other.
 
 **(b) A switch over `discuss_*` alone would be the disease this repo just cured.** The v2.34.43 retro
-(`docs/projects/INDEX.md`, 2026-08-27) records the mistake of treating a schema enum as a gate. An
+(`project/projects/INDEX.md`, 2026-08-27) records the mistake of treating a schema enum as a gate. An
 on/off field in front of a field with zero consumers repeats it one level up. So the switch here is
 **not authorized to ship for a role until that role has an executable consumer** (§4, D8/D9).
 
 **Lineage.** Exam chassis, corpus discipline, admission-before-candidates and outcome taxonomy come
-from `docs/plans/2026-08-22-implementer-qualification-suite.md` (v2.34.34). The "administration is
+from `project/plans/_archive/2026/08/2026-08-22-implementer-qualification-suite.md` (v2.34.34). The "administration is
 separately Board-authorized; the plan stops at the rail being provably wired" posture comes from
-`docs/plans/2026-08-26-cursor-cli-adaptor.md` Phase 5. Evidence rules are cited by number from
+`project/plans/_archive/2026/08/2026-08-26-cursor-cli-adaptor.md` Phase 5. Evidence rules are cited by number from
 `references/evidence-discipline.md`.
 
 ---
@@ -106,7 +106,7 @@ qualification gate strictly stronger than today and the default behavior unchang
   no new refusal, no changed value on any pre-existing resolver key.
 - **No real-money exam administration in this project.** Every suite is exercised with stub
   providers, deterministic local scripts, and planted negatives. Administration is a separate
-  Board-authorized step (`docs/plans/2026-08-26-cursor-cli-adaptor.md` Phase 5 precedent).
+  Board-authorized step (`project/plans/_archive/2026/08/2026-08-26-cursor-cli-adaptor.md` Phase 5 precedent).
 - No new trust machinery — no hash chains, no witness receipts, no attestation (ADR-0001).
   Verification is independent re-derivation from artifacts.
 - A consult and a discuss output are **ADVICE**. Neither may emit, imply, or be routed into a
@@ -249,7 +249,7 @@ reads a real, normalized, promoted role row, and role rows do not exist until D3
 and D5 normalizes and promotes it (`engine-scorecard.js:1850-1873` validates the role before
 projecting standing; `src/engine/capability-evidence.js:978-1006` is what makes the row admissible at
 all). D8 and D9 then depend on D7 independently of each other. D10 is the only closeout. Ten
-deliverables, frozen: work discovered mid-flight becomes a `docs/BACKLOG.md` row, never a D11.
+deliverables, frozen: work discovered mid-flight becomes a `project/backlog/BACKLOG.md` row, never a D11.
 
 ---
 
@@ -1158,7 +1158,7 @@ a degenerate policy can clear. Both are addressed above; the residual risks are:
   *listed* runner holds a real consult/discuss qualification, "unverified" and "qualified for this
   role" are simultaneously true and that test's premise gets murky. §8 Q7 rules membership **out of
   scope**: nothing here removes `cursor`, and a pass does not change membership. Record the tension as
-  a `docs/BACKLOG.md` row during D10 — do **not** resolve it in this project.
+  a `project/backlog/BACKLOG.md` row during D10 — do **not** resolve it in this project.
 
 ---
 

@@ -1,6 +1,6 @@
 # depth-0 per-turn gate: status detail
 
-BL-0306. Plan: docs/plans/2026-10-26-depth0-per-turn-gate.md
+BL-0306. Plan: project/plans/2026-10-26-depth0-per-turn-gate.md
 
 ## Status
 

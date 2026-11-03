@@ -1,6 +1,6 @@
 # Upstream report for the agy install symlinked-destination self-copy truncation
 
-No sidecar existed in history. Original row text from 5d0b29c1d^:docs/BACKLOG.md. Only the still-open upstream report is in scope; the install guard already shipped.
+No sidecar existed in history. Original row text from 5d0b29c1d^:project/backlog/BACKLOG.md. Only the still-open upstream report is in scope; the install guard already shipped.
 
 > ### agy install symlinked-dest self-copy truncation — guard install script + upstream report
 > - **Trigger**: before the next `agy plugin install` of autopilot anywhere in the fleet (until the guard ships, manually check the plugins directory for symlinks first), OR next S-size hardening slot.

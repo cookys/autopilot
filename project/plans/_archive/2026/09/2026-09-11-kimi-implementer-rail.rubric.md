@@ -1,6 +1,6 @@
 # Rubric — 2026-09-11-kimi-implementer-rail.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-11-kimi-implementer-rail.md (§2.5 Global Constraints, frozen)
+> Source plan: project/plans/_archive/2026/09/2026-09-11-kimi-implementer-rail.md (§2.5 Global Constraints, frozen)
 
 R1: The rail is grok/qoderclicn/opencode-shaped: EDIT-ONLY directive prepended to the prompt, `cd "$WT" && exec "$KIMI_BIN" -m "$MODEL" -p "<directive+prompt>"`, wrapper commits, verdict from git artifacts. No `--auto`, no `-y` (they cannot combine with `-p`).
 R2: The prompt travels as one argv string; bytes are measured before spawn and `die_precondition` fires above `KIMI_ARGV_LIMIT` (default 120000, env-overridable like the review rail's). Never truncate, never split silently.

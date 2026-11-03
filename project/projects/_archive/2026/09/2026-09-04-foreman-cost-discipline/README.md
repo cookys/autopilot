@@ -1,6 +1,6 @@
 # Foreman cost discipline (v2.35.15)
 
-**Branch**: `feat/v2.35.15-foreman-cost-discipline` · **Plan**: [`docs/plans/2026-09-04-foreman-cost-discipline.md`](../../../plans/2026-09-04-foreman-cost-discipline.md) · **Status**: ✅ Shipped in v2.35.15 — merged as `72dfa052`
+**Branch**: `feat/v2.35.15-foreman-cost-discipline` · **Plan**: [`project/plans/2026-09-04-foreman-cost-discipline.md`](../../../plans/2026-09-04-foreman-cost-discipline.md) · **Status**: ✅ Shipped in v2.35.15 — merged as `72dfa052`
 
 ## Project Goal
 

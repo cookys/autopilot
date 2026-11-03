@@ -4,7 +4,7 @@
 >
 > Progress: 3/3 deliverables integrated; project archived 2026-07-29
 >
-> Current deliverable: none — follow-ups are trigger-conditioned in `docs/BACKLOG.md`
+> Current deliverable: none — follow-ups are trigger-conditioned in `project/backlog/BACKLOG.md`
 >
 > Target: v2.34.0
 >
@@ -29,7 +29,7 @@ runner, reviewer, branch, or successor to reset authority or resource ceilings.
 | "每個階段跑完都要跑 heto engine loop review till all good" | Every deliverable has passing deterministic tests plus a bounded heterogeneous review gate before a dependent node starts; review generations are not new deliverables. |
 | Existing project policy: project default once, task override only when needed | Mission configuration and authenticated override contract in Mission P1/P2. |
 | Existing project policy: strong and weak models coexist through profiles | ICC and PRO consume the shipped capability/guidance profile contracts without splitting the repository. |
-| Existing project policy: no unbounded topic expansion | Review discoveries outside the frozen deliverable rubric go to `docs/BACKLOG.md`; they do not grow the active graph. |
+| Existing project policy: no unbounded topic expansion | Review discoveries outside the frozen deliverable rubric go to `project/backlog/BACKLOG.md`; they do not grow the active graph. |
 | Valuable reviewer follow-ups must not be lost | ICC/PRS emit evidence-bound follow-up candidates; LSM P4 makes depth-0 dedupe and admit them to backlog before closeout, while `/next` may reopen them only as a new ticket/contract/budget after their trigger is true. |
 | "直接放寬" Kimi transport | `runtime-control` (historical bootstrap deliverable) permits Kimi 0.28.0 direct-vector `--prompt` transport with scratch-cwd isolation and public-output redaction; it does not claim role qualification or a CLI-enforced no-effect guarantee. |
 

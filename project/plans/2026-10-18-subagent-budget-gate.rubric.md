@@ -1,6 +1,6 @@
 # Rubric — 2026-10-18-subagent-budget-gate.md
 
-> Source plan: docs/plans/2026-10-18-subagent-budget-gate.md
+> Source plan: project/plans/2026-10-18-subagent-budget-gate.md
 
 R1: [relay ceiling] The plan makes a 5th dispatch of the same lane (reviewer briefs excluded from the count) deny, whether or not a session-mode marker exists, and says how that is tested.
 R2: [turn ceilings] The plan makes a dispatch deny when the lane's transcripts already hold at least 300 turns, or when the root's subagent turns in the last 60 minutes reach 400, and the 60-minute window has a defined time source.

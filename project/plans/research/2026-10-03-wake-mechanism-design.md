@@ -2,7 +2,7 @@
 > Source: autopilot maintenance session (fable depth-0), run3 closeout; original at session scratchpad research/wake-design.md.
 
 # Wake design: events -> policy -> sinks (autopilot x Claude Code mods)
-Date 2026-10-03. Research only; nothing built. Prior art: docs/plans/research/2026-10-03-claude-code-mods-integration.md (cited "PR1").
+Date 2026-10-03. Research only; nothing built. Prior art: project/plans/research/2026-10-03-claude-code-mods-integration.md (cited "PR1").
 
 ## 摘要 (zh-TW)
 1. 設計成三層：可攜核心(Node，把各來源正規化成「事件檔指標」)、政策層(預設只通知、開關、白名單、合併、預算、防迴圈)、可插拔 sink(toast/band、喚醒自己、喚醒本機他人、喚醒遠端 depth-0)。

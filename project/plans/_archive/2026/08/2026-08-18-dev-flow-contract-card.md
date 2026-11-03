@@ -3,7 +3,7 @@
 > Status: ✅ Shipped in v2.34.18 — merged as `242a8d4d` (instrument/spec/P4 shipped; card
 > NO-SWAP per the pre-registered non-SHIP branch — verdict INSTRUMENT-INVALID, see
 > evidence/p6-adjudication.md). Plan text below is the R2 freeze (post-G2 terminal adjudication).
-> Consumes BACKLOG row: "Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）" (docs/BACKLOG.md:51)
+> Consumes BACKLOG row: "Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）" (project/backlog/BACKLOG.md:51)
 > North-star sequence step 3 (ADR-0001): roster qualification → eval ON/OFF 證據 → contract-card 改寫.
 > Trigger audit (2026-08-18): conjunct 1 (四層 Policy 層定案) SATISFIED — shipped v2.34.11, ADR-0001 accepted.
 > Conjunct 2 (目標 skill 的 eval ON/OFF 證據) NOT satisfied — no instrument measures a depth-0 skill

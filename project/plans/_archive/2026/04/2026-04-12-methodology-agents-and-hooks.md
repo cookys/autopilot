@@ -133,7 +133,7 @@
 |---|---|---|
 | **source** | ✅ 在 scope | `agents/*.md` ×3 + `skills/quality-pipeline/**` prose 更新 |
 | **tests** | ❌ 不在 scope | agents 是 prose，autopilot 無 unit test 慣例；本計畫靠 dogfood 驗證 |
-| **docs** | ✅ 在 scope | `docs/plans/_archive/2026/04/2026-04-12-methodology-agents-and-hooks.md`（本文件）+ `agents/README.md` 說明分工 |
+| **docs** | ✅ 在 scope | `project/plans/_archive/2026/04/2026-04-12-methodology-agents-and-hooks.md`（本文件）+ `agents/README.md` 說明分工 |
 | **API** | ❌ 不在 scope | skills 不公開 API；agent 契約透過 output format 隱含保證 |
 | **templates** | ❌ 不在 scope | `project-config-template/` 無須新增（agents 不需 per-project override） |
 | **CHANGELOG** | ✅ 在 scope | `CHANGELOG.md` v2.4.0 entry |
@@ -165,7 +165,7 @@
 ### 檔案總清單
 
 **新增 (6)**：
-1. `docs/plans/_archive/2026/04/2026-04-12-methodology-agents-and-hooks.md`（本文件，已存在）
+1. `project/plans/_archive/2026/04/2026-04-12-methodology-agents-and-hooks.md`（本文件，已存在）
 2. `agents/README.md`（3 agent 分工說明 + 和 voltagent 邊界）
 3. `agents/reviewer.md`
 4. `agents/debugger.md`

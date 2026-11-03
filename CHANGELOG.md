@@ -46,11 +46,11 @@
 
 - bldone6 (docs only): BACKLOG archive, seventh batch. Closed BL-0227 (managed rail does not pass the scorecard scope file) per owner decision d-c191e50b on 2026-10-23: keep pinning, so a qc seat without a pin stays refused at intake and no review-side admission path is added; sidecar removed, no code change.
 
-- bldone5 (docs only): BACKLOG archive, sixth batch. Closed BL-0251 (fleetlife 0593e70d1; the fleet-side contract was taken from the backlog sidecar (now `docs/fleet-child-contract.md`) and never checked against fleet source, so the first live fleet run should confirm ephemeral registration; the sidecar content moved to `docs/fleet-child-contract.md`, which `scripts/lib/repo-identity.sh` and `scripts/lib/config-keys.json` now cite). Closed BL-0229 (wrapstderr 97c3d5c1d after topologycheck 4c05f1800; sidecar removed; its seal-relaxation guardrails were constraints on a design nobody proposed, the two cheaper mitigations were what shipped). BL-0223 was already closed by bldone (verlog 7aa5c86aa); its rawlog follow-up (b10390256) is merged, and the new small follow-up is that `<git-common-dir>/autopilot/campaign-verify-logs/` has no retention limit yet.
+- bldone5 (docs only): BACKLOG archive, sixth batch. Closed BL-0251 (fleetlife 0593e70d1; the fleet-side contract was taken from the backlog sidecar (now `docs/dev/fleet-child-contract.md`) and never checked against fleet source, so the first live fleet run should confirm ephemeral registration; the sidecar content moved to `docs/dev/fleet-child-contract.md`, which `scripts/lib/repo-identity.sh` and `scripts/lib/config-keys.json` now cite). Closed BL-0229 (wrapstderr 97c3d5c1d after topologycheck 4c05f1800; sidecar removed; its seal-relaxation guardrails were constraints on a design nobody proposed, the two cheaper mitigations were what shipped). BL-0223 was already closed by bldone (verlog 7aa5c86aa); its rawlog follow-up (b10390256) is merged, and the new small follow-up is that `<git-common-dir>/autopilot/campaign-verify-logs/` has no retention limit yet.
 
 - bldone4 (docs only): BACKLOG archive, fifth batch. Closed BL-0256 (ledgerrot 69f9a23f0), BL-0213 (suitebudget 3eacdb233; owner chose a time budget and order, selection itself unchanged), BL-0238 (verifyrework 3eb254881), BL-0246 (finalpanelreason 788f92268), BL-0283 and BL-0284 (gtextship 98f180274, gdorm PASS cbb56ae52); sidecars removed, with the two archive/ADR links to them turned to plain text. BL-0241 now carries only the guard-port plan (P2 measured, evidence in docs/plans/evidence/2026-10-23-hook-latency-p2/) and the parked P4; BL-0227 and BL-0248 gained dated Context.
 
-- hangardoc (docs only): peer (hangar) harvest bundle docs/hangar-harvest-2026-10 ea8b40a95, docs part. Added BL-0285 (main_checkout_mutated with no HEAD movement, unreproduced) with its sidecar, and an `agy gotchas on a dispatch host` section in `docs/installation.md` (GEMINI.md persona, AppArmor userns for bwrap), both marked as peer reports. Not taken: the bundle's `review-deferrals-2026-10-21.md` rewrite (stale base, would undo the 2026-10-23 fixes), its code/test changes and its guidance-file edits (pending ON/OFF eval).
+- hangardoc (docs only): peer (hangar) harvest bundle docs/hangar-harvest-2026-10 ea8b40a95, docs part. Added BL-0285 (main_checkout_mutated with no HEAD movement, unreproduced) with its sidecar, and an `agy gotchas on a dispatch host` section in `docs/guide/installation.md` (GEMINI.md persona, AppArmor userns for bwrap), both marked as peer reports. Not taken: the bundle's `review-deferrals-2026-10-21.md` rewrite (stale base, would undo the 2026-10-23 fixes), its code/test changes and its guidance-file edits (pending ON/OFF eval).
 
 - bldone3 (docs only): BACKLOG archive, third and fourth batches. Closed BL-0255 (initstate c38fc9620; sidecar removed; the archived report-r2.md link turned to plain text, precedent 15a8badc0), BL-0252 (roomlock 185d5fce7, sidecar removed), BL-0249 (contractmsg d758f76d3, sidecar removed) and BL-0265 (implhard 0af58eeaa); reworded BL-0231 after hookmatrix 2cdefb419 (60-day advisory wired into preflight), keeping the still-open work: matrix cells not yet verified by an actual firing, plus the owner decision on grok/agy native-event rows.
 
@@ -192,7 +192,7 @@
 - opencode 2.x support: `scripts/lib/opencode-containment.js` now picks a v1 or v2 adaptor from `opencode --version` (v2 removed `run --dir/--pure/--variant`, which made every call exit rc=1) and is the single source of argv/env/cwd for `dispatch-review.sh`, `dispatch-hetero.sh`, `probe-engine-capability.sh` and the exam provider; an unknown major refuses, v1 behaviour is unchanged.
 - BL-0207 done: `mods/live/ui-lint.test.js` scans every `mods/*` source through one shared list (L8, L9/L1b, L2, L5 hand-made lines, L6 core) with a scan-level negative control planted in a copy of the viewer pane; rules that name live's own files stay live-only, each with its reason.
 - `references/evidence-discipline.md` gains sections 59 and 60 (a moving merge-target baseline; a design rule enforced in only one mod directory), plus a foreman-exam note under 53; new backlog row BL-0207 (extend ui-lint to all `mods/*`).
-- BL-0013 and BL-0065 closed: the owner dropped the SKILL.md `tier:` frontmatter field (2026-10-18, d-8a4c6dbc); tiering stays only in `docs/skills.md`. `scripts/probe-skill-frontmatter-portability.sh` (and its codex mirror) now probes tolerance with the neutral unknown field `x-autopilot-probe` instead of `tier`, and the test pins that name.
+- BL-0013 and BL-0065 closed: the owner dropped the SKILL.md `tier:` frontmatter field (2026-10-18, d-8a4c6dbc); tiering stays only in `docs/guide/skills.md`. `scripts/probe-skill-frontmatter-portability.sh` (and its codex mirror) now probes tolerance with the neutral unknown field `x-autopilot-probe` instead of `tier`, and the test pins that name.
 
 - Live pane stage walk (`mods/live/ui.ts` `walkChart`): the walk is one aligned column per stage with each dot over its label's first cell and the current label in the here colour, falling back on a narrow pane to the dot row plus a "step k/n · stage  next: stage" line; zh-TW `stage.qc-gate` reads "QC關卡".
 
@@ -202,11 +202,11 @@
 - BL-0024 (price reader semantics, reported by model-dyno): `effective_basis` (sourced|assumed) describes how a price's effective DATE was pinned, not where the price came from, so `scripts/lib/qualification-prices.js` no longer treats `assumed` as unknown; a seat is priced when its row has non-null input and output, and `effective_basis` is display-only. Extra top-level fields (`unpriced`, `content_digest`, ...) are accepted, and `status` reports `n_unpriced`.
 
 - The viewer window and the live decide tab now scroll inside a shared frame (`mods/live/scroll.tsx`) with a fixed bottom action strip under a rule and a right-hand scrollbar, so buttons stay in reach however long the content is (design plan §12.10).
-- The `viewer` window gains three buttons drawn as `[ label ]` in the action colour (dim and not pressable when they cannot act; the prev/next part buttons too): summary, ask a question, and send into the conversation. The mod calls haiku itself (`$.model.complete`), so the file or diff text never reaches the main model; answers are cached in memory by content hash, shown with their token count, cancellable, and sent into the conversation only by filling the prompt box (`prompt.fill`, never submitted); the `show` tool's one-line answer is unchanged. Details in `docs/configuration.md`.
+- The `viewer` window gains three buttons drawn as `[ label ]` in the action colour (dim and not pressable when they cannot act; the prev/next part buttons too): summary, ask a question, and send into the conversation. The mod calls haiku itself (`$.model.complete`), so the file or diff text never reaches the main model; answers are cached in memory by content hash, shown with their token count, cancellable, and sent into the conversation only by filling the prompt box (`prompt.fill`, never submitted); the `show` tool's one-line answer is unchanged. Details in `docs/guide/configuration.md`.
 
 - New `viewer` mod (`mods/viewer/`, composed with `live` by `mods/register.ts`): a `show` tool (`mcp__autopilot__show`) and `/show` command that display a file or a git diff to the owner in a window without the text reaching the model (the model gets one summary line), and pressable file paths in the live panel (decision-card text, a background command's output tail) that open the same window. `scripts/affected-suites.js` runs both mod suites for a change under either.
 
-- BL-0147 (c): `docs/settings-reference.md` now documents per-model `modelSettings.<model-id>.autoCompactWindow` (with the do-not-set-`CLAUDE_CODE_AUTO_COMPACT_WINDOW` warning and subagent frontmatter) and records the first measured compaction point (window minus 33K, preTokens about 500K at window 533000).
+- BL-0147 (c): `docs/guide/settings-reference.md` now documents per-model `modelSettings.<model-id>.autoCompactWindow` (with the do-not-set-`CLAUDE_CODE_AUTO_COMPACT_WINDOW` warning and subagent frontmatter) and records the first measured compaction point (window minus 33K, preTokens about 500K at window 533000).
 
 - BL-0147 (follow-up, asked by the <host> peer): the compaction checkpoint now gives the model's own handoff note at least 4000 bytes (was a fixed 2200) plus whatever git, dispatch and marker leave unused, with the transcript tail taking the remainder inside the same body cap (`scripts/lib/compaction-handoff.js`); the reader also waits and re-reads a note modified in the last 2 seconds and marks one that is still changing as possibly incomplete.
 
@@ -230,11 +230,11 @@
 
 - BREAKING (BL-0115, no shim): removed `dispatch-hetero.sh --gc` (with `--reap-unmarked` / `--yes`), `gc_stale_worktrees`, the orphan-log retry that only `--gc` ran, and the `stale_reaper_age_days` / `reaper_scope` keys of `worktree-teardown-config.md` (this repo's own override and the template included). The old flags now fail with a message pointing at `node scripts/repo-residue-sweep.js reap --auto --yes` (the SessionStart hook runs it); a teardown config that still carries either key is rejected by `resolve-worktree-teardown.sh` (exit 2) and `dispatch-hetero.sh` (precondition failure). `hooks/tests/dispatch-hetero-gc.test.sh` is replaced by `dispatch-hetero-gc-removed.test.sh`.
 
-- BL-0146 D4 review follow-ups: the round index now keeps the review payload and roster it was taken from, and a returned round re-derives `review_input_digest`, the verification argv hash and `roster_digest` from them (a forged index falls back to full, `prior_round_unverified`); the incremental seat context no longer carries a placeholder seat cell (a context without a seat index has no store file); the packet's `diff_paths` come from the same list as `recheck_diff`, and `buildReviewPacket` refuses a descriptor whose re-check file changed in the range without a hunk; `options.packet` is validated in `src/runners/review.js`; `docs/review-candidate.md` lists `seat_store_unavailable` and `evaluation_failed`. The default (`full`) path is unchanged.
+- BL-0146 D4 review follow-ups: the round index now keeps the review payload and roster it was taken from, and a returned round re-derives `review_input_digest`, the verification argv hash and `roster_digest` from them (a forged index falls back to full, `prior_round_unverified`); the incremental seat context no longer carries a placeholder seat cell (a context without a seat index has no store file); the packet's `diff_paths` come from the same list as `recheck_diff`, and `buildReviewPacket` refuses a descriptor whose re-check file changed in the range without a hunk; `options.packet` is validated in `src/runners/review.js`; `docs/guide/review-candidate.md` lists `seat_store_unavailable` and `evaluation_failed`. The default (`full`) path is unchanged.
 
 - BL-0109: `repo_identity_resolve_fields` caches per (root, consuming) input pair instead of per process, `repo_identity_of` names a non-repo directory as such, the manifest-repo-identity suite gains a PID trap, and `skill-onoff-markers.test.sh` skips the shared `qs-common` fixture dir (while failing any other task dir without `markers.sh`).
 
-- BL-0146 D4: `adoption.return_review` (`full` default | `incremental`, sealed, schema + checker + `docs/review-candidate.md`) wires the incremental return review into the engine: on a returned head the seats receive only the re-check set (new `incremental` option of `buildReviewPacket`), the receipt discloses `review_scope` with the carried and re-check sets, earlier findings stay open unless explicitly closed, and any failed eligibility test falls back to the unchanged full path. Also refuses an unbound `incremental_return` gate key (no shared sentinel), duplicate or overlapping set paths, and hardens `evaluateClosure` / `normalizeSeatReview` (positive-integer quorum, seat map must equal the sealed panel, evidence path must be in the packet). The default (`full`) path is unchanged.
+- BL-0146 D4: `adoption.return_review` (`full` default | `incremental`, sealed, schema + checker + `docs/guide/review-candidate.md`) wires the incremental return review into the engine: on a returned head the seats receive only the re-check set (new `incremental` option of `buildReviewPacket`), the receipt discloses `review_scope` with the carried and re-check sets, earlier findings stay open unless explicitly closed, and any failed eligibility test falls back to the unchanged full path. Also refuses an unbound `incremental_return` gate key (no shared sentinel), duplicate or overlapping set paths, and hardens `evaluateClosure` / `normalizeSeatReview` (positive-integer quorum, seat map must equal the sealed panel, evidence path must be in the packet). The default (`full`) path is unchanged.
 
 - BL-0146 prior-round addendum opened (owner ruling d-3cf4dc4c, 2026-10-17: give the list): an incremental return round appends a machine-generated list of the earlier round's open findings (`[id] | severity | path:line | claim` only, scanned by `check-blind-evidence.sh` before dispatch) to each seat's spec, seats close them with `resolutions[]` (re-derived on seat-store reuse), `prior_findings_included` is true on that path only, and the full path is byte-identical; includes the D5 round-index read-back and rename-packet tests.
 
@@ -291,7 +291,7 @@
 
 - BL-0194 P3: autopilot can now queue completed exam records and strikes in a crash-safe outbox (`scripts/qualification-send-queue.js enqueue|flush|status`, `engine-scorecard.js status`); `qualification_outbox.enqueue` (default off) also queues each `engine-scorecard.js record`, and the git transport (default off) sends over a bot branch and pull request, acking only when the bytes are on the registry default branch.
 
-- Fixed the skill on/off runner silently dropping `fixture_scripts` when an arm manifest has an empty `files` field (tab-joined fields collapsed); fields now use a non-whitespace separator. `src/engine/local-deployment.js` now applies the same transport policy as `scripts/resolve-endpoint.sh` (private-range plaintext only with the `_TRANSPORT=plaintext-private` opt-in; `transport_security` is `tls|loopback|plaintext_private`), with a parity test that runs both sides. Added `scripts/hook-harness-matrix.js` and `docs/hook-harness-matrix.md`: hook x harness registered events with verification dates taken only from `hooks/harness-support-evidence.json` (unverified cells say 未驗證), checked via `sync-all.sh`.
+- Fixed the skill on/off runner silently dropping `fixture_scripts` when an arm manifest has an empty `files` field (tab-joined fields collapsed); fields now use a non-whitespace separator. `src/engine/local-deployment.js` now applies the same transport policy as `scripts/resolve-endpoint.sh` (private-range plaintext only with the `_TRANSPORT=plaintext-private` opt-in; `transport_security` is `tls|loopback|plaintext_private`), with a parity test that runs both sides. Added `scripts/hook-harness-matrix.js` and `docs/dev/hook-harness-matrix.md`: hook x harness registered events with verification dates taken only from `hooks/harness-support-evidence.json` (unverified cells say 未驗證), checked via `sync-all.sh`.
 
 - Test-integrity now reports `early_exit` for an added unconditional top-level `exit`/`return` in a `*.test.sh` suite that still has assertions after it; the new advisory `scripts/scan-fixture-literals.js` flags fixture literals a hands diff wrote into production code (printed by `dispatch-hetero.sh`); `engine-qualify` runs report `truncation_cause` (`wall` or `count_seam`) next to `wall_truncated`, `startOfUtcDayMsOf` no longer throws outside the Date range, and the unused `required` parameter of `nowArgToMs` is gone.
 
@@ -316,7 +316,7 @@
 - **New `per_turn_gate.session_arming`** (boolean; default true). Missing or true: a valid worker-bound gate file arms per-turn-gate for that session even when the hook is otherwise off. Only an explicit false ignores gate files.
 - **New `review_ledger_archive.warn_mb`** (number >= 0; default 500). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB`. `status` warns above this many mebibytes and never blocks.
 
-Every release lists here what changed in the settings you can set (`scripts/check-settings-changelog.js` enforces it). The full list is now one page: [`docs/settings-reference.md`](docs/settings-reference.md), generated from the machine-readable `scripts/lib/config-keys.json`.
+Every release lists here what changed in the settings you can set (`scripts/check-settings-changelog.js` enforces it). The full list is now one page: [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md), generated from the machine-readable `scripts/lib/config-keys.json`.
 
 - **New `subagent_budget.concurrent_advise_max`** (integer >= 0; default 3). Env `AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX`. When the count of running subagent stamps reaches this number, an allowed Agent dispatch gets one extra advisory `additionalContext` sentence. `0` turns the sentence off. The hook never denies on this count. A scan that stops at the 200-operation or 50 ms budget words the sentence as a partial scan.
 
@@ -360,7 +360,7 @@ Every release lists here what changed in the settings you can set (`scripts/chec
   - **複審修正**：實機演練抓到並修掉兩個測試看不到的缺陷（採用範圍沒建立 scope session，scope 檢查點誤報「seal drifted」；`implementer_family` 覆寫在嚴格 readiness 之前，造成 roster digest 漂移）。宣告家族改成先從家族數扣除（RO7 字面讀法）；審查前分支被移動改為終止並給代碼 `review_candidate_branch_moved`；每個收件拒絕在頂層帶 `code`；帳本不再寫 `not_created_failed_dispatch`，改為 `not_created_adopted_range`；RO2 不再覆寫 diff provider。證據：`docs/plans/evidence/2026-10-14-review-candidate-ro10/`。
   - **續跑與處置（P2）**：`review-candidate --resume` 接續中斷或停車的 review-only campaign；分支漂移照 RO3 拒絕，席位只在 input binding 完全相同時重用。停車後用 `--campaign-continuation` 或 sealed 的 `adoption.disposition_preset` 選擇：`end` 終態 not-ready、列出 findings、不呼叫模型；`return` 新 head 必須是審過 head 的後代，同一個 campaign 以完整 diff 重審 `base..新 head`（只審新改動的便宜版本是 BL-0146）；`repair` 見下方 P5。`end` 也能收掉沒有 lease、卡在 ADJUDICATING 或 REVIEWING 的 campaign，即使已超過 wall 上限。執行期 quorum 改用 RO7 讀法（先扣作者家族再數），席位永久掉失導致面板不足時以 `review_candidate_panel_short` 終止。新增 `hooks/tests/review-candidate-resume.test.sh`。
   - **只探測用得到的席位（P3）**：review-only 的 readiness 不再探測、也不要求 implementer 和 verification-author，所以 implementer 額度用完不會擋住只審的 campaign；context gate 改用 reviewer 席位量。governance `enforce` 下，adoption 合約在 seal 時就以具名 code 拒絕。implement-review 各 level 的 profile 不變。
-  - **操作文件（P4）**：新增 `docs/review-candidate.md`，給沒看過計畫的外部操作者照著做：準備與封存 adoption contract、設定只審查用的 roster、執行與續跑、停車後選 `end`／`return`／`repair`，以及每個拒絕碼的意思和處理方式。已知限制也寫在裡面，包括 `return` 可能被拒為 `BUDGET_RESET`（BL-0154）。
+  - **操作文件（P4）**：新增 `docs/guide/review-candidate.md`，給沒看過計畫的外部操作者照著做：準備與封存 adoption contract、設定只審查用的 roster、執行與續跑、停車後選 `end`／`return`／`repair`，以及每個拒絕碼的意思和處理方式。已知限制也寫在裡面，包括 `return` 可能被拒為 `BUDGET_RESET`（BL-0154）。
   - **把停車的審查交給寫手修（P5）**：停車後選 `repair`（`--campaign-continuation repair`，或 sealed 的 `adoption.disposition_preset: "repair"`），只審的 campaign 會以 not-ready 結案並列出 findings，過程中不呼叫模型；結果另外帶一份 `repair_handoff`，內容是一份還沒封存的 `implement-review` contract 和任務說明，也寫到 `<git-common-dir>/autopilot/review-candidate-repair/<campaign>/`。contract 的 base 是審過的 head，路徑、驗證指令和上限照 adoption contract，`max_repair_generations` 取 2 和 profile 上限較小者；caller 自己封存再跑 `implement-review`。選 `repair` 代表授權開一輪修復，不代表接受每一條 finding：任務說明把 findings 寫成 reviewer 的主張，要寫手逐條對照程式碼，成立才修，不成立的列出理由。審過的 head 會和停車時存下的版本交叉比對，對不上就拒絕（`review_candidate_repair_head_mismatch`；resume 時讀不到則是 `review_candidate_repair_reviewed_head_missing`），審查維持停車，仍可改選 `end` 或 `return`。交接檔在結案之前就寫到磁碟。原本的 `review_candidate_repair_not_provided` 拒絕已移除。新增 `hooks/tests/review-candidate-repair.test.sh`（56 項）。
 
 - **背景啟動 dispatch rail 卻沒有喚醒機制，現在會被擋下**（BL-0019，openclaw 回報）：用結尾 `&` 或 `setsid -f` 把會啟動 worker 的 dispatch rail（`dispatch-review.sh` 等；`dispatch-status.js` 這類觀察工具不算）丟到背景，而同一個指令裡沒有 `wait` 或 `wait-dispatch-results.js` 時，session 永遠不會知道它跑完。這個檢查預設就生效，連 warn 模式也會擋，所有深度（包含 depth-0 和子代理）都適用；擋下時的訊息會列出改用 `run_in_background`，或搭配等待者的做法。
@@ -368,16 +368,16 @@ Every release lists here what changed in the settings you can set (`scripts/chec
   - `pkill -f`／`pgrep -f` 的 pattern 沒用 `[x]` 寫法（會比對到自己）：BL-0019 時只警告，BL-0148 起預設擋下（見「修正」）。zsh 下以 `=` 開頭的字詞或沒有檔案符合的萬用字元（zsh 會中止整行）只警告、不擋。萬用字元只查單層路徑，用 `opendirSync` 邊讀目錄邊看時間（總預算 50 ms），超時、目錄讀不到或輸入過長（超過 8 KiB）就不警告；`=` 開頭的字詞在輸入過長時也不檢查。
   - 規則放在 `scripts/lib/bash-launch-rules.js`，掛在既有的 `hooks/depth0-delegate-gate.js` 上，沒有新增 hook；`off` 模式會關掉全部。
   - **盯 `.exit` 完成檔也算叫醒**：用 `setsid -f` 啟動 `review`／`author`／`hetero`（帶齊 `--ledger --run-id --stage`）或 `foreman`（帶 `--ledger --run-id`）時放行，因為這些 rail 在正常分離執行、跑到結束時會寫 `<ledger>.results/<id>.<stage>.exit`（前置檢查失敗、監督程序被殺、hetero 分離後的 exit 2 等情況不會寫，所以等待迴圈一定要用 `timeout` 設上限），下一個呼叫用 `run_in_background` 跑 `until [ -f … ]` 或由 depth-0 用 Monitor 盯它就會被叫醒（l4–l6 的子代理不能用 Monitor）。參數不齊、不寫 `.exit` 的 rail、foreman `--resume`、`DISPATCH_DETACH=0`、結尾 `&` 仍會被擋。擋下訊息多了這個做法，並提醒不要拿 log 裡的 `rc=` 當完成訊號、不要用短間隔 ScheduleWakeup 輪詢。
-- **活面板的共用視覺語彙（P0）**（plan `docs/plans/2026-10-13-live-pane-design-system.md`）：新增 `mods/live/ui.ts`（符號表、狀態對應與嚴重度、新鮮度門檻、格式化函式、列元件），加上 glyph 與詞彙的 lint（`ui-lint.test.js`）。狀態列與面板符號改為 `⏸`→`⊘`、`⚙N`→`●N`、`⚠`→`▲`，因為舊符號在部分終端會被畫成彩色 emoji。`node mods/live/glyph-check.js` 讓你在自己的終端確認新符號只佔一格。
-- **活面板「現況」分頁改用共用元件重寫（P4）**（plan `docs/plans/2026-10-13-live-pane-design-system.md` §7 P4）：每個分頁頂端都畫同一組判決標頭（判決、專案、已進行時間、工作階段與本機今日花費、ctx），用量不再另成一段；現況只留要你處理、位置、各分頁摘要、背景工作、任務、最近對話，各分頁摘要列按下去會跳到對應分頁。背景工作只列在跑的（已結束或超過 30 分鐘沒有動靜的收在「N 項已結束」後面，退出碼 0 顯示完成、非 0 顯示失敗、沒有退出碼的顯示已停），任務只列未完成的。判定原因改成「要你處理」的一個項目。窗格內容比視窗高、而且還在最上面時，標頭的指標列最右邊會多一段 `↓ 下方還有 N 行`；捲動之後就消失，放不下時整段不畫。`↓` 還沒在你的終端確認過只佔一格，請跑 `node mods/live/glyph-check.js`。
-- **活面板「審查」分頁改用共用元件重寫（P1）**（plan `docs/plans/2026-10-13-live-pane-design-system.md` §7 P1）：程式碼審查、推送前 QC、代你決定、計畫審查四段都由 `ui.ts` 的元件組成，預設只顯示一行摘要，要看細節就按那一行。
+- **活面板的共用視覺語彙（P0）**（plan `project/plans/2026-10-13-live-pane-design-system.md`）：新增 `mods/live/ui.ts`（符號表、狀態對應與嚴重度、新鮮度門檻、格式化函式、列元件），加上 glyph 與詞彙的 lint（`ui-lint.test.js`）。狀態列與面板符號改為 `⏸`→`⊘`、`⚙N`→`●N`、`⚠`→`▲`，因為舊符號在部分終端會被畫成彩色 emoji。`node mods/live/glyph-check.js` 讓你在自己的終端確認新符號只佔一格。
+- **活面板「現況」分頁改用共用元件重寫（P4）**（plan `project/plans/2026-10-13-live-pane-design-system.md` §7 P4）：每個分頁頂端都畫同一組判決標頭（判決、專案、已進行時間、工作階段與本機今日花費、ctx），用量不再另成一段；現況只留要你處理、位置、各分頁摘要、背景工作、任務、最近對話，各分頁摘要列按下去會跳到對應分頁。背景工作只列在跑的（已結束或超過 30 分鐘沒有動靜的收在「N 項已結束」後面，退出碼 0 顯示完成、非 0 顯示失敗、沒有退出碼的顯示已停），任務只列未完成的。判定原因改成「要你處理」的一個項目。窗格內容比視窗高、而且還在最上面時，標頭的指標列最右邊會多一段 `↓ 下方還有 N 行`；捲動之後就消失，放不下時整段不畫。`↓` 還沒在你的終端確認過只佔一格，請跑 `node mods/live/glyph-check.js`。
+- **活面板「審查」分頁改用共用元件重寫（P1）**（plan `project/plans/2026-10-13-live-pane-design-system.md` §7 P1）：程式碼審查、推送前 QC、代你決定、計畫審查四段都由 `ui.ts` 的元件組成，預設只顯示一行摘要，要看細節就按那一行。
   - **狀態與新鮮度**：席位、輪次、閘門和 QC 都走 `STATUS_MAP` 與 `classify`，並補上兩兩衝突的測試。計畫審查的 `BLOCK` 對應到「失敗」（原本落到未知）。一輪裡有未知席位時顯示「未知」，不再讀成「已停」。計畫審查超過一天沒有更新，整段預設收合；程式碼審查同樣超過一天沒有收斂，輪次標成已停。已終結且過期的計畫審查只留一行歷史。
   - **決定**：每筆決定一行，按下去才出現「可逆或不可逆 · 寫入者」、決策文字和真正的 veto 指令；沒有編號的決定說明無法 veto。最新的在前；超過 5 筆時，最舊的收在「還有 N 件決定」之後。
   - **寬度**：`item`、`kv`、`header` 在 40 欄以內不再溢出：`item` 先切本文再切附註，切完一定是一行，右緣的展開記號保留；`kv` 的值換行時接在鍵欄之後；`header` 先切標題再切右側標籤。`item` 的狀態字與本文之間改為兩格（只有符號時一格），這會影響 P0 的呈現。
   - **新增共用函式**（放在 `ui.ts` 底部）：`chip`、`barValue`、`sectionOpen`、`carry`。計畫審查段只在過期時預設收合（由 `sectionOpen` 的參數決定）；`SECTION_DEFAULTS` 沒有改。
   - **測試**：新增 `mods/live/review.test.ts`（25 項：I1、I2、I3、I4、I5、I6、I7、I8、I10 的檢查器、負向對照與金樣）；`live.test.ts` 的審查分頁舊案例改寫，並新增掛載測試（席位展開、標頭收合、`more`、76 欄金樣）。
 
-- **活面板用量分頁（P3）**（plan `docs/plans/2026-10-13-live-pane-design-system.md` §5.4）：帳號與額度從「現況」搬到「用量」分頁；額度改畫成 meter（含重設倒數與等級標籤），今日花費加上 brain／其他層的份額條，近 24 小時改用 sparkline。狀態列的額度欄位按下改開「用量」分頁（`SLOT_TAB.quota = spend`），並展開額度區段。過渡期：現況仍保留「今日花費」區段，由 P4 的用量摘要取代。
+- **活面板用量分頁（P3）**（plan `project/plans/2026-10-13-live-pane-design-system.md` §5.4）：帳號與額度從「現況」搬到「用量」分頁；額度改畫成 meter（含重設倒數與等級標籤），今日花費加上 brain／其他層的份額條，近 24 小時改用 sparkline。狀態列的額度欄位按下改開「用量」分頁（`SLOT_TAB.quota = spend`），並展開額度區段。過渡期：現況仍保留「今日花費」區段，由 P4 的用量摘要取代。
 
 - **`/l5` 的 mission 骨架可以從計畫自動產生**（plan `docs/plans/2026-10-13-l5-mission-scaffold-generator.md`）：之前開一個 `/l5` mission，要照 recipe 手寫 rubric、sources、execution graph 三份檔案。手寫時漏一個欄位或路徑寫錯，就會白白燒掉一次 attempt。新增的 `scripts/scaffold-mission.js` 會從計畫和旗標產生這三份檔案。
   - 寫檔前先檢查那些會燒 attempt 的規則，例如路徑必須落在 allowed prefix 底下、驗證指令的格式。
@@ -390,7 +390,7 @@ Every release lists here what changed in the settings you can set (`scripts/chec
   - **`/clear`**：`session-handoff` 寫的機器 handoff 多一節「Workflow state」，用同一個收集器。
   - **PostCompact 檢查**：`state-checkpoint.js` 同時掛在 PostCompact，壓縮完成後檢查摘要有沒有提到當時的分支和階段；沒有就寫一筆 `compact-summary-lost-state` advisory，並在 `.state-checkpoint.log` 記 `postcompact_ok` 或 `postcompact_summary_missing`。只提醒不阻擋，hook 數量不變。
   - **任務卡**：新增 `scripts/task-card.js set|show|clear`，記下目標、成功條件、plan 路徑、審查帳本路徑和使用者說過的要求，快照會讀進來。dev-flow 在 intake 自動呼叫它屬於指引變更，要先有 ON/OFF 評測，這次沒做，所以目前任務卡要有人寫才有。
-  - 還沒做：`/handoff` 讀快照（指引，需評測）、子代理派工說明的記錄（要動 PostToolUse 主機，超過 S）。下一次真實自動壓縮要確認快照有出現在還原區塊和 Claude Code 自己的摘要裡。契約：`references/workflow-snapshot.md`；plan：`docs/plans/2026-10-13-workflow-snapshot-at-compaction.md`。
+  - 還沒做：`/handoff` 讀快照（指引，需評測）、子代理派工說明的記錄（要動 PostToolUse 主機，超過 S）。下一次真實自動壓縮要確認快照有出現在還原區塊和 Claude Code 自己的摘要裡。契約：`references/workflow-snapshot.md`；plan：`project/plans/2026-10-13-workflow-snapshot-at-compaction.md`。
 
 - **即時面板顯示登入的帳號和剩餘額度**（branch `feat/mods-account`）：之前要另外開 `/usage` 才知道 5 小時和 7 天的額度用了多少。
   - **band**：多一格 `5h 42% 7d 18%`，數字是各時段已用的百分比，小數無條件捨去，所以看到的數字和顏色一致：80% 以上顯示警告色，100% 以上顯示錯誤色，還沒到上限不會顯示 100%。同一種時段收到兩筆資料時只顯示用量較高的那筆。寬度不到 120 欄時只留用量最高的一段，不到 80 欄時整格不顯示。點這一格會開「現況」分頁，並展開「帳號」區塊。
@@ -425,7 +425,7 @@ Every release lists here what changed in the settings you can set (`scripts/chec
   - `scripts/dev-setup.sh --check` 會列出目前生效的門檻和它來自哪個檔案；沒有設定時顯示 WARN。
   - 新增的 `scripts/lib/autocompact-window.js` 依照 Claude Code 2.1.296 的規則推算門檻：env 優先，再依 user → project → local → policy 的順序合併設定檔。它讀不到命令列的 `--settings` 與 `--autocompact`，也讀不到伺服器下發的門檻。
 
-- tokmech (dd45ce115): `docs/token-discipline.md` now holds the five advisory token rules. PostCompact records one size after compaction, and the context-budget hook warns once when the live context still exceeds `context_budget.post_compact_warn`. T2 wording follows `context_budget.seat` (`session` keeps the handoff sentence; `resident` tells a fixed-address seat to update its state file). SessionStart prints one extra line that points at the rules file. The rules do not block a tool call.
+- tokmech (dd45ce115): `docs/guide/token-discipline.md` now holds the five advisory token rules. PostCompact records one size after compaction, and the context-budget hook warns once when the live context still exceeds `context_budget.post_compact_warn`. T2 wording follows `context_budget.seat` (`session` keeps the handoff sentence; `resident` tells a fixed-address seat to update its state file). SessionStart prints one extra line that points at the rules file. The rules do not block a tool call.
 - tokinstall (0feb09594): `node scripts/install-token-discipline.js` is opt-in (`install`, `uninstall`, `--check`, `--dry-run`). It writes the rules block into `CODEX_HOME/AGENTS.md` (or `~/.codex/AGENTS.md`) and `~/.gemini/GEMINI.md`. `scripts/dev-setup.sh --check` only reports whether the block is installed. It never installs it.
 
 ### 修正
@@ -554,14 +554,14 @@ Every release lists here what changed in the settings you can set (`scripts/chec
 - BL-0082: orphan adoption now re-observes the persisted runner identity and refuses an absent, partial, live or unknowable one (a dead controller no longer implies a dead leaf), and `reconstructOwnedInventory` re-reads rows Git no longer corroborates: a stale `active` on an unregistered worktree is dropped, an unregistered path on disk is unknown residue, and a branch that moved past its recorded tip is re-checked for unique commits. Worktrees created but never registered still need a write-ahead intent row (BL-0082 stays open for that).
 - t14s7: BL-0055 second experiment closed as SUCCESS (M1 28/29 vs 5/29, M2 27/29 vs 11/29, M3 26/29 vs 0/29); report archived, five BACKLOG rows added (BL-0253 to BL-0257).
 - deval (d9b0f0402): the dcard and dcard-v2 rows of the skill ON/OFF eval are recorded INSTRUMENT-INVALID (NOT-SHIP). The primary metric reads the decision file only after turn 2, so neither arm could be measured. The text was not shown to be ineffective. dskill B (12 guidance files) is not merged. A v3 waits on owner decision d-27318bdc.
-- subplan (d3878d429): the sub-agent concurrency advisory plan (`docs/plans/2026-10-21-subagent-concurrency-advisory.md`) is frozen after two generations of hetero plan review and waits on owner decision d-02c60498.
+- subplan (d3878d429): the sub-agent concurrency advisory plan (`project/plans/2026-10-21-subagent-concurrency-advisory.md`) is frozen after two generations of hetero plan review and waits on owner decision d-02c60498.
 
 ### Settings changes
 
 - **New `review_ledger_archive.rotate_after_months`** (positive integer; default 2). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS`. `rotate` compresses complete months strictly older than this. An invalid value keeps 2.
 - **New `review_ledger_archive.rotate_remove_source`** (boolean; default false). Env `AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE`. When true, `rotate` deletes the month directory after the tar listing matches.
 
-See [`docs/settings-reference.md`](docs/settings-reference.md).
+See [`docs/guide/settings-reference.md`](docs/guide/settings-reference.md).
 
 ## v3.0.0-alpha.6 — 同一個 session 開第二個任務可以用 `set --new-task` 重走階段流程，用量分頁多一條 24 小時走勢線，鍵盤也能切分頁（pre-release，供 owner 測試）
 
@@ -598,7 +598,7 @@ prose-justification: 本版只在 dev-flow 加 4 行、`/l4`、`/l5`、`/l6` 各
 
 - **band**：各群組之間用 `│` 分隔。寬度 160 欄以上會多出階段流程圖（stage walk），以及 10 格的用量條（含百分比）和判定的原因；用量與 QC 一路保留到 80 欄。`⚑N` 表示需要你處理的 worktree，取代原本的 `wt N`，任何寬度都不會被省略。一種顏色只代表一種意思，而且只用 theme key。目前選到的分頁是唯一有背景色的地方（theme key `subtle`），已在 tmux 內的 truecolor 與 256 色下實測可讀。
 - **面板**：原本 8 個分頁合併成 6 個。Now 吸收 Graph，Review 吸收 Decisions，Legend 變成 `?`。中文分頁名稱是 現況、派工、審查、用量、殘留、？。分頁有 badge，各區塊用分隔線標題，key 欄固定 12 格。長文字會換行，不再用 `…` 截掉。派工表比面板寬時，改成每個 run 一個區塊往下堆疊。按 ⓘ 現在直接開在 Now 分頁。
-- **多語言**：字串表放在 `mods/live/locales/en.json` 與 `zh-TW.json`，編譯成 `locales.ts`。測試腳本會跑 `gen-locales.js --check`，兩份表的 id 與 placeholder 不一致，或程式裡出現寫死的標籤文字，都會被擋下。語言依序決定：`~/.autopilot/config.json` 的 `ui.locale`，再來是環境變數 `AUTOPILOT_LOCALE`，再來是 Claude Code 的語言設定，再來是 `LANG`，最後是 `en`。要切換語言，在 `~/.autopilot/config.json` 設 `{"ui": {"locale": "en"}}`（或 `"zh-TW"`），或單次用 `AUTOPILOT_LOCALE=zh-TW` 啟動。對齊以顯示寬度計算，中文字算兩格。詳見 `docs/configuration.md`。
+- **多語言**：字串表放在 `mods/live/locales/en.json` 與 `zh-TW.json`，編譯成 `locales.ts`。測試腳本會跑 `gen-locales.js --check`，兩份表的 id 與 placeholder 不一致，或程式裡出現寫死的標籤文字，都會被擋下。語言依序決定：`~/.autopilot/config.json` 的 `ui.locale`，再來是環境變數 `AUTOPILOT_LOCALE`，再來是 Claude Code 的語言設定，再來是 `LANG`，最後是 `en`。要切換語言，在 `~/.autopilot/config.json` 設 `{"ui": {"locale": "en"}}`（或 `"zh-TW"`），或單次用 `AUTOPILOT_LOCALE=zh-TW` 啟動。對齊以顯示寬度計算，中文字算兩格。詳見 `docs/guide/configuration.md`。
 - **gate 工具**：`check.js` 在兩種語言下都能判讀新的版面文法；`capture.sh` 會明確記錄 `GATE_LOCALE`。
 
 ### 驗證
@@ -745,7 +745,7 @@ prose-justification: alpha.2 本身沒有新增 skill 或 reference 文字（P7 
 - **P3**：plan-review、hetero code-review、engine implement-review 三條 rail 進入時寫 stage，完成後只記錄實際完成的 review 家族；寫入失敗 fail-open，只印一行 stderr。
 - **P4a／P4b**：U3 panel、U4 experiment 與預算；owner rung 改號 U5；`check-stage-vocab.js` 掃描舊詞彙並接進 `check-canonical-invariants.sh`。
 - **P5 guidance**：dev-flow 736→530 行（含後續修正，初版 489）、finish-flow 184 行、新 `skills/dev-flow/references/stage-graph.md`；ceo-agent、l4–l6、debug、think-tank、team、quality-pipeline（改為 qc-gate 節點）、next、project-lifecycle、plan-template 與 config 模板同步改用新詞彙；profiles 重釘（364 條舊規則記為 `removed` disposition）。已知刪減：`S-scope-gate` 指標改由 E1 bump 取代、H-9 六個 subtask 的 TaskCreate 移交 finish-flow。
-- **P6**：BACKLOG effort 改名與 `docs/BACKLOG.md` 遷移（5 筆 `Fix`→`S`）。
+- **P6**：BACKLOG effort 改名與 `project/backlog/BACKLOG.md` 遷移（5 筆 `Fix`→`S`）。
 - **A1 P7a**：advisory bridge——`cost-tracker`、`version-drift-check`、`context-budget` T1、`suggest-compact` 的提示改寫入 `<live>/advisories/<sid>.jsonl`，不再注入 model context（逐 hook 旋鈕可恢復注入）。
 - **A1 P7b**：plugin load-source chip（`dev` 或 versioned cache，落後上游幾個 commit）。
 - **A1 P7c**：QC chip——watcher 以與 `.githooks/pre-push` 相同的規則發布 `QC ✓`／`QC owed`。
@@ -817,7 +817,7 @@ prose-justification: 本版新增 status／watcher 程式與 reference（referen
   - （J）第一輪就改滿所有 scope 路徑的 campaign 無法修補（第二次發生；第一次見 v2.36 CHANGELOG 約 :1195）：修補類 resume 的寫入預算檢查用 `>=`，與 reducer 的 `>` 不一致。現在修補類 resume 的預算檢查改用與 reducer 一致的 `>`（累計不重複路徑），新增路徑超出仍擋；admission 對 cap ≤ scope 路徑數且有修補輪的 campaign 發出 `campaign_file_cap_no_first_pass_headroom` 提醒；schema 補欄位說明。Peer-reported（<host>）＋第二次發生。
   - 修補輪：review 兩個 🟡 已修——提醒經真實 intake 驗證（斷言 `control.advisories`）；引擎修補閘以行為測試加 mutation check 驗證（新增 `campaign-repair-engine-at-file-cap` 套件，匯出 `campaignMutationBudgetStatus`）。
 - **驗證**：整套 `--parallel 16` 396 檔全過（第一輪 diff）；修補後重跑相關套件與 L1：`scripts/import-aa-capabilities.test.js` 22 項在本機紅，於 origin/develop 同樣紅（pre-existing，/tmp 內有 `.git` 使「cache 在 git worktree 內」檢查觸發）；check-js-syntax、codex 鏡像、validate.sh 通過。review：claude-fable-5-1 第二輪 SHIP-AS-IS（review-1791024600-335312-08ba）。
-- **已知後續（review 🔵）**：見 `docs/BACKLOG.md`「v2.36.114 review follow-ups」；含第二個 `campaignMutationBudgetStatus` 呼叫點（約 :10458）角色、fixture 用 N=4/1 而非 12、`control.advisories` 新鍵的 consumer deep-equal 快照。
+- **已知後續（review 🔵）**：見 `project/backlog/BACKLOG.md`「v2.36.114 review follow-ups」；含第二個 `campaignMutationBudgetStatus` 呼叫點（約 :10458）角色、fixture 用 N=4/1 而非 12、`control.advisories` 新鍵的 consumer deep-equal 快照。
 
 prose-justification: 本版僅改 campaign 預算判斷、admission 提醒、schema 說明與測試；一行 hetero-impl-loop reference 補述。
 
@@ -826,7 +826,7 @@ prose-justification: 本版僅改 campaign 預算判斷、admission 提醒、sch
 - **問題與改動（逐列）**：
   - （I）cost-tracker 的 50M 警告把累積 cache read（呼叫數 × window）說成 context 很重，並指向無關的 gate-map 列。現在它說明所計的是「K 次呼叫累計」與以帳本費率換算的金額占比（無價格列的模型顯示 cost unknown），並附上 statusline live 檔的真實 context %（讀不到則顯示 context % unknown）；只有 context % ≥ 50（可用 `cost_tracker.context_clear_pct` 或 `AUTOPILOT_COST_TRACKER_CLEAR_PCT` 調整）才建議 handoff 與 /clear。cost-fuse 警告顯示本 session 與全主機當日花費（門檻不變）；單一 `scripts/dispatch-*` 派工命令的豁免只在 warn 模式生效，且拒絕背景化串接與 process substitution。
 - **驗證**：整套 `--parallel 16` 395 檔全過；check-js-syntax、codex 鏡像、validate.sh 通過。review：claude-fable-5-1 SHIP-AS-IS（review-1791012999-2445836-3521）。
-- **已知後續（review 🔵）**：見 `docs/BACKLOG.md` 新增三列；另有 `hasPriceRow` 重複 getRate 的子字串比對（應改由 `PRICING` 鍵推導）、無 session id 時 cost-fuse 顯示 `$0.00` 而非 unknown、`readContextNow` 在 `total_input_tokens` 非數值時丟掉可用的 `used_percentage`。
+- **已知後續（review 🔵）**：見 `project/backlog/BACKLOG.md` 新增三列；另有 `hasPriceRow` 重複 getRate 的子字串比對（應改由 `PRICING` 鍵推導）、無 session id 時 cost-fuse 顯示 `$0.00` 而非 unknown、`readContextNow` 在 `total_input_tokens` 非數值時丟掉可用的 `used_percentage`。
 
 prose-justification: 本版不新增 skill 或 reference 文字；僅改 cost-tracker／cost-fuse hook 訊息與其測試。
 
@@ -1014,7 +1014,7 @@ prose-justification: 本版修真實可見的邊界落空（`--timeout` 記錄�
 - **規則中途改過一次**：第一版寫成排除任何帶 other 位的候選，round 3 複審抓到這仍會拒絕 codeforge 真實產生的 0775 目錄（round 2 的真機驗證跑在已被 round 1 自己 chmod 成 0700 的目錄上，沒測到真正的 0775）；depth-0 裁定為真，換成上面的父目錄規則。
 - **migration**：`/dev/shm/autopilot-<uid>/` 下的 hook 狀態（advisory-queue、context-budget、depth0-gate、dirty-tree-reminder）一次性失聯，全部是可重建的 advisory，佇列與視窗記憶重置一次即可。
 - **review 三輪**：round 1 FIX-THEN-SHIP（🟠 mask 太寬）→ round 2 SHIP-AS-IS 被整包複審打回 FIX-THEN-SHIP（🔴 仍拒真實 0775）→ round 3 對父目錄新規則 SHIP-AS-IS（`review-1790571747-63755-152a`）。
-- **既有紅**（非本版引入，`origin/develop` 基準同樣紅）：`engine-qualify-verdict-stability`（D6 honest/parity grader-hash drift）、`migrate-backlog-entries`（真實 `docs/BACKLOG.md` 可遷移列數低於 ≥100 閘門）。
+- **既有紅**（非本版引入，`origin/develop` 基準同樣紅）：`engine-qualify-verdict-stability`（D6 honest/parity grader-hash drift）、`migrate-backlog-entries`（真實 `project/backlog/BACKLOG.md` 可遷移列數低於 ≥100 閘門）。
 
 prose-justification: 本版修真實使用者可見的誤判（1M session 假 T1/T2），規則中途被複審打回重訂一次，說明規則本身、修訂原因與三輪 review 是必要事實不是灌水；相對 v2.35.2 基線的既有落差是先前版本累積的，這裡只讓本版區段本身通過 north-star 閘門。
 
@@ -1457,7 +1457,7 @@ prose-justification: `skills/ceo-agent/references/level-front-door.md` 的 forem
 
 - **洩漏根因**：plan 出生只寫檔不登記（plan-template／research-to-ship／l5 recipe），第一個機器接觸點 `dispatch-plan-review.js`、
   `mission-execution-graph-check.js` 照收未登記的 plan → 39 個孤兒、119 個 active 沒人知道狀態。修法（機制，非指引）：
-  **`docs/projects/INDEX.md` 是 active plan 的登記簿**——每個 `docs/plans/<stem>.md` 要有 Version=`active` 的列（只比對 Plan 欄，
+  **`project/projects/INDEX.md` 是 active plan 的登記簿**——每個 `docs/plans/<stem>.md` 要有 Version=`active` 的列（只比對 Plan 欄，
   不比對散文）；`check-plan-graduation.js` 新 blocking `plan_unregistered`／`plan_stem_malformed`，`dispatch-plan-review.js` 與
   `mission-execution-graph-check.js` 對未登記 plan 直接拒（exit 2；無 INDEX 的 consumer repo 自動放行、`--allow-unregistered`）；
   `--register-template <stem>` 印出要貼的列；歸檔時自動把該列 Version 從 `active` 改成釋出版本（所有指到同 plan 的列都改路徑）。
@@ -1597,7 +1597,7 @@ prose-justification: none（無 SKILL/reference 文字變動）。
   判死、carry 縮小、活 pid／活 flock／新心跳各自 skipped、`--dry-run` 不寫、`--json` 形狀）；`reap-dispatch-worktrees` 補 fixture ledger
   在真實解析路徑的斷言。主機 dry-run：184 個 lease 全判死、0 skipped、62 s。
 - BACKLOG：stale leases 列 shipped；新 S 列「lease-gc 迴圈中 transition 失敗會中止且被 `|| true` 遮成零」（reviewer 🟡）。
-- 文件：`docs/plans/2026-09-19-blind-review-2d-overlap.md` 凍結 g2（plan hetero loop G1 4 blocker＋4 non-blocking、G2 3 blocker 全 R4
+- 文件：`project/plans/2026-09-19-blind-review-2d-overlap.md` 凍結 g2（plan hetero loop G1 4 blocker＋4 non-blocking、G2 3 blocker 全 R4
   ＋4 non-blocking，全部 accept；證據 `docs/plans/evidence/2026-09-19-blind-review-2d-overlap/`）——後審 suite 與 panel 重疊、panel
   snapshot 成為契約；下一步是兩個 managed campaign。「already-scrambled carry-only ledger segments」列重估 L。
 
@@ -2560,7 +2560,7 @@ prose-justification: 本版對 prose 面沒有增量（+0 行，只動 src/engin
 
 ## v2.36.40 — backlog gate 進 pre-commit ritual；depth-0 managed-campaign 步驟寫進 l5 reference
 
-- `scripts/sync-manifest.json` 多一條 `check-backlog-entries` ritual（觸發：`docs/BACKLOG.md`、`.claude/backlog-config.md`、
+- `scripts/sync-manifest.json` 多一條 `check-backlog-entries` ritual（觸發：`project/backlog/BACKLOG.md`、`.claude/backlog-config.md`、
   `.claude/backlog-debt.json`、gate 本體），pre-commit 就擋；量過：塞一列胖 row commit 被拒（`✗ check-backlog-entries FAILED`）。
   v2.36.39 翻 block 後第一條新 row 是 commit 之後才被 finish-flow 層抓到、已經推出去——這條 ritual 就是那次的修法
   （母 plan open question 3 由事故回答）。
@@ -2590,7 +2590,7 @@ depth-0 自己探到的三條（不冪等、小列被跳過、65 KB manifest 經
 
 ### 4b（depth-0）：遷移、allowlist、flip
 
-- `docs/BACKLOG.md`：**237,170 B → 103,643 B**；154 條全部遷移，**154 個 sidecar**（`docs/backlog/`，manifest
+- `project/backlog/BACKLOG.md`：**237,170 B → 103,643 B**；154 條全部遷移，**154 個 sidecar**（`docs/backlog/`，manifest
   `MIGRATION-2026-09-14.json`，moved 219,369 B、sha256 全數驗證）；檔頭改成一段指向 schema 的說明＋壓縮後的 FIRED queue。
 - `.claude/backlog-debt.json`：**30 條殘留**（全是 Title > 120 B），只能往下。
 - `.claude/backlog-config.md` `mode: block`：gate 對現況 exit 0（new 0／allowed 30），塞一列胖 row 立刻 exit 1（量過）。
@@ -2911,7 +2911,7 @@ clean）與 `dispatch-hetero.sh` 兩段邊界註解，皆為規格文字；engin
 
 同時，真正在**建或掃**專案文件的 skill 注入的設定裡沒有路徑：`ceo-agent` 把
 「建 `docs/projects/YYYY-MM-DD-<name>/`」標成 MANDATORY，卻只注入 `dispatch-config.md`；
-`finish-flow` 把延後項目寫進 `docs/BACKLOG.md`；`research-to-ship` 寫 plans、projects 與 INDEX；
+`finish-flow` 把延後項目寫進 `project/backlog/BACKLOG.md`；`research-to-ship` 寫 plans、projects 與 INDEX；
 `handoff` 與 `retro` 什麼設定都沒注入。
 
 ### `scripts/resolve-project-paths.sh`（新）
@@ -2925,7 +2925,7 @@ clean）與 `dispatch-hetero.sh` 兩段邊界註解，皆為規格文字；engin
 
 **刻意不動的**：`survey` / `learn` / `distill` / `engine-onboarding` / `think-tank` / `finish-flow`
 裡的 `docs/plans/2026-…-*.md` 是指向**本 repo 自己**計畫書的出處引用。那裡寫死是對的，套 resolver
-會把引用打斷。這條界線寫在 `docs/BACKLOG.md` 的同名條目裡，因為接手的人最容易在這裡誤傷。
+會把引用打斷。這條界線寫在 `project/backlog/BACKLOG.md` 的同名條目裡，因為接手的人最容易在這裡誤傷。
 
 prose-justification: 這一版新增的 prose 是 `scripts/resolve-project-paths.sh` 的 header 契約與
 `hooks/tests/resolve-project-paths.test.sh` 的斷言說明，兩者都是**規格文字**；skill 側則是六處
@@ -2942,7 +2942,7 @@ provenance 說謊**（`source: none`）。測試抓到的不是路徑而是那�
 ### 問題：reference doc 寫的是 autopilot 自己的路徑
 
 `references/knowledge-routing.md` §3 與 `skills/learn/SKILL.md` 把 `.claude/knowledge/`、
-`references/`、`docs/BACKLOG.md` 當字面路徑寫死。其中兩個在消費端專案**不存在**——`references/`
+`references/`、`project/backlog/BACKLOG.md` 當字面路徑寫死。其中兩個在消費端專案**不存在**——`references/`
 是這個 plugin 自己放 skill reference 的目錄，別的專案沒有自己的 skill 要被綁；而
 `.claude/knowledge/` 的 `git add -f` 提交契約是**這個 repo 的 `.gitignore` 的事實**，不是通則。
 所以 `handoff` step 2.5 叫 agent「照 §3 路由」時，遞給對方的是我們家的家具：它要嘛自己發明一個
@@ -2959,7 +2959,7 @@ provenance 說謊**（`source: none`）。測試抓到的不是路徑而是那�
 - `backlog_path` / `plans_dir` 預設 `auto`，**委派給 `project-detect.js`**：`doc/` vs `docs/`
   與 `project_paths` 早就是它的職責，在這裡重推一次等於同一個問題有兩個答案。
 - **`none` 是真答案。** 專案若把待辦記在 repo 外，resolver 就回 `none`，正確行為是說出來，而不是
-  因為 reference doc 曾經提過就去建一個 `docs/BACKLOG.md`。發明路徑的失敗是無聲的：檔寫了，沒人讀。
+  因為 reference doc 曾經提過就去建一個 `project/backlog/BACKLOG.md`。發明路徑的失敗是無聲的：檔寫了，沒人讀。
 - `knowledge_gitignored` 是**量出來的**，不是假設的。
 
 ### 兩個量到的機制缺陷
@@ -2972,7 +2972,7 @@ provenance 說謊**（`source: none`）。測試抓到的不是路徑而是那�
 專案會命中 **autopilot 的 dogfood 設定**，tier 4 的出貨模板永遠輪不到。紅燈先跑出來：一個外部 repo
 解析出 `discipline_target: references/`、`source: project-repo`。本 script 因此不用共用 helper，
 自己展開 ladder 並只在 target 就是本 repo 時套用 tier 3。其餘六個 consumer 維持原行為，逐一判定
-是意圖還是意外後再動——登記在 `docs/BACKLOG.md`。
+是意圖還是意外後再動——登記在 `project/backlog/BACKLOG.md`。
 
 prose-justification: 自 v2.35.2 基線起 prose +1278 行（8%），其中這一版的增量在
 `references/knowledge-routing.md` §3/§3.1 與新的 `project-config-template/knowledge-routing-config.md`。
@@ -3033,7 +3033,7 @@ pin 查詢的 store 範圍跟同檔其他讀取完全一致。**第一版不是*
 第一輪 panel 作廢，錯在 depth-0：給席位的 diff 用 `-- scripts platforms hooks` 產生，排除了 spec 自己
 要求的兩個文件檔。兩席**獨立**開了同一個 MUST-FIX，對他們看到的東西判斷完全正確。舊裁決留檔不刪。
 
-### 這一輪對 rail 本身的量測（都在 `docs/BACKLOG.md`）
+### 這一輪對 rail 本身的量測（都在 `project/backlog/BACKLOG.md`）
 
 - **出貨的 operator-pin admission 在 managed rail 上到不了**：`dispatch-contract.js` 的 pin 分支從
   `--resolved-live` 文件讀 `operator_pin`，而 `dispatch-hetero.sh` 在 managed 路徑從不傳。pin 存在、
@@ -3045,7 +3045,7 @@ pin 查詢的 store 範圍跟同檔其他讀取完全一致。**第一版不是*
 ### 出貨紀律揭露
 
 prose-justification: 本版 prose 成長全在 `docs/plans/evidence/` 的兩份 QC panel 紀錄與
-`docs/BACKLOG.md` 的新量測，沒有任何 `skills/` 或 `references/` surface 變大。
+`project/backlog/BACKLOG.md` 的新量測，沒有任何 `skills/` 或 `references/` surface 變大。
 
 containment campaign 跑到 `dispatch_implementation: committed`、`campaign_scope: passed`、
 `campaign_verification: passed` 與兩輪 `dispatch_review: reviewed` 才被 rail 擋在 `final_panel`。
@@ -3125,7 +3125,7 @@ canonical 的 JavaScript 述詞而不是在 shell 裡長出第二份對封閉 sc
 重寫的那一案加上兩條新斷言：bare dispatch 在活 marker 下不生 runner，以及 marker bridge 的專屬 oracle
 仍然拒絕帶陳舊 digest 的 strict campaign）。順帶修掉 12f 案讀到陳舊 capture 檔而空轉的問題。
 
-### 這一輪關於 rail 自己的量測（都在 `docs/BACKLOG.md`）
+### 這一輪關於 rail 自己的量測（都在 `project/backlog/BACKLOG.md`）
 
 - **graph 模型了 controller 做不到的併行**：`mission grant` 不吭聲地發了三張 claim，三個 dispatch 起來，
   一個進到實作、兩個死在 `canonical Mission state changed between intake and controller persistence`
@@ -3142,7 +3142,7 @@ canonical 的 JavaScript 述詞而不是在 shell 裡長出第二份對封閉 sc
 ### 出貨紀律揭露
 
 prose-justification: 這一版的 prose 成長全部落在 `docs/plans/2026-09-12-*.md`（四份計畫加四份 rubric）
-與 `docs/BACKLOG.md`（五列新量測），不在任何 skill 或 reference 的 surface 上。rail 強制一個節點一份
+與 `project/backlog/BACKLOG.md`（五列新量測），不在任何 skill 或 reference 的 surface 上。rail 強制一個節點一份
 plan 一份 rubric（`checkMissionGraphCoverage` 要求 source plan id 對 node 是 1:1），所以四個並行
 deliverable 在結構上就是四份計畫文件；把它們壓成一份會讓併行在 rail 上不可能表達。engine 同時成長
 1566 行。北極星是 prose↓ engine↑，這一版 prose 的增量是 rail 的結構成本而非指引膨脹。
@@ -3222,7 +3222,7 @@ SHIP-AS-IS 零 finding。裁決依據是**執行**不是票數：先在候選分
 
 **偏差（誠實記錄）**：修補與本版的繞道修復都由 Claude hands 完成。managed rail 的 repair 死結已知為
 確定性，且本輪新記錄了第三個「狀態機進得去、CLI 出不來」的狀態（`awaiting_disposition`）。
-詳見 `docs/BACKLOG.md`。
+詳見 `project/backlog/BACKLOG.md`。
 
 prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）。`references/evidence-discipline.md` 新增 §34，記錄「只印判決不印運算元的檢查，與什麼都沒讀的檢查長得一模一樣」——本輪第五個同族實例，且來自另一個 repo 的另一位作者，正是該檔存在的理由。
 
@@ -3309,7 +3309,7 @@ cached ladder，live 的是 pin 疊加那層；以及 `plan_reviewer` 的 tuple 
 
 **偏差（誠實記錄）**：修補再次由 Claude sonnet 完成。managed campaign rail 的修補死結經第二條獨立
 lineage 確認為**確定性**——第一次實作跑得動，修補必定在 `prepare_implementation` 以
-`MUTATION_FAILURE_EVIDENCE_REQUIRED` 卡死且 claim 無法撤回。詳見 `docs/BACKLOG.md`。
+`MUTATION_FAILURE_EVIDENCE_REQUIRED` 卡死且 claim 無法撤回。詳見 `project/backlog/BACKLOG.md`。
 
 prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）。
 
@@ -3348,7 +3348,7 @@ prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- s
 
 **偏差（誠實記錄）**：修補未經 hetero 引擎，由 Claude sonnet 完成——managed campaign rail 在
 `prepare_implementation` 以 `MUTATION_FAILURE_EVIDENCE_REQUIRED` 卡死且 claim 無法撤回。本版因此
-不是純 L5。rail 缺陷與 panel 的四條 🔵 硬化項一併進 `docs/BACKLOG.md`。
+不是純 L5。rail 缺陷與 panel 的四條 🔵 硬化項一併進 `project/backlog/BACKLOG.md`。
 
 prose-justification: 本版未動任何 `skills/` 散文（`git diff --stat -- skills` 為空）；
 `references/evidence-discipline.md` 新增 §32 是事故記錄，該檔的用途就是累積這類條目。
@@ -3717,7 +3717,7 @@ finish-flow 的文字裡，沒叫 finish-flow 的 session 本來就沒有任何�
   三個事件的精確 manifest）。**Codex 端 live-fire 未驗證**：註冊有測試證據，但「hook 存在不等於 hook 有跑」——本機 codex 配額見底，沒跑
   hook-probe live；下一個 Codex session 觀察到提醒（或沒有）就是證據，屆時補進 portability reference。
 - 盤點：30 hooks（17 default-on／13 opt-in），`hook-classes.json` 新列（`invariant_effect`，各 profile 都保留）、catalog `hook_classes_sha256`
-  重釘、README badge、CLAUDE.md、`docs/installation.md` 過期的「15 個 opt-in」清單改成真實 13 個。
+  重釘、README badge、CLAUDE.md、`docs/guide/installation.md` 過期的「15 個 opt-in」清單改成真實 13 個。
 - 測試：`hooks/tests/dirty-protected-paths.test.sh` 23 條（乾淨靜默、低於門檻靜默、檔數門檻、非保護路徑不算、行數門檻含 untracked、
   30 分鐘去重且 per-session、env 門檻、退出、無設定整樹、非 git／垃圾 stdin 皆 exit 0 靜默）；inventory／package／profile 四套同步更新。
 - 未做（owner 問題「hook 是不是要統一做盤點表定期 check 各 harness 支援」）：立 BACKLOG「per-hook × per-harness support matrix」——現況
@@ -3740,7 +3740,7 @@ prose-justification: no `skills/*/SKILL.md` line count grew this release (hook +
   plugin-creator reference：cachebuster＋add，沒有 remove；add 原地升版已驗證）。
 - 測試：`dev-setup.test.sh` 三案（有活躍 session ⇒ exit 1、訊息帶 pid／MODULE_NOT_FOUND／--force、stub 證明沒碰 plugin 指令；`--force` ⇒
   走 `plugin add`、絕無 `plugin remove`、印重啟提醒；無 session ⇒ 靜默照常）；`codex-plugin-package.test.sh` 在獨立 sandbox 釘住「原地
-  add 升版會刪舊版本目錄、舊 post-compact.js 消失」這個事實（守衛的依據）。`docs/installation.md` 更新列改寫。
+  add 升版會刪舊版本目錄、舊 post-compact.js 消失」這個事實（守衛的依據）。`docs/guide/installation.md` 更新列改寫。
 - 未做（peer 建議、未驗證）：`~/.codex/hooks.json` 固定入口直指 repo 的開發用 hook——會與 plugin hook 重複、要另設信任審核；
   Codex 文件也沒說 hook command 是否經 shell，無法在 command 字串裡加 fallback。列 BACKLOG 待 spike。
 
@@ -3789,7 +3789,7 @@ v2.36.7 只把 l4 的 `provider_readiness_authority_missing` 改成具名拒絕�
   互不相認）；engine KR4（認證 ⇒ 無 waived；無 bootstrap ⇒ waived 仍在；`--require-qualified-reviewer` 兩種情況）；observation KR5。
 - 已知邊界（不是本版偏差）：managed engine 的 terminal-QC 閘（`prepare_implementation_loop`、`min_panel_size`）與 level 無關，任何
   `--campaign-contract` run 仍要完整 QC panel；「QC 選配」是 bootstrap roster 形狀規則。docs：front-door foreman 段、
-  `references/multi-agent-portability.md`、`docs/installation.md`；BACKLOG 兩列收線。
+  `references/multi-agent-portability.md`、`docs/guide/installation.md`；BACKLOG 兩列收線。
 
 prose-justification: no `skills/*/SKILL.md` line count grew this release (reference doc only; no skill files touched).
 
@@ -4073,7 +4073,7 @@ brief＋rulings＋14,648 行 ledger＋2.6 萬行 kernel 原始碼。稽核（本
   每個 agent 的 Bash 上限 40（第 41 次 deny，附 handoff 指令）、前景輪詢 deny（`true`／`:` 空轉、`sleep N`、
   `while … sleep|grep|test`、`pgrep`／`ps -p`／`kill -0`、讀 `/tasks/*.output`）、`Monitor` deny；
   `run_in_background` 的等待放行。模式 `foreman_guard.mode` block|warn|off、`foreman_guard.bash_cap`，env
-  `AUTOPILOT_FOREMAN_GUARD_MODE`／`_BASH_CAP`。fail-open。`docs/ironlaw-to-gate-map.md` #6 從「事後」升為在迴圈。
+  `AUTOPILOT_FOREMAN_GUARD_MODE`／`_BASH_CAP`。fail-open。`docs/dev/ironlaw-to-gate-map.md` #6 從「事後」升為在迴圈。
 - **行為改變：三個 hook 從 opt-in 改 default-on**（27 hooks：14 default-on／13 opt-in）。`context-budget`
   （100K 提醒、150K 要 handoff；退出 `context_budget.mode: off`／`AUTOPILOT_CONTEXT_BUDGET_MODE=off`）、
   `dispatch-model-guard`（沒帶 `model:` 或指到 fable 就問；退出 `AUTOPILOT_DISPATCH_MODEL_GUARD_MODE=off` 或
@@ -4482,7 +4482,7 @@ Claude Code 的 subagent task-completion notification 是 best-effort，實測�
 - `skills/dev-flow/SKILL.md` Session Rules 新增 **Background Wait Rule**（非 foreman 的一般 session）：
   預期等待 ≤15 分鐘走前景 `Bash` + 明確 `timeout` 或 `Monitor`，>15 分鐘才用 `run_in_background`
   且必須配 output path + 死人開關。
-- `docs/ironlaw-to-gate-map.md` #6 標註死人開關是 brief-template forcing function，
+- `docs/dev/ironlaw-to-gate-map.md` #6 標註死人開關是 brief-template forcing function，
   `check-foreman-polling.js` **偵測不到**缺少死人開關——誠實標示未機械化的部分（ADR-0001）。
 - profiles hash 鏈依序重釘：`rule-inventory.json`（dev-flow sha256 + 新 segment
   `dev.session-background-wait` 140–155 + 其後全部位移 +16 + duplicate_rule_sets 行號）→
@@ -4618,7 +4618,7 @@ authorization (plan §8 Q3).
 
 **D8 — wiring, generalization note, release.** `foldPooledVerdict` + `(VERDICT_Z, VERDICT_TAU)` + the
 tier map are written role-agnostic but **not** switched for `reviewer/implementer/owner/
-verification_author/brain` — each needs its own scorecard-first eval evidence first (`docs/BACKLOG.md`
+verification_author/brain` — each needs its own scorecard-first eval evidence first (`project/backlog/BACKLOG.md`
 follow-up). Sealed consult/discuss grader hashes re-asserted byte-identical to `origin/develop`.
 
 **Rail fixes that shipped alongside** (surfaced because the Mission-managed campaign rail could not
@@ -4836,7 +4836,7 @@ verdict-token coverage across every checkable channel in both graders, and made 
 seat tuple" case exit 3 across all four surfaces per the plan's tuple-integrity rule.
 
 **BACKLOG hygiene**: retired the two shipped entries this release's suite-oracle-lock and
-owner_absent-caveat work closed (`docs/BACKLOG.md`).
+owner_absent-caveat work closed (`project/backlog/BACKLOG.md`).
 
 prose-justification: this release adds 12 lines under `skills/` — the `owner_absent` HONEST
 BOUNDARY caveat relocated onto stage-lease liveness in
@@ -5537,7 +5537,7 @@ gaming early-exit 的形狀;要分開需要 L0 沒有攜帶的檔案位置資訊
 
 **誠實性修正(depth-0 panel F2/F3)**:README 宣稱 early-exit 缺口「寫在設定檔、引擎、BACKLOG
 三處」,但 `.claude/test-integrity-config.md` 裡**根本沒有**那段——已補上,並一併寫入三條具名
-未涵蓋類別;`docs/projects/INDEX.md` 仍留著被自己 review 推翻的「36 個套件結尾」,改成實測值
+未涵蓋類別;`project/projects/INDEX.md` 仍留著被自己 review 推翻的「36 個套件結尾」,改成實測值
 (19 top-level / 41 任意縮排 / 2 在最後一行)。**說有記錄卻沒記錄,比沒記錄更糟。**
 另外 README / BACKLOG / INDEX 三處把 `package.json` 列為已設定的 surface path,但設定檔刻意沒有
 這一條(理由正確)——三處散文改成與檔案一致。
@@ -5612,7 +5612,7 @@ kernel 現在在兩條 return path 都回報 `wall_truncated` 與 `started_cases
 截斷列改回 observed 分母(`6/6` + score 1.0,正是 `resolve-scaffold-tier` 會讀成完整 N/N 的形狀)→ 紅;
 `wall_truncated` 寫死 false → 紅。穩定性:單獨 `node --test` 連跑 3 次全綠。
 
-三筆各自一個 commit,對應的 `docs/BACKLOG.md` 條目都已標 RESOLVED 並寫明機制。Codex 鏡像同步。
+三筆各自一個 commit,對應的 `project/backlog/BACKLOG.md` 條目都已標 RESOLVED 並寫明機制。Codex 鏡像同步。
 
 ## v2.34.36 — 官方施測結果隨 plugin 出貨:consumer 吃預設,或在自己的環境自考
 
@@ -5624,7 +5624,7 @@ verification_author 一過(142) —— 打包進 `references/official-qualificat
 consuming repo 啟用某個 hetero role 時被問**一次**:吃官方預設,還是在自己的環境自考?
 
 **「簽署」的實作是披露,不是背書**: BACKLOG 原文寫「以簽署的 scorecard 成績單出貨」,而
-[ADR-0001](docs/adr/0001-verification-over-attestation.md) 明文禁止信任機械。所以這裡沒有簽章、
+[ADR-0001](docs/dev/adr/0001-verification-over-attestation.md) 明文禁止信任機械。所以這裡沒有簽章、
 沒有 hash chain、沒有 witness receipt。取而代之的是**逐列環境披露**:engine / model_version /
 version_source / runner / **runner CLI 版本** / family / **harness commit** / corpus_version /
 prompt_config_hash / effort / 施測日期 / qualified_at / expires,加上 evidence pointer(官方
@@ -5859,7 +5859,7 @@ review 抓住。鎖機器退場,拒絕本身扛起整個閘。
   (evidence dir 兩份)。
 
 ### Changed
-- `docs/BACKLOG.md` — P6D 條目:2/3 classes shipped(皆 planted negative);class (a) 留
+- `project/backlog/BACKLOG.md` — P6D 條目:2/3 classes shipped(皆 planted negative);class (a) 留
   觸發;新增 **durable repair-lock 設計**條目(解鎖路徑 + legacy receipts + projection
   roundtrip 攜帶 + no_effect_release 封口 + finalize-abort 冪等,reviewer 證據全引)。
   prose-justification: 本版零 skill prose 變動;ratchet 差額為既往版本遺留(dev-flow
@@ -6320,7 +6320,7 @@ think-tank 五席 panel 在分析中找到真正的根因:body 自相矛盾—�
 - `hooks/tests/profile-guided-dispositions.test.sh` — `set_dispositions` 原本整包覆蓋 dispositions,
   會把樹上真實的條目全部沖掉(套件因此在誠實的 repo 上變紅);改為附加。五個 red case 經注入變異覆核
   仍會紅(4/5 mutant killed;第 5 個是既有的空洞紅案,已進 BACKLOG)。
-- `docs/BACKLOG.md` — zero-compliance row 收斂為 F4-only(F6 leg 結案);新增 outcome-shaped
+- `project/backlog/BACKLOG.md` — zero-compliance row 收斂為 F4-only(F6 leg 結案);新增 outcome-shaped
   opt-in enforcer row(取代被否決的 invocation 檢查);card re-attempt row 補記舊 F6 marker 失效
   與 FULL pack 已與 live skill 分岔。
 - `evals/skill-onoff/README.md` — 標註 `packs/dev-flow-full/` 自本版起是**歷史**凍結(記錄當時被量的
@@ -6366,7 +6366,7 @@ baseline 三類 disposition 本體論照常出貨。
 
 ### Changed
 - `doc-drift-gate.js`: byte-frozen eval pack fixtures (`evals/skill-onoff/packs`) excluded from the links check — their relative links intentionally dangle (byte-identity with live skills is test-asserted).
-- `docs/BACKLOG.md`: contract-card row (dev-flow leg RESOLVED-NO-SWAP), new rows — dev-flow
+- `project/backlog/BACKLOG.md`: contract-card row (dev-flow leg RESOLVED-NO-SWAP), new rows — dev-flow
   card re-attempt (instrument repair first), zero-compliance finding (F6/F4), scaffold-tier A/B
   (four-layer D6 leftover repaired), cc-shim `generate_session_title` framing leak (Fix).
 
@@ -6961,7 +6961,7 @@ block to be the first non-blank line — discarded the finished review as `no_ve
   so a runner replaying it reproduces them, and position is what separates an echo from an answer.
   An attempt to relax it failed exactly that pinned case; the suppression fixes the cause instead.
 - Only the cc-shim path is changed. Other transports that prepend chrome would still lose a verdict
-  the same way — the `docs/BACKLOG.md` entry stays open for that, now with a reproduced instance.
+  the same way — the `project/backlog/BACKLOG.md` entry stays open for that, now with a reproduced instance.
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`. The suppression is one env assignment; removing it restores
@@ -7388,7 +7388,7 @@ note.
 - Framework defects observed during the real L6 run (legacy quota partition vs exact
   effort/endpoint admission, gate-budget consumption by precondition/no-effect attempts, missing
   finding-disposition resume, pre-spend output-path/version-mirror validation, `boundary_rejected`
-  status handling, QC panel-count degradation) are tracked in `docs/BACKLOG.md` and are not fixed
+  status handling, QC panel-count degradation) are tracked in `project/backlog/BACKLOG.md` and are not fixed
   by this release-closeout node.
 
 ### Rollback
@@ -7761,7 +7761,7 @@ dispatch-contract "GO / NO-GO" term are untouched (different concepts).
 - 16 occurrences across 7 files renamed: `skills/ceo-agent/SKILL.md` (5 — incl. the `-x` override
   gloss, aligned per QC panel), `skills/l3/SKILL.md` (2), `skills/l4/SKILL.md` (1),
   `skills/l5/SKILL.md` (1), `skills/l6/SKILL.md` (1), `skills/ceo-agent/references/level-front-door.md`
-  (3), `docs/skills.md` (3 — incl. the spaced `no-go = none` variant at L121 the initial inventory
+  (3), `docs/guide/skills.md` (3 — incl. the spaced `no-go = none` variant at L121 the initial inventory
   missed; caught by the depth-0 QC panel). Codex plugin payload mirror re-synced
   (`sync-codex-plugin-skills.sh`).
 - Frontmatter `description:` fields (l3/l4/l5/l6) changed only the preset descriptor
@@ -7848,7 +7848,7 @@ prose-justification: this release's prose growth is the release entry itself plu
 
 - `scripts/dev-setup.sh --check` (claude section) now compares the marketplace clone's declared version against the repo's canonical `plugin.json` and WARNs on mismatch, naming the stale-session consequence and the fix command.
 - `scripts/dev-update.sh` now also refreshes the marketplace clone (best-effort `git pull --ff-only`; warns on dirty/failed, never fails the repo update).
-- `docs/installation.md` § Dev-mode update documents the three-layer model.
+- `docs/guide/installation.md` § Dev-mode update documents the three-layer model.
 
 ## v2.32.46 — engine wires reviewer_endpoint + --resume re-entry
 
@@ -8044,21 +8044,21 @@ runner.
 - `scripts/doc-drift-gate.js` bare script-ref check now clears refs that resolve beside/under the doc itself (eval-fixture false positives).
 - Eval harness defaults `claude-sonnet-4-6`/`claude-opus-4-7` → `claude-sonnet-5`/`claude-opus-4-8` (`run-eval-batch.sh`, `run-skill-opt.sh`).
 - `.opencode/opencode.json` migrated to OpenCode 1.17 schema (`plugin`/`agent`/per-agent `permission` object/`prompt`, `skills.paths`); agent-body check green again, two remaining checks BACKLOG'd for a plugin-API spike.
-- Stale renamed-file comments (`tree.js`, `resolve-doa.sh`), incomplete consumer lists (`hooks/_shared/secret-patterns.js`), CLAUDE.md scripts-inventory gaps (7 rows), `docs/installation.md` opt-in list 12→15, blind-dispatch consumer table, `review-loop-config.md` template gains the `skill_mode` key.
+- Stale renamed-file comments (`tree.js`, `resolve-doa.sh`), incomplete consumer lists (`hooks/_shared/secret-patterns.js`), CLAUDE.md scripts-inventory gaps (7 rows), `docs/guide/installation.md` opt-in list 12→15, blind-dispatch consumer table, `review-loop-config.md` template gains the `skill_mode` key.
 - `.claude/knowledge/INDEX.md` honestly marks a knowledge file that was never committed (content lost; mirror machine absent).
 
 ## v2.32.38 — Narrative-aligned plugin descriptions
 
-**Headline**: the marketplace-facing plugin descriptions now lead with the frozen product narrative ("The CEO-agent for development work — hand it a rough idea…") instead of a bare skills/hooks catalog tally; the tally stays as the secondary clause and all machine-checked count fragments are unchanged. Companion docs sweep aligns stray pre-freeze text (a stale "22 hooks" in `docs/architecture.md`, 閘→gate in the internal narrative/panel notes) with the site's canonical vocabulary.
+**Headline**: the marketplace-facing plugin descriptions now lead with the frozen product narrative ("The CEO-agent for development work — hand it a rough idea…") instead of a bare skills/hooks catalog tally; the tally stays as the secondary clause and all machine-checked count fragments are unchanged. Companion docs sweep aligns stray pre-freeze text (a stale "22 hooks" in `docs/dev/architecture.md`, 閘→gate in the internal narrative/panel notes) with the site's canonical vocabulary.
 
 ### Changed
 
 - Plugin descriptions (canonical `.claude-plugin/plugin.json`, root mirror, `marketplace.json`, Codex payload manifest + `interface.longDescription`) lead with the CEO-agent positioning sentence; count fragments and routing surfaces untouched.
-- `docs/architecture.md` stale "22 hooks" → 25; internal narrative docs (`website/NARRATIVE.md`, `GROWTH-PANEL.md`, `WEEKLY.md`) converge on the gate/眾議會 vocabulary the shipped site uses.
+- `docs/dev/architecture.md` stale "22 hooks" → 25; internal narrative docs (`website/NARRATIVE.md`, `GROWTH-PANEL.md`, `WEEKLY.md`) converge on the gate/眾議會 vocabulary the shipped site uses.
 
 ### Added
 
-- **Grok Build host install path** — document and wire repo-root `grok plugin install <clone|git-url> --trust` (no `platforms/grok/` package). README harness tables (EN/zh-TW), `docs/installation.md` § Grok Build (host vs runner), and `scripts/dev-setup.sh --harness grok [--install|--check]`.
+- **Grok Build host install path** — document and wire repo-root `grok plugin install <clone|git-url> --trust` (no `platforms/grok/` package). README harness tables (EN/zh-TW), `docs/guide/installation.md` § Grok Build (host vs runner), and `scripts/dev-setup.sh --harness grok [--install|--check]`.
 - Refreshed `src/harness/capabilities/grok.json` (2026-07-16, grok 0.2.101): skills/agents/plugin_install **verified**, hooks **warning** (registered, runtime parity not claimed), mutation_dispatch/blocking_gate still unverified at H2.
 ## v2.32.37 — Dispatch branch lifecycle gate and preserve-first reaper
 
@@ -8164,12 +8164,12 @@ runner.
 
 ## v2.32.31 — loop-convergence gates: verification-anchored + generation cap brake for hetero review loops
 
-**Headline**: downgrades the "a human should have pulled the brake on a spinning hetero review loop" rule from "someone remembers to watch" into machine gates (`ironlaw-to-gate`). Origin: the 2026-07-14 codex replay-driver incident — a self-directed hetero review loop ran 8 artifact generations (v1→v3.4) with `tests_executed:false` the ENTIRE run (zero execution), `ship_ready:false` monotonic, verdicts oscillating FAIL/PASS, hours unattended. Five gates: (1+3) a deterministic `scripts/check-loop-convergence.js` — ≥2 consecutive zero-execution rounds, or generation cap reached while still REWORK-shape ⇒ halt; (2) `scripts/rubric-freeze.js` spec-hash seal + drift; (4+5) depth-0 clock-owner (裸跑禁令) + dispatch-brief scale budget as brief-template hard constraints. Honest scope: all five stop HONEST-but-WEAK loops; a worker that FORGES status fields is out of scope (needs execution provenance). Rules→gates table: `docs/ironlaw-to-gate-map.md`.
+**Headline**: downgrades the "a human should have pulled the brake on a spinning hetero review loop" rule from "someone remembers to watch" into machine gates (`ironlaw-to-gate`). Origin: the 2026-07-14 codex replay-driver incident — a self-directed hetero review loop ran 8 artifact generations (v1→v3.4) with `tests_executed:false` the ENTIRE run (zero execution), `ship_ready:false` monotonic, verdicts oscillating FAIL/PASS, hours unattended. Five gates: (1+3) a deterministic `scripts/check-loop-convergence.js` — ≥2 consecutive zero-execution rounds, or generation cap reached while still REWORK-shape ⇒ halt; (2) `scripts/rubric-freeze.js` spec-hash seal + drift; (4+5) depth-0 clock-owner (裸跑禁令) + dispatch-brief scale budget as brief-template hard constraints. Honest scope: all five stop HONEST-but-WEAK loops; a worker that FORGES status fields is out of scope (needs execution provenance). Rules→gates table: `docs/dev/ironlaw-to-gate-map.md`.
 
 ### Added
 - `scripts/check-loop-convergence.js` — gates 1 (verification-anchored: ≥2 consecutive zero-execution rounds) + 3 (generation cap; parses `artifact_generation` as number `2` OR string `"3.4"`). Data mode exit 0 (reports, like the resolve-* siblings); `--enforce` exit 3 on TRIP.
 - `scripts/rubric-freeze.js` — gate 2: `seal`/`check` round-0 acceptance rubric by sha256 (FROZEN/DRIFT).
-- `docs/ironlaw-to-gate-map.md` — rules→gates map + review-only list + "new gate" checklist.
+- `docs/dev/ironlaw-to-gate-map.md` — rules→gates map + review-only list + "new gate" checklist.
 - Red-case proof + negative controls: `hooks/tests/check-loop-convergence.test.sh`, `hooks/tests/rubric-freeze.test.sh` (+ 7 real incident fixtures under `hooks/tests/fixtures/loop-convergence/`), wired into the CI hooks suite.
 
 ### Changed
@@ -8410,7 +8410,7 @@ runner.
 
 ### Changed
 - `scripts/dispatch-review.sh` — prompt-assembly heredoc slimmed (semantics preserved verbatim: nonce wrapped-block protocol, VERDICT/FINDINGS contract, read-only injunctions, spec/checklist sections); `evals/reviewer-bench/prompt-skeleton.golden` updated same-commit (plan §4 #9); 3 pinned-string test assertions updated to the new wording (assertion count unchanged, positive+negative pairs preserved).
-- `docs/BACKLOG.md` — reviewer-harness calibration entry RESOLVED (haiku leg, option c); terse-contracts entry → PARTIAL-SHIP.
+- `project/backlog/BACKLOG.md` — reviewer-harness calibration entry RESOLVED (haiku leg, option c); terse-contracts entry → PARTIAL-SHIP.
 
 ### Fixed
 - (none)
@@ -8513,7 +8513,7 @@ runner.
 - `docs/plans/2026-07-09-verify-strength-precursors.md` — the ordered decomposition of the `verify_strength` density axis.
 
 ### Changed
-- `docs/BACKLOG.md` `verify_strength` item decomposed: precursor (1) marked delivered; remainder split into ordered segments (2) real-suite strength scorer and (3) `resolve-review-loop.sh` consumption.
+- `project/backlog/BACKLOG.md` `verify_strength` item decomposed: precursor (1) marked delivered; remainder split into ordered segments (2) real-suite strength scorer and (3) `resolve-review-loop.sh` consumption.
 - Wired the new script into `skills/quality-pipeline/references/test-policy.md`, the quality-pipeline SKILL scripts table, and the CLAUDE.md inventory.
 
 ### Fixed
@@ -8745,13 +8745,13 @@ prose-justification: +1 new skill body (85 lines) + a canonical tiebreak referen
 
 ## v2.31.20 — codex-plugin consult channel integrated (capability-gated) + terse-contracts 開案
 
-**Headline**: The official OpenAI codex plugin's **consult channel** becomes a first-class, capability-gated option on Claude Code hosts: `references/hetero-dispatch.md` gains a "Peer consult" posture (measured spike: ~9s repo-grounded second opinion vs ~50s–5min through the authoring/explore rails; shared app-server broker — structured protocol, resumable threads), the front-door depth-0 loop gains a §0 consult note (ADVICE only — never substitutes qc@depth-0/artifact verification/merge authority), and `docs/coexistence.md` gains the full coexistence table (review channel NOT integrated — Spark-locked + uncalibrated, gated on the known-bad bar; plugin stop-gate stays disabled — one authoritative gate). Portable degradation to `dispatch-explore/author` when the plugin is absent. Also 開案: `docs/plans/2026-07-05-terse-reviewer-contracts.md` (the one absorbable item from the Superpowers 6 study) — measured contract slimming with a paired known-bad gate, R1 after a MiniMax-M3 full-text review folded five 🟠 findings (absolute sensitivity floor, ≥10 clean-diff set, assembled-prompt structural check, combined-leg interaction test, invariant seeds).
+**Headline**: The official OpenAI codex plugin's **consult channel** becomes a first-class, capability-gated option on Claude Code hosts: `references/hetero-dispatch.md` gains a "Peer consult" posture (measured spike: ~9s repo-grounded second opinion vs ~50s–5min through the authoring/explore rails; shared app-server broker — structured protocol, resumable threads), the front-door depth-0 loop gains a §0 consult note (ADVICE only — never substitutes qc@depth-0/artifact verification/merge authority), and `docs/guide/coexistence.md` gains the full coexistence table (review channel NOT integrated — Spark-locked + uncalibrated, gated on the known-bad bar; plugin stop-gate stays disabled — one authoritative gate). Portable degradation to `dispatch-explore/author` when the plugin is absent. Also 開案: `docs/plans/2026-07-05-terse-reviewer-contracts.md` (the one absorbable item from the Superpowers 6 study) — measured contract slimming with a paired known-bad gate, R1 after a MiniMax-M3 full-text review folded five 🟠 findings (absolute sensitivity floor, ≥10 clean-diff set, assembled-prompt structural check, combined-leg interaction test, invariant seeds).
 
 ### Changed
 - `references/hetero-dispatch.md` — § Peer consult (third posture; trust boundary + degradation).
 - `skills/ceo-agent/references/level-front-door.md` — § 0. Peer consult (optional, CC+plugin only).
-- `docs/coexistence.md` — Codex Plugin Coexistence table (5 surfaces).
-- `docs/BACKLOG.md` — spike entry updated (consult shipped; review-channel calibration gate remains); terse-contracts execution entry added.
+- `docs/guide/coexistence.md` — Codex Plugin Coexistence table (5 surfaces).
+- `project/backlog/BACKLOG.md` — spike entry updated (consult shipped; review-channel calibration gate remains); terse-contracts execution entry added.
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.19`.
@@ -8763,7 +8763,7 @@ prose-justification: +1 new skill body (85 lines) + a canonical tiebreak referen
 ### Changed
 - `references/model-routing.md` — deep-reasoner + fast-worker rows (canonical; 4 in-skill copies regenerated via `sync-model-routing.sh`).
 - `skills/ceo-agent/references/level-front-door.md` — "Economy mode" subsection.
-- `docs/BACKLOG.md` — codex-plugin peer-consult spike entry (trigger: post-install session).
+- `project/backlog/BACKLOG.md` — codex-plugin peer-consult spike entry (trigger: post-install session).
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>`. User-side: `/plugin update autopilot @v2.31.18`.
@@ -8811,7 +8811,7 @@ prose-justification: baseline re-seeded this release; the measured prose delta v
 
 ### Changed
 - `skills/{l3,l4,l5,l6}/SKILL.md` + `skills/think-tank-dialectic/SKILL.md` — thin shells: 3–5-line semantic summary (each level's non-negotiables: l5 immutable-base/artifact-verify, l6 labor-not-trust, dialectic never-first-resort/max-2-rounds) + bold MUST-READ pointer. **All frontmatter byte-identical** (verified per skill against HEAD).
-- `docs/skills.md` — catalog re-laid into three tiers: core (dev-flow / quality-pipeline / finish-flow / debug / learn / next), delegation (ceo-agent + l3–l6), pioneer (16 rows). Presentation-only; the frontmatter `tier:` field stays a separate future item gated on a two-platform unknown-field load dry-run (plan R1-F5).
+- `docs/guide/skills.md` — catalog re-laid into three tiers: core (dev-flow / quality-pipeline / finish-flow / debug / learn / next), delegation (ceo-agent + l3–l6), pioneer (16 rows). Presentation-only; the frontmatter `tier:` field stays a separate future item gated on a two-platform unknown-field load dry-run (plan R1-F5).
 - `skills/{dev-flow,quality-pipeline,survey,think-tank}/references/model-routing.md` — symlinks → generated real files (byte-equal to canonical, enforced pre-commit).
 
 ### Rollback
@@ -8886,7 +8886,7 @@ prose-justification: baseline re-seeded this release; the measured prose delta v
 
 ## v2.31.11 — quality-floor engine Phase 1: the judgment-demotion ladder
 
-**Headline**: The first ship of the **quality-floor engine** — the methodology evolution from "clone cookys, remove cookys from the loop" to "make a weak orchestrating model sustain frontier-floor output quality on long tasks". Design: [`docs/plans/2026-07-04-quality-floor-engine.md`](docs/plans/_archive/2026/07/2026-07-04-quality-floor-engine.md) — a **judgment-demotion ladder** (L0 script → L1 playbook match → L2 fan-out + mechanical aggregation → L3 probe-then-branch → L4 escalate + ledger), applied at DESIGN time per lifecycle stage so the weak model never self-selects a level. The design survived a **3-disjoint-family adversarial critique** (codex gpt-5.5 · agy/Gemini · MiniMax-M3) with all 13 major claims adjudicated in the plan's §9 — including dropping the R0 "ledger trends to zero" KPI that all three families independently called a Goodhart trap.
+**Headline**: The first ship of the **quality-floor engine** — the methodology evolution from "clone cookys, remove cookys from the loop" to "make a weak orchestrating model sustain frontier-floor output quality on long tasks". Design: [`docs/plans/2026-07-04-quality-floor-engine.md`](project/plans/_archive/2026/07/2026-07-04-quality-floor-engine.md) — a **judgment-demotion ladder** (L0 script → L1 playbook match → L2 fan-out + mechanical aggregation → L3 probe-then-branch → L4 escalate + ledger), applied at DESIGN time per lifecycle stage so the weak model never self-selects a level. The design survived a **3-disjoint-family adversarial critique** (codex gpt-5.5 · agy/Gemini · MiniMax-M3) with all 13 major claims adjudicated in the plan's §9 — including dropping the R0 "ledger trends to zero" KPI that all three families independently called a Goodhart trap.
 
 ### Added
 - **`references/probe-playbook.md`** (L1) — 8 diagnostic probes indexed by symptom, each with a **discriminating check** (expected-if-match / expected-if-NOT-match) and a real incident citation; no-match ⇒ mandatory escalation (never invent silently); growth rule feeds from escalations via learn/distill.
@@ -8961,7 +8961,7 @@ prose-justification: baseline re-seeded this release; the measured prose delta v
 
 ### Changed
 - The loader is **gated on `~/.autopilot/endpoints.d/` existing** — absent ⇒ zero git calls, byte-identical to base-only (overlays cost nothing until you opt in). Per-file gate+parse factored into `_autopilot_endpoints_load_file` / `parseEndpointsFile` for reuse by the CLI.
-- `docs/installation.md` documents the overlay + the `endpoints` CLI; CLAUDE.md inventory gains the CLI + updated loader row.
+- `docs/guide/installation.md` documents the overlay + the `endpoints` CLI; CLAUDE.md inventory gains the CLI + updated loader row.
 
 ### Design panel
 - codex: O1+O3, defer overlay (YAGNI). agy: O2+O3. grok: O2+O3 (distinct-names *collides* with the selection layer). Depth-0 synthesis (not majority vote): build the overlay into the CLI's model but keep it **opt-in** — absent ⇒ today's behavior (codex's YAGNI), `set --repo` ⇒ per-repo token (agy/grok). See `docs/projects/2026-07-03-endpoints-cli/`.
@@ -8984,7 +8984,7 @@ prose-justification: baseline re-seeded this release; the measured prose delta v
 
 ### Changed
 - `load-endpoints-env.sh --init` copies the tracked template instead of emitting an inline heredoc (DRY — one source of truth); keeps a minimal inline fallback + warning for partial installs.
-- `docs/installation.md` documents the `--init`/copy path, the tracked template, and a **by-repo vs by-user** table making the secrets-are-by-user-only decision explicit. CLAUDE.md inventory row updated (incl. `dispatch-author.sh` as the 4th wired dispatcher).
+- `docs/guide/installation.md` documents the `--init`/copy path, the tracked template, and a **by-repo vs by-user** table making the secrets-are-by-user-only decision explicit. CLAUDE.md inventory row updated (incl. `dispatch-author.sh` as the 4th wired dispatcher).
 
 ### Tests
 - `hooks/tests/load-endpoints-env.test.sh` +3 assertions: template exists, `--init` copies it **verbatim** (`diff -q`), and the tracked template itself parses cleanly + loads nothing.
@@ -9000,7 +9000,7 @@ prose-justification: baseline re-seeded this release; the measured prose delta v
 ### Added
 - **`scripts/load-endpoints-env.sh`** (sourceable bash) + **`scripts/lib/load-endpoints-env.js`** (Node twin, built-ins only): the canonical endpoint-credential loader. Populates the allowlisted `AUTOPILOT_ENDPOINT_<NAME>_*` / `ANTHROPIC_*` / `MINIMAX_API_KEY` env vars from the one file. **LINE-PARSER, never `source`** (file contents never executed); safety gate rejects symlink / non-owner / group-other-writable, warns on group-other-readable, fail-closed when perms unverifiable; existing-env-WINS precedence; one-layer quote strip; `set +x` + never echoes a token; `${HOME:-}` so `set -u`/`env -i` can't crash it. `--init` idempotently scaffolds a commented mode-600 stub (never clobbers).
 - **`reviewer_endpoint` / `implementer_endpoint`** config keys (`review-loop-config.md` + `resolve-review-loop.sh`): validated `[A-Za-z0-9_]` (invalid → empty, fail-closed against `--endpoint`/JSON injection), emitted as two appended JSON keys + `--field`, passed to `dispatch-*.sh --endpoint` by the `/l5`/`/l6` prose.
-- **`docs/installation.md` § Heterogeneous engine credentials** — the canonical placement, copy-paste stub, subscription-≻-API-key ladder, and declarative wiring. README.md + README.zh-TW.md gain a `🔌 Add another engine` subsection linking there. `skills/onboard` step 5.5 points onboarding users at it.
+- **`docs/guide/installation.md` § Heterogeneous engine credentials** — the canonical placement, copy-paste stub, subscription-≻-API-key ladder, and declarative wiring. README.md + README.zh-TW.md gain a `🔌 Add another engine` subsection linking there. `skills/onboard` step 5.5 points onboarding users at it.
 
 ### Changed
 - `dispatch-hetero.sh` / `dispatch-review.sh` / `dispatch-anthropic-review.js` load `~/.autopilot/endpoints.env` at startup (best-effort — absent/rejected file = no-op; the normal cc-shim/anthropic precondition fires unchanged). The env-var convention consumed by `resolve-endpoint.sh` remains the resolution contract; the file is a persistence layer only. Legacy `MINIMAX_API_KEY` / `ANTHROPIC_COMPATIBLE_AUTH_TOKEN` become documented aliases (still honored as fallbacks).
@@ -9128,7 +9128,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 ### Added
 - `scripts/ladder-run.sh`: the ladder-run harness — `run` (impl → isolated verify → emit → sample → per-class report) + `audit` (record a later-stage escape).
 - `scripts/ladder-run.test.sh`: self-test incl. regressions for endorsement-as-fraction, audit-counts-as-escape, sampling-not-evadable, and calculator-failure-fail-closed, via a `--mock-verdict` test seam.
-- `docs/ladder-run.md`: usage + posture (verifier isolation, agent-held acceptance with cookys as sampled co-participant, on-gate-catch vs escape + the `audit` escape path, weak-oracle caveat for diff-only doc-sync, fail-closed, non-evadable sampling).
+- `docs/dev/ladder-run.md`: usage + posture (verifier isolation, agent-held acceptance with cookys as sampled co-participant, on-gate-catch vs escape + the `audit` escape path, weak-oracle caveat for diff-only doc-sync, fail-closed, non-evadable sampling).
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>` (additive — no existing behavior to restore).
@@ -9246,7 +9246,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 
 ### Verification / validation
 - Implemented by hetero dispatch (`gpt-5.3-codex-spark` implementation path), then reviewed/verified by a decorrelated `grok` + Gemini qc-panel path.
-- Plan: [`docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md`](docs/plans/_archive/2026/06/2026-06-30-hetero-engine-lifecycle-methodology.md).
+- Plan: [`docs/plans/2026-06-30-hetero-engine-lifecycle-methodology.md`](project/plans/_archive/2026/06/2026-06-30-hetero-engine-lifecycle-methodology.md).
 
 ## v2.26.10 — cc-shim reviewer + MiniMax-M3 reviewer calibration
 
@@ -9257,7 +9257,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 - `resolve-review-loop.sh`: `reviewer_runner` enum now accepts `cc-shim` (was silently reset). +1 test assertion (73 total).
 
 ### Honest isolation ceiling (BACKLOG'd)
-- No hetero reviewer is a hard OS sandbox: claude has no sandbox flag, and `codex --sandbox read-only` is a real sandbox ONLY with bubblewrap installed (absent on the current host → codex degrades to bypass too). cc-shim's surface is minimized + adversarially verified, but a genuinely-untrusted diff should be reviewed on a disposable/sandboxed host (install `bwrap` → codex becomes the hard-isolation reviewer). Tracked in `docs/BACKLOG.md`.
+- No hetero reviewer is a hard OS sandbox: claude has no sandbox flag, and `codex --sandbox read-only` is a real sandbox ONLY with bubblewrap installed (absent on the current host → codex degrades to bypass too). cc-shim's surface is minimized + adversarially verified, but a genuinely-untrusted diff should be reviewed on a disposable/sandboxed host (install `bwrap` → codex becomes the hard-isolation reviewer). Tracked in `project/backlog/BACKLOG.md`.
 
 ### Verification / calibration
 - cc-shim reviewer e2e (MiniMax-M3): caught a planted `===`→`=` auth bypass and a negative-charge bug with accurate, specific findings.
@@ -9350,7 +9350,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 - `scripts/check-optin-changelog.js`: scope `git rev-list` to commits touching the manifest (O(history) → O(version bumps)).
 - `scripts/probe-diff-domain.sh`: exclude lockfiles in subdirectories (`*/package-lock.json`, `*/go.sum`, …).
 - `scripts/dispatch-explore.sh`: signal handler exits cleanly (cleanup always returns 0).
-- Stale operational-doc references corrected to real `.js` entrypoints (`tree.sh`→`tree.js`, `qc-panel.sh`→`qc-panel.js`, `risk-counter.sh`→`risk-counter.js`, `check-node-report.sh`→`.js`, `toggle-payload-capture.sh`→`.js`) across `references/tree-contracts.md`, `references/hetero-dispatch.md`, `references/blind-dispatch.md`, `references/multi-agent-portability.md`, `docs/BACKLOG.md`; `hetero-dispatch.md` runner-schema (`agy`-only → `codex|agy` + containment fields); `multi-agent-portability.md` Antigravity self-contradiction; `AGENTS.md` hook-inventory source + `--disabled-count` + pre-commit-gate description; `hooks/README.md` opt-in mechanism + PostToolUse order.
+- Stale operational-doc references corrected to real `.js` entrypoints (`tree.sh`→`tree.js`, `qc-panel.sh`→`qc-panel.js`, `risk-counter.sh`→`risk-counter.js`, `check-node-report.sh`→`.js`, `toggle-payload-capture.sh`→`.js`) across `references/tree-contracts.md`, `references/hetero-dispatch.md`, `references/blind-dispatch.md`, `references/multi-agent-portability.md`, `project/backlog/BACKLOG.md`; `hetero-dispatch.md` runner-schema (`agy`-only → `codex|agy` + containment fields); `multi-agent-portability.md` Antigravity self-contradiction; `AGENTS.md` hook-inventory source + `--disabled-count` + pre-commit-gate description; `hooks/README.md` opt-in mechanism + PostToolUse order.
 - `hooks/tests/check-hook-inventory.test.sh`: pre-existing breakage — sandbox never copied `hooks/opt-in-manifest.json` (a derivation input since v2.26.2) so the script ENOENT'd; also stale `8 default-on` vs current `10`. Now 18/18. (Test-only.)
 
 ### Eval coverage
@@ -9398,7 +9398,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 - **12 opt-in hook scripts** — each gained an early `if (!isEnabled('<stem>')) process.exit(0)` gate (before any blocking/output logic).
 - **`scripts/check-hook-inventory.js`** — derivation reworked: `default-on = wired − opt-in-manifest`, `opt-in = manifest`, `disabled = on-disk − wired`. No longer reads `settings.example.json`. Counts/membership identical to v2.26.1.
 - **`settings.example.json`** — removed `hooks-opt-in-examples` entirely; now points at `~/.autopilot/config.json` enablement.
-- **Docs** — `hooks/README.md` (Tier B = config-enable, not copy-paste), `docs/installation.md` ("Enabling opt-in hooks" section), `CLAUDE.md` + `preflight-portability.sh` (inventory opt-in source = manifest). Version mirrors 2.26.1 → 2.26.2.
+- **Docs** — `hooks/README.md` (Tier B = config-enable, not copy-paste), `docs/guide/installation.md` ("Enabling opt-in hooks" section), `CLAUDE.md` + `preflight-portability.sh` (inventory opt-in source = manifest). Version mirrors 2.26.1 → 2.26.2.
 
 ### Known tradeoff (accepted; follow-up BACKLOG)
 - Wiring the opt-in hooks in `hooks.json` means they spawn `node` (then gate-exit) on every matching tool call even when disabled — in line with existing default-on hooks but additive. The only update-stable wiring requires `hooks.json` (token must resolve). A per-event multiplexer that runs only enabled opt-in hooks is BACKLOGd.
@@ -9418,7 +9418,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 - **`hooks/hooks.json`** — `version-drift-check` (SessionStart) + `session-handoff` writer (new SessionEnd block) moved here from `settings.example.json`. `version-drift-check` was already silent for everyone but a behind-upstream dev clone, so default-on is correct. `session-handoff` stays opt-in via a **runtime gate**.
 - **`hooks/session-handoff.js`** — added `handoffEnabled()` early gate: no-ops (`skip_disabled`) unless `AUTOPILOT_HANDOFF_INJECT=1` or `~/.autopilot/config.json` `handoff_inject:true` — the **same** switch that enables the session-start reader/inject half (writing a snapshot nobody injects is wasted work).
 - **`settings.example.json`** — removed the two now-relocated entries; added a prominent `${CLAUDE_PLUGIN_ROOT}`-does-not-expand-in-settings.json warning so the remaining 12 copy-paste opt-in entries are no longer silently misleading (replace the token with the real install path; note it changes on update).
-- **Docs** — `hooks/README.md` (tier tables 8/14 → 10/12, two rows moved Tier B → Tier A with inert-by-default notes, file-tree tags, Tier-B copy-paste caveat), `docs/installation.md` (version-drift-check now automatic; session-handoff enable-via-config), `CLAUDE.md` count line; version mirrors via `sync-version.js` (2.26.0 → 2.26.1).
+- **Docs** — `hooks/README.md` (tier tables 8/14 → 10/12, two rows moved Tier B → Tier A with inert-by-default notes, file-tree tags, Tier-B copy-paste caveat), `docs/guide/installation.md` (version-drift-check now automatic; session-handoff enable-via-config), `CLAUDE.md` count line; version mirrors via `sync-version.js` (2.26.0 → 2.26.1).
 
 ### Fixed
 - A dev clone's `.claude/settings.local.json` no longer needs the absolute-path SessionEnd workaround (the original symptom); removed to avoid double-firing now that the writer is in `hooks.json`.
@@ -9435,7 +9435,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 
 ## v2.26.0 — `autopilot:onboard` + ecosystem-standalone premise + install/update-UX
 
-**Headline**: One branch, three strands, landing as the 24th skill. **(A) `autopilot:onboard`** — the "fresh repo → autopilot-calibrated repo" bridge that was missing (project-lifecycle bootstraps tracking docs from a plan, nothing scaffolded the `.claude/*-config.md` DI): **detect** a repo's mechanical reality → **scaffold** the config set with ecosystem-standalone (autopilot-only) chains → **enrich** the judgment configs. **(B) Ecosystem-standalone premise flip** — autopilot's documented default is now autopilot + `codeforge` + `mnemos` standalone; `superpowers` consistently optional (no longer "built-in"/"recommended default"/"Superpowers executes"); voltagent de-assumed as a peer. **(C) Install/update-UX** — a single "Updating" decision branch in `docs/installation.md`, the opt-in `version-drift-check` SessionStart hook, and `dev-update.sh`. Skills 23 → **24**; hooks 21 → **22** (this branch's `version-drift-check`, opt-in).
+**Headline**: One branch, three strands, landing as the 24th skill. **(A) `autopilot:onboard`** — the "fresh repo → autopilot-calibrated repo" bridge that was missing (project-lifecycle bootstraps tracking docs from a plan, nothing scaffolded the `.claude/*-config.md` DI): **detect** a repo's mechanical reality → **scaffold** the config set with ecosystem-standalone (autopilot-only) chains → **enrich** the judgment configs. **(B) Ecosystem-standalone premise flip** — autopilot's documented default is now autopilot + `codeforge` + `mnemos` standalone; `superpowers` consistently optional (no longer "built-in"/"recommended default"/"Superpowers executes"); voltagent de-assumed as a peer. **(C) Install/update-UX** — a single "Updating" decision branch in `docs/guide/installation.md`, the opt-in `version-drift-check` SessionStart hook, and `dev-update.sh`. Skills 23 → **24**; hooks 21 → **22** (this branch's `version-drift-check`, opt-in).
 
 ### Added
 - **`skills/onboard/SKILL.md`** (24th skill) — judgment layer over the two scripts: maps domain keywords → skills, derives doc⇄code drift domains, names security surfaces, optional CLAUDE.md reconcile + memory seed. Ecosystem-standalone by default.
@@ -9444,8 +9444,8 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 - **`hooks/version-drift-check.js`** (opt-in, SessionStart) — dev-mode advisory when the autopilot clone is behind its git upstream (no network; fail-open). + **`scripts/dev-update.sh`**.
 
 ### Changed
-- **Premise flip**: `hooks/session-start.js`, `hooks/failure-escalation.js`, `.claude/dispatch-config.md`, `docs/coexistence.md`, `docs/architecture.md`, `project-config-template/team-config.md`, `agents/README.md`, `skills/think-tank/{SKILL.md,references/role-prompts.md}`, README + zh-TW + CLAUDE.md (trio baseline).
-- **Install/update**: `docs/installation.md` "Known Limitation" + "Update" folded into one "Updating" decision section; `dev-setup.sh` completion message points at the dev-mode update one-liner.
+- **Premise flip**: `hooks/session-start.js`, `hooks/failure-escalation.js`, `.claude/dispatch-config.md`, `docs/guide/coexistence.md`, `docs/dev/architecture.md`, `project-config-template/team-config.md`, `agents/README.md`, `skills/think-tank/{SKILL.md,references/role-prompts.md}`, README + zh-TW + CLAUDE.md (trio baseline).
+- **Install/update**: `docs/guide/installation.md` "Known Limitation" + "Update" folded into one "Updating" decision section; `dev-setup.sh` completion message points at the dev-mode update one-liner.
 - Counts propagated: 24 skills / 22 hooks (8 default-on, 14 opt-in) across every surface; version 2.25.16 → 2.26.0 (new skill = MINOR).
 
 ### Process
@@ -9464,7 +9464,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 
 ## v2.25.15 — auto-handoff rework: machine state to ~/.autopilot + opt-in inject (no repo writes)
 
-**Headline**: Reworks the v2.25.14 `session-handoff` hook after a decorrelated design-review loop caught — and an empirical repro **confirmed** — a 🔴 **dirty-tree self-poisoning loop**: writing the handoff into `docs/HANDOFF.md` made the repo dirty, so the next *trivial* session re-fired forever (the foreman, the depth-0 review, and all 27 v2.25.14 assertions missed it — none exercised the cross-session loop). A second 🔴: folding the inject into the default-on `session-start.js` would have turned any repo's markdown into injected context. The rework moves the machine handoff OUT of the repo to `~/.autopilot/handoff/<repo-hash>.md` (mirroring the existing `compaction-state` mechanism: write → inject-once → consume), and adds the inject as a **default-off** gate inside `session-start.js`. `docs/HANDOFF.md` is now never written or read — it stays 100% human-authored. **Process**: `/l5` dogfood — codex `gpt-5.3-codex-spark` hetero impl → 4-round decorrelated `gpt-5.5` review (2🔴 → 2🟠 → 2🟠 → SHIP-AS-IS) + independent depth-0 race harness. The review loop hardened the writer/reader concurrency protocol across rounds: atomic temp→rename publish, atomic rename-consume, **generation-id (sha1-of-body) binding** so a reader/TTL never injects-stale or deletes a freshly-republished body.
+**Headline**: Reworks the v2.25.14 `session-handoff` hook after a decorrelated design-review loop caught — and an empirical repro **confirmed** — a 🔴 **dirty-tree self-poisoning loop**: writing the handoff into `project/handoff/HANDOFF.md` made the repo dirty, so the next *trivial* session re-fired forever (the foreman, the depth-0 review, and all 27 v2.25.14 assertions missed it — none exercised the cross-session loop). A second 🔴: folding the inject into the default-on `session-start.js` would have turned any repo's markdown into injected context. The rework moves the machine handoff OUT of the repo to `~/.autopilot/handoff/<repo-hash>.md` (mirroring the existing `compaction-state` mechanism: write → inject-once → consume), and adds the inject as a **default-off** gate inside `session-start.js`. `project/handoff/HANDOFF.md` is now never written or read — it stays 100% human-authored. **Process**: `/l5` dogfood — codex `gpt-5.3-codex-spark` hetero impl → 4-round decorrelated `gpt-5.5` review (2🔴 → 2🟠 → 2🟠 → SHIP-AS-IS) + independent depth-0 race harness. The review loop hardened the writer/reader concurrency protocol across rounds: atomic temp→rename publish, atomic rename-consume, **generation-id (sha1-of-body) binding** so a reader/TTL never injects-stale or deletes a freshly-republished body.
 
 ### Changed
 - `hooks/session-handoff.js` (writer): writes `~/.autopilot/handoff/<repo-hash>.md` + `<hash>.meta.json` (repo root via `git -C cwd rev-parse --show-toplevel`; temp→atomic-rename; `gen=sha1(body)`). NO repo writes; marker-guard/`HANDOFF.auto.md` sidecar deleted. Self-poisoning gone (decide-if-needed no longer sees its own output).
@@ -9473,10 +9473,10 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 
 ## v2.25.14 — opt-in auto-handoff on /clear (SessionEnd hook)
 
-**Headline**: A new **opt-in** `session-handoff` hook automates the recurring "do I need to write a handoff before I `/clear`?" decision. On `SessionEnd` with `reason: clear` (or `logout`) it parses the transcript itself (reusing `state-checkpoint-lib`), DECIDES whether meaningful work happened — dirty tree / commits-this-session / a touched active project / a substantive transcript — and only then writes `docs/HANDOFF.md` (repo state, recent commits, last action, inferred next step). If nothing meaningful happened it writes nothing; that *is* the automated "no handoff needed" answer. **Marker-guard**: a hand-written `HANDOFF.md` (no `AUTO-GENERATED` marker) is **never clobbered** — the auto handoff lands in `docs/HANDOFF.auto.md` instead; only an absent or prior-auto file is overwritten in place. Fail-open, opt-in only (wired in `settings.example.json`, never default-on — it writes into your repo). **Process**: `/l4` dogfood — a background worktree-isolated foreman built the hook + 21-assertion test; depth-0 review caught the manual-HANDOFF clobber footgun (confirmed by an adversarial smoke that destroyed a hand-written file) and added the marker-guard + 6 more assertions before merge.
+**Headline**: A new **opt-in** `session-handoff` hook automates the recurring "do I need to write a handoff before I `/clear`?" decision. On `SessionEnd` with `reason: clear` (or `logout`) it parses the transcript itself (reusing `state-checkpoint-lib`), DECIDES whether meaningful work happened — dirty tree / commits-this-session / a touched active project / a substantive transcript — and only then writes `project/handoff/HANDOFF.md` (repo state, recent commits, last action, inferred next step). If nothing meaningful happened it writes nothing; that *is* the automated "no handoff needed" answer. **Marker-guard**: a hand-written `HANDOFF.md` (no `AUTO-GENERATED` marker) is **never clobbered** — the auto handoff lands in `docs/HANDOFF.auto.md` instead; only an absent or prior-auto file is overwritten in place. Fail-open, opt-in only (wired in `settings.example.json`, never default-on — it writes into your repo). **Process**: `/l4` dogfood — a background worktree-isolated foreman built the hook + 21-assertion test; depth-0 review caught the manual-HANDOFF clobber footgun (confirmed by an adversarial smoke that destroyed a hand-written file) and added the marker-guard + 6 more assertions before merge.
 
 ### Added
-- `hooks/session-handoff.js` — opt-in `SessionEnd` hook: decide-if-needed (dirty / commits / active-project / substantive-transcript) → write/update `docs/HANDOFF.md` (marker-guarded to `HANDOFF.auto.md` for manual files), fail-open, transcript-parse via `state-checkpoint-lib`, `~/.autopilot/.session-handoff.log` (600) diagnostics.
+- `hooks/session-handoff.js` — opt-in `SessionEnd` hook: decide-if-needed (dirty / commits / active-project / substantive-transcript) → write/update `project/handoff/HANDOFF.md` (marker-guarded to `HANDOFF.auto.md` for manual files), fail-open, transcript-parse via `state-checkpoint-lib`, `~/.autopilot/.session-handoff.log` (600) diagnostics.
 - `hooks/tests/session-handoff.test.sh` — 27 assertions (decide-if-needed paths, reason gate, non-git, fail-open on garbage/missing transcript, idempotency, marker-guard preserve+sidecar).
 
 ### Changed
@@ -9484,7 +9484,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 
 ## v2.25.13 — diff-domain telemetry for /l5 (measure-now, route-later)
 
-**Headline**: `/l5` now records a deterministic **`work_domain`** for each implementation diff, so per-project per-domain model performance becomes measurable — the prerequisite for any future domain-aware engine routing. It routes **nothing**: a new `scripts/probe-diff-domain.sh` classifies a `git diff --numstat -z -M -C` into `rust` / `backend-cli` / `frontend` / `docs` / `mixed` (enumerated extension map, explicit exclude list, ties/binary/deletion/degenerate cases pinned, LLM-free), and `resolve-review-loop.sh` gains `--domain`/`--auto-domain` that append exactly two telemetry keys (`work_domain`, `domain_source`) to its JSON without touching any pre-existing field or engine choice. **Process**: dogfooded via `/l5` — heterogeneous implementer (`codex gpt-5.3-codex-spark`, cgroup-contained worktree dispatch) → 4-round decorrelated `gpt-5.5` xhigh review loop (1🔴+2🟠+2🟡 → 1🟠+1🟡 → 1🟠+1🟡 → SHIP-AS-IS) + an independent depth-0 adversarial harness. The 🔴 (a numstat-`z` rename path that looked like a counts record caused phantom double-counting) was caught by the decorrelated reviewer after the local green passed — fixed with a deterministic NUL state-machine parse. All domain **routing** is deferred to `docs/BACKLOG.md` behind explicit prerequisites (thin evidence: one exam, n=15).
+**Headline**: `/l5` now records a deterministic **`work_domain`** for each implementation diff, so per-project per-domain model performance becomes measurable — the prerequisite for any future domain-aware engine routing. It routes **nothing**: a new `scripts/probe-diff-domain.sh` classifies a `git diff --numstat -z -M -C` into `rust` / `backend-cli` / `frontend` / `docs` / `mixed` (enumerated extension map, explicit exclude list, ties/binary/deletion/degenerate cases pinned, LLM-free), and `resolve-review-loop.sh` gains `--domain`/`--auto-domain` that append exactly two telemetry keys (`work_domain`, `domain_source`) to its JSON without touching any pre-existing field or engine choice. **Process**: dogfooded via `/l5` — heterogeneous implementer (`codex gpt-5.3-codex-spark`, cgroup-contained worktree dispatch) → 4-round decorrelated `gpt-5.5` xhigh review loop (1🔴+2🟠+2🟡 → 1🟠+1🟡 → 1🟠+1🟡 → SHIP-AS-IS) + an independent depth-0 adversarial harness. The 🔴 (a numstat-`z` rename path that looked like a counts record caused phantom double-counting) was caught by the decorrelated reviewer after the local green passed — fixed with a deterministic NUL state-machine parse. All domain **routing** is deferred to `project/backlog/BACKLOG.md` behind explicit prerequisites (thin evidence: one exam, n=15).
 
 ### Added
 - `scripts/probe-diff-domain.sh` — deterministic, LLM-free diff-domain telemetry probe (numstat-`z -M -C` NUL parse, enumerated classifier, inline exclude list, `> 0.5` dominant-share with ties→`mixed`, binary/deletion/rename-by-new-path handled). JSON + `--help`.
@@ -9502,10 +9502,10 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 - `README.md` 651→135 lines; `README.zh-TW.md` slimmed in lockstep (parity: 6 badges + 12 sections).
 - `scripts/check-hook-inventory.js`: the hooks **body** assertions (Tier headers, intro tally, Tier-A membership) now target `hooks/README.md` (already canonical) instead of `README.md`; both READMEs keep only the `hooks-<N>` hero-badge assertion. The slim README no longer carries a hook table.
 - `hooks/tests/check-hook-inventory.test.sh`: membership-drift case #4 retargeted from `README.md` to `hooks/README.md` (swaps `failure-escalation`, the one default-on hook confined to the Tier-A block).
-- `CLAUDE.md`: the `README.md#superpowers-coexistence` anchor link → `docs/coexistence.md`.
+- `CLAUDE.md`: the `README.md#superpowers-coexistence` anchor link → `docs/guide/coexistence.md`.
 
 ### Added
-- `docs/skills.md`, `docs/coexistence.md`, `docs/configuration.md`, `docs/installation.md`, `docs/architecture.md` — the relocated detail (English-only; both READMEs link to them).
+- `docs/guide/skills.md`, `docs/guide/coexistence.md`, `docs/guide/configuration.md`, `docs/guide/installation.md`, `docs/dev/architecture.md` — the relocated detail (English-only; both READMEs link to them).
 - `hooks/README.md`: `## Override` section (relocated `autopilot.<hookName>=false` / `AUTOPILOT_PROTECTED_BRANCHES` / `autopilot.costTracker=false`).
 
 ### Fixed
@@ -9545,7 +9545,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 - **`dispatch-hetero.sh` agy `no_op`**: agy `-p` ignores process cwd, so a relative-path prompt made it write to a scratch project and leave the worktree untouched. The agy directive now prepends `Your ABSOLUTE working directory is: <worktree>` + a scratch/project prohibition → agy edits in place. Restores `implementer_runner: agy` as viable (supersedes the v2.25.8-era "don't chase agy" verdict, which was an over-correction from a relative-path bench). +2 dispatch-hetero assertions (anchor-injection capture).
 
 ### Changed
-- agy `no_op`/"unreliable" narrative corrected across `references/hetero-dispatch.md`, the `review-loop-config.md` gotcha, and `docs/BACKLOG.md` (agy CAN implement now; stays EDIT-ONLY for the run_command-10s reason, not a write wall). Docker remains a non-solution (headless auth broken, #223/#479) — run agy on an interactively-authed host.
+- agy `no_op`/"unreliable" narrative corrected across `references/hetero-dispatch.md`, the `review-loop-config.md` gotcha, and `project/backlog/BACKLOG.md` (agy CAN implement now; stays EDIT-ONLY for the run_command-10s reason, not a write wall). Docker remains a non-solution (headless auth broken, #223/#479) — run agy on an interactively-authed host.
 
 ## v2.25.8 — hetero-dispatch roster fix + review-loop automation (`/l5` config-driven)
 
@@ -9808,7 +9808,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 ### Changed
 - **`scripts/sync-version.js`** — de-coupled from hook-count *ownership*. It now mirrors the canonical description's hook fragment verbatim (3-tier aware via `--disabled-count`; default-on = hook-count − opt-in − disabled) but no longer writes the README hooks badge or `hooks/README.md` — those belong to `check-hook-inventory.js`. Its 6-scenario test suite + sandbox lib + AGENTS.md bump recipe updated accordingly. `sync-version.js --check` and `check-hook-inventory.js --check` are now orthogonal gates.
 - **`CLAUDE.md` + `AGENTS.md`** — scripts inventory + verification sections document the new script and the sync-version ownership split.
-- **`docs/BACKLOG.md`** — the 2026-06-22 "hook inventory reconciliation" and 2026-06-02 "Hook tally is stale" entries (same drift, two records) resolved and folded; new entry logs the residual zh-TW skill-count "16" staleness (separate, deferred).
+- **`project/backlog/BACKLOG.md`** — the 2026-06-22 "hook inventory reconciliation" and 2026-06-02 "Hook tally is stale" entries (same drift, two records) resolved and folded; new entry logs the residual zh-TW skill-count "16" staleness (separate, deferred).
 
 ### Not changed (deliberate)
 - Period-accurate historical counts left as-is: README "v2.5 added 14 hooks", the devteam-absorb narrative "14 of devteam's 15 hooks (8 default-on Tier A + 6 opt-in Tier B)", and CHANGELOG history.
@@ -9893,7 +9893,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 
 ### Changed
 - `references/model-routing.md` §Tree roles, `skills/ceo-agent/SKILL.md` + `references/tree-adapter.md` §6, `CLAUDE.md` inventory — "integration deferred / would return wrong models" notes replaced with `--tree` usage.
-- `docs/BACKLOG.md` — tree-role-integration entry → Resolved; new entry: `.opencode/skills/` mirror is a stale manual snapshot (found by the P2 consumers sweep; out of scope here).
+- `project/backlog/BACKLOG.md` — tree-role-integration entry → Resolved; new entry: `.opencode/skills/` mirror is a stale manual snapshot (found by the P2 consumers sweep; out of scope here).
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>` (additive flag; no callers depend on `--tree` yet)
@@ -9967,7 +9967,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 - `scripts/dispatch-hetero.sh` — heterogeneous implementer dispatch: JSON output `{status, commit, files_changed, …}`; exit 0 committed (worktree auto-removed, branch survives for review) / 1 no-commit-or-dirty (worktree kept for inspection) / 2 precondition failure. `--agy-bin` seam for testing.
 - `hooks/tests/dispatch-hetero.test.sh` — 24-assertion integration test via PATH-stubbed fake agy (no network): preconditions, committed path, duplicate-branch guard, dirty and no-commit paths with kept worktree, `--keep-worktree`.
 - `references/hetero-dispatch.md` — the ritual + four invariants (worktree mandatory / artifacts-not-self-report / verdict at depth 0 / six-element prompt as the contract), engine-neutral role-prompt reuse of `.opencode/agent-bodies/*.body.md`, unverified-engines list.
-- `docs/BACKLOG.md` — skill-wrapper entry, trigger: 2-3 more real uses or a second engine passing the headless spike.
+- `project/backlog/BACKLOG.md` — skill-wrapper entry, trigger: 2-3 more real uses or a second engine passing the headless spike.
 
 ### Rollback
 - Maintainer: `git revert <merge-sha>` (pure addition — no existing behavior changed)
@@ -10018,7 +10018,7 @@ Hardening (fail-closed measurement is the point of the gate): the 30% sample is 
 - `skills/debug/SKILL.md`: added the **3-fix architecture gate** — after 3 failed fix attempts, STOP and question the architecture/mental-model (re-collect evidence at the boundary above the suspected site) rather than attempting fix #4. (Internalized from `superpowers:systematic-debugging`.)
 - `agents/reviewer.md`: the Security checklist now points to Claude Code's **native `/security-review`** for a dedicated security deep-dive (threat model / supply-chain), clarifying that autopilot's reviewer owns the *general* pre-merge security pass and delegates the specialist deep-dive rather than shipping a separate skill.
 
-### Deferred (CEO call — no biting value for self-use; recorded with triggers in `docs/BACKLOG.md`)
+### Deferred (CEO call — no biting value for self-use; recorded with triggers in `project/backlog/BACKLOG.md`)
 - **subagent-driven-development**: the spec→quality review ORDER is already covered (reviewer's v2.12.1/v2.12.3 claim-completeness IS spec-compliance); only the BLOCKED/incomplete-return handling residue remains → backlog (trigger: a mishandled blocked dispatch).
 - **writing-skills RED-phase**: overkill for self-use (it's tuned for public skill publishing); the cheap CSO description principle is already autopilot practice → backlog (trigger: publishing skills broadly).
 
@@ -10074,7 +10074,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 ### Changed
 - `agents/reviewer.md`: Fact-driven Red Line now distinguishes **documented-fact from live-system-fact** — live claims (DNS/reachability/version/process/existence) must be **Bash-execution-verified or marked `UNVERIFIED`**, never "verified" by a doc/README citation; **argument-from-silence is banned** ("repo doesn't mention Y" ≠ "Y is false"). Added a **Calibration** section (not everything is Critical; acknowledge what's clean; explicit DON'Ts) + a "**don't trust the report** — verify by reading code; hunt over-engineering + solved-wrong-problem" philosophy line (absorbed from superpowers' spec-reviewer).
 - `skills/quality-pipeline/references/code-review.md`: new **"Consuming a finding — verify before implementing"** step in Handoff Consumption (findings are suggestions to evaluate, not orders; verify against the codebase; push back with technical reasoning; YAGNI-grep; **no performative agreement** — no "You're absolutely right!"/thanks; one fix at a time). Operationalizes the `verify-reviewer-claims` discipline on the consumer side.
-- `docs/BACKLOG.md`: retired the `reviewer-livefact-confabulation` 🔴 entry (now fixed).
+- `project/backlog/BACKLOG.md`: retired the `reviewer-livefact-confabulation` 🔴 entry (now fixed).
 - Design record + the full dialectic that descoped a larger proposal: `docs/plans/2026-06-04-review-verify-barrier.md` (verify-barrier / spec-gate / Workflow fan-out all deferred with explicit triggers).
 
 ### Rollback
@@ -10103,7 +10103,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 
 ## v2.11.0 — distill cross-machine consolidate (slug-normalize + proactive merge)
 
-**Headline**: when two fleet machines distil the **same** recurring procedure, `/distill` now converges them automatically instead of stopping on a raw git conflict. A deterministic **slug normalizer** (Step 4) makes independent namings of one procedure land on a single path (`fix-git-identity`, `git-identity-fix`, `ensure-git-identity` → `git-identity`), and Step 5 does a **proactive** divergence check (`compare` against the pack's `@{u}` *before* committing the push) so the human-gated LLM merge happens in the clean working tree — **never inside a held rebase/merge transaction**. Shipped after two dialectic review rounds that cut a held-rebase design (it inverted git's `:2:`/`:3:` stages and could wedge the pack) and a per-host-staging design (it regressed Claude Code skill loading and used a self-defeating content-hash key); see [`docs/plans/2026-06-04-distill-consolidate.md`](docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md).
+**Headline**: when two fleet machines distil the **same** recurring procedure, `/distill` now converges them automatically instead of stopping on a raw git conflict. A deterministic **slug normalizer** (Step 4) makes independent namings of one procedure land on a single path (`fix-git-identity`, `git-identity-fix`, `ensure-git-identity` → `git-identity`), and Step 5 does a **proactive** divergence check (`compare` against the pack's `@{u}` *before* committing the push) so the human-gated LLM merge happens in the clean working tree — **never inside a held rebase/merge transaction**. Shipped after two dialectic review rounds that cut a held-rebase design (it inverted git's `:2:`/`:3:` stages and could wedge the pack) and a per-host-staging design (it regressed Claude Code skill loading and used a self-defeating content-hash key); see [`docs/plans/2026-06-04-distill-consolidate.md`](project/plans/_archive/2026/06/2026-06-04-distill-consolidate.md).
 
 ### Added
 - `scripts/distill-consolidate.sh` (deterministic, no LLM): `normalize-slug <raw>` (lowercase + drop a tiny stopword set + **preserve token order** — converges naming divergence while keeping antonyms like `add-user`/`remove-user` distinct), `migrate [pack]` (one-time rename of existing dirs to normalized slugs; STOPs when two dirs collide on one slug — a real consolidation case), `compare <slug> [pack]` (proactive divergence check vs `@{u}` → JSON `identical`/`divergent`/`absent-theirs`/`absent-mine`; requires a configured upstream, never guesses `origin/<branch>`).
@@ -10205,7 +10205,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 
 ### Changed (docs)
 - **`hooks/README.md`** — reconciled the contradictory suggest-compact rows (removed it from "still disabled"; fixed the threshold drift "50/75/100" → unbounded "50, then every 25"); added a "`/compact` ≠ real PreCompact for testing" caveat (cites the 2026-05-14 method-B observation).
-- **`docs/BACKLOG.md`** — "Re-enable v2.7.4 disabled hooks" rewritten to reflect that the PostToolUse log-only hooks are done (v2.8.0/v2.8.1); remaining split into PreToolUse blockers (gated on #6305) vs Stop-event hooks (separate). Dead-dispatch auto-detector marked SPIKE-GATED with the dialectic rationale. New entry logging the stale "12 default-on" hook tally (deferred, pre-existing).
+- **`project/backlog/BACKLOG.md`** — "Re-enable v2.7.4 disabled hooks" rewritten to reflect that the PostToolUse log-only hooks are done (v2.8.0/v2.8.1); remaining split into PreToolUse blockers (gated on #6305) vs Stop-event hooks (separate). Dead-dispatch auto-detector marked SPIKE-GATED with the dialectic rationale. New entry logging the stale "12 default-on" hook tally (deferred, pre-existing).
 
 ### Hook-order semantics reminder
 - Claude Code hooks run **in parallel / non-deterministic order across different matcher blocks** (PostToolUse `Write|Edit` vs `.*` are independent). Only **intra-matcher** sequencing is guaranteed. suggest-compact's new `Write|Edit` block carries no cross-block ordering guarantee.
@@ -10320,7 +10320,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 
 ## v2.7.4 — Post-portability follow-ups (OpenCode parity + release-hygiene + agy fact correction)
 
-**Headline**: Three follow-ups from the v2.7.3 ship's out-of-scope list, executed as a CEO-triaged project ([docs/projects/_archive/2026-05-29-post-portability-followups](docs/projects/_archive/2026/05/2026-05-29-post-portability-followups/README.md)). The headline is an **empirical correction**: installing real `agy` 1.0.1 overturned both the original PM claims AND v2.7.3's "fact-version" — `agy plugin validate` and the root-`plugin.json` requirement are genuine (v2.7.3 had wrongly labelled them fabricated). Spike-before-assert cuts both ways.
+**Headline**: Three follow-ups from the v2.7.3 ship's out-of-scope list, executed as a CEO-triaged project ([docs/projects/_archive/2026-05-29-post-portability-followups](project/projects/_archive/2026/05/2026-05-29-post-portability-followups/README.md)). The headline is an **empirical correction**: installing real `agy` 1.0.1 overturned both the original PM claims AND v2.7.3's "fact-version" — `agy plugin validate` and the root-`plugin.json` requirement are genuine (v2.7.3 had wrongly labelled them fabricated). Spike-before-assert cuts both ways.
 
 ### Added
 - **`scripts/preflight-release.sh`** — release-hygiene gate (5 checks): canonical version parseable, CHANGELOG entry present, version mirrors in sync, INDEX references the version, all INDEX project-README links resolve. Wired into `finish-flow` L-5.5. Prevents the doc-drift class that bit v2.7.3 (version bump with no CHANGELOG entry / colliding INDEX labels). Negative-tested (phantom version fails checks 2/3/4).
@@ -10380,7 +10380,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 - **`scripts/sync-version.js`** — `editPlan` extended to cover root `plugin.json` + `README.md` badges; `hooks/hooks.json` dropped from editPlan (its `v2.7.4 disable batch` reference is an event marker, not plugin version).
 - **`scripts/validate.sh`** — reference-existence check handles 3 SKILL.md reference forms (skill-local / repo-root / sibling-skill). Fixes pre-existing false positives on `audit`, `quality-pipeline`, `team`.
 - **`README.md`** — Install section expanded from Claude-Code-only to 4 platforms; Windows symlink prerequisites documented (`git config --global core.symlinks=true` + Developer Mode BEFORE clone).
-- **`docs/projects/INDEX.md`** — relabelled the 2026-05-14 retro-roundup row from `v2.7.3` to `v2.7.2-followup` (no canonical version bump occurred in that ship).
+- **`project/projects/INDEX.md`** — relabelled the 2026-05-14 retro-roundup row from `v2.7.3` to `v2.7.2-followup` (no canonical version bump occurred in that ship).
 - **`hooks/hooks.json`** (from disable-batch work, `c5e5a4c`) — simplified from 13 entries to 4. Only stdin-pipe-working (PreCompact, SessionStart) and stdin-tolerant (PostToolUse `.*` intent-capture + reload-watch) hooks remain wired.
 - **`hooks/README.md`** (from disable-batch work) — added "v2.7.4 disable batch" section listing the 9 disabled hooks and their reasons (`large-file-warner`, `branch-protection`, `commit-secret-scan`, `audit-log`, `failure-escalation`, `suggest-compact`, `log-error`, `cost-tracker`, `session-summary`). Note: `hooks/README.md` retains the literal text `v2.7.4 disable batch` as an event marker referring to the disable batch event, not a plugin version label.
 
@@ -10392,7 +10392,7 @@ Deliberately a **prose sharpening of the existing stance, not a new pipeline ste
 - **Hook env-var fallback chain reverted** (`hooks/intent-capture.js`, `hooks/session-start.sh` restored to `b1ee7a6` state). The added `CODEX_PLUGIN_ROOT || AGY_PLUGIN_ROOT || GEMINI_PLUGIN_ROOT || path.dirname(__dirname)` chain was non-functional (env vars don't exist) AND combined with the hardcoded `.claude-plugin/plugin.json` lookup would throw on any non-Claude host. `session-start.sh`'s broadened OR-condition also inverted semantics — emitting Claude's `hookSpecificOutput` envelope whenever any of the fabricated env vars happened to be set.
 - **OpenCode `getPluginVersion()` silent `"unknown"` regression** since `bf0c637` — the 3-level `__dirname` climb landed at the repo's parent dir, so `plugin.json` was never found. Spike 0 + Architect R3 catch.
 - **CLAUDE_SESSION_ID → CLAUDE_CODE_SESSION_ID** (`a2cd815`) — 6 hooks (`intent-capture`, `batch-format`, `accumulator`, `session-summary`, `suggest-compact`, `cost-tracker`) were reading the wrong env var name. All `getSessionId()` calls were silently falling back to cwd-hash. Post-fix, SessionStart / PreCompact-class hooks correctly join the real session UUID.
-- **9 silent-broken hooks disabled** (`c5e5a4c`, from disable-batch work) — `large-file-warner`, `branch-protection`, `commit-secret-scan`, `audit-log`, `failure-escalation`, `suggest-compact`, `log-error`, `cost-tracker`, `session-summary`. Script files retained in `hooks/`; re-enable when upstream Claude Code stdin-pipe fix lands. Tracking: `docs/BACKLOG.md` "Claude Code tool-event hooks get NO stdin pipe" entry.
+- **9 silent-broken hooks disabled** (`c5e5a4c`, from disable-batch work) — `large-file-warner`, `branch-protection`, `commit-secret-scan`, `audit-log`, `failure-escalation`, `suggest-compact`, `log-error`, `cost-tracker`, `session-summary`. Script files retained in `hooks/`; re-enable when upstream Claude Code stdin-pipe fix lands. Tracking: `project/backlog/BACKLOG.md` "Claude Code tool-event hooks get NO stdin pipe" entry.
 
 ### Hook-order semantics reminder
 No hook ordering changes in this release. Existing 4 hook entries in `hooks/hooks.json` (PreCompact / SessionStart / PostToolUse × 2) all properly prefixed with `${CLAUDE_PLUGIN_ROOT}` per Phase 1 audit.
@@ -10404,7 +10404,7 @@ No hook ordering changes in this release. Existing 4 hook entries in `hooks/hook
 ### Predecessor version-label note
 The 2026-05-14 retro-roundup ship (`57c88ee`) and the 2026-05-14 hook-disable-batch ship (`c5e5a4c`) both previously appeared as separate "releases" (retro-roundup labelled v2.7.3 in INDEX; disable-batch drafted as v2.7.4 in CHANGELOG). Neither bumped canonical `.claude-plugin/plugin.json` (which stayed at `2.7.2`). The first actual post-v2.7.2 canonical bump is this v2.7.3 release, which therefore aggregates all three work batches:
 
-- retro-roundup → relabelled `v2.7.2-followup` in `docs/projects/INDEX.md`
+- retro-roundup → relabelled `v2.7.2-followup` in `project/projects/INDEX.md`
 - disable-batch + capture-payload + SESSION_ID fix → merged into this v2.7.3 CHANGELOG entry (the standalone draft v2.7.4 entry has been removed)
 - multi-agent portability correction → this release's headline work
 
@@ -10433,7 +10433,7 @@ The `hooks/README.md` "v2.7.4 disable batch" section header is retained as an **
 
 ### Review Loop（L-size dogfood）
 
-3 rounds plan review（Architect / QA Devil / Ops/SRE）。r0：原 3-layer 提案 (UserPromptSubmit + count_tokens / PreCompact exit 2 / TaskList rehydrate) 全票 REJECT，Architect 替代設計 adopted。r1-r3：CONDITIONAL trajectory（major redesigns → smaller refinements）。Plan v4 absorbed all r3 critical findings inline。Pre-merge review at L-5.2 將補上 implementation 風險。詳見 [project README](docs/projects/_archive/2026/05/2026-05-14-context-handoff-hardening/README.md#review-background) + [plan §1.3-§2.3](docs/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md)。
+3 rounds plan review（Architect / QA Devil / Ops/SRE）。r0：原 3-layer 提案 (UserPromptSubmit + count_tokens / PreCompact exit 2 / TaskList rehydrate) 全票 REJECT，Architect 替代設計 adopted。r1-r3：CONDITIONAL trajectory（major redesigns → smaller refinements）。Plan v4 absorbed all r3 critical findings inline。Pre-merge review at L-5.2 將補上 implementation 風險。詳見 [project README](project/projects/_archive/2026/05/2026-05-14-context-handoff-hardening/README.md#review-background) + [plan §1.3-§2.3](project/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md)。
 
 ### Rollback
 
@@ -10548,8 +10548,8 @@ v2.0's rule-setter model (autopilot sets rules, Superpowers executes tactics) re
 
 ### Plan + project tracking
 
-- Plan: [`docs/plans/2026-05-14-superpowers-coexistence.md`](docs/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md)
-- Project: [`docs/projects/_archive/2026-05-14-superpowers-coexistence/README.md`](docs/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/README.md)
+- Plan: [`docs/plans/2026-05-14-superpowers-coexistence.md`](project/plans/_archive/2026/05/2026-05-14-superpowers-coexistence.md)
+- Project: [`docs/projects/_archive/2026-05-14-superpowers-coexistence/README.md`](project/projects/_archive/2026/05/2026-05-14-superpowers-coexistence/README.md)
 - Review loop: r1 (3 parallel reviewers, approve-with-revisions) + r2 (single focused reviewer, approve-with-minor-revisions). See plan §9 for findings.
 
 ---

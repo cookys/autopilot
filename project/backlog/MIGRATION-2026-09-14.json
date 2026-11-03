@@ -8,7 +8,7 @@
       "bytes_after": 406,
       "moved_bytes": 1478,
       "moved_sha256": "3a9ac481bdc8b4b41fde6570eb1d6ba61903586c6df46050b4a996f696020f26",
-      "sidecar": "docs/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md"
+      "sidecar": "project/backlog/foreman-rail-residuals-v2-36-34-accepted-and-named-not-hidden.md"
     },
     {
       "title": "PEER-REPORTED (308-8f): an agy hand commits to the MAIN checkout from inside its worktree — REPRODUCED, FIXED v2.36.37",
@@ -62,7 +62,7 @@
       "bytes_after": 880,
       "moved_bytes": 10078,
       "moved_sha256": "742252501005595ff640bf493796f73e95fdfa1e30c262c42db7c5f1b186f231",
-      "sidecar": "docs/backlog/agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a.md"
+      "sidecar": "project/backlog/agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a.md"
     },
     {
       "title": "Pin store hardening: fsync, orphaned temp files, and re-validation of stored rows",
@@ -116,7 +116,7 @@
       "bytes_after": 430,
       "moved_bytes": 4363,
       "moved_sha256": "d280a470e4f30fa5b16853645524f8f30fc284cd0faa49fc0cdb29ba52c45ed4",
-      "sidecar": "docs/backlog/peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md"
+      "sidecar": "project/backlog/peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md"
     },
     {
       "title": "Reconnaissance and implementation share one leaf bash budget, so a leaf can exhaust it before touching code",
@@ -152,7 +152,7 @@
       "bytes_after": 779,
       "moved_bytes": 1483,
       "moved_sha256": "7439ab63faff92e914adf15a2c53cfa8c089ca00126414a69308ab8ae03b799f",
-      "sidecar": "docs/backlog/main-checkout-boundary-accepted-residuals-of-an-accident-guard-that-is-not-a-san.md"
+      "sidecar": "project/backlog/main-checkout-boundary-accepted-residuals-of-an-accident-guard-that-is-not-a-san.md"
     },
     {
       "title": "The shared config ladder's tier 3 reads the PLUGIN's `.claude/`, and the installed plugin ships one",
@@ -242,7 +242,7 @@
       "bytes_after": 779,
       "moved_bytes": 1394,
       "moved_sha256": "e8dc57c0552cb1e0b2618450f9d18d8067e285a5a09cd3cca3bb737d109251a6",
-      "sidecar": "docs/backlog/per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that.md"
+      "sidecar": "project/backlog/per-hook-per-harness-support-matrix-with-verification-dates-hook-inventory-that.md"
     },
     {
       "title": "Codex dev-mode hook entry that survives plugin cache replacement (`~/.codex/hooks.json` → repo path)",
@@ -260,7 +260,7 @@
       "bytes_after": 517,
       "moved_bytes": 1183,
       "moved_sha256": "eb4309c5164d3362c26ae65e8f136516d41c57f428c679a3b9ba65bca9a80103",
-      "sidecar": "docs/backlog/apply-two-tier-pooled-verdict-to-reviewer-implementer-owner-verification-author.md"
+      "sidecar": "project/backlog/apply-two-tier-pooled-verdict-to-reviewer-implementer-owner-verification-author.md"
     },
     {
       "title": "Codex payload install-time generation（2026-08-02 residual spike：NO-GO）",
@@ -269,7 +269,7 @@
       "bytes_after": 873,
       "moved_bytes": 1470,
       "moved_sha256": "90e848f178382aad0e4fe0ee175e521d6194b75e12a30c1056bd4f8ee84c90c8",
-      "sidecar": "docs/backlog/codex-payload-install-time-generation-2026-08-02-residual-spike-no-go.md"
+      "sidecar": "project/backlog/codex-payload-install-time-generation-2026-08-02-residual-spike-no-go.md"
     },
     {
       "title": "Release-time payload branch（B）重啟條件",
@@ -278,7 +278,7 @@
       "bytes_after": 603,
       "moved_bytes": 490,
       "moved_sha256": "94473ad2428d6e409423c4ae2b30775d90bb1f8119bfc776361bf192ecc62590",
-      "sidecar": "docs/backlog/release-time-payload-branch-b.md"
+      "sidecar": "project/backlog/release-time-payload-branch-b.md"
     },
     {
       "title": "🔵 suite oracle lock: a killed full-suite run leaves the next one refused (observed 2026-09-02)",
@@ -479,7 +479,7 @@
       "sidecar": "docs/backlog/scorecard-runner-token-drift-sol-s-reviewer-row-is-recorded-under-codex-cli-not.md"
     },
     {
-      "title": "~~Foreman context is not measurable by hook — `context-budget` only sees the parent transcript~~ (CLOSED 2026-09-05, v2.36.1: `subagentStatusLine` `tasks[].tokenCount` is the per-agent usage field; `foreman-guard.js` denies at T2 from the tmpfs live file — `docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md`)",
+      "title": "~~Foreman context is not measurable by hook — `context-budget` only sees the parent transcript~~ (CLOSED 2026-09-05, v2.36.1: `subagentStatusLine` `tasks[].tokenCount` is the per-agent usage field; `foreman-guard.js` denies at T2 from the tmpfs live file — `project/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md`)",
       "slug": "foreman-context-is-not-measurable-by-hook-context-budget-only-sees-the-parent-tr",
       "bytes_before": 1369,
       "bytes_after": 823,
@@ -494,7 +494,7 @@
       "bytes_after": 824,
       "moved_bytes": 861,
       "moved_sha256": "95f561fc92f1025a4ad1966bc4aeb4352bc34926d14ec00a8e5238e7dce59784",
-      "sidecar": "docs/backlog/autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno.md"
+      "sidecar": "project/backlog/autopilot-effort-vocabulary-has-no-minimal-the-muse-spark-contributor-tier-canno.md"
     },
     {
       "title": "`adopt-qualification-defaults.js list` prints `event undefined — null` for legacy feed rows",
@@ -566,7 +566,7 @@
       "bytes_after": 759,
       "moved_bytes": 1692,
       "moved_sha256": "a2ce21772da333931b1412fc396385007b461b4893c001f5e4462f9f8d3be800",
-      "sidecar": "docs/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md"
+      "sidecar": "project/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md"
     },
     {
       "title": "Foreman model is hardcoded as `opus` in /l4–/l6 prose; routing config already overrides it",
@@ -602,7 +602,7 @@
       "bytes_after": 789,
       "moved_bytes": 1545,
       "moved_sha256": "002ed0b8e89394c58ab15f2ef6afbc3849a8e4d06b6c14634e0cbfad7db198c7",
-      "sidecar": "docs/backlog/implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list.md"
+      "sidecar": "project/backlog/implementer-suite-hardening-backlog-pre-merge-review-round-1-cut-list.md"
     },
     {
       "title": "agy output envelope invalid on create-a-new-file responses (blocks agy implementer qualification)",
@@ -647,7 +647,7 @@
       "bytes_after": 694,
       "moved_bytes": 1159,
       "moved_sha256": "1f7006d475a860926b75bfab131ce6868b894bffcf3785af329c07f9067e23ee",
-      "sidecar": "docs/backlog/brain-seat-sittings-in-the-shipped-qualification-defaults-v2-artifact.md"
+      "sidecar": "project/backlog/brain-seat-sittings-in-the-shipped-qualification-defaults-v2-artifact.md"
     },
     {
       "title": "Durable repair-lock — 解鎖路徑先行,鎖才准回來(P6D KR3 的第二階段)",
@@ -656,7 +656,7 @@
       "bytes_after": 767,
       "moved_bytes": 1422,
       "moved_sha256": "487523daea21f548d6152b1020a73606eaa01ea661311c575dd78d69ca09cdd1",
-      "sidecar": "docs/backlog/durable-repair-lock-p6d-kr3.md"
+      "sidecar": "project/backlog/durable-repair-lock-p6d-kr3.md"
     },
     {
       "title": "~~Contract-first escalation and local-repair gates~~ — 2/3 classes SHIPPED v2.34.32; class (a) REMAINS OPEN",
@@ -674,7 +674,7 @@
       "bytes_after": 613,
       "moved_bytes": 903,
       "moved_sha256": "aa268e6f7aeac853d190d97f5183dda35f7a17d56eb897164782688d96fb8076",
-      "sidecar": "docs/backlog/skill-contract-card-rewrites-under-g2-minimax-r8.md"
+      "sidecar": "project/backlog/skill-contract-card-rewrites-under-g2-minimax-r8.md"
     },
     {
       "title": "dev-flow card re-attempt — instrument repair first (V2-vacuous verdict 2026-08-18)",
@@ -710,7 +710,7 @@
       "bytes_after": 712,
       "moved_bytes": 1715,
       "moved_sha256": "67a81a2c0390e4d5b7b3a0beaeed7d2af16b7043a5f386c26deffa5ec7cf1921",
-      "sidecar": "docs/backlog/strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume.md"
+      "sidecar": "project/backlog/strike-decay-deferrals-the-five-mechanisms-the-panel-cut-from-the-first-instrume.md"
     },
     {
       "title": "Capability-claim identity is coupled to its observation timestamp",
@@ -755,7 +755,7 @@
       "bytes_after": 768,
       "moved_bytes": 839,
       "moved_sha256": "aa0485c473efcabc6c83e10c416d6d622410453a2fcde2869897efe4ea3c00f2",
-      "sidecar": "docs/backlog/scaffold-tier-effect-a-b-measurement-four-layer-d6-promised-row-repaired-2026-08.md"
+      "sidecar": "project/backlog/scaffold-tier-effect-a-b-measurement-four-layer-d6-promised-row-repaired-2026-08.md"
     },
     {
       "title": "cc-shim framing chrome leaks via `generate_session_title` (v2.34.7 fix incomplete)",
@@ -773,7 +773,7 @@
       "bytes_after": 695,
       "moved_bytes": 1180,
       "moved_sha256": "5ac16bb6d59fed29f1d4930781f5463b471977a2481e02178b8dfc6251263225",
-      "sidecar": "docs/backlog/qualification-cli-transport-runtime-identity-capture.md"
+      "sidecar": "project/backlog/qualification-cli-transport-runtime-identity-capture.md"
     },
     {
       "title": "Broker payload format token rename (unified_diff misnomer)",
@@ -791,7 +791,7 @@
       "bytes_after": 799,
       "moved_bytes": 2900,
       "moved_sha256": "96800cdc8caf5737239ace30704bfaf6b5284f2b31ba186e97e70d2275bf12c6",
-      "sidecar": "docs/backlog/roster-qualification-remaining-legs-explorer-suite-brain-re-sit-implementer-leg.md"
+      "sidecar": "project/backlog/roster-qualification-remaining-legs-explorer-suite-brain-re-sit-implementer-leg.md"
     },
     {
       "title": "Governance CLI UX polish（experience-critic findings, v2.34.13 dogfood）",
@@ -818,7 +818,7 @@
       "bytes_after": 519,
       "moved_bytes": 585,
       "moved_sha256": "25025b12e587499cf3a76bce14eb3a1cd603988b7f1ed349b56de90d2df0034a",
-      "sidecar": "docs/backlog/t14-long-horizon-per-turn-verification-gate.md"
+      "sidecar": "project/backlog/t14-long-horizon-per-turn-verification-gate.md"
     },
     {
       "title": "Mission graph scheduler 與 portfolio optimization",
@@ -827,7 +827,7 @@
       "bytes_after": 747,
       "moved_bytes": 826,
       "moved_sha256": "dcb0d83ee7f38ed11517e80289e539ca0397ab139fa0569594d80f7d0c521514",
-      "sidecar": "docs/backlog/mission-graph-scheduler-portfolio-optimization.md"
+      "sidecar": "project/backlog/mission-graph-scheduler-portfolio-optimization.md"
     },
     {
       "title": "Mission authority store 與 cross-harness enforcement hardening",
@@ -836,7 +836,7 @@
       "bytes_after": 807,
       "moved_bytes": 826,
       "moved_sha256": "539d0d5466ce2f268e6731694b29afc1254e729550665a0b960a16beffe27cd9",
-      "sidecar": "docs/backlog/mission-authority-store-cross-harness-enforcement-hardening.md"
+      "sidecar": "project/backlog/mission-authority-store-cross-harness-enforcement-hardening.md"
     },
     {
       "title": "Every gate needs a negative control — the caution needs a routine behind it",
@@ -863,7 +863,7 @@
       "bytes_after": 535,
       "moved_bytes": 1158,
       "moved_sha256": "2b0b18c3edf168d0596841799a23be4d7d0006ff359617e94c66dcdcac877fc3",
-      "sidecar": "docs/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md"
+      "sidecar": "project/backlog/check-test-integrity-sh-warn-block-needs-an-accuracy-record-first.md"
     },
     {
       "title": "Engine and CLI have no session-mode fallback for bounded non-Mission campaigns",
@@ -944,7 +944,7 @@
       "bytes_after": 775,
       "moved_bytes": 826,
       "moved_sha256": "bb57c95baba301366cb76c547996964169b444bea96bcfd5b8e2f66b00534755",
-      "sidecar": "docs/backlog/certified-clean-evals-clean-diff-specificity-certified.md"
+      "sidecar": "project/backlog/certified-clean-evals-clean-diff-specificity-certified.md"
     },
     {
       "title": "Domain-aware routing — consume the `work_domain` telemetry to route reviewer/implementer by diff domain",
@@ -953,7 +953,7 @@
       "bytes_after": 839,
       "moved_bytes": 1030,
       "moved_sha256": "ddfcaca205608b2002dfbbd21f0d14fe94b181ce9fcb0e9f5070e285efb89e52",
-      "sidecar": "docs/backlog/domain-aware-routing-consume-the-work-domain-telemetry-to-route-reviewer-impleme.md"
+      "sidecar": "project/backlog/domain-aware-routing-consume-the-work-domain-telemetry-to-route-reviewer-impleme.md"
     },
     {
       "title": "L1 block-mode override re-enable — needs a REAL isolation boundary (cgroup is NOT enough)",
@@ -962,7 +962,7 @@
       "bytes_after": 582,
       "moved_bytes": 1578,
       "moved_sha256": "e41055814700dec70f93db5ea389c83917d31fa6a39b5cfcd08082024bfea053",
-      "sidecar": "docs/backlog/l1-block-mode-override-re-enable-needs-a-real-isolation-boundary-cgroup-is-not-e.md"
+      "sidecar": "project/backlog/l1-block-mode-override-re-enable-needs-a-real-isolation-boundary-cgroup-is-not-e.md"
     },
     {
       "title": "qc-panel refute pass — graduate from shadow to gating (calibration-gated)",
@@ -980,7 +980,7 @@
       "bytes_after": 658,
       "moved_bytes": 1250,
       "moved_sha256": "68dcb9635fcc355d13000d6d67b33823d876922da3b126ac6e5acc5fe7da5910",
-      "sidecar": "docs/backlog/l5-hetero-parallel-width-fan-out-machinery-built-deliberately-unwired.md"
+      "sidecar": "project/backlog/l5-hetero-parallel-width-fan-out-machinery-built-deliberately-unwired.md"
     },
     {
       "title": "Leaf-level output compaction for dispatched implementer / qc shell commands (rtk-style)",
@@ -1007,7 +1007,7 @@
       "bytes_after": 630,
       "moved_bytes": 468,
       "moved_sha256": "9ff18dbd51890880f330addbaa91d4719db21dde16b6f82520d7036e1d9d005e",
-      "sidecar": "docs/backlog/first-local-runner-capability-semantics-availability-load-quota.md"
+      "sidecar": "project/backlog/first-local-runner-capability-semantics-availability-load-quota.md"
     },
     {
       "title": "broader shared-config containment / per-worktree isolation（2026-07-17, follow-up）",
@@ -1124,7 +1124,7 @@
       "bytes_after": 662,
       "moved_bytes": 510,
       "moved_sha256": "c25a1eafea1138a2cc312656550ec2bcee58167457434b2935ff6f518cdde38c",
-      "sidecar": "docs/backlog/heto-task-return-detection-can-miss-completed-work.md"
+      "sidecar": "project/backlog/heto-task-return-detection-can-miss-completed-work.md"
     },
     {
       "title": "No route for external field experience contributed INTO autopilot itself",
@@ -1133,7 +1133,7 @@
       "bytes_after": 498,
       "moved_bytes": 916,
       "moved_sha256": "19cd2606737e5ca6d3562cc87d011c6dd4f41a999478c873dd6c245f5a023699",
-      "sidecar": "docs/backlog/no-route-for-external-field-experience-contributed-into-autopilot-itself.md"
+      "sidecar": "project/backlog/no-route-for-external-field-experience-contributed-into-autopilot-itself.md"
     },
     {
       "title": "`peer-coordination` skill — ruled in, blocked on a spike sweep",
@@ -1142,7 +1142,7 @@
       "bytes_after": 501,
       "moved_bytes": 7495,
       "moved_sha256": "1a3ad8ebba57d43880c4dedad5cf829a8f2175bfec420160fa4e7bd849a52884",
-      "sidecar": "docs/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md"
+      "sidecar": "project/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md"
     },
     {
       "title": "Managed-campaign controller cannot record `BOUNDARY_REJECTED` — lease-fenced by its own synthesized stage identity",
@@ -1367,7 +1367,7 @@
       "bytes_after": 697,
       "moved_bytes": 1783,
       "moved_sha256": "905a39ee350fc54824b2b76ab542aecec870c8bf12400f3de14d485c55d081aa",
-      "sidecar": "docs/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md"
+      "sidecar": "project/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md"
     },
     {
       "title": "depth0-delegate-gate `Bash` matcher is an expansion over the frozen plan matcher",

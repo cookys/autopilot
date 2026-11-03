@@ -840,7 +840,7 @@ index 0389852..2a11e44 100755
 -#
 -# NOTE on model seams: QC_JUDGE_A_MODEL / QC_JUDGE_B_MODEL / QC_SYNTH_MODEL
 -#   override the hardcoded Amendment-11 factory defaults. Full resolve-dispatch.sh
--#   integration for tree-role routing is deferred — see docs/BACKLOG.md
+-#   integration for tree-role routing is deferred — see project/backlog/BACKLOG.md
 -#   "resolve-dispatch.sh tree-role integration".
 -#
 -# QUESTION SHAPES (×2 judges = 6 calls):

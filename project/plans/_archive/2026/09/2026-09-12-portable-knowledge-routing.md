@@ -6,7 +6,7 @@
 ## The problem
 
 `references/knowledge-routing.md` §3 and `skills/learn/SKILL.md` name **autopilot's own layout**
-as literal paths: `.claude/knowledge/`, `references/`, `docs/BACKLOG.md`,
+as literal paths: `.claude/knowledge/`, `references/`, `project/backlog/BACKLOG.md`,
 `~/.claude/projects/<slug>/memory/`. Two of those do not exist in a consuming project, and one
 carries a write contract (`git add -f`) that is a fact about *this* repo's `.gitignore`, not a
 general one:
@@ -15,7 +15,7 @@ general one:
 |---|---|
 | `.claude/knowledge/` | Plausible — the plugin creates `.claude/`. But whether it is gitignored is that repo's choice, and the `git add -f` step is wrong where it is not. |
 | `references/` | **Does not exist.** It is autopilot's own skill-reference directory. A consuming project has no "other skills" of its own to bind. |
-| `docs/BACKLOG.md` | May be `doc/`, may be elsewhere, may not exist. `project-detect.js` already answers this. |
+| `project/backlog/BACKLOG.md` | May be `doc/`, may be elsewhere, may not exist. `project-detect.js` already answers this. |
 | `~/.claude/projects/<slug>/memory/` | Correct and portable — it is the harness's, not the repo's. |
 
 So an agent in a consuming project, told by `handoff` step 2.5 to "route per §3", is being handed

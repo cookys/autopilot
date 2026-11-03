@@ -99,7 +99,7 @@ index f7537ced..a5ec128b 100644
  
 -Standalone lifecycle orchestration plugin: 30 skills, 3 methodology agents, 28 hooks (15 default-on,
 +Standalone lifecycle orchestration plugin: 30 skills, 3 methodology agents, 29 hooks (16 default-on,
- 13 opt-in). Optional integrations and coexistence rules: [`docs/coexistence.md`](docs/coexistence.md).
+ 13 opt-in). Optional integrations and coexistence rules: [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
  
  ## Scripts inventory (prefer over LLM judgment)
 diff --git a/README.md b/README.md

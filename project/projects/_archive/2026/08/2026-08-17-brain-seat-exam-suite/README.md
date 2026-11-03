@@ -1,6 +1,6 @@
 # brain-seat-exam-suite — execution ledger
 
-> Plan (FROZEN): [`docs/plans/2026-08-17-brain-seat-exam-suite.md`](../../plans/2026-08-17-brain-seat-exam-suite.md)
+> Plan (FROZEN): [`project/plans/_archive/2026/08/2026-08-17-brain-seat-exam-suite.md`](../../plans/2026-08-17-brain-seat-exam-suite.md)
 > · Rubric + 2-generation hetero review log therein (G1 13+2, G2 11+3 adjudicated)
 > · Evidence: [`2026-08-17-brain-seat-exam-suite/`](../../plans/evidence/2026-08-17-brain-seat-exam-suite/)
 > (survey + fable/sol perspectives + synthesis)

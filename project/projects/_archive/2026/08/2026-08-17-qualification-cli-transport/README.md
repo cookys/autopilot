@@ -19,7 +19,7 @@
 > Codex/Gemini seat restoration (trigger unmet), governance CLI UX polish (S
 > ride-along only if a governance script is touched anyway).
 
-Plan: [`docs/plans/2026-08-17-qualification-cli-transport.md`](../../plans/2026-08-17-qualification-cli-transport.md)
+Plan: [`project/plans/_archive/2026/08/2026-08-17-qualification-cli-transport.md`](../../plans/2026-08-17-qualification-cli-transport.md)
 Mission admission: READY (enforce), deliverable_count 1, admission_digest `0465c944…`.
 
 ## Scope completeness audit (L-1.5)

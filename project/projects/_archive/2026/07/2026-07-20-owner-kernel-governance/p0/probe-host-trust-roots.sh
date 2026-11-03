@@ -36,7 +36,7 @@
 #                                      happens, which the model cannot disable or rewrite
 #     R4 append-only witness root    — an event/witness log the model cannot rewrite or truncate
 #
-# Plan reference: docs/plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md § P0 step 4 and step 7.
+# Plan reference: project/plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md § P0 step 4 and step 7.
 # The plan's pass criterion is explicit: "A host capability passes only when the owner handle
 # stays in host memory or a broker/IPC handle inaccessible to model tools and worker processes;
 # a prose promise is not evidence."

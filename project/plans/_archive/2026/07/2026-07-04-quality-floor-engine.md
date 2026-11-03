@@ -210,7 +210,7 @@ false-positive surface).
 
 > **Board directive 2026-07-04**: all remaining-phase triggers WAIVED; P2-P4 plus their
 > prerequisites (previously in BACKLOG) execute in one `/l6` run to shippable state
-> (v2.31.12). Former BACKLOG entries folded in below are annotated in `docs/BACKLOG.md`.
+> (v2.31.12). Former BACKLOG entries folded in below are annotated in `project/backlog/BACKLOG.md`.
 
 | Phase | Content | Size | Ship vehicle |
 |-------|---------|------|--------------|

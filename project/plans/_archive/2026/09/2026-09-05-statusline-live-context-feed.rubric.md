@@ -1,6 +1,6 @@
 # Rubric — 2026-09-05-statusline-live-context-feed.md
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md
+> Source plan: project/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md
 > Frozen at generation 1. Each item is a pass/fail question about the plan text; cite the plan section you judged.
 
 R1: [deps] The plan adds no npm dependency in autopilot and no new crate in codeforge; `findmnt` (util-linux) with a `/proc/mounts` fallback is the only platform dependency (§2.5, §2.6).

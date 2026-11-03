@@ -1,6 +1,6 @@
 # mods P5 — proxy-decision reminders (writer first)
 
-Source: owner request 2026-10-04 ("if something awaits a human decision, or you decided on my behalf, remind me"); research `docs/plans/evidence/2026-10-04-mods-p1c/c4-proxy-decision-research.md`; state of play `docs/plans/evidence/2026-10-04-mods-p1c/README.md`; plan §P5 of `docs/plans/2026-10-03-mods-visible-dispatch.md`.
+Source: owner request 2026-10-04 ("if something awaits a human decision, or you decided on my behalf, remind me"); research `docs/plans/evidence/2026-10-04-mods-p1c/c4-proxy-decision-research.md`; state of play `docs/plans/evidence/2026-10-04-mods-p1c/README.md`; plan §P5 of `project/plans/2026-10-03-mods-visible-dispatch.md`.
 
 Order is fixed: writer, then publisher, then display. Each step ships on its own.
 

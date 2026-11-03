@@ -1,6 +1,6 @@
 # Official codex plugin as a peer consult channel
 
-No sidecar existed in history. Original row text from 5d0b29c1d^:docs/BACKLOG.md. The effort value is recorded as S (the original parenthetical said the spike's consult channel had already shipped).
+No sidecar existed in history. Original row text from 5d0b29c1d^:project/backlog/BACKLOG.md. The effort value is recorded as S (the original parenthetical said the spike's consult channel had already shipped).
 
 > ### 官方 codex plugin(openai/codex-plugin-cc)作「同級 consult 通道」的 Spike 評估
 > - **Trigger**: first session after install already fired and the first spike finished (2026-07-05, the install session). Residual trigger: after the GPT-5.3-Codex-Spark quota reset (2026-07-07 12:44), measure the `/codex:review` channel (the review subcommand is locked to Spark and has no model flag — when quota is dead the whole review channel is unavailable, and the error is honest rather than a fake verdict); and the next time a write path is needed, measure the `rescue --write` sandbox posture.

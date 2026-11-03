@@ -51,7 +51,7 @@ Second live example of gap 3 (2026-10-12): the next task (`feat/worktree-placeme
 - Handoff keyed by the marker's `repo_identity` (+ worktree path) on both routes, so the manual skill and the `/clear` hook write to one predictable place.
 - The rails' `/tmp` worktrees either move under the same root or carry the repo slug in their prefix.
 
-## Disposition (2026-10-12, plan `docs/plans/2026-10-12-worktree-placement.md`, direction C)
+## Disposition (2026-10-12, plan `project/plans/2026-10-12-worktree-placement.md`, direction C)
 
 The rule now lives in [`references/worktree-placement.md`](../../references/worktree-placement.md).
 

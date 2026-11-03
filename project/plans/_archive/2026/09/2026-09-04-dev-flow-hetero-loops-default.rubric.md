@@ -1,6 +1,6 @@
 # Frozen rubric — dev-flow hetero loops as default
 
-> Checkable form of `docs/plans/_archive/2026/09/2026-09-04-dev-flow-hetero-loops-default.md` KRs, §2.5 constraints
+> Checkable form of `project/plans/_archive/2026/09/2026-09-04-dev-flow-hetero-loops-default.md` KRs, §2.5 constraints
 > and §6 risks. Reviewers judge the plan packet as self-contained.
 
 R1: The four-stage default (plan loop → dispatch → per-phase hetero review → qc gate) is

@@ -26,15 +26,15 @@ Pure-history is **KEEP, untouched** (KR5: zero content lost). The triage below i
 |---|-----------|---------|----------|----------|
 | S1 | `hooks/session-start.js:124` | `…invoke the skill… Autopilot sets rules; Superpowers executes.` | **Injected into EVERY session start.** Frames superpowers as the assumed executor — the single loudest "superpowers-adjacent" signal in the product. | Drop the tagline (or → "Autopilot sets the rules and runs them standalone; delegates to superpowers when installed"). |
 | S2 | `.claude/dispatch-config.md:8,12,18` | autopilot's **own** dogfood config lists `superpowers:*` **first** in Code-Review / Parallel / Debugging chains | autopilot's own repo prefers superpowers-first — directly contradicts the new premise (KR3: "no skill body emits a superpowers-first default"). It's a 2026-05-14 D-1 dogfood fixture whose retention was always "TBD at Step 7". | Reorder autopilot-first (superpowers as documented fallback), **or** delete the file (defaults are already autopilot-only). Recommend: reorder, keep one superpowers fallback entry as a live coexistence smoke-fixture. |
-| S3 | `docs/coexistence.md:37` | Scenario A ("you have superpowers installed") labelled **"Recommended default."** | The *recommended default* should be ecosystem-standalone, not the superpowers-installed scenario. | Relabel: standalone is the default; A is "if you also run superpowers". |
-| S4 | `docs/architecture.md:11` | "Claude Code on its own — even with the **built-in** `superpowers` plugin…" | superpowers is **not** built-in to Claude Code; calling it built-in implies an assumed baseline. | "even with `superpowers` installed". |
+| S3 | `docs/guide/coexistence.md:37` | Scenario A ("you have superpowers installed") labelled **"Recommended default."** | The *recommended default* should be ecosystem-standalone, not the superpowers-installed scenario. | Relabel: standalone is the default; A is "if you also run superpowers". |
+| S4 | `docs/dev/architecture.md:11` | "Claude Code on its own — even with the **built-in** `superpowers` plugin…" | superpowers is **not** built-in to Claude Code; calling it built-in implies an assumed baseline. | "even with `superpowers` installed". |
 | S5 | `hooks/failure-escalation.js:128` | "Consider invoking `superpowers:systematic-debugging` if you haven't already." | Opt-in hook unconditionally suggests a superpowers skill as if present; no autopilot path offered. | Lead with `autopilot:debug`; mention superpowers only "if installed". |
 
 ## 3. FLIP set — voltagent (recommends/assumes voltagent as a peer)
 
 | # | File:line | Current | Why FLIP | Proposed |
 |---|-----------|---------|----------|----------|
-| V1 | `docs/architecture.md:86-107` | "**Companion Plugins**… we **recommend installing voltagent** alongside" + `/plugin install voltagent` + "voltagent's role agents are usually the **better primary choice**" | Active recommendation of a now-dropped peer; the strongest "assumed voltagent" surface. (B): drop voltagent as assumed peer; keep only as out-of-scope. | Remove the recommendation + install line; reframe role specialization as **out of autopilot's scope** (autopilot owns methodology; bring-your-own role agents if you have them). |
+| V1 | `docs/dev/architecture.md:86-107` | "**Companion Plugins**… we **recommend installing voltagent** alongside" + `/plugin install voltagent` + "voltagent's role agents are usually the **better primary choice**" | Active recommendation of a now-dropped peer; the strongest "assumed voltagent" surface. (B): drop voltagent as assumed peer; keep only as out-of-scope. | Remove the recommendation + install line; reframe role specialization as **out of autopilot's scope** (autopilot owns methodology; bring-your-own role agents if you have them). |
 | V2 | `project-config-template/team-config.md:10` | example role row uses `voltagent-lang:typescript-pro` | Template seeds voltagent as the example role-agent vocabulary for every consuming project. | Swap to a generic / `codeforge:*` example, or a plugin-neutral placeholder. |
 | V3 | `agents/README.md:23,26,35,69-80` (+ `.opencode/agent-bodies/*` mirrors) | "autopilot methodology agents **and voltagent role agents** coexist…", "voltagent's role agents are usually the better primary choice", layer-cake names voltagent as **the** Role layer | Frames voltagent as the assumed Role half of the layer cake. | Keep the layer-cake **concept** (methodology vs role vs project), but name the Role layer **plugin-neutral** ("a role-specialist plugin, e.g. codeforge / any voltagent-style catalog if installed"), not voltagent-as-default. |
 
@@ -74,14 +74,14 @@ fixture) **vs** delete (defaults are already autopilot-only, so the file is pure
 
 All **already** standalone-first / explicitly-optional / historical; touching them would only risk KR5 loss:
 
-- **README.md** (`if you have it`), **CLAUDE.md** §Coexistence, **docs/skills.md** (superpowers-equivalent
-  *comparison column* — factual), **docs/configuration.md:40** (example), **project-config-template/dispatch-config.md**
+- **README.md** (`if you have it`), **CLAUDE.md** §Coexistence, **docs/guide/skills.md** (superpowers-equivalent
+  *comparison column* — factual), **docs/guide/configuration.md:40** (example), **project-config-template/dispatch-config.md**
   ("create this file only when you have third-party plugins" — already gated), **project-config-template/quality-gate-config.md**.
 - **Skill Coexistence sections** — `debug` / `team` / `test-strategy` / `profiling` SKILL.md: these are the
   *standalone-fallback* framing and **embody** the new premise already.
 - **Graceful-fallback prose** — `skills/ceo-agent/SKILL.md:304`, `skills/research-to-ship/SKILL.md:73`,
   `skills/think-tank/SKILL.md:148` (dispatcher falls back to native).
-- **references/plan-template.md:3**, **docs/BACKLOG.md** (history/attribution).
+- **references/plan-template.md:3**, **project/backlog/BACKLOG.md** (history/attribution).
 - **All 40 superpowers + 11 voltagent pure-history files** (docs/plans/*, docs/projects/*, CHANGELOG.md,
   skill-creator-workspace/* eval fixtures).
 
@@ -92,7 +92,7 @@ baseline where a baseline is stated*. **codeforge / mnemos are currently named n
 the baseline-stating surfaces in P1:
 
 - `README.md` intro (the "what is autopilot / what's the assumed environment" sentence),
-- `docs/architecture.md` (replace the dropped voltagent "Companion Plugins" framing with the trio),
+- `docs/dev/architecture.md` (replace the dropped voltagent "Companion Plugins" framing with the trio),
 - `CLAUDE.md` §"What this repo is" (optional — dev-facing).
 
 → Not a P0 flip; logged so P1 doesn't miss the positive requirement.

@@ -72,7 +72,7 @@ Only this row is executable. P1–P4 are coverage and gates inside it.
 
 The C foreman may modify only the exact campaign output paths. It must not touch:
 
-- `docs/BACKLOG.md`, `docs/projects/INDEX.md`, `CHANGELOG.md`, `CLAUDE.md`;
+- `project/backlog/BACKLOG.md`, `project/projects/INDEX.md`, `CHANGELOG.md`, `CLAUDE.md`;
 - version manifests;
 - `hooks/tests/lib.sh`;
 - `src/engine/*`;

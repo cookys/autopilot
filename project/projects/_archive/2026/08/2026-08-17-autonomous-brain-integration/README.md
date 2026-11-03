@@ -1,6 +1,6 @@
 # autonomous-brain-integration — execution ledger
 
-> Plan (FROZEN): [`docs/plans/_archive/2026/08/2026-08-17-autonomous-brain-integration.md`](../../plans/_archive/2026/08/2026-08-17-autonomous-brain-integration.md)
+> Plan (FROZEN): [`project/plans/_archive/2026/08/2026-08-17-autonomous-brain-integration.md`](../../plans/_archive/2026/08/2026-08-17-autonomous-brain-integration.md)
 > · Rubric + 2-generation hetero review log therein · Evidence:
 > [`sol-pathology.md`](../../plans/_archive/evidence/2026-08-17-autonomous-brain-integration/sol-pathology.md)
 > · Mode: CEO (just-results, Hold) · Branch: `feat/autonomous-brain-integration`

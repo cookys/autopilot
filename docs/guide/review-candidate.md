@@ -1,6 +1,6 @@
 # Review-only candidate review (`engine review-candidate`)
 
-> Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
+> Part of [Autopilot](../../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](../dev/architecture.md) · [Hooks](../../hooks/README.md)
 
 How an operator outside this repository gets autopilot's managed final review over a commit range
 that someone else already wrote. Everything you need to run one campaign to a receipt is on this page,
@@ -38,9 +38,9 @@ produce them.
 ## 2. The contract
 
 The contract is a JSON file in the closed `implementation-campaign-contract` format
-([`schemas/implementation-campaign-contract.schema.json`](../schemas/implementation-campaign-contract.schema.json)),
+([`schemas/implementation-campaign-contract.schema.json`](../../schemas/implementation-campaign-contract.schema.json)),
 whose optional `adoption` section marks it review-only. The checker
-([`scripts/implementation-campaign-check.js`](../scripts/implementation-campaign-check.js)) is the
+([`scripts/implementation-campaign-check.js`](../../scripts/implementation-campaign-check.js)) is the
 authority on what is legal; an unknown field anywhere is rejected.
 
 ### 2.1 Review-only rules
@@ -292,7 +292,7 @@ from Git and the contract, so none can disagree with it. Any other flag is a usa
   3. the autopilot checkout's own `.claude/review-loop-config.md`, **only when the repository under
      review is that same autopilot checkout**. For any other repository this tier is skipped;
   4. the shipped
-     [`project-config-template/review-loop-config.md`](../project-config-template/review-loop-config.md).
+     [`project-config-template/review-loop-config.md`](../../project-config-template/review-loop-config.md).
 
   So running the command from your autopilot checkout with `--cwd` pointing at another repository that
   has no `.claude/review-loop-config.md` uses the shipped template (panel `gpt-6.1-sol`/`codex`,

@@ -110,7 +110,7 @@ a scratch write into a real one, silently, and it gets pushed. After this plan:
 | the 5 non-`lib.sh` tests | source `lib.sh` |
 | `hooks/README.md` (test section) | one paragraph: snapshot, guard, identity gate, opt-outs |
 | `docs/scripts-inventory.md`, `CLAUDE.md` group list | register `lib/test-identity.sh` |
-| `docs/BACKLOG.md` + sidecar | `.opencode/package.json` working-tree drift (out of scope) |
+| `project/backlog/BACKLOG.md` + sidecar | `.opencode/package.json` working-tree drift (out of scope) |
 
 ## 4. Phases (stacked rows, one hand commit each)
 

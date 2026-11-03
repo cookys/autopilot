@@ -1,6 +1,6 @@
 # Move large dispatch calibration scratch to a non-quota path
 
-No sidecar existed in history. Original row text from 5d0b29c1d^:docs/BACKLOG.md. Items (a)(b)(c) already shipped; only item (d) remains.
+No sidecar existed in history. Original row text from 5d0b29c1d^:project/backlog/BACKLOG.md. Items (a)(b)(c) already shipped; only item (d) remains.
 
 > ### dispatch 大型 calibration/eval scratch 改走非配額路徑（usrquota 事故殘項 d）
 > - **Trigger**: 下次跑 calibration.sh / swe-calibrate 類大型 clone 校準，或 /tmp per-user 用量再度異常成長時。

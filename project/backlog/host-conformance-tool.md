@@ -1,6 +1,6 @@
 # Autopilot Host Conformance tool (authorized 2026-08-23, never built)
 
-`docs/plans/_archive/2026/08/2026-08-23-coding-harness-consolidation-decision.md` closed its bounded review
+`project/plans/_archive/2026/08/2026-08-23-coding-harness-consolidation-decision.md` closed its bounded review
 (R2 `SHIP-AS-IS`) with decision `READY_FOR_IMPLEMENTATION` for ONE deliverable: a Host Conformance tool
 (generator-owned projection inventory, honest host capability matrix, four-boundary Mission recovery matrix,
 root/Codex fail-closed semantic parity, fake Pi RPC steer/abort proof, typed `autopilot.host-conformance.v1`

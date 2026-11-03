@@ -1,6 +1,6 @@
 # Rubric — l4 host provider-readiness bootstrap (frozen for the plan loop, 2026-09-07)
 
-> Source plan: docs/plans/_archive/2026/09/2026-09-07-l4-host-provider-readiness-bootstrap.md
+> Source plan: project/plans/_archive/2026/09/2026-09-07-l4-host-provider-readiness-bootstrap.md
 > Each R-item is a pass/fail question about the PLAN TEXT. A reviewer answers it from the plan and the
 > cited code sites only; a finding must name the R-item and the plan section it fails.
 

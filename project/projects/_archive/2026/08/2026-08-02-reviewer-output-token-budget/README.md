@@ -2,7 +2,7 @@
 
 > Status: COMPLETE — authoritative depth-0 QC passed and locally integrated
 > Owner: depth-0 CEO + one worktree-isolated foreman
-> Plan: [`docs/plans/2026-08-02-reviewer-output-token-budget.md`](../../plans/2026-08-02-reviewer-output-token-budget.md)
+> Plan: [`project/plans/2026-08-02-reviewer-output-token-budget.md`](../../plans/2026-08-02-reviewer-output-token-budget.md)
 
 ## Goal
 

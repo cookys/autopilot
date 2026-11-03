@@ -53,7 +53,7 @@ this ships the systemic fix for the remaining 12.
    `autopilot.*` settings; add a pointer comment: opt-in hooks are wired in
    `hooks.json` and enabled via `~/.autopilot/config.json` `{"hooks":{"<name>":true}}`.
 7. **Docs**: `hooks/README.md` Tier-B intro (config-enable, not copy-paste);
-   `docs/installation.md` + `docs/configuration.md` document the enable mechanism;
+   `docs/guide/installation.md` + `docs/guide/configuration.md` document the enable mechanism;
    `CLAUDE.md` + `preflight-portability.sh` comment: inventory opt-in source = manifest.
 8. **Version**: PATCH 2.26.1 → 2.26.2 (mechanism change, no new surface). CHANGELOG +
    INDEX row + mirrors via `sync-version.js` (counts unchanged, version only).

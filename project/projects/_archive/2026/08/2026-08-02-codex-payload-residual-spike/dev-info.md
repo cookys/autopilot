@@ -46,7 +46,7 @@
   codes, immutable tree checks, and negative lifecycle controls instead of accepting self-report.
 - `autopilot:quality-pipeline` ran once over the complete seven-path bundle; deterministic repository
   gates and the independent first-pass review passed with no blocking findings.
-- `autopilot:project-lifecycle` updated this tracker and `docs/projects/INDEX.md`; depth-0 completed
+- `autopilot:project-lifecycle` updated this tracker and `project/projects/INDEX.md`; depth-0 completed
   merge, archive, and worktree/branch cleanup locally with no push or release.
 
 ## Required repository gates

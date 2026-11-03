@@ -1,6 +1,6 @@
 # Investigate the /reload-plugins hook count discrepancy
 
-No sidecar existed in history. Original row text from 5d0b29c1d^:docs/BACKLOG.md.
+No sidecar existed in history. Original row text from 5d0b29c1d^:project/backlog/BACKLOG.md.
 
 > ### Investigate `/reload-plugins` hook count discrepancy
 > - **Trigger**: 下次有人寫 reload-watch 邏輯時，或 Claude Code update 改 hook reload semantics

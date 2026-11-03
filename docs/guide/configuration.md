@@ -1,6 +1,6 @@
 # Autopilot — Cross-Repository Configuration
 
-> Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
+> Part of [Autopilot](../../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](../dev/architecture.md) · [Hooks](../../hooks/README.md)
 
 Skills work out of the box. For project-specific behavior, drop a markdown file into your project's `.claude/` directory — this page explains the injection mechanism, the available config files, and team setup. Machine-level settings (`~/.autopilot/config.json`, `AUTOPILOT_*` environment variables, the Claude Code compaction settings) are in the [settings reference](settings-reference.md).
 
@@ -43,19 +43,19 @@ The `!`command`` syntax is a Claude Code preprocessor — it runs a shell comman
 
 | Config File | Customizes | Template |
 |-------------|-----------|----------|
-| `.claude/dev-flow-config.md` | Size rules, quality gates, build commands, special rules | [template](../project-config-template/dev-flow-config.md) |
-| `.claude/finish-flow-config.md` | `finish` node closing-sequence overrides (merge target, archive proc, per-size quality gate) | [template](../project-config-template/finish-flow-config.md) |
-| `.claude/quality-gate-config.md` | Test, scan, and review commands | [template](../project-config-template/quality-gate-config.md) |
-| `.claude/project-lifecycle-config.md` | Project paths, bootstrap/archive scripts | [template](../project-config-template/project-lifecycle-config.md) |
-| `.claude/next-config.md` | Work source paths for the next skill | [template](../project-config-template/next-config.md) |
-| `.claude/team-config.md` | Team role templates for your tech stack | [template](../project-config-template/team-config.md) |
-| `.claude/test-strategy-config.md` | Test commands, pyramid ratios, coverage thresholds | [template](../project-config-template/test-strategy-config.md) |
-| `.claude/debug-config.md` | Project-specific debug tools and log paths | [template](../project-config-template/debug-config.md) |
-| `.claude/profiling-config.md` | Profiling tools and metrics collection | [template](../project-config-template/profiling-config.md) |
-| `.claude/skill-routing.md` | Map keywords to your project's domain skills | [template](../project-config-template/skill-routing.md) |
-| `.claude/model-routing-config.md` | Subagent model/mode per role (planner, reviewer, etc.) | [template](../project-config-template/model-routing-config.md) |
-| `.claude/owner-kernel-governance.json` | Project governance: mission-convergence enforcement + budgets, guidance defaults, red lines, rosters (filename is historical; the file is a live mission/campaign input) | [template](../project-config-template/governance-config.md) · [dogfood example](../.claude/owner-kernel-governance.json) |
-| `.claude/loop.md` | Default prompt for a bare `/loop` — unattended babysit of the current branch (CI/PR tending → `next`/`debug`/`quality-pipeline`). Claude Code only (v2.1.72+); degrades cleanly elsewhere. | [template](../project-config-template/loop.md) |
+| `.claude/dev-flow-config.md` | Size rules, quality gates, build commands, special rules | [template](../../project-config-template/dev-flow-config.md) |
+| `.claude/finish-flow-config.md` | `finish` node closing-sequence overrides (merge target, archive proc, per-size quality gate) | [template](../../project-config-template/finish-flow-config.md) |
+| `.claude/quality-gate-config.md` | Test, scan, and review commands | [template](../../project-config-template/quality-gate-config.md) |
+| `.claude/project-lifecycle-config.md` | Project paths, bootstrap/archive scripts | [template](../../project-config-template/project-lifecycle-config.md) |
+| `.claude/next-config.md` | Work source paths for the next skill | [template](../../project-config-template/next-config.md) |
+| `.claude/team-config.md` | Team role templates for your tech stack | [template](../../project-config-template/team-config.md) |
+| `.claude/test-strategy-config.md` | Test commands, pyramid ratios, coverage thresholds | [template](../../project-config-template/test-strategy-config.md) |
+| `.claude/debug-config.md` | Project-specific debug tools and log paths | [template](../../project-config-template/debug-config.md) |
+| `.claude/profiling-config.md` | Profiling tools and metrics collection | [template](../../project-config-template/profiling-config.md) |
+| `.claude/skill-routing.md` | Map keywords to your project's domain skills | [template](../../project-config-template/skill-routing.md) |
+| `.claude/model-routing-config.md` | Subagent model/mode per role (planner, reviewer, etc.) | [template](../../project-config-template/model-routing-config.md) |
+| `.claude/owner-kernel-governance.json` | Project governance: mission-convergence enforcement + budgets, guidance defaults, red lines, rosters (filename is historical; the file is a live mission/campaign input) | [template](../../project-config-template/governance-config.md) · [dogfood example](../../.claude/owner-kernel-governance.json) |
+| `.claude/loop.md` | Default prompt for a bare `/loop` — unattended babysit of the current branch (CI/PR tending → `next`/`debug`/`quality-pipeline`). Claude Code only (v2.1.72+); degrades cleanly elsewhere. | [template](../../project-config-template/loop.md) |
 
 ### Live TUI language (`ui.locale`)
 
@@ -82,9 +82,9 @@ The `viewer` mod (Claude Code only, the second module of the same plugin; code i
 ### Project governance (`owner-kernel-governance.json`)
 
 The decision/acceptance state machine that once consumed this file was retired on 2026-08-16
-(`docs/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`); the file itself stays **live** — its
+(`project/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`); the file itself stays **live** — its
 consumers, field semantics, and a worked example are documented in
-[the governance-config template](../project-config-template/governance-config.md). The
+[the governance-config template](../../project-config-template/governance-config.md). The
 operationally decisive section is `mission_convergence` (enforcement mode + budgets, read by
 `mission-routing-admission.js`; a missing file silently resolves enforcement to `off`).
 

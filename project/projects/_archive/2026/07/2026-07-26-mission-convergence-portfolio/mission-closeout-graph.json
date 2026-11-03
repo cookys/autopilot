@@ -37,7 +37,7 @@
         "output_paths": [
           "CLAUDE.md",
           "docs/projects/2026-07-26-mission-convergence-portfolio/README.md",
-          "docs/projects/INDEX.md",
+          "project/projects/INDEX.md",
           "hooks/orchestrator-edit-gate.test.js",
           "hooks/tests/autopilot-engine-resilience.test.sh",
           "hooks/tests/codex-plugin-package.test.sh",
@@ -71,11 +71,11 @@
         ],
         "profile": "high",
         "required_paths": [
-          "docs/plans/_archive/2026/07/2026-07-26-l6-status-merge-contract.md",
-          "docs/plans/_archive/2026/07/2026-07-26-l6-status-merge-contract.rubric.md"
+          "project/plans/_archive/2026/07/2026-07-26-l6-status-merge-contract.md",
+          "project/plans/_archive/2026/07/2026-07-26-l6-status-merge-contract.rubric.md"
         ],
         "spec": {
-          "path": "docs/plans/_archive/2026/07/2026-07-26-l6-status-merge-contract.md",
+          "path": "project/plans/_archive/2026/07/2026-07-26-l6-status-merge-contract.md",
           "section": "4. Phases"
         }
       },

@@ -1,6 +1,6 @@
 # Closure rubric — 2026-11-02-oc-a3-writers-use-hippo.md
 
-> Source plan: docs/plans/2026-11-02-oc-a3-writers-use-hippo.md
+> Source plan: project/plans/2026-11-02-oc-a3-writers-use-hippo.md
 
 R1: No hosted CI: never add `.github/workflows` in any repo of this plan.
 R2: In fleet, run courier tests only via `make courier-test` (never bare `cargo test`); every new test uses a sandbox HOME or explicit tempdir and touches no process-global state.
@@ -17,7 +17,7 @@ R12: A valid signature never authorizes a production target in this plan; produc
 R13: `fleet approve` stays a human tty gate; no model runs it.
 R14: Credentials move by 0600 file, never via chat, fleet message or a model's view.
 R15: autopilot code writes hippo records only by running the `hippo` binary with an argv array (no shell string); it never opens, appends to or renames a file under `.hippo/`.
-R16: Skill, reference, agent and config-template text never tells a model to edit `docs/BACKLOG.md`, `docs/backlog/*`, an ADR file, a `HANDOFF*.md` or a knowledge file; it names `scripts/project-record.js` for writes and `hippo search|related|show|list` for reads.
+R16: Skill, reference, agent and config-template text never tells a model to edit `project/backlog/BACKLOG.md`, `docs/backlog/*`, an ADR file, a `HANDOFF*.md` or a knowledge file; it names `scripts/project-record.js` for writes and `hippo search|related|show|list` for reads.
 R17: autopilot never creates a hippo store implicitly: `project-record.js` writes through hippo only where `.hippo/repo.toml` already exists; creating a store is the explicit import of phase A3.3/A3.7.
 R18: Usage counters (how often a record was read, cited or picked) never go to git or to a hippo field; they go to A1 events or the hub.
 R19: Mechanism and guidance are separate commits; a mechanism commit does not edit requirement text (autopilot `CLAUDE.md` "機制 vs 指引").

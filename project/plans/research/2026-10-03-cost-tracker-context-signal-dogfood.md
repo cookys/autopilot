@@ -16,7 +16,7 @@
    Fires at threshold then each doubling (`:131-133`). The printed "(threshold N)" is the doubled `next`.
 4. Default-on: hooks.json:191 comment "v2.35.15 default-on"; hooks/README.md:172; opt-out
    `AUTOPILOT_COST_TRACKER=false` (`cost-tracker.js:41`). Operator's `~/.autopilot/config.json` has no override.
-5. The cited doc pointer is wrong: `docs/ironlaw-to-gate-map.md` #6 (line 21) is "Foreman no polling /
+5. The cited doc pointer is wrong: `docs/dev/ironlaw-to-gate-map.md` #6 (line 21) is "Foreman no polling /
    Bash >40", not cache reads. The code comment (`cost-tracker.js:111`) calls it "<host> digest #6"; the message
    borrowed the number. Reader following the pointer finds an unrelated rule.
 6. Real context signal exists and was already true at the time:

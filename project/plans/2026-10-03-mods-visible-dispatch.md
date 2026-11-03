@@ -2,7 +2,7 @@
 > 圖解（架構、agent 互動流程、身分與 scope、band 每格來源、P1W 進度，2026-10-05 R5.7）：https://claude.ai/artifact/6GwARh7XpbLsMSy7BwG6tE — 規則以本檔為正本。
 > Status: R6 = owner 2026-10-23 d-585003b0（部分保留，依據唯讀重疊調查：P2～P4 共 12 項承諾，stage-graph 已提供 0 項、部分提供 3 項〔mods/live toast、band 待命字、src/status/work-order-progress.js 投影〕、沒有提供 9 項，即 stage-graph 沒有取代 P2～P4）：P2 hook 延遲量測保留照做（工線 hooklat）；P3 wake-events／hooks/idle-observe.js／autopilot status declare-idle／專案層 idle.state 聚合撤回（計畫自己把 wake 限定在 notify，「人在 terminal 看得到」已由 toast 與 band 待命字覆蓋；declare-idle 與 idle 聚合的用途是跨專案排程，§2.5 已說那不是 autopilot 的事）；P4 portfolio-replan 撤回（依賴 declare-idle 與 idle.state）；P4 progress.json（autopilot.progress/1）與 work-round 投影掛起，等 radar 提出需求再做（目前沒有消費者）；P5 已是 BL-0110，不動。原文保留作歷史；R5.2 — P1W FROZEN 2026-10-04（G1＋G2 審查、depth-0 全數裁決、receipt check rc=0）；R4.4 = owner 2026-10-04 裁決：P1c band 改為「專案·phase·已跑·進度」加結論詞（C3）、新增 P5（代決策提醒，寫入先於讀取），不動 rubric；R4.3 = P1a 出貨（v2.36.115）後的事實更正，只改 P1a 二擇一 (ii) 的錯誤句；R4.2 = P0 spike 結果回寫（S1 yes → D4 結案；`flock(1)` 是 fork 不是 exec；P2 先擴 selector；`/clear` 後 timer 待驗），只改被實測推翻或確認的事實；R4.1 = owner D1／D2 裁決後的有界修補（單一 port 的 host review server＋根目錄索引，反向代理文件化），不重開已處置項目 (R4: G1+G2 CONDITIONAL; depth-0 accepted both G2 blockers and verified the bounded repair: per-project `runs/paths/<project_key>.json`, CLI-written `$HOME/.autopilot/live-pointer.json` read via `$.env.get("HOME")`, S2 spike + fallback) / Owner: cookys / Branch: `feat/mods-visible-dispatch`（未建）/ Frame: autopilot 這一半；radar（跨專案）另案
 > 日期 2026-10-03。R0 SHA256 `6f43308d…`；astra R0 審查 `4a46589b…`（9 🟠 3 🟡）；R1 SHA256 `e5192f1e…`；astra R1 確認 `4e35c87a…`（7 到位、5 部分到位、新 N01／N02）。R2 只動 R-A03／R-A04／R-A06／N01／N02 五處。R3 處理 G1：3 條 blocking＋9 條 non-blocking；引用改為「檔案:符號」。R4 只處理 G2：2 條 blocking（R5 `paths` 跨專案互蓋、R4 mod 找路徑的機制）＋ 6 條便宜 non-blocking，不重開已處置項目。證據標記：[V-file] 讀檔、[V-run] 本機跑過、[peer] 機隊自述未獨立查證、[SPIKE] 未驗證。
-> 落地程序：複製到 `docs/plans/2026-10-03-mods-visible-dispatch.md` → `node scripts/check-plan-graduation.js --register-template 2026-10-03-mods-visible-dispatch` → 列貼進 `docs/projects/INDEX.md`（Version `active`）→ 寫 `plan-review-manifest` → 才能送 `dispatch-plan-review.js`。
+> 落地程序：複製到 `project/plans/2026-10-03-mods-visible-dispatch.md` → `node scripts/check-plan-graduation.js --register-template 2026-10-03-mods-visible-dispatch` → 列貼進 `project/projects/INDEX.md`（Version `active`）→ 寫 `plan-review-manifest` → 才能送 `dispatch-plan-review.js`。
 
 ## 0. Context / thesis
 - owner 已決：mods 放 autopilot 本體；terminal 優先、desktop Code tab 要優雅降級；wake-self 是開關、預設只通知、閒置才喚、低優先；第一個 mod = MINOR（plugin.json 現為 2.36.114 → 2.37.0）；跨專案 cockpit／gantt／排程／quota 不是 autopilot，autopilot 只發佈 `autopilot.progress/1`；「dom-depth-0」= 只在某 depth-0 宣告「沒事可跑」時才跑的 portfolio 重排器。
@@ -82,7 +82,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 | `scripts/benchmark-hook-latency.js`（新；S6 = no，不擴充 `benchmark-hook-multiplexer.js`） | hook 延遲基線＋正負對照 | P2 |
 | `scripts/portfolio-replan.js`（新） | 閒置觸發的重排器，只出提案 | P4 |
 | `hooks/tests/{repo-identity-parity, manifest-repo-identity, project-key, status-runs-fields, runs-watch, runs-watch-lock, render-review-page, idle-observe, declare-idle, wake-events, work-round, portfolio-replan}.test.sh` | 腳本側測試 | 各 phase |
-| `docs/scripts-inventory.md`、`CLAUDE.md` 分組清單、`CHANGELOG.md`、`docs/projects/INDEX.md`、`docs/plans/evidence/2026-10-03-mods-spikes/` | 四處接線＋證據 | 各 phase |
+| `docs/scripts-inventory.md`、`CLAUDE.md` 分組清單、`CHANGELOG.md`、`project/projects/INDEX.md`、`docs/plans/evidence/2026-10-03-mods-spikes/` | 四處接線＋證據 | 各 phase |
 
 ## 4. Phases
 依賴：P0 → P1a → P1b → P1c → P1d → （P2 ∥ P3）→ P4。dev-flow size：P0 S、P1a L、P1b L、P1c L、P1d S、P2 S、P3 L、P4 L（每個子 phase 一個 PR、各自可獨立出貨）。
@@ -232,7 +232,7 @@ O：owner 不用問「怎麼這麼慢」就知道誰在跑、跑多久、最後 
 | U2 | 現況各區塊分隔不清楚、不能收合：區塊標題可點收合、區塊間 `subtle` 分隔線 | S | 本分支 |
 | U3 | band 每個 slot 可點，直接開 pane 到對應分頁 | S | 本分支 |
 | U4 | ⓘ 只有左半格點得到（ambiguous 寬度，owner 終端畫成 2 格） | XS | 本分支 |
-| U5 | pane 看不出現在在跑什麼（背景工作、子步驟、進度）；與 BACKLOG「Workflow snapshot」P2 子代理名冊重疊，先查資料來源再定大小 | S+S（U5a 子代理目前步驟、U5b task activeForm）；U5c run stage M 條件式；譜系歸 dispatch-tree | spike 完成（[u5-spike.md](evidence/2026-10-03-mods-visible-dispatch/u5-spike.md)）；owner 2026-10-16 §7 Q1–Q5 全照建議（「全照建議」，decision d-75aeb796）；下一步先跑 P1/P2 probe，再開工 U5a、U5b |
+| U5 | pane 看不出現在在跑什麼（背景工作、子步驟、進度）；與 BACKLOG「Workflow snapshot」P2 子代理名冊重疊，先查資料來源再定大小 | S+S（U5a 子代理目前步驟、U5b task activeForm）；U5c run stage M 條件式；譜系歸 dispatch-tree | spike 完成（[u5-spike.md](../../docs/plans/evidence/2026-10-03-mods-visible-dispatch/u5-spike.md)）；owner 2026-10-16 §7 Q1–Q5 全照建議（「全照建議」，decision d-75aeb796）；下一步先跑 P1/P2 probe，再開工 U5a、U5b |
 | U6 | 顯示登入帳號、組織、剩餘額度：先抓一次真 status line payload 確認 `rate_limits`／`spend_limit`；email 是否遮罩待 owner | S | 完成：c8d582b9（band 與 用量分頁顯示帳號、組織、方案與額度窗）；owner 2026-10-14「完整顯示」、2026-10-16 再確認「完整顯示」（decision d-c24ecfd9），email 不遮罩 |
 
 ## 5. Test / validation

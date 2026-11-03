@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-29
 **Project**: [README.md](README.md)
-**Plan**: [`docs/plans/_archive/2026/05/2026-05-22-multi-agent-portability-correction.md`](../../../plans/_archive/2026/05/2026-05-22-multi-agent-portability-correction.md)
+**Plan**: [`project/plans/_archive/2026/05/2026-05-22-multi-agent-portability-correction.md`](../../../plans/_archive/2026/05/2026-05-22-multi-agent-portability-correction.md)
 
 ---
 

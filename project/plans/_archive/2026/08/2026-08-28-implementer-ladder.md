@@ -8,7 +8,7 @@ revival.3d cost split: implementer work should use the cheapest engine that is s
 unit's determinacy. Repair that stays red climbs one rung. Today the roster has a single
 `implementer_engine` and repair re-dispatches the same tuple.
 
-Source: `docs/BACKLOG.md` 2026-08-28 foreman cost item 2.
+Source: `project/backlog/BACKLOG.md` 2026-08-28 foreman cost item 2.
 
 ## Spec
 

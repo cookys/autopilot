@@ -193,7 +193,7 @@ mutating a single line — the epoch semantics.
 | `hooks/tests/strike-decay.test.sh` | NEW. Fold, dedup, allowlist, invalidation, critical trigger, shadow. |
 | `hooks/tests/calendar-teeth-negative.test.sh` | NEW. Planted negative per pulled tooth + the grep-able "no admission path compares now vs expires" contract test. |
 | `hooks/tests/engine-scorecard.test.sh`, `hooks/tests/resolve-review-loop.test.sh`, `hooks/tests/dispatch-contract.test.sh` | Existing assertions that pin the OLD calendar behavior are UPDATED (never deleted) to pin the new one. |
-| `CHANGELOG.md`, `docs/BACKLOG.md`, `docs/projects/INDEX.md`, `docs/projects/2026-08-22-no-confidence-decay/README.md`, `.claude-plugin/plugin.json` (+ mirrors) | Docs + PATCH version bump. |
+| `CHANGELOG.md`, `project/backlog/BACKLOG.md`, `project/projects/INDEX.md`, `docs/projects/2026-08-22-no-confidence-decay/README.md`, `.claude-plugin/plugin.json` (+ mirrors) | Docs + PATCH version bump. |
 
 ## 4. Phases
 

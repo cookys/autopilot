@@ -95,7 +95,7 @@ negative controls that fail when the claimed guard is removed.
 | `scripts/probe-local-engine.js`, `dispatch-local-openai.js`, `scripts/lib/` | Exact local deployment probe, bounded raw transport, endpoint lease. |
 | `skills/ceo-agent`, `dev-flow`, `l3`-`l6`, hooks | Consume the canonical envelope/grant and selected profile without re-deriving policy. |
 | `project-config-template/`, `.claude/` | Default/override and dogfood configuration. |
-| `references/`, `README*`, `docs/architecture.md`, `CLAUDE.md` | Public contract, limitations, source attribution, and scripts inventory. |
+| `references/`, `README*`, `docs/dev/architecture.md`, `CLAUDE.md` | Public contract, limitations, source attribution, and scripts inventory. |
 | `platforms/codex/plugin/` | Generated mirror only; never hand edited. |
 
 ## User Requirements Ledger

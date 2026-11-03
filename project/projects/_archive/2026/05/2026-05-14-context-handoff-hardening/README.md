@@ -1,7 +1,7 @@
 # Context-Handoff Hardening — v2.7.2
 
 **Status**: Complete — shipped in v2.7.2 and archived.
-**Plan doc**: [`docs/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md`](../../../plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md)
+**Plan doc**: [`project/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md`](../../../plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md)
 **Branch**: `feat/v2.7.2-context-handoff-hardening`
 **CHANGELOG**: pending v2.7.2 entry
 
@@ -56,7 +56,7 @@
 ## Files touched (estimate)
 
 **新增（3）**：
-- `docs/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md` — plan doc
+- `project/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md` — plan doc
 - `docs/projects/2026-05-14-context-handoff-hardening/README.md` — 本檔
 - `hooks/intent-capture.sh`（或 .js）— PostToolUse hook
 
@@ -64,7 +64,7 @@
 - `hooks/state-checkpoint.sh` — Phase 1 改寫
 - `hooks/session-start.sh` — Phase 3 加 resume hint
 - `hooks/hooks.json` — register new PostToolUse hook
-- `docs/projects/INDEX.md` — 進行中 row
+- `project/projects/INDEX.md` — 進行中 row
 - 可能 `README.md` / `CHANGELOG.md` v2.7.2 entry（待 finish-flow L-5）
 
 ## Next step

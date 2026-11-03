@@ -1,6 +1,6 @@
 # Owner Kernel governance
 
-> **Plan**: [`docs/plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md`](../../plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md)
+> **Plan**: [`project/plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md`](../../plans/_archive/2026/07/2026-07-20-owner-kernel-evolution.md)
 > **Target branch**: `feat/owner-kernel-governance`
 > **Target version**: v2.32.59
 > **Workflow**: CEO `/l6`, scope=Hold, involvement=just-results

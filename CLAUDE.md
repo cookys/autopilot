@@ -7,7 +7,7 @@ For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS
 ## What this repo is
 
 Standalone lifecycle orchestration plugin: 30 skills, 3 methodology agents, 40 hooks (26 default-on,
-14 opt-in). Optional integrations and coexistence rules: [`docs/coexistence.md`](docs/coexistence.md).
+14 opt-in). Optional integrations and coexistence rules: [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
 
 ## Scripts inventory (prefer over LLM judgment)
 
@@ -100,7 +100,7 @@ The version (canonical in `.claude-plugin/plugin.json`, mirrored by `scripts/syn
 | **MAJOR** (`X.0.0`) | Breaking / incompatible change to a surface consumers rely on | Removed or renamed skill; a skill `description:` change that shifts routing incompatibly; config-schema break; removed hook/script a consumer depends on |
 | **MINOR** (`x.Y.0`) | A **new user-facing milestone**: a new **skill**, a new **agent**, or a new **mod surface** | New `skills/<name>/` skill; new `agents/<role>.md` methodology agent; new mod surface (first module under `mods/`) |
 | **PATCH** (`x.y.Z`) | **Everything else that changes shipped code**: new **script**, new **hook**, new **reference doc**, a bug fix or hardening of existing behavior (**including fixes to release tooling like `sync-version.js`**), a regex/contract tweak | `check-dispatch-suppression.sh` (new script) → patch; re-enabling a hook → patch; a reviewer-prompt fix → patch |
-| **(no bump)** | Changes touching **only docs or tests** — no shipped code behavior changes. Fold into the next release | Adding a `hooks/tests/*.test.sh`; a `docs/BACKLOG.md` / `docs/projects/` edit; a typo/wording fix in a doc |
+| **(no bump)** | Changes touching **only docs or tests** — no shipped code behavior changes. Fold into the next release | Adding a `hooks/tests/*.test.sh`; a `project/backlog/BACKLOG.md` / `docs/projects/` edit; a typo/wording fix in a doc |
 
 Rationale: a new script/hook/reference is real work but it is **not** a new user-facing capability the way a skill or agent is — bundling those under PATCH keeps the second digit meaningful as a "new thing users invoke" counter. The PATCH-vs-no-bump line is **code vs not-code**: if the change alters the behavior of any shipped code, it's at least a PATCH; reserve no-bump for changes that touch only docs or tests. (Borderline: a commit that is mostly tests plus a trivial incidental code touch may ride as no-bump if the code touch isn't itself the point; when the code fix *is* the point, it's a PATCH.)
 
@@ -120,7 +120,7 @@ not drift.
 
 ## Coexistence with superpowers
 
-Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md). Per-scenario UX in [`docs/coexistence.md`](docs/coexistence.md).
+Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md). Per-scenario UX in [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
 
 ## Mission graph verification (campaign convention)
 
@@ -135,9 +135,9 @@ In a Mission graph, each node's `verification_commands` hold only fast, fixed ch
 | Engine CLI / orchestration layer | `bin/autopilot.js`, `src/engine/`, `src/runners/` |
 | Cross-skill references | `references/{blind-dispatch,model-routing}.md` |
 | Project tracking | `docs/projects/` (active + `_archive/`) |
-| Backlog | `docs/BACKLOG.md` |
-| Plans | `docs/plans/` — registered in `docs/projects/INDEX.md` (Version `active`; `scripts/check-plan-graduation.js`'s `plan_unregistered` gate) |
-| Mod surface colour and emphasis (pane, band, any new mod) | [`docs/plans/2026-10-13-live-pane-design-system.md`](docs/plans/2026-10-13-live-pane-design-system.md) §12: one colour one meaning, bold whitelist; colours only through `PALETTE` in `mods/live/ui.ts` (`ui-lint.test.js` L8 enforces) |
+| Backlog | `project/backlog/BACKLOG.md` |
+| Plans | `docs/plans/` — registered in `project/projects/INDEX.md` (Version `active`; `scripts/check-plan-graduation.js`'s `plan_unregistered` gate) |
+| Mod surface colour and emphasis (pane, band, any new mod) | [`project/plans/2026-10-13-live-pane-design-system.md`](project/plans/2026-10-13-live-pane-design-system.md) §12: one colour one meaning, bold whitelist; colours only through `PALETTE` in `mods/live/ui.ts` (`ui-lint.test.js` L8 enforces) |
 | Architecture decisions | `docs/adr/` (ADR-0001: verification over attestation — binding on governance work) |
 | Release notes | `CHANGELOG.md` |
 | Per-session gotchas | `~/.claude/projects/-home-cookys-projects-autopilot/memory/` |
@@ -154,7 +154,7 @@ Inherit from `~/.claude/CLAUDE.md` (Traditional Chinese, terse decisions like `g
 - Don't write "manually check for TODO/FIXME" in a reference doc — call `scripts/completeness-scan.sh`.
 - Don't enumerate forbidden phrases inline in code-review logic — call `scripts/check-redispatch-prompt.sh`.
 - Don't introduce new severity vocabulary — use the unified 4-tier above.
-- Don't add trust machinery (hash chains, event ledgers, witness receipts, attestation, trust roots) — settled by [ADR-0001](docs/adr/0001-verification-over-attestation.md); verification is independent re-derivation, never tamper-evidence of a claim.
+- Don't add trust machinery (hash chains, event ledgers, witness receipts, attestation, trust roots) — settled by [ADR-0001](docs/dev/adr/0001-verification-over-attestation.md); verification is independent re-derivation, never tamper-evidence of a claim.
 - Don't add a second canonical statement of "what the reviewer reads" — code-review.md Invocation § is canonical; reviewer.md Workflow §1 references it.
 - Don't append per-release notes to a Scripts-inventory row — `CHANGELOG.md` owns history; the row is an index entry (see Row shape rule).
 - Don't claim cross-platform env vars or CLI subcommands without verifying — by official doc URL OR by running the real tool. Past lesson cuts both ways: `CODEX_PLUGIN_ROOT` / `AGY_PLUGIN_ROOT` / `GEMINI_PLUGIN_ROOT` env vars were fabricated and shipped to main; but the *correction* then over-corrected, labelling `agy plugin validate` + the root-`plugin.json` requirement as fabricated when installing real `agy` 1.0.1 proved both genuine. If you can't cite a URL or show a tool run, it's a Spike candidate, not a fact. See [`references/multi-agent-portability.md`](references/multi-agent-portability.md) "Corrected — previously mislabelled" §.

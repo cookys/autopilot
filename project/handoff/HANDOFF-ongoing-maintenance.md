@@ -10,7 +10,7 @@
   - v2.36.114：campaign 第一輪已碰滿 changed-file 上限時仍可修復（peer 回報）。
   - v2.36.115：mods P1a。`status runs` 回報耗時、rc、scope、新鮮度；每個 project 一支 watcher 發布 scoped 即時快照；run manifest 帶 `repo_identity`；session-mode marker 帶 scope 欄位並寫 live pointer；`references/mods.md`。三輪 combined review，第三輪 SHIP-AS-IS。證據在 `docs/plans/evidence/2026-10-04-mods-p1a/`。
 - **副作用要知道**：已安裝的 plugin symlink 到這個 checkout，所以每次 `/l3`～`/l6` 的 `session-mode set` 現在都會啟動一支 per-project watcher，活到 idle-exit 為止（marker 過期後最多 24 小時）。停掉用 `node bin/autopilot.js status runs --stop --project <key>`；整個關掉用 `AUTOPILOT_RUNS_WATCH_AUTOSTART=0`。
-- mods 計畫 `docs/plans/2026-10-03-mods-visible-dispatch.md` 已凍結（G1、G2 皆 CONDITIONAL，depth-0 全數處置；依規則最多到 G2，不再開 G3）。凍結後有兩次有界修補：R4.1 回寫 owner 對 D1／D2 的裁決，R4.2 回寫 P0 spike 結果。凍結後又有 R4.3：P1a 出貨後更正「鎖的前提」二擇一 (ii) 的錯誤句（node 不會成為 `/proc/locks` 的 pid）。INDEX 列維持 `active`。
+- mods 計畫 `project/plans/2026-10-03-mods-visible-dispatch.md` 已凍結（G1、G2 皆 CONDITIONAL，depth-0 全數處置；依規則最多到 G2，不再開 G3）。凍結後有兩次有界修補：R4.1 回寫 owner 對 D1／D2 的裁決，R4.2 回寫 P0 spike 結果。凍結後又有 R4.3：P1a 出貨後更正「鎖的前提」二擇一 (ii) 的錯誤句（node 不會成為 `/proc/locks` 的 pid）。INDEX 列維持 `active`。
 - P0 spike（`docs/plans/evidence/2026-10-03-mods-spikes/README.md`）：S1 yes（modules 與 classic 能共載，D4 結案）、S2 partial、S5(a) partial（desktop 這台跑不到）、S5(b) yes、S6 no（P2 要新寫量測儀器）、S3 yes、S4 no（owner 經 ssh 進 tmux，終端內圖片不可行）。depth-0 從原始檔複驗了 S1、S5(a)、S5(b)，並推翻計畫一處事實：`flock(1)` 是 fork 不是 exec，P1a 的鎖驗收不能拿 `/proc/locks` 的 pid 比 `writer.pid`；P1a 的 R4／R5 實測證實這一點（驗持有者要看 `writer.pid` 的 fd 9）。
 - peer 備註：<host> 的 Q01 campaign 封存成 `review_station: panel`，因為 `in_rail_review: auto` 遇完整 panel 就解成 panel；支援的路線是 intake 前設 `single`（已寫進 l5 的 `hetero-impl-loop.md`）；已封存 campaign 的就地遷移登在 BACKLOG。
 - 研究文件在 `docs/plans/research/`（研究不是 plan）。
@@ -36,11 +36,11 @@
 - plan review 的 findings 由 depth-0 裁決，最多到 G2。
 
 ## 下一步
-1. P1b：`scripts/render-review-page.js` 與 host review server（單一 port、只綁 127.0.0.1、根目錄索引），細節照計畫 R4.1。用 foreman-landing-pipeline：sonnet hands、互不相依的列平行、逐列 review、落地前一次 combined review。P1a 留下的 🔵 項目在 `docs/backlog/mods-p1a-known-follow-ups.md`，P1b 動到 `runs-watch.js` 時順手處理。
+1. P1b：`scripts/render-review-page.js` 與 host review server（單一 port、只綁 127.0.0.1、根目錄索引），細節照計畫 R4.1。用 foreman-landing-pipeline：sonnet hands、互不相依的列平行、逐列 review、落地前一次 combined review。P1a 留下的 🔵 項目在 `project/backlog/mods-p1a-known-follow-ups.md`，P1b 動到 `runs-watch.js` 時順手處理。
 2. owner 的工作環境是 ssh 進 tmux：任何「在終端裡顯示圖片」的設計都不適用，圖一律走瀏覽器 review 頁（反向代理）。
 3. BACKLOG 已觸發的列（另加一列：被拒的 `AUTOPILOT_LIVE_DIR` override 會靜默落到真的 live dir）：plan-review 席位沒有 source 存取、plan-review roster 單一家族、import-aa 測試綁死主機、Population B flake。
 4. peer 的列：review-fanout 有界並行、sealed-campaign review-station 遷移、plan-review terminal-ticket 可見性。
-5. owner 排序才動：`docs/plans/_archive/2026/10/2026-10-13-review-only-external-candidate.md`（該 plan 已出貨歸檔）。
+5. owner 排序才動：`project/plans/_archive/2026/10/2026-10-13-review-only-external-candidate.md`（該 plan 已出貨歸檔）。
 
 ## 協作
 - fable = fleet `autopilot--claude-2`（claude-fable-5-1；起草 plan R0–R4）。
@@ -51,12 +51,12 @@
 ## 驗證方式
 - `git status --short` 只剩那兩個不屬於本 session 的未追蹤目錄。
 - `bash scripts/preflight-release.sh` 回報 v2.36.115 一致。
-- `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` exit 0。
+- `node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md` exit 0。
 - `node scripts/check-plan-graduation.js --repo-root . --json` exit 0。
 
 ## Read-order
 1. 本檔。
-2. 凍結的計畫 `docs/plans/2026-10-03-mods-visible-dispatch.md`。
+2. 凍結的計畫 `project/plans/2026-10-03-mods-visible-dispatch.md`。
 3. `docs/plans/evidence/2026-10-03-mods-visible-dispatch-design/`（README、plan-review-g1、plan-review-g2、ADJUDICATION）。
 4. `.claude/skills/foreman-landing-pipeline/SKILL.md`。
 5. `references/evidence-discipline.md` §50–§52。

@@ -11,7 +11,7 @@ unmeasurable — there is no headroom for a discriminating metric to move. The
 other end (t14 long-horizon) is 0/anything. Missing: tasks whose difficulty lands
 *inside* the M3/flash band — hard enough that M3 will not score a clean sweep,
 easy enough that it is not a total wipeout. Source:
-`docs/projects/_archive/2026/07/2026-07-06-eval-instruments/report.md` L95–107, L217–220.
+`project/projects/_archive/2026/07/2026-07-06-eval-instruments/report.md` L95–107, L217–220.
 
 ## Design principle — the second axis is the headroom
 
@@ -183,19 +183,19 @@ PASS on the exploit):
 
 ## How depth-0 runs the calibration batch
 
-Runner: `docs/projects/_archive/2026/07/2026-07-09-m3-band-tasks/calibrate-m3-band.sh`
+Runner: `project/projects/_archive/2026/07/2026-07-09-m3-band-tasks/calibrate-m3-band.sh`
 (parameterized, resumable, per-round auth circuit-breaker, strictly serial for
 MiniMax rate-limits, ORCH_CC_SHIM=1).
 
 ```
 # preview the plan + confirm the endpoint resolves (no spend):
-docs/projects/_archive/2026/07/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --dry-run
+project/projects/_archive/2026/07/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --dry-run
 
 # full batch: 3 tasks × {on,off} × n=3 = 18 cells, M3 via the minimax endpoint:
-docs/projects/_archive/2026/07/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --n 3
+project/projects/_archive/2026/07/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --n 3
 
 # resume after an interruption (done cells are skipped automatically):
-docs/projects/_archive/2026/07/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --n 3
+project/projects/_archive/2026/07/2026-07-09-m3-band-tasks/calibrate-m3-band.sh --n 3
 
 # score whenever:
 node evals/orchestration/score.js docs/projects/_archive/2026/07/2026-07-09-m3-band-tasks/runs/results.jsonl
@@ -247,7 +247,7 @@ Honest conclusions (negative result — recorded as-is, not softened):
 - **Methodological takeaway**: this closes a loop — "can a harder single-turn
   task be constructed that discriminates M3?" Answer, empirically: no, not with
   this design. This reaffirms the 2026-07-06 archive's conclusion
-  (`docs/projects/_archive/2026/07/2026-07-06-eval-instruments/report.md`): **M3's
+  (`project/projects/_archive/2026/07/2026-07-06-eval-instruments/report.md`): **M3's
   discriminating signal, if it exists, lives in long-horizon tasks (t14-shaped),
   not in more single-turn tasks.**
 - **Reusable positive assets, kept**: the three two-axis tasks, the R2

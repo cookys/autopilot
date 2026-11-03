@@ -50,10 +50,10 @@ top of v2.32.48). Concretely:
    version mirrors (`platforms/codex/plugin/.codex-plugin/plugin.json`,
    `platforms/codex/.agents/plugins/marketplace.json`) match — use the sync scripts, do not
    hand-edit generated payload files except via the sync commands.
-6. **docs/BACKLOG.md** — apply the source diff's two identity follow-up notes (author
+6. **project/backlog/BACKLOG.md** — apply the source diff's two identity follow-up notes (author
    non-strict path follow-up + detach verification note), adapted to the current BACKLOG
    text (develop edited BACKLOG since the merge-base; place the notes sensibly, keep both).
-7. **docs/projects/INDEX.md** — apply the source diff's identity release row retargeted to
+7. **project/projects/INDEX.md** — apply the source diff's identity release row retargeted to
    v2.32.49, adapted to the current INDEX state.
 
 **Deliberately NOT ported** (develop already carries equivalent changes — bringing them
@@ -138,7 +138,7 @@ payload mirrors):
    line stating the rail contains ONLY `user.name`/`user.email` — other shared-config keys
    (e.g. `core.hooksPath`, `credential.helper`) remain uncontained, per the repo's standing
    "containment is teardown hygiene, NOT a malicious-worker boundary" stance. (b)
-   docs/BACKLOG.md: add a follow-up item for broader shared-config key containment /
+   project/backlog/BACKLOG.md: add a follow-up item for broader shared-config key containment /
    per-worktree config isolation (`extensions.worktreeConfig`), noting two accepted
    limitations: the drift compare is point-in-time (a worker that sets a bad identity,
    commits, then restores it before exit is undetected on its own worktree commits), and an

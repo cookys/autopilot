@@ -1,6 +1,6 @@
 # Autopilot — Skills Catalog
 
-> Part of [Autopilot](../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](architecture.md) · [Hooks](../hooks/README.md)
+> Part of [Autopilot](../../README.md). Detail docs: [Skills](skills.md) · [Coexistence](coexistence.md) · [Configuration](configuration.md) · [Installation](installation.md) · [Architecture](../dev/architecture.md) · [Hooks](../../hooks/README.md)
 
 The full catalog of all 30 skills, the three primary cognitive modes, how skills compose, and the decision table for which to reach for.
 
@@ -145,7 +145,7 @@ Output: Decision Brief with consensus, dissenting views, and recommendation
   lines remain active and cannot be removed.
 - `--solo` (L4 / L5 / L6 only) → fall back to the L3 inline engine. This is also the automatic degradation when the foreman returns `precondition_failed`.
 
-The escalation is **inline → offloaded → offloaded + decorrelated implementation → offloaded + decorrelated implementation and verification authoring**. Start at L3; reach for L4 when you want it off your thread; reach for L5 when a second engine adds cost-arbitrage or decorrelation value; reach for L6 when verification authoring should also be delegated. For the depth-0 control loop, outcome→action table, and run-summary ledger, see the [ceo-agent front-door semantics](../skills/ceo-agent/references/depth0-control-loop.md). For the roster/loop config, see [`review-loop-config.md`](../project-config-template/review-loop-config.md).
+The escalation is **inline → offloaded → offloaded + decorrelated implementation → offloaded + decorrelated implementation and verification authoring**. Start at L3; reach for L4 when you want it off your thread; reach for L5 when a second engine adds cost-arbitrage or decorrelation value; reach for L6 when verification authoring should also be delegated. For the depth-0 control loop, outcome→action table, and run-summary ledger, see the [ceo-agent front-door semantics](../../skills/ceo-agent/references/depth0-control-loop.md). For the roster/loop config, see [`review-loop-config.md`](../../project-config-template/review-loop-config.md).
 
 ### How They Work Together
 

@@ -16,7 +16,7 @@ Architecture review (Board thread 2026-08-16, two read-only wiring scans + one l
 
 ## 1. Problem
 
-~27,000 lines of shipped code (kernel core + trust scripts + observer + witness adapter + supervised family), plus ~45 test files, CI sandbox steps, doc/schema/template surfaces, and two root-owned locations outside the repo, implement a trust chain and an isolation substrate whose threat models (history tampering by self; adversarial multi-tenant hosts) do not exist in this single-user deployment. Shipped docs claim parts of it fire when nothing calls them (`skills/quality-pipeline/SKILL.md:46`, `docs/configuration.md:57-75`, `docs/architecture.md:114+`) — the documented-but-dead failure mode `references/evidence-discipline.md` catalogues. The policy insight inside it must survive the deletion.
+~27,000 lines of shipped code (kernel core + trust scripts + observer + witness adapter + supervised family), plus ~45 test files, CI sandbox steps, doc/schema/template surfaces, and two root-owned locations outside the repo, implement a trust chain and an isolation substrate whose threat models (history tampering by self; adversarial multi-tenant hosts) do not exist in this single-user deployment. Shipped docs claim parts of it fire when nothing calls them (`skills/quality-pipeline/SKILL.md:46`, `docs/guide/configuration.md:57-75`, `docs/dev/architecture.md:114+`) — the documented-but-dead failure mode `references/evidence-discipline.md` catalogues. The policy insight inside it must survive the deletion.
 
 ## 2. OKR / KRs
 
@@ -70,7 +70,7 @@ Architecture review (Board thread 2026-08-16, two read-only wiring scans + one l
 | `.claude/owner-kernel-governance.json` | keep (live mission policy) | G2 grok R2 |
 | `project-config-template/governance-config.md` | edit | strip retired kernel-CLI examples (~lines 32, 139); keep the mission-policy documentation |
 | `docs/runbooks/trust-root-provisioning.md`, `docs/retirement-receipts/` | delete | runbooks of retired machinery |
-| `docs/configuration.md`, `docs/architecture.md`, `docs/installation.md` | edit | remove owner-kernel/supervised operator instructions; configuration.md keeps the governance-json row minus the retired CLI example |
+| `docs/guide/configuration.md`, `docs/dev/architecture.md`, `docs/guide/installation.md` | edit | remove owner-kernel/supervised operator instructions; configuration.md keeps the governance-json row minus the retired CLI example |
 | `schemas/owner-event.schema.json` | delete | kernel event schema |
 | `docs/scripts-inventory.md`, `CLAUDE.md` | edit | remove 4 script rows / group-list names |
 | `src/readiness/provider-bootstrap.js` (+ readiness tests) | edit | strict /l5 → advisory at every fail site (P4) |
@@ -108,7 +108,7 @@ Architecture review (Board thread 2026-08-16, two read-only wiring scans + one l
 
 1. `skills/l3/SKILL.md`: remove the `owner-kernel.js translate-level` block (governance file stays).
 2. Delete `docs/runbooks/trust-root-provisioning.md`, `docs/retirement-receipts/`, `schemas/owner-event.schema.json`. Edit `project-config-template/governance-config.md` (strip kernel-CLI examples only).
-3. Edit operator docs: `docs/configuration.md` (drop the `owner-kernel.js resolve` example; keep the governance-json row), `docs/architecture.md` (~114-138), `docs/installation.md` (~281).
+3. Edit operator docs: `docs/guide/configuration.md` (drop the `owner-kernel.js resolve` example; keep the governance-json row), `docs/dev/architecture.md` (~114-138), `docs/guide/installation.md` (~281).
 4. **Retirement-vocabulary sweep**: from the delete-set derive the vocabulary (exported symbols, CLI commands, error identifiers incl. `strict_l5_provider_roster_drift`-as-hard-block prose) and grep every shipped surface; unwire every current-tense hit.
 5. `docs/scripts-inventory.md`: remove the 4 rows. `CLAUDE.md`: remove the 4 script names from their groups.
 6. **Archive `docs/projects/_archive/2026/07/2026-07-20-owner-kernel-governance/`** via project-lifecycle (into `docs/projects/_archive/`, a KR2 exclusion) — before the KR2 run (G2 grok R5).
@@ -144,7 +144,7 @@ Append the removal receipt (`ls` proof + date) to `host-residue/manifest.txt`.
 1. `references/evidence-contract.md` (the quarry): acceptance-predicate policy content (green verification evidence per leg; `clear` challenge from a roster-listed, non-self, non-same-family challenger; zero blocking findings; contract frozen at intake; evidence bound to artifact), terminal-issuer invariants (freeze-before-execute, empty-set refusal, silence-is-not-consent, no third outcome), the P1 quarry anchor, and a supervised-isolation appendix for any P1-matrix `quarried` entries.
 2. `references/evidence-discipline.md` addendum — the capstone case: *tamper-evidence of a claim is not verification of the claim; ~27k lines of armor around empty verifier slots. Include the G1/G2 lesson: the author's own zero-caller and separability claims fell twice to decorrelated reviewers (missed static factories/barrel requires; missed that a "kernel-named" config file was live mission policy).*
 3. CHANGELOG entry (reversal marker + §2.6 migration notes) + `sync-version.js` PATCH bump → L-5.5 release gate.
-4. `docs/BACKLOG.md`: two rows — (a) four-layer redesign (contract-only policy + harness graph) consuming `references/evidence-contract.md`; (b) skill contract-card rewrites under 成績單前置 (G2 MiniMax R8).
+4. `project/backlog/BACKLOG.md`: two rows — (a) four-layer redesign (contract-only policy + harness graph) consuming `references/evidence-contract.md`; (b) skill contract-card rewrites under 成績單前置 (G2 MiniMax R8).
 5. Append all phase SHAs (incl. P6's own, in a trailing chore commit) to `retire-manifest.md`.
 6. Re-run the KR2 whole-tree grep + `preflight-release.sh`.
 

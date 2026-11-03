@@ -1,6 +1,6 @@
 # Cursor Agent as a read-only transport fallback for reviewer-class seats
 
-**Plan**: [`docs/plans/2026-09-02-cursor-transport-fallback.md`](../../plans/2026-09-02-cursor-transport-fallback.md)
+**Plan**: [`project/plans/2026-09-02-cursor-transport-fallback.md`](../../plans/2026-09-02-cursor-transport-fallback.md)
 **Started**: 2026-09-02
 **Version**: 2.35.8 — PATCH. The semver table reserves MINOR for a new **skill** or **agent**; this
 adds a manifest field, rail behavior and tests to existing surfaces, so it is a PATCH even though it

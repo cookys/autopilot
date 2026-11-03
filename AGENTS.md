@@ -110,7 +110,7 @@ Codex and OpenCode do not receive the SessionStart injection, so they must read 
 
 ## Orchestration Discipline (learned, cross-controller)
 
-Rules distilled from real long-run transcripts of this repo's 2026-07 Mission/L6 campaigns. They bind ANY depth-0 controller driving this repo (Claude Code, Codex, OpenCode, Antigravity, …) — the failures they encode were produced by more than one controller. Machine-enforced versions are landing via `docs/BACKLOG.md` § "P0 — Controller execution discipline"; until every gate ships, treat these as binding methodology, not suggestions.
+Rules distilled from real long-run transcripts of this repo's 2026-07 Mission/L6 campaigns. They bind ANY depth-0 controller driving this repo (Claude Code, Codex, OpenCode, Antigravity, …) — the failures they encode were produced by more than one controller. Machine-enforced versions are landing via `project/backlog/BACKLOG.md` § "P0 — Controller execution discipline"; until every gate ships, treat these as binding methodology, not suggestions.
 
 ### Orchestration granularity (phase-explosion prevention)
 

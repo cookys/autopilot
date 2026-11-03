@@ -2,7 +2,7 @@
 
 Status: complete
 
-Plan: `docs/plans/2026-07-30-repair-lineage-convergence.md`
+Plan: `project/plans/2026-07-30-repair-lineage-convergence.md`
 
 This is one P0 deliverable. It closes the retry pattern that produced eleven linear Kimi repair
 branches for one P3 implementation lineage.

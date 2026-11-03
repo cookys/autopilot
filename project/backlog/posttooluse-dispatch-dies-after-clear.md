@@ -1,6 +1,6 @@
 # PostToolUse dispatch dies after /clear
 
-No sidecar existed in history. Original row text from 5d0b29c1d^:docs/BACKLOG.md. Effort is recorded as M (the open work is the detection spike; the docs item already shipped).
+No sidecar existed in history. Original row text from 5d0b29c1d^:project/backlog/BACKLOG.md. Effort is recorded as M (the open work is the detection spike; the docs item already shipped).
 
 > ### PostToolUse dispatch dies after `/clear` — process restart required（verified）
 > - **Trigger**: 下次有 user 回報 intent-capture / audit-log / reload-watch 在 long-running session 沒更新；或 Claude Code 升級 release notes 提到 hook dispatch 變更

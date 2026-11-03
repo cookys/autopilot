@@ -282,7 +282,7 @@ Disposition admission:
   includes context, trigger, and proposed backlog title;
 - `reject-out-of-scope`: false premise, duplicate, policy mismatch, or unrelated subsystem.
 
-The controller must not auto-write `docs/BACKLOG.md`; it emits a structured follow-up receipt
+The controller must not auto-write `project/backlog/BACKLOG.md`; it emits a structured follow-up receipt
 for lifecycle handling at depth-0. This prevents a reviewer from mutating tracking state.
 
 **Acceptance**: synthetic findings containing one in-scope Major, one optional hardening Major,
@@ -437,7 +437,7 @@ absence remains `unknown|shadow` during ICC core delivery rather than being reim
 
 - **R0 / 2026-07-26 / Core**: authored from transcript telemetry and current v2.32.60 source.
   Scope deliberately builds on `review-scope-stop-loss` instead of reopening it. Frozen rubric:
-  `docs/plans/_archive/2026/07/2026-07-26-implementation-campaign-convergence-control.rubric.md`.
+  `project/plans/_archive/2026/07/2026-07-26-implementation-campaign-convergence-control.rubric.md`.
 - **Historical R1 / 2026-07-26**: gpt-5.6-sol, MiniMax, Gemini, and GLM reported READY on the
   pre-consolidation revision. Their reviewed hash predates the ownership audit.
 - **R2 ownership consolidation / 2026-07-26**: ICC is now the sole campaign-generation and

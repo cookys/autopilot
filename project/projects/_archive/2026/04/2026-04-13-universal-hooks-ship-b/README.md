@@ -3,7 +3,7 @@
 **Date**: 2026-04-13
 **Status**: Complete — shipped in v2.5.0 and archived.
 **Branch**: `feature/v2.5.0-universal-hooks`
-**Plan**: `docs/plans/2026-04-12-universal-hooks.md`
+**Plan**: `project/plans/_archive/2026/04/2026-04-12-universal-hooks.md`
 **Size**: L
 **Source**: [NYCU-Chung/my-claude-devteam](https://github.com/NYCU-Chung/my-claude-devteam) v1.1.0 (MIT) — 14 hooks port with Ship A review adjustments
 

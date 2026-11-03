@@ -1,7 +1,7 @@
 # Methodology Agents — Ship A (v2.4.0)
 
 **Status**: ✅ Shipped — merged to `develop` as `14276bb` on 2026-04-12
-**Plan doc**: [`docs/plans/_archive/2026/04/2026-04-12-methodology-agents-and-hooks.md`](../../../plans/_archive/2026/04/2026-04-12-methodology-agents-and-hooks.md)
+**Plan doc**: [`project/plans/_archive/2026/04/2026-04-12-methodology-agents-and-hooks.md`](../../../plans/_archive/2026/04/2026-04-12-methodology-agents-and-hooks.md)
 **CHANGELOG**: [v2.4.0 entry](../../../../CHANGELOG.md)
 
 ---
@@ -15,7 +15,7 @@ The v2.4.0 Ship A L-size work was initially executed via plan-only flow — the 
 The retrospective was added at 2026-04-12 to:
 1. Close the compliance gap for Ship A specifically
 2. Establish `docs/projects/` as the formal convention going forward (enforced via `.claude/dev-flow-config.md`)
-3. Document the historical debt (pre-2026-04-12 L-ships did not have project dirs — see `docs/projects/INDEX.md` § 歷史債)
+3. Document the historical debt (pre-2026-04-12 L-ships did not have project dirs — see `project/projects/INDEX.md` § 歷史債)
 
 The content below is a **historical record**, not a live tracking document. The phases ran, the merge happened, evidence links to already-landed commits. The tracking value of a project README lives during execution; this one exists for compliance documentation.
 

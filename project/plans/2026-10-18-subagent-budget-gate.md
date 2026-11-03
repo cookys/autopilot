@@ -98,10 +98,10 @@ Objective: no lane can silently exceed its relay or turn ceiling, in any session
 | `hooks/tests/subagent-budget.test.sh` (+ fixture builder) | KR1–KR7 cases and negative controls |
 | `hooks/hooks.json` | Register the hook under `Task\|Agent` |
 | `profiles/hook-classes.json`, `platforms/codex/plugin/profiles/hook-classes.json`, `baselines/claude-hooks.json` | Hook class registration and mirrors |
-| `scripts/lib/config-keys.json`, `docs/settings-reference.md`, `settings.example.json` | `subagent_budget` keys and opt-out |
-| `hooks/README.md`, `docs/hook-harness-matrix.md`, hook counts in `CLAUDE.md` / `README.md` / `README.zh-TW.md` | Inventory (`scripts/check-hook-inventory.js --check`) |
+| `scripts/lib/config-keys.json`, `docs/guide/settings-reference.md`, `settings.example.json` | `subagent_budget` keys and opt-out |
+| `hooks/README.md`, `docs/dev/hook-harness-matrix.md`, hook counts in `CLAUDE.md` / `README.md` / `README.zh-TW.md` | Inventory (`scripts/check-hook-inventory.js --check`) |
 | `skills/l5/references/hetero-impl-loop.md` | `Lane:` / `Budget-Ack:` brief lines in the parallel-units recipe; new "Measurement and deploy-acceptance units" recipe |
-| `docs/backlog/foreman-guard-cost-shaped-gate.md`, `docs/BACKLOG.md` (BL-0011) | Close BL-0011 (its trigger, a cheap per-agent feed, is met by reading the transcripts); record that the 09-25 no-marker ruling is superseded by this hook |
+| `docs/backlog/foreman-guard-cost-shaped-gate.md`, `project/backlog/BACKLOG.md` (BL-0011) | Close BL-0011 (its trigger, a cheap per-agent feed, is met by reading the transcripts); record that the 09-25 no-marker ruling is superseded by this hook |
 | `CHANGELOG.md` | One Unreleased line |
 
 ## 4. Phases
@@ -115,7 +115,7 @@ One deliverable; the phases build on each other inside it.
 - **P2 (S) — wiring and docs.** hooks.json, hook classes and mirrors, config keys and settings docs, inventory
   counts, l5 reference (brief lines and the measurement recipe), BL-0011 closure and supersession note,
   CHANGELOG. Done when `bash scripts/sync-all.sh --check`, `node scripts/check-hook-inventory.js --check`,
-  `node scripts/doc-drift-gate.js` and `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` are green.
+  `node scripts/doc-drift-gate.js` and `node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md` are green.
 
 Measurement recipe content (P2): a fixed script (systemd unit or one shell entry point) runs the whole
 measurement and writes a result table; a `test-runner`-role dispatch (`scripts/resolve-dispatch.sh --role
@@ -176,7 +176,7 @@ None; the owner settled lane key, escalation and thresholds on d-bdd886cb.
 ## Review log
 
 - R0: authored 2026-10-18 by depth-0 from the research of the two read-only reports and the <host> incident data.
-  Manifest `docs/plans/2026-10-18-subagent-budget-gate.plan-review-manifest.json`, rubric `.rubric.md` beside it.
+  Manifest `project/plans/2026-10-18-subagent-budget-gate.plan-review-manifest.json`, rubric `.rubric.md` beside it.
 - G1 (sol_chair STOP, minimax_deep CONDITIONAL; verdict CONDITIONAL): four findings, all accepted and folded —
   dadf2c6d (R1, lane totals no longer age-filtered), 271d9846 (R2, clock and window defined), b057b148 (R11,
   controls 7–13), ad1bb97b (R4, slug grammar and lane-key failure modes).

@@ -1,6 +1,6 @@
 # Openclaw two leftover side effects
 
-Relevant section of the original sidecar (English as written). The closed main claim is omitted. Source blob: b9caa7db6^:docs/backlog/peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md.
+Relevant section of the original sidecar (English as written). The closed main claim is omitted. Source blob: b9caa7db6^:project/backlog/peer-reported-openclaw-an-active-l5-marker-deadlocks-the-bounded-campaign-l5-its.md.
 
 - **Status 2026-09-13**: the main claim is **shipped and verified locally**. v2.36.28's `sealed_bounded_campaign_without_mission_projection` (`scripts/dispatch-hetero.sh`, P5 of the 2026-09-12 graph) skips `check_session_mode_gate` on exactly the predicate the peer proposed — the contract carries no Mission projection and is sealed — and `hooks/tests/dispatch-hetero.test.sh:976` ("sealed bounded campaign dispatches under a live L6 marker") is green in the 234-assertion run. The reversal was justified on "unsatisfiable by construction" (a closed bounded-contract schema has nowhere to put a projection), not on marker retirement. **Remaining**: side effects (a) and (b) below; they were never reproduced here and still need the peer's artifacts.
 

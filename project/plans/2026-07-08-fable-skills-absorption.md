@@ -88,7 +88,7 @@ plan document.
 | `skills/quality-pipeline/references/anti-rationalization.md` | Add the claim ladder and, if appropriate, cross-link scope/turn-completion rationalizations. |
 | `scripts/check-canonical-invariants.sh` | Add seeds only if implementation introduces repeated load-bearing phrases. |
 | `platforms/codex/plugin/**` | Regenerated mirrors only, via `scripts/sync-codex-plugin-skills.sh`, if any mirrored skill/reference changes. |
-| `docs/BACKLOG.md` | Record deferred eval-harness work if not in scope for the first implementation pass. |
+| `project/backlog/BACKLOG.md` | Record deferred eval-harness work if not in scope for the first implementation pass. |
 
 ## 4. Phases
 
@@ -201,7 +201,7 @@ an honest pass, and no implementation happens before Board approval.
 Plan-review validation:
 
 ```bash
-git diff --no-index -- /dev/null docs/plans/2026-07-08-fable-skills-absorption.md \
+git diff --no-index -- /dev/null project/plans/2026-07-08-fable-skills-absorption.md \
   > /tmp/fable-plan.diff || true
 scripts/dispatch-review.sh --runner codex --model gpt-5.5 \
   --effort xhigh \

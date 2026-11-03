@@ -11,7 +11,7 @@ Two ships landed this session, each through a full **generation-adversarial hete
 1. **v2.25.7 — L1 test-integrity gate** (executed-set invariance). DONE.
 2. **v2.25.8 — dispatch-hetero codex-trigger fix + best-effort containment + review-loop automation.** The L1 block-mode **override unlock was attempted and REVERTED as UNSAFE** (gpt-5.5 caught it). DONE.
 
-The remaining work is in [`docs/BACKLOG.md`](../../../BACKLOG.md) — top item is the **L1 override re-enable**, which is genuinely hard (needs real OS isolation, see below). There is no half-finished code; pick the next thing from BACKLOG or `/next`.
+The remaining work is in [`project/backlog/BACKLOG.md`](../../../BACKLOG.md) — top item is the **L1 override re-enable**, which is genuinely hard (needs real OS isolation, see below). There is no half-finished code; pick the next thing from BACKLOG or `/next`.
 
 ## What shipped this session (DON'T redo)
 
@@ -45,12 +45,12 @@ The L1 block-mode override is **always DEFERRED** (`defer_override = config_mode
 ## How to continue (first moves)
 
 1. `git -C ~/projects/autopilot log --oneline -3` → confirm at `03bb60c`.
-2. `/next` (or read `docs/BACKLOG.md`) → pick the next item. The L1-override-re-enable item is L-size and needs the isolation-boundary decision first (consider `brainstorm`/`survey` on rootless sandboxing before coding).
+2. `/next` (or read `project/backlog/BACKLOG.md`) → pick the next item. The L1-override-re-enable item is L-size and needs the isolation-boundary decision first (consider `brainstorm`/`survey` on rootless sandboxing before coding).
 3. To run the now-automated loop on any task: `cp project-config-template/review-loop-config.md .claude/` (once) → `/l5 <goal>`.
 
 ## Pointers
 - Spec + review history: [`design-spec.md`](design-spec.md) (§8.3 / §12 carry the override-deferral + revert record).
 - Automation proposal: [`hetero-review-loop-automation-proposal.md`](hetero-review-loop-automation-proposal.md).
-- BACKLOG: [`docs/BACKLOG.md`](../../../BACKLOG.md) (L1-override re-enable + the v2.25.8 DONE entry).
+- BACKLOG: [`project/backlog/BACKLOG.md`](../../../BACKLOG.md) (L1-override re-enable + the v2.25.8 DONE entry).
 - CHANGELOG: v2.25.7 + v2.25.8. INDEX: both rows under Completed.
 - Memory: [[project_dispatch-hetero-codex-trigger]] (codex routing fixed + cgroup lesson), [[project_agy-writes-install-dir]], [[feedback_delegate-selftest-false-green]], [[feedback_verify-reviewer-claims]].

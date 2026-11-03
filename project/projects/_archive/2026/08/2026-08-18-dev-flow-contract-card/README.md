@@ -1,7 +1,7 @@
 # dev-flow contract-card rewrite — evidence-gated (成績單前置)
 
 > Started: 2026-08-18 · Branch: `feat/v2.34.18-dev-flow-contract-card` · Target version: v2.34.18 (PATCH)
-> Plan: [docs/plans/_archive/2026/08/2026-08-18-dev-flow-contract-card.md](../../plans/_archive/2026/08/2026-08-18-dev-flow-contract-card.md)
+> Plan: [project/plans/_archive/2026/08/2026-08-18-dev-flow-contract-card.md](../../plans/_archive/2026/08/2026-08-18-dev-flow-contract-card.md)
 > Evidence: `docs/plans/_archive/2026/08/evidence/2026-08-18-dev-flow-contract-card/`
 > Consumes BACKLOG row: "Skill contract-card rewrites under 成績單前置（G2 MiniMax R8）"
 

@@ -884,7 +884,7 @@ endpoint/token env and no default Anthropic credential fallback.
 
 Review inputs:
 
-- Diff: `git diff --no-index /dev/null docs/plans/2026-07-01-cross-harness-engine-infrastructure.md`
+- Diff: `git diff --no-index /dev/null project/plans/_archive/2026/07/2026-07-01-cross-harness-engine-infrastructure.md`
 - Native Anthropic-backed Claude: intentionally skipped.
 - `cc-shim`: intentionally skipped in R0 under an over-conservative
   interpretation of the quota constraint; corrected on 2026-07-02 to mean

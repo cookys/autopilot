@@ -47,7 +47,7 @@ Non-goal: changing the deliberate keep-on-failure policy. This plan makes the re
 | `project-config-template/worktree-teardown-config.md` | autopilot | NEW shipped-default DI config (all-off defaults → generic behavior only). |
 | `scripts/dispatch-hetero.sh` JSON schema (`emit()`) | autopilot | ADD nullable `orphan_worktree` (path kept because removal failed). |
 | `hooks/tests/dispatch-hetero.test.sh` + NEW `hooks/tests/worktree-reap.test.sh` | autopilot | cases enumerated in §3. |
-| `CHANGELOG.md` / `docs/projects/INDEX.md` | autopilot | vNEXT entry (note: script seam, **no** hook-count change) + fix-ship row. |
+| `CHANGELOG.md` / `project/projects/INDEX.md` | autopilot | vNEXT entry (note: script seam, **no** hook-count change) + fix-ship row. |
 | `.claude/hooks/worktree-teardown.sh` | **PEACE** (separate PR) | project impl of the seam (see §4). |
 | `.claude/worktree-teardown-config.md` | **PEACE** | points `teardown_hook` at the above; `stale_reaper_age_days: 3`. |
 

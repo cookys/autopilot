@@ -1,6 +1,6 @@
 # Qualification feed: adopt `--from`, effort in the seat, environment ≠ exam identity
 
-**Plan**: [`docs/plans/_archive/2026/09/2026-09-02-qualification-feed-adopt.md`](../../plans/2026-09-02-qualification-feed-adopt.md)
+**Plan**: [`project/plans/_archive/2026/09/2026-09-02-qualification-feed-adopt.md`](../../plans/2026-09-02-qualification-feed-adopt.md)
 **Started**: 2026-09-02
 **Branch**: `feat/qualification-feed-adopt`
 **Status**: all six phases shipped — v2.35.9

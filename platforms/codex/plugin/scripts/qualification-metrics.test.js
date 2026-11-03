@@ -641,7 +641,8 @@ test('ordering is a permutation: nothing admitted is dropped, nothing added', ()
 test('admission is byte-identical with the metrics cache absent or hostile', async () => {
   const run = (home) => {
     const store = tmp('store');
-    const env = { ...process.env, HOME: home, ENGINE_SCORECARD_DIR: store };
+    // run.sh pins AUTOPILOT_CONFIG_FILE to an empty {} (BL-0180), which would mask $HOME/.autopilot/config.json; point it back at this home's config.
+    const env = { ...process.env, HOME: home, ENGINE_SCORECARD_DIR: store, AUTOPILOT_CONFIG_FILE: path.join(home, '.autopilot', 'config.json') };
     const out = [];
     for (const args of [
       ['seat-status', '--engine', 'grok-4.6', '--runner', 'grok', '--role', 'reviewer', '--effort', 'default'],

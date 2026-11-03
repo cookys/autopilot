@@ -283,11 +283,11 @@ OUT="$(gate none 0)"
 assert_contains "$OUT" "PASS" "gate: no usage anywhere -> skipped note"; assert_contains "$OUT" "token-ceiling check was skipped" "gate: no usage anywhere is noted"
 # NEGATIVE CONTROLS: mutate the helper copy; the new cases must go red.
 MUT1="$TEST_TMP/mut-sumgate.js"   # judge by result.usage.input_tokens again
-sed 's/if (firstStep) {/if (false) {/' "$HELPER" > "$MUT1"
+sed_mutant "$HELPER" "$MUT1" 's/if (firstStep) {/if (false) {/'
 OUT="$(GATE_HELPER="$MUT1" gate 511413 0 7030:0)"
 assert_contains "$OUT" "REFUSE" "NEGATIVE CONTROL: judging by the result sum refuses 511413 (the 'passes' case turns red)"
 MUT2="$TEST_TMP/mut-nostep.js"    # ignore step usage entirely (same effect for step1>=95K with a small result)
-sed 's/Number.isFinite(u.input_tokens)/false/' "$HELPER" > "$MUT2"
+sed_mutant "$HELPER" "$MUT2" 's/Number.isFinite(u.input_tokens)/false/'
 OUT="$(GATE_HELPER="$MUT2" gate 60000 0 50000:45000)"
 assert_contains "$OUT" "PASS" "NEGATIVE CONTROL: without the per-step judgement a step1>=95K prompt slips through (the 'refused' case turns red)"
 

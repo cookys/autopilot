@@ -13,6 +13,10 @@
 SANDBOX="$TEST_TMP/repo"
 mkdir -p "$SANDBOX/scripts" "$SANDBOX/skills/good/references"
 cp "$REPO_ROOT/scripts/validate.sh" "$SANDBOX/scripts/validate.sh"
+# validate.sh also runs the G37 claude-spawn-sites gate (check-claude-spawn-sites.js, a whole-repo scan with its own registry).
+# That gate is covered by its own suite; this sandbox tests link checks only, so it gets a pass-through stand-in. Without it
+# validate.sh dies on MODULE_NOT_FOUND and "clean fixtures pass" is red for a reason unrelated to links.
+printf '%s\n' "process.exit(0);" > "$SANDBOX/scripts/check-claude-spawn-sites.js"
 
 # --- good skill: valid sibling link + a fenced-code placeholder (must be ignored) ---
 cat > "$SANDBOX/skills/good/SKILL.md" <<'EOF'

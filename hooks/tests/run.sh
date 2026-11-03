@@ -493,6 +493,22 @@ if ! [[ "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS" =~ ^[1-9][0-9]*$ ]]; then
 fi
 readonly AUTOPILOT_TEST_SUITE_TIMEOUT_SECS
 
+# Per-suite ceiling raise. A suite whose normal quiet-host duration sits at or past the global ceiling
+# (dispatch-hetero ~560 s, skill-onoff-findings-batch-v3 ~600 s against the 600 s default) is a TIMEOUT red
+# on any loaded host, so it can declare, in its first 40 lines, a line of the exact form
+#     # suite-timeout-secs: <positive integer>
+# The effective ceiling is the larger of that value and the global one (the directive can only raise, never lower; a
+# malformed line is ignored). The global ceiling, and its env override, stay the default for every other suite.
+suite_limit_secs() { # <suite file> -> effective ceiling in seconds
+  local n
+  n="$(sed -n '1,40{s/^# suite-timeout-secs: \([1-9][0-9]*\)$/\1/p}' "$1" 2>/dev/null | head -n 1)"
+  if [[ "$n" =~ ^[1-9][0-9]*$ ]] && [ "$n" -gt "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS" ]; then
+    printf '%s' "$n"
+  else
+    printf '%s' "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS"
+  fi
+}
+
 # Per-file durations from the last unfiltered --parallel run, used to start the slowest
 # files first. Machine-local timing history, not repo state.
 TEST_DURATIONS_FILE="${AUTOPILOT_TEST_DURATIONS_FILE:-${XDG_CACHE_HOME:-$HOME/.cache}/autopilot/test-durations.tsv}"
@@ -542,7 +558,8 @@ SUITE_WD_PID=""
 SUITE_EC=0
 SUITE_TIMED_OUT=0
 run_suite_guarded() {
-  local file="$1" out="$2" marker
+  local file="$1" out="$2" marker limit
+  limit="$(suite_limit_secs "$file")"
   if ! marker="$(mktemp "${TMPDIR:-/tmp}/hooks-run-timeout.XXXXXX")" || [ -z "$marker" ]; then
     # Fail loud: without a marker the TIMEOUT label could not be told from a plain failure.
     echo "run.sh: cannot create the timeout marker file under ${TMPDIR:-/tmp}; not running $file" >&2
@@ -556,7 +573,7 @@ run_suite_guarded() {
   bash "$file" >"$out" 2>&1 </dev/null &
   SUITE_PID=$!
   (
-    sleep "$AUTOPILOT_TEST_SUITE_TIMEOUT_SECS"
+    sleep "$limit"
     : >"$marker"
     kill -s TERM -- "-$SUITE_PID" >/dev/null 2>&1 || kill -s TERM "$SUITE_PID" >/dev/null 2>&1
     sleep 10
@@ -675,7 +692,7 @@ run_one() {
   if [ "$ec" -eq 0 ]; then
     : # PASS line printed by finalize_test
   elif [ "$SUITE_TIMED_OUT" -eq 1 ]; then
-    echo "TIMEOUT: $rel exceeded ${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS)" >&2
+    echo "TIMEOUT: $rel exceeded $(suite_limit_secs "$file")s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS or the suite's own suite-timeout-secs line)" >&2
     FAILED=$((FAILED + 1))
     FAILED_TESTS+=("$rel [TIMEOUT]")
   else
@@ -902,7 +919,7 @@ else
       if [ "$ec" -eq 0 ]; then
         : # PASS
       elif [ -f "$PARALLEL_TMP/$i.timeout" ]; then
-        echo "TIMEOUT: $rel exceeded ${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS)" >&2
+        echo "TIMEOUT: $rel exceeded $(suite_limit_secs "$file")s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS or the suite's own suite-timeout-secs line)" >&2
         FAILED=$((FAILED + 1))
         FAILED_TESTS+=("$rel [TIMEOUT]")
       else
@@ -995,7 +1012,7 @@ else
     if [ "$serial_tail_ec" -eq 0 ]; then
       :
     elif [ "$SUITE_TIMED_OUT" -eq 1 ]; then
-      echo "TIMEOUT: $rel exceeded ${AUTOPILOT_TEST_SUITE_TIMEOUT_SECS}s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS)" >&2
+      echo "TIMEOUT: $rel exceeded $(suite_limit_secs "$file")s (AUTOPILOT_TEST_SUITE_TIMEOUT_SECS or the suite's own suite-timeout-secs line)" >&2
       FAILED=$((FAILED + 1))
       FAILED_TESTS+=("$rel [TIMEOUT]")
     else

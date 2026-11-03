@@ -81,7 +81,11 @@ function buildEnv(args) {
   }
   // Read-only references to the REAL git/gh config; never copies.
   const gitconfig = path.join(realHome, '.gitconfig');
+  const xdgBase = typeof caller.XDG_CONFIG_HOME === 'string' && path.isAbsolute(caller.XDG_CONFIG_HOME)
+    ? caller.XDG_CONFIG_HOME : path.join(realHome, '.config');
+  const xdgGit = path.join(xdgBase, 'git', 'config');
   if (exists(gitconfig)) env.GIT_CONFIG_GLOBAL = gitconfig;
+  else if (exists(xdgGit)) env.GIT_CONFIG_GLOBAL = xdgGit;
   const ghDir = path.join(realHome, '.config', 'gh');
   if (exists(ghDir)) env.GH_CONFIG_DIR = ghDir;
 
@@ -118,13 +122,23 @@ function linkIfDifferent(target, linkPath) {
  */
 function prepareHome(args) {
   const { homeDir, realHome } = args;
+  if (path.resolve(homeDir) === path.resolve(realHome)) throw new EnvError('home_unsafe', 'child HOME equals real home');
   const realSsh = path.join(realHome, '.ssh');
   if (!fs.existsSync(realSsh)) return { ssh: false };
   const sshDir = path.join(homeDir, '.ssh');
-  fs.mkdirSync(sshDir, { recursive: true, mode: 0o700 });
+  let dst = null;
+  try { dst = fs.lstatSync(sshDir); } catch (_) { /* absent */ }
+  if (dst && (dst.isSymbolicLink() || !dst.isDirectory())) throw new EnvError('ssh_path_is_link', '.ssh');
+  if (!dst) fs.mkdirSync(sshDir, { mode: 0o700 });
   fs.chmodSync(sshDir, 0o700);
   const cfg = path.join(sshDir, 'config');
-  fs.writeFileSync(cfg, `Include ${path.join(realSsh, 'config')}\n`, { mode: 0o600 });
+  let cst = null;
+  try { cst = fs.lstatSync(cfg); } catch (_) { /* absent */ }
+  if (cst && (cst.isSymbolicLink() || !cst.isFile())) throw new EnvError('ssh_path_is_link', '.ssh/config');
+  // tmp file + rename: the write never follows a link at the final name.
+  const tmp = `${cfg}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `Include ${path.join(realSsh, 'config')}\n`, { mode: 0o600, flag: 'wx' });
+  fs.renameSync(tmp, cfg);
   let linked = 0;
   for (const name of fs.readdirSync(realSsh)) {
     if (name === 'known_hosts' || name.startsWith('id_')) {

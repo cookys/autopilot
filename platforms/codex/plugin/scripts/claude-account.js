@@ -83,7 +83,17 @@ function createScrubber(token) {
       return Buffer.concat(out);
     },
     end() {
-      const out = carry;
+      // A held-back tail that ends with a (long enough) token prefix is a truncated token: scrub it.
+      const minLen = Math.min(8, tok.length - 1);
+      let k = Math.min(carry.length, tok.length - 1);
+      for (; k >= Math.max(minLen, 1); k--) {
+        if (carry.subarray(carry.length - k).equals(tok.subarray(0, k))) break;
+      }
+      let out = carry;
+      if (k >= Math.max(minLen, 1)) {
+        out = Buffer.concat([carry.subarray(0, carry.length - k), SCRUB_MARK]);
+        s.hit = true;
+      }
       carry = Buffer.alloc(0);
       return out;
     },
@@ -314,9 +324,12 @@ function classifyAttempt(a, scratchDir) {
   }
   const cls = classifyErrorText(text, scratchDir);
   if (status === 429 || cls === 'rate_limited' || cls === 'quota_exhausted') {
-    return { outcome: 'rate_limited', exit: EXIT.LIMITED, limitKind: cls === 'quota_exhausted' ? 'quota' : 'throttle', text };
+    // Local fallback: "usage limit reached" text is a quota exhaustion even when classify-error says rate_limited.
+    const quotaText = /usage limit reached/i.test(text);
+    return { outcome: 'rate_limited', exit: EXIT.LIMITED, limitKind: cls === 'quota_exhausted' || quotaText ? 'quota' : 'throttle', text };
   }
-  if (a.code === 0) return { outcome: 'child_error', exit: EXIT.CHILD_ERROR };
+  // Any other structured error is a child error whatever the child's exit code was.
+  if (structuredError) return { outcome: 'child_error', exit: EXIT.CHILD_ERROR };
   return { outcome: 'other_failure', exit: a.code === null ? EXIT.CHILD_ERROR : a.code };
 }
 
@@ -418,6 +431,11 @@ async function cmdRun(ctx, argv) {
     if (!/^\d{1,6}$/.test(opts.timeout) || Number(opts.timeout) < 1) throw new Stop(EXIT.INVALID, 'timeout_invalid', null);
     timeoutSecs = Number(opts.timeout);
   }
+  if (opts.stdin !== undefined) {
+    let st = null;
+    try { st = fs.statSync(opts.stdin); } catch (_) { /* missing */ }
+    if (!st || !st.isFile()) throw new Stop(EXIT.INVALID, 'stdin_file_unreadable', null);
+  }
   const cfg = accountsConfig(ctx);
   const maxAttempts = flagAttempts !== null ? flagAttempts : cfg.max_attempts;
   const checked = loadChecked(ctx, purpose);
@@ -473,12 +491,12 @@ async function cmdRun(ctx, argv) {
       tried.push(alias);
       const info = checked.enabled.find((e) => e.alias === alias);
       const token = readToken(info.tokenFile);
-      accountEnv.prepareHome({ homeDir: info.homeDir, realHome: ctx.realHome });
       let env;
       try {
         env = accountEnv.buildEnv({
           alias, token, configDir: info.configDir, homeDir: info.homeDir, callerEnv: ctx.env, realHome: ctx.realHome, locators: loc,
         });
+        accountEnv.prepareHome({ homeDir: info.homeDir, realHome: ctx.realHome });
       } catch (e) {
         if (e instanceof accountEnv.EnvError) {
           preAudit(ctx, purpose, 'invalid_config');
@@ -591,13 +609,13 @@ async function cmdExec(ctx, argv) {
   }
   const info = checked.enabled.find((e) => e.alias === alias);
   const token = readToken(info.tokenFile);
-  accountEnv.prepareHome({ homeDir: info.homeDir, realHome: ctx.realHome });
   let env;
   try {
     env = accountEnv.buildEnv({
       alias, token, configDir: info.configDir, homeDir: info.homeDir, callerEnv: ctx.env, realHome: ctx.realHome,
       locators: { accountsDir: ctx.accountsDir, liveDir: ctx.liveDir, stateDir: ctx.stateDir, configFile: ctx.configFile, runtimeDir: runtimeDir(ctx) },
     });
+    accountEnv.prepareHome({ homeDir: info.homeDir, realHome: ctx.realHome });
   } catch (e) {
     if (e instanceof accountEnv.EnvError) { preAudit(ctx, purpose, 'invalid_config'); throw new Stop(EXIT.INVALID, e.message, null); }
     throw e;

@@ -96,6 +96,65 @@ test('N5: a child that prints the token (plain and split) -> exit 7, token only 
   }
 });
 
+test('A: structured error is exit 5 whatever the child exit code (500 status, no status)', async () => {
+  const mk = (o) => ({ exit: 1, stdout: JSON.stringify(Object.assign({ type: 'result', subtype: 'success', is_error: true, result: 'boom' }, o)) + '\n' });
+  for (const resp of [mk({ api_error_status: 500 }), mk({}), Object.assign(mk({ api_error_status: 500 }), { exit: 0 })]) {
+    const fx = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: resp } });
+    const r = await go(fx, RUN);
+    assert.strictEqual(r.code, 5);
+    assert.ok(outcomes(fx).includes('a:1:child_error'));
+    fx.cleanup();
+  }
+  // plain non-structured failure keeps the child's code
+  const fx = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: { exit: 3, stderr: 'plain failure\n' } } });
+  assert.strictEqual((await go(fx, RUN)).code, 3);
+  fx.cleanup();
+});
+
+test('B: output ending in a truncated token is scrubbed (unit and run level)', async () => {
+  const s = createScrubber('SECRET-VALUE-XYZ');
+  const out = Buffer.concat([s.push(Buffer.from('ok SECRET-VALUE-XY')), s.end()]).toString();
+  assert.strictEqual(out, 'ok [token-scrubbed]');
+  assert.strictEqual(s.hit, true);
+  const s2 = createScrubber('SECRET-VALUE-XYZ');
+  assert.strictEqual(Buffer.concat([s2.push(Buffer.from('plain tail SEC')), s2.end()]).toString(), 'plain tail SEC');
+  assert.strictEqual(s2.hit, false);
+  const fx = makeFixture({ aliases: [{ alias: 'a', token: 'FAKE-prefixtoken-0123456789' }] });
+  fx.shim.setControl({ tokens: { 'FAKE-prefixtoken-0123456789': { exit: 0, leak: 'prefix' } } });
+  const so = path.join(fx.root, 'f.out');
+  const r = await go(fx, ['run', '--purpose', 'tst', '--stdout', so, '--', 'claude']);
+  assert.strictEqual(r.code, 7);
+  assert.ok(!fs.readFileSync(so, 'utf8').includes('FAKE-prefixtoken-012'));
+  fx.cleanup();
+});
+
+test('C: symlinked .ssh or .ssh/config in the alias home is refused (exit 2) and the real config is untouched', async () => {
+  for (const kind of ['dir', 'file']) {
+    const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+    const realSsh = path.join(fx.realHome, '.ssh');
+    fs.mkdirSync(realSsh, { recursive: true });
+    fs.writeFileSync(path.join(realSsh, 'config'), 'REAL-CONFIG\n');
+    const home = path.join(fx.accountsDir, 'a', 'home');
+    if (kind === 'dir') fs.symlinkSync(realSsh, path.join(home, '.ssh'));
+    else { fs.mkdirSync(path.join(home, '.ssh')); fs.symlinkSync(path.join(realSsh, 'config'), path.join(home, '.ssh', 'config')); }
+    const r = await go(fx, RUN);
+    assert.strictEqual(r.code, 2, kind);
+    assert.match(r.err, /ssh_path_is_link/);
+    assert.strictEqual(fs.readFileSync(path.join(realSsh, 'config'), 'utf8'), 'REAL-CONFIG\n');
+    assert.deepStrictEqual(fs.readdirSync(realSsh), ['config']);
+    assert.strictEqual(fx.shim.spawns(), 0);
+    fx.cleanup();
+  }
+});
+
+test('--stdin pointing at a missing file is a usage error (exit 2, no spawn)', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  const r = await go(fx, ['run', '--purpose', 'tst', '--stdin', path.join(fx.root, 'nope'), '--', 'claude']);
+  assert.strictEqual(r.code, 2);
+  assert.strictEqual(fx.shim.spawns(), 0);
+  fx.cleanup();
+});
+
 test('scrubber unit: match split across three chunks, held-back tail flushed on end', () => {
   const s = createScrubber('SECRET-VALUE');
   let out = Buffer.concat([s.push(Buffer.from('xx SECR')), s.push(Buffer.from('ET-VAL')), s.push(Buffer.from('UE yy SECRET')), s.end()]);
@@ -333,7 +392,13 @@ process.stdout.write('{}');`);
   };
   const withHome = (fx, seed) => {
     if (seed) {
-      fs.writeFileSync(path.join(fx.realHome, '.gitconfig'), `[user]\n\tname = Fixture\n\temail = ${EMAIL}\n`);
+      const gc = `[user]\n\tname = Fixture\n\temail = ${EMAIL}\n`;
+      if (seed === 'xdg') {
+        fs.mkdirSync(path.join(fx.realHome, '.config', 'git'), { recursive: true });
+        fs.writeFileSync(path.join(fx.realHome, '.config', 'git', 'config'), gc);
+      } else {
+        fs.writeFileSync(path.join(fx.realHome, '.gitconfig'), gc);
+      }
       fs.mkdirSync(path.join(fx.realHome, '.ssh'), { recursive: true });
       fs.writeFileSync(path.join(fx.realHome, '.ssh', 'config'), 'Host x\n');
       fs.writeFileSync(path.join(fx.realHome, '.ssh', 'id_test'), 'FAKE-key');
@@ -356,6 +421,11 @@ process.stdout.write('{}');`);
   assert.strictEqual(good.res.link, path.join(good.fx.realHome, '.ssh', 'id_test'));
   assert.notStrictEqual(good.res.claude, 0);
   good.fx.cleanup();
+  const xdg = await runOne('xdg');
+  assert.strictEqual(xdg.r.code, 0);
+  assert.strictEqual(xdg.res.email, EMAIL);
+  assert.strictEqual(xdg.res.commit, 0);
+  xdg.fx.cleanup();
   const empty = await runOne(false);
   assert.notStrictEqual(empty.res.email, EMAIL);
   empty.fx.cleanup();

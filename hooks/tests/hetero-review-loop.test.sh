@@ -1473,6 +1473,38 @@ T2_CHAIN=$(cat "$LEDGER/review-p_test2/chain.json")
 assert_contains "$T2_CHAIN" '"status": "aborted"' "test 2: chain entry status is aborted"
 assert_contains "$T2_CHAIN" '"reason": "parse_failed"' "test 2: chain entry reason is parse_failed"
 
+# Test 2g: a seat heading a finding with a symbol outside the four-level vocabulary (green circle) must not
+# abort the round: the finding is kept (never dropped), filed at Major, and flagged severity_unrecognised.
+T2G_FINDINGS_TEXT=$(cat << 'EOF2'
+🟢 [glm-1] looks fine but check the retry path
+detail line that must stay with the finding
+🔴
+Real critical from the same seat
+EOF2
+)
+export STUB_SEAT_RESPONSE="$(node -e 'console.log(JSON.stringify({status: "reviewed", verdict: "FIX-THEN-SHIP", findings: process.argv[1]}));' "$T2G_FINDINGS_TEXT")"
+T2G_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2g --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2G_RC=$?
+assert_exit_code "$T2G_RC" "0" "test 2g: unrecognised severity symbol does not abort the round"
+T2G_FILE="$LEDGER/review-p_test2g/g1/findings.json"
+assert_file_exists "$T2G_FILE" "test 2g: findings.json written"
+T2G_SUMMARY=$(node -e '
+  const f = JSON.parse(fs.readFileSync(process.argv[1])).findings;
+  console.log(f.length + "|" + f.map(x => x.severity + ":" + (x.severity_unrecognised ? "flag" : "noflag") + ":" + (x.text.includes("detail line that must stay") ? "kept" : "lost")).join(","));
+' "$T2G_FILE")
+assert_eq "$T2G_SUMMARY" "2|Major:flag:kept,Critical:noflag:lost" "test 2g: both findings kept, the unrecognised one flagged at Major with its body intact"
+assert_contains "$T2G_OUT" "outside the four-level vocabulary" "test 2g: stderr names the unrecognised symbol"
+
+# Test 2h: the reported incident shape: the seat's ONLY finding is headed by the green circle. Before the
+# fix this aborted the whole round (rc=1, parse_failed, no findings.json); now the round succeeds.
+export STUB_SEAT_RESPONSE="$(node -e 'console.log(JSON.stringify({status: "reviewed", verdict: "FIX-THEN-SHIP", findings: "\u{1F7E2} [glm-9] only finding, green circle\nbody line"}));')"
+T2H_OUT=$(node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_test2h --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); T2H_RC=$?
+assert_exit_code "$T2H_RC" "0" "test 2h: a seat whose only finding uses an unrecognised symbol does not abort the round"
+T2H_SUMMARY=$(node -e '
+  const f = JSON.parse(fs.readFileSync(process.argv[1])).findings;
+  console.log(f.length + "|" + f[0].severity + "|" + f[0].severity_unrecognised + "|" + f[0].original_severity_symbol + "|" + f[0].text.includes("body line"));
+' "$LEDGER/review-p_test2h/g1/findings.json")
+assert_eq "$T2H_SUMMARY" "1|Major|true|$(node -e 'process.stdout.write("\u{1F7E2}")')|true" "test 2h: the finding is kept at Major, flagged, original symbol recorded, body intact"
+
 # Test 2d (negative control): the aborted generation left real evidence on disk (range.json, diff.txt);
 # collecting the SAME generation number again must be refused (generation numbers are never
 # reused, including aborted ones) and must NOT delete/recreate that directory.

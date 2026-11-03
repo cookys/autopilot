@@ -409,6 +409,13 @@ const EMOJI_TO_WORD = {
   '🔵': 'Suggestion',
 };
 
+// A seat may head a finding with a coloured-marker glyph outside the four-level vocabulary (a GLM seat
+// used the green circle on 2026-11-03, which aborted the whole round). That finding is kept, never
+// dropped: it is filed at the conservative level (Major, so depth-0 has to judge it, never silently
+// demoted) and flagged `severity_unrecognised` with the original glyph. No fifth level is added.
+const UNRECOGNISED_SEVERITY_GLYPH = /^(?:[-*#>\s\d.)]*)(🟢|🟣|🟤|⚫|⚪|🟥|🟧|🟨|🟩|🟦|🟪|🟫|⬛|⬜)/u;
+const UNRECOGNISED_SEVERITY_FALLBACK = 'Major';
+
 function extractFindings(seatId, findingsText) {
   if (!findingsText || typeof findingsText !== 'string') return [];
   const lines = findingsText.split(/\r?\n/);
@@ -421,17 +428,19 @@ function extractFindings(seatId, findingsText) {
     // 2. A severity glyph followed by the plain severity word
     // 3. The plain severity word alone with no glyph
     // 4. A severity glyph immediately followed by a bracketed id (glyph then whitespace then open bracket)
+    const unknown = trimmed.match(UNRECOGNISED_SEVERITY_GLYPH);
+    if (unknown) return { word: UNRECOGNISED_SEVERITY_FALLBACK, glyph: unknown[1] };
     const match = trimmed.match(/^(?:[-*#>\s\d.)]*)(?:(🔴|🟠|🟡|🔵)(?:\s*\[|\s+(Critical|Major|Minor|Suggestion)\b|\s*$|\s+)|(Critical|Major|Minor|Suggestion)\b)/i);
     if (!match) return null;
     if (match[1]) {
       const word = EMOJI_TO_WORD[match[1]];
-      if (word) return word;
+      if (word) return { word };
     }
     const rawWord = match[2] || match[3];
     if (rawWord) {
       const lower = rawWord.toLowerCase();
       for (const w of SEVERITY_WORDS) {
-        if (w.toLowerCase() === lower) return w;
+        if (w.toLowerCase() === lower) return { word: w };
       }
     }
     return null;
@@ -447,9 +456,13 @@ function extractFindings(seatId, findingsText) {
         findings.push(currentFinding);
       }
       currentFinding = {
-        severity: sev,
+        severity: sev.word,
+        unrecognisedGlyph: sev.glyph,
         lines: [line],
       };
+      if (sev.glyph) {
+        console.error(`WARN: seat ${seatId} used severity symbol ${sev.glyph} outside the four-level vocabulary; kept as ${sev.word} with severity_unrecognised for depth-0 judgement`);
+      }
     } else {
       if (currentFinding) {
         currentFinding.lines.push(line);
@@ -466,12 +479,17 @@ function extractFindings(seatId, findingsText) {
     const normalizedFirstLine = firstLine.trim().replace(/\s+/g, ' ');
     const idInput = `${seatId}|${f.severity}|${normalizedFirstLine}`;
     const id = crypto.createHash('sha256').update(idInput, 'utf8').digest('hex');
-    return {
+    const out = {
       id,
       severity: f.severity,
       seat: seatId,
       text,
     };
+    if (f.unrecognisedGlyph) {
+      out.severity_unrecognised = true;
+      out.original_severity_symbol = f.unrecognisedGlyph;
+    }
+    return out;
   });
 }
 

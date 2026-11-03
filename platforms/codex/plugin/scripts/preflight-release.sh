@@ -383,6 +383,13 @@ check_config_docs_gate() {
   node "$SCRIPTS_DIR/check-config-docs.js" >&2
 }
 
+# ─── 12. quota adapter manifest gate ───
+# Every scripts/quota-adapters/<provider>.json (fleet.quota-adapter/1) passes check-quota-adapters.js: evidence for
+# verified captures, byte-equal tinyprobe argv, required window at L2/L3, credential refs as templates only (G40 N27/N28/N72).
+check_quota_adapters_gate() {
+  node "$SCRIPTS_DIR/check-quota-adapters.js" >&2
+}
+
 # BL-0194 P4a: when the recipe records a feed snapshot (build-qualification-defaults.js build --from-snapshot),
 # the official defaults must not be derived from one older than 30 days. A build-time gate, not a runtime
 # advisory. No snapshot recorded (the store-derived path) passes.
@@ -414,6 +421,7 @@ run_check "plan graduation clean ($BACKLOG_FILE queue rows, released $PLANS_DIR/
 run_check "temp-prefix registry gate (check-tmp-residue-registry.js, whole repo)" check_tmp_residue_gate
 run_check "official defaults snapshot age (build-qualification-defaults.js --check-snapshot-age, <= 30 days)" check_defaults_snapshot_age
 run_check "settings registry gate (check-config-docs.js: code <-> ${CONFIG_KEYS##*/} <-> $SETTINGS_REFERENCE)" check_config_docs_gate
+run_check "quota adapter manifest gate (check-quota-adapters.js, scripts/quota-adapters/*.json)" check_quota_adapters_gate
 
 # ─── advisory: hook x harness support matrix staleness (BL-0231) ──────────────
 # NOT a check and NOT counted in $FAILS — hook-harness-matrix.js --check prints WARN for

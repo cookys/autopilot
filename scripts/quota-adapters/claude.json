@@ -1,0 +1,36 @@
+{
+  "schema": "fleet.quota-adapter/1",
+  "provider": "claude",
+  "visibility": "L3",
+  "starts_window": "unknown",
+  "windows": [
+    { "kind": "rolling_5h", "unit": null, "limit_known": false, "required": true },
+    { "kind": "weekly", "unit": null, "limit_known": false, "required": false }
+  ],
+  "capture": [
+    {
+      "mode": "passive", "cost": "zero_token", "verified": true,
+      "parser": "claude-stream-rate-limit-event", "needs": "stream-json --verbose",
+      "evidence": "docs/plans/evidence/2026-11-03-g40-agent-lane-quota/capability-matrix.md"
+    },
+    {
+      "mode": "endpoint", "cost": "zero_token", "verified": false,
+      "note": "none found: claude auth status reports login and subscription metadata only, not quota (capability-matrix.md claude field 3)"
+    },
+    {
+      "mode": "tinyprobe", "cost": "tokens", "verified": true,
+      "argv_template": ["claude", "-p", "<PROMPT>", "--model", "haiku", "--output-format", "stream-json", "--verbose", "--tools", "", "--no-session-persistence"],
+      "est_cost_usd": 0.0034, "est_out_tokens": [8, 222], "min_interval_minutes": 60,
+      "starts_window": "unknown",
+      "evidence": "docs/plans/evidence/2026-11-03-g40-agent-lane-quota/capability-matrix.md"
+    },
+    {
+      "mode": "fallback", "cost": "local",
+      "counter": null, "plan_limit": null, "source": "estimated",
+      "cooldown_on_429": { "default_minutes": 30 }
+    }
+  ],
+  "credential_ref": { "kind": "file", "path": "<accounts-dir>/<alias>/token" },
+  "token_lifetime": { "days": 365, "evidence": "https://code.claude.com/docs/en/authentication" },
+  "matrix_row": "capability-matrix.md#claude"
+}

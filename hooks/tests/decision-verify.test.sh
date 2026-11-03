@@ -183,7 +183,10 @@ hook "$(printf '[待決回覆]\n%s｜%s → A → B｜%s\n' "$C" "$EXC" "$AIDL")
 reset ok; C="$(open_card)"; AIDF="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{freeText:"my own words"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
 deny "$C｜Q? → other｜補充：my own words｜$AIDF" "free text only in the note"
 deny "$C｜Q? → my own words and more｜$AIDF" "free text is only a prefix"
-hook "$(printf '[待決回覆]\n%s｜Q? → 都不選｜補充：anything｜%s\n' "$C" "$AIDF")"; is_open "$C"; assert_eq "$?" 1 "picked none, text in the note: closes"
+deny "$C｜Q? → 都不選｜補充：anything｜$AIDF" "picked none, but the note is not the stored free text"
+deny "$C｜Q? → 都不選｜補充：my own words and more｜$AIDF" "picked none, note only starts with the stored free text"
+deny "$C｜Q? → 都不選｜$AIDF" "picked none, no note field at all"
+hook "$(printf '[待決回覆]\n%s｜Q? → 都不選｜補充：  my own words  ｜%s\n' "$C" "$AIDF")"; is_open "$C"; assert_eq "$?" 1 "picked none, note equals the stored free text (outer blanks ignored): closes"
 # one forged + one good in a single reply: only the good one closes
 reset ok; C1="$(open_card)"; C2="$(open_card)"; AID2="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"B"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C2")"
 hook "$(printf '[待決回覆]\n%s｜Q? → A｜AFORGED000000000000000000X\n%s｜Q? → B｜%s\n' "$C1" "$C2" "$AID2")"

@@ -10,7 +10,8 @@
  *
  * Fields (split on `｜` only): id, body, [note], answer_id.  The body must be exactly `<excerpt of the card's question> → <answer>`; the excerpt is
  * recomputed from the ledger entry, so a ` → ` inside the question or the answer cannot move the boundary. The answer must EQUAL the stored
- * answer (only outer blanks removed): no substring, no prefix, no separator folding. The note is free text and never takes part in the comparison.
+ * answer (only outer blanks removed): no substring, no prefix, no separator folding. The note takes part in exactly one case: a free-text answer
+ * written as `都不選｜補充：<text>` (the panel's form for "picked none, typed a text"), where the note must equal the stored free text.
  */
 const ARROW = ' → ';
 const NONE = '都不選';
@@ -43,7 +44,8 @@ function lineSaysAnswer(line, stored, question) {
   if (typeof ft !== 'string' || ft === '') return { ok: false, reason: 'answer' };
   // a free-text card writes the typed text as the answer; an option card whose owner picked none writes `都不選` and the text in the note
   if (p.note === null) return answer === wire(ft) ? { ok: true } : { ok: false, reason: 'answer' };
-  return answer === NONE ? { ok: true } : { ok: false, reason: 'answer' };
+  // the panel puts the typed text in the note here, so the note must EQUAL the stored text (outer blanks ignored)
+  return answer === NONE && p.note.slice(NOTE_MARK.length).trim() === wire(ft) ? { ok: true } : { ok: false, reason: 'answer' };
 }
 
 module.exports = { parseDecideLine, lineSaysAnswer, excerptOf, wire };

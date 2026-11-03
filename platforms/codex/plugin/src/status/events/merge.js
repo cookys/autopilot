@@ -44,15 +44,18 @@ function mergePage({ results, cursor, kinds, limit, projectKey }) {
   const files = [];
   const all = [];
   let invalid = 0;
+  let foreign = 0;
   for (const result of results) {
     if (!result) continue;
     for (const file of result.files || []) files.push(file);
     for (const event of result.events || []) {
       if (!validEvent(event)) { invalid += 1; continue; }
+      if (event.project_key !== projectKey) { foreign += 1; continue; } // an event of another project never reaches a page
       all.push(event);
     }
   }
   if (invalid > 0) warn(warnings, 'schema_mismatch', 'event', invalid);
+  if (foreign > 0) warn(warnings, 'schema_mismatch', 'project_key', foreign);
 
   all.sort((a, b) => cmpStr(a.ts, b.ts) || cmpStr(a.id, b.id));
   const events = [];
@@ -70,16 +73,22 @@ function mergePage({ results, cursor, kinds, limit, projectKey }) {
   const kindSet = Array.isArray(kinds) && kinds.length > 0 ? new Set(kinds) : null;
   const lines = [];
   const candidates = [];
+  const candidateById = new Map();
   for (const event of events) {
     const tsMs = parseInstantMs(event.ts);
     let pass = tsMs >= floor && !delivered.has(cursorLib.idHash(event.id));
     if (pass && cursor.e && tsMs === cursor.e[0] && event.id <= cursor.e[1]) pass = false;
     const candidate = pass && (kindSet === null || kindSet.has(event.kind));
+    candidateById.set(event.id, candidate);
+    if (candidate) candidates.push({ event, id: event.id, tsMs });
+  }
+  // Every valid occurrence keeps its source position, also the one a duplicate collapse dropped: the file it sits in may hold
+  // an undelivered line, so its hint must not run past it. "Delivered" is decided by id (see nextCursorState).
+  for (const event of all) {
     const src = event._src;
     if (src && typeof src.source === 'string') {
-      lines.push({ fileKey: `${src.source}:${src.head}`, file: src.file, offset: src.offset, tsMs, id: event.id, candidate });
+      lines.push({ fileKey: `${src.source}:${src.head}`, file: src.file, offset: src.offset, tsMs: parseInstantMs(event.ts), id: event.id, candidate: candidateById.get(event.id) === true });
     }
-    if (candidate) candidates.push({ event, id: event.id, tsMs });
   }
 
   const cap = Number.isInteger(limit) && limit > 0 ? limit : 1000;

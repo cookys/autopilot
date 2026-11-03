@@ -738,7 +738,10 @@ test('cursor-foreign-project: (vi) a cursor of another project exits 2 bad_curso
   assert.deepEqual(result, { schema: 'autopilot.events/1', error: { code: 'bad_cursor' } });
   assert.equal(exitCodeOf(result), 2);
   assert.ok(isValid(result), 'the error object is the schema\'s second top-level shape');
-  assert.equal(collectEvents(baseOpts(fx, { projectKey: 'f'.repeat(16) })).error.code, 'project_mismatch');
+  const mismatch = collectEvents(baseOpts(fx, { projectKey: 'f'.repeat(16) }));
+  assert.deepEqual(mismatch, { schema: 'autopilot.events/1', error: { code: 'project_mismatch' } });
+  assert.equal(exitCodeOf(mismatch), 2);
+  assert.ok(isValid(mismatch), 'project_mismatch is a valid error object');
   assert.equal(collectEvents(baseOpts(fx, { projectKey: fx.projectKey })).error, undefined);
 });
 
@@ -925,27 +928,28 @@ test('cursor-overflow-nodup: 1000 events at one instant then one a second later,
   assert.equal(all.size, 1002);
 });
 
-test('cursor-group-e: (g)(s3) 1500 events at one ts: pages resume with e, no duplicate, no gap, and e outlives t moving on', () => {
+test('cursor-group-e: (g)(s3) 1200 events at one ts in pages of 600: pages resume with e, no duplicate, no gap, and e outlives t moving on', () => {
   const fx = fresh();
   const list = [];
-  for (let i = 0; i < 1500; i += 1) list.push(stubEvent(fx, padId(i), T0));
+  for (let i = 0; i < 1200; i += 1) list.push(stubEvent(fx, padId(i), T0));
   const opts = stubOpts(fx, () => list);
-  const pages = drain(opts, { limit: 1000 });
+  const pages = drain(opts, { limit: 600 });
   assert.equal(pages.length, 2);
   assert.deepEqual(idsOfPages(pages), list.map((e) => e.id));
   const c2 = decodeC(pages[1].cursor);
-  assert.deepEqual(c2.e, [T0, `cost.turn:${padId(1499)}`], 'the oversized group is carried as e');
-  assert.equal(c2.w.length, 0);
+  assert.deepEqual(c2.e, [T0, `cost.turn:${padId(1199)}`], 'the group, too large for w, is carried as e');
+  assert.equal(c2.w.length, 600, 'pairs at the group instant stay (a smaller-id late row at that ms must not resend the group)');
   assert.ok(pages[1].cursor.length <= 64 * 1024);
   assert.deepEqual(collectEvents({ ...opts, since: pages[1].cursor }).events, []);
-  // t moves on to T+5 s: the group is still inside the floor, so e must still hide it
+  // t moves on to T+5 s: the group is still inside the floor, so e must still hide the ids w no longer holds
   list.push(stubEvent(fx, 'zafter', T0 + 5000));
   const after = collectEvents({ ...opts, since: pages[1].cursor });
-  assert.deepEqual(after.events.map((e) => e.id), ['cost.turn:zafter'], 'no duplicate of the 1500');
-  assert.deepEqual(decodeC(after.cursor).e, [T0, `cost.turn:${padId(1499)}`]);
-  // pages of 700 over the same group
-  const small = drain(stubOpts(fx, () => list.slice(0, 1500)), { limit: 700 });
-  assert.deepEqual(idsOfPages(small), list.slice(0, 1500).map((e) => e.id));
+  assert.deepEqual(after.events.map((e) => e.id), ['cost.turn:zafter'], 'no duplicate of the 1200');
+  assert.deepEqual(decodeC(after.cursor).e, [T0, `cost.turn:${padId(1199)}`]);
+  assert.deepEqual(collectEvents({ ...opts, since: after.cursor }).events, []);
+  // pages of 350 over the same group
+  const small = drain(stubOpts(fx, () => list.slice(0, 1200)), { limit: 350 });
+  assert.deepEqual(idsOfPages(small), list.slice(0, 1200).map((e) => e.id));
 });
 
 test('cursor-overflow-5000: (viii) 5 000 events in one second: window_overflow, s shrinks, no duplicate, no gap, every cursor <= 64 KiB', () => {
@@ -977,4 +981,64 @@ test('cursor-w-prune: (f) in a plain resume the per-id ts pruning keeps w under 
     assert.equal(c.s, 300000);
     assert.ok(c.w.length <= 302, `w ${c.w.length}: only the ids inside the slack are kept`);
   }
+});
+
+test('cursor-foreign-project-event: an event whose project_key is not this project\'s never reaches a page', () => {
+  const fx = fresh();
+  const alien = { ...stubEvent(fx, 'alien', T0), project_key: 'f'.repeat(16) };
+  const page = collectEvents(stubOpts(fx, () => [stubEvent(fx, 'mine', T0 + 1), alien]));
+  assert.deepEqual(page.events.map((e) => e.id), ['cost.turn:mine']);
+  assert.ok(page.warnings.some((w) => w.source === 'merge' && w.code === 'schema_mismatch' && w.detail === 'project_key'));
+});
+
+test('cursor-reader-load-failure: a reader module that fails to load is that source\'s source_failed only', () => {
+  const fx = fresh();
+  const deps = stubDeps(fx, () => [stubEvent(fx, 'one', T0)]);
+  const readers = deps.readers;
+  delete deps.readers;
+  deps.loadReader = (name) => { if (name === 'qc') throw new SyntaxError('cannot load'); return readers[name]; };
+  const page = collectEvents({ cwd: fx.repoDir, env: {}, now: T0, deps });
+  assert.deepEqual(page.events.map((e) => e.id), ['cost.turn:one']);
+  assert.deepEqual(page.warnings.map((w) => `${w.source}:${w.code}:${w.detail}`), ['qc:source_failed:SyntaxError']);
+  assert.deepEqual(page.sources.filter((s) => s.state === 'degraded').map((s) => s.name), ['qc']);
+});
+
+test('resume-duplicate-id-hint: a duplicate id dropped by the merge still pins its file\'s hint; removing the kept copy loses nothing with or without hints', () => {
+  const fx = fresh();
+  const headA = 'aaaaaaaaaaaa';
+  const headB = 'bbbbbbbbbbbb';
+  const fileOf = (head, f) => ({ key: `cost:${head}`, file: f, size: 100000, head, startOffset: 0, endOffset: 9000 });
+  const src = (head, f, offset) => ({ source: 'cost', file: f, head, offset, end: offset + 99 });
+  // the same ids in two files; file A lies first in reader order, so the merge keeps A's copies and drops B's
+  const mk = (head, f) => [0, 1, 2, 3].map((i) => stubEvent(fx, padId(i), T0 + i * 1000000, src(head, f, 1000 * (i + 1))));
+  let both = true;
+  const events = () => (both ? [...mk(headA, '/f/a'), ...mk(headB, '/f/b')] : mk(headB, '/f/b'));
+  const files = () => (both ? [fileOf(headA, '/f/a'), fileOf(headB, '/f/b')] : [fileOf(headB, '/f/b')]);
+  const deps = stubDeps(fx, events);
+  deps.readers.cost = { read: () => ({ events: events(), warnings: [], stats: { state: 'ok' }, files: files() }) };
+  const opts = { cwd: fx.repoDir, env: {}, now: T0, deps };
+  const first = collectEvents({ ...opts, limit: 2 });
+  assert.equal(first.events.length, 2);
+  const h = decodeC(first.cursor).h;
+  assert.ok(h[`cost:${headB}`] !== undefined && h[`cost:${headB}`] <= 3000, `B's hint ${h[`cost:${headB}`]} stays before its undelivered line`);
+  both = false; // file A (the kept copy) is gone
+  const hinted = collectEvents({ ...opts, since: first.cursor, limit: 10 });
+  const plain = collectEvents({ ...opts, since: dropHints(first.cursor), limit: 10 });
+  assert.deepEqual(hinted.events.map((e) => e.id), [padId(2), padId(3)].map((k) => `cost.turn:${k}`));
+  assert.deepEqual(hinted.events.map((e) => e.id), plain.events.map((e) => e.id));
+});
+
+test('resume-shared-head-zero-offset: two big files with one head share a hint key: the smallest offset, 0 included, wins', () => {
+  const fx = fresh();
+  const head = 'cccccccccccc';
+  const f1 = { key: `cost:${head}`, file: '/f/one', size: 100000, head, startOffset: 0, endOffset: 9000 };
+  const f2 = { key: `cost:${head}`, file: '/f/two', size: 90000, head, startOffset: 0, endOffset: 8000 };
+  const mk = (f, offset, key, tsMs) => stubEvent(fx, key, tsMs, { source: 'cost', file: f, head, offset, end: offset + 9 });
+  // file two holds an undelivered line at offset 0 (a different id, ts after the page), file one is read to its end
+  const events = [mk('/f/one', 500, 'x1', T0), mk('/f/two', 0, 'x2', T0 + 2000000)];
+  const page = collectEvents(stubOpts(fx, () => events, { files: [f1, f2], limit: 1 }));
+  assert.deepEqual(page.events.map((e) => e.id), ['cost.turn:x1']);
+  assert.equal(decodeC(page.cursor).h[`cost:${head}`], undefined, 'a 0 from either file means no hint for the shared key');
+  const rest = collectEvents(stubOpts(fx, () => events, { files: [f1, f2], since: page.cursor }));
+  assert.deepEqual(rest.events.map((e) => e.id), ['cost.turn:x2']);
 });

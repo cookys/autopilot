@@ -19,9 +19,9 @@ autopilot status events [--since <cursor|ISO-8601|0>] [--limit N] [--kinds k1,k2
 
 - `--since` omitted or `0`: from the beginning of what the sources still hold, in pages of `--limit` (default 1000, max 10 000).
 - `--since <ISO-8601>`: first call by wall time (events with `ts >=` it). `-` reads the cursor from stdin (one line). Any other value is a cursor; one that does not decode or has an unknown `v` exits 2 with `bad_cursor`.
-- `--project <project_key>`: optional; must equal the key of `cwd`'s own repo, any other key exits 2. Events of other repos are never returned; host-wide sources (costs file, manifests dir) are filtered to the project.
+- `--project <project_key>`: optional; must equal the key of `cwd`'s own repo, any other key exits 2 with `project_mismatch`. Events of other repos are never returned; host-wide sources (costs file, manifests dir) are filtered to the project.
 - `--json` prints one JSON object (the envelope). Without it a compact table (kind, ts, id prefix, one-line summary) and a `next cursor:` line; warnings go to stderr.
-- Exit codes are 0 and 2 only. Exit 2 is a usage, `bad_cursor` or `project_unresolved` error; under `--json` it prints the error object `{"schema":"autopilot.events/1","error":{"code":...}}`, the second top-level shape of the schema. A source problem is never an exit code: it is a warning.
+- Exit codes are 0 and 2 only. Exit 2 is a usage, `bad_cursor`, `project_unresolved` or `project_mismatch` (`--project` names another project than `cwd`'s repo) error; under `--json` it prints the error object `{"schema":"autopilot.events/1","error":{"code":...}}`, the second top-level shape of the schema. A source problem is never an exit code: it is a warning.
 - An absent default decision ledger or dispatch runs dir is state `absent` with no warning (a fresh repo is normal).
 
 ## Envelope

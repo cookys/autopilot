@@ -9,7 +9,7 @@
 //   kinds          array of kind names (or a comma list) or empty = all
 //   projectKey     optional --project value; must equal the key of cwd's own repository
 //   reviewLedgers  the repeated --review-ledger values (configured review roots)
-//   deps           test seam: { resolveProject, readers, mergePage, encodeCursor, buildEnvelope, now }
+//   deps           test seam: { resolveProject, readers, loadReader, mergePage, encodeCursor, buildEnvelope, now }
 //
 // Returns the envelope, or the second top-level shape {schema, error:{code}} for exit 2 (`project_unresolved`, `project_mismatch`,
 // `bad_cursor`); exitCodeOf(result) says which. Project and failure rules (docs/dev/events-contract.md):
@@ -37,16 +37,8 @@ const MAX_LIMIT = 10000;
 const SOURCE_NAMES = ['dispatch', 'cost', 'review', 'qc', 'decision', 'runledger'];
 const STATES = new Set(['ok', 'absent', 'degraded']);
 
-function defaultReaders() {
-  return {
-    dispatch: require('./sources/dispatch'),
-    cost: require('./sources/cost'),
-    review: require('./sources/review'),
-    qc: require('./sources/qc'),
-    decision: require('./sources/decision'),
-    runledger: require('./sources/runledger'),
-  };
-}
+// Readers are loaded lazily, one at a time inside runReader's try: a reader module that fails to load is that source's `source_failed`.
+const loadReaderDefault = (name) => require(`./sources/${name}`);
 
 const errorObject = (code) => ({ schema: SCHEMA, error: { code } });
 const exitCodeOf = (result) => (result && result.error ? 2 : 0);
@@ -94,9 +86,10 @@ function normaliseWarning(w, fallbackSource) {
 }
 
 // One reader, in its own try/catch. -> { name, events, files, warnings, stat }
-function runReader(name, reader, ctx, window) {
+function runReader(name, loadReader, ctx, window) {
   const warnings = [];
   try {
+    const reader = loadReader(name);
     const res = reader.read(ctx, window);
     if (!res || typeof res !== 'object' || !res.stats || typeof res.stats !== 'object') throw new TypeError('BadReaderResult');
     for (const w of Array.isArray(res.warnings) ? res.warnings : []) {
@@ -185,14 +178,15 @@ function collectEvents(opts = {}) {
   try {
     const limit = Number.isInteger(opts.limit) && opts.limit > 0 ? Math.min(opts.limit, MAX_LIMIT) : DEFAULT_LIMIT;
     const kinds = normaliseKinds(opts.kinds);
-    const readers = deps.readers || defaultReaders();
+    const loadReader = typeof deps.loadReader === 'function' ? deps.loadReader
+      : (deps.readers ? (name) => { if (!deps.readers[name]) throw new Error('NoReader'); return deps.readers[name]; } : loadReaderDefault);
     const ctx = {
       project, env, home: opts.home || env.HOME, now: nowMs(),
       reviewLedgers: Array.isArray(opts.reviewLedgers) ? opts.reviewLedgers.filter((d) => typeof d === 'string' && d !== '') : [],
     };
     const window = { sinceTs: cursorLib.floorOf(input.state), slackMs: 0, hints: input.state.h };
 
-    const ran = SOURCE_NAMES.map((name) => runReader(name, readers[name] || { read: () => { throw new Error('NoReader'); } }, ctx, window));
+    const ran = SOURCE_NAMES.map((name) => runReader(name, loadReader, ctx, window));
 
     if (faultOn('merge')) throw new Error('InjectedMergeFault');
     const merged = (deps.mergePage || mergeLib.mergePage)({

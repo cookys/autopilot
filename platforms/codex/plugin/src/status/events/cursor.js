@@ -125,8 +125,9 @@ function nextWindow(prev, page) {
     if (firstOfGroup > 0) { cut = cut.slice(0, firstOfGroup); continue; } // cut the page before the group
     const last = cut[cut.length - 1];
     const pairs = new Map();
-    // the new e covers every delivered id of the group (earlier pages' pairs at this ts included): drop them from w
-    for (const pair of prev.w) if (pair[1] > groupTs) pairs.set(pair[0], pair[1]);
+    // pairs at or after the group instant stay (a late row with a smaller id at the same ms must not resend the group); the page's
+    // own group is left to e
+    for (const pair of prev.w) if (pair[1] >= groupTs) pairs.set(pair[0], pair[1]);
     return { newT: groupTs, slack: 0, floor: Math.max(prev.f, groupTs), pairs, e: [groupTs, last.id], page: cut, overflow: true };
   }
 }
@@ -135,7 +136,8 @@ function nextWindow(prev, page) {
 // whose ts is inside the next window (>= floor); with neither, the end of what was consumed. `files` come from the readers, `lines`
 // are { fileKey, file, offset, tsMs, undelivered }.
 function nextHints(files, lines, floor) {
-  const candidates = [];
+  // Files whose first 256 bytes agree share one hint key; the key gets the SMALLEST offset of them all, 0 included.
+  const byKey = new Map();
   for (const file of files) {
     if (!file || typeof file.key !== 'string' || !(file.size >= HINT_MIN_FILE_BYTES)) continue;
     let hint = file.endOffset;
@@ -143,22 +145,16 @@ function nextHints(files, lines, floor) {
       if (line.fileKey !== file.key || line.file !== file.file) continue;
       if (line.undelivered || line.tsMs >= floor) hint = Math.min(hint, line.offset);
     }
-    if (Number.isInteger(hint) && hint > 0) candidates.push({ key: file.key, size: file.size, hint });
+    if (!Number.isInteger(hint) || hint < 0) continue;
+    const hit = byKey.get(file.key);
+    if (hit) { hit.hint = Math.min(hit.hint, hint); hit.size = Math.max(hit.size, file.size); } else byKey.set(file.key, { key: file.key, size: file.size, hint });
   }
-  candidates.sort((a, b) => (b.size - a.size) || cmpStr(a.key, b.key));
+  const candidates = [...byKey.values()].sort((a, b) => (b.size - a.size) || cmpStr(a.key, b.key)).slice(0, MAX_H);
   const h = {};
-  let count = 0;
-  for (const candidate of candidates) {
-    if (count >= MAX_H) break;
-    if (Object.prototype.hasOwnProperty.call(h, candidate.key)) { h[candidate.key] = Math.min(h[candidate.key], candidate.hint); continue; }
-    h[candidate.key] = candidate.hint;
-    count += 1;
-  }
+  for (const candidate of candidates) if (candidate.hint > 0) h[candidate.key] = candidate.hint; // 0 means "from the start": no hint
   return h;
 }
 
-// lines: one { fileKey, file, offset, tsMs, id, candidate } per event that carries a source position; candidate = the event passed
-// the cursor filter and --kinds, so it would have been delivered had the page not been cut.
 function nextCursorState(prev, page, files, lines, projectKey) {
   const win = nextWindow(prev, page);
   const state = {

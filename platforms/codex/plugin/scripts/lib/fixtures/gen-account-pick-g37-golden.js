@@ -51,9 +51,13 @@ function pinProblem(repoRoot) {
 }
 
 const COVERAGE_LINE = /^observations newest_age: /;
-// D5: once `run` has copied a statusline snapshot into the mirror, a later `status` line may carry the mirror fields.
+const stripCoverage = (out) => String(out).split('\n').filter((l) => !COVERAGE_LINE.test(l)).join('\n');
+// D5: once `run` has copied a statusline snapshot into the mirror, a later `status` alias line legitimately carries the mirror
+// fields. Only a scenario that declares `stripMirrorFields: true` (its `run` comes first, so an adapter row exists) has them
+// removed before the compare; everywhere else a mirror field on a status line is a parity break, not noise.
 const MIRROR_FIELDS = / mirror_class=\S+ mirror_age=\S+( observed_at=\S+)?/;
-const stripCoverage = (out) => String(out).split('\n').filter((l) => !COVERAGE_LINE.test(l)).map((l) => l.replace(MIRROR_FIELDS, '')).join('\n');
+const stripMirrorFields = (out) => String(out).split('\n').map((l) => l.replace(MIRROR_FIELDS, '')).join('\n');
+const normalizeOut = (out, spec) => (spec && spec.stripMirrorFields === true ? stripMirrorFields(stripCoverage(out)) : stripCoverage(out));
 
 // ---------------------------------------------------------------- pick() cases (the 10 account-pick.test.js groups + extras)
 
@@ -147,7 +151,7 @@ function cliScenarios() {
     // D5: `run` is NOT last. It copies the statusline snapshot into the mirror first (adapter), then pick and status must still
     // answer as G37 does; the whole-second written_at_ms makes the mirror row a same-second copy (a tie goes to the snapshot).
     { name: 'run-first-whole-second-tight', aliases: [{ alias: 'a' }, { alias: 'b' }],
-      snapshots: { a: cliSnap('a', 0.95, 0.1), b: cliSnap('b', 0.97, 0.1) }, runs: [RUN, PICK, ['pick', '--exclude', 'a'], STATUS] },
+      snapshots: { a: cliSnap('a', 0.95, 0.1), b: cliSnap('b', 0.97, 0.1) }, stripMirrorFields: true, runs: [RUN, PICK, ['pick', '--exclude', 'a'], STATUS] },
     { name: 'live-dir-relative', aliases: [{ alias: 'a' }], envOverride: { AUTOPILOT_LIVE_DIR: 'relative/live' }, runs: [PICK, STATUS, RUN] },
     // ctx.liveDir === null: resolveLiveDir refuses /etc, cli() answers live_dir_refused for every subcommand.
     { name: 'live-dir-null', aliases: [{ alias: 'a' }], envOverride: { AUTOPILOT_LIVE_DIR: '/etc' }, runs: [PICK, STATUS, RUN] },
@@ -230,7 +234,7 @@ async function main() {
   const text = `${JSON.stringify(g, null, 2)}\n`;
   if (check) {
     const cur = JSON.parse(fs.readFileSync(GOLDEN_FILE, 'utf8'));
-    const norm = (cli) => JSON.stringify(cli, (k, v) => (k === 'out' && typeof v === 'string' ? stripCoverage(v) : v));
+    const norm = (cli) => JSON.stringify(cli.map((c) => ({ spec: c.spec, result: { audit: c.result.audit, runs: c.result.runs.map((r) => Object.assign({}, r, { out: normalizeOut(r.out, c.spec) })) } })));
     const same = JSON.stringify(cur.pick) === JSON.stringify(g.pick) && norm(cur.cli) === norm(g.cli) &&
       JSON.stringify(cur.g37_file_sha256) === JSON.stringify(g.g37_file_sha256) && cur.generated_from_commit === PIN_COMMIT;
     process.stdout.write(same ? 'golden matches\n' : 'golden DIFFERS\n');
@@ -241,6 +245,6 @@ async function main() {
   return 0;
 }
 
-module.exports = { NOW, GOLDEN_FILE, G37_FILES, PIN_COMMIT, pinnedHashes, pinProblem, stripCoverage, pickCases, cliScenarios, runPick, runCliScenario, writeMirrorVariant, loadDeps, buildGolden };
+module.exports = { NOW, GOLDEN_FILE, G37_FILES, PIN_COMMIT, pinnedHashes, pinProblem, stripCoverage, pickCases, cliScenarios, runPick, normalizeOut, stripMirrorFields, runCliScenario, writeMirrorVariant, loadDeps, buildGolden };
 
 if (require.main === module) main().then((c) => { process.exitCode = c; });

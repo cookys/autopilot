@@ -230,7 +230,7 @@ test('G40-N83: fresh snapshot newer than a tight mirror row keeps the snapshot; 
   assert.strictEqual(older.choice.source, 'snapshot');
   assert.strictEqual('observed_at' in older.choice, false);
   const tie = pick(Object.assign(snapAt(NOW_S * 1000 - 600e3), { observations: { a: [rollingRow('a', 0.95, { observed_at: NOW_S - 600 })] } }));
-  assert.strictEqual(tie.choice.alias, 'a'); // amended 2026-11-04 (pending PM): equal stamps go to the snapshot
+  assert.strictEqual(tie.choice.alias, 'a'); // amended 2026-11-04 (PM ruling): equal stamps go to the snapshot
   assert.strictEqual(tie.choice.source, 'snapshot');
   assert.strictEqual('observed_at' in tie.choice, false);
   const newer = pick(Object.assign(snapAt(NOW - 3600e3), { observations: { a: [rollingRow('a', 0.95, { observed_at: NOW_S - 5 })] } }));

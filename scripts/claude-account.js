@@ -609,6 +609,8 @@ function tightResetsFor(ctx, alias, checked, text) {
 // It converts each enabled alias's codeforge snapshot into a local mirror row (quota-reporter.js) and never throws:
 // a failure is a result, and only a real write failure earns one stderr debug line (a missing, stale or mismatching
 // snapshot is already visible through pick's own notes). Gated by the same knob as the other mirror writers.
+// It prints NOTHING: on the run path a failed mirror write may not change stdout or stderr (PM parity), so the caller
+// turns a failure into an audit reason code (syncFailureReason) and only the explicit `sync-statusline` prints a line.
 function syncStatusline(ctx, checked, pinned, cfg) {
   try {
     if (cfg.quota_capture !== 'on' || !ctx.liveDir) return [];
@@ -621,10 +623,17 @@ function syncStatusline(ctx, checked, pinned, cfg) {
       try { real = fs.realpathSync(info.configDir); } catch (_) { /* keep as is */ }
       accounts.push({ alias: r.alias, expectedRoot: quota.hash8(real) });
     }
-    const results = reporter.syncStatusline({ liveDir: ctx.liveDir, accounts, nowMs: ctx.now(), hostRole: cfg.host_role });
-    for (const r of results) if (reporter.isFailure(r)) ctx.err(`quota_statusline alias=${r.alias} reason=${r.reason}`);
-    return results;
+    return reporter.syncStatusline({ liveDir: ctx.liveDir, accounts, nowMs: ctx.now(), hostRole: cfg.host_role });
   } catch (_) { return []; }
+}
+
+// The first adapter write failure of a result list as a closed audit reason code, or null when nothing failed.
+function syncFailureReason(results) {
+  for (const r of results) {
+    if (!reporter.isFailure(r)) continue;
+    return audit.captureReasonOk(r.reason) ? r.reason : 'capture_error';
+  }
+  return null;
 }
 
 function cmdSyncStatusline(ctx, argv) {
@@ -641,6 +650,7 @@ function cmdSyncStatusline(ctx, argv) {
   }
   if (cfg.quota_capture !== 'on') { ctx.out('skipped quota_capture=off'); return EXIT.OK; }
   for (const r of syncStatusline(ctx, checked, opts.alias || null, cfg)) {
+    if (reporter.isFailure(r)) ctx.err(`quota_statusline alias=${r.alias} reason=${r.reason}`); // the explicit command keeps its diagnostic line
     ctx.out(`alias=${r.alias} wrote=${r.wrote ? 'yes' : 'no'} reason=${r.reason === null ? '-' : r.reason}`);
   }
   return EXIT.OK;
@@ -847,7 +857,7 @@ async function cmdRun(ctx, argv) {
   try {
     scratchRoot = fs.mkdtempSync(path.join(ctx.env.TMPDIR || os.tmpdir(), 'claude-account-'));
     fs.chmodSync(scratchRoot, 0o700);
-    syncStatusline(ctx, checked, pinned, cfg); // once per run, before the first gather (G40 D5)
+    let syncReason = syncFailureReason(syncStatusline(ctx, checked, pinned, cfg)); // once per run, before the first gather (G40 D5); silent, the reason rides the first attempt's audit line
     for (let k = 1; k <= maxAttempts; k++) {
       let data = gather(ctx, checked, tried, pinned, cfg);
       if (cfg.quota_probe === 'stale' && !pinned && !probeChecked) {
@@ -903,7 +913,8 @@ async function cmdRun(ctx, argv) {
           until = nowMs + Math.min(cfg.cooldown_default_minutes, THROTTLE_COOLDOWN_MINUTES) * 60 * 1000;
         }
       }
-      const capReason = captureAttempt(ctx, cfg, alias, a, cl, attemptStartMs, token, checked, until);
+      const capReason = captureAttempt(ctx, cfg, alias, a, cl, attemptStartMs, token, checked, until) || syncReason;
+      syncReason = null; // carried by one audit line only
       auditLine(ctx, Object.assign({ alias, purpose, attempt: k, outcome: cl.outcome }, capReason ? { quota_capture: capReason } : {}), [token]);
       last = { raw, cl, alias };
       if (cl.outcome === 'rate_limited') {

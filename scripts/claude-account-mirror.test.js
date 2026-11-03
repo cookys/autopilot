@@ -21,7 +21,7 @@ const NOW_S = NOW / 1000;
 const deps = gen.loadDeps();
 
 const COVERAGE = /^observations newest_age: /;
-const stripCoverage = gen.stripCoverage; // the coverage line plus, for scenarios whose `run` came first, the mirror fields (D5)
+// coverage line only; the mirror fields are removed only for a scenario that declares stripMirrorFields (its `run` came first)
 
 async function go(fx, args) {
   let out = '';
@@ -52,7 +52,7 @@ for (const variant of ['none', 'empty-dir', 'corrupt']) {
         assert.strictEqual(r.code, want.code, `${c.spec.name} ${r.args.join(' ')} code`);
         assert.strictEqual(r.err, want.err, `${c.spec.name} ${r.args.join(' ')} stderr`);
         const isStatus = r.args[0] === 'status' && r.code === 0;
-        assert.strictEqual(isStatus ? stripCoverage(r.out) : r.out, want.out, `${c.spec.name} ${r.args.join(' ')} stdout`);
+        assert.strictEqual(isStatus ? gen.normalizeOut(r.out, c.spec) : r.out, want.out, `${c.spec.name} ${r.args.join(' ')} stdout`);
         if (isStatus) assert.strictEqual(r.out.split('\n').filter((l) => COVERAGE.test(l)).length, 1, 'exactly one coverage line');
       });
       assert.strictEqual(got.audit, c.result.audit, `${c.spec.name} audit bytes`);

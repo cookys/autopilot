@@ -29,16 +29,17 @@ const NOW = 1_800_000_000_000;
 const NOW_S = NOW / 1000;
 
 // A copy of quota-reporter.js with substitutions applied; each `from` must occur exactly once or the control itself is broken.
-function mutant(pairs) {
-  let src = fs.readFileSync(SRC, 'utf8');
+function mutant(pairs, file) {
+  const target = file || SRC;
+  let src = fs.readFileSync(target, 'utf8');
   for (const [from, to] of pairs) {
     assert.strictEqual(src.split(from).length - 1, 1, `plant anchor must match exactly once: ${from}`);
     src = src.replace(from, () => to);
   }
-  const m = new Module(SRC, module);
-  m.filename = SRC;
-  m.paths = Module._nodeModulePaths(__dirname);
-  m._compile(src, SRC);
+  const m = new Module(target, module);
+  m.filename = target;
+  m.paths = Module._nodeModulePaths(path.dirname(target));
+  m._compile(src, target);
   return m.exports;
 }
 
@@ -269,18 +270,51 @@ test('G40-N59: absent, damaged and unreadable snapshots, a busy lock and a null 
     const r = await go(fx, RUN);
     assert.strictEqual(r.code, 0, r.err);
   } finally { fx.cleanup(); }
+  await busyLockRun();
+});
+
+const auditOf = (fx) => (fs.existsSync(fx.auditFile) ? fs.readFileSync(fx.auditFile, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+
+// A busy mirror lock makes the adapter's write fail. On the run path that must be invisible on stdout and stderr (PM: with the
+// mirror unusable, run output is G37's byte for byte): the same output, exit and audit as with the adapter off, plus one
+// audit reason code. The stderr diagnostic belongs to the explicit `sync-statusline` only.
+async function busyLockRun() {
+  const RUN = ['run', '--purpose', 'tst', '--', 'claude', '-p', 'hi'];
   const held = fixtureWith({ a: snapOf('a', 0.5, 0.1) });
+  const off = fixtureWith({ a: snapOf('a', 0.5, 0.1) }, { config: { accounts: { quota_capture: 'off' } } });
   try {
     const dir = observation.mirrorDir(held.liveDir, 'claude');
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     const lock = path.join(dir, 'a.lock');
     fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, nonce: 'held-by-test', t: Date.now() }), { mode: 0o600 });
-    const r = await go(held, ['run', '--purpose', 'tst', '--', 'claude', '-p', 'hi']);
-    assert.strictEqual(r.code, 0, 'a busy mirror lock does not stop the run');
-    assert.match(r.err, /quota_statusline alias=a reason=mirror_lock_busy/, 'one debug line');
+    const r = await go(held, RUN);
+    const r0 = await go(off, RUN);
+    assert.deepStrictEqual([r.code, r.out, r.err], [r0.code, r0.out, r0.err], 'run: stdout, stderr and exit equal the adapter-off run');
+    assert.strictEqual(r.err, '', 'no stderr line from the adapter');
+    const [l, l0] = [auditOf(held), auditOf(off)];
+    assert.strictEqual(l.length, l0.length);
+    assert.strictEqual(l[0].quota_capture, 'mirror_lock_busy', 'one audit reason code');
+    assert.strictEqual(l.slice(1).filter((x) => 'quota_capture' in x).length, 0, 'only the first attempt carries it');
+    const strip = (x) => { const c = Object.assign({}, x); delete c.quota_capture; return c; };
+    assert.deepStrictEqual(l.map(strip), l0, 'the rest of the audit equals the adapter-off audit');
     assert.strictEqual(fs.existsSync(mirrorFile(held, 'a')), false);
     assert.ok(fs.existsSync(lock), 'the holder lock is untouched');
-  } finally { held.cleanup(); }
+    // the explicit command keeps its diagnostic line
+    const s = await go(held, ['sync-statusline']);
+    assert.strictEqual(s.code, 0);
+    assert.match(s.err, /quota_statusline alias=a reason=mirror_lock_busy/);
+    assert.strictEqual(s.out, 'alias=a wrote=no reason=mirror_lock_busy\n');
+  } finally { held.cleanup(); off.cleanup(); }
+}
+test('G40-N59: a clean run leaves the audit bytes of an adapter-off run (the reason code appears only on failure or skip)', async () => {
+  const RUN = ['run', '--purpose', 'tst', '--', 'claude', '-p', 'hi'];
+  const on = fixtureWith({ a: snapOf('a', 0.5, 0.1) });
+  const off = fixtureWith({ a: snapOf('a', 0.5, 0.1) }, { config: { accounts: { quota_capture: 'off' } } });
+  try {
+    await go(on, RUN); await go(off, RUN);
+    assert.deepStrictEqual(auditOf(on), auditOf(off));
+    assert.ok(localRecord(on, 'a'));
+  } finally { on.cleanup(); off.cleanup(); }
 });
 
 test('G40-N59: a newer local observation is kept (superseded is a normal result, not a failure)', () => {
@@ -375,7 +409,7 @@ test('G40-N87: tight and ok pure pick() with and without the adapter row (snapsh
 // A whole-second written_at_ms makes the adapter row (floor to seconds) a same-second copy of the snapshot. judge() gives an
 // equal stamp to the snapshot (plan 8.1 amendment), so pick, status (minus the coverage line and the mirror fields) and run
 // are byte for byte the same with the adapter on or off. Plant the old "tie goes to the mirror" (`<=` back to `<` in
-// account-pick.js judge) and this test is red; G40_TIE_PLANT=1 runs it against that mutant.
+// account-pick.js judge) and this test is red; the planted-rule test at the end of this file reproduces that red without editing the file.
 const MIRROR_FIELDS = / mirror_class=\S+ mirror_age=\S+( observed_at=\S+)?/;
 const normStatus = (o) => o.split('\n').filter((l) => !/^observations newest_age: /.test(l)).map((l) => l.replace(MIRROR_FIELDS, '')).join('\n');
 test('G40-N87: tight snapshot with a whole-second written_at_ms: pick, status and run are identical with the adapter on or off', async () => {
@@ -397,4 +431,18 @@ test('G40-N87: tight snapshot with a whole-second written_at_ms: pick, status an
   const on = await all(true);
   assert.deepStrictEqual(on, off);
   assert.match(off[0].out, /^a class=tight used=0.95 source=snapshot\n$/);
+});
+
+// Negative control for the tie rule, reproducible without editing account-pick.js: a copy of it with the old "a tie goes to
+// the mirror" comparison. With a whole-second tight snapshot and its own adapter row the pure pick output then differs from the
+// snapshot-only output (source=passive, an observed_at key); the real file keeps them identical.
+test('G40-N87: planted old tie rule (tie goes to the mirror) breaks pure pick parity; the real rule keeps it', () => {
+  const snaps = { a: snapOf('a', 0.95, 0.1, { written_at_ms: NOW - 1000 }) };
+  const c = real.convertSnapshot(snaps.a, { alias: 'a', nowMs: NOW });
+  assert.ok(c.ok);
+  const rows = { a: [{ writer_courier: observation.LOCAL_COURIER, host_role: null, observed_at_hub: null, skewed: false, record: c.record }] };
+  const input = { accounts: [{ alias: 'a', priority: 1 }], snapshots: snaps, nowMs: NOW };
+  const old = mutant([['if (snapAgeMs <= mirrorAgeMs) return base;', 'if (snapAgeMs < mirrorAgeMs) return base;']], path.join(__dirname, 'lib', 'account-pick.js'));
+  assert.notStrictEqual(JSON.stringify(old.pick(Object.assign({ observations: rows }, input))), JSON.stringify(old.pick(input)), 'old rule: red');
+  assert.strictEqual(JSON.stringify(pick(Object.assign({ observations: rows }, input))), JSON.stringify(pick(input)), 'rule (A): green');
 });

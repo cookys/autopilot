@@ -19,6 +19,11 @@ mk_layout() {
      "$SCRIPTS/run-grok-implementer-ab.sh" "$SCRIPTS/benchmark-hook-latency.js" "$d/scripts/"
   cp "$SCRIPTS/lib/auth-stop.js" "$SCRIPTS/lib/auth-stop.sh" "$SCRIPTS/lib/repo-identity.sh" \
      "$SCRIPTS/lib/claude-call-capture.js" "$SCRIPTS/lib/claude-call-capture.sh" "$SCRIPTS/lib/claude-call-capture-exec.sh" "$d/scripts/lib/"
+  # benchmark-hook-latency.js asks the G37 account layer (lib/account-rail.js -> ../claude-account.js and its libs)
+  # before it starts; a layout without them dies at require time with exit 1 before any call is made.
+  cp "$SCRIPTS/claude-account.js" "$d/scripts/"
+  cp "$SCRIPTS/lib/account-rail.js" "$SCRIPTS/lib/account-audit.js" "$SCRIPTS/lib/account-cooldown.js" "$SCRIPTS/lib/account-env.js" \
+     "$SCRIPTS/lib/account-pick.js" "$SCRIPTS/lib/account-quota.js" "$SCRIPTS/lib/account-registry.js" "$SCRIPTS/lib/live-state-dir.js" "$d/scripts/lib/"
   cp "$SCRIPTS/run-skill-opt.sh" "$d/scripts/"
   cp "$REPO_ROOT/evals/run-trigger-test.sh" "$d/evals/"
   cp "$REPO_ROOT/evals/skill-transport/run-matrix.sh" "$REPO_ROOT/evals/skill-transport/run-implementer-matrix.sh" "$REPO_ROOT/evals/skill-transport/match-eval.js" "$d/evals/skill-transport/"
@@ -746,7 +751,7 @@ case "${FAKE_MODE}" in
 esac
 EOS
   chmod +x "$L/fb/claude"
-  OUT="$(cd "$L/hooks-repo" && "${ENVX[@]}" HOME="$L/home" FAKE_CALLS="$L/calls" FAKE_MODE="$mode" BENCH_CLAUDE_BIN="$L/fb/claude" BENCH_CREDENTIALS="$L/bh/cred.json" \
+  OUT="$(cd "$L/hooks-repo" && "${ENVX[@]}" HOME="$L/home" FAKE_CALLS="$L/calls" FAKE_MODE="$mode" AUTOPILOT_ACCOUNTS_DIR="$L/no-accounts" BENCH_CLAUDE_BIN="$L/fb/claude" BENCH_CREDENTIALS="$L/bh/cred.json" \
     node "$L/scripts/benchmark-hook-latency.js" --max-usd 5 --samples 2 --out "$L/bh/report.json" < /dev/null 2>&1)"
   RC=$?; CALLS="$(count "$L/calls")"
 }

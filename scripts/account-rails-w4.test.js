@@ -124,7 +124,7 @@ function driveProbe(dir, w) {
 
 const CALLERS = [
   { name: 'A4 probe-engine-capability.sh', file: 'probe-engine-capability.sh', stdout: REVIEW_ENVELOPE, drive: driveProbe, argv0: '-p',
-    wire: ['unconfigured|mode_off)', 'unconfigured|mode_off|ok)'], failOpen: ['if [ "$_acct_rc" -ne 0 ]; then', 'if false; then'], inject: 'sh' },
+    wire: ['        legacy)\n', '        legacy|active)\n'], failOpen: ['        legacy)\n', '        legacy|*)\n'], inject: 'sh' },
   { name: 'A5 qualification-review-provider.js (claude kind)', file: 'qualification-review-provider.js', stdout: REVIEW_ENVELOPE, drive: driveProvider, argv0: '-p',
     wire: ["useAccount = layer.state === 'active';", 'useAccount = false;'], failOpen: ["if (layer.state === 'invalid') throw", 'if (false) throw'], inject: 'js' },
   { name: 'A6 qc-panel.js', file: 'qc-panel.js', stdout: 'ACHIEVED: goal-1 done\n', drive: driveQc, argv0: '-p',
@@ -132,7 +132,7 @@ const CALLERS = [
   { name: 'A7 probe-todo-tools-pin.js', file: 'probe-todo-tools-pin.js', stdout: TODO_STREAM, drive: driveTodo, argv0: '-p',
     wire: ["if (layer.state === 'active') {", 'if (false) {'], failOpen: ["if (layer.state === 'invalid') {", 'if (false) {'], inject: 'js' },
   { name: 'A8 benchmark-hook-latency.js', file: 'benchmark-hook-latency.js', stdout: REVIEW_ENVELOPE, drive: driveBench, argv0: '-p',
-    wire: ["const account = layer.state === 'active';", 'const account = false;'], failOpen: ["if (layer.state === 'invalid') usage(", 'if (false) usage('], inject: 'js' },
+    oldPathStderr: /credentials not found/, wire: ["const account = layer.state === 'active';", 'const account = false;'], failOpen: ["if (layer.state === 'invalid') usage(", 'if (false) usage('], inject: 'js' },
 ];
 
 // Mutated copy of scripts/ (once): each mutation is applied to its own file copy, then undone via a fresh copy.
@@ -199,15 +199,31 @@ for (const c of CALLERS) {
     try {
       const res = c.drive(dir, w);
       assert.ok(!goodHolds(c, w, res), 'with the wiring removed the good-run predicate must fail');
+      // right reason: the caller ran the pre-G37 claude path (shim spawned, no alias, no token)
+      const calls = apiCalls(w.fx);
+      // (A8's old path first needs the credentials copy, which the registry-world fixture deliberately leaves
+      // absent: "credentials not found" is the old path's own first step failing, so it counts as reached.)
+      const oldPathStep = c.oldPathStderr && c.oldPathStderr.test(res.stderr);
+      assert.ok(calls.length >= 1 || oldPathStep, `wiring-removed mutation reached the old claude path; code ${res.code} stderr=${res.stderr.slice(0, 300)}`);
+      for (const x of calls) { assert.strictEqual(x.fp, ''); assert.strictEqual(x.account, null); }
     } finally { w.fx.cleanup(); }
   });
 
-  test(`${c.name}: mutation - invalid registry no longer fails closed -> the broken-registry assertion turns red`, () => {
+  test(`${c.name}: mutation - invalid registry no longer fails closed -> the broken-registry assertion turns red because the OLD claude path ran`, () => {
     const dir = mutatedScripts(c.file, (s) => s.split(c.failOpen[0]).join(c.failOpen[1]));
     const w = world('broken', c.stdout);
     try {
       const res = c.drive(dir, w);
       assert.ok(!brokenHolds(w, res), 'fail-open must be caught by the broken-registry predicate');
+      // The reason must be the right one: the invalid registry fell through to the pre-G37 claude path, i.e.
+      // the shim was spawned with no alias and no token. A red caused only by a different exit code (the
+      // account wrapper refusing, say) would not prove that the legacy path is shut.
+      const calls = apiCalls(w.fx);
+      assert.ok(calls.length >= 1, `fail-open mutation reached the old claude path (shim spawned); code ${res.code} stderr=${res.stderr.slice(0, 300)}`);
+      for (const x of calls) {
+        assert.strictEqual(x.fp, '', 'old path carries no alias token');
+        assert.strictEqual(x.account, null, 'old path carries no AUTOPILOT_ACCOUNT');
+      }
     } finally { w.fx.cleanup(); }
   });
 
@@ -220,6 +236,9 @@ for (const c of CALLERS) {
     try {
       const res = c.drive(dir, w);
       assert.ok(!goodHolds(c, w, res), 'a copied decoy credentials file must break the good run (registry refuses config_dir_has_credentials)');
+      // right reason: the account layer refused the poisoned config dir, so nothing was spawned
+      assert.strictEqual(apiCalls(w.fx).length, 0, `decoy-copy mutation must be refused before any spawn; stderr=${res.stderr.slice(0, 300)}`);
+      assert.notStrictEqual(res.code, 0);
     } finally { w.fx.cleanup(); }
   });
 }
@@ -242,4 +261,47 @@ test('A8: no registry keeps the credentials copy (legacy) and still requires the
     assert.ok(/credentials not found/.test(res.stderr), res.stderr.slice(0, 300));
     assert.strictEqual(w.fx.shim.calls().length, 0);
   } finally { w.fx.cleanup(); }
+});
+
+// ---------------------------------------------------------------- layerState: the one reading rule (JS side)
+// A copy of lib/account-rail.js sits beside a stub claude-account.js that prints $STUB_OUT with exit $STUB_RC and
+// records its argv. The same table as scripts/lib/account-state.sh: rc != 0 -> invalid; first token of line 1
+// unconfigured|mode_off -> legacy, ok -> active; anything else -> invalid; always `--any`.
+function stubLayer(mutate) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g37-layer-'));
+  fs.mkdirSync(path.join(dir, 'lib'));
+  let src = fs.readFileSync(path.join(SCRIPTS, 'lib', 'account-rail.js'), 'utf8');
+  if (mutate) { const out = mutate(src); assert.notStrictEqual(out, src, 'mutation applied'); src = out; }
+  fs.writeFileSync(path.join(dir, 'lib', 'account-rail.js'), src);
+  fs.writeFileSync(path.join(dir, 'claude-account.js'), [
+    "const fs = require('fs');",
+    "fs.appendFileSync(process.env.STUB_ARGV, process.argv.slice(2).join(' ') + '\\n');",
+    "process.stdout.write(process.env.STUB_OUT || ''); process.exit(Number(process.env.STUB_RC || 0));",
+    '',
+  ].join('\n'));
+  return { dir, argvLog: path.join(dir, 'argv.log'), rail: require(path.join(dir, 'lib', 'account-rail.js')) };
+}
+function layer(st, out, rc) {
+  return st.rail.layerState({ purpose: 'x', env: Object.assign({}, process.env, { STUB_OUT: out, STUB_RC: String(rc || 0), STUB_ARGV: st.argvLog }) });
+}
+const LAYER_TABLE = [
+  ['unconfigured\n', 0, 'legacy'], ['mode_off\n', 0, 'legacy'], ['ok alias=a mode=0600\n', 0, 'active'],
+  ['garbage\n', 0, 'invalid'], ['', 0, 'invalid'], ['okay alias=a\n', 0, 'invalid'], ['Unconfigured\n', 0, 'invalid'],
+  [' ok alias=a\n', 0, 'invalid'], ['\nok alias=a\n', 0, 'invalid'], ['ok alias=a\n', 2, 'invalid'], ['unconfigured\n', 3, 'invalid'],
+];
+test('layerState: the one reading rule over the whole table, always with --any', () => {
+  const st = stubLayer();
+  try {
+    // positive control first: the stub works (an `ok` line is active and the argv log exists)
+    assert.strictEqual(layer(st, 'ok alias=a\n').state, 'active');
+    assert.match(fs.readFileSync(st.argvLog, 'utf8'), /^env-check --any --purpose x$/m);
+    for (const [out, rc, want] of LAYER_TABLE) assert.strictEqual(layer(st, out, rc).state, want, `[${JSON.stringify(out)} rc=${rc}]`);
+  } finally { fs.rmSync(st.dir, { recursive: true, force: true }); }
+});
+test('layerState: mutation - unknown output read as active turns the table red', () => {
+  const st = stubLayer((s) => s.replace("  return { state: 'invalid', detail: 'unrecognised env-check output' };", "  return { state: 'active', detail: 'ok' };"));
+  try {
+    assert.strictEqual(layer(st, 'ok alias=a\n').state, 'active');
+    assert.notStrictEqual(layer(st, 'garbage\n').state, 'invalid', 'the mutated reader accepts garbage: the table assertion above would be red');
+  } finally { fs.rmSync(st.dir, { recursive: true, force: true }); }
 });

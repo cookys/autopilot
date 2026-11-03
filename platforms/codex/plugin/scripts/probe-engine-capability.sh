@@ -483,22 +483,22 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       # G37 (plan W4/A4): with an account registry the probe spends through claude-account.js (alias
       # token in the child env only); no registry -> the ambient path below, unchanged. A broken
       # registry is a hard stop: nothing is spawned and no capability row is recorded.
-      _acct_out="$(node "$SELF_DIR/claude-account.js" env-check --purpose probe 2>"$PROBE_ERR_FILE")" && _acct_rc=0 || _acct_rc=$?
-      if [ "$_acct_rc" -ne 0 ]; then
-        printf 'probe-engine-capability: account layer invalid, claude-native probe not run: %s\n' "$(head -n 1 "$PROBE_ERR_FILE")" >&2
-        exit 2
-      fi
-      case "${_acct_out%% *}" in
-        unconfigured|mode_off)
+      . "$SELF_DIR/lib/account-state.sh"
+      case "$(account_layer_state "$SELF_DIR/claude-account.js" probe)" in
+        legacy)
           env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} \
             claude -p "Respond only with OK" --model "$MODEL" --strict-mcp-config --tools "" \
             >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
           ;;
-        *)
+        active)
           env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} \
             node "$SELF_DIR/claude-account.js" run --purpose probe -- \
             claude -p "Respond only with OK" --model "$MODEL" --strict-mcp-config --tools "" \
             >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+          ;;
+        *)
+          printf 'probe-engine-capability: account layer invalid or env-check output unrecognised, claude-native probe not run\n' >&2
+          exit 2
           ;;
       esac
       ;;

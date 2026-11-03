@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { makeFixture } = require('./lib/account-fixtures/shim-install.js');
@@ -17,7 +18,7 @@ function setup() {
   fs.writeFileSync(tmux, `#!${process.execPath}\nrequire('fs').appendFileSync(${JSON.stringify(cap)}, JSON.stringify({argv:process.argv.slice(2),env:process.env})+'\\n');\n`, { mode: 0o755 });
   return { fx, cap };
 }
-function run(fx, args) { return spawnSync(process.execPath, [TOOL, ...args], { env: fx.env, encoding: 'utf8', stdin: 'ignore' }); }
+function run(fx, args, tool) { return spawnSync(process.execPath, [tool || TOOL, ...args], { env: fx.env, encoding: 'utf8', stdin: 'ignore' }); }
 function captured(cap) { try { return fs.readFileSync(cap, 'utf8'); } catch (_) { return ''; } }
 
 test('dry-run prints an alias-only command and spawns nothing', () => {
@@ -30,16 +31,26 @@ test('dry-run prints an alias-only command and spawns nothing', () => {
   fx.cleanup();
 });
 
+// The real-path leak predicate, applied to the real tool AND to the mutated copy below: [] when clean.
+function leakProblems(tool, fx, cap) {
+  const problems = [];
+  const r = run(fx, ['--alias', 'spare', '--cwd', '/work/x', '--session', 's1'], tool);
+  if (r.status !== 0) problems.push(`exit ${r.status}`);
+  const c = captured(cap);
+  if (!c.includes('new-window')) problems.push('tmux not asked for a window');
+  if (c.includes(TOKEN)) problems.push('token leaked to tmux');
+  if (c.trim() && JSON.parse(c.trim().split('\n')[0]).argv.includes('-e')) problems.push('new-window -e used');
+  return problems;
+}
+
 test('real path: fake tmux argv and env never contain the token', () => {
   const { fx, cap } = setup();
   const r = run(fx, ['--alias', 'spare', '--cwd', '/work/x', '--session', 's1']);
   assert.strictEqual(r.status, 0);
   assert.match(r.stdout, /^reopened alias=spare window=s1:lane-spare$/m);
-  const c = captured(cap);
-  assert.ok(c.includes('new-window'));
-  assert.ok(c.includes('spare'));
-  assert.ok(!c.includes(TOKEN), 'token leaked to tmux');
-  assert.ok(!JSON.parse(c.trim()).argv.includes('-e'));
+  fs.rmSync(cap, { force: true });
+  assert.deepStrictEqual(leakProblems(TOOL, fx, cap), []);
+  assert.ok(captured(cap).includes('spare'));
   fx.cleanup();
 });
 
@@ -52,12 +63,21 @@ test('invalid alias / usage exit 2 with no tmux call', () => {
   fx.cleanup();
 });
 
-test('NEG N11: a variant that passes the token with new-window -e is caught', () => {
+test('NEG N11: lane-reopen.js itself mutated to pass the token with new-window -e is caught by the real-path predicate', () => {
   const { fx, cap } = setup();
-  // the deliberately broken behaviour
-  spawnSync(path.join(fx.shim.binDir, 'tmux'), ['new-window', '-e', `CLAUDE_CODE_OAUTH_TOKEN=${TOKEN}`, 'claude'], { env: fx.env });
-  const c = captured(cap);
-  assert.ok(c.includes(TOKEN), 'capture must see the token in the broken variant');
-  assert.ok(JSON.parse(c.trim()).argv.includes('-e'));
-  fx.cleanup();
+  // A copy of scripts/ whose lane-reopen.js hands the token to tmux via -e: the deliberately broken tool.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g37-lane-mut-'));
+  try {
+    fs.cpSync(__dirname, dir, { recursive: true, filter: (f) => !/\.test\.(js|sh)$/.test(f) });
+    const mut = path.join(dir, 'lane-reopen.js');
+    const src = fs.readFileSync(mut, 'utf8');
+    const anchor = "const tmuxArgs = ['new-window', '-d', '-c', o.cwd, '-n', window];";
+    assert.ok(src.includes(anchor), 'mutation anchor present');
+    const out = src.replace(anchor, anchor + "\n  tmuxArgs.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=' + require('fs').readFileSync(path.join(process.env.AUTOPILOT_ACCOUNTS_DIR, o.alias, 'token'), 'utf8'));");
+    assert.notStrictEqual(out, src);
+    fs.writeFileSync(mut, out);
+    const problems = leakProblems(mut, fx, cap);
+    assert.ok(problems.includes('token leaked to tmux'), `the capture must see the token: ${JSON.stringify(problems)}`);
+    assert.ok(problems.includes('new-window -e used'), JSON.stringify(problems));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); fx.cleanup(); }
 });

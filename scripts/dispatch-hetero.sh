@@ -263,6 +263,9 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib/repo-identity.sh
 # Fail-open: a missing helper only degrades the manifest to repo_identity null (telemetry sidecar).
 [ -r "$SELF_DIR/lib/repo-identity.sh" ] && . "$SELF_DIR/lib/repo-identity.sh" || true
+# G37: the one reading of `claude-account.js env-check` (legacy | active | invalid). Sourced hard (no fail-open):
+# a missing copy makes account_layer_state print nothing, and every caller treats anything but legacy/active as invalid.
+. "$SELF_DIR/lib/account-state.sh"
 # A TMPDIR that is set but missing is made before anything below uses it (BL-0336); a failure prints its reason and the run carries on.
 if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || true; fi
 # Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env (best-effort;
@@ -295,13 +298,7 @@ CNATIVE_CONFIG_DIR=""  # seeded CLAUDE_CONFIG_DIR (only .credentials.json); remo
 # the seeded dir is never created) | invalid (registry broken: caller must refuse, nothing is spawned).
 # Only the alias metadata is read here; the token never enters this shell.
 cnative_account_state() {
-  local _out _rc
-  _out="$(node "$SELF_DIR/claude-account.js" env-check --any --purpose hetero-impl 2>/dev/null)"; _rc=$?
-  [ "$_rc" -eq 0 ] || { echo invalid; return 0; }
-  case "${_out%%$'\n'*}" in
-    unconfigured|mode_off) echo legacy ;;
-    *) echo active ;;
-  esac
+  account_layer_state "$SELF_DIR/claude-account.js" hetero-impl
 }
 PI_BIN="pi"
 GROK_PROMPT_FILE=""   # grok-only combined prompt temp; init early so the INT/TERM trap can reap it
@@ -2439,12 +2436,12 @@ elif [ "$IS_CNATIVE" -eq 1 ]; then
   command -v claude >/dev/null 2>&1 || die_precondition "claude binary not found (claude-native drives the Claude Code CLI)"
   case "$(cnative_account_state)" in
     active) : ;;  # G37: the account registry is the only auth; the seeded .credentials.json path is not touched
-    invalid) die_precondition "claude-native refused: the account registry exists but is not usable (node scripts/claude-account.js env-check --any); nothing was spawned" ;;
-    *)
+    legacy)
       # Fail closed pre-spend: the child gets ONLY a seeded copy of .credentials.json, so it must exist.
       node "$SELF_DIR/lib/seed-claude-config.js" --check \
         || die_precondition "claude-native refused: source .credentials.json is missing/unreadable (see seed-claude-config message above); the child is never given the real claude config dir"
       ;;
+    *) die_precondition "claude-native refused: the account registry exists but is not usable, or its env-check output is unrecognised (node scripts/claude-account.js env-check --any); nothing was spawned" ;;
   esac
 else
   command -v "$AGY_BIN" >/dev/null 2>&1 || die_precondition "agy binary not found: $AGY_BIN (install Antigravity CLI or pass --agy-bin)"
@@ -3941,12 +3938,12 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   fi
   if [ "$GATE_RUN_OK" -eq 0 ]; then
     :
-  elif [ "$IS_CNATIVE" -eq 1 ] && [ "$(cnative_account_state)" != legacy ]; then
+  elif [ "$IS_CNATIVE" -eq 1 ] && { _CN_STATE="$(cnative_account_state)"; [ "$_CN_STATE" != legacy ]; }; then
     # G37 W3: registry present. claude-account.js reads the token itself and builds the child env; the
-    # token never touches this shell, argv or LOG. A registry that went bad since preflight (invalid) is
-    # not spawned. The push/fetch block (HANDS_GIT_ENV) is not on the account allowlist, so it rides in
-    # the inner argv through env(1). --settings (gate-rules) is kept.
-    if [ "$(cnative_account_state)" = active ]; then
+    # token never touches this shell, argv or LOG. A registry that went bad since preflight (invalid, or
+    # an env-check output nobody recognises) is not spawned. The push/fetch block (HANDS_GIT_ENV) is not on
+    # the account allowlist, so it rides in the inner argv through env(1). --settings (gate-rules) is kept.
+    if [ "$_CN_STATE" = active ]; then
       CNATIVE_ARGV=(env ${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"} claude -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL"
         --strict-mcp-config --dangerously-skip-permissions ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"}
         ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json)

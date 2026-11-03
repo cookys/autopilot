@@ -10,7 +10,11 @@
  *   node scripts/claude-account.js exec      (--alias A | --pick) [--purpose T] -- <cmd...>
  *   node scripts/claude-account.js status    [--limit N]
  *   node scripts/claude-account.js cooldown  --clear <alias>
- *   node scripts/claude-account.js selftest                 (shim only; --real-binary is refused)
+ *   node scripts/claude-account.js selftest                 (Node shim, throwaway dir)
+ *   node scripts/claude-account.js selftest --real-binary [--binary P]
+ *                                            operator-run spike (plan O6): FAKE- token against the real claude, never in a suite
+ *   node scripts/claude-account.js selftest --simulate-429 <A> [--binary P]
+ *                                            operator-run (plan O9): A answers a locally synthesized 429, then the next alias runs
  *
  * Exit codes:
  *   0 ok
@@ -525,6 +529,7 @@ async function cmdRun(ctx, argv) {
         else ctx.err(`${n.note} alias=${n.alias}`);
       }
       const alias = p.choice.alias;
+      ctx.lastAttemptAlias = alias;
       if (p.outcome === 'all_tight') auditLine(ctx, { alias, purpose, attempt: k, outcome: 'all_tight' });
       tried.push(alias);
       const info = checked.enabled.find((e) => e.alias === alias);
@@ -535,6 +540,8 @@ async function cmdRun(ctx, argv) {
           alias, token, configDir: info.configDir, homeDir: info.homeDir, callerEnv: ctx.env, realHome: ctx.realHome, locators: loc,
         });
         accountEnv.prepareHome({ homeDir: info.homeDir, realHome: ctx.realHome });
+        // Internal seam: only cmdSelftest sets ctx.childEnvExtra (never read from argv, env or cli deps).
+        if (ctx.childEnvExtra && ctx.childEnvExtra[alias]) Object.assign(env, ctx.childEnvExtra[alias]);
       } catch (e) {
         if (e instanceof accountEnv.EnvError) {
           preAudit(ctx, purpose, 'invalid_config');
@@ -719,11 +726,199 @@ function cmdCooldown(ctx, argv) {
   return EXIT.OK;
 }
 
-async function cmdSelftest(ctx, argv) {
-  const { opts } = parseArgs(argv, { 'real-binary': 'flag', 'simulate-429': 'value' });
-  if (opts['real-binary'] || opts['simulate-429'] !== undefined) {
-    throw new Stop(EXIT.INVALID, 'selftest runs against the Node shim only; the real-binary run is an operator step (plan O6/O9)', null);
+const SELFTEST_FAIL = 1; // operator spikes: any failed condition exits 1
+const LOCAL_BASE_RE = /^http:\/\/127\.0\.0\.1:\d{1,5}$/;
+const SELFTEST_PROMPT = ['-p', 'say OK', '--model', 'haiku', '--output-format', 'json', '--tools', '', '--strict-mcp-config'];
+
+/** Copy of ctx whose output is captured (lines kept in .captured), so a selftest controls what is printed. */
+function quietCtx(ctx) {
+  const q = Object.assign({}, ctx, { captured: [] });
+  q.write = (fd, data) => { q.captured.push(String(data)); };
+  q.err = (line) => q.write(2, `claude-account: ${line}\n`);
+  q.out = (line) => q.write(1, `${line}\n`);
+  return q;
+}
+
+function insideDir(child, parent) {
+  if (typeof child !== 'string' || !path.isAbsolute(child)) return false;
+  const rel = path.relative(path.resolve(parent), path.resolve(child));
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/**
+ * Pure verdict of the --real-binary spike (plan O6). Returns the list of failed conditions (empty = pass).
+ *   1 exit 6 (auth stop)   2 no normal answer (no is_error:false result)   3 child HOME and CLAUDE_CONFIG_DIR
+ *   are inside the throwaway dir and not the real home or its ~/.claude.
+ */
+function judgeRealBinary(x) {
+  const bad = [];
+  if (x.code !== EXIT.AUTH) bad.push(`exit_not_auth (got ${x.code}, want ${EXIT.AUTH})`);
+  const env = parseEnvelope(x.stdout || '');
+  if (env && env.is_error === false) bad.push('normal_answer_returned (ambient login used?)');
+  const o = x.observed;
+  if (!o || !o.home || !o.config_dir) {
+    bad.push('child_env_not_observed');
+  } else {
+    const realClaude = path.join(x.realHome, '.claude');
+    for (const [label, v] of [['HOME', o.home], ['CLAUDE_CONFIG_DIR', o.config_dir]]) {
+      if (!insideDir(v, x.tmpRoot) || path.resolve(v) === path.resolve(x.realHome) || insideDir(v, realClaude)) {
+        bad.push(`child_${label}_not_in_tempdir`);
+      }
+    }
   }
+  return bad;
+}
+
+const PROBE_SRC = [
+  "'use strict';",
+  "const fs = require('fs');",
+  "const { spawnSync } = require('child_process');",
+  "const [rec, bin, ...args] = process.argv.slice(2);",
+  "fs.writeFileSync(rec, JSON.stringify({ home: process.env.HOME || null, config_dir: process.env.CLAUDE_CONFIG_DIR || null }));",
+  "const r = spawnSync(bin, args, { stdio: 'inherit', env: process.env });",
+  "process.exitCode = r.error ? 127 : (r.status === null ? 128 : r.status);",
+  '',
+].join('\n');
+
+function resolveBinaryOpt(v) {
+  if (v === undefined) return 'claude';
+  if (typeof v !== 'string' || v === '') throw new Stop(EXIT.INVALID, 'binary_invalid', null);
+  return path.resolve(v);
+}
+
+async function selftestRealBinary(ctx, binary) {
+  let base = null;
+  try {
+    base = fs.realpathSync(fs.mkdtempSync(path.join(ctx.env.TMPDIR || os.tmpdir(), 'g37-realbin-')));
+    fs.chmodSync(base, 0o700);
+    const accounts = path.join(base, 'accounts');
+    const dirs = { accounts, live: path.join(base, 'live'), state: path.join(base, 'state'), run: path.join(base, 'run'), tmp: path.join(base, 'tmp') };
+    for (const d of Object.values(dirs)) fs.mkdirSync(d, { recursive: true, mode: 0o700 });
+    for (const d of ['claude', 'home']) fs.mkdirSync(path.join(accounts, 'probe', d), { recursive: true, mode: 0o700 });
+    fs.chmodSync(accounts, 0o700);
+    fs.chmodSync(path.join(accounts, 'probe'), 0o700);
+    const tokenFile = path.join(accounts, 'probe', 'token');
+    fs.writeFileSync(tokenFile, 'FAKE-not-a-real-token', { mode: 0o600 });
+    fs.chmodSync(tokenFile, 0o600);
+    const regFile = path.join(accounts, 'registry.json');
+    fs.writeFileSync(regFile, JSON.stringify({ schema: 'autopilot.accounts/1', accounts: [{ alias: 'probe', enabled: true, priority: 10 }] }), { mode: 0o600 });
+    fs.chmodSync(regFile, 0o600);
+    const cfgFile = path.join(base, 'config.json');
+    fs.writeFileSync(cfgFile, '{}');
+    const probe = path.join(base, 'probe.js');
+    fs.writeFileSync(probe, PROBE_SRC);
+    const rec = path.join(base, 'observed.json');
+    const outFile = path.join(base, 'stdout.json');
+    const env = {
+      PATH: ctx.env.PATH || '', LANG: ctx.env.LANG || 'C', TMPDIR: dirs.tmp, XDG_RUNTIME_DIR: dirs.run,
+      AUTOPILOT_ACCOUNTS_DIR: accounts, AUTOPILOT_LIVE_DIR: dirs.live, AUTOPILOT_STATE_DIR: dirs.state, AUTOPILOT_CONFIG: cfgFile,
+    };
+    const sctx = quietCtx(makeCtx({ env, realHome: ctx.realHome, now: ctx.now, uid: ctx.uid, warn: () => {} }));
+    const code = await cmdRun(sctx, ['--alias', 'probe', '--purpose', 'selftest', '--timeout', '180', '--stdout', outFile, '--',
+      process.execPath, probe, rec, binary, ...SELFTEST_PROMPT]);
+    let stdout = '';
+    try { stdout = fs.readFileSync(outFile, 'utf8'); } catch (_) { /* none */ }
+    let observed = null;
+    try { observed = JSON.parse(fs.readFileSync(rec, 'utf8')); } catch (_) { /* child never started */ }
+    const bad = judgeRealBinary({ code, stdout, observed, tmpRoot: base, realHome: ctx.realHome });
+    if (bad.length) {
+      for (const b of bad) ctx.err(`selftest FAIL ${b}`);
+      return SELFTEST_FAIL;
+    }
+    ctx.out('selftest: fake token -> 401, ambient login not used');
+    return EXIT.OK;
+  } finally {
+    if (base) fs.rmSync(base, { recursive: true, force: true });
+  }
+}
+
+/** Local server that answers every request itself with the S3 429 shape. It has no forwarding code path. */
+function startLocal429Server() {
+  const http = require('http');
+  const state = { requests: 0, server: null, base: null };
+  state.server = http.createServer((req, res) => {
+    req.on('data', () => {});
+    req.on('end', () => {
+      state.requests++;
+      res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '1' });
+      res.end(JSON.stringify({ type: 'error', error: { type: 'rate_limit_error', message: "This request would exceed your account's rate limit. (local synthetic)" } }));
+    });
+  });
+  return new Promise((resolve, reject) => {
+    state.server.once('error', reject);
+    state.server.listen(0, '127.0.0.1', () => {
+      state.base = `http://127.0.0.1:${state.server.address().port}`;
+      resolve(state);
+    });
+  });
+}
+
+async function selftestSimulate429(ctx, aliasA, binary) {
+  const checked = loadChecked(ctx, 'selftest');
+  if (!checked.configured) throw new Stop(EXIT.INVALID, 'registry_not_configured', null);
+  try { registry.requireAlias({ accounts: checked.accounts }, aliasA); } catch (e) {
+    if (e instanceof registry.RegistryError) throw new Stop(EXIT.INVALID, `unknown_alias (${e.reason})`, null);
+    throw e;
+  }
+  let srv = null;
+  let tmp = null;
+  try {
+    tmp = fs.realpathSync(fs.mkdtempSync(path.join(ctx.env.TMPDIR || os.tmpdir(), 'g37-sim429-')));
+    srv = await startLocal429Server();
+    if (!LOCAL_BASE_RE.test(srv.base)) throw new Stop(EXIT.INVALID, 'simulate_base_not_local', null);
+    // Step 1: alias A only, pointed at the local server. Nothing leaves the machine.
+    const a = quietCtx(ctx);
+    a.childEnvExtra = {
+      [aliasA]: {
+        ANTHROPIC_BASE_URL: srv.base,
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1', CLAUDE_CODE_MAX_RETRIES: '0',
+      },
+    };
+    const codeA = await cmdRun(a, ['--alias', aliasA, '--purpose', 'selftest-429', '--max-attempts', '1', '--timeout', '180',
+      '--stdout', path.join(tmp, 'a.out'), '--stderr', path.join(tmp, 'a.err'), '--', binary, ...SELFTEST_PROMPT]);
+    const bad = [];
+    if (srv.requests < 1) bad.push('alias_a_did_not_reach_local_server');
+    if (codeA !== EXIT.LIMITED) bad.push(`alias_a_exit (got ${codeA}, want ${EXIT.LIMITED})`);
+    const until = cooldown.readCooldown(aliasA, { dir: ctx.cooldownDir, nowMs: ctx.now() });
+    if (!cooldown.isCooling(until, ctx.now())) bad.push('cooldown_not_written');
+    if (bad.length) { for (const b of bad) ctx.err(`selftest FAIL ${b}`); return SELFTEST_FAIL; }
+    // Step 2: unpinned run, no seam. A is cooling, so the next alias answers through its real route.
+    const b = quietCtx(ctx);
+    let codeB;
+    try {
+      codeB = await cmdRun(b, ['--purpose', 'selftest-429', '--timeout', '180', '--stdout', path.join(tmp, 'b.out'), '--', binary, ...SELFTEST_PROMPT]);
+    } catch (e) {
+      if (!(e instanceof Stop)) throw e;
+      codeB = e.exitCode;
+    }
+    const aliasB = b.lastAttemptAlias;
+    if (codeB !== EXIT.OK || !aliasB || aliasB === aliasA) {
+      ctx.err(`selftest FAIL next_alias_not_ok (exit ${codeB}${aliasB ? `, alias ${aliasB}` : ''})`);
+      return SELFTEST_FAIL;
+    }
+    const st = quietCtx(ctx);
+    cmdStatus(st, []);
+    const line = st.captured.join('').split('\n').find((l) => l.startsWith(`alias=${aliasA} `));
+    if (!line || /cooldown_until=-(\s|$)/.test(line)) {
+      ctx.err('selftest FAIL status_does_not_show_cooldown');
+      return SELFTEST_FAIL;
+    }
+    ctx.out(`${aliasA} rate_limited -> ${aliasB} ok`);
+    ctx.out(`status shows ${aliasA} cooling; release it with: node scripts/claude-account.js cooldown --clear ${aliasA}`);
+    return EXIT.OK;
+  } finally {
+    if (srv) await new Promise((r) => srv.server.close(r));
+    if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+async function cmdSelftest(ctx, argv) {
+  const { opts, rest } = parseArgs(argv, { 'real-binary': 'flag', 'simulate-429': 'value', binary: 'value' });
+  if (opts['real-binary'] && opts['simulate-429'] !== undefined) throw new Stop(EXIT.INVALID, 'selftest: pick one of --real-binary or --simulate-429', null);
+  if (opts.binary !== undefined && !opts['real-binary'] && opts['simulate-429'] === undefined) throw new Stop(EXIT.INVALID, 'selftest: --binary needs --real-binary or --simulate-429', null);
+  if (rest.length) throw new Stop(EXIT.INVALID, 'selftest: unexpected argument', null);
+  if (opts['real-binary']) return selftestRealBinary(ctx, resolveBinaryOpt(opts.binary));
+  if (opts['simulate-429'] !== undefined) return selftestSimulate429(ctx, opts['simulate-429'], resolveBinaryOpt(opts.binary));
   const { makeFixture, R401, R429, R429_USAGE, ERR_EXIT0 } = require('./lib/account-fixtures/shim-install');
   const fx = makeFixture({ aliases: [{ alias: 'a', priority: 10 }, { alias: 'b', priority: 20 }] });
   const results = [];
@@ -787,7 +982,7 @@ async function cli(argv, deps) {
   }
 }
 
-module.exports = { cli, createScrubber, classifyAttempt, parseEnvelope, EXIT };
+module.exports = { cli, createScrubber, classifyAttempt, parseEnvelope, judgeRealBinary, EXIT };
 
 if (require.main === module) {
   cli(process.argv.slice(2)).then((c) => { process.exitCode = c; });

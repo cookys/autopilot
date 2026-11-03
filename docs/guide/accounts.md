@@ -73,21 +73,13 @@ Expected: a command line that carries the alias only, never the token. Then, ins
 
 ## O6. Prove a bad token never falls back to your own login
 
-This uses a throwaway accounts directory and a deliberately fake token. It spends nothing and does not touch your real registry or `~/.claude`.
+Opt-in spike, run by hand only (no suite runs it). It builds a throwaway registry with one alias holding a `FAKE-` token and runs the real `claude` through `run` in it. It spends nothing and never reads your `~/.claude`.
 
 ```
-umask 077
-export AUTOPILOT_ACCOUNTS_DIR="$(mktemp -d)/accounts"
-mkdir -p "$AUTOPILOT_ACCOUNTS_DIR/probe/claude" "$AUTOPILOT_ACCOUNTS_DIR/probe/home"
-chmod 700 "$AUTOPILOT_ACCOUNTS_DIR" "$AUTOPILOT_ACCOUNTS_DIR/probe"
-printf '{"schema":"autopilot.accounts/1","accounts":[{"alias":"probe","enabled":true,"priority":10}]}' > "$AUTOPILOT_ACCOUNTS_DIR/registry.json"
-printf '%s' 'FAKE-not-a-real-token' > "$AUTOPILOT_ACCOUNTS_DIR/probe/token"
-chmod 600 "$AUTOPILOT_ACCOUNTS_DIR/registry.json" "$AUTOPILOT_ACCOUNTS_DIR/probe/token"
-node scripts/claude-account.js run --alias probe --purpose operator-check -- claude -p "say OK" --model haiku --output-format json --tools "" --strict-mcp-config; echo "rc=$?"
-unset AUTOPILOT_ACCOUNTS_DIR
+node scripts/claude-account.js selftest --real-binary
 ```
 
-Expected: `STOP_AUTH alias=probe` on stderr and `rc=6`, and no "OK" answer. If you get an answer, your own login was used: stop and report it. The `unset` puts you back on the real registry; the throwaway directory can stay in your temp area. (The plan's `selftest --real-binary` was not built; `selftest` runs against a test double only, see O9.)
+Expected: exit 0 and the line `selftest: fake token -> 401, ambient login not used`. It passes only when all three hold: the account layer returned 6 (auth stop), the output holds no normal answer (`is_error:false`), and the child's `HOME` and `CLAUDE_CONFIG_DIR` were inside the throwaway directory. Any failed condition is printed and the exit code is 1; if the answer came back, your own login was used: stop and report it. `--binary <path>` picks another `claude`. Paste the transcript into the P8 note.
 
 ## O7. One real headless call per alias
 
@@ -108,10 +100,10 @@ Expected: one line `<alias> class=<ok|unknown|tight> used=<fraction or -> source
 ## O9. Check the limit switch
 
 ```
-node scripts/claude-account.js selftest
+node scripts/claude-account.js selftest --simulate-429 <A>
 ```
 
-Expected: `selftest ok (5 checks)`. It drives a test double of `claude` through 429 on every alias (exit 4), cooling (exit 3), 401 (exit 6) and an error envelope (exit 5) in a throwaway directory; your real `status` is unchanged. Forcing a real 429 on a real account is not possible under `claude -p`; if you want to see it with the real binary, use the pass-through proxy recipe in [docs/plans/evidence/2026-10-21-subagent-concurrency-advisory/01-subagentstop-on-quota-error.md](../plans/evidence/2026-10-21-subagent-concurrency-advisory/01-subagentstop-on-quota-error.md) and then run `status`: the limited alias shows `cooldown_until` (UTC+8). `node scripts/claude-account.js cooldown --clear <A>` releases it.
+Expected: `<A> rate_limited -> <B> ok`, then `node scripts/claude-account.js status` shows `<A>` with `cooldown_until` (UTC+8). Alias `<A>` is pointed at a local HTTP server inside this command that answers every request itself with a `rate_limit_error` 429 and forwards nothing; no request for `<A>` leaves the machine. `<B>` is the next alias and makes one real call (`say OK`, haiku) on its real route. `node scripts/claude-account.js cooldown --clear <A>` releases the cooldown. Plain `node scripts/claude-account.js selftest` still runs the 5 shim checks only.
 
 ## O10. Roll back
 

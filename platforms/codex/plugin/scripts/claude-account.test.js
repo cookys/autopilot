@@ -451,12 +451,13 @@ process.stdout.write('{}');`);
   empty.fx.cleanup();
 });
 
-test('selftest runs on the shim; --real-binary is refused', async () => {
+test('selftest runs on the shim; mixed or dangling selftest flags are refused', async () => {
   const fx = makeFixture({ aliases: [{ alias: 'a' }] });
   const r = await go(fx, ['selftest']);
   assert.strictEqual(r.code, 0, r.err);
   assert.match(r.out, /selftest ok/);
-  assert.strictEqual((await go(fx, ['selftest', '--real-binary'])).code, 2);
+  assert.strictEqual((await go(fx, ['selftest', '--real-binary', '--simulate-429', 'a'])).code, 2);
+  assert.strictEqual((await go(fx, ['selftest', '--binary', '/nonexistent'])).code, 2);
   fx.cleanup();
 });
 

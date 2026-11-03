@@ -12,10 +12,13 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const { readSmallFile } = require('./account-quota');
 
 const SCHEMA = 'autopilot.account-cooldown/1';
 const ALIAS_RE = /^[a-z0-9-]{1,24}$/;
 const DEFAULT_MINUTES = 30;
+const MAX_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 function cooldownDir(opts) {
   const o = opts || {};
@@ -41,28 +44,43 @@ function writeCooldown(alias, untilMs, opts) {
   const o = opts || {};
   const dir = cooldownDir(o);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const st = fs.lstatSync(dir);
+  if (!st.isDirectory() || st.isSymbolicLink()) throw new Error('cooldown dir is not a plain directory');
+  if (typeof process.getuid === 'function' && st.uid !== process.getuid()) throw new Error('cooldown dir has a foreign owner');
+  if ((st.mode & 0o777) !== 0o700) throw new Error('cooldown dir mode must be 0700');
   const body = JSON.stringify({
     schema: SCHEMA, alias, cooldown_until_ms: Math.trunc(untilMs),
     written_at_ms: typeof o.nowMs === 'number' ? o.nowMs : Date.now(),
   });
   const file = path.join(dir, alias + '.json');
-  const tmp = file + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, body + '\n', { mode: 0o600 });
-  fs.renameSync(tmp, file);
+  const tmp = path.join(dir, alias + '.json.' + process.pid + '.' + crypto.randomBytes(6).toString('hex') + '.tmp');
+  let fd;
+  try {
+    fd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
+    fs.writeSync(fd, body + '\n');
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(tmp, file);
+  } catch (e) {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch (_) { /* ignore */ } }
+    try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ }
+    throw e;
+  }
   return file;
 }
 
 // Returns cooldown_until_ms, or null when absent/unusable. Unusable files count as absent here:
-// a cooldown is a capacity hint, never an authority (token/config faults live in the registry).
+// a cooldown is a capacity hint, never an authority. Values beyond now + 7 days are clamped.
 function readCooldown(alias, opts) {
   if (!ALIAS_RE.test(String(alias))) return null;
-  const file = path.join(cooldownDir(opts), alias + '.json');
+  const o = opts || {};
+  const nowMs = typeof o.nowMs === 'number' ? o.nowMs : Date.now();
+  const r = readSmallFile(path.join(cooldownDir(o), alias + '.json'), 1024, o);
+  if (!r.text) return null;
   try {
-    const st = fs.lstatSync(file);
-    if (!st.isFile() || st.size > 1024) return null;
-    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const j = JSON.parse(r.text);
     if (!j || j.schema !== SCHEMA || j.alias !== alias || !Number.isFinite(j.cooldown_until_ms)) return null;
-    return j.cooldown_until_ms;
+    return Math.min(j.cooldown_until_ms, nowMs + MAX_COOLDOWN_MS);
   } catch (_) { return null; }
 }
 
@@ -86,5 +104,5 @@ function clearCooldown(alias, opts) {
 }
 
 module.exports = {
-  SCHEMA, DEFAULT_MINUTES, cooldownDir, computeUntil, writeCooldown, readCooldown, readAllCooldowns, isCooling, clearCooldown,
+  SCHEMA, DEFAULT_MINUTES, MAX_COOLDOWN_MS, cooldownDir, computeUntil, writeCooldown, readCooldown, readAllCooldowns, isCooling, clearCooldown,
 };

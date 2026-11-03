@@ -24,6 +24,7 @@ function classify(q) {
 function pick(input) {
   const i = input || {};
   const nowMs = i.nowMs;
+  if (typeof nowMs !== 'number' || !Number.isFinite(nowMs)) throw new TypeError('pick: nowMs must be a finite number');
   const accounts = Array.isArray(i.accounts) ? i.accounts : [];
   const exclude = new Set(i.exclude || []);
   const cooldowns = i.cooldowns || {};

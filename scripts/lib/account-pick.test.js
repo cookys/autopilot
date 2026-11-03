@@ -110,3 +110,9 @@ test('purity: inputs are not mutated, same input same output', () => {
   assert.deepStrictEqual(input, copy);
   assert.deepStrictEqual(r1, r2);
 });
+
+test('nowMs is required: missing or non-finite throws (never fails open on cooldowns)', () => {
+  assert.throws(() => pick({ accounts: [A('a', 1)], cooldowns: { a: NOW + 1 } }), TypeError);
+  assert.throws(() => pick({ accounts: [A('a', 1)], nowMs: NaN }), TypeError);
+  assert.throws(() => pick({ accounts: [A('a', 1)], nowMs: '5' }), TypeError);
+});

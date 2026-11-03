@@ -1,21 +1,29 @@
 'use strict';
 // G37 N11 static check: no autopilot hook may carry the whole process.env around unreviewed (it holds the
-// account token). The rule is deny-first, with no alias tracking and no sink list (those were bypassed twice):
+// account token). The rule watches the identifier `process` itself and uses an ALLOW list (listing the ways to
+// reach `env` leaked again and again: ?.["env"], (process).env, process[`env`], { ["env"]: e } = process,
+// { env = {} } = process, ...).
 //
-//   A use is a VIOLATION wherever it appears and whatever it is used for when it is
-//     1. `process.env` NOT immediately followed by a single-key read (`.X`, `?.X`, `['X']` / `[key]`), or
-//     2. a destructuring of `env` out of `process` (`{ env } = process`, `{ env: e } = process`, inside a
-//        multi-declarator statement too, or out of `globalThis.process` / `require('process')`).
-//   Spellings `process?.env` and `process['env']` are normalised to `process.env` first.
+//   After lexing (comments stripped, string / template text masked, `require('process')`,
+//   `require('node:process')`, `globalThis.process` and `global.process` rewritten to `process`), EVERY
+//   standalone `process` identifier is one use, unless the text right after it is one of
+//     1. a single env key:  .env.X  .env?.X  ?.env.X  ?.env?.X  .env[  .env?.[   (whatever is inside [ ] is not
+//        looked at, so process.env[key] stays safe), or
+//     2. a member that cannot hand out the whole env: SAFE_MEMBERS below (`?.` before it is fine too).
+//   Everything else is a use: `(process)`, `process[...]`, `process?.[...]`, any destructuring `= process`,
+//   `const p = process`, passing `process` as an argument, `{ env: process.env }`, bare `process.env`, ...
 //
-// The uses that exist today and are fine (handing env to a function, `spawn({ env: process.env })`, ...) are
-// pinned in WHITELIST: { "hooks/x.js": <count of such uses in that file> }, committed below. More uses than
-// the whitelist is red (the message names the file and the line numbers); FEWER is red too (update the
-// whitelist, so it can only get tighter). Reading one variable (process.env.X) is never counted.
+// The uses that exist today and are fine (handing process / env to a function, `spawn({ env: process.env })`,
+// ...) are pinned in WHITELIST: { "hooks/x.js": <count> }. More uses than the whitelist is red (the message
+// names the file and the line numbers); FEWER is red too (update the whitelist, so it can only get tighter).
 // Scope: every .js under hooks/ and all subdirectories, minus the explicit exclusion list below.
-// Known blind spots: `globalThis['process']` / `global['process']` / an aliased `const p = process` followed by
-// `p.env`, `Reflect.get(process, 'env')`, and env obtained through a function parameter that was handed the
-// whole env (that hand-over itself is a counted use). Comments on their own line are ignored.
+// Comments are removed by a lexical scanner (any position, multi-line too, line numbers are kept).
+//
+// Known blind spots: regex literals (a quote inside one can confuse the scanner); `eval` / `new Function` /
+// `vm` strings that build a reference to process; another module that re-exports `process` or its env and a
+// hook that imports it from there; `globalThis['process']` / `global['process']`; `Reflect.get(globalThis,
+// 'process')`; `import process from 'node:process'` (ESM, hooks are CommonJS); an object that was handed the
+// env earlier (the hand-over itself is a counted use).
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -48,25 +56,80 @@ const WHITELIST = {
   'hooks/transcript-reader-lib.js': 3,
 };
 
-const BARE = /\bprocess\s*\.\s*env\b(?!\s*(?:\?\.\s*[A-Za-z_$]|\.\s*[A-Za-z_$]|\[))/g;
-const DESTRUCT = /\{[^{}]*\benv\b[^{}]*\}\s*=\s*(?:(?:globalThis|global)\s*\.\s*)?(?:process\b(?!\s*\.\s*[A-Za-z_$])|require\s*\(\s*['"](?:node:)?process['"]\s*\))/g;
+// Members of `process` that never hand out the whole env. Every one has to stay that way.
+const SAFE_MEMBERS = [
+  'argv', 'argv0', 'execArgv', 'execPath', 'exit', 'exitCode', 'cwd', 'chdir', 'pid', 'ppid', 'platform', 'arch',
+  'version', 'versions', 'release', 'stdout', 'stderr', 'stdin', 'on', 'once', 'off', 'kill', 'hrtime', 'nextTick',
+  'uptime', 'memoryUsage', 'emitWarning', 'umask', 'getuid', 'getgid', 'geteuid', 'title', 'features', 'config',
+  // EventEmitter surface (post-tool-chain-lib snapshots and restores listeners): none of it returns the env
+  'eventNames', 'rawListeners', 'listeners', 'listenerCount', 'removeAllListeners', 'removeListener', 'addListener',
+  'prependListener', 'emit', 'setMaxListeners', 'getMaxListeners',
+];
+const SINGLE_ENV_KEY = /^\s*(?:\?\.|\.)\s*env\s*(?:\?\.\s*\[|\[|\?\.\s*[A-Za-z_$]|\.\s*[A-Za-z_$])/;
+const SAFE_MEMBER = new RegExp(`^\\s*(?:\\?\\.|\\.)\\s*(?:${SAFE_MEMBERS.join('|')})(?![\\w$])`);
+const PROCESS_ID = /(?<![\w$])process(?![\w$])/g;
 
-function normalise(src) {
-  return src
-    .replace(/\bprocess\s*\?\.\s*env\b/g, 'process.env')
-    .replace(/\bprocess\s*\[\s*['"]env['"]\s*\]/g, 'process.env')
-    .split('\n')
-    .map((l) => (/^\s*(?:\/\/|\/\*|\*)/.test(l) ? '' : l))
-    .join('\n');
+/**
+ * Small lexical scanner. Comments (`//` and `/* *\/`, multi-line too) become one space (newlines inside a block
+ * comment are kept, so line numbers do not drift). String and template-literal text is kept as is, or, with
+ * `mask`, blanked to spaces (newlines kept) so `'process.env'` in a string is not code; the code inside a
+ * template's `${ ... }` stays code. Regex literals are NOT understood (blind spot, see the header).
+ */
+function lex(src, mask) {
+  const stack = [{ t: 'code', depth: 0 }];
+  let out = '';
+  const blank = (ch) => (mask && ch !== '\n' ? ' ' : ch);
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    const top = stack[stack.length - 1];
+    if (top.t === 'tpl') {
+      if (c === '\\') { out += blank(c); if (i + 1 < src.length) out += blank(src[++i]); } else if (c === '`') { stack.pop(); out += c; } else if (c === '$' && src[i + 1] === '{') { out += '${'; i++; stack.push({ t: 'code', depth: 0 }); } else out += blank(c);
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      out += c;
+      for (i++; i < src.length && src[i] !== c && src[i] !== '\n'; i++) {
+        if (src[i] === '\\' && i + 1 < src.length) { out += blank(src[i]); i++; }
+        out += blank(src[i]);
+      }
+      if (i < src.length && src[i] === c) out += c; else if (i < src.length) out += src[i];
+    } else if (c === '`') { out += c; stack.push({ t: 'tpl' }); } else if (c === '/' && src[i + 1] === '/') {
+      while (i < src.length && src[i + 1] !== '\n') i++;
+      out += ' ';
+    } else if (c === '/' && src[i + 1] === '*') {
+      const end = src.indexOf('*/', i + 2);
+      const stop = end === -1 ? src.length : end + 2;
+      out += ' ' + (src.slice(i, stop).match(/\n/g) || []).join('');
+      i = stop - 1;
+    } else if (c === '{') { top.depth++; out += c; } else if (c === '}') {
+      if (top.depth === 0 && stack.length > 1) stack.pop(); else top.depth--;
+      out += c;
+    } else out += c;
+  }
+  return out;
 }
 
-/** Line numbers (1-based) of every violating use in one source text. */
+function normalise(src) {
+  const keepNl = (m, text) => text + '\n'.repeat((m.match(/\n/g) || []).length);
+  let s = lex(src, false);
+  s = s.replace(/\brequire\s*\(\s*['"](?:node:)?process['"]\s*\)/g, (m) => keepNl(m, 'process'));
+  s = s.replace(/\b(?:globalThis|global)\s*(?:\?\.|\.)\s*process\b/g, (m) => keepNl(m, 'process'));
+  return lex(s, true);
+}
+
+/** Line numbers (1-based) of every `process` use that is not on the allow list. */
 function uses(src) {
   const s = normalise(src);
-  const lineOf = (i) => s.slice(0, i).split('\n').length;
   const out = [];
-  for (const re of [BARE, DESTRUCT]) for (const m of s.matchAll(re)) out.push(lineOf(m.index));
-  return out.sort((a, b) => a - b);
+  for (const m of s.matchAll(PROCESS_ID)) {
+    // `x.process` is a property of something else; `...process` (spread) is not
+    const before = s.slice(Math.max(0, m.index - 3), m.index).replace(/\s+$/, '');
+    if (/(?<!\.)\.$/.test(before)) continue;
+    const rest = s.slice(m.index + m[0].length);
+    if (SINGLE_ENV_KEY.test(rest) || SAFE_MEMBER.test(rest)) continue;
+    out.push(s.slice(0, m.index).split('\n').length);
+  }
+  return out;
 }
 
 function hookFiles(dir) {
@@ -138,6 +201,24 @@ const NEG = {
   'handed to a function': 'report(process.env);',
   'process?.env bare': 'const e = process?.env;',
   "process['env'] bare": "const e = process['env'];",
+  'destructure of other keys only is still a use': 'const { argv, pid } = process;',
+  'destructure with a default': 'const { env = {} } = process;',
+  'destructure with a computed key': 'const { ["env"]: e } = process;',
+  'optional computed access, double quotes': 'const e = process?.["env"];',
+  'optional computed access, single quotes': "const e = process?.['env'];",
+  'parenthesised process': 'const e = (process).env;',
+  'template computed access': 'const e = process[`env`];',
+  'alias of process': 'const p = process; console.log(p.env);',
+  'process passed as an argument': 'report(process);',
+  'block comment before code': '/* x */ const e = process.env;',
+  'block comment before call': '/* d */ console.log(process.env);',
+  'comment inside the token': 'console.log(process /* d */ .env);',
+  'generator with yield*': '*all() { yield* Object.entries(process.env) }',
+  "require('process').env": "const e = require('process').env;",
+  "require('node:process')?.env": "const e = require('node:process')?.env;",
+  "require('process')['env']": "const e = require('process')['env'];",
+  'bare use after a string with a comment marker': "const u = 'http://x'; console.log(process.env);",
+  'bare use inside ${} of a template': 'const m = `v ${JSON.stringify(process.env)}`;',
   'util.inspect': "console.log(require('util').inspect(process.env));",
 };
 const POS = {
@@ -145,11 +226,19 @@ const POS = {
   "process.env['X']": "const v = JSON.stringify(process.env['X']);",
   'process.env?.X': 'console.log(process.env?.X);',
   'process?.env.X': 'console.log(process?.env.X);',
-  "process['env'].X": "console.log(process['env'].X);",
   'process.env[key]': 'console.log(process.env[key]);',
+  'process.argv[2]': 'const a = process.argv[2];',
+  'process.exit(1)': 'process.exit(1);',
+  'comment inside env access': 'console.log(process.env /* c */ .X);',
+  'process?.env?.X': 'console.log(process?.env?.X);',
+  'safe members with optional chain': 'console.log(process?.cwd(), process.platform, process.stdout.write("x"));',
+  'x.process is not process': 'console.log(ctx.process, other?.process);',
   'single var in an object': 'console.log(JSON.stringify({ home: process.env.HOME, n: 1 }));',
-  'destructure of a different key': 'const { argv, pid } = process;',
-  'comment only': '// process.env is documented here\n/* process.env */\n * process.env',
+  'comment only': '// process.env is documented here\n/* process.env */\n/**\n * process.env\n */',
+  "string 'process.env'": "const s = 'process.env'; const t = \"process.env\"; const u = `process.env`;",
+  'inline comment': 'const a = 1; // reads process.env later\nconst b = 2; /* process.env */',
+  'multi-line block comment': 'const a = 1; /* first\n process.env\n last */ const b = 2;',
+  'template text but single key in ${}': 'const m = `home: ${process.env.HOME} (process.env)`;',
 };
 for (const [name, src] of Object.entries(NEG)) {
   test(`NEG: ${name} is counted`, () => {

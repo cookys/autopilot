@@ -159,7 +159,19 @@ test('real-binary judge: bare exit 6 without positive auth-stop evidence fails (
   // positives: the wrapper marker alone, and the 401 envelope alone
   assert.deepStrictEqual(judgeRealBinary(mk('', 'claude-account: STOP_AUTH alias=probe\n')), []);
   assert.deepStrictEqual(judgeRealBinary(mk(R401, '')), []);
-  assert.ok(judgeRealBinary(mk('', 'STOP_AUTH alias=other\n')).some((b) => /no_auth_stop_evidence/.test(b)), 'other alias marker is not evidence');
+  assert.ok(judgeRealBinary(mk('', 'STOP_AUTH alias=other\n')).some((b) => /no_auth_stop_evidence/.test(b)), 'other alias marker is not evidence');  // a child's own copy of the marker (bare, or prefixed in its stdout) is not the wrapper's line
+  assert.ok(judgeRealBinary(mk('', 'STOP_AUTH alias=probe\n')).some((b) => /no_auth_stop_evidence/.test(b)), 'bare marker is not evidence');
+  assert.ok(judgeRealBinary(mk('claude-account: STOP_AUTH alias=probe\n', '')).some((b) => /no_auth_stop_evidence/.test(b)), 'stdout marker is not evidence');
+});
+
+test('real-binary: a child that echoes the wrapper marker itself and exits 6 is rejected end to end', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  const bin = mkShim(fx.root, 'binforge.js',
+    "process.stdout.write('claude-account: STOP_AUTH alias=probe\\n'); process.stderr.write('claude-account: STOP_AUTH alias=probe\\n'); process.exitCode = 6;");
+  const r = await go(fx, ['selftest', '--real-binary', '--binary', bin]);
+  assert.strictEqual(r.code, 1);
+  assert.match(r.err, /no_auth_stop_evidence/);
+  fx.cleanup();
 });
 
 test('real-binary: a shim that exits 6 with nothing else is rejected end to end (exit 1)', async () => {

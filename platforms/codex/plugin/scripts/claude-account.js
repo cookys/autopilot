@@ -83,16 +83,43 @@ function pdeathsigPrefix() {
 function preflightExec(cmd0, env, cwd) {
   const isExe = (p) => { try { return fs.statSync(p).isFile(); } catch (_) { return false; } };
   const canX = (p) => { try { fs.accessSync(p, fs.constants.X_OK); return true; } catch (_) { return false; } };
-  const cands = cmd0.includes('/')
-    ? [path.resolve(cwd || process.cwd(), cmd0)]
-    : String((env && env.PATH) || '').split(':').map((d) => path.resolve(cwd || process.cwd(), d || '.', cmd0));
-  let found = false;
-  for (const c of cands) {
-    if (!isExe(c)) continue;
-    found = true;
-    if (canX(c)) return null;
+  // execvp falls back to a default search path when PATH is not set at all (an empty PATH still means cwd).
+  const searchPath = env && typeof env.PATH === 'string' ? env.PATH : '/bin:/usr/bin';
+  const base = cwd || process.cwd();
+  const resolveIn = (name) => {
+    const cands = name.includes('/') ? [path.resolve(base, name)]
+      : searchPath.split(':').map((d) => path.resolve(base, d || '.', name));
+    let found = false;
+    for (const c of cands) {
+      if (!isExe(c)) continue;
+      found = true;
+      if (canX(c)) return { path: c, err: null };
+    }
+    return { path: null, err: found ? 'EACCES' : 'ENOENT' };
+  };
+  const r = resolveIn(cmd0);
+  if (r.err) return r.err;
+  // A script whose shebang interpreter is missing makes setpriv answer 127 just like a missing binary.
+  let head = '';
+  try {
+    const fd = fs.openSync(r.path, 'r');
+    try { const buf = Buffer.alloc(256); head = buf.toString('latin1', 0, fs.readSync(fd, buf, 0, 256, 0)); } finally { fs.closeSync(fd); }
+  } catch (_) { return null; }
+  if (!head.startsWith('#!')) return null;
+  const toks = head.slice(2).split('\n')[0].trim().split(/\s+/).filter(Boolean);
+  if (!toks.length) return null;
+  const interp = resolveIn(toks[0]);
+  if (interp.err) return interp.err;
+  if (path.basename(toks[0]) === 'env') {
+    const rest = toks.slice(1);
+    let i = 0;
+    while (i < rest.length && (rest[i].startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[i]))) i += 1;
+    if (i < rest.length) {
+      const target = resolveIn(rest[i]);
+      if (target.err) return target.err;
+    }
   }
-  return found ? 'EACCES' : 'ENOENT';
+  return null;
 }
 
 /** Forward SIGTERM/SIGINT to the child, escalate to SIGKILL after TERM_GRACE_MS. Returns a disposer. */
@@ -785,8 +812,10 @@ function judgeRealBinary(x) {
   const bad = [];
   if (x.code !== EXIT.AUTH) bad.push(`exit_not_auth (got ${x.code}, want ${EXIT.AUTH})`);
   const env = parseEnvelope(x.stdout || '');
-  const markerRe = /(^|\n)(claude-account: )?STOP_AUTH alias=probe(\n|$)/;
-  const marker = markerRe.test(String(x.stderr || '')) || markerRe.test(String(x.stdout || ''));
+  // Only the wrapper's own prefixed line counts. The child's stdout/stderr never reach `stderr` here (selftest sends
+  // them to files), and a child echoing the bare marker without the wrapper prefix is not evidence either.
+  const markerRe = /(^|\n)claude-account: STOP_AUTH alias=probe(\n|$)/;
+  const marker = markerRe.test(String(x.stderr || ''));
   const env401 = !!(env && env.is_error === true && env.api_error_status === 401);
   if (!marker && !env401) bad.push('no_auth_stop_evidence (need STOP_AUTH alias=probe or a 401 envelope)');
   if (env && env.is_error === false) bad.push('normal_answer_returned (ambient login used?)');
@@ -853,12 +882,13 @@ async function selftestRealBinary(ctx, binary) {
     fs.writeFileSync(probe, PROBE_SRC, { mode: 0o700 });
     const rec = path.join(base, 'observed.json');
     const outFile = path.join(base, 'stdout.json');
+    const errFile = path.join(base, 'stderr.txt');
     const env = {
       PATH: ctx.env.PATH || '', LANG: ctx.env.LANG || 'C', TMPDIR: dirs.tmp, XDG_RUNTIME_DIR: dirs.run,
       AUTOPILOT_ACCOUNTS_DIR: accounts, AUTOPILOT_LIVE_DIR: dirs.live, AUTOPILOT_STATE_DIR: dirs.state, AUTOPILOT_CONFIG: cfgFile,
     };
     const sctx = quietCtx(makeCtx({ env, realHome: ctx.realHome, now: ctx.now, uid: ctx.uid, warn: () => {} }));
-    const code = await cmdRun(sctx, ['--alias', 'probe', '--purpose', 'selftest', '--timeout', '180', '--stdout', outFile, '--',
+    const code = await cmdRun(sctx, ['--alias', 'probe', '--purpose', 'selftest', '--timeout', '180', '--stdout', outFile, '--stderr', errFile, '--',
       '/bin/sh', probe, rec, binary, ...SELFTEST_PROMPT]);
     let stdout = '';
     try { stdout = fs.readFileSync(outFile, 'utf8'); } catch (_) { /* none */ }

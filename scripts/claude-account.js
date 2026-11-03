@@ -342,7 +342,8 @@ function mirrorRows(ctx, alias, binding) {
     const r = observation.readView(ctx.liveDir, 'claude', alias);
     if (!r.view) return [];
     const b = binding || observation.readNamespaceBinding(ctx.liveDir);
-    return interpret.selectView(r.view, { configuredNamespace: null, boundNamespace: b.namespace }).rows;
+    return interpret.selectView(r.view, { configuredNamespace: null, boundNamespace: b.namespace }).rows
+      .filter((row) => row.writer_courier === observation.LOCAL_COURIER); // only the local courier's row counts here
   } catch (_) { return []; }
 }
 
@@ -554,12 +555,20 @@ function tightResetsFor(ctx, alias, checked, text) {
     const q = quota.readQuota(alias, { liveBase: ctx.liveDir, nowMs: ctx.now(), expectedRoot: quota.hash8(real) });
     out.push(...q.tight_resets);
   } catch (_) { /* no snapshot */ }
-  try { // a live MEASURED mirror window at or above 0.90 also tells when the limit lifts (estimates never count)
+  try { // a tight mirror window also tells when the limit lifts, when pick would judge the mirror newer than the snapshot
     const rows = mirrorRows(ctx, alias, null);
     if (rows.length > 0) {
-      const m = interpret.interpretWindows(rows, claudeManifest(), ctx.now() / 1000);
-      for (const w of m.windows) {
-        if (w.source !== 'estimated' && Number.isFinite(w.utilization) && w.utilization >= interpret.TIGHT_THRESHOLD && Number.isFinite(w.resets_at)) out.push(w.resets_at);
+      const info = checked.enabled.find((e) => e.alias === alias);
+      let real = info.configDir;
+      try { real = fs.realpathSync(info.configDir); } catch (_) { /* as is */ }
+      const rawSnap = quota.readSnapshotFile(ctx.liveDir, alias);
+      const snap = rawSnap && rawSnap.__error ? null : rawSnap;
+      const nowMs = ctx.now();
+      const sq = quota.interpretSnapshot(snap, { alias, expectedRoot: quota.hash8(real), nowMs });
+      const manifest = claudeManifest();
+      const { drop, observed_at: decidedAt } = judge(sq, snap, rows, manifest, nowMs);
+      if (drop !== null || decidedAt !== undefined) { // refusal row, or a tight mirror observation that took over
+        out.push(...interpret.interpretWindows(rows, manifest, nowMs / 1000).tight_resets);
       }
     }
   } catch (_) { /* no mirror */ }

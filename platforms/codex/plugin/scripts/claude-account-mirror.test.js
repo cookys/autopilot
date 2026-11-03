@@ -77,7 +77,7 @@ test('G40-N87: a view whose rows are all unusable (placeholder, stale, peer, bad
     for (const args of [['pick'], ['status'], ['pick', '--exclude', 'a']]) want.push(await go(fx, args));
     writeRow(fx, 'a', [], { visibility: 'L0', source: 'registry' }); // placeholder
     writeRow(fx, 'b', [win('rolling_5h', 0.97, { observed_at: NOW_S - 7 * 3600 })]); // stale tight
-    writeRow(fx, 'c', [win('rolling_5h', 0.97, { source: 'estimated' })]); // estimated tight
+    writeRow(fx, 'c', [win('rolling_5h', 0.2, { source: 'estimated' })]); // estimated, below 0.90
     const got = [];
     for (const args of [['pick'], ['status'], ['pick', '--exclude', 'a']]) got.push(await go(fx, args));
     assert.deepStrictEqual(got.map((r) => r.code), want.map((r) => r.code));
@@ -152,7 +152,7 @@ test('G40-N88: an elapsed refusal changes nothing', async () => {
 
 // ------------------------------------------------------------------ tightResetsFor
 
-test('G40-N88: a quota 429 uses the reset of a tight measured mirror window; an estimated one is ignored', async () => {
+test('G40-N88: a quota 429 uses the reset of a tight mirror window, estimated included (same class as pick)', async () => {
   const cooldownOf = (fx) => JSON.parse(fs.readFileSync(path.join(fx.cooldownDir, 'a.json'), 'utf8')).cooldown_until_ms;
   const RUN = ['run', '--purpose', 'tst', '--', 'claude', '-p', 'hi'];
   const fx = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: R429_USAGE } });
@@ -167,7 +167,7 @@ test('G40-N88: a quota 429 uses the reset of a tight measured mirror window; an 
     assert.strictEqual(cooldownOf(fx), (NOW_S + 900) * 1000);
     writeRow(fy, 'a', [win('rolling_5h', 0.2), win('weekly', 0.99, { resets_at: NOW_S + 900, source: 'estimated' })]);
     await go(fy, RUN);
-    assert.strictEqual(cooldownOf(fy), dflt);
+    assert.strictEqual(cooldownOf(fy), (NOW_S + 900) * 1000);
   } finally { fx.cleanup(); fy.cleanup(); fz.cleanup(); }
 });
 
@@ -183,5 +183,37 @@ test('G40-N87: a mirror view naming a peer row, even one that says tight, never 
     assert.strictEqual((await go(fx, ['pick'])).out, 'a class=ok used=0.2 source=snapshot\n');
     const st = await go(fx, ['status']);
     assert.match(st.out, /observations newest_age: a=none b=none\n/);
+  } finally { fx.cleanup(); }
+});
+
+test('G40-N88: tightResetsFor applies the pick newer-observation rule: a newer ok snapshot keeps the mirror reset out', async () => {
+  const cooldownOf = (fx) => JSON.parse(fs.readFileSync(path.join(fx.cooldownDir, 'a.json'), 'utf8')).cooldown_until_ms;
+  const RUN = ['run', '--purpose', 'tst', '--', 'claude', '-p', 'hi'];
+  const snapAt = (ms) => Object.assign(SNAP('a', 0.2), { written_at_ms: ms });
+  const newer = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: R429_USAGE }, snapshots: { a: snapAt(NOW - 1000) } });
+  const older = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: R429_USAGE }, snapshots: { a: snapAt(NOW - 3600e3) } });
+  try {
+    const tight = [win('rolling_5h', 0.2), win('weekly', 0.95, { resets_at: NOW_S + 900 })];
+    writeRow(newer, 'a', tight);
+    await go(newer, RUN);
+    assert.strictEqual(cooldownOf(newer), NOW + 30 * 60 * 1000); // the snapshot (1 s old) beats the mirror row (10 s old)
+    writeRow(older, 'a', tight);
+    await go(older, RUN);
+    assert.strictEqual(cooldownOf(older), (NOW_S + 900) * 1000); // the mirror row is newer than the 1 h old snapshot
+  } finally { newer.cleanup(); older.cleanup(); }
+});
+
+test('G40-N87: a peer row without a hub stamp (writer_courier not local) never changes pick, status or the coverage line', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }, { alias: 'b' }], snapshots: { a: SNAP('a', 0.2), b: SNAP('b', 0.5) } });
+  try {
+    const b = observation.buildRecord({ provider: 'claude', alias: 'a', visibility: 'L3', windows: [win('rolling_5h', 0.97)] });
+    const dir = path.join(fx.liveDir, 'quota', 'claude');
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(dir, 'a.json'), JSON.stringify({ schema: 'fleet.quota-view/1', namespace: null, hub_offset: 0,
+      rows: [{ writer_courier: 'peer-1', host_role: null, observed_at_hub: null, skewed: false, record: b.record }] }), { mode: 0o600 });
+    assert.strictEqual((await go(fx, ['pick'])).out, 'a class=ok used=0.2 source=snapshot\n');
+    const st = await go(fx, ['status']);
+    assert.match(st.out, /observations newest_age: a=none b=none\n/);
+    assert.doesNotMatch(aliasLines(st.out)[0], /mirror_/);
   } finally { fx.cleanup(); }
 });

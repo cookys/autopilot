@@ -10,6 +10,9 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
 const { pick } = require('./account-pick');
 const { selectView } = require('./account-interpret');
 const gen = require('./fixtures/gen-account-pick-g37-golden');
@@ -44,13 +47,15 @@ const NO_EFFECT = {
   expired_tight: (al) => rollingRow(al, 0.97, { resets_at: NOW_S - 1 }),
   future_10min_tight: (al) => rollingRow(al, 0.97, { observed_at: NOW_S + 600 }),
   estimated_low: (al) => rollingRow(al, 0.2, { source: 'estimated' }),
-  estimated_tight: (al) => rollingRow(al, 0.97, { source: 'estimated' }),
   placeholder: (al) => row(al, [], { visibility: 'L0', source: 'registry' }),
   unknown_garbage_window: (al) => rollingRow(al, 0.97, { source: 'bogus' }),
   unknown_no_record: () => ({ writer_courier: 'local', observed_at_hub: null }),
   unknown_null_row: () => null,
   token_state_invalid_ok_window: (al) => rollingRow(al, 0.1, {}, { token_state: 'invalid', token_state_at: NOW_S - 10 }),
   peer_row_tight_unselected: (al) => Object.assign(rollingRow(al, 0.97), { observed_at_hub: NOW_S - 10, writer_courier: 'peer-1' }),
+  // A peer row that lacks a hub stamp is still a peer row: only writer_courier 'local' is trusted (no hub this wave).
+  peer_no_hub_stamp_tight: (al) => Object.assign(rollingRow(al, 0.97), { writer_courier: 'peer-1' }),
+  peer_no_hub_stamp_refusal: (al) => Object.assign(row(al, [], { refusal: { observed_at: NOW_S - 10, retry_at: NOW_S + 1200, reason: 'rate_limit' } }), { writer_courier: 'peer-1' }),
   elapsed_refusal: (al) => row(al, [], { refusal: { observed_at: NOW_S - 3600, retry_at: NOW_S - 60, reason: 'rate_limit' } }),
   stale_refusal: (al) => row(al, [], { refusal: { observed_at: NOW_S - 7 * 3600, reason: 'rate_limit' } }),
 };
@@ -242,15 +247,29 @@ test('G40-N83: a newer ok mirror row never overrides an older tight snapshot, an
   assert.strictEqual(r.choice.source, 'none');
 });
 
-test('G40-N83: estimated windows (even at 0.97) never decide; the gate is the measured window', () => {
-  const both = row('a', [win('rolling_5h', 0.2), win('weekly', 0.97, { source: 'estimated' })]);
-  assert.strictEqual(run(withObservations(BASE(), { a: [both] })), baseline());
-  const measuredTightPlusEstimate = row('a', [win('rolling_5h', 0.95), win('weekly', 0.99, { source: 'estimated' })]);
-  const r = pick(withObservations(BASE(), { a: [measuredTightPlusEstimate] }));
-  assert.strictEqual(r.choice.alias, 'b');
-  const only = pick({ accounts: [A('a', 1)], nowMs: NOW, observations: { a: [measuredTightPlusEstimate] } });
-  assert.strictEqual(only.choice.used, 0.95); // the estimate never lifts the reported used
-  assert.strictEqual(only.choice.source, 'passive');
+test('G40-N88: an estimated window at or above 0.90 is tight (plan 5.2 rule 4, N26); below 0.90 changes nothing', () => {
+  const r = pick(withObservations(BASE(), { a: [rollingRow('a', 0.97, { source: 'estimated' })] }));
+  assert.notStrictEqual(JSON.stringify(r), baseline());
+  assert.strictEqual(r.choice.alias, 'b'); // a became tight and moved behind ok b
+  const only = pick({ accounts: [A('a', 1)], nowMs: NOW, observations: { a: [rollingRow('a', 0.97, { source: 'estimated' })] } });
+  assert.strictEqual(only.choice.class, 'tight');
+  assert.strictEqual(only.choice.source, 'estimated');
+  assert.strictEqual(only.choice.used, 0.97);
+  assert.strictEqual(only.outcome, 'all_tight');
+  assert.strictEqual(run(withObservations(BASE(), { a: [rollingRow('a', 0.89, { source: 'estimated' })] })), baseline());
+  // an estimate that raises used over a measured ok window decides too, exactly as interpretWindows classes it
+  const mixed = row('a', [win('rolling_5h', 0.2), win('weekly', 0.97, { source: 'estimated' })]);
+  assert.strictEqual(pick(withObservations(BASE(), { a: [mixed] })).choice.alias, 'b');
+  // the guard is still: a stale or expired estimate never decides
+  assert.strictEqual(run(withObservations(BASE(), { a: [rollingRow('a', 0.97, { source: 'estimated', observed_at: NOW_S - 7 * 3600 })] })), baseline());
+  assert.strictEqual(run(withObservations(BASE(), { a: [rollingRow('a', 0.97, { source: 'estimated', resets_at: NOW_S - 1 })] })), baseline());
+});
+
+test('G40-N88: a measured tight window with a higher estimate reports the interpreter used and source', () => {
+  const m = row('a', [win('rolling_5h', 0.95), win('weekly', 0.99, { source: 'estimated' })]);
+  const only = pick({ accounts: [A('a', 1)], nowMs: NOW, observations: { a: [m] } });
+  assert.strictEqual(only.choice.class, 'tight');
+  assert.strictEqual(only.choice.used, 0.99);
 });
 
 test('G40-N8: purity with observations: inputs are not mutated, same input same output', () => {
@@ -260,4 +279,43 @@ test('G40-N8: purity with observations: inputs are not mutated, same input same 
   const r2 = pick(input);
   assert.deepStrictEqual(input, copy);
   assert.deepStrictEqual(r1, r2);
+});
+
+// ------------------------------------------------------------------ golden provenance (pin)
+
+const REPO = path.resolve(__dirname, '..', '..');
+
+test('G40-N87: golden records the pinned commit and every G37 file hash equals git show <pin>:<file>', () => {
+  assert.strictEqual(golden.generated_from_commit, gen.PIN_COMMIT);
+  assert.strictEqual(gen.PIN_COMMIT, '254a851d39ef876ecfaa38edac5f27557b258b0d');
+  assert.deepStrictEqual(Object.keys(golden.g37_file_sha256), gen.G37_FILES);
+  const pinned = gen.pinnedHashes(REPO);
+  for (const f of gen.G37_FILES) assert.strictEqual(golden.g37_file_sha256[f], pinned[f], f);
+});
+
+test('G40-N87: the generator refuses to write when a G37 file differs from the pin, and writes nothing', () => {
+  assert.notStrictEqual(gen.pinProblem(REPO), null, 'precondition: D3 changed pick and claude-account');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g40-gen-'));
+  try {
+    const out = path.join(dir, 'golden.json');
+    const r = spawnSync(process.execPath, [path.join(__dirname, 'fixtures', 'gen-account-pick-g37-golden.js'), '--out', out], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    assert.strictEqual(r.status, 2);
+    assert.match(r.stderr, /refusing: .*differs from 254a851d/);
+    assert.strictEqual(fs.existsSync(out), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('G40-N87: pin verification fails closed when git cannot answer', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g40-nogit-'));
+  try {
+    assert.throws(() => gen.pinnedHashes(dir), /git show .* failed/);
+    assert.match(gen.pinProblem(dir), /git show .* failed/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('G40-N87: --check compares the pin and the recorded hashes and ignores the status coverage line', () => {
+  assert.strictEqual(gen.stripCoverage('a\nobservations newest_age: a=none\nb'), 'a\nb');
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'fixtures', 'gen-account-pick-g37-golden.js'), '--check'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /golden matches/);
 });

@@ -8,8 +8,10 @@
 // develop commit before D3 touched pick, and never regenerated: the parity tests replay the same inputs against
 // the changed code and demand the same bytes.
 //
-//   node scripts/lib/fixtures/gen-account-pick-g37-golden.js            write the golden (refuses on modified G37 files)
-//   node scripts/lib/fixtures/gen-account-pick-g37-golden.js --check    re-derive and diff against the file
+//   node scripts/lib/fixtures/gen-account-pick-g37-golden.js [--out <file>]   write the golden; refuses unless the three
+//        G37 files equal their blobs at PIN_COMMIT (git show), and fails closed when git cannot answer
+//   node scripts/lib/fixtures/gen-account-pick-g37-golden.js --check          re-derive and diff against the file (the
+//        status coverage line is dropped on both sides; the recorded G37 hashes and the pinned commit are compared too)
 //
 // This module also exports the scenario runner so the parity tests replay the identical scenarios. Tempdir only,
 // FAKE- tokens, Node claude shim only. No real home, credential or network.
@@ -21,7 +23,35 @@ const { spawnSync } = require('child_process');
 
 const NOW = 1_800_000_000_000;
 const GOLDEN_FILE = path.join(__dirname, 'account-pick-g37-golden.json');
+// The commit the golden is generated from. The golden is only ever written from files byte-equal to this commit's blobs.
+const PIN_COMMIT = '254a851d39ef876ecfaa38edac5f27557b258b0d';
 const G37_FILES = ['scripts/lib/account-pick.js', 'scripts/lib/account-quota.js', 'scripts/claude-account.js'];
+
+// sha256 of each G37 file as committed at PIN_COMMIT, from `git show`. Throws when git cannot answer (fail closed).
+function pinnedHashes(repoRoot) {
+  const out = {};
+  for (const f of G37_FILES) {
+    const r = spawnSync('git', ['show', `${PIN_COMMIT}:${f}`], { cwd: repoRoot, maxBuffer: 64 * 1024 * 1024 });
+    if (r.error || r.status !== 0 || !Buffer.isBuffer(r.stdout) || r.stdout.length === 0) throw new Error(`git show ${PIN_COMMIT}:${f} failed`);
+    out[f] = crypto.createHash('sha256').update(r.stdout).digest('hex');
+  }
+  return out;
+}
+
+// Returns null when every G37 file in the working tree equals its blob at PIN_COMMIT, else a reason string.
+function pinProblem(repoRoot) {
+  let pinned;
+  try { pinned = pinnedHashes(repoRoot); } catch (e) { return String(e.message); }
+  for (const f of G37_FILES) {
+    let cur;
+    try { cur = crypto.createHash('sha256').update(fs.readFileSync(path.join(repoRoot, f))).digest('hex'); } catch (_) { return `cannot read ${f}`; }
+    if (cur !== pinned[f]) return `${f} differs from ${PIN_COMMIT}`;
+  }
+  return null;
+}
+
+const COVERAGE_LINE = /^observations newest_age: /;
+const stripCoverage = (out) => String(out).split('\n').filter((l) => !COVERAGE_LINE.test(l)).join('\n');
 
 // ---------------------------------------------------------------- pick() cases (the 10 account-pick.test.js groups + extras)
 
@@ -173,9 +203,8 @@ function loadDeps() {
 async function buildGolden() {
   const deps = loadDeps();
   const repoRoot = path.resolve(__dirname, '..', '..', '..');
-  const files = {};
-  for (const f of G37_FILES) files[f] = crypto.createHash('sha256').update(fs.readFileSync(path.join(repoRoot, f))).digest('hex');
-  const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).stdout.trim();
+  const files = pinnedHashes(repoRoot);
+  const head = PIN_COMMIT;
   const picks = pickCases().map((c) => ({ name: c.name, input: c.input, output: runPick(deps.pick, c.input) }));
   const cliOut = [];
   for (const spec of cliScenarios()) cliOut.push({ spec, result: await runCliScenario(spec, 'none', deps) });
@@ -184,22 +213,28 @@ async function buildGolden() {
 
 async function main() {
   const repoRoot = path.resolve(__dirname, '..', '..', '..');
-  const dirty = spawnSync('git', ['status', '--porcelain', '--'].concat(G37_FILES), { cwd: repoRoot, encoding: 'utf8' }).stdout.trim();
   const check = process.argv.includes('--check');
-  if (dirty && !check) { process.stderr.write(`refusing: G37 files are modified:\n${dirty}\n`); return 2; }
+  const oi = process.argv.indexOf('--out');
+  const outFile = oi >= 0 ? process.argv[oi + 1] : GOLDEN_FILE;
+  if (!check) {
+    const problem = pinProblem(repoRoot);
+    if (problem !== null) { process.stderr.write(`refusing: ${problem}\n`); return 2; }
+  }
   const g = await buildGolden();
   const text = `${JSON.stringify(g, null, 2)}\n`;
   if (check) {
     const cur = JSON.parse(fs.readFileSync(GOLDEN_FILE, 'utf8'));
-    const same = JSON.stringify(cur.pick) === JSON.stringify(g.pick) && JSON.stringify(cur.cli) === JSON.stringify(g.cli);
+    const norm = (cli) => JSON.stringify(cli, (k, v) => (k === 'out' && typeof v === 'string' ? stripCoverage(v) : v));
+    const same = JSON.stringify(cur.pick) === JSON.stringify(g.pick) && norm(cur.cli) === norm(g.cli) &&
+      JSON.stringify(cur.g37_file_sha256) === JSON.stringify(g.g37_file_sha256) && cur.generated_from_commit === PIN_COMMIT;
     process.stdout.write(same ? 'golden matches\n' : 'golden DIFFERS\n');
     return same ? 0 : 1;
   }
-  fs.writeFileSync(GOLDEN_FILE, text);
-  process.stdout.write(`wrote ${GOLDEN_FILE} from ${g.generated_from_commit}\n`);
+  fs.writeFileSync(outFile, text);
+  process.stdout.write(`wrote ${outFile} from ${g.generated_from_commit}\n`);
   return 0;
 }
 
-module.exports = { NOW, GOLDEN_FILE, G37_FILES, pickCases, cliScenarios, runPick, runCliScenario, writeMirrorVariant, loadDeps, buildGolden };
+module.exports = { NOW, GOLDEN_FILE, G37_FILES, PIN_COMMIT, pinnedHashes, pinProblem, stripCoverage, pickCases, cliScenarios, runPick, runCliScenario, writeMirrorVariant, loadDeps, buildGolden };
 
 if (require.main === module) main().then((c) => { process.exitCode = c; });

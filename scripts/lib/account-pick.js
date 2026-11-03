@@ -12,11 +12,12 @@
 //   observations: { alias: [row...] }   rows of the local quota mirror view (account-observation.js readView, already
 //                                       passed through account-interpret.js selectView: peer rows never reach pick)
 //   manifest: adapter manifest (account-interpret.js interpretWindows), optional
-// PM parity (L): the mirror can change a pick in exactly two ways and no other. (1) A fresh live MEASURED window at
-// or above 0.90 makes the alias tight; the mirror observation takes over from the snapshot only when it is at least
+// PM parity (L): the mirror can change a pick in exactly two ways and no other. (1) A fresh live window at or above
+// 0.90 makes the alias tight (the class interpretWindows gives it, estimated windows included: plan 5.2 rule 4, N26);
+// only rows written by the local courier count (writer_courier 'local', no hub stamp). The mirror observation takes over from the snapshot only when it is at least
 // as new as the snapshot's (a tie goes to the mirror); an older tight mirror row under a newer snapshot is ignored.
 // (2) A live refusal drops the alias with reason `refusal` (after `excluded` and after the G37 `cooldown`, which keeps
-// its own string). An ok, unknown, estimated, stale, placeholder or foreign-namespace mirror row never changes
+// its own string). An ok, unknown, stale, placeholder, estimated-below-0.90 or peer mirror row never changes
 // anything: no promotion of an unknown alias to ok (KR2 is off this wave), no "newer whole" for an ok row, no notes.
 // Without observations (or with only unusable rows) the output is byte-for-byte the G37 output, no extra key.
 // A tight takeover adds `observed_at` (epoch seconds of the deciding window) to `choice`; nothing else does.
@@ -26,7 +27,8 @@
 // Drop reasons are capacity only: excluded, cooldown, refusal. Token/config faults are never a drop reason.
 
 const { interpretSnapshot, TIGHT_THRESHOLD } = require('./account-quota');
-const { interpretWindows, TIGHT_THRESHOLD: MIRROR_TIGHT_THRESHOLD } = require('./account-interpret');
+const { interpretWindows } = require('./account-interpret');
+const { LOCAL_COURIER } = require('./account-observation');
 
 const CLASS_RANK = { ok: 0, unknown: 1, tight: 2 };
 
@@ -36,23 +38,20 @@ function classify(q) {
 }
 
 // What the mirror rows of one alias may contribute: { refusal: bool, tight: null | { used, source, observed_at } }.
-// Only measured windows count for tight (an estimate never makes an alias tight on its own); anything unreadable
-// is no contribution at all, never an error.
+// The class is interpretWindows' own (cooling beats tight); anything unreadable is no contribution, never an error.
 function mirrorEffect(rows, manifest, nowMs) {
   const none = { refusal: false, tight: null };
   if (!Array.isArray(rows)) return none;
-  // Local rows only (no hub this wave): a row carrying a hub stamp is a peer row and is not trusted here either.
-  const local = rows.filter((r) => r && typeof r === 'object' && !(typeof r.observed_at_hub === 'number' && Number.isFinite(r.observed_at_hub)));
+  // Local rows only (no hub this wave): a row is local when its writer is the local courier and it has no hub stamp.
+  const local = rows.filter((r) => r && typeof r === 'object' && r.writer_courier === LOCAL_COURIER &&
+    !(typeof r.observed_at_hub === 'number' && Number.isFinite(r.observed_at_hub)));
   if (local.length === 0) return none;
   let m;
   try { m = interpretWindows(local, manifest, nowMs / 1000); } catch (_) { return none; }
-  if (m.refusal !== null && m.refusal !== undefined) return { refusal: true, tight: null };
-  let top = null;
-  for (const w of m.windows) {
-    if (w.source === 'estimated' || typeof w.utilization !== 'number' || !(w.utilization >= MIRROR_TIGHT_THRESHOLD)) continue;
-    if (top === null || w.utilization > top.utilization) top = w;
-  }
-  return { refusal: false, tight: top === null ? null : { used: top.utilization, source: top.source, observed_at: top.observed_at } };
+  if (m.class === 'cooling') return { refusal: true, tight: null };
+  if (m.class !== 'tight') return none;
+  // used is null only for an empty credits balance: fully used.
+  return { refusal: false, tight: { used: typeof m.used === 'number' ? m.used : 1, source: m.source, observed_at: m.observed_at } };
 }
 
 // The class/used/source of one alias after the mirror had its say: { drop, cls, used, source, observed_at? }.

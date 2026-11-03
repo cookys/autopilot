@@ -3,7 +3,7 @@
 // src/status/events/sources/cost.js - reader of kind `cost.turn` (autopilot.events/1, plan E2 step 2).
 //
 //   read(ctx, window) -> { events, warnings, stats, files }       never throws, read-only
-//   ctx    = { project:{project_key, repo_identity, cwd?,...}, env, home, now }
+//   ctx    = { project:{project_key, repo_identity, repo_name, root, common_dir}, env, home, now }
 //   window = { sinceTs, slackMs, hints }                          hints: {"cost:<12 hex head>": byte offset}
 //
 // Source: the costs file (scripts/lib/brain-spend.js:costsFileOf), rows as hooks/cost-tracker.js writes them. cost-tracker appends a
@@ -33,8 +33,10 @@ const { costsFileOf } = require('../../../../scripts/lib/brain-spend');
 const { tierOf } = require('../../../../scripts/cost-digest');
 const { runsDir } = require('../../../../scripts/lib/runtime-paths');
 const { cleanGitEnv } = require('../../git-env');
+const { createCollector } = require('../collector');
 
 const SOURCE = 'cost';
+const BROKEN = Symbol('broken-dot-git');
 const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const nonNegInt = (v) => Number.isInteger(v) && v >= 0;
@@ -47,8 +49,8 @@ function hasDotGitUp(dir) {
 }
 
 function commonDirOf(project) {
-  const id = project && project.repo_identity;
-  return typeof id === 'string' && id.startsWith('git-common-dir:') ? id.slice('git-common-dir:'.length) : null;
+  const dir = project && project.common_dir;
+  return typeof dir === 'string' && dir !== '' ? dir : null;
 }
 
 // One matcher per read() call: owns the cwd memo and the lazily built worktree-prefix list.
@@ -85,17 +87,21 @@ function makeProjectMatcher(project, env, onGitMissing) {
     return prefixes;
   }
 
-  // -> identity string, null (git says exactly "not a git repository (or any of the parent directories)": discovery found no
-  // repository, a definite "other project"), or undefined (resolution FAILED: git missing, timeout, dubious ownership, a broken
-  // .git whose message carries a quoted path, any other exit 128, an empty answer; reported once per read via onGitMissing).
+  // -> identity string; null (git says exactly "not a git repository (or any of the parent directories)" and no `.git` entry is on the
+  // way up: a definite "other project"); BROKEN (a `.git` that git cannot use: no HEAD, a gitdir pointer to nothing, any other
+  // "not a git repository" text, quoted-path variants included: treated like a cwd that no longer exists, so the worktree-prefix
+  // list may still place it, else it is only filtered, with no warning and no state change); or undefined (git ITSELF failed: the
+  // binary missing, a timeout or kill, dubious ownership, any other exit, an empty answer; one `git_unavailable` per read).
+  // The caller stats the cwd first, so an ENOENT here is the git binary, not the directory.
   function identityOf(cwd) {
     try {
       const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd).trim();
       if (common) return `git-common-dir:${fs.realpathSync(common)}`;
     } catch (error) {
-      // A `.git` directory without HEAD gives the very same text as "no repository" (git skips it and walks up), so a `.git`
-      // entry on the way up proves the answer is a failure, not an "other project".
-      if (error && error.status === 128 && /not a git repository \(or any of the parent directories\)/.test(String(error.stderr || '')) && !hasDotGitUp(cwd)) return null;
+      const stderr = String(error && error.stderr || '');
+      if (error && error.status === 128 && /not a git repository/.test(stderr) && !/dubious ownership/.test(stderr)) {
+        return /not a git repository \(or any of the parent directories\)/.test(stderr) && !hasDotGitUp(cwd) ? null : BROKEN;
+      }
     }
     onGitMissing();
     return undefined;
@@ -109,8 +115,8 @@ function makeProjectMatcher(project, env, onGitMissing) {
     try { exists = fs.statSync(cwd).isDirectory(); } catch (_error) { exists = false; }
     if (exists) {
       const identity = identityOf(cwd);
-      if (identity === undefined) {
-        // resolution failed: the manifest/worktree prefix list may still place the cwd in this project
+      if (identity === undefined || identity === BROKEN) {
+        // git failed, or the .git is unusable: the manifest/worktree prefix list may still place the cwd in this project
         const here = path.resolve(cwd);
         verdict = worktreePrefixes().some((wt) => here === wt || here.startsWith(`${wt}/`));
       } else {
@@ -126,7 +132,7 @@ function makeProjectMatcher(project, env, onGitMissing) {
 }
 
 function read(ctx = {}, window = {}) {
-  const events = [];
+  const events = createCollector(window);
   const files = [];
   const warnings = new Map();
   const stats = { state: 'ok', rows_read: 0, rows_skipped: 0, rows_filtered: 0, redactions: 0 };
@@ -195,7 +201,7 @@ function read(ctx = {}, window = {}) {
   } catch (error) {
     warn('source_failed', error && error.name ? error.name : 'Error');
   }
-  return { events, warnings: [...warnings.values()], stats, files };
+  return { ...events.result(), warnings: [...warnings.values()], stats, files };
 }
 
 module.exports = { read, SOURCE };

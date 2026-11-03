@@ -25,7 +25,7 @@ function fresh() {
 }
 const byTsId = (a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 const ctxOf = (fx, over = {}) => ({
-  project: { project_key: fx.projectKey, repo_identity: fx.identity, root: fx.repoDir, repo_name: fx.repoName },
+  project: { project_key: fx.projectKey, repo_identity: fx.identity, repo_name: fx.repoName, root: fx.repoDir, common_dir: fx.identity.slice('git-common-dir:'.length) },
   env: fx.env, home: fx.env.HOME, now: Date.parse('2026-11-02T08:00:00Z'), ...over,
 });
 const COLD = { sinceTs: null, slackMs: 300000, hints: {} };
@@ -278,7 +278,7 @@ test('degrade-qc-unborn-head: a fresh repo with no commit is ok with no event an
   const empty = path.join(fx.dir, 'empty-repo');
   fs.mkdirSync(empty);
   execFileSync('git', ['init', '-q', '--template=', '-b', 'main'], { cwd: empty, env: fx.env });
-  const r = qc.read(ctxOf(fx, { project: { project_key: fx.projectKey, repo_identity: fx.identity, root: empty } }), COLD);
+  const r = qc.read(ctxOf(fx, { project: { project_key: fx.projectKey, repo_identity: fx.identity, root: empty, common_dir: fx.identity.slice('git-common-dir:'.length) } }), COLD);
   assert.deepEqual([r.events, r.warnings, r.stats.state], [[], [], 'ok']);
 });
 

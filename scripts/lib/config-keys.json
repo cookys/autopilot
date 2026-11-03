@@ -3551,6 +3551,32 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_TEST_ALLOW_EVENTS_FAULT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "src/status/events/index.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Test-only gate for the events feed fault injection. Exactly 1 enables AUTOPILOT_EVENTS_TEST_FAULT; not a user knob."
+    },
+    {
+      "name": "AUTOPILOT_EVENTS_TEST_FAULT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "src/status/events/index.js"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Test-only fault injection of the events feed (merge, cursor or envelope): the fallback must exit 0 with internal_error and the input cursor. Honoured only with AUTOPILOT_TEST_ALLOW_EVENTS_FAULT=1."
+    },
+    {
       "name": "AUTOPILOT_TEST_LIFECYCLE_KILL_AFTER_AUTHORITY",
       "kind": "env",
       "audience": "internal",

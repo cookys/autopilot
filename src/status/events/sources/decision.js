@@ -3,7 +3,7 @@
 // src/status/events/sources/decision.js - reader of kind `decision.row` (autopilot.events/1, plan E2 step 6).
 //
 //   read(ctx, window) -> { events, warnings, stats, files }       never throws, read-only
-//   ctx    = { project:{project_key, repo_identity,...}, env, home, now }
+//   ctx    = { project:{project_key, repo_identity, repo_name, root, common_dir}, env, home, now }
 //   window = { sinceTs, slackMs, hints }                          hints: {"decision:<12 hex head>": byte offset}
 //
 // Files: <git-common-dir>/autopilot/ledger/decisions.jsonl (absent: state `absent`, no warning: a fresh repo is normal) and
@@ -22,8 +22,8 @@ const crypto = require('crypto');
 const { readLines, windowFloorMs } = require('../jsonl-tail');
 const { parseInstant, parseInstantMs } = require('../instant');
 const { canonical } = require('../../../../scripts/validate-json-schema');
-// E3 swap point: replace this require with src/status/events/redact.js (same `redactFreeText(text) -> {text, count}`).
-const { redactFreeText } = require('../redact-stub');
+const { createCollector } = require('../collector');
+const { redactText } = require('../redact');
 
 const SOURCE = 'decision';
 const RATIONALE_MAX = 240;
@@ -37,12 +37,12 @@ function cap(text, max) {
 }
 
 function commonDirOf(project) {
-  const id = project && project.repo_identity;
-  return typeof id === 'string' && id.startsWith('git-common-dir:') ? id.slice('git-common-dir:'.length) : null;
+  const dir = project && project.common_dir;
+  return typeof dir === 'string' && dir !== '' ? dir : null;
 }
 
 function read(ctx = {}, window = {}) {
-  const events = [];
+  const events = createCollector(window);
   const files = [];
   const warnings = new Map();
   const stats = { state: 'ok', rows_read: 0, rows_skipped: 0, rows_filtered: 0, redactions: 0 };
@@ -104,8 +104,8 @@ function read(ctx = {}, window = {}) {
       if (typeof row.class === 'string') data.class = row.class;
       if (typeof row.reversibility === 'string') data.reversibility = row.reversibility;
       if (typeof row.rationale === 'string') {
-        const red = redactFreeText(row.rationale);
-        stats.redactions += red.count;
+        const red = redactText(row.rationale); // redact the whole text, then cap: a token cut at the cap would escape its length threshold
+        stats.redactions += red.redactions;
         data.rationale = cap(red.text, RATIONALE_MAX);
       }
       if (typeof row.target_decision_id === 'string') data.target_decision_id = row.target_decision_id;
@@ -127,7 +127,7 @@ function read(ctx = {}, window = {}) {
   return finish();
 
   function finish() {
-    return { events, warnings: [...warnings.values()], stats, files };
+    return { ...events.result(), warnings: [...warnings.values()], stats, files };
   }
 }
 

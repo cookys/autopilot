@@ -19,9 +19,9 @@ autopilot status events [--since <cursor|ISO-8601|0>] [--limit N] [--kinds k1,k2
 
 - `--since` omitted or `0`: from the beginning of what the sources still hold, in pages of `--limit` (default 1000, max 10 000).
 - `--since <ISO-8601>`: first call by wall time (events with `ts >=` it). `-` reads the cursor from stdin (one line). Any other value is a cursor; one that does not decode or has an unknown `v` exits 2 with `bad_cursor`.
-- `--project <project_key>`: optional; must equal the key of `cwd`'s own repo, any other key exits 2. Events of other repos are never returned; host-wide sources (costs file, manifests dir) are filtered to the project.
+- `--project <project_key>`: optional; must equal the key of `cwd`'s own repo, any other key exits 2 with `project_mismatch`. Events of other repos are never returned; host-wide sources (costs file, manifests dir) are filtered to the project.
 - `--json` prints one JSON object (the envelope). Without it a compact table (kind, ts, id prefix, one-line summary) and a `next cursor:` line; warnings go to stderr.
-- Exit codes are 0 and 2 only. Exit 2 is a usage, `bad_cursor` or `project_unresolved` error; under `--json` it prints the error object `{"schema":"autopilot.events/1","error":{"code":...}}`, the second top-level shape of the schema. A source problem is never an exit code: it is a warning.
+- Exit codes are 0 and 2 only. Exit 2 is a usage, `bad_cursor`, `project_unresolved` or `project_mismatch` (`--project` names another project than `cwd`'s repo) error; under `--json` it prints the error object `{"schema":"autopilot.events/1","error":{"code":...}}`, the second top-level shape of the schema. A source problem is never an exit code: it is a warning.
 - An absent default decision ledger or dispatch runs dir is state `absent` with no warning (a fresh repo is normal).
 
 ## Envelope
@@ -144,10 +144,65 @@ live ledger gets the same `phase_base12` and its events collapse into the live o
 ## Cursor
 
 The cursor is opaque: a consumer passes `cursor` back verbatim as `--since` (or on stdin with `--since -`) and never
-parses it. An empty page returns the input cursor unchanged. A cursor of another project, one that does not decode, or
-one with an unknown `v` exits 2 with `bad_cursor`. The encoding, the late-row window, the coverage floor, the offset
-hints and the size bound are specified in phase E3 of the plan and are added to this section when E3 lands; the
-section is complete before the contract is declared frozen.
+parses it. An empty page returns the input cursor unchanged (only `generated_at` moves). A cursor of another project, one
+that does not decode, one with an unknown `v` or a malformed field, or one longer than 64 KiB exits 2 with `bad_cursor`.
+What follows is for implementers; the encoding may change inside `/1` only while a cursor of `v: 1` keeps decoding.
+
+Encoding: `base64url(JSON)` of
+
+```json
+{ "v": 1, "t": "<watermark ISO ms>", "s": 300000, "w": [["<12 hex of sha256(id)>", 1793000000000]], "f": 0, "e": null, "h": { "<source>:<12 hex head hash>": 12345 }, "p": "<project_key>" }
+```
+
+- `t` is the `ts` of the last returned event. `s` is the slack in ms (default 300000), the late-row tolerance. `w` holds one
+  `[id hash, ts in epoch ms]` pair per **delivered** event with `ts >= t - s`. `p` binds the cursor to a project.
+- **Coverage floor `f`** (ms) is the lowest `ts` that `w` is complete for. Every read uses the floor `L = max(t - s, f)`. `f` only
+  moves forward: next `f = max(f, newT - s_page)`, where `s_page` is the slack the page actually kept. So a window never
+  reopens history whose ids were pruned from `w`.
+- **Filter.** Every source is re-read from `L`, the events are merged, and an event is dropped iff its id hash is in `w`, or its
+  `ts < L`, or it is covered by `e` (below). The rest is returned in `(ts, id)` order. There is no `<= (t, last id)` comparison:
+  `w` already holds every delivered id inside the window, so a late row with `ts` in `[t - s, t)` that was not delivered passes
+  the filter and is delivered once, and a row delivered on an earlier page is not repeated.
+- **Next `w`** is the previous `w` pruned to pairs with `ts >= f'` (the new floor) united with this page's ids with `ts >= f'`,
+  where `newT` is the last returned event's `ts`. An empty page keeps the cursor as it was.
+- **Late rows** are delivered once, in the next page, therefore after later-`ts` events of the previous page; this is the only
+  ordering exception. A row arriving more than `s` after its `ts` is out of contract.
+- **`--since <ISO>`** (and `0`, and omitted) builds a synthetic cursor `{t: ISO + s, s, w: [], f: 0}`, so the lower bound `t - s`
+  is exactly the requested instant (`0`: the start of time). `--kinds` and `--limit` are applied after the filter; an event
+  excluded by `--kinds` is not in `w`, so it can still arrive under a later call that asks for its kind (inside the window).
+- **Hints `h`** are per-file byte offsets keyed by the head hash (`sha256(first 256 bytes)[0:12]`), an optimisation only:
+  deleting `h` yields the identical ids and order, only slower. Each event carries its source byte offset internally. For a
+  file, the next hint is the smallest of the start offset of any line that was read but not delivered (cut by `--limit` or the
+  page cap) and the start offset of the first line whose `ts >= f'`; with neither, the end of what was read. A hint is
+  therefore never past an undelivered line or past a line the next window can still emit, which also keeps the `cost.turn`
+  `#n` rule true. It stays valid across append (the offset grows), rotation (the head hash follows the file to `.1`) and
+  manifest reaping. Hints exist only for files of at least 64 KiB and a hint that does not match its file's head hash is
+  ignored with warning `cursor_hint_stale`.
+- **Size bound.** `w` is capped at 1 000 pairs (about 46 KB as base64url) and `h` at 16 entries (largest file first), so a
+  cursor is at most 64 KiB, far below the 128 KiB single-argument limit; it may also be passed on stdin (`--since -`).
+  `s` is recomputed on every page and never carried forward: each page starts from the default 300 000 ms and halves it
+  (150 000, 75 000, ... 0) only as far as this page's `w` needs to fit the cap. Such a page carries warning `window_overflow`
+  (late rows older than `newT - s` are out of contract for that page only). The default `s` comes back as soon as `newT` moves
+  past `f` by the default slack, never by reopening pruned history.
+- **Termination.** With `s` down to 0 only the final `ts` group could remain. If that single group still exceeds the cap, the
+  page is cut before the group when it is not the first group of the page. Otherwise (one `ts` instant holds more than 1 000
+  events, for example a cost batch) the cursor leaves that group out of `w` and carries `e` = `[ts of the group, greatest
+  delivered id]` (bytewise order within a `ts` group is by `id`), and keeps it, whatever `t` becomes, until the group's `ts`
+  falls below the floor `L`; the filter then also drops events with `ts == e[0]` and `id <= e[1]`. In that single case a late
+  row at exactly that instant with a smaller id is out of contract. In-order events are never duplicated or lost.
+
+### Reader context (`ctx.project`)
+
+`index.js` resolves the project once (`git rev-parse --git-common-dir`, symlinks resolved) and hands every reader the same
+shape, so no reader derives it again: `{ project_key, repo_identity, repo_name, root, common_dir }`. `repo_identity` is
+`git-common-dir:<common_dir>`, `repo_name` is the repository's directory name, `root` is the work tree (null in a bare
+repository) and `common_dir` is the absolute git common directory. A reader also gets `ctx.env`, `ctx.home`, `ctx.now` and
+`ctx.reviewLedgers` (the repeated `--review-ledger` values), and a window `{ sinceTs: L, slackMs: 0, hints: h, keep, cap }`: the cursor
+has already folded the slack into `L`, `keep(event)` is the cursor filter plus `--kinds`, and `cap` is `limit` plus a small buffer. Every reader
+hands its events to the shared bounded collector (`collector.js`), which keeps only the `cap` smallest by `(ts, id)`; what it displaced or
+refused is reported as `bounded` (counts and smallest source offsets per file) so `has_more` and the hints stay exact. A reader returns `{ events, warnings, stats }`, plus `files` for a JSONL source (what it
+consumed, so the cursor can place hints). Any reader failure is `source_failed` and state `degraded` for that source only.
+The `cwd` to common-directory memo of the cost reader lives inside one `collectEvents` call, never at module level.
 
 ## Versioning
 

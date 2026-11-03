@@ -3,7 +3,7 @@
 // src/status/events/sources/review.js - review.collected / review.finalized events (autopilot.events/1).
 //
 //   read(ctx, window) -> { events, warnings, stats }      never throws, read-only with respect to every source
-//   ctx    = { project: { project_key, repo_identity }, env, home, now, reviewLedgers? }
+//   ctx    = { project: { project_key, repo_identity, repo_name, root, common_dir }, env, home, now, reviewLedgers? }
 //            reviewLedgers: the repeated `--review-ledger <dir>` values (configured roots)
 //   window = { sinceTs, slackMs, hints }                  sinceTs: epoch ms | ISO string | null/0 (= from the beginning)
 //
@@ -27,6 +27,7 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const { parseInstant, parseInstantMs } = require('../instant');
 const { cleanGitEnv } = require('../../git-env');
+const { createCollector } = require('../collector');
 
 const SOURCE = 'review';
 const MAX_JSON_BYTES = 8 * 1024 * 1024;
@@ -80,8 +81,8 @@ function realOrSelf(dir) {
 }
 
 function commonDirOf(project) {
-  const id = project && project.repo_identity;
-  return typeof id === 'string' && id.startsWith('git-common-dir:') ? id.slice('git-common-dir:'.length) : null;
+  const dir = project && project.common_dir;
+  return typeof dir === 'string' && dir !== '' ? dir : null;
 }
 
 // ---- ledger roots ------------------------------------------------------------------------------------------------
@@ -366,14 +367,14 @@ function buildEvents(candidate, projectKey, events, state) {
 
 function read(ctx, window) {
   const state = createState();
-  const events = [];
+  const events = createCollector(window);
   try {
     const project = ctx && ctx.project;
     const commonDir = commonDirOf(project);
     if (!commonDir) {
       state.warn('git_unavailable', 'project');
       state.stats.state = 'degraded';
-      return { events, warnings: [...state.warnings.values()], stats: state.stats };
+      return { ...events.result(), warnings: [...state.warnings.values()], stats: state.stats };
     }
     const floor = windowFloor(window);
 
@@ -433,13 +434,12 @@ function read(ctx, window) {
       buildEvents(candidate, project.project_key, local, state);
       for (const event of local) if (!byId.has(event.id)) byId.set(event.id, event); // live ledger first, archive copy collapses
     }
-    events.push(...byId.values());
-    events.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)));
+    for (const event of byId.values()) events.push(event);
   } catch (error) {
     state.warn('source_failed', error && error.name ? String(error.name) : 'Error');
     state.stats.state = 'degraded';
   }
-  return { events, warnings: [...state.warnings.values()], stats: state.stats };
+  return { ...events.result(), warnings: [...state.warnings.values()], stats: state.stats };
 }
 
 module.exports = { read, SOURCE };

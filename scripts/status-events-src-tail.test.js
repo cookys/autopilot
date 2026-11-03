@@ -27,7 +27,7 @@ function tmp() {
 }
 const fresh = () => buildFixture({ dir: tmp() });
 const ctxOf = (fx) => ({
-  project: { project_key: fx.projectKey, repo_identity: fx.identity, repo_name: fx.repoName, cwd: fx.repoDir },
+  project: { project_key: fx.projectKey, repo_identity: fx.identity, repo_name: fx.repoName, root: fx.repoDir, common_dir: fx.identity.slice('git-common-dir:'.length) },
   env: fx.env, home: fx.env.HOME, now: Date.parse('2026-11-02T08:00:00.000Z'),
 });
 const byTsId = (a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -250,25 +250,54 @@ test('degrade-cost-git-failure-is-one-warning-not-a-silent-filter', () => {
   assert.equal(clean.stats.rows_filtered, 1);
 });
 
-test('degrade-cost-broken-dot-git-is-a-resolution-failure-with-prefix-fallback', () => {
+test('degrade-cost-broken-dot-git-is-not-a-git-failure', () => {
   const fx = fresh();
   const { execFileSync } = require('child_process');
   const wt = (name) => path.join(fx.dir, 'worktrees', name);
-  // 1: a worktree whose .git file points at a gitdir that does not exist; 2: a .git directory without HEAD
-  write(path.join(wt('broken-ptr'), '.git'), `gitdir: ${path.join(fx.dir, 'no-such-gitdir')}\n`);
-  fs.mkdirSync(wt('broken-head'), { recursive: true });
-  execFileSync('git', ['init', '-q', '--template=', wt('broken-head')], { env: fx.env });
-  fs.rmSync(path.join(wt('broken-head'), '.git', 'HEAD'));
+  const other = (name) => path.join(fx.dir, 'elsewhere', name);
+  // 1: a .git file pointing at a gitdir that does not exist; 2: a .git directory without HEAD
+  const breakAt = (dir, kind) => {
+    if (kind === 'ptr') write(path.join(dir, '.git'), `gitdir: ${path.join(fx.dir, 'no-such-gitdir')}\n`);
+    else { fs.mkdirSync(dir, { recursive: true }); execFileSync('git', ['init', '-q', '--template=', dir], { env: fx.env }); fs.rmSync(path.join(dir, '.git', 'HEAD')); }
+  };
   const rows = [];
-  for (const name of ['broken-ptr', 'broken-head']) {
+  for (const [name, kind] of [['broken-ptr', 'ptr'], ['broken-head', 'head']]) {
+    breakAt(wt(name), kind);
     write(path.join(fx.paths.runsDir, `fx-run-${name}.manifest.json`), JSON.stringify({ ...fx.manifests.done, run_id: `fx-run-${name}`, worktree: wt(name) }) + '\n');
     rows.push(JSON.stringify({ ...JSON.parse(fx.cost.main), session: `s-${name}`, cwd: wt(name) }));
+    breakAt(other(name), kind);
+    rows.push(JSON.stringify({ ...JSON.parse(fx.cost.main), session: `s-other-${name}`, cwd: other(name) }));
   }
   fs.appendFileSync(fx.paths.costsFile, rows.join('\n') + '\n');
   const res = cost.read(ctxOf(fx), {});
-  assert.equal(res.stats.state, 'degraded');
-  assert.deepEqual(res.warnings.filter((w) => w.code === 'git_unavailable').map((w) => w.count), [1], 'one aggregated warning for both');
-  for (const name of ['broken-ptr', 'broken-head']) assert.ok(res.events.some((e) => e.data.session === `s-${name}`), `${name}: kept through the prefix fallback`);
+  assert.deepEqual(res.warnings.filter((w) => w.code === 'git_unavailable'), [], 'a broken .git never warns, however often it is read');
+  assert.equal(res.stats.state, 'degraded', 'the fixture still holds its ts_invalid row');
+  assert.ok(!res.warnings.some((w) => w.code === 'git_unavailable' || w.code === 'source_failed'));
+  for (const name of ['broken-ptr', 'broken-head']) {
+    assert.ok(res.events.some((e) => e.data.session === `s-${name}`), `${name}: under a project worktree prefix, kept`);
+    assert.ok(!res.events.some((e) => e.data.session === `s-other-${name}`), `${name}: outside the prefixes, filtered`);
+  }
+  // only the broken .git rows: state stays ok and nothing is said
+  write(fx.paths.costsFile, rows.join('\n') + '\n');
+  const quiet = cost.read(ctxOf(fx), {});
+  assert.equal(quiet.stats.state, 'ok');
+  assert.deepEqual(quiet.warnings, []);
+  assert.equal(quiet.stats.rows_filtered, 2);
+});
+
+test('degrade-cost-git-binary-missing-or-timeout-stays-one-warning', () => {
+  const fx = fresh();
+  const emptyBin = path.join(tmp(), 'empty-bin');
+  fs.mkdirSync(emptyBin, { recursive: true });
+  const noGit = cost.read({ ...ctxOf(fx), env: { ...fx.env, PATH: emptyBin } }, {});
+  assert.equal(noGit.stats.state, 'degraded');
+  assert.deepEqual(noGit.warnings.filter((w) => w.code === 'git_unavailable').map((w) => w.count), [1], 'git not on PATH: one warning per read');
+  const bin = path.join(tmp(), 'bin');
+  write(path.join(bin, 'git'), '#!/bin/sh\nkill -TERM $$\n');
+  fs.chmodSync(path.join(bin, 'git'), 0o755);
+  const killed = cost.read({ ...ctxOf(fx), env: { ...fx.env, PATH: `${bin}:${fx.env.PATH}` } }, {});
+  assert.equal(killed.stats.state, 'degraded');
+  assert.deepEqual(killed.warnings.filter((w) => w.code === 'git_unavailable').map((w) => w.count), [1]);
 });
 
 test('degrade-cost-git-messages-are-read-in-the-c-locale', () => {

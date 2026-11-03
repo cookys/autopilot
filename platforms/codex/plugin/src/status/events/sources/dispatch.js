@@ -3,7 +3,7 @@
 // src/status/events/sources/dispatch.js - dispatch run manifests -> `dispatch.started`, `dispatch.ended` (autopilot.events/1).
 //
 // read(ctx, window) -> { events, warnings, stats }
-//   ctx    = { project: { project_key, repo_identity }, env, home, now }
+//   ctx    = { project: { project_key, repo_identity, repo_name, root, common_dir }, env, home, now }
 //   window = { sinceTs (epoch ms | ISO | null), slackMs, hints }   (hints are unused: a manifest dir is small and stat-filtered)
 // Source: <runsDir(env)>/<safe_id>.manifest.json, written atomically (temp file + mv) by scripts/dispatch-hetero.sh:write_manifest.
 // Read-only, never throws. `panel-*` manifests (plan-review panels, another shape) are skipped. A manifest whose mtime is older
@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { runsDir } = require('../../../../scripts/lib/runtime-paths');
 const { parseInstant, parseInstantMs } = require('../instant');
+const { createCollector } = require('../collector');
 
 const SOURCE = 'dispatch';
 const EVENT_SOURCE = 'dispatch_manifest';
@@ -57,10 +58,10 @@ function startedData(m) {
 }
 
 function read(ctx, window) {
-  const events = [];
+  const events = createCollector(window);
   const warn = warner();
   const stats = { name: SOURCE, state: 'ok', rows_read: 0, rows_skipped: 0, rows_filtered: 0, redactions: 0 };
-  const finish = () => ({ events, warnings: warn.list(), stats });
+  const finish = () => ({ ...events.result(), warnings: warn.list(), stats });
   try {
     const project = (ctx && ctx.project) || {};
     const dir = runsDir((ctx && ctx.env) || process.env);

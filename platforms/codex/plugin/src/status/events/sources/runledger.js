@@ -3,7 +3,7 @@
 // src/status/events/sources/runledger.js - reader of kind `run.stage` (autopilot.events/1, plan E2 step 7).
 //
 //   read(ctx, window) -> { events, warnings, stats, files }       never throws, read-only
-//   ctx    = { project:{project_key, repo_identity,...}, env, home, now }
+//   ctx    = { project:{project_key, repo_identity, repo_name, root, common_dir}, env, home, now }
 //   window = { sinceTs, slackMs, hints }                          hints: {"runledger:<12 hex head>": byte offset}
 //
 // Ledger paths (all optional discovery candidates: a missing one is silent and counted in rows_filtered; no ledger at all is
@@ -24,10 +24,10 @@ const crypto = require('crypto');
 const { readLines, windowFloorMs } = require('../jsonl-tail');
 const { parseInstant, parseInstantMs } = require('../instant');
 const { canonical } = require('../../../../scripts/validate-json-schema');
+const { createCollector } = require('../collector');
 const { runsDir } = require('../../../../scripts/lib/runtime-paths');
 const { maxRotations } = require('../../../../scripts/lib/run-ledger-config');
-// E3 swap point: replace this require with src/status/events/redact.js (same `redactFreeText(text) -> {text, count}`).
-const { redactFreeText } = require('../redact-stub');
+const { redactText } = require('../redact');
 
 const SOURCE = 'runledger';
 const REASON_MAX = 120;
@@ -63,9 +63,9 @@ function ledgerPaths(project, env) {
     const manifest = readSmallJson(path.join(dir, entry.name));
     if (manifest && manifest.repo_identity === project.repo_identity) add(manifest.ledger);
   }
-  const id = project.repo_identity;
-  if (typeof id === 'string' && id.startsWith('git-common-dir:')) {
-    const orders = path.join(id.slice('git-common-dir:'.length), 'autopilot', 'work-orders');
+  const commonDir = project.common_dir;
+  if (typeof commonDir === 'string' && commonDir !== '') {
+    const orders = path.join(commonDir, 'autopilot', 'work-orders');
     for (const root of listDir(orders)) {
       if (!root.isDirectory()) continue;
       for (const entry of listDir(path.join(orders, root.name))) {
@@ -81,7 +81,7 @@ function ledgerPaths(project, env) {
 }
 
 function read(ctx = {}, window = {}) {
-  const events = [];
+  const events = createCollector(window);
   const files = [];
   const warnings = new Map();
   const stats = { state: 'ok', rows_read: 0, rows_skipped: 0, rows_filtered: 0, redactions: 0 };
@@ -142,8 +142,8 @@ function read(ctx = {}, window = {}) {
       if (typeof chosen === 'string' || chosen === null) { if (hasStatus || has(row, 'state')) data.status = chosen; }
       if (hasStatus && has(row, 'state') && row.status !== row.state) warn('status_state_conflict', name);
       if (nonEmptyString(row.reason)) {
-        const red = redactFreeText(row.reason);
-        stats.redactions += red.count;
+        const red = redactText(row.reason); // redact the whole text, then cap (see decision.js)
+        stats.redactions += red.redactions;
         data.reason = cap(red.text, REASON_MAX);
       }
       const event = {
@@ -157,7 +157,7 @@ function read(ctx = {}, window = {}) {
   } catch (error) {
     warn('source_failed', error && error.name ? error.name : 'Error');
   }
-  return { events, warnings: [...warnings.values()], stats, files };
+  return { ...events.result(), warnings: [...warnings.values()], stats, files };
 }
 
 module.exports = { read, SOURCE };

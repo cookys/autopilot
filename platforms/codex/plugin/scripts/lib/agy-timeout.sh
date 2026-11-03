@@ -9,8 +9,8 @@
 #
 # CONTRACT: agy_print_timeout <value>
 #   - all digits            -> seconds, printed as "<n>s"   (900 -> 900s)
-#   - Go duration with unit -> printed unchanged             (9m, 900s, 1h30m, 1.5h, 250ms)
-#   - anything else (empty, "abc", "-5", "10 m", "1d") -> returns 1, prints a one-line reason on
+#   - Go duration with unit -> printed unchanged             (9m, 900s, 1h30m, 1.5h, .5s, 1.s, 250µs)
+#   - anything else (empty, "abc", "-5", "1.5" (no unit), ".", "10 m", "1d") -> returns 1, prints a one-line reason on
 #     stdout, so the rail can refuse BEFORE it launches agy.
 # It never exits or dies itself (callers run it inside `$( )`):
 #
@@ -21,7 +21,10 @@ agy_print_timeout() {
     printf '%ss' "$v"
     return 0
   fi
-  if [[ "$v" =~ ^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$ ]]; then
+  # Go time.ParseDuration grammar (unsigned): one or more <decimal><unit>; the decimal may omit the
+  # digits before or after the point (".5s", "1.s") but needs at least one digit. Units: ns us µs μs ms s m h.
+  local num='([0-9]+(\.[0-9]*)?|\.[0-9]+)' unit='(ns|us|µs|μs|ms|s|m|h)'
+  if [[ "$v" =~ ^(${num}${unit})+$ ]]; then
     printf '%s' "$v"
     return 0
   fi

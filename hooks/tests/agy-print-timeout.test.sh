@@ -18,6 +18,7 @@ export ENGINE_CAPABILITY_DIR="$TEST_TMP/engine-capability"; mkdir -p "$ENGINE_CA
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode-empty"; mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
 export AGY_STUB_MODELS="$(printf 'gemini-3.7-flash-high\tGemini 3.7 Flash (High)\ngemini-3.7-flash-medium\tGemini 3.7 Flash (Medium)')"
 export DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0
+export AUTOPILOT_DISPATCH_RUNS_DIR="$TEST_TMP/dispatch-runs"; mkdir -p "$AUTOPILOT_DISPATCH_RUNS_DIR"
 
 LIB="${AGY_PRINT_TIMEOUT_LIB:-$REPO_ROOT/scripts/lib/agy-timeout.sh}"
 # shellcheck source=/dev/null
@@ -41,6 +42,23 @@ check_ok 9m 9m
 check_ok 1h30m 1h30m
 check_ok 1.5h 1.5h
 check_ok 250ms 250ms
+check_ok 0 0s
+check_ok .5s .5s
+check_ok 1.s 1.s
+check_ok 250µs 250µs
+check_ok 250μs 250μs
+check_ok 250us 250us
+check_ok 1.5h30m.5s 1.5h30m.5s
+check_ok 100ns 100ns
+check_bad 1.5
+check_bad .
+check_bad .s
+check_bad -1s
+check_bad -.5s
+check_bad +5s
+check_bad " 5s"
+check_bad "5s "
+check_bad 5s10
 check_bad ""
 check_bad abc
 check_bad -5
@@ -84,6 +102,13 @@ run_case rbad env "$REVIEW" --runner agy --model $M --diff-file "$DIFFSMALL" --t
 run_case h900 env -C "$TEST_TMP/sbx-h900" "$HETERO" --branch t/h900 --prompt-file "$SMALL" --timeout 900 --agy-bin "$(mk_stub h900 AGY_STUB_CAPTURE=1)" --model $M --runner agy
 run_case h9m  env -C "$TEST_TMP/sbx-h9m"  "$HETERO" --branch t/h9m  --prompt-file "$SMALL" --timeout 9m  --agy-bin "$(mk_stub h9m AGY_STUB_CAPTURE=1)" --model $M --runner agy
 run_case hbad env -C "$TEST_TMP/sbx-hbad" "$HETERO" --branch t/hbad --prompt-file "$SMALL" --timeout 9x  --agy-bin "$(mk_stub hbad AGY_STUB_CAPTURE=1)" --model $M --runner agy
+# detached child (ledger coords => dispatch-hetero re-execs into a setsid child with an allow-listed function set):
+# an invalid --timeout must fail closed with the clear precondition JSON, not "command not found".
+LEDGER_SH="$REPO_ROOT/scripts/run-ledger.sh"
+mk_sbx "$TEST_TMP/sbx-dbad"; mkdir -p "$TEST_TMP/dbad"
+bash "$LEDGER_SH" init --ledger "$TEST_TMP/dbad/ledger.jsonl" >/dev/null
+run_case dbad env -C "$TEST_TMP/sbx-dbad" DISPATCH_HEARTBEAT_SECS=1 "$HETERO" --branch t/dbad --prompt-file "$SMALL" --timeout 9x --agy-bin "$(mk_stub dbad AGY_STUB_CAPTURE=1)" --model $M --runner agy --ledger "$TEST_TMP/dbad/ledger.jsonl" --run-id rdb --stage implement
+run_case d900 env -C "$TEST_TMP/sbx-dbad" DISPATCH_HEARTBEAT_SECS=1 "$HETERO" --branch t/d900 --prompt-file "$SMALL" --timeout 900 --agy-bin "$(mk_stub d900 AGY_STUB_CAPTURE=1)" --model $M --runner agy --ledger "$TEST_TMP/dbad/ledger.jsonl" --run-id rd9 --stage implement
 # explore runs agy straight (no bwrap), so a recording stub on a side channel is enough.
 EXREC="$TEST_TMP/explore-argv"
 EXSTUB="$TEST_TMP/explore-stub"
@@ -105,6 +130,12 @@ for rail in a r h; do
   [ ! -e "$TEST_TMP/called-${rail}bad" ] && pass_ok=1 || pass_ok=0
   assert_eq "1" "$pass_ok" "$label: agy never spawned for an invalid --timeout"
 done
+assert_contains "$(cat "$R/dbad.out")" "invalid --timeout value for agy" "detached hetero: invalid --timeout fails closed with the clear reason"
+assert_not_contains "$(cat "$R/dbad.out")" "command not found" "detached hetero: no 'command not found' in the child"
+assert_contains "$(cat "$R/dbad.out")" '"status": "precondition_failed"' "detached hetero: typed precondition_failed"
+assert_contains "$(argv_of d900)$(cat "$R/d900.out")" "--print-timeout|900s|" "detached hetero: --timeout 900 reaches agy as 900s"
+[ ! -e "$TEST_TMP/called-dbad" ] && pass_ok=1 || pass_ok=0
+assert_eq "1" "$pass_ok" "detached hetero: agy never spawned for an invalid --timeout"
 if command -v script >/dev/null 2>&1; then
   assert_contains "$(cat "$EXREC" 2>/dev/null)" "--print-timeout|900s|" "explore: --timeout 900 reaches agy as 900s"
   assert_contains "$(cat "$R/ebad.out")" "invalid --timeout value for agy" "explore: --timeout 9x refused with a clear reason"

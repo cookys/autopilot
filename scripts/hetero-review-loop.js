@@ -100,6 +100,28 @@ function acquireChainLock(chainPath) {
   return release;
 }
 
+// Events feed (autopilot.events/1, src/status/events/sources/review.js): remember where this repo's ledgers live.
+// One O_APPEND write of one short line to <git-common-dir>/autopilot/review-ledgers.txt, called with the chain lock
+// held. Fail-open and silent: a feed pointer never changes a review's output or exit code. Readers dedupe and trim
+// lines, so a lost race only duplicates a line.
+function recordLedgerPointer(ledgerDir, repoRoot) {
+  try {
+    const cwd = repoRoot || process.cwd();
+    const res = spawnSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8', cwd });
+    if (res.status !== 0 || !res.stdout) return;
+    const commonDir = fs.realpathSync(path.resolve(cwd, res.stdout.trim()));
+    const line = `${ledgerDir}\n`;
+    if (Buffer.byteLength(line) > 4000) return;
+    const pointer = path.join(commonDir, 'autopilot', 'review-ledgers.txt');
+    fs.mkdirSync(path.dirname(pointer), { recursive: true });
+    try {
+      if (fs.readFileSync(pointer, 'utf8').split('\n').some((l) => l.trim() === ledgerDir)) return;
+    } catch (_e) { /* no pointer file yet */ }
+    const fd = fs.openSync(pointer, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT, 0o644);
+    try { fs.writeSync(fd, line); } finally { fs.closeSync(fd); }
+  } catch (_e) { /* fail-open */ }
+}
+
 function withChainLock(chainPath, fn) {
   const release = acquireChainLock(chainPath);
   try {
@@ -948,8 +970,11 @@ async function handleCollect(flags) {
     seatArtifactSha256[res.seat.id] = crypto.createHash('sha256').update(seatContent, 'utf8').digest('hex');
   }
 
-  function saveChainEntry(newEntry) {
-    withChainLock(chainPath, () => saveChainEntryLocked(newEntry));
+  function saveChainEntry(newEntry, opts) {
+    withChainLock(chainPath, () => {
+      saveChainEntryLocked(newEntry);
+      if (opts && opts.recordPointer) recordLedgerPointer(ledgerDir, repoRoot);
+    });
   }
   function saveChainEntryLocked(newEntry) {
     let currentChain = [];
@@ -1163,7 +1188,8 @@ async function handleCollect(flags) {
     findings_sha256: findingsSha256,
     seat_artifact_sha256: seatArtifactSha256,
     ...(packetRecord ? { packet: packetRecord } : {}),
-  });
+    collected_at: new Date().toISOString(),
+  }, { recordPointer: true });
 
   publishRoundSummary({
     repoRoot, phase, generation, base, head, seatResults,
@@ -1663,6 +1689,7 @@ async function handleFinalize(flags) {
 
   // Update target chain entry
   targetChainEntry.status = 'finalized';
+  targetChainEntry.finalized_at = new Date().toISOString();
   targetChainEntry.dispositions_path = snapshotRelPath;
   targetChainEntry.dispositions_sha256 = dispSha256;
   if (!targetChainEntry.findings_sha256 && fs.existsSync(findingsPath)) {

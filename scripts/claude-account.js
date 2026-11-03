@@ -106,16 +106,18 @@ function preflightExec(cmd0, env, cwd) {
     try { const buf = Buffer.alloc(256); head = buf.toString('latin1', 0, fs.readSync(fd, buf, 0, 256, 0)); } finally { fs.closeSync(fd); }
   } catch (_) { return null; }
   if (!head.startsWith('#!')) return null;
-  const toks = head.slice(2).split('\n')[0].trim().split(/\s+/).filter(Boolean);
-  if (!toks.length) return null;
+  // Conservative: reject only when the kernel would certainly fail. Anything unusual is left to the real exec.
+  const line = head.slice(2).split('\n')[0];
+  if (line.includes('\r')) return null;
+  const toks = line.trim().split(/\s+/).filter(Boolean);
+  if (!toks.length || !toks[0].startsWith('/')) return null;
   const interp = resolveIn(toks[0]);
   if (interp.err) return interp.err;
   if (path.basename(toks[0]) === 'env') {
-    const rest = toks.slice(1);
-    let i = 0;
-    while (i < rest.length && (rest[i].startsWith('-') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(rest[i]))) i += 1;
-    if (i < rest.length) {
-      const target = resolveIn(rest[i]);
+    const t = toks[1];
+    // Only a bare `env NAME` (no option, no assignment, no path) is checked; -S/-u/-C/-i etc. are left to exec.
+    if (t && !t.startsWith('-') && !t.includes('=') && !t.includes('/')) {
+      const target = resolveIn(t);
       if (target.err) return target.err;
     }
   }
@@ -1059,7 +1061,7 @@ async function cli(argv, deps) {
   }
 }
 
-module.exports = { cli, createScrubber, classifyAttempt, parseEnvelope, judgeRealBinary, PROBE_SRC, EXIT };
+module.exports = { cli, createScrubber, classifyAttempt, parseEnvelope, judgeRealBinary, preflightExec, PROBE_SRC, EXIT };
 
 if (require.main === module) {
   cli(process.argv.slice(2)).then((c) => { process.exitCode = c; });

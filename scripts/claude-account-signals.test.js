@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { makeFixture } = require('./lib/account-fixtures/shim-install.js');
-const { cli, EXIT } = require('./claude-account.js');
+const { cli, EXIT, preflightExec } = require('./claude-account.js');
 
 const SCRIPTS = __dirname;
 const WRAPPER = path.join(SCRIPTS, 'claude-account.js');
@@ -220,6 +220,44 @@ test('d2: script with a missing shebang interpreter, and a PATH-less env, map to
       const r = await goCli(fx, args);
       assert.strictEqual(r.code, EXIT.CHILD_ERROR, `${label}: ${r.err}`);
       assert.match(r.err, /child_spawn_failed \(ENOENT\)/, label);
+    }
+  } finally { fx.cleanup(); }
+});
+
+// Conservative shebang preflight: only a certain miss is rejected; env options, relative interpreters, CRLF and
+// assignments go to the real exec (preflight returns null = "file exists and is executable, let exec decide").
+test('d2b: shebang preflight rejects only certain misses; unusual forms are left to exec', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    const mk = (name, first) => {
+      const f = path.join(fx.root, name);
+      fs.writeFileSync(f, `${first}\nexit 0\n`, { mode: 0o755 });
+      return f;
+    };
+    const penv = { PATH: '/bin:/usr/bin' };
+    const rows = [
+      ['abs interp missing', '#!/no/such/interpreter', 'ENOENT'],
+      ['env no option, target missing', '#!/usr/bin/env no-such-interp-xyz', 'ENOENT'],
+      ['env no option, target present', '#!/usr/bin/env sh', null],
+      ['env -S -u (arg is not the program)', '#!/usr/bin/env -S -u NODE_OPTIONS /bin/sh', null],
+      ['env -u', '#!/usr/bin/env -u NODE_OPTIONS sh', null],
+      ['env -C dir', '#!/usr/bin/env -C /no/such/dir sh', null],
+      ['env -i', '#!/usr/bin/env -i no-such-interp-xyz', null],
+      ['env -S then missing target', '#!/usr/bin/env -S no-such-interp-xyz', null],
+      ['env target with =', '#!/usr/bin/env FOO=1', null],
+      ['relative interpreter', '#!sh', null],
+      ['relative interpreter, slash', '#!./no/such', null],
+      ['CRLF shebang line', '#!/no/such/interp\r', null],
+      ['unparseable', '#!', null],
+    ];
+    for (const [label, first, want] of rows) {
+      assert.strictEqual(preflightExec(mk('p', first), penv, fx.root), want, label);
+    }
+    // a script that really starts through env -S must start under both verbs
+    const ok = mk('env-s-ok', '#!/usr/bin/env -S -u NODE_OPTIONS /bin/sh');
+    for (const verb of ['run', 'exec']) {
+      const r = await goCli(fx, [verb, '--alias', 'a', '--purpose', 'sig', '--', ok]);
+      assert.strictEqual(r.code, 0, `${verb} env -S must start: ${r.err}`);
     }
   } finally { fx.cleanup(); }
 });

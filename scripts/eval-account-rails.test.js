@@ -138,7 +138,7 @@ const ROWS = [
     run: (L, w) => runShell(L, 'evals/pipeline-bench/run-pipeline-bench.sh', ['--task', 't1-fix-with-decoy', '--arm', 'bare', '--model', 'm', '--out', path.join(w.fx.root, 'out')], w) },
   // NOT wired, on purpose: run-skill-onoff-eval{,-bpack,-fbatch,-fbatch-v2,-gdorm}.sh and run-d0gate-campaign.js are digest-frozen by
   // evals/skill-onoff/prereg/FROZEN.json (and tools/migrate/no-rewrite.json); editing them breaks the preregistered evidence. They
-  // still copy the credentials file. depth-0 decides (see the lane report); the patch that wires them exists.
+  // still copy the credentials file. The refreeze patch (evals/skill-onoff/prereg/refreeze) makes them fail closed with a registry (case D).
   ...['panel-cmd-claude.sh', 'panel-cmd-contract-claude.sh', 'panel-cmd-syscontract-claude.sh'].map((f) => ({
     name: `reviewer-bench/${f}`, file: `evals/reviewer-bench/${f}`, legacyCopies: false,
     run: (L, w) => {
@@ -235,6 +235,85 @@ for (const row of ROWS) {
       } finally { w.cleanup(); }
     });
   }
+}
+
+// ---------------------------------------------------------------- D: the refreeze patch applies cleanly and fails closed
+test('D the refreeze patch applies cleanly to the frozen runners (git apply --check)', () => {
+  const patch = path.join(REPO, 'evals', 'skill-onoff', 'prereg', 'refreeze', 'g37-account-wiring.patch');
+  const r = spawnSync('git', ['apply', '--check', patch], { cwd: REPO, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const txt = fs.readFileSync(patch, 'utf8');
+  assert.ok(!/\[ -r "\$_EA_LIB" \] && \./.test(txt), 'a fail-open "[ -r lib ] && . lib" line is back in the patch');
+});
+
+// ---------------------------------------------------------------- C: a forged AUTOPILOT_ACCOUNT never skips the account layer
+// The marker alone used to make the shell front skip its wrap, so any exported value let a runner spawn claude on ambient credentials.
+const FORGED = 'forged-alias';
+const SH_ROWS = ROWS.filter((r) => !r.file.endsWith('.js') && r.name !== 'run-trigger-test' && !r.name.startsWith('test-helpers'));
+for (const row of SH_ROWS) {
+  test(`C ${row.name}: a forged AUTOPILOT_ACCOUNT still goes through the account layer (alias token, decoy unread)`, () => {
+    const w = world('active', { env: { AUTOPILOT_ACCOUNT: FORGED } });
+    try {
+      const L = mkLayout(w.fx.root, [row.file], null);
+      if (row.prep) row.prep(L);
+      const res = row.run(L, w);
+      assert.deepStrictEqual(judge('active', w, res, row), [], `${res.stdout}\n${res.stderr}`.slice(-600));
+      for (const c of w.calls()) assert.notStrictEqual(c.account, FORGED, 'the shim saw the forged alias, not a registry alias');
+    } finally { w.cleanup(); }
+  });
+}
+test('C negative control: with the marker-only exemption put back, a forged AUTOPILOT_ACCOUNT is caught (judge red)', () => {
+  const row = SH_ROWS[0];
+  const helper = 'scripts/lib/eval-account.sh';
+  const w = world('active', { env: { AUTOPILOT_ACCOUNT: FORGED } });
+  try {
+    const L = mkLayout(w.fx.root, [row.file, helper], (rel, text) => (rel === helper
+      ? text.replace('if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then\n    EXTRA_ARGS', 'if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ] && [ -z "${AUTOPILOT_ACCOUNT:-}" ]; then\n    EXTRA_ARGS') : text));
+    assert.match(fs.readFileSync(path.join(L, helper), 'utf8'), /-z "\$\{AUTOPILOT_ACCOUNT:-\}"/, 'the mutation did not apply');
+    const res = row.run(L, w);
+    assert.ok(judge('active', w, res, row).length > 0, 'the exemption was not caught');
+  } finally { w.cleanup(); }
+});
+test('C the installed wrapper refuses to start when EVAL_ACCOUNT_SH is empty or unreadable (nothing spawned)', () => {
+  const w = world('active');
+  try {
+    const helper = path.join(REPO, 'scripts', 'lib', 'eval-account.sh');
+    for (const sh of ['', path.join(w.fx.root, 'no-such-helper.sh')]) {
+      const dir = path.join(w.fx.root, 'wrapdir');
+      const inst = spawnSync('bash', ['-c', `. "${helper}" && eval_account_install_wrapper "$1"`, '_', dir], { env: w.env, encoding: 'utf8' });
+      assert.strictEqual(inst.status, 0, inst.stderr);
+      const res = spawnSync(path.join(dir, 'claude'), ['-p', 'x'], { env: Object.assign({}, w.env, { EVAL_ACCOUNT_SH: sh }), encoding: 'utf8' });
+      assert.strictEqual(res.status, 2, `${res.stdout}${res.stderr}`);
+      assert.strictEqual(w.spawns(), 0);
+    }
+  } finally { w.cleanup(); }
+});
+
+// ---------------------------------------------------------------- F: the reviewer-bench panels keep the claude they resolved
+// The panel resolves claude to an absolute path, then cd's to a scratch dir. A wrapper that searched PATH again lost a relative PATH
+// entry (or picked another claude). The wrapper now carries the resolved binary.
+const PANEL_ROWS = ROWS.filter((r) => r.name.startsWith('reviewer-bench/'));
+function panelWithRelativePath(row, mutate) {
+  const w = world('active');
+  try {
+    const L = mkLayout(w.fx.root, [row.file, 'scripts/lib/eval-account.sh'], mutate || null);
+    fs.mkdirSync(path.join(L, 'relbin'));
+    fs.symlinkSync(w.fx.shim.shimPath, path.join(L, 'relbin', 'claude'));
+    const w2 = Object.assign({}, w, { env: Object.assign({}, w.env, { PATH: `relbin:${path.dirname(process.execPath)}:/usr/bin:/bin` }) });
+    const res = row.run(L, w2);
+    return { bad: judge('active', w, res, row), res, spawns: w.spawns() };
+  } finally { w.cleanup(); }
+}
+for (const row of PANEL_ROWS) {
+  test(`F ${row.name}: active mode runs the resolved claude even when it is only on a relative PATH entry`, () => {
+    const r = panelWithRelativePath(row);
+    assert.deepStrictEqual(r.bad, [], `${r.res.stdout}\n${r.res.stderr}`.slice(-600));
+    assert.ok(r.spawns >= 1);
+  });
+  test(`F negative control ${row.name}: without the resolved binary handed to the wrapper the fake is not reached`, () => {
+    const r = panelWithRelativePath(row, (rel, text) => text.replace('"$EA_WRAP_DIR" "$CC_BIN" || exit $?', '"$EA_WRAP_DIR"'));
+    assert.ok(r.bad.length > 0, 'the mutation was not caught');
+  });
 }
 
 // ---------------------------------------------------------------- run-eval-batch (A9) and N20

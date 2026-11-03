@@ -79,7 +79,7 @@ _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && 
 eval_account_probe reviewer-bench || exit $?
 if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
   EA_WRAP_DIR="$(mktemp -d -t panel-cmd-syscontract-claude-ea-XXXXXX)"
-  eval_account_install_wrapper "$EA_WRAP_DIR"
+  eval_account_install_wrapper "$EA_WRAP_DIR" "$CC_BIN" || exit $?
   CC_BIN="$EA_WRAP_DIR/claude"
 fi
 

@@ -356,5 +356,6 @@
   "fleet.upcoming": "待接（{n}）",
   "fleet.noun_upcoming": "待接",
   "fleet.waits_watch": "watch",
-  "fleet.waits_child": "子任務"
+  "fleet.waits_child": "子任務",
+  "fleet.capped": "另有 {n} 條工作未列出"
 }

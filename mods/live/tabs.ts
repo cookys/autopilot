@@ -882,6 +882,7 @@ function fleetSource(u: UiCtx, f: FleetView | null): PaneLine[] {
   if (f === null || (f.fetchedMs === null && f.error === null)) return [ui.kv(u, t('label.fleet_data'), [ui.absent(t('fleet.loading'))], { fact: F })]
   const age = f.fetchedMs === null ? ui.absent(t('fleet.never')) : ui.fmtd('ago', ui.ago(Math.max(0, f.nowMs - f.fetchedMs), t), F)
   const out = [ui.kv(u, t('label.fleet_data'), [age, ui.val(' · ' + t('fleet.source_cmd'), { tone: 'dim' })], { fact: F })]
+  if (f.capped > 0) out.push(...ui.detail(u, t('fleet.capped', { n: f.capped }), { fact: F }))
   if (f.error !== null) out.push(ui.item(u, ui.stateOf('fleetTask', { state: 'FAILED', stuck: false }), t('fleet.error', { error: f.error }), undefined, { fact: F, word: false }))
   return out
 }

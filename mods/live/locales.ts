@@ -360,7 +360,8 @@ export const EN: Record<string, string> = {
   "fleet.upcoming": "upcoming ({n})",
   "fleet.noun_upcoming": "upcoming",
   "fleet.waits_watch": "watch",
-  "fleet.waits_child": "child task"
+  "fleet.waits_child": "child task",
+  "fleet.capped": "{n} more work rows not shown"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -721,5 +722,6 @@ export const ZH_TW: Record<string, string> = {
   "fleet.upcoming": "待接（{n}）",
   "fleet.noun_upcoming": "待接",
   "fleet.waits_watch": "watch",
-  "fleet.waits_child": "子任務"
+  "fleet.waits_child": "子任務",
+  "fleet.capped": "另有 {n} 條工作未列出"
 }

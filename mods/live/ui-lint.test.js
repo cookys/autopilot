@@ -582,6 +582,25 @@ const MEASURE_GUARDED = src => {
   if (catchEnd < 0) return ['the catch block never closes']
   return body.slice(catchEnd).trim() === '' ? [] : ['a statement stands after the catch block, outside the protection']
 }
+// G23 review g1: the shared 5 s tick hands refresh's promise back (the Fleet fetch rides along, unawaited, its failure caught), so the tick never turns refresh into
+// a fire-and-forget. The engine's `$.clock.every` and the test kit's `clock.advance` do not await a callback's promise (advance resolves "once the event loop settled"),
+// so no mounted test can tell the two forms apart: the shape is held here, in the source.
+const TICK_SHAPE = src => {
+  const out = []
+  if (!/\$\.clock\.every\(TICK_MS, \(\) => liveTick\(\$\)\)/.test(src)) out.push('the tick is not `$.clock.every(TICK_MS, () => liveTick($))`')
+  if (!/export function liveTick\(\$: EngineInterface\): Promise<void> \{\s*void fleetTick\(\$\)\.catch\(\(\) => \{\}\)\s*return refresh\(\$\)\s*\}/.test(src)) out.push('liveTick does not return refresh($) after an unawaited, caught fleetTick($)')
+  return out
+}
+test('G23 review g1: the shared tick returns refresh\'s promise; the Fleet fetch rides along unawaited and caught', () => {
+  assert.deepEqual(TICK_SHAPE(read('register.ts')), [])
+})
+test('G23 review g1 control: the pre-fix tick (refresh voided) and a liveTick that drops the return or the catch are each reported', () => {
+  const good = read('register.ts')
+  assert.ok(TICK_SHAPE(good.replace('$.clock.every(TICK_MS, () => liveTick($))', '$.clock.every(TICK_MS, () => { void refresh($); void fleetTick($).catch(() => {}) })')).length > 0, 'refresh voided in the timer')
+  assert.ok(TICK_SHAPE(good.replace('  return refresh($)\n}', '  void refresh($)\n  return Promise.resolve()\n}')).length > 0, 'liveTick drops the promise')
+  assert.ok(TICK_SHAPE(good.replace('  void fleetTick($).catch(() => {})\n', '  void fleetTick($)\n')).length > 0, 'fleetTick uncaught')
+})
+
 test('turn.step measurement: everything between awaiting the result and returning it is ONE try / catch', () => {
   assert.deepEqual(MEASURE_GUARDED(read('register.ts')), [])
 })

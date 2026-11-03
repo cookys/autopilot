@@ -98,6 +98,12 @@ async function fleetFor($: EngineInterface): Promise<FleetView | null> {
   kickFleet($, nowMs)
   return fleetView(fleetFeed, nowMs)
 }
+// one tick of the shared timer: the Fleet fetch rides along (never awaited, its failure dropped) and the tick RETURNS refresh's promise, so the clock (and a test's
+// clock.advance) waits for the snapshot as before G23 (review g1)
+export function liveTick($: EngineInterface): Promise<void> {
+  void fleetTick($).catch(() => {})
+  return refresh($)
+}
 async function fleetTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
   if (paneTab === 'fleet' && nowMs - fleetShownMs < FLEET_SHOWN_MS) kickFleet($, nowMs)
@@ -890,7 +896,7 @@ export async function startLive($: EngineInterface): Promise<void> {
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
   decided = null
-  if (timer === undefined) timer = $.clock.every(TICK_MS, () => { void refresh($); void fleetTick($).catch(() => {}) })
+  if (timer === undefined) timer = $.clock.every(TICK_MS, () => liveTick($))
   await refresh($)
 }
 

@@ -23,14 +23,20 @@ export type StuckReason = 'unaccepted' | 'quiet' | 'hub'
 export type FleetTask = FleetRow & { inflight: boolean; stuck: StuckReason | null; ageMs: number | null; quietMs: number | null }
 export type FleetLane = { lane: string; host: string; inflight: FleetTask[]; upcoming: FleetTask[]; stuck: number }
 // what the pane draws: the lanes as of `nowMs`, when the data was last fetched and the last fetch's error (null while it worked)
-export type FleetView = { lanes: FleetLane[]; fetchedMs: number | null; error: string | null; nowMs: number }
+export type FleetView = { lanes: FleetLane[]; fetchedMs: number | null; error: string | null; nowMs: number; capped: number } // capped: work rows past FLEET_MAX_ROWS, not drawn
 
 export const FLEET_TTL_MS = 30_000
 export const OPEN_UNACCEPTED_MS = 3_600_000
 export const QUIET_MS = 4 * 3_600_000
 export const FLEET_ARGV = ['fleet', 'tasks', '--tree', '--json'] as const
+// bounds on what one fetch may cost a render (G23 review g1): an output over FLEET_MAX_BYTES (or one the engine cut at its 4 MiB) is refused and the last rows stay;
+// past FLEET_MAX_ROWS work rows the rest are counted, not kept. Today's hub: ~180 KB, ~260 rows of which ~20 are work rows.
+export const FLEET_MAX_BYTES = 2_000_000
+export const FLEET_MAX_ROWS = 300
 
 const TERMINAL = new Set(['done', 'declined', 'cancelled', 'canceled'])
+// a child that failed or was lost is not something its parent waits on (its own row still shows, as failed)
+const CHILD_ENDED = new Set([...TERMINAL, 'failed', 'lost'])
 const HUB_STUCK = new Set(['suspect', 'lost', 'blocked_human'])
 
 // The creation time a ULID carries in its first ten Crockford base-32 characters (ms since the epoch); null for an id that is not one.
@@ -61,18 +67,23 @@ const timeOf = (v: unknown): number | null => {
 
 // The hub's JSON (a list of rows) to work rows: observed runs (`kind: observed_run`, a process the courier saw, not a task anyone was given) and finished rows are left
 // out. Throws on JSON that is not a list, so the feed can say the data is unreadable instead of drawing an empty fleet.
-export function parseFleetTasks(json: string): FleetRow[] {
+export function parseFleetTasks(json: string, maxRows = FLEET_MAX_ROWS): { rows: FleetRow[]; capped: number } {
   const data: unknown = JSON.parse(json)
   if (!Array.isArray(data)) throw new Error('fleet tasks: not a list')
-  const live = (o: Record<string, unknown>): boolean => !TERMINAL.has(str(o.state).trim().toLowerCase())
+  const live = (o: Record<string, unknown>): boolean => !CHILD_ENDED.has(str(o.state).trim().toLowerCase())
   const objs = data.filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
   const liveParents = new Set(objs.filter(live).map(o => str(o.parent_task_id)).filter(p => p !== ''))
   const out: FleetRow[] = []
+  let capped = 0
   for (const o of objs) {
     if (o.kind === 'observed_run') continue
     const id = str(o.task_id)
     const state = str(o.state).trim().toLowerCase() || 'unknown'
     if (id === '' || TERMINAL.has(state)) continue
+    if (out.length >= maxRows) {
+      capped++
+      continue
+    }
     const assignee = str(o.assignee)
     const cut = assignee.lastIndexOf('/')
     out.push({
@@ -86,7 +97,7 @@ export function parseFleetTasks(json: string): FleetRow[] {
       waitsOn: state !== 'waiting' ? null : Array.isArray(o.watch_ids) && o.watch_ids.length > 0 ? 'watch' : liveParents.has(id) ? 'child' : null,
     })
   }
-  return out
+  return { rows: out, capped }
 }
 
 export function stuckOf(r: FleetRow, nowMs: number): StuckReason | null {
@@ -118,19 +129,21 @@ export function fleetLanes(rows: readonly FleetRow[], nowMs: number): FleetLane[
 }
 
 // ---- the feed: one CLI run at a time, at most once per TTL, never awaited by a render ----
-export type FleetRunner = (argv: readonly string[]) => Promise<{ exitCode: number; stdout: string; stderr: string }>
-export type FleetFeed = { rows: () => readonly FleetRow[]; fetchedMs: () => number | null; error: () => string | null; refresh: (run: FleetRunner, nowMs: number, force?: boolean) => Promise<boolean> }
+export type FleetRunner = (argv: readonly string[]) => Promise<{ exitCode: number; stdout: string; stderr: string; isStdoutTruncated?: boolean }>
+export type FleetFeed = { rows: () => readonly FleetRow[]; capped: () => number; fetchedMs: () => number | null; error: () => string | null; refresh: (run: FleetRunner, nowMs: number, force?: boolean) => Promise<boolean> }
 
 // `refresh` resolves true when it ran the CLI (the caller redraws), false when it skipped (in flight, or the data is younger than the TTL). A failed run keeps the last good
 // rows and their time, so the pane shows old data with its age and the error, never a blank fleet. The runner comes with each call: a hooks module may not keep `$`.
 export function makeFleetFeed(ttlMs = FLEET_TTL_MS): FleetFeed {
   let rows: FleetRow[] = []
+  let capped = 0
   let fetchedMs: number | null = null
   let triedMs: number | null = null
   let error: string | null = null
   let busy = false
   return {
     rows: () => rows,
+    capped: () => capped,
     fetchedMs: () => fetchedMs,
     error: () => error,
     refresh: async (run: FleetRunner, nowMs: number, force = false) => {
@@ -141,7 +154,10 @@ export function makeFleetFeed(ttlMs = FLEET_TTL_MS): FleetFeed {
       try {
         const r = await run(FLEET_ARGV)
         if (r.exitCode !== 0) throw new Error(firstLine(r.stderr) || 'exit ' + r.exitCode)
-        rows = parseFleetTasks(r.stdout)
+        if (r.isStdoutTruncated === true || r.stdout.length > FLEET_MAX_BYTES) throw new Error('output over ' + FLEET_MAX_BYTES + ' bytes, not read')
+        const parsed = parseFleetTasks(r.stdout)
+        rows = parsed.rows
+        capped = parsed.capped
         fetchedMs = nowMs
         error = null
       } catch (e) {
@@ -154,4 +170,4 @@ export function makeFleetFeed(ttlMs = FLEET_TTL_MS): FleetFeed {
   }
 }
 
-export const fleetView = (feed: FleetFeed, nowMs: number): FleetView => ({ lanes: fleetLanes(feed.rows(), nowMs), fetchedMs: feed.fetchedMs(), error: feed.error(), nowMs })
+export const fleetView = (feed: FleetFeed, nowMs: number): FleetView => ({ lanes: fleetLanes(feed.rows(), nowMs), fetchedMs: feed.fetchedMs(), error: feed.error(), nowMs, capped: feed.capped() })

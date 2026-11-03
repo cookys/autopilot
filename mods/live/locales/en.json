@@ -356,5 +356,6 @@
   "fleet.upcoming": "upcoming ({n})",
   "fleet.noun_upcoming": "upcoming",
   "fleet.waits_watch": "watch",
-  "fleet.waits_child": "child task"
+  "fleet.waits_child": "child task",
+  "fleet.capped": "{n} more work rows not shown"
 }

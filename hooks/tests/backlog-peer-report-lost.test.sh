@@ -281,7 +281,9 @@ mkdir -p "$SBX/scripts/lib" "$SBX/references" "$SBX/.githooks"
 cp "$REPO_ROOT/references/stage-graph.json" "$SBX/references/"
 cp "$GATE" "$REPO_ROOT/scripts/resolve-project-paths.sh" "$REPO_ROOT/scripts/project-detect.js" "$SBX/scripts/"
 cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$REPO_ROOT/scripts/lib/resolve-config.sh" "$REPO_ROOT/scripts/lib/repo-layout.js" "$SBX/scripts/lib/"
-sed -i -E "s#'project/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive)'#'docs/\\1'#; s#'project/backlog/BACKLOG.md'#'docs/BACKLOG.md'#" "$SBX/scripts/lib/repo-layout.js"   # the sandbox is a docs/ repo
+# the sandbox is a docs/ repo: one anchored mutation per call (a drifted anchor fails loudly instead of silently not hitting)
+sed_mutate "$SBX/scripts/lib/repo-layout.js" -E "s#'project/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive)'#'docs/\\1'#"
+sed_mutate "$SBX/scripts/lib/repo-layout.js" "s#'project/backlog/BACKLOG.md'#'docs/BACKLOG.md'#"
 cp "$REPO_ROOT/.githooks/pre-push" "$SBX/.githooks/pre-push"
 write_backlog "$SBX" 2 "$(row 'Peer row one' BL-0001 cuda '2026-09-05 fleet' none)"
 BASE="$(commit_all "$SBX" base)"

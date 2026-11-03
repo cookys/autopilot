@@ -1233,9 +1233,19 @@ wait')"
   marker="$TEST_TMP/l1-hup.marker"
   set -m
   # Direct env (not the p4b_outer_env function): $! must be the outer bash itself.
+  # SIGHUP must be at its default on entry: a runner started under nohup / `setsid nohup` (how long suites are detached here)
+  # hands SIG_IGN down, bash cannot trap a signal ignored on entry, and the HUP below would be a no-op (outer runs on to a
+  # normal exit 0 after the fixture's 120 s sleep). python3 resets it and execs bash in place, so $! is still the outer bash.
+  # Without python3 the case runs as before (and depends on the caller's disposition).
+  hup_launch=(bash)
+  if command -v python3 >/dev/null 2>&1; then
+    hup_launch=(python3 -c 'import os, signal, sys
+signal.signal(signal.SIGHUP, signal.SIG_DFL)
+os.execvp("bash", ["bash"] + sys.argv[1:])')
+  fi
   env -u AUTOPILOT_SESSION_ID -u AUTOPILOT_TEST_SNAPSHOT_ROOT -u AUTOPILOT_TEST_SNAPSHOT \
     TMPDIR="$priv" DESCENDANT_PIDFILE="$dpidf" FIXTURE_MARKER="$marker" \
-    bash "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1 &
+    "${hup_launch[@]}" "$fx/hooks/tests/run.sh" zz-fixture-one </dev/null >/dev/null 2>&1 &
   outer=$!
   set +m
   for _i in $(seq 1 150); do

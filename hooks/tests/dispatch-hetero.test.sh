@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# suite-timeout-secs: 1500
+# (601 s measured alone at load ~48, ~560 s on a quieter host: at the 600 s global ceiling, so it timed out in full runs)
 # dispatch-hetero.sh integration test — exercises the full worktree flow with a
 # PATH-stubbed fake `agy` (no network, no real Antigravity, NO live LLM). Covers:
 # preconditions (exit 2), committed path (exit 0, worktree auto-removed,

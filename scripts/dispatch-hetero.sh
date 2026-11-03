@@ -371,7 +371,9 @@ _init_orphan_state_dir() {
   if [ -e "$dir" ] || [ -L "$dir" ]; then
     [ -d "$dir" ] && [ ! -L "$dir" ] && [ -O "$dir" ] || return 1
   else
-    (umask 077; mkdir "$dir") || return 1
+    # Two first-ever dispatches can both see "absent"; the loser's mkdir fails with EEXIST. That is not unsafe: re-check the
+    # directory the winner made against the same rules (real dir, ours, mode 700) instead of refusing to start.
+    { (umask 077; mkdir "$dir" 2>/dev/null) || [ -d "$dir" ]; } && [ ! -L "$dir" ] && [ -O "$dir" ] || return 1
   fi
   mode="$(stat -c '%a' "$dir" 2>/dev/null || stat -f '%Lp' "$dir" 2>/dev/null)" || return 1
   case "$mode" in 700|0700) ;; *) return 1 ;; esac

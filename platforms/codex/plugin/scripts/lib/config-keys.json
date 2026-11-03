@@ -3567,6 +3567,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_TEST_AFTER_PLAN_READ",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/dispatch-plan-review.js"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_TEST_ALLOW_EVENTS_FAULT",
       "kind": "env",
       "audience": "internal",

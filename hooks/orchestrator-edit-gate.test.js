@@ -66,10 +66,15 @@ test('decide: l5 + depth-0 + outside repo & worktrees ⇒ allow (scratchpad etc.
 });
 
 test('isAllowlisted: tracking/config/plans paths pass, product paths fail', () => {
-  assert.strictEqual(isAllowlisted('docs/projects/2026-07-14-x/README.md'), true);
+  // This repo (no root given) keeps its work records where the layout registry says (project/ since relayout P1);
+  // a consuming project (any other root) always gets the docs/ convention.
+  assert.strictEqual(isAllowlisted('project/projects/2026-07-14-x/README.md'), true);
+  assert.strictEqual(isAllowlisted('project/plans/2026-07-14-x.md'), true);
+  assert.strictEqual(isAllowlisted('docs/projects/2026-07-14-x/README.md', os.tmpdir()), true);
+  assert.strictEqual(isAllowlisted('docs/plans/2026-07-14-x.md', os.tmpdir()), true);
+  assert.strictEqual(isAllowlisted('docs/projects/2026-07-14-x/README.md'), false);
   assert.strictEqual(isAllowlisted('.claude/settings.json'), true);
   assert.strictEqual(isAllowlisted('.autopilot/state.json'), true);
-  assert.strictEqual(isAllowlisted('docs/plans/2026-07-14-x.md'), true);
   assert.strictEqual(isAllowlisted('src/engine/autopilot-engine.js'), false);
   assert.strictEqual(isAllowlisted('docs/README.md'), false);
   // GPT-OSS finding: a handoff-named file in product territory is NOT allowlisted

@@ -47,6 +47,10 @@
     "rubric_sha256": { "$ref": "#/$defs/sha256" },
     "manifest_sha256": { "$ref": "#/$defs/sha256" },
     "plan_sha256": { "$ref": "#/$defs/sha256" },
+    "plan_path": { "type": ["string", "null"] },
+    "plan_git_blob_sha": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$" },
+    "repo_head_sha": { "type": ["string", "null"], "pattern": "^[0-9a-f]{40,64}$" },
+    "plan_dirty_vs_head": { "type": ["boolean", "null"] },
     "growth_ratio": {
       "type": "object",
       "additionalProperties": false,

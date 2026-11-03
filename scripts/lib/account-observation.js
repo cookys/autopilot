@@ -30,10 +30,8 @@ const SCHEMA = 'fleet.quota/1';
 const VIEW_SCHEMA = 'fleet.quota-view/1';
 const NAMESPACE_SCHEMA = 'fleet.quota-ns/1';
 
-// Arithmetic constants, seconds (section 6).
-const MAX_AGE_S = 21600;
-const FUTURE_SKEW_S = 300;
-const TIGHT_THRESHOLD = 0.90;
+// Age and tight constants (MAX_AGE_S, FUTURE_SKEW_S, TIGHT_THRESHOLD) live only in account-interpret.js; this file
+// holds just the validator's own limits.
 const EPOCH_MAX_S = 1e11; // above this an epoch field is a millisecond value
 const CLAMP_MAX = 1.5; // received utilization above this is almost surely an unconverted 0..100 value
 
@@ -470,7 +468,7 @@ function writeLocalRow(liveDir, record, opts) {
 
 module.exports = {
   SCHEMA, VIEW_SCHEMA, NAMESPACE_SCHEMA,
-  MAX_AGE_S, FUTURE_SKEW_S, TIGHT_THRESHOLD, EPOCH_MAX_S, CLAMP_MAX,
+  EPOCH_MAX_S, CLAMP_MAX,
   WINDOW_KINDS, WINDOW_SOURCES, UNITS, VISIBILITY, TOKEN_STATES, REFUSAL_REASONS, RECORD_SOURCES, LOCAL_COURIER,
   clampUtilization, buildRecord, validateRecord, hasMsKey,
   mirrorDir, mirrorPath, namespacePath, liveDirOrNull,

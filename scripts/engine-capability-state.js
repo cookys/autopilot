@@ -1980,7 +1980,9 @@ function parseCommandLineArgs(argv) {
 }
 
 function classifyErrorContent(content) {
-  const text = String(content).toLowerCase();
+  // claude -p wraps a plain HTTP 429 as "... (not your usage limit) ..."; the negated
+  // phrase must not trip the `usage limit` quota match (G37 spike S3).
+  const text = String(content).toLowerCase().replace(/\(?not your usage limit\)?/g, ' ');
 
   // quota_exhausted: billing/quota limit hit
   if (

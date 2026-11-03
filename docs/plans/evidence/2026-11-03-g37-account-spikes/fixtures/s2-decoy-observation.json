@@ -1,0 +1,28 @@
+{
+ "note": "auth label seen by a fully local synthetic API; env token FAKE-ENVTOKEN-*, decoy credentials DECOY-CREDSTOKEN-*; claude 2.1.317",
+ "cases": [
+  {
+   "name": "env token + decoy .credentials.json in CLAUDE_CONFIG_DIR",
+   "requests": [
+    "env-token",
+    "env-token"
+   ],
+   "used": "env-token"
+  },
+  {
+   "name": "decoy .credentials.json only (control)",
+   "requests": [
+    "creds-token"
+   ],
+   "used": "creds-token"
+  },
+  {
+   "name": "env token only",
+   "requests": [
+    "env-token",
+    "env-token"
+   ],
+   "used": "env-token"
+  }
+ ]
+}

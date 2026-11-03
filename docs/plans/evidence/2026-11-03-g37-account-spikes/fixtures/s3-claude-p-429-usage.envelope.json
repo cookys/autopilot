@@ -1,0 +1,8 @@
+{
+ "type": "result",
+ "subtype": "success",
+ "is_error": true,
+ "api_error_status": 429,
+ "terminal_reason": "api_error",
+ "result": "API Error: Server is temporarily limiting requests (not your usage limit) · Claude AI usage limit reached|1799999999 (local synthetic)"
+}

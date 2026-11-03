@@ -30,39 +30,12 @@ function watcherLaunchOpts({ key, scope, topLevel, env }) {
   return opts;
 }
 
-// What is known about the process holding the project lock. Only a POSITIVE, structural confirmation counts ('renders'):
-//   1. it is the watcher's entry point: argv = node <path>/bin/autopilot.js status runs --watch ...  (watchLaunchArgv's shape),
-//   2. it is THIS project's: `--project <key>` or `--project=<key>`,
-//   3. it really holds the project's lock: one of /proc/<pid>/fd points at the lock file (runs-watch.js lockPathOf; the wrapper
-//      `exec 9>"$LOCK"; flock -n 9 ...; exec node` leaves fd 9 on it in the node process),
-//   4. and it was started with --render.
-// 'no_render' = 1-3 confirmed, 4 not. 'unknown' = anything else: no /proc (not Linux), no such pid, unreadable argv or fd directory, a
-// different entry point, no fd on the lock. The caller then fails loudly: the card is not known to be shown.
+// What is known about the process holding the project lock: the shared structural judgement (watcher-identity.js: entry point, project, an
+// fd on the lock file). 'renders' only on positive confirmation with --render; 'no_render' = confirmed without it; 'unknown' = anything
+// else (the caller fails loudly: the card is not known to be shown).
 function holderState(pid, key, env) {
-  try {
-    if (!Number.isInteger(pid) || pid <= 0) return 'unknown';
-    const argv = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean);
-    if (argv.length < 5 || path.basename(argv[1]) !== 'autopilot.js' || argv[2] !== 'status' || argv[3] !== 'runs' || argv[4] !== '--watch') return 'unknown';
-    let project = null;
-    for (let i = 5; i < argv.length; i += 1) {
-      if (argv[i] === '--project') { project = argv[i + 1]; break; }
-      if (argv[i].startsWith('--project=')) { project = argv[i].slice('--project='.length); break; }
-    }
-    if (project !== key) return 'unknown';
-    const lock = require('./runs-watch').lockPathOf(env, key);
-    let real = lock;
-    try { real = fs.realpathSync(lock); } catch (_error) { /* the lock file is gone: no fd can match it */ }
-    let holds = false;
-    for (const fd of fs.readdirSync(`/proc/${pid}/fd`)) {
-      let target = null;
-      try { target = fs.readlinkSync(`/proc/${pid}/fd/${fd}`); } catch (_error) { continue; }
-      if (target === lock || target === real) { holds = true; break; }
-    }
-    if (!holds) return 'unknown';
-    return argv.includes('--render') ? 'renders' : 'no_render';
-  } catch (_error) {
-    return 'unknown';
-  }
+  const w = require('./watcher-identity').classifyWatcher(pid, key, require('./runs-watch').lockPathOf(env, key));
+  return w === null ? 'unknown' : w.state;
 }
 
 function ensureCardVisible({ cwd, sessionId = '', env = process.env } = {}) {
@@ -101,7 +74,7 @@ function ensureCardVisible({ cwd, sessionId = '', env = process.env } = {}) {
       const hook = require('../../hooks/runs-watch-autostart');
       const liveBase = require('../../scripts/lib/live-state-dir').resolveLiveDir({ env }).base;
       const w = hook.inspectWatcher(liveBase, scope.project_key, path.resolve(__dirname, '..', '..'));
-      if (w && w.state === 'stale') hook.reapStale(w, scope.project_key);
+      if (w && w.state === 'stale') hook.reapStale(w, scope.project_key, require('./runs-watch').lockPathOf(env, scope.project_key));
     } catch (_error) { /* the start below reports 'busy' and the --render check names it */ }
     const r = startWatcherDetached(opts);
     if (r.status === 'started') return { ok: true, status: 'started' };

@@ -196,17 +196,53 @@ test('a decoy whose argv looks like a watcher but names no root, or another root
   assert.ok(alive(p2), 'argv root disagrees with the recorded root: left alone');
 });
 
-test('legacy writer block whose argv names no root cannot be judged: treated as current (fast path: no spawn, nothing signalled)', () => {
+test('legacy writer block (no plugin_root) of a real watcher run from OUR root is current (fast path: no spawn, nothing signalled)', () => {
   const f = fx();
-  const pid = decoy(f, ['status', 'runs', '--watch', '--project', f.key]);
-  writeEnv(f, { pid, session_id: null, started_at: new Date().toISOString() }); // no plugin_root / plugin_version
+  const mine = startWatcherFrom(REPO, f);
+  const env = JSON.parse(fs.readFileSync(f.envFile, 'utf8'));
+  delete env.writer.plugin_root; delete env.writer.plugin_version; // a watcher of an older plugin never wrote the record
+  fs.writeFileSync(f.envFile, JSON.stringify(env));
   const h = crypto.createHash('sha1').update(f.repo).digest('hex').slice(0, 16);
   fs.mkdirSync(path.join(f.live, 'autostart'), { recursive: true });
   fs.writeFileSync(path.join(f.live, 'autostart', `${h}.json`), JSON.stringify({ cwd: f.repo, project_key: f.key, repo_identity: null, repo_root: f.repo }));
   fs.writeFileSync(require(path.join(REPO, 'src', 'status', 'live-pointer')).pointerPath(f.env), '{}'); // the fast path also wants the pointer present
   runHook(f, 'UserPromptSubmit');
   sleep(1500);
-  assert.ok(alive(pid));
-  assert.strictEqual(writerOf(f).pid, pid, 'no new watcher was started');
-  assert.ok(!lockHeld(f));
+  assert.ok(alive(mine.pid), 'still the same watcher');
+  assert.ok(lockHeld(f), 'and it still holds the lock');
+});
+
+// ---- structural identity (BL cardvis): only a process that IS the project's watcher is ever signalled ----
+// A stand-in whose argv is `node <root>/bin/autopilot.js status runs --watch --project <key>` (no --render): with the legacy record that the
+// argv root alone cannot rule out. Without a fd on the project lock it is not the watcher and must survive; WITH the fd it is a render-less
+// watcher and is replaced.
+function standIn(f, { holdLock, render }) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `wur-stand-${RUN}-`)); created.push(dir);
+  fs.mkdirSync(path.join(dir, 'bin'));
+  const script = path.join(dir, 'bin', 'autopilot.js');
+  fs.writeFileSync(script, `const fs=require('fs');${holdLock ? `fs.mkdirSync(${JSON.stringify(path.dirname(f.lock))},{recursive:true});fs.openSync(${JSON.stringify(f.lock)},'a');` : ''}setTimeout(()=>{},60000)\n`);
+  const child = spawn('node', [script, 'status', 'runs', '--watch', '--project', f.key, ...(render ? ['--render'] : [])], { cwd: f.repo, env: f.env, stdio: 'ignore', detached: true });
+  children.push(child.pid);
+  assert.ok(waitFor(() => { try { return !holdLock || fs.readdirSync(`/proc/${child.pid}/fd`).some((n) => { try { return fs.readlinkSync(`/proc/${child.pid}/fd/${n}`) === f.lock; } catch (_e) { return false; } }); } catch (_e) { return false; } }, 5000));
+  return child.pid;
+}
+
+test('a stand-in with the watcher entry point and argv but NO fd on the project lock is never signalled (no --render)', () => {
+  const f = fx();
+  const pid = standIn(f, { holdLock: false, render: false });
+  writeEnv(f, { pid, session_id: null, started_at: new Date().toISOString() }); // legacy record: nothing to compare the argv root against
+  runHook(f, 'SessionStart');
+  sleep(500);
+  assert.ok(alive(pid), 'not holding the lock => not the watcher => left alone');
+});
+
+test('a render-less process that really holds the project lock behind the watcher entry point is replaced by a rendering watcher', () => {
+  const f = fx();
+  const pid = standIn(f, { holdLock: true, render: false });
+  writeEnv(f, { pid, session_id: null, started_at: new Date().toISOString() });
+  runHook(f, 'SessionStart');
+  assert.ok(waitFor(() => !alive(pid), 5000), 'the render-less holder was stopped');
+  assert.ok(waitFor(() => { const w = writerOf(f); return w && w.pid !== pid && alive(w.pid); }, 45000), 'a new watcher published');
+  const argv = fs.readFileSync(`/proc/${writerOf(f).pid}/cmdline`, 'utf8').split('\0');
+  assert.ok(argv.includes('--render'), 'and it renders');
 });

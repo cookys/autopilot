@@ -281,18 +281,34 @@ function shimBin(dir, names) {
 const calls = (dir) => { try { return fs.readFileSync(path.join(dir, 'calls.log'), 'utf8').split('\n').filter(Boolean); } catch { return []; } };
 const KEY = 'abcdef0123456789';
 
-function fakeWatcher() {
-  // argv carries `status runs --watch --project <KEY>`, exactly what isWatcherFor() checks
-  const p = spawn(process.execPath, ['-e', 'setTimeout(()=>{},120000)', 'status', 'runs', '--watch', '--project', KEY], { stdio: 'ignore', detached: true });
-  p.unref();
-  return p;
+// A stand-in that is a watcher by the structural definition (src/status/watcher-identity.js): node <x>/bin/autopilot.js status runs --watch
+// --project <key> [--render], holding an fd on the project's lock file. Returns once the fd exists.
+function structuralFakeWatcher(dir, live, key, { render = true } = {}) {
+  const bin = path.join(dir, 'fakebin', 'bin'); fs.mkdirSync(bin, { recursive: true });
+  const script = path.join(bin, 'autopilot.js');
+  fs.writeFileSync(script, "const fs=require('fs');fs.mkdirSync(require('path').dirname(process.env.FAKE_LOCK),{recursive:true});fs.openSync(process.env.FAKE_LOCK,'a');setTimeout(()=>{},120000)\n");
+  const lock = path.join(live, 'runs', `${key}.lock`);
+  const child = spawn(process.execPath, [script, 'status', 'runs', '--watch', '--project', key, ...(render ? ['--render'] : [])], { stdio: 'ignore', detached: true, env: { ...process.env, FAKE_LOCK: lock } });
+  child.unref();
+  const end = Date.now() + 5000;
+  const holds = () => { try { return fs.readdirSync(`/proc/${child.pid}/fd`).some((n) => { try { return fs.readlinkSync(`/proc/${child.pid}/fd/${n}`) === lock; } catch { return false; } }); } catch { return false; } };
+  while (Date.now() < end && !holds()) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+  return child;
+}
+function fakeWatcher(live) {
+  return structuralFakeWatcher(path.dirname(live), live, KEY);
+}
+// the writer block a current-install watcher records (the stand-in's argv names another root, so the record must carry ours)
+function ownPluginIdentity() {
+  const root = fs.realpathSync(path.join(__dirname, '..'));
+  return { plugin_root: root, plugin_version: JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8')).version };
 }
 function seedAutostart(live, cwd, pid) {
   const name = crypto.createHash('sha1').update(cwd).digest('hex').slice(0, 16);
   fs.mkdirSync(path.join(live, 'autostart'), { recursive: true });
   fs.writeFileSync(path.join(live, 'autostart', `${name}.json`), JSON.stringify({ cwd, project_key: KEY }));
   fs.mkdirSync(path.join(live, 'runs'), { recursive: true });
-  fs.writeFileSync(path.join(live, 'runs', `${KEY}.json`), JSON.stringify({ schema: 'x', writer: { pid } }));
+  fs.writeFileSync(path.join(live, 'runs', `${KEY}.json`), JSON.stringify({ schema: 'x', writer: { pid, ...ownPluginIdentity() } }));
 }
 const ups = (cwd) => ({ session_id: SID, hook_event_name: 'UserPromptSubmit', cwd, prompt: 'hi' });
 
@@ -316,7 +332,7 @@ function upsFixture() {
 
 test('ups fast path (advisory-relay host): watcher alive + cached scope -> no git, no flock, no start (one process)', () => {
   const { a, cwd } = upsFixture();
-  const w = fakeWatcher();
+  const w = fakeWatcher(a.live);
   try {
     seedAutostart(a.live, cwd, w.pid);
     const r = run(RELAY, ups(cwd), a.env);
@@ -352,7 +368,7 @@ test('ups fast path falls through to the full path when the pid is dead, the cmd
   // load-only flake of this case). Stop this case's watchers first so nothing can race the deletion.
   stopWatchers(a.live);
   fs.rmSync(path.join(a.live, 'calls.log'), { force: true });
-  const w = fakeWatcher();
+  const w = fakeWatcher(a.live);
   try {
     seedAutostart(a.live, cwd, w.pid);
     fs.rmSync(path.join(a.home, '.autopilot', 'live-pointer.json'));

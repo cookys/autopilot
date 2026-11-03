@@ -419,7 +419,11 @@ eq "true,true,true" "$(cj "$BND" 'j.sums.join(",")')" "per-scope counts still su
 
 # --stop must confirm the exit: a writer that ignores SIGTERM -> stderr 'still running pid N', exit 1
 mkdir -p "$LIVE/runs"
-"$NODE" -e 'process.on("SIGTERM",()=>{});setInterval(()=>{},1000)' status runs --watch --project "$KEY_A" < /dev/null > /dev/null 2>&1 &
+# the stand-in is a watcher by the structural definition (src/status/watcher-identity.js): <root>/bin/autopilot.js entry point, the project in
+# argv, and an fd on the project lock; --stop signals nothing less (a decoy with the same argv is refused, checked below)
+mkdir -p "$SB/stub/bin"
+printf '%s\n' 'require("fs").openSync(process.env.STUB_LOCK, "a"); process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)' > "$SB/stub/bin/autopilot.js"
+STUB_LOCK="$LIVE/runs/$KEY_A.lock" "$NODE" "$SB/stub/bin/autopilot.js" status runs --watch --project "$KEY_A" < /dev/null > /dev/null 2>&1 &
 STUBBORN=$!; KILL_PIDS="$KILL_PIDS $STUBBORN"
 sleep 0.5
 printf '{"schema":"autopilot.runs-live/1","scope":{"project_key":"%s","repo_identity":null,"root_run_id":null},"published_at":"%s","valid_for_s":180,"writer":{"pid":%s,"session_id":null,"started_at":"x"},"runs":[]}\n' \
@@ -429,6 +433,17 @@ eq "1" "$?" "--stop on a writer that ignores SIGTERM exits 1"
 eq "yes" "$(grep -q "still running pid $STUBBORN" "$SB/st.err" && echo yes || echo no)" "--stop says 'still running pid N' on stderr"
 eq "no" "$(grep -q 'stopped watcher' "$SB/st.out" && echo yes || echo no)" "--stop does not claim it stopped"
 kill -9 "$STUBBORN"
+# a decoy with the same argv but no hold on the lock is refused and survives
+"$NODE" -e 'setInterval(()=>{},1000)' status runs --watch --project "$KEY_A" < /dev/null > /dev/null 2>&1 &
+DECOY=$!; KILL_PIDS="$KILL_PIDS $DECOY"
+sleep 0.5
+printf '{"schema":"autopilot.runs-live/1","scope":{"project_key":"%s","repo_identity":null,"root_run_id":null},"published_at":"%s","valid_for_s":180,"writer":{"pid":%s,"session_id":null,"started_at":"2026-01-01T00:00:00.000Z"},"runs":[],"counts":{"confirmed_live":0,"exited":0,"unknown":0}}' \
+  "$KEY_A" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$DECOY" > "$LIVE/runs/$KEY_A.json"
+(cd "$REPO_A" && wenv "$NODE" "$CLI" status runs --stop --project "$KEY_A" > "$SB/st2.out" 2> "$SB/st2.err" < /dev/null)
+eq "1" "$?" "--stop on a lock-less decoy exits 1"
+eq "yes" "$(grep -q 'refusing to stop' "$SB/st2.err" && echo yes || echo no)" "--stop refuses the decoy"
+eq "yes" "$([ -d /proc/$DECOY ] && echo yes || echo no)" "the decoy was not signalled"
+kill -9 "$DECOY"
 
 # --idle-exit re-arm: a marker holding the watcher open resets the idle clock
 cat > "$SB/rearm.js" <<'JS'

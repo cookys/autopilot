@@ -43,24 +43,24 @@ const STAGES = ['bootstrap', 'P1', 'P2', 'P3', 'P4', 'P5'];
 
 const DEFAULT_REGISTRY = {
   version: 1,
-  stage: 'bootstrap',
+  stage: 'P1',
 
   // Named paths. Value = the path at the CURRENT stage; generators rewrite these when they move files.
   paths: {
     docs_dir: 'docs',
-    plans_dir: 'docs/plans',
-    plans_archive_dir: 'docs/plans/_archive',
+    plans_dir: 'project/plans',
+    plans_archive_dir: 'project/plans/_archive',
     plans_evidence_dir: 'docs/plans/evidence',
-    projects_dir: 'docs/projects',
-    projects_index: 'docs/projects/INDEX.md',
-    projects_archive_dir: 'docs/projects/_archive',
-    backlog_file: 'docs/BACKLOG.md',
-    missions_dir: 'docs',
-    manifest_plan_base: 'docs',
+    projects_dir: 'project/projects',
+    projects_index: 'project/projects/INDEX.md',
+    projects_archive_dir: 'project/projects/_archive',
+    backlog_file: 'project/backlog/BACKLOG.md',
+    missions_dir: 'project/missions',
+    manifest_plan_base: 'project',
     metrics_dir: 'docs/metrics',
     surface_lines_baseline: 'docs/metrics/surface-lines.json',
-    settings_reference: 'docs/settings-reference.md',
-    hook_harness_matrix_doc: 'docs/hook-harness-matrix.md',
+    settings_reference: 'docs/guide/settings-reference.md',
+    hook_harness_matrix_doc: 'docs/dev/hook-harness-matrix.md',
     scripts_inventory_doc: 'docs/scripts-inventory.md',
     hooks_dir: 'hooks',
     hooks_shared_dir: 'hooks/_shared',
@@ -134,7 +134,7 @@ const DEFAULT_REGISTRY = {
       active_from: 'P1',
       match: {
         include: ['^docs/(plans|projects|missions|handoff|backlog)/', '^docs/BACKLOG\\.md$', '^docs/mission-[^/]+\\.json$', '^docs/[^/]*(HANDOFF|handoff)[^/]*$'],
-        exclude: ['^docs/plans/evidence/'],
+        exclude: ['^docs/plans/evidence/', '^docs/(plans|projects)/_archive/.+/evidence/'],
       },
     },
     {
@@ -144,7 +144,7 @@ const DEFAULT_REGISTRY = {
       active_from: 'P1',
       match: {
         include: ['^docs/.+\\.md$'],
-        exclude: ['^docs/(guide|dev)/', '^docs/README\\.md$', '^docs/assets/', '^docs/plans/evidence/'],
+        exclude: ['^docs/(guide|dev)/', '^docs/README\\.md$', '^docs/assets/', '^docs/plans/evidence/', '^docs/(plans|projects)/_archive/.+/evidence/'],
       },
     },
     {
@@ -152,7 +152,7 @@ const DEFAULT_REGISTRY = {
       condition: 'machine-written records (jsonl, raw logs, screenshots, evaluation evidence)',
       destination: 'evidence/',
       active_from: 'P2',
-      match: { include: ['^docs/plans/evidence/'], exclude: [] },
+      match: { include: ['^docs/plans/evidence/', '^docs/(plans|projects)/_archive/.+/evidence/'], exclude: [] },
     },
   ],
 
@@ -176,6 +176,7 @@ const DEFAULT_REGISTRY = {
       { name: 'platforms', purpose: 'generated mirrors for other platforms (codex)' },
       { name: 'profiles', purpose: 'execution profiles and their hash chain' },
       { name: 'project-config-template', purpose: 'config templates written into consuming projects' },
+      { name: 'project', purpose: 'work records: plans, projects, backlog, missions, handoff (moved out of docs/ by P1)', since: 'P1' },
       { name: 'references', purpose: 'cross-skill reference documents' },
       { name: 'schemas', purpose: 'JSON schemas' },
       { name: 'scripts', purpose: 'deterministic tooling (runtime and dev, split up in P4)' },
@@ -210,6 +211,37 @@ const DEFAULT_REGISTRY = {
       path: 'docs/scripts-inventory.md',
       rule: 7,
       reason: 'F5: pinned in place until P4 moves it together with check-claude-md-inventory.js, which reads it',
+    },
+    {
+      path: 'docs/mission-routing-successor-2026-11-03-execution-graph.json',
+      rule: 6,
+      reason: 'D9.5: mission-routing-successor-2026-11-03 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires',
+    },
+    {
+      path: 'docs/mission-routing-successor-2026-11-03-sources.json',
+      rule: 6,
+      reason: 'D9.5: mission-routing-successor-2026-11-03 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires',
+      plan_base: 'docs',
+    },
+    {
+      path: 'docs/plans/2026-11-03-routing-successor.md',
+      rule: 6,
+      reason: 'D9.5: mission-routing-successor-2026-11-03 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires',
+    },
+    {
+      path: 'docs/plans/2026-11-03-routing-successor.rubric.md',
+      rule: 6,
+      reason: 'D9.5: mission-routing-successor-2026-11-03 is still named by .claude/mission-routing-config.json (active mission, frozen source sha); stays in docs/ until the mission retires',
+    },
+    {
+      path: 'docs/metrics/surface-lines.json',
+      rule: 7,
+      reason: 'D10.1: release-gate baseline read through paths.surface_lines_baseline (repo-layout.js, preflight-release.sh); not markdown, stays in docs/metrics/',
+    },
+    {
+      path: 'docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json',
+      rule: 6,
+      reason: 'D10.4 / D9.7: dispatch-hetero.sh:2125, dispatch-review.sh:299 and sync-codex-plugin-skills.sh:102 hard-code this path; the C2 lane (D9.7, a or b) decides its future, so it stays and those three scripts are not changed',
     },
   ],
 };

@@ -74,32 +74,51 @@ function interpretSnapshot(snap, opts) {
   return { state: 'known', used, source: 'snapshot', note: null, tight_resets: tightResets };
 }
 
+// Opens with O_NOFOLLOW, fstat-checks type and size, reads from the SAME fd (no lstat/open gap).
+// Returns { text } | { absent:true } | { error:'invalid'|'unreadable' }. opts.beforeOpen is a test hook.
+function readSmallFile(file, maxBytes, opts) {
+  if (opts && typeof opts.beforeOpen === 'function') opts.beforeOpen(file);
+  let fd;
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return { absent: true };
+    if (e && e.code === 'ELOOP') return { error: 'invalid' };
+    return { error: 'unreadable' };
+  }
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile() || st.size > maxBytes) return { error: 'invalid' };
+    const buf = Buffer.alloc(st.size);
+    let off = 0;
+    while (off < st.size) {
+      const n = fs.readSync(fd, buf, off, st.size - off, off);
+      if (n <= 0) break;
+      off += n;
+    }
+    return { text: buf.toString('utf8', 0, off) };
+  } catch (_) { return { error: 'unreadable' }; } finally { try { fs.closeSync(fd); } catch (_) { /* ignore */ } }
+}
+
 // Reads one snapshot file. Returns the parsed object, or { __error: note } for unusable files,
 // or null when the file is absent. Never throws on expected-bad input.
-function readSnapshotFile(liveBase, alias) {
+function readSnapshotFile(liveBase, alias, opts) {
   if (!ALIAS_RE.test(String(alias))) return { __error: 'quota_invalid' };
-  const file = path.join(quotaDir(liveBase), alias + '.json');
-  let st;
-  try { st = fs.lstatSync(file); } catch (e) {
-    if (e && e.code === 'ENOENT') return null;
-    return { __error: 'quota_unreadable' };
-  }
-  if (!st.isFile() || st.isSymbolicLink()) return { __error: 'quota_invalid' };
-  if (st.size > MAX_BYTES) return { __error: 'quota_invalid' };
-  let text;
-  try { text = fs.readFileSync(file, 'utf8'); } catch (_) { return { __error: 'quota_unreadable' }; }
-  try { return JSON.parse(text); } catch (_) { return { __error: 'quota_invalid' }; }
+  const r = readSmallFile(path.join(quotaDir(liveBase), alias + '.json'), MAX_BYTES, opts);
+  if (r.absent) return null;
+  if (r.error) return { __error: r.error === 'invalid' ? 'quota_invalid' : 'quota_unreadable' };
+  try { return JSON.parse(r.text); } catch (_) { return { __error: 'quota_invalid' }; }
 }
 
 // opts: { liveBase (required), nowMs, expectedRoot }
 function readQuota(alias, opts) {
   const o = opts || {};
-  const raw = readSnapshotFile(o.liveBase, alias);
+  const raw = readSnapshotFile(o.liveBase, alias, o);
   if (raw && raw.__error) return unknown(raw.__error);
   return interpretSnapshot(raw, { alias, expectedRoot: o.expectedRoot, nowMs: o.nowMs });
 }
 
 module.exports = {
   SCHEMA, MAX_AGE_MS, TIGHT_THRESHOLD,
-  hash8, quotaDir, interpretSnapshot, readSnapshotFile, readQuota,
+  hash8, quotaDir, interpretSnapshot, readSnapshotFile, readSmallFile, readQuota,
 };

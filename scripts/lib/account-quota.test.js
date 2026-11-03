@@ -81,3 +81,18 @@ test('readQuota reads the file; symlink, oversize, absent handled', () => {
     assert.strictEqual(q.readQuota('../x', { liveBase: base, nowMs: NOW }).note, 'quota_invalid');
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+test('read TOCTOU: snapshot swapped for a symlink after the check is unknown', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'acctq-'));
+  try {
+    const dir = q.quotaDir(base);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'main.json'), JSON.stringify(snap()));
+    const secret = path.join(base, 'other.json');
+    fs.writeFileSync(secret, JSON.stringify(snap()));
+    const beforeOpen = (f) => { fs.unlinkSync(f); fs.symlinkSync(secret, f); };
+    const r = q.readQuota('main', { liveBase: base, nowMs: NOW, beforeOpen });
+    assert.strictEqual(r.state, 'unknown');
+    assert.strictEqual(r.note, 'quota_invalid');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});

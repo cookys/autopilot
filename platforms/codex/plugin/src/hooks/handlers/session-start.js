@@ -32,14 +32,14 @@ const TOKEN_DISCIPLINE_DOC = path.join(__dirname, '..', '..', '..', ...require('
 const DECISION_SCHEMA = 'autopilot.decision/2';
 
 // Open cards the way scripts/open-decision.js show does. Read failure => no line.
-function openDecisionCardLine(cwd) {
+function openDecisionEntries(cwd) {
   try {
     const fs = require('fs');
     const { scopeFromCwd } = require('../../status/project-key');
     const { commonDirOf, listScopeFiles, readScopeFile } = require('../../status/scope-key');
     const scope = scopeFromCwd(path.resolve(cwd || process.cwd()));
     const commonDir = commonDirOf(scope.repo_identity);
-    if (!scope.project_key || !commonDir) return '';
+    if (!scope.project_key || !commonDir) return [];
     const dir = path.join(commonDir, 'autopilot', 'decisions');
     const entries = [];
     for (const file of listScopeFiles(dir, scope.project_key)) {
@@ -54,8 +54,59 @@ function openDecisionCardLine(cwd) {
       }
     }
     entries.sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0) || String(a.id).localeCompare(String(b.id)));
-    if (entries.length === 0) return '';
-    return `\nOpen decision cards (${entries.length}): ${entries.map((e) => e.id).join(', ')}`;
+    return entries;
+  } catch {
+    return [];
+  }
+}
+
+function openDecisionCardLine(cwd) {
+  const entries = openDecisionEntries(cwd);
+  if (entries.length === 0) return '';
+  return `\nOpen decision cards (${entries.length}): ${entries.map((e) => e.id).join(', ')}`;
+}
+
+// F4 landing-file pickup (fleet plan oc-f4 R4.1): <git-common-dir>/fleet/decision-answers/<card_id>.json, schema fleet.decision-answer/1, written by
+// the card's courier for a console answer. The file is a pickup hint, not a credential: it is acted on only after `fleet decision verify
+// <card_id> <answer_id> --content-sha256 <content_sha256>` exits 0, and then the line carries the STORED answer verify printed, never the file's
+// own fields. No courier speaking `decision` on this host -> nothing is read or shown. A failed verify is shown as unverified and not acted on.
+const LANDING_SCHEMA_MAJOR = 'fleet.decision-answer/';
+function landedAnswerLines(cwd) {
+  try {
+    const fs = require('fs');
+    const fd = require('../../../scripts/lib/fleet-decision.js');
+    const { scopeFromCwd } = require('../../status/project-key');
+    const { commonDirOf } = require('../../status/scope-key');
+    const scope = scopeFromCwd(path.resolve(cwd || process.cwd()));
+    const commonDir = commonDirOf(scope.repo_identity);
+    if (!commonDir) return '';
+    const dir = path.join(commonDir, 'fleet', 'decision-answers');
+    let names;
+    // Filter BEFORE the cap: only a landing file whose card is still open in the ledger is pending (the courier closes the ledger entry, or
+    // the session does, once an answer is handled). Stale files of closed cards must never crowd out a newer answer.
+    const openIds = new Set(openDecisionEntries(cwd).map((e) => e.id));
+    let all;
+    try { all = fs.readdirSync(dir).filter((n) => /^d-[0-9a-f]{8}\.json$/.test(n)).sort(); } catch { return ''; }
+    names = all.filter((n) => openIds.has(n.slice(0, -5)));
+    if (names.length === 0) return '';
+    const state = fd.probe();
+    if (state === 'unsupported') return '';
+    if (state === 'probe_error') return `\nConsole answers may be waiting (${names.length} landing file(s)) but the fleet courier probe failed, so none is verified or acted on`;
+    const more = names.length > 5 ? names.length - 5 : 0;
+    names = names.slice(0, 5);
+    const out = [];
+    for (const n of names) {
+      const card = n.slice(0, -5);
+      let f;
+      try { f = JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8')); } catch { out.push(`${card} (unreadable landing file; not acted on)`); continue; }
+      if (!f || typeof f.schema !== 'string' || !f.schema.startsWith(LANDING_SCHEMA_MAJOR) || f.schema !== 'fleet.decision-answer/1' || f.card_id !== card
+        || typeof f.answer_id !== 'string' || typeof f.content_sha256 !== 'string' || !f.content_sha256) { out.push(`${card} (unverified: unknown landing schema or missing fields; not acted on)`); continue; }
+      const v = fd.verifyOnce(card, f.answer_id, f.content_sha256);
+      const a = v.ok ? v.answer : null;
+      if (!a || a.card_id !== card || a.answer_id !== f.answer_id) { out.push(`${card} (unverified: ${v.outcome}; not acted on)`); continue; }
+      out.push(`${card} -> ${a.option !== null && a.option !== undefined ? `option ${JSON.stringify(a.option)}` : `free text ${JSON.stringify(a.free_text)}`} (answered on the console, verified; answer_id ${a.answer_id})`);
+    }
+    return `\nConsole answers waiting for you (act only on the verified ones, then tell the owner): ${out.join('; ')}${more ? `; and ${more} more` : ''}`;
   } catch {
     return '';
   }
@@ -68,7 +119,7 @@ Anything that needs the owner's decision or answer: open a card with node ${OPEN
 When the owner answers in the live panel, a message whose first line is [待決回覆] arrives: act on the answers; the cards close automatically.
 To show the owner a file or a diff, use the show tool; do not paste the content.
 Cross-harness token discipline (advisory only): read ${TOKEN_DISCIPLINE_DOC}.
-${sessionStartBriefHeaderLine()}${openDecisionCardLine(cwd)}`;
+${sessionStartBriefHeaderLine()}${openDecisionCardLine(cwd)}${landedAnswerLines(cwd)}`;
 }
 
 // Appended to a trimmed recovery body. Counted inside the room left for that body.

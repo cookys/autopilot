@@ -1239,6 +1239,39 @@
       "invalid_effect": "anything but a boolean (or env true/false/1/0/yes/no) is ignored, so the source stays"
     },
     {
+      "name": "AUTOPILOT_FLEET_BIN",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": ["scripts/lib/fleet-decision.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Path of the fleet binary used by fleet-decision.js (default: fleet on PATH). Tests point it at a stub."
+    },
+    {
+      "name": "AUTOPILOT_CLAIM_RETRIES",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/lib/fleet-decision.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Attempts of fleet decision claim when the courier is unreachable (exit 9); default 3, only open-decision.js close retries."
+    },
+    {
+      "name": "AUTOPILOT_CLAIM_RETRY_MS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": ["scripts/lib/fleet-decision.js"],
+      "doc": null,
+      "relates": [],
+      "note": "Delay between claim attempts in ms; default 10000. Tests set 0."
+    },
+    {
       "name": "AUTOPILOT_TEST_DURATIONS_FILE",
       "kind": "env",
       "audience": "internal",

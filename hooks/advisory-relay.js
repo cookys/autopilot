@@ -24,6 +24,8 @@ const path = require('path');
 const DECIDE_REPLY_HEAD = '[待決回覆]';
 const DECIDE_ID = /^d-[0-9a-f]{8}(?![0-9a-f])/;
 
+const storedText = (a) => (a && typeof a === 'object' ? JSON.stringify(a.option !== null && a.option !== undefined ? { option: a.option } : { free_text: a.free_text === undefined ? null : a.free_text }) : 'nothing');
+
 function closeDecideReply(payload) {
   if (process.env.AUTOPILOT_DECIDE_REPLY_CLOSE === 'off') return;
   const prompt = payload && payload.prompt;
@@ -32,17 +34,20 @@ function closeDecideReply(payload) {
   if (lines[0] !== DECIDE_REPLY_HEAD) return;
   const ids = [];
   const seen = new Set();
+  const idLine = new Map();
   for (const line of lines.slice(1)) {
     const m = DECIDE_ID.exec(line);
     if (!m || seen.has(m[0])) continue;
     seen.add(m[0]);
     ids.push(m[0]);
+    idLine.set(m[0], line);
   }
   if (ids.length === 0) return;
   let closeDecisionById;
   let projectScopeFiles;
+  let readEntries;
   try {
-    ({ closeDecisionById, projectScopeFiles } = require('../scripts/open-decision.js'));
+    ({ closeDecisionById, projectScopeFiles, readEntries } = require('../scripts/open-decision.js'));
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
@@ -54,7 +59,27 @@ function closeDecideReply(payload) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
   }
+  // F4 verify-before-act: on a host whose courier speaks `fleet decision`, a line is acted on (its card closed) only after
+  // `fleet decision verify` accepts its answer_id (the last ｜ field). One call per card, never a retry or a sleep here.
+  // No courier on this host: today's behaviour.
+  let fd = null;
+  let probeState = 'unsupported';
+  try { const m = require('../scripts/lib/fleet-decision.js'); probeState = m.probe(); if (probeState === 'supported') fd = m; } catch (_e) { probeState = 'probe_error'; }
+  const unverified = [];
   for (const id of ids) {
+    if (probeState === 'probe_error') { unverified.push(`${id} (probe_error)`); continue; } // not "no courier": nothing is acted on
+    if (fd) {
+      const line = idLine.get(id);
+      const aid = line.split('｜').pop().trim();
+      const v = /^[0-9A-Za-z]{20,40}$/.test(aid) ? fd.verify(id, aid, line) : { ok: false, outcome: 'unverified' };
+      if (!v.ok) { unverified.push(`${id} (${v.outcome})`); continue; }
+      // the verified STORED answer is the only authority: the line's own text must say that same answer
+      // strict, field-wise (scripts/lib/decide-line.js): the question comes from the ledger card, the answer must EQUAL the stored one
+      let question = null;
+      try { for (const f of files) { const e = readEntries(f).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
+      const bound = require('../scripts/lib/decide-line.js').lineSaysAnswer(line, v.answer, question);
+      if (!bound.ok) { unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
+    }
     // closeDecisionById locks before it looks up the id, so a locked scope file
     // returns status error even when this card is not in it. Keep every error
     // and keep walking; a later scope file may still hold the card. One line is
@@ -83,6 +108,11 @@ function closeDecideReply(payload) {
     if (!closed && failures.length > 0) {
       process.stderr.write(`advisory-relay: decide-reply close fail-open: ${id}: ${failures.join('; ')}\n`);
     }
+  }
+  if (unverified.length > 0) {
+    const note = `unverified [待決回覆]: ${unverified.join(', ')}; the courier did not confirm these answers, so they are NOT acted on and their cards stay open. Tell the owner.`;
+    process.stderr.write(`advisory-relay: ${note}\n`);
+    sysMsg = sysMsg ? `${sysMsg}\n${note}` : note;
   }
 }
 

@@ -26,12 +26,27 @@ case "$CC_BIN" in
       case "$CC_BIN" in /*) ;; *) echo "panel-cmd-claude: could not resolve claude to an absolute path" >&2; exit 1 ;; esac ;;
 esac
 
+# G37 W5 (A12): with an account registry the claude below runs under `claude-account.js exec --pick` (token only in the child env).
+# A broken registry is a loud exit 2 (not a "fail" verdict that would be scored), before any spawn. No registry = unchanged.
+EA_WRAP_DIR=""
+_EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
+if [ -r "$_EA_LIB" ]; then
+  . "$_EA_LIB"
+  eval_account_probe reviewer-bench || exit $?
+  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
+    EA_WRAP_DIR="$(mktemp -d -t panel-cmd-claude-ea-XXXXXX)"
+    eval_account_install_wrapper "$EA_WRAP_DIR"
+    CC_BIN="$EA_WRAP_DIR/claude"
+  fi
+fi
+
 DIFF_TEMP="$(mktemp -t panel-cmd-claude-diff-XXXXXX)"
 PROMPT_TEMP="$(mktemp -t panel-cmd-claude-prompt-XXXXXX)"
 CC_CWD="$(mktemp -d -t panel-cmd-claude-cwd-XXXXXX)"
 RAW_LOG="$(mktemp -t panel-cmd-claude-log-XXXXXX)"
 
 cleanup() {
+  [ -n "${EA_WRAP_DIR:-}" ] && rm -rf "$EA_WRAP_DIR"
   rm -f "$DIFF_TEMP" "$PROMPT_TEMP" "$RAW_LOG"
   rm -rf "$CC_CWD"
 }

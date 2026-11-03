@@ -9,6 +9,16 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
+// G37 W5 (A12): with an account registry the version and auth probes go through claude-account.js and no credentials file is copied;
+// a broken registry stops the batch before any spawn. No registry = the credentials-copy path below is unchanged.
+let evalAccount = null;
+try { evalAccount = require("../../scripts/lib/eval-account.js"); } catch (e) { if (e.code !== "MODULE_NOT_FOUND") throw e; }
+let ACCOUNT_ACTIVE = false;
+function claudeSpec(args) {
+  if (!ACCOUNT_ACTIVE) return { cmd: OPT.claudeBin, args };
+  const w = evalAccount.wrap(OPT.claudeBin, args, "t14-gate");
+  return { cmd: w.cmd, args: w.args };
+}
 
 function findRepo() {
   const marker = path.join("evals", "orchestration", "tasks", "t14-constraint-horizon", "oracle.sh");
@@ -226,19 +236,20 @@ function authProbe() {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "orch-eval-scratch-home-"));
   try {
     const cred = path.join(process.env.HOME || "", ".claude", ".credentials.json");
-    if (process.env.HOME && fs.existsSync(cred)) {
+    if (!ACCOUNT_ACTIVE && process.env.HOME && fs.existsSync(cred)) {
       fs.mkdirSync(path.join(home, ".claude"), { recursive: true });
       const dest = path.join(home, ".claude", ".credentials.json");
       fs.copyFileSync(cred, dest);
       fs.chmodSync(dest, 0o600);
     }
     fs.writeFileSync(path.join(home, ".claude.json"), '{"hasCompletedOnboarding":true}\n');
-    const r = spawnSync(OPT.claudeBin, [
+    const spec = claudeSpec([
       "-p", "--model", MODEL,
       "--setting-sources", "project",
       "--strict-mcp-config",
       "--dangerously-skip-permissions"
-    ], {
+    ]);
+    const r = spawnSync(spec.cmd, spec.args, {
       input: "Reply with exactly AUTH_OK\n",
       encoding: "utf8",
       env: { ...process.env, HOME: home },
@@ -252,7 +263,8 @@ function authProbe() {
 }
 
 function versionProbe() {
-  const r = spawnSync(OPT.claudeBin, ["--version"], { encoding: "utf8", timeout: 15000 });
+  const spec = claudeSpec(["--version"]);
+  const r = spawnSync(spec.cmd, spec.args, { encoding: "utf8", timeout: 15000 });
   return ((r.stdout || "").split("\n")[0] || "").trim();
 }
 
@@ -343,6 +355,11 @@ function runOne(item) {
 const OPT = parseArgs(process.argv.slice(2));
 
 function main() {
+  if (evalAccount) {
+    const g = evalAccount.gate("run-t14-gate-batch");
+    if (g.state === "broken") process.exit(g.exit);
+    ACCOUNT_ACTIVE = g.state === "active";
+  }
   fs.mkdirSync(OPT.out, { recursive: true });
   const resultsPath = path.join(OPT.out, "results.jsonl");
   const schedulePath = path.join(OPT.out, "schedule.json");

@@ -985,6 +985,8 @@ const LITERAL_FOLLOWS = [
     from: 'recbase "$T/sb-old.js"; if refsbased; then bad "negative control: old join(dir, plan_path) recorder must NOT satisfy the registry-base assertion"; else ok; fi\n',
     to: 'recbase "$T/sb-old.js"; if refsbased; then bad "negative control: old join(dir, plan_path) recorder must NOT satisfy the registry-base assertion"; else ok; fi\n'
       + 'node -e \'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).objects;const f=Object.keys(o["project/missions/mission-backlog-bc-execution-graph.json"].files);process.exit(f.includes("project/missions/plans/2026-07-31-correctness-gates.md")?0:1)\' "$T/rb.json" && ok || bad "the old recorder lists the plan under the manifest directory, so the negation clause of the registry-base assertion can fail"\n' },
+  // the change pack of the harness-maintenance eval is a frozen copy of the file as it was before P1 rewrote one path in it: pin that blob (the test's own FROZEN_BLOB rule)
+  { f: 'hooks/tests/bpack-content.test.sh', from: '  [references/multi-agent-portability.md]=c82572ce9b18828de9af25c750eed3b42eeb4031\n)', to: '  [references/multi-agent-portability.md]=c82572ce9b18828de9af25c750eed3b42eeb4031\n  [skills/harness-maintenance/SKILL.md]=cded34fb654a8d8ef437bda74cd2fd842db8143c\n)' },
   { f: 'hooks/tests/uncalled-script-labels.test.sh', from: '# (docs/adr/0002-...), so the pin', to: '# (docs/dev/adr/0002-...), so the pin' },
   // D10.26: a fixture or sandbox that mimics THIS repo puts its work records where the layout registry says (the way profile-guided-dispositions already does),
   // and a fixture that is another repo under review gets that repo's own default (defaultDenyList(<repo>)), never this project's constant.

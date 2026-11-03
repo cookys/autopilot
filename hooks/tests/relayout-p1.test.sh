@@ -47,7 +47,8 @@ if [ "${RELAYOUT_P1_MODE_PROBE:-1}" = 1 ]; then
       tree_migrated "$B0"; if [ "$?" = 1 ]; then ok; else bad "negative control: a bootstrap tree is recognised as not migrated"; fi
     else echo "SKIP: pre-move commit e89d36e1a not in this checkout; the bootstrap-not-migrated control did not run"; fi
     echo "relayout-p1: $PASS passed, $FAIL failed"
-    [ "$FAIL" = 0 ]; exit $?
+    [ "$FAIL" -eq 0 ] || exit 1
+    exit 0
   fi
 fi
 
@@ -470,4 +471,4 @@ if grep -q "plan-archived-now" "$T/out"; then bad "a plan with no INDEX row must
 has "without its row it stays active" "plan-pre-sept-not-archived"
 
 echo "relayout-p1: $PASS passed, $FAIL failed"
-[ "$FAIL" = 0 ]
+[ "$FAIL" -eq 0 ]

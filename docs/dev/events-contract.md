@@ -108,6 +108,33 @@ patterns of `scripts/lib/personal-data-redact.js` plus private-key headers and c
 `basis` is an open set: today only `self_reported` exists. A value that renders as observed state must be listed as
 observed in this document; none is listed yet.
 
+### Review ledger layout (what the review reader walks)
+
+A **live ledger** is the directory given to `hetero-review-loop.js --ledger`: `phase-<phase>.base`, `receipt-<phase>.json`
+and, per phase, `review-<phase>/chain.json` plus `review-<phase>/g<N>/{range,findings,dispositions}.json`, `seat-*.json`
+and `diff.txt`. `chain.json` is an array with one entry per generation; the reader emits one `review.collected` per entry
+and one `review.finalized` per entry whose `status` is `finalized`. An entry without a `head` (an aborted generation)
+reviewed nothing and is not an event.
+
+The **archive** (`scripts/lib/review-ledger-copy.js`, opt-in via `review_ledger_archive.dir` or
+`AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR`; env wins over the operator config) is laid out as
+
+```
+<archive>/<bucket>/<YYYY-MM>/<ledger-id>/
+    archive.json                 source_realpath, repo_identity, first_collect_at, phase_keys, ...
+    chain.json                   all archived phases merged, each entry carries `phase` (not read by the feed)
+    receipt-<phase>.json         beside the review-* dirs, as in a live ledger
+    review-<phase>/chain.json
+    review-<phase>/g<N>/{range,findings,dispositions}.json, seat-*.json, [diff.txt]
+<archive>/<bucket>/.ledger-id.lock    a dot entry, skipped
+```
+
+`<bucket>` is `<repo basename>-<first 8 hex of sha1(repo_identity)>`, `<ledger-id>` is `<date>-<bucket>-<8 hex>`. Each
+`<ledger-id>` directory is itself a ledger root, so the reader treats it exactly like a live ledger, and skips it when its
+`archive.json` names another `repo_identity`. The archive does **not** copy `phase-<phase>.base`: the review id therefore
+takes the phase base from the lowest-generation `chain.json` entry (`base`), which an archive copy keeps, so a copy of a
+live ledger gets the same `phase_base12` and its events collapse into the live ones by id.
+
 ## Ordering and ids
 
 - Ascending `(ts, id)`, ids compared bytewise, within a page and across pages. The one exception is a row that arrived late (its `ts` earlier than the cursor watermark but within the slack): it is delivered once, in the next page (rules in the cursor section).

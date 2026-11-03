@@ -2300,4 +2300,54 @@ ER_M=$(pk_mutant erange hetero-review-loop.js "if (diffBytes === 0) {" "if (fals
 ER4_OUT=$(node "$ER_M/scripts/hetero-review-loop.js" collect --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_er4 --generation 1 --branch work --phase-base "$ER_HEAD" --seats "m1/low@codex" 2>&1); ER4_RC=$?
 assert_exit_code "$ER4_RC" "0" "empty-range (mutation): without the guard an empty range is collected again"
 
+# ─── events feed writer (operator console A1 E2): collected_at, finalized_at, ledger pointer ───
+# Reader: src/status/events/sources/review.js. Every collect here runs in the scratch repo, so the pointer file lands in
+# $SCRATCH_REPO/.git/autopilot, never in a real repo.
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+EV_POINTER="$SCRATCH_REPO/.git/autopilot/review-ledgers.txt"
+ev_stamp() { # <ledger> <phase> <field>: prints ok when chain entry 0 carries an RFC 3339 .sssZ stamp in <field>
+  node -e 'const e=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))[0]; process.stdout.write(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(e[process.argv[2]]||"")?"ok":"missing")' "$1/review-$2/chain.json" "$3" 2>/dev/null
+}
+ev_collect() { # [node-script] <ledger> <phase>
+  local script="$1" ledger="$2" phase="$3"
+  node "$script" collect --repo-root "$SCRATCH_REPO" --ledger "$ledger" --phase "$phase" --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1
+}
+ev_finalize() { # <script> <ledger> <phase>
+  echo "{ \"schema_version\": 1, \"phase\": \"$3\", \"generation\": 1, \"findings\": [] }" > "$TEST_TMP/ev_disp.json"
+  node "$1" finalize --repo-root "$SCRATCH_REPO" --ledger "$2" --phase "$3" --generation 1 --branch work --dispositions "$TEST_TMP/ev_disp.json" 2>&1
+}
+EV_LEDGER="$TEST_TMP/ev_ledger"
+EV_OUT=$(ev_collect "$SCRIPT" "$EV_LEDGER" pev1); EV_RC=$?
+assert_exit_code "$EV_RC" "0" "events writer: collect still exits 0"
+assert_eq "$(ev_stamp "$EV_LEDGER" pev1 collected_at)" "ok" "events writer 1: collect stamps collected_at (RFC 3339, ms, Z) on the chain entry"
+EV_OUT=$(ev_collect "$SCRIPT" "$EV_LEDGER" pev2); EV_RC=$?
+assert_eq "$(grep -c -x -F -- "$EV_LEDGER" "$EV_POINTER" 2>/dev/null)" "1" "events writer 2: collect records the ledger dir in <git-common-dir>/autopilot/review-ledgers.txt once, however many phases"
+EV_OUT=$(ev_finalize "$SCRIPT" "$EV_LEDGER" pev1); EV_RC=$?
+assert_exit_code "$EV_RC" "0" "events writer: finalize still exits 0"
+assert_eq "$(ev_stamp "$EV_LEDGER" pev1 finalized_at)" "ok" "events writer 3: finalize stamps finalized_at on the chain entry"
+# Red checks: the same three assertions on a copy of the script with the writer reverted must fail.
+EV_M1=$(pk_mutant evstamp hetero-review-loop.js "    collected_at: new Date().toISOString(),
+" "") || fail "mutation setup failed (events collected_at)"
+EV_ML="$TEST_TMP/ev_ledger_m1"; ev_collect "$EV_M1/scripts/hetero-review-loop.js" "$EV_ML" pevm1 >/dev/null
+assert_eq "$(ev_stamp "$EV_ML" pevm1 collected_at)" "missing" "events writer 1 (mutation): without the collected_at writer the stamp is missing"
+EV_M2=$(pk_mutant evpointer hetero-review-loop.js "if (opts && opts.recordPointer) recordLedgerPointer(ledgerDir, repoRoot);" "") || fail "mutation setup failed (events pointer)"
+EV_ML2="$TEST_TMP/ev_ledger_m2"; ev_collect "$EV_M2/scripts/hetero-review-loop.js" "$EV_ML2" pevm2 >/dev/null
+assert_eq "$(grep -c -x -F -- "$EV_ML2" "$EV_POINTER" 2>/dev/null)" "0" "events writer 2 (mutation): without the pointer write the ledger dir is not recorded"
+EV_M3=$(pk_mutant evfinal hetero-review-loop.js "  targetChainEntry.finalized_at = new Date().toISOString();
+" "") || fail "mutation setup failed (events finalized_at)"
+EV_ML3="$TEST_TMP/ev_ledger_m3"; ev_collect "$SCRIPT" "$EV_ML3" pevm3 >/dev/null; ev_finalize "$EV_M3/scripts/hetero-review-loop.js" "$EV_ML3" pevm3 >/dev/null
+assert_eq "$(ev_stamp "$EV_ML3" pevm3 finalized_at)" "missing" "events writer 3 (mutation): without the finalized_at writer the stamp is missing"
+
+# events writer 4: a relative --ledger is recorded as an absolute path
+EV_REL_OUT=$(cd "$TEST_TMP" && node "$SCRIPT" collect --repo-root "$SCRATCH_REPO" --ledger ev_rel_ledger --phase pevrel --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" 2>&1); EV_RC=$?
+assert_exit_code "$EV_RC" "0" "events writer: collect with a relative --ledger exits 0"
+assert_eq "$(grep -c -x -F -- "$TEST_TMP/ev_rel_ledger" "$EV_POINTER" 2>/dev/null)" "1" "events writer 4: a relative --ledger lands in the pointer file as an absolute path"
+assert_eq "$(grep -c -x -F -- "ev_rel_ledger" "$EV_POINTER" 2>/dev/null)" "0" "events writer 4: no bare relative line in the pointer file"
+EV_M4=$(pk_mutant evrel hetero-review-loop.js 'const line = `${path.resolve(ledgerDir)}\n`;' 'const line = `${RELATIVE_LEDGER_ARG}\n`;') || fail "mutation setup failed (events relative)"
+# the collect handler also resolves --ledger before it reaches the writer, so the mutant removes that resolve too (the first match in the file is handleCollect)
+sed -i 's/RELATIVE_LEDGER_ARG/ledgerDir/' "$EV_M4/scripts/hetero-review-loop.js"
+sed -i "0,/const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';/s//const ledgerDir = flags.ledger ? flags.ledger : '';/" "$EV_M4/scripts/hetero-review-loop.js"
+(cd "$TEST_TMP" && node "$EV_M4/scripts/hetero-review-loop.js" collect --repo-root "$SCRATCH_REPO" --ledger ev_rel_ledger_m --phase pevrelm --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" >/dev/null 2>&1)
+assert_eq "$(grep -c -x -F -- "ev_rel_ledger_m" "$EV_POINTER" 2>/dev/null)" "1" "events writer 4 (mutation): without any resolve the pointer holds the bare relative path"
+
 finalize_test

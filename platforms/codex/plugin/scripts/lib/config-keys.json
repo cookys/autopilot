@@ -5697,6 +5697,19 @@
       "doc": "project/plans/2026-09-19-roundtable.md",
       "relates": [],
       "note": "Comma-separated courier handles used when --seats is omitted. Else say-row senders other than owner and moderator."
+    },
+    {
+      "name": "AUTOPILOT_EVENTS_REVIEW_LEDGERS",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "src/status/events/sources/review.js"
+      ],
+      "doc": "docs/dev/events-contract.md",
+      "relates": [],
+      "note": "Colon-separated review ledger directories the events feed reads in addition to the git-common-dir pointer file."
     }
   ]
 }

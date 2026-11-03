@@ -96,3 +96,17 @@ test('read TOCTOU: snapshot swapped for a symlink after the check is unknown', (
     assert.strictEqual(r.note, 'quota_invalid');
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+test('FIFO at the snapshot path is unknown within 5 s (open must not block)', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'acctq-'));
+  try {
+    const dir = q.quotaDir(base);
+    fs.mkdirSync(dir, { recursive: true });
+    require('child_process').execFileSync('mkfifo', [path.join(dir, 'main.json')]);
+    const r = require('child_process').spawnSync(process.execPath, ['-e',
+      `process.stdout.write(JSON.stringify(require(${JSON.stringify(path.join(__dirname, 'account-quota.js'))}).readQuota('main',{liveBase:${JSON.stringify(base)},nowMs:${NOW}})))`],
+      { timeout: 5000 });
+    assert.strictEqual(r.error, undefined, 'read blocked on FIFO');
+    assert.strictEqual(JSON.parse(r.stdout.toString()).state, 'unknown');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});

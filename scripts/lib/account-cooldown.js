@@ -99,7 +99,7 @@ function isCooling(untilMs, nowMs) {
 }
 
 function clearCooldown(alias, opts) {
-  if (!ALIAS_RE.test(String(alias))) return false;
+  if (!ALIAS_RE.test(String(alias))) throw new Error('invalid alias');
   try { fs.unlinkSync(path.join(cooldownDir(opts), alias + '.json')); return true; } catch (_) { return false; }
 }
 

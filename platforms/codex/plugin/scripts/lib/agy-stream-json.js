@@ -18,9 +18,20 @@
 //
 // SECOND LAYER (response side): the byte cap alone cannot guarantee fail-closed because the wall is in
 // tokens (~97.6k input tokens on agy 1.4.6). parseStream therefore also refuses (exit 1) a SUCCESS whose
-// response is empty after trim (`agy_empty_response`) and one whose `result.usage.input_tokens` is >=
+// response is empty after trim (`agy_empty_response`) and one whose PROMPT size is >=
 // AUTOPILOT_AGY_INPUT_TOKEN_CEILING (default 95000; non-positive-integer = default; `agy_input_truncated`),
-// even when the response is non-empty. No usage field -> the token check is skipped with a stderr note.
+// even when the response is non-empty. No usage field at all -> the token check is skipped with a stderr note.
+//
+// WHAT "PROMPT SIZE" MEANS (hotfix 2026-11-04; basis: peer-measured agy 1.4.12, 2026-11-04). The wall is
+// on the prompt that came in on stdin, NOT on the whole run. `result.usage.input_tokens` is the SUM over every
+// step (a 3-file read: steps 1/3/5/7 = 7030+4556+3109+4076 = 18771 = result.usage.input_tokens), so a multi-step
+// tool task crosses 95k with no truncation at all (511,413 was wrongly refused). Tool-read context does not drop
+// the tail either (a 764 KB file read: single-step context 244,944, mid and tail nonces both correct, SUCCESS).
+// So the gate measures the FIRST per-step usage event: `{"event":"step_update","step_update":{"step_type":
+// "agent_response","state":"DONE","usage":{"input_tokens":N,"cache_read_tokens":M,...}}}` (only DONE
+// agent_response steps carry usage; step 0 `user_input` and tool / ACTIVE / text_delta events have none), and
+// compares input_tokens + cache_read_tokens. Only when no step event carries usage does it fall back to
+// `result.usage.input_tokens` (a sum, so conservative: it can over-refuse, never under-refuse).
 //
 // Verified wire facts (agy 1.4.6):
 //   * the flag is `--print=` — it NEEDS the `=`; a bare `--print` swallows the next flag as its
@@ -82,29 +93,48 @@ function encodeUserLine(prompt) {
   return `${JSON.stringify({ event: 'user', message: { content: String(prompt) } })}\n`;
 }
 
-// The last `result` event's result object, or null.
-function lastResult(text) {
+// Scan the stream once: the last `result` object, and the first per-step usage (the prompt-sized turn).
+// Basis for the step shape: peer-measured agy 1.4.12, 2026-11-04 (step_update.usage on DONE agent_response).
+function scanStream(text) {
   let result = null;
+  let firstStep = null;
   for (const line of String(text).split('\n')) {
     const t = line.trim();
     if (!t) continue;
     let ev;
     try { ev = JSON.parse(t); } catch (_e) { continue; }
-    if (ev && ev.event === 'result' && ev.result && typeof ev.result === 'object') result = ev.result;
+    if (!ev) continue;
+    if (ev.event === 'result' && ev.result && typeof ev.result === 'object') result = ev.result;
+    else if (ev.event === 'step_update' && firstStep === null && ev.step_update && typeof ev.step_update === 'object') {
+      const u = ev.step_update.usage;
+      if (u && typeof u === 'object' && Number.isFinite(u.input_tokens)) {
+        const cr = Number.isFinite(u.cache_read_tokens) ? u.cache_read_tokens : 0;
+        firstStep = { tokens: u.input_tokens + cr, step_index: ev.step_update.step_index };
+      }
+    }
   }
-  return result;
+  return { result, firstStep };
+}
+
+// The one token-ceiling decision both exits share. Returns null when no usage exists to judge, else
+// {over, tokens, ceiling, basis} where basis names the event that was measured.
+function promptTokenGate(firstStep, result, env = process.env) {
+  const ceiling = inputTokenCeiling(env);
+  if (firstStep) {
+    return { over: firstStep.tokens >= ceiling, tokens: firstStep.tokens, ceiling,
+      basis: `the first per-step usage event (step_update step ${firstStep.step_index}, input_tokens + cache_read_tokens)` };
+  }
+  const used = result && result.usage && typeof result.usage === 'object' ? result.usage.input_tokens : undefined;
+  if (typeof used === 'number' && Number.isFinite(used)) {
+    return { over: used >= ceiling, tokens: used, ceiling,
+      basis: 'result.usage.input_tokens (no per-step usage event was present, so this is the all-steps sum, not the prompt alone)' };
+  }
+  return null;
 }
 
 // Returns {ok:true, result} for SUCCESS, {ok:false, reason} for ERROR / no result event.
 function parseStream(text, env = process.env) {
-  let result = null;
-  for (const line of String(text).split('\n')) {
-    const t = line.trim();
-    if (!t) continue;
-    let ev;
-    try { ev = JSON.parse(t); } catch (_e) { continue; }
-    if (ev && ev.event === 'result' && ev.result && typeof ev.result === 'object') result = ev.result;
-  }
+  const { result, firstStep } = scanStream(text);
   if (!result) return { ok: false, reason: 'agy emitted no result event' };
   if (result.status !== 'SUCCESS') {
     const err = result.error == null ? '(no error text)' : (typeof result.error === 'string' ? result.error : JSON.stringify(result.error));
@@ -114,15 +144,14 @@ function parseStream(text, env = process.env) {
   if (result.response.trim() === '') {
     return { ok: false, reason: 'agy_empty_response: agy reported SUCCESS with an empty response (the silent truncation signature, BL-0021); treated as a failure, not a clean pass' };
   }
-  const used = result.usage && typeof result.usage === 'object' ? result.usage.input_tokens : undefined;
-  const ceiling = inputTokenCeiling(env);
-  if (typeof used === 'number' && Number.isFinite(used)) {
-    if (used >= ceiling) {
-      return { ok: false, reason: `agy_input_truncated: agy consumed ${used} input tokens, at or over the ${ceiling}-token fail-closed ceiling (about 97.6k is where agy 1.4.6 silently drops the prompt tail, BL-0021); the answer cannot be trusted. Split the unit or raise AUTOPILOT_AGY_INPUT_TOKEN_CEILING where you measured it` };
+  const gate = promptTokenGate(firstStep, result, env);
+  if (gate) {
+    if (gate.over) {
+      return { ok: false, reason: `agy_input_truncated: the prompt itself was ${gate.tokens} tokens (measured from ${gate.basis}), at or over the ${gate.ceiling}-token fail-closed ceiling (about 97.6k is where agy 1.4.6 silently drops the prompt tail, BL-0021); the answer cannot be trusted. Split the unit or raise AUTOPILOT_AGY_INPUT_TOKEN_CEILING where you measured it` };
     }
     return { ok: true, result };
   }
-  return { ok: true, result, note: 'agy result carries no usage.input_tokens; the token-ceiling check was skipped (only the empty-response and byte-cap checks apply)' };
+  return { ok: true, result, note: 'agy emitted no usage (neither a per-step usage event nor result.usage.input_tokens); the token-ceiling check was skipped (only the empty-response and byte-cap checks apply)' };
 }
 
 function usage(msg) {
@@ -199,7 +228,7 @@ function main(argv) {
 // empty-output / oracle classification decides), 1 otherwise (status not SUCCESS, no result event, or the
 // input-token ceiling reached: the BL-0021 silent-truncation guard stays on).
 function textCompatClose(raw, agyCode) {
-  const r = lastResult(raw.toString('utf8'));
+  const { result: r, firstStep } = scanStream(raw.toString('utf8'));
   if (!r) {
     if (raw.length) fs.writeSync(1, raw);
     if (agyCode === 0) process.stderr.write('agy-stream-json.js: agy emitted no result event\n');
@@ -210,9 +239,9 @@ function textCompatClose(raw, agyCode) {
   fs.writeSync(1, `${text}\n`);
   if (agyCode !== 0) return agyCode;
   if (r.status !== 'SUCCESS' || typeof r.response !== 'string') return 1;
-  const used = r.usage && typeof r.usage === 'object' ? r.usage.input_tokens : undefined;
-  if (typeof used === 'number' && Number.isFinite(used) && used >= inputTokenCeiling()) {
-    process.stderr.write(`agy-stream-json.js: agy_input_truncated: ${used} input tokens at or over the ${inputTokenCeiling()}-token fail-closed ceiling (BL-0021)\n`);
+  const gate = promptTokenGate(firstStep, r);
+  if (gate && gate.over) {
+    process.stderr.write(`agy-stream-json.js: agy_input_truncated: the prompt itself was ${gate.tokens} tokens (measured from ${gate.basis}), at or over the ${gate.ceiling}-token fail-closed ceiling (BL-0021)\n`);
     return 1;
   }
   return 0;

@@ -244,6 +244,53 @@ assert_eq "1" "$RC" "NEGATIVE CONTROL: a zero token-ceiling override falls back 
 OUT="$(node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
 assert_eq "0" "$RC" "helper: no usage field -> token check skipped, still succeeds"; assert_contains "$OUT" "token-ceiling check was skipped" "helper: missing usage field is noted on stderr"
 
+# --- hotfix 2026-11-04: the gate measures the PROMPT (first per-step usage), not the all-steps sum -------------
+# Shapes: peer-measured agy 1.4.12, 2026-11-04 (step_update.usage only on DONE agent_response steps).
+GATE_JS="$TEST_TMP/gate-case.js"
+cat > "$GATE_JS" <<'GJS'
+// usage: gate-case.js <helper> <resultInput> <resultCacheRead> [stepInput:stepCache ...]  -> prints exit code of parseStream
+const h = require(process.argv[2]);
+const [resIn, resCr, ...steps] = process.argv.slice(3);
+const L = [{ event: 'user', message: { content: 'x' } },
+  { event: 'step_update', step_update: { step_index: 0, state: 'DONE', step_type: 'user_input' } },
+  { event: 'step_update', step_update: { step_index: 1, state: 'ACTIVE', step_type: 'agent_response', text_delta: 'x' } }];
+steps.forEach((s, i) => { const [a, c] = s.split(':').map(Number);
+  L.push({ event: 'step_update', step_update: { step_index: 1 + 2 * i, state: 'DONE', step_type: 'agent_response', usage: { input_tokens: a, output_tokens: 5, thinking_tokens: 0, cache_read_tokens: c, total_tokens: a + 5 } } });
+  L.push({ event: 'step_update', step_update: { step_index: 2 + 2 * i, state: 'DONE', step_type: 'tool', tool_name: 't' } }); });
+const usage = resIn === 'none' ? undefined : { input_tokens: Number(resIn), output_tokens: 9, thinking_tokens: 0, cache_read_tokens: Number(resCr), total_tokens: 1 };
+L.push({ event: 'result', result: { status: 'SUCCESS', response: 'ok', ...(usage ? { usage } : {}) } });
+const r = h.parseStream(L.map((e) => JSON.stringify(e)).join('\n'));
+process.stdout.write((r.ok ? 'PASS' : 'REFUSE') + ' ' + (r.reason || r.note || '') + '\n');
+GJS
+gate() { node "$GATE_JS" "${GATE_HELPER:-$HELPER}" "$@"; }
+OUT="$(gate 18771 33317 7030:0 4556:5000 3109:11588 4076:14698)"
+assert_contains "$OUT" "PASS" "gate: 3-file read (result 18771, step1 7030) passes"
+OUT="$(gate 511413 0 7030:0 4556:5000)"
+assert_contains "$OUT" "PASS" "gate: result 511413 with step1 7030 passes (the wrongly-refused shape)"
+OUT="$(gate 244941 297115 7028:0 113907:0 176177:0 244944:0)"
+assert_contains "$OUT" "PASS" "gate: 764 KB nonce read (step1 7028, later steps over 95K) passes"
+OUT="$(gate 60000 0 50000:45000 4000:0)"
+assert_contains "$OUT" "REFUSE" "gate: step1 input+cache_read >= 95K is refused"; assert_contains "$OUT" "prompt itself was 95000 tokens" "gate: message names the prompt size"; assert_contains "$OUT" "first per-step usage event" "gate: message names the measured event"
+OUT="$(gate 1 0 94000:999)"
+assert_contains "$OUT" "PASS" "gate: step1 94999 (input + cache_read) is just under the ceiling and passes"
+OUT="$(gate 1 0 94000:1000)"
+assert_contains "$OUT" "REFUSE" "gate: step1 exactly 95000 is refused"
+OUT="$(gate 200000 0)"
+assert_contains "$OUT" "REFUSE" "gate: no step usage, result >= 95K falls back and is refused"; assert_contains "$OUT" "all-steps sum" "gate: fallback message says it measured result"
+OUT="$(gate 18771 0)"
+assert_contains "$OUT" "PASS" "gate: no step usage, result < 95K passes"
+OUT="$(gate none 0)"
+assert_contains "$OUT" "PASS" "gate: no usage anywhere -> skipped note"; assert_contains "$OUT" "token-ceiling check was skipped" "gate: no usage anywhere is noted"
+# NEGATIVE CONTROLS: mutate the helper copy; the new cases must go red.
+MUT1="$TEST_TMP/mut-sumgate.js"   # judge by result.usage.input_tokens again
+sed 's/if (firstStep) {/if (false) {/' "$HELPER" > "$MUT1"
+OUT="$(GATE_HELPER="$MUT1" gate 511413 0 7030:0)"
+assert_contains "$OUT" "REFUSE" "NEGATIVE CONTROL: judging by the result sum refuses 511413 (the 'passes' case turns red)"
+MUT2="$TEST_TMP/mut-nostep.js"    # ignore step usage entirely (same effect for step1>=95K with a small result)
+sed 's/Number.isFinite(u.input_tokens)/false/' "$HELPER" > "$MUT2"
+OUT="$(GATE_HELPER="$MUT2" gate 60000 0 50000:45000)"
+assert_contains "$OUT" "PASS" "NEGATIVE CONTROL: without the per-step judgement a step1>=95K prompt slips through (the 'refused' case turns red)"
+
 HUGE="$(printf '9%.0s' $(seq 1 400))"
 OUT="$(AUTOPILOT_AGY_INPUT_TOKEN_CEILING=$HUGE AGY_STUB_INPUT_TOKENS=97652 node "$HELPER" run --prompt-file "$PF" -- "$STUB" 2>&1)"; RC=$?
 assert_eq "1" "$RC" "NEGATIVE CONTROL: a 400-digit token-ceiling override (Infinity) falls back to the default, still refused"

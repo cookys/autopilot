@@ -181,3 +181,27 @@ test('FIFO at the audit path: appendAudit throws within 5s', () => {
   const out = fifoCase("try{A.appendAudit({alias:'a',purpose:'p',attempt:1,outcome:'ok'},{path:f});console.log('wrote')}catch(e){console.log('threw')}");
   assert.strictEqual(out.trim(), 'threw');
 });
+
+// ---- G40 D4: optional key `quota_capture` (plan 5.1, 9; N74)
+test('G40-N74: quota_capture is an optional closed reason code; the six-key line is unchanged without it', () => {
+  const file = path.join(tmp(), 'a.jsonl');
+  const plain = A.appendAudit(ok(), { path: file, now: NOW });
+  assert.deepStrictEqual(Object.keys(plain), A.AUDIT_KEYS, 'no quota_capture key unless given');
+  for (const q of ['mirror_lock_busy', 'bad_event', 'view_unsupported', 'lock_unreadable:EACCES']) {
+    const rec = A.appendAudit(ok({ quota_capture: q }), { path: file, now: NOW });
+    assert.strictEqual(rec.quota_capture, q);
+    assert.deepStrictEqual(Object.keys(rec), A.AUDIT_KEYS.concat(['quota_capture']));
+  }
+  const got = A.readAudit(file);
+  assert.strictEqual(got.invalid, 0);
+  assert.strictEqual(got.records.length, 5);
+  assert.match(A.renderStatus(got).slice(-1)[0], / quota_capture=lock_unreadable:EACCES$/);
+  assert.doesNotMatch(A.renderStatus(got)[0], /quota_capture/);
+});
+
+test('G40-N74: quota_capture rejects a free-form value, a token shape and an unknown reason; no new key family opens', () => {
+  for (const q of ['free text', 'sk-ant-abc', TOKEN, 'used=0.9', 'ok', '', 7, null, 'lock_unreadable:eacces']) rejects(ok({ quota_capture: q }), [TOKEN]);
+  rejects(ok({ quota_capture: 'bad_event', class: 'ok' }));
+  const v = A.validateRecord(Object.assign(A.buildRecord(ok(), NOW), { quota_capture: 'nope' }));
+  assert.deepStrictEqual(v, { ok: false, reason: 'bad_quota_capture' });
+});

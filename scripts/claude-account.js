@@ -8,6 +8,9 @@
  *   node scripts/claude-account.js run       --purpose T [--alias A] [--max-attempts N] [--stdin F] [--stdout F]
  *                                            [--stderr F] [--cwd D] [--timeout SECS] -- claude <argv...>
  *   node scripts/claude-account.js exec      (--alias A | --pick) [--purpose T] -- <cmd...>
+ *   node scripts/claude-account.js usage-probe --alias A [--purpose T]
+ *                                            one tiny model call as alias A (the manifest's tinyprobe argv); prints
+ *                                            {alias, windows} and publishes the observation as source=probe
  *   node scripts/claude-account.js status    [--limit N]
  *   node scripts/claude-account.js cooldown  --clear <alias>
  *   node scripts/claude-account.js selftest                 (Node shim, throwaway dir)
@@ -43,6 +46,8 @@ const quota = require('./lib/account-quota');
 const cooldown = require('./lib/account-cooldown');
 const { pick, judge } = require('./lib/account-pick');
 const observation = require('./lib/account-observation');
+const capture = require('./lib/account-capture');
+const probe = require('./lib/account-probe');
 const interpret = require('./lib/account-interpret');
 const audit = require('./lib/account-audit');
 const accountEnv = require('./lib/account-env');
@@ -279,6 +284,25 @@ function accountsConfig(ctx) {
     }
     cfg.max_attempts = a.max_attempts;
   }
+  // G40 D4 (plan 10): capture and probe knobs. Range errors are exit 2 like the rest of this function, never defaulted.
+  cfg.quota_capture = 'on';
+  if (a.quota_capture !== undefined) {
+    if (a.quota_capture !== 'on' && a.quota_capture !== 'off') throw new Stop(EXIT.INVALID, 'config_quota_capture_invalid', 'invalid_config');
+    cfg.quota_capture = a.quota_capture;
+  }
+  cfg.host_role = 'agent';
+  if (a.host_role !== undefined) {
+    if (typeof a.host_role !== 'string' || !/^[a-z0-9_-]{1,24}$/.test(a.host_role)) throw new Stop(EXIT.INVALID, 'config_host_role_invalid', 'invalid_config');
+    cfg.host_role = a.host_role;
+  }
+  const probeProblem = probe.checkProbeConfig(a);
+  if (probeProblem) throw new Stop(EXIT.INVALID, probeProblem, 'invalid_config');
+  cfg.quota_probe = a.quota_probe === undefined ? 'off' : a.quota_probe;
+  if (!probe.probeModeAllowed(claudeManifest(), cfg.quota_probe)) { // N66: `scheduled` needs starts_window false with evidence; Claude says unknown
+    throw new Stop(EXIT.INVALID, 'config_quota_probe_scheduled_rejected (the manifest does not say starts_window=false with evidence)', 'invalid_config');
+  }
+  cfg.quota_probe_stale_minutes = a.quota_probe_stale_minutes === undefined ? probe.STALE_MINUTES_DEFAULT : a.quota_probe_stale_minutes;
+  cfg.quota_probe_timeout_secs = a.quota_probe_timeout_secs === undefined ? probe.TIMEOUT_SECS_DEFAULT : a.quota_probe_timeout_secs;
   const envMode = ctx.env.AUTOPILOT_ACCOUNT_MODE;
   if (envMode !== undefined && envMode !== '') {
     if (envMode !== 'auto' && envMode !== 'off') throw new Stop(EXIT.INVALID, 'env_accounts_mode_invalid', 'invalid_config');
@@ -577,6 +601,147 @@ function tightResetsFor(ctx, alias, checked, text) {
   return out;
 }
 
+// ---------------------------------------------------------------- quota capture and probe (G40 D4, write side)
+
+// The one boundary where the wrapper's millisecond clock becomes the record's seconds (plan 6, N49, N84): called once
+// per attempt with the start time taken BEFORE execAttempt, never with a clock read at capture time.
+function startSeconds(startMs) { return Math.floor(startMs / 1000); }
+
+// The lock wait and the monotonic guard inside writeLocalRow run on the REAL clock on purpose: a test that pins ctx.now to
+// a constant would otherwise never reach the lock deadline. observed_at in the record is the attempt start, not this clock.
+function writeRow(ctx, record, token) {
+  return observation.writeLocalRow(ctx.liveDir, record, { secrets: [token] });
+}
+
+// Passive capture after one classified attempt (plan 5.1, 18.3, 21.8). `a.stdout` is the SCRUBBED text (the scrubber ran
+// in execAttempt); the caller never gets here for token_scrubbed. Returns an audit reason code, or null when nothing
+// failed. It never throws and never touches stdout, stderr or the exit code.
+//  - an event with windows: a passive row (observed_at = the attempt's start);
+//  - a 429 with no window in this attempt and no live window in the mirror: a shape (b) refusal row (L1);
+//  - auth_failed (401): nothing at all (token_state is P3).
+function captureAttempt(ctx, cfg, alias, a, cl, startMs, token, checked, cooldownUntilMs) {
+  try {
+    if (cfg.quota_capture !== 'on' || !ctx.liveDir) return null;
+    if (cl.outcome === 'token_scrubbed' || cl.outcome === 'auth_failed') return null;
+    const ev = capture.extractRateLimit(a.stdout);
+    let badEvent = ev.status === 'bad'; // a malformed event is dropped, but a 429 below still gets its refusal row
+    const observedAtS = startSeconds(startMs);
+    let built = null;
+    if (ev.status === 'event') {
+      built = capture.buildPassiveRow({ alias, windows: ev.windows, observedAtS, hostRole: cfg.host_role, source: 'passive' });
+      if (!built.ok) { badEvent = true; built = null; } // the event's own figures fail the contract (e.g. 0..100 left unconverted): drop it
+    }
+    if (built === null && cl.outcome === 'rate_limited') {
+      const nowS = ctx.now() / 1000;
+      const prior = interpret.interpretWindows(mirrorRows(ctx, alias, null), claudeManifest(), nowS).windows.length > 0;
+      if (prior) return badEvent ? 'bad_event' : null; // a live window is already on file for this alias: not a first 429, nothing to add
+      // PM (A), 2026-11-04: without a retry_at in the response the refusal ends when the G37 cooldown the wrapper computed for this 429 ends.
+      const hint = capture.parseRetryAt(cl.text);
+      const retryAtS = hint !== null ? hint : (Number.isFinite(cooldownUntilMs) ? Math.floor(cooldownUntilMs / 1000) : null);
+      built = capture.buildRefusalRow({
+        alias, observedAtS, retryAtS, reason: cl.limitKind === 'quota' ? 'quota' : 'rate_limit', hostRole: cfg.host_role,
+      });
+    }
+    if (built === null) return badEvent ? 'bad_event' : null;
+    if (!built.ok) return badEvent ? 'bad_event' : capture.captureReason(built);
+    const reason = capture.captureReason(writeRow(ctx, built.record, token));
+    return badEvent ? 'bad_event' : reason;
+  } catch (_) { return 'capture_error'; }
+}
+
+// One probe call as `alias` through execAttempt (the one claude spawn site). Returns
+// { cl, windows, reason, a } and never throws: any failure here is the probe's, never the caller's.
+async function probeAttempt(ctx, checked, alias, cfg, scratchRoot, purpose) {
+  try {
+    const info = checked.enabled.find((e) => e.alias === alias);
+    const token = readToken(info.tokenFile);
+    const env = accountEnv.buildEnv({
+      alias, token, configDir: info.configDir, homeDir: info.homeDir, callerEnv: ctx.env, realHome: ctx.realHome,
+      locators: { accountsDir: ctx.accountsDir, liveDir: ctx.liveDir, stateDir: ctx.stateDir, configFile: ctx.configFile, runtimeDir: runtimeDir(ctx) },
+    });
+    accountEnv.prepareHome({ homeDir: info.homeDir, realHome: ctx.realHome });
+    const argv = probe.probeArgv(claudeManifest(), probe.PROBE_PROMPT);
+    const dir = path.join(scratchRoot, `probe-${alias}`);
+    fs.mkdirSync(dir, { mode: 0o700 });
+    const startMs = ctx.now();
+    const raw = await execAttempt(ctx, { argv, env, timeoutSecs: cfg.quota_probe_timeout_secs, token, dir });
+    const a = { code: raw.code, timedOut: raw.timedOut, spawnError: raw.spawnError, scrubbed: raw.scrubbed, stdout: raw.stdout.toString('utf8'), stderr: raw.stderr.toString('utf8') };
+    const cl = classifyAttempt(a, scratchRoot);
+    let windows = [];
+    let reason = null;
+    if (cl.outcome === 'ok') { // a failed probe (429, 401, timeout, scrubbed) records nothing
+      const ev = capture.extractRateLimit(a.stdout);
+      if (ev.status === 'bad') reason = 'bad_event';
+      else if (ev.status === 'event') {
+        const built = capture.buildPassiveRow({ alias, windows: ev.windows, observedAtS: startSeconds(startMs), hostRole: cfg.host_role, source: 'probe' });
+        if (!built.ok) reason = 'bad_event';
+        else {
+          reason = capture.captureReason(writeRow(ctx, built.record, token));
+          windows = built.record.windows.map((w) => ({ kind: w.kind, utilization: w.utilization, resets_at: w.resets_at, observed_at: w.observed_at }));
+        }
+      }
+    }
+    auditLine(ctx, Object.assign({ alias, purpose: purpose || 'quota-probe', attempt: 1, outcome: cl.outcome }, reason ? { quota_capture: reason } : {}), [token]);
+    return { cl, windows, reason, a };
+  } catch (_) { return null; }
+}
+
+// `stale` trigger (plan 5.3): called once, at the first attempt of an unpinned run, between gather and pick. At most
+// one probe per run, serial; a tight, cooling, excluded or fresh alias is never probed. Returns true when it probed.
+async function maybeProbe(ctx, checked, data, cfg, scratchRoot) {
+  try {
+    const manifest = claudeManifest();
+    const nowS = ctx.now() / 1000;
+    const merged = {};
+    for (const [al, rows] of Object.entries(data.observations || {})) merged[al] = interpret.interpretWindows(rows, manifest, nowS);
+    const cands = probe.staleCandidates(data.accounts, merged, data.cooldowns, data.exclude, nowS, cfg.quota_probe_stale_minutes);
+    if (cands.length === 0) return false;
+    await probeAttempt(ctx, checked, cands[0], cfg, scratchRoot);
+    return true;
+  } catch (_) { return false; }
+}
+
+// `cooldown --clear` is the operator's release for a cooling alias (G37). Since D4 a first 429 also leaves a refusal-only
+// row in the local mirror, and that row cools the alias too (plan 21.8), so the release has to take it away as well.
+// observation.removeLocalRefusal does it under the per-alias lock and removes only the LOCAL courier's refusal-only row
+// (peer rows are written back untouched; a row with windows is left alone). Returns { removed, problem }; a lock it
+// cannot get is reported as a problem, never forced.
+function clearRefusalRow(ctx, alias) {
+  try {
+    if (!ctx.liveDir) return { removed: false, problem: null };
+    const r = observation.removeLocalRefusal(ctx.liveDir, 'claude', alias);
+    return r.ok ? { removed: r.removed, problem: null } : { removed: false, problem: r.code };
+  } catch (_) { return { removed: false, problem: 'capture_error' }; }
+}
+
+async function cmdUsageProbe(ctx, argv) {
+  const { opts } = parseArgs(argv, { alias: 'value', purpose: 'value' });
+  if (opts.alias === undefined) throw new Stop(EXIT.INVALID, 'alias_required', null);
+  const purpose = checkPurpose(opts.purpose, 'quota-probe');
+  const cfg = accountsConfig(ctx);
+  const checked = loadChecked(ctx, purpose);
+  if (!checked.configured) throw new Stop(EXIT.INVALID, 'registry_not_configured', null);
+  if (cfg.mode === 'off') { preAudit(ctx, purpose, 'mode_off'); throw new Stop(EXIT.INVALID, 'mode_off', null); }
+  try { registry.requireAlias({ accounts: checked.accounts }, opts.alias); } catch (e) {
+    if (e instanceof registry.RegistryError) { preAudit(ctx, purpose, 'invalid_config'); throw new Stop(EXIT.INVALID, `unknown_alias (${e.reason})`, null); }
+    throw e;
+  }
+  if (!checked.enabled.some((e) => e.alias === opts.alias)) { preAudit(ctx, purpose, 'no_account'); throw new Stop(EXIT.NONE, 'alias_disabled', null); }
+  let scratchRoot = null;
+  try {
+    scratchRoot = fs.mkdtempSync(path.join(ctx.env.TMPDIR || os.tmpdir(), 'claude-account-'));
+    fs.chmodSync(scratchRoot, 0o700);
+    const r = await probeAttempt(ctx, checked, opts.alias, cfg, scratchRoot, purpose);
+    if (r === null) throw new Stop(EXIT.CHILD_ERROR, 'probe_failed', null);
+    ctx.out(JSON.stringify({ alias: opts.alias, windows: r.windows }));
+    if (r.cl.outcome === 'auth_failed') ctx.err(`STOP_AUTH alias=${opts.alias}`);
+    else if (r.cl.outcome === 'token_scrubbed') ctx.err(`token_scrubbed alias=${opts.alias}`);
+    return r.cl.exit;
+  } finally {
+    if (scratchRoot) fs.rmSync(scratchRoot, { recursive: true, force: true });
+  }
+}
+
 // ---------------------------------------------------------------- subcommands
 
 async function cmdRun(ctx, argv) {
@@ -633,11 +798,16 @@ async function cmdRun(ctx, argv) {
   const tried = [];
   let last = null;
   let scratchRoot = null;
+  let probeChecked = false; // the `stale` probe is looked at once per run, at the first attempt, never when pinned
   try {
     scratchRoot = fs.mkdtempSync(path.join(ctx.env.TMPDIR || os.tmpdir(), 'claude-account-'));
     fs.chmodSync(scratchRoot, 0o700);
     for (let k = 1; k <= maxAttempts; k++) {
-      const data = gather(ctx, checked, tried, pinned, cfg);
+      let data = gather(ctx, checked, tried, pinned, cfg);
+      if (cfg.quota_probe === 'stale' && !pinned && !probeChecked) {
+        probeChecked = true;
+        if (await maybeProbe(ctx, checked, data, cfg, scratchRoot)) data = gather(ctx, checked, tried, pinned, cfg); // the probe's row is now in the mirror
+      }
       const p = pick(data);
       if (!p.ok) {
         if (k === 1) {
@@ -674,20 +844,29 @@ async function cmdRun(ctx, argv) {
       }
       const dir = path.join(scratchRoot, `attempt-${k}`);
       fs.mkdirSync(dir, { mode: 0o700 });
+      const attemptStartMs = ctx.now(); // observed_at of a passive row: the attempt's START, read before the child runs (N84)
       const raw = await execAttempt(ctx, { argv: cmd, env, cwd: opts.cwd, stdinFile: opts.stdin, timeoutSecs, token, dir });
       const a = { code: raw.code, timedOut: raw.timedOut, spawnError: raw.spawnError, scrubbed: raw.scrubbed, stdout: raw.stdout.toString('utf8'), stderr: raw.stderr.toString('utf8') };
       const cl = classifyAttempt(a, scratchRoot);
-      auditLine(ctx, { alias, purpose, attempt: k, outcome: cl.outcome }, [token]);
-      last = { raw, cl, alias };
+      let until = null; // the G37 cooldown end for a 429 as of now, so a refusal row without a retry_at can share it
       if (cl.outcome === 'rate_limited') {
         const nowMs = ctx.now();
-        let until;
         if (cl.limitKind === 'quota') {
           until = cooldown.computeUntil({ nowMs, defaultMinutes: cfg.cooldown_default_minutes, tightResets: tightResetsFor(ctx, alias, checked, cl.text) });
         } else {
           until = nowMs + Math.min(cfg.cooldown_default_minutes, THROTTLE_COOLDOWN_MINUTES) * 60 * 1000;
         }
-        cooldown.writeCooldown(alias, until, { dir: ctx.cooldownDir, nowMs });
+      }
+      const capReason = captureAttempt(ctx, cfg, alias, a, cl, attemptStartMs, token, checked, until);
+      auditLine(ctx, Object.assign({ alias, purpose, attempt: k, outcome: cl.outcome }, capReason ? { quota_capture: capReason } : {}), [token]);
+      last = { raw, cl, alias };
+      if (cl.outcome === 'rate_limited') {
+        // Recomputed after the capture on purpose: a tight window the capture just wrote also tells when the limit lifts.
+        const nowMs = ctx.now();
+        const finalUntil = cl.limitKind === 'quota'
+          ? cooldown.computeUntil({ nowMs, defaultMinutes: cfg.cooldown_default_minutes, tightResets: tightResetsFor(ctx, alias, checked, cl.text) })
+          : until;
+        cooldown.writeCooldown(alias, finalUntil, { dir: ctx.cooldownDir, nowMs });
         continue;
       }
       emitFinal(ctx, opts, raw.stdout, raw.stderr);
@@ -866,7 +1045,13 @@ function cmdCooldown(ctx, argv) {
     if (e instanceof registry.RegistryError) throw new Stop(EXIT.INVALID, `unknown_alias (${e.reason})`, null);
     throw e;
   }
-  ctx.out(cooldown.clearCooldown(opts.clear, { dir: ctx.cooldownDir }) ? `cleared alias=${opts.clear}` : `no_cooldown alias=${opts.clear}`);
+  const clearedCooldown = cooldown.clearCooldown(opts.clear, { dir: ctx.cooldownDir });
+  const refusal = clearRefusalRow(ctx, opts.clear);
+  ctx.out(clearedCooldown || refusal.removed ? `cleared alias=${opts.clear}` : `no_cooldown alias=${opts.clear}`);
+  if (refusal.problem) {
+    ctx.err(`refusal_not_cleared alias=${opts.clear} (${refusal.problem})`);
+    return EXIT.CHILD_ERROR;
+  }
   return EXIT.OK;
 }
 
@@ -1098,6 +1283,7 @@ async function cmdSelftest(ctx, argv) {
     check('none available while cooling', await call(['run', '--purpose', 'selftest', '--', 'claude', '-p', 'x']), 3);
     fx.shim.setControl({ tokens: { [fx.tokens.a]: R401 }, default: undefined });
     for (const al of ['a', 'b']) cooldown.clearCooldown(al, { dir: fx.cooldownDir });
+    fs.rmSync(path.join(fx.liveDir, 'quota'), { recursive: true, force: true }); // the 429 scenarios left refusal rows (G40 D4): release them with the cooldowns
     check('401 stops', await call(['run', '--purpose', 'selftest', '--', 'claude', '-p', 'x']), 6);
     fx.shim.setControl({ default: ERR_EXIT0 });
     check('error envelope exit 0 -> 5', await call(['run', '--purpose', 'selftest', '--', 'claude', '-p', 'x']), 5);
@@ -1133,9 +1319,10 @@ async function cli(argv, deps) {
       case 'env-check': return cmdEnvCheck(ctx, rest);
       case 'status': return cmdStatus(ctx, rest);
       case 'cooldown': return cmdCooldown(ctx, rest);
+      case 'usage-probe': return await cmdUsageProbe(ctx, rest);
       case 'selftest': return await cmdSelftest(ctx, rest);
       default:
-        ctx.err('usage: claude-account.js pick|env-check|run|exec|status|cooldown|selftest');
+        ctx.err('usage: claude-account.js pick|env-check|run|exec|usage-probe|status|cooldown|selftest');
         return EXIT.INVALID;
     }
   } catch (e) {

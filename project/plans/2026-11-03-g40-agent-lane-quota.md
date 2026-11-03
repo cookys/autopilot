@@ -667,6 +667,7 @@ Some providers refuse a request without telling a window kind or a reset time (t
 ```
 - `observed_at`: epoch seconds of the refusal. `retry_at`: epoch seconds when the provider says to retry, or `null` when it gives no hint. `reason`: `rate_limit`, `quota` or `other`. No other field.
 - Cooldown: until `retry_at` when present; otherwise until `observed_at + default_minutes * 60` (manifest `cooldown_on_429.default_minutes`, 30 when the manifest is silent). A refusal never extends a cooldown that G37's own cooldown file already holds; the longer one applies.
+  Amended 2026-11-04 (PM): without retry_at, retry_at = the G37 cooldown end the wrapper computed for that 429; the manifest default applies only where G37 has no class.
 - Expiry: the refusal stops counting at the end of its cooldown, or at `MAX_AGE_S` after `observed_at`, whichever is first. After expiry the class comes from the windows (8.3), usually `unknown` for an L1 provider.
 - Merge: across rows the live refusal with the smallest age (5.2 rules 2 and 6: a local stamp's age is `now_local - t`, a peer stamp's age is `(now_local + hub_offset) - t(refusal.observed_at)`) is the one considered; a raw local time is never compared with a hub time; one live refusal anywhere makes the alias `cooling` here. Only expiry clears it; a window below 1.0 does not.
 - Pick: a live refusal is class `cooling`; no cooldown timer is started by the record itself (G37's file remains the local timer); `status` shows the alias with the reason and the end time.

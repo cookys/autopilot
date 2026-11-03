@@ -7,6 +7,9 @@
  * File: $XDG_STATE_HOME/autopilot/accounts-audit.jsonl (default ~/.local/state/autopilot/),
  * mode 0600, written with O_APPEND. One line per attempt, exactly these keys:
  *   ts, ts_local, alias, purpose, attempt, outcome
+ * plus ONE optional key, `quota_capture` (G40 D4, plan 5.1 and 9): a closed reason code saying why a
+ * quota capture was skipped or failed (bad_event, mirror_lock_busy, ...). It is absent on every
+ * routine line, so a run that captured nothing or captured fine writes the same six keys as before.
  * No quota class, used fraction, run id or mode is ever written. The writer rejects an
  * extra key, an unknown outcome, a bad purpose, any value containing a live token
  * (caller-supplied `tokens`) and any value matching `sk-ant-`.
@@ -21,6 +24,15 @@ const os = require('os');
 const path = require('path');
 
 const AUDIT_KEYS = ['ts', 'ts_local', 'alias', 'purpose', 'attempt', 'outcome'];
+// Optional keys: absent is normal; present only with a value from QUOTA_CAPTURE_REASONS (or lock_unreadable:<CODE>).
+const OPTIONAL_KEYS = ['quota_capture'];
+const QUOTA_CAPTURE_REASONS = [
+  'bad_event', 'mirror_lock_busy', 'view_unsupported', 'write_failed', 'live_dir_refused', 'dir_refused',
+  'target_invalid', 'view_too_large', 'quota_invalid', 'capture_error',
+];
+const LOCK_UNREADABLE_RE = /^lock_unreadable:[A-Z0-9_]{1,24}$/;
+function captureReasonOk(v) { return typeof v === 'string' && (QUOTA_CAPTURE_REASONS.includes(v) || LOCK_UNREADABLE_RE.test(v)); }
+
 const OUTCOMES = [
   'ok', 'rate_limited', 'auth_failed', 'child_error', 'timeout', 'other_failure',
   'token_scrubbed', 'all_tight', 'all_limited', 'no_account', 'invalid_config',
@@ -69,11 +81,12 @@ function liveTokens(tokens) {
 function validateRecord(rec, opts) {
   const tokens = liveTokens(opts && opts.tokens);
   if (!rec || typeof rec !== 'object' || Array.isArray(rec)) return { ok: false, reason: 'not_object' };
-  const ek = extraKeys(rec, AUDIT_KEYS);
+  const ek = extraKeys(rec, AUDIT_KEYS.concat(OPTIONAL_KEYS));
   if (ek) return { ok: false, reason: ek };
   for (const k of AUDIT_KEYS) {
     if (!(k in rec)) return { ok: false, reason: `missing_key:${k}` };
   }
+  if ('quota_capture' in rec && !captureReasonOk(rec.quota_capture)) return { ok: false, reason: 'bad_quota_capture' };
   if (!Number.isSafeInteger(rec.ts) || rec.ts < 0) return { ok: false, reason: 'bad_ts' };
   if (typeof rec.ts_local !== 'string' || rec.ts_local !== formatTaipei(rec.ts)) return { ok: false, reason: 'bad_ts_local' };
   if (typeof rec.outcome !== 'string' || !OUTCOMES.includes(rec.outcome)) return { ok: false, reason: 'unknown_outcome' };
@@ -88,7 +101,7 @@ function validateRecord(rec, opts) {
     if (rec.attempt < 1) return { ok: false, reason: 'alias_needs_attempt_ge_1' };
     if (ALWAYS_PRE_ATTEMPT.includes(rec.outcome)) return { ok: false, reason: 'pre_attempt_outcome_needs_dash_alias' };
   }
-  for (const k of AUDIT_KEYS) {
+  for (const k of AUDIT_KEYS.concat(OPTIONAL_KEYS)) {
     const v = rec[k];
     if (typeof v !== 'string') continue;
     if (TOKEN_SHAPE_RE.test(v)) return { ok: false, reason: `token_shape_in:${k}` };
@@ -100,14 +113,16 @@ function validateRecord(rec, opts) {
 /** Build a full record from caller input {alias,purpose,attempt,outcome}; extra keys throw. */
 function buildRecord(input, now) {
   if (!input || typeof input !== 'object') throw new Error('audit: input must be an object');
-  const allowed = ['alias', 'purpose', 'attempt', 'outcome'];
+  const allowed = ['alias', 'purpose', 'attempt', 'outcome'].concat(OPTIONAL_KEYS);
   const ek = extraKeys(input, allowed);
   if (ek) throw new Error(`audit: rejected ${ek}`);
   const ts = Number.isSafeInteger(now) ? now : Date.now();
-  return {
+  const rec = {
     ts, ts_local: formatTaipei(ts),
     alias: input.alias, purpose: input.purpose, attempt: input.attempt, outcome: input.outcome,
   };
+  if (input.quota_capture !== undefined) rec.quota_capture = input.quota_capture;
+  return rec;
 }
 
 /**
@@ -181,13 +196,14 @@ function renderStatus(result, opts) {
   const lines = [];
   for (const r of result.records.slice(-limit)) {
     const t = formatTaipei(r.ts).replace('T', ' ').replace(/\.\d+\+08:00$/, ' +08:00');
-    lines.push(`${t} alias=${r.alias} purpose=${r.purpose} attempt=${r.attempt} outcome=${r.outcome}`);
+    const qc = r.quota_capture === undefined ? '' : ` quota_capture=${r.quota_capture}`;
+    lines.push(`${t} alias=${r.alias} purpose=${r.purpose} attempt=${r.attempt} outcome=${r.outcome}${qc}`);
   }
   if (result.invalid > 0) lines.push(`(${result.invalid} unreadable audit line(s) skipped)`);
   return lines;
 }
 
 module.exports = {
-  AUDIT_KEYS, OUTCOMES, PRE_ATTEMPT_OUTCOMES, auditPath, validateRecord,
+  AUDIT_KEYS, OPTIONAL_KEYS, QUOTA_CAPTURE_REASONS, captureReasonOk, OUTCOMES, PRE_ATTEMPT_OUTCOMES, auditPath, validateRecord,
   formatTaipei, buildRecord, appendAudit, readAudit, renderStatus,
 };

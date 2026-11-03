@@ -662,11 +662,66 @@ function writeLocalRow(liveDir, record, opts) {
   }
 }
 
+// removeLocalRefusal(liveDir, provider, alias, opts) -> { ok: true, removed: boolean } | { ok: false, code, reason? }
+// The operator release of a cooling alias (G40 D4, `cooldown --clear`). Takes the SAME per-alias lock as writeLocalRow,
+// then re-reads the view INSIDE the lock: only when the local courier's row is refusal-only (a refusal and no window) is
+// that one row removed; every other row is written back as the raw parsed JSON found on disk, and when no row is left
+// the file is unlinked. A local row that carries a window (a capture replaced it while we waited) is left alone. No lock
+// within the wait is `mirror_lock_busy`: nothing is removed by force. opts: writeLocalRow's (courier, now, sleep, waitMs,
+// hardMaxMs, log) plus hooks.beforeLock (test seam) and hooks.beforePublish.
+function removeLocalRefusal(liveDir, provider, alias, opts) {
+  const o = opts || {};
+  const courier = o.courier === undefined ? LOCAL_COURIER : o.courier;
+  if (typeof liveDir !== 'string' || !path.isAbsolute(liveDir)) return { ok: false, code: 'live_dir_refused' };
+  let file;
+  try { file = mirrorPath(liveDir, provider, alias); } catch (_) { return bad('names'); }
+  const dir = path.dirname(file);
+  if (o.hooks && typeof o.hooks.beforeLock === 'function') o.hooks.beforeLock();
+  let st = null;
+  try { st = fs.lstatSync(file); } catch (e) { if (e && e.code === 'ENOENT') return { ok: true, removed: false }; return { ok: false, code: 'target_invalid', reason: 'unreadable' }; }
+  if (st.isSymbolicLink()) return { ok: false, code: 'target_invalid', reason: 'symlink' };
+  if (!st.isFile()) return { ok: false, code: 'target_invalid', reason: 'not_regular_file' };
+  const lockPath = path.join(dir, `${alias}.lock`);
+  let held;
+  try { held = acquireLock(lockPath, o); } catch (e) {
+    const m = /^lock_unreadable:[A-Z0-9_]+$/.exec(e && e.message);
+    return { ok: false, code: 'write_failed', reason: m ? m[0] : 'lock' };
+  }
+  if (!held) return { ok: false, code: 'mirror_lock_busy' };
+  let tmp = null;
+  try {
+    const cur = readSmallFile(file, VIEW_MAX_BYTES);
+    if (cur.text === undefined) return cur.error === 'unreadable' ? { ok: false, code: 'target_invalid', reason: 'unreadable' } : { ok: true, removed: false };
+    let j = null;
+    try { j = JSON.parse(cur.text); } catch (_) { return { ok: true, removed: false }; }
+    if (!isObj(j) || j.schema !== VIEW_SCHEMA || !envelopeKnown(j) || !Array.isArray(j.rows)) return { ok: true, removed: false };
+    const at = j.rows.findIndex((r) => isObj(r) && r.writer_courier === courier);
+    if (at < 0) return { ok: true, removed: false };
+    const rec = j.rows[at].record;
+    if (!isObj(rec) || !isObj(rec.refusal) || (Array.isArray(rec.windows) && rec.windows.length > 0)) return { ok: true, removed: false };
+    const rows = j.rows.filter((_, i) => i !== at);
+    if (!holdsLock(lockPath, held)) return { ok: false, code: 'mirror_lock_busy' };
+    if (o.hooks && typeof o.hooks.beforePublish === 'function') o.hooks.beforePublish();
+    if (rows.length === 0) { fs.unlinkSync(file); return { ok: true, removed: true }; }
+    tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
+    const fd = fs.openSync(tmp, 'wx', 0o600);
+    try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, `${JSON.stringify(Object.assign({}, j, { rows }))}\n`); } finally { fs.closeSync(fd); }
+    fs.renameSync(tmp, file);
+    tmp = null;
+    return { ok: true, removed: true };
+  } catch (_) {
+    return { ok: false, code: 'write_failed' };
+  } finally {
+    if (tmp) { try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ } }
+    releaseLock(lockPath, held);
+  }
+}
+
 module.exports = {
   SCHEMA, VIEW_SCHEMA, NAMESPACE_SCHEMA,
   EPOCH_MAX_S, CLAMP_MAX,
   WINDOW_KINDS, WINDOW_SOURCES, UNITS, VISIBILITY, TOKEN_STATES, REFUSAL_REASONS, RECORD_SOURCES, LOCAL_COURIER,
   clampUtilization, buildRecord, validateRecord, hasMsKey, TOKEN_SHAPES, TOKEN_PREFIX_SHAPES,
   mirrorDir, mirrorPath, namespacePath, liveDirOrNull,
-  parseView, readView, readNamespaceBinding, writeLocalRow,
+  parseView, readView, readNamespaceBinding, writeLocalRow, removeLocalRefusal,
 };

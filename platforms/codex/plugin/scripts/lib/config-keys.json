@@ -5858,6 +5858,93 @@
       "type": "number"
     },
     {
+      "name": "accounts.quota_capture",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "needle": "quota_capture",
+      "default": "on",
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "`on` (default; zero cost) records the rate-limit event of a finished attempt into the local quota mirror; `off` records nothing. Only stream-json callers carry an event.",
+      "type": "enum",
+      "allowed": [
+        "on",
+        "off"
+      ]
+    },
+    {
+      "name": "accounts.quota_probe",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "needle": "quota_probe",
+      "default": "off",
+      "readers": [
+        "scripts/claude-account.js",
+        "scripts/lib/account-probe.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "`off` (default), `stale` (one tiny model call just before pick for an alias whose newest observation is old) or `scheduled` (rejected for Claude until the window experiment is recorded). Leave it off.",
+      "type": "enum",
+      "allowed": [
+        "off",
+        "stale",
+        "scheduled"
+      ]
+    },
+    {
+      "name": "accounts.quota_probe_stale_minutes",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "needle": "quota_probe_stale_minutes",
+      "default": 60,
+      "readers": [
+        "scripts/claude-account.js",
+        "scripts/lib/account-probe.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Minutes after which an alias's newest observation counts as stale for the `stale` probe; 5 to 360.",
+      "type": "number"
+    },
+    {
+      "name": "accounts.quota_probe_timeout_secs",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "needle": "quota_probe_timeout_secs",
+      "default": 20,
+      "readers": [
+        "scripts/claude-account.js",
+        "scripts/lib/account-probe.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Seconds a probe call may run before it is killed; a failed probe never blocks the real call.",
+      "type": "number"
+    },
+    {
+      "name": "accounts.host_role",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "accounts",
+      "needle": "host_role",
+      "default": "agent",
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [],
+      "summary": "Role label written into this host's quota rows (lower-case letters, digits, `_`, `-`, up to 24 characters).",
+      "type": "string"
+    },
+    {
       "name": "AUTOPILOT_ACCOUNT_MODE",
       "kind": "env",
       "audience": "user",

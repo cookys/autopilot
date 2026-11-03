@@ -66,11 +66,14 @@ function caseLines(text, rel) {
 function suiteProblems(text, rel) {
   const cases = caseLines(text, rel || 'x.js');
   const p = [];
-  if (!cases.some((l) => /fingerprint|\bfp\b|alias|token|good|registry present|active|account/i.test(l))) p.push('no good-registry case (alias / token fingerprint at the shim)');
-  const broken = cases.filter((l) => /broken|invalid|unusable|unrecogni[sz]ed|garbage/i.test(l));
+  // each part is recognised ONLY by its fixed case-name prefix (right after the opening quote of the case name), so one case
+  // can never be good and broken at once and a loose word ("account", "token", "active") in a name proves nothing
+  const part = (kind) => cases.filter((l) => new RegExp('[\'"`]N9 ' + kind + ':').test(l));
+  if (!part('good').length) p.push('no good-registry case (alias / token fingerprint at the shim)');
+  const broken = part('broken');
   if (!broken.length) p.push('no broken-registry case');
   else if (!broken.some((l) => /spawn|zero|nothing|\b0\b|not started|decoy/i.test(l))) p.push('the broken-registry case does not assert zero spawns');
-  if (!cases.some((l) => /mutation|negative control/i.test(l))) p.push('no mutation case');
+  if (!part('mutation').length) p.push('no mutation case');
   return p;
 }
 
@@ -124,6 +127,16 @@ test('N9 shape: the check itself rejects a suite that lost one of the parts (neg
   assert.deepStrictEqual(suiteProblems(shGood, sh), []);
   const shNoBroken = shGood.split('\n').filter((l) => !(/^\s*assert_\w+/.test(l) && /broken|invalid|unusable|unrecogni|garbage/i.test(l))).join('\n');
   assert.ok(suiteProblems(shNoBroken, sh).some((x) => /broken-registry case/.test(x)), 'comments left behind must not count');
+  // 6581ff26 / 10c4807b: the good-registry part is the fixed "N9 good:" prefix; deleting the good cases must be reported even though
+  // broken / mutation names still carry words like "registry", "token", "active" or "account"
+  const noGoodJs = good.split('\n').filter((l) => !(/^\s*test\(/.test(l) && /N9 good:/.test(l))).join('\n');
+  assert.ok(noGoodJs !== good, 'the js good cases were found to delete');
+  assert.ok(suiteProblems(noGoodJs, rel).some((x) => /no good-registry case/.test(x)), 'w4: no good case must be reported');
+  const noGoodSh = shGood.split('\n').filter((l) => !(/^\s*assert_\w+/.test(l) && /N9 good:/.test(l))).join('\n');
+  assert.ok(noGoodSh !== shGood, 'the shell good case was found to delete');
+  assert.ok(suiteProblems(noGoodSh, sh).some((x) => /no good-registry case/.test(x)), 'review rail: no good case must be reported');
+  // a broken-registry case whose name merely says "good" or "account" is not a good-registry case
+  assert.ok(suiteProblems('test("N9 broken: account token active good registry present, spawn 0", () => {});\ntest("N9 mutation: x", () => {});', rel).some((x) => /no good-registry case/.test(x)));
   // a caller that is named only in a comment of its covering suite is reported
   const site = { file: 'scripts/zz-not-driven.sh', covered_by: [rel] };
   assert.ok(callerProblems(site).some((x) => /only in comments/.test(x)));
@@ -203,8 +216,19 @@ test('A12 run-d0gate-v2-campaign.js mutation: with the gate call neutralised the
     const run1 = (script) => spawnSync(process.execPath, [script, '--runner', 'cc', '--pilot', '--results', path.join(fx.root, 'res.jsonl')], { env, encoding: 'utf8', timeout: 60000 });
     const real = run1(path.join(dir, 'run-d0gate-v2-campaign.js'));
     assert.match(real.stderr, /account registry is configured/);
+    // the original never reaches the post-gate checkpoint: it exited 2 on the gate with the shim untouched
+    assert.strictEqual(real.status, 2, `the original script did not refuse at the gate: ${real.stderr}`);
+    assert.strictEqual(fx.shim.spawns(), 0, 'the original script started a claude');
     const m = run1(mut);
+    // an execution error must not count as "passed the gate": no timeout / signal, no crash, no missing module
+    assert.strictEqual(m.error, undefined, `the mutated run did not finish: ${m.error && m.error.message}`);
+    assert.strictEqual(m.signal, null, `the mutated run was killed by ${m.signal}`);
+    assert.doesNotMatch(m.stderr, /Error:|Cannot find module|SyntaxError/, `the mutated run crashed: ${m.stderr.slice(0, 300)}`);
     assert.doesNotMatch(m.stderr, /account registry is configured/, `the mutated script still refused: ${m.stderr.slice(0, 300)}`);
+    // the deterministic after-the-gate checkpoints: the shim was called (claude --version) and the script reached its owner-confirmation stop (exit 3)
+    assert.ok(fx.shim.spawns() >= 1, 'the shim was never called: the mutated script did not get past the gate');
+    assert.strictEqual(m.status, 3, `the mutated script did not reach its post-gate stop (rc ${m.status}): ${m.stderr.slice(0, 300)}`);
+    assert.match(m.stderr, /claude-native implementer is not confirmed by the owner/);
   } finally { fx.cleanup(); }
 });
 
@@ -451,6 +475,13 @@ test('isolation: hooks/tests/lib.sh replaces the caller\'s registry dir with one
     // KEEP=1 is the only way to keep the caller's value
     const k = spawnSync('bash', ['-c', probe, 'x', REPO], { env: Object.assign({}, process.env, { AUTOPILOT_ACCOUNTS_DIR: acc, AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR: '1' }), encoding: 'utf8' });
     assert.strictEqual(k.stdout.split('\n')[0], acc);
+    // 417c1248: the KEEP=1 warning is printed readable (a '\'' pasted into a double-quoted echo comes out literally)
+    assert.match(k.stderr, /WARNING: AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1: the caller's AUTOPILOT_ACCOUNTS_DIR is kept; a wired claude caller may read the operator's REAL account registry \(WARNING\)/);
+    assert.ok(!k.stderr.includes("'\\''"), 'the warning carries a literal quote-escape');
+    for (const f of ['hooks/tests/lib.sh', 'hooks/tests/run.sh']) {
+      const w = read(f).split('\n').filter((l) => /echo "WARNING: AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR/.test(l));
+      assert.ok(w.length === 1 && !w[0].includes("'\\''"), `${f}: the KEEP warning line has a literal quote-escape or is missing`);
+    }
   } finally { fs.rmSync(d, { recursive: true, force: true }); }
 });
 

@@ -312,6 +312,17 @@ test('e45b846c: only evals/skill-onoff/run-d0gate-v2-campaign.js may require d0g
   assert.deepStrictEqual(r.codes, ['cc_v2_extra_requirer']);
   assert.strictEqual(r.out.findings[0].file, 'evals/skill-onoff/run-other.js');
   assert.ok(reg.sites.length > 0);
+  // c8c16086 / ffd2b779: the requirer scan walks the same SCAN_DIRS as the spawn scan, tools/ and skills/ included
+  fs.rmSync(path.join(root, 'evals', 'skill-onoff', 'run-other.js'));
+  for (const d of ['tools', 'skills']) {
+    fs.mkdirSync(path.join(root, d), { recursive: true });
+    fs.writeFileSync(path.join(root, d, 'zz-requirer.js'), "const cc = require('../evals/skill-onoff/d0gate-v2/cc-v2');\n");
+    const rd = run(root);
+    assert.deepStrictEqual(rd.codes, ['cc_v2_extra_requirer'], `${d}/ requirer`);
+    assert.strictEqual(rd.out.findings[0].file, `${d}/zz-requirer.js`);
+    fs.rmSync(path.join(root, d, 'zz-requirer.js'));
+  }
+  fs.writeFileSync(path.join(root, 'evals', 'skill-onoff', 'run-other.js'), "const cc = require('./d0gate-v2/cc-v2.js');\n");
   // a comment that names it is not a requirer
   fs.writeFileSync(path.join(root, 'evals', 'skill-onoff', 'run-other.js'), "// const cc = require('./d0gate-v2/cc-v2');\n");
   assert.deepStrictEqual(run(root).codes, []);

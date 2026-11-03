@@ -163,7 +163,7 @@ function brokenHolds(w, res) {
 }
 
 for (const c of CALLERS) {
-  test(`${c.name}: registry present -> alias token fingerprint at the shim, decoy never read`, () => {
+  test(`N9 good: ${c.name}: registry present -> alias token fingerprint at the shim, decoy never read`, () => {
     const w = world('good', c.stdout);
     try {
       const res = c.drive(SCRIPTS, w);
@@ -171,7 +171,7 @@ for (const c of CALLERS) {
     } finally { w.fx.cleanup(); }
   });
 
-  test(`${c.name}: N9 broken registry -> non-zero exit, no spawn, decoy not read`, () => {
+  test(`N9 broken: ${c.name}: registry -> non-zero exit, no spawn, decoy not read`, () => {
     const w = world('broken', c.stdout);
     try {
       const res = c.drive(SCRIPTS, w);
@@ -193,7 +193,7 @@ for (const c of CALLERS) {
     } finally { w.fx.cleanup(); }
   });
 
-  test(`${c.name}: mutation - account call removed -> the good-run assertion turns red`, () => {
+  test(`N9 mutation: ${c.name}: account call removed -> the good-run assertion turns red`, () => {
     const dir = mutatedScripts(c.file, (s) => s.split(c.wire[0]).join(c.wire[1]));
     const w = world('good', c.stdout);
     try {
@@ -209,7 +209,7 @@ for (const c of CALLERS) {
     } finally { w.fx.cleanup(); }
   });
 
-  test(`${c.name}: mutation - invalid registry no longer fails closed -> the broken-registry assertion turns red because the OLD claude path ran`, () => {
+  test(`N9 mutation: ${c.name}: invalid registry no longer fails closed -> the broken-registry assertion turns red because the OLD claude path ran`, () => {
     const dir = mutatedScripts(c.file, (s) => s.split(c.failOpen[0]).join(c.failOpen[1]));
     const w = world('broken', c.stdout);
     try {
@@ -227,7 +227,7 @@ for (const c of CALLERS) {
     } finally { w.fx.cleanup(); }
   });
 
-  test(`${c.name}: mutation - decoy credentials copy re-added -> the good-run assertion turns red`, () => {
+  test(`N9 mutation: ${c.name}: decoy credentials copy re-added -> the good-run assertion turns red`, () => {
     const copy = c.inject === 'sh'
       ? 'cp "$G37_DECOY" "$AUTOPILOT_ACCOUNTS_DIR/a/claude/.credentials.json"\n'
       : "require('fs').copyFileSync(process.env.G37_DECOY, require('path').join(process.env.AUTOPILOT_ACCOUNTS_DIR, 'a', 'claude', '.credentials.json'));\n";

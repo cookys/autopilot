@@ -114,7 +114,7 @@ fi
 # so the runner pins a path that does not exist (ENOENT, not a file in the way: a probe error would read as a broken registry).
 # AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1 keeps the caller's value.
 if [ "${AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR:-}" != 1 ]; then export AUTOPILOT_ACCOUNTS_DIR="${TMPDIR:-/tmp}/autopilot-no-accounts-$$/accounts"; fi
-if [ "${AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR:-}" = 1 ]; then echo "WARNING: AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1: the caller'\''s AUTOPILOT_ACCOUNTS_DIR is kept; a wired claude caller may read the operator'\''s REAL account registry (WARNING)" >&2; fi
+if [ "${AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR:-}" = 1 ]; then echo "WARNING: AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1: the caller's AUTOPILOT_ACCOUNTS_DIR is kept; a wired claude caller may read the operator's REAL account registry (WARNING)" >&2; fi
 
 # Global; set by the parallel branch, cleared after its own successful rm -rf.
 # The EXIT trap also removes it (belt-and-suspenders on an interrupted run).

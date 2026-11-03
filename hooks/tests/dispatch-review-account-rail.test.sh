@@ -55,7 +55,7 @@ check_good() {
 
 SD="$REPO_ROOT/scripts"
 GOUT="$(check_good "$SD")"; GRC=$?
-assert_eq "0" "$GRC" "good registry: shim sees alias a token fingerprint, no decoy, token not printed ($GOUT)"
+assert_eq "0" "$GRC" "N9 good: registry: shim sees alias a token fingerprint, no decoy, token not printed ($GOUT)"
 
 # N9: broken registry (token mode 0644) -> exit 2, spawn 0, decoy untouched
 chmod 0644 "$FX_ACC/a/token"
@@ -68,7 +68,7 @@ check_broken() {
   return $bad
 }
 BOUT="$(check_broken "$SD")"; BRC=$?
-assert_eq "0" "$BRC" "N9 broken registry: exit 2, shim spawned 0 times ($BOUT)"
+assert_eq "0" "$BRC" "N9 broken: registry exit 2, shim spawned 0 times ($BOUT)"
 
 # --- legacy arms: unconfigured (no registry) and mode_off both keep the seeded path: one spawn, no alias, no token
 check_legacy() {
@@ -116,25 +116,25 @@ OLD="$TEST_TMP/old-scripts"; cp -r "$SD" "$OLD"
 sed_mutate "$OLD/dispatch-review.sh" 's/^    active) _ACCT_ACTIVE=1 ;;/    active) _ACCT_ACTIVE=0 ;;/'
 chmod 0600 "$FX_ACC/a/token"
 check_good "$OLD" >/dev/null; NG=$?
-assert_neq "0" "$NG" "negative control: seeded-credentials path instead of claude-account.js run is detected (good registry)"
+assert_neq "0" "$NG" "N9 mutation: negative control: seeded-credentials path instead of claude-account.js run is detected (good registry)"
 chmod 0644 "$FX_ACC/a/token"
 OLD2="$TEST_TMP/old2-scripts"; cp -r "$SD" "$OLD2"
 sed_mutate "$OLD2/dispatch-review.sh" 's/^    \*) die_precondition "claude-native refused: the account registry is present[^"]*"/    *) _ACCT_ACTIVE=0/'
 check_broken "$OLD2" >/dev/null; NB=$?
-assert_neq "0" "$NB" "negative control: invalid registry treated as legacy is detected (broken registry)"
+assert_neq "0" "$NB" "N9 mutation: negative control: invalid registry treated as legacy is detected (broken registry)"
 # ...and it is red because the OLD claude path really ran: one spawn, no alias, no token
 assert_eq "1" "$NSPAWN" "negative control (broken registry fail-open): the old claude path spawned the shim"
 assert_eq "" "$SEEN_FP$SEEN_ACCT" "negative control (broken registry fail-open): the spawn carried no alias token"
 # same fail-open against unrecognised output
 cp "$STUBD/claude-account.js" "$OLD2/claude-account.js"
 check_unrecognised "$OLD2" "G37_STUB_OUT=garbage" >/dev/null; NU=$?
-assert_neq "0" "$NU" "negative control: unrecognised output treated as legacy is detected"
+assert_neq "0" "$NU" "N9 mutation: negative control: unrecognised output treated as legacy is detected"
 assert_eq "1" "$NSPAWN" "negative control (unrecognised fail-open): the old claude path spawned the shim"
 # the shared reading rule: unknown word treated as active/legacy in account-state.sh is detected too
 OLD3="$TEST_TMP/old3-scripts"; cp -r "$SD" "$OLD3"; cp "$STUBD/claude-account.js" "$OLD3/claude-account.js"
 sed_mutate "$OLD3/lib/account-state.sh" 's/^    \*) echo invalid ;;/    *) echo legacy ;;/'
 check_unrecognised "$OLD3" "G37_STUB_OUT=garbage" >/dev/null; NR=$?
-assert_neq "0" "$NR" "negative control: account-state.sh default arm legacy instead of invalid is detected"
+assert_neq "0" "$NR" "N9 mutation: negative control: account-state.sh default arm legacy instead of invalid is detected"
 
 rm -rf "$FX_ROOT"
 finalize_test

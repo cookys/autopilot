@@ -42,6 +42,7 @@ function kindInfo(schema) {
   const d = schema.$defs || {};
   const map = {};
   const problems = [];
+  let openSeen = false;
   const branches = d.event && d.event.oneOf;
   if (!Array.isArray(branches) || branches.length === 0) {
     problems.push('schema has no $defs.event.oneOf (or it is empty): no kinds can be derived');
@@ -51,7 +52,16 @@ function kindInfo(schema) {
     const def = resolveRef(schema, branch);
     const props = (def && def.properties) || {};
     const kindNode = props.kind || {};
-    if (kindNode.pattern !== undefined && kindNode.const === undefined && kindNode.enum === undefined) return; // open-set branch
+    if (kindNode.pattern !== undefined && kindNode.const === undefined && kindNode.enum === undefined) {
+      // The open-set fallback: exactly one such branch, and its data must be the forward-compat shell (no named properties).
+      const dRef = props.data && props.data.$ref;
+      const dDef = props.data && (dRef ? d[String(dRef).replace(/^#\/\$defs\//, '')] : props.data);
+      if (openSeen) problems.push(`oneOf branch ${i} is a second pattern-kind (open-set) branch; only one fallback is allowed`);
+      else if (!dDef) problems.push(`oneOf branch ${i} (pattern kind) has a data $ref that does not resolve`);
+      else if (dDef.properties && Object.keys(dDef.properties).length) problems.push(`oneOf branch ${i} (pattern kind) carries named data properties; only a kind with a const may`);
+      openSeen = true;
+      return;
+    }
     const kind = kindNode.const;
     const dataRef = props.data && props.data.$ref;
     const defName = typeof dataRef === 'string' ? dataRef.replace(/^#\/\$defs\//, '') : null;
@@ -195,6 +205,12 @@ function checkConsumers(schema, doc) {
         continue;
       }
       const shaped = /^([a-z][a-z_0-9]*\.[a-z][a-z_0-9]*)(?:\.[a-z_0-9.]+)?$/.exec(span);
+      const envDef = shaped && ({ envelope: d.envelope, project: d.envelope.properties.project, source_stat: d.source_stat, warning: d.warning, event: d.event_unknown_kind, error_object: d.error_object })[shaped[1].split('.')[0]];
+      if (envDef) {
+        const f = shaped[1].split('.')[1];
+        if (!(f in (envDef.properties || {}))) gaps.push(`consumer table (${who}): ${span} is not in the schema`);
+        continue;
+      }
       if (shaped && shaped[1].split('.')[0] !== 'data') {
         if (FUTURE_KINDS.has(span)) {
           // exactly the bare future kind is allowed; following bare fields have no schema kind to belong to
@@ -205,7 +221,7 @@ function checkConsumers(schema, doc) {
         gaps.push(`consumer table (${who}): ${span} names kind ${shaped[1]}, which the schema does not have`);
         continue;
       }
-      if ((m = /^data\.([a-z_]+)$/.exec(span))) {
+      if ((m = /^data\.([a-z_0-9]+)$/.exec(span))) {
         if (!KINDS.some((k) => fieldSet(k).has(m[1]))) gaps.push(`consumer table (${who}): data.${m[1]} is not in any kind of the schema`);
         continue;
       }

@@ -320,3 +320,57 @@ test('baseline: an empty section or empty kinds entry the schema fills is a gap'
   const old = runMutated([['const emptyWhere = (label, was, is) => {', 'const emptyWhere = (label, was, is) => { return;']], argsOf(f));
   assert.equal(old.status, 0, 'old behaviour (empty entries pass) is green');
 });
+
+// ---- round 3: the open-set exception allows only the one forward-compat fallback ----------------------------------------
+
+const addPatternBranch = (s, dataNode) => {
+  s.$defs.event_foo = JSON.parse(JSON.stringify(s.$defs.event_unknown_kind));
+  s.$defs.event_foo.properties.kind = { type: 'string', pattern: '^foo\\.' };
+  s.$defs.event_foo.properties.data = dataNode;
+  s.$defs.event.oneOf.push({ $ref: '#/$defs/event_foo' });
+};
+const OPEN_CASES = [
+  ['pattern branch whose data carries an undocumented property', (s) => { s.$defs.data_foo = { type: 'object', properties: { secret_field: { type: 'string' } } }; addPatternBranch(s, { $ref: '#/$defs/data_foo' }); }],
+  ['second pattern branch', (s) => { addPatternBranch(s, { type: 'object' }); }],
+  ['pattern branch with an unresolvable data $ref', (s) => { addPatternBranch(s, { $ref: '#/$defs/data_missing' }); }],
+];
+for (const [label, mutate] of OPEN_CASES) {
+  test(`A3: ${label} is schema-shape (exit 1), print-baseline refuses; with the restriction removed it is green`, () => {
+    const f = copies();
+    editJson(f.schema, mutate);
+    const r = run(f);
+    assert.equal(r.status, 1, r.err);
+    assert.match(r.err, /\[schema-shape\]/);
+    const p = spawnSync(process.execPath, [SCRIPT, '--print-baseline', '--schema', f.schema, '--baseline', f.baseline], { encoding: 'utf8' });
+    assert.equal(p.status, 1);
+    assert.equal(p.stdout, '');
+    const old = runMutated([['      if (openSeen) problems.push(', '      return;\n      if (openSeen) problems.push(']], argsOf(f));
+    assert.doesNotMatch(old.stderr, /schema-shape/, 'old behaviour (any pattern branch is skipped) does not report it');
+  });
+}
+
+test('A3: the real schema fallback branch (one pattern kind, no named data properties) is accepted', () => {
+  assert.equal(run(copies()).status, 0);
+});
+
+test('consumer table: envelope-type fragments are checked against their def, not read as unknown kinds', () => {
+  let f = copies();
+  edit(f.doc, (t) => t.replace('`dispatch.ended.duration_s` against', '`dispatch.ended.duration_s` (and `source_stat.rows_read`) against'));
+  assert.equal(run(f).status, 0, run(f).err);
+  f = copies();
+  edit(f.doc, (t) => t.replace('`dispatch.ended.duration_s` against', '`dispatch.ended.duration_s` (and `source_stat.nope`) against'));
+  const r = run(f);
+  assert.equal(r.status, 1);
+  assert.match(r.err, /source_stat\.nope is not in the schema/);
+});
+
+test('consumer table: data.<field> accepts digits', () => {
+  const f = copies();
+  const schema = JSON.parse(fs.readFileSync(f.schema, 'utf8'));
+  schema.$defs.data_cost_turn.properties.p2 = { type: 'string' };
+  fs.writeFileSync(f.schema, JSON.stringify(schema, null, 2));
+  edit(f.doc, (t) => t.replace('every `data.basis=self_reported` value', 'every `data.p2` and `data.basis=self_reported` value'));
+  edit(f.doc, (t) => t.replace(/(\| `cost\.turn` \|.*)(`agent_id\?`)/, '$1$2, `p2?`'));
+  const r = run(f);
+  assert.doesNotMatch(r.err, /data\.p2/);
+});

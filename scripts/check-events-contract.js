@@ -10,6 +10,7 @@
  *   (iii) example-drift       : a doc example that differs from the fixture's golden event (after the documented
  *                               normalisation; runs buildFixture in a tempdir)
  *   (iv)  path-unresolved     : the doc / schema / baseline path the registry names does not exist
+ *   (0)   schema-shape        : an oneOf branch without a fixed kind const and a resolvable data $ref, or no oneOf
  *   (v)   baseline-regression : a field of the committed baseline that is gone, or changed type, nullability or
  *                               required-ness (additions pass; removal or retyping needs /2)
  * Exit 0 clean, 1 gap, 2 usage.
@@ -34,18 +35,35 @@ const FUTURE_KINDS = new Set(['quota.observed']);
 const BASELINE_VERSION = 'autopilot.events.baseline/1';
 const BASELINE_SECTIONS = ['envelope', 'project', 'source_stat', 'warning', 'event', 'error_object', 'error', 'kinds'];
 
-// kind -> name of its data $def, derived from the oneOf of $defs.event (each branch pins `kind` with a const).
-function kindMap(schema) {
+// kind -> name of its data $def, derived from the oneOf of $defs.event (each branch pins `kind` with a const and its
+// `data` with a $ref to a $defs entry). Fail closed: a branch of any other shape is reported in `problems`, never
+// skipped. The one allowed exception is the open-set branch (its `kind` is a `pattern`, no const).
+function kindInfo(schema) {
   const d = schema.$defs || {};
   const map = {};
-  for (const branch of (d.event && d.event.oneOf) || []) {
-    const def = resolveRef(schema, branch);
-    const kind = def && def.properties && def.properties.kind && def.properties.kind.const;
-    const dataRef = def && def.properties && def.properties.data && def.properties.data.$ref;
-    if (typeof kind === 'string' && dataRef) map[kind] = dataRef.replace(/^#\/\$defs\//, '');
+  const problems = [];
+  const branches = d.event && d.event.oneOf;
+  if (!Array.isArray(branches) || branches.length === 0) {
+    problems.push('schema has no $defs.event.oneOf (or it is empty): no kinds can be derived');
+    return { map, problems };
   }
-  return map;
+  branches.forEach((branch, i) => {
+    const def = resolveRef(schema, branch);
+    const props = (def && def.properties) || {};
+    const kindNode = props.kind || {};
+    if (kindNode.pattern !== undefined && kindNode.const === undefined && kindNode.enum === undefined) return; // open-set branch
+    const kind = kindNode.const;
+    const dataRef = props.data && props.data.$ref;
+    const defName = typeof dataRef === 'string' ? dataRef.replace(/^#\/\$defs\//, '') : null;
+    if (typeof kind !== 'string' || !defName || !d[defName]) {
+      problems.push(`oneOf branch ${i} has no fixed kind const or no data $ref that resolves to a $defs entry`);
+      return;
+    }
+    map[kind] = defName;
+  });
+  return { map, problems };
 }
+const kindMap = (schema) => kindInfo(schema).map;
 const kindsOf = (schema) => Object.keys(kindMap(schema));
 
 function resolveRef(schema, node) {
@@ -143,6 +161,7 @@ function checkConsumers(schema, doc) {
   const fieldSet = (kind) => new Set(Object.keys((d[km[kind]] || {}).properties || {}));
   const knownKinds = [...KINDS].sort((a, b) => b.length - a.length);
   const gaps = [];
+  for (const k of FUTURE_KINDS) if (KINDS.includes(k)) gaps.push(`FUTURE_KINDS lists ${k}, which the schema now has: remove it from the whitelist`);
   for (const cells of rows) {
     const [who, reads] = cells;
     const spans = [...(reads || '').matchAll(/`([^`]+)`/g)].map((m) => m[1]);
@@ -157,6 +176,7 @@ function checkConsumers(schema, doc) {
       continue;
     }
     let ctx = [];
+    let futureOnly = false;
     for (const raw of spans) {
       const span = raw.split('=')[0];
       let m;
@@ -166,7 +186,7 @@ function checkConsumers(schema, doc) {
         continue;
       }
       if (slash) { ctx = [slash[1], `${slash[1].split('.')[0]}.${slash[2]}`].filter((k) => KINDS.includes(k)); continue; }
-      if (KINDS.includes(span)) { ctx = [span]; continue; }
+      if (KINDS.includes(span)) { ctx = [span]; futureOnly = false; continue; }
       const prefixed = knownKinds.find((k) => span.startsWith(`${k}.`));
       if (prefixed) {
         const field = span.slice(prefixed.length + 1);
@@ -174,14 +194,23 @@ function checkConsumers(schema, doc) {
         ctx = [prefixed];
         continue;
       }
-      const shaped = /^([a-z]+\.[a-z]+)(?:\.([a-z_0-9]+))?$/.exec(span);
-      if (shaped && shaped[1].split('.')[0] !== 'data' && !FUTURE_KINDS.has(shaped[1])) {
+      const shaped = /^([a-z][a-z_0-9]*\.[a-z][a-z_0-9]*)(?:\.[a-z_0-9.]+)?$/.exec(span);
+      if (shaped && shaped[1].split('.')[0] !== 'data') {
+        if (FUTURE_KINDS.has(span)) {
+          // exactly the bare future kind is allowed; following bare fields have no schema kind to belong to
+          ctx = [];
+          futureOnly = true;
+          continue;
+        }
         gaps.push(`consumer table (${who}): ${span} names kind ${shaped[1]}, which the schema does not have`);
         continue;
       }
-      if (shaped && FUTURE_KINDS.has(shaped[1])) { ctx = []; continue; }
       if ((m = /^data\.([a-z_]+)$/.exec(span))) {
         if (!KINDS.some((k) => fieldSet(k).has(m[1]))) gaps.push(`consumer table (${who}): data.${m[1]} is not in any kind of the schema`);
+        continue;
+      }
+      if (/^[a-z][a-z_0-9]*$/.test(span) && futureOnly && !ctx.length) {
+        gaps.push(`consumer table (${who}): bare field ${span} follows a future kind and has no schema kind to check against`);
         continue;
       }
       if (/^[a-z][a-z_0-9]*$/.test(span) && ctx.length) {
@@ -244,13 +273,15 @@ function checkBaseline(schema, baseline) {
       else if (c.required !== w.required) gaps.push(`baseline field ${label}.${field} changed required ${w.required} -> ${c.required}`);
     }
   };
+  const emptyWhere = (label, was, is) => { if (was && Object.keys(was).length === 0 && is && Object.keys(is).length > 0) gaps.push(`baseline ${label} is empty but the schema derives ${Object.keys(is).length} field(s)`); };
   for (const section of sections) {
     if (section === 'kinds') {
+      for (const [kind, fields] of Object.entries(baseline.kinds || {})) emptyWhere(`kinds.${kind}`, fields, now.kinds[kind]);
       for (const [kind, fields] of Object.entries(baseline.kinds)) {
         if (!now.kinds[kind]) { gaps.push(`baseline kind ${kind} is gone from the schema`); continue; }
         compare(`kinds.${kind}`, fields, now.kinds[kind]);
       }
-    } else compare(section, baseline[section], now[section]);
+    } else { emptyWhere(section, baseline[section], now[section]); compare(section, baseline[section], now[section]); }
   }
   return gaps;
 }
@@ -276,6 +307,8 @@ function main(argv) {
   const schema = fs.existsSync(schemaFile) ? readJson(schemaFile, 'schema', problems) : null;
   if (opts.print) {
     if (!schema) { process.stderr.write(`check-events-contract: ${problems.length ? problems[0][1] : 'schema unreadable'}\n`); return 1; }
+    const shape = kindInfo(schema).problems;
+    if (shape.length) { process.stderr.write(`check-events-contract: [schema-shape] refusing to print: ${shape[0]}\n`); return 1; }
     // Regenerating may only add: compare the new schema against the existing baseline first.
     if (fs.existsSync(baselineFile)) {
       const existing = readJson(baselineFile, 'baseline', []);
@@ -288,6 +321,7 @@ function main(argv) {
   }
   const doc = fs.existsSync(docFile) ? fs.readFileSync(docFile, 'utf8') : null;
   const baseline = fs.existsSync(baselineFile) ? readJson(baselineFile, 'baseline', problems) : null;
+  if (schema) for (const g of kindInfo(schema).problems.slice(0, 1)) problems.push(['schema-shape', g]);
   if (schema && doc !== null) {
     for (const g of checkSchemaDocumented(schema, doc).slice(0, 1)) problems.push(['schema-undocumented', g]);
     for (const g of checkConsumers(schema, doc).slice(0, 1)) problems.push(['consumer-unknown', g]);

@@ -148,7 +148,7 @@ const TYPO_CASES = [
   ['dispatch.endded', 'dispatch.endded.duration_s', (t) => t.replace('`dispatch.ended.duration_s`', '`dispatch.endded.duration_s`')],
   ['dispatch.startd', 'slash form with a typo', (t) => t.replace('`dispatch.started/ended`', '`dispatch.startd/ended`')],
 ];
-const OLD_A = [["if (shaped && shaped[1].split('.')[0] !== 'data' && !FUTURE_KINDS.has(shaped[1])) {", 'if (false) {'], ["if (slash && !(KINDS.includes(slash[1]) && KINDS.includes(`${slash[1].split('.')[0]}.${slash[2]}`))) {", 'if (false) {']];
+const OLD_A = [["if (shaped && shaped[1].split('.')[0] !== 'data') {", 'if (false) {'], ["if (slash && !(KINDS.includes(slash[1]) && KINDS.includes(`${slash[1].split('.')[0]}.${slash[2]}`))) {", 'if (false) {']];
 for (const [needle, label, fn] of TYPO_CASES) {
   test(`A: ${label} is a consumer-unknown gap (red); the old behaviour is green`, () => {
     const f = copies();
@@ -232,4 +232,91 @@ test('describe: enum or const containing null is nullable', () => {
   const b = baselineOf(schema).kinds['cost.turn'];
   assert.deepEqual([b.tier.nullable, b.tier.type], [true, 'string']);
   assert.equal(b.model.nullable, true);
+});
+
+// ---- round 2: fail-closed kindMap, FUTURE_KINDS tightening, typo regex, empty baseline sections ------------------------
+
+const SHAPE_CASES = [
+  ['kind uses enum', (s) => { const e = s.$defs.event_qc_verdict.properties.kind; delete e.const; e.enum = ['qc.verdict']; }],
+  ['data is inline', (s) => { s.$defs.event_qc_verdict.properties.data = { type: 'object' }; }],
+  ['data $ref does not resolve', (s) => { s.$defs.event_qc_verdict.properties.data = { $ref: '#/$defs/data_nope' }; }],
+  ['oneOf is empty', (s) => { s.$defs.event.oneOf = []; }],
+  ['oneOf is missing', (s) => { delete s.$defs.event.oneOf; }],
+];
+const OLD_SHAPE = [["    if (typeof kind !== 'string' || !defName || !d[defName]) {", '    if (false) {'], ["  if (!Array.isArray(branches) || branches.length === 0) {", '  if (false) {'], ['  branches.forEach((branch, i) => {', '  (branches || []).forEach((branch, i) => {'], ['    map[kind] = defName;', "    if (typeof kind === 'string' && defName && d[defName]) map[kind] = defName;"]];
+for (const [label, mutate] of SHAPE_CASES) {
+  test(`A2: oneOf shape "${label}" fails closed (schema-shape, exit 1) and print-baseline refuses; old behaviour is green`, () => {
+    const f = copies();
+    editJson(f.schema, mutate);
+    const r = run(f);
+    assert.equal(r.status, 1, r.err);
+    assert.match(r.err, /\[schema-shape\]/);
+    const p = spawnSync(process.execPath, [SCRIPT, '--print-baseline', '--schema', f.schema, '--baseline', f.baseline], { encoding: 'utf8' });
+    assert.equal(p.status, 1);
+    assert.equal(p.stdout, '');
+    if (label === 'oneOf is empty' || label === 'oneOf is missing') return; // the old code had no kinds at all: other classes fire
+    const old = runMutated(OLD_SHAPE, argsOf(f));
+    assert.doesNotMatch(old.stderr, /schema-shape/, 'old behaviour does not report the bad branch');
+  });
+}
+
+test('B2: the future-kind whitelist covers only the bare kind', () => {
+  let f = copies();
+  edit(f.doc, (t) => t.replace('(a later `quota.observed` kind', '(a later `quota.observed.foo` kind'));
+  let r = run(f);
+  assert.equal(r.status, 1);
+  assert.match(r.err, /\[consumer-unknown\].*quota\.observed\.foo/);
+  f = copies();
+  edit(f.doc, (t) => t.replace('(a later `quota.observed` kind', '(a later `quota.observed` kind reads `bogus_field`; a later'));
+  r = run(f);
+  assert.match(r.err, /\[consumer-unknown\].*bare field bogus_field/);
+  // old behaviour: any field of the future kind passes, and ctx is cleared
+  const old = runMutated([["if (FUTURE_KINDS.has(span)) {", "if (FUTURE_KINDS.has(shaped[1])) {"], ['futureOnly = true;', 'futureOnly = false;']], argsOf(f));
+  assert.doesNotMatch(old.stderr, /bare field/);
+  f = copies();
+  edit(f.doc, (t) => t.replace('(a later `quota.observed` kind', '(a later `quota.observed.foo` kind'));
+  assert.doesNotMatch(runMutated([["if (FUTURE_KINDS.has(span)) {", "if (FUTURE_KINDS.has(shaped[1])) {"]], argsOf(f)).stderr, /quota\.observed\.foo/);
+});
+
+test('B2: a whitelisted kind that the schema now has is a stale-whitelist gap', () => {
+  const f = copies();
+  editJson(f.schema, (s) => {
+    s.$defs.data_quota_observed = { type: 'object', additionalProperties: false, required: ['pct'], properties: { pct: { type: 'number' } } };
+    s.$defs.event_quota_observed = JSON.parse(JSON.stringify(s.$defs.event_qc_verdict));
+    s.$defs.event_quota_observed.properties.kind = { const: 'quota.observed' };
+    s.$defs.event_quota_observed.properties.data = { $ref: '#/$defs/data_quota_observed' };
+    s.$defs.event.oneOf.splice(8, 0, { $ref: '#/$defs/event_quota_observed' });
+  });
+  const r = run(f);
+  assert.match(r.err, /FUTURE_KINDS lists quota\.observed/);
+  const old = runMutated([['for (const k of FUTURE_KINDS) if (KINDS.includes(k))', 'for (const k of []) if (KINDS.includes(k))']], argsOf(f));
+  assert.doesNotMatch(old.stderr, /FUTURE_KINDS lists/);
+});
+
+test('typo regex: underscore/digit kind segments and four-segment forms are gaps', () => {
+  for (const [from, to, needle] of [
+    ['`qc.verdict.verdict`', '`qc.verdict_x.verdict`', 'qc.verdict_x'],
+    ['`dispatch.ended.duration_s`', '`dispatch.endded.data.duration_s`', 'dispatch.endded'],
+    ['`cost.turn.cost_usd`', '`cost2.turn.cost_usd`', 'cost2.turn'],
+  ]) {
+    const f = copies();
+    edit(f.doc, (t) => t.replace(from, to));
+    const r = run(f);
+    assert.equal(r.status, 1, to);
+    assert.match(r.err, new RegExp(`\\[consumer-unknown\\].*${needle.replace('.', '\\.')}`), to);
+  }
+});
+
+test('baseline: an empty section or empty kinds entry the schema fills is a gap', () => {
+  let f = copies();
+  editJson(f.baseline, (b) => { b.warning = {}; });
+  let r = run(f);
+  assert.equal(r.status, 1);
+  assert.match(r.err, /\[baseline-regression\].*warning is empty/);
+  f = copies();
+  editJson(f.baseline, (b) => { b.kinds['cost.turn'] = {}; });
+  r = run(f);
+  assert.match(r.err, /kinds\.cost\.turn is empty/);
+  const old = runMutated([['const emptyWhere = (label, was, is) => {', 'const emptyWhere = (label, was, is) => { return;']], argsOf(f));
+  assert.equal(old.status, 0, 'old behaviour (empty entries pass) is green');
 });

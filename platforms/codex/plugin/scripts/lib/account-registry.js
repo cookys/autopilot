@@ -10,6 +10,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 
 const ALIAS_RE = /^[a-z0-9-]{1,24}$/;
 const RESERVED_RE = /^(acct|codex)-[0-9a-f]{8}$/;
@@ -42,8 +43,17 @@ function uidOf(o) {
   return typeof process.getuid === 'function' ? process.getuid() : undefined;
 }
 
+// Unvalidated strings are never echoed (an operator may paste a token into an alias or key):
+// diagnostics use a position or this irreversible short fingerprint instead.
+function fp(v) {
+  return 'fp:' + crypto.createHash('sha256').update(String(v)).digest('hex').slice(0, 8);
+}
+
 function aliasProblem(alias) {
   if (typeof alias !== 'string' || !ALIAS_RE.test(alias)) return 'alias_invalid';
+  // Sentinel exception: audit uses `-` for "no alias yet", so an alias made only of dashes is
+  // reserved. The grammar itself is unchanged.
+  if (/^-+$/.test(alias)) return 'alias_reserved';
   if (RESERVED_RE.test(alias)) return 'alias_reserved';
   return null;
 }
@@ -53,23 +63,52 @@ function inside(child, parent) {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
+// Open without following links, then fstat and read from the SAME fd (no lstat-then-reopen gap).
+// `what` is 'registry' or 'token'; missing -> <what>_missing; a link -> <what>_is_symlink.
+function readChecked(file, o, uid, what, maxSize, needNonEmpty, alias) {
+  if (typeof o.beforeOpen === 'function') o.beforeOpen(file, what);
+  let fd;
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  } catch (e) {
+    const c = e && e.code;
+    if (c === 'ENOENT') throw new RegistryError(what + '_missing', alias);
+    if (c === 'ELOOP') throw new RegistryError(what + '_is_symlink', alias);
+    throw new RegistryError(what + '_probe_error', alias, c || 'unknown');
+  }
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) throw new RegistryError(what + '_not_regular_file', alias);
+    if (uid !== undefined && st.uid !== uid) throw new RegistryError(what + '_foreign_owner', alias);
+    if ((st.mode & 0o077) !== 0) throw new RegistryError(what + '_mode_too_open', alias);
+    if (st.size > maxSize || (needNonEmpty && st.size < 1)) throw new RegistryError(what + '_size_out_of_range', alias);
+    return fs.readFileSync(fd, 'utf8');
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// Only ENOENT means absent; any other probe failure is a credentials_probe_error.
+function exists(p, alias) {
+  try { fs.lstatSync(p); return true; } catch (e) {
+    if (e && e.code === 'ENOENT') return false;
+    throw new RegistryError('credentials_probe_error', alias, e && e.code ? e.code : 'unknown');
+  }
+}
+
 // Load and structurally validate registry.json. Returns {configured:false} on ENOENT only.
 function loadRegistry(opts) {
   const o = opts || {};
   const dir = accountsDir(o);
   const file = path.join(dir, 'registry.json');
   const uid = uidOf(o);
-  let st;
+  let text;
   try {
-    st = fs.lstatSync(file);
+    text = readChecked(file, o, uid, 'registry', 1 << 20, false);
   } catch (e) {
-    if (e && e.code === 'ENOENT') return { configured: false, dir, file, accounts: [] };
-    throw new RegistryError('registry_probe_error', null, e && e.code ? e.code : 'unknown');
+    if (e instanceof RegistryError && e.reason === 'registry_missing') return { configured: false, dir, file, accounts: [] };
+    throw e;
   }
-  if (st.isSymbolicLink()) throw new RegistryError('registry_is_symlink');
-  if (!st.isFile()) throw new RegistryError('registry_not_regular_file');
-  if (uid !== undefined && st.uid !== uid) throw new RegistryError('registry_foreign_owner');
-  if ((st.mode & 0o077) !== 0) throw new RegistryError('registry_mode_too_open');
   let dst;
   try {
     dst = fs.lstatSync(dir);
@@ -80,27 +119,26 @@ function loadRegistry(opts) {
   if ((dst.mode & 0o077) !== 0) throw new RegistryError('accounts_dir_mode_too_open');
   let doc;
   try {
-    doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+    doc = JSON.parse(text);
   } catch (e) {
-    throw new RegistryError(e && e.code ? 'registry_probe_error' : 'registry_not_json', null, e && e.code);
+    throw new RegistryError('registry_not_json');
   }
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new RegistryError('registry_not_object');
   for (const k of Object.keys(doc)) {
-    if (!TOP_KEYS.includes(k)) throw new RegistryError('registry_unknown_key', null, k);
+    if (!TOP_KEYS.includes(k)) throw new RegistryError('registry_unknown_key', null, 'top-level key ' + fp(k));
   }
   if (doc.schema !== SCHEMA) throw new RegistryError('registry_schema_unsupported');
   if (!Array.isArray(doc.accounts)) throw new RegistryError('registry_accounts_not_array');
   const seen = new Set();
   const accounts = [];
-  for (const row of doc.accounts) {
+  for (const [idx, row] of doc.accounts.entries()) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) throw new RegistryError('registry_row_not_object');
     const alias = row.alias;
-    const aliasLabel = typeof alias === 'string' ? alias.slice(0, 32) : null;
     for (const k of Object.keys(row)) {
-      if (!ROW_KEYS.includes(k)) throw new RegistryError('registry_unknown_key', aliasLabel, k);
+      if (!ROW_KEYS.includes(k)) throw new RegistryError('registry_unknown_key', null, `row ${idx} key ${fp(k)}`);
     }
     const p = aliasProblem(alias);
-    if (p) throw new RegistryError(p, aliasLabel);
+    if (p) throw new RegistryError(p, null, `row ${idx} value ${fp(alias)}`);
     if (seen.has(alias)) throw new RegistryError('alias_duplicate', alias);
     seen.add(alias);
     if (typeof row.enabled !== 'boolean') throw new RegistryError('enabled_not_boolean', alias);
@@ -160,27 +198,19 @@ function checkAlias(reg, alias, opts) {
   }
 
   const homeDir = path.join(aliasDir, 'home');
-  if (fs.existsSync(path.join(homeDir, '.claude', '.credentials.json'))) throw escapes('home holds .claude credentials');
   let hl = null;
-  try { hl = fs.lstatSync(path.join(homeDir, '.claude')); } catch (e) { /* absent is fine */ }
+  try { hl = fs.lstatSync(path.join(homeDir, '.claude')); } catch (e) {
+    if (!(e && e.code === 'ENOENT')) throw new RegistryError('credentials_probe_error', alias, e && e.code ? e.code : 'unknown');
+  }
   if (hl && hl.isSymbolicLink()) throw escapes('home/.claude is a link');
+  if (exists(path.join(homeDir, '.claude', '.credentials.json'), alias)) throw escapes('home holds .claude credentials');
 
   const cfgDir = path.join(aliasDir, 'claude');
-  if (fs.existsSync(path.join(cfgDir, '.credentials.json'))) throw new RegistryError('config_dir_has_credentials', alias);
+  if (exists(path.join(cfgDir, '.credentials.json'), alias)) throw new RegistryError('config_dir_has_credentials', alias);
 
   // Token file: shape only, never printed.
   const tokenFile = path.join(aliasDir, 'token');
-  let tst;
-  try { tst = fs.lstatSync(tokenFile); } catch (e) {
-    if (e && e.code === 'ENOENT') throw new RegistryError('token_missing', alias);
-    throw new RegistryError('registry_probe_error', alias, e && e.code);
-  }
-  if (tst.isSymbolicLink()) throw new RegistryError('token_is_symlink', alias);
-  if (!tst.isFile()) throw new RegistryError('token_not_regular_file', alias);
-  if (uid !== undefined && tst.uid !== uid) throw new RegistryError('token_foreign_owner', alias);
-  if ((tst.mode & 0o077) !== 0) throw new RegistryError('token_mode_too_open', alias);
-  if (tst.size < 1 || tst.size > 4096) throw new RegistryError('token_size_out_of_range', alias);
-  let body = fs.readFileSync(tokenFile, 'utf8');
+  let body = readChecked(tokenFile, o, uid, 'token', 4096, true, alias);
   body = body.replace(/\r?\n$/, '');
   if (body.length === 0) throw new RegistryError('token_empty', alias);
   if (/\s/.test(body)) throw new RegistryError('token_whitespace', alias);
@@ -201,7 +231,7 @@ function checkRegistry(opts) {
 // `--alias X` must point at an enabled registered row; never a path input.
 function requireAlias(reg, alias) {
   const p = aliasProblem(alias);
-  if (p) throw new RegistryError(p, typeof alias === 'string' ? alias.slice(0, 32) : null);
+  if (p) throw new RegistryError(p, null, `--alias value ${fp(alias)}`);
   const row = (reg.accounts || []).find((r) => r.alias === alias);
   if (!row) throw new RegistryError('alias_not_registered', alias);
   if (!row.enabled) throw new RegistryError('alias_disabled', alias);

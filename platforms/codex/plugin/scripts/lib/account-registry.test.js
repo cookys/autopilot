@@ -87,12 +87,12 @@ test('N2 token file checks', () => {
 });
 
 test('N2 token owner check on token file alone', () => {
-  // the registry owner check fires first with a uid mismatch, so probe the token check by a uid that matches registry only
+  // registry owner check runs first (1st fstat); bump the uid on the 2nd fstat (the token fd)
   const f = mk(); good(f);
-  const real = fs.lstatSync;
-  const tokenFile = path.join(f.dir, 'main', 'token');
-  fs.lstatSync = (p, ...a) => { const s = real(p, ...a); return p === tokenFile ? Object.assign(Object.create(Object.getPrototypeOf(s)), s, { uid: s.uid + 1, isSymbolicLink: () => false, isFile: () => true, isDirectory: () => false }) : s; };
-  try { assert.strictEqual(chk(f), 'token_foreign_owner'); } finally { fs.lstatSync = real; }
+  const real = fs.fstatSync;
+  let n = 0;
+  fs.fstatSync = (fd, ...a) => { const s = real(fd, ...a); n += 1; return n === 2 ? Object.assign(Object.create(Object.getPrototypeOf(s)), s, { uid: s.uid + 1 }) : s; };
+  try { assert.strictEqual(chk(f), 'token_foreign_owner'); } finally { fs.fstatSync = real; }
 });
 
 test('N2b one broken enabled alias fails the whole check (never skipped)', () => {
@@ -267,4 +267,79 @@ test('CLI: check prints ok, list shows no secret, invalid exits 2', () => {
   r = spawnSync(process.execPath, [LIB, 'check'], { env: Object.assign({}, env, { AUTOPILOT_ACCOUNTS_DIR: empty.dir }), encoding: 'utf8', input: '' });
   assert.strictEqual(r.status, 0);
   assert.strictEqual(r.stdout.trim(), 'unconfigured');
+});
+
+// ---- round 2 ----
+const SECRET = ['sk', 'ant', 'oat01', 'FAKEFAKEFAKEFAKEFAKE'].join('-');
+function noEcho(text, label) {
+  for (let i = 0; i + 8 <= SECRET.length; i++) assert.ok(!text.includes(SECRET.slice(i, i + 8)), label + ' leaked ' + SECRET.slice(i, i + 8));
+}
+
+test('A: unvalidated strings are never echoed (alias, key, --alias)', () => {
+  const texts = [];
+  let f = mk(); writeReg(f, [{ alias: SECRET, enabled: false }]);
+  try { R.checkRegistry(opts(f)); assert.fail(); } catch (e) { assert.strictEqual(e.reason, 'alias_invalid'); texts.push(e.message); }
+  f = mk(); writeReg(f, [{ alias: 'a', enabled: false, [SECRET]: 1 }]);
+  try { R.checkRegistry(opts(f)); assert.fail(); } catch (e) { assert.strictEqual(e.reason, 'registry_unknown_key'); texts.push(e.message); }
+  f = mk(); writeReg(f, [], { [SECRET]: 1 });
+  try { R.checkRegistry(opts(f)); assert.fail(); } catch (e) { assert.strictEqual(e.reason, 'registry_unknown_key'); texts.push(e.message); }
+  f = mk(); writeReg(f, [{ alias: 'a', enabled: false }]);
+  const reg = R.loadRegistry(opts(f));
+  try { R.requireAlias(reg, SECRET); assert.fail(); } catch (e) { assert.strictEqual(e.reason, 'alias_invalid'); texts.push(e.message); }
+  for (const t of texts) noEcho(t, 'lib');
+  // CLI stderr
+  for (const body of [{ schema: R.SCHEMA, accounts: [{ alias: SECRET, enabled: false }] }, { schema: R.SCHEMA, accounts: [], [SECRET]: 1 }]) {
+    const g = mk();
+    fs.writeFileSync(path.join(g.dir, 'registry.json'), JSON.stringify(body), { mode: 0o600 });
+    const r = spawnSync(process.execPath, [LIB, 'check'], { env: { PATH: process.env.PATH, AUTOPILOT_ACCOUNTS_DIR: g.dir, HOME: g.home }, encoding: 'utf8', input: '' });
+    assert.strictEqual(r.status, 2);
+    noEcho(r.stdout + r.stderr, 'cli');
+  }
+  // a validated alias may still be shown
+  f = mk(); writeReg(f, [{ alias: 'ok', enabled: true }]); mkAlias(f, 'ok'); fs.chmodSync(path.join(f.dir, 'ok', 'token'), 0o644);
+  try { R.checkRegistry(opts(f)); } catch (e) { assert.ok(e.message.startsWith('ok: ')); }
+});
+
+test('B: dash-only aliases are reserved (audit sentinel)', () => {
+  for (const a of ['-', '--', '---']) {
+    const f = mk(); writeReg(f, [{ alias: a, enabled: false }]);
+    assert.strictEqual(chk(f), 'alias_reserved', a);
+    const reg = { accounts: [{ alias: a, enabled: true }] };
+    assert.strictEqual(reason(() => R.requireAlias(reg, a)), 'alias_reserved', 'requireAlias ' + a);
+  }
+  const f = mk(); writeReg(f, [{ alias: '-a', enabled: false }, { alias: 'a-', enabled: false }]);
+  assert.strictEqual(chk(f), null);
+});
+
+test('C: credential probe failure is fail-closed', { skip: process.getuid() === 0 ? 'running as root: chmod 000 does not block access' : false }, () => {
+  let f = mk(); let d = good(f);
+  fs.mkdirSync(path.join(d, 'home', '.claude'));
+  fs.chmodSync(path.join(d, 'home', '.claude'), 0o000);
+  try { assert.strictEqual(chk(f), 'credentials_probe_error'); } finally { fs.chmodSync(path.join(d, 'home', '.claude'), 0o700); }
+  f = mk(); d = good(f);
+  fs.chmodSync(path.join(d, 'home'), 0o000);
+  try { assert.strictEqual(chk(f), 'credentials_probe_error'); } finally { fs.chmodSync(path.join(d, 'home'), 0o700); }
+  f = mk(); d = good(f);
+  fs.chmodSync(path.join(d, 'claude'), 0o000);
+  try { assert.strictEqual(chk(f), 'credentials_probe_error'); } finally { fs.chmodSync(path.join(d, 'claude'), 0o700); }
+});
+
+test('C: credentials entry that is an unreadable directory counts as present', () => {
+  const f = mk(); const d = good(f);
+  const c = path.join(d, 'claude', '.credentials.json');
+  fs.mkdirSync(c);
+  if (process.getuid() !== 0) fs.chmodSync(c, 0o000);
+  try { assert.strictEqual(chk(f), 'config_dir_has_credentials'); } finally { fs.chmodSync(c, 0o700); }
+});
+
+test('D: swap to a symlink between check and open is refused (token and registry)', () => {
+  let f = mk(); let d = good(f);
+  fs.writeFileSync(path.join(f.root, 'other'), 'FAKE-other', { mode: 0o600 });
+  const swap = (target) => (file, what) => {
+    if (file === target) { fs.unlinkSync(file); fs.symlinkSync(path.join(f.root, 'other'), file); }
+  };
+  assert.strictEqual(chk(f, { beforeOpen: swap(path.join(d, 'token')) }), 'token_is_symlink');
+  f = mk(); d = good(f);
+  fs.copyFileSync(path.join(f.dir, 'registry.json'), path.join(f.root, 'other'));
+  assert.strictEqual(chk(f, { beforeOpen: swap(path.join(f.dir, 'registry.json')) }), 'registry_is_symlink');
 });

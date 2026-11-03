@@ -370,7 +370,11 @@ test('G40-N78: a first 429 with no prior window writes a shape (b) refusal row: 
     assert.strictEqual(r.code, 0, 'b answers');
     const rec = rowOf(fx, 'a');
     assert.deepStrictEqual(rec.windows, [], 'no window is invented');
-    assert.deepStrictEqual(rec.refusal, { observed_at: NOW_S, retry_at: null, reason: 'rate_limit' });
+    assert.deepStrictEqual(rec.refusal, { observed_at: NOW_S, retry_at: NOW_S + 300, reason: 'rate_limit' }, 'PM (A): retry_at = the G37 throttle cooldown end (5 min)');
+    const until = cooldown.readCooldown('a', { dir: fx.cooldownDir, nowMs: NOW });
+    assert.strictEqual(until, NOW + 300e3, 'the refusal ends exactly when the G37 cooldown does');
+    const m = require('./lib/account-interpret').interpretWindows(observation.readView(fx.liveDir, 'claude', 'a').view.rows, MANIFEST, NOW_S);
+    assert.strictEqual(m.refusal.remaining_s, 300, 'remaining equals the G37 cooldown, not the manifest 30 minutes');
     assert.strictEqual(rec.visibility, 'L1');
     assert.strictEqual('source' in rec, false);
     assert.strictEqual(rec.token_state, 'unknown');
@@ -468,5 +472,107 @@ test('G40-N78: cooldown --clear also releases the refusal row a 429 left, so the
     const before = fs.readFileSync(mirrorFile(fx, 'b'), 'utf8');
     await go(fx, ['cooldown', '--clear', 'b']);
     assert.strictEqual(fs.readFileSync(mirrorFile(fx, 'b'), 'utf8'), before);
+  } finally { fx.cleanup(); }
+});
+
+// ------------------------------------------------------------------ review round: refusal clear under the lock, bad event + 429, --purpose
+
+const PEER = 'ns/courier/peer';
+function writePeer(fx, alias) {
+  const b = observation.buildRecord({ provider: 'claude', alias, visibility: 'L3', windows: [win('rolling_5h', 0.4)] });
+  assert.ok(b.ok);
+  const w = observation.writeLocalRow(fx.liveDir, b.record, { courier: PEER });
+  assert.ok(w.ok, JSON.stringify(w));
+}
+function writeRefusal(fx, alias, over) {
+  const b = observation.buildRecord(Object.assign({ provider: 'claude', alias, visibility: 'L1', windows: [], refusal: { observed_at: NOW_S, retry_at: NOW_S + 300, reason: 'rate_limit' } }, over || {}));
+  assert.ok(b.ok, JSON.stringify(b));
+  assert.ok(observation.writeLocalRow(fx.liveDir, b.record).ok);
+}
+const viewOf = (fx, alias) => JSON.parse(fs.readFileSync(mirrorFile(fx, alias), 'utf8'));
+
+test('G40-N78: removeLocalRefusal with a peer row on file removes only the local refusal and leaves the peer row byte for byte', () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    writePeer(fx, 'a');
+    writeRefusal(fx, 'a');
+    const peerBefore = JSON.stringify(viewOf(fx, 'a').rows.find((r) => r.writer_courier === PEER));
+    assert.strictEqual(viewOf(fx, 'a').rows.length, 2);
+    assert.deepStrictEqual(observation.removeLocalRefusal(fx.liveDir, 'claude', 'a'), { ok: true, removed: true });
+    const rows = viewOf(fx, 'a').rows;
+    assert.deepStrictEqual(rows.map((r) => r.writer_courier), [PEER]);
+    assert.strictEqual(JSON.stringify(rows[0]), peerBefore);
+    assert.strictEqual(fs.statSync(mirrorFile(fx, 'a')).mode & 0o777, 0o600);
+  } finally { fx.cleanup(); }
+});
+
+test('G40-N78: removeLocalRefusal re-reads inside the lock: a capture that replaced the row with a windowed one while we waited is not deleted', () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    writeRefusal(fx, 'a');
+    const hooks = { beforeLock() { writeRow(fx, 'a', [win('rolling_5h', 0.3, { observed_at: NOW_S + 1 })]); } };
+    assert.deepStrictEqual(observation.removeLocalRefusal(fx.liveDir, 'claude', 'a', { hooks }), { ok: true, removed: false });
+    assert.deepStrictEqual(rowOf(fx, 'a').windows.map((w) => w.utilization), [0.3]);
+  } finally { fx.cleanup(); }
+});
+
+test('G40-N78: removeLocalRefusal leaves a local row that carries a window; deletes the file when only the local refusal is on file; refuses to force a held lock', () => {
+  let fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    writeRow(fx, 'a', [win('rolling_5h', 0.3)], { refusal: { observed_at: NOW_S - 30, retry_at: NOW_S + 300, reason: 'rate_limit' }, visibility: 'L3' });
+    const before = fs.readFileSync(mirrorFile(fx, 'a'), 'utf8');
+    assert.deepStrictEqual(observation.removeLocalRefusal(fx.liveDir, 'claude', 'a'), { ok: true, removed: false });
+    assert.strictEqual(fs.readFileSync(mirrorFile(fx, 'a'), 'utf8'), before);
+  } finally { fx.cleanup(); }
+  fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    writeRefusal(fx, 'a');
+    assert.deepStrictEqual(observation.removeLocalRefusal(fx.liveDir, 'claude', 'a'), { ok: true, removed: true });
+    assert.strictEqual(fs.existsSync(mirrorFile(fx, 'a')), false);
+    assert.deepStrictEqual(observation.removeLocalRefusal(fx.liveDir, 'claude', 'a'), { ok: true, removed: false }, 'nothing left: not an error');
+    writeRefusal(fx, 'a');
+    const lock = path.join(path.dirname(mirrorFile(fx, 'a')), 'a.lock');
+    fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, nonce: 'held-by-test', t: Date.now() }), { mode: 0o600 });
+    assert.deepStrictEqual(observation.removeLocalRefusal(fx.liveDir, 'claude', 'a', { waitMs: 150 }), { ok: false, code: 'mirror_lock_busy' });
+    assert.ok(rowOf(fx, 'a').refusal, 'not forced');
+  } finally { fx.cleanup(); }
+});
+
+test('G40-N78: cooldown --clear reports a refusal it could not release (lock held) on stderr and exits non-zero', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    writeRefusal(fx, 'a');
+    const lock = path.join(path.dirname(mirrorFile(fx, 'a')), 'a.lock');
+    fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, nonce: 'held-by-test', t: Date.now() }), { mode: 0o600 });
+    const r = await go(fx, ['cooldown', '--clear', 'a']);
+    assert.notStrictEqual(r.code, 0);
+    assert.match(r.err, /refusal_not_cleared alias=a \(mirror_lock_busy\)/);
+    assert.ok(rowOf(fx, 'a').refusal);
+  } finally { fx.cleanup(); }
+});
+
+test('G40-N9: a malformed event on a 429 with no prior window still writes the L1 refusal row; the audit keeps bad_event', async () => {
+  for (const line of [JSON.stringify({ type: 'rate_limit_event', rate_limit_info: 'junk' }), ev(1.7, 0.1)]) {
+    const fx = makeFixture({ aliases: [{ alias: 'a' }, { alias: 'b' }], responses: { a: { exit: 1, stdout: `${line}\n${R429.stdout}` } } });
+    try {
+      const r = await go(fx, RUN);
+      assert.strictEqual(r.code, 0, 'b answers');
+      const rec = rowOf(fx, 'a');
+      assert.ok(rec && rec.refusal, 'refusal row written');
+      assert.strictEqual(rec.visibility, 'L1');
+      assert.deepStrictEqual(rec.windows, []);
+      const l = auditLines(fx).find((x) => x.alias === 'a');
+      assert.strictEqual(l.quota_capture, 'bad_event');
+      assert.strictEqual(l.outcome, 'rate_limited');
+    } finally { fx.cleanup(); }
+  }
+});
+
+test('G40-N13: usage-probe --purpose reaches the audit line; without it the purpose is quota-probe', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: stream(ev(0.31, 0.05)) } });
+  try {
+    await go(fx, ['usage-probe', '--alias', 'a', '--purpose', 'my-check']);
+    await go(fx, ['usage-probe', '--alias', 'a']);
+    assert.deepStrictEqual(auditLines(fx).map((l) => l.purpose), ['my-check', 'quota-probe']);
   } finally { fx.cleanup(); }
 });

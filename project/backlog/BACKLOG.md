@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0371 -->
+<!-- next-id: BL-0373 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -13,6 +13,32 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`<host>` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
+
+### affected-suites misses a changed script's own suite (false green)
+- **Id**: BL-0371
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: 驗收用的選測工具漏掉改動腳本自己的測試套件，合併前驗收因此假綠；本分支修正中，改成依名稱必選。
+- **Impact**: 選取器漏掉改動腳本自己的套件，每條 lane 的驗收都可能拿到假綠。
+- **Trigger**: PM 排序：G40 P1 之後的第 1 項（第 2 項是 bl-ap-streamjson）
+- **Trigger-Type**: ready
+- **Effort**: S
+- **Source**: PM 2026-11-04 incident report, plancwd base 0fd2de921 head d56d3ec29
+- **Pointer**: project/backlog/affected-suites-misses-a-changed-scripts-own-suite.md
+
+### bl-ap-streamjson：json 與 stream-json 的 result 位元組是否一致
+- **Id**: BL-0372
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: 還不知道真實 dispatch 下 json 與 stream-json 兩種輸出格式的 result 位元組是否一致；這是 G40 agent lane 被動觀測的前提。要用真實 dispatch 量測，PM 目前停車中。
+- **Impact**: 前提沒確認就做被動觀測，兩種格式若不一致，觀測到的結果會對不上。
+- **Trigger**: PM 排序：G40 P1 之後的第 2 項，排在 BL-0371 之後；PM 放行後開工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-04 ordering message
+- **Pointer**: project/backlog/bl-ap-streamjson-result-bytes.md
 
 ### live pane 決策卡的長背景與選項難讀
 - **Id**: BL-0369

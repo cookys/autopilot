@@ -42,7 +42,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Sync, drift & release gates** — `sync-all.sh` `sync-version.js` `sync-agent-bodies.sh` `sync-model-routing.sh` `sync-codex-plugin-skills.sh` `sync-opencode-plugin.sh` `check-canonical-invariants.sh` `check-settings-changelog.js` `check-reference-sizes.js` `check-supersession-anchors.js` `check-claude-md-inventory.js` `check-tmp-residue-registry.js` `check-config-docs.js` `config-keys.json` `check-guidance-eval.js` `check-contract-schema.js` `check-hook-inventory.js` `check-js-syntax.js` `check-optin-changelog.js` `check-readme-parity.js` `check-plan-graduation.js` `preflight-portability.sh` `preflight-release.sh` `report-roster-field-consumers.js` `validate.sh` `validate-json-schema.js` `doc-drift-gate.js` `test-doc-drift-gate.sh` `check-stage-vocab.js` `layout-lint.js`
 
-**Sync, drift & release gates (cont.)** — `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json`
+**Sync, drift & release gates (cont.)** — `check-quota-adapters.js` `check-events-contract.js` `check-claude-spawn-sites.js` `lib/claude-spawn-sites.json`
 
 **Setup & install** — `dev-setup.sh` `dev-update.sh` `accounts-onboard.sh` `install-hooks.sh` `install-antigravity.sh` `install-opencode.sh` `install-token-discipline.js` `setup-symlinks.sh` `setup-symlinks.ps1` `install-antigravity.ps1` `agy-shell-guard.zsh` `project-detect.js` `scaffold-config.js` `statusline-live-tee.js` `lib/opencode-discovery-probe.js`
 
@@ -50,7 +50,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Shared JSON & store primitives** — `lib/json-emit.sh` `lib/brain-spend.js` `lib/residue-config.js` `lib/run-ledger-config.js` `lib/effort-scale.js` `lib/jsonl-store.js` `lib/extract-json-object.js` `lib/runner-binary.js` `lib/auth-stop.js` `lib/auth-stop.sh` `lib/claude-call-capture.js` `lib/claude-call-capture.sh` `lib/claude-call-capture-exec.sh` `lib/headless-seat-derive.js` `lib/grok-effort.js` `lib/live-state-dir.js` `lib/config-path.js` `lib/load-source.js` `lib/json-fields.sh` `lib/kimi-containment.js` `lib/opencode-containment.js` `lib/test-identity.sh` `lib/semver.js` `lib/bash-wait-rules.js` `lib/sealed-docs.js` `lib/workflow-snapshot.js` `lib/compaction-handoff.js` `lib/bash-launch-rules.js` `lib/engine-spelling.js` `lib/room-log.js` `lib/qualification-trust.js`
 
-**Shared JSON & store primitives (cont.)** — `lib/repo-layout.js` `lib/seat-model-id.js` `lib/fleet-decision.js` `lib/decide-line.js` `lib/agy-timeout.sh` `lib/events-fixture.js` `lib/account-registry.js` `lib/account-quota.js` `lib/account-cooldown.js` `lib/account-pick.js` `lib/account-interpret.js` `lib/account-audit.js` `lib/account-env.js` `lib/account-fixtures/claude-shim.js` `lib/account-fixtures/shim-install.js` `lib/account-rail.js` `lib/account-state.sh` `lib/eval-account.sh` `lib/eval-account.js`
+**Shared JSON & store primitives (cont.)** — `lib/account-observation.js` `lib/repo-layout.js` `lib/seat-model-id.js` `lib/fleet-decision.js` `lib/decide-line.js` `lib/agy-timeout.sh` `lib/events-fixture.js` `lib/account-registry.js` `lib/account-quota.js` `lib/account-cooldown.js` `lib/account-pick.js` `lib/account-interpret.js` `lib/account-audit.js` `lib/account-env.js` `lib/account-fixtures/claude-shim.js` `lib/account-fixtures/shim-install.js` `lib/account-rail.js` `lib/account-state.sh` `lib/eval-account.sh` `lib/eval-account.js`
 
 
 ## When adding a new script

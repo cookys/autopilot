@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0374 -->
+<!-- next-id: BL-0375 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -39,6 +39,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PM 2026-11-04 report (alfred M2 case)
 - **Pointer**: project/backlog/check-phase-review-receipt-review-set-chain.md
+
+### G40 mirror writer: OS-held lock to close the publish fencing window
+- **Id**: BL-0374
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: G40 mirror 寫入的 lockfile 有個關不掉的窗口：持有者停頓超過 120 秒仍存活，B 可回收 lock 並發布；A 恢復後 rename 會蓋掉 B 的結果，本機 row 退回舊值直到下次寫入。
+- **Impact**: 觸發極端，現有防護已擋大半（只回收已死持有者、nonce 加 inode 比對、單調守衛）。
+- **Trigger**: PM 排序：排在 BL-0373 之後，目前尚未派工
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: G40 P1 D1 第 3 代審查 finding 48f67816；PM 在上限時的裁決，2026-11-04
+- **Pointer**: project/backlog/g40-mirror-os-held-lock.md
 
 ### live pane 決策卡的長背景與選項難讀
 - **Id**: BL-0369

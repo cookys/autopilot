@@ -144,6 +144,20 @@
       ]
     },
     {
+      "id": "check-quota-adapters",
+      "title": "G40 quota adapter manifests (scripts/quota-adapters/*.json, fleet.quota-adapter/1) vs the capability matrix evidence",
+      "generator": null,
+      "check": "node scripts/check-quota-adapters.js",
+      "fix": "open the manifest the finding names: add the evidence path, correct the tinyprobe argv_template to the matrix row's command, list a required window, or make credential_ref a <accounts-dir>/<alias>/ template",
+      "tier": "both",
+      "trigger": [
+        "scripts/quota-adapters/",
+        "scripts/check-quota-adapters.js",
+        "scripts/lib/account-observation.js",
+        "docs/plans/evidence/2026-11-03-g40-agent-lane-quota/capability-matrix.md"
+      ]
+    },
+    {
       "id": "check-claude-md-inventory",
       "title": "CLAUDE.md inventory: every scripts/*.{sh,js} + scripts/lib/* named + file/line size caps",
       "generator": null,

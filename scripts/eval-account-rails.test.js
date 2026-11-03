@@ -193,7 +193,7 @@ for (const row of ROWS) {
     } finally { w.cleanup(); }
   });
 
-  test(`N9 ${row.name}: registry present -> alias token, no credentials copy, no ambient credential`, () => {
+  test(`N9 good: ${row.name}: registry present -> alias token, no credentials copy, no ambient credential`, () => {
     const w = world('active');
     try {
       const res = row.run(build(w, null), w);
@@ -201,7 +201,7 @@ for (const row of ROWS) {
     } finally { w.cleanup(); }
   });
 
-  test(`N9 ${row.name}: broken registry -> non-zero, spawn counter 0`, () => {
+  test(`N9 broken: ${row.name}: registry -> non-zero, spawn counter 0`, () => {
     const w = world('broken');
     try {
       const res = row.run(build(w, null), w);
@@ -226,7 +226,7 @@ for (const row of ROWS) {
 
   const mutations = isNode ? [...(row.mutateNode ? ['no-call'] : []), ...(row.mutateCopy ? ['copy-guard'] : [])] : (row.legacyCopies ? ['no-call', 'copy-guard'] : ['no-call']);
   for (const m of mutations) {
-    test(`N9 mutation ${row.name}: ${m} turns the active assertions red`, () => {
+    test(`N9 mutation: ${row.name}: ${m} turns the active assertions red`, () => {
       const w = world('active');
       try {
         const res = row.run(build(w, m), w);

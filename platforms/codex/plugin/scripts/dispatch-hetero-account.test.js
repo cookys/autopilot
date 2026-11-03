@@ -136,7 +136,7 @@ function checkWired(w, rail) {
   return c;
 }
 
-test('registry present: worker goes through claude-account run (alias, fingerprint, gate-rules, T-GIT env)', () => {
+test('N9 good: registry present: worker goes through claude-account run (alias, fingerprint, gate-rules, T-GIT env)', () => {
   const w = world();
   try {
     const c = checkWired(w, REAL_RAIL);
@@ -152,7 +152,7 @@ test('registry present: worker goes through claude-account run (alias, fingerpri
   } finally { w.fx.cleanup(); }
 });
 
-test('N9: registry broken -> nothing spawned, decoy unread, precondition refusal', () => {
+test('N9 broken: registry broken -> nothing spawned, decoy unread, precondition refusal', () => {
   const w = world();
   try {
     fs.writeFileSync(w.fx.regFile, '{ not json');
@@ -214,7 +214,7 @@ test('unrecognised env-check output (garbage / empty / near-miss words): invalid
   } finally { w.fx.cleanup(); }
 });
 
-test('mutation: wiring removed (state forced to legacy) -> the registry-present check goes red', () => {
+test('N9 mutation: wiring removed (state forced to legacy) -> the registry-present check goes red', () => {
   const w = world();
   try {
     const rail = farmWith(w, { 'dispatch-hetero.sh': (s) => s.replace('  account_layer_state "$SELF_DIR/claude-account.js" hetero-impl\n', '  echo legacy\n') });
@@ -222,7 +222,7 @@ test('mutation: wiring removed (state forced to legacy) -> the registry-present 
   } finally { w.fx.cleanup(); }
 });
 
-test('mutation: --settings dropped from the account arm -> the gate-rules assertion goes red', () => {
+test('N9 mutation: --settings dropped from the account arm -> the gate-rules assertion goes red', () => {
   const w = world();
   try {
     const rail = farmWith(w, { 'dispatch-hetero.sh': (s) => s.replace('        ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json)\n      run_worker node', '        --output-format json)\n      run_worker node') });
@@ -230,7 +230,7 @@ test('mutation: --settings dropped from the account arm -> the gate-rules assert
   } finally { w.fx.cleanup(); }
 });
 
-test('mutation: invalid registry treated as legacy -> N9 goes red because the OLD claude path spawned the shim', () => {
+test('N9 mutation: invalid registry treated as legacy -> N9 goes red because the OLD claude path spawned the shim', () => {
   const w = world();
   try {
     const rail = farmWith(w, { 'dispatch-hetero.sh': (s) => s.replace('  account_layer_state "$SELF_DIR/claude-account.js" hetero-impl\n',
@@ -244,7 +244,7 @@ test('mutation: invalid registry treated as legacy -> N9 goes red because the OL
   } finally { w.fx.cleanup(); }
 });
 
-test('mutation: account-state.sh default arm = legacy -> the unrecognised-output case goes red (old path spawned)', () => {
+test('N9 mutation: account-state.sh default arm = legacy -> the unrecognised-output case goes red (old path spawned)', () => {
   const w = world();
   try {
     const libDir = path.join(w.fx.root, 'libcopy');

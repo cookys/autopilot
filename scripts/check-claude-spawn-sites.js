@@ -257,7 +257,7 @@ function check(root, registryFile) {
   for (const f of scanTestEnv(root, callerNames)) add('test_env_loses_accounts_dir', f.file, `line ${f.line}: ${f.why}`);
   // e45b846c: cc-v2.js is the d0gate v2 library; the campaign runner that refuses an active registry is its only requirer
   const ccv2 = [];
-  for (const d of ['scripts', 'src', 'hooks', 'bin', 'evals']) {
+  for (const d of SCAN_DIRS) {
     const fl = []; walk(root, d, fl);
     for (const rel of fl) {
       if (rel.split(path.sep).join('/') === 'evals/skill-onoff/d0gate-v2/cc-v2.js' || isExcludedPath(rel)) continue;

@@ -78,7 +78,7 @@ legacy_holds() { # $1 = script, $2 = unconfigured|mode_off
 
 # 1. registry present and valid: shim sees an alias token fingerprint, never the decoy.
 good_holds "$SCRIPT" > "$TEST_TMP/pred.out"; GRC=$?; GPRED="$(cat "$TEST_TMP/pred.out")"
-assert_eq "0" "$GRC" "account arm: one spawn, alias token fingerprint, no decoy ($GPRED)"
+assert_eq "0" "$GRC" "N9 good: account arm: one spawn, alias token fingerprint, no decoy ($GPRED)"
 assert_contains "$GOUT" "\"runner\": \"claude-native\"" "account arm: result produced"
 assert_not_contains "$GOUT" "precondition_failed" "account arm: no precondition failure"
 CALL1="$(first_call "$GF")"
@@ -87,7 +87,7 @@ assert_not_contains "$GOUT$(cat "$TEST_TMP/errg")" "FAKE-token" "account arm: no
 
 # 2. N9: broken registry -> die before any spawn, decoy untouched, no fallback to seeding.
 broken_holds "$SCRIPT" > "$TEST_TMP/pred.out"; BRC=$?; BPRED="$(cat "$TEST_TMP/pred.out")"
-assert_eq "0" "$BRC" "N9: broken registry fails the rail with zero spawns ($BPRED)"
+assert_eq "0" "$BRC" "N9 broken: registry fails the rail with zero spawns ($BPRED)"
 assert_not_contains "$(cat "$TEST_TMP/errb")$BOUT" "FAKE-token" "N9: no token in output"
 assert_contains "$(cat "$TEST_TMP/errb")$BOUT" "registry check failed" "N9: precondition names the registry check"
 
@@ -127,25 +127,25 @@ done
 MUT="$TEST_TMP/mut1"; cp -r "$REPO_ROOT/scripts" "$MUT"
 sed_mutate "$MUT/dispatch-author.sh" 's/^    active) CNATIVE_ACCOUNT=1 ;;/    active) CNATIVE_ACCOUNT=0 ;;/'
 good_holds "$MUT/dispatch-author.sh" >/dev/null; NG=$?
-assert_neq "0" "$NG" "negative control: account branch forced to the old seeded path turns the good-registry case red"
+assert_neq "0" "$NG" "N9 mutation: negative control: account branch forced to the old seeded path turns the good-registry case red"
 assert_eq "" "$(jget "$(first_call "$GF")" fp | sed 's/^null$//')" "negative control: ...because the shim saw no alias token (old path)"
 
 MUT2="$TEST_TMP/mut2"; cp -r "$REPO_ROOT/scripts" "$MUT2"
 sed_mutate "$MUT2/dispatch-author.sh" 's/^    \*) die_precondition "claude-native refused: account registry check failed[^"]*"/    *) CNATIVE_ACCOUNT=0/'
 broken_holds "$MUT2/dispatch-author.sh" >/dev/null; NB=$?
-assert_neq "0" "$NB" "negative control: invalid registry treated as legacy turns the N9 case red"
+assert_neq "0" "$NB" "N9 mutation: negative control: invalid registry treated as legacy turns the N9 case red"
 assert_eq "1" "$(spawns_of "$BF")" "negative control: ...because the old claude path spawned the shim"
 assert_eq "" "$(jget "$(first_call "$BF")" fp | sed 's/^null$//')" "negative control: ...and that spawn carried no alias token"
 
 cp "$STUBD/claude-account.js" "$MUT2/claude-account.js"
 unrecognised_holds "$MUT2" "garbage" >/dev/null; NU=$?
-assert_neq "0" "$NU" "negative control: unrecognised output treated as legacy turns the unrecognised case red"
+assert_neq "0" "$NU" "N9 mutation: negative control: unrecognised output treated as legacy turns the unrecognised case red"
 assert_eq "1" "$(spawns_of "$XF")" "negative control: ...because the old claude path spawned the shim"
 
 MUT3="$TEST_TMP/mut3"; cp -r "$REPO_ROOT/scripts" "$MUT3"; cp "$STUBD/claude-account.js" "$MUT3/claude-account.js"
 sed_mutate "$MUT3/lib/account-state.sh" 's/^    \*) echo invalid ;;/    *) echo legacy ;;/'
 unrecognised_holds "$MUT3" "garbage" >/dev/null; NR=$?
-assert_neq "0" "$NR" "negative control: account-state.sh default arm legacy instead of invalid turns the unrecognised case red"
+assert_neq "0" "$NR" "N9 mutation: negative control: account-state.sh default arm legacy instead of invalid turns the unrecognised case red"
 
 # 7. the child-session scrub rides the account arm too (CHILD_SESSION_UNSET present on the env line)
 assert_contains "$(grep -n 'node "\$_CNATIVE_ACCT_JS" run' -B3 "$SCRIPT" | head -20)" 'CHILD_SESSION_UNSET' "account arm: env line carries CHILD_SESSION_UNSET"

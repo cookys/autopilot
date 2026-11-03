@@ -170,7 +170,7 @@ export AUTOPILOT_FOREMAN_EVIDENCE_DIR="$TEST_TMP/foreman-evidence"
 # so the callers run their no-registry path. A suite that tests the account layer exports its own fixture dir after this
 # line; AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1 keeps the caller's value (only the isolation negative control uses it).
 if [ "${AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR:-}" != 1 ]; then export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"; fi
-if [ "${AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR:-}" = 1 ]; then echo "WARNING: AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1: the caller'\''s AUTOPILOT_ACCOUNTS_DIR is kept; a wired claude caller may read the operator'\''s REAL account registry (WARNING)" >&2; fi
+if [ "${AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR:-}" = 1 ]; then echo "WARNING: AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1: the caller's AUTOPILOT_ACCOUNTS_DIR is kept; a wired claude caller may read the operator's REAL account registry (WARNING)" >&2; fi
 # A host with a real /etc/claude-code/managed-settings.json would change what the autocompact resolver
 # reports; point it at a path that never exists (a test needing a managed file overrides this).
 export AUTOPILOT_MANAGED_SETTINGS_FILE="$TEST_TMP/.no-managed-settings.json"

@@ -1,0 +1,182 @@
+### claude claude --version
+2.1.317 (Claude Code)
+### claude claude --help
+Usage: claude [options] [command] [prompt]
+
+Claude Code - starts an interactive session by default, use -p/--print for
+non-interactive output
+
+Arguments:
+  prompt                                Your prompt
+
+Options:
+  --add-dir <directories...>            Additional directories to allow tool
+                                        access to
+  --agent <agent>                       Agent for the current session. Overrides
+                                        the 'agent' setting.
+  --agents <json-or-file>               JSON object defining custom agents, or
+                                        with --print the path to a file that
+                                        holds one (e.g. '{"reviewer":
+                                        {"description": "Reviews code",
+                                        "prompt": "You are a code reviewer"}}')
+  --allow-dangerously-skip-permissions  Enable bypassing all permission checks
+                                        as an option, without it being enabled
+                                        by default. Recommended only for
+                                        sandboxes with no internet access.
+  --allowedTools, --allowed-tools <tools...>
+      Comma or space-separated list of tool names to allow (e.g. "Bash(git *)
+      Edit")
+  --append-system-prompt <prompt>       Append a system prompt to the default
+                                        system prompt
+  --autocompact <auto|tokens>           Auto-compact window size (auto, or
+                                        100k–1M tokens)
+  --ax-screen-reader                    Render screen-reader friendly output
+                                        (flat text, no decorative borders or
+                                        animations).
+  --bg, --background                    Start the session in the background and
+                                        return immediately. Prints the id that
+                                        `claude attach`, `logs`, `stop` and `rm`
+                                        take; `claude agents` lists them. With
+                                        --resume <session-id>, continues that
+                                        session in the background under the same
+                                        ID, or starts a copy and says so when
+                                        the session is already running
+  --bare                                Minimal mode: skip hooks (those defined
+                                        in settings and by installed plugins;
+                                        features built into Claude Code are
+                                        unaffected), LSP, plugin sync,
+                                        attribution, auto-memory, background
+                                        prefetches, keychain reads, and
+                                        CLAUDE.md auto-discovery. Sets
+                                        CLAUDE_CODE_SIMPLE=1. Anthropic auth is
+                                        strictly ANTHROPIC_API_KEY or
+                                        apiKeyHelper via --settings (OAuth and
+                                        keychain are never read). 3P providers
+                                        (Bedrock/Vertex/Foundry) use their own
+                                        credentials. Skills still resolve via
+                                        /skill-name. Explicitly provide context
+                                        via: --system-prompt[-file],
+                                        --append-system-prompt[-file], --add-dir
+                                        (CLAUDE.md dirs), --mcp-config,
+                                        --settings, --agents, --plugin-dir.
+  --betas <betas...>                    Beta headers to include in API requests
+                                        (API key users only)
+  --brief                               Enable SendUserMessage tool for
+                                        agent-to-user communication
+  --chrome                              Enable Claude in Chrome integration
+  --cloud [description|session_id|url]  Create a cloud session with the given
+                                        description, or attach to an existing
+                                        one by session ID or claude.ai/code URL
+  -c, --continue                        Continue the most recent conversation in
+                                        the current directory
+  --dangerously-skip-permissions        Bypass all permission checks.
+                                        Recommended only for sandboxes with no
+                                        internet access.
+  -d, --debug [filter]                  Enable debug mode with optional category
+                                        filtering (e.g., --debug=hooks,mcp or
+                                        --debug='!hooks,!mcp')
+  --debug-file <path>                   Write debug logs to a specific file path
+                                        (implicitly enables debug mode)
+  --desktop                             Open in the Claude Desktop app instead
+                                        of the terminal (with --continue or
+                                        --resume <id> to pick the session)
+  --disable-slash-commands              Disable all skills and commands
+  --disallowedTools, --disallowed-tools <tools...>
+      Comma or space-separated list of tool names to deny (e.g. "Bash(git *)
+      Edit")
+  --effort <level>                      Effort level for the current session
+                                        (low, medium, high, xhigh, max)
+  --environment <environment_id>        Create a new cloud session that runs on
+                                        the given self-hosted environment
+                                        (ccpool_...).
+  --exclude-dynamic-system-prompt-sections
+      Move per-machine sections (cwd, env info, memory paths, git status) from
+      the system prompt into the first user message. Improves cross-user
+      prompt-cache reuse. Only applies with the default system prompt (ignored
+      with --system-prompt). (default: false)
+  --fallback-model <model>              Enable automatic fallback to specified
+                                        model(s) when the default model is
+                                        overloaded or not available. Accepts a
+                                        comma-separated list to try each in
+                                        order. Re-tries the primary at the start
+                                        of each user turn.
+  --file <specs...>                     File resources to download at startup.
+                                        Format: file_id:relative_path (e.g.,
+                                        --file file_abc:doc.txt
+                                        file_def:img.png)
+  --fork-session                        When resuming, create a new session ID
+                                        instead of reusing the original (use
+                                        with --resume or --continue)
+  --forward-subagent-text               Forward subagent text and thinking
+                                        blocks as assistant/user messages with
+                                        parent_tool_use_id set (only works with
+                                        --print and --output-format=stream-json)
+  --from-pr [value]                     Resume a session linked to a PR by PR
+                                        number/URL, or open interactive picker
+                                        with optional search term
+  -h, --help                            Display help for command
+  --ide                                 Automatically connect to IDE on startup
+                                        if exactly one valid IDE is available
+  --include-hook-events                 Include all hook lifecycle events in the
+                                        output stream (only works with
+                                        --output-format=stream-json)
+  --include-partial-messages            Include partial message chunks as they
+                                        arrive (only works with --print and
+                                        --output-format=stream-json)
+  --input-format <format>               Input format (only works with --print):
+                                        "text" (default), or "stream-json"
+                                        (realtime streaming input) (choices:
+                                        "text", "stream-json")
+  --json-schema <schema>                JSON Schema for structured output
+                                        validation (only works with --print).
+                                        Example:
+                                        {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}
+  --max-budget-usd <amount>             Maximum dollar amount to spend on API
+                                        calls (only works with --print)
+  --mcp-config <configs...>             Load MCP servers from JSON files or
+                                        strings (space-separated)
+  --model <model>                       Model for the current session. Provide
+                                        an alias for the latest model (e.g.
+                                        'fable', 'opus', or 'sonnet') or a
+                                        model's full name.
+  -n, --name <name>                     Set a display name for this session
+                                        (shown in the prompt box, /resume
+                                        picker, and terminal title)
+  --no-chrome                           Disable Claude in Chrome integration
+  --no-session-persistence              Disable session persistence - sessions
+                                        will not be saved to disk and cannot be
+                                        resumed (only works with --print)
+  --output-format <format>              Output format (only works with --print):
+                                        "text" (default), "json" (single
+                                        result), or "stream-json" (realtime
+                                        streaming) (choices: "text", "json",
+                                        "stream-json")
+### claude claude auth status --help
+Usage: claude auth status [options]
+
+Show authentication status
+
+Options:
+  -h, --help  Display help for command
+  --json      Output as JSON (default)
+  --text      Output as human-readable text
+
+### LIVE(zero-token) claude auth status
+{
+  "loggedIn": true,
+  "authMethod": "claude.ai",
+  "apiProvider": "firstParty",
+  "analyticsDisabled": false,
+  "projectsDirectory": "<home>/.claude/projects",
+  "configDirectory": "<home>/.claude",
+  "email": "<email>",
+  "orgId": "<uuid>",
+  "orgName": "<email>'s Organization",
+  "subscriptionType": "max"
+}
+
+### LIVE call 1 (claude -p ok --model haiku --output-format stream-json --verbose --tools "" --no-session-persistence): rate_limit_event line
+{"type": "rate_limit_event", "rate_limit_info": {"status": "allowed", "resetsAt": 1793833200, "rateLimitType": "seven_day", "overageStatus": "rejected", "overageDisabledReason": "org_level_disabled", "isUsingOverage": false, "unifiedWindows": {"seven_day": {"utilization": 0.67, "resetsAt": 1793833200, "status": "allowed"}}}}
+
+### LIVE result line (cost/usage subset)
+{"total_cost_usd": 0.0033936, "usage": {"input_tokens": 2, "cache_creation_input_tokens": 16412, "cache_read_input_tokens": 0, "output_tokens": 222, "output_tokens_details": {"thinking_tokens": 60}, "server_tool_use": {"web_search_requests": 0, "web_fetch_requests": 0}, "service_tier": "standard", "cache_creation": {"ephemeral_1h_input_tokens": 16412, "ephemeral_5m_input_tokens": 0}, "inference_geo": "global", "iterations": [{"input_tokens": 2, "output_tokens": 222, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 16412, "cache_creation": {"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 16412}, "type": "message"}], "speed": "standard", "fallback_credit": null}}

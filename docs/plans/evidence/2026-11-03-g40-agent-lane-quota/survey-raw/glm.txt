@@ -1,0 +1,11 @@
+
+### LIVE call 1 (POST <endpoint glm>/v1/messages, Authorization: Bearer <redacted>, model glm-5.2, max_tokens 8, prompt "ok"): response headers present (sanitized): content-type, content-length, alt-svc, vary, x-log-id, x-process-time, strict-transport-security, ga-traceid. NO ratelimit/quota headers. Body usage: {"input_tokens":13,"output_tokens":8,"cache_read_input_tokens":0,"server_tool_use":{"web_search_requests":0},"service_tier":"standard"}
+
+### LIVE (GET https://api.z.ai/api/monitor/usage/quota/limit, Authorization: <redacted>) -- endpoint is UNDOCUMENTED by Z.ai (third-party sources: pypi zai-limits, docs.rs zai-rs); live result HTTP 200:
+{"code":200,"msg":"Operation successful","data":{"limits":[{"type":"TIME_LIMIT","unit":5,"number":1,"usage":100,"currentValue":0,"remaining":100,"percentage":0,"nextResetTime":1796004274999,"usageDetails":[...]},{"type":"TOKENS_LIMIT","unit":3,"number":5,"percentage":2,"nextResetTime":1793723090344},{"type":"TOKENS_LIMIT","unit":6,"number":1,"percentage":12,"nextResetTime":1793844274997}],"level":"lite"},"success":true}
+(unit/number -> window mapping is INFERRED from reset-time distances, not documented)
+
+### WEB (https://docs.z.ai/devpack/faq): quota progress visible in subscription page; no documented API. https://docs.bigmodel.cn/cn/coding-plan/extension/usage-query-plugin: only a Claude Code slash command /glm-plan-usage:usage-query, no endpoint.
+
+### LIVE auth-scheme note for the monitor GET
+The monitor GET succeeded (HTTP 200) with the header `Authorization: <bare token>` (NO "Bearer " prefix), matching the third-party sources. The /v1/messages call used `Authorization: Bearer <token>`. Token value never printed.

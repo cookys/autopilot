@@ -3,6 +3,11 @@
   "version": 1,
   "entries": [
     {
+      "file": "scripts/lib/account-fixtures/shim-install.js",
+      "match": "g37-fix-",
+      "reason": "Test-only fixture builder: makeFixture() returns a cleanup() that every caller runs (tests call fx.cleanup() at the end); the root holds only FAKE- tokens and a decoy."
+    },
+    {
       "file": "scripts/check-tmp-residue-registry.js",
       "reason": "The gate's own detection regexes and self-test fixtures name temp constructs as text; its self-test directory is removed in a finally block."
     },

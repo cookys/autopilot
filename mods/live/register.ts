@@ -46,7 +46,7 @@ import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
-import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed } from './fleet'
+import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import { barStrip } from './tabs'
 import type { BarTabId } from './tabs'
@@ -105,18 +105,28 @@ function kickFleet($: EngineInterface, nowMs: number): void {
 // with its own speed label, so it is never handed that row (one speed on the band, BL-0359).
 const FORGE_ALIVE_MS = 10_000
 const FORGE_ALIVE_MAX_BYTES = 4096
+// The file is stat'ed before it is read: only a regular file, not itself a symbolic link, at most FORGE_ALIVE_MAX_BYTES; then the text is held to the same bound in UTF-8
+// bytes. A link, a directory, a FIFO or device (`other`), a big file or any error (EISDIR, ELOOP, EACCES, a session id that will not come) is no heartbeat: no fetch,
+// no second row, and the tick goes on. `$.fs` has no lstat and no bounded read, so a file swapped between the stat and the read is held only by the size check after.
 async function forgeBand($: EngineInterface, nowMs: number): Promise<{ alive: boolean; summaryRow: boolean }> {
   const no = { alive: false, summaryRow: false }
-  if (liveBaseSeen === null) return no
-  const sid = await $.session.id()
-  const text = await readText($, liveBaseSeen + '/codeforge/mod-alive/' + sanitizeSid(sid) + '.json')
-  if (text === null || text.length > FORGE_ALIVE_MAX_BYTES) return no
-  const parsed = parseJson(text)
-  if (!parsed.ok || !isObject(parsed.value)) return no
-  const v = parsed.value
-  const age = typeof v.written_at_ms === 'number' ? nowMs - v.written_at_ms : NaN
-  const alive = v.schema === 'codeforge.mod-alive/1' && v.session_id === sid && v.layout === 'band' && age >= 0 && age < FORGE_ALIVE_MS
-  return { alive, summaryRow: alive && v.summary_row === true }
+  try {
+    if (liveBaseSeen === null) return no
+    const sid = await $.session.id()
+    const path = liveBaseSeen + '/codeforge/mod-alive/' + sanitizeSid(sid) + '.json'
+    const st = await $.fs.stat(path)
+    if (st.kind !== 'file' || st.isLink || !(st.size <= FORGE_ALIVE_MAX_BYTES)) return no
+    const text = await $.fs.read(path)
+    if (typeof text !== 'string' || text.length > FORGE_ALIVE_MAX_BYTES || utf8Bytes(text) > FORGE_ALIVE_MAX_BYTES) return no
+    const parsed = parseJson(text)
+    if (!parsed.ok || !isObject(parsed.value)) return no
+    const v = parsed.value
+    const age = typeof v.written_at_ms === 'number' ? nowMs - v.written_at_ms : NaN
+    const alive = v.schema === 'codeforge.mod-alive/1' && v.session_id === sid && v.layout === 'band' && age >= 0 && age < FORGE_ALIVE_MS
+    return { alive, summaryRow: alive && v.summary_row === true }
+  } catch (_e) {
+    return no
+  }
 }
 let forgeSummaryRow = false // set by the tick from the heartbeat; the band's draw reads it, never the file
 async function fleetFor($: EngineInterface): Promise<FleetView | null> {

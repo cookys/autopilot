@@ -5749,6 +5749,111 @@
       "doc": "project/plans/2026-11-03-g37-account-switching.md",
       "relates": [],
       "note": "Overrides the account registry and token store directory (default ~/.config/autopilot/accounts); tests point it into a tempdir."
+    },
+    {
+      "name": "accounts.mode",
+      "kind": "config_key",
+      "audience": "internal",
+      "class": "plumbing",
+      "needle": "mode",
+      "default": "auto",
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [],
+      "note": "G37 account layer: auto (default when a registry exists) or off (explicit legacy path, audited as mode_off).",
+      "type": "enum",
+      "allowed": [
+        "auto",
+        "off"
+      ]
+    },
+    {
+      "name": "accounts.refuse_all_tight",
+      "kind": "config_key",
+      "audience": "internal",
+      "class": "plumbing",
+      "needle": "refuse_all_tight",
+      "default": false,
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [],
+      "note": "G37: when every alias is at or above 90% used, true makes pick/run exit 3 instead of using the least tight.",
+      "type": "boolean"
+    },
+    {
+      "name": "accounts.cooldown_default_minutes",
+      "kind": "config_key",
+      "audience": "internal",
+      "class": "plumbing",
+      "needle": "cooldown_default_minutes",
+      "default": 30,
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [],
+      "note": "G37: cooldown after a quota 429 when no reset time is known; a plain server throttle uses min(this, 5) minutes.",
+      "type": "number"
+    },
+    {
+      "name": "accounts.max_attempts",
+      "kind": "config_key",
+      "audience": "internal",
+      "class": "plumbing",
+      "needle": "max_attempts",
+      "default": 3,
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [],
+      "note": "G37: most aliases one run tries before exit 4.",
+      "type": "number"
+    },
+    {
+      "name": "AUTOPILOT_ACCOUNT_MODE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [
+        "accounts.mode"
+      ],
+      "note": "Overrides accounts.mode for one shell (auto|off)."
+    },
+    {
+      "name": "AUTOPILOT_ACCOUNT",
+      "kind": "env",
+      "audience": "internal",
+      "class": "plumbing",
+      "default": null,
+      "readers": [
+        "scripts/lib/account-env.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [],
+      "note": "Set by the account layer in every child env: the alias the child runs as (codeforge G36 reads it for usage attribution)."
+    },
+    {
+      "name": "AUTOPILOT_CONFIG",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/claude-account.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [],
+      "note": "Absolute path of the operator config.json handed to account children so nested calls read the same file."
     }
   ]
 }

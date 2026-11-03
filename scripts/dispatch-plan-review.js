@@ -10,6 +10,9 @@
  * transport/parser attempts. Generation 2 is the hard semantic terminal cap.
  *
  * Non-obvious contracts (each has burned a real dispatch round):
+ *  - --plan-file resolves against --repo-root, not the cwd (a relative path once read a stale
+ *    plan from the wrong checkout). Artifacts carry plan_git_blob_sha / repo_head_sha /
+ *    plan_dirty_vs_head; --expect-revision <rev> refuses a plan that differs from <rev>:<path>.
  *  - Rubric IDs must match `- R1: [label] ...` (id directly followed by `:` or
  *    punctuation, no intervening space/paren) or the rubric parses as having
  *    "no stable IDs" and the whole review round is worthless.
@@ -108,7 +111,14 @@ function usage() {
     --ticket <id> --session-id <id> --generation <1|2> \\
     --manifest-file <manifest.json> [--disposition-file <decisions.json>] \\
     [--context-file <repo-source-file>]... [--state-dir <dir>] [--now <ISO-8601>] \\
-    [--allow-unregistered] [--no-topology-fallbacks]
+    [--allow-unregistered] [--no-topology-fallbacks] [--expect-revision <git-rev>]
+
+--plan-file: a relative path resolves against --repo-root (never the cwd) and must stay inside
+  it (an absolute path may point elsewhere but then carries no git provenance); a warning is printed if the cwd has a same-named file with different content. Artifacts
+  record plan_path, plan_git_blob_sha, repo_head_sha, plan_dirty_vs_head next to plan_sha256.
+
+--expect-revision: refuse to start (exit 2, 0 seats dispatched) unless the plan file's git blob
+  sha equals that of <git-rev>:<plan path>; the message names both shas.
 
 --allow-unregistered: skip the plan_unregistered refusal (the plan must have a
   docs/projects/INDEX.md row with Version "active") — for a scratch/consumer repo. Auto-
@@ -148,6 +158,7 @@ function parseArgs(argv) {
   const flags = new Map([
     ['--repo-root', 'repoRoot'],
     ['--plan-file', 'planFile'],
+    ['--expect-revision', 'expectRevision'],
     ['--rubric-file', 'rubricFile'],
     ['--manifest-file', 'manifestFile'],
     ['--disposition-file', 'dispositionFile'],
@@ -242,7 +253,7 @@ function parseArgs(argv) {
     throw new CliError('provide --manifest-file or the legacy --runner and --model tuple');
   }
   opts.repoRoot = canonicalDirectory(opts.repoRoot, '--repo-root');
-  opts.planFile = canonicalFile(opts.planFile, '--plan-file');
+  opts.planFile = resolvePlanFile(opts.planFile, opts.repoRoot);
   opts.rubricFile = canonicalFile(opts.rubricFile, '--rubric-file');
   if (opts.manifestFile) opts.manifestFile = canonicalFile(opts.manifestFile, '--manifest-file');
   if (opts.dispositionFile) {
@@ -296,6 +307,82 @@ function canonicalFile(raw, label) {
   }
   if (!fs.statSync(resolved).isFile()) throw new CliError(`${label} must be a regular file`);
   return resolved;
+}
+
+// --plan-file resolves against --repo-root (like --context-file), never the cwd: a relative path
+// read from the wrong checkout silently reviewed a stale plan (2026-11-04). The resolved file
+// must live inside --repo-root. If cwd holds a same-named file with different bytes, warn.
+function resolvePlanFile(raw, repoRoot) {
+  const wasRelative = !path.isAbsolute(raw);
+  const resolved = canonicalFile(wasRelative ? path.join(repoRoot, raw) : raw, '--plan-file');
+  const rel = path.relative(repoRoot, resolved);
+  // Only a RELATIVE path is held to containment (it cannot name the other checkout by accident);
+  // an explicit absolute path outside --repo-root stays allowed, but carries no git provenance.
+  if (wasRelative && (rel === '' || rel.startsWith('..') || path.isAbsolute(rel))) {
+    throw new CliError(`--plan-file must be inside --repo-root: ${resolved}`);
+  }
+  if (wasRelative) {
+    try {
+      const other = fs.realpathSync(path.resolve(raw));
+      if (other !== resolved && fs.statSync(other).isFile()
+          && !fs.readFileSync(other).equals(fs.readFileSync(resolved))) {
+        process.stderr.write(`dispatch-plan-review: warning: ${raw} also exists under the cwd with different content; reviewing the --repo-root copy ${resolved}\n`);
+      }
+    } catch (error) { /* no cwd twin */ }
+  }
+  return resolved;
+}
+
+function gitOut(repoRoot, args) {
+  const run = spawnSync('git', ['-C', repoRoot, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  return run.status === 0 ? run.stdout.trim() : null;
+}
+
+// Object-id algorithm of the repo, independent of any path or revision. `rev-parse
+// --show-object-format` needs git >= 2.38; when the option is unsupported, fall back to the
+// extensions.objectformat config, default sha1 (the only format older gits can create).
+function repoObjectFormat(repoRoot) {
+  const fmt = gitOut(repoRoot, ['rev-parse', '--show-object-format']);
+  if (fmt === 'sha1' || fmt === 'sha256') return fmt;
+  return gitOut(repoRoot, ['config', '--get', 'extensions.objectformat']) === 'sha256' ? 'sha256' : 'sha1';
+}
+
+// Provenance of the reviewed plan: blob sha of the reviewed bytes, repo HEAD, and whether the
+// file differs from HEAD. Null fields when the repo is not git or the file is untracked.
+function planProvenance(opts, planBytes) {
+  const rel = path.relative(opts.repoRoot, opts.planFile).split(path.sep).join('/');
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return { plan_path: null, plan_git_blob_sha: null, repo_head_sha: null, plan_dirty_vs_head: null };
+  }
+  // The blob sha is computed from the SAME Buffer that is later sealed and sent to the seats
+  // (git object id = hash("blob <len>\0" + bytes)); a second read of the file could differ.
+  const head = gitOut(opts.repoRoot, ['rev-parse', 'HEAD']);
+  const headBlob = head ? gitOut(opts.repoRoot, ['rev-parse', `HEAD:${rel}`]) : null;
+  const algo = repoObjectFormat(opts.repoRoot);
+  const blob = crypto.createHash(algo)
+    .update(Buffer.concat([Buffer.from(`blob ${planBytes.length}\0`), planBytes])).digest('hex');
+  return {
+    plan_path: rel,
+    plan_git_blob_sha: blob,
+    repo_head_sha: head,
+    plan_dirty_vs_head: headBlob === null ? null : headBlob !== blob,
+  };
+}
+
+// --expect-revision <rev>: refuse (0 seats dispatched) unless the plan bytes equal <rev>:<path>.
+function checkExpectedRevision(opts, provenance) {
+  if (!opts.expectRevision) return;
+  if (!provenance.plan_path) {
+    throw new CliError('--expect-revision needs a --plan-file inside --repo-root');
+  }
+  const want = gitOut(opts.repoRoot, ['rev-parse', '--verify', `${opts.expectRevision}:${provenance.plan_path}`]);
+  if (!want) {
+    throw new CliError(`--expect-revision ${opts.expectRevision}: ${provenance.plan_path} not found in that revision`);
+  }
+  if (want !== provenance.plan_git_blob_sha) {
+    throw new CliError(`--expect-revision ${opts.expectRevision}: plan blob sha mismatch for ${provenance.plan_path}: `
+      + `file is ${provenance.plan_git_blob_sha}, ${opts.expectRevision} has ${want}; refusing to review (0 seats dispatched)`);
+  }
 }
 
 function canonicalRepoIdentity(repoRoot) {
@@ -1624,6 +1711,7 @@ function policyArtifact(context, reason, details = {}) {
     rubric_sha256: context.rubricSha,
     manifest_sha256: context.manifestSha,
     plan_sha256: context.planSha,
+    ...context.provenance,
     growth_ratio: context.growthRatioValue || { numerator: 1, denominator: 1 },
     growth_warning: Boolean(context.growthWarning),
     transport_status: 'policy_stop',
@@ -1742,6 +1830,14 @@ function main() {
   try {
     opts = parseArgs(process.argv.slice(2));
     checkPlanRegistration(opts);
+    // The plan is read exactly once; the same Buffer feeds provenance, --expect-revision,
+    // plan_sha256 and the seat prompts.
+    var planBytes = fs.readFileSync(opts.planFile);
+    var provenance = planProvenance(opts, planBytes);
+    checkExpectedRevision(opts, provenance);
+    if (process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS === '1' && process.env.AUTOPILOT_TEST_AFTER_PLAN_READ) {
+      spawnSync('sh', ['-c', process.env.AUTOPILOT_TEST_AFTER_PLAN_READ], { stdio: 'ignore' }); // test seam: mutate the file after the read
+    }
   } catch (error) {
     if (error instanceof CliError) {
       process.stderr.write(`dispatch-plan-review: ${error.message}\n${usage()}\n`);
@@ -1770,7 +1866,6 @@ function main() {
       process.stderr.write(`dispatch-plan-review: warning: required seat has no fallback: ${seat.id} (a failed first attempt cannot be substituted)\n`);
     }
   }
-  const planBytes = fs.readFileSync(opts.planFile);
   if (planBytes.length === 0 || planBytes.toString('utf8').trim() === '') {
     throw new CliError('plan file must contain non-whitespace content');
   }
@@ -1808,6 +1903,7 @@ function main() {
     manifestSha,
     rubricSha,
     planSha,
+    provenance,
     now,
     growthRatioValue: { numerator: 1, denominator: 1 },
     growthWarning,
@@ -2261,6 +2357,7 @@ function main() {
         rubric_sha256: rubricSha,
         manifest_sha256: manifestSha,
         plan_sha256: planSha,
+        ...provenance,
         growth_ratio: context.growthRatioValue,
         growth_warning: growthWarning,
         transport_status: 'complete',

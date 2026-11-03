@@ -108,7 +108,7 @@ money nor authorization. `scripts/qualification-review-provider.js`'s `callCli()
 because the exam transport must be able to force a tool-deny and cursor-agent offers none.
 
 That refusal rests on a live adversarial probe that was already run —
-[`docs/plans/evidence/2026-08-29-cursor-containment-probe/`](evidence/2026-08-29-cursor-containment-probe/),
+[`docs/plans/evidence/2026-08-29-cursor-containment-probe/`](../../docs/plans/evidence/2026-08-29-cursor-containment-probe/),
 18 probes against **cursor-agent 2026.08.25-3e8eec8, the exact build installed on this host**:
 
 - enumerated `permissions.deny` beats `--force` for the five nameable categories, but the model has

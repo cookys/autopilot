@@ -296,14 +296,17 @@ const BARE_SCRIPT_RE = /`([A-Za-z0-9_-]+\.(?:sh|bash|js|mjs|cjs|ts|py|ps1))`/g;
 
 // The script-ref existence check applies to ACTIVE autopilot operational docs only.
 // Exempt:
-//   - docs/plans/, docs/projects/ — period-accurate history/tracking (named scripts
-//     as they were at the time, e.g. tree.sh before the Node port)
+//   - the plans dir, the plans evidence dir and the projects dir — period-accurate
+//     history/tracking (named scripts as they were at the time, e.g. tree.sh before
+//     the Node port). The evidence dir needs its own entry: it used to sit under the
+//     plans dir, and stopped being covered when the layout registry moved plans out.
 //   - CHANGELOG.md — immutable release history (same period-accuracy rationale)
 //   - project-config-template/ — templates describe a CONSUMING project's own
 //     scripts (e.g. `scripts/check-doc-drift.py`), not autopilot's
 function isScriptRefExemptDoc(relPath) {
   const p = relPath.replace(/\\/g, '/');
   return p.startsWith(`${PLANS_DIR}/`)
+    || p.startsWith(`${PLANS_EVIDENCE_DIR}/`)
     || p.startsWith(`${PROJECTS_DIR}/`)
     || p.startsWith('project-config-template/')
     || p === 'CHANGELOG.md';

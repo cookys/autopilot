@@ -14,7 +14,8 @@
 //       spawns argv, records the child's pid, ends the manifest when it exits and exits with the child's rc.
 //       SIGTERM / SIGINT are forwarded to the child; the run is then ended with status "killed".
 //
-// The manifest dir is runtime-paths ensureRunsDir() ($AUTOPILOT_DISPATCH_RUNS_DIR, else $TMPDIR/autopilot-dispatch-runs).
+// The manifest dir is runtime-paths ensureRunsDir() ($AUTOPILOT_DISPATCH_RUNS_DIR, else a directory under $TMPDIR
+// whose name runtime-paths owns).
 // root_run_id / session_id default from the session marker of --session or $CLAUDE_CODE_SESSION_ID; with none found
 // root_run_id stays null (the run lands in the project's overall file) and stderr says so.
 

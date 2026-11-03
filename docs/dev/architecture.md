@@ -88,10 +88,10 @@ Autopilot's engine layer is the host-neutral execution core underneath the prose
 | Module | Responsibility |
 |--------|----------------|
 | [`bin/autopilot.js`](../../bin/autopilot.js) | Public CLI front door: `dispatch review`, `engine review-loop`, `engine implement-review`, and `harness report`. |
-| [`src/engine/`](../src/engine/) | `AutopilotEngine` orchestration plus the `resolve-review-loop.sh` wrapper for roster resolution, read-only review dispatch, heterogeneous implementation dispatch, repair-loop prompting, and immutable-base verification. |
-| [`src/runners/`](../src/runners/) | Thin JS wrappers around artifact-verified shell dispatchers (`dispatch-hetero.sh`, `dispatch-review.sh`) with schema validation and parse-fail visibility. |
-| [`src/harness/`](../src/harness/) | Harness capability state, stale/attention reporting, and read-only capability CLI surfaces. |
-| [`src/hooks/`](../src/hooks/) | Host-neutral hook normalizers and handlers used by Claude wrappers and Codex hook probes. |
+| [`src/engine/`](../../src/engine/) | `AutopilotEngine` orchestration plus the `resolve-review-loop.sh` wrapper for roster resolution, read-only review dispatch, heterogeneous implementation dispatch, repair-loop prompting, and immutable-base verification. |
+| [`src/runners/`](../../src/runners/) | Thin JS wrappers around artifact-verified shell dispatchers (`dispatch-hetero.sh`, `dispatch-review.sh`) with schema validation and parse-fail visibility. |
+| [`src/harness/`](../../src/harness/) | Harness capability state, stale/attention reporting, and read-only capability CLI surfaces. |
+| [`src/hooks/`](../../src/hooks/) | Host-neutral hook normalizers and handlers used by Claude wrappers and Codex hook probes. |
 | [`src/engine/execution-profile.js`](../../src/engine/execution-profile.js) + [`profile-payload.js`](../../src/engine/profile-payload.js) | Admit an exact role/deployment first, then compile one content-addressed `guided` or `autonomous` payload without changing authority. |
 | [`src/engine/capability-evidence.js`](../../src/engine/capability-evidence.js) | Typed role/scope/deployment evidence lifecycle. Disk rows remain provisional telemetry; a live host verifier is the session-admission boundary. |
 | [`src/engine/local-deployment.js`](../../src/engine/local-deployment.js) | Optional local endpoint identity/capacity probe and one-slot Autopilot lease; it does not turn a raw chat API into an agentic runner. |

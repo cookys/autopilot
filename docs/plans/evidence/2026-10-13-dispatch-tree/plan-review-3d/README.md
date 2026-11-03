@@ -1,6 +1,6 @@
 # Dispatch tree step 3d — plan review receipts
 
-Plan: [`docs/plans/2026-10-13-dispatch-tree.md`](../../../2026-10-13-dispatch-tree.md), step 3d (BL-0176)
+Plan: [`project/plans/2026-10-13-dispatch-tree.md`](../../../../../project/plans/2026-10-13-dispatch-tree.md), step 3d (BL-0176)
 Logical plan id / ticket: `dispatch-tree-3d-2026-10-15`
 
 | File | What it is |

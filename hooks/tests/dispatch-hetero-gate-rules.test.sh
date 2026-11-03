@@ -130,8 +130,15 @@ r2() { local script="$1"
   # TERM: the dispatcher is stopped while the worker runs
   export FAKE_MODE=sleep FAKE_SLEEP=4; rm -f "$TEST_TMP"/fake-*
   export FAKE_ARGV="$TEST_TMP/fake-argv" FAKE_CALLS="$TEST_TMP/fake-calls" FAKE_SID="$TEST_TMP/fake-sid" FAKE_SETTINGS="$TEST_TMP/fake-settings" FAKE_HOOKOUT="$TEST_TMP/fake-hookout" FAKE_STARTED="$TEST_TMP/fake-started"
-  ( cd "$SBX" && timeout -s TERM 2 "$script" --runner cc-shim --model m --prompt-file "$PROMPT" --context-window off --branch "feat/term$RANDOM" --gate-rules "$RULES" >/dev/null 2>&1 )
-  sleep 5
+  # TERM goes out once the fake worker has actually started (FAKE_STARTED), not after a fixed 2 s: on a loaded
+  # host the dispatcher needs longer than that to reach the worker, TERM then lands before the gate is armed,
+  # the fake never records a session, and the check fails on an empty state instead of on cleanup.
+  ( cd "$SBX" && exec "$script" --runner cc-shim --model m --prompt-file "$PROMPT" --context-window off --branch "feat/term$RANDOM" --gate-rules "$RULES" >/dev/null 2>&1 ) &
+  local dpid=$! waited=0
+  while [ ! -e "$FAKE_STARTED" ] && [ "$waited" -lt 600 ] && kill -0 "$dpid" 2>/dev/null; do sleep 0.2; waited=$((waited + 1)); done
+  [ -e "$FAKE_STARTED" ] || { echo "r2 TERM: worker never started" >&2; kill -KILL "$dpid" 2>/dev/null; return 1; }
+  kill -TERM "$dpid" 2>/dev/null
+  wait "$dpid" 2>/dev/null || true
   gone_after || { echo "r2 TERM" >&2; return 1; }; }
 
 # T-R3: distinct ids, files and counters for two overlapping hands; a stale CHILD_SESSION_ID is replaced; no id, no dispatch.

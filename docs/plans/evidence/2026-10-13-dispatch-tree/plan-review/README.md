@@ -1,6 +1,6 @@
 # Dispatch tree — plan review receipts
 
-Plan: [`docs/plans/2026-10-13-dispatch-tree.md`](../../../2026-10-13-dispatch-tree.md)
+Plan: [`project/plans/2026-10-13-dispatch-tree.md`](../../../../../project/plans/2026-10-13-dispatch-tree.md)
 Logical plan id / ticket: `dispatch-tree-2026-10-13`
 
 | File | What it is |

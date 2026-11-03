@@ -142,7 +142,8 @@ test('rejection messages never echo the offending string (key or value)', () => 
   msgs.push(A.validateRecord(full).reason);
   assert.strictEqual(msgs.length, 5);
   for (const m of msgs) for (const f of frags) assert.ok(!m.includes(f), 'leaked fragment ' + f.length);
-  assert.match(msgs[4], /^extra_keys:1 fp=[0-9a-f]{8}$/);
+  assert.strictEqual(msgs[4], 'extra_keys:1');
+  for (const m of msgs) { assert.ok(!/fp=/.test(m)); assert.ok(!/\b[0-9a-f]{8}\b/.test(m.split('\n')[0]), 'hex8 in message'); }
 });
 
 test('readAudit reads only the tail of a large file and skips the cut first line', () => {
@@ -157,4 +158,26 @@ test('readAudit reads only the tail of a large file and skips the cut first line
   assert.strictEqual(res.invalid, 0, 'cut first line must be skipped, not counted');
   assert.ok(res.records.length > 1000 && res.records.length < n);
   assert.strictEqual(res.records[res.records.length - 1].alias, 'last-one');
+});
+
+function fifoCase(code) {
+  const { execFileSync } = require('child_process');
+  const dir = tmp();
+  const fifo = path.join(dir, 'a.jsonl');
+  execFileSync('mkfifo', [fifo]);
+  const lib = JSON.stringify(path.join(__dirname, 'account-audit.js'));
+  return execFileSync(process.execPath, ['-e', `const A=require(${lib});const f=${JSON.stringify(fifo)};${code}`],
+    { timeout: 5000, encoding: 'utf8' });
+}
+
+test('FIFO at the audit path: readAudit returns refused within 5s', () => {
+  const out = fifoCase("const r=A.readAudit(f);console.log(JSON.stringify(r));");
+  const r = JSON.parse(out);
+  assert.strictEqual(r.refused, 'not_regular_file');
+  assert.deepStrictEqual(r.records, []);
+});
+
+test('FIFO at the audit path: appendAudit throws within 5s', () => {
+  const out = fifoCase("try{A.appendAudit({alias:'a',purpose:'p',attempt:1,outcome:'ok'},{path:f});console.log('wrote')}catch(e){console.log('threw')}");
+  assert.strictEqual(out.trim(), 'threw');
 });

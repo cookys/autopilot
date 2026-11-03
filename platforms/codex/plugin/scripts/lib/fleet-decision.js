@@ -3,8 +3,8 @@
  * fleet-decision.js — the autopilot side of operator-console F4 (fleet plan docs/plans/2026-11-02-oc-f4-attributed-answers.md, U8 A-side).
  * Thin wrapper over `fleet decision claim|verify`; autopilot never decides who won, the card's courier does.
  *
- *   supported()  does this host have a courier that speaks `decision`? (`fleet --help` lists `fleet decision`). No fleet binary, or
- *                one without `decision` -> false, and every caller keeps today's behaviour (no console path exists there).
+ *   probe()      'unsupported' | 'supported' | 'probe_error' (see the function). Only 'unsupported' (no fleet binary, or a fleet whose usage has
+ *                no `fleet decision`) keeps today's behaviour; 'probe_error' is a failure: callers must not close or act.
  *   claim(...)   `fleet decision claim <card_id> [--option L | --free-text T]`. Exit map (plan "CLI"):
  *                0 claimed (stdout JSON {answer_id, card_id, via, ...}; the same card + same answer again is idempotent: exit 0, same answer_id)
  *                3 already answered (stdout = the winning answer JSON) | 4 unknown card | 10 card closed | 9 courier unreachable.
@@ -26,9 +26,18 @@ function run(args, timeout) {
   return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }
 
-function supported() {
+// Three states, never a boolean: a failed probe is NOT "no courier".
+//   'unsupported'  spawn ENOENT (no fleet binary), or fleet printed its usage and that usage has no `fleet decision` line
+//   'supported'    fleet printed its usage with a `fleet decision` line
+//   'probe_error'  everything else (timeout, other spawn error, no usage text at all)
+// The exit status of `--help` is not read: today's fleet prints its usage and exits 1.
+function probe() {
   const r = run(['--help'], 5000);
-  return r.status === 0 && /^\s*fleet decision\b/m.test(r.stdout + r.stderr);
+  if (r.missing) return 'unsupported';
+  if (r.error) return 'probe_error';
+  const text = r.stdout + r.stderr;
+  if (!/courier CLI|^USAGE:/m.test(text)) return 'probe_error';
+  return /^\s*fleet decision(\s|$)/m.test(text) ? 'supported' : 'unsupported';
 }
 
 const parseJson = (s) => { try { const v = JSON.parse(String(s).trim().split('\n').pop()); return v && typeof v === 'object' ? v : null; } catch { try { return JSON.parse(s); } catch { return null; } } };
@@ -88,4 +97,4 @@ function verify(cardId, answerId, text) {
   return verifyOnce(cardId, answerId, contentSha256(text));
 }
 
-module.exports = { supported, claim, verify, verifyOnce, contentSha256 };
+module.exports = { probe, claim, verify, verifyOnce, contentSha256 };

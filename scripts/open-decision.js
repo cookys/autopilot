@@ -289,7 +289,12 @@ function claimBeforeClose(args) {
   const open = projectScopeFiles(args.cwd).some((f) => readFile(f).some((e) => e.id === args.id));
   if (!open) return { code: 0 }; // not open: the plain close below says so
   const fd = require('./lib/fleet-decision.js');
-  if (!fd.supported()) return { code: 0 }; // no courier on this host: today's behaviour
+  const pr = fd.probe();
+  if (pr === 'unsupported') return { code: 0 }; // no courier on this host: today's behaviour
+  if (pr === 'probe_error') {
+    process.stderr.write(`open-decision: ERROR: ${args.id} NOT closed and NOT answered: could not tell whether this host has a fleet courier (\`fleet --help\` probe failed); the answer is held. Run the same close again\n`);
+    return { code: 8 };
+  }
   const c = fd.claim(args.id, args.option.length ? { option: args.option[0] } : { freeText: args.closeFreeText });
   if (c.outcome === 'claimed') return { code: 0 };
   if (c.outcome === 'already_answered') {
@@ -297,8 +302,11 @@ function claimBeforeClose(args) {
     process.stdout.write(`already answered on the console: ${JSON.stringify(c.json)}\n`);
     return { code: 0 };
   }
-  if (c.outcome === 'unknown' || c.outcome === 'card_closed') {
-    process.stderr.write(`open-decision: note: courier says ${c.outcome} for ${args.id}; closing the ledger entry\n`);
+  // exit 10 card_closed (withdrawn / closed / expired on the courier): fleet plan R4.1 says an expired card "can be answered only in-session"
+  // (plan line 504) and claim exit 10 is the closed-card code (line 542), so the local ledger entry may be closed. exit 4 `unknown` is NOT
+  // defined as proceed anywhere: nothing confirmed the answer, so the card stays open (exit 8 below).
+  if (c.outcome === 'card_closed') {
+    process.stderr.write(`open-decision: note: courier says card_closed for ${args.id}; closing the ledger entry\n`);
     return { code: 0 };
   }
   process.stderr.write(`open-decision: ERROR: ${args.id} NOT closed and NOT answered: claim ${c.outcome === 'unreachable' ? `failed, courier unreachable after ${c.attempts} attempts` : 'failed'}${c.detail ? ` (${c.detail})` : ''}; the answer is held. Tell the owner, and run the same close again once the courier is back\n`);

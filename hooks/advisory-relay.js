@@ -24,6 +24,19 @@ const path = require('path');
 const DECIDE_REPLY_HEAD = '[待決回覆]';
 const DECIDE_ID = /^d-[0-9a-f]{8}(?![0-9a-f])/;
 
+const storedText = (a) => (a && typeof a === 'object' ? JSON.stringify(a.option !== null && a.option !== undefined ? { option: a.option } : { free_text: a.free_text === undefined ? null : a.free_text }) : 'nothing');
+// line: `<id>｜<excerpt> → <label>[｜補充：<note>]｜<answer_id>`. True only when its answer part equals the stored option / free text.
+function lineSaysAnswer(line, a) {
+  if (!a || typeof a !== 'object') return false;
+  const t = a.option !== null && a.option !== undefined ? a.option : a.free_text;
+  if (typeof t !== 'string' || !t) return false;
+  const norm = (s) => String(s).replace(/｜/g, '|').replace(/\s+/g, ' ').trim();
+  const segs = line.split('｜');
+  const mid = norm(segs.slice(1, -1).join('｜'));
+  const nt = norm(t);
+  return `${mid}|補充：`.includes(` → ${nt}|補充：`) || (a.option === null || a.option === undefined) && mid.includes(`補充：${nt}`);
+}
+
 function closeDecideReply(payload) {
   if (process.env.AUTOPILOT_DECIDE_REPLY_CLOSE === 'off') return;
   const prompt = payload && payload.prompt;
@@ -60,14 +73,19 @@ function closeDecideReply(payload) {
   // `fleet decision verify` accepts its answer_id (the last ｜ field). One call per card, never a retry or a sleep here.
   // No courier on this host: today's behaviour.
   let fd = null;
-  try { const m = require('../scripts/lib/fleet-decision.js'); if (m.supported()) fd = m; } catch (_e) { fd = null; }
+  let probeState = 'unsupported';
+  try { const m = require('../scripts/lib/fleet-decision.js'); probeState = m.probe(); if (probeState === 'supported') fd = m; } catch (_e) { probeState = 'probe_error'; }
   const unverified = [];
   for (const id of ids) {
+    if (probeState === 'probe_error') { unverified.push(`${id} (probe_error)`); continue; } // not "no courier": nothing is acted on
     if (fd) {
       const line = idLine.get(id);
       const aid = line.split('｜').pop().trim();
       const v = /^[0-9A-Za-z]{20,40}$/.test(aid) ? fd.verify(id, aid, line) : { ok: false, outcome: 'unverified' };
       if (!v.ok) { unverified.push(`${id} (${v.outcome})`); continue; }
+      // the verified STORED answer is the only authority: the line's own text must say that same answer
+      const bound = lineSaysAnswer(line, v.answer);
+      if (!bound) { unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
     }
     // closeDecisionById locks before it looks up the id, so a locked scope file
     // returns status error even when this card is not in it. Keep every error

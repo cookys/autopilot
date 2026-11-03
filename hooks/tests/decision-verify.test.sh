@@ -24,7 +24,12 @@ const fs = require('fs'); const crypto = require('crypto');
 const D = process.env.STUB_DIR; const a = process.argv.slice(2);
 fs.appendFileSync(D + '/calls', a.join(' ') + '\n');
 const mode = () => { try { return fs.readFileSync(D + '/mode', 'utf8').trim(); } catch { return 'ok'; } };
-if (a[0] === '--help') { process.stdout.write('fleet - courier CLI\nUSAGE:\n  fleet send x\n' + (process.env.NO_DECISION ? '' : '  fleet decision claim|verify|list <card_id>\n')); process.exit(0); }
+if (a[0] === '--help') {
+  if (mode() === 'probe_error') process.exit(2); // no usage text at all
+  // like today's fleet: usage printed, exit status 1
+  process.stdout.write('fleet — courier CLI\n\nUSAGE:\n  fleet send x\n' + (process.env.DECOY ? '  fleet decisions-report x\n' : '') + (process.env.NO_DECISION ? '' : '  fleet decision claim|verify|list <card_id>\n'));
+  process.exit(process.env.HELP_RC ? Number(process.env.HELP_RC) : 1);
+}
 const [, sub, card] = a;
 const idOf = (c, v) => 'A' + crypto.createHash('sha256').update(c + '|' + v).digest('hex').slice(0, 25).toUpperCase();
 const rows = () => (fs.existsSync(D + '/answers') ? fs.readFileSync(D + '/answers', 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
@@ -89,7 +94,17 @@ assert_eq "$(count 'decision claim')" 3 "unreachable: exactly 3 attempts (bounde
 assert_contains "$ERR" "NOT closed" "unreachable: loud error"
 reset ok; close "$C" --option A; assert_eq "$RC" 0 "courier back: the same close now works"
 # unknown / card_closed on the courier: ledger entry still closes
-for m in unknown closed; do reset $m; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 0 "$m: exit 0"; is_open "$C"; assert_eq "$?" 1 "$m: ledger entry closed"; done
+# exit 10 card_closed (fleet plan: an expired card is answered in-session): the ledger entry closes
+reset closed; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 0 "card_closed: exit 0"; is_open "$C"; assert_eq "$?" 1 "card_closed: ledger entry closed"
+# exit 4 unknown: nothing confirmed the answer -> card stays open, exit 8
+reset unknown; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "unknown card: exit 8"; is_open "$C"; assert_eq "$?" 0 "unknown card: stays open"
+# a failed probe is not 'no courier'
+reset probe_error; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "probe error: exit 8"; is_open "$C"; assert_eq "$?" 0 "probe error: card stays open"
+assert_eq "$(count 'decision claim')" 0 "probe error: no claim attempted"; assert_contains "$ERR" "probe failed" "probe error: loud"
+reset ok; HELP_RC=0 close "$C" --option A; assert_eq "$RC" 0 "usage with exit 0 also counts as supported"
+# `fleet decisions-report` is not `fleet decision`
+reset ok; C="$(open_card)"; DECOY=1 NO_DECISION=1 close "$C" --option A; assert_eq "$RC" 0 "decoy line only: unsupported, plain close"; assert_eq "$(count 'decision claim')" 0 "decoy line: no claim"
+# ENOENT stays unsupported (covered below); timeout-like failure above is probe_error
 # exit 0 without an answer_id is an error, not a claim
 reset noid; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "claim exit 0 without answer_id: exit 8"; is_open "$C"; assert_eq "$?" 0 "no answer_id: card stays open"
 # no answer given: plain close, no claim
@@ -124,6 +139,20 @@ assert_eq "$(count 'decision verify')" 1 "courier down: one verify call (exit 9 
 # no courier: today's behaviour (closes with no answer_id)
 reset ok; C="$(open_card)"; AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet" hook "$(printf '[待決回覆]\n%s｜Q → A\n' "$C")"
 is_open "$C"; assert_eq "$?" 1 "hook, no fleet: card closed as before"
+# probe error: nothing is acted on, and it is not treated as 'no courier'
+reset probe_error; C="$(open_card)"; hook "$(printf '[待決回覆]\n%s｜Q → A\n' "$C")"
+is_open "$C"; assert_eq "$?" 0 "hook, probe error: card NOT closed"; assert_contains "$HOUT" "probe_error" "hook, probe error: reported"
+# content bound to the stored answer: a valid answer_id for A with text saying B is refused
+reset ok; C="$(open_card)"; AIDA="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"A"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
+hook "$(printf '[待決回覆]\n%s｜Q → B｜%s\n' "$C" "$AIDA")"
+is_open "$C"; assert_eq "$?" 0 "swapped text (valid id for A, line says B): NOT closed"
+assert_contains "$HOUT" "content_mismatch" "swapped text: reported"; assert_contains "$HOUT" '{\"option\":\"A\"}' "swapped text: message shows the stored answer"
+assert_not_contains "$HOUT" "→ B" "swapped text: message does not repeat the line's text"
+hook "$(printf '[待決回覆]\n%s｜Q → A｜補充：extra words｜%s\n' "$C" "$AIDA")"
+is_open "$C"; assert_eq "$?" 1 "same answer with a note: closes"
+reset ok; C="$(open_card)"; AIDF="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{freeText:"my own words"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
+hook "$(printf '[待決回覆]\n%s｜Q → other words｜%s\n' "$C" "$AIDF")"; is_open "$C"; assert_eq "$?" 0 "free text swapped: NOT closed"
+hook "$(printf '[待決回覆]\n%s｜Q → my own words｜%s\n' "$C" "$AIDF")"; is_open "$C"; assert_eq "$?" 1 "free text matching: closes"
 # one forged + one good in a single reply: only the good one closes
 reset ok; C1="$(open_card)"; C2="$(open_card)"; AID2="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"B"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C2")"
 hook "$(printf '[待決回覆]\n%s｜Q → A｜AFORGED000000000000000000X\n%s｜Q → B｜%s\n' "$C1" "$C2" "$AID2")"
@@ -154,6 +183,14 @@ assert_contains "$(ctx)" "$CF (unverified: unverified; not acted on)" "forged la
 # unknown schema major -> refused
 CU="$(open_card)"; printf '{"schema":"fleet.decision-answer/2","card_id":"%s","answer_id":"%s","content_sha256":"%s"}' "$CU" "$LID" "$LSHA" > "$LD/$CU.json"
 assert_contains "$(ctx)" "$CU (unverified: unknown landing schema" "unknown schema major: refused"
+# stale landing files of CLOSED cards must not crowd out a pending answer (cap applies after the open-card filter)
+for k in 1 2 3 4 5 6 7; do printf '{"schema":"fleet.decision-answer/1","card_id":"d-0000000%s","answer_id":"01JOLD000000000000000000%s","content_sha256":"%s"}' "$k" "$k" "$LSHA" > "$LD/d-0000000$k.json"; done
+CN="$(open_card)"; NID="01JC8Z7Q4M2N6P8R0S2T4V6NEW"
+printf '{"card_id":"%s","answer_id":"%s","via":"console","option":"B","content_sha256":"%s"}\n' "$CN" "$NID" "$LSHA" >> "$STUB/answers"
+printf '{"schema":"fleet.decision-answer/1","card_id":"%s","answer_id":"%s","via":"console","option":"B","free_text":null,"content_sha256":"%s"}' "$CN" "$NID" "$LSHA" > "$LD/$CN.json"
+assert_contains "$(ctx)" "$CN -> option \"B\"" "7 old files of closed cards do not hide the new pending answer"
+# probe error: landing files are not trusted, and it says so
+reset probe_error; assert_contains "$(ctx)" "probe failed" "landing, probe error: said, nothing acted on"; reset ok
 # no courier: landing files are not read at all
 rm -f "$STUB/calls"; NOC="$(AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet" ctx)"; assert_not_contains "$NOC" "Console answers waiting" "no courier: landing files ignored"
 finalize_test

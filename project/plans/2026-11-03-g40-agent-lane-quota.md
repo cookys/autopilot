@@ -222,7 +222,7 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 
 | Phase | Size | Content | Gate |
 |-------|------|---------|------|
-| P1 | M | generic contract `fleet.quota/1`: validator with the unit rules (6), mirror view of rows (22.2), `interpretWindows` and merge (5.2, 8.3), refusal (21.8), manifest schema and checker; Claude reader adapter; G37's direct snapshot read untouched | pure tests; N1-N8, N24-N30, N33, N34, N37, N38, N49-N58, N72, N77, N79-N82 red then green |
+| P1 | M | generic contract `fleet.quota/1`: validator with the unit rules (6), mirror view of rows (22.2), `interpretWindows` and merge (5.2, 8.3), refusal (21.8), manifest schema and checker; Claude reader adapter; G37's direct snapshot read untouched | pure tests; N1-N8, N24-N30, N33, N34, N37, N38, N49-N58, N72, N77, N79-N82, N86 red then green |
 | P2 | M | Claude adapter, first because G37 needs it: wrapper passive capture (5.1) writing the local row of `quota/claude/<alias>.json`, `status` columns, `claude.json` manifest; pick reads the mirror | fixture-driven; N9, N10, N74, N78, N83, N84 red then green: json caller records nothing and exits unchanged |
 | P2b | S | generic reporter (18.2) with a fake hub: statusline adapter writes the mirror directly (18.3), direct `codeforge.quota/1` read removed from `account-quota.js`, pacing and queue, stale-skip, nack handling | N18-N23, N36, N59-N64, N68-N71 red then green |
 | P3 | S | token meta, generic fields; lifetime from the manifest; credential precedence (5.6) | N11, N12, N31, N32, N35, N65, N75, N85 red then green |

@@ -897,6 +897,7 @@ function fleetRow(u: UiCtx, task: FleetTask): U.RowSpec {
   const F = 'fleet.lanes' as const
   // the row: state, title, age; why a stalled row is stuck is in its opened detail (the state word already says it is), so a narrow pane cuts the title less
   const meta: U.MetaPart[] = task.ageMs === null ? [] : [{ text: ui.ago(task.ageMs, t), fmt: 'ago' }]
+  if (task.waitsOn !== null) meta.unshift(t(task.waitsOn === 'watch' ? 'fleet.waits_watch' : 'fleet.waits_child')) // 等待中 · watch: what it waits on (PM ruling)
   const toggle = 'fleet:' + task.id
   const children: PaneLine[] = []
   if (u.expanded?.has(toggle) === true) {

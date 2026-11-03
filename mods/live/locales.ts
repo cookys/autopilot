@@ -233,6 +233,7 @@ export const EN: Record<string, string> = {
   "ui.state.running": "running",
   "ui.state.done": "done",
   "ui.state.pending": "not started",
+  "ui.state.waiting": "waiting",
   "ui.state.stopped": "stopped",
   "ui.state.skipped": "not needed",
   "ui.state.unknown": "unknown",
@@ -274,6 +275,7 @@ export const EN: Record<string, string> = {
   "legend.state.running": "in progress",
   "legend.state.done": "finished",
   "legend.state.pending": "not started yet",
+  "legend.state.waiting": "accepted, waiting on something (a background job, a dependency, a free slot)",
   "legend.state.stopped": "stopped before finishing",
   "legend.state.skipped": "not needed, left out",
   "legend.state.unknown": "state could not be read",
@@ -356,7 +358,9 @@ export const EN: Record<string, string> = {
   "fleet.none": "no open work in the fleet",
   "fleet.noun_inflight": "in flight",
   "fleet.upcoming": "upcoming ({n})",
-  "fleet.noun_upcoming": "upcoming"
+  "fleet.noun_upcoming": "upcoming",
+  "fleet.waits_watch": "watch",
+  "fleet.waits_child": "child task"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -590,6 +594,7 @@ export const ZH_TW: Record<string, string> = {
   "ui.state.running": "執行中",
   "ui.state.done": "完成",
   "ui.state.pending": "未開始",
+  "ui.state.waiting": "等待中",
   "ui.state.stopped": "已停",
   "ui.state.skipped": "不需要",
   "ui.state.unknown": "未知",
@@ -631,6 +636,7 @@ export const ZH_TW: Record<string, string> = {
   "legend.state.running": "進行中",
   "legend.state.done": "已完成",
   "legend.state.pending": "還沒開始",
+  "legend.state.waiting": "已接手，在等某件事（背景工作、相依項目、空出的名額）",
   "legend.state.stopped": "中途停下",
   "legend.state.skipped": "不需要，已略過",
   "legend.state.unknown": "讀不到狀態",
@@ -713,5 +719,7 @@ export const ZH_TW: Record<string, string> = {
   "fleet.none": "fleet 沒有進行中的工作",
   "fleet.noun_inflight": "進行中",
   "fleet.upcoming": "待接（{n}）",
-  "fleet.noun_upcoming": "待接"
+  "fleet.noun_upcoming": "待接",
+  "fleet.waits_watch": "watch",
+  "fleet.waits_child": "子任務"
 }

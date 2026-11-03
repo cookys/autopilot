@@ -41,6 +41,19 @@ test('parseFleetTasks keeps work rows and drops observed runs and finished rows;
   expect(() => parseFleetTasks('{"members":[]}')).toThrow()
 })
 
+test('a waiting row says what it waits on: a linked watch first, else a live child (an observed run counts); a finished child or a row that is not waiting says nothing', () => {
+  const W = ulid(NOW - 60_000, 'W'.repeat(16)), C = ulid(NOW - 60_000, 'C'.repeat(16)), D = ulid(NOW - 60_000, 'D'.repeat(16)), R = ulid(NOW - 60_000, 'R'.repeat(16))
+  const rows = parseFleetTasks(JSON.stringify([
+    row({ task_id: W, state: 'waiting', title: 'w', assignee: 'h/a--claude', watch_ids: ['01WATCH'] }),
+    row({ task_id: C, state: 'waiting', title: 'c', assignee: 'h/a--claude', watch_ids: [] }),
+    row({ task_id: ulid(NOW, 'K'.repeat(16)), state: 'unknown', title: 'pid 9', assignee: 'h/a--claude', kind: 'observed_run', parent_task_id: C }),
+    row({ task_id: D, state: 'waiting', title: 'd', assignee: 'h/a--claude' }),
+    row({ task_id: ulid(NOW, 'E'.repeat(16)), state: 'done', title: 'finished child', assignee: 'h/b--claude', parent_task_id: D }),
+    row({ task_id: R, state: 'running', title: 'r', assignee: 'h/a--claude', watch_ids: ['01WATCH'] }),
+  ]))
+  expect(rows.map(r => [r.title, r.waitsOn])).toEqual([['w', 'watch'], ['c', 'child'], ['d', null], ['r', null]])
+})
+
 const r = (o: Partial<FleetRow>): FleetRow => ({ id: ulid(NOW - 60_000), lane: 'a--claude', host: 'h', title: 't', progress: '', state: 'running', createdMs: NOW - 60_000, observedMs: NOW - 60_000, ...o })
 
 test('stuck: open past the hour unaccepted, a seat quiet past four hours, the hub own suspect / lost / blocked_human; each just inside its bound is not', () => {

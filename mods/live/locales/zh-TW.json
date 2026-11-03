@@ -229,6 +229,7 @@
   "ui.state.running": "執行中",
   "ui.state.done": "完成",
   "ui.state.pending": "未開始",
+  "ui.state.waiting": "等待中",
   "ui.state.stopped": "已停",
   "ui.state.skipped": "不需要",
   "ui.state.unknown": "未知",
@@ -270,6 +271,7 @@
   "legend.state.running": "進行中",
   "legend.state.done": "已完成",
   "legend.state.pending": "還沒開始",
+  "legend.state.waiting": "已接手，在等某件事（背景工作、相依項目、空出的名額）",
   "legend.state.stopped": "中途停下",
   "legend.state.skipped": "不需要，已略過",
   "legend.state.unknown": "讀不到狀態",
@@ -352,5 +354,7 @@
   "fleet.none": "fleet 沒有進行中的工作",
   "fleet.noun_inflight": "進行中",
   "fleet.upcoming": "待接（{n}）",
-  "fleet.noun_upcoming": "待接"
+  "fleet.noun_upcoming": "待接",
+  "fleet.waits_watch": "watch",
+  "fleet.waits_child": "子任務"
 }

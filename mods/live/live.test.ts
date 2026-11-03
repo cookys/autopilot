@@ -3215,6 +3215,7 @@ function g23Tasks(now: number): string {
     row({ task_id: g23Ulid(now - 900_000, 'E'), state: 'unknown', title: 'pid 4242 node', assignee: 'host-a/autopilot--claude', kind: 'observed_run' }),
     row({ task_id: g23Ulid(now - 900_000, 'F'), state: 'done', title: '[REG z9] shipped already', assignee: 'openclaw/hangar--claude' }),
     row({ task_id: g23Ulid(now - 900_000, 'G'), state: 'running', title: 'P1.3b KR2 runs', assignee: 'host-a/hippo--claude', observed_at: iso(now - 5 * 3_600_000) }),
+    row({ task_id: g23Ulid(now - 1_200_000, 'H'), state: 'waiting', title: '[REG u7] rehearsal rerun', assignee: 'openclaw/hangar--claude', watch_ids: ['01WATCHAAAAAAAAAAAAAAAAAAA'] }),
   ])
 }
 test('G23 Fleet tab: data age, owner cards, lanes in flight before upcoming, stuck rows flagged, observed runs and finished rows left out (terminal)', async ($, on) => {
@@ -3239,6 +3240,7 @@ test('G23 Fleet tab: data age, owner cards, lanes in flight before upcoming, stu
   expect(texts[at('DOA class')]).toMatch(/^⊘ stalled +\[REG a2\] DOA class · 2h00m ago/) // open two hours, nobody accepted it: stalled (the reason is in its opened detail)
   expect(texts[at('KR2 runs')]).toMatch(/^⊘ stalled /) // its seat quiet five hours
   expect(texts[at('events contract')]).toMatch(/^● running /)
+  expect(texts[at('rehearsal rerun')]).toMatch(/^⧗ waiting +\[REG u7\] rehearsal rerun · watch · 20m ago/) // accepted, its seat waits on a linked watch (PM ruling)
   expect(at('checking the NAS audit')).toBeGreaterThan(0) // a brief-header title falls back to the progress line
   expect(at('pid 4242')).toBe(-1)
   expect(at('shipped already')).toBe(-1)

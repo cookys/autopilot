@@ -229,6 +229,7 @@
   "ui.state.running": "running",
   "ui.state.done": "done",
   "ui.state.pending": "not started",
+  "ui.state.waiting": "waiting",
   "ui.state.stopped": "stopped",
   "ui.state.skipped": "not needed",
   "ui.state.unknown": "unknown",
@@ -270,6 +271,7 @@
   "legend.state.running": "in progress",
   "legend.state.done": "finished",
   "legend.state.pending": "not started yet",
+  "legend.state.waiting": "accepted, waiting on something (a background job, a dependency, a free slot)",
   "legend.state.stopped": "stopped before finishing",
   "legend.state.skipped": "not needed, left out",
   "legend.state.unknown": "state could not be read",
@@ -352,5 +354,7 @@
   "fleet.none": "no open work in the fleet",
   "fleet.noun_inflight": "in flight",
   "fleet.upcoming": "upcoming ({n})",
-  "fleet.noun_upcoming": "upcoming"
+  "fleet.noun_upcoming": "upcoming",
+  "fleet.waits_watch": "watch",
+  "fleet.waits_child": "child task"
 }

@@ -13,6 +13,9 @@ export type FleetRow = {
   state: string // the hub's own word, lower-cased: open, task_accepted, running, waiting, result_reported, done, failed, suspect, lost, blocked_human, unknown, ...
   createdMs: number | null
   observedMs: number | null
+  // what a waiting row waits on: a linked watch (`watch_ids`), else a live child (a row of any kind, observed runs included, that is not finished and names it as parent);
+  // null for a row that is not waiting
+  waitsOn: 'watch' | 'child' | null
 }
 
 // why a row is flagged: open over an hour with nobody accepting it, a seat not observed for four hours, or a state the hub itself classifies as stuck
@@ -61,10 +64,11 @@ const timeOf = (v: unknown): number | null => {
 export function parseFleetTasks(json: string): FleetRow[] {
   const data: unknown = JSON.parse(json)
   if (!Array.isArray(data)) throw new Error('fleet tasks: not a list')
+  const live = (o: Record<string, unknown>): boolean => !TERMINAL.has(str(o.state).trim().toLowerCase())
+  const objs = data.filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
+  const liveParents = new Set(objs.filter(live).map(o => str(o.parent_task_id)).filter(p => p !== ''))
   const out: FleetRow[] = []
-  for (const r of data) {
-    if (typeof r !== 'object' || r === null) continue
-    const o = r as Record<string, unknown>
+  for (const o of objs) {
     if (o.kind === 'observed_run') continue
     const id = str(o.task_id)
     const state = str(o.state).trim().toLowerCase() || 'unknown'
@@ -79,6 +83,7 @@ export function parseFleetTasks(json: string): FleetRow[] {
       progress: firstLine(str(o.progress)),
       createdMs: ulidMs(id),
       observedMs: timeOf(o.observed_at),
+      waitsOn: state !== 'waiting' ? null : Array.isArray(o.watch_ids) && o.watch_ids.length > 0 ? 'watch' : liveParents.has(id) ? 'child' : null,
     })
   }
   return out

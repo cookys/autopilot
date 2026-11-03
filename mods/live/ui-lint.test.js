@@ -114,7 +114,7 @@ const scanMods = (rule, except = [], root = MODS_ROOT) => modSources(root).filte
 const code = src => src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, '')).split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, '$1')).join('\n')
 const hits = (src, re) => code(src).split('\n').flatMap((l, i) => (re.test(l) ? [`${i + 1}: ${l.trim().slice(0, 100)}`] : []))
 const THEME_KEYS = 'claude|warning|error|success|suggestion|inactive|subtle|merged'
-const STATE_IDS_RE = 'need_you|failed|stalled|findings|running|done|pending|stopped|skipped|unknown'
+const STATE_IDS_RE = 'need_you|failed|stalled|findings|running|done|pending|waiting|stopped|skipped|unknown'
 
 const L1 = src => [
   ...hits(src, new RegExp(`['"\`](${THEME_KEYS})['"\`]`)),

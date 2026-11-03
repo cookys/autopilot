@@ -619,6 +619,27 @@ function shortestHops(seeds, graph) {
   return hops;
 }
 
+// Same-name suites of a changed file (selgap). Rule (a): a changed suite is always selected. Rule (b): a changed
+// X.js / X.sh / X.mjs / X.cjs / X.py selects hooks/tests/X.test.sh, scripts/X.test.js, scripts/lib/X.test.js,
+// hooks/X.test.js and the X.test.js / X.test.sh beside it. A platforms/ mirror counts as its source path.
+// -> Map(suite -> [changed file that forced it]).
+function forcedSuites(changed, present) {
+  const out = new Map();
+  const add = (suite, why) => { if (present.has(suite) && isSuite(suite) && !out.has(suite)) out.set(suite, why); };
+  for (const raw of changed) {
+    const p = raw.replace(/^platforms\/[^/]+\/plugin\//, '');
+    if (isSuite(p)) { add(p, []); add(raw, []); continue; }
+    if (!isCode(p)) continue;
+    const stem = base(p).replace(/\.[A-Za-z0-9]+$/, '');
+    if (!stem) continue;
+    const dir = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '.';
+    const cands = [`${HOOK_TESTS_DIR}/${stem}.test.sh`, `${SCRIPTS_DIR}/${stem}.test.js`, `${SCRIPTS_LIB_DIR}/${stem}.test.js`, `${HOOKS_DIR}/${stem}.test.js`,
+      `${dir}/${stem}.test.js`, `${dir}/${stem}.test.sh`];
+    for (const c of cands) add(c, [raw]);
+  }
+  return out;
+}
+
 function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   const fullReasons = changed.filter((p) => FULL_TRIGGERS.some((re) => re.test(p))).map((p) => `unjudgeable change: ${p}`);
   const graph = buildGraph(headTree);
@@ -654,7 +675,11 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   for (const f of alwaysRun) if (!chains[f]) chains[f] = [f];
   const packSuites = [...packed.keys()].filter((f) => present.has(f));
   for (const f of packSuites) if (!chains[f]) chains[f] = [f];
-  const all = [...new Set([...suites, ...alwaysRun, ...packSuites])].sort();
+  // Forced suites (selgap): chosen by name, never by the reference graph, so no weak-edge bound or BL-0213
+  // narrowing can drop them. Added after the graph walk and never read by `unreferenced`, so they only add.
+  const forced = forcedSuites(changed, present);
+  for (const [f, why] of forced) if (!chains[f]) chains[f] = [f, ...why];
+  const all = [...new Set([...suites, ...alwaysRun, ...packSuites, ...forced.keys()])].sort();
   Object.defineProperty(chains, '__hops', { value: shortestHops(changed, graph), enumerable: false });
   return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
 }

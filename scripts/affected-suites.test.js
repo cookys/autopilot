@@ -1438,3 +1438,83 @@ test('pack matching g2-3: with the skill directory gone from both trees the pack
   assert.strictEqual(r.out.mode, 'full');
   assert.ok(r.out.unreferenced.includes('references/card.md'));
 });
+
+// selgap (2026-11-04): a changed script's own same-name suite is chosen by name, never by the reference graph, so no
+// weak-edge bound or narrowing can drop it. Each test below is RED on the pre-fix selector
+// (AFFECTED_SUITES_BIN=<old copy>) and green after.
+const SELGAP_ROOT = {
+  ...LAYOUT,
+  'scripts/foo.js': 'console.log("foo");\n',
+  'scripts/lib/baz.js': 'module.exports = 1;\n',
+  'platforms/codex/plugin/scripts/foo.js': 'console.log("foo");\n',
+  'hooks/tests/foo.test.sh': '#!/usr/bin/env bash\necho "checks something else, never names its script"\n',
+  'scripts/lib/baz.test.js': 'require("node:test");\n',
+  'hooks/tests/baz.test.sh': '#!/usr/bin/env bash\necho nothing\n',
+  'scripts/sib.js': 'console.log("sib");\n',
+  'scripts/sib.test.js': 'require("node:test");\n',
+  // a second suite names every script, so the change stays selective instead of "unreferenced => full"
+  'hooks/tests/names-all.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/foo.js"\nnode "$ROOT/scripts/lib/baz.js"\nnode "$ROOT/scripts/sib.js"\n',
+};
+
+test('selgap (b): a changed script selects its same-name hooks/tests suite even when that suite never names it', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const out = r.select(r.change({ 'scripts/foo.js': 'console.log("changed");\n' }));
+    assert.strictEqual(out.mode, 'selective');
+    assert.ok(out.suites.includes('hooks/tests/names-all.test.sh'), 'the graph edge still selects its referrer');
+    assert.ok(out.suites.includes('hooks/tests/foo.test.sh'), 'same-name suite must be selected');
+  } finally { r.cleanup(); }
+});
+
+test('selgap (b): scripts/lib/X.js selects scripts/lib/X.test.js and hooks/tests/X.test.sh; scripts/X.js selects scripts/X.test.js', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const lib = filesSelect(r.dir, ['scripts/lib/baz.js']);
+    assert.ok(lib.suites.includes('scripts/lib/baz.test.js'), 'scripts/lib/baz.test.js');
+    assert.ok(lib.suites.includes('hooks/tests/baz.test.sh'), 'hooks/tests/baz.test.sh');
+    const sib = filesSelect(r.dir, ['scripts/sib.js']);
+    assert.ok(sib.suites.includes('scripts/sib.test.js'), 'scripts/sib.test.js');
+  } finally { r.cleanup(); }
+});
+
+test('selgap (b): a codex mirror of a script selects the source script own suite', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const out = filesSelect(r.dir, ['platforms/codex/plugin/scripts/foo.js']);
+    assert.ok(out.suites.includes('hooks/tests/foo.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('selgap (a): a changed codex mirror of a suite selects the source suite', () => {
+  const r = makeRepo({ ...SELGAP_ROOT, 'platforms/codex/plugin/hooks/tests/foo.test.sh': '#!/usr/bin/env bash\n' });
+  try {
+    const out = filesSelect(r.dir, ['platforms/codex/plugin/hooks/tests/foo.test.sh']);
+    assert.ok(out.suites.includes('hooks/tests/foo.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('selgap: forced suites only add (negative control: an unrelated stem is not forced)', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const out = r.select(r.change({ 'scripts/foo.js': 'console.log("changed");\n' }));
+    assert.ok(!out.suites.includes('hooks/tests/baz.test.sh'));
+    assert.ok(!out.suites.includes('scripts/sib.test.js'));
+    const base = filesSelect(r.dir, ['scripts/foo.js']);
+    assert.ok(base.suites.includes('hooks/tests/names-all.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('selgap real tree: the 2026-11-04 plancwd replay (test + codex mirrors + plan-loop) selects both dispatch-plan-review.test.sh and plan-review-plan-path.test.sh', () => {
+  const files = [
+    'hooks/tests/plan-review-plan-path.test.sh',
+    'platforms/codex/plugin/schemas/plan-review-artifact.schema.json',
+    'platforms/codex/plugin/scripts/dispatch-plan-review.js',
+    'platforms/codex/plugin/scripts/lib/config-keys.json',
+    'platforms/codex/plugin/skills/hetero-review/references/plan-loop.md',
+    'skills/hetero-review/references/plan-loop.md',
+  ];
+  const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
+  assert.strictEqual(out.mode, 'selective');
+  assert.ok(out.suites.includes('hooks/tests/dispatch-plan-review.test.sh'), 'dispatch-plan-review.test.sh missing');
+  assert.ok(out.suites.includes('hooks/tests/plan-review-plan-path.test.sh'), 'plan-review-plan-path.test.sh missing');
+});

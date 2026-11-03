@@ -108,7 +108,7 @@ test('red (v): removing a field, or making it nullable, fails; adding a field pa
 for (const [cls, needle] of [
   ['schema-undocumented', ' of checkSchemaDocumented(schema, doc)'],
   ['consumer-unknown', ' of checkConsumers(schema, doc)'],
-  ['example-drift', ' of checkExamples(doc)'],
+  ['example-drift', ' of checkExamples(doc, schema)'],
   ['baseline-regression', ' of checkBaseline(schema, baseline)'],
 ]) {
   test(`negative control: removing the ${cls} check makes its red case pass wrongly`, () => {
@@ -130,3 +130,106 @@ for (const [cls, needle] of [
     assert.equal(r.status, 0, `with the ${cls} check removed the case is wrongly green: ${r.stderr}`);
   });
 }
+
+// ---- round 1 fixes: A typo'd kind, B baseline regeneration, C schema-derived kinds ------------------------------------
+
+function runMutated(replacements, args, mode) {
+  let src = fs.readFileSync(SCRIPT, 'utf8');
+  for (const [a, b] of replacements) { assert.ok(src.includes(a), `mutation anchor: ${a}`); src = src.replace(a, b); }
+  const loader = `const M = require('module'); const p = require('path'); const f = ${JSON.stringify(SCRIPT)};
+    const m = new M(f); m.filename = f; m.paths = M._nodeModulePaths(p.dirname(f)); m._compile(${JSON.stringify(src)}, f);
+    process.exit(m.exports.main(process.argv.slice(1)));`;
+  return spawnSync(process.execPath, ['-e', loader, '--', ...args], { encoding: 'utf8', cwd: REPO, input: '' });
+}
+const argsOf = (f) => ['--doc', f.doc, '--schema', f.schema, '--baseline', f.baseline];
+
+const TYPO_CASES = [
+  ['qc.verdit.verdict', 'consumer table cell with an unknown kind typo', (t) => t.replace('`qc.verdict.verdict`', '`qc.verdit.verdict`')],
+  ['dispatch.endded', 'dispatch.endded.duration_s', (t) => t.replace('`dispatch.ended.duration_s`', '`dispatch.endded.duration_s`')],
+  ['dispatch.startd', 'slash form with a typo', (t) => t.replace('`dispatch.started/ended`', '`dispatch.startd/ended`')],
+];
+const OLD_A = [["if (shaped && shaped[1].split('.')[0] !== 'data' && !FUTURE_KINDS.has(shaped[1])) {", 'if (false) {'], ["if (slash && !(KINDS.includes(slash[1]) && KINDS.includes(`${slash[1].split('.')[0]}.${slash[2]}`))) {", 'if (false) {']];
+for (const [needle, label, fn] of TYPO_CASES) {
+  test(`A: ${label} is a consumer-unknown gap (red); the old behaviour is green`, () => {
+    const f = copies();
+    edit(f.doc, fn);
+    const r = run(f);
+    assert.equal(r.status, 1, r.err);
+    assert.match(r.err, new RegExp(`\\[consumer-unknown\\].*${needle.replace('.', '\\.')}`));
+    const old = runMutated(OLD_A, argsOf(f));
+    assert.doesNotMatch(old.stderr, new RegExp(needle.replace('.', '\\.')), `old behaviour does not name the typo: ${old.stderr}`);
+  });
+}
+
+test('A: a listed future kind (quota.observed) is not a gap', () => {
+  assert.equal(run(copies()).status, 0);
+  assert.match(fs.readFileSync(real('events_contract_doc'), 'utf8'), /`quota\.observed`/);
+});
+
+test('B: --print-baseline refuses to print after a retype or removal; add-only prints', () => {
+  const f = copies();
+  editJson(f.schema, (s) => { s.$defs.data_cost_turn.properties.session.type = ['string', 'null']; });
+  let r = spawnSync(process.execPath, [SCRIPT, '--print-baseline', '--schema', f.schema, '--baseline', f.baseline], { encoding: 'utf8' });
+  assert.equal(r.status, 1);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /refusing to print.*cost\.turn\.session changed nullable/);
+  const g = copies();
+  editJson(g.schema, (s) => { delete s.$defs.data_cost_turn.properties.tier; });
+  assert.equal(spawnSync(process.execPath, [SCRIPT, '--print-baseline', '--schema', g.schema, '--baseline', g.baseline], { encoding: 'utf8' }).status, 1);
+  const h = copies();
+  editJson(h.schema, (s) => { s.$defs.data_cost_turn.properties.extra_ok = { type: 'string' }; });
+  r = spawnSync(process.execPath, [SCRIPT, '--print-baseline', '--schema', h.schema, '--baseline', h.baseline, '--doc', path.join(os.tmpdir(), 'no-such-doc.md')], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(JSON.parse(r.stdout).kinds['cost.turn'].extra_ok, 'the new field is in the printed baseline; a missing doc does not matter');
+  // negative control: without the guard, the retype regenerates cleanly
+  const old = runMutated([['if (fs.existsSync(baselineFile)) {\n      const existing', 'if (false) {\n      const existing']], ['--print-baseline', '--schema', f.schema, '--baseline', f.baseline]);
+  assert.equal(old.status, 0, 'old behaviour (regeneration bypasses the baseline) is wrongly green');
+});
+
+test('B: a missing baseline section or a changed version key is a baseline-regression', () => {
+  let f = copies();
+  editJson(f.baseline, (b) => { delete b.error_object; });
+  let r = run(f);
+  assert.equal(r.status, 1);
+  assert.match(r.err, /\[baseline-regression\].*section error_object is missing/);
+  f = copies();
+  editJson(f.baseline, (b) => { b.baseline = 'autopilot.events.baseline/2'; });
+  r = run(f);
+  assert.equal(r.status, 1);
+  assert.match(r.err, /\[baseline-regression\].*version key/);
+  f = copies();
+  editJson(f.baseline, (b) => { delete b.kinds; });
+  assert.equal(run(f).status, 1);
+  // negative control: without the completeness assertions, deleting a section is green
+  f = copies();
+  editJson(f.baseline, (b) => { delete b.error_object; b.baseline = 'x'; });
+  const old = runMutated([['for (const sec of BASELINE_SECTIONS) if', 'for (const sec of []) if'], ['if (baseline.baseline !== BASELINE_VERSION)', 'if (false)']], argsOf(f));
+  assert.equal(old.status, 0, `old behaviour is wrongly green: ${old.stderr}`);
+});
+
+test('C: a new kind added to the schema with an undocumented property is red; the hard-coded list is green', () => {
+  const f = copies();
+  editJson(f.schema, (s) => {
+    s.$defs.data_quota_observed = { type: 'object', additionalProperties: false, required: ['pct'], properties: { pct: { type: 'number' }, hidden_prop: { type: 'string' } } };
+    s.$defs.event_quota_observed = JSON.parse(JSON.stringify(s.$defs.event_qc_verdict));
+    s.$defs.event_quota_observed.properties.kind = { const: 'quota.observed' };
+    s.$defs.event_quota_observed.properties.data = { $ref: '#/$defs/data_quota_observed' };
+    s.$defs.event.oneOf.splice(8, 0, { $ref: '#/$defs/event_quota_observed' });
+  });
+  edit(f.doc, (t) => t.replace('\nNot exposed on purpose:', '\n| `quota.observed` | test row | `id` | `pct` |\n\nNot exposed on purpose:'));
+  const r = run(f);
+  assert.equal(r.status, 1);
+  assert.match(r.err, /\[schema-undocumented\].*quota\.observed\.data\.hidden_prop/);
+  const old = runMutated([['const km = kindMap(schema);\n  for (const kind of Object.keys(km)) {\n    const row', "const km = kindMap(schema);\n  for (const kind of ['dispatch.started', 'dispatch.ended', 'cost.turn', 'review.collected', 'review.finalized', 'qc.verdict', 'decision.row', 'run.stage']) {\n    const row"]], argsOf(f));
+  assert.doesNotMatch(old.stderr, /schema-undocumented/, 'old behaviour (hard-coded kinds) does not see the new kind');
+});
+
+test('describe: enum or const containing null is nullable', () => {
+  const { baselineOf } = require('./check-events-contract');
+  const schema = JSON.parse(fs.readFileSync(real('events_schema'), 'utf8'));
+  schema.$defs.data_cost_turn.properties.tier = { enum: ['a', null] };
+  schema.$defs.data_cost_turn.properties.model = { const: null };
+  const b = baselineOf(schema).kinds['cost.turn'];
+  assert.deepEqual([b.tier.nullable, b.tier.type], [true, 'string']);
+  assert.equal(b.model.nullable, true);
+});

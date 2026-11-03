@@ -13,6 +13,8 @@
  *   (v)   baseline-regression : a field of the committed baseline that is gone, or changed type, nullability or
  *                               required-ness (additions pass; removal or retyping needs /2)
  * Exit 0 clean, 1 gap, 2 usage.
+ * Regenerating the baseline (--print-baseline) is for ADDITIONS only: it first runs (v) against the existing baseline and
+ * refuses (exit 1) on any removal or retype. A breaking change needs schema /2, never a regenerated baseline.
  *
  * Usage: node scripts/check-events-contract.js [--doc F] [--schema F] [--baseline F] [--print-baseline]
  *   Defaults come from scripts/lib/repo-layout.js (events_contract_doc, events_schema, events_baseline).
@@ -26,8 +28,25 @@ const util = require('util');
 const repoLayout = require('./lib/repo-layout');
 
 const REPO = path.join(__dirname, '..');
-const KINDS = ['dispatch.started', 'dispatch.ended', 'cost.turn', 'review.collected', 'review.finalized', 'qc.verdict', 'decision.row', 'run.stage'];
-const defName = (kind) => kind.replace('.', '_');
+// Kinds that the consumer table may name before the schema has them (additive future kinds). Anything else that has the
+// shape kind.field or kind but is not a schema kind is a gap (a typo must not pass silently).
+const FUTURE_KINDS = new Set(['quota.observed']);
+const BASELINE_VERSION = 'autopilot.events.baseline/1';
+const BASELINE_SECTIONS = ['envelope', 'project', 'source_stat', 'warning', 'event', 'error_object', 'error', 'kinds'];
+
+// kind -> name of its data $def, derived from the oneOf of $defs.event (each branch pins `kind` with a const).
+function kindMap(schema) {
+  const d = schema.$defs || {};
+  const map = {};
+  for (const branch of (d.event && d.event.oneOf) || []) {
+    const def = resolveRef(schema, branch);
+    const kind = def && def.properties && def.properties.kind && def.properties.kind.const;
+    const dataRef = def && def.properties && def.properties.data && def.properties.data.$ref;
+    if (typeof kind === 'string' && dataRef) map[kind] = dataRef.replace(/^#\/\$defs\//, '');
+  }
+  return map;
+}
+const kindsOf = (schema) => Object.keys(kindMap(schema));
 
 function resolveRef(schema, node) {
   let cur = node;
@@ -42,9 +61,11 @@ function resolveRef(schema, node) {
 function describe(schema, node) {
   const n = resolveRef(schema, node) || {};
   let types = n.type === undefined ? [] : [].concat(n.type);
-  if (!types.length && n.const !== undefined) types = [typeof n.const === 'number' ? 'number' : 'string'];
-  if (!types.length && n.enum) types = [typeof n.enum[0] === 'number' ? 'number' : 'string'];
-  const nullable = types.includes('null');
+  let nullable = types.includes('null');
+  const typeOfValue = (v) => (v === null ? 'null' : typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'string');
+  if (!types.length && n.const !== undefined) types = [typeOfValue(n.const)];
+  if (!types.length && n.enum) types = [...new Set(n.enum.map(typeOfValue))];
+  nullable = nullable || types.includes('null');
   const base = types.filter((t) => t !== 'null');
   return { type: base.length ? base.sort().join('|') : 'any', nullable };
 }
@@ -63,7 +84,7 @@ function baselineOf(schema) {
   const d = schema.$defs || {};
   const envelope = d.envelope;
   const out = {
-    baseline: 'autopilot.events.baseline/1',
+    baseline: BASELINE_VERSION,
     envelope: fieldsOf(schema, envelope),
     project: fieldsOf(schema, envelope.properties.project),
     source_stat: fieldsOf(schema, d.source_stat),
@@ -73,7 +94,8 @@ function baselineOf(schema) {
     error: fieldsOf(schema, d.error_object.properties.error),
     kinds: {},
   };
-  for (const kind of KINDS) out.kinds[kind] = d[`data_${defName(kind)}`] ? fieldsOf(schema, d[`data_${defName(kind)}`]) : {};
+  const km = kindMap(schema);
+  for (const kind of Object.keys(km)) out.kinds[kind] = fieldsOf(schema, d[km[kind]]);
   return out;
 }
 
@@ -90,11 +112,12 @@ function lastCell(row) { const cells = row.split(/(?<!\\)\|/).map((c) => c.trim(
 
 function checkSchemaDocumented(schema, doc) {
   const gaps = [];
-  for (const kind of KINDS) {
+  const km = kindMap(schema);
+  for (const kind of Object.keys(km)) {
     const row = kindsRow(doc, kind);
     if (!row) { gaps.push(`kinds table has no row for ${kind}`); continue; }
     const cell = lastCell(row);
-    for (const prop of Object.keys(((schema.$defs || {})[`data_${defName(kind)}`] || {}).properties || {})) {
+    for (const prop of Object.keys(((schema.$defs || {})[km[kind]] || {}).properties || {})) {
       if (!cell.includes(`\`${prop}\``) && !cell.includes(`\`${prop}?\``)) gaps.push(`${kind}.data.${prop} is in the schema but not in the doc kinds table`);
     }
   }
@@ -115,7 +138,9 @@ function checkConsumers(schema, doc) {
   const rows = consumerRows(doc);
   if (!rows) return ['doc has no "## Consumer table" section'];
   const d = schema.$defs;
-  const fieldSet = (kind) => new Set(Object.keys((d[`data_${defName(kind)}`] || {}).properties || {}));
+  const km = kindMap(schema);
+  const KINDS = Object.keys(km);
+  const fieldSet = (kind) => new Set(Object.keys((d[km[kind]] || {}).properties || {}));
   const knownKinds = [...KINDS].sort((a, b) => b.length - a.length);
   const gaps = [];
   for (const cells of rows) {
@@ -136,6 +161,10 @@ function checkConsumers(schema, doc) {
       const span = raw.split('=')[0];
       let m;
       const slash = /^([a-z]+\.[a-z]+)\/([a-z]+)$/.exec(span);
+      if (slash && !(KINDS.includes(slash[1]) && KINDS.includes(`${slash[1].split('.')[0]}.${slash[2]}`))) {
+        gaps.push(`consumer table (${who}): ${span} names a kind the schema does not have`);
+        continue;
+      }
       if (slash) { ctx = [slash[1], `${slash[1].split('.')[0]}.${slash[2]}`].filter((k) => KINDS.includes(k)); continue; }
       if (KINDS.includes(span)) { ctx = [span]; continue; }
       const prefixed = knownKinds.find((k) => span.startsWith(`${k}.`));
@@ -145,6 +174,12 @@ function checkConsumers(schema, doc) {
         ctx = [prefixed];
         continue;
       }
+      const shaped = /^([a-z]+\.[a-z]+)(?:\.([a-z_0-9]+))?$/.exec(span);
+      if (shaped && shaped[1].split('.')[0] !== 'data' && !FUTURE_KINDS.has(shaped[1])) {
+        gaps.push(`consumer table (${who}): ${span} names kind ${shaped[1]}, which the schema does not have`);
+        continue;
+      }
+      if (shaped && FUTURE_KINDS.has(shaped[1])) { ctx = []; continue; }
       if ((m = /^data\.([a-z_]+)$/.exec(span))) {
         if (!KINDS.some((k) => fieldSet(k).has(m[1]))) gaps.push(`consumer table (${who}): data.${m[1]} is not in any kind of the schema`);
         continue;
@@ -168,7 +203,7 @@ function docExamples(doc) {
   return found;
 }
 
-function checkExamples(doc) {
+function checkExamples(doc, schema) {
   const fixtureLib = require('./lib/events-fixture');
   let dir;
   try {
@@ -178,7 +213,7 @@ function checkExamples(doc) {
     const examples = docExamples(doc);
     const gaps = [];
     const want = { envelope: fixtureLib.normaliseExample(fixtureLib.goldenEnvelope(fx), fx) };
-    for (const kind of KINDS) {
+    for (const kind of kindsOf(schema)) {
       const event = fixtureLib.exampleEvent(golden, kind);
       want[kind] = event ? fixtureLib.normaliseExample(event, fx) : undefined;
     }
@@ -197,6 +232,8 @@ function checkExamples(doc) {
 function checkBaseline(schema, baseline) {
   const now = baselineOf(schema);
   const gaps = [];
+  if (baseline.baseline !== BASELINE_VERSION) gaps.push(`baseline version key is ${JSON.stringify(baseline.baseline)}, expected ${BASELINE_VERSION}`);
+  for (const sec of BASELINE_SECTIONS) if (!baseline[sec] || typeof baseline[sec] !== 'object') gaps.push(`baseline section ${sec} is missing`);
   const sections = Object.keys(baseline).filter((k) => k !== 'baseline');
   const compare = (label, was, is) => {
     for (const [field, w] of Object.entries(was)) {
@@ -233,12 +270,19 @@ function main(argv) {
   const schemaFile = opts.schema || rel('events_schema');
   const baselineFile = opts.baseline || rel('events_baseline');
   for (const [what, file] of [['doc', docFile], ['schema', schemaFile], ['baseline', baselineFile]]) {
-    if (opts.print && what === 'baseline') continue;
+    if (opts.print && what !== 'schema') continue;
     if (!fs.existsSync(file)) problems.push(['path-unresolved', `${what} path does not exist: ${file}`]);
   }
   const schema = fs.existsSync(schemaFile) ? readJson(schemaFile, 'schema', problems) : null;
   if (opts.print) {
-    if (!schema) { process.stderr.write(`check-events-contract: ${problems[0][1]}\n`); return 1; }
+    if (!schema) { process.stderr.write(`check-events-contract: ${problems.length ? problems[0][1] : 'schema unreadable'}\n`); return 1; }
+    // Regenerating may only add: compare the new schema against the existing baseline first.
+    if (fs.existsSync(baselineFile)) {
+      const existing = readJson(baselineFile, 'baseline', []);
+      if (!existing) { process.stderr.write(`check-events-contract: [path-unresolved] existing baseline is unreadable: ${baselineFile}\n`); return 1; }
+      const gaps = checkBaseline(schema, existing);
+      if (gaps.length) { process.stderr.write(`check-events-contract: [baseline-regression] refusing to print: ${gaps[0]} (breaking changes need /2, not a regenerated baseline)\n`); return 1; }
+    }
     process.stdout.write(`${JSON.stringify(baselineOf(schema), null, 2)}\n`);
     return 0;
   }
@@ -248,7 +292,7 @@ function main(argv) {
     for (const g of checkSchemaDocumented(schema, doc).slice(0, 1)) problems.push(['schema-undocumented', g]);
     for (const g of checkConsumers(schema, doc).slice(0, 1)) problems.push(['consumer-unknown', g]);
   }
-  if (doc !== null) for (const g of checkExamples(doc).slice(0, 1)) problems.push(['example-drift', g]);
+  if (doc !== null && schema) for (const g of checkExamples(doc, schema).slice(0, 1)) problems.push(['example-drift', g]);
   if (schema && baseline) for (const g of checkBaseline(schema, baseline).slice(0, 1)) problems.push(['baseline-regression', g]);
   for (const [cls, msg] of problems) process.stderr.write(`check-events-contract: [${cls}] ${msg}\n`);
   if (problems.length) return 1;

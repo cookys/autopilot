@@ -1,5 +1,41 @@
+diff --git a/evals/orchestration/run-p2-batch-loop.js b/evals/orchestration/run-p2-batch-loop.js
+index 1c11f9b76..f9bde6de4 100755
+--- a/evals/orchestration/run-p2-batch-loop.js
++++ b/evals/orchestration/run-p2-batch-loop.js
+@@ -39,6 +39,13 @@ async function main(argv) {
+   const o = parseArgs(argv);
+   const wrapper = path.resolve(o.wrapper || path.join(__dirname, 'run-p2-batch.js'));
+   const w = require(wrapper);
++  // G37 W5 (A12): the loop restarts the wrapper above, which is refused with an account registry; refuse here too, before any spawn.
++  // A broken registry or a missing helper also stops the loop (exit 2).
++  try {
++    const g = require('../../scripts/lib/eval-account.js').gate('run-p2-batch-loop');
++    if (g.state === 'broken') return g.exit;
++    if (g.state === 'active') { process.stderr.write('run-p2-batch-loop: an account registry is configured; the wrapper it restarts needs its own per-run HOME, which the account layer replaces, so the run is refused (plan G37 A12)\n'); return 2; }
++  } catch (e) { if (!e || e.code !== 'MODULE_NOT_FOUND') throw e; process.stderr.write('run-p2-batch-loop: the account-layer helper is missing; refusing to start (nothing was spawned)\n'); return 2; }
+   const manifest = JSON.parse(fs.readFileSync(o.manifest, 'utf8'));
+   const runDir = path.resolve(o['run-dir']);
+   fs.mkdirSync(runDir, { recursive: true });
+diff --git a/evals/orchestration/run-p2-batch.js b/evals/orchestration/run-p2-batch.js
+index 090a8944d..2c57cdc25 100644
+--- a/evals/orchestration/run-p2-batch.js
++++ b/evals/orchestration/run-p2-batch.js
+@@ -1254,6 +1254,13 @@ function main(argv) {
+     const first = rangeArg('--first'), last = rangeArg('--last');
+     if (first < 0 || last < 0 || (first && last && first > last)) { process.stderr.write(`usage: --first and --last must be integers from 1 to ${nIds}, first not after last\n`); return 2; }
+     const clone = path.resolve(opt['--clone'] || process.cwd());
++    // G37 W5 (A12): every id runs in its own per-run HOME that holds a credentials copy, and the account layer would replace that HOME,
++    // so with an account registry the run is refused (exit 2); a broken registry or a missing helper also stops (exit 2), before any spawn.
++    try {
++      const g = require('../../scripts/lib/eval-account.js').gate('run-p2-batch');
++      if (g.state === 'broken') return g.exit;
++      if (g.state === 'active') { process.stderr.write('run-p2-batch: an account registry is configured; the per-run HOME this wrapper needs is replaced by the account layer, so the run is refused (plan G37 A12)\n'); return 2; }
++    } catch (e) { if (!e || e.code !== 'MODULE_NOT_FOUND') throw e; process.stderr.write('run-p2-batch: the account-layer helper is missing; refusing to start (nothing was spawned)\n'); return 2; }
+     fs.mkdirSync(runDir, { recursive: true });
+     const ctx = makeCtx({ runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, parentPid: opt['--parent-pid'] ? Number(opt['--parent-pid']) : undefined, credSource: opt['--credentials-source'] ? path.resolve(opt['--credentials-source']) : undefined, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
+     let code = 0;
 diff --git a/evals/skill-onoff/run-d0gate-campaign.js b/evals/skill-onoff/run-d0gate-campaign.js
-index c912e2801..86fc98888 100644
+index c912e2801..10273be60 100644
 --- a/evals/skill-onoff/run-d0gate-campaign.js
 +++ b/evals/skill-onoff/run-d0gate-campaign.js
 @@ -251,6 +251,14 @@ function runCc() {
@@ -8,201 +44,132 @@ index c912e2801..86fc98888 100644
    const cc = require('./d0gate/cc');
 +  // G37 W5 (A12): a broken account registry stops here before any claude spawn. With a usable registry the cells would lose their own
 +  // HOME and CLAUDE_CONFIG_DIR (the account layer replaces both with the alias dirs), and the unaccounted-session check reads the cell
-+  // config dir; running them anyway would silently weaken that check, so the run is refused. No registry = the credentials-copy path.
++  // config dir; running them anyway would silently weaken that check, so the run is refused. A missing helper also stops (exit 2).
 +  try {
 +    const g = require('../../scripts/lib/eval-account.js').gate('run-d0gate-campaign');
 +    if (g.state === 'broken') process.exit(g.exit);
 +    if (g.state === 'active') die('an account registry is configured; the d0gate cells need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so this campaign is refused until depth-0 decides the cell design (plan G37 A12)', 2);
-+  } catch (e) { if (!e || e.code !== 'MODULE_NOT_FOUND') throw e; }
++  } catch (e) { if (!e || e.code !== 'MODULE_NOT_FOUND') throw e; die('the account-layer helper is missing; refusing to start (nothing was spawned)', 2); }
    const claudeBin = cc.whichClaude('/nonexistent');
    if (!claudeBin) die('claude is not on PATH', 2);
    const ver = claudeVersion();
 diff --git a/evals/skill-onoff/run-skill-onoff-eval-bpack.sh b/evals/skill-onoff/run-skill-onoff-eval-bpack.sh
-index 689f3c19e..ed82bb990 100755
+index 689f3c19e..be0fd8c48 100755
 --- a/evals/skill-onoff/run-skill-onoff-eval-bpack.sh
 +++ b/evals/skill-onoff/run-skill-onoff-eval-bpack.sh
-@@ -269,7 +269,13 @@ fi
+@@ -269,6 +269,19 @@ fi
  # config dir can leak the operator's installed plugins into the OFF arm (G1-F9),
  # so both HOME and CLAUDE_CONFIG_DIR are always exported to scratch paths.
  mkdir -p "$SCRATCH_CONFIG"
--if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
-+# G37 W5 (A12): with an account registry every claude call of this runner goes through claude-account.js (PATH wrapper, token only in
-+# the child env) and no credentials file is copied; a broken registry stops here before any spawn. No registry = unchanged.
++# G37 W5 (A12): this runner needs its own scratch HOME and CLAUDE_CONFIG_DIR (the OFF arm must not see the operator's plugins), and the
++# account layer replaces both with the alias dirs. So with an account registry the run is refused (exit 2) until a cell design for
++# account-backed arms exists; a broken registry or a missing helper also stops here (exit 2), before any spawn and before any credentials copy.
 +if [ "$RUNNER" = "cc" ]; then
 +  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
-+  [ -r "$_EA_LIB" ] && . "$_EA_LIB" && { eval_account_probe skill-onoff || exit $?; eval_account_use_path_wrapper "$SCRATCH_HOME/.ea-bin"; }
++  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper $_EA_LIB is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
++  . "$_EA_LIB"
++  eval_account_probe skill-onoff || exit $?
++  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
++    echo "skill-onoff: an account registry is configured; this runner's arms need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so the run is refused (plan G37 A12)" >&2
++    exit 2
++  fi
 +fi
-+if [ "$RUNNER" = "cc" ] && [ "${EVAL_ACCOUNT_ACTIVE:-0}" != "1" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
    cp "${HOME}/.claude/.credentials.json" "$SCRATCH_CONFIG/"
    chmod 600 "$SCRATCH_CONFIG/.credentials.json"
- fi
 diff --git a/evals/skill-onoff/run-skill-onoff-eval-fbatch-v2.sh b/evals/skill-onoff/run-skill-onoff-eval-fbatch-v2.sh
-index e3375c07b..06a967ebe 100755
+index e3375c07b..7b8ee118f 100755
 --- a/evals/skill-onoff/run-skill-onoff-eval-fbatch-v2.sh
 +++ b/evals/skill-onoff/run-skill-onoff-eval-fbatch-v2.sh
-@@ -290,7 +290,13 @@ fi
+@@ -290,6 +290,19 @@ fi
  # config dir can leak the operator's installed plugins into the OFF arm (G1-F9),
  # so both HOME and CLAUDE_CONFIG_DIR are always exported to scratch paths.
  mkdir -p "$SCRATCH_CONFIG"
--if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
-+# G37 W5 (A12): with an account registry every claude call of this runner goes through claude-account.js (PATH wrapper, token only in
-+# the child env) and no credentials file is copied; a broken registry stops here before any spawn. No registry = unchanged.
++# G37 W5 (A12): this runner needs its own scratch HOME and CLAUDE_CONFIG_DIR (the OFF arm must not see the operator's plugins), and the
++# account layer replaces both with the alias dirs. So with an account registry the run is refused (exit 2) until a cell design for
++# account-backed arms exists; a broken registry or a missing helper also stops here (exit 2), before any spawn and before any credentials copy.
 +if [ "$RUNNER" = "cc" ]; then
 +  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
-+  [ -r "$_EA_LIB" ] && . "$_EA_LIB" && { eval_account_probe skill-onoff || exit $?; eval_account_use_path_wrapper "$SCRATCH_HOME/.ea-bin"; }
++  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper $_EA_LIB is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
++  . "$_EA_LIB"
++  eval_account_probe skill-onoff || exit $?
++  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
++    echo "skill-onoff: an account registry is configured; this runner's arms need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so the run is refused (plan G37 A12)" >&2
++    exit 2
++  fi
 +fi
-+if [ "$RUNNER" = "cc" ] && [ "${EVAL_ACCOUNT_ACTIVE:-0}" != "1" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
    cp "${HOME}/.claude/.credentials.json" "$SCRATCH_CONFIG/"
    chmod 600 "$SCRATCH_CONFIG/.credentials.json"
- fi
 diff --git a/evals/skill-onoff/run-skill-onoff-eval-fbatch.sh b/evals/skill-onoff/run-skill-onoff-eval-fbatch.sh
-index adc402d26..1a122bf85 100755
+index adc402d26..39c12a47e 100755
 --- a/evals/skill-onoff/run-skill-onoff-eval-fbatch.sh
 +++ b/evals/skill-onoff/run-skill-onoff-eval-fbatch.sh
-@@ -284,7 +284,13 @@ fi
+@@ -284,6 +284,19 @@ fi
  # config dir can leak the operator's installed plugins into the OFF arm (G1-F9),
  # so both HOME and CLAUDE_CONFIG_DIR are always exported to scratch paths.
  mkdir -p "$SCRATCH_CONFIG"
--if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
-+# G37 W5 (A12): with an account registry every claude call of this runner goes through claude-account.js (PATH wrapper, token only in
-+# the child env) and no credentials file is copied; a broken registry stops here before any spawn. No registry = unchanged.
++# G37 W5 (A12): this runner needs its own scratch HOME and CLAUDE_CONFIG_DIR (the OFF arm must not see the operator's plugins), and the
++# account layer replaces both with the alias dirs. So with an account registry the run is refused (exit 2) until a cell design for
++# account-backed arms exists; a broken registry or a missing helper also stops here (exit 2), before any spawn and before any credentials copy.
 +if [ "$RUNNER" = "cc" ]; then
 +  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
-+  [ -r "$_EA_LIB" ] && . "$_EA_LIB" && { eval_account_probe skill-onoff || exit $?; eval_account_use_path_wrapper "$SCRATCH_HOME/.ea-bin"; }
++  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper $_EA_LIB is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
++  . "$_EA_LIB"
++  eval_account_probe skill-onoff || exit $?
++  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
++    echo "skill-onoff: an account registry is configured; this runner's arms need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so the run is refused (plan G37 A12)" >&2
++    exit 2
++  fi
 +fi
-+if [ "$RUNNER" = "cc" ] && [ "${EVAL_ACCOUNT_ACTIVE:-0}" != "1" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
    cp "${HOME}/.claude/.credentials.json" "$SCRATCH_CONFIG/"
    chmod 600 "$SCRATCH_CONFIG/.credentials.json"
- fi
 diff --git a/evals/skill-onoff/run-skill-onoff-eval-gdorm.sh b/evals/skill-onoff/run-skill-onoff-eval-gdorm.sh
-index 3a7886054..2022b0e41 100755
+index 3a7886054..97b24a253 100755
 --- a/evals/skill-onoff/run-skill-onoff-eval-gdorm.sh
 +++ b/evals/skill-onoff/run-skill-onoff-eval-gdorm.sh
-@@ -269,7 +269,13 @@ fi
+@@ -269,6 +269,19 @@ fi
  # config dir can leak the operator's installed plugins into the OFF arm (G1-F9),
  # so both HOME and CLAUDE_CONFIG_DIR are always exported to scratch paths.
  mkdir -p "$SCRATCH_CONFIG"
--if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
-+# G37 W5 (A12): with an account registry every claude call of this runner goes through claude-account.js (PATH wrapper, token only in
-+# the child env) and no credentials file is copied; a broken registry stops here before any spawn. No registry = unchanged.
++# G37 W5 (A12): this runner needs its own scratch HOME and CLAUDE_CONFIG_DIR (the OFF arm must not see the operator's plugins), and the
++# account layer replaces both with the alias dirs. So with an account registry the run is refused (exit 2) until a cell design for
++# account-backed arms exists; a broken registry or a missing helper also stops here (exit 2), before any spawn and before any credentials copy.
 +if [ "$RUNNER" = "cc" ]; then
 +  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
-+  [ -r "$_EA_LIB" ] && . "$_EA_LIB" && { eval_account_probe skill-onoff || exit $?; eval_account_use_path_wrapper "$SCRATCH_HOME/.ea-bin"; }
++  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper $_EA_LIB is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
++  . "$_EA_LIB"
++  eval_account_probe skill-onoff || exit $?
++  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
++    echo "skill-onoff: an account registry is configured; this runner's arms need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so the run is refused (plan G37 A12)" >&2
++    exit 2
++  fi
 +fi
-+if [ "$RUNNER" = "cc" ] && [ "${EVAL_ACCOUNT_ACTIVE:-0}" != "1" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
    cp "${HOME}/.claude/.credentials.json" "$SCRATCH_CONFIG/"
    chmod 600 "$SCRATCH_CONFIG/.credentials.json"
- fi
 diff --git a/evals/skill-onoff/run-skill-onoff-eval.sh b/evals/skill-onoff/run-skill-onoff-eval.sh
-index 2cd2f8832..fce7d7750 100755
+index 2cd2f8832..646b2a396 100755
 --- a/evals/skill-onoff/run-skill-onoff-eval.sh
 +++ b/evals/skill-onoff/run-skill-onoff-eval.sh
-@@ -266,7 +266,13 @@ fi
+@@ -266,6 +266,19 @@ fi
  # config dir can leak the operator's installed plugins into the OFF arm (G1-F9),
  # so both HOME and CLAUDE_CONFIG_DIR are always exported to scratch paths.
  mkdir -p "$SCRATCH_CONFIG"
--if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
-+# G37 W5 (A12): with an account registry every claude call of this runner goes through claude-account.js (PATH wrapper, token only in
-+# the child env) and no credentials file is copied; a broken registry stops here before any spawn. No registry = unchanged.
++# G37 W5 (A12): this runner needs its own scratch HOME and CLAUDE_CONFIG_DIR (the OFF arm must not see the operator's plugins), and the
++# account layer replaces both with the alias dirs. So with an account registry the run is refused (exit 2) until a cell design for
++# account-backed arms exists; a broken registry or a missing helper also stops here (exit 2), before any spawn and before any credentials copy.
 +if [ "$RUNNER" = "cc" ]; then
 +  _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
-+  [ -r "$_EA_LIB" ] && . "$_EA_LIB" && { eval_account_probe skill-onoff || exit $?; eval_account_use_path_wrapper "$SCRATCH_HOME/.ea-bin"; }
++  [ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper $_EA_LIB is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
++  . "$_EA_LIB"
++  eval_account_probe skill-onoff || exit $?
++  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
++    echo "skill-onoff: an account registry is configured; this runner's arms need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so the run is refused (plan G37 A12)" >&2
++    exit 2
++  fi
 +fi
-+if [ "$RUNNER" = "cc" ] && [ "${EVAL_ACCOUNT_ACTIVE:-0}" != "1" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
+ if [ "$RUNNER" = "cc" ] && [ -f "${HOME}/.claude/.credentials.json" ]; then
    cp "${HOME}/.claude/.credentials.json" "$SCRATCH_CONFIG/"
    chmod 600 "$SCRATCH_CONFIG/.credentials.json"
- fi
-diff --git a/evals/orchestration/run-p2-batch-loop.js b/evals/orchestration/run-p2-batch-loop.js
-index 1c11f9b76..1f05cdaaa 100755
---- a/evals/orchestration/run-p2-batch-loop.js
-+++ b/evals/orchestration/run-p2-batch-loop.js
-@@ -52,6 +52,11 @@ async function main(argv) {
-     if (!Number.isFinite(w0) || w0 <= 0) return 0;
-     return manifest.window_s - (Date.now() - w0) / 1000;
-   };
-+  // G37 W5 (A12): with an account registry there is no credential source to wait for; a broken registry stops the loop before any spawn.
-+  let evalAccount = null;
-+  try { evalAccount = require('../../scripts/lib/eval-account.js'); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
-+  const acct = evalAccount ? evalAccount.gate('run-p2-batch-loop') : { state: 'legacy', exit: null };
-+  if (acct.state === 'broken') return acct.exit;
-   const credFile = o['credentials-source'] ? path.resolve(o['credentials-source']) : path.join(process.env.HOME || '', '.claude', '.credentials.json');
-   const stopFile = path.join(runDir, 'stop.request');
-   fs.rmSync(stopFile, { force: true });
-@@ -84,7 +89,7 @@ async function main(argv) {
-     for (;;) {
-       if (signalled || fs.existsSync(stopFile)) { status(`stopped_by_operator restarts=${restarts}`); return 0; }
-       if (windowLeftS() < Number(o['min-window-s'])) { status(`stopped window_exhausted left_s=${Math.floor(windowLeftS())}`); return 9; }
--      const exp = w.credExpiresAt(credFile);
-+      const exp = acct.state === 'active' ? null : w.credExpiresAt(credFile);
-       if (exp === null || exp - Date.now() >= Number(o['fresh-min']) * 60000) break;
-       await wait(Number(o['poll-s']));
-     }
-diff --git a/evals/orchestration/run-p2-batch.js b/evals/orchestration/run-p2-batch.js
-index 090a8944d..7cb317533 100644
---- a/evals/orchestration/run-p2-batch.js
-+++ b/evals/orchestration/run-p2-batch.js
-@@ -39,6 +39,17 @@ const path = require('path');
- const crypto = require('crypto');
- const { spawnSync } = require('child_process');
- const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
-+// G37 W5 (A12): with an account registry every claude call of this wrapper (version, probe) goes through claude-account.js, and no
-+// credential file is copied (the harness it starts does the same). A broken registry stops the run before any spawn.
-+let evalAccount = null;
-+try { evalAccount = require('../../scripts/lib/eval-account.js'); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
-+/** With an account registry active, a `claude ...` command becomes `node claude-account.js exec --pick -- claude ...`; any other argv is unchanged. */
-+function accountArgv(ctx, argv) {
-+  const i = ctx.accountActive ? argv.indexOf('claude') : -1;
-+  if (i < 0) return argv;
-+  const w = evalAccount.wrap('claude', argv.slice(i + 1), 'p2-batch');
-+  return [...argv.slice(0, i), w.cmd, ...w.args];
-+}
- 
- /** Set in the batch worker: a shared flag the main thread raises on the first TERM or INT. */
- let STOP = null;
-@@ -221,7 +232,7 @@ function makeCtx(o) {
-   };
-   return ctx;
- }
--const sh = (ctx, argv, opts) => ctx.exec([...ENV_PREFIX, ...argv], opts);
-+const sh = (ctx, argv, opts) => ctx.exec([...ENV_PREFIX, ...accountArgv(ctx, argv)], opts);
- const readLog = (ctx) => { try { return parseLog(fs.readFileSync(ctx.logFile, 'utf8')); } catch (_e) { return []; } };
- const tsvRows = (file) => { try { return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map((l) => l.split('\t')); } catch (_e) { return []; } };
- 
-@@ -477,16 +488,17 @@ function runBatch(ctx, first, last) {
-     fs.rmSync(home, { recursive: true, force: true });
-     fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-     // The credential file is copied from its source for every id (the per-run home is the only place the child sees it).
-+    // With an account registry there is no credential file: the alias token is handed to the claude child by claude-account.js.
-     const cred = ctx.credSource || path.join(os.homedir(), '.claude', '.credentials.json');
--    if (!fs.existsSync(cred)) throw new Exit(3, 'ABORT no credential file');
--    const exp = credExpiresAt(cred);
-+    if (!ctx.accountActive && !fs.existsSync(cred)) throw new Exit(3, 'ABORT no credential file');
-+    const exp = ctx.accountActive ? null : credExpiresAt(cred);
-     const expiring = exp !== null && exp - ctx.now() < CRED_MIN_AHEAD_MS;
-     // A launcher that is gone (killed, even with SIGKILL) must not leave a wrapper that keeps starting ids: pause instead.
-     const orphan = ctx.parentPid ? (process.ppid !== ctx.parentPid || !pidAlive(ctx.parentPid)) : false;
-     // A stop request (first TERM or INT, or <run-dir>/stop.request) pauses before the next id; the running id always finishes.
-     const stopAsked = (STOP !== null && Atomics.load(STOP, 0) === 1) || fs.existsSync(path.join(ctx.runDir, 'stop.request'));
-     const pauseReason = expiring ? 'source_token_expiring' : (orphan ? 'parent_gone' : (stopAsked ? 'operator_stop' : ''));
--    if (!pauseReason) {
-+    if (!pauseReason && !ctx.accountActive) {
-       fs.copyFileSync(cred, path.join(home, '.claude', '.credentials.json'));
-       fs.chmodSync(path.join(home, '.claude', '.credentials.json'), 0o600);
-     }
-@@ -1254,8 +1266,15 @@ function main(argv) {
-     const first = rangeArg('--first'), last = rangeArg('--last');
-     if (first < 0 || last < 0 || (first && last && first > last)) { process.stderr.write(`usage: --first and --last must be integers from 1 to ${nIds}, first not after last\n`); return 2; }
-     const clone = path.resolve(opt['--clone'] || process.cwd());
-+    let accountActive = false;
-+    if (evalAccount) {
-+      const g = evalAccount.gate('run-p2-batch');
-+      if (g.state === 'broken') return g.exit;
-+      accountActive = g.state === 'active';
-+      if (accountActive && opt['--credentials-source']) { process.stderr.write('run-p2-batch: --credentials-source is not used with an account registry (the alias token comes from claude-account.js)\n'); return 2; }
-+    }
-     fs.mkdirSync(runDir, { recursive: true });
--    const ctx = makeCtx({ runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, parentPid: opt['--parent-pid'] ? Number(opt['--parent-pid']) : undefined, credSource: opt['--credentials-source'] ? path.resolve(opt['--credentials-source']) : undefined, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
-+    const ctx = makeCtx({ accountActive, runDir, clone, manifest, manifestPath: path.resolve(opt['--manifest']), wrapperPath: __filename, parentPid: opt['--parent-pid'] ? Number(opt['--parent-pid']) : undefined, credSource: opt['--credentials-source'] ? path.resolve(opt['--credentials-source']) : undefined, taskDir: path.join(clone, 'evals', 'orchestration', 'tasks', manifest.task) });
-     let code = 0;
-     try { runBatch(ctx, first, last); } catch (e) {
-       if (!(e instanceof Exit)) { ctx.log('ABORT', `unexpected ${String(e && e.message).slice(0, 120)}`); code = 3; } else {

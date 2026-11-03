@@ -201,39 +201,34 @@ cat <<'EOF' > "$CASE8_DIR/.claude/review-loop-config.md"
 EOF
 
 FAKE_AGY_RUNNER="$TEST_TMP/fake-agy-runner"
-cat <<EOF > "$FAKE_AGY_RUNNER"
-#!/usr/bin/env bash
-$(declare -f read_fake_runner_prompt extract_autopilot_frame_markers print_autopilot_frame_markers)
-touch "\$SENTINEL" 2>/dev/null || true
-# Echo argv into raw_log for the composition checks below (the isolated AGY
-# runner cannot write host files). The ARG= lines go INSIDE the AUTHOR frame:
-# only the frame body survives into raw_log. Each arg is flattened to one line
-# and has < > neutralised, because the prompt arg carries the frame marker
-# lines and a literal <tool_call> instruction, which the frame parser would
-# otherwise read as a second frame / tool narration.
+# The rail sends the prompt to agy on STDIN as stream-json and reads the `result` event back
+# (scripts/lib/agy-stream-json.js; there is no `-p <prompt>` argv any more). The fake decodes the
+# prompt from the stdin NDJSON line and answers with a stream-json `result` event. Header and body
+# are written separately: only the header needs the shell-function expansion.
+{
+  printf '#!/usr/bin/env bash\n'
+  declare -f extract_autopilot_frame_markers
+  cat <<'EOF'
+touch "$SENTINEL" 2>/dev/null || true
+# Echo argv and the stdin prompt into the response for the composition checks below (the isolated
+# AGY runner cannot write host files). Each item is flattened to one line with < > neutralised,
+# because the prompt carries the frame marker lines and a literal <tool_call> instruction, which
+# the frame parser would otherwise read as a second frame / tool narration.
+STDIN_PROMPT_RAW="$(node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const l=d.split("\n").find(x=>x.trim());process.stdout.write(JSON.parse(l).message.content)})')"
 ARG_LINES=""
-for _arg in "\$@"; do
-  ARG_LINES="\$ARG_LINES
-ARG=\$(printf '%s' "\$_arg" | tr '\\n<>' ' __')"
+for _arg in "$@"; do
+  ARG_LINES="$ARG_LINES
+ARG=$(printf '%s' "$_arg" | tr '\n<>' ' __')"
 done
-BODY="AGY-AUTHORED\$ARG_LINES"
-MARKERS=""
-for _arg in "\$@"; do
-  if MARKERS="\$(extract_autopilot_frame_markers AUTOPILOT-AUTHOR "\$_arg")"; then
-    break
-  fi
-done
-if [ -z "\$MARKERS" ]; then
-  MARKERS="\$(print_autopilot_frame_markers AUTOPILOT-AUTHOR "\$@")" || MARKERS=""
+ARG_LINES="$ARG_LINES
+STDIN_PROMPT=$(printf '%s' "$STDIN_PROMPT_RAW" | tr '\n<>' ' __')"
+BODY="AGY-AUTHORED$ARG_LINES"
+if MARKERS="$(extract_autopilot_frame_markers AUTOPILOT-AUTHOR "$STDIN_PROMPT_RAW")"; then
+  BODY="$(printf '%s\n%s\n%s' "$(printf '%s\n' "$MARKERS" | sed -n '1p')" "$BODY" "$(printf '%s\n' "$MARKERS" | sed -n '2p')")"
 fi
-if [ -n "\$MARKERS" ]; then
-  BEGIN="\$(printf '%s\\n' "\$MARKERS" | sed -n '1p')"
-  END="\$(printf '%s\\n' "\$MARKERS" | sed -n '2p')"
-  printf '%s\\n%s\\n%s\\n' "\$BEGIN" "\$BODY" "\$END"
-else
-  printf '%s\\n' "\$BODY"
-fi
+BODY="$BODY" node -e 'process.stdout.write(JSON.stringify({event:"result",result:{status:"SUCCESS",response:process.env.BODY}})+"\n")'
 EOF
+} > "$FAKE_AGY_RUNNER"
 chmod +x "$FAKE_AGY_RUNNER"
 
 rm -f "$SENTINEL"
@@ -248,7 +243,8 @@ AGY_RAW_LOG_PATH="$(python3 -c "import json,sys; print(json.loads(sys.stdin.read
 assert_file_exists "$AGY_RAW_LOG_PATH" "Case 8: fake AGY runner produced a raw log"
 AGY_ARG_TEXT="$(cat "$AGY_RAW_LOG_PATH")"
 assert_contains "$AGY_ARG_TEXT" 'AGY-AUTHORED' "Case 8: fake AGY runner executed"
-assert_contains "$AGY_ARG_TEXT" '-p' "Case 8: AGY prompt flag composition"
+assert_contains "$AGY_ARG_TEXT" '--print=' "Case 8: AGY stdin stream-json transport flag composition"
+assert_contains "$AGY_ARG_TEXT" 'ARG=stream-json' "Case 8: AGY stream-json format flags composition"
 assert_contains "$AGY_ARG_TEXT" 'Write a verification plan.' "Case 8: AGY prompt composition"
 assert_contains "$AGY_ARG_TEXT" '--model' "Case 8: AGY model flag composition"
 assert_contains "$AGY_ARG_TEXT" 'Gemini 3.1 Pro (High)' "Case 8: AGY model composition"

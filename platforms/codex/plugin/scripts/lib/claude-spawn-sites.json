@@ -203,9 +203,11 @@
     },
     {
       "file": "evals/test-helpers.sh",
-      "status": "out_of_scope",
-      "group": "gap",
-      "reason": "KNOWN GAP, not a design decision: run_skill() starts `claude -p` on the operator's ambient login. It is reachable only through evals/test-behavior.sh, which exits at once unless AUTOPILOT_EVAL_INTEGRATION=1 (a hand-run integration smoke, three short calls, never run by a campaign or by the suites). Wiring it is a follow-up for the eval lane; it is listed so the gate stays honest and so a second hole of this kind is caught"
+      "status": "wired",
+      "group": "A12",
+      "covered_by": [
+        "scripts/eval-account-rails.test.js"
+      ]
     },
     {
       "file": "scripts/benchmark-hook-latency.js",

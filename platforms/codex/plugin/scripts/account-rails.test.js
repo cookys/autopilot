@@ -201,7 +201,7 @@ test('env-check reading rule: all four readers give the same verdict for every s
 });
 
 test('env-check reading rule mutation: eval-account.sh failing open on unrecognised output turns the table red', () => {
-  const root = readerTree({ 'eval-account.sh': (t) => t.replace('return 2', 'return 0') });
+  const root = readerTree({ 'eval-account.sh': (t) => t.replace(/return 2/g, 'return 0') });
   try {
     const r = readAll(root, 0, 'garbage');
     assert.strictEqual(r['eval-account.sh'], 'legacy', 'the mutated reader should have failed open');

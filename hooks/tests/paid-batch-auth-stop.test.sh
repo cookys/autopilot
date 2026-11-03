@@ -14,7 +14,7 @@ ENVX=(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR
 cp_account_layer() { # <scripts dir of the layout>
   mkdir -p "$1/lib"; cp "$REPO_ROOT/scripts/claude-account.js" "$1/"
   cp "$REPO_ROOT"/scripts/lib/account-{audit,cooldown,env,pick,quota,rail,registry}.js "$REPO_ROOT"/scripts/lib/{live-state-dir,auth-stop}.js \
-     "$REPO_ROOT/scripts/lib/eval-account.js" "$REPO_ROOT/scripts/lib/eval-account.sh" "$1/lib/"
+     "$REPO_ROOT/scripts/lib/eval-account.js" "$REPO_ROOT/scripts/lib/eval-account.sh" "$REPO_ROOT/scripts/lib/account-state.sh" "$1/lib/"
 }
 mkdir -p "$TEST_TMP/no-accounts"; export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"
 

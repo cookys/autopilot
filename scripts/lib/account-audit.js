@@ -19,7 +19,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const crypto = require('crypto');
 
 const AUDIT_KEYS = ['ts', 'ts_local', 'alias', 'purpose', 'attempt', 'outcome'];
 const OUTCOMES = [
@@ -46,11 +45,10 @@ function auditPath(env, homedir) {
   return path.join(base, 'autopilot', 'accounts-audit.jsonl');
 }
 
-// Never echo an unvalidated string: report only a count and a short sha256 fingerprint.
-function fp(str) { return crypto.createHash('sha256').update(String(str)).digest('hex').slice(0, 8); }
+// Never echo (or fingerprint) an unvalidated string: report only a count.
 function extraKeys(obj, allowed) {
   const extra = Object.keys(obj).filter((k) => !allowed.includes(k));
-  return extra.length ? `extra_keys:${extra.length} fp=${fp(extra[0])}` : null;
+  return extra.length ? `extra_keys:${extra.length}` : null;
 }
 
 function pad(n, w) { return String(n).padStart(w || 2, '0'); }
@@ -124,8 +122,10 @@ function appendAudit(input, opts) {
   const file = o.path || auditPath(o.env, o.homedir);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const fd = fs.openSync(file,
-    fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600);
+    fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW
+    | fs.constants.O_NONBLOCK, 0o600);
   try {
+    if (!fs.fstatSync(fd).isFile()) throw new Error('audit: path is not a regular file');
     if ((fs.fstatSync(fd).mode & 0o077) !== 0) throw new Error('audit: file mode is not 0600');
     fs.writeSync(fd, JSON.stringify(rec) + '\n');
   } finally {
@@ -143,9 +143,11 @@ function readAudit(file, opts) {
   let text;
   let bytesRead = 0;
   try {
-    const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
     try {
-      const size = fs.fstatSync(fd).size;
+      const st = fs.fstatSync(fd);
+      if (!st.isFile()) return { records: [], invalid: 0, bytesRead: 0, refused: 'not_regular_file' };
+      const size = st.size;
       const start = Math.max(0, size - max);
       const buf = Buffer.alloc(size - start);
       bytesRead = fs.readSync(fd, buf, 0, buf.length, start);

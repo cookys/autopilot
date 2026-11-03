@@ -13,23 +13,20 @@
  * Built-ins only, Node >= 20.10.
  */
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { layerState } = require('./account-rail');
 
 const ACCOUNT_JS = path.join(__dirname, '..', 'claude-account.js');
 const LOCATORS = ['AUTOPILOT_ACCOUNTS_DIR', 'AUTOPILOT_LIVE_DIR', 'AUTOPILOT_STATE_DIR', 'AUTOPILOT_CONFIG', 'AUTOPILOT_CONFIG_FILE', 'XDG_RUNTIME_DIR', 'TMPDIR'];
 const ACCOUNT_BROKEN_EXIT = 2;
 
 function probe(env) {
-  const e = env || process.env;
+  // Fail closed when the layer is missing (L9): nothing is spawned.
   if (!require('fs').existsSync(ACCOUNT_JS)) return { state: 'broken', code: ACCOUNT_BROKEN_EXIT, message: 'claude-account.js is missing' };
-  const r = spawnSync(process.execPath, [ACCOUNT_JS, 'env-check', '--purpose', 'eval-probe'], {
-    env: e, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000,
-  });
-  if (r.error || r.status !== 0) {
-    return { state: 'broken', code: r.status === null || r.status === undefined ? ACCOUNT_BROKEN_EXIT : r.status, message: String(r.stderr || (r.error && r.error.code) || '').trim().slice(0, 200) };
-  }
-  const first = String(r.stdout).split('\n')[0].trim();
-  return first.startsWith('ok ') ? { state: 'active' } : { state: 'legacy' };
+  // The ONE reading of env-check (account-rail.js layerState, always --any, anything unrecognised is invalid): the same
+  // rule every rail uses. legacy = unconfigured / mode_off; invalid = a registry exists but is unusable -> broken.
+  const r = layerState({ env: env || process.env, purpose: 'eval-probe' });
+  if (r.state === 'invalid') return { state: 'broken', code: ACCOUNT_BROKEN_EXIT, message: String(r.detail || '').slice(0, 200) };
+  return { state: r.state };
 }
 
 function wrap(cmd, args, purpose) {

@@ -43,11 +43,18 @@ function mergePage({ results, cursor, kinds, limit, projectKey }) {
   const warnings = [];
   const files = [];
   const all = [];
+  const extraLines = [];
+  let anyDisplaced = false;
   let invalid = 0;
   let foreign = 0;
   for (const result of results) {
     if (!result) continue;
     for (const file of result.files || []) files.push(file);
+    if (result.bounded) {
+      if (result.bounded.displaced > 0) anyDisplaced = true;
+      for (const o of result.bounded.displacedOffsets || []) extraLines.push({ fileKey: o.fileKey, file: o.file, offset: o.offset, tsMs: Infinity, id: undefined, candidate: true });
+      for (const o of result.bounded.rejectedOffsets || []) extraLines.push({ fileKey: o.fileKey, file: o.file, offset: o.offset, tsMs: Infinity, id: undefined, candidate: false });
+    }
     for (const event of result.events || []) {
       if (!validEvent(event)) { invalid += 1; continue; }
       if (event.project_key !== projectKey) { foreign += 1; continue; } // an event of another project never reaches a page
@@ -91,6 +98,7 @@ function mergePage({ results, cursor, kinds, limit, projectKey }) {
     }
   }
 
+  lines.push(...extraLines);
   const cap = Number.isInteger(limit) && limit > 0 ? limit : 1000;
   const pageIn = candidates.slice(0, cap);
   if (pageIn.length === 0) {
@@ -101,7 +109,7 @@ function mergePage({ results, cursor, kinds, limit, projectKey }) {
   const page = next.page.map((c) => byId.get(c.id));
   if (next.overflow) warn(warnings, 'window_overflow', `slack ${next.state.s}ms`, 1);
   return {
-    events: page, hasMore: candidates.length > page.length, empty: false, state: next.state, overflow: next.overflow, slackMs: next.state.s, warnings,
+    events: page, hasMore: candidates.length > page.length || anyDisplaced, empty: false, state: next.state, overflow: next.overflow, slackMs: next.state.s, warnings,
   };
 }
 

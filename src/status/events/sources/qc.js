@@ -15,6 +15,7 @@ const { execFileSync } = require('child_process');
 const { cleanGitEnv } = require('../../git-env');
 const { parseInstant, parseInstantMs } = require('../instant');
 const { redactText, truncateText } = require('../redact');
+const { createCollector } = require('../collector');
 
 const SOURCE = 'qc';
 const EVENT_SOURCE = 'git_trailer';
@@ -56,10 +57,10 @@ function repoArgs(ctx) {
 }
 
 function read(ctx, window) {
-  const events = [];
+  const events = createCollector(window);
   const warn = warner();
   const stats = { name: SOURCE, state: 'ok', rows_read: 0, rows_skipped: 0, rows_filtered: 0, redactions: 0 };
-  const finish = () => ({ events, warnings: warn.list(), stats });
+  const finish = () => ({ ...events.result(), warnings: warn.list(), stats });
   try {
     const project = (ctx && ctx.project) || {};
     const repo = repoArgs(ctx);

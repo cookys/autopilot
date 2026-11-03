@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { runsDir } = require('../../../../scripts/lib/runtime-paths');
 const { parseInstant, parseInstantMs } = require('../instant');
+const { createCollector } = require('../collector');
 
 const SOURCE = 'dispatch';
 const EVENT_SOURCE = 'dispatch_manifest';
@@ -57,10 +58,10 @@ function startedData(m) {
 }
 
 function read(ctx, window) {
-  const events = [];
+  const events = createCollector(window);
   const warn = warner();
   const stats = { name: SOURCE, state: 'ok', rows_read: 0, rows_skipped: 0, rows_filtered: 0, redactions: 0 };
-  const finish = () => ({ events, warnings: warn.list(), stats });
+  const finish = () => ({ ...events.result(), warnings: warn.list(), stats });
   try {
     const project = (ctx && ctx.project) || {};
     const dir = runsDir((ctx && ctx.env) || process.env);

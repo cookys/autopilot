@@ -34,6 +34,7 @@ const mergeLib = require('./merge');
 const SCHEMA = 'autopilot.events/1';
 const DEFAULT_LIMIT = 1000;
 const MAX_LIMIT = 10000;
+const CAP_BUFFER = 64;
 const SOURCE_NAMES = ['dispatch', 'cost', 'review', 'qc', 'decision', 'runledger'];
 const STATES = new Set(['ok', 'absent', 'degraded']);
 
@@ -99,6 +100,7 @@ function runReader(name, loadReader, ctx, window) {
     return {
       name,
       events: Array.isArray(res.events) ? res.events : [],
+      bounded: res.bounded && typeof res.bounded === 'object' ? res.bounded : null,
       files: Array.isArray(res.files) ? res.files : [],
       warnings,
       stat: {
@@ -112,7 +114,7 @@ function runReader(name, loadReader, ctx, window) {
     };
   } catch (error) {
     warnings.push({ source: name, code: 'source_failed', detail: errorName(error), count: 1 });
-    return { name, events: [], files: [], warnings, stat: { name, state: 'degraded', rows_read: 0, rows_skipped: 0, rows_filtered: 0, redactions: 0 } };
+    return { name, events: [], files: [], bounded: null, warnings, stat: { name, state: 'degraded', rows_read: 0, rows_skipped: 0, rows_filtered: 0, redactions: 0 } };
   }
 }
 
@@ -184,13 +186,23 @@ function collectEvents(opts = {}) {
       project, env, home: opts.home || env.HOME, now: nowMs(),
       reviewLedgers: Array.isArray(opts.reviewLedgers) ? opts.reviewLedgers.filter((d) => typeof d === 'string' && d !== '') : [],
     };
-    const window = { sinceTs: cursorLib.floorOf(input.state), slackMs: 0, hints: input.state.h };
+    // The bounded collector of every reader (collector.js): keep = the cursor filter and --kinds, cap = limit plus a small buffer.
+    const delivered = new Set(input.state.w.map((pair) => pair[0]));
+    const floor = cursorLib.floorOf(input.state);
+    const kindSet = kinds.length > 0 ? new Set(kinds) : null;
+    const keep = (event) => {
+      const tsMs = Date.parse(event.ts);
+      if (!(tsMs >= floor) || delivered.has(cursorLib.idHash(event.id))) return false;
+      if (input.state.e && tsMs === input.state.e[0] && event.id <= input.state.e[1]) return false;
+      return kindSet === null || kindSet.has(event.kind);
+    };
+    const window = { sinceTs: floor, slackMs: 0, hints: input.state.h, keep, cap: limit + CAP_BUFFER };
 
     const ran = SOURCE_NAMES.map((name) => runReader(name, loadReader, ctx, window));
 
     if (faultOn('merge')) throw new Error('InjectedMergeFault');
     const merged = (deps.mergePage || mergeLib.mergePage)({
-      results: ran.map((r) => ({ events: r.events, files: r.files })), cursor: input.state, kinds, limit, projectKey: project.project_key,
+      results: ran.map((r) => ({ events: r.events, files: r.files, bounded: r.bounded })), cursor: input.state, kinds, limit, projectKey: project.project_key,
     });
 
     let cursor = inputCursor;

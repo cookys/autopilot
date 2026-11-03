@@ -197,8 +197,10 @@ Encoding: `base64url(JSON)` of
 shape, so no reader derives it again: `{ project_key, repo_identity, repo_name, root, common_dir }`. `repo_identity` is
 `git-common-dir:<common_dir>`, `repo_name` is the repository's directory name, `root` is the work tree (null in a bare
 repository) and `common_dir` is the absolute git common directory. A reader also gets `ctx.env`, `ctx.home`, `ctx.now` and
-`ctx.reviewLedgers` (the repeated `--review-ledger` values), and a window `{ sinceTs: L, slackMs: 0, hints: h }`: the cursor
-has already folded the slack into `L`. A reader returns `{ events, warnings, stats }`, plus `files` for a JSONL source (what it
+`ctx.reviewLedgers` (the repeated `--review-ledger` values), and a window `{ sinceTs: L, slackMs: 0, hints: h, keep, cap }`: the cursor
+has already folded the slack into `L`, `keep(event)` is the cursor filter plus `--kinds`, and `cap` is `limit` plus a small buffer. Every reader
+hands its events to the shared bounded collector (`collector.js`), which keeps only the `cap` smallest by `(ts, id)`; what it displaced or
+refused is reported as `bounded` (counts and smallest source offsets per file) so `has_more` and the hints stay exact. A reader returns `{ events, warnings, stats }`, plus `files` for a JSONL source (what it
 consumed, so the cursor can place hints). Any reader failure is `source_failed` and state `degraded` for that source only.
 The `cwd` to common-directory memo of the cost reader lives inside one `collectEvents` call, never at module level.
 

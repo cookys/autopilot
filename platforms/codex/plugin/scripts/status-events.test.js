@@ -629,6 +629,23 @@ test('resume-identical-lines-hinted: two identical cost lines, the second append
   const unhinted = collectEvents({ ...opts, since: dropHints(second.cursor) });
   assert.deepEqual(hinted.events.map((e) => e.id), [`cost.turn:${sha256hex(row).slice(0, 24)}#2`]);
   assert.deepEqual(hinted.events, unhinted.events);
+  // a third and fourth copy: the hint the previous call wrote must still sit at or before the FIRST copy (it was only read, not delivered)
+  fs.appendFileSync(fx.paths.costsFile, `${row}\n`);
+  const fourth = collectEvents({ ...opts, since: hinted.cursor });
+  assert.deepEqual(fourth.events.map((e) => e.id), [`cost.turn:${sha256hex(row).slice(0, 24)}#3`]);
+  assert.deepEqual(fourth.events, collectEvents({ ...opts, since: dropHints(hinted.cursor) }).events);
+});
+
+test('resume-bounded-out-of-order: a displaced line with a smaller offset than every kept one keeps the hint behind it', () => {
+  const fx = fresh();
+  const lines = bigCostFile(fx);
+  // the first line of the file carries the LATEST ts: it is displaced by the collector, and no hint may skip it
+  lines[0] = JSON.stringify({ ...JSON.parse(lines[0]), ts: isoOf(T0 + 400 * 400000), session: 's-first-but-latest' });
+  fs.writeFileSync(fx.paths.costsFile, `${lines.join('\n')}\n`);
+  const expected = costOnlyOpts(fx, { limit: 10000 });
+  const all = collectEvents(expected).events.map((e) => e.id);
+  assert.equal(all.length, lines.length);
+  for (const hints of [true, false]) assert.deepEqual(idsOfPages(drain(costOnlyOpts(fx), { limit: 3, hints })).sort(), [...all].sort(), `hints ${hints}`);
 });
 
 test('resume-rotation: (iii) rotating the run ledger keeps its hint (the head hash follows the file to .1): no gap, no duplicate, no full re-read', () => {
@@ -1041,4 +1058,53 @@ test('resume-shared-head-zero-offset: two big files with one head share a hint k
   assert.equal(decodeC(page.cursor).h[`cost:${head}`], undefined, 'a 0 from either file means no hint for the shared key');
   const rest = collectEvents(stubOpts(fx, () => events, { files: [f1, f2], since: page.cursor }));
   assert.deepEqual(rest.events.map((e) => e.id), ['cost.turn:x2']);
+});
+
+// ---- bounded collection (collector.js): a small limit over a large source -----------------------------------------------
+
+test('resume-bounded-pages: a small limit over many rows concatenates to the full read, with and without hints, has_more from displaced rows', () => {
+  const fx = fresh();
+  const lines = bigCostFile(fx); // 170 rows, over the hint threshold, one row per 400 s
+  const expected = lines.map((line) => `cost.turn:${sha256hex(line).slice(0, 24)}#1`);
+  const full = collectEvents(costOnlyOpts(fx, { limit: 10000 }));
+  assert.deepEqual(full.events.map((e) => e.id), expected);
+  const first = collectEvents(costOnlyOpts(fx, { limit: 3 }));
+  assert.equal(first.events.length, 3);
+  assert.equal(first.has_more, true, 'rows beyond the cap were displaced, not lost');
+  for (const [limit, hints] of [[3, true], [3, false], [10, true], [64, true]]) {
+    const pages = drain(costOnlyOpts(fx), { limit, hints });
+    assert.deepEqual(idsOfPages(pages), expected, `limit ${limit}, hints ${hints}`);
+  }
+  // a byte-identical pair spread over pages: the ids stay #1, #2 whatever the page size
+  const twin = lines[10];
+  fs.appendFileSync(fx.paths.costsFile, `${twin}\n`);
+  const fullTwin = collectEvents(costOnlyOpts(fx, { limit: 10000 })).events.map((e) => e.id);
+  assert.equal(fullTwin.length, expected.length + 1);
+  assert.deepEqual(idsOfPages(drain(costOnlyOpts(fx), { limit: 4 })).sort(), [...fullTwin].sort());
+});
+
+test('resume-bounded-window-rows: pages of 7 over 400 rows 3 s apart (a wide window of delivered ids) equal the full read', () => {
+  const fx = fresh();
+  const lines = [];
+  for (let i = 0; i < 400; i += 1) lines.push(JSON.stringify({ ...JSON.parse(fx.cost.main), ts: isoOf(T0 + i * 3000), session: `s-w-${i}` }));
+  fs.writeFileSync(fx.paths.costsFile, `${lines.join('\n')}\n`);
+  const expected = lines.map((line) => `cost.turn:${sha256hex(line).slice(0, 24)}#1`);
+  for (const hints of [true, false]) assert.deepEqual(idsOfPages(drain(costOnlyOpts(fx), { limit: 7, hints })), expected);
+});
+
+test('cursor-collector-bounds: the collector keeps the smallest cap events by (ts, id), counts what it displaced and notes their offsets', () => {
+  const { createCollector } = require('../src/status/events/collector');
+  const fx = fresh();
+  const mkE = (key, tsMs, offset) => stubEvent(fx, key, tsMs, { source: 'cost', file: '/f/x', head: 'abcdef012345', offset, end: offset + 9 });
+  const col = createCollector({ cap: 3, keep: (e) => e.id !== 'cost.turn:skip', sinceTs: T0 });
+  for (const [k, ts, off] of [['d', 4, 400], ['b', 2, 200], ['a', 1, 100], ['c', 3, 300], ['e', 5, 500], ['b', 2, 250], ['skip', 2, 50]]) col.push(mkE(k, T0 + ts, off));
+  const { events, bounded } = col.result();
+  assert.deepEqual(events.map((e) => e.id), ['cost.turn:a', 'cost.turn:b', 'cost.turn:c']);
+  assert.equal(bounded.displaced, 2);
+  assert.deepEqual(bounded.displacedOffsets.map((o) => o.offset), [400], 'the smallest start offset among the displaced lines (d at 400, e at 500)');
+  assert.deepEqual(bounded.rejectedOffsets.map((o) => o.offset), [50], 'a refused line and a repeated id are noted: the smaller offset wins');
+  const plain = createCollector({});
+  plain.push(mkE('z', T0, 1));
+  plain.push(mkE('y', T0, 2));
+  assert.deepEqual(plain.result().events.map((e) => e.id), ['cost.turn:y', 'cost.turn:z'], 'without keep and cap it is a sorted list');
 });

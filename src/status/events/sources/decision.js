@@ -22,6 +22,7 @@ const crypto = require('crypto');
 const { readLines, windowFloorMs } = require('../jsonl-tail');
 const { parseInstant, parseInstantMs } = require('../instant');
 const { canonical } = require('../../../../scripts/validate-json-schema');
+const { createCollector } = require('../collector');
 const { redactText } = require('../redact');
 
 const SOURCE = 'decision';
@@ -41,7 +42,7 @@ function commonDirOf(project) {
 }
 
 function read(ctx = {}, window = {}) {
-  const events = [];
+  const events = createCollector(window);
   const files = [];
   const warnings = new Map();
   const stats = { state: 'ok', rows_read: 0, rows_skipped: 0, rows_filtered: 0, redactions: 0 };
@@ -126,7 +127,7 @@ function read(ctx = {}, window = {}) {
   return finish();
 
   function finish() {
-    return { events, warnings: [...warnings.values()], stats, files };
+    return { ...events.result(), warnings: [...warnings.values()], stats, files };
   }
 }
 

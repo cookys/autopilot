@@ -24,6 +24,7 @@ const crypto = require('crypto');
 const { readLines, windowFloorMs } = require('../jsonl-tail');
 const { parseInstant, parseInstantMs } = require('../instant');
 const { canonical } = require('../../../../scripts/validate-json-schema');
+const { createCollector } = require('../collector');
 const { runsDir } = require('../../../../scripts/lib/runtime-paths');
 const { maxRotations } = require('../../../../scripts/lib/run-ledger-config');
 const { redactText } = require('../redact');
@@ -80,7 +81,7 @@ function ledgerPaths(project, env) {
 }
 
 function read(ctx = {}, window = {}) {
-  const events = [];
+  const events = createCollector(window);
   const files = [];
   const warnings = new Map();
   const stats = { state: 'ok', rows_read: 0, rows_skipped: 0, rows_filtered: 0, redactions: 0 };
@@ -156,7 +157,7 @@ function read(ctx = {}, window = {}) {
   } catch (error) {
     warn('source_failed', error && error.name ? error.name : 'Error');
   }
-  return { events, warnings: [...warnings.values()], stats, files };
+  return { ...events.result(), warnings: [...warnings.values()], stats, files };
 }
 
 module.exports = { read, SOURCE };

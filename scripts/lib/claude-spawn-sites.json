@@ -223,6 +223,14 @@
       "reason": "this gate: its own detection patterns contain the strings it looks for; it starts no claude"
     },
     {
+      "file": "scripts/accounts-onboard.sh",
+      "status": "wired",
+      "group": "account-layer",
+      "covered_by": [
+        "hooks/tests/accounts-onboard.test.sh"
+      ]
+    },
+    {
       "file": "scripts/claude-account.js",
       "status": "wired",
       "group": "account-layer",

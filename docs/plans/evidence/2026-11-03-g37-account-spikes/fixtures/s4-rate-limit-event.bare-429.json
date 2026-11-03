@@ -1,0 +1,7 @@
+{
+ "type": "rate_limit_event",
+ "rate_limit_info": {
+  "status": "rejected",
+  "isUsingOverage": false
+ }
+}

@@ -8,6 +8,7 @@ import * as U from './ui'
 import { cellWidth, displayWidth, isStale, stateOf } from './ui'
 import { residueTally } from './model'
 import type { NeedsHumanEntry } from './model'
+import type { FleetLane, FleetTask, FleetView } from './fleet'
 import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideDialog, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
 import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
@@ -869,3 +870,66 @@ export const reviewTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, col
 export const spendTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(spendTabLinesRaw(snap, ctx), ctx.cols)
 
 export const hygieneTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(hygieneTabLinesRaw(snap, ctx), ctx.cols)
+
+// ================= Fleet (console C1 v0, PM G23): every lane's work as the fleet hub's task tree reports it (fleet.ts) =================
+// 資料 (when the data was fetched, and the last fetch's error) · the open owner cards (a projection of 待決) · one foldable section per lane: its in-flight rows (a stuck one on
+// top), then its open rows, the upcoming work. A row opens to its progress line and its id.
+const FLEET_CAP = 8
+const fleetLaneId = (l: FleetLane): string => 'sec:fleet.lane.' + l.host + '/' + l.lane
+function fleetSource(u: UiCtx, f: FleetView | null): PaneLine[] {
+  const t = u.t
+  const F = 'fleet.source' as const
+  if (f === null || (f.fetchedMs === null && f.error === null)) return [ui.kv(u, t('label.fleet_data'), [ui.absent(t('fleet.loading'))], { fact: F })]
+  const age = f.fetchedMs === null ? ui.absent(t('fleet.never')) : ui.fmtd('ago', ui.ago(Math.max(0, f.nowMs - f.fetchedMs), t), F)
+  const out = [ui.kv(u, t('label.fleet_data'), [age, ui.val(' · ' + t('fleet.source_cmd'), { tone: 'dim' })], { fact: F })]
+  if (f.error !== null) out.push(ui.item(u, ui.stateOf('fleetTask', { state: 'FAILED', stuck: false }), t('fleet.error', { error: f.error }), undefined, { fact: F, word: false }))
+  return out
+}
+function fleetCards(u: UiCtx, snap: LiveSnapshot): PaneLine[] {
+  const t = u.t
+  if (snap.pending.length === 0) return [ui.empty(t('fleet.cards_none'), 'fleet.cards')]
+  const needYou = ui.stateOf('verdict', 'DECIDE')
+  return [ui.projection('fleet', 'decide.cards', ui.item(u, needYou, t('fleet.cards', { n: snap.pending.length }), undefined, { fact: 'decide.cards', goto: 'decide' }))]
+}
+const STUCK_TEXT = { unaccepted: 'fleet.stuck_unaccepted', quiet: 'fleet.stuck_quiet', hub: 'fleet.stuck_hub' } as const
+function fleetRow(u: UiCtx, task: FleetTask): U.RowSpec {
+  const t = u.t
+  const F = 'fleet.lanes' as const
+  // the row: state, title, age; why a stalled row is stuck is in its opened detail (the state word already says it is), so a narrow pane cuts the title less
+  const meta: U.MetaPart[] = task.ageMs === null ? [] : [{ text: ui.ago(task.ageMs, t), fmt: 'ago' }]
+  const toggle = 'fleet:' + task.id
+  const children: PaneLine[] = []
+  if (u.expanded?.has(toggle) === true) {
+    if (task.stuck !== null) children.push(...ui.detail(u, task.stuck === 'quiet' && task.quietMs !== null ? t('fleet.stuck_quiet_for', { ago: ui.ago(task.quietMs, t) }) : t(STUCK_TEXT[task.stuck]), { fact: F }))
+    if (task.progress !== '' && task.progress !== task.title) children.push(...ui.detail(u, t('fleet.progress', { p: task.progress }), { fact: F }))
+    children.push(...ui.detail(u, t('fleet.task_id', { state: task.state, id: task.id }), { fact: F }))
+  }
+  return { group: task.id, ts: task.createdMs ?? 0, state: ui.stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null }), fact: F, body: task.title, meta, toggle, children, word: true }
+}
+function fleetLanesLines(u: UiCtx, ctx: PaneCtx, f: FleetView | null): PaneLine[] {
+  const t = u.t
+  const F = 'fleet.lanes' as const
+  if (f === null || f.fetchedMs === null) return []
+  if (f.lanes.length === 0) return [ui.empty(t('fleet.none'), F)]
+  const out: PaneLine[] = []
+  for (const l of f.lanes) {
+    const rows = [...l.inflight, ...l.upcoming]
+    const id = fleetLaneId(l)
+    const open = U.sectionOpen(ctx.folded, id, false)
+    const chip = ui.countChip(u, U.worst(rows.map(r => ui.stateOf('fleetTask', { state: r.state, stuck: r.stuck !== null }))), rows.length, F)
+    out.push(ui.header(u, l.lane, { id, open }, { right: chip, fact: F }))
+    if (!open) continue
+    if (l.inflight.length > 0) out.push(...ui.list(u, 'fleet.inflight.' + l.host + '/' + l.lane, t('fleet.noun_inflight'), l.inflight.map(x => fleetRow(u, x)), { keepOrder: true, cap: FLEET_CAP }))
+    if (l.upcoming.length > 0) {
+      out.push(...ui.detail(u, t('fleet.upcoming', { n: l.upcoming.length }), { fact: F }))
+      out.push(...ui.list(u, 'fleet.upcoming.' + l.host + '/' + l.lane, t('fleet.noun_upcoming'), l.upcoming.map(x => fleetRow(u, x)), { keepOrder: true, cap: FLEET_CAP }))
+    }
+  }
+  return out
+}
+function fleetTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
+  const u = uiCtxOf(ctx)
+  const f = ctx.fleet ?? null
+  return U.sections('fleet', { source: fleetSource(u, f), cards: fleetCards(u, snap), lanes: fleetLanesLines(u, ctx, f) })
+}
+export const fleetTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(fleetTabLinesRaw(snap, ctx), ctx.cols)

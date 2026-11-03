@@ -11,6 +11,7 @@
 
 import { T_EN } from './i18n'
 import type { T } from './i18n'
+import type { FleetView } from './fleet'
 import * as ui from './ui' // the design system's builders; `ui.kv` etc. keep clear of this file's own legacy `kv` / `row`
 import * as U from './ui'
 import { GLYPHS, PALETTE, STATES, carry, cellWidth, displayWidth, isStale, stateOf } from './ui'
@@ -1585,8 +1586,8 @@ export function plainBandText(reason: string, columns: number): string {
   return truncateToWidth(reason.replace(/\s*\n\s*/g, ' '), Math.max(1, columns - displayWidth(BAND_SEP) - displayWidth(BAND_INFO_LABEL)))
 }
 
-// ---- the panel's tabs: Now (absorbs the stage walk) · Dispatch · Review (absorbs the decisions) · Spend · Hygiene · ? (the legend) ----
-export const PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend'] as const
+// ---- the panel's tabs: Now (absorbs the stage walk) · Dispatch · Review (absorbs the decisions) · Spend · Hygiene · Fleet (every lane's work, console C1 v0) · ? (the legend) ----
+export const PANE_TABS = ['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend'] as const
 export type PaneTab = (typeof PANE_TABS)[number]
 // a band slot pressed opens the pane on the tab that explains it; position and unit live in Now's 目前位置 section, which the press also unfolds
 const SLOT_TAB: Record<SlotId, PaneTab> = { verdict: 'now', position: 'now', unit: 'now', dispatch: 'dispatch', review: 'review', decisions: 'decide', spend: 'spend', quota: 'spend', hygiene: 'hygiene' }
@@ -1595,7 +1596,7 @@ export const slotUnfolds = (id: SlotId): string | null => (id === 'position' || 
 export const tabLabel = (tab: PaneTab, t: T): string => t('tab.' + tab)
 
 // What a pane line is drawn with: the translator and the pane's width in cells (rules and bars size themselves to it)
-export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; folded?: ReadonlySet<string>; decide?: DecideView }
+export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; folded?: ReadonlySet<string>; decide?: DecideView; fleet?: FleetView | null } // fleet: the Fleet tab's data (fleet.ts), null before the first fetch
 
 // ---- the 待決 tab: what the owner picked and typed, and what was already sent. The pane keeps it in $.state (`autopilot.decide`, types/index.d.ts), keyed by the
 // decision id; `inputs` says whether the surface draws text fields (a phone does not). The reply is one machine-readable prompt: the head line, then one line per
@@ -1737,7 +1738,7 @@ export const wrapLines = (lines: PaneLine[], cols: number): PaneLine[] => lines.
 
 // the Now tab's foldable sections (what waits for you never folds); the ids share the toggle channel with the recent groups, hence the prefix
 export const SECTION = { where: 'sec:now.where', account: 'sec:account', recent: 'sec:now.recent', limits: 'sec:limits', today: 'sec:today', last24: 'sec:last24' } as const
-export const isSectionId = (id: string): boolean => id.startsWith('sec:') || /^(now|decide|dispatch|review|spend|hygiene|legend)\./.test(id)
+export const isSectionId = (id: string): boolean => id.startsWith('sec:') || /^(now|decide|dispatch|review|spend|hygiene|fleet|legend)\./.test(id)
 const BG_EXIT = /^\[exited with code (\d+)\]$/
 export const exitCodeOf = (tail: string | null): number | null => {
   if (tail === null) return null

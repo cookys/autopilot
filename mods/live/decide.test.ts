@@ -169,7 +169,7 @@ test('DECIDE none: no question is the section header and one empty line, and no 
   expect(dtab.label.color).toBe('warning')
   expect(dtab.label.bold).toBe(true)
   expect(strip.rule.map(s => s.text).join('')).not.toMatch(/[▲●⚑]/)
-  expect(strip.tabs.map(x => x.id)).toEqual(['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend'])
+  expect(strip.tabs.map(x => x.id)).toEqual(['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend'])
 })
 
 test('DECIDE every invariant: I1-I8 and I10 hold on the tab in both locales, with and without text fields, picked and sent, at 40-160 columns', () => {

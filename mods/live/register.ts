@@ -46,6 +46,8 @@ import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
+import { fleetView, makeFleetFeed } from './fleet'
+import type { FleetView } from './fleet'
 import { barStrip } from './tabs'
 import type { BarTabId } from './tabs'
 import { Pane } from './pane'
@@ -81,6 +83,25 @@ let petText: string | null = null // `Name Lv.N` from codeforge's pet.json, read
 let viewport: { columns: number; isFullscreen?: boolean } | null = null
 let paneAttempted = false
 let paneTab: PaneTab = 'now'
+// the Fleet tab's feed (fleet.ts): `fleet tasks --tree --json`, run only while the tab is showing and at most once per TTL, never awaited by a render. fleetShownMs is
+// when the Fleet tab was last drawn (the tick stops fetching 15 s after the tab is left).
+const fleetFeed = makeFleetFeed()
+let fleetShownMs = -Infinity
+const FLEET_SHOWN_MS = 15_000
+function kickFleet($: EngineInterface, nowMs: number): void {
+  void fleetFeed.refresh(argv => $.process.run(argv, { timeoutMs: 5000 }), nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => {})
+}
+async function fleetFor($: EngineInterface): Promise<FleetView | null> {
+  if (paneTab !== 'fleet') return null
+  const nowMs = await $.clock.now()
+  fleetShownMs = nowMs
+  kickFleet($, nowMs)
+  return fleetView(fleetFeed, nowMs)
+}
+async function fleetTick($: EngineInterface): Promise<void> {
+  const nowMs = await $.clock.now()
+  if (paneTab === 'fleet' && nowMs - fleetShownMs < FLEET_SHOWN_MS) kickFleet($, nowMs)
+}
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
 const folded = new Set<string>() // the Now sections the person folded (SECTION ids); kept across /clear, a view preference and not tied to the transcript
@@ -869,7 +890,7 @@ export async function startLive($: EngineInterface): Promise<void> {
   folded.clear() // a new Claude Code session opens every section
   pressSeq += 1 // presses still in flight become stale: they assign nothing and leave the chain alone
   decided = null
-  if (timer === undefined) timer = $.clock.every(TICK_MS, () => refresh($))
+  if (timer === undefined) timer = $.clock.every(TICK_MS, () => { void refresh($); void fleetTick($).catch(() => {}) })
   await refresh($)
 }
 
@@ -1024,7 +1045,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: await read($, DECIDE), inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }, decideScroll)))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: await read($, DECIDE), inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }, decideScroll, await fleetFor($))))
 
   // The 待決 tab draws its own scrolling window (scroll.tsx), so the person's scroll keys there move the mod's offset and never reach the engine; every other tab keeps the engine's own
   // scrolling (`next(e)`).

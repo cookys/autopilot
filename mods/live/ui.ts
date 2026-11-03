@@ -251,7 +251,7 @@ for (const id of STATE_IDS) STATED_OBJS[id] = Object.freeze({ id }) as unknown a
 const stated = (id: StateId): Stated => STATED_OBJS[id]
 export const isStated = (v: unknown): v is Stated => typeof v === 'object' && v !== null && Object.values(STATED_OBJS).includes(v as Stated)
 
-export type Domain = 'verdict' | 'run' | 'seat' | 'round' | 'gate' | 'qc' | 'background' | 'task' | 'loadSource' | 'attention' | 'residueGroup' | 'cleanup'
+export type Domain = 'verdict' | 'run' | 'seat' | 'round' | 'gate' | 'qc' | 'background' | 'task' | 'loadSource' | 'attention' | 'residueGroup' | 'cleanup' | 'fleetTask'
 export type RunSubject = { rc: number | null; final_status: string | null; stall: boolean; fresh: boolean; starting?: boolean } // `starting`: never probed yet, but inside the freshness bound since launch
 export type SeatSubject = { kind: 'code' | 'plan'; verdict: string | null; status: string | null }
 export type RoundSubject = { stale: boolean; converged: boolean; seats: readonly Stated[] }
@@ -259,9 +259,10 @@ export type BackgroundSubject = { exit: number | null; quietMs: number }
 export type LoadSourceSubject = { source: string; behind: number; flags: number }
 export type AttentionSubject = { source: Stated | null } // null = the one item of its own: task acceptance
 export type CleanupSubject = { errors: number; done: number }
+export type FleetTaskSubject = { state: string; stuck: boolean } // a fleet hub task row (fleet.ts): the hub's state word and whether a stuck rule fired
 export type Subject = {
   verdict: string; run: RunSubject; seat: SeatSubject; round: RoundSubject; gate: string; qc: string; background: BackgroundSubject; task: string
-  loadSource: LoadSourceSubject; attention: AttentionSubject; residueGroup: string; cleanup: CleanupSubject
+  loadSource: LoadSourceSubject; attention: AttentionSubject; residueGroup: string; cleanup: CleanupSubject; fleetTask: FleetTaskSubject
 }
 
 // token normalisation, once: trim, upper-case; a prefix class (`NEEDS*`, `CACHE:*`) is one atom
@@ -314,6 +315,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
   attention: a => (a.source === null ? 'acceptance' : 'from:' + a.source.id),
   residueGroup: c => norm(c).toLowerCase(),
   cleanup: c => (c.errors > 0 ? 'errors' : c.done > 0 ? 'done' : 'nothing'),
+  fleetTask: f => (f.stuck && !['FAILED', 'LOST', 'BLOCKED_HUMAN'].includes(norm(f.state)) ? 'STUCK' : norm(f.state)),
 }
 const ATTENTION_FROM = Object.fromEntries(STATE_IDS.map(id => ['from:' + id, id])) as Record<string, StateId>
 export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
@@ -333,6 +335,11 @@ export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
   attention: { acceptance: 'need_you', ...ATTENTION_FROM },
   residueGroup: { dirty: 'need_you', 'clean-integrated': 'done', 'clean-unintegrated': 'need_you', 'unintegrated-branch': 'need_you', 'missing-dir': 'done', live: 'running', unverifiable: 'unknown' }, // a 'clean' class (RESIDUE_KINDS) is drawn as a neutral row, never as a mark
   cleanup: { errors: 'failed', done: 'done', nothing: 'skipped' },
+  // the fleet hub's task states (fleet.ts); a stuck rule (open an hour unaccepted, a seat quiet four hours, the hub's own suspect) is `stalled`. A word the hub adds later is `unknown`.
+  fleetTask: {
+    OPEN: 'pending', TASK_ACCEPTED: 'pending', ACCEPTED: 'pending', RUNNING: 'running', IN_PROGRESS: 'running', WAITING: 'stopped', RESULT_REPORTED: 'findings',
+    FAILED: 'failed', LOST: 'failed', SUSPECT: 'stalled', BLOCKED_HUMAN: 'need_you', STUCK: 'stalled',
+  },
 }
 export function classify<D extends Domain>(domain: D, subject: Subject[D]): string {
   return (CLASSIFY[domain] as (s: Subject[D]) => string)(subject)
@@ -362,6 +369,7 @@ export const FACT_OWNER = {
   'spend.session': 'spend', 'spend.local_today': 'spend',
   'usage.window_other': 'spend', // any other rate-limit window the host reports (spend_limit, an unknown kind)
   'residue.groups': 'hygiene', 'residue.cleanup': 'hygiene', 'residue.source': 'hygiene',
+  'fleet.lanes': 'fleet', 'fleet.cards': 'fleet', 'fleet.source': 'fleet', // fleet.cards: only the empty line; open cards are a projection of decide.cards
   'legend.states': 'legend', 'legend.structure': 'legend', 'legend.keys': 'legend',
   'header.verdict': 'header',
   'pane.chrome': 'pane', // lines that carry no fact of the session (the blank between sections, a heading with no chip, a fold / more toggle, an attached detail)
@@ -377,6 +385,7 @@ export const SECTION_ORDER: Record<PaneTab, readonly string[]> = {
   review: ['code', 'qc', 'decisions', 'plan'],
   spend: ['limits', 'today', 'last24', 'account'],
   hygiene: ['attention', 'cleanable', 'auto', 'source'],
+  fleet: ['source', 'cards', 'lanes'],
   legend: ['states', 'structure', 'keys'],
 }
 // the sections that start folded: read by recentLines (now.recent) through sectionOpen; review.plan folds only while it is stale (F2, I11), by passing `stale` to sectionOpen

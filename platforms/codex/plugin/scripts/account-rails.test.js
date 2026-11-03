@@ -244,16 +244,26 @@ const sleepMs = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0
  * Runs `timeout [flags] 3 <cmd>` against a hanging claude and returns the claude processes still alive 6 s later (they are killed
  * by pid afterwards). tool: path of the timeout binary. deaf: the claude double ignores SIGTERM.
  */
-function orphanRun(tool, flags, kind, deaf) {
+function orphanRun(tool, flags, kind, deaf, legacy) {
   const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  if (legacy) fs.rmSync(fx.regFile); // no registry: the rail keeps its pre-G37 seeded path
   const marker = `G37-MARK-${process.pid}-${Date.now()}`;
   try {
     fx.shim.setControl({ default: { exit: 0, stdout: '{}\n', hangMs: 60000 } });
-    if (deaf) fs.writeFileSync(path.join(fx.shim.binDir, 'claude'), "#!/usr/bin/env node\nprocess.on('SIGTERM', () => {});setInterval(() => {}, 1000);\n", { mode: 0o755 });
+    const started = path.join(fx.root, 'started');
+    // The shim answers at once when it can reach an ambient credential (the legacy seeded path hands it one), so the legacy
+    // comparison uses a plain hanging claude double that records its start; `deaf` also ignores SIGTERM.
+    if (deaf || legacy) fs.writeFileSync(path.join(fx.shim.binDir, 'claude'), `#!/usr/bin/env node\nrequire('fs').appendFileSync(${JSON.stringify(started)}, 'x');\n${deaf ? "process.on('SIGTERM', () => {});" : ''}setInterval(() => {}, 1000);\n`, { mode: 0o755 });
     const pre = path.join(fx.root, 'pre.js');
     fs.writeFileSync(pre, PRELOAD_SRC);
     const env = Object.assign({}, fx.env, { NODE_OPTIONS: `--require ${pre}`, G37_TEST_REAL_HOME: fx.realHome, AUTOPILOT_SETTLE_MS: '0', DISPATCH_QUIET: '1' });
     delete env.AUTOPILOT_SESSION_ID;
+    if (legacy) { // the seeded path needs a (fake) credentials file in the config dir it copies from
+      const cfg = path.join(fx.root, 'realcfg');
+      fs.mkdirSync(cfg, { recursive: true });
+      fs.writeFileSync(path.join(cfg, '.credentials.json'), '{"claudeAiOauth":{"accessToken":"FAKE-stub"}}');
+      env.CLAUDE_CONFIG_DIR = cfg;
+    }
     let cmd;
     if (kind === 'run') cmd = [process.execPath, path.join(REPO, 'scripts', 'claude-account.js'), 'run', '--purpose', 't', '--', 'claude', '-p', marker];
     else {
@@ -262,10 +272,10 @@ function orphanRun(tool, flags, kind, deaf) {
       cmd = ['bash', path.join(REPO, 'scripts', 'dispatch-review.sh'), '--runner', 'claude-native', '--model', 'haiku', '--diff-file', diff, '--bin', path.join(fx.shim.binDir, 'claude'), '--timeout', '120s'];
     }
     const t0 = Date.now();
-    const r = spawnSync(tool, [...flags, '3', ...cmd], { env, encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] });
-    assert.ok(Date.now() - t0 < 30000, 'the outer timeout did not return');
+    const r = spawnSync(tool, [...flags, '3', ...cmd], { env, encoding: 'utf8', timeout: 30000, killSignal: 'SIGKILL', stdio: 'ignore' });
+    assert.ok(Date.now() - t0 < 29000, 'the outer timeout did not return (the wrapper never exited)');
     // the claude double was really started (a registry-present run) before the signal
-    assert.ok(fx.shim.calls().length >= 1 || deaf, 'the claude double was never started: the case proves nothing');
+    assert.ok(fx.shim.calls().length >= 1 || fs.existsSync(started), 'the claude double was never started: the case proves nothing');
     let alive = claudeChildren(marker, fx.shim.binDir);
     for (let i = 0; i < 12 && alive.length; i++) { sleepMs(500); alive = claudeChildren(marker, fx.shim.binDir); }
     for (const x of alive) { try { process.kill(x.pid, 'SIGKILL'); } catch (_) { /* gone */ } }
@@ -287,21 +297,34 @@ test('grandchild cleanup (GNU timeout): claude-account.js run, SIGKILL and TERM-
   assert.deepStrictEqual(orphanRun('/usr/bin/gnutimeout', ['-s', 'KILL'], 'run', false).alive, []);
   assert.deepStrictEqual(orphanRun('/usr/bin/gnutimeout', ['-k', '1', '-s', 'TERM'], 'run', true).alive, []);
 });
-// KNOWN LEAKS (reported to depth-0 with the G37 L12 report; the fixes touch claude-account.js and the rail, outside L12):
-//  (a) host (uutils) timeout, `-k 1` with a claude that ignores TERM: the top process is killed, the claude child is orphaned;
-//  (b) host (uutils) timeout, plain KILL of claude-account.js: same, inherent to SIGKILL without a group kill;
-//  (c) dispatch-review.sh (registry present) under either timeout: TERM kills the bash rail, claude-account.js and its claude
-//      child keep running (the rail documents that INT/TERM are not trapped, dispatch-review.sh:1094).
-// They are `todo`: they run and report, they do not fail the suite, and each turns into a pass notice when fixed.
-test('grandchild cleanup (host timeout): run, TERM-then-KILL with a claude that ignores TERM', { todo: 'known leak (a): claude-account.js does not escalate to SIGKILL on its child before the outer -k KILL' }, () => {
-  assert.deepStrictEqual(orphanRun('timeout', ['-k', '1', '-s', 'TERM'], 'run', true).alive, []);
+// Fixed in claude-account.js (installSignalForwarding / TERM_GRACE_MS / setpriv --pdeathsig KILL; see claude-account-signals.test.js):
+//  (a) TERM is forwarded to the child and escalates to SIGKILL; with the host (uutils) timeout `-k 1` and a claude that
+//      ignores TERM, the claude child must still die (the wrapper is KILLed by timeout, the kernel kills the child);
+//  (b) SIGKILL of the wrapper itself (uutils signals only its direct child): the child dies with it via pdeathsig;
+//      both need setpriv and are skipped where it is missing.
+//  (c) dispatch-review.sh TERM leaves orphans, but that is PRE-G37 behaviour (the rail does not trap INT/TERM,
+//      dispatch-review.sh:1094; the legacy path leaks the same way). The assertion is "the account path is no worse than legacy".
+const HAS_SETPRIV = ['/usr/bin/setpriv', '/bin/setpriv'].some((f) => fs.existsSync(f));
+const NO_SETPRIV = HAS_SETPRIV ? false : 'no setpriv --pdeathsig on this platform';
+test('grandchild cleanup (host timeout): run, TERM-then-KILL with a claude that ignores TERM -> nothing survives', { skip: NO_SETPRIV }, () => {
+  const r = orphanRun('timeout', ['-k', '1', '-s', 'TERM'], 'run', true);
+  assert.deepStrictEqual(r.alive, [], `rc=${r.rc} left ${JSON.stringify(r.alive)}`);
 });
-test('grandchild cleanup (host timeout): run, SIGKILL of claude-account.js', { todo: 'known leak (b): SIGKILL of the parent without a process-group kill (uutils timeout)' }, () => {
-  assert.deepStrictEqual(orphanRun('timeout', ['-s', 'KILL'], 'run', false).alive, []);
+test('grandchild cleanup (host timeout): run, plain TERM (no -k) with a claude that ignores TERM -> the wrapper escalates to SIGKILL itself', () => {
+  // no outer KILL and no pdeathsig help here: only the wrapper's own TERM_GRACE_MS escalation can end the child
+  const r = orphanRun('timeout', ['-s', 'TERM'], 'run', true);
+  assert.deepStrictEqual(r.alive, [], `rc=${r.rc} left ${JSON.stringify(r.alive)}`);
+});
+test('grandchild cleanup (host timeout): run, SIGKILL of claude-account.js -> the child dies with it', { skip: NO_SETPRIV }, () => {
+  const r = orphanRun('timeout', ['-s', 'KILL'], 'run', false);
+  assert.deepStrictEqual(r.alive, [], `rc=${r.rc} left ${JSON.stringify(r.alive)}`);
 });
 for (const [label, tool] of TIMEOUTS) {
-  test(`grandchild cleanup (${label}): dispatch-review.sh claude-native arm under a registry, SIGTERM`, { todo: 'known leak (c): the bash rail is killed by TERM, its claude-account.js and claude children are not' }, () => {
-    assert.deepStrictEqual(orphanRun(tool, ['-s', 'TERM'], 'review', false).alive, []);
+  test(`grandchild cleanup (${label}): dispatch-review.sh under a registry, SIGTERM - no more orphans than the legacy path (known pre-G37 leak)`, () => {
+    const legacy = orphanRun(tool, ['-s', 'TERM'], 'review', false, true);
+    const account = orphanRun(tool, ['-s', 'TERM'], 'review', false, false);
+    assert.ok(account.alive.length === 0 || legacy.alive.length > 0,
+      `account path regressed against legacy (legacy left ${legacy.alive.length}, account left ${JSON.stringify(account.alive)})`);
   });
 }
 

@@ -1619,7 +1619,7 @@ test('selgap symlink: a link inside root pointing at a file outside root exits 2
       const out = filesRun(r.dir, ['scripts/escape.js', ...extra]);
       assert.strictEqual(out.rc, 2, out.stderr);
       assert.strictEqual(out.doc, null);
-      assert.match(out.stderr, /symlink points outside --root/);
+      assert.match(out.stderr, /crosses a symlink that leaves --root or cannot be resolved/);
       assert.ok(!out.stderr.includes('SECRET_OUTSIDE_CONTENT'));
     }
   } finally { r.cleanup(); }
@@ -1662,7 +1662,7 @@ test('selgap parent symlink: a/missing.js with --allow-missing, under a link to 
     const out = filesRun(r.dir, ['a/missing.js', '--allow-missing']);
     assert.strictEqual(out.rc, 2, out.stderr);
     assert.strictEqual(out.doc, null);
-    assert.match(out.stderr, /resolves outside --root via a symlinked parent/);
+    assert.match(out.stderr, /crosses a symlink that leaves --root or cannot be resolved/);
   } finally { r.cleanup(); }
 });
 
@@ -1671,7 +1671,7 @@ test('selgap parent symlink: without the flag the escape message is not replaced
   try {
     const out = filesRun(r.dir, ['a/missing.js']);
     assert.strictEqual(out.rc, 2);
-    assert.match(out.stderr, /via a symlinked parent/);
+    assert.match(out.stderr, /crosses a symlink/);
     assert.ok(!/neither in the working tree/.test(out.stderr), out.stderr);
   } finally { r.cleanup(); }
 });
@@ -1693,4 +1693,53 @@ test('selgap parent symlink: a link to a directory inside root keeps b/missing.j
     assert.strictEqual(out.rc, 0, out.stderr);
     assert.deepStrictEqual(out.doc.changed, ['b/missing.js']);
   } finally { r.cleanup(); }
+});
+
+// selgap #5: every symlink on the path is walked with lstat/readlink; outside, dangling or looping targets are exit 2.
+function chainRepo() {
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-outside-'));
+  const r = makeRepo({ ...SELGAP_ROOT, 'inner/keep.js': 'x\n' });
+  const ln = (target, name) => fs.symlinkSync(target, path.join(r.dir, name));
+  ln(path.join(outsideDir, 'nonexistent'), 'dangle-out');
+  ln('inner/nonexistent', 'dangle-in');
+  ln('b2', 'a2'); ln(outsideDir, 'b2');
+  ln('loop', 'loop');
+  ln('inner', 'ok');
+  fs.mkdirSync(path.join(r.dir, '.agents')); ln('../skills', '.agents/skills');
+  fs.mkdirSync(path.join(r.dir, 'skills'), { recursive: true }); fs.writeFileSync(path.join(r.dir, 'skills/s.md'), 's\n');
+  const cleanup = r.cleanup;
+  r.cleanup = () => { cleanup(); fs.rmSync(outsideDir, { recursive: true, force: true }); };
+  return r;
+}
+for (const [name, args, rc] of [
+  ['link to a nonexistent outside target, a/f.js with --allow-missing', ['dangle-out/f.js', '--allow-missing'], 2],
+  ['a chain a2 -> b2 -> outside directory', ['a2/f.js', '--allow-missing'], 2],
+  ['a self-loop link', ['loop/f.js', '--allow-missing'], 2],
+  ['a self-loop link as the leaf', ['loop'], 2],
+  ['a link to a nonexistent target inside root, with --allow-missing', ['dangle-in/f.js', '--allow-missing'], 2],
+  ['a dangling leaf link inside root', ['dangle-in', '--allow-missing'], 2],
+  ['regression: .agents/skills style directory link', ['.agents/skills'], 0],
+  ['regression: missing file below a link to a root directory, with --allow-missing', ['ok/missing.js', '--allow-missing'], 0],
+]) {
+  test(`selgap chain: ${name} exits ${rc}`, () => {
+    const r = chainRepo();
+    try {
+      const out = filesRun(r.dir, args);
+      assert.strictEqual(out.rc, rc, out.stderr);
+      if (rc === 2) { assert.strictEqual(out.doc, null); assert.match(out.stderr, /crosses a symlink that leaves --root or cannot be resolved/); }
+    } finally { r.cleanup(); }
+  });
+}
+
+// selgap #5 over-rejection guard: the per-segment symlink walk must accept every symlink the real repo tracks.
+test('selgap real tree: every tracked symlink (git mode 120000) is accepted by --files', () => {
+  const listed = execFileSync('git', ['ls-files', '-s', '-z'], { cwd: REAL_ROOT, stdio: 'pipe', maxBuffer: 1 << 28 }).toString('utf8')
+    .split('\0').filter((l) => l.startsWith('120000 ')).map((l) => l.slice(l.indexOf('\t') + 1));
+  assert.ok(listed.length >= 1, 'the repo must track at least one symlink, or this test proves nothing');
+  const rejected = [];
+  for (const rel of listed) {
+    const r = spawnSync('node', [SEL, '--root', REAL_ROOT, '--files', rel, '--json'], { encoding: 'utf8' });
+    if (r.status === 2) rejected.push(`${rel}: ${r.stderr.trim()}`);
+  }
+  assert.deepStrictEqual(rejected, [], `tracked symlinks refused (${listed.length} listed: ${listed.join(', ')})`);
 });

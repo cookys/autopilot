@@ -621,6 +621,33 @@ function shortestHops(seeds, graph) {
   return hops;
 }
 
+// Resolve `segs` below `start` (a real directory) without trusting realpath. A missing component ends the walk (the rest is kept
+// literally) unless `strict`, which a symlink target always is: a dangling target is an error.
+function walkUnderRoot(start, segs, strict, state, inRoot) {
+  let cur = start;
+  const rest = segs.slice();
+  while (rest.length) {
+    const seg = rest.shift();
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') { cur = path.dirname(cur); continue; }
+    const next = path.join(cur, seg);
+    let l = null;
+    try { l = fs.lstatSync(next); } catch { /* missing */ }
+    if (l === null) {
+      if (strict) throw new Error(`dangling target ${next}`);
+      return path.resolve(next, ...rest);
+    }
+    if (l.isSymbolicLink()) {
+      if (++state.hops > 40) throw new Error('more than 40 symlink hops');
+      const t = fs.readlinkSync(next);
+      const real = walkUnderRoot(path.isAbsolute(t) ? path.parse(t).root : cur, t.split('/'), true, state, inRoot);
+      if (inRoot(real) === null && real !== state.root) throw new Error(`${next} -> ${real}`);
+      cur = real;
+    } else cur = next;
+  }
+  return cur;
+}
+
 // --files input shapes (selgap scan table). Every path is checked before any selection; a bad one is exit 2,
 // never a silent "selective" result (a zsh `--files $F` that does not split once produced 21 suites from one bogus path).
 //   shape                                   | result
@@ -636,7 +663,7 @@ function shortestHops(seeds, graph) {
 //   symlink resolving outside --root        | exit 2 (also with --allow-missing)
 //   missing path under a symlinked parent that resolves outside --root | exit 2, before the HEAD/--allow-missing rules
 //   symlink resolving inside --root         | kept as a file entry, even when it points at a directory
-//   dangling symlink                        | the HEAD rule above
+//   dangling or looping symlink anywhere on the path (also a missing path below one) | exit 2 (path crosses a symlink that leaves --root or cannot be resolved)
 //   --allow-missing                         | skips only the exists-on-disk-or-in-HEAD check (a hypothetical path)
 //   --base/--head mode                      | not applicable, paths come from git diff
 function normalizeFiles(root, files, allowMissing) {
@@ -654,29 +681,18 @@ function normalizeFiles(root, files, allowMissing) {
     const rel = inRoot(abs);
     if (rel === null) { errors.push(`--files: path is outside --root (${root}): ${raw}`); continue; }
     const p = rel.split(path.sep).join('/');
-    // lstat first: statSync follows a symlink, so a link inside root that points outside would pass the literal in-root test.
+    // Walk the path from the root one segment at a time with lstat (statSync/realpathSync would follow a link or give up on a dangling one).
+    // Every symlink on the way is resolved by hand (readlink; chains capped at 40 hops; a dangling or looping target is an error) and its
+    // real target must stay inside root. This runs before --allow-missing and the HEAD rule, so neither can weaken it.
+    try {
+      const resolved = walkUnderRoot(realRoot, rel.split(path.sep), false, { hops: 0, root: realRoot }, inRoot);
+      if (resolved !== realRoot && inRoot(resolved) === null) throw new Error(`resolves to ${resolved}`);
+    } catch (e) { errors.push(`--files: path crosses a symlink that leaves --root or cannot be resolved (${root}): ${raw} (${e.message})`); continue; }
     let lst = null;
     try { lst = fs.lstatSync(abs); } catch { /* not on disk */ }
-    // The escape check runs before --allow-missing and the HEAD rule, and also for a path that does not exist:
-    // resolve the nearest existing ancestor, then append the rest (root/a -> /outside makes a/missing.js an escape).
-    {
-      let cur = abs, rest = [], anc = null;
-      for (;;) {
-        try { anc = fs.realpathSync(cur); break; } catch { /* missing or dangling: go up */ }
-        const up = path.dirname(cur);
-        if (up === cur) break;
-        rest.unshift(path.basename(cur)); cur = up;
-      }
-      if (anc !== null && rest.length && inRoot(path.join(anc, ...rest)) === null) { errors.push(`--files: path resolves outside --root via a symlinked parent (${root}): ${raw} -> ${path.join(anc, ...rest)}`); continue; }
-    }
-    if (lst) {
-      let real = null;
-      try { real = fs.realpathSync(abs); } catch { /* dangling symlink */ }
-      if (real !== null && inRoot(real) === null) { errors.push(`--files: symlink points outside --root (${root}): ${raw} -> ${real}`); continue; }
-      // A symlink is a file entry even when it points at a directory (the tracked .agents/skills -> ../skills); a real directory is not.
-      if (lst.isDirectory()) { errors.push(`--files: a directory, not a file: ${raw}`); continue; }
-    }
-    if (!lst && !allowMissing || (lst && lst.isSymbolicLink() && !allowMissing && (() => { try { fs.realpathSync(abs); return false; } catch { return true; } })())) {
+    // A symlink is a file entry even when it points at a directory (the tracked .agents/skills -> ../skills); a real directory is not.
+    if (lst && lst.isDirectory()) { errors.push(`--files: a directory, not a file: ${raw}`); continue; }
+    if (!lst && !allowMissing) {
       let inHead = false;
       try { git(root, ['cat-file', '-e', `HEAD:${p}`]); inHead = true; } catch { /* not in HEAD */ }
       if (!inHead) { missing.push(raw); continue; }

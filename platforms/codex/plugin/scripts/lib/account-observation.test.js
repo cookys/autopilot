@@ -812,3 +812,65 @@ test('G40-D1 corrupt copies: the newest 3 are kept, a same-second clash gets a n
     assert.match(body, /\[truncated by the mirror writer: 80001 bytes in the original\]/);
   });
 });
+
+// --- third review round: the lock is linked in complete (no empty-lock window) --------------------------
+
+test('G40-D1 lock link (a): before the link no lock file exists; once it exists it always holds the full nonce', () => {
+  withFix((fx) => {
+    o.writeLocalRow(fx.liveDir, rec());
+    const lock = path.join(qdir(fx), 'a.lock');
+    let tmpNonce = null;
+    let lockNonce = null;
+    const hooks = {
+      beforeLink: () => {
+        assert.strictEqual(fs.existsSync(lock), false, 'no lock file before the link');
+        const tmps = fs.readdirSync(qdir(fx)).filter((n) => n.startsWith('a.lock.tmp.'));
+        assert.strictEqual(tmps.length, 1);
+        const body = JSON.parse(fs.readFileSync(path.join(qdir(fx), tmps[0]), 'utf8'));
+        assert.ok(body.nonce && body.pid === process.pid, 'the temp file is complete before it is linked');
+        tmpNonce = body.nonce;
+      },
+      beforePublish: () => {
+        const body = JSON.parse(fs.readFileSync(lock, 'utf8'));
+        lockNonce = body.nonce;
+        assert.deepStrictEqual(fs.readdirSync(qdir(fx)).filter((n) => n.includes('.tmp.')).sort().every((n) => n.startsWith('a.json.tmp.')), true, 'the lock temp file is gone after the link');
+      },
+    };
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec(), { hooks }).ok, true);
+    assert.ok(tmpNonce);
+    assert.strictEqual(lockNonce, tmpNonce);
+    assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json']);
+  });
+});
+
+test('G40-D1 lock link (b): an empty lock file older than 5 s is reclaimed; a fresh empty one is waited for', () => {
+  withFix((fx) => {
+    o.writeLocalRow(fx.liveDir, rec());
+    const lock = path.join(qdir(fx), 'a.lock');
+    fs.writeFileSync(lock, '', { mode: 0o600 });
+    assert.deepStrictEqual(o.writeLocalRow(fx.liveDir, rec(), { waitMs: 100 }), { ok: false, code: 'mirror_lock_busy' }, 'fresh and empty: maybe someone is mid-write');
+    const old = (Date.now() - 6000) / 1000;
+    fs.utimesSync(lock, old, old);
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.6 })] }), { waitMs: 100 }).ok, true);
+    assert.strictEqual(o.readView(fx.liveDir, 'claude', 'a').view.rows[0].record.windows[0].utilization, 0.6);
+    fs.writeFileSync(lock, '{not json', { mode: 0o600 });
+    fs.utimesSync(lock, old, old);
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec(), { waitMs: 100 }).ok, true, 'unparseable counts as empty');
+    assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json']);
+  });
+});
+
+test('G40-D1 lock link (c): a leftover lock temp file older than 120 s is swept on the next acquire; a fresh one is left', () => {
+  withFix((fx) => {
+    o.writeLocalRow(fx.liveDir, rec());
+    const oldTmp = path.join(qdir(fx), 'a.lock.tmp.crashed');
+    const freshTmp = path.join(qdir(fx), 'a.lock.tmp.inflight');
+    fs.writeFileSync(oldTmp, '', { mode: 0o600 });
+    fs.writeFileSync(freshTmp, '{}', { mode: 0o600 });
+    const old = (Date.now() - 200000) / 1000;
+    fs.utimesSync(oldTmp, old, old);
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec()).ok, true);
+    assert.strictEqual(fs.existsSync(oldTmp), false);
+    assert.strictEqual(fs.existsSync(freshTmp), true);
+  });
+});

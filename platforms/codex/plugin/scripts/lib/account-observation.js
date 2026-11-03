@@ -69,6 +69,7 @@ const MS_KEY_RE = /(^|_)ms$/;
 
 const VIEW_MAX_BYTES = 65536;
 const LOCK_WAIT_MS = 2000;
+const EMPTY_LOCK_MS = 5000; // an empty or unparseable lock this old has no owner
 const LOCK_HARD_MAX_MS = 120000; // a lock older than this is reclaimable even if its pid answers (pid reuse)
 const CORRUPT_KEEP = 3;
 const LOCK_POLL_MS = 25;
@@ -408,13 +409,13 @@ function holdsLock(lockPath, held) {
   return !!cur && cur.nonce === held.nonce && cur.ino === held.ino;
 }
 
-// Takes the lock with O_EXCL and writes { pid, nonce, t } into it. A lock is reclaimed only when its holder is GONE
-// (process.kill(pid, 0) says ESRCH) or when it is older than the hard cap (hardMaxMs, default 120 s: pid reuse).
+// Takes the lock by linking a complete temp file ({ pid, nonce, t }) to the lock name. A lock is reclaimed only when its holder is GONE
+// (process.kill(pid, 0) says ESRCH) or when it is older than the hard cap (hardMaxMs, default 120 s: pid reuse), or when it is empty/unparseable and older than 5 s.
 // A live holder is waited for; waitMs without getting it is `busy` (null). Reclaiming renames the lock to a unique
 // name (atomic: one reclaimer wins) and checks the renamed file is the lock that was judged dead; if it is a
 // different lock it is put back under its own name (link, never overwriting), and if the name is taken the renamed
 // file is left in place and reported through o.log. Returns { nonce, ino } or null.
-// opts: { now() -> ms, sleep(ms), waitMs, hardMaxMs, log(msg), hooks: { beforeReclaim(), beforePublish() } } (hooks are test seams).
+// opts: { now() -> ms, sleep(ms), waitMs, hardMaxMs, log(msg), hooks: { beforeLink(), beforeReclaim(), beforePublish() } } (hooks are test seams).
 function acquireLock(lockPath, o) {
   const now = o.now || Date.now;
   const sleep = o.sleep || defaultSleep;
@@ -422,19 +423,50 @@ function acquireLock(lockPath, o) {
   const hardMaxMs = o.hardMaxMs === undefined ? LOCK_HARD_MAX_MS : o.hardMaxMs;
   const nonce = newNonce();
   const deadline = now() + waitMs;
-  for (;;) {
+  sweepLockTmp(lockPath, now(), hardMaxMs);
+  // The nonce is written COMPLETE into a temp file in the same directory, then linked to the lock name: link is
+  // atomic and fails with EEXIST when someone holds it, so a lock that exists always has its content.
+  const tmpLock = `${lockPath}.tmp.${nonce}`;
+  let ino;
+  const fd = fs.openSync(tmpLock, 'wx', 0o600);
+  try {
+    fs.writeSync(fd, JSON.stringify({ pid: process.pid, nonce, t: now() }));
+    ino = fs.fstatSync(fd).ino;
+  } finally { fs.closeSync(fd); }
+  try {
+    return acquireLoop(lockPath, tmpLock, { nonce, ino }, o, { now, sleep, deadline, hardMaxMs });
+  } finally { try { fs.unlinkSync(tmpLock); } catch (_) { /* ignore */ } }
+}
+
+// A leftover `<alias>.lock.tmp.*` older than the hard cap (a crash between create and link) is removed.
+function sweepLockTmp(lockPath, nowMs, hardMaxMs) {
+  const dir = path.dirname(lockPath);
+  const prefix = `${path.basename(lockPath)}.tmp.`;
+  let names;
+  try { names = fs.readdirSync(dir).filter((n) => n.startsWith(prefix)); } catch (_) { return; }
+  for (const n of names) {
     try {
-      const fd = fs.openSync(lockPath, 'wx', 0o600);
-      try {
-        fs.writeSync(fd, JSON.stringify({ pid: process.pid, nonce, t: now() }));
-        return { nonce, ino: fs.fstatSync(fd).ino };
-      } finally { fs.closeSync(fd); }
+      const full = path.join(dir, n);
+      if (nowMs - fs.lstatSync(full).mtimeMs > hardMaxMs) fs.unlinkSync(full);
+    } catch (_) { /* ignore */ }
+  }
+}
+
+function acquireLoop(lockPath, tmpLock, held, o, c) {
+  const { now, sleep, deadline, hardMaxMs } = c;
+  const { nonce } = held;
+  for (;;) {
+    if (o.hooks && typeof o.hooks.beforeLink === 'function') o.hooks.beforeLink();
+    try {
+      fs.linkSync(tmpLock, lockPath);
+      return held;
     } catch (e) {
       if (!e || e.code !== 'EEXIST') throw e;
     }
     const judged = readLock(lockPath);
     if (!judged) continue; // released while we looked
-    const reclaimable = (judged.pid !== null && pidGone(judged.pid)) || now() - judged.mtimeMs > hardMaxMs;
+    const emptyAndOld = judged.nonce === null && now() - judged.mtimeMs > EMPTY_LOCK_MS; // leftover or foreign: no owner
+    const reclaimable = (judged.pid !== null && pidGone(judged.pid)) || now() - judged.mtimeMs > hardMaxMs || emptyAndOld;
     if (reclaimable) {
       if (o.hooks && typeof o.hooks.beforeReclaim === 'function') o.hooks.beforeReclaim();
       const moved = `${lockPath}.stale.${nonce}`;

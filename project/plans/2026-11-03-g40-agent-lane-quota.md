@@ -3,6 +3,8 @@
 
 > **Amended 16:00Z by PM (operator direction): section 20 (provider-neutral contract keyed by provider and alias, adapter manifests, Claude adapter first) is binding and overrides the record shape of 6 and 18.1 and the phase order of 13 and 18.8.**
 >
+> **Amended 2026-11-04 by PM (addendum D, section 22: the fleet hub decisions, source fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `cd91624`, `docs/plans/2026-11-04-g40-hub-quota-store.md`). Hub key is (namespace, provider, alias, writer_courier), namespace and writer taken from the authenticated connection; typed proto table with string patterns; only a courier writes and only its own row; `_access` `quota_publish` can deny; hard expiry `hub_received_at + 6 h`, no heartbeat; skew via `sent_at` into `observed_at_hub`, flagged over 5 min; per-host rows merged by the reader (section 5.2); hub limits 1 write per 10 s per key (burst 3), 60 per minute and 256 rows per courier, visible nack `quota_rate_limited`; snapshot plus deltas feeding the mirror; `unsupported` means `hub=absent`; `pct` adapter-local. Earlier text changed to match fleet: 5.4 hub key and questions 1-6 and Q8; 8.3 writer rule, tie-break and the higher-pct `quota_conflict` rule (dropped); 18.1 one row per alias; 18.2 push pacing (now bounded by the hub limits); 18.4 mirror authority and layout; section 6 `pct` as a record field (adapter-local only); 21.1 and 21.6 (hub expiry vs local persistence); phase P5 dependency (F4 and the freeze). N39-N43 added. Fleet design-note sha: `cd91624` (placeholder resolved). Addendum C (section 21): seven contract gaps closed in the schema body (token_state, remaining-only credits, one mirror root name, contract constants for the token warn levels, field-name mapping with Q11 resolved, L0 placeholder records, no history in v1); N31 to N38 added. Section 21 wins over 20.2 and 20.4 where they differ.**
+>
 > **Amended 15:54Z by PM (operator direction): sections 18 and 19 are binding and override 5.3, 5.4, 6, 8.3 and 13 where they differ (one contract, one store with a local mirror, an always-on zero-token courier reporter, and the probe experiment).**
 
 ## 0. Context / thesis
@@ -109,15 +111,15 @@ Two operator modes beyond the default: `quota_probe = "stale"` (the above) and `
 Wrapper writes the record after capture or probe. Contents (schema section 6). Local file, same schema as the future hub value:
 - Path: `<live_dir>/accounts/quota/<alias>.json`, with `<live_dir>` from `resolveLiveDir()` in `scripts/lib/live-state-dir.js` (the same base that already holds `accounts/cooldown`, `claude-account.js` `ctx.liveDir`). 0600 in a 0700 directory made through `scripts/lib/runtime-paths.js` `ensurePrivateDir`. RAM-backed is fine: an observation is worth nothing after a reboot (6 h rule), and nothing here is a secret. Token dates are NOT stored here (they are durable; section 7).
 - Writes are temp file + rename, one writer per alias per file; readers open with `O_NOFOLLOW` and fstat-limit (reuse `readSmallFile`).
-- Hub (after fleet F4): same JSON as the value, key `accounts/<alias>/quota`. Until the hub exists nothing else changes; the local file is the source of truth.
+- Hub (after fleet F4): same JSON as the value; key is `(namespace, provider, alias, writer_courier)` (decided, 22.1; the earlier `accounts/<alias>/quota` is superseded). Until the hub exists nothing else changes; the local file is the source of truth.
 
-Questions to settle with fleet--claude before the hub phase (P5), all written in section 12 too:
-1. Key naming and namespace (`accounts/<alias>/quota` per alias, or one `accounts` table keyed by alias plus `host`?). Two hosts that both run alias `main` observe the same account; do they write one key or `<alias>@<host_role>`?
-2. Write permission: who may write an alias key (any lane, or only the wrapper identity)? A lane must not be able to overwrite another account's record.
-3. TTL: proposal 6 h to equal `MAX_AGE_MS`; does the hub expire or only the reader?
-4. Cross-host clocks: see section 11. Does the hub stamp `received_at_ms`?
-5. Conflict: two hosts write the same alias concurrently; rule proposed in 8.3 (newest observed wins per window). Does the hub give compare-and-set or last-writer-wins?
-6. Payload limit and rate: at most one write per alias per 30 s; size under 1 KiB.
+Questions for fleet--claude before the hub phase (P5): ALL SETTLED (fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet `develop` `cd91624`, `docs/plans/2026-11-04-g40-hub-quota-store.md`), answers in 22.1, each line below carries its answer:
+1. SETTLED: key `(namespace, provider, alias, writer_courier)`, one row per host (22.1). Was: key naming and namespace (`accounts/<alias>/quota` per alias, or one `accounts` table keyed by alias plus `host`?). Two hosts that both run alias `main` observe the same account; do they write one key or `<alias>@<host_role>`?
+2. SETTLED: only a courier writes, only its own row; the reporter is the only writer; `_access` `quota_publish` can deny (22.1). Was: write permission, who may write an alias key (any lane, or only the wrapper identity)? A lane must not be able to overwrite another account's record.
+3. TTL: proposal 6 h to equal `MAX_AGE_MS`; does the hub expire or only the reader? SETTLED: both; the hub's hard cap is `hub_received_at + 6 h` (22.1).
+4. Cross-host clocks: see section 11. Does the hub stamp `received_at_ms`? SETTLED: it stores `hub_received_at` for expiry and `observed_at_hub = observed_at + skew` from `sent_at` (22.1).
+5. Conflict: two hosts write the same alias concurrently; rule proposed in 8.3 (newest observed wins per window). Does the hub give compare-and-set or last-writer-wins? SETTLED: neither is needed; each host keeps its own row and the reader merges newest per window (22.1).
+6. Payload limit and rate: at most one write per alias per 30 s; size under 1 KiB. SETTLED: hub limits in 22.1; over a limit the hub answers a visible nack `quota_rate_limited`.
 
 ### 5.5 Item 4 — pick reads the shared view
 
@@ -146,7 +148,7 @@ Write point: `accounts-onboard.sh` after the successful token write (the `onboar
   "token_expires_at": 0
 }
 ```
-Rules: `five_hour` and `seven_day` are an object or `null` (V3 means either can be missing; `null` is "not reported", never 0). `pct` is a finite number in `[0, 1.5]`; `resets_at` a positive integer in unix seconds. `observed_at` is unix milliseconds on the writer's clock, an integer. `source` is one of the three words; `statusline` appears only on the merged view of a codeforge snapshot, never written by the wrapper (V10). `host_role` is a short role word, `^[a-z0-9-]{1,24}$`, from config `accounts.host_role` (default `agent`); never a host name. `token_issued_at` and `token_expires_at` are unix seconds or `null`. Unknown keys: the record is rejected (`quota_invalid`), the same strictness as `codeforge.quota/1`. Maximum file size 4096 bytes. No other field; in particular no token, no config-dir path, no account email or organisation id. The alias is the only identity.
+Rules: `five_hour` and `seven_day` are an object or `null` (V3 means either can be missing; `null` is "not reported", never 0). `pct` (adapter-local only after 22.1; the record field of the contract is `utilization`) is a finite number in `[0, 1.5]`; `resets_at` a positive integer in unix seconds. `observed_at` is unix milliseconds on the writer's clock, an integer. `source` is one of the three words; `statusline` appears only on the merged view of a codeforge snapshot, never written by the wrapper (V10). `host_role` is a short role word, `^[a-z0-9-]{1,24}$`, from config `accounts.host_role` (default `agent`); never a host name. `token_issued_at` and `token_expires_at` are unix seconds or `null`. Unknown keys: the record is rejected (`quota_invalid`), the same strictness as `codeforge.quota/1`. Maximum file size 4096 bytes. No other field; in particular no token, no config-dir path, no account email or organisation id. The alias is the only identity.
 
 Units, once and for all: stream `utilization` (0..1) is stored as is. A statusline value (0..100) is divided by 100 at the statusline-reading boundary only, so the contract between code is always 0..1. A reader that sees `pct > 1.5` rejects the record (it is almost certainly a 0..100 value that skipped the conversion); the negative control in section 9 pins this.
 
@@ -167,7 +169,7 @@ Units, once and for all: stream `utilization` (0..1) is stored as is. A statusli
 - New pure `staleCandidates({accounts, merged, cooldowns, exclude, nowMs, minutes})` for 5.3. `pick` itself never probes and never does fs or clock.
 
 ### 8.3 Cross-host global pick
-With the hub (P5), the wrapper reads the hub's per-alias records and treats each as another observation candidate in the same merge (5.2): newest per window wins, ties go to the local own record, a record whose `host_role` differs is accepted (the account is the same, only the vantage differs). Two hosts that disagree by more than 0.15 on one window at near-equal `observed_at` produce a `quota_conflict` note and the HIGHER pct is used (understating is the dangerous direction). Each host writes only its own observations; the merge happens at the reader, so there is no writer conflict to resolve beyond last-writer-wins on a single key.
+With the hub (P5), the wrapper reads the hub's per-alias records and treats each as another observation candidate in the same merge (5.2): newest per window wins, ties go to the local own record, a record whose `host_role` differs is accepted (the account is the same, only the vantage differs). Two hosts that disagree by more than 0.15 on one window at near-equal `observed_at` produce a `quota_conflict` note and the HIGHER pct is used (understating is the dangerous direction). Each courier writes only its own row (the key includes `writer_courier`, 22.1); the merge happens at the reader, so there is no writer conflict at all. [Changed by 22.3: the `quota_conflict` higher-pct rule and the local tie-break above are replaced by fleet's rule, newest per window.]
 
 ## 9. Failure and degradation
 
@@ -200,7 +202,7 @@ With the hub (P5), the wrapper reads the hub's per-alias records and treats each
 - Q5 How much subscription quota does one probe consume? (tokens known, share unknown.)
 - Q6 Is there an official, quota-free usage endpoint or `claude` subcommand? None found (V7); to be re-checked against the official docs before P4.
 - Q7 `setup-token` lifetime: 1 year per official docs (V8); is it the same for team/enterprise subscriptions, and can the CLI be asked for a shorter lifetime? Unverified; treat 365 as default and allow override.
-- Q8 Hub questions in 5.4 (key naming, write permission, TTL, clocks, conflict, rate) go to fleet--claude via the PM.
+- Q8 [SETTLED by fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `cd91624`, `docs/plans/2026-11-04-g40-hub-quota-store.md`; answers in 22.1] Hub questions in 5.4 (key naming, write permission, TTL, clocks, conflict, rate).
 - Q9 `host_role` vocabulary: free role word or a fixed set? Proposed config default `agent`, set by the operator; confirm with fleet--claude whether fleet already has a role field to reuse.
 - Q10 Pick is read-mostly on every run: reading two small files per alias per run is cheap, but the hub read in P5 adds latency; budget and timeout need a number from the fleet side.
 
@@ -257,7 +259,7 @@ This addendum is binding and wins over sections 5.3, 5.4, 6, 8.3 and 13 wherever
 
 ### 18.1 One contract, one store
 
-Every source writes the SAME record schema. The record goes through the local courier into the fleet hub's quota table (one row per alias). Every display and reader (codeforge chip, statusline, `codeforge usage accounts`, `claude-account.js pick`) reads the hub or its local mirror (18.4). No second pipeline: nothing reads `codeforge.quota/1` files, wrapper records or probe output directly for display or for pick once the mirror exists.
+Every source writes the SAME record schema. The record goes through the local courier into the fleet hub's quota table (one row per (namespace, provider, alias, writer_courier), 22.1). Every display and reader (codeforge chip, statusline, `codeforge usage accounts`, `claude-account.js pick`) reads the hub or its local mirror (18.4). No second pipeline: nothing reads `codeforge.quota/1` files, wrapper records or probe output directly for display or for pick once the mirror exists.
 
 Sources (the `source` field):
 - `statusline`: the interactive session's statusline feed (today the codeforge `quota/<alias>.json` snapshot; zero token).
@@ -302,7 +304,7 @@ Debounce and rate limit:
 - Minimum 30 s between pushes for one alias (matches the existing statusline snapshot throttle, `WRITE_EVERY_MS` 30 s), except rule 4 and a status change to `rejected` / limit reached, which push at once.
 - Last-writer ordering is by `observed_at`: the reporter never pushes a record whose `observed_at` is older than what it last pushed.
 - No heartbeat: an unchanged observation is not re-pushed and its `observed_at` is never refreshed by the reporter (freshness must not be forged). The hub copy ages out by the reader's 6 h rule (5.2) exactly as before. Cost of silence: a stable idle alias shows an old `observed_at`; that is correct, and is what makes the probe's "skip if recent" rule (19.5) meaningful.
-- Hub down: keep the newest record per alias in the local mirror (18.4), retry with backoff 5 s -> 5 min cap, drop nothing newer than what is mirrored; on reconnect push only the changed ones.
+- [Amended by 22.5: every push, including the "at once" ones above, is paced by a local token bucket equal to the hub limits.] Hub down: keep the newest record per alias in the local mirror (18.4), retry with backoff 5 s -> 5 min cap, drop nothing newer than what is mirrored; on reconnect push only the changed ones.
 
 ### 18.3 Where each source enters
 
@@ -319,7 +321,7 @@ Because the reporter is the single publisher, "writers" never talk to the hub th
 The section 5.4 "local file first, hub later" is replaced by: the hub is the store; the local file is its mirror.
 - Same contract, same schema, same file shape as the hub row, at `<live_dir>/accounts/quota/<alias>.json` (path from `resolveLiveDir()`, directory via `runtime-paths.js`, as in 5.4).
 - Direction: the mirror is written by (a) the wrapper (passive and probe, before the reporter pushes), and (b) the reporter, which refreshes it from the hub (pull side) so a host with no direct hub path still sees other hosts' observations. Readers (pick, display) read ONLY the mirror; the reporter is the only code that talks to the hub. This gives pick a no-network read path and keeps the display side from forming a parallel pipeline.
-- Authority on conflict: hub row vs mirror row for the same alias: the one with the newer `observed_at` wins, per window, with the section 5.2 rules; a mirror row newer than the hub's is pushed (it is the unpushed pending state). The mirror is never authoritative against a newer hub row.
+- [Amended by 22.2: the hub holds one row per writer courier; pulled rows of other couriers go to a separate peers file and the own file is never overwritten by a pull.] Authority on conflict: hub row vs mirror row for the same alias: the one with the newer `observed_at` wins, per window, with the section 5.2 rules; a mirror row newer than the hub's is pushed (it is the unpushed pending state). The mirror is never authoritative against a newer hub row.
 - Until the hub exists (fleet F4): the mirror alone, same schema; the reporter's push step is a no-op that logs `hub=absent`. Nothing about readers changes when the hub arrives. This replaces the old P1..P5 ordering of "local first, then a different format at the hub".
 
 ### 18.5 What stays for section 5.2 and 8
@@ -462,12 +464,12 @@ A quota record belongs to one billing account at one provider. The harness (the 
 ```
 Window fields:
 - `kind`: one of `rolling_5h`, `weekly`, `daily`, `monthly`, `credits`, `rpm`, `tpm`. At most one window per `kind` per record. (`rpm/tpm` in the PM text is read as two kinds, `rpm` and `tpm`.)
-- `utilization`: number 0..1 (accepted `[0, 1.5]`, above is `quota_invalid`). Required. If a provider reports only `used` and `limit`, the adapter computes `utilization = used / limit` before the write; a window with no way to get a fraction is not written (that provider is L1, see 20.4).
+- `utilization`: number 0..1 (accepted `[0, 1.5]`, above is `quota_invalid`). Required, except the remaining-only `credits` window of 21.2 where it is `null`. If a provider reports only `used` and `limit`, the adapter computes `utilization = used / limit` before the write; a window with no way to get a fraction is not written (that provider is L1, see 20.4).
 - `used`, `limit`: optional non-negative numbers, both or neither, `unit` required when present: `requests`, `tokens` or `credits`.
 - `resets_at`: epoch seconds integer, or `null` when the provider gives no reset time (then the window is usable for ordering but never for "tight until"; `null` is not 0). This spelling replaces `resetsAt` of 18.1: the stream-event adapter maps `resetsAt` to `resets_at`. All boundary conversions of 18.1 stand (0..100 divided by 100 once, before the write).
 - `source`: one of `passive` (parsed from output the provider's CLI produced in a normal run, including the interactive statusline feed), `endpoint` (a zero-token endpoint or response header), `probe` (a tinyprobe call), `estimated` (a local counter against a plan limit), `429` (the provider refused a request). `statusline` of 18.1 is now `passive`.
 - `observed_at`: epoch milliseconds of the observation, per window (so the section 5.2 per-window merge needs no record-level source).
-Record-level: `visibility` is the adapter's effective level (20.4); `host_role`, `token_issued_at`, `token_expires_at` as before (token dates may be `null` when the manifest says the lifetime is unknown).
+Record-level: `visibility` is the adapter's effective level (20.4); `token_state` (21.1), `remaining` window field (21.2), L0 placeholder `source` (21.6); `host_role`, `token_issued_at`, `token_expires_at` as before (token dates may be `null` when the manifest says the lifetime is unknown).
 Claude mapping: stream `unifiedWindows.five_hour` -> `rolling_5h`, `seven_day` -> `weekly`; `utilization` copied; `resetsAt` -> `resets_at`; source `passive` (event or statusline feed) or `probe`. `seven_day_opus` and `seven_day_sonnet` are not mapped (out of scope, 16).
 
 Semantics shared by all providers:
@@ -551,7 +553,7 @@ The 10-provider capability survey is NOT part of this plan; lane `g40survey` pro
 | P2b | S | generic reporter (18.2), provider-keyed, fake hub; reads any mirror under `quota/<provider>/` | N19-N23 |
 | P3 | S | token meta, generic fields; lifetime from the manifest | N11, N12 |
 | P4 | M | Claude tinyprobe, blocked on the 19 experiment | N13-N15 |
-| P5 | L | hub client in the reporter, blocked on fleet F4 | N16, N17 |
+| P5 | L | hub client in the reporter, blocked on fleet F4; the hub change ships with or after F4 and never during a release freeze (fleet freeze until 2026-11-10T16:24Z), so P5 cannot start before then | N16, N17, N39-N43 |
 | P6 | M/L | C2 transparent transform, only if Q3 is answered yes | byte-identical stdout for json callers |
 | A-agy, A-grok, A-codex, A-minimax, A-qoder, A-qoder-cli-cn, A-opencode, A-glm, A-kimi | each S to M | one provider adapter each (manifest from the matrix row + implementation of the modes the manifest marks `verified`) | each is its own project and starts ONLY after the PM gives a go for that provider; none is started by this plan |
 Dependency map: P1 -> P2 -> P2b; P3 after P1; P4 after P2 + experiment; P5 after P2b + F4; provider adapters after P1 + P2b + the matrix + a per-provider PM go.
@@ -568,12 +570,137 @@ Dependency map: P1 -> P2 -> P2b; P3 after P1; P4 after P2 + experiment; P5 after
 
 ### 20.8 Additional open questions
 
-- Q11 Field spelling: the contract now uses `resets_at` (PM 16:00Z) and `utilization`; the codeforge quota file uses `pct`. Is `fleet.quota/1` a codeforge-side name too, or does the hub keep its own schema name? Ask fleet--claude.
+- Q11 [RESOLVED in 21.5: the contract name is `fleet.quota/1`; codeforge's `codeforge.quota/1` file keeps `pct` and is converted at the adapter, no dual spelling in the contract] Field spelling: the contract now uses `resets_at` (PM 16:00Z) and `utilization`; the codeforge quota file uses `pct`. Is `fleet.quota/1` a codeforge-side name too, or does the hub keep its own schema name? Ask fleet--claude.
 - Q12 Which of the ten names are providers and which are harnesses? Settled per row by the matrix; until then the provider word list in 20.1 is an example, not a registry.
 - Q13 `rpm`/`tpm` and `credits` windows: do other lanes display them? The contract stores them, the pick ignores rpm/tpm.
 - Q14 Where does the manifest checker run (preflight-release, the config-keys check pattern)? To settle in P1.
+
+## 21. Addendum C (PM): seven contract gaps closed
+
+Binding; it wins over 20.2 and 20.4 where they differ, and over 5.6 and 10 on the token warn levels. Source of the gaps: codeforge `5eb4ed7`, `doc/plans/2026-11-03-g40-usage-accounts.md` section 9 (read-only). Code is not changed by this section.
+
+### 21.1 Token revoked or invalid: record field `token_state`
+
+Record-level field `token_state`: `"ok" | "invalid" | "unknown"`. Absent is read as `unknown`. It is a different state from a 429 (a cooling window, retried after `resets_at`) and from stale data (older than 6 h, ignored): `invalid` says the credential itself is refused and no waiting fixes it.
+- Set to `invalid` only by one of: (1) an authentication refusal on a call that used this alias's credential (HTTP 401 or 403, or the provider's documented auth-failure code; the existing `auth_failed` of 5.6); (2) the operator command `account set --state revoked`; (3) a manifest-verified endpoint that reports the credential invalid. Never by a 429, never by an old `observed_at`, never by `token_expires_at` passing (an expired date is its own warn level, 21.4).
+- Set to `ok` only by a later successful authenticated call for that alias or `account set --state active`. Set to `unknown` when no authenticated call has been seen. `token_state` is a state, not a measurement: the 6 h age rule does NOT retire an `invalid` in the own mirror; only a state change does. [22.1: the hub row itself expires at `hub_received_at + 6 h` with no heartbeat; the reporter re-pushes a held `invalid` only under 18.2 rule 4 (hub copy missing), which never refreshes `observed_at`.]
+- Reporter: a change of `token_state` pushes at once (same class as 18.2 rule 4), and counts as a change even when no window moved.
+- Pick: an `invalid` alias is never selected, gets class `invalid` (not `cooling`, not `unknown`), no cooldown timer is started, and `claude-account.js status` shows it on its own line. Its windows stay in the record but are ignored for ordering.
+- Display: `invalid` is drawn as the token chip (codeforge ordering: token chip first), with the alias and the word for revoked; no gauge, no utilization.
+
+### 21.2 Credits balance without a denominator
+
+`credits` windows (codex shows only a balance) may carry `used: null`, `limit: null` and a new optional window field `remaining` (non-negative number, `unit` required when present).
+- Allowed shapes: (a) `used` and `limit` both set (as in 20.2), `remaining` optional and, if present, must equal `limit - used`; (b) remaining-only: `used: null`, `limit: null`, `remaining` set, `unit` set, and `utilization: null`.
+- `utilization: null` is legal ONLY in shape (b), on kind `credits`. Any other kind or shape with a null `utilization` is `quota_invalid`. It is never 0 and never 1.
+- Pick: a window with `utilization: null` is excluded from the `used` maximum (20.2). An alias whose only live windows are null-utilization stays class `unknown` (same rule as an `estimated`-only alias, N26), except `remaining == 0`, which classifies `tight` (balance exhausted). A balance can say "empty", never "plenty".
+- Display: the row shows `remaining unit` text and no gauge and no percentage.
+
+### 21.3 One mirror root name: `<live_dir>`
+
+Pinned name: `<live_dir>`; mirror path `<live_dir>/quota/<provider>/<alias>.json`. codeforge's `<live_base>` is the same directory in the ordinary case; the two resolvers are:
+- autopilot `resolveLiveDir()` (`scripts/lib/live-state-dir.js`): `$AUTOPILOT_LIVE_DIR` override (line 263, 282), else `$XDG_RUNTIME_DIR/autopilot` (line 244-245), else `<run-user-root>/<uid>/autopilot` when `XDG_RUNTIME_DIR` is unset and that dir exists (xdg-inferred, lines 246-251), else `/dev/shm/autopilot-<uid>` (line 254), else `~/.autopilot` (line 310).
+- codeforge `resolve_live_base()` (`src/live.rs` at `5eb4ed7`): `$AUTOPILOT_LIVE_DIR` (lines 54-58), `$XDG_RUNTIME_DIR/autopilot` (59-65), `/dev/shm/autopilot-<uid>` (66-69), `/tmp/autopilot-<uid>` (70-74), else `~/.autopilot` (line 87).
+- Same on: override, xdg, shm, `~/.autopilot` fallback. Different on exactly two points: autopilot has the xdg-inferred step and no `/tmp` candidate; codeforge has the `/tmp` candidate and no xdg-inferred step. codeforge's own files live one level below the base (`<live_base>/codeforge/...`); the quota mirror sits at `<live_dir>/quota/`, so the subdirectories never collide.
+- Rule: `<live_dir>` is defined by the autopilot resolver. A reader in another repo must reproduce it exactly: add the xdg-inferred step, and a mirror found only under a `/tmp` candidate is not a mirror (not RAM-backed by the autopilot rule). Parity vectors: N37. Coordination item for codeforge, tracked there, not edited here.
+
+### 21.4 Token warn levels are contract constants
+
+Contract constants (a data file shared by every consumer, proposed `scripts/lib/quota-contract.json`; both the autopilot code and codeforge read the same values, the display never hard-codes them):
+```json
+{ "token_warn_days": { "notice": 30, "urgent": 7 }, "observation_max_age_hours": 6 }
+```
+- A token with `token_expires_at` minus now at or under `notice` days warns `notice`; at or under `urgent` days warns `urgent`; past the date `expired`. All three are advisory (expiry warns, never blocks).
+- The config key `accounts.token_warn_days` (section 10) is removed in favour of the constant: one source, no decoupling between code and display. A warn level is derived by the reader from `token_expires_at`; the record does not carry it.
+
+### 21.5 Field-name mapping (Q11 resolved)
+
+| Concept | `fleet.quota/1` (contract, binding) | `codeforge.quota/1` file | 18.1 draft (superseded) | stream event |
+|---------|-------------------------------------|---------------------------|-------------------------|--------------|
+| fraction used | `utilization` 0..1 | `pct` 0..1 | `utilization` | `utilization` |
+| reset time | `resets_at` epoch seconds, or null | `resets_at` epoch seconds | `resetsAt` | `resetsAt` |
+| observation time | `observed_at` ms, per window | `written_at_ms` | `observed_at` (record) | none |
+| 5 h window | `kind: "rolling_5h"` in `windows[]` | top-level 5 h entry | `five_hour` | `unifiedWindows.five_hour` |
+| 7 d window | `kind: "weekly"` | top-level 7 d entry | `seven_day` | `unifiedWindows.seven_day` |
+| schema name | `fleet.quota/1` | `codeforge.quota/1` | `fleet.account-quota/1` | n/a |
+The codeforge file keeps its own names and schema; it is an input to the reporter's adapter, converted once at the boundary (18.1 rule). The contract has exactly one spelling. A record carrying `pct`, `resetsAt`, `five_hour` or `seven_day` is rejected by the validator (N38), never silently renamed. Display code locks onto `fleet.quota/1` (codeforge 14). When this contract's version is frozen, codeforge is told.
+
+### 21.6 L0 placeholder record for aliases with no data
+
+For every alias in the G37 registry (implicitly provider `claude`, 20.1) that has no mirror record and no hub row, the reporter pushes one placeholder per cycle that finds the gap, so the display can show an account that was never observed:
+```json
+{ "schema": "fleet.quota/1", "provider": "claude", "alias": "<alias>", "visibility": "L0",
+  "windows": [], "source": "registry", "host_role": "<role>", "token_state": "unknown",
+  "token_issued_at": null, "token_expires_at": null }
+```
+- `source` is a record-level field allowed ONLY here: value `registry`, valid only when `windows` is empty (a window-level `source` cannot exist without a window). A record with non-empty `windows` and a record-level `source` is rejected.
+- No `observed_at` anywhere (nothing was observed; freshness is not forged). Token dates come from the registry's token metadata when present, else null; never a token value.
+- A placeholder is only pushed when no real record exists; any real observation replaces it, and a placeholder never overwrites a real record. It is not retired by the 6 h reader rule (it carries no measurement); the hub copy still expires at `hub_received_at + 6 h` (22.1), so the reporter re-pushes the placeholder under 18.2 rule 4 when the hub copy is missing.
+- Scope: Claude registry aliases only. Other providers have no registry (20.1), so their never-observed accounts are not enumerated by this contract; that is a gap the per-provider adapters close with their own alias list.
+
+### 21.7 Not in v1: history and sparkline
+
+v1 stores no history and defines no history field. A trend or sparkline is deferred to the hub table (fleet F4), which would own sampling; until then a display must not invent one from mirror reads (codeforge 10).
+
+### 21.8 Negative controls added (each shown red before green)
+
+- N31 An alias with `token_state: "invalid"` and utilization 0.1 is never picked; a 429-cooling alias and a stale alias are not classed `invalid`; the planted case (pick selects the invalid alias) is red.
+- N32 `token_state` outside the enum is rejected; an `invalid` record older than 6 h stays `invalid`; only an `ok` observation clears it.
+- N33 A `credits` window `{used:null, limit:null, remaining:3100, unit:"credits", utilization:null}` is accepted; `utilization: null` on any other kind, or `remaining` that does not equal `limit - used`, is rejected.
+- N34 An alias whose only windows have null `utilization` is never class `ok`; `remaining: 0` yields `tight`.
+- N35 Static scan: the warn code contains no literal 30 or 7 day threshold outside `quota-contract.json`; a planted literal fails the scan; changing the constant changes the warn level in both readers.
+- N36 The reporter pushes an L0 placeholder for a registry alias with no record; it does not overwrite a real record; a record-level `source` with non-empty `windows`, or a placeholder carrying `observed_at`, is rejected.
+- N37 Parity vectors for `<live_dir>` (override, xdg, xdg-inferred, shm, fallback): the autopilot resolver and a reference reader built from 21.3 return the same path on every vector; a reader that includes the `/tmp` candidate fails vector xdg-inferred absent plus `/tmp` present.
+- N38 A record with `pct`, `resetsAt`, `five_hour` or `seven_day` is rejected `quota_invalid`, not renamed.
+
+## 22. Addendum D: hub design settled by fleet
+
+Sources: fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `cd91624`, `docs/plans/2026-11-04-g40-hub-quota-store.md`. Binding; wins over 5.4, 8.3, 18.1, 18.2 (pacing), 18.4 and section 6 where they differ. (The earlier placeholder for fleet's design-note sha is resolved: `cd91624`.)
+
+### 22.1 Questions of 5.4 and Q8, each settled
+
+| Topic | Settled answer |
+|-------|----------------|
+| Storage | a proto-typed table, not generic kv; string fields have patterns, so a token-shaped value is rejected by the schema itself |
+| Key | `(namespace, provider, alias, writer_courier)`; `namespace` and `writer_courier` come from the authenticated connection, not from the reporter's record body (the record carries neither field) |
+| Write permission | only a courier writes, and only its own row; the reporter is the only hub writer; `_access` `quota_publish` can deny, answered with a nack `quota_publish_denied` (the reporter then stops pushing and keeps the mirror) |
+| Expiry | hard cap `hub_received_at + 6 h` on the hub clock; a write cannot extend past it; no heartbeat; the hub sweeps and also filters on read; a window whose `resets_at` passed stays in the row and the reader ignores it |
+| Clock skew | the reporter sends `sent_at`; the hub stores `observed_at_hub = observed_at + (hub_now - sent_at)` beside the raw value; `abs(skew) > 5 min` stores the row flagged `skewed`, displays may mark it |
+| Conflict | each host keeps its own row; the reader merges (section 5.2: newest per window); codeforge takes the `host_role` list from these rows |
+| Limits | per key `(provider, alias)` per courier: 1 write per 10 s, burst 3; per courier: 60 writes per minute and 256 live rows; 7 windows per record. Over a limit: visible nack `quota_rate_limited` with `retry_after`; the reporter backs off and keeps its newest value in the mirror |
+| Delivery | snapshot on connect, deltas after, feeding the mirror; an old hub nacks the new frame `unsupported`: the reporter logs `hub=absent` and keeps the mirror |
+| Spelling (Q11) | the hub uses 20.2: `utilization`, `resets_at`, `observed_at`; `pct` stays adapter-local in codeforge |
+| Schedule | the hub change ships with or after F4, never during a release freeze; freeze until 2026-11-10T16:24Z |
+
+### 22.2 Mirror (18.4)
+
+Own courier record: `<live_dir>/quota/<provider>/<alias>.json` (single writer, never overwritten by a pull). Rows of other couriers, delivered by the snapshot and deltas: `<live_dir>/quota/<provider>/<alias>.peers.json`, an array of rows each tagged with `writer_courier`, `host_role`, `observed_at_hub`, `skewed`. Readers merge own plus peers per window.
+
+### 22.3 Merge rule
+
+Per `kind`: newest `observed_at` (own rows by `observed_at`, peer rows by `observed_at_hub`) wins; an exact tie keeps the own row; rows past `hub_received_at + 6 h` and windows older than the 6 h reader rule are ignored. The 8.3 higher-pct `quota_conflict` rule is dropped (not part of fleet's rule). `writer_courier` is the identity; `host_role` is informational.
+
+### 22.4 Open questions raised by fleet (fleet design note section 11, `cd91624`)
+
+- Q15 (F1) Should `host_role` be an enum from hangar's host inventory (the hub could then check it) or a free bounded string? Contract today: bounded string with the hub's pattern (N39). Owner: PM and fleet.
+- Q16 (F2) Does any reader need cross-namespace quota, or is the first version namespace-only? Assumed namespace-only; cross-namespace reads would need the dispatch-style channel and `_access` consent.
+- Q17 (F3) Is a fleet-side `fleet quota` CLI wanted in v1, or only the courier mirror? This plan builds only the mirror reader.
+
+### 22.5 Push pacing against the hub limits
+
+The reporter's own rules (5 s debounce, 30 s minimum per alias) give at most 2 pushes per minute per key, far under 1 per 10 s burst 3. The paths that bypass them ("at once": 18.2 rule 4, `rejected`, `token_state` change 21.1, placeholders 21.6) could exceed the limits, so every push goes through a local token bucket: per key 1 per 10 s, burst 3; per courier 60 per minute; own live rows capped at 256 (placeholders are pushed last and never displace a row that has a window). A delayed push is still "at once" in order, only paced; a `quota_rate_limited` nack waits for its `retry_after` and keeps only the newest value per key.
+
+### 22.6 Negative controls added
+
+- N39 The validator carries the hub's string patterns for `alias`, `provider`, `host_role`, `kind`, `source`, `token_state`, `unit`; a token-shaped string in any of them is rejected before a push; a record body carrying `namespace` or `writer_courier` is rejected (the hub takes them from the connection).
+- N40 Two rows with the same `(provider, alias)` and different `writer_courier` coexist in the reader; a pull never overwrites the own file and the reporter never writes a peer row as its own.
+- N41 The merge takes the newest per window across own and peer rows; an exact tie keeps own; a peer row past 6 h is ignored; a `skewed` row is flagged, not dropped.
+- N42 A nack `quota_rate_limited`, `quota_publish_denied` or `unsupported` is never recorded as pushed: `quota_rate_limited` retries after `retry_after`, `quota_publish_denied` stops pushing, `unsupported` logs `hub=absent` (a fake hub for each).
+- N43 Pacing: a burst of 20 "at once" events on one key produces at most 3 pushes in the first second and at most 1 per 10 s afterwards; 300 aliases never leave more than 256 own live rows, and placeholders are the ones dropped (shown red with the bucket removed).
 
 ## Review log
 - R0: authored by the G40-data hands lane; no review round yet.
 - R0b: addendum B (section 20) added for PM direction 16:00Z; capability matrix is produced by lane g40survey, not here.
 - R0a: addendum (sections 18, 19) added for PM direction 15:54Z; the experiment in section 19 is NOT run by the hands lane.
+- R0c: addendum C (section 21) added for PM direction: seven contract gaps from codeforge `5eb4ed7` section 9; N31-N38.
+- R0d: addendum D (section 22) added: fleet hub decisions (fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `cd91624`, `docs/plans/2026-11-04-g40-hub-quota-store.md`); conflicts changed to match fleet; Q15-Q17 raised by fleet.

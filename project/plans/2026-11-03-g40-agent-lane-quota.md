@@ -423,6 +423,12 @@ Record the answer here (section 12 Q2) and in the config comment when the defaul
 
 How much of the alias's subscription quota one probe consumes (Q5): the experiment records `utilization` before and after on a non-idle second alias only if the operator chooses to; it is not required for the tree. Whether an interactive session's first message starts the same window: out of scope.
 
+### 19.8 Result for glm and minimax (run by lane g40swexp, 2026-11-03)
+
+- glm: one probe at an idle 5 h entry started the window (reset = probe time + 5 h, utilization 0 to 1 %, stable at +60 s). Decision branch B applies to glm: probe only just before pick, never on a standing schedule. `starts_window: true`. Details: [starts-window/RESULT.md](../../docs/plans/evidence/2026-11-03-g40-agent-lane-quota/starts-window/RESULT.md).
+- minimax: PENDING. The window was in use at T0 (fixed 5 h grid, 87 % remaining), so no probe was sent; a retry is scheduled for 20:03Z. `starts_window` stays `unknown` (treated as true) until it lands.
+- Claude: not run (needs an idle alias); the rest of this section is unchanged.
+
 ## 20. Addendum B (PM, operator direction 16:00Z): provider-neutral contract and adapter manifests
 
 Binding; it wins over sections 6 and 18.1 (record shape), 13 and 18.8 (phase order). Everything in 18 about the reporter, the mirror, the hub-as-store and the probe experiment stays, with the record shape below.

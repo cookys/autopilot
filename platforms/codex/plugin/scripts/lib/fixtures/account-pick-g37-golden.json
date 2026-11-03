@@ -1,0 +1,1817 @@
+{
+  "schema": "autopilot.g37-golden/1",
+  "generated_from_commit": "254a851d39ef876ecfaa38edac5f27557b258b0d",
+  "g37_file_sha256": {
+    "scripts/lib/account-pick.js": "f66a6264bc473f747308e1f02edc2094aed5988d9ff245068cb643f44c8f66e1",
+    "scripts/lib/account-quota.js": "816c3396bd41d43b0be8d221f551614fd6a3a0f1c5be2821fc10f433a0a48080",
+    "scripts/claude-account.js": "d8948773d34bcc6eb9782c462e9c661a4e6eca13fcef1958108c49820f98deb8"
+  },
+  "now_ms": 1800000000000,
+  "pick": [
+    {
+      "name": "ok-ascending",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          },
+          {
+            "alias": "b",
+            "priority": 2
+          },
+          {
+            "alias": "c",
+            "priority": 3
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.95,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.5,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.5,
+              "resets_at": 1800086400
+            }
+          },
+          "c": {
+            "schema": "codeforge.quota/1",
+            "alias": "c",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.3,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.2,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"c\",\"class\":\"ok\",\"used\":0.3,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "unknown-after-ok",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          },
+          {
+            "alias": "b",
+            "priority": 2
+          },
+          {
+            "alias": "c",
+            "priority": 3
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.95,
+              "resets_at": 1800086400
+            }
+          },
+          "c": {
+            "schema": "codeforge.quota/1",
+            "alias": "c",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.7,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"c\",\"class\":\"ok\",\"used\":0.7,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "unknown-before-tight",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          },
+          {
+            "alias": "b",
+            "priority": 2
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.95,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"b\",\"class\":\"unknown\",\"used\":null,\"source\":\"none\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "unknown-by-priority",
+      "input": {
+        "accounts": [
+          {
+            "alias": "z",
+            "priority": 5
+          },
+          {
+            "alias": "y",
+            "priority": 1
+          },
+          {
+            "alias": "x",
+            "priority": 5
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {}
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"y\",\"class\":\"unknown\",\"used\":null,\"source\":\"none\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "tie-alias-order",
+      "input": {
+        "accounts": [
+          {
+            "alias": "b",
+            "priority": 1
+          },
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.3,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.3,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.3,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.3,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"ok\",\"used\":0.3,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "tie-priority-order",
+      "input": {
+        "accounts": [
+          {
+            "alias": "b",
+            "priority": 1
+          },
+          {
+            "alias": "a",
+            "priority": 2
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.3,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.3,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.3,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.3,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"b\",\"class\":\"ok\",\"used\":0.3,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "stale-snapshot",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799974800000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"unknown\",\"used\":null,\"source\":\"none\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "expired-window",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.99,
+              "resets_at": 1799999999
+            },
+            "seven_day": {
+              "pct": 0.2,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"ok\",\"used\":0.2,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "root-mismatch",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": "deadbeef",
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        },
+        "roots": {
+          "a": "cafef00d"
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"unknown\",\"used\":null,\"source\":\"none\"},\"outcome\":null,\"notes\":[{\"alias\":\"a\",\"note\":\"snapshot_root_mismatch\"}],\"dropped\":[]}"
+    },
+    {
+      "name": "exactly-090",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.9,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"tight\",\"used\":0.9,\"source\":\"snapshot\"},\"outcome\":\"all_tight\",\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "below-090",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.8999,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"ok\",\"used\":0.8999,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "five-hour-090",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.9,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"tight\",\"used\":0.9,\"source\":\"snapshot\"},\"outcome\":\"all_tight\",\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "all-tight-least",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          },
+          {
+            "alias": "b",
+            "priority": 2
+          }
+        ],
+        "nowMs": 1800000000000,
+        "refuseAllTight": false,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.97,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.92,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"b\",\"class\":\"tight\",\"used\":0.92,\"source\":\"snapshot\"},\"outcome\":\"all_tight\",\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "all-tight-refused",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          },
+          {
+            "alias": "b",
+            "priority": 2
+          }
+        ],
+        "nowMs": 1800000000000,
+        "refuseAllTight": true,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.95,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.95,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":false,\"exit\":3,\"code\":\"all_tight_refused\",\"dropped\":[],\"notes\":[]}"
+    },
+    {
+      "name": "refuse-knob-nontight",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "refuseAllTight": true,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"ok\",\"used\":0.1,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "unsupported-schema",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/9",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.99,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.99,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"unknown\",\"used\":null,\"source\":\"none\"},\"outcome\":null,\"notes\":[{\"alias\":\"a\",\"note\":\"quota_schema_unsupported\"}],\"dropped\":[]}"
+    },
+    {
+      "name": "exclude-and-cooldown",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          },
+          {
+            "alias": "b",
+            "priority": 2
+          }
+        ],
+        "nowMs": 1800000000000,
+        "exclude": [
+          "a"
+        ],
+        "cooldowns": {
+          "b": 1800000000001
+        }
+      },
+      "output": "{\"ok\":false,\"exit\":3,\"code\":\"no_account_available\",\"dropped\":[{\"alias\":\"a\",\"reason\":\"excluded\"},{\"alias\":\"b\",\"reason\":\"cooldown\"}],\"notes\":[]}"
+    },
+    {
+      "name": "empty-accounts",
+      "input": {
+        "accounts": [],
+        "nowMs": 1800000000000
+      },
+      "output": "{\"ok\":false,\"exit\":3,\"code\":\"no_account_available\",\"dropped\":[],\"notes\":[]}"
+    },
+    {
+      "name": "purity-plain",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        },
+        "exclude": []
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"ok\",\"used\":0.1,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "cooldown-elapsed",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          },
+          {
+            "alias": "b",
+            "priority": 2
+          }
+        ],
+        "nowMs": 1800000000000,
+        "cooldowns": {
+          "a": 1800000000000
+        },
+        "snapshots": {
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.4,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.4,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"b\",\"class\":\"ok\",\"used\":0.4,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "snapshot-null-entry",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          },
+          {
+            "alias": "b",
+            "priority": 2
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": null,
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.4,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.4,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"b\",\"class\":\"ok\",\"used\":0.4,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "mixed-seven-tight-five-ok",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          },
+          {
+            "alias": "b",
+            "priority": 2
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.05,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.91,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.95,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.5,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"tight\",\"used\":0.91,\"source\":\"snapshot\"},\"outcome\":\"all_tight\",\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "ok-used-only-seven",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": 1800000000000,
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": null,
+            "seven_day": {
+              "pct": 0.4,
+              "resets_at": 1800086400
+            }
+          }
+        }
+      },
+      "output": "{\"ok\":true,\"choice\":{\"alias\":\"a\",\"class\":\"ok\",\"used\":0.4,\"source\":\"snapshot\"},\"outcome\":null,\"notes\":[],\"dropped\":[]}"
+    },
+    {
+      "name": "missing-nowms",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "cooldowns": {
+          "a": 1800000000001
+        }
+      },
+      "output": "THROWS:TypeError"
+    },
+    {
+      "name": "nan-nowms",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": null
+      },
+      "output": "THROWS:TypeError"
+    },
+    {
+      "name": "string-nowms",
+      "input": {
+        "accounts": [
+          {
+            "alias": "a",
+            "priority": 1
+          }
+        ],
+        "nowMs": "5"
+      },
+      "output": "THROWS:TypeError"
+    }
+  ],
+  "cli": [
+    {
+      "spec": {
+        "name": "no-snapshots",
+        "aliases": [
+          {
+            "alias": "a"
+          },
+          {
+            "alias": "b"
+          }
+        ],
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "pick",
+            "--exclude",
+            "a"
+          ],
+          [
+            "status"
+          ],
+          [
+            "run",
+            "--purpose",
+            "tst",
+            "--",
+            "claude",
+            "-p",
+            "hi"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 0,
+            "out": "a class=unknown used=- source=none\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "pick",
+              "--exclude",
+              "a"
+            ],
+            "code": 0,
+            "out": "b class=unknown used=- source=none\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=false max_attempts=3\nalias=a enabled=yes priority=10 class=unknown used=- source=none cooldown_until=-\nalias=b enabled=yes priority=20 class=unknown used=- source=none cooldown_until=-\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "run",
+              "--purpose",
+              "tst",
+              "--",
+              "claude",
+              "-p",
+              "hi"
+            ],
+            "code": 0,
+            "out": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"OK\"}\n",
+            "err": ""
+          }
+        ],
+        "audit": "{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"a\",\"purpose\":\"tst\",\"attempt\":1,\"outcome\":\"ok\"}\n"
+      }
+    },
+    {
+      "spec": {
+        "name": "mixed",
+        "aliases": [
+          {
+            "alias": "a"
+          },
+          {
+            "alias": "b"
+          },
+          {
+            "alias": "c"
+          }
+        ],
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.95,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.3,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.2,
+              "resets_at": 1800086400
+            }
+          }
+        },
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "pick",
+            "--exclude",
+            "a"
+          ],
+          [
+            "status"
+          ],
+          [
+            "run",
+            "--purpose",
+            "tst",
+            "--",
+            "claude",
+            "-p",
+            "hi"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 0,
+            "out": "b class=ok used=0.3 source=snapshot\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "pick",
+              "--exclude",
+              "a"
+            ],
+            "code": 0,
+            "out": "b class=ok used=0.3 source=snapshot\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=false max_attempts=3\nalias=a enabled=yes priority=10 class=tight used=0.95 source=snapshot cooldown_until=-\nalias=b enabled=yes priority=20 class=ok used=0.3 source=snapshot cooldown_until=-\nalias=c enabled=yes priority=30 class=unknown used=- source=none cooldown_until=-\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "run",
+              "--purpose",
+              "tst",
+              "--",
+              "claude",
+              "-p",
+              "hi"
+            ],
+            "code": 0,
+            "out": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"OK\"}\n",
+            "err": ""
+          }
+        ],
+        "audit": "{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"b\",\"purpose\":\"tst\",\"attempt\":1,\"outcome\":\"ok\"}\n"
+      }
+    },
+    {
+      "spec": {
+        "name": "all-tight-refuse",
+        "aliases": [
+          {
+            "alias": "a"
+          },
+          {
+            "alias": "b"
+          }
+        ],
+        "config": {
+          "accounts": {
+            "refuse_all_tight": true
+          }
+        },
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.97,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.95,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        },
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "pick",
+            "--exclude",
+            "a"
+          ],
+          [
+            "status"
+          ],
+          [
+            "run",
+            "--purpose",
+            "tst",
+            "--",
+            "claude",
+            "-p",
+            "hi"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 3,
+            "out": "",
+            "err": "claude-account: all_tight_refused (no enabled alias)\n"
+          },
+          {
+            "args": [
+              "pick",
+              "--exclude",
+              "a"
+            ],
+            "code": 3,
+            "out": "",
+            "err": "claude-account: all_tight_refused (a:excluded)\n"
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=true max_attempts=3\nalias=a enabled=yes priority=10 class=tight used=0.97 source=snapshot cooldown_until=-\nalias=b enabled=yes priority=20 class=tight used=0.95 source=snapshot cooldown_until=-\n2027-01-15 16:00:00 +08:00 alias=- purpose=pick attempt=0 outcome=all_limited\n2027-01-15 16:00:00 +08:00 alias=- purpose=pick attempt=0 outcome=all_limited\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "run",
+              "--purpose",
+              "tst",
+              "--",
+              "claude",
+              "-p",
+              "hi"
+            ],
+            "code": 3,
+            "out": "",
+            "err": "claude-account: all_tight_refused (all_tight_refused)\n"
+          }
+        ],
+        "audit": "{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"-\",\"purpose\":\"pick\",\"attempt\":0,\"outcome\":\"all_limited\"}\n{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"-\",\"purpose\":\"pick\",\"attempt\":0,\"outcome\":\"all_limited\"}\n{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"-\",\"purpose\":\"tst\",\"attempt\":0,\"outcome\":\"all_limited\"}\n"
+      }
+    },
+    {
+      "spec": {
+        "name": "all-tight-allowed",
+        "aliases": [
+          {
+            "alias": "a"
+          },
+          {
+            "alias": "b"
+          }
+        ],
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.97,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.95,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        },
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "pick",
+            "--exclude",
+            "a"
+          ],
+          [
+            "status"
+          ],
+          [
+            "run",
+            "--purpose",
+            "tst",
+            "--",
+            "claude",
+            "-p",
+            "hi"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 0,
+            "out": "b class=tight used=0.95 source=snapshot\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "pick",
+              "--exclude",
+              "a"
+            ],
+            "code": 0,
+            "out": "b class=tight used=0.95 source=snapshot\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=false max_attempts=3\nalias=a enabled=yes priority=10 class=tight used=0.97 source=snapshot cooldown_until=-\nalias=b enabled=yes priority=20 class=tight used=0.95 source=snapshot cooldown_until=-\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "run",
+              "--purpose",
+              "tst",
+              "--",
+              "claude",
+              "-p",
+              "hi"
+            ],
+            "code": 0,
+            "out": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"OK\"}\n",
+            "err": ""
+          }
+        ],
+        "audit": "{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"b\",\"purpose\":\"tst\",\"attempt\":1,\"outcome\":\"all_tight\"}\n{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"b\",\"purpose\":\"tst\",\"attempt\":1,\"outcome\":\"ok\"}\n"
+      }
+    },
+    {
+      "spec": {
+        "name": "cooldown-a",
+        "aliases": [
+          {
+            "alias": "a"
+          },
+          {
+            "alias": "b"
+          }
+        ],
+        "cooldowns": {
+          "a": 3600000
+        },
+        "snapshots": {
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.2,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.2,
+              "resets_at": 1800086400
+            }
+          }
+        },
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "pick",
+            "--exclude",
+            "a"
+          ],
+          [
+            "status"
+          ],
+          [
+            "run",
+            "--purpose",
+            "tst",
+            "--",
+            "claude",
+            "-p",
+            "hi"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 0,
+            "out": "b class=ok used=0.2 source=snapshot\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "pick",
+              "--exclude",
+              "a"
+            ],
+            "code": 0,
+            "out": "b class=ok used=0.2 source=snapshot\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=false max_attempts=3\nalias=a enabled=yes priority=10 class=unknown used=- source=none cooldown_until=2027-01-15T17:00:00.000+08:00\nalias=b enabled=yes priority=20 class=ok used=0.2 source=snapshot cooldown_until=-\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "run",
+              "--purpose",
+              "tst",
+              "--",
+              "claude",
+              "-p",
+              "hi"
+            ],
+            "code": 0,
+            "out": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"OK\"}\n",
+            "err": ""
+          }
+        ],
+        "audit": "{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"b\",\"purpose\":\"tst\",\"attempt\":1,\"outcome\":\"ok\"}\n"
+      }
+    },
+    {
+      "spec": {
+        "name": "cooldown-all",
+        "aliases": [
+          {
+            "alias": "a"
+          },
+          {
+            "alias": "b"
+          }
+        ],
+        "cooldowns": {
+          "a": 3600000,
+          "b": 1800000
+        },
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "pick",
+            "--exclude",
+            "a"
+          ],
+          [
+            "status"
+          ],
+          [
+            "run",
+            "--purpose",
+            "tst",
+            "--",
+            "claude",
+            "-p",
+            "hi"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 3,
+            "out": "",
+            "err": "claude-account: no_account_available (a:cooldown,b:cooldown)\n"
+          },
+          {
+            "args": [
+              "pick",
+              "--exclude",
+              "a"
+            ],
+            "code": 3,
+            "out": "",
+            "err": "claude-account: no_account_available (a:excluded,b:cooldown)\n"
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=false max_attempts=3\nalias=a enabled=yes priority=10 class=unknown used=- source=none cooldown_until=2027-01-15T17:00:00.000+08:00\nalias=b enabled=yes priority=20 class=unknown used=- source=none cooldown_until=2027-01-15T16:30:00.000+08:00\n2027-01-15 16:00:00 +08:00 alias=- purpose=pick attempt=0 outcome=no_account\n2027-01-15 16:00:00 +08:00 alias=- purpose=pick attempt=0 outcome=no_account\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "run",
+              "--purpose",
+              "tst",
+              "--",
+              "claude",
+              "-p",
+              "hi"
+            ],
+            "code": 3,
+            "out": "",
+            "err": "claude-account: no_account_available (a:cooldown,b:cooldown)\n"
+          }
+        ],
+        "audit": "{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"-\",\"purpose\":\"pick\",\"attempt\":0,\"outcome\":\"no_account\"}\n{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"-\",\"purpose\":\"pick\",\"attempt\":0,\"outcome\":\"no_account\"}\n{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"-\",\"purpose\":\"tst\",\"attempt\":0,\"outcome\":\"no_account\"}\n"
+      }
+    },
+    {
+      "spec": {
+        "name": "unsupported-schema",
+        "aliases": [
+          {
+            "alias": "a"
+          },
+          {
+            "alias": "b"
+          }
+        ],
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/9",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.99,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.99,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.4,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        },
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "pick",
+            "--exclude",
+            "a"
+          ],
+          [
+            "status"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 0,
+            "out": "b class=ok used=0.4 source=snapshot\n",
+            "err": "claude-account: quota_schema_unsupported alias=a\n"
+          },
+          {
+            "args": [
+              "pick",
+              "--exclude",
+              "a"
+            ],
+            "code": 0,
+            "out": "b class=ok used=0.4 source=snapshot\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=false max_attempts=3\nalias=a enabled=yes priority=10 class=unknown used=- source=none cooldown_until=-\nalias=b enabled=yes priority=20 class=ok used=0.4 source=snapshot cooldown_until=-\n",
+            "err": ""
+          }
+        ],
+        "audit": null
+      }
+    },
+    {
+      "spec": {
+        "name": "stale-snapshot",
+        "aliases": [
+          {
+            "alias": "a"
+          },
+          {
+            "alias": "b"
+          }
+        ],
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799974800000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        },
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "pick",
+            "--exclude",
+            "a"
+          ],
+          [
+            "status"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 0,
+            "out": "a class=unknown used=- source=none\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "pick",
+              "--exclude",
+              "a"
+            ],
+            "code": 0,
+            "out": "b class=unknown used=- source=none\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=false max_attempts=3\nalias=a enabled=yes priority=10 class=unknown used=- source=none cooldown_until=-\nalias=b enabled=yes priority=20 class=unknown used=- source=none cooldown_until=-\n",
+            "err": ""
+          }
+        ],
+        "audit": null
+      }
+    },
+    {
+      "spec": {
+        "name": "root-mismatch",
+        "aliases": [
+          {
+            "alias": "a"
+          }
+        ],
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": "deadbeef",
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.1,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        },
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "pick",
+            "--exclude",
+            "a"
+          ],
+          [
+            "status"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 0,
+            "out": "a class=unknown used=- source=none\n",
+            "err": "claude-account: snapshot_root_mismatch alias=a\n"
+          },
+          {
+            "args": [
+              "pick",
+              "--exclude",
+              "a"
+            ],
+            "code": 3,
+            "out": "",
+            "err": "claude-account: no_account_available (a:excluded)\n"
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=false max_attempts=3\nalias=a enabled=yes priority=10 class=unknown used=- source=none cooldown_until=-\n2027-01-15 16:00:00 +08:00 alias=- purpose=pick attempt=0 outcome=no_account\n",
+            "err": ""
+          }
+        ],
+        "audit": "{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"-\",\"purpose\":\"pick\",\"attempt\":0,\"outcome\":\"no_account\"}\n"
+      }
+    },
+    {
+      "spec": {
+        "name": "live-dir-relative",
+        "aliases": [
+          {
+            "alias": "a"
+          }
+        ],
+        "envOverride": {
+          "AUTOPILOT_LIVE_DIR": "relative/live"
+        },
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "status"
+          ],
+          [
+            "run",
+            "--purpose",
+            "tst",
+            "--",
+            "claude",
+            "-p",
+            "hi"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 0,
+            "out": "a class=unknown used=- source=none\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=false max_attempts=3\nalias=a enabled=yes priority=10 class=unknown used=- source=none cooldown_until=-\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "run",
+              "--purpose",
+              "tst",
+              "--",
+              "claude",
+              "-p",
+              "hi"
+            ],
+            "code": 2,
+            "out": "",
+            "err": "claude-account: locator_unresolved (liveDir)\n"
+          }
+        ],
+        "audit": "{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"-\",\"purpose\":\"tst\",\"attempt\":0,\"outcome\":\"invalid_config\"}\n"
+      }
+    },
+    {
+      "spec": {
+        "name": "live-dir-null",
+        "aliases": [
+          {
+            "alias": "a"
+          }
+        ],
+        "envOverride": {
+          "AUTOPILOT_LIVE_DIR": "/etc"
+        },
+        "runs": [
+          [
+            "pick"
+          ],
+          [
+            "status"
+          ],
+          [
+            "run",
+            "--purpose",
+            "tst",
+            "--",
+            "claude",
+            "-p",
+            "hi"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 2,
+            "out": "",
+            "err": "claude-account: live_dir_refused\n"
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 2,
+            "out": "",
+            "err": "claude-account: live_dir_refused\n"
+          },
+          {
+            "args": [
+              "run",
+              "--purpose",
+              "tst",
+              "--",
+              "claude",
+              "-p",
+              "hi"
+            ],
+            "code": 2,
+            "out": "",
+            "err": "claude-account: live_dir_refused\n"
+          }
+        ],
+        "audit": null
+      }
+    }
+  ]
+}

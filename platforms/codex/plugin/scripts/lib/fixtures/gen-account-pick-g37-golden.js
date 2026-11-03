@@ -1,0 +1,205 @@
+#!/usr/bin/env node
+'use strict';
+// scripts/lib/fixtures/gen-account-pick-g37-golden.js — produces account-pick-g37-golden.json (G40 D3, N87).
+//
+// The golden file records what the UNMODIFIED G37 code (account-pick.js, account-quota.js, claude-account.js)
+// answers: `pick()` output strings (JSON.stringify, key order included) and the CLI results (exit code, stdout,
+// stderr, audit records) of pick / status / run in fixed scenarios with no mirror. It is generated ONCE from the
+// develop commit before D3 touched pick, and never regenerated: the parity tests replay the same inputs against
+// the changed code and demand the same bytes.
+//
+//   node scripts/lib/fixtures/gen-account-pick-g37-golden.js            write the golden (refuses on modified G37 files)
+//   node scripts/lib/fixtures/gen-account-pick-g37-golden.js --check    re-derive and diff against the file
+//
+// This module also exports the scenario runner so the parity tests replay the identical scenarios. Tempdir only,
+// FAKE- tokens, Node claude shim only. No real home, credential or network.
+
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { spawnSync } = require('child_process');
+
+const NOW = 1_800_000_000_000;
+const GOLDEN_FILE = path.join(__dirname, 'account-pick-g37-golden.json');
+const G37_FILES = ['scripts/lib/account-pick.js', 'scripts/lib/account-quota.js', 'scripts/claude-account.js'];
+
+// ---------------------------------------------------------------- pick() cases (the 10 account-pick.test.js groups + extras)
+
+const S = (pct7, pct5, over) => Object.assign({
+  schema: 'codeforge.quota/1', alias: 'x', root: null, written_at_ms: NOW - 1000,
+  five_hour: pct5 === null ? null : { pct: pct5, resets_at: NOW / 1000 + 3600 },
+  seven_day: pct7 === null ? null : { pct: pct7, resets_at: NOW / 1000 + 86400 },
+}, over || {});
+const snapFor = (alias, s) => Object.assign({}, s, { alias });
+const A = (alias, priority) => ({ alias, priority });
+
+function pickCases() {
+  const c = [];
+  const add = (name, input) => c.push({ name, input });
+  add('ok-ascending', { accounts: [A('a', 1), A('b', 2), A('c', 3)], nowMs: NOW,
+    snapshots: { a: snapFor('a', S(0.95, 0.1)), b: snapFor('b', S(0.5, 0.5)), c: snapFor('c', S(0.2, 0.3)) } });
+  add('unknown-after-ok', { accounts: [A('a', 1), A('b', 2), A('c', 3)], nowMs: NOW,
+    snapshots: { a: snapFor('a', S(0.95, 0.1)), c: snapFor('c', S(0.7, 0.1)) } });
+  add('unknown-before-tight', { accounts: [A('a', 1), A('b', 2)], nowMs: NOW, snapshots: { a: snapFor('a', S(0.95, 0.1)) } });
+  add('unknown-by-priority', { accounts: [A('z', 5), A('y', 1), A('x', 5)], nowMs: NOW, snapshots: {} });
+  add('tie-alias-order', { accounts: [A('b', 1), A('a', 1)], nowMs: NOW,
+    snapshots: { a: snapFor('a', S(0.3, 0.3)), b: snapFor('b', S(0.3, 0.3)) } });
+  add('tie-priority-order', { accounts: [A('b', 1), A('a', 2)], nowMs: NOW,
+    snapshots: { a: snapFor('a', S(0.3, 0.3)), b: snapFor('b', S(0.3, 0.3)) } });
+  add('stale-snapshot', { accounts: [A('a', 1)], nowMs: NOW,
+    snapshots: { a: snapFor('a', S(0.1, 0.1, { written_at_ms: NOW - 7 * 3600e3 })) } });
+  add('expired-window', { accounts: [A('a', 1)], nowMs: NOW,
+    snapshots: { a: snapFor('a', S(0.2, 0.99, { five_hour: { pct: 0.99, resets_at: NOW / 1000 - 1 } })) } });
+  add('root-mismatch', { accounts: [A('a', 1)], nowMs: NOW,
+    snapshots: { a: snapFor('a', S(0.1, 0.1, { root: 'deadbeef' })) }, roots: { a: 'cafef00d' } });
+  add('exactly-090', { accounts: [A('a', 1)], nowMs: NOW, snapshots: { a: snapFor('a', S(0.9, 0.1)) } });
+  add('below-090', { accounts: [A('a', 1)], nowMs: NOW, snapshots: { a: snapFor('a', S(0.8999, 0.1)) } });
+  add('five-hour-090', { accounts: [A('a', 1)], nowMs: NOW, snapshots: { a: snapFor('a', S(0.1, 0.9)) } });
+  add('all-tight-least', { accounts: [A('a', 1), A('b', 2)], nowMs: NOW, refuseAllTight: false,
+    snapshots: { a: snapFor('a', S(0.97, 0.1)), b: snapFor('b', S(0.92, 0.1)) } });
+  add('all-tight-refused', { accounts: [A('a', 1), A('b', 2)], nowMs: NOW, refuseAllTight: true,
+    snapshots: { a: snapFor('a', S(0.95, 0.1)), b: snapFor('b', S(0.95, 0.1)) } });
+  add('refuse-knob-nontight', { accounts: [A('a', 1)], nowMs: NOW, refuseAllTight: true, snapshots: { a: snapFor('a', S(0.1, 0.1)) } });
+  add('unsupported-schema', { accounts: [A('a', 1)], nowMs: NOW,
+    snapshots: { a: snapFor('a', S(0.99, 0.99, { schema: 'codeforge.quota/9' })) } });
+  add('exclude-and-cooldown', { accounts: [A('a', 1), A('b', 2)], nowMs: NOW, exclude: ['a'], cooldowns: { b: NOW + 1 } });
+  add('empty-accounts', { accounts: [], nowMs: NOW });
+  add('purity-plain', { accounts: [A('a', 1)], nowMs: NOW, snapshots: { a: snapFor('a', S(0.1, 0.1)) }, exclude: [] });
+  add('cooldown-elapsed', { accounts: [A('a', 1), A('b', 2)], nowMs: NOW, cooldowns: { a: NOW }, snapshots: { b: snapFor('b', S(0.4, 0.4)) } });
+  add('snapshot-null-entry', { accounts: [A('a', 1), A('b', 2)], nowMs: NOW, snapshots: { a: null, b: snapFor('b', S(0.4, 0.4)) } });
+  add('mixed-seven-tight-five-ok', { accounts: [A('a', 1), A('b', 2)], nowMs: NOW,
+    snapshots: { a: snapFor('a', S(0.91, 0.05)), b: snapFor('b', S(0.5, 0.95)) } });
+  add('ok-used-only-seven', { accounts: [A('a', 1)], nowMs: NOW, snapshots: { a: snapFor('a', S(0.4, null)) } });
+  add('missing-nowms', { accounts: [A('a', 1)], cooldowns: { a: NOW + 1 } });
+  add('nan-nowms', { accounts: [A('a', 1)], nowMs: null });
+  add('string-nowms', { accounts: [A('a', 1)], nowMs: '5' });
+  return c;
+}
+
+// The exact bytes the parity tests compare: JSON.stringify of the result, or THROWS:<ErrorName>.
+function runPick(pick, input) {
+  try { return JSON.stringify(pick(input)); } catch (e) { return `THROWS:${e && e.name}`; }
+}
+
+// ---------------------------------------------------------------- CLI scenarios
+
+const cliSnap = (alias, pct5, pct7, over) => Object.assign({
+  schema: 'codeforge.quota/1', alias, root: null, written_at_ms: NOW - 1000,
+  five_hour: pct5 === null ? null : { pct: pct5, resets_at: NOW / 1000 + 3600 },
+  seven_day: pct7 === null ? null : { pct: pct7, resets_at: NOW / 1000 + 86400 },
+}, over || {});
+
+const PICK = ['pick'];
+const STATUS = ['status'];
+const RUN = ['run', '--purpose', 'tst', '--', 'claude', '-p', 'hi'];
+const THREE = [PICK, ['pick', '--exclude', 'a'], STATUS];
+
+function cliScenarios() {
+  return [
+    { name: 'no-snapshots', aliases: [{ alias: 'a' }, { alias: 'b' }], runs: THREE.concat([RUN]) },
+    { name: 'mixed', aliases: [{ alias: 'a' }, { alias: 'b' }, { alias: 'c' }],
+      snapshots: { a: cliSnap('a', 0.95, 0.1), b: cliSnap('b', 0.3, 0.2) }, runs: THREE.concat([RUN]) },
+    { name: 'all-tight-refuse', aliases: [{ alias: 'a' }, { alias: 'b' }], config: { accounts: { refuse_all_tight: true } },
+      snapshots: { a: cliSnap('a', 0.97, 0.1), b: cliSnap('b', 0.95, 0.1) }, runs: THREE.concat([RUN]) },
+    { name: 'all-tight-allowed', aliases: [{ alias: 'a' }, { alias: 'b' }],
+      snapshots: { a: cliSnap('a', 0.97, 0.1), b: cliSnap('b', 0.95, 0.1) }, runs: THREE.concat([RUN]) },
+    { name: 'cooldown-a', aliases: [{ alias: 'a' }, { alias: 'b' }], cooldowns: { a: 3600e3 },
+      snapshots: { b: cliSnap('b', 0.2, 0.2) }, runs: THREE.concat([RUN]) },
+    { name: 'cooldown-all', aliases: [{ alias: 'a' }, { alias: 'b' }], cooldowns: { a: 3600e3, b: 1800e3 }, runs: THREE.concat([RUN]) },
+    { name: 'unsupported-schema', aliases: [{ alias: 'a' }, { alias: 'b' }],
+      snapshots: { a: cliSnap('a', 0.99, 0.99, { schema: 'codeforge.quota/9' }), b: cliSnap('b', 0.4, 0.1) }, runs: THREE },
+    { name: 'stale-snapshot', aliases: [{ alias: 'a' }, { alias: 'b' }],
+      snapshots: { a: cliSnap('a', 0.1, 0.1, { written_at_ms: NOW - 7 * 3600e3 }) }, runs: THREE },
+    { name: 'root-mismatch', aliases: [{ alias: 'a' }],
+      snapshots: { a: cliSnap('a', 0.1, 0.1, { root: 'deadbeef' }) }, runs: THREE },
+    { name: 'live-dir-relative', aliases: [{ alias: 'a' }], envOverride: { AUTOPILOT_LIVE_DIR: 'relative/live' }, runs: [PICK, STATUS, RUN] },
+    // ctx.liveDir === null: resolveLiveDir refuses /etc, cli() answers live_dir_refused for every subcommand.
+    { name: 'live-dir-null', aliases: [{ alias: 'a' }], envOverride: { AUTOPILOT_LIVE_DIR: '/etc' }, runs: [PICK, STATUS, RUN] },
+  ];
+}
+
+// Variants of the mirror area of <live>/quota written BEFORE the run. G37 code never looks at it.
+function writeMirrorVariant(fx, aliases, variant) {
+  if (variant === 'none') return;
+  const qdir = path.join(fx.liveDir, 'quota');
+  const cdir = path.join(qdir, 'claude');
+  fs.mkdirSync(cdir, { recursive: true, mode: 0o700 });
+  if (variant === 'empty-dir') return;
+  if (variant === 'corrupt') {
+    for (const a of aliases) fs.writeFileSync(path.join(cdir, `${a.alias}.json`), '{"schema": "fleet.quota-view/1", "rows": [', { mode: 0o600 });
+    fs.writeFileSync(path.join(qdir, 'namespace.json'), 'not json at all', { mode: 0o600 });
+    return;
+  }
+  throw new Error(`unknown mirror variant ${variant}`);
+}
+
+// Replays one scenario under the given `cli` entry point. Returns normalised, JSON-serialisable results.
+async function runCliScenario(spec, variant, deps) {
+  const { cli } = deps.cli;
+  const { makeFixture } = deps.shim;
+  const cooldown = deps.cooldown;
+  const fx = makeFixture({ aliases: spec.aliases, config: spec.config, snapshots: spec.snapshots });
+  try {
+    writeMirrorVariant(fx, spec.aliases, variant || 'none');
+    for (const [al, ahead] of Object.entries(spec.cooldowns || {})) {
+      cooldown.writeCooldown(al, NOW + ahead, { dir: fx.cooldownDir, nowMs: NOW });
+    }
+    const norm = (s) => s.split(fx.root).join('<ROOT>');
+    const runs = [];
+    for (const args of spec.runs) {
+      let out = '';
+      let err = '';
+      const code = await cli(args, {
+        env: Object.assign({}, fx.env, spec.envOverride || {}), realHome: fx.realHome, warn: () => {}, now: () => NOW,
+        write: (fd, d) => { if (fd === 1) out += d.toString(); else err += d.toString(); },
+      });
+      runs.push({ args, code, out: norm(out), err: norm(err) });
+    }
+    const audit = fs.existsSync(fx.auditFile) ? norm(fs.readFileSync(fx.auditFile, 'utf8')) : null;
+    return { runs, audit };
+  } finally { fx.cleanup(); }
+}
+
+function loadDeps() {
+  const root = path.resolve(__dirname, '..', '..', '..');
+  return {
+    cli: require(path.join(root, 'scripts', 'claude-account.js')),
+    shim: require(path.join(root, 'scripts', 'lib', 'account-fixtures', 'shim-install.js')),
+    cooldown: require(path.join(root, 'scripts', 'lib', 'account-cooldown.js')),
+    pick: require(path.join(root, 'scripts', 'lib', 'account-pick.js')).pick,
+  };
+}
+
+async function buildGolden() {
+  const deps = loadDeps();
+  const repoRoot = path.resolve(__dirname, '..', '..', '..');
+  const files = {};
+  for (const f of G37_FILES) files[f] = crypto.createHash('sha256').update(fs.readFileSync(path.join(repoRoot, f))).digest('hex');
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).stdout.trim();
+  const picks = pickCases().map((c) => ({ name: c.name, input: c.input, output: runPick(deps.pick, c.input) }));
+  const cliOut = [];
+  for (const spec of cliScenarios()) cliOut.push({ spec, result: await runCliScenario(spec, 'none', deps) });
+  return { schema: 'autopilot.g37-golden/1', generated_from_commit: head, g37_file_sha256: files, now_ms: NOW, pick: picks, cli: cliOut };
+}
+
+async function main() {
+  const repoRoot = path.resolve(__dirname, '..', '..', '..');
+  const dirty = spawnSync('git', ['status', '--porcelain', '--'].concat(G37_FILES), { cwd: repoRoot, encoding: 'utf8' }).stdout.trim();
+  const check = process.argv.includes('--check');
+  if (dirty && !check) { process.stderr.write(`refusing: G37 files are modified:\n${dirty}\n`); return 2; }
+  const g = await buildGolden();
+  const text = `${JSON.stringify(g, null, 2)}\n`;
+  if (check) {
+    const cur = JSON.parse(fs.readFileSync(GOLDEN_FILE, 'utf8'));
+    const same = JSON.stringify(cur.pick) === JSON.stringify(g.pick) && JSON.stringify(cur.cli) === JSON.stringify(g.cli);
+    process.stdout.write(same ? 'golden matches\n' : 'golden DIFFERS\n');
+    return same ? 0 : 1;
+  }
+  fs.writeFileSync(GOLDEN_FILE, text);
+  process.stdout.write(`wrote ${GOLDEN_FILE} from ${g.generated_from_commit}\n`);
+  return 0;
+}
+
+module.exports = { NOW, GOLDEN_FILE, G37_FILES, pickCases, cliScenarios, runPick, runCliScenario, writeMirrorVariant, loadDeps, buildGolden };
+
+if (require.main === module) main().then((c) => { process.exitCode = c; });

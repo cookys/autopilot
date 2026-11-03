@@ -380,7 +380,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: P2-4 verdict note merged and owner answers d-32849d39. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
 - **Trigger-Type**: event
 - **Effort**: M
-- **Source**: project/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior project/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md already corrected)
+- **Source**: project/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior project/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md corrected)
 - **Pointer**: project/plans/2026-10-20-per-turn-gate.md
 - **Context**: p2-3r2 PASS (670b3ffaf): M3 ON 28/30 vs C 1/30. p2-3-h55 PASS (a10bceef5): M3 ON 23/30 vs C 0/30, Fisher p 8.71e-11, cost 2.10 USD. Details in sidecar.
 

@@ -65,6 +65,8 @@ value.mission_convergence = { ...(value.mission_convergence || {}), enforcement_
 fs.mkdirSync(require('path').dirname(target), { recursive: true });
 fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
 NODE
+  # the sealed active mission graph still names docs/BACKLOG.md as an output; seed the old name in the copy
+  mkdir -p "$dest/docs" && cp "$dest/project/backlog/BACKLOG.md" "$dest/docs/BACKLOG.md"
 }
 
 DIFF="$TEST_TMP/d.diff"

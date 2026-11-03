@@ -364,12 +364,13 @@ refsbased() { node -e '
 const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).objects;
 const g=o["project/missions/mission-backlog-bc-execution-graph.json"];const f=Object.keys(g.files);
 const want="docs/plans/plans/2026-07-31-correctness-gates.md";   // base docs/plans + plan_path plans/<stem>.md
-process.exit(f.includes(want)&&!f.includes("project/plans/2026-07-31-correctness-gates.md")?0:1)' "$T/rb.json"; }
+process.exit(f.includes(want)&&!f.includes("project/missions/plans/2026-07-31-correctness-gates.md")?0:1)' "$T/rb.json"; }
 recbase && refsbased && ok || bad "recorder hashes plan_path under the registry base (graph and plan in different directories)"
 # negative control: the old recorder (plan_path joined to the manifest's directory) must fail the same assertion
 sed 's#path.posix.join(base, s\[k\])#path.posix.join(dir, s[k])#' "$SB" > "$T/sb-old.js"
 cmp -s "$SB" "$T/sb-old.js" && bad "negative control: the mutation did not change the tool"
 recbase "$T/sb-old.js"; if refsbased; then bad "negative control: old join(dir, plan_path) recorder must NOT satisfy the registry-base assertion"; else ok; fi
+node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).objects;const f=Object.keys(o["project/missions/mission-backlog-bc-execution-graph.json"].files);process.exit(f.includes("project/missions/plans/2026-07-31-correctness-gates.md")?0:1)' "$T/rb.json" && ok || bad "the old recorder lists the plan under the manifest directory, so the negation clause of the registry-base assertion can fail"
 recbase && refsbased && ok || bad "after restoring the recorder the registry-base assertion is green again"
 
 # ---- input errors

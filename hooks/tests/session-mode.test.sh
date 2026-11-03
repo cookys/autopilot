@@ -12,6 +12,8 @@ trap 'rm -rf "$TMP"; cleanup_test_tmp' EXIT
 git clone -q --no-local "$SOURCE_ROOT" "$TMP/hermetic-repo"
 git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TMP/hermetic-repo" apply
 REPO_ROOT="$TMP/hermetic-repo"
+# D10.27: the sealed active mission graph still names docs/BACKLOG.md as an output; the copy seeds the old name
+mkdir -p "$REPO_ROOT/docs" && cp "$REPO_ROOT/project/backlog/BACKLOG.md" "$REPO_ROOT/docs/BACKLOG.md"
 CLI="$REPO_ROOT/scripts/session-mode.js"
 
 export AUTOPILOT_SESSION_MODE_DIR="$TMP/markers"

@@ -102,8 +102,8 @@ eq "bare repo: source is none — a detector that answered nothing is not a sour
    "none" "$(bash "$R" --target "$BARE" --field source)"
 
 # 5. autopilot's own repo still resolves its real layout.
-eq "autopilot: backlog" "docs/BACKLOG.md" "$(bash "$R" --target "$REPO_ROOT" --field backlog)"
-eq "autopilot: archive" "docs/projects/_archive/" "$(bash "$R" --target "$REPO_ROOT" --field archive_dir)"
+eq "autopilot: backlog" "project/backlog/BACKLOG.md" "$(bash "$R" --target "$REPO_ROOT" --field backlog)"
+eq "autopilot: archive" "project/projects/_archive/" "$(bash "$R" --target "$REPO_ROOT" --field archive_dir)"
 
 # 6. No leak across repos: resolving a foreign target must not return this plugin's
 #    own .claude/, which the installed plugin does ship.
@@ -111,7 +111,7 @@ eq "autopilot: archive" "docs/projects/_archive/" "$(bash "$R" --target "$REPO_R
 #    root proves nothing. Assert the field values: a bare foreign repo must not resolve to
 #    autopilot's real layout, which we know exactly.
 AP_BACKLOG="$(bash "$R" --target "$REPO_ROOT" --field backlog)"
-[ "$AP_BACKLOG" = "docs/BACKLOG.md" ] || { echo "fixture error: autopilot layout changed"; exit 1; }
+[ "$AP_BACKLOG" = "project/backlog/BACKLOG.md" ] || { echo "fixture error: autopilot layout changed"; exit 1; }
 eq "foreign target: does not inherit autopilot's backlog ($AP_BACKLOG)" "none" "$(bash "$R" --target "$BARE" --field backlog)"
 eq "foreign target: does not inherit autopilot's projects_dir" "none" "$(bash "$R" --target "$BARE" --field projects_dir)"
 
@@ -150,20 +150,22 @@ else no "finish-flow Deferred items: backlog_exists=false triggers the no-backlo
 # 8d. The layout registry answers before detection (relayout: stage bootstrap -> docs/, stage P1 ->
 #     project/), but ONLY for a target in the same git repo as this script (equal git-common-dir):
 #     a consumer's repo-layout.js is never executed, whatever its header says.
-mk_wt() {  # mk_wt <dir> <docs|project> — a worktree of THIS repo; P1 rewrites its registry paths
+mk_wt() {  # mk_wt <dir> <docs|project> — a worktree of THIS repo; P1 is HEAD itself, the bootstrap fixture patches its registry paths back to docs/
   git -C "$REPO_ROOT" worktree add -q --detach "$1" HEAD >/dev/null 2>&1 || return 1
-  if [ "$2" = project ]; then
-    sed_mutate "$1/scripts/lib/repo-layout.js" -E "s#'docs/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive|BACKLOG.md)'#'project/\\1'#" || return 1
+  if [ "$2" = docs ]; then
+    sed_mutate "$1/scripts/lib/repo-layout.js" -E "s#'project/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive)'#'docs/\\1'#" || return 1
+    sed_mutate "$1/scripts/lib/repo-layout.js" -E "s#'project/backlog/BACKLOG.md'#'docs/BACKLOG.md'#" || return 1
   fi
 }
 RB="$TMP/reg-boot"; mk_wt "$RB" docs
+# P1 is HEAD itself
 RP="$TMP/reg-p1";   mk_wt "$RP" project
 RW="$TMP/reg-symlink"; mk_wt "$RW" docs
 trap 'git -C "$REPO_ROOT" worktree remove --force "$RB" 2>/dev/null; git -C "$REPO_ROOT" worktree remove --force "$RP" 2>/dev/null; git -C "$REPO_ROOT" worktree remove --force "$RW" 2>/dev/null; git -C "$REPO_ROOT" worktree prune; rm -rf "$TMP"; cleanup_test_tmp' EXIT
 eq "bootstrap registry: backlog -> docs/" "docs/BACKLOG.md" "$(bash "$R" --target "$RB" --field backlog)"
 eq "bootstrap registry: index -> docs/"   "docs/projects/INDEX.md" "$(bash "$R" --target "$RB" --field index)"
 eq "bootstrap registry: source is registry" "registry" "$(bash "$R" --target "$RB" --field source)"
-eq "P1 registry (worktree of this repo): backlog -> project/" "project/BACKLOG.md" "$(bash "$R" --target "$RP" --field backlog)"
+eq "P1 registry (worktree of this repo): backlog -> project/" "project/backlog/BACKLOG.md" "$(bash "$R" --target "$RP" --field backlog)"
 eq "P1 registry: index -> project/"       "project/projects/INDEX.md" "$(bash "$R" --target "$RP" --field index)"
 eq "P1 registry: plans_dir -> project/"   "project/plans/" "$(bash "$R" --target "$RP" --field plans_dir)"
 eq "P1 registry: projects_dir -> project/" "project/projects/" "$(bash "$R" --target "$RP" --field projects_dir)"

@@ -255,12 +255,12 @@ assert_r75_vacuous_red_case_in() {
   # not the still-present DEAD code (vacuous if both branches share DEAD).
   local sandbox base_dispositions fake_rule hash alien out rc
   sandbox="$TEST_TMP/r75-repo"
-  mkdir -p "$sandbox/skills" "$sandbox/docs/projects/_archive/2026/07"
+  mkdir -p "$sandbox/skills" "$sandbox/project/projects/_archive/2026/07"
   cp -r "$REPO_ROOT/profiles" "$sandbox/profiles"
   cp -r "$REPO_ROOT/skills/ceo-agent" "$sandbox/skills/ceo-agent"
   cp -r "$REPO_ROOT/skills/dev-flow" "$sandbox/skills/dev-flow"
-  cp -r "$REPO_ROOT/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles" \
-        "$sandbox/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles"
+  cp -r "$REPO_ROOT/project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles" \
+        "$sandbox/project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles"
   # The dispositions array exceeds MAX_ARG_STRLEN (128 KiB) as one argv string: hand it over as a file.
   base_dispositions="$TEST_TMP/r75-base-dispositions.json"
   node -e '

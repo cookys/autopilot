@@ -62,9 +62,12 @@ let HISTORY_EXCLUDES;
 let U4_EXCLUDE_PATHS;
 function configureLayout(root) {
   const dirPrefix = (key) => LAYOUT.pathFor(root, key).replace(/\/+$/, '') + '/';
+  // P1 leaves the evidence trees INSIDE the two archives where they were (P2 moves them): they are history too, and the registry's
+  // path keys no longer name them once the archives themselves have moved
+  const stayBehind = dirPrefix('plans_dir') === 'docs/plans/' ? [] : ['docs/plans/_archive/', 'docs/projects/_archive/'];
   EXCLUDE_PREFIXES = [
     'CHANGELOG.md',
-    ...uniq([dirPrefix('plans_dir'), dirPrefix('plans_evidence_dir'), dirPrefix('projects_archive_dir')]),
+    ...uniq([dirPrefix('plans_dir'), dirPrefix('plans_evidence_dir'), dirPrefix('projects_archive_dir'), ...stayBehind]),
     'evals/skill-onoff/packs/',
     '.claude/worktrees/',
     'node_modules/',

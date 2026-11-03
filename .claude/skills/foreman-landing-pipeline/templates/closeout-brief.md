@@ -16,7 +16,7 @@ Stay under ~40 tool calls. Pass an explicit Bash timeout on long commands and ke
    - Status open, Effort {{EFFORT}};
    - Trigger "{{TRIGGER_TEXT}}";
    - Source "{{SOURCE_TEXT}}";
-   - Pointer: a new sidecar `docs/backlog/{{SIDECAR_SLUG}}.md` with the details from `$H/run-land/REPORT.md`.
+   - Pointer: a new sidecar `project/backlog/{{SIDECAR_SLUG}}.md` with the details from `$H/run-land/REPORT.md`.
 
    Then run `node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md` (exit 0).
 3. **Evidence**: create `docs/plans/evidence/{{DATE}}-{{SLUG}}/landing/` and copy into it:

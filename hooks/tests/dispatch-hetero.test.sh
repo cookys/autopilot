@@ -1412,12 +1412,18 @@ if (fs.existsSync(hostRoutingPath)) {
     // Missing/invalid host routing is non-fatal; admission will fail closed later.
   }
 }
-for (const relative of authorityPaths) {
+// P1: a sealed graph names its plans and paths as they were before the move; the fixture seeds them where the repo keeps them now
+const movedPaths = (() => { try { return JSON.parse(fs.readFileSync(path.join(root, 'docs/plans/evidence/2026-10-31-repo-relayout-3-0-0/p1-plan/layout-map.json'), 'utf8')); } catch (_err) { return {}; } })();
+for (const named of authorityPaths) {
+  const relative = fs.existsSync(path.join(root, named)) ? named : (movedPaths[named] || named);
   const source = path.join(root, relative);
   if (!fs.existsSync(source)) continue;
-  const destination = path.join(repo, relative);
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.copyFileSync(source, destination);
+  // under the name the sealed graph uses (spec.path is read at the repo root) and under the name the repo keeps now (plan_path resolves against project/)
+  for (const target of new Set([named, relative])) {
+    const destination = path.join(repo, target);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(source, destination);
+  }
 }
 // Pin routing to the fixture graph/sources this matrix fully seeds. Host
 // Mission worktrees rewrite mission-routing-config.json to a different graph

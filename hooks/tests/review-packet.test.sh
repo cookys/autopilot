@@ -244,8 +244,8 @@ assert_neq "$HASH1" "$HASH3" "(e) spec byte change alters hash"
 
 OUT4="$TEST_TMP/packet4"
 HASH4="$(node - "$MODULE" "$FIX" "$B" "$C" "$DIFF" "$SPEC" "$OUT4" <<'NODE'
-const { buildReviewPacket, DEFAULT_PACKET_DENY_LIST } = require(process.argv[2]);
-const d = [...DEFAULT_PACKET_DENY_LIST].reverse();
+const { buildReviewPacket, defaultDenyList } = require(process.argv[2]);
+const d = [...defaultDenyList(process.argv[3])].reverse(); // the repo under review is a fixture that is not this project: its own default list
 d.push(d[0]);
 process.stdout.write(buildReviewPacket({
   repo: process.argv[3], baseSha: process.argv[4], candidateSha: process.argv[5],
@@ -284,7 +284,8 @@ assert_eq "0" "$?" "(f) denyList [] diff.patch cmp identical"
 
 # (g) tables
 node - "$MODULE" <<'NODE'
-const { packetPathDenied, normalizeDenyList, DEFAULT_PACKET_DENY_LIST } = require(process.argv[2]);
+const { packetPathDenied, normalizeDenyList, defaultDenyList } = require(process.argv[2]);
+const DEFAULT_PACKET_DENY_LIST = defaultDenyList(require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'packet-g-'))); // the paths below are a repo that is not this project (docs/plans convention)
 const denied = ['.autopilot/x', '.autopilot/a/b', '.qc/a.verdict.json', 'docs/plans/evidence/r.md', 'docs/plans/a/b.review.md', 'docs/plans/g2-disposition.json', 'a/b/c.receipt.json', 'x.raw.log', 'a/x.raw.log',
   // (g2) descendants of a directory named like a denied file are denied too
   'logs/x.raw.log/verdict.txt', 'docs/plans/p.review.md/body', 'lib/run.receipt.json/inner/x'];

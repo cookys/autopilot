@@ -635,7 +635,8 @@ const spec = process.argv[7];
 const stub = process.argv[8];
 const tmp = process.argv[9];
 const { dispatchReviewJson } = require(path.join(root, 'src', 'runners', 'review'));
-const { DEFAULT_PACKET_DENY_LIST } = require(path.join(root, 'src', 'runners', 'review-packet'));
+const { defaultDenyList } = require(path.join(root, 'src', 'runners', 'review-packet'));
+const DEFAULT_PACKET_DENY_LIST = defaultDenyList(repo); // the repo under review is a fixture that is not this project: its own default list
 
 function run(keep, extra) {
   const env = { ...process.env, AUTOPILOT_PACKET_KEEP: keep };

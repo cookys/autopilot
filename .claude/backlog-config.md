@@ -7,9 +7,10 @@
 - style: heading
 
 ## Pointer Roots
-- docs/plans/
-- docs/projects/
-- docs/backlog/
+- project/plans/
+- project/projects/
+- project/backlog/
+- docs/plans/evidence/
 
 ## Id Pattern
 - id_pattern: none

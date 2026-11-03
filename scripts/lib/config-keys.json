@@ -733,7 +733,7 @@
       "kind": "config_key",
       "audience": "user",
       "group": "hooks",
-      "default": "remind",
+      "default": "warn",
       "readers": [
         "hooks/subagent-budget.js"
       ],
@@ -741,7 +741,7 @@
       "relates": [
         "AUTOPILOT_SUBAGENT_BUDGET_MODE"
       ],
-      "summary": "Subagent budget gate on Agent dispatch: \"remind\" (deny at a ceiling), \"warn\" (note, never deny) or \"off\".",
+      "summary": "Subagent budget gate on Agent dispatch: \"warn\" (default: note at a ceiling, deny only past runaway_multiple, never open an owner card), \"remind\" (opt-in: deny at a ceiling and open an owner card) or \"off\".",
       "type": "enum",
       "allowed": [
         "remind",
@@ -795,6 +795,22 @@
         "AUTOPILOT_SUBAGENT_BUDGET_ROOT_TURNS_PER_HOUR_MAX"
       ],
       "summary": "Subagent turns of the whole session in the last 60 minutes before the next dispatch is denied.",
+      "type": "number"
+    },
+    {
+      "name": "subagent_budget.runaway_multiple",
+      "kind": "config_key",
+      "audience": "user",
+      "group": "hooks",
+      "default": 3,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE"
+      ],
+      "summary": "In warn mode, a ceiling whose actual count reaches this multiple of its limit denies the dispatch and writes a runaway_block ledger row (no owner card; Budget-Ack passes it). 0 disables the guard.",
       "type": "number"
     },
     {
@@ -4311,6 +4327,21 @@
         "subagent_budget.mode"
       ],
       "summary": "Environment override of subagent_budget.mode."
+    },
+    {
+      "name": "AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE",
+      "kind": "env",
+      "audience": "user",
+      "group": "hooks",
+      "default": null,
+      "readers": [
+        "hooks/subagent-budget.js"
+      ],
+      "doc": "docs/guide/settings-reference.md",
+      "relates": [
+        "subagent_budget.runaway_multiple"
+      ],
+      "summary": "Environment override of subagent_budget.runaway_multiple."
     },
     {
       "name": "AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX",

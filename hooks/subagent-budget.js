@@ -25,8 +25,12 @@
  * dispatcher fixes itself), warn mode only warns, off ignores. `Budget-Ack:` passes it. A brief not starting with
  * `Engine:` (Explore etc.) still falls back to `description` and only counts toward the root total.
  *
- * CEILINGS (deny, remind mode): lane dispatches >= lane_dispatch_max (default 4, so the 5th is denied); lane turns >=
- * lane_turns_max (300); root subagent turns in the last 60 min >= root_turns_per_hour_max (400). Lane totals use every
+ * CEILINGS (default warn mode: note only, no deny; remind mode: deny): lane dispatches >= lane_dispatch_max (default 4, so
+ * the 5th is over); lane turns >= lane_turns_max (300); root subagent turns in the last 60 min >= root_turns_per_hour_max (400).
+ * RUNAWAY CEILING (warn mode): a ceiling hit whose actual count is >= runaway_multiple (default 3, 0 = off) times its limit
+ * is denied even in warn mode, a `runaway_block` row goes to the decision ledger, and NO owner card is opened (the operator
+ * answers such cards with "you decide", so they only interrupt). `Budget-Ack:` still passes it. Remind mode is opt-in and
+ * unchanged: any ceiling denies and opens one owner card. Lane totals use every
  * transcript whatever its age; only the hour total filters, by turn timestamp (now-3600000 < ts; a later ts counts; a
  * missing ts counts toward lane totals only).
  *
@@ -34,8 +38,8 @@
  * The first deny per (session, lane-or-root) opens one owner panel card (pointer file dedup); later denies open none.
  * Every allowed dispatch gets one additionalContext line: last-hour turns, estimated USD, heaviest lane.
  *
- * MODES: ~/.autopilot/config.json {"subagent_budget": {"mode": "remind"|"warn"|"off", "lane_dispatch_max", "lane_turns_max",
- * "root_turns_per_hour_max", "concurrent_advise_max"}} or the matching environment variables registered in scripts/lib/config-keys.json.
+ * MODES (default warn): ~/.autopilot/config.json {"subagent_budget": {"mode": "remind"|"warn"|"off", "lane_dispatch_max", "lane_turns_max",
+ * "root_turns_per_hour_max", "runaway_multiple", "concurrent_advise_max"}} or the matching environment variables registered in scripts/lib/config-keys.json.
  * concurrent_advise_max (default 3, env AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX, 0 off) appends one advisory
  * sentence after an allow. It never denies. AUTOPILOT_AGENT_ACTIVITY=off skips it. A thrown reader fails open.
  * Clock: AUTOPILOT_SUBAGENT_BUDGET_NOW_MS, honoured only with AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK=1 (tests). FAIL-OPEN: no transcript_path, an unreadable or corrupt transcript, or any
@@ -48,7 +52,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const HOUR_MS = 3600000;
-const DEFAULTS = { mode: 'remind', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, concurrent_advise_max: 3 };
+const DEFAULTS = { mode: 'warn', lane_dispatch_max: 4, lane_turns_max: 300, root_turns_per_hour_max: 400, runaway_multiple: 3, concurrent_advise_max: 3 };
 const { LANE_RE, headerDenialSuffix } = require('./lib/brief-header-template.js');
 const REVIEWER_RE = /^Role:[ \t]*reviewer[ \t]*$/;
 const ACK_RE = /^Budget-Ack:[ \t]*(.*)$/;
@@ -99,6 +103,9 @@ function loadConfig() {
   cfg.lane_dispatch_max = pick('lane_dispatch_max', 'AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX');
   cfg.lane_turns_max = pick('lane_turns_max', 'AUTOPILOT_SUBAGENT_BUDGET_LANE_TURNS_MAX');
   cfg.root_turns_per_hour_max = pick('root_turns_per_hour_max', 'AUTOPILOT_SUBAGENT_BUDGET_ROOT_TURNS_PER_HOUR_MAX');
+  const runEnv = nonNegInt(process.env.AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE);
+  const runFile = nonNegInt(file.runaway_multiple);
+  cfg.runaway_multiple = runEnv !== null ? runEnv : (runFile !== null ? runFile : DEFAULTS.runaway_multiple);
   const adviseEnv = nonNegInt(process.env.AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX);
   const adviseFile = nonNegInt(file.concurrent_advise_max);
   cfg.concurrent_advise_max = adviseEnv !== null ? adviseEnv : (adviseFile !== null ? adviseFile : DEFAULTS.concurrent_advise_max);
@@ -394,6 +401,31 @@ function appendAckRow(payload, laneLabel, n, reason, hits) {
   if (r.status !== 0) process.stderr.write(`subagent-budget: decision-ledger append failed (${String(r.stderr || '').trim().slice(0, 200)})\n`);
 }
 
+// Audit row for a runaway deny: one `runaway_block` decision per blocked dispatch. The id carries the counts and a time
+// stamp so repeated blocks of one lane each leave a row (the ledger skips a repeated decision_id).
+function appendRunawayRow(payload, laneLabel, hits, multiple) {
+  try {
+    const { spawnSync } = require('child_process');
+    const row = {
+      decision_id: `runaway_block-${slug(laneLabel)}-${hits.map((h) => `${h.id}${h.actual}`).join('-')}-${nowMs()}`,
+      round: 0,
+      class: 'tactical',
+      rationale: `runaway_block: ${hits.map((h) => `${h.id} ${h.actual}/${h.limit}`).join(', ')} (runaway_multiple ${multiple}; lane ${laneLabel}; no owner card)`,
+      reversibility: 'reversible',
+      refs: [],
+    };
+    const script = path.join(__dirname, '..', 'scripts', 'decision-ledger.js');
+    const r = spawnSync(process.execPath, [script, 'append', '--kind', 'decision', '--json', JSON.stringify(row)], {
+      cwd: typeof payload.cwd === 'string' && payload.cwd ? payload.cwd : process.cwd(),
+      encoding: 'utf8',
+      timeout: 8000,
+    });
+    if (r.status !== 0) process.stderr.write(`subagent-budget: runaway audit append failed (${String(r.stderr || '').trim().slice(0, 200)})\n`);
+  } catch (e) {
+    process.stderr.write(`subagent-budget: runaway audit append failed (${e.message})\n`);
+  }
+}
+
 // Opens the owner card once per (session, key). Returns { id, fresh } or null when no card could be made.
 function ensureCard(payload, key, hit, c) {
   try {
@@ -416,7 +448,7 @@ function ensureCard(payload, key, hit, c) {
         session: sid,
         question: `子代理預算閘擋下一次派工（${where}）：${hit.text}。要放行、調高上限，還是收掉這條 lane？`,
         background: `${contextLine(c)} 派工時在 brief 前 10 行加 \`Budget-Ack: <理由>\` 可放行（會記入 decision ledger）；`
-          + '上限在 ~/.autopilot/config.json 的 subagent_budget，或設 AUTOPILOT_SUBAGENT_BUDGET_MODE=warn|off。',
+          + '上限在 ~/.autopilot/config.json 的 subagent_budget，或設 AUTOPILOT_SUBAGENT_BUDGET_MODE=remind|warn|off。',
         source: 'subagent-budget hook',
         origin: 'subagent_budget',
       });
@@ -481,13 +513,13 @@ function run(payload) {
 
   const hits = [];
   if (lane && !reviewer && c.laneDispatches >= cfg.lane_dispatch_max) {
-    hits.push({ id: 'lane_dispatch_max', scope: lane, text: `lane '${lane}' already has ${c.laneDispatches} dispatches (lane_dispatch_max ${cfg.lane_dispatch_max})` });
+    hits.push({ id: 'lane_dispatch_max', scope: lane, actual: c.laneDispatches, limit: cfg.lane_dispatch_max, text: `lane '${lane}' already has ${c.laneDispatches} dispatches (lane_dispatch_max ${cfg.lane_dispatch_max})` });
   }
   if (lane && c.laneTurns >= cfg.lane_turns_max) {
-    hits.push({ id: 'lane_turns_max', scope: lane, text: `lane '${lane}' already used ${c.laneTurns} subagent turns (lane_turns_max ${cfg.lane_turns_max})` });
+    hits.push({ id: 'lane_turns_max', scope: lane, actual: c.laneTurns, limit: cfg.lane_turns_max, text: `lane '${lane}' already used ${c.laneTurns} subagent turns (lane_turns_max ${cfg.lane_turns_max})` });
   }
   if (c.hourTurns >= cfg.root_turns_per_hour_max) {
-    hits.push({ id: 'root_turns_per_hour_max', scope: 'root', text: `this session's subagents used ${c.hourTurns} turns in the last 60 minutes (root_turns_per_hour_max ${cfg.root_turns_per_hour_max})` });
+    hits.push({ id: 'root_turns_per_hour_max', scope: 'root', actual: c.hourTurns, limit: cfg.root_turns_per_hour_max, text: `this session's subagents used ${c.hourTurns} turns in the last 60 minutes (root_turns_per_hour_max ${cfg.root_turns_per_hour_max})` });
   }
 
   if (laneMissing) {
@@ -503,12 +535,36 @@ function run(payload) {
   if (hits.length === 0) { emit({ additionalContext: withAdvisory(payload, line) }); return; }
 
   const summary = hits.map((h) => h.text).join('; ');
+  const ack = ackFromBrief(brief);
   if (cfg.mode === 'warn') {
-    process.stderr.write(`subagent-budget: ${summary}\n`);
-    emit({ additionalContext: withAdvisory(payload, `subagent-budget (warn mode, not blocking): ${summary}. ${line}`) });
+    const runaway = cfg.runaway_multiple > 0
+      ? hits.filter((h) => h.limit > 0 && h.actual >= cfg.runaway_multiple * h.limit)
+      : [];
+    if (runaway.length === 0) {
+      process.stderr.write(`subagent-budget: ${summary}\n`);
+      emit({ additionalContext: withAdvisory(payload, `subagent-budget (warn mode, not blocking): ${summary}. ${line}`) });
+      return;
+    }
+    const rtext = runaway.map((h) => `${h.id} ${h.actual} is ${(h.actual / h.limit).toFixed(1)}x its limit ${h.limit}`).join('; ');
+    if (ack && ack.reason) {
+      appendAckRow(payload, lane || 'root', (lane ? c.laneDispatches : c.files) + 1, ack.reason, runaway);
+      emit({ additionalContext: withAdvisory(payload, `subagent-budget: runaway ceiling passed on Budget-Ack (${rtext}). ${line}`) });
+      return;
+    }
+    appendRunawayRow(payload, lane || 'root', runaway, cfg.runaway_multiple);
+    // No ensureCard here, on purpose: the operator answers budget cards with "you decide", so this path only blocks and logs.
+    emit({
+      permissionDecision: 'deny',
+      permissionDecisionReason: `subagent-budget: runaway ceiling, dispatch denied (warn mode, no owner card opened). ${rtext}; `
+        + `runaway_multiple ${cfg.runaway_multiple}. ${summary}. `
+        + 'To proceed anyway, re-dispatch with a line "Budget-Ack: <reason, at least 8 characters>" in the first 10 lines of the brief '
+        + '(it is logged to the decision ledger); otherwise stop re-dispatching this lane and report to the owner. '
+        + 'Tuning: raise the ceilings (lane_dispatch_max, lane_turns_max, root_turns_per_hour_max) or runaway_multiple (0 turns this guard off) in subagent_budget in ~/.autopilot/config.json, '
+        + 'or AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE; AUTOPILOT_SUBAGENT_BUDGET_MODE=remind|warn|off.'
+        + headerDenialSuffix(brief, input.model, { engineBy: 'other', laneBy: 'self', includeLane: false }),
+    });
     return;
   }
-  const ack = ackFromBrief(brief);
   if (ack && ack.reason) {
     appendAckRow(payload, lane || 'root', (lane ? c.laneDispatches : c.files) + 1, ack.reason, hits);
     emit({ additionalContext: withAdvisory(payload, `subagent-budget: passed on Budget-Ack (${summary}). ${line}`) });
@@ -531,7 +587,7 @@ function run(payload) {
       + `Counts: lane dispatches ${c.laneDispatches}, lane turns ${c.laneTurns}, root turns in last 60 min ${c.hourTurns}. `
       + `${laneNote}${ackNote}To proceed anyway, re-dispatch with a line "Budget-Ack: <reason, at least 8 characters>" in the first 10 lines of the brief `
       + '(it is logged to the decision ledger); otherwise stop re-dispatching this lane and report to the owner. '
-      + `${cardNote} Tuning: subagent_budget in ~/.autopilot/config.json, or AUTOPILOT_SUBAGENT_BUDGET_MODE=warn|off.`
+      + `${cardNote} Tuning: subagent_budget in ~/.autopilot/config.json, or AUTOPILOT_SUBAGENT_BUDGET_MODE=remind|warn|off.`
       + headerDenialSuffix(brief, input.model, { engineBy: 'other', laneBy: 'self', includeLane: laneMissing }),
   });
 }

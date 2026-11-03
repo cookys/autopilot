@@ -2716,7 +2716,7 @@ for (const surface of SURFACES) {
     const texts = allRows((await pane.drawn()) as Node)
     // the keyboard lands on the first-drawn `›` next-tab chip, whose Enter steps on (never on the active tab's own button: that Enter is a no-op)
     const tabButtons = (await pane.findAll({ type: 'Button' })) as Drawn[]
-    expect(tabButtons.filter(b => b.props?.key === 'next' || (PANE_TABS as readonly string[]).includes(b.props?.key as string)).length).toBe(8) // the section headings are Buttons too
+    expect(tabButtons.filter(b => b.props?.key === 'next' || (PANE_TABS as readonly string[]).includes(b.props?.key as string)).length).toBe(9) // the section headings are Buttons too
     expect(tabButtons.filter(b => b.props?.autoFocus === true).map(b => b.props?.key)).toEqual(['next'])
     expect(tabButtons[0].props?.key).toBe('next')
     await pane.unmount()
@@ -2831,7 +2831,7 @@ for (const surface of SURFACES) {
     expect(await activeTab()).toBe('review') // one step on from Dispatch
   })
 
-  test('P7 band: the info press cycles the seven tabs while the pane is open; closed it opens on Now (' + surface + ')', async ($, on) => {
+  test('P7 band: the info press cycles the eight tabs while the pane is open; closed it opens on Now (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
     const band = () => mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 120, rows: 50, isFullscreen: true } })
@@ -2842,7 +2842,7 @@ for (const surface of SURFACES) {
       return tab
     }
     const press = async () => { const ui = await band(); await ui.press({ key: 'info' }); await ui.unmount() }
-    expect([...PANE_TABS]).toEqual(['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend'])
+    expect([...PANE_TABS]).toEqual(['now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend'])
     await press() // closed -> Now
     expect(await shownTab()).toBe('now')
     await press()
@@ -2858,7 +2858,7 @@ for (const surface of SURFACES) {
     expect(await shownTab()).toBe('spend')
     await press()
     expect(await shownTab()).toBe('hygiene')
-    for (const want of ['legend', 'now', 'decide']) { await press(); expect(await shownTab()).toBe(want) } // the ? legend is last; the ring wraps to Now
+    for (const want of ['fleet', 'legend', 'now', 'decide']) { await press(); expect(await shownTab()).toBe(want) } // the ? legend is last; the ring wraps to Now
     // closed again (Escape / the person closes it): the next press is Now, not the tab after Dispatch
     w.panes = []
     await press()
@@ -2869,10 +2869,10 @@ for (const surface of SURFACES) {
   // The first-drawn Button is now the `›` next-tab chip and it alone carries autoFocus.
   const paneTabs = async ($: any, surface: any) => $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
 
-  test('keyboard: Enter on the › chip (where the ring lands) steps through all seven tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
+  test('keyboard: Enter on the › chip (where the ring lands) steps through all eight tabs and wraps, whatever tab shows (' + surface + ')', async ($, on) => {
     const w = world(on, richWorld())
     await start($, surface)
-    for (const want of ['decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend', 'now', 'decide']) {
+    for (const want of ['decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend', 'now', 'decide']) {
       const pane = await paneTabs($, surface)
       await pane.press({ key: 'next' })
       await pane.unmount()
@@ -3040,7 +3040,7 @@ for (const surface of SURFACES) {
     const pane = await $.ui.mount({ plugin: 'autopilot', surface, component: 'Pane', requestId: 'autopilot-live', props: PANE_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     const tree = (await pane.drawn()) as Drawn
     const buttons = walkAll(tree).filter(n => n.type === 'Button').map(n => n.props?.key as string).filter(k => !/^[bg]\d+$/.test(k)) // the body's toggle lines (and the summary rows' goto Buttons) (section headings, recent groups) are Buttons too
-    expect(buttons).toEqual(['next', 'now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) // the › chip first (it carries the autoFocus), then the seven tabs in contract order
+    expect(buttons).toEqual(['next', 'now', 'decide', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend']) // the › chip first (it carries the autoFocus), then the eight tabs in contract order
     // the strip (child 0): zh labels, a badge per tab that holds something for the owner: ●N live runs, ⚑N residue (QC is ok here, so no ▲ on Review)
     const strip = stripOf(tree as Node)
     expect(strip).toContain('現況')
@@ -3169,7 +3169,7 @@ for (const surface of SURFACES) {
     expect((await paneParts($, surface, 'review')).texts.filter(t => t.startsWith('— no '))).toEqual(['— no review published', '— no pre-push check status published', '— no decisions sidecar published'])
     expect(await ndata('spend')).toEqual(['— no data · brain-tier spend today is not published'])
     expect(await ndata('hygiene')).toEqual(['— no data · no worktree residue published', '— no data · no automatic cleanup record published', '— no data · no load source published']) // one empty line per section, in SECTION_ORDER
-    for (const id of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) {
+    for (const id of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend']) {
       expect((await paneParts($, surface, id)).texts.length).toBeGreaterThan(1) // never just the header
     }
   })
@@ -3192,10 +3192,81 @@ for (const surface of SURFACES) {
     world(on, files)
     await start($, surface)
     for (const cols of [209, 139, 79]) expectThemeOnly((await bandLine($, surface, cols)).tree as Drawn)
-    for (const id of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'legend']) expectThemeOnly((await paneParts($, surface, id)).tree as Drawn, true)
+    for (const id of ['now', 'dispatch', 'review', 'spend', 'hygiene', 'fleet', 'legend']) expectThemeOnly((await paneParts($, surface, id)).tree as Drawn, true)
     expect(walkTexts((await bandLine($, surface, 209)).tree).find(n => textOf(n) === '160')?.props?.color).toBe('error')
   })
 }
+
+// G23 (console C1 v0): the Fleet tab, drawn from a mocked `fleet tasks --tree --json`. The pure half (parsing, stuck rules, grouping, the feed's TTL) is fleet.test.ts.
+const G23_CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+function g23Ulid(ms: number, tail: string): string {
+  let out = ''
+  for (let i = 0, v = ms; i < 10; i++, v = Math.floor(v / 32)) out = G23_CROCKFORD[v % 32] + out
+  return out + tail.repeat(16).slice(0, 16)
+}
+function g23Tasks(now: number): string {
+  const iso = (ms: number) => new Date(ms).toISOString()
+  const row = (o: Record<string, unknown>) => ({ kind: 'work', source: 'reported', progress: '', parent_task_id: null, observed_at: iso(now - 60_000), ...o })
+  return JSON.stringify([
+    row({ task_id: g23Ulid(now - 600_000, 'A'), state: 'running', title: '[REG a1] events contract', assignee: 'host-a/autopilot--claude' }),
+    row({ task_id: g23Ulid(now - 7_200_000, 'B'), state: 'open', title: '[REG a2] DOA class', assignee: 'host-a/autopilot--claude' }),
+    row({ task_id: g23Ulid(now - 300_000, 'C'), state: 'open', title: '[REG a3] card visibility', assignee: 'host-a/autopilot--claude' }),
+    row({ task_id: g23Ulid(now - 900_000, 'D'), state: 'task_accepted', title: 'Engine: claude-opus-5-5 | Role: researcher | Lane: hangar', progress: 'checking the NAS audit', assignee: 'openclaw/hangar--claude' }),
+    row({ task_id: g23Ulid(now - 900_000, 'E'), state: 'unknown', title: 'pid 4242 node', assignee: 'host-a/autopilot--claude', kind: 'observed_run' }),
+    row({ task_id: g23Ulid(now - 900_000, 'F'), state: 'done', title: '[REG z9] shipped already', assignee: 'openclaw/hangar--claude' }),
+    row({ task_id: g23Ulid(now - 900_000, 'G'), state: 'running', title: 'P1.3b KR2 runs', assignee: 'host-a/hippo--claude', observed_at: iso(now - 5 * 3_600_000) }),
+    row({ task_id: g23Ulid(now - 1_200_000, 'H'), state: 'waiting', title: '[REG u7] rehearsal rerun', assignee: 'openclaw/hangar--claude', watch_ids: ['01WATCHAAAAAAAAAAAAAAAAAAA'] }),
+  ])
+}
+test('G23 Fleet tab: data age, owner cards, lanes in flight before upcoming, stuck rows flagged, observed runs and finished rows left out (terminal)', async ($, on) => {
+  const ran: string[] = []
+  on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 0, stdout: g23Tasks(NOW_FRESH), stderr: '' } } })
+  worldEn(on, base())
+  await start($, 'terminal')
+  await paneParts($, 'terminal', 'fleet') // the first draw starts the fetch and shows "fetching"; the fetch's redraw is what the next mount reads
+  const texts = (await paneParts($, 'terminal', 'fleet')).texts
+  expect(ran.every(a => a === 'fleet tasks --tree --json')).toBe(true)
+  expect(ran.length).toBe(1) // the second draw is inside the TTL: no second run
+  const at = (needle: string) => texts.findIndex(t => t.includes(needle))
+  expect(texts[0]).toMatch(/^data {8}.* ago · fleet tasks --tree --json$/)
+  expect(at('no owner card is open')).toBeGreaterThan(0)
+  // lanes: the two with a stuck row first (autopilot: open two hours unaccepted; hippo: its seat quiet five hours), by name; then hangar
+  const lanes = ['autopilot--claude', 'hippo--claude', 'hangar--claude'].map(at)
+  expect(lanes.every(i => i > 0)).toBe(true)
+  expect([...lanes].sort((a, b) => a - b)).toEqual(lanes)
+  // autopilot's lane: in flight, then `upcoming (2)` oldest first, the stale one flagged
+  const order = ['events contract', 'upcoming (2)', 'DOA class', 'card visibility'].map(at)
+  expect([...order].sort((a, b) => a - b)).toEqual(order)
+  expect(texts[at('DOA class')]).toMatch(/^⊘ stalled +\[REG a2\] DOA class · 2h00m ago/) // open two hours, nobody accepted it: stalled (the reason is in its opened detail)
+  expect(texts[at('KR2 runs')]).toMatch(/^⊘ stalled /) // its seat quiet five hours
+  expect(texts[at('events contract')]).toMatch(/^● running /)
+  expect(texts[at('rehearsal rerun')]).toMatch(/^⧗ waiting +\[REG u7\] rehearsal rerun · watch · 20m ago/) // accepted, its seat waits on a linked watch (PM ruling)
+  expect(at('checking the NAS audit')).toBeGreaterThan(0) // a brief-header title falls back to the progress line
+  expect(at('pid 4242')).toBe(-1)
+  expect(at('shipped already')).toBe(-1)
+  // opened, a stalled row says why, then its hub state and id
+  await pressRow($, 'terminal', 'fleet', t => t.includes('DOA class'))
+  const opened = (await paneParts($, 'terminal', 'fleet')).texts
+  const row = opened.findIndex(t => t.includes('DOA class'))
+  expect(opened[row + 1]).toContain('nobody accepted it within the hour')
+  expect(opened[row + 2]).toContain('open · ' + g23Ulid(NOW_FRESH - 7_200_000, 'B'))
+  await pressRow($, 'terminal', 'fleet', t => t.includes('KR2 runs'))
+  const quiet = (await paneParts($, 'terminal', 'fleet')).texts
+  expect(quiet[quiet.findIndex(t => t.includes('KR2 runs')) + 1]).toContain('seat not observed since 5h00m ago')
+})
+test('G23 Fleet tab: a failing `fleet` says so, and the tab is not fetched while another tab shows (terminal)', async ($, on) => {
+  const ran: string[] = []
+  on('process.run', ($$: any, e: any) => { ran.push((e.argv as string[]).join(' ')); return { value: { exitCode: 1, stdout: '', stderr: 'fleet: hub unreachable' } } })
+  const w = worldEn(on, base())
+  await start($, 'terminal')
+  await paneParts($, 'terminal', 'now')
+  await w.clock.advance(60_000)
+  expect(ran.length).toBe(0)
+  await paneParts($, 'terminal', 'fleet')
+  const texts = (await paneParts($, 'terminal', 'fleet')).texts
+  expect(texts.some(t => t.includes('the last fetch failed: fleet: hub unreachable'))).toBe(true)
+  expect(texts.some(t => t.includes('never fetched'))).toBe(true)
+})
 
 test('P7 model: displayWidth counts East Asian wide as 2, combining as 0 and the band glyphs as 1', () => {
   expect(displayWidth('abc')).toBe(3)
@@ -3408,8 +3479,8 @@ test('i18n tables: en and zh-TW carry the same ids and the same placeholders; ke
     expect(displayWidth(ZH_TW[id]), 'zh-TW ' + id).toBeLessThanOrEqual(12)
   }
   // tab words (the owner's wording): 殘留 / 用量 / 審查 translated, `?` is the legend
-  expect(PANE_TABS.map(t => ZH_TW['tab.' + t])).toEqual(['現況', '待決', '派工', '審查', '用量', '殘留', '?'])
-  expect(PANE_TABS.map(t => EN['tab.' + t])).toEqual(['Now', 'Decide', 'Dispatch', 'Review', 'Spend', 'Hygiene', '?'])
+  expect(PANE_TABS.map(t => ZH_TW['tab.' + t])).toEqual(['現況', '待決', '派工', '審查', '用量', '殘留', '艦隊', '?'])
+  expect(PANE_TABS.map(t => EN['tab.' + t])).toEqual(['Now', 'Decide', 'Dispatch', 'Review', 'Spend', 'Hygiene', 'Fleet', '?'])
 })
 
 test('i18n t(): variables, plurals, and the fallback chain locale -> en -> the id itself', () => {
@@ -3576,11 +3647,13 @@ for (const surface of SURFACES) {
   })
 
   for (const locale of ['en', 'zh-TW'] as const) {
-    test('TUI v2 panel: all seven tabs render in ' + locale + ', no string id leaks, no placeholder is left unfilled (' + surface + ')', async ($, on) => {
+    test('TUI v2 panel: all eight tabs render in ' + locale + ', no string id leaks, no placeholder is left unfilled (' + surface + ')', async ($, on) => {
+      on('process.run', () => ({ value: { exitCode: 0, stdout: g23Tasks(NOW_FRESH), stderr: '' } })) // the Fleet tab's `fleet tasks` (G23)
       world(on, richWorld(), NOW_FRESH, SID_A, locale)
       await start($, surface)
       const ids = new Set(Object.keys(EN).filter(k => k.includes('.')))
       for (const id of PANE_TABS) {
+        if (id === 'fleet') await paneParts($, surface, id) // the first Fleet draw starts the fetch; the second draws its rows
         const parts = await paneParts($, surface, id)
         expect(parts.texts.length, id).toBeGreaterThan(id === 'decide' ? 0 : 3) // nothing is pending in this world: the 待決 tab is its one empty line
         const all = [stripOf(parts.tree), ...parts.texts]
@@ -3595,16 +3668,18 @@ for (const surface of SURFACES) {
 
   for (const locale of ['en', 'zh-TW'] as const) {
     test('TUI v2 panel: at pane widths 60, 76 and 90 no tab clips value text with … and no line is wider than the pane, in ' + locale + ' (' + surface + ')', async ($, on) => {
+      on('process.run', () => ({ value: { exitCode: 0, stdout: g23Tasks(NOW_FRESH), stderr: '' } })) // the Fleet tab's `fleet tasks` (G23)
       world(on, richWorld(), NOW_FRESH, SID_A, locale)
       await start($, surface)
       for (const width of [60, 76, 90]) {
         for (const id of PANE_TABS) {
+          if (id === 'fleet') await paneParts($, surface, id, width) // the first Fleet draw starts the fetch; the second draws its rows
           const parts = await paneParts($, surface, id, width)
           // the strip is Buttons in a wrapping Box: lay its entries out row by row the way a wrapping Box does (an entry that does not fit starts the next row) and hold every ROW to the width
           const entries = (((((parts.tree.children || []) as Node[])[0].children || []) as Node[])[0].children || []) as Node[]
           const rowsW: number[] = [0]
           for (const e of entries) { const w = displayWidth(fullText(e)); if (rowsW[rowsW.length - 1] > 0 && rowsW[rowsW.length - 1] + w > width) rowsW.push(0); rowsW[rowsW.length - 1] += w }
-          expect(entries.length, width + ' ' + id + ': the strip entries (› chip + 7 tabs)').toBe(8)
+          expect(entries.length, width + ' ' + id + ': the strip entries (› chip + 8 tabs)').toBe(9)
           for (const w of rowsW) expect(w, width + ' ' + id + ' strip row').toBeLessThanOrEqual(width)
           expect(stripOf(parts.tree).includes('…'), width + ' ' + id + ' strip').toBe(false)
           for (const text of parts.texts) {

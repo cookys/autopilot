@@ -1,7 +1,7 @@
 # Plan — G40-data: the agent lane gets its own live quota for every alias
 > Status: design only (no code in this plan's authoring commit). Owner: PM program. Branch: `hands/g40data/1`. Size: S (design); implementation phases below. Frame: builds on G37 (`project/plans/2026-11-03-g37-account-switching.md`) and the codeforge G40 design (codeforge `feature/g40-usage-accounts` @ `98c7a8b`, `doc/plans/2026-11-03-g40-usage-accounts.md`).
 
-> This plan states the current design only. History is in git and in the Review log; the fleet hub design note (`project/plans/context/g40-fleet-hub-quota-store-905d13e.md`, fleet `905d13e`) is the companion for the hub side. Where the two documents differ, the differences are listed in the Review log until fleet has amended its note.
+> This plan states the current design only. History is in git and in the Review log; the fleet hub design note (`project/plans/context/g40-fleet-hub-quota-store-625b0fe.md`, fleet `625b0fe`, revision 2) is the companion for the hub side. The two documents agree except for the points listed in the Review log.
 
 ## 0. Context / thesis
 
@@ -87,7 +87,7 @@ Failure policy: capture never alters exit code, stdout, audit outcome. A malform
 
 Input: the mirror view of one `(provider, alias)`: a list of rows (22.2), each a `fleet.quota/1` record (20.2) plus `writer_courier`, `host_role`, `observed_at_hub` and `skewed`. The local courier's own pending row is tagged with the local courier id and has `observed_at_hub: null`. Clock model: section 11. Rules, per window `kind`:
 1. Window time `t`: a local row uses the window's `observed_at` on the local clock. A hub row uses hub time: `t = row.observed_at_hub - (newest.observed_at - window.observed_at)`, where `newest` is the largest window `observed_at` in that record and `observed_at_hub` is the hub-clock time of that newest observation. No courier ever corrects another writer's time with its own clock; there is no `min()`.
-2. A window is dropped when `resets_at` is not null and has passed (seconds), when `now - t` exceeds `MAX_AGE_S` (21600), or when `t` is more than `FUTURE_SKEW_S` (300) ahead of the local clock. A `skewed` row is judged the same way and flagged in `status`, never dropped for skew alone.
+2. A window is dropped when `resets_at` is not null and has passed (seconds), when the age (`now - t`, with `now` corrected by `hub_offset` for peer rows, section 11) exceeds `MAX_AGE_S` (21600), or when `t` is more than `FUTURE_SKEW_S` (300) ahead of the local clock. A `skewed` row is judged the same way and flagged in `status`, never dropped for skew alone.
 3. Winner per `kind`: the live window with the newest `t`. If the newest row lacks the kind but another row still has a live one, take the older one: a live window can only have grown, so it is a lower bound; note `merged_floor`. An exact tie goes to the row whose `writer_courier` is the local courier; a tie between two peers goes to the higher `utilization` (understating is the dangerous direction).
 4. The original `observed_at` of the winning window travels with it in the merge, in re-pushes and in reader output; nothing rewrites it. The reader's result carries per window `{kind, utilization, resets_at, observed_at, writer_courier, source}`.
 5. A live `refusal` (21.8) is taken from the row with the newest refusal time; it is not cleared by a lower window, only by its own expiry.
@@ -174,8 +174,9 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 | Capture fails (bad event, write error, mirror lock busy) | swallowed; one audit field `quota_capture=<reason>`; exit code and stdout unchanged |
 | Hub unreachable (P5) | local rows and last-delivered peer rows stay; peers age by `observed_at_hub` on the local clock and retire at 6 h; `quota_hub=down` in `status`; never blocks a call; on reconnect the snapshot replaces peer rows and own pending rows are pushed with their original `observed_at` and a new `sent_at` |
 | Old hub nacks `unsupported` | log `hub=old` once per courier start, keep the mirror, keep running |
-| Nack `quota_rate_limited` | honour `retry_after`; the newest row per key stays in the mirror and is retried; nothing is dropped (18.2) |
-| Nack `quota_rows_full` | stop pushing placeholders, keep pushing rows that have a window; log and show `quota_rows_full` in `status` until a row expires |
+| Nack `quota_rate_limited` (always with `retry_after`, seconds) | honour `retry_after`; the newest row per key stays in the mirror and is retried; nothing is dropped (18.2) |
+| Nack `quota_rows_full` (always the 257th live row, never with `retry_after`; clears only when a row expires or is deleted) | stop adding new aliases (placeholders first), keep pushing rows that already exist; log and show `quota_rows_full` in `status` until it clears |
+| Nack `quota_invalid` or `quota_writer_mismatch` | drop that frame, warn once per kind; never retried, never recorded as pushed (it is a bug, not a retry case) |
 | Nack `quota_publish_denied` | stop pushing, keep the mirror, `quota_hub=denied` in `status`; one trial frame per hour; pick stays local (5.6) |
 | Nack `quota_clock_invalid` | never retried with the same frame; the reporter's own check (N34) means this signals a local clock fault: log and stop pushing until the clock check passes |
 | Local live dir refused (`LIVE_DIR_REFUSED`) | publish skipped, read side sees nothing; the run itself proceeds |
@@ -191,10 +192,10 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 ## 11. Clock model (the only one)
 
 - Writers stamp `observed_at` (seconds, the writer's clock) per window. The reporter stamps `sent_at` (seconds, its clock at push time) on EVERY frame, including re-pushes.
-- Hub: refuses `observed_at > sent_at + 5 s` (`quota_clock_invalid`); stores `observed_at_hub = observed_at + (hub_now - sent_at)` beside the raw value; flags `skewed` when `abs(hub_now - sent_at) > 5 min`; never drops for skew (22.1).
+- Hub: every snapshot and delta frame to readers carries `hub_now` (epoch seconds); it refuses `observed_at > sent_at + 5 s` (`quota_clock_invalid`); stores `observed_at_hub = observed_at + (hub_now - sent_at)` beside the raw value; flags `skewed` when `abs(hub_now - sent_at) > 5 min`; never drops for skew (22.1).
 - Reader: hub rows by `observed_at_hub`, the local pending row by the local clock (rule 1 of 5.2); the 5 min future bound and the 6 h age bound apply to the time so derived. Nobody corrects another writer's time and nobody takes `min()` of two clocks. `resets_at` is a server absolute time, immune to skew.
 - Re-push and merge keep the original `observed_at`; receipt time never refreshes freshness (22.3).
-- Assumption: a reader's clock is close to the hub's (couriers are held to the hub's 5 min skew flag); a reader whose clock is off by more misjudges every peer row by that amount, in either direction (Q20).
+- Reader offset (Q20, adopted): on every delivered frame the reader sets `hub_offset = hub_now - local_now` (seconds, network delay ignored) and stores it in the mirror view (22.2). A peer row's age is `(local_now + hub_offset) - t`, with `t` the row's hub time (5.2 rule 1); the 5 min future bound uses the same corrected age. Local rows still use the local clock only. With no frame ever received (`hub=absent` or `hub=old`) `hub_offset = 0`; offline, the last stored offset is kept. An offset beyond 5 min is applied and shown as `quota_hub_clock_offset` in `status`. Nobody adjusts another writer's `observed_at` (N55, N67).
 
 ## 12. Open questions (items 1 to 5 are evidence-gated; Q numbers are referenced above)
 
@@ -213,7 +214,6 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 - Q16 (fleet F2) Does any reader need cross-namespace quota? Assumed namespace-only; cross-namespace reads would need the dispatch-style channel and `_access` consent.
 - Q17 (fleet F3) Is a fleet-side `fleet quota` CLI wanted in v1, or only the courier mirror? This plan builds only the mirror reader.
 - Q19 The Claude CLI's emission condition for `rate_limit_event` (5.1) is UNVERIFIED. Closed by quoting the exact codeforge or CLI evidence line.
-- Q20 Reader clock versus hub clock (section 11): should delivery frames carry `hub_now` so a reader can compute its own offset? Owner: fleet.
 
 ## 13. Phases (the only phase table; each independently shippable; acceptance = "done when")
 
@@ -265,8 +265,11 @@ N1-N17 and N49-N65 are here; N18-N23 sit with the reporter (18.2), N24-N30 with 
 - N61 Frames: every frame carries `sent_at`; the reporter refuses to send a frame whose `observed_at` exceeds `sent_at` plus 5 s.
 - N62 Stale skip: a mirror row whose windows are all older than 6 h, with no `invalid`, refusal or placeholder state to carry, produces zero pushes and one `quota_stale_skipped` log line.
 - N63 Startup burst: a courier with 70 rows at start, against a fake hub enforcing the real hub limits, gets no `quota_rate_limited` nack and loses no row (red with the bucket removed); the queue sends newest `observed_at` first and placeholders last.
-- N64 Nacks: `quota_rows_full` keeps rows that have a window and drops placeholders with a counted log line; `quota_clock_invalid` is never resent unchanged; the pending queue holds at most one entry per key and none older than 6 h.
+- N64 Nacks: `quota_clock_invalid` is never resent unchanged; the pending queue holds at most one entry per key and none older than 6 h.
 - N65 Credentials: a revoked local credential with a fresh low-utilization mirror is never picked; a peer's `invalid` newer than the local `issued_at` applies, and one older does not; a new `issued_at` clears the old `invalid`; a denied publication leaves the local pick unchanged.
+- N67 Reader offset: a reader whose clock is 10 min behind the hub, given a frame with `hub_now`, computes the same peer-row age as a reader in sync; a planted reader that ignores `hub_now` is red; the stored `hub_offset` survives a hub outage and a restart; with no frame ever received the offset is 0.
+- N68 `quota_rows_full`: the reporter stops adding new aliases, counts and logs each refused one, and keeps pushing rows that already exist; a planted reporter that retries the refused alias or stops pushing everything is red.
+- N69 `quota_invalid` and `quota_writer_mismatch`: the frame is dropped with one warning per kind, never retried and never recorded as pushed (planted retry loop red).
 - N66 Probe config: `quota_probe` unset is `off` for every manifest; `scheduled` is rejected for `starts_window` `true` or `unknown`.
 
 ## 15. Risks and inversion
@@ -279,7 +282,8 @@ Any code in this commit; running `claude setup-token`; real-binary measurement; 
 
 ## 17. Review log
 - R0 to R0f: authored by the G40-data hands lane across PM directions (one contract and store with a reporter, the provider-neutral contract, seven contract gaps, fleet's hub decisions, pacing and re-push, Q18 confirmation). The additions were then folded into one current design; the layered text lives in git history.
-- G1 (plan review round 1, 19 findings, all accepted, 8 blockers): units pinned to epoch seconds and `[0, 1]` (6); mirror is the hub view, a row list with ownership (22.2, 18.2 rule 0); one clock model (11, 5.2); required windows (8.3); provider-neutral refusal (21.8); statusline enters the mirror through the reporter and the direct read is removed in P2b (8.1, 18.3); pacing under every hub cap (22.4); one phase table (13); nack and stale-skip rows (9, 18.2); probe default stated once (5.3); credential precedence (5.6); env credential refs (20.3); unverified emission rule (5.1, Q19). Fleet-side changes needed to match are listed in the hand-off to fleet; until fleet amends its note, the differences from `905d13e` are: seconds for `observed_at`/`sent_at`, the refusal and `token_state_at` fields, a row-list mirror, the reporter (not the statusline) as mirror writer, and `hub_now` (Q20).
+- G1 (plan review round 1, 19 findings, all accepted, 8 blockers): units pinned to epoch seconds and `[0, 1]` (6); mirror is the hub view, a row list with ownership (22.2, 18.2 rule 0); one clock model (11, 5.2); required windows (8.3); provider-neutral refusal (21.8); statusline enters the mirror through the reporter and the direct read is removed in P2b (8.1, 18.3); pacing under every hub cap (22.4); one phase table (13); nack and stale-skip rows (9, 18.2); probe default stated once (5.3); credential precedence (5.6); env credential refs (20.3); unverified emission rule (5.1, Q19). Fleet-side changes needed to match are listed in the hand-off to fleet; until fleet amends its note, the differences from the earlier fleet note (`905d13e`) were: seconds for `observed_at`/`sent_at`, the refusal and `token_state_at` fields, a row-list mirror, the reporter (not the statusline) as mirror writer, and `hub_now` (Q20). Fleet revision 2 (`625b0fe`) adopted all of these; the remaining differences are listed in the next entry.
+- G1b (fleet `625b0fe` cross-check): the fleet note's typed record does not yet name four fields this plan defines: window `clamped` (6), window `remaining` with a null `utilization` on a `credits` window (21.2), record-level `visibility` (20.2) and the placeholder's record-level `source` with empty `windows` (21.6); its `utilization` is stated as `[0, 1]` with no null. The fleet note also does not mention the `hub_offset` stored by readers, which is reader-side only. Open: fleet to add the four fields, or the plan to drop them.
 
 ## 18. Reporter and local mirror
 
@@ -304,7 +308,7 @@ Frames and pacing:
 - Trailing debounce 5 s; minimum 30 s between pushes for one alias; ordering by `observed_at`: never push a row older than what it last pushed. "At once" cases (rules 3 and 4) skip the debounce but NOT the bucket.
 - Every push, including every "at once" path and the startup push of all aliases, passes the token bucket of 22.4, which is strictly below every hub limit. The queue holds at most one entry per key (the newest), sends newest `observed_at` first with placeholders last, and keeps a row in the mirror until the hub accepts it.
 - No heartbeat: an unchanged observation is not re-pushed and its `observed_at` is never refreshed by the reporter. The hub copy ages out by the 6 h rule exactly as before; a stable idle alias shows an old `observed_at`, which is correct and is what makes the probe's "skip if recent" rule meaningful.
-- Nacks: `quota_rate_limited` waits `retry_after` and keeps the newest value; `unsupported` logs `hub=old`, keeps the mirror, warns once per start; `quota_publish_denied` stops pushing (one trial per hour); `quota_rows_full` stops placeholders; `quota_clock_invalid` is never resent unchanged (section 9, N42, N64). No nack is ever recorded as pushed.
+- Nacks: `quota_rate_limited` waits `retry_after` and keeps the newest value; `unsupported` logs `hub=old`, keeps the mirror, warns once per start; `quota_publish_denied` stops pushing (one trial per hour); `quota_rows_full` stops adding new aliases and keeps pushing existing rows; `quota_invalid` and `quota_writer_mismatch` drop the frame and warn, never retried; `quota_clock_invalid` is never resent unchanged (section 9, N42, N64, N68, N69). No nack is ever recorded as pushed.
 - Hub down: keep the newest row per alias in the mirror, retry with backoff 5 s to 5 min, drop nothing newer than what is mirrored; on reconnect push only what changed (N56).
 - Controls kept with the reporter: N18 a record with `utilization` 62 is rejected; N19 no push when only `source` differs or `resets_at` moves under 60 s; N20 two changes inside 5 s produce one push; N21 never an older `observed_at` and never a refreshed one without a new observation; N22 hub down: pick output from the mirror equals the output with the hub up and the same rows; N23 the reporter source contains no read of a token or credentials path (static scan, red with a planted read).
 
@@ -646,7 +650,7 @@ Some providers refuse a request without telling a window kind or a reset time (t
 
 ## 22. Hub design settled with fleet
 
-Sources: fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `cd91624` and `905d13e`, `docs/plans/2026-11-04-g40-hub-quota-store.md` (copy: `project/plans/context/g40-fleet-hub-quota-store-905d13e.md`). The first design pass's hub questions (key, write permission, TTL, clocks, conflict, rate) are all answered here.
+Sources: fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `625b0fe` (revision 2), `docs/plans/2026-11-04-g40-hub-quota-store.md` (copy: `project/plans/context/g40-fleet-hub-quota-store-625b0fe.md`; the evidence directory keeps both `905d13e` and `625b0fe`). The first design pass's hub questions (key, write permission, TTL, clocks, conflict, rate) are all answered here.
 
 ### 22.1 Settled answers
 
@@ -656,10 +660,10 @@ Sources: fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM
 | Key | `(namespace, provider, alias, writer_courier)`; `namespace` and `writer_courier` come from the authenticated connection, not from the record body |
 | Write permission | only a courier writes, only its own row; the reporter is the only hub writer; `_access` `quota_publish` can deny, answered with nack `quota_publish_denied` (the reporter stops pushing, keeps the mirror, tries one frame per hour) |
 | Expiry | hard cap `hub_received_at + 6 h` on the hub clock; a write cannot extend past it; no heartbeat; the hub sweeps and filters on read; a window whose `resets_at` passed stays in the row and the reader ignores it |
-| Clock | every frame carries `sent_at` (seconds); the hub refuses `observed_at > sent_at + 5 s` (`quota_clock_invalid`), stores `observed_at_hub = observed_at + (hub_now - sent_at)` beside the raw value, and flags `skewed` when `abs(skew) > 5 min` (stored, not refused) |
+| Clock | every frame carries `sent_at` (seconds); the hub refuses `observed_at > sent_at + 5 s` (any window, `token_state_at` or `refusal.observed_at`: `quota_clock_invalid`), stores `observed_at_hub = observed_at + (hub_now - sent_at)` beside the raw value, and flags `skewed` when `abs(skew) > 5 min` (stored, not refused) |
 | Conflict | none at the hub: each courier keeps its own row; the reader merges (5.2); `host_role` is informational |
-| Limits | per key `(provider, alias)` per courier: 1 write per 10 s, burst 3; per courier: 60 writes per minute and 256 live rows; 7 windows per record. Over a limit: visible nack `quota_rate_limited` with `retry_after`; 256 live rows: `quota_rows_full` |
-| Delivery | snapshot on connect, deltas after, feeding the mirror; an old hub nacks the new frame `unsupported` |
+| Limits | per key `(provider, alias)` per courier: 1 write per 10 s, burst 3; per courier: 60 writes per minute and 256 live rows; 7 windows per record. Over a rate limit: visible nack `quota_rate_limited`, always with `retry_after` in seconds; the 257th live row: `quota_rows_full`, never with `retry_after`, cleared only when a row expires or is deleted |
+| Delivery | snapshot on connect, deltas after, each frame carrying `hub_now` (seconds), feeding the mirror; an old hub nacks the new frame `unsupported` |
 | Spelling | the hub uses 20.2: `utilization`, `resets_at`, `observed_at` (seconds) |
 | Schedule | the hub change ships with or after F4, never during a release freeze; freeze until 2026-11-10T16:24Z |
 
@@ -667,17 +671,18 @@ Sources: fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM
 
 For each `(provider, alias)` the mirror IS the hub view: one file `<live_dir>/quota/<provider>/<alias>.json`:
 ```json
-{ "schema": "fleet.quota-view/1",
+{ "schema": "fleet.quota-view/1", "hub_offset": 0,
   "rows": [ { "writer_courier": "<id>", "host_role": "<role>", "observed_at_hub": 0, "skewed": false,
               "record": { "schema": "fleet.quota/1", "...": "..." } } ] }
 ```
 - One row per `writer_courier`; the full authenticated key is preserved. The local courier's own pending row is tagged with the local courier id (the id its connection reports; the fixed word `local` when no courier connection exists) and has `observed_at_hub: null` (judged by the local clock). Only that row is ever pushed (18.2 rule 0).
 - Peer rows arrive from snapshot and deltas, keep their `writer_courier`, `host_role`, `observed_at_hub` and `skewed`, and are written only by the reporter's pull side. Writer discipline and the lock are in 18.4.
+- `hub_offset` (seconds) is the reader's estimate of hub clock minus local clock, refreshed from `hub_now` on every delivered frame (section 11); the reporter's pull side is its only writer.
 - Readers merge all rows per window with 5.2.
 
 ### 22.3 Merge and freshness
 
-One rule set, 5.2 and 11: peer rows by hub time, the local row by the local clock, newest per window wins, an exact tie goes to the local writer, rows past `hub_received_at + 6 h` and windows past the 6 h reader rule are ignored. Freshness is judged ONLY by `observed_at_hub` (or the local clock for the local row), never by a row still existing: a re-pushed row (23.1) restarts its hub expiry but keeps its old `observed_at_hub` (fleet `905d13e` section 4). Control N48: a re-pushed old row is stale by its `observed_at_hub` even though it was just received (a planted reader that uses row presence fails).
+One rule set, 5.2 and 11: peer rows by hub time, the local row by the local clock, newest per window wins, an exact tie goes to the local writer, rows past `hub_received_at + 6 h` and windows past the 6 h reader rule are ignored. Freshness is judged ONLY by `observed_at_hub` (or the local clock for the local row), never by a row still existing: a re-pushed row (23.1) restarts its hub expiry but keeps its old `observed_at_hub` (fleet `625b0fe` section 4). Control N48: a re-pushed old row is stale by its `observed_at_hub` even though it was just received (a planted reader that uses row presence fails).
 
 ### 22.4 Push pacing: one token bucket strictly below every hub limit
 
@@ -706,4 +711,4 @@ One rule set, 5.2 and 11: peer rows by hub time, the local row by the local cloc
 
 - The own mirror keeps `invalid`, refusal and placeholder rows. When the hub copy expires (`hub_received_at + 6 h`), the reporter pushes the row again with its ORIGINAL `observed_at` and `token_state_at` (placeholders have none and keep none) in a frame with a fresh `sent_at`. Windows stay subject to the 6 h reader rule by `observed_at`, so a re-push never makes old data look fresh. It is an ordinary write: no extra "re-push" field.
 - Rate: about one write per alias per 6 h. This is not a heartbeat: it fires only when the hub copy is missing, carries no new observation and never refreshes a freshness stamp. Rows whose windows are all older than 6 h and that carry no non-aging state are not re-pushed (18.2 rule 4).
-- Hub behaviour, confirmed by fleet (`905d13e` section 4): only `observed_at > sent_at + 5 s` is refused; there is no "too old" floor; after a re-push the hub expiry restarts but `observed_at_hub` keeps the old value.
+- Hub behaviour, confirmed by fleet (`625b0fe` section 4): only `observed_at > sent_at + 5 s` is refused; there is no "too old" floor; after a re-push the hub expiry restarts but `observed_at_hub` keeps the old value.

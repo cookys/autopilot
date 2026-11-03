@@ -165,6 +165,13 @@ for alias in "$@"; do
 
   tf="$ACC_DIR/$alias/token"
   keep=0
+  if [ -L "$tf" ] || { [ -e "$tf" ] && [ ! -f "$tf" ]; }; then # onboard:token-guard
+    echo "別名 $alias 的 token 路徑是符號連結或不是一般檔案，拒絕寫入（不會動任何內容）。"
+    row "❌" "$alias token" "token 路徑是符號連結或不是一般檔案，拒絕寫入，未登記"
+    row "❌" "$alias env-check" "未執行"
+    row "❌" "$alias haiku OK 呼叫" "未執行"
+    continue
+  fi
   if [ -s "$tf" ]; then
     printf '別名 %s 的 token 檔已存在。沿用或覆蓋？[沿用/覆蓋，預設沿用] ' "$alias"
     choice=""
@@ -201,9 +208,20 @@ EOF
       got=1; break
     done
     if [ "$got" -eq 1 ]; then
-      ( umask 077; printf '%s' "$T" > "$tf" ) # onboard:token-write
-      chmod 600 "$tf"
+      # New 0600 file beside the target (noclobber = O_EXCL, never reuses a file), then rename over it: a
+      # rename replaces a symlink or a loose-mode old file instead of writing through it.
+      tmpf="$ACC_DIR/$alias/.token.new.$$"
+      wrc=0
+      ( umask 077; set -C; printf '%s' "$T" > "$tmpf" ) && chmod 600 "$tmpf" && mv -f "$tmpf" "$tf" || wrc=1 # onboard:token-write
       unset T
+      if [ "$wrc" -ne 0 ]; then
+        rm -f "$tmpf"
+        echo "別名 $alias 的 token 寫入失敗，未登記。"
+        row "❌" "$alias token" "token 檔寫入失敗，未登記"
+        row "❌" "$alias env-check" "未執行"
+        row "❌" "$alias haiku OK 呼叫" "未執行"
+        continue
+      fi
       row "✅" "$alias token" "已寫入 token 檔（0600）"
     else
       unset T
@@ -276,11 +294,22 @@ else
   else
     row "❌" "selftest --real-binary" "沒通過，請看上面的 FAIL 行；若提示答案回來了，代表動到你自己的登入，請立刻回報"
   fi
-  if [ "${#OK_ALIASES[@]}" -ge 2 ]; then
+  # Failover self-test eligibility: enabled aliases in the registry whose env-check passes (not just this run's).
+  USABLE=()
+  if usable_out="$(claude_account env-check 2>/dev/null)"; then
+    while IFS= read -r l; do
+      case "$l" in "ok alias="*) l="${l#ok alias=}"; USABLE+=("${l%% *}") ;; esac
+    done <<< "$usable_out"
+  fi
+  SIM="$FIRST"
+  in_usable=0
+  for u in ${USABLE[@]+"${USABLE[@]}"}; do [ "$u" = "$FIRST" ] && in_usable=1; done
+  [ "$in_usable" -eq 1 ] || SIM="${USABLE[0]:-$FIRST}"
+  if [ "${#USABLE[@]}" -ge 2 ]; then # onboard:failover-gate
     sim_rc=0
-    claude_account selftest --simulate-429 "$FIRST" ${BIN_ARGS[@]+"${BIN_ARGS[@]}"} || sim_rc=$?
-    if [ "$sim_rc" -eq 0 ]; then row "✅" "selftest --simulate-429 $FIRST" "$FIRST 限流後改走下一個別名"; else row "❌" "selftest --simulate-429 $FIRST" "沒通過，請看上面的 FAIL 行"; fi
-    if claude_account cooldown --clear "$FIRST"; then row "✅" "cooldown --clear $FIRST" "已解除冷卻"; else row "❌" "cooldown --clear $FIRST" "解除冷卻失敗"; fi
+    claude_account selftest --simulate-429 "$SIM" ${BIN_ARGS[@]+"${BIN_ARGS[@]}"} || sim_rc=$?
+    if [ "$sim_rc" -eq 0 ]; then row "✅" "selftest --simulate-429 $SIM" "$SIM 限流後改走下一個別名"; else row "❌" "selftest --simulate-429 $SIM" "沒通過，請看上面的 FAIL 行"; fi
+    if claude_account cooldown --clear "$SIM"; then row "✅" "cooldown --clear $SIM" "已解除冷卻"; else row "❌" "cooldown --clear $SIM" "解除冷卻失敗"; fi
   else
     row "➖" "selftest --simulate-429" "略過：需要兩個帳號"
     row "➖" "cooldown --clear" "略過：需要兩個帳號（沒有跑 simulate-429）"

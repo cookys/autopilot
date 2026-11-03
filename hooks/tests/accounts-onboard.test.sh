@@ -175,6 +175,37 @@ run_onboard "$SCRIPT" "$fx5" $'skip\n' a
 assert_neq "$(rc_of "$fx5")" "0" "skipped alias exit non-zero"
 assert_not_contains "$(cat "$(ACC "$fx5")/registry.json" 2>/dev/null)" '"a"' "skipped alias not registered"
 
+# 4. token write safety (astra M1): symlink target refused; loose-mode old file is replaced, never written in place.
+mkpre() { # <fx> : alias dir a with the accounts tree created 0700
+  local acc; acc="$(ACC "$1")"; mkdir -p "$acc/a"; chmod 700 "$(dirname "$acc")" "$acc" "$acc/a"
+}
+fx6="$(mkfx "$TA")"; mkpre "$fx6"
+printf 'DECOY-FILE-KEEP' > "$fx6/decoy.txt"; ln -s "$fx6/decoy.txt" "$(ACC "$fx6")/a/token"
+run_onboard "$SCRIPT" "$fx6" "$TA"$'\n' a
+assert_neq "$(rc_of "$fx6")" "0" "SYMLINK exit non-zero"
+assert_contains "$(cat "$fx6/out.txt")" "別名 a 的 token 路徑是符號連結" "SYMLINK message names alias a"
+assert_eq "$(cat "$fx6/decoy.txt")" "DECOY-FILE-KEEP" "SYMLINK decoy not written"
+assert_not_contains "$(cat "$(ACC "$fx6")/registry.json" 2>/dev/null)" '"a"' "SYMLINK alias not registered"
+
+fx7="$(mkfx "$TA2")"; mkpre "$fx7"
+printf 'OLD-LOOSE-TOKEN' > "$(ACC "$fx7")/a/token"; chmod 644 "$(ACC "$fx7")/a/token"
+ln "$(ACC "$fx7")/a/token" "$fx7/old-inode-link"
+run_onboard "$SCRIPT" "$fx7" $'覆蓋\n'"$TA2"$'\n' a
+assert_eq "$(rc_of "$fx7")" "0" "LOOSE overwrite exit 0"
+assert_eq "$(cat "$(ACC "$fx7")/a/token")" "$TA2" "LOOSE new token in place"
+assert_eq "$(stat -c %a "$(ACC "$fx7")/a/token")" "600" "LOOSE final mode 0600"
+assert_eq "$(cat "$fx7/old-inode-link")" "OLD-LOOSE-TOKEN" "LOOSE old 0644 inode never received the new token"
+assert_eq "$(stat -c %a "$fx7/old-inode-link")" "644" "LOOSE old inode mode untouched"
+assert_eq "$(leak_places "$fx7" "$TA2")" "" "LOOSE new token does not leak"
+
+# 5. failover eligibility counts the registry, not this run (astra M2).
+run_onboard "$SCRIPT" "$fx1" $'\n' a
+out8="$(cat "$fx1/out.txt")"
+assert_eq "$(rc_of "$fx1")" "0" "FAILOVER a-only re-run exit 0"
+assert_contains "$out8" "✅  selftest --simulate-429 a" "FAILOVER simulate-429 ran on a-only re-run"
+assert_contains "$out8" "✅  cooldown --clear a" "FAILOVER cooldown clear ran"
+assert_not_contains "$out8" "需要兩個帳號" "FAILOVER not skipped"
+
 # Negative controls: a mutant copy of the script, in a tree of symlinks to the real scripts/.
 mkmut() { # <name> <sed command> -> prints mutant script path
   local d="$TEST_TMP/mut-$1" f
@@ -185,7 +216,7 @@ mkmut() { # <name> <sed command> -> prints mutant script path
 }
 
 # NC1: token handed to an external command (plain one-shot argv, no sleep) -> RED1 must turn red via the execve trace.
-for shape in 'usrbin:s#printf .%s. "\$T" > "\$tf"#/usr/bin/printf "%s" "$T" > "$tf"#' 'envprintf:s#printf .%s. "\$T" > "\$tf"#/usr/bin/env printf "%s" "$T" > "$tf"#'; do
+for shape in 'usrbin:s#printf .%s. "\$T" > "\$tmpf"#/usr/bin/printf "%s" "$T" > "$tmpf"#' 'envprintf:s#printf .%s. "\$T" > "\$tmpf"#/usr/bin/env printf "%s" "$T" > "$tmpf"#'; do
   m1="$(mkmut "argv-${shape%%:*}" "${shape#*:}")"
   fxm1="$(mkfx "$TA" "$TB")"
   run_onboard "$m1" "$fxm1" "$INPUT_TOK" a b
@@ -193,7 +224,7 @@ for shape in 'usrbin:s#printf .%s. "\$T" > "\$tf"#/usr/bin/printf "%s" "$T" > "$
   if [ "$HAVE_STRACE" = 1 ]; then assert_contains "$(leak_places "$fxm1" "$TA")" "exec-argv" "NC1 ${shape%%:*} argv leak is caught by the execve trace"; fi
 done
 # NC1b: token through a pipe (builtin printf | cat), no argv -> RED1 must stay green (no false alarm from the trace).
-m1b="$(mkmut pipe 's#printf .%s. "\$T" > "\$tf"#printf "%s" "$T" | cat > "$tf"#')"
+m1b="$(mkmut pipe 's#printf .%s. "\$T" > "\$tmpf"#printf "%s" "$T" | cat > "$tmpf"#')"
 fxm1b="$(mkfx "$TA" "$TB")"
 run_onboard "$m1b" "$fxm1b" "$INPUT_TOK" a b
 echo "NC1b rc=$(rc_of "$fxm1b") leaks:$(leak_places "$fxm1b" "$TA")" >&2
@@ -201,7 +232,7 @@ assert_eq "$(leak_places "$fxm1b" "$TA")" "" "NC1b pipe-fed token is not flagged
 assert_eq "$(cat "$(ACC "$fxm1b")/a/token")" "$TA" "NC1b token still stored"
 
 # NC2: token echoed to the screen -> RED1 must turn red.
-m2="$(mkmut echo 's|chmod 600 "\$tf"|chmod 600 "$tf"; echo "debug $T"|')"
+m2="$(mkmut echo 's|chmod 600 "\$tmpf"|chmod 600 "$tmpf"; echo "debug $T"|')"
 fxm2="$(mkfx "$TA" "$TB")"
 run_onboard "$m2" "$fxm2" "$INPUT_TOK" a b
 assert_contains "$(leak_places "$fxm2" "$TA")" "stdout" "NC2 stdout leak is caught"
@@ -217,5 +248,35 @@ if [ "$(rc_of "$fxm3")" != "0" ] || ! cmp -s "$TEST_TMP/reg3.before" "$(ACC "$fx
 else
   fail "NC3 dropping the idempotency check did not turn the re-run red"
 fi
+
+# NC4: guard removed -> SYMLINK stop assertion must go red (rename still protects the decoy).
+m4="$(mkmut noguard '/onboard:token-guard/s/\[ -L "\$tf" \]/false/')"
+fxm4="$(mkfx "$TA")"; mkpre "$fxm4"; printf 'DECOY-FILE-KEEP' > "$fxm4/decoy.txt"; ln -s "$fxm4/decoy.txt" "$(ACC "$fxm4")/a/token"
+run_onboard "$m4" "$fxm4" "$TA"$'\n' a
+echo "NC4 rc=$(rc_of "$fxm4") decoy=$(cat "$fxm4/decoy.txt")" >&2
+assert_not_contains "$(cat "$fxm4/out.txt")" "token 路徑是符號連結" "NC4 without the guard the refusal message is gone (the SYMLINK case would be red)"
+
+# NC5: old write (redirect straight into the target) and no guard -> decoy gets the token and the 0644 inode gets it.
+mkoldwrite() {
+  local m; m="$(mkmut oldwrite 's#^.*onboard:token-write$#      ( umask 077; printf "%s" "$T" > "$tf" ) \&\& chmod 600 "$tf" || wrc=1 \# onboard:token-write#')" || return 1
+  sed_mutate "$m" '/onboard:token-guard/s/\[ -L "\$tf" \]/false/' || return 1
+  echo "$m"
+}
+m5="$(mkoldwrite)"
+fxm5="$(mkfx "$TA")"; mkpre "$fxm5"; printf 'DECOY-FILE-KEEP' > "$fxm5/decoy.txt"; ln -s "$fxm5/decoy.txt" "$(ACC "$fxm5")/a/token"
+run_onboard "$m5" "$fxm5" $'覆蓋\n'"$TA"$'\n' a
+echo "NC5 symlink: decoy now '$(cat "$fxm5/decoy.txt")'" >&2
+assert_eq "$(cat "$fxm5/decoy.txt")" "$TA" "NC5 old write goes through the symlink (the symlink case would be red)"
+fxm5b="$(mkfx "$TA2")"; mkpre "$fxm5b"
+printf 'OLD-LOOSE-TOKEN' > "$(ACC "$fxm5b")/a/token"; chmod 644 "$(ACC "$fxm5b")/a/token"; ln "$(ACC "$fxm5b")/a/token" "$fxm5b/old-inode-link"
+run_onboard "$m5" "$fxm5b" $'覆蓋\n'"$TA2"$'\n' a
+echo "NC5 loose: old inode now '$(cat "$fxm5b/old-inode-link")'" >&2
+assert_eq "$(cat "$fxm5b/old-inode-link")" "$TA2" "NC5 old write puts the token in the 0644 inode (the loose case would be red)"
+
+# NC6: failover gate counts this run's aliases (old behaviour) -> the a-only re-run skips the self-test.
+m6="$(mkmut gate '/onboard:failover-gate/s/\${#USABLE\[@\]}/${#OK_ALIASES[@]}/')"
+run_onboard "$m6" "$fx1" $'\n' a
+echo "NC6 a-only re-run: $(grep -c '需要兩個帳號' "$fx1/out.txt") skip line(s)" >&2
+assert_contains "$(cat "$fx1/out.txt")" "需要兩個帳號" "NC6 old gate skips the failover self-test (the FAILOVER case would be red)"
 
 finalize_test

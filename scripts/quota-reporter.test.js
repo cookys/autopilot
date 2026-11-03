@@ -372,10 +372,29 @@ test('G40-N87: tight and ok pure pick() with and without the adapter row (snapsh
     assert.strictEqual(JSON.stringify(pick(Object.assign({ observations: rows }, input))), JSON.stringify(pick(input)), `${pctA}/${pctB}`);
   }
 });
-// KNOWN PARITY BREAK (reported to depth-0, not papered over): when the snapshot's written_at_ms is a whole second the
-// adapter row (floor to seconds) ties with the snapshot and plan 8.1 / account-pick.js judge() hands a tie to the mirror,
-// so a tight alias is reported with source=passive and an observed_at key instead of source=snapshot. todo = runs, shown, not counted.
-test('G40-N87: tight snapshot with a whole-second written_at_ms: adapter on equals off', { todo: 'parity break: a tie goes to the mirror (judge, plan 8.1)' }, async () => {
-  const mk = () => ({ a: snapOf('a', 0.95, 0.1, { written_at_ms: NOW - 1000 }), b: snapOf('b', 0.3, 0.2, { written_at_ms: NOW - 1000 }) });
-  assert.deepStrictEqual(await pickOutputs(mk(), true), await pickOutputs(mk(), false));
+// A whole-second written_at_ms makes the adapter row (floor to seconds) a same-second copy of the snapshot. judge() gives an
+// equal stamp to the snapshot (plan 8.1 amendment), so pick, status (minus the coverage line and the mirror fields) and run
+// are byte for byte the same with the adapter on or off. Plant the old "tie goes to the mirror" (`<=` back to `<` in
+// account-pick.js judge) and this test is red; G40_TIE_PLANT=1 runs it against that mutant.
+const MIRROR_FIELDS = / mirror_class=\S+ mirror_age=\S+( observed_at=\S+)?/;
+const normStatus = (o) => o.split('\n').filter((l) => !/^observations newest_age: /.test(l)).map((l) => l.replace(MIRROR_FIELDS, '')).join('\n');
+test('G40-N87: tight snapshot with a whole-second written_at_ms: pick, status and run are identical with the adapter on or off', async () => {
+  const mk = () => ({ a: snapOf('a', 0.95, 0.1, { written_at_ms: NOW - 1000 }), b: snapOf('b', 0.99, 0.2, { written_at_ms: NOW - 1000 }) });
+  async function all(on) {
+    const fx = makeFixture({ aliases: [{ alias: 'a', priority: 10 }, { alias: 'b', priority: 20 }], snapshots: mk() });
+    try {
+      if (on) assert.strictEqual((await go(fx, ['sync-statusline'])).code, 0);
+      const outs = [];
+      for (const args of [['pick'], ['pick', '--exclude', 'a'], ['status'], ['run', '--purpose', 'tst', '--', 'claude', '-p', 'hi']]) {
+        const r = await go(fx, args);
+        outs.push({ args, code: r.code, out: args[0] === 'status' ? normStatus(r.out) : r.out, err: r.err });
+      }
+      if (on) assert.ok(localRecord(fx, 'a'), 'the adapter row exists');
+      return outs;
+    } finally { fx.cleanup(); }
+  }
+  const off = await all(false);
+  const on = await all(true);
+  assert.deepStrictEqual(on, off);
+  assert.match(off[0].out, /^a class=tight used=0.95 source=snapshot\n$/);
 });

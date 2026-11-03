@@ -15,7 +15,7 @@
 // PM parity (L): the mirror can change a pick in exactly two ways and no other. (1) A fresh live window at or above
 // 0.90 makes the alias tight (the class interpretWindows gives it, estimated windows included: plan 5.2 rule 4, N26);
 // only rows written by the local courier count (writer_courier 'local', no hub stamp). The mirror observation takes over from the snapshot only when it is at least
-// as new as the snapshot's (a tie goes to the mirror); an older tight mirror row under a newer snapshot is ignored.
+// strictly newer than the snapshot's (a tie goes to the snapshot: D5's adapter row is a same-second copy of it); an older tight mirror row under a newer snapshot is ignored.
 // (2) A live refusal drops the alias with reason `refusal` (after `excluded` and after the G37 `cooldown`, which keeps
 // its own string). An ok, unknown, stale, placeholder, estimated-below-0.90 or peer mirror row never changes
 // anything: no promotion of an unknown alias to ok (KR2 is off this wave), no "newer whole" for an ok row, no notes.
@@ -63,7 +63,7 @@ function judge(q, snap, rows, manifest, nowMs) {
   if (eff.tight === null) return base;
   const snapAgeMs = q.state === 'known' && snap && Number.isFinite(snap.written_at_ms) ? nowMs - snap.written_at_ms : Infinity;
   const mirrorAgeMs = nowMs - eff.tight.observed_at * 1000;
-  if (snapAgeMs < mirrorAgeMs) return base; // the snapshot observation is newer: it keeps the alias
+  if (snapAgeMs <= mirrorAgeMs) return base; // the snapshot observation is newer or equal: it keeps the alias
   return { drop: null, cls: 'tight', used: eff.tight.used, source: eff.tight.source, observed_at: eff.tight.observed_at };
 }
 

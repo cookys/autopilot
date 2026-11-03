@@ -19,7 +19,7 @@ js() { node -e "$1" "${@:2}" && ok || bad "$3"; }
 tree_migrated() {
   local d rc; d="$(mktemp -d "$T/probe.XXXXXX")" || return 2
   git clone -q --shared --no-checkout "$1" "$d/c" 2>/dev/null && git -C "$d/c" checkout -q --detach HEAD 2>/dev/null || return 2
-  node "$d/c/tools/migrate/relayout-p1.js" apply --phase rename --root "$d/c" </dev/null >"$d/out" 2>"$d/err"; rc=$?
+  node "$REPO_ROOT/tools/migrate/relayout-p1.js" apply --phase rename --root "$d/c" </dev/null >"$d/out" 2>"$d/err"; rc=$?
   PROBE_CLONE="$d/c"
   [ "$rc" = 0 ] && return 1
   [ "$rc" = 2 ] && grep -q "registry stage is .*; rename expects bootstrap" "$d/err" && return 0

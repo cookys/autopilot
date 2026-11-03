@@ -65,6 +65,7 @@ const DEFAULT_REGISTRY = {
     events_contract_doc: 'docs/dev/events-contract.md',
     schemas_dir: 'schemas',
     events_schema: 'schemas/events.schema.json',
+    events_baseline: 'schemas/events.baseline.json',
     hooks_dir: 'hooks',
     hooks_shared_dir: 'hooks/_shared',
     hooks_json: 'hooks/hooks.json',

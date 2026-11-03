@@ -178,7 +178,7 @@ const drawn = (task: FleetTask): string => stateOf('fleetTask', { state: task.st
 const summaryOf = (rows: FleetRow[], extra: { fetchedMs?: number | null; error?: string | null; capped?: number } = {}) =>
   fleetSummary({ lanes: fleetLanes(rows, NOW), fetchedMs: extra.fetchedMs === undefined ? NOW : extra.fetchedMs, error: extra.error ?? null, nowMs: NOW, capped: extra.capped ?? 0 }, drawn)
 
-test('fleetSummary counts each row by the state the Fleet tab draws: ▲ blocked_human, ✗ failed/lost, ⊘ stuck (an hour-old open row too), ● running, ⧗ waiting; pending and findings in no count', () => {
+test('fleetSummary counts each row by the state the Fleet tab draws: ▲ blocked_human, ✗ failed/lost, ⊘ stuck (an hour-old open row too), ● running, ⋯ waiting; pending and findings in no count', () => {
   const s = summaryOf([
     r({ id: ulid(NOW - 1000, 'A'.repeat(16)), lane: 'a--claude', state: 'running' }),
     r({ id: ulid(NOW - 2000, 'B'.repeat(16)), lane: 'a--claude', state: 'in_progress' }),

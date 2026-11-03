@@ -24,7 +24,7 @@ export type LiveStep = {
 }
 
 // The fleet summary (PM G33a; mods/live/fleet.ts `FleetSummary`, keep the two equal): what codeforge's forge-stats band reads. `v` is 1; a reader that sees another
-// value draws nothing. Counts per state the Fleet tab draws: needYou ▲, failed ✗, stuck ⊘, running ●, waiting ⧗. `title` is at most 200 characters, ending in `…` when cut.
+// value draws nothing. Counts per state the Fleet tab draws: needYou ▲, failed ✗, stuck ⊘, running ●, waiting ⋯. `title` is at most 200 characters, ending in `…` when cut.
 export type LiveFleetCounts = { needYou: number; failed: number; stuck: number; running: number; waiting: number }
 export type LiveFleetSummary = {
   v: 1

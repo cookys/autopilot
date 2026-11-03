@@ -34,6 +34,16 @@ test('M7 control: stalled = the emoji-prone pause glyph is reported', () => {
   assert.ok(v.some(x => x.includes('⏸')), JSON.stringify(v))
 })
 
+test('control: waiting is the one-cell midline ellipsis (EAW N, same class as stopped ◌); a wide waiting glyph is reported', () => {
+  assert.equal(ui.GLYPHS.state.waiting, '⋯')
+  assert.equal(ui.displayWidth('⋯'), 1)
+  for (const [wide, why] of [['⏳', 'Extended_Pictographic'], ['現', 'cells']]) { // ⏳ (EAW W) is stopped by the emoji rule; displayWidth's range table does not list U+23F3
+    const g = clone()
+    g.state.waiting = wide
+    assert.ok(ui.glyphTableViolations(g).some(x => x.includes(why)), wide)
+  }
+})
+
 test('M8 control: a line containing the gear glyph is reported', () => {
   assert.ok(ui.emojiViolations('● 2 ⚙ jobs').length > 0)
   assert.deepEqual(ui.emojiViolations('● 2 jobs'), [])

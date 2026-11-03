@@ -3240,7 +3240,7 @@ test('G23 Fleet tab: data age, owner cards, lanes in flight before upcoming, stu
   expect(texts[at('DOA class')]).toMatch(/^⊘ stalled +\[REG a2\] DOA class · 2h00m ago/) // open two hours, nobody accepted it: stalled (the reason is in its opened detail)
   expect(texts[at('KR2 runs')]).toMatch(/^⊘ stalled /) // its seat quiet five hours
   expect(texts[at('events contract')]).toMatch(/^● running /)
-  expect(texts[at('rehearsal rerun')]).toMatch(/^⧗ waiting +\[REG u7\] rehearsal rerun · watch · 20m ago/) // accepted, its seat waits on a linked watch (PM ruling)
+  expect(texts[at('rehearsal rerun')]).toMatch(/^⋯ waiting +\[REG u7\] rehearsal rerun · watch · 20m ago/) // accepted, its seat waits on a linked watch (PM ruling)
   expect(at('checking the NAS audit')).toBeGreaterThan(0) // a brief-header title falls back to the progress line
   expect(at('pid 4242')).toBe(-1)
   expect(at('shipped already')).toBe(-1)
@@ -3272,7 +3272,7 @@ const G33_READER = {
       const { Text } = $.ui.resolve(e)
       const t = value.totals
       const top = value.topStuck
-      return Text({ children: 'FLEET ▲' + t.needYou + ' ✗' + t.failed + ' ⊘' + t.stuck + ' ●' + t.running + ' ⧗' + t.waiting + ' top ' + (top === null ? '-' : top.title + ' (' + top.rule + ')') })
+      return Text({ children: 'FLEET ▲' + t.needYou + ' ✗' + t.failed + ' ⊘' + t.stuck + ' ●' + t.running + ' ⋯' + t.waiting + ' top ' + (top === null ? '-' : top.title + ' (' + top.rule + ')') })
     })
   }) as any,
 }
@@ -3305,7 +3305,7 @@ test('G33a: with forge-stats\' band alive the feed runs without the Fleet tab, p
   expect(ran).toEqual(['fleet tasks --tree --json'])
   const texts = await g33Band($)
   // the fixture: one running row, one waiting row, two stalled (an open row nobody accepted for two hours, a seat quiet five hours); the first flagged row in the tab order
-  expect(texts.at(-1)).toBe('FLEET ▲0 ✗0 ⊘2 ●1 ⧗1 top [REG a2] DOA class (unaccepted)')
+  expect(texts.at(-1)).toBe('FLEET ▲0 ✗0 ⊘2 ●1 ⋯1 top [REG a2] DOA class (unaccepted)')
   expect(g33Asks(w).at(-1)).toBe('1/1') // asked for exactly one row, read v 1
   // one row granted: the band row alone, the reader is not asked
   const asked = g33Asks(w).length

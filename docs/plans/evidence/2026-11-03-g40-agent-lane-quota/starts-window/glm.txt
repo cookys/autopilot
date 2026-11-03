@@ -1,0 +1,5 @@
+# glm starts_window experiment
+## READ T0 at 2026-11-03T16:16:12.001Z (UTC) GET https://api.z.ai/api/monitor/usage/quota/limit HTTP 200
+{"code":200,"msg":"Operation successful","data":{"limits":[{"type":"TIME_LIMIT","unit":5,"number":1,"usage":100,"currentValue":0,"remaining":100,"percentage":0,"nextResetTime":1796004274999,"usageDetails":[{"modelCode":"search-prime","usage":0},{"modelCode":"web-reader","usage":0},{"modelCode":"zread","usage":0}]},{"type":"TOKENS_LIMIT","unit":3,"number":5,"percentage":2,"nextResetTime":1793723090344},{"type":"TOKENS_LIMIT","unit":6,"number":1,"percentage":12,"nextResetTime":1793844274997}],"level":"lite"},"success":true}
+## IDLE-CHECK idle=false 5h(unit3/number5) percentage=2 nextReset=2026-11-03T16:24:50.344Z expired=false
+## NOT IDLE: no probe sent

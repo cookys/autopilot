@@ -98,8 +98,9 @@ async function fleetFor($: EngineInterface): Promise<FleetView | null> {
   kickFleet($, nowMs)
   return fleetView(fleetFeed, nowMs)
 }
-// one tick of the shared timer: the Fleet fetch rides along (never awaited, its failure dropped) and the tick RETURNS refresh's promise, so the clock (and a test's
-// clock.advance) waits for the snapshot as before G23 (review g1)
+// one tick of the shared timer: the Fleet fetch rides along (never awaited, its failure dropped) and the tick returns refresh's promise, as before G23, rather than
+// dropping it (review g1). Nothing awaits that promise today: the engine's `$.clock.every` ignores what its callback returns and the test kit's `clock.advance`
+// resolves once the event loop settles; refresh catches its own failures. ui-lint TICK_SHAPE holds the shape.
 export function liveTick($: EngineInterface): Promise<void> {
   void fleetTick($).catch(() => {})
   return refresh($)

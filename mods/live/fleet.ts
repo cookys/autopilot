@@ -34,6 +34,22 @@ export const FLEET_ARGV = ['fleet', 'tasks', '--tree', '--json'] as const
 export const FLEET_MAX_BYTES = 2_000_000
 export const FLEET_MAX_ROWS = 300
 
+// The UTF-8 size of a string, counted from its UTF-16 code units (no Buffer or TextEncoder needed): one byte below U+0080, two below U+0800, four for a surrogate
+// pair, three otherwise (a lone surrogate too: it is written as U+FFFD). `length` is a lower bound of it, so a string already longer than a bound is over it in bytes.
+export function utf8Bytes(s: string): number {
+  let n = 0
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i)
+    if (c < 0x80) n += 1
+    else if (c < 0x800) n += 2
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length && (s.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+      n += 4
+      i++
+    } else n += 3
+  }
+  return n
+}
+
 const TERMINAL = new Set(['done', 'declined', 'cancelled', 'canceled'])
 // a child that failed or was lost is not something its parent waits on (its own row still shows, as failed)
 const CHILD_ENDED = new Set([...TERMINAL, 'failed', 'lost'])
@@ -154,7 +170,7 @@ export function makeFleetFeed(ttlMs = FLEET_TTL_MS): FleetFeed {
       try {
         const r = await run(FLEET_ARGV)
         if (r.exitCode !== 0) throw new Error(firstLine(r.stderr) || 'exit ' + r.exitCode)
-        if (r.isStdoutTruncated === true || r.stdout.length > FLEET_MAX_BYTES) throw new Error('output over ' + FLEET_MAX_BYTES + ' bytes, not read')
+        if (r.isStdoutTruncated === true || r.stdout.length > FLEET_MAX_BYTES || utf8Bytes(r.stdout) > FLEET_MAX_BYTES) throw new Error('output over ' + FLEET_MAX_BYTES + ' bytes, not read')
         const parsed = parseFleetTasks(r.stdout)
         rows = parsed.rows
         capped = parsed.capped

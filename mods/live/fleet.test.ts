@@ -1,7 +1,7 @@
 // mods/live/fleet.test.ts — the Fleet tab's data, pure half (fleet.ts): parsing the hub's task tree, the stuck rules, the lane grouping and the feed's TTL.
 // The mounted half (the tab drawn from a mocked `fleet tasks --tree --json`) is in live.test.ts ("G23 Fleet tab"). Run through `bash mods/live/run-tests.sh`.
 import { test, expect } from 'claude-code/testing'
-import { FLEET_ARGV, FLEET_MAX_BYTES, fleetLanes, makeFleetFeed, OPEN_UNACCEPTED_MS, parseFleetTasks, QUIET_MS, stuckOf, taskTitle, ulidMs } from './fleet'
+import { FLEET_ARGV, FLEET_MAX_BYTES, fleetLanes, makeFleetFeed, utf8Bytes, OPEN_UNACCEPTED_MS, parseFleetTasks, QUIET_MS, stuckOf, taskTitle, ulidMs } from './fleet'
 import type { FleetRow } from './fleet'
 
 const NOW = Date.parse('2026-11-03T00:00:00.000Z')
@@ -85,10 +85,28 @@ test('an output over the byte bound, or one the engine cut, is refused and the l
   expect(feed.error()).toContain('not read')
   expect(feed.rows().map(r => r.title)).toEqual(['kept'])
   expect(feed.fetchedMs()).toBe(NOW)
-  reply = { exitCode: 0, stdout: good.replace('kept', 'cut'), stderr: '', isStdoutTruncated: true }
+  // review g2: the bound is UTF-8 bytes, not UTF-16 units: CJK text under the bound in `length` but over it in bytes is refused too
+  const cjk = '["' + '中'.repeat(Math.ceil(FLEET_MAX_BYTES / 3) + 10) + '"]'
+  expect(cjk.length).toBeLessThan(FLEET_MAX_BYTES)
+  expect(utf8Bytes(cjk)).toBeGreaterThan(FLEET_MAX_BYTES)
+  reply = { exitCode: 0, stdout: cjk, stderr: '' }
   expect(await feed.refresh(run, NOW + 2)).toBe(true)
   expect(feed.error()).toContain('not read')
   expect(feed.rows().map(r => r.title)).toEqual(['kept'])
+  expect(feed.fetchedMs()).toBe(NOW)
+  reply = { exitCode: 0, stdout: good.replace('kept', 'cut'), stderr: '', isStdoutTruncated: true }
+  expect(await feed.refresh(run, NOW + 3)).toBe(true)
+  expect(feed.error()).toContain('not read')
+  expect(feed.rows().map(r => r.title)).toEqual(['kept'])
+})
+
+test('utf8Bytes counts UTF-8 bytes: ASCII 1, Latin-1 and Greek 2, CJK 3, an astral pair 4, a lone surrogate 3 (as U+FFFD)', () => {
+  expect(utf8Bytes('')).toBe(0)
+  expect(utf8Bytes('ab')).toBe(2)
+  expect(utf8Bytes('é')).toBe(2)
+  expect(utf8Bytes('中文')).toBe(6)
+  expect(utf8Bytes('𝄞')).toBe(4)
+  expect(utf8Bytes('\ud800x')).toBe(4)
 })
 
 const r = (o: Partial<FleetRow>): FleetRow => ({ id: ulid(NOW - 60_000), lane: 'a--claude', host: 'h', title: 't', progress: '', state: 'running', createdMs: NOW - 60_000, observedMs: NOW - 60_000, ...o })

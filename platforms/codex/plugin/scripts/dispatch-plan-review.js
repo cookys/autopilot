@@ -340,14 +340,18 @@ function gitOut(repoRoot, args) {
 
 // Provenance of the reviewed plan: blob sha of the reviewed bytes, repo HEAD, and whether the
 // file differs from HEAD. Null fields when the repo is not git or the file is untracked.
-function planProvenance(opts) {
+function planProvenance(opts, planBytes) {
   const rel = path.relative(opts.repoRoot, opts.planFile).split(path.sep).join('/');
   if (rel.startsWith('..') || path.isAbsolute(rel)) {
     return { plan_path: null, plan_git_blob_sha: null, repo_head_sha: null, plan_dirty_vs_head: null };
   }
-  const blob = gitOut(opts.repoRoot, ['hash-object', '--', opts.planFile]);
+  // The blob sha is computed from the SAME Buffer that is later sealed and sent to the seats
+  // (git object id = hash("blob <len>\0" + bytes)); a second read of the file could differ.
   const head = gitOut(opts.repoRoot, ['rev-parse', 'HEAD']);
   const headBlob = head ? gitOut(opts.repoRoot, ['rev-parse', `HEAD:${rel}`]) : null;
+  const algo = headBlob && headBlob.length === 64 ? 'sha256' : 'sha1';
+  const blob = crypto.createHash(algo)
+    .update(Buffer.concat([Buffer.from(`blob ${planBytes.length}\0`), planBytes])).digest('hex');
   return {
     plan_path: rel,
     plan_git_blob_sha: blob,
@@ -1817,8 +1821,14 @@ function main() {
   try {
     opts = parseArgs(process.argv.slice(2));
     checkPlanRegistration(opts);
-    var provenance = planProvenance(opts);
+    // The plan is read exactly once; the same Buffer feeds provenance, --expect-revision,
+    // plan_sha256 and the seat prompts.
+    var planBytes = fs.readFileSync(opts.planFile);
+    var provenance = planProvenance(opts, planBytes);
     checkExpectedRevision(opts, provenance);
+    if (process.env.AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS === '1' && process.env.AUTOPILOT_TEST_AFTER_PLAN_READ) {
+      spawnSync('sh', ['-c', process.env.AUTOPILOT_TEST_AFTER_PLAN_READ], { stdio: 'ignore' }); // test seam: mutate the file after the read
+    }
   } catch (error) {
     if (error instanceof CliError) {
       process.stderr.write(`dispatch-plan-review: ${error.message}\n${usage()}\n`);
@@ -1847,7 +1857,6 @@ function main() {
       process.stderr.write(`dispatch-plan-review: warning: required seat has no fallback: ${seat.id} (a failed first attempt cannot be substituted)\n`);
     }
   }
-  const planBytes = fs.readFileSync(opts.planFile);
   if (planBytes.length === 0 || planBytes.toString('utf8').trim() === '') {
     throw new CliError('plan file must contain non-whitespace content');
   }

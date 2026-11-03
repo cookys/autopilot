@@ -43,12 +43,17 @@ run_pp() {
       --ticket "$ticket" --session-id "s-$ticket" --generation 1 --manifest-file "$TEST_TMP/m-$ticket.json" \
       --state-dir "$STATE_DIR" --allow-unregistered "$@" 2>&1) </dev/null
 }
+plan_sha_in_ticket() { # the artifact written for a logical plan pp-<ticket>
+  local d; for d in "$STATE_DIR"/*/; do
+    if grep -q "pp-$1" "$d"*.json 2>/dev/null; then grep -ho '"plan_sha256": *"[0-9a-f]*"' "$d"*.json | head -1 | grep -o '[0-9a-f]\{64\}'; return; fi
+  done
+}
 plan_sha_in() { grep -rho '"plan_sha256": *"[0-9a-f]*"' "$STATE_DIR"/*/ 2>/dev/null | head -1 | grep -o '[0-9a-f]\{64\}'; }
 
 OUT="$(run_pp t-resolve)"; RC=$?
-assert_exit_code "$RC" "0" "relative plan reviews: $OUT"
-assert_contains "$OUT" "also exists under the cwd with different content" "cwd twin warning"
 WANT="$(sha256sum "$WT/plan.md" | cut -d' ' -f1)"
+assert_contains "rc=$RC sha=$(plan_sha_in)" "rc=0 sha=$WANT" "relative plan reviews the --repo-root copy: $OUT"
+assert_contains "$OUT" "also exists under the cwd with different content" "cwd twin warning"
 assert_eq "$(plan_sha_in)" "$WANT" "reviewed bytes are the --repo-root copy, not the cwd copy"
 assert_contains "$(cat "$STATE_DIR"/*/*.json)" "$NEW_SHA" "artifact records the git blob sha"
 assert_contains "$(cat "$STATE_DIR"/*/*.json)" '"plan_dirty_vs_head": false' "artifact records dirty flag"
@@ -58,7 +63,7 @@ OUT="$(run_pp t-rev-ok --expect-revision HEAD 2>&1)"; RC=$?
 assert_exit_code "$RC" "0" "expect-revision HEAD accepted: $OUT"
 printf 'dirty edit\n' >>"$WT/plan.md"
 OUT="$(run_pp t-rev-bad --expect-revision HEAD)"; RC=$?
-assert_exit_code "$RC" "2" "dirty plan vs HEAD refused"
+assert_contains "rc=$RC mismatch=$(printf %s "$OUT" | grep -c "plan blob sha mismatch")" "rc=2 mismatch=1" "dirty plan vs HEAD refused"
 assert_contains "$OUT" "plan blob sha mismatch" "mismatch message"
 assert_contains "$OUT" "0 seats dispatched" "no seat dispatched"
 git -C "$WT" checkout -q -- plan.md
@@ -66,10 +71,18 @@ git -C "$WT" checkout -q -- plan.md
 # Outside --repo-root is refused.
 printf '# outside\n' >"$TEST_TMP/outside.md"
 OUTABS="$(cd "$MAIN" && node "$SCRIPT" --repo-root "$WT" --plan-file "$TEST_TMP/outside.md" --rubric-file "$WT/rubric.md" --ticket t-abs --session-id s-abs --generation 1 --manifest-file "$MANIFEST" --state-dir "$STATE_DIR" --allow-unregistered --expect-revision HEAD 2>&1 </dev/null)"; RC=$?
-assert_exit_code "$RC" "2" "expect-revision with plan outside repo refused"
+assert_contains "rc=$RC $OUTABS" "rc=2 dispatch-plan-review: --expect-revision needs a --plan-file inside" "expect-revision with plan outside repo refused"
 assert_contains "$OUTABS" "needs a --plan-file inside" "expect-revision outside message"
 OUT="$(cd "$MAIN" && node "$SCRIPT" --repo-root "$WT" --plan-file ../outside.md --rubric-file "$WT/rubric.md" --ticket t-out --session-id s-out --generation 1 --manifest-file "$MANIFEST" --state-dir "$STATE_DIR" --allow-unregistered 2>&1 </dev/null)"; RC=$?
-assert_exit_code "$RC" "2" "relative plan escaping repo-root refused"
+assert_contains "rc=$RC $OUT" "rc=2 dispatch-plan-review: --plan-file must be inside --repo-root" "relative plan escaping repo-root refused"
 assert_contains "$OUT" "must be inside --repo-root" "outside message"
+
+# Race: the file changes after it was read and compared with --expect-revision. The reviewed bytes
+# (plan_sha256) must be the compared bytes (committed content), never the later mutation.
+HEADSHA="$(sha256sum "$WT/plan.md" | cut -d' ' -f1)"
+OUT="$(AUTOPILOT_TEST_AFTER_PLAN_READ="printf 'mutated after read\\n' >> '$WT/plan.md'" run_pp t-race --expect-revision HEAD)"; RC=$?
+assert_exit_code "$RC" "0" "race run completes: $OUT"
+assert_eq "$(plan_sha_in_ticket t-race)" "$HEADSHA" "sealed plan bytes are the compared bytes, not the post-read mutation"
+git -C "$WT" checkout -q -- plan.md
 
 finalize_test

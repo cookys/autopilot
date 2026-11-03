@@ -27,7 +27,7 @@ Run all six collection commands simultaneously using parallel Bash calls. Set `D
 
 Run the six collection commands — **1a** commits+stats, **1b** per-commit file breakdown, **1c** timestamps for session detection, **1d** file hotspots, **1e** project-completion delta, **1f** review-loop lens (`scripts/retro-review-loop.js --days DAYS --json` — the hetero-dispatch/review/debate effort git history can't see) — from [references/data-collection.md](references/data-collection.md), substituting `DAYS`.
 
-**1g** The task-tree escalation scan is dormant. Do not run `node scripts/tree.js escalations`. See docs/adr/0002-task-tree-and-qc-panel-dormant.md.
+**1g** The task-tree escalation scan is dormant. Do not run `node scripts/tree.js escalations`. See docs/dev/adr/0002-task-tree-and-qc-panel-dormant.md.
 
 ## Step 2: Compute Metrics
 

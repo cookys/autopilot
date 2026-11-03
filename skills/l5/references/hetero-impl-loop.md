@@ -88,7 +88,7 @@ so they are one rule, not five; a healthy run surfaces nothing.
 - `domain_source` whenever `work_domain` is reported, so a reader knows whether the domain was declared
   or inferred.
 
-Rationale and evidence: `docs/plans/_archive/2026/07/2026-07-25-roster-field-report.md` §1c — a plain path, not a
+Rationale and evidence: `project/plans/_archive/2026/07/2026-07-25-roster-field-report.md` §1c — a plain path, not a
 link: `docs/` is outside the Codex plugin payload, so a relative link here escapes it (`codex-plugin-package` test).
 
 ## Stage-3 coordination boundary
@@ -238,7 +238,7 @@ done differently is marked. Paths are this repo's; a consumer substitutes its ow
    at intake: set `in_rail_review: single` before the first intake if you want one reviewer per repair round with
    the full panel only at terminal (an already-sealed campaign cannot be migrated in place; see BACKLOG).
    A campaign parked in `REVIEWING` with a bound git candidate is resumable (review-only; the
-   changed-file cap does not apply). Inspect or resume with `node bin/autopilot.js campaign inspect|status|resume --campaign-id <id>`. An externally produced range is `node bin/autopilot.js engine review-candidate` (`docs/review-candidate.md`). `max_changed_files` counts cumulative DISTINCT paths vs base (repairs
+   changed-file cap does not apply). Inspect or resume with `node bin/autopilot.js campaign inspect|status|resume --campaign-id <id>`. An externally produced range is `node bin/autopilot.js engine review-candidate` (`docs/guide/review-candidate.md`). `max_changed_files` counts cumulative DISTINCT paths vs base (repairs
    included), so size it at the output paths plus headroom when `max_repair_generations >= 1`: a repair on
    already-counted paths still resumes at the cap (pre-spend blocks only above it), one that adds a path
    beyond it is refused, and admission warns `campaign_file_cap_no_first_pass_headroom` at cap <= paths. The final panel keeps one artifact per seat under
@@ -294,7 +294,7 @@ committed candidate. Two launch traps from the same runs: take `--base` from the
 `git rev-parse HEAD` after committing contract and seal (`campaign_binding_mismatch`); commit
 `campaign.seal.json` and restore `.claude/session-start-sha` before launch (`campaign_repo_precondition_failed: dirty`).
 Source: hangar sessions 2026-09-19 (own-commit case and a P4 recurrence). A separate, unexplained variant (the
-reflog proves HEAD never moved) is tracked as a BACKLOG hypothesis (BL-0285 in `docs/BACKLOG.md`, `docs/backlog/main-checkout-mutated-with-no-head-movement.md`).
+reflog proves HEAD never moved) is tracked as a BACKLOG hypothesis (BL-0285 in `project/backlog/BACKLOG.md`, `project/backlog/main-checkout-mutated-with-no-head-movement.md`).
 
 ## Parallel units (measured 2026-09-18, v2.36.70: four rows, four kimi-code/k3 foremen, 44 min)
 

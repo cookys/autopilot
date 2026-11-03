@@ -393,7 +393,7 @@ User responses to reports:
 
 ## Tree Adapter (task-tree engine)
 
-The task tree is dormant: do not run `scripts/tree.js`. See docs/adr/0002-task-tree-and-qc-panel-dormant.md. Historical procedure: [references/tree-adapter.md](references/tree-adapter.md).
+The task tree is dormant: do not run `scripts/tree.js`. See docs/dev/adr/0002-task-tree-and-qc-panel-dormant.md. Historical procedure: [references/tree-adapter.md](references/tree-adapter.md).
 
 ## Anti-patterns
 

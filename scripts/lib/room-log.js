@@ -1,6 +1,6 @@
 'use strict';
 
-// Room log for roundtable (§6 of docs/plans/2026-09-19-roundtable.md).
+// Room log for roundtable (§6 of project/plans/2026-09-19-roundtable.md).
 // One JSON object per line in <rooms>/<room-id>/room.jsonl.
 // AUTOPILOT_ROOMS_DIR replaces the rooms directory (default $HOME/.autopilot/rooms).
 // Node built-ins only. Node >= 20.10.

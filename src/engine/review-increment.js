@@ -1,7 +1,7 @@
 'use strict';
 
 // BL-0146 D1: eligibility and sets for an incremental review of a returned review-only campaign.
-// Plan: docs/plans/2026-10-17-review-only-campaign-fix-increment.md (sections 2.1-2.3, 2.5, 2.6).
+// Plan: project/plans/2026-10-17-review-only-campaign-fix-increment.md (sections 2.1-2.3, 2.5, 2.6).
 //
 // Pure with respect to the engine: input is Git (a repo + three shas) and the stored prior round,
 // output is either `{ mode: 'full', reason }` or the sets an incremental round reviews. Nothing here

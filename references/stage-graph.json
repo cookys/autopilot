@@ -1,6 +1,6 @@
 {
   "schema": "autopilot.stage-graph/1",
-  "source": "docs/plans/2026-10-06-dev-flow-stage-graph.md section 2.7",
+  "source": "project/plans/2026-10-06-dev-flow-stage-graph.md section 2.7",
   "node_ids": ["intent", "diagnose", "research", "proposal", "plan", "plan-review", "implement", "verify", "code-review", "qc-gate", "finish"],
   "sizes": {
     "XS": {

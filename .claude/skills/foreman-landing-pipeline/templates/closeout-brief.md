@@ -18,7 +18,7 @@ Stay under ~40 tool calls. Pass an explicit Bash timeout on long commands and ke
    - Source "{{SOURCE_TEXT}}";
    - Pointer: a new sidecar `docs/backlog/{{SIDECAR_SLUG}}.md` with the details from `$H/run-land/REPORT.md`.
 
-   Then run `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` (exit 0).
+   Then run `node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md` (exit 0).
 3. **Evidence**: create `docs/plans/evidence/{{DATE}}-{{SLUG}}/landing/` and copy into it:
    - `$H/brief.md`, `$H/brief-land.md`, this brief;
    - `$H/run/REPORT.md` as `REPORT-foreman.md`, `$H/run-land/REPORT.md` as `REPORT-land.md`;
@@ -29,7 +29,7 @@ Stay under ~40 tool calls. Pass an explicit Bash timeout on long commands and ke
    - what was probed and its result;
    - what the combined review caught that the per-row reviews missed. **Lesson: per-row review cannot replace the combined review.**
    - any incident opened as a BACKLOG row above.
-4. **HANDOFF**: update `docs/projects/ongoing-maintenance/HANDOFF.md` 現況 to {{VERSION_EXPECT}}, record what shipped, and list the next candidates (from the review's 🔵 follow-ups and any new BACKLOG rows). Keep its zh-TW style.
+4. **HANDOFF**: update `project/handoff/HANDOFF.md` 現況 to {{VERSION_EXPECT}}, record what shipped, and list the next candidates (from the review's 🔵 follow-ups and any new BACKLOG rows). Keep its zh-TW style.
 5. **Gates**: `bash scripts/preflight-release.sh`, `node scripts/check-plan-graduation.js --repo-root . --json` (exit 0), `bash scripts/validate.sh`, `node scripts/check-hook-inventory.js --check`.
    If you touch a qc-protected path (`hooks/`, `references/`, `skills/`), run one fable review of the diff, with the same `dispatch-review.sh` shape as the land brief §3, and put
    `QC-Verdict: PASS (reviewer claude-fable-5-1 <the real review id>, {{DATE}})` directly above `{{CO_AUTHORED_BY_TRAILER}}` in the same final paragraph.

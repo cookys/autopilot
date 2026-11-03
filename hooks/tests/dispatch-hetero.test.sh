@@ -1382,8 +1382,8 @@ const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
 fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
 fs.mkdirSync(path.join(repo, 'specs', 'feat'), { recursive: true });
 fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
-const missionGraphRelative = 'docs/mission-codex-native-lifecycle-enforcement-execution-graph.json';
-const missionSourcesRelative = 'docs/mission-codex-native-lifecycle-enforcement-sources.json';
+const missionGraphRelative = 'project/missions/mission-codex-native-lifecycle-enforcement-execution-graph.json';
+const missionSourcesRelative = 'project/missions/mission-codex-native-lifecycle-enforcement-sources.json';
 const missionGraph = JSON.parse(fs.readFileSync(path.join(root, missionGraphRelative), 'utf8'));
 const missionNode = missionGraph.nodes[0];
 const authorityPaths = new Set([

@@ -294,7 +294,7 @@ parameter through which a self-report could reach the reviewer, and empty/unpars
 capture is fail-closed (never a silent pass). Any script that assembles verifier input
 MUST keep this property: pass artifacts, never the worker's account.
 
-**The shadow interrogation panel is dormant.** Do not run [`scripts/qc-panel.js`](../scripts/qc-panel.js). See [docs/adr/0002-task-tree-and-qc-panel-dormant.md](../docs/adr/0002-task-tree-and-qc-panel-dormant.md).
+**The shadow interrogation panel is dormant.** Do not run [`scripts/qc-panel.js`](../scripts/qc-panel.js). See [docs/dev/adr/0002-task-tree-and-qc-panel-dormant.md](../docs/dev/adr/0002-task-tree-and-qc-panel-dormant.md).
 
 **Pre-flight (add to the per-dispatch scan):** before dispatching **any** verifier, confirm
 the prompt/context contains **no** implementer self-report — no "here's what I did / changed /
@@ -454,7 +454,7 @@ in **1b-B**.
 
 ### kimi and agy cleanroom profiles (final-panel isolation plan)
 
-Plan: `docs/plans/_archive/2026/10/2026-10-02-final-panel-kimi-agy-isolation.md`; spike log and
+Plan: `project/plans/_archive/2026/10/2026-10-02-final-panel-kimi-agy-isolation.md`; spike log and
 live-fire receipts: `docs/plans/_archive/2026/10/evidence/2026-10-02-final-panel-kimi-agy-isolation/` (`spike-log.md`, `live-fire/`).
 
 - **Why cleanroom, not packet.** Neither CLI has a tools-off flag (kimi 2.1.1 has

@@ -7,7 +7,7 @@
 # hooks/, scripts/, scripts/tests/, platforms/codex/plugin/scripts/ and
 # evals/. NONE of the template globs match `hooks/tests/*.test.sh`, so before
 # this file existed the gate reported `test_paths_matched: 0` and `ok: true`
-# on ranges that rewrote test suites. See docs/BACKLOG.md and
+# on ranges that rewrote test suites. See project/backlog/BACKLOG.md and
 # references/evidence-discipline.md §1 ("existing is not running").
 #
 # A second defect had to be fixed for this file to work at all: the engine's
@@ -80,7 +80,7 @@ mode: warn
 #    a suite that WRITES a skip into a fixture from being read as one that skips.
 #
 # Everything else in the shell grammar is enumerated and covered; the full
-# enumeration is in docs/projects/_archive/2026/08/2026-08-23-test-integrity-coverage/README.md.
+# enumeration is in project/projects/_archive/2026/08/2026-08-23-test-integrity-coverage/README.md.
 
 ## Integrity Surface Paths
 # Files that DEFINE what the suites can detect. Editing one of these changes

@@ -38,10 +38,10 @@ No `lint` / `tsc` / `pytest` — skip those steps when finish-flow / quality-pip
 ## Project Paths
 
 - **Projects**: `docs/projects/YYYY-MM-DD-<name>/` with `README.md`
-- **Project index**: `docs/projects/INDEX.md`
+- **Project index**: `project/projects/INDEX.md`
 - **Ongoing-maintenance** (S/Fix audit trail): `docs/projects/ongoing-maintenance/YYYY-MM.md` — **note the `docs/` (plural)**. The dev-flow/finish-flow skill bodies default this to `doc/` (singular, the generic consumer template); autopilot's tree is `docs/`, so resolve to this path. (A 2026-06-22 Fix leaked a stray `doc/` dir by following the unqualified skill default.)
 - **Plans**: `docs/plans/YYYY-MM-DD-<name>.md`
-- **Backlog**: `docs/BACKLOG.md` — trigger-conditioned future work (each entry needs Trigger / Context / Effort / Source). Deferred items land here; `grep <topic>` it when starting work. (Historically autopilot had no backlog file and routed deferrals into plans' `Out of Scope`; the dedicated `docs/BACKLOG.md` superseded that.)
+- **Backlog**: `project/backlog/BACKLOG.md` — trigger-conditioned future work (each entry needs Trigger / Context / Effort / Source). Deferred items land here; `grep <topic>` it when starting work. (Historically autopilot had no backlog file and routed deferrals into plans' `Out of Scope`; the dedicated `project/backlog/BACKLOG.md` superseded that.)
 
 ## Bootstrap (L-size)
 
@@ -67,7 +67,7 @@ mkdir -p docs/projects/YYYY-MM-DD-<feature-name>
 #   - Progress table
 #   - Links to plan doc + commits + merge commit
 
-# 5. Update docs/projects/INDEX.md — add row to 進行中
+# 5. Update project/projects/INDEX.md — add row to 進行中
 ```
 
 The repository's configured `mission_convergence` policy makes `READY` mandatory. `Phase`/`P0..PN`
@@ -112,14 +112,14 @@ Output path: add to the originating plan doc's `Review Loop History` section + c
 
 Check for staleness:
 
-- `docs/projects/INDEX.md` — progress table reflects latest state
+- `project/projects/INDEX.md` — progress table reflects latest state
 - `CHANGELOG.md` — unreleased changes documented
 - `README.md` / `README.zh-TW.md` — skill count / agent count badges synced
 - `.claude-plugin/plugin.json` + `marketplace.json` — version synced (grep old version returns empty)
 
 ## Backlog Management
 
-Deferred items → `docs/BACKLOG.md` with a Trigger / Context / Effort / Source (entries without a trigger are rejected per the code-review backlog spec). `grep <topic>` it when starting work. If a deferral is long-term (>1 month), consider whether it is actually cancelled and should be closed.
+Deferred items → `project/backlog/BACKLOG.md` with a Trigger / Context / Effort / Source (entries without a trigger are rejected per the code-review backlog spec). `grep <topic>` it when starting work. If a deferral is long-term (>1 month), consider whether it is actually cancelled and should be closed.
 
 ## Post-Work Commands
 

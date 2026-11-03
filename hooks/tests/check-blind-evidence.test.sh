@@ -30,7 +30,7 @@ OUT="$(bash "$SCRIPT" --payload "$BOUND" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "receipt-bound test claim passes (bound claims are evidence)"
 
 # ── Clean case: a PINNED REAL historical spec passes ──
-REAL="$REPO_ROOT/docs/plans/2026-08-14-strict-l5-policy-refresh.md"
+REAL="$REPO_ROOT/project/plans/_archive/2026/08/2026-08-14-strict-l5-policy-refresh.md"
 OUT="$(bash "$SCRIPT" --payload "$REAL" 2>&1)"; EXIT=$?
 assert_eq "0" "$EXIT" "real historical spec doc passes clean (false-positive guard)"
 

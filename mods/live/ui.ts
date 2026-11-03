@@ -1,4 +1,4 @@
-// mods/live/ui.ts — the live pane's design system (docs/plans/2026-10-13-live-pane-design-system.md, P0).
+// mods/live/ui.ts — the live pane's design system (project/plans/2026-10-13-live-pane-design-system.md, P0).
 //
 // One module owns the vocabulary the pane draws with: the ten states (glyph + theme key + word), the glyph tables, the layout grid, the formatters, the
 // status mapping from domain objects to states (`classify` -> `STATUS_MAP` -> `stateOf`, `worst`, `SEVERITY`), the freshness thresholds, the fact-ownership

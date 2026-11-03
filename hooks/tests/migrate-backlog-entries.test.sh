@@ -208,7 +208,7 @@ assert_eq "$?" "0" "(h) backlog byte-identical after failed apply"
 # 100 decays into a silent red (the node -e gate prints no FAIL line). 20 still proves the parser
 # is reading the real store rather than an empty one.
 I="$(repo i-real)"
-cp "$REPO_ROOT/docs/BACKLOG.md" "$I/docs/BACKLOG.md"
+cp "$REPO_ROOT/project/backlog/BACKLOG.md" "$I/docs/BACKLOG.md"
 out="$(node "$MIG" --backlog "$I/docs/BACKLOG.md" --out-dir "$I/docs/backlog" --json)" || true
 rc_i=$?
 assert_eq "$rc_i" "0" "(i) real backlog dry-run exit 0"
@@ -221,7 +221,7 @@ assert_file_absent "$I/docs/backlog" "(i) dry-run did not create out-dir"
 # ── (j) the real backlog, applied twice: idempotent, every title kept, and the gate is left with
 #        nothing but Title caps and the header block (depth-0 probe 2026-09-14) ──
 J="$(repo j-real-apply)"
-cp "$REPO_ROOT/docs/BACKLOG.md" "$J/docs/BACKLOG.md"
+cp "$REPO_ROOT/project/backlog/BACKLOG.md" "$J/docs/BACKLOG.md"
 mkdir -p "$J/docs/plans" "$J/docs/projects"
 titles_before="$(grep -c '^### ' "$J/docs/BACKLOG.md")"
 out="$(node "$MIG" --backlog "$J/docs/BACKLOG.md" --out-dir "$J/docs/backlog" --apply --json 2>/dev/null)"

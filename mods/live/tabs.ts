@@ -1,4 +1,4 @@
-// mods/live/tabs.ts — the tab builders of the live pane (docs/plans/2026-10-13-live-pane-design-system.md §6.1): 現況, 派工, 審查, 用量, 殘留 and ?.
+// mods/live/tabs.ts — the tab builders of the live pane (project/plans/2026-10-13-live-pane-design-system.md §6.1): 現況, 派工, 審查, 用量, 殘留 and ?.
 // Every line is built by a ui.ts component; this file writes no theme key, no glyph literal and no hand-made line (ui-lint.test.js L1, L2, L4-L7).
 
 import { T_EN } from './i18n'
@@ -635,7 +635,7 @@ function reviewTabLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   ]
 }
 
-// ================= Spend (用量): limits, today, last 24 h, account — drawn through the design system's components (ui.ts), docs/plans/2026-10-13-live-pane-design-system.md §5.4 =================
+// ================= Spend (用量): limits, today, last 24 h, account — drawn through the design system's components (ui.ts), project/plans/2026-10-13-live-pane-design-system.md §5.4 =================
 const METER_CELLS = (cols: number): number => (cols >= 100 ? 40 : 20) // meter and share bars: 20 cells below 100 columns, 40 at or above
 const MARK = '\u0001'
 // a string-table sentence with one money amount in it: the words stay prose, the amount is the formatter's (fmt-tagged) fragment

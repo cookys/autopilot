@@ -110,7 +110,7 @@ header_has_adr0002() {
   local file="$1"
   # The mandated header is one line and spells the ADR as a path
   # (docs/adr/0002-...), so the pin matches that line, not the token ADR-0002.
-  head -n 60 "$file" | grep -F -q 'Dormant since 2026-08-22 (board abort): no script or hook calls it; stale skill text tracked in BL-0283 still describes it. Kept, not retired: see docs/adr/0002-task-tree-and-qc-panel-dormant.md'
+  head -n 60 "$file" | grep -F -q 'Dormant since 2026-08-22 (board abort): no script or hook calls it; stale skill text tracked in BL-0283 still describes it. Kept, not retired: see docs/dev/adr/0002-task-tree-and-qc-panel-dormant.md'
 }
 
 check_dormant() {

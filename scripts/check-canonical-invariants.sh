@@ -164,7 +164,7 @@ check_reader_allowlist() {
       esac
     done
     if [ "$hit" = "0" ]; then
-      bad "reader-allowlist[$label]: $file mentions '$token' but is not in the closed reader allowlist — unratified data is HUMAN-adjudication-only, never authority (docs/plans/_archive/2026/08/2026-08-21-verdict-bytes-preservation.md §2). If this file is a legitimate producer/display/test, add it to the seed in the SAME commit."
+      bad "reader-allowlist[$label]: $file mentions '$token' but is not in the closed reader allowlist — unratified data is HUMAN-adjudication-only, never authority (project/plans/_archive/2026/08/2026-08-21-verdict-bytes-preservation.md §2). If this file is a legitimate producer/display/test, add it to the seed in the SAME commit."
       bad_found=1
     fi
   # Tracked files only: the invariant is about repo content. A recursive grep of

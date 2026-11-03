@@ -1237,7 +1237,7 @@ AF_WORD_FILES=(
   "$REPO_ROOT/CHANGELOG.md"
   "$REPO_ROOT/docs/scripts-inventory.md"
   "$REPO_ROOT/scripts/lib/review-ledger-copy.js"
-  "$REPO_ROOT/docs/settings-reference.md"
+  "$REPO_ROOT/docs/guide/settings-reference.md"
 )
 
 # Prints how many wording checks fail. Zero means both surviving fragments

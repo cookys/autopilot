@@ -201,7 +201,7 @@ function configAuditBlock(homeDir) {
     const clip = (l) => (l.length > 200 ? `${l.slice(0, 197)}...` : l);
     const shown = lines.slice(0, CONFIG_AUDIT_MAX_LINES - 2).map((l) => `- ${clip(l)}`);
     const more = lines.length > shown.length ? ` (+${lines.length - shown.length} more)` : '';
-    return `\n[Autopilot config check: ${lines.length} finding(s)${more}]\n${shown.join('\n')}\nDetails: bash scripts/dev-setup.sh --check; settings: docs/settings-reference.md`;
+    return `\n[Autopilot config check: ${lines.length} finding(s)${more}]\n${shown.join('\n')}\nDetails: bash scripts/dev-setup.sh --check; settings: docs/guide/settings-reference.md`;
   } catch {
     return '';
   }

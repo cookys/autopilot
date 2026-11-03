@@ -168,7 +168,7 @@
 > `agy -p --model "Gemini 3.6 Flash (High)"`, which is HONORED on the installed
 > agy 1.1.5 (2026-07-23 controlled matrix: `--model` overrides the persisted
 > settings.json model for display-names AND slugs — see
-> `docs/upstream-bugs/agy-print-mode-model-flag.md`). An earlier spike reported
+> `docs/dev/upstream-bugs/agy-print-mode-model-flag.md`). An earlier spike reported
 > `--model` ignored and proposed a persisted-settings wrapper; that premise did
 > NOT reproduce — it was a direct-pipe artifact (the flag IS honored on the
 > `script -qec` pseudo-TTY path `dispatch-review.sh` uses), so the wrapper was

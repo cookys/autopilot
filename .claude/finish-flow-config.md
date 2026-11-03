@@ -12,7 +12,7 @@ below.
 ## Size-specific tooling
 
 - **Quality gate (the `qc-gate` node)**: invoke the `autopilot:quality-pipeline` skill. No CLI script. XS/S use `--size S`.
-- **Archive row (L, XL)**: move `docs/projects/YYYY-MM-DD-<name>/` → `docs/projects/_archive/YYYY-MM-DD-<name>/` + update `docs/projects/INDEX.md` (move row from 進行中 to 已完成 with merge commit hash)
+- **Archive row (L, XL)**: move `docs/projects/YYYY-MM-DD-<name>/` → `docs/projects/_archive/YYYY-MM-DD-<name>/` + update `project/projects/INDEX.md` (move row from 進行中 to 已完成 with merge commit hash)
 - **Merge row**: target branch is `develop`; urgent (`!`) hotfixes target `main` and use `--no-ff`
 
 ## `finish` node row adaptations
@@ -47,20 +47,20 @@ Re-read critical files on develop (pick 1-3 highest-risk files that were changed
 **autopilot convention** (2026-04-12 onwards):
 
 1. `mv docs/projects/YYYY-MM-DD-<name>/ docs/projects/_archive/YYYY-MM-DD-<name>/`
-2. Update `docs/projects/INDEX.md`: remove row from 進行中 table, add to 已完成 table with merge commit hash and date
+2. Update `project/projects/INDEX.md`: remove row from 進行中 table, add to 已完成 table with merge commit hash and date
 3. Commit with message `docs(archive): <project-name> — shipped in v<X.Y.Z>`
 4. Plan doc stays in `docs/plans/` (not moved) — update its `狀態` field to `✅ Shipped in v<X.Y.Z> — merged as <commit>`
 
-**Pre-2026-04-12 ships** (`think-tank-dialectic` v2.2.0, `skill-description-optimization`, v2.3.0 skill routing) did NOT follow this convention because `docs/projects/` did not exist yet. Those are historical debt, intentionally not retrofitted. See `docs/projects/INDEX.md` § 歷史債.
+**Pre-2026-04-12 ships** (`think-tank-dialectic` v2.2.0, `skill-description-optimization`, v2.3.0 skill routing) did NOT follow this convention because `docs/projects/` did not exist yet. Those are historical debt, intentionally not retrofitted. See `project/projects/INDEX.md` § 歷史債.
 
 ### Session end (full) (L, XL)
 
 Run the finish-flow Session end (full) checklist. autopilot-specific adaptations:
 - Staging verify → N/A (plugin, no staging)
 - Knowledge extraction → record to the user's cross-session memory (not autopilot's own `.claude/`, which is gitignored)
-- Deferred items → evidence-backed candidates are deduped into `docs/BACKLOG.md` with Source,
+- Deferred items → evidence-backed candidates are deduped into `project/backlog/BACKLOG.md` with Source,
   Context, and Trigger; preference-only/unsupported suggestions stay out
-- Docs sync check → `docs/projects/INDEX.md` + CHANGELOG + README skill/agent count badges
+- Docs sync check → `project/projects/INDEX.md` + CHANGELOG + README skill/agent count badges
 
 ## Per-phase quality pipeline (preserved)
 

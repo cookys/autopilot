@@ -59,7 +59,7 @@ export type LiveDecision = {
   orphaned: boolean // the asking session left no turn file: it ended (or crashed) without answering; the watcher derives it, the entry is never removed by it
 }
 
-// `kind`, `fact`, `goto`, `group` and `ts` are stamped by the ui.ts components (the design system, docs/plans/2026-10-13-live-pane-design-system.md §6.1); `kind` and
+// `kind`, `fact`, `goto`, `group` and `ts` are stamped by the ui.ts components (the design system, project/plans/2026-10-13-live-pane-design-system.md §6.1); `kind` and
 // `fact` are required: a line no component made does not type-check.
 export type PaneLine = { toggle?: string; text: string; dim?: boolean; bold?: boolean; warn?: boolean; color?: ThemeKey; segs?: Seg[]; wrap?: boolean; hang?: number; kind: LineKind; fact: FactId; goto?: PaneTab; group?: string; ts?: number; field?: { key: string; placeholder: string; value: string }; bar?: true }
 export type VerdictKind = 'decide' | 'stalled' | 'waiting' | 'running' | 'idle'
@@ -1334,7 +1334,7 @@ export function spendOf(env: Json): { brain: number; cap: number } | null {
 
 // ---- the slots ----
 // Colour semantics: one meaning per colour, through the ui.ts PALETTE roles only (text colour, never a background; the table and the rules are in the 2026-10-16 revision of
-// docs/plans/2026-10-13-live-pane-design-system.md). attention = the owner must look or act · broken = stalled / over cap · done = finished · running = running now
+// project/plans/2026-10-13-live-pane-design-system.md). attention = the owner must look or act · broken = stalled / over cap · done = finished · running = running now
 // here = you are here (current stage, current bar cell) · idle = zero / absent / not yet · structure = separators · dim = labels and hints. Bold only on the verdict.
 const sp = (text: string, extra: Partial<Seg> = {}): Seg => ({ text, ...extra })
 

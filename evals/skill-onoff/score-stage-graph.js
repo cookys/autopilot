@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // score-stage-graph.js — mechanical scorer for the pre-registered stage-graph eval row (plan
-// docs/plans/2026-10-06-dev-flow-stage-graph.md §4 P0; frozen rule: prereg/stage-graph.md + .json).
+// project/plans/2026-10-06-dev-flow-stage-graph.md §4 P0; frozen rule: prereg/stage-graph.md + .json).
 // The thresholds live in the prereg JSON — this script only applies them; it never relaxes one.
 //
 // Per-cell extraction happens at marker time (lib/stage-graph-cell.js, from the transcript; the

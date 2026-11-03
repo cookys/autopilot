@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // freeze-guidance-arm.js — P5 arm builder for the stage-graph guidance eval (plan
-// docs/plans/2026-10-06-dev-flow-stage-graph.md §2.8 + §4 P5 item 7; frozen rule prereg/stage-graph.{md,json}).
+// project/plans/2026-10-06-dev-flow-stage-graph.md §2.8 + §4 P5 item 7; frozen rule prereg/stage-graph.{md,json}).
 // An ARM here is a SET of packs (16 skills + the non-skill guidance files + the fixture scripts), described by an
 // arm manifest the harness installs (`run-skill-onoff-eval.sh --arm-manifest`, shape documented there).
 //

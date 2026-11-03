@@ -3,7 +3,7 @@
 /**
  * workflow-snapshot.js — collect the workflow state a session needs after a compaction or /clear
  * from files that already exist on disk, and render it as a bounded block of text.
- * Plan: docs/plans/2026-10-13-workflow-snapshot-at-compaction.md (P1).
+ * Plan: project/plans/2026-10-13-workflow-snapshot-at-compaction.md (P1).
  *
  * Callers: hooks/state-checkpoint.js (PreCompact: file + stdout to the summarizer) and
  * hooks/session-handoff.js (SessionEnd on /clear).

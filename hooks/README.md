@@ -1,6 +1,6 @@
 # Autopilot Hooks
 
-Every hook knob (config.json keys and environment variables) is indexed in [docs/settings-reference.md](../docs/settings-reference.md).
+Every hook knob (config.json keys and environment variables) is indexed in [docs/guide/settings-reference.md](../docs/guide/settings-reference.md).
 
 40 Claude Code hooks for runtime enforcement of development discipline: **26 default-on** (Tier A) + **14 opt-in** (Tier B) — zero disabled as of v2.25.2. Since v2.26.2 **all hooks are wired in `hooks.json`** (37 as of residue auto-reap R3) (the only place `${CLAUDE_PLUGIN_ROOT}` expands and where the path auto-tracks plugin updates); the 14 opt-in ones **self-gate default-OFF** via `_shared/opt-in.js` and do nothing until enabled in `~/.autopilot/config.json`. (Two Tier-A hooks are also inert by default: `session-handoff` needs handoff enabled; `version-drift-check` is silent outside a behind-upstream dev clone.) The canonical tally is derived from `hooks.json` (all wired hooks) + `opt-in-manifest.json` (which are opt-in) by [`../scripts/check-hook-inventory.js`](../scripts/check-hook-inventory.js) — run it to regenerate these tables, `--check` gates drift.
 
@@ -50,14 +50,14 @@ session-start.js (SessionStart), reload-watch (PostToolUse, mtime-based).
 
 Diagnostic: [`_transcript-timing-probe.js`](_transcript-timing-probe.js) (opt-in;
 wire into a PostToolUse hook to confirm intra-cycle write timing in a fresh session).
-Tracking: `docs/BACKLOG.md`.
+Tracking: `project/backlog/BACKLOG.md`.
 
 ## Is my PostToolUse dispatch dead? (how to tell + recover)
 
 Claude Code binds its PostToolUse **dispatch table** once at process boot. After a
 `/clear` (or `/reload-plugins`) **within the same process**, that table is *not*
 re-initialised — so every PostToolUse hook silently stops firing for the rest of
-that session, with no error. (Verified; tracked in `docs/BACKLOG.md`.) An automatic
+that session, with no error. (Verified; tracked in `project/backlog/BACKLOG.md`.) An automatic
 SessionStart detector for this is **deferred** — a SessionStart hook cannot reliably
 distinguish "dead dispatch" from "fresh start with a stale intent file" (see the
 BACKLOG spike entry). Until then, here is a **deterministic** manual check.
@@ -213,7 +213,7 @@ the hook — it hits the same broken-stdin ENXIO as the tool-event hooks, which
 `catastrophic`). So `/compact` only proves the hook is *reachable*, not that its
 extraction logic works. **Auto-compact** (the ~token-threshold trigger) **does**
 pipe the payload, so the extraction path only exercises there. (Empirical source:
-2026-05-14 method-B testing — see `docs/BACKLOG.md` "/compact slash-command silent
+2026-05-14 method-B testing — see `project/backlog/BACKLOG.md` "/compact slash-command silent
 miss".) To exercise extraction deterministically, prefer the unit test
 (`state-checkpoint` JSONL parser) over a manual `/compact`.
 
@@ -310,7 +310,7 @@ When enabled, `commit-secret-scan` (opt-in) and the active `audit-log` share thi
 
 ## Override
 
-- **Disable a default-on hook**: use that hook's own exit knob, named in its row above (for example `AUTOPILOT_CONTEXT_BUDGET_MODE=off`, `AUTOPILOT_FOREMAN_GUARD_MODE=off`, `AUTOPILOT_COST_TRACKER=false`). `hooks.<stem>: false` in `~/.autopilot/config.json` disables only the hooks that read it (`residue-auto-reap`); for opt-in hooks `hooks.<stem>` / `AUTOPILOT_HOOK_<STEM>` enables them. There is no `autopilot.*` settings.json namespace. Full list: `docs/settings-reference.md`.
+- **Disable a default-on hook**: use that hook's own exit knob, named in its row above (for example `AUTOPILOT_CONTEXT_BUDGET_MODE=off`, `AUTOPILOT_FOREMAN_GUARD_MODE=off`, `AUTOPILOT_COST_TRACKER=false`). `hooks.<stem>: false` in `~/.autopilot/config.json` disables only the hooks that read it (`residue-auto-reap`); for opt-in hooks `hooks.<stem>` / `AUTOPILOT_HOOK_<STEM>` enables them. There is no `autopilot.*` settings.json namespace. Full list: `docs/guide/settings-reference.md`.
 - **Custom protected branches** (when `branch-protection` is enabled): set the `AUTOPILOT_PROTECTED_BRANCHES` env var (shell or settings.json `env` block)
 - **Disable cost tracking** (when `cost-tracker` is re-enabled): set the env var `AUTOPILOT_COST_TRACKER=false`
 
@@ -348,7 +348,7 @@ window size that is not > 0 as no window signal.
 (`feat(live)` merge): `codeforge statusline` writes the main file whenever it is your `statusLine`; run
 `codeforge install --subagent-statusline` once to add the `subagentStatusLine` entry (opt-in; it renders nothing,
 keeps Claude Code's default rows). Any other status-line program can write the same two files — the schema is in
-`docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md` §2.5. Check: `ls "$XDG_RUNTIME_DIR/autopilot/context/"`
+`project/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md` §2.5. Check: `ls "$XDG_RUNTIME_DIR/autopilot/context/"`
 shows `<session_id>.json` after one tick.
 
 **Keeping a status line that is not codeforge.** Put `scripts/statusline-live-tee.js` in front of it: it writes the

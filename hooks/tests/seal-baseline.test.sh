@@ -125,7 +125,7 @@ e(j.excluded.every(x=>x.reason&&x.reason.length>20),"every exclusion has a reaso
 e(j.excluded.every(x=>!set.has(x.path)),"no excluded path is also listed");
 const need=["scripts/dispatch-hetero.sh","scripts/per-turn-gate-arm.js","scripts/gate-verify.js","hooks/per-turn-gate.js","scripts/lib/seed-claude-config.js","hooks/tests/skill-onoff-g67.test.sh","hooks/tests/skill-onoff-g8.test.sh","skills/dev-flow/SKILL.md","skills/ceo-agent/SKILL.md","hooks/fixtures/supersession-anchors.json","scripts/check-guidance-eval.js"];
 for(const p of need) e(j.excluded.some(x=>x.path===p),"excluded "+p);
-for(const p of ["docs/mission-qualification-verdict-stability-task-authority.json","docs/mission-hook-test-harness-determinism-execution-graph.json","evals/skill-onoff/prereg/FROZEN.json","evals/skill-onoff/packs/manifest.json","evals/consult-eval-rubric.seal.json","hooks/tests/fixtures/mission-terminal-rollover/.frozen-evidence"]) e(set.has(p),"listed "+p);
+for(const p of ["project/missions/mission-qualification-verdict-stability-task-authority.json","project/missions/mission-hook-test-harness-determinism-execution-graph.json","evals/skill-onoff/prereg/FROZEN.json","evals/skill-onoff/packs/manifest.json","evals/consult-eval-rubric.seal.json","hooks/tests/fixtures/mission-terminal-rollover/.frozen-evidence"]) e(set.has(p),"listed "+p);
 ' "$NR" && ok || bad "no-rewrite.json shape, exclusions and members"
 rcis 0 "unchanged clone: range HEAD..HEAD is green" node "$SB" check-rewrite --root "$C" --range "$BASE..$BASE"
 
@@ -211,7 +211,7 @@ has "lists the stale declaration" "stale declaration"
 rcis 0 "compare: no declaration for the same unchanged state -> green" cmpr
 
 # cv1 probes (wrong map, delete, same-bytes symlink, declaration for another object)
-P=docs/plans/2026-08-04-platform-capability-trigger-activation.md
+P=project/plans/2026-08-04-platform-capability-trigger-activation.md
 printf '{"%s":"README.md"}\n' "$P" > "$T/map-wrong.json"
 rcis 1 "probe: layout-map onto a different existing file -> red" node "$SB" check-rewrite --root "$C" --range "$BASE..HEAD" --layout-map "$T/map-wrong.json"
 G rm -q "$P"; G commit -qm delete
@@ -362,9 +362,9 @@ node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[
 recbase() { REPO_LAYOUT_REGISTRY="$T/reg-base.json" node "${1:-$SB}" record --root "$C" --out "$T/rb.json" </dev/null >"$T/rec.out" 2>"$T/rec.err"; }
 refsbased() { node -e '
 const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).objects;
-const g=o["docs/mission-backlog-bc-execution-graph.json"];const f=Object.keys(g.files);
+const g=o["project/missions/mission-backlog-bc-execution-graph.json"];const f=Object.keys(g.files);
 const want="docs/plans/plans/2026-07-31-correctness-gates.md";   // base docs/plans + plan_path plans/<stem>.md
-process.exit(f.includes(want)&&!f.includes("docs/plans/2026-07-31-correctness-gates.md")?0:1)' "$T/rb.json"; }
+process.exit(f.includes(want)&&!f.includes("project/plans/2026-07-31-correctness-gates.md")?0:1)' "$T/rb.json"; }
 recbase && refsbased && ok || bad "recorder hashes plan_path under the registry base (graph and plan in different directories)"
 # negative control: the old recorder (plan_path joined to the manifest's directory) must fail the same assertion
 sed 's#path.posix.join(base, s\[k\])#path.posix.join(dir, s[k])#' "$SB" > "$T/sb-old.js"

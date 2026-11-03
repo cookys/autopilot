@@ -16,7 +16,7 @@
 # Sibling of `lib/grok-effort.sh`, different mechanism. grok-effort clamps a
 # 5-level scale onto a 4-level CLI enum the grok binary itself validates.
 # cursor-agent has no `--reasoning-effort` flag at all (Global Constraint 3,
-# docs/plans/2026-08-26-cursor-cli-adaptor.md §2.5) — effort IS the model-id
+# project/plans/_archive/2026/08/2026-08-26-cursor-cli-adaptor.md §2.5) — effort IS the model-id
 # suffix, and the id ladder is not uniform across families (some families
 # stop at `-high`). So this file does two jobs grok-effort.sh doesn't:
 #   1. maps (family, effort) → a full id, not just a clamped effort word.
@@ -29,7 +29,7 @@
 # (via --list-models). `cursor_enabled_ids` and `cursor_is_enabled_id` are
 # PURE TABLE OPERATIONS — no binary argument, no subprocess, no network call.
 # dispatch-hetero.sh's `auto` guard calls the predicate on EVERY invocation
-# (docs/plans/2026-08-26-cursor-cli-adaptor.md §3a, R3/Generation 2 review
+# (project/plans/_archive/2026/08/2026-08-26-cursor-cli-adaptor.md §3a, R3/Generation 2 review
 # finding), so a subprocess there would put a live network call on the path
 # of every unrelated dispatch that never touches cursor at all. Keep it that
 # way: any change here that makes cursor_enabled_ids or cursor_is_enabled_id

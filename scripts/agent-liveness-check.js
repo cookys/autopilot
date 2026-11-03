@@ -7,7 +7,7 @@
  * WHY: PID liveness is the wrong instrument for a Claude-Code-native foreman. `run-ledger.sh
  * stage-acquire` records the PID of the SHELL that invoked it, and that shell exits immediately;
  * the foreman keeps running as a separate agent turn. So `watch-foreman.js` reports
- * `dead/owner_absent` for a perfectly healthy foreman (docs/BACKLOG.md, v2.34.39). The durable
+ * `dead/owner_absent` for a perfectly healthy foreman (project/backlog/BACKLOG.md, v2.34.39). The durable
  * evidence a foreman leaves behind is on DISK — commits, a dirty worktree, a held lock, a growing
  * log — so that is what this reports.
  *

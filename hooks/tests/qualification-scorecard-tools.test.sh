@@ -274,7 +274,7 @@ assert_r75_vacuous_red_case_in() {
     const { sha256 }=require(process.argv[2]+"/scripts/measure-profile-context.js");
     const sandbox=process.argv[1];
     const rule=process.argv[3];
-    const basePath=path.join(sandbox,"docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json");
+    const basePath=path.join(sandbox,"project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json");
     const base=JSON.parse(fs.readFileSync(basePath,"utf8"));
     const entry=base.source_surface.files.find(f=>f.path==="skills/dev-flow/SKILL.md");
     const snapPath=path.join(sandbox,"profiles/p0-sources",sha256("skills/dev-flow/SKILL.md")+".txt");

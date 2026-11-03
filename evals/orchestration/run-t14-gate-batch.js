@@ -29,7 +29,7 @@ const REPO = findRepo();
 const TASK_REL = "evals/orchestration/tasks/t14-constraint-horizon";
 const TASK_DIR = path.join(REPO, TASK_REL);
 const DEFAULT_HARNESS = path.join(REPO, "evals/orchestration/run-orchestration-eval.sh");
-const PLAN_REL = "docs/plans/2026-10-19-t14-per-turn-gate-experiment.md";
+const PLAN_REL = "project/plans/2026-10-19-t14-per-turn-gate-experiment.md";
 const MODEL = "claude-haiku-4-5";
 
 function usage(msg) {

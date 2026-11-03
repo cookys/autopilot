@@ -196,12 +196,12 @@ for (const rel of [
   'evals/va-eval-generator.js',
   'evals/va-eval-grader.js',
   'evals/va-capability-evidence-corpus.json',
-  'docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md',
-  'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
-  'docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md',
+  'project/plans/_archive/2026/06/2026-06-04-distill-consolidate.md',
+  'project/plans/_archive/2026/06/2026-06-22-ceo-fleet-autonomy.md',
+  'project/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md',
   'docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json',
-  'docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
-  'docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md',
+  'project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
+  'project/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md',
 ]) {
   compareFile(rel);
 }
@@ -344,11 +344,11 @@ const triggers = row.trigger || [];
 const covers = (f) => triggers.some((e) =>
   e.endsWith('/') ? f.startsWith(e) : e.startsWith('*') ? f.endsWith(e.slice(1)) : f === e);
 const docFiles = [
-  'docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md',
-  'docs/plans/2026-06-22-ceo-fleet-autonomy.md',
-  'docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md',
-  'docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
-  'docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md',
+  'project/plans/_archive/2026/06/2026-06-04-distill-consolidate.md',
+  'project/plans/_archive/2026/06/2026-06-22-ceo-fleet-autonomy.md',
+  'project/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md',
+  'project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json',
+  'project/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md',
 ];
 const misses = docFiles.filter((rel) => !covers(rel));
 if (misses.length > 0) { console.log(misses.join('\n')); process.exit(1); }
@@ -427,12 +427,12 @@ for skill in dev-flow ceo-agent l3 l4 l5 l6 finish-flow; do
 done
 cp "$SYNC_SANDBOX/scripts/sync-codex-plugin-skills.sh" "$SYNC_SANDBOX/platforms/codex/plugin/scripts/sync-codex-plugin-skills.sh"
 for rel in \
-  docs/plans/_archive/2026/06/2026-06-04-distill-consolidate.md \
-  docs/plans/2026-06-22-ceo-fleet-autonomy.md \
-  docs/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md \
+  project/plans/_archive/2026/06/2026-06-04-distill-consolidate.md \
+  project/plans/_archive/2026/06/2026-06-22-ceo-fleet-autonomy.md \
+  project/plans/_archive/2026/06/2026-06-26-trust-tiered-review-policy.md \
   docs/projects/_archive/2026/08/2026-08-04-platform-capability-trigger-activation/evidence/platform-capabilities.json \
-  docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json \
-  docs/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md
+  project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json \
+  project/projects/_archive/2026/06/2026-06-26-test-integrity-l1/design-spec.md
 do
   mkdir -p "$SYNC_SANDBOX/$(dirname "$rel")" "$SYNC_SANDBOX/platforms/codex/plugin/$(dirname "$rel")"
   printf 'doc %s\n' "$rel" > "$SYNC_SANDBOX/$rel"

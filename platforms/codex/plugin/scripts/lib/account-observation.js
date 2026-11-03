@@ -17,7 +17,7 @@
 // Results never echo an unvalidated string: a rejection carries a short fixed reason code only.
 // Mirror path: <live_dir>/quota/<provider>/<alias>.json, 0600 in a 0700 directory made through
 // runtime-paths.js ensurePrivateDir; <live_dir> is the caller's resolveLiveDir() base (liveDirOrNull below).
-// Writers touch only their own row, under <alias>.lock (O_EXCL, stale after 10 s, 2 s wait).
+// Writers touch only their own row, under <alias>.lock (O_EXCL; reclaimed only from a dead holder or after 120 s; 2 s wait).
 // Node >= 20.10, built-ins only.
 
 const fs = require('fs');
@@ -69,7 +69,8 @@ const MS_KEY_RE = /(^|_)ms$/;
 
 const VIEW_MAX_BYTES = 65536;
 const LOCK_WAIT_MS = 2000;
-const LOCK_STALE_MS = 10000;
+const LOCK_HARD_MAX_MS = 120000; // a lock older than this is reclaimable even if its pid answers (pid reuse)
+const CORRUPT_KEEP = 3;
 const LOCK_POLL_MS = 25;
 
 // Token shapes (two layers, as account-audit.js: shapes here, caller-supplied live tokens via opts.secrets).
@@ -113,7 +114,7 @@ function epochProblem(x, nullable) {
 
 function scanTokenShape(v, secrets, depth, shapes) {
   const sh = shapes || TOKEN_SHAPES;
-  if (depth > 8) return false;
+  if (depth > 8) return true; // fail closed: content nested deeper than any record is refused, never waved through
   if (typeof v === 'string') {
     if (sh.some((re) => re.test(v))) return true;
     return secrets.some((s) => typeof s === 'string' && s.length > 0 && v.includes(s));
@@ -383,69 +384,155 @@ function defaultSleep(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)
 
 function newNonce() { return `${process.pid}.${Math.random().toString(36).slice(2, 12)}.${Date.now()}`; }
 
-function lockOwner(lockPath) {
-  try { return JSON.parse(fs.readFileSync(lockPath, 'utf8')).nonce || null; } catch (_) { return null; }
+// { nonce, pid, ino } of the lock file as it is now, or null.
+function readLock(lockPath) {
+  try {
+    const fd = fs.openSync(lockPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    try {
+      const st = fs.fstatSync(fd);
+      let j = null;
+      try { j = JSON.parse(fs.readFileSync(fd, 'utf8')); } catch (_) { /* empty or half-written */ }
+      return { nonce: isObj(j) && typeof j.nonce === 'string' ? j.nonce : null, pid: isObj(j) && Number.isInteger(j.pid) ? j.pid : null, ino: st.ino, mtimeMs: st.mtimeMs };
+    } finally { fs.closeSync(fd); }
+  } catch (_) { return null; }
 }
 
-// Takes the lock with O_EXCL and writes a nonce into it. A stale lock (older than staleMs) is reclaimed by renaming
-// it to a unique name first: rename is atomic, so exactly one reclaimer wins; the winner unlinks the renamed file and
-// goes back to O_EXCL. If the renamed file turns out to be FRESH (someone reclaimed before us and holds a new lock),
-// it is linked back and we treat the lock as busy. Returns the nonce when held, null when busy.
-// opts: { now() -> ms, sleep(ms), waitMs, staleMs, hooks: { beforeReclaim(), beforePublish() } } (hooks are test seams).
+// ESRCH means the process is gone; EPERM means it exists (another user). Same-host only, which a /run/user lock is.
+function pidGone(pid) {
+  try { process.kill(pid, 0); return false; } catch (e) { return !!(e && e.code === 'ESRCH'); }
+}
+
+// true when WE still hold it: same nonce AND same inode as when we took it.
+function holdsLock(lockPath, held) {
+  const cur = readLock(lockPath);
+  return !!cur && cur.nonce === held.nonce && cur.ino === held.ino;
+}
+
+// Takes the lock with O_EXCL and writes { pid, nonce, t } into it. A lock is reclaimed only when its holder is GONE
+// (process.kill(pid, 0) says ESRCH) or when it is older than the hard cap (hardMaxMs, default 120 s: pid reuse).
+// A live holder is waited for; waitMs without getting it is `busy` (null). Reclaiming renames the lock to a unique
+// name (atomic: one reclaimer wins) and checks the renamed file is the lock that was judged dead; if it is a
+// different lock it is put back under its own name (link, never overwriting), and if the name is taken the renamed
+// file is left in place and reported through o.log. Returns { nonce, ino } or null.
+// opts: { now() -> ms, sleep(ms), waitMs, hardMaxMs, log(msg), hooks: { beforeReclaim(), beforePublish() } } (hooks are test seams).
 function acquireLock(lockPath, o) {
   const now = o.now || Date.now;
   const sleep = o.sleep || defaultSleep;
   const waitMs = o.waitMs === undefined ? LOCK_WAIT_MS : o.waitMs;
-  const staleMs = o.staleMs === undefined ? LOCK_STALE_MS : o.staleMs;
+  const hardMaxMs = o.hardMaxMs === undefined ? LOCK_HARD_MAX_MS : o.hardMaxMs;
   const nonce = newNonce();
   const deadline = now() + waitMs;
   for (;;) {
     try {
       const fd = fs.openSync(lockPath, 'wx', 0o600);
-      try { fs.writeSync(fd, JSON.stringify({ pid: process.pid, nonce, t: now() })); } finally { fs.closeSync(fd); }
-      return nonce;
+      try {
+        fs.writeSync(fd, JSON.stringify({ pid: process.pid, nonce, t: now() }));
+        return { nonce, ino: fs.fstatSync(fd).ino };
+      } finally { fs.closeSync(fd); }
     } catch (e) {
       if (!e || e.code !== 'EEXIST') throw e;
     }
-    let stale = false;
-    try { stale = now() - fs.lstatSync(lockPath).mtimeMs > staleMs; } catch (e) {
-      if (e && e.code === 'ENOENT') continue; // released while we looked
-      throw e;
-    }
-    if (stale) {
+    const judged = readLock(lockPath);
+    if (!judged) continue; // released while we looked
+    const reclaimable = (judged.pid !== null && pidGone(judged.pid)) || now() - judged.mtimeMs > hardMaxMs;
+    if (reclaimable) {
       if (o.hooks && typeof o.hooks.beforeReclaim === 'function') o.hooks.beforeReclaim();
       const moved = `${lockPath}.stale.${nonce}`;
       try { fs.renameSync(lockPath, moved); } catch (e) {
         if (e && e.code === 'ENOENT') continue; // another reclaimer won
         throw e;
       }
-      let stillStale = true;
-      try { stillStale = now() - fs.lstatSync(moved).mtimeMs > staleMs; } catch (_) { /* gone */ }
-      if (stillStale) { try { fs.unlinkSync(moved); } catch (_) { /* ignore */ } continue; }
-      try { fs.linkSync(moved, lockPath); } catch (_) { /* someone else already holds a newer one */ }
-      try { fs.unlinkSync(moved); } catch (_) { /* ignore */ }
+      const got = readLock(moved);
+      if (got && got.nonce === judged.nonce && got.ino === judged.ino) { try { fs.unlinkSync(moved); } catch (_) { /* ignore */ } continue; }
+      try { fs.linkSync(moved, lockPath); fs.unlinkSync(moved); } catch (_) {
+        if (typeof o.log === 'function') o.log(`lock moved aside and left in place: ${path.basename(moved)}`);
+      }
     }
     if (now() >= deadline) return null;
     sleep(LOCK_POLL_MS);
   }
 }
 
-function releaseLock(lockPath, nonce) {
-  if (lockOwner(lockPath) === nonce) { try { fs.unlinkSync(lockPath); } catch (_) { /* ignore */ } }
+function releaseLock(lockPath, held) {
+  if (held && holdsLock(lockPath, held)) { try { fs.unlinkSync(lockPath); } catch (_) { /* ignore */ } }
 }
 
 // The view envelope keys a writer understands; anything else means a newer writer made the file.
 function envelopeKnown(j) { return Object.keys(j).every((k) => VIEW_KEYS.includes(k)); }
 
-// writeLocalRow(liveDir, record, opts) -> { ok: true, path, reset } | { ok: false, code, reason? }
+// Fail closed over the whole view about to be written. Every value gets the full TOKEN_SHAPES (peer records are
+// written back raw) EXCEPT a courier id (`writer_courier`), which gets the prefix shapes only: a legitimate
+// ns/courier/member id can pass 40 characters. secrets are matched at every depth; too deep is a hit.
+function viewHasToken(view, secrets) {
+  const full = (v) => scanTokenShape(v, secrets, 0, TOKEN_SHAPES);
+  for (const k of Object.keys(view)) {
+    if (full(k)) return true;
+    if (k !== 'rows') { if (full(view[k])) return true; continue; }
+    if (!Array.isArray(view.rows)) return true;
+    for (const r of view.rows) {
+      if (!isObj(r)) { if (full(r)) return true; continue; }
+      for (const rk of Object.keys(r)) {
+        if (full(rk)) return true;
+        if (rk === 'writer_courier' ? scanTokenShape(r[rk], secrets, 0, TOKEN_PREFIX_SHAPES) : full(r[rk])) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Row basis B (5.2 rule 1): the largest stamp in the record, or null when it has none.
+function basisOf(rec) {
+  const s = [];
+  if (isObj(rec) && Array.isArray(rec.windows)) for (const w of rec.windows) if (isObj(w) && Number.isFinite(w.observed_at)) s.push(w.observed_at);
+  if (isObj(rec) && isObj(rec.refusal) && Number.isFinite(rec.refusal.observed_at)) s.push(rec.refusal.observed_at);
+  if (isObj(rec) && Number.isFinite(rec.token_state_at)) s.push(rec.token_state_at);
+  return s.length ? Math.max(...s) : null;
+}
+
+// Keeps the newest CORRUPT_KEEP copies of a damaged view, deletes older ones.
+function pruneCorrupt(dir, prefix) {
+  let names;
+  try { names = fs.readdirSync(dir).filter((n) => n.startsWith(prefix)); } catch (_) { return; }
+  const ts = (n) => Number((/^\.?(\d+)/.exec(n.slice(prefix.length)) || [0, 0])[1]);
+  names.sort((a, b) => ts(b) - ts(a) || (a < b ? 1 : -1));
+  for (const n of names.slice(CORRUPT_KEEP)) { try { fs.unlinkSync(path.join(dir, n)); } catch (_) { /* ignore */ } }
+}
+
+// Copies the damaged file (at most VIEW_MAX_BYTES, then a marker) to <file>.corrupt.<ts>[.<nonce>], 0600.
+function keepCorrupt(file, dir, base) {
+  let src;
+  try { src = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK); } catch (_) { return false; }
+  try {
+    const size = fs.fstatSync(src).size;
+    const n = Math.min(size, VIEW_MAX_BYTES);
+    const buf = Buffer.alloc(n);
+    const got = fs.readSync(src, buf, 0, n, 0);
+    const body = size > VIEW_MAX_BYTES ? Buffer.concat([buf.subarray(0, got), Buffer.from(`\n[truncated by the mirror writer: ${size} bytes in the original]\n`)]) : buf.subarray(0, got);
+    const stem = `${file}.corrupt.${Math.floor(Date.now() / 1000)}`;
+    for (const name of [stem, `${stem}.${newNonce()}`]) { // a same-second clash gets a nonce tail, never a failure
+      try {
+        const fd = fs.openSync(name, 'wx', 0o600);
+        try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, body); } finally { fs.closeSync(fd); }
+        pruneCorrupt(dir, `${base}.corrupt.`);
+        return true;
+      } catch (e) { if (!e || e.code !== 'EEXIST') return false; }
+    }
+    return false;
+  } catch (_) { return false; } finally { fs.closeSync(src); }
+}
+
+// writeLocalRow(liveDir, record, opts) -> { ok: true, path, reset, superseded? } | { ok: false, code, reason? }
 // Read-modify-write of ONLY the row tagged opts.courier (default `local`). Every other row, the namespace and
-// hub_offset are written back as the raw parsed JSON found on disk: not normalised, not filtered (an invalid peer row
-// stays, readers ignore it). The whole view about to be written is scanned for token shapes (opts.secrets as well):
-// a hit refuses the write. A newer schema or an unknown top-level key refuses the write (view_unsupported); only
-// unparseable JSON is replaced, after the damaged bytes are kept as <alias>.json.corrupt.<ts> (0600, same directory).
-// Codes: quota_invalid, live_dir_refused, dir_refused, target_invalid (symlink / not a regular file),
-// view_unsupported, mirror_lock_busy, view_too_large, write_failed.
-// opts: { courier, secrets, now, sleep, waitMs, staleMs, hooks }.
+// hub_offset are written back as the raw parsed JSON found on disk (an invalid peer row stays; readers ignore it).
+// The whole view about to be written is scanned, fail closed (viewHasToken, opts.secrets): a hit refuses the write.
+// A newer schema or an unknown top-level key refuses the write (view_unsupported); only unparseable JSON is
+// replaced, after the damaged bytes are kept as <alias>.json.corrupt.<ts> (0600, newest 3 kept).
+// Monotonic guard: just before publishing, the file is read again; if its local row already carries a newer basis
+// than the one being written (or this record has none and the file's does), nothing is overwritten and the result is
+// { ok: true, superseded: true }: not an error.
+// Codes: quota_invalid, live_dir_refused, dir_refused, target_invalid, view_unsupported, mirror_lock_busy,
+// view_too_large, write_failed.
+// opts: { courier, secrets, now, sleep, waitMs, hardMaxMs, log, hooks }.
 function writeLocalRow(liveDir, record, opts) {
   const o = opts || {};
   const courier = o.courier === undefined ? LOCAL_COURIER : o.courier;
@@ -466,9 +553,9 @@ function writeLocalRow(liveDir, record, opts) {
   if (st && !st.isFile()) return { ok: false, code: 'target_invalid', reason: 'not_regular_file' };
 
   const lockPath = path.join(dir, `${record.alias}.lock`);
-  let nonce;
-  try { nonce = acquireLock(lockPath, o); } catch (_) { return { ok: false, code: 'write_failed', reason: 'lock' }; }
-  if (!nonce) return { ok: false, code: 'mirror_lock_busy' };
+  let held;
+  try { held = acquireLock(lockPath, o); } catch (_) { return { ok: false, code: 'write_failed', reason: 'lock' }; }
+  if (!held) return { ok: false, code: 'mirror_lock_busy' };
   let tmp = null;
   try {
     let view = { schema: VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [] };
@@ -487,10 +574,7 @@ function writeLocalRow(liveDir, record, opts) {
       }
     }
     if (damaged) {
-      if (st) { // keep the damaged bytes beside it before replacing (0600, same private directory)
-        const keep = `${file}.corrupt.${Math.floor(Date.now() / 1000)}`;
-        try { fs.copyFileSync(file, keep, fs.constants.COPYFILE_EXCL); fs.chmodSync(keep, 0o600); } catch (_) { return { ok: false, code: 'write_failed', reason: 'corrupt_copy' }; }
-      }
+      if (st && !keepCorrupt(file, dir, `${record.alias}.json`)) return { ok: false, code: 'write_failed', reason: 'corrupt_copy' };
       view = { schema: VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [] };
       reset = true;
     }
@@ -503,8 +587,7 @@ function writeLocalRow(liveDir, record, opts) {
     };
     const at = view.rows.findIndex((r) => isObj(r) && r.writer_courier === courier);
     if (at >= 0) view.rows[at] = row; else view.rows.push(row);
-    // the whole view that will be written, envelope and every row (peer rows included), is scanned (prefix shapes)
-    if (scanTokenShape(view, secrets, 0, TOKEN_PREFIX_SHAPES)) return bad('token_shaped');
+    if (viewHasToken(view, secrets)) return bad('token_shaped');
     const text = `${JSON.stringify(view)}\n`;
     if (Buffer.byteLength(text) > VIEW_MAX_BYTES) return { ok: false, code: 'view_too_large' };
 
@@ -512,7 +595,17 @@ function writeLocalRow(liveDir, record, opts) {
     const fd = fs.openSync(tmp, 'wx', 0o600);
     try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
     if (o.hooks && typeof o.hooks.beforePublish === 'function') o.hooks.beforePublish();
-    if (lockOwner(lockPath) !== nonce) return { ok: false, code: 'mirror_lock_busy' }; // lost the lock: do not publish
+    if (!holdsLock(lockPath, held)) return { ok: false, code: 'mirror_lock_busy' }; // lost the lock: do not publish
+    // monotonic guard: never replace a newer local observation with an older one, whatever raced
+    const now2 = readSmallFile(file, VIEW_MAX_BYTES);
+    if (now2.text !== undefined) {
+      let j2 = null;
+      try { j2 = JSON.parse(now2.text); } catch (_) { /* damaged: nothing newer to protect */ }
+      const prev = isObj(j2) && Array.isArray(j2.rows) ? j2.rows.find((r) => isObj(r) && r.writer_courier === courier) : null;
+      const pb = prev ? basisOf(prev.record) : null;
+      const nb = basisOf(record);
+      if (pb !== null && (nb === null || pb > nb)) return { ok: true, path: file, reset: false, superseded: true };
+    }
     fs.renameSync(tmp, file);
     tmp = null;
     return { ok: true, path: file, reset };
@@ -520,7 +613,7 @@ function writeLocalRow(liveDir, record, opts) {
     return { ok: false, code: 'write_failed' };
   } finally {
     if (tmp) { try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ } }
-    releaseLock(lockPath, nonce);
+    releaseLock(lockPath, held);
   }
 }
 

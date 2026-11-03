@@ -22,7 +22,7 @@ Reviewer, owner, and brain-seat end-to-end qualification are shipped gate paths 
 - ✅ `stage-0 spike` and exact-scope `stage-1 reviewer/owner qualification` are implemented with separate repeated nonce-derived corpora, host oracles, and executable mutation controls.
 - ✅ Qualification evidence is keyed by exact role, task/domain/language/tool scope and deployment identity; legacy scorecard rows remain compatibility-only.
 - ✅ Canonical roles are `owner`, `implementer`, `reviewer`, `verification_author`, and `explorer`. Scorecard input aliases `planner`/`orchestrator` to `owner` and `verifier` to `reviewer`; stored and returned rows are canonical.
-- ⚠️ Explorer auto-qualification still requires its own role-specific eval suite before autonomous routing; reviewer, owner, brain, verification_author, and **implementer** suites are shipped (`engine-qualify.sh <role>`). The implementer suite is live-rail (real `dispatch-hetero.sh`, 6 families × 2 trials; plan `docs/plans/2026-08-22-implementer-qualification-suite.md`), unlike the broker-based reviewer/owner/brain/VA suites.
+- ⚠️ Explorer auto-qualification still requires its own role-specific eval suite before autonomous routing; reviewer, owner, brain, verification_author, and **implementer** suites are shipped (`engine-qualify.sh <role>`). The implementer suite is live-rail (real `dispatch-hetero.sh`, 6 families × 2 trials; plan `project/plans/_archive/2026/08/2026-08-22-implementer-qualification-suite.md`), unlike the broker-based reviewer/owner/brain/VA suites.
 - ⚠️ Local OpenAI-compatible transport is available only after a deployment's semantic and operational identity can be bound. A configured label or API response alone is not qualification.
 
 ## Governing constraint (routing-axis evidence bar)
@@ -74,7 +74,7 @@ Ask once, per role, then take one of two paths:
   disclosure, same collision rules, same strike targets — a feed entry is not privileged. The feed's
   own `digest` and `seat_hash` are REPORTED and then re-derived locally: a hash you did not compute is
   a claim (ADR-0001). Optional `~/.autopilot/config.json` `qualification_feed.url` so `--from` can be
-  omitted; there is no refresh timer and no auto-adopt. After the owner replies on the confirm-mode panel, run `node scripts/qualification-feed-trust.js answer --card <id> --decision confirm|reject` again or the reply does not count (`docs/backlog/p6-trust-followups.md`).
+  omitted; there is no refresh timer and no auto-adopt. After the owner replies on the confirm-mode panel, run `node scripts/qualification-feed-trust.js answer --card <id> --decision confirm|reject` again or the reply does not count (`project/backlog/p6-trust-followups.md`).
 - **Adopt** — `node scripts/adopt-qualification-defaults.js list --role <role>` shows every shipped
   administration with the environment it was measured in; `… adopt --role <role>` copies the rows
   into the local scorecard + capability stores as ordinary rows. Cheap, and honest about being
@@ -162,7 +162,7 @@ Pass requires all of:
 ### Implementer (live-rail qualifier shipped: `engine-qualify.sh implementer`)
 
 The manual bar below is now mechanized by the live-rail suite (plan
-`docs/plans/2026-08-22-implementer-qualification-suite.md`): 6 case families
+`project/plans/_archive/2026/08/2026-08-22-implementer-qualification-suite.md`): 6 case families
 (greenfield-spec, red-to-green, test-integrity trap, scope trap, security canary,
 no-op honesty) × 2 cases × 2 trials over the real `dispatch-hetero.sh` rail,
 graded offline from git artifacts with a bwrap host oracle. `corpus_pass: "24/24"`
@@ -236,7 +236,7 @@ Build stage-3 usage policy from a live host-observed qualification, not from sco
    isolates each panel process, parses every result, and creates a random run nonce.
 3. The live in-process run is the strongest evidence tier; record its outcome to the scorecard
    and reflect it in the review-loop roster. (The Owner Kernel grant machinery this stage once
-   routed through was retired 2026-08-16 — `docs/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`;
+   routed through was retired 2026-08-16 — `project/plans/_archive/2026/08/2026-08-16-owner-kernel-retirement.md`;
    routing authority is now the roster + capability state, with the epistemic rule below.)
 4. Re-resolve and re-run for every fallback identity.
 5. A JSON roundtrip, process restart, scorecard row, or `current-evidence` output is weaker

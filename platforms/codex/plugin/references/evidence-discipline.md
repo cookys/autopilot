@@ -381,7 +381,7 @@ case and the broken case look identical from where you are standing.
 
 ## 15. A claim's layer decides its evidence class — get the layer wrong and no amount of evidence saves it
 
-**Incident (2026-08-25, peer-coordination spike for the `docs/BACKLOG.md` peer-coordination-skill
+**Incident (2026-08-25, peer-coordination spike for the `project/backlog/BACKLOG.md` peer-coordination-skill
 item).** A message sent to a peer's machine landed on the wrong session on that machine — the receiving
 protocol addresses a *machine* (one identifier shared by every session on it), not a *session*. The
 first report called this "misdelivery" and proposed logging a failure rate. That was wrong: the

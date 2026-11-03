@@ -22,7 +22,7 @@
 // `retired` only after `acked`; compaction rewrites atomically without fully retired ids. Failure -> `failed` + backoff.
 // Transport is off unless qualification_outbox.transport = git (config) — flush then sends nothing.
 // Test seams: injectable transport, AUTOPILOT_OUTBOX_FAILPOINT=after-enqueue|after-send|before-ack|after-ack (SIGKILL).
-// Plan: docs/plans/2026-10-16-bl0194-qualification-registry-move.md section 4.
+// Plan: project/plans/2026-10-16-bl0194-qualification-registry-move.md section 4.
 
 const fs = require('fs');
 const os = require('os');

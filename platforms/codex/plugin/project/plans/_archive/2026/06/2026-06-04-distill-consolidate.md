@@ -1,6 +1,6 @@
 # Plan — distill multi-machine `consolidate` (deferred feature revisit)
 
-> **Status**: PROPOSED. Revisits §0.3.1 (DEFERRED post-R3) of `docs/plans/2026-06-03-distill-skill.md`.
+> **Status**: PROPOSED. Revisits §0.3.1 (DEFERRED post-R3) of `project/plans/_archive/2026/06/2026-06-03-distill-skill.md`.
 > **Owner**: cookys (participatory). **Branch**: cut `feat/distill-consolidate` off `develop` when P0 passes.
 > **Created**: 2026-06-04. **Frame**: focus-as-subtraction; spike-before-assert; solve-real-problem-not-artifact.
 > **Headline recommendation**: **BUILD-DORMANT (thin)** — ship a dormant collision detector + a manual

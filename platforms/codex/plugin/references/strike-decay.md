@@ -9,7 +9,7 @@ work, and by nothing else.**
 Owner ruling 2026-08-18: *"同一個模型不需要日期授權;降級授權應該用不信任投票累積而不是時間。"*
 A model does not get worse because the calendar turned over. Design frozen 2026-08-22 by a
 seven-seat heterogeneous panel (all seven verdicts `sound-with-changes`; no seat proposed keeping
-any calendar tooth). Plan: [`../docs/plans/_archive/2026/08/2026-08-22-no-confidence-decay.md`](../docs/plans/_archive/2026/08/2026-08-22-no-confidence-decay.md).
+any calendar tooth). Plan: [`../project/plans/_archive/2026/08/2026-08-22-no-confidence-decay.md`](../project/plans/_archive/2026/08/2026-08-22-no-confidence-decay.md).
 
 ## A qualification has no expiry
 
@@ -181,7 +181,7 @@ detector-anomaly quarantine automation (emission-rate deviation auto-demoting a 
 to shadow); fleet circuit breaker (N seats tripping in a short span freezes enforcement — a gate
 bug is not an engine bug); per-role threshold tuning.
 
-And, per [ADR-0001](../docs/adr/0001-verification-over-attestation.md): no hash chains, no witness
+And, per [ADR-0001](../docs/dev/adr/0001-verification-over-attestation.md): no hash chains, no witness
 receipts, no trust roots. `receipt_ref` and `artifact_sha256` exist so a strike can be **replayed**
 — re-derived by re-running the detector over the same artifact — not so it can be proven
 un-tampered.

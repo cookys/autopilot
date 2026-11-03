@@ -26,7 +26,7 @@
  * "known" hostnames. A deny-list of known hostnames silently PASSES every name it was
  * never told about, and the run still emits a "clean" label. That label attests that a
  * list was consulted, not that the text is clean — it is attestation, which
- * docs/adr/0001-verification-over-attestation.md forbids, and it is worse than no
+ * docs/dev/adr/0001-verification-over-attestation.md forbids, and it is worse than no
  * lint at all because it manufactures false confidence. Any pre-existing
  * ~/.autopilot/distill/identifiers.deny is now IGNORED — an intentional removal of a
  * previously-documented optional config surface, not an oversight. There is deliberately

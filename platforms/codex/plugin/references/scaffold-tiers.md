@@ -8,7 +8,7 @@ wraps the caller's `--prompt-file` with the tier skeleton ONCE, in the shared as
 the per-runner branches — every runner (codex/grok/cc-shim/agy/pi/qoder) consumes it
 identically. Disable per project with dispatch-config `scaffold_tiers: off`.
 
-Rationale (survey-bound, `docs/plans/2026-08-16-four-layer-redesign-survey.md`): scaffold
+Rationale (survey-bound, `project/plans/_archive/2026/08/2026-08-16-four-layer-redesign-survey.md`): scaffold
 weight is not flatly good or bad — it is capability-indexed. Terminal-Bench 2.0: model swap
 +52pp vs scaffold swap +17pp (scaffold matters less at the margin as capability rises, but not
 zero); SWE-bench lineage shows opposed scaffold philosophies converging in one band once the

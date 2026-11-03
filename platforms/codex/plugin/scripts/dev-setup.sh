@@ -366,7 +366,7 @@ check_config_file() {
   while IFS= read -r line; do
     [[ -n "$line" ]] && status WARN "config" "$line"
   done <<< "$out"
-  status OK "config" "reference for every setting: docs/settings-reference.md"
+  status OK "config" "reference for every setting: docs/guide/settings-reference.md"
 }
 
 # Idempotent: skip when already directory-sourced at this repo.
@@ -922,7 +922,7 @@ setup_grok() {
   echo "  grok inspect   # expect 28 skills under plugin: autopilot"
   echo ""
   echo "Note: Grok host ≠ Grok runner. Hooks runtime parity with Claude is partial;"
-  echo "see docs/installation.md § Grok Build and src/harness/capabilities/grok.json."
+  echo "see docs/guide/installation.md § Grok Build and src/harness/capabilities/grok.json."
 }
 
 # Report-only. Never install. status() counts only WARN and FAIL, so INFO does not

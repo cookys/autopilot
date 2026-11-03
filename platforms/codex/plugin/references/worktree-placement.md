@@ -2,7 +2,7 @@
 
 Where a repo's worktrees and handoff files go, who puts them there, and why the two handoff routes use
 different keys. One resolver answers every path question: [`scripts/resolve-repo-placement.js`](../scripts/resolve-repo-placement.js).
-Decisions and evidence: [`docs/plans/2026-10-12-worktree-placement.md`](../docs/plans/2026-10-12-worktree-placement.md).
+Decisions and evidence: [`project/plans/2026-10-12-worktree-placement.md`](../project/plans/2026-10-12-worktree-placement.md).
 
 ## The rule
 
@@ -20,7 +20,7 @@ path says which repo it belongs to.
 
 Claude Code's own behaviour here (names, branch, sweep, prompts, isolation) is from the docs and runs recorded in
 [`spike-native-worktree.md`](../docs/plans/evidence/2026-10-12-worktree-placement/spike-native-worktree.md); the
-refused `!` pull is gap 8 of [the backlog note](../docs/backlog/worktree-and-handoff-placement-has-no-rule.md).
+refused `!` pull is gap 8 of [the backlog note](../project/backlog/worktree-and-handoff-placement-has-no-rule.md).
 
 - **Name a hand-made worktree after its task**, and open a fresh one for the next task instead of branching a new
   task inside the old one. `session-mode.js set --new-task` prints one advisory line when the worktree's directory

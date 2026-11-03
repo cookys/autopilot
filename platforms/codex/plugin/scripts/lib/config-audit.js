@@ -24,7 +24,7 @@
 // Maintaining the change history: when you change a documented default (or flip a hook to default-on), append
 // { schema, from, to, note } to that entry's `changed_in` in config-keys.json. `schema` is the config_schema_version
 // the change belongs to; if it is a new number, raise CURRENT_SCHEMA below and document it in
-// docs/settings-reference.md. A user with config_schema_version < schema sees the entry until they set the field.
+// docs/guide/settings-reference.md. A user with config_schema_version < schema sees the entry until they set the field.
 // A missing config_schema_version counts as 0. The file is never rewritten.
 
 const fs = require('fs');

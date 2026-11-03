@@ -5,7 +5,7 @@
  *
  * Writes one HTML-comment-delimited block into Codex AGENTS.md (CODEX_HOME, or
  * ~/.codex when unset) and agy GEMINI.md (~/.gemini). The block body is the
- * text between the install-block markers in docs/token-discipline.md, read at
+ * text between the install-block markers in docs/guide/token-discipline.md, read at
  * run time. Nothing in a default install flow calls this with `install`.
  * This script writes no Codex config.toml values.
  *
@@ -49,7 +49,7 @@ function usage() {
     'Usage: node scripts/install-token-discipline.js <install|uninstall|--check> ' +
     '[--harness codex|agy|all] [--dry-run]\n' +
     'Opt-in. Does not run from any default install flow.\n' +
-    'Block body: docs/token-discipline.md (no built-in fallback).\n'
+    'Block body: docs/guide/token-discipline.md (no built-in fallback).\n'
   );
 }
 

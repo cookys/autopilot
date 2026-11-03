@@ -5,7 +5,7 @@
 // same way the writer does, reads a live file with schema/freshness checks, and classifies a
 // model id into a "family" for guarded-model comparisons.
 //
-// Contract (plan §2.5, docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md):
+// Contract (plan §2.5, project/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md):
 //   - resolveLiveDir() has two modes.
 //     (1) NO override ($AUTOPILOT_LIVE_DIR unset/empty): it tries, in order: $XDG_RUNTIME_DIR/autopilot
 //     (xdg, only if XDG_RUNTIME_DIR is set) → <runUserRoot>/<uid>/autopilot (xdg-inferred, only if

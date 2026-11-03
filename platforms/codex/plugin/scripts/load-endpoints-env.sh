@@ -225,7 +225,7 @@ autopilot_init_endpoints_env() {
     printf 'load-endpoints-env: WARNING canonical template endpoints.env.example not found; writing a minimal stub\n' >&2
     cat > "$envfile" <<'STUB' || { umask "$old_umask" 2>/dev/null; printf 'load-endpoints-env: cannot write %s\n' "$envfile" >&2; return 1; }
 # ~/.autopilot/endpoints.env — mode 600. Fill AUTOPILOT_ENDPOINT_<NAME>_URL + _TOKEN (never commit).
-# See docs/installation.md § Heterogeneous engine credentials.
+# See docs/guide/installation.md § Heterogeneous engine credentials.
 STUB
   fi
   umask "$old_umask" 2>/dev/null || true

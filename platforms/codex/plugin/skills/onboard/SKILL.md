@@ -87,7 +87,7 @@ credential home instead of scattering shell exports: run `load-endpoints-env.sh 
 a mode-600 `~/.autopilot/endpoints.env` stub, fill in `AUTOPILOT_ENDPOINT_<NAME>_{URL,TOKEN}`, then
 set `reviewer_endpoint` / `implementer_endpoint` in `.claude/review-loop-config.md` so `/l5`/`/l6`
 pick it up declaratively. Prefer a subscription/coding-plan token over a metered API key; OAuth-login
-runners (codex/agy/grok/qoderclicn) need no token. Full guide: `docs/installation.md` §
+runners (codex/agy/grok/qoderclicn) need no token. Full guide: `docs/guide/installation.md` §
 "Heterogeneous engine credentials".
 
 ### 5.6 Qualification defaults — ask ONCE (only if a hetero role was enabled in 5.5)

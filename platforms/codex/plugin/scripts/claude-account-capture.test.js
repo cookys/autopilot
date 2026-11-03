@@ -452,3 +452,21 @@ test('G40-N13: usage-probe prints only {alias, windows}, publishes a probe row a
     assert.strictEqual(fs.existsSync(path.join(f2.liveDir, 'quota')), false);
   } finally { f2.cleanup(); }
 });
+
+test('G40-N78: cooldown --clear also releases the refusal row a 429 left, so the operator release still works', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }, { alias: 'b' }], responses: { a: R429 } });
+  try {
+    await go(fx, RUN);
+    assert.ok(rowOf(fx, 'a').refusal, 'a refusal row cools a');
+    assert.deepStrictEqual((await go(fx, ['cooldown', '--clear', 'a'])).out, 'cleared alias=a\n');
+    assert.strictEqual(rowOf(fx, 'a'), null);
+    fx.shim.setControl({});
+    const p = await go(fx, ['pick']);
+    assert.match(p.out, /^a class=unknown/, 'a is pickable again (priority 1, no cooldown, no refusal)');
+    // a row that carries windows is not touched
+    writeRow(fx, 'b', [win('rolling_5h', 0.3)]);
+    const before = fs.readFileSync(mirrorFile(fx, 'b'), 'utf8');
+    await go(fx, ['cooldown', '--clear', 'b']);
+    assert.strictEqual(fs.readFileSync(mirrorFile(fx, 'b'), 'utf8'), before);
+  } finally { fx.cleanup(); }
+});

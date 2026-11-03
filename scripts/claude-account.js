@@ -695,6 +695,22 @@ async function maybeProbe(ctx, checked, data, cfg, scratchRoot) {
   } catch (_) { return false; }
 }
 
+// `cooldown --clear` is the operator's release for a cooling alias (G37). Since D4 a first 429 also leaves a refusal-only
+// row in the local mirror, and that row cools the alias too (plan 21.8), so the release has to take it away as well, or
+// the alias would stay cooling after the operator cleared it. Only a refusal-only row held by the local courier alone is
+// removed (the file is the whole view); a row that also carries windows is left alone. Returns true when it removed one.
+function clearRefusalRow(ctx, alias) {
+  try {
+    if (!ctx.liveDir) return false;
+    const r = observation.readView(ctx.liveDir, 'claude', alias);
+    if (!r.view || !r.view.rows.every((x) => x && x.writer_courier === observation.LOCAL_COURIER)) return false;
+    const rec = r.view.rows.length === 1 ? r.view.rows[0].record : null;
+    if (!rec || !rec.refusal || (Array.isArray(rec.windows) && rec.windows.length > 0)) return false;
+    fs.unlinkSync(observation.mirrorPath(ctx.liveDir, 'claude', alias));
+    return true;
+  } catch (_) { return false; }
+}
+
 async function cmdUsageProbe(ctx, argv) {
   const { opts } = parseArgs(argv, { alias: 'value', purpose: 'value' });
   if (opts.alias === undefined) throw new Stop(EXIT.INVALID, 'alias_required', null);
@@ -1019,7 +1035,9 @@ function cmdCooldown(ctx, argv) {
     if (e instanceof registry.RegistryError) throw new Stop(EXIT.INVALID, `unknown_alias (${e.reason})`, null);
     throw e;
   }
-  ctx.out(cooldown.clearCooldown(opts.clear, { dir: ctx.cooldownDir }) ? `cleared alias=${opts.clear}` : `no_cooldown alias=${opts.clear}`);
+  const clearedCooldown = cooldown.clearCooldown(opts.clear, { dir: ctx.cooldownDir });
+  const clearedRefusal = clearRefusalRow(ctx, opts.clear);
+  ctx.out(clearedCooldown || clearedRefusal ? `cleared alias=${opts.clear}` : `no_cooldown alias=${opts.clear}`);
   return EXIT.OK;
 }
 
@@ -1251,6 +1269,7 @@ async function cmdSelftest(ctx, argv) {
     check('none available while cooling', await call(['run', '--purpose', 'selftest', '--', 'claude', '-p', 'x']), 3);
     fx.shim.setControl({ tokens: { [fx.tokens.a]: R401 }, default: undefined });
     for (const al of ['a', 'b']) cooldown.clearCooldown(al, { dir: fx.cooldownDir });
+    fs.rmSync(path.join(fx.liveDir, 'quota'), { recursive: true, force: true }); // the 429 scenarios left refusal rows (G40 D4): release them with the cooldowns
     check('401 stops', await call(['run', '--purpose', 'selftest', '--', 'claude', '-p', 'x']), 6);
     fx.shim.setControl({ default: ERR_EXIT0 });
     check('error envelope exit 0 -> 5', await call(['run', '--purpose', 'selftest', '--', 'claude', '-p', 'x']), 5);

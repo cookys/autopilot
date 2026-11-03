@@ -13,10 +13,48 @@ rcis() { local want="$1" label="$2"; shift 2; "$@" >"$T/out" 2>"$T/err" </dev/nu
 has() { if grep -q -- "$2" "$T/out"; then ok; else bad "$1 (no '$2' in output)"; sed 's/^/    /' "$T/out" | head -6; fi; }
 js() { node -e "$1" "${@:2}" && ok || bad "$3"; }
 
+# ---- which tree is this? The tool itself decides: `apply --phase rename` expects a bootstrap registry and refuses (rc 2, "registry stage is X; rename
+# expects bootstrap") on anything else. The probe runs it in a throwaway shared clone of HEAD, so a bootstrap tree is migrated THERE and nowhere else.
+# 0 = migrated (the tool refused), 1 = not migrated (the tool applied), 2 = the probe itself failed.
+tree_migrated() {
+  local d rc; d="$(mktemp -d "$T/probe.XXXXXX")" || return 2
+  git clone -q --shared --no-checkout "$1" "$d/c" 2>/dev/null && git -C "$d/c" checkout -q --detach HEAD 2>/dev/null || return 2
+  node "$d/c/tools/migrate/relayout-p1.js" apply --phase rename --root "$d/c" </dev/null >"$d/out" 2>"$d/err"; rc=$?
+  PROBE_CLONE="$d/c"
+  [ "$rc" = 0 ] && return 1
+  [ "$rc" = 2 ] && grep -q "registry stage is .*; rename expects bootstrap" "$d/err" && return 0
+  sed 's/^/    /' "$d/err" | head -5; return 2
+}
+if [ "${RELAYOUT_P1_MODE_PROBE:-1}" = 1 ]; then
+  tree_migrated "$REPO_ROOT"; MODE_RC=$?
+  [ "$MODE_RC" = 2 ] && { echo "FAIL: cannot tell whether this tree is migrated"; exit 1; }
+  if [ "$MODE_RC" = 0 ]; then
+    # migrated tree (P1 landed): the full pre-move scenarios below only make sense on a bootstrap tree. Here: the tool recognises the state, and the layout is lint-clean.
+    echo "relayout-p1: this tree is already migrated (registry stage is not bootstrap); the full pre-move test runs only on an unmigrated tree, so only the migrated-tree checks run here"
+    M="$PROBE_CLONE"
+    node "$RP" apply --phase rename --root "$M" >"$T/out" 2>"$T/err" </dev/null; rc=$?
+    if [ "$rc" = 2 ] && grep -q "rename expects bootstrap" "$T/err"; then ok; else bad "apply --phase rename on a migrated tree is refused with a clear message (rc=$rc)"; fi
+    if [ -z "$(git -C "$M" status --porcelain)" ]; then ok; else bad "the refused apply left the tree untouched"; fi
+    node "$REPO_ROOT/scripts/layout-lint.js" --repo-root "$M" >"$T/out" 2>"$T/err" </dev/null; rc=$?
+    if [ "$rc" = 0 ]; then ok; else bad "layout-lint is clean on the migrated tree (rc=$rc)"; sed 's/^/    /' "$T/out" | head -5; fi
+    # negative control: a work record left in docs/ must turn the lint red
+    mkdir -p "$M/docs/plans"; echo x > "$M/docs/plans/2099-01-01-zz-stray.md"; git -C "$M" add -f docs/plans/2099-01-01-zz-stray.md
+    node "$REPO_ROOT/scripts/layout-lint.js" --repo-root "$M" >"$T/out" 2>"$T/err" </dev/null; rc=$?
+    if [ "$rc" = 1 ]; then ok; else bad "negative control: a stray tracked work record in docs/plans must fail the lint (rc=$rc)"; fi
+    # negative control: a bootstrap tree must NOT be taken for migrated (the full test would be skipped on the tree it is for)
+    if git -C "$REPO_ROOT" cat-file -e "e89d36e1a^{commit}" 2>/dev/null; then
+      B0="$T/bootstrap-src"; git clone -q --shared --no-checkout "$REPO_ROOT" "$B0" 2>/dev/null && git -C "$B0" checkout -q --detach e89d36e1a
+      tree_migrated "$B0"; if [ "$?" = 1 ]; then ok; else bad "negative control: a bootstrap tree is recognised as not migrated"; fi
+    else echo "SKIP: pre-move commit e89d36e1a not in this checkout; the bootstrap-not-migrated control did not run"; fi
+    echo "relayout-p1: $PASS passed, $FAIL failed"
+    [ "$FAIL" = 0 ]; exit $?
+  fi
+fi
+
 # ---- the real repo: plan writes four files, a one-to-one map, no internal problems
 # The dry run and apply are about the PRE-move tree, so the real-repo scenarios run on a clone of the pre-move commit (the repo itself
 # is at stage P1 once apply has landed). No such commit in this checkout (e.g. a shallow clone): the scenarios are skipped, not passed.
-BASE_SHA=90f8bafcc
+BASE_SHA=e89d36e1a
 BR="$T/base"
 if git -C "$REPO_ROOT" cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
   git clone -q --shared --no-checkout "$REPO_ROOT" "$BR" 2>/dev/null && git -C "$BR" checkout -q --detach "$BASE_SHA" || { echo "FAIL: cannot build the pre-move clone"; exit 1; }
@@ -40,8 +78,8 @@ e(plan.problems.length===0,"no internal problems");
 e(plan.renames===vals.length,"renames count equals map size");
 e(!Object.keys(map).some((k)=>k.startsWith("docs/plans/evidence/")),"P1 does not move docs/plans/evidence (P2)");
 e(!("docs/scripts-inventory.md" in map),"F5: scripts-inventory.md stays");
-e(!Object.keys(map).some((k)=>/blind-review-2d-(snapshot|overlap)/.test(k)),"D9.5: the six blind-review-2d files stay while the mission is routed");
-e(plan.registry_changes.exceptions_add.length===8&&plan.registry_changes.exceptions_add.every((x)=>x.rule>=6&&x.reason),"D9.5 six + D10 two exceptions, each with a reason");
+e(!Object.keys(map).some((k)=>/routing-successor/.test(k)),"D9.5: the four routing-successor files stay while the mission is routed to them")&&e(Object.keys(map).filter((k)=>/blind-review-2d-(snapshot|overlap)/.test(k)).length===6,"D9.5: the old 2-D snapshot graph is no longer routed, so its six files move by the ordinary rule");
+e(plan.registry_changes.exceptions_add.length===6&&plan.registry_changes.exceptions_add.every((x)=>x.rule>=6&&x.reason),"D9.5 four routing-successor + D10 two exceptions, each with a reason");
 e(plan.registry_changes.exceptions_add.some((x)=>/surface-lines/.test(x.path))&&plan.registry_changes.exceptions_add.some((x)=>/platform-capabilities\.json$/.test(x.path)),"D10: surface-lines.json and the D9.7 receipt stay by exception");
 e(plan.registry_changes.exceptions_add.filter((x)=>x.plan_base==="docs").length===1,"plan_base docs only on the sources manifest");
 e(map["docs/plans/2026-08-04-platform-capability-trigger-activation.md"]==="project/plans/2026-08-04-platform-capability-trigger-activation.md","D9.4: the capability plan lands in project/plans (not archived)");

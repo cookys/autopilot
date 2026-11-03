@@ -754,15 +754,16 @@ test('G40-D1 lock interleave (iii): a writer carrying an older basis that publis
       const file = o.mirrorPath(fx.liveDir, 'claude', 'a');
       fs.writeFileSync(file, JSON.stringify({ schema: o.VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [{ writer_courier: 'local', host_role: 'agent', observed_at_hub: null, skewed: false, record: newer }] }), { mode: 0o600 });
     } };
-    const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.2, observed_at: T })] }), { hooks });
+    const clock = { now: () => (T + 1000) * 1000 }; // the writer\'s clock, so the fixed fixture times are not "future"
+    const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.2, observed_at: T })] }), { hooks, now: clock.now });
     assert.deepStrictEqual([r.ok, r.superseded], [true, true]);
     const rows = o.readView(fx.liveDir, 'claude', 'a').view.rows;
     assert.strictEqual(rows[0].record.windows[0].utilization, 0.9);
     assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json'], 'no temp file, no lock left');
     // an equal or newer basis still replaces, and a placeholder never replaces a real observation
-    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.4, observed_at: T + 600 })] })).superseded, undefined);
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.4, observed_at: T + 600 })] }), { now: clock.now }).superseded, undefined);
     const placeholder = { schema: o.SCHEMA, provider: 'claude', alias: 'a', visibility: 'L0', windows: [], source: 'registry', token_state: 'unknown' };
-    assert.strictEqual(o.writeLocalRow(fx.liveDir, placeholder).superseded, true);
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, placeholder, { now: clock.now }).superseded, true);
   });
 });
 
@@ -872,5 +873,68 @@ test('G40-D1 lock link (c): a leftover lock temp file older than 120 s is swept 
     assert.strictEqual(o.writeLocalRow(fx.liveDir, rec()).ok, true);
     assert.strictEqual(fs.existsSync(oldTmp), false);
     assert.strictEqual(fs.existsSync(freshTmp), true);
+  });
+});
+
+// --- third review round, bounded fixes: no spin on an unreadable lock, no trust in a future basis -----
+
+const LOCK_CHILD = (modPath) => `const o=require(${JSON.stringify(modPath)});const live=process.argv[1];
+  const rec={schema:o.SCHEMA,provider:'claude',alias:'a',visibility:'L3',windows:[{kind:'rolling_5h',utilization:0.1,resets_at:1800003600,source:'passive',observed_at:1800000000}],refusal:null,token_state:'unknown',token_state_at:null,host_role:'agent'};
+  process.stdout.write(JSON.stringify(o.writeLocalRow(live,rec,{waitMs:500})));`;
+function runWriterChild(liveDir) {
+  const r = spawnSync(process.execPath, ['-e', LOCK_CHILD(path.join(__dirname, 'account-observation.js')), liveDir], { encoding: 'utf8', timeout: 8000 });
+  return { signal: r.signal, status: r.status, out: r.stdout };
+}
+
+test('G40-D1 unreadable lock (a): a symlink at the lock path ends in write_failed/lock_unreadable inside the deadline, never a spin', { timeout: 20000 }, () => {
+  withFix((fx) => {
+    o.writeLocalRow(fx.liveDir, rec());
+    const target = path.join(fx.root, 'elsewhere');
+    fs.writeFileSync(target, 'x');
+    fs.symlinkSync(target, path.join(qdir(fx), 'a.lock'));
+    const r = runWriterChild(fx.liveDir);
+    assert.strictEqual(r.signal, null, 'the child was not killed for hanging');
+    assert.deepStrictEqual(JSON.parse(r.out), { ok: false, code: 'write_failed', reason: 'lock_unreadable:ELOOP' });
+    assert.strictEqual(fs.readFileSync(target, 'utf8'), 'x');
+  });
+});
+
+test('G40-D1 unreadable lock (b): a chmod 000 lock file ends in write_failed/lock_unreadable inside the deadline', { timeout: 20000 }, (t) => {
+  if (process.getuid() === 0) { t.skip('running as root: chmod 000 does not stop root from reading the lock'); return; }
+  withFix((fx) => {
+    o.writeLocalRow(fx.liveDir, rec());
+    const lock = path.join(qdir(fx), 'a.lock');
+    fs.writeFileSync(lock, '{}', { mode: 0o000 });
+    fs.chmodSync(lock, 0o000);
+    const r = runWriterChild(fx.liveDir);
+    assert.strictEqual(r.signal, null, 'the child was not killed for hanging');
+    assert.deepStrictEqual(JSON.parse(r.out), { ok: false, code: 'write_failed', reason: 'lock_unreadable:EACCES' });
+    fs.chmodSync(lock, 0o600);
+  });
+});
+
+test('G40-D1 unreadable lock: a directory at the lock path is refused the same way', { timeout: 20000 }, () => {
+  withFix((fx) => {
+    o.writeLocalRow(fx.liveDir, rec());
+    fs.mkdirSync(path.join(qdir(fx), 'a.lock'));
+    const r = runWriterChild(fx.liveDir);
+    assert.strictEqual(r.signal, null);
+    assert.deepStrictEqual(JSON.parse(r.out), { ok: false, code: 'write_failed', reason: 'lock_unreadable:EISDIR' });
+  });
+});
+
+test('G40-D1 guard ignores a future basis: a local row stamped an hour ahead does not block a current observation', () => {
+  withFix((fx) => {
+    const nowS = 1_790_000_000;
+    const clock = { now: () => nowS * 1000 };
+    const future = rec({ windows: [win({ utilization: 0.9, observed_at: nowS + 3600, resets_at: nowS + 9000 })] });
+    writeViewFile(fx, { schema: o.VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [{ writer_courier: 'local', host_role: 'agent', observed_at_hub: null, skewed: false, record: future }] });
+    const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.2, observed_at: nowS, resets_at: nowS + 3600 })] }), clock);
+    assert.deepStrictEqual([r.ok, r.superseded], [true, undefined]);
+    assert.strictEqual(o.readView(fx.liveDir, 'claude', 'a').view.rows[0].record.windows[0].utilization, 0.2);
+    // a basis inside the skew allowance still protects
+    const near = rec({ windows: [win({ utilization: 0.8, observed_at: nowS + 100, resets_at: nowS + 9000 })] });
+    writeViewFile(fx, { schema: o.VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [{ writer_courier: 'local', host_role: 'agent', observed_at_hub: null, skewed: false, record: near }] });
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.2, observed_at: nowS, resets_at: nowS + 3600 })] }), clock).superseded, true);
   });
 });

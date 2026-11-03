@@ -25,6 +25,7 @@ const path = require('path');
 const { readSmallFile } = require('./account-quota');
 const { ensurePrivateDir } = require('./runtime-paths');
 const { resolveLiveDir, LiveDirRefusedError } = require('./live-state-dir');
+const { FUTURE_SKEW_S } = require('./account-interpret');
 
 const SCHEMA = 'fleet.quota/1';
 const VIEW_SCHEMA = 'fleet.quota-view/1';
@@ -385,17 +386,20 @@ function defaultSleep(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)
 
 function newNonce() { return `${process.pid}.${Math.random().toString(36).slice(2, 12)}.${Date.now()}`; }
 
-// { nonce, pid, ino } of the lock file as it is now, or null.
+// { nonce, pid, ino, mtimeMs } of the lock file as it is now; null ONLY when it does not exist (ENOENT);
+// { error: <code> } for anything else (ELOOP for a symlink, EACCES, EISDIR for a directory ...): callers must not retry
+// that in a loop.
 function readLock(lockPath) {
   try {
     const fd = fs.openSync(lockPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
     try {
       const st = fs.fstatSync(fd);
+      if (!st.isFile()) return { error: 'EISDIR' };
       let j = null;
       try { j = JSON.parse(fs.readFileSync(fd, 'utf8')); } catch (_) { /* empty or half-written */ }
       return { nonce: isObj(j) && typeof j.nonce === 'string' ? j.nonce : null, pid: isObj(j) && Number.isInteger(j.pid) ? j.pid : null, ino: st.ino, mtimeMs: st.mtimeMs };
     } finally { fs.closeSync(fd); }
-  } catch (_) { return null; }
+  } catch (e) { return e && e.code === 'ENOENT' ? null : { error: (e && e.code) || 'EIO' }; }
 }
 
 // ESRCH means the process is gone; EPERM means it exists (another user). Same-host only, which a /run/user lock is.
@@ -406,7 +410,7 @@ function pidGone(pid) {
 // true when WE still hold it: same nonce AND same inode as when we took it.
 function holdsLock(lockPath, held) {
   const cur = readLock(lockPath);
-  return !!cur && cur.nonce === held.nonce && cur.ino === held.ino;
+  return !!cur && !cur.error && cur.nonce === held.nonce && cur.ino === held.ino;
 }
 
 // Takes the lock by linking a complete temp file ({ pid, nonce, t }) to the lock name. A lock is reclaimed only when its holder is GONE
@@ -464,7 +468,11 @@ function acquireLoop(lockPath, tmpLock, held, o, c) {
       if (!e || e.code !== 'EEXIST') throw e;
     }
     const judged = readLock(lockPath);
-    if (!judged) continue; // released while we looked
+    if (judged && judged.error) throw new Error(`lock_unreadable:${judged.error}`); // never spin on a lock we cannot read
+    if (!judged) { // ENOENT: released while we looked; retry at once, but never past the deadline
+      if (now() >= deadline) return null;
+      continue;
+    }
     const emptyAndOld = judged.nonce === null && now() - judged.mtimeMs > EMPTY_LOCK_MS; // leftover or foreign: no owner
     const reclaimable = (judged.pid !== null && pidGone(judged.pid)) || now() - judged.mtimeMs > hardMaxMs || emptyAndOld;
     if (reclaimable) {
@@ -475,7 +483,7 @@ function acquireLoop(lockPath, tmpLock, held, o, c) {
         throw e;
       }
       const got = readLock(moved);
-      if (got && got.nonce === judged.nonce && got.ino === judged.ino) { try { fs.unlinkSync(moved); } catch (_) { /* ignore */ } continue; }
+      if (got && !got.error && got.nonce === judged.nonce && got.ino === judged.ino) { try { fs.unlinkSync(moved); } catch (_) { /* ignore */ } continue; }
       try { fs.linkSync(moved, lockPath); fs.unlinkSync(moved); } catch (_) {
         if (typeof o.log === 'function') o.log(`lock moved aside and left in place: ${path.basename(moved)}`);
       }
@@ -586,7 +594,10 @@ function writeLocalRow(liveDir, record, opts) {
 
   const lockPath = path.join(dir, `${record.alias}.lock`);
   let held;
-  try { held = acquireLock(lockPath, o); } catch (_) { return { ok: false, code: 'write_failed', reason: 'lock' }; }
+  try { held = acquireLock(lockPath, o); } catch (e) {
+    const m = /^lock_unreadable:[A-Z0-9_]+$/.exec(e && e.message);
+    return { ok: false, code: 'write_failed', reason: m ? m[0] : 'lock' };
+  }
   if (!held) return { ok: false, code: 'mirror_lock_busy' };
   let tmp = null;
   try {
@@ -636,7 +647,9 @@ function writeLocalRow(liveDir, record, opts) {
       const prev = isObj(j2) && Array.isArray(j2.rows) ? j2.rows.find((r) => isObj(r) && r.writer_courier === courier) : null;
       const pb = prev ? basisOf(prev.record) : null;
       const nb = basisOf(record);
-      if (pb !== null && (nb === null || pb > nb)) return { ok: true, path: file, reset: false, superseded: true };
+      // a basis from the future (beyond the skew allowance) is not trusted: it must not block real observations
+      const nowS = ((o.now || Date.now)()) / 1000;
+      if (pb !== null && pb <= nowS + FUTURE_SKEW_S && (nb === null || pb > nb)) return { ok: true, path: file, reset: false, superseded: true };
     }
     fs.renameSync(tmp, file);
     tmp = null;

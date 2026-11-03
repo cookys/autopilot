@@ -4,6 +4,10 @@
 
 If you work with more than one Claude subscription, autopilot can keep each one under a short name (an alias) and pick the account with the most headroom for every headless `claude` call. When one account hits its usage limit (HTTP 429), the call moves to the next alias and the limited one is left alone until it recovers. This page is the one-time setup, done by you, step by step. Nothing here is automatic: the registry stays absent until you create it, and with no registry every rail behaves as it did before.
 
+## One command for O1 to O9
+
+`scripts/accounts-onboard.sh <A> <B>` does O1 to O9 for you in one interactive run: it creates the directories and registry rows, tells you (in Traditional Chinese) when to run `claude setup-token` in another pane, reads the pasted token silently into the token file, then runs `env-check`, the haiku OK call, `status`, `pick` and both selftests, and ends with a table that marks every item. It never runs `setup-token` itself and never prints a token. Re-running it is safe (existing tokens are kept unless you choose to overwrite). `--help` prints the usage and does nothing. O5 (the first interactive start, in tmux) and O10 (rollback) stay yours; the script prints both commands. The steps below remain the manual route and the reference for what each check expects.
+
 ## Ground rules
 
 - **A token lives in one place only**: a file `~/.config/autopilot/accounts/<alias>/token` with mode `0600`. Never put it in a command line (argv), a log, a chat message, a commit or an environment variable you export by hand. If it ever shows up in one of those, treat it as leaked: revoke it in the Claude account settings and redo step O3.

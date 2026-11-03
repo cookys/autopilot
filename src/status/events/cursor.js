@@ -149,9 +149,10 @@ function nextHints(files, lines, floor) {
     const hit = byKey.get(file.key);
     if (hit) { hit.hint = Math.min(hit.hint, hint); hit.size = Math.max(hit.size, file.size); } else byKey.set(file.key, { key: file.key, size: file.size, hint });
   }
-  const candidates = [...byKey.values()].sort((a, b) => (b.size - a.size) || cmpStr(a.key, b.key)).slice(0, MAX_H);
+  // merged by key first, then the 0s go (0 means "from the start": no hint), and only then the 16 largest are taken
+  const candidates = [...byKey.values()].filter((c) => c.hint > 0).sort((a, b) => (b.size - a.size) || cmpStr(a.key, b.key)).slice(0, MAX_H);
   const h = {};
-  for (const candidate of candidates) if (candidate.hint > 0) h[candidate.key] = candidate.hint; // 0 means "from the start": no hint
+  for (const candidate of candidates) h[candidate.key] = candidate.hint;
   return h;
 }
 

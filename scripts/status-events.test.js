@@ -1108,3 +1108,53 @@ test('cursor-collector-bounds: the collector keeps the smallest cap events by (t
   plain.push(mkE('y', T0, 2));
   assert.deepEqual(plain.result().events.map((e) => e.id), ['cost.turn:y', 'cost.turn:z'], 'without keep and cap it is a sorted list');
 });
+
+// ---- the collector and repeated ids; hint slots ---------------------------------------------------------------------------
+
+test('cursor-duplicate-id-real-reader: two manifests of one run_id give one event and a duplicate_id warning through the collector', () => {
+  const fx = fresh();
+  const text = fs.readFileSync(path.join(fx.paths.runsDir, 'fx-run-live.manifest.json'), 'utf8');
+  fs.writeFileSync(path.join(fx.paths.runsDir, 'fx-run-live-copy.manifest.json'), text);
+  const page = collectEvents(baseOpts(fx));
+  assert.equal(page.events.filter((e) => e.id === 'dispatch.started:fx-run-live').length, 1);
+  assert.deepEqual(page.warnings.filter((w) => w.code === 'duplicate_id').map((w) => `${w.source}:${w.count}`), ['merge:1']);
+  assert.equal(page.events.length, goldenEvents(fx).length);
+});
+
+test('order-duplicate-id-keeps-earlier-ts: the copy with the smaller ts survives whatever the input order and page size', () => {
+  const fx = fresh();
+  const { createCollector } = require('../src/status/events/collector');
+  const mk = (key, tsMs) => stubEvent(fx, key, tsMs);
+  const run = (list, limit) => {
+    const deps = stubDeps(fx, () => []);
+    deps.readers.cost = { read: (ctx, window) => { const col = createCollector(window); for (const e of list()) col.push(e); return { ...col.result(), warnings: [], stats: { state: 'ok' }, files: [] }; } };
+    return drain({ cwd: fx.repoDir, env: {}, now: T0, deps }, { limit });
+  };
+  const forward = () => [mk('a', T0), mk('x', T0 + 1000), mk('x', T0 + 5000), mk('z', T0 + 3000)];
+  const reverse = () => [mk('x', T0 + 5000), mk('z', T0 + 3000), mk('x', T0 + 1000), mk('a', T0)];
+  for (const limit of [1, 2, 10]) {
+    for (const list of [forward, reverse]) {
+      const pages = run(list, limit);
+      assert.deepEqual(idsOfPages(pages), ['cost.turn:a', 'cost.turn:x', 'cost.turn:z'], `limit ${limit}`);
+      const x = pages.flatMap((p) => p.events).find((e) => e.id === 'cost.turn:x');
+      assert.equal(x.ts, isoOf(T0 + 1000), 'the earlier copy is kept');
+    }
+  }
+  const warned = run(reverse, 10)[0].warnings.filter((w) => w.code === 'duplicate_id');
+  assert.equal(warned.length, 1);
+  assert.equal(warned[0].count, 1);
+});
+
+test('cursor-hints-zero-placeholder: a 0 hint does not take one of the 16 slots from a positive key', () => {
+  const fx = fresh();
+  const files = [];
+  const events = [];
+  for (let i = 0; i < 17; i += 1) {
+    const head = i.toString(16).padStart(12, '0');
+    files.push({ key: `cost:${head}`, file: `/f/${i}`, size: 200000 - i * 1000, head, startOffset: 0, endOffset: 5000 });
+    events.push(stubEvent(fx, `z${i}`, T0 + i * 1000, { source: 'cost', file: `/f/${i}`, head, offset: i === 0 ? 0 : 100 + i, end: 200 }));
+  }
+  const h = decodeC(collectEvents(stubOpts(fx, () => events, { files })).cursor).h;
+  assert.equal(h['cost:000000000000'], undefined, 'the file that must be read from 0 has no hint');
+  assert.equal(Object.keys(h).length, 16, 'all 16 slots go to positive keys');
+});

@@ -45,6 +45,7 @@ function mergePage({ results, cursor, kinds, limit, projectKey }) {
   const all = [];
   const extraLines = [];
   let anyDisplaced = false;
+  let readerDuplicates = 0;
   let invalid = 0;
   let foreign = 0;
   for (const result of results) {
@@ -52,6 +53,7 @@ function mergePage({ results, cursor, kinds, limit, projectKey }) {
     for (const file of result.files || []) files.push(file);
     if (result.bounded) {
       if (result.bounded.displaced > 0) anyDisplaced = true;
+      if (result.bounded.duplicates > 0) readerDuplicates += result.bounded.duplicates;
       for (const o of result.bounded.displacedOffsets || []) extraLines.push({ fileKey: o.fileKey, file: o.file, offset: o.offset, tsMs: Infinity, id: undefined, candidate: true });
       for (const o of result.bounded.rejectedOffsets || []) extraLines.push({ fileKey: o.fileKey, file: o.file, offset: o.offset, tsMs: Infinity, id: undefined, candidate: false });
     }
@@ -73,6 +75,7 @@ function mergePage({ results, cursor, kinds, limit, projectKey }) {
     seenIds.add(event.id);
     events.push(event);
   }
+  duplicates += readerDuplicates; // copies a reader's own collector already collapsed
   if (duplicates > 0) warn(warnings, 'duplicate_id', 'events', duplicates);
 
   const floor = cursorLib.floorOf(cursor);

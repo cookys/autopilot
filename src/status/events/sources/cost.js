@@ -3,7 +3,7 @@
 // src/status/events/sources/cost.js - reader of kind `cost.turn` (autopilot.events/1, plan E2 step 2).
 //
 //   read(ctx, window) -> { events, warnings, stats, files }       never throws, read-only
-//   ctx    = { project:{project_key, repo_identity, cwd?,...}, env, home, now }
+//   ctx    = { project:{project_key, repo_identity, repo_name, root, common_dir}, env, home, now }
 //   window = { sinceTs, slackMs, hints }                          hints: {"cost:<12 hex head>": byte offset}
 //
 // Source: the costs file (scripts/lib/brain-spend.js:costsFileOf), rows as hooks/cost-tracker.js writes them. cost-tracker appends a
@@ -47,8 +47,8 @@ function hasDotGitUp(dir) {
 }
 
 function commonDirOf(project) {
-  const id = project && project.repo_identity;
-  return typeof id === 'string' && id.startsWith('git-common-dir:') ? id.slice('git-common-dir:'.length) : null;
+  const dir = project && project.common_dir;
+  return typeof dir === 'string' && dir !== '' ? dir : null;
 }
 
 // One matcher per read() call: owns the cwd memo and the lazily built worktree-prefix list.

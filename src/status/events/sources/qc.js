@@ -3,7 +3,7 @@
 // src/status/events/sources/qc.js - git `QC-Verdict` trailers -> `qc.verdict` (autopilot.events/1).
 //
 // read(ctx, window) -> { events, warnings, stats }
-//   ctx    = { project: { project_key, repo_identity, root? }, env, home, now, cwd? }
+//   ctx    = { project: { project_key, repo_identity, repo_name, root, common_dir }, env, home, now }
 //   window = { sinceTs (epoch ms | ISO | null), slackMs, hints }
 // One `git log --branches HEAD` of the project through execFileSync (GIT_* repo selectors dropped by cleanGitEnv, timeout 20 s,
 // maxBuffer 32 MiB, --since = sinceTs - slack when a window exists). One event per commit that carries a non-empty QC-Verdict
@@ -50,10 +50,8 @@ function sinceIso(window) {
 // -> { prefix: [git args placed before `log`], cwd } for the project's repository.
 function repoArgs(ctx) {
   const project = (ctx && ctx.project) || {};
-  const root = project.root || project.repo_root || project.cwd || (ctx && ctx.cwd);
-  if (root) return { prefix: ['-C', root], cwd: undefined };
-  const identity = project.repo_identity;
-  if (typeof identity === 'string' && identity.startsWith('git-common-dir:')) return { prefix: [`--git-dir=${identity.slice('git-common-dir:'.length)}`], cwd: undefined };
+  if (typeof project.root === 'string' && project.root !== '') return { prefix: ['-C', project.root], cwd: undefined };
+  if (typeof project.common_dir === 'string' && project.common_dir !== '') return { prefix: [`--git-dir=${project.common_dir}`], cwd: undefined };
   return null;
 }
 

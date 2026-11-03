@@ -3,7 +3,7 @@
 // src/status/events/sources/review.js - review.collected / review.finalized events (autopilot.events/1).
 //
 //   read(ctx, window) -> { events, warnings, stats }      never throws, read-only with respect to every source
-//   ctx    = { project: { project_key, repo_identity }, env, home, now, reviewLedgers? }
+//   ctx    = { project: { project_key, repo_identity, repo_name, root, common_dir }, env, home, now, reviewLedgers? }
 //            reviewLedgers: the repeated `--review-ledger <dir>` values (configured roots)
 //   window = { sinceTs, slackMs, hints }                  sinceTs: epoch ms | ISO string | null/0 (= from the beginning)
 //
@@ -80,8 +80,8 @@ function realOrSelf(dir) {
 }
 
 function commonDirOf(project) {
-  const id = project && project.repo_identity;
-  return typeof id === 'string' && id.startsWith('git-common-dir:') ? id.slice('git-common-dir:'.length) : null;
+  const dir = project && project.common_dir;
+  return typeof dir === 'string' && dir !== '' ? dir : null;
 }
 
 // ---- ledger roots ------------------------------------------------------------------------------------------------

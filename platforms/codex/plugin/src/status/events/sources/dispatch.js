@@ -3,7 +3,7 @@
 // src/status/events/sources/dispatch.js - dispatch run manifests -> `dispatch.started`, `dispatch.ended` (autopilot.events/1).
 //
 // read(ctx, window) -> { events, warnings, stats }
-//   ctx    = { project: { project_key, repo_identity }, env, home, now }
+//   ctx    = { project: { project_key, repo_identity, repo_name, root, common_dir }, env, home, now }
 //   window = { sinceTs (epoch ms | ISO | null), slackMs, hints }   (hints are unused: a manifest dir is small and stat-filtered)
 // Source: <runsDir(env)>/<safe_id>.manifest.json, written atomically (temp file + mv) by scripts/dispatch-hetero.sh:write_manifest.
 // Read-only, never throws. `panel-*` manifests (plan-review panels, another shape) are skipped. A manifest whose mtime is older

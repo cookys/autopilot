@@ -27,7 +27,7 @@ function tmp() {
 }
 const fresh = () => buildFixture({ dir: tmp() });
 const ctxOf = (fx) => ({
-  project: { project_key: fx.projectKey, repo_identity: fx.identity, repo_name: fx.repoName, cwd: fx.repoDir },
+  project: { project_key: fx.projectKey, repo_identity: fx.identity, repo_name: fx.repoName, root: fx.repoDir, common_dir: fx.identity.slice('git-common-dir:'.length) },
   env: fx.env, home: fx.env.HOME, now: Date.parse('2026-11-02T08:00:00.000Z'),
 });
 const byTsId = (a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);

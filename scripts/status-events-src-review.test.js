@@ -20,7 +20,7 @@ function fresh() {
   return buildFixture({ dir });
 }
 const ctxOf = (fx, extra = {}) => ({
-  project: { project_key: fx.projectKey, repo_identity: fx.identity },
+  project: { project_key: fx.projectKey, repo_identity: fx.identity, repo_name: fx.repoName, root: fx.repoDir, common_dir: fx.identity.slice('git-common-dir:'.length) },
   env: fx.env, home: fx.env.HOME, now: Date.parse('2026-11-02T08:00:00.000Z'),
   reviewLedgers: [fx.paths.reviewLedgers.foreign], ...extra,
 });

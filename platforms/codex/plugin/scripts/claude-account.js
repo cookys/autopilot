@@ -11,6 +11,9 @@
  *   node scripts/claude-account.js usage-probe --alias A [--purpose T]
  *                                            one tiny model call as alias A (the manifest's tinyprobe argv); prints
  *                                            {alias, windows} and publishes the observation as source=probe
+ *   node scripts/claude-account.js sync-statusline [--alias A]
+ *                                            convert each alias's codeforge statusline snapshot into a local mirror row
+ *                                            (quota-reporter.js); `run` does the same once before its first gather
  *   node scripts/claude-account.js status    [--limit N]
  *   node scripts/claude-account.js cooldown  --clear <alias>
  *   node scripts/claude-account.js selftest                 (Node shim, throwaway dir)
@@ -48,6 +51,7 @@ const { pick, judge } = require('./lib/account-pick');
 const observation = require('./lib/account-observation');
 const capture = require('./lib/account-capture');
 const probe = require('./lib/account-probe');
+const reporter = require('./quota-reporter');
 const interpret = require('./lib/account-interpret');
 const audit = require('./lib/account-audit');
 const accountEnv = require('./lib/account-env');
@@ -601,6 +605,47 @@ function tightResetsFor(ctx, alias, checked, text) {
   return out;
 }
 
+// G40 D5: the reporter's statusline adapter, called by `run` once before the first gather and by `sync-statusline`.
+// It converts each enabled alias's codeforge snapshot into a local mirror row (quota-reporter.js) and never throws:
+// a failure is a result, and only a real write failure earns one stderr debug line (a missing, stale or mismatching
+// snapshot is already visible through pick's own notes). Gated by the same knob as the other mirror writers.
+function syncStatusline(ctx, checked, pinned, cfg) {
+  try {
+    if (cfg.quota_capture !== 'on' || !ctx.liveDir) return [];
+    const accounts = [];
+    for (const r of checked.accounts) {
+      if (!r.enabled || (pinned && r.alias !== pinned)) continue;
+      const info = checked.enabled.find((e) => e.alias === r.alias);
+      if (!info) continue;
+      let real = info.configDir;
+      try { real = fs.realpathSync(info.configDir); } catch (_) { /* keep as is */ }
+      accounts.push({ alias: r.alias, expectedRoot: quota.hash8(real) });
+    }
+    const results = reporter.syncStatusline({ liveDir: ctx.liveDir, accounts, nowMs: ctx.now(), hostRole: cfg.host_role });
+    for (const r of results) if (reporter.isFailure(r)) ctx.err(`quota_statusline alias=${r.alias} reason=${r.reason}`);
+    return results;
+  } catch (_) { return []; }
+}
+
+function cmdSyncStatusline(ctx, argv) {
+  const { opts } = parseArgs(argv, { alias: 'value' });
+  const cfg = accountsConfig(ctx);
+  const checked = loadChecked(ctx, 'sync-statusline');
+  if (!checked.configured) throw new Stop(EXIT.INVALID, 'registry_not_configured', null);
+  if (cfg.mode === 'off') { preAudit(ctx, 'sync-statusline', 'mode_off'); throw new Stop(EXIT.INVALID, 'mode_off', null); }
+  if (opts.alias !== undefined) {
+    try { registry.requireAlias({ accounts: checked.accounts }, opts.alias); } catch (e) {
+      if (e instanceof registry.RegistryError) { preAudit(ctx, 'sync-statusline', 'invalid_config'); throw new Stop(EXIT.INVALID, `unknown_alias (${e.reason})`, null); }
+      throw e;
+    }
+  }
+  if (cfg.quota_capture !== 'on') { ctx.out('skipped quota_capture=off'); return EXIT.OK; }
+  for (const r of syncStatusline(ctx, checked, opts.alias || null, cfg)) {
+    ctx.out(`alias=${r.alias} wrote=${r.wrote ? 'yes' : 'no'} reason=${r.reason === null ? '-' : r.reason}`);
+  }
+  return EXIT.OK;
+}
+
 // ---------------------------------------------------------------- quota capture and probe (G40 D4, write side)
 
 // The one boundary where the wrapper's millisecond clock becomes the record's seconds (plan 6, N49, N84): called once
@@ -802,6 +847,7 @@ async function cmdRun(ctx, argv) {
   try {
     scratchRoot = fs.mkdtempSync(path.join(ctx.env.TMPDIR || os.tmpdir(), 'claude-account-'));
     fs.chmodSync(scratchRoot, 0o700);
+    syncStatusline(ctx, checked, pinned, cfg); // once per run, before the first gather (G40 D5)
     for (let k = 1; k <= maxAttempts; k++) {
       let data = gather(ctx, checked, tried, pinned, cfg);
       if (cfg.quota_probe === 'stale' && !pinned && !probeChecked) {
@@ -1320,9 +1366,10 @@ async function cli(argv, deps) {
       case 'status': return cmdStatus(ctx, rest);
       case 'cooldown': return cmdCooldown(ctx, rest);
       case 'usage-probe': return await cmdUsageProbe(ctx, rest);
+      case 'sync-statusline': return cmdSyncStatusline(ctx, rest);
       case 'selftest': return await cmdSelftest(ctx, rest);
       default:
-        ctx.err('usage: claude-account.js pick|env-check|run|exec|usage-probe|status|cooldown|selftest');
+        ctx.err('usage: claude-account.js pick|env-check|run|exec|usage-probe|sync-statusline|status|cooldown|selftest');
         return EXIT.INVALID;
     }
   } catch (e) {

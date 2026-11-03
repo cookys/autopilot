@@ -1258,9 +1258,27 @@ test('fixture: a suite that reads the root README by either path.join shape is s
   } finally { r.cleanup(); }
 });
 
+// The real repo no longer carries a suite that is reachable ONLY by naming runs-watch.js in text: hooks/runs-watch-hotpath.test.js, the
+// last such witness, now also sits behind a require chain (runs-watch.js -> src/status/card-visibility.js -> hooks/runs-watch-autostart.js),
+// because the autostart hook really depends on it. So the control runs on a fixture where the mention is the ONLY edge, one suite per seed;
+// it must be selected by the real selector and lost by the mutant that drops the suites' file-name mention edges.
 test('negative control: dropping the suites\' file-name mention edges turns the runs-watch regression red', () => {
   const bin = mutant([['for (const f of graph.byExt.get(b) || []) {', 'for (const f of [...(graph.byExt.get(b) || [])].filter((x) => !isSuite(x))) {']]);
-  for (const seed of RW_SEEDS) assert.ok(missingRunsWatch(bin, seed).length > 0, seed);
+  const files = {};
+  RW_SEEDS.forEach((seed, i) => {
+    files[seed] = 'module.exports = 1;\n';
+    files[`hooks/tests/mention-only-${i}.test.sh`] = `#!/usr/bin/env bash\n# status runs --watch: only names ${seed}, requires nothing\necho ${seed}\n`;
+  });
+  const r = makeRepo(files);
+  try {
+    const head = r.change(Object.fromEntries(RW_SEEDS.map((seed) => [seed, 'module.exports = 2;\n'])));
+    const run = (b, seed) => JSON.parse(execFileSync('node', [b, '--root', r.dir, '--base', r.base, '--head', head, '--files', seed, '--json'], { stdio: 'pipe' }).toString()).suites;
+    RW_SEEDS.forEach((seed, i) => {
+      const suite = `hooks/tests/mention-only-${i}.test.sh`;
+      assert.ok(run(SEL, seed).includes(suite), `the real selector keeps the mention-only suite for ${seed}`);
+      assert.ok(!run(bin, seed).includes(suite), `without file-name mention edges it is lost for ${seed}`);
+    });
+  } finally { r.cleanup(); }
 });
 
 test('negative control: dropping the hooks/README.md mention edge loses hookq', () => {

@@ -1,0 +1,9 @@
+A1 events, E4 transcript for KR-A1.4 (schema doc complete) (2026-11-03)
+$ node scripts/check-events-contract.js
+check-events-contract: ok
+exit=0
+
+$ node --test scripts/check-events-contract.test.js
+ℹ tests 43
+ℹ pass 43
+ℹ fail 0

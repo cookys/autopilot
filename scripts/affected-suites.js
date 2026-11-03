@@ -242,6 +242,7 @@ const ALWAYS_RUN = [
   [`${HOOK_TESTS_DIR}/skill-onoff-stage-graph.test.sh`, 'greps all of scripts/ for the probe ladder field (only probe-unknown.js may print it)'],
   [`${HOOK_TESTS_DIR}/skill-count-metadata.test.sh`, 'counts the skills/ directories against the documented count (a new skill dir changes it)'],
   [`${HOOK_TESTS_DIR}/qualify-recipe-credential-staging.test.sh`, `greps every ${PLANS_EVIDENCE_DIR}/*/administration/*/run.sh for staging variables`],
+  ['scripts/check-claude-spawn-sites.test.js', 'walks scripts/ src/ hooks/ bin/ evals/ for any new claude spawn (G37 N8): the changed file IS the spawn, so no reference graph reaches this suite'],
 ];
 // A repo file that an evaluation pack copies (pack manifest entry `<pack id>/<relative path>`) is compared against the
 // repo by the pack's content suite, and no source reference shows it. [pack id regex, suite]
@@ -1265,6 +1266,10 @@ async function main(argv) {
       runAlways = r.alwaysRun;
     }
     if (a.run) {
+      // G37: no entry may see the operator's real account registry (hooks/tests/lib.sh does the same for bash suites; Node suites
+      // only get it here). A path that does not exist, so a wired caller runs its no-registry path. Inherited by every entry,
+      // pool and rerun alike. AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1 keeps the caller's value.
+      if (process.env.AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR !== '1') process.env.AUTOPILOT_ACCOUNTS_DIR = path.join(os.tmpdir(), `autopilot-no-accounts-${process.pid}`, 'accounts');
       if ((a.entryTimeout != null || a.jobs > 1) && !SIG_INSTALLED) installSignalKill();
       const ran = await runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget, a.entryTimeout, a.jobs || 1);
       recordDurations(root, ran.results, ran.timedOutPaths || []);

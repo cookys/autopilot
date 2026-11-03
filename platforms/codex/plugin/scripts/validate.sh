@@ -79,6 +79,18 @@ for skill_dir in "$SKILLS_DIR"/*/; do
   fi
 done
 
+# G37 spawn-site gate (plan 5.9): every file that can start a claude process is registered in
+# scripts/lib/claude-spawn-sites.json (wired / out_of_scope / frozen_legacy); a wired file must reach the account layer.
+echo ""
+echo "Claude spawn sites:"
+if node "$SCRIPT_DIR/check-claude-spawn-sites.js"; then
+  echo "  PASS  claude spawn sites"
+else
+  echo "  FAIL  claude spawn sites"
+  failed=$((failed + 1))
+  failures+=("claude-spawn-sites")
+fi
+
 echo ""
 echo "Summary: $total skills found, $passed passed, $failed failed"
 

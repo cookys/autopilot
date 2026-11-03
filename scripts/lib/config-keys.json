@@ -5854,6 +5854,23 @@
       "doc": "project/plans/2026-11-03-g37-account-switching.md",
       "relates": [],
       "note": "Absolute path of the operator config.json handed to account children so nested calls read the same file."
+    },
+    {
+      "name": "AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "hooks/tests/lib.sh",
+        "hooks/tests/run.sh",
+        "scripts/affected-suites.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [
+        "AUTOPILOT_ACCOUNTS_DIR"
+      ],
+      "note": "Test runners pin AUTOPILOT_ACCOUNTS_DIR to a path that does not exist so no suite reads the operator's real account registry; 1 keeps the caller's value (only the isolation negative control in scripts/account-rails.test.js uses it)."
     }
   ]
 }

@@ -164,6 +164,12 @@ __TEST_ORIG_TMPDIR="${TMPDIR:-/tmp}"
 TEST_TMP=$(mktemp -d -t "autopilot-test-${TEST_NAME}-XXXXXX")
 # The foreman exam keeps a durable anti-rerun log; a test must never write the real one.
 export AUTOPILOT_FOREMAN_EVIDENCE_DIR="$TEST_TMP/foreman-evidence"
+# G37: a wired claude caller (dispatch-*, probe-*, qc-panel, eval runners ...) goes through the account layer when a
+# registry exists at AUTOPILOT_ACCOUNTS_DIR (default ~/.config/autopilot/accounts). A suite must never see the operator's
+# real registry: it would change what the suite spawns (or refuse to spawn). Every suite gets a path that does not exist,
+# so the callers run their no-registry path. A suite that tests the account layer exports its own fixture dir after this
+# line; AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1 keeps the caller's value (only the isolation negative control uses it).
+if [ "${AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR:-}" != 1 ]; then export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"; fi
 # A host with a real /etc/claude-code/managed-settings.json would change what the autocompact resolver
 # reports; point it at a path that never exists (a test needing a managed file overrides this).
 export AUTOPILOT_MANAGED_SETTINGS_FILE="$TEST_TMP/.no-managed-settings.json"

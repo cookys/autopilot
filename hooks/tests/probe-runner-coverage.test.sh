@@ -14,6 +14,8 @@
 # Deterministic: parses source, spends nothing, needs no binary and no network.
 
 set -uo pipefail
+# G37: never consult the real account registry (a wired caller reads it); this path does not exist
+export AUTOPILOT_ACCOUNTS_DIR="${TMPDIR:-/tmp}/autopilot-no-accounts-$$/accounts"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DISPATCH="$ROOT/scripts/dispatch-review.sh"
 PROBE="$ROOT/scripts/probe-engine-capability.sh"

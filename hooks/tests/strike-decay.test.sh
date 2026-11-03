@@ -17,6 +17,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CLI="$ROOT/scripts/engine-capability-state.js"
 PASS=0; FAIL=0
 TESTDIR="$(mktemp -d)"
+# G37: never consult the real account registry (a wired caller reads it); this path does not exist
+export AUTOPILOT_ACCOUNTS_DIR="$TESTDIR/no-accounts"
 export ENGINE_CAPABILITY_DIR="$TESTDIR"
 trap 'rm -rf "$TESTDIR"' EXIT
 

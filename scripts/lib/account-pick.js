@@ -8,17 +8,64 @@
 // ->  { ok:true,  choice:{alias,class,used,source}, outcome:'all_tight'|null, notes:[{alias,note}], dropped:[{alias,reason}] }
 //   | { ok:false, exit:3, code:'no_account_available'|'all_tight_refused', dropped:[...], notes:[...] }
 //
+// Optional mirror input (G40 D3, plan 8.1 P2 interim, 8.2):
+//   observations: { alias: [row...] }   rows of the local quota mirror view (account-observation.js readView, already
+//                                       passed through account-interpret.js selectView: peer rows never reach pick)
+//   manifest: adapter manifest (account-interpret.js interpretWindows), optional
+// PM parity (L): the mirror can change a pick in exactly two ways and no other. (1) A fresh live MEASURED window at
+// or above 0.90 makes the alias tight; the mirror observation takes over from the snapshot only when it is at least
+// as new as the snapshot's (a tie goes to the mirror); an older tight mirror row under a newer snapshot is ignored.
+// (2) A live refusal drops the alias with reason `refusal` (after `excluded` and after the G37 `cooldown`, which keeps
+// its own string). An ok, unknown, estimated, stale, placeholder or foreign-namespace mirror row never changes
+// anything: no promotion of an unknown alias to ok (KR2 is off this wave), no "newer whole" for an ok row, no notes.
+// Without observations (or with only unusable rows) the output is byte-for-byte the G37 output, no extra key.
+// A tight takeover adds `observed_at` (epoch seconds of the deciding window) to `choice`; nothing else does.
+//
 // Classes: ok (known, used < 0.90), unknown, tight (known, used >= 0.90).
 // Order: ok by used asc, then unknown by priority, then tight by used asc; ties by priority, alias.
-// Drop reasons are capacity only: excluded, cooldown. Token/config faults are never a drop reason.
+// Drop reasons are capacity only: excluded, cooldown, refusal. Token/config faults are never a drop reason.
 
 const { interpretSnapshot, TIGHT_THRESHOLD } = require('./account-quota');
+const { interpretWindows, TIGHT_THRESHOLD: MIRROR_TIGHT_THRESHOLD } = require('./account-interpret');
 
 const CLASS_RANK = { ok: 0, unknown: 1, tight: 2 };
 
 function classify(q) {
   if (q.state !== 'known') return 'unknown';
   return q.used >= TIGHT_THRESHOLD ? 'tight' : 'ok';
+}
+
+// What the mirror rows of one alias may contribute: { refusal: bool, tight: null | { used, source, observed_at } }.
+// Only measured windows count for tight (an estimate never makes an alias tight on its own); anything unreadable
+// is no contribution at all, never an error.
+function mirrorEffect(rows, manifest, nowMs) {
+  const none = { refusal: false, tight: null };
+  if (!Array.isArray(rows)) return none;
+  // Local rows only (no hub this wave): a row carrying a hub stamp is a peer row and is not trusted here either.
+  const local = rows.filter((r) => r && typeof r === 'object' && !(typeof r.observed_at_hub === 'number' && Number.isFinite(r.observed_at_hub)));
+  if (local.length === 0) return none;
+  let m;
+  try { m = interpretWindows(local, manifest, nowMs / 1000); } catch (_) { return none; }
+  if (m.refusal !== null && m.refusal !== undefined) return { refusal: true, tight: null };
+  let top = null;
+  for (const w of m.windows) {
+    if (w.source === 'estimated' || typeof w.utilization !== 'number' || !(w.utilization >= MIRROR_TIGHT_THRESHOLD)) continue;
+    if (top === null || w.utilization > top.utilization) top = w;
+  }
+  return { refusal: false, tight: top === null ? null : { used: top.utilization, source: top.source, observed_at: top.observed_at } };
+}
+
+// The class/used/source of one alias after the mirror had its say: { drop, cls, used, source, observed_at? }.
+// `drop` is 'refusal' or null. q is interpretSnapshot's result, snap the raw snapshot it was made from.
+function judge(q, snap, rows, manifest, nowMs) {
+  const base = { drop: null, cls: classify(q), used: q.used, source: q.source };
+  const eff = mirrorEffect(rows, manifest, nowMs);
+  if (eff.refusal) return Object.assign(base, { drop: 'refusal' });
+  if (eff.tight === null) return base;
+  const snapAgeMs = q.state === 'known' && snap && Number.isFinite(snap.written_at_ms) ? nowMs - snap.written_at_ms : Infinity;
+  const mirrorAgeMs = nowMs - eff.tight.observed_at * 1000;
+  if (snapAgeMs < mirrorAgeMs) return base; // the snapshot observation is newer: it keeps the alias
+  return { drop: null, cls: 'tight', used: eff.tight.used, source: eff.tight.source, observed_at: eff.tight.observed_at };
 }
 
 function pick(input) {
@@ -30,6 +77,7 @@ function pick(input) {
   const cooldowns = i.cooldowns || {};
   const snapshots = i.snapshots || {};
   const roots = i.roots || {};
+  const observations = i.observations || {};
   const dropped = [];
   const notes = [];
   const cands = [];
@@ -41,8 +89,11 @@ function pick(input) {
     if (Number.isFinite(until) && until > nowMs) { dropped.push({ alias, reason: 'cooldown' }); continue; }
     const q = interpretSnapshot(snapshots[alias], { alias, expectedRoot: roots[alias], nowMs });
     if (q.note === 'quota_schema_unsupported' || q.note === 'snapshot_root_mismatch') notes.push({ alias, note: q.note });
-    const cls = classify(q);
-    cands.push({ alias, priority: Number.isFinite(acct.priority) ? acct.priority : 0, cls, used: q.used, source: q.source });
+    const j = judge(q, snapshots[alias], observations[alias], i.manifest, nowMs);
+    if (j.drop !== null) { dropped.push({ alias, reason: j.drop }); continue; }
+    const cand = { alias, priority: Number.isFinite(acct.priority) ? acct.priority : 0, cls: j.cls, used: j.used, source: j.source };
+    if (j.observed_at !== undefined) cand.observed_at = j.observed_at;
+    cands.push(cand);
   }
 
   if (cands.length === 0) return { ok: false, exit: 3, code: 'no_account_available', dropped, notes };
@@ -58,12 +109,14 @@ function pick(input) {
   if (first.cls === 'tight' && i.refuseAllTight === true) {
     return { ok: false, exit: 3, code: 'all_tight_refused', dropped, notes };
   }
+  const choice = { alias: first.alias, class: first.cls, used: first.used, source: first.source };
+  if (first.observed_at !== undefined) choice.observed_at = first.observed_at;
   return {
     ok: true,
-    choice: { alias: first.alias, class: first.cls, used: first.used, source: first.source },
+    choice,
     outcome: first.cls === 'tight' ? 'all_tight' : null,
     notes, dropped,
   };
 }
 
-module.exports = { pick, classify };
+module.exports = { pick, classify, judge };

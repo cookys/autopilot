@@ -39,6 +39,13 @@ const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const nonNegInt = (v) => Number.isInteger(v) && v >= 0;
 
+function hasDotGitUp(dir) {
+  for (let here = path.resolve(dir); ; here = path.dirname(here)) {
+    try { fs.lstatSync(path.join(here, '.git')); return true; } catch (_error) { /* none here */ }
+    if (path.dirname(here) === here) return false;
+  }
+}
+
 function commonDirOf(project) {
   const id = project && project.repo_identity;
   return typeof id === 'string' && id.startsWith('git-common-dir:') ? id.slice('git-common-dir:'.length) : null;
@@ -46,7 +53,8 @@ function commonDirOf(project) {
 
 // One matcher per read() call: owns the cwd memo and the lazily built worktree-prefix list.
 function makeProjectMatcher(project, env, onGitMissing) {
-  const gitEnv = cleanGitEnv(env);
+  // Fixed C locale: the "not a repository" message below is matched as text. Local to this reader (cleanGitEnv is shared).
+  const gitEnv = { ...cleanGitEnv(env), LC_ALL: 'C', LANGUAGE: '' };
   const memo = new Map();
   let prefixes = null;
   const git = (args, cwd) => execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -77,17 +85,20 @@ function makeProjectMatcher(project, env, onGitMissing) {
     return prefixes;
   }
 
-  // -> identity string, null (git says: not a repository, a definite "other project"), or undefined (resolution FAILED:
-  // git missing, timeout, dubious ownership, broken .git ...; reported once per read via onGitMissing, never silent).
+  // -> identity string, null (git says exactly "not a git repository (or any of the parent directories)": discovery found no
+  // repository, a definite "other project"), or undefined (resolution FAILED: git missing, timeout, dubious ownership, a broken
+  // .git whose message carries a quoted path, any other exit 128, an empty answer; reported once per read via onGitMissing).
   function identityOf(cwd) {
     try {
       const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd).trim();
-      return common ? `git-common-dir:${fs.realpathSync(common)}` : undefined;
+      if (common) return `git-common-dir:${fs.realpathSync(common)}`;
     } catch (error) {
-      if (error && error.status === 128 && /not a git repository/i.test(String(error.stderr || ''))) return null;
-      onGitMissing();
-      return undefined;
+      // A `.git` directory without HEAD gives the very same text as "no repository" (git skips it and walks up), so a `.git`
+      // entry on the way up proves the answer is a failure, not an "other project".
+      if (error && error.status === 128 && /not a git repository \(or any of the parent directories\)/.test(String(error.stderr || '')) && !hasDotGitUp(cwd)) return null;
     }
+    onGitMissing();
+    return undefined;
   }
 
   return function matches(cwd) {

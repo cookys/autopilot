@@ -240,10 +240,64 @@ test('degrade-cost-git-failure-is-one-warning-not-a-silent-filter', () => {
     assert.deepEqual(res.warnings.filter((w) => w.code === 'git_unavailable').map((w) => w.count), [1], `${body}: one aggregated warning`);
     assert.ok(res.events.some((e) => e.data.session === 's-fx-2'), 'the reaped-worktree prefix fallback still works');
   }
-  // "not a git repository" is a definite other project: filtered, no warning
-  const clean = run('echo "fatal: not a git repository" >&2; exit 128');
+  // "not a git repository (or any of the parent directories)" for a cwd with no .git above it is a definite other project
+  const plain = path.join(fx.dir, 'plain-dir');
+  fs.mkdirSync(plain, { recursive: true });
+  write(fx.paths.costsFile, lines({ ...JSON.parse(fx.cost.main), session: 's-plain', cwd: plain }));
+  const clean = run('echo "fatal: not a git repository (or any of the parent directories): .git" >&2; exit 128');
   assert.ok(!clean.warnings.some((w) => w.code === 'git_unavailable'));
-  assert.equal(clean.events.length, 1, 'only the prefix-matched worktree row remains');
+  assert.equal(clean.events.length, 0);
+  assert.equal(clean.stats.rows_filtered, 1);
+});
+
+test('degrade-cost-broken-dot-git-is-a-resolution-failure-with-prefix-fallback', () => {
+  const fx = fresh();
+  const { execFileSync } = require('child_process');
+  const wt = (name) => path.join(fx.dir, 'worktrees', name);
+  // 1: a worktree whose .git file points at a gitdir that does not exist; 2: a .git directory without HEAD
+  write(path.join(wt('broken-ptr'), '.git'), `gitdir: ${path.join(fx.dir, 'no-such-gitdir')}\n`);
+  fs.mkdirSync(wt('broken-head'), { recursive: true });
+  execFileSync('git', ['init', '-q', '--template=', wt('broken-head')], { env: fx.env });
+  fs.rmSync(path.join(wt('broken-head'), '.git', 'HEAD'));
+  const rows = [];
+  for (const name of ['broken-ptr', 'broken-head']) {
+    write(path.join(fx.paths.runsDir, `fx-run-${name}.manifest.json`), JSON.stringify({ ...fx.manifests.done, run_id: `fx-run-${name}`, worktree: wt(name) }) + '\n');
+    rows.push(JSON.stringify({ ...JSON.parse(fx.cost.main), session: `s-${name}`, cwd: wt(name) }));
+  }
+  fs.appendFileSync(fx.paths.costsFile, rows.join('\n') + '\n');
+  const res = cost.read(ctxOf(fx), {});
+  assert.equal(res.stats.state, 'degraded');
+  assert.deepEqual(res.warnings.filter((w) => w.code === 'git_unavailable').map((w) => w.count), [1], 'one aggregated warning for both');
+  for (const name of ['broken-ptr', 'broken-head']) assert.ok(res.events.some((e) => e.data.session === `s-${name}`), `${name}: kept through the prefix fallback`);
+});
+
+test('degrade-cost-git-messages-are-read-in-the-c-locale', () => {
+  const fx = fresh();
+  const bin = path.join(tmp(), 'bin');
+  const realGit = require('child_process').execFileSync('sh', ['-c', 'command -v git'], { env: fx.env, encoding: 'utf8' }).trim();
+  // a translating git: any locale but C gets a German message
+  write(path.join(bin, 'git'), `#!/bin/sh
+case "$*" in *worktree*) exec ${realGit} "$@";; esac
+if [ "$LC_ALL" = "C" ]; then echo "fatal: not a git repository (or any of the parent directories): .git" >&2; else echo "fatal: kein Git-Repository (oder irgendein Elternverzeichnis): .git" >&2; fi
+exit 128
+`);
+  fs.chmodSync(path.join(bin, 'git'), 0o755);
+  const plain = path.join(fx.dir, 'plain-dir');
+  fs.mkdirSync(plain, { recursive: true });
+  write(fx.paths.costsFile, lines({ ...JSON.parse(fx.cost.main), session: 's-plain', cwd: plain }));
+  const res = cost.read({ ...ctxOf(fx), env: { ...fx.env, PATH: `${bin}:${fx.env.PATH}`, LANG: 'de_DE.UTF-8', LC_ALL: 'de_DE.UTF-8', LANGUAGE: 'de' } }, {});
+  assert.ok(!res.warnings.some((w) => w.code === 'git_unavailable'), 'a cwd outside any repo is not a resolution failure');
+});
+
+test('degrade-cost-empty-rev-parse-answer-is-a-resolution-failure', () => {
+  const fx = fresh();
+  const bin = path.join(tmp(), 'bin');
+  const realGit = require('child_process').execFileSync('sh', ['-c', 'command -v git'], { env: fx.env, encoding: 'utf8' }).trim();
+  write(path.join(bin, 'git'), `#!/bin/sh\ncase "$*" in *worktree*) exec ${realGit} "$@";; esac\nexit 0\n`);
+  fs.chmodSync(path.join(bin, 'git'), 0o755);
+  const res = cost.read({ ...ctxOf(fx), env: { ...fx.env, PATH: `${bin}:${fx.env.PATH}` } }, {});
+  assert.equal(res.stats.state, 'degraded');
+  assert.deepEqual(res.warnings.filter((w) => w.code === 'git_unavailable').map((w) => w.count), [1]);
 });
 
 test('degrade-cost-never-throws-on-a-hostile-hint', () => {

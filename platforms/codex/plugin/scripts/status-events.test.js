@@ -447,8 +447,8 @@ test('evidence-e1-lists-exactly-the-tests-of-this-suite', () => {
   const evidenceFile = path.join(REPO, repoLayout.path('plans_evidence_dir'), '2026-11-02-oc-a1-events', 'e1-contract.txt');
   const evidence = fs.readFileSync(evidenceFile, 'utf8');
   const source = fs.readFileSync(__filename, 'utf8');
-  // the resume-/order-/cursor- cases are E3's; they are recorded by the E3 evidence, not by this E1 file
-  const declared = [...source.matchAll(/^test\('([^']+)'/gm)].map((m) => m[1]).filter((name) => !/^(resume|order|cursor)-/.test(name));
+  // the resume-/order-/cursor- cases are E3's, the readonly- cases E4's; they are recorded by the E3 evidence, not by this E1 file
+  const declared = [...source.matchAll(/^test\('([^']+)'/gm)].map((m) => m[1]).filter((name) => !/^(resume|order|cursor|readonly)-/.test(name));
   for (const kind of KINDS) declared.push(`schema-negative-${kind}`);
   const listed = [...evidence.matchAll(/^✔ (\S+)$/gm)].map((m) => m[1]);
   assert.deepEqual([...listed].sort(), [...declared].sort(), 'evidence lists every declared test, no more, no less');
@@ -1157,4 +1157,168 @@ test('cursor-hints-zero-placeholder: a 0 hint does not take one of the 16 slots 
   const h = decodeC(collectEvents(stubOpts(fx, () => events, { files })).cursor).h;
   assert.equal(h['cost:000000000000'], undefined, 'the file that must be read from 0 has no hint');
   assert.equal(Object.keys(h).length, 16, 'all 16 slots go to positive keys');
+});
+
+// ============================================================================================================================
+// E4: the real binary and the read-only guarantee (KR-A1.6). `readonly-*` runs `node bin/autopilot.js status events` against a
+// fixture whose whole tempdir (repo, live dir, sources, sandbox HOME and TMPDIR) is digested before and after.
+// ============================================================================================================================
+
+const crypto = require('crypto');
+const BIN = path.join(REPO, 'bin', 'autopilot.js');
+
+// sha256 over every path under `dir`: relative path, type, mode, and for a file its size and content. Order independent of readdir.
+function treeDigest(dir) {
+  const h = crypto.createHash('sha256');
+  const walk = (current) => {
+    const names = fs.readdirSync(current).sort();
+    for (const name of names) {
+      const full = path.join(current, name);
+      const st = fs.lstatSync(full);
+      h.update(`${path.relative(dir, full)}\0${st.isDirectory() ? 'd' : st.isSymbolicLink() ? 'l' : 'f'}\0${(st.mode & 0o7777).toString(8)}\0`);
+      if (st.isDirectory()) walk(full);
+      else if (st.isSymbolicLink()) h.update(fs.readlinkSync(full));
+      else h.update(`${st.size}\0`).update(fs.readFileSync(full));
+    }
+  };
+  walk(dir);
+  return h.digest('hex');
+}
+
+function runBin(fx, extraArgs = [], envOver = {}) {
+  const env = { ...fx.env, ...envOver };
+  const r = spawnSync(process.execPath, [BIN, 'status', 'events', '--json', '--review-ledger', fx.paths.reviewLedgers.foreign, ...extraArgs], { cwd: fx.repoDir, env, encoding: 'utf8', input: '' });
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr, body: (() => { try { return JSON.parse(r.stdout); } catch (_e) { return null; } })() };
+}
+
+test('readonly-binary-envelope: the real binary returns the golden envelope and a resume from its cursor delivers the rest', () => {
+  const fx = fresh();
+  const first = runBin(fx, ['--limit', '3']);
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(first.body.schema, 'autopilot.events/1');
+  assert.ok(isValid(first.body));
+  assert.equal(first.body.events.length, 3);
+  const rest = runBin(fx, ['--since', first.body.cursor, '--limit', '1000']);
+  assert.equal(rest.status, 0, rest.stderr);
+  assert.deepEqual([...first.body.events, ...rest.body.events].map((e) => e.id), goldenEvents(fx).map((e) => e.id));
+  // --since - reads the cursor from stdin
+  const viaStdin = spawnSync(process.execPath, [BIN, 'status', 'events', '--json', '--since', '-', '--review-ledger', fx.paths.reviewLedgers.foreign], { cwd: fx.repoDir, env: fx.env, encoding: 'utf8', input: `${first.body.cursor}\n` });
+  assert.equal(viaStdin.status, 0, viaStdin.stderr);
+  assert.deepEqual(JSON.parse(viaStdin.stdout).events.map((e) => e.id), rest.body.events.map((e) => e.id));
+});
+
+test('readonly-binary-exit-codes: usage errors, a bad cursor, a foreign project key and no repo exit 2 with the error object; nothing exits 1', () => {
+  const fx = fresh();
+  const code = (r) => (r.body && r.body.error ? r.body.error.code : null);
+  assert.deepEqual([runBin(fx, ['--limit', '0']).status, code(runBin(fx, ['--limit', '0']))], [2, 'usage']);
+  assert.equal(code(runBin(fx, ['--bogus'])), 'usage');
+  assert.equal(code(runBin(fx, ['--limit'])), 'usage');
+  assert.deepEqual([runBin(fx, ['--since', 'garbage']).status, code(runBin(fx, ['--since', 'garbage']))], [2, 'bad_cursor']);
+  assert.deepEqual([runBin(fx, ['--project', 'f'.repeat(16)]).status, code(runBin(fx, ['--project', 'f'.repeat(16)]))], [2, 'project_mismatch']);
+  assert.equal(runBin(fx, ['--project', fx.projectKey]).status, 0);
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'status-events-nogit-'));
+  cleanup.push(outside);
+  const r = spawnSync(process.execPath, [BIN, 'status', 'events', '--json'], { cwd: outside, env: { ...fx.env, GIT_CEILING_DIRECTORIES: path.dirname(outside) }, encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.deepEqual(JSON.parse(r.stdout), { schema: 'autopilot.events/1', error: { code: 'project_unresolved' } });
+  // the human form: exit 2 and a stderr line, nothing on stdout
+  const human = spawnSync(process.execPath, [BIN, 'status', 'events', '--since', 'garbage'], { cwd: fx.repoDir, env: fx.env, encoding: 'utf8' });
+  assert.equal(human.status, 2);
+  assert.equal(human.stdout, '');
+  assert.match(human.stderr, /bad_cursor/);
+  // the human table ends with a next cursor line
+  const table = spawnSync(process.execPath, [BIN, 'status', 'events', '--limit', '2'], { cwd: fx.repoDir, env: fx.env, encoding: 'utf8' });
+  assert.equal(table.status, 0, table.stderr);
+  assert.match(table.stdout, /^next cursor: \S+$/m);
+});
+
+test('readonly-binary-fault: the real binary honours AUTOPILOT_EVENTS_TEST_FAULT only with the allow variable and exits 0 with internal_error', () => {
+  const fx = fresh();
+  const first = runBin(fx, ['--limit', '3']);
+  for (const name of ['merge', 'cursor', 'envelope']) {
+    const r = runBin(fx, ['--since', first.body.cursor, '--limit', '3'], { AUTOPILOT_TEST_ALLOW_EVENTS_FAULT: '1', AUTOPILOT_EVENTS_TEST_FAULT: name });
+    assert.equal(r.status, 0, `${name}: ${r.stderr}`);
+    assertFallback(r.body, first.body.cursor);
+    const rest = runBin(fx, ['--since', r.body.cursor, '--limit', '1000']);
+    assert.deepEqual([...first.body.events, ...rest.body.events].map((e) => e.id), goldenEvents(fx).map((e) => e.id));
+  }
+});
+
+test('readonly-tmpdir-absent: a TMPDIR that does not exist stays nonexistent while the envelope is returned', () => {
+  const fx = fresh();
+  const missing = path.join(fx.dir, 'no-such-tmp', 'deeper');
+  const r = runBin(fx, [], { TMPDIR: missing });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(isValid(r.body));
+  assert.ok(r.body.events.length > 0);
+  assert.equal(fs.existsSync(missing), false, 'TMPDIR stays absent');
+  assert.equal(fs.existsSync(path.dirname(missing)), false);
+  // negative control: any other command line goes through ensureTmpdir and does create it, so the assertion above can go red
+  const control = path.join(fx.dir, 'control-tmp');
+  const h = spawnSync(process.execPath, [BIN, 'help'], { cwd: fx.repoDir, env: { ...fx.env, TMPDIR: control }, encoding: 'utf8' });
+  assert.equal(h.status, 0);
+  assert.equal(fs.existsSync(control), true, 'the non-events path creates a missing TMPDIR (control)');
+});
+
+test('readonly-dispatch-runs-absent: an absent dispatch runs dir stays absent, state absent, no warning', () => {
+  const fx = fresh();
+  const absent = path.join(fx.dir, 'no-runs-here');
+  const r = runBin(fx, [], { AUTOPILOT_DISPATCH_RUNS_DIR: absent });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.existsSync(absent), false);
+  assert.equal(r.body.sources.find((s) => s.name === 'dispatch').state, 'absent');
+  assert.equal(r.body.warnings.some((w) => w.source === 'dispatch'), false);
+});
+
+test('readonly-tree-digest: the whole fixture tree (repo, live dir, sources, HOME, TMPDIR) is byte-identical after a cold read and a resume', () => {
+  const fx = fresh();
+  fs.mkdirSync(fx.env.AUTOPILOT_LIVE_DIR, { recursive: true });
+  const before = treeDigest(fx.dir);
+  const first = runBin(fx, ['--limit', '4']);
+  const rest = runBin(fx, ['--since', first.body.cursor]);
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(rest.status, 0, rest.stderr);
+  assert.ok(first.body.events.length + rest.body.events.length > 4);
+  assert.equal(treeDigest(fx.dir), before, 'no file was created, changed or removed');
+});
+
+test('readonly-chmod-a-w: with every source dir made read-only the tree is unchanged and the exit is still 0', (t) => {
+  if (typeof process.getuid === 'function' && process.getuid() === 0) { t.skip('uid 0 ignores directory permission bits, the read-only case cannot be exercised'); return; }
+  const fx = fresh();
+  fs.mkdirSync(fx.env.AUTOPILOT_LIVE_DIR, { recursive: true });
+  const dirs = [
+    path.dirname(fx.paths.costsFile), fx.paths.runsDir, path.dirname(fx.paths.decisionLedger), path.dirname(fx.paths.workOrderLedger),
+    path.dirname(fx.paths.runLedger), fx.env.AUTOPILOT_LIVE_DIR, ...Object.values(fx.paths.reviewLedgers),
+  ].filter((d) => fs.existsSync(d));
+  const modes = new Map(dirs.map((d) => [d, fs.statSync(d).mode & 0o7777]));
+  try {
+    for (const d of dirs) fs.chmodSync(d, modes.get(d) & ~0o222);
+    const before = treeDigest(fx.dir);
+    const r = runBin(fx);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(r.body.events.map((e) => e.id), goldenEvents(fx).map((e) => e.id));
+    assert.equal(treeDigest(fx.dir), before);
+  } finally {
+    for (const d of dirs) fs.chmodSync(d, modes.get(d));
+  }
+});
+
+test('readonly-no-write-api: no reader, merge or cli module calls a filesystem write API or imports a model SDK or spawns a dispatcher', () => {
+  const root = path.join(REPO, 'src', 'status', 'events');
+  const files = [];
+  const walk = (d) => { for (const n of fs.readdirSync(d)) { const f = path.join(d, n); if (fs.statSync(f).isDirectory()) walk(f); else if (f.endsWith('.js')) files.push(f); } };
+  walk(root);
+  assert.ok(files.length >= 10);
+  const forbidden = /\b(writeFileSync|appendFileSync|mkdirSync|rmSync|rmdirSync|renameSync|unlinkSync|copyFileSync|createWriteStream|chmodSync|chownSync|utimesSync|truncateSync|symlinkSync|linkSync|mkdtempSync|writeFile|appendFile|mkdir|rm|unlink|rename)\s*\(|\bopenSync\([^)]*['"](?:w|a|r\+|wx|ax)['"]|(?:require|import)\s*\(?\s*['"](?:@anthropic-ai|openai)|dispatch-(?:review|hetero|author|consult)|autopilot\.js/;
+  const hits = [];
+  for (const f of files) {
+    fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+      if (/^\s*\/\//.test(line)) return;
+      if (forbidden.test(line)) hits.push(`${path.relative(REPO, f)}:${i + 1}: ${line.trim().slice(0, 80)}`);
+    });
+  }
+  assert.deepEqual(hits, []);
+  // negative control: the pattern does fire on a write call
+  assert.ok(forbidden.test("fs.writeFileSync(file, 'x')"));
+  assert.ok(forbidden.test("fs.openSync(file, 'w')"));
 });

@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
+// `status events` fast path: handled before ensureTmpdir (which creates a missing TMPDIR) and before the eager requires below, so the
+// real process has no side effects from those and starts fast. The command is read-only (operator console A1 E4).
+if (process.argv[2] === 'status' && process.argv[3] === 'events') {
+  process.exit(require('../src/status/events/cli').main(process.argv.slice(4)));
+}
+
 // BL-0336: a TMPDIR the user chose but that does not exist yet is made here before anything uses it (one stat when it
 // exists); one that cannot be used is said once instead of surfacing as ENOENT from deep inside a run.
 {
@@ -41,8 +47,9 @@ function printHelp() {
   node bin/autopilot.js engine review-candidate --campaign-contract <file> [--campaign-seal <file>] --spec-file <file> [--campaign-disposition-authority <file>|--campaign-disposition-policy deny-nonempty|acceptance-bound] [--campaign-continuation end|return|repair] [--cwd <repo>] [--resume]
   node bin/autopilot.js harness report [harness report args...]
   node bin/autopilot.js endpoints <init|list|which|set|doctor|test> [--json]
-  node bin/autopilot.js status [quota|runs|roster|readiness] [--json] [--probe]  (--probe: bounded live spend: runs per-seat transport and live probes; quota --probe stays a no-spend safe probe)
+  node bin/autopilot.js status [quota|runs|roster|readiness|events] [--json] [--probe]  (--probe: bounded live spend: runs per-seat transport and live probes; quota --probe stays a no-spend safe probe)
   node bin/autopilot.js status task --root-run-id <id> [--json]
+  node bin/autopilot.js status events [--since <cursor|ISO-8601|0|->] [--limit N] [--kinds k1,k2] [--project <key>] [--review-ledger <dir>]... [--json]
   node bin/autopilot.js campaign <inspect|status|resume|terminalize> --campaign-id <id> [--ledger <file>]
   node bin/autopilot.js merge execute --request <file> [--json]
   node bin/autopilot.js mission <prepare|successor|init|grant|consume|withdraw|control|finalize-abort|check|receipt> [mission args...]

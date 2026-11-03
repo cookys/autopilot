@@ -1,0 +1,22 @@
+A1 events, E4 transcript for KR-A1.6 (read-only, model-free) (2026-11-03)
+
+## node --test scripts/status-events.test.js (readonly-* cases)
+✔ readonly-binary-envelope
+✔ readonly-binary-exit-codes
+✔ readonly-binary-fault
+✔ readonly-tmpdir-absent
+✔ readonly-dispatch-runs-absent
+✔ readonly-tree-digest
+✔ readonly-chmod-a-w
+✔ readonly-no-write-api
+
+(readonly-* case list as of the rebase on E3; the red-checks below were run before it and are unchanged)
+
+## red-check: one line added to src/status/events/sources/cost.js, right after the costsFileOf call
+    require('fs').writeFileSync(path.join(path.dirname(file), 'redcheck.txt'), 'x');
+RED   readonly-tree-digest, readonly-chmod-a-w, readonly-no-write-api fail (3 of 72); tests 72 pass 69 fail 3
+GREEN line removed, same command: tests 72 pass 72 fail 0
+
+## red-check: fast path in bin/autopilot.js disabled (condition changed so `status events` falls through to the normal startup)
+RED   readonly-tmpdir-absent fails (1 of 72): the missing TMPDIR was created by ensureTmpdir
+GREEN fast path restored: tests 72 pass 72 fail 0

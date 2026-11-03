@@ -1,0 +1,171 @@
+A1 events, E4 live proof in this repo (2026-11-03, rebased on E3 merge). Read-only; real cost and dispatch stores were read, nothing was written. Paths are not part of the output.
+
+$ autopilot status events --json --limit 5
+{
+ "events": [
+  {
+   "id": "qc.verdict:84d0f2908032d5fa2d95c9edf46fd3e781cf922c",
+   "kind": "qc.verdict",
+   "ts": "2026-06-23T03:51:58.000Z"
+  },
+  {
+   "id": "qc.verdict:5f07497d77680c8e0a4cf4a91a257957a5113806",
+   "kind": "qc.verdict",
+   "ts": "2026-06-23T05:08:33.000Z"
+  },
+  {
+   "id": "qc.verdict:32246e2196ff0f98beb852e6f0fc78775a2b4ef7",
+   "kind": "qc.verdict",
+   "ts": "2026-06-24T04:59:05.000Z"
+  },
+  {
+   "id": "qc.verdict:dd2abfaaf7f0462720059d4febe458458ade10d5",
+   "kind": "qc.verdict",
+   "ts": "2026-06-24T05:26:10.000Z"
+  },
+  {
+   "id": "qc.verdict:e58b21e35cfb039807fcb7622a9e51b76c551519",
+   "kind": "qc.verdict",
+   "ts": "2026-06-25T02:31:00.000Z"
+  }
+ ],
+ "has_more": true,
+ "cursor_bytes": 191,
+ "sources": [
+  {
+   "name": "dispatch",
+   "state": "ok",
+   "rows_read": 381,
+   "rows_skipped": 0,
+   "rows_filtered": 100,
+   "redactions": 0
+  },
+  {
+   "name": "cost",
+   "state": "ok",
+   "rows_read": 19398,
+   "rows_skipped": 0,
+   "rows_filtered": 4061,
+   "redactions": 0
+  },
+  {
+   "name": "review",
+   "state": "ok",
+   "rows_read": 1842,
+   "rows_skipped": 0,
+   "rows_filtered": 132,
+   "redactions": 0
+  },
+  {
+   "name": "qc",
+   "state": "ok",
+   "rows_read": 7158,
+   "rows_skipped": 0,
+   "rows_filtered": 6179,
+   "redactions": 4
+  },
+  {
+   "name": "decision",
+   "state": "ok",
+   "rows_read": 21,
+   "rows_skipped": 0,
+   "rows_filtered": 67,
+   "redactions": 0
+  },
+  {
+   "name": "runledger",
+   "state": "ok",
+   "rows_read": 598,
+   "rows_skipped": 0,
+   "rows_filtered": 598,
+   "redactions": 0
+  }
+ ],
+ "warnings": []
+}
+
+$ autopilot status events --json --limit 5 --since <cursor of the call above>
+{
+ "events": [
+  {
+   "id": "qc.verdict:5f37884b2bb5b769a8c487ceae3ac4974a78cb66",
+   "kind": "qc.verdict",
+   "ts": "2026-06-25T05:00:39.000Z"
+  },
+  {
+   "id": "qc.verdict:6760887ded6a925644df6c2293b2c43adfd2060e",
+   "kind": "qc.verdict",
+   "ts": "2026-06-25T05:23:49.000Z"
+  },
+  {
+   "id": "qc.verdict:3d48c7ea8654670683259931dffbd739f2ee8613",
+   "kind": "qc.verdict",
+   "ts": "2026-06-25T06:00:02.000Z"
+  },
+  {
+   "id": "qc.verdict:172603f69fc1e8fd132f12992efa12080f763b06",
+   "kind": "qc.verdict",
+   "ts": "2026-06-25T06:25:36.000Z"
+  },
+  {
+   "id": "qc.verdict:3dd92eac1afeff1745c54715b19933863eb9d2c8",
+   "kind": "qc.verdict",
+   "ts": "2026-06-25T19:03:56.000Z"
+  }
+ ],
+ "has_more": true,
+ "cursor_bytes": 191,
+ "sources": [
+  {
+   "name": "dispatch",
+   "state": "ok",
+   "rows_read": 381,
+   "rows_skipped": 0,
+   "rows_filtered": 100,
+   "redactions": 0
+  },
+  {
+   "name": "cost",
+   "state": "ok",
+   "rows_read": 19398,
+   "rows_skipped": 0,
+   "rows_filtered": 4061,
+   "redactions": 0
+  },
+  {
+   "name": "review",
+   "state": "ok",
+   "rows_read": 1842,
+   "rows_skipped": 0,
+   "rows_filtered": 132,
+   "redactions": 0
+  },
+  {
+   "name": "qc",
+   "state": "ok",
+   "rows_read": 6715,
+   "rows_skipped": 0,
+   "rows_filtered": 5740,
+   "redactions": 4
+  },
+  {
+   "name": "decision",
+   "state": "ok",
+   "rows_read": 21,
+   "rows_skipped": 0,
+   "rows_filtered": 67,
+   "redactions": 0
+  },
+  {
+   "name": "runledger",
+   "state": "ok",
+   "rows_read": 598,
+   "rows_skipped": 0,
+   "rows_filtered": 598,
+   "redactions": 0
+  }
+ ],
+ "warnings": []
+}
+
+overlap between the two pages: 0 ids (expected 0)

@@ -11,6 +11,7 @@
 //   autopilot status runs  [--json]
 //   autopilot status roster [--json]
 //   autopilot status readiness [--json] [--probe]
+//   autopilot status events [--since <cursor|ISO|0|->] [--limit N] [--kinds k,..] [--project <key>] [--review-ledger <dir>]... [--json]
 //
 // HONESTY CONTRACT: subscription CLIs (codex/grok/agy) expose no "remaining %"
 // programmatically — what we CAN show is the recorded per-pool status, its
@@ -427,6 +428,10 @@ function runStatusCli(argv, {
 } = {}) {
   const args = argv.slice();
   const sub = args[0] && !args[0].startsWith('--') ? args.shift() : 'overview';
+  if (sub === 'events') {
+    // lazy: the events modules are not loaded by any other subcommand (see the header note on status-finish-followup)
+    return require('./events/cli').runEventsCli(args, { stdout, stderr, cwd, env });
+  }
   const json = args.includes('--json');
   const tree = args.includes('--tree');
   const probe = args.includes('--probe');
@@ -640,7 +645,7 @@ function runStatusCli(argv, {
     rosterHuman(collectRoster(cwd), stdout);
     return 0;
   }
-  stderr.write(`unknown status subcommand: ${sub} (quota|runs|roster|readiness|task or no subcommand for overview)\n`);
+  stderr.write(`unknown status subcommand: ${sub} (quota|runs|roster|readiness|task|events or no subcommand for overview)\n`);
   return 2;
 }
 

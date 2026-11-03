@@ -1,0 +1,194 @@
+A1 events, E4 transcript for KR-A1.1 (coverage), KR-A1.2 (resume), KR-A1.3 (degrade) (2026-11-03, rebased on E3 merge)
+Names of every passing test in execution order, timings stripped. fixture-golden-* / source-* = KR-A1.1; resume-* order-* cursor-* rotation = KR-A1.2; degrade-* = KR-A1.3.
+
+## node --test scripts/status-events.test.js
+✔ instant-accepts-rfc3339-and-normalises-to-utc-millis
+✔ instant-rejects-lenient-and-impossible-forms
+✔ instant-ms-agrees-with-string-form-and-feeds-the-envelope-pattern
+✔ fixture-env-is-an-explicit-allowlist
+✔ fixture-commit-shas-are-pinned-constants
+✔ fixture-golden-covers-all-8-kinds-with-unique-ordered-ids
+✔ fixture-literal-golden-ids
+✔ fixture-hash-ids-recomputed-from-the-bytes-on-disk
+✔ fixture-stores-hold-the-planned-shapes-and-foreign-rows
+✔ fixture-golden-leaks-no-path-token-or-hidden-field
+✔ fixture-writes-only-under-its-own-dir
+✔ schema-file-is-supported-by-the-repo-validator
+✔ schema-golden-events-validate
+✔ schema-error-object-is-the-second-top-level-shape
+✔ schema-red-check-cost-turn-without-ts-fails
+✔ schema-negative-dispatch.started
+✔ schema-negative-dispatch.ended
+✔ schema-negative-cost.turn
+✔ schema-negative-review.collected
+✔ schema-negative-review.finalized
+✔ schema-negative-qc.verdict
+✔ schema-negative-decision.row
+✔ schema-negative-run.stage
+✔ schema-negative-event-level-fields
+✔ schema-negative-envelope-fields
+✔ schema-open-sets-accept-unknown-values
+✔ schema-known-kinds-are-exactly-the-doc-kinds
+✔ doc-registry-keys-resolve-and-point-at-the-files
+✔ doc-examples-equal-the-normalised-fixture-events
+✔ doc-has-a-kinds-table-row-per-kind-and-the-consumer-table
+✔ schema-review-collected-findings-total-is-optional
+✔ golden-run-stage-status-prefers-status-over-state
+✔ doc-names-the-reader-warnings-and-rules
+✔ doc-cost-turn-row-states-the-worktree-fallback
+✔ instant-rejects-a-trailing-newline
+✔ schema-counts-have-a-zero-floor
+✔ doc-run-stage-row-states-presence-rule
+✔ evidence-e1-lists-exactly-the-tests-of-this-suite
+✔ resume-pages-1-3-all
+✔ resume-after-append-cost
+✔ resume-late-row-decision
+✔ resume-manifest-finished
+✔ resume-hints-equal-pages-1
+✔ resume-identical-lines-hinted
+✔ resume-bounded-out-of-order
+✔ resume-rotation
+✔ resume-two-ledgers-one-phase
+✔ resume-pages-window
+✔ order-tie
+✔ order-duplicate-id
+✔ order-determinism
+✔ cursor-since-forms
+✔ cursor-foreign-project
+✔ cursor-project-unresolved
+✔ cursor-garbage
+✔ cursor-fault-in-process
+✔ cursor-fault-env
+✔ cursor-size-bound
+✔ cursor-hints-bound
+✔ cursor-hint-cut-page
+✔ cursor-s-restore
+✔ cursor-overflow-nodup
+✔ cursor-group-e
+✔ cursor-overflow-5000
+✔ cursor-w-prune
+✔ cursor-foreign-project-event
+✔ cursor-reader-load-failure
+✔ resume-duplicate-id-hint
+✔ resume-shared-head-zero-offset
+✔ resume-bounded-pages
+✔ resume-bounded-window-rows
+✔ cursor-collector-bounds
+✔ cursor-duplicate-id-real-reader
+✔ order-duplicate-id-keeps-earlier-ts
+✔ cursor-hints-zero-placeholder
+✔ readonly-binary-envelope
+✔ readonly-binary-exit-codes
+✔ readonly-binary-fault
+✔ readonly-tmpdir-absent
+✔ readonly-dispatch-runs-absent
+✔ readonly-tree-digest
+✔ readonly-chmod-a-w
+✔ readonly-no-write-api
+ℹ tests 83
+ℹ pass 83
+ℹ fail 0
+
+## node --test scripts/status-events-src-dq.test.js
+✔ source-dispatch
+✔ source-dispatch
+✔ source-dispatch
+✔ source-dispatch
+✔ source-dispatch
+✔ source-dispatch
+✔ degrade-dispatch-absent
+✔ degrade-dispatch-empty
+✔ degrade-dispatch-unparseable
+✔ degrade-dispatch-wrong-schema
+✔ degrade-dispatch-ts-invalid
+✔ degrade-dispatch-mode000
+✔ degrade-dispatch-runsdir-unreadable
+✔ degrade-dispatch-10mb
+✔ degrade-dispatch-never-throws
+✔ source-qc
+✔ source-qc
+✔ source-qc
+✔ source-qc
+✔ source-qc
+✔ source-qc
+✔ degrade-qc-unborn-head
+✔ degrade-qc-empty-trailer
+✔ degrade-qc-git-missing
+✔ degrade-qc-repo-gone
+✔ degrade-qc-no-repo-info
+✔ redact
+✔ redact
+✔ redact
+✔ redact
+✔ redact
+✔ redact
+ℹ tests 32
+ℹ pass 32
+ℹ fail 0
+
+## node --test scripts/status-events-src-review.test.js
+✔ source-review
+✔ source-review-project-filter
+✔ source-review-two-ledgers-one-phase
+✔ source-review-mtime
+✔ source-review-window
+✔ source-review-one-git
+✔ source-review-archive
+✔ source-review-archive-only
+✔ degrade-review-absent
+✔ degrade-review-nothing
+✔ degrade-review-wrong-schema
+✔ degrade-review-entries
+✔ degrade-review-mode000
+✔ degrade-review-huge
+✔ degrade-review-git
+✔ degrade-review-garbage-ctx
+✔ degrade-review-configured-wins
+ℹ tests 17
+ℹ pass 17
+ℹ fail 0
+
+## node --test scripts/status-events-src-tail.test.js
+✔ source-jsonl-tail-splits-lines-and-keeps-byte-offsets
+✔ source-jsonl-tail-hints-need-size-head-and-offset
+✔ source-jsonl-tail-states
+✔ source-cost
+✔ source-cost-filter-and-worktree-fallback
+✔ source-cost-id-is-position-free-and-n-counts-from-read-start
+✔ source-cost-slack-defaults-to-five-minutes-when-omitted
+✔ source-cost-slack-window-keeps-late-rows-and-drops-older
+✔ degrade-cost-absent
+✔ degrade-cost-empty
+✔ degrade-cost-unreadable
+✔ degrade-cost-truncated
+✔ degrade-cost-binary-wrong-schema-bad-ts-and-long-line
+✔ degrade-cost-git-failure-is-one-warning-not-a-silent-filter
+✔ degrade-cost-broken-dot-git-is-not-a-git-failure
+✔ degrade-cost-git-binary-missing-or-timeout-stays-one-warning
+✔ degrade-cost-git-messages-are-read-in-the-c-locale
+✔ degrade-cost-empty-rev-parse-answer-is-a-resolution-failure
+✔ degrade-cost-never-throws-on-a-hostile-hint
+✔ source-decision
+✔ source-decision-rationale-is-capped-at-240-and-marked
+✔ source-decision-redacts-free-text-through-the-call-point
+✔ source-decision-unknown-kind-kept-and-identical-rows-collapse
+✔ degrade-decision-absent
+✔ degrade-decision-empty
+✔ degrade-decision-unreadable
+✔ degrade-decision-truncated
+✔ degrade-decision-binary-wrong-schema-bad-ts-and-long-line
+✔ source-runledger
+✔ source-runledger-status-state-rule
+✔ source-runledger-reaped-ledger-is-silent
+✔ source-runledger-rotation
+✔ degrade-runledger-absent
+✔ degrade-runledger-empty
+✔ degrade-runledger-unreadable
+✔ degrade-runledger-truncated
+✔ degrade-runledger-binary-wrong-schema-bad-ts-and-long-line
+✔ source-runledger-reason-is-redacted-and-capped
+✔ source-readers-do-not-import-each-other
+✔ source-readers-write-nothing
+ℹ tests 40
+ℹ pass 40
+ℹ fail 0

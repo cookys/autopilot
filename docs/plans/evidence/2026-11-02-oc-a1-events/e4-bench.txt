@@ -1,0 +1,16 @@
+A1 events, E4 transcript for KR-A1.5 (performance) (2026-11-03, rebased on E3 merge)
+$ node scripts/status-events-bench.js
+status events bench (synthetic store, scale 1/1)
+rows: cost 200000, decision 20000, runledger 20000, manifests 2000, review phases 500; cost file 47327319 bytes; generated in 0.9 s
+cold (--since 0 --limit 1000): wall 4.136 s, peak RSS 233.6 MB, events 1000, has_more true, bytes read {"code":963285,"dispatch":6340020,"cost":47327575,"other":6,"runledger":3238686,"decision":5738036}
+prime (--since end-1h): wall 3.283 s, peak RSS 177.7 MB, events 453, has_more false, bytes read {"code":963285,"dispatch":6340020,"cost":47327575,"other":6,"runledger":3034546,"decision":5738036}
+warm (resume after 110 live appends): wall 0.270 s, peak RSS 72.8 MB, events 110, has_more false, bytes read {"code":963285,"dispatch":6340020,"cost":26447,"other":6,"runledger":203367,"decision":7595}
+warm via real binary: wall 0.340 s, exit 0, events 110
+PASS cold --limit 1000 wall: 4.136 s (bound 8 s)
+PASS warm resume wall (in-process read): 0.270 s (bound 1.5 s)
+PASS warm resume wall (real binary, incl. node start): 0.340 s (bound 1.5 s)
+PASS warm resume cost-file bytes / file bytes: 0.00056 (bound 0.05)
+PASS peak RSS cold: 233.621 MB (bound 256 MB)
+PASS peak RSS warm: 72.824 MB (bound 256 MB)
+KR-A1.5: MET
+exit=0

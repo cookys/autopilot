@@ -1,6 +1,10 @@
 # Plan — G40-data: the agent lane gets its own live quota for every alias
 > Status: design only (no code in this plan's authoring commit). Owner: PM program. Branch: `hands/g40data/1`. Size: S (design); implementation phases below. Frame: builds on G37 (`project/plans/2026-11-03-g37-account-switching.md`) and the codeforge G40 design (codeforge `feature/g40-usage-accounts` @ `98c7a8b`, `doc/plans/2026-11-03-g40-usage-accounts.md`).
 
+> **Amended 16:00Z by PM (operator direction): section 20 (provider-neutral contract keyed by provider and alias, adapter manifests, Claude adapter first) is binding and overrides the record shape of 6 and 18.1 and the phase order of 13 and 18.8.**
+>
+> **Amended 15:54Z by PM (operator direction): sections 18 and 19 are binding and override 5.3, 5.4, 6, 8.3 and 13 where they differ (one contract, one store with a local mirror, an always-on zero-token courier reporter, and the probe experiment).**
+
 ## 0. Context / thesis
 
 G37 picks an account per headless `claude` call from `codeforge.quota/1` snapshots. Those snapshots are written by the interactive statusline, which never runs under `claude -p`. So every headless-only alias is `class=unknown` forever, and a snapshot is at most as fresh as the last interactive render (G37 section 4.3).
@@ -247,5 +251,323 @@ Any code in this commit; running `claude setup-token`; real-binary measurement; 
 - Placeholder scan: no TODO/TBD left in a load-bearing step; unknowns are named Q-items with owners/gates.
 - Dependency map in section 13; risks in section 15.
 
+## 18. Addendum A (PM, operator direction 15:54Z): one contract, one store, always-on reporter
+
+This addendum is binding and wins over sections 5.3, 5.4, 6, 8.3 and 13 wherever they differ. Those sections stay as the first design pass; section 18.8 lists exactly what changes in each.
+
+### 18.1 One contract, one store
+
+Every source writes the SAME record schema. The record goes through the local courier into the fleet hub's quota table (one row per alias). Every display and reader (codeforge chip, statusline, `codeforge usage accounts`, `claude-account.js pick`) reads the hub or its local mirror (18.4). No second pipeline: nothing reads `codeforge.quota/1` files, wrapper records or probe output directly for display or for pick once the mirror exists.
+
+Sources (the `source` field):
+- `statusline`: the interactive session's statusline feed (today the codeforge `quota/<alias>.json` snapshot; zero token).
+- `passive`: the G37 wrapper capturing a `rate_limit_event` from a finished run (zero token; coverage depends on 18.7).
+- `probe`: the only source that spends tokens (section 19).
+
+Contract `fleet.account-quota/1` (replaces the section 6 record; same alias-only rule, no token, no path, no email, no organisation id):
+```json
+{
+  "schema": "fleet.account-quota/1",
+  "alias": "<alias>",
+  "five_hour": { "utilization": 0.0, "resetsAt": 0 },
+  "seven_day": { "utilization": 0.0, "resetsAt": 0 },
+  "observed_at": 0,
+  "source": "statusline | passive | probe",
+  "host_role": "<role>",
+  "token_issued_at": 0,
+  "token_expires_at": 0
+}
+```
+Pinned units (they replace the section 2.5 `pct` / `resets_at` spelling; the Global Constraint line is amended in 18.8):
+- `utilization`: fraction 0..1 (the stream-event scale, V2). Accepted range `[0, 1.5]`, anything above is rejected `quota_invalid` (it is almost certainly an unconverted 0..100 value).
+- `resetsAt`: epoch seconds, integer (the stream-event scale, V2).
+- `observed_at`: epoch milliseconds on the observing host's clock (the exception to "seconds": it is a freshness stamp, not a server value; kept in ms to match `written_at_ms`).
+- `five_hour` / `seven_day`: object or `null`; `null` means "not reported", never 0 (V3).
+- Conversion rule at each boundary, once, before the write: statusline `used_percentage` (0..100) -> `utilization = used_percentage / 100`; statusline `resets_at` is already epoch seconds (V9) -> `resetsAt` unchanged; `codeforge.quota/1` (`pct` already 0..1, `resets_at` seconds, `written_at_ms`) -> rename fields, `observed_at = written_at_ms`; stream event: copy `utilization` and `resetsAt` verbatim.
+- Mapping to the existing reader: `account-quota.js` reads `pct` / `resets_at`; the adapter that turns a hub or mirror record into the shape `interpretSnapshot` expects is the only place that renames (`utilization` -> `pct`, `resetsAt` -> `resets_at`). Naming consistency with codeforge is an open question (Q11).
+
+### 18.2 Courier-side reporter (always on, zero token)
+
+A reporter runs in the local courier for the life of the courier. It never calls the API and never touches a token or credentials file, so leaving it on costs nothing. It only normalises local observations (the codeforge statusline snapshot files, the wrapper's passive and probe mirror records) into the contract and pushes to the hub when something changed.
+
+When is it a change (compared with the last record this reporter pushed, per alias, per window):
+1. `utilization` rounded to whole percent differs (`round(u*100)`). The stream event itself is emitted on a rounded-percent change (V2), so a sub-percent move is not a signal.
+2. `resetsAt` differs by more than 60 s. A 60 s tolerance exists because the header value is a server timestamp that may jitter by a second or two; that jitter is UNVERIFIED (no repeated-header sample was taken), so the tolerance is a guard, tightened if samples show none. A real window rollover moves `resetsAt` by hours, so 60 s loses nothing.
+3. A window appears or disappears (`null` <-> object).
+4. The alias has no record in the hub yet, or the hub's copy of this alias has been missing since the reporter started.
+5. `source` is not part of the comparison: the same numbers from a different source are not a change (otherwise statusline and passive would ping-pong).
+
+Debounce and rate limit:
+- Trailing debounce 5 s: bursts of changes within 5 s collapse into one push carrying the latest values.
+- Minimum 30 s between pushes for one alias (matches the existing statusline snapshot throttle, `WRITE_EVERY_MS` 30 s), except rule 4 and a status change to `rejected` / limit reached, which push at once.
+- Last-writer ordering is by `observed_at`: the reporter never pushes a record whose `observed_at` is older than what it last pushed.
+- No heartbeat: an unchanged observation is not re-pushed and its `observed_at` is never refreshed by the reporter (freshness must not be forged). The hub copy ages out by the reader's 6 h rule (5.2) exactly as before. Cost of silence: a stable idle alias shows an old `observed_at`; that is correct, and is what makes the probe's "skip if recent" rule (19.5) meaningful.
+- Hub down: keep the newest record per alias in the local mirror (18.4), retry with backoff 5 s -> 5 min cap, drop nothing newer than what is mirrored; on reconnect push only the changed ones.
+
+### 18.3 Where each source enters
+
+| Source | Writer | Enters through |
+|--------|--------|----------------|
+| `statusline` | codeforge statusline (user lane, unchanged) writes its snapshot file | reporter reads that file, converts per 18.1, pushes |
+| `passive` | G37 wrapper after each attempt (5.1) | wrapper writes the mirror record, reporter pushes |
+| `probe` | wrapper `usage-probe` (19.5) | same mirror record, reporter pushes |
+
+Because the reporter is the single publisher, "writers" never talk to the hub themselves; the wrapper only writes the mirror (a local file, 0600), and the codeforge statusline path stays untouched. Reading the codeforge snapshot is read-only for this plan (G37 4.3).
+
+### 18.4 Local mirror (replaces "local file first")
+
+The section 5.4 "local file first, hub later" is replaced by: the hub is the store; the local file is its mirror.
+- Same contract, same schema, same file shape as the hub row, at `<live_dir>/accounts/quota/<alias>.json` (path from `resolveLiveDir()`, directory via `runtime-paths.js`, as in 5.4).
+- Direction: the mirror is written by (a) the wrapper (passive and probe, before the reporter pushes), and (b) the reporter, which refreshes it from the hub (pull side) so a host with no direct hub path still sees other hosts' observations. Readers (pick, display) read ONLY the mirror; the reporter is the only code that talks to the hub. This gives pick a no-network read path and keeps the display side from forming a parallel pipeline.
+- Authority on conflict: hub row vs mirror row for the same alias: the one with the newer `observed_at` wins, per window, with the section 5.2 rules; a mirror row newer than the hub's is pushed (it is the unpushed pending state). The mirror is never authoritative against a newer hub row.
+- Until the hub exists (fleet F4): the mirror alone, same schema; the reporter's push step is a no-op that logs `hub=absent`. Nothing about readers changes when the hub arrives. This replaces the old P1..P5 ordering of "local first, then a different format at the hub".
+
+### 18.5 What stays for section 5.2 and 8
+
+The merge rules (per-window newest wins, tie prefers the locally observed record, floor rule, 6 h and 5 min skew limits) are unchanged; they now run over mirror rows whose `source` may be any of the three, including statusline-derived rows that arrived through the reporter (so `account-quota.js` no longer needs to read `codeforge.quota/1` itself once the reporter is live; until then it keeps the direct read as the fallback, section 8.1).
+
+### 18.6 Zero-token sources (checked, not assumed)
+
+Question: is there any data source that gives the 5 h and 7 d utilization without spending tokens? Checked on the installed `claude 2.1.317` with `--help` only (no API call, no `auth status` run):
+- `claude --help` command list (full): `agents, attach, auth, auto-mode, doctor, gateway, import, install, logs, mcp, plugin, purge, respawn, rm, setup-token, stop, ultrareview, update`. No `usage`, `stats`, `quota` or `limits` subcommand. `claude usage --help` and `claude stats --help` fall through to the top-level help (they are treated as a prompt), which confirms they are not commands.
+- `claude auth --help`: `login, logout, status`. `claude auth status -h`: "Show authentication status", options `--json` (default) and `--text`. The description is authentication status, not usage. Whether its JSON contains any quota field: not run, so UNVERIFIED; the codeforge doc (row 11) only says it answers login state. The check to close it is one zero-token run of `claude auth status --json` by someone who may see the (account-identifying) output, with the keys redacted: that run is quota-free (it reads local login state), but it is not done here because its output names the account.
+- `claude doctor --help`: "Check the health of your Claude Code installation. Reads settings files ..."; installation health, not usage.
+- `claude gateway`: "Run the enterprise auth/telemetry gateway": an enterprise component; not examined; not a per-subscription usage source for these aliases (UNVERIFIED, noted not used).
+- Statusline stdin JSON `rate_limits.five_hour|seven_day.{used_percentage, resets_at}`: zero token and already in use (codeforge `src/cli/statusline.rs:401-408`, row 8), but only in interactive sessions. Official doc URL for the statusline input schema was not fetched in this lane; the evidence is codeforge's reading of the real input. UNVERIFIED against the official page.
+- Interactive slash command `/usage` (or similar): not checked; it exists only inside an interactive session, so it is not scriptable for the agent lane; not found in the CLI help; UNVERIFIED.
+- Official documentation: no usage or quota API found in the pages already cited by this plan (`https://code.claude.com/docs/en/authentication` covers `setup-token` and login only). Not exhaustively searched on the web in this lane. Any OAuth usage endpoint a person could find by reading the client would be unpublished and would need the token, so it is rejected by design (codeforge section 1.2 (c)).
+- codeforge design read (`98c7a8b`, section 1.2 (c)): "`claude auth status` exists but answers login state, not usage; calling an OAuth usage API directly needs the token and an undocumented endpoint: not adopted."
+Result: found only two zero-token sources: the interactive statusline feed and the stream `rate_limit_event` already present in output the agent lane pays for anyway (passive). Not found: any quota-free, token-free-callable way to read an idle alias's usage. That is exactly why the probe exists and why section 19 matters. Re-check against the official docs before enabling probes by default (add to the experiment's preconditions).
+
+### 18.7 Re-assessment: dispatch rails use `--output-format json`
+
+Evidence E3 stands: the claude rails behind the wrapper use `--output-format json` (`scripts/dispatch-hetero.sh:3949,3969,3980`), and codeforge infers (UNVERIFIED, row 5) that a single json object carries no quota field. In the new architecture:
+- Courier reporter: unaffected by the output format. It is source-agnostic and reads local records; it never sees run output. What changes is how many records exist for it to push. With json callers, a headless-only alias gets nothing from passive capture, so its hub row comes from the probe (and from the statusline if someone also uses it interactively).
+- Passive capture: its value is capped by the rail formats. It records only for stream callers (the foreman's kimi stream is a different engine, not claude). So passive stays a free bonus for the stream callers that exist and for any rail migrated later; it is not the primary feed for dispatch.
+- Therefore probing moves from "optional supplement" to "the main feed for headless-only aliases". That makes the section 19 experiment the gating question for the whole design, not a detail.
+- C1/C2/C3 recommendation updated: ship C3 (no rail change) first. Measure C2's precondition (stream `result` line equals the json envelope fields; Q3) as an extra step inside the section 19 experiment (it costs one more probe, 19.4 step E7). If equivalent, C2 (transparent transform in the wrapper, config-gated, default off) turns every json caller into a free observation source and the probe frequency can drop; if not, keep C3. C1 (migrating rails) is not recommended: it touches every rail parser for a signal a probe already gives cheaply.
+
+### 18.8 Edits this addendum makes to earlier sections (apply in the same change when implementing)
+
+- 2.5: replace the units line with: "`utilization` is a fraction 0..1 and `resetsAt` is epoch seconds in every record of this plan; 0..100 values are divided by 100 once, at the boundary that receives them; the reader bound `[0, 1.5]` is kept".
+- 5.3: probe default is now decided by the section 19 decision tree (default stays `off` until the experiment has a recorded result); N moves to 19.5.
+- 5.4 and 8.3: "local file first" and "the wrapper reads the hub" are replaced by 18.4 (hub is the store, mirror is its local copy, reporter is the only hub client).
+- 6: the record schema is 18.1's `fleet.account-quota/1`; the wrapper writes it to the mirror.
+- 13 phases: P1 builds the contract and mirror reader; P2 wrapper passive writes the mirror; new P2b (S): reporter (18.2) with a fake hub, enabled only when courier work is scheduled; P5 becomes "hub client in the reporter" (L, blocked on F4); P4 probe is blocked on the 19 experiment result.
+- Negative controls added: N18 a record with `utilization` 62 is rejected; N19 the reporter does not push when only `source` differs or `resetsAt` moves less than 60 s; N20 two changes inside 5 s produce one push; N21 the reporter never pushes an older `observed_at` and never refreshes `observed_at` without a new observation; N22 hub down: pick output from the mirror equals the output with the hub up and the same rows; N23 the reporter source tree contains no read of a token or credentials path (static scan, shown red by a planted read).
+
+## 19. Experiment: does a probe start the 5-hour window?
+
+### 19.1 Question and why it matters
+
+Does one probe against an idle account START that account's 5-hour window (and with it the reset clock)? Always-on cheap probing (the operator accepts a small, low-frequency, standing probe cost, about 0.0016 USD API-equivalent per probe, V6) is only safe if a probe does not move the clock; if it does, a probed idle alias would present a 5 h window it would not otherwise have, and the reset time `pick` reads would be the probe's own doing.
+
+### 19.2 Who runs it and what authorisation it needs
+
+This lane does NOT run it. It needs a real API call with an alias token.
+- Executor: the operator, or a person/session the operator names through the PM. Not this hands lane.
+- Authorisation required: (1) the operator names ONE alias to use (an account he is willing to have measured), in writing to the PM; (2) the operator's own confirmation of the spend (6 to 8 probes, roughly 0.01 to 0.013 USD API-equivalent in total, and an unknown share of that alias's subscription quota); (3) the run goes through the G37 wrapper (`claude-account.js run --alias <A>`), so no token is read by the executor. A PM "go" message does not by itself cover use of an account's credentials; the operator's confirmation is needed and should be recorded in the run's evidence directory.
+- Not allowed: running it on an account in active use, using the default login instead of an alias, or sending any 429 traffic.
+
+### 19.3 Preconditions (confirm the account is idle without spending)
+
+All must hold and be written down before step E1:
+1. The latest observation for the alias (statusline snapshot, wrapper mirror, or hub row) shows `five_hour` absent or `resetsAt` already in the past, and, if a statusline value exists, utilization 0.
+2. No attempt for that alias in the wrapper audit file (`accounts-audit.jsonl`, `ctx.auditFile`) in the last 5 hours plus 30 minutes margin, and the operator confirms no interactive session, no other host and no other tool used the account in that time.
+3. The probe command works against the alias (`claude-account.js env-check --alias <A>` passes; it spawns no claude).
+4. The executor has a quiet terminal and a clock (UTC) and will not use the account for the duration (about 6 hours of observation, mostly waiting).
+5. Re-check of 18.6 against the official docs, so a free source is not missed.
+If condition 1 or 2 cannot be established, the account is not idle and the experiment is invalid; pick another alias or wait.
+
+### 19.4 Procedure (each step output goes to a file in a temp dir; only field names and the numbers below are kept)
+
+Probe command (the executor substitutes `<A>`; the prompt is a few words):
+```
+node scripts/claude-account.js run --alias <A> --purpose quota-experiment --timeout 60 \
+  --stdout <tmp>/e<k>.out --stderr <tmp>/e<k>.err -- \
+  claude -p --model haiku --output-format stream-json --verbose --tools "" --strict-mcp-config 'Reply with OK'
+```
+Extraction (no tokens printed): load `<tmp>/e<k>.out` with Node, find the line with `type:"rate_limit_event"`, print only `unifiedWindows.five_hour` and `seven_day` (`utilization`, `resetsAt`, `status`), `rateLimitType`, and from the `result` line `total_cost_usd`, `usage` token counts, exit code. Nothing else.
+
+Steps:
+- E1 (t0) record the baseline from zero-token sources (19.3 item 1) and the exact UTC time.
+- E2 (t1, within 10 min of E1) probe 1. Record `five_hour` present/absent, `resetsAt`, `utilization`, plus `seven_day`. Keep the UTC send time `t1` (the time the request was made).
+- E3 (t1 + 30 min) probe 2. Same record.
+- E4 (t1 + 2 h) probe 3. Same record.
+- E5 (t1 + 4 h 30 min) probe 4, just before the expected reset. Same record.
+- E6 (t1 + 5 h 30 min) probe 5, after the expected reset. Same record. (Skip E4 to E6 if E2 shows `five_hour` absent: see the read-out below, and then run E4' below.)
+- E4' (only if E2 shows `five_hour` absent) repeat a probe at t1 + 30 min, t1 + 2 h and t1 + 5 h 30 min to see whether it ever appears without any other use of the account.
+- E7 (one extra, answers Q3 and Q4) immediately after E6, one probe with `--output-format json` and the same prompt; record the key names of the single envelope and whether any quota-like key exists; compare the json envelope's field names with the stream `result` line's.
+Record per step: UTC time, probe sequence number, exit code, `five_hour{utilization, resetsAt, status}` or `absent`, `seven_day{...}`, `total_cost_usd`, `usage.input_tokens / output_tokens / cache_creation_input_tokens`. No session id, request id, email or organisation id; the transcript is written to `docs/plans/evidence/<run-date>-g40-window-experiment/` after `node scripts/leak-guard.js` and `scripts/redact-personal.js` pass.
+
+### 19.5 Read-out
+
+Let `d1 = resetsAt(E2) - t1` (seconds). Expected for a window started by the probe: close to 18000 (5 h), within the time the request took.
+| Observation | Interpretation |
+|-------------|----------------|
+| E2 `five_hour` present, `d1` about 18000, and `resetsAt` unchanged at E3, E4, E5 | The probe STARTED the window, and later probes do not slide it (anchored at the first call). Probe starts the clock once. |
+| E2 present, `d1` about 18000, and `resetsAt` moves forward with each later probe (E3 > E2, E4 > E3) | Every probe restarts or slides the window. Probing is harmful as a standing job. |
+| E2 absent and absent through E4' | A probe does NOT start the window (or the server does not report it for a tiny call). Idle shows `five_hour` absent (answers Q1). |
+| E2 absent, then present at a later probe with `resetsAt - t = 18000` of the later probe | Window started by the later probe, not the first: the first probe was too small to open it (or too early); record and treat as "does not start on the first call, but counts later" (needs a repeat). |
+| E2 present with `d1` clearly less than 18000 or `resetsAt` before E2 | The precondition failed (account was not idle, or a clock problem); the run is void, not a result. |
+| E6 shows a new `resetsAt` about 18000 after E6's time | Window rolled and was re-opened by the probe E6; consistent with "starts"; confirms the anchor logic. |
+
+### 19.6 Decision tree (what the design does with the answer)
+
+- A. Probe does NOT start the window (third row): default to periodic probing of every enrolled alias that has a token on that host: every P = 60 minutes, but SKIP an alias when it already has an observation (any source) newer than N = 30 minutes, and skip when its last known utilization is at or above 0.90. Reasons for N = 30 min: half the probe period, so a busy alias (passive or statusline feeding it more often than every 30 min) is never probed, an idle one is probed about once an hour; and a stream event is emitted when the rounded percent changes, so a 30 min-old observation is already coarse for headroom decisions but the 6 h hard staleness limit is far away. Cost: at most 24 probes per idle alias per day, about 0.04 USD API-equivalent per day (24 x 0.0016), plus an unmeasured quota share (Q5).
+- B. Probe STARTS or slides the window (first, second rows): probing happens only just before pick and only when the best observation of the candidate aliases is older than 60 minutes: `pick` asks `staleCandidates` (5.3), the wrapper probes at most the top 1 stale candidate it is about to use, never the others. The alias being picked is going to be used immediately anyway, so starting its window costs nothing it would not have paid. No background schedule. Unknown (idle) aliases are never probed speculatively.
+- C. Void or ambiguous (fifth or fourth row): repeat the experiment on a fresh idle alias; until a result exists the default is `quota_probe = off` and the system relies on statusline + passive only.
+Record the answer here (section 12 Q2) and in the config comment when the default flips.
+
+### 19.7 What the experiment does not settle
+
+How much of the alias's subscription quota one probe consumes (Q5): the experiment records `utilization` before and after on a non-idle second alias only if the operator chooses to; it is not required for the tree. Whether an interactive session's first message starts the same window: out of scope.
+
+## 20. Addendum B (PM, operator direction 16:00Z): provider-neutral contract and adapter manifests
+
+Binding; it wins over sections 6 and 18.1 (record shape), 13 and 18.8 (phase order). Everything in 18 about the reporter, the mirror, the hub-as-store and the probe experiment stays, with the record shape below.
+
+Reference providers (the operator's own accounts): agy, grok, codex, claude code, minimax, qoder, qoder-cli-cn, opencode, glm, kimi. Only the Claude adapter is built by this plan's first phases; the contract and the manifest are provider-neutral from day one.
+
+### 20.1 The key is (provider, alias), not the harness
+
+A quota record belongs to one billing account at one provider. The harness (the CLI that reads or spends it) is not part of the key: a session under opencode that spends a glm account writes provider `glm`, not `opencode`. Rule for naming: `provider` is whoever meters and limits the account. Whether `opencode`, `agy` or `qoder-cli-cn` is a provider or only a harness is decided per row by the capability matrix (20.5), not here.
+- `provider`: `^[a-z0-9-]{1,24}$`, lowercase word from the matrix (for example `claude`, `codex`, `grok`, `kimi`, `glm`, `minimax`, `qoder`).
+- `alias`: the existing alias grammar. The G37 registry stays Claude-only; its aliases are implicitly provider `claude`. No registry change is made for other providers in this plan.
+- Hub key and mirror path: `quota/<provider>/<alias>` and `<live_dir>/quota/<provider>/<alias>.json`. (The earlier `accounts/quota/<alias>.json` becomes `quota/claude/<alias>.json`; nothing was shipped under the old path, so there is no migration or dual read.)
+
+### 20.2 Record `fleet.quota/1` (replaces the 18.1 schema; same alias-only, no token, no path, no email rule)
+
+```json
+{
+  "schema": "fleet.quota/1",
+  "provider": "claude",
+  "alias": "<alias>",
+  "visibility": "L3",
+  "windows": [
+    { "kind": "rolling_5h", "utilization": 0.0, "used": null, "limit": null, "unit": null,
+      "resets_at": 0, "source": "passive", "observed_at": 0 },
+    { "kind": "weekly", "utilization": 0.0, "resets_at": 0, "source": "passive", "observed_at": 0 }
+  ],
+  "host_role": "<role>",
+  "token_issued_at": 0,
+  "token_expires_at": 0
+}
+```
+Window fields:
+- `kind`: one of `rolling_5h`, `weekly`, `daily`, `monthly`, `credits`, `rpm`, `tpm`. At most one window per `kind` per record. (`rpm/tpm` in the PM text is read as two kinds, `rpm` and `tpm`.)
+- `utilization`: number 0..1 (accepted `[0, 1.5]`, above is `quota_invalid`). Required. If a provider reports only `used` and `limit`, the adapter computes `utilization = used / limit` before the write; a window with no way to get a fraction is not written (that provider is L1, see 20.4).
+- `used`, `limit`: optional non-negative numbers, both or neither, `unit` required when present: `requests`, `tokens` or `credits`.
+- `resets_at`: epoch seconds integer, or `null` when the provider gives no reset time (then the window is usable for ordering but never for "tight until"; `null` is not 0). This spelling replaces `resetsAt` of 18.1: the stream-event adapter maps `resetsAt` to `resets_at`. All boundary conversions of 18.1 stand (0..100 divided by 100 once, before the write).
+- `source`: one of `passive` (parsed from output the provider's CLI produced in a normal run, including the interactive statusline feed), `endpoint` (a zero-token endpoint or response header), `probe` (a tinyprobe call), `estimated` (a local counter against a plan limit), `429` (the provider refused a request). `statusline` of 18.1 is now `passive`.
+- `observed_at`: epoch milliseconds of the observation, per window (so the section 5.2 per-window merge needs no record-level source).
+Record-level: `visibility` is the adapter's effective level (20.4); `host_role`, `token_issued_at`, `token_expires_at` as before (token dates may be `null` when the manifest says the lifetime is unknown).
+Claude mapping: stream `unifiedWindows.five_hour` -> `rolling_5h`, `seven_day` -> `weekly`; `utilization` copied; `resetsAt` -> `resets_at`; source `passive` (event or statusline feed) or `probe`. `seven_day_opus` and `seven_day_sonnet` are not mapped (out of scope, 16).
+
+Semantics shared by all providers:
+- `429` windows: utilization 1.0, `resets_at` from the provider's retry hint when it has one, else `null`. G37's cooldown file remains the headless signal; the record is how other hosts learn of it.
+- `estimated` windows may only make an alias look tighter: for ordering they can raise `used` and can classify `tight` (>= 0.90), never `ok`; an alias whose only windows are `estimated` and below 0.90 stays `unknown`. A local counter is not a measurement.
+- Windows of kind `rpm` and `tpm` are short throttles: stored and displayed, but excluded from the `used` that decides class `ok`/`tight`; they feed the cooldown path only.
+- `used` for pick = max `utilization` over live windows of kinds `rolling_5h`, `weekly`, `daily`, `monthly`, `credits` (not `rpm`/`tpm`). A window whose `resets_at` has passed is ignored (5.2 rule 1); `resets_at: null` never expires by clock, so only the 6 h observation age limit retires it.
+- The reader adapter that feeds `interpretSnapshot` renames per window (`rolling_5h` -> `five_hour`, `weekly` -> `seven_day`, `utilization` -> `pct`) for Claude records; non-Claude kinds are handled by the generic `interpretWindows` added in P1.
+
+### 20.3 Adapter manifest `fleet.quota-adapter/1`
+
+One manifest per provider, a data file (proposed path `scripts/quota-adapters/<provider>.json`, validated by a new checker that follows the `config-keys.json` pattern). The manifest declares what is possible; adapter code implements the modes. Fields:
+```json
+{
+  "schema": "fleet.quota-adapter/1",
+  "provider": "claude",
+  "visibility": "L3",
+  "starts_window": "unknown",
+  "windows": [ {"kind": "rolling_5h", "unit": null, "limit_known": false},
+               {"kind": "weekly",     "unit": null, "limit_known": false} ],
+  "capture": [
+    {"mode": "passive",   "cost": "zero_token", "verified": true,
+     "parser": "claude-stream-rate-limit-event", "needs": "stream-json --verbose",
+     "evidence": "<url or evidence path>"},
+    {"mode": "endpoint",  "cost": "zero_token", "verified": false,
+     "note": "none found"},
+    {"mode": "tinyprobe", "cost": "tokens", "verified": true,
+     "argv_template": ["claude","-p","--model","haiku","--output-format","stream-json","--verbose","--tools","","--strict-mcp-config","<PROMPT>"],
+     "est_cost_usd": 0.0016, "est_out_tokens": 8, "min_interval_minutes": 60,
+     "starts_window": "unknown"},
+    {"mode": "fallback",  "cost": "local",
+     "counter": null, "plan_limit": null, "source": "estimated",
+     "cooldown_on_429": {"default_minutes": 30}}
+  ],
+  "credential_ref": {"kind": "file", "path": "<accounts-dir>/<alias>/token"},
+  "token_lifetime": {"days": 365, "evidence": "https://code.claude.com/docs/en/authentication"},
+  "matrix_row": "capability-matrix.md#claude"
+}
+```
+Rules:
+1. Capture modes are listed in cost order, cheapest first: `passive` (parse normal run output), then `endpoint` (zero-token endpoint or header), then `tinyprobe` (spends tokens: the manifest states the exact argv template and the per-call cost), then `fallback` (a local counter against the plan's published limit, labelled `estimated`, plus the 429 cooldown). The runtime tries them in that order and stops at the first that yields a fresh window; it never calls a more expensive mode while a cheaper one produced a fresh observation (the `skip if recent` rule of 19.6 generalised).
+2. `starts_window` is `true | false | "unknown"`, with the evidence path when not unknown. `unknown` is treated as `true` for any decision (conservative): probes then run only before pick, never on a standing schedule (19.6 branch B).
+3. `credential_ref` holds a REFERENCE only: `kind` (`file`) and a path template under the accounts dir. Never a value. The checker rejects a manifest whose `credential_ref` is not a path template (no scheme, no `=`, no token-shaped string, no absolute path outside the accounts dir and the matrix-listed provider dirs). The adapter reads the credential through the existing wrapper path; the manifest checker and the reporter never open it.
+4. `token_lifetime`: `{days, evidence}`; `days: null` means unknown and suppresses expiry warnings for that provider.
+5. `visibility` is the highest level this manifest can reach with VERIFIED captures: L0 nothing is visible; L1 only a refusal (429 or equivalent) is visible; L2 a utilization percentage is visible but without reset times for every window; L3 full `windows[]` with reset times. A capture marked `"verified": false` never counts toward the level and is disabled at runtime. The record's `visibility` equals the highest level actually produced by the last observation, so a degraded adapter shows as degraded.
+6. `capture[].verified` follows the matrix: a mode with no evidence is `false` and the matrix row must say what was checked (same rule as 18.6).
+7. Pure data; adding a provider adds a manifest and an adapter implementation, never a new contract version.
+
+Claude manifest values above come from this plan's own verified facts (V1 to V3, V6 to V8, 18.6). Everything else in a row is filled from the matrix.
+
+### 20.4 Visibility levels and what pick does with them
+
+| Level | Meaning | Record | Pick behaviour |
+|-------|---------|--------|----------------|
+| L0 | nothing visible | none (or a record with `windows: []`) | alias `unknown`; ordering by priority only |
+| L1 | only a refusal is visible | `windows` contain only `429` entries | `unknown` until a 429, then cooling (G37 cooldown) |
+| L2 | utilization visible, resets incomplete | windows with `utilization`, some `resets_at: null` | `ok` / `tight` from `utilization`; `tight` without a reset time uses the default cooldown instead of a reset |
+| L3 | full | windows with `utilization` and `resets_at` | full behaviour of section 8 |
+
+### 20.5 Capability matrix (produced by another lane)
+
+The 10-provider capability survey is NOT part of this plan; lane `g40survey` produces it. This plan only reserves the place and the rule for using it:
+- Location: the evidence directory `docs/plans/evidence/2026-11-03-g40-agent-lane-quota/capability-matrix.md` (see capability-matrix.md there; this lane does not create or edit it).
+- Using the matrix to fill a manifest (one provider = one row):
+  1. `provider` and its harness: take the provider that meters the account; a harness-only row (for example a CLI that fronts another vendor) gets no manifest of its own, its row points at the real provider's manifest.
+  2. For each of the four capture modes, copy `verified` from the matrix's evidence mark; copy `cost` and the tinyprobe argv and per-call cost from the matrix; a mode the matrix marks "not found" becomes `verified: false` with `note` = what the matrix says was checked.
+  3. `windows`: the matrix's list of window kinds and whether a limit number is public (`limit_known`).
+  4. `visibility`: highest level that has at least one `verified: true` capture producing it.
+  5. `starts_window`: the matrix cell, else `unknown`.
+  6. `credential_ref`: the credential file or login location the matrix names, converted to a path template under the accounts dir; if the matrix gives only a value or a vendor keychain item with no path, the credential is not referenced and the mode that needs it is `verified: false`.
+  7. `token_lifetime`: matrix cell with its URL, else `days: null`.
+  8. `matrix_row`: the anchor of the row, so a reviewer can re-derive every field.
+- A manifest field not backed by a matrix row (or by this plan's own verified facts for Claude) fails the manifest checker (negative control N27).
+
+### 20.6 Phase order (replaces the order in 13 and 18.8)
+
+| Phase | Size | Content | Gate |
+|-------|------|---------|------|
+| P1 | M | generic contract `fleet.quota/1`: schema validator, unit rules, `interpretWindows` + merge (5.2) generalised to `windows[]`, manifest schema and checker; Claude reader adapter (windows[] <-> `interpretSnapshot`) | pure tests; N1-N8 (rewritten for `windows[]`), N24-N30 red then green |
+| P2 | M | Claude adapter, FIRST because G37 needs it: wrapper passive capture (5.1) writing `quota/claude/<alias>.json`, `status` columns, `manifest claude.json`; pick reads the mirror | fixture-driven; json caller records nothing and exits unchanged |
+| P2b | S | generic reporter (18.2), provider-keyed, fake hub; reads any mirror under `quota/<provider>/` | N19-N23 |
+| P3 | S | token meta, generic fields; lifetime from the manifest | N11, N12 |
+| P4 | M | Claude tinyprobe, blocked on the 19 experiment | N13-N15 |
+| P5 | L | hub client in the reporter, blocked on fleet F4 | N16, N17 |
+| P6 | M/L | C2 transparent transform, only if Q3 is answered yes | byte-identical stdout for json callers |
+| A-agy, A-grok, A-codex, A-minimax, A-qoder, A-qoder-cli-cn, A-opencode, A-glm, A-kimi | each S to M | one provider adapter each (manifest from the matrix row + implementation of the modes the manifest marks `verified`) | each is its own project and starts ONLY after the PM gives a go for that provider; none is started by this plan |
+Dependency map: P1 -> P2 -> P2b; P3 after P1; P4 after P2 + experiment; P5 after P2b + F4; provider adapters after P1 + P2b + the matrix + a per-provider PM go.
+
+### 20.7 Negative controls added
+
+- N24 A record whose key says provider `a` but whose path or body says provider `b` is rejected (`provider_mismatch`).
+- N25 A window of an unknown `kind`, a duplicate `kind`, a `used` without `limit`/`unit`, or a `unit` outside the enum is rejected.
+- N26 An `estimated` window below 0.90 never yields class `ok`; at or above 0.90 it yields `tight`.
+- N27 A manifest with a `verified: true` capture and no `evidence`/`matrix_row`, or with `starts_window` missing, fails the checker; a manifest enabling a capture marked `verified: false` fails.
+- N28 A manifest `credential_ref` carrying a value (token-shaped string, `KEY=...`, a URL with userinfo) or a path outside the allowed roots fails; the checker never opens the referenced file (test: the path points at an unreadable fixture file and the check still passes/fails on the string alone).
+- N29 `rpm` / `tpm` windows at 1.0 do not make an alias `tight`; a `weekly` window at 0.95 does.
+- N30 `resets_at: null` on a `rolling_5h` window: usable for ordering, never extends a cooldown, retired by the 6 h age rule.
+
+### 20.8 Additional open questions
+
+- Q11 Field spelling: the contract now uses `resets_at` (PM 16:00Z) and `utilization`; the codeforge quota file uses `pct`. Is `fleet.quota/1` a codeforge-side name too, or does the hub keep its own schema name? Ask fleet--claude.
+- Q12 Which of the ten names are providers and which are harnesses? Settled per row by the matrix; until then the provider word list in 20.1 is an example, not a registry.
+- Q13 `rpm`/`tpm` and `credits` windows: do other lanes display them? The contract stores them, the pick ignores rpm/tpm.
+- Q14 Where does the manifest checker run (preflight-release, the config-keys check pattern)? To settle in P1.
+
 ## Review log
 - R0: authored by the G40-data hands lane; no review round yet.
+- R0b: addendum B (section 20) added for PM direction 16:00Z; capability matrix is produced by lane g40survey, not here.
+- R0a: addendum (sections 18, 19) added for PM direction 15:54Z; the experiment in section 19 is NOT run by the hands lane.

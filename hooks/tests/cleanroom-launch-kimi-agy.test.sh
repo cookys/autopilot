@@ -271,7 +271,7 @@ BASEDIR="$TEST_TMP/base-launcher/lib"
 mkdir -p "$BASEDIR"
 git -C "$REPO_ROOT" show "$BASE_SHA:scripts/lib/cleanroom-launch.sh" > "$BASEDIR/cleanroom-launch.sh" 2>/dev/null \
   || fail "cannot extract base launcher at $BASE_SHA (need full history)"
-cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$BASEDIR/json-emit.sh"
+cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$BASEDIR/json-emit.sh"; cp "$REPO_ROOT/scripts/lib/agy-timeout.sh" "$BASEDIR/"
 chmod +x "$BASEDIR/cleanroom-launch.sh"
 BASE_L="$BASEDIR/cleanroom-launch.sh"
 
@@ -315,7 +315,7 @@ assert_eq "3" "$(cat "$TEST_TMP/cx-new-pf-3/rc")" "codex preflight deny exits 3"
 
 # negative control: a mutated launcher (codex argv touched) must be caught by the same comparison
 MUT="$TEST_TMP/mut/lib"; mkdir -p "$MUT"
-cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$MUT/json-emit.sh"
+cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$MUT/json-emit.sh"; cp "$REPO_ROOT/scripts/lib/agy-timeout.sh" "$MUT/"
 sed_mutant "$LAUNCHER" "$MUT/cleanroom-launch.sh" '0,/^  append review$/s//  append reviewX/'
 chmod +x "$MUT/cleanroom-launch.sh"
 codex_capture "$MUT/cleanroom-launch.sh" "mut" 0 launch
@@ -325,7 +325,7 @@ fi
 
 # negative control: a credential bind injected into the preflight argv fails the assertion helper
 CRED_MUT="$TEST_TMP/credmut/lib"; mkdir -p "$CRED_MUT"
-cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$CRED_MUT/json-emit.sh"; cp "$REPO_ROOT/scripts/lib/agy-containment.js" "$CRED_MUT/"
+cp "$REPO_ROOT/scripts/lib/json-emit.sh" "$CRED_MUT/json-emit.sh"; cp "$REPO_ROOT/scripts/lib/agy-containment.js" "$CRED_MUT/"; cp "$REPO_ROOT/scripts/lib/agy-timeout.sh" "$CRED_MUT/"
 sed_mutant "$LAUNCHER" "$CRED_MUT/cleanroom-launch.sh" 's#^    write_runner_probe$#    write_runner_probe; CRED_DIR="'"$STUBS/credagy"'"; copy_runner_credentials#'
 chmod +x "$CRED_MUT/cleanroom-launch.sh"
 set +e

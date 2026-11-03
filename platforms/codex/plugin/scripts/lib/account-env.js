@@ -124,21 +124,27 @@ function prepareHome(args) {
   const { homeDir, realHome } = args;
   if (path.resolve(homeDir) === path.resolve(realHome)) throw new EnvError('home_unsafe', 'child HOME equals real home');
   const realSsh = path.join(realHome, '.ssh');
-  if (!fs.existsSync(realSsh)) return { ssh: false };
   const sshDir = path.join(homeDir, '.ssh');
+  const cfg = path.join(sshDir, 'config');
+  // Destination link checks come first: they hold whether or not the real ~/.ssh exists.
   let dst = null;
   try { dst = fs.lstatSync(sshDir); } catch (_) { /* absent */ }
   if (dst && (dst.isSymbolicLink() || !dst.isDirectory())) throw new EnvError('ssh_path_is_link', '.ssh');
-  if (!dst) fs.mkdirSync(sshDir, { mode: 0o700 });
-  fs.chmodSync(sshDir, 0o700);
-  const cfg = path.join(sshDir, 'config');
   let cst = null;
   try { cst = fs.lstatSync(cfg); } catch (_) { /* absent */ }
   if (cst && (cst.isSymbolicLink() || !cst.isFile())) throw new EnvError('ssh_path_is_link', '.ssh/config');
+  if (!fs.existsSync(realSsh)) return { ssh: false };
+  if (!dst) fs.mkdirSync(sshDir, { mode: 0o700 });
+  fs.chmodSync(sshDir, 0o700);
   // tmp file + rename: the write never follows a link at the final name.
-  const tmp = `${cfg}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, `Include ${path.join(realSsh, 'config')}\n`, { mode: 0o600, flag: 'wx' });
-  fs.renameSync(tmp, cfg);
+  const tmp = `${cfg}.${require('crypto').randomBytes(8).toString('hex')}.tmp`;
+  try {
+    fs.writeFileSync(tmp, `Include ${path.join(realSsh, 'config')}\n`, { mode: 0o600, flag: 'wx' });
+    fs.renameSync(tmp, cfg);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch (_) { /* not created */ }
+    throw new EnvError('ssh_config_write_failed', e && e.code ? e.code : 'error');
+  }
   let linked = 0;
   for (const name of fs.readdirSync(realSsh)) {
     if (name === 'known_hosts' || name.startsWith('id_')) {

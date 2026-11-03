@@ -125,6 +125,7 @@ test('B: output ending in a truncated token is scrubbed (unit and run level)', a
   const r = await go(fx, ['run', '--purpose', 'tst', '--stdout', so, '--', 'claude']);
   assert.strictEqual(r.code, 7);
   assert.ok(!fs.readFileSync(so, 'utf8').includes('FAKE-prefixtoken-012'));
+  assert.ok(!r.err.includes('FAKE-prefixtoken-012') && !r.out.includes('FAKE-prefixtoken-012'));
   fx.cleanup();
 });
 
@@ -142,6 +143,25 @@ test('C: symlinked .ssh or .ssh/config in the alias home is refused (exit 2) and
     assert.match(r.err, /ssh_path_is_link/);
     assert.strictEqual(fs.readFileSync(path.join(realSsh, 'config'), 'utf8'), 'REAL-CONFIG\n');
     assert.deepStrictEqual(fs.readdirSync(realSsh), ['config']);
+    assert.strictEqual(fx.shim.spawns(), 0);
+    fx.cleanup();
+  }
+});
+
+test('C2: with no real ~/.ssh, a linked .ssh or .ssh/config in the alias home is still refused (exit 2, no spawn)', async () => {
+  for (const kind of ['dir', 'file']) {
+    const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+    const victim = path.join(fx.root, 'victim');
+    fs.mkdirSync(victim);
+    fs.writeFileSync(path.join(victim, 'config'), 'VICTIM\n');
+    const home = path.join(fx.accountsDir, 'a', 'home');
+    if (kind === 'dir') fs.symlinkSync(victim, path.join(home, '.ssh'));
+    else { fs.mkdirSync(path.join(home, '.ssh')); fs.symlinkSync(path.join(victim, 'config'), path.join(home, '.ssh', 'config')); }
+    assert.ok(!fs.existsSync(path.join(fx.realHome, '.ssh')));
+    const r = await go(fx, RUN);
+    assert.strictEqual(r.code, 2, kind);
+    assert.match(r.err, /ssh_path_is_link/);
+    assert.strictEqual(fs.readFileSync(path.join(victim, 'config'), 'utf8'), 'VICTIM\n');
     assert.strictEqual(fx.shim.spawns(), 0);
     fx.cleanup();
   }

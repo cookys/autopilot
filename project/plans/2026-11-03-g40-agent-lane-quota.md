@@ -1,7 +1,7 @@
 # Plan — G40-data: the agent lane gets its own live quota for every alias
 > Status: design only (no code in this plan's authoring commit). Owner: PM program. Branch: `hands/g40data/1`. Size: S (design); implementation phases below. Frame: builds on G37 (`project/plans/2026-11-03-g37-account-switching.md`) and the codeforge G40 design (codeforge `feature/g40-usage-accounts` @ `98c7a8b`, `doc/plans/2026-11-03-g40-usage-accounts.md`).
 
-> This plan states the current design only. History is in git and in the Review log; the fleet hub design note (`project/plans/context/g40-fleet-hub-quota-store-c2d57ab.md`, fleet `c2d57ab`, revision 2) is the companion for the hub side. The two documents agree except for the points listed in the Review log.
+> This plan states the current design only. History is in git and in the Review log; the fleet hub design note (`project/plans/context/g40-fleet-hub-quota-store-1949b11.md`, fleet `1949b11`, revision 4) is the companion for the hub side. The two documents agree except for the points listed in the Review log.
 
 ## 0. Context / thesis
 
@@ -682,7 +682,7 @@ Some providers refuse a request without telling a window kind or a reset time (t
 
 ## 22. Hub design settled with fleet
 
-Sources: fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `c2d57ab` (revision 3), `docs/plans/2026-11-04-g40-hub-quota-store.md` (copy: `project/plans/context/g40-fleet-hub-quota-store-c2d57ab.md`; the evidence directory keeps the originals of `905d13e`, `625b0fe` and `c2d57ab`). The first design pass's hub questions (key, write permission, TTL, clocks, conflict, rate) are all answered here.
+Sources: fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `1949b11` (revision 4), `docs/plans/2026-11-04-g40-hub-quota-store.md` (copy: `project/plans/context/g40-fleet-hub-quota-store-1949b11.md`; the evidence directory keeps the originals of `905d13e`, `625b0fe`, `c2d57ab` and `1949b11`). The first design pass's hub questions (key, write permission, TTL, clocks, conflict, rate) are all answered here.
 
 ### 22.1 Settled answers
 
@@ -715,7 +715,7 @@ For each `(provider, alias)` the mirror IS the hub view: one file `<live_dir>/qu
 
 ### 22.3 Merge and freshness
 
-One rule set (5.2, 11): peer rows by hub time, the local row by the local clock, compared as ages, newest per window wins, an exact tie goes to the local writer, rows past `hub_received_at + 6 h` and windows past the 6 h reader rule are ignored. Freshness is judged ONLY by `observed_at_hub` (or the local clock for the local row), never by a row still existing: a re-pushed row (23.1) restarts its hub expiry but keeps its old `observed_at_hub` (fleet `c2d57ab` section 4). Control N48: a re-pushed old row is stale by its `observed_at_hub` even though it was just received (a planted reader that uses row presence fails).
+One rule set (5.2, 11): peer rows by hub time, the local row by the local clock, compared as ages, newest per window wins, an exact tie goes to the local writer, rows past `hub_received_at + 6 h` and windows past the 6 h reader rule are ignored. Freshness is judged ONLY by `observed_at_hub` (or the local clock for the local row), never by a row still existing: a re-pushed row (23.1) restarts its hub expiry but keeps its old `observed_at_hub` (fleet `1949b11` section 4). Control N48: a re-pushed old row is stale by its `observed_at_hub` even though it was just received (a planted reader that uses row presence fails).
 
 ### 22.4 Push pacing: one token bucket strictly below every hub limit
 
@@ -744,4 +744,4 @@ One rule set (5.2, 11): peer rows by hub time, the local row by the local clock,
 
 - The own mirror keeps `invalid`, refusal and placeholder rows. When the hub copy expires (`hub_received_at + 6 h`), the reporter pushes the row again with its ORIGINAL `observed_at` and `token_state_at` (placeholders have none and keep none) in a frame with a fresh `sent_at`. Windows stay subject to the 6 h reader rule by `observed_at`, so a re-push never makes old data look fresh. It is an ordinary write: no extra "re-push" field.
 - Rate: about one write per alias per 6 h. This is not a heartbeat: it fires only when the hub copy is missing, carries no new observation and never refreshes a freshness stamp. Rows whose windows are all older than 6 h and that carry no non-aging state are not re-pushed (18.2 rule 4).
-- Hub behaviour, confirmed by fleet (`c2d57ab` section 4): only `observed_at > sent_at + 5 s` is refused; there is no "too old" floor; after a re-push the hub expiry restarts but `observed_at_hub` keeps the old value.
+- Hub behaviour, confirmed by fleet (`1949b11` section 4): only `observed_at > sent_at + 5 s` is refused; there is no "too old" floor; after a re-push the hub expiry restarts but `observed_at_hub` keeps the old value.

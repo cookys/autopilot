@@ -1,4 +1,3 @@
-<!-- Source: repo fleet, sha c2d57ab, path docs/plans/2026-11-04-g40-hub-quota-store.md (verbatim below) -->
 # G40: hub side of the shared quota store (`fleet.quota/1`)
 
 Status: design note, fleet position pending hetero plan review. It is reviewed
@@ -7,6 +6,11 @@ generation 2 revision on autopilot branch `hands/g40swexp/1` at 04636bf00, which
 moves the matching sections to §6, §11, §18, §21 to §23). Nothing here is built
 yet. The hub change ships with or after the F4 batch, never during a release
 freeze.
+
+Revision 4 (plan review generation 2, depth-0 rulings at autopilot
+c5c18f7c4): three empty-windows shapes, `token_state_at` rule, window
+`source` enum, row time base B for every timestamp, `skewed` from `sent_at`
+only, namespace on the snapshot frame, one reporter throttle.
 
 Revision 3 adds `clamped`, `remaining` (credits windows, nullable
 utilization), `visibility` and `source`; `hub_offset` is mirror-only.
@@ -63,10 +67,23 @@ hub table. Not the generic kv item.
 - `token_state_at` (seconds, nullable) sits beside `token_state`: when that
   state was last observed.
 - `visibility` (record level): enum `L0 | L1 | L2 | L3`.
-- `source` (record level): bounded pattern `^[a-z0-9_-]{1,24}$` (for example
-  `placeholder`, `statusline`, `wrapper`, `probe`). A record with empty
-  `windows[]` is valid only with `visibility: L0` and a `source`; it is the
-  placeholder of an alias never observed.
+- Window-level `source`: enum `passive | endpoint | probe | estimated`
+  (`statusline` and `none` are not window sources).
+- Record-level `source`: bounded pattern `^[a-z0-9_-]{1,24}$`; the plan emits
+  only `registry`. It is allowed only on shape (a) below.
+- `token_state` `unknown` requires `token_state_at` null; `ok` and `invalid`
+  require it set.
+- A record with empty `windows[]` has `visibility` L0 or L1 (L2/L3 with empty
+  windows is `quota_invalid`) and is one of three shapes:
+  - (a) placeholder: `refusal` null, `token_state` unknown, `token_state_at`
+    null, record-level `source` set. An alias never observed.
+  - (b) refusal-only: `refusal` set, no record-level `source`,
+    `visibility` L1.
+  - (c) state-only: `token_state` ok or invalid with `token_state_at`, no
+    record-level `source`.
+  - (b) and (c) may be combined in one record. Anything else with empty
+    windows is `quota_invalid`. L0 with a `refusal` is `quota_invalid` in any
+    shape.
 - Mirror-only fields (`hub_offset`) are the reader's and never sent; a push
   frame carrying one is refused `quota_invalid` like any unknown field.
 - One additive migration: a new table plus an index on
@@ -133,19 +150,23 @@ The hub key is `(namespace, provider, alias, writer_courier)`.
 ## 5. Clock skew between hosts
 
 Every push frame carries `sent_at` (epoch seconds, the reporter's clock),
-including a re-push after expiry. The record carries `observed_at` (epoch
-seconds) per window. The hub computes `skew = hub_now - sent_at` and stores
-`observed_at_hub = newest.observed_at + skew` beside the raw values, where
-`newest` is the record's newest window observation. Readers compare only
+including a re-push after expiry. The hub computes `skew = hub_now - sent_at`.
+The row's time base is `B = max(every window's observed_at,
+refusal.observed_at, token_state_at)`, and the hub stores
+`observed_at_hub = B + skew` beside the raw values. A placeholder with no
+timestamp at all has `observed_at_hub` null. Readers compare only
 hub-normalized times, so host clock offset cancels and only network delay
 remains.
 
-- An older window's hub time is derived by the reader:
-  `observed_at_hub - (newest.observed_at - window.observed_at)`.
+- Any older timestamp `x` in the row (a window's `observed_at`,
+  `refusal.observed_at`, `token_state_at`) maps to hub time by the reader as
+  `t(x) = observed_at_hub - (B - x)`.
+- `resets_at` and `refusal.retry_at` are stored as sent, not normalized.
 - `observed_at > sent_at + 5 s` (any window, `token_state_at`,
   `refusal.observed_at`): refused `quota_clock_invalid`.
 - `|skew| > 5 min`: stored, flagged `skewed` in the view so displays can
-  mark it (matches autopilot's 5 minute skew limit).
+  mark it (matches autopilot's 5 minute skew limit). `skewed` depends only on
+  `hub_now - sent_at`, so refusal-only and state-only rows get it too.
 - Snapshot and delta frames to readers carry `hub_now` (epoch seconds) so a
   reader can estimate its own offset from the hub (Q20: yes, adopted).
 
@@ -179,8 +200,10 @@ Hub limits:
 | live rows per courier | 256 | 240 own live rows |
 | windows per record | 7, one per kind | same |
 
-The reporter's token bucket covers every push, including the start-up push of
-all aliases, so a restart cannot burst past the hub.
+The reporter's token bucket (1 per 12 s, burst 2 per key) is its only per-key
+throttle; there is no separate 30 s minimum interval. It covers every push,
+including the start-up push of all aliases, so a restart cannot burst past
+the hub.
 
 - Exceeding a rate limit: nack `quota_rate_limited` with `retry_after`
   (seconds). Never a silent drop (principle 3).
@@ -191,7 +214,15 @@ all aliases, so a restart cannot burst past the hub.
 
 Couriers receive the namespace's quota view the same way they receive
 `_access` and the directory (snapshot on connect, deltas after, each frame
-with `hub_now`), and write the local mirror from it. A query form exists for
+with `hub_now`), and write the local mirror from it.
+
+- The snapshot-on-connect frame carries the connection's authenticated
+  `namespace`. The courier also knows its own namespace from its config; the
+  two must match, and the mirror (autopilot §22.2) binds the view to it.
+  Peer rows under a different namespace are ignored.
+- Row-level `host_role` is copied by the hub from the record; readers take
+  the record's value. `observed_at_hub` may be null (a placeholder with no
+  timestamp). A query form exists for
 diagnostics (`fleet quota [--json]`, F3).
 
 Reporter handling of each nack (principle 2, degrade and warn):
@@ -221,8 +252,17 @@ An old courier simply never subscribes.
 - An epoch field of `1.7e12` (milliseconds) is refused `quota_invalid`;
   `utilization` 1.01 is refused; `utilization: null` is refused on any kind
   but `credits`; `remaining` on a non-`credits` window is refused.
-- A record with empty `windows[]` is accepted only with `visibility: L0` and a
-  `source`; an unknown `visibility` value is refused.
+- Empty `windows[]` (an unknown `visibility` value is refused in any case):
+  - placeholder (shape a): accepted;
+  - L1 refusal-only: accepted;
+  - L0 with a `refusal`, with or without `source`: refused;
+  - state-only: accepted;
+  - L1, no `refusal`, `token_state` unknown, no `source`: refused;
+  - `token_state` invalid without `token_state_at`: refused;
+  - L2 or L3 with empty windows: refused.
+- A reporter clock 1 h slow: refusal-only and invalid-only rows still get
+  `observed_at_hub` from `sent_at`, flagged `skewed`.
+- A placeholder has `observed_at_hub` null.
 - A record naming another courier is refused; a courier cannot delete another
   courier's row.
 - A row is gone from reads at `hub_received_at + 6 h` even if its windows have
@@ -247,4 +287,6 @@ An old courier simply never subscribes.
   be namespace-only for the first version?
 - F3: is a fleet-side `fleet quota` CLI wanted in the first version, or only
   the courier mirror?
+- Q21: should the hub's record-level `source` pattern become an enum (today
+  only `registry`)?
 - Q20: answered in section 5 (`hub_now` on snapshot and delta frames).

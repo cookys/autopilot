@@ -73,9 +73,10 @@ const LOCK_STALE_MS = 10000;
 const LOCK_POLL_MS = 25;
 
 // Token shapes (two layers, as account-audit.js: shapes here, caller-supplied live tokens via opts.secrets).
-const TOKEN_SHAPES = Object.freeze([
-  /sk-ant-/i, /\bsk-[A-Za-z0-9_-]{20,}/, /FAKE-/, /\bBearer\s+\S/i, /[A-Za-z0-9_+/=-]{40,}/,
-]);
+// PREFIX shapes name a token by how it starts; TOKEN_SHAPES adds the long-opaque-string rule, which is only right
+// for fields whose grammar is already short (a courier id such as ns/courier/member may legitimately pass 40 chars).
+const TOKEN_PREFIX_SHAPES = Object.freeze([/sk-ant-/i, /\bsk-[A-Za-z0-9_-]{20,}/, /FAKE-/, /\bBearer\s+\S/i]);
+const TOKEN_SHAPES = Object.freeze([...TOKEN_PREFIX_SHAPES, /[A-Za-z0-9_+/=-]{40,}/]);
 
 function bad(reason) { return { ok: false, code: 'quota_invalid', reason }; }
 function isObj(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
@@ -110,14 +111,15 @@ function epochProblem(x, nullable) {
   return null;
 }
 
-function scanTokenShape(v, secrets, depth) {
-  if (depth > 6) return false;
+function scanTokenShape(v, secrets, depth, shapes) {
+  const sh = shapes || TOKEN_SHAPES;
+  if (depth > 8) return false;
   if (typeof v === 'string') {
-    if (TOKEN_SHAPES.some((re) => re.test(v))) return true;
+    if (sh.some((re) => re.test(v))) return true;
     return secrets.some((s) => typeof s === 'string' && s.length > 0 && v.includes(s));
   }
-  if (Array.isArray(v)) return v.some((x) => scanTokenShape(x, secrets, depth + 1));
-  if (isObj(v)) return Object.keys(v).some((k) => scanTokenShape(k, secrets, depth + 1) || scanTokenShape(v[k], secrets, depth + 1));
+  if (Array.isArray(v)) return v.some((x) => scanTokenShape(x, secrets, depth + 1, sh));
+  if (isObj(v)) return Object.keys(v).some((k) => scanTokenShape(k, secrets, depth + 1, sh) || scanTokenShape(v[k], secrets, depth + 1, sh));
   return false;
 }
 
@@ -142,7 +144,8 @@ function windowProblem(w) {
   if (!has(w, 'resets_at') && w.resets_at !== null) return 'resets_at_missing';
   p = epochProblem(w.resets_at, true);
   if (p) return `resets_at:${p}`;
-  if (has(w, 'clamped') && w.clamped !== true) return 'clamped_type';
+  // `clamped` is set only by clampUtilization: true, and only on a window stored at exactly 1 (N50).
+  if (has(w, 'clamped') && !(w.clamped === true && w.utilization === 1)) return 'clamped_invalid';
 
   const used = w.used === undefined ? null : w.used;
   const limit = w.limit === undefined ? null : w.limit;
@@ -187,7 +190,7 @@ function refusalProblem(r) {
 function validateRecord(rec, opts) {
   const o = opts || {};
   if (!isObj(rec)) return bad('not_object');
-  if (scanTokenShape(rec, Array.isArray(o.secrets) ? o.secrets : [], 0)) return bad('token_shaped');
+  if (scanTokenShape(rec, Array.isArray(o.secrets) ? o.secrets : [], 0, TOKEN_SHAPES)) return bad('token_shaped');
   for (const k of Object.keys(rec)) { const p = keyProblem(k, RECORD_KEYS); if (p) return bad(p); }
   if (rec.schema !== SCHEMA) return bad('schema');
   if (typeof rec.provider !== 'string' || !PROVIDER_RE.test(rec.provider)) return bad('provider');
@@ -255,11 +258,12 @@ function buildRecord(input, opts) {
   for (const w of Array.isArray(input.windows) ? input.windows : []) {
     if (!isObj(w)) return bad('window_not_object');
     const out = Object.assign({}, w);
+    delete out.clamped; // never carried in: derived at this boundary only
     if (w.utilization !== null && w.utilization !== undefined) {
       const c = clampUtilization(w.utilization);
       if (!c.ok) return bad(c.reason);
       out.utilization = c.value;
-      if (c.clamped) out.clamped = true; else delete out.clamped;
+      if (c.clamped) out.clamped = true;
     }
     windows.push(out);
   }
@@ -303,7 +307,7 @@ function liveDirOrNull(opts) {
 
 // Parse one view file object into { view, note, row_notes } without IO. Invalid rows are dropped and named in
 // row_notes so a reader can filter; a bad view as a whole is { view: null, note }.
-function parseView(j, key) {
+function parseView(j, key, secrets) {
   if (!isObj(j)) return { view: null, note: 'quota_invalid', row_notes: [] };
   if (j.schema !== VIEW_SCHEMA) return { view: null, note: 'quota_schema_unsupported', row_notes: [] };
   for (const k of Object.keys(j)) if (!VIEW_KEYS.includes(k)) return { view: null, note: 'quota_invalid', row_notes: [] };
@@ -317,7 +321,7 @@ function parseView(j, key) {
   const seen = new Set();
   for (const r of j.rows) {
     const label = isObj(r) && typeof r.writer_courier === 'string' && COURIER_RE.test(r.writer_courier) ? r.writer_courier : null;
-    const reason = rowProblem(r, key, seen);
+    const reason = rowProblem(r, key, seen, secrets);
     if (reason) { notes.push({ writer_courier: label, note: reason }); continue; }
     seen.add(r.writer_courier);
     rows.push({
@@ -331,8 +335,10 @@ function parseView(j, key) {
   return { view: { schema: VIEW_SCHEMA, namespace, hub_offset: hubOffset, rows }, note: null, row_notes: notes };
 }
 
-function rowProblem(r, key, seen) {
+function rowProblem(r, key, seen, secrets) {
   if (!isObj(r)) return 'row_not_object';
+  const sec = Array.isArray(secrets) ? secrets : [];
+  if (scanTokenShape(Object.assign({}, r, { record: null }), sec, 0, TOKEN_PREFIX_SHAPES)) return 'token_shaped';
   for (const k of Object.keys(r)) if (!ROW_KEYS.includes(k)) return 'row_key';
   if (typeof r.writer_courier !== 'string' || !COURIER_RE.test(r.writer_courier)) return 'writer_courier';
   if (seen.has(r.writer_courier)) return 'duplicate_writer';
@@ -340,7 +346,7 @@ function rowProblem(r, key, seen) {
   const p = epochProblem(r.observed_at_hub, true);
   if (p) return `observed_at_hub:${p}`;
   if (has(r, 'skewed') && typeof r.skewed !== 'boolean') return 'skewed';
-  const v = validateRecord(r.record, key);
+  const v = validateRecord(r.record, Object.assign({}, key, { secrets: sec }));
   return v.ok ? null : v.reason;
 }
 
@@ -355,7 +361,7 @@ function readView(liveDir, provider, alias, opts) {
   if (r.error) return { view: null, note: r.error === 'invalid' ? 'quota_invalid' : 'quota_unreadable', row_notes: [] };
   let j;
   try { j = JSON.parse(r.text); } catch (_) { return { view: null, note: 'quota_invalid', row_notes: [] }; }
-  return parseView(j, { provider, alias });
+  return parseView(j, { provider, alias }, opts && opts.secrets);
 }
 
 // readNamespaceBinding(liveDir) -> { namespace: string|null, note: string|null }. Absent is null with no note.
@@ -375,43 +381,79 @@ function readNamespaceBinding(liveDir, opts) {
 
 function defaultSleep(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
 
-// opts: { now() -> ms, sleep(ms), waitMs, staleMs }. true when the lock is held by us, false when busy.
+function newNonce() { return `${process.pid}.${Math.random().toString(36).slice(2, 12)}.${Date.now()}`; }
+
+function lockOwner(lockPath) {
+  try { return JSON.parse(fs.readFileSync(lockPath, 'utf8')).nonce || null; } catch (_) { return null; }
+}
+
+// Takes the lock with O_EXCL and writes a nonce into it. A stale lock (older than staleMs) is reclaimed by renaming
+// it to a unique name first: rename is atomic, so exactly one reclaimer wins; the winner unlinks the renamed file and
+// goes back to O_EXCL. If the renamed file turns out to be FRESH (someone reclaimed before us and holds a new lock),
+// it is linked back and we treat the lock as busy. Returns the nonce when held, null when busy.
+// opts: { now() -> ms, sleep(ms), waitMs, staleMs, hooks: { beforeReclaim(), beforePublish() } } (hooks are test seams).
 function acquireLock(lockPath, o) {
   const now = o.now || Date.now;
   const sleep = o.sleep || defaultSleep;
   const waitMs = o.waitMs === undefined ? LOCK_WAIT_MS : o.waitMs;
   const staleMs = o.staleMs === undefined ? LOCK_STALE_MS : o.staleMs;
+  const nonce = newNonce();
   const deadline = now() + waitMs;
   for (;;) {
     try {
-      fs.closeSync(fs.openSync(lockPath, 'wx', 0o600));
-      return true;
+      const fd = fs.openSync(lockPath, 'wx', 0o600);
+      try { fs.writeSync(fd, JSON.stringify({ pid: process.pid, nonce, t: now() })); } finally { fs.closeSync(fd); }
+      return nonce;
     } catch (e) {
       if (!e || e.code !== 'EEXIST') throw e;
     }
-    try {
-      const st = fs.lstatSync(lockPath);
-      if (now() - st.mtimeMs > staleMs) { fs.unlinkSync(lockPath); continue; }
-    } catch (e) {
+    let stale = false;
+    try { stale = now() - fs.lstatSync(lockPath).mtimeMs > staleMs; } catch (e) {
       if (e && e.code === 'ENOENT') continue; // released while we looked
       throw e;
     }
-    if (now() >= deadline) return false;
+    if (stale) {
+      if (o.hooks && typeof o.hooks.beforeReclaim === 'function') o.hooks.beforeReclaim();
+      const moved = `${lockPath}.stale.${nonce}`;
+      try { fs.renameSync(lockPath, moved); } catch (e) {
+        if (e && e.code === 'ENOENT') continue; // another reclaimer won
+        throw e;
+      }
+      let stillStale = true;
+      try { stillStale = now() - fs.lstatSync(moved).mtimeMs > staleMs; } catch (_) { /* gone */ }
+      if (stillStale) { try { fs.unlinkSync(moved); } catch (_) { /* ignore */ } continue; }
+      try { fs.linkSync(moved, lockPath); } catch (_) { /* someone else already holds a newer one */ }
+      try { fs.unlinkSync(moved); } catch (_) { /* ignore */ }
+    }
+    if (now() >= deadline) return null;
     sleep(LOCK_POLL_MS);
   }
 }
 
+function releaseLock(lockPath, nonce) {
+  if (lockOwner(lockPath) === nonce) { try { fs.unlinkSync(lockPath); } catch (_) { /* ignore */ } }
+}
+
+// The view envelope keys a writer understands; anything else means a newer writer made the file.
+function envelopeKnown(j) { return Object.keys(j).every((k) => VIEW_KEYS.includes(k)); }
+
 // writeLocalRow(liveDir, record, opts) -> { ok: true, path, reset } | { ok: false, code, reason? }
-// Read-modify-write of ONLY the row tagged opts.courier (default `local`); every other row, the namespace and
-// hub_offset are kept as found. Codes: quota_invalid (validator), live_dir_refused, dir_refused, target_invalid
-// (symlink / not a regular file), mirror_lock_busy (skip the write, count it), view_too_large, write_failed.
-// opts: { courier, secrets, now, sleep, waitMs, staleMs }.
+// Read-modify-write of ONLY the row tagged opts.courier (default `local`). Every other row, the namespace and
+// hub_offset are written back as the raw parsed JSON found on disk: not normalised, not filtered (an invalid peer row
+// stays, readers ignore it). The whole view about to be written is scanned for token shapes (opts.secrets as well):
+// a hit refuses the write. A newer schema or an unknown top-level key refuses the write (view_unsupported); only
+// unparseable JSON is replaced, after the damaged bytes are kept as <alias>.json.corrupt.<ts> (0600, same directory).
+// Codes: quota_invalid, live_dir_refused, dir_refused, target_invalid (symlink / not a regular file),
+// view_unsupported, mirror_lock_busy, view_too_large, write_failed.
+// opts: { courier, secrets, now, sleep, waitMs, staleMs, hooks }.
 function writeLocalRow(liveDir, record, opts) {
   const o = opts || {};
   const courier = o.courier === undefined ? LOCAL_COURIER : o.courier;
+  const secrets = Array.isArray(o.secrets) ? o.secrets : [];
   if (typeof liveDir !== 'string' || !path.isAbsolute(liveDir)) return { ok: false, code: 'live_dir_refused' };
   if (typeof courier !== 'string' || !COURIER_RE.test(courier)) return bad('courier');
-  const v = validateRecord(record, { secrets: o.secrets });
+  if (scanTokenShape(courier, secrets, 0, TOKEN_PREFIX_SHAPES)) return bad('token_shaped');
+  const v = validateRecord(record, { secrets });
   if (!v.ok) return v;
 
   const dir = mirrorDir(liveDir, record.provider);
@@ -424,21 +466,33 @@ function writeLocalRow(liveDir, record, opts) {
   if (st && !st.isFile()) return { ok: false, code: 'target_invalid', reason: 'not_regular_file' };
 
   const lockPath = path.join(dir, `${record.alias}.lock`);
-  let held;
-  try { held = acquireLock(lockPath, o); } catch (_) { return { ok: false, code: 'write_failed', reason: 'lock' }; }
-  if (!held) return { ok: false, code: 'mirror_lock_busy' };
+  let nonce;
+  try { nonce = acquireLock(lockPath, o); } catch (_) { return { ok: false, code: 'write_failed', reason: 'lock' }; }
+  if (!nonce) return { ok: false, code: 'mirror_lock_busy' };
   let tmp = null;
   try {
     let view = { schema: VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [] };
     let reset = false;
     const cur = readSmallFile(file, VIEW_MAX_BYTES);
     if (cur.error === 'unreadable') return { ok: false, code: 'target_invalid', reason: 'unreadable' };
-    if (cur.text !== undefined || cur.error === 'invalid') {
-      let parsed = { view: null };
-      if (cur.text !== undefined) {
-        try { parsed = parseView(JSON.parse(cur.text), { provider: record.provider, alias: record.alias }); } catch (_) { /* reset below */ }
+    let damaged = cur.error === 'invalid';
+    if (cur.text !== undefined) {
+      let j = null;
+      try { j = JSON.parse(cur.text); } catch (_) { damaged = true; }
+      if (!damaged) {
+        if (!isObj(j)) damaged = true;
+        else if (j.schema !== VIEW_SCHEMA || !envelopeKnown(j)) return { ok: false, code: 'view_unsupported', reason: j.schema !== VIEW_SCHEMA ? 'schema' : 'unknown_key' };
+        else if (!Array.isArray(j.rows)) damaged = true;
+        else view = Object.assign({ namespace: null, hub_offset: 0 }, j);
       }
-      if (parsed.view) view = parsed.view; else reset = true; // a damaged mirror is replaced, never trusted
+    }
+    if (damaged) {
+      if (st) { // keep the damaged bytes beside it before replacing (0600, same private directory)
+        const keep = `${file}.corrupt.${Math.floor(Date.now() / 1000)}`;
+        try { fs.copyFileSync(file, keep, fs.constants.COPYFILE_EXCL); fs.chmodSync(keep, 0o600); } catch (_) { return { ok: false, code: 'write_failed', reason: 'corrupt_copy' }; }
+      }
+      view = { schema: VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [] };
+      reset = true;
     }
     const row = {
       writer_courier: courier,
@@ -447,14 +501,18 @@ function writeLocalRow(liveDir, record, opts) {
       skewed: false,
       record,
     };
-    const at = view.rows.findIndex((r) => r.writer_courier === courier);
+    const at = view.rows.findIndex((r) => isObj(r) && r.writer_courier === courier);
     if (at >= 0) view.rows[at] = row; else view.rows.push(row);
+    // the whole view that will be written, envelope and every row (peer rows included), is scanned (prefix shapes)
+    if (scanTokenShape(view, secrets, 0, TOKEN_PREFIX_SHAPES)) return bad('token_shaped');
     const text = `${JSON.stringify(view)}\n`;
     if (Buffer.byteLength(text) > VIEW_MAX_BYTES) return { ok: false, code: 'view_too_large' };
 
     tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
     const fd = fs.openSync(tmp, 'wx', 0o600);
     try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
+    if (o.hooks && typeof o.hooks.beforePublish === 'function') o.hooks.beforePublish();
+    if (lockOwner(lockPath) !== nonce) return { ok: false, code: 'mirror_lock_busy' }; // lost the lock: do not publish
     fs.renameSync(tmp, file);
     tmp = null;
     return { ok: true, path: file, reset };
@@ -462,7 +520,7 @@ function writeLocalRow(liveDir, record, opts) {
     return { ok: false, code: 'write_failed' };
   } finally {
     if (tmp) { try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ } }
-    try { fs.unlinkSync(lockPath); } catch (_) { /* ignore */ }
+    releaseLock(lockPath, nonce);
   }
 }
 
@@ -470,7 +528,7 @@ module.exports = {
   SCHEMA, VIEW_SCHEMA, NAMESPACE_SCHEMA,
   EPOCH_MAX_S, CLAMP_MAX,
   WINDOW_KINDS, WINDOW_SOURCES, UNITS, VISIBILITY, TOKEN_STATES, REFUSAL_REASONS, RECORD_SOURCES, LOCAL_COURIER,
-  clampUtilization, buildRecord, validateRecord, hasMsKey,
+  clampUtilization, buildRecord, validateRecord, hasMsKey, TOKEN_SHAPES, TOKEN_PREFIX_SHAPES,
   mirrorDir, mirrorPath, namespacePath, liveDirOrNull,
   parseView, readView, readNamespaceBinding, writeLocalRow,
 };

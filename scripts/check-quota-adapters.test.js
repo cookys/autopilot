@@ -193,3 +193,11 @@ test('G40-D1 CLI: a broken manifest exits 1 with its findings as JSON, a directo
   assert.strictEqual(bad.status, 1);
   assert.strictEqual(JSON.parse(bad.stdout).findings[0].detail, 'unreadable_or_not_json');
 });
+
+test('G40-D1 the token shapes have one source: the checker uses the validator\'s list, and an exact slug beats a prefix match', () => {
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, 'check-quota-adapters.js'), 'utf8'), /const TOKEN_SHAPES\s*=/);
+  assert.ok(Array.isArray(require('./lib/account-observation').TOKEN_SHAPES) || Object.isFrozen(require('./lib/account-observation').TOKEN_SHAPES));
+  const text = '## claude code\nprefix body\n## claude\nexact body\n';
+  assert.deepStrictEqual(c.matrixSection(text, 'claude'), ['exact body', '']);
+  assert.deepStrictEqual(c.matrixSection('## claude code\nonly prefix\n', 'claude'), ['only prefix', '']);
+});

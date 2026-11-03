@@ -450,3 +450,209 @@ test('G40-D1 token_state grammar: unknown needs a null token_state_at, ok and in
   delete noState.token_state; delete noState.token_state_at;
   assert.strictEqual(o.validateRecord(noState).ok, true, 'absent is read as unknown');
 });
+
+// --- review round: token hygiene (A), clamp boundary (B), write safety (C) -----------------------------
+
+const { spawn } = require('child_process');
+const rawView = (fx) => JSON.parse(fs.readFileSync(o.mirrorPath(fx.liveDir, 'claude', 'a'), 'utf8'));
+const noWrite = (fx) => assert.strictEqual(fs.existsSync(path.join(fx.liveDir, 'quota')), false, 'nothing was made on disk');
+
+test('G40-N2 a courier id carrying a token shape is refused and nothing is written; a long ordinary courier id is fine', () => {
+  withFix((fx) => {
+    for (const courier of [fx.tokens.a, 'ns/courier/sk-ant-abcdef', ['ns/courier/sk', 'abcdefghijklmnopqrstuvwxyz'].join('-')]) {
+      const r = o.writeLocalRow(fx.liveDir, rec(), { courier });
+      assert.deepStrictEqual([r.ok, r.code, r.reason], [false, 'quota_invalid', 'token_shaped'], courier);
+    }
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec(), { courier: 'zz-secret-1', secrets: ['zz-secret-1'] }).reason, 'token_shaped');
+    noWrite(fx);
+    const long = `ns/courier/${'m'.repeat(60)}`;
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec(), { courier: long }).ok, true, 'the generic 40-char rule is not applied to a courier id');
+  });
+});
+
+test('G40-N2 a peer row (row-level host_role or writer_courier) carrying a token refuses the whole write; the file is unchanged', () => {
+  for (const bad of [{ host_role: 'FAKE-token-a-0' }, { writer_courier: 'ns/courier/sk-ant-zzzzzz' }, { host_role: 'zz-secret-1' }]) {
+    withFix((fx) => {
+      writeViewFile(fx, { schema: o.VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [peerRow(bad)] });
+      const file = o.mirrorPath(fx.liveDir, 'claude', 'a');
+      const before = fs.readFileSync(file, 'utf8');
+      const r = o.writeLocalRow(fx.liveDir, rec(), { secrets: ['zz-secret-1'] });
+      assert.deepStrictEqual([r.ok, r.code, r.reason], [false, 'quota_invalid', 'token_shaped'], JSON.stringify(bad));
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
+    });
+  }
+});
+
+test('G40-N2 readView passes opts.secrets down: a peer row holding a live secret is dropped and named token_shaped', () => {
+  withFix((fx) => {
+    writeViewFile(fx, { schema: o.VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [
+      peerRow({ writer_courier: 'ns/courier/p1', record: rec({ host_role: 'zz-secret-1' }) }),
+      peerRow({ writer_courier: 'ns/courier/p2', host_role: 'FAKE-token-a-0' }),
+      peerRow({ writer_courier: 'ns/courier/p3' }),
+    ] });
+    assert.strictEqual(o.readView(fx.liveDir, 'claude', 'a').view.rows.length, 2, 'without secrets only the shape rule applies');
+    const r = o.readView(fx.liveDir, 'claude', 'a', { secrets: ['zz-secret-1'] });
+    assert.deepStrictEqual(r.view.rows.map((x) => x.writer_courier), ['ns/courier/p3']);
+    assert.deepStrictEqual(r.row_notes.map((n) => n.note), ['token_shaped', 'token_shaped']);
+  });
+});
+
+test('G40-N50 a clamped flag is accepted only on a window stored at exactly 1: 0.4 and null utilization with clamped:true are rejected', () => {
+  assert.strictEqual(reason(o.validateRecord(rec({ windows: [win({ utilization: 0.4, clamped: true })] }))), 'clamped_invalid');
+  assert.strictEqual(reason(o.validateRecord(rec({ windows: [win({ utilization: 1, clamped: false })] }))), 'clamped_invalid');
+  const credits = { kind: 'credits', utilization: null, used: null, limit: null, unit: 'credits', remaining: 5, resets_at: null, source: 'endpoint', observed_at: T, clamped: true };
+  assert.strictEqual(reason(o.validateRecord(rec({ windows: [credits] }))), 'clamped_invalid');
+  assert.strictEqual(o.validateRecord(rec({ windows: [win({ utilization: 1, clamped: true })] })).ok, true);
+  const b = o.buildRecord(rec({ windows: [Object.assign({}, credits)] }));
+  assert.strictEqual(b.ok, true);
+  assert.strictEqual('clamped' in b.record.windows[0], false, 'buildRecord strips a carried-in clamped before branching');
+});
+
+test('G40-N50 writeLocalRow refuses a forged clamped flag and writes nothing', () => {
+  withFix((fx) => {
+    const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.4, clamped: true })] }));
+    assert.deepStrictEqual([r.ok, r.code, r.reason], [false, 'quota_invalid', 'clamped_invalid']);
+    noWrite(fx);
+  });
+});
+
+test('G40-D1 peer rows are written back byte for byte, an invalid one included; envelope fields are kept', () => {
+  withFix((fx) => {
+    const peers = [
+      peerRow({ writer_courier: 'ns/courier/p1' }),
+      peerRow({ writer_courier: 'ns/courier/p2', record: rec({ windows: [win({ utilization: 1.2 })] }) }), // invalid: reader drops it
+      { writer_courier: 'ns/courier/p3', extra_key: { nested: [1, 2, 3] }, record: 'not even a record' },
+      peerRow({ writer_courier: 'ns/courier/p4', observed_at_hub: 1.7e12 }),
+    ];
+    writeViewFile(fx, { schema: o.VIEW_SCHEMA, namespace: 'nsA', hub_offset: 42, rows: peers });
+    const before = rawView(fx).rows.map((x) => JSON.stringify(x));
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec()).ok, true);
+    const after = rawView(fx);
+    assert.deepStrictEqual(after.rows.slice(0, 4).map((x) => JSON.stringify(x)), before);
+    assert.strictEqual(after.rows.length, 5);
+    assert.strictEqual(after.rows[4].writer_courier, 'local');
+    assert.deepStrictEqual([after.namespace, after.hub_offset], ['nsA', 42]);
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.9 })] })).ok, true);
+    assert.deepStrictEqual(rawView(fx).rows.slice(0, 4).map((x) => JSON.stringify(x)), before, 'a second write keeps them too');
+  });
+});
+
+test('G40-D1 a newer view schema or an unknown top-level key refuses the write and leaves the file alone', () => {
+  for (const view of [{ schema: 'fleet.quota-view/2', rows: [] }, { schema: o.VIEW_SCHEMA, namespace: null, hub_offset: 0, rows: [], future: 1 }]) {
+    withFix((fx) => {
+      writeViewFile(fx, view);
+      const file = o.mirrorPath(fx.liveDir, 'claude', 'a');
+      const before = fs.readFileSync(file, 'utf8');
+      const r = o.writeLocalRow(fx.liveDir, rec());
+      assert.deepStrictEqual([r.ok, r.code], [false, 'view_unsupported']);
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
+      assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json'], 'no reset, no corrupt copy');
+    });
+  }
+});
+
+test('G40-D1 only damaged JSON is replaced, and the damaged bytes are kept first as <alias>.json.corrupt.<ts> (0600)', () => {
+  withFix((fx) => {
+    mkQuotaDir(fx);
+    const file = o.mirrorPath(fx.liveDir, 'claude', 'a');
+    fs.writeFileSync(file, '{"schema": broken', { mode: 0o600 });
+    const w = o.writeLocalRow(fx.liveDir, rec());
+    assert.deepStrictEqual([w.ok, w.reset], [true, true]);
+    const kept = fs.readdirSync(qdir(fx)).filter((n) => /^a\.json\.corrupt\.\d+$/.test(n));
+    assert.strictEqual(kept.length, 1);
+    assert.strictEqual(fs.readFileSync(path.join(qdir(fx), kept[0]), 'utf8'), '{"schema": broken');
+    assert.strictEqual(fs.statSync(path.join(qdir(fx), kept[0])).mode & 0o777, 0o600);
+    assert.strictEqual(o.readView(fx.liveDir, 'claude', 'a').view.rows.length, 1);
+  });
+});
+
+function staleLock(fx, ageS) {
+  const lock = path.join(qdir(fx), 'a.lock');
+  fs.writeFileSync(lock, JSON.stringify({ pid: 1, nonce: 'dead', t: 0 }), { mode: 0o600 });
+  const t = (Date.now() / 1000) - ageS;
+  fs.utimesSync(lock, t, t);
+  return lock;
+}
+
+test('G40-D1 lock race: a competitor that reclaims the same stale lock first leaves exactly one holder and loses no write', () => {
+  withFix((fx) => {
+    o.writeLocalRow(fx.liveDir, rec());
+    const lock = staleLock(fx, 30);
+    let fired = false;
+    const hooks = { beforeReclaim: () => {
+      if (fired) return;
+      fired = true; // competitor B takes the whole path while A is between "saw stale" and "rename"
+      assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.7 })] }), { courier: 'ns/courier/b' }).ok, true);
+    } };
+    const a = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.3 })] }), { courier: 'ns/courier/a', hooks });
+    assert.strictEqual(a.ok, true);
+    const rows = Object.fromEntries(o.readView(fx.liveDir, 'claude', 'a').view.rows.map((r) => [r.writer_courier, r.record.windows[0].utilization]));
+    assert.deepStrictEqual(rows, { local: 0.5, 'ns/courier/b': 0.7, 'ns/courier/a': 0.3 });
+    assert.strictEqual(fs.existsSync(lock), false);
+    assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json']);
+  });
+});
+
+test('G40-D1 lock race: a reclaimer that renames a competitor\'s FRESH lock puts it back and waits; the holder keeps its lock', () => {
+  withFix((fx) => {
+    o.writeLocalRow(fx.liveDir, rec());
+    const lock = staleLock(fx, 30);
+    let t = Date.now();
+    let seen = null;
+    let fired = false;
+    const hooks = { beforeReclaim: () => {
+      if (fired) return;
+      fired = true; // B reclaims and now holds a FRESH lock before A's rename lands
+      fs.unlinkSync(lock);
+      fs.writeFileSync(lock, JSON.stringify({ pid: 2, nonce: 'B', t: Date.now() }), { mode: 0o600 });
+    } };
+    const sleep = (ms) => {
+      t += ms;
+      if (seen === null) { seen = lockOwnerOf(lock); fs.unlinkSync(lock); } // B finishes after A has waited once
+    };
+    const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.3 })] }), { courier: 'ns/courier/a', hooks, now: () => t, sleep });
+    assert.strictEqual(seen, 'B', 'B\'s lock was restored intact, not destroyed');
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(fs.existsSync(lock), false);
+    assert.strictEqual(o.readView(fx.liveDir, 'claude', 'a').view.rows.length, 2);
+  });
+});
+function lockOwnerOf(lock) { try { return JSON.parse(fs.readFileSync(lock, 'utf8')).nonce; } catch (_) { return null; } }
+
+test('G40-D1 lock release and publish check the nonce: a lock replaced by another holder is neither published over nor removed', () => {
+  withFix((fx) => {
+    o.writeLocalRow(fx.liveDir, rec());
+    const lock = path.join(qdir(fx), 'a.lock');
+    const file = o.mirrorPath(fx.liveDir, 'claude', 'a');
+    const before = fs.readFileSync(file, 'utf8');
+    const hooks = { beforePublish: () => { fs.writeFileSync(lock, JSON.stringify({ pid: 9, nonce: 'OTHER', t: Date.now() })); } };
+    const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.9 })] }), { hooks });
+    assert.deepStrictEqual([r.ok, r.code], [false, 'mirror_lock_busy']);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
+    assert.strictEqual(lockOwnerOf(lock), 'OTHER', 'the other holder\'s lock is still there');
+    assert.deepStrictEqual(fs.readdirSync(qdir(fx)).sort(), ['a.json', 'a.lock']);
+  });
+});
+
+test('G40-D1 lock race with real processes: two writers reclaiming one stale lock, repeated, never lose a row', async () => {
+  const modPath = path.join(__dirname, 'account-observation.js');
+  const code = `const o=require(${JSON.stringify(modPath)});const [live,courier,u]=process.argv.slice(1);
+    const rec={schema:o.SCHEMA,provider:'claude',alias:'a',visibility:'L3',windows:[{kind:'rolling_5h',utilization:Number(u),resets_at:1800003600,source:'passive',observed_at:1800000000}],refusal:null,token_state:'unknown',token_state_at:null,host_role:'agent'};
+    const r=o.writeLocalRow(live,rec,{courier,waitMs:8000});process.exit(r.ok?0:3);`;
+  const run = (live, courier, u) => new Promise((resolve) => {
+    const p = spawn(process.execPath, ['-e', code, live, courier, u], { stdio: 'ignore' });
+    p.on('exit', (c) => resolve(c));
+  });
+  for (let i = 0; i < 12; i += 1) {
+    const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+    try {
+      assert.strictEqual(o.writeLocalRow(fx.liveDir, rec()).ok, true);
+      staleLock(fx, 30);
+      const codes = await Promise.all([run(fx.liveDir, 'ns/courier/a', '0.3'), run(fx.liveDir, 'ns/courier/b', '0.7')]);
+      assert.deepStrictEqual(codes, [0, 0], `round ${i}`);
+      const names = o.readView(fx.liveDir, 'claude', 'a').view.rows.map((r) => r.writer_courier).sort();
+      assert.deepStrictEqual(names, ['local', 'ns/courier/a', 'ns/courier/b'], `round ${i}`);
+      assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json']);
+    } finally { fx.cleanup(); }
+  }
+});

@@ -21,7 +21,7 @@
 const fs = require('fs');
 const path = require('path');
 const LAYOUT = require('./lib/repo-layout.js');
-const { WINDOW_KINDS, UNITS, VISIBILITY } = require('./lib/account-observation.js');
+const { WINDOW_KINDS, UNITS, VISIBILITY, TOKEN_SHAPES } = require('./lib/account-observation.js');
 
 const SCRIPTS_DIR = LAYOUT.path('scripts_dir');
 const MANIFEST_SCHEMA = 'fleet.quota-adapter/1';
@@ -34,7 +34,6 @@ const COSTS = ['zero_token', 'tokens', 'local'];
 const CAPTURE_KEYS = ['mode', 'cost', 'verified', 'enabled', 'evidence', 'note', 'parser', 'needs', 'argv_template', 'est_cost_usd', 'est_out_tokens', 'min_interval_minutes', 'starts_window', 'counter', 'plan_limit', 'source', 'cooldown_on_429'];
 const PROVIDER_RE = /^[a-z0-9-]{1,24}$/;
 const ENV_NAME_RE = /^[A-Z0-9_]{1,64}$/;
-const TOKEN_SHAPES = [/sk-ant-/i, /\bsk-[A-Za-z0-9_-]{20,}/, /FAKE-/, /\bBearer\s+\S/i, /[A-Za-z0-9_+/=-]{40,}/];
 const TEMPLATE_PREFIX = '<accounts-dir>/<alias>/';
 
 function isObj(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
@@ -67,15 +66,16 @@ function slug(heading) {
 // The section (lines) of the matrix whose `## ` heading slug is the anchor, or starts with `<anchor>-`.
 function matrixSection(text, anchor) {
   const lines = text.split('\n');
-  let start = -1;
+  const heads = [];
   for (let i = 0; i < lines.length; i += 1) {
     const m = /^##\s+(.+?)\s*$/.exec(lines[i]);
-    if (!m) continue;
-    const s = slug(m[1]);
-    if (start < 0 && (s === anchor || s.startsWith(`${anchor}-`))) { start = i + 1; continue; }
-    if (start >= 0) return lines.slice(start, i);
+    if (m) heads.push({ at: i, s: slug(m[1]) });
   }
-  return start >= 0 ? lines.slice(start) : null;
+  // an exact slug wins; a prefix match is the fallback (so `claude` still finds `## claude code` when no `## claude` exists)
+  const h = heads.find((x) => x.s === anchor) || heads.find((x) => x.s.startsWith(`${anchor}-`));
+  if (!h) return null;
+  const next = heads.find((x) => x.at > h.at);
+  return lines.slice(h.at + 1, next ? next.at : lines.length);
 }
 
 function evidenceProblem(ev, ctx) {

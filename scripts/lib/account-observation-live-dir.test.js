@@ -3,10 +3,8 @@
 // liveDirCandidates) and a reference reader written from the text of 21.3 must return the same path on every
 // vector; a reader that takes a /tmp candidate without the RAM-backed rule must fail one vector.
 //
-// Plan 21.3 says the autopilot resolver "has no /tmp candidate". The code does have one (source 'tmp'), but it is
-// taken only when /tmp is RAM-backed, which is the rule the plan states. These vectors read 21.3 that way: /tmp is
-// ext4 here, as on the operator's hosts, and the assertion below names the extra candidate so the difference is
-// visible rather than hidden. Fixtures only; the shm vector is checked by candidate order (pure) because resolving
+// Plan 21.3: the autopilot resolver's /tmp candidate (source 'tmp') counts only when /tmp is a RAM filesystem.
+// These vectors keep /tmp on ext4, as on the operator's hosts, and the assertion below names that candidate. Fixtures only; the shm vector is checked by candidate order (pure) because resolving
 // it would create the real /dev/shm/autopilot-<uid>. Nothing here touches ~/.autopilot or any live directory.
 // Run: node --test scripts/lib/account-observation-live-dir.test.js
 const test = require('node:test');

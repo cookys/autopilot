@@ -379,12 +379,14 @@ function read(ctx, window) {
 
     // roots: [{ dir, configured }]
     const roots = [];
-    const seenRoots = new Set();
+    const seenRoots = new Map();
     const addRoot = (dir, configured) => {
       const key = realOrSelf(dir);
-      if (seenRoots.has(key)) return;
-      seenRoots.add(key);
-      roots.push({ dir: key, given: dir, configured });
+      const seen = seenRoots.get(key);
+      if (seen) { seen.configured = seen.configured || configured; return; } // any configured source makes it configured
+      const root = { dir: key, given: dir, configured };
+      seenRoots.set(key, root);
+      roots.push(root);
     };
     for (const dir of listPointerRoots(commonDir, state)) addRoot(dir, false);
     for (const dir of (ctx.reviewLedgers || [])) if (typeof dir === 'string' && dir) addRoot(path.resolve(dir), true);

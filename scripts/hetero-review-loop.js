@@ -110,12 +110,12 @@ function recordLedgerPointer(ledgerDir, repoRoot) {
     const res = spawnSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8', cwd });
     if (res.status !== 0 || !res.stdout) return;
     const commonDir = fs.realpathSync(path.resolve(cwd, res.stdout.trim()));
-    const line = `${ledgerDir}\n`;
+    const line = `${path.resolve(ledgerDir)}\n`;
     if (Buffer.byteLength(line) > 4000) return;
     const pointer = path.join(commonDir, 'autopilot', 'review-ledgers.txt');
     fs.mkdirSync(path.dirname(pointer), { recursive: true });
     try {
-      if (fs.readFileSync(pointer, 'utf8').split('\n').some((l) => l.trim() === ledgerDir)) return;
+      if (fs.readFileSync(pointer, 'utf8').split('\n').some((l) => l.trim() === path.resolve(ledgerDir))) return;
     } catch (_e) { /* no pointer file yet */ }
     const fd = fs.openSync(pointer, fs.constants.O_WRONLY | fs.constants.O_APPEND | fs.constants.O_CREAT, 0o644);
     try { fs.writeSync(fd, line); } finally { fs.closeSync(fd); }

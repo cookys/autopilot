@@ -212,3 +212,15 @@ test('degrade-review-garbage-ctx: a context without a project never throws', () 
   assert.doesNotThrow(() => review.read(undefined, undefined));
   assert.equal(review.read({ project: {}, env: {} }, {}).stats.state, 'degraded');
 });
+
+test('degrade-review-configured-wins: a gone ledger named by the pointer AND by --review-ledger / env still raises source_absent', () => {
+  const fx = fresh();
+  const gone = path.join(fx.dir, 'gone-ledger');
+  fs.appendFileSync(fx.paths.reviewPointer, `${gone}\n`);
+  const viaCtx = review.read(ctxOf(fx, { reviewLedgers: [gone] }), NO_WINDOW);
+  assert.deepEqual(viaCtx.warnings, [{ source: 'review', code: 'source_absent', detail: 'review-ledger', count: 1 }]);
+  const viaEnv = review.read(ctxOf(fx, { reviewLedgers: [], env: { ...fx.env, AUTOPILOT_EVENTS_REVIEW_LEDGERS: gone } }), NO_WINDOW);
+  assert.deepEqual(viaEnv.warnings, [{ source: 'review', code: 'source_absent', detail: 'review-ledger', count: 1 }]);
+  const pointerOnly = review.read(ctxOf(fx, { reviewLedgers: [] }), NO_WINDOW);
+  assert.deepEqual(pointerOnly.warnings, [], 'negative control: pointer alone stays silent');
+});

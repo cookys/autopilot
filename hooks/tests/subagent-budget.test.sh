@@ -11,6 +11,9 @@ NOW=1790000000000
 export AUTOPILOT_SUBAGENT_BUDGET_NOW_MS=$NOW
 export AUTOPILOT_TEST_ALLOW_SUBAGENT_BUDGET_CLOCK=1
 unset AUTOPILOT_SUBAGENT_BUDGET_MODE AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX AUTOPILOT_SUBAGENT_BUDGET_LANE_TURNS_MAX AUTOPILOT_SUBAGENT_BUDGET_ROOT_TURNS_PER_HOUR_MAX
+unset AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE
+# The default mode is warn; the KR/LR/hdrhint suites below test the opt-in remind behaviour, so they say so explicitly.
+export AUTOPILOT_SUBAGENT_BUDGET_MODE=remind
 export AUTOPILOT_SESSION_MODE_DIR="$TEST_TMP/session-mode"; mkdir -p "$AUTOPILOT_SESSION_MODE_DIR"
 
 REPO="$TEST_TMP/repo"; mkdir -p "$REPO"
@@ -176,7 +179,7 @@ assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "warn mode never deni
 assert_contains "$__RUN_STDOUT" "warn mode, not blocking" "warn mode says so"
 export AUTOPILOT_SUBAGENT_BUDGET_MODE=off
 fire s1 'Engine: sonnet\nLane: alpha\ngo'; expect_silent "mode off"
-unset AUTOPILOT_SUBAGENT_BUDGET_MODE
+export AUTOPILOT_SUBAGENT_BUDGET_MODE=remind
 export AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX=2
 mk s10 "$(same_lane 2 envl)"
 expect_deny s10 'Engine: sonnet\nLane: envl\ngo' "" "env override lane_dispatch_max=2"
@@ -185,8 +188,10 @@ printf '{"subagent_budget":{"lane_turns_max":5}}' >"$AUTOPILOT_CONFIG_FILE"
 mk s10b '[{"id":"k1","brief":["Lane: cfgl"],"turns":5}]'
 expect_deny s10b 'Engine: sonnet\nLane: cfgl\ngo' "" "config file lane_turns_max=5"
 printf '{"subagent_budget":{"mode":"off"}}' >"$AUTOPILOT_CONFIG_FILE"
+unset AUTOPILOT_SUBAGENT_BUDGET_MODE  # the env would override the file
 fire s10b 'Engine: sonnet\nLane: cfgl\ngo'; expect_silent "config mode off"
 printf '{}\n' >"$AUTOPILOT_CONFIG_FILE"
+export AUTOPILOT_SUBAGENT_BUDGET_MODE=remind
 
 # ---- cache: invalidates on size change, lives under the live dir, transcripts untouched ---------------------------------
 mk s11 '[{"id":"w1","brief":["Lane: warm"],"turns":299}]'
@@ -474,5 +479,83 @@ rm -f "$AUTOPILOT_CONFIG_FILE"
 AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX=4 fire adv3 'Task: x\ngo'
 assert_not_contains "$__RUN_STDOUT" 'appear running' "advisory: env override 4 hides 3 running stamps"
 unset AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX
+
+# ---- default warn mode + runaway ceiling (PM 2026-11-03). RED before the change: default was remind, no runaway_multiple. -----
+# Override remind for this section only; every case below runs with the mode UNSET (the default) unless it says otherwise.
+unset AUTOPILOT_SUBAGENT_BUDGET_MODE
+card_files() { find "$DECDIR" -type f 2>/dev/null | wc -l | tr -d ' '; }
+ptr_files() { find "$AUTOPILOT_LIVE_DIR/subagent-budget/cards" -type f 2>/dev/null | wc -l | tr -d ' '; }
+runaway_rows() { [ -f "$LEDGER" ] && { grep -c 'runaway_block' "$LEDGER" || true; } || echo 0; }
+# no_card_snapshot: card store + pointer files, taken before and compared after
+NC0="$(card_files)/$(ptr_files)"
+# lane_dispatch_max 4: 4 dispatches = 1x (warn), 11 = 2.75x (warn), 12 = 3x (deny)
+mk w1 "$(same_lane 4 wl)"
+fire w1 'Engine: sonnet\nLane: wl\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "default mode: 1x ceiling does not deny"
+assert_contains "$__RUN_STDOUT" "warn mode, not blocking" "default mode: 1x ceiling warns"
+mk w2 "$(same_lane 11 wl2)"
+fire w2 'Engine: sonnet\nLane: wl2\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "default mode: 2.75x ceiling does not deny"
+assert_contains "$__RUN_STDOUT" "warn mode, not blocking" "default mode: 2.75x ceiling warns"
+RB0=$(runaway_rows)
+mk w3 "$(same_lane 12 wl3)"
+fire w3 'Engine: sonnet\nLane: wl3\ngo'
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "default mode: 3x ceiling denies"
+assert_contains "$__RUN_STDOUT" "runaway" "runaway deny says runaway"
+assert_contains "$__RUN_STDOUT" "lane_dispatch_max 12 is 3.0x its limit 4" "runaway deny names item, actual and multiple"
+assert_contains "$__RUN_STDOUT" "AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE" "runaway deny says how to tune"
+assert_not_contains "$__RUN_STDOUT" "panel card d-" "runaway deny names no card"
+assert_eq "$((RB0 + 1))" "$(runaway_rows)" "runaway deny writes one runaway_block audit row"
+assert_contains "$(grep runaway_block "$LEDGER" | tail -1)" "lane_dispatch_max 12/4" "audit row carries actual/limit"
+# turns and hour: lane_turns_max 300 -> 900 denies, 899 warns; root_turns_per_hour_max 400 -> 1200
+mk w4 '[{"id":"t1","brief":["Lane: wt"],"turns":899}]'
+fire w4 'Engine: sonnet\nLane: wt\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "default mode: lane turns 899 (2.997x) warns only"
+mk w5 '[{"id":"t1","brief":["Lane: wt"],"turns":900}]'
+fire w5 'Engine: sonnet\nLane: wt\ngo'
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "default mode: lane turns 900 (3x) denies"
+mk w6 "$(root_spread 1200 60000)"
+fire w6 'Engine: sonnet\nLane: fresh\ngo'
+assert_contains "$__RUN_STDOUT" "root_turns_per_hour_max 1200 is 3.0x" "default mode: root hour 3x denies"
+# Budget-Ack still passes a runaway and logs an ack row, not a runaway row
+RB1=$(runaway_rows); LB1=$(ledger_rows)
+fire w3 'Engine: sonnet\nLane: wl3\nBudget-Ack: owner said keep going\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "runaway: Budget-Ack passes"
+assert_eq "$((LB1 + 1))" "$(ledger_rows)" "runaway: Budget-Ack writes a ledger row"
+assert_eq "$RB1" "$(runaway_rows)" "runaway: Budget-Ack writes no runaway_block row"
+fire w3 'Engine: sonnet\nLane: wl3\nBudget-Ack: short\ngo'
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "runaway: a short Budget-Ack still denies"
+# lane_missing under the default stays warn-only
+fire w1 'Engine: sonnet\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "default mode: lane_missing only warns"
+# none of the above opened an owner card or a pointer file
+assert_eq "$NC0" "$(card_files)/$(ptr_files)" "default mode: no card file and no card pointer was created (1x, 2.75x, 3x, ack)"
+# runaway_multiple knob
+export AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE=0
+mk w7 "$(same_lane 40 wl7)"
+fire w7 'Engine: sonnet\nLane: wl7\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "runaway_multiple=0: 10x does not deny"
+export AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE=5
+mk w8 "$(same_lane 16 wl8)"
+fire w8 'Engine: sonnet\nLane: wl8\ngo'
+assert_not_contains "$__RUN_STDOUT" '"permissionDecision"' "runaway_multiple=5: 4x does not deny"
+mk w9 "$(same_lane 20 wl9)"
+fire w9 'Engine: sonnet\nLane: wl9\ngo'
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "runaway_multiple=5: 5x denies"
+unset AUTOPILOT_SUBAGENT_BUDGET_RUNAWAY_MULTIPLE
+printf '{"subagent_budget":{"runaway_multiple":2}}' >"$AUTOPILOT_CONFIG_FILE"
+mk w10 "$(same_lane 8 wl10)"
+fire w10 'Engine: sonnet\nLane: wl10\ngo'
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "runaway_multiple from config file (2): 2x denies"
+printf '{}\n' >"$AUTOPILOT_CONFIG_FILE"
+assert_eq "$NC0" "$(card_files)/$(ptr_files)" "runaway knobs: still no card file and no pointer"
+# remind (opt-in) keeps opening the card
+c0=$(cards)
+mk w1b "$(same_lane 4 wlr)"
+AUTOPILOT_SUBAGENT_BUDGET_MODE=remind fire w1b 'Engine: sonnet\nLane: wlr\ngo'
+assert_contains "$__RUN_STDOUT" '"permissionDecision":"deny"' "remind opt-in: 1x ceiling denies"
+assert_eq "$((c0 + 1))" "$(cards)" "remind opt-in: opens one owner card"
+# off stays silent
+AUTOPILOT_SUBAGENT_BUDGET_MODE=off fire w3 'Engine: sonnet\nLane: wl3\ngo'; expect_silent "off mode with a runaway count"
 
 finalize_test

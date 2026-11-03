@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # dispatch-author claude-native transport regression test. No network.
 . "$(dirname "$0")/lib.sh"
+export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"
 export CLAUDE_CONFIG_DIR="$TEST_TMP/claude-config"; seed_fake_claude_credentials "$CLAUDE_CONFIG_DIR"
 
 SOURCE_ROOT="$REPO_ROOT"

@@ -97,6 +97,14 @@ echo '{"schema_version":1,"observed_at":"...Z","runner":"codex","model":"<id>","
 
 [`scripts/resolve-review-loop.sh --input-bytes N`](../scripts/resolve-review-loop.sh) reports — never rewrites — a roster seat whose window cannot hold `N` bytes, appending to the existing `capability_warnings` array. Same posture as the quota path: the resolver states the fact, the consumer decides per `on_engine_unavailable`. No new contract field exists, so `check-context-window.js` stays the single source of window truth.
 
+### agy `--print-timeout` — a Go duration, normalised by `lib/agy-timeout.sh`
+
+agy rejects a unitless `--print-timeout` (`time: missing unit in duration`). Every rail that forwards its
+`--timeout` to agy (author, review, hetero, explore, cleanroom-launch) calls `agy_print_timeout`: digits
+become `<n>s`, a value with a unit (`9m`, `900s`, `1h30m`) passes unchanged, anything else is refused
+before agy runs. Note: in `dispatch-review.sh` a bare number still means milliseconds for the
+`anthropic-compatible` runner only; for agy it is seconds. Test: `hooks/tests/agy-print-timeout.test.sh`.
+
 ### agy prompt transport — stdin stream-json, argv wall removed, stdin wall fail-closed
 
 `agy -p <prompt>` puts the whole prompt in ONE argv string, and Linux caps a single argv string at

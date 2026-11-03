@@ -121,6 +121,8 @@ set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/cursor-model.sh"
 # shellcheck source=lib/agy-model-alias.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-model-alias.sh"
+# shellcheck source=lib/agy-timeout.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-timeout.sh"
 
 # Preserve original argv so the R1 detach supervisor can re-run this EXACT dispatch inline
 # inside a kill-surviving setsid session (lib/dispatch-detach.sh). Captured before parsing.
@@ -1493,6 +1495,7 @@ else
     printf 'agy effort %s (clamped %s) folded to %s: model id encodes the tier\n' \
       "$EFFORT" "$AGY_CLAMPED" "$AGY_EFFORT" >&2
   fi
+  AGY_PRINT_TIMEOUT="$(agy_print_timeout "$TIMEOUT")" || die_precondition "$AGY_PRINT_TIMEOUT"
   {
     printf '#!/usr/bin/env bash\n'
     printf 'cd %q || exit 9\n' "$AGY_CWD"
@@ -1501,7 +1504,7 @@ else
     printf 'exec node %q run --prompt-file %q -- bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q --model %q --effort %q --dangerously-skip-permissions --print-timeout %q\n' \
       "$_AUTHOR_SELF_DIR/lib/agy-stream-json.js" "$PROMPT_FILE" \
       "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" \
-      "$AGY_CWD" "$AGY_BIN" "$MODEL" "$AGY_EFFORT" "$TIMEOUT"
+      "$AGY_CWD" "$AGY_BIN" "$MODEL" "$AGY_EFFORT" "$AGY_PRINT_TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   # agy ignores SIGTERM. The shared kill-after (author_kill_grace /

@@ -96,6 +96,8 @@ done
 # would emit invalid JSON a caller's parser chokes on — decorrelated review, gpt-5.5).
 # shellcheck source=lib/json-emit.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/json-emit.sh"
+# shellcheck source=lib/agy-timeout.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/agy-timeout.sh"
 
 die_precondition() { printf '{ "runner": "%s", "model": "%s", "status": "precondition_failed", "read_probe": "skipped", "sandbox": "n/a", "raw_log": null, "error": "%s" }\n' "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$1")"; exit 2; }
 
@@ -193,6 +195,7 @@ else
   # Correct arg order: prompt RIGHT AFTER -p, --model LAST (a --model wedged before the
   # prompt makes agy treat the model-name string as the prompt and answer "I am running
   # on <model>" instead of the task).
+  AGY_PRINT_TIMEOUT="$(agy_print_timeout "$TIMEOUT")" || die_precondition "$AGY_PRINT_TIMEOUT"
   RUN_SH="$(mktemp -t dispatch-explore-agy-XXXXXX)"
   {
     printf '#!/usr/bin/env bash\n'
@@ -200,7 +203,7 @@ else
     # THAT conversation's repository, not this one (measured 2026-09-13; see dispatch-hetero.sh).
     # Prompt on STDIN as stream-json (lib/agy-stream-json.js appends the stream flags, unwraps `result`).
     printf 'exec node %q run --prompt-file %q -- %q --new-project --model %q --dangerously-skip-permissions --print-timeout %q\n' \
-      "$_EXPLORE_SELF_DIR/lib/agy-stream-json.js" "$PROMPT_BUILT" "$AGY_BIN" "$MODEL" "$TIMEOUT"
+      "$_EXPLORE_SELF_DIR/lib/agy-stream-json.js" "$PROMPT_BUILT" "$AGY_BIN" "$MODEL" "$AGY_PRINT_TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"
   child_session_env_setup "$_EXPLORE_SELF_DIR" 2>/dev/null || true   # dispatch-tree 3b rule 3

@@ -56,6 +56,8 @@ set -euo pipefail
 _SELF="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 . "$_SELF/json-emit.sh"
+# shellcheck source=/dev/null
+. "$_SELF/agy-timeout.sh"
 
 PROFILE=""
 PREFLIGHT=0
@@ -144,6 +146,7 @@ if [ "$PREFLIGHT" -eq 0 ] && [ -n "$RUNNER" ]; then
   [ -f "$PROMPT_FILE" ] || usage_die "prompt file not found: $PROMPT_FILE"
   if [ "$RUNNER" = "agy" ]; then
     [ -n "$EFFORT" ] || usage_die "--effort is required"
+    AGY_PRINT_TIMEOUT="$(agy_print_timeout "$TIMEOUT")" || usage_die "$AGY_PRINT_TIMEOUT"
   fi
 elif [ "$PREFLIGHT" -eq 0 ]; then
   [ -n "$PACKET_DIR" ] || usage_die "--packet-dir is required"
@@ -643,7 +646,7 @@ run_runner_bwrap() {
         _ "$TIMEOUT" "$BWRAP_BIN" "$SEAT_ROOT/bwrap.args" \
         --model "$MODEL" --effort "$EFFORT" \
         --dangerously-skip-permissions --agent "$AGY_AGENT_NAME_FIXED" \
-        --print-timeout "$TIMEOUT" \
+        --print-timeout "$AGY_PRINT_TIMEOUT" \
         > "$OUT_FILE" 2> "$ERR_FILE"
     fi
   )

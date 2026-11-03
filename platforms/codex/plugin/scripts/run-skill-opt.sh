@@ -22,10 +22,10 @@ CRED_FILE="$HOME/.claude/.credentials.json"
 # G37 W5 (A10): with an account registry this run goes through claude-account.js (below) and never reads $CRED_FILE; a broken
 # registry stops here before any spawn. No registry (or mode_off) = the credentials-file path below is unchanged.
 # shellcheck source=lib/eval-account.sh
-if [ -r "$AUTOPILOT_DIR/scripts/lib/eval-account.sh" ]; then
-  . "$AUTOPILOT_DIR/scripts/lib/eval-account.sh"
-  eval_account_probe skill-opt || exit $?
-fi
+_EA_LIB="$AUTOPILOT_DIR/scripts/lib/eval-account.sh"
+[ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper ${_EA_LIB} is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
+. "$_EA_LIB"
+eval_account_probe skill-opt || exit $?
 
 if [[ "${EVAL_ACCOUNT_ACTIVE:-0}" != 1 ]]; then
 # Extract OAuth token

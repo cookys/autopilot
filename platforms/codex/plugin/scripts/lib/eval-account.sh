@@ -21,17 +21,19 @@ EVAL_ACCOUNT_ACTIVE="${EVAL_ACCOUNT_ACTIVE:-0}"
 eval_account_probe() {
   local purpose="${1:?eval_account_probe <purpose>}" out="" rc=0 first=""
   EVAL_ACCOUNT_ACTIVE=0
-  if [ -r "$EVAL_ACCOUNT_JS" ]; then
-    out="$(node "$EVAL_ACCOUNT_JS" env-check --purpose eval-probe < /dev/null)" || rc=$?
-    if [ "$rc" -ne 0 ]; then
-      echo "eval-account: the account registry is unusable (env-check exit $rc); refusing to start, nothing was spawned" >&2
-      return "$rc"
-    fi
-    first="${out%%$'\n'*}"
-    case "$first" in
-      ok\ *) EVAL_ACCOUNT_ACTIVE=1 ;;
-    esac
+  if [ ! -r "$EVAL_ACCOUNT_JS" ]; then
+    echo "eval-account: $EVAL_ACCOUNT_JS is missing; refusing to start, nothing was spawned" >&2
+    return 2
   fi
+  out="$(node "$EVAL_ACCOUNT_JS" env-check --purpose eval-probe < /dev/null)" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "eval-account: the account registry is unusable (env-check exit $rc); refusing to start, nothing was spawned" >&2
+    return "$rc"
+  fi
+  first="${out%%$'\n'*}"
+  case "$first" in
+    ok\ *) EVAL_ACCOUNT_ACTIVE=1 ;;
+  esac
   EVAL_ACCOUNT_NODE="$(command -v node)"
   EVAL_ACCOUNT_PURPOSE="$purpose"
   export EVAL_ACCOUNT_ACTIVE EVAL_ACCOUNT_JS EVAL_ACCOUNT_SH EVAL_ACCOUNT_NODE EVAL_ACCOUNT_PURPOSE

@@ -21,6 +21,7 @@ const ACCOUNT_BROKEN_EXIT = 2;
 
 function probe(env) {
   const e = env || process.env;
+  if (!require('fs').existsSync(ACCOUNT_JS)) return { state: 'broken', code: ACCOUNT_BROKEN_EXIT, message: 'claude-account.js is missing' };
   const r = spawnSync(process.execPath, [ACCOUNT_JS, 'env-check', '--purpose', 'eval-probe'], {
     env: e, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000,
   });

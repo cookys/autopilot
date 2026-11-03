@@ -74,14 +74,13 @@ esac
 # A broken registry is a loud exit 2 (not a "fail" verdict that would be scored), before any spawn. No registry = unchanged.
 EA_WRAP_DIR=""
 _EA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib" 2>/dev/null && pwd)/eval-account.sh"
-if [ -r "$_EA_LIB" ]; then
-  . "$_EA_LIB"
-  eval_account_probe reviewer-bench || exit $?
-  if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
-    EA_WRAP_DIR="$(mktemp -d -t panel-cmd-syscontract-claude-ea-XXXXXX)"
-    eval_account_install_wrapper "$EA_WRAP_DIR"
-    CC_BIN="$EA_WRAP_DIR/claude"
-  fi
+[ -r "$_EA_LIB" ] || { echo "eval-account: the account-layer helper ${_EA_LIB} is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
+. "$_EA_LIB"
+eval_account_probe reviewer-bench || exit $?
+if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
+  EA_WRAP_DIR="$(mktemp -d -t panel-cmd-syscontract-claude-ea-XXXXXX)"
+  eval_account_install_wrapper "$EA_WRAP_DIR"
+  CC_BIN="$EA_WRAP_DIR/claude"
 fi
 
 # Temp files/dirs

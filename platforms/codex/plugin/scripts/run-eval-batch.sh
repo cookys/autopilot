@@ -83,7 +83,9 @@ done
 # batch here, before any spawn. No registry (or mode_off) = the path below is unchanged.
 _EVAL_SELF_DIR0="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib/eval-account.sh
-[ -r "$_EVAL_SELF_DIR0/lib/eval-account.sh" ] && . "$_EVAL_SELF_DIR0/lib/eval-account.sh" && { eval_account_probe eval-batch || exit $?; }
+[ -r "$_EVAL_SELF_DIR0/lib/eval-account.sh" ] || { echo "eval-account: the account-layer helper $_EVAL_SELF_DIR0/lib/eval-account.sh is missing; refusing to start (nothing was spawned, no credentials copied)" >&2; exit 2; }
+. "$_EVAL_SELF_DIR0/lib/eval-account.sh"
+eval_account_probe eval-batch || exit $?
 
 extract_loaded_plugins() {
   local log_file="$1"

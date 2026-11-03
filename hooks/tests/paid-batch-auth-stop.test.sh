@@ -9,6 +9,15 @@
 SCRIPTS="$REPO_ROOT/scripts"
 ENVX=(env -u AUTOPILOT_SESSION_ID -u CLAUDE_CODE_SESSION_ID -u CLAUDE_CONFIG_DIR)
 
+# G37 W5: the eval runners fail closed without their account-layer helper (exit 2), so a minimal layout carries it and the
+# account CLI with its libs; the registry location points at an empty dir (no registry = the legacy path).
+cp_account_layer() { # <scripts dir of the layout>
+  mkdir -p "$1/lib"; cp "$REPO_ROOT/scripts/claude-account.js" "$1/"
+  cp "$REPO_ROOT"/scripts/lib/account-{audit,cooldown,env,pick,quota,registry}.js "$REPO_ROOT"/scripts/lib/{live-state-dir,auth-stop}.js \
+     "$REPO_ROOT/scripts/lib/eval-account.js" "$REPO_ROOT/scripts/lib/eval-account.sh" "$1/lib/"
+}
+mkdir -p "$TEST_TMP/no-accounts"; export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"
+
 # mk_layout <dir> [mutant]: the wired scripts + shared helper copied into a throwaway repo layout. In a mutant layout the
 # WIRING is removed from the copied scripts (every auth_stop_check / authStop.checkSources call becomes a no-op), the helper
 # itself is untouched: the stop assertions must then be false (negative control, printed as MUTANT-RED).
@@ -19,6 +28,7 @@ mk_layout() {
      "$SCRIPTS/run-grok-implementer-ab.sh" "$SCRIPTS/benchmark-hook-latency.js" "$d/scripts/"
   cp "$SCRIPTS/lib/auth-stop.js" "$SCRIPTS/lib/auth-stop.sh" "$SCRIPTS/lib/repo-identity.sh" \
      "$SCRIPTS/lib/claude-call-capture.js" "$SCRIPTS/lib/claude-call-capture.sh" "$SCRIPTS/lib/claude-call-capture-exec.sh" "$d/scripts/lib/"
+  cp_account_layer "$d/scripts"   # the eval runners fail closed (exit 2) without lib/eval-account.sh and the account CLI
   cp "$SCRIPTS/run-skill-opt.sh" "$d/scripts/"
   cp "$REPO_ROOT/evals/run-trigger-test.sh" "$d/evals/"
   cp "$REPO_ROOT/evals/skill-transport/run-matrix.sh" "$REPO_ROOT/evals/skill-transport/run-implementer-matrix.sh" "$REPO_ROOT/evals/skill-transport/match-eval.js" "$d/evals/skill-transport/"

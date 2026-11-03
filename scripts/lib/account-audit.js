@@ -19,6 +19,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 
 const AUDIT_KEYS = ['ts', 'ts_local', 'alias', 'purpose', 'attempt', 'outcome'];
 const OUTCOMES = [
@@ -34,6 +35,7 @@ const ALWAYS_PRE_ATTEMPT = ['no_account', 'invalid_config', 'mode_off'];
 const ALIAS_RE = /^[a-z0-9-]{1,24}$/;
 const PURPOSE_RE = /^[a-z0-9-]{1,32}$/;
 const TOKEN_SHAPE_RE = /sk-ant-/i;
+const TAIL_BYTES = 256 * 1024;
 const TAIPEI_OFFSET_MS = 8 * 3600 * 1000;
 
 function auditPath(env, homedir) {
@@ -42,6 +44,13 @@ function auditPath(env, homedir) {
     ? e.XDG_STATE_HOME
     : path.join(homedir || os.userInfo().homedir, '.local', 'state');
   return path.join(base, 'autopilot', 'accounts-audit.jsonl');
+}
+
+// Never echo an unvalidated string: report only a count and a short sha256 fingerprint.
+function fp(str) { return crypto.createHash('sha256').update(String(str)).digest('hex').slice(0, 8); }
+function extraKeys(obj, allowed) {
+  const extra = Object.keys(obj).filter((k) => !allowed.includes(k));
+  return extra.length ? `extra_keys:${extra.length} fp=${fp(extra[0])}` : null;
 }
 
 function pad(n, w) { return String(n).padStart(w || 2, '0'); }
@@ -62,9 +71,8 @@ function liveTokens(tokens) {
 function validateRecord(rec, opts) {
   const tokens = liveTokens(opts && opts.tokens);
   if (!rec || typeof rec !== 'object' || Array.isArray(rec)) return { ok: false, reason: 'not_object' };
-  for (const k of Object.keys(rec)) {
-    if (!AUDIT_KEYS.includes(k)) return { ok: false, reason: `extra_key:${k}` };
-  }
+  const ek = extraKeys(rec, AUDIT_KEYS);
+  if (ek) return { ok: false, reason: ek };
   for (const k of AUDIT_KEYS) {
     if (!(k in rec)) return { ok: false, reason: `missing_key:${k}` };
   }
@@ -95,9 +103,8 @@ function validateRecord(rec, opts) {
 function buildRecord(input, now) {
   if (!input || typeof input !== 'object') throw new Error('audit: input must be an object');
   const allowed = ['alias', 'purpose', 'attempt', 'outcome'];
-  for (const k of Object.keys(input)) {
-    if (!allowed.includes(k)) throw new Error(`audit: rejected extra key ${k}`);
-  }
+  const ek = extraKeys(input, allowed);
+  if (ek) throw new Error(`audit: rejected ${ek}`);
   const ts = Number.isSafeInteger(now) ? now : Date.now();
   return {
     ts, ts_local: formatTaipei(ts),
@@ -132,11 +139,27 @@ function appendAudit(input, opts) {
  * returned, so a tampered line cannot reach `status` output. ENOENT -> empty.
  */
 function readAudit(file, opts) {
+  const max = (opts && opts.maxBytes) || TAIL_BYTES;
   let text;
+  let bytesRead = 0;
   try {
-    text = fs.readFileSync(file, 'utf8');
+    const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    try {
+      const size = fs.fstatSync(fd).size;
+      const start = Math.max(0, size - max);
+      const buf = Buffer.alloc(size - start);
+      bytesRead = fs.readSync(fd, buf, 0, buf.length, start);
+      text = buf.toString('utf8', 0, bytesRead);
+      if (start > 0) {
+        // tail read: the first line is probably cut in half, drop it
+        const nl = text.indexOf('\n');
+        text = nl < 0 ? '' : text.slice(nl + 1);
+      }
+    } finally {
+      fs.closeSync(fd);
+    }
   } catch (e) {
-    if (e && e.code === 'ENOENT') return { records: [], invalid: 0 };
+    if (e && e.code === 'ENOENT') return { records: [], invalid: 0, bytesRead: 0 };
     throw e;
   }
   const records = [];
@@ -147,7 +170,7 @@ function readAudit(file, opts) {
     try { rec = JSON.parse(line); } catch { invalid++; continue; }
     if (validateRecord(rec, opts).ok) records.push(rec); else invalid++;
   }
-  return { records, invalid };
+  return { records, invalid, bytesRead };
 }
 
 /** Render the last `limit` records (default 20) as Taipei-time lines, from validated fields only. */

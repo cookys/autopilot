@@ -1,141 +1,72 @@
 'use strict';
-// G37 N11 static check: no autopilot hook may serialise or print the whole process.env (it would carry the
-// account token). A violation is `process.env` itself - or a spread / Object.assign / destructured-rest copy of
-// it, or an alias variable holding it or such a copy - reaching ANY output sink: JSON.stringify, util.inspect,
-// console.*, stdout/stderr write, fs write/append, String(), util.format.
-// Reading ONE variable (process.env.X, process.env['X']) is never a violation, and neither is copying the env
-// into a child's spawn options (a copy that is not serialised). Known limits (documented, not hidden): an env
-// object passed through a function parameter, or built key by key, is not followed.
+// G37 N11 static check: no autopilot hook may carry the whole process.env around unreviewed (it holds the
+// account token). The rule is deny-first, with no alias tracking and no sink list (those were bypassed twice):
+//
+//   A use is a VIOLATION wherever it appears and whatever it is used for when it is
+//     1. `process.env` NOT immediately followed by a single-key read (`.X`, `?.X`, `['X']` / `[key]`), or
+//     2. a destructuring of `env` out of `process` (`{ env } = process`, `{ env: e } = process`, inside a
+//        multi-declarator statement too, or out of `globalThis.process` / `require('process')`).
+//   Spellings `process?.env` and `process['env']` are normalised to `process.env` first.
+//
+// The uses that exist today and are fine (handing env to a function, `spawn({ env: process.env })`, ...) are
+// pinned in WHITELIST: { "hooks/x.js": <count of such uses in that file> }, committed below. More uses than
+// the whitelist is red (the message names the file and the line numbers); FEWER is red too (update the
+// whitelist, so it can only get tighter). Reading one variable (process.env.X) is never counted.
+// Scope: every .js under hooks/ and all subdirectories, minus the explicit exclusion list below.
+// Known blind spots: `globalThis['process']` / `global['process']` / an aliased `const p = process` followed by
+// `p.env`, `Reflect.get(process, 'env')`, and env obtained through a function parameter that was handed the
+// whole env (that hand-over itself is a counted use). Comments on their own line are ignored.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-// Scan scope: every .js under hooks/ including all subdirectories, minus this explicit exclusion list.
-// tests/ holds test code and its fixtures; fixtures/ holds recorded payloads. Both are not hook code.
 const HOOKS_DIR = __dirname;
+const REPO_ROOT = path.resolve(HOOKS_DIR, '..');
 const EXCLUDED_DIRS = ['tests', 'fixtures', 'node_modules'];
 const EXCLUDED_FILE = /\.test\.js$/;
 
-const ID = '[A-Za-z_$][\\w$]*';
-// `process.env` NOT followed by a single-variable access (.X, ?.X, ['X'])
-const BARE_PROCESS_ENV = /\bprocess\s*\.\s*env\b(?!\s*(?:\?\.\s*[A-Za-z_$]|\.\s*[A-Za-z_$]|\[))/;
-const SINKS = [
-  /\bJSON\s*\.\s*stringify\s*\(/g,
-  /\b(?:util\s*\.\s*)?inspect\s*\(/g,
-  /\b(?:util\s*\.\s*)?format\s*\(/g,
-  /\bdump\s*\(/g,
-  /\bconsole\s*\.\s*\w+\s*\(/g,
-  /\bprocess\s*\.\s*(?:stdout|stderr)\s*\.\s*write\s*\(/g,
-  /\b(?:fs\s*\.\s*)?(?:writeFileSync|appendFileSync|writeFile|appendFile|writeSync|write)\s*\(/g,
-  /\bString\s*\(/g,
-];
+// Current reviewed uses per hook file. Do not raise a number to make this pass: a new bare process.env in a
+// hook needs a reason; lowering it (a use was removed) is required, see above.
+const WHITELIST = {
+  'hooks/_transcript-timing-probe.js': 1,
+  'hooks/audit-log.js': 1,
+  'hooks/capture-payload.js': 1,
+  'hooks/cost-fuse.js': 1,
+  'hooks/dirty-protected-paths.js': 1,
+  'hooks/failure-escalation.js': 1,
+  'hooks/intent-capture.js': 2,
+  'hooks/log-error.js': 1,
+  'hooks/merge-task-status-lib.js': 1,
+  'hooks/opt-in-multiplexer.js': 1,
+  'hooks/owner-question-guard.js': 1,
+  'hooks/per-turn-gate.js': 2,
+  'hooks/post-tool-chain-lib.js': 2,
+  'hooks/residue-auto-reap-lib.js': 2,
+  'hooks/runs-watch-autostart.js': 5,
+  'hooks/transcript-reader-lib.js': 3,
+};
 
-/** The text between the paren opened at src[open] and its match (quote-aware, no regex literals). */
-function balanced(src, open) {
-  let depth = 0;
-  let q = null;
-  for (let i = open; i < src.length; i++) {
-    const ch = src[i];
-    if (q) {
-      if (ch === '\\') i++;
-      else if (ch === q) q = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === '`') { q = ch; continue; }
-    if (ch === '(') depth++;
-    else if (ch === ')') { depth--; if (depth === 0) return src.slice(open + 1, i); }
-  }
-  return src.slice(open + 1);
+const BARE = /\bprocess\s*\.\s*env\b(?!\s*(?:\?\.\s*[A-Za-z_$]|\.\s*[A-Za-z_$]|\[))/g;
+const DESTRUCT = /\{[^{}]*\benv\b[^{}]*\}\s*=\s*(?:(?:globalThis|global)\s*\.\s*)?(?:process\b(?!\s*\.\s*[A-Za-z_$])|require\s*\(\s*['"](?:node:)?process['"]\s*\))/g;
+
+function normalise(src) {
+  return src
+    .replace(/\bprocess\s*\?\.\s*env\b/g, 'process.env')
+    .replace(/\bprocess\s*\[\s*['"]env['"]\s*\]/g, 'process.env')
+    .split('\n')
+    .map((l) => (/^\s*(?:\/\/|\/\*|\*)/.test(l) ? '' : l))
+    .join('\n');
 }
 
-/** Expression text after `=` at index `from`, up to `;` or a newline at depth 0. */
-function exprAfter(src, from) {
-  let depth = 0;
-  let q = null;
-  for (let i = from; i < src.length; i++) {
-    const ch = src[i];
-    if (q) {
-      if (ch === '\\') i++;
-      else if (ch === q) q = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === '`') { q = ch; continue; }
-    if ('([{'.includes(ch)) depth++;
-    else if (')]}'.includes(ch)) depth--;
-    else if (depth <= 0 && (ch === ';' || ch === '\n')) return src.slice(from, i);
-  }
-  return src.slice(from);
-}
-
-const identBare = (name) => new RegExp(`(?<![\\w$.])${name.replace(/\$/g, '\\$')}\\b(?!\\s*(?:\\?\\.\\s*[A-Za-z_$]|\\.\\s*[A-Za-z_$]|\\[))`);
-
-/** Does this expression text carry the whole env (process.env, or a tainted alias/copy)? */
-function carriesEnv(text, tainted) {
-  // names only (Object.keys) never carries a value
-  const t = text.replace(/Object\s*\.\s*keys\s*\(\s*[\w$.]+\s*\)/g, '');
-  if (BARE_PROCESS_ENV.test(t)) return true;
-  for (const name of tainted) if (identBare(name).test(t)) return true;
-  return false;
-}
-
-/**
- * Is this right-hand side itself the env or a copy of it (not merely a call that is handed the env)?
- * carrier | carrier || x | { ...carrier } | Object.assign/fromEntries/entries/values(... carrier) |
- * structuredClone(carrier) | JSON.parse(JSON.stringify(carrier)).
- */
-function isEnvCopy(rhs, tainted) {
-  const r = rhs.trim().replace(/^\(+|\)+$/g, '').trim();
-  if (!r || !carriesEnv(r, tainted)) return false;
-  const carrier = `(?:process\\s*\\.\\s*env\\b(?!\\s*(?:\\?\\.\\s*[A-Za-z_$]|\\.\\s*[A-Za-z_$]|\\[))${[...tainted].map((n) => `|(?<![\\w$.])${n.replace(/\$/g, '\\$')}\\b(?!\\s*(?:\\?\\.\\s*[A-Za-z_$]|\\.\\s*[A-Za-z_$]|\\[))`).join('')})`;
-  const pats = [
-    new RegExp(`^${carrier}\\s*(?:(?:\\|\\||\\?\\?)[\\s\\S]*)?$`),
-    new RegExp(`^[{\\[][\\s\\S]*\\.\\.\\.\\s*${carrier}`),
-    /^(?:Object\s*\.\s*(?:assign|fromEntries|entries|values)|structuredClone)\s*\(/,
-    /^JSON\s*\.\s*parse\s*\(\s*JSON\s*\.\s*stringify\s*\(/,
-  ];
-  return pats.some((re) => re.test(r));
-}
-
-/** Variables that alias or copy the whole env, to a fixpoint. */
-function taintedNames(src) {
-  const tainted = new Set();
-  let changed = true;
-  while (changed) {
-    changed = false;
-    const add = (n) => { if (n && !tainted.has(n)) { tainted.add(n); changed = true; } };
-    // const/let/var NAME = <env or a copy of it>   and   NAME = <...>
-    for (const m of src.matchAll(new RegExp(`(?:\\b(?:const|let|var)\\s+)?(${ID})\\s*=(?![=>])`, 'g'))) {
-      if (isEnvCopy(exprAfter(src, m.index + m[0].length), tainted)) add(m[1]);
-    }
-    // const { A, ...rest } = <env or a copy>
-    for (const m of src.matchAll(/\{([^{}]*)\}\s*=(?![=>])/g)) {
-      const rest = /\.\.\.\s*([A-Za-z_$][\w$]*)/.exec(m[1]);
-      if (rest && isEnvCopy(exprAfter(src, m.index + m[0].length), tainted)) add(rest[1]);
-    }
-    // Object.assign(NAME, <env carrier>...)  mutates NAME into a copy
-    for (const m of src.matchAll(/Object\s*\.\s*assign\s*\(/g)) {
-      const args = balanced(src, m.index + m[0].length - 1);
-      const first = new RegExp(`^\\s*(${ID})\\s*,`).exec(args);
-      if (first && carriesEnv(args.slice(first[0].length), tainted)) add(first[1]);
-    }
-  }
-  return tainted;
-}
-
-/** Findings for one source text: [{ sink, arg }]. */
-function scan(src) {
-  const tainted = taintedNames(src);
+/** Line numbers (1-based) of every violating use in one source text. */
+function uses(src) {
+  const s = normalise(src);
+  const lineOf = (i) => s.slice(0, i).split('\n').length;
   const out = [];
-  for (const re of SINKS) {
-    re.lastIndex = 0;
-    for (const m of src.matchAll(re)) {
-      const arg = balanced(src, m.index + m[0].length - 1);
-      if (carriesEnv(arg, tainted)) out.push({ sink: m[0].replace(/\s+/g, ''), arg: arg.slice(0, 80) });
-    }
-  }
-  return out;
+  for (const re of [BARE, DESTRUCT]) for (const m of s.matchAll(re)) out.push(lineOf(m.index));
+  return out.sort((a, b) => a - b);
 }
 
 function hookFiles(dir) {
@@ -149,78 +80,123 @@ function hookFiles(dir) {
   return out;
 }
 
-function findings(files, base) {
-  const out = [];
-  for (const f of files) for (const x of scan(fs.readFileSync(f, 'utf8'))) out.push(`${path.relative(base || HOOKS_DIR, f)}: ${x.sink}(${x.arg})`);
-  return out;
+/** { "hooks/x.js": [line, ...] } for the files that have at least one use. */
+function scanTree(root, files) {
+  const found = {};
+  for (const f of files) {
+    const l = uses(fs.readFileSync(f, 'utf8'));
+    if (l.length) found[path.relative(root, f).split(path.sep).join('/')] = l;
+  }
+  return found;
+}
+
+/** Problems comparing the scan against a whitelist ([] when they agree exactly). */
+function compare(found, whitelist) {
+  const problems = [];
+  const names = new Set([...Object.keys(found), ...Object.keys(whitelist)]);
+  for (const f of [...names].sort()) {
+    const n = (found[f] || []).length;
+    const w = whitelist[f] || 0;
+    if (n > w) problems.push(`${f}: ${n} uses of the whole process.env, whitelist allows ${w} (lines ${found[f].join(', ')})`);
+    else if (n < w) problems.push(`${f}: ${n} uses, whitelist says ${w}: lower the whitelist entry`);
+  }
+  return problems;
 }
 
 test('scan scope covers hooks/ subdirectories, with an explicit exclusion list', () => {
   const files = hookFiles(HOOKS_DIR).map((f) => path.relative(HOOKS_DIR, f));
   assert.ok(files.some((f) => f.includes(path.sep)), 'at least one hook below hooks/ top level is scanned');
-  assert.ok(files.some((f) => f.startsWith('_shared' + path.sep)) || files.some((f) => f.startsWith('lib' + path.sep)));
   assert.ok(!files.some((f) => f.startsWith('tests' + path.sep) || f.startsWith('fixtures' + path.sep)), 'excluded dirs are not scanned');
   assert.deepStrictEqual(EXCLUDED_DIRS, ['tests', 'fixtures', 'node_modules']);
 });
 
-test('no hook serialises process.env wholesale (hooks/ and every subdirectory)', () => {
-  assert.deepStrictEqual(findings(hookFiles(HOOKS_DIR)), []);
+test('whole-process.env uses in hooks/ match the committed whitelist exactly', () => {
+  const found = scanTree(REPO_ROOT, hookFiles(HOOKS_DIR));
+  assert.deepStrictEqual(compare(found, WHITELIST), []);
 });
 
-// Every shape the old checker missed, plus the old ones. Each must be flagged.
+// Every bypass found so far, each must be counted as a violation.
 const NEG = {
   'JSON.stringify(process.env)': "require('fs').writeFileSync('/x', JSON.stringify(process.env));",
-  'console.log(JSON.stringify({ ...process.env }))': 'console.log(JSON.stringify({ ...process.env }));',
-  'spread outside a write call': "const out = JSON.stringify({ a: 1, ...process.env }); require('fs').writeFileSync('/x', out);",
-  'alias then serialise': 'const env = process.env;\nconsole.log(JSON.stringify(env));',
-  'alias then serialise with indent': 'const e = process.env\nprocess.stdout.write(JSON.stringify(e, null, 2));',
-  'spread copy then serialise': "const copy = { ...process.env };\nrequire('fs').appendFileSync('/x', JSON.stringify(copy));",
-  'Object.assign copy then serialise': 'const c = Object.assign({}, process.env);\nprocess.stderr.write(JSON.stringify(c));',
-  'Object.assign into existing then serialise': 'const c = {};\nObject.assign(c, process.env);\nconsole.error(JSON.stringify(c));',
-  'destructured rest then serialise': 'const { PATH, ...rest } = process.env;\nconsole.log(JSON.stringify(rest));',
-  'fromEntries copy then serialise': 'const c = Object.fromEntries(Object.entries(process.env));\nconsole.log(JSON.stringify(c));',
-  'entries serialised': 'console.log(JSON.stringify(Object.entries(process.env)));',
+  'spread in stringify': 'console.log(JSON.stringify({ ...process.env }));',
+  'alias then print': 'const env = process.env;\nconsole.log(JSON.stringify(env));',
+  'comma declarator': "const e = process.env, label = 'x'; console.log(e);",
+  'comma declarator, env second': "const label = 'x', e = process.env; console.log(e);",
+  'destructure env': 'const { env } = process;\nconsole.log(env);',
+  'destructure env renamed': 'const { env: e } = process;\nconsole.log(e);',
+  'destructure env, assignment form': 'let e; ({ env: e } = process);\nconsole.log(e);',
+  'destructure env inside a multi-declarator': "const a = 1, { env } = process, b = 2;\nconsole.log(env, a, b);",
+  'destructure env with other keys': 'const { argv, env: e, pid } = process;',
+  'destructure from globalThis.process': 'const { env } = globalThis.process;',
+  'destructure from require(process)': "const { env } = require('node:process');",
+  'container object': 'const box = { env: process.env };\nconsole.log(JSON.stringify(box));',
+  'initialiser on the next line': 'const e =\n  process.env;\nconsole.log(e);',
+  'array destructure rest': 'const [...all] = Object.entries(process.env);\nconsole.log(all);',
+  'object rest destructure': 'const { PATH, ...rest } = process.env;\nconsole.log(rest);',
+  'Object.assign copy': 'const c = Object.assign({}, process.env);\nconsole.log(c);',
+  'fromEntries copy': 'const c = Object.fromEntries(Object.entries(process.env));',
+  'handed to a function': 'report(process.env);',
+  'process?.env bare': 'const e = process?.env;',
+  "process['env'] bare": "const e = process['env'];",
   'util.inspect': "console.log(require('util').inspect(process.env));",
-  'console.log(process.env)': 'console.log(process.env);',
-  'console.log(alias)': 'const e = process.env; console.log(e);',
-  'copy of a copy': 'const a = { ...process.env };\nconst b = a;\nconsole.log(JSON.stringify(b));',
-  'String(process.env)': 'const s = String(process.env);',
 };
 const POS = {
-  'single var': 'const v = JSON.stringify(process.env.X);',
-  'single var bracket': "const v = JSON.stringify(process.env['X']);",
-  'single var inside an object': 'console.log(JSON.stringify({ home: process.env.HOME, n: 1 }));',
-  'optional chain single var': 'console.log(process.env?.X);',
-  'env copy into spawn options (not serialised)': "const { spawnSync } = require('child_process');\nspawnSync('x', [], { env: { ...process.env, A: '1' } });",
-  'copy mutated and passed to spawn': "const env = { ...process.env };\nenv.A = '1';\nrequire('child_process').spawn('x', [], { env });\nconsole.log(JSON.stringify({ a: env.A }));",
-  'alias single-var read serialised': 'const env = process.env;\nconsole.log(JSON.stringify(env.X));',
-  'names only': 'console.log(JSON.stringify(Object.keys(process.env)));',
-  'unrelated stringify': 'console.log(JSON.stringify({ a: 1 }));',
+  'process.env.X': 'const v = JSON.stringify(process.env.X);',
+  "process.env['X']": "const v = JSON.stringify(process.env['X']);",
+  'process.env?.X': 'console.log(process.env?.X);',
+  'process?.env.X': 'console.log(process?.env.X);',
+  "process['env'].X": "console.log(process['env'].X);",
+  'process.env[key]': 'console.log(process.env[key]);',
+  'single var in an object': 'console.log(JSON.stringify({ home: process.env.HOME, n: 1 }));',
+  'destructure of a different key': 'const { argv, pid } = process;',
+  'comment only': '// process.env is documented here\n/* process.env */\n * process.env',
 };
-
 for (const [name, src] of Object.entries(NEG)) {
-  test(`NEG: ${name} is detected`, () => {
-    assert.ok(scan(src).length >= 1, `not detected: ${src}`);
+  test(`NEG: ${name} is counted`, () => {
+    assert.ok(uses(src).length >= 1, `not detected: ${src}`);
   });
 }
 for (const [name, src] of Object.entries(POS)) {
-  test(`POS: ${name} is not flagged`, () => {
-    assert.deepStrictEqual(scan(src), [], `false positive: ${src}`);
+  test(`POS: ${name} is not counted`, () => {
+    assert.deepStrictEqual(uses(src), [], `false positive: ${src}`);
   });
 }
 
-test('NEG: a violating hook in a nested subdirectory is found by the directory scan', () => {
+test('NEG: one more bare use than the whitelist allows is red and names file and line', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'envser-'));
   try {
-    fs.mkdirSync(path.join(root, '_shared', 'deep'), { recursive: true });
-    fs.mkdirSync(path.join(root, 'tests'));
-    fs.writeFileSync(path.join(root, '_shared', 'deep', 'bad.js'), 'console.log(JSON.stringify({ ...process.env }));\n');
-    fs.writeFileSync(path.join(root, 'tests', 'skipped.js'), 'console.log(process.env);\n');
-    fs.writeFileSync(path.join(root, 'ok.js'), 'console.log(process.env.X);\n');
-    const files = hookFiles(root);
-    assert.deepStrictEqual(files.map((f) => path.relative(root, f)).sort(), [path.join('_shared', 'deep', 'bad.js'), 'ok.js'].sort());
-    const out = findings(files, root);
-    assert.strictEqual(out.length >= 1, true);
-    assert.ok(out.every((l) => l.startsWith(path.join('_shared', 'deep', 'bad.js'))), out.join('\n'));
+    fs.mkdirSync(path.join(root, 'hooks', '_shared', 'deep'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'hooks', 'tests'));
+    const hooks = path.join(root, 'hooks');
+    fs.writeFileSync(path.join(hooks, '_shared', 'deep', 'x.js'), 'spawn({ env: process.env });\nconst e = process.env;\n');
+    fs.writeFileSync(path.join(hooks, 'tests', 'skipped.js'), 'console.log(process.env);\n');
+    fs.writeFileSync(path.join(hooks, 'ok.js'), 'console.log(process.env.X);\n');
+    const files = hookFiles(hooks);
+    assert.deepStrictEqual(files.map((f) => path.relative(hooks, f)).sort(), [path.join('_shared', 'deep', 'x.js'), 'ok.js'].sort());
+    const found = scanTree(root, files);
+    assert.deepStrictEqual(Object.keys(found), ['hooks/_shared/deep/x.js']);
+    assert.deepStrictEqual(compare(found, { 'hooks/_shared/deep/x.js': 2 }), [], 'exact whitelist is green');
+    const over = compare(found, { 'hooks/_shared/deep/x.js': 1 });
+    assert.strictEqual(over.length, 1);
+    assert.match(over[0], /hooks\/_shared\/deep\/x\.js/);
+    assert.match(over[0], /lines 1, 2/);
+    const under = compare(found, { 'hooks/_shared/deep/x.js': 3 });
+    assert.strictEqual(under.length, 1);
+    assert.match(under[0], /lower the whitelist entry/);
+    const stale = compare(found, { 'hooks/_shared/deep/x.js': 2, 'hooks/gone.js': 1 });
+    assert.strictEqual(stale.length, 1, 'a whitelist entry for a file with no uses is red');
+    assert.match(stale[0], /hooks\/gone\.js/);
+    const fresh = compare(found, {});
+    assert.strictEqual(fresh.length, 1, 'a file with uses and no whitelist entry is red');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('NEG: the committed whitelist is tight against the real tree (+1 and -1 both red)', () => {
+  const found = scanTree(REPO_ROOT, hookFiles(HOOKS_DIR));
+  const names = Object.keys(WHITELIST);
+  assert.ok(names.length >= 1);
+  const plus = Object.assign({}, WHITELIST, { [names[0]]: WHITELIST[names[0]] + 1 });
+  const minus = Object.assign({}, WHITELIST, { [names[0]]: WHITELIST[names[0]] - 1 });
+  assert.strictEqual(compare(found, plus).length, 1, 'whitelist one too high is red');
+  assert.strictEqual(compare(found, minus).length, 1, 'whitelist one too low is red');
 });

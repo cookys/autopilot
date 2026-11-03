@@ -226,7 +226,7 @@ test('mutation: --settings dropped from the account arm -> the gate-rules assert
   const w = world();
   try {
     const rail = farmWith(w, { 'dispatch-hetero.sh': (s) => s.replace('        ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json)\n      run_worker node', '        --output-format json)\n      run_worker node') });
-    assert.throws(() => checkWired(w, rail), /settings argument preserved|ENOENT/);
+    assert.throws(() => checkWired(w, rail), /settings argument preserved/);
   } finally { w.fx.cleanup(); }
 });
 

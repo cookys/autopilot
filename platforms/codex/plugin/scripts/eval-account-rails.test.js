@@ -206,6 +206,21 @@ for (const row of ROWS) {
     } finally { w.cleanup(); }
   });
 
+  test(`N9 ${row.name}: helper missing -> exit 2, spawn counter 0, nothing copied (fail closed)`, () => {
+    const w = world('active');
+    try {
+      const helper = isNode ? 'scripts/lib/eval-account.js' : 'scripts/lib/eval-account.sh';
+      const L = mkLayout(w.fx.root, [row.file, helper], null);
+      fs.unlinkSync(path.join(L, helper));
+      if (row.prep) row.prep(L);
+      const res = row.run(L, w);
+      assert.strictEqual(res.status, 2, `${res.stdout}\n${res.stderr}`.slice(-400));
+      assert.strictEqual(w.spawns(), 0);
+      assert.deepStrictEqual(w.copies(), []);
+      assert.match(res.stderr, /missing/);
+    } finally { w.cleanup(); }
+  });
+
   const mutations = isNode ? [...(row.mutateNode ? ['no-call'] : []), ...(row.mutateCopy ? ['copy-guard'] : [])] : (row.legacyCopies ? ['no-call', 'copy-guard'] : ['no-call']);
   for (const m of mutations) {
     test(`N9 mutation ${row.name}: ${m} turns the active assertions red`, () => {
@@ -228,8 +243,8 @@ function ebWorld(mode, shimCtl) {
   if (shimCtl) w.fx.shim.setControl(shimCtl(w.fx));
   return w;
 }
-function ebLayout(w, mutate) {
-  const L = mkLayout(w.fx.root, [EB], mutate);
+function ebLayout(w, mutate, extra) {
+  const L = mkLayout(w.fx.root, [EB, ...(extra || [])], mutate);
   for (const d of ['skills', 'skill-creator-workspace']) { try { fs.unlinkSync(path.join(L, d)); } catch (_) { /* absent */ } }
   fs.mkdirSync(path.join(L, 'skills', 'alpha'), { recursive: true });
   fs.mkdirSync(path.join(L, 'skills', 'beta'), { recursive: true });
@@ -269,6 +284,25 @@ test('N9 run-eval-batch: legacy / registry / broken / mutation', () => {
   } finally { w.cleanup(); }
 });
 
+test('N9 run-eval-batch / run-skill-opt: helper missing -> exit 2, spawn counter 0', () => {
+  let w = ebWorld('active');
+  try {
+    const L = ebLayout(w, null, ['scripts/lib/eval-account.sh']);
+    fs.unlinkSync(path.join(L, 'scripts', 'lib', 'eval-account.sh'));
+    const res = ebRun(L, w);
+    assert.strictEqual(res.status, 2, res.stderr);
+    assert.strictEqual(w.spawns(), 0);
+  } finally { w.cleanup(); }
+  const so = soWorld('active');
+  try {
+    const L = soLayout(so.w, null, ['scripts/lib/eval-account.sh']);
+    fs.unlinkSync(path.join(L, 'scripts', 'lib', 'eval-account.sh'));
+    const res = soRun(L, so.w);
+    assert.strictEqual(res.status, 2, res.stderr);
+    assert.strictEqual(so.w.spawns(), 0);
+  } finally { so.w.cleanup(); }
+});
+
 test('N20 run-eval-batch via the shim with a 401 exits 6 (registry present); wiring removed -> not 6', () => {
   const ctl = (fx) => ({ default: R401, tokens: {} });
   let w = ebWorld('active', ctl);
@@ -305,8 +339,8 @@ function soWorld(mode) {
   fs.writeFileSync(w.fx.decoy, JSON.stringify({ claudeAiOauth: { accessToken: 'FAKE-legacy-access-token', expiresAt: Date.now() + 3600 * 1000 } }));
   return { w, sc };
 }
-function soLayout(w, mutate) {
-  const L = mkLayout(w.fx.root, [SO], mutate);
+function soLayout(w, mutate, extra) {
+  const L = mkLayout(w.fx.root, [SO, ...(extra || [])], mutate);
   for (const d of ['skills', 'skill-creator-workspace']) { try { fs.unlinkSync(path.join(L, d)); } catch (_) { /* absent */ } }
   fs.mkdirSync(path.join(L, 'skills', 'alpha'), { recursive: true });
   fs.mkdirSync(path.join(L, 'skill-creator-workspace', 'evals'), { recursive: true });

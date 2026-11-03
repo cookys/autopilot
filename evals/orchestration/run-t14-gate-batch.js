@@ -13,6 +13,7 @@ const { spawnSync } = require("child_process");
 // a broken registry stops the batch before any spawn. No registry = the credentials-copy path below is unchanged.
 let evalAccount = null;
 try { evalAccount = require("../../scripts/lib/eval-account.js"); } catch (e) { if (e.code !== "MODULE_NOT_FOUND") throw e; }
+if (!evalAccount) { process.stderr.write("eval-account: the account-layer helper is missing; refusing to start (nothing was spawned)\n"); process.exit(2); }
 let ACCOUNT_ACTIVE = false;
 function claudeSpec(args) {
   if (!ACCOUNT_ACTIVE) return { cmd: OPT.claudeBin, args };
@@ -355,11 +356,9 @@ function runOne(item) {
 const OPT = parseArgs(process.argv.slice(2));
 
 function main() {
-  if (evalAccount) {
-    const g = evalAccount.gate("run-t14-gate-batch");
-    if (g.state === "broken") process.exit(g.exit);
-    ACCOUNT_ACTIVE = g.state === "active";
-  }
+  const g = evalAccount.gate("run-t14-gate-batch");
+  if (g.state === "broken") process.exit(g.exit);
+  ACCOUNT_ACTIVE = g.state === "active";
   fs.mkdirSync(OPT.out, { recursive: true });
   const resultsPath = path.join(OPT.out, "results.jsonl");
   const schedulePath = path.join(OPT.out, "schedule.json");

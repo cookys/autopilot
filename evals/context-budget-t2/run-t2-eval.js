@@ -17,6 +17,7 @@ const authStop = require('../../scripts/lib/auth-stop.js');
 // G37 W5 (A12): with an account registry the claude calls go through claude-account.js (no credentials-only config dir needed).
 let evalAccount = null;
 try { evalAccount = require('../../scripts/lib/eval-account.js'); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+if (!evalAccount && !process.argv.includes('--dry')) { console.error('eval-account: the account-layer helper is missing; refusing to start (nothing was spawned)'); process.exit(2); }
 
 const arg = (n, d) => { const i = process.argv.indexOf(n); return i >= 0 ? process.argv[i + 1] : d; };
 const MODEL = arg('--model', 'sonnet');

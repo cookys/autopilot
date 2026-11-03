@@ -312,7 +312,7 @@ function runCc() {
     const g = require('../../scripts/lib/eval-account.js').gate('run-d0gate-v2-campaign');
     if (g.state === 'broken') process.exit(g.exit);
     if (g.state === 'active') die('an account registry is configured; the d0gate cells need their own HOME and CLAUDE_CONFIG_DIR, which the account layer replaces, so this campaign is refused until depth-0 decides the cell design (plan G37 A12)', 2);
-  } catch (e) { if (!e || e.code !== 'MODULE_NOT_FOUND') throw e; }
+  } catch (e) { if (!e || e.code !== 'MODULE_NOT_FOUND') throw e; die('the account-layer helper is missing; refusing to start (nothing was spawned)', 2); }
   const claudeBin = cc.whichClaude('/nonexistent');
   if (!claudeBin) die('claude is not on PATH', 2);
   const ver = claudeVersion();

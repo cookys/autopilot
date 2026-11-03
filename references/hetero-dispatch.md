@@ -736,6 +736,31 @@ When the ladder is present:
 The engine records the dispatched tuple plus `implementer_ladder_rung` on the
 `dispatch_implementation` ledger row. The same topology resolver (`scripts/resolve-dispatch-topology.js`) also derives `reviewer_ladder`, `consult_ladder`, `discuss_ladder`, and a `plan_review_panel` via `--role`, consumed by `scripts/resolve-review-loop.sh`'s `auto` transitions for `plan_review`, `hetero_review`, and `consult_dispatch`.
 
+## Account layer (G37) — which Claude account a claude spawn runs as
+
+Plan: [`project/plans/2026-11-03-g37-account-switching.md`](../project/plans/2026-11-03-g37-account-switching.md). Operator setup: [`docs/guide/accounts.md`](../docs/guide/accounts.md). Script contracts: [`docs/scripts-inventory.md`](../docs/scripts-inventory.md) (`claude-account.js` and the `lib/account-*` rows). Where this section and the final implementation differ (signal handling, timeouts, the spawn-site gate), the implementation wins.
+
+- **Switch.** `~/.config/autopilot/accounts/registry.json` present: every claude spawn rail goes through `scripts/claude-account.js run` (claude-native arms of `dispatch-review.sh`, `dispatch-author.sh`, `dispatch-hetero.sh`; the probes, the qualification exam, `qc-panel.js`, the hook-latency benchmark, `run-eval-batch.sh`, `run-skill-opt.sh` and the wired evals runners). Registry absent (ENOENT on that path only): every rail behaves exactly as before. The cc-shim arms (third-party endpoint) and `--bare` calls are not subscription calls and stay outside.
+- **Child env.** Built from an allowlist: `CLAUDE_CODE_OAUTH_TOKEN` from the alias token file, `CLAUDE_CONFIG_DIR` and `HOME` pointing inside the alias directory, `AUTOPILOT_ACCOUNT=<alias>`. The real `~/.claude` is never read or linked, and an alias config dir never holds `.credentials.json`. `seed-claude-config.js` is no longer called when the layer is active.
+- **Escape hatch.** `AUTOPILOT_ACCOUNT_MODE=off` or `accounts.mode: "off"` is the only way to use the legacy path while a registry exists. It is audited as `mode_off`.
+
+| Exit | Meaning | Rail reaction |
+|---|---|---|
+| 0 | ok | use the result |
+| 2 | invalid registry, token, config dir or usage (alias and reason on one stderr line) | no spawn; `die_precondition` / non-zero |
+| 3 | no account available (none enabled, all cooling or excluded, pinned alias cooling, `accounts.refuse_all_tight`) | no spawn |
+| 4 | every attempt rate limited, or `accounts.max_attempts` reached | rail reports quota |
+| 5 | child error (error envelope with child exit 0, or the child could not start) | no switch |
+| 6 | auth stop: 401 on the chosen alias, line `STOP_AUTH alias=<A>` | no further alias; same meaning as `auth-stop` |
+| 7 | the child printed the token; only scrubbed bytes were written | treat as leak, regenerate the token |
+| other | the child's own exit code (124 = timeout) | as before |
+
+- **429 switch.** A 429, or the quota text the classifier recognises (`engine-capability-state.js classify-error`), puts the alias into a local cooldown and `run` tries the next alias. Cooldown ends at the earliest future `resets_at` among the tight windows of the G36 snapshot, else after `accounts.cooldown_default_minutes` (30); a plain throttle uses the shorter of that and 5 minutes. Pick order: usage below 90% first (least used first), then unknown (no fresh snapshot) by priority, then tight. `claude-account.js cooldown --clear <alias>` releases one early.
+- **Fail closed.** A broken registry, any enabled alias with a bad token file or config dir (even an alias that would not be picked), a symlinked or foreign-owned path, a credentials file in an alias config dir, an unreadable accounts dir (anything but ENOENT) all exit 2 before any spawn. A 401 never moves to another alias. There is never a fallback to ambient credentials or the seeded path. `run` scrubs the exact token from child output; `exec` (the interactive lane) is not mediated.
+- **Audit.** `accounts-audit.jsonl` under `$XDG_STATE_HOME/autopilot/`, alias, purpose, attempt and outcome only. `claude-account.js status` renders it.
+- **`frozen_legacy` runners (PM ruling A).** Eight eval runners are locked byte-for-byte by their pre-registration (`evals/skill-onoff/prereg/FROZEN.json` for the `run-skill-onoff-eval*.sh` family and `run-d0gate-campaign.js`; the manifest wrapper hash for `run-p2-batch.js` and `run-p2-batch-loop.js`). They are replay-only and keep using the logged-in credentials, outside the account layer. The spawn-site registry records them as `frozen_legacy` with the locking file as reason. To bring them under the layer, apply the prepared patch under `evals/` and re-freeze first.
+- **Spawn-site gate.** `check-claude-spawn-sites.js` (L12) with `claude-spawn-sites.json`: every place that spawns `claude` must be registered as `wired`, `out_of_scope` (with reason) or `frozen_legacy`. A new unregistered `claude -p` fails (`unregistered_claude_spawn`); a `wired` file without an account-layer call fails (`wired_site_not_wired`). It runs in `validate.sh`.
+
 ## Wired engines (runners) — how to pick one
 
 `--runner` (or `implementer_runner`/`reviewer_runner` in `.claude/review-loop-config.md`):

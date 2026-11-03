@@ -228,6 +228,7 @@ The deep material, moved out of this page so it stays an onboarding tour:
 | **Superpowers coexistence** — three scenarios, migration | [docs/guide/coexistence.md](docs/guide/coexistence.md) |
 | **Per-project configuration** — the `.claude/` injection model | [docs/guide/configuration.md](docs/guide/configuration.md) |
 | **Installation & development** — every platform, dev mode | [docs/guide/installation.md](docs/guide/installation.md) |
+| **Claude accounts** — aliases and automatic switching between subscriptions | [docs/guide/accounts.md](docs/guide/accounts.md) |
 | **Architecture & design** — philosophy, methodology agents, credits | [docs/dev/architecture.md](docs/dev/architecture.md) |
 | **Review-only candidate review** — managed review of a range someone else wrote | [docs/guide/review-candidate.md](docs/guide/review-candidate.md) |
 | **Hooks** — 25 runtime-enforcement hooks (tiers in the doc) | [hooks/README.md](hooks/README.md) |

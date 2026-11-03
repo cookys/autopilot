@@ -5740,29 +5740,29 @@
     {
       "name": "AUTOPILOT_ACCOUNTS_DIR",
       "kind": "env",
-      "audience": "internal",
-      "class": "path_seam",
+      "audience": "user",
+      "group": "accounts",
       "default": null,
       "readers": [
         "scripts/lib/account-registry.js"
       ],
-      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
-      "note": "Overrides the account registry and token store directory (default ~/.config/autopilot/accounts); tests point it into a tempdir."
+      "summary": "Directory of the account registry and token store; point it at a throwaway directory to try the layer without touching the real one."
     },
     {
       "name": "accounts.mode",
       "kind": "config_key",
-      "audience": "internal",
-      "class": "plumbing",
+      "audience": "user",
+      "group": "accounts",
       "needle": "mode",
       "default": "auto",
       "readers": [
         "scripts/claude-account.js"
       ],
-      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
-      "note": "G37 account layer: auto (default when a registry exists) or off (explicit legacy path, audited as mode_off).",
+      "summary": "`auto` (default; used when an account registry exists) or `off` (the legacy path, audited as mode_off).",
       "type": "enum",
       "allowed": [
         "auto",
@@ -5772,62 +5772,62 @@
     {
       "name": "accounts.refuse_all_tight",
       "kind": "config_key",
-      "audience": "internal",
-      "class": "plumbing",
+      "audience": "user",
+      "group": "accounts",
       "needle": "refuse_all_tight",
       "default": false,
       "readers": [
         "scripts/claude-account.js"
       ],
-      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
-      "note": "G37: when every alias is at or above 90% used, true makes pick/run exit 3 instead of using the least tight.",
+      "summary": "true makes pick/run refuse (exit 3) when every alias is at or above 90% used, instead of using the least tight.",
       "type": "boolean"
     },
     {
       "name": "accounts.cooldown_default_minutes",
       "kind": "config_key",
-      "audience": "internal",
-      "class": "plumbing",
+      "audience": "user",
+      "group": "accounts",
       "needle": "cooldown_default_minutes",
       "default": 30,
       "readers": [
         "scripts/claude-account.js"
       ],
-      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
-      "note": "G37: cooldown after a quota 429 when no reset time is known; a plain server throttle uses min(this, 5) minutes.",
+      "summary": "Minutes an alias is skipped after a quota 429 when no reset time is known; a plain throttle uses the shorter of this and 5.",
       "type": "number"
     },
     {
       "name": "accounts.max_attempts",
       "kind": "config_key",
-      "audience": "internal",
-      "class": "plumbing",
+      "audience": "user",
+      "group": "accounts",
       "needle": "max_attempts",
       "default": 3,
       "readers": [
         "scripts/claude-account.js"
       ],
-      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
-      "note": "G37: most aliases one run tries before exit 4.",
+      "summary": "Most aliases one run tries before giving up with exit 4.",
       "type": "number"
     },
     {
       "name": "AUTOPILOT_ACCOUNT_MODE",
       "kind": "env",
-      "audience": "internal",
-      "class": "plumbing",
+      "audience": "user",
+      "group": "accounts",
       "default": null,
       "readers": [
         "scripts/claude-account.js"
       ],
-      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "accounts.mode"
       ],
-      "note": "Overrides accounts.mode for one shell (auto|off)."
+      "summary": "Overrides accounts.mode for one shell (auto or off)."
     },
     {
       "name": "AUTOPILOT_ACCOUNT",

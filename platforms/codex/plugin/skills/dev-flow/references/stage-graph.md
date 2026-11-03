@@ -1,7 +1,7 @@
 # Stage graph — calling the three scripts
 
 > On-demand reference for dev-flow. Rules (sizes, sequences, loop-backs, bump limits, marker fields) live in
-> `references/stage-graph.json` and the plan `docs/plans/2026-10-06-dev-flow-stage-graph.md` §2.7 / §2.9; this
+> `references/stage-graph.json` and the plan `project/plans/2026-10-06-dev-flow-stage-graph.md` §2.7 / §2.9; this
 > page only says how to call the scripts and what to do with their exits. Never copy a node sequence from here or
 > anywhere else — ask `stage-graph.js`.
 

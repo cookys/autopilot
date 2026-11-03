@@ -378,7 +378,7 @@ check_tmp_residue_gate() {
 
 # ─── 11. settings registry gate ───
 # Every AUTOPILOT_* env var / config.json key the code reads is registered in scripts/lib/config-keys.json, every
-# registered entry is still read, and every audience=user entry is on docs/settings-reference.md.
+# registered entry is still read, and every audience=user entry is on docs/guide/settings-reference.md.
 check_config_docs_gate() {
   node "$SCRIPTS_DIR/check-config-docs.js" >&2
 }
@@ -427,7 +427,7 @@ node "$SCRIPTS_DIR/hook-harness-matrix.js" --check 2>&1 || echo "    NOTE: hook-
 # NOT a check and NOT counted in $FAILS — it prints the roster's
 # no-detected-modeled-match bucket so the owner sees it at release prep. Its exit
 # code is deliberately ignored: this is the presentation step the plan requires
-# (docs/plans/_archive/2026/07/2026-07-25-roster-field-report.md §4.1 step 4). If it cannot run it
+# (project/plans/_archive/2026/07/2026-07-25-roster-field-report.md §4.1 step 4). If it cannot run it
 # says REPORT-HEALTH on stderr; that is a broken tool, not a release blocker.
 echo ""
 echo "── advisory: roster fields with no detected modeled match ──"

@@ -27,6 +27,7 @@ declare -A FROZEN_BLOB=(
   [references/hetero-dispatch.md]=463ae330c0ce1d323c396e254fa7e3ec17dede85
   [skills/ceo-agent/references/level-front-door.md]=f3b6dc5eaee3250dc59404cff1db8ef3513f6544
   [references/multi-agent-portability.md]=c82572ce9b18828de9af25c750eed3b42eeb4031
+  [skills/harness-maintenance/SKILL.md]=cded34fb654a8d8ef437bda74cd2fd842db8143c
 )
 
 # pack_of <repo path> <base|change> -> path of that file inside the arm's pack

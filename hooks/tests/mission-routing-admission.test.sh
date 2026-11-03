@@ -12,6 +12,8 @@ git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
 git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
 materialise_graph_named_paths "$TEST_TMP/hermetic-repo"
 REPO_ROOT="$TEST_TMP/hermetic-repo"
+# D10.27: the sealed active mission graph still names docs/BACKLOG.md as an output; the copy seeds the old name
+mkdir -p "$REPO_ROOT/docs" && cp "$REPO_ROOT/project/backlog/BACKLOG.md" "$REPO_ROOT/docs/BACKLOG.md"
 
 OUT="$(node - "$REPO_ROOT" "$TEST_TMP" <<'NODE'
 const assert = require('assert/strict');

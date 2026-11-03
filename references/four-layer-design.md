@@ -1,8 +1,8 @@
 # Four-layer design — harness governance record
 
 The post-owner-kernel governance architecture, bound by the dual-agent survey
-(`docs/plans/2026-08-16-four-layer-redesign-survey.md`) and shipped by
-`docs/plans/_archive/2026/08/2026-08-16-four-layer-redesign.md`. Contract-card style: every rule row names its
+(`project/plans/_archive/2026/08/2026-08-16-four-layer-redesign-survey.md`) and shipped by
+`project/plans/_archive/2026/08/2026-08-16-four-layer-redesign.md`. Contract-card style: every rule row names its
 enforcing mechanism or carries an explicit `documented-only` tag — a rule without a named
 enforcer is prose, and prose is not governance (the owner-kernel lesson,
 `references/evidence-discipline.md` §8).
@@ -37,7 +37,7 @@ nothing is prose. These are named here rather than left implied.
 
 | # | Rule | Enforcer | Measured |
 |---|---|---|---|
-| S1 | Quality gate before commit/merge — `skills/dev-flow` (XS/S: project-config gate, default lint + test; M/L/XL: `autopilot:quality-pipeline` at the `qc-gate` node, re-checked by finish-flow) | `documented-only` — no commit-time gate exists; an outcome-shaped opt-in enforcer exists (pre-push outcome stage, default off; docs/plans/2026-10-19-outcome-quality-gate.md), and an invocation-shaped one would govern process, which [ADR-0001](../docs/adr/0001-verification-over-attestation.md) forbids | FULL-arm compliance **0/9** at depth 0, 2026-08-18 ([P7 adjudication](../docs/plans/_archive/2026/08/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md)) |
+| S1 | Quality gate before commit/merge — `skills/dev-flow` (XS/S: project-config gate, default lint + test; M/L/XL: `autopilot:quality-pipeline` at the `qc-gate` node, re-checked by finish-flow) | `documented-only` — no commit-time gate exists; an outcome-shaped opt-in enforcer exists (pre-push outcome stage, default off; project/plans/2026-10-19-outcome-quality-gate.md), and an invocation-shaped one would govern process, which [ADR-0001](../docs/dev/adr/0001-verification-over-attestation.md) forbids | FULL-arm compliance **0/9** at depth 0, 2026-08-18 ([P7 adjudication](../docs/plans/_archive/2026/08/evidence/2026-08-18-dev-flow-contract-card/p7-f6-f4-adjudication.md)) |
 | S2 | A bug run (`--bug` entry) appends an ongoing-maintenance ledger row — `skills/finish-flow` Ongoing-maintenance entry row (bug, XS–M) | `documented-only` | FULL-arm **0/3**, same block — n=3 and the fixture repo had no `docs/` tree to append to; re-measure before acting on it |
 
 ## Execution-boundary map

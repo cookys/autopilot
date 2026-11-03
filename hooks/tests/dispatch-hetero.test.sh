@@ -1382,8 +1382,8 @@ const sha256Json = (v) => sha256(Buffer.from(JSON.stringify(v), 'utf8'));
 fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
 fs.mkdirSync(path.join(repo, 'specs', 'feat'), { recursive: true });
 fs.mkdirSync(path.join(repo, '.claude'), { recursive: true });
-const missionGraphRelative = 'docs/mission-codex-native-lifecycle-enforcement-execution-graph.json';
-const missionSourcesRelative = 'docs/mission-codex-native-lifecycle-enforcement-sources.json';
+const missionGraphRelative = 'project/missions/mission-codex-native-lifecycle-enforcement-execution-graph.json';
+const missionSourcesRelative = 'project/missions/mission-codex-native-lifecycle-enforcement-sources.json';
 const missionGraph = JSON.parse(fs.readFileSync(path.join(root, missionGraphRelative), 'utf8'));
 const missionNode = missionGraph.nodes[0];
 const authorityPaths = new Set([
@@ -1412,12 +1412,18 @@ if (fs.existsSync(hostRoutingPath)) {
     // Missing/invalid host routing is non-fatal; admission will fail closed later.
   }
 }
-for (const relative of authorityPaths) {
+// P1: a sealed graph names its plans and paths as they were before the move; the fixture seeds them where the repo keeps them now
+const movedPaths = (() => { try { return JSON.parse(fs.readFileSync(path.join(root, 'docs/plans/evidence/2026-10-31-repo-relayout-3-0-0/p1-plan/layout-map.json'), 'utf8')); } catch (_err) { return {}; } })();
+for (const named of authorityPaths) {
+  const relative = fs.existsSync(path.join(root, named)) ? named : (movedPaths[named] || named);
   const source = path.join(root, relative);
   if (!fs.existsSync(source)) continue;
-  const destination = path.join(repo, relative);
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.copyFileSync(source, destination);
+  // under the name the sealed graph uses (spec.path is read at the repo root) and under the name the repo keeps now (plan_path resolves against project/)
+  for (const target of new Set([named, relative])) {
+    const destination = path.join(repo, target);
+    fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.copyFileSync(source, destination);
+  }
 }
 // Pin routing to the fixture graph/sources this matrix fully seeds. Host
 // Mission worktrees rewrite mission-routing-config.json to a different graph

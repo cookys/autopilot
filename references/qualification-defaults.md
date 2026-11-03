@@ -32,7 +32,7 @@ makes the tradeoff visible instead of implicit.
 ## ADR-0001: this is DISCLOSURE, not attestation
 
 The originating BACKLOG row said the scorecards would ship「簽署」— signed. They are not, and they
-must not be. [ADR-0001](../docs/adr/0001-verification-over-attestation.md) and CLAUDE.md's Don't
+must not be. [ADR-0001](../docs/dev/adr/0001-verification-over-attestation.md) and CLAUDE.md's Don't
 list forbid trust machinery outright: no hash chains, no signatures-as-attestation, no witness
 receipts, no trust roots.
 
@@ -303,7 +303,7 @@ administrations) are still valid. Library: `scripts/lib/qualification-usage.js`.
 
 ## Sending results to the registry (outbox)
 
-`engine-scorecard.js record` keeps writing the local scorecard. With `qualification_outbox.enqueue` on (default off) it also queues the completed record in `~/.autopilot/qualification-outbox` (one `enqueued` line per `record_id`, fsynced; an administration that did not complete writes nothing). `node scripts/qualification-send-queue.js flush` sends un-acked ids; with `qualification_outbox.transport` off (default) it sends nothing. The `git` transport works in a dedicated clone (`qualification_outbox.registry_repo`): ingest on a `bot/qualification-<id12>` branch, push that branch, open a pull request. It never pushes the default branch. An id is acked only when the record file is on the registry's default branch with identical bytes; the ack sha is the first commit on its first-parent chain that holds it. `engine-scorecard.js status` and `qualification-send-queue.js status` list pending, rejected and older-than-24h items. Strikes use the same queue (`enqueue --kind strike`). Plan: `docs/plans/2026-10-16-bl0194-qualification-registry-move.md` section 4.
+`engine-scorecard.js record` keeps writing the local scorecard. With `qualification_outbox.enqueue` on (default off) it also queues the completed record in `~/.autopilot/qualification-outbox` (one `enqueued` line per `record_id`, fsynced; an administration that did not complete writes nothing). `node scripts/qualification-send-queue.js flush` sends un-acked ids; with `qualification_outbox.transport` off (default) it sends nothing. The `git` transport works in a dedicated clone (`qualification_outbox.registry_repo`): ingest on a `bot/qualification-<id12>` branch, push that branch, open a pull request. It never pushes the default branch. An id is acked only when the record file is on the registry's default branch with identical bytes; the ack sha is the first commit on its first-parent chain that holds it. `engine-scorecard.js status` and `qualification-send-queue.js status` list pending, rejected and older-than-24h items. Strikes use the same queue (`enqueue --kind strike`). Plan: `project/plans/2026-10-16-bl0194-qualification-registry-move.md` section 4.
 
 ## What this does NOT do
 

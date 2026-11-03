@@ -7,7 +7,7 @@
  * ITSELF and write verbatim turns to compaction-state-<session_id>.md — no Claude
  * compliance dependency.
  *
- * Architecture (per docs/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md):
+ * Architecture (per project/plans/_archive/2026/05/2026-05-14-context-handoff-hardening.md):
  * - Filter-first / tail-after / newest-first iteration with byte cap
  * - Per-block thinking truncation (preserves reasoning shape, prevents bloat)
  * - Visible failure diagnostic INTO checkpoint file + stderr emit
@@ -51,7 +51,7 @@ const STATE_DIR = path.join(os.homedir(), '.autopilot');
 const LOG_FILE = path.join(STATE_DIR, '.state-checkpoint.log');
 const LOG_ROTATE_BYTES = 1 * 1024 * 1024; // 1 MB
 // The tail is the supplement, not the state: the workflow snapshot leads the file (plan
-// docs/plans/2026-10-13-workflow-snapshot-at-compaction.md). 4 turns / 3 KB of text-bearing turns, and the
+// project/plans/2026-10-13-workflow-snapshot-at-compaction.md). 4 turns / 3 KB of text-bearing turns, and the
 // tail now goes LAST, after the repo/dispatch/marker/model-handoff sections (scripts/lib/compaction-handoff.js).
 const TRANSCRIPT_TAIL_N = parseInt(process.env.TRANSCRIPT_TAIL_N || '4', 10);
 const TRANSCRIPT_BYTE_CAP = parseInt(process.env.TRANSCRIPT_BYTE_CAP || '3072', 10);

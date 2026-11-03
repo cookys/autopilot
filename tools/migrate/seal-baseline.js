@@ -186,8 +186,12 @@ function record(root, o) {
     graphRes.set(`${dir}/${slug}`, { rc: r.rc, digest });
     const refs = [];
     try {
+      // plan_path / rubric_path are relative to the registry's base for THIS manifest (D9.2), exactly as the checker resolves them,
+      // not to the manifest's own directory: after P1 the manifests sit in project/missions/ while their base is project/.
+      let base = dir;
+      try { base = posix(path.relative(root, require(path.join(root, 'scripts/lib/repo-layout.js')).manifestBase(root, src).base)) || '.'; } catch { /* old layout or invalid base: the checker's message says why */ }
       for (const s of JSON.parse(fs.readFileSync(path.join(root, src), 'utf8')).sources || []) {
-        for (const k of ['plan_path', 'rubric_path']) if (typeof s[k] === 'string') refs.push(path.posix.normalize(path.posix.join(dir, s[k])));
+        for (const k of ['plan_path', 'rubric_path']) if (typeof s[k] === 'string') refs.push(path.posix.normalize(path.posix.join(base, s[k])));
       }
     } catch { /* an unreadable manifest is already in the checker's message */ }
     const msg = r.rc === 0 ? '' : norm(r.err || r.out);

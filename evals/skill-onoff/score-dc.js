@@ -3,7 +3,7 @@
 // the family map, reps, V2 floor and informational families come from a FROZEN prereg (prereg/dc.json) instead of constants;
 // V1 reads the row's `skill_invoked` (rows of arm-manifest cells carry it). Same V1/V2/V3 + verdict map as the frozen rules.
 // Implements the PRE-REGISTERED rules frozen in
-// docs/plans/_archive/2026/08/2026-08-18-dev-flow-contract-card.md §4 (V1 manipulation check /
+// project/plans/_archive/2026/08/2026-08-18-dev-flow-contract-card.md §4 (V1 manipulation check /
 // V2 sensitivity gate / V3 non-inferiority / verdict map). The final ship decision is a
 // Board read of the printed table — these rules are clamps against motivated reasoning.
 //

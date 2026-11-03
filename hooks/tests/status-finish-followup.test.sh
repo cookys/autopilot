@@ -5,6 +5,8 @@ SOURCE_ROOT="$REPO_ROOT"
 git clone -q --no-local "$SOURCE_ROOT" "$TEST_TMP/hermetic-repo"
 git -C "$SOURCE_ROOT" diff --binary HEAD | git -C "$TEST_TMP/hermetic-repo" apply
 REPO_ROOT="$TEST_TMP/hermetic-repo"
+# D10.27: the sealed active mission graph still names docs/BACKLOG.md as an output; the copy seeds the old name
+mkdir -p "$REPO_ROOT/docs" && cp "$REPO_ROOT/project/backlog/BACKLOG.md" "$REPO_ROOT/docs/BACKLOG.md"
 cd "$REPO_ROOT"
 
 STATUS_OUT="$TEST_TMP/status-human.out"
@@ -124,7 +126,7 @@ OUT="$(node "$REPO_ROOT/scripts/session-mode.js" clear \
 assert_eq "1" "$RC" "expired-marker clear still validates the receipt digest"
 assert_contains "$OUT" "digest is invalid" "expired-marker validation rejects a tampered receipt"
 
-cp "$REPO_ROOT/docs/BACKLOG.md" "$TEST_TMP/BACKLOG.md"
+cp "$REPO_ROOT/project/backlog/BACKLOG.md" "$TEST_TMP/BACKLOG.md"
 node - "$TEST_TMP/candidates.json" <<'NODE'
 const crypto = require('crypto');
 const fs = require('fs');
@@ -224,7 +226,7 @@ OUT="$(node "$REPO_ROOT/scripts/admit-backlog-follow-ups.js" \
 assert_eq "2" "$RC" "same fingerprint with changed backlog content fails closed"
 assert_contains "$OUT" "fingerprint content conflict" "fingerprint conflict is explicit"
 
-cp "$REPO_ROOT/docs/BACKLOG.md" "$TEST_TMP/portfolio-BACKLOG.md"
+cp "$REPO_ROOT/project/backlog/BACKLOG.md" "$TEST_TMP/portfolio-BACKLOG.md"
 node - "$TEST_TMP/candidates.json" "$TEST_TMP/malformed-portfolio.json" <<'NODE'
 const fs = require('fs');
 const value = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
@@ -246,7 +248,7 @@ PORTFOLIO_BACKLOG_AFTER="$(sha256sum "$TEST_TMP/portfolio-BACKLOG.md" | cut -d' 
 assert_eq "$PORTFOLIO_BACKLOG_BEFORE" "$PORTFOLIO_BACKLOG_AFTER" \
   "noncanonical portfolio does not mutate backlog"
 
-cp "$REPO_ROOT/docs/BACKLOG.md" "$TEST_TMP/campaign-BACKLOG.md"
+cp "$REPO_ROOT/project/backlog/BACKLOG.md" "$TEST_TMP/campaign-BACKLOG.md"
 node - "$TEST_TMP/malformed-campaign.json" <<'NODE'
 const crypto = require('crypto');
 const fs = require('fs');
@@ -320,7 +322,7 @@ assert_eq "$CAMPAIGN_BACKLOG_BEFORE" "$CAMPAIGN_BACKLOG_AFTER" \
 # RED at plan-graduation base: severity 🔵 and no-Trigger findings were folded into the
 # generic noncanonical_artifact / unsupported_evidence buckets — never refused by name,
 # and nothing stopped a 🔵 suggestion from ever reaching the backlog queue.
-cp "$REPO_ROOT/docs/BACKLOG.md" "$TEST_TMP/severity-BACKLOG.md"
+cp "$REPO_ROOT/project/backlog/BACKLOG.md" "$TEST_TMP/severity-BACKLOG.md"
 node - "$TEST_TMP/blue-and-notrigger-campaign.json" <<'NODE'
 const crypto = require('crypto');
 const fs = require('fs');

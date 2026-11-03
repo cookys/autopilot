@@ -1,6 +1,6 @@
 # Workflow snapshot (what survives a compaction or /clear)
 
-Contract for `scripts/lib/workflow-snapshot.js` and `scripts/task-card.js`. Plan: `docs/plans/2026-10-13-workflow-snapshot-at-compaction.md`.
+Contract for `scripts/lib/workflow-snapshot.js` and `scripts/task-card.js`. Plan: `project/plans/2026-10-13-workflow-snapshot-at-compaction.md`.
 
 ## What it is
 

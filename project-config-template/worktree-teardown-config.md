@@ -86,7 +86,7 @@ different uid inside the worktree.
 
 The hook receives the absolute worktree path as `$1` and should reclaim project-owned
 resources (root-owned `target/`, named volumes, …) best-effort, then exit 0. See
-`docs/plans/2026-07-09-worktree-teardown-seam.md` §4 for a reference implementation.
+`project/plans/_archive/2026/07/2026-07-09-worktree-teardown-seam.md` §4 for a reference implementation.
 
 ## Safety rails (harness-enforced; not configurable)
 

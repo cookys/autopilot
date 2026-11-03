@@ -1,6 +1,6 @@
 # Review page — served root, URL scheme, server lifecycle
 
-Index-shaped reference for the mods "visible dispatch" review pages (plan `docs/plans/2026-10-03-mods-visible-dispatch.md`,
+Index-shaped reference for the mods "visible dispatch" review pages (plan `project/plans/2026-10-03-mods-visible-dispatch.md`,
 §2.5, §8 D1/D2, R4.1). Sections marked **[renderer contract]** are implemented by
 `scripts/render-review-page.js` (rows B1a/B1b); the rest is implemented by `src/status/review-server.js` and
 `src/status/runs-watch.js` (row B2).

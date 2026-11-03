@@ -7,7 +7,7 @@
 // and default-changed names must each appear in the subsection. internal-only
 // changes are never required. No user-level change => no subsection required.
 // Baseline missing (config-keys.json did not exist at the tag) => bootstrap: the
-// subsection must exist and link docs/settings-reference.md; no per-key listing.
+// subsection must exist and link docs/guide/settings-reference.md; no per-key listing.
 //
 // Usage: check-settings-changelog.js [--keys P] [--baseline-keys P] [--changelog P]
 //        [--section "<heading text after ## >"] [--base-ref REF]
@@ -112,7 +112,7 @@ if (sub === null) {
       (bootstrap ? ` (no ${KEYS_REL} baseline: bootstrap requires the subsection)` : `; required for:\n  ${need.join('\n  ')}`));
 }
 const bad = [];
-if (bootstrap) { if (!sub.includes('docs/settings-reference.md')) bad.push('bootstrap: subsection must link docs/settings-reference.md'); }
+if (bootstrap) { if (!sub.includes('docs/guide/settings-reference.md')) bad.push('bootstrap: subsection must link docs/guide/settings-reference.md'); }
 else for (const n of need) { const name = n.split(': ')[1]; if (!sub.includes(name)) bad.push(`not named in Settings changes: ${n}`); }
 if (bad.length) die(`CHANGELOG '## ${heading}' Settings changes incomplete:\n  ${bad.join('\n  ')}`);
 console.log(`ok: Settings changes in '## ${heading}' cover ${bootstrap ? 'bootstrap' : need.length + ' change(s)'}`);

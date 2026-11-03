@@ -124,7 +124,7 @@ function stageCondition(record, event, nowMs, quietSecs) {
   const state = alive ? procState(pid) : 'absent';
   if (state.startsWith('D')) return { condition: 'blocked', reason: 'd_state_resource_holder' };
   if (!alive || state.startsWith('Z')) {
-    // KNOWN FALSE POSITIVE for a CC-native /l4-/l6 foreman (docs/BACKLOG.md
+    // KNOWN FALSE POSITIVE for a CC-native /l4-/l6 foreman (project/backlog/BACKLOG.md
     // "`/l4` watcher reports `owner_absent` for every healthy CC-native
     // foreman", v2.34.39 2026-08-24): `run-ledger.sh stage-acquire` records
     // the PID of the SHELL that invoked it, and that shell exits immediately

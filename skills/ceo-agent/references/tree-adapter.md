@@ -1,4 +1,4 @@
-> **Dormant.** Do not run this adapter or `scripts/tree.js` / qc-panel. See docs/adr/0002-task-tree-and-qc-panel-dormant.md. The body below is unchanged historical procedure.
+> **Dormant.** Do not run this adapter or `scripts/tree.js` / qc-panel. See docs/dev/adr/0002-task-tree-and-qc-panel-dormant.md. The body below is unchanged historical procedure.
 
 # Tree Adapter — CEO Agent
 
@@ -8,7 +8,7 @@ carries all operational detail.
 
 > **Sources**: `references/tree-contracts.md` (event schemas, invariants),
 > `references/model-routing.md` §"Tree roles" (Amendment 11 routing),
-> `docs/plans/_archive/2026/06/2026-06-12-task-tree-engine.md` §P6 + Amendments 6, 8, 9.
+> `project/plans/_archive/2026/06/2026-06-12-task-tree-engine.md` §P6 + Amendments 6, 8, 9.
 
 ---
 
@@ -223,7 +223,7 @@ When `docs/projects/<proj>/tree/` does not exist:
 - Zero impact on users not opting in.
 
 The tree is opt-in until graduation criteria are met (see `scripts/calibration.sh`
-and `docs/BACKLOG.md` "graduation Board review" entry).
+and `project/backlog/BACKLOG.md` "graduation Board review" entry).
 
 ---
 

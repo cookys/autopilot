@@ -255,12 +255,12 @@ assert_r75_vacuous_red_case_in() {
   # not the still-present DEAD code (vacuous if both branches share DEAD).
   local sandbox base_dispositions fake_rule hash alien out rc
   sandbox="$TEST_TMP/r75-repo"
-  mkdir -p "$sandbox/skills" "$sandbox/docs/projects/_archive/2026/07"
+  mkdir -p "$sandbox/skills" "$sandbox/project/projects/_archive/2026/07"
   cp -r "$REPO_ROOT/profiles" "$sandbox/profiles"
   cp -r "$REPO_ROOT/skills/ceo-agent" "$sandbox/skills/ceo-agent"
   cp -r "$REPO_ROOT/skills/dev-flow" "$sandbox/skills/dev-flow"
-  cp -r "$REPO_ROOT/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles" \
-        "$sandbox/docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles"
+  cp -r "$REPO_ROOT/project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles" \
+        "$sandbox/project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles"
   # The dispositions array exceeds MAX_ARG_STRLEN (128 KiB) as one argv string: hand it over as a file.
   base_dispositions="$TEST_TMP/r75-base-dispositions.json"
   node -e '
@@ -274,7 +274,7 @@ assert_r75_vacuous_red_case_in() {
     const { sha256 }=require(process.argv[2]+"/scripts/measure-profile-context.js");
     const sandbox=process.argv[1];
     const rule=process.argv[3];
-    const basePath=path.join(sandbox,"docs/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json");
+    const basePath=path.join(sandbox,"project/projects/_archive/2026/07/2026-07-26-capability-adaptive-profiles/p0-context-baseline.json");
     const base=JSON.parse(fs.readFileSync(basePath,"utf8"));
     const entry=base.source_surface.files.find(f=>f.path==="skills/dev-flow/SKILL.md");
     const snapPath=path.join(sandbox,"profiles/p0-sources",sha256("skills/dev-flow/SKILL.md")+".txt");

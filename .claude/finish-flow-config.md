@@ -12,14 +12,14 @@ below.
 ## Size-specific tooling
 
 - **Quality gate (the `qc-gate` node)**: invoke the `autopilot:quality-pipeline` skill. No CLI script. XS/S use `--size S`.
-- **Archive row (L, XL)**: move `docs/projects/YYYY-MM-DD-<name>/` → `docs/projects/_archive/YYYY-MM-DD-<name>/` + update `docs/projects/INDEX.md` (move row from 進行中 to 已完成 with merge commit hash)
+- **Archive row (L, XL)**: move `project/projects/YYYY-MM-DD-<name>/` → `project/projects/_archive/YYYY-MM-DD-<name>/` + update `project/projects/INDEX.md` (move row from 進行中 to 已完成 with merge commit hash)
 - **Merge row**: target branch is `develop`; urgent (`!`) hotfixes target `main` and use `--no-ff`
 
 ## `finish` node row adaptations
 
 ### Goal review (L, XL)
 
-Open `docs/projects/<project>/README.md`. For each success criterion, show:
+Open `project/projects/<project>/README.md`. For each success criterion, show:
 - (a) the criterion text from the plan doc
 - (b) concrete evidence (command output, file contents, or diff) proving it's met
 
@@ -46,21 +46,21 @@ Re-read critical files on develop (pick 1-3 highest-risk files that were changed
 
 **autopilot convention** (2026-04-12 onwards):
 
-1. `mv docs/projects/YYYY-MM-DD-<name>/ docs/projects/_archive/YYYY-MM-DD-<name>/`
-2. Update `docs/projects/INDEX.md`: remove row from 進行中 table, add to 已完成 table with merge commit hash and date
+1. `mv project/projects/YYYY-MM-DD-<name>/ project/projects/_archive/YYYY-MM-DD-<name>/`
+2. Update `project/projects/INDEX.md`: remove row from 進行中 table, add to 已完成 table with merge commit hash and date
 3. Commit with message `docs(archive): <project-name> — shipped in v<X.Y.Z>`
-4. Plan doc stays in `docs/plans/` (not moved) — update its `狀態` field to `✅ Shipped in v<X.Y.Z> — merged as <commit>`
+4. Plan doc stays in `project/plans/` (not moved) — update its `狀態` field to `✅ Shipped in v<X.Y.Z> — merged as <commit>`
 
-**Pre-2026-04-12 ships** (`think-tank-dialectic` v2.2.0, `skill-description-optimization`, v2.3.0 skill routing) did NOT follow this convention because `docs/projects/` did not exist yet. Those are historical debt, intentionally not retrofitted. See `docs/projects/INDEX.md` § 歷史債.
+**Pre-2026-04-12 ships** (`think-tank-dialectic` v2.2.0, `skill-description-optimization`, v2.3.0 skill routing) did NOT follow this convention because `project/projects/` did not exist yet. Those are historical debt, intentionally not retrofitted. See `project/projects/INDEX.md` § 歷史債.
 
 ### Session end (full) (L, XL)
 
 Run the finish-flow Session end (full) checklist. autopilot-specific adaptations:
 - Staging verify → N/A (plugin, no staging)
 - Knowledge extraction → record to the user's cross-session memory (not autopilot's own `.claude/`, which is gitignored)
-- Deferred items → evidence-backed candidates are deduped into `docs/BACKLOG.md` with Source,
+- Deferred items → evidence-backed candidates are deduped into `project/backlog/BACKLOG.md` with Source,
   Context, and Trigger; preference-only/unsupported suggestions stay out
-- Docs sync check → `docs/projects/INDEX.md` + CHANGELOG + README skill/agent count badges
+- Docs sync check → `project/projects/INDEX.md` + CHANGELOG + README skill/agent count badges
 
 ## Per-phase quality pipeline (preserved)
 
@@ -70,7 +70,7 @@ Like TWGameServer, autopilot's per-phase quality pipeline at each Phase advance 
 
 - **Cross-repo CWD injection**: when the session CWD is TWGameServer but work targets autopilot, dev-flow / quality-pipeline / finish-flow will inject TWGameServer's config by default. This file exists precisely to prevent that — but if the session is started BEFORE this file existed, restart the session inside autopilot repo.
 - **Do not create the project dir only at `finish`**: the `intent` node is where project dir creation belongs. Creating it retroactively at the archive row is theatrical — the tracking value of a project README lives during execution.
-- **Historical ships missing project dirs**: v2.2.0 and v2.3.0 do not have project dirs under `docs/projects/`. Do NOT retrofit — documented in INDEX.md 歷史債 section.
+- **Historical ships missing project dirs**: v2.2.0 and v2.3.0 do not have project dirs under `project/projects/`. Do NOT retrofit — documented in INDEX.md 歷史債 section.
 - **Plugin agent list snapshot at session start**: new agents added mid-session (dev-mode install) are not dispatchable in the same session. Plan Phase 5 runtime dogfood is always deferred to the next session.
 
 ## CEO mode

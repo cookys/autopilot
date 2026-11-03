@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// Window A for roundtable (docs/plans/2026-09-19-roundtable.md §9).
+// Window A for roundtable (project/plans/2026-09-19-roundtable.md §9).
 // Subcommands: open, tail, input, send.
 // Rooms directory: AUTOPILOT_ROOMS_DIR (scripts/lib/room-log.js).
 // ROUNDTABLE_FLEET_BIN (default fleet), ROUNDTABLE_TMUX_BIN (default tmux),

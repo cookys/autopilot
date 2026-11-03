@@ -15,7 +15,7 @@
  *
  * Usage:
  *   node scripts/hook-harness-matrix.js            # print the matrix markdown
- *   node scripts/hook-harness-matrix.js --write    # regenerate docs/hook-harness-matrix.md
+ *   node scripts/hook-harness-matrix.js --write    # regenerate docs/dev/hook-harness-matrix.md
  *   node scripts/hook-harness-matrix.js --check    # exit 1 if the doc drifted or an evidence row is
  *                                                  # bogus; WARN (exit 0) on rows older than 60 days
  *   --repo <dir>   operate on another tree (tests)      --today <YYYY-MM-DD>  (tests)

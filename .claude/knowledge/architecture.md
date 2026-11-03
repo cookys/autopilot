@@ -23,7 +23,7 @@ the old graph as successful or hand-author a mirror.
 
 **Related**: `scripts/sync-codex-plugin-skills.sh`,
 `scripts/mission-execution-graph-check.js`,
-`docs/plans/_archive/2026/08/2026-08-02-reviewer-output-token-budget-mirror-correction.md`.
+`project/plans/_archive/2026/08/2026-08-02-reviewer-output-token-budget-mirror-correction.md`.
 
 ## Persistent transcript continuity is not canonical ICC evidence
 
@@ -121,7 +121,7 @@ role ban on a model.
 
 **Related**: `scripts/adjudicate-findings.js`, `scripts/check-repair-scope.js`,
 `skills/quality-pipeline/references/code-review.md`,
-`docs/plans/2026-07-26-review-scope-stop-loss.md`.
+`project/plans/_archive/2026/07/2026-07-26-review-scope-stop-loss.md`.
 
 ## Verify a map by redrawing it, not by checking its sentences
 

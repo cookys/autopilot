@@ -7,7 +7,7 @@
 // Signal: the last assistant `message.usage` row in the depth-0 transcript.
 // context ≈ input + cache_read + cache_creation (RAW total, not cost-weighted:
 // cache_read tokens are IN the model's context — cheap ≠ absent; panel
-// adjudication in docs/plans/2026-07-14-context-budget-orchestrator-gate.md).
+// adjudication in project/plans/_archive/2026/07/2026-07-14-context-budget-orchestrator-gate.md).
 //
 // Backward scan: start with a 64KB tail window and GROW (×4) until the last
 // usage row is inside it, capped at 5MB. A single JSONL line (one big tool

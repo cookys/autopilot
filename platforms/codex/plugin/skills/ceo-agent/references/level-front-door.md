@@ -4,7 +4,7 @@
 > `ceo-agent/SKILL.md`. The `/lN` skills are **thin** — all execution semantics
 > live here so the three front-doors stay in lockstep.
 >
-> Design source: [`docs/plans/2026-06-22-ceo-fleet-autonomy.md`](../../../docs/plans/2026-06-22-ceo-fleet-autonomy.md)
+> Design source: [`project/plans/_archive/2026/06/2026-06-22-ceo-fleet-autonomy.md`](../../../project/plans/_archive/2026/06/2026-06-22-ceo-fleet-autonomy.md)
 > (converged through 3 rounds of Architect/Ops/Skeptic dialectic). Read it for the
 > *why*; this file is the *how*.
 

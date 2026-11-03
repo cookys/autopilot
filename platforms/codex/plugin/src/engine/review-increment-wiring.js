@@ -2,7 +2,7 @@
 
 // BL-0146 D4: glue between the pure eligibility module (review-increment.js), the seat store
 // (final-panel-seat-store.js) and the engine's returned-head review. Plan:
-// docs/plans/2026-10-17-review-only-campaign-fix-increment.md sections 2.2, 2.4, 2.6.
+// project/plans/2026-10-17-review-only-campaign-fix-increment.md sections 2.2, 2.4, 2.6.
 //
 // Everything here is re-derived on each call from Git, the campaign's gate journal and the stored
 // seat artifacts (ADR-0001); no flag from the caller is trusted for a fact Git or the store can

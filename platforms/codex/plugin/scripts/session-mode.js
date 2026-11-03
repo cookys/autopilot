@@ -39,7 +39,7 @@
  *   The marker carries no phase fields (removed in stage-graph P2b, plan §0.7) and the old phase flag is a usage error;
  *   the work position is `stage`/`stage_set_at`/`unit`, written by scripts/stage-advance.js.
  *
- * Design notes (see docs/plans/2026-07-14-context-budget-orchestrator-gate.md):
+ * Design notes (see project/plans/_archive/2026/07/2026-07-14-context-budget-orchestrator-gate.md):
  * - Host-stable path (~/.autopilot, NOT $TMPDIR) — docker-exec contexts see the
  *   same marker (Gemini panel finding).
  * - set OVERWRITES: /l3 re-entry after an /l5 run in the same session records

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // dispatch-tree.js — read-only merged view of everything one session dispatched, as ONE tree rooted at the
-// session (live-pane plan docs/plans/2026-10-13-live-pane-design-system.md §7.1, identity hand-off step 1).
+// session (live-pane plan project/plans/2026-10-13-live-pane-design-system.md §7.1, identity hand-off step 1).
 //
 // It joins three existing records and writes nothing:
 //   1. subagent tree  <projects>/<proj>/<session>/subagents/agent-*.meta.json  (parentAgentId, toolUseId, spawnDepth;

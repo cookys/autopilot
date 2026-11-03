@@ -34,9 +34,9 @@ SHIP-AS-IS is required. If the verdict is FIX-THEN-SHIP with 🔴/🟠 findings,
 
 ## 4. Release (only with green gates and SHIP-AS-IS)
 - Version = `git show origin/develop:.claude-plugin/plugin.json` + 1 PATCH (expect {{VERSION_EXPECT}}). Run `node scripts/sync-version.js --version <V>`.
-- `docs/BACKLOG.md`: delete the rows this bundle resolved (match by title, listed in the plan/bundle). Delete a sidecar only if no other row points at it. Then run `node scripts/check-backlog-entries.js --backlog docs/BACKLOG.md` (it must exit 0).
+- `project/backlog/BACKLOG.md`: delete the rows this bundle resolved (match by title, listed in the plan/bundle). Delete a sidecar only if no other row points at it. Then run `node scripts/check-backlog-entries.js --backlog project/backlog/BACKLOG.md` (it must exit 0).
 - `CHANGELOG.md`: a new top section for V, one user-facing line per row (the problem, then what changed), plus the 🔵 items from the review listed as known follow-ups.
-- `docs/projects/INDEX.md`: one row for V; put the release SHA in the merge column after the commit, or write `—` rather than `(this ship)`.
+- `project/projects/INDEX.md`: one row for V; put the release SHA in the merge column after the commit, or write `—` rather than `(this ship)`.
   If the plan has now shipped entirely, run `node scripts/check-plan-graduation.js --repo-root . --fix` to archive it and resolve its INDEX `active` row. After that, `check-plan-graduation --json` must return exit 0.
 - `bash scripts/preflight-release.sh` must pass.
 - Commit. **Fill the trailer's review id from `RUN/{{TAG}}.review.json` (or the round-2 review file if repaired) — the real id the manifest carries, never a literal `<id>` placeholder.** The final paragraph of the message holds both trailers, with no blank line between them:

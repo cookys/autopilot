@@ -23,7 +23,7 @@ set -euo pipefail
 # The in-cycle verifier is a WEAK oracle (esp. diff-only for doc-sync): a clean in-cycle
 # pass is caught_at_stage=depth0_panel = the verdict stage, so it is NOT an escape. The
 # escape rate only becomes meaningful once later/stronger review records its finds via the
-# `audit` path. See docs/ladder-run.md.
+# `audit` path. See docs/dev/ladder-run.md.
 #
 # Verifier isolation is STRUCTURAL: verify calls dispatch-review.sh, whose prompt is the
 # DIFF TEXT ONLY — the implementer's self-report never reaches the verifier

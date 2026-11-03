@@ -40,7 +40,7 @@
 // rotate_remove_source: AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE
 // (default false). AUTOPILOT_TEST_NOW is a local ISO date, honoured only when
 // AUTOPILOT_TEST_ALLOW_REVIEW_LEDGER_ARCHIVE_NOW=1.
-// Plan: docs/plans/2026-10-22-review-ledger-retention.md
+// Plan: project/plans/2026-10-22-review-ledger-retention.md
 //
 // Exit codes:
 //   0  success, including status when the archive is off

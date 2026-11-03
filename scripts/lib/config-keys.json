@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "purpose": "Machine-readable inventory of every setting autopilot reads: config.json keys, AUTOPILOT_* environment variables, the Claude Code settings it depends on, and project-level DI files. Checked in both directions by scripts/check-config-docs.js; the human reference for audience=user entries is docs/settings-reference.md.",
+    "purpose": "Machine-readable inventory of every setting autopilot reads: config.json keys, AUTOPILOT_* environment variables, the Claude Code settings it depends on, and project-level DI files. Checked in both directions by scripts/check-config-docs.js; the human reference for audience=user entries is docs/guide/settings-reference.md.",
     "fields": {
       "name": "dotted path for a config key, the variable name for env/cc_setting, .claude/<file> for project_di",
       "kind": "config_key | env | cc_setting | project_di",
@@ -11,7 +11,7 @@
       "needle": "optional literal the reader must contain (default: env name or prefix, last dotted segment, template basename)",
       "prefix": "env family: any token starting with it is covered",
       "relates": "settings that depend on or override this one",
-      "group": "user only: section of docs/settings-reference.md",
+      "group": "user only: section of docs/guide/settings-reference.md",
       "template": "project_di only",
       "doc": "where it is explained",
       "type": "config_key only: boolean | number | string | array | object | enum, joined with | for alternatives; read by scripts/lib/config-audit.js",
@@ -19,7 +19,7 @@
       "invalid_effect": "config_key: what an out-of-range value does, quoted in the config-audit finding",
       "changed_in": "config_key: list of {schema, from, to, note}. schema = the config_schema_version at which a default changed. Append one when you change a documented default; config-audit lists entries whose schema is above the user's config_schema_version (up to the current one). Bump CURRENT_SCHEMA in scripts/lib/config-audit.js when you add a schema number."
     },
-    "audience_rule": "user = a human sets it to change what autopilot does (a documented knob with an effect they can observe). internal = autopilot sets it for its own child processes, it only redirects a path or injects a fault or clock for tests, or it is a maintainer/diagnostic switch. By name pattern, internal: AUTOPILOT_TEST_*, *_TEST_HOOK, *_FIXTURE, *_CRASH_AT, *_KILL_AFTER*, *_RACE_PATH, *_SEAMS, FAULT_INJECT*, *_NOW(_MS), *_SESSION_ID, *_RUN_ID, and path/binary overrides ending in _DIR/_FILE/_PATH/_BIN/_SH/_SCRIPT/_RESOLVER/_LEDGER/_RECEIPT/_INPUT/_ENV. Everything else is classified by hand and a user entry must appear in docs/settings-reference.md.",
+    "audience_rule": "user = a human sets it to change what autopilot does (a documented knob with an effect they can observe). internal = autopilot sets it for its own child processes, it only redirects a path or injects a fault or clock for tests, or it is a maintainer/diagnostic switch. By name pattern, internal: AUTOPILOT_TEST_*, *_TEST_HOOK, *_FIXTURE, *_CRASH_AT, *_KILL_AFTER*, *_RACE_PATH, *_SEAMS, FAULT_INJECT*, *_NOW(_MS), *_SESSION_ID, *_RUN_ID, and path/binary overrides ending in _DIR/_FILE/_PATH/_BIN/_SH/_SCRIPT/_RESOLVER/_LEDGER/_RECEIPT/_INPUT/_ENV. Everything else is classified by hand and a user entry must appear in docs/guide/settings-reference.md.",
     "scan_rules": "env: AUTOPILOT_[A-Z0-9_]+ in .js .ts .tsx .mjs .sh .py under bin/ hooks/ scripts/ src/ mods/, excluding tests/ dirs, *.test.*, test-*, run-tests.sh, fixtures/, node_modules/ and the platforms/ and .opencode mirrors. config: property reads with a snake_case key in files that mention config-path / AUTOPILOT_CONFIG_FILE / .autopilot/config.json (best effort; keys without an underscore are only checked in the reverse direction). di: every file in project-config-template/."
   },
   "ignore": {
@@ -56,7 +56,7 @@
       "readers": [
         "scripts/lib/autocompact-window.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "autoCompactWindow"
       ],
@@ -71,7 +71,7 @@
       "readers": [
         "scripts/lib/autocompact-window.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.t2",
         "context_budget.gap"
@@ -87,7 +87,7 @@
       "readers": [
         "scripts/lib/autocompact-window.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.t2",
         "context_budget.gap"
@@ -103,7 +103,7 @@
       "readers": [
         "scripts/lib/autocompact-window.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "autoCompactWindow"
       ],
@@ -118,7 +118,7 @@
       "readers": [
         "scripts/lib/autocompact-window.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "autoCompactWindow"
       ],
@@ -148,7 +148,7 @@
       "readers": [
         "hooks/_shared/advisory-sink.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_ADVISORY_BRIDGE_<HOOK>"
       ],
@@ -169,7 +169,7 @@
       "readers": [
         "hooks/_shared/advisory-sink.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_ADVISORY_BRIDGE",
         "advisory_bridge.<hook>"
@@ -190,7 +190,7 @@
       "readers": [
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_GAP",
         "context_budget.t2",
@@ -208,7 +208,7 @@
       "readers": [
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_LIVE_WRITE"
       ],
@@ -224,7 +224,7 @@
       "readers": [
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_MODE"
       ],
@@ -246,7 +246,7 @@
       "readers": [
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.t1",
         "context_budget.t2",
@@ -266,7 +266,7 @@
       "readers": [
         "hooks/context-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_POST_COMPACT_WARN"
       ],
@@ -283,7 +283,7 @@
       "readers": [
         "hooks/context-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_SEAT"
       ],
@@ -304,7 +304,7 @@
       "readers": [
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_STEP"
       ],
@@ -321,7 +321,7 @@
       "readers": [
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_T1",
         "context_budget.t2"
@@ -339,7 +339,7 @@
       "readers": [
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_CONTEXT_BUDGET_T2",
         "context_budget.gap",
@@ -357,7 +357,7 @@
       "readers": [
         "scripts/lib/brain-spend.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_COST_FUSE_DAILY_USD",
         "cost_fuse.tiers"
@@ -374,7 +374,7 @@
       "readers": [
         "scripts/lib/brain-spend.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_COST_FUSE_MODE",
         "cost_fuse.daily_usd_brain"
@@ -398,7 +398,7 @@
       "readers": [
         "scripts/lib/brain-spend.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "cost_fuse.daily_usd_brain"
       ],
@@ -414,7 +414,7 @@
       "readers": [
         "hooks/cost-tracker.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_COST_TRACKER_CACHE_READ_WARN"
       ],
@@ -430,7 +430,7 @@
       "readers": [
         "hooks/cost-tracker.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_COST_TRACKER_CLEAR_PCT"
       ],
@@ -449,7 +449,7 @@
       "readers": [
         "hooks/depth0-delegate-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Model families the gate applies to.",
       "type": "array"
@@ -463,7 +463,7 @@
       "readers": [
         "hooks/depth0-delegate-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_DEPTH0_DELEGATE_GATE_MODE"
       ],
@@ -484,7 +484,7 @@
       "readers": [
         "hooks/depth0-delegate-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_BASH_GUARD_PKILL_MODE"
       ],
@@ -505,7 +505,7 @@
       "readers": [
         "hooks/depth0-delegate-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_BASH_GUARD_LS_MODE"
       ],
@@ -526,7 +526,7 @@
       "readers": [
         "hooks/depth0-delegate-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Consecutive read-class calls before the delegate reminder.",
       "type": "number"
@@ -540,7 +540,7 @@
       "readers": [
         "hooks/depth0-delegate-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_DEPTH0_WAIT_ADVICE_EVERY"
       ],
@@ -556,7 +556,7 @@
       "readers": [
         "hooks/dirty-protected-paths.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_DIRTY_TREE_REMINDER"
       ],
@@ -572,7 +572,7 @@
       "readers": [
         "hooks/dirty-protected-paths.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_DIRTY_TREE_INTERVAL_MINUTES"
       ],
@@ -588,7 +588,7 @@
       "readers": [
         "hooks/dirty-protected-paths.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_DIRTY_TREE_MIN_FILES"
       ],
@@ -604,7 +604,7 @@
       "readers": [
         "hooks/dirty-protected-paths.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_DIRTY_TREE_MIN_LINES"
       ],
@@ -620,7 +620,7 @@
       "readers": [
         "hooks/owner-question-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_OWNER_QUESTION_GUARD"
       ],
@@ -636,7 +636,7 @@
       "readers": [
         "hooks/per-turn-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "hooks.<stem>"
       ],
@@ -652,7 +652,7 @@
       "readers": [
         "hooks/per-turn-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "hooks.<stem>"
       ],
@@ -673,7 +673,7 @@
       "readers": [
         "hooks/per-turn-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "hooks.<stem>"
       ],
@@ -689,7 +689,7 @@
       "readers": [
         "hooks/per-turn-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "hooks.<stem>"
       ],
@@ -705,7 +705,7 @@
       "readers": [
         "hooks/per-turn-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "hooks.<stem>"
       ],
@@ -721,7 +721,7 @@
       "readers": [
         "hooks/per-turn-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "hooks.<stem>"
       ],
@@ -737,7 +737,7 @@
       "readers": [
         "hooks/subagent-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_SUBAGENT_BUDGET_MODE"
       ],
@@ -758,7 +758,7 @@
       "readers": [
         "hooks/subagent-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_SUBAGENT_BUDGET_LANE_DISPATCH_MAX"
       ],
@@ -774,7 +774,7 @@
       "readers": [
         "hooks/subagent-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_SUBAGENT_BUDGET_LANE_TURNS_MAX"
       ],
@@ -790,7 +790,7 @@
       "readers": [
         "hooks/subagent-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_SUBAGENT_BUDGET_ROOT_TURNS_PER_HOUR_MAX"
       ],
@@ -806,7 +806,7 @@
       "readers": [
         "hooks/subagent-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_SUBAGENT_BUDGET_CONCURRENT_ADVISE_MAX"
       ],
@@ -822,7 +822,7 @@
       "readers": [
         "hooks/foreman-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_FOREMAN_GUARD_ADVISORY_EVERY"
       ],
@@ -838,7 +838,7 @@
       "readers": [
         "hooks/foreman-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_FOREMAN_GUARD_BASH_CAP"
       ],
@@ -854,7 +854,7 @@
       "readers": [
         "hooks/foreman-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_FOREMAN_GUARD_MODE"
       ],
@@ -875,7 +875,7 @@
       "readers": [
         "hooks/foreman-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_FOREMAN_GUARD_RESERVE_CALLS"
       ],
@@ -891,7 +891,7 @@
       "readers": [
         "hooks/foreman-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_FOREMAN_GUARD_ROLE_CAPS"
       ],
@@ -908,7 +908,7 @@
         "hooks/session-start.js",
         "hooks/session-handoff.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_HANDOFF_INJECT"
       ],
@@ -925,7 +925,7 @@
       "readers": [
         "hooks/_shared/opt-in.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_HOOK_<STEM>"
       ],
@@ -936,7 +936,7 @@
           "schema": 1,
           "from": "off",
           "to": "on (default-on hooks: context-budget, dispatch-model-guard, cost-tracker, foreman-guard; v2.35.15)",
-          "note": "These hooks used to be opt-in. A hook you never enabled now runs; the exit knob is in the Hook switches section of docs/settings-reference.md."
+          "note": "These hooks used to be opt-in. A hook you never enabled now runs; the exit knob is in the Hook switches section of docs/guide/settings-reference.md."
         }
       ]
     },
@@ -949,7 +949,7 @@
       "readers": [
         "hooks/orchestrator-edit-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_ORCH_EDIT_GATE_MODE",
         "hooks.<stem>"
@@ -971,7 +971,7 @@
       "readers": [
         "scripts/adopt-qualification-defaults.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Default feed URL for adopt-qualification-defaults.js --from; it never fetches by itself.",
       "type": "string"
@@ -988,7 +988,7 @@
         "scripts/qualification-feed-trust.js",
         "scripts/engine-scorecard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "How a gate-passed qualification feed is used: auto (default), confirm, or off. An unrecognised value is off.",
       "type": "enum",
@@ -1008,7 +1008,7 @@
       "readers": [
         "scripts/qualification-send-queue.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "When true, a completed engine-scorecard record is also queued in the registry outbox (~/.autopilot/qualification-outbox). The local scorecard write is unchanged; nothing is sent until flush runs with a transport.",
       "type": "boolean"
@@ -1023,7 +1023,7 @@
       "readers": [
         "scripts/qualification-send-queue.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "How qualification-send-queue.js flush sends: off (nothing is sent) or git (bot branch + pull request in the registry clone; the owner merges, the merge is the ack).",
       "type": "enum",
@@ -1043,7 +1043,7 @@
       "readers": [
         "scripts/qualification-send-queue.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Path of the dedicated bot clone of the registry repo (llm-playground) used by the git transport. Required when transport is git.",
       "type": "string"
@@ -1058,7 +1058,7 @@
       "readers": [
         "scripts/qualification-send-queue.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Registry workspace (benchmarks/qualification/<workspace>) the outbox sends into.",
       "type": "string"
@@ -1072,7 +1072,7 @@
       "readers": [
         "scripts/lib/residue-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_RESIDUE_ARCHIVE_BRANCH_DAYS"
       ],
@@ -1088,7 +1088,7 @@
       "readers": [
         "scripts/lib/residue-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_RESIDUE_ARCHIVE_REMIND_DAYS"
       ],
@@ -1104,7 +1104,7 @@
       "readers": [
         "scripts/lib/residue-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_RESIDUE_AUTO_REAP",
         "hooks.<stem>"
@@ -1121,7 +1121,7 @@
       "readers": [
         "scripts/lib/residue-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Extra branch prefixes the reaper treats as dispatch branches (letters, digits, . _ - and an optional trailing /).",
       "type": "array"
@@ -1136,7 +1136,7 @@
         "scripts/lib/run-ledger-config.js",
         "scripts/run-ledger.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "How many rotated run-ledger segments are kept (default 4). Readers follow segments .N down to .1 then the live ledger. At 0 the campaign CLI and run-ledger.sh read only the live ledger, but the seat-store, work-order and engine readers fall back to 4; the writer still moves the live ledger to .1 on rotation even at 0. Each reader keeps its own rule for odd values: work-order and engine accept only integers 1 to 64 (else 4); seat-store and the campaign CLI cut 1.5 down to 1, use 4 for negatives and keep values above 64; the shell script uses the number as given. Config only: the RUN_LEDGER_MAX_ROTATIONS environment variable is not read.",
       "type": "number"
@@ -1150,7 +1150,7 @@
       "readers": [
         "scripts/lib/residue-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_RESIDUE_LEASE_HOURS"
       ],
@@ -1166,7 +1166,7 @@
       "readers": [
         "scripts/lib/residue-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_RESIDUE_TMP_PRUNE"
       ],
@@ -1180,7 +1180,7 @@
       "group": "review-ledger",
       "default": null,
       "readers": ["scripts/lib/review-ledger-copy.js"],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_DIR"],
       "summary": "Directory for the opt-in review-ledger archive. Unset or empty means off: it writes nothing. The config file is still read to learn whether the key is set. The environment variable wins.",
       "type": "string",
@@ -1193,7 +1193,7 @@
       "group": "review-ledger",
       "default": false,
       "readers": ["scripts/lib/review-ledger-copy.js"],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_INCLUDE_DIFF"],
       "summary": "When true, the archive copy also stores diff.txt. Default false.",
       "type": "boolean",
@@ -1206,7 +1206,7 @@
       "group": "review-ledger",
       "default": 500,
       "readers": ["scripts/lib/review-ledger-copy.js"],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_WARN_MB"],
       "summary": "status warns when the archive is larger than this many mebibytes. Never blocks.",
       "type": "number",
@@ -1219,7 +1219,7 @@
       "group": "review-ledger",
       "default": 2,
       "readers": ["scripts/lib/review-ledger-copy.js"],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_AFTER_MONTHS"],
       "summary": "rotate compresses complete month directories strictly older than this many calendar months. The current month is never compressed.",
       "type": "number",
@@ -1232,7 +1232,7 @@
       "group": "review-ledger",
       "default": false,
       "readers": ["scripts/lib/review-ledger-copy.js"],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": ["AUTOPILOT_REVIEW_LEDGER_ARCHIVE_ROTATE_REMOVE_SOURCE"],
       "summary": "When true, rotate deletes the month directory after the tar listing matches. Default false keeps the directory.",
       "type": "boolean",
@@ -1289,7 +1289,7 @@
       "group": "review-ledger",
       "default": null,
       "readers": ["scripts/lib/review-ledger-copy.js"],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": ["review_ledger_archive.dir"],
       "summary": "Overrides review_ledger_archive.dir. Empty string means off."
     },
@@ -1300,7 +1300,7 @@
       "group": "review-ledger",
       "default": null,
       "readers": ["scripts/lib/review-ledger-copy.js"],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": ["review_ledger_archive.include_diff"],
       "summary": "Overrides review_ledger_archive.include_diff. true, 1, or yes copies diff.txt."
     },
@@ -1311,7 +1311,7 @@
       "group": "review-ledger",
       "default": null,
       "readers": ["scripts/lib/review-ledger-copy.js"],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": ["review_ledger_archive.warn_mb"],
       "summary": "Overrides review_ledger_archive.warn_mb."
     },
@@ -1322,7 +1322,7 @@
       "group": "review-ledger",
       "default": null,
       "readers": ["scripts/lib/review-ledger-copy.js"],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": ["review_ledger_archive.rotate_after_months"],
       "summary": "Overrides review_ledger_archive.rotate_after_months. A non positive integer is ignored."
     },
@@ -1333,7 +1333,7 @@
       "group": "review-ledger",
       "default": null,
       "readers": ["scripts/lib/review-ledger-copy.js"],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": ["review_ledger_archive.rotate_remove_source"],
       "summary": "Overrides review_ledger_archive.rotate_remove_source. true, 1, or yes deletes the month directory after a matched listing."
     },
@@ -1368,7 +1368,7 @@
       "readers": [
         "src/status/review-server.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_REVIEW_SERVER_AUTOSTART"
       ],
@@ -1385,7 +1385,7 @@
         "hooks/run-approval-gate.js",
         "scripts/run-approval.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_RUN_APPROVAL_MODE"
       ],
@@ -1405,7 +1405,7 @@
       "readers": [
         "scripts/run-approval.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "run_approval.mode"
       ],
@@ -1421,7 +1421,7 @@
       "readers": [
         "scripts/resolve-dispatch-topology.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_TOPOLOGY_FILE"
       ],
@@ -1438,7 +1438,7 @@
         "mods/live/i18n.ts",
         "mods/viewer/show.ts"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_LOCALE"
       ],
@@ -1459,7 +1459,7 @@
       "readers": [
         "hooks/session-start.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_ONBOARD_HINT"
       ],
@@ -1475,7 +1475,7 @@
       "readers": [
         "hooks/session-start.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_UPDATE_CHECK"
       ],
@@ -1491,7 +1491,7 @@
       "readers": [
         "hooks/session-start.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_PRICES_FETCH"
       ],
@@ -3703,7 +3703,7 @@
         "hooks/suggest-compact.js",
         "hooks/version-drift-check.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "advisory_bridge.mode"
       ],
@@ -3723,7 +3723,7 @@
         "hooks/suggest-compact.js",
         "hooks/version-drift-check.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "advisory_bridge.<hook>"
       ],
@@ -3738,7 +3738,7 @@
       "readers": [
         "hooks/advisory-relay.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"off\" to stop the UserPromptSubmit hook that drains queued advisories into the next prompt."
     },
@@ -3751,7 +3751,7 @@
       "readers": [
         "hooks/advisory-relay.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"off\" to stop a live-panel reply whose first line is [待決回覆] from closing the decision cards it names."
     },
@@ -3766,7 +3766,7 @@
         "hooks/awaiting-owner.js",
         "hooks/live-session-lib.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"off\" to stop the subagent activity stamps."
     },
@@ -3779,7 +3779,7 @@
       "readers": [
         "scripts/dispatch-hetero.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"1\" to let a dispatch whose --*-bin override is not the PATH binary write the real capability store. Otherwise the strike writer and passive capture skip that write unless ENGINE_CAPABILITY_DIR, ENGINE_CAPABILITY_FILE, or --store isolates it."
     },
@@ -3794,7 +3794,7 @@
         "hooks/audit-log.js",
         "hooks/awaiting-owner.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"off\" to stop recording AskUserQuestion prompts as decisions."
     },
@@ -3807,7 +3807,7 @@
       "readers": [
         "scripts/dispatch-author.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Seconds the agy author runner is given after the outer timeout before it is killed. A positive integer; zero, negatives and non-numbers fall back to 30."
     },
@@ -3821,7 +3821,7 @@
         "scripts/dispatch-author.sh",
         "src/readiness/live-probe.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Response cap of an authoring dispatch."
     },
@@ -3837,7 +3837,7 @@
         "hooks/awaiting-owner.js",
         "src/status/sources-manifest.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"off\" to stop the awaiting-owner attention records the band shows."
     },
@@ -3850,7 +3850,7 @@
       "readers": [
         "hooks/depth0-delegate-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "depth0_delegate_gate.pkill_self_match"
       ],
@@ -3865,7 +3865,7 @@
       "readers": [
         "hooks/depth0-delegate-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "depth0_delegate_gate.bare_ls"
       ],
@@ -3881,7 +3881,7 @@
         "hooks/capture-payload.js",
         "scripts/toggle-payload-capture.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"1\" to write hook payloads to disk for debugging (scripts/toggle-payload-capture.js)."
     },
@@ -3899,7 +3899,7 @@
         "src/status/review-server.js",
         "src/status/sources-manifest.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Use this file instead of ~/.autopilot/config.json as the operator config."
     },
@@ -3912,7 +3912,7 @@
       "readers": [
         "scripts/dispatch-consult.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Timeout of a consult dispatch."
     },
@@ -3925,7 +3925,7 @@
       "readers": [
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.gap"
       ],
@@ -3941,7 +3941,7 @@
         "scripts/lib/config-path.js",
         "src/status/sources-manifest.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.live_write"
       ],
@@ -3957,7 +3957,7 @@
         "hooks/context-budget.js",
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.mode"
       ],
@@ -3972,7 +3972,7 @@
       "readers": [
         "hooks/context-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.post_compact_warn"
       ],
@@ -3987,7 +3987,7 @@
       "readers": [
         "hooks/context-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.seat"
       ],
@@ -4003,7 +4003,7 @@
         "hooks/context-budget.js",
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.step"
       ],
@@ -4019,7 +4019,7 @@
         "hooks/context-budget.js",
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.t1"
       ],
@@ -4034,7 +4034,7 @@
       "readers": [
         "scripts/lib/config-path.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "context_budget.t2",
         "autoCompactWindow"
@@ -4053,7 +4053,7 @@
         "scripts/dispatch-review.sh",
         "scripts/lib/context-window.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "off, warn or block: what a dispatch does when its prompt would not fit the engine context window."
     },
@@ -4067,7 +4067,7 @@
         "hooks/cost-fuse.js",
         "scripts/lib/brain-spend.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "cost_fuse.daily_usd_brain"
       ],
@@ -4084,7 +4084,7 @@
         "mods/live/register.ts",
         "scripts/lib/brain-spend.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "cost_fuse.mode"
       ],
@@ -4099,7 +4099,7 @@
       "readers": [
         "hooks/cost-tracker.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"false\" to switch the cost tracker off."
     },
@@ -4112,7 +4112,7 @@
       "readers": [
         "hooks/cost-tracker.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "cost_tracker.cache_read_warn_tokens"
       ],
@@ -4127,7 +4127,7 @@
       "readers": [
         "hooks/cost-tracker.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "cost_tracker.context_clear_pct"
       ],
@@ -4142,7 +4142,7 @@
       "readers": [
         "hooks/depth0-delegate-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "depth0_delegate_gate.mode"
       ],
@@ -4157,7 +4157,7 @@
       "readers": [
         "hooks/depth0-delegate-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "depth0_delegate_gate.wait_advice_every"
       ],
@@ -4172,7 +4172,7 @@
       "readers": [
         "hooks/dirty-protected-paths.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "dirty_tree_reminder.interval_minutes"
       ],
@@ -4187,7 +4187,7 @@
       "readers": [
         "hooks/dirty-protected-paths.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "dirty_tree_reminder.min_files"
       ],
@@ -4202,7 +4202,7 @@
       "readers": [
         "hooks/dirty-protected-paths.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "dirty_tree_reminder.min_lines"
       ],
@@ -4217,7 +4217,7 @@
       "readers": [
         "hooks/dirty-protected-paths.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "dirty_tree_reminder"
       ],
@@ -4232,7 +4232,7 @@
       "readers": [
         "hooks/owner-question-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "owner_question_guard"
       ],
@@ -4247,7 +4247,7 @@
       "readers": [
         "hooks/subagent-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "subagent_budget.mode"
       ],
@@ -4262,7 +4262,7 @@
       "readers": [
         "hooks/subagent-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "subagent_budget.lane_dispatch_max"
       ],
@@ -4277,7 +4277,7 @@
       "readers": [
         "hooks/subagent-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "subagent_budget.lane_turns_max"
       ],
@@ -4292,7 +4292,7 @@
       "readers": [
         "hooks/subagent-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "subagent_budget.root_turns_per_hour_max"
       ],
@@ -4307,7 +4307,7 @@
       "readers": [
         "hooks/subagent-budget.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "subagent_budget.concurrent_advise_max"
       ],
@@ -4380,7 +4380,7 @@
       "readers": [
         "scripts/dispatch-discuss.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Timeout of a discuss dispatch."
     },
@@ -4393,7 +4393,7 @@
       "readers": [
         "hooks/dispatch-model-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"off\" to silence the reminder that a subagent dispatch must name a model and an Engine header."
     },
@@ -4416,7 +4416,7 @@
         "src/engine/autopilot-engine.js",
         "src/engine/local-deployment.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "AUTOPILOT_ENDPOINTS_ENV"
       ],
@@ -4433,7 +4433,7 @@
         "scripts/load-endpoints-env.sh",
         "src/endpoints/cli.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Path of the endpoints env file (mode 600) that load-endpoints-env.sh reads."
     },
@@ -4446,7 +4446,7 @@
       "readers": [
         "hooks/foreman-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "foreman_guard.advisory_every"
       ],
@@ -4462,7 +4462,7 @@
         "hooks/foreman-guard.js",
         "scripts/dispatch-foreman.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "foreman_guard.bash_cap"
       ],
@@ -4477,7 +4477,7 @@
       "readers": [
         "hooks/foreman-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "foreman_guard.mode"
       ],
@@ -4492,7 +4492,7 @@
       "readers": [
         "hooks/foreman-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "foreman_guard.reserve_calls"
       ],
@@ -4507,7 +4507,7 @@
       "readers": [
         "hooks/foreman-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "foreman_guard.role_caps"
       ],
@@ -4523,7 +4523,7 @@
         "hooks/session-handoff.js",
         "hooks/session-start.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "handoff_inject"
       ],
@@ -4538,7 +4538,7 @@
       "readers": [
         "hooks/session-handoff.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "handoff_inject"
       ],
@@ -4553,7 +4553,7 @@
       "readers": [
         "hooks/session-handoff.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "handoff_inject"
       ],
@@ -4568,7 +4568,7 @@
       "readers": [
         "hooks/session-handoff.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "handoff_inject"
       ],
@@ -4590,7 +4590,7 @@
         "hooks/residue-auto-reap.js",
         "scripts/benchmark-hook-multiplexer.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "hooks.<stem>"
       ],
@@ -4606,7 +4606,7 @@
         "hooks/residue-auto-reap-lib.js",
         "hooks/residue-auto-reap.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "hooks.<stem>",
         "residue.auto_reap"
@@ -4622,7 +4622,7 @@
       "readers": [
         "hooks/intent-capture.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"false\" to stop the per-directory intent capture used for cross-session resume hints."
     },
@@ -4639,7 +4639,7 @@
         "src/status/load-source.js",
         "src/status/runs-watch.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Overrides the directory for the live status files; an explicit value is an isolation request and is never replaced by a fallback."
     },
@@ -4654,7 +4654,7 @@
         "mods/live/register.ts",
         "mods/viewer/show.ts"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "ui.locale"
       ],
@@ -4670,7 +4670,7 @@
         "hooks/audit-log.js",
         "hooks/merge-task-status-lib.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"off\" to stop merging task-status input into the band."
     },
@@ -4684,7 +4684,7 @@
         "scripts/check-phase-review-receipt.js",
         "scripts/hetero-review-loop.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Minimum seats that must have reviewed before a review loop or phase receipt passes (same grammar as --min-reviewed-seats)."
     },
@@ -4702,7 +4702,7 @@
         "scripts/load-endpoints-env.sh",
         "scripts/resolve-endpoint.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Base URL for the provider-native MiniMax endpoint."
     },
@@ -4715,7 +4715,7 @@
       "readers": [
         "hooks/orchestrator-edit-gate.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "orchestrator_edit_gate.mode"
       ],
@@ -4730,7 +4730,7 @@
       "readers": [
         "hooks/state-checkpoint.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"0\" to stop the PreCompact hook printing its guidance text for the summarizer."
     },
@@ -4743,7 +4743,7 @@
       "readers": [
         "hooks/branch-protection.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "hooks.<stem>"
       ],
@@ -4759,7 +4759,7 @@
         "scripts/resolve-qc-gate.sh",
         ".githooks/pre-push"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         ".claude/qc-gate-config.md"
       ],
@@ -4775,7 +4775,7 @@
         "scripts/dispatch-hetero.sh",
         "scripts/resolve-review-loop.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "A matching, unexpired override that lets a dispatch use a seat whose qualification would otherwise refuse it."
     },
@@ -4788,7 +4788,7 @@
       "readers": [
         "scripts/lib/residue-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "residue.archive_branch_days"
       ],
@@ -4803,7 +4803,7 @@
       "readers": [
         "scripts/lib/residue-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "residue.archive_remind_days"
       ],
@@ -4820,7 +4820,7 @@
         "hooks/residue-auto-reap.js",
         "scripts/lib/residue-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "residue.auto_reap"
       ],
@@ -4835,7 +4835,7 @@
       "readers": [
         "scripts/lib/residue-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "residue.lease_hours"
       ],
@@ -4851,7 +4851,7 @@
         "scripts/lib/residue-config.js",
         "scripts/repo-residue-sweep.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "residue.tmp_prune"
       ],
@@ -4866,7 +4866,7 @@
       "readers": [
         "src/status/runs-watch.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "review.port"
       ],
@@ -4881,7 +4881,7 @@
       "readers": [
         "scripts/lib/review-fanout.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Most review seats that run at once in a review fan-out (qc panel, final panel); the rest queue in order and each seat's timeout starts when it actually starts. Unset, 0 or not a whole number means all seats at once."
     },
@@ -4894,7 +4894,7 @@
       "readers": [
         "scripts/dispatch-review.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Idle cap for a review seat: no growth of its output files for this long (seconds, or Ns / Nm) kills the seat and reports no_verdict seat_idle_timeout so the seat can be swapped. Same as dispatch-review --idle-timeout, which wins. Unset or 0 means off."
     },
@@ -4932,7 +4932,7 @@
         "hooks/run-approval-gate.js",
         "scripts/run-approval.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "run_approval.mode"
       ],
@@ -4950,7 +4950,7 @@
         "hooks/runs-watch-autostart.js",
         "scripts/session-mode.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"0\" to stop sessions from starting the live runs watcher."
     },
@@ -4963,7 +4963,7 @@
       "readers": [
         "hooks/runs-watch-autostart.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Seconds of idleness before the runs watcher exits (positive integer)."
     },
@@ -4976,7 +4976,7 @@
       "readers": [
         "hooks/runs-watch-autostart.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Seconds between runs watcher polls (positive integer)."
     },
@@ -4990,7 +4990,7 @@
         "hooks/session-tasks.js",
         "src/status/sources-manifest.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"off\" to stop folding task-tool events into the live band."
     },
@@ -5003,7 +5003,7 @@
       "readers": [
         "scripts/engine-scorecard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"enforce\" to arm strike-based requalification; otherwise strikes are only recorded."
     },
@@ -5016,7 +5016,7 @@
       "readers": [
         "hooks/suggest-compact.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Set to \"false\" to turn off the tool-call-count compaction nudge (suggest-compact hook)."
     },
@@ -5034,7 +5034,7 @@
         "scripts/lib/prune-tmp-residue.sh",
         "scripts/lib/tmp-residue.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Days dispatch scripts keep their temp logs; 0 disables the prune."
     },
@@ -5050,7 +5050,7 @@
         "scripts/resolve-dispatch-topology.js",
         "scripts/resolve-review-loop.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "topology.exclude_seats"
       ],
@@ -5065,7 +5065,7 @@
       "readers": [
         "hooks/session-start.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "onboard_hint"
       ],
@@ -5080,7 +5080,7 @@
       "readers": [
         "hooks/session-start.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "update_check"
       ],
@@ -5095,7 +5095,7 @@
       "readers": [
         "hooks/session-start.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "update_check",
         "AUTOPILOT_UPDATE_CHECK"
@@ -5111,7 +5111,7 @@
       "readers": [
         "hooks/session-start.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "prices_fetch"
       ],
@@ -5126,7 +5126,7 @@
       "readers": [
         "scripts/lib/qualification-prices.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Where the seat price cache lives (never inside a git work tree); tests point it at a temp dir."
     },
@@ -5142,7 +5142,7 @@
         "scripts/resolve-project-paths.sh",
         "scripts/scaffold-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Backlog entry schema options and pointer rule."
     },
@@ -5157,7 +5157,7 @@
         "skills/debug/SKILL.md",
         "skills/dev-flow/SKILL.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Project-specific debug tools and log paths."
     },
@@ -5173,7 +5173,7 @@
         "scripts/resolve-project-paths.sh",
         "scripts/scaffold-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Size rules, quality gates, build commands, special rules."
     },
@@ -5189,7 +5189,7 @@
         "skills/debug/SKILL.md",
         "skills/dev-flow/SKILL.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Which dispatcher, reviewer and methodology autopilot delegates to when other plugins are installed."
     },
@@ -5204,7 +5204,7 @@
         "hooks/README.md",
         "hooks/dispatch-model-guard.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Per-project gate on expensive-model dispatch (dispatch-model-guard)."
     },
@@ -5220,7 +5220,7 @@
         "skills/quality-pipeline/references/model-routing.md",
         "skills/survey/references/model-routing.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Delegated Operations Authority presets for subagent dispatch."
     },
@@ -5236,7 +5236,7 @@
         "skills/doc-sync/SKILL.md",
         "skills/onboard/SKILL.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Doc-to-code domains the doc-sync skill audits."
     },
@@ -5251,7 +5251,7 @@
         "hooks/README.md",
         "hooks/exec-boundary.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "sanctioned_roots, protected refs and allow_sql for the opt-in exec-boundary hook."
     },
@@ -5265,7 +5265,7 @@
       "readers": [
         "skills/finish-flow/SKILL.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Closing-sequence overrides (merge target, archive procedure, per-size quality gate)."
     },
@@ -5279,7 +5279,7 @@
       "readers": [
         "scripts/resolve-knowledge-routing.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Where durable knowledge lands (handoff, learn, distill)."
     },
@@ -5295,7 +5295,7 @@
         "skills/ceo-agent/references/level-front-door.md",
         "skills/dev-flow/SKILL.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Default prompt for a bare /loop."
     },
@@ -5311,7 +5311,7 @@
         "skills/dev-flow/references/model-routing.md",
         "skills/quality-pipeline/SKILL.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Subagent model and mode per role."
     },
@@ -5327,7 +5327,7 @@
         "scripts/resolve-project-paths.sh",
         "scripts/scaffold-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Work source paths for the next skill."
     },
@@ -5343,7 +5343,7 @@
         "scripts/dispatch-hetero.sh",
         "scripts/lib/repo-layout.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Project governance: mission-convergence enforcement and budgets, guidance defaults, red lines, rosters (the file name is historical; the file is live)."
     },
@@ -5358,7 +5358,7 @@
         "skills/dev-flow/SKILL.md",
         "skills/profiling/SKILL.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Profiling tools and metrics collection."
     },
@@ -5374,7 +5374,7 @@
         "scripts/resolve-project-paths.sh",
         "scripts/scaffold-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Project paths and bootstrap/archive scripts."
     },
@@ -5390,7 +5390,7 @@
         "scripts/install-hooks.sh",
         "scripts/resolve-qc-gate.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Strength of the QC forcing function at push and finish-flow."
     },
@@ -5405,7 +5405,7 @@
         "skills/onboard/SKILL.md",
         "skills/quality-pipeline/SKILL.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Test, scan and review commands."
     },
@@ -5421,7 +5421,7 @@
         "skills/ceo-agent/references/depth0-control-loop.md",
         "skills/ceo-agent/references/level-front-door.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Engine roster and loop policy of the heterogeneous review pipeline."
     },
@@ -5437,7 +5437,7 @@
         "skills/onboard/SKILL.md",
         "scripts/scaffold-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Maps keywords to your project domain skills."
     },
@@ -5452,7 +5452,7 @@
         "skills/ceo-agent/references/level-front-door.md",
         "scripts/scaffold-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Autonomous front-door routing and next-pick weighting."
     },
@@ -5467,7 +5467,7 @@
         "skills/dev-flow/SKILL.md",
         "skills/team/SKILL.md"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Team role templates for your tech stack."
     },
@@ -5483,7 +5483,7 @@
         "scripts/check-test-integrity.sh",
         "scripts/lib/test-integrity-l1.py"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Mode and rules of the test-integrity gate."
     },
@@ -5499,7 +5499,7 @@
         "skills/test-strategy/SKILL.md",
         "scripts/scaffold-config.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Test commands, pyramid ratios, coverage thresholds."
     },
@@ -5513,7 +5513,7 @@
       "readers": [
         "scripts/resolve-worktree-teardown.sh"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [],
       "summary": "Per-project cleanup seam for hetero worktrees."
     },
@@ -5527,7 +5527,7 @@
       "readers": [
         "scripts/lib/config-audit.js"
       ],
-      "doc": "docs/settings-reference.md",
+      "doc": "docs/guide/settings-reference.md",
       "relates": [
         "update_check"
       ],
@@ -5583,7 +5583,7 @@
         "scripts/roundtable-window.js",
         "mods/roundtable/register.ts"
       ],
-      "doc": "docs/plans/2026-09-19-roundtable.md",
+      "doc": "project/plans/2026-09-19-roundtable.md",
       "relates": [],
       "note": "Parent of per-room directories. Unset means $HOME/.autopilot/rooms. Read by scripts/lib/room-log.js."
     },
@@ -5596,7 +5596,7 @@
       "readers": [
         "scripts/lib/repo-identity.sh"
       ],
-      "doc": "docs/fleet-child-contract.md",
+      "doc": "docs/dev/fleet-child-contract.md",
       "relates": [],
       "note": "Exported by child_session_mint to every claude child a rail launches. Always ephemeral; an inherited value is overridden, a child is never promoted to durable."
     },
@@ -5609,7 +5609,7 @@
       "readers": [
         "scripts/lib/repo-identity.sh"
       ],
-      "doc": "docs/fleet-child-contract.md",
+      "doc": "docs/dev/fleet-child-contract.md",
       "relates": [],
       "note": "Exported by child_session_mint. An inherited FLEET_PARENT is kept, else the launching Claude Code session id."
     },
@@ -5622,7 +5622,7 @@
       "readers": [
         "scripts/lib/repo-identity.sh"
       ],
-      "doc": "docs/fleet-child-contract.md",
+      "doc": "docs/dev/fleet-child-contract.md",
       "relates": [],
       "note": "Exported by child_session_mint, display only for fleet. review-seat for dispatch-review, hand for dispatch-author and dispatch-hetero, child when the caller gives none."
     },
@@ -5635,7 +5635,7 @@
       "readers": [
         "scripts/roundtable-window.js"
       ],
-      "doc": "docs/plans/2026-09-19-roundtable.md",
+      "doc": "project/plans/2026-09-19-roundtable.md",
       "relates": [],
       "note": "Executable used for fleet send. Tests point it at a fake. Default is fleet."
     },
@@ -5648,7 +5648,7 @@
       "readers": [
         "scripts/roundtable-window.js"
       ],
-      "doc": "docs/plans/2026-09-19-roundtable.md",
+      "doc": "project/plans/2026-09-19-roundtable.md",
       "relates": [],
       "note": "tmux binary for open. Tests inject a fake. Default is tmux."
     },
@@ -5661,7 +5661,7 @@
       "readers": [
         "scripts/roundtable-window.js"
       ],
-      "doc": "docs/plans/2026-09-19-roundtable.md",
+      "doc": "project/plans/2026-09-19-roundtable.md",
       "relates": [],
       "note": "Comma-separated courier handles used when --seats is omitted. Else say-row senders other than owner and moderator."
     }

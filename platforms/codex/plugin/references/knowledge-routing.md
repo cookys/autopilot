@@ -230,7 +230,7 @@ decision. The publish decision is §2's category question, made by a person, eve
 
 **Why there is no deny-list.** The obvious patch is a file of the machine's real hostnames and client
 names for the scanner to grep. It is rejected on
-[ADR-0001](../docs/adr/0001-verification-over-attestation.md) grounds, and the reasoning is recorded
+[ADR-0001](../docs/dev/adr/0001-verification-over-attestation.md) grounds, and the reasoning is recorded
 here so a future session hits it before rebuilding it:
 
 > A deny-list silently passes every name it was never told, and then the run emits a **"lint-clean"**

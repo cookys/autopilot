@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * probe-unknown.js — the unknown-escalation ladder probe
- * (plan: docs/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md, P1).
+ * (plan: project/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md, P1).
  *
  * Turns "I'm stuck" into a measured signal and a bounded recommendation. It
  * never dispatches anything, never blocks anything (exit 0 on every
@@ -67,7 +67,7 @@
  * Knob / budgets / consult fields default to `resolve-review-loop.sh --field …`
  * when present (P2 adds the fields), else auto / 2,1,1 / topology.
  *
- * Ladder (docs/plans/2026-10-06-dev-flow-stage-graph.md P4; v3 is the only behaviour — the P4a knob is gone):
+ * Ladder (project/plans/2026-10-06-dev-flow-stage-graph.md P4; v3 is the only behaviour — the P4a knob is gone):
  *   budgets    U1 2 · U2 1 · U3 1 · U4 1 per work unit (`--budget-u1..4` / resolver `unknown_budget_u1..u4`; an
  *              absent resolver field falls back to the built-in default).
  *   U3 panel   eligible iff unknown_type ∈ {why, whether} and one of S1/S2/S3/S5 (a `how` unknown stays capped at

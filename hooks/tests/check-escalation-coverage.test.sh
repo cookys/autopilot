@@ -24,7 +24,7 @@ assert_contains "$out_not_found" "Error: Project events ledger not found" "conta
 
 # Set up project path
 PROJECT_NAME="test-project"
-PROJECT_DIR="$TEST_TMP/docs/projects/$PROJECT_NAME"
+PROJECT_DIR="$TEST_TMP/$(node "$(dirname "$0")/../../scripts/lib/repo-layout.js" path projects_dir)/$PROJECT_NAME"
 mkdir -p "$PROJECT_DIR/tree"
 
 # Create helper to write events.jsonl
@@ -94,9 +94,9 @@ assert_contains "$out_malformed" "Warning: malformed events.jsonl line 2" "conta
 # and the 2 valid events should still be counted
 assert_contains "$out_malformed" "adjudication_unvalidatable: expected 1, actual 1" "counted second event"
 
-# 9. Test fallback path (docs/projects/_archive/<name>/tree/events.jsonl)
+# 9. Test fallback path (<projects_archive_dir>/<name>/tree/events.jsonl)
 echo "Testing fallback project path..."
-ARCHIVE_DIR="$TEST_TMP/docs/projects/_archive/$PROJECT_NAME"
+ARCHIVE_DIR="$TEST_TMP/$(node "$(dirname "$0")/../../scripts/lib/repo-layout.js" path projects_archive_dir)/$PROJECT_NAME"
 mkdir -p "$ARCHIVE_DIR/tree"
 # Remove active project directory to force fallback
 rm -rf "$PROJECT_DIR"

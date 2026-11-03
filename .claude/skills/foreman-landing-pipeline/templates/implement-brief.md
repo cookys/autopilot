@@ -16,7 +16,7 @@ artifacts (`git diff --stat`, the hand's result JSON), never from a hand's self-
 
 ## The plan
 `$C/{{PLAN_PATH}}`: rows {{ROWS}}, in that order (P1..P{{ROW_COUNT}}; do not reorder).
-Full row text: `$C/docs/BACKLOG.md` (grep the title) and each row's `Pointer` sidecar under `$C/docs/backlog/`.
+Full row text: `$C/project/backlog/BACKLOG.md` (grep the title) and each row's `Pointer` sidecar under `$C/project/backlog/`.
 
 ## Per row (keep it to ≤ 8 tool calls; combine read-only commands)
 1. **Premise check (1 call):** re-derive the defect at the current base (grep the symbol / run the repro). Gone → `SKIP <n> <evidence>`, no hand.

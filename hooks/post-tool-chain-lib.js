@@ -3,7 +3,7 @@
  * post-tool-chain-lib — run several PostToolUse observers in ONE node process (BL-0241, guard-port Phase 1).
  *
  * Registered in hooks/hooks.json (Phase 2) with argv intent-capture audit-log log-error; reload-watch and failure-escalation stay separate registrations. Plan:
- * docs/plans/2026-10-23-guard-port.md, Design A.
+ * project/plans/2026-10-23-guard-port.md, Design A.
  *
  * Contract (plan § 2.5 and Design A chain contract):
  *  - A chain only FORWARDS. Each member's stdout, stderr and exit status are the bytes it would produce as

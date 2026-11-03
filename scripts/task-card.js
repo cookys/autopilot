@@ -4,7 +4,7 @@
 /**
  * task-card.js — the session's task card: what it was asked to do, in a file the workflow
  * snapshot (scripts/lib/workflow-snapshot.js) can read back after a compaction or /clear.
- * Plan: docs/plans/2026-10-13-workflow-snapshot-at-compaction.md (P2).
+ * Plan: project/plans/2026-10-13-workflow-snapshot-at-compaction.md (P2).
  *
  *   node scripts/task-card.js set [--goal <text>] [--success <text>]... [--plan <path>]
  *        [--review-ledger <path>] [--ledger <decisions.jsonl>] [--requirement <text>]...

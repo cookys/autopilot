@@ -2,7 +2,7 @@
 /**
  * foreman-guard — PreToolUse Bash|Monitor (default-on; v2.35.15)
  *
- * Runtime enforcement of ironlaw #6 (docs/ironlaw-to-gate-map.md) for the actor it
+ * Runtime enforcement of ironlaw #6 (docs/dev/ironlaw-to-gate-map.md) for the actor it
  * names: a depth-1 foreman / worker subagent inside an /l4 /l5 /l6 session. Until this
  * hook existed the only enforcer was scripts/check-foreman-polling.js, which runs
  * AFTER the run at depth-0 harvest — the 2026-09-04 cuda quota digest found foremen

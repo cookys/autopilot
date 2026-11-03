@@ -10,7 +10,7 @@
 // gets re-administered, and a hand-maintained copy would silently rot into a
 // claim nobody re-checked.
 //
-// ADR-0001 (docs/adr/0001-verification-over-attestation.md) is binding here.
+// ADR-0001 (docs/dev/adr/0001-verification-over-attestation.md) is binding here.
 // This artifact is DISCLOSURE, not attestation. It carries no hash chain, no
 // signature, no witness receipt, no trust root — and, since the depth-0 panel,
 // no digest fields either. An earlier cut recorded a `store_projection_sha256`

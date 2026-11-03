@@ -1,7 +1,7 @@
 // orchestrator-edit-gate-lib.js — pure decision core for the orchestrator-edit
 // gate. Wrapper owns IO (stdin, marker read, realpath, stderr, exit codes).
 //
-// Decision model (docs/plans/2026-07-14-context-budget-orchestrator-gate.md):
+// Decision model (project/plans/_archive/2026/07/2026-07-14-context-budget-orchestrator-gate.md):
 // in /l4 /l5 /l6 sessions, DEPTH-0 editing product files is a protocol
 // violation — the work belongs in dispatched workers. Identity comes from the
 // hook payload: subagent fires carry `agent_id` (SPIKE-1, CC 2.1.208); depth-0

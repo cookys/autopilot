@@ -1,7 +1,7 @@
 # agy payload-wall probe — the reproducer for the BACKLOG row
 
 Kept here, not in `/tmp`, because reconstructing it is where both investigating hosts made their
-methodology errors. See `docs/BACKLOG.md` § "agy `--input-format stream-json` raises the payload
+methodology errors. See `project/backlog/BACKLOG.md` § "agy `--input-format stream-json` raises the payload
 ceiling but does NOT remove it".
 
 ## What it establishes, and why it is shaped this way

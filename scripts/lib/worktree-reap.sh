@@ -9,7 +9,7 @@
 # grammar mirrors _wt_read_schema2_marker (parity pinned by hooks/tests/repo-residue-auto.test.sh).
 # The former rail-local `dispatch-hetero.sh --gc` / stale_reaper_age_days path was removed at 3.0.0.
 #
-# Contract (locked by docs/plans/2026-07-09-worktree-teardown-seam.md):
+# Contract (locked by project/plans/_archive/2026/07/2026-07-09-worktree-teardown-seam.md):
 #   - reap_worktree NEVER runs git branch -D (abort trap is sole site)
 #   - liveness = flock -n on $WT/.autopilot-worktree.lock (no pid checks)
 #   - fail-open on teardown_hook error/timeout

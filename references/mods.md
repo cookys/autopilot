@@ -1,7 +1,7 @@
 # Mods — packaging, data supply, lifecycle, watcher launch
 
 Index-shaped reference for the Claude Code mod surface autopilot ships (live band / pane / toast fed by the
-project watcher). Canonical design: `docs/plans/2026-10-03-mods-visible-dispatch.md` (§2.8 pointer, §4 P1a/P1c).
+project watcher). Canonical design: `project/plans/2026-10-03-mods-visible-dispatch.md` (§2.8 pointer, §4 P1a/P1c).
 Every fact below was measured in the P0 spikes and the P1c probes: `docs/plans/evidence/2026-10-03-mods-spikes/` (S1, S2, S4,
 S5a, S5b, S7, S8; `README.md` there is the verdict table). A mod is CC-only; non-Claude-Code harnesses ignore all of this.
 

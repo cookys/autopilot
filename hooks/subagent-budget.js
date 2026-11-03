@@ -5,7 +5,7 @@
  * WHY: cuda revival.3d (2026-10-16/17) ran 104 sonnet subagents in a session with no session-mode level: 8758 turns,
  * about $715 at API prices, with lanes re-dispatched ~10 times. The only budget that survived a relay was the managed
  * campaign's, and the parallel-units recipe bypasses it. This hook makes the relay chain of one LANE share one account,
- * re-derived at dispatch time from the subagent transcripts themselves (plan docs/plans/2026-10-18-subagent-budget-gate.md).
+ * re-derived at dispatch time from the subagent transcripts themselves (plan project/plans/2026-10-18-subagent-budget-gate.md).
  *
  * COUNTS come from the session's subagents dir (<dirname(transcript_path)>/<session_id>/subagents, or the dir of
  * transcript_path itself when a subagent is the dispatcher), agent-*.jsonl, on every call (never costs.jsonl, which

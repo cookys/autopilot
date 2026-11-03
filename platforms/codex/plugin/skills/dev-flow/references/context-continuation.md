@@ -50,5 +50,5 @@ On resume, Mission graph nodes represent **only remaining deliverables**:
 - A campaign that fails because historical outputs are already present is a **correct rejection**, not
   a cue to rewrite those paths for boundary cosmetics.
 - Do not claim this judgment is mechanized until a deterministic resume-projection gate exists
-  (see `docs/BACKLOG.md`). Until then, depth-0 authors the successor graph and source coverage
+  (see `project/backlog/BACKLOG.md`). Until then, depth-0 authors the successor graph and source coverage
   explicitly.

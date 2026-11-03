@@ -2,7 +2,7 @@
 'use strict';
 
 // check-config-docs.js — two-way sync gate between the settings the code reads, the machine-readable
-// registry (scripts/lib/config-keys.json) and the human reference (docs/settings-reference.md).
+// registry (scripts/lib/config-keys.json) and the human reference (docs/guide/settings-reference.md).
 //
 //   node scripts/check-config-docs.js [--json] [--root DIR] [--registry FILE] [--reference FILE]
 //

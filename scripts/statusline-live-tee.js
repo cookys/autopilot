@@ -17,7 +17,7 @@
 // With no wrapped command the script prints nothing (live file only).
 //
 // Contract: writes the `schema_version: 1` main live file from
-// docs/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md §2 — same base dir
+// project/plans/_archive/2026/09/2026-09-05-statusline-live-context-feed.md §2 — same base dir
 // (resolveLiveDir), same session-id sanitiser, mode 0600, same-directory temp + rename. The tasks
 // file (subagent status line) is not written here.
 //

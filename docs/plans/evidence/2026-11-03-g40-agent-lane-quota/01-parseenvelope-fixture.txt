@@ -1,0 +1,3 @@
+stream fixture (synthetic, no API): parseEnvelope returns type=result ; has rate_limit_info on result: false
+rate_limit_event line is read by parseEnvelope: false (only type==="result" lines are kept)
+json fixture: parseEnvelope returns type=result ; no rate_limit_event can exist in a single json object

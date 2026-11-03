@@ -1597,3 +1597,49 @@ test('selgap --files: a directory exits 2 and --base/--head mode is untouched', 
     assert.deepStrictEqual(r.select(head).suites, ['hooks/tests/other.test.sh']);
   } finally { r.cleanup(); }
 });
+
+// selgap #3: lstat, not stat. A symlink inside --root that resolves outside it must not be accepted or read.
+function symRepo() {
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-outside-'));
+  fs.writeFileSync(path.join(outsideDir, 'secret.js'), 'SECRET_OUTSIDE_CONTENT\n');
+  const r = makeRepo({ ...SELGAP_ROOT, 'skills/x/SKILL.md': 'x\n' });
+  fs.symlinkSync(path.join(outsideDir, 'secret.js'), path.join(r.dir, 'scripts/escape.js'));
+  fs.mkdirSync(path.join(r.dir, '.agents'));
+  fs.symlinkSync('../skills', path.join(r.dir, '.agents/skills'));
+  fs.symlinkSync('foo.js', path.join(r.dir, 'scripts/alias.js'));
+  const cleanup = r.cleanup;
+  r.cleanup = () => { cleanup(); fs.rmSync(outsideDir, { recursive: true, force: true }); };
+  return r;
+}
+
+test('selgap symlink: a link inside root pointing at a file outside root exits 2, with or without --allow-missing, and nothing is read from it', () => {
+  const r = symRepo();
+  try {
+    for (const extra of [[], ['--allow-missing']]) {
+      const out = filesRun(r.dir, ['scripts/escape.js', ...extra]);
+      assert.strictEqual(out.rc, 2, out.stderr);
+      assert.strictEqual(out.doc, null);
+      assert.match(out.stderr, /symlink points outside --root/);
+      assert.ok(!out.stderr.includes('SECRET_OUTSIDE_CONTENT'));
+    }
+  } finally { r.cleanup(); }
+});
+
+test('selgap symlink: a link inside root pointing at a directory inside root is accepted as a file entry', () => {
+  const r = symRepo();
+  try {
+    const out = filesRun(r.dir, ['.agents/skills']);
+    assert.strictEqual(out.rc, 0, out.stderr);
+    assert.deepStrictEqual(out.doc.changed, ['.agents/skills']);
+    assert.strictEqual(filesRun(r.dir, ['skills']).rc, 2, 'a real directory is still refused');
+  } finally { r.cleanup(); }
+});
+
+test('selgap symlink: a link inside root pointing at a file inside root is accepted', () => {
+  const r = symRepo();
+  try {
+    const out = filesRun(r.dir, ['scripts/alias.js']);
+    assert.strictEqual(out.rc, 0, out.stderr);
+    assert.deepStrictEqual(out.doc.changed, ['scripts/alias.js']);
+  } finally { r.cleanup(); }
+});

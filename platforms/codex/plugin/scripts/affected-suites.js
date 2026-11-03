@@ -633,6 +633,9 @@ function shortestHops(seeds, graph) {
 //   missing on disk, present in HEAD        | kept (a deleted file is a legitimate change)
 //   missing on disk and in HEAD             | exit 2, listed
 //   a directory                             | exit 2 (not a file)
+//   symlink resolving outside --root        | exit 2 (also with --allow-missing)
+//   symlink resolving inside --root         | kept as a file entry, even when it points at a directory
+//   dangling symlink                        | the HEAD rule above
 //   --allow-missing                         | skips only the exists-on-disk-or-in-HEAD check (a hypothetical path)
 //   --base/--head mode                      | not applicable, paths come from git diff
 function normalizeFiles(root, files, allowMissing) {
@@ -650,10 +653,17 @@ function normalizeFiles(root, files, allowMissing) {
     const rel = inRoot(abs);
     if (rel === null) { errors.push(`--files: path is outside --root (${root}): ${raw}`); continue; }
     const p = rel.split(path.sep).join('/');
-    let st = null;
-    try { st = fs.statSync(abs); } catch { /* not on disk */ }
-    if (st && st.isDirectory()) { errors.push(`--files: a directory, not a file: ${raw}`); continue; }
-    if (!st && !allowMissing) {
+    // lstat first: statSync follows a symlink, so a link inside root that points outside would pass the literal in-root test.
+    let lst = null;
+    try { lst = fs.lstatSync(abs); } catch { /* not on disk */ }
+    if (lst) {
+      let real = null;
+      try { real = fs.realpathSync(abs); } catch { /* dangling symlink */ }
+      if (real !== null && inRoot(real) === null) { errors.push(`--files: symlink points outside --root (${root}): ${raw} -> ${real}`); continue; }
+      // A symlink is a file entry even when it points at a directory (the tracked .agents/skills -> ../skills); a real directory is not.
+      if (lst.isDirectory()) { errors.push(`--files: a directory, not a file: ${raw}`); continue; }
+    }
+    if (!lst && !allowMissing || (lst && lst.isSymbolicLink() && !allowMissing && (() => { try { fs.realpathSync(abs); return false; } catch { return true; } })())) {
       let inHead = false;
       try { git(root, ['cat-file', '-e', `HEAD:${p}`]); inHead = true; } catch { /* not in HEAD */ }
       if (!inHead) { missing.push(raw); continue; }

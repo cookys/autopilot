@@ -50,7 +50,7 @@ A caution learned the hard way (2026-08-06): several of these were fully built, 
 
 **Shared JSON & store primitives** — `lib/json-emit.sh` `lib/brain-spend.js` `lib/residue-config.js` `lib/run-ledger-config.js` `lib/effort-scale.js` `lib/jsonl-store.js` `lib/extract-json-object.js` `lib/runner-binary.js` `lib/auth-stop.js` `lib/auth-stop.sh` `lib/claude-call-capture.js` `lib/claude-call-capture.sh` `lib/claude-call-capture-exec.sh` `lib/headless-seat-derive.js` `lib/grok-effort.js` `lib/live-state-dir.js` `lib/config-path.js` `lib/load-source.js` `lib/json-fields.sh` `lib/kimi-containment.js` `lib/opencode-containment.js` `lib/test-identity.sh` `lib/semver.js` `lib/bash-wait-rules.js` `lib/sealed-docs.js` `lib/workflow-snapshot.js` `lib/compaction-handoff.js` `lib/bash-launch-rules.js` `lib/engine-spelling.js` `lib/room-log.js` `lib/qualification-trust.js`
 
-**Shared JSON & store primitives (cont.)** — `lib/repo-layout.js` `lib/seat-model-id.js` `lib/fleet-decision.js` `lib/decide-line.js` `lib/agy-timeout.sh` `lib/events-fixture.js`
+**Shared JSON & store primitives (cont.)** — `lib/repo-layout.js` `lib/seat-model-id.js` `lib/fleet-decision.js` `lib/decide-line.js` `lib/agy-timeout.sh` `lib/events-fixture.js` `lib/account-audit.js`
 
 
 ## When adding a new script

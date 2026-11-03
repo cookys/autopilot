@@ -244,6 +244,44 @@ test('source-qc: the subject is redacted and capped at 120 characters', () => {
   assert.ok(r.stats.redactions >= 1);
 });
 
+test('source-qc: redaction runs before the cap - a token, a JWT and an e-mail straddling the 120/64 boundary leave no fragment', () => {
+  const fx = fresh();
+  const env = { ...fx.env, GIT_AUTHOR_NAME: 'a', GIT_AUTHOR_EMAIL: PIN_MAIL, GIT_COMMITTER_NAME: 'a', GIT_COMMITTER_EMAIL: PIN_MAIL };
+  const tok = fx.tokenShaped; // ghp_ + 36
+  const jwtLike = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiIxMjM0NTY3ODkwIn0', 'c2lnbmF0dXJlLWJ5dGVz'].join('.');
+  const mailLike = ['bob.smith', 'corp.invalid'].join('@');
+  const commit = (message, file) => {
+    fs.writeFileSync(path.join(fx.repoDir, file), file);
+    execFileSync('git', ['add', file], { cwd: fx.repoDir, env });
+    execFileSync('git', ['commit', '-q', '-m', message[0], '-m', message[1]], { cwd: fx.repoDir, env });
+  };
+  // the secret starts 10 characters before the cap, so a cut-first order keeps only a 10-char prefix
+  const pad = (n) => 'x'.repeat(n);
+  commit([pad(109) + ' ' + tok, 'QC-Verdict: PASS'], 'a.txt');
+  commit([pad(109) + ' ' + jwtLike, 'QC-Verdict: PASS'], 'b.txt');
+  commit([pad(109) + ' ' + mailLike, 'QC-Verdict: PASS'], 'c.txt');
+  commit(['verdict carrier', 'QC-Verdict: ' + pad(55) + tok], 'd.txt');
+  const r = qc.read(ctxOf(fx), COLD);
+  const added = r.events.filter((e) => e.data.subject.startsWith('xxxx') || e.data.subject === 'verdict carrier');
+  assert.equal(added.length, 4);
+  const frags = [tok.slice(0, 8), jwtLike.slice(0, 8), 'bob.smi', 'corp.inv', tok.slice(4, 12)];
+  for (const e of added) {
+    for (const f of frags) { assert.equal(e.data.subject.includes(f), false, 'subject leaks ' + f); assert.equal(e.data.verdict.includes(f), false, 'verdict leaks ' + f); }
+    assert.ok(e.data.subject.length <= 120 && e.data.verdict.length <= 64);
+  }
+  assert.ok(added.filter((e) => /\[redacted\]|<email>|<redacted-secret>/.test(e.data.subject + e.data.verdict)).length >= 3);
+  assert.ok(r.stats.redactions >= 4);
+});
+
+test('degrade-qc-unborn-head: a fresh repo with no commit is ok with no event and no warning', () => {
+  const fx = fresh();
+  const empty = path.join(fx.dir, 'empty-repo');
+  fs.mkdirSync(empty);
+  execFileSync('git', ['init', '-q', '--template=', '-b', 'main'], { cwd: empty, env: fx.env });
+  const r = qc.read(ctxOf(fx, { project: { project_key: fx.projectKey, repo_identity: fx.identity, root: empty } }), COLD);
+  assert.deepEqual([r.events, r.warnings, r.stats.state], [[], [], 'ok']);
+});
+
 // ---- degrade-qc-* ---------------------------------------------------------------------------------------------------
 
 test('degrade-qc-empty-trailer: a QC-Verdict trailer with no value is not an event', () => {

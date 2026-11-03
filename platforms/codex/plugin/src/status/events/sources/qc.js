@@ -70,6 +70,13 @@ function read(ctx, window) {
     const since = sinceIso(window);
     if (since) args.push(`--since=${since}`);
     args.push('--branches', 'HEAD');
+    try { // an unborn HEAD (a fresh repo, no commit yet) is a normal state: no events, no warning
+      execFileSync('git', [...repo.prefix, 'rev-parse', '--verify', '-q', 'HEAD'], {
+        env: cleanGitEnv((ctx && ctx.env) || process.env), encoding: 'utf8', timeout: 20000, stdio: ['ignore', 'ignore', 'ignore'],
+      });
+    } catch (error) {
+      if (error && error.status === 1) return finish();
+    }
     let out;
     try {
       out = execFileSync('git', args, {
@@ -92,10 +99,14 @@ function read(ctx, window) {
       if (values.length === 0) { stats.rows_filtered += 1; continue; } // no trailer, or an empty one: not an event
       const ts = parseInstant(parts[1]);
       if (ts === null) { stats.rows_skipped += 1; warn.add('ts_invalid', 'git log'); stats.state = 'degraded'; continue; }
-      const verdict = truncateText(values[0].split('\n')[0].trim(), 64);
-      if (!verdict) { stats.rows_filtered += 1; continue; }
-      const subject = redactText(truncateText(parts.slice(3).join(FIELD).replace(/\n+$/, ''), 120));
-      stats.redactions += subject.redactions;
+      // redact the WHOLE text first, then cap: a token cut at the cap would no longer match its length threshold
+      const verdictRaw = values[0].split('\n')[0].trim();
+      if (!verdictRaw) { stats.rows_filtered += 1; continue; }
+      const verdictRed = redactText(verdictRaw);
+      const verdict = truncateText(verdictRed.text, 64);
+      const subjectRed = redactText(parts.slice(3).join(FIELD).replace(/\n+$/, ''));
+      const subject = { text: truncateText(subjectRed.text, 120) };
+      stats.redactions += verdictRed.redactions + subjectRed.redactions;
       events.push({
         id: `qc.verdict:${sha}`, kind: 'qc.verdict', ts, ts_basis: 'source', source: EVENT_SOURCE,
         project_key: project.project_key, root_run_id: null, run_id: null,

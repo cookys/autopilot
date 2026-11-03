@@ -1,0 +1,139 @@
+### qodercli qodercli --version
+1.1.82
+### qodercli qodercli --help
+Usage: qodercli [options] [command] [query...]
+
+Qoder CLI - Defaults to interactive mode. Use -p/--print for non-interactive
+output.
+
+Arguments:
+  query                                Initial prompt.
+
+Options:
+  -d, --debug                          Run in debug mode (default: false)
+  -m, --model <model>                  Model for the current session. Default
+                                       and New Models use model name; Custom
+                                       uses modelID
+  --reasoning-effort <level>           Set reasoning effort level
+  --thinking <mode>                    Set thinking mode (auto, adaptive,
+                                       enabled, or disabled)
+  --thinking-budget <tokens>           Set a fixed thinking token budget
+                                       (implies --thinking enabled)
+  --context-window <size>              Explicit context window for supported
+                                       models
+  --list-models                        List available models for the current
+                                       user
+  -i, --prompt-interactive <text>      Execute prompt and continue in
+                                       interactive mode
+  -w, --cwd <dir>                      Change working directory before startup
+  --config-dir <dir>                   Use a custom user-level config root for
+                                       this run
+  --worktree [name]                    Start in a new git worktree
+  --permission-mode <mode>             Set the permission mode (choices:
+                                       default, accept_edits,
+                                       bypass_permissions, dont_ask, auto)
+  --dangerously-skip-permissions       Bypass all permission checks
+  --allowed-mcp-server-names <name>    Allowed MCP server names
+  --tools <tools...>                   Restrict available built-in tools ("" to
+                                       disable all, "default" for all; use -p
+                                       or -- to separate from query)
+  --allowed-tools <tool>               Tools to allow
+  --disallowed-tools <tool>            Tools to deny
+  --attachment <file>                  Attach files to the initial prompt
+  --plugin-dir <dir>                   Plugin directories to load
+  -c, --continue                       Continue the most recent session
+  --fork-session                       Create a new session from a resumed
+                                       conversation
+  -r, --resume [id]                    Resume a previous session by identifier
+  -n, --name <name>                    Set a display name for this session
+  --session-id <id>                    Use a specific session ID
+  --list-sessions                      List available sessions and exit
+  --delete-session <index>             Delete a session by index number
+  --add-dir <dir>                      Additional directories to include in the
+                                       workspace
+  -o, --output-format <format>         The format of the CLI output
+  --input-format <format>              The format of the CLI input
+  --max-output-tokens <size>           Set maximum model output tokens
+  -p, --print                          Print response and exit
+                                       (non-interactive)
+  --no-session-persistence             Disable session persistence - sessions
+                                       will not be saved to disk and cannot be
+                                       resumed (only works with --print)
+  --agent <name>                       Agent for the current session
+  --agents <json>                      JSON object defining custom agents
+  --append-system-prompt <text>        Append to the default system prompt
+  --system-prompt <text>               System prompt for the session
+  --output-style <style>               Output style for this session
+  --max-model-request-retries <count>  Maximum retries for Qoder and Custom
+                                       Provider model requests
+  --mcp-config <config>                Load MCP servers from JSON file(s) or
+                                       inline JSON
+  --strict-mcp-config                  Only use MCP servers from --mcp-config
+                                       (default: false)
+  --setting-sources <source>           Setting sources to load (user, project,
+                                       local)
+  --settings <json>                    Load additional settings from a JSON
+                                       file path or inline JSON string
+  -v, --version                        output the version number
+  --remote-session <id>                Cold-load and attach to an existing
+                                       remote session
+  --remote-control <session-id>        Run a headless Worker for an existing
+                                       remote session.
+  --remote [task]                      Create a cloud remote session and print
+                                       its access URL (preset: "")
+  -h, --help                           display help for command
+
+Commands:
+  mcp                                  Configure and manage MCP servers
+  hooks|hook                           Manage hooks
+  rollback [options]                   Rollback to a previous version
+  update [options]                     Update to the latest version
+  plugins|plugin                       Manage plugins
+  commit [options]                     Generate a commit message and commit
+                                       changes
+  agents|agent [options]               Manage agents
+  skills|skill                         Manage agent skills.
+  feedback [options]                   Submit feedback
+  security                             Scan source code for security issues
+  login                                Sign in to your account
+  status [options]                     Show session status
+  remote-control [options]             Start the remote-control daemon
+  sites [args...]                      Build, publish and manage Qoder Sites
+  wiki [args...]                       Generate wiki documentation for projects
+### qodercli qodercli status --help
+Usage: qodercli status [options]
+
+Show session status
+
+Options:
+  -o, --output <format>  Output format (text, json) (default: "text")
+  -h, --help             display help for command
+
+### LIVE(zero-token) qodercli status -o json
+{
+  "logged_in": true,
+  "version": "1.1.82",
+  "allow_byok": 0,
+  "auth_source": "local",
+  "account_type": "user",
+  "login_method": "browser",
+  "username": "<name>",
+  "email": "<email>",
+  "avatar_url": "https://qoder.com/users/<uuid>/default/avatars",
+  "user_type": "personal_standard"
+}
+
+### LIVE call (qodercli -p ok -m Qwen3.8-Flash -o stream-json): result event
+{"type": "result", "subtype": "success", "duration_ms": 2197, "duration_api_ms": 1901, "is_error": false, "num_turns": 1, "stop_reason": "end_turn", "total_cost_usd": 0, "total_credits": 0, "usage": {"input_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 0, "server_tool_use": {"web_search_requests": 0, "web_fetch_requests": 0}, "service_tier": "standard", "cache_creation": {"ephemeral_1h_input_tokens": 0, "ephemeral_5m_input_tokens": 0}, "inference_geo": "", "iterations": [], "speed": "standard", "context_usage_ratio": 0.098925}, "modelUsage": {"auto": {"inputTokens": 0, "outputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0, "webSearchRequests": 0, "costUSD": 0, "contextWindow": 0, "maxOutputTokens": 0}, "qfmodel": {"inputTokens": 0, "outputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0, "webSearchRequests": 0, "costUSD": 0, "contextWindow": 0, "maxOutputTokens": 0, "credits": 0}}, "permission_denials": [], "fast_mode_state": "off"}
+
+### LIVE call (qoderclicn -p ok -m Qwen3.8-Flash -o stream-json): result event
+{"type": "result", "subtype": "success", "duration_ms": 2108, "duration_api_ms": 1823, "is_error": false, "num_turns": 1, "stop_reason": "end_turn", "total_cost_usd": 0, "total_credits": 0, "usage": {"input_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 0, "server_tool_use": {"web_search_requests": 0, "web_fetch_requests": 0}, "service_tier": "standard", "cache_creation": {"ephemeral_1h_input_tokens": 0, "ephemeral_5m_input_tokens": 0}, "inference_geo": "", "iterations": [], "speed": "standard", "context_usage_ratio": 0.098935}, "modelUsage": {"auto": {"inputTokens": 0, "outputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0, "webSearchRequests": 0, "costUSD": 0, "contextWindow": 0, "maxOutputTokens": 0}, "qfmodel": {"inputTokens": 0, "outputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0, "webSearchRequests": 0, "costUSD": 0, "contextWindow": 0, "maxOutputTokens": 0, "credits": 0}}, "permission_denials": [], "fast_mode_state": "off"}
+
+### LIVE (qodercli|qoderclicn) -p "/usage" -o json: result subtype=error_during_execution, is_error=true, errors=["Sorry, something went wrong..."] -> /usage is NOT usable headless. total_credits=0.
+
+### WEB (https://docs.qoder.com/cli/sdk/cost-usage, WebFetch): Agent SDK getUsageInfo()/get_usage_info() returns userQuota{total,used,remaining,percentage,unit}, addOnQuota, orgResourcePackage{cap,used,remaining,percentage,available,unit}, totalUsagePercentage, isQuotaExceeded; session.total_credits. Page does not mention reset times. https://docs.qoder.com/cli/usage: "/usage" interactive command shows plan and Credits usage.
+
+### LIVE(zero-token) qoderclicn --version
+1.1.82
+### LIVE(zero-token) qoderclicn status -o json (sanitized)
+{"logged_in": true, "version": "1.1.82", "allow_byok": 0, "auth_source": "local", "account_type": "user", "login_method": "browser", "user_type": "personal_professional_plus"}  (qodercli: user_type personal_standard; both differ in account/region, same binary version)

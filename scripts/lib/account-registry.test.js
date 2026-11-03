@@ -343,3 +343,54 @@ test('D: swap to a symlink between check and open is refused (token and registry
   fs.copyFileSync(path.join(f.dir, 'registry.json'), path.join(f.root, 'other'));
   assert.strictEqual(chk(f, { beforeOpen: swap(path.join(f.dir, 'registry.json')) }), 'registry_is_symlink');
 });
+
+// ---- round 3 ----
+test('1: FIFO at token / registry path is refused promptly (no open hang)', () => {
+  const script = `
+    const fs=require('fs'),path=require('path'),os=require('os'),cp=require('child_process');
+    const R=require(${JSON.stringify(LIB)});
+    const which=process.argv[1];
+    const root=fs.mkdtempSync(path.join(os.tmpdir(),'acct-fifo-'));
+    const home=path.join(root,'h');fs.mkdirSync(path.join(home,'.claude'),{recursive:true});
+    const dir=path.join(root,'accts');fs.mkdirSync(dir,{mode:0o700});
+    const reg=path.join(dir,'registry.json');
+    if(which==='registry'){cp.execFileSync('mkfifo',[reg]);}
+    else{fs.writeFileSync(reg,JSON.stringify({schema:R.SCHEMA,accounts:[{alias:'a',enabled:true}]}),{mode:0o600});
+      for(const d of ['a','a/claude','a/home'])fs.mkdirSync(path.join(dir,d),{mode:0o700});
+      cp.execFileSync('mkfifo',[path.join(dir,'a','token')]);}
+    try{R.checkRegistry({realHome:home,accountsDir:dir,env:{}});console.log('NOERR');}catch(e){console.log(e.reason);}
+  `;
+  for (const [which, want] of [['token', 'token_not_regular_file'], ['registry', 'registry_not_regular_file']]) {
+    const r = spawnSync(process.execPath, ['-e', script, which], { encoding: 'utf8', timeout: 5000, input: '' });
+    assert.strictEqual(r.error, undefined, which + ' hung (timeout)');
+    assert.strictEqual(r.stdout.trim(), want, which);
+  }
+});
+
+test('2: size cap holds when the file grows after fstat', () => {
+  let f = mk(); let d = good(f);
+  const grow = (target) => (file) => { if (file === target) fs.appendFileSync(file, 'F'.repeat(6000)); };
+  assert.strictEqual(chk(f, { afterFstat: grow(path.join(d, 'token')) }), 'token_size_out_of_range');
+  f = mk(); d = good(f);
+  const regp = path.join(f.dir, 'registry.json');
+  const big = (file) => { if (file === regp) fs.appendFileSync(file, ' '.repeat((1 << 20) + 10)); };
+  assert.strictEqual(chk(f, { afterFstat: big }), 'registry_size_out_of_range');
+});
+
+test('3: no fingerprint of rejected strings in any output', () => {
+  const texts = [];
+  let f = mk(); writeReg(f, [{ alias: SECRET, enabled: false }]);
+  try { R.checkRegistry(opts(f)); } catch (e) { texts.push(e.message); }
+  f = mk(); writeReg(f, [{ alias: 'a', enabled: false, [SECRET]: 1 }]);
+  try { R.checkRegistry(opts(f)); } catch (e) { texts.push(e.message); }
+  f = mk(); writeReg(f, [], { [SECRET]: 1 });
+  try { R.checkRegistry(opts(f)); } catch (e) { texts.push(e.message); }
+  f = mk(); writeReg(f, [{ alias: 'a', enabled: false }]);
+  try { R.requireAlias(R.loadRegistry(opts(f)), SECRET); } catch (e) { texts.push(e.message); }
+  assert.strictEqual(texts.length, 4);
+  for (const t of texts) {
+    assert.ok(!/fp:/.test(t), t);
+    assert.ok(!/\b[0-9a-f]{8}\b/.test(t), t);
+    noEcho(t, 'msg');
+  }
+});

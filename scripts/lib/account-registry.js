@@ -10,7 +10,6 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const crypto = require('crypto');
 
 const ALIAS_RE = /^[a-z0-9-]{1,24}$/;
 const RESERVED_RE = /^(acct|codex)-[0-9a-f]{8}$/;
@@ -43,11 +42,9 @@ function uidOf(o) {
   return typeof process.getuid === 'function' ? process.getuid() : undefined;
 }
 
-// Unvalidated strings are never echoed (an operator may paste a token into an alias or key):
-// diagnostics use a position or this irreversible short fingerprint instead.
-function fp(v) {
-  return 'fp:' + crypto.createHash('sha256').update(String(v)).digest('hex').slice(0, 8);
-}
+// Unvalidated strings are never echoed (an operator may paste a token into an alias or key), and no
+// fingerprint of them is given either (short hashes of short secrets can be brute-forced): diagnostics
+// carry only a code and a position.
 
 function aliasProblem(alias) {
   if (typeof alias !== 'string' || !ALIAS_RE.test(alias)) return 'alias_invalid';
@@ -69,7 +66,7 @@ function readChecked(file, o, uid, what, maxSize, needNonEmpty, alias) {
   if (typeof o.beforeOpen === 'function') o.beforeOpen(file, what);
   let fd;
   try {
-    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   } catch (e) {
     const c = e && e.code;
     if (c === 'ENOENT') throw new RegistryError(what + '_missing', alias);
@@ -82,7 +79,17 @@ function readChecked(file, o, uid, what, maxSize, needNonEmpty, alias) {
     if (uid !== undefined && st.uid !== uid) throw new RegistryError(what + '_foreign_owner', alias);
     if ((st.mode & 0o077) !== 0) throw new RegistryError(what + '_mode_too_open', alias);
     if (st.size > maxSize || (needNonEmpty && st.size < 1)) throw new RegistryError(what + '_size_out_of_range', alias);
-    return fs.readFileSync(fd, 'utf8');
+    if (typeof o.afterFstat === 'function') o.afterFstat(file, what);
+    // Read at most maxSize + 1 bytes from this fd: a file grown after the fstat cannot exceed the cap.
+    const buf = Buffer.alloc(maxSize + 1);
+    let got = 0;
+    while (got < buf.length) {
+      const n = fs.readSync(fd, buf, got, buf.length - got, null);
+      if (n === 0) break;
+      got += n;
+    }
+    if (got > maxSize) throw new RegistryError(what + '_size_out_of_range', alias);
+    return buf.toString('utf8', 0, got);
   } finally {
     fs.closeSync(fd);
   }
@@ -125,7 +132,7 @@ function loadRegistry(opts) {
   }
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new RegistryError('registry_not_object');
   for (const k of Object.keys(doc)) {
-    if (!TOP_KEYS.includes(k)) throw new RegistryError('registry_unknown_key', null, 'top-level key ' + fp(k));
+    if (!TOP_KEYS.includes(k)) throw new RegistryError('registry_unknown_key', null, 'top-level key rejected');
   }
   if (doc.schema !== SCHEMA) throw new RegistryError('registry_schema_unsupported');
   if (!Array.isArray(doc.accounts)) throw new RegistryError('registry_accounts_not_array');
@@ -135,10 +142,10 @@ function loadRegistry(opts) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) throw new RegistryError('registry_row_not_object');
     const alias = row.alias;
     for (const k of Object.keys(row)) {
-      if (!ROW_KEYS.includes(k)) throw new RegistryError('registry_unknown_key', null, `row ${idx} key ${fp(k)}`);
+      if (!ROW_KEYS.includes(k)) throw new RegistryError('registry_unknown_key', null, `row ${idx} key rejected`);
     }
     const p = aliasProblem(alias);
-    if (p) throw new RegistryError(p, null, `row ${idx} value ${fp(alias)}`);
+    if (p) throw new RegistryError(p, null, `row ${idx} alias rejected`);
     if (seen.has(alias)) throw new RegistryError('alias_duplicate', alias);
     seen.add(alias);
     if (typeof row.enabled !== 'boolean') throw new RegistryError('enabled_not_boolean', alias);
@@ -231,7 +238,7 @@ function checkRegistry(opts) {
 // `--alias X` must point at an enabled registered row; never a path input.
 function requireAlias(reg, alias) {
   const p = aliasProblem(alias);
-  if (p) throw new RegistryError(p, null, `--alias value ${fp(alias)}`);
+  if (p) throw new RegistryError(p, null, '--alias value rejected');
   const row = (reg.accounts || []).find((r) => r.alias === alias);
   if (!row) throw new RegistryError('alias_not_registered', alias);
   if (!row.enabled) throw new RegistryError('alias_disabled', alias);

@@ -22,6 +22,8 @@ CLONE="$TEST_TMP/clone"; mkdir -p "$CLONE/hooks" "$CLONE/scripts" "$CLONE/prereg
 cp -a "$REPO_ROOT/evals" "$CLONE/evals"; rm -rf "$CLONE/evals/orchestration/runs"
 cp "$REPO_ROOT/hooks/per-turn-gate.js" "$CLONE/hooks/"; cp -a "$REPO_ROOT/hooks/_shared" "$CLONE/hooks/_shared"
 cp -a "$REPO_ROOT/scripts/lib" "$CLONE/scripts/lib"; cp "$REPO_ROOT/scripts/adjudicate-findings.js" "$CLONE/scripts/"
+# G37 W5: the harness (run-orchestration-eval.sh) fails closed (exit 2) without the account CLI next to scripts/lib; the registry location points at an empty dir (no registry = the legacy path)
+cp "$REPO_ROOT/scripts/claude-account.js" "$CLONE/scripts/"; mkdir -p "$TEST_TMP/no-accounts"; export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"
 TASKDIR="$CLONE/evals/orchestration/tasks/t14-constraint-horizon"
 node -e 'const w=require(process.argv[1]);require("fs").writeFileSync(process.argv[3],w.taskListing(process.argv[2]))' "$WRAP_SRC" "$TASKDIR" "$CLONE/prereg/taskhash.expected.txt"
 echo "preregistration stand-in" >"$CLONE/prereg/PREREG.md"

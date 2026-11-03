@@ -1945,12 +1945,26 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # here, before the credentials seed and before claude is ever started.
   _CNATIVE_MODEL_ERR="$(node "$_REVIEW_SELF_DIR/lib/seat-model-id.js" check "$MODEL" 2>&1)" \
     || die_precondition "claude-native refused: $_CNATIVE_MODEL_ERR"
-  CNATIVE_CFG="$(node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")" \
-    || die_precondition "claude-native refused: could not seed a credentials-only config dir (source .credentials.json missing/unreadable); the child is never given the real claude config dir"
+  # G37 (plan 8 W1): when the account registry exists the arm goes through claude-account.js run (alias pick,
+  # 429 fallback, fail closed); the seeded-.credentials.json path below is then not consulted at all.
+  # bash never sees a token: claude-account.js reads the token file and puts it only in the child env.
+  _ACCT_STATE="$(node "$_REVIEW_SELF_DIR/claude-account.js" env-check --any --purpose review 2>/dev/null)" \
+    || die_precondition "claude-native refused: the account registry is present but invalid (claude-account.js env-check --any failed); not falling back to ambient or seeded credentials"
+  case "$_ACCT_STATE" in unconfigured|mode_off) _ACCT_ACTIVE=0 ;; *) _ACCT_ACTIVE=1 ;; esac
+  if [ "$_ACCT_ACTIVE" -eq 0 ]; then
+    CNATIVE_CFG="$(node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")" \
+      || die_precondition "claude-native refused: could not seed a credentials-only config dir (source .credentials.json missing/unreadable); the child is never given the real claude config dir"
+  fi
   CNATIVE_CWD="$(mktemp -d -t dispatch-review-cnativecwd-XXXXXX)"
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
+  if [ "$_ACCT_ACTIVE" -eq 1 ]; then
+    timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
+      node "$_REVIEW_SELF_DIR/claude-account.js" run --purpose review --stdin "$PROMPT_FILE" --cwd "$CNATIVE_CWD" -- \
+      "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} > "$RAW_LOG" 2>&1
+  else
   timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} CLAUDE_CONFIG_DIR="$CNATIVE_CFG" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
       _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>&1
+  fi
   CNATIVE_RC=$?
   wait_output_quiescent "$RAW_LOG" "${AUTOPILOT_SETTLE_MS:-60000}" 30000 || true
   rm -rf "$CNATIVE_CWD" "$CNATIVE_CFG"; CNATIVE_CWD=""; CNATIVE_CFG=""   # clear so the EXIT trap doesn't rm the path a 2nd time

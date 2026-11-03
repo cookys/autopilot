@@ -110,6 +110,11 @@ if [ -z "${AUTOPILOT_CONFIG_FILE:-}" ]; then
   export AUTOPILOT_CONFIG_FILE="$CFG_PIN_DIR/config.json"
 fi
 
+# G37: no suite may see the operator's real account registry (see hooks/tests/lib.sh). Node (L1) suites do not source lib.sh,
+# so the runner pins a path that does not exist (ENOENT, not a file in the way: a probe error would read as a broken registry).
+# AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1 keeps the caller's value.
+if [ "${AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR:-}" != 1 ]; then export AUTOPILOT_ACCOUNTS_DIR="${TMPDIR:-/tmp}/autopilot-no-accounts-$$/accounts"; fi
+
 # Global; set by the parallel branch, cleared after its own successful rm -rf.
 # The EXIT trap also removes it (belt-and-suspenders on an interrupted run).
 PARALLEL_TMP=""

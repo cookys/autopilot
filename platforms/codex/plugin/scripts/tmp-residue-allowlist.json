@@ -8,6 +8,11 @@
       "reason": "Test-only fixture builder: makeFixture() returns a cleanup() that every caller runs (tests call fx.cleanup() at the end); the root holds only FAKE- tokens and a decoy."
     },
     {
+      "file": "scripts/affected-suites.js",
+      "match": "autopilot-no-accounts-",
+      "reason": "A path that is deliberately never created (the pinned AUTOPILOT_ACCOUNTS_DIR for the run: it must not exist, so wired claude callers take their no-registry path); nothing to clean up."
+    },
+    {
       "file": "scripts/check-tmp-residue-registry.js",
       "reason": "The gate's own detection regexes and self-test fixtures name temp constructs as text; its self-test directory is removed in a finally block."
     },

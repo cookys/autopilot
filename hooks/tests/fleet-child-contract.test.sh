@@ -132,7 +132,7 @@ cp "$REPO_ROOT/scripts/run-skill-opt.sh" "$hopt/ap/scripts/"; cp "$REPO_ROOT/scr
 cp_account_layer() { # <scripts dir of the layout>
   mkdir -p "$1/lib"; cp "$REPO_ROOT/scripts/claude-account.js" "$1/"
   cp "$REPO_ROOT"/scripts/lib/account-{audit,cooldown,env,pick,quota,registry}.js "$REPO_ROOT"/scripts/lib/{live-state-dir,auth-stop}.js \
-     "$REPO_ROOT/scripts/lib/eval-account.js" "$REPO_ROOT/scripts/lib/eval-account.sh" "$1/lib/"
+     "$REPO_ROOT/scripts/lib/eval-account.js" "$REPO_ROOT/scripts/lib/eval-account.sh" "$REPO_ROOT/scripts/lib/account-state.sh" "$1/lib/"
 }
 cp_account_layer "$hopt/ap/scripts"; mkdir -p "$TEST_TMP/no-accounts"; export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"
 echo '{}' > "$hopt/ap/skill-creator-workspace/evals/xs-evals.json"

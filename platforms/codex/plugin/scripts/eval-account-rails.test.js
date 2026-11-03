@@ -156,6 +156,9 @@ const ROWS = [
     fs.writeFileSync(path.join(L, 'evals', 'trigger-prompts', 'should-trigger.txt'), 'dev-flow|start work on a feature\n');
     fs.writeFileSync(path.join(L, 'evals', 'trigger-prompts', 'should-not-trigger.txt'), 'what is the weather\n');
   }, run: (L, w) => runShell(L, 'evals/run-trigger-test.sh', [], Object.assign({}, w, { env: Object.assign({}, w.env, { AUTOPILOT_EVAL_RESULTS_DIR: path.join(w.fx.root, 'trig') }) })) },
+  // evals/test-helpers.sh run_skill() is reached through evals/test-behavior.sh (three short claude -p calls, AUTOPILOT_EVAL_INTEGRATION=1).
+  { name: 'test-helpers.sh (via test-behavior.sh)', file: 'evals/test-helpers.sh', legacyCopies: false,
+    run: (L, w) => runShell(L, 'evals/test-behavior.sh', [], w) },
   { name: 'run-t2-eval', file: 'evals/context-budget-t2/run-t2-eval.js', legacyCopies: false,
     mutateNode: (t) => t.replace('accountActive ? evalAccount.wrap', 'false ? evalAccount.wrap'),
     run: (L, w) => runNode(L, 'evals/context-budget-t2/run-t2-eval.js', ['--runs-on', '1', '--runs-control', '1', '--out', path.join(w.fx.root, 'res.json')],

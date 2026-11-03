@@ -11,6 +11,22 @@ run_skill() {
     local max_turns="${2:-2}"
     local outfile
     outfile=$(mktemp)
+    # G37 (A12 family): with an account registry the claude call goes through claude-account.js (PATH wrapper, token only in the
+    # child env), no ambient login is used; a broken registry or a missing helper stops here before any spawn (flag file
+    # <outfile>.accountstop, read by stop_if_auth_failed). No registry = unchanged. run_skill runs in a $(...) subshell, so the
+    # PATH wrapper and the probe state die with it.
+    local _ea_lib="$PLUGIN_DIR/scripts/lib/eval-account.sh" _ea_dir=""
+    if [ ! -r "$_ea_lib" ]; then
+        echo "eval-account: the account-layer helper $_ea_lib is missing; refusing to start (nothing was spawned)" >&2
+        : > "$outfile.accountstop"; echo "$outfile"; return 0
+    fi
+    # shellcheck source=../scripts/lib/eval-account.sh
+    . "$_ea_lib"
+    eval_account_probe test-behavior >&2 || { : > "$outfile.accountstop"; echo "$outfile"; return 0; }
+    if [ "${EVAL_ACCOUNT_ACTIVE:-0}" = 1 ]; then
+        _ea_dir="$(mktemp -d "${TMPDIR:-/tmp}/test-helpers-ea-XXXXXX")"
+        eval_account_use_path_wrapper "$_ea_dir"
+    fi
     timeout 120 claude -p "$prompt" \
         --plugin-dir "$PLUGIN_DIR" \
         --dangerously-skip-permissions \
@@ -23,11 +39,13 @@ run_skill() {
     . "$PLUGIN_DIR/scripts/lib/auth-stop.sh"
     auth_stop_check "run_skill" --failed "$(( claude_rc != 0 ))" --failed-from-stream "$outfile" --log "$outfile" --stderr "$outfile.err" >&2 || : > "$outfile.authstop"
     rm -f "$outfile.err"
+    [ -z "$_ea_dir" ] || rm -rf "$_ea_dir"
     echo "$outfile"
 }
 
 # Exit 6 (STOP_AUTH) when the run_skill call that produced $1 died on authentication.
 stop_if_auth_failed() {
+    [ ! -e "$1.accountstop" ] || exit 2
     [ ! -e "$1.authstop" ] || exit 6
 }
 

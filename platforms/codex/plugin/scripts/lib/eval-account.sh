@@ -4,7 +4,7 @@
 #   eval_account_probe <purpose>   -> asks `claude-account.js env-check` once, BEFORE any claude spawn.
 #       sets and exports EVAL_ACCOUNT_ACTIVE=1 (registry usable) or 0 (unconfigured / mode_off = legacy path unchanged),
 #       plus EVAL_ACCOUNT_JS / EVAL_ACCOUNT_SH / EVAL_ACCOUNT_NODE / EVAL_ACCOUNT_PURPOSE.
-#       returns 0, or the env-check exit code (2 invalid / 3 none) when the registry exists but is unusable:
+#       returns 0, or 2 when the registry exists but is unusable (or env-check printed something unrecognised):
 #       the caller must stop at once (fail closed, nothing spawned, nothing read from an ambient credential).
 #   eval_account_wrap_claude       -> inside a PATH `claude` wrapper that has set REAL_CLAUDE and EXTRA_ARGS:
 #       when active, REAL_CLAUDE becomes node and EXTRA_ARGS becomes `claude-account.js exec --pick -- <claude> <args>`
@@ -19,20 +19,25 @@ EVAL_ACCOUNT_SH="$_EVAL_ACCOUNT_LIB_DIR/eval-account.sh"
 EVAL_ACCOUNT_ACTIVE="${EVAL_ACCOUNT_ACTIVE:-0}"
 
 eval_account_probe() {
-  local purpose="${1:?eval_account_probe <purpose>}" out="" rc=0 first=""
+  local purpose="${1:?eval_account_probe <purpose>}" state=""
   EVAL_ACCOUNT_ACTIVE=0
-  if [ ! -r "$EVAL_ACCOUNT_JS" ]; then
-    echo "eval-account: $EVAL_ACCOUNT_JS is missing; refusing to start, nothing was spawned" >&2
+  # Fail closed when the layer itself is missing (L9): no spawn, no credentials copy.
+  if [ ! -r "$EVAL_ACCOUNT_JS" ] || [ ! -r "$_EVAL_ACCOUNT_LIB_DIR/account-state.sh" ]; then
+    echo "eval-account: the account layer ($EVAL_ACCOUNT_JS or account-state.sh) is missing; refusing to start, nothing was spawned" >&2
     return 2
   fi
-  out="$(node "$EVAL_ACCOUNT_JS" env-check --purpose eval-probe < /dev/null)" || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    echo "eval-account: the account registry is unusable (env-check exit $rc); refusing to start, nothing was spawned" >&2
-    return "$rc"
-  fi
-  first="${out%%$'\n'*}"
-  case "$first" in
-    ok\ *) EVAL_ACCOUNT_ACTIVE=1 ;;
+  # The ONE reading of env-check (account-state.sh, always --any, anything unrecognised is invalid): the same rule every
+  # rail uses. legacy = unconfigured / mode_off; invalid = the registry exists but is unusable -> fail closed (2).
+  # shellcheck source=account-state.sh
+  . "$_EVAL_ACCOUNT_LIB_DIR/account-state.sh"
+  state="$(account_layer_state "$EVAL_ACCOUNT_JS" eval-probe)"
+  case "$state" in
+    active) EVAL_ACCOUNT_ACTIVE=1 ;;
+    legacy) ;;
+    *)
+      echo "eval-account: the account registry is unusable or env-check printed something unrecognised; refusing to start, nothing was spawned" >&2
+      return 2
+      ;;
   esac
   EVAL_ACCOUNT_NODE="$(command -v node)"
   EVAL_ACCOUNT_PURPOSE="$purpose"

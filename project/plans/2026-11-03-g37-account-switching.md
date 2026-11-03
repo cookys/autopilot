@@ -420,3 +420,16 @@ Wave order: 0 -> 1 -> 2 -> 3 -> 4 -> 5. Lanes in one wave run in parallel. Each 
 | operator | P8 | after L10 | none (section 9 checklist) | L10 | O1-O10 note |
 
 Disjointness check: no file appears in two lanes; `scripts/validate.sh` belongs to L12 only, `config-keys.json` to L10 only, the shim and `claude-account.js` to L4 only. If a wiring lane needs a change in `claude-account.js`, it stops and reports to depth-0 rather than editing it.
+
+## 15. Addendum (L12, PM ruling A): N9 exception for digest-frozen replay runners
+
+This section is added after the plan was frozen; it changes none of the sentences above. It records one exception to N9 and to the "no runner copies `~/.claude/.credentials.json` when the registry exists" rule of section 6.
+
+Eight runners are replay-only and are NOT wired to the account layer. Their bytes are pinned by a digest, so wiring them would void the pre-registrations and the manifests they belong to:
+- `evals/skill-onoff/run-skill-onoff-eval.sh`, `run-skill-onoff-eval-bpack.sh`, `run-skill-onoff-eval-fbatch.sh`, `run-skill-onoff-eval-fbatch-v2.sh`, `run-skill-onoff-eval-gdorm.sh` and `evals/skill-onoff/run-d0gate-campaign.js` are named in `evals/skill-onoff/prereg/FROZEN.json` (an edit after the first live cell voids the row).
+- `evals/orchestration/run-p2-batch.js` and `run-p2-batch-loop.js` are bound by the manifest wrapper hash that `hooks/tests/p2-batch-loop.test.sh` cases 4.5 and 5.5 compare (the loop is the launcher of that pinned wrapper and is frozen with it).
+- The module `evals/skill-onoff/d0gate/cc.js` belongs to the same frozen d0gate row (its sha256 is in `tools/migrate/no-rewrite.json`).
+
+They keep using the operator's logged-in credentials and do not go through the account layer. `scripts/lib/claude-spawn-sites.json` records each of them as `frozen_legacy`, with the reason and the file that locks it; section 5.9's gate checks that the lock file still names the runner, so an entry cannot outlive its freeze. The wiring that would be applied for a new campaign is kept as a patch, `evals/skill-onoff/prereg/refreeze/g37-account-wiring.patch` (README beside it): apply it, then re-freeze the digests, before any new campaign runs through these runners. No upper entry point can print a warning without changing a pinned byte (the matrix drivers and campaign scripts are pinned too), so the warning lives in the README and in the registry reasons.
+
+`run-d0gate-v2-campaign.js` is not frozen: it calls the eval-account gate and refuses to run (exit 2, before any claude is started) when a registry exists, usable or broken. It is registered `wired`, and `scripts/account-rails.test.js` covers the refusal.

@@ -10,6 +10,7 @@ STATE_CLI="$ROOT/scripts/engine-capability-state.js"
 PASS=0; FAIL=0
 TESTDIR="$(mktemp -d)"
 export ENGINE_CAPABILITY_DIR="$TESTDIR"
+export AUTOPILOT_ACCOUNTS_DIR="$TESTDIR/no-accounts"   # G37: never consult the real account registry
 trap 'rm -rf "$TESTDIR"' EXIT
 
 ok()   { PASS=$((PASS+1)); printf 'PASS: %s\n' "$1"; }

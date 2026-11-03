@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, spawnSync, execFileSync } = require('child_process');
+const accountRail = require('./lib/account-rail');
 
 const SCOPE_RULE = "Scope rule: judge ONLY the node whose report appears in the context — the deliverables implied by its 'node'/'question' fields and the claims the report itself makes. Project-level lifecycle steps (merging branches, release/quality gates, archiving, project status updates, and work belonging to OTHER nodes) are OUT OF SCOPE: do not list them as goals, extras, or misses.";
 const Q1 = "What goals were achieved? Cite specific evidence from the report and artifacts. List each achieved goal on its own line prefixed 'ACHIEVED:'.";
@@ -257,6 +258,33 @@ async function main() {
   process.on('SIGINT', () => { cleanupWork(); process.exit(1); });
   process.on('SIGTERM', () => { cleanupWork(); process.exit(1); });
 
+  // G37 (plan W4/A6): with a registry the claude judges/synthesizer run through the account layer
+  // (claude-account.js run); a broken registry stops here before any judge is spawned.
+  const anyClaudeSeat = !((path.basename(claudeBin) === 'codex' || judgeAModel.includes('gpt-5.5'))
+    && (path.basename(claudeBin) === 'codex' || synthModel.includes('gpt-5.5')));
+  let accountActive = false;
+  if (anyClaudeSeat) {
+    const layer = accountRail.layerState({ env: process.env, purpose: 'qc-panel' });
+    if (layer.state === 'invalid') {
+      console.error(`qc-panel.js: account layer invalid, no judge spawned: ${layer.detail}`);
+      process.exit(2);
+    }
+    accountActive = layer.state === 'active';
+  }
+  let acctSeq = 0;
+  // Claude seat spawn. Legacy (no registry): exactly the old spawn. Active: the prompt (+ context file)
+  // goes into a 0600 file and `claude-account.js run --stdin` feeds it; the token never reaches this process.
+  function spawnClaudeSeat(bin, args, prompt, ctxFile, isCodex) {
+    if (!accountActive || isCodex) return spawn(bin, args, { stdio: ['pipe', 'pipe', 'ignore'] });
+    const stdinFile = path.join(workDir, `acct-stdin-${++acctSeq}`);
+    fs.writeFileSync(stdinFile, ctxFile ? Buffer.concat([Buffer.from(prompt), fs.readFileSync(ctxFile)]) : prompt, { mode: 0o600 });
+    const w = accountRail.wrapClaude(bin, args, { purpose: 'qc-panel', stdinFile });
+    const c = spawn(w.command, w.args, { stdio: ['pipe', 'pipe', 'ignore'] });
+    c.acctFed = true;
+    c.stdin.end();
+    return c;
+  }
+
   // Build context.txt
   let contextContent = '=== NODE REPORT ===\n';
   const reportContent = fs.readFileSync(reportFile, 'utf8').replace(/\r\n/g, '\n');
@@ -324,9 +352,7 @@ async function main() {
       } else {
         childArgs = ['-p', '--model', judgeAModel];
       }
-      const child = spawn(childBin, childArgs, {
-        stdio: ['pipe', 'pipe', 'ignore']
-      });
+      const child = spawnClaudeSeat(childBin, childArgs, prompt, contextFile, isA_Codex);
 
       // Buffer stdout in memory (like runJudgeB) and write it synchronously on
       // close. Piping to a createWriteStream and resolving on 'close' WITHOUT
@@ -346,7 +372,7 @@ async function main() {
         reject(err);
       });
 
-      child.stdin.write(prompt, () => {
+      if (!child.acctFed) child.stdin.write(prompt, () => {
         const ctxStream = fs.createReadStream(contextFile);
         ctxStream.pipe(child.stdin);
       });
@@ -489,9 +515,7 @@ async function main() {
       } else {
         childArgs = ['-p', '--model', judgeAModel];
       }
-      const child = spawn(childBin, childArgs, {
-        stdio: ['pipe', 'pipe', 'ignore']
-      });
+      const child = spawnClaudeSeat(childBin, childArgs, prompt, contextFile, isRefute_Codex);
 
       let out = '';
       child.stdout.on('data', (data) => {
@@ -503,7 +527,7 @@ async function main() {
         resolve('');
       });
 
-      child.stdin.write(prompt, () => {
+      if (!child.acctFed) child.stdin.write(prompt, () => {
         const ctxStream = fs.createReadStream(contextFile);
         ctxStream.pipe(child.stdin);
       });
@@ -697,9 +721,7 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
       } else {
         childArgs = ['-p', '--model', synthModel];
       }
-      const child = spawn(childBin, childArgs, {
-        stdio: ['pipe', 'pipe', 'ignore']
-      });
+      const child = spawnClaudeSeat(childBin, childArgs, prompt, null, isSynth_Codex);
 
       let out = '';
       child.stdout.on('data', (data) => {
@@ -712,8 +734,10 @@ Example: {"verdict":"pass","dissents":[],"extras":["Added error handling beyond 
         resolve(null);
       });
 
-      child.stdin.write(prompt);
-      child.stdin.end();
+      if (!child.acctFed) {
+        child.stdin.write(prompt);
+        child.stdin.end();
+      }
 
       child.on('close', (code) => {
         if (code !== 0) {

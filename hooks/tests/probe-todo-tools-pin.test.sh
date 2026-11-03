@@ -3,6 +3,7 @@
 . "$(dirname "$0")/lib.sh"
 PROBE="$REPO_ROOT/scripts/probe-todo-tools-pin.js"
 STUBS="$TEST_TMP/stubs"; mkdir -p "$STUBS"
+export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"   # G37: never consult the real account registry
 
 # stub: session where TaskCreate fires (tool present)
 cat > "$STUBS/claude-present" <<'SH'

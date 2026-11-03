@@ -49,9 +49,26 @@ if (!Number.isSafeInteger(opts.timeoutSeconds) || opts.timeoutSeconds < 1) {
 const childEnv = { ...process.env, FLEET_LIFETIME: 'ephemeral', FLEET_ROLE: 'probe' };
 const fleetParent = process.env.FLEET_PARENT || process.env.CLAUDE_CODE_SESSION_ID || '';
 if (fleetParent) childEnv.FLEET_PARENT = fleetParent; else delete childEnv.FLEET_PARENT;
-const run = spawnSync(opts.claudeBin, [
+const claudeArgv = [
   '-p', '--strict-mcp-config', '--model', opts.model, '--output-format', 'stream-json', '--verbose', PROMPT,
-], { cwd: opts.cwd, env: childEnv, encoding: 'utf8', timeout: opts.timeoutSeconds * 1000, maxBuffer: 64 * 1024 * 1024 });
+];
+// G37 (plan W4/A7): with a registry the probe session runs through the account layer; a broken registry
+// stops before anything is spawned. The account env allowlist carries CLAUDE_CODE_ENABLE_TODO_TOOLS, so the
+// pin under test still reaches the child.
+const accountRail = require('./lib/account-rail');
+const layer = accountRail.layerState({ env: process.env, purpose: 'todo-pin' });
+if (layer.state === 'invalid') {
+  console.error(`indeterminate: account layer invalid, probe not run: ${layer.detail}`);
+  process.exit(2);
+}
+let spawnCmd = opts.claudeBin;
+let spawnArgs = claudeArgv;
+if (layer.state === 'active') {
+  const w = accountRail.wrapClaude(opts.claudeBin, claudeArgv, { purpose: 'todo-pin', cwd: opts.cwd });
+  spawnCmd = w.command;
+  spawnArgs = w.args;
+}
+const run = spawnSync(spawnCmd, spawnArgs, { cwd: opts.cwd, env: childEnv, encoding: 'utf8', timeout: opts.timeoutSeconds * 1000, maxBuffer: 64 * 1024 * 1024 });
 
 if (run.error || run.signal) {
   console.error(`indeterminate: ${run.error ? run.error.message : `killed by ${run.signal}`}`);

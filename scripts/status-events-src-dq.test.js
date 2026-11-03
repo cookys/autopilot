@@ -257,12 +257,12 @@ test('source-qc: redaction runs before the cap - a token, a JWT and an e-mail st
   };
   // the secret starts 10 characters before the cap, so a cut-first order keeps only a 10-char prefix
   const pad = (n) => 'x'.repeat(n);
-  commit([pad(109) + ' ' + tok, 'QC-Verdict: PASS'], 'a.txt');
-  commit([pad(109) + ' ' + jwtLike, 'QC-Verdict: PASS'], 'b.txt');
-  commit([pad(109) + ' ' + mailLike, 'QC-Verdict: PASS'], 'c.txt');
+  commit([pad(109) + tok, 'QC-Verdict: PASS'], 'a.txt');
+  commit([pad(109) + jwtLike, 'QC-Verdict: PASS'], 'b.txt');
+  commit([pad(109) + mailLike, 'QC-Verdict: PASS'], 'c.txt');
   commit(['verdict carrier', 'QC-Verdict: ' + pad(55) + tok], 'd.txt');
   const r = qc.read(ctxOf(fx), COLD);
-  const added = r.events.filter((e) => e.data.subject.startsWith('xxxx') || e.data.subject === 'verdict carrier');
+  const added = r.events.filter((e) => e.data.commit !== fx.commits.c2 && e.data.commit !== fx.commits.c3);
   assert.equal(added.length, 4);
   const frags = [tok.slice(0, 8), jwtLike.slice(0, 8), 'bob.smi', 'corp.inv', tok.slice(4, 12)];
   for (const e of added) {
@@ -356,6 +356,27 @@ test('redact: token-shaped strings become [redacted] (prefixed tokens, JWT, key 
   assert.match(named.text, /api_key = \[redacted\]/);
   const bearer = redact.redactText('Authorization: Bearer abcdefghijklmnop1234');
   assert.equal(bearer.text.includes('abcdefghijklmnop1234'), false);
+});
+
+test('redact: tokens and e-mail glued to letters are masked (no left boundary on distinctive prefixes)', () => {
+  const tail36 = FX.tokenShaped.slice(4);
+  const glued = [
+    ['abc' + FX.tokenShaped, /^abc\[redacted\]$/],
+    ['foo' + ['glpat', 'abcdEFGH1234ijklMNOP'].join('-'), /^foo\[redacted\]$/],
+    ['x' + ['AKIA', 'ABCDEFGHIJKLMNOP'].join(''), /^x\[redacted\]$/],
+    ['name' + ['a', 'b.example'].join('@'), /^<email>$/],
+  ];
+  for (const [input, expect] of glued) {
+    const out = redact.redactText(input);
+    assert.match(out.text, expect, input.slice(0, 14));
+    assert.equal(out.text.includes(tail36.slice(0, 10)), false);
+  }
+});
+
+test('redact: counter-examples - ordinary words and a commit sha are not masked', () => {
+  for (const s of ['task-runner', 'desk-lamp', 'ask-me-later-please-ok', 'risk-assessment-notes', '576de6de3fd53f2b783385fbee0744fe92051d53', 'feature-flag-rollout-plan']) {
+    assert.deepEqual(redact.redactText(s), { text: s, redactions: 0 }, s);
+  }
 });
 
 test('redact: plain prose and a commit sha are left alone, truncateText marks the cut', () => {

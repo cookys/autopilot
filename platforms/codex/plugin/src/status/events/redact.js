@@ -16,18 +16,20 @@ const personal = require('../../../scripts/lib/personal-data-redact');
 const MARK = '[redacted]';
 
 // Token prefixes and shapes. Each pattern is anchored on a prefix that is rare in prose, so a commit subject or a
-// rationale is not eaten by a generic "long random string" guess.
+// rationale is not eaten by a generic "long random string" guess. Prefixes that cannot occur inside an ordinary word (ghp_, glpat-,
+// AKIA, xoxb-, eyJ, ...) carry NO left boundary, so a token glued to letters is still masked; prefixes that do occur inside
+// words (sk- in task-/desk-, Bearer) keep their \b.
 const TOKEN_PATTERNS = [
   { name: 'private-key-block', re: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----|$)/g },
-  { name: 'github-token', re: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g },
-  { name: 'gitlab-token', re: /\bglpat-[A-Za-z0-9_-]{16,}/g },
+  { name: 'github-token', re: /(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g },
+  { name: 'gitlab-token', re: /glpat-[A-Za-z0-9_-]{16,}/g },
   { name: 'anthropic-openai-key', re: /\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{16,}/g },
-  { name: 'aws-access-key', re: /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g },
-  { name: 'google-api-key', re: /\bAIza[A-Za-z0-9_-]{30,}/g },
-  { name: 'slack-token', re: /\bxox[abprs]-[A-Za-z0-9-]{10,}/g },
-  { name: 'stripe-key', re: /\b(?:sk|rk|pk)_live_[A-Za-z0-9]{16,}/g },
-  { name: 'npm-token', re: /\bnpm_[A-Za-z0-9]{30,}/g },
-  { name: 'jwt', re: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
+  { name: 'aws-access-key', re: /(?:AKIA|ASIA)[A-Z0-9]{16}\b/g },
+  { name: 'google-api-key', re: /AIza[A-Za-z0-9_-]{30,}/g },
+  { name: 'slack-token', re: /xox[abprs]-[A-Za-z0-9-]{10,}/g },
+  { name: 'stripe-key', re: /(?:sk|rk|pk)_live_[A-Za-z0-9]{16,}/g },
+  { name: 'npm-token', re: /npm_[A-Za-z0-9]{30,}/g },
+  { name: 'jwt', re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
   { name: 'bearer', re: /\b(Bearer\s+)[A-Za-z0-9._~+/=-]{16,}/g, keep: 1 },
   // `token=abc`, `api_key: abc`, `password = abc`: the name stays, the value goes.
   { name: 'named-secret', re: /\b((?:[A-Za-z0-9_]*(?:token|secret|passwd|password|api[_-]?key|apikey|credential)[A-Za-z0-9_]*)\s*[:=]\s*["']?)[^\s"',;]{6,}/gi, keep: 1 },

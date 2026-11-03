@@ -21,7 +21,7 @@ const NOW_S = NOW / 1000;
 const deps = gen.loadDeps();
 
 const COVERAGE = /^observations newest_age: /;
-const stripCoverage = (out) => out.split('\n').filter((l) => !COVERAGE.test(l)).join('\n');
+const stripCoverage = gen.stripCoverage; // the coverage line plus, for scenarios whose `run` came first, the mirror fields (D5)
 
 async function go(fx, args) {
   let out = '';

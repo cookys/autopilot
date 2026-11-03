@@ -51,7 +51,9 @@ function pinProblem(repoRoot) {
 }
 
 const COVERAGE_LINE = /^observations newest_age: /;
-const stripCoverage = (out) => String(out).split('\n').filter((l) => !COVERAGE_LINE.test(l)).join('\n');
+// D5: once `run` has copied a statusline snapshot into the mirror, a later `status` line may carry the mirror fields.
+const MIRROR_FIELDS = / mirror_class=\S+ mirror_age=\S+( observed_at=\S+)?/;
+const stripCoverage = (out) => String(out).split('\n').filter((l) => !COVERAGE_LINE.test(l)).map((l) => l.replace(MIRROR_FIELDS, '')).join('\n');
 
 // ---------------------------------------------------------------- pick() cases (the 10 account-pick.test.js groups + extras)
 
@@ -142,6 +144,10 @@ function cliScenarios() {
       snapshots: { a: cliSnap('a', 0.1, 0.1, { written_at_ms: NOW - 7 * 3600e3 }) }, runs: THREE },
     { name: 'root-mismatch', aliases: [{ alias: 'a' }],
       snapshots: { a: cliSnap('a', 0.1, 0.1, { root: 'deadbeef' }) }, runs: THREE },
+    // D5: `run` is NOT last. It copies the statusline snapshot into the mirror first (adapter), then pick and status must still
+    // answer as G37 does; the whole-second written_at_ms makes the mirror row a same-second copy (a tie goes to the snapshot).
+    { name: 'run-first-whole-second-tight', aliases: [{ alias: 'a' }, { alias: 'b' }],
+      snapshots: { a: cliSnap('a', 0.95, 0.1), b: cliSnap('b', 0.97, 0.1) }, runs: [RUN, PICK, ['pick', '--exclude', 'a'], STATUS] },
     { name: 'live-dir-relative', aliases: [{ alias: 'a' }], envOverride: { AUTOPILOT_LIVE_DIR: 'relative/live' }, runs: [PICK, STATUS, RUN] },
     // ctx.liveDir === null: resolveLiveDir refuses /etc, cli() answers live_dir_refused for every subcommand.
     { name: 'live-dir-null', aliases: [{ alias: 'a' }], envOverride: { AUTOPILOT_LIVE_DIR: '/etc' }, runs: [PICK, STATUS, RUN] },

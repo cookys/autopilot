@@ -733,6 +733,7 @@ module.exports = {
   SUPPORTED_KEYWORDS,
   assertJsonValue,
   assertSchemaNode,
+  canonical,
   preflightJsonSource,
   readJson,
   validateJsonSchema,

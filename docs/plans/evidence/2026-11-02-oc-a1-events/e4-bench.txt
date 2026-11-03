@@ -1,17 +1,17 @@
-A1 events, E4 transcript for KR-A1.5 (performance) (2026-11-03, on the E3 merge plus E4; MET also requires every source ok, no warning, exact warm event set)
+A1 events, E4 transcript for KR-A1.5 (performance) (2026-11-03, on the E3 merge plus E4; MET also requires every source ok, no warning, exact warm event set, RSS above the 20 MB sanity floor)
 $ node scripts/status-events-bench.js
 status events bench (synthetic store, scale 1/1)
-rows: cost 200000, decision 20000, runledger 20000, manifests 2000, review phases 500; cost file 47327319 bytes; generated in 0.8 s
-cold (--since 0 --limit 1000): wall 4.397 s, peak RSS 209.4 MB, events 1000, has_more true, bytes read {"code":963285,"dispatch":6340020,"cost":47327575,"other":6,"review":405085,"decision":5738036,"runledger":2833601}
-prime (--since end-1h): wall 2.918 s, peak RSS 176.7 MB, events 453, has_more false, bytes read {"code":963285,"dispatch":6340020,"cost":47327575,"other":6,"review":200945,"decision":5738036,"runledger":2833601}
-warm (resume after 110 live appends): wall 0.243 s, peak RSS 72.6 MB, events 110, has_more false, bytes read {"code":963285,"dispatch":6340020,"cost":26447,"other":6,"review":200945,"decision":7595,"runledger":2422}
-warm via real binary: wall 0.311 s, exit 0, events 110
-PASS cold --limit 1000 wall: 4.397 s (bound 8 s)
-PASS warm resume wall (in-process read): 0.243 s (bound 1.5 s)
-PASS warm resume wall (real binary, incl. node start): 0.311 s (bound 1.5 s)
+rows: cost 200000, decision 20000, runledger 20000, manifests 2000, review phases 500; cost file 47327319 bytes; generated in 1.0 s
+cold (--since 0 --limit 1000): wall 3.944 s, peak RSS 226.0 MB, events 1000, has_more true, bytes read {"code":963285,"dispatch":6340020,"cost":47327575,"other":6,"review":405085,"decision":5738036,"runledger":2833601}
+prime (--since end-1h): wall 2.740 s, peak RSS 175.0 MB, events 453, has_more false, bytes read {"code":963285,"dispatch":6340020,"cost":47327575,"other":6,"review":200945,"decision":5738036,"runledger":2833601}
+warm (resume after 110 live appends): wall 0.260 s, peak RSS 71.0 MB, events 110, has_more false, bytes read {"code":963285,"dispatch":6340020,"cost":26447,"other":6,"review":200945,"decision":7595,"runledger":2422}
+warm via real binary: wall 0.315 s, exit 0, events 110
+PASS cold --limit 1000 wall: 3.944 s (bound 8 s)
+PASS warm resume wall (in-process read): 0.260 s (bound 1.5 s)
+PASS warm resume wall (real binary, incl. node start): 0.315 s (bound 1.5 s)
 PASS warm resume cost-file bytes / file bytes: 0.00056 (bound 0.05)
-PASS peak RSS cold: 209.398 MB (bound 256 MB)
-PASS peak RSS warm: 72.645 MB (bound 256 MB)
+PASS peak RSS cold: 226.047 MB (bound 256 MB)
+PASS peak RSS warm: 71.004 MB (bound 256 MB)
 KR-A1.5: MET
 exit=0
 
@@ -35,5 +35,10 @@ NOT MET because: cold: review source read 0 rows, expected at least 25 phases
 NOT MET because: prime: no review bytes were read
 NOT MET because: warm: no review bytes were read
 NOT MET because: warm: review source read 0 rows, expected at least 25 phases
+KR-A1.5: NOT MET
+exit=1
+$ node scripts/status-events-bench.js --scale 20 --fault rss-unit
+NOT MET because: RSS measurement not trustworthy: cold peak RSS 0.083 MB is below the 20 MB floor of any Node process
+NOT MET because: RSS measurement not trustworthy: warm peak RSS 0.063 MB is below the 20 MB floor of any Node process
 KR-A1.5: NOT MET
 exit=1

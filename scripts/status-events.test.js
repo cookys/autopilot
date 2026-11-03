@@ -1309,21 +1309,39 @@ test('readonly-no-write-api: no reader, merge or cli module calls a filesystem w
   const walk = (d) => { for (const n of fs.readdirSync(d)) { const f = path.join(d, n); if (fs.statSync(f).isDirectory()) walk(f); else if (f.endsWith('.js')) files.push(f); } };
   walk(root);
   assert.ok(files.length >= 10);
-  const forbidden = /\b(writeFileSync|appendFileSync|mkdirSync|rmSync|rmdirSync|renameSync|unlinkSync|copyFileSync|createWriteStream|chmodSync|chownSync|utimesSync|truncateSync|ftruncateSync|fchmodSync|fchownSync|futimesSync|writeSync|writevSync|symlinkSync|linkSync|mkdtempSync|writeFile|appendFile|mkdir|rm|unlink|rename|truncate|copyFile|chmod|utimes)\s*\(|\bfs\.promises\b|require\(['"](?:node:)?fs\/promises['"]\)|\bopenSync\([^)]*['"](?:w|a|r\+|wx|ax)['"]|(?:require|import)\s*\(?\s*['"](?:@anthropic-ai|openai)|dispatch-(?:review|hetero|author|consult)|autopilot\.js/;
+  const forbidden = /\b(writeFileSync|appendFileSync|mkdirSync|rmSync|rmdirSync|renameSync|unlinkSync|copyFileSync|createWriteStream|chmodSync|chownSync|utimesSync|truncateSync|ftruncateSync|fchmodSync|fchownSync|futimesSync|writeSync|writevSync|symlinkSync|linkSync|mkdtempSync|writeFile|appendFile|mkdir|rm|unlink|rename|truncate|copyFile|chmod|utimes)\s*\(|\bfs\.promises\b|\)\.promises\b|\bfrom\s+['"](?:node:)?fs(?:\/promises)?['"]|require\(['"](?:node:)?fs\/promises['"]\)|\bopenSync\([^)]*['"](?:w|a|r\+|wx|ax)['"]|(?:require|import)\s*\(?\s*['"](?:@anthropic-ai|openai)|dispatch-(?:review|hetero|author|consult)|autopilot\.js/;
+  // The one allowed write is the CLI's stdout (fd 1) in src/status/events/cli.js. Only the call prefix `fs.writeSync(1,` is removed
+  // from the line; its arguments and everything else on the line are still scanned. In any other file it is a violation.
+  const CLI = path.join('src', 'status', 'events', 'cli.js');
+  const scanLine = (line, rel) => {
+    if (/^\s*\/\//.test(line)) return { hit: false, allowed: 0 };
+    let text = line;
+    let allowed = 0;
+    if (rel === CLI) text = text.replace(/fs\.writeSync\(1,/g, () => { allowed += 1; return '('; });
+    return { hit: forbidden.test(text), allowed };
+  };
   const hits = [];
+  let cliAllowed = 0;
   for (const f of files) {
+    const rel = path.relative(REPO, f);
     fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
-      if (/^\s*\/\//.test(line)) return;
-      if (/fs\.writeSync\(1,/.test(line)) return; // the one allowed write: the CLI's stdout (fd 1)
-      if (forbidden.test(line)) hits.push(`${path.relative(REPO, f)}:${i + 1}: ${line.trim().slice(0, 80)}`);
+      const r = scanLine(line, rel);
+      cliAllowed += r.allowed;
+      if (r.hit) hits.push(`${rel}:${i + 1}: ${line.trim().slice(0, 80)}`);
     });
   }
   assert.deepEqual(hits, []);
-  // negative control: the pattern does fire on a write call
+  assert.equal(cliAllowed, 1, 'exactly one stdout write is allowed, in the CLI');
+  // negative controls: the patterns fire
   assert.ok(forbidden.test("fs.writeFileSync(file, 'x')"));
   assert.ok(forbidden.test("fs.openSync(file, 'w')"));
-  for (const sample of ['fs.writeSync(fd, data)', 'fs.ftruncateSync(fd, 0)', 'fs.promises.writeFile(f, d)', "require('fs/promises')", 'await fsp.appendFile(f, d)', 'await fsp.rm(dir)', 'await fsp.mkdir(dir)']) {
+  for (const sample of ['fs.writeSync(fd, data)', 'fs.ftruncateSync(fd, 0)', 'fs.promises.writeFile(f, d)', "require('fs/promises')", "require('node:fs/promises')", "require('fs').promises", "require('node:fs').promises", "import { rm } from 'node:fs/promises'", 'await fsp.appendFile(f, d)', 'await fsp.rm(dir)', 'await fsp.mkdir(dir)']) {
     assert.ok(forbidden.test(sample), sample);
   }
   assert.equal(forbidden.test('fs.readSync(fd, buf, 0, 1, 0)'), false);
+  // the stdout exception covers the call prefix only
+  assert.equal(scanLine('off += fs.writeSync(1, buf, off, buf.length - off);', CLI).hit, false, 'the plain stdout write is allowed in the CLI');
+  assert.equal(scanLine("fs.writeSync(1, x); fs.writeFileSync(f, y);", CLI).hit, true, 'a second write on the same line is caught');
+  assert.equal(scanLine('fs.writeSync(1, fs.writeFileSync(f, y));', CLI).hit, true, 'a write inside the stdout call arguments is caught');
+  assert.equal(scanLine('fs.writeSync(1, x);', path.join('src', 'status', 'events', 'sources', 'cost.js')).hit, true, 'fs.writeSync(1, ...) outside the CLI is a violation');
 });

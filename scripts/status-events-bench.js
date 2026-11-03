@@ -13,7 +13,8 @@
  *   binary the same warm resume through `node bin/autopilot.js status events --since <cursor> --json` (process start included)
  *   rss    peak RSS of every child                                    bound <= 256 MB
  * Prints wall time, peak RSS and the bytes each source read (counted by wrapping fs.openSync/readSync/readFileSync in the child).
- * Negative controls: --fault cost-unreadable (cost file mode 000) and --fault no-review (no review ledger configured) must each print NOT MET.
+ * Negative controls: --fault cost-unreadable (cost file mode 000; refused with exit 2 as uid 0), --fault no-review (no review ledger configured)
+ * and --fault rss-unit (RSS divisor 1024*1024; the RSS sanity floor must catch it) must each print NOT MET.
  * MET also requires every source ok, no warning, a complete prime read, and the warm result to be exactly 100 cost.turn + 10 decision.row in-process and via the binary.
  * Exit 0 when every bound holds, 1 when one does not, 2 on a usage error. Removes its tempdir unless --keep.
  * Reference: docs/dev/events-contract.md; plan KR-A1.5.
@@ -29,8 +30,10 @@ const BOUNDS = { coldSeconds: 8, warmSeconds: 1.5, warmCostFraction: 0.05, rssMb
 const SIZES = { cost: 200000, decision: 20000, runledger: 20000, manifests: 2000, phases: 500 };
 
 // ---------------------------------------------------------------------------------------------------------------- child
-// resourceUsage().maxRSS is KB on Linux and bytes on macOS
-const rssMb = (maxRss, platform = process.platform) => (platform === 'darwin' ? maxRss / (1024 * 1024) : maxRss / 1024);
+// process.resourceUsage().maxRSS is in KB on every platform (Node docs), so MB = maxRSS / 1024. The divisor is a parameter only so the
+// negative control (--fault rss-unit) can break it; a reading below MIN_RSS_MB means the measurement itself is not trustworthy.
+const MIN_RSS_MB = 20;
+const rssMb = (maxRss, divisor = 1024) => maxRss / divisor;
 function childMain(spec) {
   const byPath = new Map(); // fd -> path
   const bytes = {};
@@ -58,7 +61,7 @@ function childMain(spec) {
   const page = collectEvents({ cwd: spec.cwd, env: spec.env, home: spec.env.HOME, since: spec.since, limit: spec.limit });
   const wallMs = Number(process.hrtime.bigint() - t0) / 1e6;
   process.stdout.write(`${JSON.stringify({
-    wall_ms: wallMs, rss_mb: rssMb(process.resourceUsage().maxRSS), bytes, sources: page.sources || [], event_ids: spec.wantIds && page.events ? page.events.map((e) => e.id) : undefined, events: page.events ? page.events.length : 0,
+    wall_ms: wallMs, rss_mb: rssMb(process.resourceUsage().maxRSS, spec.rssDivisor), bytes, sources: page.sources || [], event_ids: spec.wantIds && page.events ? page.events.map((e) => e.id) : undefined, events: page.events ? page.events.length : 0,
     has_more: page.has_more, cursor: page.cursor, error: page.error || null, warnings: (page.warnings || []).map((w) => w.code),
   })}\n`);
 }
@@ -184,21 +187,27 @@ function main(argv) {
     if (argv[i] === '--keep') keep = true;
     else if (argv[i] === '--json') json = true;
     else if (argv[i] === '--scale' && /^[1-9][0-9]*$/.test(argv[i + 1] || '')) { scale = Number(argv[i + 1]); i += 1; }
-    else if (argv[i] === '--fault' && ['cost-unreadable', 'no-review'].includes(argv[i + 1])) { fault = argv[i + 1]; i += 1; }
-    else { process.stderr.write(`usage: status-events-bench.js [--scale N] [--keep] [--json] [--fault cost-unreadable|no-review]\n`); return 2; }
+    else if (argv[i] === '--fault' && ['cost-unreadable', 'no-review', 'rss-unit'].includes(argv[i + 1])) { fault = argv[i + 1]; i += 1; }
+    else { process.stderr.write(`usage: status-events-bench.js [--scale N] [--keep] [--json] [--fault cost-unreadable|no-review|rss-unit]\n`); return 2; }
+  }
+  if (fault === 'cost-unreadable' && typeof process.getuid === 'function' && process.getuid() === 0) {
+    process.stderr.write('bench: --fault cost-unreadable cannot be verified as uid 0 (a mode 000 file is still readable), no verdict\n');
+    return 2;
   }
   let dir = null;
+  let costsFile = null;
   try {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'status-events-bench-'));
     const t0 = Date.now();
     const { fx, ledger, END, counts } = generate(dir, scale);
+    costsFile = fx.paths.costsFile;
     const costBytes = fs.statSync(fx.paths.costsFile).size;
     const env = { ...fx.env };
     if (fault !== 'no-review') env.AUTOPILOT_EVENTS_REVIEW_LEDGERS = ledger;
     if (fault === 'cost-unreadable') fs.chmodSync(fx.paths.costsFile, 0o000);
     const classes = [['code', REPO], ['cost', fx.paths.costsFile], ['dispatch', fx.paths.runsDir], ['decision', path.dirname(fx.paths.decisionLedger)],
       ['runledger', path.dirname(fx.paths.runLedger)], ['review', ledger]];
-    const base = { cwd: fx.repoDir, env, classes };
+    const base = { cwd: fx.repoDir, env, classes, rssDivisor: fault === 'rss-unit' ? 1024 * 1024 : 1024 };
     const genSeconds = (Date.now() - t0) / 1000;
 
     const cold = runChild({ ...base, since: '0', limit: 1000 });
@@ -222,6 +231,7 @@ function main(argv) {
         if (!st) problems.push(`${label}: source ${name} missing from the envelope`);
         else if (st.state !== 'ok') problems.push(`${label}: source ${name} is ${st.state}`);
       }
+      for (const st of r.sources || []) if (typeof st.rows_read !== 'number' || !Number.isFinite(st.rows_read)) problems.push(`${label}: source ${st.name} has a non-numeric rows_read`);
       if (r.error) problems.push(`${label}: error ${JSON.stringify(r.error)}`);
       if ((r.warnings || []).length) problems.push(`${label}: unexpected warnings ${r.warnings.join(',')}`);
     };
@@ -255,6 +265,7 @@ function main(argv) {
       ['peak RSS warm', warm.rss_mb, BOUNDS.rssMb, 'MB'],
     ];
     for (const [name, v, bound] of results) if (!(v <= bound)) problems.push(`bound: ${name} ${v} > ${bound}`);
+    for (const [label, r] of [['cold', cold], ['warm', warm]]) if (!(r.rss_mb >= MIN_RSS_MB)) problems.push(`RSS measurement not trustworthy: ${label} peak RSS ${r.rss_mb.toFixed(3)} MB is below the ${MIN_RSS_MB} MB floor of any Node process`);
     const verdictOk = problems.length === 0;
     const report = { scale, counts, cost_file_bytes: costBytes, generate_seconds: genSeconds, cold, warm: { ...warm, cursor: undefined, event_ids: undefined }, problems, binary: { seconds: binSeconds, status: bin.status, events: binBody ? binBody.events.length : null }, results: results.map(([name, value, bound]) => ({ name, value, bound, ok: value <= bound })), ok: verdictOk };
     if (json) { process.stdout.write(`${JSON.stringify(report)}\n`); return verdictOk ? 0 : 1; }
@@ -271,7 +282,7 @@ function main(argv) {
     process.stdout.write(`${out.join('\n')}\n`);
     return verdictOk ? 0 : 1;
   } finally {
-    if (fault === 'cost-unreadable' && dir) { try { fs.chmodSync(path.join(dir, 'metrics', 'costs.jsonl'), 0o600); } catch (_e) { /* gone */ } }
+    if (fault === 'cost-unreadable' && costsFile) { try { fs.chmodSync(costsFile, 0o600); } catch (_e) { /* gone */ } }
     if (dir && keep) process.stderr.write(`kept ${dir}\n`);
     else if (dir) fs.rmSync(dir, { recursive: true, force: true });
   }

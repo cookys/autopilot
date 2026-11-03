@@ -127,7 +127,7 @@ test('classify run: an undefined or missing rc is no exit code; only a number co
 
 test('stateBadge: only need_you, running and stalled have a badge form; the runtime refusal stays', () => {
   expect(stateBadge(stateOf('verdict', 'DECIDE') as BadgeStated, undefined, 'header.verdict' as never).text).toBe('▲')
-  expect(stateBadge(stateOf('verdict', 'STALLED') as BadgeStated, 2, 'header.verdict' as never).text).toBe('⊘2')
+  expect(stateBadge(stateOf('verdict', 'STALLED') as BadgeStated, 2, 'header.verdict' as never).text).toBe('⊘ 2')
   expect(() => stateBadge(stateOf('qc', 'ok') as BadgeStated, 1, 'header.verdict' as never)).toThrow()
   expect(isBadgeState(stateOf('qc', 'ok'))).toBe(false)
   expect(isBadgeState(stateOf('verdict', 'RUNNING'))).toBe(true)

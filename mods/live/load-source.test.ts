@@ -17,7 +17,7 @@ const cacheFact = (over: Record<string, unknown> = {}) => fact({
 
 test('P7b chip: the real dev tree reads `dev`, behind upstream adds the count', () => {
   expect(hygieneChip(readLoadSource(fact()))).toEqual({ text: 'dev', warn: false })
-  expect(hygieneChip(readLoadSource(fact({ behind_upstream: 3 })))).toEqual({ text: 'dev ↓3', warn: false })
+  expect(hygieneChip(readLoadSource(fact({ behind_upstream: 3 })))).toEqual({ text: 'dev ↓ 3', warn: false })
   expect(hygieneChip(readLoadSource(fact({ behind_upstream: null })))).toEqual({ text: 'dev', warn: false })
 })
 

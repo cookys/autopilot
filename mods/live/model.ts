@@ -625,9 +625,10 @@ export function readQc(text: string | null, want: ScopeWant): QcView | null {
 }
 
 // the review-slot chip: `QC✓` (evidence present), `QC▲` (protected diff, no evidence: it awaits a person); nothing owed or unknown = no chip
+const QC_LABEL = 'QC'
 export function qcChip(q: QcView | null): string | null {
   if (q === null) return null
-  return q.state === 'ok' ? 'QC' + GS.done : q.state === 'owed' ? 'QC' + GS.need_you : null
+  return q.state === 'ok' ? QC_LABEL + ui.CHIP_MARK + GS.done : q.state === 'owed' ? QC_LABEL + ui.CHIP_MARK + GS.need_you : null
 }
 
 // `git-common-dir:<abs path>` -> the path (only an absolute one); anything else -> null
@@ -716,10 +717,10 @@ export function hygieneChip(v: LoadSourceView | null, sessionPid: number | strin
   const marketplaceBad = v.flags.includes('marketplace_not_directory') || v.flags.includes('marketplace_not_this_repo')
   if (src.startsWith('cache:')) return { text: 'cache ' + src.slice('cache:'.length) + ' ' + GS.need_you, warn: true }
   if (src === 'dev') {
-    const behind = v.behind_upstream !== null && v.behind_upstream > 0 ? ' ' + GT.behind + v.behind_upstream : ''
+    const behind = v.behind_upstream !== null && v.behind_upstream > 0 ? ui.CHIP_LEAD + GT.behind + ui.CHIP_MARK + v.behind_upstream : ''
     return { text: 'dev' + behind + (marketplaceBad ? ' ' + GS.need_you : ''), warn: marketplaceBad }
   }
-  return { text: 'src ' + GS.unknown + ' ' + GS.need_you, warn: true }
+  return { text: 'src ' + GS.unknown + ui.CHIP_MARK + GS.need_you, warn: true }
 }
 
 export type Sources = {
@@ -1133,7 +1134,7 @@ export function reviewRound(r: ReviewView | null): number | null {
 // The band's review slot text: `↺ R<n>`; null = no slot.
 export function reviewSlot(r: ReviewView | null): string | null {
   const n = reviewRound(r)
-  return n === null ? null : GT.round + ' R' + n
+  return n === null ? null : GT.round + ui.CHIP_MARK + 'R' + n
 }
 
 const short = (sha: string | null): string => (sha === null ? '—' : sha.slice(0, 8))
@@ -1370,7 +1371,7 @@ export function slotPosition(m: MarkerView | null, nowMs: number, w: StageWalkVi
   else { if (head !== '') segs.push(sp('·', { tag: 'dot' })); segs.push(sp(' ', { tag: 'walk' }), ...walk, sp(' ', { tag: 'walk' })) }
   segs.push(sp(m.stage, { color: PALETTE.here, tag: 'stage' }))
   const age = m.stage_set_at_ms === null ? '—' : elapsedFrom(m.stage_set_at_ms, nowMs)
-  if (age !== '—') segs.push(sp(' ' + GT.age + age, { dim: true, tag: 'age' }))
+  if (age !== '—') segs.push(ui.gapSeg(ui.CHIP_LEAD, 'age'), ...ui.chipSegs([sp(GT.age, { dim: true, tag: 'age' })], [sp(age, { dim: true, tag: 'age' })]))
   return { id: 'position', segs }
 }
 
@@ -1396,36 +1397,34 @@ export function slotUnit(m: MarkerView | null, t: T = T_EN): Slot | null {
 
 export function slotDispatch(live: number, stalled: number): Slot | null {
   if (live <= 0 && stalled <= 0) return null
-  const segs: Seg[] = []
-  if (live > 0) segs.push(sp(GS.running + live, { color: PALETTE.running, tag: 'live' }))
-  if (stalled > 0) segs.push(sp((segs.length > 0 ? ' ' : '') + GS.stalled + stalled, { color: PALETTE.broken, tag: 'stalled' }))
-  return { id: 'dispatch', segs }
+  const chip = (glyph: string, n: number, color: ThemeKey, tag: SegTag): Seg[] => ui.chipSegs([sp(glyph, { color, tag })], [sp(String(n), { color, tag })])
+  const chips: Seg[][] = []
+  if (live > 0) chips.push(chip(GS.running, live, PALETTE.running, 'live'))
+  if (stalled > 0) chips.push(chip(GS.stalled, stalled, PALETTE.broken, 'stalled'))
+  return { id: 'dispatch', segs: ui.chipsJoin(chips, 'next') }
 }
 
-// `↺ R<n>` (↺ dim) + ` QC▲` / ` QC✓`: the round goes at < 120, the QC chip stays down to 80
+// `↺ R<n>` (↺ dim) + `  QC ▲` / `  QC ✓`: the round goes at < 120, the QC chip stays down to 80
 export function slotReview(r: ReviewView | null, q: QcView | null): Slot | null {
   const round = reviewRound(r)
   const chip = qcChip(q)
   if (round === null && chip === null) return null
-  const segs: Seg[] = []
-  if (round !== null) segs.push(sp(GT.round + ' ', { dim: true, tag: 'round' }), sp('R' + round, { tag: 'round' }))
-  if (chip !== null) {
-    if (round !== null) segs.push(sp(' ', { tag: 'round' }))
-    // the label stays default text; only the mark carries the colour (the owner's attention is yellow once: the verdict word)
-    segs.push(sp(chip.slice(0, 2), { tag: 'qc' }), sp(chip.slice(2), { color: chip === 'QC' + GS.done ? PALETTE.done : PALETTE.attention, tag: 'qc' }))
-  }
-  return { id: 'review', segs }
+  const chips: Seg[][] = []
+  if (round !== null) chips.push(ui.chipSegs([sp(GT.round, { dim: true, tag: 'round' })], [sp('R' + round, { tag: 'round' })]))
+  // the label stays default text; only the mark carries the colour (the owner's attention is yellow once: the verdict word)
+  if (chip !== null) chips.push(ui.chipSegs([sp(QC_LABEL, { tag: 'qc' })], [sp(chip.slice(QC_LABEL.length + ui.CHIP_MARK.length), { color: chip === QC_LABEL + ui.CHIP_MARK + GS.done ? PALETTE.done : PALETTE.attention, tag: 'qc' })]))
+  return { id: 'review', segs: ui.chipsJoin(chips) }
 }
 
-// `◆<proxy>` + ` ?<undocumented>` + ` <rung>`: ◆ is a plain value now (claude is reserved for "you are here"), `?` inactive
+// `◆ <proxy>` + `  ? <undocumented>` + `  <rung>`: ◆ is a plain value now (claude is reserved for "you are here"), `?` inactive
 export function slotDecisions(d: DecisionsView | null): Slot | null {
   if (d === null) return null
-  const parts: Seg[] = []
-  if (d.count > 0) parts.push(sp(GT.decisions + d.count))
-  if (d.undocumented > 0) parts.push(sp('?' + d.undocumented, { color: PALETTE.idle }))
-  if (d.ladder !== null) parts.push(sp(d.ladder.rung))
+  const parts: Seg[][] = []
+  if (d.count > 0) parts.push(ui.chipSegs([sp(GT.decisions)], [sp(String(d.count))]))
+  if (d.undocumented > 0) parts.push(ui.chipSegs([sp(GS.unknown, { color: PALETTE.idle })], [sp(String(d.undocumented), { color: PALETTE.idle })]))
+  if (d.ladder !== null) parts.push([sp(d.ladder.rung)])
   if (parts.length === 0) return null
-  return { id: 'decisions', segs: parts.flatMap((p, i) => (i === 0 ? [p] : [sp(' '), p])) }
+  return { id: 'decisions', segs: ui.chipsJoin(parts) }
 }
 
 // brain-tier spend vs the cap: warning from 80 % of the cap, error from 100 %
@@ -1460,27 +1459,25 @@ export function slotSpend(s: { brain: number; cap: number } | null): Slot | null
   }
 }
 
-// hygieneChip text (`dev↓3`, the arrow dim) + ` ⚑<n>` (n = residueTally(...).judgeCount = what a person must judge, the cleanable entries not counted, n > 0 only; the owner reminder, never dropped)
+// hygieneChip text (`dev ↓ 3`, the arrow chip dim) + `  ⚑ <n>` (n = residueTally(...).judgeCount = what a person must judge, the cleanable entries not counted, n > 0 only; the owner reminder, never dropped)
 export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | null): Slot | null {
   const chip = hygieneChip(ls)
   const wt = residue === null ? 0 : residueTally(residue).judgeCount // what the owner has to judge; the cleanable ones are not a reminder
   if (chip === null && wt === 0) return null
-  const segs: Seg[] = []
+  const chips: Seg[][] = []
   if (chip !== null) {
-    const text = chip.text.replace(' ' + GT.behind, GT.behind)
-    const arrow = text.indexOf(GT.behind)
     const col = chip.warn ? { color: PALETTE.attention } : {}
-    if (arrow < 0) segs.push(sp(text, { ...col, tag: 'chip' }))
-    else {
-      const m = new RegExp('^(\\S*' + GT.behind + '\\d+)(.*)$').exec(text.slice(arrow))
-      segs.push(sp(text.slice(0, arrow), { ...col, tag: 'chip' }), sp(m === null ? text.slice(arrow) : m[1], { dim: true, tag: 'chip' }))
-      if (m !== null && m[2] !== '') segs.push(sp(m[2], { ...col, tag: 'chip' }))
-    }
+    const m = new RegExp('^(.*?)' + GT.behind + ui.CHIP_MARK + '(\\d+)(.*)$').exec(chip.text)
+    if (m === null) chips.push([sp(chip.text, { ...col, tag: 'chip' })])
+    else chips.push([
+      sp(m[1], { ...col, tag: 'chip' }), // `dev ` (the word and the first chip are CHIP_LEAD apart: it is part of the text)
+      ...ui.chipSegs([sp(GT.behind, { dim: true, tag: 'chip' })], [sp(m[2], { dim: true, tag: 'chip' })]),
+      ...(m[3] === '' ? [] : [sp(m[3], { ...col, tag: 'chip' })]),
+    ])
   }
-  if (wt > 0) {
-    if (chip !== null) segs.push(sp(' ', { tag: 'chip' })) // the separator goes with the chip: a lone `⚑N` has no leading space
-    segs.push(sp(GT.residue, { color: PALETTE.attention, tag: 'wt' }), sp(String(wt), { tag: 'wt' })) // the mark is yellow, the number default text
-  }
+  // the mark is yellow, the number default text
+  if (wt > 0) chips.push(ui.chipSegs([sp(GT.residue, { color: PALETTE.attention, tag: 'wt' })], [sp(String(wt), { tag: 'wt' })]))
+  const segs = ui.chipsJoin(chips) // the gap goes with the chip before it: a lone `⚑ N` has no leading gap
   return { id: 'hygiene', segs }
 }
 
@@ -1502,7 +1499,7 @@ export function bandSlots(f: BandFacts, t: T = T_EN): Slot[] {
   ].filter((s): s is Slot => s !== null)
 }
 
-export const BAND_SEP = ' ' + GT.bandSep + ' '
+export const BAND_SEP = ui.CHIP_MARK + GT.bandSep + ui.CHIP_MARK
 export const BAND_ICON = GT.info
 // the ⓘ Button's label: the glyph plus a space. ⓘ (U+24D8) is East Asian Width Ambiguous: displayWidth counts it one cell, a CJK-locale terminal
 // (the owner's) draws it two, so a one-cell Button left the glyph's right half outside the control. The space makes the Button two cells either way.
@@ -1542,7 +1539,7 @@ export function layoutBand(slots: Slot[], columns: number): BandLayout {
   const join = (list: Slot[]): Seg[] => {
     const out: Seg[] = []
     list.forEach((s, i) => {
-      if (i > 0) out.push(GROUP[s.id] === GROUP[list[i - 1].id] ? sp(' ') : sp(BAND_SEP, { color: PALETTE.structure }))
+      if (i > 0) out.push(GROUP[s.id] === GROUP[list[i - 1].id] ? ui.gapSeg(ui.CHIP_GAP) : sp(BAND_SEP, { color: PALETTE.structure }))
       out.push(...s.segs.map(g => ({ ...g, slot: s.id })))
     })
     out.push(sp(BAND_SEP, { color: PALETTE.structure }))

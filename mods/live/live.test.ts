@@ -560,8 +560,8 @@ for (const surface of SURFACES) {
     files['/work/repo/.git/autopilot-residue-auto.json'] = auto(3)
     const w = worldEn(on, files)
     await start($, surface)
-    expect(await bandText($, surface)).toContain('no project · ⚑3 · run:')
-    expect(await paneHeader($, surface)).toContain('⚑3')
+    expect(await bandText($, surface)).toContain('no project · ⚑ 3 · run:')
+    expect(await paneHeader($, surface)).toContain('⚑ 3')
     // zero, a foreign schema or a malformed file: the plain no-project line, no wt
     w.files['/work/repo/.git/autopilot-residue-auto.json'] = auto(0)
     await w.clock.advance(5000)
@@ -577,7 +577,7 @@ for (const surface of SURFACES) {
     w.files['/work/repo/.git'] = 'gitdir: /main/.git/worktrees/wt1\n'
     w.files['/main/.git/autopilot-residue-auto.json'] = auto(2)
     await w.clock.advance(5000)
-    expect(await bandText($, surface)).toContain('no project · ⚑2 · run:')
+    expect(await bandText($, surface)).toContain('no project · ⚑ 2 · run:')
     // a scoped project is unaffected: the envelope band, not the no-project line
     w.files[LIVE + '/runs/paths/' + KEY + '.json'] = j({ '/work/repo': { project_key: KEY, repo_identity: 'y' } })
     await w.clock.advance(5000)
@@ -610,19 +610,19 @@ for (const surface of SURFACES) {
     w.files['/work/repo/.git'] = 'gitdir: ../.git/modules/sub\n'
     w.files['/work/.git/modules/sub/autopilot-residue-auto.json'] = auto(4)
     await w.clock.advance(5000)
-    expect(await bandText($, surface)).toContain('no project · ⚑4 · run:')
+    expect(await bandText($, surface)).toContain('no project · ⚑ 4 · run:')
     // a linked worktree: commondir is preferred, relative to the gitdir
     w.files['/work/repo/.git'] = 'gitdir: /main/.git/worktrees/wt1\n'
     w.files['/main/.git/worktrees/wt1/commondir'] = '../..\n'
     w.files['/main/.git/autopilot-residue-auto.json'] = auto(5)
     await w.clock.advance(5000)
-    expect(await bandText($, surface)).toContain('no project · ⚑5 · run:')
+    expect(await bandText($, surface)).toContain('no project · ⚑ 5 · run:')
     // a main repo under a directory named `worktrees` (no commondir file): the cut is at the last /worktrees/ of the gitdir only
     delete w.files['/main/.git/worktrees/wt1/commondir']
     w.files['/work/repo/.git'] = 'gitdir: /srv/worktrees/proj/.git/worktrees/wt9\n'
     w.files['/srv/worktrees/proj/.git/autopilot-residue-auto.json'] = auto(6)
     await w.clock.advance(5000)
-    expect(await bandText($, surface)).toContain('no project · ⚑6 · run:')
+    expect(await bandText($, surface)).toContain('no project · ⚑ 6 · run:')
   })
 
   // age alone never makes a snapshot stale once its writer is gone: only a change of THIS project's sources does (the watcher's sourceFingerprint groups)
@@ -2464,9 +2464,9 @@ const qcFact = (over: Record<string, unknown> = {}, scope: Record<string, unknow
   state: 'owed', range: 'abc..HEAD', protected_files_count: 2, evidence: null, mode: 'block', checked_at: '2026-10-04T10:00:00.000Z', ...over,
 })
 const QC_WANT = { project_key: KEY, root_run_id: ROOT }
-test('P7c: qc fact -> chip: ok = QC✓, owed = QC▲, not_needed / unknown / absent = no chip', async () => {
-  expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'ok', evidence: 'trailer' })), QC_WANT))).toBe('QC✓')
-  expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'owed' })), QC_WANT))).toBe('QC▲')
+test('P7c: qc fact -> chip: ok = QC ✓, owed = QC ▲, not_needed / unknown / absent = no chip', async () => {
+  expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'ok', evidence: 'trailer' })), QC_WANT))).toBe('QC ✓')
+  expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'owed' })), QC_WANT))).toBe('QC ▲')
   expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'not_needed', protected_files_count: 0 })), QC_WANT))).toBe(null)
   expect(qcChip(readQc(JSON.stringify(qcFact({ state: 'unknown', range: null })), QC_WANT))).toBe(null)
   expect(qcChip(readQc(null, QC_WANT))).toBe(null)
@@ -2559,13 +2559,15 @@ function richWorld(): Tree {
 }
 
 // TUI v2 grammar: groups separated by ` │ `, items inside a group by a space; the wide band carries the stage walk, a 10-cell spend bar + %, the verdict's reason
-const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ⊘1 ↺ R3 QC✓ │ ◆3 ?1 U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev↓3 ⚑2 │ ⓘ '
-const RICH_MID = '⊘ 疑似卡住 │ M!·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ⊘1 ↺ R3 QC✓ │ $120 ▰▰▰▰▱ │ ⚑2 │ ⓘ '
-const RICH_SMALL = '⊘ 疑似卡住 │ ▰▰▰▱▱ │ ●2 ⊘1 QC✓ │ $▰▰▱ │ ⚑2 │ ⓘ '
-const RICH_NARROW = '⊘ 疑似卡住 │ ●2 ⊘1 │ ⚑2 │ ⓘ '
+const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 ·2族 │ ● 2  ⊘ 1  ↺ R3  QC ✓ │ ◆ 3  ? 1  U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev ↓ 3  ⚑ 2 │ ⓘ '
+// at exactly 160 the chip gaps (§3.5) leave the reason phrase 9 cells less room: it is cut with … (the reason takes whatever room is left)
+const RICH_160 = '⊘ 疑似卡住 最久的派工 4m 沒有… │ M!·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 ·2族 │ ● 2  ⊘ 1  ↺ R3  QC ✓ │ ◆ 3  ? 1  U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev ↓ 3  ⚑ 2 │ ⓘ '
+const RICH_MID = '⊘ 疑似卡住 │ M!·l5·implement │ ▰▰▰▱▱ 3/5 │ ● 2  ⊘ 1  ↺ R3  QC ✓ │ $120 ▰▰▰▰▱ │ ⚑ 2 │ ⓘ '
+const RICH_SMALL = '⊘ 疑似卡住 │ ▰▰▰▱▱ │ ● 2  ⊘ 1  QC ✓ │ $▰▰▱ │ ⚑ 2 │ ⓘ '
+const RICH_NARROW = '⊘ 疑似卡住 │ ● 2  ⊘ 1 │ ⚑ 2 │ ⓘ '
 const RICH_WIDTHS: [number, string][] = [
   [209, RICH_209],
-  [160, RICH_209],
+  [160, RICH_160],
   [159, RICH_MID],
   [140, RICH_MID],
   [139, RICH_MID],
@@ -2651,6 +2653,7 @@ for (const surface of SURFACES) {
     const colored = walkTexts(line.tree).map(n => [textOf(n), n.props?.color as string | undefined, n.props?.dimColor as boolean | undefined] as const)
     const colorOf = (t: string) => colored.find(([x]) => x === t)?.[1]
     const dimOf = (t: string) => colored.find(([x]) => x === t)?.[2]
+    const valueOf = (mark: string) => colored[colored.findIndex(([x]) => x === mark) + 2] // a chip is mark, one space, value: the value is two nodes after the mark
     expect(colorOf('⊘ 疑似卡住')).toBe('error') // verdict
     expect(dimOf(' 最久的派工 4m 沒有輸出')).toBe(true) // the reason phrase is a dim hint
     expect(colorOf('implement')).toBe('claude') // the stage: you are here
@@ -2662,19 +2665,19 @@ for (const surface of SURFACES) {
     expect(colorOf('▰▰')).toBe('success') // unit bar: done cells
     expect(colored.filter(([x]) => x === '▰')[0]?.[1]).toBe('claude') // the current cell
     expect(colorOf('▱▱')).toBe('inactive') // cells to come
-    expect(colorOf('●2')).toBe('suggestion') // running: the band draws the same blue as the pane's ●
-    expect(colorOf(' ⊘1')).toBe('error') // stalled
+    expect(colorOf('●')).toBe('suggestion'); expect(valueOf('●')).toEqual(['2', 'suggestion', undefined]) // running: the band draws the same blue as the pane's ●
+    expect(colorOf('⊘')).toBe('error'); expect(valueOf('⊘')).toEqual(['1', 'error', undefined]) // stalled
     expect(colorOf('QC')).toBeUndefined() // the label stays default text, the mark carries the colour
-    expect(dimOf('↺ ')).toBe(true)
-    expect(colorOf('◆3')).toBeUndefined() // claude is reserved for "you are here"
-    expect(colorOf('?1')).toBe('inactive')
+    expect(dimOf('↺')).toBe(true)
+    expect(colorOf('◆')).toBeUndefined() // claude is reserved for "you are here"
+    expect(colorOf('?')).toBe('inactive'); expect(valueOf('?')).toEqual(['1', 'inactive', undefined])
     expect(colorOf('U2')).toBeUndefined()
     expect(colorOf('120')).toBe('warning') // 80.3 % of the cap: the amount, then the bar in the same state colour
     expect(colorOf('▰▰▰▰▰▰▰▰')).toBe('warning')
     expect(dimOf('80%')).toBe(true)
     expect(colorOf('⚑')).toBe('warning') // the owner reminder: the mark is yellow, the number stays default text
     expect(colored.some(([x, c]) => x === '2' && c === undefined)).toBe(true)
-    expect(dimOf('↓3')).toBe(true)
+    expect(dimOf('↓')).toBe(true); expect(valueOf('↓')?.[2]).toBe(true)
     expect(colored.filter(([x]) => x === ' │ ').every(([, c]) => c === 'subtle')).toBe(true)
     expect(colored.every(([x, c]) => c !== 'claude' || x === 'implement' || x === '◐' || x === '▰')).toBe(true) // claude is only "you are here"
     expect(line.tree && walkTexts(line.tree).some(n => n.props?.bold === true && textOf(n) !== '⊘ 疑似卡住')).toBe(false) // bold: the verdict word only
@@ -2685,9 +2688,9 @@ for (const surface of SURFACES) {
     world(on, base())
     await start($, surface)
     const text = (await bandLine($, surface, 209)).text
-    expect(text).toBe('⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ ●2 ⊘1 │ ⓘ ')
+    expect(text).toBe('⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ ● 2  ⊘ 1 │ ⓘ ')
     expect(text).not.toContain('│  │')
-    expect((await bandLine($, surface, 119)).text).toBe('⊘ 疑似卡住 │ ●2 ⊘1 │ ⓘ ') // the reason phrase is for wide bands only
+    expect((await bandLine($, surface, 119)).text).toBe('⊘ 疑似卡住 │ ● 2  ⊘ 1 │ ⓘ ') // the reason phrase is for wide bands only
   })
 
   test('P7 band: the ⓘ is a plain Button with autoFocus and no hotkey; pressing it opens the pane on the Now tab (' + surface + ')', async ($, on) => {
@@ -2761,7 +2764,7 @@ for (const surface of SURFACES) {
       return textOf(b)
     }
     expect(await slotText('verdict')).toBe('⊘ 疑似卡住 最久的派工 4m 沒有輸出') // the reason phrase presses as the verdict
-    expect(await slotText('decisions')).toBe('◆3 ?1 U2')
+    expect(await slotText('decisions')).toBe('◆ 3  ? 1  U2')
     expect(await slotText('spend')).toBe('$120 ▰▰▰▰▰▰▰▰▱▱ 80%')
   })
 
@@ -3421,8 +3424,8 @@ test('P7 model: slot texts and theme keys', () => {
   const mk = (over: Record<string, unknown>) => readMarker({ size: 'M', level: 'l5', stage: 'implement', stage_set_at: '2026-10-04T09:57:30.000Z', ...over })
   const text = (s: Slot | null) => (s === null ? null : s.segs.map(g => g.text).join(''))
   // position: size[!]·level·stage ◷age; level omitted when null; no stage = no slot
-  expect(text(slotPosition(mk({}), NOW))).toBe('M·l5·implement ◷3m')
-  expect(text(slotPosition(mk({ urgent: true, level: null }), NOW))).toBe('M!·implement ◷3m')
+  expect(text(slotPosition(mk({}), NOW))).toBe('M·l5·implement ◷ 3m')
+  expect(text(slotPosition(mk({ urgent: true, level: null }), NOW))).toBe('M!·implement ◷ 3m')
   expect(text(slotPosition(mk({ stage_set_at: undefined }), NOW))).toBe('M·l5·implement')
   expect(slotPosition(mk({ stage: null }), NOW)).toBeNull()
   expect(slotPosition(null, NOW)).toBeNull()
@@ -3436,22 +3439,22 @@ test('P7 model: slot texts and theme keys', () => {
   expect(text(u(7, 20))).toBe('▰▰▰▰▰▰▰▱▱▱ 7/20'.replace('▰▰▰▰▰▰▰▱▱▱', '▰▰▰▰▱▱▱▱▱▱')) // ceil(7*10/20) = 4th cell
   expect(slotUnit(mk({ unit: null }))).toBeNull()
   // dispatch: zero counts omitted
-  expect(text(slotDispatch(2, 1))).toBe('●2 ⊘1')
-  expect(text(slotDispatch(0, 1))).toBe('⊘1')
-  expect(text(slotDispatch(3, 0))).toBe('●3')
+  expect(text(slotDispatch(2, 1))).toBe('● 2  ⊘ 1')
+  expect(text(slotDispatch(0, 1))).toBe('⊘ 1')
+  expect(text(slotDispatch(3, 0))).toBe('● 3')
   expect(slotDispatch(0, 0)).toBeNull()
-  // review: ↺ R<n> QC▲ / QC✓; the chip alone has no leading space
+  // review: ↺ R<n> QC ▲ / QC ✓; the chip alone has no leading space
   const rv = readReview(JSON.stringify({ schema: 'autopilot.review/1', project_key: KEY, code: { generation: 4, seats: [] } }), KEY)
   const qc = (state: string) => readQc(JSON.stringify({ schema: 'autopilot.qc-status/1', scope: { project_key: KEY, root_run_id: null }, state }), { project_key: KEY, root_run_id: null })
-  expect(text(slotReview(rv, qc('owed')))).toBe('↺ R4 QC▲')
-  expect(slotReview(rv, qc('owed'))?.segs.slice(3).map(g => [g.text, g.color, g.bold])).toEqual([['QC', undefined, undefined], ['▲', 'warning', undefined]]) // the label is default text; only the mark is yellow, and nothing is bold
-  expect(text(slotReview(null, qc('ok')))).toBe('QC✓')
+  expect(text(slotReview(rv, qc('owed')))).toBe('↺ R4  QC ▲')
+  expect(slotReview(rv, qc('owed'))?.segs.filter(g => g.tag === 'qc' && g.text !== ' ').map(g => [g.text, g.color, g.bold])).toEqual([['QC', undefined, undefined], ['▲', 'warning', undefined]]) // the label is default text; only the mark is yellow, and nothing is bold
+  expect(text(slotReview(null, qc('ok')))).toBe('QC ✓')
   expect(text(slotReview(rv, qc('not_needed')))).toBe('↺ R4')
   expect(slotReview(null, qc('unknown'))).toBeNull()
   // decisions
   const dv = (over: Record<string, unknown>) => ({ rows: [], count: 0, irreversible: 0, writers: [], undocumented: 0, identity: null, root: null, ladder: null, ...over }) as never
-  expect(text(slotDecisions(dv({ count: 2, undocumented: 1, ladder: { rung: 'U3', at: 'x' } })))).toBe('◆2 ?1 U3')
-  expect(text(slotDecisions(dv({ undocumented: 4 })))).toBe('?4')
+  expect(text(slotDecisions(dv({ count: 2, undocumented: 1, ladder: { rung: 'U3', at: 'x' } })))).toBe('◆ 2  ? 1  U3')
+  expect(text(slotDecisions(dv({ undocumented: 4 })))).toBe('? 4')
   expect(slotDecisions(dv({}))).toBeNull()
   expect(slotDecisions(null)).toBeNull()
   // spend: `$<integer> <bar> <pct>`; warning from 80 %, error from 100 %
@@ -3471,12 +3474,12 @@ test('P7 model: slot texts and theme keys', () => {
   const ls = (over: Record<string, unknown> = {}) => readLoadSource(JSON.stringify({ schema: 'autopilot.load-source/1', source: 'dev', marketplace: 'directory', behind_upstream: 0, flags: [], stale_cache_dirs: [], ...over }))
   const rs = (n: number) => readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 9, by_class: {}, needs_human_count: n }), KEY)
   expect(text(slotHygiene(ls(), readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 5, by_class: {} }), KEY)))).toBe('dev') // reapable alone draws nothing: auto-reap clears it, needs_human_count is the number
-  expect(text(slotHygiene(ls(), rs(2)))).toBe('dev ⚑2')
-  expect(text(slotHygiene(ls({ behind_upstream: 3 }), rs(2)))).toBe('dev↓3 ⚑2') // the arrow follows the name without a space; it is the dim part
-  expect(slotHygiene(ls({ behind_upstream: 3 }), null)?.segs.map(g => [g.text, g.dim === true])).toEqual([['dev', false], ['↓3', true]])
+  expect(text(slotHygiene(ls(), rs(2)))).toBe('dev  ⚑ 2')
+  expect(text(slotHygiene(ls({ behind_upstream: 3 }), rs(2)))).toBe('dev ↓ 3  ⚑ 2') // the word, then the arrow chip (the dim part), then the residue chip two blanks on
+  expect(slotHygiene(ls({ behind_upstream: 3 }), null)?.segs.filter(g => g.text !== ' ').map(g => [g.text, g.dim === true])).toEqual([['dev ', false], ['↓', true], ['3', true]])
   expect(text(slotHygiene(ls(), rs(0)))).toBe('dev')
-  expect(text(slotHygiene(null, rs(3)))).toBe('⚑3')
-  expect(slotHygiene(null, rs(3))?.segs).toEqual([{ text: '⚑', color: 'warning', tag: 'wt' }, { text: '3', tag: 'wt' }]) // the mark is yellow, the number default text, no bold
+  expect(text(slotHygiene(null, rs(3)))).toBe('⚑ 3')
+  expect(slotHygiene(null, rs(3))?.segs).toEqual([{ text: '⚑', color: 'warning', tag: 'wt' }, { text: ' ', tag: 'wt' }, { text: '3', tag: 'wt' }]) // the mark is yellow, the number default text, no bold
   expect(slotHygiene(ls({ flags: ['marketplace_not_directory'] }), null)?.segs[0].color).toBe('warning')
   expect(slotHygiene(null, rs(0))).toBeNull()
   // an older fact without the needs_human fields reads as 0 / [] (no wt segment, no rows); the list is capped at 20
@@ -3498,9 +3501,9 @@ test('P7 model: the stage text is cut with … when the line still does not fit,
   expect(displayWidth(line.text)).toBeLessThanOrEqual(125)
   expect(displayWidth(line.text)).toBeGreaterThanOrEqual(123) // cut as little as needed
   expect(line.text.startsWith('● 進行中 │ M·l5·implement')).toBe(true)
-  expect(line.text.endsWith('… │ ●1 │ ⓘ ')).toBe(true)
-  expect(layoutBand(slots, 209).text).toBe('● 進行中 │ M·l5·implement-' + 'x'.repeat(100) + ' ◷3m │ ●1 │ ⓘ ')
-  expect(layoutBand(slots, 100).text).toBe('● 進行中 │ ●1 │ ⓘ ') // 80-119: no position slot at all
+  expect(line.text.endsWith('… │ ● 1 │ ⓘ ')).toBe(true)
+  expect(layoutBand(slots, 209).text).toBe('● 進行中 │ M·l5·implement-' + 'x'.repeat(100) + ' ◷ 3m │ ● 1 │ ⓘ ')
+  expect(layoutBand(slots, 100).text).toBe('● 進行中 │ ● 1 │ ⓘ ') // 80-119: no position slot at all
 })
 
 test('P7 width table: below 160 the load-source chip goes but `⚑N` stays down to the narrowest line (a docked panel cannot hide the owner reminder)', () => {
@@ -3510,13 +3513,13 @@ test('P7 width table: below 160 the load-source chip goes but `⚑N` stays down 
     verdict: { mark: '●', word: '進行中', key: 'suggestion' }, marker: null, live: 1, stalled: 0, review: null, qc: null, decisions: null, spend: null,
     loadSource: withLs ? ls : null, residue: rs(n), nowMs: 0,
   })
-  expect(layoutBand(slots(2), 209).text).toBe('● 進行中 │ ●1 │ dev↓3 ⚑2 │ ⓘ ')
-  expect(layoutBand(slots(2), 159).text).toBe('● 進行中 │ ●1 │ ⚑2 │ ⓘ ') // the docked panel case (bodyColumns 114 at 209 columns)
-  expect(layoutBand(slots(2), 114).text).toBe('● 進行中 │ ●1 │ ⚑2 │ ⓘ ')
-  expect(layoutBand(slots(2, false), 114).text).toBe('● 進行中 │ ●1 │ ⚑2 │ ⓘ ')
-  expect(layoutBand(slots(0), 114).text).toBe('● 進行中 │ ●1 │ ⓘ ') // no residue to act on: the chip alone leaves no empty slot or doubled separator
-  expect(layoutBand(slots(2), 79).text).toBe('● 進行中 │ ●1 │ ⚑2 │ ⓘ ') // < 80 keeps verdict, ● and ⚑
-  expect(layoutBand(slots(2), 20).text).toBe('● 進行中 │ ⚑2 │ ⓘ ') // the dispatch count goes before the owner reminder does
+  expect(layoutBand(slots(2), 209).text).toBe('● 進行中 │ ● 1 │ dev ↓ 3  ⚑ 2 │ ⓘ ')
+  expect(layoutBand(slots(2), 159).text).toBe('● 進行中 │ ● 1 │ ⚑ 2 │ ⓘ ') // the docked panel case (bodyColumns 114 at 209 columns)
+  expect(layoutBand(slots(2), 114).text).toBe('● 進行中 │ ● 1 │ ⚑ 2 │ ⓘ ')
+  expect(layoutBand(slots(2, false), 114).text).toBe('● 進行中 │ ● 1 │ ⚑ 2 │ ⓘ ')
+  expect(layoutBand(slots(0), 114).text).toBe('● 進行中 │ ● 1 │ ⓘ ') // no residue to act on: the chip alone leaves no empty slot or doubled separator
+  expect(layoutBand(slots(2), 79).text).toBe('● 進行中 │ ● 1 │ ⚑ 2 │ ⓘ ') // < 80 keeps verdict, ● and ⚑
+  expect(layoutBand(slots(2), 20).text).toBe('● 進行中 │ ⚑ 2 │ ⓘ ') // the dispatch count goes before the owner reminder does
 })
 
 // ---- P7 review round 1 fixes ----
@@ -3559,11 +3562,11 @@ for (const surface of SURFACES) {
     world(on, richWorld())
     await start($, surface)
     const at = async (n: number) => (await bandLine($, surface, n)).text
-    // every edge is one column wider than before P8: the ⓘ label is 'ⓘ ' (two cells, see BAND_INFO_LABEL), so each step lands one column later
-    expect(await at(28)).toBe('⊘ 疑似卡住 │ ●2 ⊘1 │ ⚑2 │ ⓘ ') // exactly fits
-    expect(await at(27)).toBe('⊘ 疑似卡住 │ ●2 │ ⚑2 │ ⓘ ') // the stalled count goes first
-    expect(await at(24)).toBe('⊘ 疑似卡住 │ ⚑2 │ ⓘ ') // then the live count
-    expect(await at(19)).toBe('⊘ 疑似卡… │ ⚑2 │ ⓘ ') // then the verdict word, never the ⚑ or the ⓘ
+    // every edge is one column wider than before P8: the ⓘ label is 'ⓘ ' (two cells, see BAND_INFO_LABEL), so each step lands one column later; the chip gap (§3.5) widens the exact fit from 28 to 32 (`● 2  ⊘ 1` carries two blanks and two chip spaces more)
+    expect(await at(32)).toBe('⊘ 疑似卡住 │ ● 2  ⊘ 1 │ ⚑ 2 │ ⓘ ') // exactly fits
+    expect(await at(31)).toBe('⊘ 疑似卡住 │ ● 2 │ ⚑ 2 │ ⓘ ') // the stalled count goes first
+    expect(await at(24)).toBe('⊘ 疑似卡住 │ ⚑ 2 │ ⓘ ') // then the live count
+    expect(await at(19)).toBe('⊘ 疑似… │ ⚑ 2 │ ⓘ ') // then the verdict word, never the ⚑ or the ⓘ
   })
 
   test('P7 fix C: the Now tab hero is verdict + project + elapsed, the stage is drawn once there, progress is its own row (' + surface + ')', async ($, on) => {
@@ -3583,10 +3586,10 @@ for (const surface of SURFACES) {
 test('P7 fix D: a level with no valid size has no leading ·', () => {
   const NOW = Date.parse('2026-10-04T10:00:30.000Z')
   const text = (m: Record<string, unknown>) => slotPosition(readMarker({ stage: 'implement', stage_set_at: '2026-10-04T09:57:30.000Z', ...m }), NOW)?.segs.map(g => g.text).join('')
-  expect(text({ level: 'l5' })).toBe('l5·implement ◷3m')
-  expect(text({ size: 'HUGE', level: 'l5', urgent: true })).toBe('l5·implement ◷3m')
-  expect(text({ size: 'S', level: 'l4' })).toBe('S·l4·implement ◷3m')
-  expect(text({})).toBe('implement ◷3m')
+  expect(text({ level: 'l5' })).toBe('l5·implement ◷ 3m')
+  expect(text({ size: 'HUGE', level: 'l5', urgent: true })).toBe('l5·implement ◷ 3m')
+  expect(text({ size: 'S', level: 'l4' })).toBe('S·l4·implement ◷ 3m')
+  expect(text({})).toBe('implement ◷ 3m')
 })
 
 // ==================== TUI v2: locale tables, locale choice, the band grid in both locales, CJK-aware columns ====================
@@ -3667,25 +3670,25 @@ const gridLine = (locale: 'en' | 'zh-TW', state: 'idle' | 'running' | 'blocked',
 
 // the owner-approved mockup lines (docs/plans/evidence/2026-10-10-tui-v2): idle / running / blocked at 209 / 160 / 140 / 120 / 80, both locales
 const GRID: Record<string, string> = {
-  'en idle 209': '◌ Idle │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ ',
+  'en idle 209': '◌ Idle │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev ↓ 3 │ ⓘ ',
   'en idle 120': '◌ Idle │ $12 ▰▱▱▱▱ │ ⓘ ',
   'en idle 80': '◌ Idle │ $▱▱▱ │ ⓘ ',
-  'en running 209': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
-  'en running 160': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
-  'en running 140': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
-  'en running 120': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
-  'en running 80': '● Running │ ▰▰▰▱▱ │ ●2 QC▲ │ $▰▰▱ │ ⓘ ',
-  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ✓─✓─✓─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2fam │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
-  'en blocked 140': '▲ Needs you │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ●1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
-  'en blocked 80': '▲ Needs you │ ▰▰▰▱▱ │ ●1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ ',
-  'zh-TW idle 209': '◌ 待命 │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev↓3 │ ⓘ ',
+  'en running 209': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 ·2fam │ ● 2  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev ↓ 3 │ ⓘ ',
+  'en running 160': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 ·2fam │ ● 2  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev ↓ 3 │ ⓘ ',
+  'en running 140': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ● 2  ↺ R2  QC ▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
+  'en running 120': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ● 2  ↺ R2  QC ▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
+  'en running 80': '● Running │ ▰▰▰▱▱ │ ● 2  QC ▲ │ $▰▰▱ │ ⓘ ',
+  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ✓─✓─✓─◐─○ review ◷ 3m │ ▰▰▰▱▱ 3/5 ·2fam │ ● 1  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev ↓ 3  ⚑ 3 │ ⓘ ',
+  'en blocked 140': '▲ Needs you │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ● 1  ↺ R2  QC ▲ │ $85 ▰▰▰▰▱ │ ⚑ 3 │ ⓘ ',
+  'en blocked 80': '▲ Needs you │ ▰▰▰▱▱ │ ● 1  QC ▲ │ $▰▰▰ │ ⚑ 3 │ ⓘ ',
+  'zh-TW idle 209': '◌ 待命 │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev ↓ 3 │ ⓘ ',
   'zh-TW idle 80': '◌ 待命 │ $▱▱▱ │ ⓘ ',
-  'zh-TW running 209': '● 進行中 │ M·l5 ✓─✓─◐─○─○ implement ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●2 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev↓3 │ ⓘ ',
-  'zh-TW running 120': '● 進行中 │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ●2 ↺ R2 QC▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
-  'zh-TW running 80': '● 進行中 │ ▰▰▰▱▱ │ ●2 QC▲ │ $▰▰▱ │ ⓘ ',
-  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ✓─✓─✓─◐─○ review ◷3m │ ▰▰▰▱▱ 3/5 ·2族 │ ●1 ↺ R2 QC▲ │ ◆3 ?1 U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev↓3 ⚑3 │ ⓘ ',
-  'zh-TW blocked 140': '▲ 要你決定 │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ●1 ↺ R2 QC▲ │ $85 ▰▰▰▰▱ │ ⚑3 │ ⓘ ',
-  'zh-TW blocked 80': '▲ 要你決定 │ ▰▰▰▱▱ │ ●1 QC▲ │ $▰▰▰ │ ⚑3 │ ⓘ ',
+  'zh-TW running 209': '● 進行中 │ M·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 ·2族 │ ● 2  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev ↓ 3 │ ⓘ ',
+  'zh-TW running 120': '● 進行中 │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ● 2  ↺ R2  QC ▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
+  'zh-TW running 80': '● 進行中 │ ▰▰▰▱▱ │ ● 2  QC ▲ │ $▰▰▱ │ ⓘ ',
+  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ✓─✓─✓─◐─○ review ◷ 3m │ ▰▰▰▱▱ 3/5 ·2族 │ ● 1  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev ↓ 3  ⚑ 3 │ ⓘ ',
+  'zh-TW blocked 140': '▲ 要你決定 │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ● 1  ↺ R2  QC ▲ │ $85 ▰▰▰▰▱ │ ⚑ 3 │ ⓘ ',
+  'zh-TW blocked 80': '▲ 要你決定 │ ▰▰▰▱▱ │ ● 1  QC ▲ │ $▰▰▰ │ ⚑ 3 │ ⓘ ',
 }
 
 test('TUI v2 band grid: idle / running / blocked at 209 / 160 / 140 / 120 / 80 in en and zh-TW never exceed the column budget; the approved lines are drawn', () => {
@@ -3698,7 +3701,7 @@ test('TUI v2 band grid: idle / running / blocked at 209 / 160 / 140 / 120 / 80 i
         expect(line.width, where).toBe(displayWidth(line.text))
         expect(line.text.endsWith('ⓘ '), where).toBe(true)
         expect(line.text.startsWith(state === 'idle' ? '◌' : state === 'running' ? '●' : '▲'), where).toBe(true)
-        if (state === 'blocked') expect(line.text, where).toContain('⚑3') // the owner reminder survives every width
+        if (state === 'blocked') expect(line.text, where).toContain('⚑ 3') // the owner reminder survives every width
         // tiers: the stage walk, the reason phrase, the 10-cell spend bar and the percent are for >= 160 only; the amount goes below 120
         expect(line.text.includes('◐'), where).toBe(cols >= 160 && state !== 'idle')
         expect(line.text.includes('%'), where).toBe(cols >= 160)
@@ -5103,10 +5106,10 @@ test('quota slot: absent without windows; both windows from 120 columns, the mos
   expect(slotQuota([win('weekly_opus', 50)])).toBe(null) // an unknown kind has no short label: the Now tab lists it, the band does not
   expect(layoutBand(quotaSlots([]), 209).text).toBe(layoutBand(quotaSlots(null), 209).text)
   const q = [win('five_hour', 10), win('seven_day', 85)]
-  expect(layoutBand(quotaSlots(q), 209).text).toBe('● 進行中 │ ●1 │ 5h 10% 7d 85% │ ⚑2 │ ⓘ ')
-  expect(layoutBand(quotaSlots(q), 159).text).toBe('● 進行中 │ ●1 │ 5h 10% 7d 85% │ ⚑2 │ ⓘ ')
-  expect(layoutBand(quotaSlots(q), 119).text).toBe('● 進行中 │ ●1 │ 7d 85% │ ⚑2 │ ⓘ ')
-  expect(layoutBand(quotaSlots(q), 79).text).toBe('● 進行中 │ ●1 │ ⚑2 │ ⓘ ')
+  expect(layoutBand(quotaSlots(q), 209).text).toBe('● 進行中 │ ● 1 │ 5h 10% 7d 85% │ ⚑ 2 │ ⓘ ')
+  expect(layoutBand(quotaSlots(q), 159).text).toBe('● 進行中 │ ● 1 │ 5h 10% 7d 85% │ ⚑ 2 │ ⓘ ')
+  expect(layoutBand(quotaSlots(q), 119).text).toBe('● 進行中 │ ● 1 │ 7d 85% │ ⚑ 2 │ ⓘ ')
+  expect(layoutBand(quotaSlots(q), 79).text).toBe('● 進行中 │ ● 1 │ ⚑ 2 │ ⓘ ')
   expect(slotTab('quota')).toBe('spend') // the quota slot opens 用量 (P3), no longer 現況
   expect(slotUnfolds('quota')).toBe(SECTION.limits)
 })
@@ -5117,9 +5120,9 @@ test('quota slot: a band still too long drops the quota windows before the ⊘ /
     loadSource: null, residue: null, quota: [win('five_hour', 10), win('seven_day', 85)], nowMs: 0,
   })
   const fits = layoutBand(slots('w'.repeat(60)), 100).text
-  expect(fits).toContain('●12 ⊘3 │ 7d 85% │ ⓘ ')
-  const tight = layoutBand(slots('w'.repeat(76)), 100).text // 102 cells: one step over; dropping ⊘3 alone would fit (99), so the old order kept the quota
-  expect(tight).toContain('●12 ⊘3 │ ⓘ ')
+  expect(fits).toContain('● 12  ⊘ 3 │ 7d 85% │ ⓘ ')
+  const tight = layoutBand(slots('w'.repeat(76)), 100).text // 102 cells: one step over; dropping ⊘ 3 alone would fit (99), so the old order kept the quota
+  expect(tight).toContain('● 12  ⊘ 3 │ ⓘ ')
   expect(tight).not.toContain('85%')
   expect(displayWidth(tight)).toBeLessThanOrEqual(100)
   expect((slotQuota([win('spend_limit', 30)]) as Slot).segs.map(g => g.text).join('')).toBe('cap 30%')

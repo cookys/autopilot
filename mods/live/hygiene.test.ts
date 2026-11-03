@@ -58,7 +58,7 @@ test('counts: only what needs your judgement is counted, on the tab chip, the ta
   const s = snapOf(REAL_RESIDUE, REAL_LOAD)
   const tl = residueTally(s.detail.residue!)
   expect([tl.judgeCount, tl.cleanCount, tl.judgeBytes, tl.cleanBytes]).toEqual([1, 2, 298819584, 328626176])
-  expect(surfaces(s)).toEqual({ tabName: true, nowRow: '▲ 1 個 worktree 要你處理', band: '⚑1' })
+  expect(surfaces(s)).toEqual({ tabName: true, nowRow: '▲ 1 個 worktree 要你處理', band: '⚑ 1' })
 })
 test('counts: negative control, a cleanable class counted as yours to judge is a different number on every surface (the counts test above would be red)', () => {
   const s = snapOf(REAL_RESIDUE, REAL_LOAD)

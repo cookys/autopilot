@@ -63,7 +63,7 @@
   "proxy.undocumented.other": "{n} dispatches with no decision record",
   "state.no_pointer": "no pointer · run: {hint}",
   "state.no_project": "no project · run: {hint}",
-  "state.no_project_wt": "no project · {wt}{n} · run: {hint}",
+  "state.no_project_wt": "no project · {wt} {n} · run: {hint}",
   "state.unreadable": "unreadable",
   "state.stale": "stale · the watcher is not publishing",
   "state.stale_at": "stale · last published {at} · the watcher is not publishing",

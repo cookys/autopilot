@@ -46,7 +46,7 @@ For each alias, `pick` needs a current `{five_hour, seven_day}` utilization and 
 | `scripts/accounts-onboard.sh` | modify | after the token write, record `issued_at` via a small Node helper (section 7) |
 | `scripts/lib/account-token-meta.js` (new) | add | schema `autopilot.token-meta/1`: read/write `<accounts-dir>/<alias>/token-meta.json`, expiry arithmetic |
 | `scripts/quota-adapters/<provider>.json` (new) | add | manifests (20.3) and their checker |
-| `docs/guide/accounts.md`, `docs/guide/settings-reference.md`, `scripts/config-keys.json` | modify | document and register the new config keys (section 10) |
+| `docs/guide/accounts.md`, `docs/guide/settings-reference.md`, `scripts/lib/config-keys.json` | modify | document and register the new config keys (section 10) |
 | `docs/scripts-inventory.md`, `CLAUDE.md` script lists | modify | per the "When adding a new script" rule |
 
 ## 4. Verified facts (each with its evidence)
@@ -100,7 +100,7 @@ A quiet alias with only old windows falls to `unknown` at 6 h, the same fail-saf
 Default OFF for every provider and every manifest: `accounts.quota_probe = "off"`, regardless of the manifest's `starts_window`. Whether a probe starts the provider's window clock decides only what an operator who enables probing gets (enablement and scheduling eligibility are separate):
 - `quota_probe = "stale"`: probe only just before pick, and only when the best observation of a candidate is older than N minutes (default 60). Used for `starts_window` `true` or `unknown` (treated as `true`; the glm result, 23.2, is the evidence for the conservative rule).
 - `quota_probe = "scheduled"`: a standing schedule (19.6 branch A). Accepted at config load only for providers whose manifest says `starts_window: false` with an evidence path; otherwise it is rejected with a message.
-- Claude: its `starts_window` is `unknown` and no Claude experiment has run (19.8). P4 ships no Claude probe code path before the section 19 result is recorded; absent telemetry in that experiment is ambiguous, not a "does not start" result (19.5).
+- Claude: its `starts_window` is `unknown` and no Claude experiment has run (19.8). The Claude probe code path (the `stale` trigger and `usage-probe`) may ship, but `quota_probe` stays `off` by default, `scheduled` is rejected for Claude (N66), and until the section 19 result is recorded no document or default may enable it; absent telemetry in that experiment is ambiguous, not a "does not start" result (19.5).
 
 Cheapest first: (1) official no-quota endpoint: none found (V7), not used; if an official URL turns up, replace the probe with it and record it here. (2) Smallest model call: `claude -p <prompt> --model haiku --output-format stream-json --verbose --tools "" --no-session-persistence`, a few-word prompt, through the alias env (same path as a run). This is byte for byte the matrix's live command (capability matrix, claude field 4). `--no-session-persistence` is kept so a probe leaves no session transcript under the alias's config dir. `--strict-mcp-config` (listed by `claude --help` of 2.1.317) has no live run and is NOT in the argv; it may be added only after a live probe records it. Cost per V6: 0.0034 USD API-equivalent per probe (about 0.02 to 0.03 USD for the 6 to 8 probes of the experiment, up to about 0.08 USD per day per idle alias on a standing hourly schedule, which only the demand rule of 19.6 branch A allows); share of subscription quota UNVERIFIED (Q5).
 
@@ -187,7 +187,7 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 | Auth refusal once (a single 401 or 403) | 401 sets `invalid` at once (5.6, 21.1); there is no automatic recovery, on purpose: pick never selects an invalid alias, so only the operator (re-onboard, or `account set --state active`) clears it, and `status` shows it on its own line. 403 changes nothing in `token_state` (N85) |
 | Token expiry file absent or unreadable | `unknown`, no warning, no block |
 
-## 10. Config keys (all under `accounts.*`, registered in `scripts/config-keys.json`)
+## 10. Config keys (all under `accounts.*`, registered in `scripts/lib/config-keys.json`)
 
 `quota_probe` (`off|stale|scheduled`, default `off`; `scheduled` accepted only per 5.3), `quota_probe_stale_minutes` (default 60, range 5..360), `quota_probe_timeout_secs` (default 20), `host_role` (default `agent`), `quota_capture` (`on|off`, default `on`; zero-cost, so on). The token warn levels are contract constants (21.4), not config.
 
@@ -215,7 +215,7 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 - Q14 Where does the manifest checker run (preflight-release, the config-keys check pattern)? To settle in P1.
 - Q16 (fleet F2) Does any reader need cross-namespace quota? Assumed namespace-only; cross-namespace reads would need the dispatch-style channel and `_access` consent.
 - Q17 (fleet F3) Is a fleet-side `fleet quota` CLI wanted in v1, or only the courier mirror? This plan builds only the mirror reader.
-- Q21 Should fleet's record-level `source` pattern (`^[a-z0-9_-]{1,24}$`) become an enum? This plan settles its own side: only `registry`, only on a placeholder (21.6); the window-level enum is pinned in 20.2. Open part: the hub pattern. Owner: PM and fleet.
+- Q21 Ruled (depth-0, 2026-11-04): the record-level `source` is a closed enum. It has one value today, `registry`, allowed only on a placeholder (21.6); an unknown value is rejected; adding a value bumps the contract version (N89). The window-level enum is pinned in 20.2. Only the hub's own pattern (`^[a-z0-9_-]{1,24}$`) is still fleet's to tighten; this plan's validator is already the stricter one. Owner of the hub side: PM and fleet.
 - Q19 The Claude CLI's emission condition for `rate_limit_event` (5.1) is UNVERIFIED. Closed by quoting the exact codeforge or CLI evidence line.
 
 ## 13. Phases (the only phase table; each independently shippable; acceptance = "done when")
@@ -225,7 +225,7 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 | P1 | M | generic contract `fleet.quota/1`: validator with the unit rules (6), mirror view of rows (22.2), `interpretWindows` and merge (5.2, 8.3), refusal (21.8), manifest schema and checker; Claude reader adapter; G37's direct snapshot read untouched | pure tests; N1-N8, N24-N30, N33, N34, N37, N38, N49-N58, N72, N77, N79-N82, N86 red then green |
 | P2 | M | Claude adapter, first because G37 needs it: wrapper passive capture (5.1) writing the local row of `quota/claude/<alias>.json`, `status` columns, `claude.json` manifest; pick reads the mirror | fixture-driven; N9, N10, N74, N78, N83, N84 red then green: json caller records nothing and exits unchanged |
 | P2b | S | generic reporter (18.2) with a fake hub: statusline adapter writes the mirror directly (18.3), direct `codeforge.quota/1` read removed from `account-quota.js`, pacing and queue, stale-skip, nack handling | N18-N23, N36, N59-N64, N68-N71 red then green |
-| P3 | S | token meta, generic fields; lifetime from the manifest; credential precedence (5.6) | N11, N12, N31, N32, N35, N65, N75, N85 red then green |
+| P3 | S | token meta, generic fields; lifetime from the manifest; credential precedence (5.6). Not in the G40 first implementation wave (pick may only take tight or refusal as new inputs): the `invalid` class, `scripts/lib/quota-contract.json` and the N85 writer wait for P3; the validator still accepts shape (c) (N77) | N11, N12, N31, N32, N35, N65, N75, N85 red then green (all excluded from the first wave) |
 | P4 | M | Claude tinyprobe (5.3), blocked on the section 19 experiment | N13-N15, N66, N73, N76 red then green |
 | P5 | L | hub client in the reporter, blocked on fleet F4; the hub change ships with or after F4 and never during a release freeze (fleet freeze until 2026-11-10T16:24Z) | N16, N17, N39-N48, N67 red then green |
 | P6 | M/L | C2 transparent transform, only if Q3 is answered yes | byte-identical stdout for json callers, red first with the transform broken |
@@ -234,7 +234,7 @@ Dependency map: P1 -> P2 -> P2b; P3 after P1; P4 after P2 + experiment; P5 after
 
 ## 14. Negative controls (every one shown red before green; ship with the check it guards)
 
-N1-N17 and N49-N86 are here; N18-N23 sit with the reporter (18.2), N24-N30 with the contract (20.6), N31-N38 with its details (21.9), N39-N48 with the hub (22.5).
+N1-N17 and N49-N90 are here; N18-N23 sit with the reporter (18.2), N24-N30 with the contract (20.6), N31-N38 with its details (21.9), N39-N48 with the hub (22.5).
 
 - N1 A record with `utilization` 62 (0..100 scale skipped conversion) is rejected as `quota_invalid`, alias not `ok`.
 - N2 A record with an unknown key is rejected; with a token-shaped string anywhere (fixture token) the writer refuses to write.
@@ -291,6 +291,10 @@ N1-N17 and N49-N86 are here; N18-N23 sit with the reporter (18.2), N24-N30 with 
 - N84 Passive time: a fixture event printed early in a run that lasts 2 h (clock shimmed) gives `observed_at` = the attempt start; a planted capture-time stamp is red.
 - N85 A single 401 (first call, no prior window) writes a state-only row (21.6 c) with `invalid`; a single 403 leaves `token_state` and the row unchanged.
 - N86 Namespace config vs frame: the courier's configured namespace is `A` and the snapshot frame carries `B`: no peer row of that view is used by pick (`quota_peer_namespace_mismatch`), the local row is kept; with both equal the peer rows count; a planted reader that trusts the frame alone is red.
+- N87 Parity with G37 (PM condition): with no mirror, an expired or unknown row, a broken view or a namespace mismatch, `pick` and `claude-account.js pick|status|run` output equals G37's byte for byte (a golden file made from the unmodified develop code), for `observations` omitted, `{}`, empty lists, stale-only rows, all-elapsed windows, a placeholder, a future-dated row and an `estimated` row below 0.90. Planted: a pick that adds `observed_at` without a mirror, treats no mirror as ok, treats a stale row as fresh, lets an `ok` mirror row promote an `unknown` alias, or lets a newer `ok` mirror row override an older tight snapshot is red.
+- N88 Only tight or refusal changes pick (PM condition): of all mirror row kinds, only a fresh live window at or above 0.90 (the alias becomes tight) and a live `refusal` (the alias becomes cooling, drop reason `refusal`, G37 `cooldown` unchanged) change a pick result; `ok`, `unknown`, `estimated`, stale, placeholder, `token_state: invalid` and namespace-mismatch rows each leave the result equal to the no-mirror result.
+- N89 Record-level `source` is a closed enum (Q21): `registry` on a placeholder is accepted; any other value is rejected; `registry` on a record that is not a placeholder is rejected; the enum list is pinned by a test so that adding a value forces a contract version bump.
+- N90 Statusline root protection: a `codeforge.quota/1` snapshot whose `root` hash8 differs from the alias's `expectedRoot` produces no mirror row in the statusline adapter (`snapshot_root_mismatch`), so the G37 protection survives the move into the adapter.
 
 ## 15. Risks and inversion
 
@@ -646,7 +650,7 @@ For every alias in the G37 registry (implicitly provider `claude`, 20.1) that ha
   - (b) refusal-only: `refusal` non-null (any `token_state`), no record-level `source`: the refusal is the observation and carries its own time. `visibility` must be L1: a visible refusal is by definition level 1.
   - (c) credential-state-only (L0 or L1): `token_state` `ok` or `invalid` with `token_state_at` required, no record-level `source`; a record may be both (b) and (c). `token_state_at` is null exactly when the state is `unknown`.
 - A non-null `refusal` with `visibility` L0 is `quota_invalid` in every shape, with or without a `source` (N77).
-- `source` is a record-level field, pattern `^[a-z0-9_-]{1,24}$` (the hub's, 22.1; Q21). This plan's validator allows it ONLY in shape (a), value `registry`; a record with non-empty `windows`, a refusal or a state stamp that carries it is rejected (a window-level `source` is another field, 20.2).
+- `source` is a record-level field and a CLOSED enum (Q21, N89): the only value is `registry`, allowed ONLY in shape (a); an unknown value is rejected, and adding a value bumps the contract version (the hub's own pattern is `^[a-z0-9_-]{1,24}$`, 22.1). A record with non-empty `windows`, a refusal or a state stamp that carries it is rejected (a window-level `source` is another field, 20.2).
 - No `observed_at` anywhere (nothing was observed; freshness is not forged). Token dates come from the registry's token metadata when present, else null; never a token value.
 - A placeholder is only pushed when no real record exists; any real observation replaces it, and a placeholder never overwrites a real record. It is not retired by the 6 h reader rule (it carries no measurement); the hub copy still expires at `hub_received_at + 6 h` (22.1), so the reporter re-pushes the placeholder under 18.2 rule 4 when the hub copy is missing (original values, 23.1).
 - Scope: Claude registry aliases only. Other providers have no registry (20.1), so their never-observed accounts are not enumerated by this contract; that is a gap the per-provider adapters close with their own alias list.

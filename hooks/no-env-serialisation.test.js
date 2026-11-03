@@ -6,7 +6,10 @@
 //     1. `process.env` NOT immediately followed by a single-key read (`.X`, `?.X`, `['X']` / `[key]`), or
 //     2. a destructuring of `env` out of `process` (`{ env } = process`, `{ env: e } = process`, inside a
 //        multi-declarator statement too, or out of `globalThis.process` / `require('process')`).
-//   Spellings `process?.env` and `process['env']` are normalised to `process.env` first.
+//   Spellings `process?.env`, `process['env']`, `require('process').env`, `require('node:process')?.env`,
+//   `require('process')['env']` are normalised to `process.env` first, and `require('process')` alone to `process`.
+//   Comments are stripped by a lexical scanner (any position, also mid-token and multi-line, line numbers are
+//   kept) and string / template text is masked, so `'process.env'` in a string or a comment is not a use.
 //
 // The uses that exist today and are fine (handing env to a function, `spawn({ env: process.env })`, ...) are
 // pinned in WHITELIST: { "hooks/x.js": <count of such uses in that file> }, committed below. More uses than
@@ -14,8 +17,9 @@
 // whitelist, so it can only get tighter). Reading one variable (process.env.X) is never counted.
 // Scope: every .js under hooks/ and all subdirectories, minus the explicit exclusion list below.
 // Known blind spots: `globalThis['process']` / `global['process']` / an aliased `const p = process` followed by
-// `p.env`, `Reflect.get(process, 'env')`, and env obtained through a function parameter that was handed the
-// whole env (that hand-over itself is a counted use). Comments on their own line are ignored.
+// `p.env`, `Reflect.get(process, 'env')`, nested destructuring `{ env: { ...all } } = process`, regex literals
+// (a quote inside a regex literal can confuse the scanner), and env obtained through a function parameter that
+// was handed the whole env (that hand-over itself is a counted use).
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -49,15 +53,55 @@ const WHITELIST = {
 };
 
 const BARE = /\bprocess\s*\.\s*env\b(?!\s*(?:\?\.\s*[A-Za-z_$]|\.\s*[A-Za-z_$]|\[))/g;
-const DESTRUCT = /\{[^{}]*\benv\b[^{}]*\}\s*=\s*(?:(?:globalThis|global)\s*\.\s*)?(?:process\b(?!\s*\.\s*[A-Za-z_$])|require\s*\(\s*['"](?:node:)?process['"]\s*\))/g;
+const DESTRUCT = /\{[^{}]*\benv\b[^{}]*\}\s*=\s*(?:(?:globalThis|global)\s*\.\s*)?process\b(?!\s*\.\s*[A-Za-z_$])/g;
+
+/**
+ * Small lexical scanner. Comments (`//` and `/* *\/`, multi-line too) become one space (newlines inside a block
+ * comment are kept, so line numbers do not drift). String and template-literal text is kept as is, or, with
+ * `mask`, blanked to spaces (newlines kept) so `'process.env'` in a string is not code; the code inside a
+ * template's `${ ... }` stays code. Regex literals are NOT understood (blind spot, see the header).
+ */
+function lex(src, mask) {
+  const stack = [{ t: 'code', depth: 0 }];
+  let out = '';
+  const blank = (ch) => (mask && ch !== '\n' ? ' ' : ch);
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    const top = stack[stack.length - 1];
+    if (top.t === 'tpl') {
+      if (c === '\\') { out += blank(c); if (i + 1 < src.length) out += blank(src[++i]); } else if (c === '`') { stack.pop(); out += c; } else if (c === '$' && src[i + 1] === '{') { out += '${'; i++; stack.push({ t: 'code', depth: 0 }); } else out += blank(c);
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      out += c;
+      for (i++; i < src.length && src[i] !== c && src[i] !== '\n'; i++) {
+        if (src[i] === '\\' && i + 1 < src.length) { out += blank(src[i]); i++; }
+        out += blank(src[i]);
+      }
+      if (i < src.length && src[i] === c) out += c; else if (i < src.length) out += src[i];
+    } else if (c === '`') { out += c; stack.push({ t: 'tpl' }); } else if (c === '/' && src[i + 1] === '/') {
+      while (i < src.length && src[i + 1] !== '\n') i++;
+      out += ' ';
+    } else if (c === '/' && src[i + 1] === '*') {
+      const end = src.indexOf('*/', i + 2);
+      const stop = end === -1 ? src.length : end + 2;
+      out += ' ' + (src.slice(i, stop).match(/\n/g) || []).join('');
+      i = stop - 1;
+    } else if (c === '{') { top.depth++; out += c; } else if (c === '}') {
+      if (top.depth === 0 && stack.length > 1) stack.pop(); else top.depth--;
+      out += c;
+    } else out += c;
+  }
+  return out;
+}
 
 function normalise(src) {
-  return src
-    .replace(/\bprocess\s*\?\.\s*env\b/g, 'process.env')
-    .replace(/\bprocess\s*\[\s*['"]env['"]\s*\]/g, 'process.env')
-    .split('\n')
-    .map((l) => (/^\s*(?:\/\/|\/\*|\*)/.test(l) ? '' : l))
-    .join('\n');
+  const keepNl = (m, text) => text + '\n'.repeat((m.match(/\n/g) || []).length);
+  let s = lex(src, false);
+  s = s.replace(/\brequire\s*\(\s*['"](?:node:)?process['"]\s*\)/g, (m) => keepNl(m, 'process'));
+  s = s.replace(/\bprocess\s*\?\.\s*env\b/g, (m) => keepNl(m, 'process.env'));
+  s = s.replace(/\bprocess\s*\[\s*['"]env['"]\s*\]/g, (m) => keepNl(m, 'process.env'));
+  return lex(s, true);
 }
 
 /** Line numbers (1-based) of every violating use in one source text. */
@@ -138,6 +182,15 @@ const NEG = {
   'handed to a function': 'report(process.env);',
   'process?.env bare': 'const e = process?.env;',
   "process['env'] bare": "const e = process['env'];",
+  'block comment before code': '/* x */ const e = process.env;',
+  'block comment before call': '/* d */ console.log(process.env);',
+  'comment inside the token': 'console.log(process /* d */ .env);',
+  'generator with yield*': '*all() { yield* Object.entries(process.env) }',
+  "require('process').env": "const e = require('process').env;",
+  "require('node:process')?.env": "const e = require('node:process')?.env;",
+  "require('process')['env']": "const e = require('process')['env'];",
+  'bare use after a string with a comment marker': "const u = 'http://x'; console.log(process.env);",
+  'bare use inside ${} of a template': 'const m = `v ${JSON.stringify(process.env)}`;',
   'util.inspect': "console.log(require('util').inspect(process.env));",
 };
 const POS = {
@@ -149,7 +202,11 @@ const POS = {
   'process.env[key]': 'console.log(process.env[key]);',
   'single var in an object': 'console.log(JSON.stringify({ home: process.env.HOME, n: 1 }));',
   'destructure of a different key': 'const { argv, pid } = process;',
-  'comment only': '// process.env is documented here\n/* process.env */\n * process.env',
+  'comment only': '// process.env is documented here\n/* process.env */\n/**\n * process.env\n */',
+  "string 'process.env'": "const s = 'process.env'; const t = \"process.env\"; const u = `process.env`;",
+  'inline comment': 'const a = 1; // reads process.env later\nconst b = 2; /* process.env */',
+  'multi-line block comment': 'const a = 1; /* first\n process.env\n last */ const b = 2;',
+  'template text but single key in ${}': 'const m = `home: ${process.env.HOME} (process.env)`;',
 };
 for (const [name, src] of Object.entries(NEG)) {
   test(`NEG: ${name} is counted`, () => {

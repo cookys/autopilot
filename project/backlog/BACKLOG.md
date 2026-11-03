@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0370 -->
+<!-- next-id: BL-0371 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1835,3 +1835,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: leakfu review g5 (CUT/FOLLOW-UP suggestions), 2026-11-01
 - **Pointer**: project/backlog/leak-guard-restore-hardening.md
+
+### bash-launch-guard 對長串命令替換輸入的處理時間超線性
+- **Id**: BL-0370
+- **Status**: open
+- **Since**: 2026-11-03
+- **Origin**: owner
+- **Problem**: 每次執行 Bash 前都會跑的啟動守衛，遇到很長的連續「錢字號加左括號」字串時，輸入越長就越慢，而且變慢的幅度比輸入增加得更快。
+- **Impact**: 一般指令不受影響；只有超過約 16 KB 的怪異輸入會變慢，128 KB 時要半秒。
+- **Trigger**: next edit to scripts/lib/bash-launch-rules.js
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM base-reds triage (br3 lane), 2026-11-03
+- **Pointer**: project/backlog/segments-dollar-paren-superlinear.md

@@ -2559,9 +2559,9 @@ function richWorld(): Tree {
 }
 
 // TUI v2 grammar: groups separated by ` │ `, items inside a group by a space; the wide band carries the stage walk, a 10-cell spend bar + %, the verdict's reason
-const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 ·2族 │ ● 2  ⊘ 1  ↺ R3  QC ✓ │ ◆ 3  ? 1  U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev ↓ 3  ⚑ 2 │ ⓘ '
-// at exactly 160 the chip gaps (§3.5) leave the reason phrase 9 cells less room: it is cut with … (the reason takes whatever room is left)
-const RICH_160 = '⊘ 疑似卡住 最久的派工 4m 沒有… │ M!·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 ·2族 │ ● 2  ⊘ 1  ↺ R3  QC ✓ │ ◆ 3  ? 1  U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev ↓ 3  ⚑ 2 │ ⓘ '
+const RICH_209 = '⊘ 疑似卡住 最久的派工 4m 沒有輸出 │ M!·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 · 2族 │ ● 2  ⊘ 1  ↺ R3  QC ✓ │ ◆ 3  ? 1  U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev ↓ 3  ⚑ 2 │ ⓘ '
+// at exactly 160 the chip gaps (§3.5) leave the reason phrase 10 cells less room (9 for the chip gaps and the age chip, 1 for the `· ` meta): it is cut with … (the reason takes whatever room is left)
+const RICH_160 = '⊘ 疑似卡住 最久的派工 4m 沒… │ M!·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 · 2族 │ ● 2  ⊘ 1  ↺ R3  QC ✓ │ ◆ 3  ? 1  U2 │ $120 ▰▰▰▰▰▰▰▰▱▱ 80% │ dev ↓ 3  ⚑ 2 │ ⓘ '
 const RICH_MID = '⊘ 疑似卡住 │ M!·l5·implement │ ▰▰▰▱▱ 3/5 │ ● 2  ⊘ 1  ↺ R3  QC ✓ │ $120 ▰▰▰▰▱ │ ⚑ 2 │ ⓘ '
 const RICH_SMALL = '⊘ 疑似卡住 │ ▰▰▰▱▱ │ ● 2  ⊘ 1  QC ✓ │ $▰▰▱ │ ⚑ 2 │ ⓘ '
 const RICH_NARROW = '⊘ 疑似卡住 │ ● 2  ⊘ 1 │ ⚑ 2 │ ⓘ '
@@ -3433,8 +3433,8 @@ test('P7 model: slot texts and theme keys', () => {
   // unit: bar + k/N + 族; N > 10 scales to 10 cells; no unit = no slot
   const u = (index: number, total: number, fam: string[] = []) => slotUnit(mk({ unit: { kind: 'deliverable', index, total, label: '' }, review_families: fam }))
   expect(text(u(1, 3))).toBe('▰▱▱ 1/3')
-  expect(text(u(3, 3, ['a']))).toBe('▰▰▰ 3/3 ·1fam') // the default table is en
-  expect(slotUnit(mk({ unit: { kind: 'deliverable', index: 3, total: 3, label: '' }, review_families: ['a'] }), makeT('zh-TW')) === null ? '' : text(slotUnit(mk({ unit: { kind: 'deliverable', index: 3, total: 3, label: '' }, review_families: ['a'] }), makeT('zh-TW')))).toBe('▰▰▰ 3/3 ·1族')
+  expect(text(u(3, 3, ['a']))).toBe('▰▰▰ 3/3 · 1fam') // the default table is en
+  expect(slotUnit(mk({ unit: { kind: 'deliverable', index: 3, total: 3, label: '' }, review_families: ['a'] }), makeT('zh-TW')) === null ? '' : text(slotUnit(mk({ unit: { kind: 'deliverable', index: 3, total: 3, label: '' }, review_families: ['a'] }), makeT('zh-TW')))).toBe('▰▰▰ 3/3 · 1族')
   expect(u(2, 4)?.segs.map(g => [g.text, g.color])).toEqual([['▰', 'success'], ['▰', 'claude'], ['▱▱', 'inactive'], [' 2/4', undefined]])
   expect(text(u(7, 20))).toBe('▰▰▰▰▰▰▰▱▱▱ 7/20'.replace('▰▰▰▰▰▰▰▱▱▱', '▰▰▰▰▱▱▱▱▱▱')) // ceil(7*10/20) = 4th cell
   expect(slotUnit(mk({ unit: null }))).toBeNull()
@@ -3474,7 +3474,7 @@ test('P7 model: slot texts and theme keys', () => {
   const ls = (over: Record<string, unknown> = {}) => readLoadSource(JSON.stringify({ schema: 'autopilot.load-source/1', source: 'dev', marketplace: 'directory', behind_upstream: 0, flags: [], stale_cache_dirs: [], ...over }))
   const rs = (n: number) => readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 9, by_class: {}, needs_human_count: n }), KEY)
   expect(text(slotHygiene(ls(), readResidue(JSON.stringify({ schema: 'autopilot.residue/1', project_key: KEY, reapable_worktrees: 5, by_class: {} }), KEY)))).toBe('dev') // reapable alone draws nothing: auto-reap clears it, needs_human_count is the number
-  expect(text(slotHygiene(ls(), rs(2)))).toBe('dev  ⚑ 2')
+  expect(text(slotHygiene(ls(), rs(2)))).toBe('dev ⚑ 2')
   expect(text(slotHygiene(ls({ behind_upstream: 3 }), rs(2)))).toBe('dev ↓ 3  ⚑ 2') // the word, then the arrow chip (the dim part), then the residue chip two blanks on
   expect(slotHygiene(ls({ behind_upstream: 3 }), null)?.segs.filter(g => g.text !== ' ').map(g => [g.text, g.dim === true])).toEqual([['dev ', false], ['↓', true], ['3', true]])
   expect(text(slotHygiene(ls(), rs(0)))).toBe('dev')
@@ -3673,20 +3673,20 @@ const GRID: Record<string, string> = {
   'en idle 209': '◌ Idle │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev ↓ 3 │ ⓘ ',
   'en idle 120': '◌ Idle │ $12 ▰▱▱▱▱ │ ⓘ ',
   'en idle 80': '◌ Idle │ $▱▱▱ │ ⓘ ',
-  'en running 209': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 ·2fam │ ● 2  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev ↓ 3 │ ⓘ ',
-  'en running 160': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 ·2fam │ ● 2  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev ↓ 3 │ ⓘ ',
+  'en running 209': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 · 2fam │ ● 2  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev ↓ 3 │ ⓘ ',
+  'en running 160': '● Running │ M·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 · 2fam │ ● 2  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev ↓ 3 │ ⓘ ',
   'en running 140': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ● 2  ↺ R2  QC ▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'en running 120': '● Running │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ● 2  ↺ R2  QC ▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'en running 80': '● Running │ ▰▰▰▱▱ │ ● 2  QC ▲ │ $▰▰▱ │ ⓘ ',
-  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ✓─✓─✓─◐─○ review ◷ 3m │ ▰▰▰▱▱ 3/5 ·2fam │ ● 1  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev ↓ 3  ⚑ 3 │ ⓘ ',
+  'en blocked 209': '▲ Needs you pick adapter A or B │ M·l5 ✓─✓─✓─◐─○ review ◷ 3m │ ▰▰▰▱▱ 3/5 · 2fam │ ● 1  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev ↓ 3  ⚑ 3 │ ⓘ ',
   'en blocked 140': '▲ Needs you │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ● 1  ↺ R2  QC ▲ │ $85 ▰▰▰▰▱ │ ⚑ 3 │ ⓘ ',
   'en blocked 80': '▲ Needs you │ ▰▰▰▱▱ │ ● 1  QC ▲ │ $▰▰▰ │ ⚑ 3 │ ⓘ ',
   'zh-TW idle 209': '◌ 待命 │ $12 ▰▱▱▱▱▱▱▱▱▱ 12% │ dev ↓ 3 │ ⓘ ',
   'zh-TW idle 80': '◌ 待命 │ $▱▱▱ │ ⓘ ',
-  'zh-TW running 209': '● 進行中 │ M·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 ·2族 │ ● 2  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev ↓ 3 │ ⓘ ',
+  'zh-TW running 209': '● 進行中 │ M·l5 ✓─✓─◐─○─○ implement ◷ 3m │ ▰▰▰▱▱ 3/5 · 2族 │ ● 2  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $60 ▰▰▰▰▰▰▱▱▱▱ 60% │ dev ↓ 3 │ ⓘ ',
   'zh-TW running 120': '● 進行中 │ M·l5·implement │ ▰▰▰▱▱ 3/5 │ ● 2  ↺ R2  QC ▲ │ $60 ▰▰▰▱▱ │ ⓘ ',
   'zh-TW running 80': '● 進行中 │ ▰▰▰▱▱ │ ● 2  QC ▲ │ $▰▰▱ │ ⓘ ',
-  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ✓─✓─✓─◐─○ review ◷ 3m │ ▰▰▰▱▱ 3/5 ·2族 │ ● 1  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev ↓ 3  ⚑ 3 │ ⓘ ',
+  'zh-TW blocked 209': '▲ 要你決定 選 adapter 方案 A 或 B │ M·l5 ✓─✓─✓─◐─○ review ◷ 3m │ ▰▰▰▱▱ 3/5 · 2族 │ ● 1  ↺ R2  QC ▲ │ ◆ 3  ? 1  U2 │ $85 ▰▰▰▰▰▰▰▰▰▱ 85% │ dev ↓ 3  ⚑ 3 │ ⓘ ',
   'zh-TW blocked 140': '▲ 要你決定 │ M·l5·review │ ▰▰▰▱▱ 3/5 │ ● 1  ↺ R2  QC ▲ │ $85 ▰▰▰▰▱ │ ⚑ 3 │ ⓘ ',
   'zh-TW blocked 80': '▲ 要你決定 │ ▰▰▰▱▱ │ ● 1  QC ▲ │ $▰▰▰ │ ⚑ 3 │ ⓘ ',
 }

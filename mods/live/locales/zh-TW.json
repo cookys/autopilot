@@ -5,7 +5,7 @@
   "accept.pending": "待驗收",
   "toast.execution": "執行狀態：進行中 {r0} 至 {r1} · 已結束 {e0} 至 {e1} · 不明 {u0} 至 {u1}",
   "toast.acceptance": "驗收狀態：{from} 至 {to}",
-  "band.fam": "·{n}族",
+  "band.fam": "{n}族",
   "bar.open": "開面板",
   "bar.dispatch": "看派工",
   "speed.title": "速度",

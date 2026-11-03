@@ -1391,7 +1391,7 @@ export function slotUnit(m: MarkerView | null, t: T = T_EN): Slot | null {
   const { index, total } = m.unit
   const segs: Seg[] = unitBarSegs(index, total)
   segs.push(sp(' ' + index + '/' + total, { tag: 'kn' }))
-  if (m.review_families.length > 0) segs.push(sp(' ' + t('band.fam', { n: m.review_families.length }), { dim: true, tag: 'fam' }))
+  if (m.review_families.length > 0) segs.push(sp(ui.CHIP_META + t('band.fam', { n: m.review_families.length }), { dim: true, tag: 'fam' })) // meta: CHIP_META (` · `), dim
   return { id: 'unit', segs }
 }
 
@@ -1477,7 +1477,10 @@ export function slotHygiene(ls: LoadSourceView | null, residue: ResidueView | nu
   }
   // the mark is yellow, the number default text
   if (wt > 0) chips.push(ui.chipSegs([sp(GT.residue, { color: PALETTE.attention, tag: 'wt' })], [sp(String(wt), { tag: 'wt' })]))
-  const segs = ui.chipsJoin(chips) // the gap goes with the chip before it: a lone `⚑ N` has no leading gap
+  // the gap goes with the chip before it: a lone `⚑ N` has no leading gap. A text label (`dev`, `cache 2.36.36 ▲`) belongs to the chip after it (CHIP_LEAD, one blank);
+  // CHIP_GAP is only for chip to chip (`dev ↓ 3  ⚑ 2`: the label is inside the first chip)
+  const labelOnly = chip !== null && chips.length === 2 && chips[0].length === 1
+  const segs = labelOnly ? [...chips[0], ui.gapSeg(ui.CHIP_LEAD, 'chip'), ...chips[1]] : ui.chipsJoin(chips)
   return { id: 'hygiene', segs }
 }
 

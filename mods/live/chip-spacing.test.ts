@@ -6,7 +6,7 @@
 // The helper is `ui.chipSegs` / `ui.chipsJoin`; the source-level half of this rule (no glyph glued by `+`) is L10 in ui-lint.test.js.
 // Run: `bash mods/live/run-tests.sh`.
 import { test, expect } from 'claude-code/testing'
-import { bandSlots, layoutBand, readMarker, readReview, readQc, readLoadSource, readResidue, slotDispatch, slotReview, slotDecisions, slotHygiene, slotPosition, qcChip } from './model'
+import { bandSlots, layoutBand, readMarker, readReview, readQc, readLoadSource, readResidue, slotDispatch, slotReview, slotDecisions, slotHygiene, slotPosition, slotUnit, qcChip } from './model'
 import type { Slot } from './model'
 import { GLYPHS, CHIP_GAP, CHIP_MARK, CHIP_META, chipSegs, chipsJoin, stateBadge, stateOf } from './ui'
 import type { BadgeStated } from './ui'
@@ -37,27 +37,52 @@ function fixtures() {
   add('cache source', { loadSource: ls({ source: 'cache:2.36.36', flags: ['loaded_from_cache'] }) })
   add('stalled only', { live: 0, stalled: 4, review: null, qc: qc('not_needed') })
   add('no residue, no behind', { residue: rs(0), loadSource: ls({ behind_upstream: 0 }) })
+  add('dev label then residue chip', { loadSource: ls({ behind_upstream: 0 }) })
   add('residue alone', { loadSource: null, review: null, qc: null, decisions: null, marker: null, live: 0, stalled: 0 })
   add('wide numbers', { live: 12, stalled: 34, decisions: dv({ count: 123, undocumented: 45 }), residue: rs(67) })
   return out
 }
 const WIDTHS = [20, 24, 40, 56, 60, 76, 79, 80, 90, 100, 119, 120, 140, 159, 160, 180, 209, 240]
 
-// the violations of one band line; the verdict (mark + word, first seg) is cut as its own rule says ("the glyph stays"), so it is left out
+// the violations of one band line; the verdict (mark + word, first seg) is cut as its own rule says ("the glyph stays"), so it is left out.
+// A chip is `<mark or QC> <value>`: the value is a run of non-blank characters that is not a separator (`│`, `·`, `─`). Chips of one group are exactly CHIP_GAP apart.
+const SEP = '│·─'
+const TWO_BLANKS = '  ' // written out, not CHIP_GAP: a test that reads the constant it checks passes when the constant is wrong
 function violations(text: string, verdictLen: number): string[] {
   const out: string[] = []
   const body = text.slice(verdictLen)
   const near = (i: number) => JSON.stringify(body.slice(Math.max(0, i - 3), i + 4))
   if (/ {3,}/.test(body)) out.push('3+ blanks in a row: ' + JSON.stringify(body))
   if (/[^ ]│|│[^ ]/.test(body)) out.push('bare group bar: ' + JSON.stringify(body))
+  if (/ ·(?! )|(?<! )· /.test(body)) out.push('meta dot without a blank on both sides: ' + JSON.stringify(body)) // `size·level·stage` has no blanks around its dots and is not meta
+  // every mark has a value: one space, then a character that is not blank and not a separator
   for (const m of body.matchAll(new RegExp(MARK_RE, 'gu'))) {
     const i = m.index ?? 0
     const next = body.slice(i + m[0].length)
-    if (!/^ \S/.test(next) && !/^─/.test(next)) {
+    if (body.slice(Math.max(0, i - 3), i) === 'QC ') continue // the mark of a `QC <mark>` chip is its value
+    if (!new RegExp('^ [^\\s' + SEP + ']').test(next) && !/^─/.test(next)) {
       // no value after the mark: only the trailing flag of a word chip (`dev ▲`, `cache 2.36.36 ▲`, `src ? ▲`) may stand that way, never a cut chip
       const flag = (m[0] === '▲' || m[0] === '?') && /^(?: │|  |$)/.test(next) && /[^ ] $/.test(body.slice(0, i))
       if (!flag) out.push('mark without its value / glued: ' + near(i))
     }
+  }
+  // chips of one group are exactly CHIP_GAP apart: `<mark|QC> <value>` then the blanks then the next mark, QC or rung
+  for (const group of body.split(' │ ')) {
+    const chips = [...group.matchAll(new RegExp('(?:QC|' + MARK_RE + ') [^\\s' + SEP + ']+(?: ▲(?= |$))?', 'gu'))] // a trailing ▲ flag (`dev ↓ 3 ▲`) is part of the chip it follows
+    chips.forEach((c, k) => {
+      // a text label belongs to the chip after it: exactly ONE blank between them (`dev ⚑ 2`, `implement ◷ 3m`, `dev ↓ 3`); two are for chip to chip only
+      const start = c.index ?? 0
+      const before = group.slice(0, start)
+      const pad = /( +)$/.exec(before)?.[1] ?? ''
+      const prev = chips[k - 1]
+      const afterChip = prev !== undefined && (prev.index ?? 0) + prev[0].length === start - pad.length
+      if (pad !== '' && !afterChip && pad !== ' ') out.push('label and chip ' + pad.length + ' blanks apart, not 1: ' + JSON.stringify(group))
+      const end = (c.index ?? 0) + c[0].length
+      const rest = group.slice(end)
+      const nextChip = chips[k + 1]
+      const between = nextChip === undefined ? (/^ +U\d/.exec(rest)?.[0].replace(/U\d$/, '') ?? null) : group.slice(end, nextChip.index)
+      if (between !== null && /^ +$/.test(between) && between !== TWO_BLANKS) out.push('chips ' + JSON.stringify(between.length) + ' blank(s) apart, not 2' + ': ' + JSON.stringify(group))
+    })
   }
   return out
 }
@@ -83,6 +108,7 @@ test('chip spacing: each slot, as drawn, is chips joined by CHIP_GAP, each chip 
   expect(texts(slotDecisions(dv({ count: 7, undocumented: 2, ladder: { rung: 'U3', at: 'x' } })))).toBe('◆ 7  ? 2  U3')
   expect(texts(slotHygiene(ls(), rs(3)))).toBe('dev ↓ 3  ⚑ 3')
   expect(texts(slotHygiene(null, rs(3)))).toBe('⚑ 3')
+  expect(texts(slotHygiene(ls({ behind_upstream: 0 }), rs(3)))).toBe('dev ⚑ 3') // a label and the chip it modifies: one blank
   expect(texts(slotPosition(marker(), NOW))).toBe('M·l5·implement ◷ 3m')
   expect(texts({ id: 'dispatch', segs: chipsJoin([chipSegs([{ text: '●' }], [{ text: '1' }]), chipSegs([{ text: '⊘' }], [{ text: '2' }])]) })).toBe('●' + CHIP_MARK + '1' + CHIP_GAP + '⊘' + CHIP_MARK + '2')
   expect(CHIP_GAP).toBe('  ')
@@ -95,10 +121,28 @@ test('chip spacing: the state badge goes through the same helper (`⊘ 2`), and 
   expect(stateBadge(stateOf('verdict', 'DECIDE') as BadgeStated, undefined, 'header.verdict' as never).text).toBe('▲')
 })
 
-test('chip spacing control: the checker reports a glued mark, a 3-space gap, a cut chip and a bare group bar', () => {
-  expect(violations('●2  ⊘ 1', 0).length).toBeGreaterThan(0)
-  expect(violations('● 2   ⊘ 1', 0).length).toBeGreaterThan(0)
-  expect(violations('● 2  ⊘', 0).length).toBeGreaterThan(0)
-  expect(violations('● 2│⊘ 1', 0).length).toBeGreaterThan(0)
+test('chip spacing control: the checker reports a glued mark, a 3-space gap, a one-space gap, a separator as the value, a cut chip and a bare group bar', () => {
+  expect(violations('●2  ⊘ 1', 0).length).toBeGreaterThan(0) // glued
+  expect(violations('● 2   ⊘ 1', 0).length).toBeGreaterThan(0) // three blanks
+  expect(violations('● 2 ⊘ 1', 0).length).toBeGreaterThan(0) // chips one blank apart (must fail)
+  expect(violations('● 2  ⊘ 1 ↺ R3', 0).length).toBeGreaterThan(0) // one blank apart again, later in the line
+  expect(violations('● │ ⓘ ', 0).length).toBeGreaterThan(0) // a group bar is not a value (must fail)
+  expect(violations('● 2  ⊘ · x', 0).length).toBeGreaterThan(0) // a meta dot is not a value
+  expect(violations('● 2  ⊘', 0).length).toBeGreaterThan(0) // cut chip
+  expect(violations('● 2│⊘ 1', 0).length).toBeGreaterThan(0) // bare group bar
+  expect(violations('◆ 3  ? 1 U2', 0).length).toBeGreaterThan(0) // the rung one blank after a chip
+  expect(violations('dev  ⚑ 2', 0).length).toBeGreaterThan(0) // label + chip two blanks apart (must fail)
+  expect(violations('M·l5·implement  ◷ 3m', 0).length).toBeGreaterThan(0) // same for the stage word + age
+  expect(violations('dev  ↓ 3  ⚑ 2', 0).length).toBeGreaterThan(0)
+  expect(violations('dev ⚑ 2 │ dev ↓ 3  ⚑ 2 │ implement ◷ 3m │ ⓘ ', 0)).toEqual([])
   expect(violations('● 2  ⊘ 1 │ ⓘ ', 0)).toEqual([])
+  expect(violations('● 2  ↺ R3  QC ▲ │ ◆ 3  ? 1  U2 │ dev ↓ 3  ⚑ 2 │ ⓘ ', 0)).toEqual([])
+  expect(violations('▰▰▰▱▱ 3/5 · 2fam │ cache 2.36.36 ▲ │ ⓘ ', 0)).toEqual([])
+})
+
+test('chip spacing: unit meta (`· 2fam`) is introduced by CHIP_META, and the checker reports a meta dot with no blank after it', () => {
+  const texts = (s: Slot | null) => (s === null ? '' : s.segs.map(g => g.text).join(''))
+  expect(texts(slotUnit(marker()))).toBe('▰▰▰▱▱ 3/5' + CHIP_META + '2fam')
+  expect(violations('▰▰▰▱▱ 3/5 ·2fam │ ⓘ ', 0).length).toBeGreaterThan(0) // the old `·2fam`
+  expect(violations('▰▰▰▱▱ 3/5 · 2fam │ ⓘ ', 0)).toEqual([])
 })

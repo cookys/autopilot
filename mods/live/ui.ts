@@ -507,7 +507,8 @@ export function stateBadge(s: BadgeStated, n: number | undefined, fact: FactId):
   const st = STATES[s.id]
   if (s.id !== 'need_you' && (n === undefined || n < 1)) throw new Error('badge: ' + s.id + ' needs a count')
   const mark = sg(st.glyph, { ...tone(st.key), role: 'glyph' })
-  return frag(s.id === 'need_you' || n === undefined ? [mark] : chipSegs([mark], plainCount(n, fact).segs), fact)
+  // the number keeps the state's tone and role, exactly as when glyph and number were one seg (`⊘2`); plainCount would drop the colour
+  return frag(s.id === 'need_you' || n === undefined ? [mark] : chipSegs([mark], [sg(String(n), { ...tone(st.key), role: 'glyph' })]), fact)
 }
 // a header's spend figures: one fragment per fact, no goto, typed as a projection of the 用量 facts
 export function headerProjection(fact: FactId, s: string, label?: string): Frag {

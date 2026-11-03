@@ -40,6 +40,10 @@ else if (base) {
 } else done(ctl.ok.includes(fp) ? OK : R401);
 SHIM
 
+# argv leaks are judged on an execve trace (deterministic); the 0.1 s ps snapshots are only a second look.
+HAVE_STRACE=0
+if command -v strace >/dev/null 2>&1 && strace -f -e trace=execve -o /dev/null -- true 2>/dev/null; then HAVE_STRACE=1
+else echo "SKIP [accounts-onboard] strace unavailable or ptrace blocked: argv-leak assertions (RED1 exec-argv, NC1) are skipped, not passed" >&2; fi
 tokfp() { printf '%s' "$1" | sha256sum | cut -c1-8; }
 
 # mkfx <okToken>...: a fresh world; prints its root. Tokens listed are the ones the stand-in answers OK for.
@@ -60,7 +64,10 @@ mkfx() {
 run_onboard() {
   local script="$1" fx="$2" input="$3"; shift 3
   rm -rf "$fx/snaps" "$fx/rc"; mkdir -p "$fx/snaps"
-  ( env -i PATH="$PATH" LANG=C HOME="$fx/fakehome" TMPDIR="$fx/tmp" XDG_RUNTIME_DIR="$fx/run" \
+  local tr=()
+  [ "$HAVE_STRACE" = 1 ] && tr=(strace -f -e trace=execve -s 65536 -o "$fx/exec.trace" --)
+  rm -f "$fx/exec.trace"
+  ( ${tr[@]+"${tr[@]}"} env -i PATH="$PATH" LANG=C HOME="$fx/fakehome" TMPDIR="$fx/tmp" XDG_RUNTIME_DIR="$fx/run" \
       AUTOPILOT_ACCOUNTS_DIR="$fx/fakehome/.config/autopilot/accounts" AUTOPILOT_LIVE_DIR="$fx/live" \
       AUTOPILOT_STATE_DIR="$fx/state" AUTOPILOT_CONFIG="$fx/config.json" ENGINE_CAPABILITY_DIR="$fx/ecd" \
       AUTOPILOT_STRIKE_WRITER=off ONBOARD_CLAUDE_BIN="$fx/bin/claude" \
@@ -79,7 +86,8 @@ leak_places() {
   grep -qF -e "$tok" "$fx/out.txt" && out="$out stdout"
   grep -qF -e "$tok" "$fx/err.txt" && out="$out stderr"
   grep -rqF -e "$tok" "$fx/snaps" && out="$out ps-argv"
-  [ -z "$(grep -rlF --exclude=token --exclude-dir=snaps --exclude=out.txt --exclude=err.txt -e "$tok" "$fx" 2>/dev/null)" ] || out="$out files"
+  [ -f "$fx/exec.trace" ] && grep -qF -e "$tok" "$fx/exec.trace" && out="$out exec-argv"
+  [ -z "$(grep -rlF --exclude=token --exclude-dir=snaps --exclude=out.txt --exclude=err.txt --exclude=exec.trace -e "$tok" "$fx" 2>/dev/null)" ] || out="$out files"
   echo "$out"
 }
 
@@ -121,6 +129,7 @@ assert_eq "$(cat "$A1/a/token")" "$TA" "token a stored verbatim"
 assert_eq "$(cat "$A1/registry.json")" '{"schema":"autopilot.accounts/1","accounts":[{"alias":"a","enabled":true,"priority":10},{"alias":"b","enabled":true,"priority":20}]}' "registry content and priorities"
 assert_not_contains "$(cat "$fx1/shim.log")" "setup-token" "setup-token never run"
 assert_not_contains "$(cat "$fx1/shim.log")" '"decoy_read":true' "ambient login never read"
+if [ "$HAVE_STRACE" = 1 ]; then grep -q "claude-account.js" "$fx1/exec.trace" && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "execve trace is empty: tracer not working"; fi
 assert_eq "$(leak_places "$fx1" "$TA")" "" "RED1 token a does not leak"
 assert_eq "$(leak_places "$fx1" "$TB")" "" "RED1 token b does not leak"
 [ "$(ls "$fx1/snaps" | wc -l)" -ge 3 ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "ps sampler took too few snapshots"
@@ -175,11 +184,21 @@ mkmut() { # <name> <sed command> -> prints mutant script path
   echo "$d/scripts/accounts-onboard.sh"
 }
 
-# NC1: token handed to an external command (argv) -> RED1 must turn red.
-m1="$(mkmut argv 's|printf .%s. "\$T" > "\$tf"|/usr/bin/printf "%s" "$T" > "$tf"; /bin/bash -c "sleep 0.6; :" _ "$T"|')"
-fxm1="$(mkfx "$TA" "$TB")"
-run_onboard "$m1" "$fxm1" "$INPUT_TOK" a b
-assert_contains "$(leak_places "$fxm1" "$TA")" "ps-argv" "NC1 argv leak is caught by the ps snapshots"
+# NC1: token handed to an external command (plain one-shot argv, no sleep) -> RED1 must turn red via the execve trace.
+for shape in 'usrbin:s#printf .%s. "\$T" > "\$tf"#/usr/bin/printf "%s" "$T" > "$tf"#' 'envprintf:s#printf .%s. "\$T" > "\$tf"#/usr/bin/env printf "%s" "$T" > "$tf"#'; do
+  m1="$(mkmut "argv-${shape%%:*}" "${shape#*:}")"
+  fxm1="$(mkfx "$TA" "$TB")"
+  run_onboard "$m1" "$fxm1" "$INPUT_TOK" a b
+  echo "NC1(${shape%%:*}) rc=$(rc_of "$fxm1") leaks:$(leak_places "$fxm1" "$TA")" >&2
+  if [ "$HAVE_STRACE" = 1 ]; then assert_contains "$(leak_places "$fxm1" "$TA")" "exec-argv" "NC1 ${shape%%:*} argv leak is caught by the execve trace"; fi
+done
+# NC1b: token through a pipe (builtin printf | cat), no argv -> RED1 must stay green (no false alarm from the trace).
+m1b="$(mkmut pipe 's#printf .%s. "\$T" > "\$tf"#printf "%s" "$T" | cat > "$tf"#')"
+fxm1b="$(mkfx "$TA" "$TB")"
+run_onboard "$m1b" "$fxm1b" "$INPUT_TOK" a b
+echo "NC1b rc=$(rc_of "$fxm1b") leaks:$(leak_places "$fxm1b" "$TA")" >&2
+assert_eq "$(leak_places "$fxm1b" "$TA")" "" "NC1b pipe-fed token is not flagged (no false positive)"
+assert_eq "$(cat "$(ACC "$fxm1b")/a/token")" "$TA" "NC1b token still stored"
 
 # NC2: token echoed to the screen -> RED1 must turn red.
 m2="$(mkmut echo 's|chmod 600 "\$tf"|chmod 600 "$tf"; echo "debug $T"|')"

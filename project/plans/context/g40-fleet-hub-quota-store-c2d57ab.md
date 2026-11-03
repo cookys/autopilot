@@ -1,4 +1,4 @@
-<!-- Source: repo fleet, sha 625b0fe, path docs/plans/2026-11-04-g40-hub-quota-store.md (verbatim below) -->
+<!-- Source: repo fleet, sha c2d57ab, path docs/plans/2026-11-04-g40-hub-quota-store.md (verbatim below) -->
 # G40: hub side of the shared quota store (`fleet.quota/1`)
 
 Status: design note, fleet position pending hetero plan review. It is reviewed
@@ -7,6 +7,9 @@ generation 2 revision on autopilot branch `hands/g40swexp/1` at 04636bf00, which
 moves the matching sections to §6, §11, §18, §21 to §23). Nothing here is built
 yet. The hub change ships with or after the F4 batch, never during a release
 freeze.
+
+Revision 3 adds `clamped`, `remaining` (credits windows, nullable
+utilization), `visibility` and `source`; `hub_offset` is mirror-only.
 
 Revision 2 (plan review generation 1, CONDITIONAL): units are epoch seconds,
 `refusal` and `token_state_at` added to the record, mirror writer and shape
@@ -44,7 +47,13 @@ hub table. Not the generic kv item.
     `token_state_at`, `refusal.retry_at`.
   - any epoch field `> 1e11` is refused `quota_invalid` (that is a
     milliseconds value).
-  - `utilization` in `[0, 1]`.
+  - `utilization` in `[0, 1]`, or null only for a window of kind `credits`
+    (no denominator; `used` and `limit` may then be null too).
+  - `clamped` (bool, optional, per window): the reporter stores a raw
+    utilization above 1 as 1 and sets `clamped: true`. The hub never clamps;
+    a value above 1 is refused `quota_invalid`.
+  - `remaining` (number, optional, `>= 0`): allowed only on a `credits`
+    window.
   - at most one window per kind, at most seven windows, `used`/`limit`/`unit`
     all-or-none.
 - `refusal` (optional, record level): `{observed_at, retry_at|null, reason}`,
@@ -53,6 +62,13 @@ hub table. Not the generic kv item.
   hint on it.
 - `token_state_at` (seconds, nullable) sits beside `token_state`: when that
   state was last observed.
+- `visibility` (record level): enum `L0 | L1 | L2 | L3`.
+- `source` (record level): bounded pattern `^[a-z0-9_-]{1,24}$` (for example
+  `placeholder`, `statusline`, `wrapper`, `probe`). A record with empty
+  `windows[]` is valid only with `visibility: L0` and a `source`; it is the
+  placeholder of an alias never observed.
+- Mirror-only fields (`hub_offset`) are the reader's and never sent; a push
+  frame carrying one is refused `quota_invalid` like any unknown field.
 - One additive migration: a new table plus an index on
   `(namespace, provider, alias)`. Nothing existing is rewritten.
 
@@ -203,7 +219,10 @@ An old courier simply never subscribes.
 - A record with an extra string carrying a token-shaped value, or a
   provider/alias/host_role/refusal reason outside its pattern, is refused.
 - An epoch field of `1.7e12` (milliseconds) is refused `quota_invalid`;
-  `utilization` 1.01 is refused.
+  `utilization` 1.01 is refused; `utilization: null` is refused on any kind
+  but `credits`; `remaining` on a non-`credits` window is refused.
+- A record with empty `windows[]` is accepted only with `visibility: L0` and a
+  `source`; an unknown `visibility` value is refused.
 - A record naming another courier is refused; a courier cannot delete another
   courier's row.
 - A row is gone from reads at `hub_received_at + 6 h` even if its windows have

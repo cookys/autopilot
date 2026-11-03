@@ -1,7 +1,7 @@
 # Plan — G40-data: the agent lane gets its own live quota for every alias
 > Status: design only (no code in this plan's authoring commit). Owner: PM program. Branch: `hands/g40data/1`. Size: S (design); implementation phases below. Frame: builds on G37 (`project/plans/2026-11-03-g37-account-switching.md`) and the codeforge G40 design (codeforge `feature/g40-usage-accounts` @ `98c7a8b`, `doc/plans/2026-11-03-g40-usage-accounts.md`).
 
-> This plan states the current design only. History is in git and in the Review log; the fleet hub design note (`project/plans/context/g40-fleet-hub-quota-store-625b0fe.md`, fleet `625b0fe`, revision 2) is the companion for the hub side. The two documents agree except for the points listed in the Review log.
+> This plan states the current design only. History is in git and in the Review log; the fleet hub design note (`project/plans/context/g40-fleet-hub-quota-store-c2d57ab.md`, fleet `c2d57ab`, revision 2) is the companion for the hub side. The two documents agree except for the points listed in the Review log.
 
 ## 0. Context / thesis
 
@@ -120,7 +120,7 @@ Section 8.
 ### 5.6 Item 5 — token expiry
 
 Write point: `accounts-onboard.sh` after the successful token write (the `onboard:token-write` line, about line 215), by a small Node helper call that records, per alias, `issued_at` = now. The script does not know when `setup-token` actually ran (another pane), so `issued_at` is the paste time; a lag of minutes against a 365-day life is irrelevant. File: `<accounts-dir>/<alias>/token-meta.json`, schema `autopilot.token-meta/1`, 0600, `{schema, alias, issued_at, lifetime_days}`. It is NOT put in `registry.json` (strict row keys, evidence E4) and NOT in the live dir (durable data on tmpfs would be lost). Validity: V8 says 365 days; store `lifetime_days = 365` as the default and let the operator override per alias, since the CLI help offers no option and the lifetime of a token made elsewhere is unknown. `token_expires_at = issued_at + lifetime_days*86400`.
-- Warn at 30 days remaining (config `accounts.token_warn_days`, default 30), higher severity at 7 days, `expired` after. Where it shows: `claude-account.js status` and `env-check` (a stderr warning line, never a failure: expiry is advisory, per the standing "expiry warns, never blocks" rule); the quota record carries both dates so the hub and codeforge can show them.
+- Warn at 30 days remaining (contract constant, 21.4), higher severity at 7 days, `expired` after. Where it shows: `claude-account.js status` and `env-check` (a stderr warning line, never a failure: expiry is advisory, per the standing "expiry warns, never blocks" rule); the quota record carries both dates so the hub and codeforge can show them.
 - A recorded 401 (`auth_failed`) overrides the dates: `status` shows `invalid` regardless of days left (a token can be revoked early; UNVERIFIED how often); precedence over cached quota is the first bullet after this list.
 - Existing aliases without a file: `status` prints `token_expiry: unknown`; the operator backfills with `claude-account.js token-meta set --alias A --issued-at <date>` (P3). Backfilling from the token file's mtime is not done without the operator's consent (metadata of a secret file).
 - The helper never reads the token file and never prints it.
@@ -134,7 +134,7 @@ The record itself is `fleet.quota/1` (20.2). This section pins every number in i
 - Time: `observed_at`, `resets_at`, `sent_at`, `token_state_at`, `token_issued_at`, `token_expires_at` are epoch seconds, integers. The validator rejects any of them above 1e11 as `quota_invalid` (`unit_magnitude`: it is a millisecond value), and rejects non-integers. The record, the reporter frame and the reader output use exactly one spelling, `observed_at`; there is no `_ms` field anywhere and no `observed_at_ms`.
 - `utilization`: a fraction in `[0, 1]`. Stored values never exceed 1.
 - Each foreign scale is converted exactly once, in the adapter that receives it, before anything is written: statusline `used_percentage` (0..100) is divided by 100; `codeforge.quota/1` `written_at_ms` becomes `floor(written_at_ms / 1000)` in the reporter's statusline adapter only (its `pct` and `resets_at` are already a fraction and seconds); a stream event's `utilization` and `resetsAt` are copied verbatim. After the boundary nothing converts again.
-- Overshoot at the boundary: a received value in `(1, 1.5]` is clamped to 1.0 and the window gets `clamped: true`; a value above 1.5 or below 0 is rejected (`quota_invalid`: it is almost certainly an unconverted 0..100 value). A stored record with `utilization > 1` is rejected by every reader.
+- Overshoot at the boundary: a received value in `(1, 1.5]` is clamped to 1.0 and the window gets `clamped: true`; a value above 1.5 or below 0 is rejected (`quota_invalid`: it is almost certainly an unconverted 0..100 value). A stored record with `utilization > 1` is rejected by every reader. Clamping happens only at the local writer boundary (one shared function, used by the reporter's adapters and the wrapper's capture before anything is written); the hub never clamps and refuses any `utilization > 1` with `quota_invalid`, so a frame leaving the reporter never carries one.
 - Arithmetic constants are in seconds: `MAX_AGE_S` 21600, `FUTURE_SKEW_S` 300.
 
 ## 7. File-format note: token metadata
@@ -213,6 +213,7 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 - Q14 Where does the manifest checker run (preflight-release, the config-keys check pattern)? To settle in P1.
 - Q16 (fleet F2) Does any reader need cross-namespace quota? Assumed namespace-only; cross-namespace reads would need the dispatch-style channel and `_access` consent.
 - Q17 (fleet F3) Is a fleet-side `fleet quota` CLI wanted in v1, or only the courier mirror? This plan builds only the mirror reader.
+- Q21 Should the record-level `source` (pattern `^[a-z0-9_-]{1,24}$`) become an enum? Open; today only `registry` is used here, fleet's examples add `placeholder`, `statusline`, `wrapper`, `probe`. Owner: PM and fleet.
 - Q19 The Claude CLI's emission condition for `rate_limit_event` (5.1) is UNVERIFIED. Closed by quoting the exact codeforge or CLI evidence line.
 
 ## 13. Phases (the only phase table; each independently shippable; acceptance = "done when")
@@ -270,6 +271,7 @@ N1-N17 and N49-N65 are here; N18-N23 sit with the reporter (18.2), N24-N30 with 
 - N67 Reader offset: a reader whose clock is 10 min behind the hub, given a frame with `hub_now`, computes the same peer-row age as a reader in sync; a planted reader that ignores `hub_now` is red; the stored `hub_offset` survives a hub outage and a restart; with no frame ever received the offset is 0.
 - N68 `quota_rows_full`: the reporter stops adding new aliases, counts and logs each refused one, and keeps pushing rows that already exist; a planted reporter that retries the refused alias or stops pushing everything is red.
 - N69 `quota_invalid` and `quota_writer_mismatch`: the frame is dropped with one warning per kind, never retried and never recorded as pushed (planted retry loop red).
+- N70 Mirror-only fields: a push frame built from a mirror that holds `hub_offset` contains no `hub_offset`; a planted reporter that sends the mirror view or its `hub_offset` is red against a fake hub that answers `quota_invalid` for it; a record with `utilization` above 1 is never in a frame.
 - N66 Probe config: `quota_probe` unset is `off` for every manifest; `scheduled` is rejected for `starts_window` `true` or `unknown`.
 
 ## 15. Risks and inversion
@@ -282,8 +284,8 @@ Any code in this commit; running `claude setup-token`; real-binary measurement; 
 
 ## 17. Review log
 - R0 to R0f: authored by the G40-data hands lane across PM directions (one contract and store with a reporter, the provider-neutral contract, seven contract gaps, fleet's hub decisions, pacing and re-push, Q18 confirmation). The additions were then folded into one current design; the layered text lives in git history.
-- G1 (plan review round 1, 19 findings, all accepted, 8 blockers): units pinned to epoch seconds and `[0, 1]` (6); mirror is the hub view, a row list with ownership (22.2, 18.2 rule 0); one clock model (11, 5.2); required windows (8.3); provider-neutral refusal (21.8); statusline enters the mirror through the reporter and the direct read is removed in P2b (8.1, 18.3); pacing under every hub cap (22.4); one phase table (13); nack and stale-skip rows (9, 18.2); probe default stated once (5.3); credential precedence (5.6); env credential refs (20.3); unverified emission rule (5.1, Q19). Fleet-side changes needed to match are listed in the hand-off to fleet; until fleet amends its note, the differences from the earlier fleet note (`905d13e`) were: seconds for `observed_at`/`sent_at`, the refusal and `token_state_at` fields, a row-list mirror, the reporter (not the statusline) as mirror writer, and `hub_now` (Q20). Fleet revision 2 (`625b0fe`) adopted all of these; the remaining differences are listed in the next entry.
-- G1b (fleet `625b0fe` cross-check): the fleet note's typed record does not yet name four fields this plan defines: window `clamped` (6), window `remaining` with a null `utilization` on a `credits` window (21.2), record-level `visibility` (20.2) and the placeholder's record-level `source` with empty `windows` (21.6); its `utilization` is stated as `[0, 1]` with no null. The fleet note also does not mention the `hub_offset` stored by readers, which is reader-side only. Open: fleet to add the four fields, or the plan to drop them.
+- G1 (plan review round 1, 19 findings, all accepted, 8 blockers): units pinned to epoch seconds and `[0, 1]` (6); mirror is the hub view, a row list with ownership (22.2, 18.2 rule 0); one clock model (11, 5.2); required windows (8.3); provider-neutral refusal (21.8); statusline enters the mirror through the reporter and the direct read is removed in P2b (8.1, 18.3); pacing under every hub cap (22.4); one phase table (13); nack and stale-skip rows (9, 18.2); probe default stated once (5.3); credential precedence (5.6); env credential refs (20.3); unverified emission rule (5.1, Q19). Fleet-side changes needed to match are listed in the hand-off to fleet; until fleet amends its note, the differences from the earlier fleet note (`905d13e`) were: seconds for `observed_at`/`sent_at`, the refusal and `token_state_at` fields, a row-list mirror, the reporter (not the statusline) as mirror writer, and `hub_now` (Q20). Fleet revision 2 (`c2d57ab`) adopted all of these; the remaining differences are listed in the next entry.
+- G1b (fleet cross-check): the four fields the plan defined and fleet's `625b0fe` note lacked (window `clamped`, window `remaining` with null `utilization` on `credits`, record-level `visibility`, the placeholder's record-level `source`) are now present in fleet `c2d57ab` (revision 3, section 1, tests in its section 10): fleet c2d57ab has added all four. Remaining differences: (a) fleet accepts a record-level `source` on any record while this plan's validator allows it only with empty `windows` (stricter, plan-side); (b) the placeholder `source` value here is `registry`, fleet's examples say `placeholder`; both fit the pattern, the plan's value stands; (c) whether `source` becomes an enum is open (Q21).
 
 ## 18. Reporter and local mirror
 
@@ -571,7 +573,7 @@ Record-level fields `token_state`: `"ok" | "invalid" | "unknown"` (absent is rea
 
 ### 21.2 Credits balance without a denominator
 
-`credits` windows (codex shows only a balance) may carry `used: null`, `limit: null` and a new optional window field `remaining` (non-negative number, `unit` required when present).
+`credits` windows (codex shows only a balance) may carry `used: null`, `limit: null` and a new optional window field `remaining` (number `>= 0`, `unit` required when present; only on kind `credits`, on any other kind `quota_invalid`).
 - Allowed shapes: (a) `used` and `limit` both set (as in 20.2), `remaining` optional and, if present, must equal `limit - used`; (b) remaining-only: `used: null`, `limit: null`, `remaining` set, `unit` set, and `utilization: null`.
 - `utilization: null` is legal ONLY in shape (b), on kind `credits`. Any other kind or shape with a null `utilization` is `quota_invalid`. It is never 0 and never 1.
 - Pick: a window with `utilization: null` is excluded from the `used` maximum (20.2). An alias whose only live windows are null-utilization stays class `unknown` (same rule as an `estimated`-only alias, N26), except `remaining == 0`, which classifies `tight` (balance exhausted). A balance can say "empty", never "plenty".
@@ -614,7 +616,7 @@ For every alias in the G37 registry (implicitly provider `claude`, 20.1) that ha
   "windows": [], "source": "registry", "host_role": "<role>", "token_state": "unknown",
   "token_issued_at": null, "token_expires_at": null }
 ```
-- `source` is a record-level field allowed ONLY here: value `registry`, valid only when `windows` is empty (a window-level `source` cannot exist without a window). A record with non-empty `windows` and a record-level `source` is rejected.
+- `source` is a record-level field, pattern `^[a-z0-9_-]{1,24}$` (the hub's, 22.1; enum or not is Q21). A record with empty `windows` is valid only with `visibility: L0` and a record-level `source`. This plan's validator is stricter than the hub and allows the field ONLY here: value `registry`, valid only when `windows` is empty (a window-level `source` cannot exist without a window). A record with non-empty `windows` and a record-level `source` is rejected.
 - No `observed_at` anywhere (nothing was observed; freshness is not forged). Token dates come from the registry's token metadata when present, else null; never a token value.
 - A placeholder is only pushed when no real record exists; any real observation replaces it, and a placeholder never overwrites a real record. It is not retired by the 6 h reader rule (it carries no measurement); the hub copy still expires at `hub_received_at + 6 h` (22.1), so the reporter re-pushes the placeholder under 18.2 rule 4 when the hub copy is missing (original values, 23.1).
 - Scope: Claude registry aliases only. Other providers have no registry (20.1), so their never-observed accounts are not enumerated by this contract; that is a gap the per-provider adapters close with their own alias list.
@@ -650,7 +652,7 @@ Some providers refuse a request without telling a window kind or a reset time (t
 
 ## 22. Hub design settled with fleet
 
-Sources: fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `625b0fe` (revision 2), `docs/plans/2026-11-04-g40-hub-quota-store.md` (copy: `project/plans/context/g40-fleet-hub-quota-store-625b0fe.md`; the evidence directory keeps both `905d13e` and `625b0fe`). The first design pass's hub questions (key, write permission, TTL, clocks, conflict, rate) are all answered here.
+Sources: fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `c2d57ab` (revision 3), `docs/plans/2026-11-04-g40-hub-quota-store.md` (copy: `project/plans/context/g40-fleet-hub-quota-store-c2d57ab.md`; the evidence directory keeps the originals of `905d13e`, `625b0fe` and `c2d57ab`). The first design pass's hub questions (key, write permission, TTL, clocks, conflict, rate) are all answered here.
 
 ### 22.1 Settled answers
 
@@ -677,12 +679,12 @@ For each `(provider, alias)` the mirror IS the hub view: one file `<live_dir>/qu
 ```
 - One row per `writer_courier`; the full authenticated key is preserved. The local courier's own pending row is tagged with the local courier id (the id its connection reports; the fixed word `local` when no courier connection exists) and has `observed_at_hub: null` (judged by the local clock). Only that row is ever pushed (18.2 rule 0).
 - Peer rows arrive from snapshot and deltas, keep their `writer_courier`, `host_role`, `observed_at_hub` and `skewed`, and are written only by the reporter's pull side. Writer discipline and the lock are in 18.4.
-- `hub_offset` (seconds) is the reader's estimate of hub clock minus local clock, refreshed from `hub_now` on every delivered frame (section 11); the reporter's pull side is its only writer.
+- `hub_offset` is MIRROR-ONLY: the hub refuses a push frame that carries it (`quota_invalid`, unknown field), so the reporter strips it, and every other mirror-only field, from the record before building a frame (N70). `hub_offset` (seconds) is the reader's estimate of hub clock minus local clock, refreshed from `hub_now` on every delivered frame (section 11); the reporter's pull side is its only writer.
 - Readers merge all rows per window with 5.2.
 
 ### 22.3 Merge and freshness
 
-One rule set, 5.2 and 11: peer rows by hub time, the local row by the local clock, newest per window wins, an exact tie goes to the local writer, rows past `hub_received_at + 6 h` and windows past the 6 h reader rule are ignored. Freshness is judged ONLY by `observed_at_hub` (or the local clock for the local row), never by a row still existing: a re-pushed row (23.1) restarts its hub expiry but keeps its old `observed_at_hub` (fleet `625b0fe` section 4). Control N48: a re-pushed old row is stale by its `observed_at_hub` even though it was just received (a planted reader that uses row presence fails).
+One rule set, 5.2 and 11: peer rows by hub time, the local row by the local clock, newest per window wins, an exact tie goes to the local writer, rows past `hub_received_at + 6 h` and windows past the 6 h reader rule are ignored. Freshness is judged ONLY by `observed_at_hub` (or the local clock for the local row), never by a row still existing: a re-pushed row (23.1) restarts its hub expiry but keeps its old `observed_at_hub` (fleet `c2d57ab` section 4). Control N48: a re-pushed old row is stale by its `observed_at_hub` even though it was just received (a planted reader that uses row presence fails).
 
 ### 22.4 Push pacing: one token bucket strictly below every hub limit
 
@@ -711,4 +713,4 @@ One rule set, 5.2 and 11: peer rows by hub time, the local row by the local cloc
 
 - The own mirror keeps `invalid`, refusal and placeholder rows. When the hub copy expires (`hub_received_at + 6 h`), the reporter pushes the row again with its ORIGINAL `observed_at` and `token_state_at` (placeholders have none and keep none) in a frame with a fresh `sent_at`. Windows stay subject to the 6 h reader rule by `observed_at`, so a re-push never makes old data look fresh. It is an ordinary write: no extra "re-push" field.
 - Rate: about one write per alias per 6 h. This is not a heartbeat: it fires only when the hub copy is missing, carries no new observation and never refreshes a freshness stamp. Rows whose windows are all older than 6 h and that carry no non-aging state are not re-pushed (18.2 rule 4).
-- Hub behaviour, confirmed by fleet (`625b0fe` section 4): only `observed_at > sent_at + 5 s` is refused; there is no "too old" floor; after a re-push the hub expiry restarts but `observed_at_hub` keeps the old value.
+- Hub behaviour, confirmed by fleet (`c2d57ab` section 4): only `observed_at > sent_at + 5 s` is refused; there is no "too old" floor; after a re-push the hub expiry restarts but `observed_at_hub` keeps the old value.

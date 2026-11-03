@@ -1,8 +1,9 @@
 // mods/live/fleet.test.ts — the Fleet tab's data, pure half (fleet.ts): parsing the hub's task tree, the stuck rules, the lane grouping and the feed's TTL.
 // The mounted half (the tab drawn from a mocked `fleet tasks --tree --json`) is in live.test.ts ("G23 Fleet tab"). Run through `bash mods/live/run-tests.sh`.
 import { test, expect } from 'claude-code/testing'
-import { FLEET_ARGV, FLEET_MAX_BYTES, fleetLanes, makeFleetFeed, utf8Bytes, OPEN_UNACCEPTED_MS, parseFleetTasks, QUIET_MS, stuckOf, taskTitle, ulidMs } from './fleet'
-import type { FleetRow } from './fleet'
+import { FLEET_ARGV, FLEET_MAX_BYTES, FLEET_TITLE_MAX, capTitle, fleetLanes, fleetSummary, fleetView, makeFleetFeed, utf8Bytes, OPEN_UNACCEPTED_MS, parseFleetTasks, QUIET_MS, stuckOf, taskTitle, ulidMs } from './fleet'
+import type { FleetRow, FleetTask } from './fleet'
+import { stateOf } from './ui'
 
 const NOW = Date.parse('2026-11-03T00:00:00.000Z')
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -170,4 +171,62 @@ test('the feed runs the CLI once per TTL and never twice at once; a failed run k
   expect(await feed.refresh(run, NOW + 90_000)).toBe(true)
   expect(feed.error()).not.toBe(null)
   expect(calls.length).toBe(4)
+})
+
+// ---- G33a: the published summary ----
+const drawn = (task: FleetTask): string => stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null }).id // what register.ts passes
+const summaryOf = (rows: FleetRow[], extra: { fetchedMs?: number | null; error?: string | null; capped?: number } = {}) =>
+  fleetSummary({ lanes: fleetLanes(rows, NOW), fetchedMs: extra.fetchedMs === undefined ? NOW : extra.fetchedMs, error: extra.error ?? null, nowMs: NOW, capped: extra.capped ?? 0 }, drawn)
+
+test('fleetSummary counts each row by the state the Fleet tab draws: ▲ blocked_human, ✗ failed/lost, ⊘ stuck (an hour-old open row too), ● running, ⧗ waiting; pending and findings in no count', () => {
+  const s = summaryOf([
+    r({ id: ulid(NOW - 1000, 'A'.repeat(16)), lane: 'a--claude', state: 'running' }),
+    r({ id: ulid(NOW - 2000, 'B'.repeat(16)), lane: 'a--claude', state: 'in_progress' }),
+    r({ id: ulid(NOW - 3000, 'C'.repeat(16)), lane: 'a--claude', state: 'waiting' }),
+    r({ id: ulid(NOW - 4000, 'D'.repeat(16)), lane: 'b--claude', state: 'blocked_human' }),
+    r({ id: ulid(NOW - 5000, 'E'.repeat(16)), lane: 'b--claude', state: 'failed' }),
+    r({ id: ulid(NOW - 6000, 'F'.repeat(16)), lane: 'b--claude', state: 'lost' }),
+    r({ id: ulid(NOW - 7000, 'G'.repeat(16)), lane: 'b--claude', state: 'suspect' }),
+    r({ id: ulid(NOW - 8000, 'H'.repeat(16)), lane: 'c--claude', state: 'running', observedMs: NOW - QUIET_MS - 1 }), // quiet seat: drawn ⊘, not ●
+    r({ id: ulid(NOW - OPEN_UNACCEPTED_MS - 1, 'I'.repeat(16)), lane: 'c--claude', state: 'open', createdMs: NOW - OPEN_UNACCEPTED_MS - 1 }), // upcoming, nobody accepted it: ⊘
+    r({ id: ulid(NOW - 9000, 'J'.repeat(16)), lane: 'c--claude', state: 'open' }), // upcoming: pending, no count
+    r({ id: ulid(NOW - 9500, 'K'.repeat(16)), lane: 'c--claude', state: 'task_accepted' }), // pending
+    r({ id: ulid(NOW - 9900, 'L'.repeat(16)), lane: 'c--claude', state: 'result_reported' }), // findings
+  ])
+  expect(s.v).toBe(1)
+  expect(s.totals).toEqual({ needYou: 1, failed: 2, stuck: 3, running: 2, waiting: 1 })
+  const lane = (name: string) => s.lanes.find(l => l.lane === name)
+  expect(lane('a--claude')).toEqual({ lane: 'a--claude', host: 'h', needYou: 0, failed: 0, stuck: 0, running: 2, waiting: 1 })
+  expect(lane('b--claude')).toEqual({ lane: 'b--claude', host: 'h', needYou: 1, failed: 2, stuck: 1, running: 0, waiting: 0 })
+  expect(lane('c--claude')).toEqual({ lane: 'c--claude', host: 'h', needYou: 0, failed: 0, stuck: 2, running: 0, waiting: 0 })
+  // lanes in the tab's order: those with a stuck row first (b: 3 flagged incl. failed/lost/suspect by the hub rule; c: 2), then by in-flight count
+  expect(s.lanes.map(l => l.lane)).toEqual(fleetLanes([], NOW).map(l => l.lane).concat(['b--claude', 'c--claude', 'a--claude']))
+})
+
+test('fleetSummary: topStuck is the first flagged row in the tab order with its rule and age; the feed state (time, error, capped) passes through; none flagged -> null', () => {
+  const s = summaryOf([
+    r({ id: ulid(NOW - 1000, 'A'.repeat(16)), lane: 'a--claude', state: 'running' }),
+    r({ id: ulid(NOW - OPEN_UNACCEPTED_MS - 5, 'B'.repeat(16)), lane: 'a--claude', state: 'open', title: 'nobody took it', createdMs: NOW - OPEN_UNACCEPTED_MS - 5 }),
+  ], { fetchedMs: NOW - 40_000, error: 'hub unreachable', capped: 7 })
+  expect(s.topStuck).toEqual({ lane: 'a--claude', host: 'h', title: 'nobody took it', ageMs: OPEN_UNACCEPTED_MS + 5, rule: 'unaccepted' })
+  expect([s.fetchedMs, s.error, s.capped]).toEqual([NOW - 40_000, 'hub unreachable', 7])
+  expect(summaryOf([r({ state: 'running' })]).topStuck).toBe(null)
+  expect(summaryOf([], { fetchedMs: null }).fetchedMs).toBe(null)
+})
+
+test('capTitle: at most FLEET_TITLE_MAX characters (CJK counts one each), ending in … only when cut', () => {
+  expect(capTitle('short')).toBe('short')
+  const exact = '中'.repeat(FLEET_TITLE_MAX)
+  expect(capTitle(exact)).toBe(exact)
+  const cut = capTitle('中'.repeat(FLEET_TITLE_MAX + 5))
+  expect([...cut].length).toBe(FLEET_TITLE_MAX)
+  expect(cut.endsWith('…')).toBe(true)
+  // through the summary: a long stuck title arrives capped
+  const long = summaryOf([r({ state: 'suspect', title: 'x'.repeat(500) })])
+  expect([...(long.topStuck?.title ?? '')].length).toBe(FLEET_TITLE_MAX)
+})
+
+test('fleetView feeds fleetSummary unchanged (the register.ts path): a fresh feed with no run yet publishes no time and no lanes', () => {
+  const s = fleetSummary(fleetView(makeFleetFeed(), NOW), drawn)
+  expect(s).toEqual({ v: 1, fetchedMs: null, error: null, capped: 0, totals: { needYou: 0, failed: 0, stuck: 0, running: 0, waiting: 0 }, lanes: [], topStuck: null })
 })

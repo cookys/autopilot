@@ -39,15 +39,15 @@ import { makeT, resolveLocale, T_EN } from './i18n'
 import type { T } from './i18n'
 import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
-import { forgeFit, GLYPHS, SHOW_PRESS, showTarget } from './ui'
+import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
 import { BandBar, BarRule, barContent, decideContent, speedContent, stackBand } from './band'
 import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
-import { fleetView, makeFleetFeed } from './fleet'
-import type { FleetView } from './fleet'
+import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed } from './fleet'
+import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import { barStrip } from './tabs'
 import type { BarTabId } from './tabs'
 import { Pane } from './pane'
@@ -88,9 +88,37 @@ let paneTab: PaneTab = 'now'
 const fleetFeed = makeFleetFeed()
 let fleetShownMs = -Infinity
 const FLEET_SHOWN_MS = 15_000
+// The summary other plugins read (PM G33a; fleet.ts `FleetSummary`, `v: 1`): written by the feed after each run, success or failure, never while drawing. Each row is counted
+// by the state the Fleet tab draws for it, so the band reader and the tab never disagree.
+const FLEET = atom({ plugin: 'autopilot', key: 'fleet' } as const, { v: FLEET_SUMMARY_V, fetchedMs: null, error: null, capped: 0, totals: { needYou: 0, failed: 0, stuck: 0, running: 0, waiting: 0 }, lanes: [], topStuck: null } as FleetSummary)
+const fleetState = (task: FleetTask): string => stateOf('fleetTask', { state: task.state, stuck: task.stuck !== null }).id
 function kickFleet($: EngineInterface, nowMs: number): void {
-  void fleetFeed.refresh(argv => $.process.run(argv, { timeoutMs: 5000 }), nowMs).then(ran => { if (ran) void $.ui.invalidate('ui.render') }, () => {})
+  void fleetFeed.refresh(argv => $.process.run(argv, { timeoutMs: 5000 }), nowMs).then(async ran => {
+    if (!ran) return
+    await update($, FLEET, () => fleetSummary(fleetView(fleetFeed, nowMs), fleetState))
+    void $.ui.invalidate('ui.render')
+  }, () => {}).catch(() => {})
 }
+// codeforge's forge-stats band is drawn in this session: its heartbeat `<live_base>/codeforge/mod-alive/<sid>.json` (schema codeforge.mod-alive/1, written every 2 s) is this
+// session's, at most FORGE_ALIVE_MS old and says layout `band`. The same file and threshold codeforge's statusline reads; a file over FORGE_ALIVE_MAX_BYTES is not read.
+// `summaryRow`: the heartbeat also says `summary_row: true`, the forge-stats that draws the one-line summary on the band's second row. An older one answers a one-row ask
+// with its own speed label, so it is never handed that row (one speed on the band, BL-0359).
+const FORGE_ALIVE_MS = 10_000
+const FORGE_ALIVE_MAX_BYTES = 4096
+async function forgeBand($: EngineInterface, nowMs: number): Promise<{ alive: boolean; summaryRow: boolean }> {
+  const no = { alive: false, summaryRow: false }
+  if (liveBaseSeen === null) return no
+  const sid = await $.session.id()
+  const text = await readText($, liveBaseSeen + '/codeforge/mod-alive/' + sanitizeSid(sid) + '.json')
+  if (text === null || text.length > FORGE_ALIVE_MAX_BYTES) return no
+  const parsed = parseJson(text)
+  if (!parsed.ok || !isObject(parsed.value)) return no
+  const v = parsed.value
+  const age = typeof v.written_at_ms === 'number' ? nowMs - v.written_at_ms : NaN
+  const alive = v.schema === 'codeforge.mod-alive/1' && v.session_id === sid && v.layout === 'band' && age >= 0 && age < FORGE_ALIVE_MS
+  return { alive, summaryRow: alive && v.summary_row === true }
+}
+let forgeSummaryRow = false // set by the tick from the heartbeat; the band's draw reads it, never the file
 async function fleetFor($: EngineInterface): Promise<FleetView | null> {
   if (paneTab !== 'fleet') return null
   const nowMs = await $.clock.now()
@@ -107,7 +135,10 @@ export function liveTick($: EngineInterface): Promise<void> {
 }
 async function fleetTick($: EngineInterface): Promise<void> {
   const nowMs = await $.clock.now()
-  if (paneTab === 'fleet' && nowMs - fleetShownMs < FLEET_SHOWN_MS) kickFleet($, nowMs)
+  // fetch while someone looks: the Fleet tab was drawn in the last FLEET_SHOWN_MS, or forge-stats' band (which reads the summary) is drawn in this session
+  const forge = await forgeBand($, nowMs)
+  forgeSummaryRow = forge.summaryRow
+  if ((paneTab === 'fleet' && nowMs - fleetShownMs < FLEET_SHOWN_MS) || forge.alive) kickFleet($, nowMs)
 }
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
@@ -1048,6 +1079,12 @@ export function registerLive(on: Parameters<Register>[0]): void {
       content = barContent(el, snapshot, active, columns, t, { onSlot: slot, onOpen: open })
     }
     if (active !== 'forge' && rows < 2 + content.length) content = [] // the rule and the rows do not fit: the first row alone stays
+    // No tab open, a second row to spare and a forge-stats that draws the summary row (its heartbeat says so): that row goes to the mod below (PM G33a, TUI guideline
+    // §1.1 rule 3). A mod that passes it on (the engine's own element comes back) leaves the band one row high, never a blank row.
+    if (active === null && rows >= 2 && forgeSummaryRow) {
+      const answer = await lower(1, columns)
+      if (answer !== undefined && answer !== null && (answer as { type?: string }).type !== 'engine') return stackBand(el, bar.node, [answer])
+    }
     if (content.length === 0) return bar.node
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })

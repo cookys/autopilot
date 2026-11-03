@@ -62,6 +62,9 @@ const VARIANTS = [
   ] },
   { id: 'n80-hub-offset-ignored', n: 'N80', edits: [['const off = isNum(o.hubOffset) ? o.hubOffset : 0;', 'const off = 0;']] },
   { id: 'n80-resets-vs-local-now', n: 'N80', edits: [['if (resetsAt !== null && resetsAt <= nowC) continue;', 'if (resetsAt !== null && resetsAt <= nowS) continue;']] },
+  { id: 'n80-basis-is-min', n: 'N80', edits: [['const basis = stamps.length ? Math.max(...stamps) : null;', 'const basis = stamps.length ? Math.min(...stamps) : null;']] },
+  { id: 'n80-refusal-by-remaining', n: 'N80', edits: [['const refusal = best(refusals);', 'const refusal = refusals.slice().sort((a, b) => b.remaining_s - a.remaining_s)[0] || null;']] },
+  { id: 'n58-no-remaining-cap', n: 'N58', edits: [['const remaining = Math.min(endsAt - clk.nowDomain, durS);', 'const remaining = endsAt - clk.nowDomain;']] },
   { id: 'n81-estimated-is-measured', n: 'N81', edits: [["const MEASURED_SOURCES = new Set(['passive', 'endpoint', 'probe']);", "const MEASURED_SOURCES = new Set(['passive', 'endpoint', 'probe', 'estimated']);"]] },
   { id: 'n82-ignore-binding', n: 'N82', edits: [['const peersOk = ns !== null && ns === bound && ns === configured;', 'const peersOk = ns !== null && ns === configured;']] },
   { id: 'n82-no-namespace-check', n: 'N82', edits: [['const peersOk = ns !== null && ns === bound && ns === configured;', 'const peersOk = true;']] },
@@ -138,6 +141,8 @@ control('N3', 'a window older than 6 h or more than 5 min in the future is dropp
   const fut = run(m, [local([['rolling_5h', 0.2, -600]])]);
   assert.strictEqual(fut.class, 'unknown', '10 min in the future');
   assert.strictEqual(fut.used, null);
+  const bad = run(m, [local([['rolling_5h', 1.5, 60], ['weekly', 1.5, 60]])]);
+  assert.deepStrictEqual(bad.notes, ['quota_window_unreadable'], 'notes are de-duplicated');
 });
 
 control('N4', 'a window whose resets_at has passed is ignored', (m) => {
@@ -275,6 +280,9 @@ control('N58', 'a kind-less, hint-less refusal cools for the default period, exp
   assert.strictEqual(lowWin.class, 'cooling', 'a lower window does not clear a refusal');
   assert.strictEqual(run(m, [ref(11 * 60)], MAN_10).class, 'unknown', 'manifest default_minutes 10 is honoured');
   assert.strictEqual(run(m, [ref(9 * 60)], MAN_10).class, 'cooling');
+  const future = (extra) => local([], { visibility: 'L1', refusal: Object.assign({ observed_at: NOW + 10800, retry_at: null, reason: 'rate_limit' }, extra) });
+  assert.ok(run(m, [future()], MAN_SILENT).refusal.remaining_s <= 1800, 'future-stamped refusal cannot extend past its default duration');
+  assert.strictEqual(run(m, [future({ retry_at: NOW + 10800 + 600 })], MAN_SILENT).refusal.remaining_s, 600, 'nor past retry_at - observed_at');
   const hint = (retryIn) => local([], { visibility: 'L1', refusal: { observed_at: NOW - 100, retry_at: NOW + retryIn, reason: 'rate_limit' } });
   assert.strictEqual(run(m, [hint(50)], MAN_SILENT).refusal.remaining_s, 50);
   assert.strictEqual(run(m, [hint(0)], MAN_SILENT).class, 'unknown', 'retry_at reached');
@@ -311,7 +319,7 @@ control('N80', 'ages in one clock domain: windows, resets_at and refusals under 
     const liveP = run(m, [peer('peerA', off, 10, [['rolling_5h', 0.2, { resets_at: nowC + 1 }]])], MAN, off);
     const goneP = run(m, [peer('peerA', off, 10, [['rolling_5h', 0.2, { resets_at: nowC - 1 }]])], MAN, off);
     assert.deepStrictEqual([liveL.class, goneL.class, liveP.class, goneP.class], ['ok', 'unknown', 'ok', 'unknown'], `offset ${off}: resets_at judged against now+offset for both rows`);
-    const localRef = local([], { visibility: 'L1', refusal: { observed_at: NOW - 600, retry_at: NOW - 600 + 660, reason: 'rate_limit' } });
+    const localRef = local([], { visibility: 'L1', refusal: { observed_at: NOW - 600, retry_at: NOW - 600 + 2400, reason: 'rate_limit' } });
     const peerRef = peer('peerA', off, 30, [], { visibility: 'L1', refusal: { observed_at: RAW0, retry_at: RAW0 + 1230, reason: 'rate_limit' } });
     const rr = run(m, [localRef, peerRef], MAN_SILENT, off);
     assert.strictEqual(rr.class, 'cooling');
@@ -320,6 +328,18 @@ control('N80', 'ages in one clock domain: windows, resets_at and refusals under 
     assert.strictEqual(rr.refusal.remaining_s, 1200);
     const rrRev = run(m, [peerRef, localRef], MAN_SILENT, off);
     assert.strictEqual(rrRev.refusal.writer_courier, 'peerA', 'row order does not matter');
+    assert.ok(rr.refusal.remaining_s < 1800, 'the local refusal has the longer remaining time (1800) yet loses on age');
+  }
+  // Row basis B is the LARGEST stamp (rule 1): two windows 500 s apart on the writer clock; the later
+  // one is the basis, so its age is hubAge and the earlier one's is hubAge + 500.
+  for (const off of [600, -600]) {
+    const two = (hubAge) => peer('peerA', off, hubAge, [['weekly', 0.2], ['rolling_5h', 0.3, { observed_at: RAW0 - 500 }]]);
+    const edge = run(m, [two(21500)], MAN, off);
+    assert.deepStrictEqual(edge.windows.map((w) => w.kind), ['weekly'], `offset ${off}: older stamp is hubAge+500 = 22000 s, past 6 h`);
+    const inside = run(m, [two(21000)], MAN, off);
+    assert.deepStrictEqual(inside.windows.map((w) => w.kind).sort(), ['rolling_5h', 'weekly'], 'both live at 21000 / 21500');
+    const withRefusal = peer('peerA', off, 21500, [['rolling_5h', 0.3]], { refusal: { observed_at: RAW0 + 500, retry_at: null, reason: 'other' } });
+    assert.strictEqual(run(m, [withRefusal], MAN, off).windows.length, 0, 'a later refusal stamp is the basis: the window is 500 s older');
   }
 });
 

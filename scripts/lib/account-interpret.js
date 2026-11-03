@@ -11,6 +11,10 @@
 // age `(nowS + hubOffset) - t` where t is the stamp's hub time `observed_at_hub - (B - x)` and B is
 // the row basis (largest stamp in the record). A raw local t is never compared with a hub t.
 //
+// Refusal times: `refusal.ends_at` is on the local clock for a local row and on the hub clock for a
+// peer row, so consumers (D3) must use `refusal.remaining_s` (already relative to the right now), never
+// compare ends_at with their own clock.
+//
 // invalid class (token state, plan 5.6) is out of scope for P1 and is not implemented here.
 // Node >= 20.10, built-ins only.
 
@@ -56,7 +60,9 @@ function newerFirst(a, b) {
   const ua = isNum(a.utilization) ? a.utilization : -Infinity;
   const ub = isNum(b.utilization) ? b.utilization : -Infinity;
   if (ua !== ub) return ub - ua;
-  return String(a.writer_courier).localeCompare(String(b.writer_courier));
+  const wa = String(a.writer_courier);
+  const wb = String(b.writer_courier);
+  return wa < wb ? -1 : wa > wb ? 1 : 0; // code-point order, locale-independent
 }
 
 function best(list) {
@@ -79,12 +85,16 @@ function requiredKinds(manifest) {
   return ws.filter((w) => w && w.required === true).map((w) => w.kind);
 }
 
+// Returns { state, class, used, source, observed_at, windows, tight_resets, refusal, skewed, notes }.
+// refusal: null or { observed_at, retry_at, reason, writer_courier, age_s, ends_at, remaining_s };
+// ends_at is local-clock for a local row and hub-clock for a peer row, remaining_s is the portable
+// value. notes is de-duplicated.
 function interpretWindows(rows, manifest, nowS, opts) {
   if (!isNum(nowS)) throw new TypeError('interpretWindows: nowS must be a finite number');
   const o = opts || {};
   const off = isNum(o.hubOffset) ? o.hubOffset : 0;
   const nowC = nowS + off; // server absolute time, one domain for local and peer rows
-  const notes = [];
+  const noteSet = new Set();
   const skewed = [];
   const measured = [];
   const estimated = [];
@@ -92,7 +102,7 @@ function interpretWindows(rows, manifest, nowS, opts) {
   const liveKindsByRow = new Map();
   const defMin = defaultCooldownMinutes(manifest);
   const list = Array.isArray(rows) ? rows : [];
-  if (Math.abs(off) > HUB_OFFSET_NOTE_S) notes.push('quota_hub_clock_offset');
+  if (Math.abs(off) > HUB_OFFSET_NOTE_S) noteSet.add('quota_hub_clock_offset');
 
   for (const row of list) {
     if (!row || typeof row !== 'object' || !row.record || typeof row.record !== 'object') continue;
@@ -105,9 +115,9 @@ function interpretWindows(rows, manifest, nowS, opts) {
     for (const w of Array.isArray(rec.windows) ? rec.windows : []) {
       if (!w || typeof w !== 'object' || !isNum(w.observed_at)) continue;
       const util = w.utilization === null ? null : w.utilization;
-      if (util !== null && !(isNum(util) && util >= 0 && util <= 1)) { notes.push('quota_window_unreadable'); continue; }
+      if (util !== null && !(isNum(util) && util >= 0 && util <= 1)) { noteSet.add('quota_window_unreadable'); continue; }
       const isMeasured = MEASURED_SOURCES.has(w.source);
-      if (!isMeasured && w.source !== 'estimated') { notes.push('quota_window_unreadable'); continue; }
+      if (!isMeasured && w.source !== 'estimated') { noteSet.add('quota_window_unreadable'); continue; }
       const age = clk.age(w.observed_at);
       if (age > MAX_AGE_S) continue;
       if (age < -FUTURE_SKEW_S) continue;
@@ -128,7 +138,8 @@ function interpretWindows(rows, manifest, nowS, opts) {
       const durS = isNum(rf.retry_at) ? rf.retry_at - rf.observed_at : defMin * 60;
       const endsAt = tRef + durS;
       const age = clk.age(rf.observed_at);
-      const remaining = endsAt - clk.nowDomain;
+      // Capped at the refusal's own duration: a stamp written in the future cannot extend cooling.
+      const remaining = Math.min(endsAt - clk.nowDomain, durS);
       if (age <= MAX_AGE_S && remaining > 0) {
         refusals.push({
           observed_at: rf.observed_at, retry_at: isNum(rf.retry_at) ? rf.retry_at : null,
@@ -158,7 +169,7 @@ function interpretWindows(rows, manifest, nowS, opts) {
     eWin[k] = best(byKind(estimated, k));
     if (mWin[k] && newest && mWin[k].row !== newest.row) {
       const nk = liveKindsByRow.get(newest.row);
-      if (nk && !nk.has(k) && !notes.includes('merged_floor')) notes.push('merged_floor');
+      if (nk && !nk.has(k) && !noteSet.has('merged_floor')) noteSet.add('merged_floor');
     }
   }
 
@@ -210,7 +221,7 @@ function interpretWindows(rows, manifest, nowS, opts) {
       remaining_s: refusal.remaining_s,
     } : null,
     skewed,
-    notes,
+    notes: [...noteSet],
   };
 }
 

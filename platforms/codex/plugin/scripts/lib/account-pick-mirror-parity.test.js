@@ -27,7 +27,7 @@ const win = (kind, utilization, over) => Object.assign({
 }, over || {});
 function row(alias, windows, over) {
   const rec = Object.assign({
-    schema: 'fleet.quota/1', provider: 'claude', alias, visibility: 'L3', windows,
+    schema: 'fleet.quota/1', provider: 'claude', alias, visibility: windows.length ? 'L3' : 'L1', windows,
     refusal: null, token_state: 'unknown', token_state_at: null,
   }, over || {});
   return { writer_courier: 'local', host_role: null, observed_at_hub: null, skewed: false, record: rec };

@@ -41,7 +41,9 @@ const { spawn, spawnSync } = require('child_process');
 const registry = require('./lib/account-registry');
 const quota = require('./lib/account-quota');
 const cooldown = require('./lib/account-cooldown');
-const { pick } = require('./lib/account-pick');
+const { pick, judge } = require('./lib/account-pick');
+const observation = require('./lib/account-observation');
+const interpret = require('./lib/account-interpret');
 const audit = require('./lib/account-audit');
 const accountEnv = require('./lib/account-env');
 const authStop = require('./lib/auth-stop');
@@ -321,6 +323,42 @@ function readToken(tokenFile) {
 
 // ---------------------------------------------------------------- pick data
 
+// ---------------------------------------------------------------- quota mirror (G40 D3, local rows only)
+
+let manifestCache;
+function claudeManifest() {
+  if (manifestCache === undefined) {
+    try { manifestCache = JSON.parse(fs.readFileSync(path.join(__dirname, 'quota-adapters', 'claude.json'), 'utf8')); } catch (_) { manifestCache = null; }
+  }
+  return manifestCache === null ? undefined : manifestCache;
+}
+
+// The usable rows of <live>/quota/claude/<alias>.json, or [] for anything that is not a plain readable view
+// (absent file, null liveDir, damaged file, wrong schema). There is no hub this wave: configuredNamespace is null,
+// so selectView keeps the local row only and every peer row is ignored (fail closed).
+function mirrorRows(ctx, alias, binding) {
+  if (!ctx.liveDir) return [];
+  try {
+    const r = observation.readView(ctx.liveDir, 'claude', alias);
+    if (!r.view) return [];
+    const b = binding || observation.readNamespaceBinding(ctx.liveDir);
+    return interpret.selectView(r.view, { configuredNamespace: null, boundNamespace: b.namespace }).rows;
+  } catch (_) { return []; }
+}
+
+// Seconds since the newest window or refusal observation across the rows, or null when there is none (a placeholder
+// row, or no row at all, is zero observations).
+function observationAgeS(rows, nowMs) {
+  let newest = null;
+  for (const r of rows) {
+    const rec = r && r.record;
+    if (!rec) continue;
+    const stamps = (Array.isArray(rec.windows) ? rec.windows.map((w) => w && w.observed_at) : []).concat(rec.refusal ? [rec.refusal.observed_at] : []);
+    for (const t of stamps) if (Number.isFinite(t) && (newest === null || t > newest)) newest = t;
+  }
+  return newest === null ? null : Math.max(0, Math.floor(nowMs / 1000 - newest));
+}
+
 function gather(ctx, checked, excludeList, pinned, cfg) {
   const nowMs = ctx.now();
   const accounts = checked.accounts.filter((r) => r.enabled && (!pinned || r.alias === pinned))
@@ -337,10 +375,24 @@ function gather(ctx, checked, excludeList, pinned, cfg) {
     roots[acct.alias] = quota.hash8(real);
   }
   const cooldowns = cooldown.readAllCooldowns(accounts.map((x) => x.alias), { dir: ctx.cooldownDir, nowMs });
-  return {
+  const out = {
     accounts, snapshots, roots, cooldowns, nowMs, notes,
     exclude: excludeList, refuseAllTight: cfg.refuse_all_tight,
   };
+  // The mirror adds keys only when some alias has a row: with no mirror the pick input is exactly G37's.
+  let binding = null;
+  const observations = {};
+  for (const acct of accounts) {
+    if (binding === null && ctx.liveDir) { try { binding = observation.readNamespaceBinding(ctx.liveDir); } catch (_) { binding = { namespace: null }; } }
+    const rows = mirrorRows(ctx, acct.alias, binding);
+    if (rows.length > 0) observations[acct.alias] = rows;
+  }
+  if (Object.keys(observations).length > 0) {
+    out.observations = observations;
+    const m = claudeManifest();
+    if (m !== undefined) out.manifest = m;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- args
@@ -502,6 +554,15 @@ function tightResetsFor(ctx, alias, checked, text) {
     const q = quota.readQuota(alias, { liveBase: ctx.liveDir, nowMs: ctx.now(), expectedRoot: quota.hash8(real) });
     out.push(...q.tight_resets);
   } catch (_) { /* no snapshot */ }
+  try { // a live MEASURED mirror window at or above 0.90 also tells when the limit lifts (estimates never count)
+    const rows = mirrorRows(ctx, alias, null);
+    if (rows.length > 0) {
+      const m = interpret.interpretWindows(rows, claudeManifest(), ctx.now() / 1000);
+      for (const w of m.windows) {
+        if (w.source !== 'estimated' && Number.isFinite(w.utilization) && w.utilization >= interpret.TIGHT_THRESHOLD && Number.isFinite(w.resets_at)) out.push(w.resets_at);
+      }
+    }
+  } catch (_) { /* no mirror */ }
   const m = /usage limit reached\|(\d{10})\b/i.exec(text || '');
   if (m) out.push(Number(m[1]));
   return out;
@@ -749,22 +810,39 @@ function cmdStatus(ctx, argv) {
   if (!checked.configured) { ctx.out('unconfigured'); return EXIT.OK; }
   ctx.out(`mode=${cfg.mode} refuse_all_tight=${cfg.refuse_all_tight} max_attempts=${cfg.max_attempts}`);
   const nowMs = ctx.now();
+  const ages = [];
   for (const row of checked.accounts) {
     const info = checked.enabled.find((e) => e.alias === row.alias);
     let cls = '-';
     let used = '-';
     let source = '-';
+    let extra = '';
+    let mirrorAge = null;
     if (info) {
       const d = gather(ctx, checked, [], row.alias, cfg);
       const q = quota.interpretSnapshot(d.snapshots[row.alias], { alias: row.alias, expectedRoot: d.roots[row.alias], nowMs });
       cls = require('./lib/account-pick').classify(q);
       used = q.used === null ? '-' : String(q.used);
       source = q.source;
+      const rows = d.observations ? d.observations[row.alias] : null;
+      if (rows) { // mirror fields appear only on a row that has mirror data
+        const j = judge(q, d.snapshots[row.alias], rows, d.manifest, nowMs);
+        if (j.drop !== null) { cls = 'cooling'; used = '-'; source = 'none'; } else { cls = j.cls; used = j.used === null ? '-' : String(j.used); source = j.source; }
+        const { observed_at: takeoverAt } = j; // set only when a tight mirror window decided the alias
+        mirrorAge = observationAgeS(rows, nowMs);
+        let own = 'unknown';
+        try { own = interpret.interpretWindows(rows, d.manifest, nowMs / 1000).class; } catch (_) { /* unknown */ }
+        extra = ` mirror_class=${own} mirror_age=${mirrorAge === null ? 'none' : `${mirrorAge}s`}` +
+          (takeoverAt !== undefined ? ` observed_at=${audit.formatTaipei(takeoverAt * 1000)}` : '');
+      }
     }
+    ages.push(`${row.alias}=${mirrorAge === null ? 'none' : `${mirrorAge}s`}`);
     const until = cooldown.readCooldown(row.alias, { dir: ctx.cooldownDir, nowMs });
     const cd = cooldown.isCooling(until, nowMs) ? audit.formatTaipei(until) : '-';
-    ctx.out(`alias=${row.alias} enabled=${row.enabled ? 'yes' : 'no'} priority=${row.priority} class=${cls} used=${used} source=${source} cooldown_until=${cd}`);
+    ctx.out(`alias=${row.alias} enabled=${row.enabled ? 'yes' : 'no'} priority=${row.priority} class=${cls} used=${used} source=${source} cooldown_until=${cd}${extra}`);
   }
+  // Coverage (plan 15a): the newest observation per alias in the quota mirror, or none, so zero observations show.
+  ctx.out(`observations newest_age: ${ages.join(' ')}`);
   const res = audit.readAudit(ctx.auditFile, {});
   for (const line of audit.renderStatus(res, { limit })) ctx.out(line);
   return EXIT.OK;

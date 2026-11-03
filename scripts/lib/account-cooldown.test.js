@@ -143,3 +143,34 @@ test('read clamps cooldown_until_ms beyond now + 7 days', () => {
     assert.strictEqual(cd.readCooldown('b', { dir, nowMs: NOW }), NOW + 86400e3);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+test('alias grammar is enforced on write and clear; error never echoes the input', () => {
+  const root = tmp();
+  try {
+    const dir = path.join(root, 'cd');
+    const bad = ['../x', ['FAKE', 'sk', 'ant', 'oat01', 'abcdefghijklmnop'].join('-'), 'A', '', 'a'.repeat(25)];
+    for (const b of bad) {
+      for (const fn of [() => cd.writeCooldown(b, NOW, { dir }), () => cd.clearCooldown(b, { dir })]) {
+        try { fn(); assert.fail('should throw'); } catch (e) {
+          assert.ok(!/assert/i.test(e.name), 'must throw, not assert');
+          assert.ok(!String(e.message).includes(b || '\u0000'), 'message must not echo alias');
+        }
+      }
+    }
+    assert.ok(!fs.existsSync(path.join(root, 'x.json')));
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('FIFO at the cooldown path returns null within 5 s (open must not block)', () => {
+  const root = tmp();
+  try {
+    const dir = path.join(root, 'cd');
+    fs.mkdirSync(dir, { mode: 0o700 });
+    require('child_process').execFileSync('mkfifo', [path.join(dir, 'a.json')]);
+    const r = require('child_process').spawnSync(process.execPath, ['-e',
+      `process.stdout.write(String(require(${JSON.stringify(path.join(__dirname, 'account-cooldown.js'))}).readCooldown('a',{dir:${JSON.stringify(dir)}})))`],
+      { timeout: 5000 });
+    assert.strictEqual(r.error, undefined, 'read blocked on FIFO');
+    assert.strictEqual(r.stdout.toString(), 'null');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

@@ -80,7 +80,7 @@ function readSmallFile(file, maxBytes, opts) {
   if (opts && typeof opts.beforeOpen === 'function') opts.beforeOpen(file);
   let fd;
   try {
-    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   } catch (e) {
     if (e && e.code === 'ENOENT') return { absent: true };
     if (e && e.code === 'ELOOP') return { error: 'invalid' };

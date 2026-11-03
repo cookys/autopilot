@@ -1,0 +1,510 @@
+{
+  "baseline": "autopilot.events.baseline/1",
+  "envelope": {
+    "schema": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "generated_at": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "project": {
+      "type": "object",
+      "nullable": false,
+      "required": true
+    },
+    "events": {
+      "type": "array",
+      "nullable": false,
+      "required": true
+    },
+    "cursor": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "has_more": {
+      "type": "boolean",
+      "nullable": false,
+      "required": true
+    },
+    "sources": {
+      "type": "array",
+      "nullable": false,
+      "required": true
+    },
+    "warnings": {
+      "type": "array",
+      "nullable": false,
+      "required": true
+    }
+  },
+  "project": {
+    "project_key": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "repo_name": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    }
+  },
+  "source_stat": {
+    "name": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "state": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "rows_read": {
+      "type": "integer",
+      "nullable": false,
+      "required": true
+    },
+    "rows_skipped": {
+      "type": "integer",
+      "nullable": false,
+      "required": true
+    },
+    "rows_filtered": {
+      "type": "integer",
+      "nullable": false,
+      "required": true
+    },
+    "redactions": {
+      "type": "integer",
+      "nullable": false,
+      "required": true
+    }
+  },
+  "warning": {
+    "source": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "code": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "detail": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "count": {
+      "type": "integer",
+      "nullable": false,
+      "required": true
+    }
+  },
+  "event": {
+    "id": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "kind": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "ts": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "ts_basis": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "source": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "project_key": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "root_run_id": {
+      "type": "string",
+      "nullable": true,
+      "required": true
+    },
+    "run_id": {
+      "type": "string",
+      "nullable": true,
+      "required": true
+    },
+    "data": {
+      "type": "object",
+      "nullable": false,
+      "required": true
+    }
+  },
+  "error_object": {
+    "schema": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    },
+    "error": {
+      "type": "object",
+      "nullable": false,
+      "required": true
+    }
+  },
+  "error": {
+    "code": {
+      "type": "string",
+      "nullable": false,
+      "required": true
+    }
+  },
+  "kinds": {
+    "dispatch.started": {
+      "run_id": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "role": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "runner": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "model": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "branch": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "base_sha": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "parent_run_id": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "depth": {
+        "type": "integer",
+        "nullable": true,
+        "required": false
+      },
+      "timeout_seconds": {
+        "type": "integer",
+        "nullable": true,
+        "required": false
+      }
+    },
+    "dispatch.ended": {
+      "run_id": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "final_status": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "duration_s": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "role": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "runner": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "model": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      }
+    },
+    "cost.turn": {
+      "session": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "model": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "tier": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "input_tokens": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "output_tokens": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "cache_read_tokens": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "cache_write_tokens": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "cost_usd": {
+        "type": "number",
+        "nullable": false,
+        "required": true
+      },
+      "sidechain": {
+        "type": "boolean",
+        "nullable": false,
+        "required": true
+      },
+      "agent_id": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      }
+    },
+    "review.collected": {
+      "phase": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "phase_base12": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "generation": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "base": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "head": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "seats": {
+        "type": "array",
+        "nullable": false,
+        "required": true
+      },
+      "reviewed_seats": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "total_seats": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "findings_total": {
+        "type": "integer",
+        "nullable": true,
+        "required": false
+      },
+      "findings_by_severity": {
+        "type": "object",
+        "nullable": true,
+        "required": false
+      }
+    },
+    "review.finalized": {
+      "phase": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "phase_base12": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "generation": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "verdict": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "open_findings": {
+        "type": "integer",
+        "nullable": true,
+        "required": false
+      },
+      "reviewed_seats": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "total_seats": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "dispositions_sha256": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      }
+    },
+    "qc.verdict": {
+      "commit": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "verdict": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "subject": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "basis": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      }
+    },
+    "decision.row": {
+      "basis": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "row_kind": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "decision_id": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "round": {
+        "type": "integer",
+        "nullable": true,
+        "required": false
+      },
+      "class": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "reversibility": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "rationale": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "target_decision_id": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "rung": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "result": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      }
+    },
+    "run.stage": {
+      "run_id": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "stage": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      },
+      "generation": {
+        "type": "integer",
+        "nullable": false,
+        "required": true
+      },
+      "status": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "reason": {
+        "type": "string",
+        "nullable": true,
+        "required": false
+      },
+      "basis": {
+        "type": "string",
+        "nullable": false,
+        "required": true
+      }
+    }
+  }
+}

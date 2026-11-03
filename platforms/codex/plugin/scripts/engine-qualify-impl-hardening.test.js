@@ -52,7 +52,7 @@ function git(repo, args, extraEnv = {}) {
   const r = spawnSync('git', ['-C', repo, ...args], {
     encoding: 'utf8',
     env: {
-      PATH: process.env.PATH, HOME: tempRoot, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+      PATH: process.env.PATH, HOME: tempRoot, AUTOPILOT_ACCOUNTS_DIR: path.join(tempRoot, 'no-accounts'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
       GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t',
       ...extraEnv,
     },
@@ -341,6 +341,7 @@ function liveRail(mode) {
       PATH: process.env.PATH,
       HOME: tempRoot,
       TMPDIR: tempRoot,
+      AUTOPILOT_ACCOUNTS_DIR: path.join(tempRoot, 'no-accounts'), // G37: never consult the real registry
       FAKE_GROK_MODE: mode,
       AUTOPILOT_GROK_EFFORT_PROBE: '0',
       AUTOPILOT_STRIKE_WRITER: 'off',
@@ -736,7 +737,7 @@ test('implementer --trials must be exactly the administration size', () => {
 // Control: with the precedence paragraph removed from the help text this test is red.
 test('--help states the --seat-file source precedence', () => {
   const run = spawnSync('node', [path.join(__dirname, 'engine-qualify.js'), '--help'], {
-    encoding: 'utf8', stdin: 'ignore', env: { PATH: process.env.PATH, HOME: tempRoot },
+    encoding: 'utf8', stdin: 'ignore', env: { PATH: process.env.PATH, HOME: tempRoot, AUTOPILOT_ACCOUNTS_DIR: path.join(tempRoot, 'no-accounts') },
   });
   assert.strictEqual(run.status, 0);
   const text = `${run.stdout}${run.stderr}`;

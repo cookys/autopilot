@@ -5,7 +5,7 @@
  *
  *   node scripts/check-claude-spawn-sites.js [--root DIR] [--registry FILE] [--json]
  *
- * Walks scripts/ src/ hooks/ bin/ evals/ under --root (default: this repo), finds every NON-comment line that can
+ * Walks scripts/ src/ hooks/ bin/ evals/ tools/ skills/ (those that exist) under --root (default: this repo), finds every NON-comment line that can
  * start a `claude` process, and requires each hit FILE to be listed in scripts/lib/claude-spawn-sites.json
  * (default: <root>/scripts/lib/claude-spawn-sites.json) with a status:
  *   wired         the file reaches the account layer (claude-account.js / account-state.sh / account-rail.js /
@@ -33,6 +33,8 @@
  *   S6  `'claude', '-flag'` inside an argv list, or the resolved-binary names realClaude / whichClaude
  *   S8  a flag only the claude CLI has, quoted in code (an argv list built for it): --strict-mcp-config
  *       --dangerously-skip-permissions --setting-sources --no-session-persistence --disable-slash-commands
+ *   S9  `const bin = 'claude'`, `x || 'claude'`, `${X:-claude}`, `BIN=claude`: the program name bound or defaulted for later use
+ *   S10 npx / bunx / pnpm dlx / npm exec of @anthropic-ai/claude-code
  *   S7  a call into the account layer itself: a file that routes claude through it IS a spawn site, so it must be listed
  * The scan is over files, not ranges, so an edit that moves lines cannot make the registry stale.
  */
@@ -41,7 +43,7 @@ const path = require('path');
 
 const DEFAULT_ROOT = path.resolve(__dirname, '..');
 const REGISTRY_REL = path.join('scripts', 'lib', 'claude-spawn-sites.json');
-const SCAN_DIRS = ['scripts', 'src', 'hooks', 'bin', 'evals'];
+const SCAN_DIRS = ['scripts', 'src', 'hooks', 'bin', 'evals', 'tools', 'skills'];
 const SKIP_DIRS = new Set(['node_modules', '.git', 'results', 'results-archive']);
 const CODE_EXT = /\.(js|cjs|mjs|ts|sh|bash|zsh|py)$/;
 const STATUSES = new Set(['wired', 'out_of_scope', 'frozen_legacy']);
@@ -57,6 +59,10 @@ const SHAPES = [
   ['S5', /(\bexec\s+claude\b)|(\bcommand\s+-v\s+claude\b)/],
   ['S6', /[`'"]claude[`'"]\s*,\s*[`'"]-|\b(realClaude|whichClaude)\b/],
   ['S7', ACCOUNT_LAYER_G],
+  // S9: the program name bound to a variable / defaulted, then used as argv0 elsewhere
+  ['S9', /((^|[\s;(,])(const|let|var)\s+\w+\s*=\s*[`'"]claude[`'"]\s*[;,)]?\s*$)|((\|\||\?\?)\s*[`'"]claude[`'"])|(\$\{\w+:?[-=]claude\})|(\b\w+=[`'"]?claude[`'"]?\s*$)/],
+  // S10: a package runner that fetches and starts the claude CLI
+  ['S10', /\b(npx|bunx|pnpm\s+dlx|pnpx|yarn\s+dlx|npm\s+exec)\b.*@anthropic-ai\/claude-code/],
   ['S8', /[`'"]--(strict-mcp-config|dangerously-skip-permissions|setting-sources|no-session-persistence|disable-slash-commands)[`'"]/],
 ];
 
@@ -105,6 +111,75 @@ function scan(root) {
     if (found.length) hits.set(rel.split(path.sep).join('/'), found);
   }
   return hits;
+}
+
+
+/** Test files that can run a wired caller with a hand-built environment (G37 I: the account layer resolves the home from passwd,
+ *  so only AUTOPILOT_ACCOUNTS_DIR keeps such a run off the operator's real registry). */
+function testFiles(root) {
+  const out = [];
+  const add = (dir, re) => { try { for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) if (e.isFile() && re.test(e.name)) out.push(path.join(dir, e.name)); } catch (_) { /* absent */ } };
+  add(path.join('hooks', 'tests'), /\.(sh|js)$/);
+  add('scripts', /\.test\.(js|sh)$/);
+  const walkEvals = (dir) => {
+    let ents; try { ents = fs.readdirSync(path.join(root, dir), { withFileTypes: true }); } catch (_) { return; }
+    for (const e of ents) {
+      if (SKIP_DIRS.has(e.name)) continue;
+      const rel = path.join(dir, e.name);
+      if (e.isDirectory()) walkEvals(rel); else if (/\.test\.(js|sh)$/.test(e.name)) out.push(rel);
+    }
+  };
+  walkEvals('evals');
+  return out;
+}
+
+/** Index of the `}` closing the `{` at text[open], or -1. */
+function closeBrace(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** -> [{file, line, why}] test statements that run a wired caller in an environment that drops AUTOPILOT_ACCOUNTS_DIR. */
+function scanTestEnv(root, callerNames) {
+  const found = [];
+  for (const rel of testFiles(root)) {
+    if (path.basename(rel) === 'check-claude-spawn-sites.test.js') continue; // its fixtures are strings that look like the cases it checks
+    let text;
+    try { text = fs.readFileSync(path.join(root, rel), 'utf8'); } catch (_) { continue; }
+    if (!callerNames.some((c) => text.includes(c))) continue;
+    if (/\.sh$/.test(rel)) {
+      // variables that hold the path of a wired caller
+      const vars = new Set();
+      for (const m of text.matchAll(/^\s*(?:export\s+)?([A-Za-z_]\w*)=["']?[^\n]*?([\w.-]+\.(?:sh|js))["']?\s*$/gm)) if (callerNames.includes(m[2])) vars.add(m[1]);
+      const lines = text.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (isCommentLine(lines[i])) continue;
+        let stmt = lines[i];
+        let j = i;
+        while (/\\\s*$/.test(stmt) && j + 1 < lines.length) stmt += '\n' + lines[++j];
+        if (!/\benv\s+-i\b/.test(stmt)) continue;
+        const runsCaller = callerNames.some((c) => stmt.includes(c)) || [...vars].some((v) => new RegExp(`\\$\\{?${v}\\b`).test(stmt));
+        if (runsCaller && !/AUTOPILOT_ACCOUNTS_DIR/.test(stmt)) found.push({ file: rel, line: i + 1, why: '`env -i` runs a wired caller without AUTOPILOT_ACCOUNTS_DIR' });
+      }
+    } else {
+      // a hand-built env object (it names PATH or HOME and does not spread the parent env) in a file that drives a wired caller
+      for (const m of text.matchAll(/\benv\s*:\s*\{/g)) {
+        const open = m.index + m[0].length - 1;
+        const end = closeBrace(text, open);
+        if (end < 0) continue;
+        const body = text.slice(open, end + 1);
+        if (!/\b(PATH|HOME)\s*:/.test(body)) continue;
+        if (/\.\.\.\s*process\.env|Object\.assign\(\s*\{\s*\}\s*,\s*process\.env/.test(body)) continue;
+        if (/AUTOPILOT_ACCOUNTS_DIR/.test(body)) continue;
+        found.push({ file: rel, line: text.slice(0, m.index).split('\n').length, why: 'a hand-built env object in a file that drives a wired caller has no AUTOPILOT_ACCOUNTS_DIR' });
+      }
+    }
+  }
+  return found;
 }
 
 function loadRegistry(file) {
@@ -176,6 +251,22 @@ function check(root, registryFile) {
       const f = found[0];
       add('unregistered_claude_spawn', file, `line ${f.line} (${f.shape}) can start claude and the file is not in claude-spawn-sites.json`);
     }
+  }
+  // I: a test that hand-builds its environment must still pin the account registry dir
+  const callerNames = [...new Set(reg.sites.filter((x) => x && x.status === 'wired' && typeof x.file === 'string').map((x) => path.basename(x.file)))];
+  for (const f of scanTestEnv(root, callerNames)) add('test_env_loses_accounts_dir', f.file, `line ${f.line}: ${f.why}`);
+  // e45b846c: cc-v2.js is the d0gate v2 library; the campaign runner that refuses an active registry is its only requirer
+  const ccv2 = [];
+  for (const d of ['scripts', 'src', 'hooks', 'bin', 'evals']) {
+    const fl = []; walk(root, d, fl);
+    for (const rel of fl) {
+      if (rel.split(path.sep).join('/') === 'evals/skill-onoff/d0gate-v2/cc-v2.js' || isExcludedPath(rel)) continue;
+      let t; try { t = fs.readFileSync(path.join(root, rel), 'utf8'); } catch (_) { continue; }
+      if (t.split('\n').some((l) => !isCommentLine(l) && /require\(\s*['"`][^'"`]*\bcc-v2(\.js)?['"`]\s*\)/.test(l))) ccv2.push(rel.split(path.sep).join('/'));
+    }
+  }
+  if (fs.existsSync(path.join(root, 'evals', 'skill-onoff', 'd0gate-v2', 'cc-v2.js'))) {
+    for (const r of ccv2) if (r !== 'evals/skill-onoff/run-d0gate-v2-campaign.js') add('cc_v2_extra_requirer', r, 'requires cc-v2.js; the only allowed requirer is evals/skill-onoff/run-d0gate-v2-campaign.js (it refuses an active registry)');
   }
   return { findings, hits, sites: reg.sites };
 }

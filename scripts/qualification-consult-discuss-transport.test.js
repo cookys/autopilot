@@ -264,6 +264,7 @@ function runProvider({ env = {}, request, stubOutput, stubExit }) {
       PATH: process.env.PATH,
       HOME: tempRoot,
       TMPDIR: tempRoot,
+      AUTOPILOT_ACCOUNTS_DIR: path.join(tempRoot, 'no-accounts'), // G37: never consult the real registry
       QRP_TRANSPORT: 'cli',
       QRP_CLI_KIND: 'claude',
       QRP_CLI_BIN: stubCli,

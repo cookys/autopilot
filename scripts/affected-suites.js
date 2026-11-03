@@ -1270,6 +1270,7 @@ async function main(argv) {
       // only get it here). A path that does not exist, so a wired caller runs its no-registry path. Inherited by every entry,
       // pool and rerun alike. AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1 keeps the caller's value.
       if (process.env.AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR !== '1') process.env.AUTOPILOT_ACCOUNTS_DIR = path.join(os.tmpdir(), `autopilot-no-accounts-${process.pid}`, 'accounts');
+      else process.stderr.write(`WARNING: AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1: the caller's AUTOPILOT_ACCOUNTS_DIR is kept; a wired claude caller may read the operator's REAL account registry (WARNING)\n`);
       if ((a.entryTimeout != null || a.jobs > 1) && !SIG_INSTALLED) installSignalKill();
       const ran = await runSelected(root, doc, doc.mode === 'full' ? runAlways : doc.always_run, a.budget, a.entryTimeout, a.jobs || 1);
       recordDurations(root, ran.results, ran.timedOutPaths || []);

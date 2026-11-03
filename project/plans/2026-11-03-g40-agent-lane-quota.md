@@ -3,7 +3,7 @@
 
 > **Amended 16:00Z by PM (operator direction): section 20 (provider-neutral contract keyed by provider and alias, adapter manifests, Claude adapter first) is binding and overrides the record shape of 6 and 18.1 and the phase order of 13 and 18.8.**
 >
-> **Amended 2026-11-04 by PM (addendum D, section 22: the fleet hub decisions, source fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `cd91624`, `docs/plans/2026-11-04-g40-hub-quota-store.md`). Hub key is (namespace, provider, alias, writer_courier), namespace and writer taken from the authenticated connection; typed proto table with string patterns; only a courier writes and only its own row; `_access` `quota_publish` can deny; hard expiry `hub_received_at + 6 h`, no heartbeat; skew via `sent_at` into `observed_at_hub`, flagged over 5 min; per-host rows merged by the reader (section 5.2); hub limits 1 write per 10 s per key (burst 3), 60 per minute and 256 rows per courier, visible nack `quota_rate_limited`; snapshot plus deltas feeding the mirror; `unsupported` means `hub=absent`; `pct` adapter-local. Earlier text changed to match fleet: 5.4 hub key and questions 1-6 and Q8; 8.3 writer rule, tie-break and the higher-pct `quota_conflict` rule (dropped); 18.1 one row per alias; 18.2 push pacing (now bounded by the hub limits); 18.4 mirror authority and layout; section 6 `pct` as a record field (adapter-local only); 21.1 and 21.6 (hub expiry vs local persistence); phase P5 dependency (F4 and the freeze). N39-N43 added. Fleet design-note sha: `cd91624` (placeholder resolved). Addendum C (section 21): seven contract gaps closed in the schema body (token_state, remaining-only credits, one mirror root name, contract constants for the token warn levels, field-name mapping with Q11 resolved, L0 placeholder records, no history in v1); N31 to N38 added. Section 21 wins over 20.2 and 20.4 where they differ.**
+> **Amended 2026-11-04 by PM (addendum D, section 22: the fleet hub decisions, source fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `cd91624`, `docs/plans/2026-11-04-g40-hub-quota-store.md`). Hub key is (namespace, provider, alias, writer_courier), namespace and writer taken from the authenticated connection; typed proto table with string patterns; only a courier writes and only its own row; `_access` `quota_publish` can deny; hard expiry `hub_received_at + 6 h`, no heartbeat; skew via `sent_at` into `observed_at_hub`, flagged over 5 min; per-host rows merged by the reader (section 5.2); hub limits 1 write per 10 s per key (burst 3), 60 per minute and 256 rows per courier, visible nack `quota_rate_limited`; snapshot plus deltas feeding the mirror; `unsupported` means `hub=absent`; `pct` adapter-local. Earlier text changed to match fleet: 5.4 hub key and questions 1-6 and Q8; 8.3 writer rule, tie-break and the higher-pct `quota_conflict` rule (dropped); 18.1 one row per alias; 18.2 push pacing (now bounded by the hub limits); 18.4 mirror authority and layout; section 6 `pct` as a record field (adapter-local only); 21.1 and 21.6 (hub expiry vs local persistence); phase P5 dependency (F4 and the freeze). N39-N43 added; addendum E (section 23, PM ruling): bucket below hub limits with counted coalescing, re-push with original `observed_at` (REVIEWER FLAG, Q18 awaiting fleet), glm probe evidence, probe default off; N44-N47. Fleet design-note sha: `cd91624` (placeholder resolved). Addendum C (section 21): seven contract gaps closed in the schema body (token_state, remaining-only credits, one mirror root name, contract constants for the token warn levels, field-name mapping with Q11 resolved, L0 placeholder records, no history in v1); N31 to N38 added. Section 21 wins over 20.2 and 20.4 where they differ.**
 >
 > **Amended 15:54Z by PM (operator direction): sections 18 and 19 are binding and override 5.3, 5.4, 6, 8.3 and 13 where they differ (one contract, one store with a local mirror, an always-on zero-token courier reporter, and the probe experiment).**
 
@@ -583,7 +583,7 @@ Binding; it wins over 20.2 and 20.4 where they differ, and over 5.6 and 10 on th
 
 Record-level field `token_state`: `"ok" | "invalid" | "unknown"`. Absent is read as `unknown`. It is a different state from a 429 (a cooling window, retried after `resets_at`) and from stale data (older than 6 h, ignored): `invalid` says the credential itself is refused and no waiting fixes it.
 - Set to `invalid` only by one of: (1) an authentication refusal on a call that used this alias's credential (HTTP 401 or 403, or the provider's documented auth-failure code; the existing `auth_failed` of 5.6); (2) the operator command `account set --state revoked`; (3) a manifest-verified endpoint that reports the credential invalid. Never by a 429, never by an old `observed_at`, never by `token_expires_at` passing (an expired date is its own warn level, 21.4).
-- Set to `ok` only by a later successful authenticated call for that alias or `account set --state active`. Set to `unknown` when no authenticated call has been seen. `token_state` is a state, not a measurement: the 6 h age rule does NOT retire an `invalid` in the own mirror; only a state change does. [22.1: the hub row itself expires at `hub_received_at + 6 h` with no heartbeat; the reporter re-pushes a held `invalid` only under 18.2 rule 4 (hub copy missing), which never refreshes `observed_at`.]
+- Set to `ok` only by a later successful authenticated call for that alias or `account set --state active`. Set to `unknown` when no authenticated call has been seen. `token_state` is a state, not a measurement: the 6 h age rule does NOT retire an `invalid` in the own mirror; only a state change does. [22.1: the hub row itself expires at `hub_received_at + 6 h` with no heartbeat; the reporter re-pushes a held `invalid` only under 18.2 rule 4 (hub copy missing), with the ORIGINAL `observed_at`, 23.2.]
 - Reporter: a change of `token_state` pushes at once (same class as 18.2 rule 4), and counts as a change even when no window moved.
 - Pick: an `invalid` alias is never selected, gets class `invalid` (not `cooling`, not `unknown`), no cooldown timer is started, and `claude-account.js status` shows it on its own line. Its windows stay in the record but are ignored for ordering.
 - Display: `invalid` is drawn as the token chip (codeforge ordering: token chip first), with the alias and the word for revoked; no gauge, no utilization.
@@ -635,7 +635,7 @@ For every alias in the G37 registry (implicitly provider `claude`, 20.1) that ha
 ```
 - `source` is a record-level field allowed ONLY here: value `registry`, valid only when `windows` is empty (a window-level `source` cannot exist without a window). A record with non-empty `windows` and a record-level `source` is rejected.
 - No `observed_at` anywhere (nothing was observed; freshness is not forged). Token dates come from the registry's token metadata when present, else null; never a token value.
-- A placeholder is only pushed when no real record exists; any real observation replaces it, and a placeholder never overwrites a real record. It is not retired by the 6 h reader rule (it carries no measurement); the hub copy still expires at `hub_received_at + 6 h` (22.1), so the reporter re-pushes the placeholder under 18.2 rule 4 when the hub copy is missing.
+- A placeholder is only pushed when no real record exists; any real observation replaces it, and a placeholder never overwrites a real record. It is not retired by the 6 h reader rule (it carries no measurement); the hub copy still expires at `hub_received_at + 6 h` (22.1), so the reporter re-pushes the placeholder under 18.2 rule 4 when the hub copy is missing (original values, 23.2).
 - Scope: Claude registry aliases only. Other providers have no registry (20.1), so their never-observed accounts are not enumerated by this contract; that is a gap the per-provider adapters close with their own alias list.
 
 ### 21.7 Not in v1: history and sparkline
@@ -688,7 +688,7 @@ Per `kind`: newest `observed_at` (own rows by `observed_at`, peer rows by `obser
 
 ### 22.5 Push pacing against the hub limits
 
-The reporter's own rules (5 s debounce, 30 s minimum per alias) give at most 2 pushes per minute per key, far under 1 per 10 s burst 3. The paths that bypass them ("at once": 18.2 rule 4, `rejected`, `token_state` change 21.1, placeholders 21.6) could exceed the limits, so every push goes through a local token bucket: per key 1 per 10 s, burst 3; per courier 60 per minute; own live rows capped at 256 (placeholders are pushed last and never displace a row that has a window). A delayed push is still "at once" in order, only paced; a `quota_rate_limited` nack waits for its `retry_after` and keeps only the newest value per key.
+The reporter's own rules (5 s debounce, 30 s minimum per alias) give at most 2 pushes per minute per key, far under 1 per 10 s burst 3. The paths that bypass them ("at once": 18.2 rule 4, `rejected`, `token_state` change 21.1, placeholders 21.6) could exceed the limits, so every push goes through a local token bucket whose limits are strictly BELOW the hub's (23.1): per key 1 per 12 s, burst 2; per courier 50 per minute; own live rows capped at 240 (placeholders are pushed last and never displace a row that has a window). A delayed push is still "at once" in order, only paced; a `quota_rate_limited` nack waits for its `retry_after` and keeps only the newest value per key. Coalescing is counted, never silent: see 23.1.
 
 ### 22.6 Negative controls added
 
@@ -696,7 +696,40 @@ The reporter's own rules (5 s debounce, 30 s minimum per alias) give at most 2 p
 - N40 Two rows with the same `(provider, alias)` and different `writer_courier` coexist in the reader; a pull never overwrites the own file and the reporter never writes a peer row as its own.
 - N41 The merge takes the newest per window across own and peer rows; an exact tie keeps own; a peer row past 6 h is ignored; a `skewed` row is flagged, not dropped.
 - N42 A nack `quota_rate_limited`, `quota_publish_denied` or `unsupported` is never recorded as pushed: `quota_rate_limited` retries after `retry_after`, `quota_publish_denied` stops pushing, `unsupported` logs `hub=absent` (a fake hub for each).
-- N43 Pacing: a burst of 20 "at once" events on one key produces at most 3 pushes in the first second and at most 1 per 10 s afterwards; 300 aliases never leave more than 256 own live rows, and placeholders are the ones dropped (shown red with the bucket removed).
+- N43 Pacing: a burst of 20 "at once" events on one key produces at most 2 pushes in the first second and at most 1 per 12 s afterwards; 300 aliases never leave more than 240 own live rows, and placeholders are the ones dropped (shown red with the bucket removed). The constants are checked against the hub limits (23.1, N44).
+
+## 23. Addendum E (PM ruling on 22.5 and on the 6 h expiry): pacing, re-push, probe default
+
+Binding; refines 22.5 and the 21.1 / 21.6 notes.
+
+### 23.1 Local token bucket (approved)
+
+- The bucket limits are strictly lower than the hub's (hub: per key 1 per 10 s burst 3, per courier 60 per minute, 256 rows): per key 1 per 12 s burst 2; per courier 50 per minute; own live rows at most 240. A constant at or above the hub's value is a defect (N44).
+- When pushes queue up, coalescing keeps ONLY the newest value per key; the older queued values are not sent.
+- Never a silent drop: every coalesced value increments a per-key counter `coalesced_total` and writes one line to the reporter log (`coalesced key=<provider>/<alias> dropped_observed_at=<n> kept_observed_at=<n>`), visible in `status` output. Rows dropped for the 240 cap (placeholders) are counted and logged the same way (`row_cap_dropped_total`).
+- Negative control N44: the bucket constants are below the hub's on every axis (a planted constant equal to the hub's fails the check). N45: 20 queued events for one key yield one sent value, the newest, `coalesced_total` = 19 and 19 log lines; a planted bucket that drops without counting fails (red before green). N46: with 300 aliases, `row_cap_dropped_total` equals 300 minus 240 and every dropped alias is named in the log.
+
+### 23.2 Re-push of `invalid` and placeholder rows after hub expiry (approved)
+
+- The own mirror keeps `invalid` and placeholder rows. When the hub copy expires (`hub_received_at + 6 h`), the reporter pushes the row again with its ORIGINAL `observed_at` (placeholders have none and keep none). Windows stay subject to the 6 h reader rule by `observed_at`, so a re-push never makes old data look fresh.
+- Rate: about one write per alias per 6 h. This is not a heartbeat: it fires only when the hub copy is missing, it carries no new observation, and it never refreshes any freshness stamp.
+- Negative control N47: a re-push of an `invalid` row carries the stored `observed_at` byte for byte; a planted re-push that stamps `now` fails; the re-push happens at most once per 6 h per alias and only when the hub copy is missing.
+
+> **REVIEWER FLAG:** 23.2 re-sends a row with an old `observed_at` after the hub expired it. Check three things: (1) it is not a disguised heartbeat (condition: hub copy missing; no freshness refresh); (2) it needs the hub to accept a past `observed_at`; (3) it sits next to the 5.2 / 6 h reader rule, so stale windows inside a re-pushed row are ignored by the reader, not trusted.
+
+### 23.3 Open question for fleet
+
+- Q18 [awaiting fleet confirmation] Does the hub accept a re-push whose `observed_at` is old? By fleet's design (`cd91624`, section 5) its clock check rejects only times in the future, so an old `observed_at` should pass, but this is an inference and fleet has not confirmed it. If it is refused, 23.2 falls back to keeping `invalid` and placeholder rows only in the own mirror (other hosts re-learn them from their own failed calls and from their own registry).
+
+### 23.4 Design evidence: a probe starts the glm 5 h window
+
+Measured 2026-11-03 by lane g40swexp ([starts-window/RESULT.md](../../docs/plans/evidence/2026-11-03-g40-agent-lane-quota/starts-window/RESULT.md), raw `glm-retry.txt`): one probe (`max_tokens` 8, prompt `ok`) at an idle glm 5 h entry made `nextResetTime` appear at probe time plus 5 h and utilization 1 %, unchanged at +60 s. A probe therefore moves an idle account's reset clock. This is decision branch B of 19.6 for glm.
+
+### 23.5 Probe default stays off, and why
+
+- `quota_probe` default stays `off` (section 10). Reasons: glm has shown that a probe starts the window, so a standing probe would start the clock on an idle account early; minimax has no result yet (retry pending); Claude needs an idle alias to be tested at all.
+- The policy that replaces any standing probe is: probe only before pick, and only when the best observation of the candidates is stale (19.6 branch B, 5.3 `staleCandidates`).
+- Whether a provider may ever be probed on a standing schedule is decided per adapter by its manifest `starts_window` once that provider's experiment result exists: `false` allows branch A, `true` or `unknown` keeps branch B (20.3 rule 2). The glm manifest therefore carries `starts_window: true` with the evidence path above.
 
 ## Review log
 - R0: authored by the G40-data hands lane; no review round yet.
@@ -704,3 +737,4 @@ The reporter's own rules (5 s debounce, 30 s minimum per alias) give at most 2 p
 - R0a: addendum (sections 18, 19) added for PM direction 15:54Z; the experiment in section 19 is NOT run by the hands lane.
 - R0c: addendum C (section 21) added for PM direction: seven contract gaps from codeforge `5eb4ed7` section 9; N31-N38.
 - R0d: addendum D (section 22) added: fleet hub decisions (fleet message 01M6H3S89D3MPBWVWEASJM27M2; fleet message 01M6H3W6FC4ZNJM450WZ64JAB4; fleet `develop` `cd91624`, `docs/plans/2026-11-04-g40-hub-quota-store.md`); conflicts changed to match fleet; Q15-Q17 raised by fleet.
+- R0e: addendum E (section 23): token bucket below hub limits with counted coalescing, re-push with original observed_at plus REVIEWER FLAG and Q18, glm evidence, probe default off; N44-N47.

@@ -56,6 +56,30 @@ for mode in serial parallel; do
   assert_eq "$RC" "1" "$mode: an overrunning suite fails the run"
   assert_contains "$SUMMARY" "fake-hang.test.sh [TIMEOUT]" "$mode: an overrunning suite is labelled [TIMEOUT]"
 
+  # A suite's own `# suite-timeout-secs: N` header line raises its ceiling above the global one (and only raises it).
+  rm_suites
+  mk_suite fake-longer.test.sh "# suite-timeout-secs: 30
+sleep 4; echo PASS: slow-but-declared; exit 0"
+  run_mode 2 fake- "${flags[@]}"
+  assert_eq "$RC" "0" "$mode: a suite that declared a longer ceiling is not timed out at the global one"
+  assert_not_contains "$OUT" "TIMEOUT" "$mode: the declared ceiling suppresses the global TIMEOUT"
+  rm_suites
+  mk_suite fake-malformed.test.sh "# suite-timeout-secs: 30s
+sleep 4; echo PASS: malformed; exit 0"
+  run_mode 2 fake- "${flags[@]}"
+  assert_contains "$SUMMARY" "fake-malformed.test.sh [TIMEOUT]" "$mode: a malformed suite-timeout-secs line is ignored (global ceiling applies)"
+  rm_suites
+  mk_suite fake-lower.test.sh "# suite-timeout-secs: 1
+sleep 4; echo PASS: lower; exit 0"
+  run_mode 6 fake- "${flags[@]}"
+  assert_eq "$RC" "0" "$mode: a declared ceiling below the global one does not lower it"
+  rm_suites
+  mk_suite fake-declared-hang.test.sh "# suite-timeout-secs: 3
+sleep 30"
+  run_mode 2 fake- "${flags[@]}"
+  assert_contains "$SUMMARY" "fake-declared-hang.test.sh [TIMEOUT]" "$mode: a suite past its declared ceiling is still [TIMEOUT]"
+  assert_contains "$OUT" "exceeded 3s" "$mode: the TIMEOUT line names the effective (declared) ceiling"
+
   # A suite that traps the watchdog's TERM and exits 0 must still be a TIMEOUT failure, never a pass.
   rm_suites
   mk_suite fake-trapterm.test.sh 'trap "exit 0" TERM; sleep 30 & wait'

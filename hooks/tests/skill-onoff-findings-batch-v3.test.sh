@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# suite-timeout-secs: 1500
+# (quiet-host duration ~600 s, 624 s measured alone at load ~48: right at the 600 s global ceiling, so it timed out in full runs)
 # hooks/tests/skill-onoff-findings-batch-v3.test.sh — findings-batch-v3 (BL-0295, owner decision d-78324b51 = B):
 # prereg/findings-batch-v3.json, fbatch/cc-v3 fixtures (residual Critical in fb-critical-guard), fbatch/lib-v3.js, fbatch/cell-v3.js,
 # score-fbatch-v3.js, run-fbatch-v3-campaign.js. A FAKE `claude` on PATH only logs its argv; no real claude, no network, no spend.

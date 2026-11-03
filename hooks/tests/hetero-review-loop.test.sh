@@ -2377,8 +2377,8 @@ assert_eq "$(grep -c -x -F -- "$TEST_TMP/ev_rel_ledger" "$EV_POINTER" 2>/dev/nul
 assert_eq "$(grep -c -x -F -- "ev_rel_ledger" "$EV_POINTER" 2>/dev/null)" "0" "events writer 4: no bare relative line in the pointer file"
 EV_M4=$(pk_mutant evrel hetero-review-loop.js 'const line = `${path.resolve(ledgerDir)}\n`;' 'const line = `${RELATIVE_LEDGER_ARG}\n`;') || fail "mutation setup failed (events relative)"
 # the collect handler also resolves --ledger before it reaches the writer, so the mutant removes that resolve too (the first match in the file is handleCollect)
-sed -i 's/RELATIVE_LEDGER_ARG/ledgerDir/' "$EV_M4/scripts/hetero-review-loop.js"
-sed -i "0,/const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';/s//const ledgerDir = flags.ledger ? flags.ledger : '';/" "$EV_M4/scripts/hetero-review-loop.js"
+sed_mutate "$EV_M4/scripts/hetero-review-loop.js" 's/RELATIVE_LEDGER_ARG/ledgerDir/'
+sed_mutate "$EV_M4/scripts/hetero-review-loop.js" "0,/const ledgerDir = flags.ledger ? path.resolve(flags.ledger) : '';/s//const ledgerDir = flags.ledger ? flags.ledger : '';/"
 (cd "$TEST_TMP" && node "$EV_M4/scripts/hetero-review-loop.js" collect --repo-root "$SCRATCH_REPO" --ledger ev_rel_ledger_m --phase pevrelm --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" >/dev/null 2>&1)
 assert_eq "$(grep -c -x -F -- "ev_rel_ledger_m" "$EV_POINTER" 2>/dev/null)" "1" "events writer 4 (mutation): without any resolve the pointer holds the bare relative path"
 

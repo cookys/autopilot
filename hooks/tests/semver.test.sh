@@ -88,7 +88,9 @@ mk_pf() { # mk_pf <dir> <canonical-version>
   cp "$REPO_ROOT/scripts/preflight-release.sh" "$d/scripts/"
   cp "$SEMVER" "$d/scripts/lib/"
   cp "$REPO_ROOT/scripts/lib/repo-layout.js" "$d/scripts/lib/"   # preflight-release resolves its repo paths through the layout registry
-  sed -i -E "s#'project/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive)'#'docs/\\1'#; s#'project/backlog/BACKLOG.md'#'docs/BACKLOG.md'#" "$d/scripts/lib/repo-layout.js"   # the fixture is a docs/ repo
+  # the fixture is a docs/ repo: one anchored mutation per call
+  sed_mutate "$d/scripts/lib/repo-layout.js" -E "s#'project/(plans|plans/_archive|projects|projects/INDEX.md|projects/_archive)'#'docs/\\1'#"
+  sed_mutate "$d/scripts/lib/repo-layout.js" "s#'project/backlog/BACKLOG.md'#'docs/BACKLOG.md'#"
   printf '{ "name": "autopilot", "version": "%s" }\n' "$v" > "$d/.claude-plugin/plugin.json"
 }
 pf_result() { # pf_result <dir> <check-title-prefix> → ✓ or ✗ line following the title

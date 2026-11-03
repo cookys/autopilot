@@ -20,7 +20,7 @@
  * "enabled ~ zero" is a legitimate conclusion, not a broken instrument.
  *
  * Safety: every child gets a fresh mktemp CLAUDE_CONFIG_DIR holding only .credentials.json, a throwaway
- * HOME, a throwaway workload directory, and no AUTOPILOT_/CLAUDE_CODE session ids.
+ * HOME (with an account registry present, G37: the child runs via claude-account.js and nothing is copied), a throwaway workload directory, and no AUTOPILOT_/CLAUDE_CODE session ids.
  * The real ~/.claude is never handed to a child.
  *
  * Exit codes: 0 conclusion written, 2 usage, 3 stopped on --max-usd, 4 conclusion refused.
@@ -33,6 +33,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const authStop = require('./lib/auth-stop.js');
+const accountRail = require('./lib/account-rail.js');
 
 const TOOL_CALLS = 20;
 const MARKER_CMD = 'sleep 0.2';
@@ -228,16 +229,26 @@ function runOnce(ctx, arm, remainingUsd) {
     const home = path.join(runDir, 'home');
     fs.mkdirSync(configDir);
     fs.mkdirSync(home);
-    fs.copyFileSync(ctx.credentials, path.join(configDir, '.credentials.json'));
+    if (!ctx.account) fs.copyFileSync(ctx.credentials, path.join(configDir, '.credentials.json'));
     const settingsPath = path.join(ctx.root, `settings-${arm}.json`);
     fs.writeFileSync(settingsPath, JSON.stringify(settingsFor(arm, ctx.checkout)));
     const debugFile = path.join(ctx.root, `debug-${arm}-${crypto.randomBytes(4).toString('hex')}.log`);
     const budget = Math.max(0.01, Math.min(remainingUsd, 0.5));
-    const r = spawnSync(ctx.claudeBin, [
+    const claudeArgv = [
       '-p', workloadPrompt(), '--model', ctx.model, '--settings', settingsPath, '--setting-sources', '',
       '--allowed-tools', 'Read', '--output-format', 'json', '--debug-file', debugFile,
       '--max-budget-usd', String(budget),
-    ], { cwd: ctx.workDir, env: cleanEnv(home, configDir), encoding: 'utf8', input: '', timeout: 600000 });
+    ];
+    // G37 (plan W4/A8): with a registry the run goes through claude-account.js (alias home/config, token
+    // in the child env only) and no credentials file is copied anywhere.
+    let cmd = ctx.claudeBin;
+    let cmdArgs = claudeArgv;
+    if (ctx.account) {
+      const w = accountRail.wrapClaude(ctx.claudeBin, claudeArgv, { purpose: 'hook-bench', cwd: ctx.workDir });
+      cmd = w.command;
+      cmdArgs = w.args;
+    }
+    const r = spawnSync(cmd, cmdArgs, { cwd: ctx.workDir, env: cleanEnv(home, configDir), encoding: 'utf8', input: '', timeout: 600000 });
     let cost = NaN;
     try { cost = JSON.parse(r.stdout).total_cost_usd; } catch (_) { /* no JSON: handled below */ }
     // A child that died (timeout, signal, crash) or printed no readable cost may still have spent up to its
@@ -266,8 +277,11 @@ function main() {
     return 0;
   }
 
+  const layer = accountRail.layerState({ env: process.env, purpose: 'hook-bench' });
+  if (layer.state === 'invalid') usage(2, `account layer invalid, no run started: ${layer.detail}`);
+  const account = layer.state === 'active';
   const credentials = process.env.BENCH_CREDENTIALS || path.join(os.homedir(), '.claude', '.credentials.json');
-  if (!fs.existsSync(credentials)) usage(2, `credentials not found: ${credentials}`);
+  if (!account && !fs.existsSync(credentials)) usage(2, `credentials not found: ${credentials}`);
   let code = 0;
   let root;
   try {
@@ -276,7 +290,7 @@ function main() {
     const workDir = path.join(root, 'work');
     fs.mkdirSync(workDir);
     for (const [k, v] of Object.entries(workloadFiles())) fs.writeFileSync(path.join(workDir, k), v);
-    const ctx = { root, checkout: dest, workDir, credentials, claudeBin: process.env.BENCH_CLAUDE_BIN || 'claude', model: o.model };
+    const ctx = { root, checkout: dest, workDir, credentials, account, claudeBin: process.env.BENCH_CLAUDE_BIN || 'claude', model: o.model };
 
     const raw = { enabled: [], positive_control: [], zero: [] };
     let spent = 0;

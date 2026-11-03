@@ -480,9 +480,27 @@ if [ "$LIVE_SPEND" -eq 1 ] && [ "$BINARY_FOUND" -eq 1 ]; then
       # override, so the ambient credential is exactly what dispatch would use.
       child_session_env_setup "$SELF_DIR" 2>/dev/null || true
       declare -F child_session_mint >/dev/null 2>&1 && child_session_mint probe   # BL-0251 fleet contract
-      env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} \
-        claude -p "Respond only with OK" --model "$MODEL" --strict-mcp-config --tools "" \
-        >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+      # G37 (plan W4/A4): with an account registry the probe spends through claude-account.js (alias
+      # token in the child env only); no registry -> the ambient path below, unchanged. A broken
+      # registry is a hard stop: nothing is spawned and no capability row is recorded.
+      _acct_out="$(node "$SELF_DIR/claude-account.js" env-check --purpose probe 2>"$PROBE_ERR_FILE")" && _acct_rc=0 || _acct_rc=$?
+      if [ "$_acct_rc" -ne 0 ]; then
+        printf 'probe-engine-capability: account layer invalid, claude-native probe not run: %s\n' "$(head -n 1 "$PROBE_ERR_FILE")" >&2
+        exit 2
+      fi
+      case "${_acct_out%% *}" in
+        unconfigured|mode_off)
+          env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} \
+            claude -p "Respond only with OK" --model "$MODEL" --strict-mcp-config --tools "" \
+            >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+          ;;
+        *)
+          env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} \
+            node "$SELF_DIR/claude-account.js" run --purpose probe -- \
+            claude -p "Respond only with OK" --model "$MODEL" --strict-mcp-config --tools "" \
+            >"$PROBE_ERR_FILE" 2>&1 || PROBE_EXIT=$?
+          ;;
+      esac
       ;;
     kimi)
       # $KIMI_BIN resolved in the binary-presence case above (same order as the dispatcher).

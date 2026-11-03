@@ -28,6 +28,7 @@ OUT_DIR="$TEST_TMP/panel-out"
 mkdir -p "$OUT_DIR"
 CAL_DIR="$TEST_TMP/calibration"
 export CALIBRATION_DATA_DIR="$CAL_DIR"
+export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"   # G37: never consult the real account registry
 
 # ── Stub binaries ─────────────────────────────────────────────────────────────
 
@@ -590,7 +591,7 @@ fi
 QC_SBX="$TEST_TMP/qc-namespace"
 mkdir -p "$QC_SBX/scripts"
 cp "$SCRIPT" "$QC_SBX/scripts/qc-panel.js"
-mkdir -p "$QC_SBX/scripts/lib" && cp "$REPO_ROOT/scripts/lib/agy-stream-json.js" "$REPO_ROOT/scripts/lib/repo-layout.js" "$QC_SBX/scripts/lib/"   # qc-panel.js requires the shared agy transport
+mkdir -p "$QC_SBX/scripts/lib" && cp "$REPO_ROOT/scripts/lib/agy-stream-json.js" "$REPO_ROOT/scripts/lib/repo-layout.js" "$REPO_ROOT/scripts/lib/account-rail.js" "$QC_SBX/scripts/lib/"   # qc-panel.js requires the shared agy transport
 NS1="$(cd "$QC_SBX" && node "$QC_SBX/scripts/qc-panel.js" \
   --report "$NULL_REPORT" --artifacts "$ARTIFACT" --proj sameproj --node node-a 2>"$TEST_TMP/ns1.err")"
 NS2="$(cd "$QC_SBX" && node "$QC_SBX/scripts/qc-panel.js" \

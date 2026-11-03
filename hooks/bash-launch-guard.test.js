@@ -709,22 +709,22 @@ test('recipe: bare `wait` also wakes after a detached rail', () => {
 // (100 ms per hook call, 150 ms per rule4 call) stay available as an opt-in variant: BLG_SLOW_TIMING=1.
 const SLOW_TIMING = process.env.BLG_SLOW_TIMING === '1';
 const slowTest = (name, fn) => (SLOW_TIMING ? test(`@slow ${name}`, fn) : test.skip(`@slow ${name} (set BLG_SLOW_TIMING=1)`, () => {}));
-function bestMs(fn, reps = 9) {
+function bestMs(fn, reps = 9, iters = 1) {
   let best = Infinity;
   for (let i = 0; i < reps; i += 1) {
     const t0 = process.hrtime.bigint();
-    fn();
+    for (let k = 0; k < iters; k += 1) fn();
     best = Math.min(best, Number(process.hrtime.bigint() - t0) / 1e6);
   }
   return best;
 }
 const GROWTH_FACTOR = 16;
 const GROWTH_CEILING = 64; // linear ~16x for a 16x input, quadratic ~256x
-function growthRatio(fn, build, n) {
+function growthRatio(fn, build, n, iters = 1) {
   const small = build(n);
   const large = build(GROWTH_FACTOR * n);
   fn(small); // warm up the JIT before measuring
-  return bestMs(() => fn(large)) / Math.max(bestMs(() => fn(small)), 0.05);
+  return bestMs(() => fn(large), 5, iters) / Math.max(bestMs(() => fn(small), 5, iters), 0.05);
 }
 
 
@@ -789,6 +789,7 @@ test('a huge token is not judged (no warning, no cost)', () => {
 
 // Deterministic form of the glob cost bounds: count the directory reads the rule performs instead of timing
 // them. A load spike moves a clock, never a count. The absolute ceilings stay as opt-in @slow variants.
+const { detectZshExpansion } = require('../scripts/lib/bash-launch-rules.js');
 function countOpendirs(fn) {
   const real = fs.opendirSync;
   let n = 0;
@@ -796,6 +797,11 @@ function countOpendirs(fn) {
   try { fn(); } finally { fs.opendirSync = real; }
   return n;
 }
+test('positive control: a single-level glob in a fresh tmp dir does read it (the counter is live)', () => {
+  const d = mk('blg-pc-');
+  const opendirs = countOpendirs(() => { detectZshExpansion(`ls ${d}/*.zzq`, os.tmpdir()); });
+  assert.ok(opendirs >= 1, `${opendirs} directory reads: the rule no longer uses fs.opendirSync, the counts below prove nothing`);
+});
 test('deep globs read no directory at all (count-based, load-proof)', () => {
   const opendirs = countOpendirs(() => {
     detectZshExpansion('ls /*/*/*/*/*/*/*.zzqq', os.tmpdir());
@@ -806,7 +812,7 @@ test('deep globs read no directory at all (count-based, load-proof)', () => {
 test('single-level globs are capped at 3 directory reads per command (count-based, load-proof)', () => {
   const globs = Array.from({ length: 8 }, () => '/*').join(' '); // each one matches, so the scan goes on to the next
   const opendirs = countOpendirs(() => { detectZshExpansion(`ls ${globs}`, os.tmpdir()); });
-  assert.ok(opendirs <= 3, `${opendirs} directory reads for 8 single-level globs`);
+  assert.ok(opendirs >= 1 && opendirs <= 3, `${opendirs} directory reads for 8 single-level globs (want 1..3)`);
 });
 slowTest('deep glob is bounded (worst case stays fast)', () => {
   const t0 = Date.now();
@@ -815,7 +821,6 @@ slowTest('deep glob is bounded (worst case stays fast)', () => {
 });
 
 // In-process timing of the rule itself (absolute form is opt-in; the default form above counts reads).
-const { detectZshExpansion } = require('../scripts/lib/bash-launch-rules.js');
 slowTest('five deep globs cost < 200 ms in total', () => {
   const t0 = Date.now();
   const r = detectZshExpansion('ls /*/*/* /*/*/*/* /*/*/*/*/* /*/*/*/*/*/* /*/*/*/*/*/*/*.zzqq', os.tmpdir());
@@ -844,14 +849,17 @@ for (const f of fs.readdirSync(path.join(__dirname, '..', 'scripts'))) {
 // ---- hard cost bounds (item: single glob lookups and crafted input) ----
 test('segments()/expandSegments() grow linearly: 16x the input costs < 64x the time (load-proof, deterministic)', () => {
   const { segments, expandSegments } = require('../scripts/lib/bash-launch-rules.js');
-  for (const [name, unit, n] of [['} & ', '} & ', 500], ['fi & ', 'fi & ', 800], ['done & ', 'done & ', 600]]) {
+  for (const [name, unit, n] of [['} & ', '} & ', 250], ['fi & ', 'fi & ', 200], ['done & ', 'done & ', 145]]) {
+    // 16n of every unit stays <= SEG_MAX_TEXT (16384 chars): both sizes take the structural path. Past that the
+    // `big` flag skips it, and a quadratic regression in it would hide behind the cheaper path.
     // QUARANTINED, tracked as BL-0370 (project/backlog/segments-dollar-paren-superlinear.md); unquarantine = fix it,
     // then add ['$(', '$(', n] back to the list above.
     // `$(` x n is not here on purpose: segments() is superlinear on it past ~16 KB (cur.trim() on a growing
     // cons-string, 55 ms at 64 KB, 514 ms at 128 KB). It is still bounded by the opt-in @slow absolute variant
     // below; the growth itself is a finding for the owner of scripts/lib/bash-launch-rules.js, not hidden here.
     for (const [fname, fn] of [['segments', segments], ['expandSegments', expandSegments]]) {
-      const ratio = growthRatio((c) => { try { fn(c); } catch (_e) { /* fail-open is fine; cost is what is measured */ } }, (k) => unit.repeat(k), n);
+      const ratio = growthRatio((c) => { try { fn(c); } catch (_e) { /* fail-open is fine; cost is what is measured */ } }, (k) => unit.repeat(k), n, 20);
+      assert.ok(unit.repeat(GROWTH_FACTOR * n).length <= 16384, `${name}: 16n is past SEG_MAX_TEXT`);
       assert.ok(ratio < GROWTH_CEILING, `${fname}(${name} x n) grew ${ratio.toFixed(1)}x for 16x input`);
     }
   }

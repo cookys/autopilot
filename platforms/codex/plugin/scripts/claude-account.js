@@ -330,7 +330,7 @@ function classifyAttempt(a, scratchDir) {
   }
   // Any other structured error is a child error whatever the child's exit code was.
   if (structuredError) return { outcome: 'child_error', exit: EXIT.CHILD_ERROR };
-  return { outcome: 'other_failure', exit: a.code === null ? EXIT.CHILD_ERROR : a.code };
+  return { outcome: 'other_failure', exit: (a.code === null || a.code === 0) ? EXIT.CHILD_ERROR : a.code };
 }
 
 // ---------------------------------------------------------------- child execution (run)

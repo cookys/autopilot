@@ -96,3 +96,20 @@ test('prepareHome refuses links and a home equal to the real home; never writes 
   assert.strictEqual(fs.readFileSync(path.join(real, '.ssh', 'config'), 'utf8'), 'REAL\n');
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('prepareHome: stale tmp collisions do not leak raw errors; no real .ssh still checks links', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'g37-env-'));
+  const real = path.join(root, 'real');
+  fs.mkdirSync(real);
+  const h = path.join(root, 'h');
+  fs.mkdirSync(h);
+  fs.symlinkSync(root, path.join(h, '.ssh'));
+  assert.throws(() => E.prepareHome({ homeDir: h, realHome: real }), { reason: 'ssh_path_is_link' });
+  const h2 = path.join(root, 'h2');
+  fs.mkdirSync(path.join(h2, '.ssh'), { recursive: true });
+  fs.mkdirSync(path.join(real, '.ssh'));
+  fs.mkdirSync(path.join(h2, '.ssh', 'config')); // a directory where the file belongs: rename fails
+  assert.throws(() => E.prepareHome({ homeDir: h2, realHome: real }), (e) => e instanceof E.EnvError);
+  assert.deepStrictEqual(fs.readdirSync(path.join(h2, '.ssh')), ['config']);
+  fs.rmSync(root, { recursive: true, force: true });
+});

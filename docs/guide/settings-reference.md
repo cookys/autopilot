@@ -218,6 +218,20 @@ Opt-in copy of hetero-review report files. Finalize is wired in. It writes to th
 | `AUTOPILOT_ENDPOINT_<NAME>_URL` | Per-endpoint settings loaded from the endpoints env file: AUTOPILOT_ENDPOINT_`<NAME>`_URL and AUTOPILOT_ENDPOINT_`<NAME>`_TOKEN. An HTTP seat appears in the topology only when its URL is set. | unset |  |
 | `AUTOPILOT_MINIMAX_BASE_URL` | Base URL for the provider-native MiniMax endpoint. | unset |  |
 
+## Claude accounts (G37)
+
+Only matter once you have created an account registry (`~/.config/autopilot/accounts/registry.json`); without one the account layer is not used. Setup steps: [accounts.md](accounts.md). Config keys live under `accounts` in `~/.autopilot/config.json`.
+
+| Setting | What it does | Default | Environment variable |
+|---|---|---|---|
+| `accounts.mode` (config.json) | `auto` uses the account layer whenever a registry exists; `off` takes the legacy path even with a registry (each use is audited as `mode_off`). | `auto` | `AUTOPILOT_ACCOUNT_MODE`: Overrides the config value for one shell (`auto` or `off`). |
+| `accounts.refuse_all_tight` (config.json) | true makes pick and run refuse (exit 3) when every alias is at or above 90% used; false uses the least tight alias. | `false` |  |
+| `accounts.cooldown_default_minutes` (config.json) | Minutes an alias is skipped after a quota 429 when no reset time is known. A plain server throttle uses the shorter of this and 5. | `30` |  |
+| `accounts.max_attempts` (config.json) | Most aliases one `run` tries before it gives up with exit 4. | `3` |  |
+| `AUTOPILOT_ACCOUNTS_DIR` | Directory of the registry and token store. Point it at a throwaway directory to try the layer without touching the real one (step O6). | `~/.config/autopilot/accounts` |  |
+
+Set by the layer, not by you: `AUTOPILOT_ACCOUNT` (the alias a child runs as). Test-only seams are listed as internal in `scripts/lib/config-keys.json`.
+
 ## Live band, review page and watchers
 
 | Setting | What it does | Default | Environment variable |

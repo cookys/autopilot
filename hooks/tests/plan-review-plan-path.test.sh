@@ -85,4 +85,26 @@ assert_exit_code "$RC" "0" "race run completes: $OUT"
 assert_eq "$(plan_sha_in_ticket t-race)" "$HEADSHA" "sealed plan bytes are the compared bytes, not the post-read mutation"
 git -C "$WT" checkout -q -- plan.md
 
+# SHA-256 repo: the plan exists only in the first commit (deleted in HEAD). --expect-revision <first>
+# with the same bytes must be accepted and the recorded blob sha must be 64 hex.
+if git init -q --object-format=sha256 "$TEST_TMP/probe256" 2>/dev/null; then
+  R256="$TEST_TMP/r256"
+  git init -q --object-format=sha256 "$R256"
+  printf '# Plan 256\nbody\n' >"$R256/plan.md"; printf '# Rubric\n- R1: x\n' >"$R256/rubric.md"
+  git -C "$R256" add -A; git -C "$R256" -c user.name=t -c user.email=none commit -q -m first
+  FIRST="$(git -C "$R256" rev-parse HEAD)"
+  git -C "$R256" rm -q plan.md; git -C "$R256" -c user.name=t -c user.email=none commit -q -m drop
+  printf '# Plan 256\nbody\n' >"$R256/plan.md"   # absent from HEAD, bytes equal to $FIRST
+  sed "s/pp-plan/pp-sha256/" "$MANIFEST" >"$TEST_TMP/m-sha256.json"
+  OUT="$(AUTOPILOT_TEST_ALLOW_PLAN_REVIEW_SEAMS=1 \
+    AUTOPILOT_PLAN_REVIEW_RESPONSE_SEQUENCE="{\"architect\":[\"$FIXTURES/ready.json\"]}" \
+    node "$SCRIPT" --repo-root "$R256" --plan-file plan.md --rubric-file "$R256/rubric.md" --ticket t-sha256 \
+      --session-id s-sha256 --generation 1 --manifest-file "$TEST_TMP/m-sha256.json" --state-dir "$STATE_DIR" \
+      --allow-unregistered --expect-revision "$FIRST" 2>&1 </dev/null)"; RC=$?
+  BLOB="$(grep -rho '"plan_git_blob_sha": *"[0-9a-f]*"' "$STATE_DIR"/*/ 2>/dev/null | grep -o '[0-9a-f]\{64\}' | head -1)"
+  assert_contains "rc=$RC blob64=$([ -n "$BLOB" ] && echo yes || echo no)" "rc=0 blob64=yes" "sha256 repo: plan only in an old revision is accepted with a 64-hex blob sha: $OUT"
+else
+  echo "SKIP sha256 object-format case: this git ($(git --version)) cannot init --object-format=sha256"
+fi
+
 finalize_test

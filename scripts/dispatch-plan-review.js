@@ -338,6 +338,15 @@ function gitOut(repoRoot, args) {
   return run.status === 0 ? run.stdout.trim() : null;
 }
 
+// Object-id algorithm of the repo, independent of any path or revision. `rev-parse
+// --show-object-format` needs git >= 2.38; when the option is unsupported, fall back to the
+// extensions.objectformat config, default sha1 (the only format older gits can create).
+function repoObjectFormat(repoRoot) {
+  const fmt = gitOut(repoRoot, ['rev-parse', '--show-object-format']);
+  if (fmt === 'sha1' || fmt === 'sha256') return fmt;
+  return gitOut(repoRoot, ['config', '--get', 'extensions.objectformat']) === 'sha256' ? 'sha256' : 'sha1';
+}
+
 // Provenance of the reviewed plan: blob sha of the reviewed bytes, repo HEAD, and whether the
 // file differs from HEAD. Null fields when the repo is not git or the file is untracked.
 function planProvenance(opts, planBytes) {
@@ -349,7 +358,7 @@ function planProvenance(opts, planBytes) {
   // (git object id = hash("blob <len>\0" + bytes)); a second read of the file could differ.
   const head = gitOut(opts.repoRoot, ['rev-parse', 'HEAD']);
   const headBlob = head ? gitOut(opts.repoRoot, ['rev-parse', `HEAD:${rel}`]) : null;
-  const algo = headBlob && headBlob.length === 64 ? 'sha256' : 'sha1';
+  const algo = repoObjectFormat(opts.repoRoot);
   const blob = crypto.createHash(algo)
     .update(Buffer.concat([Buffer.from(`blob ${planBytes.length}\0`), planBytes])).digest('hex');
   return {

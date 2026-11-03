@@ -110,6 +110,15 @@ const SHAPE_CASES = [
   ['S6 quoted claude then flag', 'scripts/a.js', "sh(ctx, ['timeout', '90', 'claude', '-p']);\n", true],
   ['S7 account layer reference', 'scripts/a.js', "require('./lib/account-rail');\n", true],
   ['S8 claude-only flag', 'scripts/a.js', "const a = ['--strict-mcp-config'];\n", true],
+  ['S9 bound name then execFile', 'scripts/a.js', "const bin = 'claude';\nexecFile(bin, ['-p', 'x']);\n", true],
+  ['S9 env default', 'scripts/a.js', "const bin = process.env.X || 'claude';\n", true],
+  ['S9 nullish default', 'scripts/a.js', 'const bin = opts.bin ?? "claude";\n', true],
+  ['S9 shell default expansion', 'scripts/a.sh', 'BIN=${X:-claude}\n"$BIN" -x\n', true],
+  ['S9 shell assignment', 'scripts/a.sh', 'BIN=claude\n"$BIN" -x\n', true],
+  ['S10 npx package', 'scripts/a.sh', 'npx @anthropic-ai/claude-code -p "x"\n', true],
+  ['S10 npx -y pinned', 'scripts/a.js', "sh('npx -y @anthropic-ai/claude-code@1.2.3 -p x');\n", true],
+  ['tools/ dir is scanned', 'tools/a.js', "const b = 'claude';\n", true],
+  ['skills/ dir is scanned', 'skills/x/run.sh', 'claude -p hi\n', true],
   ['comment only (#)', 'scripts/a.sh', '# claude -p is used elsewhere\n', false],
   ['comment only (//)', 'scripts/a.js', "// spawnSync('claude', [])\n", false],
   ['comment only (*)', 'scripts/a.js', '/*\n * claude -p example\n */\n', false],
@@ -244,4 +253,81 @@ test('validate.sh mutation: with the gate call removed the same unregistered fil
   fs.writeFileSync(path.join(root, 'scripts', 'new-probe.sh'), 'claude -p "hello"\n');
   const r = spawnSync('bash', [path.join(root, 'scripts', 'validate.sh')], { encoding: 'utf8', timeout: 60000 });
   assert.strictEqual(r.status, 0, 'the mutated validate.sh should not notice the new spawn');
+});
+
+// ---- G37 I: tests that hand-build their env must pin the account registry dir
+test('I: `env -i` running a wired caller (by name or through a variable) without AUTOPILOT_ACCOUNTS_DIR is blocked; with it, clean', () => {
+  const cases = [
+    ['by name', 'env -i PATH="$PATH" bash "$ROOT/scripts/rail.sh" x\n', 'test_env_loses_accounts_dir'],
+    ['through a variable', 'RAIL="$ROOT/scripts/rail.sh"\nenv -i PATH="$PATH" bash "$RAIL" x\n', 'test_env_loses_accounts_dir'],
+    ['continued line', 'RAIL="$ROOT/scripts/rail.sh"\nenv -i PATH="$PATH" \\\n  bash "$RAIL" x\n', 'test_env_loses_accounts_dir'],
+    ['pinned', 'RAIL="$ROOT/scripts/rail.sh"\nenv -i PATH="$PATH" AUTOPILOT_ACCOUNTS_DIR="$X/none" bash "$RAIL" x\n', null],
+    ['env -i running something else', 'RAIL="$ROOT/scripts/rail.sh"\nenv -i PATH="$PATH" bash "$ROOT/scripts/other.sh"\n', null],
+    ['a comment', 'RAIL="$ROOT/scripts/rail.sh"\n# env -i PATH="$PATH" bash "$RAIL" x\n', null],
+  ];
+  for (const [name, body, code] of cases) {
+    const root = baseTree();
+    fs.mkdirSync(path.join(root, 'hooks', 'tests'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'hooks', 'tests', 'x.test.sh'), `#!/bin/bash\n${body}`);
+    assert.deepStrictEqual(run(root).codes, code ? [code] : [], name);
+  }
+});
+
+test('I: a hand-built env object in a JS test that drives a wired caller needs AUTOPILOT_ACCOUNTS_DIR; a parent-env spread or an override table does not', () => {
+  const cases = [
+    ['hand-built', "spawnSync(x, [], { env: { PATH: process.env.PATH, HOME: t } }); // rail.sh\n", 'test_env_loses_accounts_dir'],
+    ['pinned', "spawnSync(x, [], { env: { PATH: process.env.PATH, HOME: t, AUTOPILOT_ACCOUNTS_DIR: n } }); // rail.sh\n", null],
+    ['spread', "spawnSync(x, [], { env: { ...process.env, HOME: t } }); // rail.sh\n", null],
+    ['override table (no PATH/HOME)', "run({ env: { QRP_MODE: 'a' } }); // rail.sh\n", null],
+  ];
+  for (const [name, body, code] of cases) {
+    const root = baseTree();
+    fs.writeFileSync(path.join(root, 'scripts', 'x.test.js'), `'use strict';\n${body}`);
+    assert.deepStrictEqual(run(root).codes, code ? [code] : [], name);
+  }
+});
+
+test('I mutation: a scanner that skips the test directories lets the unpinned env -i through', () => {
+  const mut = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'g37-spawn-mut-')), 'check.js');
+  const src = fs.readFileSync(SCRIPT, 'utf8');
+  assert.ok(src.includes('for (const f of scanTestEnv(root, callerNames))'));
+  fs.writeFileSync(mut, src.replace('for (const f of scanTestEnv(root, callerNames))', 'for (const f of [])'));
+  const root = baseTree();
+  fs.mkdirSync(path.join(root, 'hooks', 'tests'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'hooks', 'tests', 'x.test.sh'), '#!/bin/bash\nenv -i PATH="$PATH" bash "$ROOT/scripts/rail.sh" x\n');
+  assert.deepStrictEqual(run(root).codes, ['test_env_loses_accounts_dir']);
+  assert.deepStrictEqual(run(root, mut).codes, [], 'the mutated scanner should be blind');
+});
+
+// ---- e45b846c: cc-v2.js has exactly one requirer
+test('e45b846c: only evals/skill-onoff/run-d0gate-v2-campaign.js may require d0gate-v2/cc-v2.js; any other requirer is reported', () => {
+  const root = baseTree();
+  fs.mkdirSync(path.join(root, 'evals', 'skill-onoff', 'd0gate-v2'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'evals', 'skill-onoff', 'd0gate-v2', 'cc-v2.js'), 'module.exports = {};\n');
+  fs.writeFileSync(path.join(root, 'evals', 'skill-onoff', 'run-d0gate-v2-campaign.js'), "const cc = require('./d0gate-v2/cc-v2');\n");
+  const reg = JSON.parse(fs.readFileSync(path.join(root, 'scripts', 'lib', 'claude-spawn-sites.json'), 'utf8'));
+  assert.deepStrictEqual(run(root).codes, [], 'the one allowed requirer is clean');
+  fs.writeFileSync(path.join(root, 'evals', 'skill-onoff', 'run-other.js'), "const cc = require('./d0gate-v2/cc-v2.js');\n");
+  const r = run(root);
+  assert.deepStrictEqual(r.codes, ['cc_v2_extra_requirer']);
+  assert.strictEqual(r.out.findings[0].file, 'evals/skill-onoff/run-other.js');
+  assert.ok(reg.sites.length > 0);
+  // a comment that names it is not a requirer
+  fs.writeFileSync(path.join(root, 'evals', 'skill-onoff', 'run-other.js'), "// const cc = require('./d0gate-v2/cc-v2');\n");
+  assert.deepStrictEqual(run(root).codes, []);
+});
+
+// ---- G: the new indirect-launch shapes are what make the NEG fixtures red
+test('G mutation: without the S9 / S10 shapes the indirect launches are invisible (so the NEG fixtures depend on them)', () => {
+  const mut = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'g37-spawn-mut-')), 'check.js');
+  const src = fs.readFileSync(SCRIPT, 'utf8');
+  const stripped = src.split('\n').filter((l) => !/^\s*\['S(9|10)',/.test(l)).join('\n');
+  assert.notStrictEqual(stripped, src);
+  fs.writeFileSync(mut, stripped);
+  for (const body of ["const bin = 'claude';\nexecFile(bin, ['-p', 'x']);\n", "const bin = process.env.X || 'claude';\n", 'npx @anthropic-ai/claude-code -p "x"\n']) {
+    const root = baseTree();
+    fs.writeFileSync(path.join(root, 'scripts', 'indirect.js'), body);
+    assert.deepStrictEqual(run(root).codes, ['unregistered_claude_spawn'], body);
+    assert.deepStrictEqual(run(root, mut).codes, [], `mutated detector should miss: ${body}`);
+  }
 });

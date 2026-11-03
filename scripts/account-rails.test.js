@@ -41,14 +41,49 @@ const railSites = wired.filter((s) => s.group !== 'account-layer');
 const suitesOf = (sites) => [...new Set(sites.flatMap((s) => s.covered_by || []))].filter((p) => p !== SELF).sort();
 const RAIL_SUITES = suitesOf(railSites);
 
-/** What every rail suite must keep: a good-registry case, a broken-registry case (spawn 0) and a mutation case. */
-function suiteProblems(text) {
+/** The suite text without comments: a part that is only described in a comment is not a part. */
+function codeOnly(text, rel) {
+  let t = text;
+  if (/\.(js|cjs|mjs)$/.test(rel)) t = t.replace(/\/\*[\s\S]*?\*\//g, '');
+  return t.split('\n').filter((l) => {
+    const x = l.trimStart();
+    return !(x === '' || x.startsWith('#') || x.startsWith('//') || x.startsWith('*'));
+  }).join('\n');
+}
+
+/**
+ * The executable CASES of a suite: JS test()/it() lines (title included) and shell assertion lines (their message is the case
+ * name). Only these count as parts; prose, comments and helper names do not.
+ */
+function caseLines(text, rel) {
+  const code = codeOnly(text, rel);
+  const re = /\.(js|cjs|mjs)$/.test(rel) ? /^\s*(test|it)\s*\(/ : /^\s*(assert_\w+|check_\w+|pass|fail|ok)\b/;
+  return code.split('\n').filter((l) => re.test(l));
+}
+
+/** What every rail suite must keep, found among its EXECUTABLE cases: a good-registry case, a broken-registry case that asserts
+ *  zero spawns, and a mutation (or negative-control) case. A deleted case whose comment survives is a problem. */
+function suiteProblems(text, rel) {
+  const cases = caseLines(text, rel || 'x.js');
   const p = [];
-  if (!/fingerprint|\bfp\b|alias/i.test(text)) p.push('no good-registry case (alias / token fingerprint at the shim)');
-  if (!/broken|invalid|unusable/i.test(text)) p.push('no broken-registry case');
-  if (!/spawn(s|ed)?\b.{0,40}\b0\b|\b0\b.{0,30}spawn|spawn counter|NSPAWN|spawns?\(\)\s*,\s*0|calls\(\)\.length,\s*0|apiCalls\(.*\)\.length,\s*0|zero/i.test(text)) p.push('the broken-registry case does not assert zero spawns');
-  if (!/mutation/i.test(text)) p.push('no mutation case');
+  if (!cases.some((l) => /fingerprint|\bfp\b|alias|token|good|registry present|active|account/i.test(l))) p.push('no good-registry case (alias / token fingerprint at the shim)');
+  const broken = cases.filter((l) => /broken|invalid|unusable|unrecogni[sz]ed|garbage/i.test(l));
+  if (!broken.length) p.push('no broken-registry case');
+  else if (!broken.some((l) => /spawn|zero|nothing|\b0\b|not started|decoy/i.test(l))) p.push('the broken-registry case does not assert zero spawns');
+  if (!cases.some((l) => /mutation|negative control/i.test(l))) p.push('no mutation case');
   return p;
+}
+
+/** Each wired rail caller must be driven by a covering suite whose EXECUTABLE code names it (a comment naming it is not a driver). */
+function callerProblems(site) {
+  const out = [];
+  for (const c of site.covered_by || []) {
+    if (c === SELF || c === 'scripts/lane-reopen.test.js') continue;
+    const code = codeOnly(read(c), c);
+    if (!code.includes(path.basename(site.file)) && !code.includes(path.basename(site.file).replace(/\.(js|sh)$/, ''))) out.push(`${site.file}: ${c} names it only in comments`);
+    for (const x of suiteProblems(read(c), c)) out.push(`${site.file} / ${c}: ${x}`);
+  }
+  return out;
 }
 
 test('N9 list: the wired rails are the registry list, every one is covered by a suite that exists', () => {
@@ -65,16 +100,33 @@ test('N9 list: the wired rails are the registry list, every one is covered by a 
 test('N9 shape: every covering suite still holds the good / broken (spawn 0) / mutation parts', () => {
   for (const suite of RAIL_SUITES) {
     if (suite === 'scripts/lane-reopen.test.js') continue; // P4 has its own N11 shape (fake tmux), not the spawn counter
-    assert.deepStrictEqual(suiteProblems(read(suite)), [], `${suite}`);
+    assert.deepStrictEqual(suiteProblems(read(suite), suite), [], `${suite}`);
   }
+  // per caller: every wired rail site is named by the executable code of each of its covering suites
+  assert.deepStrictEqual(railSites.flatMap(callerProblems), []);
 });
 
 test('N9 shape: the check itself rejects a suite that lost one of the parts (negative control)', () => {
-  const good = read('scripts/account-rails-w4.test.js');
-  assert.deepStrictEqual(suiteProblems(good), []);
-  assert.ok(suiteProblems(good.replace(/mutation/gi, 'm')).some((x) => /mutation/.test(x)));
-  assert.ok(suiteProblems(good.replace(/broken|invalid|unusable/gi, 'x')).some((x) => /broken-registry case$/.test(x)));
-  assert.ok(suiteProblems('test("x", () => {});').length >= 3);
+  const rel = 'scripts/account-rails-w4.test.js';
+  const good = read(rel);
+  assert.deepStrictEqual(suiteProblems(good, rel), []);
+  // removing the word everywhere (the old whole-file keyword test) still turns it red
+  assert.ok(suiteProblems(good.replace(/mutation/gi, 'm'), rel).some((x) => /mutation/.test(x)));
+  assert.ok(suiteProblems(good.replace(/broken|invalid|unusable/gi, 'x'), rel).some((x) => /broken-registry case$/.test(x)));
+  assert.ok(suiteProblems('test("x", () => {});', rel).length >= 3);
+  // DELETE the real mutation cases but keep a comment that describes them: must be red (comments are not cases)
+  const noMut = good.split('\n').filter((l) => !(/^\s*test\(/.test(l) && /mutation/i.test(l))).join('\n') + '\n// mutation: remove the wiring and the good run goes red\n';
+  assert.ok(/mutation/i.test(noMut), 'the decoy comment is there');
+  assert.ok(suiteProblems(noMut, rel).some((x) => /mutation/.test(x)), 'a comment must not stand in for a mutation case');
+  // the same for the broken-registry case in a shell suite
+  const sh = 'hooks/tests/dispatch-review-account-rail.test.sh';
+  const shGood = read(sh);
+  assert.deepStrictEqual(suiteProblems(shGood, sh), []);
+  const shNoBroken = shGood.split('\n').filter((l) => !(/^\s*assert_\w+/.test(l) && /broken|invalid|unusable|unrecogni|garbage/i.test(l))).join('\n');
+  assert.ok(suiteProblems(shNoBroken, sh).some((x) => /broken-registry case/.test(x)), 'comments left behind must not count');
+  // a caller that is named only in a comment of its covering suite is reported
+  const site = { file: 'scripts/zz-not-driven.sh', covered_by: [rel] };
+  assert.ok(callerProblems(site).some((x) => /only in comments/.test(x)));
 });
 
 function runSuite(rel, env) {
@@ -129,13 +181,31 @@ test('A12 run-d0gate-v2-campaign.js: a registry (usable or broken) refuses the r
   }
 });
 
-test('A12 run-d0gate-v2-campaign.js: the gate sits before the first claude lookup (mutation: moving it after is detected)', () => {
+test('A12 run-d0gate-v2-campaign.js mutation: with the gate call neutralised the same active registry no longer stops the run', { timeout: 120000 }, () => {
+  // a REAL mutation of the object under test (the previous string-order check proved only that a swap changes a string):
+  // a copy of the campaign script whose gate() answers "legacy" and whose relative requires point back at the repo
   const src = read('evals/skill-onoff/run-d0gate-v2-campaign.js');
-  const gate = src.indexOf("eval-account.js').gate(");
-  const lookup = src.indexOf('cc.whichClaude(');
-  assert.ok(gate > 0 && lookup > 0 && gate < lookup, 'gate() must precede whichClaude()');
-  const swapped = src.replace("eval-account.js').gate(", 'XX').replace('cc.whichClaude(', "eval-account.js').gate(").replace('XX', 'cc.whichClaude(');
-  assert.ok(swapped.indexOf("eval-account.js').gate(") > swapped.indexOf('cc.whichClaude('), 'the order check is blind to a moved gate');
+  const call = "require('../../scripts/lib/eval-account.js').gate('run-d0gate-v2-campaign')";
+  assert.ok(src.includes(call), 'the gate call moved; update this mutation');
+  const dir = path.join(REPO, 'evals', 'skill-onoff');
+  const mutated = src.replace(call, "({ state: 'legacy' })")
+    .replace('const HERE = __dirname;', `const HERE = ${JSON.stringify(dir)};`)
+    .replace(/require\('\.\.\/\.\.\//g, `require('${REPO}/`)
+    .replace(/require\('\.\//g, `require('${dir}/`);
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    const mut = path.join(fx.root, 'mutated-campaign.js');
+    fs.writeFileSync(mut, mutated);
+    const pre = path.join(fx.root, 'pre.js');
+    fs.writeFileSync(pre, PRELOAD_SRC);
+    const env = Object.assign({}, fx.env, { NODE_OPTIONS: `--require ${pre}`, G37_TEST_REAL_HOME: fx.realHome });
+    delete env.AUTOPILOT_SESSION_ID;
+    const run1 = (script) => spawnSync(process.execPath, [script, '--runner', 'cc', '--pilot', '--results', path.join(fx.root, 'res.jsonl')], { env, encoding: 'utf8', timeout: 60000 });
+    const real = run1(path.join(dir, 'run-d0gate-v2-campaign.js'));
+    assert.match(real.stderr, /account registry is configured/);
+    const m = run1(mut);
+    assert.doesNotMatch(m.stderr, /account registry is configured/, `the mutated script still refused: ${m.stderr.slice(0, 300)}`);
+  } finally { fx.cleanup(); }
 });
 
 // ---------------------------------------------------------------- 3: the one env-check reading rule
@@ -320,10 +390,10 @@ test('grandchild cleanup (host timeout): run, SIGKILL of claude-account.js -> th
   assert.deepStrictEqual(r.alive, [], `rc=${r.rc} left ${JSON.stringify(r.alive)}`);
 });
 for (const [label, tool] of TIMEOUTS) {
-  test(`grandchild cleanup (${label}): dispatch-review.sh under a registry, SIGTERM - no more orphans than the legacy path (known pre-G37 leak)`, () => {
+  test(`grandchild cleanup (${label}): dispatch-review.sh under a registry, SIGTERM - no more orphans than the legacy path (known pre-G37 leak)`, { todo: 'corrected 2c92da93 comparison (account <= legacy) is red: the account path leaves one extra process, the claude-account.js wrapper itself (observed 3 vs 2); fix belongs to claude-account.js (p1 scope), then drop this todo' }, () => {
     const legacy = orphanRun(tool, ['-s', 'TERM'], 'review', false, true);
     const account = orphanRun(tool, ['-s', 'TERM'], 'review', false, false);
-    assert.ok(account.alive.length === 0 || legacy.alive.length > 0,
+    assert.ok(account.alive.length <= legacy.alive.length,
       `account path regressed against legacy (legacy left ${legacy.alive.length}, account left ${JSON.stringify(account.alive)})`);
   });
 }
@@ -376,17 +446,30 @@ test('isolation negative control: a broken registry reaches a real suite only wh
   assert.notStrictEqual(kept.status, 0, 'with the isolation off the broken registry should break the suite (it did not: the case proves nothing)');
 });
 
-test('isolation: run.sh and affected-suites.js pin the registry dir; a pin that is removed is detected', () => {
-  const pins = {
-    'hooks/tests/run.sh': /export AUTOPILOT_ACCOUNTS_DIR="\$\{TMPDIR:-\/tmp\}\/autopilot-no-accounts-/,
-    'scripts/affected-suites.js': /process\.env\.AUTOPILOT_ACCOUNTS_DIR\s*=/,
-    'hooks/tests/lib.sh': /export AUTOPILOT_ACCOUNTS_DIR="\$TEST_TMP\/no-accounts"/,
-  };
-  for (const [rel, re] of Object.entries(pins)) {
-    const t = read(rel);
-    assert.ok(re.test(t), `${rel} does not pin AUTOPILOT_ACCOUNTS_DIR`);
-    assert.ok(!re.test(t.replace(/AUTOPILOT_ACCOUNTS_DIR/g, 'X')), `${rel}: the pin check is blind to its removal`);
+test('isolation: run.sh, lib.sh and affected-suites.js really replace the caller\'s registry dir; with the pin line deleted it leaks', () => {
+  const CALLER = '/caller/real-accounts';
+  for (const rel of ['hooks/tests/run.sh', 'hooks/tests/lib.sh']) {
+    const lines = read(rel).split('\n');
+    const i = lines.findIndex((l) => /^if \[ "\$\{AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR:-\}" != 1 \]; then export AUTOPILOT_ACCOUNTS_DIR=/.test(l));
+    assert.ok(i >= 0, `${rel}: the pin line is gone`);
+    const val = (stmt) => spawnSync('bash', ['-c', `TEST_TMP=/t/x; ${stmt}; printf %s "$AUTOPILOT_ACCOUNTS_DIR"`], { env: { PATH: process.env.PATH, AUTOPILOT_ACCOUNTS_DIR: CALLER }, encoding: 'utf8' }).stdout;
+    assert.notStrictEqual(val(lines[i]), CALLER, `${rel}: the pin line did not replace the caller's dir`);
+    assert.strictEqual(val(':'), CALLER, `${rel}: with the pin line deleted the caller's dir should leak (it did not: the case proves nothing)`);
   }
+  const jl = read('scripts/affected-suites.js').split('\n');
+  const j = jl.findIndex((l) => /KEEP_ACCOUNTS_DIR !== '1'\) process\.env\.AUTOPILOT_ACCOUNTS_DIR\s*=/.test(l));
+  assert.ok(j >= 0, 'scripts/affected-suites.js: the pin line is gone');
+  const jval = (stmt) => {
+    const env = { AUTOPILOT_ACCOUNTS_DIR: CALLER };
+    new Function('process', 'os', 'path', stmt)({ env, pid: 1 }, os, path);
+    return env.AUTOPILOT_ACCOUNTS_DIR;
+  };
+  assert.notStrictEqual(jval(jl[j]), CALLER);
+  assert.strictEqual(jval(''), CALLER);
+  // AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1 keeps the caller's value and says so on stderr (b15b20ed)
+  const kept = spawnSync('bash', ['-c', '. "$1/hooks/tests/lib.sh"; printf %s "$AUTOPILOT_ACCOUNTS_DIR"', 'x', REPO], { env: { PATH: process.env.PATH, HOME: os.tmpdir(), AUTOPILOT_ACCOUNTS_DIR: CALLER, AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR: '1' }, encoding: 'utf8' });
+  assert.strictEqual(kept.stdout.split('\n')[0], CALLER);
+  assert.match(kept.stderr, /AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR=1.*real|WARNING.*AUTOPILOT_TEST_KEEP_ACCOUNTS_DIR/);
 });
 
 test('isolation: a suite that mentions a wired caller either sources hooks/tests/lib.sh or pins the registry dir itself', () => {

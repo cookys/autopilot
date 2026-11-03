@@ -37,23 +37,23 @@ const padLeft = (text: string, width: number): string => ' '.repeat(Math.max(0, 
 export const GRID = [0, 2, 4, 12] as const // the four columns a body line may start at (§3.1)
 export const KEY_W = 12 // the key column of a key/value row, in display cells
 
-export const STATE_IDS = ['need_you', 'failed', 'stalled', 'findings', 'running', 'done', 'pending', 'stopped', 'skipped', 'unknown'] as const
+export const STATE_IDS = ['need_you', 'failed', 'stalled', 'findings', 'running', 'done', 'pending', 'waiting', 'stopped', 'skipped', 'unknown'] as const // waiting: accepted, its seat idle on something (a fleet hub task, G23 / PM ruling)
 export type StateId = (typeof STATE_IDS)[number]
 
 // The glyph tables (§3.2, §3.4). Three groups that do not cross: state glyphs, structure glyphs, chart glyphs. `verified` records, per glyph that is new to
 // the vocabulary, where it was checked to draw in ONE cell: confirmed 2026-10-13 by the owner (ssh + tmux, all ten single-cell); was `pending-owner` until the owner ran `node mods/live/glyph-check.js` in the real ssh + tmux
 // terminal (P0 b). `↓` is East Asian Ambiguous and its width is still unchecked (`pending-owner`); the owner's 2026-10-14 ruling settled only its meaning (behind upstream, nothing else), see the plan §8. `fallback` is the next candidate when a glyph fails that check (§8 Q2); it is linted like every other glyph.
 export const GLYPHS = {
-  state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', stopped: '◌', skipped: '∅', unknown: '?' },
+  state: { need_you: '▲', failed: '✗', stalled: '⊘', findings: '△', running: '●', done: '✓', pending: '○', waiting: '⧗', stopped: '◌', skipped: '∅', unknown: '?' },
   structure: { open: '▾', folded: '▸', rule: '─', detail: '└', command: '$', goto: '›', bullet: '◦', empty: '—', tabMark: '━', residue: '⚑', behind: '↓', bandSep: '│', info: 'ⓘ', speed: 'ϟ', round: '↺', decisions: '◆', age: '◷', recommend: '★' },
   chart: { meterOn: '▰', meterOff: '▱', here: '◐' },
   scrollbar: { track: '│', thumb: '█' }, // §12.10: the scrolling window's right-hand column; track and thumb borrow the drawing of bandSep and the top spark step, a second meaning each (SHARED_GLYPHS)
   spark: ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
   fallback: { stalled: '◍', findings: '!' },
-  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner', '★': 'pending-owner' } as Record<string, string>,
+  verified: { '⊘': '2026-10-13 owner-ssh-tmux', '△': '2026-10-13 owner-ssh-tmux', '○': '2026-10-13 owner-ssh-tmux', '◌': '2026-10-13 owner-ssh-tmux', '∅': '2026-10-13 owner-ssh-tmux', '◦': '2026-10-13 owner-ssh-tmux', '›': '2026-10-13 owner-ssh-tmux', '━': '2026-10-13 owner-ssh-tmux', '◐': '2026-10-13 owner-ssh-tmux', '◍': '2026-10-13 owner-ssh-tmux', '↓': 'pending-owner', '★': 'pending-owner' , '⧗': 'pending-owner'} as Record<string, string>,
 }
 // glyphs that are new to the pane's vocabulary: each must carry a `verified` entry (L3)
-export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓', '★'] as const
+export const NEW_GLYPHS = ['⊘', '△', '○', '◌', '∅', '◦', '›', '━', '◐', '◍', '↓', '★', '⧗'] as const
 // Extended_Pictographic glyphs a terminal may draw as an emoji box (§3.4); repeated so the rule survives a Unicode update
 export const EMOJI_BANNED = ['⏸', '⚙', '⚠', '✔', '✖', '▶', '⏹', '⏺', '▪', '▫'] as const
 
@@ -91,12 +91,13 @@ export const STATES: Record<StateId, { glyph: string; key: ThemeKey | undefined;
   running: { glyph: GLYPHS.state.running, key: PALETTE.running, wordKey: PALETTE.running },
   done: { glyph: GLYPHS.state.done, key: PALETTE.done, wordKey: PALETTE.done },
   pending: { glyph: GLYPHS.state.pending, key: PALETTE.idle, wordKey: PALETTE.idle },
+  waiting: { glyph: GLYPHS.state.waiting, key: PALETTE.idle, wordKey: PALETTE.idle },
   stopped: { glyph: GLYPHS.state.stopped, key: PALETTE.idle, wordKey: PALETTE.idle },
   skipped: { glyph: GLYPHS.state.skipped, key: PALETTE.idle, wordKey: PALETTE.idle },
   unknown: { glyph: GLYPHS.state.unknown, key: PALETTE.idle, wordKey: PALETTE.idle },
 }
 // the one total order of "worse" (§3.3); `unknown` ranks last so a missing mapping never hides a real finding
-export const SEVERITY: readonly StateId[] = ['need_you', 'failed', 'stalled', 'findings', 'running', 'stopped', 'pending', 'done', 'skipped', 'unknown']
+export const SEVERITY: readonly StateId[] = ['need_you', 'failed', 'stalled', 'findings', 'running', 'waiting', 'stopped', 'pending', 'done', 'skipped', 'unknown']
 
 // freshness thresholds (§2.5), ms; dispatch = a finished run older than 6 h is counted in the chip, not listed (BL-0149); abandonedPlan = a non-terminal plan review untouched for 7 d fades to one line; every comparison is strict (`>`): exactly at the threshold is still fresh
 export const FRESH_MS = { quiet: 1_800_000, planReview: 86_400_000, terminalPlan: 604_800_000, abandonedPlan: 604_800_000, codeReview: 86_400_000, dispatch: 21_600_000 } as const
@@ -251,7 +252,7 @@ for (const id of STATE_IDS) STATED_OBJS[id] = Object.freeze({ id }) as unknown a
 const stated = (id: StateId): Stated => STATED_OBJS[id]
 export const isStated = (v: unknown): v is Stated => typeof v === 'object' && v !== null && Object.values(STATED_OBJS).includes(v as Stated)
 
-export type Domain = 'verdict' | 'run' | 'seat' | 'round' | 'gate' | 'qc' | 'background' | 'task' | 'loadSource' | 'attention' | 'residueGroup' | 'cleanup'
+export type Domain = 'verdict' | 'run' | 'seat' | 'round' | 'gate' | 'qc' | 'background' | 'task' | 'loadSource' | 'attention' | 'residueGroup' | 'cleanup' | 'fleetTask'
 export type RunSubject = { rc: number | null; final_status: string | null; stall: boolean; fresh: boolean; starting?: boolean } // `starting`: never probed yet, but inside the freshness bound since launch
 export type SeatSubject = { kind: 'code' | 'plan'; verdict: string | null; status: string | null }
 export type RoundSubject = { stale: boolean; converged: boolean; seats: readonly Stated[] }
@@ -259,9 +260,10 @@ export type BackgroundSubject = { exit: number | null; quietMs: number }
 export type LoadSourceSubject = { source: string; behind: number; flags: number }
 export type AttentionSubject = { source: Stated | null } // null = the one item of its own: task acceptance
 export type CleanupSubject = { errors: number; done: number }
+export type FleetTaskSubject = { state: string; stuck: boolean } // a fleet hub task row (fleet.ts): the hub's state word and whether a stuck rule fired
 export type Subject = {
   verdict: string; run: RunSubject; seat: SeatSubject; round: RoundSubject; gate: string; qc: string; background: BackgroundSubject; task: string
-  loadSource: LoadSourceSubject; attention: AttentionSubject; residueGroup: string; cleanup: CleanupSubject
+  loadSource: LoadSourceSubject; attention: AttentionSubject; residueGroup: string; cleanup: CleanupSubject; fleetTask: FleetTaskSubject
 }
 
 // token normalisation, once: trim, upper-case; a prefix class (`NEEDS*`, `CACHE:*`) is one atom
@@ -314,6 +316,7 @@ const CLASSIFY: { [D in Domain]: (s: Subject[D]) => string } = {
   attention: a => (a.source === null ? 'acceptance' : 'from:' + a.source.id),
   residueGroup: c => norm(c).toLowerCase(),
   cleanup: c => (c.errors > 0 ? 'errors' : c.done > 0 ? 'done' : 'nothing'),
+  fleetTask: f => (f.stuck && !['FAILED', 'LOST', 'BLOCKED_HUMAN'].includes(norm(f.state)) ? 'STUCK' : norm(f.state)),
 }
 const ATTENTION_FROM = Object.fromEntries(STATE_IDS.map(id => ['from:' + id, id])) as Record<string, StateId>
 export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
@@ -333,6 +336,11 @@ export const STATUS_MAP: { [D in Domain]: Record<string, StateId> } = {
   attention: { acceptance: 'need_you', ...ATTENTION_FROM },
   residueGroup: { dirty: 'need_you', 'clean-integrated': 'done', 'clean-unintegrated': 'need_you', 'unintegrated-branch': 'need_you', 'missing-dir': 'done', live: 'running', unverifiable: 'unknown' }, // a 'clean' class (RESIDUE_KINDS) is drawn as a neutral row, never as a mark
   cleanup: { errors: 'failed', done: 'done', nothing: 'skipped' },
+  // the fleet hub's task states (fleet.ts); a stuck rule (open an hour unaccepted, a seat quiet four hours, the hub's own suspect) is `stalled`. A word the hub adds later is `unknown`.
+  fleetTask: {
+    OPEN: 'pending', TASK_ACCEPTED: 'pending', ACCEPTED: 'pending', RUNNING: 'running', IN_PROGRESS: 'running', WAITING: 'waiting', RESULT_REPORTED: 'findings',
+    FAILED: 'failed', LOST: 'failed', SUSPECT: 'stalled', BLOCKED_HUMAN: 'need_you', STUCK: 'stalled',
+  },
 }
 export function classify<D extends Domain>(domain: D, subject: Subject[D]): string {
   return (CLASSIFY[domain] as (s: Subject[D]) => string)(subject)
@@ -362,6 +370,7 @@ export const FACT_OWNER = {
   'spend.session': 'spend', 'spend.local_today': 'spend',
   'usage.window_other': 'spend', // any other rate-limit window the host reports (spend_limit, an unknown kind)
   'residue.groups': 'hygiene', 'residue.cleanup': 'hygiene', 'residue.source': 'hygiene',
+  'fleet.lanes': 'fleet', 'fleet.cards': 'fleet', 'fleet.source': 'fleet', // fleet.cards: only the empty line; open cards are a projection of decide.cards
   'legend.states': 'legend', 'legend.structure': 'legend', 'legend.keys': 'legend',
   'header.verdict': 'header',
   'pane.chrome': 'pane', // lines that carry no fact of the session (the blank between sections, a heading with no chip, a fold / more toggle, an attached detail)
@@ -377,6 +386,7 @@ export const SECTION_ORDER: Record<PaneTab, readonly string[]> = {
   review: ['code', 'qc', 'decisions', 'plan'],
   spend: ['limits', 'today', 'last24', 'account'],
   hygiene: ['attention', 'cleanable', 'auto', 'source'],
+  fleet: ['source', 'cards', 'lanes'],
   legend: ['states', 'structure', 'keys'],
 }
 // the sections that start folded: read by recentLines (now.recent) through sectionOpen; review.plan folds only while it is stale (F2, I11), by passing `stale` to sectionOpen

@@ -4,7 +4,7 @@
 //
 //   runEventsCli(argv, { stdout, stderr, cwd, env, stdin }) -> exit code (0 or 2, never anything else)
 //   syncStdout()                                            -> a stdout writer that finishes before process.exit (no 64 KiB pipe truncation)
-//   main(argv)                                              -> the fast path used by bin/autopilot.js and src/status/cli.js: process.exit
+//   main(argv)                                              -> the fast path used by bin/autopilot.js (src/status/cli.js calls runEventsCli directly)
 //
 // Flags: [--since <cursor|ISO-8601|0|->] [--limit N] [--kinds k1,k2] [--project <project_key>] [--review-ledger <dir>]... [--json]
 // Exit codes: 0 for an envelope (with or without warnings); 2 for a usage error, `bad_cursor`, `project_unresolved`, `project_mismatch`.

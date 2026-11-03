@@ -13,6 +13,8 @@
  *   binary the same warm resume through `node bin/autopilot.js status events --since <cursor> --json` (process start included)
  *   rss    peak RSS of every child                                    bound <= 256 MB
  * Prints wall time, peak RSS and the bytes each source read (counted by wrapping fs.openSync/readSync/readFileSync in the child).
+ * Negative controls: --fault cost-unreadable (cost file mode 000) and --fault no-review (no review ledger configured) must each print NOT MET.
+ * MET also requires every source ok, no warning, a complete prime read, and the warm result to be exactly 100 cost.turn + 10 decision.row in-process and via the binary.
  * Exit 0 when every bound holds, 1 when one does not, 2 on a usage error. Removes its tempdir unless --keep.
  * Reference: docs/dev/events-contract.md; plan KR-A1.5.
  */
@@ -27,12 +29,17 @@ const BOUNDS = { coldSeconds: 8, warmSeconds: 1.5, warmCostFraction: 0.05, rssMb
 const SIZES = { cost: 200000, decision: 20000, runledger: 20000, manifests: 2000, phases: 500 };
 
 // ---------------------------------------------------------------------------------------------------------------- child
+// resourceUsage().maxRSS is KB on Linux and bytes on macOS
+const rssMb = (maxRss, platform = process.platform) => (platform === 'darwin' ? maxRss / (1024 * 1024) : maxRss / 1024);
 function childMain(spec) {
   const byPath = new Map(); // fd -> path
   const bytes = {};
   const classify = (file) => {
-    for (const [name, prefix] of spec.classes) if (String(file).startsWith(prefix)) return name;
-    return 'other';
+    // longest matching prefix wins: the run-ledger dir is the parent of the review ledger dir
+    let best = 'other';
+    let bestLen = -1;
+    for (const [name, prefix] of spec.classes) if (String(file).startsWith(prefix) && prefix.length > bestLen) { best = name; bestLen = prefix.length; }
+    return best;
   };
   const add = (file, n) => { const k = classify(file); bytes[k] = (bytes[k] || 0) + n; };
   const realOpen = fs.openSync;
@@ -43,6 +50,7 @@ function childMain(spec) {
   fs.readFileSync = function readFileSync(file, ...rest) {
     const out = realReadFile.call(fs, file, ...rest);
     if (typeof file === 'string') add(file, Buffer.byteLength(out));
+    else if (Number.isInteger(file)) add(byPath.get(file) || '', Buffer.byteLength(out)); // a numeric fd maps back to the path it was opened with
     return out;
   };
   const { collectEvents } = require('../src/status/events');
@@ -50,7 +58,7 @@ function childMain(spec) {
   const page = collectEvents({ cwd: spec.cwd, env: spec.env, home: spec.env.HOME, since: spec.since, limit: spec.limit });
   const wallMs = Number(process.hrtime.bigint() - t0) / 1e6;
   process.stdout.write(`${JSON.stringify({
-    wall_ms: wallMs, rss_mb: process.resourceUsage().maxRSS / 1024, bytes, events: page.events ? page.events.length : 0,
+    wall_ms: wallMs, rss_mb: rssMb(process.resourceUsage().maxRSS), bytes, sources: page.sources || [], event_ids: spec.wantIds && page.events ? page.events.map((e) => e.id) : undefined, events: page.events ? page.events.length : 0,
     has_more: page.has_more, cursor: page.cursor, error: page.error || null, warnings: (page.warnings || []).map((w) => w.code),
   })}\n`);
 }
@@ -171,11 +179,13 @@ function main(argv) {
   let scale = 1;
   let keep = false;
   let json = false;
+  let fault = null; // negative controls: cost-unreadable | no-review (the bench must then say NOT MET)
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--keep') keep = true;
     else if (argv[i] === '--json') json = true;
     else if (argv[i] === '--scale' && /^[1-9][0-9]*$/.test(argv[i + 1] || '')) { scale = Number(argv[i + 1]); i += 1; }
-    else { process.stderr.write(`usage: status-events-bench.js [--scale N] [--keep] [--json]\n`); return 2; }
+    else if (argv[i] === '--fault' && ['cost-unreadable', 'no-review'].includes(argv[i + 1])) { fault = argv[i + 1]; i += 1; }
+    else { process.stderr.write(`usage: status-events-bench.js [--scale N] [--keep] [--json] [--fault cost-unreadable|no-review]\n`); return 2; }
   }
   let dir = null;
   try {
@@ -183,17 +193,21 @@ function main(argv) {
     const t0 = Date.now();
     const { fx, ledger, END, counts } = generate(dir, scale);
     const costBytes = fs.statSync(fx.paths.costsFile).size;
-    const env = { ...fx.env, AUTOPILOT_EVENTS_REVIEW_LEDGERS: ledger };
+    const env = { ...fx.env };
+    if (fault !== 'no-review') env.AUTOPILOT_EVENTS_REVIEW_LEDGERS = ledger;
+    if (fault === 'cost-unreadable') fs.chmodSync(fx.paths.costsFile, 0o000);
     const classes = [['code', REPO], ['cost', fx.paths.costsFile], ['dispatch', fx.paths.runsDir], ['decision', path.dirname(fx.paths.decisionLedger)],
-      ['runledger', path.dirname(fx.paths.runLedger)], ['review', path.join(dir, 'ledgers', 'review-bench')]];
+      ['runledger', path.dirname(fx.paths.runLedger)], ['review', ledger]];
     const base = { cwd: fx.repoDir, env, classes };
     const genSeconds = (Date.now() - t0) / 1000;
 
     const cold = runChild({ ...base, since: '0', limit: 1000 });
     // prime: a read by wall time near the end of the data gives a cursor with hints deep in the files
     const prime = runChild({ ...base, since: new Date(END - 3600000).toISOString(), limit: 1000 });
+    if (fault === 'cost-unreadable') fs.chmodSync(fx.paths.costsFile, 0o600);
     appendLive(fx, END);
-    const warm = runChild({ ...base, since: prime.cursor, limit: 1000 });
+    if (fault === 'cost-unreadable') fs.chmodSync(fx.paths.costsFile, 0o000);
+    const warm = runChild({ ...base, since: prime.cursor, limit: 1000, wantIds: true });
     // the same resume through the real binary (process start included)
     const b0 = process.hrtime.bigint();
     const bin = spawnSync(process.execPath, [path.join(REPO, 'bin', 'autopilot.js'), 'status', 'events', '--since', prime.cursor, '--json', '--limit', '1000'], { cwd: fx.repoDir, env, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
@@ -201,6 +215,36 @@ function main(argv) {
     const binBody = bin.status === 0 ? JSON.parse(bin.stdout) : null;
 
     const warmCost = warm.bytes.cost || 0;
+    const problems = [];
+    const sourcesOk = (label, r) => {
+      for (const name of ['dispatch', 'cost', 'review', 'qc', 'decision', 'runledger']) {
+        const st = (r.sources || []).find((x) => x.name === name);
+        if (!st) problems.push(`${label}: source ${name} missing from the envelope`);
+        else if (st.state !== 'ok') problems.push(`${label}: source ${name} is ${st.state}`);
+      }
+      if (r.error) problems.push(`${label}: error ${JSON.stringify(r.error)}`);
+      if ((r.warnings || []).length) problems.push(`${label}: unexpected warnings ${r.warnings.join(',')}`);
+    };
+    sourcesOk('cold', cold);
+    sourcesOk('prime', prime);
+    sourcesOk('warm', warm);
+    if (!cold.has_more || cold.events !== 1000) problems.push(`cold: expected a full page of 1000 with has_more, got ${cold.events} has_more ${cold.has_more}`);
+    if (prime.has_more) problems.push('prime: read incomplete (has_more true)');
+    for (const label of ['cold', 'prime', 'warm']) {
+      const r = label === 'cold' ? cold : label === 'prime' ? prime : warm;
+      if (!(r.bytes.review > 0)) problems.push(`${label}: no review bytes were read`);
+      const st = (r.sources || []).find((x) => x.name === 'review');
+      if (label !== 'prime' && st && st.rows_read < counts.phases) problems.push(`${label}: review source read ${st.rows_read} rows, expected at least ${counts.phases} phases`);
+    }
+    const kindCount = (ids) => ids.reduce((acc, id) => { const k = String(id).split(':')[0]; acc[k] = (acc[k] || 0) + 1; return acc; }, {});
+    const warmKinds = kindCount(warm.event_ids || []);
+    if (JSON.stringify(Object.entries(warmKinds).sort()) !== JSON.stringify([['cost.turn', 100], ['decision.row', 10]])) problems.push(`warm (in-process): events are ${JSON.stringify(warmKinds)}, expected exactly 100 cost.turn and 10 decision.row`);
+    if (binBody) {
+      const binKinds = kindCount(binBody.events.map((e) => e.id));
+      if (JSON.stringify(Object.entries(binKinds).sort()) !== JSON.stringify([['cost.turn', 100], ['decision.row', 10]])) problems.push(`warm (real binary): events are ${JSON.stringify(binKinds)}, expected exactly 100 cost.turn and 10 decision.row`);
+      if (JSON.stringify(binBody.events.map((e) => e.id)) !== JSON.stringify(warm.event_ids)) problems.push('warm: real binary and in-process event ids differ');
+      sourcesOk('binary', { sources: binBody.sources, warnings: (binBody.warnings || []).map((w) => w.code) });
+    } else problems.push(`binary: exit ${bin.status}`);
     const fraction = warmCost / costBytes;
     const results = [
       ['cold --limit 1000 wall', cold.wall_ms / 1000, BOUNDS.coldSeconds, 's'],
@@ -210,8 +254,9 @@ function main(argv) {
       ['peak RSS cold', cold.rss_mb, BOUNDS.rssMb, 'MB'],
       ['peak RSS warm', warm.rss_mb, BOUNDS.rssMb, 'MB'],
     ];
-    const verdictOk = results.every(([, v, bound]) => v <= bound) && !cold.error && !warm.error && binBody && binBody.events.length === warm.events;
-    const report = { scale, counts, cost_file_bytes: costBytes, generate_seconds: genSeconds, cold, warm: { ...warm, cursor: undefined }, binary: { seconds: binSeconds, status: bin.status, events: binBody ? binBody.events.length : null }, results: results.map(([name, value, bound]) => ({ name, value, bound, ok: value <= bound })), ok: verdictOk };
+    for (const [name, v, bound] of results) if (!(v <= bound)) problems.push(`bound: ${name} ${v} > ${bound}`);
+    const verdictOk = problems.length === 0;
+    const report = { scale, counts, cost_file_bytes: costBytes, generate_seconds: genSeconds, cold, warm: { ...warm, cursor: undefined, event_ids: undefined }, problems, binary: { seconds: binSeconds, status: bin.status, events: binBody ? binBody.events.length : null }, results: results.map(([name, value, bound]) => ({ name, value, bound, ok: value <= bound })), ok: verdictOk };
     if (json) { process.stdout.write(`${JSON.stringify(report)}\n`); return verdictOk ? 0 : 1; }
     const out = [];
     out.push(`status events bench (synthetic store, scale 1/${scale}${scale > 1 ? ', verdict not meaningful' : ''})`);
@@ -221,10 +266,12 @@ function main(argv) {
     }
     out.push(`warm via real binary: wall ${binSeconds.toFixed(3)} s, exit ${bin.status}, events ${binBody ? binBody.events.length : 'n/a'}`);
     for (const [name, value, bound, unit] of results) out.push(`${value <= bound ? 'PASS' : 'FAIL'} ${name}: ${unit === 'x' ? value.toFixed(5) : value.toFixed(3)} ${unit === 'x' ? '' : unit} (bound ${bound}${unit === 'x' ? '' : ` ${unit}`})`.replace(/ +\(/, ' ('));
+    for (const pr of problems) out.push(`NOT MET because: ${pr}`);
     out.push(`KR-A1.5: ${verdictOk ? 'MET' : 'NOT MET'}`);
     process.stdout.write(`${out.join('\n')}\n`);
     return verdictOk ? 0 : 1;
   } finally {
+    if (fault === 'cost-unreadable' && dir) { try { fs.chmodSync(path.join(dir, 'metrics', 'costs.jsonl'), 0o600); } catch (_e) { /* gone */ } }
     if (dir && keep) process.stderr.write(`kept ${dir}\n`);
     else if (dir) fs.rmSync(dir, { recursive: true, force: true });
   }

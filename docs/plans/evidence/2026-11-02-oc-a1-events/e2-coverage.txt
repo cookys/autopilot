@@ -1,4 +1,4 @@
-A1 events, E4 transcript for KR-A1.1 (coverage), KR-A1.2 (resume), KR-A1.3 (degrade) (2026-11-03, rebased on E3 merge)
+A1 events, E2 source-suite evidence (KR-A1.1 coverage, KR-A1.2 resume, KR-A1.3 degrade), re-run on the E3 merge 2893b37b0 plus E4 (2026-11-03)
 Names of every passing test in execution order, timings stripped. fixture-golden-* / source-* = KR-A1.1; resume-* order-* cursor-* rotation = KR-A1.2; degrade-* = KR-A1.3.
 
 ## node --test scripts/status-events.test.js

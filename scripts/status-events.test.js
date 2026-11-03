@@ -1309,11 +1309,12 @@ test('readonly-no-write-api: no reader, merge or cli module calls a filesystem w
   const walk = (d) => { for (const n of fs.readdirSync(d)) { const f = path.join(d, n); if (fs.statSync(f).isDirectory()) walk(f); else if (f.endsWith('.js')) files.push(f); } };
   walk(root);
   assert.ok(files.length >= 10);
-  const forbidden = /\b(writeFileSync|appendFileSync|mkdirSync|rmSync|rmdirSync|renameSync|unlinkSync|copyFileSync|createWriteStream|chmodSync|chownSync|utimesSync|truncateSync|symlinkSync|linkSync|mkdtempSync|writeFile|appendFile|mkdir|rm|unlink|rename)\s*\(|\bopenSync\([^)]*['"](?:w|a|r\+|wx|ax)['"]|(?:require|import)\s*\(?\s*['"](?:@anthropic-ai|openai)|dispatch-(?:review|hetero|author|consult)|autopilot\.js/;
+  const forbidden = /\b(writeFileSync|appendFileSync|mkdirSync|rmSync|rmdirSync|renameSync|unlinkSync|copyFileSync|createWriteStream|chmodSync|chownSync|utimesSync|truncateSync|ftruncateSync|fchmodSync|fchownSync|futimesSync|writeSync|writevSync|symlinkSync|linkSync|mkdtempSync|writeFile|appendFile|mkdir|rm|unlink|rename|truncate|copyFile|chmod|utimes)\s*\(|\bfs\.promises\b|require\(['"](?:node:)?fs\/promises['"]\)|\bopenSync\([^)]*['"](?:w|a|r\+|wx|ax)['"]|(?:require|import)\s*\(?\s*['"](?:@anthropic-ai|openai)|dispatch-(?:review|hetero|author|consult)|autopilot\.js/;
   const hits = [];
   for (const f of files) {
     fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
       if (/^\s*\/\//.test(line)) return;
+      if (/fs\.writeSync\(1,/.test(line)) return; // the one allowed write: the CLI's stdout (fd 1)
       if (forbidden.test(line)) hits.push(`${path.relative(REPO, f)}:${i + 1}: ${line.trim().slice(0, 80)}`);
     });
   }
@@ -1321,4 +1322,8 @@ test('readonly-no-write-api: no reader, merge or cli module calls a filesystem w
   // negative control: the pattern does fire on a write call
   assert.ok(forbidden.test("fs.writeFileSync(file, 'x')"));
   assert.ok(forbidden.test("fs.openSync(file, 'w')"));
+  for (const sample of ['fs.writeSync(fd, data)', 'fs.ftruncateSync(fd, 0)', 'fs.promises.writeFile(f, d)', "require('fs/promises')", 'await fsp.appendFile(f, d)', 'await fsp.rm(dir)', 'await fsp.mkdir(dir)']) {
+    assert.ok(forbidden.test(sample), sample);
+  }
+  assert.equal(forbidden.test('fs.readSync(fd, buf, 0, 1, 0)'), false);
 });

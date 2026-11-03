@@ -516,6 +516,8 @@ usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
 . "$SELF_DIR/lib/cursor-model.sh"
 # shellcheck source=lib/agy-model-alias.sh
 . "$SELF_DIR/lib/agy-model-alias.sh"
+# shellcheck source=lib/agy-timeout.sh
+. "$SELF_DIR/lib/agy-timeout.sh"
 
 # agy_edit_only_directive <worktree> — the harness directive prepended to every agy task
 # prompt. A FUNCTION, not an inline string, because the argv-ceiling guard has to measure the
@@ -4178,6 +4180,7 @@ else
   # (308's main tree; here, autopilot's own main checkout), while the file tool still reports
   # the process cwd. With --new-project the session starts clean and every edit and commit
   # lands in "$1". Evidence: docs/plans/evidence/2026-09-13-agy-worktree-escape/.
+  AGY_PRINT_TIMEOUT="$(agy_print_timeout "$TIMEOUT")" || die_precondition "$AGY_PRINT_TIMEOUT"
   AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
   AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
   if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
@@ -4195,7 +4198,7 @@ else
       -- "$1" --new-project --model "$3" --effort "$7" \
       --dangerously-skip-permissions --print-timeout "$4" \
       >"$5" 2>"$6"' \
-      _ "$WT" "$AGY_BIN" "$AGY_EDIT_ONLY" "$MODEL" "$TIMEOUT" \
+      _ "$WT" "$AGY_BIN" "$AGY_EDIT_ONLY" "$MODEL" "$AGY_PRINT_TIMEOUT" \
       "$AGY_ENVELOPE" "$AGY_STDERR" "$AGY_EFFORT" \
       "$SELF_DIR/lib/agy-stream-json.js" "$PROMPT_FILE"
   if [ "$AGENT_EXIT" -ne 0 ]; then

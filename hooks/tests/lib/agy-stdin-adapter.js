@@ -37,6 +37,10 @@ if (flag('--input-format') !== 'stream-json') die('--input-format must be stream
 if (flag('--output-format') !== 'stream-json') die('--output-format must be stream-json');
 if (!args.includes('--print=')) die('`--print=` (with the =) is required');
 if (args.some((a) => a === '--print' || a === '-p' || a === '--prompt')) die('bare --print / -p / --prompt on argv');
+// agy parses --print-timeout as a Go duration and rejects a unitless value ("time: missing unit in duration").
+if (args.includes('--print-timeout') && !/^(\d+(\.\d+)?(ns|us|ms|s|m|h))+$/.test(String(flag('--print-timeout')))) {
+  die(`invalid value "${flag('--print-timeout')}" for flag -print-timeout: time: missing unit in duration`);
+}
 
 const raw = fs.readFileSync(0);
 const lines = raw.toString('utf8').split('\n').filter((l) => l.trim());

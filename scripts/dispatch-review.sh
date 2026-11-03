@@ -35,7 +35,7 @@
 #       [--pack-file <file>]    # trusted methodology pack prepended inside the nonce protocol (additive; absent = byte-identical)
 #       [--effort xhigh]        # codex reasoning effort (low|medium|high|xhigh|max)
 #       [--timeout 5m]          # WALL-CLOCK CAP FOR EVERY RUNNER, not just agy (default 5m).
-#                               #   agy: passed as --print-timeout
+#                               #   agy: passed as --print-timeout (bare number = seconds, via lib/agy-timeout.sh)
 #                               #   codex / grok / qoder / cursor: enforced via an external `timeout`
 #                               # Exceeding it is a NON-ZERO EXIT, which is fail-closed to
 #                               # status:no_verdict — the review is lost, not merely slow. A
@@ -235,6 +235,10 @@ if [ -r "$_REVIEW_AGY_ALIAS_LIB" ]; then
 else
   _review_die_agy_alias_lib
 fi
+
+# agy_print_timeout — a bare-number --timeout must reach agy as "<n>s" (agy rejects a unitless duration).
+# shellcheck source=lib/agy-timeout.sh
+. "$_REVIEW_SELF_DIR/lib/agy-timeout.sh" || { echo "dispatch-review.sh: required lib unreadable: $_REVIEW_SELF_DIR/lib/agy-timeout.sh" >&2; exit 2; }
 
 RUNNER=""; MODEL=""; DIFF_FILE=""; SPEC_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; IDLE_TIMEOUT="${AUTOPILOT_REVIEW_IDLE_TIMEOUT:-}"; IDLE_MARKER=""; IDLE_WRAP=(); BIN=""; ENDPOINT=""; CHECKLISTS=""; PACK_FILE=""; ALLOW_NARRATIVE=""
 REVIEW_USAGE_JSON="null"
@@ -2002,6 +2006,7 @@ else
   # Capture the native JSON envelope privately. It is never the verdict parser's
   # input and never becomes raw_log: dispatch-status validates it once, then the
   # derived response and usage become separate typed channels.
+  AGY_PRINT_TIMEOUT="$(agy_print_timeout "$TIMEOUT")" || die_precondition "$AGY_PRINT_TIMEOUT"
   AGY_CWD="$(mktemp -d -t dispatch-review-agycwd-XXXXXX)"  # scratch cwd, NEVER the repo
   AGY_OUT="$(mktemp -t dispatch-review-agy-out-XXXXXX)"
   AGY_ERR="$(mktemp -t dispatch-review-agy-err-XXXXXX)"
@@ -2079,7 +2084,7 @@ else
     --unshare-pid --die-with-parent --chdir "$AGY_CWD" \
     "$AGY_BIN" --model "$MODEL" --effort "$AGY_EFFORT" \
     --dangerously-skip-permissions --agent "$AGY_AGENT_NAME" \
-    --print-timeout "$TIMEOUT" \
+    --print-timeout "$AGY_PRINT_TIMEOUT" \
     > "$AGY_OUT" 2> "$AGY_ERR"
   AGY_RC=$?
   AGY_BREACH=""

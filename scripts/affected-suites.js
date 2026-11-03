@@ -5,7 +5,9 @@
 // Usage:
 //   node scripts/affected-suites.js --base <ref> [--head <ref>] [--json] [--run] [--record [path]]
 //     [--entry-timeout <secs>] [--attribute] [--jobs <N>]
-//   node scripts/affected-suites.js --files a.js b.sh [--json] [--run]   (paths relative to --root)
+//   node scripts/affected-suites.js --files a.js b.sh [--json] [--run] [--allow-missing]   (paths relative to --root or absolute
+//     inside it; whitespace in a path, a path outside --root, a directory, or a path in neither the tree nor HEAD is exit 2;
+//     --allow-missing lets a hypothetical path through the existence check only)
 //   Options: --root <dir> (default: the repo containing this script), --list-all (print every
 //   suite run.sh would run), --help.
 //
@@ -619,6 +621,49 @@ function shortestHops(seeds, graph) {
   return hops;
 }
 
+// --files input shapes (selgap scan table). Every path is checked before any selection; a bad one is exit 2,
+// never a silent "selective" result (a zsh `--files $F` that does not split once produced 21 suites from one bogus path).
+//   shape                                   | result
+//   relative path, exists on disk           | kept as is ("./" prefix and "a/../b" folded away)
+//   absolute path inside --root             | converted to root-relative
+//   absolute path outside --root            | exit 2 (outside root)
+//   relative path that climbs out (../x)    | exit 2 (outside root)
+//   contains whitespace or a newline        | exit 2 (shell did not split the argument?)
+//   empty string                            | exit 2
+//   missing on disk, present in HEAD        | kept (a deleted file is a legitimate change)
+//   missing on disk and in HEAD             | exit 2, listed
+//   a directory                             | exit 2 (not a file)
+//   --allow-missing                         | skips only the exists-on-disk-or-in-HEAD check (a hypothetical path)
+//   --base/--head mode                      | not applicable, paths come from git diff
+function normalizeFiles(root, files, allowMissing) {
+  const errors = [], changed = [], missing = [];
+  let realRoot = root;
+  try { realRoot = fs.realpathSync(root); } catch { /* keep root */ }
+  const inRoot = (abs) => {
+    for (const r of [root, realRoot]) { const rel = path.relative(r, abs); if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel; }
+    return null;
+  };
+  for (const raw of files) {
+    if (raw === '') { errors.push('--files: empty path'); continue; }
+    if (/\s/.test(raw)) { errors.push(`--files: path contains whitespace or a newline: ${JSON.stringify(raw)} (did the shell fail to split the argument? in zsh use "\${=VAR}" or an array)`); continue; }
+    const abs = path.resolve(root, raw);
+    const rel = inRoot(abs);
+    if (rel === null) { errors.push(`--files: path is outside --root (${root}): ${raw}`); continue; }
+    const p = rel.split(path.sep).join('/');
+    let st = null;
+    try { st = fs.statSync(abs); } catch { /* not on disk */ }
+    if (st && st.isDirectory()) { errors.push(`--files: a directory, not a file: ${raw}`); continue; }
+    if (!st && !allowMissing) {
+      let inHead = false;
+      try { git(root, ['cat-file', '-e', `HEAD:${p}`]); inHead = true; } catch { /* not in HEAD */ }
+      if (!inHead) { missing.push(raw); continue; }
+    }
+    changed.push(p);
+  }
+  if (missing.length) errors.push(`--files: path exists neither in the working tree nor in HEAD (typo, or a shell variable that did not split?): ${missing.join(', ')}`);
+  return { changed, errors };
+}
+
 // Same-name suites of a changed file (selgap). Rule (a): a changed suite is always selected. Rule (b): a changed
 // X.js / X.sh / X.mjs / X.cjs / X.py selects hooks/tests/X.test.sh, scripts/X.test.js, scripts/lib/X.test.js,
 // hooks/X.test.js and the X.test.js / X.test.sh beside it. A platforms/ mirror counts as its source path.
@@ -1178,6 +1223,7 @@ function parseArgs(argv) {
     if (x === '--base') a.base = argv[++i];
     else if (x === '--head') a.head = argv[++i];
     else if (x === '--root') a.root = argv[++i];
+    else if (x === '--allow-missing') a.allowMissing = true;
     else if (x === '--json') a.json = true;
     else if (x === '--max-weak') a.maxWeak = Number(argv[++i]);
     else if (x === '--list-all') a.listAll = true;
@@ -1251,7 +1297,9 @@ async function main(argv) {
     let tree, changed, baseRef = a.base || null, headRef = a.head || null;
     if (a.useFiles) {
       tree = diskTree(root);
-      changed = a.files.map((f) => f.replace(/^\.\//, ''));
+      const norm = normalizeFiles(root, a.files, a.allowMissing);
+      if (norm.errors.length) { for (const e of norm.errors) process.stderr.write(`affected-suites: ${e}\n`); return 2; }
+      changed = norm.changed;
       baseRef = headRef = null;
     } else if (a.listAll) {
       tree = a.head ? gitTree(root, a.head) : diskTree(root);

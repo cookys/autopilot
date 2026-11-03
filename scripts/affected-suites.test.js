@@ -197,7 +197,7 @@ test('real tree: files scanned by content-grepping suites select those suites (r
     ['docs/plans/evidence/x/administration/y/run.sh', 'hooks/tests/qualify-recipe-credential-staging.test.sh'],
   ];
   for (const [file, suite] of cases) {
-    const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', file, '--json'], { stdio: 'pipe' }).toString());
+    const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', file, '--allow-missing', '--json'], { stdio: 'pipe' }).toString());
     assert.strictEqual(out.mode, 'selective', `${file}: expected a selective result`);
     assert.ok(out.always_run.includes(suite), `${file} must run ${suite}`);
   }
@@ -661,7 +661,7 @@ test('BL-0213 real tree: dev-setup, mirror, plan, and the three merges stay unde
   // so half the list is the ceiling; it still rejects "nearly every suite".
   // 3765302f3 measured 83, bound 0.2 * total_suites (~125). A small diff; 0.2 turns red well
   // before the old shared 0.5 cap, where a regression to 300 would have stayed green.
-  const run = (files) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
+  const run = (files) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--allow-missing', '--json'], { stdio: 'pipe' }).toString());
   const dev = run(['scripts/dev-setup.sh']);
   assert.ok(dev.suites.length < 150, `dev-setup selected ${dev.suites.length}`);
   assert.ok(dev.suites.includes('hooks/tests/dev-setup.test.sh'));
@@ -1517,4 +1517,83 @@ test('selgap real tree: the 2026-11-04 plancwd replay (test + codex mirrors + pl
   assert.strictEqual(out.mode, 'selective');
   assert.ok(out.suites.includes('hooks/tests/dispatch-plan-review.test.sh'), 'dispatch-plan-review.test.sh missing');
   assert.ok(out.suites.includes('hooks/tests/plan-review-plan-path.test.sh'), 'plan-review-plan-path.test.sh missing');
+});
+
+// selgap #2 (2026-11-04): --files must refuse an input it cannot trust. The real incident: zsh did not split `--files $F`,
+// the nine paths reached the selector as ONE argument naming no file, and it answered mode selective with 21 suites, no warning.
+function filesRun(dir, files) {
+  const r = spawnSync('node', [SEL, '--root', dir, '--files', ...files, '--json'], { encoding: 'utf8' });
+  let doc = null;
+  try { doc = JSON.parse(r.stdout); } catch { /* not json: an error exit */ }
+  return { rc: r.status, stderr: r.stderr, doc };
+}
+
+test('selgap --files: a caller that joins several paths into ONE space-separated argument exits 2 and selects nothing', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const joined = ['scripts/foo.js', 'scripts/sib.js', 'scripts/lib/baz.js'].join(' ') + ' ';
+    const out = filesRun(r.dir, [joined]);
+    assert.strictEqual(out.rc, 2, out.stderr);
+    assert.strictEqual(out.doc, null, 'no selection document may be printed');
+    assert.match(out.stderr, /whitespace/);
+    assert.match(out.stderr, /split/);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: a newline-joined argument exits 2', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    assert.strictEqual(filesRun(r.dir, ['scripts/foo.js\nscripts/sib.js']).rc, 2);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: a path that exists neither on disk nor in HEAD exits 2 and is listed', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const out = filesRun(r.dir, ['scripts/foo.js', 'no/such/file.js']);
+    assert.strictEqual(out.rc, 2);
+    assert.strictEqual(out.doc, null);
+    assert.match(out.stderr, /no\/such\/file\.js/);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: a file deleted from the tree but present in HEAD is still a legitimate input', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    fs.rmSync(path.join(r.dir, 'scripts/other.js'));
+    const out = filesRun(r.dir, ['scripts/other.js']);
+    assert.strictEqual(out.rc, 0, out.stderr);
+    assert.deepStrictEqual(out.doc.changed, ['scripts/other.js']);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: an absolute path inside --root selects exactly what the relative path selects', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const rel = filesRun(r.dir, ['scripts/foo.js']);
+    const abs = filesRun(r.dir, [path.join(r.dir, 'scripts/foo.js')]);
+    assert.strictEqual(abs.rc, 0, abs.stderr);
+    assert.deepStrictEqual(abs.doc.changed, ['scripts/foo.js']);
+    assert.deepStrictEqual(abs.doc.suites, rel.doc.suites);
+    assert.strictEqual(abs.doc.mode, rel.doc.mode);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: an absolute path outside --root, or a ../ climb, exits 2', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const out = filesRun(r.dir, ['/etc/hostname']);
+    assert.strictEqual(out.rc, 2);
+    assert.match(out.stderr, /outside --root/);
+    assert.strictEqual(filesRun(r.dir, ['../elsewhere.js']).rc, 2);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: a directory exits 2 and --base/--head mode is untouched', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    assert.strictEqual(filesRun(r.dir, ['scripts']).rc, 2);
+    const head = r.change({ 'scripts/other.js': 'console.log("c");\n' });
+    assert.deepStrictEqual(r.select(head).suites, ['hooks/tests/other.test.sh']);
+  } finally { r.cleanup(); }
 });

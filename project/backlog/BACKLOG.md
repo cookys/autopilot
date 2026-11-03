@@ -19,7 +19,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Status**: open
 - **Since**: 2026-11-04
 - **Origin**: self
-- **Problem**: 驗收用的選測工具漏掉改動腳本自己的測試套件，合併前驗收因此假綠；本分支修正中，改成依名稱必選。
+- **Problem**: 選測工具收到無效的檔案路徑時不吭聲，照樣回報選出一串套件；觸發點是 zsh 沒把變數切成多個參數，九個路徑併成一個不存在的路徑，結果少選測試而假綠。另外改動腳本的同名套件現在也改成必選。
 - **Impact**: 選取器漏掉改動腳本自己的套件，每條 lane 的驗收都可能拿到假綠。
 - **Trigger**: PM 排序：G40 P1 之後的第 1 項（第 2 項是 bl-ap-streamjson）
 - **Trigger-Type**: ready

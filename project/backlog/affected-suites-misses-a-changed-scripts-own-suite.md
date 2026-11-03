@@ -10,6 +10,8 @@ First after G40 P1. Second is BL-0372 (bl-ap-streamjson).
 
 Fixing on branch hands/selgap/1 (base ba84c0327). Rules: (a) a changed or added suite is always selected; (b) a changed X.js/X.sh selects hooks/tests/X.test.sh, scripts/X.test.js, scripts/lib/X.test.js, hooks/X.test.js and the X.test.* beside it, and a platforms/ mirror counts as its source; (c) existing require/source/mention edges untouched; (d) forced suites are added after the graph walk, so no weak-edge bound or narrowing applies. Only additions.
 
-## Reproduction note
+## Root cause (found 2026-11-04 by the PM)
 
-At ba84c0327 the full 9-file plancwd set already selects 439 suites, including both missing suites, so the original 21-suite result did not reproduce from that input. What does reproduce: a codex mirror of a script alone, or the mirrored files without the source script, drop the script's own suite (31 selected, `dispatch-plan-review.test.sh` absent). Absolute paths in --files make the result `full` with no suites (not fixed here).
+The PM ran, in zsh, `F=$(git diff --name-only ... | tr '\n' ' '); affected-suites.js --run --files $F`. zsh does not split an unquoted `$F` on spaces, so the nine paths arrived as ONE argument naming no file. The selector did not complain: it answered mode selective with 21 suites (reproduced with `--files "$F"`; `--files no/such/file.js` behaves the same). Invalid input was accepted silently, so the selection was a false green. That also explains why the full nine-file set could not reproduce it.
+
+Fix (same branch): `--files` normalizes every path against --root (absolute inside root becomes relative; outside root, whitespace or newline in a path, an empty path, a directory, or a path found neither on disk nor in HEAD all exit 2 with a message that hints at an unsplit shell variable). A file deleted from the tree but present in HEAD stays legitimate. --base/--head mode is unchanged. The same-name-suite rule (a)/(b) above stays as a supporting hardening. No `--files $VAR` caller exists in scripts, skills, references or hooks (scaffold-mission quotes every path as its own token).

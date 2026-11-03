@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0371 -->
+<!-- next-id: BL-0374 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -13,6 +13,32 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 1. ~~`chatgpt-tunnel-host` (E)~~ SHIPPED v2.36.32 · 2. ~~`openclaw` main claim~~ v2.36.28 · 3. ~~`<host>` four defects~~ v2.36.33 ·
 4. ~~foreman rail Shape B~~ v2.36.34 · 5. ~~`308-db` (a) residue sweep~~ v2.36.35 · 6. ~~2026-09-12 dogfood four defects~~ v2.36.36 ·
 7. ~~backlog entry schema Phases 1–4~~ v2.36.38–39 · 8. ~~disposition resume~~ v2.36.41 · 9. ~~ledger flag burns a grant~~ v2.36.42 · 10. ~~reviewer no_verdict releases the claim~~ v2.36.43. Next: operator-named work, or the 308-8f dispatch-hetero reports.
+
+### bl-ap-streamjson：json 與 stream-json 的 result 位元組是否一致
+- **Id**: BL-0372
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: 還不知道真實 dispatch 下 json 與 stream-json 兩種輸出格式的 result 位元組是否一致；這是 G40 agent lane 被動觀測的前提。要用真實 dispatch 量測，PM 目前停車中。
+- **Impact**: 前提沒確認就做被動觀測，兩種格式若不一致，觀測到的結果會對不上。
+- **Trigger**: PM 排序：G40 P1 之後的第 2 項，排在 BL-0371 之後；PM 放行後開工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-04 ordering message
+- **Pointer**: project/backlog/bl-ap-streamjson-result-bytes.md
+
+### check-phase-review-receipt verifies a chain of review sets (--chain A,B)
+- **Id**: BL-0373
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: 一個專案先用審查組 A 審前半段，修正後新增的檔案 A 收不進去，改用審查組 B 審後半段；現在只拿 A 檢查會失敗，即使 B 已涵蓋所有改動的路徑，需要能一起檢查兩組。
+- **Impact**: 分兩組審查的專案無法通過收據檢查，只能繞過或重審一遍，浪費審查額度。
+- **Trigger**: PM 排序：排在 BL-0371 與 BL-0372 之後，目前尚未派工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-04 report (alfred M2 case)
+- **Pointer**: project/backlog/check-phase-review-receipt-review-set-chain.md
 
 ### live pane 決策卡的長背景與選項難讀
 - **Id**: BL-0369

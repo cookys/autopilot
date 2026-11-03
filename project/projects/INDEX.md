@@ -10,6 +10,7 @@
 |------|---------|----------------|--------|
 | 2026-11-03 | [G37: account aliases and automatic account switching for headless and lane claude](../plans/2026-11-03-g37-account-switching.md) | active | — | [plan](../plans/2026-11-03-g37-account-switching.md) |
 | 2026-11-03 | [G40-data: the agent lane gets its own live quota for every alias](../plans/2026-11-03-g40-agent-lane-quota.md) | active | — | [plan](../plans/2026-11-03-g40-agent-lane-quota.md) |
+| 2026-11-04 | [BL-0372: do claude json and stream-json results carry the same bytes (measurement plan)](../plans/2026-11-04-bl-ap-streamjson-measurement.md) | active | — | [plan](../plans/2026-11-04-bl-ap-streamjson-measurement.md) |
 | 2026-11-03 | [mission routing hands over to a successor graph before the relayout P1 merge](../../docs/plans/2026-11-03-routing-successor.md) | active | — | [plan](../../docs/plans/2026-11-03-routing-successor.md) |
 | 2026-11-02 | [A1 events contract: autopilot status events, schema autopilot.events/1 (operator-console D3 A1)](../plans/2026-11-02-oc-a1-events-contract.md) | active | — | [plan](../plans/2026-11-02-oc-a1-events-contract.md) |
 | 2026-11-02 | [operator console A3: autopilot writers use hippo (plan-reviewed, frozen)](../plans/2026-11-02-oc-a3-writers-use-hippo.md) | active | — | [plan](../plans/2026-11-02-oc-a3-writers-use-hippo.md) |

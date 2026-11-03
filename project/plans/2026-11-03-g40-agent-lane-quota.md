@@ -91,7 +91,7 @@ Input: the mirror view of one `(provider, alias)`: a list of rows (22.2), each a
 3. Winner per `kind`: the live window with the newest `t`. If the newest row lacks the kind but another row still has a live one, take the older one: a live window can only have grown, so it is a lower bound; note `merged_floor`. An exact tie goes to the row whose `writer_courier` is the local courier; a tie between two peers goes to the higher `utilization` (understating is the dangerous direction).
 4. The original `observed_at` of the winning window travels with it in the merge, in re-pushes and in reader output; nothing rewrites it. The reader's result carries per window `{kind, utilization, resets_at, observed_at, writer_courier, source}`.
 5. A live `refusal` (21.8) is taken from the row with the newest refusal time; it is not cleared by a lower window, only by its own expiry.
-6. Class (8.3) is computed from the merged windows; the source of the result is the source of the window that sets `used`.
+6. Class (8.3) is computed from the merged windows; the source and `choice.observed_at` of the result are those of the window that sets `used` (the same window, so a floor taken from an older row shows the older time, never the newer row's); per-window times stay in `status`.
 A quiet alias with only old windows falls to `unknown` at 6 h, the same fail-safe as today.
 
 ### 5.3 Item 2 - probe
@@ -101,7 +101,7 @@ Default OFF for every provider and every manifest: `accounts.quota_probe = "off"
 - `quota_probe = "scheduled"`: a standing schedule (19.6 branch A). Accepted at config load only for providers whose manifest says `starts_window: false` with an evidence path; otherwise it is rejected with a message.
 - Claude: its `starts_window` is `unknown` and no Claude experiment has run (19.8). P4 ships no Claude probe code path before the section 19 result is recorded; absent telemetry in that experiment is ambiguous, not a "does not start" result (19.5).
 
-Cheapest first: (1) official no-quota endpoint: none found (V7), not used; if an official URL turns up, replace the probe with it and record it here. (2) Smallest model call: `claude -p --model haiku --output-format stream-json --verbose --tools "" --strict-mcp-config`, a few-word prompt, through the alias env (same path as a run). Cost per V6: 0.0034 USD API-equivalent per probe (about 0.02 to 0.03 USD for the 6 to 8 probes of the experiment, up to about 0.08 USD per day per idle alias on a standing hourly schedule); share of subscription quota UNVERIFIED (Q5).
+Cheapest first: (1) official no-quota endpoint: none found (V7), not used; if an official URL turns up, replace the probe with it and record it here. (2) Smallest model call: `claude -p --model haiku --output-format stream-json --verbose --tools "" --strict-mcp-config`, a few-word prompt, through the alias env (same path as a run). Flag evidence: `claude --help` of claude 2.1.317 (run 2026-11-04) lists `--tools <tools...>` and `--strict-mcp-config` ("Only use MCP servers from --mcp-config, ignoring all other MCP configurations"); the matrix's live run used `--tools` without `--strict-mcp-config`, so it is the only argv element without a live run, and the P4 gate drops it if the first live probe is refused. Cost per V6: 0.0034 USD API-equivalent per probe (about 0.02 to 0.03 USD for the 6 to 8 probes of the experiment, up to about 0.08 USD per day per idle alias on a standing hourly schedule, which only the demand rule of 19.6 branch A allows); share of subscription quota UNVERIFIED (Q5).
 
 Trigger in `stale` mode: the wrapper, in `gather`, asks pure `staleCandidates(accounts, merged, cooldowns, exclude, nowS, minutes)` for aliases that are not excluded or cooling, whose best observation is older than N minutes (or missing), and whose last known `used` is below 0.90 (a tight alias is never probed: it does not need refreshing and is the one most likely to 429). At most one probe per alias per N, serial, at most 1 per `run`, never when the `run` is `--alias`-pinned. A probe's observation is published like any other, `source: probe`. Probe failure (auth, 429, timeout) records nothing, applies the normal cooldown and auth-stop classification, and never blocks the real call; bounded by `accounts.quota_probe_timeout_secs` (default 20). A manual `claude-account.js usage-probe --alias A` (P4) is explicit and prints only `{alias, windows}`.
 
@@ -221,25 +221,25 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 | Phase | Size | Content | Gate |
 |-------|------|---------|------|
 | P1 | M | generic contract `fleet.quota/1`: validator with the unit rules (6), mirror view of rows (22.2), `interpretWindows` and merge (5.2, 8.3), refusal (21.8), manifest schema and checker; Claude reader adapter; G37's direct snapshot read untouched | pure tests; N1-N8, N24-N30, N49-N58 red then green |
-| P2 | M | Claude adapter, first because G37 needs it: wrapper passive capture (5.1) writing the local row of `quota/claude/<alias>.json`, `status` columns, `claude.json` manifest; pick reads the mirror | fixture-driven; json caller records nothing and exits unchanged |
-| P2b | S | generic reporter (18.2) with a fake hub: statusline adapter writes the mirror directly (18.3), direct `codeforge.quota/1` read removed from `account-quota.js`, pacing and queue, stale-skip, nack handling | N18-N23, N59-N64 |
-| P3 | S | token meta, generic fields; lifetime from the manifest; credential precedence (5.6) | N11, N12, N65 |
-| P4 | M | Claude tinyprobe (5.3), blocked on the section 19 experiment | N13-N15 |
-| P5 | L | hub client in the reporter, blocked on fleet F4; the hub change ships with or after F4 and never during a release freeze (fleet freeze until 2026-11-10T16:24Z) | N16, N17, N39-N48 |
-| P6 | M/L | C2 transparent transform, only if Q3 is answered yes | byte-identical stdout for json callers |
-| A-agy, A-grok, A-codex, A-minimax, A-qoder, A-qoder-cli-cn, A-opencode, A-glm, A-kimi | each S to M | one provider adapter each (manifest from the matrix row plus the modes it marks `verified`); the first env-credential adapter also adds `credential_ref` kind `env` checks (20.3 rule 3) | each is its own project and starts ONLY after the PM gives a go for that provider |
+| P2 | M | Claude adapter, first because G37 needs it: wrapper passive capture (5.1) writing the local row of `quota/claude/<alias>.json`, `status` columns, `claude.json` manifest; pick reads the mirror | fixture-driven; N9, N10 red then green: json caller records nothing and exits unchanged |
+| P2b | S | generic reporter (18.2) with a fake hub: statusline adapter writes the mirror directly (18.3), direct `codeforge.quota/1` read removed from `account-quota.js`, pacing and queue, stale-skip, nack handling | N18-N23, N59-N64, N68-N71 red then green |
+| P3 | S | token meta, generic fields; lifetime from the manifest; credential precedence (5.6) | N11, N12, N65 red then green |
+| P4 | M | Claude tinyprobe (5.3), blocked on the section 19 experiment | N13-N15, N66 red then green |
+| P5 | L | hub client in the reporter, blocked on fleet F4; the hub change ships with or after F4 and never during a release freeze (fleet freeze until 2026-11-10T16:24Z) | N16, N17, N39-N48 red then green |
+| P6 | M/L | C2 transparent transform, only if Q3 is answered yes | byte-identical stdout for json callers, red first with the transform broken |
+| A-agy, A-grok, A-codex, A-minimax, A-qoder, A-qoder-cli-cn, A-opencode, A-glm, A-kimi | each S to M | one provider adapter each (manifest from the matrix row plus the modes it marks `verified`); the first env-credential adapter also adds `credential_ref` kind `env` checks (20.3 rule 3) | each is its own project and starts ONLY after the PM gives a go for that provider; its gate is N24-N30 run on its own manifest, red then green |
 Dependency map: P1 -> P2 -> P2b; P3 after P1; P4 after P2 + experiment; P5 after P2b + F4; provider adapters after P1 + P2b + the matrix + a per-provider PM go; P6 after P2 + Q3.
 
 ## 14. Negative controls (every one shown red before green; ship with the check it guards)
 
-N1-N17 and N49-N65 are here; N18-N23 sit with the reporter (18.2), N24-N30 with the contract (20.6), N31-N38 with its details (21.9), N39-N48 with the hub (22.5).
+N1-N17 and N49-N71 are here; N18-N23 sit with the reporter (18.2), N24-N30 with the contract (20.6), N31-N38 with its details (21.9), N39-N48 with the hub (22.5).
 
 - N1 A record with `utilization` 62 (0..100 scale skipped conversion) is rejected as `quota_invalid`, alias not `ok`.
 - N2 A record with an unknown key is rejected; with a token-shaped string anywhere (fixture token) the writer refuses to write.
 - N3 A record older than 6 h, or 10 min in the future, yields `unknown`.
 - N4 A window with `resets_at` in the past is ignored.
 - N5 Merge: per window the newest row wins, whichever writer; an exact tie prefers the local writer.
-- N6 Missing `five_hour` never becomes 0 and never makes an otherwise tight alias `ok` (merge keeps a live older window as floor).
+- N6 Missing `five_hour` never becomes 0 and never makes an otherwise tight alias `ok` (merge keeps a live older window as floor); with `merged_floor` set, the reported `choice.observed_at` equals the floor window's time, and a planted newest-row time is red.
 - N7 Writer refuses a symlink target and a wrong-mode directory (reuses `runtime-paths`/`live-state-dir` refusals).
 - N8 `pick` with no `observations` input equals today's output byte-for-byte on the existing fixtures.
 - N9 A stream argv with an event records; a json argv records nothing; a malformed event is dropped; in every case exit code and stdout bytes equal the run without capture.
@@ -272,6 +272,7 @@ N1-N17 and N49-N65 are here; N18-N23 sit with the reporter (18.2), N24-N30 with 
 - N68 `quota_rows_full`: the reporter stops adding new aliases, counts and logs each refused one, and keeps pushing rows that already exist; a planted reporter that retries the refused alias or stops pushing everything is red.
 - N69 `quota_invalid` and `quota_writer_mismatch`: the frame is dropped with one warning per kind, never retried and never recorded as pushed (planted retry loop red).
 - N70 Mirror-only fields: a push frame built from a mirror that holds `hub_offset` contains no `hub_offset`; a planted reporter that sends the mirror view or its `hub_offset` is red against a fake hub that answers `quota_invalid` for it; a record with `utilization` above 1 is never in a frame.
+- N71 Nack table, one control per name: a fake hub answers each of `unsupported`, `quota_rate_limited`, `quota_rows_full`, `quota_publish_denied`, `quota_clock_invalid`, `quota_invalid`, `quota_writer_mismatch` in turn; the reporter must act as section 9 says (and log the name); a planted reporter that stays silent on any one is red for that name; none is recorded as pushed.
 - N66 Probe config: `quota_probe` unset is `off` for every manifest; `scheduled` is rejected for `starts_window` `true` or `unknown`.
 
 ## 15. Risks and inversion
@@ -364,7 +365,7 @@ Does one probe against an idle account START that account's 5-hour window (and w
 
 This lane does NOT run it. It needs a real API call with an alias token.
 - Executor: the operator, or a person/session the operator names through the PM. Not this hands lane.
-- Authorisation required: (1) the operator names ONE alias to use (an account he is willing to have measured), in writing to the PM; (2) the operator's own confirmation of the spend (6 to 8 probes, roughly 0.02 to 0.03 USD API-equivalent in total at 0.0034 each, and an unknown share of that alias's subscription quota); (3) the run goes through the G37 wrapper (`claude-account.js run --alias <A>`), so no token is read by the executor. A PM "go" message does not by itself cover use of an account's credentials; the operator's confirmation is needed and should be recorded in the run's evidence directory.
+- Authorisation required: (1) the operator names ONE alias to use (an account he is willing to have measured), in writing to the PM; (2) the operator's own confirmation of the spend (6 to 8 probes, about 0.03 USD API-equivalent in total, 8 x 0.0034, the larger sample of V6, and an unknown share of that alias's subscription quota); (3) the run goes through the G37 wrapper (`claude-account.js run --alias <A>`), so no token is read by the executor. A PM "go" message does not by itself cover use of an account's credentials; the operator's confirmation is needed and should be recorded in the run's evidence directory.
 - Not allowed: running it on an account in active use, using the default login instead of an alias, or sending any 429 traffic.
 
 ### 19.3 Preconditions (confirm the account is idle without spending)
@@ -412,7 +413,7 @@ Let `d1 = resetsAt(E2) - t1` (seconds). Expected for a window started by the pro
 
 ### 19.6 Decision tree (what the design does with the answer)
 
-- A. Probe does NOT start the window (third row, confirmed by an independent observation): the manifest may say `starts_window: false`, which makes `quota_probe = "scheduled"` available to the operator (the recommended setting; the default stays `off`, 5.3). Under it, periodic probing of every enrolled alias that has a token on that host: every P = 60 minutes, but SKIP an alias when it already has an observation (any source) newer than N = 30 minutes, and skip when its last known utilization is at or above 0.90. Reasons for N = 30 min: half the probe period, so a busy alias (passive or statusline feeding it more often than every 30 min) is never probed, an idle one is probed about once an hour; and a stream event is emitted when the rounded percent changes, so a 30 min-old observation is already coarse for headroom decisions but the 6 h hard staleness limit is far away. Cost: at most 24 probes per idle alias per day, about 0.08 USD API-equivalent per day (24 x 0.0034), plus an unmeasured quota share (Q5).
+- A. Probe does NOT start the window (third row, confirmed by an independent observation): the manifest may say `starts_window: false`, which makes `quota_probe = "scheduled"` available to the operator (the recommended setting; the default stays `off`, 5.3). Under it, periodic probing of every enrolled alias that has a token on that host: every P = 60 minutes, but SKIP an alias when it already has an observation (any source) newer than N = 30 minutes, and skip when its last known utilization is at or above 0.90. Reasons for N = 30 min: half the probe period, so a busy alias (passive or statusline feeding it more often than every 30 min) is never probed, an idle one is probed about once an hour; and a stream event is emitted when the rounded percent changes, so a 30 min-old observation is already coarse for headroom decisions but the 6 h hard staleness limit is far away. Demand rule: probe only an alias that a `pick` consulted within the last 24 h or that `staleCandidates` returned, never an alias nobody asks about; and `scheduled` is not enabled until Q5 has a recorded quota share. Cost: at most 24 probes per such alias per day, about 0.08 USD API-equivalent per day (24 x 0.0034), plus the quota share Q5 must have measured.
 - B. Probe STARTS or slides the window (first, second rows): `quota_probe = "stale"` is the only mode: probing happens only just before pick and only when the best observation of the candidate aliases is older than 60 minutes: `pick` asks `staleCandidates` (5.3), the wrapper probes at most the top 1 stale candidate it is about to use, never the others. The alias being picked is going to be used immediately anyway, so starting its window costs nothing it would not have paid. No background schedule. Unknown (idle) aliases are never probed speculatively.
 - C. Void or ambiguous (fifth or fourth row): repeat the experiment on a fresh idle alias; until a result exists probing stays off and the system relies on statusline + passive only.
 Record the answer in the manifest `starts_window` with its evidence path (section 12 Q2).
@@ -500,7 +501,7 @@ One manifest per provider, a data file (proposed path `scripts/quota-adapters/<p
      "note": "none found"},
     {"mode": "tinyprobe", "cost": "tokens", "verified": true,
      "argv_template": ["claude","-p","--model","haiku","--output-format","stream-json","--verbose","--tools","","--strict-mcp-config","<PROMPT>"],
-     "est_cost_usd": 0.0034, "est_out_tokens": 8, "min_interval_minutes": 60,
+     "est_cost_usd": 0.0034, "est_out_tokens": [8, 222], "min_interval_minutes": 60,
      "starts_window": "unknown"},
     {"mode": "fallback",  "cost": "local",
      "counter": null, "plan_limit": null, "source": "estimated",

@@ -703,37 +703,6 @@ test('recipe: bare `wait` also wakes after a detached rail', () => {
   assert.ok(ms >= 900 && ms < 10000);
 });
 
-test('deep glob is bounded (worst case stays fast)', () => {
-  const t0 = Date.now();
-  run('ls /*/*/*/*/*/*/*.zzqq', { shell: 'zsh' });
-  assert.ok(Date.now() - t0 < 1500);
-});
-
-// In-process timing of the rule itself: five deep globs must cost well under 200 ms in total.
-const { detectZshExpansion } = require('../scripts/lib/bash-launch-rules.js');
-test('five deep globs cost < 200 ms in total', () => {
-  const t0 = Date.now();
-  const r = detectZshExpansion('ls /*/*/* /*/*/*/* /*/*/*/*/* /*/*/*/*/*/* /*/*/*/*/*/*/*.zzqq', os.tmpdir());
-  assert.ok(Date.now() - t0 < 200, `took ${Date.now() - t0} ms`);
-  assert.strictEqual(r, null);
-});
-test('only the first few globs per command are resolved (stay silent past the cap)', () => {
-  const r = detectZshExpansion('ls /* /* /* /* /nonexistent-dir-blg/*.zzq', os.tmpdir());
-  assert.strictEqual(r, null);
-  assert.ok(detectZshExpansion('ls /nonexistent-dir-blg/*.zzq', os.tmpdir()));
-});
-
-// Drift guard: every launching rail script in scripts/ is on the guard's explicit list. A new
-// scripts/dispatch-*.sh|js must either be a rail (add it to RAIL_NAMES) or an observer (add it here).
-const OBSERVERS = new Set(['dispatch-status.js', 'dispatch-contract.js', 'dispatch-tree.js']);
-for (const f of fs.readdirSync(path.join(__dirname, '..', 'scripts'))) {
-  if (!/^dispatch-.*\.(sh|js)$/.test(f) || /\.test\./.test(f) || OBSERVERS.has(f)) continue;
-  test(`rail on the explicit list: ${f}`, () => {
-    assert.strictEqual(run(`nohup scripts/${f} x &`).deny, true);
-  });
-}
-
-// ---- hard cost bounds (item: single glob lookups and crafted input) ----
 // Cost-bound tests come in two forms. The default form is load-proof: it compares the time at size n with
 // the time at 16n (best of several runs, same process), so a loaded host scales both sides alike. Linear work
 // gives a ratio near 16, quadratic work near 256; the ceiling is 64. The absolute wall-clock ceilings
@@ -818,9 +787,66 @@ test('a huge token is not judged (no warning, no cost)', () => {
   assert.doesNotMatch(run(`ls /nonexistent-dir-blg/${'a'.repeat(600)}*.zzq`, { shell: 'zsh' }).ctx, /zsh-expansion/);
 });
 
+// Deterministic form of the glob cost bounds: count the directory reads the rule performs instead of timing
+// them. A load spike moves a clock, never a count. The absolute ceilings stay as opt-in @slow variants.
+function countOpendirs(fn) {
+  const real = fs.opendirSync;
+  let n = 0;
+  fs.opendirSync = (...a) => { n += 1; return real.apply(fs, a); };
+  try { fn(); } finally { fs.opendirSync = real; }
+  return n;
+}
+test('deep globs read no directory at all (count-based, load-proof)', () => {
+  const opendirs = countOpendirs(() => {
+    detectZshExpansion('ls /*/*/*/*/*/*/*.zzqq', os.tmpdir());
+    detectZshExpansion('ls /*/*/* /*/*/*/* /*/*/*/*/* /*/*/*/*/*/* /*/*/*/*/*/*/*.zzqq', os.tmpdir());
+  });
+  assert.strictEqual(opendirs, 0, `${opendirs} directory reads for multi-level globs`);
+});
+test('single-level globs are capped at 3 directory reads per command (count-based, load-proof)', () => {
+  const globs = Array.from({ length: 8 }, () => '/*').join(' '); // each one matches, so the scan goes on to the next
+  const opendirs = countOpendirs(() => { detectZshExpansion(`ls ${globs}`, os.tmpdir()); });
+  assert.ok(opendirs <= 3, `${opendirs} directory reads for 8 single-level globs`);
+});
+slowTest('deep glob is bounded (worst case stays fast)', () => {
+  const t0 = Date.now();
+  run('ls /*/*/*/*/*/*/*.zzqq', { shell: 'zsh' });
+  assert.ok(Date.now() - t0 < 1500);
+});
+
+// In-process timing of the rule itself (absolute form is opt-in; the default form above counts reads).
+const { detectZshExpansion } = require('../scripts/lib/bash-launch-rules.js');
+slowTest('five deep globs cost < 200 ms in total', () => {
+  const t0 = Date.now();
+  const r = detectZshExpansion('ls /*/*/* /*/*/*/* /*/*/*/*/* /*/*/*/*/*/* /*/*/*/*/*/*/*.zzqq', os.tmpdir());
+  assert.ok(Date.now() - t0 < 200, `took ${Date.now() - t0} ms`);
+  assert.strictEqual(r, null);
+});
+test('five deep globs stay silent', () => {
+  assert.strictEqual(detectZshExpansion('ls /*/*/* /*/*/*/* /*/*/*/*/* /*/*/*/*/*/* /*/*/*/*/*/*/*.zzqq', os.tmpdir()), null);
+});
+test('only the first few globs per command are resolved (stay silent past the cap)', () => {
+  const r = detectZshExpansion('ls /* /* /* /* /nonexistent-dir-blg/*.zzq', os.tmpdir());
+  assert.strictEqual(r, null);
+  assert.ok(detectZshExpansion('ls /nonexistent-dir-blg/*.zzq', os.tmpdir()));
+});
+
+// Drift guard: every launching rail script in scripts/ is on the guard's explicit list. A new
+// scripts/dispatch-*.sh|js must either be a rail (add it to RAIL_NAMES) or an observer (add it here).
+const OBSERVERS = new Set(['dispatch-status.js', 'dispatch-contract.js', 'dispatch-tree.js']);
+for (const f of fs.readdirSync(path.join(__dirname, '..', 'scripts'))) {
+  if (!/^dispatch-.*\.(sh|js)$/.test(f) || /\.test\./.test(f) || OBSERVERS.has(f)) continue;
+  test(`rail on the explicit list: ${f}`, () => {
+    assert.strictEqual(run(`nohup scripts/${f} x &`).deny, true);
+  });
+}
+
+// ---- hard cost bounds (item: single glob lookups and crafted input) ----
 test('segments()/expandSegments() grow linearly: 16x the input costs < 64x the time (load-proof, deterministic)', () => {
   const { segments, expandSegments } = require('../scripts/lib/bash-launch-rules.js');
   for (const [name, unit, n] of [['} & ', '} & ', 500], ['fi & ', 'fi & ', 800], ['done & ', 'done & ', 600]]) {
+    // QUARANTINED, tracked as BL-0370 (project/backlog/segments-dollar-paren-superlinear.md); unquarantine = fix it,
+    // then add ['$(', '$(', n] back to the list above.
     // `$(` x n is not here on purpose: segments() is superlinear on it past ~16 KB (cur.trim() on a growing
     // cons-string, 55 ms at 64 KB, 514 ms at 128 KB). It is still bounded by the opt-in @slow absolute variant
     // below; the growth itself is a finding for the owner of scripts/lib/bash-launch-rules.js, not hidden here.

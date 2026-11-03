@@ -201,3 +201,37 @@ test('d: missing or non-executable child binary maps to the spawn-failure exit c
     }
   } finally { fx.cleanup(); }
 });
+
+// Shebang interpreter missing: setpriv would still answer 127. Same mapping, run and exec. PATH-less env falls back
+// to /bin:/usr/bin instead of searching only the cwd.
+test('d2: script with a missing shebang interpreter, and a PATH-less env, map to the spawn-failure exit code', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    const badInterp = path.join(fx.root, 'bad-interp');
+    fs.writeFileSync(badInterp, '#!/no/such/interpreter\nexit 0\n', { mode: 0o755 });
+    const badEnv = path.join(fx.root, 'bad-env');
+    fs.writeFileSync(badEnv, '#!/usr/bin/env no-such-interp-xyz\nexit 0\n', { mode: 0o755 });
+    for (const [label, args] of [
+      ['run missing interp', ['run', '--alias', 'a', '--purpose', 'sig', '--', badInterp]],
+      ['exec missing interp', ['exec', '--alias', 'a', '--purpose', 'sig', '--', badInterp]],
+      ['run env interp not on PATH', ['run', '--alias', 'a', '--purpose', 'sig', '--', badEnv]],
+      ['exec env interp not on PATH', ['exec', '--alias', 'a', '--purpose', 'sig', '--', badEnv]],
+    ]) {
+      const r = await goCli(fx, args);
+      assert.strictEqual(r.code, EXIT.CHILD_ERROR, `${label}: ${r.err}`);
+      assert.match(r.err, /child_spawn_failed \(ENOENT\)/, label);
+    }
+  } finally { fx.cleanup(); }
+});
+
+test('d3: child env without PATH resolves a bare name via /bin:/usr/bin, not only the cwd', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  try {
+    const env = Object.assign({}, fx.env);
+    delete env.PATH;
+    let err = '';
+    const code = await cli(['run', '--alias', 'a', '--purpose', 'sig', '--', 'true'], { env, realHome: fx.realHome, warn: () => {}, write: (fd, d) => { if (fd === 2) err += d.toString(); } });
+    assert.ok(!/child_spawn_failed/.test(err), `bare name must be found on the default path: ${err}`);
+    assert.notStrictEqual(code, EXIT.CHILD_ERROR, err);
+  } finally { fx.cleanup(); }
+});

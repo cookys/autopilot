@@ -27,7 +27,7 @@ function run(args, timeout) {
 }
 
 // Three states, never a boolean: a failed probe is NOT "no courier".
-//   'unsupported'  spawn ENOENT (no fleet binary), or fleet printed its usage and that usage has no `fleet decision` line
+//   'unsupported'  spawn ENOENT (no fleet binary), or fleet printed a usage section with subcommand lines and none is `fleet decision` (a bare banner is probe_error)
 //   'supported'    fleet printed its usage with a `fleet decision` line
 //   'probe_error'  everything else (timeout, other spawn error, no usage text at all)
 // The exit status of `--help` is not read: today's fleet prints its usage and exits 1.
@@ -36,8 +36,11 @@ function probe() {
   if (r.missing) return 'unsupported';
   if (r.error) return 'probe_error';
   const text = r.stdout + r.stderr;
-  if (!/courier CLI|^USAGE:/m.test(text)) return 'probe_error';
-  return /^\s*fleet decision(\s|$)/m.test(text) ? 'supported' : 'unsupported';
+  // unsupported needs POSITIVE evidence: a usage section AND at least one subcommand line under it. A banner alone ("courier CLI\ninit failed")
+  // proves nothing about the subcommands.
+  if (/^\s*fleet decision(\s|$)/m.test(text)) return 'supported';
+  if (/^usage:/im.test(text) && /^\s+fleet [a-z][a-z-]*/m.test(text)) return 'unsupported';
+  return 'probe_error';
 }
 
 const parseJson = (s) => { try { const v = JSON.parse(String(s).trim().split('\n').pop()); return v && typeof v === 'object' ? v : null; } catch { try { return JSON.parse(s); } catch { return null; } } };

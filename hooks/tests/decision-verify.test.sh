@@ -26,6 +26,7 @@ fs.appendFileSync(D + '/calls', a.join(' ') + '\n');
 const mode = () => { try { return fs.readFileSync(D + '/mode', 'utf8').trim(); } catch { return 'ok'; } };
 if (a[0] === '--help') {
   if (mode() === 'probe_error') process.exit(2); // no usage text at all
+  if (mode() === 'banner') { process.stdout.write('fleet — courier CLI\ninitialization failed\n'); process.exit(1); }
   // like today's fleet: usage printed, exit status 1
   process.stdout.write('fleet — courier CLI\n\nUSAGE:\n  fleet send x\n' + (process.env.DECOY ? '  fleet decisions-report x\n' : '') + (process.env.NO_DECISION ? '' : '  fleet decision claim|verify|list <card_id>\n'));
   process.exit(process.env.HELP_RC ? Number(process.env.HELP_RC) : 1);
@@ -66,7 +67,7 @@ export STUB_DIR="$STUB" AUTOPILOT_FLEET_BIN="$STUB/fleet"
 calls() { cat "$STUB/calls" 2>/dev/null; }
 count() { if [ -f "$STUB/calls" ]; then grep -c "$1" "$STUB/calls" || true; else echo 0; fi; }
 reset() { rm -f "$STUB/calls" "$STUB/answers"; printf '%s' "${1:-ok}" > "$STUB/mode"; }
-open_card() { node "$OD" open --cwd "$R" --root-run-id root-t --question "Q$RANDOM?" --option "A::a" --option "B::b" --not-authorized irreversible 2>/dev/null | head -1; }
+open_card() { node "$OD" open --cwd "$R" --root-run-id root-t --question "Q?" --option "A::a" --option "B::b" --not-authorized irreversible 2>/dev/null | head -1; }
 is_open() { node "$OD" show --cwd "$R" 2>/dev/null | grep -q "$1"; }
 close() { OUT="$(node "$OD" close --cwd "$R" --root-run-id root-t --id "$@" 2>"$TEST_TMP/err")"; RC=$?; ERR="$(cat "$TEST_TMP/err")"; }
 hook() { # hook <prompt>
@@ -102,6 +103,8 @@ reset unknown; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "unkno
 reset probe_error; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "probe error: exit 8"; is_open "$C"; assert_eq "$?" 0 "probe error: card stays open"
 assert_eq "$(count 'decision claim')" 0 "probe error: no claim attempted"; assert_contains "$ERR" "probe failed" "probe error: loud"
 reset ok; HELP_RC=0 close "$C" --option A; assert_eq "$RC" 0 "usage with exit 0 also counts as supported"
+# a bare banner (no usage section) is a probe error, not "unsupported"
+reset banner; C="$(open_card)"; close "$C" --option A; assert_eq "$RC" 8 "banner only: exit 8"; is_open "$C"; assert_eq "$?" 0 "banner only: card stays open"
 # `fleet decisions-report` is not `fleet decision`
 reset ok; C="$(open_card)"; DECOY=1 NO_DECISION=1 close "$C" --option A; assert_eq "$RC" 0 "decoy line only: unsupported, plain close"; assert_eq "$(count 'decision claim')" 0 "decoy line: no claim"
 # ENOENT stays unsupported (covered below); timeout-like failure above is probe_error
@@ -120,42 +123,70 @@ assert_eq "$RC" 0 "fleet without decision: exit 0"; is_open "$C"; assert_eq "$?"
 
 # --- hook: verify before act
 reset ok; C="$(open_card)"; AID="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"A"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
-hook "$(printf '[待決回覆]\n%s｜Q → A｜%s\n' "$C" "$AID")"; assert_eq "$HRC" 0 "good line: hook exit 0"
+hook "$(printf '[待決回覆]\n%s｜Q? → A｜%s\n' "$C" "$AID")"; assert_eq "$HRC" 0 "good line: hook exit 0"
 assert_contains "$(calls)" "decision verify $C $AID" "good line: verify called"
 assert_not_contains "$(calls)" "--content-sha256" "good line (local): no hash passed, fleet would refuse one"
 is_open "$C"; assert_eq "$?" 1 "good line (via local, no content hash stored): card closed"
 # KR5i forged answer_id
 reset ok; C="$(open_card)"; claim_unused="$(node -e 'require(process.argv[1]).claim(process.argv[2],{option:"A"})' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
-hook "$(printf '[待決回覆]\n%s｜Q → A｜AFORGED000000000000000000X\n' "$C")"
+hook "$(printf '[待決回覆]\n%s｜Q? → A｜AFORGED000000000000000000X\n' "$C")"
 is_open "$C"; assert_eq "$?" 0 "forged answer_id: card NOT closed"
 assert_contains "$HOUT" "unverified" "forged answer_id: systemMessage says unverified"; assert_contains "$HOUT" "$C" "forged answer_id: names the card"
 # line without any answer_id
-reset ok; C="$(open_card)"; hook "$(printf '[待決回覆]\n%s｜Q → A\n' "$C")"
+reset ok; C="$(open_card)"; hook "$(printf '[待決回覆]\n%s｜Q? → A\n' "$C")"
 is_open "$C"; assert_eq "$?" 0 "no answer_id on a courier host: not closed"; assert_contains "$HOUT" "unverified" "no answer_id: unverified"
 assert_eq "$(count 'decision verify')" 0 "no answer_id: nothing to verify, no call"
 # courier down: one verify call, no retry, not closed
-reset down; C="$(open_card)"; hook "$(printf '[待決回覆]\n%s｜Q → A｜AFORGED000000000000000000X\n' "$C")"
+reset down; C="$(open_card)"; hook "$(printf '[待決回覆]\n%s｜Q? → A｜AFORGED000000000000000000X\n' "$C")"
 assert_eq "$(count 'decision verify')" 1 "courier down: one verify call (exit 9 stops, hooks never retry)"; is_open "$C"; assert_eq "$?" 0 "courier down: not closed"
 # no courier: today's behaviour (closes with no answer_id)
-reset ok; C="$(open_card)"; AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet" hook "$(printf '[待決回覆]\n%s｜Q → A\n' "$C")"
+reset ok; C="$(open_card)"; AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet" hook "$(printf '[待決回覆]\n%s｜Q? → A\n' "$C")"
 is_open "$C"; assert_eq "$?" 1 "hook, no fleet: card closed as before"
 # probe error: nothing is acted on, and it is not treated as 'no courier'
-reset probe_error; C="$(open_card)"; hook "$(printf '[待決回覆]\n%s｜Q → A\n' "$C")"
+reset probe_error; C="$(open_card)"; hook "$(printf '[待決回覆]\n%s｜Q? → A\n' "$C")"
 is_open "$C"; assert_eq "$?" 0 "hook, probe error: card NOT closed"; assert_contains "$HOUT" "probe_error" "hook, probe error: reported"
 # content bound to the stored answer: a valid answer_id for A with text saying B is refused
 reset ok; C="$(open_card)"; AIDA="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"A"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
-hook "$(printf '[待決回覆]\n%s｜Q → B｜%s\n' "$C" "$AIDA")"
+hook "$(printf '[待決回覆]\n%s｜Q? → B｜%s\n' "$C" "$AIDA")"
 is_open "$C"; assert_eq "$?" 0 "swapped text (valid id for A, line says B): NOT closed"
 assert_contains "$HOUT" "content_mismatch" "swapped text: reported"; assert_contains "$HOUT" '{\"option\":\"A\"}' "swapped text: message shows the stored answer"
 assert_not_contains "$HOUT" "→ B" "swapped text: message does not repeat the line's text"
-hook "$(printf '[待決回覆]\n%s｜Q → A｜補充：extra words｜%s\n' "$C" "$AIDA")"
+hook "$(printf '[待決回覆]\n%s｜Q? → A｜補充：extra words｜%s\n' "$C" "$AIDA")"
 is_open "$C"; assert_eq "$?" 1 "same answer with a note: closes"
 reset ok; C="$(open_card)"; AIDF="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{freeText:"my own words"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
-hook "$(printf '[待決回覆]\n%s｜Q → other words｜%s\n' "$C" "$AIDF")"; is_open "$C"; assert_eq "$?" 0 "free text swapped: NOT closed"
-hook "$(printf '[待決回覆]\n%s｜Q → my own words｜%s\n' "$C" "$AIDF")"; is_open "$C"; assert_eq "$?" 1 "free text matching: closes"
+hook "$(printf '[待決回覆]\n%s｜Q? → other words｜%s\n' "$C" "$AIDF")"; is_open "$C"; assert_eq "$?" 0 "free text swapped: NOT closed"
+hook "$(printf '[待決回覆]\n%s｜Q? → my own words｜%s\n' "$C" "$AIDF")"; is_open "$C"; assert_eq "$?" 1 "free text matching: closes"
+# --- strict field-wise content binding (round 2): every bypass shape, plus full-/half-width mixes, many arrows, a ｜ in the note
+reset ok; C="$(open_card)"; AIDA="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"A"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
+deny() { hook "$(printf '[待決回覆]\n%s\n' "$1")"; is_open "$C"; assert_eq "$?" 0 "refused: $2"; assert_contains "$HOUT" "content_mismatch" "reported: $2"; }
+deny "$C｜Q? → B｜補充：not → A｜$AIDA" "answer B with a note ending in ' → A'"
+deny "$C｜Q? → A|補充：fake → B｜$AIDA" "half-width | typed inside the answer"
+deny "$C｜Q? → A → B｜$AIDA" "answer 'A → B' (A is only a prefix)"
+deny "$C｜Q? → B → A｜$AIDA" "answer 'B → A' (A is only a suffix)"
+deny "$C｜Q? → AB｜$AIDA" "answer AB"
+deny "$C｜Q? → A｜補充：x｜補充：y｜$AIDA" "two note fields"
+deny "$C｜Q? → A｜補充：a｜b｜$AIDA" "｜ inside the note (five fields)"
+deny "$C｜Q? → A｜extra｜$AIDA" "third field that is not a note"
+deny "$C｜Q? ‑> A｜$AIDA" "a different arrow"
+deny "$C｜Other question → A｜$AIDA" "excerpt is not this card's question"
+deny "$C｜$AIDA" "too few fields"
+hook "$(printf '[待決回覆]\n%s｜Q? → A|%s\n' "$C" "$AIDA")"; is_open "$C"; assert_eq "$?" 0 "refused: separator typed half-width (no answer_id field)"; assert_contains "$HOUT" "unverified" "reported: no answer_id field"
+hook "$(printf '[待決回覆]\n%s｜Q? → A｜補充：not → B｜%s\n' "$C" "$AIDA")"; is_open "$C"; assert_eq "$?" 1 "legit: note containing an arrow does not matter (the note never takes part)"
+# an option label that itself contains ' → ' and a question longer than 30 characters
+reset ok; LQ="This is a long question that is certainly longer than thirty characters?"
+C="$(node "$OD" open --cwd "$R" --root-run-id root-t --question "$LQ" --option "A → B::a" --option "C::c" --not-authorized irreversible 2>/dev/null | head -1)"
+AIDL="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"A → B"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
+EXC="$(node -e 'console.log(require(process.argv[1]).excerptOf(process.argv[2]))' "$REPO_ROOT/scripts/lib/decide-line.js" "$LQ")"
+hook "$(printf '[待決回覆]\n%s｜%s → B｜%s\n' "$C" "$EXC" "$AIDL")"; is_open "$C"; assert_eq "$?" 0 "label 'A → B': a line saying only B is refused"
+hook "$(printf '[待決回覆]\n%s｜%s → A → B｜%s\n' "$C" "$EXC" "$AIDL")"; is_open "$C"; assert_eq "$?" 1 "label 'A → B' with the real 30-char excerpt: closes"
+# free text: stored text only inside the note, or only a prefix, is refused
+reset ok; C="$(open_card)"; AIDF="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{freeText:"my own words"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C")"
+deny "$C｜Q? → other｜補充：my own words｜$AIDF" "free text only in the note"
+deny "$C｜Q? → my own words and more｜$AIDF" "free text is only a prefix"
+hook "$(printf '[待決回覆]\n%s｜Q? → 都不選｜補充：anything｜%s\n' "$C" "$AIDF")"; is_open "$C"; assert_eq "$?" 1 "picked none, text in the note: closes"
 # one forged + one good in a single reply: only the good one closes
 reset ok; C1="$(open_card)"; C2="$(open_card)"; AID2="$(node -e 'const{claim}=require(process.argv[1]);console.log(claim(process.argv[2],{option:"B"}).answer_id)' "$REPO_ROOT/scripts/lib/fleet-decision.js" "$C2")"
-hook "$(printf '[待決回覆]\n%s｜Q → A｜AFORGED000000000000000000X\n%s｜Q → B｜%s\n' "$C1" "$C2" "$AID2")"
+hook "$(printf '[待決回覆]\n%s｜Q? → A｜AFORGED000000000000000000X\n%s｜Q? → B｜%s\n' "$C1" "$C2" "$AID2")"
 is_open "$C1"; assert_eq "$?" 0 "mixed reply: forged card stays open"; is_open "$C2"; assert_eq "$?" 1 "mixed reply: verified card closed"
 
 # --- different answer after a win: exit 3 (R4.1-3)
@@ -164,7 +195,7 @@ node -e 'const{claim}=require(process.argv[1]);const r=claim(process.argv[2],{op
 
 # --- console answers: hash required (no downgrade), and the session-start landing-file pickup
 FD="$REPO_ROOT/scripts/lib/fleet-decision.js"
-reset ok; C="$(open_card)"; CID="01JC8Z7Q4M2N6P8R0S2T4V6W8X"; LINE="$C｜Q → A｜$CID"
+reset ok; C="$(open_card)"; CID="01JC8Z7Q4M2N6P8R0S2T4V6W8X"; LINE="$C｜Q? → A｜$CID"
 SHA="$(node -e 'console.log(require(process.argv[1]).contentSha256(process.argv[2]))' "$FD" "$LINE")"
 printf '{"card_id":"%s","answer_id":"%s","via":"console","option":"A","content_sha256":"%s"}\n' "$C" "$CID" "$SHA" >> "$STUB/answers"
 assert_eq "$(node -e 'console.log(require(process.argv[1]).verifyOnce(process.argv[2],process.argv[3],null).outcome)' "$FD" "$C" "$CID")" "unverified" "console answer without a hash: unverified (no downgrade)"

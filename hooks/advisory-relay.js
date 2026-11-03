@@ -25,17 +25,6 @@ const DECIDE_REPLY_HEAD = '[待決回覆]';
 const DECIDE_ID = /^d-[0-9a-f]{8}(?![0-9a-f])/;
 
 const storedText = (a) => (a && typeof a === 'object' ? JSON.stringify(a.option !== null && a.option !== undefined ? { option: a.option } : { free_text: a.free_text === undefined ? null : a.free_text }) : 'nothing');
-// line: `<id>｜<excerpt> → <label>[｜補充：<note>]｜<answer_id>`. True only when its answer part equals the stored option / free text.
-function lineSaysAnswer(line, a) {
-  if (!a || typeof a !== 'object') return false;
-  const t = a.option !== null && a.option !== undefined ? a.option : a.free_text;
-  if (typeof t !== 'string' || !t) return false;
-  const norm = (s) => String(s).replace(/｜/g, '|').replace(/\s+/g, ' ').trim();
-  const segs = line.split('｜');
-  const mid = norm(segs.slice(1, -1).join('｜'));
-  const nt = norm(t);
-  return `${mid}|補充：`.includes(` → ${nt}|補充：`) || (a.option === null || a.option === undefined) && mid.includes(`補充：${nt}`);
-}
 
 function closeDecideReply(payload) {
   if (process.env.AUTOPILOT_DECIDE_REPLY_CLOSE === 'off') return;
@@ -56,8 +45,9 @@ function closeDecideReply(payload) {
   if (ids.length === 0) return;
   let closeDecisionById;
   let projectScopeFiles;
+  let readEntries;
   try {
-    ({ closeDecisionById, projectScopeFiles } = require('../scripts/open-decision.js'));
+    ({ closeDecisionById, projectScopeFiles, readEntries } = require('../scripts/open-decision.js'));
   } catch (e) {
     process.stderr.write(`advisory-relay: decide-reply close fail-open: ${e && e.message ? e.message : e}\n`);
     return;
@@ -84,8 +74,11 @@ function closeDecideReply(payload) {
       const v = /^[0-9A-Za-z]{20,40}$/.test(aid) ? fd.verify(id, aid, line) : { ok: false, outcome: 'unverified' };
       if (!v.ok) { unverified.push(`${id} (${v.outcome})`); continue; }
       // the verified STORED answer is the only authority: the line's own text must say that same answer
-      const bound = lineSaysAnswer(line, v.answer);
-      if (!bound) { unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
+      // strict, field-wise (scripts/lib/decide-line.js): the question comes from the ledger card, the answer must EQUAL the stored one
+      let question = null;
+      try { for (const f of files) { const e = readEntries(f).find((x) => x.id === id); if (e) { question = e.question; break; } } } catch (_e) { question = null; }
+      const bound = require('../scripts/lib/decide-line.js').lineSaysAnswer(line, v.answer, question);
+      if (!bound.ok) { unverified.push(`${id} (content_mismatch; the courier stored ${storedText(v.answer)})`); continue; }
     }
     // closeDecisionById locks before it looks up the id, so a locked scope file
     // returns status error even when this card is not in it. Keep every error

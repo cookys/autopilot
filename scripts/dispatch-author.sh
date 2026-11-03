@@ -1418,14 +1418,12 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # claude-account.js run; the seeded credentials path below is then never touched. Only the
   # words "unconfigured" / "mode_off" select the legacy path; any env-check failure is fatal.
   _CNATIVE_ACCT_JS="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/claude-account.js"
+  . "$_AUTHOR_SELF_DIR/lib/account-state.sh"
   CNATIVE_ACCOUNT=0
-  _CNATIVE_ACCT_ALL="$(node "$_CNATIVE_ACCT_JS" env-check --any --purpose author 2>&1)" \
-    || die_precondition "claude-native refused: account registry check failed ($(printf '%s\n' "$_CNATIVE_ACCT_ALL" | tail -n 1)); no spawn, no fallback to the seeded credentials path"
-  _CNATIVE_ACCT_OUT="$(printf '%s\n' "$_CNATIVE_ACCT_ALL" | grep -E '^(unconfigured|mode_off|ok alias=)' | head -n 1)"
-  case "$_CNATIVE_ACCT_OUT" in
-    unconfigured*|mode_off*) ;;
-    ok\ alias=*) CNATIVE_ACCOUNT=1 ;;
-    *) die_precondition "claude-native refused: unrecognised account env-check result" ;;
+  case "$(account_layer_state "$_CNATIVE_ACCT_JS" author)" in
+    legacy) ;;
+    active) CNATIVE_ACCOUNT=1 ;;
+    *) die_precondition "claude-native refused: account registry check failed or its env-check output is unrecognised (claude-account.js env-check --any); no spawn, no fallback to the seeded credentials path" ;;
   esac
   if [ "$CNATIVE_ACCOUNT" = "0" ]; then
   CNATIVE_CFG="$(node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")" \
@@ -1440,7 +1438,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   if [ "$CNATIVE_ACCOUNT" = "1" ]; then
     # Token never appears in bash or argv: claude-account.js reads it and sets it in the child env only.
     CNATIVE_WRAP_ERR="${RUNNER_ERR_FILE}.wrap"
-    timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
+    timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
       node "$_CNATIVE_ACCT_JS" run --purpose author --stdin "$PROMPT_FILE" --stdout "$RAW_LOG" --stderr "$RUNNER_ERR_FILE" --cwd "$CNATIVE_CWD" -- \
       "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} \
       2>"$CNATIVE_WRAP_ERR"

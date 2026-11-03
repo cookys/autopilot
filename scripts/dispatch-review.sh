@@ -1948,9 +1948,12 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   # G37 (plan 8 W1): when the account registry exists the arm goes through claude-account.js run (alias pick,
   # 429 fallback, fail closed); the seeded-.credentials.json path below is then not consulted at all.
   # bash never sees a token: claude-account.js reads the token file and puts it only in the child env.
-  _ACCT_STATE="$(node "$_REVIEW_SELF_DIR/claude-account.js" env-check --any --purpose review 2>/dev/null)" \
-    || die_precondition "claude-native refused: the account registry is present but invalid (claude-account.js env-check --any failed); not falling back to ambient or seeded credentials"
-  case "$_ACCT_STATE" in unconfigured|mode_off) _ACCT_ACTIVE=0 ;; *) _ACCT_ACTIVE=1 ;; esac
+  . "$_REVIEW_SELF_DIR/lib/account-state.sh"
+  case "$(account_layer_state "$_REVIEW_SELF_DIR/claude-account.js" review)" in
+    legacy) _ACCT_ACTIVE=0 ;;
+    active) _ACCT_ACTIVE=1 ;;
+    *) die_precondition "claude-native refused: the account registry is present but invalid or its env-check output is unrecognised (claude-account.js env-check --any); nothing was spawned, not falling back to ambient or seeded credentials" ;;
+  esac
   if [ "$_ACCT_ACTIVE" -eq 0 ]; then
     CNATIVE_CFG="$(node "$_REVIEW_SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")" \
       || die_precondition "claude-native refused: could not seed a credentials-only config dir (source .credentials.json missing/unreadable); the child is never given the real claude config dir"

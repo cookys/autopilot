@@ -42,8 +42,29 @@ function world(opts) {
   });
   fs.mkdirSync(env.AUTOPILOT_DISPATCH_RUNS_DIR, { recursive: true });
   for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'CHILD_SESSION_ID']) delete env[k];
+  // A capturing `claude` in front of the fixture shim: records the worker's stdin and a copy of the --settings
+  // file (the rail removes it when the worker ends), then hands both to the real fixture shim. The capture dir
+  // is baked into the wrapper because the child env is an allowlist.
+  const cap = path.join(fx.root, 'cap');
+  const wrap = path.join(fx.root, 'wrap');
+  fs.mkdirSync(cap);
+  fs.mkdirSync(wrap);
+  fs.writeFileSync(path.join(wrap, 'claude'), [
+    `#!${process.execPath}`,
+    "'use strict';",
+    "const fs = require('fs');",
+    `const cap = ${JSON.stringify(cap)};`,
+    'const stdin = fs.readFileSync(0);',
+    "fs.writeFileSync(cap + '/stdin', stdin);",
+    "const i = process.argv.indexOf('--settings');",
+    "if (i > 0) { fs.writeFileSync(cap + '/settings-path', process.argv[i + 1]); fs.copyFileSync(process.argv[i + 1], cap + '/settings.json'); }",
+    `const r = require('child_process').spawnSync(process.execPath, [${JSON.stringify(fx.shim.shimPath)}, ...process.argv.slice(2)], { input: stdin, stdio: ['pipe', 'inherit', 'inherit'] });`,
+    'process.exitCode = r.status;',
+    '',
+  ].join('\n'), { mode: 0o755 });
+  env.PATH = `${wrap}:${env.PATH}`;
   spawnSync('node', [path.join(SCRIPTS, 'run-approval.js'), 'confirm-claude-native'], { env, stdio: 'ignore' });
-  return { fx, repo, prompt, rules, env };
+  return { fx, repo, prompt, rules, env, cap };
 }
 
 function dispatch(w, rail, extra) {
@@ -53,20 +74,43 @@ function dispatch(w, rail, extra) {
   return { rc: r.status, out: (r.stdout || '') + (r.stderr || '') };
 }
 
-// A copy of the rail dir (symlinks) whose dispatch-hetero.sh is edited by `edit`.
-function farmWith(w, edit) {
-  const d = path.join(w.fx.root, 'farm');
+// A farm of the scripts dir (symlinks) where the named files are replaced: edits = { name: (src) => src | string }.
+// A function-valued edit receives the real file text; a string edit is written verbatim.
+function farmWith(w, edits) {
+  // The farm keeps the repo layout (scripts/ beside src/, hooks/, ...) so `../src/...` requires still resolve;
+  // a farm that cannot resolve them fails every mutation for a reason that has nothing to do with the mutation.
+  const farmRoot = path.join(w.fx.root, 'farm-' + Math.random().toString(36).slice(2, 8));
+  fs.mkdirSync(farmRoot);
+  const repoRoot = path.resolve(SCRIPTS, '..');
+  for (const n of fs.readdirSync(repoRoot)) {
+    if (n === 'scripts' || n === '.git') continue;
+    fs.symlinkSync(path.join(repoRoot, n), path.join(farmRoot, n));
+  }
+  const d = path.join(farmRoot, 'scripts');
   fs.mkdirSync(d);
   for (const n of fs.readdirSync(SCRIPTS)) {
-    if (n === 'dispatch-hetero.sh') continue;
+    if (Object.prototype.hasOwnProperty.call(edits, n)) continue;
     fs.symlinkSync(path.join(SCRIPTS, n), path.join(d, n));
   }
-  const src = fs.readFileSync(REAL_RAIL, 'utf8');
-  const out = edit(src);
-  assert.notEqual(out, src, 'mutation matched nothing');
-  fs.writeFileSync(path.join(d, 'dispatch-hetero.sh'), out, { mode: 0o755 });
+  for (const [n, e] of Object.entries(edits)) {
+    let out = e;
+    if (typeof e === 'function') {
+      const src = fs.readFileSync(path.join(SCRIPTS, n), 'utf8');
+      out = e(src);
+      assert.notEqual(out, src, 'mutation matched nothing in ' + n);
+    }
+    fs.writeFileSync(path.join(d, n), out, { mode: 0o755 });
+  }
   return path.join(d, 'dispatch-hetero.sh');
 }
+// A stand-in claude-account.js: env-check prints $G37_STUB_OUT (exit $G37_STUB_RC); any other subcommand is
+// recorded in $G37_STUB_LOG and exits 0 (a call there means the rail tried to spend).
+const STUB_ACCOUNT_JS = [
+  "const fs = require('fs'); const a = process.argv[2];",
+  "if (a === 'env-check') { process.stdout.write(process.env.G37_STUB_OUT || ''); process.exit(Number(process.env.G37_STUB_RC || 0)); }",
+  "fs.appendFileSync(process.env.G37_STUB_LOG, a + '\\n'); process.exit(0);",
+  '',
+].join('\n');
 
 function checkWired(w, rail) {
   const r = dispatch(w, rail, ['--gate-rules', w.rules]);
@@ -78,7 +122,15 @@ function checkWired(w, rail) {
   assert.equal(c.fp, fp(w.fx.tokens[c.account]), 'token fingerprint of that alias');
   assert.equal(c.decoy_read, false, 'ambient credentials never reachable');
   assert.notEqual(c.home, w.fx.realHome);
-  assert.ok(c.argv.includes('--settings'), 'gate-rules settings argument preserved');
+  // gate-rules: --settings points at the per-run gate settings file (not just "some --settings"), whose Stop
+  // hook runs the per-turn gate, and the worker received the combined prompt on stdin.
+  const si = c.argv.indexOf('--settings');
+  assert.ok(si >= 0 && c.argv[si + 1], 'gate-rules settings argument preserved');
+  assert.match(path.basename(c.argv[si + 1]), /^dispatch-hetero-gate-settings-/, 'the --settings value is the per-run gate settings file');
+  assert.equal(fs.readFileSync(path.join(w.cap, 'settings-path'), 'utf8'), c.argv[si + 1]);
+  const gate = JSON.parse(fs.readFileSync(path.join(w.cap, 'settings.json'), 'utf8'));
+  assert.match(gate.hooks.Stop[0].hooks[0].command, /per-turn-gate\.js/, 'the settings file carries the per-turn gate Stop hook');
+  assert.match(fs.readFileSync(path.join(w.cap, 'stdin'), 'utf8'), /do work/, 'the shim received the prompt on stdin');
   assert.ok(c.argv.includes('--strict-mcp-config') && c.argv.includes('--dangerously-skip-permissions'));
   assert.ok(c.argv.includes('--output-format') && c.argv.includes('json'));
   return c;
@@ -124,10 +176,92 @@ test('no registry: legacy seeded path, no alias reaches the shim', () => {
   } finally { w.fx.cleanup(); }
 });
 
+test('mode_off: legacy seeded path, one spawn, no alias', () => {
+  const w = world();
+  try {
+    w.env.AUTOPILOT_ACCOUNT_MODE = 'off';
+    const r = dispatch(w, REAL_RAIL);
+    assert.match(r.out, /"status": "no_op".*agent exit 0/s, r.out);
+    const calls = readLog(w.fx.shim.log);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].account, null);
+    assert.equal(calls[0].fp, '');
+  } finally { w.fx.cleanup(); }
+});
+
+test('unrecognised env-check output (garbage / empty / near-miss words): invalid, spawn 0, nothing started', () => {
+  const w = world();
+  try {
+    const rail = farmWith(w, { 'claude-account.js': STUB_ACCOUNT_JS });
+    // positive control: the stub itself works. `unconfigured` through the stub is the legacy path (shim spawns once),
+    // so a spawn-0 result below cannot be a stub that crashes (rc != 0 would also read as invalid).
+    w.env.G37_STUB_OUT = 'unconfigured\n';
+    w.env.G37_STUB_LOG = path.join(w.fx.root, 'stub-pos.log');
+    fs.writeFileSync(w.env.G37_STUB_LOG, '');
+    dispatch(w, rail);
+    assert.equal(readLog(w.fx.shim.log).length, 1, 'positive control: the stub reporting unconfigured reaches the legacy spawn');
+    fs.writeFileSync(w.fx.shim.log, '');
+    for (const out of ['garbage\n', '', 'okay alias=a\n', 'Unconfigured\n', ' ok alias=a\n']) {
+      const log = path.join(w.fx.root, 'stub.log');
+      fs.writeFileSync(log, '');
+      w.env.G37_STUB_OUT = out;
+      w.env.G37_STUB_LOG = log;
+      const r = dispatch(w, rail);
+      assert.notEqual(r.rc, 0, `[${JSON.stringify(out)}] ` + r.out.slice(0, 300));
+      assert.equal(readLog(w.fx.shim.log).length, 0, `[${JSON.stringify(out)}] shim spawn count 0`);
+      assert.equal(fs.readFileSync(log, 'utf8'), '', `[${JSON.stringify(out)}] claude-account run/exec never called`);
+    }
+  } finally { w.fx.cleanup(); }
+});
+
 test('mutation: wiring removed (state forced to legacy) -> the registry-present check goes red', () => {
   const w = world();
   try {
-    const rail = farmWith(w, (s) => s.replace('local _out _rc\n', 'echo legacy; return 0\n'));
-    assert.throws(() => checkWired(w, rail), /./);
+    const rail = farmWith(w, { 'dispatch-hetero.sh': (s) => s.replace('  account_layer_state "$SELF_DIR/claude-account.js" hetero-impl\n', '  echo legacy\n') });
+    assert.throws(() => checkWired(w, rail), /alias reached the shim/);
+  } finally { w.fx.cleanup(); }
+});
+
+test('mutation: --settings dropped from the account arm -> the gate-rules assertion goes red', () => {
+  const w = world();
+  try {
+    const rail = farmWith(w, { 'dispatch-hetero.sh': (s) => s.replace('        ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json)\n      run_worker node', '        --output-format json)\n      run_worker node') });
+    assert.throws(() => checkWired(w, rail), /settings argument preserved|ENOENT/);
+  } finally { w.fx.cleanup(); }
+});
+
+test('mutation: invalid registry treated as legacy -> N9 goes red because the OLD claude path spawned the shim', () => {
+  const w = world();
+  try {
+    const rail = farmWith(w, { 'dispatch-hetero.sh': (s) => s.replace('  account_layer_state "$SELF_DIR/claude-account.js" hetero-impl\n',
+      '  if [ "$(account_layer_state "$SELF_DIR/claude-account.js" hetero-impl)" = active ]; then echo active; else echo legacy; fi\n') });
+    fs.writeFileSync(w.fx.regFile, '{ not json');
+    dispatch(w, rail);
+    const calls = readLog(w.fx.shim.log);
+    assert.equal(calls.length, 1, 'fail-open: the shim was spawned although the registry is broken (N9 would be red)');
+    assert.equal(calls[0].account, null, '...on the old seeded path: no alias');
+    assert.equal(calls[0].fp, '', '...and no alias token');
+  } finally { w.fx.cleanup(); }
+});
+
+test('mutation: account-state.sh default arm = legacy -> the unrecognised-output case goes red (old path spawned)', () => {
+  const w = world();
+  try {
+    const libDir = path.join(w.fx.root, 'libcopy');
+    fs.cpSync(path.join(SCRIPTS, 'lib'), libDir, { recursive: true });
+    const sh = path.join(libDir, 'account-state.sh');
+    const src = fs.readFileSync(sh, 'utf8');
+    const out = src.replace('    *) echo invalid ;;', '    *) echo legacy ;;');
+    assert.notEqual(out, src);
+    fs.writeFileSync(sh, out);
+    const rail = farmWith(w, { 'claude-account.js': STUB_ACCOUNT_JS, 'dispatch-hetero.sh': fs.readFileSync(REAL_RAIL, 'utf8') });
+    const farm = path.dirname(rail);
+    fs.rmSync(path.join(farm, 'lib'));
+    fs.symlinkSync(libDir, path.join(farm, 'lib'));
+    w.env.G37_STUB_OUT = 'garbage\n';
+    w.env.G37_STUB_LOG = path.join(w.fx.root, 'stub.log');
+    fs.writeFileSync(w.env.G37_STUB_LOG, '');
+    const r = dispatch(w, rail);
+    assert.equal(readLog(w.fx.shim.log).length, 1, 'unrecognised output was treated as legacy: the shim spawned: ' + r.out.slice(0, 500));
   } finally { w.fx.cleanup(); }
 });

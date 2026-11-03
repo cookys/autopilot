@@ -19,7 +19,8 @@
 //
 // id = `cost.turn:` + sha256(raw line)[0:24] + `#n`, n = 1-based ordinal of this line among byte-identical lines counted from the START OF
 // THIS READ (the counter is local to the call). An absent token field counts as 0 (rows older than the cache fields); a wrong type is
-// schema_mismatch. An absent costs file is state `absent` with one aggregated source_absent warning (a configured source).
+// schema_mismatch. A git resolution that FAILS (missing, timeout, dubious ownership, broken .git; as opposed to "not a repository") is one aggregated
+// warning `git_unavailable` per read, state degraded; the cwd then falls back to the worktree-prefix match. An absent costs file is state `absent` with one aggregated source_absent warning (a configured source).
 // Events carry a non-enumerable `_src` = {source, file, head, offset, end} for the E3 hint computation.
 
 const fs = require('fs');
@@ -48,7 +49,7 @@ function makeProjectMatcher(project, env, onGitMissing) {
   const gitEnv = cleanGitEnv(env);
   const memo = new Map();
   let prefixes = null;
-  const git = (args, cwd) => execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'] });
+  const git = (args, cwd) => execFileSync('git', args, { cwd, env: gitEnv, encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] });
 
   function worktreePrefixes() {
     if (prefixes) return prefixes;
@@ -59,7 +60,7 @@ function makeProjectMatcher(project, env, onGitMissing) {
         for (const line of git([`--git-dir=${commonDir}`, 'worktree', 'list', '--porcelain'], undefined).split('\n')) {
           if (line.startsWith('worktree ')) prefixes.push(path.resolve(line.slice('worktree '.length)));
         }
-      } catch (error) { if (error && error.code === 'ENOENT') onGitMissing(); }
+      } catch (_error) { onGitMissing(); }
     }
     try {
       const dir = runsDir(env);
@@ -76,13 +77,16 @@ function makeProjectMatcher(project, env, onGitMissing) {
     return prefixes;
   }
 
+  // -> identity string, null (git says: not a repository, a definite "other project"), or undefined (resolution FAILED:
+  // git missing, timeout, dubious ownership, broken .git ...; reported once per read via onGitMissing, never silent).
   function identityOf(cwd) {
     try {
       const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd).trim();
-      return common ? `git-common-dir:${fs.realpathSync(common)}` : null;
+      return common ? `git-common-dir:${fs.realpathSync(common)}` : undefined;
     } catch (error) {
-      if (error && error.code === 'ENOENT') onGitMissing();
-      return null;
+      if (error && error.status === 128 && /not a git repository/i.test(String(error.stderr || ''))) return null;
+      onGitMissing();
+      return undefined;
     }
   }
 
@@ -93,7 +97,14 @@ function makeProjectMatcher(project, env, onGitMissing) {
     let exists = false;
     try { exists = fs.statSync(cwd).isDirectory(); } catch (_error) { exists = false; }
     if (exists) {
-      verdict = identityOf(cwd) === project.repo_identity;
+      const identity = identityOf(cwd);
+      if (identity === undefined) {
+        // resolution failed: the manifest/worktree prefix list may still place the cwd in this project
+        const here = path.resolve(cwd);
+        verdict = worktreePrefixes().some((wt) => here === wt || here.startsWith(`${wt}/`));
+      } else {
+        verdict = identity === project.repo_identity;
+      }
     } else {
       const here = path.resolve(cwd);
       verdict = worktreePrefixes().some((wt) => here === wt || here.startsWith(`${wt}/`));

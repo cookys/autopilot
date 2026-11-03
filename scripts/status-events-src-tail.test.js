@@ -1,6 +1,6 @@
 'use strict';
 // scripts/status-events-src-tail.test.js - E2 lane "tail": jsonl-tail.js plus the readers cost, decision and runledger of the events
-// feed (autopilot.events/1). Plan: docs/plans/2026-11-02-oc-a1-events-contract.md, E2 steps 1, 2, 6, 7.
+// feed (autopilot.events/1). Plan: project/plans/2026-11-02-oc-a1-events-contract.md, E2 steps 1, 2, 6, 7.
 // Lane file (plan deviation, approved): the three E2 lanes would otherwise all edit scripts/status-events.test.js.
 // Isolation: every dir is an os.tmpdir() mkdtemp dir; the fixture env is an explicit allowlist (events-fixture.js); the readers get
 // ctx.env everywhere; nothing touches the real ~/.claude, ~/.autopilot, live dir or dispatch dir.
@@ -151,6 +151,16 @@ test('source-cost-id-is-position-free-and-n-counts-from-read-start', () => {
   assert.deepEqual(idsOf(cost.read(ctx, { ...window, hints })), idsOf(hinted));
 });
 
+test('source-cost-slack-defaults-to-five-minutes-when-omitted', () => {
+  const fx = fresh();
+  // floor = 08:26 - 5 min = 08:21 by default; an explicit 0 gives floor 08:26
+  const base = { sinceTs: '2026-11-01T08:26:00.000Z' };
+  const late = JSON.stringify({ ...JSON.parse(fx.cost.main), session: 's-late', ts: '2026-11-01T08:22:00.000Z' });
+  fs.appendFileSync(fx.paths.costsFile, late + '\n');
+  assert.ok(cost.read(ctxOf(fx), base).events.some((e) => e.data.session === 's-late'), 'a row 4 min behind the watermark is kept');
+  assert.ok(!cost.read(ctxOf(fx), { ...base, slackMs: 0 }).events.some((e) => e.data.session === 's-late'), 'explicit 0 stays 0');
+});
+
 test('source-cost-slack-window-keeps-late-rows-and-drops-older', () => {
   const fx = fresh();
   const res = cost.read(ctxOf(fx), { sinceTs: '2026-11-01T08:26:00.000Z', slackMs: 300000 });
@@ -214,6 +224,26 @@ test('degrade-cost-binary-wrong-schema-bad-ts-and-long-line', () => {
   assert.equal(res.stats.state, 'degraded');
   assert.deepEqual(codes(res), ['line_too_long:1', 'line_unparseable:1', 'schema_mismatch:3', 'ts_invalid:1']);
   assert.equal(res.stats.rows_skipped, 5, 'a too-long line is skipped before it is a row');
+});
+
+test('degrade-cost-git-failure-is-one-warning-not-a-silent-filter', () => {
+  const fx = fresh();
+  const bin = path.join(tmp(), 'bin');
+  const shim = (name, body) => { write(path.join(bin, name), `#!/bin/sh\n${body}\n`); fs.chmodSync(path.join(bin, name), 0o755); };
+  const realGit = require('child_process').execFileSync('sh', ['-c', 'command -v git'], { env: fx.env, encoding: 'utf8' }).trim();
+  // only `rev-parse` (the project identity of a cwd) is sabotaged; `worktree list` is the real git
+  const run = (body) => { shim('git', `case "$*" in *worktree*) exec ${realGit} "$@";; esac; ${body}`); return cost.read({ ...ctxOf(fx), env: { ...fx.env, PATH: `${bin}:${fx.env.PATH}` } }, {}); };
+  // dubious ownership / broken .git / timeout-like failure: exit 128 with another message, or a kill
+  for (const body of ['echo "fatal: detected dubious ownership" >&2; exit 128', 'exit 1', 'kill -9 $$']) {
+    const res = run(body);
+    assert.equal(res.stats.state, 'degraded', body);
+    assert.deepEqual(res.warnings.filter((w) => w.code === 'git_unavailable').map((w) => w.count), [1], `${body}: one aggregated warning`);
+    assert.ok(res.events.some((e) => e.data.session === 's-fx-2'), 'the reaped-worktree prefix fallback still works');
+  }
+  // "not a git repository" is a definite other project: filtered, no warning
+  const clean = run('echo "fatal: not a git repository" >&2; exit 128');
+  assert.ok(!clean.warnings.some((w) => w.code === 'git_unavailable'));
+  assert.equal(clean.events.length, 1, 'only the prefix-matched worktree row remains');
 });
 
 test('degrade-cost-never-throws-on-a-hostile-hint', () => {

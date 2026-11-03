@@ -32,6 +32,7 @@ const CHUNK_BYTES = 64 * 1024;
 const HINT_MIN_BYTES = 64 * 1024;
 const HEAD_BYTES = 256;
 const MAX_LINE_BYTES = 1024 * 1024;
+const DEFAULT_SLACK_MS = 300000;
 
 const headHashOf = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 12);
 
@@ -158,7 +159,9 @@ function windowFloorMs(window) {
   if (!window || window.sinceTs === undefined || window.sinceTs === null) return null;
   const since = typeof window.sinceTs === 'number' ? window.sinceTs : require('./instant').parseInstantMs(window.sinceTs);
   if (!Number.isFinite(since)) return null;
-  return since - (Number.isFinite(window.slackMs) && window.slackMs > 0 ? window.slackMs : 0);
+  // slackMs absent -> the default 300000 (plan E3); an explicit 0 stays 0.
+  const slack = window.slackMs === undefined ? DEFAULT_SLACK_MS : (Number.isFinite(window.slackMs) && window.slackMs > 0 ? window.slackMs : 0);
+  return since - slack;
 }
 
 module.exports = { readLines, headHashOf, addWarning, windowFloorMs, CHUNK_BYTES, HINT_MIN_BYTES, HEAD_BYTES, MAX_LINE_BYTES };

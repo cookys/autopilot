@@ -35,6 +35,21 @@ const FUTURE_KINDS = new Set(['quota.observed']);
 const BASELINE_VERSION = 'autopilot.events.baseline/1';
 const BASELINE_SECTIONS = ['envelope', 'project', 'source_stat', 'warning', 'event', 'error_object', 'error', 'kinds'];
 
+// The open-set fallback's data may use only these keys (a forward-compat shell: it documents no fields). Anything else,
+// including allOf/anyOf/oneOf/$ref/properties/patternProperties/required, could smuggle fields past the doc check.
+const OPEN_SHELL_KEYS = new Set(['type', 'description', 'additionalProperties']);
+function openShellProblem(def) {
+  for (const key of Object.keys(def)) {
+    if (!OPEN_SHELL_KEYS.has(key)) return `the fallback data shape uses key "${key}"; only type, description and additionalProperties:true|{} are allowed`;
+  }
+  if ('additionalProperties' in def) {
+    const ap = def.additionalProperties;
+    const empty = ap && typeof ap === 'object' && !Array.isArray(ap) && Object.keys(ap).length === 0;
+    if (ap !== true && !empty) return 'the fallback data shape has an additionalProperties that is not true or {}';
+  }
+  return null;
+}
+
 // kind -> name of its data $def, derived from the oneOf of $defs.event (each branch pins `kind` with a const and its
 // `data` with a $ref to a $defs entry). Fail closed: a branch of any other shape is reported in `problems`, never
 // skipped. The one allowed exception is the open-set branch (its `kind` is a `pattern`, no const).
@@ -54,11 +69,13 @@ function kindInfo(schema) {
     const kindNode = props.kind || {};
     if (kindNode.pattern !== undefined && kindNode.const === undefined && kindNode.enum === undefined) {
       // The open-set fallback: exactly one such branch, and its data must be the forward-compat shell (no named properties).
-      const dRef = props.data && props.data.$ref;
-      const dDef = props.data && (dRef ? d[String(dRef).replace(/^#\/\$defs\//, '')] : props.data);
+      const dNode = props.data;
+      const dRef = dNode && dNode.$ref;
+      const dDef = dNode && (dRef ? d[String(dRef).replace(/^#\/\$defs\//, '')] : dNode);
+      const bad = dDef && (dRef && Object.keys(dNode).length > 1 ? 'the fallback data $ref has sibling keys' : openShellProblem(dDef));
       if (openSeen) problems.push(`oneOf branch ${i} is a second pattern-kind (open-set) branch; only one fallback is allowed`);
       else if (!dDef) problems.push(`oneOf branch ${i} (pattern kind) has a data $ref that does not resolve`);
-      else if (dDef.properties && Object.keys(dDef.properties).length) problems.push(`oneOf branch ${i} (pattern kind) carries named data properties; only a kind with a const may`);
+      else if (bad) problems.push(`oneOf branch ${i} (pattern kind): ${bad}`);
       openSeen = true;
       return;
     }
@@ -72,6 +89,16 @@ function kindInfo(schema) {
     map[kind] = defName;
   });
   return { map, problems };
+}
+// Defs the other checks dereference; a schema lacking them is reported, never a TypeError.
+function structureProblems(schema) {
+  const d = (schema && schema.$defs) || {};
+  const out = [];
+  if (!d.envelope || !d.envelope.properties) out.push('schema has no $defs.envelope.properties');
+  else if (!d.envelope.properties.project) out.push('schema envelope has no project property');
+  for (const name of ['source_stat', 'warning', 'event_unknown_kind']) if (!d[name] || !d[name].properties) out.push(`schema has no $defs.${name}.properties`);
+  if (!d.error_object || !d.error_object.properties || !d.error_object.properties.error) out.push('schema has no $defs.error_object.properties.error');
+  return out;
 }
 const kindMap = (schema) => kindInfo(schema).map;
 const kindsOf = (schema) => Object.keys(kindMap(schema));
@@ -205,10 +232,17 @@ function checkConsumers(schema, doc) {
         continue;
       }
       const shaped = /^([a-z][a-z_0-9]*\.[a-z][a-z_0-9]*)(?:\.[a-z_0-9.]+)?$/.exec(span);
-      const envDef = shaped && ({ envelope: d.envelope, project: d.envelope.properties.project, source_stat: d.source_stat, warning: d.warning, event: d.event_unknown_kind, error_object: d.error_object })[shaped[1].split('.')[0]];
-      if (envDef) {
-        const f = shaped[1].split('.')[1];
-        if (!(f in (envDef.properties || {}))) gaps.push(`consumer table (${who}): ${span} is not in the schema`);
+      const envRoots = { envelope: d.envelope, source_stat: d.source_stat, warning: d.warning, event: d.event_unknown_kind, error_object: d.error_object };
+      if (shaped && Object.hasOwn(envRoots, span.split('.')[0])) {
+        // walk every remaining segment down .properties, resolving $ref; an unresolvable segment is a gap
+        let node = envRoots[span.split('.')[0]];
+        let ok = true;
+        for (const seg of span.split('.').slice(1)) {
+          node = resolveRef(schema, node);
+          if (!node || !node.properties || !Object.hasOwn(node.properties, seg)) { ok = false; break; }
+          node = node.properties[seg];
+        }
+        if (!ok) gaps.push(`consumer table (${who}): ${span} is not in the schema`);
         continue;
       }
       if (shaped && shaped[1].split('.')[0] !== 'data') {
@@ -323,6 +357,8 @@ function main(argv) {
   const schema = fs.existsSync(schemaFile) ? readJson(schemaFile, 'schema', problems) : null;
   if (opts.print) {
     if (!schema) { process.stderr.write(`check-events-contract: ${problems.length ? problems[0][1] : 'schema unreadable'}\n`); return 1; }
+    const struct = structureProblems(schema);
+    if (struct.length) { process.stderr.write(`check-events-contract: [schema-shape] ${struct[0]}\n`); return 1; }
     const shape = kindInfo(schema).problems;
     if (shape.length) { process.stderr.write(`check-events-contract: [schema-shape] refusing to print: ${shape[0]}\n`); return 1; }
     // Regenerating may only add: compare the new schema against the existing baseline first.
@@ -337,6 +373,10 @@ function main(argv) {
   }
   const doc = fs.existsSync(docFile) ? fs.readFileSync(docFile, 'utf8') : null;
   const baseline = fs.existsSync(baselineFile) ? readJson(baselineFile, 'baseline', problems) : null;
+  if (schema && structureProblems(schema).length) {
+    process.stderr.write(`check-events-contract: [schema-shape] ${structureProblems(schema)[0]}\n`);
+    return 1;
+  }
   if (schema) for (const g of kindInfo(schema).problems.slice(0, 1)) problems.push(['schema-shape', g]);
   if (schema && doc !== null) {
     for (const g of checkSchemaDocumented(schema, doc).slice(0, 1)) problems.push(['schema-undocumented', g]);

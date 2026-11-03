@@ -374,3 +374,61 @@ test('consumer table: data.<field> accepts digits', () => {
   const r = run(f);
   assert.doesNotMatch(r.err, /data\.p2/);
 });
+
+// ---- round 4: whitelisted fallback shell, full envelope-path walk, hasOwn, structural gaps ---------------------------------
+
+const SHELL_CASES = [
+  ['allOf', (s) => { s.$defs.event_unknown_kind.properties.data = { type: 'object', allOf: [{ properties: { secret_field: { type: 'string' } } }] }; }],
+  ['two-level $ref', (s) => { s.$defs.data_foo = { $ref: '#/$defs/data_foo2' }; s.$defs.data_foo2 = { type: 'object', properties: { secret_field: { type: 'string' } } }; s.$defs.event_unknown_kind.properties.data = { $ref: '#/$defs/data_foo' }; }],
+  ['patternProperties', (s) => { s.$defs.event_unknown_kind.properties.data = { type: 'object', patternProperties: { '^x': { type: 'string' } } }; }],
+  ['additionalProperties as a schema', (s) => { s.$defs.event_unknown_kind.properties.data = { type: 'object', additionalProperties: { type: 'string' } }; }],
+];
+for (const [label, mutate] of SHELL_CASES) {
+  test(`A4: fallback data using ${label} is schema-shape, print-baseline refuses; checking only properties lets it through`, () => {
+    const f = copies();
+    editJson(f.schema, mutate);
+    const r = run(f);
+    assert.equal(r.status, 1, r.err);
+    assert.match(r.err, /\[schema-shape\]/);
+    const p = spawnSync(process.execPath, [SCRIPT, '--print-baseline', '--schema', f.schema, '--baseline', f.baseline], { encoding: 'utf8' });
+    assert.equal(p.status, 1);
+    assert.equal(p.stdout, '');
+    // old behaviour: only a non-empty `properties` on the resolved definition was refused
+    const old = runMutated([['      const bad = dDef && (dRef && Object.keys(dNode).length > 1 ?', "      const bad = dDef && dDef.properties && Object.keys(dDef.properties).length ? 'named properties' : null; void (dRef && Object.keys(dNode).length > 1 ?"]], argsOf(f));
+    assert.doesNotMatch(old.stderr, /schema-shape/, 'old behaviour does not report it');
+  });
+}
+
+test('A4: the real fallback keys are inside the whitelist (type only)', () => {
+  const s = JSON.parse(fs.readFileSync(real('events_schema'), 'utf8'));
+  assert.deepEqual(Object.keys(s.$defs.event_unknown_kind.properties.data), ['type']);
+  assert.equal(run(copies()).status, 0);
+  const f = copies();
+  editJson(f.schema, (x) => { x.$defs.event_unknown_kind.properties.data = { type: 'object', description: 'x', additionalProperties: true }; });
+  assert.equal(run(f).status, 0, 'type, description, additionalProperties:true stay allowed');
+});
+
+test('B4: envelope fragments are walked to the last segment', () => {
+  const sub = (frag) => { const f = copies(); edit(f.doc, (t) => t.replace('`dispatch.ended.duration_s` against', `\`dispatch.ended.duration_s\` (and \`${frag}\`) against`)); return f; };
+  assert.equal(run(sub('envelope.project.repo_name')).status, 0, 'three segments, all present');
+  for (const frag of ['source_stat.rows_read.bogus', 'envelope.project.nonexistent', 'source_stat.constructor']) {
+    const f = sub(frag);
+    const r = run(f);
+    assert.equal(r.status, 1, frag);
+    assert.match(r.err, new RegExp(`${frag.replace(/\./g, '\\.')} is not in the schema`));
+    const old = runMutated([['for (const seg of span.split(\'.\').slice(1)) {', "for (const seg of span.split('.').slice(1, 2)) {"], ['!Object.hasOwn(node.properties, seg)', '!(seg in node.properties)']], argsOf(f));
+    if (frag !== 'source_stat.constructor') assert.doesNotMatch(old.stderr, new RegExp(`${frag.replace(/\./g, '\\.')} is not`), 'second-segment-only walk misses it');
+    else assert.doesNotMatch(old.stderr, /constructor is not/, '`in` accepts inherited names');
+  }
+});
+
+test('structure: a schema without $defs.envelope.properties is a structured gap, not a TypeError', () => {
+  const f = copies();
+  editJson(f.schema, (s) => { delete s.$defs.envelope.properties; });
+  for (const args of [argsOf(f), ['--print-baseline', '--schema', f.schema, '--baseline', f.baseline]]) {
+    const r = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /\[schema-shape\] schema has no \$defs\.envelope\.properties/);
+    assert.doesNotMatch(r.stderr, /TypeError|at .*\.js:\d+/);
+  }
+});

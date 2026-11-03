@@ -5736,6 +5736,19 @@
       "doc": "docs/dev/events-contract.md",
       "relates": [],
       "note": "Colon-separated review ledger directories the events feed reads in addition to the git-common-dir pointer file."
+    },
+    {
+      "name": "AUTOPILOT_ACCOUNTS_DIR",
+      "kind": "env",
+      "audience": "internal",
+      "class": "path_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/account-registry.js"
+      ],
+      "doc": "project/plans/2026-11-03-g37-account-switching.md",
+      "relates": [],
+      "note": "Overrides the account registry and token store directory (default ~/.config/autopilot/accounts); tests point it into a tempdir."
     }
   ]
 }

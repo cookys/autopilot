@@ -127,8 +127,16 @@ test('classify run: an undefined or missing rc is no exit code; only a number co
 
 test('stateBadge: only need_you, running and stalled have a badge form; the runtime refusal stays', () => {
   expect(stateBadge(stateOf('verdict', 'DECIDE') as BadgeStated, undefined, 'header.verdict' as never).text).toBe('▲')
-  expect(stateBadge(stateOf('verdict', 'STALLED') as BadgeStated, 2, 'header.verdict' as never).text).toBe('⊘2')
+  expect(stateBadge(stateOf('verdict', 'STALLED') as BadgeStated, 2, 'header.verdict' as never).text).toBe('⊘ 2')
   expect(() => stateBadge(stateOf('qc', 'ok') as BadgeStated, 1, 'header.verdict' as never)).toThrow()
+  // the number keeps the state's colour (one seg `⊘2` before the chip helper): the mark and the value carry the same tone, the space none
+  for (const [word, key] of [['STALLED', PALETTE.broken], ['RUNNING', PALETTE.running]] as const) {
+    const segs = stateBadge(stateOf('verdict', word) as BadgeStated, 2, 'header.verdict' as never).segs
+    expect(segs.length).toBe(3)
+    expect([segs[1].text, segs[2].text]).toEqual([' ', '2'])
+    expect([segs[0].color, segs[2].color]).toEqual([key, key])
+    expect([segs[0].role, segs[2].role]).toEqual(['glyph', 'glyph'])
+  }
   expect(isBadgeState(stateOf('qc', 'ok'))).toBe(false)
   expect(isBadgeState(stateOf('verdict', 'RUNNING'))).toBe(true)
 })

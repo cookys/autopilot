@@ -473,6 +473,30 @@ export function meterValue(value: number, cap: number, o: { cells: number; fact?
     sg(padLeft(pct(ratio), 4), { ...tone(key), role: 'value', fmt: 'pct' }),
   ], o.fact)
 }
+// ---- chip spacing (codeforge tui-guideline §3.5): THE one place a chip is written; no call site writes a spacing literal ----
+// a chip is a mark (a state or structure glyph, or a label such as `QC`), ONE space, then its value: `⊘ 2`, `↺ R3`, `QC ▲`. Chips are CHIP_GAP apart, a word and
+// the first chip after it CHIP_LEAD apart, a secondary part is introduced by CHIP_META. The exceptions are the three of §3.5 rule 1: `$329`, the fixed-width ⓘ, chart glyphs.
+export const CHIP_MARK = ' '
+export const CHIP_GAP = '  '
+export const CHIP_LEAD = ' '
+export const CHIP_META = ' · '
+type ChipTagged = { tag?: Seg['tag'] }
+// mark segs, the one space (it belongs to the same band tag as the mark, so a width step that drops the chip drops the space too), value segs
+export function chipSegs(mark: readonly Seg[], value: readonly Seg[]): Seg[] {
+  const last = mark[mark.length - 1] as (Seg & ChipTagged) | undefined
+  return [...mark, { text: CHIP_MARK, ...(last?.tag === undefined ? {} : { tag: last.tag }) }, ...value]
+}
+// a spacing seg between two parts of a line; `tag` is the band tag it belongs to (the side that is dropped first takes the space with it)
+export const gapSeg = (text: string, tag?: Seg['tag']): Seg => ({ text, ...(tag === undefined ? {} : { tag }) })
+// chips side by side, CHIP_GAP between; `gapOn` says which neighbour's tag the gap carries
+export function chipsJoin(chips: readonly (readonly Seg[])[], gapOn: 'prev' | 'next' = 'prev'): Seg[] {
+  const out: Seg[] = []
+  chips.forEach((c, i) => {
+    if (i > 0) { const from = gapOn === 'prev' ? chips[i - 1] : c; out.push(gapSeg(CHIP_GAP, from[gapOn === 'prev' ? from.length - 1 : 0]?.tag)) }
+    out.push(...c)
+  })
+  return out
+}
 const BADGE_STATES = ['need_you', 'running', 'stalled'] as const
 export type BadgeStated = Stated & { readonly id: (typeof BADGE_STATES)[number] }
 // narrows a Stated to the three states that have a badge form, so `stateBadge` rejects the other seven at the type level
@@ -482,7 +506,9 @@ export function stateBadge(s: BadgeStated, n: number | undefined, fact: FactId):
   if (!isBadgeState(s)) throw new Error('badge: state ' + (s as Stated).id + ' has no badge form')
   const st = STATES[s.id]
   if (s.id !== 'need_you' && (n === undefined || n < 1)) throw new Error('badge: ' + s.id + ' needs a count')
-  return frag([sg(st.glyph + (s.id === 'need_you' || n === undefined ? '' : String(n)), { ...tone(st.key), role: 'glyph' })], fact)
+  const mark = sg(st.glyph, { ...tone(st.key), role: 'glyph' })
+  // the number keeps the state's tone and role, exactly as when glyph and number were one seg (`⊘2`); plainCount would drop the colour
+  return frag(s.id === 'need_you' || n === undefined ? [mark] : chipSegs([mark], [sg(String(n), { ...tone(st.key), role: 'glyph' })]), fact)
 }
 // a header's spend figures: one fragment per fact, no goto, typed as a projection of the 用量 facts
 export function headerProjection(fact: FactId, s: string, label?: string): Frag {
@@ -962,8 +988,7 @@ export function carry(from: PaneLine, piece: LineInit): PaneLine {
 // a header chip made of a state glyph (no word) and a count: `✓ 32`. The section header names the state, the count says how many.
 // a need_you count is a plain number: the owner's attention is drawn once per surface (the verdict line and the tab name), not again on the section title
 export function countChip(u: Ctx, s: Stated, n: number, fact: FactId): Frag {
-  const lead = s.id === 'need_you' ? [] : [...stateLead(u, s, { word: false }).segs, sg(' ')]
-  return frag([...lead, ...plainCount(n, fact).segs], fact)
+  return frag(s.id === 'need_you' ? [...plainCount(n, fact).segs] : chipSegs(stateLead(u, s, { word: false }).segs, plainCount(n, fact).segs), fact)
 }
 
 // a table whose rows go through the same rules as list(): equal `group` keys fold into one row (the newest), rows run in SEVERITY order and, inside a

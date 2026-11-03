@@ -631,3 +631,18 @@ test('turn.step measurement control: the unguarded form, and a catch-less try, a
   assert.ok(MEASURE_GUARDED(guarded.replace('try {', '{').replace('catch (_e)', 'finally')).length > 0)
   assert.ok(MEASURE_GUARDED("on('turn.step', async function* () {\n const result = await stream.result\n await update($)\n return result\n})").length > 0)
 })
+
+// L10 (codeforge tui-guideline §3.5, rule 2): a chip is written in ONE place, ui.chipSegs / chipsJoin; no call site glues a glyph from the GS / GT tables to what
+// follows it by `+`. The only legal continuation is `ui.CHIP_MARK` (the one space), so `GS.running + live` (the old `●3`) is reported. The runtime half is chip-spacing.test.ts.
+const L10 = src => hits(src, /\b(?:GS|GT)\.\w+\s*\+(?!\s*ui\.CHIP_MARK)/)
+test('L10: no source under mods/ glues a GS / GT glyph to the next piece by `+` (a chip goes through ui.chipSegs)', () => {
+  assert.ok(modSources().includes('live/model.ts'))
+  assert.deepEqual(scanMods(L10), [])
+  assert.match(read('ui.ts'), /export function chipSegs\b/, 'ui.ts declares the one chip helper')
+})
+test('L10 control: a glyph glued to a count is reported, the helper form and a trailing glyph are not', () => {
+  for (const bad of ["sp(GS.running + live, {})", "sp(GT.decisions + d.count)", "const t = GS.stalled + stalled", "x = GT.residue+String(n)"]) assert.ok(L10(bad).length > 0, bad)
+  assert.deepEqual(L10("const t = QC_LABEL + ui.CHIP_MARK + GS.done"), [])
+  assert.deepEqual(L10("const t = GT.round + ui.CHIP_MARK + 'R' + n"), [])
+  assert.deepEqual(L10("const t = 'cache ' + v + ' ' + GS.need_you"), [])
+})

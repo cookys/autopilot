@@ -1643,3 +1643,54 @@ test('selgap symlink: a link inside root pointing at a file inside root is accep
     assert.deepStrictEqual(out.doc.changed, ['scripts/alias.js']);
   } finally { r.cleanup(); }
 });
+
+// selgap #4: a symlinked PARENT that resolves outside --root is an escape whether or not the leaf exists.
+function parentSymRepo() {
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-outside-'));
+  fs.writeFileSync(path.join(outsideDir, 'exists.js'), 'SECRET_OUTSIDE_CONTENT\n');
+  const r = makeRepo({ ...SELGAP_ROOT, 'inner/keep.js': 'x\n' });
+  fs.symlinkSync(outsideDir, path.join(r.dir, 'a'));
+  fs.symlinkSync('inner', path.join(r.dir, 'b'));
+  const cleanup = r.cleanup;
+  r.cleanup = () => { cleanup(); fs.rmSync(outsideDir, { recursive: true, force: true }); };
+  return r;
+}
+
+test('selgap parent symlink: a/missing.js with --allow-missing, under a link to an outside directory, exits 2', () => {
+  const r = parentSymRepo();
+  try {
+    const out = filesRun(r.dir, ['a/missing.js', '--allow-missing']);
+    assert.strictEqual(out.rc, 2, out.stderr);
+    assert.strictEqual(out.doc, null);
+    assert.match(out.stderr, /resolves outside --root via a symlinked parent/);
+  } finally { r.cleanup(); }
+});
+
+test('selgap parent symlink: without the flag the escape message is not replaced by the missing-path message', () => {
+  const r = parentSymRepo();
+  try {
+    const out = filesRun(r.dir, ['a/missing.js']);
+    assert.strictEqual(out.rc, 2);
+    assert.match(out.stderr, /via a symlinked parent/);
+    assert.ok(!/neither in the working tree/.test(out.stderr), out.stderr);
+  } finally { r.cleanup(); }
+});
+
+test('selgap parent symlink: an existing file under a link to an outside directory exits 2 and its content is not read', () => {
+  const r = parentSymRepo();
+  try {
+    const out = filesRun(r.dir, ['a/exists.js']);
+    assert.strictEqual(out.rc, 2, out.stderr);
+    assert.strictEqual(out.doc, null);
+    assert.ok(!out.stderr.includes('SECRET_OUTSIDE_CONTENT'));
+  } finally { r.cleanup(); }
+});
+
+test('selgap parent symlink: a link to a directory inside root keeps b/missing.js with --allow-missing acceptable', () => {
+  const r = parentSymRepo();
+  try {
+    const out = filesRun(r.dir, ['b/missing.js', '--allow-missing']);
+    assert.strictEqual(out.rc, 0, out.stderr);
+    assert.deepStrictEqual(out.doc.changed, ['b/missing.js']);
+  } finally { r.cleanup(); }
+});

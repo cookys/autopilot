@@ -634,6 +634,7 @@ function shortestHops(seeds, graph) {
 //   missing on disk and in HEAD             | exit 2, listed
 //   a directory                             | exit 2 (not a file)
 //   symlink resolving outside --root        | exit 2 (also with --allow-missing)
+//   missing path under a symlinked parent that resolves outside --root | exit 2, before the HEAD/--allow-missing rules
 //   symlink resolving inside --root         | kept as a file entry, even when it points at a directory
 //   dangling symlink                        | the HEAD rule above
 //   --allow-missing                         | skips only the exists-on-disk-or-in-HEAD check (a hypothetical path)
@@ -656,6 +657,18 @@ function normalizeFiles(root, files, allowMissing) {
     // lstat first: statSync follows a symlink, so a link inside root that points outside would pass the literal in-root test.
     let lst = null;
     try { lst = fs.lstatSync(abs); } catch { /* not on disk */ }
+    // The escape check runs before --allow-missing and the HEAD rule, and also for a path that does not exist:
+    // resolve the nearest existing ancestor, then append the rest (root/a -> /outside makes a/missing.js an escape).
+    {
+      let cur = abs, rest = [], anc = null;
+      for (;;) {
+        try { anc = fs.realpathSync(cur); break; } catch { /* missing or dangling: go up */ }
+        const up = path.dirname(cur);
+        if (up === cur) break;
+        rest.unshift(path.basename(cur)); cur = up;
+      }
+      if (anc !== null && rest.length && inRoot(path.join(anc, ...rest)) === null) { errors.push(`--files: path resolves outside --root via a symlinked parent (${root}): ${raw} -> ${path.join(anc, ...rest)}`); continue; }
+    }
     if (lst) {
       let real = null;
       try { real = fs.realpathSync(abs); } catch { /* dangling symlink */ }

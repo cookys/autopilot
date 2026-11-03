@@ -5,7 +5,9 @@
 // Usage:
 //   node scripts/affected-suites.js --base <ref> [--head <ref>] [--json] [--run] [--record [path]]
 //     [--entry-timeout <secs>] [--attribute] [--jobs <N>]
-//   node scripts/affected-suites.js --files a.js b.sh [--json] [--run]   (paths relative to --root)
+//   node scripts/affected-suites.js --files a.js b.sh [--json] [--run] [--allow-missing]   (paths relative to --root or absolute
+//     inside it; whitespace in a path, a path outside --root, a directory, or a path in neither the tree nor HEAD is exit 2;
+//     --allow-missing lets a hypothetical path through the existence check only)
 //   Options: --root <dir> (default: the repo containing this script), --list-all (print every
 //   suite run.sh would run), --help.
 //
@@ -619,6 +621,109 @@ function shortestHops(seeds, graph) {
   return hops;
 }
 
+// Resolve `segs` below `start` (a real directory) without trusting realpath. A missing component ends the walk (the rest is kept
+// literally) unless `strict`, which a symlink target always is: a dangling target is an error.
+function walkUnderRoot(start, segs, strict, state, inRoot) {
+  let cur = start;
+  const rest = segs.slice();
+  while (rest.length) {
+    const seg = rest.shift();
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') { cur = path.dirname(cur); continue; }
+    const next = path.join(cur, seg);
+    let l = null;
+    try { l = fs.lstatSync(next); } catch { /* missing */ }
+    if (l === null) {
+      if (strict) throw new Error(`dangling target ${next}`);
+      return path.resolve(next, ...rest);
+    }
+    if (l.isSymbolicLink()) {
+      if (++state.hops > 40) throw new Error('more than 40 symlink hops');
+      const t = fs.readlinkSync(next);
+      const real = walkUnderRoot(path.isAbsolute(t) ? path.parse(t).root : cur, t.split('/'), true, state, inRoot);
+      if (inRoot(real) === null && real !== state.root) throw new Error(`${next} -> ${real}`);
+      cur = real;
+    } else cur = next;
+  }
+  return cur;
+}
+
+// --files input shapes (selgap scan table). Every path is checked before any selection; a bad one is exit 2,
+// never a silent "selective" result (a zsh `--files $F` that does not split once produced 21 suites from one bogus path).
+//   shape                                   | result
+//   relative path, exists on disk           | kept as is ("./" prefix and "a/../b" folded away)
+//   absolute path inside --root             | converted to root-relative
+//   absolute path outside --root            | exit 2 (outside root)
+//   relative path that climbs out (../x)    | exit 2 (outside root)
+//   contains whitespace or a newline        | exit 2 (shell did not split the argument?)
+//   empty string                            | exit 2
+//   missing on disk, present in HEAD        | kept (a deleted file is a legitimate change)
+//   missing on disk and in HEAD             | exit 2, listed
+//   a directory                             | exit 2 (not a file)
+//   symlink resolving outside --root        | exit 2 (also with --allow-missing)
+//   missing path under a symlinked parent that resolves outside --root | exit 2, before the HEAD/--allow-missing rules
+//   symlink resolving inside --root         | kept as a file entry, even when it points at a directory
+//   dangling or looping symlink anywhere on the path (also a missing path below one) | exit 2 (path crosses a symlink that leaves --root or cannot be resolved)
+//   --allow-missing                         | skips only the exists-on-disk-or-in-HEAD check (a hypothetical path)
+//   --base/--head mode                      | not applicable, paths come from git diff
+function normalizeFiles(root, files, allowMissing) {
+  const errors = [], changed = [], missing = [];
+  let realRoot = root;
+  try { realRoot = fs.realpathSync(root); } catch { /* keep root */ }
+  const inRoot = (abs) => {
+    for (const r of [root, realRoot]) { const rel = path.relative(r, abs); if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel; }
+    return null;
+  };
+  for (const raw of files) {
+    if (raw === '') { errors.push('--files: empty path'); continue; }
+    if (/\s/.test(raw)) { errors.push(`--files: path contains whitespace or a newline: ${JSON.stringify(raw)} (did the shell fail to split the argument? in zsh use "\${=VAR}" or an array)`); continue; }
+    const abs = path.resolve(root, raw);
+    const rel = inRoot(abs);
+    if (rel === null) { errors.push(`--files: path is outside --root (${root}): ${raw}`); continue; }
+    const p = rel.split(path.sep).join('/');
+    // Walk the path from the root one segment at a time with lstat (statSync/realpathSync would follow a link or give up on a dangling one).
+    // Every symlink on the way is resolved by hand (readlink; chains capped at 40 hops; a dangling or looping target is an error) and its
+    // real target must stay inside root. This runs before --allow-missing and the HEAD rule, so neither can weaken it.
+    try {
+      const resolved = walkUnderRoot(realRoot, rel.split(path.sep), false, { hops: 0, root: realRoot }, inRoot);
+      if (resolved !== realRoot && inRoot(resolved) === null) throw new Error(`resolves to ${resolved}`);
+    } catch (e) { errors.push(`--files: path crosses a symlink that leaves --root or cannot be resolved (${root}): ${raw} (${e.message})`); continue; }
+    let lst = null;
+    try { lst = fs.lstatSync(abs); } catch { /* not on disk */ }
+    // A symlink is a file entry even when it points at a directory (the tracked .agents/skills -> ../skills); a real directory is not.
+    if (lst && lst.isDirectory()) { errors.push(`--files: a directory, not a file: ${raw}`); continue; }
+    if (!lst && !allowMissing) {
+      let inHead = false;
+      try { git(root, ['cat-file', '-e', `HEAD:${p}`]); inHead = true; } catch { /* not in HEAD */ }
+      if (!inHead) { missing.push(raw); continue; }
+    }
+    changed.push(p);
+  }
+  if (missing.length) errors.push(`--files: path exists neither in the working tree nor in HEAD (typo, or a shell variable that did not split?): ${missing.join(', ')}`);
+  return { changed, errors };
+}
+
+// Same-name suites of a changed file (selgap). Rule (a): a changed suite is always selected. Rule (b): a changed
+// X.js / X.sh / X.mjs / X.cjs / X.py selects hooks/tests/X.test.sh, scripts/X.test.js, scripts/lib/X.test.js,
+// hooks/X.test.js and the X.test.js / X.test.sh beside it. A platforms/ mirror counts as its source path.
+// -> Map(suite -> [changed file that forced it]).
+function forcedSuites(changed, present) {
+  const out = new Map();
+  const add = (suite, why) => { if (present.has(suite) && isSuite(suite) && !out.has(suite)) out.set(suite, why); };
+  for (const raw of changed) {
+    const p = raw.replace(/^platforms\/[^/]+\/plugin\//, '');
+    if (isSuite(p)) { add(p, []); add(raw, []); continue; }
+    if (!isCode(p)) continue;
+    const stem = base(p).replace(/\.[A-Za-z0-9]+$/, '');
+    if (!stem) continue;
+    const dir = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '.';
+    const cands = [`${HOOK_TESTS_DIR}/${stem}.test.sh`, `${SCRIPTS_DIR}/${stem}.test.js`, `${SCRIPTS_LIB_DIR}/${stem}.test.js`, `${HOOKS_DIR}/${stem}.test.js`,
+      `${dir}/${stem}.test.js`, `${dir}/${stem}.test.sh`];
+    for (const c of cands) add(c, [raw]);
+  }
+  return out;
+}
+
 function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   const fullReasons = changed.filter((p) => FULL_TRIGGERS.some((re) => re.test(p))).map((p) => `unjudgeable change: ${p}`);
   const graph = buildGraph(headTree);
@@ -654,7 +759,11 @@ function select(changed, headTree, maxWeak = DEFAULT_MAX_WEAK) {
   for (const f of alwaysRun) if (!chains[f]) chains[f] = [f];
   const packSuites = [...packed.keys()].filter((f) => present.has(f));
   for (const f of packSuites) if (!chains[f]) chains[f] = [f];
-  const all = [...new Set([...suites, ...alwaysRun, ...packSuites])].sort();
+  // Forced suites (selgap): chosen by name, never by the reference graph, so no weak-edge bound or BL-0213
+  // narrowing can drop them. Added after the graph walk and never read by `unreferenced`, so they only add.
+  const forced = forcedSuites(changed, present);
+  for (const [f, why] of forced) if (!chains[f]) chains[f] = [f, ...why];
+  const all = [...new Set([...suites, ...alwaysRun, ...packSuites, ...forced.keys()])].sort();
   Object.defineProperty(chains, '__hops', { value: shortestHops(changed, graph), enumerable: false });
   return { suites: all, alwaysRun, chains, fullReasons, unreferenced, graphFiles: graph.refs.size };
 }
@@ -1153,6 +1262,7 @@ function parseArgs(argv) {
     if (x === '--base') a.base = argv[++i];
     else if (x === '--head') a.head = argv[++i];
     else if (x === '--root') a.root = argv[++i];
+    else if (x === '--allow-missing') a.allowMissing = true;
     else if (x === '--json') a.json = true;
     else if (x === '--max-weak') a.maxWeak = Number(argv[++i]);
     else if (x === '--list-all') a.listAll = true;
@@ -1226,7 +1336,9 @@ async function main(argv) {
     let tree, changed, baseRef = a.base || null, headRef = a.head || null;
     if (a.useFiles) {
       tree = diskTree(root);
-      changed = a.files.map((f) => f.replace(/^\.\//, ''));
+      const norm = normalizeFiles(root, a.files, a.allowMissing);
+      if (norm.errors.length) { for (const e of norm.errors) process.stderr.write(`affected-suites: ${e}\n`); return 2; }
+      changed = norm.changed;
       baseRef = headRef = null;
     } else if (a.listAll) {
       tree = a.head ? gitTree(root, a.head) : diskTree(root);

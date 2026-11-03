@@ -197,7 +197,7 @@ test('real tree: files scanned by content-grepping suites select those suites (r
     ['docs/plans/evidence/x/administration/y/run.sh', 'hooks/tests/qualify-recipe-credential-staging.test.sh'],
   ];
   for (const [file, suite] of cases) {
-    const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', file, '--json'], { stdio: 'pipe' }).toString());
+    const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', file, '--allow-missing', '--json'], { stdio: 'pipe' }).toString());
     assert.strictEqual(out.mode, 'selective', `${file}: expected a selective result`);
     assert.ok(out.always_run.includes(suite), `${file} must run ${suite}`);
   }
@@ -661,7 +661,7 @@ test('BL-0213 real tree: dev-setup, mirror, plan, and the three merges stay unde
   // so half the list is the ceiling; it still rejects "nearly every suite".
   // 3765302f3 measured 83, bound 0.2 * total_suites (~125). A small diff; 0.2 turns red well
   // before the old shared 0.5 cap, where a regression to 300 would have stayed green.
-  const run = (files) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
+  const run = (files) => JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--allow-missing', '--json'], { stdio: 'pipe' }).toString());
   const dev = run(['scripts/dev-setup.sh']);
   assert.ok(dev.suites.length < 150, `dev-setup selected ${dev.suites.length}`);
   assert.ok(dev.suites.includes('hooks/tests/dev-setup.test.sh'));
@@ -1437,4 +1437,309 @@ test('pack matching g2-3: with the skill directory gone from both trees the pack
   assert.ok(!r.out.suites.includes(fx.BP), 'root references/card.md must not select the skill pack suite');
   assert.strictEqual(r.out.mode, 'full');
   assert.ok(r.out.unreferenced.includes('references/card.md'));
+});
+
+// selgap (2026-11-04): a changed script's own same-name suite is chosen by name, never by the reference graph, so no
+// weak-edge bound or narrowing can drop it. Each test below is RED on the pre-fix selector
+// (AFFECTED_SUITES_BIN=<old copy>) and green after.
+const SELGAP_ROOT = {
+  ...LAYOUT,
+  'scripts/foo.js': 'console.log("foo");\n',
+  'scripts/lib/baz.js': 'module.exports = 1;\n',
+  'platforms/codex/plugin/scripts/foo.js': 'console.log("foo");\n',
+  'hooks/tests/foo.test.sh': '#!/usr/bin/env bash\necho "checks something else, never names its script"\n',
+  'scripts/lib/baz.test.js': 'require("node:test");\n',
+  'hooks/tests/baz.test.sh': '#!/usr/bin/env bash\necho nothing\n',
+  'scripts/sib.js': 'console.log("sib");\n',
+  'scripts/sib.test.js': 'require("node:test");\n',
+  // a second suite names every script, so the change stays selective instead of "unreferenced => full"
+  'hooks/tests/names-all.test.sh': '#!/usr/bin/env bash\nnode "$ROOT/scripts/foo.js"\nnode "$ROOT/scripts/lib/baz.js"\nnode "$ROOT/scripts/sib.js"\n',
+};
+
+test('selgap (b): a changed script selects its same-name hooks/tests suite even when that suite never names it', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const out = r.select(r.change({ 'scripts/foo.js': 'console.log("changed");\n' }));
+    assert.strictEqual(out.mode, 'selective');
+    assert.ok(out.suites.includes('hooks/tests/names-all.test.sh'), 'the graph edge still selects its referrer');
+    assert.ok(out.suites.includes('hooks/tests/foo.test.sh'), 'same-name suite must be selected');
+  } finally { r.cleanup(); }
+});
+
+test('selgap (b): scripts/lib/X.js selects scripts/lib/X.test.js and hooks/tests/X.test.sh; scripts/X.js selects scripts/X.test.js', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const lib = filesSelect(r.dir, ['scripts/lib/baz.js']);
+    assert.ok(lib.suites.includes('scripts/lib/baz.test.js'), 'scripts/lib/baz.test.js');
+    assert.ok(lib.suites.includes('hooks/tests/baz.test.sh'), 'hooks/tests/baz.test.sh');
+    const sib = filesSelect(r.dir, ['scripts/sib.js']);
+    assert.ok(sib.suites.includes('scripts/sib.test.js'), 'scripts/sib.test.js');
+  } finally { r.cleanup(); }
+});
+
+test('selgap (b): a codex mirror of a script selects the source script own suite', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const out = filesSelect(r.dir, ['platforms/codex/plugin/scripts/foo.js']);
+    assert.ok(out.suites.includes('hooks/tests/foo.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('selgap (a): a changed codex mirror of a suite selects the source suite', () => {
+  const r = makeRepo({ ...SELGAP_ROOT, 'platforms/codex/plugin/hooks/tests/foo.test.sh': '#!/usr/bin/env bash\n' });
+  try {
+    const out = filesSelect(r.dir, ['platforms/codex/plugin/hooks/tests/foo.test.sh']);
+    assert.ok(out.suites.includes('hooks/tests/foo.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('selgap: forced suites only add (negative control: an unrelated stem is not forced)', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const out = r.select(r.change({ 'scripts/foo.js': 'console.log("changed");\n' }));
+    assert.ok(!out.suites.includes('hooks/tests/baz.test.sh'));
+    assert.ok(!out.suites.includes('scripts/sib.test.js'));
+    const base = filesSelect(r.dir, ['scripts/foo.js']);
+    assert.ok(base.suites.includes('hooks/tests/names-all.test.sh'));
+  } finally { r.cleanup(); }
+});
+
+test('selgap real tree: the 2026-11-04 plancwd replay (test + codex mirrors + plan-loop) selects both dispatch-plan-review.test.sh and plan-review-plan-path.test.sh', () => {
+  const files = [
+    'hooks/tests/plan-review-plan-path.test.sh',
+    'platforms/codex/plugin/schemas/plan-review-artifact.schema.json',
+    'platforms/codex/plugin/scripts/dispatch-plan-review.js',
+    'platforms/codex/plugin/scripts/lib/config-keys.json',
+    'platforms/codex/plugin/skills/hetero-review/references/plan-loop.md',
+    'skills/hetero-review/references/plan-loop.md',
+  ];
+  const out = JSON.parse(execFileSync('node', [SEL, '--root', REAL_ROOT, '--files', ...files, '--json'], { stdio: 'pipe' }).toString());
+  assert.strictEqual(out.mode, 'selective');
+  assert.ok(out.suites.includes('hooks/tests/dispatch-plan-review.test.sh'), 'dispatch-plan-review.test.sh missing');
+  assert.ok(out.suites.includes('hooks/tests/plan-review-plan-path.test.sh'), 'plan-review-plan-path.test.sh missing');
+});
+
+// selgap #2 (2026-11-04): --files must refuse an input it cannot trust. The real incident: zsh did not split `--files $F`,
+// the nine paths reached the selector as ONE argument naming no file, and it answered mode selective with 21 suites, no warning.
+function filesRun(dir, files) {
+  const r = spawnSync('node', [SEL, '--root', dir, '--files', ...files, '--json'], { encoding: 'utf8' });
+  let doc = null;
+  try { doc = JSON.parse(r.stdout); } catch { /* not json: an error exit */ }
+  return { rc: r.status, stderr: r.stderr, doc };
+}
+
+test('selgap --files: a caller that joins several paths into ONE space-separated argument exits 2 and selects nothing', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const joined = ['scripts/foo.js', 'scripts/sib.js', 'scripts/lib/baz.js'].join(' ') + ' ';
+    const out = filesRun(r.dir, [joined]);
+    assert.strictEqual(out.rc, 2, out.stderr);
+    assert.strictEqual(out.doc, null, 'no selection document may be printed');
+    assert.match(out.stderr, /whitespace/);
+    assert.match(out.stderr, /split/);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: a newline-joined argument exits 2', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    assert.strictEqual(filesRun(r.dir, ['scripts/foo.js\nscripts/sib.js']).rc, 2);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: a path that exists neither on disk nor in HEAD exits 2 and is listed', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const out = filesRun(r.dir, ['scripts/foo.js', 'no/such/file.js']);
+    assert.strictEqual(out.rc, 2);
+    assert.strictEqual(out.doc, null);
+    assert.match(out.stderr, /no\/such\/file\.js/);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: a file deleted from the tree but present in HEAD is still a legitimate input', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    fs.rmSync(path.join(r.dir, 'scripts/other.js'));
+    const out = filesRun(r.dir, ['scripts/other.js']);
+    assert.strictEqual(out.rc, 0, out.stderr);
+    assert.deepStrictEqual(out.doc.changed, ['scripts/other.js']);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: an absolute path inside --root selects exactly what the relative path selects', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const rel = filesRun(r.dir, ['scripts/foo.js']);
+    const abs = filesRun(r.dir, [path.join(r.dir, 'scripts/foo.js')]);
+    assert.strictEqual(abs.rc, 0, abs.stderr);
+    assert.deepStrictEqual(abs.doc.changed, ['scripts/foo.js']);
+    assert.deepStrictEqual(abs.doc.suites, rel.doc.suites);
+    assert.strictEqual(abs.doc.mode, rel.doc.mode);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: an absolute path outside --root, or a ../ climb, exits 2', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    const out = filesRun(r.dir, ['/etc/hostname']);
+    assert.strictEqual(out.rc, 2);
+    assert.match(out.stderr, /outside --root/);
+    assert.strictEqual(filesRun(r.dir, ['../elsewhere.js']).rc, 2);
+  } finally { r.cleanup(); }
+});
+
+test('selgap --files: a directory exits 2 and --base/--head mode is untouched', () => {
+  const r = makeRepo(SELGAP_ROOT);
+  try {
+    assert.strictEqual(filesRun(r.dir, ['scripts']).rc, 2);
+    const head = r.change({ 'scripts/other.js': 'console.log("c");\n' });
+    assert.deepStrictEqual(r.select(head).suites, ['hooks/tests/other.test.sh']);
+  } finally { r.cleanup(); }
+});
+
+// selgap #3: lstat, not stat. A symlink inside --root that resolves outside it must not be accepted or read.
+function symRepo() {
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-outside-'));
+  fs.writeFileSync(path.join(outsideDir, 'secret.js'), 'SECRET_OUTSIDE_CONTENT\n');
+  const r = makeRepo({ ...SELGAP_ROOT, 'skills/x/SKILL.md': 'x\n' });
+  fs.symlinkSync(path.join(outsideDir, 'secret.js'), path.join(r.dir, 'scripts/escape.js'));
+  fs.mkdirSync(path.join(r.dir, '.agents'));
+  fs.symlinkSync('../skills', path.join(r.dir, '.agents/skills'));
+  fs.symlinkSync('foo.js', path.join(r.dir, 'scripts/alias.js'));
+  const cleanup = r.cleanup;
+  r.cleanup = () => { cleanup(); fs.rmSync(outsideDir, { recursive: true, force: true }); };
+  return r;
+}
+
+test('selgap symlink: a link inside root pointing at a file outside root exits 2, with or without --allow-missing, and nothing is read from it', () => {
+  const r = symRepo();
+  try {
+    for (const extra of [[], ['--allow-missing']]) {
+      const out = filesRun(r.dir, ['scripts/escape.js', ...extra]);
+      assert.strictEqual(out.rc, 2, out.stderr);
+      assert.strictEqual(out.doc, null);
+      assert.match(out.stderr, /crosses a symlink that leaves --root or cannot be resolved/);
+      assert.ok(!out.stderr.includes('SECRET_OUTSIDE_CONTENT'));
+    }
+  } finally { r.cleanup(); }
+});
+
+test('selgap symlink: a link inside root pointing at a directory inside root is accepted as a file entry', () => {
+  const r = symRepo();
+  try {
+    const out = filesRun(r.dir, ['.agents/skills']);
+    assert.strictEqual(out.rc, 0, out.stderr);
+    assert.deepStrictEqual(out.doc.changed, ['.agents/skills']);
+    assert.strictEqual(filesRun(r.dir, ['skills']).rc, 2, 'a real directory is still refused');
+  } finally { r.cleanup(); }
+});
+
+test('selgap symlink: a link inside root pointing at a file inside root is accepted', () => {
+  const r = symRepo();
+  try {
+    const out = filesRun(r.dir, ['scripts/alias.js']);
+    assert.strictEqual(out.rc, 0, out.stderr);
+    assert.deepStrictEqual(out.doc.changed, ['scripts/alias.js']);
+  } finally { r.cleanup(); }
+});
+
+// selgap #4: a symlinked PARENT that resolves outside --root is an escape whether or not the leaf exists.
+function parentSymRepo() {
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-outside-'));
+  fs.writeFileSync(path.join(outsideDir, 'exists.js'), 'SECRET_OUTSIDE_CONTENT\n');
+  const r = makeRepo({ ...SELGAP_ROOT, 'inner/keep.js': 'x\n' });
+  fs.symlinkSync(outsideDir, path.join(r.dir, 'a'));
+  fs.symlinkSync('inner', path.join(r.dir, 'b'));
+  const cleanup = r.cleanup;
+  r.cleanup = () => { cleanup(); fs.rmSync(outsideDir, { recursive: true, force: true }); };
+  return r;
+}
+
+test('selgap parent symlink: a/missing.js with --allow-missing, under a link to an outside directory, exits 2', () => {
+  const r = parentSymRepo();
+  try {
+    const out = filesRun(r.dir, ['a/missing.js', '--allow-missing']);
+    assert.strictEqual(out.rc, 2, out.stderr);
+    assert.strictEqual(out.doc, null);
+    assert.match(out.stderr, /crosses a symlink that leaves --root or cannot be resolved/);
+  } finally { r.cleanup(); }
+});
+
+test('selgap parent symlink: without the flag the escape message is not replaced by the missing-path message', () => {
+  const r = parentSymRepo();
+  try {
+    const out = filesRun(r.dir, ['a/missing.js']);
+    assert.strictEqual(out.rc, 2);
+    assert.match(out.stderr, /crosses a symlink/);
+    assert.ok(!/neither in the working tree/.test(out.stderr), out.stderr);
+  } finally { r.cleanup(); }
+});
+
+test('selgap parent symlink: an existing file under a link to an outside directory exits 2 and its content is not read', () => {
+  const r = parentSymRepo();
+  try {
+    const out = filesRun(r.dir, ['a/exists.js']);
+    assert.strictEqual(out.rc, 2, out.stderr);
+    assert.strictEqual(out.doc, null);
+    assert.ok(!out.stderr.includes('SECRET_OUTSIDE_CONTENT'));
+  } finally { r.cleanup(); }
+});
+
+test('selgap parent symlink: a link to a directory inside root keeps b/missing.js with --allow-missing acceptable', () => {
+  const r = parentSymRepo();
+  try {
+    const out = filesRun(r.dir, ['b/missing.js', '--allow-missing']);
+    assert.strictEqual(out.rc, 0, out.stderr);
+    assert.deepStrictEqual(out.doc.changed, ['b/missing.js']);
+  } finally { r.cleanup(); }
+});
+
+// selgap #5: every symlink on the path is walked with lstat/readlink; outside, dangling or looping targets are exit 2.
+function chainRepo() {
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-suites-outside-'));
+  const r = makeRepo({ ...SELGAP_ROOT, 'inner/keep.js': 'x\n' });
+  const ln = (target, name) => fs.symlinkSync(target, path.join(r.dir, name));
+  ln(path.join(outsideDir, 'nonexistent'), 'dangle-out');
+  ln('inner/nonexistent', 'dangle-in');
+  ln('b2', 'a2'); ln(outsideDir, 'b2');
+  ln('loop', 'loop');
+  ln('inner', 'ok');
+  fs.mkdirSync(path.join(r.dir, '.agents')); ln('../skills', '.agents/skills');
+  fs.mkdirSync(path.join(r.dir, 'skills'), { recursive: true }); fs.writeFileSync(path.join(r.dir, 'skills/s.md'), 's\n');
+  const cleanup = r.cleanup;
+  r.cleanup = () => { cleanup(); fs.rmSync(outsideDir, { recursive: true, force: true }); };
+  return r;
+}
+for (const [name, args, rc] of [
+  ['link to a nonexistent outside target, a/f.js with --allow-missing', ['dangle-out/f.js', '--allow-missing'], 2],
+  ['a chain a2 -> b2 -> outside directory', ['a2/f.js', '--allow-missing'], 2],
+  ['a self-loop link', ['loop/f.js', '--allow-missing'], 2],
+  ['a self-loop link as the leaf', ['loop'], 2],
+  ['a link to a nonexistent target inside root, with --allow-missing', ['dangle-in/f.js', '--allow-missing'], 2],
+  ['a dangling leaf link inside root', ['dangle-in', '--allow-missing'], 2],
+  ['regression: .agents/skills style directory link', ['.agents/skills'], 0],
+  ['regression: missing file below a link to a root directory, with --allow-missing', ['ok/missing.js', '--allow-missing'], 0],
+]) {
+  test(`selgap chain: ${name} exits ${rc}`, () => {
+    const r = chainRepo();
+    try {
+      const out = filesRun(r.dir, args);
+      assert.strictEqual(out.rc, rc, out.stderr);
+      if (rc === 2) { assert.strictEqual(out.doc, null); assert.match(out.stderr, /crosses a symlink that leaves --root or cannot be resolved/); }
+    } finally { r.cleanup(); }
+  });
+}
+
+// selgap #5 over-rejection guard: the per-segment symlink walk must accept every symlink the real repo tracks.
+test('selgap real tree: every tracked symlink (git mode 120000) is accepted by --files', () => {
+  const listed = execFileSync('git', ['ls-files', '-s', '-z'], { cwd: REAL_ROOT, stdio: 'pipe', maxBuffer: 1 << 28 }).toString('utf8')
+    .split('\0').filter((l) => l.startsWith('120000 ')).map((l) => l.slice(l.indexOf('\t') + 1));
+  assert.ok(listed.length >= 1, 'the repo must track at least one symlink, or this test proves nothing');
+  const rejected = [];
+  for (const rel of listed) {
+    const r = spawnSync('node', [SEL, '--root', REAL_ROOT, '--files', rel, '--json'], { encoding: 'utf8' });
+    if (r.status === 2) rejected.push(`${rel}: ${r.stderr.trim()}`);
+  }
+  assert.deepStrictEqual(rejected, [], `tracked symlinks refused (${listed.length} listed: ${listed.join(', ')})`);
 });

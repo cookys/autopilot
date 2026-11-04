@@ -559,6 +559,23 @@ function resolveConfiguredMinSeats(flags) {
 // in-process parameter, not a CLI flag a caller could pass to a lone receipt.)
 class ExitSignal { constructor(code) { this.code = code; } }
 
+// The one rule for "the branch moved past the last reviewed head": the move is tolerated only when EVERY
+// changed path is an allowlisted exclusion or a sidecar (CHANGELOG.md, projects index). Mode A step (5) and
+// the --chain tail check both call this, so the two can never diverge.
+function pathsMovedAfterHead(repoRoot, range, consumerAllowlist) {
+  const diffRes = spawnSync('git', ['diff', '--name-only', range], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  const changedPaths = (diffRes.stdout || '')
+    .split('\n')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.pathFor(repoRoot, 'projects_index');
+  const blocked = changedPaths.filter((p) => !(isPathspecAllowed(p, consumerAllowlist, repoRoot) || sidecarAllowed(p)));
+  return { changedPaths, blocked, allAllowed: diffRes.status === 0 && blocked.length === 0 };
+}
+
 function validateModeA(flags, opts = {}) {
   const packetSet = opts.packetSet || null;
   // Validated first, before any generation/chain validation runs — see resolveConfiguredMinSeats.
@@ -1163,17 +1180,9 @@ function validateModeA(flags, opts = {}) {
     const currentBranchHead = revParseRes.stdout.trim();
     if (currentBranchHead !== lastEntry.head) {
       const range = `${lastEntry.head}..${currentBranchHead}`;
-      const diffRes = spawnSync('git', ['diff', '--name-only', range], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-      });
-      const changedPaths = (diffRes.stdout || '')
-        .split('\n')
-        .map((p) => p.trim())
-        .filter(Boolean);
-      const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.pathFor(repoRoot, 'projects_index');
-      const allAllowed = diffRes.status === 0
-        && changedPaths.every((p) => isPathspecAllowed(p, consumerAllowlist, repoRoot) || sidecarAllowed(p));
+      const moved = pathsMovedAfterHead(repoRoot, range, consumerAllowlist);
+      const changedPaths = moved.changedPaths;
+      const allAllowed = moved.allAllowed;
       if (!allAllowed) {
         console.error(`Branch '${branch}' head has moved: expected '${lastEntry.head}', got '${currentBranchHead}'`);
         process.exit(1);
@@ -1379,9 +1388,9 @@ function validatePacketSet(flags) {
 // Review chain — several review sets, each its own Mode A phase, that together review one contiguous
 // base..tip (e.g. set A frozen at x, new files added by the fix, set B reviewing x..tip). Every member
 // passes Mode A unchanged (SHIP-AS-IS included) except the "branch head == last chain head" step, which this
-// function replaces: set k must start where set k-1 ended, the last set's head must be an ancestor of the
-// tip, and every path changed in base..tip must have been reviewed by the LAST set that touched it.
-// Paths Mode A itself tolerates unreviewed (allowlisted exclusions, CHANGELOG/projects index) stay tolerated.
+// function replaces: set k must start where set k-1 ended (so the sets tile base..lastHead exactly), the last
+// set's head must be an ancestor of the tip, and whatever lies between the last head and the tip must be
+// tolerated by the same function Mode A uses past its head (pathsMovedAfterHead).
 function validateReviewChain(flags) {
   const fail = (msg) => { console.error(msg); process.exit(1); };
   const ledgerDir = flags.ledger;
@@ -1391,7 +1400,9 @@ function validateReviewChain(flags) {
   if (typeof flags.chain !== 'string' || !ledgerDir || !branch || typeof base !== 'string') {
     fail('Review chain check requires --chain <A,B[,C...]>, --ledger, --branch and --phase-base');
   }
-  if (flags.phase !== undefined || flags.packets !== undefined) fail('--chain cannot be combined with --phase or --packets');
+  if (flags.phase !== undefined || flags.packets !== undefined || flags['plan-artifact'] !== undefined || flags.dispositions !== undefined) {
+    fail('--chain cannot be combined with --phase, --packets, --plan-artifact or --dispositions');
+  }
   const names = flags.chain.split(',');
   if (names.some((n) => !reviewPackets.validId(n))) fail(`--chain names must be phase ids separated by commas (got '${flags.chain}')`);
   if (new Set(names).size !== names.length) fail(`--chain names a review set twice: '${flags.chain}'`);
@@ -1447,21 +1458,20 @@ function validateReviewChain(flags) {
   }
   if (problems.length) fail(`Review chain is not one contiguous range ${base}..${tip}:\n${problems.join('\n')}`);
 
-  // Coverage (second line): every changed path needs an owner set, the last one whose range changed it.
-  // Past the last head only Mode A's own tolerated paths may change.
-  const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.pathFor(repoRoot, 'projects_index');
-  const pathsOf = sets.map((s) => new Set(reviewPackets.rangeNames(repoRoot, s.base, s.head)));
-  let changed;
-  try { changed = reviewPackets.rangeNames(repoRoot, base, tip); } catch (e) { fail(e.message); }
-  for (const p of changed) {
-    let owner = -1;
-    for (let k = 0; k < sets.length; k++) if (pathsOf[k].has(p)) owner = k;
-    if (owner >= 0) continue;
-    if (isPathspecAllowed(p, consumerAllowlist, repoRoot) || sidecarAllowed(p)) continue;
-    problems.push(`chain coverage: '${p}' changed in ${base}..${tip} but no set reviewed it (last set '${finalSet.name}' ended at ${finalSet.head})`);
+  // Tail: past the last reviewed head the branch may only move the way Mode A tolerates (pathsMovedAfterHead,
+  // the same function as Mode A step (5)). This also covers a path an earlier set reviewed and that changed
+  // again after the last head, and a path put back to its base content (it would vanish from base..tip).
+  // Base..lastHead needs no separate owner loop: the contiguity check above makes the sets tile it exactly.
+  if (finalSet.head !== tip) {
+    const moved = pathsMovedAfterHead(repoRoot, `${finalSet.head}..${tip}`, consumerAllowlist);
+    for (const p of moved.blocked) {
+      problems.push(`chain tail: '${p}' changed after set '${finalSet.name}' last reviewed head ${finalSet.head} (at '${branch}' ${tip}) and is not a path Mode A tolerates past the last head`);
+    }
+    if (!moved.allAllowed && moved.blocked.length === 0) problems.push(`chain tail: git diff ${finalSet.head}..${tip} failed`);
   }
   if (problems.length) fail(`Review chain does not cover '${branch}':\n${problems.join('\n')}`);
 
+  const changed = reviewPackets.rangeNames(repoRoot, base, tip);
   console.log(`Review chain ${names.join(',')} ok: ${sets.length} set(s), ${changed.length} path(s), base ${base} .. tip ${tip}`);
   process.exit(0);
 }
@@ -1474,10 +1484,10 @@ function main() {
     process.exit(0);
   }
 
-  if (flags['plan-artifact'] && flags.dispositions) {
+  if (flags.chain !== undefined) {
+    validateReviewChain(flags); // first: it refuses a mix with Mode B/C/A flags instead of silently dropping --chain
+  } else if (flags['plan-artifact'] && flags.dispositions) {
     validateModeB(flags);
-  } else if (flags.chain !== undefined) {
-    validateReviewChain(flags);
   } else if (flags.packets !== undefined) {
     validatePacketSet(flags);
   } else if (flags.ledger || flags.phase || flags.branch) {

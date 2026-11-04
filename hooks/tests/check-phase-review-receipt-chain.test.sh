@@ -59,17 +59,38 @@ OUT=$(chain Aforge,B); RC=$?; assert_exit_code "$RC" "1" "R4a: forged SHIP-AS-IS
 OUT=$(chain A,Bbad); RC=$?; assert_exit_code "$RC" "1" "R4b: tampered range diff_sha256 fails"; assert_contains "$OUT" "chain member 'Bbad'" "R4b: filed under member"
 OUT=$(chain A); RC=$?; assert_exit_code "$RC" "1" "R5: one set fails"; assert_contains "$OUT" "at least two" "R5: message"
 OUT=$(chain A,Nope); RC=$?; assert_exit_code "$RC" "1" "R6: unknown set fails"; assert_contains "$OUT" "chain member 'Nope'" "R6: names the member"
-OUT=$(chain A,A); RC=$?; assert_exit_code "$RC" "1" "R7: duplicate set fails"
-OUT=$(node "$SCRIPT" --chain A,B --phase A --ledger "$L" --branch work --phase-base "$B0" --repo-root "$R" 2>&1); assert_exit_code "$?" "1" "R8: --chain with --phase fails"
-OUT=$(chain A,B "$X"); RC=$?; assert_exit_code "$RC" "1" "R9: --phase-base not equal to the first set's base fails"
-OUT=$(chain 'A,../B'); assert_exit_code "$?" "1" "R9b: path-like set name refused"
+OUT=$(chain A,A); RC=$?; assert_exit_code "$RC" "1" "R7: duplicate set fails"; assert_contains "$OUT" "names a review set twice" "R7: message"
+OUT=$(node "$SCRIPT" --chain A,B --phase A --ledger "$L" --branch work --phase-base "$B0" --repo-root "$R" 2>&1); assert_exit_code "$?" "1" "R8: --chain with --phase fails"; assert_contains "$OUT" "--chain cannot be combined" "R8: message"
+echo '{}' > "$TEST_TMP/pa.json"
+OUT=$(node "$SCRIPT" --chain A,B --plan-artifact "$TEST_TMP/pa.json" --dispositions "$TEST_TMP/pa.json" --ledger "$L" --branch work --phase-base "$B0" --repo-root "$R" 2>&1); assert_exit_code "$?" "1" "R8b: --chain with --plan-artifact/--dispositions fails (not silently ignored)"; assert_contains "$OUT" "--chain cannot be combined" "R8b: message"
+OUT=$(chain A,B "$X"); RC=$?; assert_exit_code "$RC" "1" "R9: --phase-base not equal to the first set's base fails"; assert_contains "$OUT" "chain contiguity: set 'A' base $B0 is not --phase-base $X" "R9: message"
+OUT=$(chain 'A,../B'); assert_exit_code "$?" "1" "R9b: path-like set name refused"; assert_contains "$OUT" "--chain names must be phase ids" "R9b: message"
 
-# tail: a commit past B's head. Allowlisted (CHANGELOG.md) passes like Mode A; a product file fails coverage only.
-echo log > "$R/CHANGELOG.md"; g add CHANGELOG.md; g commit -qm tail1
-OUT=$(chain A,B); assert_exit_code "$?" "0" "G2: CHANGELOG.md after B's head is tolerated (as in Mode A)"
-echo late > "$R/late.txt"; g add late.txt; g commit -qm tail2
-OUT=$(chain A,B); RC=$?; assert_exit_code "$RC" "1" "R10: product file past the last head fails"; assert_contains "$OUT" "chain coverage: 'late.txt'" "R10: coverage message"
-g reset -q --hard "$TIP"
+# Tail: whatever lies past B's head must be tolerated exactly as Mode A tolerates it past its own head.
+tailcase() { # tailcase <label> <path> <content> <expect-rc> <message-fragment>
+  g reset -q --hard "$TIP"
+  mkdir -p "$(dirname "$R/$2")"; printf '%s\n' "$3" > "$R/$2"; g add "$2"; g commit -qm "tail $1"
+  OUT=$(chain A,B); RC=$?
+  assert_exit_code "$RC" "$4" "tail $1: exit"
+  [ -n "$5" ] && assert_contains "$OUT" "$5" "tail $1: message"
+}
+tailcase new-file late.txt late 1 "chain tail: 'late.txt' changed after set 'B'"
+tailcase edit-A-file a.txt again 1 "chain tail: 'a.txt' changed after set 'B'"
+tailcase edit-B-file n.txt again 1 "chain tail: 'n.txt' changed after set 'B'"
+tailcase revert-to-base a.txt base 1 "chain tail: 'a.txt' changed after set 'B'"
+tailcase changelog CHANGELOG.md log 0 ""
+
+# Parity with Mode A: for each tail path, the chain verdict equals Mode A's verdict for set B alone moved past its head.
+mkdir -p "$R/.claude"; printf -- '- exclude_allowlist: vendor/dist/**\n' > "$R/.claude/review-loop-config.md"
+for pth in CHANGELOG.md package-lock.json platforms/x/y.js vendor/dist/z.txt late.txt a.txt n.txt src/app.js .claude/review-loop-config.md; do
+  g reset -q --hard "$TIP"
+  mkdir -p "$(dirname "$R/$pth")"; [ -e "$R/$pth" ] && printf 'edit\n' >> "$R/$pth" || printf 'edit\n' > "$R/$pth"
+  [ "$pth" = ".claude/review-loop-config.md" ] || { g add -f "$pth"; g commit -qm "parity $pth"; }
+  node "$SCRIPT" --ledger "$L" --phase B --branch work --phase-base "$X" --repo-root "$R" >/dev/null 2>&1; MA=$?
+  chain A,B >/dev/null; MC=$?
+  assert_eq "$MC" "$MA" "parity: tail path '$pth': --chain verdict ($MC) equals Mode A's ($MA)"
+done
+g reset -q --hard "$TIP"; rm -rf "$R/.claude" "$R/vendor" "$R/platforms" "$R/package-lock.json" "$R/src"
 
 # Negative controls: a copy of the scripts with ONE check removed must pass the red case (proving the red case
 # is caught by that check and not by something else); the real script rejects it (asserted above).
@@ -85,11 +106,13 @@ SCRIPT_UNDER="$MUT/scripts/check-phase-review-receipt.js"
 mutate "contiguity off" "if (cur.base !== want) {" "if (false) {"
 OUT=$(chain A,Bgap); assert_exit_code "$?" "0" "NC1: without the contiguity check the gap case passes (so the check is what rejects it)"
 OUT=$(chain A,Bov); assert_exit_code "$?" "0" "NC1: without the contiguity check the overlap case passes"
-OUT=$(chain B,A); assert_exit_code "$?" "0" "NC1: without the contiguity check the reversed order passes"
-mutate "coverage off" "if (owner >= 0) continue;" "continue;"
-OUT=$(chain A,B); assert_exit_code "$?" "0" "NC2 setup: coverage-off script still passes the good chain"
-g reset -q --hard "$TIP"; echo late > "$R/late.txt"; g add late.txt; g commit -qm tail2
-OUT=$(chain A,B); assert_exit_code "$?" "0" "NC2: without the coverage check the past-the-head product file passes (so coverage is what rejects it)"
+OUT=$(chain B,A); assert_exit_code "$?" "1" "NC1: reversed order is still rejected without the contiguity check (the tail check also sees it: two layers)"
+mutate "tail check off" "if (finalSet.head !== tip) {" "if (false) {"
+OUT=$(chain A,B); assert_exit_code "$?" "0" "NC2 setup: tail-check-off script still passes the good chain"
+for spec in "late.txt late" "a.txt again" "n.txt again" "a.txt base"; do
+  set -- $spec; g reset -q --hard "$TIP"; printf '%s\n' "$2" > "$R/$1"; g add "$1"; g commit -qm "nc2 $1"
+  OUT=$(chain A,B); assert_exit_code "$?" "0" "NC2: without the tail check '$1' (content '$2') changed past B's head passes (so the tail check is what rejects it)"
+done
 g reset -q --hard "$TIP"
 mutate "verdict relaxed" "receipt.verdict !== 'SHIP-AS-IS' || derivedState.verdict !== 'SHIP-AS-IS'" "receipt.verdict !== derivedState.verdict"
 OUT=$(chain Afix,B); assert_exit_code "$?" "0" "NC3: with the verdict check relaxed a FIX-THEN-SHIP member passes"

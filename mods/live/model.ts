@@ -1703,7 +1703,7 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
       continue
     }
     const urlTk = tk.cs.some(c => c.u === true)
-    if (w + tk.w > cols && content && !(urlTk && w <= prefixW)) newLine() // an address that is the first thing after the row's own prefix (w <= hang) stays: it overflows rather than leaving the prefix alone
+    if (w + tk.w > cols && content && !(urlTk && lines.length === 0 && w <= prefixW)) newLine() // an address that is the first thing after the row's own prefix stays (first line only: a continuation line starts at the clamped hang, which can be under the prefix width, so w <= prefixW there says nothing): it overflows rather than leaving the prefix alone
     if (w + tk.w <= cols) { cur.push(...tk.cs); w += tk.w; content = true; continue }
     if (urlTk) { cur.push(...tk.cs); w += tk.w; content = true; continue } // an address longer than a whole line overflows it (never split)
     for (const c of tk.cs) { // one token longer than a whole line: hard-break it

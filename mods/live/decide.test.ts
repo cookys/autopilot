@@ -723,3 +723,30 @@ test('cardwrap r3: below 32 columns a URL that starts a label still stays beside
     expect(violations(ls, cols, makeT('zh-TW')).filter(v => v.startsWith('I3')), loc).toEqual([])
   }
 })
+test('cardwrap r4: a URL that follows words on a continuation line is not mistaken for the first token after the prefix (24 and 30 columns)', () => {
+  const url = 'https://example.invalid/abcdefghijklmnopqrstuvwxyz0123456789'
+  for (const label of ['甲乙丙丁戊 ' + url, '甲乙丙丁戊 https://x.io']) for (const cols of [24, 30]) {
+    const ls = decideTabLines(snapOf([dec('d-cont', 'q?', { options: [OPT(label), OPT('乙')] })]), ctxOf(makeT('zh-TW'), cols, view()))
+    const loc = 'cols ' + cols + ' ' + label.slice(-12)
+    const rows = texts(ls)
+    const u = label.slice(6)
+    const at = rows.findIndex(x => x.includes(u))
+    expect(at, loc + ': the URL is on a row').toBeGreaterThan(0)
+    expect(rows[at].trim(), loc + ': the URL has a row of its own, not glued to a short word').toBe(u)
+    if (u.length < cols - 1 - 16) expect(ui.displayWidth(rows[at]), loc + ': a URL that fits a fresh continuation row does not overflow it').toBeLessThanOrEqual(cols - 1)
+    expect(violations(ls, cols, makeT('zh-TW')).filter(v => v.startsWith('I3')), loc).toEqual([])
+  }
+})
+test('cardwrap r4b: wrapLines on one long choice row (prefix 16, label with words before the URL): the URL starts its own continuation row, 24 and 30 columns', () => {
+  const url = 'https://example.invalid/abcdefghijklmnopqrstuvwxyz0123456789'
+  for (const tail of [url, 'https://x.io']) for (const cols of [24, 30]) {
+    const text = '  選項      [ ] 甲乙丙丁戊 ' + tail
+    const row = { kind: 'choice' as const, text, segs: [{ text: '  選項      [ ] ', press: 'pick:d:0' }, { text: '甲乙丙丁戊 ' + tail, press: 'pick:d:0' }], hang: 16 } as PaneLine
+    const out = wrapLines([row], cols).map(l => l.text)
+    const at = out.findIndex(x => x.includes(tail))
+    const loc = cols + ' ' + tail.slice(-8) + ' ' + JSON.stringify(out)
+    expect(at, loc).toBeGreaterThan(0)
+    expect(out[at].trim(), loc + ': the URL has a row of its own').toBe(tail)
+    expect(out.join('').replace(/ /g, ''), loc).toBe(text.replace(/ /g, ''))
+  }
+})

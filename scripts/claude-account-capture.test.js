@@ -840,3 +840,57 @@ test('G40-BL0375 review negative control: with the dry-run guard removed, the mo
     assert.ok(fs.existsSync(fx.auditFile), 'it wrote the audit file that did not exist');
   } finally { fx.cleanup(); }
 });
+
+// ------------------------------------------------------------------ BL-0376 (G40 D5 review g2): adapter failures on the audit line
+const cliSnap = (alias, pct5) => ({ schema: 'codeforge.quota/1', alias, root: null, written_at_ms: NOW - 1000, five_hour: { pct: pct5, resets_at: NOW_S + 3600 }, seven_day: null });
+function lockMirror(fx, alias) {
+  const dir = observation.mirrorDir(fx.liveDir, 'claude');
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return holdOsLock(path.join(dir, `${alias}.oslock`));
+}
+
+test('BL-0376: an attempt with its own capture reason AND an adapter failure on the same alias keeps both (closed `a+b` form)', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }], snapshots: { a: cliSnap('a', 0.2) }, responses: { a: stream(ev('0.4', 0.1)) } }); // a malformed event: bad_event
+  const holder = lockMirror(fx, 'a');
+  try {
+    const r = await go(fx, RUN);
+    assert.strictEqual(r.code, 0);
+    const l = auditLines(fx);
+    assert.strictEqual(l.length, 1);
+    assert.strictEqual(l[0].quota_capture, 'bad_event+mirror_lock_busy');
+    assert.strictEqual(audit.validateRecord(l[0]).ok, true, 'the combined form is inside the validated closed set');
+    assert.match((await go(fx, ['status'])).out, / quota_capture=bad_event\+mirror_lock_busy\n/);
+  } finally { holder.release(); fx.cleanup(); }
+});
+
+test('BL-0376: an unpinned run attributes an adapter failure to ITS alias: the line of another alias never carries it', async () => {
+  // a is the better alias (first attempt, answers 429); b's mirror is locked, so only b's adapter write fails; b is attempted second.
+  const r429 = { exit: 1, stdout: R429.stdout };
+  const fx = makeFixture({ aliases: [{ alias: 'a' }, { alias: 'b' }], snapshots: { a: cliSnap('a', 0.1), b: cliSnap('b', 0.5) }, responses: { a: r429 } });
+  const holder = lockMirror(fx, 'b');
+  try {
+    assert.strictEqual((await go(fx, RUN)).code, 0);
+    const l = auditLines(fx);
+    assert.deepStrictEqual(l.map((x) => [x.alias, x.attempt, x.quota_capture]), [['a', 1, undefined], ['b', 2, 'mirror_lock_busy']]);
+  } finally { holder.release(); fx.cleanup(); }
+  // the failing alias is NOT the one attempted: nothing wrong is written on the attempted alias's line
+  const fy = makeFixture({ aliases: [{ alias: 'a' }, { alias: 'b' }], snapshots: { a: cliSnap('a', 0.5), b: cliSnap('b', 0.1) } });
+  const h2 = lockMirror(fy, 'a');
+  try {
+    assert.strictEqual((await go(fy, RUN)).code, 0);
+    const l = auditLines(fy);
+    assert.deepStrictEqual(l.map((x) => [x.alias, x.quota_capture]), [['b', undefined]]);
+  } finally { h2.release(); fy.cleanup(); }
+});
+
+test('BL-0376: account-audit closes the combined form (two distinct atomic reasons only)', () => {
+  const rec = (q) => Object.assign(audit.buildRecord({ alias: 'a', purpose: 'tst', attempt: 1, outcome: 'ok' }, NOW), { quota_capture: q });
+  for (const good of ['bad_event+mirror_lock_busy', 'lock_helper+lock_unreadable:EACCES']) assert.strictEqual(audit.validateRecord(rec(good)).ok, true, good);
+  for (const bad of ['bad_event+bad_event', 'bad_event+mirror_lock_busy+lock_helper', 'bad_event+', '+bad_event', 'bad_event+nope', 'bad_event +lock_helper']) {
+    assert.deepStrictEqual(audit.validateRecord(rec(bad)), { ok: false, reason: 'bad_quota_capture' }, bad);
+  }
+  assert.strictEqual(audit.combineCaptureReasons(null, 'x'), 'x');
+  assert.strictEqual(audit.combineCaptureReasons('x', null), 'x');
+  assert.strictEqual(audit.combineCaptureReasons('x', 'x'), 'x');
+  assert.strictEqual(audit.combineCaptureReasons('x', 'y'), 'x+y');
+});

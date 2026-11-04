@@ -321,3 +321,26 @@ test('G40-N87: --check compares the pin and the recorded hashes and ignores the 
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /golden matches/);
 });
+
+// BL-0376 (G40 D5 review g2): --check compares the whole result, and the coverage line's value is pinned, not ignored.
+test('BL-0376: normalizeResult keeps every key (a new result-level field is seen) and masks only a status run\'s coverage line', () => {
+  const base = { runs: [
+    { args: ['status'], code: 0, out: 'x\nobservations newest_age: a=none\n', err: '' },
+    { args: ['pick'], code: 0, out: 'observations newest_age: a=none\n', err: '' },
+  ], audit: null };
+  const n = gen.normalizeResult(base, {});
+  assert.strictEqual(n.runs[0].out, 'x\n');
+  assert.strictEqual(n.runs[1].out, base.runs[1].out, 'a non-status run is never masked');
+  const extra = gen.normalizeResult(Object.assign({}, base, { newField: 1 }), {});
+  assert.notDeepStrictEqual(extra, n, 'a result-level field outside runs and audit changes the compared object');
+});
+test('BL-0376: the coverage line value is pinned for every scenario that has a status run (a changed value is a problem)', async () => {
+  const deps = gen.loadDeps();
+  const results = [];
+  for (const spec of gen.cliScenarios()) results.push({ spec, result: await gen.runCliScenario(spec, 'none', deps) });
+  assert.strictEqual(gen.coverageProblem(results), null);
+  const run1 = results.find((r) => r.spec.name === 'run-first-whole-second-tight');
+  assert.deepStrictEqual(gen.coverageOf(run1.result), ['observations newest_age: a=1s b=1s'], 'the adapter row is exactly 1 s old at the injected clock');
+  const mutated = results.map((r) => (r === run1 ? { spec: r.spec, result: Object.assign({}, r.result, { runs: r.result.runs.map((x) => Object.assign({}, x, { out: x.out.replace('a=1s', 'a=2s') })) }) } : r));
+  assert.match(gen.coverageProblem(mutated), /run-first-whole-second-tight: coverage/);
+});

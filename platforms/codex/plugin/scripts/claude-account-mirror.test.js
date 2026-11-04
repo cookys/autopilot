@@ -56,6 +56,10 @@ for (const variant of ['none', 'empty-dir', 'corrupt']) {
         if (isStatus) assert.strictEqual(r.out.split('\n').filter((l) => COVERAGE.test(l)).length, 1, 'exactly one coverage line');
       });
       assert.strictEqual(got.audit, c.result.audit, `${c.spec.name} audit bytes`);
+      // BL-0376: the WHOLE result (every key, not just runs and audit) after the documented masking, and the coverage line's value
+      // against the pin computed from the fixture's injected clock instead of being ignored.
+      assert.deepStrictEqual(gen.normalizeResult(got, c.spec), gen.normalizeResult(c.result, c.spec), `${c.spec.name} whole result`);
+      assert.deepStrictEqual(gen.coverageOf(got), gen.COVERAGE_PINS[c.spec.name] || [], `${c.spec.name} coverage line value`);
     }
   });
 }

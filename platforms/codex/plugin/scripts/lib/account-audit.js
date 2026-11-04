@@ -24,7 +24,7 @@ const os = require('os');
 const path = require('path');
 
 const AUDIT_KEYS = ['ts', 'ts_local', 'alias', 'purpose', 'attempt', 'outcome'];
-// Optional keys: absent is normal; present only with a value from QUOTA_CAPTURE_REASONS (or lock_unreadable:<CODE>).
+// Optional keys: absent is normal; present only with a value from QUOTA_CAPTURE_REASONS (or lock_unreadable:<CODE>), or two distinct such reasons joined by '+'.
 const OPTIONAL_KEYS = ['quota_capture'];
 const QUOTA_CAPTURE_REASONS = [
   'bad_event', 'mirror_lock_busy', 'view_unsupported', 'write_failed', 'live_dir_refused', 'dir_refused',
@@ -32,6 +32,21 @@ const QUOTA_CAPTURE_REASONS = [
 ];
 const LOCK_UNREADABLE_RE = /^lock_unreadable:[A-Z0-9_]{1,24}$/;
 function captureReasonOk(v) { return typeof v === 'string' && (QUOTA_CAPTURE_REASONS.includes(v) || LOCK_UNREADABLE_RE.test(v)); }
+// BL-0376: one attempt line can carry two reasons (the attempt's own capture reason and its alias's statusline-adapter failure).
+// The field stays a closed set: one atomic reason, or exactly two DISTINCT atomic reasons joined by '+' (capture first, adapter second).
+function captureFieldOk(v) {
+  if (typeof v !== 'string') return false;
+  const parts = v.split('+');
+  if (parts.length > 2) return false;
+  if (parts.length === 2 && parts[0] === parts[1]) return false;
+  return parts.every(captureReasonOk);
+}
+/** Joins two atomic reasons (either may be null) into one field value; equal reasons collapse, order is first-then-second. */
+function combineCaptureReasons(first, second) {
+  if (!first) return second || null;
+  if (!second || second === first) return first;
+  return `${first}+${second}`;
+}
 
 const OUTCOMES = [
   'ok', 'rate_limited', 'auth_failed', 'child_error', 'timeout', 'other_failure',
@@ -86,7 +101,7 @@ function validateRecord(rec, opts) {
   for (const k of AUDIT_KEYS) {
     if (!(k in rec)) return { ok: false, reason: `missing_key:${k}` };
   }
-  if ('quota_capture' in rec && !captureReasonOk(rec.quota_capture)) return { ok: false, reason: 'bad_quota_capture' };
+  if ('quota_capture' in rec && !captureFieldOk(rec.quota_capture)) return { ok: false, reason: 'bad_quota_capture' };
   if (!Number.isSafeInteger(rec.ts) || rec.ts < 0) return { ok: false, reason: 'bad_ts' };
   if (typeof rec.ts_local !== 'string' || rec.ts_local !== formatTaipei(rec.ts)) return { ok: false, reason: 'bad_ts_local' };
   if (typeof rec.outcome !== 'string' || !OUTCOMES.includes(rec.outcome)) return { ok: false, reason: 'unknown_outcome' };
@@ -204,6 +219,6 @@ function renderStatus(result, opts) {
 }
 
 module.exports = {
-  AUDIT_KEYS, OPTIONAL_KEYS, QUOTA_CAPTURE_REASONS, captureReasonOk, OUTCOMES, PRE_ATTEMPT_OUTCOMES, auditPath, validateRecord,
+  AUDIT_KEYS, OPTIONAL_KEYS, QUOTA_CAPTURE_REASONS, captureReasonOk, captureFieldOk, combineCaptureReasons, OUTCOMES, PRE_ATTEMPT_OUTCOMES, auditPath, validateRecord,
   formatTaipei, buildRecord, appendAudit, readAudit, renderStatus,
 };

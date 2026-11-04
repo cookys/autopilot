@@ -263,7 +263,9 @@ function consumeAll(bytes, blocks, tmp, tag, model) {
     const u = usages[0];
     res.j9_usage_lines = String(lines.length);
     res.j9_usage_fields = u && typeof u === 'object' ? Object.keys(u).map((k) => `${k}:${Array.isArray(u[k]) ? 'array' : typeof u[k]}`).join(',') : 'none';
-    res.j9_usage_self = JSON.stringify(u) === JSON.stringify(JSON.parse(bytes.split('\n').filter(Boolean)[0]).usage) ? 'ok' : 'differs';
+    // The comparison value is parsed on its own (whole envelope, top-level usage), not by the expression that produced `u`.
+    let topU; try { topU = JSON.parse(bytes).usage; } catch (_) { topU = undefined; }
+    res.j9_usage_self = JSON.stringify(u) === JSON.stringify(topU) ? 'ok' : 'differs';
   } catch (_) { res.j9_usage_lines = 'unparsable'; res.j9_usage_fields = 'unparsable'; res.j9_usage_self = 'unparsable'; }
   return res;
 }
@@ -535,7 +537,7 @@ function cmdRun(opts) {
     // fail only because the model does not exist; a rate-limit, auth or overload envelope there is as much a stop as anywhere.
     // 2 = invalid usage/registry/token, 3 = no account, 4 = rate limited, 6 = auth stop, 7 = token leak, -1 = could not start: none is a measurement result.
     const why = [-1, 2, 3, 4, 6, 7].includes(exit) ? `wrapper_exit_${exit}` : stopStatus(`${base}.stdout`);
-    if (why) { meta.aborted = why; writeJson(metaFile, meta); saveResume('aborted', null); process.stderr.write(`aborted: ${why}\n`); return EXIT.ABORT; }
+    if (why) { meta.aborted = why; writeJson(metaFile, meta); saveResume('aborted', null); process.stderr.write(`aborted: ${why}\n`); if (r.stderr) process.stderr.write(`wrapper said: ${String(r.stderr).trim().slice(0, 300)}\n`); return EXIT.ABORT; }
   }
   meta.claude_version_end = claudeVersion(process.env);
   writeJson(metaFile, meta);
@@ -671,6 +673,9 @@ function runSelftest(opts) {
     const wrongFirst = (t) => t.replace('"stop_reason":"end_turn",', '"stop_reason":"end_turn","model_usage_since_last_result":{"m":{"session_id":"wrong"}},');
     const rJ8 = A(ds('j8-nested', null, (d) => mutateS(d, (e, t) => (e === 'stdout' ? t.split('\n').map((l) => (l.includes('"type":"result"') ? wrongFirst(l) : l)).join('\n') : t))));
     results.J8_NESTED_WRONG_ID = red(rJ8) && rJ8.profiles.P1a.layer1.j8_session_value_self === 'differs' && rJ8.profiles.P1a.layer2.result === 'identical_after_mask' ? 'red' : 'MISSED';
+    // J9 must see the usage of the envelope's own top level: a first line that carries another usage is a mismatch, not a pass.
+    const rJ9 = A(ds('j9-mismatch'), conv((s0) => { const r0 = streamToEnvelope(s0); return { ok: r0.ok, bytes: JSON.stringify({ type: 'system', usage: { input_tokens: 999 } }) + '\n' + r0.bytes }; }));
+    results.J9_USAGE_MISMATCH = red(rJ9) && rJ9.profiles.P1a.layer1.j9_usage_self === 'differs' ? 'red' : 'MISSED';
     // Masking is by declared path: a duration_ms inside permission_denials[] is not volatile.
     const rPath = A(ds('path', { denials: 'vary' }));
     results.MASK_PATH = red(rPath) && rPath.profiles.P1a.layer2.result === 'differs' ? 'red' : 'MISSED';

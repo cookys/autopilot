@@ -19,7 +19,7 @@ const snap = (alias, pct) => ({ schema: 'codeforge.quota/1', alias, root: null, 
 test('selftest: R1-R13 all red, the R10 positive control green, exit 0', () => {
   const r = cli(['selftest']);
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
-  for (const id of ['J8_NESTED_WRONG_ID', 'ADD_SECOND_KEY', 'MASK_PATH', 'PARTIAL_NEVER_PASS', 'BLOCK_FAILS', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R11', 'R12', 'R13', 'R10_undeclared_field']) assert.match(r.stdout, new RegExp(`^${id}: red$`, 'm'));
+  for (const id of ['J8_NESTED_WRONG_ID', 'J9_USAGE_MISMATCH', 'ADD_SECOND_KEY', 'MASK_PATH', 'PARTIAL_NEVER_PASS', 'BLOCK_FAILS', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R11', 'R12', 'R13', 'R10_undeclared_field']) assert.match(r.stdout, new RegExp(`^${id}: red$`, 'm'));
   assert.match(r.stdout, /^R10: green$/m);
   assert.match(r.stdout, /^ADD_POSITIVE: green$/m);
 });
@@ -301,20 +301,42 @@ test('runs_failed counts runs (the unit of runs_total), not profiles', () => {
   rm(d);
 });
 
-test('N9 mutation: dropping the purpose from the wrapper call turns the good run red (nothing reaches the shim as a model call)', () => {
+// Runs a mutated copy of the instrument (written to a temp dir, relative requires pointed at scripts/ by absolute path) through the
+// real wrapper and the claude shim. Returns what N9 needs to judge: the run result and the shim's calls.
+function runMutant(mutate) {
   const fx = makeFixture({ aliases: [{ alias: 'a' }], snapshots: { a: snap('a', 0.1) }, responses: { a: DUAL_OK } });
-  const out = tmp();
-  const md = tmp(); // the mutant lives in a temp dir, never under scripts/; its relative requires are pointed at scripts/ by absolute path
+  const out = tmp(); const md = tmp();
   try {
     const src = fs.readFileSync(SCRIPT, 'utf8');
-    const mutated = src.replace("'--purpose', PURPOSE, ", '').split("require('./").join(`require('${__dirname}/`).split('__dirname').join(JSON.stringify(__dirname));
-    assert.notStrictEqual(mutated, src, 'the mutation did not apply');
+    const mutated = mutate(src).split("require('./").join(`require('${__dirname}/`).split('__dirname').join(JSON.stringify(__dirname));
     const mutant = path.join(md, 'mutant.js');
     fs.writeFileSync(mutant, mutated);
     const r = spawnSync(process.execPath, [mutant].concat(runArgs('a', out)), { encoding: 'utf8', env: runEnv(fx) });
-    assert.notStrictEqual(r.status, 0, 'the mutated run must not pass: ' + r.stderr);
-    assert.ok(fx.shim.calls().every((c) => c.argv.includes('--version')), 'no model call reached the shim');
+    return { src, mutated, r, calls: fx.shim.calls() };
   } finally { fx.cleanup(); rm(out); rm(md); }
+}
+const dropPurpose = (src) => src.replace("'--purpose', PURPOSE, ", '');
+// N9 holds only if ALL THREE are true: (a) the mutation really removed the purpose argument, (b) the wrapper itself refused with its
+// purpose_required message, (c) the shim logged at least one call (so the run really reached the claude path and only the purpose broke it).
+function n9Problems(m) {
+  const p = [];
+  if (m.mutated === m.src || m.mutated.includes("'--purpose', PURPOSE")) p.push('mutation_not_applied');
+  if (m.r.status === 0) p.push('mutated_run_passed');
+  if (!/purpose_required/.test(m.r.stderr)) p.push('no_purpose_required_message');
+  if (m.calls.length < 1) p.push('shim_logged_no_call');
+  if (!m.calls.every((c) => c.argv.includes('--version'))) p.push('a_model_call_reached_the_shim');
+  return p;
+}
+
+test('N9 mutation: dropping the purpose from the wrapper call turns the good run red, for the right reason', () => {
+  assert.deepStrictEqual(n9Problems(runMutant(dropPurpose)), []);
+});
+
+test('N9 mutation: a mutant that crashes at load does not satisfy the check (negative control)', () => {
+  const m = runMutant((src) => dropPurpose(src).replace("'use strict';", "'use strict';\nrequire('./does-not-exist-xyz');"));
+  assert.notStrictEqual(m.r.status, 0);
+  const p = n9Problems(m);
+  assert.ok(p.includes('no_purpose_required_message') && p.includes('shim_logged_no_call'), `the crash mutant must fail N9, got ${JSON.stringify(p)}`);
 });
 
 test('no mutant or scratch file is left under scripts/', () => {

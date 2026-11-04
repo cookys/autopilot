@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0390 -->
+<!-- next-id: BL-0397 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2019,3 +2019,115 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: BL-0383 review g1-g3 and entrydoc-full (PM, 2026-11-04; fix approved by PM)
 - **Pointer**: project/backlog/collect-scope-mismatch.md
+
+### 全套件跑完的紀錄，推送前的結果檢查讀不到
+- **Id**: BL-0390
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 全套件與審查流程的檢討, 2026-11-05
+- **Reply**: none
+- **Problem**: 推送前的結果檢查只讀「受影響套件」那種紀錄，全套件跑完存下的紀錄會被忽略，所以用全套件驗過的合併，還得再補跑一次部分套件才能過關。
+- **Impact**: 合併者要跑兩次套件，浪費時間，還容易漏補。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-04/05 (approved)
+- **Pointer**: project/backlog/outcome-gate-full-suite-record.md
+
+### 受影響套件的挑選在純文件變更時太寬，又漏掉三種依賴
+- **Id**: BL-0391
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 全套件與審查流程的檢討, 2026-11-05
+- **Reply**: none
+- **Problem**: 只改文件也會挑出幾乎全部套件，全套件規定幾乎每條工作線都觸發；同時漏掉複製腳本進暫存目錄、掃整棵目錄內容、凍結技能檔副本的三種測試。
+- **Impact**: 挑選又寬又漏：多花時間跑無關套件，真正會紅的反而沒挑到。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: PM 2026-11-04/05 (approved)
+- **Pointer**: project/backlog/affected-suites-blind-spots.md
+
+### 全套件跑時，序列套件變紅不會單獨重跑
+- **Id**: BL-0392
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 全套件與審查流程的檢討, 2026-11-05
+- **Reply**: none
+- **Problem**: 全套件執行只會把並行池裡紅的套件單獨重跑，列在序列清單的套件不會。負載高時計時敏感的序列套件紅了，單獨跑卻是綠的，卻被當成退步。
+- **Impact**: 負載高時會有假紅，合併者得手動辨認，容易誤判成真的退步。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-04/05 (approved)
+- **Pointer**: project/backlog/run-all-serial-rerun.md
+
+### mods 三個測試腳本從不在全套件裡跑
+- **Id**: BL-0393
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 全套件與審查流程的檢討, 2026-11-05
+- **Reply**: none
+- **Problem**: mods 底下 live、viewer、roundtable 三個測試腳本要呼叫真的 claude，但全套件的哨兵路徑會擋掉它，所以這三組測試從來沒跑過。
+- **Impact**: 這三個 mod 的 852 個測試沒有任何自動把關，壞了也不會被發現。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: PM 2026-11-04/05 (approved)
+- **Pointer**: project/backlog/mods-run-tests-full-suite.md
+
+### rrint1 審查留下的後續小項
+- **Id**: BL-0394
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: review seats（hetero-review rrint1 g1）
+- **Report**: rrint1 g1 review, 2026-11-05
+- **Reply**: none
+- **Problem**: 審查迴圈有幾個小缺口：Range 的值大小寫不一致會被當成無法辨識、單獨的 --expect-range 被默默忽略、重新定稿路徑不提醒未解決項，另有兩個測試不夠嚴。
+- **Impact**: 都是小缺口，不修不會壞，但審查範圍檢查偶爾會誤判或漏報。
+- **Trigger**: 下次改 hetero-review-loop.js 時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: rrint1 g1 deferred Suggestions
+- **Pointer**: project/backlog/rrint1-review-follow-ups.md
+
+### 主 checkout 的 hooksPath 指進工作線目錄，會蓋掉全域實驗室鉤子
+- **Id**: BL-0395
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 主 checkout 鉤子路徑事件, 2026-11-05
+- **Reply**: none
+- **Problem**: 主 checkout 的本機設定曾把鉤子路徑指進某條工作線的目錄，所有 worktree 的推送都跑那條線的鉤子；該目錄一刪或換分支鉤子就悄悄消失，還蓋掉全域實驗室鉤子。已手動修好。
+- **Impact**: 鉤子悄悄失效，推送前的檢查沒跑，沒人發現。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-05 (approved)
+- **Pointer**: project/backlog/repo-local-hookspath-shadow.md
+
+### mods 真實 claude 守衛可能被殘留的子孫行程搶時間差
+- **Id**: BL-0396
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: review seats（hetero-review modsreal g3, astra）；PM（pm--claude）
+- **Report**: modsreal g3 review, 2026-11-05；2026-11-05 PM ruling
+- **Reply**: none；none
+- **Problem**: 守衛先驗沙箱根目錄身分再掃描清理；claude 跑完後仍活著的子孫行程可在驗身分與掃描之間換掉路徑，讓掃描只看到符號連結而誤判為綠，或讓 chmod 跟著換過的連結走。
+- **Impact**: 守衛偵測意外洩漏憑證或對話紀錄的能力在極端時序下失靈；不是對付惡意行程。
+- **Trigger**: modsreal 工作線合併後
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: modsreal g3 review (astra); PM ruling 2026-11-05 (not a blocker)
+- **Pointer**: project/backlog/real-claude-guard-descendant-race.md

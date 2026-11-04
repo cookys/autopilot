@@ -16,6 +16,7 @@ This reference indexes the three deterministic scripts supporting dev-flow's pla
 - **What**: Executes multi-seat review collection, disposition aggregation, verdict synthesis, and opt-out receipt generation. Supports `--exclude <pathspec,...>` on `collect` to omit generated or mirrored files via negative pathspecs, records `excluded` and `diff_bytes` in `range.json`, and warns if diff size exceeds 400,000 bytes prior to dispatching.
 - **When**: Called by the `hetero_review` generation-adversarial review loop via `collect`, `finalize`, or `opt-out` subcommands.
 - **Large range**: A range too large for one packet is split by path with `--packets <packets.json> --packet <id>` (every changed file in exactly one packet) and gated by `check-phase-review-receipt.js --packets`; `--exclude` is never the way to shrink a review.
+- **Frozen review set that cannot take new files**: when a fix adds files the first set cannot absorb, review the rest with a second set and gate with `check-phase-review-receipt.js --chain A,B --ledger <dir> --branch <b> --phase-base <sha>`; every set must be SHIP-AS-IS, set k must start at set k-1's last reviewed head, and every changed path must lie in some set's range. Packets members are not supported yet: validate those separately with `--packets`.
 - **Contract**: Canonical options and subcommands in `node scripts/hetero-review-loop.js --help`; indexed in `docs/scripts-inventory.md`.
 
 ### scripts/check-phase-review-receipt.js

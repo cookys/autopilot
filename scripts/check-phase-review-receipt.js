@@ -13,6 +13,10 @@
  *   receipt alone is refused by Mode A. Exit 0 only when the whole set holds. Plan:
  *   project/plans/_archive/2026/10/2026-10-11-review-packet-mode.md. Shared rules: scripts/lib/review-packets.js.
  *
+ * Mode D: review chain (sets A,B,... reviewing one contiguous base..tip; see validateReviewChain)
+ *   Flags: --chain <A,B[,C...]> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
+ *   Packets members are not supported yet: validate those with --packets, separately.
+ *
  * Mode B: plan-artifact / dispositions validation
  *   Flags: --plan-artifact <gN.json> --dispositions <gN-disposition.json>
  *   Validates that all candidate blockers have valid accepted/rejected dispositions.
@@ -67,12 +71,19 @@ function printUsage() {
   Mode C (Review packet set — a range too big for one packet, split by path):
     node scripts/check-phase-review-receipt.js --packets <packets.json> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
 
+  Mode D (Review chain — several review sets that together review one contiguous base..tip):
+    node scripts/check-phase-review-receipt.js --chain <A,B[,C...]> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
+
   Mode B (Plan-artifact / dispositions validation):
     node scripts/check-phase-review-receipt.js --plan-artifact <gN.json> --dispositions <gN-disp.json> [--plan-file <p>] [--rubric-file <r>]
 
 Flags:
   --ledger <dir>                    Ledger directory containing receipts
   --phase <id>                      Phase identifier
+  --chain <A,B[,C...]>              Review sets in review order (Mode A phase ids in one --ledger); each must pass Mode A
+                                    (SHIP-AS-IS), set k must start at set k-1's last reviewed head, and every changed path
+                                    must be in the range of some set. Packets members are not supported yet: validate those
+                                    with --packets, separately.
   --branch <b>                      Git branch name
   --phase-base <sha>                Expected phase base commit sha (mandatory for review mode)
   --repo-root <r>                   Path to repository root (defaults to cwd)
@@ -547,6 +558,25 @@ function resolveConfiguredMinSeats(flags) {
 // report a misleading second error. (Chosen over one child process per packet: the packet context stays an
 // in-process parameter, not a CLI flag a caller could pass to a lone receipt.)
 class ExitSignal { constructor(code) { this.code = code; } }
+
+// The one rule for "the branch moved past the last reviewed head": the move is tolerated only when EVERY
+// changed path is an allowlisted exclusion or a sidecar (CHANGELOG.md, projects index). Mode A step (5) and
+// the --chain tail check both call this, so the two can never diverge.
+function pathsMovedAfterHead(repoRoot, range, consumerAllowlist) {
+  // --no-renames: a rename shows only its destination otherwise (and diff.renames in the user's git config
+  // decides), so a reviewed product file moved onto an allowlisted path would list only the allowed path.
+  const diffRes = spawnSync('git', ['diff', '--no-renames', '--name-only', range], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  const changedPaths = (diffRes.stdout || '')
+    .split('\n')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.pathFor(repoRoot, 'projects_index');
+  const blocked = changedPaths.filter((p) => !(isPathspecAllowed(p, consumerAllowlist, repoRoot) || sidecarAllowed(p)));
+  return { changedPaths, blocked, allAllowed: diffRes.status === 0 && blocked.length === 0 };
+}
 
 function validateModeA(flags, opts = {}) {
   const packetSet = opts.packetSet || null;
@@ -1136,7 +1166,8 @@ function validateModeA(flags, opts = {}) {
 
     // Packet member: the set check owns the head rule (ancestor of the tip, no packet path changed
     // since this packet's last reviewed head) — a fix landed for ANOTHER packet moves the tip legitimately.
-    if (packetSet) process.exit(0);
+    // Chain member: the chain check owns the head rule (contiguity, tip ancestry, tail coverage).
+    if (packetSet || opts.chainMember) process.exit(0);
 
     // (5) the last chain entry's head must equal current git rev-parse <branch> in repoRoot
     const lastEntry = chain[chain.length - 1];
@@ -1151,17 +1182,9 @@ function validateModeA(flags, opts = {}) {
     const currentBranchHead = revParseRes.stdout.trim();
     if (currentBranchHead !== lastEntry.head) {
       const range = `${lastEntry.head}..${currentBranchHead}`;
-      const diffRes = spawnSync('git', ['diff', '--name-only', range], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-      });
-      const changedPaths = (diffRes.stdout || '')
-        .split('\n')
-        .map((p) => p.trim())
-        .filter(Boolean);
-      const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.pathFor(repoRoot, 'projects_index');
-      const allAllowed = diffRes.status === 0
-        && changedPaths.every((p) => isPathspecAllowed(p, consumerAllowlist, repoRoot) || sidecarAllowed(p));
+      const moved = pathsMovedAfterHead(repoRoot, range, consumerAllowlist);
+      const changedPaths = moved.changedPaths;
+      const allAllowed = moved.allAllowed;
       if (!allAllowed) {
         console.error(`Branch '${branch}' head has moved: expected '${lastEntry.head}', got '${currentBranchHead}'`);
         process.exit(1);
@@ -1364,6 +1387,98 @@ function validatePacketSet(flags) {
   process.exit(0);
 }
 
+// Review chain — several review sets, each its own Mode A phase, that together review one contiguous
+// base..tip (e.g. set A frozen at x, new files added by the fix, set B reviewing x..tip). Every member
+// passes Mode A unchanged (SHIP-AS-IS included) except the "branch head == last chain head" step, which this
+// function replaces: set k must start where set k-1 ended (so the sets tile base..lastHead exactly), the last
+// set's head must be an ancestor of the tip, and whatever lies between the last head and the tip must be
+// tolerated by the same function Mode A uses past its head (pathsMovedAfterHead).
+function validateReviewChain(flags) {
+  const fail = (msg) => { console.error(msg); process.exit(1); };
+  const ledgerDir = flags.ledger;
+  const branch = flags.branch;
+  const base = flags['phase-base'];
+  const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : process.cwd();
+  if (typeof flags.chain !== 'string' || !ledgerDir || !branch || typeof base !== 'string') {
+    fail('Review chain check requires --chain <A,B[,C...]>, --ledger, --branch and --phase-base');
+  }
+  if (flags.phase !== undefined || flags.packets !== undefined || flags['plan-artifact'] !== undefined || flags.dispositions !== undefined) {
+    fail('--chain cannot be combined with --phase, --packets, --plan-artifact or --dispositions');
+  }
+  const names = flags.chain.split(',');
+  if (names.some((n) => !reviewPackets.validId(n))) fail(`--chain names must be phase ids separated by commas (got '${flags.chain}')`);
+  if (new Set(names).size !== names.length) fail(`--chain names a review set twice: '${flags.chain}'`);
+  if (names.length < 2) fail(`--chain needs at least two review sets (got '${flags.chain}'); a single set is validated with --phase`);
+
+  const git = (args) => spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
+  const isAncestor = (a, b) => git(['merge-base', '--is-ancestor', '--end-of-options', a, b]).status === 0;
+  const tipRes = git(['rev-parse', branch]);
+  if (tipRes.status !== 0) fail(`Failed to rev-parse branch '${branch}': ${tipRes.stderr || 'unknown error'}`);
+  const tip = tipRes.stdout.trim();
+  const consumerAllowlist = loadConsumerExcludeAllowlist(repoRoot);
+
+  const problems = [];
+  const sets = []; // { name, base, head } for members that passed Mode A
+  for (const name of names) {
+    let firstBase = base;
+    try {
+      const c = JSON.parse(fs.readFileSync(path.join(ledgerDir, `review-${name}`, 'chain.json'), 'utf8'));
+      if (Array.isArray(c) && c[0] && typeof c[0].base === 'string') firstBase = c[0].base;
+    } catch (_e) { /* Mode A reports the unreadable chain */ }
+    const memberFlags = { ...flags, phase: name, branch, 'phase-base': firstBase, 'repo-root': repoRoot };
+    delete memberFlags.chain;
+    const r = runModeAInProcess(memberFlags, { chainMember: true });
+    if (r.code) { problems.push(`chain member '${name}' did not pass: ${r.msgs.join(' | ') || `exit ${r.code}`}`); continue; }
+    const chain = JSON.parse(fs.readFileSync(path.join(ledgerDir, `review-${name}`, 'chain.json'), 'utf8'));
+    const finalized = chain.filter((e) => e && e.status === 'finalized');
+    const last = finalized[finalized.length - 1];
+    if (!last || !last.head) { problems.push(`chain member '${name}' has no finalized generation`); continue; }
+    sets.push({ name, base: chain[0].base, head: last.head });
+  }
+  if (problems.length) fail(problems.join('\n'));
+
+  // Contiguity: exact sha equality at every seam.
+  for (let k = 0; k < sets.length; k++) {
+    const cur = sets[k];
+    const want = k === 0 ? base : sets[k - 1].head;
+    const wantWhat = k === 0 ? `--phase-base ${base}` : `set '${sets[k - 1].name}' last reviewed head ${want}`;
+    if (cur.base !== want) {
+      let kind = 'the sets are not on one line';
+      if (k > 0) {
+        if (isAncestor(want, cur.base)) kind = `gap: commits ${want}..${cur.base} were reviewed by no set`;
+        else if (isAncestor(cur.base, want)) kind = `overlap or out of order: set '${cur.name}' starts before ${wantWhat}`;
+      } else if (isAncestor(base, cur.base)) kind = `gap: commits ${base}..${cur.base} were reviewed by no set`;
+      problems.push(`chain contiguity: set '${cur.name}' base ${cur.base} is not ${wantWhat} (${kind})`);
+    }
+    if (cur.head === cur.base || !isAncestor(cur.base, cur.head)) {
+      problems.push(`chain contiguity: set '${cur.name}' last reviewed head ${cur.head} is not a descendant of its base ${cur.base}`);
+    }
+  }
+  const finalSet = sets[sets.length - 1];
+  if (!isAncestor(finalSet.head, tip)) {
+    problems.push(`chain head: set '${finalSet.name}' last reviewed head ${finalSet.head} is not an ancestor of '${branch}' (${tip})`);
+  }
+  if (problems.length) fail(`Review chain is not one contiguous range ${base}..${tip}:\n${problems.join('\n')}`);
+
+  // Tail: past the last reviewed head the branch may only move the way Mode A tolerates (pathsMovedAfterHead,
+  // the same function as Mode A step (5)). This also covers a path an earlier set reviewed and that changed
+  // again after the last head, and a path put back to its base content (it would vanish from base..tip).
+  // Base..lastHead needs no separate owner loop: the contiguity check above makes the sets tile it exactly.
+  if (finalSet.head !== tip) {
+    const moved = pathsMovedAfterHead(repoRoot, `${finalSet.head}..${tip}`, consumerAllowlist);
+    for (const p of moved.blocked) {
+      problems.push(`chain tail: '${p}' changed after set '${finalSet.name}' last reviewed head ${finalSet.head} (at '${branch}' ${tip}) and is not a path Mode A tolerates past the last head`);
+    }
+    if (!moved.allAllowed && moved.blocked.length === 0) problems.push(`chain tail: git diff ${finalSet.head}..${tip} failed`);
+  }
+  if (problems.length) fail(`Review chain does not cover '${branch}':\n${problems.join('\n')}`);
+
+  let changed;
+  try { changed = reviewPackets.rangeNames(repoRoot, base, tip); } catch (e) { fail(`Review chain: ${e.message}`); }
+  console.log(`Review chain ${names.join(',')} ok: ${sets.length} set(s), ${changed.length} path(s), base ${base} .. tip ${tip}`);
+  process.exit(0);
+}
+
 function main() {
   const flags = parseArgs(process.argv.slice(2));
 
@@ -1372,7 +1487,9 @@ function main() {
     process.exit(0);
   }
 
-  if (flags['plan-artifact'] && flags.dispositions) {
+  if (flags.chain !== undefined) {
+    validateReviewChain(flags); // first: it refuses a mix with Mode B/C/A flags instead of silently dropping --chain
+  } else if (flags['plan-artifact'] && flags.dispositions) {
     validateModeB(flags);
   } else if (flags.packets !== undefined) {
     validatePacketSet(flags);

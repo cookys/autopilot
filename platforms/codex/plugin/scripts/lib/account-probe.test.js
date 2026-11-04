@@ -1,6 +1,6 @@
 'use strict';
 // G40 D4 pure probe functions (plan 5.3, 10). Run: node --test scripts/lib/account-probe.test.js
-//   G40-N13/N14/N76  staleCandidates   G40-N66  probeModeAllowed   G40-N73  checkProbeConfig   N27-style argv equality
+//   G40-N13/N14/N76  staleCandidates   G40-N66  probeModeAllowed + BL-0375 probePolicy/resolveProbeMode/periodicDue (red cases, mutants)   G40-N73  checkProbeConfig   N27-style argv equality
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -44,16 +44,100 @@ test('G40-N14: a tight, cooling, refused, excluded or fresh alias is not a candi
   assert.deepStrictEqual(p.staleCandidates(undefined, undefined, undefined, undefined, NOW_S, 60), []);
 });
 
-test('G40-N66: scheduled is allowed only for starts_window false with evidence; unknown and true are not; off and stale always', () => {
-  const man = (sw, ev) => ({ capture: [Object.assign({ mode: 'tinyprobe', argv_template: ['x', '<PROMPT>'], starts_window: sw }, ev ? { evidence: ev } : {})] });
+// ---- BL-0375 probe policy per provider ---------------------------------------------------------------------------------
+const { loadPatched } = require('./account-fixtures/shim-install');
+const SRC = path.join(__dirname, 'account-probe.js');
+const EV = 'docs/plans/evidence/2026-11-03-g40-agent-lane-quota/capability-matrix.md';
+const Q5 = { percent: 0.5, window: 'rolling_5h', evidence: EV };
+// A provider-neutral fixture manifest: starts_window trio at the top level, Q5 in the tinyprobe capture.
+const man = (sw, conf, ev, q5) => {
+  const m = { provider: 'fx', starts_window: sw, capture: [{ mode: 'tinyprobe', argv_template: ['x', '<PROMPT>'] }] };
+  if (conf !== undefined) m.starts_window_confidence = conf;
+  if (ev !== undefined) m.starts_window_evidence = ev;
+  if (q5 !== undefined) m.capture[0].quota_share_per_probe = q5;
+  return m;
+};
+const GLM = man(true, 'high', EV, Q5); // measured: a probe starts the window (19.8)
+const MINIMAX = man(false, 'medium', EV, Q5); // leans false, medium only
+const CONFIRMED = man(false, 'high', EV, Q5);
+
+// Every red-light case of the amendment (A.6) as data. Returns the list of violated expectations: [] for the real module.
+function redCases(mod) {
+  const bad = [];
+  const expect = (name, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) bad.push(`${name}: got ${JSON.stringify(got)} want ${JSON.stringify(want)}`); };
+  const periodic = [
+    ['unknown never periodic (even high + evidence + Q5)', man('unknown', 'high', EV, Q5), false],
+    ['unknown, bare', man('unknown'), false],
+    ['true never periodic (even high + evidence + Q5)', GLM, false],
+    ['false + medium', MINIMAX, false],
+    ['false + low', man(false, 'low', EV, Q5), false],
+    ['false, confidence absent', man(false, undefined, EV, Q5), false],
+    ['false + high, no evidence', man(false, 'high', undefined, Q5), false],
+    ['false + high + evidence, no Q5', man(false, 'high', EV), false],
+    ['false + high + evidence + malformed Q5', man(false, 'high', EV, { percent: 0, window: 'rolling_5h', evidence: EV }), false],
+    ['false + high + evidence + Q5', CONFIRMED, true],
+  ];
+  for (const [name, m, want] of periodic) {
+    expect(`periodic ${name}`, mod.probePolicy(m).periodic, want);
+    expect(`unset ${name}`, mod.resolveProbeMode(m, undefined), want ? 'scheduled' : 'stale');
+    expect(`explicit scheduled ${name}`, mod.probeModeAllowed(m, 'scheduled'), want);
+    expect(`explicit off ${name}`, mod.resolveProbeMode(m, 'off'), 'off');
+    expect(`explicit stale ${name}`, mod.resolveProbeMode(m, 'stale'), 'stale');
+    const due = mod.periodicDue({ manifest: m, accounts: A('a'), merged: { a: merged(0.3, 7200) }, cooldowns: {}, exclude: [], nowS: NOW_S, demand: new Set(['a']) });
+    expect(`due ${name}`, due, want ? ['a'] : []);
+  }
+  const base = { manifest: CONFIRMED, accounts: A('a', 'b', 'c'), cooldowns: {}, exclude: [], nowS: NOW_S };
+  expect('due needs the demand set', mod.periodicDue(Object.assign({ merged: { a: merged(0.3, 7200), b: merged(0.3, 7200), c: merged(0.3, 7200) }, demand: new Set(['b']) }, base)), ['b']);
+  expect('due: newer than 30 min is skipped', mod.periodicDue(Object.assign({ merged: { a: merged(0.3, 1700), b: merged(0.3, 1900), c: merged(0.95, 7200, 'tight') }, demand: new Set(['a', 'b', 'c']) }, base)), ['b']);
+  expect('due without a demand set', mod.periodicDue(Object.assign({ merged: {}, demand: undefined }, base)), []);
+  expect('no tinyprobe: unset is off', mod.resolveProbeMode({ starts_window: false }, undefined), 'off');
+  expect('undefined manifest: unset is off', mod.resolveProbeMode(undefined, undefined), 'off');
+  return bad;
+}
+
+test('G40-N13/N66 (BL-0375): the policy table, every red-light case, on the real module', () => {
+  assert.deepStrictEqual(redCases(p), []);
   assert.strictEqual(p.probeModeAllowed(MANIFEST, 'scheduled'), false, 'Claude: unknown');
-  assert.strictEqual(p.probeModeAllowed(man('unknown', 'e.md'), 'scheduled'), false);
-  assert.strictEqual(p.probeModeAllowed(man(true, 'e.md'), 'scheduled'), false);
-  assert.strictEqual(p.probeModeAllowed(man(false, null), 'scheduled'), false, 'false without an evidence path');
-  assert.strictEqual(p.probeModeAllowed(man(false, 'e.md'), 'scheduled'), true);
+  assert.strictEqual(p.resolveProbeMode(MANIFEST, undefined), 'stale', 'Claude unset: on-demand only');
   for (const m of ['off', 'stale']) assert.strictEqual(p.probeModeAllowed(MANIFEST, m), true);
   assert.strictEqual(p.probeModeAllowed(MANIFEST, 'always'), false);
   assert.strictEqual(p.probeModeAllowed(undefined, 'scheduled'), false);
+  assert.strictEqual(p.probeModeAllowed(CONFIRMED, 'scheduled'), true);
+  assert.strictEqual(p.resolveProbeMode(GLM, undefined), 'stale', 'glm=true: on-demand only');
+  assert.strictEqual(p.resolveProbeMode(MINIMAX, undefined), 'stale', 'minimax=false/medium: on-demand only');
+});
+
+test('G40-N13 (BL-0375) flip: unknown -> confirmed false flips unset to scheduled with no config edit, and back; without Q5 it stays stale', () => {
+  assert.strictEqual(p.resolveProbeMode(man('unknown'), undefined), 'stale');
+  assert.strictEqual(p.resolveProbeMode(man(false, 'high', EV, Q5), undefined), 'scheduled');
+  assert.strictEqual(p.resolveProbeMode(man('unknown'), undefined), 'stale', 'flipped back');
+  assert.strictEqual(p.resolveProbeMode(man(false, 'high', EV), undefined), 'stale', 'no Q5 record');
+});
+
+test('G40-N13 negative control (BL-0375): dropping confirmed=false, the Q5 condition or the high condition each turns the red cases red', () => {
+  const mutants = {
+    'drop starts_window===false': ["m.starts_window === false && m.starts_window_confidence === 'high'", "m.starts_window_confidence === 'high'"],
+    'drop high': ["m.starts_window === false && m.starts_window_confidence === 'high' &&", 'm.starts_window === false &&'],
+    'drop Q5': ['periodic: !!t && confirmed && q5', 'periodic: !!t && confirmed'],
+    'drop evidence': [" && nonEmpty(m.starts_window_evidence);", ';'],
+    'unset always scheduled': ["return probePolicy(manifest).periodic ? 'scheduled' : 'stale';", "return 'scheduled';"],
+    'unset is off (old default)': ["return probePolicy(manifest).periodic ? 'scheduled' : 'stale';", "return 'off';"],
+    'due ignores demand': ['.filter((a) => o.demand.has(a))', ''],
+    'due ignores the periodic gate': ['if (!probePolicy(o.manifest).periodic || !(o.demand instanceof Set)) return [];', 'if (!(o.demand instanceof Set)) return [];'],
+  };
+  for (const [name, rep] of Object.entries(mutants)) {
+    const mod = loadPatched(SRC, [rep]);
+    assert.ok(redCases(mod).length > 0, `mutant "${name}" was not caught`);
+  }
+});
+
+test('G40-N13 (BL-0375): demandAliases counts only alias lines of runs in the last 24 h, never probe lines or pre-attempt lines', () => {
+  const now = NOW_S * 1000;
+  const r = (alias, ageS, purpose, outcome) => ({ ts: now - ageS * 1000, alias, purpose: purpose || 'tst', attempt: 1, outcome: outcome === undefined ? 'ok' : outcome });
+  const got = p.demandAliases([r('a', 60), r('b', 86400), r('c', 86401), r('-', 5, 'tst', 'mode_off'), r('d', 5, 'quota-probe'), r('e', -5), r('f', 5, 'tst', ''), null], now);
+  assert.deepStrictEqual([...got].sort(), ['a', 'b']);
+  assert.strictEqual(p.demandAliases(undefined, now).size, 0);
+  assert.strictEqual(p.demandAliases([r('a', 1)], NaN).size, 0);
 });
 
 test('G40-N73: checkProbeConfig range checks', () => {

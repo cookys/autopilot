@@ -52,7 +52,7 @@ test('G40-N27 a manifest with starts_window missing fails; true or false needs i
   assert.ok(has(manifest((m) => { delete m.starts_window; }), 'starts_window', /missing/));
   assert.ok(has(manifest((m) => { m.starts_window = 'maybe'; }), 'starts_window', /enum/));
   assert.ok(has(manifest((m) => { m.starts_window = true; }), 'starts_window_evidence'));
-  assert.deepStrictEqual(rules(manifest((m) => { m.starts_window = false; m.starts_window_evidence = m.capture[0].evidence; })), []);
+  assert.deepStrictEqual(rules(manifest((m) => { m.starts_window = false; m.starts_window_evidence = m.capture[0].evidence; probe(m).starts_window = false; })), []);
 });
 
 test('G40-N27 a verified tinyprobe whose argv_template is not byte-equal to the evidenced command fails', () => {
@@ -200,4 +200,46 @@ test('G40-D1 the token shapes have one source: the checker uses the validator\'s
   const text = '## claude code\nprefix body\n## claude\nexact body\n';
   assert.deepStrictEqual(c.matrixSection(text, 'claude'), ['exact body', '']);
   assert.deepStrictEqual(c.matrixSection('## claude code\nonly prefix\n', 'claude'), ['only prefix', '']);
+});
+
+// ---- BL-0375 probe policy fields: five checks, each with a negative control (a mutant checker that lacks the check) --------
+const { loadPatched } = require('./lib/account-fixtures/shim-install');
+const CHECKER_SRC = path.join(__dirname, 'check-quota-adapters.js');
+const EVD = SHIPPED.capture[0].evidence;
+const Q5OK = { percent: 0.5, window: 'rolling_5h', evidence: EVD };
+const confirmed = (m) => { m.starts_window = false; m.starts_window_evidence = EVD; m.starts_window_confidence = 'high'; probe(m).starts_window = false; probe(m).quota_share_per_probe = JSON.parse(JSON.stringify(Q5OK)); };
+
+// [name, manifest mutation, rule, detail regex, replacement that disables exactly that check in the checker source]
+const POLICY_CHECKS = [
+  ['1 confidence enum', (m) => { confirmed(m); m.starts_window_confidence = 'certain'; }, 'starts_window_confidence', /^enum$/,
+    ["add('starts_window_confidence', 'enum')", '0']],
+  ['2 unknown has no confidence', (m) => { m.starts_window_confidence = 'low'; }, 'starts_window_confidence', /unknown_has_no_confidence/,
+    ["add('starts_window_confidence', 'unknown_has_no_confidence')", '0']],
+  ['3 false+high needs evidence', (m) => { confirmed(m); delete m.starts_window_evidence; }, 'starts_window_confidence', /high_without_evidence/,
+    ["add('starts_window_confidence', 'high_without_evidence')", '0']],
+  ['4a quota_share percent range', (m) => { confirmed(m); probe(m).quota_share_per_probe.percent = 0; }, 'quota_share', /percent_range/,
+    ["add('quota_share', 'percent_range')", '0']],
+  ['4b quota_share evidence must exist', (m) => { confirmed(m); probe(m).quota_share_per_probe.evidence = 'docs/nope/missing.md'; }, 'quota_share', /evidence:evidence_path_missing/,
+    ["add('quota_share', `evidence:${p}`)", '0']],
+  ['4c quota_share needs a verified tinyprobe', (m) => { confirmed(m); probe(m).verified = false; probe(m).note = 'x'; }, 'quota_share', /needs_verified_tinyprobe/,
+    ["add('quota_share', 'needs_verified_tinyprobe')", '0']],
+  ['4d quota_share shape', (m) => { confirmed(m); probe(m).quota_share_per_probe.extra = 1; }, 'quota_share', /shape/,
+    ["add('quota_share', 'shape')", '0']],
+  ['5 tinyprobe starts_window must equal the top level', (m) => { confirmed(m); probe(m).starts_window = 'unknown'; }, 'starts_window', /tinyprobe_mismatch/,
+    ["c.starts_window !== m.starts_window", 'false']],
+];
+
+test('G40-BL0375 a confirmed manifest (false + high + evidence + Q5) passes; each policy check fails its own bad manifest', () => {
+  assert.deepStrictEqual(c.checkManifest(manifest(confirmed), realCtx()), []);
+  for (const [name, mut, rule, re] of POLICY_CHECKS) {
+    assert.ok(has(manifest(mut), rule, re), `check ${name} did not fire`);
+  }
+});
+
+test('G40-BL0375 negative control: a checker without any one of the policy checks lets its bad manifest through', () => {
+  for (const [name, mut, rule, re, rep] of POLICY_CHECKS) {
+    const mutant = loadPatched(CHECKER_SRC, [rep]);
+    const found = mutant.checkManifest(manifest(mut), realCtx()).some((f) => f.rule === rule && re.test(f.detail));
+    assert.strictEqual(found, false, `mutant for check ${name} still reports it: the control does not isolate the check`);
+  }
 });

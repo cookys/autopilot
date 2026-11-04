@@ -9,6 +9,7 @@
  *                                            [--stderr F] [--cwd D] [--timeout SECS] -- claude <argv...>
  *   node scripts/claude-account.js exec      (--alias A | --pick) [--purpose T] -- <cmd...>
  *   node scripts/claude-account.js usage-probe --alias A [--purpose T]
+ *   node scripts/claude-account.js usage-probe --due [--dry-run]     (periodic: only when the manifest gate passes; see account-probe.js)
  *                                            one tiny model call as alias A (the manifest's tinyprobe argv); prints
  *                                            {alias, windows} and publishes the observation as source=probe
  *   node scripts/claude-account.js sync-statusline [--alias A]
@@ -301,9 +302,9 @@ function accountsConfig(ctx) {
   }
   const probeProblem = probe.checkProbeConfig(a);
   if (probeProblem) throw new Stop(EXIT.INVALID, probeProblem, 'invalid_config');
-  cfg.quota_probe = a.quota_probe === undefined ? 'off' : a.quota_probe;
-  if (!probe.probeModeAllowed(claudeManifest(), cfg.quota_probe)) { // N66: `scheduled` needs starts_window false with evidence; Claude says unknown
-    throw new Stop(EXIT.INVALID, 'config_quota_probe_scheduled_rejected (the manifest does not say starts_window=false with evidence)', 'invalid_config');
+  cfg.quota_probe = probe.resolveProbeMode(claudeManifest(), a.quota_probe); // unset follows the manifest (BL-0375); explicit off wins
+  if (!probe.probeModeAllowed(claudeManifest(), cfg.quota_probe)) { // N66: `scheduled` needs starts_window false + high confidence + evidence + a recorded Q5
+    throw new Stop(EXIT.INVALID, 'config_quota_probe_scheduled_rejected (the manifest does not say starts_window=false with high confidence, evidence and a recorded quota_share_per_probe)', 'invalid_config');
   }
   cfg.quota_probe_stale_minutes = a.quota_probe_stale_minutes === undefined ? probe.STALE_MINUTES_DEFAULT : a.quota_probe_stale_minutes;
   cfg.quota_probe_timeout_secs = a.quota_probe_timeout_secs === undefined ? probe.TIMEOUT_SECS_DEFAULT : a.quota_probe_timeout_secs;
@@ -769,8 +770,57 @@ function clearRefusalRow(ctx, alias) {
   } catch (_) { return { removed: false, problem: 'capture_error' }; }
 }
 
+// Demand rule (plan 19.6 A, BL-0375): an alias counts only when a run line with an outcome in the audit log, newer than
+// 24 h, names it. Fail closed: a missing, unreadable, refused or partly damaged log means NO demand, so nothing is probed.
+function readDemand(ctx) {
+  try {
+    const res = audit.readAudit(ctx.auditFile, {});
+    if (res.refused || res.invalid > 0) return new Set();
+    return probe.demandAliases(res.records, ctx.now());
+  } catch (_) { return new Set(); }
+}
+
+// `usage-probe --due [--dry-run]`: the periodic entry point an external timer calls. No timer is installed here.
+// Only an unset or `scheduled` quota_probe on a periodic-eligible manifest has anything due; `off`, `stale` and every
+// other manifest print an empty due list and spawn nothing. Prints {due, probed}; --dry-run never spawns.
+async function cmdUsageProbeDue(ctx, opts) {
+  if (opts.alias !== undefined || opts.purpose !== undefined) throw new Stop(EXIT.INVALID, 'due_excludes_alias_and_purpose', null);
+  const purpose = 'quota-probe';
+  const cfg = accountsConfig(ctx);
+  const checked = loadChecked(ctx, purpose);
+  if (!checked.configured) throw new Stop(EXIT.INVALID, 'registry_not_configured', null);
+  if (cfg.mode === 'off') { preAudit(ctx, purpose, 'mode_off'); throw new Stop(EXIT.INVALID, 'mode_off', null); }
+  let due = [];
+  if (cfg.quota_probe === 'scheduled') {
+    const data = gather(ctx, checked, [], null, cfg);
+    const nowS = ctx.now() / 1000;
+    const manifest = claudeManifest();
+    const merged = {};
+    for (const [al, rows] of Object.entries(data.observations || {})) merged[al] = interpret.interpretWindows(rows, manifest, nowS);
+    due = probe.periodicDue({ manifest, accounts: data.accounts, merged, cooldowns: data.cooldowns, exclude: data.exclude, nowS, demand: readDemand(ctx) });
+  }
+  const probed = [];
+  if (!opts['dry-run'] && due.length > 0) {
+    let scratchRoot = null;
+    try {
+      scratchRoot = fs.mkdtempSync(path.join(ctx.env.TMPDIR || os.tmpdir(), 'claude-account-'));
+      fs.chmodSync(scratchRoot, 0o700);
+      for (const alias of due) {
+        const r = await probeAttempt(ctx, checked, alias, cfg, scratchRoot, purpose);
+        probed.push({ alias, outcome: r === null ? 'probe_failed' : r.cl.outcome });
+      }
+    } finally {
+      if (scratchRoot) fs.rmSync(scratchRoot, { recursive: true, force: true });
+    }
+  }
+  ctx.out(JSON.stringify({ due, probed }));
+  return EXIT.OK;
+}
+
 async function cmdUsageProbe(ctx, argv) {
-  const { opts } = parseArgs(argv, { alias: 'value', purpose: 'value' });
+  const { opts } = parseArgs(argv, { alias: 'value', purpose: 'value', due: 'flag', 'dry-run': 'flag' });
+  if (opts.due) return cmdUsageProbeDue(ctx, opts);
+  if (opts['dry-run']) throw new Stop(EXIT.INVALID, 'dry_run_needs_due', null);
   if (opts.alias === undefined) throw new Stop(EXIT.INVALID, 'alias_required', null);
   const purpose = checkPurpose(opts.purpose, 'quota-probe');
   const cfg = accountsConfig(ctx);
@@ -860,7 +910,7 @@ async function cmdRun(ctx, argv) {
     let syncReason = syncFailureReason(syncStatusline(ctx, checked, pinned, cfg)); // once per run, before the first gather (G40 D5); silent, the reason rides the first attempt's audit line
     for (let k = 1; k <= maxAttempts; k++) {
       let data = gather(ctx, checked, tried, pinned, cfg);
-      if (cfg.quota_probe === 'stale' && !pinned && !probeChecked) {
+      if (cfg.quota_probe !== 'off' && !pinned && !probeChecked) { // `stale` and `scheduled` both probe on demand
         probeChecked = true;
         if (await maybeProbe(ctx, checked, data, cfg, scratchRoot)) data = gather(ctx, checked, tried, pinned, cfg); // the probe's row is now in the mirror
       }

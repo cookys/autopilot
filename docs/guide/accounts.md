@@ -4,9 +4,29 @@
 
 If you work with more than one Claude subscription, autopilot can keep each one under a short name (an alias) and pick the account with the most headroom for every headless `claude` call. When one account hits its usage limit (HTTP 429), the call moves to the next alias and the limited one is left alone until it recovers. This page is the one-time setup, done by you, step by step. Nothing here is automatic: the registry stays absent until you create it, and with no registry every rail behaves as it did before.
 
+## Shortest use
+
+```
+scripts/accounts-onboard.sh personal team     # one profile name per Claude account + organization; it prints the plan and asks [y/N]
+# per profile: switch to that account/org in another window, run `claude setup-token` there, paste the token here
+scripts/accounts-onboard.sh --help            # the full explanation (also what you get with no argument)
+```
+
+A profile is what the rest of this page calls an alias: one Claude login **plus one organization**. One e-mail can belong to several organizations (a personal subscription and a Team plan, say); register each one as its own profile. The name is yours to choose: lowercase letters, digits and `-`, at most 24 characters, never an e-mail address, never `acct-` or `codex-` followed by 8 hex digits.
+
 ## One command for O1 to O9
 
-`scripts/accounts-onboard.sh <A> <B>` does O1 to O9 for you in one interactive run: it creates the directories and registry rows, tells you (in Traditional Chinese) when to run `claude setup-token` in another pane, reads the pasted token silently into the token file, then runs `env-check`, the haiku OK call, `status`, `pick` and both selftests, and ends with a table that marks every item. It never runs `setup-token` itself and never prints a token. Re-running it is safe (existing tokens are kept unless you choose to overwrite). `--help` prints the usage and does nothing. O5 (the first interactive start, in tmux) and O10 (rollback) stay yours; the script prints both commands. The steps below remain the manual route and the reference for what each check expects.
+`scripts/accounts-onboard.sh [--yes] [--org <name>=<org-label>]... <A> <B>` does O1 to O9 for you in one interactive run. It first prints a plan ("N profiles, about 2-3 minutes each, you need to: switch account/org, run `claude setup-token` in another window, paste the token") and asks `[y/N]`; the default is N and declining creates nothing. Without a terminal on stdin it only proceeds with `--yes`. Then, per profile:
+
+1. **Org check.** It runs `claude auth status --json` (the flag is listed in the CLI's own help, recorded in `docs/plans/evidence/2026-11-03-g40-agent-lane-quota/survey-raw/claude.txt`), reads only `orgId`, `orgName` and `subscriptionType`, shows the org name and plan (never the e-mail) and asks you to confirm it is the org for this profile. If another profile already holds the same `orgId` it refuses before writing anything and names that profile (the same organization registered twice would count its quota twice). If auth status cannot be read, is not JSON, or has no `orgId`, it fails closed. If the org name itself contains an e-mail it is neither shown nor stored.
+2. It creates the directories, tells you (in Traditional Chinese) when to run `claude setup-token` in another window, reads the pasted token silently into the token file, and records the org in `<accounts-dir>/<profile>/token-meta.json` (schema `autopilot.token-meta/1`, mode 0600, keys `org_id`, `org_label`, `org_check`; other keys in that file are kept). The e-mail is never recorded, and `registry.json` row keys do not change.
+3. It adds the registry row, runs `env-check` and the haiku OK call, and compares an organization id in the call's result envelope, if it carries one, with the recorded `org_id` (a mismatch is a failed row; no id in the envelope marks the org check "unverified" in the summary and never blocks; whether the envelope ever carries one is unverified).
+
+After all profiles it runs `status`, `pick`, both selftests and ends with a table that marks every item. `claude-account.js status` shows `org="<label>"` per profile, plus `org_check=unverified` until a result envelope has confirmed it.
+
+**`--org <name>=<org-label>`** is your explicit confirmation for a profile whose auth status cannot be read or has no `orgId`: no auth-status call is made, `org_id` is recorded as unknown (`null`, so duplicate-org detection cannot see it) and the label as you typed it (1 to 64 characters, no `@`, nothing that looks like an e-mail or a credential). The summary says "org not verified". Repeat the option for several profiles.
+
+It never runs `setup-token` itself and never prints a token. Re-running it is safe (existing tokens are kept unless you choose to overwrite, and a profile that already has an org record is not asked again). `--help`, or no argument, prints the usage and creates nothing. O5 (the first interactive start, in tmux) and O10 (rollback) stay yours; the script prints both commands. The steps below remain the manual route and the reference for what each check expects; if you register by hand, write `token-meta.json` yourself or leave it out (the profile then shows no org).
 
 ## Ground rules
 

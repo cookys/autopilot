@@ -18,18 +18,34 @@ SCRIPT="$REPO_ROOT/scripts/dispatch-author.sh"
 PROMPT="$TEST_TMP/prompt.txt"
 printf '%s' "Write a verification plan for the change and include exactly three bullet items." > "$PROMPT"
 
-# Unique sleeper marker. The character class is only in the pgrep pattern so
-# `pgrep -f` does not match its own command line.
-AGY_SLEEP_SECS=86417
-AGY_SLEEP_PAT='sleep 8641[7]'
+# Per-invocation sleeper lengths. Process names are host-wide, so a fixed length
+# would be shared by two concurrent runs of this suite (two worktrees, a pool):
+# one run's EXIT trap would kill the other's sleeper, and a surviving sleeper
+# would fail the other run. Each length derives from this shell's own PID, so
+# concurrent runs never collide (pid_max ~4.2M keeps it 8 digits). The runner is
+# wrapped in bwrap (read-only root, --unshare-pid), so the stub cannot record a
+# host-visible PID; the unique length is the only handle on its sleeper. The
+# last digit sits in a character class so `pgrep -f` never matches its own
+# command line, and the trailing anchor stops a longer number matching.
+SLEEP_BASE=$(( 10000000 + $$ * 3 ))
+sleep_pat() { printf 'sleep %s[%s]$' "${1%?}" "${1: -1}"; }
+AGY_SLEEP_SECS=$SLEEP_BASE
+AGY_SLEEP_PAT="$(sleep_pat "$AGY_SLEEP_SECS")"
+BOTH_SLEEP_SECS=$(( SLEEP_BASE + 1 ))
+BOTH_SLEEP_PAT="$(sleep_pat "$BOTH_SLEEP_SECS")"
+GRACE0_SLEEP_SECS=$(( SLEEP_BASE + 2 ))
+GRACE0_SLEEP_PAT="$(sleep_pat "$GRACE0_SLEEP_SECS")"
 
 cleanup_agy_sleeper() {
-  local pids
-  pids="$(pgrep -f "$AGY_SLEEP_PAT" || true) $(pgrep -f 'sleep 8641[9]' || true)"
-  if [ -n "${pids// /}" ]; then
-    # shellcheck disable=SC2086
-    kill -9 $pids 2>/dev/null || true
-  fi
+  local pids pat
+  for pat in "${AGY_SLEEP_PAT:-}" "${BOTH_SLEEP_PAT:-}" "${GRACE0_SLEEP_PAT:-}"; do
+    [ -n "$pat" ] || continue
+    pids="$(pgrep -f "$pat" || true)"
+    if [ -n "${pids// /}" ]; then
+      # shellcheck disable=SC2086
+      kill -9 $pids 2>/dev/null || true
+    fi
+  done
 }
 trap 'cleanup_agy_sleeper; cleanup_test_tmp' EXIT
 
@@ -66,8 +82,6 @@ HANG_LEFT="$(pgrep -f "$AGY_SLEEP_PAT" || true)"
 assert_eq "" "$HANG_LEFT" "no fake agy sleeper remains after timeout plus grace"
 
 # --- case 1b: sleeper that ignores both TERM and HUP is still reaped by KILL ---
-BOTH_SLEEP_SECS=86419
-BOTH_SLEEP_PAT='sleep 8641[9]'
 STUB_AGY_BOTH="$TEST_TMP/runner-agy-term-hup"
 cat > "$STUB_AGY_BOTH" <<EOF
 #!/usr/bin/env bash
@@ -139,8 +153,8 @@ test -d "$FRESH_HOME/.gemini/antigravity-cli/crashes"
 # --- case 4: grace 0 falls back to a positive grace (KILL still escalates) ---
 # TIMEOUT is 2s so the 30s fallback grace is what must be bounded. The sleeper
 # ignores TERM and would outlast the ~45s outer wrapper if grace 0 disabled KILL.
-GRACE0_SLEEP_SECS=120
-GRACE0_SLEEP_PAT='sleep 12[0]'
+# The leftover check matches this invocation's own sleeper length (see the top
+# of the file), not a fixed `sleep 120` that any unrelated process could carry.
 STUB_AGY_GRACE0="$TEST_TMP/runner-agy-grace0"
 cat > "$STUB_AGY_GRACE0" <<EOF
 #!/usr/bin/env bash
@@ -157,15 +171,15 @@ GRACE0_EXIT=$?
 set -e
 GRACE0_ELAPSED=$(( $(date +%s) - GRACE0_START ))
 
-assert_eq "0" "$([[ "$GRACE0_ELAPSED" -lt "$GRACE0_SLEEP_SECS" ]] && echo 0 || echo "$GRACE0_ELAPSED")" \
-  "grace 0 falls back to a positive grace and returns before the sleeper finishes (elapsed=${GRACE0_ELAPSED}s exit=${GRACE0_EXIT})"
+assert_eq "0" "$([[ "$GRACE0_ELAPSED" -lt 45 ]] && echo 0 || echo "$GRACE0_ELAPSED")" \
+  "grace 0 falls back to a positive grace and returns within the outer wrapper (elapsed=${GRACE0_ELAPSED}s exit=${GRACE0_EXIT})"
 assert_eq "3" "$GRACE0_EXIT" "grace 0 fallback still exits 3 within the outer wrapper (elapsed=${GRACE0_ELAPSED}s)"
 assert_contains "$GRACE0_OUT" '"transport_status": "timeout"' "grace 0 fallback maps to transport_status timeout"
 assert_contains "$GRACE0_OUT" '"status": "runner_failed"' "grace 0 fallback is runner_failed"
 
 sleep 0.5
 GRACE0_LEFT="$(pgrep -f "$GRACE0_SLEEP_PAT" || true)"
-assert_eq "" "$GRACE0_LEFT" "no fake agy sleeper remains after grace 0 fallback kill"
+assert_eq "" "$GRACE0_LEFT" "no fake agy sleeper (unique length ${GRACE0_SLEEP_SECS}) remains after grace 0 fallback kill"
 
 # --- case 5: early SIGKILL is not a timeout ---
 STUB_AGY_KILL="$TEST_TMP/runner-agy-self-kill"

@@ -318,6 +318,15 @@ assert_contains "$(cat "$fxo/out.txt")" "org 未驗證" "ORG1 summary marks org 
 assert_contains "$(grep -h '^alias=a ' "$fxo/out.txt" | head -1)" 'org="FAKE Org One" org_check=unverified' "ORG1 status shows the label and unverified"
 assert_eq "$(no_email "$fxo")" "" "ORG1 e-mail appears in no file or output"
 
+# PROMPTS: each step says what to do, in which window, and what success looks like; the receipt line never carries the token.
+assert_contains "$(cat "$fxo/out.txt")" "已收到 token（不顯示內容）" "PROMPT paste receipt shown"
+assert_contains "$(cat "$fxo/out.txt")" "成功的樣子：那個視窗印出一長串 token" "PROMPT setup-token says what success looks like"
+assert_contains "$(cat "$fxo/out.txt")" "目前登入的 org：" "PROMPT org step shows the org line"
+assert_contains "$(cat "$fxo/out.txt")" "步驟 ④ 完成 ✅ 別名 a" "PROMPT say-OK success names the alias"
+assert_contains "$(cat "$fxo/out.txt")" "每一列都是 ✅" "PROMPT summary says what success looks like"
+assert_eq "$(grep -h '已收到 token' "$fxo/out.txt" | grep -cF -e "$TA" || true)" "0" "PROMPT receipt line does not carry the token"
+assert_contains "$(cat "$fx3/out.txt")" "修法" "PROMPT a failed run says how to fix it"
+
 # O2. envelope carries the org id: match -> verified; mismatch -> failed row.
 fxv="$(mkfx "$TA")"; setctl "$fxv" envOrg '"FAKE-ORG-1"'
 run_onboard "$SCRIPT" "$fxv" $'y\n'"$TA"$'\n' a

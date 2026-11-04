@@ -69,6 +69,11 @@
 #                                              #   --settings file whose Stop hook is hooks/per-turn-gate.js. The gate
 #                                              #   file and the settings file are removed when the worker ends
 #                                              #   (success, failure, timeout) and by the exit/abort traps. Off unless given.
+#       [--role-kit <dir>]                     # claude-native only (any other runner is refused): the child
+#                                              #   gets <dir>/role.md as --system-prompt, <dir>/plugin as
+#                                              #   --plugin-dir (when present) and the one-line <dir>/tools
+#                                              #   allowlist as --tools. Validated before anything is created
+#                                              #   (references/hetero-dispatch.md "Role kit"). Off unless given.
 #       [--commit-quiet-secs 120]              # implement stage: stop the runner once the branch has
 #                                              #   advanced past base, the worktree is clean and the log
 #                                              #   has not grown and the agent has no child process for N s (0 disables); ledger note
@@ -198,6 +203,7 @@ TIMEOUT="9m"
 GATE_RULES_FILE=""     # --gate-rules: per-turn gate rule list for ONE claude-native/cc-shim hand (BL-0306 P2)
 GATE_SETTINGS_FILE=""
 GATE_ARMED_SESSION=""
+ROLE_KIT_DIR=""        # --role-kit: per-role kit dir for ONE claude-native hand (lib/role-kit.sh)
 MODEL_SUPPLIED=0
 BASE_SUPPLIED=0
 RUNNER_SUPPLIED=0
@@ -266,6 +272,8 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # G37: the one reading of `claude-account.js env-check` (legacy | active | invalid). Sourced hard (no fail-open):
 # a missing copy makes account_layer_state print nothing, and every caller treats anything but legacy/active as invalid.
 . "$SELF_DIR/lib/account-state.sh"
+# --role-kit: validator wrapper (claude-native only). Sourced hard like account-state.sh.
+. "$SELF_DIR/lib/role-kit.sh"
 # A TMPDIR that is set but missing is made before anything below uses it (BL-0336); a failure prints its reason and the run carries on.
 if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || true; fi
 # Populate endpoint credential env from the canonical ~/.autopilot/endpoints.env (best-effort;
@@ -512,7 +520,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,76p' "$0" | sed 's/^# \{0,1\}//'; }
 
 # shellcheck source=lib/json-emit.sh
 . "$SELF_DIR/lib/json-emit.sh"
@@ -951,7 +959,9 @@ emit() { # status commit files ins del worktree error
   if [[ "${OUTCOME_ZERO_DIFF_RECEIPT_DIGEST:-}" =~ ^[0-9a-f]{64}$ ]]; then
     zero_diff_receipt_json="\"$OUTCOME_ZERO_DIFF_RECEIPT_DIGEST\""
   fi
-  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s }\n' \
+  local role_kit_fields=""
+  [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_fields=", \"role_kit\": $ROLE_KIT_JSON"
+  printf '{ "status": "%s", "runner": "%s", "model": "%s", "containment": "%s", "contained": %s, "branch": "%s", "base": "%s", "commit": %s, "files_changed": %s, "insertions": %s, "deletions": %s, "worktree": %s, "agent_log": "%s", "error": %s, "dispatcher_called": %s, "model_calls": %s, "mutation_attempts": %s, "gate_attempts": %s, "resources_created": %s, "zero_diff_receipt_digest": %s, "skill_mode_effective": "%s", "skills_injected": %s, "orphan_worktree": %s, "run_id": %s, "usage": %s, "wall_secs": %s, "duplex": %s, "provider_session_id": %s, "provider_session_reused": %s, "worktree_reused": %s, "retention_lease": %s%s%s%s%s%s%s%s%s%s }\n' \
     "$1" "$runner" "$(_flat_json_escape "$MODEL")" "$CONTAINMENT" "$contained_json" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
     "$commit_json" "${3:-0}" "${4:-0}" "${5:-0}" \
     "$wt_json" "$(_flat_json_escape "${LOG:-}")" "$err_json" \
@@ -962,7 +972,7 @@ emit() { # status commit files ins del worktree error
     "$run_id_json" "$usage_json" "$wall_json" "$duplex_json" \
     "$provider_session_json" "$provider_reused_json" "$worktree_reused_json" "$retention_lease_json" \
     "$strict_fields" "$campaign_fields" "$strict_boundary_fields" "$boundary_reject_fields" "$identity_fields" \
-    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json"
+    "$provider_error_fields" "$timeout_fields" ", \"error_category\": $error_category_json" "$role_kit_fields"
 }
 
 check_session_mode_gate() {
@@ -1808,6 +1818,8 @@ write_manifest() {
   if [ -n "${CAPABILITY_WRITE_SUPPRESSED:-}" ]; then
     capability_suppressed_fields=", \"capability_write_suppressed\": \"$(_flat_json_escape "$CAPABILITY_WRITE_SUPPRESSED")\""
   fi
+  local role_kit_manifest_fields=""
+  [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && role_kit_manifest_fields=", \"role_kit\": $ROLE_KIT_JSON"
   local mf_timeout_secs="" mf_timeout_source="default" mf_timeout_enforced="false"
   mf_timeout_secs="$(normalize_timeout_seconds "${TIMEOUT:-}" 2>/dev/null || true)"
   [ -n "$mf_timeout_secs" ] || mf_timeout_secs="null"
@@ -1817,13 +1829,13 @@ write_manifest() {
   fi
   [ "${WATCHDOG_DISARMED:-0}" -eq 1 ] && mf_timeout_enforced="false"
   {
-    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
+    printf '{ "schema": 1, "run_id": "%s", "role": "implementer", "runner": "%s", "model": "%s", "branch": "%s", "base": "%s", "base_sha": "%s", "worktree": "%s", "lock_path": "%s", "log_path": "%s", "log_format": "%s", "duplex": %s, "aux_log": null, "pid": %s, "scope_unit": %s, "containment_planned": "%s", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "scaffold_tier": "%s", "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, "timeout_seconds": %s, "timeout_source": "%s", "timeout_enforced": %s%s%s%s%s, %s, "session_id": %s, "child_session_id": %s }\n' \
       "$(_flat_json_escape "$DISPATCH_RUN_ID")" "$runner" "$(_flat_json_escape "$MODEL")" "$(_flat_json_escape "$BRANCH")" "$(_flat_json_escape "$BASE")" \
       "${BASE_SHA:-}" "$(_flat_json_escape "${WT:-}")" "$(_flat_json_escape "${WT:-}/.autopilot-worktree.lock")" "$(_flat_json_escape "${LOG:-}")" \
       "$log_format" "$duplex_json" "$pid_json" "$scope_json" "${MANIFEST_CONTAINMENT:-plain}" \
       "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DISPATCH_STARTED_EPOCH:-null}" "$(_flat_json_escape "${PROMPT_FILE:-}")" "${SCAFFOLD_TIER_EFFECTIVE:-off}" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" "$parent_json" "$root_json" "$depth_json" \
-      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$REPO_IDENTITY_FIELDS" \
+      "$mf_timeout_secs" "$(_flat_json_escape "$mf_timeout_source")" "$mf_timeout_enforced" "$strict_manifest_fields" "$strike_suppressed_fields" "$capability_suppressed_fields" "$role_kit_manifest_fields" "$REPO_IDENTITY_FIELDS" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" > "$tmp"
   } 2>/dev/null && mv -f "$tmp" "$MANIFEST_FILE" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }
@@ -1856,6 +1868,7 @@ while [ $# -gt 0 ]; do
     --base) BASE="${2:-}"; BASE_SUPPLIED=1; shift 2 ;;
     --timeout) TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
     --gate-rules) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--gate-rules requires a non-empty file path"; GATE_RULES_FILE="$2"; shift 2 ;;
+    --role-kit) [ $# -ge 2 ] && [ -n "$2" ] || die_precondition "--role-kit requires a non-empty directory path"; ROLE_KIT_DIR="$2"; shift 2 ;;
     --commit-quiet-secs) COMMIT_QUIET_SECS="${2:-}"; shift 2 ;;
     --agy-bin) AGY_BIN="${2:-}"; BIN_FLAG_AGY=1; shift 2 ;;
     --grok-bin) GROK_BIN="${2:-}"; BIN_FLAG_GROK=1; shift 2 ;;
@@ -2117,6 +2130,11 @@ set_runner_flags() {
     [ -f "$GATE_RULES_FILE" ] && [ -r "$GATE_RULES_FILE" ] || die_precondition "--gate-rules file not readable: $GATE_RULES_FILE"
     GATE_RULES_FILE="$(cd "$(dirname "$GATE_RULES_FILE")" && pwd -P)/$(basename "$GATE_RULES_FILE")"
     [[ "${CHILD_SESSION_ID:-}" =~ ^[A-Za-z0-9-]{1,128}$ ]] || die_precondition "--gate-rules: could not mint a fresh session id; refusing to dispatch"
+  fi
+  if [ -n "${ROLE_KIT_DIR:-}" ]; then
+    # Refused, never ignored: a kit the runner cannot carry would make the manifest claim a role it did not get.
+    role_kit_refuse_unless_claude_native "$([ "$IS_CNATIVE" -eq 1 ] && echo claude-native || echo "$RUNNER")"
+    role_kit_load "$ROLE_KIT_DIR"
   fi
   # Only reached if resolution actually completed (no die_precondition fired above,
   # including the cursor auto-guard refusals inside the `auto` arm). See RUNNER_RESOLVED
@@ -3948,7 +3966,8 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
     if [ "$_CN_STATE" = active ]; then
       CNATIVE_ARGV=(env ${HANDS_GIT_ENV[@]+"${HANDS_GIT_ENV[@]}"} claude -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL"
         --strict-mcp-config --dangerously-skip-permissions ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"}
-        ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json)
+        ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json
+        ${ROLE_KIT_ARGV[@]+"${ROLE_KIT_ARGV[@]}"})
       run_worker node "$SELF_DIR/claude-account.js" run --purpose hetero-impl --cwd "$WT" \
         --stdin "$CCSHIM_PROMPT_FILE" --stdout "$CCSHIM_ENVELOPE" -- "${CNATIVE_ARGV[@]}"
     else
@@ -3958,6 +3977,9 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
   elif [ "$IS_CNATIVE" -eq 1 ]; then
     # Fresh 0700 dir with only a 0600 .credentials.json; removed right after the worker (success AND
     # failure), and by cleanup/abort_dispatch if the dispatcher dies first. A seeding failure never spawns.
+    # With a kit the gate-settings slot ($8) is always passed (empty when there is no gate), then the kit argv ($9...).
+    _CN_TAIL=()
+    if [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ]; then _CN_TAIL=("${GATE_ARGV[0]-}" "${ROLE_KIT_ARGV[@]}"); else _CN_TAIL=(${GATE_ARGV[@]+"${GATE_ARGV[0]}"}); fi
     if CNATIVE_CONFIG_DIR="$(node "$SELF_DIR/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")"; then
       # Scrub every alternate provider / credential selector so the seeded .credentials.json is the SOLE auth.
       # Names verified by strings(1) on the installed claude 2.1.309 binary (none invented). Cleared: provider
@@ -3968,8 +3990,8 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
       # inject auth). NOT cleared: CLAUDE_CODE_SKIP_*_AUTH (only meaningful once a provider is selected) and
       # region/project tuning vars (inert without a selector).
       run_worker bash -c 'cd "$1" && for v in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX CLAUDE_CODE_USE_FOUNDRY CLAUDE_CODE_USE_MANTLE CLAUDE_CODE_USE_ANTHROPIC_AWS CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD CLAUDE_CODE_USE_GATEWAY ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_FOUNDRY_API_KEY ANTHROPIC_FOUNDRY_AUTH_TOKEN AWS_BEARER_TOKEN_BEDROCK ANTHROPIC_BASE_URL ANTHROPIC_BEDROCK_BASE_URL ANTHROPIC_BEDROCK_MANTLE_BASE_URL ANTHROPIC_VERTEX_BASE_URL ANTHROPIC_FOUNDRY_BASE_URL ANTHROPIC_FOUNDRY_RESOURCE ANTHROPIC_CUSTOM_HEADERS; do unset "$v"; done && exec env CLAUDE_CONFIG_DIR="$7" claude -p ${4:+--session-id "$4"} --model "$2" \
-          --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${8:+--settings "$8"} --output-format json < "$3" >"$6"' \
-          _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR" ${GATE_ARGV[@]+"${GATE_ARGV[@]}"}
+          --strict-mcp-config --dangerously-skip-permissions ${5:+--effort "$5"} ${8:+--settings "$8"} --output-format json "${@:9}" < "$3" >"$6"' \
+          _ "$WT" "$MODEL" "$CCSHIM_PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "$CCSHIM_ENVELOPE" "$CNATIVE_CONFIG_DIR" ${_CN_TAIL[@]+"${_CN_TAIL[@]}"}
     else
       CNATIVE_CONFIG_DIR=""
       echo "claude-native: could not seed config dir; worker not started" > "$LOG"
@@ -5441,6 +5463,7 @@ dispatch_detached_run() {
     declare -p _CONT_WO_CLAIMED_ROOT _CONT_WO_CLAIMED_STAGE _CONT_WO_PARENT_TRANSFERRED 2>/dev/null
     declare -p CAMPAIGN_PROMPT_FILE 2>/dev/null
     declare -p GATE_RULES_FILE 2>/dev/null || true
+    declare -p ROLE_KIT_DIR ROLE_KIT_ACTIVE ROLE_KIT_TOOLS ROLE_KIT_EXTRA ROLE_KIT_ARGV ROLE_KIT_JSON 2>/dev/null || true
     declare -p ENGINE_CAPABILITY_DIR 2>/dev/null || true
     declare -p CAPABILITY_WRITE_GUARD CAPABILITY_WRITE_SUPPRESSED _CAPABILITY_WRITE_NOTE_DONE 2>/dev/null || true
     # Preserve pi supervisor poll/stall bounds across setsid detach.

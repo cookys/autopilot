@@ -29,7 +29,7 @@ pair_section() { # lines of the pair section only (header plus following "- " li
 # non-version-update + mismatch
 printf '%s' "3.0.1" > "$HOOK_HOME/.autopilot/last-seen-version"
 printf '{"autoCompactWindow":200000}' > "$CLAUDE_CONFIG_DIR/settings.json"
-printf '%s' '{"config_schema_version":1,"context_budget":{"t2":150000,"gap":50000}}' > "$CFG"
+printf '%s' '{"config_schema_version":2,"context_budget":{"t2":150000,"gap":50000}}' > "$CFG"
 OUT="$(run_hook)"
 assert_contains "$OUT" "t2_gap_over_window" "mismatch, no version change: finding is shown"
 assert_not_contains "$OUT" "[Autopilot config check:" "mismatch, no version change: not the upgrade block"
@@ -38,13 +38,13 @@ SEC_LINES="$(printf '%s\n' "$SEC" | grep -c . || true)"
 if [ "$SEC_LINES" -ge 1 ] && [ "$SEC_LINES" -le 2 ]; then echo "ok pair section lines: $SEC_LINES"; else fail "pair section has $SEC_LINES lines (want 1..2): $SEC"; fi
 
 # negative control: pair fits
-printf '%s' '{"config_schema_version":1,"context_budget":{"t2":100000,"gap":20000}}' > "$CFG"
+printf '%s' '{"config_schema_version":2,"context_budget":{"t2":100000,"gap":20000}}' > "$CFG"
 OUT="$(run_hook)"
 assert_not_contains "$OUT" "t2_gap_over_window" "fitting pair: no finding"
 assert_not_contains "$OUT" "[Autopilot config pair]" "fitting pair: no section"
 
 # env opt-out
-printf '%s' '{"config_schema_version":1,"context_budget":{"t2":150000,"gap":50000}}' > "$CFG"
+printf '%s' '{"config_schema_version":2,"context_budget":{"t2":150000,"gap":50000}}' > "$CFG"
 OUT="$(run_hook AUTOPILOT_CONFIG_PAIR_CHECK=0)"
 assert_not_contains "$OUT" "t2_gap_over_window" "AUTOPILOT_CONFIG_PAIR_CHECK=0: no finding"
 assert_not_contains "$OUT" "[Autopilot config pair]" "AUTOPILOT_CONFIG_PAIR_CHECK=0: no section"

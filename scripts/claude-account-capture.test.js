@@ -4,10 +4,10 @@
 //   G40-N9   a stream argv with an event records; a json argv records nothing; a malformed event is dropped; exit code and
 //            stdout bytes equal the run without capture; the wrapper never rewrites a caller's argv
 //   G40-N10  a token inside an event line is scrubbed first (outcome token_scrubbed, capture skipped, no token in the mirror)
-//   G40-N13  quota_probe unset or off: zero probe spawns (counted by the shim); stale mode probes with the manifest argv
+//   G40-N13  quota_probe off: zero probe spawns (counted by the shim); unset follows the manifest (BL-0375); stale mode probes with the manifest argv
 //   G40-N14  tight, cooling, pinned and fresh aliases are never probed
 //   G40-N15  probe timeout, 429 and 401 change nothing about the real call and write nothing
-//   G40-N66  quota_probe=scheduled is rejected for Claude; unset is off
+//   G40-N66  quota_probe=scheduled is rejected for Claude; unset is on-demand (stale) for Claude (BL-0375)
 //   G40-N73  out-of-range probe config is rejected at load
 //   G40-N74  a mirror lock held makes the writer skip: audit quota_capture=mirror_lock_busy, exit and stdout unchanged
 //   G40-N76  two stale candidates yield exactly one probe spawn
@@ -19,7 +19,9 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { cli } = require('./claude-account.js');
-const { makeFixture, R401, R429, OK } = require('./lib/account-fixtures/shim-install.js');
+const { makeFixture, loadPatched, R401, R429, OK } = require('./lib/account-fixtures/shim-install.js');
+const audit = require('./lib/account-audit');
+const os = require('os');
 const observation = require('./lib/account-observation');
 const probeLib = require('./lib/account-probe');
 const cooldown = require('./lib/account-cooldown');
@@ -182,8 +184,8 @@ test('G40-N10: a token inside an event line is scrubbed before capture: token_sc
 
 // ------------------------------------------------------------------ N13 / N76 / N14
 
-test('G40-N13: quota_probe unset or off: a stale alias triggers zero probe spawns; stale mode probes with the manifest argv byte for byte', async () => {
-  for (const config of [{}, { accounts: { quota_probe: 'off' } }]) {
+test('G40-N13: quota_probe off: a stale alias triggers zero probe spawns; stale mode probes with the manifest argv byte for byte', async () => {
+  for (const config of [{ accounts: { quota_probe: 'off' } }]) {
     const fx = makeFixture({ aliases: [{ alias: 'a' }, { alias: 'b' }], config });
     try {
       const r = await go(fx, RUN);
@@ -303,7 +305,7 @@ test('G40-N15: a probe timeout (killed at quota_probe_timeout_secs) does not cha
 
 // ------------------------------------------------------------------ N66 / N73
 
-test('G40-N66: quota_probe=scheduled is rejected for Claude (starts_window unknown); unset is off', async () => {
+test('G40-N66: quota_probe=scheduled is rejected for Claude (starts_window unknown); unset is on-demand', async () => {
   let fx = makeFixture({ aliases: [{ alias: 'a' }], config: { accounts: { quota_probe: 'scheduled' } } });
   try {
     const r = await go(fx, ['status']);
@@ -313,11 +315,11 @@ test('G40-N66: quota_probe=scheduled is rejected for Claude (starts_window unkno
     assert.strictEqual(r2.code, 2);
     assert.strictEqual(fx.shim.spawns(), 0);
   } finally { fx.cleanup(); }
-  fx = makeFixture({ aliases: [{ alias: 'a' }], config: {} });
+  fx = makeFixture({ aliases: [{ alias: 'a' }], config: {}, probeFromManifest: true });
   try {
     assert.strictEqual((await go(fx, ['status'])).code, 0);
     await go(fx, RUN);
-    assert.strictEqual(probeCalls(fx).length, 0);
+    assert.strictEqual(probeCalls(fx).length, 1, 'unset follows the manifest: Claude is unknown, so one on-demand probe for the never-observed alias');
   } finally { fx.cleanup(); }
   fx = makeFixture({ aliases: [{ alias: 'a' }], config: { accounts: { quota_probe: 'sometimes' } } });
   try { assert.strictEqual((await go(fx, ['status'])).code, 2); } finally { fx.cleanup(); }
@@ -610,5 +612,231 @@ test('G40-N13: usage-probe --purpose reaches the audit line; without it the purp
     await go(fx, ['usage-probe', '--alias', 'a', '--purpose', 'my-check']);
     await go(fx, ['usage-probe', '--alias', 'a']);
     assert.deepStrictEqual(auditLines(fx).map((l) => l.purpose), ['my-check', 'quota-probe']);
+  } finally { fx.cleanup(); }
+});
+
+// ------------------------------------------------------------------ BL-0375 probe policy per provider
+
+const REPO = path.resolve(__dirname, '..');
+const CLI_SRC = path.join(__dirname, 'claude-account.js');
+const MANIFEST_LITERAL = "path.join(__dirname, 'quota-adapters', 'claude.json')";
+const EVD = 'docs/plans/evidence/2026-11-03-g40-agent-lane-quota/capability-matrix.md';
+const Q5 = { percent: 0.5, window: 'rolling_5h', evidence: EVD };
+const tmpDirs = [];
+test.after(() => { for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true }); });
+// A copy of the shipped Claude manifest with the policy facts changed: the CLI reads it instead of claude.json. Test-only
+// source rewrite of an in-memory copy of claude-account.js; the production file has no switch for this.
+function cliWithManifest(mut) {
+  const m = JSON.parse(JSON.stringify(MANIFEST));
+  mut(m);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g40-manifest-'));
+  tmpDirs.push(dir);
+  const file = path.join(dir, 'claude.json');
+  fs.writeFileSync(file, JSON.stringify(m));
+  return (extra) => loadPatched(CLI_SRC, [[MANIFEST_LITERAL, JSON.stringify(file)]].concat(extra || [])).cli;
+}
+const CONFIRMED = (m) => {
+  m.starts_window = false; m.starts_window_evidence = EVD; m.starts_window_confidence = 'high';
+  m.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe = Q5;
+};
+const UNKNOWN = () => {};
+async function goWith(cliFn, fx, args) {
+  let out = '';
+  let err = '';
+  const code = await cliFn(args, { env: fx.env, realHome: fx.realHome, warn: () => {}, now: () => NOW, write: (fd, d) => { if (fd === 1) out += d.toString(); else err += d.toString(); } });
+  return { code, out, err };
+}
+const demandLine = (fx, alias, ageS, purpose) => audit.appendAudit({ alias, purpose: purpose || 'tst', attempt: 1, outcome: 'ok' }, { path: fx.auditFile, now: NOW - ageS * 1000 });
+const dueFx = (extra) => makeFixture(Object.assign({ aliases: [{ alias: 'a' }, { alias: 'b' }], config: {}, probeFromManifest: true }, extra || {}));
+
+test('G40-BL0375: unset quota_probe on a confirmed-false manifest with Q5 is periodic: --due --dry-run lists the alias that a run used and has no newer observation; --due probes it', async () => {
+  const cli = cliWithManifest(CONFIRMED)();
+  const fx = dueFx({ responses: { a: stream(ev(0.3, 0.1)) } });
+  try {
+    demandLine(fx, 'a', 3600);
+    const dry = await goWith(cli, fx, ['usage-probe', '--due', '--dry-run']);
+    assert.strictEqual(dry.code, 0, dry.err);
+    assert.deepStrictEqual(JSON.parse(dry.out), { due: ['a'], probed: [] });
+    assert.strictEqual(fx.shim.spawns(), 0, 'dry run never spawns');
+    const live = await goWith(cli, fx, ['usage-probe', '--due']);
+    assert.strictEqual(live.code, 0, live.err);
+    assert.deepStrictEqual(JSON.parse(live.out), { due: ['a'], probed: [{ alias: 'a', outcome: 'ok' }] });
+    assert.strictEqual(probeCalls(fx).length, 1);
+    assert.deepStrictEqual(fx.shim.calls()[0].argv, PROBE_ARGV);
+    assert.ok(rowOf(fx, 'a'), 'the probe wrote a mirror row');
+    const again = await goWith(cli, fx, ['usage-probe', '--due', '--dry-run']);
+    assert.deepStrictEqual(JSON.parse(again.out).due, [], 'a fresh observation (< 30 min) skips the alias');
+  } finally { fx.cleanup(); }
+});
+
+test('G40-N13/BL0375 red: unknown, true, false below high, false+high without Q5, and explicit off or stale never get a periodic spawn, even with demand and a stale alias', async () => {
+  const cases = {
+    'unknown (the shipped Claude manifest)': [UNKNOWN, {}],
+    'true': [(m) => { m.starts_window = true; m.starts_window_evidence = EVD; m.starts_window_confidence = 'high'; m.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe = Q5; }, {}],
+    'false + medium': [(m) => { CONFIRMED(m); m.starts_window_confidence = 'medium'; }, {}],
+    'false + high, no Q5': [(m) => { CONFIRMED(m); delete m.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe; }, {}],
+    'confirmed but explicit off': [CONFIRMED, { accounts: { quota_probe: 'off' } }],
+    'confirmed but explicit stale': [CONFIRMED, { accounts: { quota_probe: 'stale' } }],
+  };
+  for (const [name, [mut, config]] of Object.entries(cases)) {
+    const fx = dueFx({ config });
+    try {
+      demandLine(fx, 'a', 60);
+      const r = await goWith(cliWithManifest(mut)(), fx, ['usage-probe', '--due']);
+      assert.strictEqual(r.code, 0, `${name}: ${r.err}`);
+      assert.deepStrictEqual(JSON.parse(r.out), { due: [], probed: [] }, name);
+      assert.strictEqual(fx.shim.spawns(), 0, `${name}: zero spawns`);
+    } finally { fx.cleanup(); }
+  }
+});
+
+test('G40-BL0375: on-demand probing at run needs no Q5: false+high without Q5 and unknown both probe once before pick; explicit off does not; confirmed also probes on demand', async () => {
+  const noQ5 = (m) => { CONFIRMED(m); delete m.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe; };
+  for (const [name, mut, config, want] of [['unknown', UNKNOWN, {}, 1], ['false+high no Q5', noQ5, {}, 1], ['confirmed (periodic)', CONFIRMED, {}, 1], ['explicit off', CONFIRMED, { accounts: { quota_probe: 'off' } }, 0]]) {
+    const fx = dueFx({ config });
+    try {
+      const r = await goWith(cliWithManifest(mut)(), fx, RUN);
+      assert.strictEqual(r.code, 0, `${name}: ${r.err}`);
+      assert.strictEqual(probeCalls(fx).length, want, name);
+    } finally { fx.cleanup(); }
+  }
+});
+
+test('G40-BL0375: explicit scheduled is accepted only when the periodic gate passes', async () => {
+  const cfg = { accounts: { quota_probe: 'scheduled' } };
+  let fx = dueFx({ config: cfg });
+  try { assert.strictEqual((await goWith(cliWithManifest(CONFIRMED)(), fx, ['status'])).code, 0); } finally { fx.cleanup(); }
+  fx = dueFx({ config: cfg });
+  try {
+    const r = await goWith(cliWithManifest((m) => { CONFIRMED(m); delete m.capture.find((x) => x.mode === 'tinyprobe').quota_share_per_probe; })(), fx, ['status']);
+    assert.strictEqual(r.code, 2);
+    assert.match(r.err, /config_quota_probe_scheduled_rejected/);
+  } finally { fx.cleanup(); }
+});
+
+test('G40-BL0375 fail closed: a missing, damaged, unreadable or stale audit log means no demand, so --due probes nothing', async () => {
+  const cli = cliWithManifest(CONFIRMED);
+  const scenarios = {
+    'audit file missing': () => {},
+    'audit path is a directory': (fx) => { fs.mkdirSync(fx.auditFile, { recursive: true }); },
+    'audit path is a symlink': (fx) => { fs.mkdirSync(path.dirname(fx.auditFile), { recursive: true }); fs.symlinkSync(path.join(fx.root, 'elsewhere.jsonl'), fx.auditFile); },
+    'one damaged line next to a good demand line': (fx) => { demandLine(fx, 'a', 60); fs.appendFileSync(fx.auditFile, 'not json\n'); },
+    'a line with an unknown key': (fx) => { demandLine(fx, 'a', 60); fs.appendFileSync(fx.auditFile, JSON.stringify({ ts: NOW, extra: 1 }) + '\n'); },
+    'demand older than 24 h': (fx) => { demandLine(fx, 'a', 86401); },
+    'only the probe wrote the line': (fx) => { demandLine(fx, 'a', 60, 'quota-probe'); },
+  };
+  for (const [name, setup] of Object.entries(scenarios)) {
+    const fx = dueFx();
+    try {
+      setup(fx);
+      const r = await goWith(cli(), fx, ['usage-probe', '--due']);
+      assert.strictEqual(r.code, 0, `${name}: ${r.err}`);
+      assert.deepStrictEqual(JSON.parse(r.out), { due: [], probed: [] }, name);
+      assert.strictEqual(fx.shim.spawns(), 0, name);
+    } finally { fx.cleanup(); }
+  }
+});
+
+test('G40-BL0375 negative control: a CLI that drops the fail-closed audit read is caught by the fail-closed scenarios', async () => {
+  // Each scenario would list alias a as due if the audit read did not fail closed (a good demand line is present or implied).
+  const damaged = (fx) => { demandLine(fx, 'a', 60); fs.appendFileSync(fx.auditFile, 'not json\n'); };
+  const refused = (fx) => { fs.mkdirSync(fx.auditFile, { recursive: true }); };
+  const unreadable = (fx) => { fs.mkdirSync(path.dirname(fx.auditFile), { recursive: true }); fs.symlinkSync(path.join(fx.root, 'elsewhere.jsonl'), fx.auditFile); };
+  const dueOf = async (cli, setup) => {
+    const fx = dueFx();
+    try { setup(fx); return JSON.parse((await goWith(cli, fx, ['usage-probe', '--due', '--dry-run'])).out).due; } finally { fx.cleanup(); }
+  };
+  const real = cliWithManifest(CONFIRMED)();
+  for (const setup of [damaged, refused, unreadable]) assert.deepStrictEqual(await dueOf(real, setup), []);
+  const noInvalidCheck = cliWithManifest(CONFIRMED)([['if (res.refused || res.invalid > 0) return new Set();', '']]);
+  assert.notDeepStrictEqual(await dueOf(noInvalidCheck, damaged), [], 'mutant: damaged log still counts as demand');
+  const noCatch = cliWithManifest(CONFIRMED)([['return probe.demandAliases(res.records, ctx.now());\n  } catch (_) { return new Set(); }', "return probe.demandAliases(res.records, ctx.now());\n  } catch (_) { return new Set(['a']); }"]]);
+  assert.notDeepStrictEqual(await dueOf(noCatch, unreadable), [], 'mutant: an unreadable log counts everyone as demand');
+  const noPolicy = cliWithManifest(CONFIRMED)([["if (res.refused || res.invalid > 0) return new Set();", "if (res.refused) return new Set(['a']);"]]);
+  assert.notDeepStrictEqual(await dueOf(noPolicy, refused), [], 'mutant: a refused log counts as demand');
+});
+
+test('G40-BL0375 negative control: a run that probes on demand only under `stale` (not `scheduled`) is caught', async () => {
+  const mutant = cliWithManifest(CONFIRMED)([["if (cfg.quota_probe !== 'off' && !pinned && !probeChecked) {", "if (cfg.quota_probe === 'stale' && !pinned && !probeChecked) {"]]);
+  const fx = dueFx();
+  try {
+    await goWith(mutant, fx, RUN);
+    assert.strictEqual(probeCalls(fx).length, 0, 'the mutant skips the on-demand probe that the real CLI makes (see the on-demand test)');
+  } finally { fx.cleanup(); }
+});
+
+test('G40-BL0375 no registry: with quota_probe unset every registry command ends as before (registry_not_configured / unconfigured), with zero spawns and no file written', async () => {
+  const before = (fx) => fs.readdirSync(fx.root).sort().join(',') + '|' + (fs.existsSync(fx.auditFile) ? 'audit' : 'no-audit');
+  for (const args of [RUN, ['usage-probe', '--alias', 'a'], ['status'], ['pick'], ['env-check'], ['sync-statusline'], ['cooldown', '--clear', 'a']]) {
+    const fx = makeFixture({ aliases: [{ alias: 'a' }], config: {}, probeFromManifest: true });
+    try {
+      fs.rmSync(fx.regFile);
+      const was = before(fx);
+      const r = await go(fx, args);
+      assert.ok(r.err.includes('registry_not_configured') || r.out.includes('unconfigured') || r.code === 0, `${args[0]}: ${r.err}${r.out}`);
+      assert.strictEqual(fx.shim.spawns(), 0, args[0]);
+      assert.strictEqual(before(fx), was, `${args[0]}: nothing written`);
+      assert.ok(!fs.existsSync(fx.liveDir + '/quota-mirror'), 'no mirror directory');
+    } finally { fx.cleanup(); }
+  }
+});
+
+// ---- BL-0375 review: `usage-probe --due --dry-run` writes nothing on any path -------------------------------------------
+// Snapshot of the whole fixture tree: every file's bytes plus every directory; "absent before" must stay absent.
+function treeSnapshot(root) {
+  const out = {};
+  const walk = (d) => {
+    for (const n of fs.readdirSync(d).sort()) {
+      const p = path.join(d, n);
+      const st = fs.lstatSync(p);
+      if (st.isDirectory()) { out[path.relative(root, p) + '/'] = 'dir'; walk(p); } else out[path.relative(root, p)] = st.isSymbolicLink() ? 'link:' + fs.readlinkSync(p) : fs.readFileSync(p).toString('base64');
+    }
+  };
+  walk(root);
+  return out;
+}
+const DRY_SCENARIOS = {
+  'mode off': { code: 2, err: /mode_off/, setup: (fx) => { fx.env.AUTOPILOT_ACCOUNT_MODE = 'off'; demandLine(fx, 'a', 60); } },
+  'registry invalid': { code: 2, err: /./, setup: (fx) => { fs.writeFileSync(fx.regFile, '{not json'); } },
+  'scheduled with a due alias': { code: 0, out: { due: ['a'], probed: [] }, setup: (fx) => { demandLine(fx, 'a', 60); } },
+  'nothing due': { code: 0, out: { due: [], probed: [] }, setup: () => {} },
+};
+
+test('G40-BL0375 review: --due --dry-run leaves audit, mirror, cooldown and every fixture file byte for byte unchanged, and refuses exactly as before', async () => {
+  for (const [name, sc] of Object.entries(DRY_SCENARIOS)) {
+    const fx = dueFx({ responses: { a: stream(ev(0.3, 0.1)) } });
+    try {
+      sc.setup(fx);
+      const before = treeSnapshot(fx.root);
+      const r = await goWith(cliWithManifest(CONFIRMED)(), fx, ['usage-probe', '--due', '--dry-run']);
+      assert.strictEqual(r.code, sc.code, `${name}: ${r.err}`);
+      if (sc.err) assert.match(r.err, sc.err, name);
+      if (sc.out) assert.deepStrictEqual(JSON.parse(r.out), sc.out, name);
+      assert.deepStrictEqual(treeSnapshot(fx.root), before, `${name}: the dry run changed a file (audit, mirror, cooldown or other)`);
+      assert.strictEqual(fx.shim.spawns(), 0, name);
+    } finally { fx.cleanup(); }
+  }
+});
+
+test('G40-BL0375 review: without --dry-run the same refusals still write their audit line (the guard is dry-run only)', async () => {
+  const fx = dueFx();
+  try {
+    fx.env.AUTOPILOT_ACCOUNT_MODE = 'off';
+    const r = await goWith(cliWithManifest(CONFIRMED)(), fx, ['usage-probe', '--due']);
+    assert.strictEqual(r.code, 2);
+    assert.ok(auditLines(fx).some((l) => l.outcome === 'mode_off'), 'the mode_off pre-audit line is written when not a dry run');
+  } finally { fx.cleanup(); }
+});
+
+test('G40-BL0375 review negative control: with the dry-run guard removed, the mode-off dry run writes an audit line and the snapshot test turns red', async () => {
+  const noGuard = cliWithManifest(CONFIRMED)([['  if (ctx.noWrite) return; // `usage-probe --due --dry-run`: no audit line on any path, refusals included\n', '']]);
+  const fx = dueFx();
+  try {
+    fx.env.AUTOPILOT_ACCOUNT_MODE = 'off';
+    const before = treeSnapshot(fx.root);
+    const r = await goWith(noGuard, fx, ['usage-probe', '--due', '--dry-run']);
+    assert.strictEqual(r.code, 2);
+    assert.notDeepStrictEqual(treeSnapshot(fx.root), before, 'the mutant must change the tree');
+    assert.ok(fs.existsSync(fx.auditFile), 'it wrote the audit file that did not exist');
   } finally { fx.cleanup(); }
 });

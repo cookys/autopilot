@@ -28,7 +28,7 @@ mutant() {
   echo "$d"
 }
 
-CLEAN='{"config_schema_version":1,"context_budget":{"t1":100000,"t2":150000,"gap":50000,"mode":"warn"},"update_check":true,"hooks":{"exec-boundary":true},"AUTOPILOT_TASKS":"off","foreman_guard":{"mode":"warn","role_caps":{"foreman":10}},"dirty_tree_reminder":false}'
+CLEAN='{"config_schema_version":2,"context_budget":{"t1":100000,"t2":150000,"gap":50000,"mode":"warn"},"update_check":true,"hooks":{"exec-boundary":true},"AUTOPILOT_TASKS":"off","foreman_guard":{"mode":"warn","role_caps":{"foreman":10}},"dirty_tree_reminder":false}'
 
 set_window 250000
 cfg "$CLEAN"
@@ -55,7 +55,7 @@ check_rule() {
   elif [ "$want" != "$have" ]; then echo "NOT KILLED: mutant of $rule changed other rules (want: $want / got: $have)"
   else KILLED=$((KILLED + 1)); fi
 }
-V1='"config_schema_version":1'
+V1='"config_schema_version":2'  # CURRENT_SCHEMA (BL-0375 raised it to 2: accounts.quota_probe default changed)
 check_rule unknown_key 250000 "{$V1,\"context_budgt\":{\"t2\":1}}"
 check_rule bad_value 250000 "{$V1,\"context_budget\":{\"mode\":\"of\"}}"
 check_rule bad_type 250000 "{$V1,\"update_check\":\"yes\"}"
@@ -70,7 +70,7 @@ assert_contains "$OUT" "~/.autopilot/config.json" "no_autocompact_window suggest
 # RED at b34149e11: autocompact-window.js did not export AUTOCOMPACT_BUFFER, so the two modules did not share one value
 BUF="$(node -e 'const a=require(process.argv[1]); const c=require(process.argv[2]); const same=a.AUTOCOMPACT_BUFFER===c.AUTOCOMPACT_BUFFER && a.AUTOCOMPACT_BUFFER===33000; process.stdout.write(same?"33000":("DIFF "+a.AUTOCOMPACT_BUFFER+" "+c.AUTOCOMPACT_BUFFER))' "$LIBDIR/autocompact-window.js" "$LIBDIR/config-audit.js")"
 assert_eq "$BUF" "33000" "autocompact-window and config-audit export the same AUTOCOMPACT_BUFFER"
-check_rule defaults_changed 250000 '{"update_check":true}'
+check_rule defaults_changed 250000 '{"config_schema_version":1,"update_check":true}'  # a schema-1 user sees exactly the schema-2 entry
 assert_eq "$KILLED" "$TOTAL" "negative controls: every removed check is caught ($KILLED of $TOTAL mutants killed)"
 echo "negative controls: $KILLED/$TOTAL mutants killed (red when the check is removed)"
 
@@ -88,11 +88,11 @@ assert_eq "$(rules_of "$LIBDIR")" "" "t1=0 (tier disabled) is not a contradictio
 cfg "{$V1,\"context_budget\":{\"mode\":\"off\",\"t2\":900000}}"
 assert_eq "$(rules_of "$LIBDIR")" "" "mode=off skips the window checks"
 set_window 250000; rm -f "$TEST_TMP/cfg.json"
-assert_eq "$(rules_of "$LIBDIR" | tr ' ' '\n' | grep -c defaults_changed)" "1" "absent file: only the schema listing applies"
+assert_eq "$(rules_of "$LIBDIR" | tr ' ' '\n' | grep -c defaults_changed)" "2" "absent file: only the schema listing applies (both default changes: hooks schema 1, quota_probe schema 2)"
 node "$LIBDIR/config-audit.js" --bogus >/dev/null 2>&1; assert_eq "$?" "2" "CLI: unknown flag exits 2"
 
 # dev-setup.sh --check prints the audit
-cfg '{"context_budgt":{"t2":1},"config_schema_version":1}'; set_window 250000
+cfg '{"context_budgt":{"t2":1},"config_schema_version":2}'; set_window 250000
 OUT="$(AUTOPILOT_CONFIG_FILE="$TEST_TMP/cfg.json" bash "$REPO_ROOT/scripts/dev-setup.sh" --check 2>&1)"
 assert_contains "$OUT" "WARN config" "dev-setup --check: config findings printed as WARN"
 assert_contains "$OUT" "unknown_key: context_budgt" "dev-setup --check: names the unknown key"

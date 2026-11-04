@@ -12,7 +12,7 @@
 // Rules (a finding's `rule`):
 //   schema, unknown_key, provider, visibility, starts_window, starts_window_evidence, windows, required_window,
 //   capture, capture_order, verified_evidence, verified_false_enabled, tinyprobe_argv, visibility_unverified,
-//   matrix_row, credential_ref, token_lifetime
+//   matrix_row, credential_ref, token_lifetime, starts_window_confidence, quota_share (BL-0375 probe policy)
 // The checker works on strings only: it opens the evidence files the manifest names (the capability matrix) and
 // NOTHING a credential_ref points at; a credential reference is a template under <accounts-dir>/<alias>/ (ruling 8)
 // and is judged by its text alone. A manifest field not backed by a matrix row or an evidence path fails (20.5).
@@ -28,10 +28,10 @@ const MANIFEST_SCHEMA = 'fleet.quota-adapter/1';
 const EVIDENCE_DIR = 'docs/plans/evidence/2026-11-03-g40-agent-lane-quota';
 const PLACEHOLDER = '<PROMPT>';
 
-const TOP_KEYS = ['schema', 'provider', 'visibility', 'starts_window', 'starts_window_evidence', 'windows', 'capture', 'credential_ref', 'token_lifetime', 'matrix_row'];
+const TOP_KEYS = ['schema', 'provider', 'visibility', 'starts_window', 'starts_window_evidence', 'starts_window_confidence', 'windows', 'capture', 'credential_ref', 'token_lifetime', 'matrix_row'];
 const MODES = ['passive', 'endpoint', 'tinyprobe', 'fallback']; // cost order, cheapest first (20.3 rule 1)
 const COSTS = ['zero_token', 'tokens', 'local'];
-const CAPTURE_KEYS = ['mode', 'cost', 'verified', 'enabled', 'evidence', 'note', 'parser', 'needs', 'argv_template', 'est_cost_usd', 'est_out_tokens', 'min_interval_minutes', 'starts_window', 'counter', 'plan_limit', 'source', 'cooldown_on_429'];
+const CAPTURE_KEYS = ['mode', 'cost', 'verified', 'enabled', 'evidence', 'note', 'parser', 'needs', 'argv_template', 'est_cost_usd', 'est_out_tokens', 'min_interval_minutes', 'starts_window', 'quota_share_per_probe', 'counter', 'plan_limit', 'source', 'cooldown_on_429'];
 const PROVIDER_RE = /^[a-z0-9-]{1,24}$/;
 const ENV_NAME_RE = /^[A-Z0-9_]{1,64}$/;
 const TEMPLATE_PREFIX = '<accounts-dir>/<alias>/';
@@ -116,6 +116,34 @@ function checkCredentialRef(ref, add) {
   return undefined;
 }
 
+// BL-0375 probe policy fields: the confidence of starts_window (top level) and the per-provider Q5 record (tinyprobe capture).
+const CONFIDENCES = ['low', 'medium', 'high'];
+const Q5_WINDOWS = ['rolling_5h', 'weekly'];
+function checkProbePolicyFields(m, ctx, add) {
+  if ('starts_window_confidence' in m) {
+    const v = m.starts_window_confidence;
+    if (!CONFIDENCES.includes(v)) add('starts_window_confidence', 'enum');
+    else if (m.starts_window === 'unknown') add('starts_window_confidence', 'unknown_has_no_confidence');
+    else if (v === 'high' && m.starts_window === false && (typeof m.starts_window_evidence !== 'string' || m.starts_window_evidence.length === 0)) {
+      add('starts_window_confidence', 'high_without_evidence');
+    }
+  }
+  if (!Array.isArray(m.capture)) return;
+  for (const c of m.capture) {
+    if (!isObj(c)) continue;
+    if (c.mode === 'tinyprobe' && 'starts_window' in c && 'starts_window' in m && c.starts_window !== m.starts_window) add('starts_window', 'tinyprobe_mismatch');
+    if (!('quota_share_per_probe' in c)) continue;
+    const q = c.quota_share_per_probe;
+    if (c.mode !== 'tinyprobe') { add('quota_share', 'only_on_tinyprobe'); continue; }
+    if (c.verified !== true) add('quota_share', 'needs_verified_tinyprobe');
+    if (!isObj(q) || Object.keys(q).some((k) => !['percent', 'window', 'evidence'].includes(k))) { add('quota_share', 'shape'); continue; }
+    if (typeof q.percent !== 'number' || !Number.isFinite(q.percent) || q.percent <= 0 || q.percent > 100) add('quota_share', 'percent_range');
+    if (!Q5_WINDOWS.includes(q.window)) add('quota_share', 'window');
+    const p = evidenceProblem(q.evidence, ctx);
+    if (p) add('quota_share', `evidence:${p}`);
+  }
+}
+
 function checkTinyprobe(c, matrix, add) {
   const t = c.argv_template;
   if (!Array.isArray(t) || t.length === 0 || t.some((x) => typeof x !== 'string')) return add('tinyprobe_argv', 'argv_template_missing');
@@ -153,6 +181,7 @@ function checkManifest(m, ctx) {
     const p = evidenceProblem(m.starts_window_evidence, ctx);
     if (p) add('starts_window_evidence', p);
   }
+  checkProbePolicyFields(m, ctx, add);
 
   // windows and required windows (8.3, N72).
   if (!Array.isArray(m.windows) || m.windows.length === 0) add('windows', 'missing');

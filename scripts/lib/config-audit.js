@@ -32,7 +32,7 @@ const path = require('path');
 const { configPath, readContextBudget } = require('./config-path.js');
 const { AUTOCOMPACT_BUFFER } = require('./autocompact-window.js');
 
-const CURRENT_SCHEMA = 1;
+const CURRENT_SCHEMA = 2;
 const REGISTRY = path.join(__dirname, 'config-keys.json');
 
 function loadRegistry(file) {

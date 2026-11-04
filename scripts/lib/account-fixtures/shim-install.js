@@ -70,9 +70,20 @@ const ERR_EXIT0 = {
   stdout: JSON.stringify({ type: 'result', subtype: 'success', is_error: true, result: 'something went wrong' }) + '\n',
 };
 
+// BL-0375: an unset `accounts.quota_probe` follows the manifest (on-demand probe for a stale alias), so a fixture pins it
+// to `off` unless the test sets it or asks for the manifest default with `probeFromManifest: true`. This keeps the G37
+// and capture scenarios free of an unrelated probe spawn; the manifest-default tests opt in explicitly.
+function pinProbeOff(config, probeFromManifest) {
+  const c = JSON.parse(JSON.stringify(config || {}));
+  if (probeFromManifest) return c;
+  if (c.accounts === undefined) c.accounts = {};
+  if (c.accounts !== null && typeof c.accounts === 'object' && !Array.isArray(c.accounts) && c.accounts.quota_probe === undefined) c.accounts.quota_probe = 'off';
+  return c;
+}
+
 /**
  * opts: { aliases: [{alias, token?, enabled?, priority?}], config: {...config.json content},
- *         responses: { <alias>: response }, snapshots: { <alias>: snapshotObject } }
+ *         responses: { <alias>: response }, snapshots: { <alias>: snapshotObject }, probeFromManifest?: boolean }
  */
 function makeFixture(opts) {
   const o = opts || {};
@@ -90,7 +101,7 @@ function makeFixture(opts) {
   const tmpDir = path.join(root, 'tmp');
   for (const d of [liveDir, stateDir, runtimeDir, tmpDir]) fs.mkdirSync(d, { recursive: true, mode: 0o700 });
   const configFile = path.join(root, 'config.json');
-  fs.writeFileSync(configFile, JSON.stringify(o.config || {}));
+  fs.writeFileSync(configFile, JSON.stringify(pinProbeOff(o.config, o.probeFromManifest)));
 
   const aliases = o.aliases || [{ alias: 'a' }, { alias: 'b' }];
   const rows = [];
@@ -131,9 +142,27 @@ function makeFixture(opts) {
     root, realHome, decoy, accountsDir, liveDir, stateDir, runtimeDir, tmpDir, configFile, regFile,
     tokens, shim, env, auditFile: path.join(stateDir, 'accounts-audit.jsonl'),
     cooldownDir: path.join(liveDir, 'accounts', 'cooldown'),
-    writeConfig(c) { fs.writeFileSync(configFile, JSON.stringify(c)); },
+    writeConfig(c) { fs.writeFileSync(configFile, JSON.stringify(pinProbeOff(c, o.probeFromManifest))); },
     cleanup() { fs.rmSync(root, { recursive: true, force: true }); },
   };
 }
 
-module.exports = { installShim, makeFixture, readLog, OK, R401, R429, R429_USAGE, ERR_EXIT0, DUAL_RESULT, DUAL_OK, SHIM_SRC };
+// Test-only negative controls: compile `file` with exact text replacements applied and return its exports. Every `from` must
+// occur exactly once, so a mutant that no longer applies fails loudly instead of silently testing the original. No switch
+// exists in production code; the mutation lives only in this in-memory copy.
+function loadPatched(file, replacements) {
+  const Module = require('module');
+  let src = fs.readFileSync(file, 'utf8').replace(/^#!.*\n/, '\n');
+  for (const [from, to] of replacements) {
+    const n = src.split(from).length - 1;
+    if (n !== 1) throw new Error(`loadPatched: expected exactly one match, got ${n}: ${from.slice(0, 60)}`);
+    src = src.replace(from, () => to);
+  }
+  const m = new Module(file, null);
+  m.filename = file;
+  m.paths = Module._nodeModulePaths(path.dirname(file));
+  m._compile(src, file);
+  return m.exports;
+}
+
+module.exports = { loadPatched, installShim, makeFixture, readLog, OK, R401, R429, R429_USAGE, ERR_EXIT0, DUAL_RESULT, DUAL_OK, SHIM_SRC };

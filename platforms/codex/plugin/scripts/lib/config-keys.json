@@ -5882,19 +5882,27 @@
       "audience": "user",
       "group": "accounts",
       "needle": "quota_probe",
-      "default": "off",
+      "default": "manifest",
       "readers": [
         "scripts/claude-account.js",
         "scripts/lib/account-probe.js"
       ],
       "doc": "docs/guide/settings-reference.md",
       "relates": [],
-      "summary": "`off` (default), `stale` (one tiny model call just before pick for an alias whose newest observation is old) or `scheduled` (rejected for Claude until the window experiment is recorded). Leave it off.",
+      "summary": "Unset (default `manifest`) follows the adapter manifest: one tiny model call just before pick for an alias whose newest observation is old, and a periodic probe only for a provider whose manifest is confirmed `starts_window=false` with a recorded Q5. `off` never probes and beats the manifest; `stale` is on-demand only; `scheduled` is rejected unless the periodic gate passes (Claude: rejected).",
       "type": "enum",
       "allowed": [
         "off",
         "stale",
         "scheduled"
+      ],
+      "changed_in": [
+        {
+          "schema": 2,
+          "from": "off (never probed)",
+          "to": "manifest (unset quota_probe makes one tiny haiku call before pick for an alias whose newest observation is old)",
+          "note": "This spends a few tokens (about 0.003 USD API-equivalent per probe, at most one per run, never for a pinned, tight or cooling alias). Set accounts.quota_probe to \"off\" to keep the old behavior. Only hosts with an account registry are affected."
+        }
       ]
     },
     {

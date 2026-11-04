@@ -1,13 +1,19 @@
 'use strict';
 
 // scripts/lib/account-probe.js — G40 D4 probe, pure parts (plan project/plans/2026-11-03-g40-agent-lane-quota.md 5.3, 10;
-// N13, N14, N66, N73, N76). The probe PROGRAM PATH ships, but `accounts.quota_probe` is `off` by default and nothing in
-// a document or a default may turn it on until the section 19 experiment is recorded.
+// N13, N14, N66, N73, N76; amendment 2026-11-04 d-2d6a93aa, BL-0375). `accounts.quota_probe` unset follows the manifest:
+// on-demand (`stale`) for every provider, periodic (`scheduled`) only when the periodic gate below passes.
 //
 //   probeArgv(manifest, prompt)         the tinyprobe argv of the adapter manifest with <PROMPT> filled in, nothing else
 //                                       added or removed (the matrix's live command; `--strict-mcp-config` is NOT in it).
-//   probeModeAllowed(manifest, mode)    `off` and `stale` always; `scheduled` only when the manifest says
-//                                       `starts_window: false` WITH an evidence path (N66). Claude says `unknown`.
+//   probePolicy(manifest)               { confirmed, q5, periodic }: periodic needs starts_window false AND
+//                                       starts_window_confidence high AND an evidence path AND a recorded Q5
+//                                       (tinyprobe quota_share_per_probe). Anything else is on-demand only.
+//   probeModeAllowed(manifest, mode)    `off` and `stale` always; `scheduled` only when probePolicy says periodic (N66).
+//   resolveProbeMode(manifest, setting) unset -> `scheduled` when periodic, else `stale`; no tinyprobe -> `off`; an explicit
+//                                       setting is returned as is (explicit `off` beats the manifest). Never throws.
+//   periodicDue(opts)                   aliases due for a periodic probe: stale at 30 minutes AND in the demand set.
+//   demandAliases(records, nowMs)       aliases a run touched in the last 24 h, from validated audit records.
 //   staleCandidates(accounts, merged, cooldowns, exclude, nowS, minutes)
 //                                       aliases worth probing, in the order given; the caller probes at most one.
 //   checkProbeConfig(a)                 the range checks of N73 as a pure function: null or a short reason code.
@@ -39,11 +45,34 @@ function probeArgv(manifest, prompt) {
   return t.argv_template.map((x) => (x === PROMPT_PLACEHOLDER ? prompt : x));
 }
 
+const CONFIDENCES = Object.freeze(['low', 'medium', 'high']);
+const Q5_WINDOWS = Object.freeze(['rolling_5h', 'weekly']);
+const PERIODIC_MINUTES = 30; // amendment A.1: about one probe per 30 minutes, only without a newer observation
+const DEMAND_SECS = 24 * 3600; // plan 19.6 A demand rule
+const nonEmpty = (x) => typeof x === 'string' && x.length > 0;
+
+// The facts the policy reads: the TOP-LEVEL starts_window trio plus the tinyprobe capture's Q5 record.
+function probePolicy(manifest) {
+  const m = manifest && typeof manifest === 'object' ? manifest : {};
+  const t = tinyprobe(m);
+  const confirmed = m.starts_window === false && m.starts_window_confidence === 'high' && nonEmpty(m.starts_window_evidence);
+  const q = t && t.quota_share_per_probe;
+  const q5 = !!q && typeof q === 'object' && Number.isFinite(q.percent) && q.percent > 0 && q.percent <= 100
+    && Q5_WINDOWS.includes(q.window) && nonEmpty(q.evidence);
+  return { confirmed, q5, periodic: !!t && confirmed && q5 };
+}
+
 function probeModeAllowed(manifest, mode) {
   if (!MODES.includes(mode)) return false;
   if (mode !== 'scheduled') return true;
-  const t = tinyprobe(manifest);
-  return !!t && t.starts_window === false && typeof t.evidence === 'string' && t.evidence.length > 0;
+  return probePolicy(manifest).periodic;
+}
+
+// quota_probe unset follows the manifest; an explicit setting wins (explicit `off` stays off). No tinyprobe: nothing to run.
+function resolveProbeMode(manifest, setting) {
+  if (setting !== undefined) return setting;
+  if (!tinyprobe(manifest)) return 'off';
+  return probePolicy(manifest).periodic ? 'scheduled' : 'stale';
 }
 
 // Returns null when fine, else a short reason code. `a` is the raw `accounts` config object (already an object).
@@ -87,7 +116,28 @@ function staleCandidates(accounts, merged, cooldowns, exclude, nowS, minutes) {
   return out;
 }
 
+// Aliases a run used in the last 24 h. `records` are VALIDATED audit records (account-audit.readAudit); a probe's own line
+// (purpose `quota-probe`) and a pre-attempt line (alias `-`) are not demand. Any other input shape yields an empty set.
+function demandAliases(records, nowMs) {
+  const out = new Set();
+  if (!Array.isArray(records) || !Number.isFinite(nowMs)) return out;
+  for (const r of records) {
+    if (!r || typeof r.alias !== 'string' || r.alias === '-' || typeof r.outcome !== 'string' || !r.outcome) continue;
+    if (r.purpose === 'quota-probe' || !Number.isFinite(r.ts)) continue;
+    if (nowMs - r.ts <= DEMAND_SECS * 1000 && r.ts <= nowMs) out.add(r.alias);
+  }
+  return out;
+}
+
+// opts: { manifest, accounts, merged, cooldowns, exclude, nowS, demand:Set }. Empty unless the manifest is periodic.
+function periodicDue(opts) {
+  const o = opts || {};
+  if (!probePolicy(o.manifest).periodic || !(o.demand instanceof Set)) return [];
+  return staleCandidates(o.accounts, o.merged, o.cooldowns, o.exclude, o.nowS, PERIODIC_MINUTES).filter((a) => o.demand.has(a));
+}
+
 module.exports = {
   PROMPT_PLACEHOLDER, PROBE_PROMPT, STALE_MINUTES_MIN, STALE_MINUTES_MAX, STALE_MINUTES_DEFAULT, TIMEOUT_SECS_DEFAULT, MODES,
-  probeArgv, probeModeAllowed, checkProbeConfig, staleCandidates,
+  CONFIDENCES, Q5_WINDOWS, PERIODIC_MINUTES,
+  probeArgv, probePolicy, probeModeAllowed, resolveProbeMode, checkProbeConfig, staleCandidates, demandAliases, periodicDue,
 };

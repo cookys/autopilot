@@ -53,7 +53,7 @@ mkfx() {
   mkdir -p "$fx/fakehome/.claude" "$fx/live" "$fx/state" "$fx/run" "$fx/tmp" "$fx/bin" "$fx/ecd"
   chmod 700 "$fx/live" "$fx/state" "$fx/run" "$fx/tmp"
   printf '{"claudeAiOauth":{"accessToken":"DECOY-CREDS-NOT-REAL"}}' > "$fx/fakehome/.claude/.credentials.json"
-  printf '{}' > "$fx/config.json"
+  printf '{"accounts":{"quota_probe":"off"}}' > "$fx/config.json"  # BL-0375: unset follows the manifest (an on-demand probe call through the PATH claude); this suite tests onboarding, not the probe
   cp "$NODE_SHIM" "$fx/bin/claude"; chmod 755 "$fx/bin/claude"
   for t in "$@"; do okjson="$okjson${okjson:+,}\"$(tokfp "$t")\""; done
   printf '{"log":"%s","ok":[%s]}' "$fx/shim.log" "$okjson" > "$fx/bin/ctl.json"

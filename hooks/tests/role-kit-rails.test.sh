@@ -61,6 +61,7 @@ mkkit() {
   printf 'skill\n' > "$1/plugin/skills/only-skill/SKILL.md"
 }
 KIT="$TEST_TMP/kit"; mkkit "$KIT"
+BAD_EMPTY="$TEST_TMP/bad-empty-role"; mkkit "$BAD_EMPTY"; : > "$BAD_EMPTY/role.md"
 KIT_NOPLUG="$TEST_TMP/kit-noplugin"; mkkit "$KIT_NOPLUG"; rm -rf "$KIT_NOPLUG/plugin"; printf 'none\n' > "$KIT_NOPLUG/tools"
 
 # run_rail <script-dir-or-file> <review|author|hetero> [extra args...] -> RC, OUT; resets argv/call logs
@@ -181,6 +182,55 @@ run_rail "$HETERO" hetero
 RUN_ID="$(printf '%s' "$OUT" | sed -n 's/.*"run_id": "\([^"]*\)".*/\1/p' | tail -1)"
 assert_not_contains "$(cat "$AUTOPILOT_DISPATCH_RUNS_DIR/$RUN_ID.manifest.json")" 'role_kit' "hetero manifest without a kit has no role_kit field"
 
+# (h) review round g1 fixes
+# h1: -h shows the knob on every rail
+for KIND in review author hetero; do
+  assert_contains "$("$REPO_ROOT/scripts/dispatch-$KIND.sh" -h 2>&1)" "--role-kit" "(h1) $KIND: -h prints the --role-kit lines"
+done
+# h2: a role card whose first bytes are "--example" reaches claude whole, as the value after --system-prompt
+KIT_DASH="$TEST_TMP/kit-dash"; mkkit "$KIT_DASH"; printf -- '--example\nsecond line' > "$KIT_DASH/role.md"
+for KIND in review author hetero; do
+  run_rail "$REPO_ROOT/scripts/dispatch-$KIND.sh" "$KIND" --role-kit "$KIT_DASH"
+  assert_eq "1" "$NCALLS" "(h2) $KIND: dash-leading role card -> one claude call"
+  assert_eq "" "$(argv_check "$KIT_DASH/role.md" "Read,Grep" "$(cd "$KIT_DASH" && pwd -P)/plugin")" "(h2) $KIND: --system-prompt value is the full text starting with --example"
+done
+# h3: a node warning on stderr must not break a good kit, and a refusal still gives its own one-line reason
+cat > "$TEST_TMP/warn.js" <<'WEOF'
+process.emitWarning('role-kit test warning');
+WEOF
+for KIND in review author hetero; do
+  NODE_OPTIONS="--require $TEST_TMP/warn.js" run_rail "$REPO_ROOT/scripts/dispatch-$KIND.sh" "$KIND" --role-kit "$KIT"
+  assert_eq "1" "$NCALLS" "(h3) $KIND: node warning on stderr, good kit still spawns"
+  assert_eq "" "$(argv_check "$KIT/role.md" "Read,Grep" "$KIT_REAL/plugin")" "(h3) $KIND: argv intact under a node warning"
+  NODE_OPTIONS="--require $TEST_TMP/warn.js" run_rail "$REPO_ROOT/scripts/dispatch-$KIND.sh" "$KIND" --role-kit "$TEST_TMP/bad-empty-role"
+  assert_eq "0" "$NCALLS" "(h3) $KIND: node warning + bad kit -> refused"
+  assert_contains "$OUT" "role-kit refused: role.md is empty" "(h3) $KIND: refusal reason is the validator line, not the warning"
+done
+# h4: an unreadable role.md is a one-line refusal, not a stack trace
+if [ "$(id -u)" != 0 ]; then
+  KIT_EACCES="$TEST_TMP/kit-eacces"; mkkit "$KIT_EACCES"; chmod 000 "$KIT_EACCES/role.md"
+  for KIND in review author hetero; do
+    run_rail "$REPO_ROOT/scripts/dispatch-$KIND.sh" "$KIND" --role-kit "$KIT_EACCES"
+    assert_eq "2" "$RC" "(h4) $KIND: unreadable role.md exits 2"
+    assert_eq "0" "$NCALLS" "(h4) $KIND: unreadable role.md spawns nothing"
+    assert_contains "$OUT" "role-kit refused: " "(h4) $KIND: one-line refusal"
+    assert_not_contains "$OUT" "at Object" "(h4) $KIND: no stack trace in the refusal"
+  done
+  chmod 644 "$KIT_EACCES/role.md"
+fi
+# h5: hetero with --gate-rules: the gate settings ride in, but only the kit adds anything after them
+GR="$TEST_TMP/gate-rules.json"; echo '{"v":1,"forbid_paths":[{"id":"fp","glob":"src/legacy/**"}]}' > "$GR"
+run_rail "$HETERO" hetero --gate-rules "$GR"
+assert_eq "1" "$NCALLS" "(h5) hetero gate-rules, no kit -> one claude call (rc=$RC)"
+assert_eq "" "$(no_kit_flags)" "(h5) hetero gate-rules, no kit -> no kit flags"
+assert_eq "ABSENT" "$(tools_arg)" "(h5) hetero gate-rules, no kit -> no --tools"
+H5_NO="$(tr '\0' '\n' < "$ARGV_NUL" | grep -c -- '^--settings$')"; assert_eq "1" "$H5_NO" "(h5) hetero gate-rules, no kit -> --settings once"
+H5_NO_N="$(tr '\0' '\n' < "$ARGV_NUL" | wc -l)"
+run_rail "$HETERO" hetero --gate-rules "$GR" --role-kit "$KIT"
+assert_eq "1" "$NCALLS" "(h5) hetero gate-rules + kit -> one claude call"
+assert_eq "" "$(argv_check "$KIT/role.md" "Read,Grep" "$KIT_REAL/plugin")" "(h5) hetero gate-rules + kit -> kit argv present"
+assert_eq "1" "$(tr '\0' '\n' < "$ARGV_NUL" | grep -c -- '^--settings$')" "(h5) hetero gate-rules + kit -> --settings once"
+
 # (e) account-layer path: the same argv through claude-account.js run
 FX="$(node -e '
   const { makeFixture } = require(process.argv[1]);
@@ -253,6 +303,14 @@ K="$TEST_TMP/bad-big-role"
 run_rail "$MUT3/dispatch-review.sh" review --role-kit "$K"
 assert_neq "0" "$NCALLS" "(f) negative control: validator without the size cap lets an oversize kit through to a spawn"
 
+MUT4="$TEST_TMP/mut4-scripts"; cp -r "$REPO_ROOT/scripts" "$MUT4"
+sed_mutate "$MUT4/lib/role-kit.sh" 's/2>\/dev\/null < \/dev\/null/2>\&1 < \/dev\/null/' >/dev/null
+NODE_OPTIONS="--require $TEST_TMP/warn.js" run_rail "$MUT4/dispatch-review.sh" review --role-kit "$KIT"
+assert_eq "0" "$NCALLS" "(f) negative control: stderr merged into the parsed output makes a node warning refuse a good kit"
+MUT5="$TEST_TMP/mut5-scripts"; cp -r "$REPO_ROOT/scripts" "$MUT5"
+sed_mutate "$MUT5/dispatch-review.sh" "s/sed -n '2,58p'/sed -n '2,50p'/" >/dev/null
+assert_not_contains "$("$MUT5/dispatch-review.sh" -h 2>&1)" "--role-kit" "(f) negative control: a -h range that stops early hides the --role-kit lines"
+
 # (g) opt-in byte-identity check: ROLE_KIT_BASELINE_SCRIPTS=<scripts dir of the pre-change tree> -> without a kit the child argv
 # and env are byte-identical to that tree's (random suffixes of temp names and session ids normalised).
 if [ -n "${ROLE_KIT_BASELINE_SCRIPTS:-}" ]; then
@@ -269,5 +327,12 @@ if [ -n "${ROLE_KIT_BASELINE_SCRIPTS:-}" ]; then
     [ -s "$TEST_TMP/new.argv" ]; assert_eq "0" "$?" "(g) $KIND: the compared argv is not empty"
   done
 fi
+
+# (i) the reference states the two caveats
+REFDOC="$(cat "$REPO_ROOT/references/hetero-dispatch.md")"
+assert_contains "$REFDOC" "no longer zero-tool" "(i) reference: a review kit with tools is no longer zero-tool"
+assert_contains "$REFDOC" "hooks and \`.mcp.json\` run" "(i) reference: plugin hooks and .mcp.json run"
+assert_not_contains "$REFDOC" "holding only that role's skills" "(i) reference: the skills-only wording is gone"
+assert_eq "$REFDOC" "$(cat "$REPO_ROOT/platforms/codex/plugin/references/hetero-dispatch.md")" "(i) codex mirror of the reference is in sync"
 
 finalize_test

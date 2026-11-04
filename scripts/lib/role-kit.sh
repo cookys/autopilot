@@ -28,7 +28,12 @@ role_kit_load() {
   local _dir="$1" _js _out _text _have
   local -a _f
   _js="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/role-kit.js"
-  _out="$(node "$_js" check "$_dir" 2>&1 < /dev/null)" || die_precondition "role-kit refused: ${_out}"
+  # stdout carries the six result lines, or on refusal one `REASON: ...` line; stderr (node warnings) is dropped, never parsed.
+  if ! _out="$(node "$_js" check "$_dir" 2>/dev/null < /dev/null)"; then
+    _out="$(printf '%s\n' "$_out" | sed -n 's/^REASON: //p' | tail -n 1)"
+    [ -n "$_out" ] || _out="validator failed without a reason"
+    die_precondition "role-kit refused: ${_out}"
+  fi
   mapfile -t _f <<<"$_out"
   [ "${#_f[@]}" -eq 6 ] || die_precondition "role-kit refused: validator output not recognised"
   # Exact bytes of role.md: the trailing x keeps $(...) from eating a final newline.

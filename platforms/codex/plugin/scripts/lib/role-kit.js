@@ -6,7 +6,7 @@
 //   role.md   the role card, passed to the child as --system-prompt (claude has no --system-prompt-file)
 //   tools     ONE line, comma-separated tool allowlist, passed as --tools; the single word `none` means
 //             an empty allowlist (--tools ""), the posture the review/author rails already use
-//   plugin/   optional Claude plugin dir (only that role's skills), passed as --plugin-dir
+//   plugin/   optional Claude plugin dir (skills; its hooks and .mcp.json also run, so a kit is caller-trusted), passed as --plugin-dir
 //
 // Usage:  node role-kit.js check <kit-dir>
 //   ok    -> stdout, one value per line (no value contains a newline):
@@ -14,7 +14,7 @@
 //              4 tools argument        5 plugin realpath or empty
 //              6 the dispatch-record JSON object ({"path","role_md_sha256","tools_sha256","tools","plugin"})
 //            exit 0
-//   fail  -> stderr, ONE line with the reason, exit 2. The rail refuses before any spawn.
+//   fail  -> stdout, one line `REASON: <reason>`, exit 2 (stderr is left to node warnings and is never parsed). The rail refuses before any spawn.
 //
 // Limits: role.md <= ROLE_MD_MAX_BYTES (8 KiB: the role-kit direction caps a card at ~2 KiB, so this is 4x
 // headroom, far below the 128 KiB single-argv limit, and keeps the point of a kit, a small prompt).
@@ -129,8 +129,9 @@ function main(argv) {
   try {
     r = check(argv[1]);
   } catch (e) {
-    if (!(e instanceof KitError)) throw e;
-    process.stderr.write(`${e.message}\n`);
+    // A KitError carries its reason; any other failure (EACCES, EISDIR, ...) is still one refusal line.
+    const why = e instanceof KitError ? e.message : `kit unreadable: ${e.code || e.message}`;
+    fs.writeSync(1, `REASON: ${String(why).replace(/\s+/g, ' ')}\n`);
     return 2;
   }
   fs.writeSync(1, [r.root, r.roleSha, r.toolsSha, r.tools, r.plugin, r.json].join('\n') + '\n');

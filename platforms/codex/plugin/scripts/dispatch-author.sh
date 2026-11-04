@@ -190,7 +190,7 @@ while [[ $# -gt 0 ]]; do
     --polarity-verify-cmd) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-verify-cmd requires a non-empty value" >&2; exit 2; }; POLARITY_VERIFY_CMD="$2"; shift 2 ;;
     --polarity-assertion-artifact) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-assertion-artifact requires a non-empty value" >&2; exit 2; }; POLARITY_ASSERTION_ARTIFACTS+=("$2"); shift 2 ;;
     --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
-    -h|--help)     sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)     sed -n '2,58p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done

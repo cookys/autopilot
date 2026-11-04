@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0382 -->
+<!-- next-id: BL-0383 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1939,3 +1939,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PM base-reds triage (br3 lane), 2026-11-03
 - **Pointer**: project/backlog/segments-dollar-paren-superlinear.md
+
+### affected-suites 看不出「拷檔進自己 layout」的依賴
+- **Id**: BL-0382
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: aa95f0ce3 full-suite triage, 2026-11-04
+- **Reply**: none
+- **Problem**: 有些測試把某支 script 拷進自己拼的暫時 layout 執行；affected-suites 只看得到直接引用的檔，看不出也依賴被拷的 script 及其 require 的檔。claude-account.js 多一個 require 時，7 個套件全紅，selector 卻沒選中。
+- **Impact**: 縮小選取會漏掉這類回歸，紅燈要到完整套件才現形，已經發生過一次。
+- **Trigger**: qrlayout 合併後優先處理（排在它之後）；下次動 affected-suites 時一併做
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: aa95f0ce3 full-suite triage, 2026-11-04 (PM ruling)
+- **Pointer**: project/backlog/affected-suites-copy-into-layout-deps.md

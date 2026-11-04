@@ -698,6 +698,8 @@ function metricsRequireHits(root, own) {
       const full = path.join(dir, ent.name);
       if (ent.isDirectory()) { if (ent.name !== 'node_modules' && ent.name !== 'fixtures') walk(full); continue; }
       if (!ent.isFile()) continue;
+      // Directory entry docs (CLAUDE.md / AGENTS.md at any depth) are prose that names every script, not code: they never require a module.
+      if (ent.name === 'CLAUDE.md' || ent.name === 'AGENTS.md') continue;
       const rel = path.relative(root, full);
       if (own.has(rel)) continue;
       if (/qualification-metrics/.test(fs.readFileSync(full, 'utf8'))) hits.push(rel);
@@ -732,6 +734,15 @@ test('whole-tree scan reports an unregistered requirer and ignores an allowliste
   fs.writeFileSync(path.join(root, rel), "require('./qualification-metrics.js');\n");
   assert.deepEqual(metricsRequireHits(root, new Set()), [rel]);
   assert.deepEqual(metricsRequireHits(root, new Set([rel])), []);
+});
+
+test('whole-tree scan skips directory entry docs by exact basename but still counts other markdown', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'qm-scan-'));
+  fs.mkdirSync(path.join(root, 'scripts', 'lib'), { recursive: true });
+  for (const f of ['scripts/CLAUDE.md', 'scripts/AGENTS.md', 'scripts/lib/CLAUDE.md']) fs.writeFileSync(path.join(root, f), 'names qualification-metrics.js in prose\n');
+  assert.deepEqual(metricsRequireHits(root, new Set()), []);
+  fs.writeFileSync(path.join(root, 'scripts/NOTES.md'), 'names qualification-metrics.js\n');
+  assert.deepEqual(metricsRequireHits(root, new Set()), ['scripts/NOTES.md']);
 });
 
 test('a malformed feed URL returns ok:false instead of throwing', async () => {

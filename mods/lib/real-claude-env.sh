@@ -15,7 +15,7 @@ mods_run_plugin_test() {
     (cd "$tmp" && timeout 600 claude plugin test "$tmp" "$@")
     return $?
   fi
-  local bin="$AUTOPILOT_MODS_REAL_CLAUDE" root rc=0 found
+  local bin="$AUTOPILOT_MODS_REAL_CLAUDE" root rc=0 found=""
   if [ ! -f "$bin" ] || [ ! -x "$bin" ]; then
     echo "AUTOPILOT_MODS_REAL_CLAUDE=$bin is not an executable file" >&2
     return 99
@@ -30,8 +30,19 @@ mods_run_plugin_test() {
       HOME="$root/home" CLAUDE_CONFIG_DIR="$root/config" XDG_CONFIG_HOME="$root/xdg-config" XDG_DATA_HOME="$root/xdg-data" \
       XDG_STATE_HOME="$root/xdg-state" XDG_CACHE_HOME="$root/xdg-cache" \
       timeout 600 "$bin" plugin test "$tmp" "$@") || rc=$?
-  found="$(find "$root" \( -name '.credentials.json' -o -name '*.jsonl' \) -print 2>/dev/null)"
-  rm -rf "$root"
+  local frc=0 scan_bad=""
+  if [ ! -d "$root" ]; then
+    scan_bad="the sandbox dir $root is gone, so nothing could be checked"
+  else
+    found="$(find "$root" \( -name '.credentials.json' -o -name '*.jsonl' \) -print 2>/dev/null)" || frc=$?
+    [ "$frc" -eq 0 ] || scan_bad="the scan of $root was incomplete (find exit $frc, e.g. an unreadable subdir)"
+  fi
+  chmod -R u+rwX "$root" 2>/dev/null || true
+  rm -rf "$root" || true
+  if [ -n "$scan_bad" ]; then
+    echo "mods real-claude guard RED: $scan_bad" >&2
+    [ "$rc" -ne 0 ] || rc=98
+  fi
   if [ -n "$found" ]; then
     echo "mods real-claude guard RED: the empty config dir gained a credentials file or a transcript (a session or model call happened):" >&2
     printf '%s\n' "$found" | sed "s#^$root/##; s#^#  #" >&2

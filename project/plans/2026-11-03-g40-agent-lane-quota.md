@@ -505,6 +505,9 @@ Record the answer in the manifest `starts_window` with its evidence path (sectio
 
 How much of the alias's subscription quota one probe consumes (Q5): the experiment records `utilization` before and after on a non-idle second alias only if the operator chooses to; it is not required for the tree. Whether an interactive session's first message starts the same window: out of scope.
 
+> Amended 2026-11-04 (d-2d6a93aa): measuring Q5 during the window-start experiment remains optional, but a recorded provider-specific Q5 share is required before periodic probing for that provider (A.5b); on-demand probing remains exempt.
+
+
 ### 19.8 Results so far
 
 - glm (run by lane g40swexp, 2026-11-03): one probe (`max_tokens` 8, prompt `ok`) at an idle 5 h entry made `nextResetTime` appear at probe time plus 5 h and utilization 1 %, unchanged at +60 s. A probe moves an idle account's reset clock, so branch B applies: probe only just before pick, never on a standing schedule. `starts_window: true`. Evidence: [starts-window/RESULT.md](../../docs/plans/evidence/2026-11-03-g40-agent-lane-quota/starts-window/RESULT.md), copy `project/plans/context/g40-starts-window-result.md`. It is also the evidence for treating `unknown` as `true` (20.3 rule 2).
@@ -874,4 +877,4 @@ The Q5 gate stays, counted per provider. Periodic probing for a provider starts 
 
 ### A.7 Sections touched
 
-Each of these carries a one-line `Amended 2026-11-04 (d-2d6a93aa)` note pointing here; original text is unchanged: 2.5 (Global Constraints bullet), 1 (problem statement), 2 (KR3), 5.3 (including the "Cheapest first" cost paragraph), 10, 12 Q2, 13 P4, 14 N13 and N66, 15 mitigation (b), 18.6 (third bullet), 19.1, 19.6 A, B and C, 19.8, 20.3 rule 2.
+Each of these carries a one-line `Amended 2026-11-04 (d-2d6a93aa)` note pointing here; original text is unchanged: 2.5 (Global Constraints bullet), 1 (problem statement), 2 (KR3), 5.3 (including the "Cheapest first" cost paragraph), 10, 12 Q2, 13 P4, 14 N13 and N66, 15 mitigation (b), 18.6 (third bullet), 19.1, 19.6 A, B and C, 19.7 (Q5 paragraph), 19.8, 20.3 rule 2.

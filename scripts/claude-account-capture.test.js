@@ -23,6 +23,9 @@ const { makeFixture, R401, R429, OK } = require('./lib/account-fixtures/shim-ins
 const observation = require('./lib/account-observation');
 const probeLib = require('./lib/account-probe');
 const cooldown = require('./lib/account-cooldown');
+const { holdOsLock, isHeld, installLeakCheck } = require('./lib/account-fixtures/os-lock-holder');
+
+installLeakCheck(test.after);
 
 const NOW = 1_800_000_000_000;
 const NOW_S = NOW / 1000;
@@ -343,11 +346,12 @@ test('G40-N74: a mirror lock held makes the writer skip the write: audit quota_c
   const resp = stream(ev(0.42, 0.1));
   const held = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: resp } });
   const free = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: resp } });
+  let holder = null;
   try {
     const dir = observation.mirrorDir(held.liveDir, 'claude');
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const lock = path.join(dir, 'a.lock');
-    fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, nonce: 'held-by-test', t: Date.now() }), { mode: 0o600 });
+    const lock = path.join(dir, 'a.oslock');
+    holder = holdOsLock(lock);
     const r1 = await go(held, RUN);
     const r0 = await go(free, RUN);
     assert.strictEqual(r1.code, r0.code);
@@ -355,10 +359,40 @@ test('G40-N74: a mirror lock held makes the writer skip the write: audit quota_c
     assert.strictEqual(auditLines(held)[0].quota_capture, 'mirror_lock_busy');
     assert.strictEqual(auditLines(held)[0].outcome, 'ok');
     assert.strictEqual(rowOf(held, 'a'), null, 'nothing was written');
-    assert.ok(fs.existsSync(lock), 'the holder\'s lock is untouched');
+    assert.ok(isHeld(lock), 'the holder\'s lock is untouched');
     assert.strictEqual('quota_capture' in auditLines(free)[0], false);
     assert.ok(rowOf(free, 'a'));
-  } finally { held.cleanup(); free.cleanup(); }
+  } finally { if (holder) holder.release(); held.cleanup(); free.cleanup(); }
+});
+
+// BL-0374: with neither flock nor perl the mirror write fails closed. That must be VISIBLE (audit reason and `status`), and
+// only then: a run without a mirror failure leaves `status` byte for byte as it was.
+test('G40-BL0374: no lock tool on PATH: run is unchanged, the audit says quota_capture=lock_helper, `status` shows it; nothing else in status changes', async () => {
+  const resp = stream(ev(0.42, 0.1));
+  const broken = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: resp } });
+  const off = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: resp }, config: { accounts: { quota_capture: 'off' } } });
+  const free = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: resp } });
+  const savedPath = process.env.PATH;
+  const emptyDir = fs.mkdtempSync(path.join(broken.root, 'nopath-'));
+  try {
+    process.env.PATH = emptyDir; // the writer looks for its tool on the process PATH; the shim claude is found through fx.env
+    let r1;
+    try { r1 = await go(broken, RUN); } finally { process.env.PATH = savedPath; }
+    const r0 = await go(off, RUN);
+    const rf = await go(free, RUN);
+    assert.deepStrictEqual([r1.code, r1.out, r1.err], [r0.code, r0.out, r0.err], 'run output equals the adapter-off run');
+    assert.strictEqual(auditLines(broken)[0].quota_capture, 'lock_helper');
+    assert.strictEqual(rowOf(broken, 'a'), null, 'nothing was written');
+    const st = await go(broken, ['status']);
+    assert.strictEqual(st.code, 0);
+    assert.match(st.out, / quota_capture=lock_helper\n/);
+    // everything but the new suffix equals the status of the adapter-off world
+    const stOff = await go(off, ['status']);
+    assert.strictEqual(st.out.replace(' quota_capture=lock_helper', ''), stOff.out);
+    // a world whose mirror write worked prints no quota_capture at all
+    assert.doesNotMatch((await go(free, ['status'])).out, /quota_capture/);
+    assert.ok(rf.code === 0 && rowOf(free, 'a'));
+  } finally { process.env.PATH = savedPath; broken.cleanup(); off.cleanup(); free.cleanup(); }
 });
 
 // ------------------------------------------------------------------ N78
@@ -531,10 +565,11 @@ test('G40-N78: removeLocalRefusal leaves a local row that carries a window; dele
     assert.strictEqual(fs.existsSync(mirrorFile(fx, 'a')), false);
     assert.deepStrictEqual(observation.removeLocalRefusal(fx.liveDir, 'claude', 'a'), { ok: true, removed: false }, 'nothing left: not an error');
     writeRefusal(fx, 'a');
-    const lock = path.join(path.dirname(mirrorFile(fx, 'a')), 'a.lock');
-    fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, nonce: 'held-by-test', t: Date.now() }), { mode: 0o600 });
-    assert.deepStrictEqual(observation.removeLocalRefusal(fx.liveDir, 'claude', 'a', { waitMs: 150 }), { ok: false, code: 'mirror_lock_busy' });
-    assert.ok(rowOf(fx, 'a').refusal, 'not forced');
+    const holder = holdOsLock(path.join(path.dirname(mirrorFile(fx, 'a')), 'a.oslock'));
+    try {
+      assert.deepStrictEqual(observation.removeLocalRefusal(fx.liveDir, 'claude', 'a', { waitMs: 150 }), { ok: false, code: 'mirror_lock_busy' });
+      assert.ok(rowOf(fx, 'a').refusal, 'not forced');
+    } finally { holder.release(); }
   } finally { fx.cleanup(); }
 });
 
@@ -542,12 +577,13 @@ test('G40-N78: cooldown --clear reports a refusal it could not release (lock hel
   const fx = makeFixture({ aliases: [{ alias: 'a' }] });
   try {
     writeRefusal(fx, 'a');
-    const lock = path.join(path.dirname(mirrorFile(fx, 'a')), 'a.lock');
-    fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, nonce: 'held-by-test', t: Date.now() }), { mode: 0o600 });
-    const r = await go(fx, ['cooldown', '--clear', 'a']);
-    assert.notStrictEqual(r.code, 0);
-    assert.match(r.err, /refusal_not_cleared alias=a \(mirror_lock_busy\)/);
-    assert.ok(rowOf(fx, 'a').refusal);
+    const holder = holdOsLock(path.join(path.dirname(mirrorFile(fx, 'a')), 'a.oslock'));
+    try {
+      const r = await go(fx, ['cooldown', '--clear', 'a']);
+      assert.notStrictEqual(r.code, 0);
+      assert.match(r.err, /refusal_not_cleared alias=a \(mirror_lock_busy\)/);
+      assert.ok(rowOf(fx, 'a').refusal);
+    } finally { holder.release(); }
   } finally { fx.cleanup(); }
 });
 

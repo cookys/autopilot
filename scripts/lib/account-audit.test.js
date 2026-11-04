@@ -187,15 +187,16 @@ test('G40-N74: quota_capture is an optional closed reason code; the six-key line
   const file = path.join(tmp(), 'a.jsonl');
   const plain = A.appendAudit(ok(), { path: file, now: NOW });
   assert.deepStrictEqual(Object.keys(plain), A.AUDIT_KEYS, 'no quota_capture key unless given');
-  for (const q of ['mirror_lock_busy', 'bad_event', 'view_unsupported', 'lock_unreadable:EACCES']) {
+  for (const q of ['mirror_lock_busy', 'bad_event', 'view_unsupported', 'lock_unreadable:EACCES', 'lock_helper']) {
     const rec = A.appendAudit(ok({ quota_capture: q }), { path: file, now: NOW });
     assert.strictEqual(rec.quota_capture, q);
     assert.deepStrictEqual(Object.keys(rec), A.AUDIT_KEYS.concat(['quota_capture']));
   }
   const got = A.readAudit(file);
   assert.strictEqual(got.invalid, 0);
-  assert.strictEqual(got.records.length, 5);
-  assert.match(A.renderStatus(got).slice(-1)[0], / quota_capture=lock_unreadable:EACCES$/);
+  assert.strictEqual(got.records.length, 6);
+  assert.match(A.renderStatus(got).slice(-1)[0], / quota_capture=lock_helper$/);
+  assert.ok(A.renderStatus(got).some((l) => / quota_capture=lock_unreadable:EACCES$/.test(l)));
   assert.doesNotMatch(A.renderStatus(got)[0], /quota_capture/);
 });
 

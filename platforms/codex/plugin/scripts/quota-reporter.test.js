@@ -23,6 +23,9 @@ const observation = require('./lib/account-observation');
 const interpret = require('./lib/account-interpret');
 const { pick } = require('./lib/account-pick');
 const { cli } = require('./claude-account.js');
+const { holdOsLock, isHeld, installLeakCheck } = require('./lib/account-fixtures/os-lock-holder');
+
+installLeakCheck(test.after);
 const { makeFixture } = require('./lib/account-fixtures/shim-install.js');
 
 const NOW = 1_800_000_000_000;
@@ -282,11 +285,12 @@ async function busyLockRun() {
   const RUN = ['run', '--purpose', 'tst', '--', 'claude', '-p', 'hi'];
   const held = fixtureWith({ a: snapOf('a', 0.5, 0.1) });
   const off = fixtureWith({ a: snapOf('a', 0.5, 0.1) }, { config: { accounts: { quota_capture: 'off' } } });
+  let holder = null;
   try {
     const dir = observation.mirrorDir(held.liveDir, 'claude');
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const lock = path.join(dir, 'a.lock');
-    fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, nonce: 'held-by-test', t: Date.now() }), { mode: 0o600 });
+    const lock = path.join(dir, 'a.oslock');
+    holder = holdOsLock(lock);
     const r = await go(held, RUN);
     const r0 = await go(off, RUN);
     assert.deepStrictEqual([r.code, r.out, r.err], [r0.code, r0.out, r0.err], 'run: stdout, stderr and exit equal the adapter-off run');
@@ -298,13 +302,13 @@ async function busyLockRun() {
     const strip = (x) => { const c = Object.assign({}, x); delete c.quota_capture; return c; };
     assert.deepStrictEqual(l.map(strip), l0, 'the rest of the audit equals the adapter-off audit');
     assert.strictEqual(fs.existsSync(mirrorFile(held, 'a')), false);
-    assert.ok(fs.existsSync(lock), 'the holder lock is untouched');
+    assert.ok(isHeld(lock), 'the holder lock is untouched');
     // the explicit command keeps its diagnostic line
     const s = await go(held, ['sync-statusline']);
     assert.strictEqual(s.code, 0);
     assert.match(s.err, /quota_statusline alias=a reason=mirror_lock_busy/);
     assert.strictEqual(s.out, 'alias=a wrote=no reason=mirror_lock_busy\n');
-  } finally { held.cleanup(); off.cleanup(); }
+  } finally { if (holder) holder.release(); held.cleanup(); off.cleanup(); }
 }
 test('G40-N59: a clean run leaves the audit bytes of an adapter-off run (the reason code appears only on failure or skip)', async () => {
   const RUN = ['run', '--purpose', 'tst', '--', 'claude', '-p', 'hi'];

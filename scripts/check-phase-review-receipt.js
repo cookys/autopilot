@@ -5,6 +5,7 @@
  * Mode A: receipt validation
  *   Flags: --ledger <dir> --phase <id> --branch <b> [--repo-root <r>]
  *   Validates <ledger>/receipt-<phase>.json against git history and review artifacts.
+ *   Optional --post-head-ledger <file>: declared-and-re-derived check of head..tip past the generation cap (see checkPostHeadLedger).
  *
  * Mode C: review packet set (a range too big for one packet, split by path)
  *   Flags: --packets <packets.json> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
@@ -12,6 +13,10 @@
  *   exactly once, and no packet file may have changed since its packet's last reviewed head. A packet
  *   receipt alone is refused by Mode A. Exit 0 only when the whole set holds. Plan:
  *   project/plans/_archive/2026/10/2026-10-11-review-packet-mode.md. Shared rules: scripts/lib/review-packets.js.
+ *
+ * Mode D: review chain (sets A,B,... reviewing one contiguous base..tip; see validateReviewChain)
+ *   Flags: --chain <A,B[,C...]> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
+ *   Packets members are not supported yet: validate those with --packets, separately.
  *
  * Mode B: plan-artifact / dispositions validation
  *   Flags: --plan-artifact <gN.json> --dispositions <gN-disposition.json>
@@ -62,10 +67,13 @@ function deepEqual(a, b) {
 function printUsage() {
   console.log(`Usage:
   Mode A (Receipt validation):
-    node scripts/check-phase-review-receipt.js --ledger <dir> --phase <id> --branch <b> --phase-base <sha> [--repo-root <r>]
+    node scripts/check-phase-review-receipt.js --ledger <dir> --phase <id> --branch <b> --phase-base <sha> [--repo-root <r>] [--post-head-ledger <file> --post-head-target <ref>]
 
   Mode C (Review packet set — a range too big for one packet, split by path):
     node scripts/check-phase-review-receipt.js --packets <packets.json> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
+
+  Mode D (Review chain — several review sets that together review one contiguous base..tip):
+    node scripts/check-phase-review-receipt.js --chain <A,B[,C...]> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
 
   Mode B (Plan-artifact / dispositions validation):
     node scripts/check-phase-review-receipt.js --plan-artifact <gN.json> --dispositions <gN-disp.json> [--plan-file <p>] [--rubric-file <r>]
@@ -73,7 +81,33 @@ function printUsage() {
 Flags:
   --ledger <dir>                    Ledger directory containing receipts
   --phase <id>                      Phase identifier
+  --chain <A,B[,C...]>              Review sets in review order (Mode A phase ids in one --ledger); each must pass Mode A
+                                    (SHIP-AS-IS), set k must start at set k-1's last reviewed head, and every changed path
+                                    must be in the range of some set. Packets members are not supported yet: validate those
+                                    with --packets, separately.
   --branch <b>                      Git branch name
+  --post-head-ledger <file>         Mode A only. Replaces "branch head must equal the last reviewed head" with a re-derived
+                                    check of the own commits past the head, for work past the generation cap (BL-0377).
+                                    Needs --post-head-target. The file is JSON:
+                                    {"schema":"post-head-ledger/1","phase":"<id>","reviewed_head":"<full sha>",
+                                     "ruling":"<PM ruling id or text>",
+                                     "commits":[{"sha":"<full sha>","paths":["..."],"verification":"<how depth-0 verified it>"}]}
+                                    Passes only when reviewed_head is the last finalized head and an ancestor of the tip,
+                                    phase equals --phase, every non-merge commit of git rev-list --no-merges head..tip ^target
+                                    (the branch's own commits) is listed exactly once (no extras, no duplicates, no abbreviated
+                                    shas), each commit's real paths (git diff-tree -r --no-renames --name-only) are a subset of
+                                    its listed paths, and every verification is non-empty. A merge commit M in that range whose
+                                    tree differs from git's own re-merge of its two parents (git diff-tree --remerge-diff:
+                                    conflict resolution, evil merge, taking one side whole, -X, -s ours) must be listed under
+                                    its own sha with paths covering that difference; a clean merge needs no entry; a merge with
+                                    more than two parents fails closed. Commits that came in from the target are not listed.
+                                    Not supported with --chain, --packets or Mode B (refused).
+  --post-head-target <ref>          Required with --post-head-ledger (and refused without it): the line the branch merges into
+                                    (normally origin/develop) as it was before this work. Resolved to a sha once. It must descend
+                                    from --phase-base and must NOT contain the last reviewed head (so not the tip, the branch, or
+                                    a line that already took the work) and must lie on the first-parent history of
+                                    refs/remotes/origin/develop (fixed, not a flag; fetch first; a side branch is refused). Own commits are head..tip
+                                    minus what that sha reaches.
   --phase-base <sha>                Expected phase base commit sha (mandatory for review mode)
   --repo-root <r>                   Path to repository root (defaults to cwd)
   --plan-artifact <gN.json>         Plan artifact JSON file
@@ -82,6 +116,10 @@ Flags:
   --rubric-file <file>              Rubric markdown file (optional, resolved automatically if omitted)
   --min-reviewed-seats <n>          Minimum reviewed seats required per generation
   --help, -h                        Show this help message and exit 0
+
+Merge gate: always run on the tip. Below the generation cap a product-code delta after the last reviewed
+head needs one more single-seat delta review (so the receipt itself passes on the tip); at the cap use
+--post-head-ledger together with the PM ruling.
 
 Chain rules (Mode A): every chain entry must be 'finalized' except an 'aborted' one (hetero-review-loop
 wrote it when the branch moved during collection, a seat's findings failed to parse, or a seat gap
@@ -547,6 +585,142 @@ function resolveConfiguredMinSeats(flags) {
 // report a misleading second error. (Chosen over one child process per packet: the packet context stays an
 // in-process parameter, not a CLI flag a caller could pass to a lone receipt.)
 class ExitSignal { constructor(code) { this.code = code; } }
+
+// The one rule for "the branch moved past the last reviewed head": the move is tolerated only when EVERY
+// changed path is an allowlisted exclusion or a sidecar (CHANGELOG.md, projects index). Mode A step (5) and
+// the --chain tail check both call this, so the two can never diverge.
+function pathsMovedAfterHead(repoRoot, range, consumerAllowlist) {
+  // --no-renames: a rename shows only its destination otherwise (and diff.renames in the user's git config
+  // decides), so a reviewed product file moved onto an allowlisted path would list only the allowed path.
+  const diffRes = spawnSync('git', ['diff', '--no-renames', '--name-only', range], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  const changedPaths = (diffRes.stdout || '')
+    .split('\n')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.pathFor(repoRoot, 'projects_index');
+  const blocked = changedPaths.filter((p) => !(isPathspecAllowed(p, consumerAllowlist, repoRoot) || sidecarAllowed(p)));
+  return { changedPaths, blocked, allAllowed: diffRes.status === 0 && blocked.length === 0 };
+}
+
+// Post-head ledger (BL-0377). At the generation cap the branch tip may sit past the last reviewed head. The ledger
+// DECLARES every own commit past the head, the paths it touched and how depth-0 verified it; this function
+// re-derives the commit list and the paths with git and compares. Nothing in the ledger is trusted (ADR-0001):
+// no hash, no signature, an unlisted commit or path is a failure.
+// Scope ("the branch's own commits"): `git rev-list --no-merges <head>..<tip> ^<target>`, where <target> is what the
+// branch merges into (--post-head-target, normally origin/develop). Commits that arrived by merging the target
+// into the branch are reachable from the target and are not listed: another phase reviewed them.
+// The target is the caller's choice, so it is not trusted: it is resolved to a sha once, and must be a line the
+// branch grew from (phase-base is its ancestor) that does not yet contain the work (the last reviewed head is NOT
+// its ancestor, which also rules out a target at or past the tip or any post-head commit). Otherwise `^target` would
+// subtract the branch's own commits and an empty ledger would pass.
+// A merge commit M in that range is listed only when it carries content of its own: the paths where M's tree
+// differs from git's own automatic re-merge of M's two parents (`git diff-tree --remerge-diff`). That covers
+// conflict resolutions, evil merges, taking one side whole (--ours/--theirs, -X, -s ours) and mixed hunks, none of
+// which `--cc` lists when the result equals one parent. Then M must be listed under its own sha and its paths must
+// cover that list. A clean merge (empty list) needs no entry. A merge with more than two parents fails closed.
+// --remerge-diff (not `git merge-tree --write-tree`) because git runs it in a temporary object directory: the
+// check leaves no objects in the repository it inspects.
+const POST_HEAD_LEDGER_SCHEMA = 'post-head-ledger/1';
+// The merge target's mainline is fixed, never chosen by the caller (a caller-chosen ref would let target=ref=side vouch
+// for itself). Fetch first; the local ref is the trusted copy (a local update-ref is an accepted residual, PM).
+const MAINLINE_REF = 'refs/remotes/origin/develop';
+function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip, target, phaseBase }) {
+  const problems = [];
+  const git = (args) => spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', maxBuffer: 1 << 28 });
+  const nul = (r) => r.stdout.split('\0').filter(Boolean); // -z output: no C-quoting of unusual path names
+  if (typeof target !== 'string' || !target) {
+    return ['--post-head-target <ref> is required with --post-head-ledger (the merge target, normally origin/develop; own commits are head..tip not reachable from it)'];
+  }
+  const tg = git(['rev-parse', '--verify', '--end-of-options', `${target}^{commit}`]);
+  if (tg.status !== 0) return [`--post-head-target '${target}' does not resolve to a commit`];
+  const targetSha = tg.stdout.trim(); // every later git call uses the sha, never the movable name
+  let ledger;
+  try {
+    ledger = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+  } catch (e) {
+    return [`post-head ledger '${ledgerFile}' cannot be read or parsed: ${e.message}`];
+  }
+  if (!ledger || typeof ledger !== 'object' || Array.isArray(ledger)) return [`post-head ledger '${ledgerFile}' is not a JSON object`];
+  if (ledger.schema !== POST_HEAD_LEDGER_SCHEMA) problems.push(`post-head ledger schema is '${ledger.schema}' (expected '${POST_HEAD_LEDGER_SCHEMA}')`);
+  if (ledger.phase !== phase) problems.push(`post-head ledger phase '${ledger.phase}' does not match --phase '${phase}'`);
+  if (ledger.reviewed_head !== head) problems.push(`post-head ledger reviewed_head '${ledger.reviewed_head}' is not the last finalized head '${head}'`);
+  if (typeof ledger.ruling !== 'string' || !ledger.ruling.trim()) problems.push('post-head ledger ruling is missing or empty (the PM ruling id or text for exceeding the generation cap)');
+  if (!Array.isArray(ledger.commits)) return problems.concat('post-head ledger commits is not an array');
+
+  if (git(['merge-base', '--is-ancestor', '--end-of-options', head, tip]).status !== 0) {
+    return problems.concat(`last reviewed head ${head} is not an ancestor of '${branch}' (${tip})`);
+  }
+  if (git(['merge-base', '--is-ancestor', '--end-of-options', head, targetSha]).status === 0) {
+    return problems.concat(`--post-head-target '${target}' (${targetSha}) already contains the last reviewed head ${head}: it is the tip, the branch, or a line that took work from it, and would hide the branch's own commits; give the line the branch merges into as it was before this work`);
+  }
+  if (git(['merge-base', '--is-ancestor', '--end-of-options', phaseBase, targetSha]).status !== 0) {
+    return problems.concat(`--post-head-target '${target}' (${targetSha}) does not descend from --phase-base ${phaseBase}: it is not the line the branch grew from`);
+  }
+  // The target must be on the merge target's mainline. A side branch cut from the phase base passes both rules above,
+  // and `^side` would then subtract an unreviewed commit that was merged into the branch.
+  const tr = git(['rev-parse', '--verify', '--end-of-options', `${MAINLINE_REF}^{commit}`]);
+  if (tr.status !== 0) return problems.concat(`${MAINLINE_REF} does not resolve to a commit: run git fetch origin first (the mainline is fixed, there is no flag to name another)`);
+  const mainline = git(['rev-list', '--first-parent', '-z', tr.stdout.trim()]);
+  if (mainline.status !== 0) return problems.concat(`git rev-list --first-parent ${MAINLINE_REF} failed: ${mainline.stderr || 'unknown error'}`);
+  if (!nul(mainline).includes(targetSha)) {
+    return problems.concat(`--post-head-target '${target}' (${targetSha}) is not on the first-parent history of ${MAINLINE_REF}: a side branch is not the line the branch merges into`);
+  }
+  const range = `${head}..${tip} ^${targetSha}`;
+  const own = git(['rev-list', '--no-merges', '-z', `${head}..${tip}`, '--not', targetSha]);
+  if (own.status !== 0) return problems.concat(`git rev-list --no-merges ${range} failed: ${own.stderr || 'unknown error'}`);
+  const actual = nul(own);
+  const mg = git(['rev-list', '--merges', '-z', `${head}..${tip}`, '--not', targetSha]);
+  if (mg.status !== 0) return problems.concat(`git rev-list --merges ${range} failed: ${mg.stderr || 'unknown error'}`);
+  // merge commits with content of their own: must be listed too
+  const mergeOwn = new Map();
+  for (const m of nul(mg)) {
+    const pr = git(['rev-list', '--parents', '-n', '1', m]);
+    if (pr.status !== 0) { problems.push(`git rev-list --parents ${m} failed: ${pr.stderr || 'unknown error'}`); continue; }
+    const parents = pr.stdout.trim().split(/\s+/).slice(1);
+    if (parents.length !== 2) { problems.push(`merge commit ${m} has ${parents.length} parents: the re-merge check supports exactly two (failing closed; split the merge or list the work in another way)`); continue; }
+    const rm = git(['diff-tree', '--remerge-diff', '-z', '--no-renames', '--name-only', '--no-commit-id', '-r', m]);
+    if (rm.status !== 0) { problems.push(`git diff-tree --remerge-diff ${m} failed (failing closed, not falling back to --cc; --remerge-diff needs git >= 2.36): ${rm.stderr || 'unknown error'}`); continue; }
+    const ps = nul(rm);
+    if (ps.length) mergeOwn.set(m, ps);
+  }
+  const expected = new Set([...actual, ...mergeOwn.keys()]);
+
+  const seen = new Set();
+  const byListed = new Map();
+  ledger.commits.forEach((c, i) => {
+    const at = `post-head ledger commits[${i}]`;
+    if (!c || typeof c !== 'object' || typeof c.sha !== 'string') { problems.push(`${at} has no sha string`); return; }
+    if (seen.has(c.sha)) { problems.push(`${at}: sha ${c.sha} is listed twice`); return; }
+    seen.add(c.sha);
+    if (!expected.has(c.sha)) problems.push(`${at}: sha ${c.sha} is not an own commit in ${range} (extra entry, abbreviated sha, a commit the target already has, or a merge that equals git's own re-merge)`);
+    if (!Array.isArray(c.paths) || c.paths.some((p) => typeof p !== 'string' || !p)) { problems.push(`${at} (${c.sha}): paths is not an array of non-empty strings`); return; }
+    if (typeof c.verification !== 'string' || !c.verification.trim()) problems.push(`${at} (${c.sha}): verification is empty (state how depth-0 verified it: red/green or mutation, with an evidence path)`);
+    byListed.set(c.sha, c);
+  });
+
+  for (const sha of actual) {
+    const entry = byListed.get(sha);
+    if (!entry) { problems.push(`commit ${sha} is in ${range} but not in the post-head ledger (an unlisted post-head commit)`); continue; }
+    const dt = git(['diff-tree', '--root', '-z', '--no-commit-id', '-r', '--no-renames', '--name-only', sha]);
+    if (dt.status !== 0) { problems.push(`git diff-tree ${sha} failed: ${dt.stderr || 'unknown error'}`); continue; }
+    const declared = new Set(entry.paths);
+    for (const p of nul(dt)) {
+      if (!declared.has(p)) problems.push(`commit ${sha} touched '${p}' which its ledger paths do not list`);
+    }
+  }
+  for (const [m, ps] of mergeOwn) {
+    const entry = byListed.get(m);
+    if (!entry) { problems.push(`merge commit ${m} carries content of its own (conflict resolution or evil merge: ${ps.join(' ')}) but is not in the post-head ledger`); continue; }
+    const declared = new Set(entry.paths);
+    for (const p of ps) {
+      if (!declared.has(p)) problems.push(`merge commit ${m} changed '${p}' on its own which its ledger paths do not list`);
+    }
+  }
+  return problems;
+}
 
 function validateModeA(flags, opts = {}) {
   const packetSet = opts.packetSet || null;
@@ -1136,7 +1310,8 @@ function validateModeA(flags, opts = {}) {
 
     // Packet member: the set check owns the head rule (ancestor of the tip, no packet path changed
     // since this packet's last reviewed head) — a fix landed for ANOTHER packet moves the tip legitimately.
-    if (packetSet) process.exit(0);
+    // Chain member: the chain check owns the head rule (contiguity, tip ancestry, tail coverage).
+    if (packetSet || opts.chainMember) process.exit(0);
 
     // (5) the last chain entry's head must equal current git rev-parse <branch> in repoRoot
     const lastEntry = chain[chain.length - 1];
@@ -1149,19 +1324,27 @@ function validateModeA(flags, opts = {}) {
       process.exit(1);
     }
     const currentBranchHead = revParseRes.stdout.trim();
+    if (flags['post-head-ledger'] !== undefined) {
+      // BL-0377: the declared-and-re-derived ledger replaces the "head must equal the tip" rule.
+      if (typeof flags['post-head-ledger'] !== 'string') {
+        console.error('--post-head-ledger requires a file path');
+        process.exit(1);
+      }
+      const problems = checkPostHeadLedger({
+        ledgerFile: flags['post-head-ledger'], repoRoot, phase, branch, head: lastEntry.head, tip: currentBranchHead, target: flags['post-head-target'], phaseBase: flags['phase-base'],
+      });
+      if (problems.length) {
+        console.error(`Post-head ledger does not cover '${branch}' (${currentBranchHead}) past last reviewed head ${lastEntry.head}:\n${problems.join('\n')}`);
+        process.exit(1);
+      }
+      console.log(`Post-head ledger ok: ${lastEntry.head}..${currentBranchHead} (own commits vs ${flags['post-head-target']}) fully declared`);
+      process.exit(0);
+    }
     if (currentBranchHead !== lastEntry.head) {
       const range = `${lastEntry.head}..${currentBranchHead}`;
-      const diffRes = spawnSync('git', ['diff', '--name-only', range], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-      });
-      const changedPaths = (diffRes.stdout || '')
-        .split('\n')
-        .map((p) => p.trim())
-        .filter(Boolean);
-      const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.pathFor(repoRoot, 'projects_index');
-      const allAllowed = diffRes.status === 0
-        && changedPaths.every((p) => isPathspecAllowed(p, consumerAllowlist, repoRoot) || sidecarAllowed(p));
+      const moved = pathsMovedAfterHead(repoRoot, range, consumerAllowlist);
+      const changedPaths = moved.changedPaths;
+      const allAllowed = moved.allAllowed;
       if (!allAllowed) {
         console.error(`Branch '${branch}' head has moved: expected '${lastEntry.head}', got '${currentBranchHead}'`);
         process.exit(1);
@@ -1364,6 +1547,98 @@ function validatePacketSet(flags) {
   process.exit(0);
 }
 
+// Review chain — several review sets, each its own Mode A phase, that together review one contiguous
+// base..tip (e.g. set A frozen at x, new files added by the fix, set B reviewing x..tip). Every member
+// passes Mode A unchanged (SHIP-AS-IS included) except the "branch head == last chain head" step, which this
+// function replaces: set k must start where set k-1 ended (so the sets tile base..lastHead exactly), the last
+// set's head must be an ancestor of the tip, and whatever lies between the last head and the tip must be
+// tolerated by the same function Mode A uses past its head (pathsMovedAfterHead).
+function validateReviewChain(flags) {
+  const fail = (msg) => { console.error(msg); process.exit(1); };
+  const ledgerDir = flags.ledger;
+  const branch = flags.branch;
+  const base = flags['phase-base'];
+  const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : process.cwd();
+  if (typeof flags.chain !== 'string' || !ledgerDir || !branch || typeof base !== 'string') {
+    fail('Review chain check requires --chain <A,B[,C...]>, --ledger, --branch and --phase-base');
+  }
+  if (flags.phase !== undefined || flags.packets !== undefined || flags['plan-artifact'] !== undefined || flags.dispositions !== undefined) {
+    fail('--chain cannot be combined with --phase, --packets, --plan-artifact or --dispositions');
+  }
+  const names = flags.chain.split(',');
+  if (names.some((n) => !reviewPackets.validId(n))) fail(`--chain names must be phase ids separated by commas (got '${flags.chain}')`);
+  if (new Set(names).size !== names.length) fail(`--chain names a review set twice: '${flags.chain}'`);
+  if (names.length < 2) fail(`--chain needs at least two review sets (got '${flags.chain}'); a single set is validated with --phase`);
+
+  const git = (args) => spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
+  const isAncestor = (a, b) => git(['merge-base', '--is-ancestor', '--end-of-options', a, b]).status === 0;
+  const tipRes = git(['rev-parse', branch]);
+  if (tipRes.status !== 0) fail(`Failed to rev-parse branch '${branch}': ${tipRes.stderr || 'unknown error'}`);
+  const tip = tipRes.stdout.trim();
+  const consumerAllowlist = loadConsumerExcludeAllowlist(repoRoot);
+
+  const problems = [];
+  const sets = []; // { name, base, head } for members that passed Mode A
+  for (const name of names) {
+    let firstBase = base;
+    try {
+      const c = JSON.parse(fs.readFileSync(path.join(ledgerDir, `review-${name}`, 'chain.json'), 'utf8'));
+      if (Array.isArray(c) && c[0] && typeof c[0].base === 'string') firstBase = c[0].base;
+    } catch (_e) { /* Mode A reports the unreadable chain */ }
+    const memberFlags = { ...flags, phase: name, branch, 'phase-base': firstBase, 'repo-root': repoRoot };
+    delete memberFlags.chain;
+    const r = runModeAInProcess(memberFlags, { chainMember: true });
+    if (r.code) { problems.push(`chain member '${name}' did not pass: ${r.msgs.join(' | ') || `exit ${r.code}`}`); continue; }
+    const chain = JSON.parse(fs.readFileSync(path.join(ledgerDir, `review-${name}`, 'chain.json'), 'utf8'));
+    const finalized = chain.filter((e) => e && e.status === 'finalized');
+    const last = finalized[finalized.length - 1];
+    if (!last || !last.head) { problems.push(`chain member '${name}' has no finalized generation`); continue; }
+    sets.push({ name, base: chain[0].base, head: last.head });
+  }
+  if (problems.length) fail(problems.join('\n'));
+
+  // Contiguity: exact sha equality at every seam.
+  for (let k = 0; k < sets.length; k++) {
+    const cur = sets[k];
+    const want = k === 0 ? base : sets[k - 1].head;
+    const wantWhat = k === 0 ? `--phase-base ${base}` : `set '${sets[k - 1].name}' last reviewed head ${want}`;
+    if (cur.base !== want) {
+      let kind = 'the sets are not on one line';
+      if (k > 0) {
+        if (isAncestor(want, cur.base)) kind = `gap: commits ${want}..${cur.base} were reviewed by no set`;
+        else if (isAncestor(cur.base, want)) kind = `overlap or out of order: set '${cur.name}' starts before ${wantWhat}`;
+      } else if (isAncestor(base, cur.base)) kind = `gap: commits ${base}..${cur.base} were reviewed by no set`;
+      problems.push(`chain contiguity: set '${cur.name}' base ${cur.base} is not ${wantWhat} (${kind})`);
+    }
+    if (cur.head === cur.base || !isAncestor(cur.base, cur.head)) {
+      problems.push(`chain contiguity: set '${cur.name}' last reviewed head ${cur.head} is not a descendant of its base ${cur.base}`);
+    }
+  }
+  const finalSet = sets[sets.length - 1];
+  if (!isAncestor(finalSet.head, tip)) {
+    problems.push(`chain head: set '${finalSet.name}' last reviewed head ${finalSet.head} is not an ancestor of '${branch}' (${tip})`);
+  }
+  if (problems.length) fail(`Review chain is not one contiguous range ${base}..${tip}:\n${problems.join('\n')}`);
+
+  // Tail: past the last reviewed head the branch may only move the way Mode A tolerates (pathsMovedAfterHead,
+  // the same function as Mode A step (5)). This also covers a path an earlier set reviewed and that changed
+  // again after the last head, and a path put back to its base content (it would vanish from base..tip).
+  // Base..lastHead needs no separate owner loop: the contiguity check above makes the sets tile it exactly.
+  if (finalSet.head !== tip) {
+    const moved = pathsMovedAfterHead(repoRoot, `${finalSet.head}..${tip}`, consumerAllowlist);
+    for (const p of moved.blocked) {
+      problems.push(`chain tail: '${p}' changed after set '${finalSet.name}' last reviewed head ${finalSet.head} (at '${branch}' ${tip}) and is not a path Mode A tolerates past the last head`);
+    }
+    if (!moved.allAllowed && moved.blocked.length === 0) problems.push(`chain tail: git diff ${finalSet.head}..${tip} failed`);
+  }
+  if (problems.length) fail(`Review chain does not cover '${branch}':\n${problems.join('\n')}`);
+
+  let changed;
+  try { changed = reviewPackets.rangeNames(repoRoot, base, tip); } catch (e) { fail(`Review chain: ${e.message}`); }
+  console.log(`Review chain ${names.join(',')} ok: ${sets.length} set(s), ${changed.length} path(s), base ${base} .. tip ${tip}`);
+  process.exit(0);
+}
+
 function main() {
   const flags = parseArgs(process.argv.slice(2));
 
@@ -1371,8 +1646,22 @@ function main() {
     printUsage();
     process.exit(0);
   }
+  if (flags['post-head-target-ref'] !== undefined) {
+    console.error('--post-head-target-ref was removed: the mainline is fixed at refs/remotes/origin/develop (run git fetch origin first); refusing instead of ignoring the flag');
+    process.exit(1);
+  }
 
-  if (flags['plan-artifact'] && flags.dispositions) {
+  if ((flags['post-head-ledger'] !== undefined || flags['post-head-target'] !== undefined) && (flags.chain !== undefined || flags.packets !== undefined || flags['plan-artifact'] !== undefined || flags.dispositions !== undefined)) {
+    console.error('--post-head-ledger and --post-head-target are supported in Mode A only (with --ledger/--phase/--branch); they cannot be combined with --chain, --packets, --plan-artifact or --dispositions yet');
+    process.exit(1);
+  }
+  if (flags['post-head-target'] !== undefined && flags['post-head-ledger'] === undefined) {
+    console.error('--post-head-target only means something with --post-head-ledger; refusing instead of ignoring it');
+    process.exit(1);
+  }
+  if (flags.chain !== undefined) {
+    validateReviewChain(flags); // first: it refuses a mix with Mode B/C/A flags instead of silently dropping --chain
+  } else if (flags['plan-artifact'] && flags.dispositions) {
     validateModeB(flags);
   } else if (flags.packets !== undefined) {
     validatePacketSet(flags);

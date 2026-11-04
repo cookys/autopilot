@@ -43,8 +43,9 @@ led() { printf '{"schema":"post-head-ledger/1","phase":"%s","reviewed_head":"%s"
 V='"verification":"depth-0 red/green, evidence /tmp/x"'
 GOOD="[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V}]"
 run() { # run <ledger-file> [branch] [extra args...]
-  local f="$1" br="${2:-work}"; shift 2 2>/dev/null || shift $#
-  node "${SCRIPT_UNDER:-$SCRIPT}" --ledger "$L" --phase P --branch "$br" --phase-base "$B0" --repo-root "$R" --post-head-ledger "$f" "$@" 2>&1
+  local f="$1" br="${2:-work}" tg="${TGT-$B0}"
+  if [ "$tg" = NONE ]; then node "${SCRIPT_UNDER:-$SCRIPT}" --ledger "$L" --phase P --branch "$br" --phase-base "$B0" --repo-root "$R" --post-head-ledger "$f" 2>&1
+  else node "${SCRIPT_UNDER:-$SCRIPT}" --ledger "$L" --phase P --branch "$br" --phase-base "$B0" --repo-root "$R" --post-head-ledger "$f" --post-head-target "$tg" 2>&1; fi
 }
 
 # baseline: no ledger, the head has moved -> fails exactly as before
@@ -60,7 +61,7 @@ OUT=$(run "$TEST_TMP/super.json" work); assert_exit_code "$?" "0" "G2: listed pa
 # red cases
 # R1a: P1 is not listed at all
 led r1a P "$HEADR" "[{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V}]"
-OUT=$(run "$TEST_TMP/r1a.json" work); assert_exit_code "$?" "1" "R1a: an unlisted post-head commit fails"; assert_contains "$OUT" "commit $P1 is in $HEADR..$TIP but not in the post-head ledger" "R1a: names the commit"
+OUT=$(run "$TEST_TMP/r1a.json" work); assert_exit_code "$?" "1" "R1a: an unlisted post-head commit fails"; assert_contains "$OUT" "commit $P1 is in $HEADR..$TIP ^$B0 but not in the post-head ledger" "R1a: names the commit"
 # R1b: same, but P2 lists a.txt so the net diff is covered; only the every-commit check can catch it
 led r1b P "$HEADR" "[{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\",\"a.txt\"],$V}]"
 OUT=$(run "$TEST_TMP/r1b.json" work); assert_exit_code "$?" "1" "R1b: an unlisted commit fails even when its path is declared on another commit"; assert_contains "$OUT" "not in the post-head ledger" "R1b: message"
@@ -72,7 +73,7 @@ led r2b P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\"
 OUT=$(run "$TEST_TMP/r2b.json" work); assert_exit_code "$?" "1" "R2b: a path listed nowhere fails"
 # R3: extra sha (the reviewed head itself, a pre-head commit, an abbreviated sha)
 led r3 P "$HEADR" "[{\"sha\":\"$HEADR\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V}]"
-OUT=$(run "$TEST_TMP/r3.json" work); assert_exit_code "$?" "1" "R3: an extra sha outside head..tip fails"; assert_contains "$OUT" "sha $HEADR is not a non-merge commit in" "R3: message"
+OUT=$(run "$TEST_TMP/r3.json" work); assert_exit_code "$?" "1" "R3: an extra sha outside head..tip fails"; assert_contains "$OUT" "sha $HEADR is not an own commit in" "R3: message"
 SHORT=$(printf %s "$P1" | cut -c1-12)
 led r3b P "$HEADR" "[{\"sha\":\"$SHORT\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V}]"
 OUT=$(run "$TEST_TMP/r3b.json" work); assert_exit_code "$?" "1" "R3b: an abbreviated sha is not accepted"
@@ -109,15 +110,29 @@ OUT=$(run "$TEST_TMP/r9.json" ren); assert_exit_code "$?" "1" "R9: rename declar
 led r9ok P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$P3\",\"paths\":[\"n.txt\",\"q.txt\"],$V}]"
 OUT=$(run "$TEST_TMP/r9ok.json" ren); assert_exit_code "$?" "0" "R9ok: rename declared with both sides passes"
 
-# Merge tip: commits arriving through the merged side count, the merge's own content is covered by the net diff.
-g checkout -q -b side "$HEADR"; echo s > "$R/s.txt"; g add s.txt; g commit -qm s1; S1=$(g rev-parse HEAD)
-g checkout -q -b merged "$TIP"; g merge -q --no-ff -m "merge side" side; MRG=$(g rev-parse HEAD)
-led m1 P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$S1\",\"paths\":[\"s.txt\"],$V}]"
-OUT=$(run "$TEST_TMP/m1.json" merged); assert_exit_code "$?" "0" "M1: merge tip, merged-side commit listed, passes"
-led m2 P "$HEADR" "$GOOD"
-OUT=$(run "$TEST_TMP/m2.json" merged); assert_exit_code "$?" "1" "M2: merge tip with the merged-side commit unlisted fails"; assert_contains "$OUT" "commit $S1 is in" "M2: names it"
-echo evil > "$R/z.txt"; g add z.txt; g commit -q --amend --no-edit; EVIL=$(g rev-parse HEAD)
-OUT=$(run "$TEST_TMP/m1.json" merged); assert_exit_code "$?" "1" "M3: content added by the merge commit itself (not on any listed commit) fails"; assert_contains "$OUT" "net change 'z.txt'" "M3: message"
+# Target merged into the branch mid-way (--post-head-target): the target's own commits are not listed; a merge commit
+# is listed only when it carries content of its own (git diff-tree --cc), and then its paths must cover that content.
+g checkout -q -b develop "$B0"; echo devline > "$R/a.txt"; g commit -qam d1; echo d > "$R/d.txt"; g add d.txt; g commit -qm d2; DEV=$(g rev-parse HEAD)
+g checkout -q -b mc "$TIP"
+g merge -q --no-ff -m "merge develop" develop >/dev/null 2>&1   # conflicts on a.txt (both sides changed it)
+echo resolved > "$R/a.txt"; g add a.txt; g commit -q -m "merge develop (resolved a.txt)"; M=$(g rev-parse HEAD)
+assert_eq "$(g rev-list --parents -n1 "$M" | wc -w)" "3" "fixture: M is a merge commit"
+assert_contains "$(g diff-tree --cc --no-commit-id --name-only -r "$M")" "a.txt" "fixture: git sees the conflict resolution as the merge's own content"
+OUT=$(TGT=develop run "$TEST_TMP/good.json" mc); assert_exit_code "$?" "1" "C1: merge with a conflict resolution on a product file, merge commit not listed, fails"; assert_contains "$OUT" "merge commit $M carries content of its own" "C1: names the merge"
+led c2 P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$M\",\"paths\":[\"a.txt\"],$V}]"
+OUT=$(TGT=develop run "$TEST_TMP/c2.json" mc); assert_exit_code "$?" "0" "C2: the same merge listed with its paths passes (the target's d1, d2 are not listed)"
+led c2b P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$M\",\"paths\":[\"m.txt\"],$V}]"
+OUT=$(TGT=develop run "$TEST_TMP/c2b.json" mc); assert_exit_code "$?" "1" "C2b: the merge listed with paths not covering its own content fails"; assert_contains "$OUT" "merge commit $M changed 'a.txt' on its own" "C2b: message"
+OUT=$(TGT=$B0 run "$TEST_TMP/c2.json" mc); assert_exit_code "$?" "1" "C2c: with a target that lacks develop, the merged-in commits are own commits and unlisted fail"
+OUT=$(TGT=NONE run "$TEST_TMP/good.json" work); assert_exit_code "$?" "1" "C2d: --post-head-ledger without --post-head-target fails"; assert_contains "$OUT" "--post-head-target <ref> is required" "C2d: message"
+OUT=$(TGT=no-such-ref run "$TEST_TMP/good.json" work); assert_exit_code "$?" "1" "C2e: an unresolvable target fails"
+# C3: a clean merge of the target: the target's commits need no entry and the merge needs none
+g checkout -q -b develop2 "$B0"; echo e > "$R/e.txt"; g add e.txt; g commit -qm e1; g checkout -q -b mc3 "$TIP"; g merge -q --no-ff -m "merge develop2" develop2
+assert_eq "$(g diff-tree --cc --no-commit-id --name-only -r HEAD | wc -l | tr -d ' ')" "0" "fixture: the clean merge has no content of its own"
+OUT=$(TGT=develop2 run "$TEST_TMP/good.json" mc3); assert_exit_code "$?" "0" "C3: clean merge of the target, only own commits listed, passes"
+# C4: an evil merge (a file no parent has) is the merge's own content
+echo evil > "$R/z.txt"; g add z.txt; g commit -q --amend --no-edit
+OUT=$(TGT=develop2 run "$TEST_TMP/good.json" mc3); assert_exit_code "$?" "1" "C4: content added by the merge commit itself, merge not listed, fails"; assert_contains "$OUT" "z.txt" "C4: names the path"
 g checkout -q work
 
 # tip == head with an empty list passes; a non-empty list for it fails (extra entry)
@@ -141,14 +156,18 @@ mutate() { # mutate <label> <from> <to>
   assert_exit_code "$?" "0" "mutation applied: $1"
 }
 SCRIPT_UNDER="$MUT/scripts/check-phase-review-receipt.js"
-mutate "every-commit-listed check off" "if (!entry) { problems.push(" "if (!entry) { continue; } if (false) { problems.push("
+mutate "every-commit-listed check off" "if (!entry) { problems.push(\`commit \${sha} is in" "if (!entry) { continue; } if (false) { problems.push(\`commit \${sha} is in"
 OUT=$(run "$TEST_TMP/good.json" work); assert_exit_code "$?" "0" "NC1 setup: the good ledger still passes"
 OUT=$(run "$TEST_TMP/r1b.json" work); assert_exit_code "$?" "0" "NC1: without the every-commit check R1b (unlisted commit, path declared elsewhere) passes"
-OUT=$(run "$TEST_TMP/r1a.json" work); assert_exit_code "$?" "1" "NC1: R1a is still caught by the net-diff layer (two layers)"
-mutate "subset check off" "if (!declared.has(p)) problems.push(" "if (false) problems.push("
+OUT=$(run "$TEST_TMP/r1a.json" work); assert_exit_code "$?" "0" "NC1: R1a (unlisted commit) passes too: there is no second layer left"
+mutate "subset check off" "if (!declared.has(p)) problems.push(\`commit \${sha} touched" "if (false) problems.push(\`commit \${sha} touched"
 OUT=$(run "$TEST_TMP/r2.json" work); assert_exit_code "$?" "0" "NC2: without the subset check R2 (commit touched a path it did not list, declared elsewhere) passes"
-OUT=$(run "$TEST_TMP/r2b.json" work); assert_exit_code "$?" "1" "NC2: R2b is still caught by the net-diff layer"
+OUT=$(run "$TEST_TMP/r2b.json" work); assert_exit_code "$?" "0" "NC2: R2b (narrow paths) passes too without the subset check"
 mutate "no-renames dropped in diff-tree" "'diff-tree', '--no-commit-id', '-r', '--no-renames', '--name-only'" "'diff-tree', '--no-commit-id', '-r', '-M', '--name-only'"
 OUT=$(run "$TEST_TMP/r9.json" ren); assert_exit_code "$?" "0" "NC3: with rename detection on, R9 (source side undeclared) passes"
+
+mutate "merge own-content check off" "if (ps.length) mergeOwn.set(m, ps);" "if (false) mergeOwn.set(m, ps);"
+OUT=$(TGT=develop run "$TEST_TMP/c2.json" mc); assert_exit_code "$?" "1" "NC4 setup: a listed merge entry is now an extra entry and fails"
+OUT=$(TGT=develop run "$TEST_TMP/good.json" mc); assert_exit_code "$?" "0" "NC4: without the merge own-content check C1 (unlisted conflict-resolving merge) passes"
 
 finalize_test

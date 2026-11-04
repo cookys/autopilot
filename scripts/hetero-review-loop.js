@@ -1954,15 +1954,19 @@ function verifyAddendumItems(items, ctx) {
       if (verified) findingGen = e.generation;
     }
     const findingEntry = chain.find((c) => c && c.generation === findingGen);
-    if (!findingEntry || !findingEntry.base) return `resolution '${it.id}': cannot locate the generation that raised the finding`;
+    if (!findingEntry || !findingEntry.head) return `resolution '${it.id}': cannot locate the generation that raised the finding`;
     const fix = git(['rev-parse', '--verify', '--quiet', `${it.fix_sha}^{commit}`]);
     if (fix.status !== 0 || !fix.stdout.trim()) return `resolution '${it.id}': fix_sha ${it.fix_sha} is not a commit in this repository`;
     const fixSha = fix.stdout.trim();
     if (git(['merge-base', '--is-ancestor', '--end-of-options', fixSha, it.reviewed_head]).status !== 0) {
       return `resolution '${it.id}': fix_sha ${fixSha} is not an ancestor of reviewed_head ${it.reviewed_head}`;
     }
-    if (fixSha === findingEntry.base || git(['merge-base', '--is-ancestor', '--end-of-options', findingEntry.base, fixSha]).status !== 0) {
-      return `resolution '${it.id}': fix_sha ${fixSha} is not a descendant of the base ${findingEntry.base} of generation ${findingGen}`;
+    // Lower bound = the raising generation's HEAD (the code the reviewers flagged), not its base: a commit
+    // inside that generation's own range is not a fix made after the finding. The head bound implies the base
+    // bound (the head descends from the base), and together with the ancestor rule above it makes reviewed_head
+    // a strictly later finalized head than the raising one.
+    if (fixSha === findingEntry.head || git(['merge-base', '--is-ancestor', '--end-of-options', findingEntry.head, fixSha]).status !== 0) {
+      return `resolution '${it.id}': fix_sha ${fixSha} is not a strict descendant of the head ${findingEntry.head} of generation ${findingGen}, the code the finding was raised on`;
     }
     it.fix_sha = fixSha;
   }
@@ -2088,8 +2092,8 @@ async function handleRefinalize(flags) {
       console.error(`ERROR: Cannot parse ${addendumPath}: ${e.message}`);
       process.exit(1);
     }
-    if (!Array.isArray(addendumItems)) {
-      console.error(`ERROR: ${addendumPath} must hold a JSON array`);
+    if (!Array.isArray(addendumItems) || addendumItems.length === 0) {
+      console.error(`ERROR: ${addendumPath} must hold a non-empty JSON array; nothing was written`);
       process.exit(1);
     }
   }

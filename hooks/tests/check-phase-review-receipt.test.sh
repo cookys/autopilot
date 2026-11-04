@@ -1137,14 +1137,17 @@ RR2_REPO="$TEST_TMP/rr2repo"; mkdir -p "$RR2_REPO"
   echo "one" > base.txt; git add base.txt; git commit -q -m "r1"
 )
 RR2_B=$(git -C "$RR2_REPO" rev-parse HEAD); RR2_ROOT0=$(git -C "$RR2_REPO" rev-parse HEAD~1)
-(cd "$RR2_REPO" && echo "bug" > a.txt && echo "g1 only" > g1only.txt && git add a.txt g1only.txt && git commit -q -m "r2 g1 head")
-RR2_H1=$(git -C "$RR2_REPO" rev-parse HEAD)
+(cd "$RR2_REPO"; echo "bug" > a.txt; git add a.txt; git commit -q -m "r2a inside g1"; echo "g1 only" > g1only.txt; git add g1only.txt; git commit -q -m "r2 g1 head")
+RR2_H1=$(git -C "$RR2_REPO" rev-parse HEAD); RR2_MID=$(git -C "$RR2_REPO" rev-parse HEAD~1)
 (cd "$RR2_REPO" && echo "fixed" > a.txt && git commit -q -am "r3 the fix")
 RR2_FIX=$(git -C "$RR2_REPO" rev-parse HEAD)
 (cd "$RR2_REPO" && echo "later" > later.txt && git add later.txt && git commit -q -m "r4 g2 head")
 RR2_H2=$(git -C "$RR2_REPO" rev-parse HEAD)
 (cd "$RR2_REPO" && git checkout -q -b side "$RR2_B" && echo "side" > side.txt && git add side.txt && git commit -q -m "side" && git checkout -q -)
 RR2_SIDE=$(git -C "$RR2_REPO" rev-parse side)
+# a commit that descends from the raised head H1 but is not in the reviewed history of H2
+(cd "$RR2_REPO"; git checkout -q -b side2 "$RR2_H1"; echo "side2" > side2.txt; git add side2.txt; git commit -q -m "side2"; git checkout -q -)
+RR2_SIDE2=$(git -C "$RR2_REPO" rev-parse side2)
 RR2_G1RESP='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Major: Missing bounds check in a.txt\nDetails here."}'
 RR2_CLEAN='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 rr2_collect() { # <ledger> <phase> <gen> [extra flags]
@@ -1216,9 +1219,12 @@ rr2_forged_c() { # <label> <id> <fix> <head> <expected text>
 }
 rr2_forged_c head "$RRC_FID" "$RR2_FIX" "$RR2_FIX" "is not the head of a finalized generation"
 rr2_forged_c anc "$RRC_FID" "$RR2_SIDE" "$RR2_H2" "is not an ancestor of reviewed_head"
+rr2_forged_c anc2 "$RRC_FID" "$RR2_SIDE2" "$RR2_H2" "is not an ancestor of reviewed_head"
 rr2_forged_c early "$RRC_FID" "$RR2_FIX" "$RR2_H1" "is not an ancestor of reviewed_head"
-rr2_forged_c pre "$RRC_FID" "$RR2_ROOT0" "$RR2_H2" "is not a descendant of the base"
-rr2_forged_c eqbase "$RRC_FID" "$RR2_B" "$RR2_H2" "is not a descendant of the base"
+rr2_forged_c rhead "$RRC_FID" "$RR2_H1" "$RR2_H2" "is not a strict descendant of the head"
+rr2_forged_c rmid "$RRC_FID" "$RR2_MID" "$RR2_H2" "is not a strict descendant of the head"
+rr2_forged_c pre "$RRC_FID" "$RR2_ROOT0" "$RR2_H2" "is not a strict descendant of the head"
+rr2_forged_c eqbase "$RRC_FID" "$RR2_B" "$RR2_H2" "is not a strict descendant of the head"
 rr2_forged_c open "no_such_finding_id" "$RR2_FIX" "$RR2_H2" "names no open verified finding"
 # sha pin
 rr2_reset; rr2_craft "$RRC_L" rrc "$(rr2_item "$RRC_FID" "$RR2_FIX" "$RR2_H2")" "0000000000000000000000000000000000000000000000000000000000000000"
@@ -1243,9 +1249,11 @@ rr2_slip_c() { # <name> <old> <new> <label> <id> <fix> <head> [derive sed]
   local out rc; out=$(rr2_check "$m/scripts/check-phase-review-receipt.js" "$RRC_L" rrc); rc=$?
   assert_exit_code "$rc" "0" "R4 checker (mutation): without the $4 check the forged addendum is accepted"
 }
-rr2_slip_c anc "if (gitQ(['merge-base', '--is-ancestor', '--end-of-options', fixFull, it.reviewed_head]).status !== 0) {" "if (false) {" "fix-ancestor" "$RRC_FID" "$RR2_SIDE" "$RR2_H2"
-rr2_slip_c base "if (fixFull === raisedEntry.base || gitQ(" "if (false && gitQ(" "descendant-of-base" "$RRC_FID" "$RR2_ROOT0" "$RR2_H2"
-rr2_slip_c eqbase "if (fixFull === raisedEntry.base || gitQ(" "if (false && gitQ(" "descendant-of-base (fix == base)" "$RRC_FID" "$RR2_B" "$RR2_H2"
+rr2_slip_c anc "if (gitQ(['merge-base', '--is-ancestor', '--end-of-options', fixFull, it.reviewed_head]).status !== 0) {" "if (false) {" "fix-ancestor" "$RRC_FID" "$RR2_SIDE2" "$RR2_H2"
+rr2_slip_c base "if (fixFull === raisedEntry.head || gitQ(" "if (false && gitQ(" "descendant-of-base" "$RRC_FID" "$RR2_ROOT0" "$RR2_H2"
+rr2_slip_c eqbase "if (fixFull === raisedEntry.head || gitQ(" "if (false && gitQ(" "descendant-of-base (fix == base)" "$RRC_FID" "$RR2_B" "$RR2_H2"
+rr2_slip_c rhead "if (fixFull === raisedEntry.head || gitQ(" "if (false && gitQ(" "strict-descendant-of-head (fix == raised head)" "$RRC_FID" "$RR2_H1" "$RR2_H2"
+rr2_slip_c rmid "if (fixFull === raisedEntry.head || gitQ(" "if (false && gitQ(" "strict-descendant-of-head (fix inside the raised range)" "$RRC_FID" "$RR2_MID" "$RR2_H2"
 # reviewed_head chain-head: even with the explicit check AND derive's unmatched push removed, a head that no
 # finalized generation owns closes nothing, so the emptied open_findings no longer matches (defence in depth)
 M_HD=$(cm_mutant rr2c_head check-phase-review-receipt.js "if (!chain.some((e) => e && e.status === 'finalized' && e.head === it.reviewed_head)) {" "if (false) {") || fail "mutation setup failed (rr2c head)"

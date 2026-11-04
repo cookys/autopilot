@@ -1295,15 +1295,16 @@ function validateModeA(flags, opts = {}) {
           if (raisedHere && verifiedHere) findingGen = e.generation;
         }
         const raisedEntry = chain.find((e) => e && e.generation === findingGen);
-        if (!raisedEntry || !raisedEntry.base) bad('cannot locate the generation that raised the finding');
+        if (!raisedEntry || !raisedEntry.head) bad('cannot locate the generation that raised the finding');
         const fixRes = gitQ(['rev-parse', '--verify', '--quiet', `${it.fix_sha}^{commit}`]);
         if (fixRes.status !== 0 || !fixRes.stdout.trim()) bad(`fix_sha ${it.fix_sha} is not a commit in this repository`);
         const fixFull = fixRes.stdout.trim();
         if (gitQ(['merge-base', '--is-ancestor', '--end-of-options', fixFull, it.reviewed_head]).status !== 0) {
           bad(`fix_sha ${fixFull} is not an ancestor of reviewed_head ${it.reviewed_head}`);
         }
-        if (fixFull === raisedEntry.base || gitQ(['merge-base', '--is-ancestor', '--end-of-options', raisedEntry.base, fixFull]).status !== 0) {
-          bad(`fix_sha ${fixFull} is not a descendant of the base ${raisedEntry.base} of generation ${findingGen}`);
+        // The lower bound is the raising generation's head (the code flagged), not its base; it implies the base bound.
+        if (fixFull === raisedEntry.head || gitQ(['merge-base', '--is-ancestor', '--end-of-options', raisedEntry.head, fixFull]).status !== 0) {
+          bad(`fix_sha ${fixFull} is not a strict descendant of the head ${raisedEntry.head} of generation ${findingGen}`);
         }
       }
     }

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0398 -->
+<!-- next-id: BL-0399 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2115,3 +2115,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PM 2026-11-05 fleet（全套件 run-all, jobs 6, 負載約 39）
 - **Pointer**: project/backlog/dispatch-author-kill-after-flaky.md
+
+### 審查收據：54 個可能被漏修的已驗證發現要人工逐條查
+- **Id**: BL-0398
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: 全機統計 443 份審查收據中有 99 份留有前幾代已驗證卻沒寫解決記錄的發現。粗估其中 54 條所引用的檔案之後從沒被改過，可能是被漏修，不只是漏記。
+- **Impact**: 真的被漏修的 Major 發現會帶著已通過的收據上線，沒人知道。
+- **Trigger**: 期限 2026-11-08，進行中的工作線優先
+- **Trigger-Type**: date:2026-11-08
+- **Effort**: M
+- **Source**: PM ruling 2026-11-05 fleet（host count 2026-11-05）
+- **Pointer**: project/backlog/unresolved-finding-audit.md

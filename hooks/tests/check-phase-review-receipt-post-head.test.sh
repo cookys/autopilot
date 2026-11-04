@@ -44,9 +44,12 @@ V='"verification":"depth-0 red/green, evidence /tmp/x"'
 GOOD="[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V}]"
 run() { # run <ledger-file> [branch] [extra args...]
   local f="$1" br="${2:-work}" tg="${TGT-$B0}"
-  # TREF: the merge target's own ref; by default the target itself (so it is trivially on its own mainline), T7 overrides it
+  # The mainline is the fixed ref refs/remotes/origin/develop; each case builds it with update-ref. MAINLINE is the commit it
+  # points at: by default the target itself (the mainline ends at the target), T7 points it somewhere the target is not on.
+  local ml="${MAINLINE-$tg}"; [ "$ml" = NONE ] && ml="$B0"
+  g rev-parse --verify -q "$ml^{commit}" >/dev/null && g update-ref refs/remotes/origin/develop "$(g rev-parse "$ml")"
   if [ "$tg" = NONE ]; then node "${SCRIPT_UNDER:-$SCRIPT}" --ledger "$L" --phase P --branch "$br" --phase-base "$B0" --repo-root "$R" --post-head-ledger "$f" 2>&1
-  else node "${SCRIPT_UNDER:-$SCRIPT}" --ledger "$L" --phase P --branch "$br" --phase-base "$B0" --repo-root "$R" --post-head-ledger "$f" --post-head-target "$tg" --post-head-target-ref "${TREF:-$tg}" 2>&1; fi
+  else node "${SCRIPT_UNDER:-$SCRIPT}" --ledger "$L" --phase P --branch "$br" --phase-base "$B0" --repo-root "$R" --post-head-ledger "$f" --post-head-target "$tg" 2>&1; fi
 }
 
 # baseline: no ledger, the head has moved -> fails exactly as before
@@ -153,11 +156,13 @@ OUT=$(TGT=$ROOT run "$TEST_TMP/good.json" work); assert_exit_code "$?" "1" "T6: 
 g checkout -q -b side "$B0"; echo s7 > "$R/s7.txt"; g add s7.txt; g commit -qm "unreviewed S"; S7=$(g rev-parse HEAD)
 g checkout -q -b mc10 "$TIP"; g merge -q --no-ff -m "merge side (clean)" side >/dev/null 2>&1; M10=$(g rev-parse HEAD)
 assert_eq "$(g diff-tree --remerge-diff --no-commit-id --name-only -r "$M10" | wc -l | tr -d ' ')" "0" "fixture T7: the merge of side is clean (empty re-merge diff)"
-OUT=$(TGT=side TREF=develop run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "1" "T7: target = a side branch off the phase base fails"; assert_contains "$OUT" "is not on the first-parent history of develop" "T7: message"
-OUT=$(TGT=$B0 TREF=develop run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "1" "T7b: a mainline target makes S an own commit, unlisted, fails"; assert_contains "$OUT" "commit $S7 is in" "T7b: names S"
+OUT=$(TGT=side MAINLINE=develop run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "1" "T7: target = a side branch off the phase base fails"; assert_contains "$OUT" "is not on the first-parent history of refs/remotes/origin/develop" "T7: message"
+OUT=$(TGT=$B0 MAINLINE=develop run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "1" "T7b: a mainline target makes S an own commit, unlisted, fails"; assert_contains "$OUT" "commit $S7 is in" "T7b: names S"
 led t7ok P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$S7\",\"paths\":[\"s7.txt\"],$V}]"
-OUT=$(TGT=$B0 TREF=develop run "$TEST_TMP/t7ok.json" mc10); assert_exit_code "$?" "0" "T7ok: a mainline target with S listed passes"
-OUT=$(TGT=$B0 TREF=no-such-ref run "$TEST_TMP/t7ok.json" mc10); assert_exit_code "$?" "1" "T7c: an unresolvable target ref fails closed"
+OUT=$(TGT=$B0 MAINLINE=develop run "$TEST_TMP/t7ok.json" mc10); assert_exit_code "$?" "0" "T7ok: a mainline target with S listed passes"
+OUT=$(TGT=side MAINLINE=develop MAINLINE_REF=side run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "1" "T7d: target = side with the environment trying to name the mainline still fails (the mainline is fixed)"
+g update-ref -d refs/remotes/origin/develop
+OUT=$(node "$SCRIPT" --ledger "$L" --phase P --branch mc10 --phase-base "$B0" --repo-root "$R" --post-head-ledger "$TEST_TMP/t7ok.json" --post-head-target "$B0" 2>&1); assert_exit_code "$?" "1" "T7c: without refs/remotes/origin/develop it fails closed"; assert_contains "$OUT" "run git fetch origin first" "T7c: tells to fetch"
 g checkout -q work
 
 # U: merges that take one side whole or drop a side: git diff-tree --cc lists nothing for them, the re-merge does
@@ -198,8 +203,8 @@ OUT=$(run "$TEST_TMP/good.json" same); assert_exit_code "$?" "1" "E2: entries fo
 g checkout -q work
 
 # --post-head-target alone is refused, not ignored
-OUT=$(node "$SCRIPT" --ledger "$L" --phase P --branch work --phase-base "$B0" --repo-root "$R" --post-head-target "$B0" 2>&1); assert_exit_code "$?" "1" "X0: --post-head-target without --post-head-ledger fails"; assert_contains "$OUT" "only mean something with --post-head-ledger" "X0: message"
-OUT=$(node "$SCRIPT" --ledger "$L" --phase P --branch work --phase-base "$B0" --repo-root "$R" --post-head-target-ref develop 2>&1); assert_exit_code "$?" "1" "X0b: --post-head-target-ref without --post-head-ledger fails"
+OUT=$(node "$SCRIPT" --ledger "$L" --phase P --branch work --phase-base "$B0" --repo-root "$R" --post-head-target "$B0" 2>&1); assert_exit_code "$?" "1" "X0: --post-head-target without --post-head-ledger fails"; assert_contains "$OUT" "only means something with --post-head-ledger" "X0: message"
+OUT=$(node "$SCRIPT" --ledger "$L" --phase P --branch work --phase-base "$B0" --repo-root "$R" --post-head-ledger "$TEST_TMP/good.json" --post-head-target "$B0" --post-head-target-ref develop 2>&1); assert_exit_code "$?" "1" "X0b: the removed --post-head-target-ref is refused, not ignored"; assert_contains "$OUT" "was removed" "X0b: message"
 echo '{}' > "$TEST_TMP/pa.json"
 OUT=$(node "$SCRIPT" --plan-artifact "$TEST_TMP/pa.json" --dispositions "$TEST_TMP/pa.json" --post-head-ledger "$TEST_TMP/good.json" --post-head-target "$B0" 2>&1); assert_exit_code "$?" "1" "X3: Mode B with --post-head-ledger is refused"; assert_contains "$OUT" "Mode A only" "X3: message"
 # Refusals outside Mode A
@@ -237,7 +242,9 @@ OUT=$(TGT=$P1 run "$TEST_TMP/t3.json" work); assert_exit_code "$?" "0" "NC5: T3 
 OUT=$(TGT=$DM run "$TEST_TMP/t0.json" work); assert_exit_code "$?" "0" "NC5: T4 (develop already merged the branch) passes"
 OUT=$(TGT=$ROOT run "$TEST_TMP/good.json" work); assert_exit_code "$?" "1" "NC5: T6 is still caught by the phase-base rule"
 mutate "mainline rule off" "if (!nul(mainline).includes(targetSha)) {" "if (false) {"
-OUT=$(TGT=side TREF=develop run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "0" "NC12: without the first-parent rule T7 (target = side, S hidden) passes"
+OUT=$(TGT=side MAINLINE=develop run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "0" "NC12: without the first-parent rule T7 (target = side, S hidden) passes"
+mutate "mainline ref overridable from the environment" "const MAINLINE_REF = 'refs/remotes/origin/develop';" "const MAINLINE_REF = process.env.MAINLINE_REF || 'refs/remotes/origin/develop';"
+OUT=$(TGT=side MAINLINE=develop MAINLINE_REF=side run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "0" "NC13: with the mainline overridable (target = ref = side) T7d passes"
 mutate "re-merge replaced by --cc" "['diff-tree', '--remerge-diff', '-z', '--no-renames', '--name-only', '--no-commit-id', '-r', m]" "['diff-tree', '--cc', '-z', '--name-only', '--no-commit-id', '-r', m]"
 OUT=$(TGT=develop run "$TEST_TMP/good.json" mc5); assert_exit_code "$?" "0" "NC6: with --cc only, U1 (whole-side resolution) passes"
 OUT=$(TGT=develop2 run "$TEST_TMP/good.json" mc6); assert_exit_code "$?" "0" "NC6: with --cc only, U2 (-s ours) passes"

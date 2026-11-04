@@ -1670,6 +1670,7 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
   ansiSpans(joined).forEach((sp, id) => { for (let k = sp.start; k < sp.end; k++) { chars[k].a = id + 1; chars[k].w = 0 } })
   const lead = (l.text.match(/^ */) as RegExpMatchArray)[0].length
   const hang = Math.min(l.hang ?? lead, Math.max(0, Math.floor(cols / 2)))
+  const prefixW = l.hang ?? lead // the row's own prefix width as declared; `hang` is that clamped for continuation lines, so it cannot say where the prefix ends on a narrow pane
   // tokens: runs of blanks, and runs of other characters that end after a `/` or a wide (CJK) character
   const tokens: { cs: WrapCh[]; blank: boolean; w: number }[] = []
   for (const c of chars) {
@@ -1702,7 +1703,7 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
       continue
     }
     const urlTk = tk.cs.some(c => c.u === true)
-    if (w + tk.w > cols && content && !(urlTk && w <= hang)) newLine() // an address that is the first thing after the row's own prefix (w <= hang) stays: it overflows rather than leaving the prefix alone
+    if (w + tk.w > cols && content && !(urlTk && w <= prefixW)) newLine() // an address that is the first thing after the row's own prefix (w <= hang) stays: it overflows rather than leaving the prefix alone
     if (w + tk.w <= cols) { cur.push(...tk.cs); w += tk.w; content = true; continue }
     if (urlTk) { cur.push(...tk.cs); w += tk.w; content = true; continue } // an address longer than a whole line overflows it (never split)
     for (const c of tk.cs) { // one token longer than a whole line: hard-break it

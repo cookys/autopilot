@@ -710,3 +710,16 @@ test('cardwrap r2.5: a URL that is the first word of a label, a background or a 
   expect(ls.filter(l => l.kind === 'choice' && (l.text.startsWith('  選項') || l.text.startsWith(' '.repeat(16)))).every(l => l.hang === 16)).toBe(true)
   expect(violations(ls, 40, makeT('zh-TW')).filter(v => v.startsWith('I3'))).toEqual([])
 })
+test('cardwrap r3: below 32 columns a URL that starts a label still stays beside its prefix (the declared hang, not the clamped one, says where the prefix ends); 24, 30, 32, 40 columns', () => {
+  const url = 'https://example.invalid/abcdefghijklmnopqrstuvwxyz0123456789'
+  for (const label of [url, url + ' 之後還有一些字要寫']) for (const cols of [24, 30, 32, 40]) {
+    const d = dec('d-narrow', 'q?', { background: url, options: [OPT(label), OPT('乙')] })
+    const ls = decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), cols, view()))
+    const t = texts(ls)
+    const loc = 'cols ' + cols + ' label ' + label.length
+    expect(t.some(x => x.startsWith('  選項      [ ] ' + url)), loc + ': prefix and URL on one row').toBe(true)
+    expect(t.some(x => /^ {2}選項 +\[ \]$/.test(x)), loc + ': the prefix is never alone on a row').toBe(false)
+    expect(t.some(x => x.startsWith('  背景      ' + url)), loc + ': background too').toBe(true)
+    expect(violations(ls, cols, makeT('zh-TW')).filter(v => v.startsWith('I3')), loc).toEqual([])
+  }
+})

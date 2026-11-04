@@ -21,7 +21,7 @@ const NOW_S = NOW / 1000;
 const deps = gen.loadDeps();
 
 const COVERAGE = /^observations newest_age: /;
-const stripCoverage = (out) => out.split('\n').filter((l) => !COVERAGE.test(l)).join('\n');
+// coverage line only; the mirror fields are removed only for a scenario that declares stripMirrorFields (its `run` came first)
 
 async function go(fx, args) {
   let out = '';
@@ -52,7 +52,7 @@ for (const variant of ['none', 'empty-dir', 'corrupt']) {
         assert.strictEqual(r.code, want.code, `${c.spec.name} ${r.args.join(' ')} code`);
         assert.strictEqual(r.err, want.err, `${c.spec.name} ${r.args.join(' ')} stderr`);
         const isStatus = r.args[0] === 'status' && r.code === 0;
-        assert.strictEqual(isStatus ? stripCoverage(r.out) : r.out, want.out, `${c.spec.name} ${r.args.join(' ')} stdout`);
+        assert.strictEqual(isStatus ? gen.normalizeOut(r.out, c.spec) : r.out, want.out, `${c.spec.name} ${r.args.join(' ')} stdout`);
         if (isStatus) assert.strictEqual(r.out.split('\n').filter((l) => COVERAGE.test(l)).length, 1, 'exactly one coverage line');
       });
       assert.strictEqual(got.audit, c.result.audit, `${c.spec.name} audit bytes`);
@@ -126,8 +126,9 @@ test('G40-N88: an ok mirror row changes nothing in pick; it shows its age in sta
   } finally { fx.cleanup(); }
 });
 
+// D5: `run` now copies a codeforge snapshot into the mirror before it picks; these two tests hand-write the mirror state, so they turn that adapter off (quota_capture=off).
 test('G40-N88: a live refusal row drops the alias (reason refusal) in pick and run, class=cooling in status', async () => {
-  const fx = makeFixture({ aliases: [{ alias: 'a' }, { alias: 'b' }], snapshots: { a: SNAP('a', 0.1), b: SNAP('b', 0.5) } });
+  const fx = makeFixture({ config: { accounts: { quota_capture: 'off' } }, aliases: [{ alias: 'a' }, { alias: 'b' }], snapshots: { a: SNAP('a', 0.1), b: SNAP('b', 0.5) } });
   try {
     writeRow(fx, 'a', [], { visibility: 'L1', refusal: { observed_at: NOW_S - 10, retry_at: NOW_S + 1200, reason: 'rate_limit' } });
     assert.strictEqual((await go(fx, ['pick'])).out, 'b class=ok used=0.5 source=snapshot\n');
@@ -190,8 +191,8 @@ test('G40-N88: tightResetsFor applies the pick newer-observation rule: a newer o
   const cooldownOf = (fx) => JSON.parse(fs.readFileSync(path.join(fx.cooldownDir, 'a.json'), 'utf8')).cooldown_until_ms;
   const RUN = ['run', '--purpose', 'tst', '--', 'claude', '-p', 'hi'];
   const snapAt = (ms) => Object.assign(SNAP('a', 0.2), { written_at_ms: ms });
-  const newer = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: R429_USAGE }, snapshots: { a: snapAt(NOW - 1000) } });
-  const older = makeFixture({ aliases: [{ alias: 'a' }], responses: { a: R429_USAGE }, snapshots: { a: snapAt(NOW - 3600e3) } });
+  const newer = makeFixture({ config: { accounts: { quota_capture: 'off' } }, aliases: [{ alias: 'a' }], responses: { a: R429_USAGE }, snapshots: { a: snapAt(NOW - 1000) } });
+  const older = makeFixture({ config: { accounts: { quota_capture: 'off' } }, aliases: [{ alias: 'a' }], responses: { a: R429_USAGE }, snapshots: { a: snapAt(NOW - 3600e3) } });
   try {
     const tight = [win('rolling_5h', 0.2), win('weekly', 0.95, { resets_at: NOW_S + 900 })];
     writeRow(newer, 'a', tight);

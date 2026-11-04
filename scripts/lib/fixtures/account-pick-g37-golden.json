@@ -1685,6 +1685,117 @@
     },
     {
       "spec": {
+        "name": "run-first-whole-second-tight",
+        "aliases": [
+          {
+            "alias": "a"
+          },
+          {
+            "alias": "b"
+          }
+        ],
+        "snapshots": {
+          "a": {
+            "schema": "codeforge.quota/1",
+            "alias": "a",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.95,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          },
+          "b": {
+            "schema": "codeforge.quota/1",
+            "alias": "b",
+            "root": null,
+            "written_at_ms": 1799999999000,
+            "five_hour": {
+              "pct": 0.97,
+              "resets_at": 1800003600
+            },
+            "seven_day": {
+              "pct": 0.1,
+              "resets_at": 1800086400
+            }
+          }
+        },
+        "stripMirrorFields": true,
+        "runs": [
+          [
+            "run",
+            "--purpose",
+            "tst",
+            "--",
+            "claude",
+            "-p",
+            "hi"
+          ],
+          [
+            "pick"
+          ],
+          [
+            "pick",
+            "--exclude",
+            "a"
+          ],
+          [
+            "status"
+          ]
+        ]
+      },
+      "result": {
+        "runs": [
+          {
+            "args": [
+              "run",
+              "--purpose",
+              "tst",
+              "--",
+              "claude",
+              "-p",
+              "hi"
+            ],
+            "code": 0,
+            "out": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"OK\"}\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "pick"
+            ],
+            "code": 0,
+            "out": "a class=tight used=0.95 source=snapshot\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "pick",
+              "--exclude",
+              "a"
+            ],
+            "code": 0,
+            "out": "b class=tight used=0.97 source=snapshot\n",
+            "err": ""
+          },
+          {
+            "args": [
+              "status"
+            ],
+            "code": 0,
+            "out": "mode=auto refuse_all_tight=false max_attempts=3\nalias=a enabled=yes priority=10 class=tight used=0.95 source=snapshot cooldown_until=-\nalias=b enabled=yes priority=20 class=tight used=0.97 source=snapshot cooldown_until=-\n2027-01-15 16:00:00 +08:00 alias=a purpose=tst attempt=1 outcome=all_tight\n2027-01-15 16:00:00 +08:00 alias=a purpose=tst attempt=1 outcome=ok\n",
+            "err": ""
+          }
+        ],
+        "audit": "{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"a\",\"purpose\":\"tst\",\"attempt\":1,\"outcome\":\"all_tight\"}\n{\"ts\":1800000000000,\"ts_local\":\"2027-01-15T16:00:00.000+08:00\",\"alias\":\"a\",\"purpose\":\"tst\",\"attempt\":1,\"outcome\":\"ok\"}\n"
+      }
+    },
+    {
+      "spec": {
         "name": "live-dir-relative",
         "aliases": [
           {

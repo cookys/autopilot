@@ -135,9 +135,11 @@ function compareTree(rel) {
 
   // Mirror sync-codex-plugin-skills.sh SCRIPT_EXCLUDES: the Codex payload
   // deliberately omits the OpenCode installer scripts.
-  const scriptExcludes = new Set(['install-opencode.sh', 'sync-opencode-plugin.sh']);
+  // BL-0383: the directory entry docs (CLAUDE.md, AGENTS.md) are left out of scripts/ and references/.
+  const scriptExcludes = new Set(['install-opencode.sh', 'sync-opencode-plugin.sh', 'CLAUDE.md', 'AGENTS.md']);
   const excluded = (file) => (
     (rel === 'scripts' && scriptExcludes.has(file))
+    || (rel === 'references' && (file === 'CLAUDE.md' || file === 'AGENTS.md'))
     || (rel === 'profiles' && file.startsWith('baselines/'))
   );
 

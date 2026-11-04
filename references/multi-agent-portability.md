@@ -381,4 +381,5 @@ tool schemas + goal docs, 2026-06-02 — see the harness-integration direction m
 
 - [`AGENTS.md`](../AGENTS.md) — agents.md-spec readme for any agent
 - [`CLAUDE.md`](../CLAUDE.md) — Claude Code-specific conventions
+- Directory rules (loaded when a session touches the directory): [`scripts/CLAUDE.md`](../scripts/CLAUDE.md), [`skills/CLAUDE.md`](../skills/CLAUDE.md), [`references/CLAUDE.md`](CLAUDE.md), [`platforms/CLAUDE.md`](../platforms/CLAUDE.md), [`mods/CLAUDE.md`](../mods/CLAUDE.md); each has an `AGENTS.md` stub for agents that do not descend
 - [`project/plans/_archive/2026/05/2026-05-22-multi-agent-portability-correction.md`](../project/plans/_archive/2026/05/2026-05-22-multi-agent-portability-correction.md) — the plan that produced this fact version

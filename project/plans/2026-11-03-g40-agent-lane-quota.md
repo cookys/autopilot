@@ -13,11 +13,17 @@ The operator's position: the user lane (statusline, codeforge) and the agent lan
 
 For each alias, `pick` needs a current `{five_hour, seven_day}` utilization and reset time, produced by the agent lane's own traffic (or, optionally and only when enabled, a tiny probe), without reading any credential beyond what G37 already reads, and without per-call cost. Also: a token that expires in a year must warn before it dies.
 
+> Amended 2026-11-04 (d-2d6a93aa): "only when enabled" for the tiny probe is superseded by the per-provider default (on-demand before pick; periodic only for confirmed `false`). See "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
+
 ## 2. OKR / KRs
 
 - KR1 After a headless run that carried a rate-limit event, the alias has an observation younger than the run, with no statusline involved.
 - KR2 `pick` classifies an alias `ok`/`tight` from an agent-lane observation when no usable statusline snapshot exists.
 - KR3 No new spend by default: probing is off unless an operator switches it on.
+
+> Amended 2026-11-04 (d-2d6a93aa): supersedes the default only: KR3 no longer means "off unless an operator switches it on". The default is now per provider: on-demand probe before pick (spend only on an alias about to be used) for `true`/`unknown`/unconfirmed `false`, periodic probe only for confirmed `false` with a recorded Q5. The "no new spend" intent is carried by the evidence gates. See "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 - KR4 Every alias with a recorded issue date shows days-to-expiry; under 30 days warns.
 - KR5 Every new check ships a negative control (section 9).
 
@@ -114,10 +120,13 @@ Default OFF for every provider and every manifest: `accounts.quota_probe = "off"
 
 - Claude: its `starts_window` is `unknown` and no Claude experiment has run (19.8). The Claude probe code path (the `stale` trigger and `usage-probe`) may ship, but `quota_probe` stays `off` by default, `scheduled` is rejected for Claude (N66), and until the section 19 result is recorded no document or default may enable it; absent telemetry in that experiment is ambiguous, not a "does not start" result (19.5).
 
-> Amended 2026-11-04 (d-2d6a93aa): for Claude, the operator decision supersedes this paragraph. `unknown` means an on-demand probe before pick when the data is stale; the experiment of section 19 is no longer a precondition for that. Reason on the operator's card: the alias is about to be used anyway, so starting its clock is acceptable. `scheduled` stays rejected for Claude (N66 unchanged); see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+> Amended 2026-11-04 (d-2d6a93aa): for Claude, the operator decision supersedes this paragraph. `unknown` means an on-demand probe before pick when the data is stale; the experiment of section 19 is no longer a precondition for that. Reason on the operator's card: the alias is about to be used anyway, so starting its clock is acceptable. `scheduled` is rejected for Claude only while its manifest is still `unknown` or any periodic-eligibility gate has not passed (`false` + `high` + evidence, and Claude's own Q5 recorded); after that it can flip on evidence like any other provider (N66 keeps the rejection for `unknown`/`true`); see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
 
 
 Cheapest first: (1) official no-quota endpoint: none found (V7), not used; if an official URL turns up, replace the probe with it and record it here. (2) Smallest model call: `claude -p <prompt> --model haiku --output-format stream-json --verbose --tools "" --no-session-persistence`, a few-word prompt, through the alias env (same path as a run). This is byte for byte the matrix's live command (capability matrix, claude field 4). `--no-session-persistence` is kept so a probe leaves no session transcript under the alias's config dir. `--strict-mcp-config` (listed by `claude --help` of 2.1.317) has no live run and is NOT in the argv; it may be added only after a live probe records it. Cost per V6: 0.0034 USD API-equivalent per probe (about 0.02 to 0.03 USD for the 6 to 8 probes of the experiment, up to about 0.08 USD per day per idle alias on a standing hourly schedule, which only the demand rule of 19.6 branch A allows); share of subscription quota UNVERIFIED (Q5).
+
+> Amended 2026-11-04 (d-2d6a93aa): supersedes the cost figure and the schedule: the standing schedule is now about every 30 minutes (up to 48 probes, about 0.16 USD API-equivalent per day per idle alias, 48 x 0.0034), not hourly at 0.08 USD, and only for confirmed `false` with a recorded Q5. The cost is recorded only, with no limit set. See "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 
 Trigger in `stale` mode: the wrapper, in `gather`, asks pure `staleCandidates(accounts, merged, cooldowns, exclude, nowS, minutes)` for aliases that are not excluded or cooling, whose best observation is older than N minutes (or missing), and whose last known `used` is below 0.90 (a tight alias is never probed: it does not need refreshing and is the one most likely to 429). At most one probe per alias per N, serial, at most 1 per `run`, never when the `run` is `--alias`-pinned. A probe's observation is published like any other, `source: probe`. Probe failure (auth, 429, timeout) records nothing, applies the normal cooldown and auth-stop classification, and never blocks the real call; bounded by `accounts.quota_probe_timeout_secs` (default 20). A manual `claude-account.js usage-probe --alias A` (P4) is explicit and prints only `{alias, windows}`.
 
@@ -412,6 +421,9 @@ Evidence E3 stands: the claude rails behind the wrapper use `--output-format jso
 - Courier reporter: unaffected by the output format. It is source-agnostic and reads local records; it never sees run output. What changes is how many records exist for it to push. With json callers, a headless-only alias gets nothing from passive capture, so its hub row comes from the probe (and from the statusline if someone also uses it interactively).
 - Passive capture: its value is capped by the rail formats. It records only for stream callers (the foreman's kimi stream is a different engine, not claude). So passive stays a free bonus for the stream callers that exist and for any rail migrated later; it is not the primary feed for dispatch.
 - Therefore probing moves from "optional supplement" to "the main feed for headless-only aliases". That makes the section 19 experiment the gating question for the whole design, not a detail.
+
+> Amended 2026-11-04 (d-2d6a93aa): supersedes the experiment gate: the section 19 experiment is no longer the gating question for the whole design. On-demand probing proceeds for `true`/`unknown` without waiting for it; the experiment (and the matching read-only evidence for other providers) now gates only whether a periodic probe can be enabled. See "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 - C1/C2/C3 recommendation updated: ship C3 (no rail change) first. Measure C2's precondition (stream `result` line equals the json envelope fields; Q3) as an extra step inside the section 19 experiment (it costs one more probe, 19.4 step E7). If equivalent, C2 (transparent transform in the wrapper, config-gated, default off) turns every json caller into a free observation source and the probe frequency can drop; if not, keep C3. C1 (migrating rails) is not recommended: it touches every rail parser for a signal a probe already gives cheaply.
 
 ## 19. Experiment: does a probe start the 5-hour window?
@@ -484,6 +496,9 @@ Let `d1 = resetsAt(E2) - t1` (seconds). Expected for a window started by the pro
 > Amended 2026-11-04 (d-2d6a93aa): branch B is now the default for `true`, `unknown` and unconfirmed `false`; the same on-demand rule applies without a prior enablement step, and for Claude without waiting for this experiment.
 
 - C. Void or ambiguous (fifth or fourth row): repeat the experiment on a fresh idle alias; until a result exists probing stays off and the system relies on statusline + passive only.
+
+> Amended 2026-11-04 (d-2d6a93aa): supersedes the experiment gate and the default: "until a result exists probing stays off" no longer holds. With a void or ambiguous result `starts_window` stays `unknown`, which means on-demand probe before pick when the data is stale; only the periodic probe stays off. See "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 Record the answer in the manifest `starts_window` with its evidence path (section 12 Q2).
 
 ### 19.7 What the experiment does not settle
@@ -499,7 +514,7 @@ How much of the alias's subscription quota one probe consumes (Q5): the experime
 
 - Claude: not run (needs an idle alias); until it runs the Claude manifest keeps `starts_window: unknown`.
 
-> Amended 2026-11-04 (d-2d6a93aa): Claude stays `unknown`, so on-demand before pick; the experiment now only decides whether periodic probing can ever be enabled; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+> Amended 2026-11-04 (d-2d6a93aa): Claude stays `unknown`, so on-demand before pick, and `scheduled` is rejected until the manifest changes and all periodic gates pass (`false` + `high` + evidence, Claude's own Q5); the experiment now only decides whether periodic probing can ever be enabled; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
 
 
 ## 20. Provider-neutral contract and adapter manifests
@@ -828,7 +843,7 @@ For Claude, the PM ruled that this decision supersedes 5.3 and section 19: `unkn
 | `true` | any | on-demand only |
 | `unknown` | any | on-demand only |
 
-Unchanged by this amendment: a tight alias (utilization at or above 0.90) is never probed, a cooling or pinned run never probes, at most one probe spawn per `run` (N14, N76), and `scheduled` stays rejected for Claude and for any manifest that is not confirmed `false`.
+Unchanged by this amendment: a tight alias (utilization at or above 0.90) is never probed, a cooling or pinned run never probes, at most one probe spawn per `run` (N14, N76), and `scheduled` is rejected for any provider, Claude included, while its manifest is `unknown`/`true` or a periodic-eligibility gate has not passed (`false` + `high` + evidence, plus that provider's own Q5 recorded); once all pass it flips on evidence with no special case for Claude.
 
 ### A.3 The "confirmed" threshold
 
@@ -844,7 +859,7 @@ The threshold lives in the manifest. Proposed (provisional) field: `starts_windo
 
 ### A.5 Residual
 
-An on-demand probe may start an alias's window, and `pick` then refuses that alias (for example, the probe shows it is tight). The PM accepts this risk; severity minor.
+An on-demand probe may start an alias's window, and `pick` then refuses that alias (for example, the probe shows it is tight). The PM accepts this risk; severity minor. Why minor: the alias was already a pick candidate, so it would be used soon anyway, and a probe happens only when its data is stale; if pick then refuses it, all that was wasted is the start of one 5-hour window.
 
 ### A.5b Q5 gate and cost (PM ruling)
 
@@ -855,8 +870,8 @@ The Q5 gate stays, counted per provider. Periodic probing for a provider starts 
 - A provider whose `starts_window` is `unknown` or `true` must never be scheduled for a periodic probe (this is the re-pinned N13: no periodic spawn for such a provider).
 - A provider with `false` + `high` + evidence but no recorded Q5 must never get a periodic spawn; its on-demand probe still works.
 - A provider with `starts_window = false` but confidence below `high` (or no evidence) must be probed on-demand only.
-- Flipping the manifest evidence from `unknown` to confirmed `false` flips the default to periodic with no config edit; flipping back reverses it.
+- Flipping the manifest evidence from `unknown` to confirmed `false` flips the default to periodic with no config edit, in a fixture where that provider already has a recorded Q5; flipping back reverses it. The same flip without a Q5 record still yields on-demand only.
 
 ### A.7 Sections touched
 
-Each of these carries a one-line `Amended 2026-11-04 (d-2d6a93aa)` note pointing here; original text is unchanged: 2.5 (Global Constraints bullet), 5.3, 10, 12 Q2, 13 P4, 14 N13 and N66, 15 mitigation (b), 19.1, 19.6 A and B, 19.8, 20.3 rule 2.
+Each of these carries a one-line `Amended 2026-11-04 (d-2d6a93aa)` note pointing here; original text is unchanged: 2.5 (Global Constraints bullet), 1 (problem statement), 2 (KR3), 5.3 (including the "Cheapest first" cost paragraph), 10, 12 Q2, 13 P4, 14 N13 and N66, 15 mitigation (b), 18.6 (third bullet), 19.1, 19.6 A, B and C, 19.8, 20.3 rule 2.

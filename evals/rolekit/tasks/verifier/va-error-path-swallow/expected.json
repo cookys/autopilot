@@ -1,0 +1,11 @@
+{
+  "kind": "va_case",
+  "seed": "rolekit-pilot-v1",
+  "trial": 0,
+  "family": "error-path-swallow",
+  "case_index": 0,
+  "case_id": "values_case_id_840917b09f",
+  "envelope_sha256": "725b5d9c25dc8e978ed3728291fe94bf72142555828ce79dca933574cacf655b",
+  "generator_version": "va-declared-plan-v1",
+  "grader": "evals/va-eval-grader.js gradeCase"
+}

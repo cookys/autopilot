@@ -1,0 +1,9 @@
+{
+  "kind": "debugger",
+  "root_cause_file": "lib/pager.py",
+  "line_min": 13,
+  "line_max": 15,
+  "claim_regex": "(off.by.one|end - 1|end-1|last page|slice)",
+  "decoy_file": null,
+  "min_hypotheses": 2
+}

@@ -1,0 +1,13 @@
+{
+  "role": "verifier",
+  "skill": "negative-control",
+  "source_path": "references/evidence-discipline.md",
+  "source_lines": [
+    1259,
+    1278
+  ],
+  "source_git_blob": "d167d9edffa128c8e8a24b99b535f54d7b8abe41",
+  "base_sha": "63308bd8f2f6fda83277047a0269cb75db1d5f1f",
+  "transform": "frontmatter added in front of the source text",
+  "copied_bytes": 1607
+}

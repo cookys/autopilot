@@ -1,0 +1,13 @@
+{
+  "case": "01-dropped-error-check",
+  "class": "critical",
+  "defect_summary": "flock error/return silently dropped; emit_event succeeds/returns 0 even when the flock or append fails, losing events without any failure signal",
+  "any_of": [
+    {"regex": "flock[^.\\n]{0,80}(fail|error|mask|silent|lost|drop|ignor|uncheck|succeed)"},
+    {"regex": "(mask|silent|lost|drop|ignor|swallow|uncheck)[^.\\n]{0,80}(flock|append|event|lock)"},
+    {"regex": "\\$\\?"},
+    {"all_of": ["emit_event"]},
+    {"regex": "returns?\\s+0\\b"},
+    {"all_of": ["lost", "event"]}
+  ]
+}

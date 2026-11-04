@@ -1,0 +1,9 @@
+{
+  "kind": "debugger",
+  "root_cause_file": "keys.py",
+  "line_min": 8,
+  "line_max": 8,
+  "claim_regex": "(key|id|role|collapse|stale)",
+  "decoy_file": "service.py",
+  "min_hypotheses": 2
+}

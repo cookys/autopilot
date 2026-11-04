@@ -1,0 +1,24 @@
+{
+  "kind": "explorer",
+  "questions": [
+    {
+      "id": "q1",
+      "expect_found": true,
+      "file": "lib/config.js",
+      "needle": "Object\\.assign\\(\\{\\}, env, defaults, override\\)",
+      "ask": "Where are the env, defaults and override layers merged into one object?"
+    },
+    {
+      "id": "q2",
+      "expect_found": true,
+      "file": "lib/parser.js",
+      "needle": "JSON\\.parse",
+      "ask": "Where is a JSON config file parsed?"
+    },
+    {
+      "id": "q3",
+      "expect_found": false,
+      "ask": "Where is the config schema validated?"
+    }
+  ]
+}

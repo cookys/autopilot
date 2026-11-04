@@ -1,0 +1,10 @@
+{
+  "role": "implementer",
+  "skill": "test-strategy",
+  "source_path": "skills/test-strategy/SKILL.md",
+  "source_lines": null,
+  "source_git_blob": "428d7f581e2d8b380c177ae9fcc8999515712341",
+  "base_sha": "63308bd8f2f6fda83277047a0269cb75db1d5f1f",
+  "transform": "verbatim copy",
+  "copied_bytes": 4625
+}

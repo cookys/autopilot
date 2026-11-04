@@ -1,0 +1,13 @@
+{
+  "kind": "implementer",
+  "protected": [
+    ".git",
+    ".claude",
+    "run-tests.sh",
+    "oracle.sh"
+  ],
+  "oracle": [
+    "bash",
+    "oracle.sh"
+  ]
+}

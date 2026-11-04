@@ -1,0 +1,438 @@
+{
+  "schema_version": 1,
+  "artifact_type": "rolekit_pilot_tasks",
+  "base_sha": "63308bd8f2f6fda83277047a0269cb75db1d5f1f",
+  "tasks": [
+    {
+      "role": "reviewer",
+      "id": "kb-01",
+      "dir": "reviewer/kb-01",
+      "sources": [
+        {
+          "path": "evals/known-bad/01-dropped-error-check.diff",
+          "git_object": "14325a1124f7e004e0fe5e43846dd29a8e6084bb"
+        },
+        {
+          "path": "evals/known-bad/01-dropped-error-check.expected.json",
+          "git_object": "7afefaf6fb4410651372dfe82898935a77b14ac3"
+        },
+        {
+          "path": "evals/skill-transport/match/01-dropped-error-check.match.json",
+          "git_object": "80c590aab58f44722ec7538e45bfd1c4b7073868"
+        }
+      ],
+      "files": {
+        "expected.json": "39ad9e15dc77bf407adb76cfa250c59371be1b05412a7bd47494b4bd4c038e58",
+        "input/change.diff": "f4ff05fcd7b5d6c270cecd9ec8bbeed06d0df5a49ee3d9ab078887d550233e16",
+        "input/known-bad.expected.json": "afe14a4f45d150a1381424e7efb2ce14192ed49a6143cf0f37c444b0b5682502",
+        "prompt.md": "626d79a22a4e3485162e4f8a097c47adef2b8e2d4df36f26d0c978620af55209"
+      }
+    },
+    {
+      "role": "reviewer",
+      "id": "kb-05",
+      "dir": "reviewer/kb-05",
+      "sources": [
+        {
+          "path": "evals/known-bad/05-off-by-one.diff",
+          "git_object": "050995b8d166c3b84e25a8b0c6003be0039e9dec"
+        },
+        {
+          "path": "evals/known-bad/05-off-by-one.expected.json",
+          "git_object": "aa87c64d14757d755bdfd8ca790de7aefc24470c"
+        },
+        {
+          "path": "evals/skill-transport/match/05-off-by-one.match.json",
+          "git_object": "b0752e03896698a4b3289f509f2fe99ebb5cae7d"
+        }
+      ],
+      "files": {
+        "expected.json": "8a430c0bd4d4c4c48c87ed7945a64826f926e39e51b0b985bacac6fa6418aa7b",
+        "input/change.diff": "ac8be1b3ab412db384b589a8888167ff5e411fea4731077667bc176fee7e57f1",
+        "input/known-bad.expected.json": "8253fb5fa5abd8a0ec426915b926fd4e3316e32d22ac786bbe2ba896eb259b7d",
+        "prompt.md": "626d79a22a4e3485162e4f8a097c47adef2b8e2d4df36f26d0c978620af55209"
+      }
+    },
+    {
+      "role": "reviewer",
+      "id": "kb-09",
+      "dir": "reviewer/kb-09",
+      "sources": [
+        {
+          "path": "evals/known-bad/09-null-deref.diff",
+          "git_object": "bc1ebd085734de2e949180be8a4518f6d94590aa"
+        },
+        {
+          "path": "evals/known-bad/09-null-deref.expected.json",
+          "git_object": "d2f94916ddedc3e54708a86e5f5ec7e9638ec0f5"
+        },
+        {
+          "path": "evals/skill-transport/match/09-null-deref.match.json",
+          "git_object": "d2b540352ec10805f94a0c0042de6e838476d08e"
+        }
+      ],
+      "files": {
+        "expected.json": "07fb24862ebc9ab25631b658061b7e0ee89bf00a66bd781dec2e2a1dc302fa1a",
+        "input/change.diff": "2054c71a381d3ec50089ad2e8e9dd5a4757634a9802139846d883663b985fe84",
+        "input/known-bad.expected.json": "b7ca668b9d35d9b28c8c69cdd2b9e71ac4f7eaac4748559409a60a55cadd6291",
+        "prompt.md": "626d79a22a4e3485162e4f8a097c47adef2b8e2d4df36f26d0c978620af55209"
+      }
+    },
+    {
+      "role": "implementer",
+      "id": "t1-fix-with-decoy",
+      "dir": "implementer/t1-fix-with-decoy",
+      "sources": [
+        {
+          "path": "evals/orchestration/tasks/t1-fix-with-decoy",
+          "git_object": "2072419c45bd11050f245d919b17ced821dbe054"
+        }
+      ],
+      "files": {
+        "expected.json": "02f4a073e2031cf0ebd429c7bf5f60219752fc248859d0b773cbedc25fd5defd",
+        "input/REVIEW-NOTES.md": "69d52a31700b3bf07967888ff195362a629a015620e663841ca535bb616e041b",
+        "input/lib/auth.js": "2d9a188f1990a97bac4527b41ca11821e81cb1636c71d0a35c7a7530f4a5a71a",
+        "input/lib/buggy.js": "b1d677c7c2c478e1ff13e32d94d8ec074aa0e4acab9e4ddb25dae00466370e82",
+        "input/lib/config.js": "a920f907ddd036e47b751f537a30e14904c3f138610eb475f7a469c24eab1c36",
+        "input/lib/decoy.js": "6d0262a2c5c9fd4451162f998beb45f57e4c6eb0d3e48244cc8018a925454d59",
+        "input/lib/logger.js": "6623a6eddcf6bce8a3ad7c99ddffb7d19669baf3509e643ae8038d85f3a36ea0",
+        "input/lib/math.js": "46bb4060d06042a19d772387b90780b338079ddab60b0a5c78463b116ec0e583",
+        "input/lib/string.js": "d2ee98db638ed412abbc2e450b4db88e99fdad25f115bdd9b79a3bf9bac5d78a",
+        "input/run-tests.sh": "ca27d1f13c1877fe99223e4404a1bb857f0d3a126878a2145ed3588517a90c01",
+        "input/tests/test-auth.js": "51bdfb46cc77a948dfc8a34776af4c3750384001c675d5229aad97072cd55d45",
+        "input/tests/test-buggy.js": "57cec2e7eadd8b4970b424a835b5efe7d28eacf8062d46c8ca6bbe06e1366ddb",
+        "input/tests/test-decoy.js": "6c104d53e1caed38ab4c47fe9af0d9d201319410406208389fda4869d07b1b76",
+        "input/tests/test-math.js": "85371185f278d7db263a72d2b82c8093261ea9a7ea46f2ce74b408d72282fb0f",
+        "input/tests/test-string.js": "094e1893cdf6a8e9db82a7f1132f6841b94bf4a23769e5ae5cc5bcb5c097e30b",
+        "oracle.sh": "3fdfa257b46cea5c4df2deabf521073b64cca38802e2fce50bba012c407aeee3",
+        "prompt.md": "fa9a0de06c83d7394f2fbc3390ca8944e3da9aa370ba7bb9393eac93880e5346"
+      }
+    },
+    {
+      "role": "implementer",
+      "id": "t4-config-layer",
+      "dir": "implementer/t4-config-layer",
+      "sources": [
+        {
+          "path": "evals/orchestration/tasks/t4-config-layer",
+          "git_object": "e73e7cda87cafe22c6f3680da727c596eb6936d5"
+        }
+      ],
+      "files": {
+        "expected.json": "02f4a073e2031cf0ebd429c7bf5f60219752fc248859d0b773cbedc25fd5defd",
+        "input/REVIEW-NOTES.md": "96000c4837286e72e9660fd4ed5cc4fe6bbbb5948674e5634c976b1c50a1749c",
+        "input/bin/config-tool.js": "15a2bbb4a5e01e1c9fd4e8597e1a27d6312a3faaeaecc724ee18f0ae01f57299",
+        "input/config/defaults.json": "9c4b32a7ed0f9bed3af26671cc1335db1b4e5ab79e34096e4b2f625734f2fc5c",
+        "input/config/override.json": "7d7058689a54e82594a1da738f3a424d708ea2c2d96e64d4f546945b92eaea67",
+        "input/data/golden.txt": "0875a397553192ac886b5ce3508d108db817d8ed627fdf12ae8ef0c41a6445f2",
+        "input/lib/config.js": "6535103c5b157319ab81499bf75326795db3eefe109df9083c1b1786e5be27da",
+        "input/lib/logger.js": "4e7fbc425843bb889e00b62c047abffee32a9c33c0a759dd578b3f794e23480f",
+        "input/lib/math.js": "09640bc730578e9a95724adc6477514b8897139036a5a8ee9c607498f162606c",
+        "input/lib/parser.js": "f927440fd3891e6fc3a8ddf9c2ebd2af2c05d0200bda9ce874a6e0cbd69a171a",
+        "input/lib/utils.js": "641c54ed395e2b922d6871c99c805c4454f38086e43997ace0af09ded5e939b0",
+        "input/run-tests.sh": "f18cfc2a7448fc1adf401d0e828afd0b81bd58a18f1250e9b63a0a61dfeb7ede",
+        "input/tests/test-config.js": "aff63b2dc6e7862f59d5db375c6b97a8ee9d01556c88e7d6b46d09fc747667f4",
+        "input/tests/test-math.js": "8951e7afde45fd9f4e00ad4d4f9dd7c7723e798d055b867151b6526fadc96fda",
+        "input/tests/test-parser.js": "4bb75bc29bcb91d0d82e2b1af7c59d46d9051440f82db105d4fbb72853f79186",
+        "input/tests/test-utils.js": "c2c5e0066cd9d2934e9ed046eab30d0c734a001934ac7afc4795ea81cd2978f5",
+        "oracle.sh": "58348ec7484857a02574c32add0a246c766e96aab1035ad6c43d290675bbd574",
+        "prompt.md": "a6ebbae0892e0d7e64ff3a86c3ac28501006d0a92088ef0b6a9da9c229131ce9"
+      }
+    },
+    {
+      "role": "implementer",
+      "id": "t11-boundary-fix",
+      "dir": "implementer/t11-boundary-fix",
+      "sources": [
+        {
+          "path": "evals/orchestration/tasks/t11-boundary-fix",
+          "git_object": "8caa8985fd790d659897940217bb5587684a55f2"
+        }
+      ],
+      "files": {
+        "expected.json": "02f4a073e2031cf0ebd429c7bf5f60219752fc248859d0b773cbedc25fd5defd",
+        "input/lib/pager.py": "692a4be1665abbdc872148c726af505c4d40fddffffd7ebd3374b2abe6cd748a",
+        "input/main.py": "a94e51fcdd9bf03c46a55043a4ccf43d0c05106e849762ea3ef2251b1bb1966a",
+        "input/run-tests.sh": "2faa8de50675efba8c94afc4a789eb221e3bf24311b79cef783ddc79287ff695",
+        "oracle.sh": "ef929f5d652528232819ab470339d677a5150b35717c4ef431ef696920b81406",
+        "prompt.md": "ac816239389ef713c638ad906f7190e0c153817a12e2ac05fa54bb70061575f3"
+      }
+    },
+    {
+      "role": "verifier",
+      "id": "va-boundary-off-by-one",
+      "dir": "verifier/va-boundary-off-by-one",
+      "sources": [
+        {
+          "path": "evals/va-eval-generator.js",
+          "git_object": "aa3768333d1320c9501063a19cecd4ce9670eb87"
+        },
+        {
+          "path": "evals/va-eval-grader.js",
+          "git_object": "f4f056d77102762f34f4bc31cc86543215c49d41"
+        },
+        {
+          "path": "evals/va-capability-evidence-corpus.json",
+          "git_object": "1f7c383807a4868b2db83fbe791c596405e4e407"
+        }
+      ],
+      "files": {
+        "expected.json": "4d78ba62fdc78a1e8cf754984b8612e64427a346d8c4e9f8ae7b5cef7b01b1ab",
+        "input/envelope.json": "4a4bc99c465578abf9f6fbff900d63b5967148e052a602f247dcb8ea6e78e3f9",
+        "prompt.md": "c7fed9aa4e0ff34a0fe16634c8b6d5db95d659f18e4701cf3b5f9d9142483564"
+      }
+    },
+    {
+      "role": "verifier",
+      "id": "va-error-path-swallow",
+      "dir": "verifier/va-error-path-swallow",
+      "sources": [
+        {
+          "path": "evals/va-eval-generator.js",
+          "git_object": "aa3768333d1320c9501063a19cecd4ce9670eb87"
+        },
+        {
+          "path": "evals/va-eval-grader.js",
+          "git_object": "f4f056d77102762f34f4bc31cc86543215c49d41"
+        },
+        {
+          "path": "evals/va-capability-evidence-corpus.json",
+          "git_object": "1f7c383807a4868b2db83fbe791c596405e4e407"
+        }
+      ],
+      "files": {
+        "expected.json": "0a899e9d9ef0bc6ac37624fa36396b17cb74cd613947953f15f3af6cdc8fcf09",
+        "input/envelope.json": "725b5d9c25dc8e978ed3728291fe94bf72142555828ce79dca933574cacf655b",
+        "prompt.md": "c7fed9aa4e0ff34a0fe16634c8b6d5db95d659f18e4701cf3b5f9d9142483564"
+      }
+    },
+    {
+      "role": "verifier",
+      "id": "va-state-residue",
+      "dir": "verifier/va-state-residue",
+      "sources": [
+        {
+          "path": "evals/va-eval-generator.js",
+          "git_object": "aa3768333d1320c9501063a19cecd4ce9670eb87"
+        },
+        {
+          "path": "evals/va-eval-grader.js",
+          "git_object": "f4f056d77102762f34f4bc31cc86543215c49d41"
+        },
+        {
+          "path": "evals/va-capability-evidence-corpus.json",
+          "git_object": "1f7c383807a4868b2db83fbe791c596405e4e407"
+        }
+      ],
+      "files": {
+        "expected.json": "3744651363bc8251f3257e88abfa716b73af6221411b17e617ca6ce0fe0fcd90",
+        "input/envelope.json": "b291b73fccb35514b7ca646cddf43c40dd95bb5fe3c664c0a282645be44e8fbb",
+        "prompt.md": "c7fed9aa4e0ff34a0fe16634c8b6d5db95d659f18e4701cf3b5f9d9142483564"
+      }
+    },
+    {
+      "role": "planner",
+      "id": "d2-l-multimodule",
+      "dir": "planner/d2-l-multimodule",
+      "sources": [
+        {
+          "path": "evals/skill-onoff/tasks/d2-l-multimodule/task.md",
+          "git_object": "6a681c553cfd83f616385254aeee3c0e79ec2c5f"
+        },
+        {
+          "path": "evals/skill-onoff/tasks/d2-l-multimodule/repo",
+          "git_object": "95bf906ae9bbf544fecc1cdf78eeafba44935f33"
+        }
+      ],
+      "files": {
+        "expected.json": "c7151c3608d21385d1753a2543a4a15530893d624aedae1dcc51446f57c9f578",
+        "input/cli.js": "8da6a2c0c1ef3d7b4d77077930a9968566c461066e453fcad4db8ae311db44f5",
+        "input/docs/README.md": "2d8f9f3e89bbe5fe1807a30474f484f2b285c7f6cedb6dce9ec850611630c77d",
+        "input/lib/parser.js": "fe0823e07f9ca25984c6c8dfb9cff60e08a2136921a2853c24a55e801949148a",
+        "input/run-tests.sh": "2488b67c8107117ac0bb75baedc4d368ce05a9e2eff2cde5bd202246045fb69a",
+        "prompt.md": "0b42bbf9c5479f2fcef934a71602e70a07db48e8a2faa0201b306a457bff2880"
+      }
+    },
+    {
+      "role": "planner",
+      "id": "d8-l-two-phase",
+      "dir": "planner/d8-l-two-phase",
+      "sources": [
+        {
+          "path": "evals/skill-onoff/tasks/d8-l-two-phase/task.md",
+          "git_object": "ec02e2883b0576b0ef7ccb3edf9ccac593379939"
+        },
+        {
+          "path": "evals/skill-onoff/tasks/d8-l-two-phase/repo",
+          "git_object": "e87191834c738a6246a2a65b7afb3164724d7810"
+        }
+      ],
+      "files": {
+        "expected.json": "c9c925bd4bd4d1330cee77e9666837449fc498b4e7ae426bf55b3715faac9171",
+        "input/cli.js": "151a42b118659fcf421bb46f930a3eeb545a2564e1d46ebf07f34b71c324ffee",
+        "input/docs/README.md": "446af91ef7d39d396998516372f7ada88ade61c0ec9e7bbae81554105f76d053",
+        "input/lib/parser.js": "46cdb2bc93380a1df1ac536411127c3c808d8eb099180d58c333b975c4a13642",
+        "input/lib/render.js": "352a57f616bf231a3d8b33ed4191f6325c0191632ae86b833ee712cc0e48a01d",
+        "input/run-tests.sh": "f5a3141fa51d9873700c0fa9324f13e41bd5200c5fa17ee6acb26658bdfea8dd",
+        "prompt.md": "eca2c451ed80eb932e5bc77c788a451dbf32d22709e5e29773c40bcc042559db"
+      }
+    },
+    {
+      "role": "planner",
+      "id": "dc-l-api",
+      "dir": "planner/dc-l-api",
+      "sources": [
+        {
+          "path": "evals/skill-onoff/tasks/dc-l-api/task.md",
+          "git_object": "6a681c553cfd83f616385254aeee3c0e79ec2c5f"
+        },
+        {
+          "path": "evals/skill-onoff/tasks/dc-l-api/repo",
+          "git_object": "95bf906ae9bbf544fecc1cdf78eeafba44935f33"
+        }
+      ],
+      "files": {
+        "expected.json": "c7151c3608d21385d1753a2543a4a15530893d624aedae1dcc51446f57c9f578",
+        "input/cli.js": "8da6a2c0c1ef3d7b4d77077930a9968566c461066e453fcad4db8ae311db44f5",
+        "input/docs/README.md": "2d8f9f3e89bbe5fe1807a30474f484f2b285c7f6cedb6dce9ec850611630c77d",
+        "input/lib/parser.js": "fe0823e07f9ca25984c6c8dfb9cff60e08a2136921a2853c24a55e801949148a",
+        "input/run-tests.sh": "2488b67c8107117ac0bb75baedc4d368ce05a9e2eff2cde5bd202246045fb69a",
+        "prompt.md": "0b42bbf9c5479f2fcef934a71602e70a07db48e8a2faa0201b306a457bff2880"
+      }
+    },
+    {
+      "role": "debugger",
+      "id": "t4-config-layer",
+      "dir": "debugger/t4-config-layer",
+      "sources": [
+        {
+          "path": "evals/orchestration/tasks/t4-config-layer/repo",
+          "git_object": "d7666da8bd7b23119f34e87b5d4e328632b17154"
+        }
+      ],
+      "files": {
+        "expected.json": "1cff92c2e111480b9e65c937adae10e79e039ece204aec4e84a1ddff03ca8322",
+        "input/REVIEW-NOTES.md": "96000c4837286e72e9660fd4ed5cc4fe6bbbb5948674e5634c976b1c50a1749c",
+        "input/bin/config-tool.js": "15a2bbb4a5e01e1c9fd4e8597e1a27d6312a3faaeaecc724ee18f0ae01f57299",
+        "input/config/defaults.json": "9c4b32a7ed0f9bed3af26671cc1335db1b4e5ab79e34096e4b2f625734f2fc5c",
+        "input/config/override.json": "7d7058689a54e82594a1da738f3a424d708ea2c2d96e64d4f546945b92eaea67",
+        "input/data/golden.txt": "0875a397553192ac886b5ce3508d108db817d8ed627fdf12ae8ef0c41a6445f2",
+        "input/lib/config.js": "6535103c5b157319ab81499bf75326795db3eefe109df9083c1b1786e5be27da",
+        "input/lib/logger.js": "4e7fbc425843bb889e00b62c047abffee32a9c33c0a759dd578b3f794e23480f",
+        "input/lib/math.js": "09640bc730578e9a95724adc6477514b8897139036a5a8ee9c607498f162606c",
+        "input/lib/parser.js": "f927440fd3891e6fc3a8ddf9c2ebd2af2c05d0200bda9ce874a6e0cbd69a171a",
+        "input/lib/utils.js": "641c54ed395e2b922d6871c99c805c4454f38086e43997ace0af09ded5e939b0",
+        "input/run-tests.sh": "f18cfc2a7448fc1adf401d0e828afd0b81bd58a18f1250e9b63a0a61dfeb7ede",
+        "input/tests/test-config.js": "aff63b2dc6e7862f59d5db375c6b97a8ee9d01556c88e7d6b46d09fc747667f4",
+        "input/tests/test-math.js": "8951e7afde45fd9f4e00ad4d4f9dd7c7723e798d055b867151b6526fadc96fda",
+        "input/tests/test-parser.js": "4bb75bc29bcb91d0d82e2b1af7c59d46d9051440f82db105d4fbb72853f79186",
+        "input/tests/test-utils.js": "c2c5e0066cd9d2934e9ed046eab30d0c734a001934ac7afc4795ea81cd2978f5",
+        "prompt.md": "380bf17767d36cd4edc1a013e28529f1eb6b3f294f953f44b4096a1d5c4222fe"
+      }
+    },
+    {
+      "role": "debugger",
+      "id": "t11-boundary-fix",
+      "dir": "debugger/t11-boundary-fix",
+      "sources": [
+        {
+          "path": "evals/orchestration/tasks/t11-boundary-fix/repo",
+          "git_object": "c0f74acfa1f3c85d2a96b8eeaa45b9eaec5abb8a"
+        }
+      ],
+      "files": {
+        "expected.json": "dcc240ab2f49d90b1cbb5f163a2c7d5a0e04b107ef1718a55ec96a764c16f21f",
+        "input/lib/pager.py": "692a4be1665abbdc872148c726af505c4d40fddffffd7ebd3374b2abe6cd748a",
+        "input/main.py": "a94e51fcdd9bf03c46a55043a4ccf43d0c05106e849762ea3ef2251b1bb1966a",
+        "input/run-tests.sh": "2faa8de50675efba8c94afc4a789eb221e3bf24311b79cef783ddc79287ff695",
+        "prompt.md": "801c17eff6c080de1f0dae73718dbe83d48adeecf7a498fdd66a4dba7bf7096c"
+      }
+    },
+    {
+      "role": "debugger",
+      "id": "t15-cache-invalidation",
+      "dir": "debugger/t15-cache-invalidation",
+      "sources": [
+        {
+          "path": "evals/orchestration/tasks/t15-cache-invalidation/repo",
+          "git_object": "a4523387b08146e8938c48c4be7f74e50e9759ce"
+        }
+      ],
+      "files": {
+        "expected.json": "6f0bd906c1ad47a05db5d6f9232cfc8d9051665710cc66cbf41fd38b6daca4fd",
+        "input/keys.py": "45f57cc5f170b8ba9a5bf70b049511eba5b0d1eee1b275f25fe83003bf6d15a8",
+        "input/run-tests.sh": "95ef252e041255e7c7a79b20b714ce38055f452a3309947ac898b5988aeda0df",
+        "input/service.py": "812251808c7de2c4a4167cc0c074165c99afc9217a48737058c1821b1dc3d0e3",
+        "input/store.py": "ae9914fcc38439e620c3f25aa3656067948de82270e4f26d8796cac7db19fcb8",
+        "prompt.md": "16087021bd20c4e2baa99b30234c375e27d9d04e1625255c7d3378a8a0fc4b83"
+      }
+    },
+    {
+      "role": "explorer",
+      "id": "t4-config-layer",
+      "dir": "explorer/t4-config-layer",
+      "sources": [
+        {
+          "path": "evals/orchestration/tasks/t4-config-layer/repo",
+          "git_object": "d7666da8bd7b23119f34e87b5d4e328632b17154"
+        }
+      ],
+      "files": {
+        "expected.json": "f324b0d8c6ed9899dc1f2dcbe952eed21574dababce771c87ce70c8d5d26d266",
+        "input/REVIEW-NOTES.md": "96000c4837286e72e9660fd4ed5cc4fe6bbbb5948674e5634c976b1c50a1749c",
+        "input/bin/config-tool.js": "15a2bbb4a5e01e1c9fd4e8597e1a27d6312a3faaeaecc724ee18f0ae01f57299",
+        "input/config/defaults.json": "9c4b32a7ed0f9bed3af26671cc1335db1b4e5ab79e34096e4b2f625734f2fc5c",
+        "input/config/override.json": "7d7058689a54e82594a1da738f3a424d708ea2c2d96e64d4f546945b92eaea67",
+        "input/data/golden.txt": "0875a397553192ac886b5ce3508d108db817d8ed627fdf12ae8ef0c41a6445f2",
+        "input/lib/config.js": "6535103c5b157319ab81499bf75326795db3eefe109df9083c1b1786e5be27da",
+        "input/lib/logger.js": "4e7fbc425843bb889e00b62c047abffee32a9c33c0a759dd578b3f794e23480f",
+        "input/lib/math.js": "09640bc730578e9a95724adc6477514b8897139036a5a8ee9c607498f162606c",
+        "input/lib/parser.js": "f927440fd3891e6fc3a8ddf9c2ebd2af2c05d0200bda9ce874a6e0cbd69a171a",
+        "input/lib/utils.js": "641c54ed395e2b922d6871c99c805c4454f38086e43997ace0af09ded5e939b0",
+        "input/run-tests.sh": "f18cfc2a7448fc1adf401d0e828afd0b81bd58a18f1250e9b63a0a61dfeb7ede",
+        "input/tests/test-config.js": "aff63b2dc6e7862f59d5db375c6b97a8ee9d01556c88e7d6b46d09fc747667f4",
+        "input/tests/test-math.js": "8951e7afde45fd9f4e00ad4d4f9dd7c7723e798d055b867151b6526fadc96fda",
+        "input/tests/test-parser.js": "4bb75bc29bcb91d0d82e2b1af7c59d46d9051440f82db105d4fbb72853f79186",
+        "input/tests/test-utils.js": "c2c5e0066cd9d2934e9ed046eab30d0c734a001934ac7afc4795ea81cd2978f5",
+        "prompt.md": "12010e73cc37dfb11c064302d94a4d34a97eaf0d7d9e970ca90557c9f6592c27"
+      }
+    },
+    {
+      "role": "explorer",
+      "id": "t11-boundary-fix",
+      "dir": "explorer/t11-boundary-fix",
+      "sources": [
+        {
+          "path": "evals/orchestration/tasks/t11-boundary-fix/repo",
+          "git_object": "c0f74acfa1f3c85d2a96b8eeaa45b9eaec5abb8a"
+        }
+      ],
+      "files": {
+        "expected.json": "e9e448968dc14171a0bae6330bdb60ee204b410ffd964e36ca3cabace0ccbaf4",
+        "input/lib/pager.py": "692a4be1665abbdc872148c726af505c4d40fddffffd7ebd3374b2abe6cd748a",
+        "input/main.py": "a94e51fcdd9bf03c46a55043a4ccf43d0c05106e849762ea3ef2251b1bb1966a",
+        "input/run-tests.sh": "2faa8de50675efba8c94afc4a789eb221e3bf24311b79cef783ddc79287ff695",
+        "prompt.md": "f81062e43eff0f4aa661b85680baa7b6db28226281bc2327510fa8c15876196e"
+      }
+    },
+    {
+      "role": "explorer",
+      "id": "t15-cache-invalidation",
+      "dir": "explorer/t15-cache-invalidation",
+      "sources": [
+        {
+          "path": "evals/orchestration/tasks/t15-cache-invalidation/repo",
+          "git_object": "a4523387b08146e8938c48c4be7f74e50e9759ce"
+        }
+      ],
+      "files": {
+        "expected.json": "0077cd01ecc73f4af4a35fe778c7362d087f8e602cb49a642e3dfa272296992a",
+        "input/keys.py": "45f57cc5f170b8ba9a5bf70b049511eba5b0d1eee1b275f25fe83003bf6d15a8",
+        "input/run-tests.sh": "95ef252e041255e7c7a79b20b714ce38055f452a3309947ac898b5988aeda0df",
+        "input/service.py": "812251808c7de2c4a4167cc0c074165c99afc9217a48737058c1821b1dc3d0e3",
+        "input/store.py": "ae9914fcc38439e620c3f25aa3656067948de82270e4f26d8796cac7db19fcb8",
+        "prompt.md": "451f1fb651abae72015d22e10acee3d8a43021f30f00dabcb0f81255be8e8b62"
+      }
+    }
+  ]
+}

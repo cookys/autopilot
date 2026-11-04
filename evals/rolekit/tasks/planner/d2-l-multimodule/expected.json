@@ -1,0 +1,20 @@
+{
+  "kind": "planner",
+  "must_cover": [
+    "lib/",
+    "cli.js",
+    "docs/"
+  ],
+  "min_subtasks": 2,
+  "require_dependency": false,
+  "acceptance_command_heads": [
+    "bash",
+    "node",
+    "npm",
+    "git",
+    "test",
+    "grep",
+    "python3",
+    "sh"
+  ]
+}

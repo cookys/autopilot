@@ -2729,6 +2729,18 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_MODS_REAL_CLAUDE",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "mods/lib/real-claude-env.sh"
+      ],
+      "doc": null,
+      "relates": []
+    },
+    {
       "name": "AUTOPILOT_NO_CANARY",
       "kind": "env",
       "audience": "internal",

@@ -5,7 +5,8 @@
 //
 //   list    [--root <dir>] [--json]
 //     Every suite id the current entry points would run: `scripts/affected-suites.js --list-all`
-//     (the set hooks/tests/run.sh runs) plus each mods/*/run-tests.sh. scripts/tests/*.test.sh are
+//     (the set hooks/tests/run.sh runs) plus each mods/*/run-tests.sh. Under the sentinel PATH those exit 97 unless
+//     AUTOPILOT_MODS_REAL_CLAUDE=<real claude path> is set (mods/CLAUDE.md, "Running the mod suites"). scripts/tests/*.test.sh are
 //     NOT listed: no entry point runs them today; they are reported as pending_join "P3" by `record`.
 //
 //   run-all [--root <dir>] [--ids <file>] [--pending] [--entry-timeout <secs>] [--jobs <N>]

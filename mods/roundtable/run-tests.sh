@@ -21,5 +21,5 @@ rm -f "$tmp/mods/roundtable/run-tests.sh" "$tmp/mods/live/run-tests.sh" "$tmp/mo
 rm -f "$tmp/mods/live/"*.test.ts "$tmp/mods/live/"*.test.js
 rm -f "$tmp/mods/viewer/"*.test.ts "$tmp/mods/viewer/"*.test.js
 
-cd "$tmp"
-timeout 600 claude plugin test "$tmp" "$@"
+. "$here/../lib/real-claude-env.sh"
+mods_run_plugin_test "$tmp" "$@"

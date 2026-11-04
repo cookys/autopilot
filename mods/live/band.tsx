@@ -130,7 +130,7 @@ export function decideContent(el: { Box: El; Text: El; Button?: El }, snap: Live
   const { Box, Text, Button } = el
   if (snap === null || snap.band === null) return []
   const plan = decideBandPlan(snap, { t, cols: columns, decide: { ...state, inputs: false } }, maxRows)
-  if (plan.rows.length === 0) return [<Text key="none" {...dimProps()} wrap="truncate">{t('decide.none')}</Text>]
+  if (plan.empty) return [<Text key="none" {...dimProps()} wrap="truncate">{t('decide.none')}</Text>]
   const shown = plan.rows
   const bars = plan.bars
   const tail: unknown[] = plan.pointer === null ? [] : [<Text key="more" {...dimProps()} wrap="truncate">{t(plan.pointer)}</Text>]

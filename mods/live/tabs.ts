@@ -385,7 +385,7 @@ export const decideTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, col
 // then the send row(s). The background and the option descriptions stay in the pane: when the first card has any, the pointer row `decide.band_bg` says so instead of showing half a
 // sentence. `maxRows` is the room the band has under its bar and rule (register.ts passes rows - 2): when title + options + pointer + send row do not fit, the rows from the top stay
 // up to the room and the pointer becomes `decide.band_more` (the pane has the rest); the send row always stays. No `maxRows` = no limit.
-export function decideBandPlan(snap: LiveSnapshot, ctx: PaneCtx, maxRows?: number): { rows: PaneLine[]; pointer: 'decide.band_bg' | 'decide.band_more' | null; bars: PaneLine[] } {
+export function decideBandPlan(snap: LiveSnapshot, ctx: PaneCtx, maxRows?: number): { rows: PaneLine[]; pointer: 'decide.band_bg' | 'decide.band_more' | null; bars: PaneLine[]; empty: boolean } {
   const lines = decideTabLines(snap, ctx)
   const rows: PaneLine[] = []
   for (const l of lines) {
@@ -394,12 +394,12 @@ export function decideBandPlan(snap: LiveSnapshot, ctx: PaneCtx, maxRows?: numbe
     else if (rows.length > 0 && l.kind === 'blank') break
   }
   const bars = lines.filter(l => l.bar === true)
-  if (rows.length === 0) return { rows, pointer: null, bars }
+  if (rows.length === 0) return { rows, pointer: null, bars, empty: true } // no card at all: the only case the band says there is nothing to answer
   const first = snap.pending[0]
   const hasMore = first !== undefined && (first.background !== null || first.options.some(o => o.description !== ''))
   const room = maxRows === undefined ? Infinity : Math.max(0, maxRows - bars.length)
-  if (rows.length + (hasMore ? 1 : 0) <= room) return { rows, pointer: hasMore ? 'decide.band_bg' : null, bars }
-  return { rows: rows.slice(0, Math.max(0, room - 1)), pointer: room > 0 ? 'decide.band_more' : null, bars }
+  if (rows.length + (hasMore ? 1 : 0) <= room) return { rows, pointer: hasMore ? 'decide.band_bg' : null, bars, empty: false }
+  return { rows: rows.slice(0, Math.max(0, room - 1)), pointer: room > 0 ? 'decide.band_more' : null, bars, empty: false } // a card exists but the room is small: the pointer row (and the send row) stay, never the `none` line
 }
 
 export function recentLines(recent: RecentGroup[] | null | undefined, ctx: PaneCtx): PaneLine[] {

@@ -4,6 +4,7 @@
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, decideLine, decideReply, recommendedIndex } from './model'
+import { wrapLines } from './model'
 import type { DecideView, LiveDecision, LiveSnapshot, PaneLine } from './model'
 import { decideBandPlan, decideTabLines, nowLines, stripOf, tabNeeds } from './tabs'
 import * as ui from './ui'
@@ -642,4 +643,70 @@ test('cardwrap: on the card, a URL longer than the pane stays whole on its own r
     expect(t.filter(x => x.includes(url)).length, 'cols ' + cols + ': the URL is on a row, whole, twice').toBe(2)
     for (const x of t) if (!x.includes(url)) expect(ui.displayWidth(x), x).toBeLessThanOrEqual(cols - 1)
   }
+})
+
+// ---- cardwrap round 2 (four-seat review, generation 1) ----
+const ESC = String.fromCharCode(27)
+for (const [name, loc] of [['zh-TW', makeT('zh-TW')], ['en', makeT('en')]] as const) {
+  test('cardwrap r2.1: a band too short for the card ' + name + ' never says there is nothing to answer; the pointer and the send row stay', () => {
+    const snap = snapOf([wide()])
+    for (const cols of [40, 100]) {
+      const ctx = ctxOf(loc, cols, view({ inputs: false }))
+      const bars = decideBandPlan(snap, ctx).bars.length
+      for (const maxRows of [bars + 1, bars, 2, 1, 0]) {
+        const plan = decideBandPlan(snap, ctx, maxRows)
+        expect(plan.empty, 'cols ' + cols + ' maxRows ' + maxRows + ': a card exists').toBe(false)
+        expect(plan.bars.length, 'the send row stays').toBe(bars)
+        if (maxRows === bars + 1) expect(plan.pointer, 'room for the pointer alone').toBe('decide.band_more')
+      }
+    }
+    expect(decideBandPlan(snapOf([]), ctxOf(loc, 40, view({ inputs: false }))).empty, 'no card at all is the one empty case').toBe(true)
+  })
+}
+test('cardwrap r2.2: an address after an astral character (emoji, CJK Ext-B) is marked at the right index, no throw, whole on its row', () => {
+  const url = 'https://example.invalid/abcdefghijklmnopqrstuvwxyz'
+  for (const lead of ['😀 ', '😀😀😀 ', '𠀋𠀋 ', '']) {
+    const d = dec('d-astral', 'q?', { background: lead + url + ' 結束', options: [OPT(lead + url, lead + url)] })
+    const t = texts(decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), 40, view())))
+    expect(t.filter(x => x.includes(url)).length, JSON.stringify(lead) + ': background, label and description each keep the URL whole').toBe(3)
+  }
+  const long = { kind: 'detail' as const, text: '  😀 ' + url, segs: [{ text: '  😀 ' }, { text: url }] } as PaneLine
+  expect(wrapLines([long], 20).map(l => l.text).join('|').includes(url)).toBe(true)
+  const spans = ui.urlSpans('😀 ' + url)
+  expect(spans).toEqual([{ start: 2, end: 2 + url.length }])
+})
+test('cardwrap r2.3: wrapLines never splits or counts an ANSI escape sequence, and keeps the segment metadata', () => {
+  const a = { kind: 'detail' as const, text: 'x'.repeat(15) + ESC + '[1;31m' + 'y'.repeat(20), segs: [{ text: 'x'.repeat(15) }, { text: ESC + '[1;31m' + 'y'.repeat(20), color: 'error' as const }] } as PaneLine
+  const out = wrapLines([a], 20)
+  expect(out.map(l => l.text).join('')).toBe(a.text)
+  for (const l of out) {
+    expect((l.text.match(/\u001b/g) ?? []).length, l.text).toBe((l.text.match(/\u001b\[[0-9;]*m/g) ?? []).length)
+    expect(ui.displayWidth(l.text), l.text).toBeLessThanOrEqual(20)
+  }
+  expect(out.some(l => (l.segs ?? []).some(s => s.color === 'error')), 'the colour seg survives').toBe(true)
+  const title = dec('d-esc', ESC + '[1m' + 'a'.repeat(34) + ESC + '[0m 之後的字', {})
+  const t = texts(decideTabLines(snapOf([title]), ctxOf(makeT('zh-TW'), 40, view())))
+  expect(t.join('')).toContain(ESC + '[1m')
+  for (const r of t) expect((r.match(/\u001b/g) ?? []).length, r).toBe((r.match(/\u001b\[[0-9;]*m/g) ?? []).length)
+})
+test('cardwrap r2.4: a URL with hyphens, digits, ? # & = and a port is matched whole (explicit \\u escapes in the class)', () => {
+  for (const u of ['http://a-b.com/very/long/path', 'https://x-y-z.example.invalid:8080/a-b/c_d?x=1&y=2#frag-ment', 'http://a-b.com/' + '-'.repeat(5)]) {
+    expect(ui.urlSpans('see ' + u + ' ok'), u).toEqual([{ start: 4, end: 4 + u.length }])
+    expect(ui.wrapPlain('see ' + u + ' ok', 12, 12).includes(u), u).toBe(true)
+  }
+  expect(ui.urlSpans('網址https://a-b.com/x。後面')).toEqual([{ start: 2, end: 2 + 'https://a-b.com/x'.length }]) // CJK mark and text end it
+  expect(ui.URL_RE.source.includes('\\u3000-\\u303f')).toBe(true) // written as escapes, not as invisible literal characters
+})
+test('cardwrap r2.5: a URL that is the first word of a label, a background or a description stays beside its prefix, and a re-wrapped option row hangs under the label', () => {
+  const url = 'https://example.invalid/abcdefghijklmnopqrstuvwxyz0123456789'
+  const d = dec('d-first', 'q?', { background: url + ' 後面還有字', options: [OPT(url + ' 之後還有一些字要寫', url + ' 說明'), OPT('★ 乙', '')], recommendation: null })
+  const ls = decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), 40, view()))
+  const t = texts(ls)
+  expect(t.some(x => x.startsWith('  背景      ' + url)), 'background: key and URL on one row').toBe(true)
+  expect(t.some(x => x.startsWith('  選項      [ ] ' + url)), 'label: prefix and URL on one row').toBe(true)
+  expect(t.some(x => x.startsWith('            ' + url)), 'description: URL at column 12').toBe(true)
+  const at = t.findIndex(x => x.startsWith('  選項      [ ] ' + url))
+  expect(t[at + 1].startsWith(' '.repeat(16) + '之後'), 'the continuation of the label hangs at 16, not at 2 or 12').toBe(true)
+  expect(ls.filter(l => l.kind === 'choice' && (l.text.startsWith('  選項') || l.text.startsWith(' '.repeat(16)))).every(l => l.hang === 16)).toBe(true)
+  expect(violations(ls, 40, makeT('zh-TW')).filter(v => v.startsWith('I3'))).toEqual([])
 })

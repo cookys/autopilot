@@ -24,7 +24,24 @@ export function cellWidth(c: number): number {
 }
 // Terminal cell width of a string: East Asian Wide / Fullwidth = 2, combining and zero-width = 0, everything else (the band glyphs included) = 1.
 // An ANSI escape sequence (CSI, OSC, two-byte) is not drawn: it is 0 cells.
-const ANSI_ALL = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[@-Z\\-_])/g
+// An address and an escape sequence are the two units a wrap never splits. Both are matched here, once, and the spans are in code points (the unit every wrap array uses), never UTF-16 offsets.
+// URL: http(s)://, then anything but a blank, a bracket or quote, CJK punctuation (U+3000-303F), CJK ideographs (U+4E00-9FFF, U+20000-3FFFD) and the full-width forms (U+FF00-FFEF); a trailing sentence mark is not part of it.
+export const URL_RE = /https?:\/\/[^\s<>"'\u3000-\u303f\u4e00-\u9fff\uff00-\uffef\u{20000}-\u{3fffd}]+/gu
+export const ANSI_RE = /\u001b(?:\[[0-?]*[ -\/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[@-Z\\-_])/gu
+const cpLen = (s: string): number => { let n = 0; for (const _ of s) n += 1; return n }
+export function urlSpans(text: string): { start: number; end: number }[] {
+  const out: { start: number; end: number }[] = []
+  for (const m of text.matchAll(URL_RE)) {
+    const url = m[0].replace(/[.,;:!?)\]}]+$/, '')
+    if (url.length > 8) { const start = cpLen(text.slice(0, m.index as number)); out.push({ start, end: start + cpLen(url) }) }
+  }
+  return out
+}
+export function ansiSpans(text: string): { start: number; end: number }[] {
+  if (!text.includes('\u001b')) return []
+  return [...text.matchAll(ANSI_RE)].map(m => { const start = cpLen(text.slice(0, m.index as number)); return { start, end: start + cpLen(m[0]) } })
+}
+const ANSI_ALL = new RegExp(ANSI_RE.source, 'gu')
 export function displayWidth(text: string): number {
   let w = 0
   for (const ch of text.includes('\u001b') ? text.replace(ANSI_ALL, '') : text) w += cellWidth(ch.codePointAt(0) as number)
@@ -702,7 +719,7 @@ export function choiceRows(u: Ctx, key: string, choices: readonly Choice[], o: {
     ;(pieces.length === 0 ? [''] : pieces).forEach((piece, i) => {
       const lead = rows.length === 0 ? cardLead(key) : [cardHang()]
       const body: Seg[] = i === 0 ? [sg(head, { role: 'prose', ...pick, ...press }), ...star] : [sg(' '.repeat(hang), { role: 'prose', ...(c.press === undefined ? {} : { press: c.press }) })]
-      rows.push(lineOf('choice', [...lead, ...body, sg(piece, { role: 'prose', ...pick, ...press })], { fact: o.fact }))
+      rows.push(lineOf('choice', [...lead, ...body, sg(piece, { role: 'prose', ...pick, ...press })], { hang: KEY_W + hang, fact: o.fact })) // hang: a re-wrap continues under the label text
     })
     // its description, dim, at column 12 (the value column; every option shows it, not only the picked one)
     const desc = o.descriptions?.[ci] ?? ''
@@ -739,8 +756,8 @@ const CLOSING_PUNCT_UI = '）」』、。，；：！？)]}】》〉,.;:!?'
 // Atoms: a URL (http/https) and an ANSI escape sequence are one unit each, never split. An escape is zero cells wide; a URL has no break point inside, so one longer than the
 // line takes a line of its own and may overflow it (only then). Every other character is its own atom.
 type WrapAtom = { s: string; w: number; url: boolean }
-const URL_AT = /^https?:\/\/[^\s<>"'（）「」『』，；：！？、。　-〿一-鿿＀-￯]+/
-const ANSI_AT = /^\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[@-Z\\-_])/
+const ANSI_AT = new RegExp('^' + ANSI_RE.source, 'u')
+const URL_AT = new RegExp('^' + URL_RE.source, 'u')
 function wrapAtoms(body: string): WrapAtom[] {
   const out: WrapAtom[] = []
   let i = 0

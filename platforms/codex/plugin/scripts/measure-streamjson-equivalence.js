@@ -248,13 +248,23 @@ function consumeAll(bytes, blocks, tmp, tag, model) {
   let cost = 'unparsable';
   try { const c = JSON.parse(bytes).total_cost_usd; cost = Number.isFinite(c) && c >= 0 ? 'finite_nonneg' : typeof c; } catch (_) { /* keep */ }
   res.benchmark_cost_type = cost;
-  // J8: `grep -o '"session_id":"[^"]*"' | head -n1` needs the compact form; J9: json.loads(line) then .usage. Run on the very bytes C2 would ship.
-  const g = /"session_id":"[^"]*"/.exec(bytes);
-  res.j8_session_grep = g ? 'matched' : 'none';
+  // J8: `grep -o '"session_id":"[^"]*"' | cut -d'"' -f4 | head -n1` reads the FIRST match anywhere in the line, so the captured VALUE must be
+  // the envelope's own top-level session_id (a session_id inside a nested object that comes first would be captured instead).
+  // The two arms carry different session ids by design, so equality is checked against each arm's own top level (and against the id the
+  // harness passed, by the session_rewritten flag); the *_self keys must be 'ok' on both arms.
+  const g = /"session_id":"([^"]*)"/.exec(bytes);
+  let top = null; try { top = JSON.parse(bytes).session_id; } catch (_) { /* unparsable */ }
+  res.j8_session_value_self = g && typeof top === 'string' && g[1] === top ? 'ok' : (g ? 'captured_value_is_not_the_top_level_session_id' : 'no_match');
+  // J9: json.loads(line) per line, then .usage. Compared: every field name with its type, per arm, and the extracted usage must equal the
+  // arm's own top-level usage (the numeric values are declared B-level, they vary with caching, so they are not compared across arms).
   try {
-    const u = JSON.parse(bytes.split('\n').filter(Boolean).join('')).usage;
-    res.j9_usage_keys = u && typeof u === 'object' ? Object.keys(u).join(',') : 'none';
-  } catch (_) { res.j9_usage_keys = 'unparsable'; }
+    const lines = bytes.split('\n').filter(Boolean);
+    const usages = lines.map((l) => JSON.parse(l).usage);
+    const u = usages[0];
+    res.j9_usage_lines = String(lines.length);
+    res.j9_usage_fields = u && typeof u === 'object' ? Object.keys(u).map((k) => `${k}:${Array.isArray(u[k]) ? 'array' : typeof u[k]}`).join(',') : 'none';
+    res.j9_usage_self = JSON.stringify(u) === JSON.stringify(JSON.parse(bytes.split('\n').filter(Boolean)[0]).usage) ? 'ok' : 'differs';
+  } catch (_) { res.j9_usage_lines = 'unparsable'; res.j9_usage_fields = 'unparsable'; res.j9_usage_self = 'unparsable'; }
   return res;
 }
 
@@ -282,7 +292,7 @@ function analyzeProfile(dir, profile, opts, blocks, tmp) {
   const ccPairs = pairIds.filter((x) => x.startsWith('c')).sort((a, b) => +a.slice(1) - +b.slice(1));
   const out = {
     pairs: jsPairs.length, control_pairs: ccPairs.length,
-    layer1: { hetero_log_bytes: 'equal', hetero_error_lines: 'equal', wrapper_parse: 'equal', qualification: 'equal', onboard_grep: 'equal', benchmark_cost_type: 'equal', j8_session_grep: 'equal', j9_usage_keys: 'equal' },
+    layer1: { hetero_log_bytes: 'equal', hetero_error_lines: 'equal', wrapper_parse: 'equal', qualification: 'equal', onboard_grep: 'equal', benchmark_cost_type: 'equal', j8_session_value_self: 'equal', j9_usage_lines: 'equal', j9_usage_fields: 'equal', j9_usage_self: 'equal' },
     layer2: { result: 'identical', first_diff_path: null, key_order: 'same', additive_keys_removed: [] },
     exit_codes: 'equal', stderr: 'equal', stderr_nonempty: false,
     noise_floor: { fields_differing_in_control_pairs: [] },
@@ -301,6 +311,8 @@ function analyzeProfile(dir, profile, opts, blocks, tmp) {
     const cj = consumeAll(J.stdout, blocks, tmp, `${profile}-${pairId}-J`, modelOf(profile));
     const cs = consumeAll(sBytes, blocks, tmp, `${profile}-${pairId}-S`, modelOf(profile));
     for (const k of Object.keys(cj)) if (cj[k] !== cs[k]) out.layer1[k] = 'differs';
+    // a value that must match the arm's own envelope is wrong on either arm, whatever the other arm shows
+    for (const k of Object.keys(cj)) if (k.endsWith('_self') && (cj[k] !== 'ok' || cs[k] !== 'ok')) out.layer1[k] = 'differs';
     // layer 2
     let r; let diffPath = null;
     // The declared additive key(s): present on the stream side, absent on the json side -> removed exactly from the stream side.
@@ -451,6 +463,9 @@ function claudeVersion(env) {
   return (r.stdout || '').trim().slice(0, 200);
 }
 
+// Plan totals: 5 J/S + 2 J/J pairs = 14 calls; P4 (J8/J9) is 5 J/S + 1 J/J = 12 (plan item 7); ERR is one J/S pair = 2.
+function defaultControl(profile) { return profile === 'ERR' ? 0 : (profile === 'P4' ? 1 : 2); }
+function planTotalFor(profile) { return profile === 'ERR' ? 2 : (profile === 'P4' ? 12 : 14); }
 const STOP_STATUS = new Set([401, 402, 403, 429, 503, 529]);
 // The api_error_status of the run's result envelope when it is a stop condition, else null (a missing model is 404/400 and is expected).
 function stopStatus(stdoutFile) {
@@ -466,10 +481,10 @@ function cmdRun(opts) {
   if (!alias || !profile || !out || !PROFILES[profile]) return usageErr('run needs --alias --profile --out');
   // Defaults equal `plan`'s: the error-path profile is ONE J/S pair and no control pair.
   const pairs = opts.pairs === undefined ? (profile === 'ERR' ? 1 : 5) : Number(opts.pairs);
-  const control = opts['control-pairs'] === undefined ? (profile === 'ERR' ? 0 : 2) : Number(opts['control-pairs']);
+  const control = opts['control-pairs'] === undefined ? defaultControl(profile) : Number(opts['control-pairs']);
   if (!Number.isInteger(pairs) || !Number.isInteger(control) || pairs < 0 || control < 0) return usageErr('pairs/control-pairs must be non-negative integers');
   // Hard cap: one run never makes more calls than the plan's total for that profile (5 J/S + 2 J/J pairs = 14 calls; ERR = 2).
-  const planTotal = profile === 'ERR' ? 2 : 14;
+  const planTotal = planTotalFor(profile);
   if (2 * (pairs + control) > planTotal) { process.stderr.write(`refused: ${2 * (pairs + control)} calls exceed the plan total of ${planTotal} for ${profile}; no call was made\n`); return EXIT.USAGE; }
   const deny = String(opts['deny-alias-pattern'] === undefined ? 'codepower' : opts['deny-alias-pattern']).toLowerCase();
   if (deny && alias.toLowerCase().includes(deny)) { process.stderr.write('refused: alias matches the deny pattern; no call was made\n'); return EXIT.USAGE; }
@@ -533,12 +548,11 @@ function cmdRun(opts) {
 function cmdPlan(opts) {
   const names = String(opts.profiles || 'P1a,P1b,P2,P3').split(',').filter(Boolean);
   const pairs = opts.pairs === undefined ? 5 : Number(opts.pairs);
-  const control = opts['control-pairs'] === undefined ? 2 : Number(opts['control-pairs']);
   const all = [];
   try {
     for (const p of names) {
       if (!PROFILES[p]) return usageErr('unknown profile');
-      all.push(...buildMatrix(p, p === 'ERR' ? 1 : pairs, p === 'ERR' ? 0 : control));
+      all.push(...buildMatrix(p, p === 'ERR' ? 1 : pairs, p === 'ERR' ? 0 : (opts['control-pairs'] === undefined ? defaultControl(p) : Number(opts['control-pairs']))));
     }
   } catch (e) { process.stderr.write(e.message + '\n'); return EXIT.FAIL; }
   if (opts.json) process.stdout.write(JSON.stringify({ calls: all.length, runs: all }, null, 1) + '\n');
@@ -652,6 +666,11 @@ function runSelftest(opts) {
     results.ADD_POSITIVE = rAdd.verdict === 'PASS' && rAdd.profiles.P1a.layer2.result === 'identical_after_mask' && rAdd.profiles.P1a.layer2.additive_keys_removed.join() === 'model_usage_since_last_result' ? 'green' : 'MISSED';
     const rAdd2 = A(ds('add-two', null, (d) => mutateS(d, (e, t) => (e === 'stdout' ? withExtra(t, addKey + ',"x_undeclared":1') : t))));
     results.ADD_SECOND_KEY = red(rAdd2) && rAdd2.profiles.P1a.layer2.result === 'differs' ? 'red' : 'MISSED';
+    // J8 reads the FIRST "session_id":"..." in the line. A wrong one inside the additive object, placed before the top-level one, is
+    // removed by layer 2 but is what the consumer would capture: layer 1 must call it a FAIL.
+    const wrongFirst = (t) => t.replace('"stop_reason":"end_turn",', '"stop_reason":"end_turn","model_usage_since_last_result":{"m":{"session_id":"wrong"}},');
+    const rJ8 = A(ds('j8-nested', null, (d) => mutateS(d, (e, t) => (e === 'stdout' ? t.split('\n').map((l) => (l.includes('"type":"result"') ? wrongFirst(l) : l)).join('\n') : t))));
+    results.J8_NESTED_WRONG_ID = red(rJ8) && rJ8.profiles.P1a.layer1.j8_session_value_self === 'differs' && rJ8.profiles.P1a.layer2.result === 'identical_after_mask' ? 'red' : 'MISSED';
     // Masking is by declared path: a duration_ms inside permission_denials[] is not volatile.
     const rPath = A(ds('path', { denials: 'vary' }));
     results.MASK_PATH = red(rPath) && rPath.profiles.P1a.layer2.result === 'differs' ? 'red' : 'MISSED';

@@ -19,7 +19,7 @@ const snap = (alias, pct) => ({ schema: 'codeforge.quota/1', alias, root: null, 
 test('selftest: R1-R13 all red, the R10 positive control green, exit 0', () => {
   const r = cli(['selftest']);
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
-  for (const id of ['ADD_SECOND_KEY', 'MASK_PATH', 'PARTIAL_NEVER_PASS', 'BLOCK_FAILS', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R11', 'R12', 'R13', 'R10_undeclared_field']) assert.match(r.stdout, new RegExp(`^${id}: red$`, 'm'));
+  for (const id of ['J8_NESTED_WRONG_ID', 'ADD_SECOND_KEY', 'MASK_PATH', 'PARTIAL_NEVER_PASS', 'BLOCK_FAILS', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R11', 'R12', 'R13', 'R10_undeclared_field']) assert.match(r.stdout, new RegExp(`^${id}: red$`, 'm'));
   assert.match(r.stdout, /^R10: green$/m);
   assert.match(r.stdout, /^ADD_POSITIVE: green$/m);
 });
@@ -200,8 +200,8 @@ test('analyze: the declared additive key on the stream side only is PASS; a seco
   let a = analyze(d);
   assert.strictEqual(a.r.status, 0, a.r.stdout + a.r.stderr);
   assert.deepStrictEqual(a.report.profiles.P1a.layer2.additive_keys_removed, ['model_usage_since_last_result']);
-  assert.strictEqual(a.report.profiles.P1a.layer1.j8_session_grep, 'equal');
-  assert.strictEqual(a.report.profiles.P1a.layer1.j9_usage_keys, 'equal');
+  assert.strictEqual(a.report.profiles.P1a.layer1.j8_session_value_self, 'equal');
+  assert.strictEqual(a.report.profiles.P1a.layer1.j9_usage_fields, 'equal');
   rm(d);
   d = dataset({ denials: 'vary' }); a = analyze(d); assert.strictEqual(a.report.verdict, 'FAIL'); rm(d);
   d = dataset({ denials: 'same' }); a = analyze(d); assert.strictEqual(a.report.verdict, 'PASS'); rm(d);
@@ -304,14 +304,47 @@ test('runs_failed counts runs (the unit of runs_total), not profiles', () => {
 test('N9 mutation: dropping the purpose from the wrapper call turns the good run red (nothing reaches the shim as a model call)', () => {
   const fx = makeFixture({ aliases: [{ alias: 'a' }], snapshots: { a: snap('a', 0.1) }, responses: { a: DUAL_OK } });
   const out = tmp();
-  const mutant = path.join(__dirname, `zz-n9-mutant-${process.pid}.js`);
+  const md = tmp(); // the mutant lives in a temp dir, never under scripts/; its relative requires are pointed at scripts/ by absolute path
   try {
     const src = fs.readFileSync(SCRIPT, 'utf8');
-    const mutated = src.replace("'--purpose', PURPOSE, ", '');
+    const mutated = src.replace("'--purpose', PURPOSE, ", '').split("require('./").join(`require('${__dirname}/`).split('__dirname').join(JSON.stringify(__dirname));
     assert.notStrictEqual(mutated, src, 'the mutation did not apply');
+    const mutant = path.join(md, 'mutant.js');
     fs.writeFileSync(mutant, mutated);
     const r = spawnSync(process.execPath, [mutant].concat(runArgs('a', out)), { encoding: 'utf8', env: runEnv(fx) });
-    assert.notStrictEqual(r.status, 0, 'the mutated run must not pass');
+    assert.notStrictEqual(r.status, 0, 'the mutated run must not pass: ' + r.stderr);
     assert.ok(fx.shim.calls().every((c) => c.argv.includes('--version')), 'no model call reached the shim');
-  } finally { fs.rmSync(mutant, { force: true }); fx.cleanup(); rm(out); }
+  } finally { fx.cleanup(); rm(out); rm(md); }
+});
+
+test('no mutant or scratch file is left under scripts/', () => {
+  const left = fs.readdirSync(__dirname).filter((n) => /mutant|^zz-/.test(n));
+  assert.deepStrictEqual(left, []);
+});
+
+test('J8 reads the first "session_id" in the line: a wrong id inside the additive object ahead of the top-level one is a FAIL even though layer 2 strips the object', () => {
+  const wrong = (t) => t.replace('"stop_reason":"end_turn",', '"stop_reason":"end_turn","model_usage_since_last_result":{"m":{"session_id":"wrong"}},');
+  let d = dataset(null, (x) => M.mutateS(x, (e, t) => (e === 'stdout' ? t.split('\n').map((l) => (l.includes('"type":"result"') ? wrong(l) : l)).join('\n') : t)));
+  let a = analyze(d);
+  assert.strictEqual(a.r.status, 1, a.r.stdout + a.r.stderr);
+  assert.strictEqual(a.report.profiles.P1a.layer1.j8_session_value_self, 'differs');
+  assert.strictEqual(a.report.profiles.P1a.layer2.result, 'identical_after_mask');
+  rm(d);
+  // positive control: the same additive object AFTER the top-level id (the shape the CLI really emits) passes
+  d = dataset();
+  assert.strictEqual(analyze(d).report.verdict, 'PASS');
+  rm(d);
+});
+
+test('P4 (J8/J9) defaults to 5 J/S + 1 control pair = 12 calls, and a run above that is refused', () => {
+  assert.strictEqual(cli(['plan', '--profiles', 'P4']).stdout.split('\n')[0], 'calls: 12');
+  assert.strictEqual(cli(['plan', '--profiles', 'P2']).stdout.split('\n')[0], 'calls: 14');
+  const out = tmp();
+  const fx = makeFixture({ aliases: [{ alias: 'a' }], snapshots: { a: snap('a', 0.1) }, responses: { a: DUAL_OK } });
+  try {
+    assert.strictEqual(cli(['run', '--alias', 'a', '--profile', 'P4', '--control-pairs', '2', '--out', out], runEnv(fx)).status, 2);
+    assert.strictEqual(fx.shim.calls().length, 0);
+    assert.strictEqual(cli(['run', '--alias', 'a', '--profile', 'P4', '--out', out], runEnv(fx)).status, 0);
+    assert.strictEqual(fs.readdirSync(path.join(out, 'P4')).filter((x) => x.endsWith('.run.json')).length, 12);
+  } finally { fx.cleanup(); rm(out); }
 });

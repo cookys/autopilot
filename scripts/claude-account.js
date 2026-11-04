@@ -1104,6 +1104,15 @@ async function cmdExec(ctx, argv) {
   });
 }
 
+// Org of an alias from its token-meta: label only (the e-mail is never recorded). Absent metadata prints nothing,
+// so an alias onboarded before org tracking looks as it always did. A label that is not printable-safe is dropped.
+function orgSuffix(ctx, dir, alias) {
+  const m = registry.readTokenMeta(dir, alias, ctx.regOpts);
+  if (!m || typeof m.org_label !== 'string' || registry.orgLabelProblem(m.org_label)) return '';
+  const check = m.org_check === 'verified' ? '' : ' org_check=unverified';
+  return ` org="${m.org_label}"${check}`;
+}
+
 function cmdStatus(ctx, argv) {
   const { opts } = parseArgs(argv, { limit: 'value' });
   const limit = opts.limit === undefined ? 20 : Number(opts.limit);
@@ -1142,7 +1151,7 @@ function cmdStatus(ctx, argv) {
     ages.push(`${row.alias}=${mirrorAge === null ? 'none' : `${mirrorAge}s`}`);
     const until = cooldown.readCooldown(row.alias, { dir: ctx.cooldownDir, nowMs });
     const cd = cooldown.isCooling(until, nowMs) ? audit.formatTaipei(until) : '-';
-    ctx.out(`alias=${row.alias} enabled=${row.enabled ? 'yes' : 'no'} priority=${row.priority} class=${cls} used=${used} source=${source} cooldown_until=${cd}${extra}`);
+    ctx.out(`alias=${row.alias} enabled=${row.enabled ? 'yes' : 'no'} priority=${row.priority} class=${cls} used=${used} source=${source} cooldown_until=${cd}${extra}${orgSuffix(ctx, checked.dir, row.alias)}`);
   }
   // Coverage (plan 15a): the newest observation per alias in the quota mirror, or none, so zero observations show.
   ctx.out(`observations newest_age: ${ages.join(' ')}`);

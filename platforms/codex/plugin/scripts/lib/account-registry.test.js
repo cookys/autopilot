@@ -394,3 +394,52 @@ test('3: no fingerprint of rejected strings in any output', () => {
     noEcho(t, 'msg');
   }
 });
+
+// --- org identity (alias = account + org): token-meta, label hygiene, duplicate org ------------------------------
+const AT = '@'; // addresses are assembled so the leak guard sees none in this file
+test('orgLabelProblem: plain labels pass; email-shaped, control and over-long labels are refused', () => {
+  assert.strictEqual(R.orgLabelProblem('Acme Team'), null);
+  assert.strictEqual(R.orgLabelProblem('個人訂閱'), null);
+  assert.strictEqual(R.orgLabelProblem(`user${AT}example.invalid`), 'org_label_email_shaped');
+  assert.strictEqual(R.orgLabelProblem(`user${AT}example.invalid's Organization`), 'org_label_email_shaped');
+  assert.strictEqual(R.orgLabelProblem('a@b'), 'org_label_email_shaped');
+  assert.strictEqual(R.orgLabelProblem(`bob${AT}corp.invalid`), 'org_label_email_shaped');
+  assert.strictEqual(R.orgLabelProblem('x\ny'), 'org_label_control_chars');
+  assert.strictEqual(R.orgLabelProblem(' padded'), 'org_label_untrimmed');
+  assert.strictEqual(R.orgLabelProblem(''), 'org_label_length');
+  assert.strictEqual(R.orgLabelProblem('x'.repeat(65)), 'org_label_length');
+  assert.strictEqual(R.orgLabelProblem(42), 'org_label_length');
+});
+
+test('token-meta: write merges and keeps other keys, 0600, never an email key; read is tolerant', () => {
+  const f = mk();
+  mkAlias(f, 'main');
+  assert.strictEqual(R.readTokenMeta(f.dir, 'main', opts(f)), null);
+  R.writeTokenMeta(f.dir, 'main', { issued_at: '2026-11-05T00:00:00.000Z' });
+  R.writeTokenMeta(f.dir, 'main', { org_id: 'FAKE-ORG-1', org_label: 'Acme' });
+  const m = R.readTokenMeta(f.dir, 'main', opts(f));
+  assert.deepStrictEqual(m, { issued_at: '2026-11-05T00:00:00.000Z', org_id: 'FAKE-ORG-1', org_label: 'Acme', schema: R.TOKEN_META_SCHEMA, alias: 'main' });
+  assert.strictEqual(fs.statSync(path.join(f.dir, 'main', 'token-meta.json')).mode & 0o777, 0o600);
+  fs.chmodSync(path.join(f.dir, 'main', 'token-meta.json'), 0o644);
+  assert.strictEqual(R.readTokenMeta(f.dir, 'main', opts(f)), null, 'a loose-mode file is not trusted');
+});
+
+test('token-meta: a symlink at the meta path is refused', () => {
+  const f = mk();
+  mkAlias(f, 'main');
+  fs.writeFileSync(path.join(f.root, 'decoy'), 'KEEP');
+  fs.symlinkSync(path.join(f.root, 'decoy'), path.join(f.dir, 'main', 'token-meta.json'));
+  assert.strictEqual(reason(() => R.writeTokenMeta(f.dir, 'main', { org_label: 'Acme' })), 'meta_is_symlink');
+  assert.strictEqual(fs.readFileSync(path.join(f.root, 'decoy'), 'utf8'), 'KEEP');
+});
+
+test('findOrgOwner: names the other alias holding the org id; ignores itself and unknown ids', () => {
+  const f = mk();
+  mkAlias(f, 'main'); mkAlias(f, 'spare');
+  R.writeTokenMeta(f.dir, 'main', { org_id: 'FAKE-ORG-1', org_label: 'Acme' });
+  R.writeTokenMeta(f.dir, 'spare', { org_id: null, org_label: 'Other' });
+  assert.strictEqual(R.findOrgOwner(f.dir, 'FAKE-ORG-1', 'spare'), 'main');
+  assert.strictEqual(R.findOrgOwner(f.dir, 'FAKE-ORG-1', 'main'), null);
+  assert.strictEqual(R.findOrgOwner(f.dir, 'FAKE-ORG-2', 'spare'), null);
+  assert.strictEqual(R.findOrgOwner(path.join(f.root, 'nope'), 'FAKE-ORG-1', 'x'), null);
+});

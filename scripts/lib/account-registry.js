@@ -157,6 +157,68 @@ function loadRegistry(opts) {
   return { configured: true, dir, file, accounts };
 }
 
+// --- org identity (alias = account + org) -----------------------------------------------------------------
+// Per-alias org metadata lives in <accounts-dir>/<alias>/token-meta.json (schema autopilot.token-meta/1, 0600),
+// never in registry.json (strict row keys). The e-mail of a login is never recorded anywhere.
+const TOKEN_META_SCHEMA = 'autopilot.token-meta/1';
+const ORG_ID_RE = /^[A-Za-z0-9._-]{1,64}$/;
+
+// Printable label for an org: 1-64 chars, no control characters, nothing the personal-data patterns recognise
+// (an e-mail, a credential shape, a private path), and never an '@'-address. Returns a reason code or null.
+function orgLabelProblem(label) {
+  if (typeof label !== 'string' || label.length < 1 || label.length > 64) return 'org_label_length';
+  if (label !== label.trim()) return 'org_label_untrimmed';
+  if (/[\p{C}\u2028\u2029]/u.test(label)) return 'org_label_control_chars';
+  if (label.includes('@')) return 'org_label_email_shaped';
+  if (require('./personal-data-patterns').findAll(label).length > 0) return 'org_label_personal_data';
+  return null;
+}
+function orgIdProblem(id) { return typeof id === 'string' && ORG_ID_RE.test(id) ? null : 'org_id_invalid'; }
+
+function tokenMetaPath(dir, alias) { return path.join(dir, alias, 'token-meta.json'); }
+
+// Tolerant read: any problem (absent, link, loose mode, not JSON) is "no metadata" (null), never a throw.
+function readTokenMeta(dir, alias, opts) {
+  if (aliasProblem(alias)) return null;
+  const o = opts || {};
+  try {
+    const doc = JSON.parse(readChecked(tokenMetaPath(dir, alias), o, uidOf(o), 'meta', 4096, true, alias));
+    return doc && typeof doc === 'object' && !Array.isArray(doc) ? doc : null;
+  } catch (e) { return null; }
+}
+
+// Merge `patch` into the alias's token-meta (other keys, e.g. issued_at, are kept). 0600, tmp + rename.
+function writeTokenMeta(dir, alias, patch) {
+  const p = aliasProblem(alias);
+  if (p) throw new RegistryError(p, null, 'token-meta alias rejected');
+  const file = tokenMetaPath(dir, alias);
+  try {
+    if (fs.lstatSync(file).isSymbolicLink()) throw new RegistryError('meta_is_symlink', alias);
+  } catch (e) { if (e instanceof RegistryError) throw e; if (!(e && e.code === 'ENOENT')) throw new RegistryError('meta_probe_error', alias); }
+  const prev = readTokenMeta(dir, alias) || {};
+  const doc = Object.assign({}, prev, patch, { schema: TOKEN_META_SCHEMA, alias });
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(doc) + '\n', { mode: 0o600 });
+  fs.chmodSync(tmp, 0o600);
+  fs.renameSync(tmp, file);
+  return doc;
+}
+
+// Which OTHER alias already holds this org_id? Scans every alias directory under the accounts dir.
+function findOrgOwner(dir, orgId, exceptAlias) {
+  let names;
+  try { names = fs.readdirSync(dir); } catch (e) { return null; }
+  for (const name of names.sort()) {
+    if (name === exceptAlias || aliasProblem(name)) continue;
+    let st;
+    try { st = fs.lstatSync(path.join(dir, name)); } catch (e) { continue; }
+    if (!st.isDirectory() || st.isSymbolicLink()) continue;
+    const m = readTokenMeta(dir, name);
+    if (m && typeof m.org_id === 'string' && m.org_id === orgId) return name;
+  }
+  return null;
+}
+
 function realpathOrNull(p) {
   try { return fs.realpathSync(p); } catch (e) { return null; }
 }
@@ -278,6 +340,7 @@ function main(argv) {
 
 module.exports = {
   ALIAS_RE, RESERVED_RE, SCHEMA, RegistryError,
+  TOKEN_META_SCHEMA, orgLabelProblem, orgIdProblem, readTokenMeta, writeTokenMeta, findOrgOwner,
   accountsDir, aliasProblem, loadRegistry, checkAlias, checkRegistry, requireAlias,
 };
 

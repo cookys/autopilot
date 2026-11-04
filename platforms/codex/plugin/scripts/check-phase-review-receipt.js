@@ -105,7 +105,12 @@ Flags:
   --post-head-target <ref>          Required with --post-head-ledger (and refused without it): the line the branch merges into
                                     (normally origin/develop) as it was before this work. Resolved to a sha once. It must descend
                                     from --phase-base and must NOT contain the last reviewed head (so not the tip, the branch, or
-                                    a line that already took the work). Own commits are head..tip minus what that sha reaches.
+                                    a line that already took the work) and must lie on the first-parent history of the merge
+                                    target ref (a side branch cut from the phase base is refused). Own commits are head..tip
+                                    minus what that sha reaches.
+  --post-head-target-ref <ref>      The merge target's own ref, default refs/remotes/origin/develop (fetch first). Only its
+                                    first-parent history is used, to check that --post-head-target is on the mainline. A
+                                    ref that does not resolve fails closed. Not read from repo config.
   --phase-base <sha>                Expected phase base commit sha (mandatory for review mode)
   --repo-root <r>                   Path to repository root (defaults to cwd)
   --plan-artifact <gN.json>         Plan artifact JSON file
@@ -622,7 +627,7 @@ function pathsMovedAfterHead(repoRoot, range, consumerAllowlist) {
 // --remerge-diff (not `git merge-tree --write-tree`) because git runs it in a temporary object directory: the
 // check leaves no objects in the repository it inspects.
 const POST_HEAD_LEDGER_SCHEMA = 'post-head-ledger/1';
-function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip, target, phaseBase }) {
+function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip, target, targetRef, phaseBase }) {
   const problems = [];
   const git = (args) => spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', maxBuffer: 1 << 28 });
   const nul = (r) => r.stdout.split('\0').filter(Boolean); // -z output: no C-quoting of unusual path names
@@ -654,6 +659,15 @@ function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip, t
   if (git(['merge-base', '--is-ancestor', '--end-of-options', phaseBase, targetSha]).status !== 0) {
     return problems.concat(`--post-head-target '${target}' (${targetSha}) does not descend from --phase-base ${phaseBase}: it is not the line the branch grew from`);
   }
+  // The target must be on the merge target's mainline. A side branch cut from the phase base passes both rules above,
+  // and `^side` would then subtract an unreviewed commit that was merged into the branch.
+  const tr = git(['rev-parse', '--verify', '--end-of-options', `${targetRef}^{commit}`]);
+  if (tr.status !== 0) return problems.concat(`--post-head-target-ref '${targetRef}' does not resolve to a commit (fetch it, or name the merge target with --post-head-target-ref)`);
+  const mainline = git(['rev-list', '--first-parent', '-z', tr.stdout.trim()]);
+  if (mainline.status !== 0) return problems.concat(`git rev-list --first-parent ${targetRef} failed: ${mainline.stderr || 'unknown error'}`);
+  if (!nul(mainline).includes(targetSha)) {
+    return problems.concat(`--post-head-target '${target}' (${targetSha}) is not on the first-parent history of ${targetRef}: a side branch is not the line the branch merges into`);
+  }
   const range = `${head}..${tip} ^${targetSha}`;
   const own = git(['rev-list', '--no-merges', '-z', `${head}..${tip}`, '--not', targetSha]);
   if (own.status !== 0) return problems.concat(`git rev-list --no-merges ${range} failed: ${own.stderr || 'unknown error'}`);
@@ -663,10 +677,12 @@ function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip, t
   // merge commits with content of their own: must be listed too
   const mergeOwn = new Map();
   for (const m of nul(mg)) {
-    const parents = git(['rev-list', '--parents', '-n', '1', m]).stdout.trim().split(/\s+/).slice(1);
+    const pr = git(['rev-list', '--parents', '-n', '1', m]);
+    if (pr.status !== 0) { problems.push(`git rev-list --parents ${m} failed: ${pr.stderr || 'unknown error'}`); continue; }
+    const parents = pr.stdout.trim().split(/\s+/).slice(1);
     if (parents.length !== 2) { problems.push(`merge commit ${m} has ${parents.length} parents: the re-merge check supports exactly two (failing closed; split the merge or list the work in another way)`); continue; }
     const rm = git(['diff-tree', '--remerge-diff', '-z', '--no-renames', '--name-only', '--no-commit-id', '-r', m]);
-    if (rm.status !== 0) { problems.push(`git diff-tree --remerge-diff ${m} failed (failing closed, not falling back to --cc): ${rm.stderr || 'unknown error'}`); continue; }
+    if (rm.status !== 0) { problems.push(`git diff-tree --remerge-diff ${m} failed (failing closed, not falling back to --cc; --remerge-diff needs git >= 2.36): ${rm.stderr || 'unknown error'}`); continue; }
     const ps = nul(rm);
     if (ps.length) mergeOwn.set(m, ps);
   }
@@ -1315,7 +1331,7 @@ function validateModeA(flags, opts = {}) {
         process.exit(1);
       }
       const problems = checkPostHeadLedger({
-        ledgerFile: flags['post-head-ledger'], repoRoot, phase, branch, head: lastEntry.head, tip: currentBranchHead, target: flags['post-head-target'], phaseBase: flags['phase-base'],
+        ledgerFile: flags['post-head-ledger'], repoRoot, phase, branch, head: lastEntry.head, tip: currentBranchHead, target: flags['post-head-target'], targetRef: typeof flags['post-head-target-ref'] === 'string' ? flags['post-head-target-ref'] : 'refs/remotes/origin/develop', phaseBase: flags['phase-base'],
       });
       if (problems.length) {
         console.error(`Post-head ledger does not cover '${branch}' (${currentBranchHead}) past last reviewed head ${lastEntry.head}:\n${problems.join('\n')}`);
@@ -1631,12 +1647,12 @@ function main() {
     process.exit(0);
   }
 
-  if ((flags['post-head-ledger'] !== undefined || flags['post-head-target'] !== undefined) && (flags.chain !== undefined || flags.packets !== undefined || flags['plan-artifact'] !== undefined || flags.dispositions !== undefined)) {
-    console.error('--post-head-ledger and --post-head-target are supported in Mode A only (with --ledger/--phase/--branch); they cannot be combined with --chain, --packets, --plan-artifact or --dispositions yet');
+  if ((flags['post-head-ledger'] !== undefined || flags['post-head-target'] !== undefined || flags['post-head-target-ref'] !== undefined) && (flags.chain !== undefined || flags.packets !== undefined || flags['plan-artifact'] !== undefined || flags.dispositions !== undefined)) {
+    console.error('--post-head-ledger, --post-head-target and --post-head-target-ref are supported in Mode A only (with --ledger/--phase/--branch); they cannot be combined with --chain, --packets, --plan-artifact or --dispositions yet');
     process.exit(1);
   }
-  if (flags['post-head-target'] !== undefined && flags['post-head-ledger'] === undefined) {
-    console.error('--post-head-target only means something with --post-head-ledger; refusing instead of ignoring it');
+  if ((flags['post-head-target'] !== undefined || flags['post-head-target-ref'] !== undefined) && flags['post-head-ledger'] === undefined) {
+    console.error('--post-head-target and --post-head-target-ref only mean something with --post-head-ledger; refusing instead of ignoring it');
     process.exit(1);
   }
   if (flags.chain !== undefined) {

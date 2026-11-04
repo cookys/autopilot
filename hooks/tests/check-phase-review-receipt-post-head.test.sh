@@ -44,8 +44,9 @@ V='"verification":"depth-0 red/green, evidence /tmp/x"'
 GOOD="[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V}]"
 run() { # run <ledger-file> [branch] [extra args...]
   local f="$1" br="${2:-work}" tg="${TGT-$B0}"
+  # TREF: the merge target's own ref; by default the target itself (so it is trivially on its own mainline), T7 overrides it
   if [ "$tg" = NONE ]; then node "${SCRIPT_UNDER:-$SCRIPT}" --ledger "$L" --phase P --branch "$br" --phase-base "$B0" --repo-root "$R" --post-head-ledger "$f" 2>&1
-  else node "${SCRIPT_UNDER:-$SCRIPT}" --ledger "$L" --phase P --branch "$br" --phase-base "$B0" --repo-root "$R" --post-head-ledger "$f" --post-head-target "$tg" 2>&1; fi
+  else node "${SCRIPT_UNDER:-$SCRIPT}" --ledger "$L" --phase P --branch "$br" --phase-base "$B0" --repo-root "$R" --post-head-ledger "$f" --post-head-target "$tg" --post-head-target-ref "${TREF:-$tg}" 2>&1; fi
 }
 
 # baseline: no ledger, the head has moved -> fails exactly as before
@@ -148,6 +149,17 @@ OUT=$(TGT=$HEADR run "$TEST_TMP/good.json" work); assert_exit_code "$?" "1" "T5:
 ROOT=$(g commit-tree "$(g mktree </dev/null)" -m unrelated-root)
 OUT=$(TGT=$ROOT run "$TEST_TMP/good.json" work); assert_exit_code "$?" "1" "T6: target not descending from --phase-base fails"; assert_contains "$OUT" "does not descend from --phase-base" "T6: message"
 
+# T7: a side branch cut from the phase base passes the ancestry rules; only the mainline rule stops it hiding an unreviewed commit
+g checkout -q -b side "$B0"; echo s7 > "$R/s7.txt"; g add s7.txt; g commit -qm "unreviewed S"; S7=$(g rev-parse HEAD)
+g checkout -q -b mc10 "$TIP"; g merge -q --no-ff -m "merge side (clean)" side >/dev/null 2>&1; M10=$(g rev-parse HEAD)
+assert_eq "$(g diff-tree --remerge-diff --no-commit-id --name-only -r "$M10" | wc -l | tr -d ' ')" "0" "fixture T7: the merge of side is clean (empty re-merge diff)"
+OUT=$(TGT=side TREF=develop run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "1" "T7: target = a side branch off the phase base fails"; assert_contains "$OUT" "is not on the first-parent history of develop" "T7: message"
+OUT=$(TGT=$B0 TREF=develop run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "1" "T7b: a mainline target makes S an own commit, unlisted, fails"; assert_contains "$OUT" "commit $S7 is in" "T7b: names S"
+led t7ok P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$S7\",\"paths\":[\"s7.txt\"],$V}]"
+OUT=$(TGT=$B0 TREF=develop run "$TEST_TMP/t7ok.json" mc10); assert_exit_code "$?" "0" "T7ok: a mainline target with S listed passes"
+OUT=$(TGT=$B0 TREF=no-such-ref run "$TEST_TMP/t7ok.json" mc10); assert_exit_code "$?" "1" "T7c: an unresolvable target ref fails closed"
+g checkout -q work
+
 # U: merges that take one side whole or drop a side: git diff-tree --cc lists nothing for them, the re-merge does
 g checkout -q -b mc5 "$TIP"; g merge -q --no-ff -m "merge develop" develop >/dev/null 2>&1; g checkout -q --theirs a.txt; g add a.txt; g commit -q -m "merge develop (took develop's a.txt whole)"; M5=$(g rev-parse HEAD)
 assert_eq "$(g diff-tree --cc --no-commit-id --name-only -r "$M5" | wc -l | tr -d ' ')" "0" "fixture U1: --cc sees nothing for a whole-side resolution"
@@ -186,7 +198,8 @@ OUT=$(run "$TEST_TMP/good.json" same); assert_exit_code "$?" "1" "E2: entries fo
 g checkout -q work
 
 # --post-head-target alone is refused, not ignored
-OUT=$(node "$SCRIPT" --ledger "$L" --phase P --branch work --phase-base "$B0" --repo-root "$R" --post-head-target "$B0" 2>&1); assert_exit_code "$?" "1" "X0: --post-head-target without --post-head-ledger fails"; assert_contains "$OUT" "only means something with --post-head-ledger" "X0: message"
+OUT=$(node "$SCRIPT" --ledger "$L" --phase P --branch work --phase-base "$B0" --repo-root "$R" --post-head-target "$B0" 2>&1); assert_exit_code "$?" "1" "X0: --post-head-target without --post-head-ledger fails"; assert_contains "$OUT" "only mean something with --post-head-ledger" "X0: message"
+OUT=$(node "$SCRIPT" --ledger "$L" --phase P --branch work --phase-base "$B0" --repo-root "$R" --post-head-target-ref develop 2>&1); assert_exit_code "$?" "1" "X0b: --post-head-target-ref without --post-head-ledger fails"
 echo '{}' > "$TEST_TMP/pa.json"
 OUT=$(node "$SCRIPT" --plan-artifact "$TEST_TMP/pa.json" --dispositions "$TEST_TMP/pa.json" --post-head-ledger "$TEST_TMP/good.json" --post-head-target "$B0" 2>&1); assert_exit_code "$?" "1" "X3: Mode B with --post-head-ledger is refused"; assert_contains "$OUT" "Mode A only" "X3: message"
 # Refusals outside Mode A
@@ -223,6 +236,8 @@ OUT=$(TGT=work run "$TEST_TMP/t0.json" work); assert_exit_code "$?" "0" "NC5: T2
 OUT=$(TGT=$P1 run "$TEST_TMP/t3.json" work); assert_exit_code "$?" "0" "NC5: T3 (target after the head, partial ledger) passes"
 OUT=$(TGT=$DM run "$TEST_TMP/t0.json" work); assert_exit_code "$?" "0" "NC5: T4 (develop already merged the branch) passes"
 OUT=$(TGT=$ROOT run "$TEST_TMP/good.json" work); assert_exit_code "$?" "1" "NC5: T6 is still caught by the phase-base rule"
+mutate "mainline rule off" "if (!nul(mainline).includes(targetSha)) {" "if (false) {"
+OUT=$(TGT=side TREF=develop run "$TEST_TMP/good.json" mc10); assert_exit_code "$?" "0" "NC12: without the first-parent rule T7 (target = side, S hidden) passes"
 mutate "re-merge replaced by --cc" "['diff-tree', '--remerge-diff', '-z', '--no-renames', '--name-only', '--no-commit-id', '-r', m]" "['diff-tree', '--cc', '-z', '--name-only', '--no-commit-id', '-r', m]"
 OUT=$(TGT=develop run "$TEST_TMP/good.json" mc5); assert_exit_code "$?" "0" "NC6: with --cc only, U1 (whole-side resolution) passes"
 OUT=$(TGT=develop2 run "$TEST_TMP/good.json" mc6); assert_exit_code "$?" "0" "NC6: with --cc only, U2 (-s ours) passes"

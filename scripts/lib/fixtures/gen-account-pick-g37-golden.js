@@ -59,6 +59,41 @@ const MIRROR_FIELDS = / mirror_class=\S+ mirror_age=\S+( observed_at=\S+)?/;
 const stripMirrorFields = (out) => String(out).split('\n').map((l) => l.replace(MIRROR_FIELDS, '')).join('\n');
 const normalizeOut = (out, spec) => (spec && spec.stripMirrorFields === true ? stripMirrorFields(stripCoverage(out)) : stripCoverage(out));
 
+// BL-0376: the coverage line is not in the golden (G37 had none), so it is removed from the status compare, but its VALUE is pinned
+// here instead of ignored. The clock is injected (`now: () => NOW`), so every age is a function of the fixture alone: no mirror
+// row means `none`; the run-first scenario's adapter row is stamped floor((NOW - 1000) / 1000) s, so it is 1 s old at NOW.
+// One entry per `status` run that exits 0, in run order; a scenario with none is absent from the map.
+const COVERAGE_PINS = {
+  'no-snapshots': ['observations newest_age: a=none b=none'],
+  mixed: ['observations newest_age: a=none b=none c=none'],
+  'all-tight-refuse': ['observations newest_age: a=none b=none'],
+  'all-tight-allowed': ['observations newest_age: a=none b=none'],
+  'cooldown-a': ['observations newest_age: a=none b=none'],
+  'cooldown-all': ['observations newest_age: a=none b=none'],
+  'unsupported-schema': ['observations newest_age: a=none b=none'],
+  'stale-snapshot': ['observations newest_age: a=none b=none'],
+  'root-mismatch': ['observations newest_age: a=none'],
+  'run-first-whole-second-tight': ['observations newest_age: a=1s b=1s'],
+  'live-dir-relative': ['observations newest_age: a=none'],
+};
+const isStatusRun = (r) => r.args[0] === 'status' && r.code === 0;
+// The coverage lines of one scenario result: every line of every successful status run, one array entry per such run.
+const coverageOf = (result) => result.runs.filter(isStatusRun).map((r) => String(r.out).split('\n').filter((l) => COVERAGE_LINE.test(l)).join('\n'));
+// The whole result with only the documented volatile parts masked (status runs: coverage line, plus mirror fields where declared).
+// Nothing is enumerated: any other key, at any level, stays and is compared.
+const normalizeResult = (result, spec) => Object.assign({}, result, {
+  runs: result.runs.map((r) => (isStatusRun(r) ? Object.assign({}, r, { out: normalizeOut(r.out, spec) }) : r)),
+});
+// Returns null when every scenario's coverage line equals its pin, else a reason string.
+function coverageProblem(cliResults) {
+  for (const c of cliResults) {
+    const want = COVERAGE_PINS[c.spec.name] || [];
+    const got = coverageOf(c.result);
+    if (JSON.stringify(got) !== JSON.stringify(want)) return `${c.spec.name}: coverage ${JSON.stringify(got)} != pinned ${JSON.stringify(want)}`;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------- pick() cases (the 10 account-pick.test.js groups + extras)
 
 const S = (pct7, pct5, over) => Object.assign({
@@ -234,12 +269,13 @@ async function main() {
   const text = `${JSON.stringify(g, null, 2)}\n`;
   if (check) {
     const cur = JSON.parse(fs.readFileSync(GOLDEN_FILE, 'utf8'));
-    // Whole-object compare: nothing is enumerated. The only normalisation is normalizeOut on each run's stdout (the coverage line,
-    // and the mirror fields of a scenario that declared stripMirrorFields); every other key, known or future, is compared as is.
-    const norm = (golden) => JSON.stringify(Object.assign({}, golden, { cli: golden.cli.map((c) => Object.assign({}, c, {
-      result: Object.assign({}, c.result, { runs: c.result.runs.map((r) => Object.assign({}, r, { out: normalizeOut(r.out, c.spec) })) }),
-    })) }));
-    const same = norm(cur) === norm(g) && cur.generated_from_commit === PIN_COMMIT;
+    // Whole-object compare: nothing is enumerated. The only masking is normalizeResult (a status run's coverage line, and the mirror
+    // fields of a scenario that declared stripMirrorFields); every other key, known or future, at any level, is compared as is.
+    // The coverage line's value is pinned separately (COVERAGE_PINS) against the fixture's injected clock.
+    const norm = (golden) => JSON.stringify(Object.assign({}, golden, { cli: golden.cli.map((c) => Object.assign({}, c, { result: normalizeResult(c.result, c.spec) })) }));
+    const covProblem = coverageProblem(g.cli);
+    if (covProblem !== null) process.stderr.write(`${covProblem}\n`);
+    const same = norm(cur) === norm(g) && cur.generated_from_commit === PIN_COMMIT && covProblem === null;
     process.stdout.write(same ? 'golden matches\n' : 'golden DIFFERS\n');
     return same ? 0 : 1;
   }
@@ -248,6 +284,6 @@ async function main() {
   return 0;
 }
 
-module.exports = { NOW, GOLDEN_FILE, G37_FILES, PIN_COMMIT, pinnedHashes, pinProblem, stripCoverage, pickCases, cliScenarios, runPick, normalizeOut, stripMirrorFields, runCliScenario, writeMirrorVariant, loadDeps, buildGolden };
+module.exports = { COVERAGE_PINS, coverageOf, coverageProblem, normalizeResult, NOW, GOLDEN_FILE, G37_FILES, PIN_COMMIT, pinnedHashes, pinProblem, stripCoverage, pickCases, cliScenarios, runPick, normalizeOut, stripMirrorFields, runCliScenario, writeMirrorVariant, loadDeps, buildGolden };
 
 if (require.main === module) main().then((c) => { process.exitCode = c; });

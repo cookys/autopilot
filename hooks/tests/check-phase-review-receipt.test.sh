@@ -1127,5 +1127,179 @@ write_receipt_json "pab3" "{ \"kind\": \"review\", \"phase\": \"pab3\", \"branch
 C15F_OUT=$(node "$SCRIPT" --ledger "$LEDGER" --phase pab3 --branch work --phase-base "$PHASE_BASE" --repo-root "$SCRATCH_REPO" 2>&1); C15F_RC=$?
 assert_exit_code "$C15F_RC" "0" "case 15f: finalized / aborted (parse_failed) / finalized chain exits 0"
 
+# ─── BL-0384 (b) resolutions addendum + BL-0389 range_mode (stage 2): the checker re-derives, never trusts ───
+unset STUB_RESPONSE_s0 STUB_RESPONSE_s1
+RR2_REPO="$TEST_TMP/rr2repo"; mkdir -p "$RR2_REPO"
+(
+  cd "$RR2_REPO"
+  git init -q; git config user.email "test@example.com"; git config user.name "Test User"
+  echo "zero" > base.txt; git add base.txt; git commit -q -m "r0"
+  echo "one" > base.txt; git add base.txt; git commit -q -m "r1"
+)
+RR2_B=$(git -C "$RR2_REPO" rev-parse HEAD); RR2_ROOT0=$(git -C "$RR2_REPO" rev-parse HEAD~1)
+(cd "$RR2_REPO" && echo "bug" > a.txt && echo "g1 only" > g1only.txt && git add a.txt g1only.txt && git commit -q -m "r2 g1 head")
+RR2_H1=$(git -C "$RR2_REPO" rev-parse HEAD)
+(cd "$RR2_REPO" && echo "fixed" > a.txt && git commit -q -am "r3 the fix")
+RR2_FIX=$(git -C "$RR2_REPO" rev-parse HEAD)
+(cd "$RR2_REPO" && echo "later" > later.txt && git add later.txt && git commit -q -m "r4 g2 head")
+RR2_H2=$(git -C "$RR2_REPO" rev-parse HEAD)
+(cd "$RR2_REPO" && git checkout -q -b side "$RR2_B" && echo "side" > side.txt && git add side.txt && git commit -q -m "side" && git checkout -q -)
+RR2_SIDE=$(git -C "$RR2_REPO" rev-parse side)
+RR2_G1RESP='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Major: Missing bounds check in a.txt\nDetails here."}'
+RR2_CLEAN='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+rr2_collect() { # <ledger> <phase> <gen> [extra flags]
+  local l="$1" ph="$2" g="$3"; shift 3
+  if [ "$g" = 1 ]; then git -C "$RR2_REPO" branch -q -f w2 "$RR2_H1"; export STUB_SEAT_RESPONSE="$RR2_G1RESP"; else git -C "$RR2_REPO" branch -q -f w2 "$RR2_H2"; export STUB_SEAT_RESPONSE="$RR2_CLEAN"; fi
+  node "$HETERO_SCRIPT" collect --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --phase-base "$RR2_B" --seats "m1/low@codex" "$@" 2>&1
+}
+rr2_finalize() { # <ledger> <phase> <gen>
+  local l="$1" ph="$2" g="$3" disp="$TEST_TMP/rr2_disp_${2}_${3}.json"
+  if [ "$g" = 1 ]; then
+    local fid; fid=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).findings[0].id)' "$l/review-$ph/g1/findings.json")
+    echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": 1, \"findings\": [ { \"id\": \"$fid\", \"disposition\": \"verified\", \"rationale\": \"reproduced\" } ] }" > "$disp"
+  else
+    echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": $g, \"findings\": [] }" > "$disp"
+  fi
+  node "$HETERO_SCRIPT" finalize --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --dispositions "$disp" >/dev/null 2>&1
+}
+rr2_build() { # <phase> [g2 collect flags] -> RR2_L, RR2_FID
+  local ph="$1"; shift
+  RR2_L="$TEST_TMP/rr2_ledger_$ph"; mkdir -p "$RR2_L"
+  rr2_collect "$RR2_L" "$ph" 1 >/dev/null; rr2_finalize "$RR2_L" "$ph" 1
+  RR2_FID=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).findings[0].id)' "$RR2_L/review-$ph/g1/findings.json")
+  rr2_collect "$RR2_L" "$ph" 2 "$@" >/dev/null; rr2_finalize "$RR2_L" "$ph" 2
+}
+rr2_check() { # <checker> <ledger> <phase>
+  git -C "$RR2_REPO" branch -q -f w2 "$RR2_H2"
+  node "$1" --ledger "$2" --phase "$3" --branch w2 --phase-base "$RR2_B" --repo-root "$RR2_REPO" 2>&1
+}
+# craft <ledger> <phase> <addendum json> [sha override]: hand-write the addendum and the receipt pin, independent of refinalize
+rr2_craft() {
+  printf '%s\n' "$3" > "$1/review-$2/resolutions-addendum.json"
+  node -e '
+    const fs = require("fs"), c = require("crypto"); const [rp, ap, ph, shaOv] = process.argv.slice(1);
+    const r = JSON.parse(fs.readFileSync(rp, "utf8"));
+    r.resolutions_addendum = { path: "review-" + ph + "/resolutions-addendum.json", sha256: shaOv || c.createHash("sha256").update(fs.readFileSync(ap)).digest("hex") };
+    r.open_findings = [];
+    fs.writeFileSync(rp, JSON.stringify(r, null, 2) + "\n");
+  ' "$1/receipt-$2.json" "$1/review-$2/resolutions-addendum.json" "$2" "${4:-}"
+}
+rr2_item() { echo "[ { \"id\": \"$1\", \"rationale\": \"fixed and re-reviewed\", \"fix_sha\": \"$2\", \"reviewed_head\": \"$3\" } ]"; }
+cm_mutant() { # <name> <file> <old> <new>
+  local m="$TEST_TMP/mut-$1"
+  if [ ! -d "$m" ]; then mkdir -p "$m"; cp -r "$REPO_ROOT/scripts" "$m/scripts"; ln -s "$REPO_ROOT/src" "$m/src"; fi
+  node -e '
+    const fs = require("fs"); const f = process.argv[1], o = process.argv[2], n = process.argv[3];
+    const s = fs.readFileSync(f, "utf8"); if (s.split(o).length !== 2) { console.error("MUTATION TARGET NOT UNIQUE: " + o); process.exit(3); }
+    fs.writeFileSync(f, s.replace(o, () => n));' "$m/scripts/$2" "$3" "$4" || return 1
+  echo "$m"
+}
+
+rr2_build rrc; RRC_L="$RR2_L"; RRC_FID="$RR2_FID"
+cp "$RRC_L/receipt-rrc.json" "$TEST_TMP/rrc.receipt.orig"
+rr2_reset() { cp "$TEST_TMP/rrc.receipt.orig" "$RRC_L/receipt-rrc.json"; rm -f "$RRC_L/review-rrc/resolutions-addendum.json"; }
+# a receipt that drops the open Major with no addendum is still refused
+node -e 'const fs=require("fs"),p=process.argv[1];const r=JSON.parse(fs.readFileSync(p,"utf8"));r.open_findings=[];fs.writeFileSync(p,JSON.stringify(r,null,2)+"\n")' "$RRC_L/receipt-rrc.json"
+RRC0_OUT=$(rr2_check "$SCRIPT" "$RRC_L" rrc); RRC0_RC=$?
+assert_exit_code "$RRC0_RC" "1" "addendum: an emptied open_findings with no addendum is refused"
+assert_contains "$RRC0_OUT" "open_findings length mismatch" "addendum: ... as a length mismatch"
+# positive: a hand-crafted valid addendum is accepted by the checker alone
+rr2_reset; rr2_craft "$RRC_L" rrc "$(rr2_item "$RRC_FID" "$RR2_FIX" "$RR2_H2")"
+RRC1_OUT=$(rr2_check "$SCRIPT" "$RRC_L" rrc); RRC1_RC=$?
+assert_exit_code "$RRC1_RC" "0" "addendum: a valid hand-crafted addendum is accepted by the checker"
+# R4 forged, checker only (no refinalize involved)
+rr2_forged_c() { # <label> <id> <fix> <head> <expected text>
+  rr2_reset; rr2_craft "$RRC_L" rrc "$(rr2_item "$2" "$3" "$4")"
+  local out rc; out=$(rr2_check "$SCRIPT" "$RRC_L" rrc); rc=$?
+  assert_exit_code "$rc" "1" "R4 checker ($1): exits 1"
+  assert_contains "$out" "$5" "R4 checker ($1): names the rule"
+}
+rr2_forged_c head "$RRC_FID" "$RR2_FIX" "$RR2_FIX" "is not the head of a finalized generation"
+rr2_forged_c anc "$RRC_FID" "$RR2_SIDE" "$RR2_H2" "is not an ancestor of reviewed_head"
+rr2_forged_c early "$RRC_FID" "$RR2_FIX" "$RR2_H1" "is not an ancestor of reviewed_head"
+rr2_forged_c pre "$RRC_FID" "$RR2_ROOT0" "$RR2_H2" "is not a descendant of the base"
+rr2_forged_c eqbase "$RRC_FID" "$RR2_B" "$RR2_H2" "is not a descendant of the base"
+rr2_forged_c open "no_such_finding_id" "$RR2_FIX" "$RR2_H2" "names no open verified finding"
+# sha pin
+rr2_reset; rr2_craft "$RRC_L" rrc "$(rr2_item "$RRC_FID" "$RR2_FIX" "$RR2_H2")" "0000000000000000000000000000000000000000000000000000000000000000"
+RRC2_OUT=$(rr2_check "$SCRIPT" "$RRC_L" rrc); RRC2_RC=$?
+assert_exit_code "$RRC2_RC" "1" "R4 checker (sha): a pin that does not match the addendum file is refused"
+assert_contains "$RRC2_OUT" "does not match the sha256 pinned" "R4 checker (sha): names the pin"
+rr2_reset; rr2_craft "$RRC_L" rrc "$(rr2_item "$RRC_FID" "$RR2_FIX" "$RR2_H2")"
+printf '%s\n' "$(rr2_item "$RRC_FID" "$RR2_FIX" "$RR2_H2") " >> "$RRC_L/review-rrc/resolutions-addendum.json"
+RRC3_OUT=$(rr2_check "$SCRIPT" "$RRC_L" rrc); RRC3_RC=$?
+assert_exit_code "$RRC3_RC" "1" "R4 checker (sha): an addendum edited after pinning is refused"
+# a path other than the phase's own addendum is refused
+rr2_reset; rr2_craft "$RRC_L" rrc "$(rr2_item "$RRC_FID" "$RR2_FIX" "$RR2_H2")"
+node -e 'const fs=require("fs"),p=process.argv[1];const r=JSON.parse(fs.readFileSync(p,"utf8"));r.resolutions_addendum.path="../elsewhere.json";fs.writeFileSync(p,JSON.stringify(r,null,2)+"\n")' "$RRC_L/receipt-rrc.json"
+RRC4_OUT=$(rr2_check "$SCRIPT" "$RRC_L" rrc); RRC4_RC=$?
+assert_exit_code "$RRC4_RC" "1" "R4 checker: an addendum path outside review-<phase>/ is refused"
+
+# negative controls: ONE checker check removed -> the matching forged case slips through
+rr2_slip_c() { # <name> <old> <new> <label> <id> <fix> <head> [derive sed]
+  local m; m=$(cm_mutant "rr2c_$1" check-phase-review-receipt.js "$2" "$3") || fail "mutation setup failed (rr2c $1)"
+  [ -n "${8:-}" ] && sed_mutate "$m/scripts/lib/review-chain-derive.js" "$8"
+  rr2_reset; rr2_craft "$RRC_L" rrc "$(rr2_item "$5" "$6" "$7")"
+  local out rc; out=$(rr2_check "$m/scripts/check-phase-review-receipt.js" "$RRC_L" rrc); rc=$?
+  assert_exit_code "$rc" "0" "R4 checker (mutation): without the $4 check the forged addendum is accepted"
+}
+rr2_slip_c anc "if (gitQ(['merge-base', '--is-ancestor', '--end-of-options', fixFull, it.reviewed_head]).status !== 0) {" "if (false) {" "fix-ancestor" "$RRC_FID" "$RR2_SIDE" "$RR2_H2"
+rr2_slip_c base "if (fixFull === raisedEntry.base || gitQ(" "if (false && gitQ(" "descendant-of-base" "$RRC_FID" "$RR2_ROOT0" "$RR2_H2"
+rr2_slip_c eqbase "if (fixFull === raisedEntry.base || gitQ(" "if (false && gitQ(" "descendant-of-base (fix == base)" "$RRC_FID" "$RR2_B" "$RR2_H2"
+# reviewed_head chain-head: even with the explicit check AND derive's unmatched push removed, a head that no
+# finalized generation owns closes nothing, so the emptied open_findings no longer matches (defence in depth)
+M_HD=$(cm_mutant rr2c_head check-phase-review-receipt.js "if (!chain.some((e) => e && e.status === 'finalized' && e.head === it.reviewed_head)) {" "if (false) {") || fail "mutation setup failed (rr2c head)"
+sed_mutate "$M_HD/scripts/lib/review-chain-derive.js" "s/unmatchedResolutions.push({ id: a.id, generation: 0 });//"
+rr2_reset; rr2_craft "$RRC_L" rrc "$(rr2_item "$RRC_FID" "$RR2_FIX" "$RR2_FIX")"
+RRHD_OUT=$(rr2_check "$M_HD/scripts/check-phase-review-receipt.js" "$RRC_L" rrc); RRHD_RC=$?
+assert_exit_code "$RRHD_RC" "1" "R4 checker (defence in depth): with both head checks removed a non-head reviewed_head still cannot close the finding"
+assert_contains "$RRHD_OUT" "open_findings length mismatch" "R4 checker (defence in depth): ... it fails on the open_findings comparison"
+rr2_slip_c sha "if (crypto.createHash('sha256').update(addBytes).digest('hex') !== ra.sha256) {" "if (false) {" "sha pin" "$RRC_FID" "$RR2_FIX" "$RR2_H2"
+# the sha mutant must be shown against a TAMPERED file (the loop above used a valid one): redo it properly
+M_SHA=$(cm_mutant rr2c_sha2 check-phase-review-receipt.js "if (crypto.createHash('sha256').update(addBytes).digest('hex') !== ra.sha256) {" "if (false) {") || fail "mutation setup failed (rr2c sha2)"
+rr2_reset; rr2_craft "$RRC_L" rrc "$(rr2_item "$RRC_FID" "$RR2_FIX" "$RR2_H2")" "0000000000000000000000000000000000000000000000000000000000000000"
+RRC5_OUT=$(rr2_check "$M_SHA/scripts/check-phase-review-receipt.js" "$RRC_L" rrc); RRC5_RC=$?
+assert_exit_code "$RRC5_RC" "0" "R4 checker (mutation): without the sha pin check a wrong pin is accepted"
+rr2_reset
+
+# R9: range_mode in the chain
+rr2_build rrf --full-range; RRF_L="$RR2_L"
+RRF_OUT=$(rr2_check "$SCRIPT" "$RRF_L" rrf); RRF_RC=$?
+assert_exit_code "$RRF_RC" "0" "R8 checker: a genuine --full-range ledger is accepted"
+# edit chain.json and the receipt's chain copy together (the receipt must equal the disk chain)
+rr2_chain_edit() { # <ledger> <phase> <node statement on chain array 'c'>
+  node -e '
+    const fs = require("fs"); const [dir, ph, stmt] = process.argv.slice(1);
+    const cp = dir + "/review-" + ph + "/chain.json", rp = dir + "/receipt-" + ph + ".json";
+    const c = JSON.parse(fs.readFileSync(cp, "utf8")); eval(stmt);
+    fs.writeFileSync(cp, JSON.stringify(c, null, 2) + "\n");
+    const r = JSON.parse(fs.readFileSync(rp, "utf8")); r.chain = c; fs.writeFileSync(rp, JSON.stringify(r, null, 2) + "\n");
+  ' "$1" "$2" "$3"
+}
+cp -r "$RRF_L" "$TEST_TMP/rrf_pristine"
+rr2_chain_edit "$RRF_L" rrf 'delete c[1].range_mode'
+RR9A_OUT=$(rr2_check "$SCRIPT" "$RRF_L" rrf); RR9A_RC=$?
+assert_exit_code "$RR9A_RC" "1" "R9: a base that skips the previous head without range_mode is still refused"
+assert_contains "$RR9A_OUT" "Chain broken at generation 2" "R9: ... as Chain broken"
+# delta ledger with a forged range_mode full: base is the previous head, not the phase base
+rr2_build rrd; RRD_L="$RR2_L"
+rr2_chain_edit "$RRD_L" rrd 'c[1].range_mode = "full"'
+RR9B_OUT=$(rr2_check "$SCRIPT" "$RRD_L" rrd); RR9B_RC=$?
+assert_exit_code "$RR9B_RC" "1" "R9: range_mode full with a base other than the phase base is refused"
+assert_contains "$RR9B_OUT" "is not the phase base" "R9: ... naming the phase base rule"
+rr2_chain_edit "$RRD_L" rrd 'c[1].range_mode = "weird"'
+RR9C_OUT=$(rr2_check "$SCRIPT" "$RRD_L" rrd); RR9C_RC=$?
+assert_exit_code "$RR9C_RC" "1" "R9: an unknown range_mode is refused"
+# negative controls
+M_RM=$(cm_mutant rr2c_rm check-phase-review-receipt.js "(entry.range_mode === 'full' && i > 0) ? expectedBaseSha : expectedEntryBase" "expectedEntryBase") || fail "mutation setup failed (rr2c range_mode)"
+rm -rf "$RRF_L"; cp -r "$TEST_TMP/rrf_pristine" "$RRF_L"
+RR9M1_OUT=$(rr2_check "$M_RM/scripts/check-phase-review-receipt.js" "$RRF_L" rrf); RR9M1_RC=$?
+assert_exit_code "$RR9M1_RC" "1" "R9 (mutation): without the range_mode branch a genuine full-range ledger is refused"
+M_G1=$(cm_mutant rr2c_g1 check-phase-review-receipt.js "(entry.range_mode === 'full' && i > 0) ? expectedBaseSha : expectedEntryBase" "(entry.range_mode === 'full' && i > 0) ? entry.base : expectedEntryBase") || fail "mutation setup failed (rr2c g1 base)"
+rr2_chain_edit "$RRD_L" rrd 'c[1].range_mode = "full"'
+RR9M2_OUT=$(rr2_check "$M_G1/scripts/check-phase-review-receipt.js" "$RRD_L" rrd); RR9M2_RC=$?
+assert_exit_code "$RR9M2_RC" "0" "R9 (mutation): without the base == phase base requirement a forged range_mode full is accepted"
+
+
 finalize_test
 

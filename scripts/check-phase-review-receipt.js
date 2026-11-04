@@ -831,8 +831,18 @@ function validateModeA(flags, opts = {}) {
 
       // first entry's base must equal expectedBaseSha, each later entry's base must equal the
       // last finalized head (== the aborted predecessor's base when the predecessor aborted)
-      if (entry.base !== expectedEntryBase) {
-        if (i === 0) {
+      // BL-0389: an entry collected with --full-range records range_mode "full" and reviews the whole
+      // phase range, so its base is the phase (generation 1) base, not the previous head. Absent
+      // range_mode keeps the contiguity rule above. Any other range_mode value is not understood.
+      if (entry.range_mode !== undefined && entry.range_mode !== 'full') {
+        console.error(`Chain entry generation ${entry.generation} has unknown range_mode '${entry.range_mode}'`);
+        process.exit(1);
+      }
+      const baseRuleExpected = (entry.range_mode === 'full' && i > 0) ? expectedBaseSha : expectedEntryBase;
+      if (entry.base !== baseRuleExpected) {
+        if (baseRuleExpected !== expectedEntryBase) {
+          console.error(`Chain entry generation ${entry.generation} declares range_mode 'full' but base '${entry.base}' is not the phase base '${expectedBaseSha}'`);
+        } else if (i === 0) {
           console.error(`First chain entry base '${entry.base}' does not match expected phase-base '${expectedBaseSha}'`);
         } else {
           console.error(`Chain broken at generation ${entry.generation}: base '${entry.base}' does not match previous head '${expectedEntryBase}'`);
@@ -1223,7 +1233,81 @@ function validateModeA(flags, opts = {}) {
     // stamps in place (they are its output, BL-0092), so the on-disk stamps are snapshotted first
     // for the aborted-attribution scan below.
     const stampsOnDisk = chainOnDisk.map((e) => (e && Array.isArray(e.closed_findings) ? e.closed_findings.map((cf) => ({ ...cf })) : []));
-    const derivedState = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration);
+    // BL-0384 (b): a receipt that carries a resolutions addendum is re-derived with it, but only after the
+    // file's sha pin and every item are verified here against the chain and git (never trusted).
+    let addendumItems = [];
+    let baseOpen = null;
+    if (receipt.resolutions_addendum !== undefined) {
+      baseOpen = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration).open_findings;
+      const ra = receipt.resolutions_addendum;
+      const expectRel = `review-${phase}/resolutions-addendum.json`;
+      if (!ra || typeof ra !== 'object' || ra.path !== expectRel || typeof ra.sha256 !== 'string') {
+        console.error(`Receipt resolutions_addendum is malformed (needs path '${expectRel}' and a sha256)`);
+        process.exit(1);
+      }
+      let addBytes;
+      try {
+        addBytes = fs.readFileSync(path.join(ledgerDir, expectRel));
+      } catch (err) {
+        if (err instanceof ExitSignal) throw err;
+        console.error(`Cannot read resolutions addendum ${expectRel}: ${err.message}`);
+        process.exit(1);
+      }
+      if (crypto.createHash('sha256').update(addBytes).digest('hex') !== ra.sha256) {
+        console.error(`Resolutions addendum ${expectRel} does not match the sha256 pinned in the receipt`);
+        process.exit(1);
+      }
+      try {
+        addendumItems = JSON.parse(addBytes.toString('utf8'));
+      } catch (err) {
+        if (err instanceof ExitSignal) throw err;
+        console.error(`Resolutions addendum is not valid JSON: ${err.message}`);
+        process.exit(1);
+      }
+      if (!Array.isArray(addendumItems) || addendumItems.length === 0) {
+        console.error('Resolutions addendum must be a non-empty array');
+        process.exit(1);
+      }
+      const gitQ = (args) => spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8' });
+      const seenIds = new Set();
+      for (const it of addendumItems) {
+        const bad = (why) => {
+          console.error(`Resolutions addendum entry '${it && it.id}': ${why}`);
+          process.exit(1);
+        };
+        if (!it || typeof it !== 'object' || Array.isArray(it)) bad('is not an object');
+        for (const k of ['id', 'rationale', 'fix_sha', 'reviewed_head']) {
+          if (typeof it[k] !== 'string' || it[k].trim().length === 0) bad(`needs a non-empty string '${k}'`);
+        }
+        if (it.fix_sha.startsWith('-') || it.reviewed_head.startsWith('-')) bad('fix_sha/reviewed_head must be commit ids');
+        if (seenIds.has(it.id)) bad('is listed twice');
+        seenIds.add(it.id);
+        if (!baseOpen.some((f) => f && f.id === it.id)) bad('names no open verified finding of the chain');
+        if (!chain.some((e) => e && e.status === 'finalized' && e.head === it.reviewed_head)) {
+          bad(`reviewed_head ${it.reviewed_head} is not the head of a finalized generation`);
+        }
+        let findingGen = 0;
+        for (const e of chain) {
+          if (!e || e.status !== 'finalized') continue;
+          const raisedHere = (findingsByGeneration.get(e.generation) || []).some((f) => f && f.id === it.id);
+          const dsp = dispositionsByGeneration.get(e.generation);
+          const verifiedHere = dsp && dsp.findings.some((d) => d && d.id === it.id && d.disposition === 'verified');
+          if (raisedHere && verifiedHere) findingGen = e.generation;
+        }
+        const raisedEntry = chain.find((e) => e && e.generation === findingGen);
+        if (!raisedEntry || !raisedEntry.base) bad('cannot locate the generation that raised the finding');
+        const fixRes = gitQ(['rev-parse', '--verify', '--quiet', `${it.fix_sha}^{commit}`]);
+        if (fixRes.status !== 0 || !fixRes.stdout.trim()) bad(`fix_sha ${it.fix_sha} is not a commit in this repository`);
+        const fixFull = fixRes.stdout.trim();
+        if (gitQ(['merge-base', '--is-ancestor', '--end-of-options', fixFull, it.reviewed_head]).status !== 0) {
+          bad(`fix_sha ${fixFull} is not an ancestor of reviewed_head ${it.reviewed_head}`);
+        }
+        if (fixFull === raisedEntry.base || gitQ(['merge-base', '--is-ancestor', '--end-of-options', raisedEntry.base, fixFull]).status !== 0) {
+          bad(`fix_sha ${fixFull} is not a descendant of the base ${raisedEntry.base} of generation ${findingGen}`);
+        }
+      }
+    }
+    const derivedState = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration, addendumItems);
     if (derivedState.unmatched_resolutions.length > 0) {
       const u = derivedState.unmatched_resolutions[0];
       console.error(`Resolution '${u.id}' in generation ${u.generation} names no open verified finding of an earlier generation`);

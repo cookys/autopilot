@@ -198,6 +198,9 @@ Subcommands:
   finalize    Finalize review generation, aggregate verdict, and write receipt
   refinalize  Re-derive chain stamps, verdict and receipt of an already finalized chain (--generation = last entry);
               refuses when any finalized generation's findings/dispositions no longer match their recorded sha256
+              --add-resolutions <file> [--repo-root <path>]: file = [{ id, rationale, fix_sha, reviewed_head }];
+              closes open verified findings after the fact through review-<phase>/resolutions-addendum.json
+              (pinned in the receipt as resolutions_addendum). Verified against the chain and git, else exit 1.
   opt-out     Record opt-out receipt for review loop
 
 Common flags:
@@ -226,6 +229,9 @@ Collect flags:
                         warns when it differs from the base..head actually collected; nothing declared,
                         nothing checked.
   --strict-range        Turn the range warning into an error raised before g<N>/ exists
+  --full-range          Generation > 1 only: review <generation 1 base>..<head> instead of the delta from
+                        the previous head. Opt-in; the chain entry and range.json gain range_mode: "full",
+                        which only a checker from this version accepts.
   --timeout <duration>  Timeout for dispatch (default: 20m)
   --allow-seat-gap      Allow generation to proceed even if some seats return no_verdict — but only
                         down to the receipt floor (--min-reviewed-seats <n> / AUTOPILOT_MIN_REVIEWED_SEATS,
@@ -277,7 +283,7 @@ function parseArgv(argv) {
       flags.help = true;
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
-      if (key === 'allow-seat-gap' || key === 'require-resolved' || key === 'strict-range') {
+      if (key === 'allow-seat-gap' || key === 'require-resolved' || key === 'strict-range' || key === 'full-range') {
         flags[key] = true;
       } else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
         flags[key] = argv[i + 1];
@@ -808,6 +814,15 @@ async function handleCollect(flags) {
   }
 
   let base = '';
+  // BL-0389: opt-in --full-range at generation > 1 reviews chain[0].base..head instead of the delta.
+  let fullRange = false;
+  if (flags['full-range']) {
+    if (generation === 1) {
+      console.error('ERROR: --full-range only applies at generation > 1 (generation 1 already reviews the whole phase range)');
+      process.exit(2);
+    }
+    fullRange = true;
+  }
   if (generation === 1) {
     if (!flags['phase-base']) {
       console.error('ERROR: --phase-base <sha> is required for generation 1');
@@ -828,9 +843,29 @@ async function handleCollect(flags) {
       // continue from the same base it was attempted against. Its evidence directory is
       // preserved on disk and remains referenced from this chain.json entry.
       base = prevEntry.base;
+      // An aborted full-range attempt continues as full range (its base is the phase base).
+      if (prevEntry.range_mode === 'full') fullRange = true;
     } else {
       console.error(`ERROR: Cannot collect generation ${generation}: generation ${generation - 1} is not finalized (status is '${prevEntry.status}')`);
       process.exit(1);
+    }
+  }
+
+  if (generation > 1) {
+    const g1Entry = chain.find((c) => c && c.generation === 1);
+    const g1Base = g1Entry && g1Entry.base;
+    if (fullRange) {
+      if (!g1Base) {
+        console.error('ERROR: --full-range needs generation 1 in chain.json to name the phase base');
+        process.exit(1);
+      }
+      base = g1Base;
+    }
+    // BL-0389 (R7): --phase-base is read at generation 1 only; say so instead of ignoring it silently.
+    if (typeof flags['phase-base'] === 'string' && g1Base) {
+      const given = flags['phase-base'].trim();
+      const same = given === g1Base || (resolveFullSha(given, repoRoot) || given) === (resolveFullSha(g1Base, repoRoot) || g1Base);
+      if (!same) console.error('WARNING: --phase-base ignored at generation > 1; use --full-range');
     }
   }
 
@@ -1017,6 +1052,7 @@ async function handleCollect(flags) {
     full_range_sha256: fullRangeSha256,
     excluded: excludedList,
     diff_bytes: diffBytes,
+    ...(fullRange ? { range_mode: 'full' } : {}),
   };
   const packetRecord = packetCtx
     ? { set: packetCtx.set, id: packetCtx.id, packets_sha256: packetCtx.sha256, paths: packetCtx.paths }
@@ -1086,7 +1122,9 @@ async function handleCollect(flags) {
       if (opts && opts.recordPointer) recordLedgerPointer(ledgerDir, repoRoot);
     });
   }
-  function saveChainEntryLocked(newEntry) {
+  function saveChainEntryLocked(entryIn) {
+    // BL-0389: additive, only when --full-range was used (absent = delta, the default)
+    const newEntry = fullRange ? { ...entryIn, range_mode: 'full' } : entryIn;
     let currentChain = [];
     if (fs.existsSync(chainPath)) {
       try {
@@ -1885,6 +1923,56 @@ async function handleFinalize(flags) {
   process.exit(0);
 }
 
+// BL-0384 (b): independent verification of a resolutions addendum (ADR-0001: the claim is re-derived from
+// the chain and git, never trusted). Returns an error string, or '' when every item holds. Pure apart from
+// read-only git calls. The checker repeats these checks on its own (check-phase-review-receipt.js).
+function verifyAddendumItems(items, ctx) {
+  const { chain, findingsByGeneration, dispositionsByGeneration, baseDerived, repoRoot } = ctx;
+  const git = (args) => spawnSync('git', args, { cwd: repoRoot || process.cwd(), encoding: 'utf8' });
+  const seen = new Set();
+  const dispOf = (g) => {
+    const d = dispositionsByGeneration.get(g);
+    return d && Array.isArray(d.findings) ? d.findings : [];
+  };
+  for (const it of items) {
+    for (const k of ['id', 'rationale', 'fix_sha', 'reviewed_head']) {
+      if (typeof it[k] !== 'string' || it[k].trim().length === 0) return `resolution entry needs a non-empty string '${k}'`;
+    }
+    if (it.fix_sha.startsWith('-') || it.reviewed_head.startsWith('-')) return `resolution '${it.id}': fix_sha/reviewed_head must be commit ids`;
+    if (seen.has(it.id)) return `resolution '${it.id}' appears twice in the addendum`;
+    seen.add(it.id);
+    if (!baseDerived.open_findings.some((f) => f && f.id === it.id)) {
+      return `resolution '${it.id}' names no open verified finding of the chain`;
+    }
+    const headEntry = chain.find((c) => c && c.status === 'finalized' && c.head === it.reviewed_head);
+    if (!headEntry) return `resolution '${it.id}': reviewed_head ${it.reviewed_head} is not the head of a finalized generation`;
+    let findingGen = 0;
+    for (const e of chain) {
+      if (!e || e.status !== 'finalized') continue;
+      const fl = findingsByGeneration.get(e.generation) || [];
+      const verified = fl.some((f) => f && f.id === it.id) && dispOf(e.generation).some((d) => d && d.id === it.id && d.disposition === 'verified');
+      if (verified) findingGen = e.generation;
+    }
+    const findingEntry = chain.find((c) => c && c.generation === findingGen);
+    if (!findingEntry || !findingEntry.base) return `resolution '${it.id}': cannot locate the generation that raised the finding`;
+    const fix = git(['rev-parse', '--verify', '--quiet', `${it.fix_sha}^{commit}`]);
+    if (fix.status !== 0 || !fix.stdout.trim()) return `resolution '${it.id}': fix_sha ${it.fix_sha} is not a commit in this repository`;
+    const fixSha = fix.stdout.trim();
+    if (git(['merge-base', '--is-ancestor', '--end-of-options', fixSha, it.reviewed_head]).status !== 0) {
+      return `resolution '${it.id}': fix_sha ${fixSha} is not an ancestor of reviewed_head ${it.reviewed_head}`;
+    }
+    if (fixSha === findingEntry.base || git(['merge-base', '--is-ancestor', '--end-of-options', findingEntry.base, fixSha]).status !== 0) {
+      return `resolution '${it.id}': fix_sha ${fixSha} is not a descendant of the base ${findingEntry.base} of generation ${findingGen}`;
+    }
+    it.fix_sha = fixSha;
+  }
+  return '';
+}
+
+function addendumRelPath(phase) {
+  return `review-${phase}/resolutions-addendum.json`;
+}
+
 // refinalize (BL-0092): repair path for a chain whose closed_findings stamps were written by an older
 // derive (e.g. pre-v2.36.3 attributing a closure to an aborted generation). Pure re-derivation: every
 // finalized generation's findings.json / dispositions.json must still hash to the sha256 its chain
@@ -1969,11 +2057,83 @@ async function handleRefinalize(flags) {
       resolutions: Array.isArray(dData.resolutions) ? dData.resolutions : [],
     });
   }
-  const derived = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration);
-  if (derived.unmatched_resolutions.length > 0) {
-    const u = derived.unmatched_resolutions[0];
+  const baseDerived = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration);
+  if (baseDerived.unmatched_resolutions.length > 0) {
+    const u = baseDerived.unmatched_resolutions[0];
     console.error(`ERROR: Resolution '${u.id}' (generation ${u.generation}) names no open verified finding of an earlier generation`);
     process.exit(1);
+  }
+  // BL-0384 (b): resolutions addendum. An addendum the receipt already carries is re-verified (sha pin,
+  // then the same checks as a new one) and stays applied; --add-resolutions adds entries. Every check
+  // runs before the first write, so a refusal leaves the ledger untouched.
+  let addendumItems = [];
+  let addendumWrite = null;
+  const addendumPath = path.join(ledgerDir, addendumRelPath(phase));
+  if (receipt.resolutions_addendum !== undefined) {
+    const ra = receipt.resolutions_addendum;
+    if (!ra || ra.path !== addendumRelPath(phase) || typeof ra.sha256 !== 'string') {
+      console.error('ERROR: receipt.resolutions_addendum is malformed (needs the phase addendum path and a sha256)');
+      process.exit(1);
+    }
+    let bytes;
+    try { bytes = fs.readFileSync(addendumPath); } catch (e) {
+      console.error(`ERROR: Cannot read ${addendumPath}: ${e.message}`);
+      process.exit(1);
+    }
+    if (sha(bytes) !== ra.sha256) {
+      console.error(`ERROR: ${addendumPath} no longer matches receipt.resolutions_addendum.sha256; refusing to refinalize`);
+      process.exit(1);
+    }
+    try { addendumItems = JSON.parse(bytes.toString('utf8')); } catch (e) {
+      console.error(`ERROR: Cannot parse ${addendumPath}: ${e.message}`);
+      process.exit(1);
+    }
+    if (!Array.isArray(addendumItems)) {
+      console.error(`ERROR: ${addendumPath} must hold a JSON array`);
+      process.exit(1);
+    }
+  }
+  if (flags['add-resolutions'] !== undefined) {
+    if (typeof flags['add-resolutions'] !== 'string') {
+      console.error('ERROR: --add-resolutions needs a file path');
+      process.exit(2);
+    }
+    let added;
+    try { added = JSON.parse(fs.readFileSync(path.resolve(flags['add-resolutions']), 'utf8')); } catch (e) {
+      console.error(`ERROR: Cannot read --add-resolutions file: ${e.message}`);
+      process.exit(1);
+    }
+    if (!Array.isArray(added) || added.length === 0 || added.some((r) => !r || typeof r !== 'object' || Array.isArray(r))) {
+      console.error('ERROR: --add-resolutions file must be a non-empty JSON array of { id, rationale, fix_sha, reviewed_head }');
+      process.exit(1);
+    }
+    addendumItems = addendumItems.concat(added.map((r) => ({ id: r.id, rationale: r.rationale, fix_sha: r.fix_sha, reviewed_head: r.reviewed_head })));
+    addendumWrite = true;
+  }
+  let derived = baseDerived;
+  if (addendumItems.length > 0) {
+    const repoRoot = flags['repo-root'] ? path.resolve(flags['repo-root']) : '';
+    if (!repoRoot) {
+      console.error('ERROR: --repo-root <path> is required to verify a resolutions addendum against git');
+      process.exit(2);
+    }
+    const bad = verifyAddendumItems(addendumItems, { chain, findingsByGeneration, dispositionsByGeneration, baseDerived, repoRoot });
+    if (bad) {
+      console.error(`ERROR: ${bad}; nothing was written`);
+      process.exit(1);
+    }
+    derived = deriveReceiptState(chain, findingsByGeneration, dispositionsByGeneration, addendumItems);
+    if (derived.unmatched_resolutions.length > 0) {
+      const u = derived.unmatched_resolutions[0];
+      console.error(`ERROR: Resolution '${u.id}' names no open verified finding at its reviewed_head; nothing was written`);
+      process.exit(1);
+    }
+  }
+  if (addendumWrite) {
+    const addBytes = JSON.stringify(addendumItems, null, 2) + '\n';
+    fs.mkdirSync(reviewPhaseDir, { recursive: true });
+    writeFileSyncAtomic(addendumPath, addBytes);
+    receipt.resolutions_addendum = { path: addendumRelPath(phase), sha256: sha(Buffer.from(addBytes, 'utf8')) };
   }
   writeFileSyncAtomic(chainPath, JSON.stringify(chain, null, 2) + '\n');
   receipt.chain = chain;

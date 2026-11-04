@@ -2511,4 +2511,216 @@ assert_exit_code "$RR6M_RC" "0" "R6 (mutation): without the comparison --strict-
 assert_not_contains "$RR6M_OUT" "WARNING" "R6 (mutation): without the comparison there is no warning"
 git -C "$SCRATCH_REPO" checkout -q "$RR_REPO_BR" 2>/dev/null
 
+# ─── BL-0384 (b) addendum + BL-0389 --full-range (stage 2): opt-in, checker-verified ───
+CHECKER="$REPO_ROOT/scripts/check-phase-review-receipt.js"
+RR2_REPO="$TEST_TMP/rr2repo"; mkdir -p "$RR2_REPO"
+(
+  cd "$RR2_REPO"
+  git init -q; git config user.email "test@example.com"; git config user.name "Test User"
+  echo "zero" > base.txt; git add base.txt; git commit -q -m "r0"; RR2_ROOT0=$(git rev-parse HEAD)
+  echo "one" > base.txt; git add base.txt; git commit -q -m "r1"
+)
+RR2_B=$(git -C "$RR2_REPO" rev-parse HEAD); RR2_ROOT0=$(git -C "$RR2_REPO" rev-parse HEAD~1)
+(
+  cd "$RR2_REPO"
+  echo "bug" > a.txt; echo "g1 only" > g1only.txt; git add a.txt g1only.txt; git commit -q -m "r2 g1 head"; echo H1 > /dev/null
+)
+RR2_H1=$(git -C "$RR2_REPO" rev-parse HEAD)
+(
+  cd "$RR2_REPO"
+  echo "fixed" > a.txt; git commit -q -am "r3 the fix"
+)
+RR2_FIX=$(git -C "$RR2_REPO" rev-parse HEAD)
+(
+  cd "$RR2_REPO"
+  echo "later" > later.txt; git add later.txt; git commit -q -m "r4 g2 head"
+)
+RR2_H2=$(git -C "$RR2_REPO" rev-parse HEAD)
+# a commit that is NOT in the reviewed history
+(
+  cd "$RR2_REPO"
+  git checkout -q -b side "$RR2_B"; echo "side" > side.txt; git add side.txt; git commit -q -m "side"
+  git checkout -q -
+)
+RR2_SIDE=$(git -C "$RR2_REPO" rev-parse side)
+git -C "$RR2_REPO" branch -q w2 "$RR2_H1" 2>/dev/null
+RR2_G1RESP='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Major: Missing bounds check in a.txt\nDetails here."}'
+RR2_CLEAN='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+rr2_collect() { # <script> <ledger> <phase> <gen> [extra flags]; branch w2 is moved to the head of that generation
+  local s="$1" l="$2" ph="$3" g="$4"; shift 4
+  if [ "$g" = 1 ]; then git -C "$RR2_REPO" branch -q -f w2 "$RR2_H1"; export STUB_SEAT_RESPONSE="$RR2_G1RESP"; else git -C "$RR2_REPO" branch -q -f w2 "$RR2_H2"; export STUB_SEAT_RESPONSE="$RR2_CLEAN"; fi
+  node "$s" collect --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --phase-base "$RR2_B" --seats "m1/low@codex" "$@" 2>&1
+}
+rr2_finalize() { # <script> <ledger> <phase> <gen>
+  local s="$1" l="$2" ph="$3" g="$4" disp="$TEST_TMP/rr2_disp_${3}_${4}.json"
+  if [ "$g" = 1 ]; then
+    local fid; fid=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).findings[0].id)' "$l/review-$ph/g1/findings.json")
+    echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": 1, \"findings\": [ { \"id\": \"$fid\", \"disposition\": \"verified\", \"rationale\": \"reproduced\" } ] }" > "$disp"
+  else
+    echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": $g, \"findings\": [] }" > "$disp"
+  fi
+  node "$s" finalize --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --dispositions "$disp" 2>&1
+}
+# rr2_build <phase> [g2 collect flags]: g1 raises a verified Major, g2 is clean and resolves nothing -> SHIP-AS-IS with 1 open finding
+rr2_build() {
+  local ph="$1"; shift
+  RR2_L="$TEST_TMP/rr2_ledger_$ph"; mkdir -p "$RR2_L"
+  rr2_collect "$SCRIPT" "$RR2_L" "$ph" 1 >/dev/null; rr2_finalize "$SCRIPT" "$RR2_L" "$ph" 1 >/dev/null
+  RR2_FID=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).findings[0].id)' "$RR2_L/review-$ph/g1/findings.json")
+  RR2_COLLECT_OUT=$(rr2_collect "$SCRIPT" "$RR2_L" "$ph" 2 "$@"); rr2_finalize "$SCRIPT" "$RR2_L" "$ph" 2 >/dev/null 2>&1
+}
+rr2_check() { # <script> <ledger> <phase>
+  git -C "$RR2_REPO" branch -q -f w2 "$RR2_H2"
+  node "$1" --ledger "$2" --phase "$3" --branch w2 --phase-base "$RR2_B" --repo-root "$RR2_REPO" 2>&1
+}
+rr2_add_file() { # <file> <id> <fix> <head>
+  echo "[ { \"id\": \"$2\", \"rationale\": \"fixed and re-reviewed\", \"fix_sha\": \"$3\", \"reviewed_head\": \"$4\" } ]" > "$1"
+}
+rr2_refin() { # <script> <ledger> <phase> <file>
+  node "$1" refinalize --repo-root "$RR2_REPO" --ledger "$2" --phase "$3" --generation 2 --add-resolutions "$4" 2>&1
+}
+
+# R5: the gap is invisible to the checker today (characterisation, stays green)
+rr2_build rr2a; RR2A_L="$RR2_L"
+RR2A_OUT=$(rr2_check "$CHECKER" "$RR2_L" rr2a); RR2A_RC=$?
+assert_exit_code "$RR2A_RC" "0" "R5 (stage 2): checker passes a receipt that carries an open Major (finalize-time warning only)"
+assert_contains "$(cat "$RR2_L/receipt-rr2a.json")" "$RR2_FID" "R5: the Major is still in receipt.open_findings"
+
+# PM condition: the default path emits neither new field
+assert_not_contains "$(cat "$RR2_L/receipt-rr2a.json")" "resolutions_addendum" "default path: no resolutions_addendum in the receipt"
+assert_not_contains "$(cat "$RR2_L/review-rr2a/chain.json")" "range_mode" "default path: no range_mode in chain.json"
+assert_not_contains "$(cat "$RR2_L/review-rr2a/g2/range.json")" "range_mode" "default path: no range_mode in g2/range.json"
+assert_not_contains "$(cat "$RR2_L/review-rr2a/g1/range.json")" "range_mode" "default path: no range_mode in g1/range.json"
+assert_file_absent "$RR2_L/review-rr2a/resolutions-addendum.json" "default path: no addendum file"
+# red check: a writer that always stamps range_mode / the addendum is caught by the same assertions
+RR2_MD=$(pk_mutant rr2dflt hetero-review-loop.js "const newEntry = fullRange ? { ...entryIn, range_mode: 'full' } : entryIn;" "const newEntry = { ...entryIn, range_mode: 'full' };") || fail "mutation setup failed (rr2 default)"
+sed_mutate "$RR2_MD/scripts/hetero-review-loop.js" "s/    \.\.\.(fullRange ? { range_mode: 'full' } : {}),/    range_mode: 'full',/"
+RR2_L0="$TEST_TMP/rr2_ledger_dflt"; mkdir -p "$RR2_L0"
+rr2_collect "$RR2_MD/scripts/hetero-review-loop.js" "$RR2_L0" rr2dflt 1 >/dev/null
+assert_contains "$(cat "$RR2_L0/review-rr2dflt/chain.json")" "range_mode" "default path (mutation): an always-stamping writer is caught by the absence assertion"
+assert_contains "$(cat "$RR2_L0/review-rr2dflt/g1/range.json")" "range_mode" "default path (mutation): ... in range.json too"
+
+# R3: addendum accepted by refinalize and by the checker
+RR2_L="$RR2A_L"
+RR2_DISP_SHA=$(sha256sum "$RR2_L/review-rr2a/g2/dispositions.json" | cut -d' ' -f1); RR2_DISP1_SHA=$(sha256sum "$RR2_L/review-rr2a/g1/dispositions.json" | cut -d' ' -f1)
+rr2_add_file "$TEST_TMP/rr2_add_ok.json" "$RR2_FID" "$RR2_FIX" "$RR2_H2"
+RR2_BEFORE=$(ledger_digest "$RR2_L")
+RR3_OUT=$(rr2_refin "$SCRIPT" "$RR2_L" rr2a "$TEST_TMP/rr2_add_ok.json"); RR3_RC=$?
+assert_exit_code "$RR3_RC" "0" "R3 (BL-0384 b): refinalize --add-resolutions with a verified fix exits 0"
+assert_contains "$RR3_OUT" '"open_findings_count": 0' "R3: the finding is closed"
+assert_file_exists "$RR2_L/review-rr2a/resolutions-addendum.json" "R3: addendum file written"
+assert_contains "$(cat "$RR2_L/receipt-rr2a.json")" '"resolutions_addendum"' "R3: receipt pins the addendum"
+assert_eq "$(sha256sum "$RR2_L/review-rr2a/g2/dispositions.json" | cut -d' ' -f1)" "$RR2_DISP_SHA" "R3: g2 dispositions untouched"
+assert_eq "$(sha256sum "$RR2_L/review-rr2a/g1/dispositions.json" | cut -d' ' -f1)" "$RR2_DISP1_SHA" "R3: g1 dispositions untouched"
+assert_contains "$(cat "$RR2_L/review-rr2a/chain.json")" '"closed_by_generation": 2' "R3: the g2 head closes the finding (closed_by_generation 2)"
+RR3C_OUT=$(rr2_check "$CHECKER" "$RR2_L" rr2a); RR3C_RC=$?
+assert_exit_code "$RR3C_RC" "0" "R3: the checker accepts the repaired receipt"
+# plain refinalize on a receipt that carries an addendum keeps it applied
+RR3R_OUT=$(node "$SCRIPT" refinalize --repo-root "$RR2_REPO" --ledger "$RR2_L" --phase rr2a --generation 2 2>&1); RR3R_RC=$?
+assert_exit_code "$RR3R_RC" "0" "R3: a later plain refinalize exits 0"
+assert_contains "$RR3R_OUT" '"open_findings_count": 0' "R3: ... and keeps the addendum applied"
+# tampered addendum: refinalize and the checker both refuse
+cp "$RR2_L/review-rr2a/resolutions-addendum.json" "$TEST_TMP/rr2_add_good.bak"
+sed -i 's/fixed and re-reviewed/tampered/' "$RR2_L/review-rr2a/resolutions-addendum.json"
+RR4T_OUT=$(node "$SCRIPT" refinalize --repo-root "$RR2_REPO" --ledger "$RR2_L" --phase rr2a --generation 2 2>&1); RR4T_RC=$?
+assert_exit_code "$RR4T_RC" "1" "R4: refinalize refuses a tampered addendum"
+assert_contains "$RR4T_OUT" "no longer matches" "R4: ... naming the sha pin"
+RR4TC_OUT=$(rr2_check "$CHECKER" "$RR2_L" rr2a); RR4TC_RC=$?
+assert_exit_code "$RR4TC_RC" "1" "R4: the checker refuses a tampered addendum"
+cp "$TEST_TMP/rr2_add_good.bak" "$RR2_L/review-rr2a/resolutions-addendum.json"
+# edited dispositions still refused
+echo ' ' >> "$RR2_L/review-rr2a/g1/dispositions.json"
+RR4D_OUT=$(rr2_refin "$SCRIPT" "$RR2_L" rr2a "$TEST_TMP/rr2_add_ok.json"); RR4D_RC=$?
+assert_exit_code "$RR4D_RC" "1" "R4: refinalize --add-resolutions still refuses edited dispositions"
+assert_contains "$RR4D_OUT" "no longer matches" "R4: ... by the existing sha rule"
+
+# R4 forged inputs to refinalize: each exits 1 and leaves the ledger byte-identical
+rr2_forged() { # <label> <id> <fix> <head> [expected text]
+  rr2_build "rr2f_$1"
+  rr2_add_file "$TEST_TMP/rr2_add_f_$1.json" "$2" "$3" "$4"
+  local before out rc
+  before=$(ledger_digest "$RR2_L")
+  out=$(rr2_refin "$SCRIPT" "$RR2_L" "rr2f_$1" "$TEST_TMP/rr2_add_f_$1.json"); rc=$?
+  assert_exit_code "$rc" "1" "R4 forged ($1): refinalize exits 1"
+  assert_contains "$out" "${5:-nothing was written}" "R4 forged ($1): refusal names the rule"
+  assert_eq "$(ledger_digest "$RR2_L")" "$before" "R4 forged ($1): nothing written"
+}
+rr2_build rr2src; RR2_FID_SRC="$RR2_FID"
+rr2_forged head "$RR2_FID_SRC" "$RR2_FIX" "$RR2_FIX" "is not the head of a finalized generation"
+rr2_forged anc "$RR2_FID_SRC" "$RR2_SIDE" "$RR2_H2" "is not an ancestor of reviewed_head"
+rr2_forged pre "$RR2_FID_SRC" "$RR2_ROOT0" "$RR2_H2" "is not a descendant of the base"
+rr2_forged eqbase "$RR2_FID_SRC" "$RR2_B" "$RR2_H2" "is not a descendant of the base"
+rr2_forged open "no_such_finding_id" "$RR2_FIX" "$RR2_H2" "names no open verified finding"
+# reviewed_head = the head of the generation that raised the finding: it cannot have reviewed a later fix
+rr2_forged early "$RR2_FID_SRC" "$RR2_FIX" "$RR2_H1" "is not an ancestor of reviewed_head"
+
+# negative controls: with ONE refinalize check removed the matching forged case slips through
+rr2_mut_case() { # <name> <old> <new> <label> <fix> <head> <id-or-@src>
+  local m; m=$(pk_mutant "rr2m_$1" hetero-review-loop.js "$2" "$3") || fail "mutation setup failed (rr2 $1)"
+  rr2_build "rr2m_$1"
+  local id="$RR2_FID"; [ "$7" != "@src" ] && id="$7"
+  rr2_add_file "$TEST_TMP/rr2_add_m_$1.json" "$id" "$5" "$6"
+  local out rc; out=$(rr2_refin "$m/scripts/hetero-review-loop.js" "$RR2_L" "rr2m_$1" "$TEST_TMP/rr2_add_m_$1.json"); rc=$?
+  assert_exit_code "$rc" "0" "R4 (mutation): without the $4 check the forged addendum is accepted"
+}
+# reviewed_head chain-head: enforced twice (explicit check + derive's unmatched), so removing one alone still refuses
+RR2_MH=$(pk_mutant rr2m_head hetero-review-loop.js "    if (!headEntry) return" "    if (false) return") || fail "mutation setup failed (rr2 head)"
+rr2_build rr2m_head; rr2_add_file "$TEST_TMP/rr2_add_m_head.json" "$RR2_FID" "$RR2_FIX" "$RR2_FIX"
+RRH1_OUT=$(rr2_refin "$RR2_MH/scripts/hetero-review-loop.js" "$RR2_L" rr2m_head "$TEST_TMP/rr2_add_m_head.json"); RRH1_RC=$?
+assert_exit_code "$RRH1_RC" "1" "R4 (defence in depth): with only the explicit head check removed derive still refuses"
+sed_mutate "$RR2_MH/scripts/lib/review-chain-derive.js" "s/unmatchedResolutions.push({ id: a.id, generation: 0 });//"
+RRH2_OUT=$(rr2_refin "$RR2_MH/scripts/hetero-review-loop.js" "$RR2_L" rr2m_head "$TEST_TMP/rr2_add_m_head.json"); RRH2_RC=$?
+assert_exit_code "$RRH2_RC" "0" "R4 (mutation): with both head checks removed a reviewed_head that is no chain head is accepted"
+rr2_mut_case anc "    if (git(['merge-base', '--is-ancestor', '--end-of-options', fixSha, it.reviewed_head]).status !== 0) {" "    if (false) {" "fix ancestor" "$RR2_SIDE" "$RR2_H2" "@src"
+rr2_mut_case base "    if (fixSha === findingEntry.base || git(" "    if (false && git(" "descendant-of-base" "$RR2_ROOT0" "$RR2_H2" "@src"
+# id-open: enforced twice as well (explicit check + derive's unmatched), same two-step control
+RR2_MO=$(pk_mutant rr2m_open hetero-review-loop.js "    if (!baseDerived.open_findings.some((f) => f && f.id === it.id)) {" "    if (false) {") || fail "mutation setup failed (rr2 open)"
+rr2_build rr2m_open; rr2_add_file "$TEST_TMP/rr2_add_m_open.json" "no_such_finding_id" "$RR2_FIX" "$RR2_H2"
+RRO1_OUT=$(rr2_refin "$RR2_MO/scripts/hetero-review-loop.js" "$RR2_L" rr2m_open "$TEST_TMP/rr2_add_m_open.json"); RRO1_RC=$?
+assert_exit_code "$RRO1_RC" "1" "R4 (defence in depth): with only the explicit id-open check removed derive still refuses"
+sed_mutate "$RR2_MO/scripts/lib/review-chain-derive.js" "s/if (!finding || currentFindingIds.has(id)) {/if (!finding) { continue; } if (false) {/"
+RRO2_OUT=$(rr2_refin "$RR2_MO/scripts/hetero-review-loop.js" "$RR2_L" rr2m_open "$TEST_TMP/rr2_add_m_open.json"); RRO2_RC=$?
+assert_eq "$RRO2_RC" "1" "R4 (defence in depth): with derive also relaxed the unknown id still stops at the finding-generation lookup"
+# sha pin on an existing addendum (fresh ledger: the one above has edited dispositions)
+RR2_MS=$(pk_mutant rr2m_sha hetero-review-loop.js "    if (sha(bytes) !== ra.sha256) {" "    if (false) {") || fail "mutation setup failed (rr2 sha)"
+rr2_build rr2m_sha; rr2_add_file "$TEST_TMP/rr2_add_m_sha.json" "$RR2_FID" "$RR2_FIX" "$RR2_H2"
+rr2_refin "$SCRIPT" "$RR2_L" rr2m_sha "$TEST_TMP/rr2_add_m_sha.json" >/dev/null
+sed -i 's/fixed and re-reviewed/tampered/' "$RR2_L/review-rr2m_sha/resolutions-addendum.json"
+RR4TM_OUT=$(node "$RR2_MS/scripts/hetero-review-loop.js" refinalize --repo-root "$RR2_REPO" --ledger "$RR2_L" --phase rr2m_sha --generation 2 2>&1); RR4TM_RC=$?
+assert_exit_code "$RR4TM_RC" "0" "R4 (mutation): without the sha pin check a tampered addendum is accepted by refinalize"
+
+# R8: --full-range at generation 2 reviews phase base..head and records range_mode
+rr2_build rr2full --full-range
+RR8_RANGE=$(cat "$RR2_L/review-rr2full/g2/range.json")
+assert_contains "$RR8_RANGE" "\"base\": \"$RR2_B\"" "R8: --full-range collects from the generation 1 base"
+assert_contains "$RR8_RANGE" '"range_mode": "full"' "R8: range.json records range_mode full"
+assert_contains "$(cat "$RR2_L/review-rr2full/chain.json")" '"range_mode": "full"' "R8: the chain entry records range_mode full"
+assert_contains "$(cat "$RR2_L/review-rr2full/g2/diff.txt")" "g1only.txt" "R8: the full-range diff holds a file touched only in generation 1"
+assert_not_contains "$(cat "$RR2A_L/review-rr2a/g2/diff.txt")" "g1only.txt" "R8: the default delta diff does not (the gap --full-range closes)"
+RR8C_OUT=$(rr2_check "$CHECKER" "$RR2_L" rr2full); RR8C_RC=$?
+assert_exit_code "$RR8C_RC" "0" "R8: the checker accepts a full-range generation"
+# only the generation that asked for it is stamped
+assert_eq "$(grep -c range_mode "$RR2_L/review-rr2full/chain.json")" "1" "R8: generation 1 carries no range_mode"
+# --full-range at generation 1 is a usage error
+RR8G1_OUT=$(node "$SCRIPT" collect --repo-root "$RR2_REPO" --ledger "$TEST_TMP/rr2_ledger_g1x" --phase g1x --generation 1 --branch w2 --phase-base "$RR2_B" --seats "m1/low@codex" --full-range 2>&1); RR8G1_RC=$?
+assert_exit_code "$RR8G1_RC" "2" "R8: --full-range at generation 1 exits 2"
+# checker negative control: without the range_mode branch the same ledger is "Chain broken"
+RR2_MR=$(pk_mutant rr2m_rm check-phase-review-receipt.js "(entry.range_mode === 'full' && i > 0) ? expectedBaseSha : expectedEntryBase" "expectedEntryBase") || fail "mutation setup failed (rr2 range_mode)"
+RR8M_OUT=$(rr2_check "$RR2_MR/scripts/check-phase-review-receipt.js" "$RR2_L" rr2full); RR8M_RC=$?
+assert_exit_code "$RR8M_RC" "1" "R8 (mutation): without the range_mode branch the checker refuses the full-range generation"
+assert_contains "$RR8M_OUT" "Chain broken" "R8 (mutation): ... as a broken chain"
+
+# R7: --phase-base differing from the generation 1 base at generation > 1 is no longer silent
+rr2_build rr2r7 --phase-base "$RR2_ROOT0"
+assert_contains "$RR2_COLLECT_OUT" "WARNING: --phase-base ignored at generation > 1; use --full-range" "R7: a different --phase-base at generation 2 warns"
+assert_contains "$(cat "$RR2_L/review-rr2r7/g2/range.json")" "\"base\": \"$RR2_H1\"" "R7: ... and the flag is still ignored (g2 base is the g1 head)"
+rr2_build rr2r7b
+assert_not_contains "$RR2_COLLECT_OUT" "--phase-base ignored" "R7: the same --phase-base as generation 1 does not warn"
+RR2_MW=$(pk_mutant rr2m_w hetero-review-loop.js "      if (!same) console.error('WARNING: --phase-base ignored at generation > 1; use --full-range');" "") || fail "mutation setup failed (rr2 R7)"
+RR2_LW="$TEST_TMP/rr2_ledger_w"; mkdir -p "$RR2_LW"
+rr2_collect "$SCRIPT" "$RR2_LW" rr2w 1 >/dev/null; rr2_finalize "$SCRIPT" "$RR2_LW" rr2w 1 >/dev/null
+RR7M_OUT=$(rr2_collect "$RR2_MW/scripts/hetero-review-loop.js" "$RR2_LW" rr2w 2 --phase-base "$RR2_ROOT0")
+assert_not_contains "$RR7M_OUT" "--phase-base ignored" "R7 (mutation): without the warning the flag is ignored silently"
+
+
 finalize_test

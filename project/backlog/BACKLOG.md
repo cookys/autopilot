@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0383 -->
+<!-- next-id: BL-0387 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -78,32 +78,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: BL-0374 結案時留下的後續（cd7f28002）
 - **Pointer**: project/backlog/g40-mirror-oslock-macos-perl-unverified.md
-
-### G40 probe policy per provider (build)
-- **Id**: BL-0375
-- **Status**: open
-- **Since**: 2026-11-04
-- **Origin**: owner
-- **Problem**: operator 決定 probe 依各家設定：確認 starts_window=false 才做約每 30 分鐘的週期性 probe，其餘只在 pick 前資料過舊時 probe。目前只寫進計畫，程式未做；manifest 要加信心欄位，證據更新時自動翻轉。
-- **Impact**: 沒做前 probe 仍整個關閉；做錯則會對會啟動計時的 provider 排週期性 probe，白白啟動 window。
-- **Trigger**: 排在 BL-0372 Tasks 0-3 之後，走 P4 probe 路徑（目前 gated off）
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: operator decision d-2d6a93aa（經 PM 轉達），2026-11-04
-- **Pointer**: project/backlog/g40-probe-policy-per-provider.md
-
-### G40 D5 第二代審查的六條 Suggestion（全是後續，不擋任何事）
-- **Id**: BL-0376
-- **Status**: open
-- **Since**: 2026-11-04
-- **Origin**: self
-- **Problem**: 六條藍燈建議，歸四類：(1) 第一次嘗試已有 capture 原因時 adapter 失敗碼被丟；(2) 失敗碼可能掛錯 alias；(3) golden --check 只比固定投影；(4) status 比對剝掉 newest_age 整行，值沒人釘。
-- **Impact**: 都只影響診斷或漂移偵測的完整度，不改輸出、不影響 parity；測試路徑已直接比對 audit 與 runs。
-- **Trigger**: 下次動 scripts/claude-account.js 的 adapter 同步段或 golden 產生器時順手處理
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: G40 D5 review g2 (2026-11-04)
-- **Pointer**: project/backlog/g40-d5-review-g2-follow-ups.md
 
 ### live pane 決策卡的長背景與選項難讀
 - **Id**: BL-0369
@@ -1955,3 +1929,61 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: aa95f0ce3 full-suite triage, 2026-11-04 (PM ruling)
 - **Pointer**: project/backlog/affected-suites-copy-into-layout-deps.md
+
+### 拆分 autopilot 的入口文件
+- **Id**: BL-0383
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: operator 的全艦隊入口文件健檢, 2026-11-04
+- **Reply**: none
+- **Problem**: 根目錄 CLAUDE.md 加 AGENTS.md 共 41.1 KB，10 個 checkout 都是這個量；5 個 par worktree 為 32.6 KB。全部超過 20 KB，每個 session 一開始就吃掉大量脈絡，重要規則也被埋在細節裡。
+- **Impact**: 每個 session 啟動就多背一大包文字，守則難找，容易漏看要緊的規則。
+- **Trigger**: PM 在 d5fu 之後派工
+- **Trigger-Type**: owner
+- **Effort**: L
+- **Source**: pm:knowledge/harness-entry-docs.md（pm repo 無 remote，無網址）
+- **Pointer**: project/backlog/entry-doc-split.md
+
+### code-loop 收斂後 finalize 仍把已解決的發現留在 open_findings
+- **Id**: BL-0384
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 多個專案的 code-loop 收尾經驗, 2026-11-04
+- **Reply**: none
+- **Problem**: 第 N+1 代 disposition 若沒寫明確的解決記錄，已修好並重審的發現仍留在收據 JSON 的 open_findings，即使所有判定都是 SHIP-AS-IS；事後也無法用 refinalize 補進去。
+- **Impact**: 收據顯示還有未解決項目，與實際狀況不符；各專案只能自己補對照表或寫本機檢查。
+- **Trigger**: d5fu 與入口文件拆分之後
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PM, 2026-11-04（codeforge、alfred、autopilot g40d5 三處證據）
+- **Pointer**: project/backlog/finalize-open-findings-after-convergence.md
+
+### BL-0375 審查留下的四條 Suggestion
+- **Id**: BL-0385
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: 四條藍燈建議：(a) 無 registry 的測試沒逐位元組比對輸出；(b) 手動 probe 的紀錄行也被算成有需求；(c) 設定稽核測試沒斷言那一筆提示的數量與內容；(d) dry-run 的 ctx 是淺拷貝，之後型態一變就會悄悄分歧。
+- **Impact**: 都只影響測試或判斷的嚴謹度，不改輸出，不擋任何事；逐位元組證明目前只留在證據檔。
+- **Trigger**: 下次動 account-probe 或 usage-probe 的 --due 路徑時順手處理
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: probepol review g1/g2 (2026-11-04)
+- **Pointer**: project/backlog/probe-policy-review-follow-ups.md
+
+### BL-0376 審查留下的三條 Suggestion
+- **Id**: BL-0386
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: 三條藍燈建議：(a) 新舊版本共用同一個 audit 檔時，舊版會把合併的 capture 原因當成壞值；(b) 從未被嘗試的 alias 其 adapter 失敗不再寫進 audit；(c) 合併原因的先後順序只靠寫入端保證，沒有文件也無法由讀取端驗證。
+- **Impact**: 只影響混版本情境或診斷完整度；不改輸出，不影響 parity。
+- **Trigger**: 下次動 account-audit 或 claude-account.js 的 adapter 同步段時順手處理
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: d5fu review g1 (2026-11-04)
+- **Pointer**: project/backlog/d5-g2-follow-ups-review-follow-ups.md

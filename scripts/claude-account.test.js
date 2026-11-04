@@ -483,3 +483,10 @@ test('CLI process: usage exit 2', () => {
   const r = spawnSync(process.execPath, [path.join(__dirname, 'claude-account.js'), 'nope'], { encoding: 'utf8' });
   assert.strictEqual(r.status, 2);
 });
+
+test('ORG: status shows a mismatch instead of verified', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  require('./lib/account-registry.js').writeTokenMeta(fx.accountsDir, 'a', { org_id: 'x', org_label: 'Acme', org_check: 'mismatch' });
+  assert.match((await go(fx, ['status'])).out, / org="Acme" org_check=mismatch/);
+  fx.cleanup();
+});

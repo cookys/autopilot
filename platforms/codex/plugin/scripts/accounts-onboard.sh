@@ -78,12 +78,12 @@ accounts-onboard.sh：替每個「Claude 帳號＋org」登記一個 profile
 
 開始前
   先印出計畫並問你「繼續？[y/N]」，預設 N。直接按 Enter 或輸入 n 就結束，什麼都不會建立。
-  在非互動環境（stdin 不是終端機）要加 --yes 才會繼續。
+  stdin 不是終端機（管線、轉向）時，送進來的 y 不算確認：要加 --yes 才會繼續，否則拒絕並什麼都不建立。
 
 選項
   -h, --help             印出這段說明就結束，不建立任何東西。不帶任何參數時也是這樣（結束碼 2）。
   --yes                  跳過「繼續？」的詢問，直接開始。
-  --org 名稱=org標籤     指定某個 profile 的 org 標籤（不可含 @、不可像 email）。
+  --org 名稱=org標籤     指定某個 profile 的 org 標籤（不可含 @ 或雙引號、不可像 email）。
                          orgId 讀得到時照常記錄並檢查重複，只有標籤用你給的字（名稱含 email 時尤其好用）；
                          claude auth status 完全讀不到 orgId 時，org 識別碼記為未知，總結表寫「org 未驗證」。
                          可重複給多個。例：--org team=Acme-Team
@@ -93,7 +93,7 @@ accounts-onboard.sh：替每個「Claude 帳號＋org」登記一個 profile
   某個 profile 的 token 壞掉會在該 profile 停下並點名，結束碼非 0，修好後再跑一次即可。
   個人 org 的名稱常是「<email> 的 Organization」：名稱含 email 時，本指令不顯示也不儲存名稱，
   但 orgId 讀得到就照常記錄並檢查重複；標籤改用 --org 給的值，沒給就當場請你輸入一個
-  （不可含 @、不可像 email、最多 64 字；非互動又沒有 --org 就失敗並告訴你怎麼修）。
+  （不可含 @ 或雙引號、不可像 email、最多 64 字；非互動又沒有 --org 就失敗並告訴你怎麼修）。
   回滾：mv <帳號目錄>/registry.json <帳號目錄>/registry.json.off（跑完會印出完整指令）。
 
 環境變數
@@ -113,19 +113,19 @@ for a in "$@"; do
     -h|--help) usage; exit 0 ;;
     --yes) YES=1 ;;
     --org) want_org=1 ;;
-    -*) echo "不認得的選項（用 --help 看用法）。" >&2; exit 2 ;;
+    -*) echo "不認得的選項。修法：用 --help 看可用的選項（--yes、--org 名稱=org標籤），拿掉多餘的再重跑。" >&2; exit 2 ;;
     *) ALIASES+=("$a") ;;
   esac
 done
-if [ "$want_org" -eq 1 ]; then echo "--org 後面要接「名稱=org標籤」（例：--org team=Acme-Team）。" >&2; exit 2; fi
+if [ "$want_org" -eq 1 ]; then echo "--org 後面少了值。修法：寫成 --org 名稱=org標籤（例：--org team=Acme-Team）。" >&2; exit 2; fi
 if [ "${#ALIASES[@]}" -eq 0 ]; then usage; exit 2; fi
 set -- "${ALIASES[@]}"
 
 BIN_ARGS=()
 CLAUDE_PROG="claude"
 if [ -n "${ONBOARD_CLAUDE_BIN:-}" ]; then
-  case "$ONBOARD_CLAUDE_BIN" in /*) ;; *) echo "ONBOARD_CLAUDE_BIN 必須是絕對路徑" >&2; exit 2 ;; esac
-  [ -x "$ONBOARD_CLAUDE_BIN" ] || { echo "ONBOARD_CLAUDE_BIN 不可執行" >&2; exit 2; }
+  case "$ONBOARD_CLAUDE_BIN" in /*) ;; *) echo "ONBOARD_CLAUDE_BIN 必須是絕對路徑。修法：改成替身 claude 的完整路徑，或不要設定它（用真的 claude）。" >&2; exit 2 ;; esac
+  [ -x "$ONBOARD_CLAUDE_BIN" ] || { echo "ONBOARD_CLAUDE_BIN 不可執行。修法：確認該檔存在且有執行權限（chmod +x），或不要設定它。" >&2; exit 2; }
   BIN_ARGS=(--binary "$ONBOARD_CLAUDE_BIN")
   CLAUDE_PROG="$ONBOARD_CLAUDE_BIN"
 fi
@@ -139,9 +139,9 @@ const reg = require(path.join(root, 'scripts', 'lib', 'account-registry.js'));
 const die = (m) => { process.stderr.write(m + '\n'); process.exit(2); };
 function secureDir(p) {
   let st = null;
-  try { st = fs.lstatSync(p); } catch (e) { if (!e || e.code !== 'ENOENT') die('無法檢查目錄 ' + p); }
+  try { st = fs.lstatSync(p); } catch (e) { if (!e || e.code !== 'ENOENT') die('無法檢查目錄 ' + p + '。修法：確認上層目錄存在且你有權限後重跑。'); }
   if (!st) fs.mkdirSync(p, { recursive: true, mode: 0o700 });
-  else if (st.isSymbolicLink() || !st.isDirectory()) die('不是一般目錄（或是符號連結）：' + p);
+  else if (st.isSymbolicLink() || !st.isDirectory()) die('不是一般目錄（或是符號連結）：' + p + '。修法：把它移走或改用別的 AUTOPILOT_ACCOUNTS_DIR 後重跑。');
   fs.chmodSync(p, 0o700);
 }
 if (mode === 'dir') {
@@ -155,7 +155,7 @@ if (mode === 'dir') {
     if (a.includes('@')) die(`第 ${i + 1} 個名稱看起來像 email（含 @）。profile 名稱是你自己取的短名字，例如 personal、team；請改用不含 email 的名稱，沒有建立任何東西。`);
     const p = reg.aliasProblem(a);
     if (p) die(`第 ${i + 1} 個名稱不合法（${p}）：只能用小寫英文字母、數字和 -，最多 24 字，且不能長得像 acct-/codex- 加 8 位十六進位。請改名後重跑，沒有建立任何東西。`);
-    if (seen.has(a)) die(`第 ${i + 1} 個名稱重複，沒有建立任何東西。`);
+    if (seen.has(a)) die(`第 ${i + 1} 個名稱重複，沒有建立任何東西。修法：每個 profile 只列一次，重複的拿掉再重跑。`);
     seen.add(a);
   });
   const seenOrg = new Set();
@@ -163,11 +163,11 @@ if (mode === 'dir') {
     const eq = sp.indexOf('=');
     const al = eq < 0 ? '' : sp.slice(0, eq);
     const label = eq < 0 ? '' : sp.slice(eq + 1);
-    if (!seen.has(al)) die(`第 ${i + 1} 個 --org 要寫成「名稱=org標籤」，且名稱必須是這次要登記的 profile 之一；沒有建立任何東西。`);
-    if (seenOrg.has(al)) die(`第 ${i + 1} 個 --org 的 profile 重複，沒有建立任何東西。`);
+    if (!seen.has(al)) die(`第 ${i + 1} 個 --org 要寫成「名稱=org標籤」，且名稱必須是這次要登記的 profile 之一；沒有建立任何東西。修法：寫成 --org 名稱=org標籤，名稱要是你列出的 profile 之一。`);
+    if (seenOrg.has(al)) die(`第 ${i + 1} 個 --org 的 profile 重複，沒有建立任何東西。修法：每個 profile 只給一個 --org，重複的拿掉再重跑。`);
     seenOrg.add(al);
     const lp = reg.orgLabelProblem(label);
-    if (lp) die(`第 ${i + 1} 個 --org 的標籤不合法（${lp}）：1 到 64 字、不可含 @、不可像 email 或帳號資訊。請改用不含 email 的標籤，沒有建立任何東西。`);
+    if (lp) die(`第 ${i + 1} 個 --org 的標籤不合法（${lp}）：1 到 64 字、不可含 @ 或雙引號、不可像 email 或帳號資訊。修法：改用不含 email 的單純標籤再重跑，沒有建立任何東西。`);
   });
 } else if (mode === 'authstatus') {
   // `claude auth status --json` through the given program. Prints: status line (ok|fail:<code>), orgId, org name
@@ -181,7 +181,7 @@ if (mode === 'dir') {
   if (reg.orgIdProblem(j.orgId)) fail('no_org_id');
   const name = typeof j.orgName === 'string' && !reg.orgLabelProblem(j.orgName) ? j.orgName : '';
   const sub = typeof j.subscriptionType === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(j.subscriptionType) ? j.subscriptionType : '';
-  process.stdout.write(`ok\n${j.orgId}\n${name}\n${sub}\n`);
+  process.stdout.write(`ok\n${j.orgId.toLowerCase()}\n${name}\n${sub}\n`);
 } else if (mode === 'orgowner') {
   const o = reg.findOrgOwner(reg.accountsDir({}), args[1], args[0]);
   process.stdout.write((o || '') + '\n');
@@ -191,8 +191,8 @@ if (mode === 'dir') {
 } else if (mode === 'metaset') {
   const [alias, id, label, chk] = args;
   const lp = reg.orgLabelProblem(label);
-  if (lp) die('org 標籤不合法：' + lp);
-  if (id !== '-' && reg.orgIdProblem(id)) die('org 識別碼不合法');
+  if (lp) die('org 標籤不合法：' + lp + '。修法：改用單純的名稱（1 到 64 字、不含 @ 和雙引號）。');
+  if (id !== '-' && reg.orgIdProblem(id)) die('org 識別碼不合法。修法：重跑並確認 claude auth status 的 orgId 正常，或改用 --org 給標籤。');
   reg.writeTokenMeta(reg.accountsDir({}), alias, { org_id: id === '-' ? null : id, org_label: label, org_check: chk === 'verified' ? 'verified' : 'unverified' });
 } else if (mode === 'labelcheck') { // the typed label arrives by environment, never argv (a mistyped e-mail must not reach ps)
   if (reg.orgLabelProblem(process.env.ONBOARD_LABEL)) process.exit(2);
@@ -205,14 +205,14 @@ if (mode === 'dir') {
   try { env = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { /* not a single JSON document */ }
   const seen = env && typeof env === 'object' ? [env.orgId, env.org_id, env.organization_id].find((v) => typeof v === 'string') : undefined;
   let verdict = 'unverified';
-  if (seen !== undefined && m && typeof m.org_id === 'string') verdict = seen === m.org_id ? 'verified' : 'mismatch';
+  if (seen !== undefined && m && typeof m.org_id === 'string') verdict = seen.toLowerCase() === m.org_id.toLowerCase() ? 'verified' : 'mismatch';
   if (verdict === 'unverified' && m && m.org_check === 'verified') verdict = 'kept'; // an id read from auth status stays verified
-  else if (m && verdict !== 'mismatch') reg.writeTokenMeta(acc, alias, { org_check: verdict });
+  else if (m) { try { reg.writeTokenMeta(acc, alias, { org_check: verdict }); } catch (e) { /* the summary row still reports the verdict */ } } // a mismatch overwrites an earlier verified
   process.stdout.write(verdict + '\n');
 } else if (mode === 'prepare') {
   const alias = args[0];
   const p = reg.aliasProblem(alias);
-  if (p) die(`別名不合法（${p}）`);
+  if (p) die(`別名不合法（${p}）。修法：改用小寫英文字母、數字和 -，最多 24 字。`);
   const acc = reg.accountsDir({});
   if (!process.env.AUTOPILOT_ACCOUNTS_DIR) secureDir(path.dirname(acc));
   secureDir(acc);
@@ -220,10 +220,10 @@ if (mode === 'dir') {
 } else if (mode === 'register') {
   const alias = args[0];
   const priority = Number(args[1]);
-  if (reg.aliasProblem(alias)) die('別名不合法');
+  if (reg.aliasProblem(alias)) die('別名不合法。修法：改用小寫英文字母、數字和 -，最多 24 字。');
   const acc = reg.accountsDir({});
   let r;
-  try { r = reg.loadRegistry({}); } catch (e) { die('registry 無法讀取：' + (e && e.message ? e.message : 'error')); }
+  try { r = reg.loadRegistry({}); } catch (e) { die('registry 無法讀取：' + (e && e.message ? e.message : 'error') + '。修法：依訊息修正 registry.json（權限須為 0600）；損壞時先備份再移走後重跑。'); }
   const have = new Set(r.accounts.map((x) => x.alias));
   if (have.has(alias)) { process.stdout.write('exists\n'); process.exit(0); } // onboard:idempotent
   const rows = r.accounts.map((x) => ({ alias: x.alias, enabled: x.enabled, priority: x.priority }));
@@ -269,6 +269,10 @@ cat <<EOF
 EOF
 if [ "$YES" -eq 1 ]; then
   echo "（已加 --yes，不再詢問。）"
+elif [ ! -t 0 ]; then
+  echo "stdin 不是終端機，而且沒有加 --yes，所以不繼續（管線或轉向送進來的 y 不算確認），沒有建立任何東西。"
+  echo "修法：在互動式終端機直接執行，或確認計畫無誤後加上 --yes 重跑。"
+  exit 1
 else
   printf '繼續？[y/N] '
   go_ans=""
@@ -277,7 +281,7 @@ else
   case "$go_ans" in
     y|Y|yes|YES) ;;
     *)
-      echo "已取消，沒有建立任何東西。要開始請輸入 y；在非互動環境請加 --yes。"
+      echo "已取消，沒有建立任何東西。要開始請重跑並輸入 y；非互動環境請加 --yes。"
       exit 1 ;;
   esac
 fi
@@ -441,7 +445,7 @@ EOF
       if [ "$wrc" -ne 0 ]; then
         rm -f "$tmpf"
         echo "別名 $alias 的 token 寫入失敗，未登記。修法：檢查帳號目錄 $ACC_DIR 的磁碟空間與權限後重跑。"
-        row "❌" "$alias token" "token 檔寫入失敗，未登記"
+        row "❌" "$alias token" "token 檔寫入失敗，未登記；修法：檢查磁碟空間與目錄權限後重跑"
         row "❌" "$alias env-check" "未執行"
         row "❌" "$alias haiku OK 呼叫" "未執行"
         continue
@@ -450,7 +454,7 @@ EOF
       row "✅" "$alias token" "已寫入 token 檔（0600）"
     else
       unset T
-      row "❌" "$alias token" "你略過了這個別名，沒有 token，所以沒有登記；要登記請重跑並貼上 token"
+      row "❌" "$alias token" "你略過了這個別名，沒有 token，所以沒有登記；修法：要登記請重跑並貼上 token"
       row "❌" "$alias env-check" "未執行（沒有 token）"
       row "❌" "$alias haiku OK 呼叫" "未執行（沒有 token）"
       echo "別名 $alias 已略過，繼續下一個。"
@@ -460,7 +464,7 @@ EOF
 
   if [ "$ORG_PENDING" -eq 1 ]; then
     if ! mr="$(nodeh metaset "$alias" "$ORG_ID" "$ORG_LABEL" "$ORG_CHECK" 2>&1)"; then
-      row "❌" "$alias org 記錄" "token-meta.json 寫入失敗：$mr；修法：檢查該別名目錄的權限，或移走既有的 token-meta.json 後重跑"
+      row "❌" "$alias org 記錄" "token-meta.json 寫入失敗：$mr；修法：檢查該別名目錄的權限，或先備份再移走既有的 token-meta.json 後重跑（meta_unreadable 代表既有檔案讀不懂，不會被蓋掉）"
       STOPPED="$alias"; break
     fi
   fi
@@ -497,7 +501,7 @@ EOF
     OK_ALIASES+=("$alias")
     case "$(nodeh orgcmp "$alias" "$okf" 2>/dev/null)" in
       verified) row "✅" "$alias org 核對" "OK 呼叫的回應帶有 org 識別碼，與記錄相符" ;;
-      mismatch) row "❌" "$alias org 核對" "OK 呼叫的回應帶的 org 識別碼與記錄不同：這個 token 可能綁到別的 org，請重新 setup-token 並確認 org" ;;
+      mismatch) row "❌" "$alias org 核對" "OK 呼叫的回應帶的 org 識別碼與記錄不同：這個 token 可能綁到別的 org；修法：重新 setup-token 並確認 org" ;;
       kept) ;;
       *) row "➖" "$alias org 核對" "org 未驗證：OK 呼叫的回應沒有 org 識別碼或記錄的識別碼未知（不影響通過）" ;;
     esac
@@ -531,7 +535,7 @@ else
   if claude_account selftest --real-binary ${BIN_ARGS[@]+"${BIN_ARGS[@]}"}; then
     row "✅" "selftest --real-binary" "假 token 得 401，沒有退回你自己的登入"
   else
-    row "❌" "selftest --real-binary" "沒通過，請看上面的 FAIL 行；若提示答案回來了，代表動到你自己的登入，請立刻回報"
+    row "❌" "selftest --real-binary" "沒通過；修法：照上面的 FAIL 行處理後重跑；若提示答案回來了，代表動到你自己的登入，請立刻停手並回報"
   fi
   # Failover self-test eligibility: enabled aliases in the registry whose env-check passes (not just this run's).
   USABLE=()

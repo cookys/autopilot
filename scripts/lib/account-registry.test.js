@@ -418,7 +418,7 @@ test('token-meta: write merges and keeps other keys, 0600, never an email key; r
   R.writeTokenMeta(f.dir, 'main', { issued_at: '2026-11-05T00:00:00.000Z' });
   R.writeTokenMeta(f.dir, 'main', { org_id: 'FAKE-ORG-1', org_label: 'Acme' });
   const m = R.readTokenMeta(f.dir, 'main', opts(f));
-  assert.deepStrictEqual(m, { issued_at: '2026-11-05T00:00:00.000Z', org_id: 'FAKE-ORG-1', org_label: 'Acme', schema: R.TOKEN_META_SCHEMA, alias: 'main' });
+  assert.deepStrictEqual(m, { issued_at: '2026-11-05T00:00:00.000Z', org_id: 'fake-org-1', org_label: 'Acme', schema: R.TOKEN_META_SCHEMA, alias: 'main' });
   assert.strictEqual(fs.statSync(path.join(f.dir, 'main', 'token-meta.json')).mode & 0o777, 0o600);
   fs.chmodSync(path.join(f.dir, 'main', 'token-meta.json'), 0o644);
   assert.strictEqual(R.readTokenMeta(f.dir, 'main', opts(f)), null, 'a loose-mode file is not trusted');
@@ -442,4 +442,44 @@ test('findOrgOwner: names the other alias holding the org id; ignores itself and
   assert.strictEqual(R.findOrgOwner(f.dir, 'FAKE-ORG-1', 'main'), null);
   assert.strictEqual(R.findOrgOwner(f.dir, 'FAKE-ORG-2', 'spare'), null);
   assert.strictEqual(R.findOrgOwner(path.join(f.root, 'nope'), 'FAKE-ORG-1', 'x'), null);
+});
+
+test('C: a pre-placed temp-file symlink is never followed (exclusive create, unpredictable name)', () => {
+  const f = mk();
+  mkAlias(f, 'main');
+  fs.writeFileSync(path.join(f.root, 'victim'), 'KEEP', { mode: 0o644 });
+  const metaFile = path.join(f.dir, 'main', 'token-meta.json');
+  fs.symlinkSync(path.join(f.root, 'victim'), `${metaFile}.tmp-${process.pid}`); // the name the old code would use
+  R.writeTokenMeta(f.dir, 'main', { org_label: 'Acme' });
+  assert.strictEqual(fs.readFileSync(path.join(f.root, 'victim'), 'utf8'), 'KEEP');
+  assert.strictEqual(fs.statSync(path.join(f.root, 'victim')).mode & 0o777, 0o644);
+  assert.strictEqual(R.readTokenMeta(f.dir, 'main', opts(f)).org_label, 'Acme');
+});
+
+test('C: an unreadable existing token-meta is refused (meta_unreadable), never overwritten as empty', () => {
+  const cases = {
+    loose_mode: (file) => { fs.writeFileSync(file, '{"issued_at":"2026-11-05T00:00:00.000Z"}', { mode: 0o644 }); fs.chmodSync(file, 0o644); },
+    too_big: (file) => { fs.writeFileSync(file, JSON.stringify({ issued_at: 'x'.repeat(5000) }), { mode: 0o600 }); },
+    bad_json: (file) => { fs.writeFileSync(file, '{not json', { mode: 0o600 }); },
+    not_object: (file) => { fs.writeFileSync(file, '[1]', { mode: 0o600 }); },
+  };
+  for (const [name, setup] of Object.entries(cases)) {
+    const f = mk();
+    mkAlias(f, 'main');
+    const file = path.join(f.dir, 'main', 'token-meta.json');
+    setup(file);
+    const before = fs.readFileSync(file);
+    assert.strictEqual(reason(() => R.writeTokenMeta(f.dir, 'main', { org_label: 'Acme' }, opts(f))), 'meta_unreadable', name);
+    assert.ok(before.equals(fs.readFileSync(file)), `${name}: file unchanged`);
+  }
+});
+
+test('E: org ids compare case-insensitively; a double quote is not allowed in a label', () => {
+  const f = mk();
+  mkAlias(f, 'main'); mkAlias(f, 'spare');
+  R.writeTokenMeta(f.dir, 'main', { org_id: 'fake-org-1', org_label: 'Acme' });
+  assert.strictEqual(R.findOrgOwner(f.dir, 'FAKE-ORG-1', 'spare'), 'main');
+  R.writeTokenMeta(f.dir, 'spare', { org_id: 'FAKE-ORG-2', org_label: 'Other' }); // a legacy mixed-case record
+  assert.strictEqual(R.findOrgOwner(f.dir, 'fake-org-2', 'main'), 'spare');
+  assert.strictEqual(R.orgLabelProblem('Ac"me'), 'org_label_quote');
 });

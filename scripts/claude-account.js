@@ -1109,7 +1109,7 @@ async function cmdExec(ctx, argv) {
 function orgSuffix(ctx, dir, alias) {
   const m = registry.readTokenMeta(dir, alias, ctx.regOpts);
   if (!m || typeof m.org_label !== 'string' || registry.orgLabelProblem(m.org_label)) return '';
-  const check = m.org_check === 'verified' ? '' : ' org_check=unverified';
+  const check = m.org_check === 'verified' ? '' : ` org_check=${m.org_check === 'mismatch' ? 'mismatch' : 'unverified'}`;
   return ` org="${m.org_label}"${check}`;
 }
 

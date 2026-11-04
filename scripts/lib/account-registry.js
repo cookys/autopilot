@@ -170,6 +170,7 @@ function orgLabelProblem(label) {
   if (label !== label.trim()) return 'org_label_untrimmed';
   if (/[\p{C}\u2028\u2029]/u.test(label)) return 'org_label_control_chars';
   if (label.includes('@')) return 'org_label_email_shaped';
+  if (label.includes('"')) return 'org_label_quote'; // status prints org="<label>"; a quote would make key=value ambiguous
   if (require('./personal-data-patterns').findAll(label).length > 0) return 'org_label_personal_data';
   return null;
 }
@@ -187,20 +188,47 @@ function readTokenMeta(dir, alias, opts) {
   } catch (e) { return null; }
 }
 
-// Merge `patch` into the alias's token-meta (other keys, e.g. issued_at, are kept). 0600, tmp + rename.
-function writeTokenMeta(dir, alias, patch) {
+// Strict read for the write path: absent = {} (a new file); anything unreadable (loose mode, over 4096 bytes, bad
+// JSON, not an object, foreign owner) is meta_unreadable, so a write never replaces fields it could not read
+// (G40's issued_at lives in the same file).
+function readMetaStrict(dir, alias, o) {
+  const file = tokenMetaPath(dir, alias);
+  let text;
+  try {
+    text = readChecked(file, o, uidOf(o), 'meta', 4096, true, alias);
+  } catch (e) {
+    if (e instanceof RegistryError && e.reason === 'meta_missing') return {};
+    throw new RegistryError('meta_unreadable', alias, e instanceof RegistryError ? e.reason : 'error');
+  }
+  let doc;
+  try { doc = JSON.parse(text); } catch (e) { throw new RegistryError('meta_unreadable', alias, 'not_json'); }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new RegistryError('meta_unreadable', alias, 'not_object');
+  return doc;
+}
+
+// Merge `patch` into the alias's token-meta (other keys, e.g. issued_at, are kept). 0600; the temp file is created
+// exclusively ('wx', unpredictable name) and renamed over the target, so a pre-placed link is never followed.
+// org_id is stored lower-case.
+function writeTokenMeta(dir, alias, patch, opts) {
   const p = aliasProblem(alias);
   if (p) throw new RegistryError(p, null, 'token-meta alias rejected');
+  const o = opts || {};
   const file = tokenMetaPath(dir, alias);
   try {
     if (fs.lstatSync(file).isSymbolicLink()) throw new RegistryError('meta_is_symlink', alias);
   } catch (e) { if (e instanceof RegistryError) throw e; if (!(e && e.code === 'ENOENT')) throw new RegistryError('meta_probe_error', alias); }
-  const prev = readTokenMeta(dir, alias) || {};
-  const doc = Object.assign({}, prev, patch, { schema: TOKEN_META_SCHEMA, alias });
-  const tmp = `${file}.tmp-${process.pid}`;
-  fs.writeFileSync(tmp, JSON.stringify(doc) + '\n', { mode: 0o600 });
-  fs.chmodSync(tmp, 0o600);
-  fs.renameSync(tmp, file);
+  const prev = readMetaStrict(dir, alias, o);
+  const add = Object.assign({}, patch);
+  if (typeof add.org_id === 'string') add.org_id = add.org_id.toLowerCase();
+  const doc = Object.assign({}, prev, add, { schema: TOKEN_META_SCHEMA, alias });
+  const tmp = `${file}.tmp-${process.pid}-${require('crypto').randomBytes(8).toString('hex')}`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(doc) + '\n', { mode: 0o600, flag: 'wx' });
+    fs.renameSync(tmp, file);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch (_) { /* never created, or already renamed */ }
+    throw new RegistryError('meta_write_failed', alias, e && e.code ? e.code : 'error');
+  }
   return doc;
 }
 
@@ -214,7 +242,7 @@ function findOrgOwner(dir, orgId, exceptAlias) {
     try { st = fs.lstatSync(path.join(dir, name)); } catch (e) { continue; }
     if (!st.isDirectory() || st.isSymbolicLink()) continue;
     const m = readTokenMeta(dir, name);
-    if (m && typeof m.org_id === 'string' && m.org_id === orgId) return name;
+    if (m && typeof m.org_id === 'string' && m.org_id.toLowerCase() === String(orgId).toLowerCase()) return name;
   }
   return null;
 }

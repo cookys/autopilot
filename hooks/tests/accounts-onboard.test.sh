@@ -308,9 +308,9 @@ meta_of() { cat "$(ACC "$1")/$2/token-meta.json" 2>/dev/null || echo none; }
 fxo="$(mkfx "$TA" "$TB")"
 run_onboard "$SCRIPT" "$fxo" "$INPUT_TOK" a b
 assert_eq "$(rc_of "$fxo")" "0" "ORG1 two orgs: exit 0"
-assert_contains "$(meta_of "$fxo" a)" '"org_id":"FAKE-ORG-1"' "ORG1 a org_id recorded"
+assert_contains "$(meta_of "$fxo" a)" '"org_id":"fake-org-1"' "ORG1 a org_id recorded"
 assert_contains "$(meta_of "$fxo" a)" '"org_label":"FAKE Org One"' "ORG1 a org_label recorded"
-assert_contains "$(meta_of "$fxo" b)" '"org_id":"FAKE-ORG-2"' "ORG1 b org_id recorded"
+assert_contains "$(meta_of "$fxo" b)" '"org_id":"fake-org-2"' "ORG1 b org_id recorded"
 assert_eq "$(stat -c %a "$(ACC "$fxo")/a/token-meta.json")" "600" "ORG1 token-meta 0600"
 assert_not_contains "$(cat "$(ACC "$fxo")/registry.json")" "org" "ORG1 registry.json row keys unchanged (no org)"
 assert_contains "$(cat "$fxo/out.txt")" "FAKE Org One（方案：max）" "ORG1 org name and plan shown"
@@ -379,7 +379,7 @@ HID="$(authj FAKE-ORG-9 "$FAKE_EMAIL's Organization")"
 fxh="$(mkfx "$TA" "$TB")"; setctl "$fxh" auth "[$HID,$HID,$HID,$HID]"
 run_onboard "$SCRIPT" "$fxh" $'personal\n'"$TA"$'\n' a
 assert_eq "$(rc_of "$fxh")" "0" "H1 hidden org name, typed label: exit 0"
-assert_contains "$(meta_of "$fxh" a)" '"org_id":"FAKE-ORG-9"' "H1 orgId stored although the name is hidden"
+assert_contains "$(meta_of "$fxh" a)" '"org_id":"fake-org-9"' "H1 orgId stored although the name is hidden"
 assert_contains "$(meta_of "$fxh" a)" '"org_label":"personal"' "H1 label is the typed one"
 assert_contains "$(meta_of "$fxh" a)" '"org_check":"verified"' "H1 org_check verified"
 assert_contains "$(cat "$fxh/out.txt")" "org 已驗證（名稱已隱藏）" "H1 summary says verified, name hidden"
@@ -399,7 +399,7 @@ assert_eq "$(no_email "$fxh")" "" "H2 no e-mail anywhere"
 fxh2="$(mkfx "$TA")"; setctl "$fxh2" auth "[$HID]"
 run_onboard "$SCRIPT" "$fxh2" "$TA"$'\n' --org a=Given-Label a
 assert_eq "$(rc_of "$fxh2")" "0" "H3 --org with readable orgId: exit 0"
-assert_contains "$(meta_of "$fxh2" a)" '"org_id":"FAKE-ORG-9"' "H3 orgId stored"
+assert_contains "$(meta_of "$fxh2" a)" '"org_id":"fake-org-9"' "H3 orgId stored"
 assert_contains "$(meta_of "$fxh2" a)" '"org_label":"Given-Label"' "H3 given label stored"
 # no label input at all (non-interactive) and no --org: fail closed with a remedy, nothing written
 fxh3="$(mkfx "$TA")"; setctl "$fxh3" auth "[$HID]"
@@ -438,19 +438,69 @@ run_onboard "$SCRIPT" "$fxn" "" "user""@""example.invalid"
 assert_contains "$(cat "$fxn/err.txt")" "看起來像 email" "NAME email-shaped reason is explained"
 assert_not_contains "$(cat "$fxn/out.txt" "$fxn/err.txt")" "user@example" "NAME refusal does not echo the name"
 
-# P1. the plan question: default N cancels and creates nothing; y proceeds; EOF stdin without --yes cancels.
+# P1. the plan question. A piped "y" without --yes must NOT proceed (stdin is not a terminal): refuse, create nothing.
 fxp="$(mkfx "$TA")"
-YESFLAG=(); run_onboard "$SCRIPT" "$fxp" $'\n' a
-assert_eq "$(rc_of "$fxp")" "1" "PLAN default N: exit 1"
+YESFLAG=(); run_onboard "$SCRIPT" "$fxp" $'y\ny\n'"$TA"$'\n' a; YESFLAG=(--yes)
+assert_eq "$(rc_of "$fxp")" "1" "PLAN A piped y without --yes: refused (exit 1)"
 assert_contains "$(cat "$fxp/out.txt")" "將登記 1 個 profile：a" "PLAN is printed first"
-assert_contains "$(cat "$fxp/out.txt")" "繼續？[y/N]" "PLAN asks to continue"
-assert_contains "$(cat "$fxp/out.txt")" "沒有建立任何東西" "PLAN cancel says nothing was created"
-[ ! -e "$fxp/fakehome/.config" ] && [ ! -e "$fxp/shim.log" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "PLAN decline created something"
-run_onboard "$SCRIPT" "$fxp" "" a
-assert_eq "$(rc_of "$fxp")" "1" "PLAN empty stdin without --yes cancels"
-run_onboard "$SCRIPT" "$fxp" $'y\ny\n'"$TA"$'\n' a
-assert_eq "$(rc_of "$fxp")" "0" "PLAN y proceeds"
-YESFLAG=(--yes)
+assert_contains "$(cat "$fxp/out.txt")" "不是終端機" "PLAN A says why it refused"
+assert_contains "$(cat "$fxp/out.txt")" "修法" "PLAN A says how to fix"
+[ ! -e "$fxp/fakehome/.config" ] && [ ! -e "$fxp/shim.log" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "PLAN A refusal created something"
+YESFLAG=(); run_onboard "$SCRIPT" "$fxp" "" a; YESFLAG=(--yes)
+assert_eq "$(rc_of "$fxp")" "1" "PLAN A empty stdin without --yes refused"
+# the real question, on a pseudo-terminal (script(1)): default N declines, y proceeds
+run_tty() { # <fx> <input> <arg>...
+  local fx="$1" input="$2"; shift 2
+  rm -f "$fx/rc"
+  ( printf '%s' "$input" | env -i PATH="$PATH" LANG=C HOME="$fx/fakehome" TMPDIR="$fx/tmp" XDG_RUNTIME_DIR="$fx/run" \
+      AUTOPILOT_ACCOUNTS_DIR="$fx/fakehome/.config/autopilot/accounts" AUTOPILOT_LIVE_DIR="$fx/live" \
+      AUTOPILOT_STATE_DIR="$fx/state" AUTOPILOT_CONFIG="$fx/config.json" ENGINE_CAPABILITY_DIR="$fx/ecd" \
+      AUTOPILOT_STRIKE_WRITER=off ONBOARD_CLAUDE_BIN="$fx/bin/claude" \
+      script -qec "$(printf '%q ' "$SCRIPT" "$@")" /dev/null > "$fx/out.txt" 2> "$fx/err.txt"
+    echo $? > "$fx/rc" )
+}
+if command -v script >/dev/null 2>&1; then
+  fxt="$(mkfx "$TA")"
+  run_tty "$fxt" $'\n' a
+  assert_eq "$(rc_of "$fxt")" "1" "PLAN tty default N: exit 1"
+  assert_contains "$(cat "$fxt/out.txt")" "繼續？[y/N]" "PLAN tty asks to continue"
+  [ ! -e "$fxt/fakehome/.config" ] && [ ! -e "$fxt/shim.log" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "PLAN tty decline created something"
+  run_tty "$fxt" $'y\ny\n'"$TA"$'\n' a
+  assert_eq "$(rc_of "$fxt")" "0" "PLAN tty y proceeds"
+else echo "SKIP [accounts-onboard] script(1) unavailable: the tty plan-question cases are skipped, not passed" >&2; fi
+
+# B. the org state follows the facts: verified, then a token of another org -> mismatch, never stays verified.
+fxb="$(mkfx "$TA" "$TA2")"; setctl "$fxb" envOrg '"fake-org-1"'
+run_onboard "$SCRIPT" "$fxb" $'y\n'"$TA"$'\n' a
+assert_contains "$(meta_of "$fxb" a)" '"org_check":"verified"' "B verified first"
+setctl "$fxb" envOrg '"some-other-org"'
+run_onboard "$SCRIPT" "$fxb" $'覆蓋\n'"$TA2"$'\n' a
+assert_neq "$(rc_of "$fxb")" "0" "B token of another org: exit non-zero"
+assert_contains "$(meta_of "$fxb" a)" '"org_check":"mismatch"' "B org_check no longer verified after a mismatch"
+assert_contains "$(grep -h '^alias=a ' "$fxb/out.txt" | head -1)" 'org_check=mismatch' "B status shows the mismatch"
+
+# D. every refusal says how to fix it.
+run_onboard "$SCRIPT" "$fx0" "" a a
+assert_contains "$(cat "$fx0/err.txt")" "修法" "D duplicate name has a remedy"
+run_onboard "$SCRIPT" "$fx0" "" --org a=X --org a=Y a
+assert_contains "$(cat "$fx0/err.txt")" "修法" "D duplicate --org has a remedy"
+run_onboard "$SCRIPT" "$fx0" "" --bogus a
+assert_eq "$(rc_of "$fx0")" "2" "D unknown option: exit 2"
+assert_contains "$(cat "$fx0/err.txt")" "--help" "D unknown option points at --help"
+run_onboard "$SCRIPT" "$fx0" "" --org 'a=Ac"me' a
+assert_eq "$(rc_of "$fx0")" "2" "E label with a double quote refused"
+bad_rows="$(grep -n 'row "❌"' "$SCRIPT" | grep -v -e '修法' -e '未執行' -e '未處理' -e '"\$1"' -e '"\$why"' -e '請照上面訊息' || true)"
+assert_eq "$bad_rows" "" "D every failed summary row carries a remedy (or is a not-run follow-on)"
+
+# E. orgId is case-folded; --org cannot bypass the duplicate check when the id is readable.
+fxc="$(mkfx "$TA" "$TB")"; setctl "$fxc" auth "[$(authj FAKE-ORG-7 'FAKE Org Seven'),$(authj fake-org-7 'FAKE Org Seven')]"
+run_onboard "$SCRIPT" "$fxc" $'y\n'"$TA"$'\n' a
+assert_contains "$(meta_of "$fxc" a)" '"org_id":"fake-org-7"' "E orgId stored lower-case"
+before_c="$(tree_digest "$(ACC "$fxc")")"
+run_onboard "$SCRIPT" "$fxc" "$TB"$'\n' --org b=Whatever b
+assert_neq "$(rc_of "$fxc")" "0" "E same org in another letter case with --org: still refused"
+assert_contains "$(cat "$fxc/out.txt")" "已經由 profile a 登記" "E refusal names a"
+assert_eq "$(tree_digest "$(ACC "$fxc")")" "$before_c" "E nothing written"
 
 # NC7: duplicate-org check removed -> ORG3 must turn red.
 m7="$(mkmut orgdup 's#^      owner="\$(nodeh orgowner.*#      owner=""#')"

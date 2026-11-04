@@ -1,7 +1,7 @@
 {
   "row": "rolekit-pilot",
-  "status": "draft",
-  "stamped": false,
+  "status": "stamped 2026-11-04",
+  "stamped": true,
   "stamp": null,
   "note": "DRAFT. Not stamped. The PM stamps it with `node evals/rolekit/stamp-rolekit.js --row pilot` before any real cell runs. After stamping any edit to a frozen file voids the row.",
   "plan": "project/plans/2026-11-05-rolekit-direction.md",

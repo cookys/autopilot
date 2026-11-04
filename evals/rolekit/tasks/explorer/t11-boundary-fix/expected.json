@@ -1,0 +1,24 @@
+{
+  "kind": "explorer",
+  "questions": [
+    {
+      "id": "q1",
+      "expect_found": true,
+      "file": "lib/pager.py",
+      "needle": "def paginate",
+      "ask": "Where is paginate defined?"
+    },
+    {
+      "id": "q2",
+      "expect_found": true,
+      "file": "main.py",
+      "needle": "paginate\\(items, page_num, page_size\\)",
+      "ask": "Where is paginate called?"
+    },
+    {
+      "id": "q3",
+      "expect_found": false,
+      "ask": "Where is a database connection opened?"
+    }
+  ]
+}

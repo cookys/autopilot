@@ -1,0 +1,24 @@
+{
+  "kind": "explorer",
+  "questions": [
+    {
+      "id": "q1",
+      "expect_found": true,
+      "file": "keys.py",
+      "needle": "return \\(record\\[\"id\"\\],\\)",
+      "ask": "Where is the cache key built?"
+    },
+    {
+      "id": "q2",
+      "expect_found": true,
+      "file": "store.py",
+      "needle": "self\\._cache = \\{\\}",
+      "ask": "Where is the cache dictionary created?"
+    },
+    {
+      "id": "q3",
+      "expect_found": false,
+      "ask": "Where is cache expiry (TTL) implemented?"
+    }
+  ]
+}

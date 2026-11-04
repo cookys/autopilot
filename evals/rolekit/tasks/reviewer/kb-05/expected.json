@@ -1,0 +1,35 @@
+{
+  "kind": "reviewer",
+  "class": "major",
+  "line_slack": 1,
+  "groups": [
+    [
+      "-ge",
+      "-gt",
+      ">=",
+      "off[- ]by[- ]one",
+      "inclusive",
+      "boundary"
+    ],
+    [
+      "\\bend\\b",
+      "last line",
+      "line_count",
+      "line count",
+      "range",
+      "length",
+      "exceed"
+    ],
+    [
+      "reject",
+      "fail",
+      "wrong",
+      "incorrect",
+      "valid",
+      "error",
+      "exceed",
+      "too"
+    ]
+  ],
+  "rule": "a finding counts only if it is critical or major, cites a changed line (+/-1), and its claim matches at least one pattern in EVERY group"
+}

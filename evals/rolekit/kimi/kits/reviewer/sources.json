@@ -1,0 +1,9 @@
+{
+  "role": "reviewer",
+  "runner": "kimi-code 2.3.0",
+  "card_from": "kits/reviewer/role.md",
+  "method": "none (reviewer has no skill; card identical to the Claude kit)",
+  "method_condensed_from": null,
+  "max_role_bytes": 4096,
+  "card_bytes": 1472
+}

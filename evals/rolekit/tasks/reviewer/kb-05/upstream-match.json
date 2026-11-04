@@ -1,0 +1,12 @@
+{
+  "case": "05-off-by-one",
+  "class": "major",
+  "defect_summary": "off-by-one in line-range validation: >= rejects valid pointers whose end line equals the last line (1-based inclusive)",
+  "any_of": [
+    {"regex": "off[ -]by[ -]one"},
+    {"all_of": ["last line"]},
+    {"regex": ">=[^.\\n]{0,40}(last|end|line|valid|reject)"},
+    {"all_of": [">=", "reject"]},
+    {"all_of": ["end line"]}
+  ]
+}

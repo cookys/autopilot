@@ -1,0 +1,138 @@
+---
+name: survey
+description: >
+  Research what the industry does — dual-agent (researcher + skeptic) tech investigation. Use when:
+  "research X", "survey", "investigate options/tradeoffs", "what do others use", "industry standard
+  for X", "compare X vs Y vs Z", "I'm not sure which to pick", "業界怎麼做", "調研一下",
+  "別人怎麼處理的". Not for: strategic priority decisions (→ think-tank), brainstorming designs,
+  or creating implementation plans.
+---
+
+# Survey -- Technology Research
+
+> Routing overlap? If this intent better matches a sibling skill, redirect per [references/routing-tiebreaks.md](../../references/routing-tiebreaks.md) (prefer external evidence research over internal priority debate).
+
+Two independent agents (researcher + skeptic) search in parallel, bringing different perspectives to avoid anchoring bias and recency bias.
+
+## Trigger
+
+| Method | When |
+|--------|------|
+| Manual | User says "survey", "research", "investigate", "what does the industry do" |
+| Signal suggestion | Plan Mode / brainstorming detects tech selection / architecture decision / uncertainty -> suggest (user confirms before running) |
+
+**Suggestion template** (when signal detected):
+> "This decision involves tech selection. Suggest running `/survey` to research industry practices first. Proceed?"
+
+## Boundary
+
+- **Produce recommendation, marked as suggestion** -- attach reasoning and preconditions so user can judge applicability
+- **No code** -- research only
+- **No judgment-only auto-trigger** -- a survey runs without a Proceed prompt only when the unknown-escalation ladder probe (plan `project/plans/_archive/2026/09/2026-09-07-unknown-escalation-ladder.md`, ships with the ladder) recommends U2 with budget left, in every mode; the caller records the climb in the decision ledger. Judgment-only suggestions, knob-off and budget-exhausted cases keep the suggest-then-confirm template above
+
+## Flow
+
+### Step 1: Scope the Research
+
+Extract from user input:
+- **Topic**: what to research (e.g. "WS compression options")
+- **Constraints**: known limits (e.g. "must support C++20", "latency < 1ms")
+- **Existing bias**: does user already lean toward something? (researcher should specifically probe that option's weaknesses)
+
+If input is vague (e.g. "look into cache"), ask one clarifying round before dispatch.
+
+**Mode `issue-search`** (unknown-escalation ladder rung U2 for a `why` unknown — a bug that resisted two hypotheses): the input is an exact error / finding string plus the runtime and version tuple, not a topic. The researcher searches the literal string **as written** (at least one query verbatim — familiarity with the error is not a reason to skip the search), the skeptic checks whether each hit applies to *our* version; the report's Options table gains a "matches our version?" column. Budget: one round, no second generation; if nothing matches, the explicit "no public data" marker is the result and the caller climbs or stops per the probe. Callers: `debug` step 4, the foreman round end. After the report, the caller stamps the climb: `node scripts/probe-unknown.js receipt --ledger <ledger> --rung U2 --unknown-type why --terms <terms> --signals <ids>`.
+
+### Step 2: Parallel Dispatch
+
+**Model routing**: Read `.claude/model-routing-config.md` if exists; otherwise defaults from [references/model-routing.md](references/model-routing.md). Survey agents map to `researcher` → default: `model: "sonnet"` (needs web search tools, so NOT plan mode). **Effort floor: `medium`** on **anthropic-family seats**, both seats, every mode — at `low` effort Claude is less likely to call a search/retrieval tool and more likely to answer from memory (Anthropic "Prompting Claude Fable 5.1"), which turns a survey into a recollection. Do NOT apply this floor to families whose vendor documents low effort as search-capable — e.g. OpenAI's current reasoning guide (developers.openai.com/api/docs/guides/reasoning) lists low effort as "Ideal for use cases requiring tool-use, planning, search, or multi-step decision making" for their latest model; a forced bump there buys nothing and only adds cost/latency.
+
+Spawn researcher + skeptic **simultaneously**. Skeptic does NOT wait for researcher -- independent search finds different angles.
+
+```
+Agent tool:
+  name: "survey-researcher"
+  subagent_type: "general-purpose"
+  model: "sonnet"              # from model-routing config (researcher role)
+  run_in_background: true
+  prompt: -> references/prompts.md #Researcher   (issue-search mode: #Issue-search Researcher)
+
+Agent tool:
+  name: "survey-skeptic"
+  subagent_type: "general-purpose"
+  model: "sonnet"              # from model-routing config (researcher role)
+  run_in_background: true
+  prompt: -> references/prompts.md #Skeptic      (issue-search mode: add the #Issue-search Skeptic addendum)
+```
+
+> Full agent prompts with variable substitution: [references/prompts.md](references/prompts.md)
+
+### Step 3: Merge Report
+
+After both agents complete:
+
+1. **Deduplicate** -- merge overlapping sources
+2. **Cross-validate** -- researcher's pros vs skeptic's risks, same row per option
+3. **Gap-fill** -- option with only pros and no risks (or vice versa) -> mark "incomplete data"
+4. **Rank** -- by combined pros, risks, industry adoption
+5. **Generate report** -- fixed format below
+
+### Step 4: Present to User
+
+Present report, clearly mark "decision is yours". If user wants to dive deeper into one option, run follow-up search.
+
+## Output Format
+
+```markdown
+## Survey: {topic}
+
+> Date: YYYY-MM-DD
+
+### Background
+{Why this research, 1-2 sentences}
+
+### Options Comparison
+
+| Option | Pros | Risks | Industry Adoption | Fit |
+|--------|------|-------|-------------------|-----|
+| A      | ...  | ...   | ...               | 3/3 |
+| B      | ...  | ...   | ...               | 2/3 |
+
+### Recommendation
+{Recommended option + reasoning + preconditions (under what assumptions this holds). Decision is yours.}
+
+### Sources
+
+**Theory/Standards**
+- [{title}]({url}) -- {one-line summary}
+
+**Production Practice**
+- [{title}]({url}) -- {one-line summary}
+
+**Benchmark / Demo**
+- [{title}]({url}) -- {one-line summary}
+
+**Adoption Cases**
+- [{title}]({url}) -- {one-line summary}
+
+**Risk/Failure Cases**
+- [{title}]({url}) -- {one-line summary}
+```
+
+## Error Handling
+
+| Situation | Action |
+|-----------|--------|
+| WebSearch unavailable | Use LLM knowledge + WebFetch known URLs. Mark "no live search" in report |
+| Agent timeout | Use partial results. Mark "{agent} incomplete" |
+| No sources found for option | Keep in table, mark all fields "no public data" -- this is a risk signal |
+
+## Signal Detection (for other skills)
+
+| Signal | Example |
+|--------|---------|
+| Tech selection | "X or Y?", "which library?" |
+| Architecture decision | "canonical approach for this?" |
+| Novelty / no consensus | Computed, not phrased: the unknown-escalation ladder probe reports `unknown_type: how` (task terms with zero knowledge/memory/repo hits, or an unrecognised / fast-moving name) or `whether` (think-tank consensus LOW). A plan that reaches review carries no `TBD` (plan-template placeholder scan), so plan wording is not a signal |
+| New domain | Tech/protocol/pattern team hasn't used |
+| User bias | "I think X is good" -- worth verifying with survey |

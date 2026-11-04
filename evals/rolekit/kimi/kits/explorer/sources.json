@@ -1,0 +1,13 @@
+{
+  "role": "explorer",
+  "runner": "kimi-code 2.3.0",
+  "card_from": "kits/explorer/role.md",
+  "method": "hand-condensed Method section appended (kimi custom agents cannot read plugin skills)",
+  "method_condensed_from": {
+    "source_path": "skills/survey/SKILL.md",
+    "source_lines": null,
+    "source_git_blob": "7a0df9fdcda332ed40db9cf9d6c3bdb3d6c34b7d"
+  },
+  "max_role_bytes": 4096,
+  "card_bytes": 1902
+}

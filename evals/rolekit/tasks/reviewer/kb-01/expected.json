@@ -1,0 +1,44 @@
+{
+  "kind": "reviewer",
+  "class": "critical",
+  "line_slack": 1,
+  "groups": [
+    [
+      "\\bflock\\b",
+      "\\block\\b"
+    ],
+    [
+      "fail",
+      "error",
+      "exit status",
+      "return code",
+      "\\$\\?",
+      "unchecked",
+      "not checked",
+      "ignor",
+      "swallow",
+      "silent",
+      "mask",
+      "lost",
+      "drop"
+    ],
+    [
+      "remov",
+      "drop",
+      "delet",
+      "no longer",
+      "missing",
+      "without",
+      "never",
+      "always returns? 0",
+      "returns? 0",
+      "ignor",
+      "swallow",
+      "silent",
+      "mask",
+      "unchecked",
+      "not checked"
+    ]
+  ],
+  "rule": "a finding counts only if it is critical or major, cites a changed line (+/-1), and its claim matches at least one pattern in EVERY group"
+}

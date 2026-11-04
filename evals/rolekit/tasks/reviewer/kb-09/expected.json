@@ -1,0 +1,21 @@
+{
+  "kind": "reviewer",
+  "class": "major",
+  "line_slack": 1,
+  "groups": [
+    [
+      "\\bjq\\b"
+    ],
+    [
+      "null"
+    ],
+    [
+      "empty",
+      "guard",
+      "literal",
+      "bypass",
+      "\\[ -n"
+    ]
+  ],
+  "rule": "a finding counts only if it is critical or major, cites a changed line (+/-1), and its claim matches at least one pattern in EVERY group"
+}

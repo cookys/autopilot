@@ -1,0 +1,214 @@
+{
+  "row": "rolekit-pilot",
+  "status": "stamped 2026-11-04",
+  "stamped": true,
+  "stamp": null,
+  "note": "DRAFT. Not stamped. The PM stamps it with `node evals/rolekit/stamp-rolekit.js --row pilot` before any real cell runs. After stamping any edit to a frozen file voids the row.",
+  "plan": "project/plans/2026-11-05-rolekit-direction.md",
+  "decisions": [
+    "operator d-c76529c3 (2026-11-05): go; subscription billing only; 75 USD cap; pilot first, the PM decides the formal run",
+    "real-model cells start only after G37 account registration (d-2a19fdb5)"
+  ],
+  "precedent": "skill-transport 2026-07-15: a skill-body pack gave a weak reviewer no gain (H2 refuted, haiku delta -1 vs placebo delta -1). This row tests the whole kit: narrowed skill, fixed output shape, tool list, machine-checked output, with a same-length placebo.",
+  "hypotheses": [
+    {
+      "id": "H1",
+      "text": "For the same weak model and task set, the role kit (B) closes at least 50% of the gap between the current brief (A) and the strong-model ceiling (D) on at least 3 of the 6 roles."
+    },
+    {
+      "id": "H2",
+      "text": "On those roles B beats the same-length placebo kit (C) by the discordant-pair test: the gain is the kit content, not extra words."
+    },
+    {
+      "id": "H3",
+      "text": "No role gets worse with the kit (B - A > -0.10 on every role)."
+    },
+    {
+      "id": "H4 (secondary, never decides)",
+      "text": "The effect repeats on kimi (kimi-code 2.3.0), a weak seat from another model family; reported in weak2_report, not in the verdict."
+    }
+  ],
+  "design": {
+    "roles": [
+      "planner",
+      "implementer",
+      "reviewer",
+      "verifier",
+      "debugger",
+      "explorer"
+    ],
+    "tasks_by_role": {
+      "planner": 3,
+      "implementer": 3,
+      "reviewer": 3,
+      "verifier": 3,
+      "debugger": 3,
+      "explorer": 3
+    },
+    "arms": [
+      {
+        "id": "A",
+        "name": "current brief",
+        "seats": [
+          "weak1"
+        ],
+        "kit": null,
+        "tools": "production default for the rail"
+      },
+      {
+        "id": "B",
+        "name": "role kit",
+        "seats": [
+          "weak1"
+        ],
+        "kit": "kits/<role>",
+        "tools": "kits/<role>/tools"
+      },
+      {
+        "id": "C",
+        "name": "placebo kit",
+        "seats": [
+          "weak1"
+        ],
+        "kit": "placebo/<role>",
+        "tools": "kits/<role>/tools (same list as B: C isolates the content, not the tool surface)"
+      },
+      {
+        "id": "D",
+        "name": "strong model + current brief (ceiling)",
+        "seats": [
+          "strong"
+        ],
+        "kit": null,
+        "tools": "same as A"
+      }
+    ],
+    "seats": {
+      "weak1": "Haiku 5.5 (claude)",
+      "weak2": "not run in the pilot",
+      "strong": "Sonnet (claude), arm D only"
+    },
+    "reps": {
+      "A": {
+        "weak1": 2
+      },
+      "B": {
+        "weak1": 2
+      },
+      "C": {
+        "weak1": 2
+      },
+      "D": {
+        "strong": 1
+      }
+    },
+    "task_prompt": "tasks/<role>/<id>/prompt.md is byte-identical in all arms; it ends with a one-line list of the top-level keys of the final JSON. Arms differ only in system prompt, plugin and tool list."
+  },
+  "metrics": {
+    "cell_pass": "Each cell yields pass in {0,1} from its machine check (checks/check-cell.js, exit 0 = pass, 1 = miss, 2 = infra). Rates are means of pass.",
+    "per_role": {
+      "reviewer": {
+        "primary": "defect catch: verdict FIX and a critical/major finding that matches the case predicate and cites a line inside a diff hunk",
+        "secondary": [
+          "false_must_fix count (critical/major findings that do not match and cite no real line)"
+        ],
+        "source": "evals/skill-transport/match-eval.js predicate rule, evals/known-bad"
+      },
+      "implementer": {
+        "primary": "task oracle.sh exits 0 AND red/green evidence valid (red exit != 0, green exit == 0) AND no protected path touched",
+        "secondary": [
+          "files_changed vs git status"
+        ],
+        "source": "evals/orchestration/tasks/*/oracle.sh"
+      },
+      "verifier": {
+        "primary": "va grader outcome pass: declared results match the contract oracle and the clean twin, and the defect twin deviates somewhere",
+        "secondary": [
+          "malformed_plan / budget_exceeded / declared_mismatch / missed_defect shares"
+        ],
+        "source": "evals/va-eval-generator.js, evals/va-eval-grader.js gradeCase"
+      },
+      "planner": {
+        "primary": "plan skeleton check: six elements, runnable acceptance, scopes exist and parallel scopes disjoint, request areas covered, dependency edge where required, no cycle, risks have dispositions",
+        "secondary": [
+          "subtask count"
+        ],
+        "source": "checks/check-cell.js checkPlanner"
+      },
+      "debugger": {
+        "primary": "hypothesis hit: root_cause file, line window and claim wording match the planted cause, >= 2 decided hypotheses, repository untouched",
+        "secondary": [
+          "decoy_blamed"
+        ],
+        "source": "checks/check-cell.js checkDebugger"
+      },
+      "explorer": {
+        "primary": "all questions right: found/absent as expected and every positive answer has a citation whose line really holds the quoted text",
+        "secondary": [
+          "score = fraction of questions right"
+        ],
+        "source": "checks/check-cell.js checkExplorer"
+      }
+    }
+  },
+  "estimators": {
+    "gap_closed": "(s_B - s_A) / (s_D - s_A) per role",
+    "discordant_pairs": "B vs C over (task, rep) cells; exact one-sided binomial tail on b of b + c at p = 0.5, alpha 0.10"
+  },
+  "verdict": {
+    "rule": "The pilot checks the instrument and never emits SHIP_CANDIDATE or NOT_SHIP. Verdict PILOT_OK iff every gate below holds, else PILOT_FIX with the failing gates listed.\nG1 infra: infra rows <= 10% of all scheduled cells and <= 25% in any arm x role.\nG2 kit applied: for >= 95% of B and C rows, kit_applied is true (the runner confirmed the system prompt marker, the tool list and the plugin skill match the compiled kit); a B or C row with kit_applied=false is an infra row.\nG3 parse: parse_ok is true for >= 50% of the non-infra rows in every arm A, B, C, D.\nG4 headroom: s_D(r) - s_A(r) > 0 for >= 3 roles, and s_A(r) < 1.0 for >= 4 roles (no ceiling), and s_D(r) > 0 for >= 4 roles (no floor).\nG5 cost: every submitted row has a finite non-negative cost_usd (a missing or invalid cost fails the gate, it is never read as 0), and the sum <= 1.5 x the high estimate of cost-table for this row; the per-role mean cost_usd per cell is written to the pilot report for the formal estimate.\nG6 checks: the evidence file written by collect-evidence.js (it runs the unit tests itself) shows tests > 0, pass == tests, fail == 0, a passing negative-control test for each of reviewer, implementer, verifier, planner, debugger, explorer, score-rolekit, compile-kit, stamp-rolekit, the full set of test files, sentinel_calls == 0, and an artifact_sha256 equal to the identity (sha256 over every file under evals/rolekit/ including the tests, see lib-identity.js) of the tree being scored, which the collector derives itself; a missing or failing evidence file fails the gate.",
+    "script": "evals/rolekit/score-rolekit.js",
+    "params": {
+      "infra_total_max": 0.1,
+      "infra_arm_role_max": 0.25,
+      "kit_applied_min": 0.95,
+      "parse_ok_min": 0.5,
+      "roles_with_headroom_min": 3,
+      "roles_below_ceiling_min": 4,
+      "roles_above_floor_min": 4,
+      "cost_factor_max": 1.5
+    }
+  },
+  "exclusions": [
+    "A task whose frozen files no longer match tasks/manifest.json is excluded before the run and the row is void until restamped.",
+    "A cell with infra=true is never scored as a miss and never as a pass; it is re-run once, and a second infra stays infra.",
+    "No cell is dropped for being a bad answer: parse failure, wrong schema and wrong content all score pass=0."
+  ],
+  "infra_failure": [
+    "auth or quota error from the runner (the campaign stops at the first one, exit 4 like the skill-onoff runners)",
+    "runner crash, timeout with no model output, empty transcript",
+    "kit not applied: init system prompt, tool list or plugin skill differs from the compiled kit (kit_applied=false) in a B or C cell",
+    "check-cell.js exit 2 (task files missing, workdir not a git repo, oracle cannot run, verifier case drifted from its frozen envelope)"
+  ],
+  "cost": {
+    "billing": "subscription only; no API-key path",
+    "cap_usd": 15,
+    "cap_note": "pilot-own cap; the pilot spend counts against the 75 USD A/B total",
+    "estimate_usd_low": 5.1696,
+    "estimate_usd_high": 7.1496,
+    "estimate_usd_high_with_margin": 10.72,
+    "cells": 126,
+    "table": "COST-TABLE-pilot.md",
+    "stop_loss": [
+      "stop the campaign when booked cost reaches cap_usd",
+      "stop and report when the first 30 cells cost more than 2x their share of the high estimate"
+    ]
+  },
+  "freeze_files": [
+    "kits",
+    "placebo",
+    "kimi",
+    "tasks",
+    "checks",
+    "cost-model.json",
+    "cost-table.js",
+    "compile-kit.js",
+    "score-rolekit.js",
+    "collect-evidence.js",
+    "stamp-rolekit.js",
+    "lib-identity.js",
+    "prereg/pilot.json",
+    "COST-TABLE-pilot.md"
+  ],
+  "stamp_with": "node evals/rolekit/stamp-rolekit.js --row pilot   (then --check)"
+}

@@ -1,0 +1,1 @@
+{"class":"major","defect":"// empty guard removed from jq expressions; when path or sha256 is null/absent, jq -r outputs the literal string 'null' instead of empty string, bypassing the non-empty guard and allowing null-valued entries to pass validation"}

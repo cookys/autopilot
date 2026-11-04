@@ -1,0 +1,10 @@
+{
+  "role": "debugger",
+  "skill": "debug",
+  "source_path": "skills/debug/SKILL.md",
+  "source_lines": null,
+  "source_git_blob": "5a38e775746d1a0825493c40ae042fe10fe9be0d",
+  "base_sha": "63308bd8f2f6fda83277047a0269cb75db1d5f1f",
+  "transform": "frontmatter description re-quoted as a YAML double-quoted string; body verbatim",
+  "copied_bytes": 8213
+}

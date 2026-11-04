@@ -1,0 +1,10 @@
+{
+  "role": "planner",
+  "skill": "plan-template",
+  "source_path": "references/plan-template.md",
+  "source_lines": null,
+  "source_git_blob": "b07b729443098e7de1b1041b2236418d80190689",
+  "base_sha": "63308bd8f2f6fda83277047a0269cb75db1d5f1f",
+  "transform": "frontmatter added in front of the source text",
+  "copied_bytes": 7479
+}

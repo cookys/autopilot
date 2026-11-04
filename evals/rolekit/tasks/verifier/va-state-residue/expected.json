@@ -1,0 +1,11 @@
+{
+  "kind": "va_case",
+  "seed": "rolekit-pilot-v1",
+  "trial": 0,
+  "family": "state-residue",
+  "case_index": 0,
+  "case_id": "values_case_id_c1b6709efc",
+  "envelope_sha256": "b291b73fccb35514b7ca646cddf43c40dd95bb5fe3c664c0a282645be44e8fbb",
+  "generator_version": "va-declared-plan-v1",
+  "grader": "evals/va-eval-grader.js gradeCase"
+}

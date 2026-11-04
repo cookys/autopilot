@@ -1,0 +1,9 @@
+{
+  "kind": "debugger",
+  "root_cause_file": "lib/config.js",
+  "line_min": 14,
+  "line_max": 18,
+  "claim_regex": "(precedence|Object\\.assign|order|override|env)",
+  "decoy_file": "lib/parser.js",
+  "min_hypotheses": 2
+}

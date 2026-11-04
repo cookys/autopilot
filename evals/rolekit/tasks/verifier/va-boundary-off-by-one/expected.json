@@ -1,0 +1,11 @@
+{
+  "kind": "va_case",
+  "seed": "rolekit-pilot-v1",
+  "trial": 0,
+  "family": "boundary-off-by-one",
+  "case_index": 0,
+  "case_id": "values_case_id_c1ab313b18",
+  "envelope_sha256": "4a4bc99c465578abf9f6fbff900d63b5967148e052a602f247dcb8ea6e78e3f9",
+  "generator_version": "va-declared-plan-v1",
+  "grader": "evals/va-eval-grader.js gradeCase"
+}

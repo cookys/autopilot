@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "artifact_type": "rolekit_stamp_receipt",
+  "row": "pilot",
+  "stamped_at": "2026-11-04T22:46:57.506Z",
+  "authorized_by": "d-c76529c3.pm-20261105T0700-pilot",
+  "prereg_sha256": "0b69dfe427cdff9df641dfc1440883c8dac6f6dbab2cf8d1abfd226ecf5f516b",
+  "digests": {
+    "kits": "176891d496c225f9a12b5c0447e9c9e67728b8d6ed01ee9d7608271987931554",
+    "placebo": "3144b1b905e5a9d3b8a5463e746c6f3a17c52dce287c61b9d81c3303fd053f8e",
+    "tasks": "4c397583ff2e83c15d2731d679b5754d4a6403ceb00098bce8c7cf38331f2f83",
+    "checks": "b7636191bc43abc9f4c0c9620b85f12ff0b730469b786d3f3e6d8bb30a42f056",
+    "verdict_code": "4e1170fb50df2d4e8d610dbe038c4f39542cfcbfaade6b8875adb13af2e89b48"
+  },
+  "frozen_files": 234
+}

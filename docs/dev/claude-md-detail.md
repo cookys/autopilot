@@ -5,11 +5,11 @@ BL-0383 shortened the root `CLAUDE.md` to under 10 KB. Each line below is the or
 ```text
 For Claude Code sessions working **on** the autopilot plugin itself. Skill-runtime conventions live in each skill's `SKILL.md`; this file covers cross-cutting things a session needs at entry.
 
-For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS.md`](AGENTS.md) for the agents.md-spec readme that applies to any agent. For cross-platform portability details (what each platform actually supports vs. what's unverified), see [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
+For **non-Claude-Code** agents (OpenCode, Codex, Antigravity, …), see [`AGENTS.md`](../../AGENTS.md) for the agents.md-spec readme that applies to any agent. For cross-platform portability details (what each platform actually supports vs. what's unverified), see [`references/multi-agent-portability.md`](../../references/multi-agent-portability.md).
 
 ## Coexistence with superpowers
 
-Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md). Per-scenario UX in [`docs/guide/coexistence.md`](docs/guide/coexistence.md).
+Autopilot is standalone-capable. When `superpowers` is installed, orchestrators (`ceo-agent`, `finish-flow`, `quality-pipeline`, `think-tank*`, `dev-flow`) consult `.claude/dispatch-config.md` to decide which methodology / reviewer / parallel dispatcher to delegate to. Defaults in [`project-config-template/dispatch-config.md`](../../project-config-template/dispatch-config.md). Per-scenario UX in [`docs/guide/coexistence.md`](../../docs/guide/coexistence.md).
 
 ## Mission graph verification (campaign convention)
 

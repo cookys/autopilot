@@ -12,6 +12,6 @@ Loaded when a session reads or edits a file under `platforms/`. Root `AGENTS.md`
 
 ## Cross-Platform Notes (factual)
 
-Each platform reads different config files and uses different skill discovery paths. See [`references/multi-agent-portability.md`](references/multi-agent-portability.md) for the verified facts table with source URLs.
+Each platform reads different config files and uses different skill discovery paths. See [`references/multi-agent-portability.md`](../references/multi-agent-portability.md) for the verified facts table with source URLs.
 
 Skill-sharing paths by platform: **OpenCode** scans `.agents/skills/` natively (verified empirically, OpenCode 1.15.10). **Codex** can use `.agents/skills/` from the repo and can also install the package under `platforms/codex/plugin` through the repo-local marketplace; that package includes the live-proven production `PostCompact` boundary in addition to skills (verified on codex-cli 0.146.0). **Antigravity** does NOT scan a loose skills dir — it imports the whole repo as a plugin via `agy plugin install <repo>` (verified empirically, `agy` 1.0.1), registering skills + agents + hooks. SKILL.md format (YAML frontmatter + Markdown body) is the de facto standard across all four platforms.

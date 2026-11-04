@@ -22,8 +22,8 @@ run_hook_at() { # <hooks-dir> [extra env assignment]
   printf '%s' "3.0.0" > "$HOOK_HOME/.autopilot/last-seen-version"
   env HOME="$HOOK_HOME" TMPDIR="$HOOK_TMPDIR" CLAUDE_PLUGIN_ROOT="$ROOT" ${2:+"$2"} node "$1/session-start.js" <<< "$PAYLOAD" 2>/dev/null | ctx_of
 }
-BAD='{"config_schema_version":1,"context_budgt":{"t2":1},"context_budget":{"mode":"of","t1":300000},"a_typo":1,"update_chek":false}'
-CLEAN='{"config_schema_version":1,"context_budget":{"t2":150000}}'
+BAD='{"config_schema_version":2,"context_budgt":{"t2":1},"context_budget":{"mode":"of","t1":300000},"a_typo":1,"update_chek":false}'
+CLEAN='{"config_schema_version":2,"context_budget":{"t2":150000}}'
 
 printf '%s' "$BAD" > "$CFG"
 OUT="$(run_hook_at "$HOOKS_DIR")"

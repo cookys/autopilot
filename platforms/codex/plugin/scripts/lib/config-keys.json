@@ -5895,6 +5895,14 @@
         "off",
         "stale",
         "scheduled"
+      ],
+      "changed_in": [
+        {
+          "schema": 2,
+          "from": "off (never probed)",
+          "to": "manifest (unset quota_probe makes one tiny haiku call before pick for an alias whose newest observation is old)",
+          "note": "This spends a few tokens (about 0.003 USD API-equivalent per probe, at most one per run, never for a pinned, tight or cooling alias). Set accounts.quota_probe to \"off\" to keep the old behavior. Only hosts with an account registry are affected."
+        }
       ]
     },
     {

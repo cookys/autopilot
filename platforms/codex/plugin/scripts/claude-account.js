@@ -317,6 +317,7 @@ function accountsConfig(ctx) {
 }
 
 function auditLine(ctx, rec, tokens) {
+  if (ctx.noWrite) return; // `usage-probe --due --dry-run`: no audit line on any path, refusals included
   try {
     audit.appendAudit(rec, { path: ctx.auditFile, now: ctx.now(), tokens: tokens || [] });
   } catch (e) {
@@ -783,7 +784,10 @@ function readDemand(ctx) {
 // `usage-probe --due [--dry-run]`: the periodic entry point an external timer calls. No timer is installed here.
 // Only an unset or `scheduled` quota_probe on a periodic-eligible manifest has anything due; `off`, `stale` and every
 // other manifest print an empty due list and spawn nothing. Prints {due, probed}; --dry-run never spawns.
-async function cmdUsageProbeDue(ctx, opts) {
+async function cmdUsageProbeDue(realCtx, opts) {
+  // --dry-run writes nothing on any path: audit (preAudit/auditLine, also from loadChecked), mirror and cooldown are only
+  // read before the spawn step, and the spawn step is skipped. Refusals and exit codes are unchanged.
+  const ctx = opts['dry-run'] ? Object.assign({}, realCtx, { noWrite: true }) : realCtx;
   if (opts.alias !== undefined || opts.purpose !== undefined) throw new Stop(EXIT.INVALID, 'due_excludes_alias_and_purpose', null);
   const purpose = 'quota-probe';
   const cfg = accountsConfig(ctx);

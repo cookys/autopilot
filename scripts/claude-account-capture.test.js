@@ -780,3 +780,63 @@ test('G40-BL0375 no registry: with quota_probe unset every registry command ends
     } finally { fx.cleanup(); }
   }
 });
+
+// ---- BL-0375 review: `usage-probe --due --dry-run` writes nothing on any path -------------------------------------------
+// Snapshot of the whole fixture tree: every file's bytes plus every directory; "absent before" must stay absent.
+function treeSnapshot(root) {
+  const out = {};
+  const walk = (d) => {
+    for (const n of fs.readdirSync(d).sort()) {
+      const p = path.join(d, n);
+      const st = fs.lstatSync(p);
+      if (st.isDirectory()) { out[path.relative(root, p) + '/'] = 'dir'; walk(p); } else out[path.relative(root, p)] = st.isSymbolicLink() ? 'link:' + fs.readlinkSync(p) : fs.readFileSync(p).toString('base64');
+    }
+  };
+  walk(root);
+  return out;
+}
+const DRY_SCENARIOS = {
+  'mode off': { code: 2, err: /mode_off/, setup: (fx) => { fx.env.AUTOPILOT_ACCOUNT_MODE = 'off'; demandLine(fx, 'a', 60); } },
+  'registry invalid': { code: 2, err: /./, setup: (fx) => { fs.writeFileSync(fx.regFile, '{not json'); } },
+  'scheduled with a due alias': { code: 0, out: { due: ['a'], probed: [] }, setup: (fx) => { demandLine(fx, 'a', 60); } },
+  'nothing due': { code: 0, out: { due: [], probed: [] }, setup: () => {} },
+};
+
+test('G40-BL0375 review: --due --dry-run leaves audit, mirror, cooldown and every fixture file byte for byte unchanged, and refuses exactly as before', async () => {
+  for (const [name, sc] of Object.entries(DRY_SCENARIOS)) {
+    const fx = dueFx({ responses: { a: stream(ev(0.3, 0.1)) } });
+    try {
+      sc.setup(fx);
+      const before = treeSnapshot(fx.root);
+      const r = await goWith(cliWithManifest(CONFIRMED)(), fx, ['usage-probe', '--due', '--dry-run']);
+      assert.strictEqual(r.code, sc.code, `${name}: ${r.err}`);
+      if (sc.err) assert.match(r.err, sc.err, name);
+      if (sc.out) assert.deepStrictEqual(JSON.parse(r.out), sc.out, name);
+      assert.deepStrictEqual(treeSnapshot(fx.root), before, `${name}: the dry run changed a file (audit, mirror, cooldown or other)`);
+      assert.strictEqual(fx.shim.spawns(), 0, name);
+    } finally { fx.cleanup(); }
+  }
+});
+
+test('G40-BL0375 review: without --dry-run the same refusals still write their audit line (the guard is dry-run only)', async () => {
+  const fx = dueFx();
+  try {
+    fx.env.AUTOPILOT_ACCOUNT_MODE = 'off';
+    const r = await goWith(cliWithManifest(CONFIRMED)(), fx, ['usage-probe', '--due']);
+    assert.strictEqual(r.code, 2);
+    assert.ok(auditLines(fx).some((l) => l.outcome === 'mode_off'), 'the mode_off pre-audit line is written when not a dry run');
+  } finally { fx.cleanup(); }
+});
+
+test('G40-BL0375 review negative control: with the dry-run guard removed, the mode-off dry run writes an audit line and the snapshot test turns red', async () => {
+  const noGuard = cliWithManifest(CONFIRMED)([['  if (ctx.noWrite) return; // `usage-probe --due --dry-run`: no audit line on any path, refusals included\n', '']]);
+  const fx = dueFx();
+  try {
+    fx.env.AUTOPILOT_ACCOUNT_MODE = 'off';
+    const before = treeSnapshot(fx.root);
+    const r = await goWith(noGuard, fx, ['usage-probe', '--due', '--dry-run']);
+    assert.strictEqual(r.code, 2);
+    assert.notDeepStrictEqual(treeSnapshot(fx.root), before, 'the mutant must change the tree');
+    assert.ok(fs.existsSync(fx.auditFile), 'it wrote the audit file that did not exist');
+  } finally { fx.cleanup(); }
+});

@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0378 -->
+<!-- next-id: BL-0382 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -21,37 +21,63 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 還不知道真實 dispatch 下 json 與 stream-json 兩種輸出格式的 result 位元組是否一致；這是 G40 agent lane 被動觀測的前提。要用真實 dispatch 量測，PM 目前停車中。
 - **Impact**: 前提沒確認就做被動觀測，兩種格式若不一致，觀測到的結果會對不上。
-- **Trigger**: PM 排序：G40 P1 之後的第 2 項，排在 BL-0371 之後；PM 放行後開工
+- **Trigger**: Tasks 0-3 已於 05a70bf82 合併；Tasks 4-5 停在 operator card d-2a19fdb5，等已註冊的 alias；PM 以 bl-ap-sj45 追蹤
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: PM 2026-11-04 ordering message
 - **Pointer**: project/backlog/bl-ap-streamjson-result-bytes.md
 
-### check-phase-review-receipt verifies a chain of review sets (--chain A,B)
-- **Id**: BL-0373
+### check-phase-review-receipt：--chain 還不能收 packets 審查組
+- **Id**: BL-0378
 - **Status**: open
 - **Since**: 2026-11-04
 - **Origin**: self
-- **Problem**: 一個專案先用審查組 A 審前半段，修正後新增的檔案 A 收不進去，改用審查組 B 審後半段；現在只拿 A 檢查會失敗，即使 B 已涵蓋所有改動的路徑，需要能一起檢查兩組。
-- **Impact**: 分兩組審查的專案無法通過收據檢查，只能繞過或重審一遍，浪費審查額度。
-- **Trigger**: PM 排序：排在 BL-0371 與 BL-0372 之後，目前尚未派工
-- **Trigger-Type**: owner
+- **Problem**: --chain 目前只收 Mode A 的 phase id，用 packets 審查的專案不能當鏈上的一環，只能另外用 packets 模式單獨驗。
+- **Impact**: 用 packets 審的專案若也分兩組審，無法一次通過鏈檢查，要拆開驗而且跨組的連續性沒人檢查。
+- **Trigger**: 下次有專案用 packets 分組審查又需要鏈檢查時
+- **Trigger-Type**: event
 - **Effort**: S
-- **Source**: PM 2026-11-04 report (alfred M2 case)
-- **Pointer**: project/backlog/check-phase-review-receipt-review-set-chain.md
+- **Source**: BL-0373 結案時留下的後續（aa95f0ce3）
+- **Pointer**: project/backlog/check-phase-review-chain-packets-members.md
 
-### G40 mirror writer: OS-held lock to close the publish fencing window
-- **Id**: BL-0374
+### post-head ledger 只支援 Mode A，Mode C 與 Mode D 還不能用
+- **Id**: BL-0379
 - **Status**: open
 - **Since**: 2026-11-04
 - **Origin**: self
-- **Problem**: G40 mirror 寫入的 lockfile 有個關不掉的窗口：持有者停頓超過 120 秒仍存活，B 可回收 lock 並發布；A 恢復後 rename 會蓋掉 B 的結果，本機 row 退回舊值直到下次寫入。
-- **Impact**: 觸發極端，現有防護已擋大半（只回收已死持有者、nonce 加 inode 比對、單調守衛）。
-- **Trigger**: PM 排序：排在 BL-0373 之後，目前尚未派工
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: G40 P1 D1 第 3 代審查 finding 48f67816；PM 在上限時的裁決，2026-11-04
-- **Pointer**: project/backlog/g40-mirror-os-held-lock.md
+- **Problem**: 合併 tip 之後的補丁帳本目前只有 Mode A 能用，鏈模式與 packets 模式會明確拒絕這個旗標。
+- **Impact**: 到世代上限的專案若走鏈或 packets，head 之後的產品碼沒有帳本可以交代，只能靠人工裁決。
+- **Trigger**: 下次有到世代上限的鏈或 packets 專案時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: BL-0377 結案時留下的後續（2cd868306）
+- **Pointer**: project/backlog/post-head-ledger-modes-c-d.md
+
+### post-head 目標分支：有網路時用 ls-remote 交叉比對
+- **Id**: BL-0380
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: 帳本檢查靠本機的遠端追蹤 ref 判斷目標分支，本機若被手動改過 ref，檢查會相信被改過的值。
+- **Impact**: 風險很小（PM 已接受這個殘餘），有網路時多一道比對可以關掉它。
+- **Trigger**: 下次動 post-head 帳本檢查時順手做
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: BL-0377 結案時留下的後續（2cd868306）
+- **Pointer**: project/backlog/post-head-ledger-ls-remote-cross-check.md
+
+### G40 mirror 鎖的 perl 備援在 macOS 上沒驗證過
+- **Id**: BL-0381
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: mirror 鎖優先用 flock 指令，沒有時改用 perl；標準 macOS 沒有 flock 指令，perl 這條路徑沒在 macOS 上跑過。
+- **Impact**: macOS 主機上若 perl 路徑壞掉，mirror 寫入會失敗並在 status 顯示 lock_helper，不會寫壞資料。
+- **Trigger**: 第一次在 macOS 主機跑 G40 mirror 時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: BL-0374 結案時留下的後續（cd7f28002）
+- **Pointer**: project/backlog/g40-mirror-oslock-macos-perl-unverified.md
 
 ### G40 probe policy per provider (build)
 - **Id**: BL-0375
@@ -1913,16 +1939,3 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PM base-reds triage (br3 lane), 2026-11-03
 - **Pointer**: project/backlog/segments-dollar-paren-superlinear.md
-
-### 合併閘門要在合併 tip 上跑，head 之後的產品碼 delta 不能沒人看
-- **Id**: BL-0377
-- **Status**: open
-- **Since**: 2026-11-04
-- **Origin**: self
-- **Problem**: 合併閘門一直是對「最後一次審查的 head」跑 check-phase-review-receipt，不是對實際合併的 tip；head 之後補上的產品碼 commit 沒有任何審查席看過，只有 depth-0 驗證過。
-- **Impact**: 審查通過的證據和實際合併的內容不同；到世代上限時尤其容易有未審的產品碼進 develop。
-- **Trigger**: PM 裁決 2026-11-04，已派 hands 實作
-- **Trigger-Type**: owner
-- **Effort**: S
-- **Source**: PM 2026-11-04 ruling (retro check of g40d1, g40d2, selgap)
-- **Pointer**: project/backlog/merge-gate-runs-on-tip.md

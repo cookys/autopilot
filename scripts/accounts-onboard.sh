@@ -207,6 +207,7 @@ if (mode === 'dir') {
   let verdict = 'unverified';
   if (seen !== undefined && m && typeof m.org_id === 'string') verdict = seen.toLowerCase() === m.org_id.toLowerCase() ? 'verified' : 'mismatch';
   if (verdict === 'unverified' && m && m.org_check === 'verified') verdict = 'kept'; // an id read from auth status stays verified
+  else if (verdict === 'unverified' && m && m.org_check === 'mismatch') verdict = 'kept_mismatch'; // an envelope without an id does not erase an earlier mismatch
   else if (m) { try { reg.writeTokenMeta(acc, alias, { org_check: verdict }); } catch (e) { /* the summary row still reports the verdict */ } } // a mismatch overwrites an earlier verified
   process.stdout.write(verdict + '\n');
 } else if (mode === 'prepare') {
@@ -343,7 +344,7 @@ for alias in "$@"; do
         row "✅" "$alias org" "標籤「$given」（以 --org 指定），org 已驗證（識別碼來自 auth status${oname:+；名稱 $oname 未採用}）"
       elif [ -z "$oname" ]; then
         echo "目前登入的 org 名稱含帳號資訊（例如 email）或無法顯示，所以不顯示也不儲存；org 識別碼已讀到並會照常記錄與檢查重複。"
-        echo "請為 profile $alias 輸入一個 org 標籤（1 到 64 字，不可含 @、不可像 email；例：personal）。"
+        echo "請為 profile $alias 輸入一個 org 標籤（1 到 64 字，不可含 @ 或雙引號、不可像 email；例：personal）。"
         lbl=""; tries=0
         while [ "$tries" -lt 3 ]; do
           tries=$((tries + 1))
@@ -354,7 +355,7 @@ for alias in "$@"; do
             lbl=""; break
           fi
           if ONBOARD_LABEL="$lbl" nodeh labelcheck >/dev/null 2>&1; then break; fi
-          echo "標籤不合法（空白、超過 64 字、含 @ 或像 email）。修法：請改輸入單純的名稱，例如 personal。"
+          echo "標籤不合法（空白、超過 64 字、含 @、含雙引號或像 email）。修法：請改輸入單純的名稱，例如 personal。"
           lbl=""
         done
         if [ -z "$lbl" ]; then
@@ -503,6 +504,7 @@ EOF
       verified) row "✅" "$alias org 核對" "OK 呼叫的回應帶有 org 識別碼，與記錄相符" ;;
       mismatch) row "❌" "$alias org 核對" "OK 呼叫的回應帶的 org 識別碼與記錄不同：這個 token 可能綁到別的 org；修法：重新 setup-token 並確認 org" ;;
       kept) ;;
+      kept_mismatch) row "➖" "$alias org 核對" "這次的回應沒有 org 識別碼，先前的 mismatch 仍然有效（status 會顯示 org_check=mismatch）" ;;
       *) row "➖" "$alias org 核對" "org 未驗證：OK 呼叫的回應沒有 org 識別碼或記錄的識別碼未知（不影響通過）" ;;
     esac
   else

@@ -444,6 +444,7 @@ YESFLAG=(); run_onboard "$SCRIPT" "$fxp" $'y\ny\n'"$TA"$'\n' a; YESFLAG=(--yes)
 assert_eq "$(rc_of "$fxp")" "1" "PLAN A piped y without --yes: refused (exit 1)"
 assert_contains "$(cat "$fxp/out.txt")" "將登記 1 個 profile：a" "PLAN is printed first"
 assert_contains "$(cat "$fxp/out.txt")" "不是終端機" "PLAN A says why it refused"
+assert_contains "$(cat "$fxp/out.txt")" "沒有建立任何東西" "PLAN A refusal says nothing was created"
 assert_contains "$(cat "$fxp/out.txt")" "修法" "PLAN A says how to fix"
 [ ! -e "$fxp/fakehome/.config" ] && [ ! -e "$fxp/shim.log" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "PLAN A refusal created something"
 YESFLAG=(); run_onboard "$SCRIPT" "$fxp" "" a; YESFLAG=(--yes)
@@ -478,6 +479,16 @@ run_onboard "$SCRIPT" "$fxb" $'覆蓋\n'"$TA2"$'\n' a
 assert_neq "$(rc_of "$fxb")" "0" "B token of another org: exit non-zero"
 assert_contains "$(meta_of "$fxb" a)" '"org_check":"mismatch"' "B org_check no longer verified after a mismatch"
 assert_contains "$(grep -h '^alias=a ' "$fxb/out.txt" | head -1)" 'org_check=mismatch' "B status shows the mismatch"
+# a later OK call whose envelope carries no org id must not erase the mismatch
+setctl "$fxb" envOrg 'null'
+run_onboard "$SCRIPT" "$fxb" $'覆蓋\n'"$TA2"$'\n' a
+assert_contains "$(meta_of "$fxb" a)" '"org_check":"mismatch"' "B a later envelope without an org id keeps the mismatch"
+assert_contains "$(grep -h '^alias=a ' "$fxb/out.txt" | head -1)" 'org_check=mismatch' "B status still shows the mismatch"
+# the typed-label prompt and retry message name the double quote among the refusal reasons
+fxq="$(mkfx "$TA")"; setctl "$fxq" auth "[$HID]"
+run_onboard "$SCRIPT" "$fxq" $'bad"label\nbad"label\nbad"label\n' a
+assert_contains "$(cat "$fxq/out.txt")" "雙引號" "E the retry message lists the double quote"
+assert_contains "$(cat "$fxq/out.txt")" "不可含 @ 或雙引號" "E the label prompt lists the double quote"
 
 # D. every refusal says how to fix it.
 run_onboard "$SCRIPT" "$fx0" "" a a

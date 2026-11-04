@@ -96,13 +96,16 @@ Flags:
                                     phase equals --phase, every non-merge commit of git rev-list --no-merges head..tip ^target
                                     (the branch's own commits) is listed exactly once (no extras, no duplicates, no abbreviated
                                     shas), each commit's real paths (git diff-tree -r --no-renames --name-only) are a subset of
-                                    its listed paths, and every verification is non-empty. A merge commit M in that range with
-                                    content of its own (git diff-tree --cc --no-commit-id --name-only -r M is non-empty:
-                                    conflict resolution or evil merge) must be listed under its own sha with paths covering
-                                    that list; a clean merge needs no entry. Commits that came in from the target are not listed.
+                                    its listed paths, and every verification is non-empty. A merge commit M in that range whose
+                                    tree differs from git's own re-merge of its two parents (git diff-tree --remerge-diff:
+                                    conflict resolution, evil merge, taking one side whole, -X, -s ours) must be listed under
+                                    its own sha with paths covering that difference; a clean merge needs no entry; a merge with
+                                    more than two parents fails closed. Commits that came in from the target are not listed.
                                     Not supported with --chain, --packets or Mode B (refused).
-  --post-head-target <ref>          Required with --post-head-ledger: what the branch merges into (normally origin/develop).
-                                    Own commits are head..tip minus anything reachable from <ref>.
+  --post-head-target <ref>          Required with --post-head-ledger (and refused without it): the line the branch merges into
+                                    (normally origin/develop) as it was before this work. Resolved to a sha once. It must descend
+                                    from --phase-base and must NOT contain the last reviewed head (so not the tip, the branch, or
+                                    a line that already took the work). Own commits are head..tip minus what that sha reaches.
   --phase-base <sha>                Expected phase base commit sha (mandatory for review mode)
   --repo-root <r>                   Path to repository root (defaults to cwd)
   --plan-artifact <gN.json>         Plan artifact JSON file
@@ -607,20 +610,28 @@ function pathsMovedAfterHead(repoRoot, range, consumerAllowlist) {
 // Scope ("the branch's own commits"): `git rev-list --no-merges <head>..<tip> ^<target>`, where <target> is what the
 // branch merges into (--post-head-target, normally origin/develop). Commits that arrived by merging the target
 // into the branch are reachable from the target and are not listed: another phase reviewed them.
-// A merge commit M in that range is listed only when it carries content of its own:
-// `git diff-tree --cc --no-commit-id --name-only -r M` (paths where the merge result differs from EVERY parent:
-// conflict resolutions and evil merges) is non-empty. Then M must be listed under its own sha and its paths must
-// cover that list. A clean merge (empty list) needs no entry.
+// The target is the caller's choice, so it is not trusted: it is resolved to a sha once, and must be a line the
+// branch grew from (phase-base is its ancestor) that does not yet contain the work (the last reviewed head is NOT
+// its ancestor, which also rules out a target at or past the tip or any post-head commit). Otherwise `^target` would
+// subtract the branch's own commits and an empty ledger would pass.
+// A merge commit M in that range is listed only when it carries content of its own: the paths where M's tree
+// differs from git's own automatic re-merge of M's two parents (`git diff-tree --remerge-diff`). That covers
+// conflict resolutions, evil merges, taking one side whole (--ours/--theirs, -X, -s ours) and mixed hunks, none of
+// which `--cc` lists when the result equals one parent. Then M must be listed under its own sha and its paths must
+// cover that list. A clean merge (empty list) needs no entry. A merge with more than two parents fails closed.
+// --remerge-diff (not `git merge-tree --write-tree`) because git runs it in a temporary object directory: the
+// check leaves no objects in the repository it inspects.
 const POST_HEAD_LEDGER_SCHEMA = 'post-head-ledger/1';
-function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip, target }) {
+function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip, target, phaseBase }) {
   const problems = [];
   const git = (args) => spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', maxBuffer: 1 << 28 });
-  const lines = (r) => r.stdout.split('\n').map((l) => l.trim()).filter(Boolean);
+  const nul = (r) => r.stdout.split('\0').filter(Boolean); // -z output: no C-quoting of unusual path names
   if (typeof target !== 'string' || !target) {
     return ['--post-head-target <ref> is required with --post-head-ledger (the merge target, normally origin/develop; own commits are head..tip not reachable from it)'];
   }
   const tg = git(['rev-parse', '--verify', '--end-of-options', `${target}^{commit}`]);
   if (tg.status !== 0) return [`--post-head-target '${target}' does not resolve to a commit`];
+  const targetSha = tg.stdout.trim(); // every later git call uses the sha, never the movable name
   let ledger;
   try {
     ledger = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
@@ -637,18 +648,26 @@ function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip, t
   if (git(['merge-base', '--is-ancestor', '--end-of-options', head, tip]).status !== 0) {
     return problems.concat(`last reviewed head ${head} is not an ancestor of '${branch}' (${tip})`);
   }
-  const range = `${head}..${tip} ^${target}`;
-  const own = git(['rev-list', '--no-merges', `${head}..${tip}`, '--not', target]);
+  if (git(['merge-base', '--is-ancestor', '--end-of-options', head, targetSha]).status === 0) {
+    return problems.concat(`--post-head-target '${target}' (${targetSha}) already contains the last reviewed head ${head}: it is the tip, the branch, or a line that took work from it, and would hide the branch's own commits; give the line the branch merges into as it was before this work`);
+  }
+  if (git(['merge-base', '--is-ancestor', '--end-of-options', phaseBase, targetSha]).status !== 0) {
+    return problems.concat(`--post-head-target '${target}' (${targetSha}) does not descend from --phase-base ${phaseBase}: it is not the line the branch grew from`);
+  }
+  const range = `${head}..${tip} ^${targetSha}`;
+  const own = git(['rev-list', '--no-merges', '-z', `${head}..${tip}`, '--not', targetSha]);
   if (own.status !== 0) return problems.concat(`git rev-list --no-merges ${range} failed: ${own.stderr || 'unknown error'}`);
-  const actual = lines(own);
-  const mg = git(['rev-list', '--merges', `${head}..${tip}`, '--not', target]);
+  const actual = nul(own);
+  const mg = git(['rev-list', '--merges', '-z', `${head}..${tip}`, '--not', targetSha]);
   if (mg.status !== 0) return problems.concat(`git rev-list --merges ${range} failed: ${mg.stderr || 'unknown error'}`);
   // merge commits with content of their own: must be listed too
   const mergeOwn = new Map();
-  for (const m of lines(mg)) {
-    const cc = git(['diff-tree', '--cc', '--no-commit-id', '--name-only', '-r', m]);
-    if (cc.status !== 0) { problems.push(`git diff-tree --cc ${m} failed: ${cc.stderr || 'unknown error'}`); continue; }
-    const ps = lines(cc);
+  for (const m of nul(mg)) {
+    const parents = git(['rev-list', '--parents', '-n', '1', m]).stdout.trim().split(/\s+/).slice(1);
+    if (parents.length !== 2) { problems.push(`merge commit ${m} has ${parents.length} parents: the re-merge check supports exactly two (failing closed; split the merge or list the work in another way)`); continue; }
+    const rm = git(['diff-tree', '--remerge-diff', '-z', '--no-renames', '--name-only', '--no-commit-id', '-r', m]);
+    if (rm.status !== 0) { problems.push(`git diff-tree --remerge-diff ${m} failed (failing closed, not falling back to --cc): ${rm.stderr || 'unknown error'}`); continue; }
+    const ps = nul(rm);
     if (ps.length) mergeOwn.set(m, ps);
   }
   const expected = new Set([...actual, ...mergeOwn.keys()]);
@@ -660,7 +679,7 @@ function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip, t
     if (!c || typeof c !== 'object' || typeof c.sha !== 'string') { problems.push(`${at} has no sha string`); return; }
     if (seen.has(c.sha)) { problems.push(`${at}: sha ${c.sha} is listed twice`); return; }
     seen.add(c.sha);
-    if (!expected.has(c.sha)) problems.push(`${at}: sha ${c.sha} is not an own commit in ${range} (extra entry, abbreviated sha, a commit the target already has, or a merge with no content of its own)`);
+    if (!expected.has(c.sha)) problems.push(`${at}: sha ${c.sha} is not an own commit in ${range} (extra entry, abbreviated sha, a commit the target already has, or a merge that equals git's own re-merge)`);
     if (!Array.isArray(c.paths) || c.paths.some((p) => typeof p !== 'string' || !p)) { problems.push(`${at} (${c.sha}): paths is not an array of non-empty strings`); return; }
     if (typeof c.verification !== 'string' || !c.verification.trim()) problems.push(`${at} (${c.sha}): verification is empty (state how depth-0 verified it: red/green or mutation, with an evidence path)`);
     byListed.set(c.sha, c);
@@ -669,10 +688,10 @@ function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip, t
   for (const sha of actual) {
     const entry = byListed.get(sha);
     if (!entry) { problems.push(`commit ${sha} is in ${range} but not in the post-head ledger (an unlisted post-head commit)`); continue; }
-    const dt = git(['diff-tree', '--no-commit-id', '-r', '--no-renames', '--name-only', sha]);
+    const dt = git(['diff-tree', '--root', '-z', '--no-commit-id', '-r', '--no-renames', '--name-only', sha]);
     if (dt.status !== 0) { problems.push(`git diff-tree ${sha} failed: ${dt.stderr || 'unknown error'}`); continue; }
     const declared = new Set(entry.paths);
-    for (const p of lines(dt)) {
+    for (const p of nul(dt)) {
       if (!declared.has(p)) problems.push(`commit ${sha} touched '${p}' which its ledger paths do not list`);
     }
   }
@@ -1296,7 +1315,7 @@ function validateModeA(flags, opts = {}) {
         process.exit(1);
       }
       const problems = checkPostHeadLedger({
-        ledgerFile: flags['post-head-ledger'], repoRoot, phase, branch, head: lastEntry.head, tip: currentBranchHead, target: flags['post-head-target'],
+        ledgerFile: flags['post-head-ledger'], repoRoot, phase, branch, head: lastEntry.head, tip: currentBranchHead, target: flags['post-head-target'], phaseBase: flags['phase-base'],
       });
       if (problems.length) {
         console.error(`Post-head ledger does not cover '${branch}' (${currentBranchHead}) past last reviewed head ${lastEntry.head}:\n${problems.join('\n')}`);
@@ -1614,6 +1633,10 @@ function main() {
 
   if ((flags['post-head-ledger'] !== undefined || flags['post-head-target'] !== undefined) && (flags.chain !== undefined || flags.packets !== undefined || flags['plan-artifact'] !== undefined || flags.dispositions !== undefined)) {
     console.error('--post-head-ledger and --post-head-target are supported in Mode A only (with --ledger/--phase/--branch); they cannot be combined with --chain, --packets, --plan-artifact or --dispositions yet');
+    process.exit(1);
+  }
+  if (flags['post-head-target'] !== undefined && flags['post-head-ledger'] === undefined) {
+    console.error('--post-head-target only means something with --post-head-ledger; refusing instead of ignoring it');
     process.exit(1);
   }
   if (flags.chain !== undefined) {

@@ -135,6 +135,49 @@ echo evil > "$R/z.txt"; g add z.txt; g commit -q --amend --no-edit
 OUT=$(TGT=develop2 run "$TEST_TMP/good.json" mc3); assert_exit_code "$?" "1" "C4: content added by the merge commit itself, merge not listed, fails"; assert_contains "$OUT" "z.txt" "C4: names the path"
 g checkout -q work
 
+# T: the target is the caller's choice and must not hide the branch's own commits (it must not contain the reviewed head,
+# and must descend from the phase base). Each of these would pass with an empty or partial ledger if the target were trusted.
+g checkout -q -b dm "$B0"; g merge -q --no-ff -m "develop took the branch" work; DM=$(g rev-parse HEAD); g checkout -q work
+led t0 P "$HEADR" "[]"
+led t3 P "$HEADR" "[{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V}]"
+OUT=$(TGT=$TIP run "$TEST_TMP/t0.json" work); assert_exit_code "$?" "1" "T1: target = the tip, empty ledger, fails"; assert_contains "$OUT" "already contains the last reviewed head" "T1: message"
+OUT=$(TGT=work run "$TEST_TMP/t0.json" work); assert_exit_code "$?" "1" "T2: target = the branch name, empty ledger, fails"; assert_contains "$OUT" "already contains the last reviewed head" "T2: message"
+OUT=$(TGT=$P1 run "$TEST_TMP/t3.json" work); assert_exit_code "$?" "1" "T3: target = a commit after the head, partial ledger, fails"
+OUT=$(TGT=$DM run "$TEST_TMP/t0.json" work); assert_exit_code "$?" "1" "T4: target = a develop that already merged the branch, empty ledger, fails"
+OUT=$(TGT=$HEADR run "$TEST_TMP/good.json" work); assert_exit_code "$?" "1" "T5: target = the reviewed head itself fails"
+ROOT=$(g commit-tree "$(g mktree </dev/null)" -m unrelated-root)
+OUT=$(TGT=$ROOT run "$TEST_TMP/good.json" work); assert_exit_code "$?" "1" "T6: target not descending from --phase-base fails"; assert_contains "$OUT" "does not descend from --phase-base" "T6: message"
+
+# U: merges that take one side whole or drop a side: git diff-tree --cc lists nothing for them, the re-merge does
+g checkout -q -b mc5 "$TIP"; g merge -q --no-ff -m "merge develop" develop >/dev/null 2>&1; g checkout -q --theirs a.txt; g add a.txt; g commit -q -m "merge develop (took develop's a.txt whole)"; M5=$(g rev-parse HEAD)
+assert_eq "$(g diff-tree --cc --no-commit-id --name-only -r "$M5" | wc -l | tr -d ' ')" "0" "fixture U1: --cc sees nothing for a whole-side resolution"
+OUT=$(TGT=develop run "$TEST_TMP/good.json" mc5); assert_exit_code "$?" "1" "U1: conflict resolved by taking develop's whole file, merge not listed, fails"; assert_contains "$OUT" "merge commit $M5 carries content of its own" "U1: names the merge"
+led u1ok P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$M5\",\"paths\":[\"a.txt\"],$V}]"
+OUT=$(TGT=develop run "$TEST_TMP/u1ok.json" mc5); assert_exit_code "$?" "0" "U1ok: the same merge listed with a.txt passes"
+g checkout -q -b mc6 "$TIP"; g merge -q -s ours --no-ff -m "merge develop2 -s ours" develop2 >/dev/null 2>&1; M6=$(g rev-parse HEAD)
+assert_eq "$(g diff-tree --cc --no-commit-id --name-only -r "$M6" | wc -l | tr -d ' ')" "0" "fixture U2: --cc sees nothing for -s ours"
+OUT=$(TGT=develop2 run "$TEST_TMP/good.json" mc6); assert_exit_code "$?" "1" "U2: merge -s ours (drops develop2's e.txt), not listed, fails"; assert_contains "$OUT" "merge commit $M6 carries content of its own" "U2: names the merge"
+led u2ok P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$M6\",\"paths\":[\"e.txt\"],$V}]"
+OUT=$(TGT=develop2 run "$TEST_TMP/u2ok.json" mc6); assert_exit_code "$?" "0" "U2ok: listed with e.txt passes"
+g checkout -q -b mc7 "$TIP"; g merge -q -X theirs --no-ff -m "merge develop -X theirs" develop >/dev/null 2>&1; M7=$(g rev-parse HEAD)
+OUT=$(TGT=develop run "$TEST_TMP/good.json" mc7); assert_exit_code "$?" "1" "U3: merge -X theirs (auto-resolved conflict), not listed, fails"; assert_contains "$OUT" "merge commit $M7 carries content of its own" "U3: names the merge"
+# a merge with more than two parents fails closed
+g checkout -q -b o3 "$B0"; echo o3 > "$R/o3.txt"; g add o3.txt; g commit -qm o3
+g checkout -q -b mc8 "$TIP"; g merge -q --no-ff -m octopus develop2 o3 >/dev/null 2>&1
+OUT=$(run "$TEST_TMP/good.json" mc8); assert_exit_code "$?" "1" "U4: an octopus merge fails closed"; assert_contains "$OUT" "has 3 parents" "U4: message"
+# unrelated histories: the root commit has no parent, diff-tree needs --root to list its paths
+g checkout -q --orphan orph; g rm -rfq . >/dev/null 2>&1; echo o > "$R/o.txt"; g add o.txt; g commit -q -m "orphan root"; ORPH=$(g rev-parse HEAD)
+g checkout -q -b mc9 "$TIP"; g merge -q --allow-unrelated-histories --no-ff -m "merge unrelated" orph >/dev/null 2>&1
+led r10 P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$ORPH\",\"paths\":[],$V}]"
+OUT=$(run "$TEST_TMP/r10.json" mc9); assert_exit_code "$?" "1" "R10: a root commit (unrelated history) listed with no paths fails"; assert_contains "$OUT" "commit $ORPH touched 'o.txt'" "R10: its path is reported"
+led r10ok P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$ORPH\",\"paths\":[\"o.txt\"],$V}]"
+OUT=$(run "$TEST_TMP/r10ok.json" mc9); assert_exit_code "$?" "0" "R10ok: the root commit listed with o.txt passes (the clean unrelated merge needs no entry)"
+# unusual path names are read with -z (git would C-quote them otherwise)
+g checkout -q -b uni "$TIP"; echo u > "$R/naïve file.txt"; g add . ; g commit -q -m uni; UNI=$(g rev-parse HEAD)
+led g3 P "$HEADR" "[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],$V},{\"sha\":\"$P2\",\"paths\":[\"m.txt\",\"n.txt\"],$V},{\"sha\":\"$UNI\",\"paths\":[\"naïve file.txt\"],$V}]"
+OUT=$(run "$TEST_TMP/g3.json" uni); assert_exit_code "$?" "0" "G3: a non-ASCII path with a space is compared unquoted"
+g checkout -q work
+
 # tip == head with an empty list passes; a non-empty list for it fails (extra entry)
 g checkout -q -b same "$HEADR"
 led e1 P "$HEADR" "[]"
@@ -142,6 +185,10 @@ OUT=$(run "$TEST_TMP/e1.json" same); assert_exit_code "$?" "0" "E1: tip equals t
 OUT=$(run "$TEST_TMP/good.json" same); assert_exit_code "$?" "1" "E2: entries for commits outside head..tip fail"
 g checkout -q work
 
+# --post-head-target alone is refused, not ignored
+OUT=$(node "$SCRIPT" --ledger "$L" --phase P --branch work --phase-base "$B0" --repo-root "$R" --post-head-target "$B0" 2>&1); assert_exit_code "$?" "1" "X0: --post-head-target without --post-head-ledger fails"; assert_contains "$OUT" "only means something with --post-head-ledger" "X0: message"
+echo '{}' > "$TEST_TMP/pa.json"
+OUT=$(node "$SCRIPT" --plan-artifact "$TEST_TMP/pa.json" --dispositions "$TEST_TMP/pa.json" --post-head-ledger "$TEST_TMP/good.json" --post-head-target "$B0" 2>&1); assert_exit_code "$?" "1" "X3: Mode B with --post-head-ledger is refused"; assert_contains "$OUT" "Mode A only" "X3: message"
 # Refusals outside Mode A
 OUT=$(node "$SCRIPT" --chain P,Q --post-head-ledger "$TEST_TMP/good.json" --ledger "$L" --branch work --phase-base "$B0" --repo-root "$R" 2>&1); assert_exit_code "$?" "1" "X1: --chain with --post-head-ledger refused"; assert_contains "$OUT" "Mode A only" "X1: message"
 OUT=$(node "$SCRIPT" --packets "$TEST_TMP/good.json" --post-head-ledger "$TEST_TMP/good.json" --ledger "$L" --branch work --phase-base "$B0" --repo-root "$R" 2>&1); assert_exit_code "$?" "1" "X2: --packets with --post-head-ledger refused"
@@ -163,11 +210,33 @@ OUT=$(run "$TEST_TMP/r1a.json" work); assert_exit_code "$?" "0" "NC1: R1a (unlis
 mutate "subset check off" "if (!declared.has(p)) problems.push(\`commit \${sha} touched" "if (false) problems.push(\`commit \${sha} touched"
 OUT=$(run "$TEST_TMP/r2.json" work); assert_exit_code "$?" "0" "NC2: without the subset check R2 (commit touched a path it did not list, declared elsewhere) passes"
 OUT=$(run "$TEST_TMP/r2b.json" work); assert_exit_code "$?" "0" "NC2: R2b (narrow paths) passes too without the subset check"
-mutate "no-renames dropped in diff-tree" "'diff-tree', '--no-commit-id', '-r', '--no-renames', '--name-only'" "'diff-tree', '--no-commit-id', '-r', '-M', '--name-only'"
+mutate "no-renames dropped in diff-tree" "'diff-tree', '--root', '-z', '--no-commit-id', '-r', '--no-renames', '--name-only'" "'diff-tree', '--root', '-z', '--no-commit-id', '-r', '-M', '--name-only'"
 OUT=$(run "$TEST_TMP/r9.json" ren); assert_exit_code "$?" "0" "NC3: with rename detection on, R9 (source side undeclared) passes"
 
 mutate "merge own-content check off" "if (ps.length) mergeOwn.set(m, ps);" "if (false) mergeOwn.set(m, ps);"
 OUT=$(TGT=develop run "$TEST_TMP/c2.json" mc); assert_exit_code "$?" "1" "NC4 setup: a listed merge entry is now an extra entry and fails"
 OUT=$(TGT=develop run "$TEST_TMP/good.json" mc); assert_exit_code "$?" "0" "NC4: without the merge own-content check C1 (unlisted conflict-resolving merge) passes"
+
+mutate "target-contains-head rule off" "if (git(['merge-base', '--is-ancestor', '--end-of-options', head, targetSha]).status === 0) {" "if (false) {"
+OUT=$(TGT=$TIP run "$TEST_TMP/t0.json" work); assert_exit_code "$?" "0" "NC5: without the head-not-in-target rule T1 (target = tip, empty ledger) passes"
+OUT=$(TGT=work run "$TEST_TMP/t0.json" work); assert_exit_code "$?" "0" "NC5: T2 (target = branch name) passes"
+OUT=$(TGT=$P1 run "$TEST_TMP/t3.json" work); assert_exit_code "$?" "0" "NC5: T3 (target after the head, partial ledger) passes"
+OUT=$(TGT=$DM run "$TEST_TMP/t0.json" work); assert_exit_code "$?" "0" "NC5: T4 (develop already merged the branch) passes"
+OUT=$(TGT=$ROOT run "$TEST_TMP/good.json" work); assert_exit_code "$?" "1" "NC5: T6 is still caught by the phase-base rule"
+mutate "re-merge replaced by --cc" "['diff-tree', '--remerge-diff', '-z', '--no-renames', '--name-only', '--no-commit-id', '-r', m]" "['diff-tree', '--cc', '-z', '--name-only', '--no-commit-id', '-r', m]"
+OUT=$(TGT=develop run "$TEST_TMP/good.json" mc5); assert_exit_code "$?" "0" "NC6: with --cc only, U1 (whole-side resolution) passes"
+OUT=$(TGT=develop2 run "$TEST_TMP/good.json" mc6); assert_exit_code "$?" "0" "NC6: with --cc only, U2 (-s ours) passes"
+OUT=$(TGT=develop run "$TEST_TMP/good.json" mc7); assert_exit_code "$?" "0" "NC6: with --cc only, U3 (-X theirs) passes"
+OUT=$(TGT=develop run "$TEST_TMP/good.json" mc); assert_exit_code "$?" "1" "NC6: C1 (real conflict resolution) is still seen by --cc"
+mutate "--root dropped" "'diff-tree', '--root', '-z'" "'diff-tree', '-z'"
+OUT=$(run "$TEST_TMP/r10.json" mc9); assert_exit_code "$?" "0" "NC7: without --root a root commit's paths are never compared, R10 passes"
+mutate "extra-sha check off" "if (!expected.has(c.sha)) problems.push(" "if (false) problems.push("
+OUT=$(run "$TEST_TMP/r3.json" work); assert_exit_code "$?" "0" "NC8: without the extra-sha check R3 passes"
+mutate "merge paths subset off" "if (!declared.has(p)) problems.push(\`merge commit" "if (false) problems.push(\`merge commit"
+OUT=$(TGT=develop run "$TEST_TMP/c2b.json" mc); assert_exit_code "$?" "0" "NC9: without the merge paths subset C2b passes"
+mutate "reviewed_head check off" "if (ledger.reviewed_head !== head) problems.push(" "if (false) problems.push("
+OUT=$(run "$TEST_TMP/r6.json" work); assert_exit_code "$?" "0" "NC10: without the reviewed_head check R6 passes"
+mutate "head-ancestor-of-tip off" "if (git(['merge-base', '--is-ancestor', '--end-of-options', head, tip]).status !== 0) {" "if (false) {"
+OUT=$(run "$TEST_TMP/r8.json" alt); assert_exit_code "$?" "0" "NC11: without the head-is-ancestor-of-tip check R8 passes"
 
 finalize_test

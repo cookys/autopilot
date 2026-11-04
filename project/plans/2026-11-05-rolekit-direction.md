@@ -7,6 +7,7 @@
 > 2. A/B budget cap 75 USD, decided by the operator. Subscription billing only: no API-key billing path.
 > 3. Five spikes are approved now: one mechanism each, minimal haiku calls, results recorded in evidence, no default change, no merge of any dispatch behaviour.
 > 4. 3.0.0 follows the relayout plan plus two items: reserve `roles/` (layout-lint top-level allowlist and export whitelist) and the BL-0388 consumer-side fix. See the amendment in `project/plans/2026-10-31-repo-relayout-3-0-0.md` (section "E1").
+> 5. Operator decision d-c76529c3 (2026-11-05, relayed by the PM; original: 「做，撥額度｜補充：一樣 bump 3.0.0.x 不要推進 3.1」): go. A/B uses about 75 USD of quota, subscription billing only. Run the pilot first; the pilot result goes to the PM, who decides whether to run the full matrix. The prereg and the mechanical verdict are stamped before any run. The real-model part starts only after G37 account registration is done. Versions follow the current 3.0.0 bump rule (alpha or patch number, never 3.1); every "3.0.0.x" in this plan means that.
 
 日期 2026-11-05（台北）。作者 autopilot depth-0。狀態：草案，待 plan review 和 operator 確認。不含程式。
 事實細節與出處：本文附錄（來源為 rolekit-probe 2026-11-05 的唯讀調研，附 file:line）。
@@ -83,20 +84,20 @@ BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
 
 ### 3.4 跟 3.0.0 定稿的關係，以及建議
 - 定稿 §1 的「依角色重排」，是指檔案依用途分層（skills、scripts、evidence 等），不是 dispatch 角色；§8 明文把「改寫 skill 內容」排除在範圍外，要另外照 scorecard-first 處理。兩件事不是同一個軸，P2–P5 沒辦法直接拿角色套件當重排的單位。
-- 建議：3.0.0 照定稿走（P2–P5 → 白名單匯出 → 轉私有），只多做兩件小事，讓 3.1 不用再搬一次：
+- 建議：3.0.0 照定稿走（P2–P5 → 白名單匯出 → 轉私有），只多做兩件小事，讓 3.0.0.x 不用再搬一次：
   1. layout-lint 的頂層白名單和匯出白名單，預留 `roles/` 這個位置（空目錄加 README）。
   2. BL-0388 的使用端那半邊（規則改由 skill、hook 或 reference 帶），因為它影響 public 版的使用者。
 - 跟 3.0.0 並行、現在就能做（便宜、不動定稿）：五個 spike——一次性 config dir 或 cwd 裡的 CLAUDE.md 會不會被讀、`--append-system-prompt`、`--setting-sources project` 下 cwd 的 CLAUDE.md、`codex exec` 讀不讀 skill、套件編譯器的雛形。每個 spike 只用 haiku 跑幾次。
 - `codex exec` 的真模型驗證排在 G37 帳號註冊（d-2a19fdb5）之後；在那之前 S 階段對這一項記為 blocked，不算完成。驗證時仍只用最便宜的模型、say OK 等級。
-- 3.1：套件內容加 A/B 評測；評測成立才把 dispatch 預設改成走套件。
+- 3.0.0.x：套件內容加 A/B 評測；評測成立才把 dispatch 預設改成走套件。
 - 不建議塞進 3.0.0 的理由：7/15 的前例是負面結果，套件效果還沒證明；改 skill 內容依規要先有 eval；把它混進重排，會讓 3.0.0 的完成條件多一個未知數。
 
 ## 4. Phases
 
 - **S（現在，與 3.0.0 並行）**：五個 spike（KR1）。零模型呼叫的請求形狀部分已完成（見 3.2 與附錄「Spike 結果」），剩下的真模型回應驗證待憑證路徑。每個一條小 lane，互不依賴，不動 relayout 定稿。
 - **R（3.0.0 內，兩件小事）**：在 relayout 計畫的修訂 E1 登記，由該計畫的階段承接（頂層白名單在 P4、匯出白名單在 C2、BL-0388 使用端修正排在 P4 之後 C2 之前）。
-- **A（3.1）**：角色套件內容與 A/B 評測：預註冊、pilot（每組 3 題）確認儀器沒壞、再跑正式；成本守 KR3。
-- **D（3.1，A 成立才做）**：把 dispatch 預設改成走套件，另立 lane 與審查。
+- **A（3.0.0.x）**：角色套件內容與 A/B 評測：預註冊、pilot（每組 3 題）確認儀器沒壞、再跑正式；成本守 KR3。
+- **D（3.0.0.x，A 成立才做）**：把 dispatch 預設改成走套件，另立 lane 與審查。
 
 ## 5. Test / validation
 
@@ -111,7 +112,7 @@ BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
 - agy 無頭模式不讀 skill、沒有細的工具白名單。對策：方法論寫進角色卡，隔離靠 worktree。
 - 成本上限貼著預估值，抽樣起伏就觸發停損、整批作廢。對策：上限 75 USD，約留 50% 餘裕，先跑 pilot。
 - 把本計畫混進 3.0.0 重排，會讓完成條件多一個未知數。對策：3.0.0 只多兩件小事。
-- 保留的 `roles/` 位置長期空著變成死目錄。對策：只放一份 README，成本接近零；3.1 評測不成立時在 E1 修訂中撤銷。
+- 保留的 `roles/` 位置長期空著變成死目錄。對策：只放一份 README，成本接近零；3.0.0.x 評測不成立時在 E1 修訂中撤銷。
 - 改 skill 內容依規要先有 eval。對策：套件內容的 A/B 先做，預設不動。
 
 ## 7. Out of scope
@@ -130,6 +131,7 @@ BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
 
 - 2026-11-05：PM 裁定見檔首；plan review（凍結 rubric、最多兩代）尚未開始。
 - g1 2026-11-05：astra chair，CONDITIONAL，0 blocker；R1/R2/R13 accepted_nonblocking，已在同一 commit 修正（R13：7/15 有安慰劑組，缺的是完整套件；R1：codex exec 真模型驗證排在 d-2a19fdb5 之後；R2：判定規則在 A 階段預註冊定案並蓋章）。
+- 2026-11-05 (after plan review): wording changed per operator decision d-c76529c3: every "3.1" is now "3.0.0.x", the header gains ruling 5. The design is unchanged.
 
 ## 附註（跟本提案無關，但查的時候發現）
 - 定稿 P3（`project/plans/2026-10-31-repo-relayout-3-0-0.md:100`）寫了「新增 .github/workflows/test.yml」，跟 operator「不用 hosted CI」的規則衝突。PM 2026-11-05 裁定拿掉，已記入該計畫的修訂 E1（改成本機跑）。

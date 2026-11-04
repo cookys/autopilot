@@ -494,17 +494,18 @@ platforms/ 鏡像產物
 # E 修訂（PM 裁定 2026-11-05；與上文衝突時以本節為準，上文各節不改）
 
 來源：PM 以 fleet 訊息於 2026-11-05 裁定（`pm--claude`）；E1(a) 另引 operator 規則「不要用託管 CI 一樣都走本機」（`CLAUDE.md` Process rules：「No hosted CI (operator): suites and the merge gate run locally; never add a hosted workflow」）。方向提案見 `project/plans/2026-11-05-rolekit-direction.md`。
+版號依 operator 決策卡 d-c76529c3（2026-11-05，PM 轉達）：角色套件工作照 3.0.0 現行 bump 規則走 3.0.0.x，不升 3.1。
 
 ## E1 三項修訂
 **(a) P3 不新增 `.github/workflows/test.yml`**（取代 §3 P3 第三條，原文在 `:100`）
 - 來源：operator 規則（上述）加 PM 裁定 2026-11-05。
 - P3 改成：`tests/run.sh` 仍是唯一入口；驗證在本機跑，合併前用 `node scripts/affected-suites.js` 選套件，選到至少一半就跑全套（`tools/migrate/suite-baseline.js` 的 `record`，依 `skills/quality-pipeline/references/test-policy.md` 的 operator 決定 d-a62f4abc）；付費路徑照現行哨兵擋掉。不新增任何託管 workflow；C 章與 §7 提到「進 CI」的 fixture，一律理解為本機執行。
 
-**(b) 保留頂層 `roles/`（角色套件，3.1 的工作）**
+**(b) 保留頂層 `roles/`（角色套件，3.0.0.x 的工作）**
 - 來源：PM 裁定 2026-11-05。這裡只保留位置，內容與是否出貨由 `project/plans/2026-11-05-rolekit-direction.md` 決定；本修訂不建立 `roles/`。
-- 放在 **P4**：頂層白名單是登錄表 `scripts/lib/repo-layout.js` 的 `allowlists.top_dirs`，每項帶 `since` 階段，layout-lint 的 `allowlist:top_dirs` 檢查讀它（`scripts/layout-lint.js:156`）；P4 是最後一個改頂層目錄集合的階段（新增 `lib/`、tools 子目錄），把 `roles`（`since: 'P4'`，purpose: 角色套件，3.1 工作）一起登錄，避免在 P5 之後為它單獨再改一次登錄表。實體只有 `roles/README.md`（空目錄不進 git），由 P4 的產生器建立。
+- 放在 **P4**：頂層白名單是登錄表 `scripts/lib/repo-layout.js` 的 `allowlists.top_dirs`，每項帶 `since` 階段，layout-lint 的 `allowlist:top_dirs` 檢查讀它（`scripts/layout-lint.js:156`）；P4 是最後一個改頂層目錄集合的階段（新增 `lib/`、tools 子目錄），把 `roles`（`since: 'P4'`，purpose: 角色套件，3.0.0.x 工作）一起登錄，避免在 P5 之後為它單獨再改一次登錄表。實體只有 `roles/README.md`（空目錄不進 git），由 P4 的產生器建立。
 - 匯出白名單在 **C2**（`:245`）：展開清單加入 `roles/`，3.0.0 時其內容只有 README；規則仍是排除優先。P5 的「每個頂層目錄一份短 README」順帶涵蓋它。
-- 若 3.1 的 A/B 不成立，再以修訂撤銷這個位置。
+- 若 3.0.0.x 的 A/B 不成立，再以修訂撤銷這個位置。
 
 **(c) BL-0388 使用端那半邊，列為 3.0.0 的一步，排在 P4 之後、C2 匯出工具之前**（C6 的第 4 與第 5 步之間）
 - 來源：PM 裁定 2026-11-05。內容見 `project/backlog/BACKLOG.md` 的 BL-0388 與 `project/backlog/consumer-rules-in-claude-md.md`：plugin 的 CLAUDE.md 到不了使用端專案，所以使用端需要的規則要改由 skill、hook 或 reference 帶。

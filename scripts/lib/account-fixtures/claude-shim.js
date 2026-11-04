@@ -9,6 +9,14 @@
  * env var can carry the control path):
  *   { "log": "<abs file>", "default": <response>, "tokens": { "<token>": <response> } }
  * <response> = { "exit": 0, "stdout": "...", "stderr": "...", "leak": "plain"|"split"|"prefix", "hangMs": 0 }
+ * Dual-format response (BL-0372 Task 3): when <response> carries a `result` OBJECT (and no static `stdout` is needed),
+ * the shim renders it by the --output-format in argv, both from that one object:
+ *   json         JSON.stringify(result) + "\n"
+ *   stream-json  system/init line, assistant line, rate_limit_event line (`rate_limit_event` object overrides the
+ *                default), then the SAME JSON.stringify(result) line + "\n" (plus the optional `stream_result_extra`
+ *                keys appended, to model a CLI whose stream result line carries extra keys)
+ *   text/absent  result.result + "\n"
+ * A response without `result` keeps the old behaviour: the static `stdout` string, whatever the argv says.
  *
  * Each call appends one JSON line to `log`: argv, env NAMES (sorted), a sha256-first-8 fingerprint
  * of the presented token (never the token), HOME, CLAUDE_CONFIG_DIR, cwd, AUTOPILOT_ACCOUNT, and
@@ -23,6 +31,24 @@ const crypto = require('crypto');
 
 function sleep(ms) { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
 function w(fd, s) { fs.writeSync(fd, s); }
+
+function renderResult(resp, argv) {
+  const i = argv.indexOf('--output-format');
+  const fmt = i >= 0 ? argv[i + 1] : 'text';
+  const line = JSON.stringify(resp.result);
+  if (fmt === 'json') return line + '\n';
+  if (fmt === 'stream-json') {
+    const sid = resp.result.session_id || 'S';
+    const last = resp.stream_result_extra ? JSON.stringify(Object.assign({}, resp.result, resp.stream_result_extra)) : line;
+    return [
+      JSON.stringify({ type: 'system', subtype: 'init', session_id: sid }),
+      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: String(resp.result.result) }] }, session_id: sid }),
+      JSON.stringify(resp.rate_limit_event || { type: 'rate_limit_event', rate_limit_info: { status: 'allowed' }, session_id: sid }),
+      last,
+    ].join('\n') + '\n';
+  }
+  return String(resp.result.result) + '\n';
+}
 
 function main() {
   const dir = path.dirname(fs.realpathSync(process.argv[1]));
@@ -78,7 +104,8 @@ function main() {
       }
     }
   }
-  if (resp.stdout) w(1, resp.stdout);
+  const stdout = resp.result && typeof resp.result === 'object' ? renderResult(resp, process.argv.slice(2)) : resp.stdout;
+  if (stdout) w(1, stdout);
   if (resp.stderr) w(2, resp.stderr);
   return resp.exit || 0;
 }

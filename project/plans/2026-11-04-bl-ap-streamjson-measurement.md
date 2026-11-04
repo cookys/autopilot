@@ -1,5 +1,5 @@
 # Plan — BL-0372 measurement: are the claude `--output-format json` and `stream-json --verbose` results byte-identical?
-> Status: queued, dispatch after G40 P1. Backlog row: BL-0372 (`project/backlog/bl-ap-streamjson-result-bytes.md`). Owner: PM program. Size: S (instrument and measurement; no change to dispatch behaviour). Frame: baseline autopilot develop `a44ea9a6a`; this plan was written by reading the repo only, no claude call was made. Upstream: `project/plans/2026-11-03-g40-agent-lane-quota.md` section 5.1 (C1/C2/C3), section 18.6, section 19.4 step E7, and N9 in section 14.
+> Status: Tasks 0–3 in progress; Tasks 4–5 parked on a registered alias. Backlog row: BL-0372 (`project/backlog/bl-ap-streamjson-result-bytes.md`). Owner: PM program. Size: S (instrument and measurement; no change to dispatch behaviour). Frame: baseline autopilot develop `a44ea9a6a`; this plan was written by reading the repo only, no claude call was made. Upstream: `project/plans/2026-11-03-g40-agent-lane-quota.md` section 5.1 (C1/C2/C3), section 18.6, section 19.4 step E7, and N9 in section 14.
 
 ## 0. Context / thesis
 
@@ -17,7 +17,14 @@ These decisions are final. The body below has been updated so that every place t
 - **D3 (shipping form of C2).** C2 ships behind a config flag whose default is json. The flag is switched to stream-json only after both measurement layers PASS: layer 1 is the fields; layer 2 is the bytes after masking volatile fields, plus stderr and the exit code. Any FAIL means C3, and the flag stays off.
 - **D5 (scope of the json callers).** `frozen_legacy` runners (frozen under G37) are not included. An eval path is included only if it is on the live spawn-site list (`scripts/lib/claude-spawn-sites.json`); every other one is excluded, with a one-line reason (section 1.1).
 
-Still open, not ruled on today: D4 and D6 (section 8).
+- **PM round 2 (2026-11-04).**
+  1. J8/J9 (eval paths) enter scope once Task 0's field table is complete; if a fifth profile (P4) is needed, the call ceiling may rise to about 70 (haiku, subscription account).
+  2. J2/J3 are measured and recorded only, never switched (C2 does not touch that path); the result must state this explicitly.
+  3. Error-path calls triggered by a non-existent model name are acceptable.
+  4. **D4:** J7 (`--bare`, API-key billing) is out of scope; the operator's authorisation covers subscription accounts only. Switching J7 later needs its own measurement and its own approval. **D6:** register `purpose=streamjson-measure` in the wrapper allow-list; this is the small develop change inside the measurement task (Task 2).
+  5. Tasks 4 and 5 (live calls) are parked on an operator card because this host has no account registry; the hands lane for Tasks 0–3 makes zero claude model calls.
+  6. **Amended 2026-11-04 (PM ruling, amendment to D3): one declared additive key.** The stream result line ends with one extra key, `model_usage_since_last_result`, that the json envelope lacks (found on the fake endpoint, CLI 2.1.318). It does not by itself send the result to C3. Layer 2 already masks declared volatile fields; it now also removes declared ADDITIVE keys, and the plan declares exactly this one. After the exact (byte-level, never re-serialised) removal of that key from the stream side, the two sides must be byte-identical for a PASS; any other difference, including a second extra key, is a FAIL. What makes this safe is layer 1: every real consumer (including J8's grep on `"session_id"` and J9's `json.loads`) runs on the stream-derived line WITH the extra key, because that is the line C2 ships; all of them must pass. C2's output keeps the key: no stripping, no re-serialising. The additive-key list in code holds only the key named here, and a negative control proves a second undeclared key fails layer 2.
+  7. **P4 is in scope** (PM approved): 5 J/S pairs plus 1 control pair for the J8/J9 shape, about 70 calls in total. **D6** needs no change: `PURPOSE_RE` already accepts `streamjson-measure` and there is no separate allow-list (checked in Task 2).
 
 ## Global Constraints (copied verbatim into every dispatch)
 - Node >= 20.10, built-ins only; JSON handling in Node, not shell (CLAUDE.md language rule).

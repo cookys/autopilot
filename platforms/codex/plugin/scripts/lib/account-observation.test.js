@@ -9,6 +9,9 @@ const fs = require('fs');
 const path = require('path');
 const o = require('./account-observation');
 const { makeFixture } = require('./account-fixtures/shim-install');
+const { holdOsLock, installLeakCheck } = require('./account-fixtures/os-lock-holder');
+
+installLeakCheck(test.after);
 
 const T = 1_800_000_000;
 
@@ -349,7 +352,7 @@ test('G40-D1 a write makes a 0700 directory and a 0600 file and leaves no lock o
     assert.strictEqual(r.path, o.mirrorPath(fx.liveDir, 'claude', 'a'));
     assert.strictEqual(fs.statSync(qdir(fx)).mode & 0o777, 0o700);
     assert.strictEqual(fs.statSync(r.path).mode & 0o777, 0o600);
-    assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json']);
+    assert.deepStrictEqual(fs.readdirSync(qdir(fx)).sort(), ['a.json', 'a.oslock']);
   });
 });
 
@@ -358,34 +361,37 @@ test('G40-D1 a lock held for the whole wait skips the write with mirror_lock_bus
     assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.2 })] })).ok, true);
     const file = o.mirrorPath(fx.liveDir, 'claude', 'a');
     const before = fs.readFileSync(file, 'utf8');
-    const lock = path.join(qdir(fx), 'a.lock');
-    fs.writeFileSync(lock, '', { mode: 0o600 });
-    let t = Date.now();
-    const clock = { now: () => t, sleep: (ms) => { t += ms; } };
-    const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.9 })] }), clock);
-    assert.deepStrictEqual(r, { ok: false, code: 'mirror_lock_busy' });
-    assert.ok(t - Date.now() >= 1900, 'waited the 2 s budget on the injected clock, not the real one');
-    assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
-    assert.strictEqual(fs.existsSync(lock), true, 'a lock we did not take is not ours to remove');
+    const lock = path.join(qdir(fx), 'a.oslock');
+    const holder = holdOsLock(lock);
+    try {
+      const t0 = Date.now();
+      let t = t0;
+      const clock = { now: () => t, sleep: (ms) => { t += ms; } };
+      const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.9 })] }), clock);
+      assert.deepStrictEqual(r, { ok: false, code: 'mirror_lock_busy' });
+      assert.ok(t - t0 >= 1900, 'waited the 2 s budget on the injected clock');
+      assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
+    } finally { holder.release(); }
   });
 });
 
-test('G40-D1 a lock released during the wait is taken; a dead holder\'s lock is reclaimed; a live holder\'s lock is not, however old up to 120 s', () => {
+test('G40-D1 a lock released during the wait is taken; a killed holder frees it at once; a live holder keeps it however long the wait', () => {
   withFix((fx) => {
     o.writeLocalRow(fx.liveDir, rec());
-    const lock = path.join(qdir(fx), 'a.lock');
-    fs.writeFileSync(lock, '', { mode: 0o600 });
+    const lock = path.join(qdir(fx), 'a.oslock');
+    let holder = holdOsLock(lock);
     let t = Date.now();
-    const r = o.writeLocalRow(fx.liveDir, rec(), { now: () => t, sleep: (ms) => { t += ms; try { fs.unlinkSync(lock); } catch (_) { /* gone */ } } });
-    assert.strictEqual(r.ok, true);
-    deadLock(fx);
-    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec()).ok, true, 'holder gone: reclaimed');
-    assert.strictEqual(fs.existsSync(lock), false);
-    lockWith(fx, process.pid, 100);
-    assert.deepStrictEqual(o.writeLocalRow(fx.liveDir, rec(), { waitMs: 150 }), { ok: false, code: 'mirror_lock_busy' }, 'live holder, 100 s old: the old 10 s rule is gone');
-    assert.strictEqual(fs.existsSync(lock), true);
-    lockWith(fx, process.pid, 200);
-    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec(), { waitMs: 150 }).ok, true, 'older than the 120 s hard cap: reclaimed even if the pid answers');
+    const r = o.writeLocalRow(fx.liveDir, rec(), { now: () => t, sleep: (ms) => { t += ms; if (holder) { holder.release(); holder = null; } } });
+    assert.strictEqual(r.ok, true, 'released during the wait: taken');
+    holder = holdOsLock(lock);
+    holder.release(); // kill -9: the kernel frees the lock, nothing to reclaim
+    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec(), { waitMs: 150 }).ok, true, 'holder gone: free at once');
+    const live = holdOsLock(lock);
+    try {
+      for (const waitMs of [150, 1500]) {
+        assert.deepStrictEqual(o.writeLocalRow(fx.liveDir, rec(), { waitMs, hardMaxMs: 1 }), { ok: false, code: 'mirror_lock_busy' }, `live holder, waited ${waitMs} ms: there is no age rule (hardMaxMs is ignored)`);
+      }
+    } finally { live.release(); }
   });
 });
 
@@ -456,7 +462,7 @@ test('G40-D1 token_state grammar: unknown needs a null token_state_at, ok and in
 
 // --- review round: token hygiene (A), clamp boundary (B), write safety (C) -----------------------------
 
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const rawView = (fx) => JSON.parse(fs.readFileSync(o.mirrorPath(fx.liveDir, 'claude', 'a'), 'utf8'));
 const noWrite = (fx) => assert.strictEqual(fs.existsSync(path.join(fx.liveDir, 'quota')), false, 'nothing was made on disk');
 
@@ -549,7 +555,7 @@ test('G40-D1 a newer view schema or an unknown top-level key refuses the write a
       const r = o.writeLocalRow(fx.liveDir, rec());
       assert.deepStrictEqual([r.ok, r.code], [false, 'view_unsupported']);
       assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
-      assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json'], 'no reset, no corrupt copy');
+      assert.deepStrictEqual(fs.readdirSync(qdir(fx)).sort(), ['a.json', 'a.oslock'], 'no reset, no corrupt copy');
     });
   }
 });
@@ -569,79 +575,7 @@ test('G40-D1 only damaged JSON is replaced, and the damaged bytes are kept first
   });
 });
 
-// a pid that certainly does not exist any more: a child that has already exited
-const { spawnSync } = require('child_process');
-const DEAD_PID = spawnSync(process.execPath, ['-e', '']).pid;
-function lockWith(fx, pid, ageS) {
-  const lock = path.join(qdir(fx), 'a.lock');
-  fs.writeFileSync(lock, JSON.stringify({ pid, nonce: `held-by-${pid}`, t: 0 }), { mode: 0o600 });
-  const t = (Date.now() / 1000) - ageS;
-  fs.utimesSync(lock, t, t);
-  return lock;
-}
-const deadLock = (fx) => lockWith(fx, DEAD_PID, 1);
-
-test('G40-D1 lock race: a competitor that reclaims the same stale lock first leaves exactly one holder and loses no write', () => {
-  withFix((fx) => {
-    o.writeLocalRow(fx.liveDir, rec());
-    const lock = deadLock(fx);
-    let fired = false;
-    const hooks = { beforeReclaim: () => {
-      if (fired) return;
-      fired = true; // competitor B takes the whole path while A is between "saw stale" and "rename"
-      assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.7 })] }), { courier: 'ns/courier/b' }).ok, true);
-    } };
-    const a = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.3 })] }), { courier: 'ns/courier/a', hooks });
-    assert.strictEqual(a.ok, true);
-    const rows = Object.fromEntries(o.readView(fx.liveDir, 'claude', 'a').view.rows.map((r) => [r.writer_courier, r.record.windows[0].utilization]));
-    assert.deepStrictEqual(rows, { local: 0.5, 'ns/courier/b': 0.7, 'ns/courier/a': 0.3 });
-    assert.strictEqual(fs.existsSync(lock), false);
-    assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json']);
-  });
-});
-
-test('G40-D1 lock race: a reclaimer that renames a competitor\'s FRESH lock puts it back and waits; the holder keeps its lock', () => {
-  withFix((fx) => {
-    o.writeLocalRow(fx.liveDir, rec());
-    const lock = deadLock(fx);
-    let t = Date.now();
-    let seen = null;
-    let fired = false;
-    const hooks = { beforeReclaim: () => {
-      if (fired) return;
-      fired = true; // B reclaims and now holds a FRESH lock before A's rename lands
-      fs.unlinkSync(lock);
-      fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, nonce: 'B', t: Date.now() }), { mode: 0o600 });
-    } };
-    const sleep = (ms) => {
-      t += ms;
-      if (seen === null) { seen = lockOwnerOf(lock); fs.unlinkSync(lock); } // B finishes after A has waited once
-    };
-    const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.3 })] }), { courier: 'ns/courier/a', hooks, now: () => t, sleep });
-    assert.strictEqual(seen, 'B', 'B\'s lock was restored intact, not destroyed');
-    assert.strictEqual(r.ok, true);
-    assert.strictEqual(fs.existsSync(lock), false);
-    assert.strictEqual(o.readView(fx.liveDir, 'claude', 'a').view.rows.length, 2);
-  });
-});
-function lockOwnerOf(lock) { try { return JSON.parse(fs.readFileSync(lock, 'utf8')).nonce; } catch (_) { return null; } }
-
-test('G40-D1 lock release and publish check the nonce: a lock replaced by another holder is neither published over nor removed', () => {
-  withFix((fx) => {
-    o.writeLocalRow(fx.liveDir, rec());
-    const lock = path.join(qdir(fx), 'a.lock');
-    const file = o.mirrorPath(fx.liveDir, 'claude', 'a');
-    const before = fs.readFileSync(file, 'utf8');
-    const hooks = { beforePublish: () => { fs.writeFileSync(lock, JSON.stringify({ pid: 9, nonce: 'OTHER', t: Date.now() })); } };
-    const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.9 })] }), { hooks });
-    assert.deepStrictEqual([r.ok, r.code], [false, 'mirror_lock_busy']);
-    assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
-    assert.strictEqual(lockOwnerOf(lock), 'OTHER', 'the other holder\'s lock is still there');
-    assert.deepStrictEqual(fs.readdirSync(qdir(fx)).sort(), ['a.json', 'a.lock']);
-  });
-});
-
-test('G40-D1 lock race with real processes: two writers reclaiming one stale lock, repeated, never lose a row', async () => {
+test('G40-D1 lock race with real processes: two writers contending for one lock, repeated, never lose a row', async () => {
   const modPath = path.join(__dirname, 'account-observation.js');
   const code = `const o=require(${JSON.stringify(modPath)});const [live,courier,u]=process.argv.slice(1);
     const rec={schema:o.SCHEMA,provider:'claude',alias:'a',visibility:'L3',windows:[{kind:'rolling_5h',utilization:Number(u),resets_at:1800003600,source:'passive',observed_at:1800000000}],refusal:null,token_state:'unknown',token_state_at:null,host_role:'agent'};
@@ -654,12 +588,11 @@ test('G40-D1 lock race with real processes: two writers reclaiming one stale loc
     const fx = makeFixture({ aliases: [{ alias: 'a' }] });
     try {
       assert.strictEqual(o.writeLocalRow(fx.liveDir, rec()).ok, true);
-      deadLock(fx);
       const codes = await Promise.all([run(fx.liveDir, 'ns/courier/a', '0.3'), run(fx.liveDir, 'ns/courier/b', '0.7')]);
       assert.deepStrictEqual(codes, [0, 0], `round ${i}`);
       const names = o.readView(fx.liveDir, 'claude', 'a').view.rows.map((r) => r.writer_courier).sort();
       assert.deepStrictEqual(names, ['local', 'ns/courier/a', 'ns/courier/b'], `round ${i}`);
-      assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json']);
+      assert.deepStrictEqual(fs.readdirSync(qdir(fx)).sort(), ['a.json', 'a.oslock']);
     } finally { fx.cleanup(); }
   }
 });
@@ -708,7 +641,7 @@ test('G40-N2 a live secret hidden deep in a peer row refuses the write', () => {
 
 const fakeClock = () => { let t = Date.now(); return { now: () => t, sleep: (ms) => { t += ms; } }; };
 
-test('G40-D1 lock interleave (i): a live writer paused before publish is not reclaimed; the competitor gets mirror_lock_busy, A publishes', () => {
+test('G40-D1 lock interleave (i): a live writer paused before publish keeps the lock; the competitor gets mirror_lock_busy, A publishes', () => {
   withFix((fx) => {
     let bResult = null;
     const hooks = { beforePublish: () => {
@@ -718,28 +651,25 @@ test('G40-D1 lock interleave (i): a live writer paused before publish is not rec
     assert.deepStrictEqual(bResult, { ok: false, code: 'mirror_lock_busy' });
     assert.strictEqual(a.ok, true);
     assert.deepStrictEqual(o.readView(fx.liveDir, 'claude', 'a').view.rows.map((r) => r.writer_courier), ['ns/courier/a']);
-    assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json']);
+    assert.deepStrictEqual(fs.readdirSync(qdir(fx)).sort(), ['a.json', 'a.oslock']);
   });
 });
 
-test('G40-D1 lock interleave (ii): the holder process is killed while holding the lock; the competitor reclaims and writes', async () => {
+test('G40-D1 lock interleave (ii): the holder process is killed while holding the lock; the competitor takes it at once and writes', async () => {
   const modPath = path.join(__dirname, 'account-observation.js');
   const code = `const o=require(${JSON.stringify(modPath)});const [live]=process.argv.slice(1);
     const rec={schema:o.SCHEMA,provider:'claude',alias:'a',visibility:'L3',windows:[{kind:'rolling_5h',utilization:0.1,resets_at:1800003600,source:'passive',observed_at:1800000000}],refusal:null,token_state:'unknown',token_state_at:null,host_role:'agent'};
-    o.writeLocalRow(live,rec,{courier:'ns/courier/dead',hooks:{beforePublish(){Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,60000);}}});`;
+    o.writeLocalRow(live,rec,{courier:'ns/courier/dead',hooks:{beforePublish(){require('fs').writeSync(1,'held\\n');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,60000);}}});`;
   await withFixAsync(async (fx) => {
-    const child = spawn(process.execPath, ['-e', code, fx.liveDir], { stdio: 'ignore' });
+    const child = spawn(process.execPath, ['-e', code, fx.liveDir], { stdio: ['ignore', 'pipe', 'inherit'] });
     const exited = new Promise((res) => child.on('exit', res));
-    const lock = path.join(qdir(fx), 'a.lock');
-    for (let i = 0; i < 400 && !fs.existsSync(lock); i += 1) await new Promise((res) => setTimeout(res, 25));
-    assert.strictEqual(fs.existsSync(lock), true, 'the child holds the lock');
-    assert.strictEqual(JSON.parse(fs.readFileSync(lock, 'utf8')).pid, child.pid);
+    await new Promise((res) => child.stdout.on('data', res)); // the child is inside the lock
+    assert.strictEqual(fs.existsSync(path.join(qdir(fx), 'a.oslock')), true);
     child.kill('SIGKILL');
     await exited;
     const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.6 })] }), { courier: 'ns/courier/b', waitMs: 300 });
-    assert.strictEqual(r.ok, true, 'reclaimed from a dead holder');
+    assert.strictEqual(r.ok, true, 'the dead holder\'s lock was freed by the kernel');
     assert.deepStrictEqual(o.readView(fx.liveDir, 'claude', 'a').view.rows.map((x) => x.writer_courier), ['ns/courier/b']);
-    assert.strictEqual(fs.existsSync(lock), false);
   });
 });
 async function withFixAsync(fn) {
@@ -759,32 +689,11 @@ test('G40-D1 lock interleave (iii): a writer carrying an older basis that publis
     assert.deepStrictEqual([r.ok, r.superseded], [true, true]);
     const rows = o.readView(fx.liveDir, 'claude', 'a').view.rows;
     assert.strictEqual(rows[0].record.windows[0].utilization, 0.9);
-    assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json'], 'no temp file, no lock left');
+    assert.deepStrictEqual(fs.readdirSync(qdir(fx)).sort(), ['a.json', 'a.oslock'], 'no temp file, no lock left');
     // an equal or newer basis still replaces, and a placeholder never replaces a real observation
     assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.4, observed_at: T + 600 })] }), { now: clock.now }).superseded, undefined);
     const placeholder = { schema: o.SCHEMA, provider: 'claude', alias: 'a', visibility: 'L0', windows: [], source: 'registry', token_state: 'unknown' };
     assert.strictEqual(o.writeLocalRow(fx.liveDir, placeholder, { now: clock.now }).superseded, true);
-  });
-});
-
-test('G40-D1 lock interleave (iv): a lock replaced under the holder (same text, new inode) is not published over and not unlinked', () => {
-  withFix((fx) => {
-    o.writeLocalRow(fx.liveDir, rec());
-    const lock = path.join(qdir(fx), 'a.lock');
-    const file = o.mirrorPath(fx.liveDir, 'claude', 'a');
-    const before = fs.readFileSync(file, 'utf8');
-    let inoBefore = null;
-    const hooks = { beforePublish: () => {
-      const text = fs.readFileSync(lock, 'utf8');
-      inoBefore = fs.statSync(lock).ino;
-      fs.writeFileSync(`${lock}.x`, text, { mode: 0o600 });
-      fs.renameSync(`${lock}.x`, lock); // same nonce text, a different file
-    } };
-    const r = o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.9, observed_at: T + 50 })] }), { hooks });
-    assert.notStrictEqual(fs.statSync(lock).ino, inoBefore);
-    assert.deepStrictEqual([r.ok, r.code], [false, 'mirror_lock_busy']);
-    assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
-    assert.strictEqual(fs.existsSync(lock), true, 'the replacement lock is not ours to remove');
   });
 });
 
@@ -814,68 +723,6 @@ test('G40-D1 corrupt copies: the newest 3 are kept, a same-second clash gets a n
   });
 });
 
-// --- third review round: the lock is linked in complete (no empty-lock window) --------------------------
-
-test('G40-D1 lock link (a): before the link no lock file exists; once it exists it always holds the full nonce', () => {
-  withFix((fx) => {
-    o.writeLocalRow(fx.liveDir, rec());
-    const lock = path.join(qdir(fx), 'a.lock');
-    let tmpNonce = null;
-    let lockNonce = null;
-    const hooks = {
-      beforeLink: () => {
-        assert.strictEqual(fs.existsSync(lock), false, 'no lock file before the link');
-        const tmps = fs.readdirSync(qdir(fx)).filter((n) => n.startsWith('a.lock.tmp.'));
-        assert.strictEqual(tmps.length, 1);
-        const body = JSON.parse(fs.readFileSync(path.join(qdir(fx), tmps[0]), 'utf8'));
-        assert.ok(body.nonce && body.pid === process.pid, 'the temp file is complete before it is linked');
-        tmpNonce = body.nonce;
-      },
-      beforePublish: () => {
-        const body = JSON.parse(fs.readFileSync(lock, 'utf8'));
-        lockNonce = body.nonce;
-        assert.deepStrictEqual(fs.readdirSync(qdir(fx)).filter((n) => n.includes('.tmp.')).sort().every((n) => n.startsWith('a.json.tmp.')), true, 'the lock temp file is gone after the link');
-      },
-    };
-    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec(), { hooks }).ok, true);
-    assert.ok(tmpNonce);
-    assert.strictEqual(lockNonce, tmpNonce);
-    assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json']);
-  });
-});
-
-test('G40-D1 lock link (b): an empty lock file older than 5 s is reclaimed; a fresh empty one is waited for', () => {
-  withFix((fx) => {
-    o.writeLocalRow(fx.liveDir, rec());
-    const lock = path.join(qdir(fx), 'a.lock');
-    fs.writeFileSync(lock, '', { mode: 0o600 });
-    assert.deepStrictEqual(o.writeLocalRow(fx.liveDir, rec(), { waitMs: 100 }), { ok: false, code: 'mirror_lock_busy' }, 'fresh and empty: maybe someone is mid-write');
-    const old = (Date.now() - 6000) / 1000;
-    fs.utimesSync(lock, old, old);
-    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec({ windows: [win({ utilization: 0.6 })] }), { waitMs: 100 }).ok, true);
-    assert.strictEqual(o.readView(fx.liveDir, 'claude', 'a').view.rows[0].record.windows[0].utilization, 0.6);
-    fs.writeFileSync(lock, '{not json', { mode: 0o600 });
-    fs.utimesSync(lock, old, old);
-    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec(), { waitMs: 100 }).ok, true, 'unparseable counts as empty');
-    assert.deepStrictEqual(fs.readdirSync(qdir(fx)), ['a.json']);
-  });
-});
-
-test('G40-D1 lock link (c): a leftover lock temp file older than 120 s is swept on the next acquire; a fresh one is left', () => {
-  withFix((fx) => {
-    o.writeLocalRow(fx.liveDir, rec());
-    const oldTmp = path.join(qdir(fx), 'a.lock.tmp.crashed');
-    const freshTmp = path.join(qdir(fx), 'a.lock.tmp.inflight');
-    fs.writeFileSync(oldTmp, '', { mode: 0o600 });
-    fs.writeFileSync(freshTmp, '{}', { mode: 0o600 });
-    const old = (Date.now() - 200000) / 1000;
-    fs.utimesSync(oldTmp, old, old);
-    assert.strictEqual(o.writeLocalRow(fx.liveDir, rec()).ok, true);
-    assert.strictEqual(fs.existsSync(oldTmp), false);
-    assert.strictEqual(fs.existsSync(freshTmp), true);
-  });
-});
-
 // --- third review round, bounded fixes: no spin on an unreadable lock, no trust in a future basis -----
 
 const LOCK_CHILD = (modPath) => `const o=require(${JSON.stringify(modPath)});const live=process.argv[1];
@@ -891,7 +738,8 @@ test('G40-D1 unreadable lock (a): a symlink at the lock path ends in write_faile
     o.writeLocalRow(fx.liveDir, rec());
     const target = path.join(fx.root, 'elsewhere');
     fs.writeFileSync(target, 'x');
-    fs.symlinkSync(target, path.join(qdir(fx), 'a.lock'));
+    fs.unlinkSync(path.join(qdir(fx), 'a.oslock')); // the first write left the (empty, permanent) lock file
+    fs.symlinkSync(target, path.join(qdir(fx), 'a.oslock'));
     const r = runWriterChild(fx.liveDir);
     assert.strictEqual(r.signal, null, 'the child was not killed for hanging');
     assert.deepStrictEqual(JSON.parse(r.out), { ok: false, code: 'write_failed', reason: 'lock_unreadable:ELOOP' });
@@ -903,7 +751,7 @@ test('G40-D1 unreadable lock (b): a chmod 000 lock file ends in write_failed/loc
   if (process.getuid() === 0) { t.skip('running as root: chmod 000 does not stop root from reading the lock'); return; }
   withFix((fx) => {
     o.writeLocalRow(fx.liveDir, rec());
-    const lock = path.join(qdir(fx), 'a.lock');
+    const lock = path.join(qdir(fx), 'a.oslock');
     fs.writeFileSync(lock, '{}', { mode: 0o000 });
     fs.chmodSync(lock, 0o000);
     const r = runWriterChild(fx.liveDir);
@@ -916,7 +764,8 @@ test('G40-D1 unreadable lock (b): a chmod 000 lock file ends in write_failed/loc
 test('G40-D1 unreadable lock: a directory at the lock path is refused the same way', { timeout: 20000 }, () => {
   withFix((fx) => {
     o.writeLocalRow(fx.liveDir, rec());
-    fs.mkdirSync(path.join(qdir(fx), 'a.lock'));
+    fs.unlinkSync(path.join(qdir(fx), 'a.oslock'));
+    fs.mkdirSync(path.join(qdir(fx), 'a.oslock'));
     const r = runWriterChild(fx.liveDir);
     assert.strictEqual(r.signal, null);
     assert.deepStrictEqual(JSON.parse(r.out), { ok: false, code: 'write_failed', reason: 'lock_unreadable:EISDIR' });

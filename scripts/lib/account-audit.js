@@ -28,7 +28,7 @@ const AUDIT_KEYS = ['ts', 'ts_local', 'alias', 'purpose', 'attempt', 'outcome'];
 const OPTIONAL_KEYS = ['quota_capture'];
 const QUOTA_CAPTURE_REASONS = [
   'bad_event', 'mirror_lock_busy', 'view_unsupported', 'write_failed', 'live_dir_refused', 'dir_refused',
-  'target_invalid', 'view_too_large', 'quota_invalid', 'capture_error',
+  'target_invalid', 'view_too_large', 'quota_invalid', 'capture_error', 'lock_helper',
 ];
 const LOCK_UNREADABLE_RE = /^lock_unreadable:[A-Z0-9_]{1,24}$/;
 function captureReasonOk(v) { return typeof v === 'string' && (QUOTA_CAPTURE_REASONS.includes(v) || LOCK_UNREADABLE_RE.test(v)); }

@@ -77,6 +77,7 @@ test('G40-N74: captureReason maps a failed write to a closed audit code and trea
   assert.strictEqual(c.captureReason({ ok: false, code: 'mirror_lock_busy' }), 'mirror_lock_busy');
   assert.strictEqual(c.captureReason({ ok: false, code: 'view_unsupported', reason: 'schema' }), 'view_unsupported');
   assert.strictEqual(c.captureReason({ ok: false, code: 'write_failed', reason: 'lock_unreadable:EACCES' }), 'lock_unreadable:EACCES');
+  assert.strictEqual(c.captureReason({ ok: false, code: 'write_failed', reason: 'lock_helper' }), 'lock_helper', 'no flock/perl: a visible reason, not a bare write_failed');
   assert.strictEqual(c.captureReason({ ok: false, code: 'write_failed' }), 'write_failed');
   assert.strictEqual(c.captureReason({ ok: false, code: 'something_new' }), 'capture_error');
   assert.strictEqual(c.captureReason({ ok: false, code: 'write_failed', reason: 'sk-ant-leak' }), 'write_failed');

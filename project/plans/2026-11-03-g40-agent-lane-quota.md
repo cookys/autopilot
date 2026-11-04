@@ -396,7 +396,7 @@ The writer set of the mirror's local row is therefore the wrapper (passive, prob
 ### 18.4 Local mirror
 
 The hub is the store; the local mirror is its view, in one file per `(provider, alias)`: `<live_dir>/quota/<provider>/<alias>.json`, shape in 22.2.
-- Writers: the wrapper and the reporter's statusline adapter touch ONLY the row tagged with the local courier id; the reporter's pull side touches ONLY the other rows (snapshot, then deltas) and the namespace stamp (22.2), and never overwrites the local row. Each write is read-modify-write under a lock file `<alias>.lock` (O_EXCL, held under 1 s, stale after 10 s); a writer that cannot get the lock within 2 s skips the write and counts `mirror_lock_busy` (capture failure rules apply).
+- Writers: the wrapper and the reporter's statusline adapter touch ONLY the row tagged with the local courier id; the reporter's pull side touches ONLY the other rows (snapshot, then deltas) and the namespace stamp (22.2), and never overwrites the local row. Each write is read-modify-write under an OS flock on `<alias>.oslock`, taken on a descriptor the writer itself keeps open (flock(1), else perl, run once on it; neither present fails closed as `write_failed` / `lock_helper`, shown in `status` as `quota_capture=lock_helper`); a live holder never loses it, however long it stalls, and a dead one frees it at once (BL-0374; the old lock file `<alias>.lock` with a stale rule is gone); a writer that cannot get the lock within 2 s skips the write and counts `mirror_lock_busy` (capture failure rules apply).
 - Readers (pick, display) read ONLY the mirror; the reporter is the only code that talks to the hub. This gives pick a no-network read path and keeps display from forming a parallel pipeline.
 - Authority: per window, the 5.2 rules decide; the hub row for the local courier is ignored when it echoes (it only confirms receipt). A local row newer than what the hub holds is the unpushed pending state.
 - Until the hub exists (fleet F4): the mirror alone, same shape; the reporter's push step is a no-op that logs `hub=absent`. Nothing about readers changes when the hub arrives.
@@ -867,6 +867,8 @@ An on-demand probe may start an alias's window, and `pick` then refuses that ali
 ### A.5b Q5 gate and cost (PM ruling)
 
 The Q5 gate stays, counted per provider. Periodic probing for a provider starts only when both hold: (a) `starts_window=false` + `high` + evidence, and (b) that provider's Q5 (the quota cost of one probe) has a recorded share. This is an evidence gate in the spirit of the operator decision, not a reversal of it; on-demand probing is not subject to Q5. The roughly doubled periodic cost (48 probes per alias per day) is recorded only, with no limit set. When a provider's setting flips, the PM tells the operator.
+
+> Amended 2026-11-04 (PM ruling, BL-0374): the mirror lock is an OS flock, not a lock file with a reclaim rule. Residual: the mirror is per host and per user, and the plugin updates host by host, so old and new writers can run side by side for a short time; they do not exclude each other (old: `<alias>.lock`, new: `<alias>.oslock`). It affects only that one host, and the worst case is the already-accepted stale row. macOS is unverified for the perl fallback and has no flock(1) by default.
 
 ### A.6 Red-light cases for the build
 

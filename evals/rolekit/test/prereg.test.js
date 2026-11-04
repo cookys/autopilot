@@ -98,27 +98,3 @@ test('pilot verdict: healthy instrument -> PILOT_OK; each broken gate names itse
   const infra = good.map((r, i) => (i % 3 === 0 ? { ...r, infra: true } : r));
   assert.ok(scorePilot(infra, pilot).failing_gates.includes('G1'));
 });
-
-test('stamper: stamps a copy, --check passes, a one-byte edit or a placebo size drift is refused, a second stamp is refused', () => {
-  const d = tmp();
-  try {
-    fs.cpSync(ROOT, d, { recursive: true, filter: (s) => !s.includes(`${path.sep}test${path.sep}`) || true });
-    const run = (...a) => cp.spawnSync('node', [path.join(d, 'stamp-rolekit.js'), ...a], { encoding: 'utf8', cwd: d });
-    assert.strictEqual(run('--row', 'pilot', '--check').status, 2, 'unstamped row cannot pass --check');
-    assert.strictEqual(run('--row', 'pilot').status, 0);
-    assert.strictEqual(run('--row', 'pilot', '--check').status, 0);
-    assert.strictEqual(run('--row', 'pilot').status, 2, 'already stamped');
-    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(d, 'prereg/pilot.json'), 'utf8')).stamped, true);
-    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'prereg/pilot.json'), 'utf8')).stamped, false, 'the real draft is untouched');
-    fs.appendFileSync(path.join(d, 'tasks/reviewer/kb-01/prompt.md'), ' ');
-    assert.strictEqual(run('--row', 'pilot', '--check').status, 2);
-  } finally { rm(d); }
-  const d2 = tmp();
-  try {
-    fs.cpSync(ROOT, d2, { recursive: true });
-    fs.writeFileSync(path.join(d2, 'placebo/planner/role.md'), 'short');
-    const r = cp.spawnSync('node', [path.join(d2, 'stamp-rolekit.js'), '--row', 'pilot'], { encoding: 'utf8', cwd: d2 });
-    assert.strictEqual(r.status, 2); assert.match(r.stderr, /not within 5%/);
-    assert.ok(!fs.existsSync(path.join(d2, 'prereg/FROZEN.json')), 'a refused stamp writes nothing');
-  } finally { rm(d2); }
-});

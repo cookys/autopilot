@@ -33,12 +33,15 @@ test('build-tasks --check and build-kits --check rebuild identically from the gi
   const b = ok('build-kits.js'); assert.strictEqual(b.status, 0, b.stderr);
 });
 
-test('negative control: --check refuses a frozen file that changed', () => {
-  const f = path.join(ROOT, 'tasks/reviewer/kb-05/prompt.md');
-  const keep = fs.readFileSync(f);
+test('negative control: --check refuses a frozen file that changed (on a copy: the real tree is never touched)', () => {
+  const { tmp, rm } = require('./helpers.js');
+  const d = tmp();
   try {
-    fs.writeFileSync(f, `${keep}tampered\n`);
-    const r = cp.spawnSync('node', [path.join(ROOT, 'build-tasks.js'), '--repo', top, '--base', man.base_sha, '--check'], { encoding: 'utf8' });
-    assert.strictEqual(r.status, 2);
-  } finally { fs.writeFileSync(f, keep); }
+    fs.cpSync(ROOT, d, { recursive: true });
+    const run = () => cp.spawnSync('node', [path.join(d, 'build-tasks.js'), '--repo', top, '--base', man.base_sha, '--check'], { encoding: 'utf8' });
+    assert.strictEqual(run().status, 0, 'the copy is green first');
+    fs.appendFileSync(path.join(d, 'tasks/reviewer/kb-05/prompt.md'), 'tampered\n');
+    const r = run();
+    assert.strictEqual(r.status, 2); assert.match(r.stderr, /kb-05/);
+  } finally { rm(d); }
 });

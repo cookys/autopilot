@@ -64,7 +64,7 @@ The engine-qualify implementer exam (`impl-eval-generator.js`) needs bwrap and g
 
 ## Prereg, stamping, cost
 
-`prereg/pilot.json` and `prereg/formal.json` are drafts. The existing `skill-onoff/stamp-prereg.js` needs packs and arm manifests; a role-kit arm is a directory, so `stamp-rolekit.js` is the same idea (digest every frozen file into `prereg/FROZEN.json`, refuse a second stamp, `--check` re-derives). The PM runs `node evals/rolekit/stamp-rolekit.js --row pilot` before any real cell. The formal task set is not frozen yet (see `task_set` in `formal.json`).
+`prereg/pilot.json` and `prereg/formal.json` are drafts. The existing `skill-onoff/stamp-prereg.js` needs packs and arm manifests; a role-kit arm is a directory, so `stamp-rolekit.js` is the same idea (digest every frozen file into `prereg/FROZEN.json`, refuse a second stamp, `--check` re-derives). The PM runs `node evals/rolekit/stamp-rolekit.js --row pilot --authorized-by <id>` before any real cell. The formal task set is not frozen yet (see `task_set` in `formal.json`).
 
 The formal row estimates 29.98 to 38.56 USD (1014 cells; 57.84 USD with the 50% margin) against the 75 USD cap that includes pilot spend; the pilot estimates 5.17 to 7.15 USD (126 cells) with its own 15 USD cap. Only one Haiku cell cost is recorded (0.0162 USD) and no Haiku tool-loop cost exists, so the pilot's per-role measured cost is an explicit output (`score-rolekit.js` pilot mode) and gate G5.
 
@@ -86,6 +86,28 @@ claude: `-p --setting-sources project --strict-mcp-config --system-prompt <role.
 | `orchestration/tasks`, `va-eval-*` | implementer, debugger, explorer, verifier tasks |
 | `engine-qualify` per-role exams | formal-phase sources (implementer, verifier, reviewer clean controls) |
 
+## Negative controls
+
+Every grader or check has at least one test where a bad output must be judged a failure, next to a good output so the control cannot pass by failing everything. "Result" is what the grader returned for the bad output.
+
+| grader | negative-control test (file: name) | bad output | result |
+|---|---|---|---|
+| check-cell reviewer | checks.test.js: reviewer: a matching critical finding ... | cited line outside every hunk; SHIP-AS-IS verdict; minor severity; matching words but off-topic claim | exit 1 (miss), detail false_must_fix=1 |
+| check-cell reviewer kb-05, kb-09 | negative-controls.test.js: negctl reviewer kb-05 / kb-09 | unrelated claim; SHIP-AS-IS; correct claim citing line 5 (outside the hunk) | exit 1 |
+| check-cell (all roles), answer file | checks.test.js: answer file problems | prose instead of JSON; a JSON array | exit 1; a missing answer file is exit 2 (infra) |
+| check-cell implementer | checks.test.js: implementer: the real fix ...; implementer t1 and t4 ... | untouched repo (oracle red); red evidence with exit 0; edited `run-tests.sh`; no workdir | exit 1 (detail names the protected file); no workdir exit 2 |
+| check-cell verifier | checks.test.js: verifier: a plan derived from the contract passes ... (3 cases) | wrong declared value; empty plan; wrong case_id | exit 1 (declared_mismatch, malformed_plan) |
+| check-cell planner | checks.test.js: planner: a complete disjoint plan passes ...; negative-controls.test.js: negctl planner d2 / dc-l-api / d8 | empty boundaries; prose acceptance; shared parallel scope; no dependency edge; scope not in the repo; uncovered docs/; cycle; no risks; empty acceptance | exit 1, detail names the broken property |
+| check-cell debugger | checks.test.js: debugger: the planted cause passes ...; negctl debugger t4 / t11 / t15 | decoy file blamed; wrong line; one hypothesis; no confirmed hypothesis; repo edited | exit 1 (decoy_blamed, repo_clean=false) |
+| check-cell explorer | checks.test.js: explorer: real citations ...; negctl explorer t4 / t11 | fabricated line or quote; path escape; citation on an absent thing; missing answer | exit 1; score 2/3 for the missing answer |
+| score-rolekit formal | prereg.test.js: negative control: a kit that is no better than the placebo; two winning roles are not enough ...; no headroom ...; more than 5% infra ...; malformed rows | B equal to placebo; only two winning roles; one harmed role; D no better than A; 25% infra in an arm; row with pass=2 | NOT_SHIP / NOT_SHIP / no_headroom, never a pass / INCONCLUSIVE_INFRA / refused |
+| score-rolekit pilot | prereg.test.js: pilot verdict: healthy instrument ... | kit_applied=false; unparsable answers; every arm at ceiling; cost 1 USD per cell; one third infra | PILOT_FIX naming G2, G3, G4, G5, G1 |
+| compile-kit validator | kits.test.js: negative controls: each broken kit is rejected | oversized role.md; missing role.md or tools; unknown, duplicate or two-line tools; symlink; second skill; stray plugin file; no plugin.json; extra top-level entry | exit 2 with its own reason |
+| build-tasks --check | frozen-tasks.test.js: negative control: --check refuses a frozen file that changed | a prompt edited after freezing | exit 2 |
+| stamp-rolekit | stamp.test.js: (a) after stamping ...; (b) a second stamp is refused ...; (c) the receipt ...; stamping without --authorized-by | edited task, role card, placebo, skill, tools, check, score script, prereg rule, cost model; added or deleted frozen file; tampered receipt field; second stamp; missing authoriser; placebo size drift | `--check` exit 2 naming the file or receipt field; stamp refused and nothing written |
+
+Stamp receipt: `stamp-rolekit.js --row <row> --authorized-by <id>` writes `prereg/receipt-<row>.json` (schema_version, stamped_at, authorized_by, prereg_sha256, one digest each for kits, placebo, tasks, checks and the verdict code) next to `FROZEN.json`; `--check` re-derives all of it.
+
 ## Tests
 
-`bash <suite env> node --test evals/rolekit/test/kits.test.js evals/rolekit/test/checks.test.js evals/rolekit/test/prereg.test.js evals/rolekit/test/frozen-tasks.test.js`
+`bash <suite env> node --test evals/rolekit/test/kits.test.js evals/rolekit/test/checks.test.js evals/rolekit/test/prereg.test.js evals/rolekit/test/frozen-tasks.test.js evals/rolekit/test/stamp.test.js evals/rolekit/test/negative-controls.test.js`

@@ -23,11 +23,13 @@ CHANGED=(
 # paragraph to references/hetero-dispatch.md after the bpack run). Blob id of the file at 0967088f1.
 # relay0 (f34b094e4) replaced personal data in multi-agent-portability.md with placeholders; the pack keeps the stamped pre-relay0 blob (pack bytes unchanged, manifest digest unchanged).
 # doagate (BL-0309 item 3) rewrote the --not-authorized example in level-front-door.md; its pinned blob is the file at c3809424c.
+# rrint1 (2330ce0cc, BL-0384 a / BL-0389) documented --require-resolved and the Range: header in code-loop.md; its pinned blob is the file at 1f221ae63.
 declare -A FROZEN_BLOB=(
   [references/hetero-dispatch.md]=463ae330c0ce1d323c396e254fa7e3ec17dede85
   [skills/ceo-agent/references/level-front-door.md]=f3b6dc5eaee3250dc59404cff1db8ef3513f6544
   [references/multi-agent-portability.md]=c82572ce9b18828de9af25c750eed3b42eeb4031
   [skills/harness-maintenance/SKILL.md]=cded34fb654a8d8ef437bda74cd2fd842db8143c
+  [skills/hetero-review/references/code-loop.md]=3f7341f611ce6dcce1365af8d5f70369ba9fa52d
 )
 
 # pack_of <repo path> <base|change> -> path of that file inside the arm's pack

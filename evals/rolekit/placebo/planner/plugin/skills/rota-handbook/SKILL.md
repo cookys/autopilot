@@ -1,6 +1,6 @@
 ---
 name: rota-handbook
-description: Use when planning the watering rota and seasonal jobs for a community garden plot. Not for allotment legal matters.
+description: "Use when planning the watering rota and seasonal jobs for a community garden plot. Not for allotment legal matters."
 ---
 
 # Garden Rota Handbook

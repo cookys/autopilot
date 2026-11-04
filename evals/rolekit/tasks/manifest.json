@@ -22,10 +22,11 @@
         }
       ],
       "files": {
-        "expected.json": "39ad9e15dc77bf407adb76cfa250c59371be1b05412a7bd47494b4bd4c038e58",
+        "expected.json": "dd76e291043c91b97a068ebd7839666205925d0f0519906353d9d47a1d24eeaf",
         "input/change.diff": "f4ff05fcd7b5d6c270cecd9ec8bbeed06d0df5a49ee3d9ab078887d550233e16",
         "input/known-bad.expected.json": "afe14a4f45d150a1381424e7efb2ce14192ed49a6143cf0f37c444b0b5682502",
-        "prompt.md": "626d79a22a4e3485162e4f8a097c47adef2b8e2d4df36f26d0c978620af55209"
+        "prompt.md": "626d79a22a4e3485162e4f8a097c47adef2b8e2d4df36f26d0c978620af55209",
+        "upstream-match.json": "39ad9e15dc77bf407adb76cfa250c59371be1b05412a7bd47494b4bd4c038e58"
       }
     },
     {
@@ -47,10 +48,11 @@
         }
       ],
       "files": {
-        "expected.json": "8a430c0bd4d4c4c48c87ed7945a64826f926e39e51b0b985bacac6fa6418aa7b",
+        "expected.json": "bde99e2c6658d8db6c5f8ae601ffecc368363e87dda65fc566657b5c4c57d2e6",
         "input/change.diff": "ac8be1b3ab412db384b589a8888167ff5e411fea4731077667bc176fee7e57f1",
         "input/known-bad.expected.json": "8253fb5fa5abd8a0ec426915b926fd4e3316e32d22ac786bbe2ba896eb259b7d",
-        "prompt.md": "626d79a22a4e3485162e4f8a097c47adef2b8e2d4df36f26d0c978620af55209"
+        "prompt.md": "626d79a22a4e3485162e4f8a097c47adef2b8e2d4df36f26d0c978620af55209",
+        "upstream-match.json": "8a430c0bd4d4c4c48c87ed7945a64826f926e39e51b0b985bacac6fa6418aa7b"
       }
     },
     {
@@ -72,10 +74,11 @@
         }
       ],
       "files": {
-        "expected.json": "07fb24862ebc9ab25631b658061b7e0ee89bf00a66bd781dec2e2a1dc302fa1a",
+        "expected.json": "77c48055fb818ceadd786fae0b09a3ef0fa5d73d6cd68a964effef4f0624ffc0",
         "input/change.diff": "2054c71a381d3ec50089ad2e8e9dd5a4757634a9802139846d883663b985fe84",
         "input/known-bad.expected.json": "b7ca668b9d35d9b28c8c69cdd2b9e71ac4f7eaac4748559409a60a55cadd6291",
-        "prompt.md": "626d79a22a4e3485162e4f8a097c47adef2b8e2d4df36f26d0c978620af55209"
+        "prompt.md": "626d79a22a4e3485162e4f8a097c47adef2b8e2d4df36f26d0c978620af55209",
+        "upstream-match.json": "07fb24862ebc9ab25631b658061b7e0ee89bf00a66bd781dec2e2a1dc302fa1a"
       }
     },
     {
@@ -118,6 +121,14 @@
           "git_object": "e73e7cda87cafe22c6f3680da727c596eb6936d5"
         }
       ],
+      "corrections": [
+        {
+          "file": "prompt.md",
+          "from": "must output `Port: 8080, Theme: light` (matching the golden output)",
+          "to": "must output `Port: 3000, Theme: light` (matching the golden output: `config/override.json` sets port 3000 and legitimately wins over the defaults file)",
+          "reason": "Upstream task.md requirement 2 still says 8080, but the shipped config/override.json sets port 3000, data/golden.txt says 3000 and oracle.sh grades against the golden file; upstream commit 55417455b reconciled the golden file and the opening paragraph but left requirement 2 stale. Without this correction the task text contradicts its own grader."
+        }
+      ],
       "files": {
         "expected.json": "02f4a073e2031cf0ebd429c7bf5f60219752fc248859d0b773cbedc25fd5defd",
         "input/REVIEW-NOTES.md": "96000c4837286e72e9660fd4ed5cc4fe6bbbb5948674e5634c976b1c50a1749c",
@@ -136,7 +147,7 @@
         "input/tests/test-parser.js": "4bb75bc29bcb91d0d82e2b1af7c59d46d9051440f82db105d4fbb72853f79186",
         "input/tests/test-utils.js": "c2c5e0066cd9d2934e9ed046eab30d0c734a001934ac7afc4795ea81cd2978f5",
         "oracle.sh": "58348ec7484857a02574c32add0a246c766e96aab1035ad6c43d290675bbd574",
-        "prompt.md": "a6ebbae0892e0d7e64ff3a86c3ac28501006d0a92088ef0b6a9da9c229131ce9"
+        "prompt.md": "3af58ab1969c2bc221fa046b10ed79f1ab227391c47c99bfa4ad2458126994ba"
       }
     },
     {
@@ -327,7 +338,7 @@
         "input/tests/test-math.js": "8951e7afde45fd9f4e00ad4d4f9dd7c7723e798d055b867151b6526fadc96fda",
         "input/tests/test-parser.js": "4bb75bc29bcb91d0d82e2b1af7c59d46d9051440f82db105d4fbb72853f79186",
         "input/tests/test-utils.js": "c2c5e0066cd9d2934e9ed046eab30d0c734a001934ac7afc4795ea81cd2978f5",
-        "prompt.md": "380bf17767d36cd4edc1a013e28529f1eb6b3f294f953f44b4096a1d5c4222fe"
+        "prompt.md": "5434bf1834e147ef25220ad65be7973b7326b5754a4f918d27e90255cd08da44"
       }
     },
     {

@@ -11,6 +11,7 @@ const ROLES = ['planner', 'implementer', 'reviewer', 'verifier', 'debugger', 'ex
 const PLAN = 'project/plans/2026-11-05-rolekit-direction.md';
 
 const RULE_FORMAL = [
+  '0. Schedule: rows are checked against the frozen schedule (arm x seat x role x task x rep from this design and tasks/manifest.json). A row outside it or a duplicate row is refused; a scheduled cell with no row counts as infra. All comparisons use exact rational arithmetic; rounded numbers in the report are display only.',
   'Primary seat = weak1 (Haiku 5.5) for arms A, B, C; arm D = strong seat (Sonnet) with the current brief. Only rows with infra=false count.',
   '1. Infra gate: if infra rows exceed 5% of the scheduled cells of any arm x seat after one re-run, the verdict is INCONCLUSIVE_INFRA and nothing else is computed.',
   '2. Per role r and arm X, s_X(r) = mean over tasks of (mean over reps of pass). A task with no non-infra row in any of A, B, C, D is dropped from that role in all arms.',
@@ -28,8 +29,8 @@ const RULE_PILOT = [
   'G2 kit applied: for >= 95% of B and C rows, kit_applied is true (the runner confirmed the system prompt marker, the tool list and the plugin skill match the compiled kit); a B or C row with kit_applied=false is an infra row.',
   'G3 parse: parse_ok is true for >= 50% of the non-infra rows in every arm A, B, C, D.',
   'G4 headroom: s_D(r) - s_A(r) > 0 for >= 3 roles, and s_A(r) < 1.0 for >= 4 roles (no ceiling), and s_D(r) > 0 for >= 4 roles (no floor).',
-  'G5 cost: sum of cost_usd over rows <= 1.5 x the high estimate of cost-table for this row, and the per-role mean cost_usd per cell is written to the pilot report for the formal estimate.',
-  'G6 checks: every machine check has a negative control that is red (unit tests in test/), and the sentinel-calls count of the unit-test run is 0 (recorded before the pilot starts).',
+  'G5 cost: every submitted row has a finite non-negative cost_usd (a missing or invalid cost fails the gate, it is never read as 0), and the sum <= 1.5 x the high estimate of cost-table for this row; the per-role mean cost_usd per cell is written to the pilot report for the formal estimate.',
+  'G6 checks: the evidence file written by collect-evidence.js (it runs the unit tests itself) shows tests > 0, pass == tests, fail == 0, a passing negative-control test for each of reviewer, implementer, verifier, planner, debugger, explorer, score-rolekit, compile-kit, stamp-rolekit, and sentinel_calls == 0; a missing or failing evidence file fails the gate.',
 ].join('\n');
 
 function common(row, isPilot) {
@@ -126,7 +127,7 @@ function build(row) {
         ? ['stop the campaign when booked cost reaches cap_usd', 'stop and report when the first 30 cells cost more than 2x their share of the high estimate']
         : ['stop the campaign when booked cost reaches cap_usd', 'after 10% of the cells, stop and report if the projected total exceeds cap_usd', 'a stop is recorded as INCONCLUSIVE_INFRA with the cells done; it is never silently resumed past the cap'],
     },
-    freeze_files: ['kits', 'placebo', 'tasks', 'checks', 'cost-model.json', 'cost-table.js', 'compile-kit.js', 'score-rolekit.js', `prereg/${row}.json`, `COST-TABLE-${row}.md`],
+    freeze_files: ['kits', 'placebo', 'tasks', 'checks', 'cost-model.json', 'cost-table.js', 'compile-kit.js', 'score-rolekit.js', 'collect-evidence.js', `prereg/${row}.json`, `COST-TABLE-${row}.md`],
     stamp_with: `node evals/rolekit/stamp-rolekit.js --row ${row}   (then --check)`,
   };
   if (!isPilot) {

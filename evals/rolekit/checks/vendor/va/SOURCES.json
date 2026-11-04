@@ -1,0 +1,21 @@
+{
+  "base_sha": "63308bd8f2f6fda83277047a0269cb75db1d5f1f",
+  "note": "verbatim copies from the git objects at base_sha; checks/check-cell.js VA_PINS holds their sha256",
+  "files": [
+    {
+      "path": "evals/va-eval-generator.js",
+      "git_object": "aa3768333d1320c9501063a19cecd4ce9670eb87",
+      "sha256": "c37cd9fced8d4da2a1eb06cf5ea220dbf7b0aa02f89c8c5ff1de86c0f39c6a35"
+    },
+    {
+      "path": "evals/va-eval-grader.js",
+      "git_object": "f4f056d77102762f34f4bc31cc86543215c49d41",
+      "sha256": "dedaea5cf11072b2e6f40490c3e02ec88e80ba756d44c2e5d1ca5891337128a3"
+    },
+    {
+      "path": "evals/va-capability-evidence-corpus.json",
+      "git_object": "1f7c383807a4868b2db83fbe791c596405e4e407",
+      "sha256": "85ede154ce11f89ceca3af3c9f895c9fa94e7bc0a84ffd8dc0da391535ccd9b8"
+    }
+  ]
+}

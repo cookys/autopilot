@@ -162,7 +162,7 @@
     "discordant_pairs": "B vs C over (task, rep) cells; exact one-sided binomial tail on b of b + c at p = 0.5, alpha 0.10"
   },
   "verdict": {
-    "rule": "Primary seat = weak1 (Haiku 5.5) for arms A, B, C; arm D = strong seat (Sonnet) with the current brief. Only rows with infra=false count.\n1. Infra gate: if infra rows exceed 5% of the scheduled cells of any arm x seat after one re-run, the verdict is INCONCLUSIVE_INFRA and nothing else is computed.\n2. Per role r and arm X, s_X(r) = mean over tasks of (mean over reps of pass). A task with no non-infra row in any of A, B, C, D is dropped from that role in all arms.\n3. Headroom: if s_D(r) - s_A(r) < 0.15 the role is \"no_headroom\": it is reported and counts neither as a pass nor as a fail.\n4. gap_closed(r) = (s_B(r) - s_A(r)) / (s_D(r) - s_A(r)).\n5. Discordant pairs B vs C: over (task, rep) cells present in both arms, b = #(B pass, C fail), c = #(B fail, C pass). B_beats_C(r) iff b > c and the exact one-sided binomial tail P(X >= b | n = b + c, p = 0.5) <= 0.10.\n6. role_pass(r) = headroom ok AND gap_closed(r) >= 0.50 AND B_beats_C(r).\n7. harm(r) = s_B(r) - s_A(r) <= -0.10.\n8. Verdict: SHIP_CANDIDATE iff the number of role_pass roles >= 3 AND no role has harm; otherwise NOT_SHIP. The second weak seat (weak2) is reported in the same table but never changes the verdict.",
+    "rule": "0. Schedule: rows are checked against the frozen schedule (arm x seat x role x task x rep from this design and tasks/manifest.json). A row outside it or a duplicate row is refused; a scheduled cell with no row counts as infra. All comparisons use exact rational arithmetic; rounded numbers in the report are display only.\nPrimary seat = weak1 (Haiku 5.5) for arms A, B, C; arm D = strong seat (Sonnet) with the current brief. Only rows with infra=false count.\n1. Infra gate: if infra rows exceed 5% of the scheduled cells of any arm x seat after one re-run, the verdict is INCONCLUSIVE_INFRA and nothing else is computed.\n2. Per role r and arm X, s_X(r) = mean over tasks of (mean over reps of pass). A task with no non-infra row in any of A, B, C, D is dropped from that role in all arms.\n3. Headroom: if s_D(r) - s_A(r) < 0.15 the role is \"no_headroom\": it is reported and counts neither as a pass nor as a fail.\n4. gap_closed(r) = (s_B(r) - s_A(r)) / (s_D(r) - s_A(r)).\n5. Discordant pairs B vs C: over (task, rep) cells present in both arms, b = #(B pass, C fail), c = #(B fail, C pass). B_beats_C(r) iff b > c and the exact one-sided binomial tail P(X >= b | n = b + c, p = 0.5) <= 0.10.\n6. role_pass(r) = headroom ok AND gap_closed(r) >= 0.50 AND B_beats_C(r).\n7. harm(r) = s_B(r) - s_A(r) <= -0.10.\n8. Verdict: SHIP_CANDIDATE iff the number of role_pass roles >= 3 AND no role has harm; otherwise NOT_SHIP. The second weak seat (weak2) is reported in the same table but never changes the verdict.",
     "script": "evals/rolekit/score-rolekit.js",
     "params": {
       "infra_arm_seat_max": 0.05,
@@ -208,6 +208,7 @@
     "cost-table.js",
     "compile-kit.js",
     "score-rolekit.js",
+    "collect-evidence.js",
     "prereg/formal.json",
     "COST-TABLE-formal.md"
   ],

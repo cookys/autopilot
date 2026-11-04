@@ -1,12 +1,35 @@
 {
-  "case": "05-off-by-one",
+  "kind": "reviewer",
   "class": "major",
-  "defect_summary": "off-by-one in line-range validation: >= rejects valid pointers whose end line equals the last line (1-based inclusive)",
-  "any_of": [
-    {"regex": "off[ -]by[ -]one"},
-    {"all_of": ["last line"]},
-    {"regex": ">=[^.\\n]{0,40}(last|end|line|valid|reject)"},
-    {"all_of": [">=", "reject"]},
-    {"all_of": ["end line"]}
-  ]
+  "line_slack": 1,
+  "groups": [
+    [
+      "-ge",
+      "-gt",
+      ">=",
+      "off[- ]by[- ]one",
+      "inclusive",
+      "boundary"
+    ],
+    [
+      "\\bend\\b",
+      "last line",
+      "line_count",
+      "line count",
+      "range",
+      "length",
+      "exceed"
+    ],
+    [
+      "reject",
+      "fail",
+      "wrong",
+      "incorrect",
+      "valid",
+      "error",
+      "exceed",
+      "too"
+    ]
+  ],
+  "rule": "a finding counts only if it is critical or major, cites a changed line (+/-1), and its claim matches at least one pattern in EVERY group"
 }

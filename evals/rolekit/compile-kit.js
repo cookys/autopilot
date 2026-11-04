@@ -48,6 +48,30 @@ function parseTools(text) {
   return { tools: names };
 }
 
+// Frontmatter of a skill: "---", single-line `key: value` pairs, "---". A value must be a double-quoted JSON string, a
+// single-quoted string, or a plain scalar with no ": " or " #" inside and no leading indicator character (strict YAML;
+// the 2026-11 planner/verifier skills failed here). name and description are required.
+function frontmatterError(text) {
+  const m = /^---\n([\s\S]*?)\n---\n/.exec(text);
+  if (!m) return 'no frontmatter block';
+  const seen = {};
+  let inBlock = false;
+  for (const [i, line] of m[1].split('\n').entries()) {
+    if (inBlock && /^\s+\S/.test(line)) continue; // continuation of a | or > block scalar
+    inBlock = false;
+    const kv = /^([A-Za-z][A-Za-z0-9_-]*):(?: (.*))?$/.exec(line);
+    if (!kv) return `frontmatter line ${i + 1} is not "key: value": ${line.slice(0, 50)}`;
+    const v = kv[2] === undefined ? '' : kv[2];
+    seen[kv[1]] = v;
+    if (/^[|>][+-]?$/.test(v)) { inBlock = true; continue; }
+    if (v.startsWith('"')) { try { JSON.parse(v); } catch (e) { return `frontmatter ${kv[1]}: bad double-quoted string`; } }
+    else if (v.startsWith("'")) { if (!/^'(?:[^']|'')*'$/.test(v)) return `frontmatter ${kv[1]}: bad single-quoted string`; }
+    else if (v !== '' && (/: |\s#/.test(v) || /^[&*!|>%@`{[\],?-]/.test(v) || /:$/.test(v))) return `frontmatter ${kv[1]}: plain scalar needs quotes (": " or an indicator character): ${v.slice(0, 50)}`;
+  }
+  for (const k of ['name', 'description']) if (!seen[k]) return `frontmatter lacks ${k}`;
+  return null;
+}
+
 function validateKit(kitDir) {
   const errors = [];
   const kit = path.resolve(kitDir);
@@ -79,6 +103,7 @@ function validateKit(kitDir) {
     if (stray.length) errors.push(`stray files in plugin/: ${stray.map((f) => f.rel).join(', ')}`);
     const bytes = files.reduce((n, f) => n + fs.statSync(f.abs).size, 0);
     if (bytes > MAX_PLUGIN_BYTES) errors.push(`plugin is ${bytes} bytes (max ${MAX_PLUGIN_BYTES})`);
+    if (skills.length === 1) { const fe = frontmatterError(fs.readFileSync(skills[0].abs, 'utf8')); if (fe) errors.push(`${skills[0].rel}: ${fe}`); }
     if (skills.length === 1) plugin = { dir: pluginDir, skillRel: skills[0].rel.replace(/^plugin\//, ''), skillName: skills[0].rel.split('/')[2], skillAbs: skills[0].abs };
   }
   return { errors, kit, roleText, tools, plugin };
@@ -132,4 +157,4 @@ function main() {
   for (const [k, val] of Object.entries(r.verified)) process.stdout.write(`status: ${k}: ${val}\n`);
 }
 if (require.main === module) main();
-module.exports = { validateKit, compile, parseTools, MAX_ROLE_BYTES };
+module.exports = { frontmatterError, validateKit, compile, parseTools, MAX_ROLE_BYTES };

@@ -41,22 +41,47 @@ const OT = 'evals/orchestration/tasks';
 const SO = 'evals/skill-onoff/tasks';
 const VA_GEN = 'evals/va-eval-generator.js';
 const NOEDIT = 'Do not modify any file in the repository; this is a read-only task.';
+// Fixture corrections, recorded in manifest.json (corrections) so they are visible and digest-frozen.
+const PATCHES = {
+  't4-config-layer': [{
+    from: 'must output `Port: 8080, Theme: light` (matching the golden output)',
+    to: 'must output `Port: 3000, Theme: light` (matching the golden output: `config/override.json` sets port 3000 and legitimately wins over the defaults file)',
+    reason: 'Upstream task.md requirement 2 still says 8080, but the shipped config/override.json sets port 3000, data/golden.txt says 3000 and oracle.sh grades against the golden file; upstream commit 55417455b reconciled the golden file and the opening paragraph but left requirement 2 stale. Without this correction the task text contradicts its own grader.',
+  }],
+};
 const PROTECTED = ['.git', '.claude', 'run-tests.sh', 'oracle.sh'];
 
 const defs = [];
-// reviewer: known-bad diffs + skill-transport predicates
-for (const [id, name] of [['kb-01', '01-dropped-error-check'], ['kb-05', '05-off-by-one'], ['kb-09', '09-null-deref']]) {
+// reviewer: known-bad diffs; the predicate is authored here: every group must match, so a claim has to name the
+// defect itself (not just a keyword that happens to occur) and cite a changed line. The upstream skill-transport
+// predicate (any one regex is enough) is kept beside it as upstream-match.json for provenance only.
+const REV = {
+  '01-dropped-error-check': { id: 'kb-01', class: 'critical', groups: [
+    ['\\bflock\\b', '\\block\\b'],
+    ['fail', 'error', 'exit status', 'return code', '\\$\\?', 'unchecked', 'not checked', 'ignor', 'swallow', 'silent', 'mask', 'lost', 'drop'],
+    ['remov', 'drop', 'delet', 'no longer', 'missing', 'without', 'never', 'always returns? 0', 'returns? 0', 'ignor', 'swallow', 'silent', 'mask', 'unchecked', 'not checked']] },
+  '05-off-by-one': { id: 'kb-05', class: 'major', groups: [
+    ['-ge', '-gt', '>=', 'off[- ]by[- ]one', 'inclusive', 'boundary'],
+    ['\\bend\\b', 'last line', 'line_count', 'line count', 'range', 'length', 'exceed'],
+    ['reject', 'fail', 'wrong', 'incorrect', 'valid', 'error', 'exceed', 'too']] },
+  '09-null-deref': { id: 'kb-09', class: 'major', groups: [
+    ['\\bjq\\b'],
+    ['null'],
+    ['empty', 'guard', 'literal', 'bypass', '\\[ -n']] },
+};
+for (const [name, r] of Object.entries(REV)) {
   defs.push({
-    role: 'reviewer', id, sources: [`evals/known-bad/${name}.diff`, `evals/known-bad/${name}.expected.json`, `evals/skill-transport/match/${name}.match.json`],
-    files: { 'input/change.diff': `evals/known-bad/${name}.diff`, 'input/known-bad.expected.json': `evals/known-bad/${name}.expected.json`, 'expected.json': `evals/skill-transport/match/${name}.match.json` },
+    role: 'reviewer', id: r.id, sources: [`evals/known-bad/${name}.diff`, `evals/known-bad/${name}.expected.json`, `evals/skill-transport/match/${name}.match.json`],
+    files: { 'input/change.diff': `evals/known-bad/${name}.diff`, 'input/known-bad.expected.json': `evals/known-bad/${name}.expected.json`, 'upstream-match.json': `evals/skill-transport/match/${name}.match.json` },
     prompt: 'Review the diff in input/change.diff (it will be appended below). Report only defects the diff introduces. Cite the file and the new-side line number of each finding.',
+    extra: { class: r.class, line_slack: 1, groups: r.groups, rule: 'a finding counts only if it is critical or major, cites a changed line (+/-1), and its claim matches at least one pattern in EVERY group' },
   });
 }
 // implementer: engine-orchestration micro repos with their own oracle.sh
 for (const t of ['t1-fix-with-decoy', 't4-config-layer', 't11-boundary-fix']) {
   defs.push({
     role: 'implementer', id: t, sources: [`${OT}/${t}`], copyTree: { 'input': `${OT}/${t}/repo` }, files: { 'oracle.sh': `${OT}/${t}/oracle.sh` },
-    promptFrom: `${OT}/${t}/task.md`, extra: { protected: PROTECTED, oracle: ['bash', 'oracle.sh'] },
+    promptFrom: `${OT}/${t}/task.md`, patches: PATCHES[t], extra: { protected: PROTECTED, oracle: ['bash', 'oracle.sh'] },
   });
 }
 // verifier: seed-derived va exam cases (generator pinned by blob sha; envelope pinned by sha256)
@@ -78,7 +103,7 @@ for (const [t, ex] of Object.entries(planners)) {
 }
 // debugger: known root cause in the same micro repos (read-only diagnosis)
 const dbg = {
-  't4-config-layer': { file: 'lib/config.js', line_min: 14, line_max: 18, claim_regex: '(precedence|Object\\.assign|order|override|env)', symptom: 'Users changed "port" to 8080 in config/defaults.json but the tool still prints port 3000, and PORT/THEME env vars do not win over the files. A reviewer note blames lib/parser.js.', decoy: 'lib/parser.js' },
+  't4-config-layer': { file: 'lib/config.js', line_min: 14, line_max: 18, claim_regex: '(precedence|Object\\.assign|order|override|env)', symptom: 'Running the tool with PORT=9999 THEME=dark still prints the values from the config files: environment variables do not win over the files as documented (Env Var > config/override.json > config/defaults.json). A reviewer note blames lib/parser.js.', decoy: 'lib/parser.js' },
   't11-boundary-fix': { file: 'lib/pager.py', line_min: 13, line_max: 15, claim_regex: '(off.by.one|end - 1|end-1|last page|slice)', symptom: 'Paginating a list of 4 items with page size 2: page 2 returns [\'c\'] instead of [\'c\', \'d\'].', decoy: null },
   't15-cache-invalidation': { file: 'keys.py', line_min: 8, line_max: 8, claim_regex: '(key|id|role|collapse|stale)', symptom: 'After an account is promoted from viewer to admin, get_permissions keeps returning the old permissions. service.py looks correct on its own.', decoy: 'service.py' },
 };
@@ -121,6 +146,15 @@ function walk(dir) { // frozen output tree
   return res;
 }
 
+// Executable dependencies of the verifier check, frozen inside checks/ (the check loads them only after a sha256 pin).
+const VENDOR = ['evals/va-eval-generator.js', 'evals/va-eval-grader.js', 'evals/va-capability-evidence-corpus.json'];
+function vendorFiles() {
+  const files = {};
+  for (const src of VENDOR) files[path.basename(src)] = readSrc(src);
+  files['SOURCES.json'] = Buffer.from(`${JSON.stringify({ base_sha: base, note: 'verbatim copies from the git objects at base_sha; checks/check-cell.js VA_PINS holds their sha256', files: VENDOR.map((s) => ({ path: s, git_object: objSha(s), sha256: sha256(readSrc(s)) })) }, null, 2)}\n`);
+  return files;
+}
+
 function build(target) {
   const manifest = { schema_version: 1, artifact_type: 'rolekit_pilot_tasks', base_sha: base, tasks: [] };
   for (const d of defs) {
@@ -132,6 +166,12 @@ function build(target) {
     for (const [rel, src] of Object.entries(d.copyTree || {})) for (const f of listSrc(src)) cpf(path.join(rel, path.relative(src, f)), f);
     let prompt = d.prompt || '';
     if (d.promptFrom) prompt = (d.promptPrefix || '') + readSrc(d.promptFrom).toString('utf8').trimEnd();
+    const corrections = [];
+    for (const pt of d.patches || []) {
+      if (!prompt.includes(pt.from)) die(`correction text not found in ${d.id}`);
+      prompt = prompt.replace(pt.from, pt.to);
+      corrections.push({ file: 'prompt.md', from: pt.from, to: pt.to, reason: pt.reason });
+    }
     const entry = { role: d.role, id: d.id, dir: `${d.role}/${d.id}`, sources: d.sources.map((s) => ({ path: s, git_object: objSha(s) })) };
     if (d.va) {
       const gdir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rkg-'));
@@ -149,6 +189,7 @@ function build(target) {
       wr('expected.json', JSON.stringify({ kind: d.role, ...d.extra }, null, 2) + '\n');
     }
     wr('prompt.md', `${prompt}\n\n${KEYS[d.role]}\n`);
+    if (corrections.length) entry.corrections = corrections;
     entry.files = {};
     for (const f of walk(dir)) entry.files[path.relative(dir, f)] = sha256(fs.readFileSync(f));
     manifest.tasks.push(entry);
@@ -157,7 +198,14 @@ function build(target) {
   return manifest;
 }
 
+const vendorDir = path.join(__dirname, 'checks', 'vendor', 'va');
 if (check) {
+  for (const [f, buf] of Object.entries(vendorFiles())) {
+    const p = path.join(vendorDir, f);
+    if (!fs.existsSync(p) || !fs.readFileSync(p).equals(buf)) die(`vendored file differs from the git objects at base: checks/vendor/va/${f}`);
+  }
+  const pins = require('./checks/check-cell.js').VA_PINS;
+  for (const [f, buf] of Object.entries(vendorFiles())) if (pins[f] !== undefined && pins[f] !== sha256(buf)) die(`VA_PINS in check-cell.js does not match ${f}`);
   const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rkb-'));
   const fresh = build(tmp);
   const have = JSON.parse(fs.readFileSync(path.join(out, 'manifest.json'), 'utf8'));
@@ -169,6 +217,8 @@ if (check) {
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log(`build-tasks: ok (${have.tasks.length} tasks)`);
 } else {
+  fs.mkdirSync(vendorDir, { recursive: true });
+  for (const [f, buf] of Object.entries(vendorFiles())) fs.writeFileSync(path.join(vendorDir, f), buf);
   const m = build(out);
   console.log(`build-tasks: wrote ${m.tasks.length} tasks to ${out}`);
 }

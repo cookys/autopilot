@@ -5,7 +5,7 @@ const path = require('path');
 const cp = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
-const EVALS = path.resolve(ROOT, '..');
+const VA = path.join(ROOT, 'checks', 'vendor', 'va');
 const ROLES = ['planner', 'implementer', 'reviewer', 'verifier', 'debugger', 'explorer'];
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'rkt-'));
 const rm = (d) => fs.rmSync(d, { recursive: true, force: true });
@@ -14,7 +14,7 @@ function runCheck(role, id, answer, extra = []) {
   const d = tmp();
   const f = path.join(d, 'answer.json');
   fs.writeFileSync(f, typeof answer === 'string' ? answer : JSON.stringify(answer));
-  const r = cp.spawnSync('node', [path.join(ROOT, 'checks/check-cell.js'), '--role', role, '--task-dir', taskDir(role, id), '--answer', f, '--evals-dir', EVALS, ...extra], { encoding: 'utf8' });
+  const r = cp.spawnSync('node', [path.join(ROOT, 'checks/check-cell.js'), '--role', role, '--task-dir', taskDir(role, id), '--answer', f, ...extra], { encoding: 'utf8' });
   rm(d);
   return { rc: r.status, out: r.stdout ? JSON.parse(r.stdout.trim().split('\n').pop()) : null, err: r.stderr };
 }
@@ -25,4 +25,4 @@ function gitWorkdir(role, id) { // a fresh git worktree of the task input with a
   g('init', '-q'); g('add', '-A'); g('commit', '-q', '-m', 'base', '--no-verify');
   return { dir: d, git: g };
 }
-module.exports = { ROOT, EVALS, ROLES, tmp, rm, taskDir, runCheck, gitWorkdir };
+module.exports = { ROOT, VA, ROLES, tmp, rm, taskDir, runCheck, gitWorkdir };

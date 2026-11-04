@@ -79,14 +79,23 @@ if (check) {
   const diff = Object.keys({ ...now, ...fz.files }).filter((k) => now[k] !== fz.files[k]);
   if (diff.length) die(`digest mismatch: ${diff.join(', ')}`);
   if (!fs.existsSync(path.join(root, receiptRel))) die(`receipt missing: ${receiptRel}`);
-  const rc = JSON.parse(fs.readFileSync(path.join(root, receiptRel), 'utf8'));
+  const raw = fs.readFileSync(path.join(root, receiptRel));
+  let rc;
+  try { rc = JSON.parse(raw.toString('utf8')); } catch (e) { die(`receipt is not JSON: ${e.message}`); }
+  // every receipt field is compared with a recomputed value or with the metadata pinned in FROZEN.json at stamp time
   const bad = [];
-  if (rc.artifact_type !== 'rolekit_stamp_receipt' || rc.row !== row) bad.push('artifact_type/row');
-  if (typeof rc.authorized_by !== 'string' || rc.authorized_by.trim() === '') bad.push('authorized_by');
-  if (!/^\d{4}-\d\d-\d\dT/.test(String(rc.stamped_at))) bad.push('stamped_at');
+  if (crypto.createHash('sha256').update(raw).digest('hex') !== fz.receipt_sha256) bad.push('receipt bytes (receipt_sha256)');
+  if (rc.schema_version !== 1) bad.push('schema_version');
+  if (rc.artifact_type !== 'rolekit_stamp_receipt') bad.push('artifact_type');
+  if (rc.row !== row) bad.push('row');
+  if (typeof fz.authorized_by !== 'string' || fz.authorized_by === '' || rc.authorized_by !== fz.authorized_by) bad.push('authorized_by');
+  if (typeof fz.stamped_at !== 'string' || rc.stamped_at !== fz.stamped_at) bad.push('stamped_at');
   if (rc.prereg_sha256 !== sha(preregRel)) bad.push('prereg_sha256');
+  if (rc.frozen_files !== Object.keys(now).length || fz.frozen_file_count !== Object.keys(now).length) bad.push('frozen_files');
   const gd = groupDigests(now);
   for (const g of Object.keys(GROUPS)) if (!rc.digests || rc.digests[g] !== gd[g]) bad.push(`digests.${g}`);
+  const extra = Object.keys(rc).filter((k) => !['schema_version', 'artifact_type', 'row', 'stamped_at', 'authorized_by', 'prereg_sha256', 'digests', 'frozen_files'].includes(k));
+  if (extra.length) bad.push(`unknown field(s) ${extra.join(',')}`);
   if (bad.length) die(`receipt mismatch: ${bad.join(', ')}`);
   console.log(`stamp-rolekit: ${row} ok (${Object.keys(now).length} files)`);
 } else {
@@ -97,10 +106,12 @@ if (check) {
   prereg.stamped = true;
   fs.writeFileSync(path.join(root, preregRel), `${JSON.stringify(prereg, null, 2)}\n`);
   const fz = readFrozen();
-  fz.rows[row] = { frozen_at: new Date().toISOString().slice(0, 10), stamped: true, files: Object.fromEntries(frozen().map((f) => [f, sha(f)])) };
-  fs.writeFileSync(frozenPath, `${JSON.stringify(fz, null, 2)}\n`);
+  const files = Object.fromEntries(frozen().map((f) => [f, sha(f)]));
   const stampedAt = new Date().toISOString();
-  const receipt = { schema_version: 1, artifact_type: 'rolekit_stamp_receipt', row, stamped_at: stampedAt, authorized_by: authorizedBy, prereg_sha256: sha(preregRel), digests: groupDigests(fz.rows[row].files), frozen_files: Object.keys(fz.rows[row].files).length };
-  fs.writeFileSync(path.join(root, receiptRel), `${JSON.stringify(receipt, null, 2)}\n`);
+  const receipt = { schema_version: 1, artifact_type: 'rolekit_stamp_receipt', row, stamped_at: stampedAt, authorized_by: authorizedBy, prereg_sha256: sha(preregRel), digests: groupDigests(files), frozen_files: Object.keys(files).length };
+  const receiptBytes = `${JSON.stringify(receipt, null, 2)}\n`;
+  fs.writeFileSync(path.join(root, receiptRel), receiptBytes);
+  fz.rows[row] = { frozen_at: stampedAt.slice(0, 10), stamped: true, stamped_at: stampedAt, authorized_by: authorizedBy, frozen_file_count: Object.keys(files).length, receipt_sha256: crypto.createHash('sha256').update(receiptBytes).digest('hex'), files };
+  fs.writeFileSync(frozenPath, `${JSON.stringify(fz, null, 2)}\n`);
   console.log(`stamp-rolekit: stamped ${row} (${Object.keys(fz.rows[row].files).length} files)`);
 }

@@ -89,7 +89,7 @@ function placeboRole(target, offset) {
   return fit(head, tail, target, offset);
 }
 function placeboSkill(name, target, offset) {
-  const head = `---\nname: ${name}\ndescription: Use when planning the watering rota and seasonal jobs for a community garden plot. Not for allotment legal matters.\n---\n\n# Garden Rota Handbook\n\n`;
+  const head = `---\nname: ${name}\ndescription: ${JSON.stringify('Use when planning the watering rota and seasonal jobs for a community garden plot. Not for allotment legal matters.')}\n---\n\n# Garden Rota Handbook\n\n`;
   return fit(head, '\n', target, offset);
 }
 
@@ -104,12 +104,21 @@ function build() {
     if (!sk) return;
     const raw = readSrc(sk.src);
     let text = sk.lines ? raw.split('\n').slice(sk.lines[0] - 1, sk.lines[1]).join('\n') : raw;
-    if (sk.wrap) text = `---\nname: ${sk.name}\ndescription: ${sk.wrap}\n---\n\n${text.endsWith('\n') ? text : `${text}\n`}`;
+    let requoted = false;
+    if (sk.wrap) text = `---\nname: ${sk.name}\ndescription: ${JSON.stringify(sk.wrap)}\n---\n\n${text.endsWith('\n') ? text : `${text}\n`}`;
+    else {
+      // YAML: a plain scalar may not contain ": ", so a description with one is re-encoded as a double-quoted string (the body stays verbatim)
+      const m = /^---\n([\s\S]*?)\n---\n/.exec(text);
+      if (m) {
+        const fixed = m[1].split('\n').map((l) => { const d = /^description:\s*(.*)$/.exec(l); if (d && d[1] !== '' && !/^["'|>]/.test(d[1])) { requoted = true; return `description: ${JSON.stringify(d[1])}`; } return l; }).join('\n');
+        text = `---\n${fixed}\n---\n${text.slice(m[0].length)}`;
+      }
+    }
     const skillPath = `skills/${sk.name}/SKILL.md`;
     const manifest = (n) => `${JSON.stringify({ name: n, version: '0.0.0', description: 'role kit pilot (no behaviour of its own)' }, null, 2)}\n`;
     files[`kits/${role}/plugin/.claude-plugin/plugin.json`] = manifest(`rk-${role}`);
     files[`kits/${role}/plugin/${skillPath}`] = text;
-    files[`kits/${role}/sources.json`] = `${JSON.stringify({ role, skill: sk.name, source_path: sk.src, source_lines: sk.lines || null, source_git_blob: git('rev-parse', `${base}:${sk.src}`), base_sha: base, transform: sk.wrap ? 'frontmatter added in front of the source text' : 'verbatim copy', copied_bytes: Buffer.byteLength(text) }, null, 2)}\n`;
+    files[`kits/${role}/sources.json`] = `${JSON.stringify({ role, skill: sk.name, source_path: sk.src, source_lines: sk.lines || null, source_git_blob: git('rev-parse', `${base}:${sk.src}`), base_sha: base, transform: sk.wrap ? 'frontmatter added in front of the source text' : requoted ? 'frontmatter description re-quoted as a YAML double-quoted string; body verbatim' : 'verbatim copy', copied_bytes: Buffer.byteLength(text) }, null, 2)}\n`;
     const pname = 'rota-handbook';
     files[`placebo/${role}/plugin/.claude-plugin/plugin.json`] = manifest(`rk-placebo-${role}`);
     files[`placebo/${role}/plugin/skills/${pname}/SKILL.md`] = placeboSkill(pname, Buffer.byteLength(text), ri * 7 + 3);

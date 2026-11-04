@@ -1,6 +1,6 @@
 ---
 name: negative-control
-description: Use when a check or test is written: it must be shown failing on a deliberately broken case.
+description: "Use when a check or test is written: it must be shown failing on a deliberately broken case."
 ---
 
 ## 58. A gate that has never been seen to fail has not been shown to guard anything

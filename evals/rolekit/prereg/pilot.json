@@ -156,7 +156,7 @@
     "discordant_pairs": "B vs C over (task, rep) cells; exact one-sided binomial tail on b of b + c at p = 0.5, alpha 0.10"
   },
   "verdict": {
-    "rule": "The pilot checks the instrument and never emits SHIP_CANDIDATE or NOT_SHIP. Verdict PILOT_OK iff every gate below holds, else PILOT_FIX with the failing gates listed.\nG1 infra: infra rows <= 10% of all scheduled cells and <= 25% in any arm x role.\nG2 kit applied: for >= 95% of B and C rows, kit_applied is true (the runner confirmed the system prompt marker, the tool list and the plugin skill match the compiled kit); a B or C row with kit_applied=false is an infra row.\nG3 parse: parse_ok is true for >= 50% of the non-infra rows in every arm A, B, C, D.\nG4 headroom: s_D(r) - s_A(r) > 0 for >= 3 roles, and s_A(r) < 1.0 for >= 4 roles (no ceiling), and s_D(r) > 0 for >= 4 roles (no floor).\nG5 cost: sum of cost_usd over rows <= 1.5 x the high estimate of cost-table for this row, and the per-role mean cost_usd per cell is written to the pilot report for the formal estimate.\nG6 checks: every machine check has a negative control that is red (unit tests in test/), and the sentinel-calls count of the unit-test run is 0 (recorded before the pilot starts).",
+    "rule": "The pilot checks the instrument and never emits SHIP_CANDIDATE or NOT_SHIP. Verdict PILOT_OK iff every gate below holds, else PILOT_FIX with the failing gates listed.\nG1 infra: infra rows <= 10% of all scheduled cells and <= 25% in any arm x role.\nG2 kit applied: for >= 95% of B and C rows, kit_applied is true (the runner confirmed the system prompt marker, the tool list and the plugin skill match the compiled kit); a B or C row with kit_applied=false is an infra row.\nG3 parse: parse_ok is true for >= 50% of the non-infra rows in every arm A, B, C, D.\nG4 headroom: s_D(r) - s_A(r) > 0 for >= 3 roles, and s_A(r) < 1.0 for >= 4 roles (no ceiling), and s_D(r) > 0 for >= 4 roles (no floor).\nG5 cost: every submitted row has a finite non-negative cost_usd (a missing or invalid cost fails the gate, it is never read as 0), and the sum <= 1.5 x the high estimate of cost-table for this row; the per-role mean cost_usd per cell is written to the pilot report for the formal estimate.\nG6 checks: the evidence file written by collect-evidence.js (it runs the unit tests itself) shows tests > 0, pass == tests, fail == 0, a passing negative-control test for each of reviewer, implementer, verifier, planner, debugger, explorer, score-rolekit, compile-kit, stamp-rolekit, and sentinel_calls == 0; a missing or failing evidence file fails the gate.",
     "script": "evals/rolekit/score-rolekit.js",
     "params": {
       "infra_total_max": 0.1,
@@ -203,6 +203,7 @@
     "cost-table.js",
     "compile-kit.js",
     "score-rolekit.js",
+    "collect-evidence.js",
     "prereg/pilot.json",
     "COST-TABLE-pilot.md"
   ],

@@ -1,6 +1,6 @@
 ---
 name: plan-template
-description: Use when writing a plan: the structure every plan follows.
+description: "Use when writing a plan: the structure every plan follows."
 ---
 
 # Plan-authoring template (the structure every autopilot plan doc follows)

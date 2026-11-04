@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { runCheck, gitWorkdir, taskDir, rm, EVALS } = require('./helpers.js');
+const { runCheck, gitWorkdir, taskDir, rm, VA } = require('./helpers.js');
 
 test('reviewer: a matching critical finding that cites a diff line passes; wrong, uncited or SHIP-AS-IS fails', () => {
   const good = { verdict: 'FIX-THEN-SHIP', findings: [{ severity: 'critical', file: 'scripts/emit.sh', line: 14, claim: 'flock failure is silently dropped; emit_event always returns 0 even when the append fails' }] };
@@ -51,7 +51,7 @@ test('implementer t1 and t4: the untouched repositories are red under their own 
 });
 
 test('verifier: a plan derived from the contract passes; a wrong declaration, a trivial plan and a bad shape fail', () => {
-  const gen = require(path.join(EVALS, 'va-eval-generator.js'));
+  const gen = require(path.join(VA, 'va-eval-generator.js'));
   for (const id of ['va-boundary-off-by-one', 'va-error-path-swallow', 'va-state-residue']) {
     const exp = JSON.parse(fs.readFileSync(path.join(taskDir('verifier', id), 'expected.json'), 'utf8'));
     const c = gen.generateAdministration(exp.seed).trials[exp.trial].cases.find((x) => x.case_id === exp.case_id);

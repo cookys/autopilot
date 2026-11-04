@@ -38,8 +38,9 @@ test('(a) after stamping, changing a task file, a role card (kit and placebo) or
       ['kit skill', 'kits/debugger/plugin/skills/debug/SKILL.md', (t) => `${t}x`],
       ['kit tools', 'kits/explorer/tools', (t) => `${t.trim()},Bash\n`],
       ['check', 'checks/check-cell.js', (t) => t.replace("pass: !!pass", "pass: true")],
-      ['verdict script', 'score-rolekit.js', (t) => t.replace('b > c &&', 'true &&')],
+      ['verdict script', 'score-rolekit.js', (t) => t.replace('e.harm = cmp', 'e.harm = false && cmp')],
       ['prereg verdict rule', 'prereg/pilot.json', (t) => t.replace('G1 infra: infra rows <= 10%', 'G1 infra: infra rows <= 90%')],
+      ['vendored verifier grader', 'checks/vendor/va/va-eval-grader.js', (t) => `${t}\n`],
       ['cost model', 'cost-model.json', (t) => t.replace('0.0162', '0.0001')],
     ];
     for (const [name, rel, fn] of cases) {
@@ -106,7 +107,12 @@ test('(c) the receipt records time, prereg sha256, kit/placebo/tasks/checks dige
       ['checks digest changed', (j) => { j.digests.checks = '0'.repeat(64); }, /digests\.checks/],
       ['kits digest removed', (j) => { delete j.digests.kits; }, /digests\.kits/],
       ['placebo digest changed', (j) => { j.digests.placebo = '1'.repeat(64); }, /digests\.placebo/],
-      ['wrong row', (j) => { j.row = 'formal'; }, /artifact_type\/row/],
+      ['wrong row', (j) => { j.row = 'formal'; }, /\brow\b/],
+      ['authorized_by swapped for another legal id', (j) => { j.authorized_by = 'd-someone-else'; }, /authorized_by/],
+      ['stamped_at swapped for another legal time', (j) => { j.stamped_at = '2020-01-01T00:00:00.000Z'; }, /stamped_at/],
+      ['schema_version changed', (j) => { j.schema_version = 2; }, /schema_version/],
+      ['frozen_files changed', (j) => { j.frozen_files = 1; }, /frozen_files/],
+      ['unknown field added', (j) => { j.note = 'x'; }, /unknown field/],
     ];
     for (const [name, mut, re] of cases) {
       const keep = fs.readFileSync(rcPath);
@@ -114,6 +120,13 @@ test('(c) the receipt records time, prereg sha256, kit/placebo/tasks/checks dige
       const r = s.check();
       assert.strictEqual(r.status, 2, name); assert.match(r.stderr, re, name);
       fs.writeFileSync(rcPath, keep); assert.strictEqual(s.check().status, 0, `${name}: green after restore`);
+    }
+    // the pinned metadata in FROZEN.json is compared too: changing it alone, to a legal value, is red
+    const fp = path.join(s.d, 'prereg/FROZEN.json'); const fkeep = fs.readFileSync(fp);
+    for (const [k, v] of [['authorized_by', 'd-other'], ['stamped_at', '2020-01-01T00:00:00.000Z'], ['receipt_sha256', '0'.repeat(64)], ['frozen_file_count', 3]]) {
+      const j = JSON.parse(fkeep); j.rows.pilot[k] = v; fs.writeFileSync(fp, JSON.stringify(j));
+      assert.strictEqual(s.check().status, 2, `FROZEN.${k}`);
+      fs.writeFileSync(fp, fkeep); assert.strictEqual(s.check().status, 0);
     }
     fs.rmSync(rcPath);
     const r = s.check(); assert.strictEqual(r.status, 2); assert.match(r.stderr, /receipt missing/);

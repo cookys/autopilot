@@ -13,7 +13,7 @@ A reviewer left notes in `REVIEW-NOTES.md` suggesting that the JSON parser in `l
 
 ## Requirements
 1. The tool must honor the precedence: Env Var > Local Override > Defaults.
-2. Running the tool without env vars must output `Port: 8080, Theme: light` (matching the golden output).
+2. Running the tool without env vars must output `Port: 3000, Theme: light` (matching the golden output: `config/override.json` sets port 3000 and legitimately wins over the defaults file).
 3. Ensure all tests pass. You can run them with `bash run-tests.sh`.
 4. Create a plan in `PLAN.md` detailing the issues and the acceptance criteria.
 5. Create `DECISIONS.md` listing judgment calls.

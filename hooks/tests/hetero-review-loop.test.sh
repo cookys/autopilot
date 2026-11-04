@@ -2450,7 +2450,7 @@ assert_exit_code "$RR1M_RC" "0" "R1 (mutation): without the check the default le
 assert_not_contains "$RR1M_OUT" "stay open with no resolution" "R1 (mutation): without the check no refusal is printed"
 assert_not_contains "$(cat "$LEDGER/receipt-rr1m.json")" "unresolved_allowed" "R1 (mutation): ... and no field is recorded"
 
-# R2: resolution present -> no warning, --require-resolved passes
+# R2: resolution present -> default finalize passes, no refusal, no unresolved_allowed field
 rr_phase rr2 yes
 RR2_OUT=$(rr_fin2 "$SCRIPT" rr2); RR2_RC=$?
 assert_exit_code "$RR2_RC" "0" "R2 (BL-0384): complete resolutions pass the default"

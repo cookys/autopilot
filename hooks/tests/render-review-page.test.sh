@@ -679,5 +679,9 @@ assert_not_contains "$(sec "$P_NW" 2)" "目前沒有待你決定" "CLI with no d
 printf '[]' > "$SB/planned-empty.json"
 render "$SB/pnw2.html" --runs "$F/runs.json" --root R1 --task-receipt "$F/task-accepted.json" --progress-receipt "$F/progress-frozen.json" --decisions "$F/decisions.json" --compare "$F/compare" --planned "$SB/planned-empty.json" "${COMMON[@]}"
 assert_not_contains "$(cat "$SB/pnw2.html")" "來源未接" "CLI with every input wired: no 來源未接 anywhere"
+# cardwrap: a URL in a list item or definition is not split at every character (break-word, not anywhere); code still breaks anywhere
+assert_contains "$(cat "$SB/pnw2.html")" "section>p,li,dd{overflow-wrap:break-word}" "cardwrap: li/dd break only when a token overflows"
+assert_not_contains "$(cat "$SB/pnw2.html")" "li,dd{overflow-wrap:anywhere}" "cardwrap: no overflow-wrap:anywhere on li/dd (it splits URLs)"
+assert_contains "$(cat "$SB/pnw2.html")" "code{font-size:.85em;word-break:break-all}" "cardwrap: code still breaks anywhere"
 
 finalize_test

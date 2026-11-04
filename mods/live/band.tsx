@@ -9,7 +9,7 @@ import { BAND_INFO_LABEL, BAND_SEP, displayWidth, layoutBand, plainBandText } fr
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
 import { actionSeg, dimProps, drawSeg, forgeBar, GLYPHS } from './ui'
 import type { ForgeSegment } from './ui'
-import { barRule, barStrip, decideTabLines } from './tabs'
+import { barRule, barStrip, decideBandPlan } from './tabs'
 import { COL_GAP } from './speedview'
 import type { SpeedColumn } from './speedview'
 import type { BarStrip, BarTabId } from './tabs'
@@ -125,18 +125,15 @@ export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSna
 
 // the 待決 tab's compact form: the first open question's title and its options, then the send row the pane's own builder made (the same lines, the same press ids: a press is
 // decidePress, so a pick or a send here is the one the pane makes). No notes (a text field is the pane's); the rest of the questions are the pane's too.
-export function decideContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, state: DecideState, columns: number, t: T, onPress: (id: string) => void): unknown[] {
+// The rows come from `decideBandPlan` (tabs.ts): wrapped, never cut; a pointer row for what the pane alone shows; `maxRows` is the room under the bar and rule (rows - 2).
+export function decideContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, state: DecideState, columns: number, t: T, onPress: (id: string) => void, maxRows?: number): unknown[] {
   const { Box, Text, Button } = el
   if (snap === null || snap.band === null) return []
-  const lines = decideTabLines(snap, { t, cols: columns, decide: { ...state, inputs: false } })
-  const picked: PaneLine[] = []
-  for (const l of lines) {
-    if (l.bar === true) continue
-    if (l.kind === 'item' || l.kind === 'choice') picked.push(l)
-    else if (picked.length > 0 && l.kind === 'blank') break
-  }
-  const bars = lines.filter(l => l.bar === true)
-  if (picked.length === 0) return [<Text key="none" {...dimProps()} wrap="truncate">{t('decide.none')}</Text>]
+  const plan = decideBandPlan(snap, { t, cols: columns, decide: { ...state, inputs: false } }, maxRows)
+  if (plan.rows.length === 0) return [<Text key="none" {...dimProps()} wrap="truncate">{t('decide.none')}</Text>]
+  const shown = plan.rows
+  const bars = plan.bars
+  const tail: unknown[] = plan.pointer === null ? [] : [<Text key="more" {...dimProps()} wrap="truncate">{t(plan.pointer)}</Text>]
   const drawLine = (l: PaneLine, k: string) => {
     const runs: { press: string | undefined; segs: Seg[] }[] = []
     for (const s of l.segs ?? [{ text: l.text }]) {
@@ -154,7 +151,7 @@ export function decideContent(el: { Box: El; Text: El; Button?: El }, snap: Live
       </Box>
     )
   }
-  return [...picked.map((l, i) => drawLine(l, 'p' + i)), ...bars.map((l, i) => drawLine(l, 'b' + i))]
+  return [...shown.map((l, i) => drawLine(l, 'p' + i)), ...tail, ...bars.map((l, i) => drawLine(l, 'b' + i))]
 }
 
 // ---- the speed view under the tabs (BL-0359): the speed column and the recent-requests table, and the mod below (codeforge's forge-stats: Ferris, pet, memory, brain) ----

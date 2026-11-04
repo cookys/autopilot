@@ -1659,12 +1659,16 @@ export const paneWidth = (bodyColumns: number | null | undefined): number => (ty
 // lines are indented by `hang` (kv rows: under the value column; other rows: their own leading blanks). Only a single unbreakable token longer than
 // a whole line is hard-broken. A line that fits is returned untouched.
 const CLOSING_PUNCT = '）」』、。，；：！？)]}】》〉,.;:!?'
-type WrapCh = { ch: string; si: number; w: number }
+type WrapCh = { ch: string; si: number; w: number; u?: true } // u: the character is part of an http(s) address, which is never split
 function wrapLine(l: PaneLine, cols: number): PaneLine[] {
   if (displayWidth(l.text) <= cols) return [l]
   const base: Seg[] = l.segs ?? [{ text: l.text, ...(l.color !== undefined ? { color: l.color } : l.warn ? { color: PALETTE.attention } : {}), ...(l.bold ? { bold: true } : {}), ...(l.dim ? { dim: true } : {}) }]
   const chars: WrapCh[] = []
   base.forEach((s, si) => { for (const ch of s.text) chars.push({ ch, si, w: cellWidth(ch.codePointAt(0) as number) }) })
+  for (const m of chars.map(c => c.ch).join('').matchAll(/https?:\/\/[^\s<>"'（）「」『』，；：！？、。\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]+/gu)) { // an address is one token: it may overflow a line, it is never split
+    const end = (m.index as number) + [...m[0].replace(/[.,;:!?)\]}]+$/, '')].length
+    for (let k = m.index as number; k < end; k++) chars[k].u = true
+  }
   const lead = (l.text.match(/^ */) as RegExpMatchArray)[0].length
   const hang = Math.min(l.hang ?? lead, Math.max(0, Math.floor(cols / 2)))
   // tokens: runs of blanks, and runs of other characters that end after a `/` or a wide (CJK) character
@@ -1674,7 +1678,8 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
     const last = tokens[tokens.length - 1]
     const lastCh = last === undefined ? null : last.cs[last.cs.length - 1]
     const closing = !blank && last !== undefined && !last.blank && CLOSING_PUNCT.includes(c.ch)
-    const joins = closing || last !== undefined && last.blank === blank && !(lastCh !== null && (lastCh.ch === '/' || lastCh.w === 2)) && !(c.w === 2 && lastCh !== null && lastCh.w !== 2 && !blank)
+    const inUrl = c.u === true && lastCh !== null && lastCh.u === true
+    const joins = inUrl || closing || last !== undefined && last.blank === blank && !(lastCh !== null && (lastCh.ch === '/' || lastCh.w === 2)) && !(c.w === 2 && lastCh !== null && lastCh.w !== 2 && !blank)
     if (joins) { last.cs.push(c); last.w += c.w } else tokens.push({ cs: [c], blank, w: c.w })
   }
   const lines: WrapCh[][] = []
@@ -1697,6 +1702,7 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
     }
     if (w + tk.w > cols && content) newLine()
     if (w + tk.w <= cols) { cur.push(...tk.cs); w += tk.w; content = true; continue }
+    if (tk.cs.some(c => c.u === true)) { cur.push(...tk.cs); w += tk.w; content = true; continue } // an address longer than a whole line overflows it (never split)
     for (const c of tk.cs) { // one token longer than a whole line: hard-break it
       if (w + c.w > cols && content) newLine()
       cur.push(c); w += c.w; content = true

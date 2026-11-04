@@ -5,8 +5,9 @@ import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, decideLine, decideReply, recommendedIndex } from './model'
 import type { DecideView, LiveDecision, LiveSnapshot, PaneLine } from './model'
-import { decideTabLines, nowLines, stripOf, tabNeeds } from './tabs'
+import { decideBandPlan, decideTabLines, nowLines, stripOf, tabNeeds } from './tabs'
 import * as ui from './ui'
+import { applyScroll, newScroll } from './scrollmath'
 import { violations } from './invariants.testkit'
 
 const LOCALES = [['zh-TW', makeT('zh-TW')], ['en', makeT('en')]] as const
@@ -47,10 +48,12 @@ test('DECIDE card: a section header with the count, then per question the title,
   const note = ls.findIndex(l => l.field !== undefined && l.field.key === 'note:d-4290499d')
   expect(bg).toBe(2)
   expect([bg < blocks, blocks < row, row < advice, advice < note], 'the order is 背景, 卡住, 選項, 建議, 補充').toEqual([true, true, true, true])
-  expect(t[row + 1]).toBe('            [ ] 完整顯示')
+  expect(t[row + 1]).toBe('            照現況') // every option shows its description under it, not only the picked one
+  expect(t[row + 2]).toBe('            [ ] 完整顯示')
+  expect(t[row + 3]).toBe('            全列出來')
   expect(t[row]).toBe('  選項      [ ] ★ OK') // the star marks the recommendation, on the option only
   expect(ls[row].segs?.filter(s => s.role === 'glyph').map(s => s.text)).toEqual([ui.GLYPHS.structure.recommend])
-  expect(pressIds(ls.slice(row, row + 2))).toEqual(['pick:d-4290499d:0', 'pick:d-4290499d:1']) // one row per option
+  expect(pressIds(ls.slice(row, row + 4))).toEqual(['pick:d-4290499d:0', 'pick:d-4290499d:1']) // one pressable row per option (its description row is plain)
   expect(t[advice]).toBe('  建議      OK') // no reason given: the recommended option alone
   expect(t[note]).toBe('  補充')
   expect(ls[note].field?.placeholder).toBe('選填；都不要就直接寫你的答案')
@@ -521,5 +524,122 @@ test('DECIDE card layout (review): `1、` items split without a following space;
   for (const cols of [16, 17, 18, 20, 24]) {
     const ls = decideTabLines(snapOf([dec('d-n', 'q?', { background: '背景：1、' + '甲'.repeat(12) + '；2、乙乙乙乙乙乙', options: [OPT('甲'), OPT('乙')] })]), ctxOf(makeT('zh-TW'), cols, view()))
     for (const x of texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            ')).filter(x => !/^\s+\[[ x]\] /.test(x))) expect(ui.displayWidth(x), 'cols ' + cols + ' [' + x + ']').toBeLessThanOrEqual(cols - 1)
+  }
+})
+
+// ---- cardwrap: a card is read whole in a narrow terminal (no horizontal scroll): nothing is cut, every row fits, the layout is a pure function of the width ----
+const BG300 = Array.from({ length: 30 }, (_, i) => '第' + (i + 1) + '段說明文字寫得很長很長，').join('').slice(0, 300) // 300 Chinese characters, no spaces
+const LONG_LABEL = '採用方案甲並且在合併之前先把所有相關的測試都重新跑過一遍再決定要不要發版'
+const LONG_DESC = '這個選項的說明也很長，它會把背景裡提到的每一件事情都再講一次，直到整行寫滿為止，然後還要繼續換行才寫得完。'
+const wide = (): LiveDecision => dec('d-wide', 'q?', { background: BG300, options: [OPT(LONG_LABEL, LONG_DESC), OPT('乙', '')] })
+// the value of a card row with the key slot (12 cells) taken off
+const val12 = (x: string): string => (/^ {2}\S/.test(x) ? x.replace(/^ {2}\S+ +/, '') : x.slice(12))
+const rowsOf = (cols: number): PaneLine[] => decideTabLines(snapOf([wide()]), ctxOf(makeT('zh-TW'), cols, view()))
+function cardText(ls: PaneLine[]): { bg: string; label: string; desc: string } {
+  const t = texts(ls)
+  const bgAt = t.findIndex(x => x.startsWith('  背景'))
+  const optAt = t.findIndex(x => x.startsWith('  選項'))
+  const bg = t.slice(bgAt, optAt).map(val12).join('')
+  let label = ''
+  let desc = ''
+  for (let i = optAt; i < ls.length && ls[i].kind !== 'blank' && !ls[i].bar; i++) {
+    if (ls[i].kind === 'choice' && !t[i].includes('乙') && !t[i].includes('field')) label += val12(t[i]).replace(/^\[ \] /, '').replace(/^ {4}/, '')
+    else if (ls[i].kind === 'kv') desc += val12(t[i])
+  }
+  return { bg, label, desc }
+}
+for (const cols of [40, 80] as const) {
+  test('cardwrap: at ' + cols + ' columns a 300-character background, a long option label and its long description come back whole, no ellipsis, every row <= cols - 1 cells', () => {
+    const ls = rowsOf(cols)
+    const got = cardText(ls)
+    expect(got.bg).toBe(BG300)
+    expect(got.label).toBe(LONG_LABEL)
+    expect(got.desc).toBe(LONG_DESC)
+    for (const x of texts(ls)) { expect(x.includes('…'), x).toBe(false); expect(ui.displayWidth(x), x).toBeLessThanOrEqual(cols - 1) }
+    expect(violations(ls, cols, makeT('zh-TW')), 'the design invariants hold').toEqual([])
+    // every row of the wrapped option is a Button of the same press; the continuation rows hang under the label text (column 16)
+    const opt = ls.filter(l => l.kind === 'choice' && (l.segs ?? []).some(s => s.press === 'pick:d-wide:0'))
+    expect(opt.length).toBeGreaterThan(cols === 40 ? 2 : 1)
+    for (const l of opt) expect((l.segs ?? []).some(s => s.press === 'pick:d-wide:0')).toBe(true)
+    if (opt.length > 1) expect(texts(opt)[1].startsWith(' '.repeat(16))).toBe(true)
+  })
+}
+test('cardwrap: the layout is a pure function of the width (a resize re-flows): 40 -> 80 -> 40 gives the same rows as a fresh 40', () => {
+  const a = texts(rowsOf(40))
+  rowsOf(80)
+  expect(texts(rowsOf(40))).toEqual(a)
+  expect(texts(rowsOf(80)).length).toBeLessThan(a.length)
+})
+test('cardwrap: four options with a 120-character description each, 40 columns: every description is whole across the scrolled body', () => {
+  const descs = [0, 1, 2, 3].map(k => Array.from({ length: 12 }, (_, i) => String.fromCharCode(0x4e00 + k * 100 + i * 7).repeat(10)).join('').slice(0, 120))
+  const d = dec('d-four', 'q?', { options: descs.map((x, k) => OPT('選項' + (k + 1), x)) })
+  const ls = decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), 40, view())).filter(l => !l.bar)
+  const room = 10
+  const m = { ...newScroll(), room, max: Math.max(0, ls.length - room) }
+  const seen = new Set<number>()
+  for (let guard = 0; guard < 100; guard++) {
+    for (let i = m.offset; i < Math.min(ls.length, m.offset + room); i++) seen.add(i)
+    if (!applyScroll(m, { by: room, contentRows: ls.length })) break
+  }
+  const body = ls.filter((_, i) => seen.has(i)).map(l => l.text.trimEnd())
+  expect(seen.size, 'the scroll reached every row').toBe(ls.length)
+  for (const x of descs) expect(body.map(r => r.trim()).join('')).toContain(x)
+})
+test('cardwrap: the narrow band wraps the options (no ellipsis), points at the pane when the card has a background, and keeps the send row inside its row budget', () => {
+  const zh = makeT('zh-TW')
+  const snap = snapOf([wide()])
+  const ctx = ctxOf(zh, 40, view({ inputs: false }))
+  const open = decideBandPlan(snap, ctx)
+  expect(open.pointer).toBe('decide.band_bg')
+  expect(zh('decide.band_bg')).toBe('背景與說明見待決分頁')
+  expect(open.rows.map(l => l.text).join('')).toContain('採用方案甲')
+  for (const l of open.rows) { expect(l.text.includes('…')).toBe(false); expect(ui.displayWidth(l.text)).toBeLessThanOrEqual(39) }
+  expect(open.bars.length).toBeGreaterThan(0)
+  const need = open.rows.length + 1 + open.bars.length
+  expect(decideBandPlan(snap, ctx, need).pointer).toBe('decide.band_bg') // exactly fits
+  const tight = decideBandPlan(snap, ctx, need - 1) // one row short: the rows from the top stay, a pointer stands for the rest, the send row stays
+  expect(tight.pointer).toBe('decide.band_more')
+  expect(tight.rows.length + 1 + tight.bars.length).toBe(need - 1)
+  expect(tight.bars).toEqual(open.bars)
+  // a card with nothing the pane alone shows has no pointer
+  expect(decideBandPlan(snapOf([dec('d-p', 'q?', { options: [OPT('甲'), OPT('乙')] })]), ctx).pointer).toBeNull()
+})
+test('cardwrap: wrapPlain keeps a URL and an ANSI escape whole, an escape is 0 cells wide, a URL longer than the line takes its own line', () => {
+  const url = 'https://example.invalid/some/very/long/path/that/keeps/going/index.html?x=1'
+  const esc = '\u001b[1;31m'
+  const rst = '\u001b[0m'
+  const w = (s: string, n: number): string[] => ui.wrapPlain(s, n, n)
+  const line = '看這個 ' + url + ' 然後 ' + esc + '紅色的字' + rst + ' 結束'
+  for (const n of [20, 30, 40, 60]) {
+    const out = w(line, n)
+    expect(out.join('').includes(url), 'width ' + n + ': the URL is whole on one row').toBe(true)
+    expect(out.some(r => r.includes(url)), 'n ' + n).toBe(true)
+    expect(out.every(r => (r.match(/\u001b/g) ?? []).length === (r.match(/\u001b\[[0-9;]*m/g) ?? []).length), 'no escape is split').toBe(true)
+    expect(out.join('').replace(/ /g, '')).toBe(line.replace(/ /g, ''))
+    for (const r of out) if (!r.includes(url)) expect(ui.displayWidth(r)).toBeLessThanOrEqual(n)
+  }
+  expect(ui.displayWidth(esc + 'ab' + rst)).toBe(2)
+  expect(w(url, 20)).toEqual([url]) // longer than the line: its own line, not cut
+  expect(w('前面的字 ' + url, 20)).toEqual(['前面的字', url]) // and it starts a new line instead of splitting after a `/`
+  const colored = w('甲乙丙丁戊己庚辛' + esc + '紅紅紅紅紅紅' + rst + '壬癸', 12)
+  expect(colored.map(r => ui.displayWidth(r)).every(n => n <= 12)).toBe(true)
+  expect(colored.join('')).toBe('甲乙丙丁戊己庚辛' + esc + '紅紅紅紅紅紅' + rst + '壬癸')
+})
+test('cardwrap: I3 admits a wrapped option label only at its label column (16 / 18); another lead on a choice row is still flagged (negative control)', () => {
+  const zh = makeT('zh-TW')
+  const ls = rowsOf(40)
+  const cont = ls.findIndex(l => l.kind === 'choice' && l.text.startsWith(' '.repeat(16)))
+  expect(cont).toBeGreaterThan(0)
+  expect(violations(ls, 40, zh).filter(v => v.startsWith('I3'))).toEqual([])
+  const bent = ls.map((l, i) => (i === cont ? ui.carry(l, { ...l, text: ' ' + l.text, segs: [{ text: ' ' }, ...(l.segs ?? [])] }) : l))
+  expect(violations(bent, 40, zh).some(v => v.startsWith('I3'))).toBe(true)
+})
+test('cardwrap: on the card, a URL longer than the pane stays whole on its own row (the second wrap pass in wrapLines does not split it either), in a background and in an option description', () => {
+  const url = 'https://example.invalid/review/some/very/long/path/that/keeps/going/index.html'
+  const d = dec('d-url', 'q?', { background: '詳見 ' + url + ' 然後結束。', options: [OPT('甲', '看 ' + url + ' 就知道'), OPT('乙')] })
+  for (const cols of [30, 40, 60]) {
+    const t = texts(decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), cols, view())))
+    expect(t.filter(x => x.includes(url)).length, 'cols ' + cols + ': the URL is on a row, whole, twice').toBe(2)
+    for (const x of t) if (!x.includes(url)) expect(ui.displayWidth(x), x).toBeLessThanOrEqual(cols - 1)
   }
 })

@@ -23,9 +23,11 @@ export function cellWidth(c: number): number {
   return 1
 }
 // Terminal cell width of a string: East Asian Wide / Fullwidth = 2, combining and zero-width = 0, everything else (the band glyphs included) = 1.
+// An ANSI escape sequence (CSI, OSC, two-byte) is not drawn: it is 0 cells.
+const ANSI_ALL = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[@-Z\\-_])/g
 export function displayWidth(text: string): number {
   let w = 0
-  for (const ch of text) w += cellWidth(ch.codePointAt(0) as number)
+  for (const ch of text.includes('\u001b') ? text.replace(ANSI_ALL, '') : text) w += cellWidth(ch.codePointAt(0) as number)
   return w
 }
 const padCells = (text: string, width: number): string => text + ' '.repeat(Math.max(0, width - displayWidth(text)))
@@ -685,18 +687,28 @@ export function cardParaRows(u: Ctx, key: string, paras: readonly CardPara[], o:
   return rows
 }
 // the options of one question: the key `選項` at column 2, then one row per option from column 12: `[x] ★ label` (picked: bold default text), `[ ] label`. A press-less choice is drawn plain (a question already sent), its picked mark kept. The star marks the recommendation here and nowhere else.
-export function choiceRows(u: Ctx, key: string, choices: readonly Choice[], o: { fact: FactId }): PaneLine[] {
-  const room = u.cols - 1 - KEY_W
-  const piece = (c: Choice): Seg[] => {
+export function choiceRows(u: Ctx, key: string, choices: readonly Choice[], o: { fact: FactId; descriptions?: readonly string[] }): PaneLine[] {
+  const room = Math.max(1, u.cols - 1 - KEY_W)
+  const rows: PaneLine[] = []
+  choices.forEach((c, ci) => {
     const press = c.press === undefined ? {} : { press: c.press, color: PALETTE.action }
     const pick = c.picked ? { bold: true, role: 'pick' as const } : c.press === undefined ? { dim: true } : {}
     const head = c.picked ? '[x] ' : '[ ] '
     const star: Seg[] = c.recommended ? [sg(GLYPHS.structure.recommend, { role: 'glyph', ...(c.press === undefined ? {} : { press: c.press }) }), sg(' ', { role: 'prose', ...(c.press === undefined ? {} : { press: c.press }) })] : []
     const used = displayWidth(head) + star.reduce((n, x) => n + displayWidth(x.text), 0)
-    return [sg(head, { role: 'prose', ...pick, ...press }), ...star, sg(cutProse(c.label, Math.max(1, room - used)), { role: 'prose', ...pick, ...press })]
-  }
-  const rows: Seg[][] = choices.map(piece)
-  return rows.map((r, i) => lineOf('choice', [...(i === 0 ? cardLead(key) : [cardHang()]), ...r], { fact: o.fact }))
+    // the label wraps (never cut); its continuation rows sit under the label text, and every row of the option carries the press
+    const hang = Math.min(used, Math.max(0, room - 2))
+    const pieces = wrapPlain(c.label, Math.max(1, room - used), Math.max(1, room - hang))
+    ;(pieces.length === 0 ? [''] : pieces).forEach((piece, i) => {
+      const lead = rows.length === 0 ? cardLead(key) : [cardHang()]
+      const body: Seg[] = i === 0 ? [sg(head, { role: 'prose', ...pick, ...press }), ...star] : [sg(' '.repeat(hang), { role: 'prose', ...(c.press === undefined ? {} : { press: c.press }) })]
+      rows.push(lineOf('choice', [...lead, ...body, sg(piece, { role: 'prose', ...pick, ...press })], { fact: o.fact }))
+    })
+    // its description, dim, at column 12 (the value column; every option shows it, not only the picked one)
+    const desc = o.descriptions?.[ci] ?? ''
+    if (desc !== '') rows.push(...cardRow(u, '', desc, { fact: o.fact, subtle: true }))
+  })
+  return rows
 }
 // the send row: `[ label ]` at column 2, bold default text and pressable under `press`, dim and inert without it (nothing chosen yet, or already sent), then a dim `note` saying where
 // the answers go; a note that does not fit beside the button takes the line below, at column 2.
@@ -723,42 +735,70 @@ export function fieldRow(u: Ctx, label: string, o: { key: string; placeholder: s
 }
 
 const CLOSING_PUNCT_UI = '）」』、。，；：！？)]}】》〉,.;:!?'
-// wrap plain text at spaces, after `/`, and between wide characters; continuation lines hang at `hang` (already part of `first`'s prefix width)
-function wrapPlain(body: string, firstW: number, restW: number): string[] {
-  const out: string[] = []
-  let cur = ''
+// wrap plain text at spaces, after `/`, and between wide characters; continuation lines hang at `hang` (already part of `first`'s prefix width).
+// Atoms: a URL (http/https) and an ANSI escape sequence are one unit each, never split. An escape is zero cells wide; a URL has no break point inside, so one longer than the
+// line takes a line of its own and may overflow it (only then). Every other character is its own atom.
+type WrapAtom = { s: string; w: number; url: boolean }
+const URL_AT = /^https?:\/\/[^\s<>"'（）「」『』，；：！？、。　-〿一-鿿＀-￯]+/
+const ANSI_AT = /^\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[@-Z\\-_])/
+function wrapAtoms(body: string): WrapAtom[] {
+  const out: WrapAtom[] = []
+  let i = 0
+  while (i < body.length) {
+    const rest = body.slice(i)
+    const esc = ANSI_AT.exec(rest)
+    if (esc !== null) { out.push({ s: esc[0], w: 0, url: false }); i += esc[0].length; continue }
+    const u = URL_AT.exec(rest)
+    if (u !== null) {
+      const url = u[0].replace(/[.,;:!?)\]}]+$/, '') // a sentence mark after the address is not part of it
+      if (url.length > 8) { out.push({ s: url, w: displayWidth(url), url: true }); i += url.length; continue }
+    }
+    const ch = String.fromCodePoint(rest.codePointAt(0) as number)
+    out.push({ s: ch, w: cellWidth(ch.codePointAt(0) as number), url: false })
+    i += ch.length
+  }
+  return out
+}
+export function wrapPlain(body: string, firstW: number, restW: number): string[] {
+  const lines: WrapAtom[][] = []
+  let cur: WrapAtom[] = []
   let w = 0
   let limit = firstW
   let lastBreak = -1 // index into `cur` just after the last break opportunity
-  for (const ch of body) {
-    const cw = cellWidth(ch.codePointAt(0) as number)
-    if (w + cw > limit && cur !== '') {
-      // in code points, so a step back never splits a surrogate pair
-      const cps = [...cur]
-      let cut = lastBreak > 0 ? [...cur.slice(0, lastBreak)].length : cps.length
-      // a closing mark never starts a line: while the next line would open with one (after its leading spaces are dropped), the character before the cut goes
-      // down too. This covers a run of marks (`。」`), a space before the mark, and a cut at an earlier break; at least one character stays on this line.
-      const head = (k: number): string => (cps.slice(k).join('') + ch).replace(/^ +/, '')[0] ?? ''
+  const text = (xs: WrapAtom[]): string => xs.map(x => x.s).join('')
+  const blank = (x: WrapAtom): boolean => x.s === ' '
+  for (const a of wrapAtoms(body)) {
+    if (a.w > 0 && w + a.w > limit && cur.length > 0) {
+      // a URL that does not fit starts a line of its own (the cut is just before it); anything else breaks at the last opportunity
+      let cut = a.url || lastBreak <= 0 ? cur.length : lastBreak
+      // a closing mark never starts a line: while the next line would open with one (after its leading spaces are dropped), the atom before the cut goes
+      // down too. This covers a run of marks (`。」`), a space before the mark, and a cut at an earlier break; at least one atom stays on this line.
+      const head = (k: number): string => [...cur.slice(k), a].find(x => !blank(x) && x.w > 0)?.s ?? ''
       const closing = (c: string): boolean => c !== '' && CLOSING_PUNCT_UI.includes(c)
       while (cut > 1 && closing(head(cut))) cut -= 1
-      out.push(cps.slice(0, cut).join('').replace(/ +$/, ''))
-      cur = cps.slice(cut).join('').replace(/^ +/, '')
-      w = displayWidth(cur)
+      const first = cur.slice(0, cut)
+      while (first.length > 0 && blank(first[first.length - 1])) first.pop()
+      lines.push(first)
+      cur = cur.slice(cut)
+      while (cur.length > 0 && blank(cur[0])) cur.shift()
+      w = cur.reduce((n, x) => n + x.w, 0)
       limit = restW
       lastBreak = -1
     }
-    cur += ch
-    w += cw
-    if (ch === ' ' || ch === '/' || cw === 2) lastBreak = cur.length
+    if (blank(a) && cur.length === 0 && lines.length > 0) continue // a space at the head of a continuation line
+    cur.push(a)
+    w += a.w
+    if (a.s === ' ' || a.s === '/' || a.w === 2) lastBreak = cur.length
   }
-  if (cur !== '') out.push(cur.replace(/ +$/, ''))
+  while (cur.length > 0 && blank(cur[cur.length - 1])) cur.pop()
+  if (cur.length > 0) lines.push(cur)
   // a last line of one wide character (a CJK orphan) takes the last character of the line above, so no line is a lone glyph
-  if (out.length > 1) {
-    const last = [...out[out.length - 1]]
-    const prev = [...out[out.length - 2]]
-    if (last.length === 1 && cellWidth(last[0].codePointAt(0) as number) === 2 && prev.length > 2) { out[out.length - 2] = prev.slice(0, -1).join(''); out[out.length - 1] = prev[prev.length - 1] + last[0] }
+  if (lines.length > 1) {
+    const last = lines[lines.length - 1]
+    const prev = lines[lines.length - 2]
+    if (last.length === 1 && last[0].w === 2 && prev.length > 2 && !prev[prev.length - 1].url && prev[prev.length - 1].w > 0) { lines[lines.length - 2] = prev.slice(0, -1); lines[lines.length - 1] = [prev[prev.length - 1], last[0]] }
   }
-  return out
+  return lines.map(text)
 }
 // `$` at 2, the command dim at 4; wraps at spaces and `/`, hangs at 4, is never cut (the owner copies it)
 export function command(u: Ctx, cmd: string, o: { at?: 0 | 12 } = {}): PaneLine[] {

@@ -30,6 +30,12 @@ cleanup_agy_sleeper() {
     # shellcheck disable=SC2086
     kill -9 $pids 2>/dev/null || true
   fi
+  pids=""
+  [ -n "${GRACE0_SLEEP_PAT:-}" ] && pids="$(pgrep -f "$GRACE0_SLEEP_PAT" || true)"
+  if [ -n "${pids// /}" ]; then
+    # shellcheck disable=SC2086
+    kill -9 $pids 2>/dev/null || true
+  fi
 }
 trap 'cleanup_agy_sleeper; cleanup_test_tmp' EXIT
 
@@ -139,8 +145,13 @@ test -d "$FRESH_HOME/.gemini/antigravity-cli/crashes"
 # --- case 4: grace 0 falls back to a positive grace (KILL still escalates) ---
 # TIMEOUT is 2s so the 30s fallback grace is what must be bounded. The sleeper
 # ignores TERM and would outlast the ~45s outer wrapper if grace 0 disabled KILL.
-GRACE0_SLEEP_SECS=120
-GRACE0_SLEEP_PAT='sleep 12[0]'
+# The old check searched the host for `sleep 120`, so an unrelated polling loop
+# failed it. A stub PID is not usable: the runner is wrapped in bwrap (read-only
+# root, --unshare-pid), so the stub can neither write a host-visible file nor
+# learn its host PID. Instead the sleeper gets a length no other process uses
+# (as in cases 1 and 1b), so the pattern can only match this stub's sleeper.
+GRACE0_SLEEP_SECS=86423
+GRACE0_SLEEP_PAT='sleep 8642[3]'
 STUB_AGY_GRACE0="$TEST_TMP/runner-agy-grace0"
 cat > "$STUB_AGY_GRACE0" <<EOF
 #!/usr/bin/env bash
@@ -157,15 +168,15 @@ GRACE0_EXIT=$?
 set -e
 GRACE0_ELAPSED=$(( $(date +%s) - GRACE0_START ))
 
-assert_eq "0" "$([[ "$GRACE0_ELAPSED" -lt "$GRACE0_SLEEP_SECS" ]] && echo 0 || echo "$GRACE0_ELAPSED")" \
-  "grace 0 falls back to a positive grace and returns before the sleeper finishes (elapsed=${GRACE0_ELAPSED}s exit=${GRACE0_EXIT})"
+assert_eq "0" "$([[ "$GRACE0_ELAPSED" -lt 45 ]] && echo 0 || echo "$GRACE0_ELAPSED")" \
+  "grace 0 falls back to a positive grace and returns within the outer wrapper (elapsed=${GRACE0_ELAPSED}s exit=${GRACE0_EXIT})"
 assert_eq "3" "$GRACE0_EXIT" "grace 0 fallback still exits 3 within the outer wrapper (elapsed=${GRACE0_ELAPSED}s)"
 assert_contains "$GRACE0_OUT" '"transport_status": "timeout"' "grace 0 fallback maps to transport_status timeout"
 assert_contains "$GRACE0_OUT" '"status": "runner_failed"' "grace 0 fallback is runner_failed"
 
 sleep 0.5
 GRACE0_LEFT="$(pgrep -f "$GRACE0_SLEEP_PAT" || true)"
-assert_eq "" "$GRACE0_LEFT" "no fake agy sleeper remains after grace 0 fallback kill"
+assert_eq "" "$GRACE0_LEFT" "no fake agy sleeper (unique length ${GRACE0_SLEEP_SECS}) remains after grace 0 fallback kill"
 
 # --- case 5: early SIGKILL is not a timeout ---
 STUB_AGY_KILL="$TEST_TMP/runner-agy-self-kill"

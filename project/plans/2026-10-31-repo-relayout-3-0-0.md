@@ -489,3 +489,25 @@ platforms/ 鏡像產物
 25. **content 階段的兩句說明**：`docs/README.md` 加一句「evidence 目錄（`docs/plans/evidence/`、各 `_archive/**/evidence/`）在 P1 仍留在 docs/，P2 才搬」；合併後 HANDOFF 的作者位址一行維持 D10.11 的遮罩，同一行補上位址的格式（形如 `<id>+<user>@users.noreply.github.com`，用 git log 查 owner 的提交），由 `annotateHandoffAddress` 在遮罩之後寫入。不寫 `git log -1`：最近一次提交的作者可能是錯的身分。
 26. **sandbox 與 fixture 的身分一律一種處理**：登錄表的 `path(key)` 回本專案的位置。仿本專案結構的 sandbox（複製 profiles、skills 與一個專案目錄，`profile-guided-dispositions` 早就這樣寫：註解『the sandbox mimics THIS repo』，路徑向登錄表問）與以 `REPO_ROOT` 指向的 mktemp 專案樹，都把工作紀錄建在登錄表說的位置，因此 P1 之後是 `project/…`；讀取者不改。content 階段用必須恰好命中一次的字面替換改兩支測試：`check-escalation-coverage` 的 fixture 改向登錄表問 `projects_dir`／`projects_archive_dir`；`qualification-scorecard-tools` 的 r75 sandbox 與其來源改 `project/projects/_archive/…`。被審的 repo 是另一個 fixture 時（`review-packet`、`review-runner`），拿 `defaultDenyList(<被審 repo>)`，不拿本專案常數 `DEFAULT_PACKET_DENY_LIST`（可執行的清單 `src/runners/review-packet.js` 本身已是登錄表驅動，沒有字串被改寫，是測試拿錯清單）。曾考慮把 `check-escalation-coverage.js` 與 `build-profile-payload.js` 改成 `pathFor(root)`，驗證時與 `profile-guided-dispositions` 既有的 sandbox 慣例衝突而撤回；讀取者對非本專案根目錄的行為屬登錄表遷移的後續，掃描見 `scan-table-readers.md`。
 27. **hermetic 副本補回密封 mission graph 還在用的舊名**：D9.5 的現行 mission graph（位元組不變）把 `docs/BACKLOG.md` 列為 node 的輸出路徑，enforce 模式的 session-mode 在沒有執行期狀態可以替它背書的副本裡，會因輸出檔不存在而拒絕（`OUTPUT_MISSING_CREATE_AUTH`）。所有以 `REPO_ROOT="$TEST_TMP/hermetic-repo"`（或 `$TMP`）建立 hermetic 副本的 hooks/tests 套件（`session-mode`、`dispatch-author-session-mode`、`status-finish-followup`、`context-window`、`dispatch-author-claude-native`、`mission-routing-admission`），加上 `autopilot-cli` 的 `copy_hermetic_repo`，因此補一份 `docs/BACKLOG.md`（content 階段一條規則 `seedHermeticCopies`，不是逐支補），做法同 D10.13 的 dispatch-hetero fixture（密封 graph 用舊名，fixture 兩個名字都放）。這是測試的處置；真實 repo 的處置 owner 已裁定選項 C（卡 d-0d8b3b31）：由 routesucc lane 把 mission routing 改指向 successor graph，執行期的 legacy 重綁在合併後做。
+
+---
+# E 修訂（PM 裁定 2026-11-05；與上文衝突時以本節為準，上文各節不改）
+
+來源：PM 以 fleet 訊息於 2026-11-05 裁定（`pm--claude`）；E1(a) 另引 operator 規則「不要用託管 CI 一樣都走本機」（`CLAUDE.md` Process rules：「No hosted CI (operator): suites and the merge gate run locally; never add a hosted workflow」）。方向提案見 `project/plans/2026-11-05-rolekit-direction.md`。
+
+## E1 三項修訂
+**(a) P3 不新增 `.github/workflows/test.yml`**（取代 §3 P3 第三條，原文在 `:100`）
+- 來源：operator 規則（上述）加 PM 裁定 2026-11-05。
+- P3 改成：`tests/run.sh` 仍是唯一入口；驗證在本機跑，合併前用 `node scripts/affected-suites.js` 選套件，選到至少一半就跑全套（`tools/migrate/suite-baseline.js` 的 `record`，依 `skills/quality-pipeline/references/test-policy.md` 的 operator 決定 d-a62f4abc）；付費路徑照現行哨兵擋掉。不新增任何託管 workflow；C 章與 §7 提到「進 CI」的 fixture，一律理解為本機執行。
+
+**(b) 保留頂層 `roles/`（角色套件，3.1 的工作）**
+- 來源：PM 裁定 2026-11-05。這裡只保留位置，內容與是否出貨由 `project/plans/2026-11-05-rolekit-direction.md` 決定；本修訂不建立 `roles/`。
+- 放在 **P4**：頂層白名單是登錄表 `scripts/lib/repo-layout.js` 的 `allowlists.top_dirs`，每項帶 `since` 階段，layout-lint 的 `allowlist:top_dirs` 檢查讀它（`scripts/layout-lint.js:156`）；P4 是最後一個改頂層目錄集合的階段（新增 `lib/`、tools 子目錄），把 `roles`（`since: 'P4'`，purpose: 角色套件，3.1 工作）一起登錄，避免在 P5 之後為它單獨再改一次登錄表。實體只有 `roles/README.md`（空目錄不進 git），由 P4 的產生器建立。
+- 匯出白名單在 **C2**（`:245`）：展開清單加入 `roles/`，3.0.0 時其內容只有 README；規則仍是排除優先。P5 的「每個頂層目錄一份短 README」順帶涵蓋它。
+- 若 3.1 的 A/B 不成立，再以修訂撤銷這個位置。
+
+**(c) BL-0388 使用端那半邊，列為 3.0.0 的一步，排在 P4 之後、C2 匯出工具之前**（C6 的第 4 與第 5 步之間）
+- 來源：PM 裁定 2026-11-05。內容見 `project/backlog/BACKLOG.md` 的 BL-0388 與 `project/backlog/consumer-rules-in-claude-md.md`：plugin 的 CLAUDE.md 到不了使用端專案，所以使用端需要的規則要改由 skill、hook 或 reference 帶。
+- 為什麼在 P4 之後：P4 才改完 `scripts/`、`hooks/` 的位置與 CLAUDE.md 的 Scripts inventory，這一步要掃根目錄與子目錄的 CLAUDE.md，先搬完再掃，規則只改一次；為什麼在 C2 之前：匯出的是公開版，公開版的使用端要拿到這些規則，且 C2 的相對引用檢查要看到規則的新載體。
+- 載體優先選 hook 與 reference；改 skill 本文屬於內容改寫，依 `skills/CLAUDE.md` 的 scorecard-first 另行取得 eval 證據（§8 本來就把改寫 skill 內容排除在範圍外）。
+- BL-0388 留在 backlog，當這一步的追蹤列；完成時依 plan-graduation 規則關閉。

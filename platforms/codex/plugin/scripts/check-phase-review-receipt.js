@@ -5,6 +5,7 @@
  * Mode A: receipt validation
  *   Flags: --ledger <dir> --phase <id> --branch <b> [--repo-root <r>]
  *   Validates <ledger>/receipt-<phase>.json against git history and review artifacts.
+ *   Optional --post-head-ledger <file>: declared-and-re-derived check of head..tip past the generation cap (see checkPostHeadLedger).
  *
  * Mode C: review packet set (a range too big for one packet, split by path)
  *   Flags: --packets <packets.json> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
@@ -66,7 +67,7 @@ function deepEqual(a, b) {
 function printUsage() {
   console.log(`Usage:
   Mode A (Receipt validation):
-    node scripts/check-phase-review-receipt.js --ledger <dir> --phase <id> --branch <b> --phase-base <sha> [--repo-root <r>]
+    node scripts/check-phase-review-receipt.js --ledger <dir> --phase <id> --branch <b> --phase-base <sha> [--repo-root <r>] [--post-head-ledger <file>]
 
   Mode C (Review packet set — a range too big for one packet, split by path):
     node scripts/check-phase-review-receipt.js --packets <packets.json> --ledger <dir> --branch <b> --phase-base <sha> [--repo-root <r>]
@@ -85,6 +86,18 @@ Flags:
                                     must be in the range of some set. Packets members are not supported yet: validate those
                                     with --packets, separately.
   --branch <b>                      Git branch name
+  --post-head-ledger <file>         Mode A only. Replaces "branch head must equal the last reviewed head" with a re-derived
+                                    check of head..tip, for work past the generation cap (BL-0377). The file is JSON:
+                                    {"schema":"post-head-ledger/1","phase":"<id>","reviewed_head":"<full sha>",
+                                     "ruling":"<PM ruling id or text>",
+                                     "commits":[{"sha":"<full sha>","paths":["..."],"verification":"<how depth-0 verified it>"}]}
+                                    Passes only when reviewed_head is the last finalized head and an ancestor of the tip,
+                                    phase equals --phase, every non-merge commit of git rev-list --no-merges head..tip is
+                                    listed exactly once (no extras, no duplicates, no abbreviated shas), each commit's real
+                                    paths (git diff-tree -r --no-renames --name-only) are a subset of its listed paths,
+                                    every verification is non-empty, and the net git diff --no-renames head..tip paths are
+                                    all listed. When the tip is a merge, commits arriving through the merged side count too.
+                                    Not supported with --chain, --packets or Mode B (refused).
   --phase-base <sha>                Expected phase base commit sha (mandatory for review mode)
   --repo-root <r>                   Path to repository root (defaults to cwd)
   --plan-artifact <gN.json>         Plan artifact JSON file
@@ -93,6 +106,10 @@ Flags:
   --rubric-file <file>              Rubric markdown file (optional, resolved automatically if omitted)
   --min-reviewed-seats <n>          Minimum reviewed seats required per generation
   --help, -h                        Show this help message and exit 0
+
+Merge gate: always run on the tip. Below the generation cap a product-code delta after the last reviewed
+head needs one more single-seat delta review (so the receipt itself passes on the tip); at the cap use
+--post-head-ledger together with the PM ruling.
 
 Chain rules (Mode A): every chain entry must be 'finalized' except an 'aborted' one (hetero-review-loop
 wrote it when the branch moved during collection, a seat's findings failed to parse, or a seat gap
@@ -576,6 +593,78 @@ function pathsMovedAfterHead(repoRoot, range, consumerAllowlist) {
   const sidecarAllowed = (p) => p === 'CHANGELOG.md' || p === LAYOUT.pathFor(repoRoot, 'projects_index');
   const blocked = changedPaths.filter((p) => !(isPathspecAllowed(p, consumerAllowlist, repoRoot) || sidecarAllowed(p)));
   return { changedPaths, blocked, allAllowed: diffRes.status === 0 && blocked.length === 0 };
+}
+
+// Post-head ledger (BL-0377). At the generation cap the branch tip may sit past the last reviewed head. The ledger
+// DECLARES every commit in head..tip, the paths it touched and how depth-0 verified it; this function re-derives
+// the commit list and the paths with git and compares. Nothing in the ledger is trusted (ADR-0001): no hash,
+// no signature, an unlisted commit or path is a failure. Scope of "the branch's own commits": `git rev-list
+// --no-merges head..tip`, i.e. every non-merge commit reachable from tip and not from head. When tip is a merge,
+// the commits arriving through the merged-in side (for example develop's own history) are in that range and must
+// be listed too; a merge commit itself carries no list entry, so its own content (conflict resolutions) is
+// covered by the net-diff check: every path of `git diff --no-renames --name-only head..tip` must appear in some
+// listed commit's paths.
+const POST_HEAD_LEDGER_SCHEMA = 'post-head-ledger/1';
+function checkPostHeadLedger({ ledgerFile, repoRoot, phase, branch, head, tip }) {
+  const problems = [];
+  const git = (args) => spawnSync('git', args, { cwd: repoRoot, encoding: 'utf8', maxBuffer: 1 << 28 });
+  let ledger;
+  try {
+    ledger = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));
+  } catch (e) {
+    return [`post-head ledger '${ledgerFile}' cannot be read or parsed: ${e.message}`];
+  }
+  if (!ledger || typeof ledger !== 'object' || Array.isArray(ledger)) return [`post-head ledger '${ledgerFile}' is not a JSON object`];
+  if (ledger.schema !== POST_HEAD_LEDGER_SCHEMA) problems.push(`post-head ledger schema is '${ledger.schema}' (expected '${POST_HEAD_LEDGER_SCHEMA}')`);
+  if (ledger.phase !== phase) problems.push(`post-head ledger phase '${ledger.phase}' does not match --phase '${phase}'`);
+  if (ledger.reviewed_head !== head) problems.push(`post-head ledger reviewed_head '${ledger.reviewed_head}' is not the last finalized head '${head}'`);
+  if (typeof ledger.ruling !== 'string' || !ledger.ruling.trim()) problems.push('post-head ledger ruling is missing or empty (the PM ruling id or text for exceeding the generation cap)');
+  if (!Array.isArray(ledger.commits)) return problems.concat('post-head ledger commits is not an array');
+
+  if (git(['merge-base', '--is-ancestor', '--end-of-options', head, tip]).status !== 0) {
+    return problems.concat(`last reviewed head ${head} is not an ancestor of '${branch}' (${tip})`);
+  }
+  const range = `${head}..${tip}`;
+  const rl = git(['rev-list', '--no-merges', range]);
+  if (rl.status !== 0) return problems.concat(`git rev-list --no-merges ${range} failed: ${rl.stderr || 'unknown error'}`);
+  const actual = rl.stdout.split('\n').map((l) => l.trim()).filter(Boolean);
+  const actualSet = new Set(actual);
+
+  const seen = new Set();
+  const listedPaths = new Set();
+  const byListed = new Map();
+  ledger.commits.forEach((c, i) => {
+    const at = `post-head ledger commits[${i}]`;
+    if (!c || typeof c !== 'object' || typeof c.sha !== 'string') { problems.push(`${at} has no sha string`); return; }
+    if (seen.has(c.sha)) { problems.push(`${at}: sha ${c.sha} is listed twice`); return; }
+    seen.add(c.sha);
+    if (!actualSet.has(c.sha)) problems.push(`${at}: sha ${c.sha} is not a non-merge commit in ${range} (extra entry, abbreviated sha, or a commit outside the post-head range)`);
+    if (!Array.isArray(c.paths) || c.paths.some((p) => typeof p !== 'string' || !p)) { problems.push(`${at} (${c.sha}): paths is not an array of non-empty strings`); return; }
+    if (typeof c.verification !== 'string' || !c.verification.trim()) problems.push(`${at} (${c.sha}): verification is empty (state how depth-0 verified it: red/green or mutation, with an evidence path)`);
+    byListed.set(c.sha, c);
+    for (const p of c.paths) listedPaths.add(p);
+  });
+
+  for (const sha of actual) {
+    const entry = byListed.get(sha);
+    if (!entry) { problems.push(`commit ${sha} is in ${range} but not in the post-head ledger (an unlisted post-head commit)`); continue; }
+    const dt = git(['diff-tree', '--no-commit-id', '-r', '--no-renames', '--name-only', sha]);
+    if (dt.status !== 0) { problems.push(`git diff-tree ${sha} failed: ${dt.stderr || 'unknown error'}`); continue; }
+    const declared = new Set(entry.paths);
+    for (const p of dt.stdout.split('\n').map((l) => l.trim()).filter(Boolean)) {
+      if (!declared.has(p)) problems.push(`commit ${sha} touched '${p}' which its ledger paths do not list`);
+    }
+  }
+
+  // Net diff: covers what a merge commit changed on its own (a merge has no entry of its own).
+  const nd = git(['diff', '--name-only', '--no-renames', range]);
+  if (nd.status !== 0) problems.push(`git diff ${range} failed: ${nd.stderr || 'unknown error'}`);
+  else {
+    for (const p of nd.stdout.split('\n').map((l) => l.trim()).filter(Boolean)) {
+      if (!listedPaths.has(p)) problems.push(`net change '${p}' in ${range} is covered by no ledger commit (a merge commit's own content must be declared on a listed commit's paths)`);
+    }
+  }
+  return problems;
 }
 
 function validateModeA(flags, opts = {}) {
@@ -1180,6 +1269,22 @@ function validateModeA(flags, opts = {}) {
       process.exit(1);
     }
     const currentBranchHead = revParseRes.stdout.trim();
+    if (flags['post-head-ledger'] !== undefined) {
+      // BL-0377: the declared-and-re-derived ledger replaces the "head must equal the tip" rule.
+      if (typeof flags['post-head-ledger'] !== 'string') {
+        console.error('--post-head-ledger requires a file path');
+        process.exit(1);
+      }
+      const problems = checkPostHeadLedger({
+        ledgerFile: flags['post-head-ledger'], repoRoot, phase, branch, head: lastEntry.head, tip: currentBranchHead,
+      });
+      if (problems.length) {
+        console.error(`Post-head ledger does not cover '${branch}' (${currentBranchHead}) past last reviewed head ${lastEntry.head}:\n${problems.join('\n')}`);
+        process.exit(1);
+      }
+      console.log(`Post-head ledger ok: ${lastEntry.head}..${currentBranchHead} fully declared`);
+      process.exit(0);
+    }
     if (currentBranchHead !== lastEntry.head) {
       const range = `${lastEntry.head}..${currentBranchHead}`;
       const moved = pathsMovedAfterHead(repoRoot, range, consumerAllowlist);
@@ -1487,6 +1592,10 @@ function main() {
     process.exit(0);
   }
 
+  if (flags['post-head-ledger'] !== undefined && (flags.chain !== undefined || flags.packets !== undefined || flags['plan-artifact'] !== undefined || flags.dispositions !== undefined)) {
+    console.error('--post-head-ledger is supported in Mode A only (with --ledger/--phase/--branch); it cannot be combined with --chain, --packets, --plan-artifact or --dispositions yet');
+    process.exit(1);
+  }
   if (flags.chain !== undefined) {
     validateReviewChain(flags); // first: it refuses a mix with Mode B/C/A flags instead of silently dropping --chain
   } else if (flags['plan-artifact'] && flags.dispositions) {

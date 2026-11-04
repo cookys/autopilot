@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0377 -->
+<!-- next-id: BL-0378 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1913,3 +1913,16 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PM base-reds triage (br3 lane), 2026-11-03
 - **Pointer**: project/backlog/segments-dollar-paren-superlinear.md
+
+### 合併閘門要在合併 tip 上跑，head 之後的產品碼 delta 不能沒人看
+- **Id**: BL-0377
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: 合併閘門一直是對「最後一次審查的 head」跑 check-phase-review-receipt，不是對實際合併的 tip；head 之後補上的產品碼 commit 沒有任何審查席看過，只有 depth-0 驗證過。
+- **Impact**: 審查通過的證據和實際合併的內容不同；到世代上限時尤其容易有未審的產品碼進 develop。
+- **Trigger**: PM 裁決 2026-11-04，已派 hands 實作
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-04 ruling (retro check of g40d1, g40d2, selgap)
+- **Pointer**: project/backlog/merge-gate-runs-on-tip.md

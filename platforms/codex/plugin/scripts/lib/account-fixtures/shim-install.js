@@ -56,6 +56,15 @@ const R429_USAGE = {
   stdout: JSON.stringify({ type: 'result', subtype: 'success', is_error: true, api_error_status: 429, terminal_reason: 'api_error',
     result: 'API Error: 429 Claude AI usage limit reached|1799999999' }) + '\n',
 };
+// BL-0372: a dual-format response. The shim renders `result` as json or stream-json by the argv's --output-format.
+// Invented fixture values, not real CLI output.
+const DUAL_RESULT = {
+  duration_api_ms: 812, stop_reason: 'end_turn', session_id: 'S', total_cost_usd: 0.0034,
+  usage: { input_tokens: 5, output_tokens: 1 }, modelUsage: { 'claude-haiku-5-5': { inputTokens: 5, outputTokens: 1 } },
+  permission_denials: [], terminal_reason: 'completed', fast_mode_state: 'off', is_error: false, num_turns: 1,
+  subtype: 'success', api_error_status: null, result: 'OK', ttft_ms: 400, type: 'result', duration_ms: 900, uuid: 'U',
+};
+const DUAL_OK = { exit: 0, result: DUAL_RESULT };
 const ERR_EXIT0 = {
   exit: 0,
   stdout: JSON.stringify({ type: 'result', subtype: 'success', is_error: true, result: 'something went wrong' }) + '\n',
@@ -127,4 +136,4 @@ function makeFixture(opts) {
   };
 }
 
-module.exports = { installShim, makeFixture, readLog, OK, R401, R429, R429_USAGE, ERR_EXIT0, SHIM_SRC };
+module.exports = { installShim, makeFixture, readLog, OK, R401, R429, R429_USAGE, ERR_EXIT0, DUAL_RESULT, DUAL_OK, SHIM_SRC };

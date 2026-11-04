@@ -93,6 +93,52 @@ function placeboSkill(name, target, offset) {
   return fit(head, '\n', target, offset);
 }
 
+// kimi variant: kimi-code custom agents (--agent-file) do not list skills and do not read AGENTS.md, so the method
+// the Claude kit ships as a plugin skill is condensed by hand into the card body. The skill text itself is not
+// rewritten (scorecard-first): this is a separate, smaller, hand-written Method section recorded as such.
+const KIMI_METHOD = {
+  planner: `## Method (condensed from the plan template)
+1. Problem: restate the request in one paragraph, with what is in and out of scope.
+2. Constraints that bind every subtask: paths not to touch, commands that must stay green.
+3. Subtasks: the smallest units that can be verified alone; give each a command that fails before the work and passes after.
+4. Order: mark real dependencies only (a subtask that reads what another writes); everything else may run in parallel and must then share no path.
+5. Risks: decide each one now: mitigated (say how), accepted (say why it is cheap) or deferred (say the trigger that reopens it).
+6. Before you answer, re-read every path you named and check it exists and that each acceptance command names a real script. Never invent files, dates or versions.
+`,
+  implementer: `## Method (condensed from test-strategy)
+1. Run the test command before you change anything and keep the failing output.
+2. Use the lowest layer that can show the bug (unit before integration); change code until that test is green, then run the whole suite once.
+3. A test that passes while the bug exists is vacuous: make it fail on the bug first, then fix the code.
+4. Never delete, skip or loosen a test to get green.
+5. If the suite fails for a reason unrelated to your change, show it fails the same way without your change (baseline) and report it; do not fix it.
+`,
+  verifier: `## Method (condensed from evidence-discipline section 58)
+A check that has never been seen to fail has not been shown to guard anything.
+1. For each clause you test, include a case where the clause is violated so that a defective implementation shows itself.
+2. Put the boundary on both sides (n-1, n, n+1).
+3. Prefer a few sharp calls to many similar ones, within the budget.
+4. Track the state call by call and write it down before declaring a result.
+5. A plan that cannot fail on a wrong implementation proves nothing.
+`,
+  debugger: `## Method (condensed from the debug skill)
+1. Gather before you think: reproduce with a command, read the error text and the lines it names, check what changed recently.
+2. Narrow: halve the search space (does it fail with the input reduced? with the suspect file replaced?).
+3. Hypothesise: write each hypothesis as a claim a command or a file read can refute; test the cheapest first.
+4. Distrust: a note, comment or task text that names a culprit is a hypothesis, not a fact.
+5. Conclude only from evidence you saw; the root cause is where the wrong behaviour is created.
+6. After two failed hypotheses, re-read the symptom and widen the search instead of tweaking the same idea.
+`,
+  explorer: `## Method (condensed from the survey skill)
+1. Turn each question into search terms (identifier names, error strings, file-name patterns); list files first, then grep, then read the matching lines in context.
+2. Prefer code over prose: a comment or document that mentions a feature is not the feature.
+3. Quote exactly: copy the line after reading it, with its line number.
+4. Absence: before you say not found, search two other spellings or locations and list them in note.
+5. Separate what you saw from what you infer; only the first goes in citations. No source, no claim.
+`,
+  reviewer: null,
+};
+const KIMI_MAX_ROLE_BYTES = 4096;
+
 function build() {
   const files = {}; // relative path -> content
   const roles = Object.keys(SKILLS);
@@ -122,6 +168,19 @@ function build() {
     const pname = 'rota-handbook';
     files[`placebo/${role}/plugin/.claude-plugin/plugin.json`] = manifest(`rk-placebo-${role}`);
     files[`placebo/${role}/plugin/skills/${pname}/SKILL.md`] = placeboSkill(pname, Buffer.byteLength(text), ri * 7 + 3);
+  });
+  // kimi variants: kimi/kits/<role>/{role.md,tools,sources.json}, kimi/placebo/<role>/{role.md,tools}
+  roles.forEach((role, ri) => {
+    const card = fs.readFileSync(path.join(__dirname, 'kits', role, 'role.md'), 'utf8');
+    const method = KIMI_METHOD[role];
+    const kimiCard = method ? `${card.trimEnd()}\n\n${method}` : card;
+    if (Buffer.byteLength(kimiCard) > KIMI_MAX_ROLE_BYTES) throw new Error(`kimi card for ${role} exceeds ${KIMI_MAX_ROLE_BYTES} bytes`);
+    const tools = fs.readFileSync(path.join(__dirname, 'kits', role, 'tools'), 'utf8');
+    files[`kimi/kits/${role}/role.md`] = kimiCard;
+    files[`kimi/kits/${role}/tools`] = tools;
+    files[`kimi/kits/${role}/sources.json`] = `${JSON.stringify({ role, runner: 'kimi-code 2.3.0', card_from: `kits/${role}/role.md`, method: method ? 'hand-condensed Method section appended (kimi custom agents cannot read plugin skills)' : 'none (reviewer has no skill; card identical to the Claude kit)', method_condensed_from: SKILLS[role] ? { source_path: SKILLS[role].src, source_lines: SKILLS[role].lines || null, source_git_blob: git('rev-parse', `${base}:${SKILLS[role].src}`) } : null, max_role_bytes: KIMI_MAX_ROLE_BYTES, card_bytes: Buffer.byteLength(kimiCard) }, null, 2)}\n`;
+    files[`kimi/placebo/${role}/role.md`] = placeboRole(Buffer.byteLength(kimiCard), ri * 5 + 2);
+    files[`kimi/placebo/${role}/tools`] = tools;
   });
   return files;
 }

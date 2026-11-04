@@ -13,7 +13,7 @@ const readJson = (f) => JSON.parse(fs.readFileSync(path.join(root, f), 'utf8'));
 function rateFor(seatKind, model) {
   const r = model.rates_usd_per_cell;
   if (seatKind === 'weak1') return { low: r.haiku.usd, high: r.haiku.usd };
-  if (seatKind === 'weak2') return { low: r.second_weak_seat.usd, high: r.second_weak_seat.usd };
+  if (seatKind === 'weak2') return { low: r.kimi.usd, high: r.kimi.usd };
   if (seatKind === 'strong') return { low: r.sonnet_low.usd, high: r.sonnet_high.usd };
   throw new Error(`unknown seat ${seatKind}`);
 }
@@ -43,8 +43,10 @@ function markdown(row, c, cap) {
   L.push('| arm | role | seat | cells | USD low | USD high |', '|---|---|---|---:|---:|---:|');
   for (const r of c.rows) L.push(`| ${r.arm} | ${r.role} | ${r.seat} | ${r.cells} | ${r.usd_low.toFixed(3)} | ${r.usd_high.toFixed(3)} |`);
   L.push('', '| seat | cells | USD low | USD high |', '|---|---:|---:|---:|');
-  for (const [s, v] of Object.entries(c.bySeat)) L.push(`| ${s} | ${v.cells} | ${v.usd_low.toFixed(2)} | ${v.usd_high.toFixed(2)} |`);
+  const label = { weak1: 'weak1 (Haiku 5.5, Claude quota)', weak2: 'weak2 (kimi-code 2.3.0, its own quota; unit price NOT measured, Haiku-rate placeholder)', strong: 'strong (Sonnet, Claude quota)' };
+  for (const [s, v] of Object.entries(c.bySeat)) L.push(`| ${label[s] || s} | ${v.cells} | ${v.usd_low.toFixed(2)} | ${v.usd_high.toFixed(2)} |`);
   L.push(`| total | ${c.total.cells} | ${c.total.usd_low.toFixed(2)} | ${c.total.usd_high.toFixed(2)} |`, '');
+  if (c.bySeat.weak2) L.push('', 'weak2 cells run on the kimi-code subscription, not on the Claude quota. No unit price has been measured for them; the row uses the Haiku rate as a placeholder so the cells still count against the estimate and the cap. weak2 results are reported apart and do not enter the verdict.');
   L.push(`Estimate with the ${c.margin}x margin on the high column: ${c.with_margin_high} USD. Cap for this row: ${cap} USD.`, '');
   return `${L.join('\n')}\n`;
 }

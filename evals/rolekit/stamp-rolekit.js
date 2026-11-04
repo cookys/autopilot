@@ -17,7 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { validateKit } = require('./compile-kit.js');
+const { validateKit, MAX_ROLE_BYTES_KIMI } = require('./compile-kit.js');
 
 const argv = process.argv.slice(2);
 const opt = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : undefined; };
@@ -44,6 +44,25 @@ function preflight() {
   for (const kind of ['kits', 'placebo']) for (const r of roles) {
     const v = validateKit(path.join(root, kind, r));
     if (v.errors.length) die(`${kind}/${r}: ${v.errors.join('; ')}`);
+  }
+  for (const r of roles) { // kimi variants: separate card cap, no plugin, placebo within 5% and with the same tools
+    for (const kind of ['kimi/kits', 'kimi/placebo']) {
+      const v = validateKit(path.join(root, kind, r), { maxRole: MAX_ROLE_BYTES_KIMI });
+      if (v.errors.length) die(`${kind}/${r}: ${v.errors.join('; ')}`);
+      if (fs.existsSync(path.join(root, kind, r, 'plugin'))) die(`${kind}/${r}: a kimi kit has no plugin/`);
+    }
+    const a = fs.statSync(path.join(root, 'kimi/kits', r, 'role.md')).size; const b = fs.statSync(path.join(root, 'kimi/placebo', r, 'role.md')).size;
+    if (Math.abs(a - b) > 0.05 * a) die(`kimi/placebo/${r}/role.md is not within 5% of the kimi card`);
+    if (fs.readFileSync(path.join(root, 'kimi/kits', r, 'tools'), 'utf8') !== fs.readFileSync(path.join(root, 'kimi/placebo', r, 'tools'), 'utf8')) die(`kimi/${r}: placebo tools differ from kit tools`);
+  }
+  if (prereg.preconditions) { // real-model checks that must be met before the row is stamped
+    const pf = path.join(root, `prereg/preconditions-${row}.json`);
+    if (!fs.existsSync(pf)) die(`preconditions file missing: prereg/preconditions-${row}.json (${prereg.preconditions.map((c) => c.id).join(', ')})`);
+    let got; try { got = JSON.parse(fs.readFileSync(pf, 'utf8')); } catch (e) { die(`preconditions file is not JSON: ${e.message}`); }
+    for (const c of prereg.preconditions) {
+      const e = (got.items || []).find((x) => x && x.id === c.id);
+      if (!e || e.met !== true || typeof e.evidence !== 'string' || e.evidence.trim() === '') die(`precondition not met: ${c.id}`);
+    }
   }
   const size = (f) => (fs.existsSync(f) ? fs.statSync(f).size : 0);
   const within = (a, b) => Math.abs(a - b) <= 0.05 * b;

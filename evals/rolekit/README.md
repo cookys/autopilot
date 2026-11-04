@@ -8,7 +8,7 @@ Whether a **role kit** lets the same weak model do a role's tasks better. A kit 
 
 | arm | system prompt / plugin / tools | model |
 |---|---|---|
-| A current brief | production default for the rail | weak: Haiku 5.5 (later also one cheap non-Claude seat) |
+| A current brief | production default for the rail | weak: Haiku 5.5 (weak1); in the formal run also kimi (weak2) |
 | B role kit | `kits/<role>/` compiled by `compile-kit.js` | weak |
 | C placebo kit | `placebo/<role>/`: same byte length, irrelevant content, **same tools as B** (C isolates the content, not the tool surface) | weak |
 | D ceiling | as A | strong: Sonnet |
@@ -21,6 +21,8 @@ The task prompt (`tasks/<role>/<id>/prompt.md`) is byte-identical in every arm a
 README.md  COST-TABLE-pilot.md  COST-TABLE-formal.md  cost-model.json
 kits/<role>/{role.md, tools, plugin/, sources.json}   six real kits (reviewer has no plugin)
 placebo/<role>/{role.md, tools, plugin/}              six placebo kits
+kimi/kits/<role>/{role.md, tools, sources.json}        kimi variant: method written into the card, no plugin/
+kimi/placebo/<role>/{role.md, tools}                  kimi placebo, same length (+-5%) as the kimi card
 tasks/<role>/<id>/{prompt.md, expected.json, input/}  18 frozen pilot tasks + tasks/manifest.json
 checks/check-cell.js                                  the machine check for all six roles
 compile-kit.js                                        kit validator + runner mapping (dry run)
@@ -61,6 +63,17 @@ Frozen by `build-tasks.js` from the git objects at base `63308bd8f` (not from th
 | explorer | t4-config-layer, t11-boundary-fix, t15-cache-invalidation | same repos; questions authored (two findable, one absent) | found/absent right and every citation is a real line containing the quote |
 
 The engine-qualify implementer exam (`impl-eval-generator.js`) needs bwrap and git and is a formal-phase source, not used in the pilot. Checks exit 0 pass, 1 miss, 2 infra; the exit code 2 is how the runner knows an instrument problem from a model miss. The verifier check's executable dependencies (`va-eval-generator.js`, `va-eval-grader.js`, the corpus) are frozen copies in `checks/vendor/va/` (inside the stamped set), loaded only after their sha256 matches the `VA_PINS` constant in `check-cell.js`; there is no option to load them from elsewhere, so the relayout cannot move them.
+
+## Second seat: kimi (weak2), and flash
+
+PM ruling 2026-11-05: the formal run's second weak seat is **kimi** (kimi-code 2.3.0). Spike facts (`rolekit-probe.md`, zero model calls, session records only): `--agent-file role.md` injects the card (system prompt and its hash match); the tool allowlist is `tools: [...]` in the agent file (no CLI flag; `[Read, Grep]` gave exactly those two tools); a custom agent reads neither `AGENTS.md` nor skills.
+
+- **Kit variant** (`kimi/kits/<role>`): the Claude card plus a hand-condensed `## Method` section (from the same skill sources; the skill files themselves are not rewritten), no `plugin/`. The reviewer has no skill and its kimi card is the Claude card. **Card cap: 4096 bytes** (the Claude cap is 2048): the method that the Claude kit ships as a plugin skill has to live in the card, and 4 KB (measured cards: 1.5 to 2.4 KB) keeps the card small next to the task input. Placebo (`kimi/placebo/<role>`) is within 5% of the kimi card, same tools.
+- `compile-kit.js --runner kimi` prints `-p --agent-file <agent.md>`, `KIMI_CODE_HOME`, and the generated agent file (frontmatter `name`, `description`, `tools: [...]`, then the card). A kit with `plugin/` is refused for kimi; `tools: []` is only a warning because the spike did not exercise an empty list.
+- **Reporting:** weak2 gets the same arithmetic in a separate `weak2_report`; nothing in the verdict rules 1 to 8 reads it, and weak2 infra cannot cause INCONCLUSIVE_INFRA.
+- **Precondition before the formal run:** one minimal real-model check per weak seat (Haiku and kimi, same method: a nonce in a throwaway copy of the compiled card, the runner's session record equal to the compiled kit, a reply containing the nonce). `stamp-rolekit.js` refuses the formal stamp until `prereg/preconditions-formal.json` lists `real-check-weak1` and `real-check-weak2` with `met: true` and an evidence path. Model-follows-card is UNVERIFIED for both until then.
+- **Cost:** kimi cells run on the kimi-code subscription (its own quota), not the Claude quota. No unit price is measured; the cost table uses the Haiku rate as a labelled placeholder so the cells still count against the estimate and the 75 USD cap.
+- **flash (agy 1.5.0): unproven, not a candidate.** Without credentials agy cannot create a request (it asks for OAuth first), so the injected card cannot be observed, and a non-empty tool allowlist cannot be discovered with zero calls; the empty-allowlist evidence in the repo is from older agy versions. Recorded as `seats_not_used` in `formal.json`.
 
 ## Prereg, stamping, cost
 
@@ -109,6 +122,9 @@ Every grader or check has at least one test where a bad output must be judged a 
 | debugger evidence | hardening.test.js: debugger: one confirmed plus one open ... | confirmed + open; evidence [null]; empty strings; dangling evidence_ref | rc 1 |
 | planner scopes | hardening.test.js: planner: a dependency chain ... | `./lib/hooks.js` vs `lib/hooks.js`; `lib/../lib/hooks.js`; `../x`; absolute path | rc 1 (a chain A->B->C sharing a file passes) |
 | skill frontmatter | hardening.test.js: skill frontmatter | unquoted `: ` in a description; unterminated quote; no description | validator error (PyYAML parses every shipped SKILL.md) |
+| compile-kit kimi | kimi.test.js: compile-kit kimi: negative controls | a Claude kit with plugin/; a kimi card of 4097+ bytes; a kimi card under the Claude cap | refused with its own reason |
+| weak2 isolation | kimi.test.js: score-rolekit: weak2 (kimi) results never change the verdict | weak2 winning, losing, all-zero or entirely missing | verdict identical; a weak2 win cannot rescue a weak1 loss |
+| formal preconditions | kimi.test.js: stamp-rolekit formal | no preconditions file; one id missing; met=false; empty evidence | stamp refused, nothing written |
 | collect-evidence | score.test.js: collect-evidence derives graders_red ... | a partial run of the tests | graders_red lists only graders whose negative control passed |
 | compile-kit validator | kits.test.js: negative controls: each broken kit is rejected | oversized role.md; missing role.md or tools; unknown, duplicate or two-line tools; symlink; second skill; stray plugin file; no plugin.json; extra top-level entry | exit 2 with its own reason |
 | build-tasks --check | frozen-tasks.test.js: negative control: --check refuses a frozen file that changed | a prompt edited after freezing | exit 2 |
@@ -120,4 +136,4 @@ Stamp receipt: `stamp-rolekit.js --row <row> --authorized-by <id>` writes `prere
 
 ## Tests
 
-`bash <suite env> node --test evals/rolekit/test/kits.test.js evals/rolekit/test/checks.test.js evals/rolekit/test/prereg.test.js evals/rolekit/test/frozen-tasks.test.js evals/rolekit/test/stamp.test.js evals/rolekit/test/negative-controls.test.js`
+`bash <suite env> node --test evals/rolekit/test/kits.test.js evals/rolekit/test/checks.test.js evals/rolekit/test/prereg.test.js evals/rolekit/test/frozen-tasks.test.js evals/rolekit/test/stamp.test.js evals/rolekit/test/negative-controls.test.js evals/rolekit/test/hardening.test.js evals/rolekit/test/score.test.js evals/rolekit/test/kimi.test.js`

@@ -63,8 +63,8 @@ function validateRows(rows, sched) {
 }
 
 // ---- per-role tables over the primary seats (weak1 for A/B/C, strong for D); infra and missing cells are not scored
-function tables(rows, prereg, taskMap) {
-  const prim = (arm, seat) => (arm === 'D' ? seat === 'strong' : seat === 'weak1');
+function tables(rows, prereg, taskMap, weakSeat = 'weak1') {
+  const prim = (arm, seat) => (arm === 'D' ? seat === 'strong' : seat === weakSeat);
   const out = {};
   for (const role of prereg.design.roles) {
     const t = Object.fromEntries(ARMS.map((a) => [a, {}]));
@@ -80,8 +80,8 @@ function score(T, a) { // exact mean over kept tasks of the mean over reps; null
   for (const k of T.keep) { const xs = T.t[a][k]; acc = add(acc, fr(xs.reduce((p, q) => p + q, 0), xs.length)); }
   return mul(acc, fr(1, T.keep.length));
 }
-function pairs(rows, role, tasks) {
-  const get = (arm) => new Map(rows.filter((x) => x.role === role && x.arm === arm && x.seat === 'weak1' && !x.infra && tasks.includes(x.task)).map((x) => [`${x.task}#${x.rep}`, x.pass]));
+function pairs(rows, role, tasks, seat = 'weak1') {
+  const get = (arm) => new Map(rows.filter((x) => x.role === role && x.arm === arm && x.seat === seat && !x.infra && tasks.includes(x.task)).map((x) => [`${x.task}#${x.rep}`, x.pass]));
   const B = get('B'); const C = get('C'); let b = 0; let c = 0;
   for (const [k, v] of B) if (C.has(k)) { if (v === 1 && C.get(k) === 0) b += 1; if (v === 0 && C.get(k) === 1) c += 1; }
   return { b, c };
@@ -99,7 +99,9 @@ function scoreFormal(rows, prereg, taskMap) {
   const sched = schedule(prereg, taskMap); validateRows(rows, sched);
   const lim = dec(P.infra_arm_seat_max);
   const infraBad = [];
+  // the verdict rests on the primary seats only (weak1 for A/B/C, strong for D); weak2 is reported apart and cannot block it
   for (const arm of prereg.design.arms) for (const seat of arm.seats) {
+    if (seat === 'weak2') continue;
     const c = infraCounts(rows, sched, (k) => k.arm === arm.id && k.seat === seat);
     if (rateOver(c, lim)) infraBad.push({ arm_seat: `${arm.id}/${seat}`, infra_or_missing: c.bad, scheduled: c.n });
   }
@@ -126,7 +128,25 @@ function scoreFormal(rows, prereg, taskMap) {
     if (e.role_pass) nPass += 1;
     per[role] = e;
   }
-  return { verdict: nPass >= P.roles_pass_min && nHarm === 0 ? 'SHIP_CANDIDATE' : 'NOT_SHIP', roles_pass: nPass, roles_harm: nHarm, roles: per };
+  const out = { verdict: nPass >= P.roles_pass_min && nHarm === 0 ? 'SHIP_CANDIDATE' : 'NOT_SHIP', roles_pass: nPass, roles_harm: nHarm, roles: per };
+  const w2 = weak2Report(rows, prereg, taskMap, sched);
+  if (w2) out.weak2_report = w2;
+  return out;
+}
+
+// Separate table for the second weak seat (kimi): same arithmetic, no thresholds, never read by the verdict.
+function weak2Report(rows, prereg, taskMap, sched) {
+  if (!prereg.design.arms.some((a) => a.seats.includes('weak2'))) return null;
+  const tb = tables(rows, prereg, taskMap, 'weak2'); const roles = {};
+  const infra = infraCounts(rows, sched, (k) => k.seat === 'weak2');
+  for (const role of prereg.design.roles) {
+    const T = tb[role];
+    if (!T.keep.length) { roles[role] = { n_tasks: 0 }; continue; }
+    const s = Object.fromEntries(ARMS.map((a) => [a, score(T, a)])); const headroom = sub(s.D, s.A);
+    const { b, c } = pairs(rows, role, T.keep, 'weak2');
+    roles[role] = { n_tasks: T.keep.length, s: Object.fromEntries(ARMS.map((a) => [a, disp(s[a])])), gap_closed: headroom.n === 0n ? null : disp(mul(sub(s.B, s.A), fr(headroom.d, headroom.n))), discordant: { b, c, p: b > c ? tailAtMost(b, b + c, fr(1)).p : 1 } };
+  }
+  return { note: 'reported separately; not part of the verdict', infra_or_missing: infra.bad, scheduled: infra.n, roles };
 }
 
 // ---- G6 evidence: produced by collect-evidence.js from a real run of the unit tests, re-checked here

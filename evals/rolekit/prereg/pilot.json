@@ -25,7 +25,7 @@
     },
     {
       "id": "H4 (secondary, never decides)",
-      "text": "The effect repeats on a second weak seat from another model family."
+      "text": "The effect repeats on kimi (kimi-code 2.3.0), a weak seat from another model family; reported in weak2_report, not in the verdict."
     }
   ],
   "design": {
@@ -197,6 +197,7 @@
   "freeze_files": [
     "kits",
     "placebo",
+    "kimi",
     "tasks",
     "checks",
     "cost-model.json",

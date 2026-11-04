@@ -2,7 +2,7 @@
 'use strict';
 // compile-kit.js -- PROTOTYPE kit compiler. Validates a role kit and prints how it maps onto one runner.
 // It never starts a binary and never writes anything (a dry-run mapping, no model call).
-//   compile-kit.js --kit <dir> --runner claude|codex|agy [--config-dir <dir>] [--json]
+//   compile-kit.js --kit <dir> --runner claude|codex|agy|kimi [--config-dir <dir>] [--json]
 //
 // Kit layout (shared with the railkit lane):   <kit>/role.md  [<kit>/plugin/]  <kit>/tools
 //   role.md   the role card, <= 2048 bytes, a regular file
@@ -17,6 +17,9 @@
 //   codex   env:  CODEX_HOME=<dir>; layout AGENTS.md <- role.md, skills/<name>/SKILL.md <- plugin skill.
 //           NO tool allowlist exists on codex (only -s sandbox and -c); the tools file is NOT enforced -> warning.
 //           Swapping CODEX_HOME swaps auth too: the rail must seed it. codex exec with a real model is UNVERIFIED.
+//   kimi    argv: -p --agent-file <agent.md>; env KIMI_CODE_HOME=<dir>. agent.md = frontmatter (name, description, tools: [...]) + the card.
+//           Use the kimi variant kits (kimi/kits/<role>): the card carries the method as text and may be up to 4096 bytes, because a
+//           custom kimi agent does not list skills and does not read AGENTS.md. A kit with plugin/ is refused for kimi.
 //   agy     env:  HOME=<dir>; layout GEMINI.md <- role.md. NO allowlist; `agy -p` does not read skills (verified
 //           negative), so the plugin skill is dropped and its method must be in the role card -> warning. UNVERIFIED end to end.
 // Exit: 0 ok . 2 invalid kit or usage.
@@ -24,6 +27,9 @@ const fs = require('fs');
 const path = require('path');
 
 const MAX_ROLE_BYTES = 2048;
+// kimi variant cards carry the method as text (a custom kimi agent lists no skills), so they get their own cap: 4096 bytes,
+// twice the Claude card, still far smaller than the task input; measured cards are 1.5 to 2.4 KB.
+const MAX_ROLE_BYTES_KIMI = 4096;
 const MAX_PLUGIN_BYTES = 32 * 1024;
 const TOOL_NAMES = new Set(['Read', 'Write', 'Edit', 'Bash', 'Grep', 'Glob', 'WebSearch', 'WebFetch', 'Agent', 'NotebookEdit']);
 
@@ -72,7 +78,8 @@ function frontmatterError(text) {
   return null;
 }
 
-function validateKit(kitDir) {
+function validateKit(kitDir, opts = {}) {
+  const maxRole = opts.maxRole || MAX_ROLE_BYTES;
   const errors = [];
   const kit = path.resolve(kitDir);
   if (!fs.existsSync(kit) || !fs.statSync(kit).isDirectory()) return { errors: [`kit dir not found: ${kitDir}`] };
@@ -84,7 +91,7 @@ function validateKit(kitDir) {
   if (!fs.existsSync(rolePath) || fs.lstatSync(rolePath).isSymbolicLink() || !fs.statSync(rolePath).isFile()) errors.push('role.md missing or not a regular file');
   else {
     roleText = fs.readFileSync(rolePath, 'utf8');
-    if (Buffer.byteLength(roleText) > MAX_ROLE_BYTES) errors.push(`role.md is ${Buffer.byteLength(roleText)} bytes (max ${MAX_ROLE_BYTES})`);
+    if (Buffer.byteLength(roleText) > maxRole) errors.push(`role.md is ${Buffer.byteLength(roleText)} bytes (max ${maxRole})`);
     if (roleText.trim() === '') errors.push('role.md is empty');
   }
   if (!fs.existsSync(toolsPath) || !fs.statSync(toolsPath).isFile()) errors.push('tools missing');
@@ -110,8 +117,9 @@ function validateKit(kitDir) {
 }
 
 function compile(kitDir, runner, opts = {}) {
-  const v = validateKit(kitDir);
+  const v = validateKit(kitDir, runner === 'kimi' ? { maxRole: MAX_ROLE_BYTES_KIMI } : {});
   if (v.errors.length) return { ok: false, errors: v.errors };
+  if (runner === 'kimi' && v.plugin) return { ok: false, errors: ['kimi custom agents cannot read plugin skills: use the kimi variant (kimi/kits/<role>, no plugin/) so the method is in the card'] };
   const warnings = [];
   const out = { ok: true, runner, kit: v.kit, argv: [], env: {}, files: [], warnings, verified: {} };
   if (runner === 'claude') {
@@ -135,6 +143,19 @@ function compile(kitDir, runner, opts = {}) {
     warnings.push('agy has no tool allowlist: the tools file is NOT enforced; isolation is the worktree');
     if (v.plugin) warnings.push('agy -p does not read skills: the plugin skill is dropped; its method must be in role.md');
     out.verified = { gemini_md_via_home: 'UNVERIFIED on agy 1.5.0', skills: 'verified negative' };
+  } else if (runner === 'kimi') {
+    // kimi-code 2.3.0: the card is injected with --agent-file; the tool allowlist lives in the agent file's tools: [...]
+    // (no CLI flag). Verified by session records only (profile.bind systemPrompt, llm.tools_snapshot), no model call.
+    const name = `rk-${path.basename(path.resolve(kitDir)).replace(/[^A-Za-z0-9_-]/g, '-')}`;
+    const agent = `---\nname: ${name}\ndescription: ${JSON.stringify('role kit agent (no behaviour of its own)')}\ntools: [${v.tools.join(', ')}]\n---\n${v.roleText}`;
+    out.argv = ['-p', '--agent-file', '<agent.md written by the rail>'];
+    out.env.KIMI_CODE_HOME = opts.configDir || '<throwaway KIMI_CODE_HOME; the rail seeds the login>';
+    out.files.push({ generated: 'agent.md', content: agent });
+    out.agent_file = agent;
+    warnings.push('--agent-file cannot be combined with --session/--continue');
+    warnings.push('a custom kimi agent does not read AGENTS.md and lists no skills: the card body is the only instruction channel');
+    if (v.tools.length === 0) warnings.push('tools: [] (no tools) was not exercised in the kimi spike (only [Read, Grep] and [Read, Grep, Skill]); verify before relying on it');
+    out.verified = { agent_file_card_injection: 'verified (wire.jsonl systemPrompt + hash)', tools_allowlist: 'verified for [Read, Grep] (tools_snapshot)', model_follows_card: 'UNVERIFIED (needs a real-model check before the formal run)' };
   } else {
     return { ok: false, errors: [`unknown runner: ${runner}`] };
   }
@@ -145,16 +166,16 @@ function main() {
   const argv = process.argv.slice(2);
   const opt = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : undefined; };
   const kit = opt('--kit'); const runner = opt('--runner');
-  if (!kit || !runner) { console.error('usage: compile-kit.js --kit <dir> --runner claude|codex|agy [--config-dir <dir>] [--json]'); process.exit(2); }
+  if (!kit || !runner) { console.error('usage: compile-kit.js --kit <dir> --runner claude|codex|agy|kimi [--config-dir <dir>] [--json]'); process.exit(2); }
   const r = compile(kit, runner, { configDir: opt('--config-dir') });
   if (!r.ok) { console.error(`compile-kit: invalid\n${r.errors.map((e) => `  - ${e}`).join('\n')}`); process.exit(2); }
   if (argv.includes('--json')) { process.stdout.write(`${JSON.stringify(r, null, 2)}\n`); return; }
   const show = (a) => a.map((x, i) => (a[i - 1] === '--system-prompt' ? `<role.md ${Buffer.byteLength(x)} bytes>` : /[\s"']/.test(x) || x === '' ? JSON.stringify(x) : x)).join(' ');
   process.stdout.write(`runner: ${r.runner}\nargv:   ${show(r.argv)}\n`);
   for (const [k, val] of Object.entries(r.env)) process.stdout.write(`env:    ${k}=${val}\n`);
-  for (const f of r.files) process.stdout.write(`file:   ${f.from} -> <home>/${f.to}\n`);
+  for (const f of r.files) process.stdout.write(f.generated ? `file:   <generated ${f.generated}, ${Buffer.byteLength(f.content)} bytes>\n` : `file:   ${f.from} -> <home>/${f.to}\n`);
   for (const w of r.warnings) process.stdout.write(`WARN:   ${w}\n`);
   for (const [k, val] of Object.entries(r.verified)) process.stdout.write(`status: ${k}: ${val}\n`);
 }
 if (require.main === module) main();
-module.exports = { frontmatterError, validateKit, compile, parseTools, MAX_ROLE_BYTES };
+module.exports = { MAX_ROLE_BYTES_KIMI, frontmatterError, validateKit, compile, parseTools, MAX_ROLE_BYTES };

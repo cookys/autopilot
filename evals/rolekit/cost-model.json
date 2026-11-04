@@ -2,14 +2,31 @@
   "schema_version": 1,
   "note": "Per-cell cost basis. Subscription billing only: USD is the booked value, not a charge; the real constraint is the shared quota and the model mix. Nothing here is measured for these kits: the pilot measures it.",
   "rates_usd_per_cell": {
-    "haiku": { "usd": 0.0162, "basis": "one measured Haiku cell, evals/skill-onoff/README.md findings-batch pilot (rolekit-probe 2026-11-05 section 4.3; the same README warns that summing every result row gives 0.0433)" },
-    "sonnet_low": { "usd": 0.19, "basis": "findings-batch T3/T4 cell, Sonnet estimate (rolekit-probe 4.3)" },
-    "sonnet_high": { "usd": 0.30, "basis": "findings-batch T1/T2 two-round cell, Sonnet estimate (rolekit-probe 4.3)" },
-    "second_weak_seat": { "usd": 0.0162, "basis": "no recorded cost for a non-Claude cheap seat; the Haiku rate is used as a stand-in and the cells run on that seat's own subscription, not the Claude quota" }
+    "haiku": {
+      "usd": 0.0162,
+      "basis": "one measured Haiku cell, evals/skill-onoff/README.md findings-batch pilot (rolekit-probe 2026-11-05 section 4.3; the same README warns that summing every result row gives 0.0433)"
+    },
+    "sonnet_low": {
+      "usd": 0.19,
+      "basis": "findings-batch T3/T4 cell, Sonnet estimate (rolekit-probe 4.3)"
+    },
+    "sonnet_high": {
+      "usd": 0.3,
+      "basis": "findings-batch T1/T2 two-round cell, Sonnet estimate (rolekit-probe 4.3)"
+    },
+    "kimi": {
+      "usd": 0.0162,
+      "basis": "PLACEHOLDER, not measured: no recorded cost exists for a kimi-code cell. The Haiku rate is used so the cell is counted in the estimate and the 75 USD cap; the cells draw on the kimi-code subscription (its own weekly quota, resets Friday 17:37 Taipei), not on the Claude quota. The real-model check before the formal run is where a first kimi unit price may appear."
+    }
   },
   "caveats": [
     "implementer, debugger and explorer cells run tool loops; no recorded per-cell cost exists for a Haiku tool-loop cell, so the Haiku rate may be low for those roles; the pilot reports the real value per role and the verdict rule compares it with this table",
     "--max-budget-usd is checked after a call, so a cell can overshoot by one model call (rolekit-probe 4.3)"
   ],
-  "estimate_margin": 1.5
+  "estimate_margin": 1.5,
+  "quota": {
+    "weak1": "Claude subscription",
+    "strong": "Claude subscription",
+    "weak2": "kimi-code subscription (own quota)"
+  }
 }

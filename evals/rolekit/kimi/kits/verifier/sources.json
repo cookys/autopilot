@@ -1,0 +1,16 @@
+{
+  "role": "verifier",
+  "runner": "kimi-code 2.3.0",
+  "card_from": "kits/verifier/role.md",
+  "method": "hand-condensed Method section appended (kimi custom agents cannot read plugin skills)",
+  "method_condensed_from": {
+    "source_path": "references/evidence-discipline.md",
+    "source_lines": [
+      1259,
+      1278
+    ],
+    "source_git_blob": "d167d9edffa128c8e8a24b99b535f54d7b8abe41"
+  },
+  "max_role_bytes": 4096,
+  "card_bytes": 2040
+}

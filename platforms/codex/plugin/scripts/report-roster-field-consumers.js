@@ -41,6 +41,16 @@ const EXCLUDE_FILES = new Set([
   'scripts/check-contract-schema.js',    // the producers' parity gate
   'CHANGELOG.md',                        // (redundant today) release notes
   'CLAUDE.md',                           // (redundant today) script-inventory table
+  'scripts/CLAUDE.md',                   // directory entry docs: prose that names fields, not consumers
+  'scripts/AGENTS.md',
+  'skills/CLAUDE.md',
+  'skills/AGENTS.md',
+  'references/CLAUDE.md',
+  'references/AGENTS.md',
+  'platforms/CLAUDE.md',                 // (redundant today) outside SCAN_ROOTS; kept so the five directory entry docs are covered together
+  'platforms/AGENTS.md',
+  'mods/CLAUDE.md',                      // (redundant today) outside SCAN_ROOTS
+  'mods/AGENTS.md',
   'project-config-template/review-loop-config.md', // (redundant today) names every field by construction
 ]);
 const EXCLUDE_PREFIXES = [

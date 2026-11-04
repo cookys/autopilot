@@ -103,7 +103,7 @@
 #   administration died on authentication, the remaining seats were NOT run (BL-0294, scripts/lib/auth-stop.js).
 #
 # Language choice: bash. This is git/CLI-dispatch glue that never runs inside
-# the agy sandbox (CLAUDE.md § "Language choice (sh vs js vs py)"), so Node is
+# the agy sandbox (scripts/CLAUDE.md § "Language choice (sh vs js vs py)"), so Node is
 # used only where JSON parsing is unavoidable (`node -e`, not jq — jq is not
 # guaranteed present; Node is).
 set -uo pipefail
@@ -435,7 +435,7 @@ run_seat() { # slug runner model family vsrc endpoint effort
   local saved_base="${ANTHROPIC_BASE_URL:-}" saved_tok="${ANTHROPIC_AUTH_TOKEN:-}"
   if [ "$endpoint" = "anthropic-native" ]; then
     local tok
-    # Node, not python3: CLAUDE.md's language rule puts JSON parsing on Node,
+    # Node, not python3: scripts/CLAUDE.md's language rule puts JSON parsing on Node,
     # and the sweep sources' python3 one-liner was the script's only python
     # dependency. Same file, same key path, same empty-on-failure behavior.
     tok="$(node -e 'try{const d=require(process.argv[1]);process.stdout.write((d.claudeAiOauth&&d.claudeAiOauth.accessToken)||"")}catch(e){}' "$HOME/.claude/.credentials.json" 2>/dev/null)"

@@ -159,14 +159,15 @@
     },
     {
       "id": "check-claude-md-inventory",
-      "title": "CLAUDE.md inventory: every scripts/*.{sh,js} + scripts/lib/* named + file/line size caps",
+      "title": "CLAUDE.md inventory: every scripts/*.{sh,js} + scripts/lib/* named in scripts/CLAUDE.md + entry-doc size caps",
       "generator": null,
       "check": "node scripts/check-claude-md-inventory.js",
-      "fix": "add an index row per unlisted script; for size violations trim the row and move detail to CHANGELOG.md / references/ (see CLAUDE.md Row shape rule)",
+      "fix": "add an index row per unlisted script; for size violations trim the row and move detail to CHANGELOG.md / references/ (see scripts/CLAUDE.md Row shape rule)",
       "tier": "both",
       "trigger": [
         "scripts/",
-        "CLAUDE.md"
+        "CLAUDE.md",
+        "AGENTS.md"
       ]
     },
     {

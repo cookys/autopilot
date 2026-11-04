@@ -1,6 +1,6 @@
 # Skill contract card — shape spec
 
-> Canonical operational definition of the 童子軍規則 target (CLAUDE.md keeps only a pointer here —
+> Canonical operational definition of the 童子軍規則 target (CLAUDE.md and skills/CLAUDE.md keep only a pointer here —
 > single canonical home). Origin: `project/plans/_archive/2026/07/2026-07-08-observation-first-skills.md` (合約卡);
 > shipped by `project/plans/_archive/2026/08/2026-08-18-dev-flow-contract-card.md` P1. Style precedent:
 > [`four-layer-design.md`](four-layer-design.md) ("a rule without a named enforcer is prose, and

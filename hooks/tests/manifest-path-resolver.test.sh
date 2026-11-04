@@ -354,7 +354,8 @@ assert_contains "$(reads_of "$ALR/docs/m.json")" "reads=1" "control: an inside m
 SBX="$TEST_TMP/inv"; mkdir -p "$SBX/scripts/lib" "$SBX/docs"
 cp "$REPO_ROOT/scripts/check-claude-md-inventory.js" "$SBX/scripts/"
 cp "$LAYOUT" "$SBX/scripts/lib/"   # the checker asks the registry where the inventory doc is
-printf '# f\ncheck-claude-md-inventory.js repo-layout.js\n' > "$SBX/CLAUDE.md"
+printf '# f\n' > "$SBX/CLAUDE.md"; printf '# f\n' > "$SBX/AGENTS.md"   # BL-0383: entry docs, size-capped only
+printf '# f\ncheck-claude-md-inventory.js repo-layout.js\n' > "$SBX/scripts/CLAUDE.md"   # the name list lives here
 printf 'check-claude-md-inventory.js repo-layout.js\n' > "$SBX/docs/scripts-inventory.md"
 node "$SBX/scripts/check-claude-md-inventory.js" >/dev/null 2>&1
 assert_eq "0" "$?" "inventory present: green"
@@ -370,7 +371,7 @@ assert_eq "0" "$?" "inventory restored: green again"
 mkdir -p "$TEST_TMP/inv2/scripts/lib" "$TEST_TMP/inv2/docs"
 cp "$LAYOUT" "$TEST_TMP/inv2/scripts/lib/"
 sed 's/ && !inventoryMissing//' "$SBX/scripts/check-claude-md-inventory.js" > "$TEST_TMP/inv2/scripts/check-claude-md-inventory.js"
-cp "$SBX/CLAUDE.md" "$TEST_TMP/inv2/CLAUDE.md"
+cp "$SBX/CLAUDE.md" "$SBX/AGENTS.md" "$TEST_TMP/inv2/"; cp "$SBX/scripts/CLAUDE.md" "$TEST_TMP/inv2/scripts/CLAUDE.md"
 if cmp -s "$SBX/scripts/check-claude-md-inventory.js" "$TEST_TMP/inv2/scripts/check-claude-md-inventory.js"; then fail "mutant did not apply: gate text moved"; fi
 node "$TEST_TMP/inv2/scripts/check-claude-md-inventory.js" >/dev/null 2>&1
 assert_eq "0" "$?" "mutant (absent passes) is green with the file missing, so the red assertion above is load-bearing"

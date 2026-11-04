@@ -93,7 +93,20 @@ LIFECYCLE_ADAPTER_DEST="skill-adapters/lifecycle.md"
 SCRIPT_EXCLUDES=(
   "install-opencode.sh"
   "sync-opencode-plugin.sh"
+  # BL-0383: directory entry docs. They steer sessions working IN this repo; the
+  # Codex package and a consumer's plugin cache do not need them, and a copy there
+  # would only add text to every consumer's tree.
+  "CLAUDE.md"
+  "AGENTS.md"
 )
+
+# Names left out of a mirrored directory. references/ carries the entry-doc names only.
+dir_excludes() {
+  case "$1" in
+    scripts) printf '%s\n' "${SCRIPT_EXCLUDES[@]}" ;;
+    references) printf '%s\n' "CLAUDE.md" "AGENTS.md" ;;
+  esac
+}
 
 DOC_FILES=(
   "project/plans/_archive/2026/06/2026-06-04-distill-consolidate.md"
@@ -234,9 +247,10 @@ sync_skills() {
   rm -rf "$destination"
   mkdir -p "$destination"
   if command -v rsync >/dev/null 2>&1; then
-    rsync -aL --delete "$SRC/" "$destination/"
+    # BL-0383: the skills/ directory entry docs (root-level only) stay out of the package.
+    rsync -aL --delete --exclude /CLAUDE.md --exclude /AGENTS.md "$SRC/" "$destination/"
   else
-    (cd "$SRC" && tar -chf - .) | (cd "$destination" && tar -xf -)
+    (cd "$SRC" && tar -chf - --exclude=./CLAUDE.md --exclude=./AGENTS.md .) | (cd "$destination" && tar -xf -)
   fi
   local skill
   for skill in "${PROJECTED_SKILLS[@]}"; do
@@ -261,7 +275,8 @@ if (!fs.existsSync(copyRoot)) {
   console.log('drift: missing directory platforms/codex/plugin/skills');
   process.exit(1);
 }
-const sourceFiles = list(sourceRoot);
+// BL-0383: skills/CLAUDE.md and skills/AGENTS.md are directory entry docs, not part of the package.
+const sourceFiles = list(sourceRoot).filter((f) => f !== 'CLAUDE.md' && f !== 'AGENTS.md');
 const copyFiles = list(copyRoot);
 if (JSON.stringify(sourceFiles) !== JSON.stringify(copyFiles)) failures.push('skill file set differs');
 const adapter = fs.readFileSync(adapterPath, 'utf8');
@@ -308,21 +323,17 @@ sync_dir() {
 
   if command -v rsync >/dev/null 2>&1; then
     local args=(-aL --delete)
-    if [ "$rel" = "scripts" ]; then
-      local excluded
-      for excluded in "${SCRIPT_EXCLUDES[@]}"; do
-        args+=(--exclude "$excluded")
-      done
-    fi
+    local excluded
+    while IFS= read -r excluded; do
+      [ -n "$excluded" ] && args+=(--exclude "$excluded")
+    done < <(dir_excludes "$rel")
     rsync "${args[@]}" "$src/" "$dst/"
   else
     local tar_args=(-chf -)
-    if [ "$rel" = "scripts" ]; then
-      local excluded
-      for excluded in "${SCRIPT_EXCLUDES[@]}"; do
-        tar_args+=(--exclude="./$excluded")
-      done
-    fi
+    local excluded
+    while IFS= read -r excluded; do
+      [ -n "$excluded" ] && tar_args+=(--exclude="./$excluded")
+    done < <(dir_excludes "$rel")
     (cd "$src" && tar "${tar_args[@]}" .) | (cd "$dst" && tar -xf -)
   fi
 }
@@ -355,20 +366,20 @@ check_dir() {
     return 1
   fi
 
-  if [ "$rel" = "scripts" ]; then
+  if [ "$rel" = "scripts" ] || [ "$rel" = "references" ]; then
     local args=(-qr)
     local excluded
     local diff_status=0
-    for excluded in "${SCRIPT_EXCLUDES[@]}"; do
+    while IFS= read -r excluded; do
       args+=(--exclude="$excluded")
-    done
+    done < <(dir_excludes "$rel")
     diff "${args[@]}" "$src" "$dst" || diff_status=$?
-    for excluded in "${SCRIPT_EXCLUDES[@]}"; do
+    while IFS= read -r excluded; do
       if [ -e "$dst/$excluded" ]; then
-        echo "drift: excluded OpenCode installer leaked into platforms/codex/plugin/scripts/$excluded"
+        echo "drift: excluded file leaked into platforms/codex/plugin/$rel/$excluded"
         return 1
       fi
-    done
+    done < <(dir_excludes "$rel")
     return "$diff_status"
   fi
 

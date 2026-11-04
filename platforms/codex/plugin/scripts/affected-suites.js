@@ -236,7 +236,7 @@ const ALWAYS_RUN = [
   [`${HOOK_TESTS_DIR}/test-suite-finalize-gate.test.sh`, 'scans every *.test.sh for the finalize counter'],
   [`${HOOK_TESTS_DIR}/check-test-integrity.test.sh`, 'real config must match every real suite file'],
   [`${HOOK_TESTS_DIR}/check-tmp-residue-registry.test.sh`, 'scans the git index for tmp residue'],
-  [`${HOOK_TESTS_DIR}/check-claude-md-inventory.test.sh`, 'every shipped script must be named in CLAUDE.md'],
+  [`${HOOK_TESTS_DIR}/check-claude-md-inventory.test.sh`, 'every shipped script must be named in scripts/CLAUDE.md'],
   [`${HOOK_TESTS_DIR}/check-hook-inventory.test.sh`, 'hook files vs hooks.json vs docs'],
   [`${HOOK_TESTS_DIR}/check-canonical-invariants.test.sh`, 'cross-file invariants over the real tree'],
   [`${HOOK_TESTS_DIR}/p6d-gates-repair-ladder.test.sh`, 'grep -rln repair_lock over all of src/'],

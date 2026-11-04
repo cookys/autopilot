@@ -32,6 +32,7 @@ Not for: anything needing autopilot skills inside the executor (unverified — s
 5. **Every brief carries a scale budget (gate 5).** The Task Prompt's HOW MUCH element MUST state a LOC-delta / files-touched ceiling (see [`skills/ceo-agent/references/task-prompt-templates.md`](../skills/ceo-agent/references/task-prompt-templates.md) § HOW MUCH). A worker that would exceed it STOPS and returns an `[ESCALATION]` to re-scope — it never silently grinds past the budget. A brief with no budget is incomplete.
 6. **No bare multi-hour autonomous loop (gate 4).** A hetero implement/review loop that runs for hours MUST have a named depth-0 clock owner armed with the sensing watcher and the convergence brake ([`scripts/check-loop-convergence.js`](../scripts/check-loop-convergence.js) — gates 1 + 3; see [`skills/ceo-agent/references/level-front-door.md`](../skills/ceo-agent/references/level-front-door.md) § 裸跑禁令). Unwatched hours-long self-directed loops are the banned "bare run" shape.
 7. **Input must fit the engine's context window (gate 7).** Every rail runs the context-window gate before spawning a runner; an over-budget unit fails closed rather than letting the engine compact its way through. See § Context-window gate.
+8. **A brief that relies on rules in a subdirectory says so.** Codex, agy and OpenCode do not descend into subdirectories, so when a dispatch brief relies on the rules of `scripts/`, `skills/`, `references/`, `platforms/` or `mods/`, it must say "read <subdir>/AGENTS.md first" (the stub names the `CLAUDE.md` to read in full). Mechanising this is BL-0387.
 
 ## Runner choice and guidance profile are separate
 
@@ -948,7 +949,7 @@ has recorded `skill_transport.native = supported` (so it can never silently clai
 mechanism); **`auto`** uses native only when bench-supported+fresh, else prompt, else off; **`off`**
 (default) is byte-identical to prior behavior. `scripts/bench-engine-capability.sh` is the only thing
 that may record native/prompt-pack support, and only from an actual passing bench. Reviewers
-(`dispatch-review.sh`) NEVER receive a skill pack (verifier isolation). See CLAUDE.md inventory for the
+(`dispatch-review.sh`) NEVER receive a skill pack (verifier isolation). See the `scripts/CLAUDE.md` name list (descriptions: `docs/scripts-inventory.md`) for the
 three capability-state scripts.
 - agy `-p` exposes `define_subagent` / `invoke_subagent` / `manage_subagents` — a native subagent surface inside the headless executor. Semantics unprobed; could matter if a dispatched phase wants its own fan-out.
 - Other engines' headless equivalence (`gemini` CLI, `codex` CLI): same spike shape as the agy one — prove full agentic loop + flags before writing them here. `opencode run` was spiked 2026-09-03 (1.18.25) and is now the `--runner opencode` implementer rail above.

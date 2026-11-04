@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0387 -->
+<!-- next-id: BL-0388 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1987,3 +1987,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: d5fu review g1 (2026-11-04)
 - **Pointer**: project/backlog/d5-g2-follow-ups-review-follow-ups.md
+
+### 派工 brief 自動帶上「先讀子目錄 AGENTS.md」
+- **Id**: BL-0387
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: BL-0383 入口文件拆分的 Q6 裁示, 2026-11-04
+- **Reply**: none
+- **Problem**: Codex、agy、OpenCode 這類工具不會自己往子目錄走，從根目錄開工就看不到各子目錄的規則檔。入口文件拆分只在派工說明裡加了一句文字，要求 brief 寫明「先讀該子目錄的 AGENTS.md」，沒有任何機制檢查。
+- **Impact**: 派去 Codex 或 agy 的工作若漏寫這句，工人看不到該目錄的規則，可能做出違反子目錄規定的改動。
+- **Trigger**: BL-0383 合併之後，下次動 dispatch 軌道的 brief 組裝時
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: pm:knowledge/harness-entry-docs.md 規則 4（pm repo 無 remote，無網址）
+- **Pointer**: project/backlog/brief-reads-subdir-agents-md.md

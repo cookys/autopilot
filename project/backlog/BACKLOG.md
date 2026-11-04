@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0396 -->
+<!-- next-id: BL-0397 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2115,3 +2115,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: PM 2026-11-05 (approved)
 - **Pointer**: project/backlog/repo-local-hookspath-shadow.md
+
+### mods 真實 claude 守衛可能被殘留的子孫行程搶時間差
+- **Id**: BL-0396
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: review seats（hetero-review modsreal g3, astra）；PM（pm--claude）
+- **Report**: modsreal g3 review, 2026-11-05；2026-11-05 PM ruling
+- **Reply**: none；none
+- **Problem**: 守衛先驗沙箱根目錄身分再掃描清理；claude 跑完後仍活著的子孫行程可在驗身分與掃描之間換掉路徑，讓掃描只看到符號連結而誤判為綠，或讓 chmod 跟著換過的連結走。
+- **Impact**: 守衛偵測意外洩漏憑證或對話紀錄的能力在極端時序下失靈；不是對付惡意行程。
+- **Trigger**: modsreal 工作線合併後
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: modsreal g3 review (astra); PM ruling 2026-11-05 (not a blocker)
+- **Pointer**: project/backlog/real-claude-guard-descendant-race.md

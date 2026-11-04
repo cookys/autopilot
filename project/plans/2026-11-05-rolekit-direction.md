@@ -66,7 +66,7 @@ foreman／owner 先不做成套件（它是強模型的位置，不在「弱模�
   - unverified：模型實際有沒有照角色卡做。現有派工路徑沒有放角色卡的旋鈕，自己處理憑證又不被允許；待 G37 帳號註冊（d-2a19fdb5）或 rail 加旋鈕之後驗證。
 - codex（codex-cli 0.166.0）：
   - verified（只驗 `codex debug prompt-input`）：專案 `.agents/skills`、`CODEX_HOME/skills`、專案 AGENTS.md 與 `CODEX_HOME/AGENTS.md` 都進了 prompt-input。
-  - unverified：`codex exec` 實跑（需要憑證）；工具白名單：codex 沒有 `--tools` 等價旗標，只有 `-s` 沙箱與 `-c`（具體 key 未驗）。換 `CODEX_HOME` 會連 auth 一起換掉，需 rail 另行處理。
+  - unverified：`codex exec` 實跑（需要憑證；排在 G37 帳號註冊 d-2a19fdb5 之後，在那之前記為 blocked，不算完成，驗證時只用最便宜的模型、say OK 等級）；工具白名單：codex 沒有 `--tools` 等價旗標，只有 `-s` 沙箱與 `-c`（具體 key 未驗）。換 `CODEX_HOME` 會連 auth 一起換掉，需 rail 另行處理。
 - agy（agy 1.5.0）：unverified。`--help` 沒有 system-prompt 旗標，也沒有工具白名單；HOME 下的 GEMINI.md 會不會被讀尚未驗證（先前 1.4.4 的實測見附錄）。`agy -p` 不讀 skill（verified negative，見附錄），所以方法論要寫進角色卡；隔離靠 worktree。
 - opencode：`--agent` 加上 `{file:}`，`OPENCODE_DISABLE_PROJECT_CONFIG=1` 實測有效。
 BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
@@ -75,10 +75,10 @@ BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
 
 ### 3.3 怎麼證明「弱模型也做得好」
 - 任務集固定且事先凍結，重用現有的：reviewer 用 evals/known-bad（13 個植入缺陷）加 reviewer-bench；implementer 和 verifier 用 engine-qualify 各角色考卷的任務；planner 和 debugger 各 10 題，由 evals/ 的凍結 pack 產生。
-- 組別（同一個弱模型、同一批任務）：A 現行 brief ｜ B 角色套件 ｜ C 安慰劑套件（字數相同、內容不相干） ｜ D 強模型＋現行 brief（當上限）。安慰劑用來排除「只是字多了」的效果，這正是 7/15 那次缺的對照。
+- 組別（同一個弱模型、同一批任務）：A 現行 brief ｜ B 角色套件 ｜ C 安慰劑套件（字數相同、內容不相干） ｜ D 強模型＋現行 brief（當上限）。安慰劑用來排除「只是字多了」的效果。7/15 那次其實有安慰劑組（`evals/skill-transport`，等長 placebo，見附錄），它缺的是完整套件（縮小後的 skill、固定輸出、工具白名單、機器驗收）；它只測了 skill 本文 pack。
 - 弱模型：haiku 5.5 為主，另加一個非 Claude 的便宜席位（例如 flash 或 kimi），看效果能不能跨模型家族成立。
 - 指標：各角色一個主指標（reviewer：植入缺陷的抓到率，以及誤報的 MUST-FIX 數；implementer：驗收測試通過、而且紅綠證據成立；verifier：mutation 被抓到的比率；planner：腳本驗收的欄位完整率；debugger：假說命中率）。總指標是「縮小差距比例」＝(B−A)/(D−A)。
-- 判定：事先登記並蓋章（prereg、stamp），用 discordant pair 做檢定。成功門檻：至少 3 個角色、B 對 A 縮小差距 ≥ 50%，而且 B 明顯優於 C。不成立就照實記錄，不出貨。
+- 判定：事先登記並蓋章（prereg、stamp），用 discordant pair 做檢定。成功門檻：至少 3 個角色、B 對 A 縮小差距 ≥ 50%，而且 B 明顯優於 C。不成立就照實記錄，不出貨。唯一的機械判定（門檻、檢定、排除規則）在 A 階段的預註冊裡定案，正式評測前要蓋章（stamp），蓋章後不得改。
 - 花費：6 角色 × 4 組 × 每組 20 題 × 2 個弱模型，約 960 格。haiku 約 0.016 USD/格；D 組用 sonnet 約 0.2–0.3 USD/格，只跑 6×20=120 格。估計約 50 USD，上限 75 USD（留 50% 餘裕，否則抽樣起伏就可能觸發停損）。先跑 pilot（每組 3 題），確認儀器沒壞再跑正式的。
 
 ### 3.4 跟 3.0.0 定稿的關係，以及建議
@@ -87,6 +87,7 @@ BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
   1. layout-lint 的頂層白名單和匯出白名單，預留 `roles/` 這個位置（空目錄加 README）。
   2. BL-0388 的使用端那半邊（規則改由 skill、hook 或 reference 帶），因為它影響 public 版的使用者。
 - 跟 3.0.0 並行、現在就能做（便宜、不動定稿）：五個 spike——一次性 config dir 或 cwd 裡的 CLAUDE.md 會不會被讀、`--append-system-prompt`、`--setting-sources project` 下 cwd 的 CLAUDE.md、`codex exec` 讀不讀 skill、套件編譯器的雛形。每個 spike 只用 haiku 跑幾次。
+- `codex exec` 的真模型驗證排在 G37 帳號註冊（d-2a19fdb5）之後；在那之前 S 階段對這一項記為 blocked，不算完成。驗證時仍只用最便宜的模型、say OK 等級。
 - 3.1：套件內容加 A/B 評測；評測成立才把 dispatch 預設改成走套件。
 - 不建議塞進 3.0.0 的理由：7/15 的前例是負面結果，套件效果還沒證明；改 skill 內容依規要先有 eval；把它混進重排，會讓 3.0.0 的完成條件多一個未知數。
 
@@ -128,6 +129,7 @@ BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
 ## Review log
 
 - 2026-11-05：PM 裁定見檔首；plan review（凍結 rubric、最多兩代）尚未開始。
+- g1 2026-11-05：astra chair，CONDITIONAL，0 blocker；R1/R2/R13 accepted_nonblocking，已在同一 commit 修正（R13：7/15 有安慰劑組，缺的是完整套件；R1：codex exec 真模型驗證排在 d-2a19fdb5 之後；R2：判定規則在 A 階段預註冊定案並蓋章）。
 
 ## 附註（跟本提案無關，但查的時候發現）
 - 定稿 P3（`project/plans/2026-10-31-repo-relayout-3-0-0.md:100`）寫了「新增 .github/workflows/test.yml」，跟 operator「不用 hosted CI」的規則衝突。PM 2026-11-05 裁定拿掉，已記入該計畫的修訂 E1（改成本機跑）。

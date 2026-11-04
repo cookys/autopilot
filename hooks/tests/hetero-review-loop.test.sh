@@ -2416,29 +2416,46 @@ rr_fin2() { # <script> <phase> [extra flags]
 # R1: g2 omits the resolution of the verified g1 Major, verdict SHIP-AS-IS
 rr_phase rr1 no
 RR1_BEFORE=$(ledger_digest "$LEDGER")
-RR1_OUT=$(rr_fin2 "$SCRIPT" rr1 --require-resolved); RR1_RC=$?
-assert_exit_code "$RR1_RC" "1" "R1 (BL-0384): --require-resolved refuses an unresolved earlier verified finding"
+RR1_OUT=$(rr_fin2 "$SCRIPT" rr1); RR1_RC=$?
+assert_exit_code "$RR1_RC" "1" "R1 (BL-0384): default finalize refuses an unresolved earlier verified finding"
 assert_contains "$RR1_OUT" "rrmajor_" "R1: refusal names the missing id (first 8 chars)"
-assert_eq "$(ledger_digest "$LEDGER")" "$RR1_BEFORE" "R1: --require-resolved refusal changed nothing in the ledger (no receipt, chain untouched)"
-RR1B_OUT=$(rr_fin2 "$SCRIPT" rr1); RR1B_RC=$?
-assert_exit_code "$RR1B_RC" "0" "R1: default finalize still exits 0"
-assert_contains "$RR1B_OUT" "verified finding(s) from earlier generations stay open with no resolution: rrmajor_" "R1: default finalize warns on stderr and names the id"
-assert_contains "$RR1B_OUT" "resolutions" "R1: warning says how to fix it"
-assert_contains "$(cat "$LEDGER/receipt-rr1.json")" '"verdict": "SHIP-AS-IS"' "R1: default path still records SHIP-AS-IS"
-# R1 negative control: without the unresolved-open check the red case is missed
+assert_contains "$RR1_OUT" "--allow-unresolved --reason" "R1: refusal says how to opt out"
+assert_contains "$RR1_OUT" "resolutions" "R1: refusal says how to resolve"
+assert_eq "$(ledger_digest "$LEDGER")" "$RR1_BEFORE" "R1: refusal changed nothing in the ledger (no receipt, chain untouched)"
+# --allow-unresolved needs a non-empty reason
+RR1A_OUT=$(rr_fin2 "$SCRIPT" rr1 --allow-unresolved); RR1A_RC=$?
+assert_exit_code "$RR1A_RC" "1" "R1: --allow-unresolved without --reason is refused"
+assert_contains "$RR1A_OUT" "non-empty --reason" "R1: ... naming the missing reason"
+RR1A2_OUT=$(rr_fin2 "$SCRIPT" rr1 --allow-unresolved --reason ""); RR1A2_RC=$?
+assert_exit_code "$RR1A2_RC" "1" "R1: --allow-unresolved with an empty reason is refused"
+RR1A3_OUT=$(rr_fin2 "$SCRIPT" rr1 --allow-unresolved --reason "   "); RR1A3_RC=$?
+assert_exit_code "$RR1A3_RC" "1" "R1: --allow-unresolved with a blank reason is refused"
+RR1A4_OUT=$(rr_fin2 "$SCRIPT" rr1 --reason "x"); RR1A4_RC=$?
+assert_exit_code "$RR1A4_RC" "1" "R1: --reason without --allow-unresolved is refused"
+assert_eq "$(ledger_digest "$LEDGER")" "$RR1_BEFORE" "R1: none of the refused calls wrote anything"
+# the removed flag is no longer special: it is not accepted as an opt-out
+assert_not_contains "$(node "$SCRIPT" --help 2>&1)" "--require-resolved" "R1: --require-resolved is gone from the help"
+RR1B_OUT=$(rr_fin2 "$SCRIPT" rr1 --allow-unresolved --reason "tracked in BL-9999"); RR1B_RC=$?
+assert_exit_code "$RR1B_RC" "0" "R1: --allow-unresolved --reason finalizes"
+assert_contains "$(cat "$LEDGER/receipt-rr1.json")" '"verdict": "SHIP-AS-IS"' "R1: opt-out path records SHIP-AS-IS"
+RR1_FIELD=$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(JSON.stringify(r.unresolved_allowed))' "$LEDGER/receipt-rr1.json")
+assert_eq "$RR1_FIELD" '{"reason":"tracked in BL-9999","ids":["rrmajor_g1"]}' "R1: receipt records exactly the left-open id and the reason"
+# negative control: without the unresolved-open check the red case is missed
 RR1_M=$(pk_mutant rr1 hetero-review-loop.js "  if (verdict === 'SHIP-AS-IS') {
     const unresolved" "  if (false) {
     const unresolved") || fail "mutation setup failed (R1)"
 rr_phase rr1m no
-RR1M_OUT=$(rr_fin2 "$RR1_M/scripts/hetero-review-loop.js" rr1m --require-resolved); RR1M_RC=$?
-assert_exit_code "$RR1M_RC" "0" "R1 (mutation): without the check --require-resolved lets the gap through"
-assert_not_contains "$RR1M_OUT" "stay open with no resolution" "R1 (mutation): without the check no warning is printed"
+RR1M_OUT=$(rr_fin2 "$RR1_M/scripts/hetero-review-loop.js" rr1m); RR1M_RC=$?
+assert_exit_code "$RR1M_RC" "0" "R1 (mutation): without the check the default lets the gap through"
+assert_not_contains "$RR1M_OUT" "stay open with no resolution" "R1 (mutation): without the check no refusal is printed"
+assert_not_contains "$(cat "$LEDGER/receipt-rr1m.json")" "unresolved_allowed" "R1 (mutation): ... and no field is recorded"
 
 # R2: resolution present -> no warning, --require-resolved passes
 rr_phase rr2 yes
-RR2_OUT=$(rr_fin2 "$SCRIPT" rr2 --require-resolved); RR2_RC=$?
-assert_exit_code "$RR2_RC" "0" "R2 (BL-0384): complete resolutions pass --require-resolved"
-assert_not_contains "$RR2_OUT" "stay open with no resolution" "R2: no warning when resolved"
+RR2_OUT=$(rr_fin2 "$SCRIPT" rr2); RR2_RC=$?
+assert_exit_code "$RR2_RC" "0" "R2 (BL-0384): complete resolutions pass the default"
+assert_not_contains "$RR2_OUT" "stay open with no resolution" "R2: no refusal when resolved"
+assert_not_contains "$(cat "$LEDGER/receipt-rr2.json")" "unresolved_allowed" "R2: no unresolved_allowed field when nothing is left open"
 # a Major left open by gen 1 alone (finalizing gen 1) is not an 'earlier generation' gap
 assert_not_contains "$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase rr2 --generation 1 --dispositions "$TEST_TMP/rr_rr2_g1.json" 2>&1)" "stay open with no resolution" "R2: a generation's own findings are not flagged"
 
@@ -2563,7 +2580,10 @@ rr2_finalize() { # <script> <ledger> <phase> <gen>
   else
     echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": $g, \"findings\": [] }" > "$disp"
   fi
-  node "$s" finalize --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --dispositions "$disp" 2>&1
+  # these fixtures leave the generation-1 Major open on purpose (the checker/addendum paths need that state), so the
+  # generation >= 2 finalize passes the explicit opt-out that the refuse-by-default rule requires
+  local optout=(); [ "$g" -ge 2 ] && optout=(--allow-unresolved --reason "fixture: earlier Major left open on purpose")
+  node "$s" finalize --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --dispositions "$disp" "${optout[@]}" 2>&1
 }
 # rr2_build <phase> [g2 collect flags]: g1 raises a verified Major, g2 is clean and resolves nothing -> SHIP-AS-IS with 1 open finding
 rr2_build() {

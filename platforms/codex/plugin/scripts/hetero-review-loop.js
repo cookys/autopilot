@@ -259,9 +259,12 @@ Finalize flags:
                         Verbatim finding text, finding ids, and seat names are
                         not scanned. Must be a readable regular file.
 
-  --require-resolved    Refuse (exit 1, nothing written) when the verdict is SHIP-AS-IS but verified
-                        findings of earlier generations remain open with no resolution. Without it
-                        finalize only warns on stderr.
+  --allow-unresolved    finalize refuses by default (exit 1, nothing written) when the verdict is
+                        SHIP-AS-IS but verified findings of earlier generations remain open with no
+                        resolution. Resolve them (a "resolutions" entry in the dispositions file) or
+                        pass --allow-unresolved --reason "<text>" to leave them open on purpose; the
+                        receipt then records unresolved_allowed { reason, ids }.
+  --reason <text>       Required, non-empty, with --allow-unresolved (refused without it).
 
 Opt-out flags:
   --knob <knob>         Review knob to opt out (plan_review|hetero_review)
@@ -283,7 +286,7 @@ function parseArgv(argv) {
       flags.help = true;
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
-      if (key === 'allow-seat-gap' || key === 'require-resolved' || key === 'strict-range' || key === 'full-range') {
+      if (key === 'allow-seat-gap' || key === 'allow-unresolved' || key === 'strict-range' || key === 'full-range') {
         flags[key] = true;
       } else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
         flags[key] = argv[i + 1];
@@ -1472,6 +1475,15 @@ async function handleFinalize(flags) {
   }
 
   const targetChainEntry = chain[targetChainIdx];
+  // --allow-unresolved needs a written reason; checked before any write. --reason alone is a misuse, not a no-op.
+  if (flags['allow-unresolved'] && (typeof flags.reason !== 'string' || flags.reason.trim().length === 0)) {
+    console.error('ERROR: --allow-unresolved requires a non-empty --reason "<text>"; nothing was written');
+    process.exit(1);
+  }
+  if (!flags['allow-unresolved'] && flags.reason !== undefined) {
+    console.error('ERROR: --reason is only meaningful with --allow-unresolved; nothing was written');
+    process.exit(1);
+  }
   const allowedPendingStatuses = new Set(['pending', 'pending-with-gap']);
   if (!allowedPendingStatuses.has(targetChainEntry.status)) {
     console.error(`ERROR: Chain entry for generation ${generation} is not pending (got '${targetChainEntry.status}')`);
@@ -1643,7 +1655,7 @@ async function handleFinalize(flags) {
   const snapshotAbsPath = path.join(gDir, 'dispositions.json');
   const dispRawBytes = fs.readFileSync(dispositionsFile);
   const dispSha256 = crypto.createHash('sha256').update(dispRawBytes).digest('hex');
-  // (written below, after the --require-resolved refusal point: a refusal must leave the ledger untouched)
+  // (written below, after the unresolved-findings refusal point: a refusal must leave the ledger untouched)
 
   // Load findings and dispositions across generations in the chain
   const findingsByGeneration = new Map();
@@ -1698,16 +1710,18 @@ async function handleFinalize(flags) {
   const openFindings = derived.open_findings || derived.openFindings;
 
   // BL-0384: a converged verdict (no verified Critical) can still carry verified Major/Minor findings
-  // of EARLIER generations that no resolution closed -- absence closes nothing. Say so now, while the
-  // dispositions file is still editable. Warn by default; --require-resolved refuses before any write.
+  // of EARLIER generations that no resolution closed -- absence closes nothing. Refuse by default before
+  // any write; --allow-unresolved --reason records the choice in the receipt (unresolved_allowed).
+  let unresolvedAllowed;
   if (verdict === 'SHIP-AS-IS') {
     const unresolved = openFindings.filter((f) => f && !findingsMap.has(f.id));
     if (unresolved.length > 0) {
-      const ids = unresolved.map((f) => String(f.id).slice(0, 8)).join(', ');
-      console.error(`WARNING: verdict is SHIP-AS-IS but ${unresolved.length} verified finding(s) from earlier generations stay open with no resolution: ${ids}`);
-      console.error(`WARNING: add a { "id": "<finding id>", "rationale": "..." } entry to "resolutions" in generation ${generation}'s dispositions file for each one that is now fixed (or leave them open on purpose).`);
-      if (flags['require-resolved']) {
-        console.error('ERROR: --require-resolved: refusing to finalize; nothing was written');
+      if (flags['allow-unresolved']) {
+        unresolvedAllowed = { reason: String(flags.reason).trim(), ids: unresolved.map((f) => f.id) };
+      } else {
+        const ids = unresolved.map((f) => String(f.id).slice(0, 8)).join(', ');
+        console.error(`ERROR: verdict is SHIP-AS-IS but ${unresolved.length} verified finding(s) from earlier generations stay open with no resolution: ${ids}`);
+        console.error(`ERROR: add a { "id": "<finding id>", "rationale": "..." } entry to "resolutions" in generation ${generation}'s dispositions file for each one that is now fixed, or pass --allow-unresolved --reason "<text>" to leave them open on purpose. Refusing to finalize; nothing was written.`);
         process.exit(1);
       }
     }
@@ -1886,6 +1900,7 @@ async function handleFinalize(flags) {
     chain,
     verdict,
     open_findings: openFindings,
+    ...(unresolvedAllowed ? { unresolved_allowed: unresolvedAllowed } : {}),
     resolved_from: resolvedFrom,
     ...(freshContext === 'off' ? { review_fresh_context: 'off' } : {}),
     written_at: new Date().toISOString(),
@@ -2143,6 +2158,13 @@ async function handleRefinalize(flags) {
   receipt.chain = chain;
   receipt.verdict = derived.verdict;
   receipt.open_findings = derived.open_findings;
+  // unresolved_allowed is derived output too: re-derive its id set from the new open set (an addendum may have closed some).
+  if (receipt.unresolved_allowed !== undefined) {
+    const lastIds = new Set((findingsByGeneration.get(generation) || []).filter((f) => f && f.id).map((f) => f.id));
+    const ids = derived.open_findings.filter((f) => f && !lastIds.has(f.id)).map((f) => f.id);
+    if (ids.length > 0) receipt.unresolved_allowed = { ...receipt.unresolved_allowed, ids };
+    else delete receipt.unresolved_allowed;
+  }
   // A top-level closed_findings (older writers) is derived output too; leaving it would keep a stale value the checker compares.
   if (receipt.closed_findings !== undefined) receipt.closed_findings = derived.closed_findings;
   receipt.written_at = new Date().toISOString();

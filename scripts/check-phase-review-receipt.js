@@ -1367,6 +1367,23 @@ function validateModeA(flags, opts = {}) {
       }
     }
 
+    // unresolved_allowed (finalize --allow-unresolved --reason): re-derived, never trusted. The ids must be exactly the
+    // re-derived open findings the last generation did not raise itself, in order; the reason must be non-empty.
+    if (receipt.unresolved_allowed !== undefined) {
+      const ua = receipt.unresolved_allowed;
+      if (!ua || typeof ua !== 'object' || Array.isArray(ua) || typeof ua.reason !== 'string' || ua.reason.trim().length === 0 || !Array.isArray(ua.ids)) {
+        console.error('Receipt unresolved_allowed is malformed (needs a non-empty string reason and an ids array)');
+        process.exit(1);
+      }
+      const lastGen = chain.reduce((m, e) => Math.max(m, e && Number.isInteger(e.generation) ? e.generation : 0), 0);
+      const lastIds = new Set((findingsByGeneration.get(lastGen) || []).filter((f) => f && f.id).map((f) => f.id));
+      const expectIds = derivedState.open_findings.filter((f) => !lastIds.has(f.id)).map((f) => f.id);
+      if (expectIds.length === 0 || ua.ids.length !== expectIds.length || ua.ids.some((id, i) => id !== expectIds[i])) {
+        console.error(`Receipt unresolved_allowed.ids mismatch: re-derived earlier-generation open findings are ${JSON.stringify(expectIds)}, receipt says ${JSON.stringify(ua.ids)}`);
+        process.exit(1);
+      }
+    }
+
     // Check closed_findings if present on receipt
     if (receipt.closed_findings !== undefined) {
       if (Array.isArray(receipt.closed_findings)) {

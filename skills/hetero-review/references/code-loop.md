@@ -21,6 +21,10 @@ A good disposition rationale for code-review findings:
 
 Closing an earlier finding is explicit. A verified finding from an earlier generation stays open until a later generation's dispositions file lists it under `"resolutions": [{"id": "<finding id>", "rationale": "<what you re-read or re-ran to confirm the fix>"}]`; a later generation that simply stops reporting it closes nothing, and re-raising the same problem under a new id leaves the old id open until it is explicitly resolved. `finalize` and `check-phase-review-receipt.js` refuse a resolution that names no open verified finding. A chain whose `closed_findings` stamps are stale is repaired with `node scripts/hetero-review-loop.js refinalize --ledger <dir> --phase <id> --generation <last>` (re-derives from the on-disk evidence; refuses if any findings/dispositions sha256 changed).
 
+Two integrity warnings (BL-0384 and BL-0389; they add no receipt, chain or range field):
+- `finalize` warns on stderr when the verdict is `SHIP-AS-IS` but verified findings of earlier generations remain open with no resolution: it lists their ids (first 8 characters) and says to add a `resolutions` entry to this generation's dispositions file, which is still editable at that point. `finalize --require-resolved` turns the warning into a refusal: exit 1 and nothing written (no snapshot, chain or receipt change). Leaving a known Minor open on purpose stays legal, so the default is the warning.
+- `collect` can compare the range it is about to review with the range the caller declared. Declare it in the first paragraph of the `--spec-file` as `Range: full` (base is the phase's generation 1 base), `Range: delta` (base is the previous generation's head) or `Range: <base>..<head>` (compared after both sides are resolved to full shas), or pass `--expect-range <same syntax>`, which wins over the header and says so. A mismatch prints a `WARNING:` line; `--strict-range` makes it an error raised before `g<N>/` exists, so the generation number is not consumed. Nothing declared means nothing is checked.
+
 ## Freeze Predicate
 
 The code review loop freezes when either:

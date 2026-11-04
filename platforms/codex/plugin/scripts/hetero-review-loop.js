@@ -221,6 +221,11 @@ Collect flags:
   --seats <specs>       Comma-separated list of seats (engine/effort@runner[:endpoint])
   --spec-file <file>    Task specification file to pass to reviewer
   --exclude <specs>     Comma-separated git pathspecs to exclude from diff
+  --expect-range <r>    full | delta | <base>..<head>: the range the reviewers are expected to cover.
+                        Overrides a 'Range:' line in the first paragraph of the spec file. collect
+                        warns when it differs from the base..head actually collected; nothing declared,
+                        nothing checked.
+  --strict-range        Turn the range warning into an error raised before g<N>/ exists
   --timeout <duration>  Timeout for dispatch (default: 20m)
   --allow-seat-gap      Allow generation to proceed even if some seats return no_verdict — but only
                         down to the receipt floor (--min-reviewed-seats <n> / AUTOPILOT_MIN_REVIEWED_SEATS,
@@ -248,6 +253,10 @@ Finalize flags:
                         Verbatim finding text, finding ids, and seat names are
                         not scanned. Must be a readable regular file.
 
+  --require-resolved    Refuse (exit 1, nothing written) when the verdict is SHIP-AS-IS but verified
+                        findings of earlier generations remain open with no resolution. Without it
+                        finalize only warns on stderr.
+
 Opt-out flags:
   --knob <knob>         Review knob to opt out (plan_review|hetero_review)
 
@@ -268,7 +277,7 @@ function parseArgv(argv) {
       flags.help = true;
     } else if (arg.startsWith('--')) {
       const key = arg.slice(2);
-      if (key === 'allow-seat-gap') {
+      if (key === 'allow-seat-gap' || key === 'require-resolved' || key === 'strict-range') {
         flags[key] = true;
       } else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
         flags[key] = argv[i + 1];
@@ -680,6 +689,68 @@ function publishRoundSummary({ repoRoot, phase, generation, base, head, seatResu
   } catch (_e) { /* fail-open: a status summary never changes the review result */ }
 }
 
+// BL-0389: a spec may declare which range its reviewers are expected to cover. Only the first
+// paragraph of the file is searched and only the first `Range:` line counts. Returns null when
+// nothing is declared (no check, no warning).
+function parseSpecRange(specText) {
+  const lines = String(specText || '').split(/\r?\n/);
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') i++;
+  for (; i < lines.length && lines[i].trim() !== ''; i++) {
+    const m = /^\s*Range:\s*(\S.*?)\s*$/i.exec(lines[i]);
+    if (m) return m[1].replace(/\s+#.*$/, '').trim();
+  }
+  return null;
+}
+
+function resolveFullSha(rev, repoRoot) {
+  const res = spawnSync('git', ['rev-parse', '--verify', '--quiet', `${rev}^{commit}`], {
+    encoding: 'utf8',
+    cwd: repoRoot || process.cwd(),
+  });
+  return res.status === 0 && res.stdout.trim() ? res.stdout.trim() : '';
+}
+
+// Compare a declared range with the base..head that collect is about to use. Returns an array of
+// warning strings (empty when it matches). Pure comparison plus read-only git rev-parse.
+function rangeMismatches(declared, ctx) {
+  const { generation, base, head, chain, flagPhaseBase, repoRoot } = ctx;
+  const out = [];
+  if (declared === 'delta') {
+    if (generation > 1) {
+      const prev = chain.find((c) => c && c.generation === generation - 1);
+      const expected = prev ? (prev.status === 'finalized' ? prev.head : prev.base) : '';
+      if (expected && expected !== base) {
+        out.push(`spec declares Range: delta but generation ${generation} collects ${base}..${head}, not from the generation ${generation - 1} head ${expected}`);
+      }
+    }
+  } else if (declared === 'full') {
+    if (generation > 1) {
+      const g1 = chain.find((c) => c && c.generation === 1);
+      const fullBase = (g1 && g1.base) || (typeof flagPhaseBase === 'string' ? flagPhaseBase.trim() : '');
+      if (fullBase && fullBase !== base) {
+        out.push(`spec declares Range: full but generation ${generation} collects ${base}..${head} (a delta from the previous generation); the phase base is ${fullBase}, so files unchanged since then are not in this diff. Declare Range: delta, or review the full range in a separate phase`);
+      }
+    }
+  } else {
+    const m = /^(\S+?)\.\.(\S+)$/.exec(declared);
+    if (!m) {
+      out.push(`unrecognised Range declaration '${declared}' (expected full, delta or <base>..<head>)`);
+    } else {
+      const wantBase = resolveFullSha(m[1], repoRoot);
+      const wantHead = resolveFullSha(m[2], repoRoot);
+      const gotBase = resolveFullSha(base, repoRoot) || base;
+      const gotHead = resolveFullSha(head, repoRoot) || head;
+      if (!wantBase || !wantHead) {
+        out.push(`declared Range '${declared}' does not resolve to two commits in this repository`);
+      } else if (wantBase !== gotBase || wantHead !== gotHead) {
+        out.push(`spec declares Range: ${declared} (${wantBase}..${wantHead}) but generation ${generation} collects ${gotBase}..${gotHead}`);
+      }
+    }
+  }
+  return out;
+}
+
 async function handleCollect(flags) {
   // v2.36.5: validate the reviewed-seat floor FIRST — before any generation directory or seat
   // dispatch exists — so a garbage value costs nothing and cannot leave g<N>/ without a chain
@@ -854,6 +925,27 @@ async function handleCollect(flags) {
     } catch (e) {
       console.error(`ERROR: Failed to read spec-file: ${e.message}`);
       process.exit(1);
+    }
+  }
+
+  // BL-0389: compare the range a caller declared (spec header `Range:` or --expect-range) with the
+  // range about to be collected. Before g<N>/ exists, so --strict-range consumes no generation.
+  // Nothing declared: no check, no output.
+  {
+    const flagRange = typeof flags['expect-range'] === 'string' ? flags['expect-range'].trim() : '';
+    const headerRange = parseSpecRange(specText);
+    let declaredRange = headerRange;
+    if (flagRange) {
+      if (headerRange) console.error(`NOTE: --expect-range '${flagRange}' overrides the spec header 'Range: ${headerRange}'`);
+      declaredRange = flagRange;
+    }
+    if (declaredRange) {
+      const problems = rangeMismatches(declaredRange, { generation, base, head, chain, flagPhaseBase: flags['phase-base'], repoRoot });
+      for (const w of problems) console.error(`WARNING: ${w}`);
+      if (problems.length > 0 && flags['strict-range']) {
+        console.error(`ERROR: --strict-range: declared range does not match; no seat was dispatched and generation ${generation} was not consumed`);
+        process.exit(1);
+      }
     }
   }
 
@@ -1513,7 +1605,7 @@ async function handleFinalize(flags) {
   const snapshotAbsPath = path.join(gDir, 'dispositions.json');
   const dispRawBytes = fs.readFileSync(dispositionsFile);
   const dispSha256 = crypto.createHash('sha256').update(dispRawBytes).digest('hex');
-  writeFileSyncAtomic(snapshotAbsPath, dispRawBytes);
+  // (written below, after the --require-resolved refusal point: a refusal must leave the ledger untouched)
 
   // Load findings and dispositions across generations in the chain
   const findingsByGeneration = new Map();
@@ -1566,6 +1658,23 @@ async function handleFinalize(flags) {
   }
   const verdict = derived.verdict;
   const openFindings = derived.open_findings || derived.openFindings;
+
+  // BL-0384: a converged verdict (no verified Critical) can still carry verified Major/Minor findings
+  // of EARLIER generations that no resolution closed -- absence closes nothing. Say so now, while the
+  // dispositions file is still editable. Warn by default; --require-resolved refuses before any write.
+  if (verdict === 'SHIP-AS-IS') {
+    const unresolved = openFindings.filter((f) => f && !findingsMap.has(f.id));
+    if (unresolved.length > 0) {
+      const ids = unresolved.map((f) => String(f.id).slice(0, 8)).join(', ');
+      console.error(`WARNING: verdict is SHIP-AS-IS but ${unresolved.length} verified finding(s) from earlier generations stay open with no resolution: ${ids}`);
+      console.error(`WARNING: add a { "id": "<finding id>", "rationale": "..." } entry to "resolutions" in generation ${generation}'s dispositions file for each one that is now fixed (or leave them open on purpose).`);
+      if (flags['require-resolved']) {
+        console.error('ERROR: --require-resolved: refusing to finalize; nothing was written');
+        process.exit(1);
+      }
+    }
+  }
+  writeFileSyncAtomic(snapshotAbsPath, dispRawBytes);
 
   // If FIX-THEN-SHIP, write hands-brief.md and run check-redispatch-prompt.sh
   const briefPath = path.join(gDir, 'hands-brief.md');

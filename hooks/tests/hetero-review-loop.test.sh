@@ -2382,4 +2382,133 @@ sed_mutate "$EV_M4/scripts/hetero-review-loop.js" "0,/const ledgerDir = flags.le
 (cd "$TEST_TMP" && node "$EV_M4/scripts/hetero-review-loop.js" collect --repo-root "$SCRATCH_REPO" --ledger ev_rel_ledger_m --phase pevrelm --generation 1 --branch work --phase-base "$PHASE_BASE" --seats "m1/low@codex" >/dev/null 2>&1)
 assert_eq "$(grep -c -x -F -- "ev_rel_ledger_m" "$EV_POINTER" 2>/dev/null)" "1" "events writer 4 (mutation): without any resolve the pointer holds the bare relative path"
 
+# ─── BL-0384 / BL-0389 stage 1: review-record integrity warnings (no schema change) ───
+
+ledger_digest() { (cd "$1" && find . -type f | LC_ALL=C sort | while read -r f; do sha256sum "$f"; done | sha256sum | cut -d' ' -f1); }
+
+# rr_phase <phase> <with-resolution yes|no>: g1 verified Major, g1 finalized, g2 pending with a refuted Minor.
+# The g2 dispositions file is written to $TEST_TMP/rr_<phase>_g2.json (not yet finalized).
+rr_phase() {
+  local ph="$1" withres="$2"
+  mkdir -p "$LEDGER/review-$ph/g1" "$LEDGER/review-$ph/g2"
+  echo '{ "base": "sha_base1", "head": "sha_head1" }' > "$LEDGER/review-$ph/g1/range.json"
+  echo '{ "findings": [ { "id": "rrmajor_g1", "severity": "Major", "seat": "s0", "text": "Missing bounds check" } ] }' > "$LEDGER/review-$ph/g1/findings.json"
+  echo '[ { "generation": 1, "base": "sha_base1", "head": "sha_head1", "seats": ["s0"], "status": "pending" } ]' > "$LEDGER/review-$ph/chain.json"
+  echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": 1, \"findings\": [ { \"id\": \"rrmajor_g1\", \"disposition\": \"verified\", \"rationale\": \"reproduced\" } ] }" > "$TEST_TMP/rr_${ph}_g1.json"
+  node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase "$ph" --generation 1 --dispositions "$TEST_TMP/rr_${ph}_g1.json" >/dev/null 2>&1
+  echo '{ "base": "sha_head1", "head": "sha_head2" }' > "$LEDGER/review-$ph/g2/range.json"
+  echo '{ "findings": [ { "id": "rrminor_g2", "severity": "Minor", "seat": "s0", "text": "Typo" } ] }' > "$LEDGER/review-$ph/g2/findings.json"
+  node -e '
+    const fs = require("fs"); const p = process.argv[1];
+    const chain = JSON.parse(fs.readFileSync(p, "utf8"));
+    chain.push({ generation: 2, base: "sha_head1", head: "sha_head2", seats: ["s0"], status: "pending" });
+    fs.writeFileSync(p, JSON.stringify(chain, null, 2) + "\n");
+  ' "$LEDGER/review-$ph/chain.json"
+  local res=''
+  [ "$withres" = yes ] && res=', "resolutions": [ { "id": "rrmajor_g1", "rationale": "re-read the fixed code: bound is checked" } ]'
+  echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": 2, \"findings\": [ { \"id\": \"rrminor_g2\", \"disposition\": \"refuted\", \"rationale\": \"fine\" } ]$res }" > "$TEST_TMP/rr_${ph}_g2.json"
+}
+rr_fin2() { # <script> <phase> [extra flags]
+  local s="$1" ph="$2"; shift 2
+  node "$s" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase "$ph" --generation 2 --dispositions "$TEST_TMP/rr_${ph}_g2.json" "$@" 2>&1
+}
+
+# R1: g2 omits the resolution of the verified g1 Major, verdict SHIP-AS-IS
+rr_phase rr1 no
+RR1_BEFORE=$(ledger_digest "$LEDGER")
+RR1_OUT=$(rr_fin2 "$SCRIPT" rr1 --require-resolved); RR1_RC=$?
+assert_exit_code "$RR1_RC" "1" "R1 (BL-0384): --require-resolved refuses an unresolved earlier verified finding"
+assert_contains "$RR1_OUT" "rrmajor_" "R1: refusal names the missing id (first 8 chars)"
+assert_eq "$(ledger_digest "$LEDGER")" "$RR1_BEFORE" "R1: --require-resolved refusal changed nothing in the ledger (no receipt, chain untouched)"
+RR1B_OUT=$(rr_fin2 "$SCRIPT" rr1); RR1B_RC=$?
+assert_exit_code "$RR1B_RC" "0" "R1: default finalize still exits 0"
+assert_contains "$RR1B_OUT" "verified finding(s) from earlier generations stay open with no resolution: rrmajor_" "R1: default finalize warns on stderr and names the id"
+assert_contains "$RR1B_OUT" "resolutions" "R1: warning says how to fix it"
+assert_contains "$(cat "$LEDGER/receipt-rr1.json")" '"verdict": "SHIP-AS-IS"' "R1: default path still records SHIP-AS-IS"
+# R1 negative control: without the unresolved-open check the red case is missed
+RR1_M=$(pk_mutant rr1 hetero-review-loop.js "  if (verdict === 'SHIP-AS-IS') {
+    const unresolved" "  if (false) {
+    const unresolved") || fail "mutation setup failed (R1)"
+rr_phase rr1m no
+RR1M_OUT=$(rr_fin2 "$RR1_M/scripts/hetero-review-loop.js" rr1m --require-resolved); RR1M_RC=$?
+assert_exit_code "$RR1M_RC" "0" "R1 (mutation): without the check --require-resolved lets the gap through"
+assert_not_contains "$RR1M_OUT" "stay open with no resolution" "R1 (mutation): without the check no warning is printed"
+
+# R2: resolution present -> no warning, --require-resolved passes
+rr_phase rr2 yes
+RR2_OUT=$(rr_fin2 "$SCRIPT" rr2 --require-resolved); RR2_RC=$?
+assert_exit_code "$RR2_RC" "0" "R2 (BL-0384): complete resolutions pass --require-resolved"
+assert_not_contains "$RR2_OUT" "stay open with no resolution" "R2: no warning when resolved"
+# a Major left open by gen 1 alone (finalizing gen 1) is not an 'earlier generation' gap
+assert_not_contains "$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase rr2 --generation 1 --dispositions "$TEST_TMP/rr_rr2_g1.json" 2>&1)" "stay open with no resolution" "R2: a generation's own findings are not flagged"
+
+# R6 (BL-0389): spec declares Range: full, gen 2 collects a delta
+RR_REPO_BR=$(git -C "$SCRATCH_REPO" rev-parse --abbrev-ref HEAD)
+git -C "$SCRATCH_REPO" checkout -q work
+git -C "$SCRATCH_REPO" checkout -q -b work_rr
+echo "rr change" >> "$SCRATCH_REPO/file.txt"
+git -C "$SCRATCH_REPO" commit -q -am "rr c4"
+git -C "$SCRATCH_REPO" checkout -q work
+export STUB_SEAT_RESPONSE='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
+printf 'Range: full\n\nReview the whole phase.\n' > "$TEST_TMP/rr_spec_full.txt"
+printf 'Range: delta\n\nReview the delta.\n' > "$TEST_TMP/rr_spec_delta.txt"
+printf 'Review it.\n' > "$TEST_TMP/rr_spec_none.txt"
+rr_collect() { # <script> <ledger> <phase> <gen> <branch> <spec> [extra]
+  local s="$1" l="$2" ph="$3" g="$4" br="$5" sp="$6"; shift 6
+  node "$s" collect --repo-root "$SCRATCH_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch "$br" --phase-base "$PHASE_BASE" --seats "m1/low@codex" --spec-file "$sp" "$@" 2>&1
+}
+rr_g1() { # <script> <ledger> <phase> <spec>
+  rr_collect "$1" "$2" "$3" 1 work "$4" >/dev/null
+  echo "{ \"schema_version\": 1, \"phase\": \"$3\", \"generation\": 1, \"findings\": [] }" > "$TEST_TMP/rr_g1_empty.json"
+  node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$2" --phase "$3" --generation 1 --branch work --dispositions "$TEST_TMP/rr_g1_empty.json" >/dev/null 2>&1
+}
+RL="$TEST_TMP/rr_ledger"; mkdir -p "$RL"
+rr_g1 "$SCRIPT" "$RL" rr6 "$TEST_TMP/rr_spec_full.txt"
+assert_exit_code "$?" "0" "R6 setup: generation 1 collected and finalized under Range: full (full == gen 1, no warning)"
+RR6G1_OUT=$(cat "$RL/review-rr6/chain.json")
+RR6_OUT=$(rr_collect "$SCRIPT" "$RL" rr6 2 work_rr "$TEST_TMP/rr_spec_full.txt" --strict-range); RR6_RC=$?
+assert_exit_code "$RR6_RC" "1" "R6 (BL-0389): --strict-range fails when Range: full meets a delta"
+assert_contains "$RR6_OUT" "Range: full" "R6: failure names the declaration"
+assert_file_absent "$RL/review-rr6/g2" "R6: no g2 directory was created"
+assert_eq "$(cat "$RL/review-rr6/chain.json")" "$RR6G1_OUT" "R6: chain.json unchanged (generation number not consumed)"
+RR6B_OUT=$(rr_collect "$SCRIPT" "$RL" rr6 2 work_rr "$TEST_TMP/rr_spec_full.txt"); RR6B_RC=$?
+assert_exit_code "$RR6B_RC" "0" "R6: default collect still succeeds on the same mismatch"
+assert_contains "$RR6B_OUT" "WARNING: spec declares Range: full but generation 2 collects" "R6: default collect warns"
+# positive: matching declarations are silent
+RL2="$TEST_TMP/rr_ledger2"; mkdir -p "$RL2"
+rr_g1 "$SCRIPT" "$RL2" rr6d "$TEST_TMP/rr_spec_delta.txt"
+RR6D_OUT=$(rr_collect "$SCRIPT" "$RL2" rr6d 2 work_rr "$TEST_TMP/rr_spec_delta.txt" --strict-range); RR6D_RC=$?
+assert_exit_code "$RR6D_RC" "0" "R6 positive: Range: delta matches a delta collect under --strict-range"
+assert_not_contains "$RR6D_OUT" "WARNING" "R6 positive: no warning when the declared range matches"
+RL3="$TEST_TMP/rr_ledger3"; mkdir -p "$RL3"
+rr_g1 "$SCRIPT" "$RL3" rr6n "$TEST_TMP/rr_spec_none.txt"
+RR6N_OUT=$(rr_collect "$SCRIPT" "$RL3" rr6n 2 work_rr "$TEST_TMP/rr_spec_none.txt" --strict-range); RR6N_RC=$?
+assert_exit_code "$RR6N_RC" "0" "R6 positive: nothing declared -> unchanged behaviour"
+assert_not_contains "$RR6N_OUT" "WARNING" "R6 positive: nothing declared -> no warning"
+# explicit <base>..<head>: gen 2 delta really is G1HEAD..work_rr
+RR_G1HEAD=$(git -C "$SCRATCH_REPO" rev-parse work); RR_G2HEAD=$(git -C "$SCRATCH_REPO" rev-parse work_rr)
+RL4="$TEST_TMP/rr_ledger4"; mkdir -p "$RL4"
+rr_g1 "$SCRIPT" "$RL4" rr6e "$TEST_TMP/rr_spec_none.txt"
+RR6E_OUT=$(rr_collect "$SCRIPT" "$RL4" rr6e 2 work_rr "$TEST_TMP/rr_spec_none.txt" --strict-range --expect-range "${RR_G1HEAD:0:12}..work_rr"); RR6E_RC=$?
+assert_exit_code "$RR6E_RC" "0" "R6 positive: explicit --expect-range <base>..<head> matching after resolving to full shas"
+RL5="$TEST_TMP/rr_ledger5"; mkdir -p "$RL5"
+rr_g1 "$SCRIPT" "$RL5" rr6x "$TEST_TMP/rr_spec_none.txt"
+RR6X_OUT=$(rr_collect "$SCRIPT" "$RL5" rr6x 2 work_rr "$TEST_TMP/rr_spec_none.txt" --strict-range --expect-range "${PHASE_BASE}..work_rr"); RR6X_RC=$?
+assert_exit_code "$RR6X_RC" "1" "R6: explicit --expect-range with the wrong base fails under --strict-range"
+assert_file_absent "$RL5/review-rr6x/g2" "R6: explicit mismatch also leaves no g2 directory"
+# flag beats header, and says so
+RL6="$TEST_TMP/rr_ledger6"; mkdir -p "$RL6"
+rr_g1 "$SCRIPT" "$RL6" rr6f "$TEST_TMP/rr_spec_full.txt"
+RR6F_OUT=$(rr_collect "$SCRIPT" "$RL6" rr6f 2 work_rr "$TEST_TMP/rr_spec_full.txt" --strict-range --expect-range delta); RR6F_RC=$?
+assert_exit_code "$RR6F_RC" "0" "R6: --expect-range delta overrides a Range: full header"
+assert_contains "$RR6F_OUT" "overrides the spec header" "R6: the override is announced"
+# R6 negative control: without the comparison the mismatch is missed
+RR6_M=$(pk_mutant rr6 hetero-review-loop.js "    if (declaredRange) {" "    if (false) {") || fail "mutation setup failed (R6)"
+RL7="$TEST_TMP/rr_ledger7"; mkdir -p "$RL7"
+rr_g1 "$RR6_M/scripts/hetero-review-loop.js" "$RL7" rr6m "$TEST_TMP/rr_spec_full.txt"
+RR6M_OUT=$(rr_collect "$RR6_M/scripts/hetero-review-loop.js" "$RL7" rr6m 2 work_rr "$TEST_TMP/rr_spec_full.txt" --strict-range); RR6M_RC=$?
+assert_exit_code "$RR6M_RC" "0" "R6 (mutation): without the comparison --strict-range lets the mismatch through"
+assert_not_contains "$RR6M_OUT" "WARNING" "R6 (mutation): without the comparison there is no warning"
+git -C "$SCRATCH_REPO" checkout -q "$RR_REPO_BR" 2>/dev/null
+
 finalize_test

@@ -49,7 +49,8 @@ function listFiles(root, dir = '') {
   return files.sort();
 }
 
-const sourceFiles = listFiles(sourceRoot);
+// BL-0383: skills/CLAUDE.md and skills/AGENTS.md are directory entry docs, left out of the package.
+const sourceFiles = listFiles(sourceRoot).filter((f) => f !== 'CLAUDE.md' && f !== 'AGENTS.md');
 const copyFiles = listFiles(copyRoot);
 const sourceSet = new Set(sourceFiles);
 const copySet = new Set(copyFiles);

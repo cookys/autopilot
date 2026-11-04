@@ -365,7 +365,7 @@ assert_eq "$(rc_of "$fxu")" "0" "ORG4 --org lets the unreadable case proceed"
 assert_contains "$(meta_of "$fxu" a)" '"org_id":null' "ORG4 org_id recorded as unknown"
 assert_contains "$(meta_of "$fxu" a)" '"org_label":"Hand-Label"' "ORG4 org_label as given"
 assert_contains "$(cat "$fxu/out.txt")" "org 未驗證" "ORG4 summary says org unverified"
-assert_not_contains "$(cat "$fxu/shim.log")" "auth_status" "ORG4 --org makes no auth status call"
+assert_contains "$(cat "$fxu/shim.log")" "auth_status" "ORG4 --org still reads auth status (an id, when readable, is recorded)"
 
 # O5. RED: email-shaped org_label refused (via --org, and via an orgName that carries an e-mail) with nothing created.
 fxe="$(mkfx "$TA")"
@@ -373,11 +373,46 @@ run_onboard "$SCRIPT" "$fxe" "" --org "a=$FAKE_EMAIL" a
 assert_eq "$(rc_of "$fxe")" "2" "ORG5 email-shaped --org label refused (exit 2)"
 assert_not_contains "$(cat "$fxe/out.txt" "$fxe/err.txt")" "$FAKE_EMAIL" "ORG5 refusal does not echo the label"
 [ ! -e "$fxe/fakehome/.config" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "ORG5 refused label created the accounts dir"
-setctl "$fxe" auth "[$(authj FAKE-ORG-9 "$FAKE_EMAIL's Organization")]"
-run_onboard "$SCRIPT" "$fxe" $'y\n'"$TA"$'\n' a
-assert_neq "$(rc_of "$fxe")" "0" "ORG5 an orgName carrying an e-mail is not accepted as the label"
-assert_eq "$(no_email "$fxe")" "" "ORG5 e-mail-bearing orgName is neither shown nor stored"
-[ ! -e "$(ACC "$fxe")/a/token-meta.json" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "ORG5 wrote meta for an e-mail-bearing orgName"
+
+# H. orgName carries an e-mail but orgId is readable: the id is recorded and checked, the name is neither shown nor stored.
+HID="$(authj FAKE-ORG-9 "$FAKE_EMAIL's Organization")"
+fxh="$(mkfx "$TA" "$TB")"; setctl "$fxh" auth "[$HID,$HID,$HID,$HID]"
+run_onboard "$SCRIPT" "$fxh" $'personal\n'"$TA"$'\n' a
+assert_eq "$(rc_of "$fxh")" "0" "H1 hidden org name, typed label: exit 0"
+assert_contains "$(meta_of "$fxh" a)" '"org_id":"FAKE-ORG-9"' "H1 orgId stored although the name is hidden"
+assert_contains "$(meta_of "$fxh" a)" '"org_label":"personal"' "H1 label is the typed one"
+assert_contains "$(meta_of "$fxh" a)" '"org_check":"verified"' "H1 org_check verified"
+assert_contains "$(cat "$fxh/out.txt")" "org 已驗證（名稱已隱藏）" "H1 summary says verified, name hidden"
+assert_eq "$(no_email "$fxh")" "" "H1 the e-mail-bearing name appears nowhere"
+assert_not_contains "$(meta_of "$fxh" a)" "Organization" "H1 the name is not stored"
+# second registration of the same orgId: refused, nothing written, whether the label is typed or given by --org
+before_h="$(tree_digest "$(ACC "$fxh")")"
+run_onboard "$SCRIPT" "$fxh" $'other\n'"$TB"$'\n' b
+assert_neq "$(rc_of "$fxh")" "0" "H2 same orgId, typed label: refused"
+assert_contains "$(cat "$fxh/out.txt")" "已經由 profile a 登記" "H2 names the existing alias"
+assert_eq "$(tree_digest "$(ACC "$fxh")")" "$before_h" "H2 nothing written (typed label)"
+run_onboard "$SCRIPT" "$fxh" "$TB"$'\n' --org b=Other-Label b
+assert_neq "$(rc_of "$fxh")" "0" "H2 same orgId, --org label: refused"
+assert_eq "$(tree_digest "$(ACC "$fxh")")" "$before_h" "H2 nothing written (--org)"
+assert_eq "$(no_email "$fxh")" "" "H2 no e-mail anywhere"
+# --org with a readable orgId records the id (verified) and the given label
+fxh2="$(mkfx "$TA")"; setctl "$fxh2" auth "[$HID]"
+run_onboard "$SCRIPT" "$fxh2" "$TA"$'\n' --org a=Given-Label a
+assert_eq "$(rc_of "$fxh2")" "0" "H3 --org with readable orgId: exit 0"
+assert_contains "$(meta_of "$fxh2" a)" '"org_id":"FAKE-ORG-9"' "H3 orgId stored"
+assert_contains "$(meta_of "$fxh2" a)" '"org_label":"Given-Label"' "H3 given label stored"
+# no label input at all (non-interactive) and no --org: fail closed with a remedy, nothing written
+fxh3="$(mkfx "$TA")"; setctl "$fxh3" auth "[$HID]"
+run_onboard "$SCRIPT" "$fxh3" "" a
+assert_neq "$(rc_of "$fxh3")" "0" "H4 hidden name, no input, no --org: fails"
+assert_contains "$(cat "$fxh3/out.txt")" "--org a=" "H4 remedy names --org"
+[ ! -e "$(ACC "$fxh3")/registry.json" ] && [ ! -e "$(ACC "$fxh3")/a/token" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "H4 wrote registry or token"
+# typed label that looks like an e-mail is refused three times, then fail closed
+fxh4="$(mkfx "$TA")"; setctl "$fxh4" auth "[$HID]"
+run_onboard "$SCRIPT" "$fxh4" "$FAKE_EMAIL"$'\n'"$FAKE_EMAIL"$'\n'"$FAKE_EMAIL"$'\n' a
+assert_neq "$(rc_of "$fxh4")" "0" "H5 e-mail-shaped typed label: fails"
+assert_eq "$(no_email "$fxh4")" "" "H5 no e-mail anywhere"
+[ ! -e "$(ACC "$fxh4")/registry.json" ] && __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)) || fail "H5 wrote registry"
 
 # U1. RED: no argument prints the explanation (not an error dump) and creates nothing; --help the same, exit 0.
 fxn="$(mkfx "$TA")"

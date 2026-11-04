@@ -40,18 +40,34 @@ for k in XC XD XS XK; do v="$(sed -n "s/^$k=//p" "$T/clean.env")"; case "$v" in 
 fake gone 'rm -rf "$(dirname "$HOME")"; exit 0'
 run gone; rc=$?
 { [ "$rc" = 98 ] && grep -q 'guard RED' "$T/gone.err"; } && ok || bad "a child that removes the sandbox root must go red 98 (rc=$rc)"
+if [ "$(id -u)" = 0 ]; then echo "SKIP: unreadable-subdir case (chmod 000 does not block reads for uid 0)"; else
 fake unread 'mkdir "$CLAUDE_CONFIG_DIR/locked"; chmod 000 "$CLAUDE_CONFIG_DIR/locked"; exit 0'
 run unread; rc=$?
 { [ "$rc" = 98 ] && grep -q 'incomplete' "$T/unread.err"; } && ok || bad "an unreadable subdir (scan incomplete) must go red 98 (rc=$rc)"
+fi
 fake gonered 'rm -rf "$(dirname "$HOME")"; exit 4'
 run gonered; rc=$?
 [ "$rc" = 4 ] && ok || bad "a failing child keeps its own rc when the scan is also bad (rc=$rc)"
+if [ "$(id -u)" = 0 ]; then echo "SKIP: set -e unreadable-subdir case (uid 0)"; else
 # errexit active in the caller: cleanup still happens and the rc is right
 ( set -e; . "$LIB"; AUTOPILOT_MODS_REAL_CLAUDE="$T/unread" mods_run_plugin_test "$T/plug" ) >/dev/null 2>"$T/e.err"; rc=$?
 left="$(sed -n 's/^ROOT=//p' "$T/unread.env")"
 { [ "$rc" = 98 ] && [ ! -e "$left" ]; } && ok || bad "under set -e: rc 98 and the sandbox removed (rc=$rc left=$left)"
+fi
 ( set -e; . "$LIB"; AUTOPILOT_MODS_REAL_CLAUDE="$T/clean" mods_run_plugin_test "$T/plug" ) >/dev/null 2>&1; rc=$?
 [ "$rc" = 0 ] && ok || bad "under set -e a clean run returns 0 (rc=$rc)"
+
+# symlinks the cleanup could follow out of the sandbox: an outside dir (mode 500, with a 500 subdir and a file) must stay byte for byte as it was
+OUT="$T/outside"; mkdir -p "$OUT/sub"; echo keep > "$OUT/f"; echo keep > "$OUT/sub/g"; chmod 500 "$OUT/sub" "$OUT"
+export OUT
+snap() { find "$OUT" -printf '%p %m\n' | sort; cat "$OUT/f" "$OUT/sub/g"; }
+before="$(snap)"
+fake rootlink 'r="$(dirname "$HOME")"; echo "$r" > "$OUT/../rootlink.path"; rm -rf "$r"; ln -s "$OUT" "$r"; exit 0'
+run rootlink; rc=$?; rp="$(cat "$T/rootlink.path" 2>/dev/null)"
+{ [ "$rc" = 98 ] && grep -q 'symlink' "$T/rootlink.err" && [ ! -e "$rp" ] && [ ! -L "$rp" ] && [ "$(snap)" = "$before" ]; } && ok || bad "a root replaced by a symlink must go red 98, the link removed, the outside dir untouched (rc=$rc)"
+fake innerlink 'ln -s "$OUT" "$CLAUDE_CONFIG_DIR/lnk"; ln -s "$OUT" "$HOME/lnk2"; exit 0'
+run innerlink; rc=$?
+{ [ "$rc" = 0 ] && [ "$(snap)" = "$before" ]; } && ok || bad "a symlink inside the sandbox must not be followed by the cleanup (rc=$rc)"
 
 fake cred 'echo FAKE-credentials > "$CLAUDE_CONFIG_DIR/.credentials.json"; exit 0'
 run cred; rc=$?

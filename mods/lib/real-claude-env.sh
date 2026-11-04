@@ -22,6 +22,7 @@ mods_run_plugin_test() {
   fi
   case "$bin" in /*) ;; *) bin="$PWD/$bin" ;; esac
   root="$(mktemp -d)"
+  local id0; id0="$(stat -c %d:%i "$root")"
   mkdir -p "$root/home" "$root/config" "$root/xdg-config" "$root/xdg-data" "$root/xdg-state" "$root/xdg-cache"
   (cd "$tmp" && env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u CLAUDE_CODE_OAUTH_TOKEN -u CLAUDE_CODE_OAUTH_REFRESH_TOKEN \
       -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX -u CLAUDE_CODE_USE_FOUNDRY -u ANTHROPIC_BASE_URL -u ANTHROPIC_BEDROCK_BASE_URL \
@@ -31,14 +32,22 @@ mods_run_plugin_test() {
       XDG_STATE_HOME="$root/xdg-state" XDG_CACHE_HOME="$root/xdg-cache" \
       timeout 600 "$bin" plugin test "$tmp" "$@") || rc=$?
   local frc=0 scan_bad=""
-  if [ ! -d "$root" ]; then
+  if [ -L "$root" ]; then
+    # the child replaced the root with a symlink: nothing behind it is ours to scan, chmod or remove
+    scan_bad="the sandbox dir $root was replaced by a symlink, so nothing could be checked"
+    rm -f "$root" || true
+  elif [ ! -d "$root" ]; then
     scan_bad="the sandbox dir $root is gone, so nothing could be checked"
+  elif [ "$(stat -c %d:%i "$root" 2>/dev/null)" != "$id0" ]; then
+    scan_bad="the sandbox dir $root is no longer the directory that was created, so nothing could be checked"
+    rm -rf "$root" || true
   else
     found="$(find "$root" \( -name '.credentials.json' -o -name '*.jsonl' \) -print 2>/dev/null)" || frc=$?
     [ "$frc" -eq 0 ] || scan_bad="the scan of $root was incomplete (find exit $frc, e.g. an unreadable subdir)"
+    # make unreadable dirs removable; find -P (the default) never follows a symlink, and only real directories are touched
+    find "$root" -type d ! -perm -u+rwx -exec chmod u+rwx {} + 2>/dev/null || true
+    rm -rf "$root" || true
   fi
-  chmod -R u+rwX "$root" 2>/dev/null || true
-  rm -rf "$root" || true
   if [ -n "$scan_bad" ]; then
     echo "mods real-claude guard RED: $scan_bad" >&2
     [ "$rc" -ne 0 ] || rc=98

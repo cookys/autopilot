@@ -14,7 +14,7 @@ import type { T } from './i18n'
 import type { FleetView } from './fleet'
 import * as ui from './ui' // the design system's builders; `ui.kv` etc. keep clear of this file's own legacy `kv` / `row`
 import * as U from './ui'
-import { GLYPHS, PALETTE, STATES, carry, cellWidth, displayWidth, isStale, stateOf } from './ui'
+import { GLYPHS, PALETTE, STATES, carry, cellWidth, displayWidth, isStale, stateOf, ansiSpans, urlSpans } from './ui'
 const GS = GLYPHS.state
 const GT = GLYPHS.structure
 const GC = GLYPHS.chart
@@ -1659,14 +1659,18 @@ export const paneWidth = (bodyColumns: number | null | undefined): number => (ty
 // lines are indented by `hang` (kv rows: under the value column; other rows: their own leading blanks). Only a single unbreakable token longer than
 // a whole line is hard-broken. A line that fits is returned untouched.
 const CLOSING_PUNCT = '）」』、。，；：！？)]}】》〉,.;:!?'
-type WrapCh = { ch: string; si: number; w: number }
+type WrapCh = { ch: string; si: number; w: number; u?: true; a?: number } // u: part of an http(s) address, never split; a: part of the ANSI escape sequence with this id (0 cells wide, never split)
 function wrapLine(l: PaneLine, cols: number): PaneLine[] {
   if (displayWidth(l.text) <= cols) return [l]
   const base: Seg[] = l.segs ?? [{ text: l.text, ...(l.color !== undefined ? { color: l.color } : l.warn ? { color: PALETTE.attention } : {}), ...(l.bold ? { bold: true } : {}), ...(l.dim ? { dim: true } : {}) }]
   const chars: WrapCh[] = []
   base.forEach((s, si) => { for (const ch of s.text) chars.push({ ch, si, w: cellWidth(ch.codePointAt(0) as number) }) })
+  const joined = chars.map(c => c.ch).join('')
+  for (const sp of urlSpans(joined)) for (let k = sp.start; k < sp.end; k++) chars[k].u = true // spans are in code points, as `chars` is
+  ansiSpans(joined).forEach((sp, id) => { for (let k = sp.start; k < sp.end; k++) { chars[k].a = id + 1; chars[k].w = 0 } })
   const lead = (l.text.match(/^ */) as RegExpMatchArray)[0].length
   const hang = Math.min(l.hang ?? lead, Math.max(0, Math.floor(cols / 2)))
+  const prefixW = l.hang ?? lead // the row's own prefix width as declared; `hang` is that clamped for continuation lines, so it cannot say where the prefix ends on a narrow pane
   // tokens: runs of blanks, and runs of other characters that end after a `/` or a wide (CJK) character
   const tokens: { cs: WrapCh[]; blank: boolean; w: number }[] = []
   for (const c of chars) {
@@ -1674,7 +1678,10 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
     const last = tokens[tokens.length - 1]
     const lastCh = last === undefined ? null : last.cs[last.cs.length - 1]
     const closing = !blank && last !== undefined && !last.blank && CLOSING_PUNCT.includes(c.ch)
-    const joins = closing || last !== undefined && last.blank === blank && !(lastCh !== null && (lastCh.ch === '/' || lastCh.w === 2)) && !(c.w === 2 && lastCh !== null && lastCh.w !== 2 && !blank)
+    const inUrl = c.u === true && lastCh !== null && lastCh.u === true
+    const inEsc = c.a !== undefined && lastCh !== null && lastCh.a === c.a
+    const escOpen = c.a !== undefined && !inEsc && last !== undefined && !last.blank // an escape sequence joins the word before it (it is 0 cells wide), never starts a break
+    const joins = inUrl || inEsc || escOpen || closing || last !== undefined && last.blank === blank && !(lastCh !== null && (lastCh.ch === '/' || lastCh.w === 2)) && !(c.w === 2 && lastCh !== null && lastCh.w !== 2 && !blank)
     if (joins) { last.cs.push(c); last.w += c.w } else tokens.push({ cs: [c], blank, w: c.w })
   }
   const lines: WrapCh[][] = []
@@ -1695,10 +1702,12 @@ function wrapLine(l: PaneLine, cols: number): PaneLine[] {
       if (w + tk.w <= cols) { cur.push(...tk.cs); w += tk.w } else newLine()
       continue
     }
-    if (w + tk.w > cols && content) newLine()
+    const urlTk = tk.cs.some(c => c.u === true)
+    if (w + tk.w > cols && content && !(urlTk && lines.length === 0 && w <= prefixW)) newLine() // an address that is the first thing after the row's own prefix stays (first line only: a continuation line starts at the clamped hang, which can be under the prefix width, so w <= prefixW there says nothing): it overflows rather than leaving the prefix alone
     if (w + tk.w <= cols) { cur.push(...tk.cs); w += tk.w; content = true; continue }
+    if (urlTk) { cur.push(...tk.cs); w += tk.w; content = true; continue } // an address longer than a whole line overflows it (never split)
     for (const c of tk.cs) { // one token longer than a whole line: hard-break it
-      if (w + c.w > cols && content) newLine()
+      if (c.w > 0 && w + c.w > cols && content) newLine() // an escape sequence (0 cells) is never where a line breaks
       cur.push(c); w += c.w; content = true
     }
   }

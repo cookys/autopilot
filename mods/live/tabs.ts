@@ -353,8 +353,7 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
     const rec = recommendedIndex(d)
     const dialog = decideDialog(d)
     if (d.options.length > 0) {
-      out.push(...ui.choiceRows(u, t('decide.k_options'), d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(sent || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F }))
-      if (pick !== null && d.options[pick].description !== '') out.push(...ui.cardRow(u, '', d.options[pick].description, { fact: F, subtle: true }))
+      out.push(...ui.choiceRows(u, t('decide.k_options'), d.options.map((o, k) => ({ label: o.label, picked: pick === k, recommended: rec === k, ...(sent || id === null || dialog ? {} : { press: 'pick:' + id + ':' + k }) })), { fact: F, descriptions: d.options.map(o => o.description) })) // every option shows its description under it
     }
     if (d.recommendation !== null) { // the recommended option's own label when it matches one, else the recommendation as written; the reason goes on the row below it
       const what = rec === null ? d.recommendation : d.options[rec].label
@@ -382,6 +381,26 @@ function decideLinesRaw(snap: LiveSnapshot, ctx: PaneCtx): PaneLine[] {
   return U.sections('decide', { cards: decideCards(uiCtxOf(ctx), ctx, snap) })
 }
 export const decideTabLines = (snap: LiveSnapshot, ctx: PaneCtx = { t: T_EN, cols: DEFAULT_PANE_COLS }): PaneLine[] => wrapLines(decideLinesRaw(snap, ctx), ctx.cols)
+// The 待決 band's compact form (band.tsx draws it): the first open question's title rows and option rows (the pane's own lines, wrapped at `ctx.cols`, never cut), a pointer row,
+// then the send row(s). The background and the option descriptions stay in the pane: when the first card has any, the pointer row `decide.band_bg` says so instead of showing half a
+// sentence. `maxRows` is the room the band has under its bar and rule (register.ts passes rows - 2): when title + options + pointer + send row do not fit, the rows from the top stay
+// up to the room and the pointer becomes `decide.band_more` (the pane has the rest); the send row always stays. No `maxRows` = no limit.
+export function decideBandPlan(snap: LiveSnapshot, ctx: PaneCtx, maxRows?: number): { rows: PaneLine[]; pointer: 'decide.band_bg' | 'decide.band_more' | null; bars: PaneLine[]; empty: boolean } {
+  const lines = decideTabLines(snap, ctx)
+  const rows: PaneLine[] = []
+  for (const l of lines) {
+    if (l.bar === true) continue
+    if (l.kind === 'item' || l.kind === 'choice') rows.push(l)
+    else if (rows.length > 0 && l.kind === 'blank') break
+  }
+  const bars = lines.filter(l => l.bar === true)
+  if (rows.length === 0) return { rows, pointer: null, bars, empty: true } // no card at all: the only case the band says there is nothing to answer
+  const first = snap.pending[0]
+  const hasMore = first !== undefined && (first.background !== null || first.options.some(o => o.description !== ''))
+  const room = maxRows === undefined ? Infinity : Math.max(0, maxRows - bars.length)
+  if (rows.length + (hasMore ? 1 : 0) <= room) return { rows, pointer: hasMore ? 'decide.band_bg' : null, bars, empty: false }
+  return { rows: rows.slice(0, Math.max(0, room - 1)), pointer: room > 0 ? 'decide.band_more' : null, bars, empty: false } // a card exists but the room is small: the pointer row (and the send row) stay, never the `none` line
+}
 
 export function recentLines(recent: RecentGroup[] | null | undefined, ctx: PaneCtx): PaneLine[] {
   const t = ctx.t

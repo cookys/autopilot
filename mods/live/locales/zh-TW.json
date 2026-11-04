@@ -300,6 +300,8 @@
   "decide.k_advice": "建議",
   "decide.submit_note": "答案會貼進這個對話送出",
   "decide.none": "目前沒有待你回答的問題",
+  "decide.band_bg": "背景與說明見待決分頁",
+  "decide.band_more": "其餘見待決分頁",
   "decide.sent": "已送出，等處理",
   "decide.sent_all": "全部已送出，等處理",
   "decide.note": "補充",

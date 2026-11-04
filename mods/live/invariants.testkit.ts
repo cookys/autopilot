@@ -26,7 +26,8 @@ export function violations(lines: PaneLine[], cols: number, t: Tr): string[] {
     if (l.kind !== 'blank' && l.text !== '') {
       const lead = leading(l.text)
       const attached = (l.kind === 'detail' || l.kind === 'command') && (lead === 14 || lead === 16) // a detail under a column-12 item moves right by 12 (§5.3, I23): `└` at 14, text at 16; I3 of the plan does not list them
-      if (![0, 2, 4, 12].includes(lead) && !attached) out.push('I3 ' + at + ' starts at ' + lead)
+      const underLabel = l.kind === 'choice' && (lead === 16 || lead === 18) // a wrapped option label continues under its label text: past `[ ] ` (16) or `[ ] ★ ` (18)
+      if (![0, 2, 4, 12].includes(lead) && !attached && !underLabel) out.push('I3 ' + at + ' starts at ' + lead)
       if (l.kind === 'kv' && l.hang !== 12) out.push('I3 ' + at + ' kv without hang 12')
     }
     if (l.kind === 'header') { // I4: `^[▾▸] \S.*─+$`, width cols - 1, column 0

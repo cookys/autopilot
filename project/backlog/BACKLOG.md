@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0375 -->
+<!-- next-id: BL-0377 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -52,6 +52,32 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: G40 P1 D1 第 3 代審查 finding 48f67816；PM 在上限時的裁決，2026-11-04
 - **Pointer**: project/backlog/g40-mirror-os-held-lock.md
+
+### G40 probe policy per provider (build)
+- **Id**: BL-0375
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: owner
+- **Problem**: operator 決定 probe 依各家設定：確認 starts_window=false 才做約每 30 分鐘的週期性 probe，其餘只在 pick 前資料過舊時 probe。目前只寫進計畫，程式未做；manifest 要加信心欄位，證據更新時自動翻轉。
+- **Impact**: 沒做前 probe 仍整個關閉；做錯則會對會啟動計時的 provider 排週期性 probe，白白啟動 window。
+- **Trigger**: 排在 BL-0372 Tasks 0-3 之後，走 P4 probe 路徑（目前 gated off）
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: operator decision d-2d6a93aa（經 PM 轉達），2026-11-04
+- **Pointer**: project/backlog/g40-probe-policy-per-provider.md
+
+### G40 D5 第二代審查的六條 Suggestion（全是後續，不擋任何事）
+- **Id**: BL-0376
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: 六條藍燈建議，歸四類：(1) 第一次嘗試已有 capture 原因時 adapter 失敗碼被丟；(2) 失敗碼可能掛錯 alias；(3) golden --check 只比固定投影；(4) status 比對剝掉 newest_age 整行，值沒人釘。
+- **Impact**: 都只影響診斷或漂移偵測的完整度，不改輸出、不影響 parity；測試路徑已直接比對 audit 與 runs。
+- **Trigger**: 下次動 scripts/claude-account.js 的 adapter 同步段或 golden 產生器時順手處理
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: G40 D5 review g2 (2026-11-04)
+- **Pointer**: project/backlog/g40-d5-review-g2-follow-ups.md
 
 ### live pane 決策卡的長背景與選項難讀
 - **Id**: BL-0369

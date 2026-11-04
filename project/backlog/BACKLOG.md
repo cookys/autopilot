@@ -964,20 +964,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: project/plans/2026-10-03-mods-visible-dispatch.md
 - **Context**: Phase 2 merged 59905f025 (gport2) by owner d-0ed54425=A: KR1 only reached 5 spawns, KR2 latency unmeasured, host load ~35. reload-watch and failure-escalation stay separate. P4 parked.
 
-### dispatch-tree step 5 and R blocked by the D0 probes
-- **Id**: BL-0242
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: self
-- **Problem**: 派工樹的後段步驟被探針擋住，還沒有結果就不能做。車隊那一步已經另有追蹤。
-- **Impact**: 步驟停在探針，沒人盯著就不會重跑，後面的工作也不會開始。
-- **Trigger**: D0 probes clear step 5 (row h) and R (row d2 kimi/agy/opencode not_run); fleet step tracked by BL-0144
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: project/plans/2026-10-13-dispatch-tree.md
-- **Context**: Fleet step is tracked by BL-0144. Step 5 and R stay blocked on the D0 probes.
-
 ### workflow-snapshot P3: handoff reads the snapshot and dev-flow calls task-card
 - **Id**: BL-0243
 - **Status**: open
@@ -1531,20 +1517,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: project/backlog/stop-hooks-git-isolation.md
 - **Context**: Same class as the closed BL-0319; per-turn-gate is handled, the hooks listed at Pointer are not. Follow-on of BL-0306.
 
-### Per-turn gate P2 known limits to settle in P3 design
-- **Id**: BL-0326
-- **Status**: open
-- **Since**: 2026-10-29
-- **Origin**: self
-- **Problem**: 每回合驗證的接線版有幾個已知限制：工人換到子目錄時可能不生效、前景原生子代理無法使用、與另一個外殼同時觸發時工人只剩一次修正機會、紀錄檔名格式讀取端要配合、兩個 git 設定項沒有測試涵蓋。
-- **Impact**: 不處理的話，評測結果可能被這些限制扭曲，或有工人繞過驗證的縫。
-- **Trigger**: P3 design starts, or the next change to the per-turn gate hook
-- **Trigger-Type**: ready
-- **Effort**: M
-- **Source**: d0gp2 P2 merge review, 2026-10-29 (self)
-- **Pointer**: project/backlog/depth0-per-turn-gate-status.md
-- **Context**: Five limits listed at Pointer under Known limits of P2. Follow-on of BL-0306.
-
 ### Selection result reports each changed file's contribution
 - **Id**: BL-0333
 - **Status**: open
@@ -1822,20 +1794,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED codeforge 2026-11-01 (owner decision on card d-0e2e6e0d; codeforge main b12c8d0, BACKLOG B31 and agent-coupling ADR)
 - **Pointer**: project/backlog/extension-mechanism.md
 - **Context**: Consensus, contract pieces and plan-review focus are in the sidecar. Plan first, codeforge joins the plan review.
-
-### affected-suites 對純文件改動選出太多套件
-- **Id**: BL-0357
-- **Status**: open
-- **Since**: 2026-11-01
-- **Origin**: self
-- **Problem**: 一個只改備忘清單與兩個附屬文件的提交，選套件工具卻挑出三百八十支套件，跑一輪要一到兩小時，實作者只跑了一百一十支就停下。
-- **Impact**: 純文件的工作也要等很久，或只能接受只跑了一部分的驗收結果。
-- **Trigger**: next edit to scripts/affected-suites.js, or the next docs-only lane
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: BL-0352 archive commit acceptance, 2026-10-31
-- **Pointer**: project/backlog/affected-suites-docs-only-fanout.md
-- **Context**: Investigation steps and the negative control are in the sidecar; whole-repo audits must stay selected.
 
 ### band 加一個 fleet 分頁，由 autopilot 畫
 - **Id**: BL-0358

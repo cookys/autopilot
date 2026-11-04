@@ -28,6 +28,9 @@ For each alias, `pick` needs a current `{five_hour, seven_day}` utilization and 
 - Silence is never "ok": a missing, stale, invalid or future-dated observation is `unknown`, never `ok`.
 - The wrapper never changes a caller's `--output-format`, exit code or stdout bytes because of quota capture. Capture and publish failures are swallowed (one debug line), never a new exit code.
 - Probe defaults to OFF for every provider. It is enabled only by an explicit config key (5.3).
+
+> Amended 2026-11-04 (d-2d6a93aa): the default is no longer OFF for every provider. It follows the manifest: on-demand probe before pick for `starts_window` `true`/`unknown`, a periodic probe only for confirmed `false`; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan. Superseded only once the P4 build ships; until then probing stays gated off.
+
 - ADR-0001: no hash chains, signatures or attestation for these records; freshness comes from re-deriving (the next run or probe), not from proving the writer.
 
 ## 2.6 Change-policy decisions
@@ -98,9 +101,21 @@ A quiet alias with only old windows falls to `unknown` at 6 h, the same fail-saf
 ### 5.3 Item 2 - probe
 
 Default OFF for every provider and every manifest: `accounts.quota_probe = "off"`, regardless of the manifest's `starts_window`. Whether a probe starts the provider's window clock decides only what an operator who enables probing gets (enablement and scheduling eligibility are separate):
+
+> Amended 2026-11-04 (d-2d6a93aa): "Default OFF for every provider ... regardless of the manifest's `starts_window`" is replaced by a per-provider default derived from `starts_window` and `starts_window_confidence`; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 - `quota_probe = "stale"`: probe only just before pick, and only when the best observation of a candidate is older than N minutes (default 60). Used for `starts_window` `true` or `unknown` (treated as `true`; the glm result, 23.2, is the evidence for the conservative rule).
+
+> Amended 2026-11-04 (d-2d6a93aa): on-demand (`stale`) is now the default for `true`, `unknown` and unconfirmed `false`, not an opt-in mode.
+
 - `quota_probe = "scheduled"`: a standing schedule (19.6 branch A). Accepted at config load only for providers whose manifest says `starts_window: false` with an evidence path; otherwise it is rejected with a message.
+
+> Amended 2026-11-04 (d-2d6a93aa): `scheduled` is now the default (about every 30 minutes, only without a newer observation) for confirmed `false` (`false` + `high` confidence + evidence); see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 - Claude: its `starts_window` is `unknown` and no Claude experiment has run (19.8). The Claude probe code path (the `stale` trigger and `usage-probe`) may ship, but `quota_probe` stays `off` by default, `scheduled` is rejected for Claude (N66), and until the section 19 result is recorded no document or default may enable it; absent telemetry in that experiment is ambiguous, not a "does not start" result (19.5).
+
+> Amended 2026-11-04 (d-2d6a93aa): for Claude, the operator decision supersedes this paragraph. `unknown` means an on-demand probe before pick when the data is stale; the experiment of section 19 is no longer a precondition for that. Reason on the operator's card: the alias is about to be used anyway, so starting its clock is acceptable. `scheduled` stays rejected for Claude (N66 unchanged); see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 
 Cheapest first: (1) official no-quota endpoint: none found (V7), not used; if an official URL turns up, replace the probe with it and record it here. (2) Smallest model call: `claude -p <prompt> --model haiku --output-format stream-json --verbose --tools "" --no-session-persistence`, a few-word prompt, through the alias env (same path as a run). This is byte for byte the matrix's live command (capability matrix, claude field 4). `--no-session-persistence` is kept so a probe leaves no session transcript under the alias's config dir. `--strict-mcp-config` (listed by `claude --help` of 2.1.317) has no live run and is NOT in the argv; it may be added only after a live probe records it. Cost per V6: 0.0034 USD API-equivalent per probe (about 0.02 to 0.03 USD for the 6 to 8 probes of the experiment, up to about 0.08 USD per day per idle alias on a standing hourly schedule, which only the demand rule of 19.6 branch A allows); share of subscription quota UNVERIFIED (Q5).
 
@@ -192,6 +207,9 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 
 `quota_probe` (`off|stale|scheduled`, default `off`; `scheduled` accepted only per 5.3), `quota_probe_stale_minutes` (default 60, range 5..360), `quota_probe_timeout_secs` (default 20), `host_role` (default `agent`), `quota_capture` (`on|off`, default `on`; zero-cost, so on). The token warn levels are contract constants (21.4), not config.
 
+> Amended 2026-11-04 (d-2d6a93aa): the `quota_probe` default `off` becomes a per-provider default resolved from the manifest (key name and values to be settled by the P4 build); see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
+
 ## 11. Clock model (the only one)
 
 - Writers stamp `observed_at` (seconds, the writer's clock) per window. The reporter stamps `sent_at` (seconds, its clock at push time) on EVERY frame, including re-pushes.
@@ -204,6 +222,9 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 
 - Q1 With no recent run, does `five_hour` stay absent from the event (V3 cause)? It decides whether an idle alias shows `unknown` or `0`. Needs one operator-authorised comparison measurement (idle alias vs one used within 5 h).
 - Q2 Does one probe start the Claude 5-hour window clock? Gates Claude probing; stays `off` until answered (glm: yes, 19.8).
+
+> Amended 2026-11-04 (d-2d6a93aa): Q2 no longer gates Claude on-demand probing; it still gates any periodic probe for Claude, which needs `false` + `high` confidence + evidence.
+
 - Q3 Is the stream `result` line equivalent to the single json envelope (C2), and does `--verbose` change stderr? Gates the transparent transform.
 - Q4 Does the single-object `--output-format json` carry any quota field? (codeforge inference only.)
 - Q5 How much subscription quota does one probe consume? (tokens known, share unknown.)
@@ -233,6 +254,9 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 | A-agy, A-grok, A-codex, A-minimax, A-qoder, A-qoder-cli-cn, A-opencode, A-glm, A-kimi | each S to M | one provider adapter each (manifest from the matrix row plus the modes it marks `verified`); the `credential_ref` kind `env` checks (20.3 rule 3) already ship in P1 with N28 | each is its own project and starts ONLY after the PM gives a go for that provider; its gate is N24-N30 and N72 run on its own manifest, red then green |
 Dependency map: P1 -> P2 -> P2b; P3 after P1; P4 after P2 + experiment; P5 after P2b + F4; provider adapters after P1 + P2b + the matrix + a per-provider PM go; P6 after P2 + Q3.
 
+> Amended 2026-11-04 (d-2d6a93aa): P4 now also carries the per-provider probe policy build (BL-0375), after BL-0372 Tasks 0-3. For Claude, the "blocked on the section 19 experiment" gate applies only to periodic probing; on-demand probing is not blocked by it.
+
+
 ## 14. Negative controls (every one shown red before green; ship with the check it guards)
 
 N1-N17 and N49-N90 are here; N18-N23 sit with the reporter (18.2), N24-N30 with the contract (20.6), N31-N38 with its details (21.9), N39-N48 with the hub (22.5).
@@ -250,6 +274,9 @@ N1-N17 and N49-N90 are here; N18-N23 sit with the reporter (18.2), N24-N30 with 
 - N11 Token meta: 29, 7 and 0 days boundaries; absent file is `unknown` not `ok`.
 - N12 A `.credentials.json` in `<alias>/claude/` is still refused while `token-meta.json` beside the token is accepted; the helper never opens the token file (test with an unreadable token file).
 - N13 Probe disabled by default: with `quota_probe` unset a stale alias triggers zero spawns (counted by the shim).
+
+> Amended 2026-11-04 (d-2d6a93aa): N13 "unset means zero spawns" holds only until the P4 build; afterwards an unset `quota_probe` resolves per provider, and the zero-spawn case becomes an explicit `off` (to be re-pinned by the build).
+
 - N14 A tight alias (>= 0.90) is never probed; a cooling or pinned run never probes.
 - N15 Probe timeout and 401 do not change the real call's outcome.
 - N16 Hub down: pick result equals local-only result.
@@ -277,6 +304,9 @@ N1-N17 and N49-N90 are here; N18-N23 sit with the reporter (18.2), N24-N30 with 
 - N70 Mirror-only fields: a push frame built from a mirror that holds `hub_offset` contains no `hub_offset`; a planted reporter that sends the mirror view or its `hub_offset` is red against a fake hub that answers `quota_invalid` for it; a record with `utilization` above 1 is never in a frame.
 - N71 Nack table, one control per name: a fake hub answers each of `unsupported`, `quota_rate_limited`, `quota_rows_full`, `quota_publish_denied`, `quota_clock_invalid`, `quota_invalid`, `quota_writer_mismatch` in turn; the reporter must act as section 9 says (and log the name); a planted reporter that stays silent on any one is red for that name; none is recorded as pushed.
 - N66 Probe config: `quota_probe` unset is `off` for every manifest; `scheduled` is rejected for `starts_window` `true` or `unknown`.
+
+> Amended 2026-11-04 (d-2d6a93aa): "`quota_probe` unset is `off` for every manifest" is replaced by the per-provider default; the `scheduled`-rejection half stays, with the exception that `starts_window` `false` is accepted only with `high` confidence and evidence; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 - N72 A manifest at L2 or L3 with no `required` window fails the checker; one with a required window passes.
 - N73 `quota_probe_stale_minutes` outside 5..360 and a non-numeric `quota_probe_timeout_secs` are rejected at config load with a message.
 - N74 A mirror lock held for 3 s makes the writer skip the write: audit field `mirror_lock_busy`, exit code and stdout unchanged.
@@ -300,6 +330,9 @@ N1-N17 and N49-N90 are here; N18-N23 sit with the reporter (18.2), N24-N30 with 
 ## 15. Risks and inversion
 
 What would guarantee failure: (a) all dispatch rails stay on json, so the passive channel yields nothing and the design looks finished but observes nothing (mitigation: P2 acceptance includes a coverage line in `status`, "observations in last 24 h per alias", and the C1/C2/C3 decision is explicit); (b) a probe moves the window and `pick` chases its own measurement (mitigation: off by default, per-provider `starts_window`, never probe tight); (c) a unit slip (0..100 vs 0..1, or seconds vs milliseconds) silently marks an alias `ok` (N1, N49, N51); (d) quota records on shared tmpfs become a covert channel between lanes (mitigation: 0600, alias-only content, one writer identity per row); (e) freshness is forged by receipt or by a courier correcting another's clock (mitigation: one clock model, section 11; N54, N55).
+
+> Amended 2026-11-04 (d-2d6a93aa): "off by default" in mitigation (b) is replaced by "on-demand by default, periodic only when confirmed `false`"; never probe tight and the per-provider `starts_window` stay. Residual (minor, accepted by PM): an on-demand probe may start an alias's window and `pick` then refuse that alias (for example the probe shows it is tight).
+
 
 ## 16. Out of scope
 
@@ -387,6 +420,9 @@ Evidence E3 stands: the claude rails behind the wrapper use `--output-format jso
 
 Does one probe against an idle account START that account's 5-hour window (and with it the reset clock)? Always-on cheap probing (the operator accepts a small, low-frequency, standing probe cost, about 0.0034 USD API-equivalent per probe, V6) is only safe if a probe does not move the clock; if it does, a probed idle alias would present a 5 h window it would not otherwise have, and the reset time `pick` reads would be the probe's own doing.
 
+> Amended 2026-11-04 (d-2d6a93aa): the operator's stated standing probe is now limited to confirmed `false` providers (about every 30 minutes, only without a newer observation); see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
+
 ### 19.2 Who runs it and what authorisation it needs
 
 This lane does NOT run it. It needs a real API call with an alias token.
@@ -440,7 +476,13 @@ Let `d1 = resetsAt(E2) - t1` (seconds). Expected for a window started by the pro
 ### 19.6 Decision tree (what the design does with the answer)
 
 - A. Probe does NOT start the window (third row, confirmed by an independent observation): the manifest may say `starts_window: false`, which makes `quota_probe = "scheduled"` available to the operator (the recommended setting; the default stays `off`, 5.3). Under it, periodic probing of every enrolled alias that has a token on that host: every P = 60 minutes, but SKIP an alias when it already has an observation (any source) newer than N = 30 minutes, and skip when its last known utilization is at or above 0.90. Reasons for N = 30 min: half the probe period, so a busy alias (passive or statusline feeding it more often than every 30 min) is never probed, an idle one is probed about once an hour; and the CLI's emission condition for the event is UNVERIFIED (Q19), so nothing here relies on it: N = 30 min is a policy choice, half the probe period, far inside the 6 h hard staleness limit. Demand rule: probe only an alias that a `pick` consulted within the last 24 h or that `staleCandidates` returned, never an alias nobody asks about; and `scheduled` is not enabled until Q5 has a recorded quota share. Cost: at most 24 probes per such alias per day, about 0.08 USD API-equivalent per day (24 x 0.0034), plus the quota share Q5 must have measured.
+
+> Amended 2026-11-04 (d-2d6a93aa): the schedule is now about one probe per 30 minutes (replacing P = 60 and N = 30), and only for an alias with no newer observation; the demand rule and the 0.90 skip stay. The "`scheduled` is not enabled until Q5" condition and the "recommended setting, default stays `off`" wording are superseded by the per-provider default. Cost at 48 probes per alias per day is about 0.16 USD API-equivalent (48 x 0.0034), double the figure above; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 - B. Probe STARTS or slides the window (first, second rows): `quota_probe = "stale"` is the only mode: probing happens only just before pick and only when the best observation of the candidate aliases is older than 60 minutes: `pick` asks `staleCandidates` (5.3), the wrapper probes at most the top 1 stale candidate it is about to use, never the others. The alias being picked is going to be used immediately anyway, so starting its window costs nothing it would not have paid. No background schedule. Unknown (idle) aliases are never probed speculatively.
+
+> Amended 2026-11-04 (d-2d6a93aa): branch B is now the default for `true`, `unknown` and unconfirmed `false`; the same on-demand rule applies without a prior enablement step, and for Claude without waiting for this experiment.
+
 - C. Void or ambiguous (fifth or fourth row): repeat the experiment on a fresh idle alias; until a result exists probing stays off and the system relies on statusline + passive only.
 Record the answer in the manifest `starts_window` with its evidence path (section 12 Q2).
 
@@ -452,7 +494,13 @@ How much of the alias's subscription quota one probe consumes (Q5): the experime
 
 - glm (run by lane g40swexp, 2026-11-03): one probe (`max_tokens` 8, prompt `ok`) at an idle 5 h entry made `nextResetTime` appear at probe time plus 5 h and utilization 1 %, unchanged at +60 s. A probe moves an idle account's reset clock, so branch B applies: probe only just before pick, never on a standing schedule. `starts_window: true`. Evidence: [starts-window/RESULT.md](../../docs/plans/evidence/2026-11-03-g40-agent-lane-quota/starts-window/RESULT.md), copy `project/plans/context/g40-starts-window-result.md`. It is also the evidence for treating `unknown` as `true` (20.3 rule 2).
 - minimax: PENDING. The window was in use at T0 (fixed 5 h grid, 87 % remaining), so no probe was sent; a retry is scheduled for 20:03Z. `starts_window` stays `unknown` (treated as true) until it lands.
+
+> Amended 2026-11-04 (d-2d6a93aa): minimax leans `false` at medium confidence only, so it stays on-demand until read-only window-start evidence reaches `high`; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 - Claude: not run (needs an idle alias); until it runs the Claude manifest keeps `starts_window: unknown`.
+
+> Amended 2026-11-04 (d-2d6a93aa): Claude stays `unknown`, so on-demand before pick; the experiment now only decides whether periodic probing can ever be enabled; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 
 ## 20. Provider-neutral contract and adapter manifests
 
@@ -541,6 +589,9 @@ One manifest per provider, a data file (proposed path `scripts/quota-adapters/<p
 Rules:
 1. Capture modes are listed in cost order, cheapest first: `passive` (parse normal run output), then `endpoint` (zero-token endpoint or header), then `tinyprobe` (spends tokens: the manifest states the exact argv template and the per-call cost), then `fallback` (a local counter against the plan's published limit, labelled `estimated`, plus the 429 cooldown). The runtime tries them in that order and stops at the first that yields a fresh window; it never calls a more expensive mode while a cheaper one produced a fresh observation (the `skip if recent` rule of 19.6 generalised).
 2. `starts_window` is `true | false | "unknown"`, with the evidence path when not unknown. `unknown` is treated as `true` for any decision (conservative; the glm measurement, 19.8, is the evidence): when an operator enables probing (`quota_probe=stale`, which is off by default whatever this field says, 5.3), probes run only before pick, never on a standing schedule (19.6 branch B). Only `false` with evidence makes `scheduled` available.
+
+> Amended 2026-11-04 (d-2d6a93aa): "which is off by default whatever this field says" and "never on a standing schedule" are replaced by the per-provider default; only `false` with `high` confidence and evidence makes periodic probing the default; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+
 3. `credential_ref` holds a REFERENCE only, never a value. `kind` is `file` (a path template under the accounts dir) or `env` (`{"kind":"env","name":"<VAR>","file":"<env-file path template>"}`: the NAME of an environment variable, pattern `^[A-Z0-9_]{1,64}$`, plus the path template of the file that defines it). The checker rejects a `file` ref that is not a path template (no scheme, no `=`, no token-shaped string, no absolute path outside the accounts dir and the matrix-listed provider dirs) and an `env` ref whose name is followed by `=` and a value or does not match the pattern. The adapter reads the credential through the existing wrapper path; the manifest checker and the reporter never open it.
 4. `token_lifetime`: `{days, evidence}`; `days: null` means unknown and suppresses expiry warnings for that provider.
 5. `visibility` is the highest level this manifest can reach with VERIFIED captures: L0 nothing is visible; L1 only a refusal (429 or equivalent) is visible; L2 a utilization percentage is visible but without reset times for every window; L3 full `windows[]` with reset times. A capture marked `"verified": false` never counts toward the level and is disabled at runtime. The record's `visibility` equals the highest level actually produced by the last observation, so a degraded adapter shows as degraded.
@@ -752,3 +803,54 @@ One rule set (5.2, 11): peer rows by hub time, the local row by the local clock,
 - The own mirror keeps `invalid`, refusal and placeholder rows. When the hub copy expires (`hub_received_at + 6 h`), the reporter pushes the row again with its ORIGINAL `observed_at` and `token_state_at` (placeholders have none and keep none) in a frame with a fresh `sent_at`. Windows stay subject to the 6 h reader rule by `observed_at`, so a re-push never makes old data look fresh. It is an ordinary write: no extra "re-push" field.
 - Rate: about one write per alias per 6 h. This is not a heartbeat: it fires only when the hub copy is missing, carries no new observation and never refreshes a freshness stamp. Rows whose windows are all older than 6 h and that carry no non-aging state are not re-pushed (18.2 rule 4).
 - Hub behaviour, confirmed by fleet (`1949b11` section 4): only `observed_at > sent_at + 5 s` is refused; there is no "too old" floor; after a re-push the hub expiry restarts but `observed_at_hub` keeps the old value.
+
+## Amendment 2026-11-04: probe policy per provider (operator decision d-2d6a93aa)
+
+Status: decision recorded; the build is a follow-up (BL-0375, after BL-0372 Tasks 0-3) on the P4 probe path, which is still gated off. Nothing in this amendment is implemented. Source: operator decision d-2d6a93aa, relayed by the PM on 2026-11-04.
+
+### A.1 The decision
+
+For the probe strategy the operator chose "per provider" (follow each provider's own setting). The probe default is decided by the adapter manifest's `starts_window`:
+
+- `starts_window = false` (confirmed by evidence): a periodic probe, about once every 30 minutes, and only when the alias has no newer observation.
+- `true` or `unknown`: on-demand probe only, that is, just before pick and only when the data is stale.
+- When new evidence arrives, the setting flips automatically through the manifest; no new operator decision is needed.
+
+For Claude, the PM ruled that this decision supersedes 5.3 and section 19: `unknown` means an on-demand probe before pick when the data is stale. The reason on the operator's card: the alias is about to be used anyway, so starting its clock is acceptable.
+
+### A.2 Mapping from manifest to default behaviour
+
+| `starts_window` | confidence | default probe behaviour |
+|---|---|---|
+| `false` | `high`, with evidence | periodic, about every 30 minutes, only without a newer observation; on-demand before pick still applies |
+| `false` | `low` or `medium` | on-demand only |
+| `true` | any | on-demand only |
+| `unknown` | any | on-demand only |
+
+Unchanged by this amendment: a tight alias (utilization at or above 0.90) is never probed, a cooling or pinned run never probes, at most one probe spawn per `run` (N14, N76), and `scheduled` stays rejected for Claude and for any manifest that is not confirmed `false`.
+
+### A.3 The "confirmed" threshold
+
+The threshold lives in the manifest. Proposed (provisional) field: `starts_window_confidence: low|medium|high`. Only `starts_window: false` plus `starts_window_confidence: high` plus an evidence path counts as confirmed. The field name and values are provisional (PM agreed) and are settled by the build round. The manifest checker (N27 family) must reject `false` + `high` without evidence.
+
+### A.4 Current state of the three providers
+
+| Provider | `starts_window` | confidence | resulting behaviour |
+|---|---|---|---|
+| glm | `true` (19.8, measured) | n/a | on-demand only |
+| minimax | leans `false` | `medium` | on-demand until read-only window-start evidence reaches `high` |
+| Claude | `unknown` | n/a | on-demand only |
+
+### A.5 Residual
+
+An on-demand probe may start an alias's window, and `pick` then refuses that alias (for example, the probe shows it is tight). The PM accepts this risk; severity minor.
+
+### A.6 Red-light cases for the build
+
+- A provider whose `starts_window` is `unknown` or `true` must never be scheduled for a periodic probe.
+- A provider with `starts_window = false` but confidence below `high` (or no evidence) must be probed on-demand only.
+- Flipping the manifest evidence from `unknown` to confirmed `false` flips the default to periodic with no config edit; flipping back reverses it.
+
+### A.7 Sections touched
+
+Each of these carries a one-line `Amended 2026-11-04 (d-2d6a93aa)` note pointing here; original text is unchanged: 2.5 (Global Constraints bullet), 5.3, 10, 12 Q2, 13 P4, 14 N13 and N66, 15 mitigation (b), 19.1, 19.6 A and B, 19.8, 20.3 rule 2.

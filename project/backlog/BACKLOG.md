@@ -21,7 +21,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 還不知道真實 dispatch 下 json 與 stream-json 兩種輸出格式的 result 位元組是否一致；這是 G40 agent lane 被動觀測的前提。要用真實 dispatch 量測，PM 目前停車中。
 - **Impact**: 前提沒確認就做被動觀測，兩種格式若不一致，觀測到的結果會對不上。
-- **Trigger**: Tasks 0-3 已於 05a70bf82 合併；Tasks 4-5 停在 operator card d-2a19fdb5，等已註冊的 alias；PM 以 bl-ap-sj45 追蹤
+- **Trigger**: 3.0.0 之後；Tasks 0-3 已於 05a70bf82 合併；Tasks 4-5 停在 operator card d-2a19fdb5，等已註冊的 alias；PM 以 bl-ap-sj45 追蹤
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: PM 2026-11-04 ordering message
@@ -34,7 +34,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: mirror 鎖優先用 flock 指令，沒有時改用 perl；標準 macOS 沒有 flock 指令，perl 這條路徑沒在 macOS 上跑過。
 - **Impact**: macOS 主機上若 perl 路徑壞掉，mirror 寫入會失敗並在 status 顯示 lock_helper，不會寫壞資料。
-- **Trigger**: 第一次在 macOS 主機跑 G40 mirror 時
+- **Trigger**: 3.0.0 之後；第一次在 macOS 主機跑 G40 mirror 時
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: BL-0374 結案時留下的後續（cd7f28002）
@@ -132,7 +132,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 一個專案的工作要派到另一個專案的程式庫去做時，目前沒有規則說明該用哪個專案的工作樹、標記檔與交接文件。當初規劃工作樹位置規則時，刻意把這一項延後。 (draft)
 - **Impact**: 跨專案派工時各 session 可能各做各的、交接位置不一致；平常很少遇到。 (draft)
-- **Trigger**: the first real cross-repo dispatch that goes wrong (worktree, marker or handoff location disagrees)
+- **Trigger**: 3.0.0 之後；the first real cross-repo dispatch that goes wrong (worktree, marker or handoff location disagrees)
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: worktree-placement gap 5, deferred by the plan (D12), 2026-10-12
@@ -149,7 +149,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-05 01M45R4M3V0999MB5HEV8E7R84
 - **Problem**: hangar 的 claude 工作階段反映：預覽與審查伺服器應向 lab-ingress 登記，而不是各自開 0.0.0.0 的臨時埠。目前審查伺服器只綁本機 127.0.0.1，沒有登記機制。 (draft)
 - **Impact**: 其他機器想看預覽時只能自己想辦法；原定版本已不會出貨，需擁有者重訂時程並與 hangar 確認。 (draft)
-- **Trigger**: mods shipped with 3.0.0 AND hangar lab-ingress v2 `lab preview` decided
+- **Trigger**: 3.0.0 之後；mods shipped with 3.0.0 AND hangar lab-ingress v2 `lab preview` decided
 - **Trigger-Type**: peer
 - **Effort**: M
 - **Source**: fleet `01M45R3JWAVVZ5WDTQ4M89A503` from hangar--claude-2 (2026-10-05, on cookys' request); replied `01M45R4M3V0999MB5HEV8E7R84`
@@ -166,7 +166,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-09-11 session 587b795f:2936
 - **Problem**: <host> 回報：agy 改用 stream-json 輸入雖提高了內容上限，但超過上限後會無聲失敗而不報錯。我方已在本機驗證屬實，目前仍保留硬性上限檢查。 (draft)
 - **Impact**: 若有人移除上限檢查，超長內容會無聲出錯；現行檢查已擋住，只需保留該原則。 (draft)
-- **Trigger**: the next agy-rail dispatch refused by `agy_argv_ceiling_assert`, or any work that proposes routing `dispatch-review.sh` / `dispatch-hetero.sh` / `dispatch-author.sh` through stream-json.
+- **Trigger**: 3.0.0 之後；the next agy-rail dispatch refused by `agy_argv_ceiling_assert`, or any work that proposes routing `dispatch-review.sh` / `dispatch-hetero.sh` / `dispatch-author.sh` through stream-json.
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: peer report from <host> 2026-09-11, re-derived locally the same day with four probes; the since-removed `lib/agy-argv-ceiling.sh` guard, callers at…
@@ -180,7 +180,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 在其他專案使用 autopilot 學到、屬於 autopilot 的專案知識，沒有路徑回灌：學習技能只寫到該專案，提煉技能又排除 autopilot。同儕回報的流程（先回覆、再登 BACKLOG）不涵蓋這類知識。
 - **Impact**: 其他專案學到的教訓會流失，autopilot 本身讀不到；目前只有一個案例（n=1），所以只是登記，還沒動工。
-- **Trigger**: A second instance of a lesson learned while using autopilot on another project that belongs in autopilot's own skills/references and has nowhere to go.
+- **Trigger**: 3.0.0 之後；A second instance of a lesson learned while using autopilot on another project that belongs in autopilot's own skills/references and has nowhere to go.
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: knowledge-routing fix set, foreman first-pass review (2026-08-24)
@@ -197,7 +197,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-08-25 session 61892959:1108
 - **Problem**: 其他專案經 peer 通道要求新增「同儕協調」技能，讓多個 session 互相派工、溝通有統一做法。兩輪異質審查已裁定要做，但要先在各機器跑完實測才能動工。 (draft)
 - **Impact**: 沒有此技能時，各 session 自行摸索協調方式，容易踩重複的坑。 (draft)
-- **Trigger**: The R5 spike list below comes back with dated, per-machine results. Do not author the
+- **Trigger**: 3.0.0 之後；The R5 spike list below comes back with dated, per-machine results. Do not author the
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: cross-repo request via peer relay, 2026-08-24/25; ruled by two-round heterogeneous panel
@@ -211,7 +211,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: 擁有者要求 mods 介面能顯示「代理替你做的決定」提醒。目前沒有任何地方記錄這類決定，所以介面無從顯示；要先做記錄寫入，再做監看，最後才是顯示。 (draft)
 - **Impact**: 擁有者想看到代理的決定卻看不到；屬新功能，排在 mods 隨 3.0.0 發布之後。 (draft)
-- **Trigger**: after mods ship with 3.0.0
+- **Trigger**: 3.0.0 之後；after mods ship with 3.0.0
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: owner request and C4 research, 2026-10-04
@@ -225,7 +225,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: mods/live 介面的「最近對話」區塊，群組只能用滑鼠點開；在 tmux 裡用鍵盤無法移到群組並展開，按 Enter 反而觸發前面的切換分頁按鈕。 (draft)
 - **Impact**: 只用鍵盤或 ssh 的使用者無法展開群組；擁有者若要用鍵盤才需處理。 (draft)
-- **Trigger**: Claude Code 支援 pane 內非分頁 Button 的鍵盤焦點或 hotkey 時
+- **Trigger**: 3.0.0 之後；Claude Code 支援 pane 內非分頁 Button 的鍵盤焦點或 hotkey 時
 - **Trigger-Type**: peer
 - **Effort**: S
 - **Source**: now-recent-turns screenshot run, merge `82d34da4`, 2026-10-12
@@ -253,7 +253,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: 考試登記機制要全部搬到 llm-playground，不維護多份；由 dyno 產出一份 JSON 給 autopilot 綜合評估，至少含每小時解題數、資格、通過率、花費。
 - **Impact**: 兩邊各記一份會不一致，排席位時看到的數字對不上。
-- **Trigger**: llm-playground 回報 intake 流程後，由 owner 確認新的 P5–P7 範圍。
+- **Trigger**: 3.0.0 之後；llm-playground 回報 intake 流程後，由 owner 確認新的 P5–P7 範圍。
 - **Trigger-Type**: peer
 - **Effort**: M
 - **Source**: owner, 2026-10-15
@@ -267,7 +267,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: autopilot 同時含異質引擎（panel、discuss、plan review、code review）、軟體開發流程、實驗性功能，使用者難分辨哪些是核心。拆法還沒定。
 - **Impact**: 不分組只是說明與目錄較雜，沒有功能影響；使用者要分辨用途時較費力。
-- **Trigger**: owner 重新提起分組，或新增的技能與腳本再次難以歸類
+- **Trigger**: 3.0.0 之後；owner 重新提起分組，或新增的技能與腳本再次難以歸類
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: owner, 2026-10-18（放棄 tier 欄位時順帶提出，以後再說）
@@ -281,7 +281,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: 圓桌第一階段要把幾場手動開過的討論整理成可重複使用的技能，目前只有書面計畫，技能還沒寫。
 - **Impact**: 每次討論仍得手動組場，前面幾輪累積的做法無法沉澱成固定流程。
-- **Trigger**: three more manual rooms run under the Phase 0 protocol, each with an evidence dir, OR the owner asks for the skill by name
+- **Trigger**: 3.0.0 之後；three more manual rooms run under the Phase 0 protocol, each with an evidence dir, OR the owner asks for the skill by name
 - **Trigger-Type**: owner
 - **Effort**: L
 - **Source**: original operator 2026-09-19 Phase 0 ("值,先詳細寫成 plan 留 backlog,我們應該多經歷幾輪再來繼續"); restored 2026-10-19; dropped by 5f3aa3b1d
@@ -312,7 +312,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: 掛鉤與執行環境支援表各格多數仍未以實際觸發驗證（證據檔只有一筆打包紀錄，沒有實際觸發）。另需 owner 決定：表只收我們自己註冊的掛鉤，grok 與 agy 的原生事件證據是否擴充進來。
 - **Impact**: 矩陣上的「支援」多數仍未被實際觸發證明；原生事件層也沒有證據列，grok 與 agy 的掛鉤支援只能靠散文記載。
-- **Trigger**: the next hook registered on a second harness, a harness-maintenance run that finds a hook-event claim older than 60 days, or the owner deciding whether the matrix should accept native-event (grok/agy) evidence rows
+- **Trigger**: 3.0.0 之後；the next hook registered on a second harness, a harness-maintenance run that finds a hook-event claim older than 60 days, or the owner deciding whether the matrix should accept native-event (grok/agy) evidence rows
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: owner 2026-09-07 dirty-tree hook; restored 2026-10-19; dropped by 061cc11c7; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
@@ -340,7 +340,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 監看器記錄的專案根目錄清單沒有上限。其餘強化已修完，這項留給後續階段。
 - **Impact**: 長時間追蹤很多專案時，這份清單會一直變大。
-- **Trigger**: P3 start
+- **Trigger**: 3.0.0 之後；P3 start
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: mods P1a reviews, 2026-10-04; restored 2026-10-19; dropped by a1cc180cb; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
@@ -354,7 +354,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: 交接時讀取壓縮快照，以及流程開始時自動寫任務卡，這兩件還沒做，要等評測與擁有者裁決。
 - **Impact**: 交接仍不會讀快照，任務卡也不會在流程開始時自動寫入。
-- **Trigger**: P3: handoff reads the snapshot and dev-flow calls task-card, after guidance and eval
+- **Trigger**: 3.0.0 之後；P3: handoff reads the snapshot and dev-flow calls task-card, after guidance and eval
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: original backlog row; restored 2026-10-19; dropped by 0a9c9efac; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
@@ -402,7 +402,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 信任檢查剩兩件事：確認模式下 owner 在面板回覆後，還得再跑一次答覆指令才算數；計畫第五節對紀錄驗證的用詞與實作不符。其餘兩項已修。
 - **Impact**: 前者要改技能說明才能自動化，後者是文件與行為不一致。
-- **Trigger**: next guidance eval allowed to edit the engine-onboarding skill text, or the next change to the P6 plan
+- **Trigger**: 3.0.0 之後；next guidance eval allowed to edit the engine-onboarding skill text, or the next change to the P6 plan
 - **Trigger-Type**: event
 - **Effort**: S
 - **Source**: hetero-review p6trust g2
@@ -419,7 +419,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-21 01M5EWEHPTPD4F0P6KAP5VDCAH；2026-10-21 01M5EX9883PHTTG3N2HPE08CG6；2026-10-21 01M5EY2GX2JCMJB1VX3TMF81EX
 - **Problem**: 跨工具的長駐席位沒有共用的用量紀律。交接時機、讀檔、輪詢、子代理與回覆節奏都靠各席自己拿捏。
 - **Impact**: 主執行緒會累積到十億級用量。壓縮後仍比新執行緒肥，成本與延遲都下不來。
-- **Trigger**: the owner decides whether to build P1-P3 of the concurrency plan.
+- **Trigger**: 3.0.0 之後；the owner decides whether to build P1-P3 of the concurrency plan.
 - **Trigger-Type**: owner
 - **Effort**: M
 - **Source**: PEER llm-playground claude-4 2026-10-21
@@ -504,7 +504,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 整理了一份給 Claude Code 上游的回報草稿，交 owner 決定是否送出。內容是同為 2.1.309 時觀察到的四個行為問題。
 - **Impact**: 不回報的話，這些問題會繼續影響長時間工作。
-- **Trigger**: owner decides whether to send the draft
+- **Trigger**: 3.0.0 之後；owner decides whether to send the draft
 - **Trigger-Type**: owner
 - **Effort**: XS
 - **Source**: bldone9 2026-10-24 observations on CC 2.1.309
@@ -533,7 +533,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-26 fleet
 - **Problem**: 3.0.0-alpha.6 在 agy 1.4.7 安裝驗證失敗（3 個錯誤、4 個警告，載入的 agent 為 0）：三個 agent 檔的工具欄位格式不對，另有檔案不被載入或被截斷。
 - **Impact**: agy 上裝不起這個 plugin；agy 審查目前走 cleanroom，不受影響。
-- **Trigger**: someone needs the autopilot plugin itself installed on agy, or agy reviewers stop using cleanroom
+- **Trigger**: 3.0.0 之後；someone needs the autopilot plugin itself installed on agy, or agy reviewers stop using cleanroom
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: PEER-REPORTED <host> (peace--claude-2) 2026-10-26, agy 1.4.7, 3.0.0-alpha.6
@@ -550,7 +550,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-10-26 fleet
 - **Problem**: peer 回報編排者自己拖慢進度的七處：交接檔不分 owner 指示與前任判斷、停滯偵測看不到只改計畫不合入、DOA 內仍去問、審查迴圈不隨嚴重度縮編等。
 - **Impact**: 流程多花輪次與 owner 時間；指引類改動要先有 ON/OFF 評測。
-- **Trigger**: an ON/OFF eval slot opens for items 1, 5, 7, the item 3 DOA-table rows and the top-stale wiring (efficiency class, jumps the queue)
+- **Trigger**: 3.0.0 之後；an ON/OFF eval slot opens for items 1, 5, 7, the item 3 DOA-table rows and the top-stale wiring (efficiency class, jumps the queue)
 - **Trigger-Type**: owner
 - **Effort**: L
 - **Source**: PEER-REPORTED <host> (peace--claude) 2026-10-26
@@ -619,7 +619,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: owner
 - **Problem**: 選出幾百支套件時，看不出是哪個改動檔把它們拉進來的，也就不知道該先處理哪個。
 - **Impact**: 每次都要手動逐檔試跑才能找出灌水來源，這次調研就花了大量時間。
-- **Trigger**: work can start now
+- **Trigger**: 3.0.0 之後；work can start now
 - **Trigger-Type**: ready
 - **Effort**: S
 - **Source**: owner request 2026-10-29 (suite speed research)
@@ -872,7 +872,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-11-01 01M69BJE67SRNZD4C6XN9F6Z0G
 - **Problem**: 想在 band 上直接看到 fleet 的狀態，現在要開終端打指令才看得到。
 - **Impact**: 要看在線的 peer、未讀訊息與待核准數量，都得離開畫面去打指令。
-- **Trigger**: after 3.0.0-alpha.7 ships, or when the BL-0356 plan is written
+- **Trigger**: 3.0.0 之後；after 3.0.0-alpha.7 ships, or when the BL-0356 plan is written
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: PEER-REPORTED codeforge 2026-11-01; owner chose autopilot-drawn tab on card d-d99e2d99
@@ -889,7 +889,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reply**: 2026-11-01 01M6A95N5HQ26507XPERC9JFVJ
 - **Problem**: owner 在 codeforge 的卡片 d-7b0f7a4a 選 A：速度整包改由 autopilot 量測並繪製，含分頁列的 ϟ 標籤、速度欄（平均、最佳、最新、首字、走勢）與最近請求表。forge-stats 之後只畫 Ferris、寵物、記憶與大腦。
 - **Impact**: 移交前 live mod 仍讀 codeforge 的 keyed Box；我們上線並把 sha 告訴 codeforge 後，他們才移除自己的速度程式，中間沒有空窗。
-- **Trigger**: after 3.0.0-alpha.7 ships (the mods path moves during the relayout, same reason as BL-0358)
+- **Trigger**: 3.0.0 之後；after 3.0.0-alpha.7 ships (the mods path moves during the relayout, same reason as BL-0358)
 - **Trigger-Type**: event
 - **Effort**: M
 - **Source**: PEER-REPORTED codeforge 2026-11-01 (fleet message), owner card d-7b0f7a4a

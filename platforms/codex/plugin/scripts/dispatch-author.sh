@@ -53,6 +53,9 @@
 #       # explicit mode (non-strict roster path)
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
 #       # active `/l6` contract: strict roster selection only.
+#   --role-kit <dir> (claude-native only; any other runner is refused): <dir>/role.md is the child's --system-prompt,
+#   <dir>/plugin its --plugin-dir (when present), the one-line <dir>/tools its --tools (`none` = today's no-tools
+#   posture). Validated before any spawn; references/hetero-dispatch.md "Role kit". Off unless given.
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file> --bin <path>
 #       # test seam only: override the runner binary for seam/fake tests.
 #   [--context-window off|warn|block] on any mode: pre-dispatch context-window gate (default:
@@ -150,6 +153,7 @@ if declare -F runs_tmpdir_ensure >/dev/null 2>&1; then runs_tmpdir_ensure || tru
 [ -r "$_AUTHOR_SELF_DIR/lib/context-window.sh" ] && . "$_AUTHOR_SELF_DIR/lib/context-window.sh" || true
 
 CONTEXT_WINDOW_GATE=""   # off|warn|block; empty ⇒ AUTOPILOT_CONTEXT_WINDOW_GATE, else block
+ROLE_KIT_DIR=""   # --role-kit (lib/role-kit.sh)
 RUNNER=""; MODEL=""; PROMPT_FILE=""; EFFORT="xhigh"; EFFORT_EXPLICIT=0; TIMEOUT="5m"; BIN=""; ENDPOINT=""
 REPO_ROOT=""; STRICT_ROSTER=0; STRICT_CONTRACT=0; CONTRACT_FILE=""; CONTRACT_FILE_SUPPLIED=0
 TIMEOUT_SUPPLIED=0
@@ -169,6 +173,7 @@ while [[ $# -gt 0 ]]; do
     --prompt-file)  PROMPT_FILE="${2:-}"; shift 2 ;;
     --effort)      EFFORT="${2:-}"; EFFORT_SUPPLIED=1; EFFORT_EXPLICIT=1; shift 2 ;;
     --timeout)     TIMEOUT="${2:-}"; TIMEOUT_SUPPLIED=1; shift 2 ;;
+    --role-kit)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--role-kit requires a non-empty directory path" >&2; exit 2; }; ROLE_KIT_DIR="$2"; shift 2 ;;
     --bin)         BIN="${2:-}"; shift 2 ;;
     --context-window) CONTEXT_WINDOW_GATE="${2:-}"; shift 2 ;;
     --ledger)      LEDGER="${2:-}"; shift 2 ;;
@@ -185,7 +190,7 @@ while [[ $# -gt 0 ]]; do
     --polarity-verify-cmd) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-verify-cmd requires a non-empty value" >&2; exit 2; }; POLARITY_VERIFY_CMD="$2"; shift 2 ;;
     --polarity-assertion-artifact) { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--polarity-assertion-artifact requires a non-empty value" >&2; exit 2; }; POLARITY_ASSERTION_ARTIFACTS+=("$2"); shift 2 ;;
     --repo-root)    { [ $# -ge 2 ] && [ -n "$2" ]; } || { echo "--repo-root requires a non-empty value" >&2; exit 2; }; REPO_ROOT="$2"; shift 2 ;;
-    -h|--help)     sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)     sed -n '2,58p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -507,6 +512,7 @@ emit_result() {
 
   local verification_author_json
   verification_author_json="$(emit_verification_author)"
+  [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && extra_fields="${extra_fields:-}, \"role_kit\": $ROLE_KIT_JSON"
   printf '{ "runner": "%s", "model": "%s", "status": "%s", "raw_log": %s, "error": %s, "selection_source": "%s", "selection_path": %s, "verification_author": %s%s }\n' \
     "$(json_escape "$RUNNER")" "$(json_escape "$MODEL")" "$(json_escape "$status")" \
     "$raw_log_json" "$error_json" "$(json_escape "$SELECTION_SOURCE")" "$selection_path_json" \
@@ -866,6 +872,12 @@ if [[ "$STRICT_ROSTER" -eq 1 ]]; then
 fi
 
 [[ -n "$RUNNER" ]] || die_precondition "--runner is required (codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor)"
+# --role-kit: refused on every runner but claude-native, validated now (before any spawn).
+. "$_AUTHOR_SELF_DIR/lib/role-kit.sh"   # defaults only: no kit leaves ROLE_KIT_TOOLS empty and ROLE_KIT_EXTRA unset-equivalent
+if [ -n "$ROLE_KIT_DIR" ]; then
+  role_kit_refuse_unless_claude_native "$RUNNER"
+  role_kit_load "$ROLE_KIT_DIR"
+fi
 case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;; esac
 case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, qoderclicn, or cursor (got: $RUNNER)" ;; esac
 [[ -n "$MODEL" ]] || die_precondition "--model is required"
@@ -1078,6 +1090,8 @@ write_author_manifest() {
   # repo_identity (mods P1a R1): explicit --repo-root wins, else the cwd's toplevel.
   if declare -F repo_identity_resolve_fields >/dev/null 2>&1; then repo_identity_resolve_fields "${AUTHOR_REPO_ROOT_EXPLICIT:-}" "" || true; fi
   [ -n "${REPO_IDENTITY_FIELDS:-}" ] || REPO_IDENTITY_FIELDS='"repo_identity": null, "repo_identity_source": null'
+  local _rk_ident="$REPO_IDENTITY_FIELDS"
+  [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ] && _rk_ident="$_rk_ident, \"role_kit\": $ROLE_KIT_JSON"
   {
     printf '{ "schema": 1, "run_id": "%s", "role": "%s", "allow_narrative": null, "runner": "%s", "model": "%s", "branch": null, "base": null, "base_sha": null, "worktree": null, "lock_path": null, "log_path": "%s", "log_format": "%s", "aux_log": %s, "pid": %s, "scope_unit": null, "containment_planned": "scratch", "started_at": "%s", "started_epoch": %s, "prompt_file": "%s", "diff_file": null, "ledger": %s, "stage": %s, "ended_at": %s, "ended_epoch": %s, "final_status": %s, "parent_run_id": %s, "root_run_id": %s, "depth": %s, %s, "session_id": %s, "child_session_id": %s, "child_transcript": %s }\n' \
       "$(json_escape "$AUTHOR_RUN_ID")" "$role_tok" "$RUNNER" "$(json_escape "$MODEL")" \
@@ -1085,7 +1099,7 @@ write_author_manifest() {
       "$AUTHOR_STARTED_AT" "$AUTHOR_STARTED_EPOCH" \
       "$(json_escape "${PROMPT_FILE_ORIG:-$PROMPT_FILE}")" \
       "$ledger_json" "$stage_json" "$ended_json" "$endep_json" "$final_json" \
-      "$parent_json" "$root_json" "$depth_json" "$REPO_IDENTITY_FIELDS" \
+      "$parent_json" "$root_json" "$depth_json" "$_rk_ident" \
       "$(declare -F manifest_session_id_json >/dev/null 2>&1 && manifest_session_id_json || printf null)" \
       "$(declare -F manifest_child_session_json >/dev/null 2>&1 && manifest_child_session_json || printf null)" \
       "$(declare -F manifest_child_transcript_json >/dev/null 2>&1 && manifest_child_transcript_json || printf null)" > "$tmp"
@@ -1440,14 +1454,14 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     CNATIVE_WRAP_ERR="${RUNNER_ERR_FILE}.wrap"
     timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
       node "$_CNATIVE_ACCT_JS" run --purpose author --stdin "$PROMPT_FILE" --stdout "$RAW_LOG" --stderr "$RUNNER_ERR_FILE" --cwd "$CNATIVE_CWD" -- \
-      "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} \
+      "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "$ROLE_KIT_TOOLS" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} \
       2>"$CNATIVE_WRAP_ERR"
     RUNNER_EXIT=$?
     cat "$CNATIVE_WRAP_ERR" >> "$RUNNER_ERR_FILE" 2>/dev/null || true
     rm -f "$CNATIVE_WRAP_ERR"
   else
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} CLAUDE_CONFIG_DIR="$CNATIVE_CFG" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "" ${6:+--effort "$6"} ${7:+--settings "$7"} < "$4"' \
-    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} CLAUDE_CONFIG_DIR="$CNATIVE_CFG" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
+    _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
     RUNNER_EXIT=$?
   fi
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"

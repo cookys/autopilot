@@ -29,6 +29,9 @@ const ALLOW = [
   { file: 'lib/runtime-paths.js', line: 'if (require.main === module) {', reason: MAIN_GUARD },
 ];
 
+// The single lazy, test-only require a layout never loads (claude-account.js selftest). Exact file + exact specifier.
+const FIXTURE_EXEMPT = { file: 'claude-account.js', spec: './lib/account-fixtures/shim-install', reason: 'lazy test-only selftest fixture; never loaded by a layout' };
+
 const TOKEN = /\brequire\b|\bimport\s*\(|createRequire|module\.require/g;
 // Recognised forms, anchored at the token start: require('x') / require("x"), spaces allowed around the literal.
 const RECOGNISED = /^require\s*\(\s*(['"])([^'"`\\$]*)\1\s*\)/;
@@ -53,7 +56,7 @@ function closure(root, entries, allow = ALLOW) {
         if (ok && m[0] === 'require') {
           const spec = ok[2];
           if (/^\.{1,2}\//.test(spec)) {
-            if (spec.includes('account-fixtures')) continue; // lazy, test-only (claude-account.js selftest); never loaded by a layout
+            if (rel === FIXTURE_EXEMPT.file && spec === FIXTURE_EXEMPT.spec) continue;
             let p = path.resolve(path.dirname(f), spec);
             if (!fs.existsSync(p) && fs.existsSync(p + '.js')) p += '.js';
             if (!fs.existsSync(p)) { problems.push(`${rel}:${i + 1} -> missing target ${spec}`); continue; }
@@ -185,6 +188,28 @@ test('negative control: a require inside a string is red (the guard does not jud
     append(tmp, 'claude-account.js', 'const t = "say require(x)";');
     assert.throws(() => assertCovered(tmp, ENTRIES, readList()), /unrecognised/);
   });
+});
+
+test('negative control: a lookalike account-fixtures require is NOT exempt and must be in the list', () => {
+  tempCopy((tmp) => {
+    fs.writeFileSync(path.join(tmp, 'lib', 'account-fixtures-extra.js'), 'module.exports = {};\n');
+    append(tmp, 'claude-account.js', "function lazyExtra() { return require('./lib/account-fixtures-extra.js'); }");
+    assert.throws(() => assertCovered(tmp, ENTRIES, readList()), /missing from list: \[lib\/account-fixtures-extra\.js\]/);
+  });
+});
+
+test('mutation: the exemption widened back to includes() lets the lookalike through', () => {
+  const src = fs.readFileSync(__filename, 'utf8');
+  assert.ok(src.includes("if (rel === FIXTURE_EXEMPT.file && spec === FIXTURE_EXEMPT.spec) continue;"));
+  const wide = src.replace("if (rel === FIXTURE_EXEMPT.file && spec === FIXTURE_EXEMPT.spec) continue;", "if (spec.includes('account-fixtures')) continue;")
+    .replace("const SCRIPTS = __dirname;", `const SCRIPTS = ${JSON.stringify(SCRIPTS)};`);
+  const tmpFile = path.join(os.tmpdir(), `acct-layer-mut-${process.pid}.test.js`);
+  fs.writeFileSync(tmpFile, wide);
+  try {
+    const r = cp.spawnSync(process.execPath, ['--test', '--test-name-pattern=is NOT exempt', tmpFile], { encoding: 'utf8', env: Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== 'NODE_TEST_CONTEXT')) });
+    assert.notStrictEqual(r.status, 0, 'mutant must fail the lookalike control');
+    assert.match(r.stdout, /not ok|✖/);
+  } finally { fs.rmSync(tmpFile, { force: true }); }
 });
 
 test('negative control: literal builtin requires are recognised, not flagged', () => {

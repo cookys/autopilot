@@ -57,7 +57,7 @@ docs/                projects/ (active + archive), plans/, BACKLOG.md, CHANGELOG
 ## Contribution (autopilot-added)
 
 - **Plans go in `docs/plans/`** with date prefix (`YYYY-MM-DD-<name>.md`): background, design decisions, steps, acceptance criteria, risks, out-of-scope, open questions.
-- **Spike before assert**. Any cross-platform claim (env var, CLI subcommand, directory path) MUST be verified, by official-doc URL or by running the real tool, before it is written into reference material; full lesson in `references/multi-agent-portability.md`.
+- **Spike before assert**. Any cross-platform claim (env var, CLI subcommand, directory path) MUST be verified, by official-doc URL or by running the real tool, before it is written into reference material; the two-way lesson is in the `CLAUDE.md` Don't list.
 
 ---
 

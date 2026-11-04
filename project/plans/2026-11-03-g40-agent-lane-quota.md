@@ -223,7 +223,7 @@ Each courier writes only its own row (key includes `writer_courier`, 22.1) and t
 - Q1 With no recent run, does `five_hour` stay absent from the event (V3 cause)? It decides whether an idle alias shows `unknown` or `0`. Needs one operator-authorised comparison measurement (idle alias vs one used within 5 h).
 - Q2 Does one probe start the Claude 5-hour window clock? Gates Claude probing; stays `off` until answered (glm: yes, 19.8).
 
-> Amended 2026-11-04 (d-2d6a93aa): Q2 no longer gates Claude on-demand probing; it still gates any periodic probe for Claude, which needs `false` + `high` confidence + evidence.
+> Amended 2026-11-04 (d-2d6a93aa): Q2 no longer gates Claude on-demand probing (confirmed by PM); it still gates any periodic probe for Claude, which needs `false` + `high` confidence + evidence + a recorded Claude Q5.
 
 - Q3 Is the stream `result` line equivalent to the single json envelope (C2), and does `--verbose` change stderr? Gates the transparent transform.
 - Q4 Does the single-object `--output-format json` carry any quota field? (codeforge inference only.)
@@ -275,7 +275,7 @@ N1-N17 and N49-N90 are here; N18-N23 sit with the reporter (18.2), N24-N30 with 
 - N12 A `.credentials.json` in `<alias>/claude/` is still refused while `token-meta.json` beside the token is accepted; the helper never opens the token file (test with an unreadable token file).
 - N13 Probe disabled by default: with `quota_probe` unset a stale alias triggers zero spawns (counted by the shim).
 
-> Amended 2026-11-04 (d-2d6a93aa): N13 "unset means zero spawns" holds only until the P4 build; afterwards an unset `quota_probe` resolves per provider, and the zero-spawn case becomes an explicit `off` (to be re-pinned by the build).
+> Amended 2026-11-04 (d-2d6a93aa): N13 is re-pinned (PM ruling) to: a provider with `starts_window` `unknown` or `true` never has a periodic spawn; an unset `quota_probe` follows the manifest.
 
 - N14 A tight alias (>= 0.90) is never probed; a cooling or pinned run never probes.
 - N15 Probe timeout and 401 do not change the real call's outcome.
@@ -477,7 +477,7 @@ Let `d1 = resetsAt(E2) - t1` (seconds). Expected for a window started by the pro
 
 - A. Probe does NOT start the window (third row, confirmed by an independent observation): the manifest may say `starts_window: false`, which makes `quota_probe = "scheduled"` available to the operator (the recommended setting; the default stays `off`, 5.3). Under it, periodic probing of every enrolled alias that has a token on that host: every P = 60 minutes, but SKIP an alias when it already has an observation (any source) newer than N = 30 minutes, and skip when its last known utilization is at or above 0.90. Reasons for N = 30 min: half the probe period, so a busy alias (passive or statusline feeding it more often than every 30 min) is never probed, an idle one is probed about once an hour; and the CLI's emission condition for the event is UNVERIFIED (Q19), so nothing here relies on it: N = 30 min is a policy choice, half the probe period, far inside the 6 h hard staleness limit. Demand rule: probe only an alias that a `pick` consulted within the last 24 h or that `staleCandidates` returned, never an alias nobody asks about; and `scheduled` is not enabled until Q5 has a recorded quota share. Cost: at most 24 probes per such alias per day, about 0.08 USD API-equivalent per day (24 x 0.0034), plus the quota share Q5 must have measured.
 
-> Amended 2026-11-04 (d-2d6a93aa): the schedule is now about one probe per 30 minutes (replacing P = 60 and N = 30), and only for an alias with no newer observation; the demand rule and the 0.90 skip stay. The "`scheduled` is not enabled until Q5" condition and the "recommended setting, default stays `off`" wording are superseded by the per-provider default. Cost at 48 probes per alias per day is about 0.16 USD API-equivalent (48 x 0.0034), double the figure above; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
+> Amended 2026-11-04 (d-2d6a93aa): the schedule is now about one probe per 30 minutes (replacing P = 60 and N = 30), and only for an alias with no newer observation; the demand rule and the 0.90 skip stay. The "recommended setting, default stays `off`" wording is superseded by the per-provider default. The Q5 gate is KEPT, per provider (PM ruling): periodic probing starts only when the provider has `starts_window=false` + `high` + evidence AND that provider's own Q5 (quota cost of one probe) has a recorded share; on-demand probing is not limited by Q5. Cost at 48 probes per alias per day is about 0.16 USD API-equivalent (48 x 0.0034), double the figure above; see "Amendment 2026-11-04: probe policy per provider" at the end of this plan.
 
 - B. Probe STARTS or slides the window (first, second rows): `quota_probe = "stale"` is the only mode: probing happens only just before pick and only when the best observation of the candidate aliases is older than 60 minutes: `pick` asks `staleCandidates` (5.3), the wrapper probes at most the top 1 stale candidate it is about to use, never the others. The alias being picked is going to be used immediately anyway, so starting its window costs nothing it would not have paid. No background schedule. Unknown (idle) aliases are never probed speculatively.
 
@@ -822,7 +822,8 @@ For Claude, the PM ruled that this decision supersedes 5.3 and section 19: `unkn
 
 | `starts_window` | confidence | default probe behaviour |
 |---|---|---|
-| `false` | `high`, with evidence | periodic, about every 30 minutes, only without a newer observation; on-demand before pick still applies |
+| `false` | `high`, with evidence, and this provider's Q5 recorded | periodic, about every 30 minutes, only without a newer observation; on-demand before pick still applies |
+| `false` | `high`, with evidence, Q5 not yet recorded | on-demand only |
 | `false` | `low` or `medium` | on-demand only |
 | `true` | any | on-demand only |
 | `unknown` | any | on-demand only |
@@ -831,7 +832,7 @@ Unchanged by this amendment: a tight alias (utilization at or above 0.90) is nev
 
 ### A.3 The "confirmed" threshold
 
-The threshold lives in the manifest. Proposed (provisional) field: `starts_window_confidence: low|medium|high`. Only `starts_window: false` plus `starts_window_confidence: high` plus an evidence path counts as confirmed. The field name and values are provisional (PM agreed) and are settled by the build round. The manifest checker (N27 family) must reject `false` + `high` without evidence.
+The threshold lives in the manifest. Proposed (provisional) field: `starts_window_confidence: low|medium|high`. Only `starts_window: false` plus `starts_window_confidence: high` plus an evidence path counts as confirmed (PM accepted this extension of the evidence rule). An unset `quota_probe` follows the manifest. The field name and values are provisional (PM agreed) and are settled by the build round. The manifest checker (N27 family) must reject `false` + `high` without evidence.
 
 ### A.4 Current state of the three providers
 
@@ -845,9 +846,14 @@ The threshold lives in the manifest. Proposed (provisional) field: `starts_windo
 
 An on-demand probe may start an alias's window, and `pick` then refuses that alias (for example, the probe shows it is tight). The PM accepts this risk; severity minor.
 
+### A.5b Q5 gate and cost (PM ruling)
+
+The Q5 gate stays, counted per provider. Periodic probing for a provider starts only when both hold: (a) `starts_window=false` + `high` + evidence, and (b) that provider's Q5 (the quota cost of one probe) has a recorded share. This is an evidence gate in the spirit of the operator decision, not a reversal of it; on-demand probing is not subject to Q5. The roughly doubled periodic cost (48 probes per alias per day) is recorded only, with no limit set. When a provider's setting flips, the PM tells the operator.
+
 ### A.6 Red-light cases for the build
 
-- A provider whose `starts_window` is `unknown` or `true` must never be scheduled for a periodic probe.
+- A provider whose `starts_window` is `unknown` or `true` must never be scheduled for a periodic probe (this is the re-pinned N13: no periodic spawn for such a provider).
+- A provider with `false` + `high` + evidence but no recorded Q5 must never get a periodic spawn; its on-demand probe still works.
 - A provider with `starts_window = false` but confidence below `high` (or no evidence) must be probed on-demand only.
 - Flipping the manifest evidence from `unknown` to confirmed `false` flips the default to periodic with no config edit; flipping back reverses it.
 

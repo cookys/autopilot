@@ -92,6 +92,8 @@ Status: BL-0001 stage 2. The gate's test step runs this selector first (SKILL.md
 
 When the project turned the opt-in outcome stage on (`qc-gate-config` `outcome: warn` or `block`), the test step runs the selection with the two extra flags, `node scripts/affected-suites.js --base <ref> --head <sha> --run --record`, which writes one plain JSON record per pushed SHA at the git common dir under `autopilot/qc-runs/<full-sha>.json`. The pre-push hook then re-derives (selection recompute plus a re-run sample) via `scripts/check-test-outcome.js` and treats the record as a claim; the unsampled remainder is reported "claimed, not re-derived". A selector full result is reported NOT JUDGED and not blocked. Escape hatch `AUTOPILOT_QC_OUTCOME=off`; default off. Plan: `project/plans/2026-10-19-outcome-quality-gate.md`.
 
+Full suite when the selection is near-full (operator decision d-a62f4abc, 2026-11-04). For a merge to develop, when `node scripts/affected-suites.js` selects at least half of all suites, run the full suite on the merge tree, detached and in parallel (`node tools/migrate/suite-baseline.js run-all --jobs 6`, its stream stored with `suite-baseline.js record`), and merge only when it is green. Otherwise run the affected-suites selection as usual. The full suite before a release tag is unchanged. Why: the selector cannot see two kinds of dependency, a suite that copies scripts into its own throwaway layout and a test that reads the contents of a whole directory tree, and widening the selection by hand missed both on 2026-11-04.
+
 ## Prohibited Behaviors
 
 Test failure prohibitions: skip pre-existing, skip even 1 failure, commit before fixing, assume unrelated.

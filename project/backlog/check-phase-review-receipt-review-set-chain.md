@@ -16,3 +16,5 @@ alfred M2 first reviewed base..x with review set A. The fix delta added new file
 ## Red case
 
 A gap between the two sets' ranges must fail.
+
+Follow-up: `--chain` members are Mode A phase ids only; review-packet sets (`--packets`) are not yet supported as chain members and must be validated separately with `--packets`.

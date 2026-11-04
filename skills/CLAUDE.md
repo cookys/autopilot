@@ -1,6 +1,6 @@
 # skills/ - directory rules (Claude Code)
 
-Loaded when a session reads or edits a file under `skills/`. Root `CLAUDE.md` keeps the one-line versions of scorecard-first and mechanism-vs-guidance.
+Loaded when a session reads or edits a file under `skills/`. Root `CLAUDE.md` keeps the one-line versions of boy-scout, scorecard-first and mechanism-vs-guidance.
 
 ## Skill evolution rules
 

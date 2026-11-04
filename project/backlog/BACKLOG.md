@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0388 -->
+<!-- next-id: BL-0390 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1930,22 +1930,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: aa95f0ce3 full-suite triage, 2026-11-04 (PM ruling)
 - **Pointer**: project/backlog/affected-suites-copy-into-layout-deps.md
 
-### 拆分 autopilot 的入口文件
-- **Id**: BL-0383
-- **Status**: open
-- **Since**: 2026-11-04
-- **Origin**: peer
-- **Reporter**: PM（pm--claude）
-- **Report**: operator 的全艦隊入口文件健檢, 2026-11-04
-- **Reply**: none
-- **Problem**: 根目錄 CLAUDE.md 加 AGENTS.md 共 41.1 KB，10 個 checkout 都是這個量；5 個 par worktree 為 32.6 KB。全部超過 20 KB，每個 session 一開始就吃掉大量脈絡，重要規則也被埋在細節裡。
-- **Impact**: 每個 session 啟動就多背一大包文字，守則難找，容易漏看要緊的規則。
-- **Trigger**: PM 在 d5fu 之後派工
-- **Trigger-Type**: owner
-- **Effort**: L
-- **Source**: pm:knowledge/harness-entry-docs.md（pm repo 無 remote，無網址）
-- **Pointer**: project/backlog/entry-doc-split.md
-
 ### code-loop 收斂後 finalize 仍把已解決的發現留在 open_findings
 - **Id**: BL-0384
 - **Status**: open
@@ -2003,3 +1987,35 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: pm:knowledge/harness-entry-docs.md 規則 4（pm repo 無 remote，無網址）
 - **Pointer**: project/backlog/brief-reads-subdir-agents-md.md
+
+### autopilot CLAUDE.md 裡給使用端的規則從沒送到使用端
+- **Id**: BL-0388
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: BL-0383 入口文件拆分的即時注入測試, 2026-11-04
+- **Reply**: none
+- **Problem**: 即時測試顯示，把 autopilot 當 plugin 裝的使用端專案，不會載入 plugin 的任何 CLAUDE.md，根目錄和子目錄都一樣。所以 autopilot 根目錄或子目錄 CLAUDE.md 裡原本要給使用端 session 看的規則，從來沒送到過它們。
+- **Impact**: 使用端 session 看不到這些規則，可能做出違反規定的事，而 autopilot 這邊以為已經寫明。
+- **Trigger**: PM 派工；現在不做
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: BL-0383 live injection test (PM, 2026-11-04)
+- **Pointer**: project/backlog/consumer-rules-in-claude-md.md
+
+### 審查紀錄與被審的程式碼可能悄悄分歧（collect 範圍）
+- **Id**: BL-0389
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: BL-0383 入口文件拆分的審查經過, 2026-11-04
+- **Reply**: none
+- **Problem**: 審查迴圈的收集步驟從第 2 代起只審上一代之後的差異，即使指定了起點也一樣，而規格寫「審完整範圍」時不會有任何警告。BL-0383 的兩份平台入口文件因此跨三代都沒有席位看過，是有人拿規格對照 diff 才發現。
+- **Impact**: 審查紀錄寫「已審」，實際有檔案從沒被看過；與 BL-0384 同類，紀錄與實況不一致。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: BL-0383 review g1-g3 and entrydoc-full (PM, 2026-11-04; fix approved by PM)
+- **Pointer**: project/backlog/collect-scope-mismatch.md

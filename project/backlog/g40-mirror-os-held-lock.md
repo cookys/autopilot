@@ -15,3 +15,11 @@ An OS-held lock that cannot be taken away while the holder lives: flock or fcntl
 ## Red case
 
 A holder that stalls past the old hard cap while alive must keep the lock: a second writer gets mirror_lock_busy, and the stalled holder's rename never overwrites a newer publication.
+
+## Residual (PM ruling 2026-11-04, plan A.5)
+
+Old and new plugin versions can run side by side on one host for a short time; the old writer locks `<alias>.lock`, the new one `<alias>.oslock`, so they do not exclude each other. The mirror is per host and per user and the plugin updates host by host, so the overlap is short and local; the worst case is the already-accepted stale row. No compatibility shim was added (owner principle).
+
+## Built (BL-0374)
+
+OS flock on `<alias>.oslock`, held by a helper process (flock(1), then perl; neither: `write_failed` / `lock_helper`, visible in `status`). The perl fallback is UNVERIFIED on macOS, and stock macOS has no flock(1). Tests: `scripts/lib/account-observation-oslock.test.js` (red cases and a mutant negative control).

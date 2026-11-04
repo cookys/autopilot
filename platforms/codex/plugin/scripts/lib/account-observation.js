@@ -17,10 +17,11 @@
 // Results never echo an unvalidated string: a rejection carries a short fixed reason code only.
 // Mirror path: <live_dir>/quota/<provider>/<alias>.json, 0600 in a 0700 directory made through
 // runtime-paths.js ensurePrivateDir; <live_dir> is the caller's resolveLiveDir() base (liveDirOrNull below).
-// Writers touch only their own row, under <alias>.lock (O_EXCL; reclaimed only from a dead holder or after 120 s; 2 s wait).
+// Writers touch only their own row, under an OS flock on <alias>.oslock held by a helper process (never reclaimed from a live holder; 2 s wait).
 // Node >= 20.10, built-ins only.
 
 const fs = require('fs');
+const { spawn } = require('child_process');
 const path = require('path');
 const { readSmallFile } = require('./account-quota');
 const { ensurePrivateDir } = require('./runtime-paths');
@@ -70,8 +71,6 @@ const MS_KEY_RE = /(^|_)ms$/;
 
 const VIEW_MAX_BYTES = 65536;
 const LOCK_WAIT_MS = 2000;
-const EMPTY_LOCK_MS = 5000; // an empty or unparseable lock this old has no owner
-const LOCK_HARD_MAX_MS = 120000; // a lock older than this is reclaimable even if its pid answers (pid reuse)
 const CORRUPT_KEEP = 3;
 const LOCK_POLL_MS = 25;
 
@@ -386,115 +385,132 @@ function defaultSleep(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)
 
 function newNonce() { return `${process.pid}.${Math.random().toString(36).slice(2, 12)}.${Date.now()}`; }
 
-// { nonce, pid, ino, mtimeMs } of the lock file as it is now; null ONLY when it does not exist (ENOENT);
-// { error: <code> } for anything else (ELOOP for a symlink, EACCES, EISDIR for a directory ...): callers must not retry
-// that in a loop.
-function readLock(lockPath) {
+// --- per-alias lock: an OS-held flock owned by a helper child process (G40 BL-0374) --------------------------------
+// Node has no flock/fcntl and may not use native addons, so a small helper process takes `flock` on <alias>.oslock and
+// keeps it for as long as it lives. The kernel releases the lock when the helper dies, and the helper dies when this
+// process dies (its stdin pipe reaches EOF), so a crashed writer frees the lock at once and a LIVE writer, however long
+// it stalls, can never have the lock taken away: there is no age rule and no reclaim. Wire protocol over the helper's
+// stdout (an unlinked temp file whose fd the helper inherits, so the sync callers here can poll it without an event loop):
+//   first line `ok` (lock held) | `busy` (someone else holds it) | `error`; then one `ok` per `p` line written to its stdin
+//   (liveness ping); `q` releases the lock and answers `bye`.
+// Tools, in order: flock(1) (util-linux; absent from a stock macOS), then perl (core flock; /usr/bin/perl ships with macOS,
+// UNVERIFIED there). Neither: write_failed reason lock_helper. It never falls back to a lockfile with a reclaim rule.
+const HELPER_ACK_MS = 2000; // real-clock bound on the helper's answers (a sync caller cannot use the injected clock for IO)
+const HELPER_SH = [
+  'exec 9>>"$2" || { echo error; exit 0; }',
+  '"$1" -n 9; rc=$?',
+  '[ $rc = 1 ] && { echo busy; exit 0; }',
+  '[ $rc = 0 ] || { echo error; exit 0; }',
+  'echo ok',
+  'while read x; do',
+  '  if [ "$x" = q ]; then exec 9>&-; echo bye; exit 0; fi',
+  '  echo ok',
+  'done',
+].join('\n');
+const HELPER_PERL = [
+  'use Fcntl qw(:flock); $|=1;',
+  'open(F,">>",$ARGV[0]) or do { print "error\\n"; exit 0 };',
+  'flock(F,LOCK_EX|LOCK_NB) or do { print "busy\\n"; exit 0 };',
+  'print "ok\\n";',
+  'while (my $l=<STDIN>) { if ($l eq "q\\n") { close(F); print "bye\\n"; exit 0 } print "ok\\n"; }',
+].join('\n');
+
+function findTool(name) {
+  for (const dir of String(process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue;
+    const p = path.join(dir, name);
+    try { fs.accessSync(p, fs.constants.X_OK); if (fs.statSync(p).isFile()) return p; } catch (_) { /* next */ }
+  }
+  return null;
+}
+function helperSpec(lockPath) {
+  const flock = findTool('flock');
+  if (flock) return { cmd: '/bin/sh', args: ['-c', HELPER_SH, 'sh', flock, lockPath] };
+  const perl = findTool('perl');
+  if (perl) return { cmd: perl, args: ['-e', HELPER_PERL, lockPath] };
+  return null;
+}
+function ackLines(h) {
+  const buf = Buffer.alloc(4096);
+  let n = 0;
+  try { n = fs.readSync(h.ackFd, buf, 0, buf.length, 0); } catch (_) { return []; }
+  return buf.toString('utf8', 0, n).split('\n').filter((s) => s !== '');
+}
+function waitLines(h, count) {
+  const until = Date.now() + HELPER_ACK_MS;
+  for (;;) {
+    const l = ackLines(h);
+    if (l.length >= count) return l;
+    if (Date.now() >= until) return l;
+    defaultSleep(1);
+  }
+}
+function closeHelper(h, kill) {
+  if (kill) { try { h.child.kill('SIGKILL'); } catch (_) { /* gone */ } }
+  try { h.child.stdin.destroy(); } catch (_) { /* ignore */ }
+  try { fs.closeSync(h.ackFd); } catch (_) { /* ignore */ }
+}
+
+// One attempt: spawns a helper. Returns the held helper object, null when busy, throws lock_helper / lock_unreadable:<CODE>.
+function tryHelper(lockPath) {
+  const spec = helperSpec(lockPath);
+  if (!spec) throw new Error('lock_helper');
+  const ackPath = `${lockPath}.ack.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
+  let ackFd;
   try {
-    const fd = fs.openSync(lockPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
-    try {
-      const st = fs.fstatSync(fd);
-      if (!st.isFile()) return { error: 'EISDIR' };
-      let j = null;
-      try { j = JSON.parse(fs.readFileSync(fd, 'utf8')); } catch (_) { /* empty or half-written */ }
-      return { nonce: isObj(j) && typeof j.nonce === 'string' ? j.nonce : null, pid: isObj(j) && Number.isInteger(j.pid) ? j.pid : null, ino: st.ino, mtimeMs: st.mtimeMs };
-    } finally { fs.closeSync(fd); }
-  } catch (e) { return e && e.code === 'ENOENT' ? null : { error: (e && e.code) || 'EIO' }; }
+    ackFd = fs.openSync(ackPath, fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_APPEND, 0o600);
+    fs.unlinkSync(ackPath); // the fd is all either side needs; nothing is left in the directory
+  } catch (_) { if (ackFd !== undefined) { try { fs.closeSync(ackFd); } catch (__) { /* ignore */ } } throw new Error('lock_helper'); }
+  let child;
+  try { child = spawn(spec.cmd, spec.args, { stdio: ['pipe', ackFd, 'ignore'] }); } catch (_) { fs.closeSync(ackFd); throw new Error('lock_helper'); }
+  child.on('error', () => { /* a failed spawn shows as no pid below */ });
+  const h = { child, ackFd, stdinFd: child.stdin && child.stdin._handle ? child.stdin._handle.fd : undefined };
+  if (child.pid === undefined || typeof h.stdinFd !== 'number') { closeHelper(h, true); throw new Error('lock_helper'); }
+  child.unref();
+  child.stdin._handle.unref();
+  const first = waitLines(h, 1)[0];
+  if (first === 'ok') return h;
+  closeHelper(h, first !== 'busy');
+  if (first === 'busy') return null;
+  throw new Error('lock_helper');
 }
 
-// ESRCH means the process is gone; EPERM means it exists (another user). Same-host only, which a /run/user lock is.
-function pidGone(pid) {
-  try { process.kill(pid, 0); return false; } catch (e) { return !!(e && e.code === 'ESRCH'); }
-}
-
-// true when WE still hold it: same nonce AND same inode as when we took it.
-function holdsLock(lockPath, held) {
-  const cur = readLock(lockPath);
-  return !!cur && !cur.error && cur.nonce === held.nonce && cur.ino === held.ino;
-}
-
-// Takes the lock by linking a complete temp file ({ pid, nonce, t }) to the lock name. A lock is reclaimed only when its holder is GONE
-// (process.kill(pid, 0) says ESRCH) or when it is older than the hard cap (hardMaxMs, default 120 s: pid reuse), or when it is empty/unparseable and older than 5 s.
-// A live holder is waited for; waitMs without getting it is `busy` (null). Reclaiming renames the lock to a unique
-// name (atomic: one reclaimer wins) and checks the renamed file is the lock that was judged dead; if it is a
-// different lock it is put back under its own name (link, never overwriting), and if the name is taken the renamed
-// file is left in place and reported through o.log. Returns { nonce, ino } or null.
-// opts: { now() -> ms, sleep(ms), waitMs, hardMaxMs, log(msg), hooks: { beforeLink(), beforeReclaim(), beforePublish() } } (hooks are test seams).
+// Takes the lock for lockPath. A live holder is waited for (polling a fresh `flock -n` every LOCK_POLL_MS on the injected
+// clock); waitMs without getting it is `busy` (null). Returns the held helper or null; throws on a missing/broken helper.
+// opts: { now() -> ms, sleep(ms), waitMs, hooks } (hooks are test seams).
 function acquireLock(lockPath, o) {
   const now = o.now || Date.now;
   const sleep = o.sleep || defaultSleep;
   const waitMs = o.waitMs === undefined ? LOCK_WAIT_MS : o.waitMs;
-  const hardMaxMs = o.hardMaxMs === undefined ? LOCK_HARD_MAX_MS : o.hardMaxMs;
-  const nonce = newNonce();
-  const deadline = now() + waitMs;
-  sweepLockTmp(lockPath, now(), hardMaxMs);
-  // The nonce is written COMPLETE into a temp file in the same directory, then linked to the lock name: link is
-  // atomic and fails with EEXIST when someone holds it, so a lock that exists always has its content.
-  const tmpLock = `${lockPath}.tmp.${nonce}`;
-  let ino;
-  const fd = fs.openSync(tmpLock, 'wx', 0o600);
-  try {
-    fs.writeSync(fd, JSON.stringify({ pid: process.pid, nonce, t: now() }));
-    ino = fs.fstatSync(fd).ino;
-  } finally { fs.closeSync(fd); }
-  try {
-    return acquireLoop(lockPath, tmpLock, { nonce, ino }, o, { now, sleep, deadline, hardMaxMs });
-  } finally { try { fs.unlinkSync(tmpLock); } catch (_) { /* ignore */ } }
-}
-
-// A leftover `<alias>.lock.tmp.*` older than the hard cap (a crash between create and link) is removed.
-function sweepLockTmp(lockPath, nowMs, hardMaxMs) {
-  const dir = path.dirname(lockPath);
-  const prefix = `${path.basename(lockPath)}.tmp.`;
-  let names;
-  try { names = fs.readdirSync(dir).filter((n) => n.startsWith(prefix)); } catch (_) { return; }
-  for (const n of names) {
-    try {
-      const full = path.join(dir, n);
-      if (nowMs - fs.lstatSync(full).mtimeMs > hardMaxMs) fs.unlinkSync(full);
-    } catch (_) { /* ignore */ }
+  // The lock file is created here, not by the helper: O_NOFOLLOW + 0600, so a symlink or directory at the name is refused.
+  try { fs.closeSync(fs.openSync(lockPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600)); } catch (e) {
+    throw new Error(`lock_unreadable:${e && /^[A-Z0-9_]{1,24}$/.test(e.code) ? e.code : 'EIO'}`);
   }
-}
-
-function acquireLoop(lockPath, tmpLock, held, o, c) {
-  const { now, sleep, deadline, hardMaxMs } = c;
-  const { nonce } = held;
+  const deadline = now() + waitMs;
   for (;;) {
-    if (o.hooks && typeof o.hooks.beforeLink === 'function') o.hooks.beforeLink();
-    try {
-      fs.linkSync(tmpLock, lockPath);
-      return held;
-    } catch (e) {
-      if (!e || e.code !== 'EEXIST') throw e;
-    }
-    const judged = readLock(lockPath);
-    if (judged && judged.error) throw new Error(`lock_unreadable:${judged.error}`); // never spin on a lock we cannot read
-    if (!judged) { // ENOENT: released while we looked; retry at once, but never past the deadline
-      if (now() >= deadline) return null;
-      continue;
-    }
-    const emptyAndOld = judged.nonce === null && now() - judged.mtimeMs > EMPTY_LOCK_MS; // leftover or foreign: no owner
-    const reclaimable = (judged.pid !== null && pidGone(judged.pid)) || now() - judged.mtimeMs > hardMaxMs || emptyAndOld;
-    if (reclaimable) {
-      if (o.hooks && typeof o.hooks.beforeReclaim === 'function') o.hooks.beforeReclaim();
-      const moved = `${lockPath}.stale.${nonce}`;
-      try { fs.renameSync(lockPath, moved); } catch (e) {
-        if (e && e.code === 'ENOENT') continue; // another reclaimer won
-        throw e;
-      }
-      const got = readLock(moved);
-      if (got && !got.error && got.nonce === judged.nonce && got.ino === judged.ino) { try { fs.unlinkSync(moved); } catch (_) { /* ignore */ } continue; }
-      try { fs.linkSync(moved, lockPath); fs.unlinkSync(moved); } catch (_) {
-        if (typeof o.log === 'function') o.log(`lock moved aside and left in place: ${path.basename(moved)}`);
-      }
-    }
+    const h = tryHelper(lockPath);
+    if (h) return h;
     if (now() >= deadline) return null;
     sleep(LOCK_POLL_MS);
   }
 }
 
-function releaseLock(lockPath, held) {
-  if (held && holdsLock(lockPath, held)) { try { fs.unlinkSync(lockPath); } catch (_) { /* ignore */ } }
+// true when the helper that owns the lock still answers: a dead helper means the lock is gone, so nothing may be published.
+function holdsLock(held) {
+  if (!held) return false;
+  const have = ackLines(held).length;
+  try { fs.writeSync(held.stdinFd, 'p\n'); } catch (_) { return false; }
+  const l = waitLines(held, have + 1);
+  return l.length > have && l[0] === 'ok';
+}
+
+// Releases the lock now (the helper drops its fd before answering `bye`); a helper that does not answer is killed.
+function releaseLock(held) {
+  if (!held) return;
+  let bye = false;
+  const have = ackLines(held).length; // counted BEFORE the write: the answer can land before the next read
+  try { fs.writeSync(held.stdinFd, 'q\n'); bye = waitLines(held, have + 1).includes('bye'); } catch (_) { /* helper gone */ }
+  closeHelper(held, !bye);
 }
 
 // The view envelope keys a writer understands; anything else means a newer writer made the file.
@@ -572,7 +588,7 @@ function keepCorrupt(file, dir, base) {
 // { ok: true, superseded: true }: not an error.
 // Codes: quota_invalid, live_dir_refused, dir_refused, target_invalid, view_unsupported, mirror_lock_busy,
 // view_too_large, write_failed.
-// opts: { courier, secrets, now, sleep, waitMs, hardMaxMs, log, hooks }.
+// opts: { courier, secrets, now, sleep, waitMs, log, hooks }; hooks (test seams): beforePublish, beforeRename.
 function writeLocalRow(liveDir, record, opts) {
   const o = opts || {};
   const courier = o.courier === undefined ? LOCAL_COURIER : o.courier;
@@ -592,11 +608,11 @@ function writeLocalRow(liveDir, record, opts) {
   if (st && st.isSymbolicLink()) return { ok: false, code: 'target_invalid', reason: 'symlink' };
   if (st && !st.isFile()) return { ok: false, code: 'target_invalid', reason: 'not_regular_file' };
 
-  const lockPath = path.join(dir, `${record.alias}.lock`);
+  const lockPath = path.join(dir, `${record.alias}.oslock`);
   let held;
   try { held = acquireLock(lockPath, o); } catch (e) {
-    const m = /^lock_unreadable:[A-Z0-9_]+$/.exec(e && e.message);
-    return { ok: false, code: 'write_failed', reason: m ? m[0] : 'lock' };
+    const m = /^(lock_unreadable:[A-Z0-9_]+|lock_helper)$/.exec(e && e.message);
+    return { ok: false, code: 'write_failed', reason: m ? m[0] : 'lock_helper' };
   }
   if (!held) return { ok: false, code: 'mirror_lock_busy' };
   let tmp = null;
@@ -638,7 +654,7 @@ function writeLocalRow(liveDir, record, opts) {
     const fd = fs.openSync(tmp, 'wx', 0o600);
     try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
     if (o.hooks && typeof o.hooks.beforePublish === 'function') o.hooks.beforePublish();
-    if (!holdsLock(lockPath, held)) return { ok: false, code: 'mirror_lock_busy' }; // lost the lock: do not publish
+    if (!holdsLock(held)) return { ok: false, code: 'mirror_lock_busy' }; // lost the lock: do not publish
     // monotonic guard: never replace a newer local observation with an older one, whatever raced
     const now2 = readSmallFile(file, VIEW_MAX_BYTES);
     if (now2.text !== undefined) {
@@ -651,6 +667,7 @@ function writeLocalRow(liveDir, record, opts) {
       const nowS = ((o.now || Date.now)()) / 1000;
       if (pb !== null && pb <= nowS + FUTURE_SKEW_S && (nb === null || pb > nb)) return { ok: true, path: file, reset: false, superseded: true };
     }
+    if (o.hooks && typeof o.hooks.beforeRename === 'function') o.hooks.beforeRename(); // test seam: the last step before the publish
     fs.renameSync(tmp, file);
     tmp = null;
     return { ok: true, path: file, reset };
@@ -658,7 +675,7 @@ function writeLocalRow(liveDir, record, opts) {
     return { ok: false, code: 'write_failed' };
   } finally {
     if (tmp) { try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ } }
-    releaseLock(lockPath, held);
+    releaseLock(held);
   }
 }
 
@@ -667,8 +684,7 @@ function writeLocalRow(liveDir, record, opts) {
 // then re-reads the view INSIDE the lock: only when the local courier's row is refusal-only (a refusal and no window) is
 // that one row removed; every other row is written back as the raw parsed JSON found on disk, and when no row is left
 // the file is unlinked. A local row that carries a window (a capture replaced it while we waited) is left alone. No lock
-// within the wait is `mirror_lock_busy`: nothing is removed by force. opts: writeLocalRow's (courier, now, sleep, waitMs,
-// hardMaxMs, log) plus hooks.beforeLock (test seam) and hooks.beforePublish.
+// within the wait is `mirror_lock_busy`: nothing is removed by force. opts: writeLocalRow's (courier, now, sleep, waitMs, log) plus hooks.beforeLock (test seam) and hooks.beforePublish.
 function removeLocalRefusal(liveDir, provider, alias, opts) {
   const o = opts || {};
   const courier = o.courier === undefined ? LOCAL_COURIER : o.courier;
@@ -681,11 +697,11 @@ function removeLocalRefusal(liveDir, provider, alias, opts) {
   try { st = fs.lstatSync(file); } catch (e) { if (e && e.code === 'ENOENT') return { ok: true, removed: false }; return { ok: false, code: 'target_invalid', reason: 'unreadable' }; }
   if (st.isSymbolicLink()) return { ok: false, code: 'target_invalid', reason: 'symlink' };
   if (!st.isFile()) return { ok: false, code: 'target_invalid', reason: 'not_regular_file' };
-  const lockPath = path.join(dir, `${alias}.lock`);
+  const lockPath = path.join(dir, `${alias}.oslock`);
   let held;
   try { held = acquireLock(lockPath, o); } catch (e) {
-    const m = /^lock_unreadable:[A-Z0-9_]+$/.exec(e && e.message);
-    return { ok: false, code: 'write_failed', reason: m ? m[0] : 'lock' };
+    const m = /^(lock_unreadable:[A-Z0-9_]+|lock_helper)$/.exec(e && e.message);
+    return { ok: false, code: 'write_failed', reason: m ? m[0] : 'lock_helper' };
   }
   if (!held) return { ok: false, code: 'mirror_lock_busy' };
   let tmp = null;
@@ -700,7 +716,7 @@ function removeLocalRefusal(liveDir, provider, alias, opts) {
     const rec = j.rows[at].record;
     if (!isObj(rec) || !isObj(rec.refusal) || (Array.isArray(rec.windows) && rec.windows.length > 0)) return { ok: true, removed: false };
     const rows = j.rows.filter((_, i) => i !== at);
-    if (!holdsLock(lockPath, held)) return { ok: false, code: 'mirror_lock_busy' };
+    if (!holdsLock(held)) return { ok: false, code: 'mirror_lock_busy' };
     if (o.hooks && typeof o.hooks.beforePublish === 'function') o.hooks.beforePublish();
     if (rows.length === 0) { fs.unlinkSync(file); return { ok: true, removed: true }; }
     tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
@@ -713,7 +729,7 @@ function removeLocalRefusal(liveDir, provider, alias, opts) {
     return { ok: false, code: 'write_failed' };
   } finally {
     if (tmp) { try { fs.unlinkSync(tmp); } catch (_) { /* ignore */ } }
-    releaseLock(lockPath, held);
+    releaseLock(held);
   }
 }
 

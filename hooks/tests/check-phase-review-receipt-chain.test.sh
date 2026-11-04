@@ -9,7 +9,10 @@ L="$TEST_TMP/ledger"
 mkdir -p "$R" "$L"
 g() { git -C "$R" "$@"; }
 g init -q; g config user.email t@example.com; g config user.name t
-echo base > "$R/a.txt"; g add a.txt; g commit -q -m b0; B0=$(g rev-parse HEAD)
+g config diff.renames true   # a user config that makes a plain git diff detect renames (the scripts must not depend on it)
+echo base > "$R/a.txt"
+mkdir -p "$R/.claude"; printf -- '- exclude_allowlist: vendor/dist/**\n' > "$R/.claude/review-loop-config.md"   # consumer allowlist, committed
+g add a.txt .claude/review-loop-config.md; g commit -q -m b0; B0=$(g rev-parse HEAD)
 g checkout -q -b work
 echo x > "$R/a.txt"; g commit -qam c1; X=$(g rev-parse HEAD)
 echo gap > "$R/a.txt"; g commit -qam c2; GAP=$(g rev-parse HEAD)
@@ -80,17 +83,39 @@ tailcase edit-B-file n.txt again 1 "chain tail: 'n.txt' changed after set 'B'"
 tailcase revert-to-base a.txt base 1 "chain tail: 'a.txt' changed after set 'B'"
 tailcase changelog CHANGELOG.md log 0 ""
 
-# Parity with Mode A: for each tail path, the chain verdict equals Mode A's verdict for set B alone moved past its head.
-mkdir -p "$R/.claude"; printf -- '- exclude_allowlist: vendor/dist/**\n' > "$R/.claude/review-loop-config.md"
-for pth in CHANGELOG.md package-lock.json platforms/x/y.js vendor/dist/z.txt late.txt a.txt n.txt src/app.js .claude/review-loop-config.md; do
+# Parity with Mode A, with the expected verdict pinned for each path (so both modes degrading together is caught).
+# The consumer allowlist (vendor/dist/**) is committed at b0, so it is part of the repo under test.
+parity() { # parity <path> <expected-rc> [mv-from]
   g reset -q --hard "$TIP"
-  mkdir -p "$(dirname "$R/$pth")"; [ -e "$R/$pth" ] && printf 'edit\n' >> "$R/$pth" || printf 'edit\n' > "$R/$pth"
-  [ "$pth" = ".claude/review-loop-config.md" ] || { g add -f "$pth"; g commit -qm "parity $pth"; }
-  node "$SCRIPT" --ledger "$L" --phase B --branch work --phase-base "$X" --repo-root "$R" >/dev/null 2>&1; MA=$?
-  chain A,B >/dev/null; MC=$?
-  assert_eq "$MC" "$MA" "parity: tail path '$pth': --chain verdict ($MC) equals Mode A's ($MA)"
-done
-g reset -q --hard "$TIP"; rm -rf "$R/.claude" "$R/vendor" "$R/platforms" "$R/package-lock.json" "$R/src"
+  mkdir -p "$(dirname "$R/$1")"
+  if [ -n "${3:-}" ]; then g mv "$3" "$1"; else { [ -e "$R/$1" ] && printf 'edit\n' >> "$R/$1" || printf 'edit\n' > "$R/$1"; }; g add -f "$1"; fi
+  g commit -qm "parity $1"
+  OUT_A=$(node "$SCRIPT" --ledger "$L" --phase B --branch work --phase-base "$X" --repo-root "$R" 2>&1); MA=$?
+  OUT_C=$(chain A,B); MC=$?
+  assert_eq "$MA" "$2" "parity: '$1'${3:+ (git mv ${3:-})}: Mode A exit is $2"
+  assert_eq "$MC" "$2" "parity: '$1'${3:+ (git mv ${3:-})}: --chain exit is $2"
+}
+parity CHANGELOG.md 0
+parity package-lock.json 0
+parity platforms/x/y.js 0
+parity vendor/dist/z.txt 0
+parity late.txt 1
+parity a.txt 1
+parity n.txt 1
+parity .claude/review-loop-config.md 1
+# the consumer row is what lets vendor/dist through: drop it from the working tree and the same move is refused by both
+g reset -q --hard "$TIP"; mkdir -p "$R/vendor/dist"; echo z > "$R/vendor/dist/z.txt"; g add vendor; g commit -qm vend
+mv "$R/.claude/review-loop-config.md" "$TEST_TMP/cfg.bak"
+node "$SCRIPT" --ledger "$L" --phase B --branch work --phase-base "$X" --repo-root "$R" >/dev/null 2>&1; assert_eq "$?" "1" "parity: vendor/dist/z.txt without the consumer row: Mode A exit is 1"
+chain A,B >/dev/null; assert_eq "$?" "1" "parity: vendor/dist/z.txt without the consumer row: --chain exit is 1"
+mv "$TEST_TMP/cfg.bak" "$R/.claude/review-loop-config.md"
+# renames (diff.renames=true in this repo): a reviewed product file moved onto a tolerated path is NOT tolerated
+parity CHANGELOG.md 1 a.txt
+parity vendor/dist/a.txt 1 a.txt
+parity platforms/x.js 1 n.txt
+g reset -q --hard "$TIP"; OUT=$(chain A,B); assert_exit_code "$?" "0" "parity: back at the tip the chain passes"
+OUT_R=$(g mv a.txt CHANGELOG.md; g commit -qm mvchg; chain A,B); assert_contains "$OUT_R" "chain tail: 'a.txt' changed after set 'B'" "rename: the deleted source path is the one reported"
+g reset -q --hard "$TIP"
 
 # Negative controls: a copy of the scripts with ONE check removed must pass the red case (proving the red case
 # is caught by that check and not by something else); the real script rejects it (asserted above).
@@ -112,6 +137,13 @@ OUT=$(chain A,B); assert_exit_code "$?" "0" "NC2 setup: tail-check-off script st
 for spec in "late.txt late" "a.txt again" "n.txt again" "a.txt base"; do
   set -- $spec; g reset -q --hard "$TIP"; printf '%s\n' "$2" > "$R/$1"; g add "$1"; g commit -qm "nc2 $1"
   OUT=$(chain A,B); assert_exit_code "$?" "0" "NC2: without the tail check '$1' (content '$2') changed past B's head passes (so the tail check is what rejects it)"
+done
+g reset -q --hard "$TIP"
+mutate "no-renames dropped" "['diff', '--no-renames', '--name-only', range]" "['diff', '--name-only', range]"
+for spec in "CHANGELOG.md a.txt" "vendor/dist/a.txt a.txt" "platforms/x.js n.txt"; do
+  set -- $spec; g reset -q --hard "$TIP"; mkdir -p "$(dirname "$R/$1")"; g mv "$2" "$1"; g commit -qm "nc rename $1"
+  OUT=$(chain A,B); assert_exit_code "$?" "0" "NC4: without --no-renames the move $2 -> $1 passes --chain"
+  OUT=$(node "$MUT/scripts/check-phase-review-receipt.js" --ledger "$L" --phase B --branch work --phase-base "$X" --repo-root "$R" 2>&1); assert_exit_code "$?" "0" "NC4: without --no-renames the move $2 -> $1 passes Mode A"
 done
 g reset -q --hard "$TIP"
 mutate "verdict relaxed" "receipt.verdict !== 'SHIP-AS-IS' || derivedState.verdict !== 'SHIP-AS-IS'" "receipt.verdict !== derivedState.verdict"

@@ -563,7 +563,9 @@ class ExitSignal { constructor(code) { this.code = code; } }
 // changed path is an allowlisted exclusion or a sidecar (CHANGELOG.md, projects index). Mode A step (5) and
 // the --chain tail check both call this, so the two can never diverge.
 function pathsMovedAfterHead(repoRoot, range, consumerAllowlist) {
-  const diffRes = spawnSync('git', ['diff', '--name-only', range], {
+  // --no-renames: a rename shows only its destination otherwise (and diff.renames in the user's git config
+  // decides), so a reviewed product file moved onto an allowlisted path would list only the allowed path.
+  const diffRes = spawnSync('git', ['diff', '--no-renames', '--name-only', range], {
     cwd: repoRoot,
     encoding: 'utf8',
   });
@@ -1471,7 +1473,8 @@ function validateReviewChain(flags) {
   }
   if (problems.length) fail(`Review chain does not cover '${branch}':\n${problems.join('\n')}`);
 
-  const changed = reviewPackets.rangeNames(repoRoot, base, tip);
+  let changed;
+  try { changed = reviewPackets.rangeNames(repoRoot, base, tip); } catch (e) { fail(`Review chain: ${e.message}`); }
   console.log(`Review chain ${names.join(',')} ok: ${sets.length} set(s), ${changed.length} path(s), base ${base} .. tip ${tip}`);
   process.exit(0);
 }

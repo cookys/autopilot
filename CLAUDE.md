@@ -2,7 +2,7 @@
 
 For Claude Code sessions working **on** the autopilot plugin itself. Skill-runtime conventions live in each skill's `SKILL.md`. Other agents (Codex, OpenCode, Antigravity): [`AGENTS.md`](AGENTS.md); portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
 
-Directory rules load when a session reads or edits a file there: `scripts/CLAUDE.md`, `skills/CLAUDE.md`, `references/CLAUDE.md`, `platforms/CLAUDE.md`, `mods/CLAUDE.md`. A path assembled inside a script does not trigger the load, so every rule that causes damage when missed is also kept below, in one line.
+Original wording of the rules shortened here: [`docs/dev/claude-md-detail.md`](docs/dev/claude-md-detail.md). Directory rules load when a session reads or edits a file there: `scripts/CLAUDE.md`, `skills/CLAUDE.md`, `references/CLAUDE.md`, `platforms/CLAUDE.md`, `mods/CLAUDE.md`. A path assembled inside a script does not trigger the load, so every rule that causes damage when missed is also kept below, in one line.
 
 ## What this repo is
 
@@ -15,6 +15,7 @@ Standalone lifecycle orchestration plugin: 30 skills, 3 methodology agents, 40 h
 
 - A script existing is not evidence it is running: when one is meant to protect something, check that it actually fires; read [`references/evidence-discipline.md`](references/evidence-discipline.md) before recording anything as verified.
 - Every new or modified check (gate, hook, scan) ships a negative control: a deliberately broken case shown red before green ([evidence-discipline §58](references/evidence-discipline.md)).
+- Some scripts do not parse argv at all, and a few of those are installers that act immediately, so `--help` runs them: read the header comment of an unfamiliar script first.
 - A new script is dead code until wired into the reference doc, the SKILL.md table, `docs/scripts-inventory.md` and the name list in `scripts/CLAUDE.md`.
 - A script that parses JSON or could run under agy is Node built-ins only; bash only for pure git glue (table in `scripts/CLAUDE.md`).
 
@@ -52,7 +53,7 @@ Bump with `scripts/sync-version.js` only; version frozen at 3.0.0 (no bump witho
 ## Process rules
 
 - With `superpowers` installed, orchestrators consult `.claude/dispatch-config.md` (defaults: [`project-config-template/dispatch-config.md`](project-config-template/dispatch-config.md)).
-- Mission graphs: node `verification_commands` stay fast and fixed, never `bash hooks/tests/run.sh`; the whole suite runs once, alone, on this host before a campaign merges into `develop`, and red means no merge.
+- Mission graphs: node `verification_commands` stay fast and fixed, never `bash hooks/tests/run.sh`; the whole suite runs once, alone, on this host before a campaign merges into `develop`, and red means no merge. Sealed graphs keep their existing chain; editing one breaks its pinned digest.
 - The merge gate runs `check-phase-review-receipt.js` against the branch tip being merged, never the last reviewed head; any product-code delta after the reviewed head needs its own review, and at the generation cap only a PM ruling plus a post-head ledger passes ([`skills/dev-flow/references/hetero-loops.md`](skills/dev-flow/references/hetero-loops.md)).
 - No hosted CI (operator): suites and the merge gate run locally; never add a hosted workflow. The remaining checks.yml / website.yml are retired by G39.
 - Destructive or irreversible ops (force-push, history rewrite, mass delete, `reset --hard`, overwriting live config) need a snapshot, a stated blast radius and explicit operator confirmation; never read, print or copy credentials, and give dispatch children a throwaway config dir seeded with only `.credentials.json`, never the real `~/.claude` ([`references/hetero-dispatch.md`](references/hetero-dispatch.md)).

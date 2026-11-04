@@ -1,6 +1,6 @@
 # references/ - directory rules (Claude Code and any depth-0 controller)
 
-Loaded when a session reads or edits a file under `references/`. Root `AGENTS.md` keeps one-line versions of every clause below; this file holds the full text and the evidence stories.
+Loaded when a session reads or edits a file under `references/`. Root `AGENTS.md` keeps a short version of each clause below (the imperative, without the evidence stories); this file holds the full text and the evidence stories.
 
 ## Orchestration Discipline (learned, cross-controller)
 

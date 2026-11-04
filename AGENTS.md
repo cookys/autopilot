@@ -1,6 +1,6 @@
 # autopilot — Agent Instructions
 
-Follows the [agents.md](https://agents.md/) convention: one readme any coding agent reads on entry. Claude Code conventions: [`CLAUDE.md`](CLAUDE.md). Portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
+Follows the [agents.md](https://agents.md/) convention. Claude Code conventions: [`CLAUDE.md`](CLAUDE.md). Portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md). Original wording of the rules shortened here: [`docs/dev/agents-md-detail.md`](docs/dev/agents-md-detail.md).
 
 Codex, agy and OpenCode do not descend into subdirectories: before working in `scripts/`, `skills/`, `references/`, `platforms/` or `mods/`, read that directory's `AGENTS.md` and the `CLAUDE.md` it names, in full.
 
@@ -25,7 +25,7 @@ docs/                projects/ (active + archive), plans/, BACKLOG.md, CHANGELOG
 
 ## Coding Conventions (spec)
 
-- **Severity vocabulary**: `🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion` (the `think-tank*` skills use a separate lowercase `critical / important / minor` risk tag).
+- **Severity vocabulary**: `🔴 Critical / 🟠 Major / 🟡 Minor / 🔵 Suggestion` (`think-tank*` skills use lowercase `critical / important / minor` risk tags).
 - **No hardcoded dispatch metadata** in skill files. Use `scripts/resolve-dispatch.sh` to map role → `{model, mode, agent}` JSON.
 - **Prefer scripts over LLM judgment** for mechanical work (regex scans, JSON parsing, diff filtering). When you write a new script, wire it into the name list in `scripts/CLAUDE.md` and the relevant skill's "Available Scripts" table.
 
@@ -38,9 +38,9 @@ docs/                projects/ (active + archive), plans/, BACKLOG.md, CHANGELOG
 ## Testing (spec)
 
 - **Skill structure**: `scripts/validate.sh` checks every `SKILL.md` has YAML frontmatter (`name`, `description`) and the required structure.
-- **Version manifest sync**: `node scripts/sync-version.js --check` (read-only) verifies the version mirrors and description fragments match `.claude-plugin/plugin.json`; run it before any commit that touches version metadata.
-- **Hook inventory drift**: `node scripts/check-hook-inventory.js --check` (read-only) is the single source of truth for the hook tally and tier membership; run it without the flag to print the canonical lists.
-- **Pre-commit gate**: after `scripts/install-hooks.sh` once per clone, `git commit` runs `.githooks/pre-commit`: `sync-version.js --check`, `sync-agent-bodies.sh --check`, the `blind-dispatch.md` issue-ref grep, `check-canonical-invariants.sh`, plus change-scoped `check-readme-parity.js` and `check-hook-inventory.js --check`. Any drift blocks the commit.
+- **Version manifest sync**: `node scripts/sync-version.js --check` (read-only); run it before any commit that touches version metadata.
+- **Hook inventory drift**: `node scripts/check-hook-inventory.js --check` (read-only) is the single source of truth for the hook tally.
+- **Pre-commit gate**: after `scripts/install-hooks.sh` once per clone, `git commit` runs `.githooks/pre-commit` (version, agent-body, canonical-invariants and change-scoped readme/hook-inventory checks). Any drift blocks the commit.
 
 ## Build (autopilot-added)
 
@@ -56,7 +56,7 @@ docs/                projects/ (active + archive), plans/, BACKLOG.md, CHANGELOG
 
 ## Contribution (autopilot-added)
 
-- **Plans go in `docs/plans/`** with date prefix (`YYYY-MM-DD-<name>.md`): background, design decisions, steps, acceptance criteria, risks, out-of-scope, open questions.
+- **Plans go in `docs/plans/`** with date prefix (`YYYY-MM-DD-<name>.md`).
 - **Spike before assert**. Any cross-platform claim (env var, CLI subcommand, directory path) MUST be verified, by official-doc URL or by running the real tool, before it is written into reference material; the two-way lesson is in the `CLAUDE.md` Don't list.
 
 ---
@@ -80,9 +80,9 @@ Codex and OpenCode do not receive the SessionStart injection, so they must read 
 | What to work on next, /next, highest priority | `autopilot:next` |
 | Compare two implementations, feature parity check | `autopilot:audit` |
 
-**Owner decision cards.** Open with `node scripts/open-decision.js open --question <q> --option <label>::<description> --option <label>::<description> --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>]` (at least two `--option`, or `--free-text` for a question the owner answers by typing; `--not-authorized` is required: boundary is `read_only|reversible|external|irreversible|goal-change|scope-expansion|resources-2x|red-line`, and in an `/l3`–`/l6` session a class the DOA lets you decide alone is refused with exit 3). Close with `node scripts/open-decision.js close --id <id>`. Write the card id in the reply; when the owner answers with a message whose first line is `[待決回覆]`, act on the answer.
+**Owner decision cards.** `node scripts/open-decision.js open --question <q> --option <label>::<description> (at least two, or `--free-text`) --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>]`; `--not-authorized` is required (boundary `read_only|reversible|external|irreversible|goal-change|scope-expansion|resources-2x|red-line`; in an `/l3`–`/l6` session a class the DOA lets you decide alone is refused, exit 3). Close with `close --id <id>`. Write the card id in the reply; when the owner's answer starts with `[待決回覆]`, act on it.
 
-**Dispatch rails.** Selection table: [references/hetero-dispatch.md](references/hetero-dispatch.md). Scripts: `scripts/dispatch-consult.sh` (advice), `dispatch-discuss.js`, `dispatch-explore.sh` (read-the-repo question), `dispatch-plan-review.js`, `dispatch-review.sh` (read-only verdict), `dispatch-batch.sh`, `dispatch-foreman.sh`, `dispatch-author.sh`, `dispatch-hetero.sh` (worktree-isolated implementer).
+**Dispatch rails.** Selection table: [references/hetero-dispatch.md](references/hetero-dispatch.md). Scripts: `scripts/dispatch-consult.sh`, `dispatch-discuss.js`, `dispatch-explore.sh`, `dispatch-plan-review.js`, `dispatch-review.sh`, `dispatch-batch.sh`, `dispatch-foreman.sh`, `dispatch-author.sh`, `dispatch-hetero.sh`.
 
 **Hetero review.** Follow `skills/hetero-review/SKILL.md`. Poll with `node scripts/dispatch-status.js` (`--run <run-id>`, or `--log <path>`, or `--list`). Wait with `node scripts/wait-dispatch-results.js --ledger <path> --expect <run_id>.<stage>` (optional `--timeout`, `--poll`, `--json`).
 
@@ -98,13 +98,13 @@ These bind ANY depth-0 controller driving this repo.
 - Read the raw child log BEFORE classifying a failure (a quota death was once misread as a model question).
 - Env vars and the command consuming them go in the SAME shell invocation; exports do not survive across tool calls.
 - Prefer one blocking wait over polling loops; polling burns context and forces compaction.
-- A background agent parked on its own child is NOT auto-woken: on the child's completion, cross-check via the dispatcher's status query (never the agent's self-report), then wake it explicitly to harvest, advance, and not park again.
+- A background agent parked on its own child is NOT auto-woken: on the child's completion, cross-check via the dispatcher's status query (never the agent's self-report), then wake it explicitly to harvest, advance, and not park again; budget a wake at every phase boundary.
 - Never dispatch background work you cannot be woken for: use the harness's background notification or an armed self-polling wake, never a bare detached process.
-- Pin an absolute path (or `cd <repo-root> &&`) before any merge or `worktree remove`; verify a worktree still exists (`git worktree list`) before resuming an agent into it.
-- Source-plan phases are not execution phases: normalise into a bounded deliverable DAG (default max 8); tests, review seats, repair generations and doc sync are gates INSIDE a deliverable. Each deliverable binds source plan/rubric, dependencies, acceptance command, resource reservation and gate-attempt budget.
-- Repair a failure inside its original deliverable; never add a phase to hide a retry; a new branch/session/ticket/model must NOT reopen an unresolved Mission's lineage, graph or budget without a reconciled terminal receipt.
-- Judge failed test files only from the runner's Summary section (the `❌ N / M test files FAILED:` list) or a file's own `PASS` line, never `grep FAIL` over a log.
-- GitHub Actions `run:` steps default to `bash -e {0}` with NO pipefail: steps that pipe a test command need explicit `shell: bash` or `set -o pipefail`.
+- Before ANY git state operation (not only merge or `worktree remove`), pin an absolute path or start with `cd <repo-root> &&`; verify a worktree still exists (`git worktree list`) before resuming an agent into it.
+- Source-plan phases are not execution phases: normalise into a bounded deliverable DAG (default max 8); tests, review seats, repair generations and doc sync are gates INSIDE a deliverable. Each deliverable binds source plan/rubric, dependencies, acceptance command, resource reservation and gate-attempt budget; total reservations stay under the Mission ceiling.
+- Repair a failure inside its original deliverable; never add a phase to hide a retry; a new branch/session/ticket/model must NOT reopen an unresolved Mission's lineage, graph or budget without a reconciled terminal receipt. If the tracker row count equals the sum of all source-plan phase counts, stop: document segmentation has been mistaken for execution segmentation.
+- Judge failed test files only from the runner's Summary section (the `❌ N / M test files FAILED:` list) or a file's own `PASS` line, never `grep FAIL` over a log; cross-check suspect output against the same log section in a known-green run.
+- GitHub Actions `run:` steps default to `bash -e {0}` with NO pipefail: steps that pipe a test command need explicit `shell: bash` or `set -o pipefail`; verify by intentionally breaking one test and confirming CI goes red.
 
 ---
 

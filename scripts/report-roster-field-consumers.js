@@ -47,6 +47,10 @@ const EXCLUDE_FILES = new Set([
   'skills/AGENTS.md',
   'references/CLAUDE.md',
   'references/AGENTS.md',
+  'platforms/CLAUDE.md',                 // (redundant today) outside SCAN_ROOTS; kept so the five directory entry docs are covered together
+  'platforms/AGENTS.md',
+  'mods/CLAUDE.md',                      // (redundant today) outside SCAN_ROOTS
+  'mods/AGENTS.md',
   'project-config-template/review-loop-config.md', // (redundant today) names every field by construction
 ]);
 const EXCLUDE_PREFIXES = [

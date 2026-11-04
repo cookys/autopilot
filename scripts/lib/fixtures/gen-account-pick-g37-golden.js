@@ -234,9 +234,12 @@ async function main() {
   const text = `${JSON.stringify(g, null, 2)}\n`;
   if (check) {
     const cur = JSON.parse(fs.readFileSync(GOLDEN_FILE, 'utf8'));
-    const norm = (cli) => JSON.stringify(cli.map((c) => ({ spec: c.spec, result: { audit: c.result.audit, runs: c.result.runs.map((r) => Object.assign({}, r, { out: normalizeOut(r.out, c.spec) })) } })));
-    const same = JSON.stringify(cur.pick) === JSON.stringify(g.pick) && norm(cur.cli) === norm(g.cli) &&
-      JSON.stringify(cur.g37_file_sha256) === JSON.stringify(g.g37_file_sha256) && cur.generated_from_commit === PIN_COMMIT;
+    // Whole-object compare: nothing is enumerated. The only normalisation is normalizeOut on each run's stdout (the coverage line,
+    // and the mirror fields of a scenario that declared stripMirrorFields); every other key, known or future, is compared as is.
+    const norm = (golden) => JSON.stringify(Object.assign({}, golden, { cli: golden.cli.map((c) => Object.assign({}, c, {
+      result: Object.assign({}, c.result, { runs: c.result.runs.map((r) => Object.assign({}, r, { out: normalizeOut(r.out, c.spec) })) }),
+    })) }));
+    const same = norm(cur) === norm(g) && cur.generated_from_commit === PIN_COMMIT;
     process.stdout.write(same ? 'golden matches\n' : 'golden DIFFERS\n');
     return same ? 0 : 1;
   }

@@ -26,6 +26,10 @@
  *     closedFindings: alias for closed_findings
  *   }
  *
+ * Optional 4th parameter (BL-0384 b): addendumResolutions, [{ id, rationale, fix_sha, reviewed_head }].
+ * Default empty. Each closes its finding as if the generation whose finalized head is reviewed_head
+ * had carried the resolution. Git ancestry of fix_sha is NOT judged here (no I/O); callers verify it.
+ *
  * Closure: only an explicit `resolutions` entry ({ id, rationale }) in a later generation's
  * dispositions closes an earlier verified finding; absence never does (BL-0032). Pass the
  * dispositions value as { findings, resolutions } to carry them.
@@ -64,7 +68,8 @@ function getFromGenMap(mapOrObj, gen) {
   return [];
 }
 
-function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGeneration) {
+function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGeneration, addendumResolutions) {
+  const addenda = Array.isArray(addendumResolutions) ? addendumResolutions.filter((r) => r && typeof r.id === 'string') : [];
   const chain = Array.isArray(chainEntries) ? [...chainEntries] : [];
   chain.sort((a, b) => (a.generation || 0) - (b.generation || 0));
 
@@ -104,7 +109,13 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
     const rawDisp = dispositionsByGeneration instanceof Map
       ? (dispositionsByGeneration.get(gen) !== undefined ? dispositionsByGeneration.get(gen) : dispositionsByGeneration.get(String(gen)))
       : dispositionsByGeneration && (dispositionsByGeneration[gen] !== undefined ? dispositionsByGeneration[gen] : dispositionsByGeneration[String(gen)]);
-    for (const r of resolutionsOf(rawDisp)) {
+    // BL-0384 (b): an addendum resolution closes at the generation whose FINALIZED head is its
+    // reviewed_head (git ancestry of the fix is checked by the callers, which have a repository).
+    const addForGen = addenda.filter((a) => {
+      const g = chain.find((c) => c && c.status === 'finalized' && c.head === a.reviewed_head);
+      return g === entry;
+    });
+    for (const r of resolutionsOf(rawDisp).concat(addForGen)) {
       const id = r.id;
       const finding = activeVerified.get(id);
       if (!finding || currentFindingIds.has(id)) {
@@ -163,6 +174,13 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
         // If it was refuted or deferred in this generation, it is not an active verified finding
         activeVerified.delete(f.id);
       }
+    }
+  }
+
+  // An addendum naming a reviewed_head that is no finalized chain head closes nothing.
+  for (const a of addenda) {
+    if (!chain.some((c) => c && c.status === 'finalized' && c.head === a.reviewed_head)) {
+      unmatchedResolutions.push({ id: a.id, generation: 0 });
     }
   }
 

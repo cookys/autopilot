@@ -27,3 +27,7 @@ Rules distilled from real long-run transcripts of this repo's 2026-07 Mission/L6
 
 - The only authority for which test files failed is the runner's Summary section (the `❌ N / M test files FAILED:` list) or a file's own `PASS [name] N assertions` line. `grep FAIL` over a CI log also matches fixtures' intentional negative-path output — identical lines exist in green runs — and has doubled a repair scope before. Cross-check the same log section in a known-green run to unmask fixture output.
 - GitHub Actions `run:` steps without an explicit `shell:` default to `bash -e {0}` — NO pipefail. Any `cmd | tee` pipeline silently swallows the command's failure → false-green CI. Steps that pipe a test command must set explicit `shell: bash` (or lead with `set -o pipefail`). Verify by intentionally breaking one test and confirming CI goes red.
+
+## Review practice (moved from AGENTS.md)
+
+- **Reviews are dialectic**. For non-trivial changes, prefer 3-perspective review (Architect / Ops / Skeptic) — each spawned in parallel with disjoint focus. Findings get tagged with the unified severity vocabulary and consolidated in a review summary table within the plan.

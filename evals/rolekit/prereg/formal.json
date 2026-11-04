@@ -210,6 +210,8 @@
     "compile-kit.js",
     "score-rolekit.js",
     "collect-evidence.js",
+    "stamp-rolekit.js",
+    "lib-identity.js",
     "prereg/formal.json",
     "COST-TABLE-formal.md",
     "prereg/preconditions-formal.json"

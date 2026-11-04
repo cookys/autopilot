@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 // score-rolekit.js -- the single mechanical verdict of a rolekit prereg row. No model call. Node built-ins only.
-//   score-rolekit.js --prereg prereg/<row>.json --results <results.jsonl> [--tasks tasks/manifest.json] [--evidence evidence.json] [--json]
+//   score-rolekit.js --row pilot|formal --results <results.jsonl> [--evidence evidence.json]
+// Everything the verdict depends on is read from this directory (the stamped root): the prereg, the task manifest, the
+// stamper. Before scoring it runs `stamp-rolekit.js --row <row> --check` (a row that is not stamped, or whose frozen files
+// changed, is refused), and it checks that stamp-rolekit.js itself is the frozen one. There is no option to point it at
+// another prereg or another task manifest. results and evidence are data; the evidence must carry this tree's identity.
 // results.jsonl: one row per cell {role, task, rep, arm: A|B|C|D, seat: weak1|weak2|strong, pass: 0|1,
 //   infra: bool, parse_ok: bool, kit_applied: bool, cost_usd: number}.
 // The rows are checked against the FROZEN SCHEDULE (arm x seat x role x task x rep, derived from prereg.design and the
@@ -34,6 +38,19 @@ function tailAtMost(b, n, alpha) { // P(X >= b), X ~ Bin(n, 1/2), <= alpha, exac
   return { ok: tail * alpha.d <= alpha.n * (2n ** BigInt(n)), p: Number(tail) / 2 ** n };
 }
 
+// ---- task map from a manifest: duplicate (role, id) pairs are refused before any schedule is built
+function taskMapFrom(man) {
+  const map = Object.create(null);
+  if (!man || !Array.isArray(man.tasks)) throw new Error('task manifest has no tasks array');
+  for (const t of man.tasks) {
+    if (!t || typeof t.role !== 'string' || typeof t.id !== 'string' || t.id === '') throw new Error(`malformed manifest task: ${JSON.stringify(t)}`);
+    const list = map[t.role] || (map[t.role] = []);
+    if (list.includes(t.id)) throw new Error(`duplicate task id in the manifest: ${t.role}/${t.id}`);
+    list.push(t.id);
+  }
+  return map;
+}
+
 // ---- schedule
 function schedule(prereg, taskMap) {
   const keys = [];
@@ -41,6 +58,7 @@ function schedule(prereg, taskMap) {
     const reps = prereg.design.reps[arm.id][seat];
     for (const role of prereg.design.roles) {
       const tasks = taskMap[role] || [];
+      if (new Set(tasks).size !== tasks.length) throw new Error(`duplicate task id for ${role}`);
       if (tasks.length !== prereg.design.tasks_by_role[role]) throw new Error(`task set for ${role} has ${tasks.length} tasks but the design says ${prereg.design.tasks_by_role[role]} (task set not frozen)`);
       for (const task of tasks) for (let rep = 0; rep < reps; rep += 1) keys.push(`${arm.id}|${seat}|${role}|${task}|${rep}`);
     }
@@ -67,7 +85,7 @@ function tables(rows, prereg, taskMap, weakSeat = 'weak1') {
   const prim = (arm, seat) => (arm === 'D' ? seat === 'strong' : seat === weakSeat);
   const out = {};
   for (const role of prereg.design.roles) {
-    const t = Object.fromEntries(ARMS.map((a) => [a, {}]));
+    const t = Object.fromEntries(ARMS.map((a) => [a, Object.create(null)]));
     for (const r of rows) if (r.role === role && prim(r.arm, r.seat) && !r.infra) (t[r.arm][r.task] = t[r.arm][r.task] || []).push(r.pass);
     const keep = (taskMap[role] || []).filter((k) => ARMS.every((a) => (t[a][k] || []).length > 0));
     out[role] = { t, keep };
@@ -151,13 +169,14 @@ function weak2Report(rows, prereg, taskMap, sched) {
 
 // ---- G6 evidence: produced by collect-evidence.js from a real run of the unit tests, re-checked here
 const REQUIRED_GRADERS = ['reviewer', 'implementer', 'verifier', 'planner', 'debugger', 'explorer', 'score-rolekit', 'compile-kit', 'stamp-rolekit'];
-function evidenceProblems(ev, prereg) {
+function evidenceProblems(ev, prereg, expected = {}) {
   const p = [];
   const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
   if (!isObj(ev)) return ['evidence is not an object'];
   if (ev.schema_version !== 1) p.push('schema_version');
   if (ev.row !== prereg.row) p.push('row');
-  if (!/^[0-9a-f]{40}$/.test(String(ev.head_sha))) p.push('head_sha');
+  if (!/^[0-9a-f]{64}$/.test(String(ev.artifact_sha256)) || ev.artifact_sha256 !== expected.artifactSha) p.push('artifact_sha256 does not match the tree being scored (the evidence is for other bytes)');
+  if (!isObj(ev.unit_tests) || !Array.isArray(ev.unit_tests.files) || !Array.isArray(expected.testFiles) || JSON.stringify([...ev.unit_tests.files].sort()) !== JSON.stringify([...expected.testFiles].sort())) p.push('unit_tests.files is not the full set of test files (a partial run)');
   const u = ev.unit_tests;
   if (!isObj(u) || !Number.isInteger(u.tests) || u.tests <= 0 || u.pass !== u.tests || u.fail !== 0) p.push('unit_tests (tests>0, pass==tests, fail==0)');
   const n = ev.negative_controls;
@@ -166,7 +185,7 @@ function evidenceProblems(ev, prereg) {
   return p;
 }
 
-function scorePilot(rows, prereg, taskMap, evidence) {
+function scorePilot(rows, prereg, taskMap, evidence, expected) {
   const P = prereg.verdict.params; const roles = prereg.design.roles; const gates = {}; const why = {};
   const sched = schedule(prereg, taskMap); validateRows(rows, sched);
   const all = infraCounts(rows, sched, () => true);
@@ -191,7 +210,7 @@ function scorePilot(rows, prereg, taskMap, evidence) {
   const limitMicro = mul(dec(P.cost_factor_max), fr(Math.round(prereg.cost.estimate_usd_high * 1e6)));
   gates.G5 = badCost === 0 && rows.length > 0 && fr(spentMicro).n * limitMicro.d <= limitMicro.n * 1n;
   if (badCost) why.G5 = `${badCost} row(s) without a finite non-negative cost_usd`;
-  const ev = evidence === undefined ? ['no evidence input (--evidence)'] : evidenceProblems(evidence, prereg);
+  const ev = evidence === undefined ? ['no evidence input (--evidence)'] : evidenceProblems(evidence, prereg, expected);
   gates.G6 = ev.length === 0;
   if (ev.length) why.G6 = ev;
   const failing = Object.entries(gates).filter(([, v]) => v === false).map(([k]) => k);
@@ -200,19 +219,28 @@ function scorePilot(rows, prereg, taskMap, evidence) {
 }
 
 function main() {
+  const fsx = fs; const pathx = require('path'); const cp = require('child_process'); const crypto = require('crypto');
+  const { artifactIdentity, testFiles } = require('./lib-identity.js');
   const argv = process.argv.slice(2);
   const opt = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : undefined; };
-  if (!opt('--prereg') || !opt('--results')) { console.error('usage: score-rolekit.js --prereg P --results R.jsonl [--tasks tasks/manifest.json] [--evidence E.json]'); process.exit(2); }
+  for (const a of argv) if (a.startsWith('--') && !['--row', '--results', '--evidence'].includes(a)) { console.error(`score-rolekit: unknown option ${a} (the prereg and the task manifest are read from the stamped root; they cannot be redirected)`); process.exit(2); }
+  const row = opt('--row');
+  if (!row || !/^(pilot|formal)$/.test(row) || !opt('--results')) { console.error('usage: score-rolekit.js --row pilot|formal --results R.jsonl [--evidence E.json]'); process.exit(2); }
   try {
-    const prereg = JSON.parse(fs.readFileSync(opt('--prereg'), 'utf8'));
-    const man = JSON.parse(fs.readFileSync(opt('--tasks') || require('path').join(__dirname, 'tasks/manifest.json'), 'utf8'));
-    const taskMap = {};
-    for (const t of man.tasks) (taskMap[t.role] = taskMap[t.role] || []).push(t.id);
-    const rows = fs.readFileSync(opt('--results'), 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l));
-    const evidence = opt('--evidence') ? JSON.parse(fs.readFileSync(opt('--evidence'), 'utf8')) : undefined;
-    const out = prereg.row.endsWith('pilot') ? scorePilot(rows, prereg, taskMap, evidence) : scoreFormal(rows, prereg, taskMap);
+    const root = __dirname;
+    const chk = cp.spawnSync('node', [pathx.join(root, 'stamp-rolekit.js'), '--row', row, '--check', '--root', root], { encoding: 'utf8' });
+    if (chk.status !== 0) throw new Error(`the row is not a valid stamped row: ${chk.stderr.trim()}`);
+    const fz = JSON.parse(fsx.readFileSync(pathx.join(root, 'prereg/FROZEN.json'), 'utf8')).rows[row];
+    const sha = (f) => crypto.createHash('sha256').update(fsx.readFileSync(pathx.join(root, f))).digest('hex');
+    for (const f of ['stamp-rolekit.js', 'score-rolekit.js', 'lib-identity.js']) if (fz.files[f] !== sha(f)) throw new Error(`${f} is not the frozen one (digest differs from the stamp record)`);
+    const prereg = JSON.parse(fsx.readFileSync(pathx.join(root, `prereg/${row}.json`), 'utf8'));
+    const taskMap = taskMapFrom(JSON.parse(fsx.readFileSync(pathx.join(root, 'tasks/manifest.json'), 'utf8')));
+    const rows = fsx.readFileSync(opt('--results'), 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l));
+    const evidence = opt('--evidence') ? JSON.parse(fsx.readFileSync(opt('--evidence'), 'utf8')) : undefined;
+    const expected = { artifactSha: artifactIdentity(root).sha256, testFiles: testFiles(root) };
+    const out = row === 'pilot' ? scorePilot(rows, prereg, taskMap, evidence, expected) : scoreFormal(rows, prereg, taskMap);
     process.stdout.write(`${JSON.stringify(out, null, 2)}\n`);
   } catch (e) { console.error(`score-rolekit: ${e.message}`); process.exit(2); }
 }
 if (require.main === module) main();
-module.exports = { add, sub, mul, scoreFormal, scorePilot, schedule, validateRows, evidenceProblems, tailAtMost, dec, fr, cmp, REQUIRED_GRADERS };
+module.exports = { add, sub, mul, taskMapFrom, scoreFormal, scorePilot, schedule, validateRows, evidenceProblems, tailAtMost, dec, fr, cmp, REQUIRED_GRADERS };

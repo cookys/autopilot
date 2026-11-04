@@ -30,7 +30,7 @@ const RULE_PILOT = [
   'G3 parse: parse_ok is true for >= 50% of the non-infra rows in every arm A, B, C, D.',
   'G4 headroom: s_D(r) - s_A(r) > 0 for >= 3 roles, and s_A(r) < 1.0 for >= 4 roles (no ceiling), and s_D(r) > 0 for >= 4 roles (no floor).',
   'G5 cost: every submitted row has a finite non-negative cost_usd (a missing or invalid cost fails the gate, it is never read as 0), and the sum <= 1.5 x the high estimate of cost-table for this row; the per-role mean cost_usd per cell is written to the pilot report for the formal estimate.',
-  'G6 checks: the evidence file written by collect-evidence.js (it runs the unit tests itself) shows tests > 0, pass == tests, fail == 0, a passing negative-control test for each of reviewer, implementer, verifier, planner, debugger, explorer, score-rolekit, compile-kit, stamp-rolekit, and sentinel_calls == 0; a missing or failing evidence file fails the gate.',
+  'G6 checks: the evidence file written by collect-evidence.js (it runs the unit tests itself) shows tests > 0, pass == tests, fail == 0, a passing negative-control test for each of reviewer, implementer, verifier, planner, debugger, explorer, score-rolekit, compile-kit, stamp-rolekit, the full set of test files, sentinel_calls == 0, and an artifact_sha256 equal to the identity (sha256 over every file under evals/rolekit/ including the tests, see lib-identity.js) of the tree being scored, which the collector derives itself; a missing or failing evidence file fails the gate.',
 ].join('\n');
 
 function common(row, isPilot) {
@@ -127,7 +127,7 @@ function build(row) {
         ? ['stop the campaign when booked cost reaches cap_usd', 'stop and report when the first 30 cells cost more than 2x their share of the high estimate']
         : ['stop the campaign when booked cost reaches cap_usd', 'after 10% of the cells, stop and report if the projected total exceeds cap_usd', 'a stop is recorded as INCONCLUSIVE_INFRA with the cells done; it is never silently resumed past the cap'],
     },
-    freeze_files: ['kits', 'placebo', 'kimi', 'tasks', 'checks', 'cost-model.json', 'cost-table.js', 'compile-kit.js', 'score-rolekit.js', 'collect-evidence.js', `prereg/${row}.json`, `COST-TABLE-${row}.md`, ...(isPilot ? [] : ['prereg/preconditions-formal.json'])],
+    freeze_files: ['kits', 'placebo', 'kimi', 'tasks', 'checks', 'cost-model.json', 'cost-table.js', 'compile-kit.js', 'score-rolekit.js', 'collect-evidence.js', 'stamp-rolekit.js', 'lib-identity.js', `prereg/${row}.json`, `COST-TABLE-${row}.md`, ...(isPilot ? [] : ['prereg/preconditions-formal.json'])],
     stamp_with: `node evals/rolekit/stamp-rolekit.js --row ${row}   (then --check)`,
   };
   if (!isPilot) {

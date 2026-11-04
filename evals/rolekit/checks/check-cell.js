@@ -42,19 +42,19 @@ function loadVa() {
 }
 
 // ---- reviewer
-function changedLines(diffText) { // file -> new-side positions of added lines and of deletions (the line after the removal)
-  const out = {}; let file = null; let oldRem = 0; let newRem = 0; let n = 0;
+function changedLines(diffText) { // Map: file -> new-side positions of added lines and of deletions (the line after the removal)
+  const out = new Map(); let file = null; let oldRem = 0; let newRem = 0; let n = 0;
   for (const line of diffText.split('\n')) {
     if (oldRem <= 0 && newRem <= 0) {
       let m = /^\+\+\+ b\/(.+)$/.exec(line);
-      if (m) { file = m[1]; out[file] = out[file] || []; continue; }
+      if (m) { file = m[1]; if (!out.has(file)) out.set(file, []); continue; }
       m = /^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
       if (m && file) { oldRem = m[1] === undefined ? 1 : +m[1]; n = +m[2]; newRem = m[3] === undefined ? 1 : +m[3]; }
       continue;
     }
     if (line.startsWith('\\')) continue;
-    if (line.startsWith('+')) { out[file].push(n); n += 1; newRem -= 1; }
-    else if (line.startsWith('-')) { out[file].push(n); oldRem -= 1; }
+    if (line.startsWith('+')) { out.get(file).push(n); n += 1; newRem -= 1; }
+    else if (line.startsWith('-')) { out.get(file).push(n); oldRem -= 1; }
     else { n += 1; oldRem -= 1; newRem -= 1; }
   }
   return out;
@@ -69,7 +69,7 @@ function checkReviewer(ans, taskDir) {
   if (!Array.isArray(ans.findings) || typeof ans.verdict !== 'string') return res(false, 0, 'shape: verdict or findings missing');
   const slack = exp.line_slack === undefined ? 1 : exp.line_slack;
   const must = ans.findings.filter((f) => isObj(f) && /^(critical|major)$/i.test(String(f.severity)));
-  const cites = (f) => Number.isInteger(f.line) && (changed[f.file] || []).some((p) => Math.abs(f.line - p) <= slack);
+  const cites = (f) => Number.isInteger(f.line) && typeof f.file === 'string' && (changed.get(f.file) || []).some((p) => Math.abs(f.line - p) <= slack);
   const hits = must.filter((f) => cites(f) && groupsMatch(exp.groups, String(f.claim || '')));
   const fix = /FIX|BLOCK|REJECT/i.test(ans.verdict) && !/SHIP-AS-IS/i.test(ans.verdict);
   const caught = fix && hits.length > 0;
@@ -93,9 +93,9 @@ function checkImplementer(ans, taskDir, workdir) {
   const root = git('rev-list', '--max-parents=0', 'HEAD').split('\n').filter(Boolean)[0];
   if (!root) throw infra('workdir has no root commit');
   // the base commit must be exactly the frozen input (the oracles diff against the first commit)
-  const want = Object.fromEntries(walkFiles(inputDir).map((f) => [f, gitBlob(fs.readFileSync(path.join(inputDir, f)))]));
-  const have = Object.fromEntries(git('ls-tree', '-r', root).split('\n').filter(Boolean).map((l) => { const m = /^\d+ blob ([0-9a-f]{40})\t(.+)$/.exec(l); return m ? [m[2], m[1]] : [l, '?']; }));
-  const baseDiff = [...new Set([...Object.keys(want), ...Object.keys(have)])].filter((k) => want[k] !== have[k]);
+  const want = new Map(walkFiles(inputDir).map((f) => [f, gitBlob(fs.readFileSync(path.join(inputDir, f)))]));
+  const have = new Map(git('ls-tree', '-r', root).split('\n').filter(Boolean).map((l) => { const m = /^\d+ blob ([0-9a-f]{40})\t(.+)$/.exec(l); return m ? [m[2], m[1]] : [l, '?']; }));
+  const baseDiff = [...new Set([...want.keys(), ...have.keys()])].filter((k) => want.get(k) !== have.get(k));
   if (baseDiff.length) reasons.push(`base commit is not the frozen input (${baseDiff.slice(0, 3).join(', ')})`);
   // protected paths compare against the frozen input bytes, committed or not
   const touched = [];
@@ -178,8 +178,8 @@ function checkPlanner(ans, taskDir) {
   const all = [...scopes.values()].flat().map(scopeBase);
   for (const need of exp.must_cover) if (!all.some((p) => p !== '' && (p.startsWith(need) || need.startsWith(p)))) errs.push(`uncovered: ${need}`);
   if (exp.require_dependency && ![...deps.values()].some((d) => d.length > 0)) errs.push('no dependency edge between stages');
-  const state = {};
-  const cyc = (id) => { if (state[id] === 1) return true; if (state[id] === 2) return false; state[id] = 1; for (const d of deps.get(id) || []) if (deps.has(d) && cyc(d)) return true; state[id] = 2; return false; };
+  const state = new Map();
+  const cyc = (id) => { if (state.get(id) === 1) return true; if (state.get(id) === 2) return false; state.set(id, 1); for (const d of deps.get(id) || []) if (deps.has(d) && cyc(d)) return true; state.set(id, 2); return false; };
   if (idl.some(cyc)) errs.push('dependency cycle');
   return res(errs.length === 0, errs.length === 0 ? 1 : 0, errs.length ? errs.join('; ') : 'ok');
 }
@@ -234,8 +234,17 @@ function checkExplorer(ans, taskDir) {
 const ROLE_FNS = { reviewer: checkReviewer, implementer: checkImplementer, verifier: checkVerifier, planner: checkPlanner, debugger: checkDebugger, explorer: checkExplorer };
 
 // Grade one answer object. Throws an Error with .infra = true for instrument problems; any other exception is wrapped as infra.
+function boundTaskDir(role, taskDir) { // only a frozen task of this role under this root's tasks/ is gradable
+  const base = fs.realpathSync(path.join(__dirname, '..', 'tasks'));
+  let real; try { real = fs.realpathSync(taskDir); } catch (e) { throw infra(`task dir unreadable: ${e.message}`); }
+  const rel = path.relative(base, real).split(path.sep);
+  if (rel.length !== 2 || rel[0] !== role || rel.includes('..')) throw infra(`--task-dir is not a frozen task of role ${role} under ${base}`);
+  return real;
+}
+
 function grade(role, ans, taskDir, workdir) {
-  try { return ROLE_FNS[role](ans, path.resolve(taskDir), workdir); } catch (e) { if (e.infra) throw e; throw infra(`unclassified grader error: ${e.message}`); }
+  try {
+    taskDir = boundTaskDir(role, taskDir); return ROLE_FNS[role](ans, path.resolve(taskDir), workdir); } catch (e) { if (e.infra) throw e; throw infra(`unclassified grader error: ${e.message}`); }
 }
 
 function main() {
@@ -245,9 +254,10 @@ function main() {
   const out = (o, rc) => { process.stdout.write(`${JSON.stringify({ role, task: taskDir && path.basename(taskDir), ...o })}\n`); process.exit(rc); };
   if (!role || !taskDir || !answer) { console.error('usage: check-cell.js --role R --task-dir D --answer A.json [--workdir W]'); process.exit(2); }
   if (!ROLE_FNS[role]) { console.error(`unknown role ${role}`); process.exit(2); }
-  if (!fs.existsSync(answer)) out({ pass: false, score: 0, parse_ok: false, detail: 'infra: answer file missing' }, 2);
+  let raw;
+  try { raw = fs.readFileSync(answer, 'utf8'); } catch (e) { out({ pass: false, score: 0, parse_ok: false, detail: `infra: answer file unreadable: ${e.code || e.message}` }, 2); } // missing, a directory, no permission: not the model's miss
   let ans;
-  try { ans = JSON.parse(fs.readFileSync(answer, 'utf8')); } catch (e) { out({ pass: false, score: 0, parse_ok: false, detail: `answer is not JSON: ${e.message}` }, 1); }
+  try { ans = JSON.parse(raw); } catch (e) { out({ pass: false, score: 0, parse_ok: false, detail: `answer is not JSON: ${e.message}` }, 1); }
   if (!isObj(ans)) out({ pass: false, score: 0, parse_ok: false, detail: 'answer is not a JSON object' }, 1);
   try { const r = grade(role, ans, taskDir, opt('--workdir')); out({ ...r, parse_ok: true }, r.pass ? 0 : 1); } catch (e) { out({ pass: false, score: 0, parse_ok: true, detail: `infra: ${e.message}` }, 2); }
 }

@@ -95,59 +95,68 @@ function pilotRows(over = (r) => r) {
     return over({ arm, seat, role, task, rep: +rep, pass, infra: false, parse_ok: true, kit_applied: true, cost_usd: 0.02 });
   });
 }
-const goodEv = { schema_version: 1, row: 'rolekit-pilot', head_sha: 'a'.repeat(40), unit_tests: { tests: 60, pass: 60, fail: 0 }, negative_controls: { graders_red: REQUIRED_GRADERS }, sentinel_calls: 0 };
+const EXPECT = { artifactSha: 'c'.repeat(64), testFiles: ['a.test.js', 'b.test.js'] };
+const goodEv = { schema_version: 1, row: 'rolekit-pilot', artifact_sha256: 'c'.repeat(64), unit_tests: { files: ['a.test.js', 'b.test.js'], tests: 60, pass: 60, fail: 0 }, negative_controls: { graders_red: REQUIRED_GRADERS }, sentinel_calls: 0 };
 
 test('score-rolekit: pilot with healthy rows and verified evidence is PILOT_OK; the schedule has 126 cells', () => {
   assert.strictEqual(schedule(pilot, manMap).length, 126);
-  const r = scorePilot(pilotRows(), pilot, manMap, goodEv);
+  const r = scorePilot(pilotRows(), pilot, manMap, goodEv, EXPECT);
   assert.strictEqual(r.verdict, 'PILOT_OK', JSON.stringify(r.failing_gates));
 });
 
 test('score-rolekit: pilot G5 - a missing, NaN, negative or non-number cost is never read as 0', () => {
   for (const bad of [undefined, NaN, -1, '0.02', null, Infinity]) {
     let n = 0;
-    const r = scorePilot(pilotRows((x) => { n += 1; return n === 5 ? { ...x, cost_usd: bad } : x; }), pilot, manMap, goodEv);
+    const r = scorePilot(pilotRows((x) => { n += 1; return n === 5 ? { ...x, cost_usd: bad } : x; }), pilot, manMap, goodEv, EXPECT);
     assert.strictEqual(r.verdict, 'PILOT_FIX', String(bad)); assert.ok(r.failing_gates.includes('G5'), String(bad)); assert.match(r.why.G5, /without a finite non-negative cost_usd/);
   }
-  assert.ok(scorePilot(pilotRows((x) => ({ ...x, cost_usd: 1 })), pilot, manMap, goodEv).failing_gates.includes('G5'));
+  assert.ok(scorePilot(pilotRows((x) => ({ ...x, cost_usd: 1 })), pilot, manMap, goodEv, EXPECT).failing_gates.includes('G5'));
 });
 
 test('score-rolekit: pilot G6 - no evidence, failing tests, a missing grader, sentinel calls, wrong row or a malformed head all block PILOT_OK', () => {
   const rows = pilotRows();
   const cases = [
     ['no evidence', undefined],
-    ['failing test', { ...goodEv, unit_tests: { tests: 60, pass: 59, fail: 1 } }],
-    ['zero tests', { ...goodEv, unit_tests: { tests: 0, pass: 0, fail: 0 } }],
+    ['failing test', { ...goodEv, unit_tests: { ...goodEv.unit_tests, pass: 59, fail: 1 } }],
+    ['zero tests', { ...goodEv, unit_tests: { ...goodEv.unit_tests, tests: 0, pass: 0, fail: 0 } }],
+    ['evidence of other bytes', { ...goodEv, artifact_sha256: 'd'.repeat(64) }],
+    ['partial run', { ...goodEv, unit_tests: { ...goodEv.unit_tests, files: ['a.test.js'] } }],
     ['grader without a negative control', { ...goodEv, negative_controls: { graders_red: REQUIRED_GRADERS.slice(1) } }],
     ['sentinel call', { ...goodEv, sentinel_calls: 1 }],
     ['sentinel not an integer', { ...goodEv, sentinel_calls: '0' }],
     ['wrong row', { ...goodEv, row: 'rolekit-formal' }],
-    ['bad head', { ...goodEv, head_sha: 'abc' }],
+    ['malformed identity', { ...goodEv, artifact_sha256: 'abc' }],
     ['not an object', 'ok'],
   ];
   for (const [name, ev] of cases) {
-    const r = scorePilot(rows, pilot, manMap, ev);
+    const r = scorePilot(rows, pilot, manMap, ev, EXPECT);
     assert.strictEqual(r.verdict, 'PILOT_FIX', name); assert.ok(r.failing_gates.includes('G6'), name);
   }
-  assert.deepStrictEqual(evidenceProblems(goodEv, pilot), []);
+  assert.deepStrictEqual(evidenceProblems(goodEv, pilot, EXPECT), []);
+  assert.ok(evidenceProblems(goodEv, pilot).length > 0, 'without an expected identity nothing is accepted');
 });
 
 test('score-rolekit: pilot gates G1-G4 still fire, and missing cells count as infra (G1)', () => {
-  const noKit = scorePilot(pilotRows((x) => (x.arm === 'B' ? { ...x, kit_applied: false } : x)), pilot, manMap, goodEv);
+  const noKit = scorePilot(pilotRows((x) => (x.arm === 'B' ? { ...x, kit_applied: false } : x)), pilot, manMap, goodEv, EXPECT);
   assert.ok(noKit.failing_gates.includes('G2'));
-  assert.ok(scorePilot(pilotRows((x) => (x.arm === 'A' ? { ...x, parse_ok: false } : x)), pilot, manMap, goodEv).failing_gates.includes('G3'));
-  assert.ok(scorePilot(pilotRows((x) => ({ ...x, pass: 1 })), pilot, manMap, goodEv).failing_gates.includes('G4'));
+  assert.ok(scorePilot(pilotRows((x) => (x.arm === 'A' ? { ...x, parse_ok: false } : x)), pilot, manMap, goodEv, EXPECT).failing_gates.includes('G3'));
+  assert.ok(scorePilot(pilotRows((x) => ({ ...x, pass: 1 })), pilot, manMap, goodEv, EXPECT).failing_gates.includes('G4'));
   const dropped = pilotRows().filter((r, i) => i % 3 !== 0);
-  assert.ok(scorePilot(dropped, pilot, manMap, goodEv).failing_gates.includes('G1'));
-  assert.throws(() => scorePilot([...pilotRows(), pilotRows()[0]], pilot, manMap, goodEv), /duplicate row/);
+  assert.ok(scorePilot(dropped, pilot, manMap, goodEv, EXPECT).failing_gates.includes('G1'));
+  assert.throws(() => scorePilot([...pilotRows(), pilotRows()[0]], pilot, manMap, goodEv, EXPECT), /duplicate row/);
 });
 
-test('score-rolekit: collect-evidence derives graders_red from tests that really passed; a partial run cannot satisfy G6', () => {
+test('score-rolekit: collect-evidence derives the identity itself, takes no caller-supplied sha, and a partial run cannot satisfy G6', () => {
   const cp = require('child_process');
-  const r = cp.spawnSync('node', [path.join(ROOT, 'collect-evidence.js'), '--row', 'rolekit-pilot', '--head', 'b'.repeat(40), '--sentinel-calls', '0', '--only', 'negative-controls.test.js'], { encoding: 'utf8' });
+  const { artifactIdentity, testFiles } = require('../lib-identity.js');
+  const r = cp.spawnSync('node', [path.join(ROOT, 'collect-evidence.js'), '--row', 'rolekit-pilot', '--sentinel-calls', '0', '--only', 'negative-controls.test.js'], { encoding: 'utf8' });
   const ev = JSON.parse(r.stdout);
   assert.strictEqual(ev.unit_tests.tests, 10); assert.strictEqual(ev.unit_tests.fail, 0); assert.strictEqual(ev.unit_tests.pass, 10);
+  assert.strictEqual(ev.artifact_sha256, artifactIdentity(ROOT).sha256, 'derived from the tree');
   assert.deepStrictEqual(ev.negative_controls.graders_red.sort(), ['debugger', 'explorer', 'planner', 'reviewer']);
-  assert.ok(evidenceProblems(ev, { row: 'rolekit-pilot' }).some((p) => /graders_red/.test(p)), 'four of nine graders is not enough');
+  const expected = { artifactSha: artifactIdentity(ROOT).sha256, testFiles: testFiles(ROOT) };
+  const probs = evidenceProblems(ev, { row: 'rolekit-pilot' }, expected);
+  assert.ok(probs.some((p) => /graders_red/.test(p)) && probs.some((p) => /partial run/.test(p)), probs.join('; '));
   assert.strictEqual(cp.spawnSync('node', [path.join(ROOT, 'collect-evidence.js'), '--row', 'x'], { encoding: 'utf8' }).status, 2);
+  assert.ok(!('head_sha' in ev));
 });

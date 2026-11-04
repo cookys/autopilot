@@ -17,11 +17,11 @@
 // Results never echo an unvalidated string: a rejection carries a short fixed reason code only.
 // Mirror path: <live_dir>/quota/<provider>/<alias>.json, 0600 in a 0700 directory made through
 // runtime-paths.js ensurePrivateDir; <live_dir> is the caller's resolveLiveDir() base (liveDirOrNull below).
-// Writers touch only their own row, under an OS flock on <alias>.oslock held by a helper process (never reclaimed from a live holder; 2 s wait).
+// Writers touch only their own row, under an OS flock on <alias>.oslock, taken on a descriptor the writer keeps open (never lost while the writer lives; 2 s wait).
 // Node >= 20.10, built-ins only.
 
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawnSync } = require('child_process');
 const path = require('path');
 const { readSmallFile } = require('./account-quota');
 const { ensurePrivateDir } = require('./runtime-paths');
@@ -385,132 +385,75 @@ function defaultSleep(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)
 
 function newNonce() { return `${process.pid}.${Math.random().toString(36).slice(2, 12)}.${Date.now()}`; }
 
-// --- per-alias lock: an OS-held flock owned by a helper child process (G40 BL-0374) --------------------------------
-// Node has no flock/fcntl and may not use native addons, so a small helper process takes `flock` on <alias>.oslock and
-// keeps it for as long as it lives. The kernel releases the lock when the helper dies, and the helper dies when this
-// process dies (its stdin pipe reaches EOF), so a crashed writer frees the lock at once and a LIVE writer, however long
-// it stalls, can never have the lock taken away: there is no age rule and no reclaim. Wire protocol over the helper's
-// stdout (an unlinked temp file whose fd the helper inherits, so the sync callers here can poll it without an event loop):
-//   first line `ok` (lock held) | `busy` (someone else holds it) | `error`; then one `ok` per `p` line written to its stdin
-//   (liveness ping); `q` releases the lock and answers `bye`.
+// --- per-alias lock: an OS flock on a descriptor THIS process keeps open (G40 BL-0374) ----------------------------------
+// Node has no flock/fcntl and may not use native addons. So the writer opens <alias>.oslock itself and keeps that descriptor
+// until the critical section ends; a short-lived tool (flock(1), else perl) is run once with the descriptor inherited as fd 3
+// and takes the lock on it. A flock belongs to the open file description, which this process still holds after the tool exits,
+// so the lock cannot be lost while the writer lives: not to an age rule (there is none), not to the death of anything else.
+// If the writer dies the kernel closes the descriptor and the lock is free at once. A live writer that stalls keeps it.
 // Tools, in order: flock(1) (util-linux; absent from a stock macOS), then perl (core flock; /usr/bin/perl ships with macOS,
-// UNVERIFIED there). Neither: write_failed reason lock_helper. It never falls back to a lockfile with a reclaim rule.
-const HELPER_ACK_MS = 2000; // real-clock bound on the helper's answers (a sync caller cannot use the injected clock for IO)
-const HELPER_SH = [
-  'exec 9>>"$2" || { echo error; exit 0; }',
-  '"$1" -n 9; rc=$?',
-  '[ $rc = 1 ] && { echo busy; exit 0; }',
-  '[ $rc = 0 ] || { echo error; exit 0; }',
-  'echo ok',
-  'while read x; do',
-  '  if [ "$x" = q ]; then exec 9>&-; echo bye; exit 0; fi',
-  '  echo ok',
-  'done',
-].join('\n');
-const HELPER_PERL = [
-  'use Fcntl qw(:flock); $|=1;',
-  'open(F,">>",$ARGV[0]) or do { print "error\\n"; exit 0 };',
-  'flock(F,LOCK_EX|LOCK_NB) or do { print "busy\\n"; exit 0 };',
-  'print "ok\\n";',
-  'while (my $l=<STDIN>) { if ($l eq "q\\n") { close(F); print "bye\\n"; exit 0 } print "ok\\n"; }',
-].join('\n');
+// UNVERIFIED there). A tool that errors (not "busy") falls through to the next; none left: write_failed reason lock_helper.
+// It never falls back to a lockfile with a reclaim rule. Only absolute PATH entries are searched.
+const TOOL_BUSY = 75; // flock -E: the exit code for "someone else holds it"; perl uses the same 75 for EWOULDBLOCK and 2 for any other flock failure
+const TOOL_TIMEOUT_MS = 2000; // real-clock bound on one tool run
+const PERL_FLOCK = 'use Fcntl qw(:flock); open(my $f, ">&=", 3) or exit 2; if (flock($f, LOCK_EX|LOCK_NB)) { exit 0 } exit($!{EWOULDBLOCK} ? 75 : 2);';
 
 function findTool(name) {
   for (const dir of String(process.env.PATH || '').split(path.delimiter)) {
-    if (!dir) continue;
+    if (!path.isAbsolute(dir)) continue; // an empty or relative entry means "the current directory": never run a tool from there
     const p = path.join(dir, name);
     try { fs.accessSync(p, fs.constants.X_OK); if (fs.statSync(p).isFile()) return p; } catch (_) { /* next */ }
   }
   return null;
 }
-function helperSpec(lockPath) {
+function toolRuns() {
+  const runs = [];
   const flock = findTool('flock');
-  if (flock) return { cmd: '/bin/sh', args: ['-c', HELPER_SH, 'sh', flock, lockPath] };
+  if (flock) runs.push({ cmd: flock, args: ['-E', String(TOOL_BUSY), '-n', '3'] });
   const perl = findTool('perl');
-  if (perl) return { cmd: perl, args: ['-e', HELPER_PERL, lockPath] };
-  return null;
-}
-function ackLines(h) {
-  const buf = Buffer.alloc(4096);
-  let n = 0;
-  try { n = fs.readSync(h.ackFd, buf, 0, buf.length, 0); } catch (_) { return []; }
-  return buf.toString('utf8', 0, n).split('\n').filter((s) => s !== '');
-}
-function waitLines(h, count) {
-  const until = Date.now() + HELPER_ACK_MS;
-  for (;;) {
-    const l = ackLines(h);
-    if (l.length >= count) return l;
-    if (Date.now() >= until) return l;
-    defaultSleep(1);
-  }
-}
-function closeHelper(h, kill) {
-  if (kill) { try { h.child.kill('SIGKILL'); } catch (_) { /* gone */ } }
-  try { h.child.stdin.destroy(); } catch (_) { /* ignore */ }
-  try { fs.closeSync(h.ackFd); } catch (_) { /* ignore */ }
+  if (perl) runs.push({ cmd: perl, args: ['-e', PERL_FLOCK] });
+  return runs;
 }
 
-// One attempt: spawns a helper. Returns the held helper object, null when busy, throws lock_helper / lock_unreadable:<CODE>.
-function tryHelper(lockPath) {
-  const spec = helperSpec(lockPath);
-  if (!spec) throw new Error('lock_helper');
-  const ackPath = `${lockPath}.ack.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
-  let ackFd;
+// One attempt. Returns the held descriptor ({ fd }), null when busy; throws lock_unreadable:<CODE> or lock_helper.
+function tryLock(lockPath) {
+  let fd;
   try {
-    ackFd = fs.openSync(ackPath, fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_APPEND, 0o600);
-    fs.unlinkSync(ackPath); // the fd is all either side needs; nothing is left in the directory
-  } catch (_) { if (ackFd !== undefined) { try { fs.closeSync(ackFd); } catch (__) { /* ignore */ } } throw new Error('lock_helper'); }
-  let child;
-  try { child = spawn(spec.cmd, spec.args, { stdio: ['pipe', ackFd, 'ignore'] }); } catch (_) { fs.closeSync(ackFd); throw new Error('lock_helper'); }
-  child.on('error', () => { /* a failed spawn shows as no pid below */ });
-  const h = { child, ackFd, stdinFd: child.stdin && child.stdin._handle ? child.stdin._handle.fd : undefined };
-  if (child.pid === undefined || typeof h.stdinFd !== 'number') { closeHelper(h, true); throw new Error('lock_helper'); }
-  child.unref();
-  child.stdin._handle.unref();
-  const first = waitLines(h, 1)[0];
-  if (first === 'ok') return h;
-  closeHelper(h, first !== 'busy');
-  if (first === 'busy') return null;
-  throw new Error('lock_helper');
+    // O_NONBLOCK: a FIFO with no reader must fail at once (ENXIO), not block the open for ever. O_NOFOLLOW: no symlink.
+    fd = fs.openSync(lockPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK, 0o600);
+  } catch (e) { throw new Error(`lock_unreadable:${e && /^[A-Z0-9_]{1,24}$/.test(e.code) ? e.code : 'EIO'}`); }
+  try {
+    if (!fs.fstatSync(fd).isFile()) throw new Error('lock_unreadable:ENOTREG'); // a FIFO that has a reader, a device, ...
+    const runs = toolRuns();
+    for (const r of runs) {
+      const res = spawnSync(r.cmd, r.args, { stdio: ['ignore', 'ignore', 'ignore', fd], timeout: TOOL_TIMEOUT_MS, killSignal: 'SIGKILL' });
+      if (res.status === 0) { const held = { fd }; fd = undefined; return held; }
+      if (res.status === TOOL_BUSY) return null;
+      // anything else (spawn error, timeout, other failure) is this tool failing: try the next one
+    }
+    throw new Error('lock_helper');
+  } finally { if (fd !== undefined) { try { fs.closeSync(fd); } catch (_) { /* ignore */ } } }
 }
 
-// Takes the lock for lockPath. A live holder is waited for (polling a fresh `flock -n` every LOCK_POLL_MS on the injected
-// clock); waitMs without getting it is `busy` (null). Returns the held helper or null; throws on a missing/broken helper.
-// opts: { now() -> ms, sleep(ms), waitMs, hooks } (hooks are test seams).
+// Takes the lock for lockPath. A live holder is waited for (a fresh attempt every LOCK_POLL_MS on the injected clock);
+// waitMs without getting it is `busy` (null). Returns { fd } or null; throws on an unusable lock file or missing tool.
+// opts: { now() -> ms, sleep(ms), waitMs }.
 function acquireLock(lockPath, o) {
   const now = o.now || Date.now;
   const sleep = o.sleep || defaultSleep;
   const waitMs = o.waitMs === undefined ? LOCK_WAIT_MS : o.waitMs;
-  // The lock file is created here, not by the helper: O_NOFOLLOW + 0600, so a symlink or directory at the name is refused.
-  try { fs.closeSync(fs.openSync(lockPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600)); } catch (e) {
-    throw new Error(`lock_unreadable:${e && /^[A-Z0-9_]{1,24}$/.test(e.code) ? e.code : 'EIO'}`);
-  }
   const deadline = now() + waitMs;
   for (;;) {
-    const h = tryHelper(lockPath);
+    const h = tryLock(lockPath);
     if (h) return h;
     if (now() >= deadline) return null;
     sleep(LOCK_POLL_MS);
   }
 }
 
-// true when the helper that owns the lock still answers: a dead helper means the lock is gone, so nothing may be published.
-function holdsLock(held) {
-  if (!held) return false;
-  const have = ackLines(held).length;
-  try { fs.writeSync(held.stdinFd, 'p\n'); } catch (_) { return false; }
-  const l = waitLines(held, have + 1);
-  return l.length > have && l[0] === 'ok';
-}
-
-// Releases the lock now (the helper drops its fd before answering `bye`); a helper that does not answer is killed.
+// Ends the critical section: closing the descriptor is what frees the lock.
 function releaseLock(held) {
-  if (!held) return;
-  let bye = false;
-  const have = ackLines(held).length; // counted BEFORE the write: the answer can land before the next read
-  try { fs.writeSync(held.stdinFd, 'q\n'); bye = waitLines(held, have + 1).includes('bye'); } catch (_) { /* helper gone */ }
-  closeHelper(held, !bye);
+  if (held) { try { fs.closeSync(held.fd); } catch (_) { /* ignore */ } }
 }
 
 // The view envelope keys a writer understands; anything else means a newer writer made the file.
@@ -654,7 +597,6 @@ function writeLocalRow(liveDir, record, opts) {
     const fd = fs.openSync(tmp, 'wx', 0o600);
     try { fs.fchmodSync(fd, 0o600); fs.writeSync(fd, text); } finally { fs.closeSync(fd); }
     if (o.hooks && typeof o.hooks.beforePublish === 'function') o.hooks.beforePublish();
-    if (!holdsLock(held)) return { ok: false, code: 'mirror_lock_busy' }; // lost the lock: do not publish
     // monotonic guard: never replace a newer local observation with an older one, whatever raced
     const now2 = readSmallFile(file, VIEW_MAX_BYTES);
     if (now2.text !== undefined) {
@@ -716,7 +658,6 @@ function removeLocalRefusal(liveDir, provider, alias, opts) {
     const rec = j.rows[at].record;
     if (!isObj(rec) || !isObj(rec.refusal) || (Array.isArray(rec.windows) && rec.windows.length > 0)) return { ok: true, removed: false };
     const rows = j.rows.filter((_, i) => i !== at);
-    if (!holdsLock(held)) return { ok: false, code: 'mirror_lock_busy' };
     if (o.hooks && typeof o.hooks.beforePublish === 'function') o.hooks.beforePublish();
     if (rows.length === 0) { fs.unlinkSync(file); return { ok: true, removed: true }; }
     tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;

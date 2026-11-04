@@ -1,0 +1,132 @@
+// MUTANT ONLY. Never required by shipped code. The lock mechanism of commit 97b7def2b (first BL-0374 build): the flock is
+// held by a persistent helper CHILD, not by a descriptor the writer itself keeps open, so the lock dies with the helper. Frozen
+// as the negative control for the helper-killed case (account-observation-oslock.test.js). It needs `spawn` from child_process.
+const { spawn } = require('child_process');
+// --- per-alias lock: an OS-held flock owned by a helper child process (G40 BL-0374) --------------------------------
+// Node has no flock/fcntl and may not use native addons, so a small helper process takes `flock` on <alias>.oslock and
+// keeps it for as long as it lives. The kernel releases the lock when the helper dies, and the helper dies when this
+// process dies (its stdin pipe reaches EOF), so a crashed writer frees the lock at once and a LIVE writer, however long
+// it stalls, can never have the lock taken away: there is no age rule and no reclaim. Wire protocol over the helper's
+// stdout (an unlinked temp file whose fd the helper inherits, so the sync callers here can poll it without an event loop):
+//   first line `ok` (lock held) | `busy` (someone else holds it) | `error`; then one `ok` per `p` line written to its stdin
+//   (liveness ping); `q` releases the lock and answers `bye`.
+// Tools, in order: flock(1) (util-linux; absent from a stock macOS), then perl (core flock; /usr/bin/perl ships with macOS,
+// UNVERIFIED there). Neither: write_failed reason lock_helper. It never falls back to a lockfile with a reclaim rule.
+const HELPER_ACK_MS = 2000; // real-clock bound on the helper's answers (a sync caller cannot use the injected clock for IO)
+const HELPER_SH = [
+  'exec 9>>"$2" || { echo error; exit 0; }',
+  '"$1" -n 9; rc=$?',
+  '[ $rc = 1 ] && { echo busy; exit 0; }',
+  '[ $rc = 0 ] || { echo error; exit 0; }',
+  'echo ok',
+  'while read x; do',
+  '  if [ "$x" = q ]; then exec 9>&-; echo bye; exit 0; fi',
+  '  echo ok',
+  'done',
+].join('\n');
+const HELPER_PERL = [
+  'use Fcntl qw(:flock); $|=1;',
+  'open(F,">>",$ARGV[0]) or do { print "error\\n"; exit 0 };',
+  'flock(F,LOCK_EX|LOCK_NB) or do { print "busy\\n"; exit 0 };',
+  'print "ok\\n";',
+  'while (my $l=<STDIN>) { if ($l eq "q\\n") { close(F); print "bye\\n"; exit 0 } print "ok\\n"; }',
+].join('\n');
+
+function findTool(name) {
+  for (const dir of String(process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue;
+    const p = path.join(dir, name);
+    try { fs.accessSync(p, fs.constants.X_OK); if (fs.statSync(p).isFile()) return p; } catch (_) { /* next */ }
+  }
+  return null;
+}
+function helperSpec(lockPath) {
+  const flock = findTool('flock');
+  if (flock) return { cmd: '/bin/sh', args: ['-c', HELPER_SH, 'sh', flock, lockPath] };
+  const perl = findTool('perl');
+  if (perl) return { cmd: perl, args: ['-e', HELPER_PERL, lockPath] };
+  return null;
+}
+function ackLines(h) {
+  const buf = Buffer.alloc(4096);
+  let n = 0;
+  try { n = fs.readSync(h.ackFd, buf, 0, buf.length, 0); } catch (_) { return []; }
+  return buf.toString('utf8', 0, n).split('\n').filter((s) => s !== '');
+}
+function waitLines(h, count) {
+  const until = Date.now() + HELPER_ACK_MS;
+  for (;;) {
+    const l = ackLines(h);
+    if (l.length >= count) return l;
+    if (Date.now() >= until) return l;
+    defaultSleep(1);
+  }
+}
+function closeHelper(h, kill) {
+  if (kill) { try { h.child.kill('SIGKILL'); } catch (_) { /* gone */ } }
+  try { h.child.stdin.destroy(); } catch (_) { /* ignore */ }
+  try { fs.closeSync(h.ackFd); } catch (_) { /* ignore */ }
+}
+
+// One attempt: spawns a helper. Returns the held helper object, null when busy, throws lock_helper / lock_unreadable:<CODE>.
+function tryHelper(lockPath) {
+  const spec = helperSpec(lockPath);
+  if (!spec) throw new Error('lock_helper');
+  const ackPath = `${lockPath}.ack.${process.pid}.${Math.random().toString(36).slice(2, 10)}`;
+  let ackFd;
+  try {
+    ackFd = fs.openSync(ackPath, fs.constants.O_RDWR | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_APPEND, 0o600);
+    fs.unlinkSync(ackPath); // the fd is all either side needs; nothing is left in the directory
+  } catch (_) { if (ackFd !== undefined) { try { fs.closeSync(ackFd); } catch (__) { /* ignore */ } } throw new Error('lock_helper'); }
+  let child;
+  try { child = spawn(spec.cmd, spec.args, { stdio: ['pipe', ackFd, 'ignore'] }); } catch (_) { fs.closeSync(ackFd); throw new Error('lock_helper'); }
+  child.on('error', () => { /* a failed spawn shows as no pid below */ });
+  const h = { child, ackFd, stdinFd: child.stdin && child.stdin._handle ? child.stdin._handle.fd : undefined };
+  if (child.pid === undefined || typeof h.stdinFd !== 'number') { closeHelper(h, true); throw new Error('lock_helper'); }
+  child.unref();
+  child.stdin._handle.unref();
+  const first = waitLines(h, 1)[0];
+  if (first === 'ok') return h;
+  closeHelper(h, first !== 'busy');
+  if (first === 'busy') return null;
+  throw new Error('lock_helper');
+}
+
+// Takes the lock for lockPath. A live holder is waited for (polling a fresh `flock -n` every LOCK_POLL_MS on the injected
+// clock); waitMs without getting it is `busy` (null). Returns the held helper or null; throws on a missing/broken helper.
+// opts: { now() -> ms, sleep(ms), waitMs, hooks } (hooks are test seams).
+function acquireLock(lockPath, o) {
+  const now = o.now || Date.now;
+  const sleep = o.sleep || defaultSleep;
+  const waitMs = o.waitMs === undefined ? LOCK_WAIT_MS : o.waitMs;
+  // The lock file is created here, not by the helper: O_NOFOLLOW + 0600, so a symlink or directory at the name is refused.
+  try { fs.closeSync(fs.openSync(lockPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_NOFOLLOW, 0o600)); } catch (e) {
+    throw new Error(`lock_unreadable:${e && /^[A-Z0-9_]{1,24}$/.test(e.code) ? e.code : 'EIO'}`);
+  }
+  const deadline = now() + waitMs;
+  for (;;) {
+    const h = tryHelper(lockPath);
+    if (h) return h;
+    if (now() >= deadline) return null;
+    sleep(LOCK_POLL_MS);
+  }
+}
+
+// true when the helper that owns the lock still answers: a dead helper means the lock is gone, so nothing may be published.
+function holdsLock(held) {
+  if (!held) return false;
+  const have = ackLines(held).length;
+  try { fs.writeSync(held.stdinFd, 'p\n'); } catch (_) { return false; }
+  const l = waitLines(held, have + 1);
+  return l.length > have && l[0] === 'ok';
+}
+
+// Releases the lock now (the helper drops its fd before answering `bye`); a helper that does not answer is killed.
+function releaseLock(held) {
+  if (!held) return;
+  let bye = false;
+  const have = ackLines(held).length; // counted BEFORE the write: the answer can land before the next read
+  try { fs.writeSync(held.stdinFd, 'q\n'); bye = waitLines(held, have + 1).includes('bye'); } catch (_) { /* helper gone */ }
+  closeHelper(held, !bye);
+}
+

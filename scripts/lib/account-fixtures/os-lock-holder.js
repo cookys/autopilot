@@ -3,7 +3,7 @@
 // writer would, so a test never plants a fake lock file. Tests call holdOsLock(lockPath) (synchronous: returns once the
 // lock is held), release it with h.release() (kill -9, synchronous: returns once the kernel has freed the lock) and
 // register installLeakCheck(after) once per test file: it kills what is left and asserts that no holder process, zombie or
-// otherwise, outlives the file. Tools are looked up like the writer does (flock(1), then perl); neither -> throws.
+// otherwise, outlives the file. Tools are looked up like the writer does (flock(1), then perl); neither -> throws. (The writer under test keeps the lock on its own descriptor; this fixture is the OTHER process.)
 // Node >= 20.10, built-ins only.
 const fs = require('fs');
 const path = require('path');

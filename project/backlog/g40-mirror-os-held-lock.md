@@ -22,4 +22,4 @@ Old and new plugin versions can run side by side on one host for a short time; t
 
 ## Built (BL-0374)
 
-OS flock on `<alias>.oslock`, held by a helper process (flock(1), then perl; neither: `write_failed` / `lock_helper`, visible in `status`). The perl fallback is UNVERIFIED on macOS, and stock macOS has no flock(1). Tests: `scripts/lib/account-observation-oslock.test.js` (red cases and a mutant negative control).
+OS flock on `<alias>.oslock`, taken on a descriptor the writer itself keeps open (flock(1), then perl, run once with the fd inherited; neither: `write_failed` / `lock_helper`, visible in `status`). Round 1 review fixes: the first build held the flock in a persistent helper child, so killing the helper freed the lock of a live writer (Major 8b7c2c4a); the writer now owns the descriptor and the helper process, the ping and the stdin handle are gone. A FIFO at the lock path now fails at once (Major 6bdcffeb). The perl fallback is UNVERIFIED on macOS, and stock macOS has no flock(1). Tests: `scripts/lib/account-observation-oslock.test.js` (red cases and a mutant negative control).

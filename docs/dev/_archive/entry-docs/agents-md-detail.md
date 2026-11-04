@@ -1,11 +1,15 @@
 # Original wording of rules summarised in the root AGENTS.md
 
-BL-0383 shortened the root `AGENTS.md` to under 10 KB. Each line below is the original, unshortened text of a rule the root file now states in fewer words; it is kept here word for word so nothing is lost. Shown in a code block because the relative links in the original lines were written for the repo root.
+This is the historical original text, kept for provenance; where it differs from the root or a subdirectory CLAUDE.md or AGENTS.md, the latter wins.
+
+這是供溯源用的歷史原文；與根目錄或子目錄的 CLAUDE.md／AGENTS.md 有出入時，以後者為準。
+
+BL-0383 shortened the root `AGENTS.md` to under 10 KB. Each line in the code block is the original, unshortened text of a rule the root file now states in fewer words, byte for byte as in commit f8180c376 (including relative link targets, which were written for the repo root and do not resolve from this directory). This directory is `_archive`, so the doc-drift link check does not follow them.
 
 ```text
 This file follows the [agents.md](https://agents.md/) convention: a single agent-facing readme that any coding agent (Claude Code, OpenCode, Codex, Antigravity, Cursor, Aider, …) can read on entry to this repository. Sections below follow the spec's recommended four-section structure (Project Structure / Coding Conventions / Testing / PR Guidelines) plus two autopilot-added sections (Build / Contribution).
 
-For Claude Code-specific conventions, see [`CLAUDE.md`](../../CLAUDE.md). For cross-agent portability detail (what each platform actually supports vs. what's unverified), see [`references/multi-agent-portability.md`](../../references/multi-agent-portability.md).
+For Claude Code-specific conventions, see [`CLAUDE.md`](CLAUDE.md). For cross-agent portability detail (what each platform actually supports vs. what's unverified), see [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
 
 Skill body is in `skills/<name>/SKILL.md`. Methodology agent prompt body is in `agents/<role>.md`. Hooks live in `hooks/` and are registered via `hooks/hooks.json`.
 
@@ -43,7 +47,7 @@ Skill body is in `skills/<name>/SKILL.md`. Methodology agent prompt body is in `
 
 **Owner decision cards.** Open with `node scripts/open-decision.js open --question <q> --option <label>::<description> --option <label>::<description> --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>]` (at least two `--option`, or `--free-text` for a question the owner answers by typing; `--not-authorized` is required: boundary is `read_only|reversible|external|irreversible|goal-change|scope-expansion|resources-2x|red-line`, and in an `/l3`–`/l6` session a class the DOA lets you decide alone is refused with exit 3; optional `--background`, `--recommendation`, `--why`, `--blocks`, `--source`, `--root-run-id`). Close with `node scripts/open-decision.js close --id <id>`. List with `node scripts/open-decision.js show`. Write the card id in the reply; when the owner answers with a message whose first line is `[待決回覆]`, act on the answer.
 
-**Dispatch rails.** Selection table: [references/hetero-dispatch.md](../../references/hetero-dispatch.md).
+**Dispatch rails.** Selection table: [references/hetero-dispatch.md](references/hetero-dispatch.md).
 
 - `scripts/dispatch-consult.sh` — advice-only consult
 

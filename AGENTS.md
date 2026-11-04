@@ -1,6 +1,6 @@
 # autopilot — Agent Instructions
 
-Follows the [agents.md](https://agents.md/) convention. Claude Code conventions: [`CLAUDE.md`](CLAUDE.md). Portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md). Original wording of the rules shortened here: [`docs/dev/agents-md-detail.md`](docs/dev/agents-md-detail.md).
+Follows the [agents.md](https://agents.md/) convention. Claude Code conventions: [`CLAUDE.md`](CLAUDE.md). Portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md). Original wording of the rules shortened here: [`docs/dev/_archive/entry-docs/agents-md-detail.md`](docs/dev/_archive/entry-docs/agents-md-detail.md).
 
 Codex, agy and OpenCode do not descend into subdirectories: before working in `scripts/`, `skills/`, `references/`, `platforms/` or `mods/`, read that directory's `AGENTS.md` and the `CLAUDE.md` it names, in full.
 
@@ -80,7 +80,7 @@ Codex and OpenCode do not receive the SessionStart injection, so they must read 
 | What to work on next, /next, highest priority | `autopilot:next` |
 | Compare two implementations, feature parity check | `autopilot:audit` |
 
-**Owner decision cards.** `node scripts/open-decision.js open --question <q> --option <label>::<description> (at least two, or `--free-text`) --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>]`; `--not-authorized` is required (boundary `read_only|reversible|external|irreversible|goal-change|scope-expansion|resources-2x|red-line`; in an `/l3`–`/l6` session a class the DOA lets you decide alone is refused, exit 3). Close with `close --id <id>`. Write the card id in the reply; when the owner's answer starts with `[待決回覆]`, act on it.
+**Owner decision cards.** `node scripts/open-decision.js open --question <q> --option <label>::<description> --option <label>::<description> --recommendation <label> --why <reason> --not-authorized <boundary>[:<why>]` (at least two `--option`, or `--free-text`). `--not-authorized` is required; boundary is `read_only|reversible|external|irreversible|goal-change|scope-expansion|resources-2x|red-line`, and in an `/l3`–`/l6` session a class the DOA lets you decide alone is refused (exit 3). Close with `close --id <id>`. Write the card id in the reply; when the owner's answer starts with `[待決回覆]`, act on it.
 
 **Dispatch rails.** Selection table: [references/hetero-dispatch.md](references/hetero-dispatch.md). Scripts: `scripts/dispatch-consult.sh`, `dispatch-discuss.js`, `dispatch-explore.sh`, `dispatch-plan-review.js`, `dispatch-review.sh`, `dispatch-batch.sh`, `dispatch-foreman.sh`, `dispatch-author.sh`, `dispatch-hetero.sh`.
 

@@ -40,19 +40,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0374 結案時留下的後續（cd7f28002）
 - **Pointer**: project/backlog/g40-mirror-oslock-macos-perl-unverified.md
 
-### live pane 決策卡的長背景與選項難讀
-- **Id**: BL-0369
-- **Status**: open
-- **Since**: 2026-11-01
-- **Origin**: owner
-- **Problem**: 其他專案用 open-decision 開的決策卡，背景欄是一整段長文字，pane 只做硬折行；要點、脈絡、檔案路徑擠在同一段，選項全擠在同一行，owner 讀得很難過。
-- **Impact**: owner 要回的決策卡難以掃讀，容易漏看要點或選錯。
-- **Trigger**: owner picks a layout from the before/after screenshots
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: owner report with screenshot, 2026-11-01
-- **Pointer**: project/backlog/decision-card-long-background-layout.md
-
 ### develop 上五支測試套件在 base 就是紅的
 - **Id**: BL-0366
 - **Status**: open
@@ -186,48 +173,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: project/backlog/agy-input-format-stream-json-raises-the-payload-ceiling-but-does-not-remove-it-a.md
 - **Context**: agystdin 0221af27e: stdin stream-json shipped fail-closed (170000 B cap, empty-response and token-ceiling checks). Stays open: lifting the cap safely needs a per-host measurement or a tail-nonce self-check.
 
-### Dispatch justification check for acceptance-oracle tasks — P6D incident follow-up
-- **Id**: BL-0035
-- **Status**: open
-- **Since**: 2026-08-21
-- **Origin**: self
-- **Problem**: P6D 事故的後續只剩「派工理由檢查」尚未出貨：已有完整驗收依據的工作，派去重量級流程前要先說明理由。暫存區清單檢查與無狀態拒絕已出貨。
-- **Impact**: 沒有派工理由檢查時，簡單且驗收明確的工作仍可能被送進過重的流程；其餘兩段已擋住。
-- **Trigger**: an owner-approved project opens the dispatch-justification check; it must ship a planted negative case showing unjustified heavy dispatch for an acceptance-oracle task is blocked
-- **Trigger-Type**: owner
-- **Effort**: L
-- **Source**: [`2026-08-21-p6d-orchestration-incident`](../projects/_archive/2026/08/2026-08-21-p6d-orchestration-incident/README.md) (incl. Fable 5 judgment).
-- **Pointer**: project/backlog/contract-first-escalation-and-local-repair-gates-p6d-incident-follow-up.md
-- **Context**: Owner 2026-10-17: narrowed to the unshipped dispatch-justification control, keep waiting. Origin: a bounded six-file/three-command consumer task was routed through strict L5 Mission governance.
-
-### t14 long-horizon per-turn verification gate
-- **Id**: BL-0055
-- **Status**: open
-- **Since**: 2026-08-01
-- **Origin**: self
-- **Problem**: 每回合重新提醒模型守規則沒有明顯進步，因此改做每回合驗證。兩批評測（Haiku 4.5、5.5；模式 violations+features）都 PASS；預設模式 violations 未單獨評測。P2-4 收尾文件進行中；預設值由 owner 決定（卡 d-32849d39）。
-- **Impact**: 預設仍未開啟，長時間工作時模型可能漸漸偏離規定；hook 已可選用，兩批評測都通過，等 owner 決定預設。
-- **Trigger**: P2-4 verdict note merged and owner answers d-32849d39. Sidecar t14-long-horizon-per-turn-verification-gate.md stays referenced.
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: project/projects/_archive/2026/10/2026-10-19-t14-gate-batch/report.md (prior project/projects/_archive/2026/07/2026-07-08-t14-reinject/report.md corrected)
-- **Pointer**: project/plans/2026-10-20-per-turn-gate.md
-- **Context**: p2-3r2 PASS (670b3ffaf): M3 ON 28/30 vs C 1/30. p2-3-h55 PASS (a10bceef5): M3 ON 23/30 vs C 0/30, Fisher p 8.71e-11, cost 2.10 USD. Details in sidecar.
-
-### HETO task-return detection can miss completed work
-- **Id**: BL-0084
-- **Status**: open
-- **Since**: 2026-08-05
-- **Origin**: owner
-- **Problem**: 擁有者回報偶爾 HETO 已完成任務，但控制端沒偵測到回傳，一直等下去。只出現過一次且無法重現，也找不到負責偵測的程式。 (draft)
-- **Impact**: 偶爾造成流程卡住空等；目前無法重現，需第二次發生才能追查。 (draft)
-- **Trigger**: A second reproducible case where a completed HETO task produces no return event/notification, or before another HETO return-consumer is added.
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: user-reported intermittent missed HETO return detection (2026-08-05)
-- **Pointer**: project/backlog/heto-task-return-detection-can-miss-completed-work.md
-- **Context**: The controller can remain waiting when HETO has completed a dispatched task but the return detector does not fire; inspect event names, buffering/flush, timeout, and terminal-state reconciliation without treating silence as success.
-
 ### No route for external field experience contributed INTO autopilot itself
 - **Id**: BL-0085
 - **Status**: open
@@ -258,40 +203,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: cross-repo request via peer relay, 2026-08-24/25; ruled by two-round heterogeneous panel
 - **Pointer**: project/backlog/peer-coordination-skill-ruled-in-blocked-on-a-spike-sweep.md
 - **Context**: autopilot models subordinates (`team`, `l3`–`l6`) and future-self (`handoff`) but has
-
-### CEO/dev-flow: reversible-candidate release gates and optional Boil-the-Lake re-try
-- **Id**: BL-0093
-- **Status**: open
-- **Since**: 2026-09-06
-- **Origin**: peer
-- **Reporter**: <host>（revival.3d）
-- **Report**: 2026-09-06 peer
-- **Reply**: 2026-09-05 session e1e51201:1496
-- **Problem**: 可逆的候選改動仍要過發版核准。煮乾湖泊那條已評過但沒有資訊量，是否再測一次由擁有者決定。
-- **Impact**: 可逆改動的發版門檻仍然過嚴；指引要等擁有者裁決才動。
-- **Trigger**: owner decides to open this; point 3 (reversible-candidate release gates) and an optional point-1 re-try remain
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: <host> revival.3d peer message, 2026-09-06; ASTRA-SKILL-AUDIT report on <host> (/data/rw3d-evidence/2026-09-06/ASTRA-SKILL-AUDIT/report.md, not shared)
-- **Pointer**: project/backlog/ceo-dev-flow-guidance-proportionality-peer-request-to-soften-boil-the-lake-near.md
-- **Context**: Point 2 shipped in the 98e5c6e7d merge. BL-0147 is tracked separately. Owner decision card d-c9b50973 for text.
-
-### Sealed-campaign review-station migration
-- **Id**: BL-0106
-- **Status**: open
-- **Since**: 2026-10-03
-- **Origin**: peer
-- **Reporter**: <host> chatgpt-tunnel
-- **Report**: 2026-10-03 peer
-- **Reply**: 2026-10-03 session 76c98aac:1628; 2026-10-15 reporter: no campaign run since 10-08, in_rail_review: single at seal is enough, shelve until hit
-- **Problem**: 其他專案的 campaign（自動化連續任務）建立後被封存，之後想在同一個 campaign 內改成「每次修復單獨審查、最後再整體審查」，目前做不到，只能在建立時選。 (draft)
-- **Impact**: 遇到這種需求的專案只能重建 campaign；建立時就選好的情況不受影響。 (draft)
-- **Trigger**: next peer/operator campaign needing per-repair single review plus a terminal panel inside one already-sealed campaign
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: peer-reported <host>/chatgpt-tunnel 2026-10-03
-- **Pointer**: project/backlog/sealed-campaign-review-station-migration.md
-- **Context**: single+terminal panel works at intake; only in-place migration of a sealed campaign's review_station is missing.
 
 ### mods P5 proxy-decision reminders (writer first)
 - **Id**: BL-0110
@@ -334,20 +245,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: context reset cost analysis, 2026-10-12
 - **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
 - **Context**: detection and T2 wording shipped (BL-0124 merge, ON/OFF eval docs/plans/evidence/2026-10-14-t2-wording-onoff/). Left: name autoCompactWindow in the next release heading so users learn to set it.
-
-### Compaction handoff: T2 text and the remaining checks
-- **Id**: BL-0147
-- **Status**: open
-- **Since**: 2026-10-14
-- **Origin**: self
-- **Problem**: 交接機制已出貨。剩：T2 提示改成先寫交接檔再繼續（指引變更，要 eval 和 owner 同意）；間隔設定只有開 session 的檢查會讀。壓縮點已有第一筆實測（約窗口減 33K，數據在 Context），還缺別台機器或別的模型的紀錄。
-- **Impact**: 交接檔要模型自己寫才有，現在的 T2 提示沒叫它寫，所以壓縮後多半只有腳本產生的那部分。
-- **Trigger**: owner 同意改 T2 文字並排 eval 時，或別的模型出現新壓縮點紀錄時（核對 pre_tokens 是否為這次壓縮）
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: BL-0124 review, 2026-10-14; mechanism merged from lane/hand, 2026-10-15
-- **Pointer**: docs/plans/evidence/2026-10-12-context-reset-cost/README.md
-- **Context**: Compaction point measured 2026-10-17 (window 533000): preTokens 499974-501310, about window minus 33K. Done: model note budget 4000B+, half-write guard. Eval: quiz/grade on real transcripts, ON = handoff file, OFF = 20-turn tail.
 
 ### Move exam registration to llm-playground; autopilot reads one JSON
 - **Id**: BL-0194
@@ -450,34 +347,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: project/backlog/mods-p1a-known-follow-ups.md
 - **Context**: Old id BL-0109. Everything else in that row was already fixed. P3 owns the bound.
 
-### Cursor seat admission stays blocked until tool-deny or a portable sandbox
-- **Id**: BL-0240
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: self
-- **Problem**: Cursor 席位仍不能准入，因為該代理無法強制拒絕未授權工具，資格考也還沒跑。要等官方做出可攜沙箱或全面拒絕，或擁有者同意花錢再測。
-- **Impact**: 沒有這一列時，不准入的原因只寫在計畫裡，之後沒人會記得何時可以重測。
-- **Trigger**: cursor-agent ships a catch-all deny or portable sandbox, rerun the 18 probes under docs/plans/evidence/2026-08-29-cursor-containment-probe, or the owner authorises the Stage-1 spend
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: project/plans/2026-09-02-cursor-transport-fallback.md
-- **Context**: Also project/plans/_archive/2026/08/2026-08-26-cursor-cli-adaptor.md. Seat blocked: cursor-agent cannot enforce tool-deny.
-
-### mods-visible-dispatch: P2 guard-port Phase 2 merged, latency unmeasured, P4 parked
-- **Id**: BL-0241
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: owner
-- **Problem**: P2 guard-port Phase 2 已合併（三個觀察 hook 串成一次執行，每次工具呼叫 7 次降為 5 次）；owner 決定照現狀合併，延遲沒量。P4 的 progress.json 與 work-round 投影仍掛起，目前沒有程式會讀它。
-- **Impact**: 延遲改善沒有數字佐證，要等之後的基準量測。progress.json 掛起不影響現有功能。
-- **Trigger**: a later latency re-baseline is run (reference measurement, not a merge gate), or radar asks for P4 progress.json and the work-round projection
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: owner ruling 2026-10-23 d-585003b0 (partial keep); 2026-10-19 deletion audit, restored; docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: project/plans/2026-10-03-mods-visible-dispatch.md
-- **Context**: Phase 2 merged 59905f025 (gport2) by owner d-0ed54425=A: KR1 only reached 5 spawns, KR2 latency unmeasured, host load ~35. reload-watch and failure-escalation stay separate. P4 parked.
-
 ### workflow-snapshot P3: handoff reads the snapshot and dev-flow calls task-card
 - **Id**: BL-0243
 - **Status**: open
@@ -490,35 +359,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: original backlog row; restored 2026-10-19; dropped by 0a9c9efac; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
 - **Pointer**: project/plans/2026-10-13-workflow-snapshot-at-compaction.md
-- **Context**: Prior row deleted in 0a9c9efac. BL-0147 covers T2 text only, not P3.
-
-### default-dispatch-topology P5 per-host rollout, <host> first
-- **Id**: BL-0244
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: self
-- **Problem**: 預設派工拓樸的逐主機推廣還沒做，原來說先從 <host> 那台開始。之後預設拓樸又改過，是否仍適用尚未確認。
-- **Impact**: 各主機可能一直用舊的拓樸設定，沒有人安排逐台更新。
-- **Trigger**: per-host rollout of the default dispatch topology, <host> first
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: project/backlog/default-dispatch-topology-p5-rollout.md
-- **Context**: Archived plan P0-P4 shipped in v2.35.16. P5 per-host rollout was left untracked.
-
-### eval-router-judge harness was never built
-- **Id**: BL-0245
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: owner
-- **Problem**: 路由評審的量測工具只有計畫、沒有做出來。優先順序低，之後改技能說明需要量化證據時才會用到。
-- **Impact**: 下次需要量化路由準確度時，才會發現量測工具從未建立。
-- **Trigger**: next skill-description tightening needs routing-precision evidence
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: 2026-10-19 deletion audit, never had a row; restored 2026-10-19; audit docs/plans/evidence/2026-10-19-backlog-deletion-audit/
-- **Pointer**: project/backlog/eval-router-judge-harness-unbuilt.md
-- **Context**: Low priority. The harness was never built. The plan is archived.
+- **Context**: Prior row deleted in 0a9c9efac. The T2 text change (formerly BL-0147) was dropped 2026-11-05.
 
 ### Mission stays not ready after a section 11 downgrade
 - **Id**: BL-0248
@@ -536,23 +377,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: PEER-REPORTED codepower <host> 2026-10-19
 - **Pointer**: project/backlog/mission-not-ready-after-section-11-downgrade.md
 - **Context**: See BL-0220. 2026-10-23 BLOCKED: no "section 11 downgrade" concept in the repo; need a minimal repro from codepower <host> (detail in the Pointer); the fleet MCP was down, request not sent.
-
-### One command that writes the autocompact window and the context budget
-- **Id**: BL-0250
-- **Status**: open
-- **Since**: 2026-10-19
-- **Origin**: peer
-- **Reporter**: codepower <host>
-- **Report**: 01M59WNDJSZG3Y6YTERWD9DF4J
-- **Reply**: 2026-10-19 01M59WPA9TSF4TR7ST9AJRWF4V
-- **Problem**: 每次工作階段開始的對齊檢查與完整提示已經出貨。剩下的是一道指令同時把兩處的建議值寫好，這件事還沒做。
-- **Impact**: 兩處仍得各自手改。對不齊時會被提醒，但沒有一道指令一次寫好。
-- **Trigger**: the owner asks for one command that writes both recommended values
-- **Trigger-Type**: event
-- **Effort**: S
-- **Source**: PEER-REPORTED codepower <host> 2026-10-19
-- **Pointer**: project/backlog/autocompact-window-context-budget-manual-align.md
-- **Context**: Alignment check and full prompt shipped in merge e993e0fc0. The one-command writer is not built.
 
 ### agy 1.4.2 headless large output prints SUCCESS envelope but process does not exit
 - **Id**: BL-0253
@@ -630,20 +454,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Pointer**: docs/plans/evidence/2026-10-21-discoverability-audit/README.md
 - **Context**: Detail in remaining-discoverability-entry-gaps.md. Dispatch-tree sentence withdrawn 2026-10-23: neither pilot arm opened depth0-control-loop.md; needs a SKILL.md-level change with its own eval.
 
-### Uncalled-script follow-ups that touch guidance need eval
-- **Id**: BL-0279
-- **Status**: open
-- **Since**: 2026-10-22
-- **Origin**: owner
-- **Problem**: 十支腳本已標明誰在用。還有四件後續這次沒做，兩件要先評測，一件要負責人決定，一件被已封印的圖擋住，並非四件都改指引。
-- **Impact**: 指引仍沒寫何時、由誰去跑，之後的人還是會猜。
-- **Trigger**: the owner accepts an eval for the guidance follow-ups in the sidecar
-- **Trigger-Type**: owner
-- **Effort**: S
-- **Source**: BL-0275 relabel, 2026-10-22
-- **Pointer**: project/backlog/uncalled-scripts-guidance-follow-ups.md
-- **Context**: two need eval, one needs an owner decision, one is blocked by a sealed graph pin. (c) closed by ADR-0002 (qc-panel dormant).
-
 ### Seat schema admits / and . in engine and model; audit path-building consumers
 - **Id**: BL-0291
 - **Status**: open
@@ -712,20 +522,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: 2026-10-25 pre-push suite runs at 670b3ffaf and 1d38cfefb
 - **Pointer**: project/backlog/bash-launch-guard-timing-assertion-load.md
-
-### depth-0 per-turn gate: P3 NOT-SHIP, next step waits for owner
-- **Id**: BL-0306
-- **Status**: open
-- **Since**: 2026-10-26
-- **Origin**: owner
-- **Problem**: 計畫要讓 depth-0 依任務決定要不要替工人開啟每回合驗證。P0 探測、P1 驗證腳本、P2 接線都已完成並合併，P3 開關評測已跑完，裁決 NOT-SHIP（2026-10-30，正式格 3.84 USD）；P4 不開。
-- **Impact**: 評測沒有支持預設推廣，預設維持關閉；要不要修指引與評分後另開 v2 要 owner 決定。
-- **Trigger**: owner decides card d-1ea8bb49 (A fix guidance and G3 scoring then a v2 row; B authorize depth-0 to fix the list then a v2 row; C stop)
-- **Trigger-Type**: owner
-- **Effort**: L
-- **Source**: owner d-32849d39 (A, default off), d-6f6b706f (A: P0 cap 1 USD, P3 cap 20 USD), d-b3bc7aef (BL-0318 option B); plan merged 4ebcb428b
-- **Pointer**: project/backlog/depth0-per-turn-gate-status.md
-- **Context**: P1 ae44b5a0a; P2 7230a7f6e, b60ab831a; P3 NOT-SHIP (G3 scoring gap, G4 no violation), evidence docs/plans/evidence/2026-10-26-depth0-gate-p3; row kept for A/B. Detail at Pointer.
 
 ### dev-setup --harness agy --install fails validation on agy 1.4.7
 - **Id**: BL-0308
@@ -815,19 +611,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: bltidy20 handoff list 2026-10-28; idle cap shipped ae247356e, paid-batch auth stop shipped 8183aaaf2
 - **Pointer**: project/backlog/review-seat-fault-no-auto-redispatch.md
-
-### The severity table edit in code-review was never measured
-- **Id**: BL-0323
-- **Status**: open
-- **Since**: 2026-10-28
-- **Origin**: self
-- **Problem**: 審查指引的嚴重度表原本與批次指引互相矛盾，後來改字面消除了矛盾，但這處改動沒有跑過開關對照評測。
-- **Impact**: 指引改動沒有成績單；單一工作線的行為是否真的沒變，也沒量過。
-- **Trigger**: next eval round on quality-pipeline guidance, or the owner deciding to accept the edit as a wording fix
-- **Trigger-Type**: owner
-- **Effort**: S
-- **Source**: bltidy20 handoff list 2026-10-28; edit in 33224ad72
-- **Pointer**: project/backlog/code-review-tier-table-edit-not-evaluated.md
 
 ### Selection result reports each changed file's contribution
 - **Id**: BL-0333

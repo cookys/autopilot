@@ -1163,7 +1163,9 @@ rr2_finalize() { # <ledger> <phase> <gen>
   else
     echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": $g, \"findings\": [] }" > "$disp"
   fi
-  node "$HETERO_SCRIPT" finalize --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --dispositions "$disp" >/dev/null 2>&1
+  # these fixtures leave the generation-1 Major open on purpose, so generation >= 2 passes the explicit opt-out
+  local optout=(); [ "$g" -ge 2 ] && optout=(--allow-unresolved --reason "fixture: earlier Major left open on purpose")
+  node "$HETERO_SCRIPT" finalize --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --dispositions "$disp" "${optout[@]}" >/dev/null 2>&1
 }
 rr2_build() { # <phase> [g2 collect flags] -> RR2_L, RR2_FID
   local ph="$1"; shift
@@ -1184,6 +1186,7 @@ rr2_craft() {
     const r = JSON.parse(fs.readFileSync(rp, "utf8"));
     r.resolutions_addendum = { path: "review-" + ph + "/resolutions-addendum.json", sha256: shaOv || c.createHash("sha256").update(fs.readFileSync(ap)).digest("hex") };
     r.open_findings = [];
+    delete r.unresolved_allowed; // a hand-written addendum closes the findings the field lists; the field is not part of that fixture
     fs.writeFileSync(rp, JSON.stringify(r, null, 2) + "\n");
   ' "$1/receipt-$2.json" "$1/review-$2/resolutions-addendum.json" "$2" "${4:-}"
 }
@@ -1308,6 +1311,51 @@ rr2_chain_edit "$RRD_L" rrd 'c[1].range_mode = "full"'
 RR9M2_OUT=$(rr2_check "$M_G1/scripts/check-phase-review-receipt.js" "$RRD_L" rrd); RR9M2_RC=$?
 assert_exit_code "$RR9M2_RC" "0" "R9 (mutation): without the base == phase base requirement a forged range_mode full is accepted"
 
+
+# unresolved_allowed (finalize --allow-unresolved --reason): the checker re-derives it, never trusts it
+rr2_build rua; RUA_L="$RR2_L"; RUA_FID="$RR2_FID"
+cp "$RUA_L/receipt-rua.json" "$TEST_TMP/rua.receipt.orig"
+rua_edit() { # <js body over r>
+  cp "$TEST_TMP/rua.receipt.orig" "$RUA_L/receipt-rua.json"
+  node -e 'const fs=require("fs"),p=process.argv[1];const r=JSON.parse(fs.readFileSync(p,"utf8"));'"$1"';fs.writeFileSync(p,JSON.stringify(r,null,2)+"\n")' "$RUA_L/receipt-rua.json"
+}
+assert_contains "$(cat "$TEST_TMP/rua.receipt.orig")" "\"unresolved_allowed\"" "UA: finalize --allow-unresolved wrote the field"
+RUA0_OUT=$(rr2_check "$SCRIPT" "$RUA_L" rua); RUA0_RC=$?
+assert_exit_code "$RUA0_RC" "0" "UA: a genuine receipt with unresolved_allowed is accepted"
+rua_edit "r.unresolved_allowed.ids=[...r.unresolved_allowed.ids,'zzz_extra']"
+RUA1_OUT=$(rr2_check "$SCRIPT" "$RUA_L" rua); RUA1_RC=$?
+assert_exit_code "$RUA1_RC" "1" "UA: an extra id is red"
+assert_contains "$RUA1_OUT" "unresolved_allowed.ids mismatch" "UA: ... named as an ids mismatch"
+rua_edit "r.unresolved_allowed.ids=[]"
+RUA2_OUT=$(rr2_check "$SCRIPT" "$RUA_L" rua); RUA2_RC=$?
+assert_exit_code "$RUA2_RC" "1" "UA: a missing id is red"
+rua_edit "r.unresolved_allowed.ids=['zzz_other']"
+RUA3_OUT=$(rr2_check "$SCRIPT" "$RUA_L" rua); RUA3_RC=$?
+assert_exit_code "$RUA3_RC" "1" "UA: a wrong id is red"
+rua_edit "r.unresolved_allowed.reason='  '"
+RUA4_OUT=$(rr2_check "$SCRIPT" "$RUA_L" rua); RUA4_RC=$?
+assert_exit_code "$RUA4_RC" "1" "UA: a blank reason is red"
+assert_contains "$RUA4_OUT" "unresolved_allowed is malformed" "UA: ... named as malformed"
+rua_edit "delete r.unresolved_allowed.reason"
+RUA5_OUT=$(rr2_check "$SCRIPT" "$RUA_L" rua); RUA5_RC=$?
+assert_exit_code "$RUA5_RC" "1" "UA: a missing reason is red"
+# the field is not required by the checker (part B is separate): a receipt without it still passes
+rua_edit "delete r.unresolved_allowed"
+RUA6_OUT=$(rr2_check "$SCRIPT" "$RUA_L" rua); RUA6_RC=$?
+assert_exit_code "$RUA6_RC" "0" "UA: a receipt without the field is not made red by this change"
+# negative control: without the id comparison a forged id list is accepted
+M_UA=$(cm_mutant ua_ids check-phase-review-receipt.js "if (expectIds.length === 0 || ua.ids.length !== expectIds.length || ua.ids.some((id, i) => id !== expectIds[i])) {" "if (false) {") || fail "mutation setup failed (UA ids)"
+rua_edit "r.unresolved_allowed.ids=['zzz_other']"
+RUAM_OUT=$(rr2_check "$M_UA/scripts/check-phase-review-receipt.js" "$RUA_L" rua); RUAM_RC=$?
+assert_exit_code "$RUAM_RC" "0" "UA (mutation): without the ids re-derivation a forged id list is accepted"
+# refinalize keeps the field in step with an addendum: closing the only left-open finding drops it
+cp "$TEST_TMP/rua.receipt.orig" "$RUA_L/receipt-rua.json"
+printf '%s\n' "$(rr2_item "$RUA_FID" "$RR2_FIX" "$RR2_H2")" > "$TEST_TMP/rua_add.json"
+RUAR_OUT=$(node "$HETERO_SCRIPT" refinalize --repo-root "$RR2_REPO" --ledger "$RUA_L" --phase rua --generation 2 --add-resolutions "$TEST_TMP/rua_add.json" 2>&1); RUAR_RC=$?
+assert_exit_code "$RUAR_RC" "0" "UA: refinalize with an addendum that closes the left-open finding succeeds"
+assert_not_contains "$(cat "$RUA_L/receipt-rua.json")" "unresolved_allowed" "UA: ... and drops the now-empty field"
+RUAR_CHK=$(rr2_check "$SCRIPT" "$RUA_L" rua); RUAR_RC2=$?
+assert_exit_code "$RUAR_RC2" "0" "UA: ... and the checker accepts the refinalized receipt"
 
 finalize_test
 

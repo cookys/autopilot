@@ -129,11 +129,7 @@ hopt="$TEST_TMP/hopt"; mkdir -p "$hopt/ap/scripts/lib" "$hopt/ap/skills/xs" "$ho
 cp "$REPO_ROOT/scripts/run-skill-opt.sh" "$hopt/ap/scripts/"; cp "$REPO_ROOT/scripts/lib/repo-identity.sh" "$REPO_ROOT"/scripts/lib/auth-stop.* "$REPO_ROOT"/scripts/lib/claude-call-capture* "$hopt/ap/scripts/lib/"
 # G37 W5: the eval runners fail closed without their account-layer helper (exit 2), so a minimal layout carries it and the
 # account CLI with its libs; the registry location points at an empty dir (no registry = the legacy path).
-cp_account_layer() { # <scripts dir of the layout>
-  mkdir -p "$1/lib"; cp "$REPO_ROOT/scripts/claude-account.js" "$1/"
-  cp "$REPO_ROOT"/scripts/lib/account-{audit,cooldown,env,pick,quota,registry}.js "$REPO_ROOT"/scripts/lib/{live-state-dir,auth-stop}.js \
-     "$REPO_ROOT/scripts/lib/eval-account.js" "$REPO_ROOT/scripts/lib/eval-account.sh" "$REPO_ROOT/scripts/lib/account-state.sh" "$1/lib/"
-}
+. "$(dirname "$0")/lib/account-layer.sh"
 cp_account_layer "$hopt/ap/scripts"; mkdir -p "$TEST_TMP/no-accounts"; export AUTOPILOT_ACCOUNTS_DIR="$TEST_TMP/no-accounts"
 echo '{}' > "$hopt/ap/skill-creator-workspace/evals/xs-evals.json"
 printf '{"claudeAiOauth":{"accessToken":"tok","expiresAt":99999999999999}}' > "$hopt/home/.claude/.credentials.json"

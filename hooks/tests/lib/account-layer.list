@@ -1,0 +1,23 @@
+# The ONE declared list of files a throwaway layout needs so scripts/claude-account.js (and the eval-account
+# helper in front of it) runs. Paths are relative to scripts/. Consumed by hooks/tests/lib/account-layer.sh
+# (cp_account_layer); scripts/account-layer-list.test.js asserts it covers claude-account.js's relative
+# require closure, so a new local require there fails that guard until it is added here.
+claude-account.js
+quota-reporter.js
+lib/account-audit.js
+lib/account-capture.js
+lib/account-cooldown.js
+lib/account-env.js
+lib/account-interpret.js
+lib/account-observation.js
+lib/account-pick.js
+lib/account-probe.js
+lib/account-quota.js
+lib/account-registry.js
+lib/auth-stop.js
+lib/live-state-dir.js
+lib/runtime-paths.js
+lib/account-rail.js
+lib/eval-account.js
+lib/eval-account.sh
+lib/account-state.sh

@@ -24,5 +24,5 @@ rm -f "$tmp/mods/viewer/run-tests.sh" "$tmp/mods/live/run-tests.sh" "$tmp/mods/r
 rm -f "$tmp/mods/roundtable/"*.test.ts "$tmp/mods/roundtable/"*.test.js
 rm -f "$tmp/mods/live/"*.test.ts "$tmp/mods/live/"*.test.js # the live suites run from their own wrapper
 
-cd "$tmp"
-timeout 600 claude plugin test "$tmp" "$@"
+. "$here/../lib/real-claude-env.sh"
+mods_run_plugin_test "$tmp" "$@"

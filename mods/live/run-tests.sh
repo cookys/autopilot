@@ -33,5 +33,5 @@ cp -r "$here/../viewer" "$tmp/mods/viewer"
 rm -f "$tmp/mods/live/run-tests.sh"
 rm -f "$tmp/mods/viewer/"*.test.ts "$tmp/mods/viewer/"*.test.js "$tmp/mods/viewer/run-tests.sh" # the viewer suites run from their own wrapper
 
-cd "$tmp"
-timeout 600 claude plugin test "$tmp" "$@"
+. "$here/../lib/real-claude-env.sh"
+mods_run_plugin_test "$tmp" "$@"

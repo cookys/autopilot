@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0395 -->
+<!-- next-id: BL-0396 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -2099,3 +2099,19 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: rrint1 g1 deferred Suggestions
 - **Pointer**: project/backlog/rrint1-review-follow-ups.md
+
+### 主 checkout 的 hooksPath 指進工作線目錄，會蓋掉全域實驗室鉤子
+- **Id**: BL-0395
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 主 checkout 鉤子路徑事件, 2026-11-05
+- **Reply**: none
+- **Problem**: 主 checkout 的本機設定曾把鉤子路徑指進某條工作線的目錄，所有 worktree 的推送都跑那條線的鉤子；該目錄一刪或換分支鉤子就悄悄消失，還蓋掉全域實驗室鉤子。已手動修好。
+- **Impact**: 鉤子悄悄失效，推送前的檢查沒跑，沒人發現。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-05 (approved)
+- **Pointer**: project/backlog/repo-local-hookspath-shadow.md

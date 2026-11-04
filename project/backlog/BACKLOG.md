@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0397 -->
+<!-- next-id: BL-0399 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1930,22 +1930,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: aa95f0ce3 full-suite triage, 2026-11-04 (PM ruling)
 - **Pointer**: project/backlog/affected-suites-copy-into-layout-deps.md
 
-### code-loop 收斂後 finalize 仍把已解決的發現留在 open_findings
-- **Id**: BL-0384
-- **Status**: open
-- **Since**: 2026-11-04
-- **Origin**: peer
-- **Reporter**: PM（pm--claude）
-- **Report**: 多個專案的 code-loop 收尾經驗, 2026-11-04
-- **Reply**: none
-- **Problem**: 第 N+1 代 disposition 若沒寫明確的解決記錄，已修好並重審的發現仍留在收據 JSON 的 open_findings，即使所有判定都是 SHIP-AS-IS；事後也無法用 refinalize 補進去。
-- **Impact**: 收據顯示還有未解決項目，與實際狀況不符；各專案只能自己補對照表或寫本機檢查。
-- **Trigger**: d5fu 與入口文件拆分之後
-- **Trigger-Type**: event
-- **Effort**: M
-- **Source**: PM, 2026-11-04（codeforge、alfred、autopilot g40d5 三處證據）
-- **Pointer**: project/backlog/finalize-open-findings-after-convergence.md
-
 ### BL-0375 審查留下的四條 Suggestion
 - **Id**: BL-0385
 - **Status**: open
@@ -2004,22 +1988,6 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Source**: BL-0383 live injection test (PM, 2026-11-04)
 - **Pointer**: project/backlog/consumer-rules-in-claude-md.md
 
-### 審查紀錄與被審的程式碼可能悄悄分歧（collect 範圍）
-- **Id**: BL-0389
-- **Status**: open
-- **Since**: 2026-11-04
-- **Origin**: peer
-- **Reporter**: PM（pm--claude）
-- **Report**: BL-0383 入口文件拆分的審查經過, 2026-11-04
-- **Reply**: none
-- **Problem**: 審查迴圈的收集步驟從第 2 代起只審上一代之後的差異，即使指定了起點也一樣，而規格寫「審完整範圍」時不會有任何警告。BL-0383 的兩份平台入口文件因此跨三代都沒有席位看過，是有人拿規格對照 diff 才發現。
-- **Impact**: 審查紀錄寫「已審」，實際有檔案從沒被看過；與 BL-0384 同類，紀錄與實況不一致。
-- **Trigger**: PM 派工
-- **Trigger-Type**: owner
-- **Effort**: M
-- **Source**: BL-0383 review g1-g3 and entrydoc-full (PM, 2026-11-04; fix approved by PM)
-- **Pointer**: project/backlog/collect-scope-mismatch.md
-
 ### 全套件跑完的紀錄，推送前的結果檢查讀不到
 - **Id**: BL-0390
 - **Status**: open
@@ -2076,8 +2044,8 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: PM（pm--claude）
 - **Report**: 全套件與審查流程的檢討, 2026-11-05
 - **Reply**: none
-- **Problem**: mods 底下 live、viewer、roundtable 三個測試腳本要呼叫真的 claude，但全套件的哨兵路徑會擋掉它，所以這三組測試從來沒跑過。
-- **Impact**: 這三個 mod 的 852 個測試沒有任何自動把關，壞了也不會被發現。
+- **Problem**: 三個 mod 測試腳本現在能用真的 claude 跑（要手動指定路徑），但全套件執行還沒帶這個路徑，所以在全套件裡仍被哨兵擋掉、從沒跑過。
+- **Impact**: 這三個 mod 的 852 個測試仍沒有在全套件裡自動把關。
 - **Trigger**: PM 派工
 - **Trigger-Type**: owner
 - **Effort**: M
@@ -2131,3 +2099,35 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: modsreal g3 review (astra); PM ruling 2026-11-05 (not a blocker)
 - **Pointer**: project/backlog/real-claude-guard-descendant-race.md
+
+### dispatch-author-kill-after：並行池裡紅過一次，原因未留下
+- **Id**: BL-0397
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: 全套件並行池中，殺進程逾時測試紅了一次，單獨重跑卻綠；池內那次的輸出沒有留下，不知道為什麼紅。它的姊妹測試以前也因同機行程互相干擾而不穩。
+- **Impact**: 之後再紅仍查不出原因，只能當偶發放過，真正的問題可能被掩蓋。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-05 fleet（全套件 run-all, jobs 6, 負載約 39）
+- **Pointer**: project/backlog/dispatch-author-kill-after-flaky.md
+
+### 審查收據：54 個可能被漏修的已驗證發現要人工逐條查
+- **Id**: BL-0398
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: 全機統計 443 份審查收據中有 99 份留有前幾代已驗證卻沒寫解決記錄的發現。粗估其中 54 條所引用的檔案之後從沒被改過，可能是被漏修，不只是漏記。
+- **Impact**: 真的被漏修的 Major 發現會帶著已通過的收據上線，沒人知道。
+- **Trigger**: 期限 2026-11-08，進行中的工作線優先
+- **Trigger-Type**: date:2026-11-08
+- **Effort**: M
+- **Source**: PM ruling 2026-11-05 fleet（host count 2026-11-05）
+- **Pointer**: project/backlog/unresolved-finding-audit.md

@@ -102,46 +102,58 @@ function buildMatrix(profile, pairs, controlPairs) {
 
 // ---------------------------------------------------------------- level tables (plan 2.2)
 
+// Declared volatile values live at the TOP LEVEL of the envelope only (a path, not a key name anywhere): a `duration_ms` inside
+// permission_denials[] is not declared and must be seen as a difference. Inside a declared subtree only numbers are masked.
 const B_SCALAR = new Set(['duration_ms', 'duration_api_ms', 'ttft_ms', 'ttft_stream_ms', 'time_to_request_ms', 'first_content_frame_ms', 'total_cost_usd', 'uuid', 'queued_turn_count', 'result_index', 'session_id']);
 const B_TREE = new Set(['usage', 'modelUsage', 'subagent_stats', 'model_usage_since_last_result']); // numbers inside are masked, keys stay
 const isBLevel = (k) => B_SCALAR.has(k) || B_TREE.has(k);
+// PM ruling 2026-11-04 (amendment to D3): the plan declares exactly ONE additive key. It may be present on the stream side only; it is
+// removed byte-exactly (never masked, never re-serialised) before the layer-2 comparison. Any other extra key is a difference.
+const ADDITIVE_KEYS = ['model_usage_since_last_result'];
 
-// ---------------------------------------------------------------- raw-text masker (keeps every other byte)
-
-function maskRaw(text) {
+// opts.strip: top-level keys to drop (key, value and its separator) from the output.
+function maskRaw(text, opts) {
+  const strip = (opts && opts.strip) || [];
   let i = 0;
   const bad = () => { throw new Error('mask_unparsable'); };
-  const ws = () => { const s = i; while (i < text.length && ' \t\r\n'.includes(text[i])) i++; return text.slice(s, i); };
+  const ws = () => { const s0 = i; while (i < text.length && ' \t\r\n'.includes(text[i])) i++; return text.slice(s0, i); };
   function str() {
-    const s = i; if (text[i] !== '"') bad(); i++;
+    const s0 = i; if (text[i] !== '"') bad(); i++;
     while (i < text.length && text[i] !== '"') { if (text[i] === '\\') i++; i++; }
     if (i >= text.length) bad(); i++;
-    return text.slice(s, i);
+    return text.slice(s0, i);
   }
-  function value(mode) {
+  function value(mode, depth) {
     // mode: 'keep' | 'num' (mask numbers only) | 'scalar' (mask the whole value by type)
     const c = text[i];
     if (c === '{') {
-      let out = '{'; i++; out += ws();
-      let first = true;
-      if (text[i] === '}') { i++; return mode === 'scalar' ? '"<object>"' : out + '}'; }
+      i++;
+      const open = ws();
+      if (text[i] === '}') { i++; return mode === 'scalar' ? '"<object>"' : '{' + open + '}'; }
+      const members = []; let seps = []; let close = '';
       for (;;) {
-        if (!first) { out += ws(); if (text[i] === ',') { out += ','; i++; out += ws(); } else break; }
-        first = false;
-        const k = str(); out += k; out += ws(); if (text[i] !== ':') bad(); out += ':'; i++; out += ws();
+        const k = str(); const w1 = ws(); if (text[i] !== ':') bad(); i++; const w2 = ws();
         const key = JSON.parse(k);
-        let child = mode;
-        if (mode === 'keep') child = B_SCALAR.has(key) ? 'scalar' : (B_TREE.has(key) ? 'num' : 'keep');
-        out += value(child);
+        let child = mode === 'scalar' ? 'keep' : mode;
+        if (mode === 'keep' && depth === 0) child = B_SCALAR.has(key) ? 'scalar' : (B_TREE.has(key) ? 'num' : 'keep');
+        const v = value(child, depth + 1);
+        const pre = ws();
+        members.push({ key, text: k + w1 + ':' + w2 + v, drop: depth === 0 && mode === 'keep' && strip.includes(key) });
+        if (text[i] === ',') { i++; seps.push(pre + ',' + ws()); } else { close = pre; break; }
       }
-      out += ws(); if (text[i] !== '}') bad(); i++;
-      return mode === 'scalar' ? '"<object>"' : out + '}';
+      if (text[i] !== '}') bad(); i++;
+      if (mode === 'scalar') return '"<object>"';
+      let out = '{' + open;
+      const kept = members.map((m, n) => ({ m, sep: seps[n] })).filter((x) => !x.m.drop);
+      kept.forEach((x, n) => { out += x.m.text + (n < kept.length - 1 ? x.sep : ''); });
+      return out + close + '}';
     }
     if (c === '[') {
-      let out = '['; i++; out += ws();
+      i++;
+      let out = '[' + ws();
       if (text[i] === ']') { i++; return mode === 'scalar' ? '"<array>"' : out + ']'; }
       for (;;) {
-        out += value(mode === 'scalar' ? 'keep' : mode); out += ws();
+        out += value(mode === 'scalar' ? 'keep' : mode, depth + 1); out += ws();
         if (text[i] === ',') { out += ','; i++; out += ws(); } else break;
       }
       if (text[i] !== ']') bad(); i++;
@@ -155,7 +167,7 @@ function maskRaw(text) {
     return mode === 'scalar' ? (m[0] === 'null' ? '"<null>"' : '"<boolean>"') : m[0];
   }
   const lead = ws();
-  const v = value('keep');
+  const v = value('keep', 0);
   const tail = text.slice(i);
   return lead + v + tail;
 }
@@ -189,6 +201,7 @@ function leafDiffs(a, b, prefix, acc) {
 // ---------------------------------------------------------------- hetero consumer extraction (plan 2.3)
 
 class ExtractError extends Error {}
+class InstrumentError extends ExtractError {} // an extracted consumer could not run: the instrument is broken, never a verdict
 const HETERO_MARKERS = {
   log: `node - "$CCSHIM_ENVELOPE" "$LOG" <<'NODE'`,
   err: `node - "\${LOG:-}" "\${CCSHIM_ENVELOPE:-}" "\${IS_CCSHIM:-0}" "\${IS_OPENCODE:-0}" <<'NODE'`,
@@ -213,8 +226,11 @@ function runHeteroBlocks(blocks, envBytes, tmp, tag) {
   const logFile = path.join(tmp, `log-${tag}`); fs.writeFileSync(logFile, '');
   const f1 = path.join(tmp, 'b-log.js'); const f2 = path.join(tmp, 'b-err.js');
   fs.writeFileSync(f1, blocks.log); fs.writeFileSync(f2, blocks.err);
-  spawnSync(process.execPath, [f1, envFile, logFile], { encoding: 'utf8' });
+  const r1 = spawnSync(process.execPath, [f1, envFile, logFile], { encoding: 'utf8' });
   const r2 = spawnSync(process.execPath, [f2, logFile, envFile, '1', '0'], { encoding: 'utf8' });
+  for (const [name, r] of [['log', r1], ['err', r2]]) {
+    if (r.error || r.status !== 0) throw new InstrumentError(`hetero_block_failed:${name}`);
+  }
   return { log: fs.readFileSync(logFile).toString('latin1'), err: r2.stdout };
 }
 
@@ -232,6 +248,13 @@ function consumeAll(bytes, blocks, tmp, tag, model) {
   let cost = 'unparsable';
   try { const c = JSON.parse(bytes).total_cost_usd; cost = Number.isFinite(c) && c >= 0 ? 'finite_nonneg' : typeof c; } catch (_) { /* keep */ }
   res.benchmark_cost_type = cost;
+  // J8: `grep -o '"session_id":"[^"]*"' | head -n1` needs the compact form; J9: json.loads(line) then .usage. Run on the very bytes C2 would ship.
+  const g = /"session_id":"[^"]*"/.exec(bytes);
+  res.j8_session_grep = g ? 'matched' : 'none';
+  try {
+    const u = JSON.parse(bytes.split('\n').filter(Boolean).join('')).usage;
+    res.j9_usage_keys = u && typeof u === 'object' ? Object.keys(u).join(',') : 'none';
+  } catch (_) { res.j9_usage_keys = 'unparsable'; }
   return res;
 }
 
@@ -259,8 +282,8 @@ function analyzeProfile(dir, profile, opts, blocks, tmp) {
   const ccPairs = pairIds.filter((x) => x.startsWith('c')).sort((a, b) => +a.slice(1) - +b.slice(1));
   const out = {
     pairs: jsPairs.length, control_pairs: ccPairs.length,
-    layer1: { hetero_log_bytes: 'equal', hetero_error_lines: 'equal', wrapper_parse: 'equal', qualification: 'equal', onboard_grep: 'equal', benchmark_cost_type: 'equal' },
-    layer2: { result: 'identical', first_diff_path: null, key_order: 'same' },
+    layer1: { hetero_log_bytes: 'equal', hetero_error_lines: 'equal', wrapper_parse: 'equal', qualification: 'equal', onboard_grep: 'equal', benchmark_cost_type: 'equal', j8_session_grep: 'equal', j9_usage_keys: 'equal' },
+    layer2: { result: 'identical', first_diff_path: null, key_order: 'same', additive_keys_removed: [] },
     exit_codes: 'equal', stderr: 'equal', stderr_nonempty: false,
     noise_floor: { fields_differing_in_control_pairs: [] },
     stream: { rate_limit_event_runs: 0, rate_limit_events: 0, system_init_present: false },
@@ -280,10 +303,17 @@ function analyzeProfile(dir, profile, opts, blocks, tmp) {
     for (const k of Object.keys(cj)) if (cj[k] !== cs[k]) out.layer1[k] = 'differs';
     // layer 2
     let r; let diffPath = null;
+    // The declared additive key(s): present on the stream side, absent on the json side -> removed exactly from the stream side.
+    let strip = [];
+    try {
+      const jo = JSON.parse(J.stdout); const so = JSON.parse(sBytes);
+      strip = ADDITIVE_KEYS.filter((k) => Object.prototype.hasOwnProperty.call(so, k) && !Object.prototype.hasOwnProperty.call(jo, k));
+    } catch (_) { /* layer 1 / the mask will report it */ }
+    for (const k of strip) if (!out.layer2.additive_keys_removed.includes(k)) out.layer2.additive_keys_removed.push(k);
     if (J.stdout === sBytes) r = 'identical';
     else {
       let mj; let ms;
-      try { mj = maskRaw(J.stdout); ms = maskRaw(sBytes); } catch (_) { mj = J.stdout; ms = sBytes; }
+      try { mj = maskRaw(J.stdout); ms = maskRaw(sBytes, { strip }); } catch (_) { mj = J.stdout; ms = sBytes; }
       if (mj === ms) r = 'identical_after_mask';
       else {
         r = 'differs';
@@ -293,7 +323,8 @@ function analyzeProfile(dir, profile, opts, blocks, tmp) {
     if (rank[r] > rank[out.layer2.result]) { out.layer2.result = r; if (diffPath) out.layer2.first_diff_path = out.layer2.first_diff_path || diffPath; }
     try {
       const kp = (t) => keyPaths(JSON.parse(t), '$', []).join('|');
-      if (kp(J.stdout) !== kp(sBytes)) out.layer2.key_order = 'differs';
+      const ks = strip.length ? maskRaw(sBytes, { strip }) : sBytes; // key sets compared after the declared additive key is removed
+      if (kp(J.stdout) !== kp(ks)) out.layer2.key_order = 'differs';
     } catch (_) { out.layer2.key_order = 'differs'; }
     if (J.run.exit !== S.run.exit) out.exit_codes = 'differs';
     if (J.stderr !== S.stderr) out.stderr = 'differs';
@@ -342,9 +373,21 @@ function analyzeDir(dir, opts) {
     const profiles = {};
     const dirs = fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && PROFILES[d.name]).map((d) => d.name).sort();
     for (const p of dirs) profiles[p] = analyzeProfile(dir, p, o, blocks, tmp);
-    const fail = []; const inconc = [];
-    let runsTotal = 0;
-    for (const p of dirs) runsTotal += fs.readdirSync(path.join(dir, p)).filter((n) => n.endsWith('.run.json')).length;
+    const fail = []; const inconc = []; const runState = [];
+    let runsTotal = 0; let runsFailed = 0;
+    for (const p of dirs) {
+      for (const n of fs.readdirSync(path.join(dir, p)).filter((x) => x.endsWith('.run.json'))) {
+        runsTotal++;
+        // runs_failed counts runs (the unit of runs_total) with a non-zero exit; the error-path profile is expected to fail and is left out.
+        try { if (p !== 'ERR' && JSON.parse(fs.readFileSync(path.join(dir, p, n), 'utf8')).exit !== 0) runsFailed++; } catch (_) { /* counted as incomplete elsewhere */ }
+      }
+      // The persisted expected matrix: every expected artifact must exist before a PASS is possible.
+      let exp = null; try { exp = JSON.parse(fs.readFileSync(path.join(dir, p, 'expected.json'), 'utf8')); } catch (_) { /* reported below */ }
+      if (!exp || !Array.isArray(exp.ids)) { runState.push(`${p}:no_expected_matrix`); continue; }
+      const missing = exp.ids.filter((id) => !['stdout', 'stderr', 'run.json'].every((ext) => fs.existsSync(path.join(dir, `${id}.${ext}`))));
+      if (missing.length) runState.push(`${p}:missing_artifacts:${missing.length}/${exp.ids.length}`);
+    }
+    if (resume.status !== 'complete') runState.push(`resume:${resume.status || 'missing'}`);
     for (const [p, r] of Object.entries(profiles)) {
       for (const [k, v] of Object.entries(r.layer1)) if (v !== 'equal') fail.push(`${p}:layer1:${k}`);
       if (r.layer2.result === 'differs') fail.push(`${p}:layer2:differs`);
@@ -356,20 +399,21 @@ function analyzeDir(dir, opts) {
       if (r.flags.a_level_noise) inconc.push(`${p}:a_level_field_differs_in_control_pairs`);
       if (r.flags.incomplete) inconc.push(`${p}:incomplete`);
     }
-    if (resume.status === 'skipped_near_cap') inconc.push('quota:skipped_near_cap');
     if (meta.claude_version && meta.claude_version_end && meta.claude_version !== meta.claude_version_end) inconc.push('claude_version_changed');
     if (dirs.length === 0) inconc.push('no_profiles');
-    const verdict = fail.length ? 'FAIL' : (inconc.length ? 'INCONCLUSIVE' : 'PASS');
+    // A batch that stopped (429, auth, cap, version change, still running) or lacks expected artifacts is never judged on its partial data.
+    const verdict = runState.length ? 'INCONCLUSIVE' : (fail.length ? 'FAIL' : (inconc.length ? 'INCONCLUSIVE' : 'PASS'));
     const notes = [];
     for (const [p, r] of Object.entries(profiles)) {
       if (r.flags.text_drift) notes.push(`${p}: result text drifted between control runs; compare structure only`);
     }
+    notes.push('runs_failed counts runs with a non-zero exit, excluding the error-path profile ERR (its failure is expected).');
     notes.push('J2/J3 (hetero registry-absent branches) are measured per argv shape and recorded only; C2 does not touch that path and nothing is switched.');
     return {
       schema_version: 1, verdict,
       claude_version: meta.claude_version || null, runs_total: runsTotal,
-      runs_failed: Object.values(profiles).reduce((n, r) => n + (r.exit_codes === 'differs' ? 1 : 0), 0),
-      profiles, fail_reasons: fail, inconclusive_reasons: inconc,
+      runs_failed: runsFailed,
+      profiles, fail_reasons: fail, inconclusive_reasons: runState.concat(inconc),
       negative_controls: o.negativeControls || null, notes,
     };
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
@@ -407,15 +451,31 @@ function claudeVersion(env) {
   return (r.stdout || '').trim().slice(0, 200);
 }
 
+const STOP_STATUS = new Set([401, 402, 403, 429, 503, 529]);
+// The api_error_status of the run's result envelope when it is a stop condition, else null (a missing model is 404/400 and is expected).
+function stopStatus(stdoutFile) {
+  try {
+    const env = parseEnvelope(fs.readFileSync(stdoutFile, 'utf8'));
+    if (env && env.is_error === true && STOP_STATUS.has(env.api_error_status)) return `api_error_status_${env.api_error_status}`;
+  } catch (_) { /* unreadable: the exit code decides */ }
+  return null;
+}
+
 function cmdRun(opts) {
   const alias = opts.alias; const profile = opts.profile; const out = opts.out;
   if (!alias || !profile || !out || !PROFILES[profile]) return usageErr('run needs --alias --profile --out');
-  const pairs = opts.pairs === undefined ? 5 : Number(opts.pairs);
-  const control = opts['control-pairs'] === undefined ? 2 : Number(opts['control-pairs']);
+  // Defaults equal `plan`'s: the error-path profile is ONE J/S pair and no control pair.
+  const pairs = opts.pairs === undefined ? (profile === 'ERR' ? 1 : 5) : Number(opts.pairs);
+  const control = opts['control-pairs'] === undefined ? (profile === 'ERR' ? 0 : 2) : Number(opts['control-pairs']);
   if (!Number.isInteger(pairs) || !Number.isInteger(control) || pairs < 0 || control < 0) return usageErr('pairs/control-pairs must be non-negative integers');
+  // Hard cap: one run never makes more calls than the plan's total for that profile (5 J/S + 2 J/J pairs = 14 calls; ERR = 2).
+  const planTotal = profile === 'ERR' ? 2 : 14;
+  if (2 * (pairs + control) > planTotal) { process.stderr.write(`refused: ${2 * (pairs + control)} calls exceed the plan total of ${planTotal} for ${profile}; no call was made\n`); return EXIT.USAGE; }
   const deny = String(opts['deny-alias-pattern'] === undefined ? 'codepower' : opts['deny-alias-pattern']).toLowerCase();
   if (deny && alias.toLowerCase().includes(deny)) { process.stderr.write('refused: alias matches the deny pattern; no call was made\n'); return EXIT.USAGE; }
+  // 0.80 is a ceiling: the knob can only lower it. NaN, Infinity, <= 0 and > 0.80 are refused.
   const maxUtil = opts['max-util'] === undefined ? 0.80 : Number(opts['max-util']);
+  if (!Number.isFinite(maxUtil) || maxUtil <= 0 || maxUtil > 0.80) { process.stderr.write('refused: --max-util must be a number in (0, 0.80]; no call was made\n'); return EXIT.USAGE; }
   let liveBase = null;
   try { liveBase = resolveLiveDir({ env: process.env, warn: () => {} }).base; } catch (_) { liveBase = null; }
   if (!liveBase) { process.stderr.write('refused: no live dir, the quota gate cannot run\n'); return EXIT.NEAR_CAP; }
@@ -424,6 +484,7 @@ function cmdRun(opts) {
   const resumeFile = path.join(out, 'resume.json');
   let done = new Set();
   if (opts.resume) { try { done = new Set(JSON.parse(fs.readFileSync(resumeFile, 'utf8')).done || []); } catch (_) { /* fresh */ } }
+  writeJson(path.join(out, profile, 'expected.json'), { ids: matrix.map((m) => `${m.profile}/${m.pairId}-${m.arm}`) }); // the persisted expected matrix analyze checks
   const accountsDir = process.env.AUTOPILOT_ACCOUNTS_DIR || '~/.config/autopilot/accounts';
   const metaFile = path.join(out, 'meta.json');
   const gate0 = quotaGate(liveBase, alias, maxUtil);
@@ -445,7 +506,7 @@ function cmdRun(opts) {
     if (done.has(id)) continue;
     const g = gate(n);
     if (g) { writeJson(metaFile, meta); saveResume('skipped_near_cap', id); process.stderr.write(`skipped_near_cap: ${g}\n`); return EXIT.NEAR_CAP; }
-    if (n > 0 && n % 10 === 0 && claudeVersion(process.env) !== meta.claude_version) { saveResume('version_changed', id); return EXIT.ABORT; }
+    if (n > 0 && n % 10 === 0 && claudeVersion(process.env) !== meta.claude_version) { meta.aborted = 'version_changed'; writeJson(metaFile, meta); saveResume('version_changed', id); return EXIT.ABORT; }
     const base = path.join(out, m.profile, `${m.pairId}-${m.arm}`);
     const t0 = Date.now();
     const util = readUtil(liveBase, alias);
@@ -455,8 +516,11 @@ function cmdRun(opts) {
     writeJson(`${base}.run.json`, { exit, argv_digest: crypto.createHash('sha256').update(JSON.stringify(normalise(m.argv))).digest('hex').slice(0, 16), order_index: idx, started_at: t0, duration_ms_wall: Date.now() - t0, util_before: util, session_id_passed: m.session_id_passed });
     done.add(id); n++;
     saveResume('running', null);
-    // 429 / no account / auth stop: stop the whole batch, never retry. The error-path profile is expected to fail on its own.
-    if ((exit === 3 || exit === 4 || exit === 6) && m.profile !== 'ERR') { meta.aborted = `wrapper_exit_${exit}`; writeJson(metaFile, meta); saveResume('aborted', null); process.stderr.write(`aborted: wrapper exit ${exit}\n`); return EXIT.ABORT; }
+    // 429 / no account / auth stop: stop the whole batch, never retry, in EVERY profile. The error-path profile (ERR) is expected to
+    // fail only because the model does not exist; a rate-limit, auth or overload envelope there is as much a stop as anywhere.
+    // 2 = invalid usage/registry/token, 3 = no account, 4 = rate limited, 6 = auth stop, 7 = token leak, -1 = could not start: none is a measurement result.
+    const why = [-1, 2, 3, 4, 6, 7].includes(exit) ? `wrapper_exit_${exit}` : stopStatus(`${base}.stdout`);
+    if (why) { meta.aborted = why; writeJson(metaFile, meta); saveResume('aborted', null); process.stderr.write(`aborted: ${why}\n`); return EXIT.ABORT; }
   }
   meta.claude_version_end = claudeVersion(process.env);
   writeJson(metaFile, meta);
@@ -500,7 +564,7 @@ function writeDataset(dir, o) {
   const pd = path.join(dir, 'P1a'); fs.mkdirSync(pd, { recursive: true });
   const put = (pairId, arm, fmt, n) => {
     const sid = fakeUuid('P1a', `${pairId}-${arm}`);
-    const res = Object.assign({}, FIX, { session_id: sid, duration_ms: 900 + n, duration_api_ms: 800 + n, ttft_ms: 400 + n, total_cost_usd: 0.003 + n / 1e5, uuid: `U${n}-${arm}` });
+    const res = Object.assign({}, FIX, opt.denials ? { permission_denials: [{ tool_name: 'Read', duration_ms: opt.denials === 'vary' ? n : 7 }] } : {}, { session_id: sid, duration_ms: 900 + n, duration_api_ms: 800 + n, ttft_ms: 400 + n, total_cost_usd: 0.003 + n / 1e5, uuid: `U${n}-${arm}` });
     const line = JSON.stringify(res);
     let stdout;
     if (fmt === 'json') stdout = line + '\n';
@@ -517,9 +581,16 @@ function writeDataset(dir, o) {
   let n = 0;
   for (let k = 1; k <= 5; k++) { put(`p${k}`, 'J', 'json', n++); put(`p${k}`, 'S', 'stream-json', n++); }
   for (let k = 1; k <= 2; k++) { put(`c${k}`, 'J1', 'json', n++); put(`c${k}`, 'J2', 'json', n++); }
+  const ids = [];
+  for (let k = 1; k <= 5; k++) ids.push(`P1a/p${k}-J`, `P1a/p${k}-S`);
+  for (let k = 1; k <= 2; k++) ids.push(`P1a/c${k}-J1`, `P1a/c${k}-J2`);
+  fs.writeFileSync(path.join(pd, 'expected.json'), JSON.stringify({ ids }));
+  fs.writeFileSync(path.join(dir, 'resume.json'), JSON.stringify({ status: 'complete', done: ids, next: null }));
   fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ claude_version: 'fixture', claude_version_end: 'fixture' }));
   return dir;
 }
+// Appends extra members before the last closing brace of the text (the result line is the last line of a stream).
+function withExtra(t, extra) { const i = t.lastIndexOf('}'); return t.slice(0, i) + extra + t.slice(i); }
 function mutateS(dir, fn) {
   const pd = path.join(dir, 'P1a');
   for (const f of fs.readdirSync(pd)) {
@@ -575,6 +646,45 @@ function runSelftest(opts) {
     results.R10 = r10.verdict === 'PASS' ? 'green' : 'MISSED';
     const r10b = A(ds('r10b', null, (d) => mutateS(d, (ext, t) => (ext === 'stdout' ? t.replace(/"fast_mode_state":"off"/g, '"fast_mode_state":"on"') : t))));
     results.R10_undeclared_field = red(r10b) && r10b.profiles.P1a.layer2.result === 'differs' ? 'red' : 'MISSED';
+    // PM amendment: the one declared additive key may appear on the stream side only (removed exactly); a second extra key is a FAIL.
+    const addKey = ',"model_usage_since_last_result":{"claude-haiku-5-5":{"inputTokens":5}}';
+    const rAdd = A(ds('add-ok', null, (d) => mutateS(d, (e, t) => (e === 'stdout' ? withExtra(t, addKey) : t))));
+    results.ADD_POSITIVE = rAdd.verdict === 'PASS' && rAdd.profiles.P1a.layer2.result === 'identical_after_mask' && rAdd.profiles.P1a.layer2.additive_keys_removed.join() === 'model_usage_since_last_result' ? 'green' : 'MISSED';
+    const rAdd2 = A(ds('add-two', null, (d) => mutateS(d, (e, t) => (e === 'stdout' ? withExtra(t, addKey + ',"x_undeclared":1') : t))));
+    results.ADD_SECOND_KEY = red(rAdd2) && rAdd2.profiles.P1a.layer2.result === 'differs' ? 'red' : 'MISSED';
+    // Masking is by declared path: a duration_ms inside permission_denials[] is not volatile.
+    const rPath = A(ds('path', { denials: 'vary' }));
+    results.MASK_PATH = red(rPath) && rPath.profiles.P1a.layer2.result === 'differs' ? 'red' : 'MISSED';
+    const rPathOk = A(ds('path-ok', { denials: 'same' }));
+    results.MASK_PATH_POSITIVE = rPathOk.verdict === 'PASS' ? 'green' : 'MISSED';
+    // A stopped or partial batch is never a PASS, whatever its partial data says.
+    const stateOk = [];
+    for (const st of ['aborted', 'version_changed', 'running', 'skipped_near_cap']) {
+      const rs = A(ds(`state-${st}`, null, (d) => fs.writeFileSync(path.join(d, 'resume.json'), JSON.stringify({ status: st, done: [], next: null }))));
+      stateOk.push(rs.verdict === 'INCONCLUSIVE' && rs.inconclusive_reasons.includes(`resume:${st}`));
+    }
+    const rMiss = A(ds('state-missing', null, (d) => fs.unlinkSync(path.join(d, 'P1a', 'p5-S.stdout'))));
+    stateOk.push(rMiss.verdict === 'INCONCLUSIVE' && rMiss.inconclusive_reasons.some((x) => x.startsWith('P1a:missing_artifacts')));
+    const rNoExp = A(ds('state-noexp', null, (d) => fs.unlinkSync(path.join(d, 'P1a', 'expected.json'))));
+    stateOk.push(rNoExp.verdict === 'INCONCLUSIVE' && rNoExp.inconclusive_reasons.includes('P1a:no_expected_matrix'));
+    // a one-pair batch whose second arm never ran (429 on the second arm), with the complete-looking files of the first arm
+    const rOne = A(ds('state-onepair', null, (d) => {
+      const pd = path.join(d, 'P1a');
+      for (const f of fs.readdirSync(pd)) if (!/^p1-/.test(f) && f !== 'expected.json') fs.unlinkSync(path.join(pd, f));
+      fs.unlinkSync(path.join(pd, 'p1-S.stdout')); fs.unlinkSync(path.join(pd, 'p1-S.stderr')); fs.unlinkSync(path.join(pd, 'p1-S.run.json'));
+      fs.writeFileSync(path.join(d, 'resume.json'), JSON.stringify({ status: 'aborted', done: ['P1a/p1-J'], next: null }));
+    }));
+    stateOk.push(rOne.verdict === 'INCONCLUSIVE');
+    results.PARTIAL_NEVER_PASS = stateOk.every(Boolean) ? 'red' : 'MISSED';
+    // An extracted consumer that cannot run (markers intact, block broken) is an instrument failure, not a verdict.
+    const hs0 = o.heteroScript || path.join(REPO, 'scripts', 'dispatch-hetero.sh');
+    const broken = path.join(tmp, 'hetero-broken.sh');
+    const src = fs.readFileSync(hs0, 'utf8').split('\n');
+    const bi = src.findIndex((l) => l.includes(HETERO_MARKERS.log));
+    src.splice(bi + 1, 0, 'process.exit(7);');
+    fs.writeFileSync(broken, src.join('\n'));
+    let rb = 'MISSED'; try { analyzeDir(path.join(tmp, 'base'), { heteroScript: broken }); } catch (e) { if (e instanceof InstrumentError) rb = 'red'; }
+    results.BLOCK_FAILS = rb;
     // R13 hetero marker renamed on a copy: extraction must fail
     const hs = o.heteroScript || path.join(REPO, 'scripts', 'dispatch-hetero.sh');
     const copy = path.join(tmp, 'hetero-renamed.sh');
@@ -584,7 +694,7 @@ function runSelftest(opts) {
     // R11 / R12 go through the real `run` path with the claude shim: zero calls
     Object.assign(results, runGateControls(tmp));
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
-  const expected = (k) => (k === 'R10' ? 'green' : (k === 'baseline_pass' ? 'green' : 'red'));
+  const expected = (k) => (['R10', 'baseline_pass', 'ADD_POSITIVE', 'MASK_PATH_POSITIVE'].includes(k) ? 'green' : 'red');
   const ok = Object.keys(results).every((k) => results[k] === expected(k));
   return { ok, results };
 }
@@ -603,7 +713,7 @@ function runGateControls(tmp) {
   const fx2 = makeFixture({ aliases: [{ alias: 'a' }], snapshots: { a: { schema: 'codeforge.quota/1', alias: 'a', root: null, written_at_ms: Date.now(), five_hour: { pct: 0.85, resets_at: Math.floor(Date.now() / 1000) + 3600 } } } });
   try {
     const r = spawnRun(fx2, 'a', path.join(tmp, 'o12'));
-    res.R12 = r.status === EXIT.NEAR_CAP && fx2.shim.calls().length === 0 ? 'red' : 'MISSED';
+    res.R12 = r.status === EXIT.NEAR_CAP && fx2.shim.calls().length === 0 && /utilization/.test(r.stderr) ? 'red' : 'MISSED';
   } finally { fx2.cleanup(); }
   return res;
 }
@@ -630,7 +740,7 @@ function main(argv) {
   if (sub === 'plan') return cmdPlan(opts);
   if (sub === 'run') return cmdRun(opts);
   if (sub === 'selftest') {
-    const r = runSelftest({});
+    const r = runSelftest({ heteroScript: opts['hetero-script'] });
     for (const [k, v] of Object.entries(r.results)) process.stdout.write(`${k}: ${v}\n`);
     return r.ok ? EXIT.PASS : EXIT.INSTRUMENT;
   }
@@ -659,8 +769,8 @@ function main(argv) {
 
 if (require.main === module) {
   let code;
-  try { code = main(process.argv.slice(2)); } catch (e) { process.stderr.write(`error: ${e.message}\n`); code = EXIT.USAGE; }
+  try { code = main(process.argv.slice(2)); } catch (e) { process.stderr.write(`error: ${e.message}\n`); code = e instanceof ExtractError ? EXIT.INSTRUMENT : EXIT.USAGE; }
   process.exitCode = code;
 }
 
-module.exports = { EXIT, PROFILES, buildArgv, buildMatrix, assertArgvDiff, maskRaw, extractHetero, ExtractError, analyzeDir, runSelftest, writeDataset, mutateS, quotaGate, HETERO_MARKERS };
+module.exports = { ADDITIVE_KEYS, InstrumentError, EXIT, PROFILES, buildArgv, buildMatrix, assertArgvDiff, maskRaw, extractHetero, ExtractError, analyzeDir, runSelftest, writeDataset, mutateS, quotaGate, HETERO_MARKERS };

@@ -320,6 +320,14 @@
       "reason": "false positive: the hit is the adapter registry key ['claude', adapter]; the adapter parses transcripts and starts nothing"
     },
     {
+      "file": "scripts/measure-streamjson-equivalence.js",
+      "status": "wired",
+      "group": "BL-0372",
+      "covered_by": [
+        "scripts/measure-streamjson-equivalence.test.js"
+      ]
+    },
+    {
       "file": "scripts/preflight-release.sh",
       "status": "out_of_scope",
       "reason": "false positive: `--runner claude` is an argument to engine-capability-state.js (a state lookup), not a claude process"

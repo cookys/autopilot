@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0404 -->
+<!-- next-id: BL-0406 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1188,3 +1188,35 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: S
 - **Source**: relayout plan amendment E1 review 2026-11-05
 - **Pointer**: project/backlog/relayout-c2-export-hippo.md
+
+### 即時面板輸入雙 @ 時自動補全席位名稱
+- **Id**: BL-0404
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-03 fleet
+- **Reply**: none
+- **Problem**: 想在即時面板輸入兩個 @ 時，列出席位名稱讓人補全（例如 @@codex）。這是新功能，不是缺陷，目前沒有人回報任何症狀。
+- **Impact**: 不做的話，指定席位仍要手打完整名稱，容易打錯。
+- **Trigger**: 角色成員機制的計畫完成之後
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 2026-11-03 request
+- **Pointer**: project/backlog/seat-name-autocomplete.md
+
+### G29：owner 端的派工與處理迴圈要寫一份薄計畫
+- **Id**: BL-0405
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: owner 要改用艦隊子席位派工，而不是 Agent 工具；喚醒後依驗收判斷、有少量重試額度、用完就升級給 PM；並要有子樹層級的進度顯示。團隊章程第一版和艦隊任務租約都沒涵蓋這些。
+- **Impact**: 不做的話，owner 端的派工、驗收與升級仍靠各 session 自行處理，進度也看不到。
+- **Trigger**: 角色成員計畫完成之後
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PM go-ledger G29, ruling 2026-11-05
+- **Pointer**: project/backlog/g29-owner-dispatch-handling-loop.md

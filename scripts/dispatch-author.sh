@@ -53,7 +53,7 @@
 #       # explicit mode (non-strict roster path)
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file>
 #       # active `/l6` contract: strict roster selection only.
-#   --role-kit <dir> (claude-native only; any other runner is refused): <dir>/role.md is the child's --system-prompt,
+#   --role-kit <dir> (claude-native and kimi; any other runner is refused; kimi: role.md + tools become an --agent-file, plugin/ refused): <dir>/role.md is the child's --system-prompt,
 #   <dir>/plugin its --plugin-dir (when present), the one-line <dir>/tools its --tools (`none` = today's no-tools
 #   posture). Validated before any spawn; references/hetero-dispatch.md "Role kit". Off unless given.
 #   scripts/dispatch-author.sh --strict-roster --repo-root <consuming-repo> --prompt-file <file> --bin <path>
@@ -875,8 +875,12 @@ fi
 # --role-kit: refused on every runner but claude-native, validated now (before any spawn).
 . "$_AUTHOR_SELF_DIR/lib/role-kit.sh"   # defaults only: no kit leaves ROLE_KIT_TOOLS empty and ROLE_KIT_EXTRA unset-equivalent
 if [ -n "$ROLE_KIT_DIR" ]; then
-  role_kit_refuse_unless_claude_native "$RUNNER"
-  role_kit_load "$ROLE_KIT_DIR"
+  if [ "$RUNNER" = "kimi" ]; then
+    role_kit_load_kimi "$ROLE_KIT_DIR"   # this rail only: dispatch-review / dispatch-hetero still refuse kimi
+  else
+    role_kit_refuse_unless_claude_native "$RUNNER"
+    role_kit_load "$ROLE_KIT_DIR"
+  fi
 fi
 case "$RUNNER" in cc-shim|claude-native) declare -F child_session_mint >/dev/null 2>&1 && child_session_mint hand ;; esac
 case "$RUNNER" in codex|agy|grok|kimi|cc-shim|anthropic-compatible|claude-native|qoderclicn|cursor) ;; *) die_precondition "--runner must be codex, agy, grok, kimi, cc-shim, anthropic-compatible, claude-native, qoderclicn, or cursor (got: $RUNNER)" ;; esac
@@ -1158,6 +1162,7 @@ CNATIVE_ACCOUNT=0
 CNATIVE_CFG=""   # seeded credentials-only CLAUDE_CONFIG_DIR for claude-native (BL-0290)
 CURSOR_CWD=""
 CURSOR_ERR=""
+KIMI_KIT_DIR=""   # --role-kit on kimi: rail-owned dir holding the generated agent file
 RUNNER_ERR_FILE=""
 AUTHOR_WRAP_FILE=""
 AUTHOR_PARSE_FILE=""
@@ -1174,6 +1179,7 @@ cleanup() {
   [ -n "$CNATIVE_CFG" ] && rm -rf "$CNATIVE_CFG" || true
   [ -n "$CURSOR_CWD" ] && rm -rf "$CURSOR_CWD" || true
   [ -n "$CURSOR_ERR" ] && rm -f "$CURSOR_ERR" || true
+  [ -n "$KIMI_KIT_DIR" ] && rm -rf "$KIMI_KIT_DIR" || true
   [ -n "$RUNNER_ERR_FILE" ] && rm -f "$RUNNER_ERR_FILE" || true
   [ -n "$AUTHOR_WRAP_FILE" ] && rm -f "$AUTHOR_WRAP_FILE" || true
   [ -n "$AUTHOR_PARSE_FILE" ] && rm -f "$AUTHOR_PARSE_FILE" || true
@@ -1377,12 +1383,18 @@ elif [[ "$RUNNER" = "kimi" ]]; then
   if KIMI_TIMEOUT_S="$(normalize_timeout_seconds "$TIMEOUT" 2>/dev/null)" && [[ "$KIMI_TIMEOUT_S" -gt 0 ]]; then
     KIMI_TIMEOUT_ARGS=(--timeout-seconds "$KIMI_TIMEOUT_S")
   fi
+  KIMI_AGENT_ARGS=()
+  if [ "${ROLE_KIT_ACTIVE:-0}" -eq 1 ]; then
+    KIMI_KIT_DIR="$(mktemp -d -t dispatch-author-kimikit-XXXXXX)" || die_precondition "could not create the kimi role-kit dir"
+    role_kit_write_kimi_agent "$ROLE_KIT_DIR" "$KIMI_KIT_DIR/agent.md"
+    KIMI_AGENT_ARGS=(--agent-file "$KIMI_KIT_DIR/agent.md")
+  fi
   author_kill_grace
   set +e
   AUTHOR_TIMEOUT_START=$SECONDS
   # kimi.js reads --prompt-file, so stdin is /dev/null (avoids SIGTTOU on a tty).
   timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" node "$KIMI_JS" --model "$MODEL" --prompt-file "$PROMPT_FILE" \
-    ${KIMI_TIMEOUT_ARGS[@]+"${KIMI_TIMEOUT_ARGS[@]}"} </dev/null > "$RAW_LOG" 2>>"$RAW_LOG"
+    ${KIMI_TIMEOUT_ARGS[@]+"${KIMI_TIMEOUT_ARGS[@]}"} ${KIMI_AGENT_ARGS[@]+"${KIMI_AGENT_ARGS[@]}"} </dev/null > "$RAW_LOG" 2>>"$RAW_LOG"
   RUNNER_EXIT=$?
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e

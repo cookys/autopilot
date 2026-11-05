@@ -1,7 +1,7 @@
 // mods/live/scroll.test.ts — the scrolling window's arithmetic (design plan §12.10): the thumb, the clamp, every ui.scroll key, the cell wrap. The drawing is tested where it is used:
 // the 待決 tab in live.test.ts ("SCROLL decide ...") and the viewer window in viewer.test.ts.
 import { test, expect } from 'claude-code/testing'
-import { applyScroll, frameOf, jumpCells, jumpOffset, keyedGrow, newScroll, roomOf, scrollHook, takesScroll, thumbOf, wrapCells } from './scrollmath'
+import { applyScroll, bottomRows, followsTail, frameOf, jumpCells, jumpOffset, keyedGrow, newScroll, roomOf, scrollHook, takesScroll, thumbOf, wrapCells } from './scrollmath'
 
 test('thumb: flush with the top at offset 0, in the middle halfway, flush with the bottom at the last offset', () => {
   // 100 rows through a 20-row window: the thumb is 4 cells, 16 cells of travel for 80 rows of offset
@@ -164,4 +164,21 @@ test('jumpCells: five points (top, quarter, middle, three quarters, bottom) on a
   expect(jumpCells(1)).toEqual([0])
   expect(jumpCells(0)).toEqual([])
   expect(jumpCells(-3)).toEqual([])
+})
+
+test('bottomRows: short content pads at the TOP and needs no hint; overflow reserves one top hint row; unseen appended rows reserve one bottom row more', () => {
+  expect(bottomRows(5, 12, false)).toEqual({ hint: false, newer: false, rows: 12, max: 0, pad: 7 })
+  expect(bottomRows(12, 12, false)).toEqual({ hint: false, newer: false, rows: 12, max: 0, pad: 0 })
+  expect(bottomRows(30, 12, false)).toEqual({ hint: true, newer: false, rows: 11, max: 19, pad: 0 })
+  expect(bottomRows(30, 12, true)).toEqual({ hint: true, newer: true, rows: 10, max: 20, pad: 0 })
+  expect(bottomRows(5, 12, true).newer, 'content that fits never says new messages').toBe(false)
+  expect(bottomRows(30, 1, true).rows, 'a tiny room still shows one row').toBe(1)
+})
+test('followsTail: a window never drawn follows; one whose offset stood at the last max follows; one scrolled up does not', () => {
+  const m = newScroll()
+  expect(followsTail(m)).toBe(true)
+  m.total = 30; m.max = 19; m.offset = 19
+  expect(followsTail(m)).toBe(true)
+  m.offset = 4
+  expect(followsTail(m)).toBe(false)
 })

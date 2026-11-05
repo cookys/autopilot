@@ -11,7 +11,7 @@
 // the Tab ring, so the keyboard walk gains one stop per jump cell (five); the click is the pointer path, the keys scroll as before.
 // (ui.ts owns every glyph; ui-lint L2 keeps literals out of this file).
 import { GLYPHS, PALETTE } from './ui'
-import { jumpCells, jumpOffset, roomOf, thumbOf } from './scrollmath'
+import { bottomRows, followsTail, jumpCells, jumpOffset, roomOf, thumbOf } from './scrollmath'
 import type { ScrollModel } from './scrollmath'
 export * from './scrollmath'
 
@@ -27,9 +27,66 @@ export type FrameOptions = {
   bar: unknown[] // the fixed action strip under the rule
   barRows: number
   model: ScrollModel
+  // Chat-room layout: the content is anchored to the bottom (the newest row sits directly above the rule and the control area; short content leaves the blank rows at the TOP),
+  // the offset follows the newest row while the view stands at the bottom, and a view scrolled up keeps its place. `above(n)` is the top hint when n rows are above the view;
+  // `newer` (the words; the arrow is GLYPHS.structure.behind, added here) the line shown just above the control area when rows were APPENDED while scrolled up (`append`; a snapshot that is re-read whole never says so). The control area is
+  // `bar` and its height never depends on any of this.
+  // `inline`: an inline pane's frame fits its content, so the content grows upward from the control area up to `rows` and there is no blank; a dock pane has the fixed height `rows`.
+  bottom?: { above: (n: number) => string; newer: string; append: boolean; inline?: boolean }
+}
+
+function bottomFrame(el: { Box: El; Text: El; Button?: El }, o: FrameOptions & { bottom: NonNullable<FrameOptions['bottom']> }) {
+  const { Box, Text, Button } = el
+  const m = o.model
+  const fit = o.bottom.inline === true && o.headRows + o.total + 1 + o.barRows <= o.rows
+  const height = fit ? o.headRows + o.total + 1 + o.barRows : o.rows
+  const room0 = roomOf({ ...o, rows: height })
+  const follow = followsTail(m)
+  const grew = m.total !== undefined && o.total > m.total
+  const g = bottomRows(o.total, room0, !follow && (m.unseen === true || (o.bottom.append && grew)))
+  m.max = g.max
+  m.room = g.rows
+  m.framed = true
+  const target = g.max
+  m.offset = !follow ? Math.min(m.offset, g.max) : grew || m.total === undefined ? target : Math.max(Math.min(m.offset, g.max), target)
+  m.unseen = g.newer && m.offset < g.max
+  m.total = o.total
+  const off = m.offset
+  // the track spans the whole content area (hint and new-messages rows included), so the engine-free layout of the old frame (content > rows + scrollbar) is kept
+  const th = thumbOf(o.total, room0, off)
+  const cells: unknown[] = []
+  const jumps = new Set(jumpCells(room0))
+  if (th !== null) {
+    for (let i = 0; i < room0; i++) {
+      const on = i >= th.top && i < th.top + th.len
+      const glyph = <Text key={'sb' + i} color={on ? PALETTE.here : PALETTE.structure}>{on ? GLYPHS.scrollbar.thumb : GLYPHS.scrollbar.track}</Text>
+      cells.push(Button === undefined || !jumps.has(i) ? glyph : <Button key={'sbj' + i} plain onPress={() => { m.offset = jumpOffset(i, room0, m.max); m.redraw?.() }}>{glyph}</Button>)
+    }
+  }
+  const newerText = <Text key="newer" color={PALETTE.structure} wrap="truncate">{o.bottom.newer + ' ' + GLYPHS.structure.behind}</Text>
+  return (
+    <Box key="frame" flexDirection="column">
+      <Box key="fixed" flexDirection="column" height={height} overflow="hidden">
+        {o.head}
+        <Box key="content" flexDirection="row" flexGrow={1} overflow="hidden">
+          <Box key="rows" flexDirection="column" flexGrow={1} overflow="hidden">
+            {g.hint ? <Text key="above" color={PALETTE.structure} wrap="truncate">{off > 0 ? o.bottom.above(off) : ' '}</Text> : null}
+            {g.pad > 0 ? <Box key="pad" height={g.pad} flexShrink={0} /> : null}
+            {o.window(off, g.hint ? g.rows : o.total)}
+            {g.newer ? (Button === undefined ? newerText : <Button key="newerb" plain onPress={() => { m.offset = m.max; m.redraw?.() }}>{newerText}</Button>) : null}
+          </Box>
+          {th === null ? null : <Box key="scrollbar" flexDirection="column" width={1} flexShrink={0}>{cells}</Box>}
+        </Box>
+        <Text key="rule" color={PALETTE.structure}>{GLYPHS.structure.rule.repeat(Math.max(1, o.cols))}</Text>
+        {o.bar}
+      </Box>
+      <Text key="spare"> </Text>
+    </Box>
+  )
 }
 
 export function scrollFrame(el: { Box: El; Text: El; Button?: El }, o: FrameOptions) {
+  if (o.bottom !== undefined) return bottomFrame(el, { ...o, bottom: o.bottom })
   const { Box, Text, Button } = el
   const room = roomOf(o)
   o.model.max = Math.max(0, o.total - room)

@@ -4,7 +4,9 @@ import { displayWidth } from './ui'
 // a window's state: which content it is for, how far down it stands, and the largest legal offset (the frame writes it each draw, the scroll hook clamps to it)
 // `framed` is whether the LAST draw was a frame (the draw sets it, either way); `room` the content rows that draw showed (a page move is capped to it, so no row is skipped)
 // `redraw` (set by the hook that owns the model, optional) asks for a new draw after a click on the track moved the offset
-export type ScrollModel = { key: string; offset: number; max: number; room: number; framed: boolean; redraw?: () => void }
+// Bottom-anchored windows (scrollFrame option `bottom`) also keep, between draws: `total` (content rows of the last draw; undefined = never drawn) and `unseen` (appended rows arrived while
+// the view stood above the bottom). Whether the view FOLLOWS the newest row is not stored: it is "the offset stood at the last max" (see followsTail).
+export type ScrollModel = { key: string; offset: number; max: number; room: number; framed: boolean; redraw?: () => void; total?: number; unseen?: boolean }
 export const newScroll = (): ScrollModel => ({ key: '', offset: 0, max: 0, room: 0, framed: false })
 // The ONE test for whether the mod, not the engine, takes a ui.scroll: only while the last draw was a frame. Drawn as a plain tree (no Button, no bodyColumns, no band, another tab) the
 // engine scrolls it, so the hook must hand the event to `next`.
@@ -28,7 +30,19 @@ export function keyedGrow(model: ScrollModel, ids: readonly string[]): void {
 }
 // a new content (another file, another list) starts at the top
 export function keyed(model: ScrollModel, key: string): void {
-  if (model.key !== key) { model.key = key; model.offset = 0; model.max = 0 }
+  if (model.key !== key) { model.key = key; model.offset = 0; model.max = 0; model.total = undefined; model.unseen = false }
+}
+// a bottom-anchored window follows the newest row when it has never been drawn, or the offset stood at the last draw's max (the scroll hook only ever clamps to that max)
+export const followsTail = (m: ScrollModel): boolean => m.total === undefined || m.offset >= m.max
+
+// The rows of a bottom-anchored window (one decision for scrollFrame and for the tests). `room` is the content area after the fixed head, rule and control area. Overflowing content
+// reserves one top row for the scroll hint ("↑ N lines more"); appended rows that arrived while the view stood above the bottom reserve one more row at the bottom for the new-messages line.
+// `unseen` is that second reservation, already decided by the caller. Returns the rows left for content, the largest offset, and how many blank rows go ABOVE the content (short content).
+export function bottomRows(total: number, room: number, unseen: boolean): { hint: boolean; newer: boolean; rows: number; max: number; pad: number } {
+  const hint = total > room
+  const newer = hint && unseen
+  const rows = Math.max(1, room - (hint ? 1 : 0) - (newer ? 1 : 0))
+  return { hint, newer, rows, max: Math.max(0, total - rows), pad: hint ? 0 : room - total }
 }
 
 // the pane's room as its render hook sees it: null when the engine gave none (an older host, a test with no scroll prop), and the caller draws the plain tree

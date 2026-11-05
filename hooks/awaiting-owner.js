@@ -17,6 +17,9 @@
  *                                        input_digest = sha256 of the canonical JSON of tool_input, 16 hex; idle entries are dropped
  *   Notification idle_prompt          -> add idle (NOT Stop: idle_prompt is the +60 s confirmation) only when no permission/question entry
  *   Notification permission_prompt    -> heartbeat (updated_at) only; never creates a file, so a late Notification cannot resurrect
+ *                                        PERMWATCH: the oldest permission entry not yet marked also becomes state "BLOCKED_ON_PERMISSION" (the prompt is
+ *                                        still up ~6 s after PermissionRequest) and opens ONE owner-panel card (hooks/permission-block-lib.js); the card
+ *                                        closes with the entry (PostToolUse / Stop / UserPromptSubmit / SubagentStop / SessionEnd). Detection only: no key is sent.
  *   PostToolUse                       -> end the exact (agent_id, tool_name, digest) entry; else the OLDEST permission/question entry of
  *                                        the same (agent_id, tool_name) (Tab-to-amend changes the input); NEVER another agent's entry
  *   Stop | UserPromptSubmit           -> end main-thread entries (agent_id null) and idle; subagent entries survive
@@ -81,11 +84,28 @@ function inputDigest(input) {
   return require('crypto').createHash('sha256').update(JSON.stringify(canon(input === undefined ? null : input))).digest('hex').slice(0, 16);
 }
 
+// PERMWATCH: the optional fields a Notification permission_prompt adds to a permission entry (see permission-block-lib.js).
+// cwd / pane_id come from the PermissionRequest; state + decision_* appear once the prompt has stayed up long enough for
+// Claude Code to notify (about 6 s), and ride along on every rewrite.
+function blockedFields(e) {
+  const o = {};
+  for (const k of ['cwd', 'pane_id', 'state', 'decision_file', 'decision_id']) if (typeof e[k] === 'string' && e[k]) o[k] = e[k];
+  return o;
+}
+
+// Close the cards of entries that are gone from `next` (the prompt resolved, was denied, or its agent/session ended).
+function closeGoneCards(p, prev, next) {
+  for (const e of prev) {
+    if (!e.decision_id || next.some((n) => n.decision_id === e.decision_id)) continue;
+    try { require('./permission-block-lib.js').closeBlockedCard(e.decision_file, e.decision_id, p.session_id); } catch (err) { L.failOpen('awaiting-owner/permission-card', err); }
+  }
+}
+
 // The entries of a parsed attention file; an old-shape file (no `pending`) is one main-thread entry.
 function entriesOf(cur) {
   if (Array.isArray(cur.pending)) {
     return cur.pending.filter((e) => e && typeof e === 'object' && ['permission', 'question', 'idle'].includes(e.kind) && Number.isFinite(Date.parse(e.since)))
-      .map((e) => ({ agent_id: typeof e.agent_id === 'string' && e.agent_id ? e.agent_id : null, tool_name: e.tool_name || null, input_digest: e.input_digest || null, kind: e.kind, summary: String(e.summary || ''), since: e.since, updated_at: e.updated_at || e.since }));
+      .map((e) => ({ agent_id: typeof e.agent_id === 'string' && e.agent_id ? e.agent_id : null, tool_name: e.tool_name || null, input_digest: e.input_digest || null, kind: e.kind, summary: String(e.summary || ''), since: e.since, updated_at: e.updated_at || e.since, ...blockedFields(e) }));
   }
   if (!['permission', 'question', 'idle'].includes(cur.kind) || !Number.isFinite(Date.parse(cur.since))) return [];
   return [{ agent_id: null, tool_name: cur.tool_name || null, input_digest: null, kind: cur.kind, summary: String(cur.summary || ''), since: cur.since, updated_at: cur.updated_at || cur.since }];
@@ -118,7 +138,7 @@ function endEntries(p, agentId) {
     if (!cur || cur.schema !== 'autopilot.attention/1') return;
     const entries = entriesOf(cur);
     const next = entries.filter((e) => e.agent_id !== agentId);
-    if (next.length !== entries.length) writeEntries(file, p, next, cur.project_key, new Date().toISOString());
+    if (next.length !== entries.length) { closeGoneCards(p, entries, next); writeEntries(file, p, next, cur.project_key, new Date().toISOString()); }
   });
 }
 
@@ -167,14 +187,19 @@ function handle(p) {
     // missing file is a no-op, so skipping the lock for the end events is behaviour-identical.
     if (!require('fs').existsSync(file)) return;
   }
-  if (ev === 'SessionEnd') { L.removeFile(file); return; }
+  if (ev === 'SessionEnd') {
+    const cur = L.readJsonFile(file);
+    if (cur && cur.schema === 'autopilot.attention/1') closeGoneCards(p, entriesOf(cur), []);
+    L.removeFile(file);
+    return;
+  }
 
   L.withLock(file, () => {
     const cur = L.readJsonFile(file);
     const hasFile = cur && cur.schema === 'autopilot.attention/1';
     const entries = hasFile ? entriesOf(cur) : [];
     const projectKey = hasFile ? cur.project_key : undefined;
-    const commit = (next) => writeEntries(file, p, next, projectKey, now);
+    const commit = (next) => { closeGoneCards(p, entries, next); writeEntries(file, p, next, projectKey, now); };
     if (ev === 'UserPromptSubmit' || ev === 'Stop') {
       commit(entries.filter((e) => e.agent_id !== null));
     } else if (ev === 'PostToolUse') {
@@ -194,10 +219,19 @@ function handle(p) {
         commit([...rest, {
           agent_id: agent, tool_name: tool, input_digest: digest, kind: tool === 'AskUserQuestion' ? 'question' : 'permission',
           summary: summarize(p), since: now, updated_at: now,
+          ...blockedFields({ cwd: p.cwd, pane_id: process.env.TMUX_PANE }),
         }]);
       }
     } else if (ev === 'Notification' && notifType === 'permission_prompt') {
-      if (entries.some((e) => e.kind !== 'idle')) commit(entries.map((e) => ({ ...e })));
+      // PERMWATCH: the prompt is still up when Claude Code notifies (about 6 s after PermissionRequest). The oldest permission
+      // entry not yet marked becomes BLOCKED_ON_PERMISSION and opens ONE card; a repeat Notification finds it marked and only heartbeats.
+      const fresh = entries.filter((e) => e.kind === 'permission' && !e.state).sort(bySince)[0];
+      if (fresh) {
+        const card = require('./permission-block-lib.js').openBlockedCard({ cwd: fresh.cwd || p.cwd, sessionId: p.session_id, paneId: fresh.pane_id, summary: fresh.summary });
+        commit(entries.map((e) => (e === fresh
+          ? { ...e, state: require('./permission-block-lib.js').STATE, ...(card ? { decision_file: card.file, decision_id: card.id } : {}) }
+          : { ...e })));
+      } else if (entries.some((e) => e.kind !== 'idle')) commit(entries.map((e) => ({ ...e })));
     } else if (ev === 'Notification' && notifType === 'idle_prompt') {
       if (entries.some((e) => e.kind !== 'idle')) return; // a real prompt outranks idle
       const idle = entries.find((e) => e.kind === 'idle');

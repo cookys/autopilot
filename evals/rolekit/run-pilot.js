@@ -206,20 +206,26 @@ function attempt(ctx, c, n) {
   }
 }
 
-function runCell(ctx, c) {
-  let cost = 0; let last = null;
-  for (let n = 1; n <= 2; n += 1) {
-    const a = attempt(ctx, c, n);
-    cost += a.cost ? a.cost.usd : 0;
-    if (a.stop) return { stop: a.stop, cost };
-    last = a;
-    if (!a.infra) break;
+// Every attempt is appended to <out>/attempts.jsonl as it ends (cost, outcome), independently of the scored rows. Spend and the
+// per-cell progress (infra attempts used, cost so far) are rebuilt from that ledger on resume, so a stop between attempts loses nothing.
+// The budget is checked before EVERY attempt, retries included; a cell that cannot afford its next attempt stays pending (no row).
+function runCell(ctx, c, key) {
+  const st = ctx.cells[key] || (ctx.cells[key] = { infraAttempts: 0, cost: 0, lastInfra: null, source: 'cost_model_rate' });
+  let last = null;
+  while (st.infraAttempts < 2) {
+    if (ctx.spent + estimateUsd(c.seat, ctx.rates) > ctx.cap) return { stop: { kind: 'cap', why: `spent ${ctx.spent.toFixed(4)} + estimate would cross ${ctx.cap} before attempt ${st.infraAttempts + 1}` } };
+    const a = attempt(ctx, c, st.infraAttempts + 1);
+    const usd = a.cost ? a.cost.usd : 0;
+    ctx.spent += usd; st.cost += usd; if (a.cost) st.source = a.cost.source;
+    fs.appendFileSync(ctx.ledgerFile, `${JSON.stringify({ key, attempt: st.infraAttempts + 1, cost_usd: usd, cost_source: st.source, outcome: a.stop ? `stop:${a.stop.kind}` : a.infra ? 'infra' : 'scored', infra: a.infra || null })}\n`);
+    if (a.stop) return { stop: a.stop };
+    if (a.infra) { st.infraAttempts += 1; st.lastInfra = a.infra; continue; }
+    last = a; break;
   }
-  const infra = !!last.infra;
+  const infra = !last;
   return {
-    cost,
-    row: { role: c.role, task: c.task, rep: c.rep, arm: c.arm, seat: c.seat, pass: infra ? 0 : last.pass, infra, parse_ok: infra ? false : last.parse_ok, kit_applied: last.kit_applied === true,
-      cost_usd: Math.round(cost * 1e6) / 1e6, cost_source: last.cost ? last.cost.source : 'cost_model_rate', check_rc: last.check_rc === undefined ? null : last.check_rc, detail: infra ? last.infra : last.detail, attempts: last.infra && cost > estimateUsd(c.seat, ctx.rates) * 1.0001 ? 2 : 1 },
+    row: { role: c.role, task: c.task, rep: c.rep, arm: c.arm, seat: c.seat, pass: infra ? 0 : last.pass, infra, parse_ok: infra ? false : last.parse_ok, kit_applied: infra ? false : last.kit_applied === true,
+      cost_usd: Math.round(st.cost * 1e6) / 1e6, cost_source: st.source, check_rc: infra || last.check_rc === undefined ? null : last.check_rc, detail: infra ? st.lastInfra : last.detail, attempts: st.infraAttempts + (infra ? 0 : 1) },
   };
 }
 
@@ -259,7 +265,15 @@ function run(opts, env = process.env) {
   const resultsFile = path.join(out, 'results.jsonl');
   const rows = fs.existsSync(resultsFile) ? fs.readFileSync(resultsFile, 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)) : [];
   const done = new Set(rows.map((r) => `${r.arm}|${r.seat}|${r.role}|${r.task}|${r.rep}`));
-  let spent = rows.reduce((n, r) => n + r.cost_usd, 0);
+  ctx.ledgerFile = path.join(out, 'attempts.jsonl'); ctx.cap = cap; ctx.spent = 0; ctx.cells = {};
+  if (fs.existsSync(ctx.ledgerFile)) {
+    for (const l of fs.readFileSync(ctx.ledgerFile, 'utf8').split('\n').filter((x) => x.trim())) {
+      const e = JSON.parse(l);
+      const st = ctx.cells[e.key] || (ctx.cells[e.key] = { infraAttempts: 0, cost: 0, lastInfra: null, source: 'cost_model_rate' });
+      ctx.spent += e.cost_usd; st.cost += e.cost_usd; st.source = e.cost_source;
+      if (e.outcome === 'infra') { st.infraAttempts += 1; st.lastInfra = e.infra; }
+    }
+  }
   const summary = { dry_run: ctx.dry, account: opts.account, scheduled: plan.keys.length, skipped_already_recorded: 0, ran: 0, stopped: null, spent_usd: 0, cap_usd: cap };
   const share30 = (plan.prereg.cost.estimate_usd_high * 30) / plan.keys.length;
   const roleSet = opts.roles ? new Set(opts.roles.split(',')) : null;
@@ -268,15 +282,13 @@ function run(opts, env = process.env) {
     if (done.has(key)) { summary.skipped_already_recorded += 1; continue; }
     const c = parseKey(key);
     if (roleSet && !roleSet.has(c.role)) continue; // --roles narrows the walk; the schedule digest and the other cells are untouched
-    if (spent + estimateUsd(c.seat, rates) > cap) { summary.stopped = { kind: 'cap', at: key, why: `spent ${spent.toFixed(4)} + estimate would cross ${cap}` }; break; }
     if (rows.length >= 30 && rows.slice(0, 30).reduce((n, r) => n + r.cost_usd, 0) > 2 * share30 && !state.stoploss_waived) { summary.stopped = { kind: 'cap', at: key, why: 'stop-loss: the first 30 cells cost more than 2x their share of the high estimate' }; break; }
-    const res = runCell(ctx, c);
-    spent += res.cost;
+    const res = runCell(ctx, c, key);
     if (res.stop) { summary.stopped = { kind: res.stop.kind, at: key, why: res.stop.why.slice(0, 500) }; break; }
     fs.appendFileSync(resultsFile, `${JSON.stringify(res.row)}\n`);
     rows.push(res.row); done.add(key); summary.ran += 1;
   }
-  summary.spent_usd = Math.round(spent * 1e6) / 1e6;
+  summary.spent_usd = Math.round(ctx.spent * 1e6) / 1e6;
   summary.rows = rows.length;
   fs.writeFileSync(path.join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   return { summary, resultsFile, rows };

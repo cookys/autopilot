@@ -15,7 +15,10 @@ let scenario = {}; try { scenario = JSON.parse(fs.readFileSync(process.env.RKRUN
 const frame = (prompt.match(/^<<<AUTOPILOT-AUTHOR-[0-9a-f]+>>>$/m) || [])[0]; // the author rail wraps its prompt in a nonce frame the answer must reuse
 const endFrame = (prompt.match(/^<<<AUTOPILOT-END-[0-9a-f]+>>>$/m) || [])[0];
 const emit = (t) => process.stdout.write(frame && endFrame ? `${frame}\n${t}\n${endFrame}\n` : t);
-const outcome = scenario[cell] || 'miss';
+// A scenario value may be a list: the Nth call for this cell (counted in RKRUN_CALLS) takes the Nth entry, the last entry repeats.
+let seen = 0; try { seen = fs.readFileSync(process.env.RKRUN_CALLS, 'utf8').split('\n').filter((l) => l && JSON.parse(l).cell === cell).length; } catch (e) { /* first call */ }
+const want = scenario[cell];
+const outcome = (Array.isArray(want) ? want[Math.min(seen, want.length - 1)] : want) || 'miss';
 if (process.env.RKRUN_CALLS) {
   fs.appendFileSync(process.env.RKRUN_CALLS, `${JSON.stringify({ cell, outcome, argv_flags: argv.filter((a) => a.startsWith('--')), prompt_bytes: prompt.length })}\n`);
 }

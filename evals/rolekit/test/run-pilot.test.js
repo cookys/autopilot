@@ -147,3 +147,34 @@ test('run (dry, hetero path): an auth error that only the agent log carries stop
     assert.strictEqual(fs.readFileSync(path.join(d, 'dry', 'calls.jsonl'), 'utf8').trim().split('\n').length, 1); // no infra retry
   } finally { rm(d); }
 });
+
+test('budget: a retry that cannot fit the cap is not run; the cell stays pending with its first attempt on the ledger', () => {
+  const d = tmp();
+  try {
+    const res = rp.run(base(d, { capUsd: '0.02', scenario: scenarioFile(d, { [firstKey()]: 'infra' }) })); // first attempt 0.0162 fits, a second would reach 0.0324
+    assert.strictEqual(res.summary.stopped.kind, 'cap');
+    assert.strictEqual(res.summary.stopped.at, firstKey());
+    assert.strictEqual(res.summary.ran, 0);
+    assert.ok(!fs.existsSync(res.resultsFile) || fs.readFileSync(res.resultsFile, 'utf8') === '');
+    assert.ok(res.summary.spent_usd <= 0.02, `spent ${res.summary.spent_usd}`);
+    assert.strictEqual(fs.readFileSync(path.join(d, 'dry', 'calls.jsonl'), 'utf8').trim().split('\n').length, 1);
+  } finally { rm(d); }
+});
+
+test('budget: infra attempt then an auth stop, then resume: the lost attempts are in the total, the cell runs once more, exactly one row', () => {
+  const d = tmp();
+  try {
+    const key = firstKey();
+    const first = rp.run(base(d, { scenario: scenarioFile(d, { [key]: ['infra', 'auth'] }) }));
+    assert.strictEqual(first.summary.stopped.kind, 'auth');
+    assert.ok(!fs.existsSync(first.resultsFile) || fs.readFileSync(first.resultsFile, 'utf8') === '');
+    assert.ok(Math.abs(first.summary.spent_usd - 0.0324) < 1e-9, `spent ${first.summary.spent_usd}`); // infra + auth attempt, no scored row
+    const second = rp.run(base(d, { capUsd: '0.06', scenario: scenarioFile(d, {}) })); // resume; the infra attempt is remembered, so one attempt is left
+    const rows = fs.readFileSync(second.resultsFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.strictEqual(rows.filter((r) => `${r.arm}|${r.seat}|${r.role}|${r.task}|${r.rep}` === key).length, 1);
+    assert.ok(Math.abs(rows[0].cost_usd - 0.0486) < 1e-9, `row cost ${rows[0].cost_usd}`);
+    assert.strictEqual(rows[0].infra, false);
+    assert.ok(Math.abs(second.summary.spent_usd - 0.0486) < 1e-9 || second.summary.spent_usd > 0.0486, `total ${second.summary.spent_usd}`);
+    assert.strictEqual(second.summary.stopped.kind, 'cap'); // the 0.06 cap stops the walk after that cell
+  } finally { rm(d); }
+});

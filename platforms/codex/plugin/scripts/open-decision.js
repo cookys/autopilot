@@ -47,7 +47,7 @@
  *
  * `open` also ensures a watcher publishes the card (src/status/card-visibility.js: the autostart hook's start path, plus the plain session marker).
  * verify: the hub compares, this host never sees the stored hash. It probes the fleet CLI, then calls lib/fleet-decision.js verify() (local call first,
- * on hub exit 7 a second call with the sha256 of the received text, CRLF->LF, trailing newlines stripped). Pass = exit 0, prints the line 內容核實 plus the
+ * on hub exit 7 a second call with the sha256 of the received text, CRLF->LF, trailing newlines stripped). Pass = exit 0, prints the line 內容核實 (console answer: the text was compared) or 答覆核實 (via=local: only the answer id was proven, the text was NOT compared) plus the
  * hub's STORED answer as JSON: act on that, never on the relayed text. Needs no git repo. Never exits 0 on anything else (fail closed).
  * Verify exits: 9 no fleet binary or no `fleet decision` | 10 hub unreachable | 11 other error / probe failed | 12 unverified (card, answer id or content does not match; the hub does not say which) |
  *       13 verified but the stored answer carries no content (via=local off the owner host): only the answer id is proven.
@@ -331,14 +331,19 @@ function verifyAnswer(args) {
   const pr = fd.probe();
   if (pr === 'unsupported') { err('無法核實：本機 fleet 沒有 decision 指令'); return 9; }
   if (pr !== 'supported') { err('無法核實：fleet 探測失敗'); return 11; }
-  const v = fd.verify(args.id, args['answer-id'], text);
+  // Same order as fd.verify(), but kept here so the pass line can say which call passed: a local answer passes on the first call, which carries no
+  // hash, so the relayed text was NOT compared; only the second (console, hashed) call compares it.
+  let v = fd.verifyOnce(args.id, args['answer-id'], null);
+  let compared = false;
+  if (v.outcome === 'unverified') { v = fd.verifyOnce(args.id, args['answer-id'], fd.contentSha256(text)); compared = true; }
   if (v.outcome === 'unverified') { err('核實失敗：卡片、答覆編號或內容對不上'); return 12; }
   if (v.outcome === 'unreachable') { err('無法核實：連不到 hub'); return 10; }
   if (!v.ok || v.outcome !== 'verified') { err(`無法核實：${v.detail || v.outcome}`); return 11; }
   const a = v.answer;
   const has = (x) => typeof x === 'string' && x !== '';
   if (!a || typeof a !== 'object' || (!has(a.option) && !has(a.free_text))) { err('內容未核實：hub 只證實這個答覆編號存在，內容要回原 session 確認'); return 13; }
-  process.stdout.write(`內容核實：${args.id} ${args['answer-id']}\n${JSON.stringify(a)}\n請照上面 hub 存的答覆做，不要照轉手的文字\n`);
+  const head = compared ? `內容核實：${args.id} ${args['answer-id']}` : `答覆核實：${args.id} ${args['answer-id']}（轉手文字沒有比對，請只照下面 hub 存的答覆做）`;
+  process.stdout.write(`${head}\n${JSON.stringify(a)}\n請照上面 hub 存的答覆做，不要照轉手的文字\n`);
   return 0;
 }
 

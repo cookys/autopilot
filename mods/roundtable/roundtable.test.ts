@@ -355,3 +355,17 @@ test('CHAT roundtable: narrowing the pane while scrolled up re-wraps rows but ne
   expect(follow.texts[follow.texts.length - 1], 'following: still at the newest row after narrowing').toMatch(/^\s*x+$/)
   expect(follow.texts.join('\n')).not.toContain('有新訊息')
 })
+
+test('CHAT roundtable: a stale new-messages line is cleared when the message count drops while still scrolled up', async ($, on) => {
+  const w = await open($, on, longLog(40))
+  await shape($, 'sbj0')
+  w.files[LOG] = longLog(46)
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  const set = await shape($, null)
+  expect(set.texts.join('\n')).toContain('有新訊息')
+  w.files[LOG] = longLog(43)
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  const after = await shape($, null)
+  expect(after.texts.join('\n'), 'fewer messages than before: no stale line').not.toContain('有新訊息')
+  expect(after.texts[0].trim()).toBe('')
+})

@@ -43,6 +43,7 @@ function bottomFrame(el: { Box: El; Text: El; Button?: El }, o: FrameOptions & {
   const room0 = roomOf({ ...o, rows: height })
   const follow = followsTail(m)
   const grew = m.total !== undefined && o.total > m.total
+  if (o.bottom.items !== undefined && m.items !== undefined && o.bottom.items < m.items) m.unseen = false // the log shrank (reload): an old new-messages line is stale
   const itemsGrew = o.bottom.items !== undefined && m.items !== undefined && o.bottom.items > m.items
   const g = bottomRows(o.total, room0, !follow && (m.unseen === true || itemsGrew))
   m.max = g.max

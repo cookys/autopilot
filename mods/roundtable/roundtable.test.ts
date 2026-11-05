@@ -369,3 +369,13 @@ test('CHAT roundtable: a stale new-messages line is cleared when the message cou
   expect(after.texts.join('\n'), 'fewer messages than before: no stale line').not.toContain('有新訊息')
   expect(after.texts[0].trim()).toBe('')
 })
+
+test('CHAT roundtable: switching to another room resets the view: no new-messages line, and the new room opens at its newest message', async ($, on) => {
+  const w = await open($, on, longLog(40))
+  await shape($, 'sbj0')
+  w.files[ROOMS + '/other/room.jsonl'] = longLog(60)
+  await $.command.run({ command: 'rt-room', args: 'other' })
+  const b = await shape($, null)
+  expect(b.texts.join('\n')).not.toContain('有新訊息')
+  expect(b.texts[b.texts.length - 1], 'opens at the newest message').toContain('第 60 則發言')
+})

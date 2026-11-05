@@ -76,8 +76,8 @@ Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0
 | Cross-skill references | `references/{blind-dispatch,model-routing}.md` |
 | Project tracking | `docs/projects/` (active + `_archive/`) |
 | Backlog | `project/backlog/BACKLOG.md` |
-| Plans | `docs/plans/` — registered in `project/projects/INDEX.md` (Version `active`; `scripts/check-plan-graduation.js`'s `plan_unregistered` gate) |
-| Architecture decisions | `docs/adr/` (ADR-0001: verification over attestation — binding on governance work) |
+| Plans | `docs/plans/` — registered in `project/projects/INDEX.md` (Version `active`; `check-plan-graduation.js`'s `plan_unregistered` gate) |
+| Architecture decisions | `docs/dev/adr/` (ADR-0001: verification over attestation — binding on governance work) |
 | Release notes | `CHANGELOG.md` |
 | Per-session gotchas | `~/.claude/projects/-home-cookys-projects-autopilot/memory/` |
 | Dogfood / coexistence knowledge | `.claude/knowledge/` — read `INDEX.md` first. Gitignored on purpose: a write there is not saved until `git add -f` + commit (`references/knowledge-routing.md`) |

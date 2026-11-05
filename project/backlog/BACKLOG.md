@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0399 -->
+<!-- next-id: BL-0404 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1114,3 +1114,77 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PM ruling 2026-11-05 fleet（host count 2026-11-05）
 - **Pointer**: project/backlog/unresolved-finding-audit.md
+
+### 審查迴圈收尾輸出把未解決與待解決混在一個數字
+- **Id**: BL-0399
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: codeforge
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: 收尾輸出的未解決發現數，把已驗證但還沒被後一代明確解決的發現也算進去。這是設計如此，但輸出沒說明，解決的寫法也沒寫清楚。
+- **Impact**: 使用端看到數字不為零，不知道是真的沒修，還是只差一筆解決記錄。
+- **Trigger**: next touch of the hetero-review-loop finalize summary
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED codeforge 2026-11-05
+- **Pointer**: project/backlog/review-loop-open-vs-pending-split.md
+
+### 殺進程逾時測試在高負載主機上單獨跑也會紅
+- **Id**: BL-0400
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: 殺進程逾時測試在主機負載四十多時，單獨跑也有四條時間斷言失敗，量到九到十五秒，超出測試寫死的上限。時間上限不能硬加寬，要改成不靠牆上時間的判法。
+- **Impact**: 高負載時這支測試固定紅，會蓋住真正的新壞掉。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-05 fleet（四次執行，負載 40-43）
+- **Pointer**: project/backlog/kill-after-timing-bounds-under-load.md
+
+### 四支測試只在並行池裡紅，另一支偶發
+- **Id**: BL-0401
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: 全套件並行時有四支測試紅、單獨跑卻綠，是同機互相干擾。另有一支付費批次停止測試單獨跑六次紅一次，哪一條斷言紅還沒查出來。
+- **Impact**: 完整套件會出現假紅，要靠人工單獨重跑才能判斷。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: PM 2026-11-05 fleet（04913afdf 全套件）
+- **Pointer**: project/backlog/suite-pool-interference-and-intermittents.md
+
+### d0gate 測試的凍結樣本只對已結案那一輪成立
+- **Id**: BL-0402
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: self
+- **Problem**: d0gate 測試現在拿凍結樣本跟釘住提交上的程式比對，因為那一輪已結案。開新一輪時沒有重釘，測試就會比對過期的版本。
+- **Impact**: 新一輪 d0gate 若沒重釘，測試照樣綠但沒驗到現行程式。
+- **Trigger**: next d0gate round
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: wfix merge 8c0d36273
+- **Pointer**: project/backlog/d0gate-stub-repin-on-new-round.md
+
+### 公開匯出工具要排除本機 hippo 資料夾
+- **Id**: BL-0403
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: self
+- **Problem**: 第二階段公開匯出工具還沒明文排除本機 hippo 資料夾，版面清單也還沒登記它。沒排除，本機資料可能被帶進公開匯出。
+- **Impact**: 本機資料夾可能混進公開匯出。
+- **Trigger**: relayout C2 export tool
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: relayout plan amendment E1 review 2026-11-05
+- **Pointer**: project/backlog/relayout-c2-export-hippo.md

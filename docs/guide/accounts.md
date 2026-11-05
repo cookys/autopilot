@@ -145,6 +145,20 @@ mv ~/.config/autopilot/accounts/registry.json ~/.config/autopilot/accounts/regis
 
 Expected: the next rail call returns to the old seeded behaviour. For one shell only, `export AUTOPILOT_ACCOUNT_MODE=off` does the same (it is audited as `mode_off`). To go back, move the file back.
 
+## Changing the host default
+
+Every dispatch rail runs `claude-account.js run --pin-default`, which uses the enabled registry row with the lowest `priority` number (a tie goes to the earlier row). To make another alias the default for a while, for example for a pilot window, without editing JSON:
+
+```
+node scripts/claude-account.js set-default <alias>
+```
+
+The alias gets priority (lowest priority among the other enabled rows) minus 1, so it is strictly lowest; no other byte of `registry.json` changes. It refuses (exit 2, nothing written) an alias that is not registered or is disabled, and a registry file that is not in the one-line form the writers emit. An alias that is already the strictly lowest prints `default_unchanged` and writes nothing. Before writing, the command copies `registry.json` to `registry.json.bak.<ms>` (0600) and prints the rollback command; writes are atomic (temp file then rename, 0600). Rollback, which puts the backup back byte for byte after checking it still validates:
+
+```
+node scripts/claude-account.js set-default --restore <accounts-dir>/registry.json.bak.<ms>
+```
+
 ## Day to day
 
 - `node scripts/claude-account.js status` shows each alias, its class and used fraction, any cooldown, and the last audit lines.

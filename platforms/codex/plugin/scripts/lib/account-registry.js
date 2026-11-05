@@ -103,27 +103,8 @@ function exists(p, alias) {
   }
 }
 
-// Load and structurally validate registry.json. Returns {configured:false} on ENOENT only.
-function loadRegistry(opts) {
-  const o = opts || {};
-  const dir = accountsDir(o);
-  const file = path.join(dir, 'registry.json');
-  const uid = uidOf(o);
-  let text;
-  try {
-    text = readChecked(file, o, uid, 'registry', 1 << 20, false);
-  } catch (e) {
-    if (e instanceof RegistryError && e.reason === 'registry_missing') return { configured: false, dir, file, accounts: [] };
-    throw e;
-  }
-  let dst;
-  try {
-    dst = fs.lstatSync(dir);
-  } catch (e) {
-    throw new RegistryError('registry_probe_error', null, e && e.code ? e.code : 'unknown');
-  }
-  if (dst.isSymbolicLink() || !dst.isDirectory()) throw new RegistryError('accounts_dir_not_directory');
-  if ((dst.mode & 0o077) !== 0) throw new RegistryError('accounts_dir_mode_too_open');
+// Structural validation of registry text (shared by loadRegistry, set-default and restore). Returns {doc, accounts}.
+function parseRegistryText(text) {
   let doc;
   try {
     doc = JSON.parse(text);
@@ -154,6 +135,32 @@ function loadRegistry(opts) {
     }
     accounts.push({ alias, enabled: row.enabled, priority: row.priority === undefined ? 100 : row.priority });
   }
+  return { doc, accounts };
+}
+
+// Load and structurally validate registry.json. Returns {configured:false} on ENOENT only.
+function loadRegistry(opts) {
+  const o = opts || {};
+  const dir = accountsDir(o);
+  const file = path.join(dir, 'registry.json');
+  const uid = uidOf(o);
+  let text;
+  try {
+    text = readChecked(file, o, uid, 'registry', 1 << 20, false);
+  } catch (e) {
+    if (e instanceof RegistryError && e.reason === 'registry_missing') return { configured: false, dir, file, accounts: [] };
+    throw e;
+  }
+  let dst;
+  try {
+    dst = fs.lstatSync(dir);
+  } catch (e) {
+    throw new RegistryError('registry_probe_error', null, e && e.code ? e.code : 'unknown');
+  }
+  if (dst.isSymbolicLink() || !dst.isDirectory()) throw new RegistryError('accounts_dir_not_directory');
+  if ((dst.mode & 0o077) !== 0) throw new RegistryError('accounts_dir_mode_too_open');
+  const parsed = parseRegistryText(text);
+  const accounts = parsed.accounts;
   return { configured: true, dir, file, accounts };
 }
 
@@ -335,6 +342,66 @@ function requireAlias(reg, alias) {
   return row;
 }
 
+function writeFileAtomic600(dir, file, text) {
+  const tmp = path.join(dir, `registry.json.tmp-${process.pid}-${require('crypto').randomBytes(8).toString('hex')}`);
+  try {
+    fs.writeFileSync(tmp, text, { mode: 0o600, flag: 'wx' });
+    fs.chmodSync(tmp, 0o600);
+    fs.renameSync(tmp, file);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch (_) { /* never created, or already renamed */ }
+    throw new RegistryError('registry_write_failed', null, e && e.code ? e.code : 'error');
+  }
+}
+
+// Make `alias` the host default (what `run --pin-default` resolves: the enabled row with the lowest priority number,
+// ties to the earlier row). Rule: the alias gets priority (lowest priority among the OTHER enabled rows) - 1, so it is
+// strictly lowest; nothing else changes. Already strictly lowest -> no write. Disabled rows never count. Refuses
+// (nothing written, no backup) for an unregistered or disabled alias, or a registry file whose bytes are not the
+// canonical single-line form the writers emit (a rewrite could then change more than priorities).
+// Before writing, registry.json is copied byte-for-byte to registry.json.bak.<ms> (0600, exclusive create).
+// Returns {changed, priority, previous, backup}.
+function setDefault(alias, opts) {
+  const o = opts || {};
+  const reg = loadRegistry(o);
+  if (!reg.configured) throw new RegistryError('registry_not_configured');
+  const row = requireAlias(reg, alias);
+  const text = readChecked(reg.file, o, uidOf(o), 'registry', 1 << 20, false);
+  const doc = parseRegistryText(text).doc;
+  const nl = text.endsWith('\n') ? '\n' : '';
+  if (JSON.stringify(doc) + nl !== text) throw new RegistryError('registry_format_noncanonical', null, 'refusing to rewrite');
+  const others = reg.accounts.filter((r) => r.enabled && r.alias !== alias).map((r) => r.priority);
+  if (others.length === 0 || row.priority < Math.min(...others)) {
+    return { changed: false, priority: row.priority, previous: row.priority, backup: null };
+  }
+  const priority = Math.min(...others) - 1;
+  const target = doc.accounts.find((r) => r.alias === alias);
+  target.priority = priority;
+  const backup = path.join(reg.dir, `registry.json.bak.${(o.now ? o.now() : Date.now())}`);
+  try {
+    fs.writeFileSync(backup, text, { mode: 0o600, flag: 'wx' });
+    fs.chmodSync(backup, 0o600);
+  } catch (e) {
+    throw new RegistryError('backup_write_failed', null, e && e.code ? e.code : 'error');
+  }
+  writeFileAtomic600(reg.dir, reg.file, JSON.stringify(doc) + nl);
+  return { changed: true, priority, previous: row.priority, backup };
+}
+
+// Put a backup made by setDefault back, byte for byte. The backup must sit in the accounts dir, be named
+// registry.json.bak.<digits>, be 0600 and still validate as a registry.
+function restoreRegistry(backup, opts) {
+  const o = opts || {};
+  const dir = accountsDir(o);
+  const abs = path.resolve(String(backup));
+  if (path.dirname(abs) !== path.resolve(dir) || !/^registry\.json\.bak\.\d+$/.test(path.basename(abs))) {
+    throw new RegistryError('backup_path_rejected', null, 'must be registry.json.bak.<n> in the accounts dir');
+  }
+  const text = readChecked(abs, o, uidOf(o), 'backup', 1 << 20, false);
+  parseRegistryText(text);
+  writeFileAtomic600(path.resolve(dir), path.join(path.resolve(dir), 'registry.json'), text);
+}
+
 function main(argv) {
   const [maj, min] = process.versions.node.split('.').map(Number);
   if (maj < 20 || (maj === 20 && min < 10)) {
@@ -369,7 +436,7 @@ function main(argv) {
 module.exports = {
   ALIAS_RE, RESERVED_RE, SCHEMA, RegistryError,
   TOKEN_META_SCHEMA, orgLabelProblem, orgIdProblem, readTokenMeta, writeTokenMeta, findOrgOwner,
-  accountsDir, aliasProblem, loadRegistry, checkAlias, checkRegistry, requireAlias,
+  accountsDir, aliasProblem, loadRegistry, checkAlias, checkRegistry, requireAlias, setDefault, restoreRegistry,
 };
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));

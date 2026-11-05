@@ -270,6 +270,9 @@ function run(opts, env = process.env) {
   const plan = loadPlan();
   const rates = costModel();
   const cap = Math.min(plan.prereg.cost.cap_usd, opts.capUsd === undefined ? Infinity : Number(opts.capUsd));
+  // Spend is rebuilt from attempts.jsonl only. Scored rows without that ledger (output of an older runner) would restart spend at 0: no migration, refuse.
+  const priorRows = path.join(out, 'results.jsonl');
+  if (fs.existsSync(priorRows) && fs.statSync(priorRows).size > 0 && !fs.existsSync(path.join(out, 'attempts.jsonl'))) throw refuse(`${out} has results.jsonl but no attempts.jsonl: its spend cannot be restored, so a resume would restart the budget at 0; use a new --out`);
   fs.mkdirSync(path.join(out, 'tmp'), { recursive: true }); fs.mkdirSync(path.join(out, 'answers'), { recursive: true });
   const stateFile = path.join(out, 'run.json');
   const state = { schedule_sha256: plan.digest, prereg_sha256: plan.preregSha, dry_run: !!opts.dryRun, account: opts.account,

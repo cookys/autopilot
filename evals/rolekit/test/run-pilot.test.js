@@ -235,3 +235,13 @@ test('account pin: pinProblem is re-evaluated against the live registry (the per
     assert.strictEqual(rp.pinProblem({ ...ctx, pinActive: false }), null);
   } finally { rm(d); fx.cleanup(); }
 });
+
+test('resume: an out dir that has results but no attempts ledger is refused before any dispatch (spend would restart at 0)', () => {
+  const d = tmp();
+  try {
+    fs.writeFileSync(path.join(d, 'results.jsonl'), `${JSON.stringify({ role: 'planner', task: 'x', rep: 0, arm: 'A', seat: 'weak1', pass: 0, infra: false, parse_ok: true, kit_applied: false, cost_usd: 0.0162, cost_source: 'cost_model_rate' })}\n`);
+    assert.match(refusal(() => rp.run(base(d, { capUsd: '0.02' }))), /no attempts\.jsonl/);
+    assert.ok(!fs.existsSync(path.join(d, 'dry', 'calls.jsonl')), 'nothing was dispatched');
+    assert.ok(!fs.existsSync(path.join(d, 'attempts.jsonl')));
+  } finally { rm(d); }
+});

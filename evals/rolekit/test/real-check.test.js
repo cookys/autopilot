@@ -16,8 +16,8 @@ const KIT = path.join(ROOT, 'kits', 'reviewer');
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 const BILLING = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY', 'AWS_BEARER_TOKEN_BEDROCK', 'KIMI_API_KEY', 'KIMI_MODEL_API_KEY', 'MOONSHOT_API_KEY', 'OPENAI_API_KEY'];
 
-function world() {
-  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+function world(aliases) {
+  const fx = makeFixture({ aliases: aliases || [{ alias: 'a' }] });
   const base = { ...process.env }; for (const k of BILLING) delete base[k];
   delete base.AUTOPILOT_SESSION_ID;
   const env = { ...base, ...fx.env, DISPATCH_QUIET: '1', AUTOPILOT_SETTLE_MS: '0' };
@@ -30,7 +30,7 @@ function world() {
   const evidence = (name) => JSON.parse(fs.readFileSync(path.join(out, name), 'utf8'));
   return { fx, env, out, run, std, evidence, done: () => fx.cleanup() };
 }
-const withWorld = (fn) => () => { const w = world(); try { return fn(w); } finally { w.done(); } };
+const withWorld = (fn, aliases) => () => { const w = world(aliases); try { return fn(w); } finally { w.done(); } };
 
 test('dry-run ok: card recorded in argv, rail record sha, nonce in reply -> met true, rc 0, item id cannot satisfy a precondition', withWorld((w) => {
   const before = sha(fs.readFileSync(path.join(KIT, 'role.md')));
@@ -185,3 +185,56 @@ test('mutation: a checker without the billing refusal runs under ANTHROPIC_API_K
   assert.strictEqual(w.run(w.std(['--dry-run', 'ok']), { ANTHROPIC_API_KEY: 'FAKE-x' }).rc, 2);
   assert.strictEqual(w.run(w.std(['--dry-run', 'ok']), { ANTHROPIC_API_KEY: 'FAKE-x' }, m).rc, 0);
 }));
+
+// ---- requested account must be the host default (the rails run `claude-account.js run --pin-default`)
+const A_DEFAULT = [{ alias: 'a', priority: 10 }, { alias: 'b', priority: 20 }];
+const B_DEFAULT = [{ alias: 'a', priority: 20 }, { alias: 'b', priority: 10 }];
+
+test('host default is B, --account A -> refused before any dispatch (rc 2, nothing written)', withWorld((w) => {
+  const r = w.run(w.std(['--dry-run', 'ok']));
+  assert.strictEqual(r.rc, 2, r.err);
+  assert.match(r.err, /host default account is b, not a/);
+  assert.ok(!fs.existsSync(w.out), 'nothing dispatched, no out dir');
+}, B_DEFAULT));
+
+test('host default is A, --account A (two aliases in the registry) -> still works', withWorld((w) => {
+  const r = w.run(w.std(['--dry-run', 'ok']));
+  assert.strictEqual(r.rc, 0, r.err);
+  assert.strictEqual(w.evidence('dry-run-real-check-weak1.json').account, 'a');
+}, A_DEFAULT));
+
+test('the default alias real-check computes is the one `claude-account.js run --pin-default` picks (no drift), for both priority orders', () => {
+  const { hostDefaultAlias } = require(RC);
+  for (const aliases of [A_DEFAULT, B_DEFAULT, [{ alias: 'a', priority: 5 }, { alias: 'b', priority: 5 }], [{ alias: 'a', enabled: false, priority: 1 }, { alias: 'b', priority: 9 }]]) {
+    const w = world(aliases);
+    try {
+      const outFile = path.join(w.fx.root, 'who.txt');
+      const r = cp.spawnSync('node', [path.join(ROOT, '..', '..', 'scripts', 'claude-account.js'), 'run', '--pin-default', '--purpose', 'author', '--stdout', outFile, '--', process.execPath, '-e', 'console.log(process.env.AUTOPILOT_ACCOUNT)'], { encoding: 'utf8', env: w.env, input: '' });
+      assert.strictEqual(r.status, 0, r.stderr);
+      assert.strictEqual(hostDefaultAlias(w.env), fs.readFileSync(outFile, 'utf8').trim(), JSON.stringify(aliases));
+    } finally { w.done(); }
+  }
+});
+
+test('wrapper: AUTOPILOT_ACCOUNT=b while a was requested -> exits non-zero WITHOUT exec of the real binary (fake claude count stays 0); a matching account execs it once', withWorld((w) => {
+  const { writeWrapper } = require(RC);
+  const count = path.join(w.fx.root, 'count.log');
+  const fake = path.join(w.fx.root, 'counting-claude');
+  fs.writeFileSync(fake, `#!/bin/sh\necho x >> ${count}\n`, { mode: 0o755 });
+  const wrapper = path.join(w.fx.root, 'wrap');
+  const rec = path.join(w.fx.root, 'rec.jsonl');
+  writeWrapper(wrapper, { rec, shape: '', real: fake, account: 'a' });
+  const bad = cp.spawnSync(wrapper, ['-p'], { encoding: 'utf8', env: { ...w.env, AUTOPILOT_ACCOUNT: 'b' }, input: '' });
+  assert.notStrictEqual(bad.status, 0);
+  assert.ok(!fs.existsSync(count), 'the real binary was not started');
+  assert.strictEqual(JSON.parse(fs.readFileSync(rec, 'utf8').trim()).refused, 'account_mismatch');
+  const ok = cp.spawnSync(wrapper, ['-p'], { encoding: 'utf8', env: { ...w.env, AUTOPILOT_ACCOUNT: 'a' }, input: '' });
+  assert.strictEqual(ok.status, 0, ok.stderr);
+  assert.strictEqual(fs.readFileSync(count, 'utf8').trim().split('\n').length, 1);
+}));
+
+test('mutation: a real-check without the host-default comparison dispatches under host default B (the real one refuses)', withWorld((w) => {
+  const m = mutant(w, 'if (def !== o.account)', 'if (false)');
+  assert.strictEqual(w.run(w.std(['--dry-run', 'ok'])).rc, 2);
+  assert.notStrictEqual(w.run(w.std(['--dry-run', 'ok']), {}, m).rc, 2);
+}, B_DEFAULT));

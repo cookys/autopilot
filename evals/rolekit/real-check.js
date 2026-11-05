@@ -32,6 +32,12 @@
 // or a dry-run is not a real-model check: its item id is `test-real-check-<seat>` (--claude-bin) or `dry-run-real-check-<seat>`,
 // the evidence says trusted_runner:false, and neither id can satisfy a precondition. A fake `claude` placed first on PATH is the
 // operator's own environment and is out of scope here (the evidence records the resolved path so it can be seen).
+// Which account is billed: the rails call `claude-account.js run --pin-default`, i.e. the HOST DEFAULT alias, whatever --account
+// says. So --account must BE the host default: hostDefaultAlias() applies claude-account.js's own rule (the enabled registry row
+// with the lowest priority number, ties in registry order, claude-account.js ~:894) to the same registry (scripts/lib/
+// account-registry.js), and a mismatch is refused before anything is dispatched. A test compares it with the real
+// `run --pin-default` pick so the two cannot drift. The generated wrapper repeats the check on AUTOPILOT_ACCOUNT before it
+// execs the real claude and exits 97 without exec on a mismatch.
 // Account layer: required. `claude-account.js env-check --alias <A>` must say ok before anything is dispatched, so the legacy
 // seeded-credentials path (which reads a credentials file) can never run from here. The rail picks the alias itself; if it
 // picks another one than --account the check is not met.
@@ -47,6 +53,7 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 const REPO = path.resolve(__dirname, '..', '..');
+const registry = require(path.join(REPO, 'scripts', 'lib', 'account-registry.js'));
 const AUTHOR = path.join(REPO, 'scripts', 'dispatch-author.sh');
 const ACCOUNT_JS = path.join(REPO, 'scripts', 'claude-account.js');
 const SHAPES = ['ok', 'dropcard', 'dropcard-echo', 'wrongnonce', 'authstop'];
@@ -94,8 +101,10 @@ const argv = process.argv.slice(2);
 const i = argv.indexOf('--system-prompt');
 const card = i >= 0 ? argv[i + 1] : '';
 const shape = CFG.shape;
+const refused = CFG.account && process.env.AUTOPILOT_ACCOUNT !== CFG.account ? 'account_mismatch' : null;
 const rec = shape === 'dropcard' || shape === 'dropcard-echo' ? argv.filter((a, j) => j !== i && j !== i + 1) : argv;
-fs.appendFileSync(CFG.rec, JSON.stringify({ argv: rec, account: process.env.AUTOPILOT_ACCOUNT || null }) + '\\n');
+fs.appendFileSync(CFG.rec, JSON.stringify({ argv: rec, account: process.env.AUTOPILOT_ACCOUNT || null, refused }) + '\\n');
+if (refused) { process.stderr.write('real-check wrapper: AUTOPILOT_ACCOUNT is ' + (process.env.AUTOPILOT_ACCOUNT || 'unset') + ', requested ' + CFG.account + '; not starting claude\\n'); process.exit(97); }
 if (!shape) { const r = cp.spawnSync(CFG.real, argv, { stdio: 'inherit' }); process.exit(r.status === null ? 1 : r.status); }
 if (shape === 'authstop') {
   process.stdout.write(JSON.stringify({ type: 'result', subtype: 'success', is_error: true, api_error_status: 401, terminal_reason: 'api_error', result: 'Failed to authenticate. API Error: 401 OAuth access token is invalid.' }) + '\\n');
@@ -109,6 +118,15 @@ if (shape === 'ok' || shape === 'dropcard-echo') body = found ? found[0] : 'ok';
 if (shape === 'wrongnonce') body = 'RK-NONCE-' + '0'.repeat(32);
 process.stdout.write(m[0] + '\\n' + body + '\\n' + e[0] + '\\n');
 `;
+
+/** The alias `claude-account.js run --pin-default` would use on this host (same rule, same registry), or null. */
+function hostDefaultAlias(env) {
+  const res = registry.checkRegistry({ realHome: os.userInfo().homedir, env });
+  if (!res.configured) return null;
+  let best = null;
+  for (const r of res.accounts) if (r.enabled && (best === null || r.priority < best.priority)) best = r;
+  return best === null ? null : best.alias;
+}
 
 function writeWrapper(file, cfg) {
   fs.writeFileSync(file, `#!${process.execPath}\n${WRAPPER.replace('__CFG__', JSON.stringify(cfg))}`, { mode: 0o755 });
@@ -157,11 +175,14 @@ function main(argv, env) {
   const kit = path.resolve(o.kit);
   if (!fs.existsSync(path.join(kit, 'role.md')) || !fs.existsSync(path.join(kit, 'tools'))) throw new Refuse(`kit ${o.kit} has no role.md and tools`);
   const out = path.resolve(o.out);
-  fs.mkdirSync(out, { recursive: true });
 
   // the account layer must be active and know the alias, else the rail would take the legacy credentials-seeding path
   const ec = spawnSync('node', [ACCOUNT_JS, 'env-check', '--alias', o.account, '--purpose', 'author'], { encoding: 'utf8', env, input: '' });
   if (ec.status !== 0 || !/^ok\b/.test(ec.stdout)) throw new Refuse(`account layer not usable for alias ${o.account} (claude-account.js env-check: ${(ec.stdout + ec.stderr).split('\n').filter((l) => !l.startsWith('autopilot:')).join(' ').trim() || `rc ${ec.status}`}); nothing dispatched`, 3);
+
+  const def = hostDefaultAlias(env);
+  if (def !== o.account) throw new Refuse(`host default account is ${def}, not ${o.account}: the rails always run claude-account.js run --pin-default, so this check would be billed to ${def}; make ${o.account} the default (lowest priority number) or request ${def}; nothing dispatched`);
+  fs.mkdirSync(out, { recursive: true });
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'rolekit-real-check-'));
   try {
@@ -189,7 +210,7 @@ function main(argv, env) {
       real = which.stdout.trim();
       if (!real) throw new Refuse('claude binary not found (pass --claude-bin)');
     }
-    writeWrapper(wrapper, { rec: recFile, shape: dry || '', real });
+    writeWrapper(wrapper, { rec: recFile, shape: dry || '', real, account: o.account });
     const promptFile = path.join(work, 'prompt.txt');
     fs.writeFileSync(promptFile, 'Follow your role card and reply now.\n');
 
@@ -242,4 +263,4 @@ if (require.main === module) {
     process.exit(e.exitCode);
   }
 }
-module.exports = { main, verify, cardInArgv, parseArgs, refuseBillingEnv, BILLING_ENV };
+module.exports = { hostDefaultAlias, writeWrapper, main, verify, cardInArgv, parseArgs, refuseBillingEnv, BILLING_ENV };

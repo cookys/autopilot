@@ -56,6 +56,51 @@ assert_eq "0" "$EXIT" "E4 prose in quoted args passes"
 run_hook "true && rm -rf /etc/autopilot"; EXIT=$?
 assert_eq "2" "$EXIT" "rm at command position after && still denied"
 
+# ── E2 command-segment judging (2026-11-05): rm is judged only where it is a command
+# word; a later line / heredoc body / quoted data is not an rm target or an rm command. ──
+# False DENY seen live: line 1 a relative-ish rm, line 2 a command whose argument is an
+# absolute path; the rm argument capture used to swallow line 2.
+run_hook $'rm -rf $T/k/home/.kimi-code/sessions\ntimeout 12 bash $S/run-suite.sh --x /k/proj --y'; EXIT=$?
+assert_eq "0" "$EXIT" "E2: absolute path on a later line is not an rm target"
+run_hook $'cat > notes.md <<\'EOF\'\nrun this: ls && rm -rf /\nEOF\nls'; EXIT=$?
+assert_eq "0" "$EXIT" "E2: rm text inside a quoted-delimiter heredoc body passes"
+run_hook $'cat > notes.md <<EOF\nstep one; rm -rf /\nEOF'; EXIT=$?
+assert_eq "0" "$EXIT" "E2: rm text inside a bare heredoc body passes"
+run_hook $'cat <<-EOF\n\tdo it | rm -rf /etc/x\n\tEOF'; EXIT=$?
+assert_eq "0" "$EXIT" "E2: rm text inside a <<- heredoc body passes"
+run_hook $'git commit -m "docs: the old step was\nrm -rf /\nremoved; rm -rf /etc/y"'; EXIT=$?
+assert_eq "0" "$EXIT" "E2: rm text on its own line inside a quoted commit message passes"
+run_hook $'printf \'%s\\n\' \'x; rm -rf /\' > note.txt'; EXIT=$?
+assert_eq "0" "$EXIT" "E2: printf of rm text redirected to a file passes"
+run_hook $'echo "x && rm -rf /" > note.txt'; EXIT=$?
+assert_eq "0" "$EXIT" "E2: echo of rm text redirected to a file passes"
+run_hook $'echo "a; rm -rf /etc/x" >> note.txt'; EXIT=$?
+assert_eq "0" "$EXIT" "E2: separator inside quotes does not start a command"
+
+# Must-still-DENY controls (a real rm outside the roots is never let through).
+run_hook $'echo hi\nrm -rf /'; EXIT=$?
+assert_eq "2" "$EXIT" "E2: real rm -rf / on its own line denied"
+run_hook $'echo hi\nrm -rf ~/x'; EXIT=$?
+assert_eq "2" "$EXIT" "E2: rm -rf ~/x on line 2 denied"
+run_hook $'ls\nrm -rf $T/a /etc/x'; EXIT=$?
+assert_eq "2" "$EXIT" "E2: absolute target after a skipped \$VAR target on the same rm denied"
+run_hook 'cd / && rm -rf *'; EXIT=$?
+assert_eq "2" "$EXIT" "E2: cd / then rm -rf * denied"
+run_hook 'ls ; rm -rf /etc/x'; EXIT=$?
+assert_eq "2" "$EXIT" "E2: rm after ; denied"
+run_hook 'ls | rm -rf /etc/x'; EXIT=$?
+assert_eq "2" "$EXIT" "E2: rm after | denied"
+run_hook 'FOO=1 rm -rf /etc/x'; EXIT=$?
+assert_eq "2" "$EXIT" "E2: rm after env assignment denied"
+run_hook 'command rm -rf /etc/x'; EXIT=$?
+assert_eq "2" "$EXIT" "E2: rm after command builtin denied"
+run_hook $'cat <<EOF\nhello\nEOF\nrm -rf /etc/x'; EXIT=$?
+assert_eq "2" "$EXIT" "E2: rm after a closed heredoc denied"
+run_hook $'cat <<EOF\nhello'; EXIT=$?
+assert_eq "0" "$EXIT" "unterminated heredoc body is data"
+run_hook 'echo "$(rm -rf /etc/x)"'; EXIT=$?
+assert_eq "2" "$EXIT" "E2: rm inside \$( ) within double quotes denied"
+
 # ── Benign commands pass (allow-by-default) ──
 for cmd in "ls -la" "git status" "npm test" "grep -r foo src/"; do
   run_hook "$cmd"; EXIT=$?

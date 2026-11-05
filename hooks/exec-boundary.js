@@ -53,6 +53,65 @@ function readConfig() {
   return cfg;
 }
 
+// Split a shell command into command segments. Not a shell parser: it tracks
+// quotes, backslash escapes and heredocs only. Separators (newline ; & | ( ) and
+// backtick) end a segment; inside quotes they are neutralised to \u0001 (except
+// `$(` / backtick inside double quotes, which the shell executes, so they still
+// split). Heredoc bodies (<<W, <<'W', <<-W) are dropped up to the closing W line.
+function commandSegments(cmd) {
+  const NEUTRAL = '\u0001';
+  const segs = [];
+  let cur = '';
+  let quote = '';
+  const pending = []; // heredoc delimiters awaiting their body
+  const flush = () => { if (cur.trim()) segs.push(cur); cur = ''; };
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (quote) {
+      if (c === quote) { quote = ''; cur += c; continue; }
+      if (quote === '"' && c === '\\') { cur += c + (cmd[i + 1] === undefined ? '' : NEUTRAL); i++; continue; }
+      if (quote === '"' && (c === '`' || (c === '$' && cmd[i + 1] === '('))) { flush(); if (c === '$') i++; continue; }
+      cur += /[;&|\n<>()`]/.test(c) ? NEUTRAL : c;
+      continue;
+    }
+    if (c === '\\') {
+      const n = cmd[i + 1];
+      if (n === '\n') cur += ' ';
+      else if (n !== undefined) cur += /[;&|()`'"<>\s]/.test(n) ? NEUTRAL : n;
+      i++;
+      continue;
+    }
+    if (c === '\'' || c === '"') { quote = c; cur += c; continue; }
+    if (c === '#' && (cur === '' || /\s$/.test(cur))) { while (i < cmd.length && cmd[i] !== '\n') i++; i--; continue; }
+    if (c === '<' && cmd[i + 1] === '<' && cmd[i + 2] !== '<') {
+      const m = cmd.slice(i + 2).match(/^(-?)[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|([^\s;&|<>()]+))/);
+      if (m) {
+        pending.push({ dash: m[1] === '-', word: m[2] ?? m[3] ?? m[4] });
+        i += 1 + m[0].length;
+        continue;
+      }
+    }
+    if (c === '\n') {
+      flush();
+      while (pending.length) {
+        const { dash, word } = pending.shift();
+        for (;;) {
+          if (i + 1 >= cmd.length) break;
+          const eol = cmd.indexOf('\n', i + 1);
+          const line = cmd.slice(i + 1, eol === -1 ? cmd.length : eol);
+          i = eol === -1 ? cmd.length : eol;
+          if ((dash ? line.replace(/^\t+/, '') : line) === word) break;
+        }
+      }
+      continue;
+    }
+    if (/[;&|()`]/.test(c)) { flush(); continue; }
+    cur += c;
+  }
+  flush();
+  return segs;
+}
+
 function deny(rule, detail) {
   process.stderr.write(`exec-boundary DENY [${rule}]: ${detail}\n`);
   process.exit(2);
@@ -78,22 +137,55 @@ try {
     }
   }
 
-  // E2 — recursive rm outside sanctioned roots. Anchored to COMMAND POSITION
-  // (start / ; / && / || / | / $( / backtick) so prose mentions inside quoted
-  // arguments (e.g. commit messages) do not false-positive — found live, twice,
-  // on this repo's own D5 commit (execution notes, 2026-08-16).
-  const rm = command.match(/(?:^|[;&|]\s*|\$\(\s*|`\s*)rm\s+((?:-[a-zA-Z-]+\s+)*)([^|;&]*)/);
-  if (rm && /(^|\s)-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|--recursive/.test(rm[1] + ' ' + command)) {
-    const roots = [
-      os.tmpdir(), '/tmp', process.cwd(),
-      ...(process.env.TMPDIR ? [process.env.TMPDIR] : []),
-      ...cfg.roots,
-    ].map((r) => path.resolve(r));
-    for (const tok of rm[2].split(/\s+/).filter((t) => t && !t.startsWith('-'))) {
+  // E2 — recursive rm outside sanctioned roots. The command is first split into
+  // command segments (commandSegments: newline and shell separators; heredoc
+  // bodies dropped; separators inside quotes neutralised), then rm is judged only
+  // where it is the command word of a segment (after env assignments / sudo /
+  // command / builtin / exec ...). Prose mentions in quoted arguments, heredoc
+  // bodies and later lines are therefore not rm targets (live false DENYs
+  // 2026-08-16 and 2026-11-05). Literal `cd <abs>` is tracked so `cd / && rm -rf *`
+  // judges `*` against `/`.
+  // Deliberately still DENY (fail closed): rm after a real separator, in `$( )` or
+  // backticks (also inside double quotes, where the shell runs them), `rm` fed by
+  // `xargs`/`find -exec`/`bash -c` strings is NOT seen (never was), and any
+  // unterminated quote or heredoc is read to the end as one segment.
+  const roots = [
+    os.tmpdir(), '/tmp', process.cwd(),
+    ...(process.env.TMPDIR ? [process.env.TMPDIR] : []),
+    ...cfg.roots,
+  ].map((r) => path.resolve(r));
+  const inRoots = (abs) => abs !== '/' && roots.some((r) => abs === r || abs.startsWith(r + path.sep));
+  let simCwd = process.cwd();
+  for (const seg of commandSegments(command)) {
+    const toks = seg.split(/\s+/).filter(Boolean);
+    let k = 0;
+    while (k < toks.length) {
+      if (/^[A-Za-z_]\w*=/.test(toks[k])) { k++; continue; }
+      if (/^(sudo|command|builtin|exec|nohup|time)$/.test(toks[k])) {
+        k++;
+        while (k < toks.length && toks[k].startsWith('-')) k++;
+        continue;
+      }
+      break;
+    }
+    const head = toks[k];
+    if (head === 'cd') {
+      const arg = (toks[k + 1] || '').replace(/["']/g, '');
+      if (arg && !arg.includes('$') && arg !== '-') {
+        simCwd = path.resolve(simCwd, arg.replace(/^~(?=$|\/)/, os.homedir()));
+      }
+      continue;
+    }
+    if (head !== 'rm') continue;
+    const rest = toks.slice(k + 1);
+    if (!/(^|\s)-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|--recursive/.test(rest.join(' '))) continue;
+    for (const tok of rest.filter((t) => !t.startsWith('-'))) {
       const expanded = tok.replace(/^~(?=$|\/)/, os.homedir()).replace(/["']/g, '');
-      if (!expanded.startsWith('/') && !expanded.startsWith(os.homedir())) continue; // relative = inside cwd
-      const abs = path.resolve(expanded);
-      if (abs === '/' || !roots.some((r) => abs === r || abs.startsWith(r + path.sep))) {
+      let abs;
+      if (expanded.startsWith('/') || expanded.startsWith(os.homedir())) abs = path.resolve(expanded);
+      else if (simCwd !== process.cwd() && !expanded.startsWith('$')) abs = path.resolve(simCwd, expanded); // after a literal cd
+      else continue; // relative = inside cwd
+      if (!inRoots(abs)) {
         deny('E2-recursive-rm', `recursive rm targets '${tok}' outside sanctioned roots (cwd, tmp, configured sanctioned_roots)`);
       }
     }

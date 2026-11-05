@@ -245,10 +245,12 @@ const frameOf = (tree: Node) => {
   const own = ((((kids[ci].children || []) as Node[]).find(k => k.props?.key === 'rows') as Node).children || []) as Node[]
   const rows = own.flatMap(r => (r.props?.key === 'pad' ? Array.from({ length: Number(r.props?.height) }, () => ({ ...r, children: [] })) : [r])) // the pad Box is `height` blank rows
   // the screen row of the Say field: rows above the content, the content rows drawn, the rule, the failure row
-  return { texts: rows.map(textOf), keys: rows.map(r => String(r.props?.key ?? '')), sayAt: ci + rows.length + 2, below: kids.length - ci - 2 }
+  const bar = ((kids[ci].children || []) as Node[]).find(k => k.props?.key === 'scrollbar')
+  const thumb = ((bar?.children || []) as Node[]).map(textOf).join('') // the scrollbar column top to bottom: █ is the thumb
+  return { thumb, texts: rows.map(textOf), keys: rows.map(r => String(r.props?.key ?? '')), sayAt: ci + rows.length + 2, below: kids.length - ci - 2 }
 }
-async function shape($: any, key: string | null, bodyRows = 24) {
-  const props = { ...PANE_PROPS, scroll: { offset: 0, bodyRows } }
+async function shape($: any, key: string | null, bodyRows = 24, cols = 80) {
+  const props = { ...PANE_PROPS, bodyColumns: cols, scroll: { offset: 0, bodyRows } }
   const m = () => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-roundtable', props, viewport: { columns: 120, rows: 40, isFullscreen: true } })
   if (key !== null) { const p = await m(); await p.press({ key }); await p.unmount() }
   const win = await m()
@@ -328,4 +330,28 @@ test('CHAT roundtable: a send failure uses its reserved row (the control area ke
   const small = await shape($, null, 12)
   expect(small.texts[small.texts.length - 1], 'still at the newest row after the pane got shorter').toContain('第 40 則發言')
   expect(small.below).toBe(before.below)
+})
+
+test('CHAT roundtable: the thumb is flush with the top at Home and flush with the bottom of the track at End', async ($, on) => {
+  await open($, on, longLog(40))
+  const end = await shape($, null)
+  expect(end.thumb.endsWith('█'), 'bottom position: the thumb reaches the last track cell').toBe(true)
+  const top = await shape($, 'sbj0')
+  expect(top.thumb.startsWith('█')).toBe(true)
+})
+
+const wideLog = (n: number) => Array.from({ length: n }, (_, i) => one({ seq: i + 1, from: 'owner', kind: 'say', text: 'm' + (i + 1) + ' ' + 'x'.repeat(100) })).join('\n') + '\n'
+test('CHAT roundtable: narrowing the pane while scrolled up re-wraps rows but never says new messages; while following it stays at the bottom', async ($, on) => {
+  await open($, on, wideLog(40))
+  const wide = await shape($, 'sbj0', 24, 120)
+  expect(wide.texts.join('\n')).not.toContain('有新訊息')
+  const narrow = await shape($, null, 24, 40)
+  expect(narrow.texts.join('\n'), 'a width change is not an appended message').not.toContain('有新訊息')
+  const again = await shape($, null, 24, 120)
+  expect(again.texts.join('\n')).not.toContain('有新訊息')
+  const end = await shape($, 'sbj19', 24, 120)
+  expect(end.texts[end.texts.length - 1]).toContain('m40 ')
+  const follow = await shape($, null, 24, 40)
+  expect(follow.texts[follow.texts.length - 1], 'following: still at the newest row after narrowing').toMatch(/^\s*x+$/)
+  expect(follow.texts.join('\n')).not.toContain('有新訊息')
 })

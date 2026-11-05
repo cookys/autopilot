@@ -6,7 +6,7 @@ import { displayWidth } from './ui'
 // `redraw` (set by the hook that owns the model, optional) asks for a new draw after a click on the track moved the offset
 // Bottom-anchored windows (scrollFrame option `bottom`) also keep, between draws: `total` (content rows of the last draw; undefined = never drawn) and `unseen` (appended rows arrived while
 // the view stood above the bottom). Whether the view FOLLOWS the newest row is not stored: it is "the offset stood at the last max" (see followsTail).
-export type ScrollModel = { key: string; offset: number; max: number; room: number; framed: boolean; redraw?: () => void; total?: number; unseen?: boolean }
+export type ScrollModel = { key: string; offset: number; max: number; room: number; framed: boolean; redraw?: () => void; total?: number; unseen?: boolean; items?: number }
 export const newScroll = (): ScrollModel => ({ key: '', offset: 0, max: 0, room: 0, framed: false })
 // The ONE test for whether the mod, not the engine, takes a ui.scroll: only while the last draw was a frame. Drawn as a plain tree (no Button, no bodyColumns, no band, another tab) the
 // engine scrolls it, so the hook must hand the event to `next`.
@@ -30,7 +30,7 @@ export function keyedGrow(model: ScrollModel, ids: readonly string[]): void {
 }
 // a new content (another file, another list) starts at the top
 export function keyed(model: ScrollModel, key: string): void {
-  if (model.key !== key) { model.key = key; model.offset = 0; model.max = 0; model.total = undefined; model.unseen = false }
+  if (model.key !== key) { model.key = key; model.offset = 0; model.max = 0; model.total = undefined; model.unseen = false; model.items = undefined }
 }
 // a bottom-anchored window follows the newest row when it has never been drawn, or the offset stood at the last draw's max (the scroll hook only ever clamps to that max)
 export const followsTail = (m: ScrollModel): boolean => m.total === undefined || m.offset >= m.max

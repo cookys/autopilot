@@ -64,7 +64,7 @@ export function RoundtablePane(
       window: (o, r) => view.lines.slice(o, o + r).map((l, i) => lineNode(Text, l, 'r' + (o + i))),
       bar, barRows: bar.length,
       model: win.model,
-      bottom: { above: n => t('rt.above', { n }), newer: t('rt.newer'), append: true, inline: (win.props as { placement?: unknown }).placement === 'inline' }, // the log only grows by appended rows
+      bottom: { above: n => t('rt.above', { n }), newer: t('rt.newer'), items: view.count, inline: (win.props as { placement?: unknown }).placement === 'inline' }, // the message count, not the wrapped rows: a width change never says new messages
     })
   }
   return (

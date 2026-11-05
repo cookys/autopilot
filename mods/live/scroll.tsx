@@ -29,10 +29,10 @@ export type FrameOptions = {
   model: ScrollModel
   // Chat-room layout: the content is anchored to the bottom (the newest row sits directly above the rule and the control area; short content leaves the blank rows at the TOP),
   // the offset follows the newest row while the view stands at the bottom, and a view scrolled up keeps its place. `above(n)` is the top hint when n rows are above the view;
-  // `newer` (the words; the arrow is GLYPHS.structure.behind, added here) the line shown just above the control area when rows were APPENDED while scrolled up (`append`; a snapshot that is re-read whole never says so). The control area is
+  // `newer` (the words; the arrow is GLYPHS.structure.behind, added here) the line shown just above the control area when rows were APPENDED while scrolled up (`items`: a count of appended items that only grows, e.g. the message count; the line shows only when it grows while the view is scrolled up, so a change of width, which re-wraps rows, never says it. Omitted = a snapshot that is re-read whole, never says so). The control area is
   // `bar` and its height never depends on any of this.
   // `inline`: an inline pane's frame fits its content, so the content grows upward from the control area up to `rows` and there is no blank; a dock pane has the fixed height `rows`.
-  bottom?: { above: (n: number) => string; newer: string; append: boolean; inline?: boolean }
+  bottom?: { above: (n: number) => string; newer: string; items?: number; inline?: boolean }
 }
 
 function bottomFrame(el: { Box: El; Text: El; Button?: El }, o: FrameOptions & { bottom: NonNullable<FrameOptions['bottom']> }) {
@@ -43,7 +43,8 @@ function bottomFrame(el: { Box: El; Text: El; Button?: El }, o: FrameOptions & {
   const room0 = roomOf({ ...o, rows: height })
   const follow = followsTail(m)
   const grew = m.total !== undefined && o.total > m.total
-  const g = bottomRows(o.total, room0, !follow && (m.unseen === true || (o.bottom.append && grew)))
+  const itemsGrew = o.bottom.items !== undefined && m.items !== undefined && o.bottom.items > m.items
+  const g = bottomRows(o.total, room0, !follow && (m.unseen === true || itemsGrew))
   m.max = g.max
   m.room = g.rows
   m.framed = true
@@ -51,9 +52,11 @@ function bottomFrame(el: { Box: El; Text: El; Button?: El }, o: FrameOptions & {
   m.offset = !follow ? Math.min(m.offset, g.max) : grew || m.total === undefined ? target : Math.max(Math.min(m.offset, g.max), target)
   m.unseen = g.newer && m.offset < g.max
   m.total = o.total
+  m.items = o.bottom.items
   const off = m.offset
   // the track spans the whole content area (hint and new-messages rows included), so the engine-free layout of the old frame (content > rows + scrollbar) is kept
-  const th = thumbOf(o.total, room0, off)
+  // the offset range is 0..g.max (hint and new-messages rows shrink the window), so the thumb is measured on that range: flush at both ends
+  const th = thumbOf(g.max + room0, room0, off)
   const cells: unknown[] = []
   const jumps = new Set(jumpCells(room0))
   if (th !== null) {

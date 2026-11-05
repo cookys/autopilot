@@ -12,6 +12,12 @@
 #     ROLE_KIT_ARGV     array: ROLE_KIT_EXTRA followed by --tools <list>
 #     ROLE_KIT_JSON     dispatch record object: path + sha256 of role.md and of tools
 #
+# kimi arm of dispatch-author only (lib/role-kit-kimi.js; the kit becomes an --agent-file, not argv text):
+#   role_kit_load_kimi <kit-dir>                     validate + plan (die_precondition before any spawn; a kit with plugin/ or a
+#                                                    role.md over 4096 bytes is refused); sets ROLE_KIT_ACTIVE=1, ROLE_KIT_JSON (with
+#                                                    agent_file_sha256) and ROLE_KIT_KIMI_SHA
+#   role_kit_write_kimi_agent <kit-dir> <out-file>   write the agent file at spawn time and check it against the planned sha256
+#
 # Needs die_precondition from the caller. A rail that was not given a kit never calls these, so its argv is
 # the one it always built.
 ROLE_KIT_ACTIVE=0
@@ -47,4 +53,26 @@ role_kit_load() {
   [ -z "${_f[4]}" ] || ROLE_KIT_EXTRA+=(--plugin-dir "${_f[4]}")
   ROLE_KIT_ARGV=("${ROLE_KIT_EXTRA[@]}" --tools "$ROLE_KIT_TOOLS")
   ROLE_KIT_JSON="${_f[5]}"
+}
+
+role_kit_load_kimi() {
+  local _js _out _sha _json
+  _js="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/role-kit-kimi.js"
+  if ! _out="$(node "$_js" plan "$1" 2>/dev/null < /dev/null)"; then
+    _out="$(printf '%s\n' "$_out" | sed -n 's/^REASON: //p' | tail -n 1)"
+    [ -n "$_out" ] || _out="validator failed without a reason"
+    die_precondition "role-kit refused: ${_out}"
+  fi
+  _sha="$(printf '%s\n' "$_out" | sed -n '1p')"; _json="$(printf '%s\n' "$_out" | sed -n '2p')"
+  { [ -n "$_sha" ] && [ -n "$_json" ]; } || die_precondition "role-kit refused: validator output not recognised"
+  ROLE_KIT_ACTIVE=1
+  ROLE_KIT_KIMI_SHA="$_sha"
+  ROLE_KIT_JSON="$_json"
+}
+
+role_kit_write_kimi_agent() {
+  local _js _got
+  _js="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/role-kit-kimi.js"
+  _got="$(node "$_js" write "$1" "$2" 2>/dev/null < /dev/null)" || die_precondition "role-kit refused: could not write the kimi agent file"
+  [ "$_got" = "$ROLE_KIT_KIMI_SHA" ] || die_precondition "role-kit refused: kit changed between validation and spawn"
 }

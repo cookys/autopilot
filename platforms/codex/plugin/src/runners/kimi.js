@@ -79,7 +79,10 @@ function inspectKimiSurface(options = {}) {
   const helpOptions = new Set(
     [...helpText.matchAll(LONG_OPTION_PATTERN)].map((match) => match[2]),
   );
-  const missing = REQUIRED_HELP_TOKENS.filter((token) => !helpOptions.has(token));
+  const required = Array.isArray(options.extraRequiredTokens)
+    ? [...REQUIRED_HELP_TOKENS, ...options.extraRequiredTokens]
+    : REQUIRED_HELP_TOKENS;
+  const missing = required.filter((token) => !helpOptions.has(token));
   if (missing.length > 0) {
     return {
       ready: false,
@@ -126,8 +129,15 @@ function runKimiAuthor(input = {}, options = {}) {
     : 300000;
   const execute = typeof options.spawnSync === 'function' ? options.spawnSync : spawnSync;
   const bin = typeof input.bin === 'string' && input.bin.length > 0 ? input.bin : RUNNER;
+  // Optional role-kit agent file (dispatch-author --role-kit): absolute path of a rail-written agent file. Absent = the argv
+  // below is exactly what it always was.
+  const agentFile = input.agentFile === undefined ? null : input.agentFile;
+  if (agentFile !== null && (typeof agentFile !== 'string' || !path.isAbsolute(agentFile))) {
+    return publicFailure('precondition_failed', 'kimi_agent_file_must_be_absolute_path');
+  }
   const surface = inspectKimiSurface({
     bin,
+    ...(agentFile === null ? {} : { extraRequiredTokens: ['--agent-file'] }),
     spawnSync: execute,
     timeoutMs: Math.min(timeoutMs, 5000),
     cwd: options.probeCwd || os.tmpdir(),
@@ -143,6 +153,7 @@ function runKimiAuthor(input = {}, options = {}) {
     '--model', model,
     '--prompt', input.prompt,
     '--output-format', 'text',
+    ...(agentFile === null ? [] : ['--agent-file', agentFile]),
   ];
   let child;
   try {

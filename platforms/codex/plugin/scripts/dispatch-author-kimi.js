@@ -26,7 +26,10 @@
  * the artifact is then removed, because on this path `$RAW_LOG` is the record
  * that survives and a second 0600 copy in the temp dir is pure residue.
  *
- * Usage: dispatch-author-kimi.js --model <id> --prompt-file <path> [--timeout-seconds <n>]
+ * Usage: dispatch-author-kimi.js --model <id> --prompt-file <path> [--timeout-seconds <n>] [--agent-file <abs path>]
+ *
+ * `--agent-file` (dispatch-author --role-kit): passed to the adapter, which appends `--agent-file <path>` to the kimi argv.
+ * Absent = the argv the adapter always built.
  *
  * `--timeout-seconds` is the shell-side deadline `dispatch-author.sh` enforces with
  * `timeout`. The adapter's own limit is set KIMI_TIMEOUT_MARGIN_MS (5 s) under it so the
@@ -48,12 +51,13 @@ function fail(message, code = 1) {
 }
 
 function parseArgs(argv) {
-  const out = { model: null, promptFile: null, timeoutMs: null };
+  const out = { model: null, promptFile: null, timeoutMs: null, agentFile: null };
   for (let i = 0; i < argv.length; i += 1) {
     const key = argv[i];
     const value = argv[i + 1];
     if (key === '--model') { out.model = value; i += 1; continue; }
     if (key === '--prompt-file') { out.promptFile = value; i += 1; continue; }
+    if (key === '--agent-file') { out.agentFile = value; i += 1; continue; }
     if (key === '--timeout-seconds') {
       if (!/^[1-9][0-9]*$/.test(String(value))) fail(`--timeout-seconds must be a positive integer (got: ${value})`, 2);
       out.timeoutMs = Math.max(KIMI_TIMEOUT_FLOOR_MS, Number(value) * 1000 - KIMI_TIMEOUT_MARGIN_MS);
@@ -134,6 +138,7 @@ const result = runKimiAuthor({
   model: args.model,
   prompt,
   ...(args.timeoutMs === null ? {} : { timeoutMs: args.timeoutMs }),
+  ...(args.agentFile === null ? {} : { agentFile: args.agentFile }),
 });
 
 const locator = result

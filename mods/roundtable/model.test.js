@@ -1,4 +1,4 @@
-// # RED at 0de69d4e5: model.ts missing — import of parseRoomLog / wrapToWidth / visibleLines / nextOffset / rowRole fails (ERR_MODULE_NOT_FOUND).
+// # RED at 0de69d4e5: model.ts missing — import of parseRoomLog / wrapToWidth / visibleLines / rowRole fails (ERR_MODULE_NOT_FOUND).
 // mods/roundtable/model.test.js — pure room-log display. Run: node --test mods/roundtable/model.test.js
 const test = require('node:test')
 const assert = require('node:assert/strict')
@@ -60,27 +60,13 @@ test('display lines indent the text by two cells and name seq, from, kind, and r
   for (const l of narrow) assert.ok(ui.displayWidth(l.text) <= 6, JSON.stringify(l.text))
 })
 
-test('scroll window and tail-follow: an offset at the bottom stays at the bottom; an offset above it stays put', () => {
+test('scroll window: visibleLines clamps the offset into range', () => {
   const lines = [0, 1, 2, 3, 4].map(i => ({ text: String(i), role: 'text' }))
   assert.deepEqual(m.visibleLines(lines, 2, 2).map(l => l.text), ['2', '3'])
   assert.deepEqual(m.visibleLines(lines, 99, 2).map(l => l.text), ['3', '4'])
-  // was at bottom (offset 3 of 5 in a room of 2: max is 3)
-  assert.equal(m.nextOffset(3, 5, 7, 2), 5)
-  // scrolled up
-  assert.equal(m.nextOffset(1, 5, 7, 2), 1)
 })
 
-// # RED at 51e68c71e: node --test mods/roundtable/model.test.js exit 1.
-// not ok open scroll: TypeError m.openOffset is not a function. A fitting room has no
-// opening offset of 0, so row 1 is not pinned; the longer-room tail case never runs.
-test('open scroll: a room that fits is offset 0 with row 1 visible; a longer room opens at the tail; owner is PALETTE.here', () => {
-  const fit = ['row1', 'row2', 'row3'].map((text) => ({ text, role: 'text' }))
-  assert.equal(m.openOffset(fit.length, 10), 0)
-  assert.equal(m.visibleLines(fit, m.openOffset(fit.length, 10), 10)[0].text, 'row1')
-  const long = Array.from({ length: 8 }, (_, i) => ({ text: 'r' + i, role: 'text' }))
-  const tail = m.openOffset(long.length, 3)
-  assert.equal(tail, 5)
-  assert.deepEqual(m.visibleLines(long, tail, 3).map((l) => l.text), ['r5', 'r6', 'r7'])
+test('owner is PALETTE.here', () => {
   assert.equal(m.rowRole(row({ from: 'owner', kind: 'say' })), 'here')
   assert.equal(ui.PALETTE.here, 'claude')
 })

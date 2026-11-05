@@ -127,22 +127,3 @@ export function visibleLines<T>(lines: readonly T[], offset: number, room: numbe
   const start = Math.max(0, Math.min(offset, max))
   return lines.slice(start, start + size)
 }
-
-// First paint. A room that fits (every line in the window) starts at row 1. A longer room opens at the tail.
-export function openOffset(count: number, room: number): number {
-  const size = Math.max(room, 0)
-  if (size === 0) return 0
-  return Math.max(0, count - size)
-}
-
-// When the previous offset sat on the bottom, the next offset sits on the new bottom. An offset above the bottom is kept and clamped.
-// A room that fits is always offset 0, so row 1 stays on screen.
-export function nextOffset(offset: number, prevCount: number, nextCount: number, room: number): number {
-  const size = Math.max(room, 0)
-  const prevMax = Math.max(0, prevCount - size)
-  const nextMax = Math.max(0, nextCount - size)
-  if (nextMax === 0) return 0
-  const atBottom = prevCount === 0 ? true : offset >= prevMax
-  const kept = atBottom ? nextMax : offset
-  return Math.max(0, Math.min(nextMax, kept))
-}

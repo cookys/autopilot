@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0399 -->
+<!-- next-id: BL-0406 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -1114,3 +1114,109 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Effort**: M
 - **Source**: PM ruling 2026-11-05 fleet（host count 2026-11-05）
 - **Pointer**: project/backlog/unresolved-finding-audit.md
+
+### 審查迴圈收尾輸出把未解決與待解決混在一個數字
+- **Id**: BL-0399
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: codeforge
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: 收尾輸出的未解決發現數，把已驗證但還沒被後一代明確解決的發現也算進去。這是設計如此，但輸出沒說明，解決的寫法也沒寫清楚。
+- **Impact**: 使用端看到數字不為零，不知道是真的沒修，還是只差一筆解決記錄。
+- **Trigger**: next touch of the hetero-review-loop finalize summary
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PEER-REPORTED codeforge 2026-11-05
+- **Pointer**: project/backlog/review-loop-open-vs-pending-split.md
+
+### 殺進程逾時測試在高負載主機上單獨跑也會紅
+- **Id**: BL-0400
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: 殺進程逾時測試在主機負載四十多時，單獨跑也有四條時間斷言失敗，量到九到十五秒，超出測試寫死的上限。時間上限不能硬加寬，要改成不靠牆上時間的判法。
+- **Impact**: 高負載時這支測試固定紅，會蓋住真正的新壞掉。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: PM 2026-11-05 fleet（四次執行，負載 40-43）
+- **Pointer**: project/backlog/kill-after-timing-bounds-under-load.md
+
+### 四支測試只在並行池裡紅，另一支偶發
+- **Id**: BL-0401
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: 全套件並行時有四支測試紅、單獨跑卻綠，是同機互相干擾。另有一支付費批次停止測試單獨跑六次紅一次，哪一條斷言紅還沒查出來。
+- **Impact**: 完整套件會出現假紅，要靠人工單獨重跑才能判斷。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: M
+- **Source**: PM 2026-11-05 fleet（04913afdf 全套件）
+- **Pointer**: project/backlog/suite-pool-interference-and-intermittents.md
+
+### d0gate 測試的凍結樣本只對已結案那一輪成立
+- **Id**: BL-0402
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: self
+- **Problem**: d0gate 測試現在拿凍結樣本跟釘住提交上的程式比對，因為那一輪已結案。開新一輪時沒有重釘，測試就會比對過期的版本。
+- **Impact**: 新一輪 d0gate 若沒重釘，測試照樣綠但沒驗到現行程式。
+- **Trigger**: next d0gate round
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: wfix merge 8c0d36273
+- **Pointer**: project/backlog/d0gate-stub-repin-on-new-round.md
+
+### 公開匯出工具要排除本機 hippo 資料夾
+- **Id**: BL-0403
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: self
+- **Problem**: 第二階段公開匯出工具還沒明文排除本機 hippo 資料夾，版面清單也還沒登記它。沒排除，本機資料可能被帶進公開匯出。
+- **Impact**: 本機資料夾可能混進公開匯出。
+- **Trigger**: relayout C2 export tool
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: relayout plan amendment E1 review 2026-11-05
+- **Pointer**: project/backlog/relayout-c2-export-hippo.md
+
+### 即時面板輸入雙 @ 時自動補全席位名稱
+- **Id**: BL-0404
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-03 fleet
+- **Reply**: none
+- **Problem**: 想在即時面板輸入兩個 @ 時，列出席位名稱讓人補全（例如 @@codex）。這是新功能，不是缺陷，目前沒有人回報任何症狀。
+- **Impact**: 不做的話，指定席位仍要手打完整名稱，容易打錯。
+- **Trigger**: 角色成員機制的計畫完成之後
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM 2026-11-03 request
+- **Pointer**: project/backlog/seat-name-autocomplete.md
+
+### G29：owner 端的派工與處理迴圈要寫一份薄計畫
+- **Id**: BL-0405
+- **Status**: open
+- **Since**: 2026-11-05
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 2026-11-05 fleet
+- **Reply**: none
+- **Problem**: owner 要改用艦隊子席位派工，而不是 Agent 工具；喚醒後依驗收判斷、有少量重試額度、用完就升級給 PM；並要有子樹層級的進度顯示。團隊章程第一版和艦隊任務租約都沒涵蓋這些。
+- **Impact**: 不做的話，owner 端的派工、驗收與升級仍靠各 session 自行處理，進度也看不到。
+- **Trigger**: 角色成員計畫完成之後
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PM go-ledger G29, ruling 2026-11-05
+- **Pointer**: project/backlog/g29-owner-dispatch-handling-loop.md

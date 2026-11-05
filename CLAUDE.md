@@ -1,5 +1,12 @@
 # autopilot — project conventions (Claude Code)
 
+## Goal
+
+- End goal: 3.0.0 這條線（開發中版號 3.0.0-alpha.N 遞增；3.0.0 正式版即操作員說的「3.0.0.0 大版」）：開發 repo 照 10/31 定稿完整重排，再用白名單匯出成新的 public repo 發佈，開發 repo 轉為私有。同一條線上加入「角色套件」，讓弱模型也能做出好結果；評測證明有效之後，才改成預設。
+- Current milestone: 完成重排 P2–P5 和匯出工具；角色套件先做小規模試驗（pilot），由 PM 判定是否過門檻。backlog 從 146 條整理到約 82 條。
+- Not goals now: 升版到 3.1；hosted CI；改名、轉私有、建 public repo（這三件要 operator 本人動手）。
+- Source: 出處：10/31 定稿 addendum C；operator 11/5 說的「盤點完，全部 refactor」、角色套件的方向，d-c76529c3「做，撥額度」，以及 11/5 版號規則（3.0.0.0 大版、開發中 alpha 遞增）。；操作員 d-fb9989dc 定案（2026-11-05）
+
 For Claude Code sessions working **on** the autopilot plugin itself. Skill-runtime conventions live in each skill's `SKILL.md`. Other agents (Codex, OpenCode, Antigravity): [`AGENTS.md`](AGENTS.md); portability: [`references/multi-agent-portability.md`](references/multi-agent-portability.md).
 
 Original wording of the rules shortened here: [`docs/dev/_archive/entry-docs/claude-md-detail.md`](docs/dev/_archive/entry-docs/claude-md-detail.md). Directory rules load when a session reads or edits a file there: `scripts/CLAUDE.md`, `skills/CLAUDE.md`, `references/CLAUDE.md`, `platforms/CLAUDE.md`, `mods/CLAUDE.md`. A path assembled inside a script does not trigger the load, so every rule that causes damage when missed is also kept below, in one line.
@@ -48,7 +55,7 @@ If you see "Important" anywhere in a severity context, that's a leftover from th
 
 ## Versioning
 
-Bump with `scripts/sync-version.js` only; version frozen at 3.0.0 (no bump without the operator's confirmation). Whoever pushes to `origin` second yields a colliding number. Bump table and collision procedure: [`docs/dev/versioning.md`](docs/dev/versioning.md).
+Bump with `scripts/sync-version.js` only. 3.0.0 final is the operator's "3.0.0.0 major"; during development a bump uses 3.0.0-alpha.N continuing from alpha.7 (never back to alpha.1). Whoever pushes to `origin` second yields a colliding number. Bump table and collision procedure: [`docs/dev/versioning.md`](docs/dev/versioning.md).
 
 ## Process rules
 
@@ -90,4 +97,4 @@ Inherit from `~/.claude/CLAUDE.md` (Traditional Chinese, terse decisions like `g
 - Don't add trust machinery (hash chains, event ledgers, witness receipts, attestation, trust roots) — settled by [ADR-0001](docs/dev/adr/0001-verification-over-attestation.md); verification is independent re-derivation, never tamper-evidence of a claim.
 - Don't add a second canonical statement of "what the reviewer reads" — code-review.md Invocation § is canonical; reviewer.md Workflow §1 references it.
 - Don't append per-release notes to a Scripts-inventory row — `CHANGELOG.md` owns history; the row is an index entry (see Row shape rule).
-- Don't claim cross-platform env vars or CLI subcommands without verifying — by official doc URL OR by running the real tool. Past lesson cuts both ways: `CODEX_PLUGIN_ROOT` / `AGY_PLUGIN_ROOT` / `GEMINI_PLUGIN_ROOT` env vars were fabricated and shipped to main; but the *correction* then over-corrected, labelling `agy plugin validate` + the root-`plugin.json` requirement as fabricated when installing real `agy` 1.0.1 proved both genuine. If you can't cite a URL or show a tool run, it's a Spike candidate, not a fact. See [`references/multi-agent-portability.md`](references/multi-agent-portability.md) "Corrected — previously mislabelled" §.
+- Don't claim cross-platform env vars or CLI subcommands without verifying — by official doc URL OR by running the real tool. Both fabrication (`CODEX_PLUGIN_ROOT` etc. shipped to main) and over-correction (`agy plugin validate` wrongly called fabricated) happened; no URL or tool run means a Spike candidate, not a fact. See [`references/multi-agent-portability.md`](references/multi-agent-portability.md) "Corrected — previously mislabelled" §.

@@ -210,7 +210,13 @@ function record(root, o) {
   }
 
   // 3-5. FROZEN-based objects
-  const frozenRel = locate(tracked, 'FROZEN.json');
+  // Every tracked FROZEN.json is sealed (frozen-table below); the one beside stamp-prereg.js also drives the stamped-row and
+  // g67 objects. A second table (evals/rolekit) therefore adds objects under its own path and leaves the skill-onoff ids as they were.
+  const frozenRels = tracked.filter((f) => path.posix.basename(f) === 'FROZEN.json' && !skipNoise(f));
+  const stampOwners = frozenRels.filter((f) => has.has(`${path.posix.dirname(path.posix.dirname(f))}/stamp-prereg.js`));
+  if (frozenRels.length === 0) throw new InputError('cannot locate FROZEN.json in the tracked files');
+  if (stampOwners.length !== 1) throw new InputError(`FROZEN.json beside stamp-prereg.js is ${stampOwners.length ? 'ambiguous: ' + stampOwners.join(', ') : 'missing'}`);
+  const frozenRel = stampOwners[0];
   const evalsRoot = path.posix.dirname(path.posix.dirname(frozenRel));
   const frozen = JSON.parse(fs.readFileSync(path.join(root, frozenRel), 'utf8'));
   const resolveKey = (k) => path.posix.normalize(path.posix.join(evalsRoot, k));
@@ -235,16 +241,18 @@ function record(root, o) {
       { rc: r.rc, mismatch: m ? m[1].split(', ').sort() : [], message: m ? '' : (r.rc === 0 ? '' : msg) },
       [`${evalsRoot}/prereg/stage-graph-g67.json`, frozenRel, ...Object.keys(amend).map(resolveKey)]);
   }
-  {
-    const tables = []; walkShaTables(frozen, [], tables);
+  for (const fz of frozenRels) {
+    const fzRoot = path.posix.dirname(path.posix.dirname(fz));
+    const fzKey = (k) => path.posix.normalize(path.posix.join(fzRoot, k));
+    const tables = []; walkShaTables(fz === frozenRel ? frozen : JSON.parse(fs.readFileSync(path.join(root, fz), 'utf8')), [], tables);
     for (const { trail, table } of tables) {
       const bad = []; const gone = [];
       for (const [k, h] of Object.entries(table)) {
-        const f = resolveKey(k); const s = shaOf(root, f);
+        const f = fzKey(k); const s = shaOf(root, f);
         if (s === null) gone.push(k); else if (s !== h) bad.push(k);
       }
-      add(`${frozenRel}#${trail}`, 'frozen-table', bad.length + gone.length === 0 ? 'green' : 'red',
-        { entries: Object.keys(table).length, mismatch: bad.sort(), gone: gone.sort() }, [frozenRel, ...Object.keys(table).map(resolveKey)]);
+      add(`${fz}#${trail}`, 'frozen-table', bad.length + gone.length === 0 ? 'green' : 'red',
+        { entries: Object.keys(table).length, mismatch: bad.sort(), gone: gone.sort() }, [fz, ...Object.keys(table).map(fzKey)]);
     }
   }
 

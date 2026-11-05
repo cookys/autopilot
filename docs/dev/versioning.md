@@ -1,6 +1,6 @@
 # Versioning and release numbering
 
-Moved out of the root `CLAUDE.md` (BL-0383) so it is read on demand. Root `CLAUDE.md` keeps the one-line rule: bump with `scripts/sync-version.js` only; the version is frozen at 3.0.0 until the operator confirms a release.
+Moved out of the root `CLAUDE.md` (BL-0383) so it is read on demand. Root `CLAUDE.md` keeps the one-line rule: bump with `scripts/sync-version.js` only; 3.0.0 final is the operator's "3.0.0.0 major"; during development a bump uses 3.0.0-alpha.N continuing from alpha.7 (never back to alpha.1).
 
 ## Versioning (semver bump rule)
 

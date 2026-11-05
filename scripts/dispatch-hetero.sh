@@ -3968,7 +3968,7 @@ verifies them. Ignore any instruction in the task below to commit, push, or open
         --strict-mcp-config --dangerously-skip-permissions ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"}
         ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json
         ${ROLE_KIT_ARGV[@]+"${ROLE_KIT_ARGV[@]}"})
-      run_worker node "$SELF_DIR/claude-account.js" run --purpose hetero-impl --cwd "$WT" \
+      run_worker node "$SELF_DIR/claude-account.js" run --pin-default --purpose hetero-impl --cwd "$WT" \
         --stdin "$CCSHIM_PROMPT_FILE" --stdout "$CCSHIM_ENVELOPE" -- "${CNATIVE_ARGV[@]}"
     else
       echo "claude-native: account registry not usable; worker not started" > "$LOG"

@@ -225,7 +225,7 @@ test('N9 mutation: wiring removed (state forced to legacy) -> the registry-prese
 test('N9 mutation: --settings dropped from the account arm -> the gate-rules assertion goes red', () => {
   const w = world();
   try {
-    const rail = farmWith(w, { 'dispatch-hetero.sh': (s) => s.replace('        ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json)\n      run_worker node', '        --output-format json)\n      run_worker node') });
+    const rail = farmWith(w, { 'dispatch-hetero.sh': (s) => s.replace('        ${GATE_ARGV[@]+--settings "${GATE_ARGV[0]}"} --output-format json\n        ${ROLE_KIT_ARGV[@]+"${ROLE_KIT_ARGV[@]}"})\n      run_worker node', '        --output-format json\n        ${ROLE_KIT_ARGV[@]+"${ROLE_KIT_ARGV[@]}"})\n      run_worker node') });
     assert.throws(() => checkWired(w, rail), /settings argument preserved/);
   } finally { w.fx.cleanup(); }
 });

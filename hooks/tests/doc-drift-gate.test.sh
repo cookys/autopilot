@@ -293,6 +293,21 @@ assert_exit_code "$__GATE_EXIT" 1 "same missing-script reference in an active do
 assert_contains "$__GATE_OUT" "docs/guide/g.md" "the active doc is the reported failure"
 assert_not_contains "$__GATE_OUT" "evidence/x/brief.md" "the evidence file is not reported"
 
+# 7b. Frozen rolekit kit/placebo copies keep dangling relative links: excluded by default, drift elsewhere.
+echo "Testing rolekit frozen-fixture exclusion..."
+RK="$TEST_TMP/rolekit-excl"
+mkdir -p "$RK/evals/rolekit/kits/k" "$RK/evals/rolekit/placebo/p" "$RK/evals/other/k"
+for d in evals/rolekit/kits/k evals/rolekit/placebo/p; do printf '# S\nSee [r](../../references/gone.md).\n' > "$RK/$d/SKILL.md"; done
+__GATE_OUT="$(node "$GATE_JS" "$RK" --repo-root "$RK" 2>&1)"; __GATE_EXIT=$?
+assert_exit_code "$__GATE_EXIT" 0 "dangling links under evals/rolekit/{kits,placebo} are excluded"
+printf '# S\nSee [r](../../references/gone.md).\n' > "$RK/evals/other/k/SKILL.md"
+__GATE_OUT="$(node "$GATE_JS" "$RK" --repo-root "$RK" 2>&1)"; __GATE_EXIT=$?
+assert_exit_code "$__GATE_EXIT" 1 "negative control: the same dangling link outside the excluded dirs is drift"
+assert_contains "$__GATE_OUT" "evals/other/k/SKILL.md" "the non-excluded copy is the reported failure"
+assert_not_contains "$__GATE_OUT" "evals/rolekit" "no rolekit path is reported"
+__GATE_OUT="$(env -u REPO_LAYOUT_REGISTRY node "$GATE_JS" "$REPO_ROOT" --repo-root "$REPO_ROOT" 2>&1)"; __GATE_EXIT=$?
+assert_exit_code "$__GATE_EXIT" 0 "whole repo passes the baseline gate (rolekit kits/placebo included)"
+
 # 8. Testing invalid command arguments/usage errors (exit 2)
 echo "Testing invalid usage..."
 run_gate "--exclude" # missing arg

@@ -214,6 +214,8 @@ function runCell(ctx, c, key) {
   let last = null;
   while (st.infraAttempts < 2) {
     if (ctx.spent + estimateUsd(c.seat, ctx.rates) > ctx.cap) return { stop: { kind: 'cap', why: `spent ${ctx.spent.toFixed(4)} + estimate would cross ${ctx.cap} before attempt ${st.infraAttempts + 1}` } };
+    const pin = pinProblem(ctx);
+    if (pin) return { stop: { kind: 'account', why: pin } };
     const a = attempt(ctx, c, st.infraAttempts + 1);
     const usd = a.cost ? a.cost.usd : 0;
     ctx.spent += usd; st.cost += usd; if (a.cost) st.source = a.cost.source;
@@ -227,6 +229,34 @@ function runCell(ctx, c, key) {
     row: { role: c.role, task: c.task, rep: c.rep, arm: c.arm, seat: c.seat, pass: infra ? 0 : last.pass, infra, parse_ok: infra ? false : last.parse_ok, kit_applied: infra ? false : last.kit_applied === true,
       cost_usd: Math.round(st.cost * 1e6) / 1e6, cost_source: st.source, check_rc: infra || last.check_rc === undefined ? null : last.check_rc, detail: infra ? st.lastInfra : last.detail, attempts: st.infraAttempts + (infra ? 0 : 1) },
   };
+}
+
+// ---- account pin (PM ruling: option A, no rail change)
+// The rails run claude-native through `claude-account.js run --pin-default`, i.e. as the host's default alias. The pilot account is therefore
+// the host default, and this runner refuses to dispatch unless that holds: at start, on resume, and before every attempt. The default is
+// resolved by claude-account.js itself (a tiny non-claude child that prints the AUTOPILOT_ACCOUNT the account layer hands it), never by
+// re-implementing its rule here. No claude binary is started by the check.
+function accountLayerState(env) {
+  const r = cp.spawnSync('node', [path.join(REPO, 'scripts/claude-account.js'), 'env-check', '--any'], { env, encoding: 'utf8', input: '' });
+  if (r.status !== 0) return { state: 'error', why: `env-check --any rc ${r.status}: ${(r.stderr || '').trim().slice(-300)}` };
+  const first = String(r.stdout).trim().split('\n')[0] || '';
+  return { state: first === 'unconfigured' || first === 'mode_off' ? first : 'active' };
+}
+function resolveDefaultAlias(env, tmpDir) {
+  const f = path.join(tmpDir, `default-alias-${process.pid}-${Date.now()}.txt`);
+  const r = cp.spawnSync('node', [path.join(REPO, 'scripts/claude-account.js'), 'run', '--pin-default', '--purpose', 'author', '--stdout', f, '--', '/bin/sh', '-c', 'printf %s "$AUTOPILOT_ACCOUNT"'], { env, encoding: 'utf8', input: '' });
+  let alias = '';
+  try { alias = fs.readFileSync(f, 'utf8').trim(); } catch (e) { /* not written */ }
+  try { fs.rmSync(f, { force: true }); } catch (e) { /* best effort */ }
+  if (r.status !== 0 || !alias) return { alias: null, why: `claude-account.js run --pin-default could not resolve the host default (rc ${r.status}): ${(r.stderr || '').trim().slice(-300)}` };
+  return { alias };
+}
+// null when the pin holds (or the dry run has no registry), else the reason.
+function pinProblem(ctx) {
+  if (!ctx.pinActive) return null;
+  const d = resolveDefaultAlias(ctx.env, path.join(ctx.out, 'tmp'));
+  if (!d.alias) return d.why;
+  return d.alias === ctx.opts.account ? null : `the host default account is "${d.alias}" but this run is for "${ctx.opts.account}" (the rails dispatch as the default)`;
 }
 
 // ---- the run
@@ -246,21 +276,28 @@ function run(opts, env = process.env) {
     known_deviations: [
       'dispatch-hetero.sh (claude-native) prepends a harness instruction ("only do file edits") to the prompt of every hetero-routed role (planner, implementer, debugger, explorer), identically on all four arms; reviewer and verifier go through dispatch-author.sh and do not get it',
       'reviewer and verifier kits have an empty tools line, which the rails refuse; they are dispatched from a byte-for-byte copy of the frozen kit with tools = none; kit_applied compares the frozen role.md sha256',
-      '--account is checked (claude-account.js env-check --alias) and recorded, not pinned: the rails pick the account per call',
+      '--account is enforced by verification, not by the rails: the rails run as the host default alias (claude-account.js run --pin-default); the runner refuses to start, to resume under another account, and to start an attempt unless claude-account.js resolves that default to --account; a default switched by someone else mid-attempt cannot be detected',
       'cost_usd is the rail total_cost_usd when present, else the cost-model.json per-cell rate; cost_source says which, per row'] };
+  const ctx = { opts, out, rates, dry: !!opts.dryRun, env: { ...env, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(out, 'rail-runs'), DISPATCH_QUIET: '1' } };
+  fs.mkdirSync(ctx.env.AUTOPILOT_DISPATCH_RUNS_DIR, { recursive: true });
+  if (ctx.dry) setupDry(ctx, plan);
+  const layer = accountLayerState(ctx.env);
+  if (layer.state === 'error') throw refuse(`account layer check failed: ${layer.why}`);
+  if (!ctx.dry && layer.state !== 'active') throw refuse(`the account registry is ${layer.state}: a real pilot needs the registry (the rails would use ambient credentials)`);
+  ctx.pinActive = layer.state === 'active';
   if (fs.existsSync(stateFile)) {
     const old = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
     if (old.schedule_sha256 !== state.schedule_sha256 || old.prereg_sha256 !== state.prereg_sha256) throw refuse('the schedule digest in run.json differs from the frozen schedule: refusing to resume');
     if (old.dry_run !== state.dry_run) throw refuse('run.json belongs to a different mode (dry-run vs real): use another --out');
-  } else fs.writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`);
-
-  const ctx = { opts, out, rates, dry: !!opts.dryRun, env: { ...env, AUTOPILOT_DISPATCH_RUNS_DIR: path.join(out, 'rail-runs'), DISPATCH_QUIET: '1' } };
-  fs.mkdirSync(ctx.env.AUTOPILOT_DISPATCH_RUNS_DIR, { recursive: true });
-  if (ctx.dry) setupDry(ctx, plan);
-  else {
+    if (old.account !== opts.account) throw refuse(`run.json belongs to account "${old.account}", this call says "${opts.account}": refusing to resume under another account`);
+  }
+  if (ctx.pinActive) {
     const ec = cp.spawnSync('node', [path.join(REPO, 'scripts/claude-account.js'), 'env-check', '--alias', opts.account], { env: ctx.env, encoding: 'utf8', input: '' });
     if (ec.status !== 0) throw refuse(`claude-account.js env-check --alias ${opts.account} failed (rc ${ec.status}); register the account first`);
+    const pin = pinProblem(ctx);
+    if (pin) throw refuse(pin);
   }
+  if (!fs.existsSync(stateFile)) fs.writeFileSync(stateFile, `${JSON.stringify({ ...state, pinned_default_at_start: ctx.pinActive ? opts.account : null }, null, 2)}\n`);
 
   const resultsFile = path.join(out, 'results.jsonl');
   const rows = fs.existsSync(resultsFile) ? fs.readFileSync(resultsFile, 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)) : [];
@@ -312,7 +349,7 @@ function setupDry(ctx, plan) {
   const scenario = ctx.opts.scenario ? JSON.parse(fs.readFileSync(ctx.opts.scenario, 'utf8')) : defaultScenario(plan);
   fs.writeFileSync(path.join(d, 'scenario.json'), JSON.stringify(scenario));
   for (const k of ['AUTOPILOT_SESSION_ID', 'CLAUDE_CODE_SESSION_ID', 'AUTOPILOT_CONFIG_FILE']) delete ctx.env[k];
-  Object.assign(ctx.env, { PATH: `${path.join(d, 'bin')}:${ctx.env.PATH}`, HOME: path.join(d, 'home'), CLAUDE_CONFIG_DIR: path.join(d, 'claude'), AUTOPILOT_ACCOUNTS_DIR: path.join(d, 'no-accounts'),
+  Object.assign(ctx.env, { PATH: `${path.join(d, 'bin')}:${ctx.env.PATH}`, HOME: path.join(d, 'home'), CLAUDE_CONFIG_DIR: path.join(d, 'claude'), AUTOPILOT_ACCOUNTS_DIR: ctx.env.AUTOPILOT_ACCOUNTS_DIR || path.join(d, 'no-accounts'),
     TMPDIR: path.join(d, 'tmp'), AUTOPILOT_SETTLE_MS: '0', RKRUN_SCENARIO: path.join(d, 'scenario.json'), RKRUN_CALLS: path.join(d, 'calls.jsonl') });
   cp.spawnSync('node', [path.join(REPO, 'scripts/run-approval.js'), 'confirm-claude-native'], { env: ctx.env, stdio: 'ignore' }); // the throwaway HOME only
 }
@@ -329,11 +366,11 @@ function main() {
       process.exit(sc.status === 0 ? 0 : 2);
     }
     const k = summary.stopped && summary.stopped.kind;
-    process.exit(k === 'auth' ? EXIT.AUTH : k === 'quota' ? EXIT.QUOTA : k === 'cap' ? EXIT.CAP : k === 'precondition' ? EXIT.PRECONDITION : EXIT.DONE);
+    process.exit(k === 'auth' ? EXIT.AUTH : k === 'quota' ? EXIT.QUOTA : k === 'cap' ? EXIT.CAP : k === 'precondition' || k === 'account' ? EXIT.PRECONDITION : EXIT.DONE);
   } catch (e) {
     if (e.refusal) { console.error(`run-pilot: refused: ${e.message}`); process.exit(EXIT.REFUSED); }
     throw e;
   }
 }
 if (require.main === module) main();
-module.exports = { parseArgs, checkEnv, loadPlan, costOf, extractAnswer, stopKind, kitApplied, railKitDir, transportFor, defaultScenario, run, EXIT };
+module.exports = { pinProblem, parseArgs, checkEnv, loadPlan, costOf, extractAnswer, stopKind, kitApplied, railKitDir, transportFor, defaultScenario, run, EXIT };

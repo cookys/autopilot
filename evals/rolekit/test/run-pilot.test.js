@@ -178,3 +178,60 @@ test('budget: infra attempt then an auth stop, then resume: the lost attempts ar
     assert.strictEqual(second.summary.stopped.kind, 'cap'); // the 0.06 cap stops the walk after that cell
   } finally { rm(d); }
 });
+
+// ---- account pin (PM ruling A): the rails dispatch as the host default alias, so the runner must refuse unless that alias is --account
+const { makeFixture, readLog } = require('../../../scripts/lib/account-fixtures/shim-install');
+const acctEnv = (fx) => ({ ...process.env, AUTOPILOT_ACCOUNTS_DIR: fx.accountsDir, AUTOPILOT_LIVE_DIR: fx.liveDir, AUTOPILOT_STATE_DIR: fx.stateDir, AUTOPILOT_CONFIG: fx.configFile, XDG_RUNTIME_DIR: fx.runtimeDir });
+const setPriority = (fx, alias, priority) => {
+  const reg = JSON.parse(fs.readFileSync(fx.regFile, 'utf8'));
+  reg.accounts.find((x) => x.alias === alias).priority = priority;
+  fs.writeFileSync(fx.regFile, JSON.stringify(reg), { mode: 0o600 });
+};
+const twoAliases = () => makeFixture({ aliases: [{ alias: 'a', priority: 20 }, { alias: 'b', priority: 10 }] }); // default is b
+
+test('account pin: the host default is b, the run says a: refused before any cell, no claude started, nothing written', () => {
+  const fx = twoAliases(); const d = tmp();
+  try {
+    assert.match(refusal(() => rp.run(base(d, { account: 'a', capUsd: '0.02' }), acctEnv(fx))), /host default account is "b" but this run is for "a"/);
+    assert.strictEqual(readLog(fx.shim.log).length, 0);
+    assert.ok(!fs.existsSync(path.join(d, 'dry', 'calls.jsonl')));
+    assert.ok(!fs.existsSync(path.join(d, 'run.json')) && !fs.existsSync(path.join(d, 'results.jsonl')) && !fs.existsSync(path.join(d, 'attempts.jsonl')));
+  } finally { rm(d); fx.cleanup(); }
+});
+
+test('account pin: the default equals --account: the run goes through the rails and records the account', () => {
+  const fx = twoAliases(); const d = tmp();
+  try {
+    const res = rp.run(base(d, { account: 'b', capUsd: '0.02' }), acctEnv(fx));
+    assert.strictEqual(res.summary.ran, 1);
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(d, 'run.json'), 'utf8')).account, 'b');
+    // the account layer scrubs the child env, so the stub cannot log its call; a scored, non-infra row proves the stub answered through it
+    const rows = fs.readFileSync(res.resultsFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.strictEqual(rows.length, 1); assert.strictEqual(rows[0].infra, false);
+  } finally { rm(d); fx.cleanup(); }
+});
+
+test('account pin: resume under another --account, or after the host default changed, is refused before any cell', () => {
+  const fx = twoAliases(); const d = tmp();
+  try {
+    rp.run(base(d, { account: 'b', capUsd: '0.02' }), acctEnv(fx));
+    const calls = () => fs.readFileSync(path.join(d, 'attempts.jsonl'), 'utf8').trim().split('\n').length; // one ledger line per attempt
+    const before = calls();
+    assert.match(refusal(() => rp.run(base(d, { account: 'a', capUsd: '0.05' }), acctEnv(fx))), /belongs to account "b"/);
+    setPriority(fx, 'a', 5); // the host default becomes a
+    assert.match(refusal(() => rp.run(base(d, { account: 'b', capUsd: '0.05' }), acctEnv(fx))), /host default account is "a" but this run is for "b"/);
+    assert.strictEqual(calls(), before, 'no further attempt');
+  } finally { rm(d); fx.cleanup(); }
+});
+
+test('account pin: pinProblem is re-evaluated against the live registry (the per-attempt check)', () => {
+  const fx = twoAliases(); const d = tmp();
+  try {
+    fs.mkdirSync(path.join(d, 'tmp'), { recursive: true });
+    const ctx = { pinActive: true, env: acctEnv(fx), opts: { account: 'b' }, out: d };
+    assert.strictEqual(rp.pinProblem(ctx), null);
+    setPriority(fx, 'a', 1);
+    assert.match(rp.pinProblem(ctx), /host default account is "a"/);
+    assert.strictEqual(rp.pinProblem({ ...ctx, pinActive: false }), null);
+  } finally { rm(d); fx.cleanup(); }
+});

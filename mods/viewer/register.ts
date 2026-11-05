@@ -15,7 +15,7 @@ import { errorOf, fileView, parseShowInput } from './model'
 import type { ShowInput, ShowRequest } from './model'
 import { aiState, cancelAi, runAi, sendToChat, toggleAi } from './assist'
 import type { Source } from './assist'
-import { Viewer } from './pane'
+import { Viewer, newHScroll } from './pane'
 import { newScroll, scrollHook } from '../live/scroll'
 import type { AiView } from './pane'
 import { PANE_ID, TOOL_DESCRIPTION, TOOL_FULL, TOOL_NAME, TOOL_SCHEMA, currentView, reopenWindow, setCurrentView, shownFile, show } from './show'
@@ -76,16 +76,18 @@ export function registerViewer(on: Parameters<Register>[0]): void {
       toChat: () => { void sendToChat($, t) },
       toggle: () => toggleAi($),
     }
+    viewerH.redraw = () => { void $.ui.invalidate('ui.render') } // the left / right buttons move the sideways offset and ask for a draw
     viewerScroll.redraw = () => { void $.ui.invalidate('ui.render') } // a click on the track moves the offset and asks for a draw
     return Viewer($.ui.resolve(e), c.shown, c.title, t, (start: number) => {
       if (c.shown.kind !== 'file' || c.text === null || currentView() !== c) return
       const view = fileView(c.shown.view.path, c.text, start, null)
       if (view === null) return
       setCurrentView({ ...c, shown: shownFile(view, null) })
-      viewerScroll.offset = 0 // another part of the file starts at the top
+      viewerScroll.offset = 0
+      viewerH.hoff = 0 // another part of the file starts at the top
       void $.ui.invalidate('ui.render')
       void $.ui.scroll({ in: PANE_ID, to: 'start' }).catch(() => undefined)
-    }, ai, { props: (e as unknown as { props?: unknown }).props, model: viewerScroll })
+    }, ai, { props: (e as unknown as { props?: unknown }).props, model: viewerScroll, h: viewerH })
   })
 
   // the person's scroll keys on the window: the mod moves its own offset (the frame, ../live/scroll.tsx); without a frame the engine scrolls as before
@@ -94,6 +96,7 @@ export function registerViewer(on: Parameters<Register>[0]): void {
   })
 }
 const viewerScroll = newScroll()
+const viewerH = newHScroll()
 
 // what the summary and the question read: the whole text of the window's file (not only the part on screen) or the whole diff
 function sourceOf(c: NonNullable<ReturnType<typeof currentView>>): Source | null {

@@ -92,6 +92,26 @@ export function wrapCells(text: string, width: number): string[] {
   return out
 }
 
+// the part of `text` that shows in `width` cells when the window stands `from` cells to the right: whole characters only (a CJK character is 2 cells). A wide character cut by the
+// left edge is replaced by one blank so the cells after it keep their place; one that does not fit at the right edge is left out.
+export function sliceCells(text: string, from: number, width: number): string {
+  let pos = 0
+  let used = 0
+  let out = ''
+  for (const ch of Array.from(text)) {
+    const cw = displayWidth(ch)
+    if (pos < from) {
+      pos += cw
+      if (pos > from) { out += ' '; used += pos - from }
+      continue
+    }
+    pos += cw
+    if (used + cw > width) break
+    out += ch
+    used += cw
+  }
+  return out
+}
 
 // the frame's room for content: what is left after the head, the rule and the action strip (at least 1 row)
 export const roomOf = (o: { rows: number; headRows: number; barRows: number }): number => Math.max(1, o.rows - o.headRows - 1 - o.barRows)

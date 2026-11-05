@@ -356,3 +356,61 @@ test('SCROLL viewer: a host that gives no body columns gets the plain tree (no f
   expect(find(tree, 'Code')[0].props?.source, 'the whole part is one Code for the engine to scroll').toContain('row 300')
   await win.unmount()
 })
+
+// ---- a line wider than the window scrolls sideways (the host gives no Left / Right key, so two buttons in the strip move it) ----
+// press a sideways button, then draw again (the engine does that after the press; the mock does not); a button at its end is dim and cannot be pressed, which changes nothing
+const slide = async ($: any, win: any, key: string): Promise<any> => { await win.press({ key }).catch(() => undefined); await win.unmount(); return mountWindow($) }
+const codeText = (tree: Node): string => find(tree, 'Code').map(c => String(c.props?.source)).join('\n')
+test('HSCROLL viewer: a 300-column line in a 100-column window can be slid right until its end shows, and back to column 0', async ($, on) => {
+  const line = 'a'.repeat(120) + 'MIDDLE' + 'b'.repeat(120) + 'THE-END-MARK'
+  world(on, { [CWD + '/wide.txt']: 'short\n' + line + '\nshort\n' })
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+  await call($, { path: 'wide.txt' })
+  const win = await mountWindow($)
+  let tree = (await win.drawn()) as Node
+  expect(codeText(tree), 'starts at column 0').toContain(line.slice(0, 50))
+  expect(codeText(tree), 'the end is cut off at first').not.toContain('THE-END-MARK')
+  expect(textOf(tree), 'a cue that the lines go on').toContain('columns 1 to')
+  let win2 = win
+  for (let i = 0; i < 10; i++) win2 = await slide($, win2, 'hright')
+  tree = (await win2.drawn()) as Node
+  expect(codeText(tree), 'text from beyond column 100 shows').toContain('THE-END-MARK')
+  expect(codeText(tree)).not.toContain('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+  const m = /columns (\d+) to (\d+) of (\d+)/.exec(textOf(tree))
+  expect(Number(m![2]), 'hoff never passes the longest line').toBe(Number(m![3]))
+  for (let i = 0; i < 10; i++) win2 = await slide($, win2, 'hleft')
+  tree = (await win2.drawn()) as Node
+  expect(codeText(tree)).toContain(line.slice(0, 50))
+  expect(textOf(tree)).toContain('columns 1 to')
+  await win2.unmount()
+})
+
+test('HSCROLL viewer: a file whose lines all fit has no sideways buttons and no column cue', async ($, on) => {
+  world(on, { [CWD + '/n.txt']: 'one\ntwo\n' })
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+  await call($, { path: 'n.txt' })
+  const win = await mountWindow($)
+  const tree = (await win.drawn()) as Node
+  expect(textOf(tree)).not.toContain('columns')
+  await expect(win.press({ key: 'hright' })).rejects.toThrow()
+  await win.unmount()
+})
+
+test('HSCROLL viewer: a CJK line is cut between characters, never in the middle of one, and the line numbers stay', async ($, on) => {
+  const cjk = '漢'.repeat(150) // 300 cells
+  world(on, { [CWD + '/cjk.txt']: 'x\n' + cjk + '\ny\n' })
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+  await call($, { path: 'cjk.txt' })
+  const win = await mountWindow($)
+  let w = win
+  for (let i = 0; i < 3; i++) {
+    w = await slide($, w, 'hright')
+    const tree = (await w.drawn()) as Node
+    const code = find(tree, 'Code')[0]
+    expect(code.props?.startLine, 'line numbers stay in place').toBe(1)
+    const row = String(code.props?.source).split('\n')[1]
+    expect(row.replace(/漢| /g, ''), 'only whole characters (and one pad blank)').toBe('')
+    expect(row.length).toBeGreaterThan(0)
+  }
+  await w.unmount()
+})

@@ -138,19 +138,8 @@ function parseRegistryText(text) {
   return { doc, accounts };
 }
 
-// Load and structurally validate registry.json. Returns {configured:false} on ENOENT only.
-function loadRegistry(opts) {
-  const o = opts || {};
-  const dir = accountsDir(o);
-  const file = path.join(dir, 'registry.json');
-  const uid = uidOf(o);
-  let text;
-  try {
-    text = readChecked(file, o, uid, 'registry', 1 << 20, false);
-  } catch (e) {
-    if (e instanceof RegistryError && e.reason === 'registry_missing') return { configured: false, dir, file, accounts: [] };
-    throw e;
-  }
+// The accounts dir itself: a real directory (not a link), no group/other access.
+function checkAccountsDir(dir) {
   let dst;
   try {
     dst = fs.lstatSync(dir);
@@ -159,9 +148,30 @@ function loadRegistry(opts) {
   }
   if (dst.isSymbolicLink() || !dst.isDirectory()) throw new RegistryError('accounts_dir_not_directory');
   if ((dst.mode & 0o077) !== 0) throw new RegistryError('accounts_dir_mode_too_open');
-  const parsed = parseRegistryText(text);
-  const accounts = parsed.accounts;
-  return { configured: true, dir, file, accounts };
+}
+
+// ONE read of registry.json plus the accounts-dir check. Returns {configured:false,...} on ENOENT only, else
+// {configured:true, dir, file, text}. Callers that must act on a consistent snapshot parse this text and never re-read.
+function readRegistryText(opts) {
+  const o = opts || {};
+  const dir = accountsDir(o);
+  const file = path.join(dir, 'registry.json');
+  let text;
+  try {
+    text = readChecked(file, o, uidOf(o), 'registry', 1 << 20, false);
+  } catch (e) {
+    if (e instanceof RegistryError && e.reason === 'registry_missing') return { configured: false, dir, file };
+    throw e;
+  }
+  checkAccountsDir(dir);
+  return { configured: true, dir, file, text };
+}
+
+// Load and structurally validate registry.json. Returns {configured:false} on ENOENT only.
+function loadRegistry(opts) {
+  const r = readRegistryText(opts);
+  if (!r.configured) return { configured: false, dir: r.dir, file: r.file, accounts: [] };
+  return { configured: true, dir: r.dir, file: r.file, accounts: parseRegistryText(r.text).accounts };
 }
 
 // --- org identity (alias = account + org) -----------------------------------------------------------------
@@ -358,33 +368,38 @@ function writeFileAtomic600(dir, file, text) {
 // ties to the earlier row). Rule: the alias gets priority (lowest priority among the OTHER enabled rows) - 1, so it is
 // strictly lowest; nothing else changes. Already strictly lowest -> no write. Disabled rows never count. Refuses
 // (nothing written, no backup) for an unregistered or disabled alias, or a registry file whose bytes are not the
-// canonical single-line form the writers emit (a rewrite could then change more than priorities).
+// exact form the writers emit, JSON.stringify(doc) + newline (a rewrite could then change more than priorities), or a new priority that is not strictly below every other enabled row (priority_floor); the registry is read once.
 // Before writing, registry.json is copied byte-for-byte to registry.json.bak.<ms> (0600, exclusive create).
 // Returns {changed, priority, previous, backup}.
 function setDefault(alias, opts) {
   const o = opts || {};
-  const reg = loadRegistry(o);
-  if (!reg.configured) throw new RegistryError('registry_not_configured');
-  const row = requireAlias(reg, alias);
-  const text = readChecked(reg.file, o, uidOf(o), 'registry', 1 << 20, false);
-  const doc = parseRegistryText(text).doc;
-  const nl = text.endsWith('\n') ? '\n' : '';
-  if (JSON.stringify(doc) + nl !== text) throw new RegistryError('registry_format_noncanonical', null, 'refusing to rewrite');
-  const others = reg.accounts.filter((r) => r.enabled && r.alias !== alias).map((r) => r.priority);
+  const read = readRegistryText(o); // the only read: target, others and the edited doc all come from this text
+  if (!read.configured) throw new RegistryError('registry_not_configured');
+  const { dir, file, text } = read;
+  const { doc, accounts } = parseRegistryText(text);
+  const row = requireAlias({ accounts }, alias);
+  if (JSON.stringify(doc) + '\n' !== text) throw new RegistryError('registry_format_noncanonical', null, 'refusing to rewrite');
+  const others = accounts.filter((r) => r.enabled && r.alias !== alias).map((r) => r.priority);
   if (others.length === 0 || row.priority < Math.min(...others)) {
     return { changed: false, priority: row.priority, previous: row.priority, backup: null };
   }
   const priority = Math.min(...others) - 1;
-  const target = doc.accounts.find((r) => r.alias === alias);
-  target.priority = priority;
-  const backup = path.join(reg.dir, `registry.json.bak.${(o.now ? o.now() : Date.now())}`);
+  if (!(priority < Math.min(...others))) throw new RegistryError('priority_floor', alias, 'no strictly lower number exists; only one priority may change');
+  doc.accounts.find((r) => r.alias === alias).priority = priority;
+  // Resolve --pin-default from the text about to be written: it must parse and pick `alias`.
+  const newText = JSON.stringify(doc) + '\n';
+  const next = parseRegistryText(newText).accounts;
+  let best = null;
+  for (const r of next) if (r.enabled && (best === null || r.priority < best.priority)) best = r;
+  if (best === null || best.alias !== alias) throw new RegistryError('default_not_resolved', alias, 'new registry would not resolve to the alias');
+  const backup = path.join(dir, `registry.json.bak.${(o.now ? o.now() : Date.now())}`);
   try {
     fs.writeFileSync(backup, text, { mode: 0o600, flag: 'wx' });
     fs.chmodSync(backup, 0o600);
   } catch (e) {
     throw new RegistryError('backup_write_failed', null, e && e.code ? e.code : 'error');
   }
-  writeFileAtomic600(reg.dir, reg.file, JSON.stringify(doc) + nl);
+  writeFileAtomic600(dir, file, newText);
   return { changed: true, priority, previous: row.priority, backup };
 }
 
@@ -393,6 +408,7 @@ function setDefault(alias, opts) {
 function restoreRegistry(backup, opts) {
   const o = opts || {};
   const dir = accountsDir(o);
+  checkAccountsDir(dir);
   const abs = path.resolve(String(backup));
   if (path.dirname(abs) !== path.resolve(dir) || !/^registry\.json\.bak\.\d+$/.test(path.basename(abs))) {
     throw new RegistryError('backup_path_rejected', null, 'must be registry.json.bak.<n> in the accounts dir');

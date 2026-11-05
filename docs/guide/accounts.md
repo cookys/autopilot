@@ -153,7 +153,7 @@ Every dispatch rail runs `claude-account.js run --pin-default`, which uses the e
 node scripts/claude-account.js set-default <alias>
 ```
 
-The alias gets priority (lowest priority among the other enabled rows) minus 1, so it is strictly lowest; no other byte of `registry.json` changes. It refuses (exit 2, nothing written) an alias that is not registered or is disabled, and a registry file that is not in the one-line form the writers emit. An alias that is already the strictly lowest prints `default_unchanged` and writes nothing. Before writing, the command copies `registry.json` to `registry.json.bak.<ms>` (0600) and prints the rollback command; writes are atomic (temp file then rename, 0600). Rollback, which puts the backup back byte for byte after checking it still validates:
+The alias gets priority (lowest priority among the other enabled rows) minus 1, so it is strictly lowest; no other byte of `registry.json` changes. It refuses (exit 2, nothing written) an alias that is not registered or is disabled, a registry file that is not exactly the one-line form the writers emit (JSON plus a final newline), and a case where no strictly lower number exists (`priority_floor`; only one priority may change). An alias that is already the strictly lowest prints `default_unchanged` and writes nothing. Before writing, the command copies `registry.json` to `registry.json.bak.<ms>` (0600) and prints the rollback command; writes are atomic (temp file then rename, 0600). Rollback, which puts the backup back byte for byte after checking it still validates:
 
 ```
 node scripts/claude-account.js set-default --restore <accounts-dir>/registry.json.bak.<ms>

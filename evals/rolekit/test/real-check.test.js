@@ -150,10 +150,10 @@ test('a --claude-bin other than the default claude can never earn the formal id:
 
 test('trust rule: the formal id needs the default `claude` (no --claude-bin) and no --dry-run; a PATH-resolved fake named claude through the default is the only way left, and the evidence records the resolved path', withWorld((w) => {
   const bin = path.join(w.fx.root, 'bin2'); fs.mkdirSync(bin);
-  fs.copyFileSync(path.join(w.fx.root, 'bin', 'claude'), path.join(bin, 'claude')); // the account-layer shim: answers OK, never obeys a card
+  fs.writeFileSync(path.join(bin, 'claude'), `#!${process.execPath}\nconst fs=require('fs');const p=fs.readFileSync(0,'utf8');\nconst b=/<<<AUTOPILOT-AUTHOR-[0-9a-f]+>>>/.exec(p)[0],e=/<<<AUTOPILOT-END-[0-9a-f]+>>>/.exec(p)[0];\nprocess.stdout.write(b+'\\nOK\\n'+e+'\\n');\n`, { mode: 0o755 }); // a default-named claude that never obeys a card
   const r = w.run(w.std([]), { PATH: `${bin}:${w.env.PATH}` });
   assert.strictEqual(r.item.id, 'real-check-weak1', 'default claude -> formal id (met decided by the checks)');
-  assert.strictEqual(r.item.met, false, 'the shim never echoes the nonce');
+  assert.strictEqual(r.item.met, false, 'this claude never echoes the nonce');
   const ev = w.evidence('real-check-weak1.json');
   assert.strictEqual(ev.trusted_runner, true);
   assert.strictEqual(ev.claude_resolved, path.join(bin, 'claude'));

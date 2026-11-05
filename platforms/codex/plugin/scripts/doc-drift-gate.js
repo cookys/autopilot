@@ -51,6 +51,10 @@ const DEFAULT_EXCLUDES = [
   // links intentionally dangle from the pack location — rewriting them would break the
   // byte-identity the skill-onoff arm-parity tests assert).
   `${EVALS_DIR}/skill-onoff/packs`,
+  // Role-kit pilot fixtures (digest-stamped by evals/rolekit/stamp-rolekit.js): the skill copies under kits/ and placebo/
+  // keep their original relative links, which dangle from the eval location; rewriting them would break the stamp.
+  `${EVALS_DIR}/rolekit/kits`,
+  `${EVALS_DIR}/rolekit/placebo`,
   // Findings-batch cell fixtures: the READMEs/task.md under here are what the eval agent reads inside its own cell repo,
   // where `scripts/merge-lane.sh` etc. are the fixture's stubs (cc/stubs/scripts), not this repo's scripts/.
   `${EVALS_DIR}/skill-onoff/fbatch/cc`,

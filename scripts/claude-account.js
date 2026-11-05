@@ -17,6 +17,13 @@
  *                                            (quota-reporter.js); `run` does the same once before its first gather
  *   node scripts/claude-account.js status    [--limit N]
  *   node scripts/claude-account.js cooldown  --clear <alias>
+ *   node scripts/claude-account.js set-default <alias>
+ *                                            make <alias> the host default that `run --pin-default` resolves: its priority
+ *                                            becomes (lowest priority among the other ENABLED rows) - 1; nothing else in
+ *                                            registry.json changes. Refuses an unknown or disabled alias. Backs registry.json up
+ *                                            to registry.json.bak.<ms> (0600) first and prints the rollback command.
+ *   node scripts/claude-account.js set-default --restore <backup>
+ *                                            put that backup back byte for byte (rollback)
  *   node scripts/claude-account.js selftest                 (Node shim, throwaway dir)
  *   node scripts/claude-account.js selftest --real-binary [--binary P]
  *                                            operator-run spike (plan O6): FAKE- token against the real claude, never in a suite
@@ -1188,6 +1195,29 @@ function cmdCooldown(ctx, argv) {
   return EXIT.OK;
 }
 
+function cmdSetDefault(ctx, argv) {
+  const { opts, rest } = parseArgs(argv, { restore: 'value' });
+  const wrap = (fn) => {
+    try { return fn(); } catch (e) {
+      if (e instanceof registry.RegistryError) throw new Stop(EXIT.INVALID, e.message, null);
+      throw e;
+    }
+  };
+  if (opts.restore !== undefined) {
+    if (rest.length) throw new Stop(EXIT.INVALID, 'usage: set-default --restore <backup>', null);
+    wrap(() => registry.restoreRegistry(opts.restore, ctx.regOpts));
+    ctx.out('restored registry.json from the backup');
+    return EXIT.OK;
+  }
+  if (rest.length !== 1) throw new Stop(EXIT.INVALID, 'usage: set-default <alias> | set-default --restore <backup>', null);
+  const r = wrap(() => registry.setDefault(rest[0], Object.assign({}, ctx.regOpts, { now: ctx.now })));
+  if (!r.changed) { ctx.out(`default_unchanged alias=${rest[0]} priority=${r.priority} (already the strictly lowest enabled)`); return EXIT.OK; }
+  ctx.out(`default_set alias=${rest[0]} priority=${r.previous}->${r.priority}`);
+  ctx.out(`backup ${r.backup}`);
+  ctx.out(`rollback: node scripts/claude-account.js set-default --restore ${r.backup}`);
+  return EXIT.OK;
+}
+
 const SELFTEST_FAIL = 1; // operator spikes: any failed condition exits 1
 const LOCAL_BASE_RE = /^http:\/\/127\.0\.0\.1:\d{1,5}$/;
 const SELFTEST_PROMPT = ['-p', 'say OK', '--model', 'haiku', '--output-format', 'json', '--tools', '', '--strict-mcp-config'];
@@ -1452,11 +1482,12 @@ async function cli(argv, deps) {
       case 'env-check': return cmdEnvCheck(ctx, rest);
       case 'status': return cmdStatus(ctx, rest);
       case 'cooldown': return cmdCooldown(ctx, rest);
+      case 'set-default': return cmdSetDefault(ctx, rest);
       case 'usage-probe': return await cmdUsageProbe(ctx, rest);
       case 'sync-statusline': return cmdSyncStatusline(ctx, rest);
       case 'selftest': return await cmdSelftest(ctx, rest);
       default:
-        ctx.err('usage: claude-account.js pick|env-check|run|exec|usage-probe|sync-statusline|status|cooldown|selftest');
+        ctx.err('usage: claude-account.js pick|env-check|run|exec|usage-probe|sync-statusline|status|cooldown|set-default|selftest');
         return EXIT.INVALID;
     }
   } catch (e) {

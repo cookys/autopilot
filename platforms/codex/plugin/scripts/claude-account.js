@@ -5,7 +5,7 @@
  *
  *   node scripts/claude-account.js pick      [--purpose T] [--exclude a,b]
  *   node scripts/claude-account.js env-check [--alias A] [--any]
- *   node scripts/claude-account.js run       --purpose T [--alias A] [--max-attempts N] [--stdin F] [--stdout F]
+ *   node scripts/claude-account.js run       --purpose T [--alias A | --pin-default] [--max-attempts N] [--stdin F] [--stdout F]
  *                                            [--stderr F] [--cwd D] [--timeout SECS] -- claude <argv...>
  *   node scripts/claude-account.js exec      (--alias A | --pick) [--purpose T] -- <cmd...>
  *   node scripts/claude-account.js usage-probe --alias A [--purpose T]
@@ -857,8 +857,9 @@ async function cmdUsageProbe(ctx, argv) {
 
 async function cmdRun(ctx, argv) {
   const { opts, cmd } = parseArgs(argv, {
-    purpose: 'value', alias: 'value', 'max-attempts': 'value', stdin: 'value', stdout: 'value', stderr: 'value', cwd: 'value', timeout: 'value',
+    purpose: 'value', alias: 'value', 'pin-default': 'flag', 'max-attempts': 'value', stdin: 'value', stdout: 'value', stderr: 'value', cwd: 'value', timeout: 'value',
   });
+  if (opts['pin-default'] === true && opts.alias !== undefined) throw new Stop(EXIT.INVALID, 'pin_default_excludes_alias', null);
   if (cmd.length === 0) throw new Stop(EXIT.INVALID, 'missing_command (use -- claude <argv>)', null);
   if (opts.purpose === undefined) throw new Stop(EXIT.INVALID, 'purpose_required', null);
   const purpose = checkPurpose(opts.purpose);
@@ -890,6 +891,14 @@ async function cmdRun(ctx, argv) {
     configFile: ctx.configFile, runtimeDir: runtimeDir(ctx),
   };
   let pinned = null;
+  if (opts['pin-default'] === true) {
+    // The host's default alias: the enabled row with the lowest priority number, ties in registry order. From here on it is
+    // exactly `--alias <default>` (no failover, no stale probe; a 429 exits 4, a cooling default exits 3, 401 stays STOP_AUTH).
+    let best = null;
+    for (const r of checked.accounts) if (r.enabled && (best === null || r.priority < best.priority)) best = r;
+    if (best === null) { preAudit(ctx, purpose, 'no_account'); throw new Stop(EXIT.NONE, 'no enabled alias', null); }
+    opts.alias = best.alias;
+  }
   if (opts.alias !== undefined) {
     try { registry.requireAlias({ accounts: checked.accounts }, opts.alias); } catch (e) {
       if (e instanceof registry.RegistryError) {

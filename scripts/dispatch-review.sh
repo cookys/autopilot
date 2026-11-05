@@ -1978,7 +1978,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
   child_marker_hook_setup || { CHILD_MARKER_SETTINGS=""; CHILD_MARKER_DIR="${AUTOPILOT_SESSION_MODE_DIR:-}"; }
   if [ "$_ACCT_ACTIVE" -eq 1 ]; then
     timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" \
-      node "$_REVIEW_SELF_DIR/claude-account.js" run --purpose review --stdin "$PROMPT_FILE" --cwd "$CNATIVE_CWD" -- \
+      node "$_REVIEW_SELF_DIR/claude-account.js" run --pin-default --purpose review --stdin "$PROMPT_FILE" --cwd "$CNATIVE_CWD" -- \
       "$CC_BIN" -p ${CHILD_SESSION_ID:+--session-id "$CHILD_SESSION_ID"} --model "$MODEL" --setting-sources project --strict-mcp-config --tools "$ROLE_KIT_TOOLS" ${CLAUDE_EFFORT_ARG:+--effort "$CLAUDE_EFFORT_ARG"} ${CHILD_MARKER_SETTINGS:+--settings "$CHILD_MARKER_SETTINGS"} ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} > "$RAW_LOG" 2>&1
   else
   timeout "$TIMEOUT" ${IDLE_WRAP[@]+"${IDLE_WRAP[@]}"} env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} CLAUDE_CONFIG_DIR="$CNATIVE_CFG" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \

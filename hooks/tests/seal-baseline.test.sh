@@ -373,6 +373,22 @@ recbase "$T/sb-old.js"; if refsbased; then bad "negative control: old join(dir, 
 node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).objects;const f=Object.keys(o["project/missions/mission-backlog-bc-execution-graph.json"].files);process.exit(f.includes("project/missions/plans/2026-07-31-correctness-gates.md")?0:1)' "$T/rb.json" && ok || bad "the old recorder lists the plan under the manifest directory, so the negation clause of the registry-base assertion can fail"
 recbase && refsbased && ok || bad "after restoring the recorder the registry-base assertion is green again"
 
+# ---- two FROZEN.json files (skill-onoff and rolekit): each is sealed as its own object, ids carry the path
+rec "$T/two.json"
+node -e '
+const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).objects;
+const e=(c,m)=>{if(!c){console.log("BAD "+m);process.exit(1)}};
+const so=o["evals/skill-onoff/prereg/FROZEN.json#stage-graph-g67.files"], rk=o["evals/rolekit/prereg/FROZEN.json#rows.pilot.files"];
+e(so&&so.category==="frozen-table","skill-onoff table keeps its id");
+e(rk&&rk.category==="frozen-table"&&rk.status==="green","rolekit table sealed under its own path");
+e(Object.keys(rk.files).includes("evals/rolekit/prereg/FROZEN.json")&&Object.keys(rk.files).includes("evals/rolekit/compile-kit.js"),"rolekit keys resolve under evals/rolekit");
+e(Object.keys(o).filter(i=>/\/FROZEN\.json#/.test(i)&&i.startsWith("evals/rolekit/")).every(i=>!i.startsWith("evals/skill-onoff/")),"ids are distinct per FROZEN.json");
+' "$T/two.json" && ok || bad "both FROZEN.json files are sealed, each under its own path"
+printf 'x' >> "$C/evals/rolekit/compile-kit.js"
+rec "$T/cur.json"; rcis 1 "a frozen rolekit file tampered -> compare red" cmpr
+has "names the rolekit table" "evals/rolekit/prereg/FROZEN.json#rows.pilot.files"
+reset; rec "$T/cur.json"; rcis 0 "rolekit file restored -> green" cmpr
+
 # ---- input errors
 rcis 2 "no subcommand" node "$SB"
 rcis 2 "compare without --baseline" node "$SB" compare --current "$T/cur.json"

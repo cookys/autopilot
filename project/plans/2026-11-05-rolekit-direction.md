@@ -173,3 +173,16 @@ BL-0388（使用端收不到 plugin 的 CLAUDE.md）分兩半處理：
 **Spike 結果 2026-11-05（rolekit-probe，0 次模型呼叫；claude 2.1.318、codex-cli 0.166.0、agy 1.5.0）**：S1 一次性 CLAUDE_CONFIG_DIR 的 CLAUDE.md 與 skills 預設會讀、`--setting-sources project` 下不讀（verified，請求形狀）；S2 `--setting-sources project` 讀 cwd 的 CLAUDE.md（verified）；S3 `--append-system-prompt` 可用，且沒有 `--system-prompt-file`（verified）；S4 codex 的 `.agents/skills`、`CODEX_HOME/skills`、兩處 AGENTS.md 進 prompt-input（verified，`codex exec` 未實跑）；S5 claude 角色套件 argv 全數 verified，codex 部分 verified、無工具白名單旗標，agy unverified。
 
 **仍未驗證**：(1) 模型實際有沒有照角色卡做（現有派工路徑沒有放角色卡的旋鈕，待 G37 帳號註冊 d-2a19fdb5 或 rail 加旋鈕之後驗證）；(2) `codex exec` 實跑；(3) agy 的 GEMINI.md 載入與工具限制；(4) 先前 H1/H2 的否定結果只涵蓋 skill 本文 prompt-pack，「角色卡 + 縮窄 skill + 縮小工具面」整組套件從未被測過；套件編譯器雛形尚未做。
+
+## 附錄：G25 role-bundle 實驗併入（2026-11-05 PM 裁示）
+
+PM go-ledger G25（三家討論的結論：不拆分 autopilot，先在可量測的實驗後面做角色套件）併入本方向並結案；角色矩陣、凍結任務、對照組與安慰劑組、預註冊與封存、成本上限、停止規則本文都已涵蓋，不再重複。
+
+下面四點仍有用，記為 B 組的**次要讀數**。它們**不屬於已封存的判定**；除非在 pilot 封存之前先寫進預註冊，否則只作參考，不影響 SHIP 或 NOT-SHIP。
+
+1. **載入的輸入 token 數**：量第一輪實際載入的 token（含快取校正後的成本），不用「裝了幾個技能」當指標。
+2. **聯合防線**：token 減少只有在關鍵缺陷的找出率沒有下降、誤報沒有增加、權限沒有放寬三者同時成立時才算數。
+3. **越界率**：每一百個 session 中，呼叫了角色允許清單以外技能的次數。
+4. **套件身分入帳**：把渲染後的套件雜湊寫進派工的任務紀錄，行為差異才能追到是哪一版套件造成的。
+
+提醒：十個案例只支撐有限度的推行，不足以宣稱可靠度。

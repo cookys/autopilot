@@ -16,6 +16,8 @@ lib/account-quota.js
 lib/account-registry.js
 lib/auth-stop.js
 lib/live-state-dir.js
+lib/personal-data-patterns.js
+../hooks/_shared/secret-patterns.js
 lib/runtime-paths.js
 lib/account-rail.js
 lib/eval-account.js

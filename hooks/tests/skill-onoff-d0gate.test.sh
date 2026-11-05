@@ -94,11 +94,36 @@ else if (!stub.includes(gate)) problems.push('stub does not contain the real --g
 if (problems.length) { console.log(problems.join('; ')); process.exit(1); }
 console.log('parity ok: parse loop ' + loop.split('\n').length + ' lines, gate block ' + gate.split('\n').length + ' lines');
 EOF
-S node "$TEST_TMP/parity.js" "$D0/stubs/scripts/dispatch-hetero.sh" "$REPO_ROOT/scripts/dispatch-hetero.sh" || fail "stub parity (green case)"
+# The d0gate round is closed: the frozen stub is compared with the rail at the commit the d0gate prereg pinned (read from FROZEN.json,
+# never hardcoded). A new d0gate round must re-pin the stub and switch this parity back to HEAD's scripts/dispatch-hetero.sh.
+cat >"$TEST_TMP/pin-rail.js" <<'EOF'
+// pin-rail(frozenJson, repo, outFile [, overrideSha]): write scripts/dispatch-hetero.sh as of the pinned commit; exit 1 when the pin is unreadable / not a commit
+const fs = require('fs'); const cp = require('child_process');
+const [frozen, repo, out, override] = process.argv.slice(2);
+let sha = override;
+if (!sha) { try { sha = JSON.parse(fs.readFileSync(frozen, 'utf8')).d0gate.packs['fixture-scripts-d0gate'].ref; } catch (e) { console.log('cannot read the d0gate pin from FROZEN.json: ' + e.message); process.exit(1); } }
+if (typeof sha !== 'string' || !/^[0-9a-f]{40}$/.test(sha)) { console.log('d0gate pin is not a 40-hex sha: ' + sha); process.exit(1); }
+try { cp.execFileSync('git', ['-C', repo, 'cat-file', '-e', sha + '^{commit}'], { stdio: 'ignore' }); } catch (e) { console.log('d0gate pin does not resolve to a commit: ' + sha); process.exit(1); }
+try { fs.writeFileSync(out, cp.execFileSync('git', ['-C', repo, 'show', sha + ':scripts/dispatch-hetero.sh'], { maxBuffer: 1 << 26 })); } catch (e) { console.log('no scripts/dispatch-hetero.sh at ' + sha); process.exit(1); }
+console.log('pinned rail ' + sha);
+EOF
+S node "$TEST_TMP/pin-rail.js" "$EV/prereg/FROZEN.json" "$REPO_ROOT" "$TEST_TMP/pinned-rail.sh" || fail "stub parity: the d0gate pin cannot be resolved"
+S node "$TEST_TMP/parity.js" "$D0/stubs/scripts/dispatch-hetero.sh" "$TEST_TMP/pinned-rail.sh" || fail "stub parity (green case)"
 sed 's/--gate-rules) \[ \$# -ge 2 \]/--gate-rules) [ $# -ge 3 ]/' "$D0/stubs/scripts/dispatch-hetero.sh" >"$TEST_TMP/stub-planted.sh"
 cmp -s "$TEST_TMP/stub-planted.sh" "$D0/stubs/scripts/dispatch-hetero.sh" && fail "planted stub equals the real stub (sed matched nothing)"
-if S node "$TEST_TMP/parity.js" "$TEST_TMP/stub-planted.sh" "$REPO_ROOT/scripts/dispatch-hetero.sh" >"$TEST_TMP/parity-red.out" 2>&1; then fail "RED control: planted stub change was not detected"; fi
+if S node "$TEST_TMP/parity.js" "$TEST_TMP/stub-planted.sh" "$TEST_TMP/pinned-rail.sh" >"$TEST_TMP/parity-red.out" 2>&1; then fail "RED control: planted stub change was not detected"; fi
 echo "RED (expected): $(cat "$TEST_TMP/parity-red.out")"
+# RED control (b): a pin whose rail does not contain the stub's loop (HEAD carries the --role-kit case the frozen stub lacks) must fail
+HEAD_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+S node "$TEST_TMP/pin-rail.js" "$EV/prereg/FROZEN.json" "$REPO_ROOT" "$TEST_TMP/head-rail.sh" "$HEAD_SHA" >/dev/null || fail "RED control (b) setup: HEAD rail not readable"
+if S node "$TEST_TMP/parity.js" "$D0/stubs/scripts/dispatch-hetero.sh" "$TEST_TMP/head-rail.sh" >"$TEST_TMP/parity-red-b.out" 2>&1; then fail "RED control: a pin whose rail lacks the stub's loop was not detected"; fi
+echo "RED (expected, wrong pin): $(cat "$TEST_TMP/parity-red-b.out")"
+# RED control (c): an unreadable / malformed / unresolvable pin fails, it never skips
+echo '{"d0gate":{"packs":{"fixture-scripts-d0gate":{"ref":"deadbeef"}}}}' >"$TEST_TMP/frozen-bad.json"
+if S node "$TEST_TMP/pin-rail.js" "$TEST_TMP/frozen-bad.json" "$REPO_ROOT" "$TEST_TMP/x.sh" >"$TEST_TMP/pin-red.out" 2>&1; then fail "RED control: a non-40-hex pin was accepted"; fi
+echo "RED (expected, bad pin): $(cat "$TEST_TMP/pin-red.out")"
+if S node "$TEST_TMP/pin-rail.js" "$TEST_TMP/frozen-bad.json" "$REPO_ROOT" "$TEST_TMP/x.sh" 0123456789012345678901234567890123456789 >"$TEST_TMP/pin-red2.out" 2>&1; then fail "RED control: an unresolvable sha was accepted"; fi
+echo "RED (expected, unresolvable): $(cat "$TEST_TMP/pin-red2.out")"
 ok "stub parity"
 
 echo "=== 3. arms and packs: --check-arms green, then planted reds ==="

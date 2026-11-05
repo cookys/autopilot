@@ -72,6 +72,11 @@
       ]
     },
     {
+      "file": "evals/rolekit/compile-kit.js",
+      "status": "out_of_scope",
+      "reason": "builds the claude argv and env for a role kit and returns them as data; it never spawns a process, and the rail that runs the argv goes through the account layer with a throwaway config dir"
+    },
+    {
       "file": "evals/run-trigger-test.sh",
       "status": "wired",
       "group": "A12",

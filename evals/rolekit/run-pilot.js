@@ -263,6 +263,7 @@ function run(opts, env = process.env) {
   const summary = { dry_run: ctx.dry, account: opts.account, scheduled: plan.keys.length, skipped_already_recorded: 0, ran: 0, stopped: null, spent_usd: 0, cap_usd: cap };
   const share30 = (plan.prereg.cost.estimate_usd_high * 30) / plan.keys.length;
   const roleSet = opts.roles ? new Set(opts.roles.split(',')) : null;
+  if (roleSet) { const bad = [...roleSet].filter((r) => !plan.prereg.design.roles.includes(r)); if (bad.length) throw refuse(`--roles: unknown role ${bad.join(',')} (known: ${plan.prereg.design.roles.join(',')})`); }
   for (const key of plan.ordered) {
     if (done.has(key)) { summary.skipped_already_recorded += 1; continue; }
     const c = parseKey(key);

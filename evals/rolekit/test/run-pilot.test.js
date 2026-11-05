@@ -114,3 +114,36 @@ test('the runner is not part of the stamped set: stamp --check still passes', ()
   const r = require('child_process').spawnSync('node', [path.join(ROOT, 'stamp-rolekit.js'), '--row', 'pilot', '--check', '--root', ROOT], { encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
 });
+
+test('run --roles: an unknown role is refused before any cell runs', () => {
+  const d = tmp();
+  try {
+    assert.match(refusal(() => rp.run(base(d, { roles: 'reviewer,nosuchrole' }))), /unknown role nosuchrole/);
+    assert.ok(!fs.existsSync(path.join(d, 'results.jsonl')));
+  } finally { rm(d); }
+});
+
+test('run --roles: only the named role runs, in the unchanged schedule order', () => {
+  const d = tmp();
+  try {
+    const res = rp.run(base(d, { roles: 'explorer', capUsd: '0.07' })); // weak1 cells at 0.0162: four fit, the fifth would cross
+    const rows = fs.readFileSync(res.resultsFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.ok(rows.length >= 1 && rows.every((r) => r.role === 'explorer'));
+    const want = rp.loadPlan().ordered.filter((k) => k.split('|')[2] === 'explorer').slice(0, rows.length);
+    assert.deepStrictEqual(rows.map((r) => `${r.arm}|${r.seat}|${r.role}|${r.task}|${r.rep}`), want);
+    assert.strictEqual(res.summary.scheduled, 126);
+  } finally { rm(d); }
+});
+
+test('run (dry, hetero path): an auth error that only the agent log carries stops the run and is not recorded as infra', () => {
+  const d = tmp();
+  try {
+    const key = rp.loadPlan().ordered.find((k) => k.split('|')[2] === 'explorer'); // explorer goes through the hetero rail
+    const res = rp.run(base(d, { roles: 'explorer', scenario: scenarioFile(d, { [key]: 'auth' }) }));
+    assert.strictEqual(res.summary.stopped.kind, 'auth');
+    assert.strictEqual(res.summary.stopped.at, key);
+    assert.strictEqual(res.summary.ran, 0);
+    assert.ok(!fs.existsSync(res.resultsFile) || fs.readFileSync(res.resultsFile, 'utf8') === '');
+    assert.strictEqual(fs.readFileSync(path.join(d, 'dry', 'calls.jsonl'), 'utf8').trim().split('\n').length, 1); // no infra retry
+  } finally { rm(d); }
+});

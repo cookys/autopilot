@@ -388,6 +388,24 @@ test('N5c: status never prints token bytes', async () => {
   fx.cleanup();
 });
 
+test('ORG: status shows org_label per alias and unverified until checked; no org part without metadata; no e-mail', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }, { alias: 'b' }, { alias: 'c' }] });
+  const reg = require('./lib/account-registry.js');
+  reg.writeTokenMeta(fx.accountsDir, 'a', { org_id: 'FAKE-ORG-1', org_label: 'Acme Team', org_check: 'verified' });
+  reg.writeTokenMeta(fx.accountsDir, 'b', { org_id: null, org_label: 'Personal' });
+  const r = await go(fx, ['status']);
+  assert.strictEqual(r.code, 0);
+  const line = (al) => r.out.split('\n').find((l) => l.startsWith(`alias=${al} `));
+  assert.match(line('a'), / org="Acme Team"$/);
+  assert.match(line('b'), / org="Personal" org_check=unverified$/);
+  assert.doesNotMatch(line('c'), /org/);
+  assert.ok(!r.out.includes('@') && !r.out.includes('FAKE-ORG-1'), 'no e-mail, no org id on status');
+  // negative control: a label that is not printable-safe (hand-edited file) is dropped, never printed
+  reg.writeTokenMeta(fx.accountsDir, 'c', { org_label: EMAIL });
+  assert.doesNotMatch((await go(fx, ['status'])).out.split('\n').find((l) => l.startsWith('alias=c ')), /org/);
+  fx.cleanup();
+});
+
 test('T-GIT: child HOME carries the real git identity, ssh Include and links, push to file:// works; empty home fails (negative control)', async () => {
   const script = (fx) => {
     const f = path.join(fx.root, 'check.js');
@@ -464,4 +482,11 @@ test('selftest runs on the shim; mixed or dangling selftest flags are refused', 
 test('CLI process: usage exit 2', () => {
   const r = spawnSync(process.execPath, [path.join(__dirname, 'claude-account.js'), 'nope'], { encoding: 'utf8' });
   assert.strictEqual(r.status, 2);
+});
+
+test('ORG: status shows a mismatch instead of verified', async () => {
+  const fx = makeFixture({ aliases: [{ alias: 'a' }] });
+  require('./lib/account-registry.js').writeTokenMeta(fx.accountsDir, 'a', { org_id: 'x', org_label: 'Acme', org_check: 'mismatch' });
+  assert.match((await go(fx, ['status'])).out, / org="Acme" org_check=mismatch/);
+  fx.cleanup();
 });

@@ -283,7 +283,7 @@ table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid var(--li
 .chip-running,.chip-info{color:var(--info)}.chip-accepted,.chip-match{color:var(--ok)}.chip-rejected,.chip-conflict,.chip-unverified{color:var(--bad)}
 .chip-pending,.chip-unknown,.chip-warn{color:var(--warn)}.muted{color:var(--mute)}figure{margin:0 8px 8px 0;display:inline-block;vertical-align:top;max-width:100%}
 figcaption{font-size:.8rem;color:var(--mute);overflow-wrap:anywhere}figure img{max-width:100%;height:auto;border:1px solid var(--line)}code{font-size:.85em;word-break:break-all}
-.counts{word-break:keep-all}.summary{font-weight:600;margin:.2rem 0 .6rem}section>p,li,dd{overflow-wrap:anywhere}
+.counts{word-break:keep-all}.summary{font-weight:600;margin:.2rem 0 .6rem}section>p,li,dd{overflow-wrap:break-word}
 @media (max-width:640px){main{padding:8px}section{padding:8px 12px;margin:6px 0}section p{margin:.25rem 0}section ol,section ul{margin:.25rem 0}h1{font-size:1.2rem}h2{font-size:1rem;margin:0 0 .25rem}h3{margin:.3rem 0 .15rem}.updated{font-size:.75rem}th,td{padding:2px 6px}
 table.cards,table.cards thead,table.cards tbody,table.cards tr,table.cards td{display:block;width:100%}
 table.cards thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}

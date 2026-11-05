@@ -32,6 +32,7 @@ mk_layout() {
   cp "$REPO_ROOT/evals/skill-transport/packs/implementer-pack.md" "$d/evals/skill-transport/packs/"
   cp "$REPO_ROOT/evals/pipeline-bench/run-pipeline-bench.sh" "$d/evals/pipeline-bench/"
   cp "$REPO_ROOT/evals/context-budget-t2/run-t2-eval.js" "$d/evals/context-budget-t2/"
+  rm -rf "$d/hooks"   # cp_account_layer copied the closure file hooks/_shared/secret-patterns.js into a real dir; the layout links the whole repo hooks/ instead
   ln -sfn "$REPO_ROOT/hooks" "$d/hooks"
   # test seam: the matrix pins a frozen pack digest that the shipped pack no longer has (separate, pre-existing drift);
   # the layout copy pins the digest of the pack it ships so the cell loop can be reached

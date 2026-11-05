@@ -1462,7 +1462,7 @@ for (const surface of SURFACES) {
     expect(pane.texts.some(t => t.includes('要合併 plan 還是拆開？'))).toBe(false)
     const cards = (await paneParts($, surface, 'decide')).texts
     expect(cards[1]).toBe('▲ 1. 要合併 plan 還是拆開？')
-    expect(cards).toContain('  選項      [ ] 合併') // one row per option, each a Button; the one-line description of an option shows once it is picked
+    expect(cards).toContain('  選項      [ ] 合併') // one row per option, each a Button; each option's description sits on the row under it
     expect(cards).toContain('            [ ] 拆開')
     const disp = await paneParts($, surface, 'dispatch') // the table is still there, on its own tab, and so is the Link
     expect(disp.texts.some(t => t.includes('這是執行狀態，不是進度'))).toBe(true)

@@ -1084,7 +1084,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       }
     } else if (active === 'decide') {
       // the pane's own 待決 lines, compact; a press is the pane's decidePress, and the draw is asked again once it has written the state
-      content = decideContent(el, snapshot, await read($, DECIDE), columns, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) })
+      content = decideContent(el, snapshot, await read($, DECIDE), columns, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, rows - 2)
     } else if (active !== null) {
       content = barContent(el, snapshot, active, columns, t, { onSlot: slot, onOpen: open })
     }

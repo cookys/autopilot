@@ -4,9 +4,11 @@
 import { test, expect } from 'claude-code/testing'
 import { makeT } from './i18n'
 import { DECIDE_REPLY_HEAD, NO_DECIDE, NO_DETAIL, NO_SECTIONS, decideLine, decideReply, recommendedIndex } from './model'
+import { wrapLines } from './model'
 import type { DecideView, LiveDecision, LiveSnapshot, PaneLine } from './model'
-import { decideTabLines, nowLines, stripOf, tabNeeds } from './tabs'
+import { decideBandPlan, decideTabLines, nowLines, stripOf, tabNeeds } from './tabs'
 import * as ui from './ui'
+import { applyScroll, newScroll } from './scrollmath'
 import { violations } from './invariants.testkit'
 
 const LOCALES = [['zh-TW', makeT('zh-TW')], ['en', makeT('en')]] as const
@@ -47,10 +49,12 @@ test('DECIDE card: a section header with the count, then per question the title,
   const note = ls.findIndex(l => l.field !== undefined && l.field.key === 'note:d-4290499d')
   expect(bg).toBe(2)
   expect([bg < blocks, blocks < row, row < advice, advice < note], 'the order is 背景, 卡住, 選項, 建議, 補充').toEqual([true, true, true, true])
-  expect(t[row + 1]).toBe('            [ ] 完整顯示')
+  expect(t[row + 1]).toBe('            照現況') // every option shows its description under it, not only the picked one
+  expect(t[row + 2]).toBe('            [ ] 完整顯示')
+  expect(t[row + 3]).toBe('            全列出來')
   expect(t[row]).toBe('  選項      [ ] ★ OK') // the star marks the recommendation, on the option only
   expect(ls[row].segs?.filter(s => s.role === 'glyph').map(s => s.text)).toEqual([ui.GLYPHS.structure.recommend])
-  expect(pressIds(ls.slice(row, row + 2))).toEqual(['pick:d-4290499d:0', 'pick:d-4290499d:1']) // one row per option
+  expect(pressIds(ls.slice(row, row + 4))).toEqual(['pick:d-4290499d:0', 'pick:d-4290499d:1']) // one pressable row per option (its description row is plain)
   expect(t[advice]).toBe('  建議      OK') // no reason given: the recommended option alone
   expect(t[note]).toBe('  補充')
   expect(ls[note].field?.placeholder).toBe('選填；都不要就直接寫你的答案')
@@ -521,5 +525,228 @@ test('DECIDE card layout (review): `1、` items split without a following space;
   for (const cols of [16, 17, 18, 20, 24]) {
     const ls = decideTabLines(snapOf([dec('d-n', 'q?', { background: '背景：1、' + '甲'.repeat(12) + '；2、乙乙乙乙乙乙', options: [OPT('甲'), OPT('乙')] })]), ctxOf(makeT('zh-TW'), cols, view()))
     for (const x of texts(ls).filter(x => x.startsWith('  背景') || x.startsWith('            ')).filter(x => !/^\s+\[[ x]\] /.test(x))) expect(ui.displayWidth(x), 'cols ' + cols + ' [' + x + ']').toBeLessThanOrEqual(cols - 1)
+  }
+})
+
+// ---- cardwrap: a card is read whole in a narrow terminal (no horizontal scroll): nothing is cut, every row fits, the layout is a pure function of the width ----
+const BG300 = Array.from({ length: 30 }, (_, i) => '第' + (i + 1) + '段說明文字寫得很長很長，').join('').slice(0, 300) // 300 Chinese characters, no spaces
+const LONG_LABEL = '採用方案甲並且在合併之前先把所有相關的測試都重新跑過一遍再決定要不要發版'
+const LONG_DESC = '這個選項的說明也很長，它會把背景裡提到的每一件事情都再講一次，直到整行寫滿為止，然後還要繼續換行才寫得完。'
+const wide = (): LiveDecision => dec('d-wide', 'q?', { background: BG300, options: [OPT(LONG_LABEL, LONG_DESC), OPT('乙', '')] })
+// the value of a card row with the key slot (12 cells) taken off
+const val12 = (x: string): string => (/^ {2}\S/.test(x) ? x.replace(/^ {2}\S+ +/, '') : x.slice(12))
+const rowsOf = (cols: number): PaneLine[] => decideTabLines(snapOf([wide()]), ctxOf(makeT('zh-TW'), cols, view()))
+function cardText(ls: PaneLine[]): { bg: string; label: string; desc: string } {
+  const t = texts(ls)
+  const bgAt = t.findIndex(x => x.startsWith('  背景'))
+  const optAt = t.findIndex(x => x.startsWith('  選項'))
+  const bg = t.slice(bgAt, optAt).map(val12).join('')
+  let label = ''
+  let desc = ''
+  for (let i = optAt; i < ls.length && ls[i].kind !== 'blank' && !ls[i].bar; i++) {
+    if (ls[i].kind === 'choice' && !t[i].includes('乙') && !t[i].includes('field')) label += val12(t[i]).replace(/^\[ \] /, '').replace(/^ {4}/, '')
+    else if (ls[i].kind === 'kv') desc += val12(t[i])
+  }
+  return { bg, label, desc }
+}
+for (const cols of [40, 80] as const) {
+  test('cardwrap: at ' + cols + ' columns a 300-character background, a long option label and its long description come back whole, no ellipsis, every row <= cols - 1 cells', () => {
+    const ls = rowsOf(cols)
+    const got = cardText(ls)
+    expect(got.bg).toBe(BG300)
+    expect(got.label).toBe(LONG_LABEL)
+    expect(got.desc).toBe(LONG_DESC)
+    for (const x of texts(ls)) { expect(x.includes('…'), x).toBe(false); expect(ui.displayWidth(x), x).toBeLessThanOrEqual(cols - 1) }
+    expect(violations(ls, cols, makeT('zh-TW')), 'the design invariants hold').toEqual([])
+    // every row of the wrapped option is a Button of the same press; the continuation rows hang under the label text (column 16)
+    const opt = ls.filter(l => l.kind === 'choice' && (l.segs ?? []).some(s => s.press === 'pick:d-wide:0'))
+    expect(opt.length).toBeGreaterThan(cols === 40 ? 2 : 1)
+    for (const l of opt) expect((l.segs ?? []).some(s => s.press === 'pick:d-wide:0')).toBe(true)
+    if (opt.length > 1) expect(texts(opt)[1].startsWith(' '.repeat(16))).toBe(true)
+  })
+}
+test('cardwrap: the layout is a pure function of the width (a resize re-flows): 40 -> 80 -> 40 gives the same rows as a fresh 40', () => {
+  const a = texts(rowsOf(40))
+  rowsOf(80)
+  expect(texts(rowsOf(40))).toEqual(a)
+  expect(texts(rowsOf(80)).length).toBeLessThan(a.length)
+})
+test('cardwrap: four options with a 120-character description each, 40 columns: every description is whole across the scrolled body', () => {
+  const descs = [0, 1, 2, 3].map(k => Array.from({ length: 12 }, (_, i) => String.fromCharCode(0x4e00 + k * 100 + i * 7).repeat(10)).join('').slice(0, 120))
+  const d = dec('d-four', 'q?', { options: descs.map((x, k) => OPT('選項' + (k + 1), x)) })
+  const ls = decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), 40, view())).filter(l => !l.bar)
+  const room = 10
+  const m = { ...newScroll(), room, max: Math.max(0, ls.length - room) }
+  const seen = new Set<number>()
+  for (let guard = 0; guard < 100; guard++) {
+    for (let i = m.offset; i < Math.min(ls.length, m.offset + room); i++) seen.add(i)
+    if (!applyScroll(m, { by: room, contentRows: ls.length })) break
+  }
+  const body = ls.filter((_, i) => seen.has(i)).map(l => l.text.trimEnd())
+  expect(seen.size, 'the scroll reached every row').toBe(ls.length)
+  for (const x of descs) expect(body.map(r => r.trim()).join('')).toContain(x)
+})
+test('cardwrap: the narrow band wraps the options (no ellipsis), points at the pane when the card has a background, and keeps the send row inside its row budget', () => {
+  const zh = makeT('zh-TW')
+  const snap = snapOf([wide()])
+  const ctx = ctxOf(zh, 40, view({ inputs: false }))
+  const open = decideBandPlan(snap, ctx)
+  expect(open.pointer).toBe('decide.band_bg')
+  expect(zh('decide.band_bg')).toBe('背景與說明見待決分頁')
+  expect(open.rows.map(l => l.text).join('')).toContain('採用方案甲')
+  for (const l of open.rows) { expect(l.text.includes('…')).toBe(false); expect(ui.displayWidth(l.text)).toBeLessThanOrEqual(39) }
+  expect(open.bars.length).toBeGreaterThan(0)
+  const need = open.rows.length + 1 + open.bars.length
+  expect(decideBandPlan(snap, ctx, need).pointer).toBe('decide.band_bg') // exactly fits
+  const tight = decideBandPlan(snap, ctx, need - 1) // one row short: the rows from the top stay, a pointer stands for the rest, the send row stays
+  expect(tight.pointer).toBe('decide.band_more')
+  expect(tight.rows.length + 1 + tight.bars.length).toBe(need - 1)
+  expect(tight.bars).toEqual(open.bars)
+  // a card with nothing the pane alone shows has no pointer
+  expect(decideBandPlan(snapOf([dec('d-p', 'q?', { options: [OPT('甲'), OPT('乙')] })]), ctx).pointer).toBeNull()
+})
+test('cardwrap: wrapPlain keeps a URL and an ANSI escape whole, an escape is 0 cells wide, a URL longer than the line takes its own line', () => {
+  const url = 'https://example.invalid/some/very/long/path/that/keeps/going/index.html?x=1'
+  const esc = '\u001b[1;31m'
+  const rst = '\u001b[0m'
+  const w = (s: string, n: number): string[] => ui.wrapPlain(s, n, n)
+  const line = '看這個 ' + url + ' 然後 ' + esc + '紅色的字' + rst + ' 結束'
+  for (const n of [20, 30, 40, 60]) {
+    const out = w(line, n)
+    expect(out.join('').includes(url), 'width ' + n + ': the URL is whole on one row').toBe(true)
+    expect(out.some(r => r.includes(url)), 'n ' + n).toBe(true)
+    expect(out.every(r => (r.match(/\u001b/g) ?? []).length === (r.match(/\u001b\[[0-9;]*m/g) ?? []).length), 'no escape is split').toBe(true)
+    expect(out.join('').replace(/ /g, '')).toBe(line.replace(/ /g, ''))
+    for (const r of out) if (!r.includes(url)) expect(ui.displayWidth(r)).toBeLessThanOrEqual(n)
+  }
+  expect(ui.displayWidth(esc + 'ab' + rst)).toBe(2)
+  expect(w(url, 20)).toEqual([url]) // longer than the line: its own line, not cut
+  expect(w('前面的字 ' + url, 20)).toEqual(['前面的字', url]) // and it starts a new line instead of splitting after a `/`
+  const colored = w('甲乙丙丁戊己庚辛' + esc + '紅紅紅紅紅紅' + rst + '壬癸', 12)
+  expect(colored.map(r => ui.displayWidth(r)).every(n => n <= 12)).toBe(true)
+  expect(colored.join('')).toBe('甲乙丙丁戊己庚辛' + esc + '紅紅紅紅紅紅' + rst + '壬癸')
+})
+test('cardwrap: I3 admits a wrapped option label only at its label column (16 / 18); another lead on a choice row is still flagged (negative control)', () => {
+  const zh = makeT('zh-TW')
+  const ls = rowsOf(40)
+  const cont = ls.findIndex(l => l.kind === 'choice' && l.text.startsWith(' '.repeat(16)))
+  expect(cont).toBeGreaterThan(0)
+  expect(violations(ls, 40, zh).filter(v => v.startsWith('I3'))).toEqual([])
+  const bent = ls.map((l, i) => (i === cont ? ui.carry(l, { ...l, text: ' ' + l.text, segs: [{ text: ' ' }, ...(l.segs ?? [])] }) : l))
+  expect(violations(bent, 40, zh).some(v => v.startsWith('I3'))).toBe(true)
+})
+test('cardwrap: on the card, a URL longer than the pane stays whole on its own row (the second wrap pass in wrapLines does not split it either), in a background and in an option description', () => {
+  const url = 'https://example.invalid/review/some/very/long/path/that/keeps/going/index.html'
+  const d = dec('d-url', 'q?', { background: '詳見 ' + url + ' 然後結束。', options: [OPT('甲', '看 ' + url + ' 就知道'), OPT('乙')] })
+  for (const cols of [30, 40, 60]) {
+    const t = texts(decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), cols, view())))
+    expect(t.filter(x => x.includes(url)).length, 'cols ' + cols + ': the URL is on a row, whole, twice').toBe(2)
+    for (const x of t) if (!x.includes(url)) expect(ui.displayWidth(x), x).toBeLessThanOrEqual(cols - 1)
+  }
+})
+
+// ---- cardwrap round 2 (four-seat review, generation 1) ----
+const ESC = String.fromCharCode(27)
+for (const [name, loc] of [['zh-TW', makeT('zh-TW')], ['en', makeT('en')]] as const) {
+  test('cardwrap r2.1: a band too short for the card ' + name + ' never says there is nothing to answer; the pointer and the send row stay', () => {
+    const snap = snapOf([wide()])
+    for (const cols of [40, 100]) {
+      const ctx = ctxOf(loc, cols, view({ inputs: false }))
+      const bars = decideBandPlan(snap, ctx).bars.length
+      for (const maxRows of [bars + 1, bars, 2, 1, 0]) {
+        const plan = decideBandPlan(snap, ctx, maxRows)
+        expect(plan.empty, 'cols ' + cols + ' maxRows ' + maxRows + ': a card exists').toBe(false)
+        expect(plan.bars.length, 'the send row stays').toBe(bars)
+        if (maxRows === bars + 1) expect(plan.pointer, 'room for the pointer alone').toBe('decide.band_more')
+      }
+    }
+    expect(decideBandPlan(snapOf([]), ctxOf(loc, 40, view({ inputs: false }))).empty, 'no card at all is the one empty case').toBe(true)
+  })
+}
+test('cardwrap r2.2: an address after an astral character (emoji, CJK Ext-B) is marked at the right index, no throw, whole on its row', () => {
+  const url = 'https://example.invalid/abcdefghijklmnopqrstuvwxyz'
+  for (const lead of ['😀 ', '😀😀😀 ', '𠀋𠀋 ', '']) {
+    const d = dec('d-astral', 'q?', { background: lead + url + ' 結束', options: [OPT(lead + url, lead + url)] })
+    const t = texts(decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), 40, view())))
+    expect(t.filter(x => x.includes(url)).length, JSON.stringify(lead) + ': background, label and description each keep the URL whole').toBe(3)
+  }
+  const long = { kind: 'detail' as const, text: '  😀 ' + url, segs: [{ text: '  😀 ' }, { text: url }] } as PaneLine
+  expect(wrapLines([long], 20).map(l => l.text).join('|').includes(url)).toBe(true)
+  const spans = ui.urlSpans('😀 ' + url)
+  expect(spans).toEqual([{ start: 2, end: 2 + url.length }])
+})
+test('cardwrap r2.3: wrapLines never splits or counts an ANSI escape sequence, and keeps the segment metadata', () => {
+  const a = { kind: 'detail' as const, text: 'x'.repeat(15) + ESC + '[1;31m' + 'y'.repeat(20), segs: [{ text: 'x'.repeat(15) }, { text: ESC + '[1;31m' + 'y'.repeat(20), color: 'error' as const }] } as PaneLine
+  const out = wrapLines([a], 20)
+  expect(out.map(l => l.text).join('')).toBe(a.text)
+  for (const l of out) {
+    expect((l.text.match(/\u001b/g) ?? []).length, l.text).toBe((l.text.match(/\u001b\[[0-9;]*m/g) ?? []).length)
+    expect(ui.displayWidth(l.text), l.text).toBeLessThanOrEqual(20)
+  }
+  expect(out.some(l => (l.segs ?? []).some(s => s.color === 'error')), 'the colour seg survives').toBe(true)
+  const title = dec('d-esc', ESC + '[1m' + 'a'.repeat(34) + ESC + '[0m 之後的字', {})
+  const t = texts(decideTabLines(snapOf([title]), ctxOf(makeT('zh-TW'), 40, view())))
+  expect(t.join('')).toContain(ESC + '[1m')
+  for (const r of t) expect((r.match(/\u001b/g) ?? []).length, r).toBe((r.match(/\u001b\[[0-9;]*m/g) ?? []).length)
+})
+test('cardwrap r2.4: a URL with hyphens, digits, ? # & = and a port is matched whole (explicit \\u escapes in the class)', () => {
+  for (const u of ['http://a-b.com/very/long/path', 'https://x-y-z.example.invalid:8080/a-b/c_d?x=1&y=2#frag-ment', 'http://a-b.com/' + '-'.repeat(5)]) {
+    expect(ui.urlSpans('see ' + u + ' ok'), u).toEqual([{ start: 4, end: 4 + u.length }])
+    expect(ui.wrapPlain('see ' + u + ' ok', 12, 12).includes(u), u).toBe(true)
+  }
+  expect(ui.urlSpans('網址https://a-b.com/x。後面')).toEqual([{ start: 2, end: 2 + 'https://a-b.com/x'.length }]) // CJK mark and text end it
+  expect(ui.URL_RE.source.includes('\\u3000-\\u303f')).toBe(true) // written as escapes, not as invisible literal characters
+})
+test('cardwrap r2.5: a URL that is the first word of a label, a background or a description stays beside its prefix, and a re-wrapped option row hangs under the label', () => {
+  const url = 'https://example.invalid/abcdefghijklmnopqrstuvwxyz0123456789'
+  const d = dec('d-first', 'q?', { background: url + ' 後面還有字', options: [OPT(url + ' 之後還有一些字要寫', url + ' 說明'), OPT('★ 乙', '')], recommendation: null })
+  const ls = decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), 40, view()))
+  const t = texts(ls)
+  expect(t.some(x => x.startsWith('  背景      ' + url)), 'background: key and URL on one row').toBe(true)
+  expect(t.some(x => x.startsWith('  選項      [ ] ' + url)), 'label: prefix and URL on one row').toBe(true)
+  expect(t.some(x => x.startsWith('            ' + url)), 'description: URL at column 12').toBe(true)
+  const at = t.findIndex(x => x.startsWith('  選項      [ ] ' + url))
+  expect(t[at + 1].startsWith(' '.repeat(16) + '之後'), 'the continuation of the label hangs at 16, not at 2 or 12').toBe(true)
+  expect(ls.filter(l => l.kind === 'choice' && (l.text.startsWith('  選項') || l.text.startsWith(' '.repeat(16)))).every(l => l.hang === 16)).toBe(true)
+  expect(violations(ls, 40, makeT('zh-TW')).filter(v => v.startsWith('I3'))).toEqual([])
+})
+test('cardwrap r3: below 32 columns a URL that starts a label still stays beside its prefix (the declared hang, not the clamped one, says where the prefix ends); 24, 30, 32, 40 columns', () => {
+  const url = 'https://example.invalid/abcdefghijklmnopqrstuvwxyz0123456789'
+  for (const label of [url, url + ' 之後還有一些字要寫']) for (const cols of [24, 30, 32, 40]) {
+    const d = dec('d-narrow', 'q?', { background: url, options: [OPT(label), OPT('乙')] })
+    const ls = decideTabLines(snapOf([d]), ctxOf(makeT('zh-TW'), cols, view()))
+    const t = texts(ls)
+    const loc = 'cols ' + cols + ' label ' + label.length
+    expect(t.some(x => x.startsWith('  選項      [ ] ' + url)), loc + ': prefix and URL on one row').toBe(true)
+    expect(t.some(x => /^ {2}選項 +\[ \]$/.test(x)), loc + ': the prefix is never alone on a row').toBe(false)
+    expect(t.some(x => x.startsWith('  背景      ' + url)), loc + ': background too').toBe(true)
+    expect(violations(ls, cols, makeT('zh-TW')).filter(v => v.startsWith('I3')), loc).toEqual([])
+  }
+})
+test('cardwrap r4: a URL that follows words on a continuation line is not mistaken for the first token after the prefix (24 and 30 columns)', () => {
+  const url = 'https://example.invalid/abcdefghijklmnopqrstuvwxyz0123456789'
+  for (const label of ['甲乙丙丁戊 ' + url, '甲乙丙丁戊 https://x.io']) for (const cols of [24, 30]) {
+    const ls = decideTabLines(snapOf([dec('d-cont', 'q?', { options: [OPT(label), OPT('乙')] })]), ctxOf(makeT('zh-TW'), cols, view()))
+    const loc = 'cols ' + cols + ' ' + label.slice(-12)
+    const rows = texts(ls)
+    const u = label.slice(6)
+    const at = rows.findIndex(x => x.includes(u))
+    expect(at, loc + ': the URL is on a row').toBeGreaterThan(0)
+    expect(rows[at].trim(), loc + ': the URL has a row of its own, not glued to a short word').toBe(u)
+    if (u.length < cols - 1 - 16) expect(ui.displayWidth(rows[at]), loc + ': a URL that fits a fresh continuation row does not overflow it').toBeLessThanOrEqual(cols - 1)
+    expect(violations(ls, cols, makeT('zh-TW')).filter(v => v.startsWith('I3')), loc).toEqual([])
+  }
+})
+test('cardwrap r4b: wrapLines on one long choice row (prefix 16, label with words before the URL): the URL starts its own continuation row, 24 and 30 columns', () => {
+  const url = 'https://example.invalid/abcdefghijklmnopqrstuvwxyz0123456789'
+  for (const tail of [url, 'https://x.io']) for (const cols of [24, 30]) {
+    const text = '  選項      [ ] 甲乙丙丁戊 ' + tail
+    const row = { kind: 'choice' as const, text, segs: [{ text: '  選項      [ ] ', press: 'pick:d:0' }, { text: '甲乙丙丁戊 ' + tail, press: 'pick:d:0' }], hang: 16 } as PaneLine
+    const out = wrapLines([row], cols).map(l => l.text)
+    const at = out.findIndex(x => x.includes(tail))
+    const loc = cols + ' ' + tail.slice(-8) + ' ' + JSON.stringify(out)
+    expect(at, loc).toBeGreaterThan(0)
+    expect(out[at].trim(), loc + ': the URL has a row of its own').toBe(tail)
+    expect(out.join('').replace(/ /g, ''), loc).toBe(text.replace(/ /g, ''))
   }
 })

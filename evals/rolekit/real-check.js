@@ -27,6 +27,11 @@
 // Nonce: only its sha256 goes into the evidence JSON (the throwaway nonce is not a secret, but the evidence is meant to be
 // pasted around and must not be a copy of a passing reply). The reply log stays at the rail's raw_log path (referenced, with sha256).
 //
+// Trust rule (who may earn the formal id): the runner is trusted only when NO --claude-bin is given, so the binary is the
+// `claude` the PATH resolves to (its resolved path goes into the evidence), and it is not a --dry-run. Any --claude-bin, a stub
+// or a dry-run is not a real-model check: its item id is `test-real-check-<seat>` (--claude-bin) or `dry-run-real-check-<seat>`,
+// the evidence says trusted_runner:false, and neither id can satisfy a precondition. A fake `claude` placed first on PATH is the
+// operator's own environment and is out of scope here (the evidence records the resolved path so it can be seen).
 // Account layer: required. `claude-account.js env-check --alias <A>` must say ok before anything is dispatched, so the legacy
 // seeded-credentials path (which reads a credentials file) can never run from here. The rail picks the alias itself; if it
 // picks another one than --account the check is not met.
@@ -178,6 +183,7 @@ function main(argv, env) {
     const recFile = path.join(work, 'argv.jsonl');
     const wrapper = path.join(work, 'claude-wrapper');
     let real = '';
+    const trusted = !dry && !o['claude-bin'];
     if (!dry) {
       const which = spawnSync('bash', ['-c', 'command -v "${1:-claude}"', '_', o['claude-bin'] || 'claude'], { encoding: 'utf8' });
       real = which.stdout.trim();
@@ -192,13 +198,13 @@ function main(argv, env) {
     { encoding: 'utf8', env: { ...env, DISPATCH_QUIET: '1' }, input: '', maxBuffer: 1 << 24 });
     const railResult = lastJsonLine(r.stdout);
 
-    const prefix = dry ? 'dry-run-' : '';
+    const prefix = dry ? 'dry-run-' : trusted ? '' : 'test-';
     const item = (met, evidence) => ({ id: `${prefix}real-check-${o.seat}`, met, evidence });
     const evFile = path.join(out, `${prefix}real-check-${o.seat}.json`);
     const evidence = {
       schema_version: 1, artifact_type: 'rolekit_real_check', created_at: new Date().toISOString(),
       seat: o.seat, rail: 'scripts/dispatch-author.sh --runner claude-native --role-kit', model: o.model || 'haiku', account: o.account,
-      dry_run: dry || null, kit_source: kit, kit_copy_role_md: path.join(out, `${prefix}real-check-${o.seat}.role.md`),
+      dry_run: dry || null, trusted_runner: trusted, claude_resolved: dry ? null : real, kit_source: kit, kit_copy_role_md: path.join(out, `${prefix}real-check-${o.seat}.role.md`),
       role_md_sha256: roleSha, source_role_md_sha256: sha256(base), tools_arg: tools, tools_file_empty_rewritten_to_none: toolsNormalized, nonce_sha256: sha256(nonce),
       rail_exit: r.status, rail_status: railResult ? railResult.status : null, rail_role_kit: railResult ? railResult.role_kit || null : null,
       raw_log: railResult ? railResult.raw_log : null,

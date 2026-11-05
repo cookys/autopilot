@@ -133,16 +133,30 @@ test('usage: missing --account, unknown dry-run shape, unknown flag -> rc 2', wi
   assert.strictEqual(w.run(w.std(['--bogus', 'x'])).rc, 2);
 }));
 
-test('real mode (no --dry-run) runs the given claude binary through the wrapper: a fake binary that obeys the card -> met true, id real-check-weak1', withWorld((w) => {
+test('a --claude-bin other than the default claude can never earn the formal id: a fake binary that obeys the card gets test-real-check-weak1, trusted_runner false', withWorld((w) => {
   const fake = path.join(w.fx.root, 'fake-claude');
   fs.writeFileSync(fake, `#!${process.execPath}\nconst fs=require('fs');const a=process.argv.slice(2);const c=a[a.indexOf('--system-prompt')+1];const p=fs.readFileSync(0,'utf8');\nconst b=/<<<AUTOPILOT-AUTHOR-[0-9a-f]+>>>/.exec(p)[0],e=/<<<AUTOPILOT-END-[0-9a-f]+>>>/.exec(p)[0];\nprocess.stdout.write(b+'\\n'+/RK-NONCE-[0-9a-f]{32}/.exec(c)[0]+'\\n'+e+'\\n');\n`, { mode: 0o755 });
   const r = w.run(w.std(['--claude-bin', fake]));
   assert.strictEqual(r.rc, 0, r.err);
-  assert.strictEqual(r.item.id, 'real-check-weak1');
+  assert.notStrictEqual(r.item.id, 'real-check-weak1', 'a caller-chosen binary must not produce the formal id');
+  assert.strictEqual(r.item.id, 'test-real-check-weak1');
   assert.strictEqual(r.item.met, true);
-  const ev = w.evidence('real-check-weak1.json');
+  const ev = w.evidence('test-real-check-weak1.json');
+  assert.strictEqual(ev.trusted_runner, false);
   assert.strictEqual(ev.dry_run, null);
+  assert.ok(!fs.existsSync(path.join(w.out, 'real-check-weak1.json')), 'no formal-named evidence file');
   assert.match(ev.session_record_note, /does not contain --system-prompt/);
+}));
+
+test('trust rule: the formal id needs the default `claude` (no --claude-bin) and no --dry-run; a PATH-resolved fake named claude through the default is the only way left, and the evidence records the resolved path', withWorld((w) => {
+  const bin = path.join(w.fx.root, 'bin2'); fs.mkdirSync(bin);
+  fs.copyFileSync(path.join(w.fx.root, 'bin', 'claude'), path.join(bin, 'claude')); // the account-layer shim: answers OK, never obeys a card
+  const r = w.run(w.std([]), { PATH: `${bin}:${w.env.PATH}` });
+  assert.strictEqual(r.item.id, 'real-check-weak1', 'default claude -> formal id (met decided by the checks)');
+  assert.strictEqual(r.item.met, false, 'the shim never echoes the nonce');
+  const ev = w.evidence('real-check-weak1.json');
+  assert.strictEqual(ev.trusted_runner, true);
+  assert.strictEqual(ev.claude_resolved, path.join(bin, 'claude'));
 }));
 
 // ---- negative controls: a copy of the checker with one verification neutralised must turn the matching case red

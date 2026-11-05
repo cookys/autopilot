@@ -7,6 +7,8 @@
 import type { On } from 'claude-code'
 import { test, expect } from 'claude-code/testing'
 import { currentView, reopenWindow, show } from './show'
+import { makeVT } from './strings'
+import { displayWidth } from '../live/ui'
 
 const CWD = '/work/repo'
 const TOOL = 'mcp__autopilot__show'
@@ -413,4 +415,28 @@ test('HSCROLL viewer: a CJK line is cut between characters, never in the middle 
     expect(row.length).toBeGreaterThan(0)
   }
   await w.unmount()
+})
+
+test('HSCROLL viewer: the hint line fits the pane (the slide buttons and the column cue explain themselves, the hint does not grow)', async () => {
+  expect(displayWidth(makeVT('en')('viewer.hint')), 'en hint within cols-1 of a 100-column pane').toBeLessThanOrEqual(99)
+  expect(displayWidth(makeVT('zh-TW')('viewer.hint')), 'zh-TW hint within cols-1 of an 80-column pane').toBeLessThanOrEqual(79)
+  expect(displayWidth(makeVT('zh-TW')('viewer.hint')), 'zh-TW hint within cols-1 of a 100-column pane').toBeLessThanOrEqual(99)
+})
+
+test('HSCROLL viewer: with four-digit line numbers the end of a wide line still shows at the last offset (the gutter is wider)', async ($, on) => {
+  const END = 'THE-END-MARK'
+  const lines = Array.from({ length: 1020 }, (_, i) => (i === 1009 ? 'a'.repeat(250) + END : 'x'))
+  world(on, { [CWD + '/big.txt']: lines.join('\n') + '\n' })
+  await $.session.start({ surface: 'terminal', cwd: CWD })
+  await call($, { path: 'big.txt', start: 1000, end: 1020 })
+  let win = await mountWindow($)
+  expect(textOf((await win.drawn()) as Node), 'the window starts at line 1000').toContain('lines 1000 to')
+  for (let i = 0; i < 12; i++) win = await slide($, win, 'hright')
+  const tree = (await win.drawn()) as Node
+  const code = find(tree, 'Code')[0]
+  expect(code.props?.startLine).toBe(1000)
+  const row = String(code.props?.source).split('\n')[10]
+  expect(row.endsWith(END), 'the end of the wide line shows at the last offset').toBe(true)
+  expect(displayWidth(row), 'and fits the cells the code text has beside a 4-digit gutter (a gutter is the digits and two blanks)').toBeLessThanOrEqual(100 - 1 - (4 + 2))
+  await win.unmount()
 })

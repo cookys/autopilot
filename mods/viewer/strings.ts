@@ -6,7 +6,7 @@ import type { Locale, Vars } from '../live/i18n'
 const EN: Record<string, string> = {
   'viewer.lines': 'lines {a} to {b} of {n}',
   'viewer.whole': '{n} lines',
-  'viewer.hint': 'Esc closes   Tab picks a button, Enter presses it   arrows, PgUp, PgDn, Home, End scroll   [ left ] [ right ] slide a wide line',
+  'viewer.hint': 'Esc closes   Tab picks a button, Enter presses it   arrows, PgUp, PgDn, Home, End scroll',
   'viewer.left': 'left',
   'viewer.right': 'right',
   'viewer.cols': 'columns {a} to {b} of {n}',
@@ -56,7 +56,7 @@ const EN: Record<string, string> = {
 const ZH_TW: Record<string, string> = {
   'viewer.lines': '第 {a} 到 {b} 行，共 {n} 行',
   'viewer.whole': '共 {n} 行',
-  'viewer.hint': 'Esc 關閉   Tab 選按鈕、Enter 按下   方向鍵、PgUp、PgDn、Home、End 捲動   [ 向左 ] [ 向右 ] 橫移過寬的行',
+  'viewer.hint': 'Esc 關閉   Tab 選按鈕、Enter 按下   方向鍵、PgUp、PgDn、Home、End 捲動',
   'viewer.left': '向左',
   'viewer.right': '向右',
   'viewer.cols': '第 {a} 到 {b} 欄，共 {n} 欄',

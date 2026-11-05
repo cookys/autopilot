@@ -152,3 +152,17 @@ Stamp receipt: `stamp-rolekit.js --row <row> --authorized-by <id>` writes `prere
 `--dry-run` swaps `claude` for `dry-run-stub.js` (fake credentials, throwaway HOME, no network) and prints the `score-rolekit.js --row pilot` verdict; it is plumbing evidence only.
 
 Known deviations, also written into `<out>/run.json`: (1) the hetero rail prepends a "file edits only" harness instruction to the planner, implementer, debugger and explorer prompts, the same on all four arms; (2) the reviewer and verifier kits have an empty tools line, which the rails refuse, so they are dispatched from a byte-for-byte copy with `tools = none` (`kit_applied` compares the frozen role.md sha256); (3) the rails run claude-native as the host default alias (`claude-account.js run --pin-default`), so `--account` is enforced by verification: the runner refuses to start, to resume under another account, and to start any attempt unless `claude-account.js` itself resolves the default to `--account` (a default switched by someone else in the middle of an attempt cannot be detected); (4) `cost_usd` is the rail's `total_cost_usd` when present, else the `cost-model.json` per-cell rate, per row `cost_source` says which.
+
+## Pilot runbook (account window)
+
+The rails send every claude-native dispatch through `claude-account.js run --pin-default`, i.e. as the host's default alias. So the pilot account must be the host default for the length of the run, and the previous default must come back afterwards. Use the wrapper, not the manual steps; the restore is mechanical.
+
+1. Pre-flight (no model call): `stamp-rolekit.js --row pilot --check`, the dry run (`run-pilot.js --dry-run ...`) and `run-pilot.test.js` / `run-pilot-window.test.js` are green on the tip being run; the one-time claude-native owner confirmation exists; `claude-account.js env-check --alias <pilot-alias>` is ok.
+2. Open the window and run, in one command (`set-default` backs up `registry.json` and prints `set-default --restore <backup>`; the wrapper keeps that line):
+
+       node evals/rolekit/run-pilot-window.js --pilot-alias <pilot-alias> -- --out <dir outside the tree> --model-weak <id> --model-strong <id> [--cap-usd N]
+
+   It runs `claude-account.js set-default <pilot-alias>`, then `run-pilot.js --account <pilot-alias> ...`, and restores in a finally path that also covers a failing runner and SIGINT / SIGTERM / SIGHUP (`claude-account.js set-default --restore <backup>`). Exit codes: the runner's own code (4 quota, 5 cap, 6 auth, 7 precondition), 128+signal when interrupted, 9 when the restore itself failed (the manual command is printed; run it before anything else), 2 when the window could not be opened.
+3. Last step: confirm the previous default is back (`claude-account.js status`, or `env-check --any` and the registry priorities). A re-run after a stop resumes from `<out>`; open the window again with the same alias.
+
+Who is affected while the window is open: every claude-native dispatch on this host that goes through `claude-account.js run --pin-default` (`dispatch-review.sh`, `dispatch-author.sh`, `dispatch-hetero.sh`: reviews, hands and authors started by anyone on this host) uses the pilot account. The lead should not start other claude-native rail work during the window. Callers that do not use the rails (probes, qualification, evals not on the rails) are unaffected. The runner re-checks the default before every attempt and stops with exit 7 if it was changed.

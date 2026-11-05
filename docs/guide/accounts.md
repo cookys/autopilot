@@ -4,6 +4,8 @@
 
 If you work with more than one Claude subscription, autopilot can keep each one under a short name (an alias) and pick the account with the most headroom for every headless `claude` call. When one account hits its usage limit (HTTP 429), the call moves to the next alias and the limited one is left alone until it recovers. This page is the one-time setup, done by you, step by step. Nothing here is automatic: the registry stays absent until you create it, and with no registry every rail behaves as it did before.
 
+**No account switch inside a task.** The dispatch rails (`dispatch-review.sh`, `dispatch-author.sh`, `dispatch-hetero.sh`) pin the default alias: the enabled alias with the lowest `priority` number (ties: the earlier row in `registry.json`) runs the whole call. If it answers a 429 the call fails with the quota exit and no other alias is tried, and while it is cooling the next call fails the same way instead of moving to another account. G41 will add the start-time pick. Other callers (probes, qualification, `qc-panel`, evals) still fail over as described below.
+
 ## Shortest use
 
 ```

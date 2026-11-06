@@ -194,9 +194,10 @@ async function shellTick($: EngineInterface, nowMs: number): Promise<void> {
     await update($, PANEL_OPEN, () => nowMs).catch(() => undefined)
   }
   const raw = await readRoomText($)
-  if (raw === null || raw === shellRoom.raw) return
+  if (raw === null) return
+  if (shellBaseline === undefined) shellBaseline = newestSeq(raw === shellRoom.raw ? shellRoom.rows : parseRoom(raw)) ?? 0 // taken before the unchanged-log return: a reopened shell on an old (or empty) log still gets its baseline
+  if (raw === shellRoom.raw) return
   const rows = parseRoom(raw)
-  if (shellBaseline === undefined) shellBaseline = newestSeq(rows) ?? 0
   shellRoom = { rows, raw }
   void $.ui.invalidate('ui.render')
 }
@@ -1146,7 +1147,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
         columns, t, menuTitle: leftTitle(cards.length > 0 ? 'cards' : 'tabs', (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(), t),
         mainTitle: cards.length > 0 ? t('shell.main_title', { n: decideCursor + 1, total: cards.length }) : (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(),
         room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes,
-        ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}),
+        ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 ? t('shell.hint_pick', { n: Math.min(optN, 6, MAIN_CONTENT_ROWS - 1) }) : '' } : {}),
       })
       if (plan !== null) {
         shellDrawnMs = nowMs

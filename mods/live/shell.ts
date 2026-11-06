@@ -52,6 +52,8 @@ export const PANEL_SCHEMA = 'codeforge.panel/1'
 export const STALE_MS = 60_000
 // codeforge's tone words (PanelTone); written as one string so no theme-key literal stands here (ui-lint L8: colours are PALETTE roles)
 const TONES = new Set('subtle inactive dim bold mono success'.split(' '))
+// text read from another process's file is cleaned once, here at the trust boundary: C0 (ESC, CR, TAB…), DEL and C1 controls become nothing, a newline a space
+const clean = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/[\x00-\x1f\x7f-\x9f]/g, '')
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 // a tiers table: numeric keys, each a list of lines, each line a list of {text, tone?}. A tier that breaks the shape is dropped; a table with no tier left is null.
@@ -67,7 +69,7 @@ function tiersOf(v: unknown): Tiers | null {
       const parts: PanelLine = []
       for (const p of line) {
         if (!isObj(p) || typeof p.text !== 'string') { ok = false; break }
-        parts.push(typeof p.tone === 'string' && TONES.has(p.tone) ? { text: p.text, tone: p.tone } : { text: p.text })
+        parts.push(typeof p.tone === 'string' && TONES.has(p.tone) ? { text: clean(p.text), tone: p.tone } : { text: clean(p.text) })
       }
       if (!ok) break
       rows.push(parts)
@@ -143,7 +145,7 @@ export function parseRoom(text: string): RoomRow[] {
     let v: unknown
     try { v = JSON.parse(line) } catch { continue }
     if (!isObj(v) || typeof v.seq !== 'number' || !Number.isInteger(v.seq) || typeof v.from !== 'string' || typeof v.text !== 'string' || typeof v.kind !== 'string') continue
-    out.push({ seq: v.seq, from: v.from, kind: v.kind, text: v.text })
+    out.push({ seq: v.seq, from: clean(v.from), kind: v.kind, text: clean(v.text.split('\n')[0]) }) // the summary shows the first line of a message
   }
   return out
 }
@@ -158,9 +160,8 @@ export function newestSeq(rows: readonly RoomRow[]): number | null {
 // the last `count` rows, one line each (`from text`, first line of the text), owner rows in `here` like the roundtable pane, system rows in `attention`
 export function roomLines(rows: readonly RoomRow[], inner: number, count: number): Seg[][] {
   return rows.slice(Math.max(0, rows.length - count)).map(r => {
-    const first = r.text.split('\n')[0]
     const style: Partial<Seg> = r.kind === 'system' ? { color: r.text.includes('send failed') ? PALETTE.broken : PALETTE.attention } : r.from === 'owner' ? { color: PALETTE.here } : {}
-    return clipSegs([{ text: r.from + ' ', ...style }, { text: first }], inner - 1)
+    return clipSegs([{ text: r.from + ' ', ...style }, { text: r.text }], inner - 1)
   })
 }
 

@@ -100,9 +100,32 @@ test('reader: money is never drawn: any `$` in `side` drops the whole side (cont
   const clean = PANEL()
   assert.notEqual(S.parsePanel(clean, 0).side, null)
   const dirty = PANEL(); dirty.side.usage_full.tiers[40][3] = line('model-a $12.50')
-  assert.equal(S.parsePanel(dirty, 0).side, null)
+  const rd = S.parsePanel(dirty, 1_030_000)
+  assert.equal(rd.side, null)
+  assert.equal(rd.status, 'ok') // only the side is dropped: the read itself is still a good one
+  assert.equal(rd.ageMs, 30_000)
   const dirtyTone = PANEL(); dirtyTone.side.memory.tiers[30][0] = [{ text: '記憶 ', tone: 'dim' }, { text: '$3' }]
-  assert.equal(S.parsePanel(dirtyTone, 0).side, null)
+  const rt = S.parsePanel(dirtyTone, 1_030_000)
+  assert.equal(rt.side, null)
+  assert.equal(rt.status, 'ok')
+  assert.equal(rt.ageMs, 30_000)
+})
+
+test('reader: control characters in another process\'s text never reach the screen (ESC, OSC, BEL, newline in a panel line, a room from and text; one row stays one row)', () => {
+  const bad = '\u001b[31mred\u001b]52;x\u0007\nnext\u0085\u007f'
+  const p = PANEL(); p.side.usage.tiers[30][0] = [{ text: bad, tone: 'dim' }, { text: bad }]
+  const r = S.parsePanel(p, 0)
+  assert.equal(r.status, 'ok')
+  const segs = S.panelSegs(r.side.usage['30'][0], 80)
+  const text = segText(segs)
+  for (const c of ['\u001b', '\u0007', '\n', '\u0085', '\u007f']) assert.ok(!text.includes(c), JSON.stringify(c))
+  assert.ok(text.includes('red') && text.includes('next'))
+  const rows = S.parseRoom(JSON.stringify({ seq: 1, from: bad, kind: 'say', text: bad }) + '\n')
+  assert.equal(rows.length, 1)
+  const out = S.roomLines(rows, 80, 5)
+  assert.equal(out.length, 1)
+  const rt = segText(out[0])
+  for (const c of ['\u001b', '\u0007', '\n', '\u0085', '\u007f']) assert.ok(!rt.includes(c), JSON.stringify(c))
 })
 
 test('reader: unknown tone words are dropped to plain text; the age counts from updated_at_ms and is never negative', () => {

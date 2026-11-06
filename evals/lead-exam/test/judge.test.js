@@ -22,8 +22,8 @@ test('perfect stub judge: every round ok, tamper and X/Z controls caught, refere
   assert.deepStrictEqual(e.hard_fails.all, []);
   assert.strictEqual(e.total, 100);
   assert.strictEqual(e.pass, true);
-  // 1 tamper call + 6 rounds, each valid on the first attempt
-  assert.strictEqual(rep.calls.length, 7);
+  // 1 tamper call + 6 rounds x (examinee + X + Z), each its own call and valid on the first attempt
+  assert.strictEqual(rep.calls.length, 19);
   assert.ok(rep.calls.every((c) => c.valid));
 });
 
@@ -37,7 +37,8 @@ test('quote check: a judge quote that is not in the output voids the reply, one 
   const rep = await grade(judge, [run]);
   assert.strictEqual(rep.controls.rounds[2].status, 'void');
   assert.strictEqual(rep.controls.rounds[3].status, 'ok');
-  const r2calls = rep.calls.filter((c) => c.round === 2 && c.purpose === 'judge');
+  // the control X call of round 2 is the first one the bad judge fails (X carries hard fails, so a quote is required)
+  const r2calls = rep.calls.filter((c) => c.round === 2 && c.purpose === 'control_x');
   assert.strictEqual(r2calls.length, 2, 'one retry');
   assert.ok(r2calls.every((c) => !c.valid && c.errors.some((m) => /not verbatim/.test(m))));
   // the void round leaves the judge-scored items of that round unscored, the mechanical hard fail stands

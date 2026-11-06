@@ -73,6 +73,12 @@ async function runExam(opts) {
         new Promise((_, rej) => { timer = setTimeout(() => { ctl.abort(); rej(Object.assign(new Error('round timeout'), { timeout: true })); }, timeoutMs); }),
       ]);
       outputs.push(res.text); rec.ms = res.ms; rec.in_tokens_est = res.in_tokens_est; rec.out_tokens_est = res.out_tokens_est;
+      // the CLI's own numbers when it printed any; null otherwise (the *_est fields above are estimates, never merged in)
+      const u = res.cli_usage;
+      rec.usage = u ? {
+        source: 'cli', input_tokens: u.input_tokens, output_tokens: u.output_tokens,
+        cache_read_input_tokens: u.cache_read_input_tokens || 0, cache_creation_input_tokens: u.cache_creation_input_tokens || 0,
+      } : null;
     } catch (e) {
       outputs.push(''); rec.error = e.message; rec.timed_out = !!e.timeout || /timed? ?out/i.test(e.message); rec.ms = e.ms || null;
     } finally {
@@ -84,7 +90,7 @@ async function runExam(opts) {
   }
   return {
     schema: 'lead-exam-run/1', seed: opts.seed, name: opts.name, model: opts.model, kind: opts.kind || null,
-    dry_run: !!opts.dry, outputs, rounds, total_ms: now() - started,
+    dry_run: !!opts.dry, outputs, rounds, usage_totals: lib.usageTotals(rounds), total_ms: now() - started,
   };
 }
 

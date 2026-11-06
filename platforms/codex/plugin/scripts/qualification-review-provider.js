@@ -1137,7 +1137,7 @@ function verifyClaudeRuntimeIdentity(stdoutText, declared) {
       + `${keys.map((k) => `"${k}"`).join(', ')}`,
     );
   }
-  return { text: envelope.result, resolvedModel: keys[0] };
+  return { text: envelope.result, resolvedModel: keys[0], cliUsage: envelope.usage };
 }
 
 // Run a local CLI harness as the exam transport: prompt on stdin, single shot,
@@ -1814,6 +1814,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
       else resolve(value);
     };
     let claudeResolvedModel = null;
+    let claudeCliUsage = null;
     const settleFromExit = (status, signal) => {
       if (timedOut) {
         finish(new Error(`${kind} CLI timed out after ${timeoutMs}ms`));
@@ -1850,6 +1851,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
             const verified = verifyClaudeRuntimeIdentity(text, model);
             text = verified.text;
             claudeResolvedModel = verified.resolvedModel;
+            claudeCliUsage = verified.cliUsage || null;
           } catch (error) {
             finish(error);
             return;
@@ -1891,7 +1893,7 @@ function callCliOnce(kind, bin, model, effort, timeoutMs, prompt) {
         ));
         return;
       }
-      finish(null, { text, resolvedModel: claudeResolvedModel || model });
+      finish(null, { text, resolvedModel: claudeResolvedModel || model, cliUsage: claudeCliUsage });
     };
     // The promise MUST settle within its declared budget. 'close' alone cannot be
     // trusted for that: a detached descendant that inherits a stdio pipe keeps
@@ -2208,6 +2210,9 @@ async function main() {
     // Optional wire key. HTTP transports report what the endpoint returned; the
     // CLI transports report all-null (not measured); claude's identity is checked, not usage.
     usage: qualificationUsage.normalizeUsage(result.usage),
+    // lead mode only: the claude CLI envelope's own usage block, passed through as the CLI printed it
+    // (null when the CLI gave none). The shared `usage` key above stays all-null for CLI transports.
+    ...(promptMode === 'lead' ? { cli_usage: result.cliUsage || null } : {}),
   }));
 }
 

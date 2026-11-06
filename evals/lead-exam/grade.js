@@ -42,61 +42,84 @@ async function gradeExam(opts) {
   const calls = [];
   const roundStatus = {};
   const judgeByExaminee = examinees.map(() => ({}));
-  const judgeHf = examinees.map(() => new Set());
+  const judgeHf = examinees.map(() => []);
 
   // tamper control first: if the judge misses it, nothing it says is used
-  const tReq = jd.buildJudgeRequest(items, map, 3, { 'ex-1': lib.blindText(fx.tamperGoodOutput(seed, items)) },
+  const tReq = jd.buildJudgeRequest(items, map, 3, { [`ex-${lib.hex(rand, 6)}`]: lib.blindText(fx.tamperGoodOutput(seed, items)) },
     { item: fx.TAMPER_ITEM, expected: fx.TAMPER_EXPECTED });
   const t = await judgeWithRetry(opts.judge, tReq);
   t.calls.forEach((c) => calls.push({ purpose: 'tamper_control', round: 3, ...c }));
   const tamperPass = !!(t.data && t.data.reference_conflicts.includes(fx.TAMPER_ITEM));
   const judgeVoid = !tamperPass;
 
+  const opaque = () => `ex-${lib.hex(rand, 6)}`;
+  // one judge call = exactly one answer set: blinding removes identity only, it never mixes examinees into a prompt
+  const callOne = async (round, text, purpose) => {
+    const label = opaque();
+    const req = jd.buildJudgeRequest(items, map, round, { [label]: text }, null);
+    const r = await judgeWithRetry(opts.judge, req);
+    r.calls.forEach((c) => calls.push({ purpose, round, ...c }));
+    return r.data ? { req, label, e: r.data.examinees[label] } : null;
+  };
+
+  const examineeVoid = examinees.map(() => []);
   for (let round = 1; round <= items.rounds.length; round += 1) {
     if (judgeVoid) { roundStatus[round] = { status: 'void', reason: 'tamper control missed' }; continue; }
-    const entries = examinees.map((e, i) => ({ kind: 'real', idx: i, text: e.blind[round - 1] || '' }));
-    entries.push({ kind: 'x', text: xOut[round - 1] });
-    entries.push({ kind: 'z', text: zOut });
-    const order = lib.shuffled(entries, rand);
-    const outputs = {};
-    order.forEach((en, k) => { en.label = `ex-${k + 1}`; outputs[en.label] = en.text; });
-    const req = jd.buildJudgeRequest(items, map, round, outputs, null);
-    const r = await judgeWithRetry(opts.judge, req);
-    r.calls.forEach((c) => calls.push({ purpose: 'judge', round, ...c }));
-    if (!r.data) { roundStatus[round] = { status: 'void', reason: 'judge reply invalid twice' }; continue; }
     const failures = [];
-    const xe = r.data.examinees[order.find((en) => en.kind === 'x').label];
-    const xFound = xe.hard_fails.map((h) => h.id);
-    (fx.CONTROL_X_EXPECTED_HF[round] || []).forEach((id) => { if (!xFound.includes(id)) failures.push(`control X: ${id} not found`); });
-    const ze = r.data.examinees[order.find((en) => en.kind === 'z').label];
-    const zCredited = req.items.some((it) => it.criteria.some((c) => c.kind === 'credit' && ze.items[it.id] && ze.items[it.id].criteria[c.id] && ze.items[it.id].criteria[c.id].hit));
-    if (Object.keys(ze.items).some((id) => ze.items[id].answered) || ze.hard_fails.length || zCredited) failures.push('control Z: padding was credited');
+    const xr = await callOne(round, xOut[round - 1], 'control_x');
+    if (!xr) failures.push('control X: judge reply invalid twice');
+    else {
+      const xFound = xr.e.hard_fails.map((h) => h.id);
+      (fx.CONTROL_X_EXPECTED_HF[round] || []).forEach((id) => { if (!xFound.includes(id)) failures.push(`control X: ${id} not found`); });
+    }
+    const zr = await callOne(round, zOut, 'control_z');
+    if (!zr) failures.push('control Z: judge reply invalid twice');
+    else {
+      const ze = zr.e;
+      const zCredited = zr.req.items.some((it) => it.criteria.some((c) => c.kind === 'credit' && ze.items[it.id] && ze.items[it.id].criteria[c.id] && ze.items[it.id].criteria[c.id].hit));
+      if (Object.keys(ze.items).some((id) => ze.items[id].answered) || ze.hard_fails.length || zCredited) failures.push('control Z: padding was credited');
+    }
     if (failures.length) { roundStatus[round] = { status: 'void', reason: failures.join('; ') }; continue; }
-    roundStatus[round] = { status: 'ok' };
-    order.filter((en) => en.kind === 'real').forEach((en) => {
-      const e = r.data.examinees[en.label];
-      Object.keys(e.items).forEach((id) => { judgeByExaminee[en.idx][id] = { criteria: e.items[id].criteria, answered: e.items[id].answered }; });
-      e.hard_fails.forEach((h) => judgeHf[en.idx].add(h.id));
-    });
+    const failed = [];
+    for (let i = 0; i < examinees.length; i += 1) {
+      const r = await callOne(round, examinees[i].blind[round - 1] || '', 'judge');
+      if (!r) { failed.push(examinees[i].run.name); examineeVoid[i].push(round); continue; }
+      Object.keys(r.e.items).forEach((id) => { judgeByExaminee[i][id] = { criteria: r.e.items[id].criteria, answered: r.e.items[id].answered }; });
+      r.e.hard_fails.forEach((h) => judgeHf[i].push({ id: h.id, round }));
+    }
+    roundStatus[round] = failed.length ? { status: 'void', reason: `judge reply invalid twice for: ${failed.join(', ')}` } : { status: 'ok' };
   }
 
   const results = examinees.map((e, i) => {
     const mechHf = lib.mechHardFails(items, e.ex);
-    const jh = Array.from(judgeHf[i]).sort();
+    const judged = judgeHf[i];
+    const jh = Array.from(new Set(judged.map((h) => h.id))).sort();
+    // the mechanical verdict wins for every hard fail it can decide in the round the judge reported it
+    const standing = Array.from(new Set(judged.filter((h) => lib.judgeHfStands(items, e.ex, h.id, h.round)).map((h) => h.id))).sort();
+    const overruled = jh.filter((id) => !standing.includes(id) && !mechHf.includes(id));
     const disagree = [];
-    const judgedRounds = Object.keys(roundStatus).filter((k) => roundStatus[k].status === 'ok').map(Number);
-    mechHf.forEach((id) => { if (!jh.includes(id) && judgedRounds.length === items.rounds.length) disagree.push(`${id}: mechanical only`); });
-    jh.forEach((id) => { if (!mechHf.includes(id)) disagree.push(`${id}: judge only`); });
+    const fullyJudged = examineeVoid[i].length === 0 && !judgeVoid && Object.values(roundStatus).every((s) => s.status === 'ok');
+    mechHf.forEach((id) => { if (!jh.includes(id) && fullyJudged) disagree.push(`${id}: mechanical only`); });
+    jh.forEach((id) => { if (!mechHf.includes(id)) disagree.push(`${id}: judge only${overruled.includes(id) ? ' (overruled by mechanical)' : ''}`); });
     // an item whose round is void has no judge data: scoreItem marks it void
     const sc = lib.scoreExaminee(items, e.ex, judgeByExaminee[i]);
-    const hardFails = Array.from(new Set([...mechHf, ...jh])).sort();
+    const hardFails = Array.from(new Set([...mechHf, ...standing])).sort();
     const red = [];
     (e.run.rounds || []).forEach((rr) => { if (rr.timed_out) red.push(`round ${rr.round} timed out, counted blank`); else if (rr.error) red.push(`round ${rr.round} failed: ${rr.error}`); });
     if (disagree.length) red.push('mechanical and judge hard fails disagree: PM spot-check');
+    const leadCritical = { items: {}, flagged: [], rule: 'flag when the score is below half marks' };
+    ['D1', 'D3'].forEach((id) => {
+      const it = sc.items.find((x) => x.id === id);
+      const flag = it.score !== null && it.score < it.max / 2;
+      leadCritical.items[id] = { score: it.score, max: it.max, flag };
+      if (flag) leadCritical.flagged.push(id);
+    });
     return {
       name: e.run.name, model: e.run.model, total: sc.total, complete: sc.complete,
       categories: sc.categories, categories_ok: sc.categories_ok,
       hard_fails: { mechanical: mechHf, judge: jh, all: hardFails, disagree },
+      lead_critical: leadCritical,
+      usage: e.run.usage_totals || (e.run.rounds ? lib.usageTotals(e.run.rounds) : null),
       pass: lib.passVerdict(items, sc, hardFails), items: sc.items,
       parse_notes: e.ex.notes, red, run_wall_ms: e.run.total_ms || null,
     };
@@ -120,6 +143,9 @@ async function gradeExam(opts) {
       judge_in_tokens_est: calls.reduce((s, c) => s + (c.in_tokens_est || 0), 0),
       judge_out_tokens_est: calls.reduce((s, c) => s + (c.out_tokens_est || 0), 0),
       tokens_are_estimates: true,
+      examinee_input_tokens: results.reduce((n, r) => n + ((r.usage && r.usage.input_tokens) || 0), 0),
+      examinee_output_tokens: results.reduce((n, r) => n + ((r.usage && r.usage.output_tokens) || 0), 0),
+      examinee_tokens_note: 'from the claude CLI envelope; rounds without one are counted under usage.rounds_estimated and not added in',
     },
   };
 }

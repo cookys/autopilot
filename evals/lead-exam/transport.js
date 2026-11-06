@@ -60,6 +60,7 @@ function callProvider(prompt, opts) {
         in_tokens_est: estimateTokens(prompt),
         out_tokens_est: estimateTokens(parsed.output),
         usage: parsed.usage || null,
+        cli_usage: parsed.cli_usage || null,
       });
     });
     child.stdin.end(JSON.stringify({

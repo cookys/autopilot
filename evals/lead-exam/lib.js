@@ -168,6 +168,53 @@ function mechHardFails(items, ex) {
   return out;
 }
 
+// Which message belongs to which round (rounds[].messages[].id).
+function msgRounds(items) {
+  const m = {};
+  items.rounds.forEach((r) => r.messages.forEach((x) => { m[x.id] = r.round; }));
+  return m;
+}
+
+// The mechanical layer can decide hard fail `id` for what the judge saw in `round` when one of its conditions is on a
+// message of that round. HF items whose text also reaches into the round-6 summary (R) have no condition there:
+// for that part the judge's verdict stands.
+function mechDecides(items, id, round) {
+  const hf = items.hard_fails.find((h) => h.id === id);
+  const mr = msgRounds(items);
+  return !!hf && hf.mech.some((c) => mr[c.msg] === round);
+}
+
+// A judge hard fail reported in `round` stands unless the mechanical layer decides that hard fail for that round and
+// did not hit there: then the mechanical verdict wins (the disagreement is still reported by the caller).
+function judgeHfStands(items, ex, id, round) {
+  if (!mechDecides(items, id, round)) return true;
+  const hf = items.hard_fails.find((h) => h.id === id);
+  const mr = msgRounds(items);
+  return hf.mech.some((c) => mr[c.msg] === round && enumHitAnyRound(ex, c.msg, c.field, c.values));
+}
+
+// Sum an examinee's per-round usage records (run.rounds[].usage). CLI numbers are never mixed with estimates.
+function usageTotals(rounds) {
+  const t = {
+    input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0,
+    rounds_measured: 0, rounds_estimated: 0, estimate_in_tokens: 0, estimate_out_tokens: 0, estimates_included_in_totals: false,
+  };
+  (rounds || []).forEach((r) => {
+    if (r.usage) {
+      t.rounds_measured += 1;
+      t.input_tokens += r.usage.input_tokens || 0;
+      t.output_tokens += r.usage.output_tokens || 0;
+      t.cache_read_input_tokens += r.usage.cache_read_input_tokens || 0;
+      t.cache_creation_input_tokens += r.usage.cache_creation_input_tokens || 0;
+    } else if (r.in_tokens_est !== undefined || r.out_tokens_est !== undefined) {
+      t.rounds_estimated += 1;
+      t.estimate_in_tokens += r.in_tokens_est || 0;
+      t.estimate_out_tokens += r.out_tokens_est || 0;
+    }
+  });
+  return t;
+}
+
 function mechCriterionHit(c, ex) {
   const m = c.mech;
   const order = ex.order || [];
@@ -282,7 +329,7 @@ function quoteOk(quote, blindedText) {
 }
 
 module.exports = {
-  ACTIONS, VERDICTS, loadItems, seedRng, shuffled, deriveNames, subst, renderRound, buildPrompt,
+  ACTIONS, VERDICTS, loadItems, seedRng, shuffled, hex, deriveNames, subst, renderRound, buildPrompt,
   extractRoundJson, parseExaminee, mechHardFails, mechCriterionHit, itemAnswered, scoreItem,
-  scoreExaminee, passVerdict, blindText, quoteOk,
+  scoreExaminee, passVerdict, blindText, quoteOk, msgRounds, mechDecides, judgeHfStands, usageTotals,
 };

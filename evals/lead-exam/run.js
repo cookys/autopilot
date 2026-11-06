@@ -1,0 +1,127 @@
+#!/usr/bin/env node
+'use strict';
+// lead-exam driver: runs ONE examinee through the 6 rounds (transcript replay, single-shot, no tools,
+// 4 min per round, 24 min hard stop), writes the run record, and grades it when a judge is configured.
+// Standalone measurement, not a qualification gate: no engine-qualify wiring, no qualification record.
+//
+//   node evals/lead-exam/run.js --dry-run --seed S --out-dir DIR
+//   node evals/lead-exam/run.js --seed S --kind <cli kind> --model <id> --name <label> --out-dir DIR
+//        [--config-dir DIR]   pre-seeded dedicated config dir; without it a fresh one is seeded from
+//                             scripts/lib/seed-claude-config.js and removed afterwards
+//        [--judge-kind codex|agy --judge-model <id> [--judge-home DIR]]   also grade after the run
+// --dry-run: stub examinee (the reference answers) and stub judge; no model call at all.
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const lib = require('./lib');
+const fx = require('./fixtures');
+const jd = require('./judge');
+const { callProvider } = require('./transport');
+const { gradeExam } = require('./grade');
+
+const ROUND_TIMEOUT_MS = 4 * 60 * 1000;
+const HARD_STOP_MS = 24 * 60 * 1000;
+
+// call: async (prompt, round) => {text, ms, in_tokens_est, out_tokens_est}
+async function runExam(opts) {
+  const items = opts.items || lib.loadItems();
+  const now = opts.now || Date.now;
+  const roundTimeout = opts.roundTimeoutMs || ROUND_TIMEOUT_MS;
+  const hardStop = opts.hardStopMs || HARD_STOP_MS;
+  const started = now();
+  const outputs = [];
+  const rounds = [];
+  for (let r = 1; r <= items.rounds.length; r += 1) {
+    const rec = { round: r };
+    if (now() - started >= hardStop) {
+      outputs.push(''); rec.timed_out = true; rec.error = 'hard stop reached before this round'; rounds.push(rec); continue;
+    }
+    const prompt = lib.buildPrompt(items, opts.seed, r, outputs);
+    rec.prompt_chars = prompt.length;
+    let timer;
+    try {
+      const res = await Promise.race([
+        opts.call(prompt, r),
+        new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error('round timeout'), { timeout: true })), roundTimeout); }),
+      ]);
+      outputs.push(res.text); rec.ms = res.ms; rec.in_tokens_est = res.in_tokens_est; rec.out_tokens_est = res.out_tokens_est;
+    } catch (e) {
+      outputs.push(''); rec.error = e.message; rec.timed_out = !!e.timeout || /timed? ?out/i.test(e.message); rec.ms = e.ms || null;
+    } finally { clearTimeout(timer); }
+    rounds.push(rec);
+  }
+  return {
+    schema: 'lead-exam-run/1', seed: opts.seed, name: opts.name, model: opts.model, kind: opts.kind || null,
+    dry_run: !!opts.dry, outputs, rounds, total_ms: now() - started,
+  };
+}
+
+function seedConfigDir(parent) {
+  const script = path.join(__dirname, '..', '..', 'scripts', 'lib', 'seed-claude-config.js');
+  const r = spawnSync(process.execPath, [script, '--parent', parent], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (r.status !== 0) throw new Error(`seed-claude-config failed: ${String(r.stderr).trim()}`);
+  return r.stdout.trim();
+}
+
+function parseArgs(argv) {
+  const a = {};
+  const withValue = ['seed', 'kind', 'model', 'name', 'out-dir', 'config-dir', 'judge-kind', 'judge-model', 'judge-home'];
+  for (let i = 0; i < argv.length; i += 1) {
+    const k = argv[i];
+    if (k === '--dry-run') a.dry = true;
+    else if (k.startsWith('--') && withValue.includes(k.slice(2)) && argv[i + 1] !== undefined) { a[k.slice(2)] = argv[i + 1]; i += 1; }
+    else { process.stderr.write(`run: unknown or incomplete argument ${k}\n`); process.exit(2); }
+  }
+  return a;
+}
+
+async function main() {
+  const a = parseArgs(process.argv.slice(2));
+  if (!a.seed || !a['out-dir']) { process.stderr.write('run: --seed and --out-dir are required\n'); process.exit(2); }
+  const items = lib.loadItems();
+  fs.mkdirSync(a['out-dir'], { recursive: true });
+  let call; let name; let model; let cleanupDir = null; let cleanup = null;
+  if (a.dry) {
+    const gold = fx.goldOutputs(a.seed, items);
+    call = async (prompt, round) => ({ text: gold[round - 1], ms: 0, in_tokens_est: Math.ceil(prompt.length / 4), out_tokens_est: Math.ceil(gold[round - 1].length / 4) });
+    name = a.name || 'dry-run-reference'; model = 'stub';
+  } else {
+    if (!a.kind || !a.model) { process.stderr.write('run: live runs need --kind and --model\n'); process.exit(2); }
+    let dir = a['config-dir'];
+    if (!dir) { dir = seedConfigDir(os.tmpdir()); cleanupDir = dir; }
+    const passEnv = { CLAUDE_CONFIG_DIR: dir };
+    call = (prompt) => callProvider(prompt, { kind: a.kind, model: a.model, timeoutMs: ROUND_TIMEOUT_MS, passEnv });
+    name = a.name || a.model; model = a.model;
+  }
+  let record;
+  try {
+    record = await runExam({ items, seed: a.seed, call, name, model, kind: a.kind, dry: a.dry });
+  } finally {
+    if (cleanupDir) {
+      fs.rmSync(cleanupDir, { recursive: true, force: true });
+      cleanup = { config_dir_removed: !fs.existsSync(cleanupDir) };
+    }
+  }
+  if (cleanup) record.cleanup = cleanup;
+  const runFile = path.join(a['out-dir'], `run-${name}.json`);
+  fs.writeFileSync(runFile, `${JSON.stringify(record, null, 2)}\n`);
+  process.stdout.write(`run record: ${runFile}\n`);
+  if (a.dry || a['judge-kind']) {
+    let judge; let jk = null; let jm = null;
+    if (a.dry) judge = jd.stubJudge(items);
+    else {
+      jk = a['judge-kind']; jm = a['judge-model'];
+      if (!['codex', 'agy'].includes(jk) || !jm) { process.stderr.write('run: --judge-kind codex|agy and --judge-model are both needed to grade\n'); process.exit(2); }
+      const passEnv = a['judge-home'] ? { [jk === 'codex' ? 'CODEX_HOME' : 'QRP_CLI_HOME']: a['judge-home'] } : {};
+      judge = (req) => callProvider(jd.buildJudgePrompt(req), { kind: jk, model: jm, timeoutMs: 720000, passEnv });
+    }
+    const report = await gradeExam({ items, seed: a.seed, runs: [record], judge, judgeKind: jk, judgeModel: jm, stub: !!a.dry });
+    const reportFile = path.join(a['out-dir'], `report-${name}.json`);
+    fs.writeFileSync(reportFile, `${JSON.stringify(report, null, 2)}\n`);
+    process.stdout.write(`report: ${reportFile}\n`);
+  }
+}
+
+if (require.main === module) main().catch((e) => { process.stderr.write(`run: ${e.message}\n`); process.exit(1); });
+module.exports = { runExam };

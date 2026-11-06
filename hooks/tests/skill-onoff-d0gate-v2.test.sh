@@ -12,7 +12,9 @@
 #   - G3v2 markers: planted mutants (ask-anywhere, no-turn-dispatch-check, flag-presence-only, blocks-ignored, tests-only, any-vs-every-dispatch, three safe
 #     mutants) must each misjudge a trace; an identity mutant planted in a copy must make controls-v2.js exit non-zero
 #   - decision table: one case per row + single-rule mutants (V4 safe 4, V4 ok 5, G4 in the verdict, g3 detail skipped, skill min 0.5, grid count only, ...)
-#   - ask stub vs the REAL scripts/open-decision.js: flag set and exit-2 matrix; a stub copy without the --not-authorized check must turn the matrix red
+#   - ask stub vs the REAL scripts/open-decision.js: the stub is a frozen eval asset holding the interface subset the cells used, so its flags must be a SUBSET of
+#     the real script's (flags only the real one gained later are listed as info, not red) and the exit-2 matrix, which uses only stub flags, must agree;
+#     a stub copy without the --not-authorized check, or with a flag the real script lacks, must turn it red
 #   - arms / candidate: one changed byte in the v2 or the v1 candidate, a swapped base pack, a tampered pack byte, a change arm equal to base must fail --check-arms
 #   - caps: ONOFF_MAX_USD above the formal / pilot / probe ceiling is refused; cc on a draft prereg is refused; a probe file is not a pilot file
 #   - the P3 d0gate row: stamp-prereg.js --row d0gate --check stays green; a copy with one frozen byte changed must go red; the frozen-path guard sees a planted edit
@@ -123,7 +125,15 @@ const flagSet = (file) => {
 const problems = [];
 const fs1 = flagSet(stubFile); const fs2 = flagSet(realFile);
 if (!fs1 || !fs2) problems.push('flag set not found in ' + (!fs1 ? 'stub' : 'real'));
-else if (fs1 !== fs2) problems.push(`flag sets differ: stub ${fs1} vs real ${fs2}`);
+else {
+  // the stub is a frozen eval asset: it holds the interface subset the d0gate-v2 cells used, so stub flags must be a subset of the real ones
+  const toks = (s) => new Set(s.replace('|', ',').split(','));
+  const st = toks(fs1); const re = toks(fs2);
+  const extraInStub = [...st].filter((x) => !re.has(x));
+  if (extraInStub.length) problems.push(`stub has flags the real script does not: ${extraInStub.join(',')}`);
+  const onlyReal = [...re].filter((x) => !st.has(x));
+  if (onlyReal.length) console.log(`info: real open-decision.js flags not in the frozen stub (not compared): ${onlyReal.join(',')}`);
+}
 const dirOf = (n) => { const d = path.join(tmp, n); fs.rmSync(d, { recursive: true, force: true }); fs.mkdirSync(d, { recursive: true }); return d; };
 // real: a scratch git repo (its decisions go into that repo's git-common-dir); stub: a scratch cell with .d0gate, the stub copy pinned to it
 const repo = dirOf('real-repo');
@@ -171,7 +181,7 @@ for (const [name, args] of CASES) {
   if (real !== stub) problems.push(`${name}: real exit ${real}, stub exit ${stub}`);
 }
 if (problems.length) { console.log(problems.join('\n')); process.exit(1); }
-console.log(`ask parity ok: flag set ${fs1}; ${n} cases give the same exit code in the real script and the stub`);
+console.log(`ask parity ok: stub flag set ${fs1} is a subset of the real one; ${n} cases give the same exit code in the real script and the stub`);
 EOF
 S node "$TEST_TMP/ask-parity.js" "$V2/stubs/scripts/open-decision.js" "$REPO_ROOT/scripts/open-decision.js" "$TEST_TMP/askp" || fail "ask stub parity (green case)"
 # planted red 1: the stub forgets the --not-authorized check
@@ -189,6 +199,7 @@ sed "s/'doa-role', 'doa-tier'/'doa-role', 'doa-tier', 'extra-flag'/" "$V2/stubs/
 cmp -s "$TEST_TMP/stub-flag.js" "$V2/stubs/scripts/open-decision.js" && fail "planted stub 3 equals the real stub"
 if S node "$TEST_TMP/ask-parity.js" "$TEST_TMP/stub-flag.js" "$REPO_ROOT/scripts/open-decision.js" "$TEST_TMP/askp4" >"$TEST_TMP/ask-red3.out" 2>&1; then fail "RED control: a stub with an extra flag was not detected"; fi
 echo "RED (expected): $(tr '\n' ' ' <"$TEST_TMP/ask-red3.out" | cut -c1-300)"
+grep -q "stub has flags the real script does not: extra-flag" "$TEST_TMP/ask-red3.out" || fail "RED control 3 went red for the wrong reason"
 ok "ask stub parity"
 
 echo "=== 4. G3v2 markers: RED (planted mutants) then GREEN (36 traces x 2 markers really run through both stubs) ==="

@@ -92,7 +92,10 @@ function validateJudgeReply(text, req) {
   try { data = JSON.parse(body); } catch {
     // ONE bounded repair: append the closers the reply is short of (live judge replies lost the last root `}`). Never
     // deletes or reorders text; any other malformation stays invalid.
-    const fixed = appendMissingClosers(body);
+    // The repair reads from the first `{` to the END of the text: it may only append closers when nothing but
+    // whitespace (and an optional closing ``` fence) follows the last closer, so a truncated tail is never dropped.
+    const rest = a < 0 ? '' : s.slice(a).replace(/\s*```\s*$/, '').trimEnd();
+    const fixed = /[}\]]$/.test(rest) ? appendMissingClosers(rest) : null;
     try { data = fixed === null ? null : JSON.parse(fixed); repaired = data !== null; } catch { data = null; }
     if (!repaired) return { ok: false, errors: ['reply is not a JSON object'], data: null };
   }

@@ -55,3 +55,16 @@ test('grade records repaired:true and the raw reply on the call', async () => {
   assert.ok(rep.calls.length > 0);
   rep.calls.forEach((c) => { assert.strictEqual(c.valid, true); assert.strictEqual(c.repaired, true); assert.strictEqual(typeof c.raw, 'string'); });
 });
+
+test('g8: a truncated tail after the last } is never dropped by the repair', () => {
+  const req = reqFor('ex-1', 'x');
+  const label = Object.keys(JSON.parse(RAW + '}').examinees)[0];
+  const r2 = reqFor(label, '暴露與不可逆優先於有期限，有期限優先於 fyi。');
+  assert.strictEqual(jd.validateJudgeReply(RAW + ',"reference_conflicts":["unfinished', r2).ok, false);
+  assert.strictEqual(jd.validateJudgeReply(RAW + ',"x":1', r2).ok, false);
+  assert.strictEqual(jd.validateJudgeReply(RAW + ' \n ', r2).repaired, true);
+  assert.strictEqual(jd.validateJudgeReply('```json\n' + RAW + '\n```', r2).repaired, true);
+  const full = jd.validateJudgeReply('前言\n```json\n' + RAW + '}\n```\n', r2);
+  assert.strictEqual(full.ok, true); assert.strictEqual(full.repaired, undefined);
+  assert.strictEqual(req.outputs['ex-1'], 'x');
+});

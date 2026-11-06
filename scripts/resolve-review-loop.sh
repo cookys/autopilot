@@ -19,12 +19,15 @@
 #              # Default (no --enforce) stays exit-0 data mode like resolve-doa/resolve-qc-gate;
 #              # the resolver REPORTS, the caller (depth-0 loop / pre-push) ENFORCES.
 #
-# Order of precedence (first existing file wins):
+# Order of precedence (the first existing file is the "repo file"):
 #   1. $REVIEW_LOOP_CONFIG_OVERRIDE
 #   2. $PWD/.claude/review-loop-config.md          (consuming project's cwd)
 #   3. $REPO_ROOT/.claude/review-loop-config.md    (autopilot's own repo, dogfood)
-#   4. project-config-template/review-loop-config.md  (shipped default)
-#   5. Built-in defaults below
+#   4. project-config-template/review-loop-config.md  (the roster itself)
+# The template is the only roster (unreadable = exit 3). A repo file is overlaid on it by
+# scripts/lib/roster-overlay.js: seat fields are legal only inside an override block
+# (`- override: <group> | until YYYY-MM-DD | <reason>` + the group's whole field set), otherwise
+# exit 3 with the fix printed. JSON gains roster_overrides: [{group, until, reason}].
 #
 # Output: JSON — the authoritative field set lives in schemas/review-loop-contract.schema.json
 #   (SSOT; drift-gated by scripts/check-contract-schema.js). Core roster fields:
@@ -57,23 +60,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Built-in defaults (the user's stated good-loop roster; agy is NOT the default
-# implementer because it corrupts the autopilot repo — see config gotchas).
-DEF_REV_ENGINE="gpt-6.1-sol"
-DEF_REV_EFFORT="low"
-DEF_REV_RUNNER="codex"
-DEF_IMPL_ENGINE="gpt-6.1-sol"
-DEF_IMPL_EFFORT="high"
-DEF_IMPL_RUNNER="auto"
-DEF_REV_ENDPOINT=""
-DEF_IMPL_ENDPOINT=""
-DEF_VER_AUTHOR_PRESENT="false"
-DEF_VER_AUTHOR_ENGINE=""
-DEF_VER_AUTHOR_RUNNER=""
-DEF_VER_AUTHOR_EFFORT=""
-DEF_VER_AUTHOR_ENDPOINT=""
-DEF_REV_ENGINE_LOW_RISK=""   # risk-tiered overlay: empty = tiering OFF (loop reviewer = reviewer_engine at every risk)
-DEF_REV_EFFORT_LOW_RISK=""
+# Built-in defaults for NON-SEAT knobs only. Seats (reviewer / implementer / verification author /
+# qc_panel / consult / discuss) have no built-in values: the roster is
+# project-config-template/review-loop-config.md, the only place seats are written, and a repo
+# file overlays it through scripts/lib/roster-overlay.js (see "roster overlay" below).
 DEF_MAX_ROUNDS="5"
 DEF_CONVERGE="SHIP-AS-IS"
 DEF_SPEC_REVIEW="on"
@@ -83,13 +73,8 @@ DEF_PLAN_MAX_WALL_SECONDS="7200"
 DEF_PLAN_GROWTH_WARN_RATIO="1.25"
 DEF_PLAN_GROWTH_STOP_RATIO="1.50"
 DEF_HARNESS="on"
-# Terminal depth-0 qc panel (v2.25.9): a DISJOINT-FAMILY panel, not a single reviewer.
-# Default spans OpenAI / Anthropic / Google so ≥1 family differs from any implementer.
-DEF_QC_PANEL="gpt-6.1-sol, claude-opus-5-5, gemini-flash"
-DEF_QC_PANEL_RUNNERS="codex, claude-native, agy"
-DEF_QC_PANEL_EFFORTS="low, high, high"
-DEF_QC_PANEL_ENDPOINTS="@none, @none, @none"
-# Engines with recorded reviewer calibration/spike evidence (qc_panel: all-calibrated roster)
+# Engines with recorded reviewer calibration/spike evidence (qc_panel: all-calibrated preset;
+# a preset list, not the default roster).
 QC_ALL_CALIBRATED="gpt-6.1-sol, claude-opus-5-5, gemini-flash, grok-4.7, MiniMax-M3"
 DEF_QC_AGG="union-on-verified-critical"
 DEF_IN_RAIL_REVIEW="auto"
@@ -109,18 +94,6 @@ DEF_PROVIDER_READINESS_FAMILY_CONSTRAINT="different"
 DEF_DIFF_SCOPE="full"
 DEF_MIN_PANEL_SIZE="3"
 DEF_ON_ENGINE_UNAVAILABLE="ask"
-# Two seats the roster gained 2026-08-27 (Board: per-role heterogeneous routing).
-# Both default EMPTY = seat unconfigured, which is byte-identical to the previous
-# behaviour for every existing roster: `consult` callers hand-type dispatch-review.sh
-# argv, and `discuss` has no executable consumer at all yet.
-DEF_CONSULT_ENGINE=""
-DEF_CONSULT_EFFORT=""
-DEF_CONSULT_RUNNER=""
-DEF_CONSULT_ENDPOINT=""
-DEF_DISCUSS_ENGINE=""
-DEF_DISCUSS_EFFORT=""
-DEF_DISCUSS_RUNNER=""
-DEF_DISCUSS_ENDPOINT=""
 # consult_dispatch / discuss_dispatch (v2.34.44+, D6): whether the consult/discuss
 # RAIL is live (scripts/dispatch-consult.sh / dispatch-discuss.js), independent of
 # whether the seat tuple above is configured. DEFAULT OFF on both — off is today's
@@ -256,7 +229,7 @@ while [[ $# -gt 0 ]]; do
     --scorecard-identity-file) SCORECARD_IDENTITY_FILE="${2:-}"; shift 2 ;;
     --enforce) ENFORCE=1; shift ;;
     --scale-by-capability) SCALE_BY_CAPABILITY=1; shift ;;
-    -h|--help) sed -n '2,53p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,56p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -270,6 +243,32 @@ done
 
 # --- locate the config file (4-tier -r ladder) ---
 resolve_config_ladder "review-loop-config.md" "REVIEW_LOOP_CONFIG_OVERRIDE" "builtin-default"
+
+# --- roster overlay ---
+# The template is the only roster. Unreadable template = exit 3 (no silent built-in values).
+# When the ladder picked a repo file, scripts/lib/roster-overlay.js builds the effective config
+# (roster groups, with a repo override group replacing the roster's group as a whole; non-seat
+# knobs from the repo when written) in a temp file, and CONFIG points at it so every read_field
+# below sees the effective view. CONFIG_ORIG stays the file the ladder chose: it is what
+# config_path reports and where a relative brain_seat_identity_file resolves.
+ROSTER_TEMPLATE="$REPO_ROOT/project-config-template/review-loop-config.md"
+if [[ ! -r "$ROSTER_TEMPLATE" ]]; then
+  echo "resolve-review-loop: roster template unreadable: $ROSTER_TEMPLATE" >&2
+  exit 3
+fi
+CONFIG_ORIG="$CONFIG"
+ROSTER_OVERRIDES_JSON="[]"
+if [[ -z "$CONFIG" || "$CONFIG" -ef "$ROSTER_TEMPLATE" ]]; then
+  CONFIG="$ROSTER_TEMPLATE"
+else
+  ROSTER_EFFECTIVE=""
+  trap 'rm -f -- "${ROSTER_EFFECTIVE:-}"' EXIT
+  ROSTER_EFFECTIVE="$(mktemp "${TMPDIR:-/tmp}/review-loop-effective.XXXXXX")" || { echo "resolve-review-loop: cannot create effective config temp file" >&2; exit 3; }
+  if ! ROSTER_OVERRIDES_JSON="$(node "$SCRIPT_DIR/lib/roster-overlay.js" --template "$ROSTER_TEMPLATE" --repo "$CONFIG" --out "$ROSTER_EFFECTIVE")"; then
+    exit 3
+  fi
+  CONFIG="$ROSTER_EFFECTIVE"
+fi
 
 # A missing runner key may use the built-in default. An explicitly configured
 # runner (including an empty value) is an operator decision and must never be
@@ -289,39 +288,23 @@ read_explicit_field() {
     | sed -E 's/[[:space:]]+$//'
 }
 
-if config_has_field "$CONFIG" reviewer_engine; then
-  REV_ENGINE="$(read_explicit_field "$CONFIG" reviewer_engine)"
-else
-  REV_ENGINE="$DEF_REV_ENGINE"
-fi
-if config_has_field "$CONFIG" reviewer_effort; then
-  REV_EFFORT="$(read_explicit_field "$CONFIG" reviewer_effort)"
-else
-  REV_EFFORT="$DEF_REV_EFFORT"
-fi
-if config_has_field "$CONFIG" reviewer_runner; then
-  REV_RUNNER="$(read_explicit_field "$CONFIG" reviewer_runner)"
-else
-  REV_RUNNER="$DEF_REV_RUNNER"
-fi
-IMPL_ENGINE="$(read_field "$CONFIG" implementer_engine "$DEF_IMPL_ENGINE")"
-IMPL_EFFORT="$(read_field "$CONFIG" implementer_effort "$DEF_IMPL_EFFORT")"
-if config_has_field "$CONFIG" implementer_runner; then
-  IMPL_RUNNER="$(read_explicit_field "$CONFIG" implementer_runner)"
-else
-  IMPL_RUNNER="$DEF_IMPL_RUNNER"
-fi
+REV_ENGINE="$(read_explicit_field "$CONFIG" reviewer_engine)"
+REV_EFFORT="$(read_explicit_field "$CONFIG" reviewer_effort)"
+REV_RUNNER="$(read_explicit_field "$CONFIG" reviewer_runner)"
+IMPL_ENGINE="$(read_field "$CONFIG" implementer_engine "")"
+IMPL_EFFORT="$(read_field "$CONFIG" implementer_effort "")"
+IMPL_RUNNER="$(read_explicit_field "$CONFIG" implementer_runner)"
 IMPL_LADDER_RAW="$(read_field "$CONFIG" implementer_ladder "")"
 LADDER_START_RUNG_JUDGMENT="$(read_field "$CONFIG" ladder_start_rung_judgment "0")"
 [[ "$LADDER_START_RUNG_JUDGMENT" =~ ^[01]$ ]] || LADDER_START_RUNG_JUDGMENT="0"
-REV_ENDPOINT="$(read_field "$CONFIG" reviewer_endpoint "$DEF_REV_ENDPOINT")"
+REV_ENDPOINT="$(read_field "$CONFIG" reviewer_endpoint "")"
 REV_LIMITATION="$(read_field "$CONFIG" reviewer_limitation "")"
-IMPL_ENDPOINT="$(read_field "$CONFIG" implementer_endpoint "$DEF_IMPL_ENDPOINT")"
-VER_AUTH_PRESENT="$(read_field "$CONFIG" verification_author_present "$DEF_VER_AUTHOR_PRESENT")"
-VER_AUTH_ENGINE="$(read_field "$CONFIG" verification_author_engine "$DEF_VER_AUTHOR_ENGINE")"
-VER_AUTH_RUNNER="$(read_field "$CONFIG" verification_author_runner "$DEF_VER_AUTHOR_RUNNER")"
-VER_AUTH_EFFORT="$(read_field "$CONFIG" verification_author_effort "$DEF_VER_AUTHOR_EFFORT")"
-VER_AUTH_ENDPOINT="$(read_field "$CONFIG" verification_author_endpoint "$DEF_VER_AUTHOR_ENDPOINT")"
+IMPL_ENDPOINT="$(read_field "$CONFIG" implementer_endpoint "")"
+VER_AUTH_PRESENT="$(read_field "$CONFIG" verification_author_present "false")"
+VER_AUTH_ENGINE="$(read_field "$CONFIG" verification_author_engine "")"
+VER_AUTH_RUNNER="$(read_field "$CONFIG" verification_author_runner "")"
+VER_AUTH_EFFORT="$(read_field "$CONFIG" verification_author_effort "")"
+VER_AUTH_ENDPOINT="$(read_field "$CONFIG" verification_author_endpoint "")"
 # Endpoint names feed dispatch-*.sh --endpoint (→ resolve-endpoint.sh env-var suffix); allow
 # [A-Za-z0-9_] only (empty = none). A bad value → "" so it can't inject into the --endpoint
 # arg or the emitted JSON (same fail-closed stance as resolve-endpoint.sh's NAME_RE).
@@ -372,20 +355,20 @@ else
       ;;
   esac
 fi
-if [[ -n "$CONFIG" ]]; then
-  if ! CONFIG_DIR="$(cd "$(dirname -- "$CONFIG")" 2>/dev/null && pwd -P)"; then
-    echo "resolve-review-loop: unable to canonicalize config path from CONFIG: $CONFIG" >&2
+if [[ -n "$CONFIG_ORIG" ]]; then
+  if ! CONFIG_DIR="$(cd "$(dirname -- "$CONFIG_ORIG")" 2>/dev/null && pwd -P)"; then
+    echo "resolve-review-loop: unable to canonicalize config path from CONFIG: $CONFIG_ORIG" >&2
     exit 3
   fi
-  CONFIG_PATH="$CONFIG_DIR/$(basename -- "$CONFIG")"
+  CONFIG_PATH="$CONFIG_DIR/$(basename -- "$CONFIG_ORIG")"
 fi
 # Risk-tiered low-risk reviewer overlay (ADDITIVE): when BOTH keys are set the caller
 # (/l5 /l6 front-door) uses this pair as the LOOP reviewer for computed review_risk=low;
 # high risk always uses reviewer_engine/reviewer_effort. Empty = tiering off (unchanged
 # behavior). Garbage effort → "" (tiering off), never a bogus effort value — the
 # fail-safe direction is "review with the stronger incumbent", not "skip".
-REV_ENGINE_LOW_RISK="$(read_field "$CONFIG" reviewer_engine_low_risk "$DEF_REV_ENGINE_LOW_RISK")"
-REV_EFFORT_LOW_RISK="$(read_field "$CONFIG" reviewer_effort_low_risk "$DEF_REV_EFFORT_LOW_RISK")"
+REV_ENGINE_LOW_RISK="$(read_field "$CONFIG" reviewer_engine_low_risk "")"
+REV_EFFORT_LOW_RISK="$(read_field "$CONFIG" reviewer_effort_low_risk "")"
 case "$REV_EFFORT_LOW_RISK" in
   ''|default|low|medium|high|xhigh|max) ;;
   *) echo "resolve-review-loop: ignoring invalid reviewer_effort_low_risk (must be default|low|medium|high|xhigh|max): $REV_EFFORT_LOW_RISK" >&2; REV_EFFORT_LOW_RISK="" ;;
@@ -436,14 +419,14 @@ PLAN_DEEP_ENGINE="$(read_field "$CONFIG" plan_deep_reviewer_engine "")"
 PLAN_DEEP_EFFORT="$(read_field "$CONFIG" plan_deep_reviewer_effort "")"
 PLAN_DEEP_RUNNER="$(read_field "$CONFIG" plan_deep_reviewer_runner "")"
 PLAN_DEEP_ENDPOINT="$(read_field "$CONFIG" plan_deep_reviewer_endpoint "")"
-CONSULT_ENGINE="$(read_field "$CONFIG" consult_engine "$DEF_CONSULT_ENGINE")"
-CONSULT_EFFORT="$(read_field "$CONFIG" consult_effort "$DEF_CONSULT_EFFORT")"
-CONSULT_RUNNER="$(read_field "$CONFIG" consult_runner "$DEF_CONSULT_RUNNER")"
-CONSULT_ENDPOINT="$(read_field "$CONFIG" consult_endpoint "$DEF_CONSULT_ENDPOINT")"
-DISCUSS_ENGINE="$(read_field "$CONFIG" discuss_engine "$DEF_DISCUSS_ENGINE")"
-DISCUSS_EFFORT="$(read_field "$CONFIG" discuss_effort "$DEF_DISCUSS_EFFORT")"
-DISCUSS_RUNNER="$(read_field "$CONFIG" discuss_runner "$DEF_DISCUSS_RUNNER")"
-DISCUSS_ENDPOINT="$(read_field "$CONFIG" discuss_endpoint "$DEF_DISCUSS_ENDPOINT")"
+CONSULT_ENGINE="$(read_field "$CONFIG" consult_engine "")"
+CONSULT_EFFORT="$(read_field "$CONFIG" consult_effort "")"
+CONSULT_RUNNER="$(read_field "$CONFIG" consult_runner "")"
+CONSULT_ENDPOINT="$(read_field "$CONFIG" consult_endpoint "")"
+DISCUSS_ENGINE="$(read_field "$CONFIG" discuss_engine "")"
+DISCUSS_EFFORT="$(read_field "$CONFIG" discuss_effort "")"
+DISCUSS_RUNNER="$(read_field "$CONFIG" discuss_runner "")"
+DISCUSS_ENDPOINT="$(read_field "$CONFIG" discuss_endpoint "")"
 CONSULT_DISPATCH="$(read_field "$CONFIG" consult_dispatch "$DEF_CONSULT_DISPATCH")"
 DISCUSS_DISPATCH="$(read_field "$CONFIG" discuss_dispatch "$DEF_DISCUSS_DISPATCH")"
 UNKNOWN_ESCALATION="$(read_field "$CONFIG" unknown_escalation "$DEF_UNKNOWN_ESCALATION")"
@@ -637,7 +620,7 @@ case "$CAPABILITY_STATE" in
   *) CAPABILITY_STATE="on" ;;
 esac
 HARNESS="$(read_field "$CONFIG" independent_harness "$DEF_HARNESS")"
-QC_PANEL_RAW="$(read_field "$CONFIG" qc_panel "$DEF_QC_PANEL")"
+QC_PANEL_RAW="$(read_field "$CONFIG" qc_panel "")"
 QC_PANEL_METADATA_CONFIGURED="true"
 if config_has_field "$CONFIG" qc_panel; then
   QC_PANEL_METADATA_CONFIGURED="false"
@@ -651,9 +634,9 @@ if config_has_field "$CONFIG" qc_panel; then
   QC_PANEL_EFFORTS_RAW="$(read_field "$CONFIG" qc_panel_efforts "")"
   QC_PANEL_ENDPOINTS_RAW="$(read_field "$CONFIG" qc_panel_endpoints "")"
 else
-  QC_PANEL_RUNNERS_RAW="$DEF_QC_PANEL_RUNNERS"
-  QC_PANEL_EFFORTS_RAW="$DEF_QC_PANEL_EFFORTS"
-  QC_PANEL_ENDPOINTS_RAW="$DEF_QC_PANEL_ENDPOINTS"
+  QC_PANEL_RUNNERS_RAW=""
+  QC_PANEL_EFFORTS_RAW=""
+  QC_PANEL_ENDPOINTS_RAW=""
 fi
 QC_AGG="$(read_field "$CONFIG" qc_panel_aggregation "$DEF_QC_AGG")"
 IN_RAIL_REVIEW="$(read_field "$CONFIG" in_rail_review "$DEF_IN_RAIL_REVIEW")"
@@ -898,8 +881,8 @@ case "$REV_RUNNER" in
     exit 3
     ;;
 esac
-case "$REV_EFFORT" in default|low|medium|high|xhigh|max) ;; *) REV_EFFORT="$DEF_REV_EFFORT" ;; esac
-case "$IMPL_EFFORT" in default|low|medium|high|xhigh|max) ;; *) IMPL_EFFORT="$DEF_IMPL_EFFORT" ;; esac
+case "$REV_EFFORT" in default|low|medium|high|xhigh|max) ;; *) echo "resolve-review-loop: invalid reviewer_effort (must be default|low|medium|high|xhigh|max): ${REV_EFFORT:-<empty>}" >&2; exit 3 ;; esac
+case "$IMPL_EFFORT" in default|low|medium|high|xhigh|max) ;; *) echo "resolve-review-loop: invalid implementer_effort (must be default|low|medium|high|xhigh|max): ${IMPL_EFFORT:-<empty>}" >&2; exit 3 ;; esac
 case "$IMPL_RUNNER" in
   auto|codex|agy|grok|cc-shim|pi|claude-native|qoderclicn|cursor|opencode|kimi) ;;
   *)
@@ -2260,7 +2243,7 @@ esac
 # A relative pin resolves against the CONFIG's own directory (the file travels
 # with the config that declares it), never against the caller's cwd.
 if [[ -n "$BRAIN_IDENTITY_FILE" && "$BRAIN_IDENTITY_FILE" != /* ]]; then
-  BRAIN_IDENTITY_FILE="$(cd "$(dirname -- "$CONFIG")" 2>/dev/null && pwd -P)/../$BRAIN_IDENTITY_FILE"
+  BRAIN_IDENTITY_FILE="$(cd "$(dirname -- "$CONFIG_ORIG")" 2>/dev/null && pwd -P)/../$BRAIN_IDENTITY_FILE"
 fi
 PROPOSED_BRAIN_IDENTITY="${AUTOPILOT_BRAIN_SEAT_IDENTITY:-}"
 if [[ -n "$BRAIN_IDENTITY_FILE" || -n "$PROPOSED_BRAIN_IDENTITY" ]]; then
@@ -2950,6 +2933,7 @@ if [[ -n "$FIELD" ]]; then
     capability_warnings) printf '%s\n' "$CAP_WARNINGS_JSON" ;;
     brain_seat) printf '%s\n' "$BRAIN_SEAT_JSON" ;;
     override_admitted_seats) printf '%s\n' "$OVERRIDE_ADMITTED_JSON" ;;
+    roster_overrides) printf '%s\n' "$ROSTER_OVERRIDES_JSON" ;;
     *) echo "unknown field: $FIELD" >&2; exit 2 ;;
   esac
   exit "$ENFORCE_EXIT"
@@ -2966,7 +2950,7 @@ READINESS_ARGS=(
   "$(json_escape "$STRICT_L5_POLICY_OVERRIDE")"
   "$BRAIN_SEAT_JSON"
 )
-SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "unknown_escalation": "%s", "unknown_budget_u1": %s, "unknown_budget_u2": %s, "unknown_budget_u3": %s, "unknown_resolved_from": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s, "review_fresh_context": "%s"'
+SEATS_FMT=', "consult_engine": "%s", "consult_effort": "%s", "consult_runner": "%s", "consult_endpoint": "%s", "discuss_engine": "%s", "discuss_effort": "%s", "discuss_runner": "%s", "discuss_endpoint": "%s", "consult_dispatch": "%s", "consult_resolved_from": "%s", "discuss_dispatch": "%s", "unknown_escalation": "%s", "unknown_budget_u1": %s, "unknown_budget_u2": %s, "unknown_budget_u3": %s, "unknown_resolved_from": "%s", "allow_same_runner_dual_seat": "%s", "same_runner_dual_seat": %s, "override_admitted_seats": %s, "review_fresh_context": "%s", "roster_overrides": %s'
 SEATS_ARGS=(
   "$(json_escape "$CONSULT_ENGINE")" "$CONSULT_EFFORT" "$CONSULT_RUNNER" "$CONSULT_ENDPOINT"
   "$(json_escape "$DISCUSS_ENGINE")" "$DISCUSS_EFFORT" "$DISCUSS_RUNNER" "$DISCUSS_ENDPOINT"
@@ -2974,6 +2958,7 @@ SEATS_ARGS=(
   "$UNKNOWN_ESCALATION" "$UNKNOWN_BUDGET_U1" "$UNKNOWN_BUDGET_U2" "$UNKNOWN_BUDGET_U3" "$UNKNOWN_RESOLVED_FROM"
   "$ALLOW_DUAL_SEAT" "$SAME_RUNNER_DUAL_SEAT" "$OVERRIDE_ADMITTED_JSON"
   "$REVIEW_FRESH_CONTEXT"
+  "$ROSTER_OVERRIDES_JSON"
 )
 PLAN_FMT=', "plan_review": "%s", "plan_review_resolved_from": "%s", "plan_review_same_family_as_depth0": %s, "hetero_review": "%s", "hetero_review_resolved_from": "%s", "plan_reviewer_engine": "%s", "plan_reviewer_effort": "%s", "plan_reviewer_runner": "%s", "plan_reviewer_endpoint": "%s", "plan_deep_reviewer_engine": "%s", "plan_deep_reviewer_effort": "%s", "plan_deep_reviewer_runner": "%s", "plan_deep_reviewer_endpoint": "%s", "plan_review_max_generations": %s, "plan_review_max_wall_seconds": %s, "plan_review_growth_warn_ratio": %s, "plan_review_growth_stop_ratio": %s'
 PLAN_ARGS=(

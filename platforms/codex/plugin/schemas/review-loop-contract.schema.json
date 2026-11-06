@@ -96,7 +96,8 @@
     "allow_same_runner_dual_seat",
     "same_runner_dual_seat",
     "override_admitted_seats",
-    "review_fresh_context"
+    "review_fresh_context",
+    "roster_overrides"
   ],
   "properties": {
     "reviewer_engine": {
@@ -881,6 +882,19 @@
       },
       "description": "Seat roles (e.g. \"reviewer\", \"consult\", \"qc_panel[1]\") whose runner has NO recorded role qualification and was admitted ONLY by a matching AUTOPILOT_QUALIFICATION_OVERRIDE entry. Empty on every qualified roster. This is the recorded-operator-decision surface Board ruling 1 requires \u2014 it is NOT evidence of qualification, and nothing downstream may read it as such. ADR-0001: an override is a recorded decision re-derived from the override file on every resolve, never an attestation."
     },
+    "roster_overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["group", "until", "reason"],
+        "properties": {
+          "group": { "type": "string" },
+          "until": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      },
+      "description": "Seat groups where the repo review-loop config deliberately differs from the roster (project-config-template/review-loop-config.md): one entry per override block, with the block's until date and reason. Empty = this repo follows the roster everywhere."
+    },
     "review_fresh_context": {
       "type": "string",
       "enum": [
@@ -983,7 +997,8 @@
     "allow_same_runner_dual_seat",
     "same_runner_dual_seat",
     "override_admitted_seats",
-    "review_fresh_context"
+    "review_fresh_context",
+    "roster_overrides"
   ],
   "additionalProperties": true
 }

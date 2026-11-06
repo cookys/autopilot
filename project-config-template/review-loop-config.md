@@ -6,9 +6,10 @@ Per-project engine roster + loop policy for the `/l5`-style pipeline:
 > → **heterogeneous implementer** → reviewer low loop + depth-0 adversarial harness
 > → qc-gate subagent.
 
-This file turns that hand-typed prompt into **data**: copy it to
-`.claude/review-loop-config.md` (in the consuming project, or autopilot's own
-`.claude/` for dogfood) and `/l5` reads the roster instead of you re-typing it.
+This file turns that hand-typed prompt into **data**: it is the roster, and `/l5` reads it
+instead of you re-typing it. Do not copy it into a project: a project's
+`.claude/review-loop-config.md` is a stub that follows this roster, plus override blocks
+(see "Roster" below) for the groups that truly differ.
 Resolved by [`scripts/resolve-review-loop.sh`](../scripts/resolve-review-loop.sh)
 (same precedence chain as `resolve-qc-gate.sh` / `resolve-doa.sh`).
 
@@ -26,11 +27,43 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 > only). Canonical rule: [`references/blind-dispatch.md`](../references/blind-dispatch.md)
 > § "Verifier isolation".
 
+## Roster
+
+This file is the only roster. `scripts/resolve-review-loop.sh` reads the seat fields under
+Settings below and overlays a repo `.claude/review-loop-config.md` on top. A repo file holds seat
+fields only inside an override block: a declaration line of the shape
+`- override: <group> | until YYYY-MM-DD | <reason>`, followed by that group's whole field set
+(for `reviewer`: engine, runner, effort and the rest of its fields, each written as
+`- reviewer_engine: value` and so on). The block replaces the roster's group as a whole.
+
+The groups are `reviewer`, `implementer`, `verification_author`, `qc_panel`, `consult`, `discuss`,
+`plan_reviewer`, `plan_deep_reviewer`. A repo file with seat fields outside an override block
+is refused by the resolver (exit 3). Non-seat knobs (`loop_max_rounds` and the like) are written
+in the repo file as before, or left out to follow this file.
+
+### Roster changelog
+
+Every roster change adds a block here: date, reason, who ruled.
+
+**2026-11-06.** The roster became the single source, and its values are the seats running now.
+Ruled by the PM (Q1 of the roster-single-source design, go 2026-11-06).
+
+* The terminal panel is gpt-6-astra (codex, low), gpt-6.1-sol (codex, medium), gemini-4-argon-high
+  (agy, high) and GLM-5.3 (cc-shim, endpoint glm, high). Runner and effort per seat come from the
+  four-seat command in daily use (`collect-gen-55.sh`: sol medium, GLM high, astra low, argon high).
+  `min_panel_size` stays 3 as before.
+* The loop reviewer is GLM-5.3 on cc-shim (endpoint glm, high) with fallback preference gpt-6.1-sol,
+  which is the state of autopilot's own config after commit 3859a85b4 dropped MiniMax-M3.
+* The verification author is Qwen3.8-Max on qoderclicn, high: the seat autopilot's own config gives
+  strict /l5 today.
+* The implementer and every other field are unchanged from the previous template.
+
 ## Settings
 
-- reviewer_engine: gpt-6.1-sol
-- reviewer_effort: low
-- reviewer_runner: codex
+- reviewer_engine: GLM-5.3
+- reviewer_effort: high
+- reviewer_runner: cc-shim
+- reviewer_endpoint: glm
 - reviewer_limitation:
 - reviewer_limitation_required: false
 - reviewer_engine_low_risk:
@@ -40,26 +73,25 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - implementer_runner: auto
 - implementer_ladder: auto
 - ladder_start_rung_judgment: 0
-- reviewer_endpoint:
 - implementer_endpoint:
-- verification_author_present: false
-- verification_author_engine:
-- verification_author_runner:
-- verification_author_effort:
+- verification_author_present: true
+- verification_author_engine: Qwen3.8-Max
+- verification_author_runner: qoderclicn
+- verification_author_effort: high
 - verification_author_endpoint:
 - on_engine_unavailable: ask
 - on_family_conflict: fallback
 - review_fresh_context: on
-- reviewer_fallback_preference:
-- reviewer_fallback_preference_low_risk:
+- reviewer_fallback_preference: gpt-6.1-sol
+- reviewer_fallback_preference_low_risk: gpt-6.1-sol
 - loop_max_rounds: 5
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
 - independent_harness: on
-- qc_panel: gpt-6.1-sol, claude-opus-5-5, gemini-flash
-- qc_panel_runners: codex, claude-native, agy
-- qc_panel_efforts: low, high, high
-- qc_panel_endpoints: @none, @none, @none
+- qc_panel: gpt-6-astra, gpt-6.1-sol, gemini-4-argon-high, GLM-5.3
+- qc_panel_runners: codex, codex, agy, cc-shim
+- qc_panel_efforts: low, medium, high, high
+- qc_panel_endpoints: @none, @none, @none, glm
 - review_packet_deny_extra:
 - qc_panel_aggregation: union-on-verified-critical
 <!-- in_rail_review: auto|single|panel. auto uses the sealed panel as the in-loop review station when the QC panel is complete. -->

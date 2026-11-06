@@ -3,6 +3,14 @@
 
 . "$(dirname "$0")/lib.sh"
 
+# Default fleet stub for every hook call in this suite. It does not list `fleet recent`, so no call
+# reaches the operator's real fleet and the restore text carries no fleet-message line. Section 2b overrides it per call.
+TEST_FLEET_DEFAULT_DIR="$TEST_TMP/fleet-default"
+mkdir -p "$TEST_FLEET_DEFAULT_DIR"
+printf '#!/bin/sh\nprintf "usage: fleet <command>\\n  fleet send <to>\\n  fleet decision claim <id>\\n"\nexit 1\n' > "$TEST_FLEET_DEFAULT_DIR/fleet"
+chmod +x "$TEST_FLEET_DEFAULT_DIR/fleet"
+export AUTOPILOT_FLEET_BIN="$TEST_FLEET_DEFAULT_DIR/fleet"
+
 # Ensure ~/.autopilot directories are set up in the sandboxed HOOK_HOME
 mkdir -p "$HOOK_HOME/.autopilot"
 mkdir -p "$HOOK_HOME/.autopilot/intent"
@@ -55,6 +63,7 @@ assert_file_exists "$AP/compaction-state-sess-a.md" "startup leaves a fresh file
 
 run_hook session-start.js "$COMPACT_A"
 assert_contains "$__RUN_STDOUT" "[Autopilot State Recovery — Post-Compaction]" "contains recovery title"
+assert_not_contains "$__RUN_STDOUT" "fleet recent --unseen" "default fleet stub (no recent): section 2 restore has no fleet-message line"
 assert_contains "$__RUN_STDOUT" "RestoreStateTestContent" "contains compaction state content"
 assert_file_absent "$AP/compaction-state-sess-a.md" "the hook consumes the file after injecting"
 run_hook session-start.js "$COMPACT_A"

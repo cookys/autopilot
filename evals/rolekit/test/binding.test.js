@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
-const { ROOT, ROLES, tmp, rm, taskDir, runCheck, gitWorkdir } = require('./helpers.js');
+const { ROOT, ROLES, tmp, rm, draftCopy, taskDir, runCheck, gitWorkdir } = require('./helpers.js');
 const { artifactIdentity, testFiles } = require('../lib-identity.js');
 const { REQUIRED_GRADERS, schedule, taskMapFrom } = require('../score-rolekit.js');
 
@@ -14,7 +14,7 @@ const man = () => JSON.parse(fs.readFileSync(path.join(ROOT, 'tasks/manifest.jso
 
 // ---- 1: a stamped root is the only thing the scorer will use
 function stampedCopy() {
-  const d = tmp(); fs.cpSync(ROOT, d, { recursive: true });
+  const d = draftCopy();
   const r = cp.spawnSync('node', [path.join(d, 'stamp-rolekit.js'), '--row', 'pilot', '--authorized-by', 'd-test'], { encoding: 'utf8', cwd: d });
   assert.strictEqual(r.status, 0, r.stderr);
   const prereg = JSON.parse(fs.readFileSync(path.join(d, 'prereg/pilot.json'), 'utf8'));
@@ -30,7 +30,7 @@ function stampedCopy() {
 }
 
 test('score-rolekit: the CLI scores only a stamped root - an unstamped row, a fabricated task manifest, a changed grader or a tampered stamper are refused', () => {
-  const unst = tmp(); fs.cpSync(ROOT, unst, { recursive: true });
+  const unst = draftCopy();
   try { const r = cp.spawnSync('node', [path.join(unst, 'score-rolekit.js'), '--row', 'pilot', '--results', '/dev/null'], { encoding: 'utf8' }); assert.strictEqual(r.status, 2); assert.match(r.stderr, /not a valid stamped row/); } finally { rm(unst); }
   const s = stampedCopy();
   try {

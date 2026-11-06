@@ -7,7 +7,7 @@ const path = require('path');
 const cp = require('child_process');
 const { compile, validateKit, frontmatterError, MAX_ROLE_BYTES_KIMI } = require('../compile-kit.js');
 const { scoreFormal } = require('../score-rolekit.js');
-const { ROOT, ROLES, tmp, rm } = require('./helpers.js');
+const { ROOT, ROLES, tmp, rm, draftCopy } = require('./helpers.js');
 
 const rd = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const kimi = (r) => path.join(ROOT, 'kimi/kits', r);
@@ -106,9 +106,8 @@ test('score-rolekit: weak2 (kimi) results never change the verdict - winning, lo
 
 // ---- the preconditions gate of the formal stamp
 test('stamp-rolekit formal: refused without the real-model check evidence for both seats; stamped when met; the kimi kits and the evidence file are frozen', () => {
-  const d = tmp();
+  const d = draftCopy();
   try {
-    fs.cpSync(ROOT, d, { recursive: true });
     const run = (...a) => cp.spawnSync('node', [path.join(d, 'stamp-rolekit.js'), ...a], { encoding: 'utf8', cwd: d });
     const pf = path.join(d, 'prereg/preconditions-formal.json');
     let r = run('--row', 'formal', '--authorized-by', 'd-test'); assert.strictEqual(r.status, 2); assert.match(r.stderr, /preconditions file missing/);
@@ -128,9 +127,9 @@ test('stamp-rolekit formal: refused without the real-model check evidence for bo
       fs.writeFileSync(f, keep);
     }
   } finally { rm(d); }
-  const d2 = tmp();
+  const d2 = draftCopy();
   try { // a kimi placebo of the wrong length blocks the pilot stamp too
-    fs.cpSync(ROOT, d2, { recursive: true }); fs.writeFileSync(path.join(d2, 'kimi/placebo/planner/role.md'), 'short');
+    fs.writeFileSync(path.join(d2, 'kimi/placebo/planner/role.md'), 'short');
     const r = cp.spawnSync('node', [path.join(d2, 'stamp-rolekit.js'), '--row', 'pilot', '--authorized-by', 'd-test'], { encoding: 'utf8', cwd: d2 });
     assert.strictEqual(r.status, 2); assert.match(r.stderr, /kimi\/placebo\/planner\/role\.md is not within 5%/);
   } finally { rm(d2); }

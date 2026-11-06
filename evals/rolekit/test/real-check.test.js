@@ -113,11 +113,17 @@ for (const k of BILLING) {
   }));
 }
 
-test('weak2 (kimi) is refused while the rail has no kimi --role-kit: "rail not available", rc 2, nothing written', withWorld((w) => {
+test('weak2 (kimi) is refused while the script has no kimi evidence reader: "no kimi evidence reader yet", rc 2, nothing written', withWorld((w) => {
   const r = w.run(['--seat', 'weak2', '--account', 'a', '--kit', KIT, '--out', w.out, '--dry-run', 'ok']);
   assert.strictEqual(r.rc, 2);
-  assert.match(r.err, /rail not available/);
+  assert.match(r.err, /no kimi evidence reader yet/);
   assert.ok(!fs.existsSync(w.out));
+}));
+test('mutation: a checker that no longer refuses weak2 (kimi) gets past the refusal (the real one refuses, rc 2)', withWorld((w) => {
+  const seat = ['--seat', 'weak2', '--account', 'a', '--kit', KIT, '--out', w.out, '--dry-run', 'ok'];
+  assert.strictEqual(w.run(seat).rc, 2);
+  const m = mutant(w, "if (o.seat === 'weak2') {", 'if (false) {');
+  assert.notStrictEqual(w.run(seat, {}, m).rc, 2);
 }));
 
 test('account layer not active (no registry) -> rc 3 before any dispatch; unknown alias -> rc 3', withWorld((w) => {

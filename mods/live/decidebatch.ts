@@ -91,12 +91,25 @@ export function cardOfKey(key: string | null): string | null {
   const m = /^(?:opt:(.+):\d+|note:(.+))$/.exec(key)
   return m === null ? null : (m[1] ?? m[2])
 }
-// The focus plan when the sync (not a local press) closed the card the focus was on: the card is in `batch.ans` now and was not in `prev.ans`. The same successor plan as a local answer;
-// null when the focus is elsewhere or the card was already answered.
-export function closedFocusPlan(o: { prev: DecideBatch; batch: DecideBatch; focus: string | null; lines: readonly PaneLine[]; pending: readonly LiveDecision[]; st: DecideState; offset: number; room: number }): AnswerPlan | null {
+// The focus repair after a sync, as one class: whatever the reason the focused key is no longer drawn (the card closed elsewhere, the batch reset to NO_BATCH because the list emptied, a
+// card gone), focus moves to something that exists. Order: the successor plan when the batch still has the card; else the send row when it is drawn (some card here can be answered);
+// else null, because the empty state (`decide.none`, an `empty` line) has no focusable element. null return = focus is fine, leave it. `focus: null` in the plan = focus nothing.
+// When the list empties the batch closes (NO_BATCH) and the empty state replaces the greyed cards: the g2 "greyed in place" choice holds while any card is pending, and keeping closed
+// cards on screen with nothing pending would contradict the empty state, so it is not kept.
+export type FocusRepair = { focus: string | null; offset: number }
+export function focusRepair(o: { prev: DecideBatch; batch: DecideBatch; focus: string | null; lines: readonly PaneLine[]; pending: readonly LiveDecision[]; st: DecideState; offset: number; room: number }): FocusRepair | null {
+  if (o.focus === null) return null
+  const sendDrawn = o.pending.some(d => d.id !== null && !decideDialog(d))
+  const clampOff = (): number => Math.max(0, Math.min(Math.max(0, o.lines.length - o.room), o.offset))
+  if (o.focus === SUBMIT_KEY) return sendDrawn ? null : { focus: null, offset: clampOff() }
+  if (rowOfKey(o.lines, o.focus) >= 0) return null // still drawn
   const k = cardOfKey(o.focus)
-  if (k === null || o.prev.ans[k] !== undefined || o.batch.ans[k] === undefined) return null
-  return answerPlan({ lines: o.lines, batch: o.batch, pending: o.pending, st: o.st, answered: k, offset: o.offset, room: o.room })
+  if (k === null) return null
+  if (o.batch.ans[k] !== undefined && o.batch.order.includes(k)) {
+    const plan = answerPlan({ lines: o.lines, batch: o.batch, pending: o.pending, st: o.st, answered: k, offset: o.offset, room: o.room })
+    return plan.focus === SUBMIT_KEY && !sendDrawn ? { focus: null, offset: plan.offset } : plan
+  }
+  return sendDrawn ? { focus: SUBMIT_KEY, offset: clampOff() } : { focus: null, offset: clampOff() }
 }
 // After a submit: the card whose successor the focus goes to, the last of the sent ids that is a typed-only card (an option card was planned when its option was pressed). null when none.
 export function submitSuccessor(pending: readonly LiveDecision[], sent: readonly string[]): string | null {

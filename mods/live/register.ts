@@ -41,7 +41,7 @@ import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
-import { NO_BATCH, answerPlan, answerOf, batchSync, closedFocusPlan, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
+import { NO_BATCH, answerPlan, answerOf, batchSync, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
 import { barStrip, decideTabLines } from './tabs'
 
@@ -1132,10 +1132,11 @@ function decideCardLines(snap: LiveSnapshot, st: DecideState): PaneLine[] {
   const ctx = { t: tr, cols: decideCols, expanded: new Set<string>(), folded: new Set<string>(), decide: { ...st, inputs: decideInputs, batch: decideBatch } }
   return decideTabLines(snap, ctx).filter(l => l.bar !== true)
 }
-async function decideFocusTo($: EngineInterface, plan: { focus: string; offset: number }): Promise<void> {
+async function decideFocusTo($: EngineInterface, plan: { focus: string | null; offset: number }): Promise<void> {
   decideScroll.offset = plan.offset
   decideFocus = plan.focus
   decideScroll.redraw?.()
+  if (plan.focus === null) return
   await $.ui.focus({ requestId: PANE_ID, key: plan.focus }).catch(() => undefined)
 }
 // A draw's sync. A card the owner was on that another session or the CLI closed now stays greyed in place (batchSync): the focus goes where a local answer would send it.
@@ -1143,7 +1144,7 @@ async function decideRepair($: EngineInterface, st: DecideState): Promise<void> 
   const prev = decideBatch
   decideSync(st)
   if (snapshot === null || paneTab !== 'decide') return
-  const plan = closedFocusPlan({ prev, batch: decideBatch, focus: decideFocus, lines: decideCardLines(snapshot, st), pending: snapshot.pending, st, offset: decideScroll.offset, room: Math.max(1, decideScroll.room) })
+  const plan = focusRepair({ prev, batch: decideBatch, focus: decideFocus, lines: decideCardLines(snapshot, st), pending: snapshot.pending, st, offset: decideScroll.offset, room: Math.max(1, decideScroll.room) })
   if (plan !== null) await decideFocusTo($, plan)
 }
 async function decideAnswered($: EngineInterface, id: string): Promise<void> {

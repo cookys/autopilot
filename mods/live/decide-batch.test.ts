@@ -5,7 +5,7 @@ import { makeT } from './i18n'
 import { NO_DECIDE, NO_DETAIL, NO_SECTIONS } from './model'
 import type { DecideView, LiveDecision, LiveSnapshot, PaneLine } from './model'
 import { decideTabLines } from './tabs'
-import { NO_BATCH, SUBMIT_KEY, answerPlan, batchSync, closedFocusPlan, inputsFor, noteKey, optKey, rowOfKey, submitSuccessor } from './decidebatch'
+import { NO_BATCH, SUBMIT_KEY, answerPlan, batchSync, focusRepair, inputsFor, noteKey, optKey, rowOfKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
 
 const zh = makeT('zh-TW')
@@ -41,11 +41,11 @@ class Session {
     return plan
   }
   // another session or the CLI closes card `id`: it leaves pending; the shell repairs the focus it remembers
-  closeElsewhere(id: string, focus: string): { focus: string; offset: number } | null {
+  closeElsewhere(id: string, focus: string): { focus: string | null; offset: number } | null {
     const prev = this.batch
     this.pending = this.pending.filter(d => d.id !== id)
     this.sync()
-    const plan = closedFocusPlan({ prev, batch: this.batch, focus, lines: this.lines(), pending: this.pending, st: this.st, offset: this.offset, room: this.room })
+    const plan = focusRepair({ prev, batch: this.batch, focus, lines: this.lines(), pending: this.pending, st: this.st, offset: this.offset, room: this.room })
     if (plan !== null) this.offset = plan.offset
     return plan
   }
@@ -151,6 +151,7 @@ test('DECIDE batch: answer 8 cards in a row — focus, scroll, numbering and the
     const total = s.lines().length
     expect(plan.offset, 'scroll in range after answer ' + (i + 1)).toBeGreaterThanOrEqual(0)
     expect(plan.offset).toBeLessThanOrEqual(Math.max(0, total - s.room))
+    expect(plan.focus === SUBMIT_KEY || rowOfKey(s.lines(), plan.focus) >= 0, 'focus after sync ' + (i + 1) + ' is a drawn key or the send row: ' + plan.focus).toBe(true)
     if (i < 7) {
       const r = rowOfKey(s.lines(), plan.focus)
       expect(r >= plan.offset && r < plan.offset + s.room, 'focus row ' + r + ' inside window at ' + plan.offset).toBe(true)
@@ -253,4 +254,22 @@ test('DECIDE batch: answer 8 cards in a row with a card closed elsewhere mid-bat
   for (let i = 0; i < 4; i++) { const p = s.answer('d-late' + i); check(p.focus, 'late ' + i) }
   expect(s.greyed(), 'every card ends greyed').toBe(9)
   expect(s.texts().filter(x => /^\S+ \d+\. /u.test(x)).map(x => Number(x.split('. ')[0].replace(/^\S+ /, '')))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
+})
+
+test('DECIDE batch (D) the LAST pending card closes elsewhere while it holds the focus: focus never stays on the removed key', () => {
+  for (const focus of [optKey('d-fake0', 0), noteKey('d-fake0')]) {
+    const s = new Session(fakes(1))
+    const plan = s.closeElsewhere('d-fake0', focus)
+    expect(plan, 'a repair is made for ' + focus).not.toBeNull()
+    expect((plan as { focus: string | null }).focus, 'the empty state has nothing focusable').toBeNull()
+    expect(s.batch, 'nothing pending: the batch closes').toEqual(NO_BATCH)
+  }
+  // an earlier card was answered here, the last open one closes elsewhere: the batch still has it (pending keeps the answered one), so the successor plan runs
+  const two = new Session(fakes(2))
+  two.answer('d-fake0')
+  const p2 = two.closeElsewhere('d-fake1', optKey('d-fake1', 0)) as { focus: string | null }
+  expect(p2.focus).toBe(SUBMIT_KEY)
+  // focus on the send row while the list empties
+  const sub = new Session(fakes(1))
+  expect((sub.closeElsewhere('d-fake0', SUBMIT_KEY) as { focus: string | null }).focus).toBeNull()
 })

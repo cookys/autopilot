@@ -241,12 +241,39 @@ function passVerdict(items, scoreRes, hardFails) {
 }
 
 // ---- blinding and quote check --------------------------------------------
-function blindText(text) {
+const FAMILY_LATIN = ['chatgpt', 'openai', 'anthropic', 'claude', 'opus', 'sonnet', 'haiku', 'fable', 'gpt', 'codex', 'o1', 'o3', 'o4',
+  'gemini', 'gemma', 'bard', 'glm', 'zhipu', 'chatglm', 'kimi', 'moonshot', 'qwen', 'tongyi', 'deepseek', 'llama', 'mistral', 'mixtral',
+  'grok', 'minimax', 'astra', 'argon', 'copilot', 'ernie', 'doubao'];
+const FAMILY_CJK = ['克勞德', '克劳德', '千問', '千问', '通義', '通义', '智譜', '智谱', '月之暗面', '文心', '豆包', '深度求索'];
+const GENERIC_ID_PARTS = ['latest', 'preview', 'instruct', 'turbo', 'high', 'low', 'medium', 'chat', 'base', 'fast', 'thinking'];
+
+function escRe(x) { return String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// extra: the examinee's own --model id; the whole id and each name part of it are blinded too.
+function blindTerms(model) {
+  const latin = FAMILY_LATIN.slice();
+  const whole = [];
+  const id = String(model || '').trim();
+  if (id) {
+    whole.push(id);
+    id.split(/[-_/.:\s]+/).forEach((t) => {
+      if (/[A-Za-z]/.test(t) && t.length >= 4 && !GENERIC_ID_PARTS.includes(t.toLowerCase())) latin.push(t);
+    });
+  }
+  return { whole, latin, cjk: FAMILY_CJK };
+}
+
+function blindText(text, model) {
+  const t = blindTerms(model);
   let s = String(text || '');
   s = s.replace(/<(thinking|think|reasoning)>[\s\S]*?<\/\1>/gi, '');
-  s = s.split('\n').filter((line) => !/^\s*(我是|我是由|身為|作為).{0,12}(Claude|Anthropic|AI 模型|語言模型)/.test(line)
-    && !/^\s*(As an AI|I am Claude|I'm Claude)/i.test(line)).join('\n');
-  s = s.replace(/\b(Claude|Anthropic|Sonnet|Opus|Haiku|GPT|Gemini|Codex|Kimi)\b/g, '[model]');
+  const names = t.latin.concat(t.cjk).map(escRe).join('|');
+  const selfIntro = new RegExp(`^\\s*(我是|我是由|身為|作為|我叫|I am|I'm|As an? ).{0,24}(${names}|AI 模型|語言模型|language model)`, 'i');
+  s = s.split('\n').filter((line) => !selfIntro.test(line)).join('\n');
+  t.whole.forEach((w) => { s = s.replace(new RegExp(escRe(w), 'gi'), '[model]'); });
+  const latinRe = new RegExp(`(?<![A-Za-z])(?:${t.latin.slice().sort((x, y) => y.length - x.length).map(escRe).join('|')})(?![A-Za-z])`, 'gi');
+  s = s.replace(latinRe, '[model]');
+  t.cjk.forEach((w) => { s = s.split(w).join('[model]'); });
   return s.trim();
 }
 

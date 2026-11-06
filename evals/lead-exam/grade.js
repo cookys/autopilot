@@ -36,7 +36,7 @@ async function gradeExam(opts) {
   const rand = opts.rand || Math.random;
   const map = lib.deriveNames(items, seed);
   const runs = opts.runs;
-  const examinees = runs.map((r) => ({ run: r, ex: lib.parseExaminee(r.outputs), blind: (r.outputs || []).map(lib.blindText) }));
+  const examinees = runs.map((r) => ({ run: r, ex: lib.parseExaminee(r.outputs), blind: (r.outputs || []).map((o) => lib.blindText(o, r.model)) }));
   const xOut = fx.controlXOutputs(seed, items).map(lib.blindText);
   const zOut = lib.blindText(fx.controlZOutput());
   const calls = [];

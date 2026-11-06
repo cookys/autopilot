@@ -91,13 +91,25 @@ T6="$TEST_TMP/fx6"; new_fixture "$T6"
 node "$REAPER" --root "$T6/scratch" --repo "$T6/main" --apply < /dev/null > /dev/null
 assert_file_exists "$T6/scratch/unreach" "real script keeps the unreachable worktree (green side of the control)"
 
+# test-only entry point: the module's run(argv, inj) takes the proc reader and the between-classify-and-apply callback
+INJ="$TEST_TMP/inject.js"
+cat > "$INJ" <<'JS'
+const { run } = require(process.env.INJ_MOD);
+const inj = {};
+if (process.env.INJ_PROC) inj.procDir = process.env.INJ_PROC;
+if (process.env.INJ_HOOK) inj.afterClassify = () => require('child_process').execFileSync('sh', [process.env.INJ_HOOK], { stdio: 'ignore' });
+if (process.env.INJ_NOPRIV) inj.assumeNoPrivateAncestor = true;
+process.exitCode = run(process.argv.slice(2), inj);
+JS
+export INJ_MOD="$REAPER"
+
 # g2: live cwds are re-read before each removal (a process that enters a candidate after classification keeps it)
 T7="$TEST_TMP/fx7"; new_fixture "$T7"; mkdir -p "$T7/proc"
 cat > "$T7/hook.sh" <<HOOK
 mkdir -p "$T7/proc/4242"
 ln -s "$T7/scratch/merged" "$T7/proc/4242/cwd"
 HOOK
-REAP_SCRATCH_PROC="$T7/proc" REAP_SCRATCH_HOOK_AFTER_CLASSIFY="$T7/hook.sh" node "$REAPER" --root "$T7/scratch" --repo "$T7/main" --apply < /dev/null > /dev/null
+INJ_PROC="$T7/proc" INJ_HOOK="$T7/hook.sh" node "$INJ" --root "$T7/scratch" --repo "$T7/main" --apply < /dev/null > /dev/null
 assert_file_exists "$T7/scratch/merged" "worktree entered after classification survives --apply"
 assert_file_absent "$T7/scratch/ignored" "other REAP candidates are still removed"
 
@@ -105,15 +117,15 @@ assert_file_absent "$T7/scratch/ignored" "other REAP candidates are still remove
 T8="$TEST_TMP/fx8"; new_fixture "$T8"; mkdir -p "$T8/proc/77" "$T8/proc/78"
 printf 'EACCES\n' > "$T8/proc/77/cwd.err"
 printf 'ENOENT\n' > "$T8/proc/78/cwd.err"
-OUT=$(REAP_SCRATCH_ASSUME_NO_PRIVATE_ANCESTOR=1 REAP_SCRATCH_PROC="$T8/proc" node "$REAPER" --root "$T8/scratch" --repo "$T8/main" --apply 2>&1 < /dev/null)
-REAP_SCRATCH_ASSUME_NO_PRIVATE_ANCESTOR=1 REAP_SCRATCH_PROC="$T8/proc" node "$REAPER" --root "$T8/scratch" --repo "$T8/main" --apply > /dev/null 2>&1 < /dev/null
+OUT=$(INJ_NOPRIV=1 INJ_PROC="$T8/proc" node "$INJ" --root "$T8/scratch" --repo "$T8/main" --apply 2>&1 < /dev/null)
+INJ_NOPRIV=1 INJ_PROC="$T8/proc" node "$INJ" --root "$T8/scratch" --repo "$T8/main" --apply > /dev/null 2>&1 < /dev/null
 RC=$?
 assert_eq "$([ "$RC" -ne 0 ] && echo refused)" refused "unreadable cwd without a 0700 ancestor refuses --apply"
 assert_file_exists "$T8/scratch/merged" "refused apply removed nothing"
 assert_contains "$OUT" "no ancestor of root is mode 0700" "refusal says why"
 T9="$TEST_TMP/fx9"; new_fixture "$T9"; mkdir -p "$T9/proc/77"; printf 'EPERM\n' > "$T9/proc/77/cwd.err"
 chmod 700 "$T9"
-OUT=$(REAP_SCRATCH_PROC="$T9/proc" node "$REAPER" --root "$T9/scratch" --repo "$T9/main" --apply < /dev/null)
+OUT=$(INJ_PROC="$T9/proc" node "$INJ" --root "$T9/scratch" --repo "$T9/main" --apply < /dev/null)
 assert_file_absent "$T9/scratch/merged" "0700 ancestor owned by the caller lets --apply proceed"
 assert_contains "$OUT" "is mode 0700 owned by the caller" "output reports the rule that applied"
 
@@ -122,8 +134,20 @@ MUT2="$TEST_TMP/mutant2.js"
 sed 's/const now = readLive();.*/const now = { failures: [], names: live };/' "$REAPER" > "$MUT2"
 T10="$TEST_TMP/fx10"; new_fixture "$T10"; mkdir -p "$T10/proc"
 printf 'mkdir -p "%s/proc/4242"\nln -s "%s/scratch/merged" "%s/proc/4242/cwd"\n' "$T10" "$T10" "$T10" > "$T10/hook.sh"
-REAP_SCRATCH_PROC="$T10/proc" REAP_SCRATCH_HOOK_AFTER_CLASSIFY="$T10/hook.sh" node "$MUT2" --root "$T10/scratch" --repo "$T10/main" --apply < /dev/null > /dev/null
+INJ_MOD="$MUT2" INJ_PROC="$T10/proc" INJ_HOOK="$T10/hook.sh" node "$INJ" --root "$T10/scratch" --repo "$T10/main" --apply < /dev/null > /dev/null
 if [ -d "$T10/scratch/merged" ]; then fail "negative control: stale-snapshot mutant kept the worktree (test cannot detect the break)"
 else __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); fi
+
+# g3: the CLI ignores the removed env seams; a live cwd still protects
+T11="$TEST_TMP/fx11"; new_fixture "$T11"; mkdir -p "$T11/emptyproc"; printf 'exit 0\n' > "$T11/nohook.sh"
+( cd "$T11/scratch/merged" && exec sleep 30 ) < /dev/null > /dev/null 2>&1 &
+SLP=$!
+sleep 0.5
+REAP_SCRATCH_PROC="$T11/emptyproc" REAP_SCRATCH_HOOK_AFTER_CLASSIFY="$T11/nohook.sh" REAP_SCRATCH_ASSUME_NO_PRIVATE_ANCESTOR=1 node "$REAPER" --root "$T11/scratch" --repo "$T11/main" --apply < /dev/null > /dev/null
+assert_file_exists "$T11/scratch/merged" "CLI ignores REAP_SCRATCH_PROC: live cwd still protects"
+kill "$SLP" 2> /dev/null; wait "$SLP" 2> /dev/null
+T12="$TEST_TMP/fx12"; new_fixture "$T12"; printf 'touch "%s/hook-ran"\n' "$T12" > "$T12/hook.sh"
+REAP_SCRATCH_HOOK_AFTER_CLASSIFY="$T12/hook.sh" node "$REAPER" --root "$T12/scratch" --repo "$T12/main" --apply < /dev/null > /dev/null
+assert_file_absent "$T12/hook-ran" "CLI never runs REAP_SCRATCH_HOOK_AFTER_CLASSIFY"
 
 finalize_test

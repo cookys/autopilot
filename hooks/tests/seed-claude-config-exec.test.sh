@@ -123,6 +123,18 @@ assert_eq "$?" "2" "exec without -- exits 2"
 node "$SCRIPT" --check --exec -- true >/dev/null 2>&1
 assert_eq "$?" "2" "--check with --exec exits 2"
 
+# j. SIGTERM in the seeding window (test-only pause after the credentials copy is written): dir gone
+for SIGNAME in TERM HUP INT; do
+  reset_parent
+  SEED_TEST_PAUSE_AFTER_WRITE_MS=3000 node "$SCRIPT" --exec --parent "$PARENT" -- sleep 30 >/dev/null 2>&1 &
+  WPID=$!
+  i=0
+  while [ -z "$(find "$PARENT" -name .credentials.json 2>/dev/null)" ] && [ "$i" -lt 100 ]; do sleep 0.05; i=$((i + 1)); done
+  kill -"$SIGNAME" "$WPID"
+  wait "$WPID" 2>/dev/null
+  assert_eq "$(left)" "0" "j: SIG$SIGNAME inside the seeding window leaves no claude-config-* dir"
+done
+
 # i. negative control: neutralising fs.rmSync must leave a dir (the leftover check can fail)
 MUT="$TEST_TMP/seed-noclean.js"
 cp "$SCRIPT" "$MUT"

@@ -20,6 +20,9 @@
 // --sweep lists <parent>/claude-config-*/.credentials.json (one absolute path per line, sorted)
 // and deletes nothing. Exit 1 if any path was listed, 0 if none.
 //
+// SEED_TEST_PAUSE_AFTER_WRITE_MS (TEST-ONLY, honoured only when set): --exec blocks that many ms right after the
+// credentials copy is written, so a test can signal the wrapper inside the seeding window. Never set in production.
+//
 // --check validates that the source credentials file is readable and creates nothing.
 // --check combined with --exec is an error.
 // Fails closed: exit 2 with a one-line stderr message when the source credentials are missing
@@ -91,15 +94,19 @@ try {
 }
 if (check) process.exit(0);
 
-function buildSeed() {
+function buildSeed(onCreated) {
   let dir = '';
   try {
     fs.mkdirSync(parent, { recursive: true });
     dir = fs.mkdtempSync(path.join(parent, 'claude-config-'));
+    if (onCreated) onCreated(dir);
     fs.chmodSync(dir, 0o700);
     const dst = path.join(dir, '.credentials.json');
     fs.writeFileSync(dst, fs.readFileSync(src), { mode: 0o600 });
     fs.chmodSync(dst, 0o600);
+    // Test-only (SEED_TEST_PAUSE_AFTER_WRITE_MS): block here, credentials copy on disk, so a test can signal the window.
+    const pauseMs = Number(process.env.SEED_TEST_PAUSE_AFTER_WRITE_MS || 0);
+    if (pauseMs > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, pauseMs);
     return dir;
   } catch (e) {
     if (dir) { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } }
@@ -112,7 +119,10 @@ if (!execMode) {
   process.stdout.write(`${buildSeed()}\n`);
 } else {
 // Only this variable names the directory this process created. Removal never reads argv, env, or stdin.
-let seeded = buildSeed();
+// Handlers are installed BEFORE the dir exists. Seeding is synchronous, so a signal that lands in it is delivered
+// right after the child is spawned and forwarded; the dir is recorded in `seeded` the moment mkdtemp returns, so
+// even a failure mid-seed removes exactly that dir.
+let seeded = '';
 function removeSeeded() {
   const target = seeded;
   if (!target) return;
@@ -121,7 +131,6 @@ function removeSeeded() {
 }
 process.on('exit', removeSeeded);
 
-const childEnv = Object.assign({}, process.env, { CLAUDE_CONFIG_DIR: seeded });
 let child = null;
 let settled = false;
 function finish(code) {
@@ -138,6 +147,9 @@ function forward(sig) {
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   process.on(sig, () => forward(sig));
 }
+
+seeded = buildSeed((d) => { seeded = d; });
+const childEnv = Object.assign({}, process.env, { CLAUDE_CONFIG_DIR: seeded });
 
 child = spawn(cmd[0], cmd.slice(1), { stdio: 'inherit', env: childEnv });
 child.on('error', (err) => {

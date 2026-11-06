@@ -29,15 +29,20 @@ NOTE='has no recorded operator admission'
 CFG_DIR="$TEST_TMP/proj"
 mkdir -p "$CFG_DIR/.claude"
 cat <<EOF > "$CFG_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: TESTEP
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- override: qc_panel | until 2099-01-01 | test fixture seat
 - qc_panel: gpt-5.5, claude-opus, gemini-flash
 - qc_panel_runners: codex, claude-native, agy
 - qc_panel_efforts: high, high, high
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 # Positive control: the resolver itself still prints the three notes for this config.
@@ -61,16 +66,21 @@ assert_contains "$ERR" "invalid qc_panel_endpoints length" "case 1: unrelated re
 BAD_DIR="$TEST_TMP/bad"
 mkdir -p "$BAD_DIR/.claude"
 cat <<EOF > "$BAD_DIR/.claude/review-loop-config.md"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: TESTEP
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- override: qc_panel | until 2099-01-01 | test fixture seat
 - qc_panel: gpt-5.5, claude-opus
 - qc_panel_runners: codex, cursor
 - qc_panel_efforts: high, high
 - qc_panel_endpoints: ,
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 OUT="$(DISPATCH_QUIET=1 "$SCRIPT" --strict-roster --repo-root "$BAD_DIR" --prompt-file "$PROMPT" --bin "$FAKE_RUNNER" 2>"$TEST_TMP/case2.stderr")"; EXIT=$?
 ERR="$(cat "$TEST_TMP/case2.stderr")"

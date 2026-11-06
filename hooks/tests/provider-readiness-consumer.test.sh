@@ -2,14 +2,17 @@
 . "$(dirname "$0")/lib.sh"
 
 cat > "$TEST_TMP/review-loop-config.md" <<'CFG'
+- override: reviewer | until 2099-01-01 | test fixture seat
 - reviewer_engine: MiniMax-M3
 - reviewer_effort: high
 - reviewer_runner: cc-shim
 - reviewer_endpoint: minimax
 - reviewer_limitation: minimax-false-central-claim-5-of-6
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: grok-4.5
 - implementer_effort: high
 - implementer_runner: grok
+- override: qc_panel | until 2099-01-01 | test fixture seat
 - qc_panel: gpt-5.5
 - qc_panel_runners: codex
 - qc_panel_efforts: xhigh

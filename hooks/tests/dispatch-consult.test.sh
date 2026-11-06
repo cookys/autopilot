@@ -69,7 +69,7 @@ rm -f "$SHADOW_MARKER"
 
 # ── Fixtures shared by the switch-on cases below ────────────────────────────
 ON_CFG="$TEST_TMP/on.md"
-printf -- '- consult_engine: gpt-5.6\n- consult_runner: codex\n- consult_effort: high\n- consult_dispatch: on\n' > "$ON_CFG"
+printf -- '- override: consult | until 2099-01-01 | test fixture seat\n- consult_engine: gpt-5.6\n- consult_runner: codex\n- consult_effort: high\n- consult_dispatch: on\n' > "$ON_CFG"
 OVR="$TEST_TMP/override.json"
 cat > "$OVR" <<'JSON'
 {"schema":1,"overrides":[
@@ -188,7 +188,7 @@ assert_contains "$GOOD_OUT" '"authority": { "refused": true, "reference": "qc@de
 
 # ── 8. Endpoint is forwarded when the seat configures one ──────────────────
 EP_CFG="$TEST_TMP/on-endpoint.md"
-printf -- '- consult_engine: glm-5.2\n- consult_runner: cc-shim\n- consult_effort: high\n- consult_endpoint: MY_EP\n- consult_dispatch: on\n' > "$EP_CFG"
+printf -- '- override: consult | until 2099-01-01 | test fixture seat\n- consult_engine: glm-5.2\n- consult_runner: cc-shim\n- consult_effort: high\n- consult_endpoint: MY_EP\n- consult_dispatch: on\n' > "$EP_CFG"
 EP_OVR="$TEST_TMP/override-endpoint.json"
 cat > "$EP_OVR" <<'JSON'
 {"schema":1,"overrides":[
@@ -214,7 +214,7 @@ MY_EP" "recorded argv carries --endpoint MY_EP when consult_endpoint is set"
 # ── 9. Qualification gate failure (D7) surfaces the resolver's own message,
 # never a re-invented one, and never dispatches.
 UNQUAL_CFG="$TEST_TMP/on-unqualified.md"
-printf -- '- consult_engine: unqualified-model\n- consult_runner: codex\n- consult_effort: high\n- consult_dispatch: on\n' > "$UNQUAL_CFG"
+printf -- '- override: consult | until 2099-01-01 | test fixture seat\n- consult_engine: unqualified-model\n- consult_runner: codex\n- consult_effort: high\n- consult_dispatch: on\n' > "$UNQUAL_CFG"
 UNQUAL_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$UNQUAL_CFG" "$SCRIPT" --question-file "$Q" --artifact "$ART" --dispatch-author-bin "$SHADOW_BIN" 2>"$TEST_TMP/unqual.err")"
 UNQUAL_EXIT=$?
 UNQUAL_ERR="$(cat "$TEST_TMP/unqual.err")"

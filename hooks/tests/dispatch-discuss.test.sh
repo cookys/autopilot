@@ -108,6 +108,7 @@ printf -- '- discuss_dispatch: off\n' > "$CFG_OFF"
 CFG_ON_NO_OVERRIDE="$TEST_TMP/cfg-on-no-override.md"
 cat > "$CFG_ON_NO_OVERRIDE" <<'EOF'
 - discuss_dispatch: on
+- override: discuss | until 2099-01-01 | test fixture seat
 - discuss_engine: gpt-5.6-sol
 - discuss_effort: high
 - discuss_runner: codex

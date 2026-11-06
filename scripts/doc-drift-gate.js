@@ -64,6 +64,9 @@ const DEFAULT_EXCLUDES = [
   // its relative links intentionally dangle from hooks/tests/fixtures/ — rewriting them
   // would break the byte identity that hooks/tests/*.sh pin against.
   `${HOOK_TESTS_DIR}/fixtures/pre-consult-discuss-review-loop-config.md`,
+  // Frozen pre-SSOT roster (2026-11-06): the old built-in seat defaults as a roster file, used by the resolver suites
+  // through resolve-legacy-fixture.sh. Its relative links dangle from hooks/tests/fixtures/ for the same reason.
+  `${HOOK_TESTS_DIR}/fixtures/review-loop-roster.pre-ssot-2026-11-06.md`,
   // Fast path in front of the general nested-git-root rule below (isNestedGitRoot):
   // live background-agent worktrees under .claude/worktrees/ are separate git repos
   // whose scripts/... references resolve against THEIR OWN root, not this scan's

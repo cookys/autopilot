@@ -51,7 +51,7 @@ assert_r23_probe_unknown_js_cla
 assert_r36_resolve_review_loop() {
   unset REVIEW_LOOP_CONFIG_OVERRIDE
   export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/r36-no-topology.json"
-  local SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+  local SCRIPT="$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh"
   local SCDIR="$TEST_TMP/r36-scorecard"
   local CFG="$TEST_TMP/r36-impl-codex.md"
   mkdir -p "$SCDIR"
@@ -129,7 +129,7 @@ qc_panel_efforts: high
 qc_panel_endpoints: @none
 EOF
   local ENGINE
-  ENGINE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" AUTOPILOT_TOPOLOGY_FILE="$TOPO" bash "$REPO_ROOT/scripts/resolve-review-loop.sh" --field consult_engine 2>/dev/null)" || true
+  ENGINE="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" AUTOPILOT_TOPOLOGY_FILE="$TOPO" bash "$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh" --field consult_engine 2>/dev/null)" || true
   # RED at 2678cf10addf008cd9e1186f63ce59a8d5153ba2: consult_engine=gemini-flash (qc_panel alias not excluded)
   assert_neq "$ENGINE" "gemini-flash" "r42: consult auto does not pick qc_panel gemini-flash alias after normalize_agy_alias"
   assert_eq "$ENGINE" "minimax-m3" "r42: consult auto picks the next ladder seat after excluding the aliased qc_panel engine"

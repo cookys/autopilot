@@ -119,7 +119,7 @@ stored=$(grep -o '"status":"[a-z]*"' "$SCORECARD_DIR/scorecard.jsonl" | head -1)
 # (b) the same OLD row does NOT get tier 'low' from resolve-review-loop.sh
 # =============================================================================
 IMPL_CFG="$TESTDIR/impl-cfg.md"
-printf -- '- implementer_engine: A\n- implementer_runner: codex\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' > "$IMPL_CFG"
+printf -- '- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_engine: A\n- implementer_runner: codex\n- override: reviewer | until 2099-01-01 | test fixture seat\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n- implementer_effort: high\n- reviewer_effort: low\n' > "$IMPL_CFG"
 reset_stores
 echo "$(score_row A codex implementer 2026-01-01 2026-01-02)" | node "$ESC" record >/dev/null 2>&1
 RRL_OUT=$(REVIEW_LOOP_CONFIG_OVERRIDE="$IMPL_CFG" bash "$RRL" --scale-by-capability 2>/dev/null || true)
@@ -152,7 +152,7 @@ build_contract_fixture() {
     printf '#!/usr/bin/env bash\nexit 0\n' > tools/red.sh
     printf '#!/usr/bin/env bash\nexit 0\n' > tools/runner.sh
     chmod +x tools/red.sh tools/runner.sh
-    printf -- '- implementer_engine: %s\n- implementer_runner: %s\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' "$engine" "$runner" > .claude/review-loop-config.md
+    printf -- '- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_engine: %s\n- implementer_runner: %s\n- override: reviewer | until 2099-01-01 | test fixture seat\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n- implementer_effort: high\n- reviewer_effort: low\n' "$engine" "$runner" > .claude/review-loop-config.md
     git add -A
     git commit -qm init
   ) >/dev/null
@@ -249,7 +249,7 @@ adm_sh=$(echo "$SS_B_SHADOW" | jq_get admission_status); wr_sh=$(echo "$SS_B_SHA
   || bad "strike2: admission_status=$adm_sh would_requalify=$wr_sh under shadow"
 
 IMPL_CFG_B="$TESTDIR/impl-cfg-b.md"
-printf -- '- implementer_engine: B\n- implementer_runner: codex\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n' > "$IMPL_CFG_B"
+printf -- '- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_engine: B\n- implementer_runner: codex\n- override: reviewer | until 2099-01-01 | test fixture seat\n- reviewer_engine: claude-opus\n- reviewer_runner: claude-native\n- implementer_effort: high\n- reviewer_effort: low\n' > "$IMPL_CFG_B"
 echo "$(score_row B codex implementer 2026-06-01 2099-01-01)" | node "$ESC" record >/dev/null 2>&1
 SH_B_IMPL=$(seat_hash B codex implementer)
 {

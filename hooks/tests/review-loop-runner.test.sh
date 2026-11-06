@@ -2,7 +2,7 @@
 . "$(dirname "$0")/lib.sh"
 
 # Hermetic: an empty config override pins the resolver's built-in default reviewer
-# (DEF_REV_ENGINE in scripts/resolve-review-loop.sh) so this asserts the runner's
+# (reviewer_engine in project-config-template/review-loop-config.md) so this asserts the runner's
 # capture plumbing, not the repo's live dogfood roster (Board decision A → MiniMax-M3).
 # The expected name is read from that assignment, not hardcoded: a shipped-default
 # change must not silently rot this assertion (f3f539d99 moved gpt-5.5 → gpt-6.1-sol
@@ -31,9 +31,9 @@ NODE
 assert_eq "0" "$EXIT" "review-loop JS capture process exits 0"
 assert_contains "$OUT" "status=0" "review-loop runner preserves child exit 0"
 assert_contains "$OUT" "parse=ok" "review-loop runner parses JSON"
-# Single source of truth: the shipped default lives only in the resolver.
-DEF_REV="$(sed -n 's/^DEF_REV_ENGINE="\([^"]*\)".*/\1/p' "$REPO_ROOT/scripts/resolve-review-loop.sh" | head -n 1)"
-[ -n "$DEF_REV" ] || fail "DEF_REV_ENGINE assignment missing or empty in scripts/resolve-review-loop.sh"
+# Single source of truth: the shipped default lives only in the roster template.
+DEF_REV="$(sed -n 's/^- *reviewer_engine: *\([^ #]*\).*/\1/p' "$REPO_ROOT/project-config-template/review-loop-config.md" | head -n 1)"
+[ -n "$DEF_REV" ] || fail "reviewer_engine missing or empty in project-config-template/review-loop-config.md"
 assert_contains "$OUT" "reviewer=${DEF_REV}" "review-loop runner captures reviewer engine"
 assert_contains "$OUT" "qualified=false" "review-loop runner captures fail-closed scorecard state"
 assert_contains "$OUT" "fallback=[]" "review-loop runner captures empty scorecard ladder"
@@ -170,6 +170,7 @@ const valid = {
   min_panel_size: 3,
   on_engine_unavailable: 'ask',
   reviewer_engine_low_risk: '',
+  roster_overrides: [],
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
@@ -281,6 +282,7 @@ const valid = {
   min_panel_size: 3,
   on_engine_unavailable: 'ask',
   reviewer_engine_low_risk: '',
+  roster_overrides: [],
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
@@ -411,6 +413,7 @@ const partial = {
   min_panel_size: 3,
   on_engine_unavailable: 'ask',
   reviewer_engine_low_risk: '',
+  roster_overrides: [],
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
@@ -520,6 +523,7 @@ const invalid = {
   min_panel_size: 3,
   on_engine_unavailable: 'ask',
   reviewer_engine_low_risk: '',
+  roster_overrides: [],
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
@@ -629,6 +633,7 @@ const valid = {
   min_panel_size: 3,
   on_engine_unavailable: 'ask',
   reviewer_engine_low_risk: '',
+  roster_overrides: [],
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
@@ -734,6 +739,7 @@ const valid = {
   min_panel_size: 3,
   on_engine_unavailable: 'ask',
   reviewer_engine_low_risk: '',
+  roster_overrides: [],
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],
@@ -843,6 +849,7 @@ const valid = {
   min_panel_size: 3,
   on_engine_unavailable: 'ask',
   reviewer_engine_low_risk: '',
+  roster_overrides: [],
   reviewer_effort_low_risk: '',
   on_family_conflict: 'fallback',
   reviewer_fallback_preference: [],

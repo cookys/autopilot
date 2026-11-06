@@ -411,7 +411,7 @@ function deriveStrictL5InvocationPolicy(resolved, level = 'l5', options = {}) {
     if (profile.verification_author === 'required') {
       fail(
         'strict_l5_provider_roster_incomplete',
-        'strict /l5 requires the verification-author seat: set verification_author_present: true and verification_author_engine/runner/effort/endpoint in .claude/review-loop-config.md (l4 does not require it)',
+        'strict /l5 requires the verification-author seat: set verification_author_present: true and verification_author_engine/runner/effort/endpoint in the roster (project-config-template/review-loop-config.md), or in a verification_author override block of .claude/review-loop-config.md (l4 does not require it)',
       );
     }
   } else {

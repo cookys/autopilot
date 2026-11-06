@@ -65,8 +65,13 @@ assert_contains "$OUT" '"dispatcher_called": false' "hetero: nothing was dispatc
 
 # ─── resolver reviewer_engine path: template copy with reviewer_engine: claude-opus ───
 export AUTOPILOT_CONFIG_FILE="$TEST_TMP/no-config.json" AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-topology.json"
-cp "$REPO_ROOT/project-config-template/review-loop-config.md" "$TEST_TMP/tpl.md"
-sed -i -E 's/^- reviewer_engine:.*/- reviewer_engine: claude-opus/; s/^- reviewer_runner:.*/- reviewer_runner: claude-native/' "$TEST_TMP/tpl.md"
+# The roster is the only place seats live: the repo file keeps a dated reviewer override.
+cat > "$TEST_TMP/tpl.md" <<'SEAT'
+- override: reviewer | until 2099-01-01 | test fixture seat
+- reviewer_engine: claude-opus
+- reviewer_runner: claude-native
+- reviewer_effort: high
+SEAT
 # Pin the consult/discuss switches explicitly so the fixture never rides a changed default (the
 # consult-discuss-switch suite's Population B rule). Appended last; a later key line wins.
 cat >> "$TEST_TMP/tpl.md" <<'PIN'

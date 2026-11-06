@@ -45,7 +45,7 @@ assert_contains "$docout" 'brokep: token missing' "doctor flags the missing toke
 REPO="$WORK/repo"; mkdir -p "$REPO/.claude"
 git -C "$REPO" init -q >/dev/null 2>&1
 git -C "$REPO" remote add origin https://example.com/myproj.git
-printf -- '- reviewer_endpoint: glm\n- implementer_endpoint: mm\n' > "$REPO/.claude/review-loop-config.md"
+printf -- '- override: reviewer | until 2099-01-01 | test fixture seat\n- reviewer_engine: GLM-5.3\n- reviewer_runner: cc-shim\n- reviewer_effort: high\n- reviewer_endpoint: glm\n- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_engine: gpt-6.1-sol\n- implementer_runner: codex\n- implementer_effort: high\n- implementer_endpoint: mm\n' > "$REPO/.claude/review-loop-config.md"
 # glm already in base; put mm in the per-repo overlay
 ( cd "$REPO" && printf 'repo-TOK' | env HOME="$WORK/home" AUTOPILOT_ENDPOINTS_ENV="$BASE" node "$CLI" endpoints set mm --url https://m --token-stdin --repo ) >/dev/null 2>&1
 assert_file_exists "$WORK/endpoints.d/example_com_myproj.env" "set --repo wrote the keyed overlay file"

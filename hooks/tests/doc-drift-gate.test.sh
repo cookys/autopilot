@@ -308,6 +308,19 @@ assert_not_contains "$__GATE_OUT" "evals/rolekit" "no rolekit path is reported"
 __GATE_OUT="$(env -u REPO_LAYOUT_REGISTRY node "$GATE_JS" "$REPO_ROOT" --repo-root "$REPO_ROOT" 2>&1)"; __GATE_EXIT=$?
 assert_exit_code "$__GATE_EXIT" 0 "whole repo passes the baseline gate (rolekit kits/placebo included)"
 
+# 7c. The frozen pre-SSOT roster fixture keeps its dangling relative links: excluded by exact path, drift at any sibling path.
+echo "Testing frozen pre-SSOT roster fixture exclusion..."
+FR="$TEST_TMP/roster-fixture-excl"
+mkdir -p "$FR/hooks/tests/fixtures"
+printf '# R\nSee [r](../references/gone.md).\n' > "$FR/hooks/tests/fixtures/review-loop-roster.pre-ssot-2026-11-06.md"
+__GATE_OUT="$(node "$GATE_JS" "$FR" --repo-root "$FR" 2>&1)"; __GATE_EXIT=$?
+assert_exit_code "$__GATE_EXIT" 0 "dangling links in the frozen pre-SSOT roster fixture are excluded"
+printf '# R\nSee [r](../references/gone.md).\n' > "$FR/hooks/tests/fixtures/review-loop-roster.other.md"
+__GATE_OUT="$(node "$GATE_JS" "$FR" --repo-root "$FR" 2>&1)"; __GATE_EXIT=$?
+assert_exit_code "$__GATE_EXIT" 1 "negative control: the same dangling link in a sibling fixture is drift"
+assert_contains "$__GATE_OUT" "review-loop-roster.other.md" "the sibling fixture is the reported failure"
+assert_not_contains "$__GATE_OUT" "pre-ssot" "the frozen fixture is not reported"
+
 # 8. Testing invalid command arguments/usage errors (exit 2)
 echo "Testing invalid usage..."
 run_gate "--exclude" # missing arg

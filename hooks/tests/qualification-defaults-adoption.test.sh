@@ -306,6 +306,7 @@ printf 'touch run.marker\n' > "$CONTRACT_REPO/tools/runner.sh"
 # adopted, so a GO here is a statement about the ADOPTED row.
 {
   printf '# Review Loop Config\n'
+  printf -- '- override: implementer | until 2099-01-01 | test fixture seat\n- implementer_effort: high\n'
   printf -- '- implementer_engine: %s\n' "$SEAT_ENGINE"
   printf -- '- implementer_runner: %s\n' "$SEAT_RUNNER"
 } > "$CONTRACT_REPO/.claude/review-loop-config.md"

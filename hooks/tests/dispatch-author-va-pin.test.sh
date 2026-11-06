@@ -111,10 +111,13 @@ mkdir -p docs/plans .claude
 printf "## Unit spec\nBody line.\n" > docs/plans/spec.md
 cat > .claude/review-loop-config.md <<EOF
 # Review Loop Config
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_runner: codex
+- override: reviewer | until 2099-01-01 | test fixture seat
 - reviewer_engine: claude-opus
 - reviewer_runner: claude-native
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible
@@ -123,6 +126,8 @@ cat > .claude/review-loop-config.md <<EOF
 - hetero_review: off
 - consult_dispatch: off
 - discuss_dispatch: off
+- implementer_effort: high
+- reviewer_effort: low
 EOF
 git add . >/dev/null 2>&1
 git commit -m "B" >/dev/null 2>&1

@@ -110,8 +110,11 @@ fs.writeFileSync(path.join(repo, 'src', 'value.txt'), [
   '',
 ].join('\n'));
 fs.writeFileSync(path.join(repo, '.claude', 'review-loop-config.md'), [
+  '- override: implementer | until 2099-01-01 | test fixture seat',
   '- implementer_engine: gpt-5.3-codex-spark',
   '- implementer_runner: codex',
+  '- implementer_effort: high',
+  '- override: reviewer | until 2099-01-01 | test fixture seat',
   '- reviewer_engine: claude-opus',
   '- reviewer_runner: claude-native',
   '- reviewer_effort: xhigh',
@@ -890,8 +893,11 @@ const offGov = JSON.parse(JSON.stringify(projectGovernance));
 delete offGov.mission_convergence;
 writeJson(path.join(offRepo, '.claude', 'owner-kernel-governance.json'), offGov);
 fs.writeFileSync(path.join(offRepo, '.claude', 'review-loop-config.md'), [
+  '- override: implementer | until 2099-01-01 | test fixture seat',
   '- implementer_engine: gpt-5.3-codex-spark',
   '- implementer_runner: codex',
+  '- implementer_effort: high',
+  '- override: reviewer | until 2099-01-01 | test fixture seat',
   '- reviewer_engine: claude-opus',
   '- reviewer_runner: claude-native',
   '- reviewer_effort: xhigh',

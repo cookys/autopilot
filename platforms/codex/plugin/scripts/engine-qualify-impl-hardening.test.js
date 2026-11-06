@@ -583,9 +583,15 @@ emit({ status: 'committed', commit: sha, files_changed: Object.keys(files).lengt
   // dispatch-contract check: the projected row is admitted as provisional assurance.
   const cfgSrc = fs.readFileSync(path.join(__dirname, '..', 'project-config-template', 'review-loop-config.md'), 'utf8');
   const cfgPath = path.join(tempRoot, 'review-loop-config.md');
-  fs.writeFileSync(cfgPath, cfgSrc
-    .replace(/^- implementer_engine:.*$/m, '- implementer_engine: grok-4.5')
-    .replace(/^- implementer_runner:.*$/m, '- implementer_runner: grok'));
+  // The roster is the only place seats live; the repo file keeps the grok implementer as a dated override.
+  const effort = (/^- implementer_effort:\s*(.*?)\s*$/m.exec(cfgSrc) || [])[1] || 'high';
+  fs.writeFileSync(cfgPath, [
+    '- override: implementer | until 2099-01-01 | test fixture seat',
+    '- implementer_engine: grok-4.5',
+    '- implementer_runner: grok',
+    `- implementer_effort: ${effort}`,
+    '',
+  ].join('\n'));
   const gateRepo = fs.mkdtempSync(path.join(tempRoot, 'gate-repo-'));
   const gitEnv = {
     ...process.env,

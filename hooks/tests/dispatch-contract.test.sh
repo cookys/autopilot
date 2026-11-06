@@ -113,10 +113,15 @@ EOF
 
 cat > .claude/review-loop-config.md <<'EOF'
 # Review Loop Config
+- override: implementer | until 2099-01-01 | test fixture seat
+- implementer_effort: high
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_runner: codex
+- override: reviewer | until 2099-01-01 | test fixture seat
+- reviewer_effort: high
 - reviewer_engine: claude-opus
 - reviewer_runner: claude-native
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible
@@ -1293,12 +1298,16 @@ EOF
     cd "$MINI_REPO"
     cat > .claude/review-loop-config.md <<'EOF'
 # Review Loop Config
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_runner: codex
+- override: reviewer | until 2099-01-01 | test fixture seat
+- reviewer_effort: high
 - reviewer_engine: claude-opus
 - reviewer_runner: claude-native
 - implementer_effort: high
 - implementer_endpoint: wallet_a
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible
@@ -1399,10 +1408,15 @@ EOF
     cd "$MINI_REPO"
     cat > .claude/review-loop-config.md <<'EOF'
 # Review Loop Config
+- override: implementer | until 2099-01-01 | test fixture seat
+- implementer_effort: high
 - implementer_engine: gpt-5.3-codex-spark
 - implementer_runner: codex
+- override: reviewer | until 2099-01-01 | test fixture seat
+- reviewer_effort: high
 - reviewer_engine: claude-opus
 - reviewer_runner: claude-native
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: anthropic-compatible
@@ -1513,9 +1527,11 @@ EOF
   git checkout -- . 2>/dev/null || true
   cat > "$MINI_REPO/.claude/review-loop-config.md" <<'EOF'
 # Review Loop Config (l6 family decorrelation regression)
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: grok-4.5
 - implementer_runner: grok
 - implementer_effort: high
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: Gemini 3.5 Flash (High)
 - verification_author_runner: agy

@@ -274,7 +274,7 @@ EMPTY_SCDIR="$TEST_TMP/parity-empty-scorecard"
 mkdir -p "$EMPTY_SCDIR"
 for PARITY_RUNNER in $SCHEMA_RUNNERS; do
   RES_CFG="$TEST_TMP/parity-qc-${PARITY_RUNNER}.md"
-  printf -- '- qc_panel: fixture-model\n- qc_panel_runners: %s\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' "$PARITY_RUNNER" > "$RES_CFG"
+  printf -- '- override: qc_panel | until 2099-01-01 | test fixture seat\n- qc_panel: fixture-model\n- qc_panel_runners: %s\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' "$PARITY_RUNNER" > "$RES_CFG"
   RES_OVR="$TEST_TMP/parity-qc-${PARITY_RUNNER}-ovr.json"
   printf '{"schema":1,"overrides":[{"engine":"fixture-model","runner":"%s","role":"qc_panel","reason":"parity fixture admission","operator":"test","expires":"2099-12-31"}]}\n' "$PARITY_RUNNER" > "$RES_OVR"
   RES_STDOUT="$TEST_TMP/parity-res-${PARITY_RUNNER}.out"

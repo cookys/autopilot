@@ -370,7 +370,7 @@ assert_eq "3" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$MISSPELL_CONSULT_CFG" bash "$SCRI
 # from topology / native fallback, so MiniMax-M3@cc-shim resolved to opus@claude-native
 # with a generic warning. The peer's plan got READY with zero findings from that chair.
 DECL_CFG="$TEST_TMP/declared-chair.md"
-cp "$REPO_ROOT/.claude/review-loop-config.md" "$DECL_CFG"
+cp "$FROZEN_CFG" "$DECL_CFG"
 python3 - "$DECL_CFG" <<'PY2'
 import sys,re
 p=sys.argv[1]; s=open(p).read()

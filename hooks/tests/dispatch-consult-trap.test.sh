@@ -10,7 +10,7 @@ SCRIPT="$REPO_ROOT/scripts/dispatch-consult.sh"
 Q="$TEST_TMP/question.txt"; printf 'which file?\n' > "$Q"
 ART="$TEST_TMP/artifact.diff"; printf 'diff --git a/x b/x\n+line\n' > "$ART"
 ON_CFG="$TEST_TMP/on.md"
-printf -- '- consult_engine: gpt-5.6\n- consult_runner: codex\n- consult_effort: high\n- consult_dispatch: on\n' > "$ON_CFG"
+printf -- '- override: consult | until 2099-01-01 | test fixture seat\n- consult_engine: gpt-5.6\n- consult_runner: codex\n- consult_effort: high\n- consult_dispatch: on\n' > "$ON_CFG"
 OVR="$TEST_TMP/override.json"
 cat > "$OVR" <<'JSON'
 {"schema":1,"overrides":[
@@ -94,7 +94,7 @@ OWNER_OK="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[
 assert_eq "yes" "$OWNER_OK" ".autopilot-owner carries integer pid + start_time"
 
 # --- negative control: strip the traps => the same SIGTERM scenario leaves the dir ---
-MUT="$TEST_TMP/mut"; mkdir -p "$MUT"
+MUT="$TEST_TMP/mut"; mkdir -p "$MUT" ; [ -e "$TEST_TMP/project-config-template" ] || ln -s "$REPO_ROOT/project-config-template" "$TEST_TMP/project-config-template"
 for f in "$REPO_ROOT"/scripts/*; do ln -s "$f" "$MUT/$(basename "$f")"; done
 rm "$MUT/dispatch-consult.sh"
 grep -v '^trap ' "$SCRIPT" > "$MUT/dispatch-consult.sh"; chmod +x "$MUT/dispatch-consult.sh"

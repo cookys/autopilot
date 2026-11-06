@@ -849,6 +849,7 @@ execFileSync('git', ['-C', repo, 'init', '-q']);
 execFileSync('git', ['-C', repo, 'config', 'user.email', 't@t']);
 execFileSync('git', ['-C', repo, 'config', 'user.name', 't']);
 fs.writeFileSync(path.join(repo, '.claude', 'review-loop-config.md'), [
+  '- override: implementer | until 2099-01-01 | test fixture seat',
   `- implementer_engine: ${dispatchModel}`,
   '- implementer_effort: high',
   '- implementer_runner: agy',

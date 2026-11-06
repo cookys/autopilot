@@ -7,7 +7,7 @@
 # exit 3, and markdown-list regex scoping (a JS-literal line is not a config line).
 . "$(dirname "$0")/lib.sh"
 
-RESOLVER="$REPO_ROOT/scripts/resolve-review-loop.sh"
+RESOLVER="$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh"
 unset REVIEW_LOOP_CONFIG_OVERRIDE
 jget() { node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const v=j[process.argv[1]];process.stdout.write(v===undefined?"<absent>":(typeof v==="object"?JSON.stringify(v):String(v)))})' "$1"; }
 
@@ -31,7 +31,9 @@ assert_not_contains "$(printf '%s' "$OUT" | jget capability_warnings)" "unknown_
 
 # ── 3. on without budgets ⇒ exit 3; on with budgets ⇒ explicit ──
 CFG_ON="$TEST_TMP/on.md"; printf -- '- unknown_escalation: on\n' > "$CFG_ON"
-REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON" bash "$RESOLVER" >/dev/null 2>"$TEST_TMP/on.err"; RC=$?
+# The roster carries the budgets (non-seat knobs follow it), so the "missing budgets" case needs a roster without them.
+grep -v '^- unknown_budget_u' "$REPO_ROOT/hooks/tests/fixtures/review-loop-roster.pre-ssot-2026-11-06.md" > "$TEST_TMP/roster-no-budgets.md"
+REVIEW_LOOP_ROSTER_TEMPLATE="$TEST_TMP/roster-no-budgets.md" REVIEW_LOOP_CONFIG_OVERRIDE="$CFG_ON" bash "$RESOLVER" >/dev/null 2>"$TEST_TMP/on.err"; RC=$?
 assert_eq "3" "$RC" "on without budgets exits 3"
 assert_contains "$(cat "$TEST_TMP/on.err")" "unknown_budget_u1" "on-without-budgets message names the missing field"
 printf -- '- unknown_escalation: on\n- unknown_budget_u1: 3\n- unknown_budget_u2: 1\n- unknown_budget_u3: 0\n' > "$CFG_ON"

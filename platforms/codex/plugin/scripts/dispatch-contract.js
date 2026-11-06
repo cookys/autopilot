@@ -473,31 +473,6 @@ function hasKey(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
-function withResolverConfig(configPath, requiredEngineRole) {
-  let raw;
-  try {
-    raw = fs.readFileSync(configPath, 'utf8');
-  } catch (err) {
-    return { path: configPath };
-  }
-
-  if (requiredEngineRole !== 'verification-author') {
-    return { path: configPath };
-  }
-
-  const hasPresent = /^\s*-\s*verification_author_present\s*:\s*true\s*$/im.test(raw);
-  const hasEffort = /^\s*-\s*verification_author_effort\s*:/im.test(raw);
-  if (!hasPresent || hasEffort) {
-    return { path: configPath };
-  }
-
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-contract-'));
-  const tempFile = path.join(tempDir, `review-loop-config-${Date.now()}.md`);
-  const updated = `${raw.trimEnd()}\n- verification_author_effort: high\n`;
-  fs.writeFileSync(tempFile, `${updated}\n`, 'utf8');
-  return { path: tempFile, isTemp: true };
-}
-
 function assertNoExtra(pathName, obj, allowedKeys, errors) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
     errors.push(`${pathName}: expected object`);
@@ -1152,31 +1127,16 @@ function resolveEngine(repo, reasons, resolvedEngine, requiredEngineRole = 'impl
     return;
   }
 
+  // The resolver returns the effective view (roster overlaid by this repo file), so the
+  // seat tuple here is what a run would use; no per-role patching of the repo file.
   let resolvedConfig;
-  const resolverConfig = withResolverConfig(configPath, requiredEngineRole);
   try {
     resolvedConfig = runResolverJson(repo, path.join(SCRIPT_DIR, 'resolve-review-loop.sh'), [], {
-      REVIEW_LOOP_CONFIG_OVERRIDE: resolverConfig.path,
+      REVIEW_LOOP_CONFIG_OVERRIDE: configPath,
     });
   } catch (err) {
-    if (resolverConfig.isTemp) {
-      try {
-        fs.unlinkSync(resolverConfig.path);
-        fs.rmdirSync(path.dirname(resolverConfig.path), { recursive: false });
-      } catch (cleanupErr) {
-        // Ignore cleanup failure; keep original error path for deterministic diagnostics.
-      }
-    }
     reasons.push('engine: failed to resolve engine tuple via canonical resolver');
     return;
-  }
-  if (resolverConfig.isTemp) {
-    try {
-      fs.unlinkSync(resolverConfig.path);
-      fs.rmdirSync(path.dirname(resolverConfig.path), { recursive: false });
-    } catch (cleanupErr) {
-      // Ignore cleanup failure; temporary files are under /tmp and best-effort.
-    }
   }
 
   const prefix = getResolverFieldPrefix(requiredEngineRole);

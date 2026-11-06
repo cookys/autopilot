@@ -391,6 +391,7 @@ mkdir -p "$SCRATCH_10D/.claude"
 )
 cat << 'CFG_10D_EOF' > "$SCRATCH_10D/.claude/review-loop-config.md"
 ## Settings
+- override: qc_panel | until 2099-01-01 | test fixture seats
 - qc_panel: gpt-5.5, gemini-flash, MiniMax-M3
 - qc_panel_runners: codex, agy, cc-shim
 - qc_panel_efforts: high, low, high
@@ -786,6 +787,7 @@ assert_contains "$(cat "$LEDGER/review-p_fin2f/g1/hands-brief.md")" "Finding f_s
 FIN2G_DIR="$TEST_TMP/scripts-missing-suppression"
 rm -rf "$FIN2G_DIR"
 cp -a "$(dirname "$SCRIPT")" "$FIN2G_DIR"
+[ -e "$TEST_TMP/project-config-template" ] || ln -s "$REPO_ROOT/project-config-template" "$TEST_TMP/project-config-template"  # the roster lives beside the copied scripts dir
 rm -f "$FIN2G_DIR/check-dispatch-suppression.sh"
 FIN2G_MISSING="$(cd "$FIN2G_DIR" && pwd)/check-dispatch-suppression.sh"
 mkdir -p "$LEDGER/review-p_fin2g/g1"
@@ -1879,7 +1881,7 @@ pk_check() { # <script> <ledger> <packets-file>
 # A copy of the scripts with ONE guard line removed: pk_mutant <name> <file> <exact old text> <new text>
 pk_mutant() {
   local m="$TEST_TMP/mut-$1"
-  if [ ! -d "$m" ]; then mkdir -p "$m"; cp -r "$REPO_ROOT/scripts" "$m/scripts"; ln -s "$REPO_ROOT/src" "$m/src"; fi
+  if [ ! -d "$m" ]; then mkdir -p "$m"; cp -r "$REPO_ROOT/scripts" "$m/scripts"; ln -s "$REPO_ROOT/src" "$m/src"; ln -s "$REPO_ROOT/project-config-template" "$m/project-config-template"; fi
   node -e '
     const fs = require("fs"); const f = process.argv[1], o = process.argv[2], n = process.argv[3];
     const s = fs.readFileSync(f, "utf8"); if (s.split(o).length !== 2) { console.error("MUTATION TARGET NOT UNIQUE: " + o); process.exit(3); }

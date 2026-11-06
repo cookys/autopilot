@@ -2,7 +2,7 @@
 # Regression coverage for loud, unconditional QC-panel companion validation.
 . "$(dirname "$0")/lib.sh"
 
-SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+SCRIPT="$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh"
 unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_FILE
 export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-such-topology.json"
 

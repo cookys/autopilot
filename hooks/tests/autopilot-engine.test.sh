@@ -2207,7 +2207,9 @@ execFileSync(process.execPath, [path.join(root, 'scripts', 'engine-capability-st
   '--store', process.env.ENGINE_CAPABILITY_DIR], { stdio: ['ignore', 'ignore', 'pipe'] });
 const resolvedResult = resolveReviewLoopJson(['--check-scorecard'], {
   cwd: root,
-  env: { ...process.env, REVIEW_LOOP_CONFIG_OVERRIDE: path.join(root, 'hooks', 'tests', 'fixtures', 'review-loop-config.frozen-2026-09-13.md') },
+  // The frozen file plays the ROSTER (seats may only live in the roster or in an override block);
+  // the repo layer is /dev/null, so the resolved seats are exactly the frozen file's.
+  env: { ...process.env, REVIEW_LOOP_ROSTER_TEMPLATE: path.join(root, 'hooks', 'tests', 'fixtures', 'review-loop-config.frozen-2026-09-13.md'), REVIEW_LOOP_CONFIG_OVERRIDE: '/dev/null' },
 });
 if (resolvedResult.status !== 0 || !resolvedResult.result) {
   throw new Error(`fixture roster did not resolve: status=${resolvedResult.status} ${String(resolvedResult.stderr || '').slice(0, 300)}`);
@@ -4148,6 +4150,7 @@ const validPayload = {
   same_runner_dual_seat: false,
   override_admitted_seats: [],
   review_fresh_context: 'on',
+  roster_overrides: [],
   strict_l5_policy_override: '',
   brain_seat: null,
 };

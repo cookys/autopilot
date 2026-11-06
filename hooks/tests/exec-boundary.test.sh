@@ -101,6 +101,128 @@ assert_eq "0" "$EXIT" "unterminated heredoc body is data"
 run_hook 'echo "$(rm -rf /etc/x)"'; EXIT=$?
 assert_eq "2" "$EXIT" "E2: rm inside \$( ) within double quotes denied"
 
+# Literal commands are read from quoted heredocs so no shell layer rewrites them.
+cmd_of() { cat; }
+expect_exit() { # $1 = expected exit, $2 = label; command on stdin
+  local c; c="$(cmd_of)"
+  run_hook "$c"; EXIT=$?
+  assert_eq "$1" "$EXIT" "$2"
+}
+
+# ── Class A (g1 review): quote state across $( ) / backtick inside double quotes.
+# The substitution body is a fresh command context: separators split, quotes nest.
+expect_exit 2 "E2/A: rm after ; inside \"\$( )\" denied" <<'X'
+echo "$(true; rm -rf /etc/x)"
+X
+expect_exit 2 "E2/A: rm after && inside \"\$( )\" denied" <<'X'
+echo "$(true && rm -rf /etc/x)"
+X
+expect_exit 2 "E2/A: rm after ; inside backticks in double quotes denied" <<'X'
+echo "`ls; rm -rf /etc/x`"
+X
+expect_exit 2 "E2/A: inner quote inside \$( ) does not close the outer string" <<'X'
+echo "$(printf '"')"; rm -rf /etc/x
+X
+expect_exit 2 "E2/A: rm after a double-quoted \$( ) on the same line denied" <<'X'
+echo "$(date)"; rm -rf /etc/x
+X
+expect_exit 0 "E2/A: separator inside a quoted string inside \$( ) is data" <<'X'
+echo "$(printf 'a; rm -rf /etc/x')" > note.txt
+X
+
+# ── Class B (g1 review): heredoc opener misrecognised; the rest of the command was dropped.
+expect_exit 2 "E2/B: here-string <<< is not a heredoc (space)" <<'X'
+cat <<< hi
+ls; rm -rf /etc/x
+X
+expect_exit 2 "E2/B: here-string <<<WORD is not a heredoc" <<'X'
+cat <<<EOF
+true; rm -rf /etc/x
+X
+expect_exit 2 "E2/B: here-string then && continuation" <<'X'
+cat <<< hello &&
+rm -rf /etc/x
+X
+expect_exit 2 "E2/B: <<\\EOF is a quoted delimiter, rest after the body still judged" <<'X'
+cat <<\EOF
+body
+EOF
+ls; rm -rf /etc/x
+X
+expect_exit 2 "E2/B: <<E\"OF\" delimiter, rest after the body still judged" <<'X'
+cat <<E"OF"
+body
+EOF
+ls && rm -rf /etc/x
+X
+expect_exit 2 "E2/B: arithmetic shift in \$(( )) is not a heredoc" <<'X'
+echo $((1<<4))
+ls && rm -rf /etc/x
+X
+expect_exit 2 "E2/B: arithmetic shift then ; and newline" <<'X'
+echo $((8<<1));
+rm -rf /etc/x
+X
+expect_exit 2 "E2/B: spaced arithmetic shift then &&" <<'X'
+echo $((1 << 2)) &&
+rm -rf /etc/x
+X
+expect_exit 2 "E2/B: unterminated heredoc rewinds and the following lines are judged" <<'X'
+cat <<NOSUCHEND
+ls; rm -rf /etc/x
+X
+expect_exit 0 "E2/B: <<\\EOF body is literal text" <<'X'
+cat <<\EOF
+run; rm -rf /
+EOF
+X
+expect_exit 0 "E2/B: <<E\"OF\" body is literal text" <<'X'
+cat <<E"OF"
+run; rm -rf /
+EOF
+X
+
+# ── Class C (g1 review): ANSI-C $'...' quoting, where \' does not close the string.
+expect_exit 2 "E2/C: \$'it\\'s' is one string, rm after ; denied" <<'X'
+echo $'it\'s'; rm -rf /etc/x
+X
+expect_exit 2 "E2/C: printf \$'it\\'s\\n' then rm denied" <<'X'
+printf $'it\'s\n'; rm -rf /etc/x
+X
+expect_exit 2 "E2/C: \$'\\'' then rm denied" <<'X'
+echo $'\'' ; rm -rf /etc/x
+X
+expect_exit 0 "E2/C: separator inside \$'...' is data" <<'X'
+echo $'a; rm -rf /' > note.txt
+X
+
+# ── Class D (g1 review): an unquoted heredoc body runs $( ) and backticks.
+expect_exit 2 "E2/D: rm inside \$( ) in a bare heredoc body denied" <<'X'
+cat <<EOF
+$(rm -rf /etc/x)
+EOF
+X
+expect_exit 2 "E2/D: rm inside backticks in a bare heredoc body denied" <<'X'
+cat <<EOF
+text `rm -rf /etc/x` more
+EOF
+X
+expect_exit 2 "E2/D: rm after ; inside \$( ) in a <<-EOF body denied" <<'X'
+cat <<-EOF
+	$(true; rm -rf /etc/x)
+	EOF
+X
+expect_exit 0 "E2/D: \$( ) in a QUOTED heredoc body is literal text" <<'X'
+cat <<'EOF'
+$(rm -rf /etc/x)
+EOF
+X
+expect_exit 0 "E2/D: harmless \$( ) plus rm prose in a bare heredoc body passes" <<'X'
+cat <<EOF
+today is $(date); then run: ls && rm -rf /
+EOF
+X
+
 # ── Benign commands pass (allow-by-default) ──
 for cmd in "ls -la" "git status" "npm test" "grep -r foo src/"; do
   run_hook "$cmd"; EXIT=$?

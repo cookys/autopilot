@@ -81,7 +81,7 @@ function validateJudgeReply(text, req) {
         if (!cr || typeof cr.hit !== 'boolean') { errors.push(`${label}/${c.id} hit missing`); return; }
         if (cr.hit && !quoteOk(cr.quote, text2)) errors.push(`${label}/${c.id} quote is not verbatim`);
         // a non-hit criterion carries no quote; any non-empty quote is checked verbatim like the others
-        if (!cr.hit && cr.quote !== undefined && cr.quote !== '') {
+        if (!cr.hit && cr.quote !== '') {
           errors.push(`${label}/${c.id} non-hit criterion must have an empty quote`);
           if (!quoteOk(cr.quote, text2)) errors.push(`${label}/${c.id} quote is not verbatim`);
         }

@@ -22,6 +22,7 @@ const { gradeExam } = require('./grade');
 
 const ROUND_TIMEOUT_MS = 4 * 60 * 1000;
 const HARD_STOP_MS = 24 * 60 * 1000;
+const KILL_WAIT_MS = 2000 + 1000; // transport kill grace + a margin
 
 // call: async (prompt, round, {timeoutMs, signal}) => {text, ms, in_tokens_est, out_tokens_est}
 async function runExam(opts) {
@@ -29,6 +30,7 @@ async function runExam(opts) {
   const now = opts.now || Date.now;
   const roundTimeout = opts.roundTimeoutMs || ROUND_TIMEOUT_MS;
   const hardStop = opts.hardStopMs || HARD_STOP_MS;
+  const killWait = opts.killWaitMs || KILL_WAIT_MS;
   const started = now();
   const outputs = [];
   const rounds = [];
@@ -44,15 +46,20 @@ async function runExam(opts) {
     rec.timeout_ms = timeoutMs;
     const ctl = new AbortController();
     let timer;
+    const pending = Promise.resolve(opts.call(prompt, r, { timeoutMs, signal: ctl.signal }));
     try {
       const res = await Promise.race([
-        opts.call(prompt, r, { timeoutMs, signal: ctl.signal }),
+        pending,
         new Promise((_, rej) => { timer = setTimeout(() => { ctl.abort(); rej(Object.assign(new Error('round timeout'), { timeout: true })); }, timeoutMs); }),
       ]);
       outputs.push(res.text); rec.ms = res.ms; rec.in_tokens_est = res.in_tokens_est; rec.out_tokens_est = res.out_tokens_est;
     } catch (e) {
       outputs.push(''); rec.error = e.message; rec.timed_out = !!e.timeout || /timed? ?out/i.test(e.message); rec.ms = e.ms || null;
-    } finally { clearTimeout(timer); }
+    } finally {
+      clearTimeout(timer);
+      // a timed-out call is only abandoned once its process group is dead (SIGTERM, then SIGKILL after the grace)
+      if (ctl.signal.aborted) await Promise.race([pending.catch(() => {}), new Promise((res) => setTimeout(res, killWait))]);
+    }
     rounds.push(rec);
   }
   return {
@@ -71,13 +78,18 @@ function seedConfigDir(parent) {
 // A caller-supplied --config-dir must be a dedicated throwaway dir: refuse (throw) when its real path is, or is inside,
 // the real $HOME/.claude or $CLAUDE_CONFIG_DIR target, or when it holds anything but a regular .credentials.json.
 function realOrResolved(p) { try { return fs.realpathSync(p); } catch { return path.resolve(p); } }
-function isInside(child, parent) { const rel = path.relative(parent, child); return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel)); }
+function isInside(child, parent) {
+  const rel = path.relative(parent, child);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
+}
 function checkConfigDir(dir, env) {
   const e = env || process.env;
   let real;
   try { real = fs.realpathSync(dir); } catch { throw new Error(`--config-dir ${dir} does not exist`); }
   if (!fs.statSync(real).isDirectory()) throw new Error(`--config-dir ${dir} is not a directory`);
-  const realDirs = [path.join(e.HOME || os.homedir(), '.claude')];
+  const home = e.HOME || os.homedir();
+  if (real === realOrResolved(home)) throw new Error(`--config-dir ${dir} is the real $HOME; give a dedicated throwaway dir`);
+  const realDirs = [path.join(home, '.claude')];
   if (e.CLAUDE_CONFIG_DIR) realDirs.push(e.CLAUDE_CONFIG_DIR);
   realDirs.map(realOrResolved).forEach((rd) => {
     if (isInside(real, rd)) throw new Error(`--config-dir ${dir} is, or is inside, the real Claude config dir; give a dedicated throwaway dir`);
@@ -119,12 +131,21 @@ async function main() {
     let dir = a['config-dir'];
     if (!dir) { dir = seedConfigDir(os.tmpdir()); cleanupDir = dir; }
     const passEnv = { CLAUDE_CONFIG_DIR: dir };
-    call = (prompt, _round, ctl) => callProvider(prompt, { kind: a.kind, model: a.model, timeoutMs: ctl.timeoutMs, signal: ctl.signal, passEnv });
+    // LEAD_EXAM_* env vars are test seams only (stub provider, short timers); unset in real runs
+    const seam = (k) => (process.env[k] ? Number(process.env[k]) : undefined);
+    call = (prompt, _round, ctl) => callProvider(prompt, {
+      kind: a.kind, model: a.model, timeoutMs: ctl.timeoutMs, signal: ctl.signal, passEnv,
+      providerBin: process.env.LEAD_EXAM_PROVIDER_BIN || undefined, graceMs: seam('LEAD_EXAM_KILL_GRACE_MS'),
+    });
     name = a.name || a.model; model = a.model;
   }
   let record;
   try {
-    record = await runExam({ items, seed: a.seed, call, name, model, kind: a.kind, dry: a.dry });
+    record = await runExam({
+      items, seed: a.seed, call, name, model, kind: a.kind, dry: a.dry,
+      roundTimeoutMs: Number(process.env.LEAD_EXAM_ROUND_TIMEOUT_MS) || undefined, hardStopMs: Number(process.env.LEAD_EXAM_HARD_STOP_MS) || undefined,
+      killWaitMs: Number(process.env.LEAD_EXAM_KILL_GRACE_MS) ? Number(process.env.LEAD_EXAM_KILL_GRACE_MS) + 1000 : undefined,
+    });
   } finally {
     if (cleanupDir) {
       fs.rmSync(cleanupDir, { recursive: true, force: true });

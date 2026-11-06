@@ -60,3 +60,22 @@ test('accepted: a throwaway dir holding only .credentials.json (unit)', () => {
 });
 
 test.after(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
+
+// g3 item 1: ".." prefix is traversal only as a whole path segment; the real $HOME itself is refused even when it
+// is empty or holds only a credentials file.
+test('refused: a dir named ..scratch inside the real config dir (not a traversal, still inside)', () => {
+  const sneaky = path.join(realCfg, '..scratch');
+  fs.mkdirSync(sneaky);
+  fs.writeFileSync(path.join(sneaky, '.credentials.json'), 'FAKE-CREDENTIAL-NOT-REAL');
+  const { checkConfigDir } = require('../run');
+  assert.throws(() => checkConfigDir(sneaky, { HOME: fakeHome }), /real Claude config dir/);
+});
+
+for (const [label, files] of [['an empty HOME', []], ['a HOME holding only .credentials.json', ['.credentials.json']]]) {
+  test(`refused: the real $HOME itself (${label})`, () => {
+    const h = fs.mkdtempSync(path.join(tmp, 'home2-'));
+    files.forEach((f) => fs.writeFileSync(path.join(h, f), 'FAKE-CREDENTIAL-NOT-REAL'));
+    const { checkConfigDir } = require('../run');
+    assert.throws(() => checkConfigDir(h, { HOME: h }), /\$HOME/);
+  });
+}

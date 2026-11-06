@@ -50,3 +50,21 @@ test('quote rule unit: non-hit with empty quote ok; non-hit with fabricated quot
   assert.strictEqual(jd.validateJudgeReply(mk(false, 'not in output'), req).ok, false);
   assert.strictEqual(jd.validateJudgeReply(mk(true, 'not in output'), req).ok, false);
 });
+
+// g3 item 3: a non-hit criterion with no quote field at all is rejected; the quote must be the empty string.
+test('non-hit criterion with the quote field missing is rejected', () => {
+  const map = lib.deriveNames(items, SEED);
+  const req = jd.buildJudgeRequest(items, map, 2, { 'ex-1': 'hello world text' }, null);
+  const ex = { items: {}, hard_fails: [] };
+  req.items.forEach((it) => {
+    ex.items[it.id] = { answered: true, criteria: {} };
+    it.criteria.forEach((c) => { ex.items[it.id].criteria[c.id] = { hit: false, quote: '' }; if (c.max_count > 1) ex.items[it.id].criteria[c.id].count = 1; });
+  });
+  const reply = (e) => JSON.stringify({ reference_conflicts: [], examinees: { 'ex-1': e } });
+  assert.strictEqual(jd.validateJudgeReply(reply(ex), req).ok, true);
+  const it = req.items.find((i) => i.criteria.length);
+  delete ex.items[it.id].criteria[it.criteria[0].id].quote;
+  const v = jd.validateJudgeReply(reply(ex), req);
+  assert.strictEqual(v.ok, false);
+  assert.match(v.errors.join('\n'), /empty quote/);
+});

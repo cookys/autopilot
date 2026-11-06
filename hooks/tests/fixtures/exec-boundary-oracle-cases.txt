@@ -1,0 +1,402 @@
+#@ Corpus for hooks/tests/exec-boundary-oracle.js (run by exec-boundary-oracle.test.sh).
+#@ Format: a header line `#@ <id> <expect>` followed by the raw command text up to the next header
+#@ (the final newline of the block is not part of the command). expect = deny | allow | oracle.
+#@ deny / allow: the hook verdict must be exactly that. oracle: no assertion beyond "no bypass".
+#@ A header whose first word has no expect token is a comment (the lines of this preamble).
+#@ g2-a3bcb6a3 deny
+echo $(( $(rm -rf /etc/x; echo 0) + 1 ))
+#@ g2-de3d953d deny
+r\
+m -rf /etc/x
+#@ g2-ed5e1cc4-a deny
+echo $(( $(rm -rf /etc/x; echo 0) ))
+#@ g2-ed5e1cc4-b deny
+echo "$(( `rm -rf /etc/x` ))"
+#@ g2-95e5b178 deny
+((1<<4))
+rm -rf /etc/x
+4
+#@ g2-abb6b2ad-a deny
+echo $(( $(rm -rf /etc/x) + 1 ))
+#@ g2-abb6b2ad-b deny
+echo "$(( $(rm -rf /etc/x) + 1 ))"
+#@ g2-e6f6596a-a deny
+echo $((true); rm -rf /etc/x)
+#@ g2-e6f6596a-b deny
+cat <<EOF
+$((true); rm -rf /etc/x)
+EOF
+#@ g2-e6f6596a-c deny
+echo $(($(rm -rf /etc/x)))
+#@ g2-8e0940ec-a deny
+rm -rf <(true) /etc/x
+#@ g2-8e0940ec-b deny
+rm <(true) -rf /etc/x
+#@ g2-3cefbb3a-a deny
+echo `true #` ; rm -rf /etc/x
+#@ g2-3cefbb3a-b deny
+echo `echo \`rm -rf /etc/x\``
+#@ g2-52493811-a deny
+echo foo\
+#bar; rm -rf /etc/x
+#@ g2-52493811-b deny
+r\
+m -rf /etc/x
+#@ g2-52493811-c oracle
+cat <<<#foo; rm -rf /etc/x
+#@ g2-8febe280-a deny
+echo $(cat <<'EOF')
+rm -rf /etc/x
+EOF
+#@ g2-8febe280-b oracle
+cat <<'EOF'; echo '
+EOF
+'
+rm -rf /etc/x
+EOF
+#@ g2-8febe280-c deny
+cat <<$'EOF'
+EOF
+rm -rf /etc/x
+$EOF
+#@ g2-8febe280-d allow
+cat <<$'EOF'
+rm -rf /etc/x
+EOF
+#@ g1-A1 deny
+echo "$(true; rm -rf /etc/x)"
+#@ g1-A2 deny
+echo "$(true && rm -rf /etc/x)"
+#@ g1-A3 deny
+echo "`ls; rm -rf /etc/x`"
+#@ g1-A4 deny
+echo "$(printf '"')"; rm -rf /etc/x
+#@ g1-A5 deny
+echo "$(date)"; rm -rf /etc/x
+#@ g1-A6 allow
+echo "$(printf 'a; rm -rf /etc/x')" > note.txt
+#@ g1-B1 deny
+cat <<< hi
+ls; rm -rf /etc/x
+#@ g1-B2 deny
+cat <<<EOF
+true; rm -rf /etc/x
+#@ g1-B3 deny
+cat <<< hello &&
+rm -rf /etc/x
+#@ g1-B4 deny
+cat <<\EOF
+body
+EOF
+ls; rm -rf /etc/x
+#@ g1-B5 deny
+cat <<E"OF"
+body
+EOF
+ls && rm -rf /etc/x
+#@ g1-B6 deny
+echo $((1<<4))
+ls && rm -rf /etc/x
+#@ g1-B7 deny
+echo $((8<<1));
+rm -rf /etc/x
+#@ g1-B8 deny
+echo $((1 << 2)) &&
+rm -rf /etc/x
+#@ g1-B9 deny
+cat <<NOSUCHEND
+ls; rm -rf /etc/x
+#@ g1-B10 allow
+cat <<\EOF
+run; rm -rf /
+EOF
+#@ g1-B11 allow
+cat <<E"OF"
+run; rm -rf /
+EOF
+#@ g1-C1 deny
+echo $'it\'s'; rm -rf /etc/x
+#@ g1-C2 deny
+printf $'it\'s\n'; rm -rf /etc/x
+#@ g1-C3 deny
+echo $'\'' ; rm -rf /etc/x
+#@ g1-C4 allow
+echo $'a; rm -rf /' > note.txt
+#@ g1-D1 deny
+cat <<EOF
+$(rm -rf /etc/x)
+EOF
+#@ g1-D2 deny
+cat <<EOF
+text `rm -rf /etc/x` more
+EOF
+#@ g1-D3 deny
+cat <<-EOF
+	$(true; rm -rf /etc/x)
+	EOF
+#@ g1-D4 allow
+cat <<'EOF'
+$(rm -rf /etc/x)
+EOF
+#@ existing-1 deny
+rm -rf /etc/autopilot
+#@ existing-2 deny
+rm -rf /
+#@ existing-3 allow
+rm -rf build/ dist/
+#@ existing-4 allow
+rm -rf /tmp/scratch-dir
+#@ existing-5 deny
+sudo rm /etc/some-file
+#@ existing-6 allow
+git commit -m "fix: guard E2 worktree-escaping rm -rf / E3 destructive SQL"
+#@ existing-7 allow
+echo "docs: never sudo rm anything here" > note.txt
+#@ existing-8 deny
+true && rm -rf /etc/autopilot
+#@ existing-9 allow
+rm -rf $T/k/home/.kimi-code/sessions
+timeout 12 bash $S/run-suite.sh --x /k/proj --y
+#@ existing-10 allow
+cat > notes.md <<'EOF'
+run this: ls && rm -rf /
+EOF
+ls
+#@ existing-13 allow
+git commit -m "docs: the old step was
+rm -rf /
+removed; rm -rf /etc/y"
+#@ existing-14 allow
+printf '%s\n' 'x; rm -rf /' > note.txt
+#@ existing-15 allow
+echo "x && rm -rf /" > note.txt
+#@ existing-16 allow
+echo "a; rm -rf /etc/x" >> note.txt
+#@ existing-17 deny
+echo hi
+rm -rf /
+#@ existing-18 deny
+echo hi
+rm -rf ~/x
+#@ existing-19 deny
+ls
+rm -rf $T/a /etc/x
+#@ existing-20 deny
+cd / && rm -rf *
+#@ existing-21 deny
+ls ; rm -rf /etc/x
+#@ existing-22 deny
+ls | rm -rf /etc/x
+#@ existing-23 deny
+FOO=1 rm -rf /etc/x
+#@ existing-24 deny
+command rm -rf /etc/x
+#@ existing-25 deny
+cat <<EOF
+hello
+EOF
+rm -rf /etc/x
+#@ existing-26 allow
+cat <<EOF
+hello
+#@ existing-27 deny
+echo "$(rm -rf /etc/x)"
+#@ regress-heredoc-quoted allow
+cat > notes.md <<'EOF'
+Describe the cleanup: run `rm -rf /etc/x` and then `sudo reboot`.
+- step: ls && rm -rf /
+EOF
+#@ regress-heredoc-dq allow
+cat > notes.md <<"EOF"
+Describe the cleanup: rm -rf /etc/x
+EOF
+#@ regress-heredoc-bs allow
+cat > notes.md <<\EOF
+Describe the cleanup: rm -rf /etc/x
+EOF
+#@ regress-heredoc-partq allow
+cat > notes.md <<E"OF"
+Describe the cleanup: rm -rf /etc/x
+EOF
+#@ regress-heredoc-dash allow
+cat > notes.md <<-'EOF'
+	Describe the cleanup: rm -rf /etc/x
+	EOF
+#@ regress-sq allow
+echo 'Describe the cleanup: rm -rf /etc/x'
+#@ regress-sq-multiline allow
+echo 'step one
+rm -rf /etc/x
+step three' > notes.md
+#@ regress-ansi allow
+echo $'Describe the cleanup: rm -rf /etc/x'
+#@ regress-ansi-escaped-quote allow
+echo $'it\'s; rm -rf /etc/x' > notes.md
+#@ regress-dq-commit allow
+git commit -m "fix: the old step ran rm -rf /etc/x; now guarded"
+#@ regress-dq-commit-multiline allow
+git commit -m "fix: the old step was
+rm -rf /etc/x
+removed"
+#@ regress-commit-heredoc allow
+git commit -m "$(cat <<'EOF'
+docs: mention rm -rf /etc/x as text
+
+Co-Authored-By: someone
+EOF
+)"
+#@ regress-comment allow
+echo hi # then rm -rf /etc/x
+#@ regress-comment-line allow
+echo hi
+# rm -rf /etc/x
+echo done
+#@ nested-in-scope deny
+echo $(rm -rf ./build)
+#@ nested-in-scope-bt deny
+echo `rm -rf ./build`
+#@ nested-in-scope-dq deny
+echo "$(rm -rf ./build)"
+#@ nested-arith deny
+echo $(( $(rm -rf ./build) ))
+#@ nested-procsub deny
+cat <(rm -rf ./build)
+#@ nested-heredoc-bare deny
+cat <<EOF
+$(rm -rf ./build)
+EOF
+#@ nested-heredoc-body-text deny
+cat <<EOF
+rm -rf ./build
+EOF
+#@ nested-bare-arith deny
+(( $(rm -rf ./build) ))
+#@ top-in-scope allow
+rm -rf ./build
+#@ top-in-scope-tmp allow
+rm -rf /tmp/work/x
+#@ top-subshell-in-scope allow
+(rm -rf ./build)
+#@ reserved-brace deny
+{ rm -rf /etc/x; }
+#@ reserved-if deny
+if true; then rm -rf /etc/x; fi
+#@ quoted-command-word deny
+"rm" -rf /etc/x
+#@ quoted-command-word-2 deny
+r""m -rf /etc/x
+#@ backslash-command-word deny
+\rm -rf /etc/x
+#@ param-comment deny
+echo ${a:- # }; rm -rf /etc/x
+#@ unterminated-sq-line2 deny
+rm -rf /etc/x
+echo 'unterminated
+#@ unterminated-dq-line2 deny
+rm -rf /etc/x
+echo "unterminated
+#@ continuation-flag deny
+rm \
+-rf /etc/x
+#@ continuation-target deny
+rm -rf /etc/\
+x
+#@ continuation-in-sq allow
+echo 'a\
+rm -rf /etc/x'
+#@ adv-heredoc-close-paren deny
+echo $(cat <<'EOF'
+)
+EOF
+)
+rm -rf /etc/x
+#@ adv-two-heredocs deny
+cat <<'A' <<'B'
+x
+A
+y
+B
+rm -rf /etc/x
+#@ adv-heredoc-pipe-rm deny
+cat <<'EOF' | rm -rf /etc/x
+body
+EOF
+#@ adv-param-in-dq deny
+echo ${x:-"$(rm -rf /etc/x)"}
+#@ adv-param-dq-outer deny
+echo "${x:-$(rm -rf /etc/x)}"
+#@ adv-case deny
+case x in x) rm -rf /etc/x;; esac
+#@ adv-for deny
+for i in 1; do rm -rf /etc/x; done
+#@ adv-hash-after-quote deny
+echo "a"#; rm -rf /etc/x
+#@ adv-hash-after-empty-quote deny
+echo ''#; rm -rf /etc/x
+#@ adv-ansi-backslash deny
+echo $'a\\'; rm -rf /etc/x
+#@ adv-redirect-prefix-1 deny
+>/dev/null rm -rf /etc/x
+#@ adv-redirect-prefix-2 deny
+2>&1 rm -rf /etc/x
+#@ adv-redirect-prefix-3 deny
+> out.txt rm -rf /etc/x
+#@ adv-env deny
+env FOO=1 rm -rf /etc/x
+#@ adv-time deny
+time rm -rf /etc/x
+#@ adv-bang deny
+! rm -rf /etc/x
+#@ adv-function deny
+f() { rm -rf /etc/x; }; f
+#@ adv-bt-dq-nested deny
+echo "`echo "$(rm -rf /etc/x)"`"
+#@ adv-dq-continuation deny
+echo "a\
+b"; rm -rf /etc/x
+#@ adv-comment-backslash deny
+# comment \
+rm -rf /etc/x
+#@ adv-comment-apostrophe deny
+# it's a comment
+rm -rf /etc/x
+#@ adv-heredoc-bare-apostrophe deny
+cat <<EOF
+don't $(rm -rf /etc/x)
+EOF
+#@ adv-heredoc-quote-line deny
+cat <<'EOF'
+"
+EOF
+rm -rf /etc/x
+#@ adv-bare-arith-then-rm deny
+(( 1 )); rm -rf /etc/x
+#@ adv-arith-dq-operand deny
+echo $(( "1" + $(rm -rf /etc/x) ))
+#@ adv-arith-lt deny
+echo $((1<2)); rm -rf /etc/x
+#@ adv-arith-ternary-comment deny
+echo $((1 ? 1 : 2)) # x
+rm -rf /etc/x
+#@ adv-bt-sq oracle
+echo `echo '`'; rm -rf /etc/x
+#@ adv-nested-depth deny
+echo $(echo $(echo $(echo $(echo $(rm -rf /etc/x)))))
+#@ adv-heredoc-in-bt deny
+echo `cat <<'EOF'
+x
+EOF
+rm -rf /etc/x`
+#@ adv-unterminated-bt oracle
+echo `rm -rf /etc/x
+#@ adv-unterminated-subst oracle
+echo $(rm -rf /etc/x
+#@ adv-unterminated-param oracle
+echo ${a:-x; rm -rf /etc/x
+#@ adv-heredoc-dash-tab deny
+cat <<-'EOF'
+	x
+	EOF
+rm -rf /etc/x
+#@ g4-dq-param-sq deny
+unset x; echo "${x:-'$(rm -rf /etc/x)'}"

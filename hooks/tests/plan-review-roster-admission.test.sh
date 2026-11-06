@@ -203,8 +203,9 @@ printf '%s' '{"schema_version":1,"consult_ladder":[{"engine":"grok-fixture","eff
 CFG_USE="$IMPL" run_resolver "$MIX_TOPO" --field plan_reviewer_engine
 assert_not_contains "$R_ERR" "grok-fixture/high@grok" "mixed topology: grok seat filtered out"
 run_printed "write the recommendation" "$IMPL"
-# the printed command writes plan-review seat keys; a repo file may hold them only inside a dated override
-printf -- '- override: plan_reviewer | until 2099-01-01 | test fixture seat\n- override: plan_deep_reviewer | until 2099-01-01 | test fixture seat\n' >> "$IMPL"
+# the printed command writes plan_reviewer_* keys only (one non-implementer seat); a repo file may hold them only inside a
+# dated override of that group, and an override with no fields (plan_deep_reviewer here) is refused with exit 3
+printf -- '- override: plan_reviewer | until 2099-01-01 | test fixture seat\n' >> "$IMPL"
 CFG_USE="$IMPL" run_resolver "$MIX_TOPO" --field plan_reviewer_engine
 assert_eq "$R_EXIT" "0" "mixed topology round trip: no exit 3 after writing the recommendation"
 

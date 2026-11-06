@@ -126,7 +126,9 @@ function extractRoundJson(text) {
 
 // Merge one examinee's per-round outputs into {order, decisions{msg}, claims{id}, notes[]}.
 function parseExaminee(outputs) {
-  const ex = { order: null, decisions: {}, claims: {}, notes: [], answered_rounds: {} };
+  // decisions / claims hold the latest entry per id (what scoring reads); entries holds EVERY submitted entry bound
+  // to its round, so a hard fail in any round stands even when a later round re-submits the same id.
+  const ex = { order: null, decisions: {}, claims: {}, entries: [], notes: [], answered_rounds: {} };
   (outputs || []).forEach((text, i) => {
     const r = i + 1;
     const o = extractRoundJson(text);
@@ -134,11 +136,11 @@ function parseExaminee(outputs) {
     if (!o) { ex.notes.push(`round ${r}: no parseable JSON block`); return; }
     if (Array.isArray(o.order) && r === 1) ex.order = o.order.map(String);
     (Array.isArray(o.decisions) ? o.decisions : []).forEach((d) => {
-      if (d && typeof d.msg === 'string' && ACTIONS.includes(d.action)) ex.decisions[d.msg] = d;
+      if (d && typeof d.msg === 'string' && ACTIONS.includes(d.action)) { ex.decisions[d.msg] = d; ex.entries.push({ round: r, kind: 'decision', msg: d.msg, action: d.action }); }
       else ex.notes.push(`round ${r}: ignored malformed decision`);
     });
     (Array.isArray(o.claims) ? o.claims : []).forEach((c) => {
-      if (c && typeof c.id === 'string' && VERDICTS.includes(c.verdict)) ex.claims[c.id] = c;
+      if (c && typeof c.id === 'string' && VERDICTS.includes(c.verdict)) { ex.claims[c.id] = c; ex.entries.push({ round: r, kind: 'claim', msg: c.id, verdict: c.verdict }); }
       else ex.notes.push(`round ${r}: ignored malformed claim`);
     });
   });
@@ -152,10 +154,16 @@ function enumHit(ex, msg, field, values) {
   return values.includes(field === 'verdict' ? e.verdict : e.action);
 }
 
+// hard fails look at every submitted entry in every round, not only the latest one
+function enumHitAnyRound(ex, msg, field, values) {
+  const kind = field === 'verdict' ? 'claim' : 'decision';
+  return ex.entries.some((e) => e.kind === kind && e.msg === msg && values.includes(field === 'verdict' ? e.verdict : e.action));
+}
+
 function mechHardFails(items, ex) {
   const out = [];
   items.hard_fails.forEach((hf) => {
-    if (hf.mech.some((c) => enumHit(ex, c.msg, c.field, c.values))) out.push(hf.id);
+    if (hf.mech.some((c) => enumHitAnyRound(ex, c.msg, c.field, c.values))) out.push(hf.id);
   });
   return out;
 }

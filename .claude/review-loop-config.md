@@ -15,21 +15,19 @@
 
 <!-- 2026-08-05 quota rotation: Claude Code native is unavailable, so this
      managed L5 campaign uses the live-smoked hetero seats instead. Grok-4.5
-     remains the implementer; MiniMax-M3 remains the calibrated reviewer;
-     GLM-5.3 is one QC seat (replaced GLM-5.2 on 2026-10-16); the other QC seats are
-     MiniMax-M3 and Codex gpt-5.5. This is an operational roster rotation only;
+     remains the implementer; GLM-5.3 is one QC seat (replaced GLM-5.2 on 2026-10-16);
+     2026-11-06: MiniMax-M3 removed (PM request); the loop reviewer is GLM-5.3 on cc-shim, the same seat as qc_panel[1].
+     This is an operational roster rotation only;
      restore the normal Claude/agy seats after quota recovery and re-probe them. -->
-- reviewer_engine: MiniMax-M3
+- reviewer_engine: GLM-5.3
 - reviewer_effort: high
 - reviewer_runner: cc-shim
-- reviewer_endpoint: minimax
-- reviewer_limitation: minimax-false-central-claim-5-of-6
-- reviewer_limitation_required: true
+- reviewer_endpoint: glm
 - reviewer_engine_low_risk:
 - reviewer_effort_low_risk:
 - on_family_conflict: fallback
-- reviewer_fallback_preference: GLM-5.3
-- reviewer_fallback_preference_low_risk: GLM-5.3
+- reviewer_fallback_preference: gpt-6.1-sol
+- reviewer_fallback_preference_low_risk: gpt-6.1-sol
 - implementer_engine: grok-4.7
 - implementer_effort: low
 - implementer_runner: grok

@@ -1,5 +1,6 @@
 'use strict';
 
+require('../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 /**
  * Hook-level tests for the workflow snapshot (plan 2026-10-13-workflow-snapshot-at-compaction, P1):
  *  - state-checkpoint.js (PreCompact): the file leads with the snapshot; stdout is the bounded snapshot

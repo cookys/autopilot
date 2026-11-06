@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // RED at 0f810c88488a9028ce6afd440485dc07db33898f: tests 12, pass 0, fail 12 (MODULE_NOT_FOUND scripts/check-test-outcome.js)
 // RED at 269e334417afe9fff9f1d05b9c8b2822db15d5fa: tests 15, pass 12, fail 3 (single-sha --range exits 2, outcome gate: bad --range)
 // node --test scripts/check-test-outcome.test.js

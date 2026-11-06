@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // node --test scripts/gate-verify.test.js
 //
 // Controls of plan docs/plans/2026-10-26-depth0-per-turn-gate.md section 3.2 (P1).

@@ -4,6 +4,7 @@
 // Run: node --test hooks/residue-auto-reap.test.js
 'use strict';
 
+require('../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 const { test } = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');

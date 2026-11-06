@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // scripts/status-events.test.js - acceptance suite of the events feed (`autopilot status events`, schema autopilot.events/1).
 // Plan: docs/plans/2026-11-02-oc-a1-events-contract.md. This file holds the E1 cases (contract, schema, fixture, instant
 // grammar); the E2-E4 cases (source-*, degrade-*, resume-*, order-*, cursor-*, rotation, readonly-*) are added by those phases.

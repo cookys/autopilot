@@ -1,4 +1,5 @@
 'use strict';
+require('../../../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // The frozen task set reproduces from the git objects at its base sha and matches its manifest.
 const test = require('node:test');
 const assert = require('node:assert');

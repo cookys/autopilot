@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // node --test scripts/affected-suites-jobs.test.js
 // BL-0330 (per-suite seconds + durations tsv) and BL-0331 (--jobs N pool). Fake suites in a throwaway git repo; no real suite runs.
 // Negative controls are inline: (a) a self-interfering suite taken off the serial list is caught, (b) a copy of the runner

@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // scripts/status-events-src-tail.test.js - E2 lane "tail": jsonl-tail.js plus the readers cost, decision and runledger of the events
 // feed (autopilot.events/1). Plan: project/plans/2026-11-02-oc-a1-events-contract.md, E2 steps 1, 2, 6, 7.
 // Lane file (plan deviation, approved): the three E2 lanes would otherwise all edit scripts/status-events.test.js.

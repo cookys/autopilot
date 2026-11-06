@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // Run: node --test scripts/qualification-metrics.test.js
 //
 // BL-0194 P2. Positive cases, parity with the llm-playground fixtures, and NEGATIVE CONTROLS:

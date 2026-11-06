@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 /**
  * G37 W5 (plan 8 W5, N9, N20): the eval runners and the shell wrappers go through the account layer.
  * One table; every row runs the REAL runner against the Node claude shim in a tempdir world (fake home with a DECOY credentials

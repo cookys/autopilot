@@ -1,5 +1,6 @@
 // mods/viewer/model.test.js — the viewer's pure half: input parsing, the file window, the diff split, and the one line the MODEL reads.
 // Imports the real model.ts (erasable syntax only, so Node strips the types). Run: node --test mods/viewer/model.test.js (also run by run-tests.sh).
+require('../../scripts/lib/test-git-env') // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')

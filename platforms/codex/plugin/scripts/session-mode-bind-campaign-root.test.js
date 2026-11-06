@@ -1,5 +1,6 @@
 'use strict';
 
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // session-mode.js bind-campaign-root (mods P1W SCOPE, gate run l5g): an /l5-/l6 session's marker records the
 // Mission root of the campaign it launched (additive `campaign_roots`), so the band can follow it.
 // RED before the change (verb absent -> exit 2 "Usage"): 17 tests, 8 pass (negative cases, vacuous) / 9 fail: run-w/land/scope-bind-red.txt.

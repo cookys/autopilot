@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // scripts/runs-watch-sidecars.test.js — mods P1W WATCH-B: the watcher publishes <scope>.decisions.json
 // (autopilot.decisions-sidecar/1, W2d publisher + W2g (b)(c)) and <scope>.foreman.json (autopilot.foreman-activity/1,
 // W2c read side) next to the runs envelopes. Drives the real createWatcher().tick() against fixture repos.

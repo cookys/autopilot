@@ -1,4 +1,5 @@
 'use strict';
+require('../../../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // compile-kit validation and mapping, kit sizes, placebo sizes, provenance. Fixtures only; no binary is run.
 const test = require('node:test');
 const assert = require('node:assert');

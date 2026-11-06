@@ -3,6 +3,7 @@
 // negative controls (M7 to M10): each broken table must be reported, so a checker that goes quiet turns this suite red.
 // Scope (BL-0207): the rules about what a mod screen may draw scan EVERY mod under mods/ through modSources(); the rules that name live's own files say why they stay live (see SCOPE below).
 // Run: node --test mods/live/ui-lint.test.js   (also run by run-tests.sh)
+require('../../scripts/lib/test-git-env') // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // # RED at 572041858: test "consumer matrix (b)-(f) on the emitted implementer row" fails at scripts/engine-qualify-impl-hardening.test.js:517 with "Expected values to be strictly equal: actual 'failed' expected 'qualified'" (11 pass, 1 fail).
 
 // engine-qualify-impl-hardening.test.js -- BL-0037 hardening cases for the

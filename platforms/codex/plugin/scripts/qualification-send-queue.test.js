@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 /*
 # RED at 45b1c5fff: new cases 8 fail / 1 pass (exit 1). enqueue_enabled_at absent from status; first enqueue writes no meta; ts_rejected missing (buildV2Record returns null); SECONDARY_KEY_COLLISION stays in rejected with no already_ingested array; old rejected line still parses but already_ingested is undefined. The pre-set sentinel case passed only because the base never reads outbox.meta.json.
 # RED at 5a93aadcf: record stderr is the legacy_shape line (no ts_rejected) for observed_at 2026-02-30; flush summary.already_ingested is undefined (equal-hash rejected count stays on rejected; different-hash already_ingested !== 0). exit 1.

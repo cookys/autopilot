@@ -8,7 +8,7 @@
 # two pinned roles in one run before this file (2026-09-24).
 . "$(dirname "$0")/lib.sh"
 
-SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+SCRIPT="$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh"
 STATE="$REPO_ROOT/scripts/engine-capability-state.js"
 
 node "$STATE" pin-seat --engine cur-rev --runner cursor --role reviewer --effort high \

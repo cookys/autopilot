@@ -17,7 +17,7 @@ unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_DIR ENGINE_CAPABILITY_FILE E
 seed_dogfood_implementer_pin
 unset AUTOPILOT_QUALIFICATION_OVERRIDE
 
-SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+SCRIPT="$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh"
 TEMPLATE="$REPO_ROOT/project-config-template/review-loop-config.md"
 
 # A roster that names cursor (an UNQUALIFIED runner) in a reviewer-class seat.
@@ -477,7 +477,7 @@ assert_contains "$json" '"override_admitted_seats": ["reviewer"]' "control: and 
 # whose harness capability record says "unverified" must appear in the list.
 # Without this, onboarding a second unverified rail would silently route it with
 # no override — the "a script existing is not evidence it is running" failure.
-DECLARED="$(grep -E '^UNQUALIFIED_RUNNERS=' "$SCRIPT" | sed -E 's/^UNQUALIFIED_RUNNERS="([^"]*)".*/\1/')"
+DECLARED="$(grep -E '^UNQUALIFIED_RUNNERS=' "$REPO_ROOT/scripts/resolve-review-loop.sh" | sed -E 's/^UNQUALIFIED_RUNNERS="([^"]*)".*/\1/')"
 [ -n "$DECLARED" ] || fail "could not extract UNQUALIFIED_RUNNERS from $SCRIPT — the extraction pattern is stale"
 
 # Runner tokens the schema says a roster can name, minus the non-engine ones.

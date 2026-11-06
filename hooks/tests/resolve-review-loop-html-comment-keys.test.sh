@@ -8,7 +8,7 @@
 # RED at 086168637: 3 of 4 asserts failed — explicit-field printed bogus-from-comment, read_field printed 99, inline comment stayed in the value.
 . "$(dirname "$0")/lib.sh"
 
-SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+SCRIPT="$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh"
 unset REVIEW_LOOP_CONFIG_OVERRIDE
 export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-such-topology.json"
 

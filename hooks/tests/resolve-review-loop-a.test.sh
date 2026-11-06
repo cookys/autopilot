@@ -117,16 +117,22 @@ assert_eq "2" "$EXIT" "unknown field exit code"
 
 # 6. override precedence + non-transport enum fallback on garbage
 CFG="$TEST_TMP/rl.md"
-printf -- '- reviewer_effort: turbo\n- loop_max_rounds: notanum\n- implementer_engine: my-local-model\n' > "$CFG"
-assert_eq "low" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field reviewer_effort)" "bad effort falls back to default"
+printf -- '- loop_max_rounds: notanum\n- implementer_engine: my-local-model\n' > "$CFG"
+# A bad seat enum is a refusal now (no seat default to fall back to): exit 3 naming the field.
+BAD_EFF_CFG="$TEST_TMP/rl-bad-effort.md"
+printf -- '- reviewer_effort: turbo\n' > "$BAD_EFF_CFG"
+BAD_EFF_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BAD_EFF_CFG" bash "$SCRIPT" --field reviewer_effort 2>&1)"; BAD_EFF_EXIT=$?
+assert_eq "3" "$BAD_EFF_EXIT" "bad reviewer_effort is refused (no seat default to fall back to)"
+assert_contains "$BAD_EFF_OUT" "invalid reviewer_effort" "bad reviewer_effort is diagnosed"
 assert_eq "5" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field loop_max_rounds)" "non-numeric rounds falls back to default"
 assert_eq "my-local-model" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field implementer_engine)" "valid override value is honored"
 assert_eq "override" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG" bash "$SCRIPT" --field source)" "override source reported"
 TEMPLATE_CFG="$REPO_ROOT/project-config-template/review-loop-config.md"
-assert_eq "false" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_present)" "template override present is false"
-assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_engine)" "template override verification_author_engine is empty"
-assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_runner)" "template override verification_author_runner is empty"
-assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_effort)" "template override verification_author_effort is empty"
+# Re-pinned 2026-11-06: the template is the roster and carries the VA seat (Qwen3.8-Max on qoderclicn).
+assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_present)" "template roster verification_author_present is true"
+assert_eq "Qwen3.8-Max" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_engine)" "template roster verification_author_engine"
+assert_eq "qoderclicn" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_runner)" "template roster verification_author_runner"
+assert_eq "high" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_effort)" "template roster verification_author_effort"
 assert_eq "" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEMPLATE_CFG" bash "$SCRIPT" --field verification_author_endpoint)" "template override verification_author_endpoint is empty"
 
 # 6a. Explicit runner values select a transport, so invalid/blank values fail
@@ -157,7 +163,7 @@ BLANK_REV_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BLANK_REV_CFG" bash "$SCRIPT" --f
 BLANK_REV_EXIT=$?
 assert_eq "3" "$BLANK_REV_EXIT" "blank explicit reviewer_runner fails config resolution"
 assert_contains "$BLANK_REV_OUT" "<empty>" "blank explicit reviewer_runner is diagnosed"
-assert_eq "codex" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field reviewer_runner)" "missing reviewer_runner alone uses the built-in default"
+assert_eq "codex" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$EMPTY_CFG" bash "$SCRIPT" --field reviewer_runner)" "missing reviewer_runner alone uses the roster's (the frozen pre-SSOT fixture roster: codex)"
 
 # 6b. new hetero runners are accepted (v2.26.6–2.26.8): grok (impl+reviewer), cc-shim (impl).
 #     Regression guard — these were silently reset to default before the enums were widened.
@@ -324,10 +330,10 @@ assert_contains "$PLAN_INCOMPLETE_OUT" "requires plan_reviewer_engine" "incomple
 # can ONLY come from grok being a real (xai) family — an UNKNOWN family never satisfies
 # cross-family (fail-closed), so this would be false if family_of didn't know grok.
 XFCFG="$TEST_TMP/rl-xfamily.md"
-printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- qc_panel: grok-build\n' > "$XFCFG"
+printf -- '- implementer_runner: cc-shim\n- implementer_engine: MiniMax-M3\n- qc_panel: grok-build\n- qc_panel_runners: grok\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' > "$XFCFG"
 assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$XFCFG" bash "$SCRIPT" --source-trust high --field cross_family_satisfied)" "lone grok (xai) panel member satisfies cross-family vs a minimax implementer"
 QXFCFG="$TEST_TMP/rl-qwen-xfamily.md"
-printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- qc_panel: grok-4.5\n' > "$QXFCFG"
+printf -- '- implementer_runner: qoderclicn\n- implementer_engine: Qwen3.8-Max-Preview\n- qc_panel: grok-4.5\n- qc_panel_runners: grok\n- qc_panel_efforts: high\n- qc_panel_endpoints: @none\n' > "$QXFCFG"
 assert_eq "true" "$(REVIEW_LOOP_CONFIG_OVERRIDE="$QXFCFG" bash "$SCRIPT" --source-trust high --field cross_family_satisfied)" "lone grok panel member satisfies cross-family vs qwen/alibaba implementer"
 
 

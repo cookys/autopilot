@@ -8,14 +8,14 @@
 #   3. The config template documents the "consult seat must not equal a qc_panel seat" rule.
 . "$(dirname "$0")/lib.sh"
 
-RESOLVER="$REPO_ROOT/scripts/resolve-review-loop.sh"
+RESOLVER="$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh"
 export HOME="$TEST_TMP/home"
 mkdir -p "$HOME"
 export AUTOPILOT_CONFIG_FILE="$TEST_TMP/no-config.json"
 export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-topology.json"
 
 # --- 1. single alias table --------------------------------------------------------------
-N="$(grep -c 'gemini-4-argon-high' "$RESOLVER")"
+N="$(grep -c 'gemini-4-argon-high' "$REPO_ROOT/scripts/resolve-review-loop.sh")"
 assert_eq "$N" "1" "the resolved gemini-flash id appears once in resolve-review-loop.sh (single alias table)"
 
 run_resolver() { # run_resolver <config-file> -> sets OUT, ERR, RC

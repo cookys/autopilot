@@ -391,6 +391,7 @@ mkdir -p "$SCRATCH_10D/.claude"
 )
 cat << 'CFG_10D_EOF' > "$SCRATCH_10D/.claude/review-loop-config.md"
 ## Settings
+- override: qc_panel | until 2099-01-01 | test fixture seats
 - qc_panel: gpt-5.5, gemini-flash, MiniMax-M3
 - qc_panel_runners: codex, agy, cc-shim
 - qc_panel_efforts: high, low, high

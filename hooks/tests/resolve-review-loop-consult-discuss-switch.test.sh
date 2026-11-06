@@ -8,7 +8,7 @@
 # wrappers exist.
 . "$(dirname "$0")/lib.sh"
 
-SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+SCRIPT="$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh"
 JS_MODULE="$REPO_ROOT/src/engine/resolve-review-loop.js"
 SHIPPED_TEMPLATE="$REPO_ROOT/project-config-template/review-loop-config.md"
 export REPO_ROOT
@@ -159,10 +159,11 @@ for (const [key, oldVal] of Object.entries(oldJson)) {
   if (!(key in newJson)) { problems.push(`missing-in-new:${key}`); continue; }
   if (INTENTIONAL_DEFAULT_MOVE.has(key)) {
     const want = key === 'qc_panel'
-      ? ['gpt-6.1-sol', 'claude-opus-5-5', 'gemini-4-argon-high']
-      : [{role:'qc',runner:'codex',model:'gpt-6.1-sol',effort:'low',endpoint:null,family:'openai'},
-         {role:'qc',runner:'claude-native',model:'claude-opus-5-5',effort:'high',endpoint:null,family:'anthropic'},
-         {role:'qc',runner:'agy',model:'gemini-4-argon-high',effort:'high',endpoint:null,family:'google'}];
+      ? ['gpt-6-astra', 'gpt-6.1-sol', 'gemini-4-argon-high', 'GLM-5.3']
+      : [{role:'qc',runner:'codex',model:'gpt-6-astra',effort:'low',endpoint:null,family:'openai'},
+         {role:'qc',runner:'codex',model:'gpt-6.1-sol',effort:'medium',endpoint:null,family:'openai'},
+         {role:'qc',runner:'agy',model:'gemini-4-argon-high',effort:'high',endpoint:null,family:'google'},
+         {role:'qc',runner:'cc-shim',model:'GLM-5.3',effort:'high',endpoint:'glm',family:'zhipu'}];
     if (JSON.stringify(newJson[key]) !== JSON.stringify(want)) problems.push(`new-value-drift:${key}`);
     continue;
   }
@@ -194,6 +195,8 @@ const expectedAdded = [
   'in_rail_review',
   // reviewer fresh-session switch (BL-0111, 2026-10-13)
   'review_fresh_context',
+  // roster overlay (rosterssot): the repo override groups in force
+  'roster_overrides',
 ].sort();
 if (JSON.stringify(addedKeys) !== JSON.stringify(expectedAdded)) {
   problems.push(`unexpected-added-keys:${addedKeys.join(',')}`);
@@ -367,7 +370,9 @@ assert_eq "validated-ok" "$CONTRACT_PARITY_OUT" "contract-parity.test.sh's real 
 # member of POP_B_DEFAULT_ALLOW (path|reason) — reviewed as resolving via the default. A new
 # matching file that does neither FAILS with its path named; adding a compliant or listed
 # file never requires editing a number.
-POP_B_DEFAULT_ALLOW='hooks/tests/autopilot-cli.test.sh|partial roster fixture, resolves consult/discuss via the default
+POP_B_DEFAULT_ALLOW='hooks/tests/fixtures/review-loop-roster.pre-ssot-2026-11-06.md|frozen copy of the old built-in roster, used as a fixture roster; switches ride it on purpose
+hooks/tests/resolve-review-loop-roster-overlay.test.sh|overlay fixtures that test the roster itself; the switches ride the roster on purpose
+hooks/tests/autopilot-cli.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/rail-stage-writers.test.sh|in-process roster object literal for a stage-writer campaign fixture, never resolved from config; consult/discuss not involved
 hooks/tests/autopilot-engine-boundary-resume.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/autopilot-engine-park-reserve.test.sh|partial roster fixture, resolves consult/discuss via the default

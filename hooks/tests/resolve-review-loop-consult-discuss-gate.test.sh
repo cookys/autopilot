@@ -12,7 +12,7 @@
 # it, not re-deriving every branch independently).
 . "$(dirname "$0")/lib.sh"
 
-SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+SCRIPT="$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh"
 FIXTURE_JS="$REPO_ROOT/hooks/tests/lib/consult-discuss-genuine-row-fixture.js"
 export REPO_ROOT
 

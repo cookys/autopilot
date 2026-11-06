@@ -109,4 +109,19 @@ assert_eq "0" "$rc" "broken outside-block check accepts the legacy copy (negativ
 REVIEW_LOOP_CONFIG_OVERRIDE="$LEG" bash "$SCRIPT" >/dev/null 2>&1; rc=$?
 assert_eq "3" "$rc" "the real lib still refuses it"
 
+# 7. TEST-ONLY knob REVIEW_LOOP_ROSTER_TEMPLATE: a fixture roster (the real template with patched fields,
+# built by lib/roster-fixture.js) replaces the roster; the repo file still goes through the overlay rules.
+printf -- '- reviewer_engine: fixture-reviewer\n- reviewer_runner: codex\n- reviewer_effort: low\n' > "$TEST_TMP/patch.md"
+node "$REPO_ROOT/hooks/tests/lib/roster-fixture.js" build "$TEST_TMP/patch.md" "$TEST_TMP/fixture-roster.md"
+FX_JSON="$(REVIEW_LOOP_ROSTER_TEMPLATE="$TEST_TMP/fixture-roster.md" REVIEW_LOOP_CONFIG_OVERRIDE="$STUB" bash "$SCRIPT" 2>/dev/null)"; rc=$?
+assert_eq "0" "$rc" "fixture roster through the knob resolves"
+assert_eq "fixture-reviewer" "$(printf '%s' "$FX_JSON" | jget reviewer_engine)" "the knob's roster supplies the patched seat"
+assert_eq "$(printf '%s' "$ROSTER_JSON" | jget qc_panel)" "$(printf '%s' "$FX_JSON" | jget qc_panel)" "unpatched groups still equal the real roster"
+REVIEW_LOOP_ROSTER_TEMPLATE="$TEST_TMP/fixture-roster.md" REVIEW_LOOP_CONFIG_OVERRIDE="$LEG" bash "$SCRIPT" >/dev/null 2>&1; rc=$?
+assert_eq "3" "$rc" "a legacy full copy is still refused when the roster comes from the knob"
+
+# 8. production caller: check-contract-schema.js passes the template itself through REVIEW_LOOP_CONFIG_OVERRIDE.
+node "$REPO_ROOT/scripts/check-contract-schema.js" >/dev/null 2>&1 </dev/null; rc=$?
+assert_eq "0" "$rc" "check-contract-schema.js exits 0 at the tip"
+
 finalize_test

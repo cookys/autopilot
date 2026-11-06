@@ -18,11 +18,14 @@ AMBIENT_NO_BRAIN="$TEST_TMP/ambient-config-no-brain.md"
 # check. Stripping the seat lets the resolver fall back to its built-in default,
 # which is what "ambient" was always meant to mean here.
 if [ -f "$REPO_ROOT/.claude/review-loop-config.md" ]; then
-  grep -v -e 'brain_seat_identity_file' -e '^- implementer_' \
+  grep -v -e 'brain_seat_identity_file' -e '^- implementer_' -e '^- override:' \
     "$REPO_ROOT/.claude/review-loop-config.md" > "$AMBIENT_NO_BRAIN"
 else
   : > "$AMBIENT_NO_BRAIN"
 fi
+# The roster supplies a ladder and a brain seat; this fixture means "neither", so blank them (a legacy-shaped
+# file is split into a fixture roster by the resolver shim, the blank values replace the roster's).
+printf -- '- implementer_ladder:\n- brain_seat_identity_file:\n' >> "$AMBIENT_NO_BRAIN"
 
 EMPTY_SCDIR="$TEST_TMP/check-miss"
 mkdir -p "$EMPTY_SCDIR"
@@ -243,8 +246,6 @@ assert_contains "$SC_OUT" '"fallback_ladder_implementer_family"' "ladder provena
 # ---------------------------------------------------------------------------
 ENUM_CFG="$TEST_TMP/enum-invalid.md"
 cat > "$ENUM_CFG" <<'CFG'
-- reviewer_effort: not-an-effort
-- implementer_effort: turbo
 - spec_review: maybe
 - independent_harness: maybe
 - qc_panel_aggregation: majority
@@ -254,8 +255,13 @@ cat > "$ENUM_CFG" <<'CFG'
 - provider_readiness_fallback_family_constraint: invent
 CFG
 ENUM_OUT="$(REVIEW_LOOP_CONFIG_OVERRIDE="$ENUM_CFG" bash "$SCRIPT" 2>/dev/null)"
-assert_eq "$(json_get "$ENUM_OUT" reviewer_effort)" "low" "invalid reviewer_effort falls back to the default (low)"
-assert_eq "$(json_get "$ENUM_OUT" implementer_effort)" "high" "invalid implementer_effort falls back to high"
+# Seat efforts have no seat default to fall back to any more: an invalid one is a refusal (exit 3).
+for _seat in reviewer implementer; do
+  printf -- '- %s_effort: not-an-effort\n' "$_seat" > "$TEST_TMP/bad-$_seat-effort.md"
+  _out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/bad-$_seat-effort.md" bash "$SCRIPT" 2>&1 >/dev/null)"; _rc=$?
+  assert_eq "3" "$_rc" "invalid ${_seat}_effort is refused (re-pinned: was a fallback to the seat default)"
+  assert_contains "$_out" "invalid ${_seat}_effort" "invalid ${_seat}_effort is diagnosed"
+done
 assert_eq "$(json_get "$ENUM_OUT" spec_review)" "on" "invalid spec_review falls back to on"
 assert_eq "$(json_get "$ENUM_OUT" independent_harness)" "on" "invalid independent_harness falls back to on"
 assert_eq "$(json_get "$ENUM_OUT" qc_panel_aggregation)" "union-on-verified-critical" "invalid qc_panel_aggregation falls back to union"

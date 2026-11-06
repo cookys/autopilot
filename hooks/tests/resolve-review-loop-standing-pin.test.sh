@@ -15,7 +15,7 @@
 #   dropping endpoint compare would admit it. Unpinned qc seat must not refuse (exit 0).
 . "$(dirname "$0")/lib.sh"
 
-SCRIPT="$REPO_ROOT/scripts/resolve-review-loop.sh"
+SCRIPT="$REPO_ROOT/hooks/tests/lib/resolve-legacy-fixture.sh"
 CAP_STATE="$REPO_ROOT/scripts/engine-capability-state.js"
 unset REVIEW_LOOP_CONFIG_OVERRIDE ENGINE_CAPABILITY_FILE AUTOPILOT_QUALIFICATION_OVERRIDE ENGINE_CAPABILITY_DIR
 export AUTOPILOT_TOPOLOGY_FILE="$TEST_TMP/no-such-topology.json"

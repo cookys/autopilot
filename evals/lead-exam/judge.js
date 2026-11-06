@@ -101,9 +101,9 @@ function stubJudge(items, opts) {
     Object.keys(req.outputs).forEach((label) => {
       const text = req.outputs[label];
       const j = extractRoundJson(text);
-      const ex = { order: j && Array.isArray(j.order) ? j.order : null, decisions: {}, claims: {} };
-      ((j && j.decisions) || []).forEach((d) => { if (d && d.msg) ex.decisions[d.msg] = d; });
-      ((j && j.claims) || []).forEach((c) => { if (c && c.id) ex.claims[c.id] = c; });
+      const ex = { order: j && Array.isArray(j.order) ? j.order : null, decisions: {}, claims: {}, entries: [] };
+      ((j && j.decisions) || []).forEach((d) => { if (d && d.msg) { ex.decisions[d.msg] = d; ex.entries.push({ kind: 'decision', msg: d.msg, action: d.action }); } });
+      ((j && j.claims) || []).forEach((c) => { if (c && c.id) { ex.claims[c.id] = c; ex.entries.push({ kind: 'claim', msg: c.id, verdict: c.verdict }); } });
       const q = o.badQuote ? 'ZZZ-not-in-the-output' : text.slice(0, 12);
       const hfs = (j ? mechHardFails(items, ex) : []).filter((id) => id !== o.missHf);
       const e = { items: {}, hard_fails: hfs.map((id) => ({ id, quote: q })) };

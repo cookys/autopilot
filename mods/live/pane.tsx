@@ -68,12 +68,12 @@ export function Pane(el: { Box: El; Text: El; Link: El; Button?: El; Input?: El 
       else runs.push({ press: s.press, segs: [s] })
     }
     return (
-      <Box key={k + 'p' + i} flexWrap="wrap">
+      <Box key={k + 'p' + (runs.find(r => r.press !== undefined)?.press ?? i)} flexWrap="wrap">
         {runs.map((r, j) => {
           const texts = r.segs.map((s, n) => <Text key={'g' + n} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
           return r.press === undefined || Button === undefined || decide === null
             ? <Box key={'r' + j}>{texts}</Box>
-            : <Button key={r.press} plain onPress={() => decide.onPress(r.press as string)}>{texts}</Button>
+            : <Button key={r.press.replace(/^pick:/, 'opt:')} plain onPress={() => decide.onPress(r.press as string)}>{texts}</Button>
         })}
       </Box>
     )

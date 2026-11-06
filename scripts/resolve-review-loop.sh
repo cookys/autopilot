@@ -28,6 +28,8 @@
 # scripts/lib/roster-overlay.js: seat fields are legal only inside an override block
 # (`- override: <group> | until YYYY-MM-DD | <reason>` + the group's whole field set), otherwise
 # exit 3 with the fix printed. JSON gains roster_overrides: [{group, until, reason}].
+# REVIEW_LOOP_ROSTER_TEMPLATE (TEST-ONLY) replaces the roster file; REVIEW_LOOP_CONFIG_OVERRIDE only chooses the repo-layer file and
+# follows the same overlay rules (it never bypasses the roster).
 #
 # Output: JSON — the authoritative field set lives in schemas/review-loop-contract.schema.json
 #   (SSOT; drift-gated by scripts/check-contract-schema.js). Core roster fields:

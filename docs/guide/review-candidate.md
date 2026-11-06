@@ -294,6 +294,12 @@ from Git and the contract, so none can disagree with it. Any other flag is a usa
   4. the shipped
      [`project-config-template/review-loop-config.md`](../../project-config-template/review-loop-config.md).
 
+  The shipped template is the only roster: whichever file wins is overlaid on it (seat fields only inside
+  an `- override: <group> | until YYYY-MM-DD | <reason>` block; anything else exits 3). A file chosen by
+  `$REVIEW_LOOP_CONFIG_OVERRIDE` plays the repo layer under the same rules; it never bypasses the roster.
+  `$REVIEW_LOOP_ROSTER_TEMPLATE` replaces the roster file itself and is **test-only** (suites that need
+  other seats build a fixture roster with `hooks/tests/lib/roster-fixture.js`); do not set it in real runs.
+
   So running the command from your autopilot checkout with `--cwd` pointing at another repository that
   has no `.claude/review-loop-config.md` uses the shipped template (panel `gpt-6.1-sol`/`codex`,
   `claude-opus`/`claude-native`, `gemini-4-argon-high`/`agy`), not your checkout's own config. Running

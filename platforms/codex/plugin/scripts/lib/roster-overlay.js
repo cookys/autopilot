@@ -10,7 +10,8 @@
 // declared an override and the roster's whole group otherwise; non-seat knobs come from the repo
 // when it writes them and from the roster otherwise.
 //
-// stdout: [{"group","until","reason"}] (the declared overrides). Exit 0 ok, 3 refused (message on stderr).
+// stdout: [{"group","until","reason","expired"}] (the declared overrides; expired = until is before today's UTC date,
+// a warning on stderr, never a refusal). A non-existent date such as 2026-02-31 is refused. Exit 0 ok, 3 refused.
 // Node built-ins only. Parsing matches scripts/lib/resolve-config.sh: HTML comments are removed
 // first, a field is `key: value` with an optional leading dash.
 'use strict';
@@ -32,6 +33,10 @@ const GROUPS = [
   { name: 'plan_deep_reviewer', re: /^plan_deep_reviewer_[a-z_]+$/, required: [] },
   { name: 'plan_reviewer', re: /^plan_reviewer_[a-z_]+$/, required: [] },
 ];
+
+// Per-project pins the roster must never supply: the template documents them in a fenced example, and
+// visibleLines does not skip fences, so without this a stub repo would inherit the example as a real pin.
+const REPO_ONLY_KEYS = new Set(['brain_seat_identity_file']);
 
 function groupOf(key) {
   for (const g of GROUPS) if (g.re.test(key)) return g.name;
@@ -72,9 +77,16 @@ function parseDecl(decl) {
   const reason = parts.slice(2).join('|').trim();
   if (!GROUPS.some((g) => g.name === group)) return { error: `unknown group "${group}": ${decl}` };
   if (!until) return { error: `second part must be "until YYYY-MM-DD": ${decl}` };
+  // A date that does not exist (02-31, month 13) is an input error: rebuild it from the parsed parts and compare.
+  const [y, mo, d] = until[1].split('-').map(Number);
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.toISOString().slice(0, 10) !== until[1]) return { error: `date ${until[1]} does not exist: ${decl}` };
   if (!reason) return { error: `reason is empty: ${decl}` };
   return { group, until: until[1], reason };
 }
+
+// Today as a UTC date. An override is expired only after its until day: the day itself still counts.
+function utcToday() { return new Date().toISOString().slice(0, 10); }
 
 function overlay(templateText, repoText) {
   const tpl = parse(templateText);
@@ -86,7 +98,7 @@ function overlay(templateText, repoText) {
     const p = parseDecl(d);
     if (p.error) { problems.push(`override declaration ${p.error}`); continue; }
     if (declared.has(p.group)) { problems.push(`override declared twice for group ${p.group}`); continue; }
-    declared.set(p.group, { group: p.group, until: p.until, reason: p.reason });
+    declared.set(p.group, { group: p.group, until: p.until, reason: p.reason, expired: p.until < utcToday() });
   }
 
   const repoSeatFields = repo.entries.filter((e) => groupOf(e.key));
@@ -113,11 +125,15 @@ function overlay(templateText, repoText) {
   const out = [];
   for (const e of tpl.entries) {
     const g = groupOf(e.key);
+    if (REPO_ONLY_KEYS.has(e.key)) continue;
     if (g) { if (!declared.has(g)) out.push(e.raw); continue; }
     if (!repoKeys.has(e.key)) out.push(e.raw);
   }
   for (const e of repo.entries) out.push(e.raw);
-  return { text: `${out.join('\n')}\n`, overrides: [...declared.values()] };
+  const overrides = [...declared.values()];
+  // TTL reminds, never blocks (operator rule): an expired override still applies; the patrol lane reads `expired`.
+  const warnings = overrides.filter((o) => o.expired).map((o) => `override for ${o.group} expired on ${o.until} (${o.reason}); it still applies, renew or delete it`);
+  return { text: `${out.join('\n')}\n`, overrides, warnings };
 }
 
 function main(argv) {
@@ -134,6 +150,7 @@ function main(argv) {
   const res = overlay(t, r);
   if (res.problems) fail([`resolve-review-loop: roster overlay refused ${args['--repo']}`, ...res.problems.map((p) => `  ${p}`)]);
   fs.writeFileSync(args['--out'], res.text);
+  for (const w of res.warnings) process.stderr.write(`resolve-review-loop: ${w}\n`);
   process.stdout.write(`${JSON.stringify(res.overrides)}\n`);
 }
 

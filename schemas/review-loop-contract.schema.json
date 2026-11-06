@@ -886,11 +886,12 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["group", "until", "reason"],
+        "required": ["group", "until", "reason", "expired"],
         "properties": {
           "group": { "type": "string" },
           "until": { "type": "string" },
-          "reason": { "type": "string" }
+          "reason": { "type": "string" },
+          "expired": { "type": "boolean", "description": "true when until is before today's UTC date; a reminder only, the override still applies." }
         }
       },
       "description": "Seat groups where the repo review-loop config deliberately differs from the roster (project-config-template/review-loop-config.md): one entry per override block, with the block's until date and reason. Empty = this repo follows the roster everywhere."

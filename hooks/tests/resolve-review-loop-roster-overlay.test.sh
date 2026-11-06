@@ -58,7 +58,7 @@ assert_eq "grok" "$(printf '%s' "$OVR_JSON" | jget implementer_runner)" "overrid
 assert_eq "GLM-5.3" "$(printf '%s' "$OVR_JSON" | jget reviewer_engine)" "other group (reviewer) still from the roster"
 assert_eq "$(printf '%s' "$ROSTER_JSON" | jget qc_panel)" "$(printf '%s' "$OVR_JSON" | jget qc_panel)" "other group (qc_panel) still from the roster"
 assert_eq "7" "$(printf '%s' "$OVR_JSON" | jget loop_max_rounds)" "non-seat knob written in the repo file wins"
-assert_eq '[{"group":"implementer","until":"2099-01-01","reason":"trial of another implementer"}]' "$(printf '%s' "$OVR_JSON" | jget roster_overrides)" "roster_overrides lists the declared group"
+assert_eq '[{"group":"implementer","until":"2099-01-01","reason":"trial of another implementer","expired":false}]' "$(printf '%s' "$OVR_JSON" | jget roster_overrides)" "roster_overrides lists the declared group"
 
 # 3b. an incomplete override group is refused.
 INC="$TEST_TMP/incomplete.md"
@@ -66,6 +66,47 @@ printf -- '- override: implementer | until 2099-01-01 | x\n- implementer_engine:
 out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$INC" bash "$SCRIPT" 2>&1 >/dev/null)"; rc=$?
 assert_eq "3" "$rc" "override missing runner/effort exits 3"
 assert_contains "$out" "missing: implementer_runner, implementer_effort" "names the missing fields"
+
+# 3c. until dates: expired still applies (TTL reminds, never blocks), the until day itself is not expired,
+# a date that does not exist and a bad format are input errors, an empty override block is refused.
+ovr_file() {  # ovr_file <name> <until-part>
+  printf -- '- override: implementer | %s | ttl case\n- implementer_engine: grok-4.7\n- implementer_effort: low\n- implementer_runner: grok\n' "$2" > "$TEST_TMP/$1.md"
+}
+ovr_file expired "until 2000-01-01"
+EXP_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/expired.md" bash "$SCRIPT" 2>"$TEST_TMP/expired.err")"; rc=$?
+assert_eq "0" "$rc" "an expired override does not block (exit 0)"
+assert_eq "grok-4.7" "$(printf '%s' "$EXP_JSON" | jget implementer_engine)" "an expired override still applies"
+assert_contains "$(printf '%s' "$EXP_JSON" | jget roster_overrides)" '"expired":true' "expired override reports expired:true"
+assert_contains "$(cat "$TEST_TMP/expired.err")" "override for implementer expired on 2000-01-01" "expired override prints a warning on stderr"
+TODAY_UTC="$(node -e 'process.stdout.write(new Date().toISOString().slice(0,10))')"
+ovr_file today "until $TODAY_UTC"
+TODAY_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/today.md" bash "$SCRIPT" 2>"$TEST_TMP/today.err")"; rc=$?
+assert_eq "0" "$rc" "an override whose until day is today resolves"
+assert_contains "$(printf '%s' "$TODAY_JSON" | jget roster_overrides)" '"expired":false' "the until day itself is not expired"
+assert_not_contains "$(cat "$TEST_TMP/today.err")" "expired on" "no expiry warning on the until day"
+assert_contains "$(printf '%s' "$OVR_JSON" | jget roster_overrides)" '"expired":false' "a future date is not expired"
+ovr_file nodate "until 2026-02-31"
+out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/nodate.md" bash "$SCRIPT" 2>&1 >/dev/null)"; rc=$?
+assert_eq "3" "$rc" "a date that does not exist (02-31) exits 3"
+assert_contains "$out" "does not exist" "says the date does not exist"
+ovr_file month13 "until 2026-13-01"
+REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/month13.md" bash "$SCRIPT" >/dev/null 2>&1; rc=$?
+assert_eq "3" "$rc" "month 13 exits 3"
+ovr_file badfmt "until 06/11/2026"
+out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/badfmt.md" bash "$SCRIPT" 2>&1 >/dev/null)"; rc=$?
+assert_eq "3" "$rc" "a malformed until exits 3"
+assert_contains "$out" 'must be "until YYYY-MM-DD"' "says what shape until takes"
+printf -- '- override: implementer | until 2099-01-01 | empty block\n' > "$TEST_TMP/emptyblock.md"
+out="$(REVIEW_LOOP_CONFIG_OVERRIDE="$TEST_TMP/emptyblock.md" bash "$SCRIPT" 2>&1 >/dev/null)"; rc=$?
+assert_eq "3" "$rc" "an empty override block exits 3"
+assert_contains "$out" "override for implementer has no fields" "says the block has no fields"
+
+# 3d. the template's fenced brain_seat_identity_file example is not a pin: a stub repo must not inherit it
+# (SOURCE=override would otherwise seat an incumbent brain from the roster's example line).
+assert_eq "null" "$(printf '%s' "$STUB_JSON" | jget brain_seat)" "stub repo: no brain seat from the roster's fenced example"
+BRAIN="$TEST_TMP/brain.md"; printf -- '- brain_seat_identity_file: .claude/brain-seat-identity.json\n' > "$BRAIN"
+BRAIN_JSON="$(REVIEW_LOOP_CONFIG_OVERRIDE="$BRAIN" bash "$SCRIPT" 2>/dev/null)"
+assert_contains "$(printf '%s' "$BRAIN_JSON" | jget brain_seat)" '"seat_class":"incumbent"' "a repo that writes the pin itself still seats the brain"
 
 # 4. legacy full copy: seat fields outside an override block -> exit 3 with the fix.
 LEG="$TEST_TMP/legacy.md"

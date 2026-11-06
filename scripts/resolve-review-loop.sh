@@ -1672,7 +1672,7 @@ const Q = "\x27";
 // Paste-ready, idempotent, shell-neutral (bash, zsh, BSD/GNU): a one-line node script in single quotes
 // with no dollar, bang or bracket characters, so no shell expands anything. REPLACES every matching key
 // line (read_field takes the FIRST match), appends when absent, creates the file when missing.
-const JS = String.raw`var fs=require("fs"),p=require("path"),a=process.argv.slice(1),f=a.shift(),t="";try{t=fs.readFileSync(f,"utf8")}catch(e){fs.mkdirSync(p.dirname(f),{recursive:true})}a.forEach(function(kv){var i=kv.indexOf("="),k=kv.slice(0,i),v=kv.slice(i+1),n=0;t=t.replace(new RegExp("^(\\s*-?\\s*"+k+"\\s*:).*","gim"),function(m,h){n=n+1;return h+" "+v});if(n===0){t=t+(t===""||t.slice(-1)==="\n"?"":"\n")+"- "+k+": "+v+"\n"}});fs.writeFileSync(f,t)`;
+const JS = String.raw`var fs=require("fs"),p=require("path"),a=process.argv.slice(1),f=a.shift(),t="";try{t=fs.readFileSync(f,"utf8")}catch(e){fs.mkdirSync(p.dirname(f),{recursive:true})}a.forEach(function(kv){var i=kv.indexOf("="),k=kv.slice(0,i),v=kv.slice(i+1),n=0;if(k==="override"){var g=v.split(" ").shift();t=t.replace(new RegExp("^(\\s*-?\\s*override\\s*:)\\s*"+g+"\\s*\\|.*","gim"),function(m,h){n=n+1;return h+" "+v});if(n===0){t=t+(t===""||t.slice(-1)==="\n"?"":"\n")+"- override: "+v+"\n"}return}t=t.replace(new RegExp("^(\\s*-?\\s*"+k+"\\s*:).*","gim"),function(m,h){n=n+1;return h+" "+v});if(n===0){t=t+(t===""||t.slice(-1)==="\n"?"":"\n")+"- "+k+": "+v+"\n"}});fs.writeFileSync(f,t)`;
 // POSIX single-quote escaping shared by every printed command: a quote inside becomes close, backslash-quote, reopen.
 const shq = (x) => Q + String(x).replace(/\x27/g, Q + "\\" + Q + Q) + Q;
 const setCmd = (pairs) => "node -e " + Q + JS + Q + " " + shq(cfg) + " " + pairs.map(shq).join(" ");
@@ -1702,8 +1702,13 @@ if (seats.length === 0) {
     kv.push(prefix + "_runner=" + s.runner);
     if (s.endpoint) kv.push(prefix + "_endpoint=" + s.endpoint);
   };
+  // A repo file may hold seat fields only inside a dated override of their group (roster-overlay.js), so each
+  // group written gets its declaration line first; without it the next resolve exits 3.
+  const until = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+  const decl = (group) => kv.push("override=" + group + " | until " + until + " | recommended by resolve-review-loop from the topology when plan_review is auto and the topology has no plan_review_panel");
+  decl("plan_reviewer");
   emit("plan_reviewer", pick[0]);
-  if (pick[1]) emit("plan_deep_reviewer", pick[1]);
+  if (pick[1]) { decl("plan_deep_reviewer"); emit("plan_deep_reviewer", pick[1]); }
   out.push("  write the recommendation: " + setCmd(kv));
   out.push("  caller: ask the owner which seats to use; with nobody to ask (headless), apply the recommendation and log it as a decision.");
 }

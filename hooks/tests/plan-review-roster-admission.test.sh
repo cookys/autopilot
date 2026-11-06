@@ -34,7 +34,7 @@ run_resolver() {
   # roster itself in these round trips: hand it to the resolver as the roster, the way production reads it.
   local roster=""
   if [ -n "${CFG_USE:-}" ] && grep -q '^- reviewer_engine:' "$CFG_USE" 2>/dev/null; then roster="$CFG_USE"; fi
-  env ${roster:+REVIEW_LOOP_ROSTER_TEMPLATE="$roster"} AUTOPILOT_TOPOLOGY_FILE="$1" REVIEW_LOOP_CONFIG_OVERRIDE="${CFG_USE:-$CFG}" bash "$RESOLVER" "${@:2}" \
+  env ${roster:+"REVIEW_LOOP_ROSTER_TEMPLATE=$roster"} AUTOPILOT_TOPOLOGY_FILE="$1" REVIEW_LOOP_CONFIG_OVERRIDE="${CFG_USE:-$CFG}" bash "$RESOLVER" "${@:2}" \
     >"$TEST_TMP/r.out" 2>"$TEST_TMP/r.err"
   R_EXIT=$?; R_OUT="$(cat "$TEST_TMP/r.out")"; R_ERR="$(cat "$TEST_TMP/r.err")"
 }
@@ -203,11 +203,26 @@ printf '%s' '{"schema_version":1,"consult_ladder":[{"engine":"grok-fixture","eff
 CFG_USE="$IMPL" run_resolver "$MIX_TOPO" --field plan_reviewer_engine
 assert_not_contains "$R_ERR" "grok-fixture/high@grok" "mixed topology: grok seat filtered out"
 run_printed "write the recommendation" "$IMPL"
-# the printed command writes plan_reviewer_* keys only (one non-implementer seat); a repo file may hold them only inside a
-# dated override of that group, and an override with no fields (plan_deep_reviewer here) is refused with exit 3
-printf -- '- override: plan_reviewer | until 2099-01-01 | test fixture seat\n' >> "$IMPL"
+# End to end: only the printed command runs, nothing is added by hand. It must write the override declaration
+# for its group (a repo file may hold seat fields only inside a dated override), so the next resolve is not exit 3.
+assert_contains "$R_ERR" "override=plan_reviewer" "mixed topology: the printed command carries the plan_reviewer override declaration"
 CFG_USE="$IMPL" run_resolver "$MIX_TOPO" --field plan_reviewer_engine
-assert_eq "$R_EXIT" "0" "mixed topology round trip: no exit 3 after writing the recommendation"
+assert_eq "$R_EXIT" "0" "mixed topology round trip: no exit 3 after running only the printed command"
+assert_eq "$(grep -cE '^- override: plan_reviewer \| until [0-9]{4}-[0-9]{2}-[0-9]{2} \| ' "$IMPL")" "1" "exactly one plan_reviewer override declaration written"
+assert_eq "$(grep -cE '^- override: implementer ' "$IMPL")" "1" "the existing implementer override is left alone"
+# running the printed command again is idempotent (declaration replaced, not duplicated)
+run_printed "write the recommendation" "$IMPL"
+assert_eq "$(grep -cE '^- override: plan_reviewer ' "$IMPL")" "1" "second run: still one declaration"
+
+# two seats on a repo stub (not a template copy): both groups get a declaration and the whole resolve has no exit 3
+TWO="$TEST_TMP/two-seats.md"; printf -- '- plan_review: auto\n- loop_max_rounds: 5\n' > "$TWO"
+CFG_USE="$TWO" run_resolver "$STALE_TOPO" --field plan_reviewer_engine
+assert_eq "$R_EXIT" "4" "repo stub on a stale topology stops"
+run_printed "write the recommendation" "$TWO"
+CFG_USE="$TWO" run_resolver "$STALE_TOPO"
+assert_eq "$R_EXIT" "0" "two-seat printed command: whole resolve exits 0 (no exit 3)"
+assert_eq "$(grep -cE '^- override: plan_(deep_)?reviewer ' "$TWO")" "2" "one declaration per written group"
+assert_contains "$R_OUT" '"plan_review_resolved_from": "config-explicit"' "the written seats resolve as config-explicit"
 
 # no topology at all: still a stop, with the opt-out named
 run_resolver "$TEST_TMP/none.json" --field plan_reviewer_runner

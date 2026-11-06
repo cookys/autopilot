@@ -134,7 +134,8 @@ PARITY_TEMPLATE="$OLD_ROOT/parity-template.md"
 # without a topology file. `off` only sets hetero_review_resolved_from (an added key)
 # and emits no warning; nothing about hetero auto is lost (resolve-review-loop.test.sh
 # covers its four topology states).
-sed -e 's/^- plan_review: auto$/- plan_review: off/' -e 's/^- implementer_ladder: auto$/- implementer_ladder:/' -e 's/^- consult_dispatch: auto$/- consult_dispatch: off/' -e 's/^- hetero_review: auto$/- hetero_review: off/' "$SHIPPED_TEMPLATE" > "$PARITY_TEMPLATE"
+# the template's fenced brain_seat_identity_file example is not a pin any more (roster-overlay.js REPO_ONLY_KEYS); the frozen resolver still reads it as one, so the line is dropped from the parity copy.
+sed -e 's/^- plan_review: auto$/- plan_review: off/' -e 's/^- implementer_ladder: auto$/- implementer_ladder:/' -e 's/^- consult_dispatch: auto$/- consult_dispatch: off/' -e 's/^- hetero_review: auto$/- hetero_review: off/' -e '/^- brain_seat_identity_file:/d' "$SHIPPED_TEMPLATE" > "$PARITY_TEMPLATE"
 assert_contains "$(cat "$PARITY_TEMPLATE")" "- hetero_review: off" "parity template pins hetero_review: off (no host-dependent native-fallback warning)"
 assert_contains "$(cat "$PARITY_TEMPLATE")" "- plan_review: off" "parity template carries plan_review: off (a value the frozen resolver can parse)"
 assert_not_contains "$(cat "$PARITY_TEMPLATE")" "- implementer_ladder: auto" "parity template drops implementer_ladder: auto (the frozen resolver has no auto expansion)"

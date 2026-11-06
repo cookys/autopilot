@@ -82,7 +82,7 @@ assert_contains "$(cat "$REPO_ROOT/skills/finish-flow/SKILL.md")" "scratch-close
 
 # negative control: break the reachability check -> unreachable worktree is reaped -> assertion goes red
 MUT="$TEST_TMP/mutant.js"
-sed 's/!reachable(head)/false/' "$REAPER" > "$MUT"
+sed_mutant "$REAPER" "$MUT" 's/!reachable(head)/false/'
 T5="$TEST_TMP/fx5"; new_fixture "$T5"
 node "$MUT" --root "$T5/scratch" --repo "$T5/main" --apply < /dev/null > /dev/null
 if [ -d "$T5/scratch/unreach" ]; then fail "negative control: mutant did not reap the unreachable worktree (test cannot detect the break)"
@@ -131,7 +131,7 @@ assert_contains "$OUT" "is mode 0700 owned by the caller" "output reports the ru
 
 # negative control: re-read removed -> the late-entering process no longer protects the worktree
 MUT2="$TEST_TMP/mutant2.js"
-sed 's/const now = readLive();.*/const now = { failures: [], names: live };/' "$REAPER" > "$MUT2"
+sed_mutant "$REAPER" "$MUT2" 's/const now = readLive();.*/const now = { failures: [], names: live };/'
 T10="$TEST_TMP/fx10"; new_fixture "$T10"; mkdir -p "$T10/proc"
 printf 'mkdir -p "%s/proc/4242"\nln -s "%s/scratch/merged" "%s/proc/4242/cwd"\n' "$T10" "$T10" "$T10" > "$T10/hook.sh"
 INJ_MOD="$MUT2" INJ_PROC="$T10/proc" INJ_HOOK="$T10/hook.sh" node "$INJ" --root "$T10/scratch" --repo "$T10/main" --apply < /dev/null > /dev/null

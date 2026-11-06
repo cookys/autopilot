@@ -60,6 +60,24 @@ assert_file_absent "$AP/compaction-state-sess-a.md" "the hook consumes the file 
 run_hook session-start.js "$COMPACT_A"
 assert_not_contains "$__RUN_STDOUT" "RestoreStateTestContent" "a consumed checkpoint is not injected twice"
 
+# 2b. Fleet-message line in the restore text: only when the local fleet lists `fleet recent` (stubs only).
+FLEET_LINE='fleet recent --unseen'
+mkdir -p "$TEST_TMP/fleet-yes" "$TEST_TMP/fleet-no"
+printf '#!/bin/sh\nprintf "usage: fleet <command>\\n  fleet send <to>\\n  fleet recent [--unseen]\\n  fleet decision claim <id>\\n"\nexit 1\n' > "$TEST_TMP/fleet-yes/fleet"
+printf '#!/bin/sh\nprintf "usage: fleet <command>\\n  fleet send <to>\\n  fleet decision claim <id>\\n"\nexit 1\n' > "$TEST_TMP/fleet-no/fleet"
+chmod +x "$TEST_TMP/fleet-yes/fleet" "$TEST_TMP/fleet-no/fleet"
+echo "RestoreStateTestContent" > "$AP/compaction-state-sess-a.md"
+AUTOPILOT_FLEET_BIN="$TEST_TMP/fleet-yes/fleet" run_hook session-start.js "$COMPACT_A"
+assert_contains "$__RUN_STDOUT" "$FLEET_LINE" "fleet supporting recent: the restore text carries the fleet-message line"
+echo "RestoreStateTestContent" > "$AP/compaction-state-sess-a.md"
+AUTOPILOT_FLEET_BIN="$TEST_TMP/fleet-no/fleet" run_hook session-start.js "$COMPACT_A"
+assert_contains "$__RUN_STDOUT" "RestoreStateTestContent" "fleet without recent: restore still injected"
+assert_not_contains "$__RUN_STDOUT" "$FLEET_LINE" "fleet without recent: no fleet-message line"
+echo "RestoreStateTestContent" > "$AP/compaction-state-sess-a.md"
+AUTOPILOT_FLEET_BIN="$TEST_TMP/no-such-fleet" run_hook session-start.js "$COMPACT_A"
+assert_contains "$__RUN_STDOUT" "RestoreStateTestContent" "no fleet binary: restore still injected"
+assert_not_contains "$__RUN_STDOUT" "$FLEET_LINE" "no fleet binary: no fleet-message line"
+
 # 3. Expired TTL (default 4h): not injected, and removed.
 echo "RestoreStateTestContent" > "$AP/compaction-state-sess-a.md"
 age_file "$AP/compaction-state-sess-a.md" 5

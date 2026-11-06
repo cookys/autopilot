@@ -43,6 +43,14 @@ function probe() {
   return 'probe_error';
 }
 
+// True only when `fleet --help` lists a `fleet recent` line. One bounded call (5 s), no retry, no cache; no binary, a timeout or any
+// other failure is false. Used by the post-compaction restore text, which must stay silent when it cannot know.
+function supportsRecent() {
+  const r = run(['--help'], 5000);
+  if (r.missing || r.error) return false;
+  return /^\s*fleet recent(\s|$)/m.test(r.stdout + r.stderr);
+}
+
 const parseJson = (s) => { try { const v = JSON.parse(String(s).trim().split('\n').pop()); return v && typeof v === 'object' ? v : null; } catch { try { return JSON.parse(s); } catch { return null; } } };
 
 function sleepMs(ms) { if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
@@ -100,4 +108,4 @@ function verify(cardId, answerId, text) {
   return verifyOnce(cardId, answerId, contentSha256(text));
 }
 
-module.exports = { probe, claim, verify, verifyOnce, contentSha256 };
+module.exports = { probe, supportsRecent, claim, verify, verifyOnce, contentSha256 };

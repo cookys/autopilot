@@ -57,9 +57,9 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - spec_review: on
 - independent_harness: on
 - qc_panel: gpt-6-astra, gpt-6.1-sol, gemini-4-argon-high, GLM-5.3
-- qc_panel_runners: codex, claude-native, agy
-- qc_panel_efforts: low, high, high
-- qc_panel_endpoints: @none, @none, @none
+- qc_panel_runners: codex, codex, agy, cc-shim
+- qc_panel_efforts: low, high, high, high
+- qc_panel_endpoints: @none, @none, @none, glm
 - review_packet_deny_extra:
 - qc_panel_aggregation: union-on-verified-critical
 <!-- in_rail_review: auto|single|panel. auto uses the sealed panel as the in-loop review station when the QC panel is complete. -->

@@ -1548,10 +1548,14 @@ else
   # unchanged; only these two leaf paths become writable, and the credential
   # material one level up at ~/.gemini stays read-only and readable.
   AGY_STATE_DIR="${HOME:-/root}/.gemini/antigravity-cli"
+  _AGY_HOME_CHECK="$(agy_assert_disposable_home)" || die_precondition "$_AGY_HOME_CHECK"
   # Mount points must exist before the read-only root bind. These are empty
   # directories agy itself also creates; credential material in the parent
   # .gemini directory stays read-only. Fail open: a mkdir error is bwrap's to report.
-  mkdir -p "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" || true
+  # bwrap cannot --tmpfs onto a symlink (agy 1.5.2 symlinks parts of this dir): resolve, fail closed outside ~/.gemini.
+  AGY_STATE_LOG="$(agy_bind_target "$AGY_STATE_DIR/log")" || die_precondition "$AGY_STATE_LOG"
+  AGY_STATE_CRASHES="$(agy_bind_target "$AGY_STATE_DIR/crashes")" || die_precondition "$AGY_STATE_CRASHES"
+  mkdir -p "$AGY_STATE_LOG" "$AGY_STATE_CRASHES" || true
   AGY_EFFORT="$(agy_effort_for_model "$MODEL" "$EFFORT")"
   AGY_CLAMPED="$(agy_effort_clamp "$EFFORT")"
   if [ "$AGY_EFFORT" != "$AGY_CLAMPED" ]; then
@@ -1566,7 +1570,7 @@ else
     # unwraps the `result` event), so there is no argv-size ceiling; the helper prints result.response.
     printf 'exec node %q run --prompt-file %q -- bwrap --ro-bind / / --dev /dev --proc /proc --bind %q %q --tmpfs %q --tmpfs %q --unshare-pid --die-with-parent --chdir %q %q --model %q --effort %q --dangerously-skip-permissions --print-timeout %q\n' \
       "$_AUTHOR_SELF_DIR/lib/agy-stream-json.js" "$PROMPT_FILE" \
-      "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_DIR/log" "$AGY_STATE_DIR/crashes" \
+      "$AGY_CWD" "$AGY_CWD" "$AGY_STATE_LOG" "$AGY_STATE_CRASHES" \
       "$AGY_CWD" "$AGY_BIN" "$MODEL" "$AGY_EFFORT" "$AGY_PRINT_TIMEOUT"
   } > "$RUN_SH"
   chmod +x "$RUN_SH"

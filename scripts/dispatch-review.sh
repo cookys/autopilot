@@ -2040,6 +2040,7 @@ else
   # input and never becomes raw_log: dispatch-status validates it once, then the
   # derived response and usage become separate typed channels.
   AGY_PRINT_TIMEOUT="$(agy_print_timeout "$TIMEOUT")" || die_precondition "$AGY_PRINT_TIMEOUT"
+  _AGY_HOME_CHECK="$(agy_assert_disposable_home)" || die_precondition "$_AGY_HOME_CHECK"
   AGY_CWD="$(mktemp -d -t dispatch-review-agycwd-XXXXXX)"  # scratch cwd, NEVER the repo
   AGY_OUT="$(mktemp -t dispatch-review-agy-out-XXXXXX)"
   AGY_ERR="$(mktemp -t dispatch-review-agy-err-XXXXXX)"
@@ -2079,6 +2080,7 @@ else
   for AGY_APP_SUBDIR in crashes; do
     AGY_APP_TARGET="${HOME:-}/.gemini/antigravity-cli/$AGY_APP_SUBDIR"
     if [ -d "$AGY_APP_TARGET" ]; then
+      AGY_APP_TARGET="$(agy_bind_target "$AGY_APP_TARGET")" || die_precondition "$AGY_APP_TARGET"
       mkdir -p "$AGY_CWD/$AGY_APP_SUBDIR"
       AGY_BWRAP_ARGS+=(--bind "$AGY_CWD/$AGY_APP_SUBDIR" "$AGY_APP_TARGET")
     fi
@@ -2098,6 +2100,8 @@ else
     AGY_APP_TARGET="${HOME:-}/.gemini/antigravity-cli/$AGY_APP_SUBDIR"
     # Mount point only: an empty dir in agy's own app dir (the root bind is read-only,
     # so bwrap cannot create it). Every write inside it lands in scratch.
+    # agy 1.5.2 turns agents/ into a symlink; bwrap cannot bind onto a symlink, so resolve first.
+    AGY_APP_TARGET="$(agy_bind_target "$AGY_APP_TARGET")" || die_precondition "$AGY_APP_TARGET"
     mkdir -p "$AGY_APP_TARGET" "$AGY_CWD/$AGY_APP_SUBDIR" \
       || die_precondition "cannot prepare agy containment mount point: $AGY_APP_TARGET"
     AGY_BWRAP_ARGS+=(--bind "$AGY_CWD/$AGY_APP_SUBDIR" "$AGY_APP_TARGET")

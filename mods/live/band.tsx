@@ -255,18 +255,25 @@ export function chunkText(text: string, w: number, n: number): string[] {
   if (rest !== '' && out.length > 0) { const last = out[out.length - 1]; out[out.length - 1] = displayWidth(last) >= w ? last.slice(0, Math.max(0, last.length - 1)) + '…' : last + '…' }
   return out
 }
+// the option label is padded to this many cells inside its Button, so the highlight and the description column sit at the same place at every tier (ux-v7: the highlight is 13 wide with `1: `)
+const OPT_LABEL_COLS = 10
 export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t: T): unknown[] {
   const { Box, Text, Button } = el
   const rows: unknown[] = []
   rows.push(<Box key="q"><Text>{' '}</Text><Text wrap="truncate">{v.question}</Text></Box>)
-  const room = MAIN_CONTENT_ROWS - 1 - v.options.length - (v.note === null ? 0 : 1)
-  const bg = v.background === null ? [] : chunkText(v.background, v.width - 6, Math.max(0, Math.min(v.bgRows, room)))
-  bg.forEach((line, i) => rows.push(<Box key={'bg' + i}><Text>{' '}</Text><Text {...dimProps()} wrap="truncate">{(i === 0 ? t('shell.bg') + '  ' : '      ') + line}</Text></Box>))
+  // the background area is two rows at every tier (one line of text when narrow, two from 160, the second row blank otherwise), so the options sit on the same rows everywhere; it
+  // gives rows back only when the options would not fit
+  const area = Math.max(0, Math.min(2, MAIN_CONTENT_ROWS - 1 - v.options.length - (v.note === null ? 0 : 1)))
+  const bg = v.background === null ? [] : chunkText(v.background, v.width - 6, Math.min(v.bgRows, area))
+  for (let i = 0; i < area; i++) {
+    const line = bg[i]
+    rows.push(<Box key={'bg' + i}><Text>{' '}</Text>{line === undefined ? <Text key="e">{' '}</Text> : <Text key="e" {...dimProps()} wrap="truncate">{(i === 0 ? t('shell.bg') + '  ' : '      ') + line}</Text>}</Box>)
+  }
   v.options.slice(0, MAIN_CONTENT_ROWS - rows.length).forEach((o, k) => {
     const hotkey = k < 6 ? String(k + 1) : undefined
     const label = Button === undefined || hotkey === undefined
       ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + o.label}</Text>
-      : <Button key={o.key} plain hotkey={hotkey} onPress={() => v.onPress(k)}>{o.label}</Button>
+      : <Button key={o.key} plain hotkey={hotkey} onPress={() => v.onPress(k)}>{o.label + ' '.repeat(Math.max(0, OPT_LABEL_COLS - displayWidth(o.label)))}</Button>
     rows.push(
       <Box key={'o' + k}>
         <Text>{' '}</Text>{o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>}<Text>{' '}</Text>

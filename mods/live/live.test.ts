@@ -6998,6 +6998,46 @@ for (const surface of SURFACES) {
     expect(at.length).toBe(0)
   })
 
+  test('O4 shell v7: a card with a long background keeps its options on the same rows at every tier (the background area is two rows everywhere, the second one blank when narrow) (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ ...DQ1, background: '長'.repeat(50) + '，' + '背'.repeat(60) }, DQ2] }))
+    world(on, files)
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide'])
+    const rowOf = async (cols: number) => (await drawShell($, cols)).rows.map((r, i) => (i >= 2 && i <= 7 ? r : '')).findIndex(r => r.includes('完整顯示'))
+    const ref = await rowOf(240)
+    expect(ref).toBeGreaterThan(3)
+    for (const cols of [200, 160, 120, 80]) expect(await rowOf(cols), 'tier ' + cols).toBe(ref)
+    const narrow = (await drawShell($, 80)).rows.slice(2, 8).filter(r => r.includes('長'))
+    expect(narrow.length, 'one background line at 80').toBe(1)
+    const wide = (await drawShell($, 160)).rows.slice(2, 8).filter(r => r.includes('長') || r.includes('背'))
+    expect(wide.length, 'two background lines at 160').toBe(2)
+  })
+
+  test('O4 shell v7: 待送 N 張 is a 160-and-wider tail: with room to spare it is there at 160 and 200 and not at 120 or 80 (' + surface + ')', async ($, on) => {
+    const files = base()
+    files[W_MODEL] = j(model({ needs_decision: true, decisions: [{ id: 'd-aaaa0001', question: '甲', options: [{ label: '是', description: '' }, { label: '否', description: '' }] }, { id: 'd-aaaa0002', question: '乙', options: [{ label: '是', description: '' }] }] }))
+    world(on, files)
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide'])
+    await drawShell($, 240, ['opt:d-aaaa0001:0'])
+    for (const cols of [240, 200, 160]) expect((await drawShell($, cols)).rows[9], 'tier ' + cols).toContain('待送 1 張')
+    for (const cols of [120, 80]) expect((await drawShell($, cols)).rows[9], 'tier ' + cols).not.toContain('待送')
+  })
+
+  test('O4 shell v7: when cards leave the list under the cursor the shell shows the last card that is left, never an empty window (' + surface + ')', async ($, on) => {
+    const w = shellWorld(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'])
+    expect((await drawShell($, 160, ['next', 'next'])).rows[1]).toContain('第 3 張，共 3 張')
+    w.files[W_MODEL] = j(model({ needs_decision: true, decisions: [DQ1] }))
+    await w.clock.advance(5000)
+    await w.clock.advance(5000)
+    const d = await drawShell($, 160)
+    expect(d.rows[1]).toContain('第 1 張，共 1 張')
+    expect(d.rows.slice(2, 8).some(r => r.includes('P5 殘留'))).toBe(true)
+  })
+
   test('side pane plan B: the pane is never opened on its own, at 160 or 240 columns, fullscreen with a project; the ⓘ, a slot, the quick row and /live-pane open it (' + surface + ')', async ($, on) => {
     const w = shellWorld(on)
     await start($, surface)

@@ -6,7 +6,7 @@
 import { T_EN } from './i18n'
 import type { T } from './i18n'
 import { BAND_INFO_LABEL, BAND_SEP, displayWidth, layoutBand, plainBandText } from './model'
-import { BODY_ROWS } from './shell'
+import { BODY_ROWS, MAIN_CONTENT_ROWS, PICK_MARK, QUICK_SEP } from './shell'
 import type { LeftItem, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
 import { actionSeg, dimProps, drawSeg, forgeBar, GLYPHS } from './ui'
@@ -188,38 +188,120 @@ export type ShellDraw = {
   plan: ShellPlan
   left: LeftItem[]
   onLeft: (id: string) => void
-  main: unknown[] // the main window's rows (the open tab's content), at most BODY_ROWS
-  progress: { segs: Seg[]; onSlot: (id: SlotId) => void } | null
+  main: unknown[] // the main window's content rows, at most MAIN_CONTENT_ROWS; the divider and the progress row below them are drawn here
+  progress: unknown // the progress row's content (one Box), inside the main window
   quick: unknown[]
 }
 export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unknown[] {
   const { Box, Text, Button } = el
   const { plan } = d
   const segsOf = (segs: readonly Seg[], k: string) => segs.map((s, i) => <Text key={k + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
-  const vert = (i: number) => <Text key={'v' + i} {...drawSeg(plan.verts[i])}>{plan.verts[i].text}</Text>
+  const vert = (i: number, divider: boolean) => {
+    const seg = divider && i === 1 ? plan.divider.left : divider && i === 2 ? plan.divider.right : plan.verts[i]
+    return <Text key={'v' + i} {...drawSeg(seg)}>{seg.text}</Text>
+  }
   const blank = (k: string) => <Text key={k}>{' '}</Text>
   const rows: unknown[] = [<Box key="top">{segsOf(plan.top, 't')}</Box>]
   for (let r = 0; r < BODY_ROWS; r++) {
     const item = d.left[r]
+    const divider = r === MAIN_CONTENT_ROWS
     const leftCell = item === undefined
       ? blank('l')
       : Button === undefined
         ? <Box key="l">{segsOf(item.segs, 'l')}</Box>
-        : <Button key={'menu:' + item.id} plain onPress={() => d.onLeft(item.id)}>{segsOf(item.segs, 'l')}</Button>
+        : <Button key={item.key} plain onPress={() => d.onLeft(item.id)}>{segsOf(item.segs, 'l')}</Button>
+    const mainCell = divider ? <Text key="div" {...drawSeg(plan.divider.rule)}>{plan.divider.rule.text}</Text> : r > MAIN_CONTENT_ROWS ? d.progress : d.main[r] ?? blank('m')
     const cells = [
-      vert(0),
+      vert(0, false),
       <Box key="lc" width={plan.geo.left} flexShrink={0}>{leftCell}</Box>,
-      vert(1),
-      <Box key="mc" width={plan.geo.main} flexShrink={0}>{d.main[r] ?? blank('m')}</Box>,
+      vert(1, divider),
+      <Box key="mc" width={plan.geo.main} flexShrink={0}>{mainCell}</Box>,
     ]
     plan.columns.forEach((c, i) => {
-      cells.push(vert(2 + i), <Box key={'c' + i} width={c.inner} flexShrink={0}>{segsOf(c.rows[r], 'c' + i + '-')}</Box>)
+      cells.push(vert(2 + i, divider && i === 0), <Box key={'c' + i} width={c.inner} flexShrink={0}>{segsOf(c.rows[r], 'c' + i + '-')}</Box>)
     })
-    cells.push(vert(2 + plan.columns.length))
+    cells.push(vert(2 + plan.columns.length, divider && plan.columns.length === 0))
     rows.push(<Box key={'row' + r}>{cells}</Box>)
   }
   rows.push(<Box key="bottom">{segsOf(plan.bottom, 'b')}</Box>)
-  rows.push(<Box key="progress"><Text>{' '}</Text>{d.progress === null ? blank('p') : drawSegs(el, d.progress.segs, d.progress.onSlot)}</Box>)
   rows.push(<Box key="quick"><Text>{' '}</Text>{d.quick}</Box>)
   return rows
+}
+
+// ---- the card view (ux-v7): the main window of the 待決 tab shows ONE card: its question, its background (dim, one row, two from 160), its options as hotkey Buttons 1..6 ----
+export type CardView = {
+  key: string
+  question: string
+  background: string | null
+  options: { label: string; description: string; picked: boolean; recommended: boolean; key: string }[]
+  note: string | null // a card the band cannot answer (typed or in a dialog): one dim line instead of options
+  bgRows: number
+  width: number // the main window's inner width less the pad
+  onPress: (k: number) => void
+}
+// `text` cut into at most `n` lines of `w` cells; the last one ends in … when something is left. Breaks after a punctuation mark when one is near the end of the line.
+export function chunkText(text: string, w: number, n: number): string[] {
+  const out: string[] = []
+  let rest = text.replace(/\s+/g, ' ').trim()
+  while (rest !== '' && out.length < n) {
+    if (displayWidth(rest) <= w) { out.push(rest); rest = ''; break }
+    let cut = 0
+    let used = 0
+    for (const ch of rest) { const cw = displayWidth(ch); if (used + cw > w) break; used += cw; cut += ch.length }
+    const head = rest.slice(0, cut)
+    const brk = Math.max(head.lastIndexOf('，'), head.lastIndexOf('；'), head.lastIndexOf('、'), head.lastIndexOf('。'), head.lastIndexOf(' '))
+    if (brk >= head.length - 8 && brk > 0 && out.length < n - 1) { out.push(head.slice(0, brk + 1).trimEnd()); rest = rest.slice(brk + 1).trimStart() } else { out.push(head); rest = rest.slice(cut) }
+  }
+  if (rest !== '' && out.length > 0) { const last = out[out.length - 1]; out[out.length - 1] = displayWidth(last) >= w ? last.slice(0, Math.max(0, last.length - 1)) + '…' : last + '…' }
+  return out
+}
+export function cardMain(el: { Box: El; Text: El; Button?: El }, v: CardView, t: T): unknown[] {
+  const { Box, Text, Button } = el
+  const rows: unknown[] = []
+  rows.push(<Box key="q"><Text>{' '}</Text><Text wrap="truncate">{v.question}</Text></Box>)
+  const room = MAIN_CONTENT_ROWS - 1 - v.options.length - (v.note === null ? 0 : 1)
+  const bg = v.background === null ? [] : chunkText(v.background, v.width - 6, Math.max(0, Math.min(v.bgRows, room)))
+  bg.forEach((line, i) => rows.push(<Box key={'bg' + i}><Text>{' '}</Text><Text {...dimProps()} wrap="truncate">{(i === 0 ? t('shell.bg') + '  ' : '      ') + line}</Text></Box>))
+  v.options.slice(0, MAIN_CONTENT_ROWS - rows.length).forEach((o, k) => {
+    const hotkey = k < 6 ? String(k + 1) : undefined
+    const label = Button === undefined || hotkey === undefined
+      ? <Text key="b" wrap="truncate">{(hotkey === undefined ? '' : hotkey + ': ') + o.label}</Text>
+      : <Button key={o.key} plain hotkey={hotkey} onPress={() => v.onPress(k)}>{o.label}</Button>
+    rows.push(
+      <Box key={'o' + k}>
+        <Text>{' '}</Text>{o.picked ? <Text key="pk" {...drawSeg(PICK_MARK)}>{PICK_MARK.text}</Text> : <Text key="pk">{' '}</Text>}<Text>{' '}</Text>
+        {label}
+        {o.recommended ? <Text key="rec">{' ' + GLYPHS.structure.recommend}</Text> : <Text key="rec">{''}</Text>}
+        {o.description === '' ? <Text key="d">{''}</Text> : <Text key="d" {...dimProps()} wrap="truncate">{'  ' + o.description}</Text>}
+      </Box>,
+    )
+  })
+  if (v.note !== null) rows.push(<Box key="note"><Text>{' '}</Text><Text {...dimProps()} wrap="truncate">{v.note}</Text></Box>)
+  return rows.slice(0, MAIN_CONTENT_ROWS)
+}
+
+// the quick row of the 待決 card view: `0: 送出 N 張 │ 7: 上一張 │ 8: 下一張 │ 9: 下一個選單   tip`. The slots have fixed widths (15, 12, 12, 16), so the four labels sit at the same
+// columns at every tier; only the tip's length changes.
+export type CardQuick = { sendN: number; tip: string; onSend: () => void; onPrev: () => void; onNext: () => void; onMenu: () => void }
+export function cardQuick(el: { Box: El; Text: El; Button?: El }, t: T, q: CardQuick): unknown[] {
+  const { Box, Text, Button } = el
+  const slot = (key: string, hotkey: string, label: string, width: number, press: () => void, sep: boolean) => (
+    <Box key={'s-' + key} width={width} flexShrink={0}>
+      {Button === undefined ? <Text key="b">{hotkey + ': ' + label}</Text> : <Button key={key} plain hotkey={hotkey} onPress={press}>{label}</Button>}
+      {sep ? <Text key="sep" {...drawSeg(QUICK_SEP)}>{QUICK_SEP.text}</Text> : <Text key="sep">{''}</Text>}
+    </Box>
+  )
+  return [
+    slot('send', '0', t('shell.send', { n: q.sendN }), 15, q.onSend, true),
+    slot('prev', '7', t('shell.prev'), 12, q.onPrev, true),
+    slot('next', '8', t('shell.next'), 12, q.onNext, true),
+    slot('next-menu', '9', t('shell.next_menu'), 16, q.onMenu, false),
+    <Text key="tip" {...dimProps()} wrap="truncate">{q.tip}</Text>,
+  ]
+}
+
+// the progress row's content inside the main window: a one-cell pad, then the segments (slot segs become Buttons through `onSlot`)
+export function progressRow(el: { Box: El; Text: El; Button?: El }, segs: readonly Seg[], onSlot?: (id: SlotId) => void): unknown {
+  const { Box, Text } = el
+  return <Box key="progress"><Text>{' '}</Text>{segs.length === 0 ? <Text key="p">{' '}</Text> : drawSegs(el, segs as Seg[], onSlot ?? (() => undefined))}</Box>
 }

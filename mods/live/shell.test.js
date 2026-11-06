@@ -283,3 +283,109 @@ test('left column: the open item is marked ◐ in `here`, the others carry no ma
   assert.ok(segText(rows[2].segs).includes('…'))
   assert.equal(S.leftItems([{ id: 'a', label: 'A' }], null, 26).some(r => segText(r.segs).includes('◐')), false)
 })
+
+// ---- ux-v7 (codeforge feature/panel-side 6cb6061): 8 body rows, the progress row inside the main window, the card list on the left, a foot title on the left and main windows ----
+test('v7: the frame has 8 body rows and the shell is 12 rows (menu, top, 8, bottom, quick)', () => {
+  assert.equal(S.BODY_ROWS, 8)
+  assert.equal(S.SHELL_ROWS, 12)
+  assert.equal(S.SHELL_ROWS, 1 + 1 + S.BODY_ROWS + 1 + 1)
+})
+
+test('v7: the main window divider joins the frame with ├ and ┤ at the main window edges, the rule between in `structure`', () => {
+  for (const cols of [100, 120, 160, 200, 240]) {
+    const p = S.shellPlan(input(cols))
+    assert.equal(p.divider.left.text, '├', 'left edge at ' + cols)
+    assert.equal(p.divider.right.text, '┤', 'right edge at ' + cols)
+    assert.equal(width([p.divider.rule]), p.geo.main)
+    assert.equal(p.divider.rule.color, ui.PALETTE.structure)
+    assert.equal(p.divider.left.color, ui.PALETTE.here)
+  }
+})
+
+test('v7: the bottom frame carries a foot title right-aligned in the left window and in the main window; the row keeps its width', () => {
+  for (const cols of [100, 160, 240]) {
+    const p = S.shellPlan(input(cols, { footLeft: '3/8', footMain: 'pick 1-2' }))
+    const text = segText(p.bottom)
+    assert.equal(width(p.bottom), planWidth(p))
+    assert.ok(text.includes(' 3/8 ─'), 'left foot at ' + cols)
+    assert.ok(text.includes(' pick 1-2 ─'), 'main foot at ' + cols)
+    assert.ok(text.indexOf('3/8') < text.indexOf('pick 1-2'))
+    const none = S.shellPlan(input(cols))
+    assert.ok(!segText(none.bottom).includes('3/8'))
+    assert.equal(width(none.bottom), planWidth(none))
+  }
+})
+
+const CARDS = [
+  { id: 'a', name: 'merge plan', answer: 'merge', sent: false },
+  { id: 'b', name: 'plugin timing', answer: 'wait', sent: true },
+  { id: 'c', name: 'preview width', answer: null, sent: false },
+  { id: 'd', name: 'room default', answer: null, sent: false },
+]
+test('v7: card list: ◐ the current card, ◆ an answered one, ○ an open one; the answer is right-aligned; every row is exactly the column wide', () => {
+  const rows = S.cardRows(CARDS, 2, 26)
+  assert.equal(rows.length, 4)
+  for (const r of rows) assert.equal(width(r.segs), 26)
+  assert.deepEqual(rows.map(r => r.key), ['card:a', 'card:b', 'card:c', 'card:d'])
+  assert.ok(segText(rows[0].segs).startsWith('◆ merge plan'))
+  assert.ok(segText(rows[0].segs).trimEnd().endsWith(' merge'))
+  assert.ok(segText(rows[2].segs).startsWith('◐ preview width'))
+  assert.ok(segText(rows[3].segs).startsWith('○ room default'))
+  const glyph = i => rows[i].segs[0]
+  assert.equal(glyph(2).color, ui.PALETTE.here)
+  assert.equal(glyph(0).color, ui.PALETTE.action)
+  assert.equal(glyph(1).color, ui.PALETTE.done) // sent
+  assert.equal(glyph(3).color, ui.PALETTE.idle)
+})
+
+test('v7: card list: a long name is cut with …, the answer stays whole; more cards than rows scroll so the current one is shown', () => {
+  const long = [{ id: 'x', name: 'a very long card name that cannot fit', answer: 'ok', sent: false }]
+  const r = S.cardRows(long, 0, 26)[0]
+  assert.equal(width(r.segs), 26)
+  assert.ok(segText(r.segs).includes('…'))
+  assert.ok(segText(r.segs).trimEnd().endsWith(' ok'))
+  const many = Array.from({ length: 12 }, (_, i) => ({ id: 'k' + i, name: 'card ' + i, answer: null, sent: false }))
+  for (const cur of [0, 5, 11]) {
+    const rows = S.cardRows(many, cur, 26)
+    assert.equal(rows.length, S.BODY_ROWS)
+    assert.ok(rows.some(x => x.key === 'card:k' + cur && segText(x.segs).startsWith('◐')), 'cursor ' + cur)
+  }
+})
+
+test('v7: progress: one cell per card (sent done, picked action, open idle), then picked/total, then the last answered card', () => {
+  const segs = S.progressSegs({ cards: CARDS, last: { name: 'merge plan', answer: 'merge' }, wide: false, width: 70, t })
+  const text = segText(segs)
+  assert.ok(text.startsWith('▰▰▱▱ 2/4'), text)
+  assert.ok(text.includes('◆ shell.prev merge plan → merge'), text)
+  const cells = segs.filter(s => s.text === '▰' || s.text === '▱')
+  assert.equal(cells.length, 4)
+  assert.deepEqual(cells.map(c => c.color), [ui.PALETTE.action, ui.PALETTE.done, ui.PALETTE.idle, ui.PALETTE.idle])
+  assert.ok(!text.includes('shell.to_send'), 'narrow: no to-send tail')
+})
+
+test('v7: progress: after a send with nothing left to send it says what was sent, in place of the last card', () => {
+  const sent = CARDS.map(c => ({ ...c, answer: c.answer ?? null, sent: c.answer !== null }))
+  const text = segText(S.progressSegs({ cards: sent, last: { name: 'x', answer: 'y' }, wide: true, width: 70, t }))
+  assert.ok(text.includes('✓ shell.sent_n{"n":2}'), text)
+  assert.ok(!text.includes('shell.prev'))
+})
+
+test('v7: progress: wide adds the to-send count; names only when they all fit, never half a name', () => {
+  const base = { cards: CARDS, last: { name: 'merge plan', answer: 'merge' }, wide: true, t }
+  const roomy = segText(S.progressSegs({ ...base, width: 120 }))
+  assert.ok(roomy.includes('shell.to_send{"n":1}'), roomy)
+  assert.ok(roomy.includes('merge plan'), roomy)
+  const names = S.progressSegs({ ...base, cards: CARDS.map(c => ({ ...c, sent: false })), width: 140 })
+  assert.ok(segText(names).includes('（merge plan、plugin timing'), segText(names))
+  const tight = S.progressSegs({ ...base, cards: CARDS.map(c => ({ ...c, sent: false })), width: 80 })
+  assert.ok(width(tight) <= 80)
+  assert.ok(!segText(tight).includes('（'), 'names dropped whole: ' + segText(tight))
+  assert.ok(!segText(tight).includes('plugin tim'), 'no half name')
+})
+
+test('v7: progress: control: the colours are PALETTE roles only, no background, inverse or bold', () => {
+  for (const s of S.progressSegs({ cards: CARDS, last: { name: 'n', answer: 'a' }, wide: true, width: 120, t })) {
+    assert.ok(s.color === undefined || Object.values(ui.PALETTE).includes(s.color), s.text)
+    assert.ok(s.bg === undefined && s.inverse === undefined && s.bold === undefined, s.text)
+  }
+})

@@ -16,8 +16,9 @@ export function bandTier(bodyColumns: number): Tier {
 }
 
 // ---- geometry (contract 1.2): the left column is 26 wide at every tier, the main window starts at the same column and grows to the right up to 76 ----
-export const SHELL_ROWS = 12 // menu row, top frame, BODY_ROWS body rows, bottom frame, progress row, quick row
-export const BODY_ROWS = 7
+export const SHELL_ROWS = 12 // menu row, top frame, BODY_ROWS body rows, bottom frame, quick row (ux-v7: the progress row moved inside the main window)
+export const BODY_ROWS = 8 // the main window's last two rows are the divider ├─┤ and the progress row; the six above are its content
+export const MAIN_CONTENT_ROWS = BODY_ROWS - 2
 export const LEFT_COLS = 26
 export const MAIN_MAX = 76
 export const MAIN_MIN = 30
@@ -188,9 +189,11 @@ export type ShellInput = {
   room: { rows: readonly RoomRow[]; fresh: number }
   panel: PanelRead
   fleet: readonly FleetLaneSum[]
+  footLeft?: string // right-aligned in the bottom frame of the left window (the card position, `3/8`)
+  footMain?: string // right-aligned in the bottom frame of the main window (the one-line hint)
 }
 export type ShellColumn = { id: ColId; inner: number; rows: Seg[][] } // BODY_ROWS rows, each padded to exactly `inner` cells
-export type ShellPlan = { geo: Geometry; top: Seg[]; bottom: Seg[]; verts: Seg[]; columns: ShellColumn[] }
+export type ShellPlan = { geo: Geometry; top: Seg[]; bottom: Seg[]; verts: Seg[]; columns: ShellColumn[]; divider: { left: Seg; right: Seg; rule: Seg } }
 
 const border = (role: 'here' | 'idle'): Partial<Seg> => ({ color: PALETTE[role] })
 function frameRow(kind: 'top' | 'bottom', widths: readonly number[], titles: readonly Seg[][]): Seg[] {
@@ -201,7 +204,14 @@ function frameRow(kind: 'top' | 'bottom', widths: readonly number[], titles: rea
   widths.forEach((w, i) => {
     out.push({ text: i === 0 ? l : mid, ...border(i === MAIN || i - 1 === MAIN ? 'here' : 'idle') })
     const style = border(i === MAIN ? 'here' : 'idle')
-    const title = kind === 'top' ? clipSegs(titles[i] ?? [], Math.max(0, w - 4)) : []
+    if (kind === 'bottom') {
+      // a foot title sits at the right end: `───── 3/8 ─`
+      const title = clipSegs(titles[i] ?? [], Math.max(0, w - 4))
+      if (title.length === 0) { out.push({ text: f.rule.repeat(w), ...style }); return }
+      out.push({ text: f.rule.repeat(Math.max(0, w - 3 - segWidth(title))) + ' ', ...style }, ...title, { text: ' ' + f.rule, ...style })
+      return
+    }
+    const title = clipSegs(titles[i] ?? [], Math.max(0, w - 4))
     if (title.length === 0) { out.push({ text: f.rule.repeat(w), ...style }); return }
     out.push({ text: f.rule + ' ', ...style }, ...title, { text: ' ' + f.rule.repeat(Math.max(0, w - 3 - segWidth(title))), ...style })
   })
@@ -232,7 +242,7 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
     const all = roomLines(inp.room.rows, inner, BODY_ROWS)
     return all.length === 0 ? [[{ text: t('shell.room_none'), dim: true }]] : all
   }
-  const hasUsage = (inner: number, full: boolean): boolean => usageOf(full ? side?.usageFull ?? null : side?.usage ?? null, inner, 7).length > 0
+  const hasUsage = (inner: number, full: boolean): boolean => usageOf(full ? side?.usageFull ?? null : side?.usage ?? null, inner, BODY_ROWS).length > 0
   const freshTitle: Seg[] = inp.room.fresh > 0 ? [{ text: ' ' + GLYPHS.structure.fresh + ' ' + inp.room.fresh }] : []
   const roomTitle: Seg[] = [{ text: t('shell.room') }, ...freshTitle]
 
@@ -259,7 +269,7 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
       titles.push(roomTitle)
       columns.push({ id: c.id, inner: c.inner, rows: stack(roomRows(c.inner), [], c.inner, lead1) })
     } else if (c.id === 'usage') {
-      const usage = usageOf(side?.usageFull ?? null, c.inner, 7).map(l => panelSegs(l, c.inner))
+      const usage = usageOf(side?.usageFull ?? null, c.inner, BODY_ROWS).map(l => panelSegs(l, c.inner))
       titles.push([{ text: t('shell.usage') }])
       columns.push({ id: c.id, inner: c.inner, rows: Array.from({ length: BODY_ROWS }, (_x, i) => padSegs(usage[i] ?? [], c.inner)) })
     } else {
@@ -276,15 +286,66 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
   const widths = [geo.left, geo.main, ...columns.map(c => c.inner)]
   const v = GLYPHS.structure.bandSep
   const verts = widths.concat([0]).map((_w, i) => ({ text: v, ...border(i === 1 || i === 2 ? 'here' : 'idle') }) as Seg)
-  return { geo, top: frameRow('top', widths, titles), bottom: frameRow('bottom', widths, titles), verts, columns }
+  const f = GLYPHS.structure
+  const divider = { left: { text: f.frameLeftT, ...border('here') } as Seg, right: { text: f.frameRightT, ...border('here') } as Seg, rule: { text: f.rule.repeat(geo.main), color: PALETTE.structure } as Seg }
+  const foot = (text: string | undefined): Seg[] => (text === undefined || text === '' ? [] : [{ text }])
+  const bottomTitles: Seg[][] = [foot(inp.footLeft), foot(inp.footMain)]
+  return { geo, top: frameRow('top', widths, titles), bottom: frameRow('bottom', widths, bottomTitles), verts, columns, divider }
+}
+
+// the marks band.tsx draws (it sets no colour of its own): a picked option's ◆ and the `│` between the quick row's slots
+export const PICK_MARK: Seg = { text: GLYPHS.structure.decisions, color: PALETTE.action }
+export const QUICK_SEP: Seg = { text: ' ' + GLYPHS.structure.bandSep + ' ', color: PALETTE.structure }
+
+// ---- the card list (ux-v7): the left column of the 待決 tab, one row per question; and the progress row inside the main window ----
+export type Card = { id: string; name: string; answer: string | null; sent: boolean }
+// the visible window of `count` rows around the cursor
+function window(n: number, cursor: number, count: number): number {
+  return Math.max(0, Math.min(n - count, cursor - Math.floor(count / 2)))
+}
+// ◐ the card in the main window (here), ◆ an answered one (action; done when it was sent), ○ an open one; the answer is right-aligned with one empty cell at the end
+export function cardRows(cards: readonly Card[], cursor: number, inner: number): { id: string; key: string; segs: Seg[] }[] {
+  const from = window(cards.length, cursor, BODY_ROWS)
+  return cards.slice(from, from + BODY_ROWS).map((c, k) => {
+    const here = from + k === cursor
+    const answered = c.sent || c.answer !== null
+    const glyph: Seg = here ? { text: GLYPHS.chart.here, color: PALETTE.here } : answered ? { text: GLYPHS.structure.decisions, color: c.sent ? PALETTE.done : PALETTE.action } : { text: GLYPHS.state.pending, color: PALETTE.idle }
+    const usable = inner - 1
+    const answer = c.answer === null ? '' : clipSegs([{ text: c.answer }], Math.max(1, Math.min(displayWidth(c.answer), Math.floor(usable / 2))))[0]?.text ?? ''
+    const answerW = answer === '' ? 0 : displayWidth(answer) + 1
+    const name = clipSegs([{ text: c.name, ...(here ? { color: PALETTE.here } : {}) }], Math.max(1, usable - 2 - answerW))
+    const used = 2 + segWidth(name) + answerW
+    const segs: Seg[] = [glyph, { text: ' ' }, ...name, { text: sp(usable - used) + (answer === '' ? '' : ' ' + answer), ...(answer === '' ? {} : { color: PALETTE.idle }) }]
+    return { id: c.id, key: 'card:' + c.id, segs: padSegs(segs, inner) }
+  })
+}
+
+// `▰▰▱▱▱▱▱▱ 2/8  ◆ 上一張 name → answer` (ux-v7 G3): one cell per card, sent done, picked action, open idle. After a send with nothing waiting the tail says `✓ 已送出 N 張`. `wide` adds `· 待送 N 張`
+// and, only when every name fits, the names; a name is never cut in half. The result is never wider than `width`.
+export function progressSegs(o: { cards: readonly Card[]; last: { name: string; answer: string } | null; wide: boolean; width: number; t: T }): Seg[] {
+  const { cards, t } = o
+  const meter: Seg[] = cards.map(c => (c.sent ? { text: GLYPHS.chart.meterOn, color: PALETTE.done } : c.answer !== null ? { text: GLYPHS.chart.meterOn, color: PALETTE.action } : { text: GLYPHS.chart.meterOff, color: PALETTE.idle }))
+  const picked = cards.filter(c => !c.sent && c.answer !== null)
+  const sentN = cards.filter(c => c.sent).length
+  const head: Seg[] = [...meter, { text: ' ' + (picked.length + sentN) + '/' + cards.length }]
+  let tail: Seg[] = []
+  if (sentN > 0 && picked.length === 0) tail = [{ text: '  ' }, { text: GLYPHS.state.done, color: PALETTE.done }, { text: ' ' + t('shell.sent_n', { n: sentN }) }]
+  else if (o.last !== null) tail = [{ text: '  ' }, { text: GLYPHS.structure.decisions, color: PALETTE.action }, { text: ' ' + t('shell.prev') + ' ' }, ...clipSegs([{ text: o.last.name }], 16), { text: ' ' + GLYPHS.structure.answer + ' ' + o.last.answer }]
+  const toSend = (names: boolean): Seg[] => {
+    if (!o.wide || picked.length === 0) return []
+    return [{ text: ' · ' + t('shell.to_send', { n: picked.length }) + (names ? '（' + picked.map(c => c.name).join('、') + '）' : '') }]
+  }
+  const variants = [[...head, ...tail, ...toSend(true)], [...head, ...tail, ...toSend(false)], [...head, ...tail]]
+  for (const v of variants) if (segWidth(v) <= o.width) return v
+  return clipSegs(variants[2], o.width)
 }
 
 // ---- the left column: the submenu of the open menu item (contract 3: the current one is marked ◐, shared with the 待決 list's "you are here") ----
 export type MenuItem = { id: string; label: string }
-export type LeftItem = { id: string; segs: Seg[] }
+export type LeftItem = { id: string; key: string; segs: Seg[] }
 export function leftItems(items: readonly MenuItem[], active: string | null, inner: number): LeftItem[] {
   return items.map(it => {
     const here = it.id === active
-    return { id: it.id, segs: padSegs(clipSegs([{ text: (here ? GLYPHS.chart.here : ' ') + ' ', ...(here ? { color: PALETTE.here } : {}) }, { text: it.label }], inner - 1), inner) }
+    return { id: it.id, key: 'menu:' + it.id, segs: padSegs(clipSegs([{ text: (here ? GLYPHS.chart.here : ' ') + ' ', ...(here ? { color: PALETTE.here } : {}) }, { text: it.label }], inner - 1), inner) }
   })
 }

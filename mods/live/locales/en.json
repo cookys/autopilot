@@ -368,5 +368,16 @@
   "shell.fleet": "Fleet",
   "shell.memory": "Memory",
   "shell.stale": "data {n} min old",
-  "shell.room_none": "no messages yet"
+  "shell.room_none": "no messages yet",
+  "shell.main_title": "Card {n} of {total}",
+  "shell.hint_pick": "Press 1-{n} to choose, the next card follows",
+  "shell.send": "Send {n}",
+  "shell.prev": "Previous",
+  "shell.next": "Next",
+  "shell.next_menu": "Next menu",
+  "shell.sent_n": "Sent {n}",
+  "shell.to_send": "{n} to send",
+  "shell.bg": "Why",
+  "shell.tip_short": "Esc returns the keys",
+  "shell.tip_full": "ctrl+x tab takes the keys · Esc returns them"
 }

@@ -41,11 +41,11 @@ import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
-import { NO_BATCH, answerPlan, answerOf, batchSync, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
+import { NO_BATCH, answerPlan, answerOf, batchSync, cardKey, focusRepair, inputsFor, noteKey, optKey, submitSuccessor } from './decidebatch'
 import type { DecideBatch } from './decidebatch'
 import { barStrip, decideTabLines } from './tabs'
 
-import { BandBar, BarRule, Shell, barContent, barParts, decideContent, speedContent, stackBand } from './band'
+import { BandBar, BarRule, Shell, barContent, barParts, cardMain, cardQuick, decideContent, progressRow, speedContent, stackBand } from './band'
 import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
@@ -53,13 +53,15 @@ import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BarTabId } from './tabs'
-import { BODY_ROWS, SHELL_ROWS, freshCount, leftItems, newestSeq, parsePanel, parseRoom, shellPlan } from './shell'
+import { MAIN_CONTENT_ROWS, SHELL_ROWS, cardRows, freshCount, leftItems, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan } from './shell'
+import type { Card } from './shell'
+import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
 import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
 import {
-  acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
+  acceptanceToast, autoResidueCount, decideDialog, decidePick, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   layoutBand, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
   paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
@@ -198,6 +200,8 @@ async function shellTick($: EngineInterface, nowMs: number): Promise<void> {
   shellRoom = { rows, raw }
   void $.ui.invalidate('ui.render')
 }
+let decideCursor = 0 // the card the O4 shell's main window shows (an index into snapshot.pending; clamped at every draw)
+let decideLastId: string | null = null // the card answered last from the shell (the progress row names it)
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
 const folded = new Set<string>() // the Now sections the person folded (SECTION ids); kept across /clear, a view preference and not tied to the transcript
@@ -1131,27 +1135,70 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const lanes: FleetLaneSum[] = fleet.lanes.map(l => ({ lane: l.lane, needYou: l.needYou, failed: l.failed, stuck: l.stuck, running: l.running, waiting: l.waiting }))
       const panel: PanelRead = parsePanel(panelRaw, nowMs)
       const strip = barStrip(snapshot, t, active, null)
+      // ux-v7: the 待決 tab is a card view. One card in the main window (decideCursor), the card list on the left, the progress row and the four quick slots under it.
+      const st = active === 'decide' ? await read($, DECIDE) : null
+      const pending = active === 'decide' ? snapshot.pending : []
+      const cards: Card[] = st === null ? [] : pending.map(d => ({ id: cardKey(d), name: d.question, answer: answerOf(d, st), sent: d.id !== null && st.sent[d.id] !== undefined }))
+      decideCursor = cards.length === 0 ? 0 : Math.max(0, Math.min(cards.length - 1, decideCursor))
+      const cur = pending[decideCursor]
+      const optN = cur === undefined || cur.id === null || decideDialog(cur) ? 0 : cur.options.length
       const plan = shellPlan({
-        columns, t, menuTitle: t('shell.menu'), mainTitle: (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(),
+        columns, t, menuTitle: t('shell.menu'),
+        mainTitle: cards.length > 0 ? t('shell.main_title', { n: decideCursor + 1, total: cards.length }) : (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(),
         room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes,
+        ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}),
       })
       if (plan !== null) {
         shellDrawnMs = nowMs
         shellWantsFleet = plan.geo.tier === 240
         const mainCols = plan.geo.main - 1
-        const parts = active === 'decide'
-          ? { rows: decideContent(el, snapshot, await read($, DECIDE), mainCols, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, BODY_ROWS), quick: barParts(el, snapshot, 'decide', mainCols, t, { onSlot: slot, onOpen: open }).quick }
-          : barParts(el, snapshot, active, mainCols, t, { onSlot: slot, onOpen: open })
-        const total = plan.geo.left + plan.geo.main + plan.columns.reduce((a, c) => a + c.inner, 0) + plan.columns.length + 3
-        const unit = snapshot.band === null ? [] : snapshot.band.slots.filter(sl => sl.id === 'unit')
-        return stackBand(el, bar.node, Shell(el, {
-          plan,
-          left: leftItems(strip.tabs.map(b => ({ id: b.id, label: b.label.text.trim() })), active, plan.geo.left),
-          onLeft: (id: string) => { if (id !== active) onTab(id as BarTabId) },
-          main: parts.rows.slice(0, BODY_ROWS),
-          progress: unit.length === 0 ? null : { segs: layoutBand(unit, total - 2).segs.slice(0, -1), onSlot: slot },
-          quick: parts.quick,
-        }))
+        const tabIds = strip.tabs.map(b => b.id).filter(id => id !== 'forge')
+        const redraw = () => { void $.ui.invalidate('ui.render') }
+        let main: unknown[]
+        let left: LeftItem[]
+        let onLeft: (id: string) => void
+        let progress: unknown
+        let quick: unknown[]
+        if (active === 'decide' && cards.length > 0 && st !== null && cur !== undefined) {
+          const pickPress = (k: number) => {
+            if (cur.id === null) return
+            const id = cur.id
+            void decidePress($, 'pick:' + id + ':' + k).then(async () => {
+              const now = await read($, DECIDE)
+              if (now.picks[id] === k) { decideLastId = id; decideCursor = Math.min(cards.length - 1, decideCursor + 1) }
+              redraw()
+            })
+          }
+          const note = optN === 0 ? t(cur.id === null || !decideDialog(cur) ? 'decide.in_chat' : 'decide.in_dialog') : null
+          main = cardMain(el, {
+            key: cardKey(cur), question: cur.question, background: cur.background, note, bgRows: plan.geo.tier >= 160 ? 2 : 1, width: mainCols - 1, onPress: pickPress,
+            options: optN === 0 || cur.id === null ? [] : cur.options.map((o, k) => ({ label: o.label, description: o.description, picked: decidePick(cur, st) === k, recommended: cur.recommendation === o.label, key: optKey(cur.id as string, k) })),
+          }, t)
+          left = cardRows(cards, decideCursor, plan.geo.left)
+          onLeft = (id: string) => { const i = cards.findIndex(c => c.id === id); if (i >= 0) { decideCursor = i; redraw() } }
+          const lastCard = cards.find(c => c.id === decideLastId)
+          const prog = progressSegs({ cards, last: lastCard === undefined || lastCard.answer === null || lastCard.sent ? null : { name: lastCard.name, answer: lastCard.answer }, wide: plan.geo.tier >= 160, width: mainCols - 1, t })
+          progress = progressRow(el, prog)
+          const sendN = cards.filter(c => !c.sent && c.answer !== null).length
+          quick = cardQuick(el, t, {
+            sendN, tip: t(plan.geo.tier === 80 ? 'shell.tip_short' : 'shell.tip_full'),
+            onSend: () => { void decidePress($, 'submit').then(redraw) },
+            onPrev: () => { decideCursor = Math.max(0, decideCursor - 1); redraw() },
+            onNext: () => { decideCursor = Math.min(cards.length - 1, decideCursor + 1); redraw() },
+            onMenu: () => { const at = tabIds.indexOf(active); const to = tabIds[(at + 1) % tabIds.length]; if (to !== undefined && to !== active) onTab(to as BarTabId) },
+          })
+        } else {
+          const parts = active === 'decide'
+            ? { rows: decideContent(el, snapshot, await read($, DECIDE), mainCols, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, MAIN_CONTENT_ROWS), quick: barParts(el, snapshot, 'decide', mainCols, t, { onSlot: slot, onOpen: open }).quick }
+            : barParts(el, snapshot, active, mainCols, t, { onSlot: slot, onOpen: open })
+          const unit = snapshot.band === null ? [] : snapshot.band.slots.filter(sl => sl.id === 'unit')
+          main = parts.rows.slice(0, MAIN_CONTENT_ROWS)
+          left = leftItems(strip.tabs.map(b => ({ id: b.id, label: b.label.text.trim() })), active, plan.geo.left)
+          onLeft = (id: string) => { if (id !== active) onTab(id as BarTabId) }
+          progress = progressRow(el, unit.length === 0 ? [] : layoutBand(unit, mainCols - 1).segs.slice(0, -1), slot)
+          quick = parts.quick
+        }
+        return stackBand(el, bar.node, Shell(el, { plan, left, onLeft, main, progress, quick }))
       }
     }
     let content: unknown[] = []

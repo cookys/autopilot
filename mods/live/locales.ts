@@ -372,7 +372,18 @@ export const EN: Record<string, string> = {
   "shell.fleet": "Fleet",
   "shell.memory": "Memory",
   "shell.stale": "data {n} min old",
-  "shell.room_none": "no messages yet"
+  "shell.room_none": "no messages yet",
+  "shell.main_title": "Card {n} of {total}",
+  "shell.hint_pick": "Press 1-{n} to choose, the next card follows",
+  "shell.send": "Send {n}",
+  "shell.prev": "Previous",
+  "shell.next": "Next",
+  "shell.next_menu": "Next menu",
+  "shell.sent_n": "Sent {n}",
+  "shell.to_send": "{n} to send",
+  "shell.bg": "Why",
+  "shell.tip_short": "Esc returns the keys",
+  "shell.tip_full": "ctrl+x tab takes the keys · Esc returns them"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -745,5 +756,16 @@ export const ZH_TW: Record<string, string> = {
   "shell.fleet": "艦隊",
   "shell.memory": "記憶",
   "shell.stale": "資料 {n} 分鐘前",
-  "shell.room_none": "還沒有訊息"
+  "shell.room_none": "還沒有訊息",
+  "shell.main_title": "第 {n} 張，共 {total} 張",
+  "shell.hint_pick": "按 1–{n} 直接選，選完換下一張",
+  "shell.send": "送出 {n} 張",
+  "shell.prev": "上一張",
+  "shell.next": "下一張",
+  "shell.next_menu": "下一個選單",
+  "shell.sent_n": "已送出 {n} 張",
+  "shell.to_send": "待送 {n} 張",
+  "shell.bg": "背景",
+  "shell.tip_short": "Esc 還給輸入框",
+  "shell.tip_full": "ctrl+x tab 拿鍵盤 · Esc 還給輸入框"
 }

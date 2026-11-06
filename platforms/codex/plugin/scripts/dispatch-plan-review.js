@@ -1273,6 +1273,24 @@ function sleepMilliseconds(milliseconds) {
   }
 }
 
+// Last ~20 lines of a runner's stderr with secrets masked, for a failed seat. The artifact used to
+// keep only a stderr digest, so a refused model or a missing key reached the operator as a bare exit.
+function redactedTail(text, maxLines = 20, maxBytes = 2048) {
+  let redact = (value) => String(value);
+  try {
+    redact = require('../hooks/_shared/secret-patterns').redact;
+  } catch (error) {
+    // Without the shared patterns nothing is quoted: fail closed to an empty tail.
+    return '';
+  }
+  const lines = redact(String(text || '')).split(/\r?\n/).filter((line) => line.trim() !== '');
+  let tail = lines.slice(-maxLines).join('\n');
+  if (Buffer.byteLength(tail, 'utf8') > maxBytes) {
+    tail = Buffer.from(tail, 'utf8').subarray(-maxBytes).toString('utf8').replace(/^\uFFFD+/, '');
+  }
+  return tail;
+}
+
 function dispatchSeat(
   target,
   prompt,
@@ -1399,7 +1417,11 @@ function dispatchSeat(
         digest: sha256(raw),
       } : null,
     });
-    return { envelope, raw, authorError: policyRefuse ? authorError : null };
+    const failure = success ? null : {
+      error: authorError ? redactedTail(authorError) : null,
+      runner_stderr_tail: redactedTail(run.stderr),
+    };
+    return { envelope, raw, authorError: policyRefuse ? authorError : null, failure };
   } finally {
     fs.rmSync(promptPath, { force: true });
     try {
@@ -1536,6 +1558,14 @@ function reviewSeat({
       raw: dispatched.raw,
       expected: bounded,
     });
+    if (dispatched.failure) {
+      const why = dispatched.failure.error || dispatched.failure.runner_stderr_tail || 'no runner output';
+      process.stderr.write(
+        `dispatch-plan-review: seat ${seat.id} (${bounded.runner}/${bounded.model}`
+        + `${bounded.endpoint && bounded.endpoint !== 'default' ? `, endpoint ${bounded.endpoint}` : ''}) `
+        + `attempt ${attempt} failed: ${why.replace(/\s*\n\s*/g, ' | ')}\n`,
+      );
+    }
     // Unratified salvage carry (verdict-bytes preservation, plan R3 §3). Controller-side
     // binding: provenance is recorded by the code that parsed those exact bytes.
     // g2-adjudication #0: a reused/out-of-attempt capture locator is never salvage-
@@ -1572,6 +1602,10 @@ function reviewSeat({
       transport_envelope: dispatched.envelope,
       transport_status: normalized.transport_status,
       ...(dispatched.authorError ? { error: dispatched.authorError } : {}),
+      ...(dispatched.failure && !dispatched.authorError && dispatched.failure.error
+        ? { error: dispatched.failure.error } : {}),
+      ...(dispatched.failure && dispatched.failure.runner_stderr_tail
+        ? { runner_stderr_tail: dispatched.failure.runner_stderr_tail } : {}),
       parser_status: normalized.parser_status,
       semantic_status: normalized.semantic_status,
       unratified_semantic_status: unratified ? 'available' : 'unavailable',

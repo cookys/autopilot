@@ -151,18 +151,19 @@ const problems = [];
 // (2) every key present in the OLD output is present in the NEW output with a
 // byte-identical value (the parity template pins consult_dispatch: off, so the
 // consult seat fields are '' on both sides on every host).
-// qc_panel / qc_panel_seats moved on purpose after the pre-D6 pin (gpt-6.1-sol at low, the
-// gemini-flash alias -> gemini-4-argon-high): they are not compared with the old output but
+// qc_panel / qc_panel_seats moved on purpose after the pre-D6 pin (three seats: gpt-6.1-sol at low, claude-opus-5-5,
+// gemini-4-argon-high; now four seats: gpt-6-astra low, gpt-6.1-sol high, gemini-4-argon-high, GLM-5.3 via glm): they are not compared with the old output but
 // asserted against the exact new values below (same values resolve-review-loop-b pins).
 const INTENTIONAL_DEFAULT_MOVE = new Set(['qc_panel', 'qc_panel_seats']);
 for (const [key, oldVal] of Object.entries(oldJson)) {
   if (!(key in newJson)) { problems.push(`missing-in-new:${key}`); continue; }
   if (INTENTIONAL_DEFAULT_MOVE.has(key)) {
     const want = key === 'qc_panel'
-      ? ['gpt-6.1-sol', 'claude-opus-5-5', 'gemini-4-argon-high']
-      : [{role:'qc',runner:'codex',model:'gpt-6.1-sol',effort:'low',endpoint:null,family:'openai'},
-         {role:'qc',runner:'claude-native',model:'claude-opus-5-5',effort:'high',endpoint:null,family:'anthropic'},
-         {role:'qc',runner:'agy',model:'gemini-4-argon-high',effort:'high',endpoint:null,family:'google'}];
+      ? ['gpt-6-astra', 'gpt-6.1-sol', 'gemini-4-argon-high', 'GLM-5.3']
+      : [{role:'qc',runner:'codex',model:'gpt-6-astra',effort:'low',endpoint:null,family:'openai'},
+         {role:'qc',runner:'codex',model:'gpt-6.1-sol',effort:'high',endpoint:null,family:'openai'},
+         {role:'qc',runner:'agy',model:'gemini-4-argon-high',effort:'high',endpoint:null,family:'google'},
+         {role:'qc',runner:'cc-shim',model:'GLM-5.3',effort:'high',endpoint:'glm',family:'zhipu'}];
     if (JSON.stringify(newJson[key]) !== JSON.stringify(want)) problems.push(`new-value-drift:${key}`);
     continue;
   }

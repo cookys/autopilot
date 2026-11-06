@@ -19,7 +19,7 @@ CHK=$(printf '%s' "$SEATS" | node -e '
   const seats = s.map((x, i) => ({ id: "s" + i, runner: x.runner, engine: x.model }));
   const native = seats.filter((x) => x.runner === "claude-native").length;
   console.log(seats.length + " " + native + " " + invalidSeatModels(seats).length);' "$REPO_ROOT/scripts/lib/seat-model-id.js")
-assert_eq "$CHK" "3 1 0" "template qc_panel: 3 seats, 1 claude-native, 0 invalid models"
+assert_eq "$CHK" "4 0 0" "template qc_panel: 4 seats, 0 claude-native, 0 invalid models"
 assert_not_contains "$SEATS" '"model":"claude-opus"' "template qc_panel carries no bare claude-opus"
 DEFSEATS=$(cd "$TEST_TMP" && REVIEW_LOOP_CONFIG_OVERRIDE=/dev/null "$RESOLVER" --field qc_panel_seats 2>/dev/null)
 assert_not_contains "$DEFSEATS" '"model":"claude-opus"' "resolver built-in default carries no bare claude-opus"

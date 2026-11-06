@@ -398,3 +398,5 @@ cat <<-'EOF'
 	x
 	EOF
 rm -rf /etc/x
+#@ g4-dq-param-sq deny
+unset x; echo "${x:-'$(rm -rf /etc/x)'}"

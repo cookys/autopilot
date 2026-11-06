@@ -195,7 +195,7 @@ function dquote(s, i, c, st) {
     }
     if (ch === '$' && s[j + 1] === '(') { j = scan(s, j + 2, { ...next, term: ')', noHere: s[j + 2] === '(' }, st); out += '$(' + NEUTRAL; sub = true; continue; }
     if (ch === '`') { const b = backtick(s, j); scan(b.inner, 0, { ...next, term: '' }, st); j = b.end; out += '$(' + NEUTRAL; sub = true; continue; }
-    if (ch === '$' && s[j + 1] === '{' && s.indexOf('}', j + 2) !== -1) { j = scan(s, j + 2, { ...next, term: '}', word: true }, st); out += '${' + NEUTRAL; continue; }
+    if (ch === '$' && s[j + 1] === '{' && s.indexOf('}', j + 2) !== -1) { j = scan(s, j + 2, { ...next, term: '}', word: true, dq: true }, st); out += '${' + NEUTRAL; continue; }
     out += inert(ch);
   }
   return { text: out, end: s.length, sub };
@@ -204,7 +204,8 @@ function dquote(s, i, c, st) {
 // Scan s from i until the terminator c.term ('' = end of input, ')' closes a $( ) / <( )
 // / (( )) body at paren depth 0, '}' closes a ${ } body); finished segments go to
 // st.segs as { text, nested, sub }. Returns the terminator index (s.length when absent).
-// c: { term, nested, depth, noHere (arithmetic: << is a shift), word (${ }: nothing splits) }.
+// c: { term, nested, depth, noHere (arithmetic: << is a shift), word (${ }: nothing splits),
+//       dq (a ${ } span inside a double-quoted string: single quotes are plain characters) }.
 function scan(s, i, c, st) {
   if (c.depth > MAX_DEPTH) throw new DepthError('command nesting deeper than ' + MAX_DEPTH);
   const next = { nested: true, depth: c.depth + 1 };
@@ -227,12 +228,13 @@ function scan(s, i, c, st) {
       inWord = true;
       continue;
     }
+    if (ch === '\'' && c.dq) { cur += NEUTRAL; continue; } // inside "${ }" a single quote is a plain character, not a quote opener
     if (ch === '\'') {
       const k = s.indexOf('\'', i + 1);
       if (k !== -1) { cur += inert(s.slice(i + 1, k)); crossed(i, k); i = k; inWord = true; }
       continue; // an unterminated quote is dropped; the rest stays active
     }
-    if (ch === '$' && s[i + 1] === '\'') { // ANSI-C quoting: backslash escapes the next char
+    if (ch === '$' && s[i + 1] === '\'' && !c.dq) { // ANSI-C quoting: backslash escapes the next char
       let k = i + 2;
       while (k < s.length && s[k] !== '\'') k += s[k] === '\\' ? 2 : 1;
       if (k < s.length) { cur += inert(s.slice(i + 2, k)); crossed(i, k); i = k; inWord = true; } else { cur += '$'; inWord = true; }
@@ -256,7 +258,7 @@ function scan(s, i, c, st) {
       continue;
     }
     if (ch === '$' && s[i + 1] === '{' && s.indexOf('}', i + 2) !== -1) {
-      const e = scan(s, i + 2, { ...next, term: '}', word: true }, st);
+      const e = scan(s, i + 2, { ...next, term: '}', word: true, dq: c.dq }, st);
       cur += '${' + NEUTRAL; crossed(i, e); i = e; inWord = true;
       continue;
     }

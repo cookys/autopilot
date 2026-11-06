@@ -287,6 +287,16 @@ cat <<$'EOF'
 rm -rf /etc/x
 EOF
 X
+# g4: inside a double-quoted ${ }, single quotes are plain characters, so the $( ) in them runs.
+expect_exit 2 "E2/g4: single-quoted \$( ) inside \"\${x:-..}\" is active and denied" <<'X'
+unset x; echo "${x:-'$(rm -rf /etc/x)'}"
+X
+expect_exit 2 "E2/g4: ANSI-C quoted \$( ) inside \"\${x:-..}\" is active and denied" <<'X'
+unset x; echo "${x:-$'$(rm -rf /etc/x)'}"
+X
+expect_exit 0 "E2/g4: plain single-quoted rm text outside a dq \${ } stays allowed" <<'X'
+echo 'rm -rf /etc/x'
+X
 # Nested active spans deny any recursive rm, in-scope target included (fail closed).
 expect_exit 2 "E2/g3: in-scope rm inside \$( ) denied" <<'X'
 echo $(rm -rf ./build)

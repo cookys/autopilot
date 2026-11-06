@@ -528,6 +528,13 @@ die_precondition() {
 # nothing when there is no stderr file. Redaction reuses hooks/_shared/secret-patterns.
 runner_stderr_excerpt() {
   local err_file="${RUNNER_ERR_FILE:-}"
+  # The codex transport keeps stderr in its own private artifact, never in RUNNER_ERR_FILE; without
+  # this fallback a refused codex model ("... not supported with ChatGPT account") was a bare exit 3.
+  # Only this failure path reads it, so the success-path result still never carries a stderr body.
+  # That artifact also holds the chrome frame (session id) and the echoed prompt, which the result must
+  # not carry, so only the runner's own error lines are quoted from it.
+  local only_errors=0
+  if [[ "${CODEX_TRANSPORT:-0}" -eq 1 && -n "${CODEX_STDERR:-}" ]]; then err_file="$CODEX_STDERR"; only_errors=1; fi
   [[ -n "$err_file" && -s "$err_file" ]] || return 0
   node -e '
     const fs = require("fs"), path = require("path");
@@ -537,7 +544,11 @@ runner_stderr_excerpt() {
     // recognisable prefix. Work on an 8000-byte tail window, drop continuation bytes a byte-cut may
     // leave at its start, and strip a leading run of key-like characters the window start may have
     // sliced off a token; then redact, collapse whitespace, and cut to <=2048 bytes on a UTF-8 boundary.
-    const b = fs.readFileSync(process.argv[1]);
+    let b = fs.readFileSync(process.argv[1]);
+    if (process.argv[3] === "1") {
+      const keep = b.toString("utf8").split(/\r?\n/).filter((l) => /^(\x1b\[[0-9;]*m)*\s*(ERROR|Error|error|fatal|stream error|warning)\b/.test(l));
+      b = Buffer.from(keep.slice(-20).join("\n"), "utf8");
+    }
     const start = Math.max(0, b.length - 8000);
     let s = 0;
     while (start > 0 && start + s < b.length && (b[start + s] & 0xC0) === 0x80) s++;
@@ -552,7 +563,7 @@ runner_stderr_excerpt() {
       o = o.subarray(k);
     }
     process.stdout.write(o.toString("utf8"));
-  ' "$err_file" "$_AUTHOR_SELF_DIR" 2>/dev/null || true
+  ' "$err_file" "$_AUTHOR_SELF_DIR" "$only_errors" 2>/dev/null || true
 }
 
 # transport_status vocabulary matches dispatch-plan-review.js: quota | timeout | exit_failure.

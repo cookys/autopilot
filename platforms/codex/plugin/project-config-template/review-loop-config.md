@@ -56,7 +56,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 - loop_convergence_verdict: SHIP-AS-IS
 - spec_review: on
 - independent_harness: on
-- qc_panel: gpt-6.1-sol, claude-opus-5-5, gemini-flash
+- qc_panel: gpt-6-astra, gpt-6.1-sol, gemini-4-argon-high, GLM-5.3
 - qc_panel_runners: codex, claude-native, agy
 - qc_panel_efforts: low, high, high
 - qc_panel_endpoints: @none, @none, @none
@@ -201,7 +201,7 @@ Claude; set `reviewer_engine` here to make the review heterogeneous too.
 | `loop_convergence_verdict` | the reviewer verdict that ENDS a loop | `SHIP-AS-IS` (loop continues on `FIX-THEN-SHIP`/`RECONSIDER`) |
 | `spec_review` | run the reviewer loop on the spec BEFORE dispatching impl | `on\|off` |
 | `independent_harness` | depth-0 builds its OWN adversarial harness (never trusts the implementer's green) | `on\|off` |
-| `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (distinct families >= required AND ≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-5.5, claude-opus, gemini-flash`) |
+| `qc_panel` | the authoritative depth-0 terminal gate — a disjoint-family reviewer panel (distinct families >= required AND ≥1 family ≠ implementer) | comma list of model names (e.g. `gpt-6-astra, gpt-6.1-sol, gemini-4-argon-high, GLM-5.3`) |
 | `qc_panel_runners` / `qc_panel_efforts` / `qc_panel_endpoints` | positional exact-tuple metadata for readiness. All three lists must align 1:1 with `qc_panel`; endpoint `@none` means literal null. Missing/invalid/misaligned metadata leaves legacy review dispatch unchanged but makes `qc_panel_seats_complete=false`, so readiness fails closed instead of guessing | comma lists; reviewer runner allowlist, effort `low\|medium\|high\|xhigh\|max`, endpoint `@none` or `[A-Za-z0-9_]` |
 | `review_packet_deny_extra` | additional packet deny-list patterns, composed with the eight shipped defaults (`DEFAULT_PACKET_DENY_LIST`). Additive only — extras cannot remove a default. Grammar is `normalizeDenyList`: relative `/`-joined globs; `**` whole-segment; `*` inside a segment. Invalid element fails closed. Visible in `MANIFEST.json` `deny_list` / `packet_hash` | comma list (default empty) |
 | `exclude_allowlist` | consumer-declared pathspec(s) that widen `scripts/lib/exclude-allowlist.js`'s hardcoded `EXCLUDE_ALLOWLIST` for `--exclude` on generated/vendor paths, one per row. Each row is checked by `isAcceptedConsumerRow`: no source extension (`.js\|.ts\|.py\|.sh\|.md`), no glob character except a literal trailing `/**`, and at least one `/` — a code directory such as `src/**` is refused, not widened | one or more `- exclude_allowlist: <pathspec>` rows (repeatable), or absent |

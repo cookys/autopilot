@@ -7,7 +7,6 @@
 import { PALETTE } from '../live/ui'
 import { frameOf, scrollFrame } from '../live/scroll'
 import type { ScrollModel } from '../live/scroll'
-import { nextOffset, openOffset } from './model'
 import type { DisplayLine, LineRole } from './model'
 import type { RT } from './strings'
 
@@ -45,11 +44,6 @@ export function RoundtablePane(
   win?: { props: unknown; model: ScrollModel },
 ) {
   const { Box, Text, Input } = el
-  // scrollFrame sets framed; the next paint clears it. Read the previous paint first so the opening offset runs only once.
-  const hadFrame = win !== undefined && win.model.framed
-  const prevMax = win !== undefined ? win.model.max : 0
-  const prevRoom = win !== undefined ? win.model.room : 0
-  const prevOffset = win !== undefined ? win.model.offset : 0
   if (win !== undefined) win.model.framed = false
   const title = view.room === null ? t('rt.empty') : t('rt.head', { room: view.room, n: view.count })
   const name = <Text key="name" wrap="truncate-end">{title}</Text>
@@ -60,17 +54,8 @@ export function RoundtablePane(
   )
   const frame = win === undefined ? null : frameOf(win.props)
   if (frame !== null && win !== undefined) {
-    const bar = [failure, field].filter(n => n !== null)
-    const headRows = note === null ? 1 : 2
-    const room = Math.max(1, frame.rows - headRows - 1 - bar.length)
-    const total = view.lines.length
-    // A room that fits opens at row 1. A longer room opens at the tail, and stays there only while it was already at the tail.
-    if (hadFrame) {
-      const prevCount = prevMax + (prevRoom > 0 ? prevRoom : room)
-      win.model.offset = nextOffset(prevOffset, prevCount, total, room)
-    } else {
-      win.model.offset = openOffset(total, room)
-    }
+    // The control area is the failure row and the field, always both rows: a send failure appears in its reserved row and never changes the area's height (chat-room layout).
+    const bar = [failure ?? <Text key="failure"> </Text>, field].filter(n => n !== null)
     return scrollFrame(el, {
       rows: frame.rows, cols: frame.cols,
       head: [name, ...(note === null ? [] : [note])],
@@ -79,6 +64,7 @@ export function RoundtablePane(
       window: (o, r) => view.lines.slice(o, o + r).map((l, i) => lineNode(Text, l, 'r' + (o + i))),
       bar, barRows: bar.length,
       model: win.model,
+      bottom: { above: n => t('rt.above', { n }), newer: t('rt.newer'), items: view.count, inline: (win.props as { placement?: unknown }).placement === 'inline' }, // the message count, not the wrapped rows: a width change never says new messages
     })
   }
   return (

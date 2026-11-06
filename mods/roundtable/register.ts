@@ -8,7 +8,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { resolveLocale } from '../live/i18n'
 import type { Locale } from '../live/i18n'
-import { newScroll, scrollHook } from '../live/scroll'
+import { keyed, newScroll, scrollHook } from '../live/scroll'
 import { displayLines, parseRoomLog } from './model'
 import type { RoomRow } from './model'
 import { RoundtablePane } from './pane'
@@ -180,6 +180,7 @@ export function registerRoundtable(on: Parameters<Register>[0]): void {
     const t: RT = makeRT(state.locale)
     const cols = frameCols(e)
     scroll.redraw = () => { void $.ui.invalidate('ui.render') }
+    keyed(scroll, state.room ?? '') // another room starts at the newest message: offset, unseen and the item count are reset
     return RoundtablePane($.ui.resolve(e), {
       room: state.room,
       count: state.rows.length,

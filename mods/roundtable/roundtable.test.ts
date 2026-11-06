@@ -235,3 +235,147 @@ test('empty text and no room clear the draft and do not send', async ($, on) => 
   expect(w.runs.length).toBe(0)
   expect((await draftValue($)).value).toBe('')
 })
+
+// ---- chat-room layout: the control area (failure row + Say field) is fixed at the bottom; the log is bottom-anchored; scroll state is the first content row ----
+const longLog = (n: number) => Array.from({ length: n }, (_, i) => one({ seq: i + 1, from: i % 2 === 0 ? 'owner' : 'cuda', kind: 'say', text: '第 ' + (i + 1) + ' 則發言' })).join('\n') + '\n'
+const frameOf = (tree: Node) => {
+  const fixed = ((tree.children || []) as Node[]).find(k => k.props?.key === 'fixed') as Node
+  const kids = (fixed.children || []) as Node[]
+  const ci = kids.findIndex(k => k.props?.key === 'content')
+  const own = ((((kids[ci].children || []) as Node[]).find(k => k.props?.key === 'rows') as Node).children || []) as Node[]
+  const rows = own.flatMap(r => (r.props?.key === 'pad' ? Array.from({ length: Number(r.props?.height) }, () => ({ ...r, children: [] })) : [r])) // the pad Box is `height` blank rows
+  // the screen row of the Say field: rows above the content, the content rows drawn, the rule, the failure row
+  const bar = ((kids[ci].children || []) as Node[]).find(k => k.props?.key === 'scrollbar')
+  const thumb = ((bar?.children || []) as Node[]).map(textOf).join('') // the scrollbar column top to bottom: █ is the thumb
+  return { thumb, texts: rows.map(textOf), keys: rows.map(r => String(r.props?.key ?? '')), sayAt: ci + rows.length + 2, below: kids.length - ci - 2 }
+}
+async function shape($: any, key: string | null, bodyRows = 24, cols = 80) {
+  const props = { ...PANE_PROPS, bodyColumns: cols, scroll: { offset: 0, bodyRows } }
+  const m = () => $.ui.mount({ plugin: 'autopilot', surface: 'terminal', component: 'Pane', requestId: 'autopilot-roundtable', props, viewport: { columns: 120, rows: 40, isFullscreen: true } })
+  if (key !== null) { const p = await m(); await p.press({ key }); await p.unmount() }
+  const win = await m()
+  const tree = (await win.drawn()) as Node
+  await win.unmount()
+  return frameOf(tree)
+}
+async function open($: any, on: On, log: string) {
+  const w = world(on)
+  w.files[LOG] = log
+  await $.session.start({ surface: 'terminal', cwd: '/work/repo' })
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  return w
+}
+
+test('CHAT roundtable: a short log is bottom-anchored (blank rows at the top, the newest row right above the rule)', async ($, on) => {
+  await open($, on, longLog(3))
+  const s = await shape($, null)
+  expect(s.keys[0]).toMatch(/^pad/)
+  expect(s.texts[0].trim()).toBe('')
+  expect(s.texts[s.texts.length - 1]).toContain('第 3 則發言')
+  expect(s.texts.join('\n')).not.toContain('上方還有')
+})
+
+test('CHAT roundtable: overflow keeps the Say field on one screen row while scrolling up, down and End; the hint is the first content row', async ($, on) => {
+  await open($, on, longLog(40))
+  const bottom = await shape($, null)
+  expect(bottom.texts[bottom.texts.length - 1]).toContain('第 40 則發言')
+  expect(bottom.texts[0].trim()).toMatch(/^上方還有 \d+ 行$/)
+  const top = await shape($, 'sbj0')
+  expect(top.texts.join('\n')).toContain('第 1 則發言')
+  expect(top.texts[0].trim(), 'nothing above at the top').toBe('')
+  const mid = await shape($, 'sbj10')
+  expect(mid.texts[0].trim()).toMatch(/^上方還有 \d+ 行$/)
+  expect(mid.texts.join('\n')).not.toContain('第 40 則發言')
+  const end = await shape($, 'sbj19')
+  expect(end.texts.join('\n')).toContain('第 40 則發言')
+  for (const s of [bottom, top, mid, end]) {
+    expect(s.sayAt, 'the Say field never changes its screen row').toBe(bottom.sayAt)
+    expect(s.below, 'the control area keeps its height').toBe(bottom.below)
+  }
+})
+
+test('CHAT roundtable: rows appended while scrolled up show the new-messages line and do not move the view; the line returns to the bottom; at the bottom the view follows', async ($, on) => {
+  const w = await open($, on, longLog(40))
+  const top = await shape($, 'sbj0')
+  expect(top.texts.join('\n')).not.toContain('有新訊息')
+  w.files[LOG] = longLog(46)
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  const still = await shape($, null)
+  expect(still.texts[still.texts.length - 1].trim(), 'the row just above the control area').toBe('有新訊息 ↓')
+  expect(still.texts[1], 'the first content row of the view did not move').toBe(top.texts[1])
+  expect(still.sayAt).toBe(top.sayAt)
+  expect(still.below).toBe(top.below)
+  const back = await shape($, 'newerb')
+  expect(back.texts.join('\n')).toContain('第 46 則發言')
+  expect(back.texts.join('\n')).not.toContain('有新訊息')
+  w.files[LOG] = longLog(50)
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  const followed = await shape($, null)
+  expect(followed.texts[followed.texts.length - 1]).toContain('第 50 則發言')
+  expect(followed.texts.join('\n'), 'a view at the bottom never shows the line').not.toContain('有新訊息')
+})
+
+test('CHAT roundtable: a send failure uses its reserved row (the control area keeps its height) and a resize keeps the bottom anchor', async ($, on) => {
+  const w = await open($, on, longLog(40))
+  const before = await shape($, null)
+  w.exitCode = 3
+  w.stderr = 'seat-down\n'
+  const win = await mount($)
+  await win.input({ key: 'say', text: 'x' })
+  await win.unmount()
+  const after = await shape($, null)
+  expect(after.below).toBe(before.below)
+  expect(after.sayAt).toBe(before.sayAt)
+  expect(after.texts).toEqual(before.texts)
+  const small = await shape($, null, 12)
+  expect(small.texts[small.texts.length - 1], 'still at the newest row after the pane got shorter').toContain('第 40 則發言')
+  expect(small.below).toBe(before.below)
+})
+
+test('CHAT roundtable: the thumb is flush with the top at Home and flush with the bottom of the track at End', async ($, on) => {
+  await open($, on, longLog(40))
+  const end = await shape($, null)
+  expect(end.thumb.endsWith('█'), 'bottom position: the thumb reaches the last track cell').toBe(true)
+  const top = await shape($, 'sbj0')
+  expect(top.thumb.startsWith('█')).toBe(true)
+})
+
+const wideLog = (n: number) => Array.from({ length: n }, (_, i) => one({ seq: i + 1, from: 'owner', kind: 'say', text: 'm' + (i + 1) + ' ' + 'x'.repeat(100) })).join('\n') + '\n'
+test('CHAT roundtable: narrowing the pane while scrolled up re-wraps rows but never says new messages; while following it stays at the bottom', async ($, on) => {
+  await open($, on, wideLog(40))
+  const wide = await shape($, 'sbj0', 24, 120)
+  expect(wide.texts.join('\n')).not.toContain('有新訊息')
+  const narrow = await shape($, null, 24, 40)
+  expect(narrow.texts.join('\n'), 'a width change is not an appended message').not.toContain('有新訊息')
+  const again = await shape($, null, 24, 120)
+  expect(again.texts.join('\n')).not.toContain('有新訊息')
+  const end = await shape($, 'sbj19', 24, 120)
+  expect(end.texts[end.texts.length - 1]).toContain('m40 ')
+  const follow = await shape($, null, 24, 40)
+  expect(follow.texts[follow.texts.length - 1], 'following: still at the newest row after narrowing').toMatch(/^\s*x+$/)
+  expect(follow.texts.join('\n')).not.toContain('有新訊息')
+})
+
+test('CHAT roundtable: a stale new-messages line is cleared when the message count drops while still scrolled up', async ($, on) => {
+  const w = await open($, on, longLog(40))
+  await shape($, 'sbj0')
+  w.files[LOG] = longLog(46)
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  const set = await shape($, null)
+  expect(set.texts.join('\n')).toContain('有新訊息')
+  w.files[LOG] = longLog(43)
+  await $.command.run({ command: 'rt-room', args: ROOM })
+  const after = await shape($, null)
+  expect(after.texts.join('\n'), 'fewer messages than before: no stale line').not.toContain('有新訊息')
+  expect(after.texts[0].trim()).toBe('')
+})
+
+test('CHAT roundtable: switching to another room resets the view: no new-messages line, and the new room opens at its newest message', async ($, on) => {
+  const w = await open($, on, longLog(40))
+  await shape($, 'sbj0')
+  w.files[ROOMS + '/other/room.jsonl'] = longLog(60)
+  await $.command.run({ command: 'rt-room', args: 'other' })
+  const b = await shape($, null)
+  expect(b.texts.join('\n')).not.toContain('有新訊息')
+  expect(b.texts[b.texts.length - 1], 'opens at the newest message').toContain('第 60 則發言')
+})

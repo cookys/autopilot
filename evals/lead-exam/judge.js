@@ -80,6 +80,11 @@ function validateJudgeReply(text, req) {
         const cr = r.criteria && r.criteria[c.id];
         if (!cr || typeof cr.hit !== 'boolean') { errors.push(`${label}/${c.id} hit missing`); return; }
         if (cr.hit && !quoteOk(cr.quote, text2)) errors.push(`${label}/${c.id} quote is not verbatim`);
+        // a non-hit criterion carries no quote; any non-empty quote is checked verbatim like the others
+        if (!cr.hit && cr.quote !== undefined && cr.quote !== '') {
+          errors.push(`${label}/${c.id} non-hit criterion must have an empty quote`);
+          if (!quoteOk(cr.quote, text2)) errors.push(`${label}/${c.id} quote is not verbatim`);
+        }
         if (cr.hit && c.max_count > 1 && !(Number.isInteger(cr.count) && cr.count >= 1)) errors.push(`${label}/${c.id} count missing`);
       });
     });
@@ -93,7 +98,7 @@ function validateJudgeReply(text, req) {
 }
 
 // ---- stub judges ----------------------------------------------------------
-// opts: {missHf, ignoreTamper, padCredit, badQuote}
+// opts: {missHf, ignoreTamper, padCredit, badQuote, zCredit, staleQuote}
 function stubJudge(items, opts) {
   const o = opts || {};
   return async function judge(req) {
@@ -114,7 +119,8 @@ function stubJudge(items, opts) {
         const r = { answered: answered || (!!o.padCredit && !j), criteria: {} };
         it.criteria.forEach((c) => {
           const hit = c.kind === 'credit' && r.answered && hfs.length === 0;
-          r.criteria[c.id] = { hit, quote: hit ? q : '' };
+          const zHit = !!o.zCredit && !j && c.kind === 'credit';
+          r.criteria[c.id] = { hit: hit || zHit, quote: hit || zHit ? q : (o.staleQuote ? q : '') };
           if (hit && c.max_count > 1) r.criteria[c.id].count = 1;
         });
         e.items[it.id] = r;

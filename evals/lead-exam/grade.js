@@ -69,7 +69,8 @@ async function gradeExam(opts) {
     const xFound = xe.hard_fails.map((h) => h.id);
     (fx.CONTROL_X_EXPECTED_HF[round] || []).forEach((id) => { if (!xFound.includes(id)) failures.push(`control X: ${id} not found`); });
     const ze = r.data.examinees[order.find((en) => en.kind === 'z').label];
-    if (Object.keys(ze.items).some((id) => ze.items[id].answered) || ze.hard_fails.length) failures.push('control Z: padding was credited');
+    const zCredited = req.items.some((it) => it.criteria.some((c) => c.kind === 'credit' && ze.items[it.id] && ze.items[it.id].criteria[c.id] && ze.items[it.id].criteria[c.id].hit));
+    if (Object.keys(ze.items).some((id) => ze.items[id].answered) || ze.hard_fails.length || zCredited) failures.push('control Z: padding was credited');
     if (failures.length) { roundStatus[round] = { status: 'void', reason: failures.join('; ') }; continue; }
     roundStatus[round] = { status: 'ok' };
     order.filter((en) => en.kind === 'real').forEach((en) => {

@@ -82,6 +82,16 @@
       "reason": "builds the claude argv and env for a role kit and returns them as data; it never spawns a process, and the rail that runs the argv goes through the account layer with a throwaway config dir"
     },
     {
+      "file": "evals/rolekit/run-pilot-window.js",
+      "status": "out_of_scope",
+      "reason": "opens the default-account window around run-pilot.js; its claude-account.js calls are set-default (registry edit, restored in a finally path), env-check and a non-claude probe child (printf), so it never starts a claude process; the claude-native calls it wraps run in run-pilot.js through dispatch-author.sh / dispatch-hetero.sh (wired)"
+    },
+    {
+      "file": "evals/rolekit/run-pilot.js",
+      "status": "out_of_scope",
+      "reason": "pilot runner: its claude-account.js calls are env-check and a non-claude probe child (/bin/sh printf of the alias), and every claude-native call is dispatched through dispatch-author.sh / dispatch-hetero.sh (--runner claude-native), which are wired and covered by their account-rail suites; it starts no claude process itself (its --dry-run claude is a stub on the author rail's --bin / PATH)"
+    },
+    {
       "file": "evals/run-trigger-test.sh",
       "status": "wired",
       "group": "A12",

@@ -10,6 +10,7 @@
  *                                       [--root-run-id <id>] [--cwd <dir>] [--json]     (prints the new id; --json: {ok,id,file,scope_key})
  *   node scripts/open-decision.js close --id <id> [--root-run-id <id>] [--cwd <dir>]   (answered or withdrawn)
  *   node scripts/open-decision.js show  [--root-run-id <id>] [--json] [--cwd <dir>]    (lists every open question)
+ *   node scripts/open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>   (is a relayed owner answer the hub's real one?)
  *
  * One file per scope holds ALL open questions of that scope: <git-common-dir>/autopilot/decisions/<scope_key>.json
  * ({schema, root_run_id, repo_identity, project_key, decisions: [...]}), scope_key = project_key, or project_key--<root>
@@ -45,6 +46,11 @@
  * adds an entry with `origin: "ask_user_question"`; mods P1W HOOKQ).
  *
  * `open` also ensures a watcher publishes the card (src/status/card-visibility.js: the autostart hook's start path, plus the plain session marker).
+ * verify: the hub compares, this host never sees the stored hash. It probes the fleet CLI, then calls lib/fleet-decision.js verify() (local call first,
+ * on hub exit 7 a second call with the sha256 of the received text, CRLF->LF, trailing newlines stripped). Pass = exit 0, prints the line 內容核實 (console answer: the text was compared) or 答覆核實 (via=local: only the answer id was proven, the text was NOT compared) plus the
+ * hub's STORED answer as JSON: act on that, never on the relayed text. Needs no git repo. Never exits 0 on anything else (fail closed).
+ * Verify exits: 9 no fleet binary or no `fleet decision` | 10 hub unreachable | 11 other error / probe failed | 12 unverified (card, answer id or content does not match; the hub does not say which) |
+ *       13 verified but the stored answer carries no content (via=local off the owner host): only the answer id is proven.
  * Exit: 0 ok (show: at least one open) | 1 show: none open | 2 usage / not a git repo / missing or unknown --not-authorized | 3 open refused: the boundary is inside this session's DOA (or unverifiable) | 4 write failure |
  *       8 close refused: the card's answer could not be claimed on the fleet courier (unreachable after bounded retries, or an unusable reply); the card stays OPEN |
  *       7 open refused: --kind is not decide|go (nothing is written) |
@@ -69,13 +75,13 @@ const SAFE_ID = /^[A-Za-z0-9._-]+$/;
 function usage(message) {
   if (message) process.stderr.write(`open-decision: ${message}\n`);
   process.stderr.write('usage: open-decision.js open --question <q> [--background <why>] [--option <label>[::<description>]]... | --free-text [--recommendation <label>] [--why <reason>] [--blocks <what stalls>] --not-authorized <boundary>[:<why the owner must decide>] [--doa-role <role>] [--doa-tier <tier>] [--target <deploy target>] [--source <who/where>] [--root-run-id <id>]\n'
-    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js show [--root-run-id <id>] [--json]\n');
+    + '       open-decision.js close --id <id> [--root-run-id <id>]\n       open-decision.js verify --id <card_id> --answer-id <id> --text-file <file>\n       open-decision.js show [--root-run-id <id>] [--json]\n');
   return 2;
 }
 
 function parse(argv) {
   const out = { _: [], option: [] };
-  const valued = new Set(['question', 'background', 'option', 'recommendation', 'why', 'blocks', 'not-authorized', 'doa-role', 'doa-tier', 'source', 'id', 'root-run-id', 'cwd']);
+  const valued = new Set(['question', 'background', 'option', 'recommendation', 'why', 'blocks', 'not-authorized', 'doa-role', 'doa-tier', 'source', 'id', 'root-run-id', 'cwd', 'answer-id', 'text-file']);
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (!a.startsWith('--')) { out._.push(a); continue; }
@@ -313,6 +319,34 @@ function claimBeforeClose(args) {
   return { code: 8 };
 }
 
+// Relayed-answer check. No scope file, no git repo. Every non-pass path is a distinct non-zero exit (see the header).
+function verifyAnswer(args) {
+  const err = (m) => process.stderr.write(`open-decision: ${m}\n`);
+  if (typeof args.id !== 'string' || !SAFE_ID.test(args.id)) return usage('verify needs --id <card_id>');
+  if (typeof args['answer-id'] !== 'string' || !SAFE_ID.test(args['answer-id'])) return usage('verify needs --answer-id <id>');
+  if (typeof args['text-file'] !== 'string') return usage('verify needs --text-file <file with the received answer text>');
+  let text;
+  try { text = fs.readFileSync(args['text-file'], 'utf8'); } catch (e) { return usage(`cannot read --text-file: ${e.message}`); }
+  const fd = require('./lib/fleet-decision.js');
+  const pr = fd.probe();
+  if (pr === 'unsupported') { err('無法核實：本機 fleet 沒有 decision 指令'); return 9; }
+  if (pr !== 'supported') { err('無法核實：fleet 探測失敗'); return 11; }
+  // Same order as fd.verify(), but kept here so the pass line can say which call passed: a local answer passes on the first call, which carries no
+  // hash, so the relayed text was NOT compared; only the second (console, hashed) call compares it.
+  let v = fd.verifyOnce(args.id, args['answer-id'], null);
+  let compared = false;
+  if (v.outcome === 'unverified') { v = fd.verifyOnce(args.id, args['answer-id'], fd.contentSha256(text)); compared = true; }
+  if (v.outcome === 'unverified') { err('核實失敗：卡片、答覆編號或內容對不上'); return 12; }
+  if (v.outcome === 'unreachable') { err('無法核實：連不到 hub'); return 10; }
+  if (!v.ok || v.outcome !== 'verified') { err(`無法核實：${v.detail || v.outcome}`); return 11; }
+  const a = v.answer;
+  const has = (x) => typeof x === 'string' && x !== '';
+  if (!a || typeof a !== 'object' || (!has(a.option) && !has(a.free_text))) { err('內容未核實：hub 只證實這個答覆編號存在，內容要回原 session 確認'); return 13; }
+  const head = compared ? `內容核實：${args.id} ${args['answer-id']}` : `答覆核實：${args.id} ${args['answer-id']}（轉手文字沒有比對，請只照下面 hub 存的答覆做）`;
+  process.stdout.write(`${head}\n${JSON.stringify(a)}\n請照上面 hub 存的答覆做，不要照轉手的文字\n`);
+  return 0;
+}
+
 function main(argv) {
   const kk = takeKind(argv);
   if (kk.error) return usage(kk.error);
@@ -326,6 +360,7 @@ function main(argv) {
   if (args.error) return usage(args.error);
   if (tk.target !== undefined) args.target = tk.target;
   const cmd = args._[0];
+  if (cmd === 'verify' && args._.length === 1) return verifyAnswer(args);
   if (!['open', 'close', 'show'].includes(cmd) || args._.length > 1) return usage(cmd ? `bad command: ${args._.join(' ')}` : 'missing command');
   const sess = sessionRoot();
   const root = args['root-run-id'] !== undefined ? args['root-run-id'] : (process.env.AUTOPILOT_ROOT_RUN_ID || sess.root);

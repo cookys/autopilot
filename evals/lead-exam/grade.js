@@ -26,9 +26,10 @@ async function judgeWithRetry(judge, req) {
     }
     const v = jd.validateJudgeReply(reply.text, req);
     calls.push({ attempt, valid: v.ok, errors: v.errors.slice(0, 5), ms: reply.ms, in_tokens_est: reply.in_tokens_est, out_tokens_est: reply.out_tokens_est, usage: reply.usage || null });
+    // keep what the judge actually said so the next failure (or a repaired reply) can be read
+    if (!v.ok || v.repaired) calls[calls.length - 1].raw = String(reply.text || '').slice(0, 4096);
+    if (v.repaired) calls[calls.length - 1].repaired = true;
     if (v.ok) return { data: v.data, calls };
-    // keep what the judge actually said so the next failure can be read
-    calls[calls.length - 1].raw = String(reply.text || '').slice(0, 4096);
     lastErr = v.errors.slice(0, 3).join('; ');
   }
   return { data: null, calls };

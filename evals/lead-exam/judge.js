@@ -64,17 +64,42 @@ function buildJudgePrompt(req) {
   return lines.join('\n');
 }
 
-// Returns {ok, errors[], data}. A void reply is never partially trusted.
+// String-aware bracket scan. Returns the text plus the closers still open, or null when it ends inside a string, has a
+// closer with nothing open, or a closer that does not match the innermost opener (nothing to append in those cases).
+function appendMissingClosers(t) {
+  const stack = [];
+  let inStr = false;
+  for (let i = 0; i < t.length; i += 1) {
+    const ch = t[i];
+    if (inStr) { if (ch === '\\') i += 1; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true;
+    else if (ch === '{') stack.push('}');
+    else if (ch === '[') stack.push(']');
+    else if (ch === '}' || ch === ']') { if (stack.pop() !== ch) return null; }
+  }
+  if (inStr || stack.length === 0) return null;
+  return t + stack.reverse().join('');
+}
+
+// Returns {ok, errors[], data, repaired?}. A void reply is never partially trusted.
 function validateJudgeReply(text, req) {
   const errors = [];
   let data = null;
   const s = String(text || '');
   const a = s.indexOf('{'); const b = s.lastIndexOf('}');
-  try { data = JSON.parse(s.slice(a, b + 1)); } catch { return { ok: false, errors: ['reply is not a JSON object'], data: null }; }
+  let repaired = false;
+  const body = s.slice(a, b + 1);
+  try { data = JSON.parse(body); } catch {
+    // ONE bounded repair: append the closers the reply is short of (live judge replies lost the last root `}`). Never
+    // deletes or reorders text; any other malformation stays invalid.
+    const fixed = appendMissingClosers(body);
+    try { data = fixed === null ? null : JSON.parse(fixed); repaired = data !== null; } catch { data = null; }
+    if (!repaired) return { ok: false, errors: ['reply is not a JSON object'], data: null };
+  }
   if (!data || typeof data !== 'object' || Array.isArray(data)) return { ok: false, errors: ['reply is not a JSON object'], data: null };
   if (!Array.isArray(data.reference_conflicts)) errors.push('reference_conflicts missing');
   const ex = data.examinees && typeof data.examinees === 'object' ? data.examinees : null;
-  if (!ex) { errors.push('examinees missing'); return { ok: false, errors, data }; }
+  if (!ex) { errors.push('examinees missing'); return { ok: false, errors, data, ...(repaired ? { repaired: true } : {}) }; }
   Object.keys(req.outputs).forEach((label) => {
     const e = ex[label];
     if (!e) { errors.push(`${label} missing`); return; }
@@ -100,7 +125,7 @@ function validateJudgeReply(text, req) {
       else if (!quoteOk(h.quote, text2)) errors.push(`${label}/${h.id} quote is not verbatim`);
     });
   });
-  return { ok: errors.length === 0, errors, data };
+  return repaired ? { ok: errors.length === 0, errors, data, repaired: true } : { ok: errors.length === 0, errors, data };
 }
 
 // ---- stub judges ----------------------------------------------------------

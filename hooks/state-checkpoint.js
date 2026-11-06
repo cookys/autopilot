@@ -38,6 +38,7 @@ const {
   renderContentBlocks,
   extractTurn,
   parseTranscriptText,
+  extractUnansweredChannels,
   buildTranscriptTail: libBuildTranscriptTail,
   dropToolNoise,
   selectFailureCounter,
@@ -263,6 +264,7 @@ function armPostCompactSizeCheck(sessionId) {
 - Hook: state-checkpoint.js (v2.7.2+, Node JSONL parser)
 `;
     let tailBlock = null; // { header, body }, placed last by buildHandoff
+    let inbound = []; // unanswered fleet messages, a reserved section of the handoff
 
     // Extract transcript tail
     if (!transcriptPath) {
@@ -288,6 +290,7 @@ function armPostCompactSizeCheck(sessionId) {
           status = 'failed';
           failureReason = 'transcript_outside_home';
         } else {
+          try { inbound = extractUnansweredChannels(fs.readFileSync(realTranscript, 'utf8')); } catch { inbound = []; }
           const parsed = parseTranscript(realTranscript);
           total = parsed.totalRecords;
           filteredOut = parsed.filteredOut;
@@ -338,7 +341,7 @@ function armPostCompactSizeCheck(sessionId) {
     let handoffBody;
     try {
       handoffBody = require('../scripts/lib/compaction-handoff.js').buildHandoff({
-        sessionId: input.session_id, cwd: input.cwd || process.cwd(), snapshot: collectedSnapshot, machineState, tail: tailBlock,
+        sessionId: input.session_id, cwd: input.cwd || process.cwd(), snapshot: collectedSnapshot, machineState, tail: tailBlock, inbound,
       });
     } catch (err) {
       handoffBody = `## Handoff sections\nunavailable: ${String(err && err.message).slice(0, 120)}\n\n${machineState}\n${tailBlock ? tailBlock.header + tailBlock.body : ''}`;

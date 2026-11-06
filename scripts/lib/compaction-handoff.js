@@ -46,6 +46,11 @@ const DEFAULT_T2_TOKENS = 150_000;
 const BODY_CAP = 6900;
 const SECTION_CAPS = { git: 1700, dispatch: 1100, marker: 1500, model: 4000 };
 const SECTION_FLOOR = 300;
+// Unanswered fleet messages (opts.inbound): a reserved section the size cap never cuts. Its bytes come off the top of
+// BODY_CAP before any other section is sized. When more are unanswered than fit, the newest are kept and the count of
+// older ones is written. Bodies are data: every field is escaped (the restore block is wrapped in a tag).
+const INBOUND_BUDGET = 1536;
+const INBOUND_REREAD_PLACEHOLDER = 'compaction 前可能有 fleet 訊息沒讀到：呼叫 `recent` 並設 `unseen_only=true`，或執行 `fleet recent --unseen`（待上線）';
 // A note written within this long ago, or whose size/mtime moves while it is read, may be mid-write (the model writes
 // it with the Write tool; atomicity is not under our control, so the reader guards).
 const STABLE_AGE_MS = 2000;
@@ -308,12 +313,44 @@ function modelNoteSection({ sessionId, now, dirs, cap: capOpt, sleepMs, deadline
     return unavailable(`cannot read ${shown}: ${e && e.code}`);
   } finally { try { fs.closeSync(fd); } catch { /* ignore */ } }
 }
+// --- inbound fleet messages ---------------------------------------------------------------
+
+function escapeText(s) {
+  return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// items: oldest first, {message_id, from, kind, disposition, reply_to, first_line}. Returns '' for none, else the
+// section text (header, newest items that fit INBOUND_BUDGET in arrival order, omitted count, re-read placeholder).
+function inboundSection(items) {
+  if (!Array.isArray(items) || !items.length) return '';
+  const e = (v, n = 80) => escapeText(String(v == null ? '' : v).slice(0, n));
+  const lines = (it) => {
+    const meta = [`kind=${e(it.kind)}`];
+    if (it.disposition) meta.push(`disposition=${e(it.disposition)}`);
+    if (it.reply_to) meta.push(`reply_to=${e(it.reply_to)}`);
+    let t = `- ${e(it.message_id)} from=${e(it.from)} ${meta.join(' ')} | ${e(it.first_line, 60)}\n`;
+    if (it.kind === 'dispatch') t += `  fleet task show ${e(it.message_id)}\n`;
+    return t;
+  };
+  const render = (kept, omitted) => `## Unanswered Fleet Messages (reserved, never cut)\n這 ${kept.length} 則在壓縮前到達，請重讀：\n`
+    + kept.map(lines).join('') + (omitted ? `省略 ${omitted} 則較舊的\n` : '') + `${INBOUND_REREAD_PLACEHOLDER}\n\n`;
+  let kept = [];
+  for (let i = items.length - 1; i >= 0; i--) {
+    const next = [items[i], ...kept];
+    if (Buffer.byteLength(render(next, items.length - next.length)) > INBOUND_BUDGET) break;
+    kept = next;
+  }
+  if (!kept.length) kept = [items[items.length - 1]];
+  return render(kept, items.length - kept.length);
+}
+
 // --- assemble -------------------------------------------------------------------------------
 
 /**
  * buildHandoff({sessionId, cwd, now?, dirs?, gitRunner?, statusScript?, snapshot, machineState, tail})
  *   snapshot: {snapshot}|{error} from the caller's single workflow-snapshot collect()
  *   machineState: ready-made text; tail: {body, header} ready-made transcript-tail text or null
+ *   inbound: unanswered fleet messages (hooks/state-checkpoint-lib.js extractUnansweredChannels), reserved section
  * Returns the markdown for the file. Section order is the contract.
  */
 function buildHandoff(opts = {}) {
@@ -339,17 +376,19 @@ function buildHandoff(opts = {}) {
   const render = (k) => capLines(raw[k], caps[k]);
   const modelTitle = 'Model Handoff Note';
   const machine = opts.machineState ? `${opts.machineState.replace(/\s+$/, '')}\n\n` : '';
+  const inboundText = inboundSection(opts.inbound);
+  const bodyCap = BODY_CAP - Buffer.byteLength(inboundText); // the reserved section comes off the top
   const frame = (t) => Buffer.byteLength(`## ${t}\n\n\n`);
   // the "tail omitted" line (~115 bytes) is reserved too, so a full body never overshoots BODY_CAP
   const fixed = (opts.tail ? 120 : 0) + Buffer.byteLength(machine) + frame(modelTitle) + frame(titles.git) + frame(titles.dispatch) + frame(titles.marker);
   const othersLen = () => Object.keys(titles).reduce((n, k) => n + Buffer.byteLength(render(k)), 0);
   // The model section's budget: at least MODEL_MIN, more when the other sections leave room. It depends only on the
   // sizes of the other sections, so the note is read (and settled) exactly once.
-  const modelCap = Math.min(BODY_CAP, Math.max(SECTION_CAPS.model, BODY_CAP - fixed - othersLen()));
+  const modelCap = Math.min(bodyCap, Math.max(SECTION_CAPS.model, bodyCap - fixed - othersLen()));
   const model = safe(() => modelNoteSection({ sessionId, now, dirs, cap: modelCap, deadlineAt }));
   // Shrink git / dispatch / marker only as far as the model section needs, the shortfall shared in proportion to how
   // much each has above SECTION_FLOOR (so no single section is cut to its floor while another stays full).
-  const deficit = fixed + othersLen() + Buffer.byteLength(model) - BODY_CAP;
+  const deficit = fixed + othersLen() + Buffer.byteLength(model) - bodyCap;
   if (deficit > 0) {
     const have = {};
     let slack = 0;
@@ -363,8 +402,9 @@ function buildHandoff(opts = {}) {
   for (const k of Object.keys(titles)) out += `## ${titles[k]}\n${render(k)}\n\n`;
   out += `## ${modelTitle}\n${model}\n\n`;
   out += machine;
+  out += inboundText;
   const used = Buffer.byteLength(out);
-  const room = BODY_CAP - used;
+  const room = bodyCap - used;
   if (opts.tail) {
     if (room >= TAIL_MIN_BYTES) {
       const tail = `${opts.tail.header}${opts.tail.body}`;
@@ -515,5 +555,5 @@ function recordCompactionPoint(opts = {}) {
 module.exports = {
   buildHandoff, gitSection, dispatchSection, markerLedgerSection, modelNoteSection, modelNotePath,
   budgetWarning, readBudget, recordCompactionPoint, lastCompactBoundary, compactionPointsFile,
-  AUTOCOMPACT_BUFFER_TOKENS, DEFAULT_GAP_TOKENS, DEFAULT_T2_TOKENS, BODY_CAP, SECTION_CAPS, HANDOFF_DEADLINE_MS,
+  AUTOCOMPACT_BUFFER_TOKENS, DEFAULT_GAP_TOKENS, DEFAULT_T2_TOKENS, BODY_CAP, SECTION_CAPS, INBOUND_BUDGET, inboundSection, HANDOFF_DEADLINE_MS,
 };

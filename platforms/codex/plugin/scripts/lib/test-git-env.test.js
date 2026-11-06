@@ -10,7 +10,7 @@ const { execFileSync, spawnSync } = require('child_process');
 const { scrubGitEnv } = require('./test-git-env.js');
 
 const HELPER = path.join(__dirname, 'test-git-env.js');
-const ID = ['-c', 'user.email=o@example.invalid', '-c', 'user.name=o'];
+const ID = ['-c', 'user.email=fixture', '-c', 'user.name=o'];
 
 function outerRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-env-outer-'));

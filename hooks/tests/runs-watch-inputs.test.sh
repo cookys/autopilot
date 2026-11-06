@@ -68,11 +68,12 @@ eq 'yes' "$(grep -q 'Q one?' "$SB/show.txt" && grep -q 'Q two?' "$SB/show.txt" &
 odo show --root-run-id R-none --json > "$SB/show2.out"; eq 0 "$?" "show --json from another root still lists the project's open questions (every scope file counts)"
 odo close --root-run-id R1 > /dev/null; eq 2 "$?" "close without --id is a usage error (it would be ambiguous)"
 odo close --id "$ID1" --root-run-id R1 > "$SB/close.out"; eq 0 "$?" "close --id removes one entry"
-eq "$ID2" "$(jf "$F1" 'v.decisions.map((d)=>d.id).join(",")')" "closing one entry leaves the other"
+eq "$ID2" "$(jf "$F1" 'v.decisions.filter((d)=>d.status!=="closed").map((d)=>d.id).join(",")')" "closing one entry leaves the other open (the closed one stays as a record)"
 odo close --id "$ID1" --root-run-id R1 > "$SB/close2.out"; eq 0 "$?" "close of an already-closed id is idempotent (exit 0)"
 eq 'not open: '"$ID1" "$(cat "$SB/close2.out")" "and says so"
 odo close --id "$ID2" --root-run-id R1 > /dev/null; eq 0 "$?" "close of the last entry succeeds"
-assert_file_absent "$F1" "the file is removed when its last entry goes"
+assert_file_exists "$F1" "the file is kept when its last entry closes (BL cardtrail: the closed cards are the record)"
+eq "closed,closed" "$(jf "$F1" 'v.decisions.map((d)=>d.status).join(",")')" "both entries are kept with status closed"
 odo show --root-run-id R1 --json > /dev/null; eq 1 "$?" "show exits 1 after the last close"
 # six concurrent opens: ALL win, none is lost, the file is intact JSON
 rm -f "$SB"/c*.rc
@@ -90,8 +91,8 @@ i=0; while read -r gid; do i=$((i+1)); ( odo close --id "$gid" --root-run-id RK 
 for i in $(seq 1 12); do ( odo open --not-authorized irreversible --free-text --question "new-$i" --root-run-id RK > "$SB/new.ids.$i"; echo $? > "$SB/n$i.rc" ) & done; wait
 eq '0' "$(cat "$SB"/k*.rc "$SB"/n*.rc | sort -u | tr '\n' ' ' | sed 's/ $//')" "concurrent close x12 + open x12: every call exits 0"
 cat "$SB/keep.ids" "$SB"/new.ids.* | LC_ALL=C sort > "$SB/want.ids"
-jf "$FK" 'v.decisions.map((d)=>d.id).sort().join("\n")' > "$SB/have.ids"; echo >> "$SB/have.ids"
-eq 24 "$(wc -l < "$SB/have.ids" | tr -d ' ')" "concurrent close + open: 24 entries remain (12 kept + 12 new, 12 closed gone)"
+jf "$FK" 'v.decisions.filter((d)=>d.status!=="closed").map((d)=>d.id).sort().join("\n")' > "$SB/have.ids"; echo >> "$SB/have.ids"
+eq 24 "$(wc -l < "$SB/have.ids" | tr -d ' ')" "concurrent close + open: 24 entries remain (12 kept + 12 new open; the 12 closed are kept as records)"
 eq same "$(cmp -s "$SB/want.ids" "$SB/have.ids" && echo same || echo differ)" "concurrent close + open: the surviving id set is exactly the kept + new ids (no lost update, no resurrected close)"
 rm -f "$FK"
 # unbound scope file name = project_key

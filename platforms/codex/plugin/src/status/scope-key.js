@@ -55,4 +55,26 @@ function readScopeFile(file, { schema, projectKey, identity }) {
   }
 }
 
-module.exports = { safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile };
+// Card status (BL cardtrail). A card entry is kept after `open-decision.js close`: `status` is 'open' (or absent on cards written before this
+// field), 'awaiting_operator_action' (answered, but the operator must still do one step; shown on the panel, differently from a question) or
+// 'closed' (kept with closed_at + answer). "The entry is in the file" never means "the card is open": every reader that lists cards asks this.
+const CARD_STATUS = ['open', 'awaiting_operator_action', 'closed'];
+function isClosedEntry(e) {
+  return !!e && typeof e === 'object' && e.status === 'closed';
+}
+function isAwaitingEntry(e) {
+  return !!e && typeof e === 'object' && e.status === 'awaiting_operator_action';
+}
+
+// True when the scope file holds at least one entry that is not closed (it needs a string id and question like every reader requires).
+function scopeFileHasLive(file) {
+  const fs = require('fs');
+  try {
+    const v = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return !!v && Array.isArray(v.decisions) && v.decisions.some((e) => e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question && !isClosedEntry(e));
+  } catch (_error) {
+    return false;
+  }
+}
+
+module.exports = { safeSegment, scopeKeyOf, commonDirOf, listScopeFiles, readScopeFile, CARD_STATUS, isClosedEntry, isAwaitingEntry, scopeFileHasLive };

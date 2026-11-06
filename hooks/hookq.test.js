@@ -100,9 +100,11 @@ function run(script, payload, env, args = []) {
 }
 const readJ = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const decDir = (repo) => path.join(repo, '.git', 'autopilot', 'decisions');
-const decFiles = (repo) => (fs.existsSync(decDir(repo)) ? fs.readdirSync(decDir(repo)).filter((f) => f.endsWith('.json')).sort() : []);
+// BL cardtrail: a closed card stays in its scope file as a record (status closed). These helpers see what is still OPEN: a file counts when it holds
+// at least one entry that is not closed, and entriesOf drops closed entries (the intent of every assertion here is "the question is gone").
+const entriesOf = (repo, file) => readJ(path.join(decDir(repo), file)).decisions.filter((e) => e.status !== 'closed');
+const decFiles = (repo) => (fs.existsSync(decDir(repo)) ? fs.readdirSync(decDir(repo)).filter((f) => f.endsWith('.json')).sort().filter((f) => entriesOf(repo, f).length > 0) : []);
 
-const entriesOf = (repo, file) => readJ(path.join(decDir(repo), file)).decisions;
 const allEntries = (repo) => decFiles(repo).flatMap((f) => entriesOf(repo, f));
 
 const q = (text, labels) => ({ question: text, header: 'h', multiSelect: false, options: (labels || []).map((l) => ({ label: l, description: `${l} desc` })) });

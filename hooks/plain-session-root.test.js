@@ -160,13 +160,14 @@ test('read back: open-decision defaults to this session\'s plain marker root; no
   assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}.json`]);
   assert.match(r.stdout.trim(), /^d-[0-9a-f]{8}$/, 'open prints the id');
   od(['close', '--id', r.stdout.trim()]);
-  assert.deepStrictEqual(fs.readdirSync(dir), [], 'closing the last entry removes the file');
+  assert.strictEqual(od(['show']).status, 1, 'closing the last entry leaves nothing open (the closed record stays in the file)');
+  assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}.json`], 'the closed record is kept');
   cli(f, ['set', '--repo-root', f.repo]);
   const root = readJson(f.marker()).root_run_id;
   r = od(['open', '--not-authorized', 'irreversible', '--free-text', '--question', 'rooted?']);
   assert.strictEqual(r.status, 0, r.stderr);
   const rootedId = r.stdout.trim();
-  assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}--${root}.json`]);
+  assert.deepStrictEqual(fs.readdirSync(dir).sort(), [`${f.key}--${root}.json`, `${f.key}.json`].sort(), 'the rooted card has its own file; the closed unbound record is kept');
   assert.strictEqual(readJson(path.join(dir, `${f.key}--${root}.json`)).root_run_id, root);
   assert.strictEqual(od(['show']).status, 0);
   r = od(['open', '--not-authorized', 'irreversible', '--free-text', '--question', 'explicit?', '--root-run-id', 'job-other']);
@@ -177,7 +178,9 @@ test('read back: open-decision defaults to this session\'s plain marker root; no
   od(['close', '--id', otherId, '--root-run-id', 'job-other']);
   od(['close', '--id', rootedId, '--root-run-id', root]);
   r = od(['open', '--not-authorized', 'irreversible', '--free-text', '--question', 'after expiry']);
-  assert.deepStrictEqual(fs.readdirSync(dir), [`${f.key}.json`], 'an expired marker no longer scopes the decision');
+  // closed cards stay as records, so the earlier files are still there; the new card must have gone to the UNBOUND file, not to the expired root's
+  assert.ok(readJson(path.join(dir, `${f.key}.json`)).decisions.some((d) => d.question === 'after expiry' && d.status === 'open'), 'an expired marker no longer scopes the decision');
+  assert.ok(!readJson(path.join(dir, `${f.key}--${root}.json`)).decisions.some((d) => d.question === 'after expiry'));
 });
 
 // ---------------------------------------------------------------- 3. watcher scopes + retention

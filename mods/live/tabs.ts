@@ -128,6 +128,11 @@ function attentionPart(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   if (d !== null) { // one row that points at 待決, where every question is drawn whole with its options; the number of questions is the row's text, the tab's name its press target
     put(needYou, bare => ui.item(u, needYou, t('now.pending_sum', { n: pending.length }), undefined, { fact: 'decide.cards', word: !bare, goto: 'decide' }))
   }
+  const aw = snap.awaiting ?? []
+  if (aw.length > 0) { // answered, but one step is left for the owner himself: a different row from 待決 (no press target; the step, not a question)
+    const step = (aw[0].awaiting_operator ?? aw[0].question) + (aw.length > 1 ? ' (+' + (aw.length - 1) + ')' : '')
+    put(needYou, bare => ui.item(u, needYou, t('now.awaiting_op', { n: aw.length, step }), undefined, { fact: 'now.attention', word: !bare }))
+  }
   if (a !== null) put(needYou, bare => ui.item(u, needYou, attentionReason(a, nowMs, t), undefined, { fact: 'now.attention', word: !bare }))
   const wt = judgeCountOf(snap)
   if (wt > 0) put(needYou, bare => ui.item(u, needYou, t('now.residue', { n: wt }), undefined, { fact: 'now.attention', word: !bare, goto: 'hygiene' })) // an attention row of this tab that points at 殘留; the one residue.groups line is the summary kv

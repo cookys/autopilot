@@ -72,7 +72,10 @@ const r = readDecision({ commonDir: commonDirOf(sc.repo_identity), key: sc.proje
 console.log(r.value.map((d) => d.question).sort().join(","));')"
 assert_contains "$PANE2" "Q-SEEDED-OK?" "seed-shaped card in a valid scope file reaches the pane data"
 if node "$OD" close --cwd "$R" --id d-good3333 | grep -q '^closed'; then :; else fail "seed-shaped card could not be closed"; fi
-assert_file_absent "$D/$KEY--okroot.json" "closing its last card removes the file"
+# BL cardtrail: close keeps the record (the file stays, the card is hidden from show, show --id still finds it as closed)
+assert_file_exists "$D/$KEY--okroot.json" "closing its last card keeps the file (the record)"
+assert_not_contains "$(node "$OD" show --cwd "$R" --root-run-id root-new)" "Q-SEEDED-OK" "closed card is not listed by show"
+assert_contains "$(node "$OD" show --cwd "$R" --id d-good3333)" "status: closed" "show --id finds the closed record"
 
 # a root with unsafe characters (library callers such as hooks pass raw roots; the CLI flag refuses them): open -> show -> close
 UID_="$(R="$R" REPO_ROOT="$REPO_ROOT" node -e 'const r=require(process.env.REPO_ROOT+"/scripts/open-decision.js").openDecision({cwd:process.env.R,root:"a b/c",session:null,question:"Q-UNSAFE-ROOT?"});console.log(r.status==="ok"?r.id:"ERR "+r.message)')"

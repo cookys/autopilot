@@ -133,6 +133,70 @@
           },
           "turn_tracked": {
             "const": true
+          },
+          "status": {
+            "enum": [
+              "open",
+              "awaiting_operator_action",
+              "closed"
+            ]
+          },
+          "answer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "closed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "answered_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "executor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asker": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "awaiting_operator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delivery_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delivery_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delivery": {
+            "enum": [
+              "ok",
+              "failed"
+            ]
+          },
+          "backfilled": {
+            "const": true
           }
         }
       }

@@ -13,6 +13,7 @@
  *   verify(...)  `fleet decision verify <card_id> <answer_id> [--content-sha256 H]` — exit 0 and the stored answer on stdout ({outcome:"verified",...}), or 7.
  *                H is required for a via=console answer and must be absent for via=local (fleet R4.1-1; a local claim vouches for itself).
  *                No retry, no sleep (hook-safe).
+ *   dispatch(address, text) / send(address, text)   card delivery for open-decision.js close --answer (see below).
  * AUTOPILOT_FLEET_BIN overrides the binary (tests use a stub). Node built-ins only.
  */
 const crypto = require('crypto');
@@ -108,4 +109,18 @@ function verify(cardId, answerId, text) {
   return verifyOnce(cardId, answerId, contentSha256(text));
 }
 
-module.exports = { probe, supportsRecent, claim, verify, verifyOnce, contentSha256 };
+// Card delivery (open-decision.js close --answer). One bounded `fleet dispatch <address> <text>` (a task for the executor) or
+// `fleet send <address> <text>` (an fyi note, no task). No retry, no sleep. -> { ok, detail } ; a spawn failure, a non-zero exit and a
+// refused address are all ok:false with the reason, never swallowed. An address must look like namespace/courier/member (or courier/member).
+const ADDRESS = /^[A-Za-z0-9][A-Za-z0-9._@:-]*(\/[A-Za-z0-9][A-Za-z0-9._@:-]*){1,2}$/;
+function deliver(verb, address, text) {
+  if (typeof address !== 'string' || !ADDRESS.test(address)) return { ok: false, detail: `bad address "${address}" (want namespace/courier/member)` };
+  const r = run([verb, address, text], 20000);
+  if (r.error) return { ok: false, detail: `fleet ${verb} could not run: ${r.error}` };
+  if (r.status !== 0) return { ok: false, detail: `fleet ${verb} exit ${r.status}: ${(r.stderr || r.stdout || '').trim().split('\n')[0] || 'no output'}` };
+  return { ok: true, detail: '' };
+}
+const dispatch = (address, text) => deliver('dispatch', address, text);
+const send = (address, text) => deliver('send', address, text);
+
+module.exports = { probe, supportsRecent, claim, verify, verifyOnce, contentSha256, dispatch, send, isAddress: (a) => typeof a === 'string' && ADDRESS.test(a) };

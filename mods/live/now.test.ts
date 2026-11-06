@@ -539,6 +539,26 @@ test('PENDING (現況): any number of open questions is ONE row that counts them
   expect(none.map(l => l.text).join('\n')).not.toContain('pending decisions')
 })
 
+// ---- awaiting_operator_action (BL cardtrail): answered, but the owner still has one step. Its own row, apart from 待決 ----
+test('AWAITING (現況): an answered card with an operator step is its own 要你處理 row (not a 待決 row, no press target); none -> no such row', () => {
+  const aw = [{ id: 'd-9', question: 'run the migration?', answer: 'yes, run it', awaiting_operator: 'run scripts/migrate.sh', executor: null, asker: null }]
+  for (const [loc, t] of LOCALES) {
+    const ls = nowLines({ ...snap(), pending: [], awaiting: aw }, ctxOf(t, 76))
+    const want = t('now.awaiting_op', { n: 1, step: 'run scripts/migrate.sh' })
+    const rows = ls.filter(l => l.text.includes(want))
+    expect(rows.length, loc).toBe(1)
+    expect(ls.filter(l => l.fact === 'decide.cards').length, loc + ': it is not a question').toBe(0)
+    expect(rows[0].goto, loc + ': nothing to open').toBeUndefined()
+    expect(rows[0].segs?.some(s => s.color === 'warning'), loc + ': 要你處理 is the one yellow').toBe(true)
+    expect(ls.map(l => l.text).join('\n'), loc).not.toContain(t('now.nothing_waits'))
+    expect(want, loc + ': its text differs from the 待決 row').not.toBe(t('now.pending_sum', { n: 1 }))
+    for (const l of ls) expect(ui.displayWidth(l.text), loc + ': "' + l.text + '"').toBeLessThanOrEqual(75)
+    expect(i17(ls), loc).toEqual([])
+  }
+  const none = nowLines({ ...snap(), pending: [], awaiting: [] }, ctxOf(makeT('en'), 76))
+  expect(none.map(l => l.text).join('\n')).not.toContain('your own step left')
+})
+
 // ---- orphan label (BL-0163): the asker's session is gone; the entry stays listed, labelled, never dropped ----
 test('PENDING: an orphaned question carries the asker-ended label in pane and band suffix, stays listed; a live one carries none', () => {
   for (const [loc, t] of LOCALES) {

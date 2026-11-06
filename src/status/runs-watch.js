@@ -45,7 +45,7 @@ const { projectKey, scopeFromCwd } = require('./project-key');
 const { pointerPath, writeLivePointer } = require('./live-pointer');
 const { applySelectors } = require('./runs-fields');
 const { latestProgress } = require('./work-order-progress');
-const { commonDirOf, listScopeFiles, readScopeFile } = require('./scope-key');
+const { commonDirOf, listScopeFiles, readScopeFile, isClosedEntry, scopeFileHasLive } = require('./scope-key');
 const { publishTurnEffective } = require('./turn-effective');
 const { readWatchInputs } = require('./watch-inputs');
 const { ensureReviewServer } = require('./review-server');
@@ -217,7 +217,7 @@ function recentSessionFiles(env, key, nowMs, windowS) {
 
 // Owner cards still open for this project: entries across every scope file of <git-common-dir>/autopilot/decisions/ that
 // belongs to this project_key + repo_identity (the same reader the job page uses, src/status/decision-input.js). A card has
-// no expiry field: it is open until `open-decision.js close` removes it (the file goes with the last one).
+// no expiry field: it is open until `open-decision.js close` marks it closed (the entry stays in the file with status closed, and is not counted here).
 // An owner deciding is a live session even though it fires no prompt and no tool call.
 function openDecisionCount(identity, key) {
   const common = commonDirOf(identity);
@@ -225,7 +225,7 @@ function openDecisionCount(identity, key) {
   let n = 0;
   for (const file of listScopeFiles(path.join(common, 'autopilot', 'decisions'), key)) {
     const sf = readScopeFile(file, { schema: 'autopilot.decision/2', projectKey: key, identity });
-    if (sf) n += sf.value.decisions.filter((e) => e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question).length;
+    if (sf) n += sf.value.decisions.filter((e) => e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question && !isClosedEntry(e)).length;
   }
   return n;
 }
@@ -723,7 +723,7 @@ function createWatcher({
     const common = commonDirOf(identity);
     if (common) {
       for (const root of candidates) {
-        if (fs.existsSync(path.join(common, 'autopilot', 'decisions', `${key}--${safeSegment(root)}.json`))) active.add(root);
+        if (scopeFileHasLive(path.join(common, 'autopilot', 'decisions', `${key}--${safeSegment(root)}.json`))) active.add(root); // a kept closed card does not make its root active
       }
     }
     for (const root of recentSessionRoots(env, key, nowMs, windowS)) active.add(root);

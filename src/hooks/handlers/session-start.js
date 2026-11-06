@@ -36,7 +36,7 @@ function openDecisionEntries(cwd) {
   try {
     const fs = require('fs');
     const { scopeFromCwd } = require('../../status/project-key');
-    const { commonDirOf, listScopeFiles, readScopeFile } = require('../../status/scope-key');
+    const { commonDirOf, listScopeFiles, readScopeFile, isClosedEntry } = require('../../status/scope-key');
     const scope = scopeFromCwd(path.resolve(cwd || process.cwd()));
     const commonDir = commonDirOf(scope.repo_identity);
     if (!scope.project_key || !commonDir) return [];
@@ -50,7 +50,7 @@ function openDecisionEntries(cwd) {
         decisions = v && v.schema === DECISION_SCHEMA && Array.isArray(v.decisions) ? v.decisions : [];
       } catch { decisions = []; }
       for (const e of decisions) {
-        if (e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question) entries.push(e);
+        if (e && typeof e.id === 'string' && e.id && typeof e.question === 'string' && e.question && !isClosedEntry(e)) entries.push(e);
       }
     }
     entries.sort((a, b) => (Date.parse(a.opened_at) || 0) - (Date.parse(b.opened_at) || 0) || String(a.id).localeCompare(String(b.id)));
@@ -350,4 +350,5 @@ module.exports = {
   buildBaseContext,
   composeSessionStartContext,
   buildSessionStartOutput,
+  openDecisionEntries,
 };

@@ -57,7 +57,7 @@ mk_home() { # name target-kind -> prints fake HOME; antigravity-cli/agents is a 
 run_review() { # name home [extra env...] -> out file $TEST_TMP/out-<name>
   local n="$1" h="$2"; shift 2
   env -i PATH="$PATH" HOME="$h" TMPDIR="$TEST_TMP" ENGINE_CAPABILITY_DIR="$ENGINE_CAPABILITY_DIR" \
-    AUTOPILOT_STRIKE_WRITER=off AUTOPILOT_SESSION_MODE_DIR="$AUTOPILOT_SESSION_MODE_DIR" AGY_STUB_MODELS="$AGY_STUB_MODELS" \
+    AUTOPILOT_ACCOUNTS_DIR="$AUTOPILOT_ACCOUNTS_DIR" AUTOPILOT_STRIKE_WRITER=off AUTOPILOT_SESSION_MODE_DIR="$AUTOPILOT_SESSION_MODE_DIR" AGY_STUB_MODELS="$AGY_STUB_MODELS" \
     DISPATCH_QUIET=1 AUTOPILOT_SETTLE_MS=0 AUTOPILOT_DISPATCH_RUNS_DIR="$AUTOPILOT_DISPATCH_RUNS_DIR" "$@" \
     "$REVIEW" --runner agy --model "$M" --diff-file "$DIFF" --timeout 60 --bin "$(mk_stub "$n")" \
     < /dev/null > "$TEST_TMP/out-$n" 2>&1

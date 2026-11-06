@@ -3,9 +3,14 @@
 . "$(dirname "$0")/lib.sh"
 
 HOOK="$REPO_ROOT/hooks/exec-boundary.js"
+# E2 expands ~ to os.homedir() and treats /tmp and TMPDIR as sanctioned roots. lib.sh puts HOME
+# at $TEST_TMP/home, which lands under /tmp when the full suite runs with TMPDIR=/tmp/sbj.*
+# (tools/migrate/suite-baseline.js), so `rm -rf ~/x` would be judged "inside" a root. A real
+# HOME is never under /tmp; give the hook a HOME outside every sanctioned root.
+EB_HOME=/nonexistent-eb-home
 run_hook() { # $1 = command string; extra env via caller
   printf '{"tool_input":{"command":%s}}' "$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$1")" \
-    | AUTOPILOT_HOOK_EXEC_BOUNDARY=1 node "$HOOK" 2>"$TEST_TMP/hook-err.txt"
+    | HOME="$EB_HOME" AUTOPILOT_HOOK_EXEC_BOUNDARY=1 node "$HOOK" 2>"$TEST_TMP/hook-err.txt"
 }
 
 # ── Disabled = no-op. Hermetic against machine-local dogfood config (evidence-discipline

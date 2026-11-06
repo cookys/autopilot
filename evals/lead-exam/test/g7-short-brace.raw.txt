@@ -1,0 +1,1 @@
+{"reference_conflicts":[],"examinees":{"ex-4b0e09":{"items":{"A1":{"answered":true,"criteria":{"A1.reason":{"hit":true,"quote":"暴露與不可逆優先於有期限，有期限優先於 fyi。"}}}},"hard_fails":[]}}

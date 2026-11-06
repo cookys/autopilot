@@ -6856,6 +6856,47 @@ for (const surface of SURFACES) {
     expect(at).toBeLessThanOrEqual(NOW_FRESH + 60_000)
   })
 
+  // O4 shell, 240 tier: the fleet column may fetch Fleet data, but only while the shell is actually drawn, never more often than every 30 s, and not at the other tiers
+  const fleetElapsed = { v: 0 } // ms the test has advanced the mock clock: the time a run is stamped with
+  const tick = async (w: any) => { await w.clock.advance(5000); fleetElapsed.v += 5000 }
+  const fleetRuns = (on: any): number[] => {
+    fleetElapsed.v = 0
+    const at: number[] = []
+    on('process.run', async ($$: any, e: any) => { if ((e.argv as string[]).join(' ') === 'fleet tasks --tree --json') at.push(fleetElapsed.v); return { value: { exitCode: 0, stdout: g23Tasks(NOW_FRESH), stderr: '' } } })
+    return at
+  }
+  test('O4 shell fleet fetch: at 240 columns, with the shell drawn, the Fleet CLI runs at least 30 s apart (' + surface + ')', async ($, on) => {
+    const at = fleetRuns(on)
+    const w = shellWorld(on)
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide'])
+    for (let i = 0; i < 24; i++) { await tick(w); await drawShell($, 240) } // 120 s, drawn on every tick
+    expect(at.length, 'it does fetch while shown').toBeGreaterThanOrEqual(3)
+    for (let i = 1; i < at.length; i++) expect(at[i] - at[i - 1], 'gap ' + i).toBeGreaterThanOrEqual(30_000)
+  })
+
+  test('O4 shell fleet fetch: once the shell is closed (no longer drawn) the Fleet CLI is not run again (' + surface + ')', async ($, on) => {
+    const at = fleetRuns(on)
+    const w = shellWorld(on)
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide'])
+    for (let i = 0; i < 8; i++) { await tick(w); await drawShell($, 240) }
+    expect(at.length).toBeGreaterThanOrEqual(1)
+    for (let i = 0; i < 4; i++) await tick(w) // 20 s: past the 15 s the shell counts as open
+    const settled = at.length
+    for (let i = 0; i < 36; i++) await tick(w) // 180 s, nothing drawn
+    expect(at.length).toBe(settled)
+  })
+
+  test('O4 shell fleet fetch: the other tiers (200, 160, 120, 80) never run the Fleet CLI (' + surface + ')', async ($, on) => {
+    const at = fleetRuns(on)
+    const w = shellWorld(on)
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide'])
+    for (const cols of [200, 160, 120, 80]) for (let i = 0; i < 14; i++) { await tick(w); await drawShell($, cols) }
+    expect(at.length).toBe(0)
+  })
+
   test('side pane plan B: the pane is never opened on its own, at 160 or 240 columns, fullscreen with a project; the ⓘ, a slot, the quick row and /live-pane open it (' + surface + ')', async ($, on) => {
     const w = shellWorld(on)
     await start($, surface)

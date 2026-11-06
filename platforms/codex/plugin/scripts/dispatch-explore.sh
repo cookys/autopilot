@@ -196,6 +196,7 @@ else
   # prompt makes agy treat the model-name string as the prompt and answer "I am running
   # on <model>" instead of the task).
   AGY_PRINT_TIMEOUT="$(agy_print_timeout "$TIMEOUT")" || die_precondition "$AGY_PRINT_TIMEOUT"
+  _AGY_HOME_CHECK="$(agy_assert_disposable_home)" || die_precondition "$_AGY_HOME_CHECK"
   RUN_SH="$(mktemp -t dispatch-explore-agy-XXXXXX)"
   {
     printf '#!/usr/bin/env bash\n'

@@ -192,6 +192,11 @@ REPO_ROOT="$(cd "$HOOKS_DIR/.." && pwd)"
 # isolates ~/.autopilot/* writes.
 HOOK_HOME="$TEST_TMP/home"
 mkdir -p "$HOOK_HOME"
+# Real home of this uid (passwd, never $HOME). Arms agy_assert_disposable_home in the dispatch rails:
+# an agy launch whose HOME still equals it fails. Then HOME itself becomes the disposable sandbox so
+# no rail started from a suite can mkdir/migrate the operator's ~/.gemini.
+export AUTOPILOT_TEST_REAL_HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+export HOME="$HOOK_HOME"
 
 # Some hooks also write to os.tmpdir() (accumulator.js, batch-format.js,
 # suggest-compact.js, intent-capture.js SESSION_TOOL_COUNTER). Redirect TMPDIR

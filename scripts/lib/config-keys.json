@@ -3665,6 +3665,19 @@
       "relates": []
     },
     {
+      "name": "AUTOPILOT_TEST_REAL_HOME",
+      "kind": "env",
+      "audience": "internal",
+      "class": "test_seam",
+      "default": null,
+      "readers": [
+        "scripts/lib/agy-timeout.sh"
+      ],
+      "doc": null,
+      "relates": [],
+      "note": "Test-only. Set by hooks/tests/lib.sh to the passwd home of the uid; arms agy_assert_disposable_home so an agy launch under a suite with the real HOME is refused. A production dispatch never sets it."
+    },
+    {
       "name": "AUTOPILOT_TEST_REAL_HOME_OVERRIDE",
       "kind": "env",
       "audience": "internal",

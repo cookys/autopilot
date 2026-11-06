@@ -31,3 +31,37 @@ agy_print_timeout() {
   printf 'invalid --timeout value for agy: "%s" (use plain seconds such as 900, or a duration with a unit such as 900s, 9m, 1h30m)' "$v"
   return 1
 }
+
+# agy bwrap mount-target resolution (shares this lib because every agy rail already sources it).
+# WHY: agy 1.5.2 migrates ~/.gemini/antigravity-cli/agents into a symlink to ~/.gemini/config/agents.
+# bwrap cannot --bind (or --tmpfs) onto a symlink destination ("Can't bind mount ... No such file or
+# directory"), so agy never started and the review ended rc=1 / no_verdict.
+# CONTRACT: agy_bind_target <path>
+#   prints the symlink-free absolute path (readlink -m, so a dangling link resolves to where it points);
+#   returns 1 with a one-line reason on stdout when the resolved path is not under the resolved
+#   "$HOME/.gemini" (fail closed: never mount scratch over anything outside agy's own state dir).
+#   Callers mkdir -p the printed path before bwrap.
+agy_bind_target() {
+  local want="${1-}" real root
+  real="$(readlink -m -- "$want")" && root="$(readlink -m -- "${HOME:-}/.gemini")" \
+    && [ -n "$real" ] && [ -n "${HOME:-}" ] || { printf 'cannot resolve agy mount target: %s' "$want"; return 1; }
+  case "$real" in
+    "$root"/*) printf '%s' "$real" ;;
+    *) printf 'agy mount target %s resolves to %s, outside %s: refusing to bind over it' "$want" "$real" "$root"; return 1 ;;
+  esac
+}
+
+# Test-mode guard: an agy launch must never run with the operator's real HOME under a test suite
+# (agy migrates and writes ~/.gemini/antigravity-cli on every start; 2026-11 a suite did exactly that).
+# Armed ONLY when hooks/tests/lib.sh exports AUTOPILOT_TEST_REAL_HOME (the passwd home of the uid,
+# captured before HOME was redirected); a production dispatch never sets it, so this is a no-op there.
+# CONTRACT: agy_assert_disposable_home  -> 0 (ok / unarmed), 1 + one-line reason on stdout.
+agy_assert_disposable_home() {
+  [ -n "${AUTOPILOT_TEST_REAL_HOME:-}" ] || return 0
+  local h real
+  h="$(readlink -m -- "${HOME:-}")"; real="$(readlink -m -- "$AUTOPILOT_TEST_REAL_HOME")"
+  if [ -z "$h" ] || [ "$h" = "$real" ]; then
+    printf 'test guard: agy would start with the real HOME (%s); tests must use a disposable HOME' "$real"
+    return 1
+  fi
+}

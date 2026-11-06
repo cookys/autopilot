@@ -375,6 +375,7 @@ POP_B_DEFAULT_ALLOW='hooks/tests/fixtures/review-loop-roster.pre-ssot-2026-11-06
 hooks/tests/resolve-review-loop-roster-overlay.test.sh|overlay fixtures that test the roster itself; the switches ride the roster on purpose
 hooks/tests/plan-review-roster-admission.test.sh|only greps a config for a roster-shaped reviewer_engine line to decide whether to hand it over as the roster; consult/discuss not involved
 hooks/tests/autopilot-cli.test.sh|partial roster fixture, resolves consult/discuss via the default
+hooks/tests/endpoints-cli.test.sh|partial roster override fixture for endpoint resolution (reviewer/implementer seats only); consult/discuss not tested
 hooks/tests/rail-stage-writers.test.sh|in-process roster object literal for a stage-writer campaign fixture, never resolved from config; consult/discuss not involved
 hooks/tests/autopilot-engine-boundary-resume.test.sh|partial roster fixture, resolves consult/discuss via the default
 hooks/tests/autopilot-engine-park-reserve.test.sh|partial roster fixture, resolves consult/discuss via the default

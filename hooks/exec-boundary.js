@@ -53,80 +53,57 @@ function readConfig() {
   return cfg;
 }
 
-// Split a shell command into command segments. Not a shell parser: a small
-// recursive scanner that knows quotes ('..', "..", $'..' with \' escapes), backslash
-// escapes, `$( )` / backtick substitutions (also inside double quotes, where the
-// body is a fresh command context: separators split and quotes nest), `$(( ))`
-// arithmetic (skipped, so its `<<` is not a heredoc), here-strings `<<<` and
-// heredocs. Separators (newline ; & | ( ) and backtick) end a segment; inside quotes
-// they are neutralised to \u0001. Heredoc bodies are dropped up to the closing line,
-// except that an UNQUOTED delimiter (<<W, <<-W) runs `$( )` / backticks in its body,
-// so only those spans are scanned as commands; a quoted delimiter (<<'W', <<"W",
-// <<\W, <<W"x") has a literal body and is dropped whole. A heredoc whose closing
-// line is never found is not a body: scanning rewinds and the lines are judged as
-// commands (fail closed).
+// ── E2 command splitter: mask the inert spans, scan everything else ──────────────────
+//
+// DESIGN (final shape after three review generations; do not reopen it as a false DENY).
+// A hand-written splitter that enumerates the ACTIVE shell constructs never converged:
+// each review round found another executed rm it skipped (arithmetic with a command
+// substitution inside, process substitution, continuation lines, comments and escaped
+// backticks inside backticks, heredoc state across recursion, <<$'EOF', bare ((..))).
+// So the model is inverted. Only a small CLOSED set of spans is provably inert and is
+// masked (their text can never be executed):
+//   - single-quoted text '..' and ANSI-C $'..' (only \' and \\ matter for its end);
+//   - the LITERAL text of a double-quoted string (the $( ), backtick, $(( )) and ${ }
+//     inside it stay active);
+//   - the body of a heredoc, and only when the operator is << or <<- (never <<<), it is
+//     not inside arithmetic, the delimiter word is quoted (<<'X' <<"X" <<\X <<E"OF") and
+//     the terminator line exists;
+//   - a # comment at top level (outside every substitution), to the end of the line.
+// Everything else is ACTIVE and scanned: unquoted or unterminated heredoc bodies,
+// arithmetic, process substitution, $( ), backticks (comments inside them included).
+// \<newline> is deleted (nothing inserted) everywhere except inside single quotes.
+// A quote with no closing quote is not a span: the quote char is dropped and the rest is
+// read as active text. The rm decision (E2 loop below) then splits in two:
+//   - top level: a simple-command rm judged by the literal-target scope rules;
+//   - nested (inside $( ), backticks, (( )) / $(( )), <( ) / >( ), or active heredoc text):
+//     any recursive rm is DENIED whatever its target looks like.
+// This is a deliberate fail-closed trade: an rm that merely sits in an active nested span
+// (e.g. `echo $(rm -rf ./build)`, an unquoted heredoc that describes rm) is refused even
+// when it would be harmless. Quote the heredoc delimiter (<<'EOF') to write rm prose.
+// Not seen, as before: rm fed through xargs / find -exec / `bash -c` strings or a heredoc
+// piped to a shell, and command words built by expansion ($RM, ${a:-rm}).
+// Nesting deeper than MAX_DEPTH fails closed (E2-nesting) so a pathological command can
+// neither overflow the JS stack nor hide an rm.
 const NEUTRAL = '\u0001';
-const neut = (t) => t.replace(/[;&|\n<>()`]/g, NEUTRAL);
+const MAX_DEPTH = 64;
+class DepthError extends Error {}
+// Text that cannot split a segment, start a quote or substitution, or break a token.
+const inert = (t) => t.replace(/[\s;&|<>()`'"{}\\]/g, NEUTRAL);
 
-// Index of the last `)` of a `$((` ... `))` that starts at s[i] === '$', or -1.
-function arithEnd(s, i) {
-  let depth = 2;
-  for (let k = i + 3; k < s.length; k++) {
-    if (s[k] === '(') depth++;
-    else if (s[k] === ')' && --depth === 0) return k;
+// Closing backtick of the backtick span at s[i] (escapes: \` \\ \$ are unescaped, as the
+// shell does before parsing the body). Returns { inner, end } (end = s.length if open).
+function backtick(s, i) {
+  let inner = '';
+  for (let j = i + 1; j < s.length; j++) {
+    const ch = s[j];
+    if (ch === '\\' && j + 1 < s.length) {
+      const n = s[j + 1];
+      inner += (n === '`' || n === '\\' || n === '$') ? n : ch + n;
+      j++;
+    } else if (ch === '`') return { inner, end: j };
+    else inner += ch;
   }
-  return -1;
-}
-
-// Scan `$( )` / backtick spans of an unquoted-heredoc body as commands.
-function scanBody(text, st) {
-  const sub = { segs: st.segs, pending: [] };
-  for (let k = 0; k < text.length; k++) {
-    if (text[k] === '\\') k++;
-    else if (text[k] === '$' && text[k + 1] === '(' && text[k + 2] !== '(') k = scan(text, k + 2, ')', sub);
-    else if (text[k] === '`') k = scan(text, k + 1, '`', sub);
-  }
-}
-
-// Consume the bodies of the heredocs queued on the line ending at s[nl]; return the
-// index of the last consumed newline (nl itself when nothing was consumed).
-function readBodies(s, nl, st) {
-  let p = nl;
-  while (st.pending.length) {
-    const { dash, word, quoted } = st.pending.shift();
-    const body = [];
-    let q = p;
-    let found = false;
-    while (q + 1 < s.length) {
-      const eol = s.indexOf('\n', q + 1);
-      const line = s.slice(q + 1, eol === -1 ? s.length : eol);
-      q = eol === -1 ? s.length : eol;
-      if ((dash ? line.replace(/^\t+/, '') : line) === word) { found = true; break; }
-      body.push(line);
-    }
-    if (!found) { st.pending.length = 0; return p; } // rewind: not a body, judge the lines
-    p = q;
-    if (!quoted) scanBody(body.join('\n'), st);
-  }
-  return p;
-}
-
-// Double-quoted string starting after the opening quote; returns [text, index of closing quote].
-function dquote(s, i, st) {
-  let out = '';
-  for (; i < s.length; i++) {
-    const c = s[i];
-    if (c === '"') return [out, i];
-    if (c === '\\') { out += c + (s[i + 1] === undefined ? '' : NEUTRAL); i++; continue; }
-    if (c === '$' && s[i + 1] === '(' && s[i + 2] === '(') {
-      const e = arithEnd(s, i);
-      if (e !== -1) { out += '0'; i = e; continue; }
-    }
-    if (c === '`') { out += '$'; i = scan(s, i + 1, '`', st); continue; }
-    if (c === '$' && s[i + 1] === '(') { out += '$'; i = scan(s, i + 2, ')', st); continue; }
-    out += neut(c);
-  }
-  return [out, s.length];
+  return { inner, end: s.length };
 }
 
 // Heredoc delimiter word at s[j]; returns { word, quoted, end } or null.
@@ -134,6 +111,7 @@ function heredocWord(s, j) {
   let word = '';
   let quoted = false;
   const start = j;
+  if (s[j] === '$' && (s[j + 1] === '\'' || s[j + 1] === '"')) j++; // <<$'EOF' <<$"EOF"
   while (j < s.length && !/[\s;&|<>()]/.test(s[j])) {
     const ch = s[j];
     if (ch === '\'' || ch === '"') {
@@ -152,78 +130,186 @@ function heredocWord(s, j) {
   return j === start ? null : { word, quoted, end: j };
 }
 
-// Scan s from i until the terminator `term` ('' = end of input; ')' or '`' for a
-// substitution body); every finished segment goes to st.segs. Returns the index of
-// the terminator (s.length when absent).
-function scan(s, i, term, st) {
+const push = (st, text, nested, sub) => st.segs.push({ text, nested, sub });
+
+// Body of an UNQUOTED heredoc: literal text whose expansions run. The text is nested
+// active text (any recursive rm in it is denied); $( ), backticks and ${ } are scanned.
+function scanBody(text, c, st) {
+  const t = text.replace(/\\\n/g, '');
   let cur = '';
-  let depth = 0;
-  const flush = () => { if (cur.trim()) st.segs.push(cur); cur = ''; };
+  let sub = false;
+  const out = () => { if (cur.trim()) push(st, cur, true, sub); cur = ''; sub = false; };
+  const next = { nested: true, depth: c.depth + 1 };
+  for (let k = 0; k < t.length; k++) {
+    const ch = t[k];
+    if (ch === '\\' && k + 1 < t.length) { cur += t[k + 1] === '\n' ? '' : t[k + 1]; k++; continue; }
+    if (ch === '\n') { out(); continue; }
+    if (ch === '$' && t[k + 1] === '(') { k = scan(t, k + 2, { ...next, term: ')', noHere: t[k + 2] === '(' }, st); cur += '$(' + NEUTRAL; sub = true; continue; }
+    if (ch === '`') { const b = backtick(t, k); scan(b.inner, 0, { ...next, term: '' }, st); k = b.end; cur += '$(' + NEUTRAL; sub = true; continue; }
+    if (ch === '$' && t[k + 1] === '{' && t.indexOf('}', k + 2) !== -1) { k = scan(t, k + 2, { ...next, term: '}', word: true }, st); cur += '${' + NEUTRAL; continue; }
+    cur += ch;
+  }
+  out();
+}
+
+// Consume the bodies of the heredocs queued on the line ending at s[nl]; return the
+// index of the last consumed newline (nl itself when nothing was consumed). A heredoc
+// whose terminator line is never found is not a body: everything stays active.
+function readBodies(s, nl, pending, missing, c, st) {
+  let p = nl;
+  while (pending.length) {
+    const { dash, word, quoted } = pending.shift();
+    const key = (dash ? '-' : '') + word;
+    if (missing.has(key)) { pending.length = 0; return p; }
+    const body = [];
+    let q = p;
+    let found = false;
+    while (q + 1 < s.length) {
+      const eol = s.indexOf('\n', q + 1);
+      const line = s.slice(q + 1, eol === -1 ? s.length : eol);
+      q = eol === -1 ? s.length : eol;
+      if ((dash ? line.replace(/^\t+/, '') : line) === word) { found = true; break; }
+      body.push(line);
+    }
+    if (!found) { missing.add(key); pending.length = 0; return p; }
+    p = q;
+    if (!quoted) scanBody(body.join('\n'), c, st);
+  }
+  return p;
+}
+
+// Double-quoted string starting after the opening quote. Literal text is masked; the
+// substitutions inside stay active. Returns { text, end, sub }, end = closing quote index.
+function dquote(s, i, c, st) {
+  let out = '';
+  let sub = false;
+  const next = { nested: true, depth: c.depth + 1 };
+  for (let j = i; j < s.length; j++) {
+    const ch = s[j];
+    if (ch === '"') return { text: out, end: j, sub };
+    if (ch === '\\') {
+      const n = s[j + 1];
+      if (n === '\n') { j++; continue; }
+      if (n !== undefined) { out += NEUTRAL + (/[$`"\\]/.test(n) ? '' : inert(n)); j++; }
+      continue;
+    }
+    if (ch === '$' && s[j + 1] === '(') { j = scan(s, j + 2, { ...next, term: ')', noHere: s[j + 2] === '(' }, st); out += '$(' + NEUTRAL; sub = true; continue; }
+    if (ch === '`') { const b = backtick(s, j); scan(b.inner, 0, { ...next, term: '' }, st); j = b.end; out += '$(' + NEUTRAL; sub = true; continue; }
+    if (ch === '$' && s[j + 1] === '{' && s.indexOf('}', j + 2) !== -1) { j = scan(s, j + 2, { ...next, term: '}', word: true }, st); out += '${' + NEUTRAL; continue; }
+    out += inert(ch);
+  }
+  return { text: out, end: s.length, sub };
+}
+
+// Scan s from i until the terminator c.term ('' = end of input, ')' closes a $( ) / <( )
+// / (( )) body at paren depth 0, '}' closes a ${ } body); finished segments go to
+// st.segs as { text, nested, sub }. Returns the terminator index (s.length when absent).
+// c: { term, nested, depth, noHere (arithmetic: << is a shift), word (${ }: nothing splits) }.
+function scan(s, i, c, st) {
+  if (c.depth > MAX_DEPTH) throw new DepthError('command nesting deeper than ' + MAX_DEPTH);
+  const next = { nested: true, depth: c.depth + 1 };
+  let cur = '';
+  let sub = false; // the segment holds a substitution marker
+  let inWord = false; // a word is open (so a following # is not a comment)
+  let pd = 0;
+  const pending = []; // heredoc delimiters awaiting their body (this scan only)
+  const missing = new Set();
+  const flush = () => { if (cur.trim()) push(st, cur, c.nested, sub); cur = ''; sub = false; inWord = false; };
+  const crossed = (a, b) => { if (pending.length) { const n = s.indexOf('\n', a); if (n !== -1 && n < b) pending.length = 0; } };
   for (; i < s.length; i++) {
-    const c = s[i];
-    if (term === ')' && c === ')' && depth === 0) { flush(); return i; }
-    if (term === '`' && c === '`') { flush(); return i; }
-    if (c === '\\') {
+    const ch = s[i];
+    if (c.term === ')' && ch === ')' && pd === 0) { flush(); return i; }
+    if (c.term === '}' && ch === '}') return i;
+    if (ch === '\\') {
       const n = s[i + 1];
-      if (n === '\n') cur += ' ';
-      else if (n !== undefined) cur += /[;&|()`'"<>\s]/.test(n) ? NEUTRAL : n;
-      i++;
+      if (n === '\n') { i++; continue; } // continuation: deleted, nothing inserted
+      if (n !== undefined) { cur += /[A-Za-z0-9_/.:@%+=,-]/.test(n) ? n : NEUTRAL; i++; }
+      inWord = true;
       continue;
     }
-    if (c === '\'') {
+    if (ch === '\'') {
       const k = s.indexOf('\'', i + 1);
-      cur += '\'' + neut(s.slice(i + 1, k === -1 ? s.length : k)) + (k === -1 ? '' : '\'');
-      i = k === -1 ? s.length : k;
-      continue;
+      if (k !== -1) { cur += inert(s.slice(i + 1, k)); crossed(i, k); i = k; inWord = true; }
+      continue; // an unterminated quote is dropped; the rest stays active
     }
-    if (c === '$' && s[i + 1] === '\'') { // ANSI-C quoting: backslash escapes the next char
+    if (ch === '$' && s[i + 1] === '\'') { // ANSI-C quoting: backslash escapes the next char
       let k = i + 2;
-      let body = '';
-      while (k < s.length && s[k] !== '\'') {
-        if (s[k] === '\\' && k + 1 < s.length) { body += NEUTRAL + NEUTRAL; k += 2; } else { body += neut(s[k]); k++; }
-      }
-      cur += '$\'' + body + (k < s.length ? '\'' : '');
-      i = k;
+      while (k < s.length && s[k] !== '\'') k += s[k] === '\\' ? 2 : 1;
+      if (k < s.length) { cur += inert(s.slice(i + 2, k)); crossed(i, k); i = k; inWord = true; } else { cur += '$'; inWord = true; }
       continue;
     }
-    if (c === '"') { const [t, k] = dquote(s, i + 1, st); cur += '"' + t + (k < s.length ? '"' : ''); i = k; continue; }
-    if (c === '$' && s[i + 1] === '(' && s[i + 2] === '(') {
-      const e = arithEnd(s, i);
-      if (e !== -1) { cur += '0'; i = e; continue; }
+    if (ch === '"') {
+      if (s.indexOf('"', i + 1) === -1) continue; // unterminated: dropped, rest stays active
+      const r = dquote(s, i + 1, c, st);
+      cur += r.text; sub = sub || r.sub; crossed(i, r.end); i = r.end; inWord = true;
+      continue;
     }
-    if (c === '$' && s[i + 1] === '(') { cur += '$'; i = scan(s, i + 2, ')', st); continue; }
-    if (c === '`') { cur += '$'; i = scan(s, i + 1, '`', st); continue; }
-    if (c === '#' && (cur === '' || /\s$/.test(cur))) { while (i < s.length && s[i] !== '\n') i++; i--; continue; }
-    if (c === '<' && s[i + 1] === '<' && s[i + 2] === '<') { cur += ' '; i += 2; continue; } // here-string
-    if (c === '<' && s[i + 1] === '<') {
+    if (ch === '$' && s[i + 1] === '(') { // $( ), also $(( )): the body is nested active text
+      const e = scan(s, i + 2, { ...next, term: ')', noHere: s[i + 2] === '(' }, st);
+      cur += '$(' + NEUTRAL; sub = true; crossed(i, e); i = e; inWord = true;
+      continue;
+    }
+    if (ch === '`') {
+      const b = backtick(s, i);
+      scan(b.inner, 0, { ...next, term: '' }, st);
+      cur += '$(' + NEUTRAL; sub = true; crossed(i, b.end); i = b.end; inWord = true;
+      continue;
+    }
+    if (ch === '$' && s[i + 1] === '{' && s.indexOf('}', i + 2) !== -1) {
+      const e = scan(s, i + 2, { ...next, term: '}', word: true }, st);
+      cur += '${' + NEUTRAL; crossed(i, e); i = e; inWord = true;
+      continue;
+    }
+    if (c.word) { // inside ${ }: everything else is word text, nothing splits or starts
+      cur += /[\s;&|<>()#]/.test(ch) ? NEUTRAL : ch;
+      continue;
+    }
+    if (ch === '#' && !c.nested && !inWord) { while (i + 1 < s.length && s[i + 1] !== '\n') i++; continue; }
+    if ((ch === '<' || ch === '>') && s[i + 1] === '(') { // process substitution: a word, not a separator
+      const e = scan(s, i + 2, { ...next, term: ')' }, st);
+      cur += '$(' + NEUTRAL; sub = true; crossed(i, e); i = e; inWord = true;
+      continue;
+    }
+    if (ch === '<' && s[i + 1] === '<' && s[i + 2] === '<') { cur += '<<<'; i += 2; inWord = true; continue; } // here-string
+    if (ch === '<' && s[i + 1] === '<' && !c.noHere) {
       const dash = s[i + 2] === '-';
       let j = i + 2 + (dash ? 1 : 0);
       while (s[j] === ' ' || s[j] === '\t') j++;
       const w = heredocWord(s, j);
-      if (w) {
-        st.pending.push({ dash, word: w.word, quoted: w.quoted });
-        i = w.end - 1;
-        continue;
-      }
+      if (w) { pending.push({ dash, word: w.word, quoted: w.quoted }); i = w.end - 1; inWord = true; continue; }
     }
-    if (c === '\n') {
+    if (ch === '\n') {
       flush();
-      if (st.pending.length) i = readBodies(s, i, st);
+      if (pending.length) i = readBodies(s, i, pending, missing, c, st);
       continue;
     }
-    if (c === '(') { flush(); depth++; continue; }
-    if (c === ')') { flush(); if (depth > 0) depth--; continue; }
-    if (/[;&|]/.test(c)) { flush(); continue; }
-    cur += c;
+    if (ch === '(') {
+      if (s[i + 1] === '(' && cur.trim() === '' && !c.noHere) { // bare ((..)): arithmetic command, nested active text
+        i = scan(s, i + 1, { ...next, term: ')', noHere: true }, st);
+        continue;
+      }
+      flush(); pd++;
+      continue;
+    }
+    if (ch === ')') { flush(); if (pd > 0) pd--; continue; }
+    if (ch === '&' && (/[<>]$/.test(cur) || s[i + 1] === '>')) { cur += ch; inWord = true; continue; } // >&2 2>&1 &>f: redirection, not a separator
+    if (ch === ';' || ch === '&' || ch === '|') { flush(); continue; }
+    cur += ch;
+    inWord = !/\s/.test(ch);
   }
-  flush();
+  if (!c.word) flush();
   return s.length;
 }
 
+// Returns the segment texts, with .nested and .subst: Sets of segment indexes that sit in
+// a nested active span, resp. hold a substitution marker (the rm-target checks key on them).
 function commandSegments(cmd) {
-  const st = { segs: [], pending: [] };
-  scan(cmd, 0, '', st);
-  return st.segs;
+  const st = { segs: [] };
+  scan(cmd, 0, { term: '', nested: false, depth: 0 }, st);
+  const out = st.segs.map((g) => g.text);
+  out.nested = new Set(st.segs.flatMap((g, k) => (g.nested ? [k] : [])));
+  out.subst = new Set(st.segs.flatMap((g, k) => (g.sub ? [k] : [])));
+  return out;
 }
 
 function deny(rule, detail) {
@@ -251,18 +337,13 @@ try {
     }
   }
 
-  // E2 — recursive rm outside sanctioned roots. The command is first split into
-  // command segments (commandSegments: newline and shell separators; heredoc
-  // bodies dropped; separators inside quotes neutralised), then rm is judged only
-  // where it is the command word of a segment (after env assignments / sudo /
-  // command / builtin / exec ...). Prose mentions in quoted arguments, heredoc
-  // bodies and later lines are therefore not rm targets (live false DENYs
-  // 2026-08-16 and 2026-11-05). Literal `cd <abs>` is tracked so `cd / && rm -rf *`
-  // judges `*` against `/`.
-  // Deliberately still DENY (fail closed): rm after a real separator, in `$( )` or
-  // backticks (also inside double quotes, where the shell runs them), `rm` fed by
-  // `xargs`/`find -exec`/`bash -c` strings is NOT seen (never was), and any
-  // unterminated quote or heredoc is read to the end as one segment.
+  // E2 — recursive rm outside sanctioned roots. The design is the header block above
+  // commandSegments (mask the inert spans, scan the rest). Top-level simple commands:
+  // rm is judged only where it is the command word of a segment (after env assignments /
+  // sudo / command / builtin / exec / reserved words) against the literal-target scope
+  // rules; literal `cd <abs>` is tracked so `cd / && rm -rf *` judges `*` against `/`.
+  // Nested active spans ($( ), backticks, (( )), <( ), unquoted heredoc text): any
+  // recursive rm is denied, whatever its target.
   const roots = [
     os.tmpdir(), '/tmp', process.cwd(),
     ...(process.env.TMPDIR ? [process.env.TMPDIR] : []),
@@ -270,12 +351,27 @@ try {
   ].map((r) => path.resolve(r));
   const inRoots = (abs) => abs !== '/' && roots.some((r) => abs === r || abs.startsWith(r + path.sep));
   let simCwd = process.cwd();
-  for (const seg of commandSegments(command)) {
+  let segments;
+  try { segments = commandSegments(command); } catch (e) {
+    if (!(e instanceof DepthError)) throw e;
+    deny('E2-nesting', `${e.message}; refused (fail closed) because the nested text cannot be judged`);
+  }
+  for (const [segIdx, seg] of segments.entries()) {
     const toks = seg.split(/\s+/).filter(Boolean);
+    if (segments.nested.has(segIdx)) {
+      const at = toks.findIndex((t) => t === 'rm' || t.endsWith('/rm'));
+      if (at !== -1 && /(^|\s)-[a-zA-Z]*[rR]|--recursive/.test(toks.slice(at + 1).join(' '))) {
+        deny('E2-recursive-rm', 'recursive rm inside a command substitution, arithmetic, process substitution or unquoted heredoc text is refused whatever its target (fail closed; quote the heredoc delimiter to write rm prose, or run the rm as a plain top-level command)');
+      }
+      continue;
+    }
     let k = 0;
     while (k < toks.length) {
       if (/^[A-Za-z_]\w*=/.test(toks[k])) { k++; continue; }
-      if (/^(sudo|command|builtin|exec|nohup|time)$/.test(toks[k])) {
+      if (/^(\{|!|if|then|else|elif|do|while|until)$/.test(toks[k])) { k++; continue; }
+      if (/^\d*(?:>>?|<|&>)\S+$/.test(toks[k])) { k++; continue; } // leading redirection: >f 2>&1
+      if (/^\d*(?:>>?|<|&>)$/.test(toks[k])) { k += 2; continue; } // > file
+      if (/^(sudo|command|builtin|exec|nohup|time|env)$/.test(toks[k])) {
         k++;
         while (k < toks.length && toks[k].startsWith('-')) k++;
         continue;
@@ -290,7 +386,7 @@ try {
       }
       continue;
     }
-    if (head !== 'rm') continue;
+    if (head !== 'rm' && !/\/rm$/.test(head || '')) continue;
     const rest = toks.slice(k + 1);
     if (!/(^|\s)-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r|--recursive/.test(rest.join(' '))) continue;
     for (const tok of rest.filter((t) => !t.startsWith('-'))) {

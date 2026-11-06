@@ -65,9 +65,9 @@ assert_eq "0" "$EXIT" "E2: absolute path on a later line is not an rm target"
 run_hook $'cat > notes.md <<\'EOF\'\nrun this: ls && rm -rf /\nEOF\nls'; EXIT=$?
 assert_eq "0" "$EXIT" "E2: rm text inside a quoted-delimiter heredoc body passes"
 run_hook $'cat > notes.md <<EOF\nstep one; rm -rf /\nEOF'; EXIT=$?
-assert_eq "0" "$EXIT" "E2: rm text inside a bare heredoc body passes"
+assert_eq "2" "$EXIT" "E2 (g3 fail-closed trade): rm text in an UNQUOTED heredoc body is active text, denied; quote the delimiter"
 run_hook $'cat <<-EOF\n\tdo it | rm -rf /etc/x\n\tEOF'; EXIT=$?
-assert_eq "0" "$EXIT" "E2: rm text inside a <<- heredoc body passes"
+assert_eq "2" "$EXIT" "E2 (g3 fail-closed trade): rm text in an unquoted <<- heredoc body is denied"
 run_hook $'git commit -m "docs: the old step was\nrm -rf /\nremoved; rm -rf /etc/y"'; EXIT=$?
 assert_eq "0" "$EXIT" "E2: rm text on its own line inside a quoted commit message passes"
 run_hook $'printf \'%s\\n\' \'x; rm -rf /\' > note.txt'; EXIT=$?
@@ -217,11 +217,148 @@ cat <<'EOF'
 $(rm -rf /etc/x)
 EOF
 X
-expect_exit 0 "E2/D: harmless \$( ) plus rm prose in a bare heredoc body passes" <<'X'
+expect_exit 2 "E2/D (g3 fail-closed trade): rm prose in an unquoted heredoc body is denied" <<'X'
 cat <<EOF
 today is $(date); then run: ls && rm -rf /
 EOF
 X
+
+# ── g3 structural rewrite: mask only the inert spans, scan everything else. The g2 findings
+# (each ran a real recursive rm in zsh and bash while the g2 splitter ALLOWED it), see also
+# exec-boundary-oracle.test.sh which checks the same strings against real shells.
+expect_exit 2 "E2/g2 a3bcb6a3: \$( ) inside \$(( ))" <<'X'
+echo $(( $(rm -rf /etc/x; echo 0) + 1 ))
+X
+expect_exit 2 "E2/g2 de3d953d: backslash-newline inside the command word" <<'X'
+r\
+m -rf /etc/x
+X
+expect_exit 2 "E2/g2 ed5e1cc4: backtick inside \"\$(( ))\"" <<'X'
+echo "$(( `rm -rf /etc/x` ))"
+X
+expect_exit 2 "E2/g2 95e5b178: bare ((1<<4)) is not a heredoc" <<'X'
+((1<<4))
+rm -rf /etc/x
+4
+X
+expect_exit 2 "E2/g2 abb6b2ad: \$( ) inside \$(( )) in double quotes" <<'X'
+echo "$(( $(rm -rf /etc/x) + 1 ))"
+X
+expect_exit 2 "E2/g2 e6f6596a: \$((true); ...) is a subshell substitution" <<'X'
+echo $((true); rm -rf /etc/x)
+X
+expect_exit 2 "E2/g2 e6f6596a: \$((\$( ))) nested" <<'X'
+echo $(($(rm -rf /etc/x)))
+X
+expect_exit 2 "E2/g2 e6f6596a: \$((..)) inside an unquoted heredoc body" <<'X'
+cat <<EOF
+$((true); rm -rf /etc/x)
+EOF
+X
+expect_exit 2 "E2/g2 8e0940ec: process substitution does not split the rm arguments" <<'X'
+rm -rf <(true) /etc/x
+X
+expect_exit 2 "E2/g2 8e0940ec: process substitution between rm flags" <<'X'
+rm <(true) -rf /etc/x
+X
+expect_exit 2 "E2/g2 3cefbb3a: comment inside backticks ends at the closing backtick" <<'X'
+echo `true #` ; rm -rf /etc/x
+X
+expect_exit 2 "E2/g2 3cefbb3a: escaped backticks nest" <<'X'
+echo `echo \`rm -rf /etc/x\``
+X
+expect_exit 2 "E2/g2 52493811: continuation before a # does not make a comment" <<'X'
+echo foo\
+#bar; rm -rf /etc/x
+X
+expect_exit 2 "E2/g2 8febe280: heredoc operator inside \$( ) leaves no state behind" <<'X'
+echo $(cat <<'EOF')
+rm -rf /etc/x
+EOF
+X
+expect_exit 2 "E2/g2 8febe280: <<\$'EOF' delimiter, rm after the terminator" <<'X'
+cat <<$'EOF'
+EOF
+rm -rf /etc/x
+$EOF
+X
+expect_exit 0 "E2/g2 8febe280: <<\$'EOF' body is literal text (was a false DENY)" <<'X'
+cat <<$'EOF'
+rm -rf /etc/x
+EOF
+X
+# Nested active spans deny any recursive rm, in-scope target included (fail closed).
+expect_exit 2 "E2/g3: in-scope rm inside \$( ) denied" <<'X'
+echo $(rm -rf ./build)
+X
+expect_exit 2 "E2/g3: in-scope rm inside backticks denied" <<'X'
+echo `rm -rf ./build`
+X
+expect_exit 2 "E2/g3: in-scope rm inside <( ) denied" <<'X'
+cat <(rm -rf ./build)
+X
+expect_exit 2 "E2/g3: in-scope rm inside (( )) denied" <<'X'
+(( $(rm -rf ./build) ))
+X
+expect_exit 0 "E2/g3: top-level in-scope rm still allowed" <<'X'
+rm -rf ./build
+X
+# Inert spans stay inert (the named false-DENY regressions).
+expect_exit 0 "E2/g3: rm text in a <<'EOF' body passes" <<'X'
+cat > notes.md <<'EOF'
+Describe the cleanup: rm -rf /etc/x
+EOF
+X
+expect_exit 0 "E2/g3: rm text in single quotes passes" <<'X'
+echo 'Describe the cleanup: rm -rf /etc/x'
+X
+expect_exit 0 "E2/g3: rm text in \$'...' passes" <<'X'
+echo $'Describe the cleanup: rm -rf /etc/x'
+X
+expect_exit 0 "E2/g3: rm text in a double-quoted commit message passes" <<'X'
+git commit -m "fix: the old step ran rm -rf /etc/x"
+X
+expect_exit 0 "E2/g3: commit message heredoc with rm text passes" <<'X'
+git commit -m "$(cat <<'EOF'
+docs: mention rm -rf /etc/x as text
+EOF
+)"
+X
+expect_exit 0 "E2/g3: a # comment is inert at top level" <<'X'
+echo hi # then rm -rf /etc/x
+X
+expect_exit 2 "E2/g3: a # comment inside backticks is active text" <<'X'
+echo `true
+# x
+rm -rf /etc/x`
+X
+# Prefix shapes that used to hide the command word.
+expect_exit 2 "E2/g3: leading redirection before rm" <<'X'
+>/dev/null rm -rf /etc/x
+X
+expect_exit 2 "E2/g3: 2>&1 before rm (the & is not a separator)" <<'X'
+2>&1 rm -rf /etc/x
+X
+expect_exit 2 "E2/g3: reserved word { before rm" <<'X'
+{ rm -rf /etc/x; }
+X
+expect_exit 2 "E2/g3: quoted command word" <<'X'
+"rm" -rf /etc/x
+X
+expect_exit 2 "E2/g3: path-qualified rm" <<'X'
+/bin/rm -rf /etc/x
+X
+# Nesting bound (cd225789): deeper than 64 fails closed with a clear message.
+DEEP="$(printf 'echo $(%.0s' $(seq 1 70))true$(printf ')%.0s' $(seq 1 70))"
+run_hook "$DEEP"; EXIT=$?
+assert_eq "2" "$EXIT" "E2/g3: nesting deeper than 64 is denied"
+assert_contains "$(cat "$TEST_TMP/hook-err.txt")" "E2-nesting" "E2/g3: the nesting denial names its rule"
+SHALLOW="$(printf 'echo $(%.0s' $(seq 1 40))true$(printf ')%.0s' $(seq 1 40))"
+run_hook "$SHALLOW"; EXIT=$?
+assert_eq "0" "$EXIT" "E2/g3: nesting of 40 without rm is allowed"
+MANY="$(printf 'cat <<A\n%.0s' $(seq 1 3000))"
+run_hook "$MANY"; EXIT=$?
+assert_eq "0" "$EXIT" "E2/g3: thousands of unterminated heredoc lines finish promptly (no quadratic rescan)"
 
 # ── Benign commands pass (allow-by-default) ──
 for cmd in "ls -la" "git status" "npm test" "grep -r foo src/"; do

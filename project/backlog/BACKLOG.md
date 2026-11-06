@@ -1213,7 +1213,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: PM（pm--claude）
 - **Report**: 2026-11-05 fleet
 - **Reply**: none
-- **Problem**: owner 端要改用艦隊子席位派工、依驗收判斷並有重試額度、用完升級給 PM，另要子樹進度顯示。第 3 項已轉到 fleet 的 backlog，其餘關掉。
+- **Problem**: owner 端要改用艦隊子席位派工、依驗收判斷並有重試額度、用完升級給 PM，另要子樹進度顯示。第 3 項已轉到 fleet 的 backlog；第 1、2、4 項在 role-members 之後寫一份精簡的 owner 端計畫；其他項目關掉。
 - **Impact**: 不做的話，owner 端的派工、驗收與升級仍靠各 session 自行處理，進度也看不到。
 - **Trigger**: 角色成員計畫完成之後
 - **Trigger-Type**: event

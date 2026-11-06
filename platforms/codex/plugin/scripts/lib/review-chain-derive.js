@@ -211,7 +211,10 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
       const disp = dispMap.get(f.id);
       const disposition = disp ? disp.disposition : undefined;
 
-      if (disposition === 'verified') {
+      // Rule A, enforced here once for every consumer: in a marker-carrying entry a Critical/Major whose
+      // disposition fails majorDispositionError (bare refuted/deferred, missing, ...) stays open as if verified.
+      const ruleAOpen = enforcedBySchema(entry) && !!majorDispositionError(f, disp);
+      if (disposition === 'verified' || ruleAOpen) {
         activeVerified.set(f.id, {
           id: f.id,
           severity: f.severity,

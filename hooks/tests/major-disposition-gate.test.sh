@@ -168,3 +168,108 @@ E2=$(rc_gen r7 2 "$GEN1_HEAD" "$GEN2_HEAD" "$DIFF2" '[]' '[]' '[ { "id": "fm", "
 rc_write r7 "SHIP-AS-IS" '[]' "$E1, $E2"
 git -C "$SCRATCH_REPO" reset -q --hard "$GEN2_HEAD"; rc_run r7
 assert_exit_code "$RC_RC" "0" "R7: verified Major resolved by a later generation passes (output: $RC_OUT)"
+
+# ─── rule A lives in the shared derive (one place): every consumer agrees ───
+BARE='[ { "id": "fm", "disposition": "refuted", "rationale": "not blocking" } ]'
+OKD='[ { "id": "fm", "disposition": "refuted", "rationale": "r", "refutation_kind": "false_claim", "evidence": "file.txt:1 does not do that" } ]'
+
+# D1: derive alone keeps a marker-carrying bare-refuted Major open; without the marker it stays closed (history)
+D1=$(node -e '
+const d=require(process.argv[1]);
+const f=[{id:"fm",severity:"Major",seat:"s0",text:"bug"}];
+const run=(m,disp)=>{const e={generation:1,status:"finalized"}; if(m) e.disposition_schema=2;
+  const r=d([e],new Map([[1,f]]),new Map([[1,{findings:disp,resolutions:[]}]])); return r.verdict+":"+(r.open_findings||[]).map(x=>x.id).join(",");};
+console.log([run(true,[{id:"fm",disposition:"refuted"}]),run(false,[{id:"fm",disposition:"refuted"}]),run(true,[{id:"fm",disposition:"deferred"}]),run(true,[{id:"fm",disposition:"refuted",refutation_kind:"false_claim",evidence:"x"}])].join("|"));
+' "$REPO_ROOT/scripts/lib/review-chain-derive.js")
+assert_eq "$D1" "FIX-THEN-SHIP:fm|SHIP-AS-IS:|FIX-THEN-SHIP:fm|SHIP-AS-IS:" "D1: derive alone keeps a schema-2 bare refuted/deferred Major active; unmarked and valid ones close"
+
+# D2: finalize of generation 2 re-derives generation 1 (schema 2, bare refuted Major) as still open -> FIX-THEN-SHIP, never SHIP-AS-IS
+d2_case() { # <phase> <gen1-dispositions-json-array> -> D2_OUT D2_RC; receipt verdict in $D2_VERDICT
+  local p="$1" dj="$2" L2="$TEST_TMP/ledger-$1"
+  mkdir -p "$L2/review-$p/g1" "$L2/review-$p/g2"
+  echo "{ \"base\": \"$PHASE_BASE\", \"head\": \"$GEN1_HEAD\", \"diff_sha256\": \"$DIFF1\" }" > "$L2/review-$p/g1/range.json"
+  echo "{ \"findings\": $FJ }" > "$L2/review-$p/g1/findings.json"
+  echo "{ \"findings\": $dj, \"resolutions\": [] }" > "$L2/review-$p/g1/dispositions.json"
+  echo "{ \"base\": \"$GEN1_HEAD\", \"head\": \"$GEN2_HEAD\" }" > "$L2/review-$p/g2/range.json"
+  echo '{ "findings": [] }' > "$L2/review-$p/g2/findings.json"
+  echo "{ \"schema_version\": 1, \"phase\": \"$p\", \"generation\": 2, \"findings\": [] }" > "$TEST_TMP/disp_$p.json"
+  cat > "$L2/review-$p/chain.json" <<EOF
+[ { "generation": 1, "base": "$PHASE_BASE", "head": "$GEN1_HEAD", "seats": ["s0"], "status": "finalized", "finalized_at": "$AT", "disposition_schema": 2, "dispositions_path": "review-$p/g1/dispositions.json" },
+  { "generation": 2, "base": "$GEN1_HEAD", "head": "$GEN2_HEAD", "seats": ["s0"], "status": "pending" } ]
+EOF
+  D2_OUT=$(node "$LOOP" finalize --repo-root "$SCRATCH_REPO" --ledger "$L2" --phase "$p" --generation 2 --dispositions "$TEST_TMP/disp_$p.json" 2>&1); D2_RC=$?
+  D2_VERDICT=$(cat "$L2/receipt-$p.json" 2>/dev/null)
+}
+d2_case d2 "$BARE"
+assert_contains "$D2_VERDICT" '"verdict": "FIX-THEN-SHIP"' "D2: a later generation does not close a schema-2 bare refuted Major (output: $D2_OUT)"
+d2_case d2ok "$OKD"
+assert_contains "$D2_VERDICT" '"verdict": "SHIP-AS-IS"' "D2 control: the same chain with a valid refutation closes (output: $D2_OUT)"
+
+# D3 / D4 share a builder: one Mode A phase (optionally a packet) whose single Major carries a bare or a valid refutation
+cat > "$TEST_TMP/mkphase.js" <<'JS'
+const fs = require('fs'), path = require('path'), crypto = require('crypto'), cp = require('child_process');
+const [ledger, repo, phase, base, head, variant, packetsFile, packetId] = process.argv.slice(2);
+const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
+const gd = path.join(ledger, `review-${phase}`, 'g1');
+fs.mkdirSync(gd, { recursive: true });
+let packet;
+const diffArgs = ['diff', `${base}..${head}`];
+if (packetsFile) {
+  const text = fs.readFileSync(packetsFile, 'utf8');
+  const obj = JSON.parse(text);
+  const paths = obj.packets[packetId].slice().sort();
+  packet = { set: obj.set, id: packetId, packets_sha256: sha(text), paths };
+  diffArgs.splice(1, 0, '--no-renames'); diffArgs.push('--', ...paths);
+}
+const diff = cp.spawnSync('git', ['--literal-pathspecs', ...diffArgs], { cwd: repo, encoding: 'utf8', maxBuffer: 1 << 26 }).stdout;
+const full = packet ? sha(cp.spawnSync('git', ['diff', `${base}..${head}`], { cwd: repo, encoding: 'utf8', maxBuffer: 1 << 26 }).stdout) : undefined;
+fs.writeFileSync(path.join(gd, 'range.json'), JSON.stringify({ base, head, diff_sha256: sha(diff), ...(packet ? { packet, full_range_sha256: full, excluded: [] } : {}) }));
+const findings = variant === 'none' ? [] : [{ id: 'fm', severity: 'Major', seat: 's0', text: 'bug' }];
+const disp = variant === 'bare' ? [{ id: 'fm', disposition: 'refuted', rationale: 'not blocking' }]
+  : variant === 'ok' ? [{ id: 'fm', disposition: 'refuted', rationale: 'r', refutation_kind: 'false_claim', evidence: 'a.txt:1 does not do that' }] : [];
+fs.writeFileSync(path.join(gd, 'findings.json'), JSON.stringify({ findings }));
+fs.writeFileSync(path.join(gd, 'dispositions.json'), JSON.stringify({ findings: disp, resolutions: [] }));
+fs.writeFileSync(path.join(gd, 'seat-s0.json'), JSON.stringify({ status: 'reviewed', verdict: 'SHIP-AS-IS', findings: '', no_finding_proof: 'checked=all; evidence=clean diff; conclusion=safe' }));
+const h = (f) => sha(fs.readFileSync(path.join(gd, f)));
+const entry = { generation: 1, base, head, status: 'finalized', seats: [{ id: 's0', status: 'reviewed' }], finalized_at: '2026-11-07T00:00:00.000Z', disposition_schema: 2,
+  dispositions_sha256: h('dispositions.json'), findings_sha256: h('findings.json'), seat_artifact_sha256: { s0: h('seat-s0.json') }, ...(packet ? { packet } : {}) };
+fs.writeFileSync(path.join(ledger, `review-${phase}`, 'chain.json'), JSON.stringify([entry]));
+fs.writeFileSync(path.join(ledger, `receipt-${phase}.json`), JSON.stringify({ kind: 'review', phase, branch: 'work', phase_base_sha: base,
+  chain: [entry], verdict: 'SHIP-AS-IS', open_findings: [], resolved_from: 'test', written_at: '2026-11-07T00:00:00Z', ...(packet ? { packet } : {}) }));
+JS
+
+# D3: --packets path. Packet a is clean, packet b carries a schema-2 bare refuted Major: the set fails naming packet b; a valid refutation passes
+PR="$TEST_TMP/prepo"; mkdir -p "$PR"
+pg() { git -C "$PR" "$@"; }
+pg init -q; pg config user.email t@example.com; pg config user.name t
+echo base > "$PR/a.txt"; echo base > "$PR/b.txt"; pg add a.txt b.txt; pg commit -q -m b0; PB0=$(pg rev-parse HEAD)
+pg checkout -q -b work; echo x > "$PR/a.txt"; echo y > "$PR/b.txt"; pg commit -qam c1; PH=$(pg rev-parse HEAD)
+echo '{ "schema": "autopilot.review-packets/1", "set": "ps", "packets": { "a": ["a.txt"], "b": ["b.txt"] } }' > "$TEST_TMP/packets.json"
+d3_run() { # <variant-of-b>
+  local L3="$TEST_TMP/ledger-d3-$1"; mkdir -p "$L3"
+  node "$TEST_TMP/mkphase.js" "$L3" "$PR" ps-a "$PB0" "$PH" none "$TEST_TMP/packets.json" a
+  node "$TEST_TMP/mkphase.js" "$L3" "$PR" ps-b "$PB0" "$PH" "$1" "$TEST_TMP/packets.json" b
+  D3_OUT=$(node "$CHECK" --packets "$TEST_TMP/packets.json" --ledger "$L3" --branch work --phase-base "$PB0" --repo-root "$PR" 2>&1); D3_RC=$?
+}
+d3_run bare
+assert_exit_code "$D3_RC" "1" "D3b: packet set with a schema-2 bare refuted Major in packet b fails"
+assert_contains "$D3_OUT" "refuted without refutation_kind" "D3b: message names the rule (output: $D3_OUT)"
+d3_run ok
+assert_exit_code "$D3_RC" "0" "D3a: the same set with a valid refutation passes (output: $D3_OUT)"
+
+# D4: --post-head-ledger path. Past the cap the head moved; the same schema-2 bare refuted Major still fails
+HR=$(pg rev-parse HEAD); echo p >> "$PR/a.txt"; pg commit -qam p1; P1=$(pg rev-parse HEAD)
+pg update-ref refs/remotes/origin/develop "$PB0"
+echo "{\"schema\":\"post-head-ledger/1\",\"phase\":\"P\",\"reviewed_head\":\"$HR\",\"ruling\":\"PM ruling d-test\",\"commits\":[{\"sha\":\"$P1\",\"paths\":[\"a.txt\"],\"verification\":\"depth-0 red/green\"}]}" > "$TEST_TMP/phl.json"
+d4_run() { # <variant>
+  local L4="$TEST_TMP/ledger-d4-$1"; mkdir -p "$L4"
+  node "$TEST_TMP/mkphase.js" "$L4" "$PR" P "$PB0" "$HR" "$1"
+  D4_OUT=$(node "$CHECK" --ledger "$L4" --phase P --branch work --phase-base "$PB0" --repo-root "$PR" --post-head-ledger "$TEST_TMP/phl.json" --post-head-target "$PB0" 2>&1); D4_RC=$?
+}
+d4_run bare
+assert_exit_code "$D4_RC" "1" "D4b: post-head path with a schema-2 bare refuted Major fails"
+assert_contains "$D4_OUT" "refuted without refutation_kind" "D4b: message names the rule (output: $D4_OUT)"
+d4_run ok
+assert_exit_code "$D4_RC" "0" "D4a: the same chain with a valid refutation passes the post-head path (output: $D4_OUT)"
+
+finalize_test

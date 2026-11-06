@@ -18,6 +18,18 @@ function runCheck(role, id, answer, extra = []) {
   rm(d);
   return { rc: r.status, out: r.stdout ? JSON.parse(r.stdout.trim().split('\n').pop()) : null, err: r.stderr };
 }
+// A copy of the tree in its pre-stamp state: the pilot prereg is stamped in the repo, but the stamper and the scorer tests need a draft
+// to stamp or to refuse. Only the three stamp artefacts are reverted (status fields, FROZEN.json, receipt); nothing in the repo changes.
+function draftCopy() {
+  const d = tmp();
+  fs.cpSync(ROOT, d, { recursive: true });
+  const pj = path.join(d, 'prereg/pilot.json');
+  const p = JSON.parse(fs.readFileSync(pj, 'utf8'));
+  p.status = 'draft'; p.stamped = false; p.stamp = null;
+  fs.writeFileSync(pj, `${JSON.stringify(p, null, 2)}\n`);
+  for (const f of ['prereg/FROZEN.json', 'prereg/receipt-pilot.json']) fs.rmSync(path.join(d, f), { force: true });
+  return d;
+}
 function gitWorkdir(role, id) { // a fresh git worktree of the task input with a base commit, like the runner makes
   const d = tmp();
   fs.cpSync(path.join(taskDir(role, id), 'input'), d, { recursive: true });
@@ -25,4 +37,4 @@ function gitWorkdir(role, id) { // a fresh git worktree of the task input with a
   g('init', '-q'); g('add', '-A'); g('commit', '-q', '-m', 'base', '--no-verify');
   return { dir: d, git: g };
 }
-module.exports = { ROOT, VA, ROLES, tmp, rm, taskDir, runCheck, gitWorkdir };
+module.exports = { ROOT, VA, ROLES, tmp, rm, draftCopy, taskDir, runCheck, gitWorkdir };

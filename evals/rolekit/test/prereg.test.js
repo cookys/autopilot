@@ -11,14 +11,15 @@ const { ROOT, ROLES, tmp, rm } = require('./helpers.js');
 const rj = (f) => JSON.parse(fs.readFileSync(path.join(ROOT, f), 'utf8'));
 const formal = rj('prereg/formal.json'); const pilot = rj('prereg/pilot.json');
 
-test('both preregs are drafts, unstamped, and name every required section', () => {
+test('the pilot prereg is stamped, the formal one is still an unstamped draft, and both name every required section', () => {
+  assert.strictEqual(formal.status, 'draft'); assert.strictEqual(formal.stamped, false); assert.strictEqual(formal.stamp, null);
+  assert.match(pilot.status, /^stamped \d{4}-\d\d-\d\d$/); assert.strictEqual(pilot.stamped, true);
   for (const p of [pilot, formal]) {
-    assert.strictEqual(p.status, 'draft'); assert.strictEqual(p.stamped, false); assert.strictEqual(p.stamp, null);
     for (const k of ['hypotheses', 'design', 'metrics', 'estimators', 'verdict', 'exclusions', 'infra_failure', 'cost', 'freeze_files']) assert.ok(p[k], k);
     assert.deepStrictEqual(Object.keys(p.metrics.per_role).sort(), [...ROLES].sort());
     assert.strictEqual(p.cost.billing, 'subscription only; no API-key path');
   }
-  assert.ok(!fs.existsSync(path.join(ROOT, 'prereg/FROZEN.json')), 'FROZEN.json must not exist before the PM stamps');
+  const fz = rj('prereg/FROZEN.json'); assert.ok(fz.rows.pilot && !fz.rows.formal, 'FROZEN.json records the pilot only; formal is not stamped');
   assert.strictEqual(formal.cost.cap_usd, 75);
   assert.match(formal.verdict.rule, /gap_closed\(r\) = \(s_B\(r\) - s_A\(r\)\) \/ \(s_D\(r\) - s_A\(r\)\)/);
 });

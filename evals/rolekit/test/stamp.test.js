@@ -6,12 +6,11 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
-const { ROOT, tmp, rm } = require('./helpers.js');
+const { ROOT, tmp, rm, draftCopy } = require('./helpers.js');
 
 const AUTH = 'd-test0000';
 function stamped(row = 'pilot') {
-  const d = tmp();
-  fs.cpSync(ROOT, d, { recursive: true });
+  const d = draftCopy();
   const run = (...a) => cp.spawnSync('node', [path.join(d, 'stamp-rolekit.js'), ...a], { encoding: 'utf8', cwd: d });
   const r = run('--row', row, '--authorized-by', AUTH);
   assert.strictEqual(r.status, 0, r.stderr);
@@ -19,10 +18,16 @@ function stamped(row = 'pilot') {
 }
 const edit = (f, fn) => { const keep = fs.readFileSync(f); fs.writeFileSync(f, fn(keep.toString('utf8'))); return () => fs.writeFileSync(f, keep); };
 
-test('the real drafts are untouched: no FROZEN.json, no receipt', () => {
-  assert.ok(!fs.existsSync(path.join(ROOT, 'prereg/FROZEN.json')));
-  assert.ok(!fs.existsSync(path.join(ROOT, 'prereg/receipt-pilot.json')));
-  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'prereg/pilot.json'), 'utf8')).stamped, false);
+test('the real pilot row is stamped (FROZEN.json + receipt, --check green) and the formal row is still unstamped', () => {
+  const fz = JSON.parse(fs.readFileSync(path.join(ROOT, 'prereg/FROZEN.json'), 'utf8'));
+  assert.ok(fz.rows.pilot && fz.rows.pilot.stamped === true); assert.ok(!fz.rows.formal, 'formal is not stamped');
+  assert.ok(fs.existsSync(path.join(ROOT, 'prereg/receipt-pilot.json')));
+  assert.ok(!fs.existsSync(path.join(ROOT, 'prereg/receipt-formal.json')));
+  const pilot = JSON.parse(fs.readFileSync(path.join(ROOT, 'prereg/pilot.json'), 'utf8'));
+  assert.strictEqual(pilot.stamped, true); assert.match(pilot.status, /^stamped \d{4}-\d\d-\d\d$/);
+  const r = cp.spawnSync('node', [path.join(ROOT, 'stamp-rolekit.js'), '--row', 'pilot', '--check'], { encoding: 'utf8', cwd: ROOT });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(ROOT, 'prereg/formal.json'), 'utf8')).stamped, false);
 });
 
 test('(a) after stamping, changing a task file, a role card (kit and placebo) or a verdict file turns --check red and names the file', () => {
@@ -73,9 +78,8 @@ test('(b) a second stamp is refused and FROZEN.json and the receipt stay byte-id
 });
 
 test('stamping without --authorized-by is refused and writes nothing; an unstamped row cannot pass --check', () => {
-  const d = tmp();
+  const d = draftCopy();
   try {
-    fs.cpSync(ROOT, d, { recursive: true });
     const run = (...a) => cp.spawnSync('node', [path.join(d, 'stamp-rolekit.js'), ...a], { encoding: 'utf8', cwd: d });
     assert.strictEqual(run('--row', 'pilot').status, 2);
     assert.strictEqual(run('--row', 'pilot', '--authorized-by', 'bad id with spaces').status, 2);

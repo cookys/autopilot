@@ -9,6 +9,7 @@ import { cellWidth, displayWidth, isStale, stateOf } from './ui'
 import { residueTally } from './model'
 import type { NeedsHumanEntry } from './model'
 import type { FleetLane, FleetTask, FleetView } from './fleet'
+import { cardKey } from './decidebatch'
 import { cleanTargets, NO_DECIDE, bandAsks, bandIsDecide, bandIsQuiet, bandIsStalled, bandIsWaiting, DEFAULT_PANE_COLS, NOT_WIRED_ID, PANE_TABS, QUOTA_KEYS, RECENT_EXPANDED_LINES, SECTION, TODO_TOOLS_ID, agoText, attentionReason, bgLabel, collapsedPrompt, commonDirOf, decideDialog, decideLine, decideOpen, decidePick, recommendedIndex, elapsedFrom, exitCodeOf, hygieneChip, oneLine, runAgedOut, runEndedMs, runSubject, slotUnit, staleSuffix, tabLabel, truncateToWidth, verdictOf, vetoStep, walkSegs, wrapLines } from './model'
 import type { AccountSnap, BandView, CodeReviewView, LivePaneRow, LiveSnapshot, PaneCtx, PaneLine, PaneTab, PlanReviewView, QuotaWindow, RecentGroup, ReviewSeat, Seg, SpendView, VerdictKind } from './model'
 import type { Ctx as UiCtx, Column as UiColumn, FactId, FmtKind, Frag, LineKind, RunSubject, SegRole, Stated, TableListRow as UiTableListRow } from './ui'
@@ -343,10 +344,20 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   const dv = ctx.decide ?? { ...NO_DECIDE, inputs: false }
   const sentState = ui.stateOf('task', 'PENDING') // a question already sent: not yet closed by the session
   const out: PaneLine[] = [head]
-  list.forEach((d, i) => {
+  const batch = dv.batch
+  const shown: { d: LiveDecision | null; key: string }[] = batch === undefined ? list.map(d => ({ d, key: cardKey(d) })) : batch.order.map(key => ({ d: list.find(x => cardKey(x) === key) ?? null, key }))
+  shown.forEach(({ d, key }, i) => {
+    const num = batch === undefined ? i + 1 : batch.num[key]
+    if (batch !== undefined && batch.ans[key] !== undefined) { // answered: stays in place, greyed (dim theme text only), shows the chosen answer, no Button and no field so it takes no focus
+      out.push(...ui.cardTitle(u, ui.stateOf('task', 'PENDING'), num + '. ' + batch.q[key], undefined, { fact: F, sent: true, grey: true }))
+      out.push(...ui.cardRow(u, t('decide.k_answer'), batch.ans[key], { fact: F, subtle: true }))
+      out.push(ui.blank())
+      return
+    }
+    if (d === null) return
     const id = d.id
     const sent = id !== null && dv.sent[id] !== undefined
-    out.push(...ui.cardTitle(u, sent ? sentState : needYou, (i + 1) + '. ' + d.question + staleSuffix(d, t), sent ? t('decide.sent') : undefined, { fact: F, sent }))
+    out.push(...ui.cardTitle(u, sent ? sentState : needYou, num + '. ' + d.question + staleSuffix(d, t), sent ? t('decide.sent') : undefined, { fact: F, sent }))
     if (d.background !== null) out.push(...ui.cardParaRows(u, t('decide.k_background'), ui.cardParas(d.background), { fact: F, subtle: true }))
     if (d.blocks !== null) out.push(...ui.cardRow(u, t('decide.k_blocks'), d.blocks, { fact: F }))
     const pick = decidePick(d, dv)

@@ -146,7 +146,7 @@ export function decideContent(el: { Box: El; Text: El; Button?: El }, snap: Live
         {runs.map((r, j) => {
           const texts = r.segs.map((s, n) => <Text key={'g' + n} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
           const press = r.press
-          return press === undefined || Button === undefined ? <Box key={'r' + j}>{texts}</Box> : <Button key={press} plain onPress={() => onPress(press)}>{texts}</Button>
+          return press === undefined || Button === undefined ? <Box key={'r' + j}>{texts}</Box> : <Button key={press.replace(/^pick:/, 'opt:')} plain onPress={() => onPress(press)}>{texts}</Button>
         })}
       </Box>
     )

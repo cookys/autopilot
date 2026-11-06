@@ -1604,7 +1604,7 @@ export type PaneCtx = { t: T; cols: number; expanded?: ReadonlySet<string>; fold
 // in the locale tables and do not change with the language. ----
 export type DecideState = { picks: Record<string, number>; notes: Record<string, string>; sent: Record<string, number>; clean?: Record<string, U.CleanResult> }
 export const NO_DECIDE: DecideState = { picks: {}, notes: {}, sent: {} }
-export type DecideView = DecideState & { inputs: boolean }
+export type DecideView = DecideState & { inputs: boolean; batch?: import('./decidebatch').DecideBatch }
 export const DECIDE_REPLY_HEAD = '[待決回覆]'
 const DECIDE_ARROW = '\u2192' // written as an escape: it is wire text the model parses, never a glyph the pane draws (ui-lint L2 keeps drawn glyphs in GLYPHS)
 // wire text the model on the receiving end reads as "owner picked none of the options and wrote their own answer in the note"

@@ -42,4 +42,14 @@ assert_eq "3" "$SB_EXIT" "negative control: without the stub binds the sandbox s
 assert_contains "$SB" "NOT IN STUB LOG" "negative control: the self-check names the rm spelling that missed the stub"
 assert_not_contains "$SB" "cases:" "negative control: no case ran after the failed self-check"
 
+# Negative control 3 (cargo coreutils rm): drop only the bind of the cargo rm path; the self-check
+# spellings still derive from the bind list, so it must invoke that path and exit 3 before any case.
+if [ -e /usr/lib/cargo/bin/coreutils/rm ]; then
+  sed '/\/\/ STUB-BIND$/ s|dests\.flatMap|dests.filter((d) => !d.includes("/cargo/")).flatMap|' "$ORACLE" > "$TEST_TMP/oracle-nocargo.js"
+  CB="$(node "$TEST_TMP/oracle-nocargo.js" --hook "$REPO_ROOT/hooks/exec-boundary.js" --corpus "$REPO_ROOT/hooks/tests/fixtures/exec-boundary-oracle-cases.txt" < /dev/null 2>&1)"; CB_EXIT=$?
+  assert_eq "3" "$CB_EXIT" "negative control: without the cargo rm bind the self-check exits 3"
+  assert_contains "$CB" "/usr/lib/cargo/bin/coreutils/rm" "negative control: the self-check names the cargo rm path"
+  assert_not_contains "$CB" "cases:" "negative control: no case ran after the cargo self-check failure"
+fi
+
 finalize_test

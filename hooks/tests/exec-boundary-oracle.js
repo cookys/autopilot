@@ -185,12 +185,19 @@ function spawnP(cmd, args, o, input) {
 
 // bwrap argv for one sandboxed shell run. Lines tagged STUB-BIND overlay the stub on every
 // real rm path; the harness negative control strips them and expects the self-check to fail.
+// Every host path that can run rm: a plain rm binary, or a multi-call binary with an `rm` applet.
+// The stub binds and the self-check spellings are both derived from this one list.
+const RM_BINDS = [
+  { p: '/usr/bin/rm' }, { p: '/bin/rm' }, { p: '/usr/lib/cargo/bin/coreutils/rm' },
+  { p: '/usr/bin/busybox', multi: true }, { p: '/usr/bin/coreutils', multi: true },
+];
+function realOrNull(p) { try { return fs.realpathSync(p); } catch { return null; } }
+function bindDests() {
+  return [...new Set(RM_BINDS.map(({ p }) => realOrNull(p)).filter(Boolean))];
+}
 function stubBinds() {
-  const dests = new Set();
-  for (const p of ['/usr/bin/rm', '/bin/rm', '/usr/bin/busybox', '/usr/bin/coreutils', '/usr/lib/cargo/bin/coreutils/rm']) {
-    try { dests.add(fs.realpathSync(p)); } catch { /* absent on this host */ }
-  }
-  return [...dests].flatMap((d) => ['--ro-bind', path.join(STUBS, 'rm'), d]); // STUB-BIND
+  const dests = bindDests();
+  return dests.flatMap((d) => ['--ro-bind', path.join(STUBS, 'rm'), d]); // STUB-BIND
 }
 function sandboxArgs(w, inner) {
   return ['--unshare-all', '--die-with-parent', '--new-session',
@@ -235,14 +242,18 @@ async function selfCheck() {
   const victimDir = fs.mkdtempSync(path.join(process.env.ORACLE_TMP || os.tmpdir(), 'ebo-victim-'));
   const victim = path.join(victimDir, 'victim');
   fs.writeFileSync(victim, 'keep');
-  const spellings = ['/bin/rm', '/usr/bin/rm', 'command -p rm', 'rm', '/usr/bin/busybox rm', 'command -p busybox rm', '/usr/bin/coreutils rm'];
+  // Spellings come from the bind list: each existing bound path is invoked by its own path
+  // (multi-call binaries as `<path> rm`), plus the two PATH-lookup forms.
+  const spellings = ['command -p rm', 'rm', 'command -p busybox rm'];
+  for (const { p, multi } of RM_BINDS) if (realOrNull(p)) spellings.push(multi ? `${p} rm` : p);
+  if (!realOrNull('/usr/bin/busybox')) spellings.splice(spellings.indexOf('command -p busybox rm'), 1);
+  const covered = new Set(spellings.map((sp) => sp.replace(/ rm$/, '')).map(realOrNull).filter(Boolean));
+  for (const d of bindDests()) if (!covered.has(d)) fail(`bind ${d} has no self-check spelling`);
   for (const sh of SHELLS) {
     const r = cp.spawnSync(BWRAP, sandboxArgs(w, [SHELL_BIN[sh], ...SHELL_FLAGS[sh], 'command -v rm; command -v rmdir; command -v find']), { encoding: 'utf8' });
     const lines = (r.stdout || '').split('\n').filter(Boolean);
     if (lines[0] !== path.join(STUBS, 'rm') || lines.length !== 1) fail(`${sh}: command -v rm is ${JSON.stringify(r.stdout)}`);
     for (const sp of spellings) {
-      if (/busybox/.test(sp) && !fs.existsSync('/usr/bin/busybox')) continue;
-      if (/coreutils/.test(sp) && !fs.existsSync('/usr/bin/coreutils')) continue;
       fs.writeFileSync(w.log, '');
       const cmd = `${sp} -rf ${victim}`;
       const rr = cp.spawnSync(BWRAP, sandboxArgs(w, ['/usr/bin/timeout', '2', SHELL_BIN[sh], ...SHELL_FLAGS[sh], cmd]), { encoding: 'utf8' });

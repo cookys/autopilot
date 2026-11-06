@@ -37,6 +37,8 @@ The code review loop freezes when either:
 
 Receipt verdict tokens are strictly `SHIP-AS-IS` and `FIX-THEN-SHIP`. Severities use only existing vocabulary (`Critical`, `Major`, `Minor`, `Suggestion`).
 
+Verdict rule (PM ruling 01M6Q49K0K, 2026-11-06): a verified finding at `Major` or above that no later generation has resolved makes the verdict `FIX-THEN-SHIP` and the receipt fails. A verified `Minor` is listed in `open_findings` and does not block.
+
 A range too large for one packet is split by path with `--packets <packets.json> --packet <id>` (every changed file in exactly one packet) and gated by `check-phase-review-receipt.js --packets`; `--exclude` is never the way to shrink a review.
 
 Packet set rule on heads: every packet pins the same range h1 (the earliest first reviewed head), and the exact cover is checked at h1. One exception: a packet may be first reviewed at a later head h2 when none of that packet's own paths changed between h1 and h2. A packet whose own paths changed in h1..h2 is refused ("first reviewed at a different head"); a change to another packet's file does not matter to it, but that other packet must be re-reviewed at the new tip (generation 2).

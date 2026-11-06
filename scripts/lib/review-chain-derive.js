@@ -20,7 +20,7 @@
  * Returns:
  *   {
  *     verdict: 'SHIP-AS-IS' | 'FIX-THEN-SHIP',
- *     open_findings: Array of active open verified findings (Major/Minor),
+ *     open_findings: Array of active open verified findings (Major/Minor); any verified Critical or Major makes the verdict FIX-THEN-SHIP,
  *     closed_findings: Array of closed findings across chain generations ({ id, closed_by_generation, ... }),
  *     openFindings: alias for open_findings,
  *     closedFindings: alias for closed_findings
@@ -185,12 +185,14 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
   }
 
   // Derive final open findings and verdict
-  let hasVerifiedCritical = false;
+  // A verified Critical or Major is a confirmed defect awaiting its fix: it blocks (FIX-THEN-SHIP).
+  // A verified Minor rides in open_findings and can be left open on purpose (--allow-unresolved).
+  let hasBlocking = false;
   const openFindings = [];
 
   for (const f of activeVerified.values()) {
-    if (f.severity === 'Critical') {
-      hasVerifiedCritical = true;
+    if (f.severity === 'Critical' || f.severity === 'Major') {
+      hasBlocking = true;
     }
     if (f.severity === 'Major' || f.severity === 'Minor') {
       openFindings.push({
@@ -203,7 +205,7 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
     }
   }
 
-  const verdict = hasVerifiedCritical ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS';
+  const verdict = hasBlocking ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS';
   const closedList = Array.from(closedMap.values());
 
   return {

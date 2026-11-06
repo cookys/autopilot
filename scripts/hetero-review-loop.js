@@ -1709,7 +1709,7 @@ async function handleFinalize(flags) {
   const verdict = derived.verdict;
   const openFindings = derived.open_findings || derived.openFindings;
 
-  // BL-0384: a converged verdict (no verified Critical) can still carry verified Major/Minor findings
+  // BL-0384: a converged verdict (no verified Critical or Major) can still carry verified Minor findings
   // of EARLIER generations that no resolution closed -- absence closes nothing. Refuse by default before
   // any write; --allow-unresolved --reason records the choice in the receipt (unresolved_allowed).
   let unresolvedAllowed;

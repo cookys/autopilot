@@ -19,8 +19,8 @@ const verified = (id) => ({ id, disposition: 'verified' });
 test('baseline: a verified Major finding stays open when the chain ends on its generation', () => {
   const chain = [{ generation: 1, status: 'finalized' }];
   const r = deriveReceiptState(chain, new Map([[1, [F1]]]), new Map([[1, [verified('F1')]]]));
-  // Only a verified Critical flips the verdict; an open Major rides in open_findings.
-  assert.strictEqual(r.verdict, 'SHIP-AS-IS');
+  // A verified Critical or Major flips the verdict (confirmed, awaiting its fix); it also rides in open_findings.
+  assert.strictEqual(r.verdict, 'FIX-THEN-SHIP');
   assert.deepStrictEqual(r.open_findings.map((f) => f.id), ['F1']);
 });
 

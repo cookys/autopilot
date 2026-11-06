@@ -1148,7 +1148,7 @@ RR2_SIDE=$(git -C "$RR2_REPO" rev-parse side)
 # a commit that descends from the raised head H1 but is not in the reviewed history of H2
 (cd "$RR2_REPO"; git checkout -q -b side2 "$RR2_H1"; echo "side2" > side2.txt; git add side2.txt; git commit -q -m "side2"; git checkout -q -)
 RR2_SIDE2=$(git -C "$RR2_REPO" rev-parse side2)
-RR2_G1RESP='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Major: Missing bounds check in a.txt\nDetails here."}'
+RR2_G1RESP='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Minor: Missing bounds check in a.txt\nDetails here."}'
 RR2_CLEAN='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 rr2_collect() { # <ledger> <phase> <gen> [extra flags]
   local l="$1" ph="$2" g="$3"; shift 3
@@ -1163,8 +1163,8 @@ rr2_finalize() { # <ledger> <phase> <gen>
   else
     echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": $g, \"findings\": [] }" > "$disp"
   fi
-  # these fixtures leave the generation-1 Major open on purpose, so generation >= 2 passes the explicit opt-out
-  local optout=(); [ "$g" -ge 2 ] && optout=(--allow-unresolved --reason "fixture: earlier Major left open on purpose")
+  # these fixtures leave the generation-1 Minor open on purpose, so generation >= 2 passes the explicit opt-out
+  local optout=(); [ "$g" -ge 2 ] && optout=(--allow-unresolved --reason "fixture: earlier Minor left open on purpose")
   node "$HETERO_SCRIPT" finalize --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --dispositions "$disp" "${optout[@]}" >/dev/null 2>&1
 }
 rr2_build() { # <phase> [g2 collect flags] -> RR2_L, RR2_FID
@@ -1204,7 +1204,7 @@ cm_mutant() { # <name> <file> <old> <new>
 rr2_build rrc; RRC_L="$RR2_L"; RRC_FID="$RR2_FID"
 cp "$RRC_L/receipt-rrc.json" "$TEST_TMP/rrc.receipt.orig"
 rr2_reset() { cp "$TEST_TMP/rrc.receipt.orig" "$RRC_L/receipt-rrc.json"; rm -f "$RRC_L/review-rrc/resolutions-addendum.json"; }
-# a receipt that drops the open Major with no addendum is still refused
+# a receipt that drops the open Minor with no addendum is still refused
 node -e 'const fs=require("fs"),p=process.argv[1];const r=JSON.parse(fs.readFileSync(p,"utf8"));r.open_findings=[];fs.writeFileSync(p,JSON.stringify(r,null,2)+"\n")' "$RRC_L/receipt-rrc.json"
 RRC0_OUT=$(rr2_check "$SCRIPT" "$RRC_L" rrc); RRC0_RC=$?
 assert_exit_code "$RRC0_RC" "1" "addendum: an emptied open_findings with no addendum is refused"

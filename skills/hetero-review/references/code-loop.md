@@ -12,8 +12,11 @@ No trust machinery (no hash chains, event ledgers, witness receipts, attestation
 
 Depth-0 evaluates all candidate findings emitted by the heterogeneous review panel. Each finding receives a disposition:
 - `verified`: finding is confirmed and valid.
-- `refuted`: finding is rejected with a concrete rationale.
-- `deferred`: non-blocker deferred with explicit justification.
+- `refuted`: the finding is wrong. For a Critical or Major finding it carries `"refutation_kind": "false_claim"` (the code does not do what the finding says) or `"unreachable"` (no input or state reaches it) and a non-empty `"evidence"` (file:line, a command with its output, or a test). "Not blocking", "low impact" and "follow-up" are not kinds: a true finding is never refuted.
+- `downgraded` (Critical or Major findings only): the finding is true but its impact is smaller than reported. Fields: `"to": "Minor" | "Suggestion"`, `"evidence_kind": "unreachable" | "impact_bounded"`, a non-empty `"evidence"`. It is recorded as that lower severity from then on and no longer blocks.
+- `deferred`: non-blocker deferred with explicit justification (not allowed for a Critical or Major finding).
+
+Gate rule A as a machine check: a Critical or Major finding leaves the gate only as `verified` (then a later generation's resolution closes it), `refuted` with kind and evidence, or `downgraded` with its fields. `finalize` exits 1, naming the finding id, when a Critical or Major disposition lacks these fields; `check-phase-review-receipt.js` fails the same for every generation whose chain entry carries `disposition_schema: 2` (written by the new `finalize`; `DISPOSITION_SCHEMA` in `scripts/lib/review-chain-derive.js`). Entries without the marker, finalized by the old `finalize`, are not re-judged whatever their `finalized_at`. Rule A is enforced in one place, `scripts/lib/review-chain-derive.js`: for a chain entry carrying `disposition_schema: 2`, a Critical or Major finding whose disposition lacks these fields stays open in every consumer (`finalize`, the receipt check, `--packets`, `--post-head-ledger`), so no path treats it as closed.
 
 A good disposition rationale for code-review findings:
 - Ties the refutation to concrete code evidence, tests, runtime semantics, or existing invariants rather than bare assertion.
@@ -36,6 +39,8 @@ The code review loop freezes when either:
 2. A valid opt-out receipt is written via `node scripts/hetero-review-loop.js opt-out --knob hetero_review` when the `hetero_review` knob resolves to `off`.
 
 Receipt verdict tokens are strictly `SHIP-AS-IS` and `FIX-THEN-SHIP`. Severities use only existing vocabulary (`Critical`, `Major`, `Minor`, `Suggestion`).
+
+Verdict rule (PM ruling 01M6Q49K0K, 2026-11-06): a verified finding at `Major` or above that no later generation has resolved makes the verdict `FIX-THEN-SHIP` and the receipt fails. A verified `Minor` is listed in `open_findings` and does not block.
 
 A range too large for one packet is split by path with `--packets <packets.json> --packet <id>` (every changed file in exactly one packet) and gated by `check-phase-review-receipt.js --packets`; `--exclude` is never the way to shrink a review.
 

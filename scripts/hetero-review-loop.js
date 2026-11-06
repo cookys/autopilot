@@ -13,6 +13,7 @@ const process = require('process');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const deriveReceiptState = require('./lib/review-chain-derive');
+const { majorDispositionError, downgradeMisuseError } = deriveReceiptState;
 const { isSafeSeatId } = require('./lib/seat-id-guard');
 const { stageWrite, familyOfEngine } = require('./lib/stage-write');
 const { invalidSeatModels } = require('./lib/seat-model-id');
@@ -1568,7 +1569,7 @@ async function handleFinalize(flags) {
     process.exit(1);
   }
 
-  const allowedDispositions = new Set(['verified', 'refuted', 'deferred']);
+  const allowedDispositions = new Set(['verified', 'refuted', 'deferred', 'downgraded']);
   const dispFindings = dispData.findings;
   const dispMap = new Map();
   for (let i = 0; i < dispFindings.length; i++) {
@@ -1586,7 +1587,7 @@ async function handleFinalize(flags) {
       process.exit(1);
     }
     if (!allowedDispositions.has(df.disposition)) {
-      console.error(`ERROR: Finding ${df.id} has invalid disposition '${df.disposition}' (must be verified, refuted, or deferred)`);
+      console.error(`ERROR: Finding ${df.id} has invalid disposition '${df.disposition}' (must be verified, refuted, deferred, or downgraded)`);
       process.exit(1);
     }
     if (typeof df.rationale !== 'string' || df.rationale.trim().length === 0) {
@@ -1594,6 +1595,15 @@ async function handleFinalize(flags) {
       process.exit(1);
     }
     dispMap.set(df.id, df);
+  }
+  // Gate rule A (G14): a Critical/Major finding is verified, refuted as false (kind + evidence) or downgraded (to + kind + evidence).
+  for (const df of dispFindings) {
+    const fnd = findingsMap.get(df.id);
+    const bad = fnd && (majorDispositionError(fnd, df) || downgradeMisuseError(fnd, df));
+    if (bad) {
+      console.error(`ERROR: ${bad}. Refusing to finalize; nothing was written.`);
+      process.exit(1);
+    }
   }
 
   // Optional explicit re-verification of EARLIER verified findings (BL-0032): the only way a later
@@ -1709,7 +1719,7 @@ async function handleFinalize(flags) {
   const verdict = derived.verdict;
   const openFindings = derived.open_findings || derived.openFindings;
 
-  // BL-0384: a converged verdict (no verified Critical) can still carry verified Major/Minor findings
+  // BL-0384: a converged verdict (no verified Critical or Major) can still carry verified Minor findings
   // of EARLIER generations that no resolution closed -- absence closes nothing. Refuse by default before
   // any write; --allow-unresolved --reason records the choice in the receipt (unresolved_allowed).
   let unresolvedAllowed;
@@ -1869,6 +1879,7 @@ async function handleFinalize(flags) {
   // Update target chain entry
   targetChainEntry.status = 'finalized';
   targetChainEntry.finalized_at = new Date().toISOString();
+  targetChainEntry.disposition_schema = deriveReceiptState.DISPOSITION_SCHEMA;
   targetChainEntry.dispositions_path = snapshotRelPath;
   targetChainEntry.dispositions_sha256 = dispSha256;
   if (!targetChainEntry.findings_sha256 && fs.existsSync(findingsPath)) {

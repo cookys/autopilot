@@ -20,7 +20,7 @@
  * Returns:
  *   {
  *     verdict: 'SHIP-AS-IS' | 'FIX-THEN-SHIP',
- *     open_findings: Array of active open verified findings (Major/Minor),
+ *     open_findings: Array of active open verified findings (Major/Minor); any verified Critical or Major makes the verdict FIX-THEN-SHIP,
  *     closed_findings: Array of closed findings across chain generations ({ id, closed_by_generation, ... }),
  *     openFindings: alias for open_findings,
  *     closedFindings: alias for closed_findings
@@ -66,6 +66,56 @@ function getFromGenMap(mapOrObj, gen) {
     if (mapOrObj[String(gen)] !== undefined) return toList(mapOrObj[String(gen)]);
   }
   return [];
+}
+
+// Gate rule A as a machine check (G14). A Critical or Major finding leaves the gate in exactly one of
+// three ways: verified (then a later generation's resolution closes it), refuted as a FALSE finding
+// (refutation_kind false_claim | unreachable, plus evidence), or formally downgraded to Minor or
+// Suggestion (to, evidence_kind unreachable | impact_bounded, plus evidence). "Not blocking",
+// "low impact" and "follow-up" are not refutation kinds: a true finding with small impact is
+// downgraded with evidence, never refuted. Minor and Suggestion findings keep the old rules.
+// Only chain entries carrying `disposition_schema: 2` are judged: the new finalize writes that marker,
+// so an entry finalized by the old finalize (which could not write kinds) is never re-opened, whatever
+// its finalized_at says.
+const DISPOSITION_SCHEMA = 2;
+const REFUTATION_KINDS = ['false_claim', 'unreachable'];
+const DOWNGRADE_TO = ['Minor', 'Suggestion'];
+const DOWNGRADE_EVIDENCE_KINDS = ['unreachable', 'impact_bounded'];
+
+function nonEmpty(v) { return typeof v === 'string' && v.trim().length > 0; }
+
+// Returns an error string for a Major+ finding whose disposition does not satisfy rule A, else null.
+function majorDispositionError(finding, disp) {
+  if (!finding || (finding.severity !== 'Critical' && finding.severity !== 'Major')) return null;
+  const id = finding.id;
+  const d = disp && disp.disposition;
+  if (d === 'verified') return null;
+  if (d === 'refuted') {
+    if (!REFUTATION_KINDS.includes(disp.refutation_kind)) {
+      return `${finding.severity} finding ${id} is refuted without refutation_kind ${REFUTATION_KINDS.join(' | ')} ("not blocking" / "low impact" are not refutations; a true finding with small impact needs disposition "downgraded" with evidence)`;
+    }
+    if (!nonEmpty(disp.evidence)) return `${finding.severity} finding ${id} is refuted without non-empty evidence (file:line, a command and its output, or a test)`;
+    return null;
+  }
+  if (d === 'downgraded') {
+    if (!DOWNGRADE_TO.includes(disp.to)) return `${finding.severity} finding ${id} is downgraded without "to" ${DOWNGRADE_TO.join(' | ')}`;
+    if (!DOWNGRADE_EVIDENCE_KINDS.includes(disp.evidence_kind)) return `${finding.severity} finding ${id} is downgraded without evidence_kind ${DOWNGRADE_EVIDENCE_KINDS.join(' | ')}`;
+    if (!nonEmpty(disp.evidence)) return `${finding.severity} finding ${id} is downgraded without non-empty evidence`;
+    return null;
+  }
+  return `${finding.severity} finding ${id} has disposition '${d}'; a Critical or Major finding must be verified, refuted (refutation_kind + evidence) or downgraded (to + evidence_kind + evidence)`;
+}
+
+// A downgraded non-Major finding is not a downgrade: only Major+ may use the form.
+function downgradeMisuseError(finding, disp) {
+  if (disp && disp.disposition === 'downgraded' && finding && finding.severity !== 'Critical' && finding.severity !== 'Major') {
+    return `finding ${finding.id} is ${finding.severity}; "downgraded" applies only to a Critical or Major finding`;
+  }
+  return null;
+}
+
+function enforcedBySchema(chainEntry) {
+  return !!(chainEntry && chainEntry.disposition_schema === DISPOSITION_SCHEMA);
 }
 
 function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGeneration, addendumResolutions) {
@@ -161,7 +211,10 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
       const disp = dispMap.get(f.id);
       const disposition = disp ? disp.disposition : undefined;
 
-      if (disposition === 'verified') {
+      // Rule A, enforced here once for every consumer: in a marker-carrying entry a Critical/Major whose
+      // disposition fails majorDispositionError (bare refuted/deferred, missing, ...) stays open as if verified.
+      const ruleAOpen = enforcedBySchema(entry) && !!majorDispositionError(f, disp);
+      if (disposition === 'verified' || ruleAOpen) {
         activeVerified.set(f.id, {
           id: f.id,
           severity: f.severity,
@@ -171,7 +224,7 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
           generation: gen,
         });
       } else {
-        // If it was refuted or deferred in this generation, it is not an active verified finding
+        // If it was refuted, downgraded or deferred in this generation, it is not an active verified finding
         activeVerified.delete(f.id);
       }
     }
@@ -185,12 +238,14 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
   }
 
   // Derive final open findings and verdict
-  let hasVerifiedCritical = false;
+  // A verified Critical or Major is a confirmed defect awaiting its fix: it blocks (FIX-THEN-SHIP).
+  // A verified Minor rides in open_findings and can be left open on purpose (--allow-unresolved).
+  let hasBlocking = false;
   const openFindings = [];
 
   for (const f of activeVerified.values()) {
-    if (f.severity === 'Critical') {
-      hasVerifiedCritical = true;
+    if (f.severity === 'Critical' || f.severity === 'Major') {
+      hasBlocking = true;
     }
     if (f.severity === 'Major' || f.severity === 'Minor') {
       openFindings.push({
@@ -203,7 +258,7 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
     }
   }
 
-  const verdict = hasVerifiedCritical ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS';
+  const verdict = hasBlocking ? 'FIX-THEN-SHIP' : 'SHIP-AS-IS';
   const closedList = Array.from(closedMap.values());
 
   return {
@@ -218,3 +273,7 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
 
 module.exports = deriveReceiptState;
 module.exports.deriveReceiptState = deriveReceiptState;
+module.exports.majorDispositionError = majorDispositionError;
+module.exports.downgradeMisuseError = downgradeMisuseError;
+module.exports.enforcedBySchema = enforcedBySchema;
+module.exports.DISPOSITION_SCHEMA = DISPOSITION_SCHEMA;

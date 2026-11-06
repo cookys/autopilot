@@ -495,8 +495,8 @@ cat << 'EOF' > "$TEST_TMP/disp_fin1.json"
   "generation": 1,
   "findings": [
     { "id": "f1", "disposition": "refuted", "rationale": "not a bug" },
-    { "id": "f2", "disposition": "refuted", "rationale": "intended behavior" },
-    { "id": "f3", "disposition": "refuted", "rationale": "already guarded" }
+    { "id": "f2", "disposition": "refuted", "rationale": "intended behavior", "refutation_kind": "false_claim", "evidence": "bar.js:3 returns early" },
+    { "id": "f3", "disposition": "refuted", "rationale": "already guarded", "refutation_kind": "unreachable", "evidence": "baz.js:7 guards the only caller" }
   ]
 }
 EOF
@@ -893,7 +893,7 @@ cat << 'EOF' > "$TEST_TMP/disp_fin3.json"
   "phase": "p_fin3",
   "generation": 1,
   "findings": [
-    { "id": "f_crit", "disposition": "refuted", "rationale": "false positive" }
+    { "id": "f_crit", "disposition": "refuted", "rationale": "false positive", "refutation_kind": "false_claim", "evidence": "parser.js:12 checks null first" }
   ]
 }
 EOF
@@ -901,7 +901,7 @@ FIN3_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER
 assert_exit_code "$FIN3_RC" "0" "case 3 (fin): exits 0 on refuted Critical"
 assert_contains "$(cat "$LEDGER/receipt-p_fin3.json")" '"verdict": "SHIP-AS-IS"' "case 3 (fin): verdict is SHIP-AS-IS"
 
-# Case 4 (finalize): a Major-severity finding disposed verified alone -> SHIP-AS-IS with exactly one entry in open_findings
+# Case 4 (finalize): a Major-severity finding disposed verified alone -> FIX-THEN-SHIP (PM ruling 01M6Q49K0K) with exactly one entry in open_findings
 mkdir -p "$LEDGER/review-p_fin4/g1"
 cat << 'EOF' > "$LEDGER/review-p_fin4/chain.json"
 [
@@ -939,7 +939,7 @@ cat << 'EOF' > "$TEST_TMP/disp_fin4.json"
 EOF
 FIN4_OUT=$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase p_fin4 --generation 1 --dispositions "$TEST_TMP/disp_fin4.json" 2>&1); FIN4_RC=$?
 assert_exit_code "$FIN4_RC" "0" "case 4 (fin): exits 0 on verified Major"
-assert_contains "$(cat "$LEDGER/receipt-p_fin4.json")" '"verdict": "SHIP-AS-IS"' "case 4 (fin): verdict is SHIP-AS-IS"
+assert_contains "$(cat "$LEDGER/receipt-p_fin4.json")" '"verdict": "FIX-THEN-SHIP"' "case 4 (fin): verdict is FIX-THEN-SHIP"
 OPEN_COUNT=$(node -e 'const r = JSON.parse(fs.readFileSync(process.argv[1])); console.log(r.open_findings.length);' "$LEDGER/receipt-p_fin4.json")
 assert_eq "$OPEN_COUNT" "1" "case 4 (fin): open_findings has exactly 1 entry"
 
@@ -2386,13 +2386,13 @@ assert_eq "$(grep -c -x -F -- "ev_rel_ledger_m" "$EV_POINTER" 2>/dev/null)" "1" 
 
 ledger_digest() { (cd "$1" && find . -type f | LC_ALL=C sort | while read -r f; do sha256sum "$f"; done | sha256sum | cut -d' ' -f1); }
 
-# rr_phase <phase> <with-resolution yes|no>: g1 verified Major, g1 finalized, g2 pending with a refuted Minor.
+# rr_phase <phase> <with-resolution yes|no>: g1 verified Minor, g1 finalized, g2 pending with a refuted Minor.
 # The g2 dispositions file is written to $TEST_TMP/rr_<phase>_g2.json (not yet finalized).
 rr_phase() {
   local ph="$1" withres="$2"
   mkdir -p "$LEDGER/review-$ph/g1" "$LEDGER/review-$ph/g2"
   echo '{ "base": "sha_base1", "head": "sha_head1" }' > "$LEDGER/review-$ph/g1/range.json"
-  echo '{ "findings": [ { "id": "rrmajor_g1", "severity": "Major", "seat": "s0", "text": "Missing bounds check" } ] }' > "$LEDGER/review-$ph/g1/findings.json"
+  echo '{ "findings": [ { "id": "rrmajor_g1", "severity": "Minor", "seat": "s0", "text": "Missing bounds check" } ] }' > "$LEDGER/review-$ph/g1/findings.json"
   echo '[ { "generation": 1, "base": "sha_base1", "head": "sha_head1", "seats": ["s0"], "status": "pending" } ]' > "$LEDGER/review-$ph/chain.json"
   echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": 1, \"findings\": [ { \"id\": \"rrmajor_g1\", \"disposition\": \"verified\", \"rationale\": \"reproduced\" } ] }" > "$TEST_TMP/rr_${ph}_g1.json"
   node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase "$ph" --generation 1 --dispositions "$TEST_TMP/rr_${ph}_g1.json" >/dev/null 2>&1
@@ -2413,7 +2413,7 @@ rr_fin2() { # <script> <phase> [extra flags]
   node "$s" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase "$ph" --generation 2 --dispositions "$TEST_TMP/rr_${ph}_g2.json" "$@" 2>&1
 }
 
-# R1: g2 omits the resolution of the verified g1 Major, verdict SHIP-AS-IS
+# R1: g2 omits the resolution of the verified g1 Minor, verdict SHIP-AS-IS
 rr_phase rr1 no
 RR1_BEFORE=$(ledger_digest "$LEDGER")
 RR1_OUT=$(rr_fin2 "$SCRIPT" rr1); RR1_RC=$?
@@ -2456,7 +2456,7 @@ RR2_OUT=$(rr_fin2 "$SCRIPT" rr2); RR2_RC=$?
 assert_exit_code "$RR2_RC" "0" "R2 (BL-0384): complete resolutions pass the default"
 assert_not_contains "$RR2_OUT" "stay open with no resolution" "R2: no refusal when resolved"
 assert_not_contains "$(cat "$LEDGER/receipt-rr2.json")" "unresolved_allowed" "R2: no unresolved_allowed field when nothing is left open"
-# a Major left open by gen 1 alone (finalizing gen 1) is not an 'earlier generation' gap
+# a Minor left open by gen 1 alone (finalizing gen 1) is not an 'earlier generation' gap
 assert_not_contains "$(node "$SCRIPT" finalize --repo-root "$SCRATCH_REPO" --ledger "$LEDGER" --phase rr2 --generation 1 --dispositions "$TEST_TMP/rr_rr2_g1.json" 2>&1)" "stay open with no resolution" "R2: a generation's own findings are not flagged"
 
 # R6 (BL-0389): spec declares Range: full, gen 2 collects a delta
@@ -2565,7 +2565,7 @@ RR2_SIDE=$(git -C "$RR2_REPO" rev-parse side)
 (cd "$RR2_REPO"; git checkout -q -b side2 "$RR2_H1"; echo "side2" > side2.txt; git add side2.txt; git commit -q -m "side2"; git checkout -q -)
 RR2_SIDE2=$(git -C "$RR2_REPO" rev-parse side2)
 git -C "$RR2_REPO" branch -q w2 "$RR2_H1" 2>/dev/null
-RR2_G1RESP='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Major: Missing bounds check in a.txt\nDetails here."}'
+RR2_G1RESP='{"status": "reviewed", "verdict": "FIX-THEN-SHIP", "findings": "Minor: Missing bounds check in a.txt\nDetails here."}'
 RR2_CLEAN='{"status": "reviewed", "verdict": "SHIP-AS-IS", "findings": "", "no_finding_proof": "checked=all; evidence=clean diff; conclusion=safe"}'
 rr2_collect() { # <script> <ledger> <phase> <gen> [extra flags]; branch w2 is moved to the head of that generation
   local s="$1" l="$2" ph="$3" g="$4"; shift 4
@@ -2580,12 +2580,12 @@ rr2_finalize() { # <script> <ledger> <phase> <gen>
   else
     echo "{ \"schema_version\": 1, \"phase\": \"$ph\", \"generation\": $g, \"findings\": [] }" > "$disp"
   fi
-  # these fixtures leave the generation-1 Major open on purpose (the checker/addendum paths need that state), so the
+  # these fixtures leave the generation-1 Minor open on purpose (the checker/addendum paths need that state), so the
   # generation >= 2 finalize passes the explicit opt-out that the refuse-by-default rule requires
-  local optout=(); [ "$g" -ge 2 ] && optout=(--allow-unresolved --reason "fixture: earlier Major left open on purpose")
+  local optout=(); [ "$g" -ge 2 ] && optout=(--allow-unresolved --reason "fixture: earlier Minor left open on purpose")
   node "$s" finalize --repo-root "$RR2_REPO" --ledger "$l" --phase "$ph" --generation "$g" --branch w2 --dispositions "$disp" "${optout[@]}" 2>&1
 }
-# rr2_build <phase> [g2 collect flags]: g1 raises a verified Major, g2 is clean and resolves nothing -> SHIP-AS-IS with 1 open finding
+# rr2_build <phase> [g2 collect flags]: g1 raises a verified Minor, g2 is clean and resolves nothing -> SHIP-AS-IS with 1 open finding
 rr2_build() {
   local ph="$1"; shift
   RR2_L="$TEST_TMP/rr2_ledger_$ph"; mkdir -p "$RR2_L"
@@ -2607,8 +2607,8 @@ rr2_refin() { # <script> <ledger> <phase> <file>
 # R5: the gap is invisible to the checker today (characterisation, stays green)
 rr2_build rr2a; RR2A_L="$RR2_L"
 RR2A_OUT=$(rr2_check "$CHECKER" "$RR2_L" rr2a); RR2A_RC=$?
-assert_exit_code "$RR2A_RC" "0" "R5 (stage 2): checker passes a receipt that carries an open Major (finalize-time warning only)"
-assert_contains "$(cat "$RR2_L/receipt-rr2a.json")" "$RR2_FID" "R5: the Major is still in receipt.open_findings"
+assert_exit_code "$RR2A_RC" "0" "R5 (stage 2): checker passes a receipt that carries an open Minor (finalize-time warning only)"
+assert_contains "$(cat "$RR2_L/receipt-rr2a.json")" "$RR2_FID" "R5: the Minor is still in receipt.open_findings"
 
 # PM condition: the default path emits neither new field
 assert_not_contains "$(cat "$RR2_L/receipt-rr2a.json")" "resolutions_addendum" "default path: no resolutions_addendum in the receipt"

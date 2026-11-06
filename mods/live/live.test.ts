@@ -253,6 +253,7 @@ function world(on: On, files: Tree, nowMs = NOW_FRESH, sid = SID_A, locale: 'en'
     yield { kind: 'text', index: 0, text: 'b' } as const
     return { turnId: e.turnId, index: e.index, answer: 'ab', toolUses: [], stopReason: 'end_turn', ...(f.badTools === true ? { serverToolUses: [null] as never } : {}), usage: { input_tokens: 10, output_tokens: f.tokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: f.model ?? 'claude-opus-5-5' } } as const
   })
+  on('command.register', (_$, e) => ({ value: { command: e.name } })) // the live mod registers /live-pane at session start
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.toast', ($, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('ui.open', async ($, e) => {
@@ -873,7 +874,7 @@ for (const surface of SURFACES) {
     expect(text).toContain('5 個派工在跑')
   })
 
-  test('pane: fullscreen at 160 columns opens once; table, gate table, review link; no Image (' + surface + ')', async ($, on) => {
+  test('pane: fullscreen at 160 columns is never opened on its own (side pane plan B); table, gate table, review link; no Image (' + surface + ')', async ($, on) => {
     const files = base()
     files[LIVE + '/review/server.json'] = j({ pid: 1, port: 9123, root: AHOME + '/review', started_at: PUBLISHED })
     files[AHOME + '/review/' + KEY + '/2026-10-04/' + ROOT + '/current/model.json'] = j(model())
@@ -882,11 +883,7 @@ for (const surface of SURFACES) {
     const band = await mountAbove($, { plugin: 'autopilot', surface, component: 'AbovePrompt', props: BAND_PROPS, viewport: { columns: 160, rows: 50, isFullscreen: true } })
     await w.clock.advance(5000)
     await w.clock.advance(5000)
-    expect(w.opens.length).toBe(1)
-    expect(w.opens[0]?.id).toBe('autopilot-live')
-    // the unasked auto-open must never take the keyboard (it would steal the prompt)
-    expect(w.opens[0]?.focus).toBeUndefined()
-    expect(w.opens[0]?.closeOnEscape).toBeUndefined()
+    expect(w.opens.length).toBe(0) // it took 37-40% of the width and left the band 83 columns at 160: the person opens it (the ⓘ, a slot, the quick row, /live-pane)
     await band.unmount()
     const pane = await paneOn($, surface, 'dispatch')
     const rows = rowsOf((await pane.drawn()) as Node)
@@ -6597,5 +6594,288 @@ for (const surface of SURFACES) {
   test('forgeBar: an unknown part is default text, kept', () => {
     const segs = segsOf([B('speed', 'ϟ93'), B('mood', ' (happy)')])
     expect(at(segs, ' (happy)')?.color).toBeUndefined(); expect(at(segs, ' (happy)')?.dim).toBeUndefined()
+  })
+}
+
+// ---- the O4 band shell (panel-band contract 2026-11-06) and the side pane's plan B (never opened on its own) ----
+// A band tab is open and the host gave 12 rows: menu row, frame (left submenu | main window | right summary columns), progress row, quick row. The tier is chosen on the bodyColumns the band is handed.
+const rowStr = (n: Node | string): string => (typeof n === 'string' ? n : n.type === 'Text' ? textOf(n) : (n.children || []).length === 0 && typeof n.props?.label === 'string' ? (n.props.label as string) : (n.children || []).map(c => rowStr(c as Node | string)).join(''))
+const SHELL_PANEL = {
+  schema: 'codeforge.panel/1', updated_at_ms: NOW_FRESH - 5_000, usage: { tiers: {} }, pet: { title: 'p', sprite: null, tiers: {} },
+  side: {
+    usage: { tiers: { 30: [[{ text: '5h ▰▰▱▱ 41%' }], [{ text: '7d ▰▱▱▱ 12%' }]], 40: [[{ text: '5h ▰▰▱▱ 41% 重置 2h' }], [{ text: '7d ▰▱▱▱ 12% 重置 3d' }]], 50: [[{ text: '5h ▰▰▱▱ 41% 重置 2h10m' }], [{ text: '7d ▰▱▱▱ 12% 重置 3d4h' }]] } },
+    usage_full: { tiers: { 40: [[{ text: '5h ▰▰▱▱ 41%' }], [{ text: '7d ▰▱▱▱ 12%' }], [{ text: '' }], [{ text: 'model-a 55%' }], [{ text: 'model-b 30%' }]] } },
+    memory: { tiers: { 30: [[{ text: '記憶 12 條' }], [{ text: '大腦 已連線' }]], 40: [[{ text: '記憶 12 條' }], [{ text: '大腦 已連線' }]], 50: [[{ text: '記憶 12 條' }], [{ text: '大腦 已連線' }]] } },
+  },
+}
+// the codeforge side of the contract in miniature: the plugin named forge-stats owns `panel`; it copies a file of the world into it at session start
+const FORGE_STATS_WRITER = {
+  name: 'forge-stats',
+  tier: 'append' as const,
+  register: ((on: any) => {
+    on('session.start', async ($: any, e: any, next: any) => {
+      try {
+        const text = await $.fs.read('/fake/forge-panel.json')
+        await $.state.set({ plugin: 'forge-stats', key: 'panel' }, JSON.parse(text))
+      } catch (_err) {
+        // nothing to copy: the panel stays unwritten
+      }
+      return next(e)
+    })
+  }) as any,
+}
+// reads `autopilot.panel_open_at_ms` for the test (the test kit's `$` has no state API of its own) and reports it through the world's fs.write
+const PANEL_OPEN_READER = {
+  name: 'pm-reader',
+  tier: 'append' as const,
+  register: ((on: any) => {
+    on('session.start', async ($: any, e: any, next: any) => {
+      await $.command.register({ name: 'pm-read', description: 'test reader' })
+      return next(e)
+    })
+    on('command.run', { command: 'pm-read' }, async ($: any) => {
+      const got = await $.state.get({ plugin: 'autopilot', key: 'panel_open_at_ms' })
+      await $.fs.write('/pm-reader/' + String(got.value), '')
+      return {}
+    })
+  }) as any,
+}
+const FLEET_LANES = [{ lane: 'lane-a', host: 'h1', needYou: 0, failed: 0, stuck: 0, running: 2, waiting: 0 }, { lane: 'lane-b', host: 'h1', needYou: 1, failed: 0, stuck: 0, running: 0, waiting: 0 }]
+for (const surface of SURFACES) {
+  const shellWorld = (on: any, extra: Tree = {}, nowMs = NOW_FRESH) => {
+    const files = base()
+    files[W_MODEL] = j(model({ needs_decision: true, decisions: [DQ1, DQ2, DQ3] }))
+    Object.assign(files, extra)
+    return world(on, files, nowMs)
+  }
+  const mountShell = ($: any, columns: number, maxRows = 12) => $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-shell', props: { ...BAND_PROPS, maxRows, bodyColumns: columns }, viewport: { columns: columns + 5, rows: 50, isFullscreen: true } })
+  const drawShell = async ($: any, columns: number, press: string[] = [], maxRows = 12) => {
+    for (const key of press) {
+      const ui = await mountShell($, columns, maxRows)
+      await ui.press({ key })
+      await ui.unmount()
+    }
+    const ui = await mountShell($, columns, maxRows)
+    const tree = (await ui.drawn()) as Node
+    const buttons = ((await ui.findAll({ type: 'Button' })) as Node[]).map(b => b.props?.key as string)
+    await ui.unmount()
+    const rows = ((tree.children || []) as Node[]).map(rowStr)
+    return { tree, rows, buttons }
+  }
+  // the width of the last window of the top frame row (the text after the last ┬, less the closing corner)
+  const lastWindow = (top: string): number => displayWidth(top.slice(top.lastIndexOf('┬') + 1)) - 1
+
+  test('O4 shell: 12 rows with a band tab open; the frame is 8 + 3 rows under the menu row, and every frame row is as wide as the others (' + surface + ')', async ($, on) => {
+    const w = shellWorld(on)
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide']) // a press opens the tab; it stays open (a memory state) for the draws below
+    for (const cols of [240, 200, 160, 120, 80]) {
+      const d = await drawShell($, cols)
+      expect(d.rows.length, 'rows at ' + cols).toBe(12)
+      expect(d.rows[1].startsWith('╭'), 'top frame at ' + cols).toBe(true)
+      expect(d.rows[9].startsWith('╰'), 'bottom frame at ' + cols).toBe(true)
+      for (const i of [2, 3, 4, 5, 6, 7, 8]) expect(d.rows[i].startsWith('│') && d.rows[i].endsWith('│'), 'body row ' + i + ' at ' + cols).toBe(true)
+      const wd = displayWidth(d.rows[1])
+      expect(wd).toBeLessThanOrEqual(cols)
+      expect(displayWidth(d.rows[9]), 'bottom frame at ' + cols).toBe(wd) // a body row's windows are Boxes of a fixed width: only the frame rows are one string
+    }
+    void w
+  })
+
+  test('O4 shell: the tier follows bodyColumns at 235 / 195 / 155 / 115; the last window is 44 / 45 / 50 / 32 wide, and below 115 the frame has only the left and main windows (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    shellWorld(on, { '/fake/forge-panel.json': j(SHELL_PANEL) })
+    await start($, surface)
+    const last: [number, number | null][] = [[300, 44], [235, 44], [234, 45], [195, 45], [194, 50], [155, 50], [154, 32], [115, 32], [114, null], [80, null]]
+    await drawShell($, 240, ['tab:decide'])
+    for (const [cols, inner] of last) {
+      const d = await drawShell($, cols)
+      const top = d.rows[1]
+      if (inner === null) expect(top.split('┬').length, 'two windows at ' + cols).toBe(2)
+      else expect(lastWindow(top), 'last window at ' + cols).toBe(inner)
+    }
+  })
+
+  test('O4 shell: the menu row, the left submenu and the main window do not move between tiers: the same Buttons in the same order at 240, 200, 160, 120 and 80 (right columns hold Text only) (' + surface + ')', async ($, on) => {
+    shellWorld(on, { '/fake/forge-panel.json': j(SHELL_PANEL) })
+    await start($, surface)
+    const keys: string[][] = []
+    await drawShell($, 240, ['tab:decide'])
+    for (const cols of [240, 200, 160, 120, 80]) keys.push((await drawShell($, cols)).buttons)
+    for (const k of keys.slice(1)) expect(k).toEqual(keys[0])
+    expect(keys[0]).toContain('menu:now')
+    expect(keys[0]).toContain('menu:dispatch')
+    expect(keys[0]).toContain('opt:d-4290499d:0')
+    expect(keys[0].filter(x => x.startsWith('menu:')).length).toBe(4)
+  })
+
+  test('O4 shell: the left submenu marks the open item ◐, a press on another item opens that tab, and the open item\'s own press changes nothing (' + surface + ')', async ($, on) => {
+    shellWorld(on)
+    await start($, surface)
+    const a = await drawShell($, 160, ['tab:decide'])
+    expect(a.rows[2]).toContain('│  現況')
+    expect(a.rows.slice(2, 9).some(r => r.includes('◐ 待決'))).toBe(true)
+    expect(a.rows.slice(2, 9).filter(r => r.includes('◐')).length).toBe(1)
+    const same = await drawShell($, 160, ['menu:decide'])
+    expect(same.rows.slice(2, 9).some(r => r.includes('◐ 待決'))).toBe(true)
+    const b = await drawShell($, 160, ['menu:dispatch'])
+    expect(b.rows.slice(2, 9).some(r => r.includes('◐ 派工'))).toBe(true)
+    expect(b.rows.slice(2, 9).some(r => r.includes('◐ 待決'))).toBe(false)
+  })
+
+  test('O4 shell: maxRows under 12 keeps the tab-row layout, and no tab open keeps the one-row band (' + surface + ')', async ($, on) => {
+    shellWorld(on)
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide'])
+    const small = await drawShell($, 240, [], 11)
+    expect(small.rows.some(r => r.includes('╭'))).toBe(false)
+    expect(small.rows.length).toBeLessThanOrEqual(11)
+    const eight = await drawShell($, 240, [], 8) // the tab is still open (a memory state); 8 rows are no room for the frame
+    expect(eight.rows.some(r => r.includes('╭'))).toBe(false)
+    await start($, surface) // a new session: no tab open
+    const none = await drawShell($, 240, [], 12)
+    expect(none.rows.some(r => r.includes('╭'))).toBe(false)
+  })
+
+  test('O4 shell: a band too narrow for a main window of 30 keeps the tab-row layout (' + surface + ')', async ($, on) => {
+    shellWorld(on)
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide'])
+    const d = await drawShell($, 58)
+    expect(d.rows.some(r => r.includes('╭'))).toBe(false)
+  })
+
+  test('O4 shell: no forge-stats panel at all: the right side is the roundtable alone (160) or the roundtable and the fleet column (240); no usage window, no empty window (' + surface + ')', async ($, on) => {
+    shellWorld(on)
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide'])
+    const a = await drawShell($, 160)
+    expect(a.rows[1]).toContain('圓桌')
+    expect(a.rows[1]).not.toContain('用量')
+    const b = await drawShell($, 200, [])
+    expect(b.rows[1].split('┬').length).toBe(3) // left | main | roundtable: three windows
+    expect(b.rows[1]).not.toContain('用量')
+    const c = await drawShell($, 240, [])
+    expect(c.rows[1]).not.toContain('用量')
+    expect(c.rows[1]).toContain('圓桌')
+  })
+
+  test('O4 shell: an old or broken panel (another schema, no side) is a quiet no-summary; the band still draws (' + surface + ')', async ($, on) => {
+    shellWorld(on, { '/fake/forge-panel.json': j({ ...SHELL_PANEL, side: undefined }) })
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide'])
+    const d = await drawShell($, 240)
+    expect(d.rows.length).toBe(12)
+    expect(d.rows[1]).not.toContain('用量')
+  })
+
+  test('O4 shell: with the forge-stats panel the right side carries its tables: usage under the roundtable at 120 and 160, a usage window at 200 and 240 and memory with the fleet at 240 (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    const w = shellWorld(on, { '/fake/forge-panel.json': j(SHELL_PANEL) })
+    await start($, surface)
+    void w
+    await drawShell($, 240, ['tab:decide'])
+    const t160 = await drawShell($, 160)
+    expect(t160.rows[1]).toContain('圓桌 · 用量')
+    expect(t160.rows.slice(2, 9).some(r => r.includes('5h ▰▰▱▱ 41% 重置 2h10m'))).toBe(true) // the 50 table
+    const t120 = await drawShell($, 120)
+    expect(t120.rows[1]).toContain('圓桌 · 用量')
+    expect(t120.rows.slice(2, 9).some(r => r.includes('5h ▰▰▱▱ 41%'))).toBe(true)
+    expect(t120.rows.slice(2, 9).some(r => r.includes('重置 2h10m'))).toBe(false) // the 30 table, not the 50
+    const t200 = await drawShell($, 200, [])
+    expect(t200.rows[1]).toContain('用量')
+    expect(t200.rows.slice(2, 9).some(r => r.includes('model-a 55%'))).toBe(true)
+    const t240 = await drawShell($, 240, [])
+    expect(t240.rows[1]).toContain('艦隊 · 記憶')
+    expect(t240.rows.slice(2, 9).some(r => r.includes('大腦 已連線'))).toBe(true)
+    expect(t240.rows.slice(2, 9).some(r => r.includes('model-a 55%'))).toBe(true)
+    expect(t200.rows.slice(2, 9).some(r => r.includes('大腦 已連線'))).toBe(false)
+  })
+
+  test('O4 shell: panel data older than a minute is marked on the first row of the first right column, with no extra row (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    shellWorld(on, { '/fake/forge-panel.json': j({ ...SHELL_PANEL, updated_at_ms: NOW_FRESH - 200_000 }) })
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide'])
+    const d = await drawShell($, 160)
+    expect(d.rows.length).toBe(12)
+    expect(d.rows[2]).toContain('資料 3 分鐘前')
+  })
+
+  test('O4 shell: colours are PALETTE roles as text colour only: no background, no inverse, no bold in the frame (' + surface + ')', { plugins: [FORGE_STATS_WRITER] }, async ($, on) => {
+    shellWorld(on, { '/fake/forge-panel.json': j(SHELL_PANEL) })
+    await start($, surface)
+    await drawShell($, 240, ['tab:decide'])
+    const d = await drawShell($, 240)
+    const frame = [d.tree.children?.[1], d.tree.children?.[9]].map(n => JSON.stringify(n))
+    for (const f of frame) {
+      expect(f).not.toContain('backgroundColor')
+      expect(f).not.toContain('inverse')
+      expect(f).not.toContain('"bold":true')
+    }
+    const colours = new Set(Object.values(ui.PALETTE))
+    const texts = walkTexts((d.tree.children?.[1] ?? {}) as Node)
+    const used = texts.map(tn => tn.props?.color).filter(x => x !== undefined)
+    expect(used.length).toBeGreaterThan(0)
+    for (const c of used) expect(colours.has(c as never), String(c)).toBe(true)
+    expect(used).toContain(ui.PALETTE.here)
+    expect(used).toContain(ui.PALETTE.idle)
+  })
+
+  test('O4 shell: the roundtable column shows the newest room\'s last messages; ✦ N counts what arrived after the shell opened (' + surface + ')', async ($, on) => {
+    const room = (rows: object[]) => rows.map(r => j(r)).join('\n') + '\n'
+    const path = AHOME + '/rooms/room-a/room.jsonl'
+    const first = room([{ ts: 't', room: 'room-a', seq: 1, from: 'owner', kind: 'say', text: 'hello', reply_to: null }, { ts: 't', room: 'room-a', seq: 2, from: 'seat-x', kind: 'say', text: 'second message', reply_to: null }])
+    const w = shellWorld(on, { [path]: first })
+    w.stats[path] = { size: first.length, mtimeMs: 1 }
+    await start($, surface)
+    await drawShell($, 160, ['tab:decide']) // the shell is on screen
+    await w.clock.advance(5000) // the tick reads the room; the newest seq is the baseline
+    const a = await drawShell($, 160)
+    expect(a.rows[1]).toContain('圓桌')
+    expect(a.rows[1]).not.toContain('✦')
+    expect(a.rows.slice(2, 9).some(r => r.includes('seat-x second message'))).toBe(true)
+    const second = first + j({ ts: 't', room: 'room-a', seq: 3, from: 'seat-y', kind: 'say', text: 'third', reply_to: null }) + '\n' + j({ ts: 't', room: 'room-a', seq: 4, from: 'owner', kind: 'say', text: 'mine', reply_to: null }) + '\n'
+    w.files[path] = second
+    w.stats[path] = { size: second.length, mtimeMs: 2 }
+    await drawShell($, 160) // still on screen
+    await w.clock.advance(5000)
+    const b = await drawShell($, 160)
+    expect(b.rows[1]).toContain('圓桌 ✦ 1') // the owner's own row is not new content
+    expect(b.rows.slice(2, 9).some(r => r.includes('seat-y third'))).toBe(true)
+  })
+
+  test('O4 shell: the shell publishes autopilot.panel_open_at_ms while it is on screen, and not when no band tab is open (' + surface + ')', { plugins: [PANEL_OPEN_READER] }, async ($, on) => {
+    const w = shellWorld(on)
+    await start($, surface)
+    const seen = async () => { await $.command.run({ command: 'pm-read', args: '' }); return w.writes.filter(p => p.startsWith('/pm-reader/')).map(p => p.slice('/pm-reader/'.length)) }
+    await w.clock.advance(5000)
+    await w.clock.advance(5000)
+    expect((await seen()).at(-1)).toBe('undefined') // no band tab was ever open: never written
+    await drawShell($, 160, ['tab:decide'])
+    await w.clock.advance(5000)
+    const at = Number((await seen()).at(-1))
+    expect(at).toBeGreaterThan(0)
+    expect(at).toBeLessThanOrEqual(NOW_FRESH + 60_000)
+  })
+
+  test('side pane plan B: the pane is never opened on its own, at 160 or 240 columns, fullscreen with a project; the ⓘ, a slot, the quick row and /live-pane open it (' + surface + ')', async ($, on) => {
+    const w = shellWorld(on)
+    await start($, surface)
+    for (const cols of [160, 240]) {
+      const band = await $.ui.mount({ plugin: 'autopilot', surface, component: 'AbovePrompt', requestId: 'rq-b', props: { ...BAND_PROPS, bodyColumns: cols }, viewport: { columns: cols, rows: 50, isFullscreen: true } })
+      await w.clock.advance(5000)
+      await w.clock.advance(5000)
+      await band.unmount()
+    }
+    expect(w.opens.length).toBe(0)
+    await $.command.run({ command: 'live-pane', args: '' })
+    expect(w.opens.length).toBe(1)
+    expect(w.opens[0]).toEqual({ id: 'autopilot-live', title: 'Autopilot', focus: true, closeOnEscape: true })
+    // the quick row of the shell opens it on the tab
+    const q = await mountShell($, 160)
+    await q.press({ key: 'tab:decide' })
+    await q.unmount()
+    const again = await mountShell($, 160)
+    await again.press({ key: 'open:decide' })
+    await again.unmount()
+    expect(w.opens.length).toBe(2)
   })
 }

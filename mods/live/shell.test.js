@@ -271,3 +271,15 @@ test('fleet: one row per lane that has anything, the most pressing state first; 
   assert.equal(S.fleetLines(FLEET, 44, 7)[0][0].color, ui.PALETTE.attention)
   assert.equal(S.fleetLines(FLEET, 44, 7)[1][0].color, ui.PALETTE.running)
 })
+
+test('left column: the open item is marked ◐ in `here`, the others carry no mark and no colour; every row is the column wide and cut with an ellipsis', () => {
+  const rows = S.leftItems([{ id: 'now', label: 'Now' }, { id: 'decide', label: 'Decide' }, { id: 'long', label: 'x'.repeat(60) }], 'decide', 26)
+  assert.deepEqual(rows.map(r => r.id), ['now', 'decide', 'long'])
+  assert.equal(segText(rows[1].segs).trimEnd(), '◐ Decide')
+  assert.equal(rows[1].segs[0].color, ui.PALETTE.here)
+  assert.equal(segText(rows[0].segs).trimEnd(), '  Now')
+  assert.equal(rows[0].segs.some(s => s.color !== undefined), false)
+  for (const r of rows) assert.equal(width(r.segs), 26)
+  assert.ok(segText(rows[2].segs).includes('…'))
+  assert.equal(S.leftItems([{ id: 'a', label: 'A' }], null, 26).some(r => segText(r.segs).includes('◐')), false)
+})

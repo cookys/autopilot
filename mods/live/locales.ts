@@ -365,7 +365,14 @@ export const EN: Record<string, string> = {
   "fleet.noun_upcoming": "upcoming",
   "fleet.waits_watch": "watch",
   "fleet.waits_child": "child task",
-  "fleet.capped": "{n} more work rows not shown"
+  "fleet.capped": "{n} more work rows not shown",
+  "shell.menu": "Menu",
+  "shell.room": "Roundtable",
+  "shell.usage": "Usage",
+  "shell.fleet": "Fleet",
+  "shell.memory": "Memory",
+  "shell.stale": "data {n} min old",
+  "shell.room_none": "no messages yet"
 }
 
 export const ZH_TW: Record<string, string> = {
@@ -731,5 +738,12 @@ export const ZH_TW: Record<string, string> = {
   "fleet.noun_upcoming": "待接",
   "fleet.waits_watch": "watch",
   "fleet.waits_child": "子任務",
-  "fleet.capped": "另有 {n} 條工作未列出"
+  "fleet.capped": "另有 {n} 條工作未列出",
+  "shell.menu": "選單",
+  "shell.room": "圓桌",
+  "shell.usage": "用量",
+  "shell.fleet": "艦隊",
+  "shell.memory": "記憶",
+  "shell.stale": "資料 {n} 分鐘前",
+  "shell.room_none": "還沒有訊息"
 }

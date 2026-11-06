@@ -6,6 +6,8 @@
 import { T_EN } from './i18n'
 import type { T } from './i18n'
 import { BAND_INFO_LABEL, BAND_SEP, displayWidth, layoutBand, plainBandText } from './model'
+import { BODY_ROWS } from './shell'
+import type { LeftItem, ShellPlan } from './shell'
 import type { DecideState, LiveSnapshot, PaneLine, PaneTab, Seg, SlotId } from './model'
 import { actionSeg, dimProps, drawSeg, forgeBar, GLYPHS } from './ui'
 import type { ForgeSegment } from './ui'
@@ -106,10 +108,10 @@ export function BarButton(el: { Text: El; Button?: El }, id: string, label: stri
 
 const PROJECT_SLOTS: SlotId[] = ['position', 'unit', 'review', 'spend']
 
-// the open tab's content: rows (each one drawn row)
-export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab, columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): unknown[] {
+// the open tab's content: rows (each one drawn row). `barParts` keeps the buttons row apart: the tab-row layout draws it as the last row, the O4 shell as its quick row.
+export function barParts(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab, columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): { rows: unknown[]; quick: unknown[] } {
   const { Box, Text } = el
-  if (snap === null || snap.band === null) return []
+  if (snap === null || snap.band === null) return { rows: [], quick: [] }
   const band = snap.band
   const sel = (ids: SlotId[]) => band.slots.filter(s => ids.includes(s.id))
   const lineOf = (ids: SlotId[]): unknown[] => {
@@ -117,10 +119,15 @@ export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSna
     return slots.length === 0 ? [] : [<Box key="line">{drawSegs(el, layoutBand(slots, columns).segs.slice(0, -1), o.onSlot)}</Box>]
   }
   const open = <Box key="buttons">{BarButton(el, 'open:' + tab, t('bar.open'), () => o.onOpen(tab))}</Box>
-  if (tab === 'now') return [...lineOf(PROJECT_SLOTS), <Box key="buttons">{BarButton(el, 'open:now', t('bar.open'), () => o.onOpen('now'))}<Text>{'  '}</Text>{BarButton(el, 'open:dispatch', t('bar.dispatch'), () => o.onOpen('dispatch'))}</Box>]
-  if (tab === 'dispatch') return [...lineOf(['dispatch']), open]
-  if (tab === 'review') return [...lineOf(['review', 'decisions']), open]
-  return []
+  if (tab === 'decide') return { rows: [], quick: [open] }
+  if (tab === 'now') return { rows: lineOf(PROJECT_SLOTS), quick: [<Box key="buttons">{BarButton(el, 'open:now', t('bar.open'), () => o.onOpen('now'))}<Text>{'  '}</Text>{BarButton(el, 'open:dispatch', t('bar.dispatch'), () => o.onOpen('dispatch'))}</Box>] }
+  if (tab === 'dispatch') return { rows: lineOf(['dispatch']), quick: [open] }
+  if (tab === 'review') return { rows: lineOf(['review', 'decisions']), quick: [open] }
+  return { rows: [], quick: [] }
+}
+export function barContent(el: { Box: El; Text: El; Button?: El }, snap: LiveSnapshot | null, tab: PaneTab, columns: number, t: T, o: { onSlot: (id: SlotId) => void; onOpen: (tab: PaneTab) => void }): unknown[] {
+  const p = barParts(el, snap, tab, columns, t, o)
+  return [...p.rows, ...p.quick]
 }
 
 // the 待決 tab's compact form: the first open question's title and its options, then the send row the pane's own builder made (the same lines, the same press ids: a press is
@@ -171,4 +178,48 @@ export function speedContent(el: { Box: El; Text: El }, cols: readonly SpeedColu
   if (below === null) return [<Box key="speedview" flexDirection="row">{ours}</Box>]
   if (placement === 'beside') return [<Box key="speedview" flexDirection="row">{ours}{gap('gb')}{below}</Box>]
   return [<Box key="speedview" flexDirection="row">{ours}</Box>, below]
+}
+
+// ---- the O4 shell (contract 2026-11-06): menu row on top (BandBar), then a frame of three kinds of window, a progress row and a quick row; 12 rows. shell.ts plans the frame, the
+// columns and the left submenu; this file draws them. Only the left submenu, the main window and the quick row hold Buttons: the right-hand columns are Text, so the Tab order and the
+// highlight are the same at every tier. ----
+
+export type ShellDraw = {
+  plan: ShellPlan
+  left: LeftItem[]
+  onLeft: (id: string) => void
+  main: unknown[] // the main window's rows (the open tab's content), at most BODY_ROWS
+  progress: { segs: Seg[]; onSlot: (id: SlotId) => void } | null
+  quick: unknown[]
+}
+export function Shell(el: { Box: El; Text: El; Button?: El }, d: ShellDraw): unknown[] {
+  const { Box, Text, Button } = el
+  const { plan } = d
+  const segsOf = (segs: readonly Seg[], k: string) => segs.map((s, i) => <Text key={k + i} {...drawSeg(s)} wrap="truncate">{s.text}</Text>)
+  const vert = (i: number) => <Text key={'v' + i} {...drawSeg(plan.verts[i])}>{plan.verts[i].text}</Text>
+  const blank = (k: string) => <Text key={k}>{' '}</Text>
+  const rows: unknown[] = [<Box key="top">{segsOf(plan.top, 't')}</Box>]
+  for (let r = 0; r < BODY_ROWS; r++) {
+    const item = d.left[r]
+    const leftCell = item === undefined
+      ? blank('l')
+      : Button === undefined
+        ? <Box key="l">{segsOf(item.segs, 'l')}</Box>
+        : <Button key={'menu:' + item.id} plain onPress={() => d.onLeft(item.id)}>{segsOf(item.segs, 'l')}</Button>
+    const cells = [
+      vert(0),
+      <Box key="lc" width={plan.geo.left} flexShrink={0}>{leftCell}</Box>,
+      vert(1),
+      <Box key="mc" width={plan.geo.main} flexShrink={0}>{d.main[r] ?? blank('m')}</Box>,
+    ]
+    plan.columns.forEach((c, i) => {
+      cells.push(vert(2 + i), <Box key={'c' + i} width={c.inner} flexShrink={0}>{segsOf(c.rows[r], 'c' + i + '-')}</Box>)
+    })
+    cells.push(vert(2 + plan.columns.length))
+    rows.push(<Box key={'row' + r}>{cells}</Box>)
+  }
+  rows.push(<Box key="bottom">{segsOf(plan.bottom, 'b')}</Box>)
+  rows.push(<Box key="progress"><Text>{' '}</Text>{d.progress === null ? blank('p') : drawSegs(el, d.progress.segs, d.progress.onSlot)}</Box>)
+  rows.push(<Box key="quick"><Text>{' '}</Text>{d.quick}</Box>)
+  return rows
 }

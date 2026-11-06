@@ -45,7 +45,7 @@ import { NO_BATCH, answerPlan, answerOf, batchSync, focusRepair, inputsFor, note
 import type { DecideBatch } from './decidebatch'
 import { barStrip, decideTabLines } from './tabs'
 
-import { BandBar, BarRule, barContent, decideContent, speedContent, stackBand } from './band'
+import { BandBar, BarRule, Shell, barContent, barParts, decideContent, speedContent, stackBand } from './band'
 import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
 import type { Step } from './speed'
@@ -53,6 +53,8 @@ import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BarTabId } from './tabs'
+import { BODY_ROWS, SHELL_ROWS, freshCount, leftItems, newestSeq, parsePanel, parseRoom, shellPlan } from './shell'
+import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
 import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
 import { showPath } from '../viewer/show'
@@ -66,7 +68,6 @@ import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, Rec
 
 const TICK_MS = 5000
 const PANE_ID = 'autopilot-live'
-const PANE_MIN_COLUMNS = 144
 const MAX_PATH_FILES = 256
 const MAX_RECEIPT_FILES = 64
 const MAX_CAMPAIGN_ROOTS = 8 // session-mode.js CAMPAIGN_ROOTS_MAX
@@ -82,8 +83,6 @@ const DECIDE_KEEP_MS = 24 * 3600 * 1000 // a sent question the session never clo
 let timer: { cancel: () => void } | undefined
 let liveBaseSeen: string | null = null // the live base the pointer named on the last tick (codeforge's pet.json sits under it)
 let petText: string | null = null // `Name Lv.N` from codeforge's pet.json, read each tick only while SPEED_LABEL_PET is on
-let viewport: { columns: number; isFullscreen?: boolean } | null = null
-let paneAttempted = false
 let paneTab: PaneTab = 'now'
 // the Fleet tab's feed (fleet.ts): `fleet tasks --tree --json`, run only while the tab is showing and at most once per TTL, never awaited by a render. fleetShownMs is
 // when the Fleet tab was last drawn (the tick stops fetching 15 s after the tab is left).
@@ -150,7 +149,54 @@ async function fleetTick($: EngineInterface): Promise<void> {
   // fetch while someone looks: the Fleet tab was drawn in the last FLEET_SHOWN_MS, or forge-stats' band (which reads the summary) is drawn in this session
   const forge = await forgeBand($, nowMs)
   forgeSummaryRow = forge.summaryRow
-  if ((paneTab === 'fleet' && nowMs - fleetShownMs < FLEET_SHOWN_MS) || forge.alive) kickFleet($, nowMs)
+  if ((paneTab === 'fleet' && nowMs - fleetShownMs < FLEET_SHOWN_MS) || forge.alive || (shellWantsFleet && nowMs - shellDrawnMs < SHELL_SEEN_MS)) kickFleet($, nowMs)
+  await shellTick($, nowMs).catch(() => undefined)
+}
+// ---- the O4 shell (shell.ts): the render never reads a file; the tick keeps what it draws from while the shell is on screen ----
+const SHELL_SEEN_MS = 15_000 // the shell counts as open while it was drawn this recently
+const PANEL_OPEN_EVERY_MS = 15_000 // forge-stats reads `autopilot.panel_open_at_ms` and refreshes the quota mirror only while it is within a minute
+let shellDrawnMs = -Infinity
+let shellWantsFleet = false // the 240 tier has a fleet column: the Fleet feed runs while it is drawn
+let shellRoom: { rows: RoomRow[]; raw: string } = { rows: [], raw: '' }
+let shellBaseline: number | undefined // the newest roundtable seq when the shell opened (✦ counts what came after); undefined = taken at the next read
+let panelOpenWrittenMs = -Infinity
+const PANEL_OPEN = atom({ plugin: 'autopilot', key: 'panel_open_at_ms' } as const, 0)
+const ROOM_RE = /^[a-z0-9-]+$/
+const MAX_ROOM_BYTES = 2_000_000 // a longer log keeps the last read (the roundtable pane reads it whole; the band does not)
+// the newest room's log text, '' when there is none. The rooms directory is the roundtable mod's: AUTOPILOT_ROOMS_DIR, else HOME/.autopilot/rooms.
+async function readRoomText($: EngineInterface): Promise<string | null> {
+  try {
+    const over = await $.env.get('AUTOPILOT_ROOMS_DIR').catch(() => undefined)
+    const home = await $.env.get('HOME').catch(() => undefined)
+    const dir = typeof over === 'string' && over.trim() !== '' ? over.trim() : typeof home === 'string' && home.trim() !== '' ? home.replace(/\/$/, '') + '/.autopilot/rooms' : null
+    if (dir === null) return ''
+    let best: { name: string; mt: number } | null = null
+    for (const e of await $.fs.list(dir)) {
+      if (e.kind !== 'dir' || !ROOM_RE.test(e.name)) continue
+      const mt = typeof (e as { mtimeMs?: number }).mtimeMs === 'number' ? (e as { mtimeMs: number }).mtimeMs : 0
+      if (best === null || mt >= best.mt) best = { name: e.name, mt }
+    }
+    if (best === null) return ''
+    const path = dir.replace(/\/$/, '') + '/' + best.name + '/room.jsonl'
+    const st = await $.fs.stat(path)
+    if (st.kind !== 'file' || st.isLink || !(st.size <= MAX_ROOM_BYTES)) return null
+    return String(await $.fs.read(path))
+  } catch (_e) {
+    return '' // no rooms directory, no log: an empty column, not an error
+  }
+}
+async function shellTick($: EngineInterface, nowMs: number): Promise<void> {
+  if (nowMs - shellDrawnMs > SHELL_SEEN_MS) { shellBaseline = undefined; return }
+  if (nowMs - panelOpenWrittenMs >= PANEL_OPEN_EVERY_MS) {
+    panelOpenWrittenMs = nowMs
+    await update($, PANEL_OPEN, () => nowMs).catch(() => undefined)
+  }
+  const raw = await readRoomText($)
+  if (raw === null || raw === shellRoom.raw) return
+  const rows = parseRoom(raw)
+  if (shellBaseline === undefined) shellBaseline = newestSeq(rows) ?? 0
+  shellRoom = { rows, raw }
+  void $.ui.invalidate('ui.render')
 }
 let barTab: BarTabId | null = null // the tab of the band row that is open (its content is drawn under the rule); null = none; a memory state, reset at session start
 const expanded = new Set<string>() // the recent-prompt groups the person opened (by group id)
@@ -739,11 +785,8 @@ async function refresh($: EngineInterface): Promise<void> {
       }
       previous = { scope, counts: built.counts, acceptance: built.acceptance }
     }
-    // pane: asked for once, and only where it would be a sidebar (fullscreen, >= 144 columns)
-    if (!paneAttempted && built.snap.project_key !== null && viewport !== null && viewport.isFullscreen === true && viewport.columns >= PANE_MIN_COLUMNS) {
-      paneAttempted = true
-      await $.ui.open({ id: PANE_ID, title: 'Autopilot' })
-    }
+    // The side pane is never opened here (side-pane plan B, owner ruling 2026-11-06): it took 37-40% of the width and left the band 83 columns at 160 and 145 at 240. The person opens it:
+    // the ⓘ, a slot, the shell's quick row, or the /live-pane command.
   } catch (_e) {
     // a bad tick must never take the session down; the next tick tries again
   }
@@ -940,6 +983,11 @@ async function ringToNext($: EngineInterface): Promise<void> {
 // the live mod's session start. A function of its own because Claude Code refuses a second matcher-less `session.start` hook in one plugin: the composed module
 // (mods/register.ts) registers the one hook and calls this and the viewer's start; the live mod's own tests use `register` below, which hooks it alone.
 export async function startLive($: EngineInterface): Promise<void> {
+  try {
+    await $.command.register({ name: 'live-pane', description: 'Open the Autopilot side pane (it is never opened on its own)' })
+  } catch (_e) {
+    // a host without commands: the band's own controls still open the pane
+  }
   paneTab = 'now'
   barTab = null
   folded.clear() // a new Claude Code session opens every section
@@ -951,6 +999,11 @@ export async function startLive($: EngineInterface): Promise<void> {
 
 // every hook of the live mod except `session.start`
 export function registerLive(on: Parameters<Register>[0]): void {
+  // /live-pane: the pane is never opened on its own (plan B); this and the band's ⓘ, slots and quick row are the ways to open it
+  on('command.run', { command: 'live-pane' }, async ($) => {
+    await $.ui.open({ id: PANE_ID, title: 'Autopilot', focus: true, closeOnEscape: true })
+    return {}
+  })
   // /clear ends the session but no session.start follows and the timer survives it (S7): only a real exit stops it.
   on('session.end', async ($, e, next) => {
     if (e.reason !== 'clear' && timer !== undefined) {
@@ -995,7 +1048,6 @@ export function registerLive(on: Parameters<Register>[0]): void {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    viewport = e.viewport ? { columns: e.viewport.columns, isFullscreen: e.viewport.isFullscreen } : null
     if (e.props.hasSurvey) return next(e)
     // the ⓘ opens the panel on the Now tab; pressed again while the panel is open it shows the next tab (7 tabs, the ? legend last, then Now again) (the pane never gets the keyboard
     // while the person holds the ⓘ, so this is the keyboard way to change tab). "Open" is the engine's own record, $.ui.panes() (the pane
@@ -1071,6 +1123,37 @@ export function registerLive(on: Parameters<Register>[0]): void {
     const active = barTab
     const bar = BandBar(el, snapshot, columns, t, { onInfo: info, onSlot: slot, onTab }, active, forge)
     const open = (tab: PaneTab) => { void openOn(tab) }
+    // The O4 shell: a band tab is open, the host gave 12 rows and the width holds a main window. Anything less keeps the tab-row layout below.
+    if (active !== null && active !== 'forge' && rows >= SHELL_ROWS && snapshot !== null) {
+      const nowMs = await $.clock.now()
+      const panelRaw = await ($.state.get as (ref: { plugin: string; key: string }) => Promise<{ value: unknown }>)({ plugin: 'forge-stats', key: 'panel' }).then(g => g.value, () => null)
+      const fleet = await read($, FLEET)
+      const lanes: FleetLaneSum[] = fleet.lanes.map(l => ({ lane: l.lane, needYou: l.needYou, failed: l.failed, stuck: l.stuck, running: l.running, waiting: l.waiting }))
+      const panel: PanelRead = parsePanel(panelRaw, nowMs)
+      const strip = barStrip(snapshot, t, active, null)
+      const plan = shellPlan({
+        columns, t, menuTitle: t('shell.menu'), mainTitle: (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(),
+        room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes,
+      })
+      if (plan !== null) {
+        shellDrawnMs = nowMs
+        shellWantsFleet = plan.geo.tier === 240
+        const mainCols = plan.geo.main - 1
+        const parts = active === 'decide'
+          ? { rows: decideContent(el, snapshot, await read($, DECIDE), mainCols, t, (id: string) => { void decidePress($, id).then(() => $.ui.invalidate('ui.render')) }, BODY_ROWS), quick: barParts(el, snapshot, 'decide', mainCols, t, { onSlot: slot, onOpen: open }).quick }
+          : barParts(el, snapshot, active, mainCols, t, { onSlot: slot, onOpen: open })
+        const total = plan.geo.left + plan.geo.main + plan.columns.reduce((a, c) => a + c.inner, 0) + plan.columns.length + 3
+        const unit = snapshot.band === null ? [] : snapshot.band.slots.filter(sl => sl.id === 'unit')
+        return stackBand(el, bar.node, Shell(el, {
+          plan,
+          left: leftItems(strip.tabs.map(b => ({ id: b.id, label: b.label.text.trim() })), active, plan.geo.left),
+          onLeft: (id: string) => { if (id !== active) onTab(id as BarTabId) },
+          main: parts.rows.slice(0, BODY_ROWS),
+          progress: unit.length === 0 ? null : { segs: layoutBand(unit, total - 2).segs.slice(0, -1), onSlot: slot },
+          quick: parts.quick,
+        }))
+      }
+    }
     let content: unknown[] = []
     if (active === 'forge') {
       // the room under the bar and the rule: the speed view (ours) and, when there is room for it, the mod below's full view (Ferris, pet, memory, brain)

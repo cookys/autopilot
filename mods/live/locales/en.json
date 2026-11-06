@@ -361,5 +361,12 @@
   "fleet.noun_upcoming": "upcoming",
   "fleet.waits_watch": "watch",
   "fleet.waits_child": "child task",
-  "fleet.capped": "{n} more work rows not shown"
+  "fleet.capped": "{n} more work rows not shown",
+  "shell.menu": "Menu",
+  "shell.room": "Roundtable",
+  "shell.usage": "Usage",
+  "shell.fleet": "Fleet",
+  "shell.memory": "Memory",
+  "shell.stale": "data {n} min old",
+  "shell.room_none": "no messages yet"
 }

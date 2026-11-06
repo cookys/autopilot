@@ -22,6 +22,8 @@ node "$here/gen-locales.js" --check
 node --test "$here/gen-locales.test.js"
 # the glyph tables, vocabulary and the all-mod design lints (L3, I5 (a), I20, L1b-L9 over every mods/* source): imports the real ui.ts, so the tables it lints are the ones the pane draws
 node --test "$here/ui-lint.test.js"
+# the O4 shell planner (tiers, geometry, the forge-stats panel reader, the right-hand columns): pure, imports the real shell.ts
+node --test "$here/shell.test.js"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 

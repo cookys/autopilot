@@ -278,3 +278,13 @@ export function shellPlan(inp: ShellInput): ShellPlan | null {
   const verts = widths.concat([0]).map((_w, i) => ({ text: v, ...border(i === 1 || i === 2 ? 'here' : 'idle') }) as Seg)
   return { geo, top: frameRow('top', widths, titles), bottom: frameRow('bottom', widths, titles), verts, columns }
 }
+
+// ---- the left column: the submenu of the open menu item (contract 3: the current one is marked ◐, shared with the 待決 list's "you are here") ----
+export type MenuItem = { id: string; label: string }
+export type LeftItem = { id: string; segs: Seg[] }
+export function leftItems(items: readonly MenuItem[], active: string | null, inner: number): LeftItem[] {
+  return items.map(it => {
+    const here = it.id === active
+    return { id: it.id, segs: padSegs(clipSegs([{ text: (here ? GLYPHS.chart.here : ' ') + ' ', ...(here ? { color: PALETTE.here } : {}) }, { text: it.label }], inner - 1), inner) }
+  })
+}

@@ -177,6 +177,9 @@ CODEX_EDIT_GATE_LIB_SOURCE="hooks/orchestrator-edit-gate-lib.js"
 CODEX_EDIT_GATE_LIB_DEST="hooks/orchestrator-edit-gate-lib.js"
 CODEX_DIRTY_TREE_SOURCE="hooks/dirty-protected-paths.js"
 CODEX_DIRTY_TREE_DEST="hooks/dirty-protected-paths.js"
+# Hook libs that mirrored scripts require as ../hooks/<name> (scripts/permission-prompt-watch.js needs the first two;
+# permission-block-lib.js lazily needs ask-decision.js). Same-name mirror, no remap.
+CODEX_HOOK_LIBS=(live-session-lib.js permission-block-lib.js ask-decision.js)
 PLUGIN_MANIFEST="$PLUGIN/.codex-plugin/plugin.json"
 
 if [ ! -d "$SRC" ]; then
@@ -658,11 +661,14 @@ if [ "$MODE" = "check" ]; then
   check_mapped_file "$CODEX_POSTCOMPACT_SOURCE" "$CODEX_POSTCOMPACT_DEST" || STATUS=1
   check_mapped_file "$CODEX_EDIT_GATE_LIB_SOURCE" "$CODEX_EDIT_GATE_LIB_DEST" || STATUS=1
   check_mapped_file "$CODEX_DIRTY_TREE_SOURCE" "$CODEX_DIRTY_TREE_DEST" || STATUS=1
+  for hook_lib in "${CODEX_HOOK_LIBS[@]}"; do
+    check_mapped_file "hooks/$hook_lib" "hooks/$hook_lib" || STATUS=1
+  done
   check_mapped_file "platforms/codex/skill-adapters/lifecycle.md" \
     "$LIFECYCLE_ADAPTER_DEST" || STATUS=1
   check_exact_directory_entries "profiles/baselines" "claude-hooks.json" || STATUS=1
   check_exact_directory_entries "hooks" "_shared" "dirty-protected-paths.js" "hooks.json" \
-    "lib" "orchestrator-edit-gate-lib.js" "post-compact.js" "pre-effect.js" || STATUS=1
+    "lib" "orchestrator-edit-gate-lib.js" "post-compact.js" "pre-effect.js" "${CODEX_HOOK_LIBS[@]}" || STATUS=1
   check_mirrored_file_list "hooks/lib" || STATUS=1
   check_plugin_manifest || STATUS=1
   check_doc_extras || STATUS=1
@@ -695,6 +701,9 @@ copy_mapped_file "$CODEX_PREEFFECT_SOURCE" "$CODEX_PREEFFECT_DEST"
 copy_mapped_file "$CODEX_POSTCOMPACT_SOURCE" "$CODEX_POSTCOMPACT_DEST"
 copy_mapped_file "$CODEX_EDIT_GATE_LIB_SOURCE" "$CODEX_EDIT_GATE_LIB_DEST"
 copy_mapped_file "$CODEX_DIRTY_TREE_SOURCE" "$CODEX_DIRTY_TREE_DEST"
+for hook_lib in "${CODEX_HOOK_LIBS[@]}"; do
+  copy_mapped_file "hooks/$hook_lib" "hooks/$hook_lib"
+done
 copy_mapped_file "platforms/codex/skill-adapters/lifecycle.md" "$LIFECYCLE_ADAPTER_DEST"
 sync_plugin_manifest
 

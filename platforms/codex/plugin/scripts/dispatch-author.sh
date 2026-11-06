@@ -1452,7 +1452,7 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     *) die_precondition "claude-native refused: account registry check failed or its env-check output is unrecognised (claude-account.js env-check --any); no spawn, no fallback to the seeded credentials path" ;;
   esac
   if [ "$CNATIVE_ACCOUNT" = "0" ]; then
-  CNATIVE_CFG="$(node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}")" \
+  node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seed-claude-config.js" --check \
     || die_precondition "claude-native refused: could not seed a credentials-only config dir (source .credentials.json missing/unreadable); the child is never given the real claude config dir"
   fi
   CNATIVE_CWD="$(mktemp -d)"
@@ -1472,13 +1472,14 @@ elif [[ "$RUNNER" = "claude-native" ]]; then
     cat "$CNATIVE_WRAP_ERR" >> "$RUNNER_ERR_FILE" 2>/dev/null || true
     rm -f "$CNATIVE_WRAP_ERR"
   else
-  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} CLAUDE_CONFIG_DIR="$CNATIVE_CFG" ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
+  node "$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/lib/seed-claude-config.js" --parent "${TMPDIR:-/tmp}" --exec -- \
+  timeout -k "$AUTHOR_KILL_GRACE_SECS" "$TIMEOUT" env ${CHILD_SESSION_UNSET[@]+"${CHILD_SESSION_UNSET[@]}"} ${CHILD_SESSION_PARENT:+"AUTOPILOT_PARENT_SESSION_ID=$CHILD_SESSION_PARENT"} ${CHILD_SESSION_ID:+"AUTOPILOT_CHILD_SESSION_ID=$CHILD_SESSION_ID"} AUTOPILOT_SESSION_MODE_DIR="$CHILD_MARKER_DIR" bash -c 'cd "$1" && exec "$2" -p ${5:+--session-id "$5"} --model "$3" --setting-sources project --strict-mcp-config --tools "$8" ${6:+--effort "$6"} ${7:+--settings "$7"} "${@:9}" < "$4"' \
     _ "$CNATIVE_CWD" "$CC_BIN" "$MODEL" "$PROMPT_FILE" "${CHILD_SESSION_ID:-}" "$CLAUDE_EFFORT_ARG" "${CHILD_MARKER_SETTINGS:-}" "$ROLE_KIT_TOOLS" ${ROLE_KIT_EXTRA[@]+"${ROLE_KIT_EXTRA[@]}"} > "$RAW_LOG" 2>"$RUNNER_ERR_FILE"
     RUNNER_EXIT=$?
   fi
   author_remap_kill_exit "$AUTHOR_TIMEOUT_START"
   set -e
-  rm -rf "$CNATIVE_CWD" "$CNATIVE_CFG"; CNATIVE_CWD=""; CNATIVE_CFG=""
+  rm -rf "$CNATIVE_CWD"; CNATIVE_CWD=""; CNATIVE_CFG=""
 elif [[ "$RUNNER" = "anthropic-compatible" ]]; then
   ANTHROPIC_JS="${BIN:-$(cd "$(dirname "$0")" && pwd)/dispatch-anthropic-review.js}"
   [[ -r "$ANTHROPIC_JS" ]] || die_precondition "dispatch-anthropic-review.js not found beside dispatch-author.sh"

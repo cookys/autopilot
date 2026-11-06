@@ -226,17 +226,17 @@
     {
       "file": "scripts/lib/seed-claude-config.js",
       "match": "os.tmpdir()",
-      "reason": "Default parent only; the allocation uses the registered claude-config-* prefix and the caller (dispatch-hetero.sh) removes the directory on every exit path."
+      "reason": "Default parent only; the allocation uses the registered claude-config-* prefix. --exec removes the directory on child exit; single-shot callers (dispatch-hetero.sh) remove it themselves."
     },
     {
       "file": "scripts/dispatch-review.sh",
       "match": "seed-claude-config.js\" --parent",
-      "reason": "Passes the temp root to the seed helper; the dir (registered claude-config-*) is removed after the child and by the EXIT trap."
+      "reason": "Passes the temp root to the seed helper; --exec removes the registered claude-config-* dir when the child exits (the EXIT trap still drops an empty CNATIVE_CFG)."
     },
     {
       "file": "scripts/dispatch-author.sh",
       "match": "seed-claude-config.js\" --parent",
-      "reason": "Passes the temp root to the seed helper; the dir (registered claude-config-*) is removed after the child and by the cleanup EXIT trap."
+      "reason": "Passes the temp root to the seed helper; --exec removes the registered claude-config-* dir when the child exits (the EXIT trap still drops an empty CNATIVE_CFG)."
     },
     {
       "file": "scripts/dispatch-hetero.sh",

@@ -15,6 +15,8 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
+# shellcheck source=../../scripts/lib/test-git-env.sh
+. "$REPO_ROOT/scripts/lib/test-git-env.sh"
 WORK="$(mktemp -d -t "test-git-env-bash-XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 FAILS=0

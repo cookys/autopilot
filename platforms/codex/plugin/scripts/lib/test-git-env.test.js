@@ -7,13 +7,14 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
+const { scrubGitEnv } = require('./test-git-env.js');
 
 const HELPER = path.join(__dirname, 'test-git-env.js');
 const ID = ['-c', 'user.email=o@example.invalid', '-c', 'user.name=o'];
 
 function outerRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-env-outer-'));
-  const g = (...a) => execFileSync('git', [...ID, ...a], { cwd: dir, env: { ...process.env, GIT_DIR: undefined }, stdio: 'pipe' }).toString().trim();
+  const g = (...a) => execFileSync('git', [...ID, ...a], { cwd: dir, env: scrubGitEnv({ ...process.env }), stdio: 'pipe' }).toString().trim();
   g('init', '-q', '-b', 'main');
   fs.writeFileSync(path.join(dir, 'a.txt'), '1\n');
   fs.writeFileSync(path.join(dir, 'b.txt'), '2\n');

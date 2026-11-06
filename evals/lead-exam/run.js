@@ -23,6 +23,26 @@ const { gradeExam } = require('./grade');
 const ROUND_TIMEOUT_MS = 4 * 60 * 1000;
 const HARD_STOP_MS = 24 * 60 * 1000;
 const KILL_WAIT_MS = 2000 + 1000; // transport kill grace + a margin
+const KILL_GRACE_MS = 2000; // transport default (transport.js graceMs)
+
+// LEAD_EXAM_* are test seams: each may only shorten a timer, never lengthen it past the production default.
+// Unset or empty means the production default. Returns the effective values.
+function resolveKnobs(env) {
+  const knob = (k, prod) => {
+    const raw = env[k];
+    if (raw === undefined || raw === '') return prod;
+    const v = Number(raw);
+    if (!Number.isInteger(v) || v <= 0 || v > prod) {
+      throw new Error(`${k}=${raw} must be a positive integer at or below the production default ${prod} ms`);
+    }
+    return v;
+  };
+  return {
+    roundTimeoutMs: knob('LEAD_EXAM_ROUND_TIMEOUT_MS', ROUND_TIMEOUT_MS),
+    hardStopMs: knob('LEAD_EXAM_HARD_STOP_MS', HARD_STOP_MS),
+    graceMs: knob('LEAD_EXAM_KILL_GRACE_MS', KILL_GRACE_MS),
+  };
+}
 
 // call: async (prompt, round, {timeoutMs, signal}) => {text, ms, in_tokens_est, out_tokens_est}
 async function runExam(opts) {
@@ -115,6 +135,8 @@ function parseArgs(argv) {
 
 async function main() {
   const a = parseArgs(process.argv.slice(2));
+  let knobs;
+  try { knobs = resolveKnobs(process.env); } catch (err) { process.stderr.write(`run: ${err.message}\n`); process.exit(2); }
   if (!a.seed || !a['out-dir']) { process.stderr.write('run: --seed and --out-dir are required\n'); process.exit(2); }
   if (a['config-dir']) {
     try { a['config-dir'] = checkConfigDir(a['config-dir']); } catch (err) { process.stderr.write(`run: ${err.message}\n`); process.exit(2); }
@@ -132,10 +154,9 @@ async function main() {
     if (!dir) { dir = seedConfigDir(os.tmpdir()); cleanupDir = dir; }
     const passEnv = { CLAUDE_CONFIG_DIR: dir };
     // LEAD_EXAM_* env vars are test seams only (stub provider, short timers); unset in real runs
-    const seam = (k) => (process.env[k] ? Number(process.env[k]) : undefined);
     call = (prompt, _round, ctl) => callProvider(prompt, {
       kind: a.kind, model: a.model, timeoutMs: ctl.timeoutMs, signal: ctl.signal, passEnv,
-      providerBin: process.env.LEAD_EXAM_PROVIDER_BIN || undefined, graceMs: seam('LEAD_EXAM_KILL_GRACE_MS'),
+      providerBin: process.env.LEAD_EXAM_PROVIDER_BIN || undefined, graceMs: knobs.graceMs,
     });
     name = a.name || a.model; model = a.model;
   }
@@ -143,8 +164,7 @@ async function main() {
   try {
     record = await runExam({
       items, seed: a.seed, call, name, model, kind: a.kind, dry: a.dry,
-      roundTimeoutMs: Number(process.env.LEAD_EXAM_ROUND_TIMEOUT_MS) || undefined, hardStopMs: Number(process.env.LEAD_EXAM_HARD_STOP_MS) || undefined,
-      killWaitMs: Number(process.env.LEAD_EXAM_KILL_GRACE_MS) ? Number(process.env.LEAD_EXAM_KILL_GRACE_MS) + 1000 : undefined,
+      roundTimeoutMs: knobs.roundTimeoutMs, hardStopMs: knobs.hardStopMs, killWaitMs: knobs.graceMs + 1000,
     });
   } finally {
     if (cleanupDir) {
@@ -173,4 +193,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((e) => { process.stderr.write(`run: ${e.message}\n`); process.exit(1); });
-module.exports = { runExam, checkConfigDir };
+module.exports = { runExam, checkConfigDir, resolveKnobs };

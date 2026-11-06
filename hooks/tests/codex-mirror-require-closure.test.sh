@@ -41,6 +41,11 @@ function stripComments(text) {
 }
 const root = process.argv[2] || path.join(process.argv[1], "platforms/codex/plugin");
 const missing = [];
+// Requires that sit inside try/catch by design and degrade when the file is absent from the mirror (each cites the guard).
+const OPTIONAL = new Set([
+  "scripts/dispatch-tree.js -> ../hooks/cost-tracker-lib.js", // try { require(...) } catch { /* mirror without hooks/ */ }
+  "src/status/card-visibility.js -> ../../hooks/runs-watch-autostart", // inside a try block that falls through when the hook is absent
+]);
 const seen = new Set();
 function resolve(base) {
   return [base, base + ".js", base + ".cjs", base + ".json", path.join(base, "index.js")]
@@ -55,7 +60,7 @@ function visit(file) {
   const text = stripComments(fs.readFileSync(file, "utf8"));
   for (const match of text.matchAll(/\brequire\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/gu)) {
     const found = resolve(path.resolve(path.dirname(file), match[1]));
-    if (!found) missing.push(path.relative(root, file) + " -> " + match[1]);
+    if (!found) { const entry = path.relative(root, file) + " -> " + match[1]; if (!OPTIONAL.has(entry)) missing.push(entry); }
     else visit(found);
   }
 }
@@ -73,10 +78,13 @@ if (process.argv[2]) {
   walk(root);
 } else {
   roots.push(path.join(root, "scripts/engine-qualify.js"));
-  for (const dir of ["evals", "scripts"]) {
-    for (const name of fs.readdirSync(path.join(root, dir))) {
-      if (/^foreman-.*\.js$/u.test(name)) roots.push(path.join(root, dir, name));
-    }
+  for (const name of fs.readdirSync(path.join(root, "evals"))) {
+    if (/^foreman-.*\.js$/u.test(name)) roots.push(path.join(root, "evals", name));
+  }
+  // Every mirrored top-level script is a root: a script synced into the mirror must load there (permission-prompt-watch.js
+  // shipped requiring ../hooks libs the mirror did not carry).
+  for (const name of fs.readdirSync(path.join(root, "scripts"))) {
+    if (/\.(js|cjs)$/u.test(name) && !/\.test\.js$/u.test(name)) roots.push(path.join(root, "scripts", name));
   }
 }
 for (const file of roots) {
@@ -94,6 +102,11 @@ assert_contains "$OUT" "scanned" "the closure scan ran"
 
 LOAD="$(cd "$REPO_ROOT/platforms/codex/plugin" && node -e 'require("./scripts/engine-qualify.js"); console.log("mirror engine-qualify loaded")' 2>&1)"
 assert_contains "$LOAD" "mirror engine-qualify loaded" "the mirrored engine-qualify.js loads"
+
+# The mirrored permission watcher must actually run from the mirror (no argv = usage, exit 2; a missing lib would throw, exit 1).
+WATCH_RC=0
+(cd "$REPO_ROOT/platforms/codex/plugin" && node scripts/permission-prompt-watch.js </dev/null >/dev/null 2>&1) || WATCH_RC=$?
+assert_exit_code "$WATCH_RC" "2" "the mirrored permission-prompt-watch.js loads (usage exit, not a missing-module crash)"
 
 # Negative controls: the same scanner, pointed at a fixture root (second argument).
 FIX_REAL="$(mktemp -d)"

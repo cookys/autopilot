@@ -495,8 +495,8 @@ cat << 'EOF' > "$TEST_TMP/disp_fin1.json"
   "generation": 1,
   "findings": [
     { "id": "f1", "disposition": "refuted", "rationale": "not a bug" },
-    { "id": "f2", "disposition": "refuted", "rationale": "intended behavior" },
-    { "id": "f3", "disposition": "refuted", "rationale": "already guarded" }
+    { "id": "f2", "disposition": "refuted", "rationale": "intended behavior", "refutation_kind": "false_claim", "evidence": "bar.js:3 returns early" },
+    { "id": "f3", "disposition": "refuted", "rationale": "already guarded", "refutation_kind": "unreachable", "evidence": "baz.js:7 guards the only caller" }
   ]
 }
 EOF
@@ -893,7 +893,7 @@ cat << 'EOF' > "$TEST_TMP/disp_fin3.json"
   "phase": "p_fin3",
   "generation": 1,
   "findings": [
-    { "id": "f_crit", "disposition": "refuted", "rationale": "false positive" }
+    { "id": "f_crit", "disposition": "refuted", "rationale": "false positive", "refutation_kind": "false_claim", "evidence": "parser.js:12 checks null first" }
   ]
 }
 EOF

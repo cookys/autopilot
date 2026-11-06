@@ -12,8 +12,11 @@ No trust machinery (no hash chains, event ledgers, witness receipts, attestation
 
 Depth-0 evaluates all candidate findings emitted by the heterogeneous review panel. Each finding receives a disposition:
 - `verified`: finding is confirmed and valid.
-- `refuted`: finding is rejected with a concrete rationale.
-- `deferred`: non-blocker deferred with explicit justification.
+- `refuted`: the finding is wrong. For a Critical or Major finding it carries `"refutation_kind": "false_claim"` (the code does not do what the finding says) or `"unreachable"` (no input or state reaches it) and a non-empty `"evidence"` (file:line, a command with its output, or a test). "Not blocking", "low impact" and "follow-up" are not kinds: a true finding is never refuted.
+- `downgraded` (Critical or Major findings only): the finding is true but its impact is smaller than reported. Fields: `"to": "Minor" | "Suggestion"`, `"evidence_kind": "unreachable" | "impact_bounded"`, a non-empty `"evidence"`. It is recorded as that lower severity from then on and no longer blocks.
+- `deferred`: non-blocker deferred with explicit justification (not allowed for a Critical or Major finding).
+
+Gate rule A as a machine check: a Critical or Major finding leaves the gate only as `verified` (then a later generation's resolution closes it), `refuted` with kind and evidence, or `downgraded` with its fields. `finalize` exits 1, naming the finding id, when a Critical or Major disposition lacks these fields; `check-phase-review-receipt.js` fails the same for every generation whose chain entry has `finalized_at` at or after the cutover `2026-11-06T02:30:00.000Z` (`MAJOR_DISPOSITION_CUTOVER` in `scripts/lib/review-chain-derive.js`). Generations finalized earlier are not re-judged.
 
 A good disposition rationale for code-review findings:
 - Ties the refutation to concrete code evidence, tests, runtime semantics, or existing invariants rather than bare assertion.

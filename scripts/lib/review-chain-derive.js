@@ -68,6 +68,55 @@ function getFromGenMap(mapOrObj, gen) {
   return [];
 }
 
+// Gate rule A as a machine check (G14). A Critical or Major finding leaves the gate in exactly one of
+// three ways: verified (then a later generation's resolution closes it), refuted as a FALSE finding
+// (refutation_kind false_claim | unreachable, plus evidence), or formally downgraded to Minor or
+// Suggestion (to, evidence_kind unreachable | impact_bounded, plus evidence). "Not blocking",
+// "low impact" and "follow-up" are not refutation kinds: a true finding with small impact is
+// downgraded with evidence, never refuted. Minor and Suggestion findings keep the old rules.
+// Chains whose generation was finalized before MAJOR_DISPOSITION_CUTOVER are not re-judged
+// (history is not re-opened); finalize stamps finalized_at, and the receipt keys on it.
+const MAJOR_DISPOSITION_CUTOVER = '2026-11-06T02:30:00.000Z';
+const REFUTATION_KINDS = ['false_claim', 'unreachable'];
+const DOWNGRADE_TO = ['Minor', 'Suggestion'];
+const DOWNGRADE_EVIDENCE_KINDS = ['unreachable', 'impact_bounded'];
+
+function nonEmpty(v) { return typeof v === 'string' && v.trim().length > 0; }
+
+// Returns an error string for a Major+ finding whose disposition does not satisfy rule A, else null.
+function majorDispositionError(finding, disp) {
+  if (!finding || (finding.severity !== 'Critical' && finding.severity !== 'Major')) return null;
+  const id = finding.id;
+  const d = disp && disp.disposition;
+  if (d === 'verified') return null;
+  if (d === 'refuted') {
+    if (!REFUTATION_KINDS.includes(disp.refutation_kind)) {
+      return `${finding.severity} finding ${id} is refuted without refutation_kind ${REFUTATION_KINDS.join(' | ')} ("not blocking" / "low impact" are not refutations; a true finding with small impact needs disposition "downgraded" with evidence)`;
+    }
+    if (!nonEmpty(disp.evidence)) return `${finding.severity} finding ${id} is refuted without non-empty evidence (file:line, a command and its output, or a test)`;
+    return null;
+  }
+  if (d === 'downgraded') {
+    if (!DOWNGRADE_TO.includes(disp.to)) return `${finding.severity} finding ${id} is downgraded without "to" ${DOWNGRADE_TO.join(' | ')}`;
+    if (!DOWNGRADE_EVIDENCE_KINDS.includes(disp.evidence_kind)) return `${finding.severity} finding ${id} is downgraded without evidence_kind ${DOWNGRADE_EVIDENCE_KINDS.join(' | ')}`;
+    if (!nonEmpty(disp.evidence)) return `${finding.severity} finding ${id} is downgraded without non-empty evidence`;
+    return null;
+  }
+  return `${finding.severity} finding ${id} has disposition '${d}'; a Critical or Major finding must be verified, refuted (refutation_kind + evidence) or downgraded (to + evidence_kind + evidence)`;
+}
+
+// A downgraded non-Major finding is not a downgrade: only Major+ may use the form.
+function downgradeMisuseError(finding, disp) {
+  if (disp && disp.disposition === 'downgraded' && finding && finding.severity !== 'Critical' && finding.severity !== 'Major') {
+    return `finding ${finding.id} is ${finding.severity}; "downgraded" applies only to a Critical or Major finding`;
+  }
+  return null;
+}
+
+function enforcedAfterCutover(chainEntry) {
+  return !!(chainEntry && typeof chainEntry.finalized_at === 'string' && chainEntry.finalized_at >= MAJOR_DISPOSITION_CUTOVER);
+}
+
 function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGeneration, addendumResolutions) {
   const addenda = Array.isArray(addendumResolutions) ? addendumResolutions.filter((r) => r && typeof r.id === 'string') : [];
   const chain = Array.isArray(chainEntries) ? [...chainEntries] : [];
@@ -171,7 +220,7 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
           generation: gen,
         });
       } else {
-        // If it was refuted or deferred in this generation, it is not an active verified finding
+        // If it was refuted, downgraded or deferred in this generation, it is not an active verified finding
         activeVerified.delete(f.id);
       }
     }
@@ -220,3 +269,7 @@ function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGe
 
 module.exports = deriveReceiptState;
 module.exports.deriveReceiptState = deriveReceiptState;
+module.exports.majorDispositionError = majorDispositionError;
+module.exports.downgradeMisuseError = downgradeMisuseError;
+module.exports.enforcedAfterCutover = enforcedAfterCutover;
+module.exports.MAJOR_DISPOSITION_CUTOVER = MAJOR_DISPOSITION_CUTOVER;

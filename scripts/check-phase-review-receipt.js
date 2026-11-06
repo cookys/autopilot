@@ -30,6 +30,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const deriveReceiptState = require('./lib/review-chain-derive');
+const { majorDispositionError, downgradeMisuseError, enforcedAfterCutover } = deriveReceiptState;
 
 const { EXCLUDE_ALLOWLIST, isPathspecAllowed, loadConsumerExcludeAllowlist } = require('./lib/exclude-allowlist');
 const reviewPackets = require('./lib/review-packets');
@@ -1168,7 +1169,7 @@ function validateModeA(flags, opts = {}) {
         process.exit(1);
       }
 
-      const allowedDispositions = new Set(['verified', 'refuted', 'deferred']);
+      const allowedDispositions = new Set(['verified', 'refuted', 'deferred', 'downgraded']);
       const dispList = dispData.findings;
       const dispMap = new Map();
       for (let j = 0; j < dispList.length; j++) {
@@ -1194,6 +1195,19 @@ function validateModeA(flags, opts = {}) {
           process.exit(1);
         }
         dispMap.set(d.id, d);
+      }
+
+      // Gate rule A (G14): every Critical/Major finding of a generation finalized after the cutover is verified,
+      // refuted with kind + evidence, or downgraded with its fields. Earlier generations are not re-judged.
+      if (enforcedAfterCutover(entry)) {
+        for (const [fid, fnd] of findingsMap) {
+          const d = dispMap.get(fid);
+          const bad = d && (majorDispositionError(fnd, d) || downgradeMisuseError(fnd, d));
+          if (bad) {
+            console.error(`Generation ${entry.generation}: ${bad}`);
+            process.exit(1);
+          }
+        }
       }
 
       // Check matching IDs: one entry per finding id, no extras, none missing

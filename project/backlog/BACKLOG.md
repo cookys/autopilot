@@ -1,6 +1,6 @@
 # autopilot — BACKLOG
 
-<!-- next-id: BL-0406 -->
+<!-- next-id: BL-0412 -->
 
 One entry = one index row per [`references/backlog-entry.md`](../../references/backlog-entry.md); evidence lives at
 the row's `Pointer` (a plan, a project, or a sidecar under `docs/backlog/`). Gate:
@@ -21,7 +21,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Origin**: self
 - **Problem**: 還不知道真實 dispatch 下 json 與 stream-json 兩種輸出格式的 result 位元組是否一致；這是 G40 agent lane 被動觀測的前提。要用真實 dispatch 量測，PM 目前停車中。
 - **Impact**: 前提沒確認就做被動觀測，兩種格式若不一致，觀測到的結果會對不上。
-- **Trigger**: 3.0.0 之後；Tasks 0-3 已於 05a70bf82 合併；Tasks 4-5 停在 operator card d-2a19fdb5，等已註冊的 alias；PM 以 bl-ap-sj45 追蹤
+- **Trigger**: 3.0.0 之後；Tasks 0-3 已於 05a70bf82 合併；Tasks 4-5（約 70 次 haiku 呼叫）等已註冊的 alias（d-2a19fdb5）；兩層都 PASS 才切 G40 P2 旗標；PM 追蹤 bl-ap-sj45
 - **Trigger-Type**: owner
 - **Effort**: S
 - **Source**: PM 2026-11-04 ordering message
@@ -1155,7 +1155,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: PM（pm--claude）
 - **Report**: 2026-11-05 fleet
 - **Reply**: none
-- **Problem**: 全套件並行時有四支測試紅、單獨跑卻綠，是同機互相干擾。另有一支付費批次停止測試單獨跑六次紅一次，哪一條斷言紅還沒查出來。
+- **Problem**: 全套件並行時有四支測試紅、單獨跑卻綠，是同機互相干擾。另有一支付費批次停止測試偶發紅，13ac151f0 全套件又見 runs-watch-start 只在並行池紅、單獨綠。
 - **Impact**: 完整套件會出現假紅，要靠人工單獨重跑才能判斷。
 - **Trigger**: PM 派工
 - **Trigger-Type**: owner
@@ -1202,7 +1202,7 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Trigger**: 角色成員機制的計畫完成之後
 - **Trigger-Type**: event
 - **Effort**: S
-- **Source**: PM 2026-11-03 request
+- **Source**: PM 2026-11-03 request；fleet 01M6FA4D51Q47AGXJR4ACY94TP 處置：排在 role-members 之後
 - **Pointer**: project/backlog/seat-name-autocomplete.md
 
 ### G29：owner 端的派工與處理迴圈要寫一份薄計畫
@@ -1213,10 +1213,116 @@ residual debt in `.claude/backlog-debt.json` ratchets down only). Migrated 2026-
 - **Reporter**: PM（pm--claude）
 - **Report**: 2026-11-05 fleet
 - **Reply**: none
-- **Problem**: owner 要改用艦隊子席位派工，而不是 Agent 工具；喚醒後依驗收判斷、有少量重試額度、用完就升級給 PM；並要有子樹層級的進度顯示。團隊章程第一版和艦隊任務租約都沒涵蓋這些。
+- **Problem**: owner 端要改用艦隊子席位派工、依驗收判斷並有重試額度、用完升級給 PM，另要子樹進度顯示。第 3 項已轉到 fleet 的 backlog，其餘關掉。
 - **Impact**: 不做的話，owner 端的派工、驗收與升級仍靠各 session 自行處理，進度也看不到。
 - **Trigger**: 角色成員計畫完成之後
 - **Trigger-Type**: event
 - **Effort**: M
-- **Source**: PM go-ledger G29, ruling 2026-11-05
+- **Source**: PM go-ledger G29；fleet 01M6FBQGQEMB5E513JSG7957WD 處置：第 1、2、4 項在 role-members 後寫精簡 owner 端計畫
 - **Pointer**: project/backlog/g29-owner-dispatch-handling-loop.md
+
+### 計畫回執要能收下超過世代上限後的補錄
+- **Id**: BL-0406
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 01M6NMTWQJPNV799ZQYD71MSNW
+- **Reply**: none
+- **Problem**: 計畫審查超過世代上限後，回執檢查不收補錄，只能靠 PM 裁定頂替。程式審查已有補錄選項。11 月 5 日發生兩次。
+- **Impact**: 每次超過上限都靠人工裁定，回執閘門形同缺席。
+- **Trigger**: leadbase 完成之後
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: PM go 2026-11-05 (fleet 01M6NMTWQJPNV799ZQYD71MSNW)
+- **Pointer**: project/backlog/plan-receipt-post-cap-ledger.md
+
+### mods 小改動讓受影響套件挑到一半以上
+- **Id**: BL-0407
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: self
+- **Problem**: 只改 mods/roundtable 十個檔案，受影響套件挑出 496/789，等於每次都要跑全套。還不知道 mods 的變更為何擴散這麼廣。
+- **Impact**: 小改動也觸發全套規則，浪費時間。與 BL-0391、BL-0410 同屬挑選準確度。
+- **Trigger**: PM 派工
+- **Trigger-Type**: owner
+- **Effort**: S
+- **Source**: autopilot depth-0, 2026-11-06 (rtchat)
+- **Pointer**: project/backlog/affected-suites-accuracy-2026-11-06.md
+
+### G39：不用託管 CI（範圍 a、b）
+- **Id**: BL-0408
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 01M6FJW5Z8Q6N76XPQ05HKJAQN
+- **Reply**: none
+- **Problem**: 操作員決定不用託管 CI，但還留著兩個託管 workflow 和 Pages 設定。範圍 a、b 要等各工作線清空後再做。
+- **Impact**: 不做的話，違反操作員決定的託管設定還在。
+- **Trigger**: 各 lane 清空之後
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: PM fleet 01M6FJW5Z8Q6N76XPQ05HKJAQN
+- **Pointer**: project/backlog/g39-no-hosted-ci.md
+
+### G25：角色套件實驗併入 rolekit 計畫後關掉
+- **Id**: BL-0409
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 01M6FAH6W29MQH5ATPC8E080MK
+- **Reply**: none
+- **Problem**: 角色套件實驗的內容要併進 rolekit 計畫的附錄，併完這一條就關掉。附錄由 rolekit lane 寫，這裡只記處置。
+- **Impact**: 不記的話，實驗內容散在兩處，容易漏。
+- **Trigger**: rolekit lane 寫完附錄
+- **Trigger-Type**: event
+- **Effort**: XS
+- **Source**: PM fleet 01M6FAH6W29MQH5ATPC8E080MK
+- **Pointer**: project/backlog/g25-role-bundle-into-rolekit.md
+
+### 受影響套件漏掉被改審查腳本自己的套件與新的計畫路徑測試
+- **Id**: BL-0410
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: peer
+- **Reporter**: PM（pm--claude）
+- **Report**: 01M6HB7DK2BGZEZHT69R4DQX7C
+- **Reply**: none
+- **Problem**: 受影響套件挑選漏掉被改動的審查腳本自己的套件，也漏掉新的計畫路徑測試，有假綠風險。結果閘門只認受影響套件的紀錄，認不得全套紀錄。
+- **Impact**: 漏挑的套件若紅，合併時看不到。
+- **Trigger**: WIP 空出來即可；排在 bl-ap-streamjson 之前
+- **Trigger-Type**: ready
+- **Effort**: M
+- **Source**: PM fleet 01M6HB7DK2BGZEZHT69R4DQX7C
+- **Pointer**: project/backlog/affected-suites-accuracy-2026-11-06.md
+
+### A3 要求每個會 commit 的帳號都有 hippo，但有兩類帳號沒有
+- **Id**: BL-0411
+- **Status**: open
+- **Since**: 2026-11-06
+- **Origin**: peer
+- **Reporter**: hippo
+- **Report**: 01M6HXPAF9ZTF59XKH68H8HR3A
+- **Reply**: none
+- **Problem**: A3.7 要求每個會 commit 的帳號都裝 hippo，但 Windows 帳號（操作員 A1）和公司主機帳號（d-10ab93ef）都沒有。
+- **Impact**: 條件照寫會讓這兩類帳號永遠過不了，或被迫繞過。
+- **Trigger**: A3 規劃時
+- **Trigger-Type**: event
+- **Effort**: S
+- **Source**: hippo fleet 01M6HXPAF9ZTF59XKH68H8HR3A item 4
+- **Pointer**: project/backlog/a3-hippo-account-exemption.md
+
+### G40 探針政策依供應商分開建置
+- **Id**: BL-0375
+- **Status**: open
+- **Since**: 2026-11-04
+- **Origin**: self
+- **Problem**: 額度探針要依各供應商分別訂政策。Claude 只有定期探測要等實驗結果，隨選探測不用等。這條是 BL-0372 之後的建置。
+- **Impact**: 不做的話，額度探針第四階段仍關著。
+- **Trigger**: BL-0372 兩層都 PASS 並切 G40 P2 旗標之後
+- **Trigger-Type**: event
+- **Effort**: M
+- **Source**: operator d-2d6a93aa via PM, 2026-11-04
+- **Pointer**: project/plans/2026-11-03-g40-agent-lane-quota.md

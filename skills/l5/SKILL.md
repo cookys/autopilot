@@ -68,6 +68,7 @@ Hard rules:
   that final fresh, digest-valid receipt and `can_close=true`; lifecycle `zero_residue=true` alone
   is not task completion.
 - Review is DECORRELATED: the reviewer is a different engine family than the implementer.
+- **Visual work gets a stronger implementer floor** (PM fleet 01M6PXXS16DY81G72PGGM49E6K): special 3D or visual work (3D scenes, shaders, sprite or visual design, anything judged by how it looks) uses an implementer of at least gemini-4-argon-high, claude-sonnet-5-5, gpt-6-astra or claude-opus-5-5, never a cheaper rung. Tests alone cannot check it, and weaker implementers failed it.
 - `--solo` → the `/l3` inline engine (also the degradation on `precondition_failed`).
 - Only admitted graph nodes become implementation tasks. Plan phase headings, modules, tests,
   review seats, and retries stay inside the owning deliverable and gate-attempt budget.

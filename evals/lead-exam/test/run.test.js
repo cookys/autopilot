@@ -37,7 +37,9 @@ test('a live run without --kind/--model is a usage error (exit 2) and calls noth
   assert.strictEqual(r.status, 2);
 });
 
-test('a round that exceeds its timeout is blank and flagged, later rounds still run', async () => {
+// bounded: if the timeout were removed this call never settles, and the test's own 5 s limit turns that into a failure
+// instead of a hang (the g1 negative control hung until the outer 170 s limit).
+test('a round that exceeds its timeout is blank and flagged, later rounds still run', { timeout: 5000 }, async () => {
   const gold = fx.goldOutputs('t1', items);
   const rec = await runExam({
     items, seed: 't1', name: 'slow', model: 'stub', roundTimeoutMs: 30,

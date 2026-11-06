@@ -10,7 +10,9 @@ const PROVIDER = path.join(__dirname, '..', '..', 'scripts', 'qualification-revi
 
 function estimateTokens(s) { return Math.ceil(String(s || '').length / 4); }
 
-// opts: {kind, model, timeoutMs, passEnv:{NAME:value}, providerBin?, cliBin?}
+// opts: {kind, model, timeoutMs, passEnv:{NAME:value}, providerBin?, cliBin?, signal?, graceMs?}
+// The provider runs in its own process group. On abort (or the fallback timer) the whole group gets SIGTERM, then
+// SIGKILL after graceMs, so the provider's own model CLI child dies with it instead of being left running.
 function callProvider(prompt, opts) {
   const env = {
     PATH: process.env.PATH || '',
@@ -27,14 +29,27 @@ function callProvider(prompt, opts) {
   };
   const started = Date.now();
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [opts.providerBin || PROVIDER], { env, stdio: ['pipe', 'pipe', 'pipe'] });
-    let out = ''; let err = ''; let done = false;
-    const kill = setTimeout(() => { if (!done) { child.kill('SIGKILL'); } }, opts.timeoutMs + 15000);
+    const child = spawn(process.execPath, [opts.providerBin || PROVIDER], { env, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
+    let out = ''; let err = ''; let done = false; let aborted = false;
+    const killGroup = (sig) => { try { process.kill(-child.pid, sig); } catch { /* group already gone */ } };
+    const graceMs = opts.graceMs === undefined ? 2000 : opts.graceMs;
+    let hardKill;
+    const stop = () => {
+      if (aborted) return;
+      aborted = true;
+      killGroup('SIGTERM');
+      hardKill = setTimeout(() => killGroup('SIGKILL'), graceMs);
+    };
+    if (opts.signal) { if (opts.signal.aborted) stop(); else opts.signal.addEventListener('abort', stop, { once: true }); }
+    const kill = setTimeout(stop, opts.timeoutMs + 15000);
     child.stdout.on('data', (b) => { out += b; });
     child.stderr.on('data', (b) => { err += b; });
     child.on('error', (e) => { done = true; clearTimeout(kill); reject(e); });
     child.on('close', (code) => {
       done = true; clearTimeout(kill);
+      // the provider is gone; whatever it left in its group must go too (a late SIGKILL still fires from hardKill)
+      killGroup(aborted ? 'SIGKILL' : 'SIGTERM');
+      if (hardKill) clearTimeout(hardKill);
       const ms = Date.now() - started;
       if (code !== 0) { reject(Object.assign(new Error(`provider exit ${code}: ${err.trim().slice(0, 300)}`), { ms })); return; }
       let parsed;

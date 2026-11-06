@@ -23,7 +23,7 @@ const { gradeExam } = require('./grade');
 const ROUND_TIMEOUT_MS = 4 * 60 * 1000;
 const HARD_STOP_MS = 24 * 60 * 1000;
 
-// call: async (prompt, round) => {text, ms, in_tokens_est, out_tokens_est}
+// call: async (prompt, round, {timeoutMs, signal}) => {text, ms, in_tokens_est, out_tokens_est}
 async function runExam(opts) {
   const items = opts.items || lib.loadItems();
   const now = opts.now || Date.now;
@@ -37,13 +37,17 @@ async function runExam(opts) {
     if (now() - started >= hardStop) {
       outputs.push(''); rec.timed_out = true; rec.error = 'hard stop reached before this round'; rounds.push(rec); continue;
     }
+    const remaining = hardStop - (now() - started);
+    const timeoutMs = Math.min(roundTimeout, remaining);
     const prompt = lib.buildPrompt(items, opts.seed, r, outputs);
     rec.prompt_chars = prompt.length;
+    rec.timeout_ms = timeoutMs;
+    const ctl = new AbortController();
     let timer;
     try {
       const res = await Promise.race([
-        opts.call(prompt, r),
-        new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error('round timeout'), { timeout: true })), roundTimeout); }),
+        opts.call(prompt, r, { timeoutMs, signal: ctl.signal }),
+        new Promise((_, rej) => { timer = setTimeout(() => { ctl.abort(); rej(Object.assign(new Error('round timeout'), { timeout: true })); }, timeoutMs); }),
       ]);
       outputs.push(res.text); rec.ms = res.ms; rec.in_tokens_est = res.in_tokens_est; rec.out_tokens_est = res.out_tokens_est;
     } catch (e) {
@@ -91,7 +95,7 @@ async function main() {
     let dir = a['config-dir'];
     if (!dir) { dir = seedConfigDir(os.tmpdir()); cleanupDir = dir; }
     const passEnv = { CLAUDE_CONFIG_DIR: dir };
-    call = (prompt) => callProvider(prompt, { kind: a.kind, model: a.model, timeoutMs: ROUND_TIMEOUT_MS, passEnv });
+    call = (prompt, _round, ctl) => callProvider(prompt, { kind: a.kind, model: a.model, timeoutMs: ctl.timeoutMs, signal: ctl.signal, passEnv });
     name = a.name || a.model; model = a.model;
   }
   let record;

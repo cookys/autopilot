@@ -91,4 +91,39 @@ T6="$TEST_TMP/fx6"; new_fixture "$T6"
 node "$REAPER" --root "$T6/scratch" --repo "$T6/main" --apply < /dev/null > /dev/null
 assert_file_exists "$T6/scratch/unreach" "real script keeps the unreachable worktree (green side of the control)"
 
+# g2: live cwds are re-read before each removal (a process that enters a candidate after classification keeps it)
+T7="$TEST_TMP/fx7"; new_fixture "$T7"; mkdir -p "$T7/proc"
+cat > "$T7/hook.sh" <<HOOK
+mkdir -p "$T7/proc/4242"
+ln -s "$T7/scratch/merged" "$T7/proc/4242/cwd"
+HOOK
+REAP_SCRATCH_PROC="$T7/proc" REAP_SCRATCH_HOOK_AFTER_CLASSIFY="$T7/hook.sh" node "$REAPER" --root "$T7/scratch" --repo "$T7/main" --apply < /dev/null > /dev/null
+assert_file_exists "$T7/scratch/merged" "worktree entered after classification survives --apply"
+assert_file_absent "$T7/scratch/ignored" "other REAP candidates are still removed"
+
+# g2: unreadable cwd is an inspection failure, not "no process"
+T8="$TEST_TMP/fx8"; new_fixture "$T8"; mkdir -p "$T8/proc/77" "$T8/proc/78"
+printf 'EACCES\n' > "$T8/proc/77/cwd.err"
+printf 'ENOENT\n' > "$T8/proc/78/cwd.err"
+OUT=$(REAP_SCRATCH_ASSUME_NO_PRIVATE_ANCESTOR=1 REAP_SCRATCH_PROC="$T8/proc" node "$REAPER" --root "$T8/scratch" --repo "$T8/main" --apply 2>&1 < /dev/null)
+REAP_SCRATCH_ASSUME_NO_PRIVATE_ANCESTOR=1 REAP_SCRATCH_PROC="$T8/proc" node "$REAPER" --root "$T8/scratch" --repo "$T8/main" --apply > /dev/null 2>&1 < /dev/null
+RC=$?
+assert_eq "$([ "$RC" -ne 0 ] && echo refused)" refused "unreadable cwd without a 0700 ancestor refuses --apply"
+assert_file_exists "$T8/scratch/merged" "refused apply removed nothing"
+assert_contains "$OUT" "no ancestor of root is mode 0700" "refusal says why"
+T9="$TEST_TMP/fx9"; new_fixture "$T9"; mkdir -p "$T9/proc/77"; printf 'EPERM\n' > "$T9/proc/77/cwd.err"
+chmod 700 "$T9"
+OUT=$(REAP_SCRATCH_PROC="$T9/proc" node "$REAPER" --root "$T9/scratch" --repo "$T9/main" --apply < /dev/null)
+assert_file_absent "$T9/scratch/merged" "0700 ancestor owned by the caller lets --apply proceed"
+assert_contains "$OUT" "is mode 0700 owned by the caller" "output reports the rule that applied"
+
+# negative control: re-read removed -> the late-entering process no longer protects the worktree
+MUT2="$TEST_TMP/mutant2.js"
+sed 's/const now = readLive();.*/const now = { failures: [], names: live };/' "$REAPER" > "$MUT2"
+T10="$TEST_TMP/fx10"; new_fixture "$T10"; mkdir -p "$T10/proc"
+printf 'mkdir -p "%s/proc/4242"\nln -s "%s/scratch/merged" "%s/proc/4242/cwd"\n' "$T10" "$T10" "$T10" > "$T10/hook.sh"
+REAP_SCRATCH_PROC="$T10/proc" REAP_SCRATCH_HOOK_AFTER_CLASSIFY="$T10/hook.sh" node "$MUT2" --root "$T10/scratch" --repo "$T10/main" --apply < /dev/null > /dev/null
+if [ -d "$T10/scratch/merged" ]; then fail "negative control: stale-snapshot mutant kept the worktree (test cannot detect the break)"
+else __TEST_PASS_COUNT=$((__TEST_PASS_COUNT + 1)); fi
+
 finalize_test

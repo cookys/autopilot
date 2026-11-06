@@ -415,7 +415,7 @@ assert_eq "$c_small" "nocut" "budget: a small note is not marked cut"
 cp "$REPO_ROOT/scripts/lib/autocompact-window.js" "$TEST_TMP/autocompact-window.js"
 cp "$REPO_ROOT/scripts/lib/runtime-paths.js" "$TEST_TMP/runtime-paths.js" # compaction-handoff.js requires it (BL-0336); the mutants live in $TEST_TMP
 sed_mutant "$LIB" "$TEST_TMP/mut-fixed.js" 's/model: 4000 }/model: 2200 }/'
-sed_mutate "$TEST_TMP/mut-fixed.js" 's/Math.max(SECTION_CAPS.model, BODY_CAP - fixed - othersLen())/SECTION_CAPS.model/'
+sed_mutate "$TEST_TMP/mut-fixed.js" 's/Math.max(SECTION_CAPS.model, bodyCap - fixed - othersLen())/SECTION_CAPS.model/'
 read -r m_mut _ _ <<< "$(measure "$TEST_TMP/mut-fixed.js" 12000 full)"
 if [ "$m_mut" -lt 3500 ]; then assert_eq 1 1 "negative control: fixed 2200 cap carries only $m_mut bytes (budget test goes red)"; else assert_eq "$m_mut" "<3500" "negative control: fixed cap not red"; fi
 

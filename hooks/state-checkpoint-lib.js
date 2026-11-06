@@ -225,7 +225,73 @@ function compactionStateName(sessionId) {
   return `compaction-state-${sessionId}.md`;
 }
 
+// === Unanswered inbound fleet messages ===
+// A fleet message reaches the session as a user turn whose text holds
+//   <channel source="fleet" from="ns/courier/member@uuid" message_id="01M..." kind="chat|dispatch" ...>body</channel>
+// It counts as answered once a LATER tool call names its message_id: a fleet reply or task_result (message_id) or a
+// send (reply_to). Pure: takes the transcript text, returns the unanswered ones oldest first. Body text is data.
+const ANSWER_TOOL = /^mcp__(?:[\w-]+__)?fleet__(reply|task_result|send)$/;
+const CHANNEL_OPEN = /<channel\s+([^>]*)>/g;
+const INBOUND_FIRST_LINE_MAX = 20; // bytes; 8 entries (one dispatch) must fit INBOUND_BUDGET 1024
+
+function escapeInboundText(s) {
+  return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function channelAttrs(attrText) {
+  const attrs = {};
+  const re = /([A-Za-z_][\w-]*)="([^"]*)"/g;
+  let m;
+  while ((m = re.exec(attrText))) attrs[m[1]] = m[2];
+  return attrs;
+}
+
+function extractUnansweredChannels(raw) {
+  const pending = new Map(); // message_id -> item, insertion order = arrival order
+  for (const line of String(raw || '').replace(/\r\n?/g, '\n').split('\n')) {
+    if (!line.trim() || Buffer.byteLength(line, 'utf8') > MAX_LINE_BYTES) continue;
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    const content = rec && rec.message && rec.message.content;
+    if (rec && rec.type === 'user') {
+      const texts = typeof content === 'string' ? [content]
+        : Array.isArray(content) ? content.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text) : [];
+      for (const text of texts) {
+        // A block runs from its opening tag to the next opening tag (or the end of the turn); a body that itself
+        // contains </channel> must not end it early, so only the final closing tag is stripped.
+        const opens = [...text.matchAll(CHANNEL_OPEN)];
+        opens.forEach((m, k) => {
+          const a = channelAttrs(m[1]);
+          if (a.source !== 'fleet' || !a.message_id) return;
+          const end = k + 1 < opens.length ? opens[k + 1].index : text.length;
+          const inner = text.slice(m.index + m[0].length, end).replace(/\s*<\/channel>\s*$/, '');
+          const first = (inner.split('\n').map((l) => l.trim()).find((l) => l) || '');
+          pending.delete(a.message_id);
+          pending.set(a.message_id, {
+            message_id: a.message_id, from: (a.from || '').replace(/@[^@/]*$/, ''), kind: a.kind || '', disposition: a.disposition || '',
+            reply_to: a.reply_to || '', first_line: first,
+          });
+        });
+      }
+    } else if (rec && rec.type === 'assistant' && Array.isArray(content)) {
+      for (const b of content) {
+        if (!b || b.type !== 'tool_use' || typeof b.name !== 'string' || !b.input) continue;
+        const t = ANSWER_TOOL.exec(b.name);
+        if (!t) continue;
+        const id = t[1] === 'send' ? b.input.reply_to : b.input.message_id;
+        if (typeof id === 'string') pending.delete(id);
+      }
+    }
+  }
+  return [...pending.values()].map((it) => {
+    const cut = truncateUtf8Safe(it.first_line, INBOUND_FIRST_LINE_MAX);
+    return { ...it, first_line: `${cut.text}${cut.truncated ? '…' : ''}` };
+  });
+}
+
 module.exports = {
+  extractUnansweredChannels,
+  escapeInboundText,
   // Constants
   PER_TURN_BUDGET,
   THINKING_BLOCK_CAP,

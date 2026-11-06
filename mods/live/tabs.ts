@@ -349,8 +349,7 @@ function decideCards(u: UiCtx, ctx: PaneCtx, snap: LiveSnapshot): PaneLine[] {
   shown.forEach(({ d, key }, i) => {
     const num = batch === undefined ? i + 1 : batch.num[key]
     if (batch !== undefined && batch.ans[key] !== undefined) { // answered: stays in place, greyed (dim theme text only), shows the chosen answer, no Button and no field so it takes no focus
-      const grey = (ls: PaneLine[]): PaneLine[] => ls.map(l => ({ ...l, segs: (l.segs ?? []).map(s => ({ ...s, dim: true, bold: false })) }))
-      out.push(...grey(ui.cardTitle(u, ui.stateOf('task', 'PENDING'), num + '. ' + batch.q[key], undefined, { fact: F, sent: true })))
+      out.push(...ui.cardTitle(u, ui.stateOf('task', 'PENDING'), num + '. ' + batch.q[key], undefined, { fact: F, sent: true, grey: true }))
       out.push(...ui.cardRow(u, t('decide.k_answer'), batch.ans[key], { fact: F, subtle: true }))
       out.push(ui.blank())
       return

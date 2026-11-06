@@ -41,6 +41,10 @@ import { atom, read, update } from 'claude-code'
 import type { AdvisoryTracker } from './advisories'
 import { forgeFit, GLYPHS, SHOW_PRESS, showTarget, stateOf } from './ui'
 import type { ForgeSegment } from './ui'
+import { NO_BATCH, answerPlan, answerOf, batchSync } from './decidebatch'
+import type { DecideBatch } from './decidebatch'
+import { barStrip, decideTabLines } from './tabs'
+
 import { BandBar, BarRule, barContent, decideContent, speedContent, stackBand } from './band'
 import type { SpeedPlacement } from './band'
 import { KEEP_STEPS, petTag, serverToolMs, STEPS_SHAPE, stepRate, validSteps } from './speed'
@@ -48,7 +52,6 @@ import type { Step } from './speed'
 import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
-import { barStrip } from './tabs'
 import type { BarTabId } from './tabs'
 import { Pane } from './pane'
 import { newScroll, scrollHook } from './scroll'
@@ -57,7 +60,7 @@ import {
   acceptanceToast, autoResidueCount, cleanTargets, normalizeAbs, decideReply, NO_DECIDE, makeRecentTracker, bandLine1, bandView, buildSections, checkEnvelope, sourceMoved, sourcesOf, commonDirOf, commonDirOfGitdir, gitdirOfGitFile, countsOf, ctxShown, ctxText, earliestReceiptMs, executionToast,
   layoutBand, headerText, hhmm, projectName as projectNameOf, isKey, isSectionId, isObject, isPlainRoot, jobOf, longestPrefixKey, mergeDecisions, mergeEnvelopes, mergeJobModels, NO_SECTIONS, PANE_TABS, paneRows, parseJson, portOf, readAttention, readTurn, readDecisions,
   readForeman, readLoadSource, readSpendHistory, hourlySpend, readJobModel, readManifest, readMarker, readQc, readResidue, readReview, readStageWalk, readTasks, reviewLink, sanitizeSid, scopeKeyOf, sessionUsd,
-  slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
+  paneWidth, DEFAULT_PANE_COLS, slotTab, slotUnfolds, truncateToWidth, spendOf, startMsOf, stateText, stalledCount, POINTER_SCHEMA, NO_DETAIL, usd, scanBackground, lastOutputLine, bgLabel, readQuota, readAccount,
 } from './model'
 import type { AccountView, ActivityItem, Counts, DecideState, DecisionsView, RecentGroup, EnvelopeCheck, JobModel, Json, LiveSnapshot, Manifest, PaneTab, SlotId, QuotaWindow, Sources } from './model'
 
@@ -765,6 +768,7 @@ async function decidePress($: EngineInterface, id: string): Promise<void> {
         else picks[m[1]] = k
         return { ...s, picks }
       })
+      await decideAnswered($, m[1])
     } else if (id === 'submit') await sendDecide($)
     else if (id.startsWith('clean:')) await cleanPress($, id)
   } catch (_e) {
@@ -1099,7 +1103,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
     return stackBand(el, bar.node, [BarRule(el, bar.strip, columns, bar.tabsAt, active), ...content])
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: await read($, DECIDE), inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }, decideScroll, await fleetFor($))))
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, async ($, e) => (hostScrollHome($, e.props.scroll, paneTab), decideCols = paneWidth(e.props.bodyColumns), decideSync(await read($, DECIDE)), decideScroll.redraw = () => { void $.ui.invalidate('ui.render') }, Pane($.ui.resolve(e), snapshot, paneTab, (t: PaneTab) => { paneTab = t; $.ui.invalidate('ui.render'); void ringToNext($) }, tr, e.props.bodyColumns, () => { paneTab = nextTab(paneTab); $.ui.invalidate('ui.render') }, expanded, (id: string) => { const set = isSectionId(id) ? folded : expanded; if (!set.delete(id)) set.add(id); $.ui.invalidate('ui.render') }, folded, e.props.scroll ?? null, { state: decideState, batch: decideBatch, inputs: SURFACES_WITH_INPUT.has(e.surface), onPress: (id: string) => { void decidePress($, id) }, onNote: (key: string, value: string) => { void decideNote($, key, value) } }, decideScroll, await fleetFor($))))
 
   // The 待決 tab draws its own scrolling window (scroll.tsx), so the person's scroll keys there move the mod's offset and never reach the engine; every other tab keeps the engine's own
   // scrolling (`next(e)`).
@@ -1108,6 +1112,29 @@ export function registerLive(on: Parameters<Register>[0]): void {
   })
 }
 const decideScroll = newScroll()
+
+// The 待決 batch (decidebatch.ts): the shell holds it between draws. It closes when nothing is pending or the tab is left; an answer moves the focus to the next card and the scroll offset
+// where answerPlan put it, so the next card takes the answered card's place and the list never jumps to the top.
+let decideBatch: DecideBatch = NO_BATCH
+let decideState: DecideState = NO_DECIDE
+let decideCols = DEFAULT_PANE_COLS
+function decideSync(st: DecideState): void {
+  decideState = st
+  decideBatch = paneTab === 'decide' ? batchSync(decideBatch, snapshot === null ? [] : snapshot.pending, st) : NO_BATCH
+}
+async function decideAnswered($: EngineInterface, id: string): Promise<void> {
+  const st = await read($, DECIDE)
+  const pending = snapshot === null ? [] : snapshot.pending
+  decideSync(st)
+  const d = pending.find(x => x.id === id)
+  if (d === undefined || answerOf(d, st) === null || snapshot === null) return
+  const ctx = { t: tr, cols: decideCols, expanded: new Set<string>(), folded: new Set<string>(), decide: { ...st, inputs: false, batch: decideBatch } }
+  const lines = decideTabLines(snapshot, ctx).filter(l => l.bar !== true)
+  const plan = answerPlan({ lines, batch: decideBatch, pending, st, answered: id, offset: decideScroll.offset, room: Math.max(1, decideScroll.room) })
+  decideScroll.offset = plan.offset
+  decideScroll.redraw?.()
+  await $.ui.focus({ requestId: PANE_ID, key: plan.focus }).catch(() => undefined)
+}
 
 // The 待決 tab is exactly the pane's height, so the engine's own window must stand at 0 there; one left scrolled by another tab (the engine keeps one offset per pane) would hide the
 // strip. Best effort: a pane that holds no keys refuses, and the next draw asks again.

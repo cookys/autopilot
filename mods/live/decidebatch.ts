@@ -4,6 +4,7 @@
 // A batch is the run of cards from the first pending question until nothing is pending (or the view is opened again). A card is ANSWERED once an option is picked or it was sent; it then
 // stays where it is, greyed, with the chosen answer, and takes no focus. A card that only wants a typed reply is answered when sent (typing must not move the focus mid-word).
 import { decideDialog, decidePick } from './model'
+import { GLYPHS } from './ui'
 import type { DecideState, LiveDecision, PaneLine } from './model'
 
 export type DecideBatch = {
@@ -28,7 +29,7 @@ export function answerOf(d: LiveDecision, st: DecideState): string | null {
   if (pick !== null) return d.options[pick].label
   if (st.sent[d.id] !== undefined) {
     const note = (st.notes[d.id] ?? '').replace(/\s+/g, ' ').trim()
-    return note === '' ? '✓' : note
+    return note === '' ? GLYPHS.state.done : note
   }
   return null
 }

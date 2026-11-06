@@ -649,11 +649,11 @@ const cardLead = (key: string): Seg[] => [sg('  '), dim(padCells(cutProse(key, C
 const cardHang = (): Seg => sg(' '.repeat(KEY_W))
 // the question line(s): `▲ n. question` with the glyph of its state; the whole text is bold default text (the 'question title' bold use) while the question is open, plain once it is
 // sent. It wraps (never cut, never repeated) and continuation lines start at column 2. `meta` (dim, after ` · `) closes the last line, or takes one of its own when it does not fit.
-export function cardTitle(u: Ctx, s: Stated, title: string, meta: string | undefined, o: { fact: FactId; sent: boolean }): PaneLine[] {
+export function cardTitle(u: Ctx, s: Stated, title: string, meta: string | undefined, o: { fact: FactId; sent: boolean; grey?: boolean }): PaneLine[] {
   const room = u.cols - 1 - 2
   const pieces = wrapPlain(title, room, room)
   const lines = pieces.map((piece, i) => {
-    const body = sg(piece, { role: 'title', ...(o.sent ? {} : { bold: true }) })
+    const body = sg(piece, { role: 'title', ...(o.grey === true ? { dim: true } : o.sent ? {} : { bold: true }) }) // grey: an answered card of the batch, kept in place, dim theme text only
     const lead = i === 0 ? [...stateLead(u, s, { word: false }).segs, sg(' ')] : [sg('  ')]
     return lineOf('item', [...lead, body], { fact: o.fact, hang: 2 })
   })

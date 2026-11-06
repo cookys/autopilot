@@ -5687,41 +5687,36 @@ for (const surface of SURFACES) {
     expect(rows).toContain('            [ ] 不要')
     expect(rows[rows.length - 1]).toBe('  [ 送出（已答 0/3） ]  答案會貼進這個對話送出')
     const buttons = await keysOf($, 'Button')
-    for (const k of ['pick:d-4290499d:0', 'pick:d-4290499d:1', 'pick:d-c24ecfd9:0', 'pick:d-c24ecfd9:1']) expect(buttons, k).toContain(k)
+    for (const k of ['opt:d-4290499d:0', 'opt:d-4290499d:1', 'opt:d-c24ecfd9:0', 'opt:d-c24ecfd9:1']) expect(buttons, k).toContain(k)
     expect(buttons, 'nothing is chosen: the send row is plain text').not.toContain('submit')
     expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d', 'note:d-c24ecfd9', 'note:d-0000free'])
     expect(rows.filter(r => r === ' ').length, 'a blank line is DRAWN after each card (an empty Text takes no row, a one-cell Text does)').toBe(3)
     expect(rows.findIndex(r => r === ' '), 'the first blank closes the first card, after its note field').toBeGreaterThan(rows.findIndex(r => r.startsWith('  補充')))
   })
 
-  test('DECIDE mounted: a press picks, a second press on the same option unpicks, a pick survives the pane being drawn again, and the send Button appears (' + surface + ')', async ($, on) => {
+  test('DECIDE mounted: a press answers the card (greyed, shows the answer, loses its Buttons and field), a pick survives the pane being drawn again, and the send Button appears (' + surface + ')', async ($, on) => {
     decideWorld(on)
     await start($, surface)
-    await act($, 'pick:d-4290499d:1')
-    let rows = await decideRows($)
-    expect(rows).toContain('  選項      [ ] ★ OK')
-    expect(rows).toContain('            [x] 完整顯示')
+    await act($, 'opt:d-4290499d:1')
+    const rows = await decideRows($)
+    expect(rows[1]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來')
+    expect(rows).toContain('  已答      完整顯示')
+    expect(rows).toContain('  選項      [ ] 要') // the next card is still open
     expect(rows[rows.length - 1]).toBe('  [ 送出（已答 1/3） ]  答案會貼進這個對話送出')
-    expect(await keysOf($, 'Button')).toContain('submit')
-    await act($, 'pick:d-4290499d:0') // another option of the same question replaces the pick
-    const swapped = await decideRows($)
-    expect(swapped).toContain('  選項      [x] ★ OK')
-    expect(swapped).toContain('            [ ] 完整顯示')
-    await act($, 'pick:d-4290499d:0') // the same one again: unpicked
-    rows = await decideRows($)
-    expect(rows).toContain('  選項      [ ] ★ OK')
-    expect(rows).toContain('            [ ] 完整顯示')
-    expect(await keysOf($, 'Button')).not.toContain('submit')
+    const keys = await keysOf($, 'Button')
+    expect(keys).toContain('submit')
+    expect(keys.filter(k => k.startsWith('opt:d-4290499d')), 'an answered card takes no focus: no option Button').toEqual([])
+    expect(keys).toContain('opt:d-c24ecfd9:0')
   })
 
   test('DECIDE mounted: send submits ONE prompt with the answered questions only, not as the user; the cards then read sent and lose their Buttons until the id leaves the file (' + surface + ')', async ($, on) => {
     const { w, files, submits } = decideWorld(on)
     await start($, surface)
     const pane = await paneOn($, surface, 'decide')
-    await pane.press({ key: 'pick:d-4290499d:0' })
-    await pane.press({ key: 'pick:d-c24ecfd9:1' })
-    await pane.input({ key: 'note:d-c24ecfd9', text: '要，但只寫一句', kind: 'change' })
+    await pane.input({ key: 'note:d-c24ecfd9', text: '要，但只寫一句', kind: 'change' }) // a note is typed BEFORE the pick: the pick answers the card and takes its field away
     await pane.input({ key: 'note:d-0000free', text: '叫 main', kind: 'change' })
+    await pane.press({ key: 'opt:d-4290499d:0' })
+    await pane.press({ key: 'opt:d-c24ecfd9:1' })
     await pane.press({ key: 'submit' })
     await pane.unmount()
     expect(submits.length).toBe(1)
@@ -5733,14 +5728,13 @@ for (const surface of SURFACES) {
     ].join('\n'))
     expect((submits[0].origin as { asUser?: unknown } | undefined)?.asUser, 'the model must be able to tell the panel sent it').toBeUndefined()
     const rows = await decideRows($)
-    expect(rows[1]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來 · 已送出，等處理')
-    expect(rows).toContain('  選項      [x] ★ OK')
-    expect(rows).toContain('            [ ] 完整顯示')
+    expect(rows[1]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來')
+    expect(rows).toContain('  已答      OK')
     expect(rows[rows.length - 1]).toBe('  [ 全部已送出，等處理 ]')
-    expect((await keysOf($, 'Button')).filter(k => k.startsWith('pick:') || k === 'submit')).toEqual([])
+    expect((await keysOf($, 'Button')).filter(k => k.startsWith('opt:') || k === 'submit')).toEqual([])
     expect(await keysOf($, 'Input')).toEqual([])
     await w.clock.advance(5000) // the file still lists them: still sent, and nothing is sent twice
-    expect((await decideRows($))[1]).toContain('已送出，等處理')
+    expect((await decideRows($))[1]).toBe('○ 1. P5 殘留分頁要不要把已清掉的也列出來')
     expect(submits.length).toBe(1)
     // the session closed them (open-decision.js close): the cards are gone
     files[W_MODEL] = j(model({ needs_decision: false, decisions: [] }))
@@ -5750,11 +5744,24 @@ for (const surface of SURFACES) {
     expect(after[1]).toContain('目前沒有待你回答的問題')
   })
 
+  test('DECIDE mounted: answering card 2 of 4 greys it in place; the other cards keep their numbers and Buttons (' + surface + ')', async ($, on) => {
+    const four = [1, 2, 3, 4].map(n => ({ id: 'd-fake000' + n, question: '第 ' + n + ' 個假問題', options: [{ label: 'A', description: '' }, { label: 'B', description: '' }] }))
+    decideWorld(on, four)
+    await start($, surface)
+    await act($, 'opt:d-fake0002:1')
+    const rows = await decideRows($)
+    expect(rows.filter(l => /^\S+ \d+\. /u.test(l)).map(l => l.replace(/^\S+ /u, '')), 'numbers stay 1-4 and the answered card stays').toEqual(['1. 第 1 個假問題', '2. 第 2 個假問題', '3. 第 3 個假問題', '4. 第 4 個假問題'])
+    expect(rows).toContain('  已答      B')
+    const buttons = await keysOf($, 'Button')
+    expect(buttons.filter(k => k.startsWith('opt:d-fake0002')), 'the answered card takes no focus').toEqual([])
+    for (const id of ['d-fake0001', 'd-fake0003', 'd-fake0004']) expect(buttons, id).toContain('opt:' + id + ':0')
+  })
+
   test('DECIDE mounted: a question that is still open can be answered after another was sent; only the new answer goes in the second prompt (' + surface + ')', async ($, on) => {
     const { submits } = decideWorld(on)
     await start($, surface)
-    await act($, 'pick:d-4290499d:0', 'submit')
-    await act($, 'pick:d-c24ecfd9:0', 'submit')
+    await act($, 'opt:d-4290499d:0', 'submit')
+    await act($, 'opt:d-c24ecfd9:0', 'submit')
     expect(submits.map(s => s.text)).toEqual([
       '[待決回覆]\nd-4290499d｜P5 殘留分頁要不要把已清掉的也列出來 → OK',
       '[待決回覆]\nd-c24ecfd9｜U6 要不要把建議也寫進回覆 → 要',
@@ -5784,7 +5791,7 @@ for (const surface of SURFACES) {
     const { submits } = decideWorld(on)
     await start($, surface)
     const a = await paneOn($, surface, 'decide')
-    await a.press({ key: 'pick:d-4290499d:0' })
+    await a.press({ key: 'opt:d-4290499d:0' })
     await Promise.all([a.press({ key: 'submit' }), a.press({ key: 'submit' })]) // a double click: both presses run before either has written its marks
     await a.unmount()
     expect(submits.length).toBe(1)
@@ -5813,8 +5820,8 @@ for (const surface of SURFACES) {
     expect(rows[at + 3]).toBe('  請在對話框回答。')
     expect(rows[rows.length - 1]).toBe('  [ 送出（已答 0/1） ]  答案會貼進這個對話送出') // only the first question counts
     const buttons = await keysOf($, 'Button')
-    expect(buttons.filter(k => k.startsWith('pick:d-c24ecfd9')), 'no pick Button for the dialog question').toEqual([])
-    expect(buttons.filter(k => k.startsWith('pick:d-4290499d')).length).toBe(2)
+    expect(buttons.filter(k => k.startsWith('opt:d-c24ecfd9')), 'no pick Button for the dialog question').toEqual([])
+    expect(buttons.filter(k => k.startsWith('opt:d-4290499d')).length).toBe(2)
     expect(await keysOf($, 'Input')).toEqual(['note:d-4290499d'])
   })
 
@@ -5938,11 +5945,10 @@ for (const surface of SURFACES) {
     expect(((await phone.findAll({ type: 'Input' })) as Drawn[]).length).toBe(0)
     const rows = rowsOf((await phone.drawn()) as Node)
     expect(rows).toContain('  這題請在對話裡回答。')
-    await phone.press({ key: 'pick:d-4290499d:0' })
+    await phone.press({ key: 'opt:d-4290499d:0' })
     await phone.unmount()
     const again = await mountPhone()
-    expect(rowsOf((await again.drawn()) as Node)).toContain('  選項      [x] ★ OK')
-    expect(rowsOf((await again.drawn()) as Node)).toContain('            [ ] 完整顯示')
+    expect(rowsOf((await again.drawn()) as Node)).toContain('  已答      OK')
     await again.unmount()
   })
 }
@@ -6455,7 +6461,7 @@ for (const surface of SURFACES) {
     expect(all[all.length - 1]).toContain('[ 送出（已答 0/3） ]')
     expect(all.join('\n')).not.toContain('U6')
     expect(d.inputs).toBe(0)
-    for (const k of ['pick:d-4290499d:0', 'pick:d-4290499d:1']) expect(d.keys, k).toContain(k)
+    for (const k of ['opt:d-4290499d:0', 'opt:d-4290499d:1']) expect(d.keys, k).toContain(k)
     expect(d.keys, 'nothing chosen: no send Button').not.toContain('submit')
   })
 
@@ -6472,12 +6478,11 @@ for (const surface of SURFACES) {
   test('E1 待決: a pick on the band is the pane\'s pick (one state), and the send Button sends ONE prompt (' + surface + ')', async ($, on) => {
     const { submits } = decideBand(on)
     await start($, surface)
-    const d = await rowsD($, ['tab:decide', 'pick:d-4290499d:1'])
+    const d = await rowsD($, ['tab:decide', 'opt:d-4290499d:1'])
     expect(d.rows.map(textD).some(r => r.includes('[x] 完整顯示'))).toBe(true)
     expect(d.keys).toContain('submit')
     expect(d.rows.map(textD).some(r => r.includes('[ ] ★ OK'))).toBe(true)
-    expect((await paneParts($, surface, 'decide')).texts).toContain('  選項      [ ] ★ OK')
-    expect((await paneParts($, surface, 'decide')).texts).toContain('            [x] 完整顯示')
+    expect((await paneParts($, surface, 'decide')).texts).toContain('  已答      完整顯示') // the pane greys an answered card
     await rowsD($, ['submit'])
     expect(submits.length).toBe(1)
     expect(submits[0].text).toContain('d-4290499d')

@@ -1,5 +1,6 @@
 'use strict';
 
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 const assert = require('assert');
 const fs = require('fs');
 const os = require('os');

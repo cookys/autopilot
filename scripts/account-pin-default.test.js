@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // Pin hotfix (operator decision d-2ab1e732 (c)): no account switch inside a task. `claude-account.js run --pin-default`
 // resolves the host's default alias (lowest priority number among enabled rows, ties in registry order) and behaves exactly
 // like `--alias <that>`; the three dispatch rails pass it on every run call. Tempdir only, FAKE- tokens, Node shim only.

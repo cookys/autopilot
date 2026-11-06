@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // scripts/qc-evidence-status.test.js — P7c: the qc fact (scripts/qc-evidence-status.js) and the watcher publisher
 // (src/status/qc-fact.js). Fixture repos with a real upstream; the decision itself is scripts/lib/qc-evidence.sh, the same
 // file .githooks/pre-push sources (hooks/tests/qc-gate.test.sh covers the hook side of it).

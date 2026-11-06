@@ -14,6 +14,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BASE="$REPO_ROOT/evals/skill-onoff"
+. "$REPO_ROOT/scripts/lib/test-git-env.sh"
 TEST_TMP=$(mktemp -d -t "skill-onoff-eval-test-XXXXXX")
 trap 'rm -rf "$TEST_TMP"' EXIT
 

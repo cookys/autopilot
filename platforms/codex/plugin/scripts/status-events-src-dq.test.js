@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // scripts/status-events-src-dq.test.js - E2 readers `dispatch` and `qc`, plus `redact.js` (autopilot.events/1).
 // Plan: project/plans/2026-11-02-oc-a1-events-contract.md (E2 steps 3 and 5, section 3 redact.js).
 // Isolation: every dir is an os.tmpdir() mkdtemp dir; the fixture env is an explicit allowlist; nothing touches the real stores.

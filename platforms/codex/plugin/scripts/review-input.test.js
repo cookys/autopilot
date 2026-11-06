@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // scripts/review-input.test.js — stage-graph P7d: the review facts of the runs watcher (src/status/review-input.js).
 // Plan-review reader (selection rules: repo match, active beats terminal, newest wins), code-review round reader, and the
 // watcher publishing <live>/runs/<project_key>.review.json (autopilot.review/1). The writer side of the round summary

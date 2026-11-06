@@ -178,9 +178,16 @@ assert_contains "$SCAN_OUT" "catchall-scan@github.com" "catch-all flags --author
 
 # --- 4. Inventory two: git-invoking tests source lib.sh ---
 HOOKS_TESTS="$REPO_ROOT/hooks/tests"
+# Exemption (name -> reason): test-git-env-bash.test.sh tests lib.sh's own GIT_DIR scrub, so it must run WITHOUT
+# lib.sh (sourcing it would scrub the very leak it plants). It is exempt only while it sources the shared
+# scripts/lib/test-git-env.sh snippet instead; drop the snippet and the exemption stops applying.
+lib_exempt() {
+  [ "$(basename "$1")" = "test-git-env-bash.test.sh" ] \
+    && grep -Eq '(^|[[:space:]])(\.|source)[[:space:]]+.*scripts/lib/test-git-env\.sh' "$1"
+}
 for f in "$HOOKS_TESTS"/*.test.sh; do
   if grep -Eq '(^|[[:space:];|&])git[[:space:]]' "$f"; then
-    if ! grep -Eq '(^|[[:space:]])(\.|source)[[:space:]]+.*lib\.sh' "$f"; then
+    if ! grep -Eq '(^|[[:space:]])(\.|source)[[:space:]]+.*lib\.sh' "$f" && ! lib_exempt "$f"; then
       fail "git-invoking test missing lib.sh: $(basename "$f")"
     fi
   fi

@@ -1,4 +1,5 @@
 'use strict';
+require('../../../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // Round-2 review fixes: the scorer is bound to the stamped root and to the tested bytes, answer file read errors are infra,
 // answer-controlled keys cannot reach Object.prototype, grading is bound to frozen tasks.
 const test = require('node:test');

@@ -1,5 +1,6 @@
 'use strict';
 
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // Tests for scripts/per-turn-gate-arm.js (BL-0306 P2, T-A1). Every check also runs against a deliberately
 // broken copy of the script (negative control, evidence-discipline section 58): the copy must make it fail.
 

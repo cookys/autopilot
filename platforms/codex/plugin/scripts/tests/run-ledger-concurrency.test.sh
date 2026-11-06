@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SCRIPT="$SCRIPT_ROOT/scripts/run-ledger.sh"
+. "$SCRIPT_ROOT/scripts/lib/test-git-env.sh"
 TEST_TMP="$(mktemp -d -t "run-ledger-concurrency-test-XXXXXX")"
 
 cleanup_r6_workers() {

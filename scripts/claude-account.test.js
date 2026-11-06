@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // G37 P3 tests: N1 N2b N5 N6 N7 N12 N14 N16 N17 N18 N19 N20 T-GIT (+ all_tight_refused mapping, no-echo).
 // Tempdir only, FAKE- tokens, Node claude shim only. No real home, credential, or network.
 const test = require('node:test');

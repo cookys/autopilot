@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // Run: node --test scripts/qualification-feed-trust.test.js
 //
 // # RED at 23d0b55cc2515baf7b828cdb3f77ef0955f4420f:

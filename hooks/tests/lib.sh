@@ -24,6 +24,8 @@ __git_local_vars="$(git rev-parse --local-env-vars 2>/dev/null)" || __git_local_
 # shellcheck disable=SC2086
 unset $__git_local_vars
 unset __git_local_vars
+# git's own list omits GIT_NAMESPACE and GIT_INTERNAL_SUPER_PREFIX; the shared snippet adds every src/status/git-env.js REPO_SELECTING name.
+. "$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib/test-git-env.sh"
 
 # G9: scratch dirs without their own .git must not discover a repo above them.
 __g9_td="${TMPDIR:-/tmp}"

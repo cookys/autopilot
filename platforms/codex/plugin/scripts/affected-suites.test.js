@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // node --test scripts/affected-suites.test.js
 // Builds a throwaway git repo with a fixed layout and checks what the selector picks for a diff.
 const test = require('node:test');

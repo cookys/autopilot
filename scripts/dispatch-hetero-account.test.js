@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // G37 W3 (plan section 8) rail test: dispatch-hetero.sh --runner claude-native with an account registry.
 // Only `claude` is faked (the Node shim from account-fixtures); the real rail and claude-account.js run.
 // Controls: registry present -> alias + token fingerprint at the shim, gate-rules --settings kept, push

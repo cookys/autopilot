@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // # RED at 572041858: AssertionError [ERR_ASSERTION]: implementer truncated undecided sitting is no_verdict / actual 'failed' expected 'no_verdict' at engine-qualify-truncated-locked.test.js:38 via line 300.
 
 // # RED at fa8c6e456:

@@ -1,4 +1,5 @@
 'use strict';
+require('../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // runs-watch-hotpath.test.js -- the PostToolUse hot path of hooks/runs-watch-autostart.js makes no directory (BL-0336 U1,
 // plan F3 / F6 row "hot path makes no directory"). The hook runs under a preload that counts fs.mkdirSync / fs.mkdir /
 // fs.promises.mkdir / fs.chmodSync; both PostToolUse fast outcomes (the watcher is alive; the 60 s throttle holds) must show

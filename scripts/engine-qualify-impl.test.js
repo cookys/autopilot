@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // # RED at 572041858: AssertionError [ERR_ASSERTION]: honest candidate qualifies / false !== true at engine-qualify-impl.test.js:26 via line 188.
 
 // engine-qualify-impl.test.js — P2/P3 acceptance for `engine-qualify.sh

@@ -1,4 +1,5 @@
 'use strict';
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // scripts/p7-watcher-data.test.js — stage-graph plan P7 body, package ① (watcher data): the four facts the band's new slots read.
 //   D1 spend    envelope host_today_brain_usd / brain_cap_usd (one shared implementation with hooks/cost-fuse.js)
 //   D2 ladder   <scope>.decisions.json `ladder` (latest kind:"ladder" row; counts unchanged)

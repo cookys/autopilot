@@ -1,4 +1,5 @@
 'use strict';
+require('../../../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 // Round-1 review fixes (classes A-D): infra classification, vendored verifier dependencies, implementer harness pins,
 // reviewer/debugger/planner grader holes, skill frontmatter, fixture consistency. Bad output must judge FAIL (rc 1);
 // instrument problems must be rc 2.

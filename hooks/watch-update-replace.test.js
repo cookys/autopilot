@@ -16,6 +16,7 @@
  */
 'use strict';
 
+require('../scripts/lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 const test = require('node:test');
 const { afterEach } = require('node:test');
 const assert = require('node:assert');

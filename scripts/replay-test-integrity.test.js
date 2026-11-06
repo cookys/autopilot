@@ -3,6 +3,7 @@
 'use strict';
 // node --test scripts/replay-test-integrity.test.js
 // Builds a throwaway git repo and replays the L0 checker over three first-parent merges.
+require('./lib/test-git-env'); // drop ambient GIT_DIR & co so fixture git cannot write into the launching repo
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');

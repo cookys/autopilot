@@ -25,10 +25,14 @@ git -C "$REPO" config user.email "campaign-authority@example.invalid"
 git -C "$REPO" config user.name "Campaign Authority Test"
 printf '%s\n' '## Detached strict authority' 'Frozen fixture spec.' > "$REPO/docs/plans/spec.md"
 printf '%s\n' \
+  '- override: implementer | until 2099-01-01 | test fixture seat' \
   '- implementer_engine: gpt-5.3-codex-spark' \
   '- implementer_runner: codex' \
+  '- implementer_effort: high' \
+  '- override: reviewer | until 2099-01-01 | test fixture seat' \
   '- reviewer_engine: claude-opus' \
-  '- reviewer_runner: claude-native' > "$REPO/.claude/review-loop-config.md"
+  '- reviewer_runner: claude-native' \
+  '- reviewer_effort: high' > "$REPO/.claude/review-loop-config.md"
 git -C "$REPO" add -A
 git -C "$REPO" commit -qm "base"
 BASE="$(git -C "$REPO" rev-parse HEAD)"

@@ -35,12 +35,16 @@ NODE
 #    implementer_family=openai, nonempty config_path, parseable JSON, and working `--field verification_author_engine`.
 CFG1="$TEST_TMP/config1.md"
 cat <<EOF > "$CFG1"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint: TESTEP
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 JSON1="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG1" bash "$SCRIPT" 2>/dev/null)"
@@ -70,12 +74,16 @@ assert_eq "glm-5.2" "$FIELD1" "Case 1 --field verification_author_engine"
 # 2. present=false with empty tuple remains a valid unauthorized state and does not choose a model.
 CFG2="$TEST_TMP/config2.md"
 cat <<EOF > "$CFG2"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: false
 - verification_author_engine:
 - verification_author_runner:
 - verification_author_effort:
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 JSON2="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG2" bash "$SCRIPT" 2>/dev/null)"
@@ -95,12 +103,16 @@ assert_eq "" "$(json_get "$JSON2" verification_author_endpoint)" "Case 2 endpoin
 # 3. present=true with only engine set exits 3 with an incomplete-tuple diagnostic.
 CFG3="$TEST_TMP/config3.md"
 cat <<EOF > "$CFG3"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: glm-5.2
 - verification_author_runner:
 - verification_author_effort:
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 OUT3="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG3" bash "$SCRIPT" 2>&1)"
@@ -114,12 +126,16 @@ assert_contains "$OUT3" "tuple" "Case 3 output mentions tuple"
 # 4. present=false with a nonempty engine exits 3 as inconsistent.
 CFG4="$TEST_TMP/config4.md"
 cat <<EOF > "$CFG4"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: false
 - verification_author_engine: glm-5.2
 - verification_author_runner:
 - verification_author_effort:
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 OUT4="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG4" bash "$SCRIPT" 2>&1)"
@@ -133,12 +149,16 @@ assert_contains "$OUT4" "present" "Case 4 output mentions present"
 # 5. Unknown author engine surfaces family=unknown, never a guessed known family.
 CFG5="$TEST_TMP/config5.md"
 cat <<EOF > "$CFG5"
+- override: verification_author | until 2099-01-01 | test fixture seat
 - verification_author_present: true
 - verification_author_engine: unknown-spec-engine-name
 - verification_author_runner: cc-shim
 - verification_author_effort: high
 - verification_author_endpoint:
+- override: implementer | until 2099-01-01 | test fixture seat
 - implementer_engine: gpt-5.3-codex-spark
+- implementer_runner: codex
+- implementer_effort: high
 EOF
 
 JSON5="$(REVIEW_LOOP_CONFIG_OVERRIDE="$CFG5" bash "$SCRIPT" 2>/dev/null)"

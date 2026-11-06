@@ -18,10 +18,14 @@ git -C "$REPO" config user.name "Campaign Projection Test"
 printf '## Strict bridge\nFrozen authority.\n' > "$REPO/docs/plans/spec.md"
 printf 'required\n' > "$REPO/required.txt"
 printf '%s\n' \
+  '- override: implementer | until 2099-01-01 | test fixture seat' \
   '- implementer_engine: gpt-5.3-codex-spark' \
   '- implementer_runner: codex' \
+  '- implementer_effort: high' \
+  '- override: reviewer | until 2099-01-01 | test fixture seat' \
   '- reviewer_engine: claude-opus' \
-  '- reviewer_runner: claude-native' > "$REPO/.claude/review-loop-config.md"
+  '- reviewer_runner: claude-native' \
+  '- reviewer_effort: high' > "$REPO/.claude/review-loop-config.md"
 git -C "$REPO" add .
 git -C "$REPO" commit -qm "base"
 BASE="$(git -C "$REPO" rev-parse HEAD)"

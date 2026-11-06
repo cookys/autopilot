@@ -2,7 +2,7 @@
 # BL-0198: the strict /l5 provider policy (src/readiness/provider-bootstrap.js) must name the
 # models the plugin ships as defaults, read from the shipped sources themselves, never from a
 # literal list in this test:
-#   openai  -> scripts/resolve-review-loop.sh DEF_REV_ENGINE
+#   openai  -> project-config-template/review-loop-config.md reviewer_fallback_preference (the roster; DEF_REV_ENGINE left the resolver)
 #   xai     -> scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (the grok entry)
 #   minimax -> scripts/resolve-review-loop.sh QC_ALL_CALIBRATED (the MiniMax-M3 review seat)
 #   zhipu   -> references/official-qualification-defaults.json (highest-version GLM engine)
@@ -26,6 +26,7 @@ const path = require('path');
 const root = process.argv[2];
 const policyFile = process.argv[3];
 const script = fs.readFileSync(path.join(root, 'scripts/resolve-review-loop.sh'), 'utf8');
+const roster = fs.readFileSync(path.join(root, 'project-config-template/review-loop-config.md'), 'utf8');
 const defaults = JSON.parse(fs.readFileSync(path.join(root, 'references/official-qualification-defaults.json'), 'utf8'));
 const shell = (name) => {
   const m = script.match(new RegExp(`^${name}="([^"]*)"`, 'm'));
@@ -38,7 +39,7 @@ const cmp = (a, b) => { for (let i = 0; i < Math.max(a.length, b.length); i += 1
 const zhipu = [...new Set(defaults.defaults.filter((r) => r.administration.family === 'zhipu').map((r) => r.administration.engine))];
 const newestZhipu = zhipu.sort((a, b) => cmp(versionKey(b), versionKey(a)))[0];
 const expected = {
-  openai: shell('DEF_REV_ENGINE'),
+  openai: (roster.match(/^- reviewer_fallback_preference:\s*(\S+)\s*$/m) || [])[1],
   xai: calibrated.find((m) => /^grok-/.test(m)),
   minimax: calibrated.find((m) => /^MiniMax-M3$/.test(m)),
   zhipu: newestZhipu,

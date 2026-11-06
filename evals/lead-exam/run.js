@@ -68,6 +68,27 @@ function seedConfigDir(parent) {
   return r.stdout.trim();
 }
 
+// A caller-supplied --config-dir must be a dedicated throwaway dir: refuse (throw) when its real path is, or is inside,
+// the real $HOME/.claude or $CLAUDE_CONFIG_DIR target, or when it holds anything but a regular .credentials.json.
+function realOrResolved(p) { try { return fs.realpathSync(p); } catch { return path.resolve(p); } }
+function isInside(child, parent) { const rel = path.relative(parent, child); return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel)); }
+function checkConfigDir(dir, env) {
+  const e = env || process.env;
+  let real;
+  try { real = fs.realpathSync(dir); } catch { throw new Error(`--config-dir ${dir} does not exist`); }
+  if (!fs.statSync(real).isDirectory()) throw new Error(`--config-dir ${dir} is not a directory`);
+  const realDirs = [path.join(e.HOME || os.homedir(), '.claude')];
+  if (e.CLAUDE_CONFIG_DIR) realDirs.push(e.CLAUDE_CONFIG_DIR);
+  realDirs.map(realOrResolved).forEach((rd) => {
+    if (isInside(real, rd)) throw new Error(`--config-dir ${dir} is, or is inside, the real Claude config dir; give a dedicated throwaway dir`);
+  });
+  fs.readdirSync(real).forEach((name) => {
+    const st = fs.lstatSync(path.join(real, name));
+    if (name !== '.credentials.json' || !st.isFile()) throw new Error(`--config-dir ${dir} holds ${name}; only a regular .credentials.json is allowed`);
+  });
+  return real;
+}
+
 function parseArgs(argv) {
   const a = {};
   const withValue = ['seed', 'kind', 'model', 'name', 'out-dir', 'config-dir', 'judge-kind', 'judge-model', 'judge-home'];
@@ -83,6 +104,9 @@ function parseArgs(argv) {
 async function main() {
   const a = parseArgs(process.argv.slice(2));
   if (!a.seed || !a['out-dir']) { process.stderr.write('run: --seed and --out-dir are required\n'); process.exit(2); }
+  if (a['config-dir']) {
+    try { a['config-dir'] = checkConfigDir(a['config-dir']); } catch (err) { process.stderr.write(`run: ${err.message}\n`); process.exit(2); }
+  }
   const items = lib.loadItems();
   fs.mkdirSync(a['out-dir'], { recursive: true });
   let call; let name; let model; let cleanupDir = null; let cleanup = null;
@@ -128,4 +152,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((e) => { process.stderr.write(`run: ${e.message}\n`); process.exit(1); });
-module.exports = { runExam };
+module.exports = { runExam, checkConfigDir };

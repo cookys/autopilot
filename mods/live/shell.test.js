@@ -389,3 +389,12 @@ test('v7: progress: control: the colours are PALETTE roles only, no background, 
     assert.ok(s.bg === undefined && s.inverse === undefined && s.bold === undefined, s.text)
   }
 })
+
+test('left title: a card list is titled with the open tab\'s name, a tab list with the menu word; the plan puts that title on the top frame (control: a tab list never takes the tab name)', () => {
+  assert.equal(S.leftTitle('cards', '待決', t), '待決')
+  assert.equal(S.leftTitle('tabs', '待決', t), 'shell.menu')
+  assert.notEqual(S.leftTitle('tabs', '待決', t), '待決')
+  const top = segText(S.shellPlan(input(160, { menuTitle: S.leftTitle('cards', '待決', t) })).top)
+  assert.ok(top.includes('待決'))
+  assert.ok(!top.includes('shell.menu'))
+})

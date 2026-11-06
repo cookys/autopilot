@@ -181,6 +181,10 @@ export function fleetLines(lanes: readonly FleetLaneSum[], inner: number, count:
 
 // ---- the plan ----
 export type T = (id: string, vars?: Record<string, string | number>) => string
+// The title of the left frame says what the left column lists: the open tab's name while it lists cards (the 待決 card view), the menu word while it lists the tabs.
+export function leftTitle(listing: 'cards' | 'tabs', tabName: string, t: T): string {
+  return listing === 'cards' ? tabName : t('shell.menu')
+}
 export type ShellInput = {
   columns: number // bodyColumns
   t: T

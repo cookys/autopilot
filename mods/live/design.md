@@ -55,6 +55,7 @@ With no tab open, under 12 rows, or too narrow for a main window of 30, the band
 
 ## 8. The 待決 card view (ux-v7)
 
+- Left frame title: it says what the left column lists. In the card view it is the open tab's name (`待決`); a column that lists the tabs is titled `選單`.
 - Left column: one row per pending question, `◐` the card in the main window (`here`), `◆` an answered one (`action`, `done` once sent) with its answer right-aligned, `○` an open one. More than 8 cards scroll so the current one is visible. A press on a row goes to that card. The foot title is the position, `3/8`.
 - Main window: the title is `第 n 張，共 N 張`. Row 1 is the question; two background rows follow (the text is one line when narrow and two from 160, the second row stays blank otherwise, so the options sit on the same rows at every tier; the area gives rows back only when the options would not fit); then the options as hotkey Buttons `1`-`6` (the label padded to 10 cells inside the Button, `★` marks the recommended one, the description is dim, a picked one carries `◆`). A card the band cannot answer (typed text or the asker's own dialog) shows one dim line instead of options. The foot title is `按 1–n 直接選，選完換下一張`.
 - A pick moves to the next card (it stops at the last one).

@@ -53,7 +53,7 @@ import { COL_GAP, SPEED_ROWS, speedLabelParts, speedView } from './speedview'
 import { FLEET_SUMMARY_V, fleetSummary, fleetView, makeFleetFeed, utf8Bytes } from './fleet'
 import type { FleetSummary, FleetTask, FleetView } from './fleet'
 import type { BarTabId } from './tabs'
-import { MAIN_CONTENT_ROWS, SHELL_ROWS, cardRows, freshCount, leftItems, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan } from './shell'
+import { MAIN_CONTENT_ROWS, SHELL_ROWS, cardRows, freshCount, leftItems, leftTitle, newestSeq, parsePanel, parseRoom, progressSegs, shellPlan } from './shell'
 import type { Card } from './shell'
 import type { LeftItem } from './shell'
 import type { FleetLaneSum, PanelRead, RoomRow } from './shell'
@@ -1143,7 +1143,7 @@ export function registerLive(on: Parameters<Register>[0]): void {
       const cur = pending[decideCursor]
       const optN = cur === undefined || cur.id === null || decideDialog(cur) ? 0 : cur.options.length
       const plan = shellPlan({
-        columns, t, menuTitle: t('shell.menu'),
+        columns, t, menuTitle: leftTitle(cards.length > 0 ? 'cards' : 'tabs', (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(), t),
         mainTitle: cards.length > 0 ? t('shell.main_title', { n: decideCursor + 1, total: cards.length }) : (strip.tabs.find(b => b.id === active)?.label.text ?? '').trim(),
         room: { rows: shellRoom.rows, fresh: freshCount(shellRoom.rows, shellBaseline ?? null) }, panel, fleet: lanes,
         ...(cards.length > 0 ? { footLeft: decideCursor + 1 + '/' + cards.length, footMain: optN > 0 ? t('shell.hint_pick', { n: Math.min(optN, 6) }) : '' } : {}),

@@ -46,6 +46,13 @@ test('quote check: a judge quote that is not in the output voids the reply, one 
   assert.strictEqual(rep.examinees[0].pass, null);
 });
 
+test('quote check also covers criterion quotes, not only hard-fail quotes', async () => {
+  // the reference examinee has criterion hits (credits) and no hard fail: only the criterion quote path can void it
+  const rep = await grade(jd.stubJudge(items, { badQuote: true }));
+  assert.strictEqual(rep.controls.rounds[1].status, 'void');
+  assert.ok(rep.calls.some((c) => c.round === 1 && c.errors && c.errors.some((m) => /A1\.reason quote is not verbatim/.test(m))));
+});
+
 test('quote check accepts a verbatim substring and rejects a paraphrase (unit)', () => {
   assert.strictEqual(lib.quoteOk('abc', 'xxabcxx'), true);
   assert.strictEqual(lib.quoteOk('abd', 'xxabcxx'), false);

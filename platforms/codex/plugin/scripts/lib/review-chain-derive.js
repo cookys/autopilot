@@ -74,9 +74,10 @@ function getFromGenMap(mapOrObj, gen) {
 // Suggestion (to, evidence_kind unreachable | impact_bounded, plus evidence). "Not blocking",
 // "low impact" and "follow-up" are not refutation kinds: a true finding with small impact is
 // downgraded with evidence, never refuted. Minor and Suggestion findings keep the old rules.
-// Chains whose generation was finalized before MAJOR_DISPOSITION_CUTOVER are not re-judged
-// (history is not re-opened); finalize stamps finalized_at, and the receipt keys on it.
-const MAJOR_DISPOSITION_CUTOVER = '2026-11-06T02:30:00.000Z';
+// Only chain entries carrying `disposition_schema: 2` are judged: the new finalize writes that marker,
+// so an entry finalized by the old finalize (which could not write kinds) is never re-opened, whatever
+// its finalized_at says.
+const DISPOSITION_SCHEMA = 2;
 const REFUTATION_KINDS = ['false_claim', 'unreachable'];
 const DOWNGRADE_TO = ['Minor', 'Suggestion'];
 const DOWNGRADE_EVIDENCE_KINDS = ['unreachable', 'impact_bounded'];
@@ -113,8 +114,8 @@ function downgradeMisuseError(finding, disp) {
   return null;
 }
 
-function enforcedAfterCutover(chainEntry) {
-  return !!(chainEntry && typeof chainEntry.finalized_at === 'string' && chainEntry.finalized_at >= MAJOR_DISPOSITION_CUTOVER);
+function enforcedBySchema(chainEntry) {
+  return !!(chainEntry && chainEntry.disposition_schema === DISPOSITION_SCHEMA);
 }
 
 function deriveReceiptState(chainEntries, findingsByGeneration, dispositionsByGeneration, addendumResolutions) {
@@ -271,5 +272,5 @@ module.exports = deriveReceiptState;
 module.exports.deriveReceiptState = deriveReceiptState;
 module.exports.majorDispositionError = majorDispositionError;
 module.exports.downgradeMisuseError = downgradeMisuseError;
-module.exports.enforcedAfterCutover = enforcedAfterCutover;
-module.exports.MAJOR_DISPOSITION_CUTOVER = MAJOR_DISPOSITION_CUTOVER;
+module.exports.enforcedBySchema = enforcedBySchema;
+module.exports.DISPOSITION_SCHEMA = DISPOSITION_SCHEMA;

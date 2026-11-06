@@ -1879,6 +1879,7 @@ async function handleFinalize(flags) {
   // Update target chain entry
   targetChainEntry.status = 'finalized';
   targetChainEntry.finalized_at = new Date().toISOString();
+  targetChainEntry.disposition_schema = deriveReceiptState.DISPOSITION_SCHEMA;
   targetChainEntry.dispositions_path = snapshotRelPath;
   targetChainEntry.dispositions_sha256 = dispSha256;
   if (!targetChainEntry.findings_sha256 && fs.existsSync(findingsPath)) {

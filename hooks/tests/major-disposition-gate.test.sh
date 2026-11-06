@@ -2,7 +2,7 @@
 # major-disposition-gate.test.sh — gate rule A as a machine check (G14): a Critical/Major finding is
 # verified (and resolved later), refuted as false (refutation_kind + evidence) or downgraded
 # (to + evidence_kind + evidence). finalize refuses the rest; the receipt fails the rest for chains
-# finalized after the cutover. FAKE ledgers only.
+# finalized by the new finalize (disposition_schema 2). FAKE ledgers only.
 . "$(dirname "$0")/lib.sh"
 
 LOOP="$REPO_ROOT/scripts/hetero-review-loop.js"
@@ -101,13 +101,12 @@ fin_case f10 Minor '"disposition": "downgraded", "rationale": "x", "to": "Sugges
 assert_exit_code "$FIN_RC" "1" "F10: downgraded on a non-Major finding is refused"
 
 # ─── receipt (check-phase-review-receipt.js) ───
-OLD_AT="2026-11-01T00:00:00.000Z"
-NEW_AT="2026-11-07T00:00:00.000Z"
+AT="2026-11-07T00:00:00.000Z"  # every entry is finalized "after" the old cutover time; only the marker decides
 DIFF1=$(git -C "$SCRATCH_REPO" diff "$PHASE_BASE" "$GEN1_HEAD" | sha256sum | awk '{print $1}')
 DIFF2=$(git -C "$SCRATCH_REPO" diff "$GEN1_HEAD" "$GEN2_HEAD" | sha256sum | awk '{print $1}')
 
 rc_gen() { # <phase> <gen> <base> <head> <diffsha> <findings-json-array> <disp-json-array> <resolutions-json-array> -> echoes chain entry json
-  local p="$1" g="$2" b="$3" h="$4" ds="$5" fj="$6" dj="$7" rj="$8" at="$9"
+  local p="$1" g="$2" b="$3" h="$4" ds="$5" fj="$6" dj="$7" rj="$8" mk="$9"
   mkdir -p "$LEDGER/review-$p/g$g"
   echo "{ \"base\": \"$b\", \"head\": \"$h\", \"diff_sha256\": \"$ds\" }" > "$LEDGER/review-$p/g$g/range.json"
   echo "{ \"findings\": $fj }" > "$LEDGER/review-$p/g$g/findings.json"
@@ -116,7 +115,7 @@ rc_gen() { # <phase> <gen> <base> <head> <diffsha> <findings-json-array> <disp-j
   local dsha fsha ssha
   ssha=$(sha_of "$LEDGER/review-$p/g$g/seat-s0.json")
   dsha=$(sha_of "$LEDGER/review-$p/g$g/dispositions.json"); fsha=$(sha_of "$LEDGER/review-$p/g$g/findings.json")
-  echo "{ \"generation\": $g, \"base\": \"$b\", \"head\": \"$h\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"seat_artifact_sha256\": { \"s0\": \"$ssha\" }, \"finalized_at\": \"$at\", \"dispositions_sha256\": \"$dsha\", \"findings_sha256\": \"$fsha\" }"
+  echo "{ \"generation\": $g, \"base\": \"$b\", \"head\": \"$h\", \"status\": \"finalized\", \"seats\": [{ \"id\": \"s0\", \"status\": \"reviewed\" }], \"seat_artifact_sha256\": { \"s0\": \"$ssha\" }, \"finalized_at\": \"$AT\"${mk:+, \"disposition_schema\": $mk}, \"dispositions_sha256\": \"$dsha\", \"findings_sha256\": \"$fsha\" }"
 }
 rc_write() { # <phase> <verdict> <open-json> <chain-entries comma-joined>
   local p="$1" v="$2" o="$3" ch="$4"
@@ -130,42 +129,42 @@ FJ='[ { "id": "fm", "severity": "Major", "seat": "s0", "text": "bug" } ]'
 mkdir -p "$LEDGER/review-r1" "$LEDGER/review-r2" "$LEDGER/review-r3" "$LEDGER/review-r4" "$LEDGER/review-r5" "$LEDGER/review-r6" "$LEDGER/review-r7"
 
 # R1 (negative control): verified Major left open -> the receipt does not pass (FIX-THEN-SHIP is refused; a forged SHIP-AS-IS mismatches the re-derived state)
-E=$(rc_gen r1 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "verified", "rationale": "ok" } ]' '[]' "$NEW_AT")
+E=$(rc_gen r1 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "verified", "rationale": "ok" } ]' '[]' 2)
 rc_write r1 "SHIP-AS-IS" '[]' "$E"; rc_run r1
 assert_exit_code "$RC_RC" "1" "R1: unhandled verified Major (forged SHIP-AS-IS) fails the receipt"
-E=$(rc_gen r1 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "verified", "rationale": "ok" } ]' '[]' "$NEW_AT")
+E=$(rc_gen r1 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "verified", "rationale": "ok" } ]' '[]' 2)
 rc_write r1 "FIX-THEN-SHIP" '[ { "id": "fm", "severity": "Major", "disposition": "verified" } ]' "$E"; rc_run r1
 assert_exit_code "$RC_RC" "1" "R1b: honest FIX-THEN-SHIP receipt fails the merge gate"
 
-# R2: refuted Major without refutation_kind in a chain finalized after the cutover fails, naming the rule
-E=$(rc_gen r2 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "refuted", "rationale": "not blocking" } ]' '[]' "$NEW_AT")
+# R2: refuted Major without refutation_kind in an entry carrying disposition_schema 2 fails, naming the rule
+E=$(rc_gen r2 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "refuted", "rationale": "not blocking" } ]' '[]' 2)
 rc_write r2 "SHIP-AS-IS" '[]' "$E"; rc_run r2
-assert_exit_code "$RC_RC" "1" "R2: post-cutover refuted Major without refutation_kind fails"
+assert_exit_code "$RC_RC" "1" "R2: marked refuted Major without refutation_kind fails"
 assert_contains "$RC_OUT" "refuted without refutation_kind" "R2: message names the missing kind"
 
-# R3: the SAME ledger finalized before the cutover is not re-failed
-E=$(rc_gen r3 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "refuted", "rationale": "not blocking" } ]' '[]' "$OLD_AT")
+# R3: the SAME ledger without the marker (old finalize), finalized_at after 02:30Z, is not re-judged
+E=$(rc_gen r3 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "refuted", "rationale": "not blocking" } ]' '[]' "")
 rc_write r3 "SHIP-AS-IS" '[]' "$E"; rc_run r3
-assert_exit_code "$RC_RC" "0" "R3: pre-cutover chain with old-style refuted Major is not re-failed"
+assert_exit_code "$RC_RC" "0" "R3: marker-less chain with old-style refuted Major is not re-failed"
 
 # R4: refuted with kind + evidence passes
-E=$(rc_gen r4 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "refuted", "rationale": "r", "refutation_kind": "false_claim", "evidence": "file.txt:1 does not do that" } ]' '[]' "$NEW_AT")
+E=$(rc_gen r4 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "refuted", "rationale": "r", "refutation_kind": "false_claim", "evidence": "file.txt:1 does not do that" } ]' '[]' 2)
 rc_write r4 "SHIP-AS-IS" '[]' "$E"; rc_run r4
 assert_exit_code "$RC_RC" "0" "R4: refuted with kind + evidence passes"
 
 # R5: downgraded with fields passes
-E=$(rc_gen r5 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "downgraded", "rationale": "r", "to": "Minor", "evidence_kind": "impact_bounded", "evidence": "only the debug path reads it: a.js:9" } ]' '[]' "$NEW_AT")
+E=$(rc_gen r5 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "downgraded", "rationale": "r", "to": "Minor", "evidence_kind": "impact_bounded", "evidence": "only the debug path reads it: a.js:9" } ]' '[]' 2)
 rc_write r5 "SHIP-AS-IS" '[]' "$E"; rc_run r5
 assert_exit_code "$RC_RC" "0" "R5: downgraded with fields passes"
 
 # R6: downgraded missing evidence fails
-E=$(rc_gen r6 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "downgraded", "rationale": "r", "to": "Minor", "evidence_kind": "impact_bounded" } ]' '[]' "$NEW_AT")
+E=$(rc_gen r6 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "downgraded", "rationale": "r", "to": "Minor", "evidence_kind": "impact_bounded" } ]' '[]' 2)
 rc_write r6 "SHIP-AS-IS" '[]' "$E"; rc_run r6
 assert_exit_code "$RC_RC" "1" "R6: downgraded without evidence fails the receipt"
 
 # R7: verified in gen 1, resolved by gen 2's resolution entry -> passes
-E1=$(rc_gen r7 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "verified", "rationale": "ok" } ]' '[]' "$NEW_AT")
-E2=$(rc_gen r7 2 "$GEN1_HEAD" "$GEN2_HEAD" "$DIFF2" '[]' '[]' '[ { "id": "fm", "rationale": "fixed in c4, re-checked" } ]' "$NEW_AT")
+E1=$(rc_gen r7 1 "$PHASE_BASE" "$GEN1_HEAD" "$DIFF1" "$FJ" '[ { "id": "fm", "disposition": "verified", "rationale": "ok" } ]' '[]' 2)
+E2=$(rc_gen r7 2 "$GEN1_HEAD" "$GEN2_HEAD" "$DIFF2" '[]' '[]' '[ { "id": "fm", "rationale": "fixed in c4, re-checked" } ]' 2)
 rc_write r7 "SHIP-AS-IS" '[]' "$E1, $E2"
 git -C "$SCRATCH_REPO" reset -q --hard "$GEN2_HEAD"; rc_run r7
 assert_exit_code "$RC_RC" "0" "R7: verified Major resolved by a later generation passes (output: $RC_OUT)"
